@@ -155,7 +155,7 @@ static int tryToRevive(void)
                             if (DirectCallEnemy(p, 0, pos, ZUnitVector, 0) == 0) {
                                 return 0;
                             }
-                            ExecuteSEPackage(p, PAL_NTSCAUG6JUN26(107, 102));
+                            ExecuteSEPackage(p, PAL_NTSCAUG6_JUN26(107, 102, 88));
                             for (m = 0; m < 5; m++) {
                                 SetAP1DeadStatus(DeleteSpiderFromLayoutGroup(
                                     spiderPairs[m].group, spiderPairs[m].spider));
@@ -172,8 +172,50 @@ static int tryToRevive(void)
     return 0;
 }
 
+static void ExecSpiderGroupManager_jun26(void)
+{
+    int i;
+    int total;
+
+    if ((execFrame & 0xF) == 0) {
+        tryToRevive();
+    }
+
+    if (spiderGroupIdCount != 0 && reviveDone == 0) {
+        total = 0;
+        for (i = 0; i < spiderGroupIdCount; i++) {
+            total += GetAliveSpiders((GObj *)spiderGroupIds[i]);
+        }
+
+        if (total > 0 && total < 5) {
+            reviveCounter = reviveCounter + 1;
+            if (debug_brain_bar_flag != 0) {
+                debug_PrintfDummy(400, 120, 0xFFFFFFFF, "COUNTER %d/%d", reviveCounter,
+                                  (60 - systemStatus[0] * 10) / systemStatus[1] * 45);
+            }
+        }
+
+        if ((60 - systemStatus[0] * 10) / systemStatus[1] * 45 < reviveCounter) {
+            for (i = 0; i < spiderGroupIdCount; i++) {
+                DeadAllSpiders((GObj *)spiderGroupIds[i]);
+            }
+            reviveDone = 1;
+        }
+
+        if (debug_brain_bar_flag != 0) {
+            debug_PrintfDummy(400, 110, 0xFFFFFFFF, "REMAIN %d", total);
+        }
+    }
+
+    execFrame = execFrame + 1;
+}
+
 void ExecSpiderGroupManager(void)
 {
+    if (ICO_JUN26) {
+        ExecSpiderGroupManager_jun26();
+        return;
+    }
     int i;
     int total;
     int groups;

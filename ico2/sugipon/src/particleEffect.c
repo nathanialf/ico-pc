@@ -59,9 +59,12 @@ static PEffect particleEffects[128]; /* derived name */
 
 static int particleParams_pal[61 * 40]; /* derived name */
 
-static int particleParams_ntscaug6jun26[53 * 40]; /* derived name */
+static int particleParams_ntscaug6[53 * 40]; /* derived name */
 
-#define particleParams PAL_NTSCAUG6JUN26(particleParams_pal, particleParams_ntscaug6jun26)
+static int particleParams_jun26[52 * 40]; /* derived name */
+
+#define particleParams                                                                             \
+    PAL_NTSCAUG6_JUN26(particleParams_pal, particleParams_ntscaug6, particleParams_jun26)
 
 /* the free-slot search, inlined at its one call site */
 static inline int searchFreeParticleEffect(void) /* derived name */
@@ -1176,8 +1179,29 @@ void DisableParticleEffectGeometryControl(int id)
     particleEffects[id].geoCtrl = 0;
 }
 
+static int GetParticleIDWithName_jun26(char *name)
+{
+    int i;
+    for (i = 0; i < 52; i++) {
+        if (strcmp(particleEffectFile[i].name, name) == 0) {
+            /* EUC-JP: "particle effect found!" */
+            debug_StdPrintfDummy("パーティクルエフェクト発見！ \033[36m%s\033[m\n",
+                                 particleEffectFile[i].name);
+            return i;
+        }
+    }
+    /* EUC-JP: "no particle effect of that name exists" */
+    debug_StdPrintfDummy(
+        "%s: \"\033[36m%s\033[m\"という名前のパーティクルエフェクトは存在しません\n", __FILE__,
+        name);
+    return -1;
+}
+
 int GetParticleIDWithName(char *name)
 {
+    if (ICO_JUN26) {
+        return GetParticleIDWithName_jun26(name);
+    }
     int i;
     for (i = 0; i < PAL_NTSCAUG6JUN26(61, 53); i++) {
         if (strcmp(particleEffectFile[i].name, name) == 0) {

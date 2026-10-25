@@ -195,8 +195,131 @@ typedef union { /* field names derived */
     long long ll;
 } AP1Flag; /* derived name */
 
+static AP1Work *InitAP1_jun26(GObj *self, SObjSimpleSetting *arg)
+{
+    AP1Work *p;
+    Sub15C *d;
+    int i;
+
+    p = iosMallocDebug(ios_partition_sugipon, sizeof(AP1Work), a_p_1File, 218);
+    GOBJ_SUB(self)->work = p;
+    p->layout = arg->obj;
+    p->skel = 1;
+    p->word16C = 0;
+    p->mode = 7;
+    p->word168 = 0;
+    p->roll = 0.0f;
+    p->sink = 0.0f;
+    p->tilt = 0.0f;
+    p->blink = rand() & 0x1F;
+    ap1LayoutUp[2] = spiderDef[p->layout].upZ;
+    CopyVector(&p->up, ap1LayoutUp);
+    _UnitMatrix(p->mtx);
+    _UnitMatrix(p->root);
+    GetRootQuaternion(&p->quat, self);
+    GetRootPosition(p->pos.m, self);
+    for (i = 0; i < 4; i++) {
+        p->part[i] = ap1PartInit;
+    }
+    for (i = 0; i < 2; i++) {
+        p->hit[i] = InitialColInfo;
+    }
+    applyPartOrients(self);
+    if (p->skel == 0) {
+        d = CSVSYSTEM_InitDObj(5, arg);
+        p->arm[0] = d;
+        if (d->nodeMtx != 0) {
+            iosFree((void *)ICO_PHYS(d->nodeMtx));
+        }
+        if (p->arm[0]->nodeQuat != 0) {
+            iosFree((void *)ICO_PHYS(p->arm[0]->nodeQuat));
+        }
+        p->arm[0]->nodeMtx = 0;
+        p->arm[0]->nodeQuat = 0;
+        p->arm[0]->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, 256, a_p_1File, 249);
+        p->arm[0]->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, 64, a_p_1File, 249);
+        p->arm[0]->nodeNum = 4;
+        if (p->arm[0]->nodes != 0) {
+            iosFree((void *)ICO_PHYS(ICO_ADDR(p->arm[0]->nodes)));
+        }
+        p->arm[0]->nodes = iosMallocDebug(ios_partition_seki, 320, a_p_1File, 249);
+        {
+            int n;
+
+            for (n = 0; n < 4; n++) {
+                p->arm[0]->nodes[n].flags.ll &= ~1;
+                p->arm[0]->nodes[n].flags.ll &= ~2;
+                p->arm[0]->nodes[n].pos[0] = 0.0f;
+                p->arm[0]->nodes[n].pos[1] = 0.0f;
+                p->arm[0]->nodes[n].pos[2] = 0.0f;
+                p->arm[0]->nodes[n].pos[3] = 1.0f;
+                p->arm[0]->nodes[n].flags.ll &= ~4;
+                p->arm[0]->nodes[n].fade = 0;
+                p->arm[0]->nodes[n].alpha = 1.0f;
+                ((short *)&p->arm[0]->nodes[n].flags)[1] = 0;
+                p->arm[0]->nodes[n].scale[0] = 1.0f;
+                p->arm[0]->nodes[n].scale[1] = 1.0f;
+                p->arm[0]->nodes[n].scale[2] = 1.0f;
+            }
+        }
+        p->arm[0]->dispType = 2;
+        d = CSVSYSTEM_InitDObj(6, arg);
+        p->arm[1] = d;
+        if (d->nodeMtx != 0) {
+            iosFree((void *)ICO_PHYS(d->nodeMtx));
+        }
+        if (p->arm[1]->nodeQuat != 0) {
+            iosFree((void *)ICO_PHYS(p->arm[1]->nodeQuat));
+        }
+        p->arm[1]->nodeMtx = 0;
+        p->arm[1]->nodeQuat = 0;
+        p->arm[1]->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, 256, a_p_1File, 252);
+        p->arm[1]->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, 64, a_p_1File, 252);
+        p->arm[1]->nodeNum = 4;
+        if (p->arm[1]->nodes != 0) {
+            iosFree((void *)ICO_PHYS(ICO_ADDR(p->arm[1]->nodes)));
+        }
+        p->arm[1]->nodes = iosMallocDebug(ios_partition_seki, 320, a_p_1File, 252);
+        {
+            int n;
+
+            for (n = 0; n < 4; n++) {
+                p->arm[1]->nodes[n].flags.ll &= ~1;
+                p->arm[1]->nodes[n].flags.ll &= ~2;
+                p->arm[1]->nodes[n].pos[0] = 0.0f;
+                p->arm[1]->nodes[n].pos[1] = 0.0f;
+                p->arm[1]->nodes[n].pos[2] = 0.0f;
+                p->arm[1]->nodes[n].pos[3] = 1.0f;
+                p->arm[1]->nodes[n].flags.ll &= ~4;
+                p->arm[1]->nodes[n].fade = 0;
+                p->arm[1]->nodes[n].alpha = 1.0f;
+                ((short *)&p->arm[1]->nodes[n].flags)[1] = 0;
+                p->arm[1]->nodes[n].scale[0] = 1.0f;
+                p->arm[1]->nodes[n].scale[1] = 1.0f;
+                p->arm[1]->nodes[n].scale[2] = 1.0f;
+            }
+        }
+        p->arm[1]->dispType = 2;
+    } else {
+        for (i = 0; i < 9; i++) {
+            p->focus[i] = GetSkeltonFocusNode(self, *(int *)((char *)ap1FocusNode + i * 4));
+            if (p->focus[i] == -1) {
+                debug_assertMessage(a_p_1File, 257, warningBanner);
+                __assert(a_p_1File, 257, "e");
+            }
+        }
+        p->arm[1] = 0;
+        p->arm[0] = 0;
+    }
+    p->eye = InitEnemyEye(10, 0, 10);
+    return p;
+}
+
 AP1Work *InitAP1(GObj *self, SObjSimpleSetting *arg)
 {
+    if (ICO_JUN26) {
+        return InitAP1_jun26(self, arg);
+    }
     AP1Work *p;
     Sub15C *d;
     int i;
@@ -588,7 +711,7 @@ static int walkMot(GObj *self)
     return 1;
 }
 
-static int rolling(GObj *self)
+static int rolling_jun26(GObj *self)
 {
     WallCfg info;
 
@@ -616,9 +739,60 @@ static int rolling(GObj *self)
                 if (col->wall.elem != 0) {
                     GOBJ_SUB(self)->ctrl.floorAttr = GetWallAttribute(col);
                 }
-                if (PAL_NTSCAUG6JUN26(CheckWallAttribute(self, 0x50) != 0,
-                                      CheckWallAttribute(self, 0x40) != 0 ||
-                                          CheckWallAttribute(self, 0x50) != 0)) {
+                if ((CheckWallAttribute(self, 0x40) != 0 || CheckWallAttribute(self, 0x50) != 0)) {
+                    if (GetPoolGlobalHeight(col->wall.o.obj) <
+                        GOBJ_SUB(self)->root.pos[1] + 50.0f) {
+                        iosOmSendMail(self, 0x26, self);
+                    }
+                }
+            }
+            {
+                ClipWork *col = &ap1RollClip;
+                if (col->floor.elem != 0) {
+                    GOBJ_SUB(self)->ctrl.floorAttr = GetFloorAttribute(col);
+                }
+            }
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static int rolling(GObj *self)
+{
+    if (ICO_JUN26) {
+        return rolling_jun26(self);
+    }
+    WallCfg info;
+
+    if (GOBJ_SUB(self)->parent.obj != 0) {
+        UnlinkParentOfDObj(self);
+    }
+    GOBJ_SUB(self)->root.move[1] +=
+        60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
+        (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+    _AddVectorXYZ(GOBJ_SUB(self)->root.pos, GOBJ_SUB(self)->root.pos, GOBJ_SUB(self)->root.move);
+    {
+        ClipWork *col = &ap1RollClip;
+        CopyVector(col->pt[0], GOBJ_SUB(self)->root.last);
+        CopyVector(col->pt[1], GOBJ_SUB(self)->root.pos);
+        col->pt[0][1] -= 50.0f;
+        if (clipAndTakeHit(&info, col)) {
+            CopyVector(GOBJ_SUB(self)->root.pos, ap1RollClip.pt[2]);
+            CopyVector(GOBJ_SUB(self)->root.move, ZeroVector);
+            yAxisRotFitting(self, &ap1RollClip.normal);
+            LinkParentOfDObj(self, &info.o);
+            UpdateRootMatrix(self);
+            applyPartOrients(self);
+            {
+                ClipWork *col = &ap1RollClip;
+                if (col->wall.elem != 0) {
+                    GOBJ_SUB(self)->ctrl.floorAttr = GetWallAttribute(col);
+                }
+                if (PAL_NTSCAUG6_JUN26(CheckWallAttribute(self, 0x50) != 0,
+                                       CheckWallAttribute(self, 0x40) != 0 ||
+                                           CheckWallAttribute(self, 0x50) != 0,
+                                       0)) {
                     if (GetPoolGlobalHeight(col->wall.o.obj) <
                         GOBJ_SUB(self)->root.pos[1] + 50.0f) {
                         iosOmSendMail(self, 0x26, self);
@@ -665,11 +839,159 @@ static inline short armCosine(float a, float b, float c) /* derived name */
     float bb = b * b;
     float cc = c * c;
 
-    return (short)(int)GetTableArcCos((aa + bb - cc) / (2.0f * a * b));
+    return PAL_JUN26((short)(int)GetTableArcCos((aa + bb - cc) / (2.0f * a * b)),
+                     GetTableArcCos((aa + bb - cc) / (2.0f * a * b)));
+}
+
+static void calcSubMission_jun26(GObj *self)
+{
+    AP1Work *p = GOBJ_SUB(self)->work;
+    Vec4A_P_1 base;
+    Vec4A_P_1 axis;
+    Vec4A_P_1 rq;
+    Mtx44 tm;
+    Vec4A_P_1 q;
+    Vec4A_P_1 w;
+    Vec4A_P_1 dir;
+    Vec4A_P_1 v;
+    Vec4A_P_1 v2;
+    Mtx44 rm;
+    Vec4A_P_1 lv;
+    Vec4A_P_1 save;
+    Vec4A_P_1 save2;
+    Vec4A_P_1 atk;
+    int i;
+    int ang;
+    int dbg = 0; /* the function's local debug switch, off (case 1) */
+
+    CopyMatrix(MatrixDrive_GetMatrix(), p->mtx);
+    MatrixDrive_RotMatrixZ(0x4000);
+    MatrixDrive_RotMatrixX(0x4000);
+    CopyVector(&base, MatrixDrive_GetMatrix()[3]);
+    GetRootQuaternion(&rq, self);
+    _ApplyMatrix(&axis, MatrixDrive_GetMatrix(), &ap1AttackAxis);
+    MatrixDrive_SetTransposeMatrix(tm.m, MatrixDrive_GetMatrix());
+
+    for (i = 0; i < 4; i++) {
+        AP1Part *part = &p->part[i];
+        float len;
+
+        switch (part->state) {
+        case 1: {
+            float t = (float)part->count / 10.0f;
+
+            CopyVector(&w, &part->home);
+            w.m[1] -= (t < 0.5f) ? t * 2.0f * 20.0f : (1.0f - t) * 2.0f * 20.0f;
+            _ApplyMatrix(&q, p->root, &w);
+            _InterVectorXYZ(&part->pos, &q, &part->pos, t);
+            /* the local debug switch's window: a dump of the root matrix
+               the step is placed in.  Pinned: three to five instructions
+               here at the first GCSE pass (its expression table of 219
+               buckets orders the three spilled frame addresses as the ROM
+               has them); the August TRFILE and PAL's have three code-less
+               lines (664-666) in its place.  Not pinned: the body's text,
+               which is derived. */
+            if (dbg) {
+                debug_DispMatrix((int *)p->root);
+            }
+            if ((part->count += 1) >= 10) {
+                part->state = 0;
+            }
+            break;
+        }
+        case 2: {
+            float t = (float)part->count / 10.0f;
+
+            MatrixDrive_PushMatrix();
+            _UnitMatrix(MatrixDrive_GetMatrix());
+            {
+                float f = t * 49152.0f + -32768.0f;
+
+                MatrixDrive_RotMatrixY((short)(i == 0 ? -f : f));
+            }
+            _ApplyMatrix(&v, MatrixDrive_GetMatrix(), &part->home);
+            v.m[3] = 1.0f;
+            _ApplyMatrix(&dir, p->root, &v);
+            _InterVectorXYZ(&part->pos, &dir, &part->pos, t);
+            MatrixDrive_PopMatrix();
+            if ((part->count += 1) >= 10) {
+                ExecuteSEPackage(self, 85);
+                CopyVector(&part->home, (char *)ap1PartOffset + i * 0x10);
+                part->state = 1;
+                part->count = 0;
+            }
+            break;
+        }
+        }
+
+        MatrixDrive_PushMatrix();
+
+        len = _GetLength(&base, &part->pos);
+        ang = armCosine(len, 50.0f, 50.0f);
+        _SubVector(&dir, &part->pos, &base);
+        _NormalizeVector(&dir, &dir);
+
+        if (part->state == 2) {
+            _OuterProduct(&w, &dir, &axis);
+        } else {
+            _OuterProduct(&w, &dir, &axis);
+        }
+        _ApplyMatrix(&lv, &tm, &dir);
+        MatrixDrive_TurnXObjectMatrixYZ(lv.m[0], lv.m[1], lv.m[2]);
+
+        _ScaleVector(&v, &dir, 50.0f);
+        SetQuaternionByAxisRotateV(&q, (short)-ang, &w);
+        GetMatrixFromQuaternion(&rm, &q);
+        _ApplyMatrix(&v, &rm, &v);
+        _AddVectorXYZ(&part->knee, &base, &v);
+
+        CopyVector(&save, MatrixDrive_GetMatrix()[3]);
+        _MulMatrix(MatrixDrive_GetMatrix(), &rm, MatrixDrive_GetMatrix());
+        CopyVector(MatrixDrive_GetMatrix()[3], &save);
+
+        if (p->skel != 0) {
+            _MulMatrix((char *)GOBJ_SUB(self)->nodeMtx + (p->focus[i * 2 + 1] << 6),
+                       MatrixDrive_GetMatrix(), ap1ArmScale);
+        } else {
+            _MulMatrix((char *)p->arm[0]->nodeMtx + (i << 6), MatrixDrive_GetMatrix(), ap1ArmScale);
+        }
+
+        _ScaleVector(&v2, &dir, 50.0f);
+        SetQuaternionByAxisRotateV(&q, (short)ang, &w);
+        GetMatrixFromQuaternion(&rm, &q);
+        _ApplyMatrix(&v2, &rm, &v2);
+        _AddVectorXYZ(&part->tip, &part->knee, &v2);
+
+        _MulMatrix(MatrixDrive_GetMatrix(), MatrixDrive_GetMatrix(), ap1ArmOffset);
+
+        CopyVector(&save2, MatrixDrive_GetMatrix()[3]);
+        _MulMatrix(MatrixDrive_GetMatrix(), &rm, MatrixDrive_GetMatrix());
+        _MulMatrix(MatrixDrive_GetMatrix(), &rm, MatrixDrive_GetMatrix());
+        CopyVector(MatrixDrive_GetMatrix()[3], &save2);
+
+        if (part->state == 2) {
+            atk = attackCenterOffset;
+            _ApplyMatrix(&atk, MatrixDrive_GetMatrix(), &atk);
+            AttackCenter(self, -1, atk.m, 0, 30.0f);
+        }
+
+        if (p->skel != 0) {
+            _MulMatrix((char *)GOBJ_SUB(self)->nodeMtx + (p->focus[i * 2 + 2] << 6),
+                       MatrixDrive_GetMatrix(), ap1ArmScale);
+        } else {
+            _MulMatrix((char *)p->arm[1]->nodeMtx + (i << 6), MatrixDrive_GetMatrix(), ap1ArmScale);
+        }
+
+        MatrixDrive_PopMatrix();
+    }
 }
 
 static void calcSubMission(GObj *self)
 {
+    if (ICO_JUN26) {
+        calcSubMission_jun26(self);
+        return;
+    }
     AP1Work *p = GOBJ_SUB(self)->work;
     Vec4A_P_1 base;
     Vec4A_P_1 axis;
@@ -885,9 +1207,11 @@ void AP1Geo(GObj *self)
 
     switch (p->mode) {
     default:
-        if (p->settleCount < 10) {
-            p->settleCount = p->settleCount + 1;
-            resetPositionInfo(self);
+        if (!ICO_JUN26) {
+            if (p->settleCount < 10) {
+                p->settleCount = p->settleCount + 1;
+                resetPositionInfo(self);
+            }
         }
         p->mode = motFuncList[p->mode][1](self);
         stepAP1BlinkTimer(self);
@@ -926,8 +1250,27 @@ void AP1Geo(GObj *self)
     }
 }
 
+static void AP1DL_jun26(GObj *self)
+{
+    AP1Work *p = GOBJ_SUB(self)->work;
+
+    if (p->mode < 5) {
+        p2o_SetDefaultEnviroment();
+        p2o_DispVU1(self);
+        if (p->skel == 0) {
+            p2o_DispVU1DObjMulti(p->arm[0]);
+            p2o_DispVU1DObjMulti(p->arm[1]);
+        }
+        DispEnemyEye(p->eye);
+    }
+}
+
 void AP1DL(GObj *self)
 {
+    if (ICO_JUN26) {
+        AP1DL_jun26(self);
+        return;
+    }
     AP1Work *p = GOBJ_SUB(self)->work;
 
     if (p->mode < 5) {
@@ -1021,8 +1364,17 @@ check:
     return 0;
 }
 
+static GObj *MakeAP1GObj_jun26(SObjSimpleSetting *setting)
+{
+    debug_StdPrintfDummy("TYPE: %d\n", spiderDef[setting->obj].layout);
+    return CreateLayoutedGObj(59, spiderDef[setting->obj].layout, -1, 0, setting, -1, 7, 1);
+}
+
 GObj *MakeAP1GObj(SObjSimpleSetting *setting)
 {
+    if (ICO_JUN26) {
+        return MakeAP1GObj_jun26(setting);
+    }
     return PAL_NTSC_AUG6JUN26(
         CreateLayoutedGObj(62, spiderDef[setting->obj].layout, -1, 0, setting, 0, 7, 1),
         CreateLayoutedGObj(61, spiderDef[setting->obj].layout, -1, 0, setting, -1, 7, 1),

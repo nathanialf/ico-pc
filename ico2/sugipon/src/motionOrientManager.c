@@ -133,7 +133,23 @@ static void orientDebug(void *self, int idx, int y)
     }
 }
 
-static inline void checkMotionKind_ntscaug6jun26(int i, int j) /* derived name */
+static inline void checkMotionKind_jun26(int i, int j) /* derived name */
+{
+    if (motionKind[i].blendKind != 207) {
+        char buf[256];
+
+        /* EUC-JP: "the node-blending motion (%s) uses a node-blending motion again" */
+        debug_StdPrintfDummy(
+            "ノードを混ぜるモーション(%s)が、\n再度ノードを混ぜるモーションを利用しています。\n",
+            motionKind[j].name);
+        sprintf(buf, "NODE BLEND MOTION \"%s\" REFERS\nNODE BLEND MOTION RECURSIVELY.\n",
+                motionKind[j].name);
+        debug_assertMessage(__FILE__, 153, buf);
+        __assert(__FILE__, 153, "e");
+    }
+}
+
+static inline void checkMotionKind_ntscaug6(int i, int j) /* derived name */
 {
     if (motionKind[i].blendKind != 228) {
         char buf[256];
@@ -151,8 +167,12 @@ static inline void checkMotionKind_ntscaug6jun26(int i, int j) /* derived name *
 
 static inline void checkMotionKind(int i, int j) /* derived name */
 {
-    if (ICO_NTSCAUG6JUN26) {
-        checkMotionKind_ntscaug6jun26(i, j);
+    if (ICO_JUN26) {
+        checkMotionKind_jun26(i, j);
+        return;
+    }
+    if (ICO_NTSCAUG6) {
+        checkMotionKind_ntscaug6(i, j);
         return;
     }
     if (motionKind[i].blendKind != 320) {
@@ -174,7 +194,7 @@ int GetNbMotionFrames(int id)
     int m;
     int n;
 
-    if (motionKind[id].blendKind == PAL_NTSCAUG6JUN26(320, 228)) {
+    if (motionKind[id].blendKind == PAL_NTSCAUG6_JUN26(320, 228, 207)) {
         return *motionTable[id];
     }
     m = blendMotionKind[motionKind[id].blendKind].motion;
@@ -190,7 +210,7 @@ float GetMotionPlaySpeedRatio(int id)
 {
     int m;
 
-    if (motionKind[id].blendKind == PAL_NTSCAUG6JUN26(320, 228)) {
+    if (motionKind[id].blendKind == PAL_NTSCAUG6_JUN26(320, 228, 207)) {
         return motionKind[id].playSpeedRatio;
     }
     m = blendMotionKind[motionKind[id].blendKind].motion;
@@ -396,7 +416,7 @@ inline MotionOrientEntry *GetMotionOrient(int i, int n, int id, int kind)
             if (motionOrient[i].id == id) {
                 return &motionOrient[i];
             }
-            if (motionOrient[i].id == PAL_NTSC_AUG6JUN26(1146, 1085, 1087)) {
+            if (motionOrient[i].id == PAL_NTSC_AUG6_JUN26(1146, 1085, 1087, 1166)) {
                 found = i;
             }
         }
@@ -407,8 +427,21 @@ inline MotionOrientEntry *GetMotionOrient(int i, int n, int id, int kind)
     return 0;
 }
 
+static inline MotionOrientEntry *getMotionOrient_jun26(int i, int n, int id, int kind)
+{
+    MotionOrientEntry *p = GetMotionOrient(i, n, id, kind);
+
+    if (p != 0) {
+        return p;
+    }
+    return &motionOrient[2165];
+}
+
 inline MotionOrientEntry *getMotionOrient(int i, int n, int id, int kind)
 {
+    if (ICO_JUN26) {
+        return getMotionOrient_jun26(i, n, id, kind);
+    }
     MotionOrientEntry *p = GetMotionOrient(i, n, id, kind);
 
     if (p != 0) {
@@ -519,7 +552,7 @@ static inline int searchMotionShift(void *self, int id, int cur) /* derived name
         for (i = 0; (m->shiftReq)[i] != -1; i++) {
             if ((m->shiftReq)[i] == id) {
                 if ((m->shiftNext)[i] == cur) {
-                    return PAL_NTSC_AUG6JUN26(0x479, 1084, 1086);
+                    return PAL_NTSC_AUG6_JUN26(0x479, 1084, 1086, 1165);
                 }
                 return (m->shiftNext)[i];
             }
@@ -668,8 +701,77 @@ inline void CopyBlendMotionDataSource(void *self, short ang)
     }
 }
 
+static void shiftMotionOrientBeginFunc_jun26(void *self, int motion, int request, int shiftMode)
+{
+    Vec16 v;
+    char *m = (char *)MOWORK(self);
+    struct MotCtrl *w = ICO_RAWP(struct MotCtrl *, m, 0x470, &MOWORK(self)->ctrl);
+    struct MotRoot *p = ICO_RAWP(struct MotRoot *, m, 0xA0, &MOWORK(self)->root);
+    short ang;
+    StreamElem *mot;
+    int i;
+
+    debug_StdPrintfDummy(
+        "Change \"\033[33m%s(%d)\033[m\"in \"\033[33m%s(%d)\033[m\" at control \"\033[33m%s\033[m\".\n",
+        motionOriKind[w->orientKind].s, w->orientKind, motionKind[w->motion].name, w->motion, "");
+    shiftMotionData((ICO_WORD_PTR(void *))self, motion, request, shiftMode);
+    if (w->parallelEnded != 0) {
+        GetOutOutsideOfWall(self, p->radius);
+    }
+    memset(&v, 0, 16);
+    ang = 0;
+    v.f[2] = 1.0f;
+    if (w->rootUpdateMode != 0 && w->rootUpdateMode != 6) {
+        int kind = motionKind[w->lastMotion].adjustAngle;
+
+        if (motionKind[w->motion].flags.bits.adjustRoot || kind != 0) {
+            sceVu0UnitMatrix(MatrixDrive_GetMatrix());
+            if (kind != 0 && kind != 1) {
+                ang = (short)(kind * 32768 / 180);
+                debug_StdPrintfDummy("ADJUST FROM TABLE \033[36m%08x(%f)\033[m\n", ang,
+                                     (float)ang * 180.0f / 32768.0f);
+            } else {
+                float mtx[4][4];
+
+                GetMatrixFromQuaternion((char *)mtx, p->motionQuat);
+                sceVu0ApplyMatrix(&v, mtx, &v);
+                v.f[1] = 0.0f;
+                _NormalizeVector(&v, &v);
+                ang = GetTableArcTan2(v.f[0], v.f[2]);
+                debug_StdPrintfDummy("ADJUST \033[36m%08x(%f)\033[m\n", ang,
+                                     (float)ang * 180.0f / 32768.0f);
+            }
+            MatrixDrive_RotMatrixY(ang);
+            sceVu0ApplyMatrix(w->dir, MatrixDrive_GetMatrix(), w->dir);
+        } else {
+            debug_StdPrintfDummy("ROT DIFF %08x(%f)\n", 0, (float)ang);
+        }
+    }
+    mot = MOWORK(self)->blendBuf;
+    i = 0;
+    CopyMotion(mot, MOWORK(self)->motionBuf, MOWORK(self)->skelNodeNum);
+    CopyVector(MOWORK(self)->localPos, MOWORK(self)->motionPos);
+    CopyVector(MOWORK(self)->localMove, MOWORK(self)->root.move);
+    *(struct MotOriFloat *)((char *)MOWORK(self) + 0x7A8) =
+        *(struct MotOriFloat *)((char *)MOWORK(self) + 0x150);
+    *(struct MotOriHead8 *)((char *)MOWORK(self) + 0x7A0) = *(struct MotOriHead8 *)MOWORK(self);
+    while (MOWORK(self)->skel[i].parent == -1) {
+        float quat[4];
+
+        SetQuaternionByAxisRotate(quat, ang, 0.0f, 1.0f, 0.0f);
+        MultiQuaternion(mot[i].q, quat, mot[i].q);
+        i = MOWORK(self)->skel[i].sibling;
+    }
+    InitFrameDependSequence(MOWORK(self)->fdsFlags);
+    clearFrameTriggerState(self);
+}
+
 static void shiftMotionOrientBeginFunc(void *self, int motion, int request, int shiftMode)
 {
+    if (ICO_JUN26) {
+        shiftMotionOrientBeginFunc_jun26(self, motion, request, shiftMode);
+        return;
+    }
     Vec16 v;
     char *m = (char *)MOWORK(self);
     struct MotCtrl *w = ICO_RAWP(struct MotCtrl *, m, 0x470, &MOWORK(self)->ctrl);
@@ -739,7 +841,7 @@ static inline int checkMotionShiftReady(struct MotCtrl *m, MotionOrientEntry *p)
     }
     kind = p->nextId;
     m->orientReq = kind;
-    if (kind == PAL_NTSC_AUG6JUN26(0x479, 1084, 1086)) {
+    if (kind == PAL_NTSC_AUG6_JUN26(0x479, 1084, 1086, 1165)) {
         if (m->frameEnd == 0) {
             goto fail;
         }
@@ -760,7 +862,7 @@ static int normalMotionShift(void *self, int force)
     MotionOrientEntry *p = getMotionOrient(w->oriFrom, w->oriTo, w->request, w->orientKind);
 
     if (force == 0) {
-        if (p->id == PAL_NTSC_AUG6JUN26(1146, 1085, 1087)) {
+        if (p->id == PAL_NTSC_AUG6_JUN26(1146, 1085, 1087, 1166)) {
             return 0;
         }
     }
@@ -770,11 +872,11 @@ static int normalMotionShift(void *self, int force)
         int next;
         int r = -1; /* no pairing found; the else arm searches with it as cur */
 
-        if (kind == PAL_NTSC_AUG6JUN26(0x479, 1084, 1086)) {
+        if (kind == PAL_NTSC_AUG6_JUN26(0x479, 1084, 1086, 1165)) {
             kind = p->id;
             mode = 5;
             r = searchMotionShift(self, kind, w->motion);
-            if (r == -1 || r == PAL_NTSC_AUG6JUN26(0x479, 1084, 1086)) {
+            if (r == -1 || r == PAL_NTSC_AUG6_JUN26(0x479, 1084, 1086, 1165)) {
                 return 0;
             }
             next = r;
@@ -808,7 +910,24 @@ static inline MotionOrientEntry *findParallelMotion_ntsc(int cur, int next) /* d
     return 0;
 }
 
-static inline MotionOrientEntry *findParallelMotion_aug6jun26(int cur, int next) /* derived name */
+static inline MotionOrientEntry *findParallelMotion_jun26(int cur, int next) /* derived name */
+{
+    int i;
+
+    if (cur == next) {
+        return &motionOrient[2165];
+    }
+    for (i = 0; i < 41; i++) {
+        if (parallelMotionOrient[i].id == cur) {
+            if (parallelMotionOrient[i].kind == next) {
+                return (MotionOrientEntry *)&parallelMotionOrient[i];
+            }
+        }
+    }
+    return 0;
+}
+
+static inline MotionOrientEntry *findParallelMotion_aug6(int cur, int next) /* derived name */
 {
     int i;
 
@@ -827,11 +946,14 @@ static inline MotionOrientEntry *findParallelMotion_aug6jun26(int cur, int next)
 
 static inline MotionOrientEntry *findParallelMotion(int cur, int next) /* derived name */
 {
+    if (ICO_JUN26) {
+        return findParallelMotion_jun26(cur, next);
+    }
     if (ICO_NTSC) {
         return findParallelMotion_ntsc(cur, next);
     }
-    if (ICO_AUG6JUN26) {
-        return findParallelMotion_aug6jun26(cur, next);
+    if (ICO_AUG6) {
+        return findParallelMotion_aug6(cur, next);
     }
     int i;
 
@@ -865,7 +987,7 @@ static int parallelMotionShift(void *self)
                 shiftMotionOrientBeginFunc(self, p->nextId, m->request, p->shiftMode);
                 return 1;
             }
-        } else if (next != PAL_NTSC_AUG6JUN26(0x479, 1084, 1086)) {
+        } else if (next != PAL_NTSC_AUG6_JUN26(0x479, 1084, 1086, 1165)) {
             MotionOrientEntry e = {m->motion, m->orientKind, next, m->shiftFrom, m->shiftMode};
 
             if (checkMotionShiftReady(&MOWORK(self)->ctrl, &e) != 0) {
@@ -889,8 +1011,76 @@ typedef struct MotOriSpin { /* field names derived */
     char *s[4];
 } MotOriSpin; /* derived name */
 
+static char *SetMotionRequest_jun26(void *self, int mot, MotOriReq req)
+{
+    char *w = ICO_RAWP(char *, GOBJ_SUB(self), 0x470, (char *)&GOBJ_SUB(self)->ctrl);
+    struct MotCtrl *c = &GOBJ_SUB(self)->ctrl;
+    int old = ICO_RAW(int, w, 0xD0, c->orientKind);
+
+    ICO_RAW(int, w, 0xD0, c->orientKind) = mot;
+    if (normalMotionShift(self, 1) != 0) {
+        ICO_RAW(int, w, 0x44, *(int *)&c->playTime) = 0;
+        switch (ICO_RAW(int, w, 0x68, c->rootUpdateMode)) {
+        case 3:
+        case 7:
+        case 8:
+        case 9:
+        case 10:
+        case 13:
+        case 15:
+        case 16:
+            *(MotOriReq *)&GOBJ_SUB(self)->root.wall = req;
+            debug_StdPrintfDummy("\033[36mUpdate with collision info that act memorized.\033[m\n");
+            break;
+        }
+        if ((debug_mot_debug_target == 0 && self == boyGObj) ||
+            (debug_mot_debug_target == 1 && self == girlGObj) ||
+            (debug_mot_debug_target == 2 && self == isysGObjSearchFromObjKindID_begin(32)) ||
+            (debug_mot_debug_target == 3 && self == isysGObjSearchFromObjKindID_begin(4)) ||
+            (debug_mot_debug_target == 4 && self == isysGObjSearchFromObjKindID_begin(45))) {
+            if (ignoreCount != 0 && debug_window_flag != 0) {
+                debug_PrintFontWindow(0xC0FF20, "\n ");
+            }
+            orientDebug(self, mot, 0xFFFFFF80);
+            ignoreCount = 0;
+        }
+    } else {
+        ICO_RAW(int, w, 0xD0, c->orientKind) = old;
+        if (pad[0].now & 0x1) {
+            if ((debug_mot_debug_target == 0 && self == boyGObj) ||
+                (debug_mot_debug_target == 1 && self == girlGObj) ||
+                (debug_mot_debug_target == 2 && self == isysGObjSearchFromObjKindID_begin(32)) ||
+                (debug_mot_debug_target == 3 && self == isysGObjSearchFromObjKindID_begin(4)) ||
+                (debug_mot_debug_target == 4 && self == isysGObjSearchFromObjKindID_begin(45))) {
+                MotOriSpin spin = {{"-", "\\", "|", "/"}};
+
+                if (ignoreMotion != mot && ignoreCount != 0) {
+                    ignoreCount = 0;
+                    if (debug_window_flag != 0) {
+                        debug_PrintFontWindow(0xC0FF20, "\n ");
+                    }
+                }
+                if (debug_window_flag != 0) {
+                    MotOriName name = motionOriKind[mot];
+
+                    debug_PrintFontWindow(
+                        0x3080FF20, "%s %s at %s ignore %d times", spin.s[frame_count & 3], name.s,
+                        motionKind[ICO_RAW(int, w, 0x30, c->motion)].name, ++ignoreCount);
+                }
+                ignoreMotion = mot;
+            }
+        }
+    }
+    /* PC port: the callers read the result as the motion control block
+       (struct MotCtrl); GOBJ_SUB + 0x470 is that block on the EE only */
+    return (char *)c;
+}
+
 char *SetMotionRequest(void *self, int mot, MotOriReq req)
 {
+    if (ICO_JUN26) {
+        return SetMotionRequest_jun26(self, mot, req);
+    }
     char *w = ICO_RAWP(char *, GOBJ_SUB(self), 0x470, (char *)&GOBJ_SUB(self)->ctrl);
     struct MotCtrl *c = &GOBJ_SUB(self)->ctrl;
     int old = ICO_RAW(int, w, 0xD0, c->orientKind);
@@ -971,7 +1161,7 @@ inline void SetParallelMotionTable(void *self, int *next, int *req, int from, in
     struct MotCtrl *m = &GOBJ_SUB(self)->ctrl;
     int old = m->orientKind;
 
-    m->orientKind = PAL_NTSC_AUG6JUN26(269, 237, 235);
+    m->orientKind = PAL_NTSC_AUG6_JUN26(269, 237, 235, 224);
     SetParallelMotionTableWithNoRequest(self, next, req);
     m->shiftFrom = from;
     m->shiftMode = mode;
@@ -993,7 +1183,7 @@ static void getNodeBlendedFloatingMotion(StreamElem *dst, float *root, int id, i
     SkelNode *skel = MOWORK(self)->skel;
 
     for (i = 0, j = motionKind[id].blendKind;
-         blendMotionKind[j].motion != PAL_NTSC_AUG6JUN26(0x47B, 1086, 1088); i++, j++) {
+         blendMotionKind[j].motion != PAL_NTSC_AUG6_JUN26(0x47B, 1086, 1088, 1167); i++, j++) {
         int node = blendMotionKind[j].motion;
 
         checkMotionKind(node, id);
@@ -1018,8 +1208,8 @@ static void getNodeBlendedFloatingMotion(StreamElem *dst, float *root, int id, i
     if (i == 0) {
         /* EUC-JP: "(%s) the motion to blend is not defined" */
         debug_StdPrintfDummy("(%s)混ぜるモーションが定義されていません。\n", motionKind[id].name);
-        debug_assert(__FILE__, LN(1228, 1222, 1222, 1228, 1228, 1228, 1222));
-        __assert(__FILE__, LN(1228, 1222, 1222, 1228, 1228, 1228, 1222), "0");
+        debug_assert(__FILE__, LN(1228, 1222, 1222, 1228, 1228, 1219, 1222));
+        __assert(__FILE__, LN(1228, 1222, 1222, 1228, 1228, 1219, 1222), "0");
     }
 }
 
@@ -1045,12 +1235,12 @@ static inline void assertMotionLoaded(struct MotCtrl *w, int *md) /* derived nam
 
         sprintf(buf, "THE MOTION \"%s\"(%d)\nDID NOT LOAD IN THIS STAGE\nOR IS INVALID ID.\n",
                 motionKind[w->motion].name, w->motion);
-        debug_assertMessage(__FILE__, LN(1275, 1269, 1269, 1268, 1262, 1275, 1269), buf);
-        __assert(__FILE__, LN(1275, 1269, 1269, 1268, 1262, 1275, 1269), "e");
+        debug_assertMessage(__FILE__, LN(1275, 1269, 1269, 1268, 1262, 1260, 1269), buf);
+        __assert(__FILE__, LN(1275, 1269, 1269, 1268, 1262, 1260, 1269), "e");
     }
 }
 
-static inline void assertMotionNodeCount(struct MotCtrl *w, int *md, int n) /* derived name */
+static inline void assertMotionNodeCount_jun26(struct MotCtrl *w, int *md, int n) /* derived name */
 {
     int *e = ICO_EEPTR(int *, md[3]);
     int i = 0;
@@ -1065,8 +1255,32 @@ static inline void assertMotionNodeCount(struct MotCtrl *w, int *md, int n) /* d
             buf,
             "THE NUMBER OF NODE DATAS OF MOTION\n\"%s\"(%d SKELTONS) DOES NOT MATCH\nTHE NUMBER OF SKELTON NODES(%d SKELTONS)\n",
             motionKind[w->motion].name, i - 1, n);
-        debug_assertMessage(__FILE__, LN(1287, 1281, 1281, 1280, 1274, 1287, 1281), buf);
-        __assert(__FILE__, LN(1287, 1281, 1281, 1280, 1274, 1287, 1281), "e");
+        debug_assertMessage(__FILE__, 1272, buf);
+        __assert(__FILE__, 1272, "e");
+    }
+}
+
+static inline void assertMotionNodeCount(struct MotCtrl *w, int *md, int n) /* derived name */
+{
+    if (ICO_JUN26) {
+        assertMotionNodeCount_jun26(w, md, n);
+        return;
+    }
+    int *e = ICO_EEPTR(int *, md[3]);
+    int i = 0;
+
+    do {
+        i++;
+    } while (*e++ != 0);
+    if (i - 1 != n) {
+        char buf[1024];
+
+        sprintf(
+            buf,
+            "THE NUMBER OF NODE DATAS OF MOTION\n\"%s\"(%d SKELTONS) DOES NOT MATCH\nTHE NUMBER OF SKELTON NODES(%d SKELTONS)\n",
+            motionKind[w->motion].name, i - 1, n);
+        debug_assertMessage(__FILE__, LN(1287, 1281, 1281, 1280, 1274, 1274, 1281), buf);
+        __assert(__FILE__, LN(1287, 1281, 1281, 1280, 1274, 1274, 1281), "e");
     }
 }
 
@@ -1265,7 +1479,168 @@ static void getMotionGeometry_ntsc(void *self)
     }
 }
 
-static void getMotionGeometry_aug6jun26(void *self)
+static void getMotionGeometry_jun26(void *self)
+{
+    SkelNode *skel = MOWORK(self)->skel;
+    struct MotRoot *mo = &MOWORK(self)->root;
+    struct MotCtrl *w = &MOWORK(self)->ctrl;
+    int n = MOWORK(self)->skelNodeNum;
+    char *blendless = MOWORK(self)->blendless;
+    StreamElem mot[n];
+    float scale = MOWORK(self)->nodes->scale[0];
+    int *md = motionTable[w->motion];
+
+    if (motionKind[w->motion].blendKind == 207) {
+        assertMotionLoaded(w, md);
+        assertMotionNodeCount(w, md, n);
+    }
+    MatrixDrive_PushMatrix();
+    {
+        Vec16 v;
+        Vec16 rv;
+
+        /* PC port: neither root-position call writes w (see below); 0
+           rather than whatever the host's frame left there */
+        v.f[3] = 0.0f;
+        rv.f[3] = 0.0f;
+        if (motionKind[w->motion].blendKind == 228) {
+            GetFloatingMotion(mot, w->animFrame, v.f, md, n, blendless, skel);
+            GetFloatingMotionRootPos(rv.f, md, w->lastFrame);
+        } else {
+            getNodeBlendedFloatingMotion(mot, v.f, w->motion, n, blendless, self, w->animFrame);
+            getMotionRootPos(w, rv.f);
+        }
+        sceVu0ScaleVector(&v, &v, scale);
+        /* PC port: a root position blended between two frames
+           (GetBlendedMotionRootPos) gets x, y and z only, so w is the stack
+           word an earlier call left in v (and in rv). VU0 scales an
+           exponent-255 word as a number, saturating at +-Fmax, and the root
+           update's sceVu0ApplyMatrix multiplies it by the zero translation
+           row, so rootMove's x, y and z are the rotation alone; a host NaN
+           there gave NaN in all three (a shadow carrying the girl, stage 4).
+           Read it as the PS2 does. */
+        v.f[3] = ps2_operand(v.f[3]);
+        if (w->animFrame < w->lastFrame) {
+            CopyVector(mo->step, ZeroVector);
+        } else {
+            sceVu0ScaleVector(&rv, &rv, scale);
+            rv.f[3] = ps2_operand(rv.f[3]);
+            sceVu0SubVector(mo->step, &v, &rv);
+        }
+        if (w->noAlt != 0) {
+            MakeMirrorMotion(mot, skel);
+        }
+        if (w->catchBoy != 0) {
+            SlopeIKControl(self, (char *)mot, v.f, (Vec4 *)mo->step, n);
+        }
+        {
+            Vec16 fv;
+            Vec16 tv;
+            Vec16 tmp;
+            float len;
+            float ang;
+            float r;
+            int flag;
+            int k;
+
+            len = VectorLength(mo->move) *
+                  ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f);
+            CopyVector(&fv, w->dir);
+            CopyVector(&tv, w->lastDir);
+            if (MOWORK(self)->parent.obj != 0) {
+                sceVu0ApplyMatrix(&fv,
+                                  (char *)MOWORK(MOWORK(self)->parent.obj)->nodeMtx +
+                                      MOWORK(self)->parent.node * 0x40,
+                                  &fv);
+                sceVu0ApplyMatrix(&tv,
+                                  (char *)MOWORK(MOWORK(self)->parent.obj)->nodeMtx +
+                                      MOWORK(self)->parent.node * 0x40,
+                                  &tv);
+            }
+            ang = acosf(tv.f[0] * fv.f[0] + tv.f[2] * fv.f[2]) *
+                  ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f * 10430.378f);
+            if (0.0f < tv.f[0] * fv.f[2] - tv.f[2] * fv.f[0]) {
+                ang = -ang;
+            }
+            r = ang * 0.1f * len * len;
+            if (6144.0f < r) {
+                r = 6144.0f;
+            }
+            if (r < -6144.0f) {
+                r = -6144.0f;
+            }
+            if (debug_now_motion_viewer == 0) {
+                float t = 60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.2f;
+
+                /* two statements with an int between them: the August TRFILE
+                 * and PAL's listing have code on both lines, the narrowing to
+                 * short on the second */
+                int tw = mo->twist * (1.0f - t);
+                mo->twist = (short)tw + r * t;
+            }
+            if (w->rootUpdateMode == 20) {
+                Vec16 up;
+                float mtx[4][4];
+                Vec16 rot;
+                short a;
+
+                tmp = mo->plane;
+                GetMatrixFromQuaternion((char *)mtx, mo->quat);
+                _ApplyMatrix(&up, mtx, ZUnitVector);
+                tmp.f[3] = 0.0f;
+                slopeVector[1] = GetYDistanceFromPlane(tmp.f, up.f);
+                slopeVector[2] = 1.0f;
+                _NormalizeVector(slopeVector, slopeVector);
+                a = GetTableArcTan2(slopeVector[1], slopeVector[2]);
+                SetIdentityQuaternion(&rot);
+                RotQuaternionX(&rot, a);
+                rotateNodes(mot, skel, &rot);
+            }
+            flag = 0;
+            if (debug_motion_interporate != 0) {
+                flag = w->blendFrames >= w->blendCount;
+            }
+            k = motionKind[w->motion].stepNode;
+            if (flag != 0) {
+                /* PC port: shiftMotionData sets blendFrames to 0 for a
+                   shift shorter than one frame at this rate; the guard
+                   then passes only with blendCount 0 (a record not yet
+                   shifted), where 0 / 0 is +Fmax on the EE and NaN under
+                   IEEE */
+                float s = ps2_div((float)w->blendCount, (float)w->blendFrames);
+
+                GetBlendedMotion(MOWORK(self)->motionBuf, tmp.f, mot, v.f, MOWORK(self)->blendBuf,
+                                 MOWORK(self)->localPos, s, blendless, n);
+                mo->radius = mo->radiusFrom * (1.0f - s) + mo->radiusTo * s;
+                GetGeometryOfMotion(self, mot, MOWORK(self)->motionBuf, v.f, s, mo->step, k);
+            } else {
+                CopyMotion(MOWORK(self)->motionBuf, mot, n);
+                mo->radius = mo->radiusTo;
+                GetGeometryOfMotion(self, mot, MOWORK(self)->motionBuf, v.f, 1.0f, mo->step,
+                                    w->justShifted ? k : -1);
+            }
+            SetIdentityQuaternion(&tmp);
+            RotQuaternionX(&tmp, -32768);
+            RotQuaternionY(&tmp, -32768);
+            MultiQuaternion(&tmp, &tmp, skel->quat);
+            GetInverseQuaternion(&tmp, &tmp);
+            MultiQuaternion(mo->motionQuat, mot[0].q, &tmp);
+            CopyVector(w->lastDir, w->dir);
+        }
+    }
+    MatrixDrive_PopMatrix();
+    if (w->mailDelay <= 0) {
+        w->mailDelay = w->mailDelay + 1;
+    } else {
+        sendStateMail(self);
+    }
+    DispSkelton(self, mot);
+    ExecFrameDependSequence(self);
+    execFrameTrigger(self);
+    UpdateFrameCounter(self);
+}
+
+static void getMotionGeometry_aug6(void *self)
 {
     SkelNode *skel = MOWORK(self)->skel;
     struct MotRoot *mo = &MOWORK(self)->root;
@@ -1448,12 +1823,16 @@ static void getMotionGeometry_aug6jun26(void *self)
 
 static void getMotionGeometry(void *self)
 {
+    if (ICO_JUN26) {
+        getMotionGeometry_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         getMotionGeometry_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        getMotionGeometry_aug6jun26(self);
+    if (ICO_AUG6) {
+        getMotionGeometry_aug6(self);
         return;
     }
     SkelNode *skel = MOWORK(self)->skel;
@@ -1662,8 +2041,85 @@ enum DebugDisplayMode {
 
 extern enum DebugDisplayMode debug_bar_flag;
 
+static void getShapeGeometry_jun26(void *self)
+{
+    struct MotCtrl *m = &GOBJ_SUB(self)->ctrl;
+
+    if (motionKind[m->motion].blendKind == 207) {
+        void *mot = motionTable[m->motion];
+
+        if (CheckMotionIncludeFacialData(mot) == 0) {
+            int n = *ICO_EEPTR(int *, *(int *)((char *)mot + 0x10));
+            float buf[n];
+            int i;
+
+            GetFloatingShapeMotion(buf, mot, m->animFrame, n);
+            if (n != 0) {
+                int cnt = GOBJ_SUB(self)->morphNum;
+
+                if (cnt != 0) {
+                    if (cnt != n) {
+                        /* EUC-JP: "the shape motion data and the number of targets differ; motion: %d target: %d" */
+                        debug_StdPrintfDummy(
+                            "シェイプモーションデータとターゲットの数が違います。\nモーション:%d ターゲット:%d\n",
+                            n, cnt);
+                    }
+                    for (i = 0; i < n; i++) {
+                        float x = buf[i] * 0.01f;
+                        int *p = (int *)(i * 4 + ICO_RAW(int, GOBJ_SUB(self), 0x838,
+                                                         (ICO_WORD)GOBJ_SUB(self)->morphWeight));
+
+                        if (x < 0.0f) {
+                            if (0.0001f < -x) {
+                                *(float *)p = x;
+                            } else {
+                                *p = 0;
+                            }
+                        } else {
+                            if (0.0001f < x) {
+                                *(float *)p = x;
+                            } else {
+                                *p = 0;
+                            }
+                        }
+                    }
+                } else {
+                    /* EUC-JP: "no place is reserved to store the handover data" */
+                    debug_StdPrintfDummy("受渡しデータを格納する場所が確保されていません。\n");
+                }
+                if (debug_bar_flag != 0) {
+                    gif_StartPacketPri(11);
+                    {
+                        int p1[4];
+                        int p2[4];
+                        MotOriCol4 c0 = {{64, 32, 0, 128}};
+                        MotOriCol4 c1 = {{255, 128, 0, 128}};
+
+                        gif_SetAlpha(1, 5, 128);
+                        for (i = 0; i < n; i++) {
+                            p1[0] = (ScreenWidth / 2 + 1824) << 4;
+                            p2[0] = (ScreenWidth / 2 + 2024) << 4;
+                            p1[1] = p2[1] = (ScreenHeight / 2 - n * 6 + 2024 + i * 6) << 4;
+                            Draw2DLine(p1, p2, (int *)c0.c, -1);
+                            p1[0] = p2[0] = (ScreenWidth / 2 + (int)buf[i] + 1924) << 4;
+                            p1[1] = (ScreenHeight / 2 - n * 6 + 2025 + i * 6) << 4;
+                            p2[1] = (ScreenHeight / 2 - n * 6 + 2028 + i * 6) << 4;
+                            Draw2DLine(p1, p2, (int *)c1.c, -1);
+                        }
+                        gif_EndPacket();
+                    }
+                }
+            }
+        }
+    }
+}
+
 static void getShapeGeometry(void *self)
 {
+    if (ICO_JUN26) {
+        getShapeGeometry_jun26(self);
+        return;
+    }
     struct MotCtrl *m = &GOBJ_SUB(self)->ctrl;
 
     if (motionKind[m->motion].blendKind == PAL_NTSCAUG6JUN26(320, 228)) {
@@ -1766,8 +2222,10 @@ static void getStreamMotionGeometry_ntscaug6jun26(void *self, void *sm)
         v[1] -= MOWORK(self)->streamOfs[1];
         v[2] += MOWORK(self)->streamOfs[2];
         GetGeometryOfMotion(self, mot, mot, v, 1.0f, ZeroVector, -1);
-        CopyMotion(MOWORK(self)->motionBuf, mot, MOWORK(self)->skelNodeNum);
-        CopyVector(MOWORK(self)->motionPos, v);
+        if (!ICO_JUN26) {
+            CopyMotion(MOWORK(self)->motionBuf, mot, MOWORK(self)->skelNodeNum);
+            CopyVector(MOWORK(self)->motionPos, v);
+        }
         DispSkelton(self, mot);
     }
 }
@@ -1904,8 +2362,55 @@ static void getStreamMotion(void *self)
     }
 }
 
+static void ExecMotionOrient_jun26(void *self)
+{
+    struct MotCtrl *w = &GOBJ_SUB(self)->ctrl;
+
+    if (w->shiftStop != 0) {
+        /* EUC-JP: "the motion replacement function is stopped" */
+        debug_StdPrintfDummy("\033[36mモーション置き換え機能が停止しています。\033[m: %p\n", self);
+    }
+    if (w->stream == -1) {
+        if (w->orientKind != 224) {
+            normalMotionShift(self, 0);
+        } else {
+            parallelMotionShift(self);
+        }
+        if ((debug_mot_debug_target == 0 && self == boyGObj) ||
+            (debug_mot_debug_target == 1 && self == girlGObj) ||
+            (debug_mot_debug_target == 2 && self == isysGObjSearchFromObjKindID_begin(32)) ||
+            (debug_mot_debug_target == 3 && self == isysGObjSearchFromObjKindID_begin(4)) ||
+            (debug_mot_debug_target == 4 && self == isysGObjSearchFromObjKindID_begin(45))) {
+            if (w->shifted != 0) {
+                if (ignoreCount != 0 && debug_window_flag != 0) {
+                    debug_PrintFontWindow(0xC0FF20, "\n ");
+                }
+                orientDebug(self, w->orientKind, 0xE0FF20);
+                ignoreCount = 0;
+            }
+        }
+        if (w->justShifted != 0) {
+            int n = GOBJ_SUB(self)->morphNum;
+            int i;
+
+            for (i = 0; i < n; i++) {
+                *(int *)(i * 4 + ICO_RAW(int, GOBJ_SUB(self), 0x838,
+                                         (ICO_WORD)GOBJ_SUB(self)->morphWeight)) = 0;
+            }
+        }
+        getMotionGeometry(self);
+        getShapeGeometry(self);
+    } else {
+        getStreamMotion(self);
+    }
+}
+
 void ExecMotionOrient(void *self)
 {
+    if (ICO_JUN26) {
+        ExecMotionOrient_jun26(self);
+        return;
+    }
     struct MotCtrl *w = &GOBJ_SUB(self)->ctrl;
 
     if (w->shiftStop != 0) {
@@ -1966,8 +2471,8 @@ void SetNodeRotationLimitDataTable(void *self, int from, int to)
             /* EUC-JP: "the node the node rotation limit data names is not in the skeleton" */
             debug_StdPrintfDummy(
                 "ノード回転リミットデータの示すノードがスケルトン中にありません。\n");
-            debug_assert(__FILE__, LN(1838, 1832, 1832, 1756, 1744, 1838, 1832));
-            __assert(__FILE__, LN(1838, 1832, 1832, 1756, 1744, 1838, 1832), "0");
+            debug_assert(__FILE__, LN(1838, 1832, 1832, 1756, 1744, 1714, 1832));
+            __assert(__FILE__, LN(1838, 1832, 1832, 1756, 1744, 1714, 1832), "0");
         }
         /* a 4-byte word cannot hold the row's address: the row, one-based
            (motMan_getFinalMatrix.c.inc reads it back) */
@@ -2017,16 +2522,16 @@ inline int ExecuteSlipProc(GObj *self)
     if (e->ctrl.lastSlipFlags != e->ctrl.slipFlags) {
         StopSEPackageWithGroupVariation(self, 1);
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x100000) {
-            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6JUN26(114, 109), 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6_JUN26(114, 109, 95), 1);
         }
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x200000) {
-            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6JUN26(116, 111), 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6_JUN26(116, 111, 97), 1);
         }
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x400000) {
-            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6JUN26(118, 113), 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6_JUN26(118, 113, 99), 1);
         }
         if (GOBJ_SUB(self)->ctrl.slipFlags & 0x800000) {
-            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6JUN26(120, 115), 1);
+            ExecuteSEPackageWithGroupVariation(self, PAL_NTSCAUG6_JUN26(120, 115, 101), 1);
         }
     }
     return 1;

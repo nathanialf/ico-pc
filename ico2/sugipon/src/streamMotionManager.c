@@ -379,10 +379,22 @@ void PlayStreamMotion(void)
     streamState = 1;
 }
 
+static inline void ClearStreamMotionEntry_jun26(GObj *gobj)
+{
+    GOBJ_SUB(gobj)->ctrl.stream = -1;
+    GOBJ_SUB(gobj)->streamScale = 1;
+    CopyVector(GOBJ_SUB(gobj)->streamOfs, ZeroVector);
+    GOBJ_SUB(gobj)->ctrl.catchBoy = 1;
+}
+
 /* reset the actor's stream-motion state; the offset trace at the end is
  * switched off */
 void ClearStreamMotionEntry(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        ClearStreamMotionEntry_jun26(gobj);
+        return;
+    }
     GOBJ_SUB(gobj)->ctrl.stream = -1;
     GOBJ_SUB(gobj)->streamScale = 1;
     CopyVector(GOBJ_SUB(gobj)->streamOfs, ZeroVector);
@@ -402,8 +414,44 @@ static SMotion emptyEntry_ntscaug6jun26 = {0, 0, -1, -1, {0}, 0}; /* derived nam
 
 #define emptyEntry (*PAL_NTSCAUG6JUN26(&emptyEntry_pal, &emptyEntry_ntscaug6jun26))
 
+static void _deleteStreamMotionManager_jun26(void)
+{
+    int i;
+
+    if (streamNum != 0) {
+        for (i = 0; i < streamNum; i++) {
+            ClearStreamMotionEntry(streamEntry[i].obj.p);
+        }
+        streamNum = 0;
+    }
+    for (i = 0; i < 10; i++) {
+        streamEntry[i] = emptyEntry;
+    }
+    streamState = 0;
+    readState = 0;
+    ringRead = 0;
+    ringWrite = 0;
+    headerRead = 0;
+    headerSize = 0;
+    ringUsed = 0;
+    if (ringBuf != 0) {
+        iosFree(ringBuf);
+        iosFree(readBuf);
+        ringBuf = 0;
+        readBuf = 0;
+    }
+    if (bgMgrId != 0) {
+        bgMgrId = 0;
+    }
+    debug_StdPrintfDummy("delete stream motion manager\n");
+}
+
 static void _deleteStreamMotionManager(void)
 {
+    if (ICO_JUN26) {
+        _deleteStreamMotionManager_jun26();
+        return;
+    }
     int i;
 
     if (streamNum != 0) {
@@ -637,8 +685,10 @@ inline void ClearAllStreamMotionEntry(void)
     }
     for (i = 0; i < streamNum; i++) {
         ClearStreamMotionEntry(streamEntry[i].obj.p);
-        if (streamEntry[i].finishFunc != 0) {
-            streamEntry[i].finishFunc(streamEntry[i].obj.p);
+        if (!ICO_JUN26) {
+            if (streamEntry[i].finishFunc != 0) {
+                streamEntry[i].finishFunc(streamEntry[i].obj.p);
+            }
         }
     }
     streamNum = 0;

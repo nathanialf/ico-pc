@@ -100,8 +100,17 @@ static void landingSE(GObj *self)
     ExecuteSEPackage(self, 0x2);
 }
 
+static void fallDownStartSE_jun26(GObj *self)
+{
+    ExecuteSEPackage(self, 31);
+}
+
 static void fallDownStartSE(GObj *self)
 {
+    if (ICO_JUN26) {
+        fallDownStartSE_jun26(self);
+        return;
+    }
     ExecuteSEPackage(self, 0x24);
 }
 
@@ -110,13 +119,31 @@ static void pushStartSE(GObj *self)
     ExecuteSEPackage(self, 0x4);
 }
 
+static void pullStartSE_jun26(GObj *self)
+{
+    ExecuteSEPackage(self, 12);
+}
+
 static void pullStartSE(GObj *self)
 {
+    if (ICO_JUN26) {
+        pullStartSE_jun26(self);
+        return;
+    }
     ExecuteSEPackage(self, 0xD);
+}
+
+static void wallHitSE_jun26(GObj *self)
+{
+    ExecuteSEPackage(self, 29);
 }
 
 static void wallHitSE(GObj *self)
 {
+    if (ICO_JUN26) {
+        wallHitSE_jun26(self);
+        return;
+    }
     ExecuteSEPackage(self, 0x1E);
 }
 
@@ -156,9 +183,9 @@ static void initFallDown(GObj *self)
         DivQuaternion(GOBJ_SUB(self)->root.motionQuat, GOBJ_SUB(self)->root.motionQuat,
                       GOBJ_SUB(self)->root.baseQuat);
         GetMatrixFromQuaternionPos(p->mtx[0], GOBJ_SUB(self)->root.baseQuat, (char *)pos);
-        GOBJ_SUB(self)->ctrl.motion = PAL_NTSC_AUG6JUN26(1143, 1082, 1084);
+        GOBJ_SUB(self)->ctrl.motion = PAL_NTSC_AUG6_JUN26(1143, 1082, 1084, 1163);
     } else {
-        GOBJ_SUB(self)->ctrl.motion = PAL_NTSC_AUG6JUN26(1143, 1082, 1084);
+        GOBJ_SUB(self)->ctrl.motion = PAL_NTSC_AUG6_JUN26(1143, 1082, 1084, 1163);
         GetRootQuaternion(GOBJ_SUB(self)->root.baseQuat, self);
     }
 }
@@ -640,7 +667,97 @@ static void initWheels_ntsc(GObj *self, SObjSimpleSetting *lay)
     }
 }
 
-static void initWheels_aug6jun26(GObj *self, SObjSimpleSetting *lay)
+static void initWheels_jun26(GObj *self, SObjSimpleSetting *lay)
+{
+    BoxWork *w = GOBJ_SUB(self)->work;
+    int i;
+
+    if (objLayout[self->labelId].accessary == 21 ||
+        accessary[GOBJ_SUB(self)->accessary].model == 1425) {
+        w->wheelDObj = 0;
+    } else {
+        w->wheelDObj = CSVSYSTEM_InitDObj(accessary[GOBJ_SUB(self)->accessary].model, lay);
+        if (w->wheelDObj->nodeMtx != 0) {
+            iosFree((void *)(ICO_PHYS(w->wheelDObj->nodeMtx)));
+        }
+        if (w->wheelDObj->nodeQuat != 0) {
+            iosFree((void *)(ICO_PHYS(w->wheelDObj->nodeQuat)));
+        }
+        w->wheelDObj->nodeMtx = 0;
+        w->wheelDObj->nodeQuat = 0;
+        w->wheelDObj->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, 128, __FILE__, 525);
+        w->wheelDObj->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, 32, __FILE__, 525);
+        w->wheelDObj->nodeNum = 2;
+        if (w->wheelDObj->nodes != 0) {
+            iosFree((void *)(ICO_PHYS(ICO_ADDR(w->wheelDObj->nodes))));
+        }
+        w->wheelDObj->nodes = iosMallocDebug(ios_partition_seki, 160, __FILE__, 525);
+
+        for (i = 0; i < 2; i++) {
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->flags.ll &= ~1;
+            }
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->flags.ll &= ~2;
+            }
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->pos[0] = 0.0f;
+            }
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->pos[1] = 0.0f;
+            }
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->pos[2] = 0.0f;
+            }
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->pos[3] = 1.0f;
+            }
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->flags.ll &= ~4;
+            }
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->fade = 0;
+            }
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->alpha = 1.0f;
+            }
+            {
+                char *e = (char *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                *(short *)(e + 0x3A) = 0;
+            }
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->scale[0] = 1.0f;
+            }
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->scale[1] = 1.0f;
+            }
+            {
+                struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->wheelDObj->nodes);
+                e->scale[2] = 1.0f;
+            }
+        }
+        w->wheelDObj->dispType = 2;
+
+        /* the sub-object handle at 0x15C read through the file's IntFloat
+           union, as the wheel-float stores are */
+        ((IntFloat *)&w->wheelHeight)->f = accessary[self->dobj->accessary].pivot[0];
+        ((IntFloat *)&w->wheelFront)->f = accessary[self->dobj->accessary].pivot[1];
+        ((IntFloat *)&w->wheelRear)->f = accessary[self->dobj->accessary].pivot[2];
+    }
+}
+
+static void initWheels_aug6(GObj *self, SObjSimpleSetting *lay)
 {
     BoxWork *w = GOBJ_SUB(self)->work;
     int i;
@@ -659,9 +776,9 @@ static void initWheels_aug6jun26(GObj *self, SObjSimpleSetting *lay)
         w->wheelDObj->nodeMtx = 0;
         w->wheelDObj->nodeQuat = 0;
         w->wheelDObj->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, 128, __FILE__,
-                                                         LN(560, 557, 557, 560, 536, 525, 557));
+                                                         LN(560, 557, 557, 560, 536, 536, 557));
         w->wheelDObj->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, 32, __FILE__,
-                                                          LN(560, 557, 557, 560, 536, 525, 557));
+                                                          LN(560, 557, 557, 560, 536, 536, 557));
         w->wheelDObj->nodeNum = 2;
         if (w->wheelDObj->nodes != 0) {
             iosFree((void *)(ICO_PHYS(ICO_ADDR(w->wheelDObj->nodes))));
@@ -734,12 +851,16 @@ static void initWheels_aug6jun26(GObj *self, SObjSimpleSetting *lay)
 
 static void initWheels(GObj *self, SObjSimpleSetting *lay)
 {
+    if (ICO_JUN26) {
+        initWheels_jun26(self, lay);
+        return;
+    }
     if (ICO_NTSC) {
         initWheels_ntsc(self, lay);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        initWheels_aug6jun26(self, lay);
+    if (ICO_AUG6) {
+        initWheels_aug6(self, lay);
         return;
     }
     BoxWork *w = GOBJ_SUB(self)->work;
@@ -759,15 +880,15 @@ static void initWheels(GObj *self, SObjSimpleSetting *lay)
         w->wheelDObj->nodeMtx = 0;
         w->wheelDObj->nodeQuat = 0;
         w->wheelDObj->nodeMtx = (ICO_WORD)iosMallocDebug(ios_partition_seki, 128, __FILE__,
-                                                         LN(560, 557, 557, 560, 536, 525, 557));
+                                                         LN(560, 557, 557, 560, 536, 536, 557));
         w->wheelDObj->nodeQuat = (ICO_WORD)iosMallocDebug(ios_partition_seki, 32, __FILE__,
-                                                          LN(560, 557, 557, 560, 536, 525, 557));
+                                                          LN(560, 557, 557, 560, 536, 536, 557));
         w->wheelDObj->nodeNum = 2;
         if (w->wheelDObj->nodes != 0) {
             iosFree((void *)(ICO_PHYS(ICO_ADDR(w->wheelDObj->nodes))));
         }
         w->wheelDObj->nodes = iosMallocDebug(ios_partition_seki, 160, __FILE__,
-                                             LN(560, 557, 557, 560, 536, 525, 557));
+                                             LN(560, 557, 557, 560, 536, 536, 557));
 
         for (i = 0; i < 2; i++) {
             {
@@ -885,11 +1006,19 @@ static PathPt route2[] = {
     {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
 }; /* derived name */
 
-static PathPt route3[] = {
+static PathPt route3_pal[] = {
     {-525.0f, 1450.0f, -1650.0f, 1.0f},
     {-1700.0f, 1450.0f, -1650.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
 }; /* derived name */
+
+static PathPt route3_jun26[] = {
+    {-525.0f, 1450.0f, -1650.0f, 1.0f},
+    {-2150.0f, 1450.0f, -1650.0f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
+}; /* derived name */
+
+#define route3 PAL_JUN26(route3_pal, route3_jun26)
 
 static PathPt route4[] = {
     {6500.0f, -3470.0f, -1450.0f, 1.0f},
@@ -925,53 +1054,117 @@ static PathPt route9[] = {
     {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
 }; /* derived name */
 
-static PathPt route10[] = {
+static PathPt route10_pal[] = {
     {-380.0f, -50.0f, -570.0f, 1.0f},
     {-220.0f, -50.0f, -570.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
 }; /* derived name */
 
-static PathPt route11[] = {
+static PathPt route10_jun26[] = {
+    {-390.0f, -50.0f, -570.0f, 1.0f},
+    {-220.0f, -50.0f, -570.0f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
+}; /* derived name */
+
+#define route10 PAL_JUN26(route10_pal, route10_jun26)
+
+static PathPt route11_pal[] = {
     {-380.0f, -50.0f, -1370.0f, 1.0f},
     {-220.0f, -50.0f, -1370.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
 }; /* derived name */
 
-static PathPt route12[] = {
+static PathPt route11_jun26[] = {
+    {-390.0f, -50.0f, -1370.0f, 1.0f},
+    {-220.0f, -50.0f, -1370.0f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
+}; /* derived name */
+
+#define route11 PAL_JUN26(route11_pal, route11_jun26)
+
+static PathPt route12_pal[] = {
     {-380.0f, -50.0f, -2170.0f, 1.0f},
     {-220.0f, -50.0f, -2170.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
 }; /* derived name */
 
-static PathPt route13[] = {
+static PathPt route12_jun26[] = {
+    {-390.0f, -50.0f, -2170.0f, 1.0f},
+    {-220.0f, -50.0f, -2170.0f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
+}; /* derived name */
+
+#define route12 PAL_JUN26(route12_pal, route12_jun26)
+
+static PathPt route13_pal[] = {
     {-380.0f, -50.0f, -2970.0f, 1.0f},
     {-220.0f, -50.0f, -2970.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
 }; /* derived name */
 
-static PathPt route14[] = {
+static PathPt route13_jun26[] = {
+    {-390.0f, -50.0f, -2970.0f, 1.0f},
+    {-220.0f, -50.0f, -2970.0f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
+}; /* derived name */
+
+#define route13 PAL_JUN26(route13_pal, route13_jun26)
+
+static PathPt route14_pal[] = {
     {380.0f, -50.0f, -570.0f, 1.0f},
     {220.0f, -50.0f, -570.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
 }; /* derived name */
 
-static PathPt route15[] = {
+static PathPt route14_jun26[] = {
+    {390.0f, -50.0f, -570.0f, 1.0f},
+    {220.0f, -50.0f, -570.0f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
+}; /* derived name */
+
+#define route14 PAL_JUN26(route14_pal, route14_jun26)
+
+static PathPt route15_pal[] = {
     {380.0f, -50.0f, -1370.0f, 1.0f},
     {220.0f, -50.0f, -1370.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
 }; /* derived name */
 
-static PathPt route16[] = {
+static PathPt route15_jun26[] = {
+    {390.0f, -50.0f, -1370.0f, 1.0f},
+    {220.0f, -50.0f, -1370.0f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
+}; /* derived name */
+
+#define route15 PAL_JUN26(route15_pal, route15_jun26)
+
+static PathPt route16_pal[] = {
     {380.0f, -50.0f, -2170.0f, 1.0f},
     {220.0f, -50.0f, -2170.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
 }; /* derived name */
 
-static PathPt route17[] = {
+static PathPt route16_jun26[] = {
+    {390.0f, -50.0f, -2170.0f, 1.0f},
+    {220.0f, -50.0f, -2170.0f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
+}; /* derived name */
+
+#define route16 PAL_JUN26(route16_pal, route16_jun26)
+
+static PathPt route17_pal[] = {
     {380.0f, -50.0f, -2970.0f, 1.0f},
     {220.0f, -50.0f, -2970.0f, 1.0f},
     {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
 }; /* derived name */
+
+static PathPt route17_jun26[] = {
+    {390.0f, -50.0f, -2970.0f, 1.0f},
+    {220.0f, -50.0f, -2970.0f, 1.0f},
+    {0.0f, 0.0f, 0.0f, 3.40282347e+38f},
+}; /* derived name */
+
+#define route17 PAL_JUN26(route17_pal, route17_jun26)
 
 static PathPt route18[] = {{0.0f, 0.0f, 0.0f, 3.40282347e+38f}}; /* derived name */
 
@@ -999,11 +1192,49 @@ static PathPt route29[] = {{0.0f, 0.0f, 0.0f, 3.40282347e+38f}}; /* derived name
 
 /* the route a box's layout names (the low half of its kind word) indexes
    this table; route 0 is no route and the last two slots are empty */
-static PathPt *routeTable[32] = {
-    0,       route1,  route2,  route3,  route4,  route5,  route6,  route7,  route8,  route9,
-    route10, route11, route12, route13, route14, route15, route16, route17, route18, route19,
-    route20, route21, route22, route23, route24, route25, route26, route27, route28, route29,
+static PathPt *routeTable_pal[32] = {
+    0,           route1,      route2,      route3_pal,  route4,      route5,
+    route6,      route7,      route8,      route9,      route10_pal, route11_pal,
+    route12_pal, route13_pal, route14_pal, route15_pal, route16_pal, route17_pal,
+    route18,     route19,     route20,     route21,     route22,     route23,
+    route24,     route25,     route26,     route27,     route28,     route29,
 }; /* derived name */
+
+/* PC port: the June 2001 demo's routes */
+static PathPt *routeTable_jun26[32] = {
+    0,
+    route1,
+    route2,
+    route3_jun26,
+    route4,
+    route5,
+    route6,
+    route7,
+    route8,
+    route9,
+    route10_jun26,
+    route11_jun26,
+    route12_jun26,
+    route13_jun26,
+    route14_jun26,
+    route15_jun26,
+    route16_jun26,
+    route17_jun26,
+    route18,
+    route19,
+    route20,
+    route21,
+    route22,
+    route23,
+    route24,
+    route25,
+    route26,
+    route27,
+    route28,
+    route29,
+}; /* derived name */
+
+#define routeTable PAL_JUN26(routeTable_pal, routeTable_jun26)
 
 /* GetBoxHoldPoint's four hold-point candidates in the box's local frame and
    the four offsets added back after they are scaled by the box's half
@@ -1189,11 +1420,87 @@ static inline int countPathPoints(int route) /* derived name */
     return i;
 }
 
+static int getNearestPosition_jun26(float *out, int *pidx, int *path)
+{
+    float pos[4];
+    float seg[4];
+    float dir[4];
+    float proj[4];
+    float pl[4];
+    float foot[4];
+    PathPt *pts = routeTable[path[0]];
+    float best = 3.40282347e+38f;
+    int bi = -1;
+    int start;
+    int end;
+    int i;
+    float dist;
+    float ad;
+    float t;
+
+    if (*pidx != -1) {
+        start = *pidx - 1;
+        start = 0 < start ? start : 1;
+        end = *pidx + 2;
+        end = path[1] < end ? path[1] : end;
+    } else {
+        start = 0;
+        end = path[1] - 1;
+    }
+
+    for (i = start; i < end; i++) {
+        sceVu0SubVector(seg, pts[i], pts[i - 1]);
+        seg[1] = 0.0f;
+        sceVu0Normalize(dir, seg);
+        sceVu0OuterProduct(pl, yAxis, dir);
+        pl[1] = 0.0f;
+        sceVu0Normalize(pl, pl);
+        pl[3] = -(pl[0] * pts[i][0] + pl[2] * pts[i][2]);
+        dist = pl[0] * out[0] + pl[2] * out[2] + pl[3];
+        ad = dist < 0.0f ? -dist : dist;
+        pl[1] = 0.0f;
+        pl[3] = 0.0f;
+        sceVu0ScaleVector(proj, pl, dist);
+        SubVectorXYZ(foot, out, proj);
+
+        if (0.707f < (dir[0] < 0.0f ? -dir[0] : dir[0])) {
+            t = (foot[0] - pts[i - 1][0]) / seg[0];
+        } else {
+            t = (foot[2] - pts[i - 1][2]) / seg[2];
+        }
+        if (0.0f <= t && t <= 1.0f) {
+            CopyVector(out, foot);
+            *pidx = i;
+            return 0;
+        }
+        if (ad < best) {
+            best = ad;
+            bi = i;
+            if (t < 0.0f) {
+                CopyVector(pos, pts[i - 1]);
+            } else {
+                CopyVector(pos, pts[i]);
+            }
+        }
+    }
+    out[0] = pos[0];
+    out[2] = pos[2];
+    out[3] = 1.0f;
+
+    debug_StdPrintfDummy("%d-%d\n", start, end);
+    debug_StdPrintfDummy("%d: %f, %f, %f\n", bi, out[0], out[1], out[2]);
+    *pidx = bi;
+    return 1;
+}
+
 /* The signed plane distance is what the projection is scaled by and its
    magnitude is what the nearest test keeps.  0.707 is the 45 degree axis
    test. */
 static int getNearestPosition(float *out, int *pidx, int *path)
 {
+    if (ICO_JUN26) {
+        return getNearestPosition_jun26(out, pidx, path);
+    }
     float pos[4];
     float seg[4];
     float dir[4];
@@ -1302,10 +1609,83 @@ static int routeFrontColor[4] = {0, 128, 255, 128}; /* derived name */
 
 static int routeRearColor[4] = {255, 128, 0, 128}; /* derived name */
 
+static int onPath_jun26(GObj *self)
+{
+    BoxWork *p = GOBJ_SUB(self)->work;
+    float front[4];
+    float rear[4];
+    float q[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    VECTOR fwd = {0.0f, 0.0f, p->scaleZ * 50.0f, 1.0f};
+    VECTOR bwd = {0.0f, 0.0f, p->scaleZ * -50.0f, 1.0f};
+    PathPt *pts = routeTable[p->route];
+    float mid[4];
+    Vec4 ofs;
+    float m[16];
+    int hitFront;
+    int hitRear;
+    int i;
+
+    sceVu0ApplyMatrix(front, (void *)GOBJ_SUB(self)->nodeMtx, &fwd);
+    sceVu0ApplyMatrix(rear, (void *)GOBJ_SUB(self)->nodeMtx, &bwd);
+
+    hitFront = getNearestPosition(front, (int *)&p->frontPoint, (int *)&p->route);
+    hitRear = getNearestPosition(rear, (int *)&p->rearPoint, (int *)&p->route);
+
+    RotQuaternionY(q, (short)(int)(atan2f(front[0] - rear[0], front[2] - rear[2]) * 10430.378f));
+    SetRootQuaternion(self, q);
+
+    if (hitFront != 0 || hitRear != 0) {
+        if (hitFront != 0) {
+            debug_StdPrintfDummy("fronthit!\n");
+            GetMatrixFromQuaternion(m, q);
+            CopyVector(&ofs, &bwd);
+            ofs.f[2] -= 1.0f;
+            sceVu0ApplyMatrix(&ofs, m, &ofs);
+            AddVectorXYZ(mid, front, &ofs);
+        } else {
+            debug_StdPrintfDummy("rearhit!\n");
+            GetMatrixFromQuaternion(m, q);
+            CopyVector(&ofs, &fwd);
+            ofs.f[2] += 1.0f;
+            sceVu0ApplyMatrix(&ofs, m, &ofs);
+            AddVectorXYZ(mid, rear, &ofs);
+        }
+
+        mid[1] = front[1];
+    } else {
+        sceVu0AddVector(mid, front, rear);
+        sceVu0ScaleVector(mid, mid, 0.5f);
+    }
+
+    mid[3] = 1.0f;
+    SetDirectRootPosition(self, mid);
+
+    UpdateRootMatrix(self);
+
+    if (debug_skel_flag != 0) {
+        gif_StartPacketPri(11);
+        gif_SetZWrite(0);
+        gif_SetZTest(1);
+        sceVu0UnitMatrix(MatrixDrive_GetMatrix());
+        for (i = 1; pts[i][3] < 10.0f; i++) {
+            DrawLineG(pts[i - 1], routeFrontColor, pts[i], routeFrontColor, -1);
+        }
+        CopyMatrix(MatrixDrive_GetMatrix(), (void *)GOBJ_SUB(self)->nodeMtx);
+        MatrixDrive_TransMatrix(0.0f, 0.0f, p->scaleZ * 50.0f);
+        prim_DispWireSphere(10.0f, routeFrontColor, 4, 4);
+        CopyMatrix(MatrixDrive_GetMatrix(), (void *)GOBJ_SUB(self)->nodeMtx);
+        MatrixDrive_TransMatrix(0.0f, 0.0f, p->scaleZ * -50.0f);
+        prim_DispWireSphere(10.0f, routeRearColor, 4, 4);
+        gif_EndPacket();
+    }
+
+    return hitFront | hitRear;
+}
+
 /* 10430.378 is 32768 / pi, the radian-to-angle-table factor.  The
    quaternion's initialiser is mostly zero, and each wheel offset is a VECTOR
    record built by an initialiser, as onPathInitialize's are. */
-static int onPath_ntscaug6jun26(GObj *self)
+static int onPath_ntscaug6(GObj *self)
 {
     BoxWork *p = GOBJ_SUB(self)->work;
     float front[4];
@@ -1385,8 +1765,11 @@ static int onPath_ntscaug6jun26(GObj *self)
 
 static int onPath(GObj *self)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return onPath_ntscaug6jun26(self);
+    if (ICO_JUN26) {
+        return onPath_jun26(self);
+    }
+    if (ICO_NTSCAUG6) {
+        return onPath_ntscaug6(self);
     }
     BoxWork *p = GOBJ_SUB(self)->work;
     Vec4 front;
@@ -1649,10 +2032,35 @@ static inline void pushOutFloatingBox(ClipWork *cw, float *m, float *sv, float *
     }
 }
 
+static void avoidCharGObj_jun26(GObj *self, GObj *chara)
+{
+    ClipWork w;
+    float pos[4];
+
+    GetCylinderCollisionWithExceptOwnCollision(self, chara, 50.0f, 50.0f, 0.0f, 1.0f, 1);
+    w.radius = (30.0f < GOBJ_SUB(chara)->root.radius) ? GOBJ_SUB(chara)->root.radius : 30.0f;
+    GetRootPosition(pos, chara);
+    CopyVector(&w, pos);
+    CopyVector(w.pt[1], pos);
+    w.filter.o.obj = self;
+    w.filter.o.node = -1;
+    w.filter.elem = 0;
+    ClipWallE(&w);
+    if (w.wall.elem != 0) {
+        GetCylinderCollisionWithExceptOwnCollision(self, chara, (w.radius + 50.0f) * 1.414f, 100.0f,
+                                                   0.5f, 0.0f, 1);
+        UpdateRootMatrix(self);
+    }
+}
+
 /* the same prototype fieldCollision.h gives */
 
 static void avoidCharGObj(GObj *self, GObj *chara)
 {
+    if (ICO_JUN26) {
+        avoidCharGObj_jun26(self, chara);
+        return;
+    }
     ClipWork w;
     float pos[4];
     int hit;
@@ -1693,8 +2101,86 @@ static void avoidCharGObj(GObj *self, GObj *chara)
 /* the world Y axis the box's tilt is measured around */
 static float floatTiltAxis[4] = {0.0f, 1.0f, 0.0f, 0.0f}; /* derived name */
 
+static void execFloating_jun26(GObj *self)
+{
+    ClipWork fw;
+    float pos[4];
+    float g[4];
+    float sub[4];
+    float axis[4];
+    float ofs[4];
+    float acc[4];
+    float q[4];
+    float rot[4];
+    float m[16];
+    ClipWork cw;
+    float cm[16];
+    float sv[4];
+    float dv[4];
+    BoxWork *w = GOBJ_SUB(self)->work;
+    float len;
+    float r;
+
+    if (boyGObj != 0) {
+        if (w->charHit == 0) {
+            avoidCharGObj(self, boyGObj);
+        }
+    }
+    GetRootPosition(pos, self);
+    GetLowerPlaneCollision(&fw, pos);
+    len = VectorLengthSquare(GOBJ_SUB(self)->root.move);
+    if (100.0f < len) {
+        _ScaleVectorXYZ(GOBJ_SUB(self)->root.move, GOBJ_SUB(self)->root.move, 3.0f / _Sqrt(len));
+    }
+    /* the three water-probe heights are additions of a negative offset */
+    if (GetWaterReaction(w->waterHeight, 0, &fw, pos, GOBJ_SUB(self)->root.move, pos[1] + -50.0f,
+                         pos[1] + -25.0f, pos[1] + 50.0f, 0.9f,
+                         60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * -0.1f *
+                             (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])) *
+                             3.0f) != 0) {
+        if (fw.pt[2][1] - 50.0f < pos[1]) {
+            pos[1] = fw.pt[2][1] - 50.0f;
+        }
+        memset(g, 0, 0x10);
+        g[1] = -35.0f;
+        sceVu0ScaleVectorXYZ(acc, w->tilt, -0.01f);
+        sceVu0AddVector(w->tiltVel, w->tiltVel, acc);
+        sceVu0AddVector(w->tiltVel, w->tiltVel, w->tiltForce);
+        sceVu0ScaleVectorXYZ(w->tiltVel, w->tiltVel, 0.95f);
+        sceVu0AddVector(w->tilt, w->tilt, w->tiltVel);
+        sceVu0OuterProduct(axis, floatTiltAxis, w->tilt);
+        CopyQuaternion(q, IdentityQuaternion);
+        RotQuaternionY(q,
+                       GetTableArcTan2(GOBJ_SUB(self)->ctrl.dir[0], GOBJ_SUB(self)->ctrl.dir[2]));
+        SetQuaternionByAxisRotateV(rot, (short)(int)(VectorLength(w->tilt) * 20.48f / 50.0f), axis);
+        MultiQuaternion(q, q, rot);
+        SetRootQuaternion(self, q);
+        GetMatrixFromQuaternion(m, rot);
+        sceVu0ApplyMatrix(ofs, m, g);
+        ofs[1] = 0.0f;
+        sceVu0SubVector(sub, ofs, w->lastOffset);
+        sceVu0SubVector(pos, pos, sub);
+        CopyVector(w->lastOffset, ofs);
+        r = w->scaleX > w->scaleZ ? w->scaleX * 50.0f : w->scaleZ * 50.0f;
+        pushOutFloatingBox(&cw, cm, sv, dv, pos, q, r);
+        _AddVectorXYZ(cw.pt[0], pos, ofs);
+        cw.pt[0][3] = 0.0f;
+        _SubVector(GOBJ_SUB(self)->root.move, cw.pt[0], w->lastPos);
+        GOBJ_SUB(self)->root.move[3] = 0;
+        CopyVector(w->lastPos, cw.pt[0]);
+        SetRootPosition(self, pos);
+    }
+    GOBJ_SUB(self)->root.move[1] += GetTableSin(w->floatPhase) * 0.1f;
+    w->floatPhase += 2048;
+    w->charHit = 0;
+}
+
 static void execFloating(GObj *self)
 {
+    if (ICO_JUN26) {
+        execFloating_jun26(self);
+        return;
+    }
     ClipWork fw;
     float pos[4];
     float d[4];
@@ -1851,8 +2337,35 @@ static int _checkItemBreak(void *pos)
     return 1;
 }
 
+static void initLanding_jun26(GObj *self)
+{
+    float pos[4];
+    float plane[4];
+    float v[4];
+    BoxWork *p = GOBJ_SUB(self)->work;
+
+    GetRootPosition(pos, self);
+    CopyVector(&GOBJ_SUB(self)->root.move[0], ZeroVector);
+    *(int *)&GOBJ_SUB(self)->ctrl.animFrame = 0;
+    GOBJ_SUB(self)->ctrl.motion = 1164;
+    if (p->wall.elem != 0) {
+        float d;
+
+        GetPureVerticalPlane(0, plane, 0, &p->wall, 1);
+        d = GetDistanceFromPlane(plane, pos);
+        plane[3] = 0.0f;
+        sceVu0ScaleVectorXYZ(v, plane, -(d - 50.0f));
+        AddVectorXYZ(pos, pos, v);
+    }
+    GetMatrixFromQuaternionPos(p->mtx[0], GOBJ_SUB(self)->root.baseQuat, (char *)pos);
+}
+
 static void initLanding(GObj *self)
 {
+    if (ICO_JUN26) {
+        initLanding_jun26(self);
+        return;
+    }
     float pos[4];
     float plane[4];
     float v[4];
@@ -1924,7 +2437,9 @@ static void execFallDown(GObj *self)
         execBoxFall(self);
         break;
     }
-    attackBoxFallCenter(self);
+    if (!ICO_JUN26) {
+        attackBoxFallCenter(self);
+    }
     switch (checkFieldContact(self, 50.0f)) {
     case 1:
         initLanding(self);
@@ -2451,7 +2966,44 @@ static inline int checkItemHit(GObj *obj, float *dir) /* derived name */
     return _checkItemCollision(to);
 }
 
-static int moveBoxAutoMatic_ntscaug6jun26(GObj *self, int dir)
+static int moveBoxAutoMatic_jun26(GObj *self, int dir)
+{
+    static float pushPlusZ[4] = {0.0f, 0.0f, 0.5f, 0.0f};   /* derived name */
+    static float pushMinusZ[4] = {0.0f, 0.0f, -0.5f, 0.0f}; /* derived name */
+    BoxWork *p = GOBJ_SUB(self)->work;
+    int r;
+
+    switch (dir) {
+    default:
+        p->friction = 0.85f;
+        AddVectorXYZ(p->vel, p->vel, ZeroVector);
+        break;
+    case 1:
+        p->friction = 0.98f;
+        AddVectorXYZ(p->vel, p->vel, pushPlusZ);
+        break;
+    case -1:
+        p->friction = 0.98f;
+        AddVectorXYZ(p->vel, p->vel, pushMinusZ);
+        break;
+    }
+    if (p->autoDir != dir) {
+        StopSEPackageWithGroupVariation(self, 1);
+    }
+    if (dir != 0) {
+        ExecuteSEPackageWithGroupVariation(self, 28, 1);
+    }
+    p->autoDir = dir;
+    if (onPath(self) != 0) {
+        CopyVector(p->vel, ZeroVector);
+    }
+    UpdateRootMatrix(self);
+    r = execNormalMove(self, 1);
+    UpdateRootMatrix(self);
+    return r;
+}
+
+static int moveBoxAutoMatic_ntscaug6(GObj *self, int dir)
 {
     static float pushPlusZ[4] = {0.0f, 0.0f, 0.5f, 0.0f};   /* derived name */
     static float pushMinusZ[4] = {0.0f, 0.0f, -0.5f, 0.0f}; /* derived name */
@@ -2490,8 +3042,11 @@ static int moveBoxAutoMatic_ntscaug6jun26(GObj *self, int dir)
 
 static int moveBoxAutoMatic(GObj *self, int dir)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return moveBoxAutoMatic_ntscaug6jun26(self, dir);
+    if (ICO_JUN26) {
+        return moveBoxAutoMatic_jun26(self, dir);
+    }
+    if (ICO_NTSCAUG6) {
+        return moveBoxAutoMatic_ntscaug6(self, dir);
     }
     /* the Japanese build's v and v2 are static constants, the push without
        the frame-rate scale w */
@@ -2536,8 +3091,63 @@ static int moveBoxAutoMatic(GObj *self, int dir)
     return r;
 }
 
-static int MoveBoxWithHoldPoint_aug6jun26(GObj *self, float *holdPoint, GObj *holder, int focus,
-                                          float *dir)
+static int MoveBoxWithHoldPoint_jun26(GObj *self, float *holdPoint, GObj *holder, int focus,
+                                      float *dir)
+{
+    float plane[4];
+    float nv[4];
+    float hp[4];
+    float pos[4];
+    float mv[4];
+    BoxWork *q = GOBJ_SUB(self)->work;
+    int idx;
+    float dot;
+    float dist;
+
+    GetBoxGlobalHoldPoint(hp, self, holdPoint);
+    GetRootPosition(pos, self);
+    sceVu0SubVector(nv, hp, pos);
+    sceVu0Normalize(nv, nv);
+
+    dot = sceVu0InnerProduct(nv, hp);
+    SetSimplePlane(plane, nv[0], nv[1], nv[2], -dot);
+
+    idx = GetSkeltonFocusNode(holder, focus);
+    dist = GetDistanceFromPlane(plane, (char *)GOBJ_SUB(holder)->nodeMtx + (idx << 6) + 0x30);
+
+    sceVu0ScaleVector(mv, nv, dist);
+
+    if (((BoxWork *)GOBJ_SUB(self)->work)->route != 0) {
+        float m[16];
+
+        _ScaleVector(mv, mv, 0.05f);
+        MatrixDrive_SetTransposeMatrix(m, (void *)GOBJ_SUB(self)->nodeMtx);
+        sceVu0ApplyMatrix(mv, m, mv);
+        AddVectorXYZ(q->vel, q->vel, mv);
+        if (onPath(self) != 0) {
+            CopyVector(q->vel, ZeroVector);
+        }
+    } else if (checkCharGObjs(self, holder, dir) && checkBoxStopWall(self, dir) &&
+               CheckGeneratorCollision(self, dir)) {
+        q->moveFrames = GetNbMotionFrames(GOBJ_SUB(holder)->ctrl.motion) - 1;
+        _ScaleVectorXYZ(q->vel, dir,
+                        100.0f / ((float)q->moveFrames * 2.0f) *
+                            (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])));
+
+        q->mode = 1;
+    } else {
+        return 0;
+    }
+    UpdateRootMatrix(self);
+    {
+        int rv = execNormalMove(self, 1);
+        UpdateRootMatrix(self);
+        return rv;
+    }
+}
+
+static int MoveBoxWithHoldPoint_aug6(GObj *self, float *holdPoint, GObj *holder, int focus,
+                                     float *dir)
 {
     float plane[4];
     float nv[4];
@@ -2683,11 +3293,14 @@ static int MoveBoxWithHoldPoint_ntsc(GObj *self, float *holdPoint, GObj *holder,
 
 int MoveBoxWithHoldPoint(GObj *self, float *holdPoint, GObj *holder, int focus, float *dir)
 {
+    if (ICO_JUN26) {
+        return MoveBoxWithHoldPoint_jun26(self, holdPoint, holder, focus, dir);
+    }
     if (ICO_NTSC) {
         return MoveBoxWithHoldPoint_ntsc(self, holdPoint, holder, focus, dir);
     }
-    if (ICO_AUG6JUN26) {
-        return MoveBoxWithHoldPoint_aug6jun26(self, holdPoint, holder, focus, dir);
+    if (ICO_AUG6) {
+        return MoveBoxWithHoldPoint_aug6(self, holdPoint, holder, focus, dir);
     }
     float plane[4];
     float nv[4];
@@ -2789,8 +3402,21 @@ inline int BoxRideFunc(ObjNode *node, GObj *rider)
     return 1;
 }
 
+static void ExecBoxMoveStartReaction_jun26(GObj *self, int dir)
+{
+    if (dir >= 0) {
+        pushStartSE(self);
+    } else {
+        pullStartSE(self);
+    }
+}
+
 inline void ExecBoxMoveStartReaction(GObj *self, int dir)
 {
+    if (ICO_JUN26) {
+        ExecBoxMoveStartReaction_jun26(self, dir);
+        return;
+    }
     BoxWork *q = GOBJ_SUB(self)->work;
     if (q->route != 0) {
         if (q->moving != 0) {
@@ -2808,8 +3434,24 @@ end:
     q->moving = 1;
 }
 
+static inline void ExecBoxMoveEndReaction_jun26(GObj *self)
+{
+    BoxWork *q = GOBJ_SUB(self)->work;
+
+    StopSEPackage(self);
+    ExecuteSEPackage(self, 20);
+    if (q->stopWall != 0) {
+        wallHitSE(self);
+        q->stopWall = 0;
+    }
+}
+
 inline void ExecBoxMoveEndReaction(GObj *self)
 {
+    if (ICO_JUN26) {
+        ExecBoxMoveEndReaction_jun26(self);
+        return;
+    }
     BoxWork *q = GOBJ_SUB(self)->work;
     if (q->route == 0 || q->moving != 0) {
         stopBoxMoveSE(self);
@@ -2821,8 +3463,10 @@ void ReInitBoxGeo(GObj *self)
 {
     BoxWork *p = GOBJ_SUB(self)->work;
 
-    debug_StdPrintfDummy("BOXREINIT\n");
-    GOBJ_SUB(self)->colData = p->colData;
+    if (!ICO_JUN26) {
+        debug_StdPrintfDummy("BOXREINIT\n");
+        GOBJ_SUB(self)->colData = p->colData;
+    }
     if (checkFieldContact(self, 100000.0f) == 0) {
         /* EUC-JP: "the box is placed where there is no ground; its behaviour cannot be guaranteed (is the box before the collision definition?)" */
         debug_StdPrintfDummy(
@@ -2836,11 +3480,15 @@ void ReInitBoxGeo(GObj *self)
             /* EUC-JP: "box initially placed on the water bottom" */
             debug_StdPrintfDummy("箱初期水底配置\n");
         } else {
-            p->mode = 0;
-            AlignBox(self, 100.0f);
+            if (!ICO_JUN26) {
+                p->mode = 0;
+                AlignBox(self, 100.0f);
+            }
             execNormalMove(self, 1);
-            /* EUC-JP: "box initially placed normally" */
-            debug_StdPrintfDummy("箱初期通常配置\n");
+            if (!ICO_JUN26) {
+                /* EUC-JP: "box initially placed normally" */
+                debug_StdPrintfDummy("箱初期通常配置\n");
+            }
         }
     }
     UpdateRootMatrix(self);
@@ -2854,7 +3502,7 @@ static unsigned char boxSerial = 0; /* derived name */
 static BoxWork *InitBoxGeo_ntsc(GObj *self, SObjSimpleSetting *lay)
 {
     BoxWork *w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__,
-                                LN(2017, 2003, 2003, 1964, 1905, 2017, 2003));
+                                LN(2017, 2003, 2003, 1964, 1905, 1905, 2003));
     GObj *o;
     GObj *g;
     int sub;
@@ -2940,10 +3588,89 @@ static BoxWork *InitBoxGeo_ntsc(GObj *self, SObjSimpleSetting *lay)
     return w;
 }
 
-static BoxWork *InitBoxGeo_aug6jun26(GObj *self, SObjSimpleSetting *lay)
+static BoxWork *InitBoxGeo_jun26(GObj *self, SObjSimpleSetting *lay)
+{
+    BoxWork *w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__, 1905);
+    GObj *o;
+    int sub;
+
+    GOBJ_SUB(self)->work = w;
+
+    *w = boxWorkInit;
+
+    w->serial = boxSerial;
+    boxSerial = (boxSerial + 1) % 30;
+
+    ((IntFloat *)&w->scaleX)->f = lay->scale[0];
+    ((IntFloat *)&w->scaleZ)->f = lay->scale[2];
+    ((IntFloat *)((char *)GOBJ_SUB(self)->nodes + 0x20))->f =
+        ((IntFloat *)((char *)GOBJ_SUB(self)->nodes + 0x24))->f =
+            ((IntFloat *)((char *)GOBJ_SUB(self)->nodes + 0x28))->f = 1.0f;
+
+    w->effectDObj = CSVSYSTEM_InitDObj(41, &InitialSObjSimpleSetting);
+
+    w->route = lay->obj & 0xFFFF;
+    GOBJ_SUB(self)->rideFunc = BoxRideFunc;
+
+    if (w->route != 0) {
+        w->pointCount = countPathPoints(w->route);
+        w->friction = 0.98f;
+        onPathInitialize(self);
+        onPath(self);
+        initWheels(self, lay);
+        execNormalMove(self, 1);
+        debug_StdPrintfDummy("%d\n", w->pointCount);
+
+        if ((lay->obj & 0xFFFF0000) != 0) {
+            SObjSimpleSetting r = *lay;
+            ObjNode lnk = {self, 0};
+            Vec4 v;
+            Vec4 q;
+
+            r.scale[0] = 1.0f;
+            r.scale[1] = 1.0f;
+            r.scale[2] = 1.0f;
+            r.scale[3] = 1.0f;
+            r.obj = 1;
+
+            sub = accessary[GOBJ_SUB(self)->accessary].subModel;
+            o = CreateLayoutedGObj(23, accessary[sub].model, sub, 0, &r, 0, 7, 0);
+
+            LinkParentOfDObj(o, &lnk);
+
+            q.f[0] = accessary[GOBJ_SUB(self)->accessary].subPos[0];
+            q.f[1] = accessary[GOBJ_SUB(self)->accessary].subPos[1];
+            q.f[2] = accessary[GOBJ_SUB(self)->accessary].subPos[2];
+            q.f[3] = 1.0f;
+            v = q;
+
+            CopyVector(GOBJ_SUB(o)->root.pos, &v);
+
+            memset(&q, 0, 16);
+            q.f[3] = 1.0f;
+            RotQuaternionY(
+                &q, (short)(int)(accessary[GOBJ_SUB(self)->accessary].subRotY * 32768.0f / 180.0f));
+            CopyVector(GOBJ_SUB(o)->root.quat, &q);
+
+            SetSwitchTriggerFunc(o, moveBoxAutoMatic);
+
+            w->friction = 0.85f;
+        }
+        UpdateRootMatrix(self);
+        return w;
+    }
+
+    w->tiltForce[0] = random_signed() * 50.0f * 0.5f;
+    w->tiltForce[1] = random_signed() * 50.0f * 0.5f;
+    ReInitBoxGeo(self);
+
+    return w;
+}
+
+static BoxWork *InitBoxGeo_aug6(GObj *self, SObjSimpleSetting *lay)
 {
     BoxWork *w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__,
-                                LN(2017, 2003, 2003, 1964, 1905, 2017, 2003));
+                                LN(2017, 2003, 2003, 1964, 1905, 1905, 2003));
     GObj *o;
     int sub;
 
@@ -3024,14 +3751,17 @@ static BoxWork *InitBoxGeo_aug6jun26(GObj *self, SObjSimpleSetting *lay)
 
 BoxWork *InitBoxGeo(GObj *self, SObjSimpleSetting *lay)
 {
+    if (ICO_JUN26) {
+        return InitBoxGeo_jun26(self, lay);
+    }
     if (ICO_NTSC) {
         return InitBoxGeo_ntsc(self, lay);
     }
-    if (ICO_AUG6JUN26) {
-        return InitBoxGeo_aug6jun26(self, lay);
+    if (ICO_AUG6) {
+        return InitBoxGeo_aug6(self, lay);
     }
     BoxWork *w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(BoxWork, 416), __FILE__,
-                                LN(2017, 2003, 2003, 1964, 1905, 2017, 2003));
+                                LN(2017, 2003, 2003, 1964, 1905, 1905, 2003));
     GObj *o;
     GObj *g;
     int sub;

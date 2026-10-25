@@ -166,9 +166,11 @@ static int effectToolDirty[64]; /* derived name */
 
 static float effectToolPos_pal[4]; /* derived name */
 
-static sceVu0FVECTOR effectToolPos_aug6jun26; /* derived name */
+static sceVu0FVECTOR effectToolPos_aug6; /* derived name */
 
-#define effectToolPos PAL_AUG6JUN26(effectToolPos_pal, effectToolPos_aug6jun26)
+static float effectToolPos_jun26[4]; /* derived name */
+
+#define effectToolPos PAL_AUG6_JUN26(effectToolPos_pal, effectToolPos_aug6, effectToolPos_jun26)
 
 static int editParam(int id, int sel)
 {
@@ -500,7 +502,7 @@ static inline void initEffectTool(void) /* derived name */
     CameraSetMode(1);
     scpBoyControlReadDisable = 1;
     debug_StdPrintfDummy("initialize\n");
-    for (i = PAL_NTSCAUG6JUN26(0x3C, 52); i >= 0; i--) {
+    for (i = PAL_NTSCAUG6_JUN26(0x3C, 52, 51); i >= 0; i--) {
         effectToolDirty[i] = 0;
     }
 }
@@ -573,8 +575,8 @@ static int execEffectTool(void)
     default:
     case 0:
         r = debug_SelectCsvWindow("Effect Tools: PUSH 2-CON'\202' TO SAVE SELECTED DATA", 10, 0x32,
-                                  0xB, particleEffectFile, 0x50, 0, 0, PAL_NTSCAUG6JUN26(0x3D, 53),
-                                  &effectId);
+                                  0xB, particleEffectFile, 0x50, 0, 0,
+                                  PAL_NTSCAUG6_JUN26(0x3D, 53, 52), &effectId);
         if (effectId != lastEffectId) {
             setQ(q);
             if (effectHandle != -1) {
@@ -593,12 +595,12 @@ static int execEffectTool(void)
         if (pad[1].rep & 0x1000) {
             effectId--;
             if (effectId < 0) {
-                effectId = PAL_NTSCAUG6JUN26(0x3C, 52);
+                effectId = PAL_NTSCAUG6_JUN26(0x3C, 52, 51);
             }
         }
         if (pad[1].rep & 0x4000) {
             effectId++;
-            if (effectId >= PAL_NTSCAUG6JUN26(0x3D, 53)) {
+            if (effectId >= PAL_NTSCAUG6_JUN26(0x3D, 53, 52)) {
                 effectId = 0;
             }
         }

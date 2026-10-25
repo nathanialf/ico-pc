@@ -21,8 +21,16 @@ static unsigned int acbSphereColor[4] = {0, 128, 255, 128}; /* derived name */
 
 inline float GetAttackCheckBoundaryRadius(GObj *self);
 
+static inline GObj *createAttackCheckBoundaryGObj_jun26(SObjSimpleSetting *lay) /* derived name */
+{
+    return CreateLayoutedGObj(60, 51, -1, 0, lay, -1, 7, 1);
+}
+
 static inline GObj *createAttackCheckBoundaryGObj(SObjSimpleSetting *lay) /* derived name */
 {
+    if (ICO_JUN26) {
+        return createAttackCheckBoundaryGObj_jun26(lay);
+    }
     return CreateLayoutedGObj(PAL_NTSC_AUG6JUN26(63, 62, 61), PAL_NTSC_AUG6JUN26(75, 69, 68), -1, 0,
                               lay, -1, 7, 1);
 }
@@ -162,7 +170,52 @@ static void AttackCheckBoundaryBeforeFunc_ntsc(GObj *self)
     box->num = 0;
 }
 
-static void AttackCheckBoundaryBeforeFunc_aug6jun26(GObj *self)
+static void AttackCheckBoundaryBeforeFunc_jun26(GObj *self)
+{
+    IosMailBox *box = &self->mailBox;
+    IosMail *e = box->mail;
+    int i;
+
+    for (i = 0; i < box->num; i++, e++) {
+        if (e->type == 13) {
+            if (e->arg == boyGObj) {
+                AcbWork *b = GOBJ_SUB(self)->work;
+                void *g = GetBoyWeaponGObj();
+
+                if (g != 0) {
+                    if (CheckWeaponKind(g) == 5 || CheckWeaponKind(g) == 4) {
+                        if (*b->handle < 2) {
+                            GOBJ_SUB(g)->ctrl.wallAttr = b->attr;
+                            ExecuteSEPackage(g, 64);
+                            b->hit = 2;
+                            *b->handle = 2;
+                            /* " - cut by the sword" */
+                            debug_StdPrintfDummy(" - 剣で切られた\n");
+                        }
+                        goto done;
+                    }
+                }
+                if (*b->handle <= 0) {
+                    ActSendMail_WithAdditionalData(boyGObj, 187, self, &b->attr);
+                    b->hit = 1;
+                    *b->handle = 1;
+                    /* " - cannot cut" */
+                    debug_StdPrintfDummy(" - きれない\n");
+                }
+            }
+        done:
+            {
+                Act *q = GOBJ_ACT(self);
+
+                q->attacker = 0;
+                q->hit = 0;
+            }
+        }
+    }
+    box->num = 0;
+}
+
+static void AttackCheckBoundaryBeforeFunc_aug6(GObj *self)
 {
     IosMailBox *box = &self->mailBox;
     IosMail *e = box->mail;
@@ -210,12 +263,16 @@ static void AttackCheckBoundaryBeforeFunc_aug6jun26(GObj *self)
 
 void AttackCheckBoundaryBeforeFunc(GObj *self)
 {
+    if (ICO_JUN26) {
+        AttackCheckBoundaryBeforeFunc_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         AttackCheckBoundaryBeforeFunc_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        AttackCheckBoundaryBeforeFunc_aug6jun26(self);
+    if (ICO_AUG6) {
+        AttackCheckBoundaryBeforeFunc_aug6(self);
         return;
     }
     IosMailBox *box = &self->mailBox;

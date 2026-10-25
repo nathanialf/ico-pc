@@ -3,12 +3,12 @@
 
 void switchOnSE(GObj *self)
 {
-    ExecuteSEPackage(self, PAL_NTSCAUG6JUN26(63, 61));
+    ExecuteSEPackage(self, PAL_NTSCAUG6_JUN26(63, 61, 55));
 }
 
 void switchReleaseSE(GObj *self)
 {
-    ExecuteSEPackage(self, PAL_NTSCAUG6JUN26(64, 62));
+    ExecuteSEPackage(self, PAL_NTSCAUG6_JUN26(64, 62, 56));
 }
 
 inline void SetSwitchTriggerFunc(GObj *lever, int (*func)(GObj *, int))
@@ -89,8 +89,20 @@ inline LeverGeoWork *InitFloorLeverGeo(GObj *self, SObjSimpleSetting *lay)
     return g;
 }
 
+static void SetSwitchState_jun26(GObj *lev, int state)
+{
+    LeverGeoWork *p = GOBJ_SUB(lev)->work;
+
+    p->state = state;
+    switchOnSE(lev);
+}
+
 inline void SetSwitchState(GObj *lev, int state)
 {
+    if (ICO_JUN26) {
+        SetSwitchState_jun26(lev, state);
+        return;
+    }
     LeverGeoWork *p = GOBJ_SUB(lev)->work;
     int cur = p->state;
     unsigned char ne = cur != state;

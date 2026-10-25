@@ -23,7 +23,7 @@ int *motionTable[1170] = {0}; /* the June 2001 demo's 1170, the largest (PAL 115
 inline void ResetDynamicMotionManager(void)
 {
     int i;
-    for (i = 0; i <= PAL_NTSC_AUG6JUN26(1146, 1085, 1087); i++) {
+    for (i = 0; i <= PAL_NTSC_AUG6_JUN26(1146, 1085, 1087, 1166); i++) {
         if (motionKind[i].area == 4) {
             motionTable[i] = 0;
         }
@@ -34,7 +34,7 @@ inline void ResetDynamicMotionManager(void)
 inline void ResetStatic2MotionManager(int seg)
 {
     int i;
-    for (i = 0; i <= PAL_NTSC_AUG6JUN26(1146, 1085, 1087); i++) {
+    for (i = 0; i <= PAL_NTSC_AUG6_JUN26(1146, 1085, 1087, 1166); i++) {
         if (motionKind[i].area == seg) {
             motionTable[i] = 0;
         }

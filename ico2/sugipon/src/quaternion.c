@@ -3,6 +3,7 @@
 #include "quaternion.h"
 #include "matrixDrive.h"
 #include "Matrix.h"
+#include <stdio.h>
 
 inline void MultiQuaternion(void *out, void *qa, void *qb);
 inline void RotQuaternionX(void *self, short ang);
@@ -52,14 +53,22 @@ void PushQuaternion(void)
 {
     int v = quatStackIndex;
     if (v < 0) {
-        debug_StdPrintfDummy("Quaternion stack not initialized.\n");
+        if (ICO_JUN26) {
+            printf("Quaternion stack not initialized.\n");
+        } else {
+            debug_StdPrintfDummy("Quaternion stack not initialized.\n");
+        }
         InitQuaternionDrive();
         v = quatStackIndex;
     }
     v++;
     quatStackIndex = v;
     if (v >= 0x40) {
-        debug_StdPrintfDummy("Quaternion stack overflow!!\n");
+        if (ICO_JUN26) {
+            printf("Quaternion stack overflow!!\n");
+        } else {
+            debug_StdPrintfDummy("Quaternion stack overflow!!\n");
+        }
         v = 0x3F;
         quatStackIndex = v;
     }
@@ -197,9 +206,44 @@ void GetSlerpQuaternionNoRegularize(void *out, void *qa, void *qb, float t)
     _AddVector(out, out, tq);
 }
 
+static void GetSlerpQuaternion_jun26(void *out, void *qa, void *qb, float t)
+{
+    float tmp[4];
+    float tq[4];
+    float c;
+    int ang;
+    float s;
+    float inv;
+    float sa, sb;
+
+    CopyQuaternion(tmp, qb);
+    c = GetQuaternionCosRadian(qa, tmp);
+    if (c < 0.0f) {
+        _ScaleVector(tmp, tmp, -1.0f);
+        c = GetQuaternionCosRadian(qa, tmp);
+    }
+    ang = GetTableArcCos(c);
+    s = GetTableSin(ang);
+    if (s < 0.05f) {
+        _InterVector(out, qa, tmp, t);
+    } else {
+        inv = 1.0f / s;
+        sa = GetTableSin((short)((float)ang * t)) * inv;
+        sb = GetTableSin((short)((float)ang * (1.0f - t))) * inv;
+        _ScaleVector(out, qa, sa);
+        _ScaleVector(tq, tmp, sb);
+        _AddVector(out, out, tq);
+    }
+    RegularizeQuaternion(out);
+}
+
 /* The slerp, then the result put back to unit length. */
 void GetSlerpQuaternion(void *out, void *qa, void *qb, float t)
 {
+    if (ICO_JUN26) {
+        GetSlerpQuaternion_jun26(out, qa, qb, t);
+        return;
+    }
     GetSlerpQuaternionNoRegularize(out, qa, qb, t);
     RegularizeQuaternion(out);
 }
@@ -218,14 +262,22 @@ inline void PushQuaternionWithNoCopy(void)
 {
     int v = quatStackIndex;
     if (v < 0) {
-        debug_StdPrintfDummy("Quaternion stack not initialized.\n");
+        if (ICO_JUN26) {
+            printf("Quaternion stack not initialized.\n");
+        } else {
+            debug_StdPrintfDummy("Quaternion stack not initialized.\n");
+        }
         InitQuaternionDrive();
         v = quatStackIndex;
     }
     v++;
     quatStackIndex = v;
     if (v >= 0x40) {
-        debug_StdPrintfDummy("Quaternion stack overflow!!\n");
+        if (ICO_JUN26) {
+            printf("Quaternion stack overflow!!\n");
+        } else {
+            debug_StdPrintfDummy("Quaternion stack overflow!!\n");
+        }
         v = 0x3F;
         quatStackIndex = v;
     }
@@ -235,7 +287,11 @@ inline void PopQuaternion(void)
 {
     quatStackIndex -= 1;
     if (quatStackIndex < 0) {
-        debug_StdPrintfDummy("Quaternion stack underflow!!\n");
+        if (ICO_JUN26) {
+            printf("Quaternion stack underflow!!\n");
+        } else {
+            debug_StdPrintfDummy("Quaternion stack underflow!!\n");
+        }
         quatStackIndex = 0;
     }
 }

@@ -1164,6 +1164,17 @@ static sceVu0FMATRIX procMatrix = {
     {0.0f, 0.0f, 0.0f, 1.0f},
 }; /* derived name */
 
+/* PC port: the June 2001 demo's point writer, with the node's matrix */
+static __inline__ void clothAddPointM(void *dst, float (*m)[4], void *src,
+                                      float f) /* derived name */
+{
+    VECTOR tv;
+
+    _ApplyMatrix(&tv, m, src);
+    _ScaleVector(&tv, &tv, f);
+    AddVectorXYZ(dst, dst, &tv);
+}
+
 /* the two point writers: add, or set, a scaled transformed vector */
 static __inline__ void clothAddPoint(void *dst, void *src, float f) /* derived name */
 {
@@ -1182,8 +1193,88 @@ static __inline__ void clothSetPoint(void *dst, void *src, float f) /* derived n
     _ScaleVectorXYZ(dst, &tv, f);
 }
 
-static void getCloth4D_preProcess_ntscaug6jun26(Cloth4D *c, float g, float damp, float z, float w,
-                                                int tight, void *qa, void *qb)
+static void getCloth4D_preProcess_jun26(Cloth4D *c, float g, float damp, float z, float w,
+                                        int tight, void *qa, void *qb)
+{
+    (void)z;     /* PC port: the European parameter, unused here */
+    (void)w;     /* PC port: the European parameter, unused here */
+    (void)tight; /* PC port: the European parameter, unused here */
+    (void)qa;    /* PC port: the European parameter, unused here */
+    (void)qb;    /* PC port: the European parameter, unused here */
+    VECTOR dv;
+    int i;
+    int j;
+    Prim3DVec **pos = c->pos;
+    Prim3DVec **nrm = c->nrm;
+    Prim3DVec **vel = c->vel;
+    Cloth4DCfg *cfg = c->cfg;
+    int nx = cfg->nx - (cfg->wrap != 0);
+    int ny = cfg->ny;
+    VECTOR va[nx];
+    float t;
+    float *wind;
+    float wpow;
+
+    for (i = 0; i < nx; i++) {
+        for (j = 1; j < ny; j++) {
+            sceVu0ScaleVector(&dv, &vel[i][j], damp);
+            CopyVector(&vel[i][j], &pos[i][j]);
+            AddVectorXYZ(&pos[i][j], &pos[i][j], &dv);
+        }
+    }
+    wind = GetWindVector(&wpow, &pos[0]->x);
+    wpow = wpow / 40960.0f;
+    for (i = 0; i < nx; i++) {
+        CopyVector(pos[i], ZeroPoint);
+        CopyVector(nrm[i], ZeroVector);
+        CopyVector(&va[i], ZeroVector);
+        for (j = 0; j < 2; j++) {
+            int n = cfg->cols[i].link[j].node;
+
+            if (n == -1) {
+                break;
+            }
+            {
+                /* the hang node carries the column's top point, its normal
+                   and its rest direction */
+                float m[4][4];
+                Sub15C *sk = GOBJ_SUB(c->gobj);
+
+                _MulMatrix(m, (char *)sk->nodeMtx + n * 64, sk->clusterMtx + n * 64);
+                clothAddPointM(pos[i], m, cfg->cols[i].pos, cfg->cols[i].link[j].weight);
+                clothAddPointM(nrm[i], m, cfg->cols[i].dir, cfg->cols[i].link[j].weight);
+                clothAddPointM(&va[i], m, cfg->cols[i].restDir, cfg->cols[i].link[j].weight);
+            }
+        }
+        pos[i]->w = 1.0f;
+        nrm[i]->w = 1.0f;
+        va[i].w = 0.0f;
+    }
+    for (j = 1; j < ny; j++) {
+        t = (float)(ny - j) / (float)(ny - 1);
+        t = t * t;
+        for (i = 0; i < nx; i++) {
+            AddVectorXYZ(&pos[i][j], &pos[i][j], wind);
+            {
+                /* a random gust, then the point follows the one above it
+                   toward its rest direction */
+                Vec16 noise = {{wpow * (float)((rand() & 0x7FFF) - 16383),
+                                wpow * (float)((rand() & 0x7FFF) - 16383),
+                                wpow * (float)((rand() & 0x7FFF) - 16383), 0.0f}};
+                VECTOR w;
+
+                AddVectorXYZ(&pos[i][j], &pos[i][j], &noise);
+                SubVectorXYZ(&w, &pos[i][j], &pos[i][j - 1]);
+                _InterVectorXYZ(&w, &va[i], &w, t);
+                AddVectorXYZ(&pos[i][j], &pos[i][j - 1], &w);
+            }
+            pos[i][j].y = pos[i][j].y + g;
+        }
+    }
+}
+
+static void getCloth4D_preProcess_ntscaug6(Cloth4D *c, float g, float damp, float z, float w,
+                                           int tight, void *qa, void *qb)
 {
     (void)z;     /* PC port: the European parameter, unused here */
     (void)w;     /* PC port: the European parameter, unused here */
@@ -1276,8 +1367,12 @@ static void getCloth4D_preProcess_ntscaug6jun26(Cloth4D *c, float g, float damp,
 static void getCloth4D_preProcess(Cloth4D *c, float g, float damp, float z, float w, int tight,
                                   void *qa, void *qb)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        getCloth4D_preProcess_ntscaug6jun26(c, g, damp, z, w, tight, qa, qb);
+    if (ICO_JUN26) {
+        getCloth4D_preProcess_jun26(c, g, damp, z, w, tight, qa, qb);
+        return;
+    }
+    if (ICO_NTSCAUG6) {
+        getCloth4D_preProcess_ntscaug6(c, g, damp, z, w, tight, qa, qb);
         return;
     }
     VECTOR dv;
@@ -2178,7 +2273,8 @@ static void GetCloth4D_ntscaug6jun26(Cloth4D *c, float x, float y)
             rows[i][j] = -1;
         }
     }
-    getCloth4D_preProcess_ntscaug6jun26(c, x, y, 0.0f, 0.0f, 0, 0, 0);
+    getCloth4D_preProcess(c, x, y, 0.0f, 0.0f, 0, 0,
+                          0); /* PC port: through the dispatch (the demo has its own) */
     getCloth4D(c, rows);
     obj = GOBJ_SUB(c->gobj);
     if (motionKind[obj->ctrl.motion].flags.bits.clothPlane) {
@@ -2258,8 +2354,76 @@ ICO_LAYOUT_AT(ClothHangCfg, posW, ClothPoint, pos[3]);
 
 ICO_LAYOUT_AT(ClothHangCfg, turn, ClothPoint, turn);
 
+static Cloth4D *InitCloth4D_jun26(GObj *gobj, Cloth4DCfg *cfg, ClothHangCfg *tbl)
+{
+    Cloth4D *r;
+    int i;
+    int j;
+    float sc;
+
+    r = (Cloth4D *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(Cloth4D, 0x300),
+                                  "src/clothAnimation.c", 2183);
+    r->gobj = gobj;
+    r->cfg = cfg;
+    r->sweepRight = 0;
+    if (cfg->tex != 0) {
+        r->mesh = prim_InitMesh3D(cfg->ny, cfg->nx, 1, 0x5C, 0x80808080, 1);
+        r->tex = *(TexBlob *)tex_GetTextureData(tex_GetTextureNo(cfg->tex));
+    } else {
+        r->mesh = prim_InitMesh3D(cfg->ny, cfg->nx, 1, 0x4C, 0xFFFFFF80, 1);
+    }
+    r->pos = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * sizeof(Prim3DVec *),
+                                          "src/clothAnimation.c", 1902);
+    r->vel = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * sizeof(Prim3DVec *),
+                                          "src/clothAnimation.c", 1903);
+    r->nrm = (Prim3DVec **)iosMallocDebug(ios_partition_sugipon, cfg->nx * sizeof(Prim3DVec *),
+                                          "src/clothAnimation.c", 1904);
+    for (i = 0; i < cfg->nx; i++) {
+        r->pos[i] = r->mesh->pos + i * cfg->ny;
+        r->vel[i] = (Prim3DVec *)iosMallocDebug(ios_partition_sugipon, cfg->ny * 16,
+                                                "src/clothAnimation.c", 1908);
+        r->nrm[i] = r->mesh->nrm + i * cfg->ny;
+        for (j = 0; j < cfg->ny; j++) {
+            CopyVector(&r->pos[i][j], ZeroPoint);
+            CopyVector(&r->vel[i][j], ZeroVector);
+            r->mesh->st[i * cfg->ny + j].x = cfg->cols[i].uv[j][0];
+            r->mesh->st[i * cfg->ny + j].y = 1.0f - cfg->cols[i].uv[j][1];
+        }
+    }
+    prim_UpdateMesh3D(r->mesh, 8, buffer_ID);
+    prim_UpdateMesh3D(r->mesh, 8, (buffer_ID + 1) & 1);
+    if (tbl != 0) {
+        i = 0;
+        sc = GOBJ_SUB(r->gobj)->nodes->scale[0];
+        while (tbl[i].enable != -1) {
+            i++;
+        }
+        r->colNum = i;
+        r->col = iosMallocDebug(ios_partition_sugipon, i * 0x40, "src/clothAnimation.c", 1937);
+        r->colMtx =
+            iosMallocDebug(ios_partition_sugipon, r->colNum * 0x40, "src/clothAnimation.c", 1938);
+        r->colNode =
+            iosMallocDebug(ios_partition_sugipon, r->colNum * 4, "src/clothAnimation.c", 1939);
+        for (i = 0; tbl[i].enable != -1; i++) {
+            *(Blob64 *)&r->col[i] = *(Blob64 *)&tbl[i];
+            r->col[i].radius = r->col[i].radius * sc;
+            r->col[i].top = r->col[i].top * sc;
+            r->col[i].bottom = r->col[i].bottom * sc;
+            r->col[i].invDiameter = 1.0f / (r->col[i].radius + r->col[i].radius);
+            sceVu0UnitMatrix(r->colMtx[i]);
+            r->colNode[i] = GetSkeltonFocusNode(gobj, tbl[i].node);
+        }
+    } else {
+        r->colNum = 0;
+    }
+    return r;
+}
+
 Cloth4D *InitCloth4D(GObj *gobj, Cloth4DCfg *cfg, ClothHangCfg *tbl)
 {
+    if (ICO_JUN26) {
+        return InitCloth4D_jun26(gobj, cfg, tbl);
+    }
     Cloth4D *r;
     int i;
     int j;

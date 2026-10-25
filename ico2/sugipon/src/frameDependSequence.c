@@ -138,7 +138,11 @@ static int playSE(int no)
    picks so far and how many times each entry was picked. */
 static int seRandomPicks; /* derived name */
 
-static int seRandomPickCount[50]; /* derived name */
+static int seRandomPickCount_pal[50]; /* derived name */
+
+static int seRandomPickCount_jun26[52]; /* derived name */
+
+#define seRandomPickCount PAL_JUN26(seRandomPickCount_pal, seRandomPickCount_jun26)
 
 static int playSERandomID_ntsc(int no, void *entry)
 {
@@ -280,7 +284,39 @@ static int playSERandomID(int no, void *entry)
     return execSE(randomSEKind[no].se, entry);
 }
 
-static int playSEConditionID_ntscaug6jun26(int no, void *entry)
+static inline int playSEConditionID_jun26(int no, void *entry)
+{
+    (void)entry; /* PC port: the European parameter, unused here */
+    int (*fn)(GObj *, int);
+    const SECondEntry *p;
+
+    switch (motSECondKind[no].kind) {
+    case 0:
+    default:
+        fn = CheckFloorAttribute;
+        break;
+    case 1:
+        fn = CheckWallAttribute;
+        break;
+    case 2:
+        fn = checkWaterDepth;
+        break;
+    }
+    if (motSECondKind[no].kind != -1) {
+        p = &motSECondKind[no];
+        do {
+            if (p->cond == -1 || fn((GObj *)fdsGObj, p->cond) != 0) {
+                if (execSE(p->se, 0) != 0) {
+                    return 1;
+                }
+            }
+            p++;
+        } while (p->kind != -1);
+    }
+    return 0;
+}
+
+static int playSEConditionID_ntscaug6(int no, void *entry)
 {
     (void)entry; /* PC port: the European parameter, unused here */
     int (*fn)(GObj *, int);
@@ -317,8 +353,11 @@ static int playSEConditionID_ntscaug6jun26(int no, void *entry)
 
 static int playSEConditionID(int no, void *entry)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return playSEConditionID_ntscaug6jun26(no, entry);
+    if (ICO_JUN26) {
+        return playSEConditionID_jun26(no, entry);
+    }
+    if (ICO_NTSCAUG6) {
+        return playSEConditionID_ntscaug6(no, entry);
     }
     int (*fn)(GObj *, int);
     const SECondEntry *p;
@@ -355,7 +394,20 @@ static int playSEConditionID(int no, void *entry)
     return 0;
 }
 
-static inline int execSE_ntscaug6jun26(int no, void *entry)
+static int execSE_jun26(int no, void *entry)
+{
+    (void)entry; /* PC port: the European parameter, unused here */
+    if (no <= 0xFFFF) {
+        return playSE(no);
+    } else if (no <= 0x1FFFF) {
+        return playSERandomID(no - 0x10000, 0);
+    } else {
+        return playSEConditionID(no - 0x20000, 0);
+    }
+    /* the bad-ID report, switched off */
+}
+
+static inline int execSE_ntscaug6(int no, void *entry)
 {
     (void)entry; /* PC port: the European parameter, unused here */
     if (no <= 0xFFFF) {
@@ -374,8 +426,11 @@ static inline int execSE_ntscaug6jun26(int no, void *entry)
 
 static inline int execSE(int no, void *entry)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return execSE_ntscaug6jun26(no, entry);
+    if (ICO_JUN26) {
+        return execSE_jun26(no, entry);
+    }
+    if (ICO_NTSCAUG6) {
+        return execSE_ntscaug6(no, entry);
     }
     if (no <= 0xFFFF) {
         return playSE(no);
@@ -391,8 +446,58 @@ static inline int execSE(int no, void *entry)
     }
 }
 
+static void playEff_jun26(int no)
+{
+    float q[4];
+    float pos[4];
+    int node;
+
+    /* PC port: the model viewer (port/game/model_viewer.c) plays a motion
+       over its host stage with every other object parked and only the
+       model's own draws kept, so a motion's stage animation or particle
+       effect is not seen there, and the stage may not hold it (the boy's
+       SWIM in stage 8, DIVERGENCES.md GL-10): no effect is entered while it
+       is up.  The sounds and the vibration (execSE, execVib) play on. */
+    if (ico_mv_active != 0) {
+        return;
+    }
+    if (motionEffKind[no].node == -1) {
+        GetRootQuaternion(q, (GObj *)fdsGObj);
+        GetRootMatrix(MatrixDrive_GetMatrix(), (GObj *)fdsGObj);
+    } else {
+        node = GetSkeltonFocusNode((GObj *)fdsGObj, motionEffKind[no].node);
+        if (no == -1) {
+            GetRootQuaternion(q, (GObj *)fdsGObj);
+            GetRootMatrix(MatrixDrive_GetMatrix(), (GObj *)fdsGObj);
+            /* EUC-JP: "note: the node of a node-specified motion effect was not found" */
+            debug_StdPrintfDummy(
+                "注意：ノード指定のモーションエフェクトでノードが見つかりませんでした\n");
+        } else {
+            GetRootQuaternion(q, (GObj *)fdsGObj);
+            CopyMatrix(MatrixDrive_GetMatrix(), (char *)GOBJ_SUB(fdsGObj)->nodeMtx + (node << 6));
+        }
+    }
+    MatrixDrive_TransMatrix(-motionEffKind[no].x, -motionEffKind[no].y, -motionEffKind[no].z);
+    CopyVector(pos, (float *)(MatrixDrive_GetMatrix()[3]));
+    RotQuaternionY(q, (short)(int)(motionEffKind[no].ry * -32768.0f / 180.0f));
+    RotQuaternionX(q, (short)(int)(motionEffKind[no].rx * -32768.0f / 180.0f));
+    RotQuaternionZ(q, (short)(int)(motionEffKind[no].rz * -32768.0f / 180.0f));
+    if (motionEffKind[no].flags != 0) {
+        if (0.0f < GOBJ_SUB(fdsGObj)->ctrl.waterDepth) {
+            pos[1] = GOBJ_SUB(fdsGObj)->ctrl.waterY;
+        }
+        EntryStageMultiBgaManager(motionEffKind[no].eff, pos, q);
+    } else {
+        SetParticleEffect(motionEffKind[no].eff, pos, q);
+    }
+}
+
 static void playEff(int no)
 {
+    if (ICO_JUN26) {
+        playEff_jun26(no);
+        return;
+    }
     float q[4];
     float pos[4];
     const EffEntry *p;
@@ -586,9 +691,31 @@ static void execVibCondition(int no, int *entry)
    typedef.h, and commonact.c declares the table char [] */
 extern const MotionDef motionKind[];
 
+static inline void fireFDSSlot_jun26(float t, int no, void *entry, int *done,
+                                     int (*fn)(int, void *)) /* derived name */
+{
+    int ok;
+    if (t < 0.0f) {
+        return;
+    }
+    if (t < fdsLayout->animFrame) {
+        ok = fn(no, entry);
+        *done = 1;
+        if (ok == 0) {
+            /* EUC-JP: "none of the SEs is loaded, so it could not be played" */
+            debug_StdPrintfDummy(
+                "\033[36mどのSEもロードされていないので鳴らせませんでした。\033[m\n");
+        }
+    }
+}
+
 static inline void fireFDSSlot(float t, int no, void *entry, int *done,
                                int (*fn)(int, void *)) /* derived name */
 {
+    if (ICO_JUN26) {
+        fireFDSSlot_jun26(t, no, entry, done, fn);
+        return;
+    }
     if (t < 0.0f) {
         return;
     }
@@ -602,7 +729,7 @@ static inline void fireSESlots(void) /* derived name */
 {
     int i;
 
-    for (i = 0; i < 12; i++) {
+    for (i = 0; i < PAL_JUN26(12, 5); i++) {
         if (fdsFlags->seDone[i] == 0) {
             fireFDSSlot(fdsRecord->se[i].t, fdsRecord->se[i].no, 0, &fdsFlags->seDone[i], execSE);
         }
@@ -713,6 +840,15 @@ static inline int *findSEPackage(int no, int id) /* derived name */
     return progSELink[no].se;
 }
 
+/* the display object slot at GObj + 0x15C as setSEEnvironment reads it, a
+   word that is a handle or a pointer: the demo's read of it aliases the SE
+   volume store after it (ExecuteSEPackageWithVolumeRate keeps the store
+   behind the load), which a read through the union gives */
+typedef union { /* field names derived */
+    char *p;
+    int handle;
+} FDSObjWord; /* derived name */
+
 static inline int setSEEnvironment(GObj *gobj, int id) /* derived name */
 {
     char *w;
@@ -743,8 +879,25 @@ static inline int setSEEnvironment(GObj *gobj, int id) /* derived name */
     return no;
 }
 
+static inline void executeSEPackageByGObj_jun26(GObj *gobj, int no, int grp)
+{
+    int id;
+    int *p;
+    int i;
+
+    id = setSEEnvironment(gobj, grp);
+    p = findSEPackage(no, id);
+    for (i = 0; i < 2; i++) {
+        execSE(p[i], 0);
+    }
+}
+
 static void executeSEPackageByGObj(GObj *gobj, int no, int grp)
 {
+    if (ICO_JUN26) {
+        executeSEPackageByGObj_jun26(gobj, no, grp);
+        return;
+    }
     int id;
     int *p;
     int i;
@@ -792,8 +945,18 @@ void ExecuteSEPackage(GObj *gobj, int id)
     ExecuteSEPackageWithGroupVariation(gobj, id, 0);
 }
 
+static inline void ExecuteSEPackageWithVolumeRate_jun26(GObj *gobj, int id, float rate)
+{
+    fdsVolume = rate;
+    executeSEPackageByGObj(gobj, id, 0);
+}
+
 void ExecuteSEPackageWithVolumeRate(GObj *gobj, int id, float rate)
 {
+    if (ICO_JUN26) {
+        ExecuteSEPackageWithVolumeRate_jun26(gobj, id, rate);
+        return;
+    }
     fdsVolume = rate;
     executeSEPackageByGObj(gobj, id, 0);
 }

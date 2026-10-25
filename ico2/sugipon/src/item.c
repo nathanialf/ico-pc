@@ -74,18 +74,45 @@ typedef struct {                        /* field names derived */
     int pad94[3];                       /* 0x94 */
 } __attribute__((aligned(8))) ItemWork; /* derived name */
 
+static void bombSparkStartSE_jun26(GObj *gobj)
+{
+    ExecuteSEPackage(gobj, 42);
+}
+
 static void bombSparkStartSE(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        bombSparkStartSE_jun26(gobj);
+        return;
+    }
     ExecuteSEPackage(gobj, PAL_NTSCAUG6JUN26(50, 48));
+}
+
+static void bombSparkSE_jun26(GObj *gobj)
+{
+    ExecuteSEPackage(gobj, 43);
 }
 
 static void bombSparkSE(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        bombSparkSE_jun26(gobj);
+        return;
+    }
     ExecuteSEPackage(gobj, PAL_NTSCAUG6JUN26(51, 49));
+}
+
+static void bombExplodeSE_jun26(GObj *gobj)
+{
+    ExecuteSEPackage(gobj, 44);
 }
 
 static void bombExplodeSE(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        bombExplodeSE_jun26(gobj);
+        return;
+    }
     ExecuteSEPackage(gobj, PAL_NTSCAUG6JUN26(52, 50));
 }
 
@@ -97,7 +124,7 @@ static inline int IsItemKindBomb(GObj *gobj) /* derived name */
     return p->kind == 1;
 }
 
-void HoldItem(GObj *gobj, GObj *holder)
+static void HoldItem_jun26(GObj *gobj, GObj *holder)
 {
     float q[4];
     float hq[4];
@@ -106,8 +133,39 @@ void HoldItem(GObj *gobj, GObj *holder)
     if (gobj == 0) {
         /* lost sight of the small barrel but is still trying to grab it */
         debug_StdPrintfDummy("小樽を見失ったのにつかもうとしてます。\n");
-        debug_assert(__FILE__, LN(356, 356, 356, 344, 344, 312, 356));
-        __assert(__FILE__, LN(356, 356, 356, 344, 344, 312, 356), "0");
+        debug_assert(__FILE__, 312);
+        __assert(__FILE__, 312, "0");
+    }
+    p = GOBJ_SUB(gobj)->work;
+    p->released = 0;
+    p->held = 1;
+    p->holder = (ICO_WORD_PTR(GObj *))holder;
+    GOBJ_SUB(gobj)->disp = 0;
+    SetIdentityQuaternion(GOBJ_SUB(gobj)->root.itemQuat);
+    if (p->kind == 1) {
+        SetRootQuaternion(gobj, IdentityQuaternion);
+    }
+    GetRootQuaternion(q, gobj);
+    GetRootQuaternion(hq, holder);
+    GetInverseQuaternion(hq, hq);
+    MultiQuaternion(p->rot, hq, q);
+}
+
+void HoldItem(GObj *gobj, GObj *holder)
+{
+    if (ICO_JUN26) {
+        HoldItem_jun26(gobj, holder);
+        return;
+    }
+    float q[4];
+    float hq[4];
+    ItemWork *p;
+
+    if (gobj == 0) {
+        /* lost sight of the small barrel but is still trying to grab it */
+        debug_StdPrintfDummy("小樽を見失ったのにつかもうとしてます。\n");
+        debug_assert(__FILE__, LN(356, 356, 356, 344, 344, 344, 356));
+        __assert(__FILE__, LN(356, 356, 356, 344, 344, 344, 356), "0");
     }
     p = GOBJ_SUB(gobj)->work;
     p->released = 0;
@@ -179,7 +237,9 @@ static void avoidInsideOfWall(void *self, GObj *arg)
 void ReleaseItem(GObj *gobj)
 {
     ItemWork *p = GOBJ_SUB(gobj)->work;
-    avoidInsideOfWall(gobj, (GObj *)p->holder);
+    if (!ICO_JUN26) {
+        avoidInsideOfWall(gobj, (GObj *)p->holder);
+    }
     p->released = 1;
     p->held = 0;
     p->holder = 0;
@@ -189,8 +249,23 @@ void ReleaseItem(GObj *gobj)
     SetIdentityQuaternion(GOBJ_SUB(gobj)->root.itemQuat);
 }
 
+static void ThrowItem_jun26(GObj *gobj, void *vel)
+{
+    ItemWork *p = (ItemWork *)(char *)GOBJ_SUB(gobj)->work;
+    p->released = 1;
+    p->held = 0;
+    p->thrown = 1;
+    CopyVector(GOBJ_SUB(gobj)->root.move, vel);
+    SetIdentityQuaternion(
+        ICO_RAWP(char *, *(char **)&gobj->dobj, 0x150, (char *)gobj->dobj->root.itemQuat));
+}
+
 void ThrowItem(GObj *gobj, void *vel)
 {
+    if (ICO_JUN26) {
+        ThrowItem_jun26(gobj, vel);
+        return;
+    }
     ItemWork *p = (ItemWork *)(char *)GOBJ_SUB(gobj)->work;
     avoidInsideOfWall(gobj, (GObj *)p->holder);
     p->released = 1;
@@ -240,7 +315,7 @@ char *InitItemGeo(GObj *gobj, ItemLayout *layout)
         link.node = 0;
         lay = *layout;
         lay.kind = 2;
-        g = CreateLayoutedGObj(10, PAL_NTSC_AUG6JUN26(75, 69, 68), -1, 1, &lay, -1, 7, 0);
+        g = CreateLayoutedGObj(10, PAL_NTSC_AUG6_JUN26(75, 69, 68, 51), -1, 1, &lay, -1, 7, 0);
         SetTorchChainReactionFlag(g, 1);
         LinkParentOfDObj(g, &link);
         CopyVector(GOBJ_SUB(g)->root.pos, itemDropOfs);
@@ -400,7 +475,7 @@ static inline int entryBreakBgAnimation_aug6jun26(int id, float *pos, float *dir
     float rot[4];
     float d[4];
 
-    if (id != 814) {
+    if (id != PAL_JUN26(814, 763)) {
         memset(&rot, 0, 16);
         rot[3] = 1.0f;
         CopyVector(d, dir);
@@ -441,10 +516,44 @@ static inline int entryBreakBgAnimation(int id, float *pos, float *dir, int arg)
    and InitItemGeo spell the same integer quotient out */
 #define ITEM_DT (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])) /* derived name */
 
+static inline int breakItemOnWallHit_jun26(GObj *gobj, float len, float *pos,
+                                           float *vel) /* derived name */
+{
+    float rot[4];
+    float d[4];
+    float sv[4];
+    ItemWork *p = GOBJ_SUB(gobj)->work;
+
+    if (5.0f < len) {
+        int id = itemKind[p->kind].stayAnim;
+
+        if (id != 763) {
+            memset(&rot, 0, 16);
+            rot[3] = 1.0f;
+            CopyVector(d, vel);
+            d[1] = 0.0f;
+            _NormalizeVector(d, d);
+            RotQuaternionY(&rot, GetTableArcTan2(d[0], d[2]));
+            _ScaleVectorXYZ(sv, vel, 0.3f);
+            EntryStageMultiBgaManagerSensitive(id, pos, &rot, sv);
+            SetParticleEffect(10, pos, &rot);
+        }
+        if ((itemKind + p->kind)->flags & 1) {
+            ExecuteSEPackage(gobj, 34);
+            return 1;
+        }
+        ExecuteSEPackage(gobj, 32);
+    }
+    return 0;
+}
+
 /* the wall-hit arm of uncarriedItemGeo */
 static inline int breakItemOnWallHit(GObj *gobj, float len, float *pos,
                                      float *vel) /* derived name */
 {
+    if (ICO_JUN26) {
+        return breakItemOnWallHit_jun26(gobj, len, pos, vel);
+    }
     float rot[4];
     float d[4];
     float sv[4];
@@ -478,10 +587,36 @@ static inline int breakItemOnWallHit(GObj *gobj, float len, float *pos,
     return 0;
 }
 
+static inline int breakItemOnFloorHit_jun26(GObj *gobj, float len, float *pos,
+                                            float *vel) /* derived name */
+{
+    ItemWork *p = GOBJ_SUB(gobj)->work;
+
+    if (10.0f < len) {
+        entryBreakBgAnimation(itemKind[p->kind].breakAnim, pos, vel, 0);
+        if ((itemKind + p->kind)->flags & 1) {
+            ExecuteSEPackage(gobj, 37);
+            return 1;
+        }
+    }
+    if (p->thrown == 0) {
+        p->thrown = 1;
+        ExecuteSEPackage(gobj, 40);
+        return 0;
+    }
+    if (5.0f < len) {
+        ExecuteSEPackageWithVolumeRate(gobj, 33, 20.0f < len ? 1.0f : len * 0.05f);
+    }
+    return 0;
+}
+
 /* the floor-hit arm of uncarriedItemGeo; it calls entryBreakBgAnimation */
 static inline int breakItemOnFloorHit(GObj *gobj, float len, float *pos,
                                       float *vel) /* derived name */
 {
+    if (ICO_JUN26) {
+        return breakItemOnFloorHit_jun26(gobj, len, pos, vel);
+    }
     ItemWork *p = GOBJ_SUB(gobj)->work;
 
     if (10.0f < len) {
@@ -512,7 +647,9 @@ static void floatGeo(float t, GObj *gobj, float *vel, ItemWork *p, float *pos)
     ClipWork w;
 
     _ScaleVector(vel, vel, t);
-    _AddVectorXYZ(vel, vel, p->drain);
+    if (!ICO_JUN26) { /* PC port: the June 2001 demo's float has no drain push */
+        _AddVectorXYZ(vel, vel, p->drain);
+    }
     GetSlerpQuaternion(GOBJ_SUB(gobj)->root.itemQuat, GOBJ_SUB(gobj)->root.itemQuat,
                        IdentityQuaternion, t);
     RegularizeQuaternion(GOBJ_SUB(gobj)->root.itemQuat);
@@ -536,7 +673,164 @@ static void floatGeo(float t, GObj *gobj, float *vel, ItemWork *p, float *pos)
     }
 }
 
-static void uncarriedItemGeo_ntscaug6jun26(GObj *gobj)
+static void uncarriedItemGeo_jun26(GObj *gobj)
+{
+    ObjNode link;  /* 0x00 */
+    float pos[4];  /* 0x10 */
+    float npos[4]; /* 0x20 */
+    float vel[4];  /* 0x30 */
+    ItemWork *p;   /* 0x40 */
+
+    float q[4];  /* 0x50 */
+    ClipWork cw; /* 0x60 */
+    int linked = 0;
+    float len0;
+    float len;
+    float spd;
+    float grav;
+    float rate;
+
+    p = GOBJ_SUB(gobj)->work;
+    GOBJ_SUB(gobj)->ctrl.wallAttr = 0;
+    GOBJ_SUB(gobj)->ctrl.floorAttr = 0;
+    CopyVector(vel, GOBJ_SUB(gobj)->root.move);
+    len0 = VectorLength(vel);
+    UnlinkParentOfDObj(gobj);
+    GetRootPosition(pos, gobj);
+    vel[1] += ITEM_DT * 0.5f * ITEM_DT;
+    if (p->inPool == 1) {
+        float d = pos[1] - GOBJ_SUB(gobj)->ctrl.waterY;
+
+        if (d < 0.0f ? -d < 20.0f : d < 20.0f) {
+            float r = (d + 20.0f) / 40.0f;
+
+            vel[1] -= ITEM_DT * 0.5f * ITEM_DT * 1.2f * r;
+            floatGeo(1.0f - r * 0.08f, gobj, vel, p, pos);
+        } else if (0.0f < d) {
+            vel[1] -= ITEM_DT * 0.5f * ITEM_DT * 1.2f;
+            rate = 0.92f;
+            floatGeo(rate, gobj, vel, p, pos);
+        }
+    }
+    sceVu0AddVector(npos, pos, vel);
+    GetRootQuaternion(q, gobj);
+    MultiQuaternion(q, GOBJ_SUB(gobj)->root.itemQuat, q);
+    RegularizeQuaternion(q);
+    SetRootQuaternion(gobj, q);
+    CopyVector(cw.pt[0], pos);
+    CopyVector(cw.pt[1], npos);
+    cw.radius = 20.0f;
+    ClipWall(&cw);
+    if (cw.wall.elem != 0) {
+        GOBJ_SUB(gobj)->ctrl.wallAttr = GetWallAttribute(&cw);
+        GetReflectionElement(&cw, 0.8f, 0.8f);
+        CopyVector(npos, cw.reflect.pos);
+        CopyVector(vel, cw.reflect.dir);
+        if (breakItemOnWallHit(gobj, VectorLength(cw.reflect.bounce), npos, vel)) {
+            setItemDead(gobj);
+        }
+    }
+    CopyVector(cw.pt[0], pos);
+    CopyVector(cw.pt[1], npos);
+    cw.pt[0][1] += 20.0f;
+    cw.pt[1][1] += 20.0f;
+    ClipFloor(&cw);
+    if (cw.floor.elem != 0) {
+        float axis[4];
+
+        GOBJ_SUB(gobj)->ctrl.floorAttr = GetFloorAttribute(&cw);
+        GetReflectionElement(&cw, 0.8f, 0.7f);
+        CopyVector(npos, cw.reflect.pos);
+        CopyVector(vel, cw.reflect.dir);
+        npos[1] -= 20.0f;
+        sceVu0OuterProduct(axis, cw.normal.f, cw.reflect.slide);
+        SetQuaternionByAxisRotate(GOBJ_SUB(gobj)->root.itemQuat,
+                                  (short)(int)(-VectorLength(cw.reflect.slide) * 521.5189209f),
+                                  axis[0], axis[1], axis[2]);
+        len = VectorLength(cw.reflect.bounce);
+        if (breakItemOnFloorHit(gobj, len, npos, vel)) {
+            setItemDead(gobj);
+        }
+        linked = 2;
+        link = cw.floor.o;
+    } else {
+        CopyVector(cw.pt[1], pos);
+        CopyVector(cw.pt[0], pos);
+        cw.pt[0][1] -= 20.0f;
+        cw.pt[1][1] += 20.0f;
+        cw.radius = 0;
+        ClipFloor(&cw);
+        if (cw.floor.elem != 0) {
+            float n[4];
+            float sv[4];
+
+            CopyVector(npos, cw.pt[2]);
+            npos[1] = cw.pt[2][1] - 21.0f;
+            cw.normal.f[3] = 0;
+            linked = 1;
+            CopyVector(n, cw.normal.f);
+            sceVu0ScaleVector(sv, n, GetDistanceFromPlane(cw.normal.f, vel) * -2.0f);
+            AddVectorXYZ(vel, vel, sv);
+            link = cw.floor.o;
+        } else {
+            cw.pt[1][1] += 10000.0f;
+            ClipFloor(&cw);
+            if (CheckFieldContact(&cw, gobj, npos, 20.0f) == 2) {
+                if (p->inPool != 1) {
+                    GOBJ_SUB(gobj)->ctrl.waterY = GetPoolGlobalHeight(cw.floor.o.obj);
+                }
+                GOBJ_SUB(gobj)->ctrl.waterDepth = cw.pt[2][1] - GOBJ_SUB(gobj)->ctrl.waterY;
+                p->inPool = 1;
+            }
+        }
+    }
+    spd = VectorLength(vel);
+    grav = ITEM_DT * 0.5f * ITEM_DT;
+    if (len0 + (grav + grav) < spd) {
+        CopyVector(npos, pos);
+        p->released = 0;
+        /* emergency stop 2 */
+        debug_StdPrintfDummy("緊急停止2(%f←%f)\n", spd, len0);
+        p->holder = 0;
+    }
+    if (LimitExistGeometry(npos, vel)) {
+        p->released = 0;
+        p->holder = 0;
+        /* emergency stop 3 */
+        debug_StdPrintfDummy("緊急停止3\n");
+    }
+    npos[3] = 1.0f;
+    SetDirectRootPosition(gobj, npos);
+    CopyVector(GOBJ_SUB(gobj)->root.move, vel);
+    if (p->holder != 0) {
+        if (VectorLengthSquare(vel) > 100.0f) {
+            AttackCenter((GObj *)p->holder, -1, npos, 0, 20.0f);
+        }
+    }
+    if (linked != 0) {
+        if (p->spin < 8.0f) {
+            int n = p->spinCount + 1;
+
+            p->spinCount = n;
+            if (n >= 6) {
+                p->spinCount = 0;
+                p->released = 0;
+                /* vibration sleep */
+                debug_StdPrintfDummy("振動睡眠\n");
+            }
+            p->spin = spd;
+        } else {
+            p->spin = 0;
+            p->spinCount = 0;
+        }
+    }
+    p->spin = p->spin < spd ? spd : p->spin;
+    if (p->released == 0 && linked != 0) {
+        LinkParentOfDObj(gobj, &link);
+    }
+}
+
+static void uncarriedItemGeo_ntscaug6(GObj *gobj)
 {
     ObjNode link;  /* 0x00 */
     float pos[4];  /* 0x10 */
@@ -717,8 +1011,12 @@ static void uncarriedItemGeo_ntscaug6jun26(GObj *gobj)
 
 static void uncarriedItemGeo(GObj *gobj)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        uncarriedItemGeo_ntscaug6jun26(gobj);
+    if (ICO_JUN26) {
+        uncarriedItemGeo_jun26(gobj);
+        return;
+    }
+    if (ICO_NTSCAUG6) {
+        uncarriedItemGeo_ntscaug6(gobj);
         return;
     }
     ObjNode link;  /* 0x00 */
@@ -903,8 +1201,68 @@ static void uncarriedItemGeo(GObj *gobj)
     }
 }
 
+static void execBombGeo_jun26(GObj *gobj)
+{
+    float v[4];
+    ItemWork *rec = GOBJ_SUB(gobj)->work;
+    ItemFuse *q = &rec->fuse;
+
+    switch (q->state) {
+    default:
+    case 0:
+        if (IsTorchLightOn(q->torch)) {
+            q->state = 1;
+            bombSparkStartSE(gobj);
+            bombSparkSE(gobj);
+            rec->fuse.animMode = 1;
+        }
+        break;
+    case 1:
+        CopyVector(v, itemDropOfs);
+        v[1] = itemDropOfs[1] * (float)q->time *
+               (1.0f / ((float)((60 - systemStatus[0] * 10) / systemStatus[1]) / 60.0f * 300.0f));
+        CopyVector(((SubHandle *)&q->torch->dobj)->sub->root.pos, v);
+        q->time = q->time - 1;
+        if (q->time == 0) {
+            q->state = 2;
+        }
+        break;
+    case 2:
+        rec->fuse.animMode = 0;
+        stage_SetLoopFlag(403, 0);
+        stage_SetFrameStep(403, 1);
+        GetRootPosition(q->pos, gobj);
+        AttackCenter(gobj, 19, q->pos, 0, 100.0f);
+        LightTorchOff(q->torch);
+        q->torch->active = 0;
+        rec->released = 0;
+        StopSEPackage(gobj);
+        bombExplodeSE(gobj);
+        q->anim = stage_MakePlayBgAnimation(403);
+        q->anim->frame = 1.0f;
+        _CopyVector(q->anim->pos, q->pos);
+        CopyQuaternion(q->anim->rot, IdentityQuaternion);
+        q->state = 3;
+        GOBJ_SUB(gobj)->disp = 0;
+        break;
+    case 3:
+        rec->released = 0;
+        if (stage_DispBgAnimation(&q->anim) != 0) {
+            q->state = 4;
+            setItemDead(gobj);
+        }
+        break;
+    case 4:
+        break;
+    }
+}
+
 static void execBombGeo(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        execBombGeo_jun26(gobj);
+        return;
+    }
     float v[4];
     ItemWork *rec = GOBJ_SUB(gobj)->work;
     ItemFuse *q = &rec->fuse;
@@ -982,8 +1340,43 @@ static void execBombGeo(GObj *gobj)
     }
 }
 
+static void ItemGeo_jun26(GObj *gobj)
+{
+    ItemWork *p = GOBJ_SUB(gobj)->work;
+    if (p->dead == 1) {
+        return;
+    }
+    if (p->held != 0) {
+        carriedItemGeo(gobj);
+    } else if (p->released != 0) {
+        int held = GOBJ_SUB(gobj)->disp;
+        GOBJ_SUB(gobj)->disp = 0;
+        uncarriedItemGeo(gobj);
+        if (held != 0) {
+            GOBJ_SUB(gobj)->disp = 1;
+        }
+    } else {
+        GObj *owner = GOBJ_SUB(gobj)->parent.obj;
+        if (owner != 0) {
+            if (owner->kind == 17) {
+                if (GetBoxMode(owner) == 2) {
+                    ThrowItem(gobj, GOBJ_SUB(owner)->root.move);
+                }
+            }
+        }
+    }
+    UpdateRootMatrix(gobj);
+    if (p->kind == 1) {
+        execBombGeo(gobj);
+    }
+}
+
 void ItemGeo(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        ItemGeo_jun26(gobj);
+        return;
+    }
     ItemWork *p = GOBJ_SUB(gobj)->work;
     if (p->dead == 1) {
         return;
@@ -1028,8 +1421,41 @@ static inline void checkBombExplodeEnd(GObj *gobj) /* derived name */
     }
 }
 
+static void ItemDL_jun26(GObj *gobj)
+{
+    ItemWork *p = GOBJ_SUB(gobj)->work;
+
+    if (p->dead == 1) {
+        return;
+    }
+    if (p->kind == 1) {
+        ItemFuse *q = &p->fuse;
+        int mode = q->state;
+
+        if (mode >= 2) {
+            return;
+        }
+        if (mode == 1) {
+            if (systemStatus[5] != 0) {
+                if (q->animMode != 0) {
+                    StopSEPackage(gobj);
+                    q->animMode = 0;
+                }
+            } else if (q->animMode == 0) {
+                bombSparkSE(gobj);
+                q->animMode = mode;
+            }
+        }
+    }
+    p2o_DispVU1(gobj);
+}
+
 void ItemDL(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        ItemDL_jun26(gobj);
+        return;
+    }
     ItemWork *p = GOBJ_SUB(gobj)->work;
 
     if (!ICO_NTSCAUG6JUN26) {
@@ -1150,8 +1576,20 @@ int IsBombExplode(GObj *gobj)
     return p->fuse.state == 2;
 }
 
+static void *GetBombTorchGObj_jun26(GObj *item)
+{
+    ItemWork *p = GOBJ_SUB(item)->work;
+    if (p->kind == 1) {
+        return p->fuse.torch;
+    }
+    return 0;
+}
+
 void *GetBombTorchGObj(GObj *item)
 {
+    if (ICO_JUN26) {
+        return GetBombTorchGObj_jun26(item);
+    }
     ItemWork *p = GOBJ_SUB(item)->work;
     if (IsItemKindBomb(item)) {
         return p->fuse.torch;
@@ -1168,7 +1606,9 @@ int ReviveAllCarryableItems(void)
             ItemWork *p = (ItemWork *)GOBJ_SUB(g)->work;
             UnlinkParentOfDObj(g);
             p->released = 1;
-            p->sleep = 0;
+            if (!ICO_JUN26) {
+                p->sleep = 0;
+            }
         }
     }
     return 1;
@@ -1188,7 +1628,9 @@ int ReviveCarryableItemsWithBoundary(void *center, float radius)
                 ItemWork *p = (ItemWork *)GOBJ_SUB(g)->work;
                 UnlinkParentOfDObj(g);
                 p->released = 1;
-                p->sleep = 0;
+                if (!ICO_JUN26) {
+                    p->sleep = 0;
+                }
             }
         }
     }
@@ -1207,7 +1649,9 @@ int ReviveAllCarryableItemsWithRandomVelocity(float up, float horz)
             ItemWork *p = (ItemWork *)GOBJ_SUB(g)->work;
             UnlinkParentOfDObj(g);
             p->released = 1;
-            p->sleep = 0;
+            if (!ICO_JUN26) {
+                p->sleep = 0;
+            }
         }
         GOBJ_SUB(g)->root.move[0] = horz * GetTableSin(ang);
         GOBJ_SUB(g)->root.move[1] = up * random_unit();

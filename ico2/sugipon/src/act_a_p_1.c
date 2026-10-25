@@ -31,6 +31,10 @@ typedef struct AP1Vec { /* field names derived */
 /* the two-letter tag GetAP1AIMode hands the debug display. */
 static char *ap1ModeTag[] = {"ST", "WA", "JM", "AT", "DE", "SL"}; /* derived name */
 
+/* a second fixed vector before the boxed-in hop, which nothing reads in this
+   build */
+static AP1Vec ap1FixedVector = {0.0f, -10.0f, -15.0f, 0.0f}; /* derived name */
+
 inline char *GetAP1AIMode(GObj *self)
 {
     Act *p = GOBJ_ACT(self);
@@ -70,7 +74,11 @@ static short boyYaw; /* derived name */ /* heading to the boy in local space */
 
 static short boyYawBack; /* derived name */ /* the opposite heading, boyYaw - 32768 */
 
-static int boySafe; /* derived name */ /* the boy is not in danger */
+static int boySafe_pal; /* derived name */ /* the boy is not in danger */
+
+static int boySafe_jun26; /* derived name */
+
+#define boySafe (*PAL_JUN26(&boySafe_pal, &boySafe_jun26))
 
 static float lookDist; /* derived name */ /* distance to the object being watched */
 
@@ -94,8 +102,62 @@ static AP1Vec lookDeltaFlat; /* derived name */ /* lookDelta with y removed */
 
 static AP1Vec selfPos; /* derived name */ /* this actor's own root position */
 
+static int standAI_jun26(GObj *self)
+{
+    Act *p = GOBJ_ACT(self);
+
+    if ((int)((p->flags20.ll >> 5)) & 1) {
+        short r = boyYaw;
+        r = r > 2048 ? 2048 : (r < -2048 ? -2048 : r);
+        AP1Turn(self, r);
+        return -1;
+    }
+
+    if (boyDist < 500.0f) {
+        if (p->lookPri != 0) {
+            if (AP1MotReq(self, 1))
+                return 1;
+        }
+        if (lookDist > 100.0f) {
+            if (AP1MotReq(self, 1))
+                return 1;
+        }
+        if (boyPitch < 16384 && boyDist > 300.0f) {
+            short r = boyYaw;
+            r = r > 4096 ? 4096 : (r < -4096 ? -4096 : r);
+            AP1Turn(self, r);
+            return -1;
+        }
+        if (AP1MotReq(self, 1))
+            return 1;
+    }
+
+    if (p->lookPri != 0) {
+        if (lookDist < 50.0f) {
+            short r = lookYaw;
+            r = r > 2048 ? 2048 : (r < -2048 ? -2048 : r);
+            AP1Turn(self, r);
+            return -1;
+        }
+        if (AP1MotReq(self, 1))
+            return 1;
+    }
+
+    if (lookDist < 100.0f) {
+        short r = boyYaw;
+        r = r > 2048 ? 2048 : (r < -2048 ? -2048 : r);
+        AP1Turn(self, r);
+        return -1;
+    }
+
+    return AP1MotReq(self, 1) ? 1 : -1;
+}
+
 static int standAI(GObj *self)
 {
+    if (ICO_JUN26) {
+        return standAI_jun26(self);
+    }
     Act *p = GOBJ_ACT(self);
 
     if ((int)(PAL_NTSC_AUG6JUN26(p->flags20.ll >> 21, p->flags20.ll >> 10, p->flags20.ll >> 7)) &
@@ -241,7 +303,7 @@ static int walkAI_aug6jun26(GObj *self)
 {
     Act *p = GOBJ_ACT(self);
 
-    if ((int)(p->flags20.ll >> 7) & 1) {
+    if (((p->flags20.ll & (PAL_JUN26(1ULL << 7, 1ULL << 5))) != 0)) {
         if (AP1MotReq(self, 0))
             return 0;
     }
@@ -631,7 +693,7 @@ static void subAP1BrainMain_aug6jun26(GObj *volatile self)
         }
 
         if (CheckFloorAttribute(self, 0x800) || CheckFloorAttribute(self, 0x900)) {
-            iosOmSendMail(self, 204, self);
+            iosOmSendMail(self, PAL_JUN26(204, 199), self);
             /* forced death */
             debug_StdPrintfDummy("強制死亡\n");
         }
@@ -776,6 +838,18 @@ static inline void AP1SetMode(GObj *self, int mode) /* derived name */
     GOBJ_ACT(self)->hit = 1;
 }
 
+/* the actor dies where it stands: dead mode and the death burst */
+static inline void AP1Die(GObj *self) /* derived name */
+{
+    int pos[4];
+    int quat[4];
+
+    AP1SetMode(self, 4);
+    GetRootPosition(pos, self);
+    GetRootQuaternion(quat, self);
+    SetParticleEffect(12, pos, quat);
+}
+
 static inline void AP1DeadEffect(GObj *self) /* derived name */
 {
     Act *p = GOBJ_ACT(self);
@@ -816,14 +890,14 @@ static inline void AP1SetHold(GObj *self) /* derived name */
 {
     Act *p = GOBJ_ACT(self);
 
-    p->flags20.ll |= PAL_NTSC_AUG6JUN26(0x200000, 0x400, 0x80);
+    p->flags20.ll |= PAL_NTSC_AUG6_JUN26(0x200000, 0x400, 0x80, 0x20);
 }
 
 static inline void AP1ClrHold(GObj *self) /* derived name */
 {
     Act *p = GOBJ_ACT(self);
 
-    p->flags20.ll &= ~PAL_NTSC_AUG6JUN26(0x200000, 0x400, 0x80);
+    p->flags20.ll &= ~PAL_NTSC_AUG6_JUN26(0x200000, 0x400, 0x80, 0x20);
 }
 
 static void AP1BeforeFunc_ntsc(GObj *self)
@@ -873,7 +947,49 @@ static void AP1BeforeFunc_ntsc(GObj *self)
     q->num = 0;
 }
 
-static void AP1BeforeFunc_aug6jun26(GObj *self)
+static void AP1BeforeFunc_jun26(GObj *self)
+{
+    AP1MailQueue *q = ICO_RAWP(AP1MailQueue *, self, 0x54, (AP1MailQueue *)&self->mailBox);
+    AP1MailEntry *e = q->e;
+    int i;
+
+    for (i = 0; i < q->num; i++, e++) {
+        switch (e->mail) {
+        default:
+            break;
+
+        case 32:
+            AP1SetHold(self);
+            break;
+
+        case 31:
+            AP1ClrHold(self);
+            break;
+
+        case 13:
+            hitProc(self);
+            AP1Die(self);
+            iosPadActRequest(boyPad, 17);
+            ExecuteSEPackage(self, 86);
+            break;
+
+        case 37:
+            AP1Die(self);
+            hitProc(self);
+            break;
+
+        case 199:
+            AP1Die(self);
+            /* " - forced death accepted" */
+            debug_StdPrintfDummy(" - 強制死亡受理\n");
+            hitProc(self);
+            break;
+        }
+    }
+    q->num = 0;
+}
+
+static void AP1BeforeFunc_aug6(GObj *self)
 {
     AP1MailQueue *q = ICO_RAWP(AP1MailQueue *, self, 0x54, (AP1MailQueue *)&self->mailBox);
     AP1MailEntry *e = q->e;
@@ -922,12 +1038,16 @@ static void AP1BeforeFunc_aug6jun26(GObj *self)
 
 void AP1BeforeFunc(GObj *self)
 {
+    if (ICO_JUN26) {
+        AP1BeforeFunc_jun26(self);
+        return;
+    }
     if (ICO_NTSC) {
         AP1BeforeFunc_ntsc(self);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        AP1BeforeFunc_aug6jun26(self);
+    if (ICO_AUG6) {
+        AP1BeforeFunc_aug6(self);
         return;
     }
     AP1MailQueue *q = ICO_RAWP(AP1MailQueue *, self, 0x54, (AP1MailQueue *)&self->mailBox);

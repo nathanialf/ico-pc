@@ -52,11 +52,61 @@ inline void SetTorchChainReactionFlag(GObj *torch, int flag)
 void torchOffSE(GObj *torch)
 {
     StopSEPackage(torch);
-    ExecuteSEPackage(torch, PAL_NTSCAUG6JUN26(67, 65));
+    ExecuteSEPackage(torch, PAL_NTSCAUG6_JUN26(67, 65, 59));
+}
+
+static void LightTorchOn_jun26(GObj *gobj)
+{
+    float pos[4];
+    TorchGeoWork *w;
+    GObj *o;
+    int n;
+
+    w = GOBJ_SUB(gobj)->work;
+    if (w->lightOn != 0) {
+        return;
+    }
+    GetRootPosition(pos, gobj);
+    switch (w->flags) {
+    case 2:
+        n = 0;
+        o = isysGObjSearchFromObjKindID_begin(10);
+        while (o != 0) {
+            TorchGeoWork *ow = GOBJ_SUB(o)->work;
+            if (o != gobj && ow->flags == 2) {
+                if (IsTorchLightOn(o)) {
+                    n++;
+                }
+            }
+            o = isysGObjSearchFromObjKindID_next(o);
+        }
+        if (n > 0) {
+            return;
+        }
+        w->effect[1] = SetParticleEffect(20, pos, IdentityQuaternion);
+        w->effect[4] = SetParticleEffect(18, pos, IdentityQuaternion);
+        break;
+    case 4:
+        w->effect[0] = SetParticleEffect(22, pos, IdentityQuaternion);
+        break;
+    default:
+        w->effect[3] = SetParticleEffect(7, pos, IdentityQuaternion);
+        w->effect[0] = SetParticleEffect(5, pos, IdentityQuaternion);
+        w->effect[1] = SetParticleEffect(9, pos, IdentityQuaternion);
+        w->effect[4] = SetParticleEffect(18, pos, IdentityQuaternion);
+        break;
+    }
+    w->burnTime = 0;
+    w->lightOn = 1;
+    GOBJ_SUB(gobj)->lightId = 1;
 }
 
 void LightTorchOn(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        LightTorchOn_jun26(gobj);
+        return;
+    }
     float pos[4];
     TorchGeoWork *w;
     GObj *o;
@@ -382,8 +432,27 @@ static inline int chainReactionBlocked(GObj *gobj, GObj *other) /* derived name 
     return 0;
 }
 
+static inline void procChainReaction_jun26(GObj *gobj)
+{
+    TorchGeoWork *w;
+    GObj *o;
+
+    w = GOBJ_SUB(gobj)->work;
+    if (w->chainFlag == 0) {
+        return;
+    }
+    o = CheckTorchChainReaction(gobj, 20.0f);
+    if (o != 0) {
+        LightTorchOn(gobj);
+    }
+}
+
 static void procChainReaction(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        procChainReaction_jun26(gobj);
+        return;
+    }
     TorchGeoWork *w;
     GObj *o;
 
@@ -432,7 +501,30 @@ static void TorchGeo_ntsc(GObj *gobj)
     }
 }
 
-static void TorchGeo_aug6jun26(GObj *gobj)
+static void TorchGeo_jun26(GObj *gobj)
+{
+    TorchGeoWork *w = GOBJ_SUB(gobj)->work;
+
+    if (IsTorchLightOn(gobj) == 0) {
+        procChainReaction(gobj);
+        return;
+    }
+    if (w->burnTime < 65535) {
+        w->burnTime = w->burnTime + 1;
+    }
+    if (GOBJ_SUB(gobj)->parent.obj != 0) {
+        float pos[4];
+
+        GetRootPosition(pos, gobj);
+        UpdateRealTimeGeometryValue(gobj);
+        moveTorch(gobj, pos);
+    }
+    if (w->life < w->burnTime) {
+        LightTorchOff(gobj);
+    }
+}
+
+static void TorchGeo_aug6(GObj *gobj)
 {
     TorchGeoWork *w;
     Sub15C *sub;
@@ -474,12 +566,16 @@ static void TorchGeo_aug6jun26(GObj *gobj)
 
 void TorchGeo(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        TorchGeo_jun26(gobj);
+        return;
+    }
     if (ICO_NTSC) {
         TorchGeo_ntsc(gobj);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        TorchGeo_aug6jun26(gobj);
+    if (ICO_AUG6) {
+        TorchGeo_aug6(gobj);
         return;
     }
     TorchGeoWork *w;

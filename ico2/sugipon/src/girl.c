@@ -52,8 +52,27 @@ typedef struct GirlWork { /* field names derived */
     int hint2Played;      /* 0x40 */
 } GirlWork;               /* derived name */
 
+static void execClothes_jun26(GObj *gobj)
+{
+    GirlWork *w;
+
+    w = GOBJ_SUB(gobj)->work;
+    if ((void *)w->cloth1 != 0) {
+        GetCloth4D((void *)w->cloth1, 4.0f, 0.98f);
+    }
+    if ((void *)w->cloth0 != 0) {
+        GetCloth4D((void *)w->cloth0, 3.0f, 0.98f);
+    }
+    if ((void *)w->cloth2 != 0) {
+        GetCloth4D((void *)w->cloth2, 4.0f, 0.98f);
+    }
+    if ((void *)w->cloth3 != 0) {
+        GetCloth4D((void *)w->cloth3, 4.0f, 0.98f);
+    }
+}
+
 /* file-static: boy.c has a global function of the same name */
-static void execClothes_ntscaug6jun26(GObj *gobj)
+static void execClothes_ntscaug6(GObj *gobj)
 {
     GirlWork *w;
 
@@ -80,8 +99,12 @@ static void execClothes_ntscaug6jun26(GObj *gobj)
 
 static void execClothes(GObj *gobj)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        execClothes_ntscaug6jun26(gobj);
+    if (ICO_JUN26) {
+        execClothes_jun26(gobj);
+        return;
+    }
+    if (ICO_NTSCAUG6) {
+        execClothes_ntscaug6(gobj);
         return;
     }
     float q[4];
@@ -196,7 +219,30 @@ static void dispClothes_ntsc(GObj *gobj)
     }
 }
 
-static void dispClothes_aug6jun26(GObj *gobj)
+static void dispClothes_jun26(GObj *gobj)
+{
+    GirlWork *w;
+    char *x;
+    char *y;
+
+    w = GOBJ_SUB(gobj)->work;
+    x = (char *)GOBJ_SUB(gobj)->lightMtx;
+    y = x + 0x40;
+    if (w->cloth1 != 0) {
+        DispCloth4D((void *)w->cloth1, y, x);
+    }
+    if (w->cloth0 != 0) {
+        DispCloth4D((void *)w->cloth0, y, x);
+    }
+    if (w->cloth2 != 0) {
+        DispCloth4D((void *)w->cloth2, y, x);
+    }
+    if (w->cloth3 != 0) {
+        DispCloth4D((void *)w->cloth3, y, x);
+    }
+}
+
+static void dispClothes_aug6(GObj *gobj)
 {
     GirlWork *w;
     char *x;
@@ -233,12 +279,16 @@ static void dispClothes_aug6jun26(GObj *gobj)
 
 static void dispClothes(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        dispClothes_jun26(gobj);
+        return;
+    }
     if (ICO_NTSC) {
         dispClothes_ntsc(gobj);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        dispClothes_aug6jun26(gobj);
+    if (ICO_AUG6) {
+        dispClothes_aug6(gobj);
         return;
     }
     GirlWork *w;
@@ -2655,7 +2705,41 @@ static void *InitGirlGeo_ntsc(GObj *gobj, SObjSimpleSetting *csv)
     return w;
 }
 
-static void *InitGirlGeo_aug6jun26(GObj *gobj, SObjSimpleSetting *csv)
+static void *InitGirlGeo_jun26(GObj *gobj, SObjSimpleSetting *csv)
+{
+    GirlWork *w;
+    int kind;
+
+    w = iosMallocDebug(ios_partition_sugipon, sizeof(GirlWork), __FILE__, 617);
+    kind = csv->obj;
+    w->cloth3 = 0;
+    w->cloth2 = 0;
+    w->cloth0 = 0;
+    w->cloth1 = 0;
+    w->kind = kind;
+    /* the work pointer, stored as a word */
+    *(ICO_WORD *)&GOBJ_SUB(gobj)->work = (ICO_WORD)w;
+    switch (kind) {
+    case 1:
+        w->cloth1 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF10, 0);
+        w->cloth2 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF14, 0);
+        w->cloth3 = (ICO_WORD)InitCloth4D(gobj, &demoClothMeshF20, 0);
+        break;
+    case 2:
+        break;
+    default:
+        w->cloth1 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF10, clothHangF10);
+        w->cloth0 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF8, clothHangF8);
+        w->cloth2 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF14, clothHangF10);
+        w->cloth3 = (ICO_WORD)InitCloth4D(gobj, &clothMeshF20, clothHangF20);
+        break;
+    }
+    InitMotionOrient(gobj, 1207, 1772, 12, 24, 521);
+    SetLodLevel(gobj, 2);
+    return w;
+}
+
+static void *InitGirlGeo_aug6(GObj *gobj, SObjSimpleSetting *csv)
 {
     GirlWork *w;
     int kind;
@@ -2694,11 +2778,14 @@ static void *InitGirlGeo_aug6jun26(GObj *gobj, SObjSimpleSetting *csv)
 
 void *InitGirlGeo(GObj *gobj, SObjSimpleSetting *csv)
 {
+    if (ICO_JUN26) {
+        return InitGirlGeo_jun26(gobj, csv);
+    }
     if (ICO_NTSC) {
         return InitGirlGeo_ntsc(gobj, csv);
     }
-    if (ICO_AUG6JUN26) {
-        return InitGirlGeo_aug6jun26(gobj, csv);
+    if (ICO_AUG6) {
+        return InitGirlGeo_aug6(gobj, csv);
     }
     GirlWork *w;
     ICO_WORD p;
@@ -2762,7 +2849,7 @@ void GirlGeo(GObj *gobj)
 
     HandManager(gobj);
     ExecMotionOrient(gobj);
-    SetActressLight(gobj, 35, 44, PAL_JPNKORCN_NTSC_AUG6JUN26(470, 466, 407, 406));
+    SetActressLight(gobj, 35, 44, PAL_JPNKORCN_NTSC_AUG6_JUN26(470, 466, 407, 406, 372));
     if (CylinderCollision(gobj, 4, 50.0f, 50.0f, 0.0f)) {
         iosOmSendMail(gobj, 6, gobj);
     }

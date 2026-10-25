@@ -454,8 +454,48 @@ extern LightLineExt _llExtGeo;
 /* the one LightLineExt InitLightLineGeo fills */
 static LightLineExt lightLineExt; /* derived name */
 
+static LightLineExt *InitLightLineGeo_jun26(GObj *gobj, float *pos)
+{
+    LLVec v = {pos[0] + 500.0f, pos[1], pos[2] + 200.0f, 1.0f};
+    int i;
+    int j;
+    int n;
+    float f;
+
+    llExtGeo = &_llExtGeo;
+    llExtGeo->phase = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 130);
+    llExtGeo->speed = iosMallocDebug(ios_partition_sugipon, 0x190, "src/boy.c", 131);
+    llExtGeo->line = iosMallocDebug(ios_partition_sugipon, 100 * sizeof(LLVec *), "src/boy.c", 132);
+    for (i = 0; i < 100; i++) {
+        llExtGeo->phase[i] = 0.0f;
+        llExtGeo->speed[i] = random_unit() * 0.1f + 0.01f;
+        llExtGeo->line[i] = iosMallocDebug(ios_partition_sugipon, 0x140, "src/boy.c", 137);
+        CopyVector(llExtGeo->line[i], &v);
+        llExtGeo->line[i][0].x += (float)((i - 0x32) * 5);
+        for (j = 1; j < 20; j++) {
+            CopyVector(&llExtGeo->line[i][j], &llExtGeo->line[i][j - 1]);
+            if (random_unit() < 0.9f) {
+                if (j & 1) {
+                    llExtGeo->line[i][j].y -= (float)((int)(random_unit() * 10.0f) + 1) * 5.0f;
+                } else {
+                    n = (int)(random_signed() * 10.0f) + 1;
+                    llExtGeo->line[i][j].x += (float)n * 5.0f;
+                }
+            } else {
+                f = (float)((int)(random_unit() * 10.0f) + 1) * 5.0f;
+                llExtGeo->line[i][j].y -= f;
+                llExtGeo->line[i][j].x += f;
+            }
+        }
+    }
+    return llExtGeo;
+}
+
 LightLineExt *InitLightLineGeo(GObj *gobj, float *pos)
 {
+    if (ICO_JUN26) {
+        return InitLightLineGeo_jun26(gobj, pos);
+    }
     LLVec v = {pos[0] + 500.0f, pos[1], pos[2] + 200.0f, 1.0f};
     int i;
     int j;
@@ -643,7 +683,41 @@ static BoyWork *InitBoyGeo_ntsc(GObj *gobj, void *csv)
     return w;
 }
 
-static BoyWork *InitBoyGeo_aug6jun26(GObj *gobj, void *csv)
+static BoyWork *InitBoyGeo_jun26(GObj *gobj, void *csv)
+{
+    BoyWork *w;
+    BoyWork *p;
+
+    w = iosMallocDebug(ios_partition_sugipon, sizeof(BoyWork), "src/boy.c", 243);
+    /* the work word, stored and read back as char * */
+    ICO_RAW(char *, *(char **)(((char *)gobj) + 0x15C), 0x830, GOBJ_SUB(gobj)->work) = (char *)w;
+    p = (BoyWork *)ICO_RAW(char *, *(char **)(((char *)gobj) + 0x15C), 0x830, GOBJ_SUB(gobj)->work);
+    p->mantle = (char *)InitCloth4D(gobj, &mantleMesh, mantleHang);
+    p->tape = (char *)InitCloth4D(gobj, &tapeMesh, tapeHang);
+    p->tapeB = (char *)InitCloth4D(gobj, &tapeBMesh, 0);
+    p->tapeBoro1 = (char *)InitCloth4D(gobj, &tapeBoro1Mesh, 0);
+    p->tapeBoro2 = (char *)InitCloth4D(gobj, &tapeBoro2Mesh, 0);
+    ICO_RAW(int, *(char **)(((char *)gobj) + 0x15C), 0x554, GOBJ_SUB(gobj)->ctrl.sideWallCheck) = 1;
+    w->crown0 = (char *)CSVSYSTEM_InitDObj(1, csv);
+    /* PC port: the June 2001 demo has the one crown (crown 0); the picks share it */
+    w->crown1 = w->crown0;
+    w->crown2 = w->crown0;
+    (ICO_RAW(BoyWork *, *(char **)(((char *)gobj) + 0x15C), 0x830, (BoyWork *)GOBJ_SUB(gobj)->work))
+        ->crown = 0;
+    sceVu0UnitMatrix(ICO_RAWP(char *, w->crown0, 0x20, (char *)((Sub15C *)w->crown0)->matrix));
+    InitMotionOrient(gobj, 0, 1207, 0, 12, 0);
+    InitLightLineGeo(gobj, csv);
+    SetLodLevel(gobj, 2);
+    w->refl.nrow = 20;
+    w->refl.ncol = 20;
+    w->refl.sizeX = 300.0f;
+    w->refl.sizeZ = 300.0f;
+    w->refl.color = 0x80808080;
+    InitLimitedPoolReflactionMesh(&w->refl);
+    return w;
+}
+
+static BoyWork *InitBoyGeo_aug6(GObj *gobj, void *csv)
 {
     BoyWork *w;
     BoyWork *p;
@@ -680,11 +754,14 @@ static BoyWork *InitBoyGeo_aug6jun26(GObj *gobj, void *csv)
 
 BoyWork *InitBoyGeo(GObj *gobj, void *csv)
 {
+    if (ICO_JUN26) {
+        return InitBoyGeo_jun26(gobj, csv);
+    }
     if (ICO_NTSC) {
         return InitBoyGeo_ntsc(gobj, csv);
     }
-    if (ICO_AUG6JUN26) {
-        return InitBoyGeo_aug6jun26(gobj, csv);
+    if (ICO_AUG6) {
+        return InitBoyGeo_aug6(gobj, csv);
     }
     BoyWork *w;
     BoyWork *p;
@@ -862,7 +939,7 @@ static void BoyGeo_aug6jun26(GObj *gobj)
     ExecMotionOrient(gobj);
     execClothes(gobj);
     ExecuteSlipProc(gobj);
-    SetActressLight(gobj, 35, 44, 407);
+    SetActressLight(gobj, 35, 44, PAL_JUN26(407, 373));
     if (CylinderCollision(gobj, 4, 50.0f, 50.0f, 0.7f) != 0) {
         iosOmSendMail(gobj, 6, gobj);
     }
@@ -918,8 +995,26 @@ static void dispSubParts(GObj *gobj)
     p2o_DispVU1DObjMulti(w->body);
 }
 
+static void dispCrown_jun26(GObj *gobj)
+{
+    BoyWork *w = GOBJ_SUB(gobj)->work;
+    char *obj = w->crown0;
+    int node = GetSkeltonFocusNode(gobj, 35);
+
+    CopyMatrix(MatrixDrive_GetMatrix(), (char *)GOBJ_SUB(gobj)->nodeMtx + (node << 6));
+    MatrixDrive_RotMatrixX(-0x8000);
+    CopyMatrix(ICO_RAW(char *, obj, 0xC, (char *)((Sub15C *)obj)->nodeMtx),
+               MatrixDrive_GetMatrix());
+    p2o_SetDefaultEnviroment();
+    p2o_DispVU1DObj((Sub15C *)obj);
+}
+
 static void dispCrown(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        dispCrown_jun26(gobj);
+        return;
+    }
     BoyWork *w = GOBJ_SUB(gobj)->work;
     int node = GetSkeltonFocusNode(gobj, 0x23);
     char *obj;
@@ -951,8 +1046,31 @@ inline void SetBoyStonizedVisual(GObj *self)
     GOBJ_SUB(self)->ctrl.slipOn = 0;
 }
 
+static void BoyDL_jun26(GObj *gobj)
+{
+    Sub15C *sub;
+    PoolMesh *m;
+
+    ExecutePauseSlipProc(gobj);
+    p2o_SetDefaultEnviroment();
+    p2o_DispVU1(gobj);
+    dispCrown(gobj);
+    dispClothes(gobj);
+    if (stage_no == 39 && 20.0f < GOBJ_SUB(gobj)->ctrl.waterDepth &&
+        GOBJ_SUB(gobj)->ctrl.pool != 0 && CheckPoolHasGridMesh(GOBJ_SUB(gobj)->ctrl.pool) == 0) {
+        sub = GOBJ_SUB(gobj);
+        m = ICO_RAWP(PoolMesh *, (char *)sub->work, 0x34, &((BoyWork *)sub->work)->refl);
+        SetLimitedPoolReflactionMesh(m, sub->ctrl.pool, gobj);
+        DispLimitedPoolReflactionMesh(m);
+    }
+}
+
 void BoyDL(GObj *gobj)
 {
+    if (ICO_JUN26) {
+        BoyDL_jun26(gobj);
+        return;
+    }
     char pos[16];
     char quat[16];
     BoyWork *w = GOBJ_SUB(gobj)->work;

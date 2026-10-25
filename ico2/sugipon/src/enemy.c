@@ -80,8 +80,90 @@ typedef struct {              /* field names derived */
     float flyXZAccel; /* 0x50, the fly XZ acceleration, from the enemyKind row */
 } EnemyWork;          /* derived name */
 
+static void setEnemyParticleObject_jun26(GObj *self, int pid)
+{
+    Sub15C *sub = GOBJ_SUB(self);
+    EnemyWork *w = sub->work;
+    int n = sub->skelNodeNum;
+    SkelNode *tbl = sub->skel;
+    struct DObjNode *p = sub->nodes;
+    PrimParticle **parts;
+    int *fl;
+    float size;
+    int i;
+    int cnt;
+    int num;
+    int n4;
+    int type;
+    EnemyPosEntry *v;
+    EnemyPosEntry *q;
+
+    size = (p->scale[0] + p->scale[1] + p->scale[2]) * 32.0f * 0.33333f * 0.5f;
+    parts = (PrimParticle **)iosMallocDebug(ios_partition_sugipon, n * sizeof(PrimParticle *),
+                                            "src/enemy.c", 104);
+    w->particle = parts;
+    fl = (int *)iosMallocDebug(ios_partition_sugipon, n * 4, "src/enemy.c", 106);
+    w->flag = fl;
+    clearEnemyParticleFlags(fl, n);
+    for (i = 0; i < n; i++) {
+        q = (EnemyPosEntry *)enemy_GetPositionTable(pid, i);
+        v = q;
+        if (q == 0) {
+            (w->flag)[i] = 0;
+            continue;
+        }
+        (w->flag)[i] = 1;
+        for (cnt = 0; q->w > -1.0f; cnt++)
+            q++;
+        q = v;
+        parts[i] = 0;
+        if (cnt <= 0)
+            continue;
+        if (cnt >= 80)
+            num = 80;
+        else
+            num = cnt;
+        parts[i] = prim_InitParticle(num, size, 0.5f, 0.5f, 1, "enemy_sprite", 0);
+        if (parts[i] == 0) {
+            /* EUC-JP: "cannot reserve the memory for the enemy soldier particles" */
+            debug_StdPrintfDummy("敵兵のパーティクルのメモリを確保できません\n");
+            debug_assertMessage("src/enemy.c", 151, "CAN'T ALLOCATE ENEMY'S PARTICLE MEMORY\n");
+            __assert("src/enemy.c", 151, "e");
+        }
+        for (cnt = 0; q->w > -1.0f && cnt < 80; cnt++, q++) {
+            n4 = rand() % 4;
+            _CopyVector((char *)parts[i]->vtx + cnt * 32, q);
+            _CopyVector((char *)parts[i]->vtxNext + cnt * 32, q);
+            type = tbl[i].kind;
+            if (type >= 38)
+                goto spread;
+            if (type < 36)
+                goto spread;
+            *(float *)((char *)parts[i]->vtx + cnt * 32 + 0x10) =
+                *(float *)((char *)parts[i]->vtxNext + cnt * 32 + 0x10) = 0.5f;
+            *(float *)((char *)parts[i]->vtx + cnt * 32 + 0x14) =
+                *(float *)((char *)parts[i]->vtxNext + cnt * 32 + 0x14) = 0.0f;
+            goto done;
+        spread:
+            *(float *)((char *)parts[i]->vtx + cnt * 32 + 0x10) =
+                *(float *)((char *)parts[i]->vtxNext + cnt * 32 + 0x10) = (n4 / 2) * 0.5f;
+            *(float *)((char *)parts[i]->vtx + cnt * 32 + 0x14) =
+                *(float *)((char *)parts[i]->vtxNext + cnt * 32 + 0x14) = (n4 % 2) * 0.5f;
+        done:
+            *(float *)((char *)parts[i]->vtx + cnt * 32 + 0x18) =
+                *(float *)((char *)parts[i]->vtxNext + cnt * 32 + 0x18) = 128.0f;
+            *(float *)((char *)parts[i]->vtx + cnt * 32 + 0x1C) =
+                *(float *)((char *)parts[i]->vtxNext + cnt * 32 + 0x1C) = 64.0f;
+        }
+    }
+}
+
 static void setEnemyParticleObject(GObj *self, int pid)
 {
+    if (ICO_JUN26) {
+        setEnemyParticleObject_jun26(self, pid);
+        return;
+    }
     Sub15C *sub = GOBJ_SUB(self);
     EnemyWork *w = sub->work;
     int n = sub->skelNodeNum;
@@ -180,7 +262,7 @@ static inline int enemyRandomizeID(int kind, int *ctr) /* derived name */
     return randomEnemyVariationKind[id];
 }
 
-static int setEnemyObject(GObj *self, int kind, int *ctr)
+static int setEnemyObject_jun26(GObj *self, int kind, int *ctr)
 {
     struct DObjNode *p;
     Sub15C *sub;
@@ -203,7 +285,46 @@ retry:
     p->scale[0] = sc;
     w->scale = sc;
     obj = enemyKind[kind].model;
-    if (obj != PAL_JPNKORCN(0x610, 1548)) {
+    if (obj != 1425) {
+        GOBJ_SUB(self)->model = GetPObjAddress(obj);
+        debug_StdPrintfDummy("%p\n", GOBJ_SUB(self)->model);
+        w->loaded = 1;
+    }
+    pid = enemyKind[kind].particle;
+    if (pid != -1) {
+        setEnemyParticleObject(self, pid);
+    }
+    debug_StdPrintfDummy("\x1b[36mENEMY DESIGN ID: %d\x1b[m\n", kind);
+    return kind;
+}
+
+static int setEnemyObject(GObj *self, int kind, int *ctr)
+{
+    if (ICO_JUN26) {
+        return setEnemyObject_jun26(self, kind, ctr);
+    }
+    struct DObjNode *p;
+    Sub15C *sub;
+    EnemyWork *w;
+    float sc;
+    int obj;
+    int pid;
+
+retry:
+    sub = GOBJ_SUB(self);
+    w = sub->work;
+    if (kind > 0xFFFF) {
+        kind = enemyRandomizeID(kind, ctr);
+        goto retry;
+    }
+    p = sub->nodes;
+    sc = enemyKind[kind].scale;
+    p->scale[2] = sc;
+    p->scale[1] = sc;
+    p->scale[0] = sc;
+    w->scale = sc;
+    obj = enemyKind[kind].model;
+    if (obj != PAL_JPNKORCN_NTSC_AUG6(0x610, 1548, 1515, 1510)) {
         GOBJ_SUB(self)->model = GetPObjAddress(obj);
         GOBJ_SUB(self)->modelId = obj;
         debug_StdPrintfDummy("%p\n", GOBJ_SUB(self)->model);
@@ -455,8 +576,40 @@ static inline int enemyInitPartsList(GObj *self, SObjSimpleSetting *param) /* de
     return setEnemyObject(self, kind, &w->ctr);
 }
 
+static void *InitEnemyGeo_jun26(GObj *self, SObjSimpleSetting *param)
+{
+    EnemyWork *w;
+    int kind;
+    int no;
+
+    w = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyWork, 0x54), "src/enemy.c", 597);
+    SUBOF(self)->work = w;
+    w->word1C = 0;
+    w->eye0 = InitEnemyEye(10, 0, 10);
+    w->word24 = 0;
+    w->eye1 = InitEnemyEye(10, 0, 10);
+    w->foot = InitEnemyFootPrint(6);
+    w->particle = 0;
+    w->loaded = 0;
+    w->float3C = 0.0f;
+    w->short40 = 0;
+    w->wing = 0.0f;
+    kind = enemyInitPartsList(self, param);
+    w->def = kind;
+    InitMotionOrient(self, 1772, 2106, 24, 36, 821);
+    no = enemyVariation;
+    SUBOF(self)->ctrl.variation = no;
+    enemyVariation = (no + 2) % 10;
+    SUBOF(self)->ctrl.catchBoy = 0;
+    SetLodLevel(self, 2);
+    return w;
+}
+
 void *InitEnemyGeo(GObj *self, SObjSimpleSetting *param)
 {
+    if (ICO_JUN26) {
+        return InitEnemyGeo_jun26(self, param);
+    }
     EnemyWork *w;
     int kind;
     int no;
@@ -497,8 +650,57 @@ void *InitEnemyGeo(GObj *self, SObjSimpleSetting *param)
     return w;
 }
 
+static void EnemyGeo_jun26(GObj *self)
+{
+    Sub15C *sub = GOBJ_SUB(self);
+    EnemyWork *w = sub->work;
+    float ratio;
+    float buf[4];
+
+    IsActCharDead(self);
+
+    GOBJ_SUB(self)->ctrl.catchBoy = 0;
+    GOBJ_SUB(self)->ctrl.cliffWallCheck = 2;
+    GOBJ_SUB(self)->ctrl.wallReact = 0;
+    if (GetEnemyTypeFromGObj(self) == 3)
+        GOBJ_SUB(self)->ctrl.catchBoy = 1;
+
+    ExecMotionOrient(self);
+
+    CylinderCollisionWithControlDynamics(self, 4, 0, w->scale * 70.0f, w->scale * 50.0f, 0.5f);
+
+    if (isEnemyActive(self) != 0) {
+        Sub15C *s = GOBJ_SUB(self);
+        if (s->ctrl.landed != 0) {
+            GetProjectionOfPlane(buf, s->root.plane.f,
+                                 (float *)((char *)s->nodeMtx + s->root.standNode * 0x40 + 0x30));
+            EntryEnemyFootPrint(w->foot, buf);
+        }
+    }
+    ExecEnemyFootPrints(w->foot);
+
+    GOBJ_SUB(self)->ctrl.variation = (GOBJ_SUB(self)->ctrl.variation + 1) % 10;
+
+    ratio = (GOBJ_SUB(self)->nodes->scale[0] + GOBJ_SUB(self)->nodes->scale[1] +
+             GOBJ_SUB(self)->nodes->scale[2]) /
+            3.0f;
+
+    _MulMatrix(MatrixDrive_GetMatrix(),
+               (char *)GOBJ_SUB(self)->nodeMtx + GetSkeltonFocusNode(self, 0x24) * 0x40,
+               (char *)offsetMatrix);
+    UpdateEnemyEye(w->eye0, MatrixDrive_GetMatrix(), ratio);
+    _MulMatrix(MatrixDrive_GetMatrix(),
+               (char *)GOBJ_SUB(self)->nodeMtx + GetSkeltonFocusNode(self, 0x25) * 0x40,
+               (char *)offsetMatrix);
+    UpdateEnemyEye(w->eye1, MatrixDrive_GetMatrix(), ratio);
+}
+
 void EnemyGeo(GObj *self)
 {
+    if (ICO_JUN26) {
+        EnemyGeo_jun26(self);
+        return;
+    }
     Sub15C *sub = GOBJ_SUB(self);
     Act *node = GOBJ_ACT(self);
     unsigned long long flag = node->flags18.ll;
@@ -579,8 +781,20 @@ void DisplayEnemy(GObj *self)
     }
 }
 
+static void EnemyDL_jun26(GObj *self)
+{
+    IsActCharDead(self);
+    if (isEnemyHyde(self) != 0)
+        return;
+    DisplayEnemy(self);
+}
+
 void EnemyDL(GObj *self)
 {
+    if (ICO_JUN26) {
+        EnemyDL_jun26(self);
+        return;
+    }
     Act *sub = GOBJ_ACT(self);
     unsigned long long flag = sub->flags18.ll;
     if (((flag >> 33) & 1) == 0)
@@ -761,9 +975,9 @@ void SetEnemyHitGeometryAction(GObj *self, int on)
 
 int InitDemoMotionGeo(GObj *self)
 {
-    InitMotionOrient(self, PAL_NTSC_AUG6JUN26(2122, 1820, 1797),
-                     PAL_NTSC_AUG6JUN26(2407, 2105, 2080), -1, -1,
-                     PAL_NTSC_AUG6JUN26(983, 922, 924));
+    InitMotionOrient(self, PAL_NTSC_AUG6_JUN26(2122, 1820, 1797, 1772),
+                     PAL_NTSC_AUG6_JUN26(2407, 2105, 2080, 2106), -1, -1,
+                     PAL_NTSC_AUG6_JUN26(983, 922, 924, 1002));
     SetLodLevel(self, 0);
     self->active = 0;
     return 0;
@@ -771,9 +985,9 @@ int InitDemoMotionGeo(GObj *self)
 
 void HotInitDemoMotionGeo(GObj *self)
 {
-    InitMotionOrient(self, PAL_NTSC_AUG6JUN26(2122, 1820, 1797),
-                     PAL_NTSC_AUG6JUN26(2407, 2105, 2080), -1, -1,
-                     PAL_NTSC_AUG6JUN26(983, 922, 924));
+    InitMotionOrient(self, PAL_NTSC_AUG6_JUN26(2122, 1820, 1797, 1772),
+                     PAL_NTSC_AUG6_JUN26(2407, 2105, 2080, 2106), -1, -1,
+                     PAL_NTSC_AUG6_JUN26(983, 922, 924, 1002));
     SetLodLevel(self, 0);
     self->active = 0;
 }
@@ -831,8 +1045,10 @@ void ResetEnemyPositionInfo(GObj *self)
 
     ResetEnemyEye(w->eye0);
     ResetEnemyEye(w->eye1);
-    GOBJ_SUB(self)->ctrl.blendFrames =
-        (int)((float)((0x3C - systemStatus[0] * 0xA) / systemStatus[1]) / 60.0f * 0.0f);
+    if (!ICO_JUN26) {
+        GOBJ_SUB(self)->ctrl.blendFrames =
+            (int)((float)((0x3C - systemStatus[0] * 0xA) / systemStatus[1]) / 60.0f * 0.0f);
+    }
 }
 
 void SetEnemyStonizedVisual(GObj *self)

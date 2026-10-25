@@ -343,7 +343,723 @@ static inline void getRotOfDir(float *q, float *v) /* derived name */
     MultiCurrentQuaternion(q);                                                                     \
     GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion())
 
-static void _getFinalMatrix_ntscaug6jun26(int id)
+static void _getFinalMatrix_jun26(int id)
+{
+    SkelNode *node = &skelNode[id];
+    char *elem = skelMotion + id * 32;
+    /* Sub15C nodeRotElem and nodeLimit, reached from the root block (the ROM adds 160 first) */
+    char *geo = ICO_RAWP(char *, GOBJ_SUB(skelGObj), 0xA0, (char *)GOBJ_SUB(skelGObj)->root.pos);
+    MotIk *ik = ICO_RAW(MotIk *, geo, 0x76C, GOBJ_SUB(skelGObj)->nodeRotElem) + id;
+    /* the host's nodeLimit holds the one-based row of motionLimitDef (motionOrientManager.c) */
+    MotLimAng *lim = GOBJ_SUB(skelGObj)->nodeLimit[id] == 0
+                         ? 0
+                         : (MotLimAng *)&motionLimitDef[GOBJ_SUB(skelGObj)->nodeLimit[id] - 1];
+    float v[4];
+    float dq[4];
+    float q[4];
+    int dbg = 0;
+
+    if (node->parent != -1) {
+        sceVu0ScaleVectorXYZ(v, node->pos, skelScale);
+        sceVu0ApplyMatrix(MatrixDrive_GetMatrix()[3], MatrixDrive_GetLastMatrix(), v);
+    } else {
+        ikRotZ = ikRotY = ikBend0 = ikBend1 = 0;
+    }
+
+    /* the function's local debug switch, off: a dump of the node's IK
+       quaternion.  The ROM's register assignment needs the block here, and
+       the August TRFILE has three code-less lines (416-418) in its place;
+       the text is derived. */
+    if (dbg) {
+        debug_DispQW(ik->q, 0);
+    }
+    switch (node->kind) {
+    case 0:
+        MultiQuaternion(GetCurrentQuaternion(), GetLastQuaternion(), elem + 16);
+        MultiQuaternion(GetCurrentQuaternion(), twistQuatLow, GetCurrentQuaternion());
+        GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
+        break;
+
+    case 44:
+        MultiQuaternion(GetCurrentQuaternion(), GetLastQuaternion(), elem + 16);
+        DivQuaternion(GetCurrentQuaternion(), GetCurrentQuaternion(), twistQuat);
+        GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
+        break;
+
+    case 34: {
+        GET_NODE_ROT(q, dq);
+        if (skelRoot->lookIK != 0 && skelRoot->lookMode != 0) {
+            ik->rate = ik->rate + (1.0f - ik->rate) * MOT_BLEND(ikRate0);
+        } else {
+            ik->rate = ik->rate * (1.0f - MOT_BLEND(ikRate0));
+        }
+        {
+            float q3[4];
+            float q2[4];
+
+            memset(q2, 0, 16);
+            q2[3] = 1.0f;
+            if (skelGeoType == 2) {
+                RotQuaternionZ(q2, 1820);
+            }
+            GetSlerpQuaternion(q3, q2, dq, ik->rate);
+            MultiQuaternion(q, q, q3);
+            APPLY_ROT(q);
+            GetInverseQuaternion(q3, skelRoot->armTwist);
+            MultiQuaternion(GetCurrentQuaternion(), q3, GetCurrentQuaternion());
+            GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
+        }
+        break;
+    }
+
+    case 35: {
+        /* read only by the DEBUG build's report of the rolled quaternion */
+        float work[4];
+
+        GET_NODE_ROT(q, dq);
+        RotQuaternionZ(GetCurrentQuaternion(), skelRoot->b);
+        GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
+#ifdef DEBUG
+        CopyQuaternion(work, GetCurrentQuaternion());
+        scePrintf("node roll %f %f %f %f\n", work[0], work[1], work[2], work[3]);
+#endif
+        if (skelRoot->lookIK != 0 && skelRoot->lookMode != 0)
+            ik->rate = ik->rate + (1.0f - ik->rate) * (skelRoot->ikRate0 * (60.0f / MOT_FPS));
+        else
+            ik->rate = ik->rate * (1.0f - skelRoot->ikRate0 * (60.0f / MOT_FPS));
+        if (ik->rate < 0.01f) {
+            CopyQuaternion(ik->q, GetCurrentQuaternion());
+            SetIdentityQuaternion(ik->offset);
+            CopyQuaternion(ik->step, ik->offset);
+        } else {
+            float out[4];
+            /* PC port: the turn below leaves h alone for a target
+               straight ahead (or a NaN one); 0 rather than the host's stack
+               word */
+            short h = 0;
+            short p = 0;
+            short ha = 0;
+            short pa = 0;
+            short ba = 0;
+
+            if (skelGeoType == 4) {
+                MatrixDrive_RotMatrixX(-32768);
+            }
+            getLocalTargetDir(out, (float *)skelRoot->lookPos);
+            MatrixDrive_GetTurnYAngleXZ(&h, &p, out[0], out[1], out[2]);
+            limitHPAngleAndSetB(&ha, &pa, &ba, lim, h, 0, -p, 0, 0, 1, 1.0f);
+            pa *= -1;
+            if (skelGeoType == 4) {
+                pa *= -1;
+            }
+            skelRoot->h = h - ha;
+            skelRoot->p = p - pa;
+            {
+                float rq[4];
+                float t[4];
+                float t2[4];
+                float t3[4];
+
+                SetIdentityQuaternion(rq);
+                RotQuaternionX(rq, -ha);
+                RotQuaternionZ(rq, -pa);
+                RotQuaternionY(rq, -ba);
+                avoidReverseInterpOnCurrentMatrixWithLimit(ik->q, lim, ik->offset, rq, 1.2f);
+                MultiQuaternion(t, GetCurrentQuaternion(), rq);
+                DivQuaternion(t2, t, ik->q);
+                GetSlerpQuaternion(t3, t2, IdentityQuaternion, skelRoot->ikRate1);
+                GetSlerpQuaternion(ik->step, t3, ik->step, skelRoot->ikRate2);
+                MultiQuaternion(ik->q, ik->q, ik->step);
+                RegularizeQuaternion(ik->q);
+                DivQuaternion(ik->offset, ik->q, GetCurrentQuaternion());
+            }
+        }
+        {
+            float r[4];
+
+            RotQuaternionX(GetCurrentQuaternion(), (short)(int)(-skelRoot->twist * 2.5f));
+            MultiQuaternion(r, GetCurrentQuaternion(), dq);
+            GetSlerpQuaternion(GetCurrentQuaternion(), ik->q, r, ik->rate);
+            MultiQuaternion(GetCurrentQuaternion(), twistQuatHigh, GetCurrentQuaternion());
+            GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
+        }
+        break;
+    }
+
+    case 1: {
+        GET_NODE_ROT(q, dq);
+        MultiQuaternion(GetCurrentQuaternion(), GetCurrentQuaternion(), dq);
+        GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
+        if (skelRoot->handTurnIK != 0 &&
+            ((skelRoot->lookIK != 0 && skelRoot->lookMode != 0) || skelRoot->hand1.ikMode != 0 ||
+             skelRoot->hand0.ikMode != 0)) {
+            ik->rate = ik->rate + (1.0f - ik->rate) * MOT_BLEND(ikRate0);
+        } else {
+            ik->rate = ik->rate * (1.0f - MOT_BLEND(ikRate0));
+        }
+        if (ik->rate < 0.01f) {
+            CopyQuaternion(ik->q, GetCurrentQuaternion());
+            SetIdentityQuaternion(ik->offset);
+            CopyQuaternion(ik->step, ik->offset);
+        } else {
+            /* work0 and work1 are read only by the DEBUG build's report of the
+               interpolation's two quaternions */
+            float work0[4];
+            float out[4];
+            float work1[4];
+            int h;
+            int p;
+            int n;
+            int hv;
+            /* PC port: each turn below leaves its first angle alone
+               for a target on its axis (or a NaN one); 0 rather than the
+               host's stack word */
+            short a0 = 0, a1 = 0;
+            short b0 = 0, b1 = 0;
+            short c0 = 0, c1 = 0;
+            short ha = 0, pa = 0, ba = 0;
+            short hb = 0, pb = 0, bb = 0;
+            float rate = 1.0f;
+
+            avoidReverseInterpOnCurrentMatrix(ik->q, lim, ik->offset);
+#ifdef DEBUG
+            CopyQuaternion(work0, ik->q);
+            CopyQuaternion(work1, ik->offset);
+            scePrintf("interp %f %f %f %f -> %f %f %f %f\n", work0[0], work0[1], work0[2], work0[3],
+                      work1[0], work1[1], work1[2], work1[3]);
+#endif
+            p = h = 0;
+            n = 0;
+            if (skelRoot->handTurnIK == 1 && skelRoot->hand0.ikMode != 0) {
+                getLocalTargetDir(out, (float *)skelRoot->hand0.ikDir);
+                MatrixDrive_GetTurnMinusZAngleXY(&a0, &a1, out[0], out[1], out[2]);
+                h = a0;
+                n++;
+            }
+            if (skelRoot->handTurnIK == 1 && skelRoot->hand1.ikMode != 0) {
+                float out2[4];
+
+                getLocalTargetDir(out2, (float *)skelRoot->hand1.ikDir);
+                MatrixDrive_GetTurnZAngleXY(&b0, &b1, out2[0], out2[1], out2[2]);
+                h -= b0;
+                n++;
+            }
+            hv = h;
+            if (skelRoot->lookIK != 0 && skelRoot->lookMode != 0) {
+                float out3[4];
+
+                getLocalTargetDir(out3, (float *)skelRoot->lookPos);
+                MatrixDrive_GetTurnYAngleXZ(&c0, &c1, out3[0], out3[1], out3[2]);
+                if (skelRoot->lookMode == 2) {
+                    h = hv + c0;
+                    p = c1;
+                    hv = h;
+                } else {
+                    h = hv + skelRoot->h;
+                    p = skelRoot->p;
+                    hv += c0 / 2;
+                }
+                n++;
+            }
+            if (n != 0) {
+                h /= n;
+                hv /= n;
+            }
+            limitHPAngleAndSetB(&ha, &pa, &ba, lim, h, ik->prevH, -p, -ik->pitch, 0, 0, rate);
+            limitHPAngleAndSetB(&hb, &pb, &bb, lim, hv, ik->prevH, -p, -ik->pitch, 0, 0, rate);
+            pb *= -1;
+            {
+                float r[4];
+                float t[4];
+                float t2[4];
+                float t3[4];
+
+                SetIdentityQuaternion(r);
+                RotQuaternionX(r, -ha);
+                RotQuaternionZ(r, -pb);
+                RotQuaternionY(r, -ba);
+                MultiQuaternion(t, GetCurrentQuaternion(), r);
+                DivQuaternion(t2, t, ik->q);
+                GetSlerpQuaternion(t3, t2, IdentityQuaternion, skelRoot->ikRate1);
+                GetSlerpQuaternion(ik->step, t3, ik->step, skelRoot->ikRate2);
+                MultiQuaternion(ik->q, ik->q, ik->step);
+                RegularizeQuaternion(ik->q);
+                DivQuaternion(ik->offset, ik->q, GetCurrentQuaternion());
+            }
+            ik->pitchSpeed = (short)(int)(ik->pitchSpeed +
+                                          (((pb - ik->pitch) * skelRoot->ikRate1 - ik->pitchSpeed) *
+                                           skelRoot->ikRate2));
+            ik->pitch += ik->pitchSpeed;
+            skelRoot->b = (short)(int)(ik->pitch * ik->rate);
+        }
+        {
+            RotQuaternionX(GetCurrentQuaternion(), (short)(int)(skelRoot->twist * 2.5f));
+            GetSlerpQuaternion(GetCurrentQuaternion(), ik->q, GetCurrentQuaternion(), ik->rate);
+            MultiQuaternion(GetCurrentQuaternion(), skelRoot->armTwist, GetCurrentQuaternion());
+            GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
+            _ApplyMatrix(ikXAxis, MatrixDrive_GetMatrix(), XUnitVector);
+        }
+        break;
+    }
+
+    case 18:
+        GET_NODE_ROT(q, dq);
+        MultiQuaternion(q, q, dq);
+        APPLY_ROT(q);
+        break;
+
+    case 19: {
+        float s[4];
+        int flag;
+
+        GET_NODE_ROT(q, dq);
+        {
+            float out[4], r[4], work0[4], qa[4], work1[4], dv[4];
+            /* PC port: MatrixDrive_GetTurnXAngleZY leaves a0 alone
+               for a target along x (or a NaN one); 0 rather than the host's
+               stack word */
+            short a0 = 0, a1 = 0;
+            short ha = 0, pa = 0, ba = 0;
+
+            memset(qa, 0, 16);
+            qa[3] = 1.0f;
+            /* a turn computed from the work vectors, under the function's
+             * local debug switch (case 3 has the same window with one
+             * vector) */
+            if (dbg) {
+                short w0, w1;
+
+                CopyVector(work0, work1);
+                MatrixDrive_GetTurnXAngleZY(&w0, &w1, work0[0], work0[1], work0[2]);
+            }
+            getLocalTargetDir(out, (float *)skelRoot->hand0.ikDir);
+            MatrixDrive_GetTurnXAngleZY(&a0, &a1, out[0], out[1], out[2]);
+            limitHPAngleAndSetB(&ha, &pa, &ba, lim, a0, 0, a1, 0, 1, 0, 1.0f);
+            if (skelRoot->hand0.ikLock != 0)
+                _NormalizeVector(dv, out);
+            else
+                getDirOfAngle(dv, ha, pa);
+            getRotOfDir(r, dv);
+            MultiQuaternion(qa, qa, r);
+            switch (skelRoot->hand0.ikMode) {
+            case 1: {
+                /* PC port: a node without children leaves the bone
+                   lengths unset; 0 rather than the host's stack words */
+                float len[4] = {0.0f, 0.0f}, t[4], p[4];
+                float d;
+                float l;
+                float dd;
+                int i;
+                int ci;
+                SkelNode *cn;
+
+                d = VectorLength(out);
+                for (i = 0, cn = node; i < 2; i++) {
+                    ci = cn->child;
+                    if (ci == -1) {
+                        break;
+                    }
+                    cn = &skelNode[ci];
+                    len[i] = skelScale * VectorLength(cn->pos);
+                }
+                len[1] += skelScale *
+                          VectorLength(skelNode[GetSkeltonFocusNode((GObj *)skelGObj, 32)].pos);
+                {
+                    float ax[4], w[4];
+                    short ang;
+                    int n;
+
+                    {
+                        MatrixDrive_PushMatrixWithNoCopy();
+                        n = GetSkeltonFocusNode((GObj *)skelGObj, 22);
+                        GetMatrixFromQuaternion((void *)MatrixDrive_GetMatrix(),
+                                                skelMotion + n * 32 + 16);
+                        MatrixDrive_TransMatrix(5.0f, -3.0f, 0.0f);
+                        CopyVector(p, (void *)(MatrixDrive_GetMatrix()[3]));
+                        _AddVector(t, skelNode[node->child].pos, p);
+                        l = skelScale * VectorLength(t);
+                        w[0] = l;
+                        w[1] = 0.0f;
+                        w[2] = 0.0f;
+                        w[3] = 1.0f;
+                        _SubVectorXYZ(w, w, p);
+                        _NormalizeVector(w, w);
+                        _OuterProduct(ax, w, XUnitVector);
+                        ang = GetTableArcCos(_InnerProduct(XUnitVector, w));
+
+                        SetQuaternionByAxisRotateV(ikBendQuat, ang, ax);
+                        len[1] = l;
+                        MatrixDrive_PopMatrix();
+                    }
+                }
+                if (skelRoot->hand0.ikReached == 0) {
+                    if (len[0] + len[1] < d) {
+                        d = len[0] + len[1];
+                    }
+                }
+                dd = d * d;
+                /* PC port: a target at the shoulder (d 0) or a zero bone
+                   length (skelScale 0) divides by zero: +-Fmax on the EE,
+                   Inf or NaN under IEEE */
+                ikBend0 = GetTableArcCos(
+                    ps2_div(dd + len[0] * len[0] - len[1] * len[1], 2.0f * len[0] * d));
+                ikBend1 = GetTableArcCos(
+                    ps2_div(dd + len[1] * len[1] - len[0] * len[0], 2.0f * len[1] * d));
+                RotQuaternionX(qa, ba);
+                RotQuaternionZ(qa, ikBend0);
+                CopyQuaternion(s, qa);
+                getRootRelativePos(t, MatrixDrive_GetMatrix(), (float *)skelRoot->hand0.ikDir);
+                _NormalizeVector(t, t);
+                _OuterProduct(p, t, ikXAxis);
+                if (skelRoot->handIK == 2 && d + 0.0f > len[0] + len[1]) {
+                    float rq[4];
+                    short ang = (d + 0.0f - (len[0] + len[1])) * 208.60756f;
+
+                    SetQuaternionByAxisRotateV(rq, (short)(int)(ang), p);
+                    GetSlerpQuaternion(skelRoot->armTwist, skelRoot->armTwist, rq, 0.6f);
+                } else {
+                    GetSlerpQuaternion(skelRoot->armTwist, skelRoot->armTwist, IdentityQuaternion,
+                                       0.9f);
+                }
+                break;
+            }
+            case 2:
+                MultiQuaternion(s, qa, skelRoot->hand0.ikQuat);
+                MultiQuaternion(s, s, dq);
+                GetSlerpQuaternion(skelRoot->armTwist, skelRoot->armTwist, IdentityQuaternion,
+                                   0.9f);
+                break;
+            default:
+                CopyQuaternion(s, dq);
+                GetSlerpQuaternion(skelRoot->armTwist, skelRoot->armTwist, IdentityQuaternion,
+                                   0.9f);
+                break;
+            }
+        }
+        GetSlerpQuaternion(ik->q, s, ik->q, skelRoot->hand0.ikRate * (60.0f / MOT_FPS));
+        if (skelRoot->hand0.ikMode != 0)
+            ik->rate = ik->rate + (1.0f - ik->rate) * (skelRoot->handRate * (60.0f / MOT_FPS));
+        else
+            ik->rate = ik->rate * (1.0f - skelRoot->handRate * (60.0f / MOT_FPS));
+        {
+            float r2[4];
+
+            GetSlerpQuaternion(r2, ik->q, dq, ik->rate);
+            MultiQuaternion(q, q, r2);
+            APPLY_ROT(q);
+            ikSlerpRate = ik->rate;
+            flag = ikSlerpRate > 0.99f;
+            if (flag && skelRoot->hand0.ikFlag == 0)
+                skelRoot->hand0.ikReached = 1;
+            else
+                skelRoot->hand0.ikReached = 0;
+            skelRoot->hand0.ikFlag = flag;
+        }
+        break;
+    }
+
+    case 20: {
+        GET_NODE_ROT(q, dq);
+        {
+            float t[4];
+            float r[4];
+
+            CopyQuaternion(t, dq);
+            if (skelRoot->hand0.ikMode == 1) {
+                SetQuaternionByAxisRotateWithNoRegularize(t, -(ikBend0 + ikBend1), 0.0f, 0.0f,
+                                                          -1.0f);
+                MultiQuaternion(t, t, ikBendQuat);
+            }
+            GetSlerpQuaternion(ik->q, t, ik->q, skelRoot->hand0.ikRate * (60.0f / MOT_FPS));
+            GetSlerpQuaternion(r, ik->q, dq, ikSlerpRate);
+            MultiQuaternion(q, q, r);
+            APPLY_ROT(q);
+        }
+        break;
+    }
+
+    case 22: {
+        float t[4];
+        float w;
+
+        GET_NODE_ROT(q, dq);
+        if (skelRoot->flag330 != 0)
+            CopyQuaternion(t, IdentityQuaternion);
+        else
+            CopyQuaternion(t, dq);
+        {
+            float r[4];
+
+            GetSlerpQuaternion(r, t, dq, ikSlerpRate);
+            MultiQuaternion(q, q, r);
+            APPLY_ROT(q);
+            if (skelMotCtrl->pickedWeapon != 0 &&
+                !motionKind[skelMotCtrl->motion].flags2.bits.weaponSwing) {
+                switch (skelMotCtrl->rootUpdateMode) {
+                case 0:
+                case 6:
+                case 14:
+                case 19:
+                    break;
+                default:
+                    w = GetWeaponWeight(skelMotCtrl->pickedWeapon) * 0.00016666666f;
+                    w = 0.8f < w ? 0.8f : w;
+                    GetSlerpQuaternion(ik->q, ik->q, GetCurrentQuaternion(), w);
+                    CopyQuaternion(GetCurrentQuaternion(), ik->q);
+                    GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
+                    return;
+                }
+            }
+            CopyQuaternion(ik->q, GetCurrentQuaternion());
+        }
+        break;
+    }
+
+    case 21:
+        CopyQuaternion(GetCurrentQuaternion(), GetLastQuaternion());
+        MultiQuaternion(GetCurrentQuaternion(), GetCurrentQuaternion(), elem + 16);
+        GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
+        break;
+
+    case 2:
+        GET_NODE_ROT(q, dq);
+        MultiQuaternion(q, q, dq);
+        APPLY_ROT(q);
+        break;
+
+    case 3: {
+        float t[4];
+
+        GET_NODE_ROT(q, dq);
+        {
+            float qa[4], out[4], r[4], work[4], dv[4];
+            /* PC port: as in case 19 */
+            short a0 = 0, a1 = 0;
+            short ha = 0, pa = 0, ba = 0;
+
+            memset(qa, 0, 16);
+            qa[3] = 1.0f;
+            /* case 19's debug window again, with one work vector */
+            if (dbg) {
+                CopyVector(work, out);
+            }
+            getLocalTargetDir(out, (float *)skelRoot->hand1.ikDir);
+            MatrixDrive_GetTurnXAngleZY(&a0, &a1, out[0], out[1], out[2]);
+            limitHPAngleAndSetB(&ha, &pa, &ba, lim, a0, 0, a1, 0, 1, 0, 1.0f);
+            if (skelRoot->hand1.ikLock != 0)
+                _NormalizeVector(dv, out);
+            else
+                getDirOfAngle(dv, ha, pa);
+            getRotOfDir(r, dv);
+            MultiQuaternion(qa, qa, r);
+            switch (skelRoot->hand1.ikMode) {
+            case 1: {
+                /* PC port: as in case 19 */
+                float len[4] = {0.0f, 0.0f};
+                float d;
+                int i;
+                int ci;
+                SkelNode *cn;
+
+                d = VectorLength(out);
+                for (i = 0, cn = node; i < 2; i++) {
+                    ci = cn->child;
+                    if (ci == -1) {
+                        break;
+                    }
+                    cn = &skelNode[ci];
+                    len[i] = skelScale * VectorLength(cn->pos);
+                }
+                len[1] += skelScale *
+                          VectorLength(skelNode[GetSkeltonFocusNode((GObj *)skelGObj, 16)].pos);
+                /* PC port: as hand 0's above, a target at the
+                   shoulder (d 0) or a zero bone length divides by zero:
+                   +-Fmax on the EE, NaN under IEEE for 0/0, an arm raised
+                   straight up on arm64 */
+                ikBend0 = GetTableArcCos(
+                    ps2_div(d * d + len[0] * len[0] - len[1] * len[1], 2.0f * len[0] * d));
+                ikBend1 = GetTableArcCos(
+                    ps2_div(d * d + len[1] * len[1] - len[0] * len[0], 2.0f * len[1] * d));
+                RotQuaternionX(qa, ba);
+                RotQuaternionZ(qa, ikBend0);
+                CopyQuaternion(t, qa);
+                break;
+            }
+            case 2:
+                MultiQuaternion(t, qa, skelRoot->hand1.ikQuat);
+                MultiQuaternion(t, t, dq);
+                break;
+            default:
+                CopyQuaternion(t, dq);
+                break;
+            }
+        }
+        GetSlerpQuaternion(ik->q, t, ik->q, skelRoot->handRate * (60.0f / MOT_FPS));
+        if (skelRoot->hand1.ikMode != 0)
+            ik->rate = ik->rate + (1.0f - ik->rate) * (skelRoot->handRate * (60.0f / MOT_FPS));
+        else
+            ik->rate = ik->rate * (1.0f - skelRoot->handRate * (60.0f / MOT_FPS));
+        {
+            float r2[4];
+
+            GetSlerpQuaternion(r2, ik->q, dq, ik->rate);
+            MultiQuaternion(q, q, r2);
+            APPLY_ROT(q);
+            ikSlerpRate = ik->rate;
+        }
+        break;
+    }
+
+    case 4: {
+        GET_NODE_ROT(q, dq);
+        {
+            float t[4];
+            float r[4];
+
+            CopyQuaternion(t, dq);
+            if (skelRoot->hand1.ikMode == 1) {
+                SetQuaternionByAxisRotateWithNoRegularize(t, -(ikBend0 + ikBend1), 0.0f, 0.0f,
+                                                          -1.0f);
+            }
+            GetSlerpQuaternion(ik->q, t, ik->q, skelRoot->handRate * (60.0f / MOT_FPS));
+            GetSlerpQuaternion(r, ik->q, dq, ikSlerpRate);
+            MultiQuaternion(q, q, r);
+            APPLY_ROT(q);
+        }
+        break;
+    }
+
+    case 6: {
+        GET_NODE_ROT(q, dq);
+        if (skelRoot->flag334 != 0)
+            CopyQuaternion(ik->q, IdentityQuaternion);
+        else
+            CopyQuaternion(ik->q, dq);
+        {
+            float r[4];
+
+            GetSlerpQuaternion(r, ik->q, dq, ikSlerpRate);
+            MultiQuaternion(q, q, r);
+            APPLY_ROT(q);
+        }
+        break;
+    }
+
+    case 5:
+        GET_NODE_ROT(q, dq);
+        if (skelRoot->hand1.ikMode != 0) {
+            if (skelRoot->hand1.ikMode != 1) {
+                MultiQuaternion(q, q, dq);
+            }
+        } else {
+            MultiQuaternion(q, q, dq);
+        }
+        APPLY_ROT(q);
+        break;
+
+    case 45:
+    case 49:
+        if (skelRoot->lifting != 0) {
+            /* one body for both discs: the Japanese build's text takes the
+               node rotation before these declarations, inside a block, and
+               stores ikRotY without the (short)(int) casts, the same values */
+            GET_NODE_ROT(q, dq);
+            {
+                int i;
+                int flag;
+                SkelNode *cn;
+                int ci;
+                float len[2];
+                float p[4];
+                float sv[4];
+                float d;
+                float dd;
+                float (*m)[4];
+
+                flag = 0;
+                MatrixDrive_PushMatrix();
+                CopyVector((void *)(MatrixDrive_GetMatrix()[3]), ZeroPoint);
+                MultiMatrixByQuaternion(dq);
+                MatrixDrive_PushMatrix();
+                for (i = 0, cn = node; i < 2; i++) {
+                    ci = cn->child;
+                    if (ci == -1) {
+                        flag = 1;
+                        break;
+                    }
+                    cn = &skelNode[ci];
+                    sceVu0ScaleVectorXYZ(sv, cn->pos, skelScale);
+                    MatrixDrive_TransMatrixV(sv);
+                    MultiMatrixByQuaternion(skelMotion + ci * 32 + 16);
+                    len[i] = skelScale * VectorLength(cn->pos);
+                }
+                CopyVector(p, (void *)(MatrixDrive_GetMatrix()[3]));
+                switch (node->kind) {
+                case 45:
+                    p[1] += skelRoot->lift[0];
+                    break;
+                case 49:
+                    p[1] += skelRoot->lift[1];
+                    break;
+                }
+                d = VectorLength(p);
+                MatrixDrive_PopMatrix();
+                dd = d * d;
+                m = MatrixDrive_GetMatrix();
+                sceVu0TransposeMatrix(m, m);
+                sceVu0ApplyMatrix(p, m, p);
+                sceVu0Normalize(p, p);
+                ikRotZ = GetTableArcSin(p[1]);
+                ikRotY = -GetTableArcSin(p[2]);
+                ikBend0 =
+                    GetTableArcCos((dd + len[0] * len[0] - len[1] * len[1]) / (2.0f * len[0] * d));
+                ikBend1 =
+                    GetTableArcCos((dd + len[1] * len[1] - len[0] * len[0]) / (2.0f * len[1] * d));
+                MatrixDrive_PopMatrix();
+                if (flag == 0) {
+                    MultiQuaternion(q, q, dq);
+                    RotQuaternionZ(q, ikRotZ);
+                    RotQuaternionY(q, ikRotY);
+                    RotQuaternionZ(q, -ikBend0);
+                } else {
+                    MultiQuaternion(q, q, dq);
+                }
+            }
+            APPLY_ROT(q);
+            break;
+        }
+    case 46:
+    case 50:
+        if (skelRoot->lifting != 0) {
+            GET_NODE_ROT(q, dq);
+            RotQuaternionZ(q, ikBend0 + ikBend1);
+            APPLY_ROT(q);
+            break;
+        }
+    case 47:
+    case 51:
+        if (skelRoot->lifting != 0) {
+            GET_NODE_ROT(q, dq);
+            RotQuaternionZ(q, -ikBend1);
+            RotQuaternionY(q, -ikRotY);
+            RotQuaternionZ(q, -ikRotZ);
+            MultiQuaternion(q, q, skelMotion + node->parent * 32 + 16);
+            MultiQuaternion(q, q, dq);
+            APPLY_ROT(q);
+            break;
+        }
+        MultiQuaternion(GetCurrentQuaternion(), GetLastQuaternion(), elem + 16);
+        GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
+        break;
+
+    default:
+        MultiQuaternion(GetCurrentQuaternion(), GetLastQuaternion(), elem + 16);
+        GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
+        break;
+    }
+}
+
+static void _getFinalMatrix_ntscaug6(int id)
 {
     SkelNode *node = &skelNode[id];
     char *elem = skelMotion + id * 32;
@@ -1064,8 +1780,12 @@ static void _getFinalMatrix_ntscaug6jun26(int id)
 
 static void _getFinalMatrix(int id)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        _getFinalMatrix_ntscaug6jun26(id);
+    if (ICO_JUN26) {
+        _getFinalMatrix_jun26(id);
+        return;
+    }
+    if (ICO_NTSCAUG6) {
+        _getFinalMatrix_ntscaug6(id);
         return;
     }
     SkelNode *node = &skelNode[id];
@@ -1974,15 +2694,45 @@ static inline void applyNaturalGeometry(int id) /* derived name */
     Vec16 t;
 
     if (e->parent != -1) {
-        _ScaleVectorXYZ(&t, e->pos, skelScale);
-        _ApplyMatrix(MatrixDrive_GetMatrix()[3], MatrixDrive_GetLastMatrix(), &t);
+        if (ICO_JUN26) {
+            sceVu0ScaleVectorXYZ(t.f, e->pos, skelScale);
+            sceVu0ApplyMatrix(MatrixDrive_GetMatrix()[3], MatrixDrive_GetLastMatrix(), t.f);
+        } else {
+            _ScaleVectorXYZ(&t, e->pos, skelScale);
+            _ApplyMatrix(MatrixDrive_GetMatrix()[3], MatrixDrive_GetLastMatrix(), &t);
+        }
     }
     MultiQuaternion(GetCurrentQuaternion(), GetLastQuaternion(), skelMotion + id * 32 + 16);
     GetMatrixFromQuaternionRotElem((char *)MatrixDrive_GetMatrix(), (char *)GetCurrentQuaternion());
 }
 
+static void getFinalMatrixWithNaturalGeometry(int id);
+
+static void getFinalMatrixWithNaturalGeometry_jun26(int id)
+{
+    SkelNode *e = &skelNode[id];
+
+    MatrixDrive_PushMatrixWithNoCopy();
+    PushQuaternionWithNoCopy();
+    applyNaturalGeometry(id);
+    CopyMatrix((char *)GOBJ_SUB(skelGObj)->nodeMtx + id * 64, (void *)MatrixDrive_GetMatrix());
+    CopyQuaternion(skelQuat + id * 16, GetCurrentQuaternion());
+    if (e->child != -1) {
+        getFinalMatrixWithNaturalGeometry(e->child);
+    }
+    MatrixDrive_PopMatrix();
+    PopQuaternion();
+    if (e->sibling != -1) {
+        getFinalMatrixWithNaturalGeometry(e->sibling);
+    }
+}
+
 static void getFinalMatrixWithNaturalGeometry(int id)
 {
+    if (ICO_JUN26) {
+        getFinalMatrixWithNaturalGeometry_jun26(id);
+        return;
+    }
     SkelNode *e = &skelNode[id];
     int child = e->child;
     int next = e->sibling;
@@ -2008,17 +2758,50 @@ static void _calcNaturalGeometry(int id)
     char *elemB = naturalMotion + id * 32;
     float (*x)[4];
     if (elemA->parent != -1) {
-        _ScaleVectorXYZ(naturalTrans, elemA->pos, skelScale);
+        if (ICO_JUN26) {
+            sceVu0ScaleVectorXYZ(naturalTrans, elemA->pos, skelScale);
+        } else {
+            _ScaleVectorXYZ(naturalTrans, elemA->pos, skelScale);
+        }
         GetMatrixFromQuaternionPos(naturalMatrix, elemB + 16, naturalTrans);
     } else {
         GetMatrixFromQuaternion(naturalMatrix, elemB + 16);
     }
     x = MatrixDrive_GetMatrix();
-    _MulMatrix(x, MatrixDrive_GetLastMatrix(), naturalMatrix);
+    if (ICO_JUN26) {
+        sceVu0MulMatrix(x, MatrixDrive_GetLastMatrix(), naturalMatrix);
+    } else {
+        _MulMatrix(x, MatrixDrive_GetLastMatrix(), naturalMatrix);
+    }
+}
+
+static void pursueNaturalGeometry(int id);
+
+static inline void pursueNaturalGeometry_jun26(int id)
+{
+    SkelNode *e = &skelNode[id];
+    char *o;
+    float (*m)[4];
+    MatrixDrive_PushMatrixWithNoCopy();
+    _calcNaturalGeometry(id);
+    o = naturalNodePos + id * 16;
+    m = MatrixDrive_GetMatrix();
+    CopyVector(o, m[3]);
+    if (e->child != -1) {
+        pursueNaturalGeometry(e->child);
+    }
+    MatrixDrive_PopMatrix();
+    if (e->sibling != -1) {
+        pursueNaturalGeometry(e->sibling);
+    }
 }
 
 static inline void pursueNaturalGeometry(int id)
 {
+    if (ICO_JUN26) {
+        pursueNaturalGeometry_jun26(id);
+        return;
+    }
     SkelNode *e = &skelNode[id];
     int child = e->child;
     int next = e->sibling;

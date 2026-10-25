@@ -32,9 +32,58 @@ typedef struct StreamShapeHdr { /* field names derived */
     unsigned char shapeNum;
 } StreamShapeHdr; /* derived name */
 
-static int GetWaterReaction_ntscaug6jun26(float *outH, int *outFlag, ClipWork *info, float *pos,
-                                          float *vel, float h0, float h1, float h2, float scaleIn,
-                                          float amp)
+static int GetWaterReaction_jun26(float *outH, ClipWork *info, float *pos, float *vel, float h0,
+                                  float h1, float h2, float scaleIn, float amp)
+{
+    float drain[4];
+    float waterH;
+    float scale;
+    float r;
+    GObj *pool;
+    int attr;
+
+    if (info->floor.elem != 0) {
+        attr = GetFloorAttribute(info);
+        if (CompareAttribute(attr, 0x40) | CompareAttribute(attr, 0x50)) {
+            scale = scaleIn;
+            pool = info->floor.o.obj;
+            waterH = GetPoolGlobalHeightDetail(pool, pos);
+            GetPoolGlobalDrainVector(drain, pool);
+            if (waterH < h0) {
+                vel[1] = vel[1] + amp;
+            } else if (waterH < h1) {
+                vel[1] = vel[1] + amp * (h1 - waterH) / (h1 - h0);
+            } else if (waterH < h2) {
+                r = (waterH - h1) / (h2 - h1);
+                vel[1] = vel[1] +
+                         (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
+                              (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1])) +
+                          amp * (1.0f - r)) *
+                             r;
+            } else {
+                vel[1] =
+                    vel[1] + 60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f *
+                                 (60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+                scale = 1.0f;
+                CopyVector(drain, ZeroVector);
+            }
+            vel[0] = vel[0] * scale;
+            vel[1] = vel[1] * scale;
+            vel[2] = vel[2] * scale;
+            sceVu0AddVector(vel, vel, drain);
+            AddVectorXYZ(pos, pos, vel);
+            if (outH != 0) {
+                *outH = waterH;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int GetWaterReaction_ntscaug6(float *outH, int *outFlag, ClipWork *info, float *pos,
+                                     float *vel, float h0, float h1, float h2, float scaleIn,
+                                     float amp)
 {
     float drain[4];
     float waterH;
@@ -93,9 +142,11 @@ static int GetWaterReaction_ntscaug6jun26(float *outH, int *outFlag, ClipWork *i
 int GetWaterReaction(float *outH, int *outFlag, ClipWork *info, float *pos, float *vel, float h0,
                      float h1, float h2, float scaleIn, float amp)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return GetWaterReaction_ntscaug6jun26(outH, outFlag, info, pos, vel, h0, h1, h2, scaleIn,
-                                              amp);
+    if (ICO_JUN26) {
+        return GetWaterReaction_jun26(outH, info, pos, vel, h0, h1, h2, scaleIn, amp);
+    }
+    if (ICO_NTSCAUG6) {
+        return GetWaterReaction_ntscaug6(outH, outFlag, info, pos, vel, h0, h1, h2, scaleIn, amp);
     }
     float drain[4];
     float waterH;
@@ -242,6 +293,8 @@ void GetOrientOfCliffOfGObj(float *dir, GObj *obj)
     CopyVector(dir, obj->dobj->ctrl.cliffNormal);
 }
 
+void SetMotionDirection(GObj *self, float *dir);
+
 void SetMotionDirection(GObj *self, float *dir)
 {
     Sub15C *base = self->dobj;
@@ -313,11 +366,24 @@ void AdjustMotionHeightToField(GObj *obj)
     debug_StdPrintfDummy("Adjust Motion Height To Field. --------------\n");
 }
 
-void GetLowerPlaneCollision(ClipWork *w, float *pos)
+/* the downward ray the lower-plane queries cast from pos (aug6's TRFILE: one
+   helper's lines in GetLowerPlaneCollision and in the field-filtered query) */
+static inline void setLowerPlaneRay(ClipWork *w, float *pos) /* derived name */
 {
     CopyVector(w->pt[0], pos);
     CopyVector(w->pt[1], w->pt[0]);
     w->pt[1][1] = w->pt[1][1] + 10000.0f;
+}
+
+void GetLowerPlaneCollision(ClipWork *w, float *pos)
+{
+    if (ICO_JUN26) {
+        setLowerPlaneRay(w, pos);
+    } else {
+        CopyVector(w->pt[0], pos);
+        CopyVector(w->pt[1], w->pt[0]);
+        w->pt[1][1] = w->pt[1][1] + 10000.0f;
+    }
     ClipFloor(w);
 }
 
@@ -339,9 +405,19 @@ static inline int adjustMotionHeightToNearestField(struct MotRoot *r, float *pos
     p[1] = p[1] - 100.0f;
     if (r->filter.o.obj != 0) {
         buf.filter = r->filter;
-        getLowerPlaneCollisionE(&buf, p);
+        if (ICO_JUN26) {
+            setLowerPlaneRay(&buf, p);
+            ClipFloorE(&buf);
+        } else {
+            getLowerPlaneCollisionE(&buf, p);
+        }
     } else {
-        GetLowerPlaneCollision(&buf, p);
+        if (ICO_JUN26) {
+            setLowerPlaneRay(&buf, p);
+            ClipFloor(&buf);
+        } else {
+            GetLowerPlaneCollision(&buf, p);
+        }
     }
     if (buf.floor.elem == 0) {
         return 0;
@@ -880,7 +956,7 @@ typedef struct MotionStateInfo { /* field names derived */
 
 /* the record InitMotionStateInfo copies over every new actor's motion
    state */
-static MotionStateInfo motionStateInfoTemplate = {
+static MotionStateInfo motionStateInfoTemplate_pal = {
     -1,
     -1,
     -1,
@@ -985,6 +1061,111 @@ static MotionStateInfo motionStateInfoTemplate = {
     0,
 }; /* derived name */
 
+static MotionStateInfo motionStateInfoTemplate_jun26 = {
+    -1,
+    -1,
+    -1,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0.0f,
+    0.0f,
+    0.0f,
+    1.0f,
+    1.0f,
+    0.0f,
+    1,
+    0,
+    0,
+    0,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    -1,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    {0},
+    {{0.0f, 0.0f, 1.0f, 0.0f}},
+    {{0.0f, 0.0f, 1.0f, 0.0f}},
+    0,
+    1,
+    1,
+    1,
+    1,
+    0,
+    0,
+    0.0f,
+    0.0f,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1.5e+02f,
+    0.0f,
+    {0},
+    {{0.0f, 0.0f, 1.0f, 1.0f}},
+    0.0f,
+    0.0f,
+    7e+02f,
+    {0},
+    {{0.0f, 0.0f, 1.0f, 1.0f}},
+    {{0.0f, 0.0f, 1.0f, 1.0f}},
+    {{0.0f, 0.0f, 1.0f, 1.0f}},
+    0.0f,
+    0.0f,
+    0.0f,
+    0,
+    0,
+    0,
+    0,
+    {0},
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1e+02f,
+    {-1, -1},
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0.0f,
+    0.0f,
+    0,
+    0,
+}; /* derived name */
+
+#define motionStateInfoTemplate                                                                    \
+    (*PAL_JUN26(&motionStateInfoTemplate_pal, &motionStateInfoTemplate_jun26))
+
 void InitMotionGeoInfo(struct MotRoot *self, float x, float y, float z, float rx, float ry,
                        float rz)
 {
@@ -1015,6 +1196,10 @@ static void *skelGObj; /* derived name */
 static ICO_WORD skelMotion; /* derived name */
 
 static SkelNode *skelNodes; /* derived name */
+
+/* a file static; ico2/sugipon/src/motionManager.c has its own of the same
+   name */
+static void dispSkeltonHierarchy(int node);
 
 /* a file static; ico2/sugipon/src/motionManager.c has its own of the same
    name */
@@ -1196,9 +1381,84 @@ static float wallAlignMatrix[16] = {
 /* the half turn about Z every motion node's quaternion is multiplied by */
 static float nodeFlipQuaternion[4] = {0.0f, 0.0f, -1.0f, 0.0f}; /* derived name */
 
+static int GetPureVerticalPlaneOfCurrentPosition_jun26(void *plane0, void *plane1, float *ptsIn,
+                                                       WallCfg *cfg, int flip, float *pos)
+{
+    float local[4][4];
+    float nrm[4];
+    float best[4];
+    float bestNrm[4];
+    float plane[4];
+    float work[4];
+    float *pts;
+    int i;
+    int bestIdx;
+    int *t;
+    int *tbl;
+    float bestDist;
+    float d;
+    GObj *obj;
+    int sh;
+    Sub15C *p15c;
+    ICO_WORD v_c;
+
+    tbl = wallEdgeCorner;
+    pts = (ptsIn != 0) ? ptsIn : (float *)local;
+    bestIdx = -1;
+
+    bestDist = 3.40282347e+38f;
+
+    obj = cfg->o.obj;
+    sh = cfg->o.node << 6;
+    p15c = obj->dobj;
+    v_c = p15c->nodeMtx;
+    GetWallGlobalInfo(pts, nrm, cfg->elem, (void *)(v_c + sh));
+    nrm[1] = 0;
+    sceVu0Normalize((int *)nrm, (int *)nrm);
+    t = tbl;
+    for (i = 0; i < 4; i++, t++) {
+        sceVu0SubVector(work, pts + t[1] * 4, pts + t[0] * 4);
+        sceVu0Normalize((int *)work, (int *)work);
+        sceVu0OuterProduct(work, work, nrm);
+        if (flip != 0) {
+            sceVu0ScaleVectorXYZ(work, work, -1.0f);
+        }
+        if (work[1] < -0.1f) {
+            SetSimplePlane(plane, work[0], work[1], work[2],
+                           -sceVu0InnerProduct(work, pts + t[0] * 4));
+            d = GetYDistanceFromPlane(plane, pos);
+            if (d < 0.0f) {
+                d = -d;
+            }
+            if (d < bestDist) {
+                bestIdx = i;
+                CopyVector(best, work);
+                CopyVector(bestNrm, nrm);
+                bestDist = d;
+            }
+        }
+    }
+    if (bestIdx == -1) {
+        debug_assertMessage(__FILE__, 1341, "!!");
+        __assert(__FILE__, 1341, "e");
+    }
+    if (plane0 != 0) {
+        SetSimplePlane(plane0, best[0], best[1], best[2],
+                       -sceVu0InnerProduct(best, pts + tbl[bestIdx] * 4));
+    }
+    if (plane1 != 0) {
+        SetSimplePlane(plane1, bestNrm[0], bestNrm[1], bestNrm[2],
+                       -sceVu0InnerProduct(bestNrm, pts + tbl[bestIdx] * 4));
+    }
+    return bestIdx;
+}
+
 int GetPureVerticalPlaneOfCurrentPosition(void *plane0, void *plane1, float *ptsIn, WallCfg *cfg,
                                           int flip, float *pos)
 {
+    if (ICO_JUN26) {
+        return GetPureVerticalPlaneOfCurrentPosition_jun26(plane0, plane1, ptsIn, cfg, flip, pos);
+    }
     float local[4][4];
     float nrm[4];
     float best[4];
@@ -1366,7 +1626,15 @@ int GetPureVerticalPlane(void *plane0, void *plane1, float *ptsIn, WallCfg *cfg,
     tbl = wallEdgeCorner;
     pts = (ptsIn != 0) ? ptsIn : (float *)local;
     bestIdx = 0;
-    getVerticalElementOfWallNormal((int *)pts, (int *)up, cfg);
+    if (ICO_JUN26) {
+        /* the wall's corners and its normal with the vertical part taken out */
+        GetWallGlobalInfo(pts, up, cfg->elem,
+                          (char *)GOBJ_SUB(cfg->o.obj)->nodeMtx + cfg->o.node * 64);
+        up[1] = 0.0f;
+        sceVu0Normalize(up, up);
+    } else {
+        getVerticalElementOfWallNormal((int *)pts, (int *)up, cfg);
+    }
     for (i = 0, t = tbl; i < 4; i++, t++) {
         sceVu0SubVector(work, pts + t[1] * 4, pts + t[0] * 4);
         sceVu0Normalize((int *)work, (int *)work);
@@ -1400,6 +1668,13 @@ typedef struct { /* field names derived */
     signed char adj : 7;
     unsigned char neg : 1;
 } MotS16Hdr; /* derived name */
+
+/* the sign and adjustment byte of a packed rotation on its own, as the
+   per-node formats 5 and 6 keep it */
+typedef struct { /* field names derived */
+    signed char adj : 7;
+    unsigned char neg : 1;
+} MotS16Sign; /* derived name */
 
 /* 2^e as a float, built by repeated multiply/divide so the exponent can
    exceed a single shift's range */
@@ -1451,8 +1726,30 @@ static inline float motSqrtEnd(void) /* derived name */
     return motSqrtQ;
 }
 
+static void _getS16MotRotElem_jun26(void *dst, void *src)
+{
+    Vec4f v = {motDecodeS16(*(unsigned short *)((char *)src + 2)),
+               motDecodeS16(*(unsigned short *)((char *)src + 4)),
+               motDecodeS16(*(unsigned short *)((char *)src + 6)), 1.0f};
+    float d = sceVu0InnerProduct((float *)&v, (float *)&v);
+
+    d = (d > 1.0f) ? 1.0f : d;
+
+    *(int *)dst = *(unsigned char *)src;
+    sceVu0CopyVector((char *)dst + 0x10, &v);
+    *(float *)((char *)dst + 0x1C) = FSqrt(1.0f - d);
+    if (*(signed char *)((char *)src + 1) < 0) {
+        *(float *)((char *)dst + 0x1C) = -*(float *)((char *)dst + 0x1C);
+    }
+    *(float *)((char *)dst + 0x1C) += (float)((MotS16Hdr *)src)->adj * 0.001f;
+}
+
 void _getS16MotRotElem(void *dst, void *src)
 {
+    if (ICO_JUN26) {
+        _getS16MotRotElem_jun26(dst, src);
+        return;
+    }
     Vec4f v = {motDecodeS16(*(unsigned short *)((char *)src + 2)),
                motDecodeS16(*(unsigned short *)((char *)src + 4)),
                motDecodeS16(*(unsigned short *)((char *)src + 6)), 1.0f};
@@ -1702,7 +1999,11 @@ static inline void getBlendedMotion(StreamElem *dst, float *root, StreamElem *a,
                 dst[i] = a[i];
             } else {
                 *(int *)&dst[i] = (float)*(int *)&a[i] * t + (float)*(int *)&b[i] * u;
-                GetSlerpQuaternionNoRegularize(dst[i].q, a[i].q, b[i].q, t);
+                if (ICO_JUN26) {
+                    GetSlerpQuaternion(dst[i].q, a[i].q, b[i].q, t);
+                } else {
+                    GetSlerpQuaternionNoRegularize(dst[i].q, a[i].q, b[i].q, t);
+                }
             }
         }
     } else {
@@ -1730,17 +2031,29 @@ void GetFloatingMotion(StreamElem *dst, float t, float *root, void *motion, int 
     idx = (int)t;
     idx1 = idx + 1;
     frac = t - (float)idx;
-    if (frac == 0.0f) {
-        getMotion((char *)dst, root, motion, idx, 0, count, hrc);
-        return;
+    if (!ICO_JUN26) {
+        if (frac == 0.0f) {
+            getMotion((char *)dst, root, motion, idx, 0, count, hrc);
+            return;
+        }
     }
     if (frac < 0.5f) {
-        getMotion((char *)buf0, rootA, motion, idx, 0, count, hrc);
-        getMotion((char *)buf1, rootB, motion, idx1, mask, count, hrc);
+        if (ICO_JUN26) {
+            GetMotion((char *)buf0, rootA, motion, idx, 0, count, hrc);
+            GetMotion((char *)buf1, rootB, motion, idx1, mask, count, hrc);
+        } else {
+            getMotion((char *)buf0, rootA, motion, idx, 0, count, hrc);
+            getMotion((char *)buf1, rootB, motion, idx1, mask, count, hrc);
+        }
         getBlendedMotion(dst, root, buf0, rootA, buf1, rootB, 1.0f - frac, mask, count);
     } else {
-        getMotion((char *)buf0, rootA, motion, idx, mask, count, hrc);
-        getMotion((char *)buf1, rootB, motion, idx1, 0, count, hrc);
+        if (ICO_JUN26) {
+            GetMotion((char *)buf0, rootA, motion, idx, mask, count, hrc);
+            GetMotion((char *)buf1, rootB, motion, idx1, 0, count, hrc);
+        } else {
+            getMotion((char *)buf0, rootA, motion, idx, mask, count, hrc);
+            getMotion((char *)buf1, rootB, motion, idx1, 0, count, hrc);
+        }
         getBlendedMotion(dst, root, buf1, rootB, buf0, rootA, frac, mask, count);
     }
 }
@@ -1973,10 +2286,10 @@ static inline int getSkeltonFocusNode_aug6jun26(GObj *self, int focus) /* derive
         debug_StdPrintfDummy(
             "このメッセージを見たひとは杉山まで連絡ください: GetSkeltonFocusNode SKEL=NULL\n");
         debug_assertMessage(
-            __FILE__, 515,
+            __FILE__, PAL_JUN26(515, 503),
             "GetSkeltonFocusNode:\n PLEASE CALL SUGIYAMA\n GOBJ==NULL Or SKEL==NULL "
             "Or RETURNID>=NBSKELS\n");
-        __assert(__FILE__, 515, "e");
+        __assert(__FILE__, PAL_JUN26(515, 503), "e");
     }
     return GOBJ_SUB(self)->focusNodes[focus];
 }
@@ -2177,7 +2490,13 @@ static float GetDifferenceFromLowerField_aug6jun26(GObj *self, int node)
     int idx;
 
     idx = getSkeltonFocusNode(self, node);
-    GetLowerPlaneCollision(&buf, (float *)((char *)GOBJ_SUB(self)->nodeMtx + idx * 0x40 + 0x30));
+    if (ICO_JUN26) {
+        setLowerPlaneRay(&buf, (float *)((char *)GOBJ_SUB(self)->nodeMtx + idx * 0x40 + 0x30));
+        ClipFloor(&buf);
+    } else {
+        GetLowerPlaneCollision(&buf,
+                               (float *)((char *)GOBJ_SUB(self)->nodeMtx + idx * 0x40 + 0x30));
+    }
     if (buf.floor.elem == 0) {
         return 3.40282347e+38f;
     }
@@ -2356,9 +2675,54 @@ void GetMotionRootPos(float *dst, void *motion, int idx)
     getMotionRootPos(dst, motion, idx);
 }
 
+static void GetMotion_jun26(char *dst, float *root, void *motion, int idx, unsigned char *mask,
+                            int count, SkelNode *hrc)
+{
+    float flip[4];
+    int i;
+
+    /* the motion files' nodes are turned half a turn about X and Y */
+    SetIdentityQuaternion(flip);
+    RotQuaternionX(flip, -32768);
+    RotQuaternionY(flip, -32768);
+    if (mask != 0) {
+        for (i = 0; i < count; i++) {
+            if (mask[i] != 0) {
+                SetIdentityQuaternion(dst + i * 32 + 16);
+                *(int *)(dst + i * 32) = 0;
+            } else {
+                _getMotion(dst + i * 32, motion, i, idx);
+            }
+        }
+    } else {
+        for (i = 0; i < count; i++) {
+            _getMotion(dst + i * 32, motion, i, idx);
+        }
+    }
+
+    if (hrc != 0) {
+        for (i = 0; i < count; i++) {
+            if (hrc[i].parent == -1) {
+                MultiQuaternion(dst + i * 32 + 16, flip, dst + i * 32 + 16);
+            }
+        }
+    } else {
+        for (i = 0; i < count; i++) {
+            MultiQuaternion(dst + i * 32 + 16, flip, dst + i * 32 + 16);
+        }
+    }
+    if (root != 0) {
+        getMotionRootPos(root, motion, idx);
+    }
+}
+
 void GetMotion(char *dst, float *root, void *motion, int idx, unsigned char *mask, int count,
                SkelNode *hrc)
 {
+    if (ICO_JUN26) {
+        GetMotion_jun26(dst, root, motion, idx, mask, count, hrc);
+        return;
+    }
     getMotion(dst, root, motion, idx, mask, count, hrc);
 }
 
@@ -2394,8 +2758,24 @@ void LockForceGroundParent(GObj *gobj) {}
 
 void UnlockForceGroundParent(GObj *gobj) {}
 
+static void GetOutOutsideOfWall_jun26(GObj *obj, float threshold)
+{
+    int buf0[4];
+    float buf1[4];
+    if (GOBJ_SUB(obj)->root.wall.elem != 0) {
+        GetRootPosition(buf0, obj);
+        GetGlobalWallPlane(buf1, &obj->dobj->root.wall);
+        GetProjectionOfPlaneWithKeepAway(buf0, buf1, buf0, threshold);
+        SetDirectRootPosition(obj, buf0);
+    }
+}
+
 void GetOutOutsideOfWall(GObj *obj, float threshold)
 {
+    if (ICO_JUN26) {
+        GetOutOutsideOfWall_jun26(obj, threshold);
+        return;
+    }
     int buf0[4];
     float buf1[4];
     if (GOBJ_SUB(obj)->root.wall.elem != 0) {

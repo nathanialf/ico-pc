@@ -31,6 +31,15 @@ static float sunScreenOffset[4] = {-2048.0f, -2048.0f, 0.0f, 0.0f}; /* derived n
 
 static int work0ToFeedBackRect[4] = {-1024, -1024, 2048, 2048}; /* derived name */
 
+/* auraInspireAfter's work buffer 1 to work 0 sprite, the texture rectangle
+   of the feedback area it pastes to the frame buffer, and the sprite the
+   current frame buffer is copied into the feedback area with */
+static int reduceRect[4] = {-2048, -1024, 4096, 2048}; /* derived name */
+
+static int feedBackAreaUv[4] = {8, 18, 2048, 2048}; /* derived name */
+
+static int currentFBToFeedBackRect[4] = {-1024, -1024, 2048, 2048}; /* derived name */
+
 static int feedBackToWork0Rect[4] = {-1024, -1024, 2048, 2048}; /* derived name */
 
 static float subWork1Point[4] = {0.0f, 0.0f, 0.0f, 1.0f}; /* derived name */
@@ -441,7 +450,11 @@ static int postMode = 1; /* derived name */
 
 static int postModeRequest = 1; /* derived name */
 
-static int flareOn = 1; /* derived name */
+static int flareOn_pal = 1; /* derived name */
+
+static int flareOn_jun26 = 0; /* derived name */
+
+#define flareOn (*PAL_JUN26(&flareOn_pal, &flareOn_jun26))
 
 static int feedMode = 2; /* derived name */
 
@@ -481,7 +494,15 @@ static inline void blurPass(int fb, int tex, int rm, int um, void *col) /* deriv
     gif_SetDrawEnviroment(fb, 0, SB_X(256), 128, 0, 0);
 
     gif_SetGsReg(6, tex | SB_TEX0_W(256) | 0x15C0000000LL);
-    gif_SetGsReg(0x14, 0x60);
+    if (ICO_JUN26) {
+        if (rm > um) {
+            gif_SetGsReg(0x14, 0x40);
+        } else {
+            gif_SetGsReg(0x14, 0x20);
+        }
+    } else {
+        gif_SetGsReg(0x14, 0x60);
+    }
     gif_SetGsReg(8, 5);
     gif_SetAlpha(1, 4, 0);
     {
@@ -760,8 +781,71 @@ static void subWork1ToCurrentFB(int *rect, int *uv)
     gif_SetZWrite(0);
 }
 
+static void auraInspireAfter_jun26(int mode)
+{
+    /* halfRect and halfUv are read only by the DEBUG build's half-height
+       preview of work buffer 1 */
+    int halfRect[4] = {-gsFrame.w / 2 * 16, -ScreenHeight / 4 * 16, gsFrame.w * 16,
+                       ScreenHeight / 2 * 16};
+    int uv[4] = {8, 8, gsFrame.w * 16, ScreenHeight * 16};
+    int rect[4] = {-gsFrame.w / 2 * 16, -ScreenHeight / 2 * 16, gsFrame.w * 16, ScreenHeight * 16};
+    int halfUv[4] = {8, 28, gsFrame.w * 16, ScreenHeight / 2 * 16};
+
+    SB_KIND(RD_POST_AURA);
+    gif_StartPacketPri(8);
+    gif_SetGsReg(0x4A, 0);
+    gif_SetGsReg(8, 5);
+
+    gif_SetZTest(0);
+    gif_SetZWrite(0);
+
+#ifdef DEBUG
+    if (mode == 4) {
+        gif_SetGsReg(6, workBase[1] | SB_TEX0_W(512) | 0x640000000LL);
+        gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, 0, 0);
+        gif_SetAlpha(0, 2, 0);
+        gif_SpriteSensitiveOrg(halfRect, 0, halfUv, &whiteCol, 0);
+    }
+#endif
+    switch (mode) {
+    case 2:
+        reduceCopyAlphaChannelOfWork1ToWork0();
+        copyAlphaChannelOfWork0ToFeedBackArea();
+        pasteFeedBackAreaToFB(rect);
+        if (systemStatus[5] == 0 || ico_photo_active() || ico_photo_left()) {
+            copyCurrentFBToFeedBackArea();
+        }
+        break;
+    case 1:
+        blurBlendFeedBackAreaToWork1();
+        addWork1ToFB(rect, uv);
+        if (systemStatus[5] == 0 || ico_photo_active() || ico_photo_left()) {
+            pasteWork0ToFeedBackArea(uv);
+        }
+        break;
+    case 3:
+        pasteWork1ToFB(rect, uv);
+        blurBlendFeedBackAreaToWork1();
+        addWork1ToFBWithZ(rect, uv);
+        if (systemStatus[5] == 0 || ico_photo_active() || ico_photo_left()) {
+            pasteWork0ToFeedBackArea(uv);
+        }
+        break;
+    }
+
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, 0, 0);
+
+    gif_SetZWrite(1);
+    gif_SetZTest(1);
+    gif_EndPacket();
+}
+
 static void auraInspireAfter(int mode)
 {
+    if (ICO_JUN26) {
+        auraInspireAfter_jun26(mode);
+        return;
+    }
     /* halfRect and halfUv are read only by the DEBUG build's half-height
        preview of work buffer 1 */
     int halfRect[4] = {-gsFrame.w / 2 * 16, -ScreenHeight / 4 * 16, gsFrame.w * 16,
@@ -1362,7 +1446,46 @@ static int motionBlurAlpha = 0; /* derived name */
 /* frames the motion blur still skips after a non-linear camera move */
 static int motionBlurSkip = 0; /* derived name */
 
-static void MotionBlur_aug6jun26(void)
+static void MotionBlur_jun26(void)
+{
+    SprCol col = {{128, 128, 128, 128}};
+    SprUV uv = {4, 4, gsFrame.w * 16, ScreenHeight / 2 * 16};
+    SprUV rect = {-gsFrame.w / 2 * 16 - 4, -ScreenHeight / 2 * 16 - 4, gsFrame.w * 16,
+                  ScreenHeight * 16};
+
+    if (motionBlurAlpha == 0) {
+        return;
+    }
+    /* PC port: Options > Effects > Motion blur off */
+    if (!ico_video_effect_motion_blur()) {
+        return;
+    }
+    if (NonLinearCameraMove != 0) {
+        return;
+    }
+    if (debug_font_flag & 1) {
+        debug_Printf(300, 40, 0xFFFFFF00, "MBLUR %d", motionBlurAlpha);
+    }
+
+    SB_KIND(RD_POST_MOTION_BLUR);
+    gif_StartPacketPri(7);
+
+    gif_SetDrawEnviroment(0x800, 0, gsFrame.w, ScreenHeight, 0, 0);
+
+    gif_SetGsReg(6, SB_TEX0_W(512) | 0x640100000LL);
+    gif_SetGsReg(0x3B, 0x8000000080LL);
+    gif_SetGsReg(0x47, 0x3000C);
+
+    gif_SetZWrite(0);
+    gif_SetAlpha(1, 2, motionBlurAlpha);
+    gif_SpriteSensitiveOrg(&rect, -1, &uv, &col, 1);
+    gif_SetZWrite(1);
+
+    gif_SetGsReg(0x47, 0x5000D);
+    gif_EndPacket();
+}
+
+static void MotionBlur_aug6(void)
 {
     SprCol col = {{128, 128, 128, 128}};
     SprUV uv = {4, 4, gsFrame.w * 16, ScreenHeight / 2 * 16};
@@ -1407,8 +1530,12 @@ static void MotionBlur_aug6jun26(void)
 
 void MotionBlur(void)
 {
-    if (ICO_AUG6JUN26) {
-        MotionBlur_aug6jun26();
+    if (ICO_JUN26) {
+        MotionBlur_jun26();
+        return;
+    }
+    if (ICO_AUG6) {
+        MotionBlur_aug6();
         return;
     }
     SprCol col = {{128, 128, 128, 128}};
@@ -1448,8 +1575,29 @@ void MotionBlur(void)
     gif_EndPacket();
 }
 
+static void calcSun_jun26(void)
+{
+    float buf[4];
+    _NormalizeVector(buf, sunDir);
+    _ScaleVector(buf, buf, 1000000.0f);
+    buf[3] = 1.0f;
+    _ApplyMatrix(buf, matrixptr + 256, buf);
+    /* PC port: the view matrix is still zero on the stage's first tick, so
+       buf[3] is 0; the EE's division gives Fmax, and Fmax * 0 is 0, where
+       IEEE gives Inf * 0 = NaN. */
+    _ScaleVectorXYZ(buf, buf, ps2_div(1.0f, buf[3]));
+    _AddVectorXYZ(buf, buf, sunScreenOffset);
+    _FTOI0Vector(sunScreen, buf);
+    _ApplyMatrix(sunView, matrixptr + 128, sunDir);
+    flareOn = 1;
+}
+
 static void calcSun(void)
 {
+    if (ICO_JUN26) {
+        calcSun_jun26();
+        return;
+    }
     float buf[4];
     _NormalizeVector(buf, sunDir);
     _ScaleVector(buf, buf, 1000000.0f);

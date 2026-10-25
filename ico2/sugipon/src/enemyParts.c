@@ -159,7 +159,7 @@ EnemyEye *InitEnemyEye(int num, int mode, int pri)
                        PAL_AUG6JUN26(137, 136));
     *p = enemyEyeTemplate;
 
-    p->dobj[0] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6JUN26(1322, 1318, 1286, 1281),
+    p->dobj[0] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6_JUN26(1322, 1318, 1286, 1281, 1201),
                                     &InitialSObjSimpleSetting);
     p->dobj[0]->nodes->flags.ll |= 1;
     p->dobj[0]->nodes->fade = 1e-5f;
@@ -167,7 +167,7 @@ EnemyEye *InitEnemyEye(int num, int mode, int pri)
     p->dobj[0]->nodes->scale[0] = p->dobj[0]->nodes->scale[1] = p->dobj[0]->nodes->scale[2] = 3.0f;
     p->dobj[0]->dispType = 2;
 
-    p->dobj[1] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6JUN26(1323, 1319, 1287, 1282),
+    p->dobj[1] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6_JUN26(1323, 1319, 1287, 1282, 1202),
                                     &InitialSObjSimpleSetting);
     p->dobj[1]->nodes->flags.ll |= 1;
     p->dobj[1]->nodes->fade = 1e-5f;
@@ -175,7 +175,7 @@ EnemyEye *InitEnemyEye(int num, int mode, int pri)
     p->dobj[1]->nodes->scale[0] = p->dobj[0]->nodes->scale[1] = p->dobj[0]->nodes->scale[2] = 3.0f;
     p->dobj[1]->dispType = 2;
 
-    p->dobj[2] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6JUN26(1324, 1320, 1288, 1283),
+    p->dobj[2] = CSVSYSTEM_InitDObj(PAL_JPNKORCN_NTSC_AUG6_JUN26(1324, 1320, 1288, 1283, 1203),
                                     &InitialSObjSimpleSetting);
     p->dobj[2]->nodes->flags.ll |= 1;
     p->dobj[2]->nodes->fade = 1e-5f;
@@ -247,8 +247,68 @@ static EnemyFootPrintHead *InitEnemyFootPrint_ntsc(int num)
     return p;
 }
 
+static EnemyFootPrintHead *InitEnemyFootPrint_jun26(int num)
+{
+    EnemyFootPrintHead *p;
+    Sub15C *d;
+    int i;
+    int j;
+
+    p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(EnemyFootPrintHead, 0x10),
+                       "src/enemyParts.c", 224);
+    *p = footPrintHeadTemplate;
+    p->num = num;
+    p->buf = iosMallocDebug(ios_partition_sugipon, num << 5, "src/enemyParts.c", 227);
+    d = CSVSYSTEM_InitDObj(1174, &InitialSObjSimpleSetting);
+    p->dobj = d;
+    if (d->nodeMtx != 0) {
+        iosFree((void *)ICO_PHYS(d->nodeMtx));
+    }
+    if (p->dobj->nodeQuat != 0) {
+        iosFree((void *)ICO_PHYS(p->dobj->nodeQuat));
+    }
+    p->dobj->nodeMtx = 0;
+    p->dobj->nodeQuat = 0;
+    p->dobj->nodeMtx =
+        (ICO_WORD)iosMallocDebug(ios_partition_seki, num << 6, "src/enemyParts.c", 230);
+    p->dobj->nodeQuat =
+        (ICO_WORD)iosMallocDebug(ios_partition_seki, num << 4, "src/enemyParts.c", 230);
+    p->dobj->nodeNum = num;
+    if ((ICO_WORD)p->dobj->nodes != 0) {
+        iosFree((void *)ICO_PHYS(ICO_ADDR(p->dobj->nodes)));
+    }
+    p->dobj->nodes = iosMallocDebug(ios_partition_seki, num * 80, "src/enemyParts.c", 230);
+    for (i = 0; i < num; i++) {
+        p->dobj->nodes[i].flags.ll &= ~1;
+        p->dobj->nodes[i].flags.ll &= ~2;
+        p->dobj->nodes[i].pos[0] = 0.0f;
+        p->dobj->nodes[i].pos[1] = 0.0f;
+        p->dobj->nodes[i].pos[2] = 0.0f;
+        p->dobj->nodes[i].pos[3] = 1.0f;
+        p->dobj->nodes[i].flags.ll &= ~4;
+        p->dobj->nodes[i].fade = 0;
+        p->dobj->nodes[i].alpha = 1.0f;
+        *(short *)((char *)&p->dobj->nodes[i].flags + 2) = 0;
+        p->dobj->nodes[i].scale[0] = 1.0f;
+        p->dobj->nodes[i].scale[1] = 1.0f;
+        p->dobj->nodes[i].scale[2] = 1.0f;
+    }
+    p->dobj->dispType = 2;
+    for (j = 0; j < num; j++) {
+        p->buf[j] = footPrintVtxTemplate;
+        p->dobj->nodes[j].flags.ll |= 1;
+        p->dobj->nodes[j].fade = 1.0f;
+        p->dobj->nodes[j].flags.ll &= ~4;
+        p->dobj->nodes[j].scale[0] = p->dobj->nodes[j].scale[1] = p->dobj->nodes[j].scale[2] = 0.0f;
+    }
+    return p;
+}
+
 EnemyFootPrintHead *InitEnemyFootPrint(int num)
 {
+    if (ICO_JUN26) {
+        return InitEnemyFootPrint_jun26(num);
+    }
     if (ICO_NTSC) {
         return InitEnemyFootPrint_ntsc(num);
     }

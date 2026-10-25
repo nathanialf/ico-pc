@@ -46,15 +46,24 @@ typedef struct RotObjMemory { /* field names derived */
     int turnCount; /* 0x4 */
 } RotObjMemory;    /* derived name */
 
-static void moveStartSE_ntscaug6jun26(GObj *self)
+static void moveStartSE_jun26(GObj *self)
+{
+    ExecuteSEPackage(self, 45);
+}
+
+static void moveStartSE_ntscaug6(GObj *self)
 {
     ExecuteSEPackage(self, 51);
 }
 
 static void moveStartSE(GObj *self)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        moveStartSE_ntscaug6jun26(self);
+    if (ICO_JUN26) {
+        moveStartSE_jun26(self);
+        return;
+    }
+    if (ICO_NTSCAUG6) {
+        moveStartSE_ntscaug6(self);
         return;
     }
     ExecuteSEPackage(self, 53);
@@ -63,7 +72,7 @@ static void moveStartSE(GObj *self)
 static void moveEndSE(GObj *self)
 {
     StopSEPackage(self);
-    ExecuteSEPackage(self, PAL_NTSCAUG6JUN26(58, 56));
+    ExecuteSEPackage(self, PAL_NTSCAUG6_JUN26(58, 56, 50));
 }
 
 void RotObjectGeo(GObj *self)
@@ -112,13 +121,19 @@ void GetRotObjectHoldPoint(void *pos, void *dir, WallCfg *wall, GObj *holder)
     GetGlobalWallPlane(buf.plane, wall);
     sceVu0ScaleVectorXYZ(dir, buf.plane, -1.0f);
     *(int *)((char *)dir + 0xC) = 0;
-    AdjustVerticalSidePlaneOfWall(pos, wall, buf.pos, 10.0f);
-    GetProjectionPosOfPlane(pos, buf.plane, pos);
+    if (ICO_JUN26) {
+        GetProjectionPosOfPlane(pos, buf.plane, buf.pos);
+    } else {
+        AdjustVerticalSidePlaneOfWall(pos, wall, buf.pos, 10.0f);
+        GetProjectionPosOfPlane(pos, buf.plane, pos);
+    }
     /* the hold point trace, switched off */
-    if (0) {
-        debug_StdPrintfDummy("%s\n", "GetRotObjectHoldPoint");
-        debug_StdPrintfDummy("\t%f, %f, %f\n", ((float *)pos)[0], ((float *)pos)[1],
-                             ((float *)pos)[2]);
+    if (!ICO_JUN26) {
+        if (0) {
+            debug_StdPrintfDummy("%s\n", "GetRotObjectHoldPoint");
+            debug_StdPrintfDummy("\t%f, %f, %f\n", ((float *)pos)[0], ((float *)pos)[1],
+                                 ((float *)pos)[2]);
+        }
     }
     MatrixDrive_SetTransposeMatrix(buf.mtx,
                                    (char *)GOBJ_SUB(wall->o.obj)->nodeMtx + (wall->o.node << 6));
@@ -128,8 +143,92 @@ void GetRotObjectHoldPoint(void *pos, void *dir, WallCfg *wall, GObj *holder)
     sceVu0Normalize(dir, dir);
 }
 
+static int MoveRotObjectWithHoldPoint_jun26(GObj *bar, float *hold, void *self, float *dir,
+                                            float *up)
+{
+    RotObjWork *w = GOBJ_SUB(bar)->work;
+    float q[4];
+    float m[16];
+    float tm[16];
+    float p[4];
+    char *h;
+    float vy;
+    float len;
+    float sl;
+    float ang;
+    float k;
+
+    if (bar->active == 0) {
+        w->turnCount = 0;
+        return 0;
+    }
+    getRootMatrix(m, bar);
+    {
+        float v[4];
+        float o[4];
+        MatrixDrive_SetTransposeMatrix(tm, m);
+        sceVu0ApplyMatrix(q, tm, dir);
+        CopyVector(p, up);
+        p[1] = 0.0f;
+        p[3] = 0.0f;
+        _ApplyMatrix(p, tm, p);
+        _OuterProduct(v, p, hold);
+        vy = v[1];
+        len = FSqrt(hold[0] * hold[0] + hold[2] * hold[2]);
+        sceVu0ScaleVector(q, q, len / FSqrt(q[0] * q[0] + q[2] * q[2]));
+        sceVu0OuterProduct(o, q, hold);
+        sl = _GetLengthXZ(q, hold);
+        if (o[1] < 0.0f)
+            sl = -sl;
+        if (sl * vy < 0.0f)
+            return 0;
+    }
+    ang = -atan2f(sl, len);
+    k = len * 0.01f;
+    if (k > 1.0f)
+        k = 1.0f;
+    k *= k;
+    k *= k;
+    ang *= k;
+    switch (w->kind) {
+    case 2:
+        if (0.0f <= ang)
+            return 0;
+        break;
+    case 3:
+        if (GOBJ_SUB(bar)->parent.obj != 0) {
+            float r;
+
+            h = (char *)GOBJ_SUB(GOBJ_SUB(bar)->parent.obj)->nodeMtx;
+            ((Vec4 *)(h + 0x30))->f[1] += ang * 31.83098793f;
+            CopyVector(GOBJ_SUB(GOBJ_SUB(bar)->parent.obj)->root.pos,
+                       (char *)GOBJ_SUB(GOBJ_SUB(bar)->parent.obj)->nodeMtx + 0x30);
+            r = -((Vec4 *)(h + 0x30))->f[1];
+            if (w->limitMax < r) {
+                ((Vec4 *)(h + 0x30))->f[1] = -w->limitMax;
+                CopyVector(GOBJ_SUB(GOBJ_SUB(bar)->parent.obj)->root.pos,
+                           (char *)GOBJ_SUB(GOBJ_SUB(bar)->parent.obj)->nodeMtx + 0x30);
+                return 0;
+            } else if (r < w->limitMin) {
+                ((Vec4 *)(h + 0x30))->f[1] = -w->limitMin;
+                CopyVector(GOBJ_SUB(GOBJ_SUB(bar)->parent.obj)->root.pos,
+                           (char *)GOBJ_SUB(GOBJ_SUB(bar)->parent.obj)->nodeMtx + 0x30);
+                return 0;
+            }
+        }
+        break;
+    }
+    /* the function's name trace, switched off */
+    w->turnCount += ang * 10430.378f;
+    w->angle += ang * 10430.378f;
+    return 1;
+}
+
 int MoveRotObjectWithHoldPoint(GObj *bar, float *hold, void *self, float *dir, float *up)
 {
+    if (ICO_JUN26) {
+        return MoveRotObjectWithHoldPoint_jun26(bar, hold, self, dir, up);
+    }
     RotObjWork *w = GOBJ_SUB(bar)->work;
     float q[4];
     float m[16];
@@ -256,7 +355,33 @@ void GetRotObjectGlobalHoldGeometry(void *pos, void *dir, GObj *bar, void *holdP
     }
 }
 
-static RotObjWork *InitRotObjectGeo_ntscaug6jun26(GObj *gobj, SObjSimpleSetting *src)
+static RotObjWork *InitRotObjectGeo_jun26(GObj *gobj, SObjSimpleSetting *src)
+{
+    RotObjWork *p = iosMallocDebug(ios_partition_sugipon, sizeof(RotObjWork), rotObjectFile, 53);
+
+    p->saveCount = rotObjectPhase;
+    rotObjectPhase = (rotObjectPhase + 1) % 30;
+
+    CopyVector(p->pos, src->pos);
+    p->kind = src->obj;
+    p->pos[3] = 1.0f;
+    p->angle = (short)(int)(src->rot[1] * 32768.0f / 180.0f);
+    p->turnCount = 0;
+    p->limitMax = p->limitMin = 0.0f;
+
+    if (p->kind == 3) {
+        p->limitMax = src->scale[2];
+        p->limitMin = src->scale[0];
+        CopyVector(((SubHandle *)&gobj->dobj)->sub->root.pos, ZeroPoint);
+    }
+    {
+        struct DObjNode *q = GOBJ_SUB(gobj)->nodes;
+        q->scale[0] = q->scale[1] = q->scale[2] = 1.0f;
+    }
+    return p;
+}
+
+static RotObjWork *InitRotObjectGeo_ntscaug6(GObj *gobj, SObjSimpleSetting *src)
 {
     RotObjWork *p = iosMallocDebug(ios_partition_sugipon, sizeof(RotObjWork), rotObjectFile, 55);
 
@@ -285,8 +410,11 @@ static RotObjWork *InitRotObjectGeo_ntscaug6jun26(GObj *gobj, SObjSimpleSetting 
 
 RotObjWork *InitRotObjectGeo(GObj *gobj, SObjSimpleSetting *src)
 {
-    if (ICO_NTSCAUG6JUN26) {
-        return InitRotObjectGeo_ntscaug6jun26(gobj, src);
+    if (ICO_JUN26) {
+        return InitRotObjectGeo_jun26(gobj, src);
+    }
+    if (ICO_NTSCAUG6) {
+        return InitRotObjectGeo_ntscaug6(gobj, src);
     }
     RotObjWork *p = iosMallocDebug(ios_partition_sugipon, sizeof(RotObjWork), rotObjectFile, 57);
 

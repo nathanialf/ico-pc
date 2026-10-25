@@ -175,8 +175,28 @@ static __inline__ void SetDirectRootPositionNoFitting_i(GObj *self, void *v) /* 
     CopyVector(sub->root.delta, ZeroVector);
 }
 
+static void SetDirectRootPositionNoFittingWithNodePoint_jun26(GObj *gobj, int node, float *pos,
+                                                              float t)
+{
+    float v[4];
+    float w[4];
+    int idx;
+
+    idx = GetSkeltonFocusNode(gobj, node);
+    sceVu0SubVector(v, pos, (float *)(gobj->dobj->nodeMtx + (idx << 6)) + 12);
+    sceVu0ScaleVector(v, v, t);
+    GetRootPosition_i(w, gobj);
+    sceVu0AddVector(w, w, v);
+    SetDirectRootPositionNoFitting_i(gobj, w);
+    AdjustMotionHeightToNearestField(gobj);
+}
+
 void SetDirectRootPositionNoFittingWithNodePoint(GObj *gobj, int node, float *pos, float t)
 {
+    if (ICO_JUN26) {
+        SetDirectRootPositionNoFittingWithNodePoint_jun26(gobj, node, pos, t);
+        return;
+    }
     float v[4];
     float w[4];
     int idx;
@@ -204,8 +224,27 @@ void SetDirectRootPositionNoFittingWithNodePointXZ(GObj *gobj, int node, float *
     SetDirectRootPositionNoFitting_i(gobj, w);
 }
 
+static void SetDirectRootPositionWithNodePoint_jun26(GObj *gobj, int node, float *pos, float t)
+{
+    float v[4];
+    float w[4];
+    int idx;
+
+    idx = GetSkeltonFocusNode(gobj, node);
+    sceVu0SubVector(v, pos, (float *)(gobj->dobj->nodeMtx + (idx << 6)) + 12);
+    sceVu0ScaleVector(v, v, t);
+    GetRootPosition_i(w, gobj);
+    sceVu0AddVector(w, w, v);
+    SetDirectRootPositionNoFitting_i(gobj, w);
+    AdjustMotionHeightToNearestField(gobj);
+}
+
 void SetDirectRootPositionWithNodePoint(GObj *gobj, int node, float *pos, float t)
 {
+    if (ICO_JUN26) {
+        SetDirectRootPositionWithNodePoint_jun26(gobj, node, pos, t);
+        return;
+    }
     SetDirectRootPositionNoFittingWithNodePoint(gobj, node, pos, t);
     AdjustMotionHeightToNearestField(gobj);
 }
@@ -393,9 +432,12 @@ loop:
 /* the object kinds the character list builder accepts, -1 terminated */
 static int charGObjKinds_pal[5] = {1, 2, 4, 47, -1}; /* derived name */
 
-static int charGObjKinds_ntscaug6jun26[5] = {1, 2, 4, 46, -1}; /* derived name */
+static int charGObjKinds_ntscaug6[5] = {1, 2, 4, 46, -1}; /* derived name */
 
-#define charGObjKinds PAL_NTSCAUG6JUN26(charGObjKinds_pal, charGObjKinds_ntscaug6jun26)
+static int charGObjKinds_jun26[5] = {1, 2, 4, 45, -1}; /* derived name */
+
+#define charGObjKinds                                                                              \
+    PAL_NTSCAUG6_JUN26(charGObjKinds_pal, charGObjKinds_ntscaug6, charGObjKinds_jun26)
 
 /* the live character objects the cylinder check walks */
 static GObj *charGObjList[64]; /* derived name */
@@ -430,7 +472,7 @@ void MakeCharGObjList(void)
             if (charGObjCount > 64) {
                 debug_assertMessage("src/geometryManager.c", LN(558, 558, 558, 558, 542, 546, 558),
                                     "TOO MANY CHARACTERS EXIST ON THIS STAGE(>64)\n");
-                __assert("src/geometryManager.c", LN(558, 558, 558, 558, 558, 558, 558), "e");
+                __assert("src/geometryManager.c", LN(558, 558, 558, 558, 558, 546, 558), "e");
             }
         }
         o = isysGObjGetExist_next(o);
@@ -438,9 +480,98 @@ void MakeCharGObjList(void)
     charGObjList[charGObjCount] = 0;
 }
 
+static int cylinderCollisionCheck_jun26(GObj *self, float *ppos, GObj *target, float r, float rr,
+                                        float h, float s, float t, int ctrl, int exceptOwn)
+{
+    float pos[4];
+    float v[4];
+    float d1[4];
+    float d2[4];
+    float d3[4];
+    ClipWork w;
+    float dy;
+    float len;
+    float over;
+
+    GetRootPosition_i(pos, target);
+    dy = pos[1] - ppos[1];
+    if (!((dy < 0.0f ? -dy : dy) < h)) {
+        goto fail;
+    }
+    sceVu0SubVector(v, pos, ppos);
+    v[1] = 0.0f;
+    len = VectorLengthSquare(v);
+    if (!(len < rr)) {
+        goto fail;
+    }
+    over = r - _Sqrt(len);
+    sceVu0Normalize(v, v);
+    sceVu0ScaleVector(d1, v, over * s);
+    sceVu0SubVector(d2, ppos, d1);
+    sceVu0ScaleVector(d1, v, over * t);
+    sceVu0AddVector(d3, pos, d1);
+
+    if (self != 0) {
+        if (exceptOwn != 0) {
+            w.filter.o.obj = self;
+            w.filter.o.node = -1;
+            w.filter.elem = 0;
+            w.radius = SUBOF(self)->root.radius;
+            CopyVector(w.pt[0], ppos);
+            CopyVector(w.pt[1], d2);
+            ClipWallE(&w);
+            if (w.wall.elem != 0) {
+                CopyVector(d2, w.pt[2]);
+            }
+            w.radius = SUBOF(target)->root.radius;
+            CopyVector(w.pt[0], pos);
+            CopyVector(w.pt[1], d3);
+            ClipWallE(&w);
+            if (w.wall.elem != 0) {
+                CopyVector(d3, w.pt[2]);
+            }
+            goto moved;
+        }
+        w.radius = SUBOF(self)->root.radius;
+        CopyVector(w.pt[0], ppos);
+        CopyVector(w.pt[1], d2);
+        ClipWall(&w);
+        if (w.wall.elem != 0) {
+            CopyVector(d2, w.pt[2]);
+        }
+    }
+    w.radius = SUBOF(target)->root.radius;
+    CopyVector(w.pt[0], pos);
+    CopyVector(w.pt[1], d3);
+    ClipWall(&w);
+    if (w.wall.elem != 0) {
+        CopyVector(d3, w.pt[2]);
+    }
+moved:
+    if (ctrl != 0) {
+        if (self != 0) {
+            SetDirectRootPositionNoFitting_i(self, d2);
+            AdjustMotionHeightToNearestField(self);
+        }
+        SetDirectRootPositionNoFitting_i(target, d3);
+        AdjustMotionHeightToNearestField(target);
+    } else {
+        if (self != 0) {
+            SetRootPosition_i(self, d2);
+        }
+        SetRootPosition_i(target, d3);
+    }
+    return 1;
+fail:
+    return 0;
+}
+
 int cylinderCollisionCheck(GObj *self, float *ppos, GObj *target, float r, float rr, float h,
                            float s, float t, int ctrl, int exceptOwn)
 {
+    if (ICO_JUN26) {
+        return cylinderCollisionCheck_jun26(self, ppos, target, r, rr, h, s, t, ctrl, exceptOwn);
+    }
     float pos[4];
     float v[4];
     float d1[4];

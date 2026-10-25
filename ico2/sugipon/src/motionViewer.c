@@ -53,13 +53,19 @@ MvMenuEnt objMenu_ntsc[] = {
     {"QueenMotion", 46, 1011, 1073, 2105, 2119},
 };
 
-MvMenuEnt objMenu_aug6jun26[] = {
+MvMenuEnt objMenu_aug6[] = {
     {"BoyMotion", 1, 0, 514, 0, 1195},           {"GirlMotion", 2, 514, 790, 1195, 1797},
     {"Enemy1Motion", 4, 790, 924, 1797, 2080},   {"BirdMotion", 32, 1075, 1084, 2094, 2138},
     {"QueenMotion", 46, 1013, 1075, 2080, 2094},
 };
 
-#define objMenu PAL_NTSC_AUG6JUN26(objMenu_pal, objMenu_ntsc, objMenu_aug6jun26)
+MvMenuEnt objMenu_jun26[] = {
+    {"BoyMotion", 1, 0, 521, 0, 1207},           {"GirlMotion", 2, 521, 821, 1207, 1772},
+    {"Enemy1Motion", 4, 821, 1002, 1772, 2106},  {"BirdMotion", 32, 1153, 1163, 2120, 2165},
+    {"QueenMotion", 45, 1091, 1153, 2106, 2120},
+};
+
+#define objMenu PAL_NTSC_AUG6_JUN26(objMenu_pal, objMenu_ntsc, objMenu_aug6, objMenu_jun26)
 
 static int objSel = 0; /* derived name */
 
@@ -87,7 +93,7 @@ static inline int countMotionKinds(int id, int from, int to) /* derived name */
 
     for (i = from; i < to; i++) {
         if (motionOrient[i].id == id ||
-            motionOrient[i].id == PAL_NTSC_AUG6JUN26(1146, 1085, 1087)) {
+            motionOrient[i].id == PAL_NTSC_AUG6_JUN26(1146, 1085, 1087, 1166)) {
             n++;
         }
     }
@@ -107,7 +113,7 @@ static inline int makeMotionKindList(MvMenuEnt *ent, int base) /* derived name *
         k = 0;
         for (i = from; i < to; i++) {
             if (motionOrient[i].id == id ||
-                motionOrient[i].id == PAL_NTSC_AUG6JUN26(1146, 1085, 1087)) {
+                motionOrient[i].id == PAL_NTSC_AUG6_JUN26(1146, 1085, 1087, 1166)) {
                 int kind = motionOrient[i].kind;
 
                 list[k].kind = kind;
@@ -271,8 +277,62 @@ extern void debug_PrintfDummy(int x, int y, unsigned int color, const char *fmt,
 extern int debug_SelectCsvWindowWithLine(char *title, int x, int y, int rows, void *tbl, int stride,
                                          int off, int deref, int count, int *cur, int extra);
 
+static int motKindMenuProc_jun26(void)
+{
+    MvMenuEnt *ent = &objMenu[objSel];
+    int mot = ForMotionViewer_GetCurrentMotion(viewObj);
+    float speed = GetMotionPlaySpeedRatio(mot);
+    int ret;
+    int base;
+    int cur;
+
+    dispMotFrameProgress(mot, ForMotionViewer_GetCurrentAnimationFrame(viewObj));
+    ret = debug_SelectCsvWindowWithLine(ent->name, 10, 70, 6, &motionKind[ent->motFirst], 388, 192,
+                                        0, ent->motLast - ent->motFirst, &motSel, 0);
+    base = motSel;
+    cur = base + ent->motFirst;
+    if (motionKind[cur].area != 0 && motionKind[cur].blendKind == 207 && motionTable[cur] == 0) {
+        base = 0;
+        if (((blinkCount >> 4) & 3) != 0) {
+            debug_PrintfDummy(10, 60, 0x4080FF00, "NO MOTION IN THIS STAGE.");
+        }
+    } else {
+        debug_PrintfDummy(10, 50, 0xC0FFFF00, "Frame : %1.1f/%d",
+                          ForMotionViewer_GetCurrentAnimationFrame(viewObj),
+                          GetNbMotionFrames(mot) - 1);
+        debug_PrintfDummy(10, 60, 0x80FFFF00, "x%1.3f: %1.1f/%d", speed,
+                          ForMotionViewer_GetCurrentAnimationFrame(viewObj) / speed,
+                          (int)((GetNbMotionFrames(mot) - 1) / speed));
+    }
+    if (motSel != lastMotSel) {
+        DisableChangeRootUpdateMode(viewObj);
+        DisableMotionOrientUpdate(viewObj);
+        InitMotionOrient(viewObj, base + ent->oriFrom, base + ent->oriTo, -1, -1,
+                         base + ent->motFirst);
+        lastMotSel = motSel;
+    }
+    if (pad[0].flags & 0x10) {
+        InitMotionOrient(viewObj, base + ent->oriFrom, base + ent->oriTo, -1, -1,
+                         base + ent->motFirst);
+    }
+    if (ret == 1) {
+        motionKindCount = makeMotionKindList(ent, base);
+        oriCsv.sel = 0;
+    }
+    if (ret == -1) {
+        InitMotionOrient(viewObj, ent->oriFrom, ent->oriTo, -1, -1, ent->motFirst);
+        EnableMotionOrientUpdate(viewObj);
+        EnableChangeRootUpdateMode(viewObj);
+        lastMotSel = ret;
+    }
+    return ret;
+}
+
 static int motKindMenuProc(void)
 {
+    if (ICO_JUN26) {
+        return motKindMenuProc_jun26();
+    }
     MvMenuEnt *ent = &objMenu[objSel];
     int mot = ForMotionViewer_GetCurrentMotion(viewObj);
     float speed = GetMotionPlaySpeedRatio(mot);
@@ -365,10 +425,11 @@ static int motOriMenuProc(void)
         for (i = 0; i < 10; i++) {
             ori = GetMotionOrient(ent->oriFrom, ent->oriTo, m, oriCsv.rows[oriCsv.sel].kind);
             debug_PrintfDummy(430, i * 8 + 90,
-                              (i == 0 || m == PAL_NTSC_AUG6JUN26(1145, 1084, 1086)) ? 0x00FFFF00
-                                                                                    : 0xFFFFFF00,
+                              (i == 0 || m == PAL_NTSC_AUG6_JUN26(1145, 1084, 1086, 1165))
+                                  ? 0x00FFFF00
+                                  : 0xFFFFFF00,
                               "%c %s", m == now ? 62 : 32, motionKind[m].name);
-            if (m == PAL_NTSC_AUG6JUN26(1145, 1084, 1086)) {
+            if (m == PAL_NTSC_AUG6_JUN26(1145, 1084, 1086, 1165)) {
                 break;
             }
             if (ori == 0) {

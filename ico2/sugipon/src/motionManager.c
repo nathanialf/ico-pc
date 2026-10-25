@@ -132,41 +132,53 @@ static sceVu0IVECTOR dirColor2 = {0x00, 0x60, 0xFF, 0x80}; /* derived name */
 
 static float ikXAxis_pal[4]; /* derived name */
 
-static sceVu0FVECTOR ikXAxis_aug6jun26; /* derived name */
+static sceVu0FVECTOR ikXAxis_aug6; /* derived name */
 
-#define ikXAxis PAL_AUG6JUN26(ikXAxis_pal, ikXAxis_aug6jun26)
+static float ikXAxis_jun26[4]; /* derived name */
+
+#define ikXAxis PAL_AUG6_JUN26(ikXAxis_pal, ikXAxis_aug6, ikXAxis_jun26)
 
 static float ikBendQuat_pal[4]; /* derived name */
 
-static sceVu0FVECTOR ikBendQuat_aug6jun26; /* derived name */
+static sceVu0FVECTOR ikBendQuat_aug6; /* derived name */
 
-#define ikBendQuat PAL_AUG6JUN26(ikBendQuat_pal, ikBendQuat_aug6jun26)
+static float ikBendQuat_jun26[4]; /* derived name */
+
+#define ikBendQuat PAL_AUG6_JUN26(ikBendQuat_pal, ikBendQuat_aug6, ikBendQuat_jun26)
 
 static float naturalMatrix[16]; /* derived name */
 
 static float naturalTrans_pal[4]; /* derived name */
 
-static sceVu0FVECTOR naturalTrans_aug6jun26; /* derived name */
+static sceVu0FVECTOR naturalTrans_aug6; /* derived name */
 
-#define naturalTrans PAL_AUG6JUN26(naturalTrans_pal, naturalTrans_aug6jun26)
+static float naturalTrans_jun26[4]; /* derived name */
+
+#define naturalTrans PAL_AUG6_JUN26(naturalTrans_pal, naturalTrans_aug6, naturalTrans_jun26)
 
 static float rootMove_pal[4]; /* derived name */
 
-static sceVu0FVECTOR rootMove_aug6jun26; /* derived name */
+static sceVu0FVECTOR rootMove_aug6; /* derived name */
 
-#define rootMove PAL_AUG6JUN26(rootMove_pal, rootMove_aug6jun26)
+static float rootMove_jun26[4]; /* derived name */
+
+#define rootMove PAL_AUG6_JUN26(rootMove_pal, rootMove_aug6, rootMove_jun26)
 
 static float rootStep_pal[4]; /* derived name */
 
-static sceVu0FVECTOR rootStep_aug6jun26; /* derived name */
+static sceVu0FVECTOR rootStep_aug6; /* derived name */
 
-#define rootStep PAL_AUG6JUN26(rootStep_pal, rootStep_aug6jun26)
+static float rootStep_jun26[4]; /* derived name */
+
+#define rootStep PAL_AUG6_JUN26(rootStep_pal, rootStep_aug6, rootStep_jun26)
 
 static float rootDelta_pal[4]; /* derived name */
 
-static sceVu0FVECTOR rootDelta_aug6jun26; /* derived name */
+static sceVu0FVECTOR rootDelta_aug6; /* derived name */
 
-#define rootDelta PAL_AUG6JUN26(rootDelta_pal, rootDelta_aug6jun26)
+static float rootDelta_jun26[4]; /* derived name */
+
+#define rootDelta PAL_AUG6_JUN26(rootDelta_pal, rootDelta_aug6, rootDelta_jun26)
 
 /* The skeleton the motion being computed belongs to: its node array and its
    object.  Declared here for the functions above; the definitions follow
@@ -364,8 +376,33 @@ static void clearCollisionStatus(void)
     skelMotCtrl->landed = 0;
 }
 
+static inline void checkUpperWallState_jun26(void)
+{
+    ClipWork buf;
+    memset(&buf, 0, sizeof(buf));
+    MatrixDrive_PushMatrix();
+    MatrixDrive_TransMatrixV(wallCheckBase);
+    CopyVector(&buf, (void *)(MatrixDrive_GetMatrix()[3]));
+    sceVu0ApplyMatrix(buf.pt[1], MatrixDrive_GetMatrix(), wallCheckAhead);
+    MatrixDrive_PopMatrix();
+    ClipWall(&buf);
+    if (buf.wall.elem != 0) {
+        float a;
+        struct MotCtrl *D;
+        a = GetPointDistance(buf.pt[2], &buf);
+        D = skelMotCtrl;
+        D->upperWallDist = a;
+        D->upperWall = 1;
+        D->flags = D->flags | 0x1000;
+    }
+}
+
 static void checkUpperWallState(void)
 {
+    if (ICO_JUN26) {
+        checkUpperWallState_jun26();
+        return;
+    }
     ClipWork buf;
     memset(&buf, 0, sizeof(buf));
     MatrixDrive_PushMatrix();
@@ -580,8 +617,8 @@ static void checkCliffState_ntscaug6jun26(int first)
                 d = GetPointDistance(p->pt[2], p);
                 _ScaleVector(sc, wv, d + 10.0f);
                 _AddVectorXYZ((w2.pt[1]), &w2, sc);
-                w2.pt[0][1] = w2.pt[0][1] - 30.0f;
-                w2.pt[1][1] = w2.pt[1][1] - 30.0f;
+                w2.pt[0][1] = w2.pt[0][1] - PAL_JUN26(30.0f, 20.0f);
+                w2.pt[1][1] = w2.pt[1][1] - PAL_JUN26(30.0f, 20.0f);
                 ClipWall(&w2);
                 if (hitColRayDisp != 0) {
                     DrawCollisionRay(&w2);
@@ -773,8 +810,58 @@ static void checkCliffState(int first)
     }
 }
 
+static void _checkCliffAndWall_jun26(void)
+{
+    float t;
+
+    if (skelMotCtrl->cliffWallCheck == 1 ||
+        (skelMotCtrl->cliffWallCheck == 2 && skelMotCtrl->variation == 0)) {
+        MatrixDrive_PushMatrix();
+        checkCliffState(0);
+        MatrixDrive_PopMatrix();
+    }
+    if (skelMotCtrl->cliffWallCheck == 1 ||
+        (skelMotCtrl->cliffWallCheck == 2 && skelMotCtrl->variation == 1)) {
+        MatrixDrive_PushMatrix();
+        checkWallState(3);
+        MatrixDrive_PopMatrix();
+    }
+    if (skelMotCtrl->cliffWallCheck == 1) {
+        if ((skelMotCtrl->flags & 0x20) == 0) {
+            MatrixDrive_PushMatrix();
+            MatrixDrive_TransMatrix(0.0f, -30.0f, 0.0f);
+            checkWallState(3);
+            MatrixDrive_PopMatrix();
+
+            if ((skelMotCtrl->flags & 0x20) != 0) {
+                skelMotCtrl->wallFloorHeight += 30.0f;
+                skelMotCtrl->wallTopHeight += 30.0f;
+            }
+        }
+        if (skelMotCtrl->wallHit != 0 && skelMotCtrl->cliffEdge != 0) {
+            t = skelMotCtrl->wallDist - skelMotCtrl->cliffDist;
+            if ((t < 0.0f ? -t : t) < 10.0f) {
+                clearCliffStatus();
+            }
+        }
+    }
+    if (hitColRayDisp != 0) {
+        if (skelMotCtrl->wallHit != 0) {
+            DrawGObjWallCollision(skelRoot->wall.o.obj, 0);
+        }
+    }
+    if (GOBJ_SUB(skelGObj)->ctrl.wallHit != 0 && GOBJ_SUB(skelGObj)->root.wall.elem == 0) {
+        debug_assertMessage(__FILE__, 788, "NOT ENTRY WCL\n");
+        __assert(__FILE__, 788, "e");
+    }
+}
+
 static void _checkCliffAndWall(void)
 {
+    if (ICO_JUN26) {
+        _checkCliffAndWall_jun26();
+        return;
+    }
     float v[4];
     float d;
     float t;
@@ -839,8 +926,8 @@ static void _checkCliffAndWall(void)
         }
     }
     if (GOBJ_SUB(skelGObj)->ctrl.wallHit != 0 && GOBJ_SUB(skelGObj)->root.wall.elem == 0) {
-        debug_assertMessage(__FILE__, LN(822, 822, 822, 816, 816, 788, 822), "NOT ENTRY WCL\n");
-        __assert(__FILE__, LN(822, 822, 822, 816, 816, 788, 822), "e");
+        debug_assertMessage(__FILE__, LN(822, 822, 822, 816, 816, 816, 822), "NOT ENTRY WCL\n");
+        __assert(__FILE__, LN(822, 822, 822, 816, 816, 816, 822), "e");
     }
 }
 
@@ -922,8 +1009,132 @@ static inline void calcMaxNodeHeight(int n) /* derived name */
     }
 }
 
+static void _getGeometryOfMotion_jun26(ObjNode *out, int second)
+{
+    float v[4];
+    char q[16];
+    int save180 = skelRoot->standNode;
+
+    MatrixDrive_PushMatrix();
+    PushQuaternion();
+    CopyVector((void *)v, (void *)skelMotCtrl->dir);
+    SetIdentityQuaternion(q);
+    sceVu0Normalize((void *)v, (void *)v);
+    RotQuaternionY(q, GetTableArcTan2(v[0], v[2]));
+    CopyQuaternion(skelRoot->quat, q);
+    GetMatrixFromQuaternion((void *)MatrixDrive_GetMatrix(), skelRoot->quat);
+    SetCurrentQuaternion(skelRoot->quat);
+
+    naturalMotion = skelMotion;
+    naturalNodePos = nodePos;
+    pursueNaturalGeometry(0);
+
+    if (second) {
+        naturalMotion = skelMotion2;
+        naturalNodePos = nodePos2;
+        pursueNaturalGeometry(0);
+    } else {
+        int i;
+        for (i = 0; i < skelNodeNum; i++) {
+            CopyVector((void *)(nodePos2 + i * 16), (void *)(nodePos + i * 16));
+        }
+    }
+    calcMaxNodeHeight(skelNodeNum);
+
+    clearCollisionStatus();
+    {
+        skelRoot->lifting = 0;
+        skelRoot->lift[0] = 0.0f;
+        skelRoot->lift[1] = 0.0f;
+    }
+
+    if (skelMotCtrl->stream != -1) {
+        *out = rootUpdateDirectPlayForStream();
+    } else {
+        struct MotCtrl *pm;
+        MatrixDrive_PushMatrix();
+        pm = skelMotCtrl;
+        switch (pm->rootUpdateMode) {
+        default: {
+            char buf[1024];
+            sprintf(
+                buf,
+                "MAY BE MOTION ORIENT DATA WAS BROKEN\n(MOTIONNAME:\"%s\" ID:%d: rootUpdateMode:%d)\n",
+                skelMotDef->name, pm->motion, pm->rootUpdateMode);
+            debug_assertMessage(__FILE__, 961, buf);
+            __assert(__FILE__, 961, "e");
+        } break;
+        case 1:
+        case 20:
+            *out = rootUpdateXZ(pm->rootUpdateMode, findActPoint(footActPoints));
+            break;
+        case 2:
+        case 17:
+            *out = rootUpdateXZ_MotPos(pm->rootUpdateMode, findActPoint(footActPoints));
+            break;
+        case 7:
+        case 8:
+        case 9:
+        case 13:
+        case 16:
+            *out = rootUpdateStepSolution(pm->rootUpdateMode);
+            break;
+        case 10:
+        case 15:
+            *out = rootUpdateHang(pm->rootUpdateMode, checkActPointWithHeight(6, 10.0f),
+                                  checkActPointWithHeight(22, 10.0f));
+            break;
+        case 11:
+            *out = rootUpdateSwim();
+            break;
+        case 5:
+            *out = rootUpdateNodeFix();
+            break;
+        case 4:
+            rootUpdateY_Rope(findActPoint(ropeActPoints));
+            break;
+        case 3:
+            *out = rootUpdateY();
+            break;
+        case 0:
+        case 19:
+            *out = rootUpdateTrueMotion(pm->rootUpdateMode);
+            break;
+        case 6:
+        case 14:
+            *out = rootUpdateDirectPlay(pm->rootUpdateMode);
+            break;
+        case 12:
+            *out = rootUpdateFly();
+            break;
+        case 18:
+            *out = rootUpdateEnemyFly();
+            break;
+        }
+        MatrixDrive_PopMatrix();
+    }
+
+    skelMotCtrl->groundHeight = skelRoot->pos[1] + skelNode->pos[1] - skelRoot->footPos[1];
+
+    MatrixDrive_PushMatrix();
+    MatrixDrive_SetTransposeMatrix((void *)MatrixDrive_GetMatrix(), MatrixDrive_GetMatrix());
+    sceVu0ApplyMatrix(skelRoot->stepMove, MatrixDrive_GetMatrix(), skelRoot->move);
+    MatrixDrive_PopMatrix();
+
+    MatrixDrive_PopMatrix();
+    PopQuaternion();
+
+    if (skelRoot->standNode != -1 && save180 == -1) {
+        skelMotCtrl->landed = 1;
+    }
+}
+
 static void _getGeometryOfMotion(ObjNode *out, int second)
 {
+    if (ICO_JUN26) {
+        _getGeometryOfMotion_jun26(out, second);
+        return;
+    }
     float v[4];
     char q[16];
     int save180 = skelRoot->standNode;
@@ -977,8 +1188,8 @@ static void _getGeometryOfMotion(ObjNode *out, int second)
                 buf,
                 "MAY BE MOTION ORIENT DATA WAS BROKEN\n(MOTIONNAME:\"%s\" ID:%d: rootUpdateMode:%d)\n",
                 skelMotDef->name, pm->motion, pm->rootUpdateMode);
-            debug_assertMessage(__FILE__, LN(997, 997, 997, 991, 989, 961, 997), buf);
-            __assert(__FILE__, LN(997, 997, 997, 991, 989, 997, 997), "e");
+            debug_assertMessage(__FILE__, LN(997, 997, 997, 991, 989, 989, 997), buf);
+            __assert(__FILE__, LN(997, 997, 997, 991, 989, 989, 997), "e");
         } break;
         case 1:
         case 20:
@@ -1127,8 +1338,154 @@ typedef struct MotHdrTag MotHdr; /* derived name */
    union, as motionOrientManager.c reads it */
 #define MOWORK(self) (((SubHandle *)&((GObj *)(self))->dobj)->sub) /* derived name */
 
+static void GetGeometryOfMotion_jun26(void *self, void *m0, void *m1, float *v, float r,
+                                      float *step, int k)
+{
+    ObjNode sh;
+    float v2[4];
+
+    sh = MOWORK(self)->parent;
+    stepFocusNode = k;
+    if ((char *)MOWORK(self)->local.obj != 0) {
+        MOWORK(self)->localPos[3] = 1.0f;
+        CopyVector(v2, MOWORK(self)->localPos);
+        sceVu0ApplyMatrix(
+            (int *)v2,
+            (void *)(GOBJ_SUB(MOWORK(self)->local.obj)->nodeMtx + MOWORK(self)->local.node * 64),
+            (char *)v2);
+    } else {
+        AddVectorXYZ(MOWORK(self)->localPos, MOWORK(self)->localPos, MOWORK(self)->localMove);
+        CopyVector(v2, MOWORK(self)->localPos);
+    }
+    v2[1] = v2[1] + MOWORK(self)->localHeight;
+    v2[3] = 1.0f;
+    UnlinkParentOfDObj(self);
+
+    skelNodeNum = MOWORK(self)->skelNodeNum;
+    {
+        float wk0[skelNodeNum][4], wk1[skelNodeNum][4];
+
+        skelGObj = (ICO_WORD)self;
+        nodePos = (char *)wk0;
+        nodePos2 = (char *)wk1;
+        skelMotion = m0;
+        skelMotion2 = m1;
+        skelScale = MOWORK(self)->nodes->scale[0];
+        skelRoot = &MOWORK(self)->root;
+        skelMotCtrl = &MOWORK(self)->ctrl;
+        skelNode = MOWORK(self)->skel;
+        skelMotDef = &motionKind[skelMotCtrl->motion];
+        CopyVector(rootMove, v);
+        CopyVector(rootStep, step);
+        skelMotCtrl->flags = 0;
+        sceVu0SubVector(rootDelta, skelRoot->last, skelRoot->clipFrom);
+        if (MOWORK(self)->ctrl.keepStand != 0) {
+            ObjNode tmp;
+            getGeometryOfMotion(&tmp, r != 1.0f);
+        } else {
+            getGeometryOfMotion(&sh, r != 1.0f);
+        }
+        CopyVector(skelRoot->clipFrom, skelRoot->last);
+        if (MOWORK(self)->ctrl.noStand == 1) {
+            sh = InitialObjPointer;
+        }
+        AddVectorXYZ(MOWORK(self)->motionPos, skelRoot->pos, skelRoot->trans);
+        MOWORK(self)->motionPos[3] = 1.0f;
+        MOWORK(self)->motionPos[1] = MOWORK(self)->motionPos[1] * r + v2[1] * (1.0f - r);
+        GetMatrixOfMotion(self, m1, MOWORK(self)->motionPos);
+    }
+    if (debug_wallcheck_flag != 0) {
+        gif_StartPacketPri(11);
+        gif_SetAlpha(1, 5, 128);
+        gif_SetZTest(0);
+        gif_EndPacket();
+        dispPlane((Vec4 *)MOWORK(self)->root.plane.f, MOWORK(self)->root.pos);
+        gif_StartPacketPri(11);
+        gif_SetZTest(1);
+        gif_EndPacket();
+    }
+    skelRoot->last[3] = 1.0f;
+    skelRoot->clipFrom[3] = 1.0f;
+    skelRoot->pos[3] = 1.0f;
+    skelRoot->move[3] = 0.0f;
+    if (sh.obj != 0) {
+        LinkParentOfDObj(self, &sh);
+        if (GOBJ_SUB(sh.obj)->rideFunc != 0) {
+            GOBJ_SUB(sh.obj)->rideFunc(&sh, self);
+        }
+    } else {
+        MOWORK(self)->root.pos[1] = MOWORK(self)->root.pos[1] - MOWORK(self)->root.height;
+        MOWORK(self)->root.last[1] = MOWORK(self)->root.last[1] - MOWORK(self)->root.height;
+    }
+    MOWORK(self)->motionPos[1] = MOWORK(self)->motionPos[1] - skelRoot->height;
+    if (sh.obj != 0) {
+        float m[16];
+        MatrixDrive_SetTransposeMatrix((void *)m,
+                                       (void *)(GOBJ_SUB(sh.obj)->nodeMtx + sh.node * 64));
+        sceVu0ApplyMatrix((MOWORK(self)->motionPos), m, MOWORK(self)->motionPos);
+    }
+    {
+        Sub15C *ext;
+        float buf[4];
+        float buf2[4];
+
+        ext = GOBJ_SUB(self);
+        if (ext->ctrl.loopFlag == 1) {
+            if (ext->ctrl.posReserve == 0 || ext->ctrl.posReserve != ext->ctrl.loopFlag) {
+                if (sh.obj != 0) {
+                    if (!(skelMotCtrl->floorAttr & 0xF00000) && !(skelMotCtrl->flags & 0x2000)) {
+                        ext->ctrl.posReserve = ext->ctrl.loopFlag;
+                        CopyVector(skelRoot->savePos, skelRoot->pos);
+                        skelRoot->hitObj = sh;
+                    }
+                }
+            } else {
+                CopyVector(skelRoot->pos, skelRoot->savePos);
+            }
+        }
+        skelMotCtrl->reserveMoved = 1;
+        if (GOBJ_SUB(self)->ctrl.posReserve == 1) {
+            if (sh.obj != 0) {
+                CopyVector(buf, skelRoot->savePos);
+                _ApplyMatrix(buf, ((char *)GOBJ_SUB(sh.obj)->nodeMtx + sh.node * 64), buf);
+                if (distance_squared(buf, skelRoot->reservePos) == 0.0f) {
+                    skelMotCtrl->reserveMoved = 0;
+                }
+                buf[3] = 1.0f;
+                CopyVector(skelRoot->reservePos, buf);
+            }
+            if ((skelMotCtrl->flags & 0x2000) || sh.obj != skelRoot->hitObj.obj ||
+                sh.node != skelRoot->hitObj.node || (skelMotCtrl->floorAttr & 0xF00000)) {
+                GOBJ_SUB(self)->ctrl.posReserve = 0;
+            }
+        }
+        if (debug_skel_flag != 0) {
+            if ((GObj *)skelGObj == boyGObj) {
+                CopyVector(buf2, skelRoot->savePos);
+                _UnitMatrix(MatrixDrive_GetMatrix());
+                if (sh.obj != 0) {
+                    _ApplyMatrix(buf2, ((char *)GOBJ_SUB(sh.obj)->nodeMtx + sh.node * 64),
+                                 (char *)buf2);
+                    MatrixDrive_TransMatrixV(buf2);
+                    gif_StartPacketPri(11);
+                    if (GOBJ_SUB(self)->ctrl.posReserve == 1) {
+                        prim_DispWireSphere(30.0f, reserverColor, 16, 8);
+                    } else {
+                        prim_DispWireSphere(30.0f, reserverColor2, 16, 8);
+                    }
+                    gif_EndPacket();
+                }
+            }
+        }
+    }
+}
+
 void GetGeometryOfMotion(void *self, void *m0, void *m1, float *v, float r, float *step, int k)
 {
+    if (ICO_JUN26) {
+        GetGeometryOfMotion_jun26(self, m0, m1, v, r, step, k);
+        return;
+    }
     ObjNode sh;
     float v2[4];
 

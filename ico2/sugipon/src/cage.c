@@ -75,8 +75,21 @@ void SetCageFixGeometry(GObj *self, void *pos, void *dir)
     CopyVector(w->rot, dir);
 }
 
+static inline void GetCageChainPoint_jun26(float *root, float *tip, GObj *self)
+{
+    CageWork *w = GOBJ_SUB(self)->work;
+    CopyVector(root, w->chains->nodes->pos[0]);
+    CopyVector(tip, w->chains->nodes->pos[1]);
+    root[1] = root[1] + 50.0f;
+    tip[1] = tip[1] - 150.0f;
+}
+
 inline int GetCageChainPoint(float *root, float *tip, GObj *self)
 {
+    if (ICO_JUN26) {
+        GetCageChainPoint_jun26(root, tip, self);
+        return 0;
+    }
     CageWork *w = GOBJ_SUB(self)->work;
     CopyVector(root, w->chains->nodes->pos[0]);
     CopyVector(tip, w->chains->nodes->pos[1]);
@@ -91,8 +104,126 @@ static ChainCfg cageChainParam[2] = {
     {-1},
 }; /* derived name */
 
+static char *InitCageGeo_jun26(char *self, SObjSimpleSetting *lay)
+{
+    CageWork *w;
+    ChainCfg *ch;
+    int i;
+    float one;
+
+    w = (CageWork *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(CageWork, 80), __FILE__, 97);
+    ch = iosMallocDebug(ios_partition_sugipon, 160, __FILE__, 98);
+    w->dobj = CSVSYSTEM_InitDObj(accessary[SUBHANDLE_OF(self)->sub->accessary].model, lay);
+    w->dobj2 = CSVSYSTEM_InitDObj(accessary[SUBHANDLE_OF(self)->sub->accessary].model2, lay);
+    w->damping = 1.0f;
+    w->mass = lay->scale[0];
+    ch[0] = cageChainParam[0];
+    ch[1] = cageChainParam[1];
+    ch->pm.root[0] = lay->pos[0];
+    ch->pm.root[1] = lay->pos[1];
+    ch->pm.root[2] = lay->pos[2];
+    ch->pm.step = lay->scale[1];
+    SetIdentityQuaternion(w->rot);
+    w->chains = InitChains(ch);
+    w->upperNode = SetChainExtendedWeight(w->chains->nodes, 1, 0.0f, 600.0f);
+    w->lowerNode = SetChainExtendedWeight(w->chains->nodes, 1, 500.0f, 1400.0f);
+    w->angle = (short)(int)(-lay->rot[1] * 10430.378f);
+    one = 1.0f;
+    {
+        struct DObjNode *e = SUBHANDLE_OF(self)->sub->nodes;
+
+        e->scale[0] = e->scale[1] = e->scale[2] = one;
+    }
+    {
+        struct DObjNode *e = SUBHANDLE_OF(self)->sub->nodes;
+
+        e->rot[0] = e->rot[1] = e->rot[2] = 0;
+    }
+    w->linkLength = lay->scale[2];
+    w->linkCount = (int)(lay->scale[1] / w->linkLength);
+
+    /* from here to the 0x84C store: the DObj buffer reallocation, in the
+       statement order box.c, boy.c and omori's chain.c also use */
+    if (DOBJ_NODEMTX_PTR(w->dobj) != 0) {
+        iosFree((void *)ICO_PHYS(ICO_ADDR(DOBJ_NODEMTX_PTR(w->dobj))));
+    }
+    if (w->dobj->nodeQuat != 0) {
+        iosFree((void *)(ICO_PHYS(w->dobj->nodeQuat)));
+    }
+    DOBJ_NODEQUAT_PTR(w->dobj) = DOBJ_NODEMTX_PTR(w->dobj) = 0;
+    DOBJ_NODEMTX_PTR(w->dobj) =
+        iosMallocDebug(ios_partition_seki, w->linkCount << 6, __FILE__, 125);
+    DOBJ_NODEQUAT_PTR(w->dobj) =
+        iosMallocDebug(ios_partition_seki, w->linkCount << 4, __FILE__, 125);
+    w->dobj->nodeNum = w->linkCount;
+    if (w->dobj->nodes != 0) {
+        iosFree((void *)(ICO_PHYS(ICO_ADDR(w->dobj->nodes))));
+    }
+    w->dobj->nodes = iosMallocDebug(ios_partition_seki, w->linkCount * 80, __FILE__, 125);
+    for (i = 0; i < w->linkCount; i++) {
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->flags.ll &= ~1;
+        }
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->flags.ll &= ~2;
+        }
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->pos[0] = 0.0f;
+        }
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->pos[1] = 0.0f;
+        }
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->pos[2] = 0.0f;
+        }
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->pos[3] = 1.0f;
+        }
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->flags.ll &= ~4;
+        }
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->fade = 0.0f;
+        }
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->alpha = 1.0f;
+        }
+        {
+            char *e = (char *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            *(short *)(e + 0x3A) = 0;
+        }
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->scale[0] = 1.0f;
+        }
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->scale[1] = 1.0f;
+        }
+        {
+            struct DObjNode *e = (struct DObjNode *)(i * 80 + (ICO_WORD)w->dobj->nodes);
+            e->scale[2] = 1.0f;
+        }
+    }
+    w->dobj->dispType = 2;
+    SUBHANDLE_OF(self)->sub->rideFunc = CageRideFunc;
+    return (char *)w;
+}
+
 char *InitCageGeo(char *self, SObjSimpleSetting *lay)
 {
+    if (ICO_JUN26) {
+        return InitCageGeo_jun26(self, lay);
+    }
     CageWork *w;
     ChainCfg *ch;
     int i;
@@ -238,7 +369,7 @@ inline void StabilizeAllLayoutedCage(void)
 {
     void *gobj;
 
-    gobj = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(44, 43));
+    gobj = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6_JUN26(44, 43, 42));
     while (gobj != 0) {
         HotInitCageGeo(gobj);
         gobj = isysGObjSearchFromObjKindID_next(gobj);
@@ -303,8 +434,8 @@ void CageGeo(GObj *self)
                         &w->chains->nodes->ex[w->upperNode].v1);
         sceVu0Normalize(v, v);
         angle = GetTableArcTan2(FSqrt(v[0] * v[0] + v[2] * v[2]), v[1]);
-        if (angle >= 2731) {
-            f = (float)angle / 2730.0f;
+        if (angle >= PAL_JUN26(2731, 3641)) {
+            f = (float)angle / PAL_JUN26(2730.0f, 3640.0f);
             v[1] = 0.0f;
             sceVu0ScaleVector(v, v, f);
             sceVu0SubVector(&w->chains->nodes->ex[w->lowerNode].v2,
@@ -323,7 +454,9 @@ void CageGeo(GObj *self)
                            &w->chains->nodes->ex[w->upperNode].v1);
     RotQuaternionY((char *)GOBJ_SUB(self)->nodeQuat, w->angle);
     MultiQuaternion((char *)GOBJ_SUB(self)->nodeQuat, (char *)GOBJ_SUB(self)->nodeQuat, w->rot);
-    RegularizeQuaternion((char *)GOBJ_SUB(self)->nodeQuat);
+    if (!ICO_JUN26) {
+        RegularizeQuaternion((char *)GOBJ_SUB(self)->nodeQuat);
+    }
     GetMatrixFromQuaternionPos(MatrixDrive_GetMatrix(), (char *)GOBJ_SUB(self)->nodeQuat,
                                &w->chains->nodes->ex[w->upperNode].v1);
     MatrixDrive_TransMatrix(0.0f, 0.0f, 0.0f);
