@@ -39,14 +39,6 @@ float ropeInterRate = 0.0f; /* derived name */
 
 extern MotionOrientEntry motionOrient[];
 
-struct MotOriHead8 { /* field names derived */
-    long long v;
-} __attribute__((packed));
-
-struct MotOriFloat { /* field names derived */
-    float frame;
-};
-
 /* the object's display object, read through geometryManager.h's SubHandle
    union */
 #define MOWORK(self) (((SubHandle *)&((GObj *)(self))->dobj)->sub) /* derived name */
@@ -701,77 +693,8 @@ inline void CopyBlendMotionDataSource(void *self, short ang)
     }
 }
 
-static void shiftMotionOrientBeginFunc_jun26(void *self, int motion, int request, int shiftMode)
-{
-    Vec16 v;
-    char *m = (char *)MOWORK(self);
-    struct MotCtrl *w = ICO_RAWP(struct MotCtrl *, m, 0x470, &MOWORK(self)->ctrl);
-    struct MotRoot *p = ICO_RAWP(struct MotRoot *, m, 0xA0, &MOWORK(self)->root);
-    short ang;
-    StreamElem *mot;
-    int i;
-
-    debug_StdPrintfDummy(
-        "Change \"\033[33m%s(%d)\033[m\"in \"\033[33m%s(%d)\033[m\" at control \"\033[33m%s\033[m\".\n",
-        motionOriKind[w->orientKind].s, w->orientKind, motionKind[w->motion].name, w->motion, "");
-    shiftMotionData((ICO_WORD_PTR(void *))self, motion, request, shiftMode);
-    if (w->parallelEnded != 0) {
-        GetOutOutsideOfWall(self, p->radius);
-    }
-    memset(&v, 0, 16);
-    ang = 0;
-    v.f[2] = 1.0f;
-    if (w->rootUpdateMode != 0 && w->rootUpdateMode != 6) {
-        int kind = motionKind[w->lastMotion].adjustAngle;
-
-        if (motionKind[w->motion].flags.bits.adjustRoot || kind != 0) {
-            sceVu0UnitMatrix(MatrixDrive_GetMatrix());
-            if (kind != 0 && kind != 1) {
-                ang = (short)(kind * 32768 / 180);
-                debug_StdPrintfDummy("ADJUST FROM TABLE \033[36m%08x(%f)\033[m\n", ang,
-                                     (float)ang * 180.0f / 32768.0f);
-            } else {
-                float mtx[4][4];
-
-                GetMatrixFromQuaternion((char *)mtx, p->motionQuat);
-                sceVu0ApplyMatrix(&v, mtx, &v);
-                v.f[1] = 0.0f;
-                _NormalizeVector(&v, &v);
-                ang = GetTableArcTan2(v.f[0], v.f[2]);
-                debug_StdPrintfDummy("ADJUST \033[36m%08x(%f)\033[m\n", ang,
-                                     (float)ang * 180.0f / 32768.0f);
-            }
-            MatrixDrive_RotMatrixY(ang);
-            sceVu0ApplyMatrix(w->dir, MatrixDrive_GetMatrix(), w->dir);
-        } else {
-            debug_StdPrintfDummy("ROT DIFF %08x(%f)\n", 0, (float)ang);
-        }
-    }
-    mot = MOWORK(self)->blendBuf;
-    i = 0;
-    CopyMotion(mot, MOWORK(self)->motionBuf, MOWORK(self)->skelNodeNum);
-    CopyVector(MOWORK(self)->localPos, MOWORK(self)->motionPos);
-    CopyVector(MOWORK(self)->localMove, MOWORK(self)->root.move);
-    *(struct MotOriFloat *)((char *)MOWORK(self) + 0x7A8) =
-        *(struct MotOriFloat *)((char *)MOWORK(self) + 0x150);
-    *(struct MotOriHead8 *)((char *)MOWORK(self) + 0x7A0) = *(struct MotOriHead8 *)MOWORK(self);
-    while (MOWORK(self)->skel[i].parent == -1) {
-        float quat[4];
-
-        SetQuaternionByAxisRotate(quat, ang, 0.0f, 1.0f, 0.0f);
-        MultiQuaternion(mot[i].q, quat, mot[i].q);
-        i = MOWORK(self)->skel[i].sibling;
-    }
-    InitFrameDependSequence(MOWORK(self)->fdsFlags);
-    clearFrameTriggerState(self);
-}
-
 static void shiftMotionOrientBeginFunc(void *self, int motion, int request, int shiftMode)
 {
-    if (ICO_JUN26) {
-        shiftMotionOrientBeginFunc_jun26(self, motion, request, shiftMode);
-        return;
-    }
     Vec16 v;
     char *m = (char *)MOWORK(self);
     struct MotCtrl *w = ICO_RAWP(struct MotCtrl *, m, 0x470, &MOWORK(self)->ctrl);

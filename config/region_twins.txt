@@ -2006,7 +2006,6 @@ ico2/sugipon/src/motionManager2.c	GetMotion	GetMotion_jun26
 ico2/sugipon/src/motionManager2.c	GetOutOutsideOfWall	GetOutOutsideOfWall_jun26
 ico2/sugipon/src/motionOrientManager.c	checkMotionKind	checkMotionKind_jun26
 ico2/sugipon/src/motionOrientManager.c	getMotionOrient	getMotionOrient_jun26
-ico2/sugipon/src/motionOrientManager.c	shiftMotionOrientBeginFunc	shiftMotionOrientBeginFunc_jun26
 ico2/sugipon/src/motionOrientManager.c	findParallelMotion	findParallelMotion_jun26
 ico2/sugipon/src/motionOrientManager.c	SetMotionRequest	SetMotionRequest_jun26
 ico2/sugipon/src/motionOrientManager.c	assertMotionNodeCount	assertMotionNodeCount_jun26
