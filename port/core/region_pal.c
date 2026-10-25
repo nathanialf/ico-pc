@@ -105,6 +105,8 @@ const IcoRegionInfo ico_region_info_pal = {
     .credits_roll_ms = 151080,    /* credits_live.c:72, 3777 ticks at 25 Hz */
     .credits_entrance_exit = 216, /* credits_live.c:80 */
     .credits_boy_label = 54,      /* credits_live.c:81, act-game.c SetActors_Debug */
+    /* DATA.DF's directory (192 entries) holds STGSTAFF1.DF, STGSTAFF2.DF and STGSTAFF3.DF */
+    .credits_staff_packs = 1,
 
     .n_adpcm = 105,            /* gallery_play.c:97 */
     .n_sefile = 104,           /* gallery_play.c:98 */
