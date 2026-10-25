@@ -7,12 +7,14 @@
  * bits.  enemy.c reads it.  The file name is derived: MAIN.MAP links the
  * member as ico2000.a(enemy-def.o) and names its one symbol enemyKind.
  *
- * One table per disc in the European 0x1C-byte record (enemy.h): the USA disc's
- * and the August 2001 preview's 0x14-byte rows (model, particle, life, scale,
- * the fly and battle types) are widened with the European words they do not
- * have (float0C, the dodge range and the parameter row) zero; their code reads
- * none of those.  The tables differ in the model id of "no model" (1552, the
- * Japanese, Korean and Asian 1548, the USA 1515, the preview 1510).
+ * One table per disc in the European 0x1C-byte record (enemy.h): the USA disc's,
+ * the August 2001 preview's and the June 2001 demo's 0x14-byte rows (model,
+ * particle, life, scale, the fly and battle types) are widened with the
+ * European words they do not have (float0C, the dodge range and the parameter
+ * row) zero; their code reads none of those.  The tables differ in the model id
+ * of "no model" (1552, the Japanese, Korean and Asian 1548, the USA 1515, the
+ * preview 1510, the demo 1425); the demo's has 18 rows of its own, the others
+ * 45.
  */
 
 #include "enemy.h"
@@ -99,7 +101,7 @@ const EnemyDef enemyKind_ntsc[] = {
 }; /* derived name */
 
 /* the August 2001 preview */
-const EnemyDef enemyKind_aug6jun26[] = {
+const EnemyDef enemyKind_aug6[] = {
     {19, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 0, 3},  {18, -1, 400.0f, 0.0f, 1.0f, 0.0f, 0, 0, 3},
     {17, -1, 400.0f, 0.0f, 0.9f, 0.0f, 0, 0, 3},  {20, -1, 400.0f, 0.0f, 0.9f, 0.0f, 0, 0, 2},
     {28, -1, 400.0f, 0.0f, 1.0f, 0.0f, 0, 0, 2},  {31, -1, 400.0f, 0.0f, 1.1f, 0.0f, 0, 0, 2},
@@ -124,3 +126,28 @@ const EnemyDef enemyKind_aug6jun26[] = {
     {39, -1, 400.0f, 0.0f, 1.0f, 0.0f, 0, 0, 3},  {40, -1, 400.0f, 0.0f, 1.0f, 0.0f, 0, 0, 3},
     {1510, 0, 100.0f, 0.0f, 4.0f, 0.0f, 0, 0, 3},
 }; /* derived name */
+
+/* the June 2001 demo: 18 rows, its own models (1425 for none) */
+const EnemyDef enemyKind_jun26[] = {
+    {12, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 0, 3},  {13, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 0, 3},
+    {14, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 0, 3},  {15, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 0, 3},
+    {16, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 0, 3},  {17, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 1, 3},
+    {18, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 1, 3},  {19, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 1, 3},
+    {20, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 1, 3},  {21, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 1, 3},
+    {22, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 2, 3},  {23, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 2, 3},
+    {24, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 2, 3},  {25, -1, 200.0f, 0.0f, 1.0f, 0.0f, 0, 2, 3},
+    {1425, 0, 100.0f, 0.0f, 1.0f, 0.0f, 0, 0, 0}, {28, 0, 100.0f, 0.0f, 4.0f, 0.0f, 0, 0, 3},
+    {11, -1, 100.0f, 0.0f, 1.0f, 0.0f, 0, 0, 1},  {1425, 0, 100.0f, 0.0f, 4.0f, 0.0f, 0, 0, 3},
+}; /* derived name */
+
+/* PC port: each table's rows, for the Game variants' reader of a row
+   (port/game/variants.c ico_variant_enemy_def, through enemy.h) */
+const int enemyKindRows_pal = (int)(sizeof(enemyKind_pal) / sizeof(enemyKind_pal[0]));
+
+const int enemyKindRows_jpn = (int)(sizeof(enemyKind_jpn) / sizeof(enemyKind_jpn[0]));
+
+const int enemyKindRows_ntsc = (int)(sizeof(enemyKind_ntsc) / sizeof(enemyKind_ntsc[0]));
+
+const int enemyKindRows_aug6 = (int)(sizeof(enemyKind_aug6) / sizeof(enemyKind_aug6[0]));
+
+const int enemyKindRows_jun26 = (int)(sizeof(enemyKind_jun26) / sizeof(enemyKind_jun26[0]));
