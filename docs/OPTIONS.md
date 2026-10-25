@@ -11,10 +11,10 @@ There are two ways in, and both open the same menu:
 
 Up and Down move between rows. Left and Right change a value. Cross opens
 a page or confirms. Triangle goes back, and so does Circle (see **Circle
-goes back** under [Controls](#controls)). On the Japanese and Korean discs it
-is the other way round, as on those PS2 releases: Circle opens a page or
-confirms, and Cross goes back. Triangle still goes back in Options too
-([more](CONTROLS.md#the-japanese-and-korean-discs)).
+goes back** under [Controls](#controls)). On the Japanese, Korean and Asian
+discs it is the other way round, as on those PS2 releases: Circle opens a
+page or confirms, and Cross goes back. Triangle still goes back in Options too
+([more](CONTROLS.md#the-japanese-korean-and-asian-discs)).
 
 In a released download, the version of the game is shown in small grey
 letters in the top-right corner of the Options menu's first page. Say
@@ -142,7 +142,7 @@ How the picture looks.
   Windows the Direct3D 12 renderer ([Choosing the renderer](#choosing-the-renderer)).
 - **Video mode** is PAL 50 Hz or 60 Hz. The normal choice is 60 Hz. This
   row is only on the title screen's Options, and only with the European
-  disc: the Japanese and Korean discs always run at 60 Hz, as they did on the
+  disc: the other six discs always run at 60 Hz, as they did on the
   PS2.
 
 ## Effects
@@ -311,7 +311,7 @@ A change takes effect the next time you start the game.
 - **Vibration** is On or Off, as the game's own setting. Pause menu only.
 - **Hold type** is **A (hold)**, where Yorda's hand stays held while you
   keep R1 down, or **B (toggle)**, where you press R1 once to take her hand
-  and again to let go. A is how the European, Japanese and Korean discs
+  and again to let go. A is how the European, Japanese, Korean and Asian discs
   start; the North American disc always worked as B. It shows from the
   title screen and the pause menu, and is kept in the settings file for
   every save.
@@ -337,8 +337,8 @@ The six mouse rows do not show on phones and tablets.
 
 - **Circle goes back** lets Circle leave the game's own menus, like
   Triangle. It starts On. In the Options menu, Circle always goes back.
-  This row is not there with the Japanese or Korean disc, where Circle
-  confirms.
+  This row is not there with the Japanese, Korean or Asian disc, where
+  Circle confirms.
 - **Touch screen** opens a page for the on-screen buttons. It only shows
   up on a device with a touch screen.
   [About touch controls](CONTROLS.md#touch-controls-phones-and-tablets).
@@ -398,15 +398,21 @@ Options once you have finished the game:
   game's own text and subtitles change at the next area. This row is only
   there with the European disc. The Japanese disc's signs, menus and
   subtitles are in Japanese and the Korean disc's are in Korean, as on the
-  PS2, and neither has a language choice of its own.
+  PS2; the North American disc, the August 2001 preview and the June 2001
+  magazine demo are in English, and the Asian disc's menus are in Chinese.
+  None of them has a language choice of its own.
 - **Menu language** is the language of the menus this port adds (Options,
   the extras, photo mode's help, the messages): English, French, German,
   Italian, Spanish, Japanese (日本語) or Korean (한국어). It starts on Auto:
   Japanese with the Japanese disc, Korean with the Korean disc, and with the
-  European disc the game's language. It does not change the game's own
+  European disc the game's language. The North American disc, the August 2001
+  preview and the June 2001 magazine demo start on English, and so does the
+  Asian disc, since the port has no Chinese text yet. It does not change the game's own
   text, which is always the disc's.
 - **Disc** shows only when more than one disc is set up. It is the disc the
-  game plays: Europe (SCES-50760), Japan (SCPS-11003) or Korea (SCPS-56001). A change
+  game plays: Europe (SCES-50760), Japan (SCPS-11003), Korea (SCPS-56001), USA
+  (SCUS-97113), Preview 2001-08 (the August 2001 preview), Demo 2001-06
+  (SCUS-97158, the June 2001 magazine demo) or Asia (SCPS-55001). A change
   takes effect the next time you start the game. It is the same setting as
   `disc` in the `[game]` part of `config.toml`.
 
