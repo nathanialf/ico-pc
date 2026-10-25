@@ -459,8 +459,8 @@ struct MotCtrl {           /* field names derived */
     int parallel;          /* 0x70, the motion is a parallel one */
     int orientUpdateOff;   /* 0x74, 1 while the motion orient update is disabled */
     int noStand; /* 0x78, 1 drops the object the root stands on after the geometry update (st99a's explosion) */
-    int posReserve;       /* 0x7C, 1 while a position reservation is pending */
-    int loopFlag;         /* 0x80 */
+    int posReserve; /* 0x7C, 1 while a position reservation is pending */
+    int loopFlag;   /* 0x80 */
     int reserveBlend;     /* 0x84, frames left of the reservation blend */
     int reserveMoved;     /* 0x88 */
     enum MotOriStep step; /* 0x8C, frames since the shift */
@@ -1429,11 +1429,11 @@ typedef struct GenGeo { /* field names derived */
 /* one stage-animation mode record: the base mode, the second animation and the held mode */
 typedef struct { /* field names derived */
     int baseMode; /* 0x00, the mode the record returns to, also its BG animation: the first stage-animation id */
-    int anim2; /* 0x04, the second stage-animation id, 972 (JPN and KOR 949, no animation) in most rows */
+    int anim2; /* 0x04, the second stage-animation id, 972 (JPN, KOR and CN 949, no animation) in most rows */
     int word8; /* 0x08, no C reader */
-    int mode;  /* 0x0C, 972 (JPN and KOR 949) while held */
-    int flags; /* 0x10, bit 0 holds the mode at 972 (JPN and KOR 949) */
-} OaRecB; /* derived name */
+    int mode;  /* 0x0C, 972 (JPN, KOR and CN 949) while held */
+    int flags; /* 0x10, bit 0 holds the mode at 972 (JPN, KOR and CN 949) */
+} OaRecB;      /* derived name */
 
 typedef struct { /* field names derived */
     float m[16];

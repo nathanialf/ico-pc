@@ -132,8 +132,32 @@ static inline char *get_texture_base_name(char *src) /* derived name */
     return p;
 }
 
+static inline int get_texture_no_of_property_ntscaug6(int idx) /* derived name */
+{
+    int n;
+    const char *src; /* const in the Japanese build: the same code */
+    char *name;
+    int no;
+
+    n = texProperty[idx].texFileNo;
+    src = texFile[n].path;
+    name = get_texture_base_name(src);
+
+    no = tex_GetTextureNo(name);
+
+    if (no < 0) {
+        debug_StdPrintfDummy("no texture loaded.(%s)\n", src);
+        debug_assert(__FILE__, LN(272, 265, 265, 255, 255, 255, 265));
+        __assert(__FILE__, LN(272, 265, 265, 255, 255, 255, 265), "0");
+    }
+    return no;
+}
+
 static inline int get_texture_no_of_property(int idx) /* derived name */
 {
+    if (ICO_NTSCAUG6) {
+        return get_texture_no_of_property_ntscaug6(idx);
+    }
     int n;
     char *src; /* const in the Japanese build: the same code */
     char *name;
@@ -150,8 +174,8 @@ static inline int get_texture_no_of_property(int idx) /* derived name */
             debug_StdPrintfDummy("tex_id %d\n", n);
         }
         debug_StdPrintfDummy("no texture loaded.(%s)\n", src);
-        debug_assert(__FILE__, LN(272, 265, 265, 272, 272, 272, 265));
-        __assert(__FILE__, LN(272, 265, 265, 272, 272, 272, 265), "0");
+        debug_assert(__FILE__, LN(272, 265, 265, 255, 255, 255, 265));
+        __assert(__FILE__, LN(272, 265, 265, 255, 255, 255, 265), "0");
     }
     return no;
 }
@@ -165,11 +189,42 @@ static inline void init_textures_of_property_range(int first, int last) /* deriv
     }
 }
 
+/* the USA disc's and the August 2001 preview's key read: the buttons are read after any
+   move, and Triangle (2) wins over Cross (1) */
+static inline int kanban_layout_key_ntscaug6(LtProp *pr) /* derived name */
+{
+    int ret;
+    unsigned long long button;
+    LtProperty *e = &texProperty[pr->curItem];
+
+    if ((pad[0].flags & 0x1000) && e->upItem > 0) {
+        pr->curItem = e->upItem;
+    } else if ((pad[0].flags & 0x4000) && e->downItem > 0) {
+        pr->curItem = e->downItem;
+    } else if ((pad[0].flags & 0x8000) && e->leftItem > 0) {
+        pr->curItem = e->leftItem;
+    } else if ((pad[0].flags & 0x2000) && e->rightItem > 0) {
+        pr->curItem = e->rightItem;
+    }
+    button = pad[0].flags;
+    ret = 0;
+    if (button & 0x40) {
+        ret = 1;
+    }
+    if (button & 0x10) {
+        ret = 2;
+    }
+    return ret;
+}
+
 static inline int kanban_layout_key(LtProp *pr) /* derived name */
 {
     int ret = 0;
     LtProperty *e = &texProperty[pr->curItem];
 
+    if (ICO_NTSCAUG6) {
+        return kanban_layout_key_ntscaug6(pr);
+    }
     if ((pad[0].flags & 0x1000) && e->upItem > 0) {
         pr->curItem = e->upItem;
     } else if ((pad[0].flags & 0x4000) && e->downItem > 0) {
@@ -308,8 +363,10 @@ static void init_textures_of_specified_property(int first, int last)
     int no;
 
     for (i = first; i < last; i++) {
-        if (!ICO_JPNKORCN) {
-            debug_StdPrintfDummy("propertyId %d\n", i);
+        if (!ICO_NTSCAUG6) {
+            if (!ICO_JPNKORCN) {
+                debug_StdPrintfDummy("propertyId %d\n", i);
+            }
         }
         no = get_texture_no_of_property(i);
         /* the EE's stride and texData-before-texNo offset are 32-bit only */
@@ -324,14 +381,91 @@ void kanbanInit(int no)
     if (no != 0) {
         init_textures_of_property_range(stageData[no].layoutFirst, stageData[no].layoutLast);
     } else {
-        init_textures_of_property_range(0, PAL_JPNKORCN(1, 4));
+        init_textures_of_property_range(0, PAL_JPNKORNTSCAUG6CN(1, 4));
         kanbanReqAllDel();
         kanbanCommonRead = 1;
     }
 }
 
+static void display_texture_ntscaug6(LtProp *pr, LtProperty *e, KanbanCol *col)
+{
+    int uv[4];
+    int r[4];
+    int pt[4];
+    int i;
+
+    uv[0] = (e->texU << 4) + 8;
+    uv[1] = (e->texV << 4) + 8;
+    uv[2] = e->texW << 4;
+    uv[3] = e->texH << 4;
+
+    r[2] = e->dispW << 4;
+    r[3] = e->dispH << 3;
+    if (r[2] == 0) {
+        r[2] = uv[2];
+    }
+    if (r[3] == 0) {
+        r[3] = uv[3] >> 1;
+    }
+
+    if (e->centerX) {
+        r[0] = (0x2800 - r[2]) / 2 - 0x1400;
+    } else {
+        r[0] = (e->dispX - 320) << 4;
+    }
+    r[1] = (e->dispY - 112) << 4;
+
+    if (e->masked == 0) {
+        tex_TransTexture(e->texNo, 11);
+
+        gif_StartPacketPri(11);
+
+        gif_SetAlpha(1, 7, 0);
+
+        gif_SetZWrite(0);
+
+        r[1] += 8;
+
+        r[3] -= 8;
+        uv[3] -= 8;
+
+        /* PC port: a menu text row (the boot screens' prompts,
+           Yes / No, the language names) is drawn in the sheets' look where
+           the sprite would be, its texture still transferred
+           (port/ui/menu_text.h) */
+        KANBAN_HOST_KEY(e, 0);
+        if (lt_ext_is_text_row(e)) {
+            lt_ext_draw_text_row(e, r, uv, (const unsigned char *)col->b, 0);
+        } else
+            gif_SpriteSensitiveOffset(r, 0xFFFFFF9B, uv, col->b, 1);
+        KANBAN_HOST_KEY(0, 0);
+        gif_SetZWrite(1);
+        gif_EndPacket();
+    }
+
+    if (e == &texProperty[pr->curItem]) {
+        KanbanCol col2 = {{0x80, 0x80, 0x80, 0x7F}};
+
+        gif_StartPacketPri(11);
+        gif_SetZTest(0);
+
+        for (i = 0; i < r[2] * r[3] / 1200; i++) {
+            pt[0] = r[0] + rand() % r[2];
+            pt[1] = r[1] + rand() % r[3];
+            col2.b[3] = rand() % 127 + 32;
+
+            gif_PointOffset(pt, 0x800000, col2.b, 1);
+        }
+        gif_EndPacket();
+    }
+}
+
 static void display_texture(LtProp *pr, LtProperty *e, KanbanCol *col)
 {
+    if (ICO_NTSCAUG6) {
+        display_texture_ntscaug6(pr, e, col);
+        return;
+    }
     int uv[4];
     int r[4];
     int pt[4];
@@ -441,8 +575,33 @@ static int fade_exec(Kanban *p)
     return ret;
 }
 
+static void display_layout_ntscaug6(Kanban *k)
+{
+    LtProp *pr;
+    int i;
+
+    pr = k->layout;
+
+    k->key = 0;
+    if (kanbanCurrent != 0 && kanbanCurrent->layout == pr) {
+        k->key = kanban_layout_key(pr);
+    }
+
+    if (fade_exec(k) < 0) {
+        kanbanReqDel(k);
+    } else {
+        for (i = pr->first; i < pr->last; i++) {
+            display_texture(pr, &texProperty[i], &k->col);
+        }
+    }
+}
+
 static void display_layout(Kanban *k)
 {
+    if (ICO_NTSCAUG6) {
+        display_layout_ntscaug6(k);
+        return;
+    }
     LtProp *pr;
     int i;
 

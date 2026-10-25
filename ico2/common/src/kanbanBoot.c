@@ -112,7 +112,9 @@ static int bootWarningUp(void)
 
 /* The Japanese disc's card check: no language, camera or video-mode steps;
    the card warning (sign 3, with sign 1 no card or 2 full) goes up at step
-   100, which lets go of the kept frame as the European step 301 does. */
+   100, which lets go of the kept frame as the European step 301 does.  The
+   USA disc and the August 2001 preview run it without the retries of step 90
+   and leave the signs up when the warning's "continue" (item 5) is taken. */
 static int kanbanBootMcCheck_jpn(void)
 {
     McMgr *mc = &bootMcReq;
@@ -152,7 +154,7 @@ static int kanbanBootMcCheck_jpn(void)
             mcPort = 1;
             mcCheckStep = 2;
         } else {
-            mcCheckStep = 90;
+            mcCheckStep = ICO_NTSCAUG6 ? 100 : 90;
         }
         break;
     case 90:
@@ -179,10 +181,12 @@ static int kanbanBootMcCheck_jpn(void)
         if (bootKanban->key != 1) {
             break;
         }
-        if (bootKanban->layout->curItem == PAL_KORCN(11, 5)) {
+        if (bootKanban->layout->curItem == PAL_KORNTSCAUG6(11, 5)) {
             mcCheckStep = -1;
-            kanbanReqDelFade(bootKanbanSub);
-            kanbanReqDelFade(bootKanban);
+            if (!ICO_NTSCAUG6) {
+                kanbanReqDelFade(bootKanbanSub);
+                kanbanReqDelFade(bootKanban);
+            }
             break;
         }
         kanbanReqDelFade(bootKanbanSub);
@@ -208,7 +212,7 @@ static int kanbanBootMcCheck(void)
     int lang;
     int ret = 0;
 
-    if (ICO_JPNKORCN) {
+    if (ICO_JPNKORNTSCAUG6CN) {
         return kanbanBootMcCheck_jpn();
     }
 
@@ -484,7 +488,7 @@ void kanbanBootMain(void)
         }
         kanbanReqAllDelFade();
         /* PC port: Skip the opening puts up no presents sign */
-        waitKanban = bootSkipOpening ? 0 : kanbanReqAdd(PAL_JPNKORCN(2, 0), 1);
+        waitKanban = bootSkipOpening ? 0 : kanbanReqAdd(PAL_JPNKORNTSCAUG6CN(2, 0), 1);
         bootStep++;
         break;
     case 3:

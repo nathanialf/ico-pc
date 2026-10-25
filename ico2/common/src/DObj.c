@@ -146,10 +146,10 @@ static void initGeometryState(Sub15C *self, SObjSimpleSetting *lay)
     if (DOBJ_D(p)->skel != 0) {
         DOBJ_D(p)->root.plane.f[3] =
             DOBJ_D(p)->root.plane.f[3] + DOBJ_D(p)->skel->pos[1] * self->nodes->scale[0];
-        DOBJ_D(p)->blendBuf =
-            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 5, __FILE__, 125);
-        DOBJ_D(p)->motionBuf =
-            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 5, __FILE__, 127);
+        DOBJ_D(p)->blendBuf = iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 5,
+                                             __FILE__, PAL_NTSC(125, 124));
+        DOBJ_D(p)->motionBuf = iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 5,
+                                              __FILE__, PAL_NTSC(127, 126));
         InitMotionRotElem(DOBJ_D(p)->blendBuf, DOBJ_D(p)->skelNodeNum);
         InitMotionRotElem(DOBJ_D(p)->motionBuf, DOBJ_D(p)->skelNodeNum);
         CopyVector(DOBJ_D(p)->localPos, ZeroPoint);
@@ -157,28 +157,28 @@ static void initGeometryState(Sub15C *self, SObjSimpleSetting *lay)
         CopyVector(DOBJ_D(p)->localMove, ZeroVector);
         DOBJ_D(p)->localHeight = 0.0f;
         DOBJ_D(p)->local = InitialObjPointer;
-        DOBJ_D(p)->nodeRotElem =
-            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 6, __FILE__, 137);
+        DOBJ_D(p)->nodeRotElem = iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 6,
+                                                __FILE__, PAL_NTSC(137, 136));
         for (i = 0; i < DOBJ_D(p)->skelNodeNum; i++) {
             *(DObjBlk40 *)&DOBJ_D(p)->nodeRotElem[i] = initialRotElem;
         }
-        DOBJ_D(p)->nodeLimit =
-            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 2, __FILE__, 145);
+        DOBJ_D(p)->nodeLimit = iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 2,
+                                              __FILE__, PAL_NTSC(145, 144));
         for (j = 0; j < DOBJ_D(p)->skelNodeNum; j++) {
             DOBJ_D(p)->nodeLimit[j] = 0;
         }
-        DOBJ_D(p)->nodeVec =
-            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 4, __FILE__, 153);
+        DOBJ_D(p)->nodeVec = iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 4,
+                                            __FILE__, PAL_NTSC(153, 152));
         for (k = 0; k < DOBJ_D(p)->skelNodeNum; k++) {
             CopyVector(DOBJ_D(p)->nodeVec[k], ZeroVector);
         }
-        DOBJ_D(p)->blendRot =
-            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 6, __FILE__, 161);
+        DOBJ_D(p)->blendRot = iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum << 6,
+                                             __FILE__, PAL_NTSC(161, 160));
         for (m = 0; m < DOBJ_D(p)->skelNodeNum; m++) {
             *(DObjBlk40 *)DOBJ_D(p)->blendRot[m] = initialBlendRot;
         }
-        DOBJ_D(p)->blendless =
-            iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum, __FILE__, 169);
+        DOBJ_D(p)->blendless = iosMallocDebug(ios_partition_sugipon, DOBJ_D(p)->skelNodeNum,
+                                              __FILE__, PAL_NTSC(169, 168));
         for (n = 0; n < DOBJ_D(p)->skelNodeNum; n++) {
             DOBJ_D(p)->blendless[n] = 0;
         }
@@ -240,7 +240,8 @@ static void allocObjectData(Sub15C *self, SObjSimpleSetting *lay, int n)
     int j;
     int k;
 
-    self->nodes = iosMallocDebug(ios_partition_seki, n * 80, __FILE__, 299);
+    self->nodes = iosMallocDebug(ios_partition_seki, n * 80, __FILE__,
+                                 PAL_NTSC(LN(299, 299, 299, 299, 298, 298, 299), 298));
     for (i = 0; i < n; i++) {
         self->nodes[i].flags.ll &= ~1;
         self->nodes[i].flags.ll &= ~2;
@@ -287,7 +288,8 @@ static void allocObjectData(Sub15C *self, SObjSimpleSetting *lay, int n)
 
 static void initInitialInverseMatrix(Sub15C *d)
 {
-    char *m = iosMallocDebug(ios_partition_sugipon, d->skelNodeNum << 6, __FILE__, 333);
+    char *m = iosMallocDebug(ios_partition_sugipon, d->skelNodeNum << 6, __FILE__,
+                             PAL_NTSC(LN(333, 333, 333, 333, 332, 332, 333), 332));
     d->clusterMtx = m;
     GetInitialInverseMatrixByDObj(m, d);
 }
@@ -299,7 +301,8 @@ static inline void initPolyHead(Sub15C *d) /* derived name */
 
     h = d->model;
     q = h->dobj;
-    d->lightMtx = iosMallocDebug(ios_partition_seki, 256, __FILE__, 238);
+    d->lightMtx = iosMallocDebug(ios_partition_seki, 256, __FILE__,
+                                 PAL_NTSC(LN(238, 238, 238, 238, 237, 237, 238), 237));
     d->lightMtx->mode = q->lightMtx->mode;
     if (d->lightMtx->mode == 4) {
         h->mode.s.type = 3;
@@ -315,8 +318,15 @@ static inline void allocMatrixArrays(Sub15C *d, int n) /* derived name */
 {
     int i;
 
-    *(char **)&d->nodeMtx = iosMallocDebug(ios_partition_seki, n * 64, __FILE__, 259);
-    *(char **)&d->nodeQuat = iosMallocDebug(ios_partition_seki, n * 16, __FILE__, 259);
+    if (ICO_NTSC) {
+        *(char **)&d->nodeMtx = iosMallocDebug(ios_partition_seki, n * 64, __FILE__, 258);
+        *(char **)&d->nodeQuat = iosMallocDebug(ios_partition_seki, n * 16, __FILE__, 258);
+    } else {
+        *(char **)&d->nodeMtx = iosMallocDebug(ios_partition_seki, n * 64, __FILE__,
+                                               LN(259, 259, 259, 259, 258, 258, 259));
+        *(char **)&d->nodeQuat = iosMallocDebug(ios_partition_seki, n * 16, __FILE__,
+                                                LN(259, 259, 259, 259, 258, 258, 259));
+    }
     d->nodeNum = n;
     for (i = 0; i < n; i++) {
         _CopyMatrix(*(char **)&d->nodeMtx + i * 64, d->matrix);
@@ -338,7 +348,8 @@ static inline void allocMorphWeights(Sub15C *d, int n) /* derived name */
 {
     int i;
 
-    d->morphWeight = iosMallocDebug(ios_partition_seki, n * 4, __FILE__, 283);
+    d->morphWeight = iosMallocDebug(ios_partition_seki, n * 4, __FILE__,
+                                    PAL_NTSC(LN(283, 283, 283, 283, 282, 282, 283), 282));
     for (i = 0; i < n; i++) {
         d->morphWeight[i] = 0.0f;
     }
@@ -420,7 +431,8 @@ static inline void makeSlotTable(Sub15C *d) /* derived name */
 {
     int i;
 
-    d->focusNodes = iosMallocDebug(ios_partition_sugipon, 53, __FILE__, 440);
+    d->focusNodes = iosMallocDebug(ios_partition_sugipon, 53, __FILE__,
+                                   PAL_NTSC(LN(440, 440, 440, 440, 439, 439, 440), 439));
     for (i = 0; i < 53; i++) {
         d->focusNodes[i] = findSlot(d, i);
     }
@@ -432,22 +444,25 @@ Sub15C *CSVSYSTEM_InitDObj(int id, SObjSimpleSetting *lay)
 
     /* the record is a runtime Sub15C here (wider than the EE's 0x880): the
        same all-zero start with the template's non-zero words by name */
-    d = iosMallocDebug(ios_partition_seki, sizeof(Sub15C), __FILE__, 463);
+    d = iosMallocDebug(ios_partition_seki, sizeof(Sub15C), __FILE__,
+                       LN(463, 463, 463, 462, 462, 462, 463));
     memset(d, 0, sizeof(Sub15C));
     d->parent.node = -1;
     d->disp = 1;
     d->colRotate = 1;
     d->cylinderOn = 1;
-    d->modelId = PAL_JPNKORCN(1552, 1548);
+    d->modelId = PAL_JPNKORCN_NTSC_AUG6(1552, 1548, 1515, 1510);
     d->accessary = -1;
-    if (id != PAL_JPNKORCN(1552, 1548)) {
+    if (id != PAL_JPNKORCN_NTSC_AUG6(1552, 1548, 1515, 1510)) {
         CSVSYSTEM_ReadCharFiles(d, id);
     }
     debug_StdPrintfDummy("\x1b[35mALLOCED DOBJ\x1b[m\n");
     if (d->model != 0 || d->skel != 0) {
         initPolygonState(d, lay);
     }
-    debug_StdPrintfDummy(" ------------------ allocate DOBJ %p: POBJ: %p\n", d, d->model);
+    if (!ICO_NTSCAUG6) {
+        debug_StdPrintfDummy(" ------------------ allocate DOBJ %p: POBJ: %p\n", d, d->model);
+    }
     debug_StdPrintfDummy("\x1b[35mINITED POLYGONSTATE\x1b[m\n");
     initGeometryState(d, lay);
     debug_StdPrintfDummy("\x1b[35mINITED GEOMETRYSTATE\x1b[m\n");

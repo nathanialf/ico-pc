@@ -129,17 +129,17 @@ static signed char keepFlags[20]; /* derived name */
 
 void POSITIVE_SE(void)
 {
-    soundSeDefPlay(412, 0xFFFFFFFE, 0, 0);
+    soundSeDefPlay(PAL_NTSCAUG6(412, 400), 0xFFFFFFFE, 0, 0);
 }
 
 void NEGATIVE_SE(void)
 {
-    soundSeDefPlay(413, 0xFFFFFFFE, 0, 0);
+    soundSeDefPlay(PAL_NTSCAUG6(413, 401), 0xFFFFFFFE, 0, 0);
 }
 
 void CUR_SE(void)
 {
-    soundSeDefPlay(411, 0xFFFFFFFE, 0, 0);
+    soundSeDefPlay(PAL_NTSCAUG6(411, 399), 0xFFFFFFFE, 0, 0);
 }
 
 inline int PSH_POSITIVE_OR_NEGATIVE(int idx)
@@ -330,8 +330,10 @@ static int _la_memory_card_check(McMgr *p, int step)
         p->result = 0;
         iosMcGetInfo(p);
         mcLastResult = 0;
-        (IosMcProductFile + p->port)->serial = 0;
-        (IosMcProductFile + p->port)->fileNo = 0;
+        if (!ICO_NTSCAUG6) {
+            (IosMcProductFile + p->port)->serial = 0;
+            (IosMcProductFile + p->port)->fileNo = 0;
+        }
         step++;
         break;
     case 10:
@@ -691,7 +693,7 @@ inline int la_boot_memory_card_check(void)
     layout_boot_flag = 1;
     lt_set_item_select_func(0);
     actionStarted = 0;
-    return PAL_JPNKORCN(0x37, 0x34);
+    return PAL_JPNKORCN_NTSCAUG6(0x37, 0x34, 0x33);
 }
 
 inline int la_boot_no_memory_card(int first, int item)
@@ -722,13 +724,97 @@ inline void keyconfig_reset(void)
     *(KeyConf *)iosPadConfCustom.bit = def;
 }
 
+static int la_vibe_select_ntsc(void)
+{
+    if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(0x840, 0x820))) {
+        soundSeDefPlay(403, 0xFFFFFFFF, 0, 0);
+        switch (
+            lt_current_property_item() +
+            PAL_JPNCN_KOR(0, 30, 36)) { /* JPN property ids 30 lower, KOR property ids 36 lower */
+        case 8:
+            iosPadActRequestEnable = 1;
+            break;
+        case 9:
+            iosPadActRequestEnable = 0;
+            break;
+        }
+        if (ui_new_game_screen_layout() >= 0) {
+            return la_host_new_game_screen(); /* the New Game screen, then the start */
+        }
+        if (titleAdpcm != 0) {
+            titleAdpcm->stream->fadeStep = 0x80;
+        }
+        titleAdpcm = 0;
+        gflagInit();
+        keyconfig_reset();
+        systemStatus[4] = 0;
+        gflagOn(349);
+        return -1;
+    }
+    if (lt_fade_status() != 2) {
+        return -1;
+    }
+    if ((pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40)) == 0) {
+        return -1;
+    }
+    NEGATIVE_SE();
+    lt_set_item_select_func(0);
+    actionStarted = 0;
+    return 9;
+}
+
+static int la_vibe_select_aug6(void)
+{
+    if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(0x840, 0x820))) {
+        soundSeDefPlay(403, 0xFFFFFFFF, 0, 0);
+        switch (
+            lt_current_property_item() +
+            PAL_JPNCN_KOR(0, 30, 36)) { /* JPN property ids 30 lower, KOR property ids 36 lower */
+        case 8:
+            iosPadActRequestEnable = 1;
+            break;
+        case 9:
+            iosPadActRequestEnable = 0;
+            break;
+        }
+        if (ui_new_game_screen_layout() >= 0) {
+            return la_host_new_game_screen(); /* the New Game screen, then the start */
+        }
+        if (titleAdpcm != 0) {
+            titleAdpcm->stream->fadeStep = 0x80;
+        }
+        titleAdpcm = 0;
+        gflagInit();
+        keyconfig_reset();
+        systemStatus[4] = 0;
+        gflagOn(348);
+        return -1;
+    }
+    if (lt_fade_status() != 2) {
+        return -1;
+    }
+    if ((pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40)) == 0) {
+        return -1;
+    }
+    NEGATIVE_SE();
+    lt_set_item_select_func(0);
+    actionStarted = 0;
+    return 9;
+}
+
 int la_vibe_select(void)
 {
+    if (ICO_NTSC) {
+        return la_vibe_select_ntsc();
+    }
+    if (ICO_AUG6) {
+        return la_vibe_select_aug6();
+    }
     if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(0x840, 0x820))) {
         soundSeDefPlay(415, 0xFFFFFFFF, 0, 0);
         switch (
             lt_current_property_item() +
-            PAL_JPN_KORCN(0, 30, 36)) { /* JPN property ids 30 lower, KOR property ids 36 lower */
+            PAL_JPNCN_KOR(0, 30, 36)) { /* JPN property ids 30 lower, KOR property ids 36 lower */
         case 44:
             iosPadActRequestEnable = 1;
             break;
@@ -793,11 +879,11 @@ inline int la_scei_logo(int first)
 {
     if (first) {
         stgmgrNextStagePreLoadForceStageSet(0);
-        logoIcoMiscLock = lock_execIcoMisc;
+        logoIcoMiscLock = PAL_AUG6(lock_execIcoMisc, GlobalTimer);
         systemStatus[5] = 1;
         iosPadEnable();
         isysGObjActiveLink(0, 0);
-        gflagOff(386);
+        gflagOff(PAL_NTSC_AUG6(386, 353, 352));
         if (layout_boot_flag == 0) {
             layout_boot_flag = 1;
         }
@@ -814,8 +900,146 @@ inline int la_title_demo(void)
 
 static int continueDecided = 0; /* derived name */
 
+static int la_title_continue_or_new_ntsc(int first)
+{
+    if (first) {
+        opTitleLogoMode = 1;
+        continueIcoMiscLock = lock_execIcoMisc;
+        iosPadEnable();
+        isysGObjActiveLink(0, 1);
+        systemStatus[5] = 0;
+        gflagOff(349);
+        ico_opt_mirror_reset(); /* the title belongs to no run */
+        if (gflagChk(352) == 0) {
+            gflagOn(352);
+        }
+        continueDecided = 0;
+        lt_continue_selected = 0;
+    }
+    if (continueDecided != 0) {
+        lt_item_select_disable = 0;
+        lt_mask_property(14, 0);
+        lt_mask_property(15, 0);
+    } else {
+        lt_item_select_disable = 1;
+        lt_mask_property(14, 1);
+        lt_mask_property(15, 1);
+    }
+    ui_settings_title_mask(continueDecided == 0);
+    /* PC port: not on the Settings row, whose Cross default_item_select
+       takes (it opens the menu) */
+    if (continueDecided != 0 && (pad[0].flags & PAL_JPNKORCN(0x840, 0x820)) &&
+        lt_fade_status() == 2 LA_HOST_NOT_SETTINGS_ROW) {
+        lt_continue_selected = 1;
+        soundSeDefPlay(402, 0xFFFFFFFF, 0, 0);
+        switch (
+            lt_current_property_item() +
+            PAL_JPNCN_KOR(0, 29, 35)) { /* JPN property ids 29 lower, KOR property ids 35 lower */
+        case 14:
+            opTitleLogoMode = 2;
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 17;
+        case 15:
+            opTitleLogoMode = 2;
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 6;
+        }
+    }
+    switch (_la_set_current_port_2(&mc, first)) {
+    case 0:
+        break;
+    case 1:
+        if ((curPortInfo->flags.w & 0x22) == 2) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 10;
+        }
+        continueDecided = 1;
+        break;
+    case -1:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 10;
+    }
+    return -1;
+}
+
+static int la_title_continue_or_new_aug6(int first)
+{
+    if (first) {
+        opTitleLogoMode = 1;
+        continueIcoMiscLock = GlobalTimer;
+        iosPadEnable();
+        isysGObjActiveLink(0, 1);
+        systemStatus[5] = 0;
+        gflagOff(348);
+        ico_opt_mirror_reset(); /* the title belongs to no run */
+        if (gflagChk(351) == 0) {
+            gflagOn(351);
+        }
+        continueDecided = 0;
+        lt_continue_selected = 0;
+    }
+    if (continueDecided != 0) {
+        lt_item_select_disable = 0;
+        lt_mask_property(14, 0);
+        lt_mask_property(15, 0);
+    } else {
+        lt_item_select_disable = 1;
+        lt_mask_property(14, 1);
+        lt_mask_property(15, 1);
+    }
+    ui_settings_title_mask(continueDecided == 0);
+    /* PC port: not on the Settings row, whose Cross default_item_select
+       takes (it opens the menu) */
+    if (continueDecided != 0 && (pad[0].flags & PAL_JPNKORCN(0x840, 0x820)) &&
+        lt_fade_status() == 2 LA_HOST_NOT_SETTINGS_ROW) {
+        lt_continue_selected = 1;
+        soundSeDefPlay(402, 0xFFFFFFFF, 0, 0);
+        switch (
+            lt_current_property_item() +
+            PAL_JPNCN_KOR(0, 29, 35)) { /* JPN property ids 29 lower, KOR property ids 35 lower */
+        case 14:
+            opTitleLogoMode = 2;
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 17;
+        case 15:
+            opTitleLogoMode = 2;
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 6;
+        }
+    }
+    switch (_la_set_current_port_2(&mc, first)) {
+    case 0:
+        break;
+    case 1:
+        if ((curPortInfo->flags.w & 0x22) == 2) {
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 10;
+        }
+        continueDecided = 1;
+        break;
+    case -1:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 10;
+    }
+    return -1;
+}
+
 int la_title_continue_or_new(int first)
 {
+    if (ICO_NTSC) {
+        return la_title_continue_or_new_ntsc(first);
+    }
+    if (ICO_AUG6) {
+        return la_title_continue_or_new_aug6(first);
+    }
     if (first) {
         opTitleLogoMode = 1;
         continueIcoMiscLock = lock_execIcoMisc;
@@ -832,12 +1056,12 @@ int la_title_continue_or_new(int first)
     }
     if (continueDecided != 0) {
         lt_item_select_disable = 0;
-        lt_mask_property(PAL_JPN_KORCN(49, 20, 14), 0);
-        lt_mask_property(PAL_JPN_KORCN(50, 21, 15), 0);
+        lt_mask_property(PAL_JPNCN_KOR(49, 20, 14), 0);
+        lt_mask_property(PAL_JPNCN_KOR(50, 21, 15), 0);
     } else {
         lt_item_select_disable = 1;
-        lt_mask_property(PAL_JPN_KORCN(49, 20, 14), 1);
-        lt_mask_property(PAL_JPN_KORCN(50, 21, 15), 1);
+        lt_mask_property(PAL_JPNCN_KOR(49, 20, 14), 1);
+        lt_mask_property(PAL_JPNCN_KOR(50, 21, 15), 1);
     }
     ui_settings_title_mask(continueDecided == 0);
     /* PC port: not on the Settings row, whose Cross default_item_select
@@ -848,7 +1072,7 @@ int la_title_continue_or_new(int first)
         soundSeDefPlay(414, 0xFFFFFFFF, 0, 0);
         switch (
             lt_current_property_item() +
-            PAL_JPN_KORCN(0, 29, 35)) { /* JPN property ids 29 lower, KOR property ids 35 lower */
+            PAL_JPNCN_KOR(0, 29, 35)) { /* JPN property ids 29 lower, KOR property ids 35 lower */
         case 49:
             opTitleLogoMode = 2;
             lt_set_item_select_func(0);
@@ -887,14 +1111,14 @@ int la_title_new_game_only(int first)
 {
     if (first) {
         opTitleLogoMode = 1;
-        newGameIcoMiscLock = lock_execIcoMisc;
+        newGameIcoMiscLock = PAL_AUG6(lock_execIcoMisc, GlobalTimer);
         iosPadEnable();
         isysGObjActiveLink(0, 1);
         systemStatus[5] = 0;
-        gflagOff(382);
+        gflagOff(PAL_NTSC_AUG6(382, 349, 348));
         ico_opt_mirror_reset(); /* the title belongs to no run */
-        if (gflagChk(385) == 0) {
-            gflagOn(385);
+        if (gflagChk(PAL_NTSC_AUG6(385, 352, 351)) == 0) {
+            gflagOn(PAL_NTSC_AUG6(385, 352, 351));
         }
         newGameDecided = 0;
         lt_continue_selected = 0;
@@ -902,10 +1126,10 @@ int la_title_new_game_only(int first)
     }
     if (newGameDecided != 0) {
         lt_item_select_disable = 0;
-        lt_mask_property(PAL_JPN_KORCN(51, 22, 16), 0);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(51, 22, 16), 0);
     } else {
         lt_item_select_disable = 1;
-        lt_mask_property(PAL_JPN_KORCN(51, 22, 16), 1);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(51, 22, 16), 1);
     }
     ui_settings_title_mask(newGameDecided == 0);
     /* PC port: not on the Settings row, whose Cross default_item_select
@@ -915,10 +1139,12 @@ int la_title_new_game_only(int first)
         soundSeDefPlay(414, 0xFFFFFFFF, 0, 0);
         lt_continue_selected = 1;
         opTitleLogoMode = 2;
-        gFlagGameClear = 0;
+        if (!ICO_NTSCAUG6) {
+            gFlagGameClear = 0;
+        }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(9, 6);
+        return PAL_JPNKORNTSCAUG6CN(9, 6);
     }
     switch (_la_set_current_port_2(&mc, first)) {
     case 0:
@@ -930,7 +1156,7 @@ int la_title_new_game_only(int first)
         if ((curPortInfo->flags.w >> 5) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0xC, 9);
+            return PAL_JPNKORNTSCAUG6CN(0xC, 9);
         }
         newGameDecided = 1;
         break;
@@ -950,9 +1176,9 @@ static int fileMoved = 0; /* derived name */
 
 static int fileFirst = 1; /* derived name */
 
-static inline int la_mc_saved_file_select(int item)
+static inline int la_mc_saved_file_select_ntscaug6(int item)
 {
-    int i = item - PAL_JPN_KORCN(62, 33, 27);
+    int i = item - 27;
     int old = i;
 
     lt_analog2Pad();
@@ -978,7 +1204,41 @@ static inline int la_mc_saved_file_select(int item)
     if (old != i) {
         CUR_SE();
     }
-    return i + PAL_JPN_KORCN(62, 33, 27);
+    return i + 27;
+}
+
+static inline int la_mc_saved_file_select(int item)
+{
+    if (ICO_NTSCAUG6) {
+        return la_mc_saved_file_select_ntscaug6(item);
+    }
+    int i = item - PAL_JPNCN_KOR(62, 33, 27);
+    int old = i;
+
+    lt_analog2Pad();
+    do {
+        if (pad[0].flags & 0x1000) {
+            i += 5;
+        } else if (pad[0].flags & 0x4000) {
+            i -= 5;
+        } else if (pad[0].flags & 0x8000) {
+            i -= 1;
+        } else if (pad[0].flags & 0x2000) {
+            i += 1;
+        } else if (IosMcProductFile[filePort].file[i].stage == 0xFFFFFFFF) {
+            i++;
+        }
+        if (i < 0) {
+            i += 10;
+        }
+        if (i >= 10) {
+            i -= 10;
+        }
+    } while (IosMcProductFile[filePort].file[i].stage == 0xFFFFFFFF);
+    if (old != i) {
+        CUR_SE();
+    }
+    return i + PAL_JPNCN_KOR(62, 33, 27);
 }
 
 /* the selected port's current file number, 0 when the port has no card or
@@ -1004,11 +1264,40 @@ static inline int mcFileNoOfPort(void) /* derived name */
     return mcCurrentFileNo();
 }
 
-int la_mc_file_select(int first)
+static inline int la_mc_file_select_ntscaug6(int first)
 {
     int i;
 
-    curFile = lt_current_property_item() - PAL_JPN_KORCN(62, 33, 27);
+    curFile = lt_current_property_item() - 27;
+
+    if (actionStarted == 0) {
+        lt_item_select_disable = 1;
+        return -1;
+    }
+
+    for (i = 0; i < 10; i++) {
+        if (((fileMask >> i) & 1) && IosMcProductFile[filePort].file[i].stage != 0xFFFFFFFF) {
+            lt_mask_property(i + 27, 0);
+            lt_mask_property(i + 17, 1);
+        } else {
+            lt_mask_property(i + 27, 1);
+            lt_mask_property(i + 17, 0);
+        }
+    }
+
+    previewInfo = *(struct McPreview *)&IosMcProductFile[filePort].file[curFile];
+
+    return (pad[0].flags & PAL_JPNKORCN(0x40 | LA_BACK, 0x30)) ? curFile : -1;
+}
+
+int la_mc_file_select(int first)
+{
+    if (ICO_NTSCAUG6) {
+        return la_mc_file_select_ntscaug6(first);
+    }
+    int i;
+
+    curFile = lt_current_property_item() - PAL_JPNCN_KOR(62, 33, 27);
 
     if (first) {
         fileFirst = 1;
@@ -1027,17 +1316,17 @@ int la_mc_file_select(int first)
         } else {
             curFile = mcFileNoOfPort();
         }
-        texLayout[PAL_JPNKORCN(14, 11)].curItem = curFile + PAL_JPN_KORCN(62, 33, 27);
+        texLayout[PAL_JPNKORCN(14, 11)].curItem = curFile + PAL_JPNCN_KOR(62, 33, 27);
         fileMoved = 1;
     }
 
     for (i = 0; i < 10; i++) {
         if (((fileMask >> i) & 1) && IosMcProductFile[filePort].file[i].stage != 0xFFFFFFFF) {
-            lt_mask_property(i + PAL_JPN_KORCN(62, 33, 27), 0);
-            lt_mask_property(i + PAL_JPN_KORCN(52, 23, 17), 1);
+            lt_mask_property(i + PAL_JPNCN_KOR(62, 33, 27), 0);
+            lt_mask_property(i + PAL_JPNCN_KOR(52, 23, 17), 1);
         } else {
-            lt_mask_property(i + PAL_JPN_KORCN(62, 33, 27), 1);
-            lt_mask_property(i + PAL_JPN_KORCN(52, 23, 17), 0);
+            lt_mask_property(i + PAL_JPNCN_KOR(62, 33, 27), 1);
+            lt_mask_property(i + PAL_JPNCN_KOR(52, 23, 17), 0);
         }
     }
 
@@ -1048,31 +1337,76 @@ int la_mc_file_select(int first)
 
 /* the discs' bodies differ only in the property ids, 29 lower on the
    Japanese disc and 35 lower on the Korean one, as in _la_set_preview_info */
-static void _la_mask_preview_info(void)
+static inline void _la_mask_preview_info_ntscaug6(void)
 {
     int i;
 
     for (i = 0; i < 10; i++) {
-        lt_mask_property(i + PAL_JPN_KORCN(76, 47, 41), 1);
-        lt_mask_property(i + PAL_JPN_KORCN(86, 57, 51), 1);
-        lt_mask_property(i + PAL_JPN_KORCN(96, 67, 61), 1);
-        lt_mask_property(i + PAL_JPN_KORCN(106, 77, 71), 1);
-        lt_mask_property(i + PAL_JPN_KORCN(116, 87, 81), 1);
-        lt_mask_property(i + PAL_JPN_KORCN(126, 97, 91), 1);
+        lt_mask_property(i + 41, 1);
+        lt_mask_property(i + 51, 1);
+        lt_mask_property(i + 61, 1);
+        lt_mask_property(i + 71, 1);
+        lt_mask_property(i + 81, 1);
+        lt_mask_property(i + 91, 1);
     }
-    lt_mask_property(PAL_JPN_KORCN(74, 45, 39), 1);
-    lt_mask_property(PAL_JPN_KORCN(75, 46, 40), 1);
+    lt_mask_property(39, 1);
+    lt_mask_property(40, 1);
     for (i = 0; i < 39; i++) {
-        lt_mask_property(i + PAL_JPN_KORCN(137, 108, 102), 1);
+        lt_mask_property(i + 101, 1);
     }
-    lt_mask_property(PAL_JPN_KORCN(136, 107, 101), 1);
 }
+
+static void _la_mask_preview_info(void)
+{
+    if (ICO_NTSCAUG6) {
+        _la_mask_preview_info_ntscaug6();
+        return;
+    }
+    int i;
+
+    for (i = 0; i < 10; i++) {
+        lt_mask_property(i + PAL_JPNCN_KOR(76, 47, 41), 1);
+        lt_mask_property(i + PAL_JPNCN_KOR(86, 57, 51), 1);
+        lt_mask_property(i + PAL_JPNCN_KOR(96, 67, 61), 1);
+        lt_mask_property(i + PAL_JPNCN_KOR(106, 77, 71), 1);
+        lt_mask_property(i + PAL_JPNCN_KOR(116, 87, 81), 1);
+        lt_mask_property(i + PAL_JPNCN_KOR(126, 97, 91), 1);
+    }
+    lt_mask_property(PAL_JPNCN_KOR(74, 45, 39), 1);
+    lt_mask_property(PAL_JPNCN_KOR(75, 46, 40), 1);
+    for (i = 0; i < 39; i++) {
+        lt_mask_property(i + PAL_JPNCN_KOR(137, 108, 102), 1);
+    }
+    lt_mask_property(PAL_JPNCN_KOR(136, 107, 101), 1);
+}
+
+/* the frames a second, 60 or 50 by the video mode, over the field rate */
+#define FRAME_RATE ((60 - systemStatus[0] * 10) / systemStatus[1]) /* derived name */
 
 /* the play time of a save record split into hours, minutes and seconds and
    clamped to 99:59:59, inlined into _la_set_preview_info, la_load_processing
    and la_system_save_processing; the last two leave the results unused */
+static inline void playTime_aug6(struct McPreview *p, int *hour, int *min,
+                                 int *sec) /* derived name */
+{
+    int frames = p->playTime;
+
+    *sec = (frames / FRAME_RATE) % 60;
+    *min = (frames / (FRAME_RATE * 60)) % 60;
+    *hour = frames / (FRAME_RATE * 3600);
+    if (*hour >= 100) {
+        *hour = 99;
+        *min = 59;
+        *sec = 59;
+    }
+}
+
 static inline void playTime(struct McPreview *p, int *hour, int *min, int *sec) /* derived name */
 {
+    if (ICO_AUG6) {
+        playTime_aug6(p, hour, min, sec);
+        return;
+    }
     int frames = p->playTime;
     int fps = ((60 - systemStatus[0] * 10) / systemStatus[1]) * systemStatus[1];
 
@@ -1108,21 +1442,35 @@ static void _la_set_preview_info(void)
     min = ((min / 10 + 9) % 10) * 10 + (min % 10 + 9) % 10;
     sec = ((sec / 10 + 9) % 10) * 10 + (sec % 10 + 9) % 10;
 
-    lt_mask_property(PAL_JPN_KORCN(76, 47, 41) + hour / 10, 0);
-    lt_mask_property(PAL_JPN_KORCN(86, 57, 51) + hour % 10, 0);
-    lt_mask_property(PAL_JPN_KORCN(96, 67, 61) + min / 10, 0);
-    lt_mask_property(PAL_JPN_KORCN(106, 77, 71) + min % 10, 0);
-    lt_mask_property(PAL_JPN_KORCN(116, 87, 81) + sec / 10, 0);
-    lt_mask_property(PAL_JPN_KORCN(126, 97, 91) + sec % 10, 0);
-    lt_mask_property(PAL_JPN_KORCN(74, 45, 39), 0);
-    lt_mask_property(PAL_JPN_KORCN(75, 46, 40), 0);
+    if (ICO_NTSCAUG6) {
+        lt_mask_property(41 + hour / 10, 0);
+        lt_mask_property(51 + hour % 10, 0);
+        lt_mask_property(61 + min / 10, 0);
+        lt_mask_property(71 + min % 10, 0);
+        lt_mask_property(81 + sec / 10, 0);
+        lt_mask_property(91 + sec % 10, 0);
+        lt_mask_property(39, 0);
+        lt_mask_property(40, 0);
+    } else {
+        lt_mask_property(PAL_JPNCN_KOR(76, 47, 41) + hour / 10, 0);
+        lt_mask_property(PAL_JPNCN_KOR(86, 57, 51) + hour % 10, 0);
+        lt_mask_property(PAL_JPNCN_KOR(96, 67, 61) + min / 10, 0);
+        lt_mask_property(PAL_JPNCN_KOR(106, 77, 71) + min % 10, 0);
+        lt_mask_property(PAL_JPNCN_KOR(116, 87, 81) + sec / 10, 0);
+        lt_mask_property(PAL_JPNCN_KOR(126, 97, 91) + sec % 10, 0);
+        lt_mask_property(PAL_JPNCN_KOR(74, 45, 39), 0);
+        lt_mask_property(PAL_JPNCN_KOR(75, 46, 40), 0);
+    }
 
     n = previewInfo.stage;
-    if (n == PAL_JPNKORCN(63, 61)) {
-        n = 38;
+    if (!ICO_NTSCAUG6) {
+        if (n == PAL_JPNKORCN(63, 61)) {
+            n = 38;
+        }
     }
     if (n >= 3 && n < 56) {
-        switch (previewInfo.sofa) {
+        switch (previewInfo.sofa +
+                PAL_NTSC_AUG6(0, 30, 31)) { /* NTSC ids 30 lower, AUG6 ids 31 lower */
         case 329:
             n = 39;
             break;
@@ -1130,9 +1478,13 @@ static void _la_set_preview_info(void)
             n = 40;
             break;
         }
-        lt_mask_property(n + PAL_JPN_KORCN(134, 105, 99), 0);
-        if (previewInfo.cleared != 0) {
-            lt_mask_property(PAL_JPN_KORCN(136, 107, 101), 0);
+        if (ICO_NTSCAUG6) {
+            lt_mask_property(n + 98, 0);
+        } else {
+            lt_mask_property(n + PAL_JPNCN_KOR(134, 105, 99), 0);
+            if (previewInfo.cleared != 0) {
+                lt_mask_property(PAL_JPNCN_KOR(136, 107, 101), 0);
+            }
         }
     }
 }
@@ -1150,8 +1502,8 @@ inline int la_mc_preview_info(void)
 
 inline int la_mc_current_slot(void)
 {
-    lt_mask_property(PAL_JPN_KORCN(176, 147, 141), curPort);
-    lt_mask_property(PAL_JPN_KORCN(177, 148, 142), curPort ^ 1);
+    lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(176, 147, 141, 140), curPort);
+    lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(177, 148, 142, 141), curPort ^ 1);
     return -1;
 }
 
@@ -1160,18 +1512,23 @@ inline int la_mc_current_slot(void)
 static inline void setLoadGameStartItem(void) /* derived name */
 {
     if (loadSerial == IosMcProductFile[0].serial || saveSerial != IosMcProductFile[1].serial) {
-        texLayout[PAL_JPNKORCN(17, 14)].defaultItem = PAL_JPN_KORCN(186, 158, 152);
+        texLayout[PAL_JPNKORCN(17, 14)].defaultItem = PAL_JPNCN_KOR(186, 158, 152);
     } else {
-        texLayout[PAL_JPNKORCN(17, 14)].defaultItem = PAL_JPN_KORCN(187, 159, 153);
+        texLayout[PAL_JPNKORCN(17, 14)].defaultItem = PAL_JPNCN_KOR(187, 159, 153);
     }
 }
 
 int la_load_game_memory_card_check(int first)
 {
     _la_mask_preview_info();
-    mcLoadMode = 1;
-    lt_mask_property(PAL_JPN_KORCN(176, 147, 141), 1);
-    lt_mask_property(PAL_JPN_KORCN(177, 148, 142), 1);
+    if (ICO_NTSCAUG6) {
+        lt_mask_property(140, 1);
+        lt_mask_property(141, 1);
+    } else {
+        mcLoadMode = 1;
+        lt_mask_property(PAL_JPNCN_KOR(176, 147, 141), 1);
+        lt_mask_property(PAL_JPNCN_KOR(177, 148, 142), 1);
+    }
     switch (_la_set_current_port_2(&mc, first)) {
     case 0:
         if (mcLastResult == 0 || mcLastResult == -14) {
@@ -1179,40 +1536,66 @@ int la_load_game_memory_card_check(int first)
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x16, 0x13);
+        return PAL_JPNKORCN_NTSCAUG6(0x16, 0x13, 19);
     case -1:
         if ((curPortInfo->flags.w >> 1) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x17, 0x14);
+            return PAL_JPNKORCN_NTSCAUG6(0x17, 0x14, 20);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x16, 0x13);
+        return PAL_JPNKORCN_NTSCAUG6(0x16, 0x13, 19);
     case 1:
         if ((curPortInfo->flags.w >> 6) & 1) {
-            setLoadGameStartItem();
+            if (!ICO_NTSCAUG6) {
+                setLoadGameStartItem();
+            }
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x11, 0xE);
+            return PAL_JPNKORCN_NTSCAUG6(0x11, 0xE, 14);
         }
         if ((curPortInfo->flags.w >> 5) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x13, 0x10);
+            return PAL_JPNKORCN_NTSCAUG6(0x13, 0x10, 16);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x17, 0x14);
+        return PAL_JPNKORCN_NTSCAUG6(0x17, 0x14, 20);
+    }
+    return -1;
+}
+
+static int la_mc_load_current_slot_select_ntscaug6(void)
+{
+    _la_mask_preview_info();
+    if (pad[0].flags & 0x40) {
+        curPort = lt_current_property_item() - 151;
+        lastPort = curPort;
+        curPortInfo = &mcPortInfo[curPort];
+        POSITIVE_SE();
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 16;
+    }
+    if (pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40)) {
+        NEGATIVE_SE();
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 9;
     }
     return -1;
 }
 
 inline int la_mc_load_current_slot_select(void)
 {
+    if (ICO_NTSCAUG6) {
+        return la_mc_load_current_slot_select_ntscaug6();
+    }
     _la_mask_preview_info();
     if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
-        curPort = lt_current_property_item() - PAL_JPN_KORCN(186, 158, 152);
+        curPort = lt_current_property_item() - PAL_JPNCN_KOR(186, 158, 152);
         lastPort = curPort;
         curPortInfo = &mcPortInfo[curPort];
         POSITIVE_SE();
@@ -1245,16 +1628,16 @@ int la_mc_load_file_select(int first, int item)
 
     if (fileMask != 0) {
         _la_set_preview_info();
-        lt_mask_property(PAL_JPN_KORCN(73, 44, 38), 1);
-        lt_mask_property(PAL_JPN_KORCN(72, 43, 37), 1);
-        lt_mask_property(PAL_JPN_KORCN(195, 167, 161), 0);
-        lt_mask_property(PAL_JPN_KORCN(196, 168, 162), 0);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(73, 44, 38), 1);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(72, 43, 37), 1);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(195, 167, 161, 160), 0);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(196, 168, 162, 161), 0);
     } else {
         _la_mask_preview_info();
-        lt_mask_property(PAL_JPN_KORCN(73, 44, 38), 0);
-        lt_mask_property(PAL_JPN_KORCN(72, 43, 37), 0);
-        lt_mask_property(PAL_JPN_KORCN(195, 167, 161), 1);
-        lt_mask_property(PAL_JPN_KORCN(196, 168, 162), 1);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(73, 44, 38), 0);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(72, 43, 37), 0);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(195, 167, 161, 160), 1);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(196, 168, 162, 161), 1);
     }
     lt_set_item_select_func((ICO_WORD_PTR(LtSelectFn))la_mc_saved_file_select);
 
@@ -1262,7 +1645,7 @@ int la_mc_load_file_select(int first, int item)
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(12, 9);
+        return PAL_JPNKORNTSCAUG6CN(12, 9);
     }
 
     if ((fileMask != 0 || loadFileChosen != 0) && (pad[0].flags & PAL_JPNKORCN(0x40, 0x20))) {
@@ -1272,7 +1655,7 @@ int la_mc_load_file_select(int first, int item)
             lastPort = filePort;
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(21, 18);
+            return PAL_JPNKORNTSCAUG6CN(21, 18);
         }
     }
 
@@ -1282,21 +1665,21 @@ int la_mc_load_file_select(int first, int item)
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(22, 19);
+            return PAL_JPNKORNTSCAUG6CN(22, 19);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(23, 20);
+        return PAL_JPNKORNTSCAUG6CN(23, 20);
     case 1:
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(22, 19);
+            return PAL_JPNKORNTSCAUG6CN(22, 19);
         }
         if ((curPortInfo->flags.w & 0x22) == 2) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(23, 20);
+            return PAL_JPNKORNTSCAUG6CN(23, 20);
         }
         break;
     case 0:
@@ -1310,7 +1693,7 @@ int la_mc_load_file_select(int first, int item)
                 debug_StdPrintfDummy("1 to 2\n");
                 lt_set_item_select_func(0);
                 actionStarted = 0;
-                return PAL_JPNKORCN(17, 14);
+                return PAL_JPNKORNTSCAUG6CN(17, 14);
             }
         } else if (((curPortInfo->flags.w >> 6) & 1) == 0) {
             debug_StdPrintfDummy("2 to 1\n");
@@ -1336,34 +1719,57 @@ int la_load_confirm_no_memory_card(int first)
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0xD, 0xA);
+        return PAL_JPNKORCN_NTSCAUG6(0xD, 0xA, 10);
     }
     switch (_la_set_current_port_lock_2(&mc, first)) {
     case 0:
         break;
     case -1:
-        if ((curPortInfo->flags.w & 0x32) == 2 || (curPortInfo->flags.w & 0x22) == 2) {
-            lt_set_item_select_func(0);
-            actionStarted = 0;
-            return PAL_JPNKORCN(0x17, 0x14);
+        if (ICO_NTSC) {
+            if ((curPortInfo->flags.w & 0x12) == 2 || (curPortInfo->flags.w & 0x22) == 2) {
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return 20;
+            }
+        } else if (ICO_AUG6) {
+            if ((curPortInfo->flags.w & 0x12) == 2) {
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return 20;
+            }
+        } else {
+            if ((curPortInfo->flags.w & 0x32) == 2 || (curPortInfo->flags.w & 0x22) == 2) {
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return PAL_JPNKORCN(0x17, 0x14);
+            }
         }
         if ((curPortInfo->flags.w >> 1) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x14, 0x11);
+            return PAL_JPNKORCN_NTSCAUG6(0x14, 0x11, 17);
         }
         lock2Restart = 1;
         break;
     case 1:
-        if ((curPortInfo->flags.w & 0x32) == 2 || (curPortInfo->flags.w & 0x22) == 2) {
-            lt_set_item_select_func(0);
-            actionStarted = 0;
-            return PAL_JPNKORCN(0x17, 0x14);
+        if (ICO_NTSC) {
+            if ((curPortInfo->flags.w & 0x12) == 2 || (curPortInfo->flags.w & 0x22) == 2) {
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return 20;
+            }
+        } else if (ICO_AUG6) {
+        } else {
+            if ((curPortInfo->flags.w & 0x32) == 2 || (curPortInfo->flags.w & 0x22) == 2) {
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return PAL_JPNKORCN(0x17, 0x14);
+            }
         }
         if ((curPortInfo->flags.w >> 1) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x14, 0x11);
+            return PAL_JPNKORCN_NTSCAUG6(0x14, 0x11, 17);
         }
         break;
     }
@@ -1379,7 +1785,7 @@ int la_load_confirm_no_data(int first)
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0xD, 0xA);
+        return PAL_JPNKORCN_NTSCAUG6(0xD, 0xA, 10);
     }
     switch (_la_set_current_port_lock_2(&mc, first)) {
     case 0:
@@ -1388,7 +1794,7 @@ int la_load_confirm_no_data(int first)
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x16, 0x13);
+            return PAL_JPNKORCN_NTSCAUG6(0x16, 0x13, 19);
         }
         lock2Restart = 1;
         break;
@@ -1396,7 +1802,7 @@ int la_load_confirm_no_data(int first)
         if ((curPortInfo->flags.w >> 5) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x14, 0x11);
+            return PAL_JPNKORCN_NTSCAUG6(0x14, 0x11, 17);
         }
         break;
     }
@@ -1413,31 +1819,31 @@ int la_load_start_check(int first)
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x2E, 0x2B);
+        return PAL_JPNKORCN_NTSCAUG6(0x2E, 0x2B, 42);
     case -1:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x2E, 0x2B);
+        return PAL_JPNKORCN_NTSCAUG6(0x2E, 0x2B, 42);
     case 1:
         if (filePort != curPort) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x2E, 0x2B);
+            return PAL_JPNKORCN_NTSCAUG6(0x2E, 0x2B, 42);
         }
         if ((curPortInfo->flags.w & 3) != 3) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x16, 0x13);
+            return PAL_JPNKORCN_NTSCAUG6(0x16, 0x13, 19);
         }
         if ((curPortInfo->fileMask >> selectFile) & 1) {
             fileMask = 0x3FF;
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x19, 0x16);
+            return PAL_JPNKORCN_NTSCAUG6(0x19, 0x16, 22);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x17, 0x14);
+        return PAL_JPNKORCN_NTSCAUG6(0x17, 0x14, 20);
     }
     return -1;
 }
@@ -1524,7 +1930,7 @@ int la_load_processing(int first)
         debug_StdPrintfDummy("chk:%d\n", err);
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(46, 43);
+        return PAL_JPNKORCN_NTSCAUG6(46, 43, 42);
     case 4:
         debug_StdPrintfDummy("case 4\n");
         if (((1 << mc.fileNo) & mc.mask) == 0) {
@@ -1559,7 +1965,9 @@ int la_load_processing(int first)
         *(struct McPreview *)IosMcPreviewInfo =
             *(struct McPreview *)&IosMcProductFile[mc.port].file[mc.fileNo];
         playTime((struct McPreview *)IosMcPreviewInfo, &hour, &min, &sec);
-        loadSerial = mcSetFileNo(mc.port, mc.fileNo);
+        if (!ICO_NTSCAUG6) {
+            loadSerial = mcSetFileNo(mc.port, mc.fileNo);
+        }
         ico_mirror_slot_loaded(mc.fileNo, (unsigned int)mc.sum); /* the slot's mirror flag */
         ico_ach_slot_loaded(mc.fileNo, (unsigned int)mc.sum);    /* the slot's achievement run */
         debug_StdPrintfDummy("stage no %d\n", gFlagSaveStage);
@@ -1568,10 +1976,12 @@ int la_load_processing(int first)
             titleAdpcm->stream->fadeStep = 0x40;
         }
         titleAdpcm = 0;
-        if (gflagChk(395)) {
-            lt_set_item_select_func(0);
-            actionStarted = 0;
-            return PAL_JPNKORCN(9, 6);
+        if (!ICO_NTSCAUG6) {
+            if (gflagChk(395)) {
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return PAL_JPNKORCN(9, 6);
+            }
         }
         stgmgrForceSwitchWithFade(gFlagSaveStage, 0.05f, 4.0f);
         ACTGame_SetActors_Debug(gFlagSaveStage, 0);
@@ -1579,7 +1989,7 @@ int la_load_processing(int first)
     case 20:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(20, 17);
+        return PAL_JPNKORNTSCAUG6CN(20, 17);
     }
     return -1;
 }
@@ -1612,13 +2022,86 @@ static int saveVoiceOpened = 0; /* derived name */
 
 static int saveVoiceWait = 0; /* derived name */
 
-int la_mc_confirm_save_file(int first, int item)
+static int la_mc_confirm_save_file_ntscaug6(int first, int item)
 {
     int i;
 
     _la_mask_preview_info();
-    lt_mask_property(PAL_JPN_KORCN(176, 147, 141), 1);
-    lt_mask_property(PAL_JPN_KORCN(177, 148, 142), 1);
+    lt_mask_property(140, 1);
+    lt_mask_property(141, 1);
+    if (first) {
+        systemStatus[5] = 1;
+        if (fightSoundProcessRequestStatus() == 0) {
+            fightSoundProcessRequestPause();
+            fightSoundStopped = 1;
+        }
+        CheckPoint();
+        saveVoiceOpened = 0;
+    }
+    if (saveVoiceOpened == 0) {
+        if (AdpcmFreeAreaGet() != 0) {
+            saveVoice = openLayoutVoice(21);
+            saveVoiceOpened = 1;
+        }
+    } else {
+        _la_mask_preview_info();
+        /* a loop over extra preview pages, built with a count of 0 in the
+           release build, so its body never runs */
+        for (i = 0; i < LA_EXTRA_PREVIEW_PAGES; i++) {
+            _la_mask_preview_info();
+        }
+        if (saveVoice != 0) {
+            layoutVoice = soundDataOpenSync(&voiceOpenReq);
+            if (layoutVoice != (SqEntry *)ICO_INVALID_PTR) {
+                saveVoice = 0;
+                if (layoutVoice != 0) {
+                    AdpcmPlay(layoutVoice->stream);
+                    return -1;
+                }
+            }
+            return -1;
+        }
+        {
+            if (lt_fade_status() == 2) {
+                switch (item + PAL_JPNCN_KOR(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
+                case 183:
+                    POSITIVE_SE();
+                    lt_set_item_select_func(0);
+                    actionStarted = 0;
+                    return 26;
+                case 184:
+                    NEGATIVE_SE();
+                    systemStatus[5] = 0;
+                    lt_set_item_select_func(0);
+                    actionStarted = 0;
+                    return 50;
+                }
+            }
+            if (lt_fade_status() != 2) {
+                return -1;
+            }
+            if ((pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40)) == 0) {
+                return -1;
+            }
+            NEGATIVE_SE();
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 50;
+        }
+    }
+    return -1;
+}
+
+int la_mc_confirm_save_file(int first, int item)
+{
+    if (ICO_NTSCAUG6) {
+        return la_mc_confirm_save_file_ntscaug6(first, item);
+    }
+    int i;
+
+    _la_mask_preview_info();
+    lt_mask_property(PAL_JPNCN_KOR(176, 147, 141), 1);
+    lt_mask_property(PAL_JPNCN_KOR(177, 148, 142), 1);
     if (first) {
         systemStatus[5] = 1;
         fightSoundProcessRequestPause();
@@ -1663,7 +2146,7 @@ int la_mc_confirm_save_file(int first, int item)
         }
         {
             if (lt_fade_status() == 2) {
-                switch (item + PAL_JPN_KORCN(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
+                switch (item + PAL_JPNCN_KOR(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
                 case 214:
                     POSITIVE_SE();
                     lt_set_item_select_func(0);
@@ -1700,18 +2183,23 @@ int la_mc_confirm_save_file(int first, int item)
 static inline void setSaveGameStartItem(void) /* derived name */
 {
     if (loadSerial == IosMcProductFile[0].serial || loadSerial != IosMcProductFile[1].serial) {
-        texLayout[PAL_JPNKORCN(18, 15)].defaultItem = PAL_JPN_KORCN(186, 158, 152);
+        texLayout[PAL_JPNKORCN(18, 15)].defaultItem = PAL_JPNCN_KOR(186, 158, 152);
     } else {
-        texLayout[PAL_JPNKORCN(18, 15)].defaultItem = PAL_JPN_KORCN(187, 159, 153);
+        texLayout[PAL_JPNKORCN(18, 15)].defaultItem = PAL_JPNCN_KOR(187, 159, 153);
     }
 }
 
 int la_save_game_memory_card_check(int first)
 {
     _la_mask_preview_info();
-    mcLoadMode = 0;
-    lt_mask_property(PAL_JPN_KORCN(176, 147, 141), 1);
-    lt_mask_property(PAL_JPN_KORCN(177, 148, 142), 1);
+    if (ICO_NTSCAUG6) {
+        lt_mask_property(140, 1);
+        lt_mask_property(141, 1);
+    } else {
+        mcLoadMode = 0;
+        lt_mask_property(PAL_JPNCN_KOR(176, 147, 141), 1);
+        lt_mask_property(PAL_JPNCN_KOR(177, 148, 142), 1);
+    }
     debug_StdPrintfDummy("save game check port %d\n", curPort);
     switch (_la_set_current_port_new(&mc, first)) {
     case 0:
@@ -1720,37 +2208,41 @@ int la_save_game_memory_card_check(int first)
         debug_StdPrintfDummy("fail\n");
         if ((curPortInfo->flags.w & 3) == 3) {
             if ((curPortInfo->flags.w >> 2) & 1) {
-                setSaveGameStartItem();
+                if (!ICO_NTSCAUG6) {
+                    setSaveGameStartItem();
+                }
                 lt_set_item_select_func(0);
                 actionStarted = 0;
-                return PAL_JPNKORCN(0x12, 0xF);
+                return PAL_JPNKORCN_NTSCAUG6(0x12, 0xF, 15);
             }
             if (((curPortInfo->flags.w >> 4) & 1) == 0) {
                 lt_set_item_select_func(0);
                 actionStarted = 0;
-                return PAL_JPNKORCN(0x20, 0x1D);
+                return PAL_JPNKORCN_NTSCAUG6(0x20, 0x1D, 28);
             }
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x1F, 0x1C);
+        return PAL_JPNKORCN_NTSCAUG6(0x1F, 0x1C, 27);
     case 1:
         debug_StdPrintfDummy("sucess :%d %d %d\n", (curPortInfo->flags.w >> 5) & 1,
                              (curPortInfo->flags.w >> 4) & 1, (curPortInfo->flags.w & 0xA) == 2);
         if ((curPortInfo->flags.w >> 2) & 1) {
-            setSaveGameStartItem();
+            if (!ICO_NTSCAUG6) {
+                setSaveGameStartItem();
+            }
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x12, 0xF);
+            return PAL_JPNKORCN_NTSCAUG6(0x12, 0xF, 15);
         }
         if ((curPortInfo->flags.w & 0x30) != 0 || (curPortInfo->flags.w & 0xA) == 2) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x21, 0x1E);
+            return PAL_JPNKORCN_NTSCAUG6(0x21, 0x1E, 29);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x20, 0x1D);
+        return PAL_JPNKORCN_NTSCAUG6(0x20, 0x1D, 28);
     }
     return -1;
 }
@@ -1759,18 +2251,18 @@ inline int la_mc_save_current_slot_select(void)
 {
     if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
         POSITIVE_SE();
-        curPort = lt_current_property_item() - PAL_JPN_KORCN(186, 158, 152);
+        curPort = lt_current_property_item() - PAL_JPNCN_KOR_NTSCAUG6(186, 158, 152, 151);
         lastPort = curPort;
         curPortInfo = &mcPortInfo[curPort];
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x21, 0x1E);
+        return PAL_JPNKORCN_NTSCAUG6(0x21, 0x1E, 29);
     }
     if (pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40)) {
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x1C, 0x19);
+        return PAL_JPNKORCN_NTSCAUG6(0x1C, 0x19, 25);
     }
     return -1;
 }
@@ -1825,20 +2317,20 @@ static void progressive_bar(void)
     gif_SetZTest(0);
     gif_SetAlpha(1, 2, 64);
     {
-        SprRect frame = {80, PAL_JPNKORCN(11, 6), -160, PAL_JPNKORCN(5, 6)};
+        SprRect frame = {80, PAL_JPNKORNTSCAUG6CN(11, 6), -160, PAL_JPNKORNTSCAUG6CN(5, 6)};
         SprCol frameCol = {128, 128, 128, 32};
 
         gif_Sprite(&frame, 0xFFFFFFFF, 0, &frameCol, 1);
     }
     {
-        SprRect back = {78, PAL_JPNKORCN(12, 7), -156, PAL_JPNKORCN(3, 4)};
+        SprRect back = {78, PAL_JPNKORNTSCAUG6CN(12, 7), -156, PAL_JPNKORNTSCAUG6CN(3, 4)};
         SprCol backCol = {0, 0, 0, 32};
 
         gif_Sprite(&back, 0xFFFFFFFF, 0, &backCol, 1);
     }
     {
         int w = (float)barStep / (float)barTotal * -160.0f;
-        SprRect bar = {-80 - w, PAL_JPNKORCN(13, 8), w, PAL_JPNKORCN(1, 2)};
+        SprRect bar = {-80 - w, PAL_JPNKORNTSCAUG6CN(13, 8), w, PAL_JPNKORNTSCAUG6CN(1, 2)};
         SprCol barCol = {64, 255, 64, 32};
 
         gif_Sprite(&bar, 0xFFFFFFFF, 0, &barCol, 1);
@@ -1869,15 +2361,15 @@ int la_mc_save_file_select(int first, int item)
 
     if (actionStarted != 0) {
         _la_set_preview_info();
-        lt_mask_property(PAL_JPN_KORCN(73, 44, 38), 1);
-        lt_mask_property(PAL_JPN_KORCN(72, 43, 37), 1);
-        lt_mask_property(PAL_JPN_KORCN(239, 216, 210), 0);
-        lt_mask_property(PAL_JPN_KORCN(240, 217, 211), 0);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(73, 44, 38), 1);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(72, 43, 37), 1);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(239, 216, 210, 208), 0);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(240, 217, 211, 209), 0);
     } else {
-        lt_mask_property(PAL_JPN_KORCN(73, 44, 38), 0);
-        lt_mask_property(PAL_JPN_KORCN(72, 43, 37), 0);
-        lt_mask_property(PAL_JPN_KORCN(239, 216, 210), 1);
-        lt_mask_property(PAL_JPN_KORCN(240, 217, 211), 1);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(73, 44, 38), 0);
+        lt_mask_property(PAL_JPNCN_KORNTSCAUG6(72, 43, 37), 0);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(239, 216, 210, 208), 1);
+        lt_mask_property(PAL_JPNCN_KOR_NTSCAUG6(240, 217, 211, 209), 1);
     }
 
     if (actionStarted != 0) {
@@ -1885,7 +2377,7 @@ int la_mc_save_file_select(int first, int item)
             NEGATIVE_SE();
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(28, 25);
+            return PAL_JPNKORNTSCAUG6CN(28, 25);
         }
     }
 
@@ -1894,7 +2386,7 @@ int la_mc_save_file_select(int first, int item)
         selectFile = item;
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(34, 31);
+        return PAL_JPNKORCN_NTSCAUG6(34, 31, 30);
     }
 
     r = _la_set_current_port_lock_2(&mc, first);
@@ -1903,23 +2395,23 @@ int la_mc_save_file_select(int first, int item)
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(31, 28);
+            return PAL_JPNKORCN_NTSCAUG6(31, 28, 27);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(32, 29);
+        return PAL_JPNKORCN_NTSCAUG6(32, 29, 28);
     case 1:
         if (((mcPortInfo[filePort].flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(28, 25);
+            return PAL_JPNKORNTSCAUG6CN(28, 25);
         }
         if (fileMask != 0) {
             if (saveCardChanged == 0) {
                 if (((curPortInfo->flags.w >> 2) & 1) != 0) {
                     lt_set_item_select_func(0);
                     actionStarted = 0;
-                    return PAL_JPNKORCN(18, 15);
+                    return PAL_JPNKORNTSCAUG6CN(18, 15);
                 }
             } else if (((curPortInfo->flags.w >> 2) & 1) == 0) {
                 saveCardChanged = 0;
@@ -1956,7 +2448,7 @@ inline int la_save_confirm_no_memory_card(int first)
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x1C, 0x19);
+        return PAL_JPNKORCN_NTSCAUG6(0x1C, 0x19, 25);
     }
     switch (_la_set_current_port_lock_2(&mc, first)) {
     case 0:
@@ -1965,7 +2457,7 @@ inline int la_save_confirm_no_memory_card(int first)
         if ((curPortInfo->flags.w >> 1) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x1E, 0x1B);
+            return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
         }
         lock2Restart = 1;
         break;
@@ -1973,7 +2465,7 @@ inline int la_save_confirm_no_memory_card(int first)
         if ((curPortInfo->flags.w >> 1) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x1E, 0x1B);
+            return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
         }
         break;
     }
@@ -1986,7 +2478,7 @@ inline int la_save_confirm_no_free_area(int first)
         NEGATIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x1C, 0x19);
+        return PAL_JPNKORCN_NTSCAUG6(0x1C, 0x19, 25);
     }
     switch (_la_set_current_port_lock_2(&mc, first)) {
     case 0:
@@ -1995,7 +2487,7 @@ inline int la_save_confirm_no_free_area(int first)
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x1F, 0x1C);
+            return PAL_JPNKORCN_NTSCAUG6(0x1F, 0x1C, 27);
         }
         lock2Restart = 1;
         break;
@@ -2003,7 +2495,7 @@ inline int la_save_confirm_no_free_area(int first)
         if ((curPortInfo->flags.w >> 4) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x1E, 0x1B);
+            return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
         }
         break;
     }
@@ -2019,45 +2511,105 @@ int la_save_start_check(int first)
         if (((curPortInfo->flags.w >> 1) & 1) == 0) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x1F, 0x1C);
+            return PAL_JPNKORCN_NTSCAUG6(0x1F, 0x1C, 27);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x1E, 0x1B);
+        return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
     case 1:
         if (filePort != curPort) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x2C, 0x29);
+            return PAL_JPNKORCN_NTSCAUG6(0x2C, 0x29, 40);
         }
         if ((curPortInfo->flags.w & 0xA) == 2) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x24, 0x21);
+            return PAL_JPNKORCN_NTSCAUG6(0x24, 0x21, 32);
         }
         if ((curPortInfo->fileMask >> selectFile) & 1) {
             if (IosMcProductFile[filePort].file[selectFile].stage != 0xFFFFFFFF) {
                 lt_set_item_select_func(0);
                 actionStarted = 0;
-                return PAL_JPNKORCN(0x23, 0x20);
+                return PAL_JPNKORCN_NTSCAUG6(0x23, 0x20, 31);
             }
             if (curPortInfo->fileMask != 0) {
                 debug_StdPrintfDummy("already exist save data\n");
                 lt_set_item_select_func(0);
                 actionStarted = 0;
-                return PAL_JPNKORCN(0x26, 0x23);
+                return PAL_JPNKORCN_NTSCAUG6(0x26, 0x23, 34);
             }
         }
         debug_StdPrintfDummy("new save. system data making..\n");
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x27, 0x24);
+        return PAL_JPNKORCN_NTSCAUG6(0x27, 0x24, 35);
+    }
+    return -1;
+}
+
+static int la_save_confirm_overwrite_ntscaug6(int first, int item)
+{
+    if (first) {
+        filePort = curPort;
+    }
+    fileMask = 0x3FF;
+    _la_set_preview_info();
+    if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40))) {
+        NEGATIVE_SE();
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 29;
+    }
+    switch (item + PAL_JPNCN_KOR(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
+    case 183:
+    case 187:
+        POSITIVE_SE();
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 34;
+    case 184:
+    case 188:
+        NEGATIVE_SE();
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 29;
+    }
+    switch (_la_set_current_port_lock_2(&mc, first)) {
+    case 0:
+        break;
+    case -1:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 27;
+    case 1:
+        if (saveCardChanged == 0) {
+            if (((curPortInfo->flags.w >> 2) & 1) == 0) {
+                break;
+            }
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 15;
+        }
+        if ((curPortInfo->flags.w >> 2) & 1) {
+            break;
+        }
+        saveCardChanged = 0;
+        if (filePort == curPort) {
+            break;
+        }
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 26;
     }
     return -1;
 }
 
 int la_save_confirm_overwrite(int first, int item)
 {
+    if (ICO_NTSCAUG6) {
+        return la_save_confirm_overwrite_ntscaug6(first, item);
+    }
     if (first) {
         filePort = curPort;
     }
@@ -2069,7 +2621,7 @@ int la_save_confirm_overwrite(int first, int item)
         actionStarted = 0;
         return PAL_JPNKORCN(0x21, 0x1E);
     }
-    switch (item + PAL_JPN_KORCN(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
+    switch (item + PAL_JPNCN_KOR(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
     case 214:
     case 218:
         POSITIVE_SE();
@@ -2113,8 +2665,66 @@ int la_save_confirm_overwrite(int first, int item)
     return -1;
 }
 
+static int la_format_confirm_ntscaug6(int first, int item)
+{
+    if (first) {
+        filePort = curPort;
+    }
+    if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40))) {
+        NEGATIVE_SE();
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 29;
+    }
+    switch (item + PAL_JPNCN_KOR(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
+    case 183:
+    case 187:
+        POSITIVE_SE();
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 33;
+    case 184:
+    case 188:
+        NEGATIVE_SE();
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 29;
+    }
+    switch (_la_set_current_port_lock_2(&mc, first)) {
+    case 0:
+        break;
+    case -1:
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 27;
+    case 1:
+        if (saveCardChanged == 0) {
+            if (((curPortInfo->flags.w >> 2) & 1) == 0) {
+                break;
+            }
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 15;
+        }
+        if ((curPortInfo->flags.w >> 2) & 1) {
+            break;
+        }
+        saveCardChanged = 0;
+        if (filePort == curPort) {
+            break;
+        }
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 26;
+    }
+    return -1;
+}
+
 int la_format_confirm(int first, int item)
 {
+    if (ICO_NTSCAUG6) {
+        return la_format_confirm_ntscaug6(first, item);
+    }
     if (first) {
         filePort = curPort;
     }
@@ -2124,7 +2734,7 @@ int la_format_confirm(int first, int item)
         actionStarted = 0;
         return PAL_JPNKORCN(0x21, 0x1E);
     }
-    switch (item + PAL_JPN_KORCN(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
+    switch (item + PAL_JPNCN_KOR(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
     case 214:
     case 218:
         POSITIVE_SE();
@@ -2196,12 +2806,12 @@ inline int la_format_processing(int first)
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x2D, 0x2A);
+        return PAL_JPNKORCN_NTSCAUG6(0x2D, 0x2A, 41);
     case 4:
         formatStep++;
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x27, 0x24);
+        return PAL_JPNKORCN_NTSCAUG6(0x27, 0x24, 35);
     }
     return -1;
 }
@@ -2278,13 +2888,15 @@ int la_system_save_processing(int first)
         curPortInfo->flags.w |= 0x80;
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(44, 41);
+        return PAL_JPNKORCN_NTSCAUG6(44, 41, 40);
     case 4:
         for (i = 0; i < 10; i++) {
             IosMcProductFile[mc.port].file[i].stage = 0xFFFFFFFF;
         }
-        while ((IosMcProductFile[mc.port].serial = mcMakeSerial()) == 0)
-            ;
+        if (!ICO_NTSCAUG6) {
+            while ((IosMcProductFile[mc.port].serial = mcMakeSerial()) == 0)
+                ;
+        }
         playTime((struct McPreview *)IosMcPreviewInfo, &hour, &min, &sec);
         iosMcSaveProductBlock(&mc);
         systemSaveStep++;
@@ -2310,7 +2922,7 @@ int la_system_save_processing(int first)
         if (systemSaveRetry >= 10) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(38, 35);
+            return PAL_JPNKORCN_NTSCAUG6(38, 35, 34);
         }
         break;
     }
@@ -2375,23 +2987,30 @@ int la_save_processing(int first)
         debug_StdPrintfDummy("save error? %d\n", saveStep);
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(44, 41);
+        return PAL_JPNKORCN_NTSCAUG6(44, 41, 40);
     case 4:
         IosMcPreviewInfo[0] = stage_no;
-        IosMcPreviewInfo[3] = GetSaveSofaLayoutID();
-        IosMcPreviewInfo[1] = gFlagGameClear;
+        if (ICO_NTSCAUG6) {
+            IosMcPreviewInfo[2] = GetSaveSofaLayoutID();
+        } else {
+            IosMcPreviewInfo[3] = GetSaveSofaLayoutID();
+            IosMcPreviewInfo[1] = gFlagGameClear;
+        }
         *(struct McPreview *)&IosMcProductFile[mc.port].file[mc.fileNo] =
             *(struct McPreview *)IosMcPreviewInfo;
         playTime((struct McPreview *)IosMcPreviewInfo, &hour, &min, &sec);
-        (IosMcProductFile + mc.port)->fileNo = mc.fileNo;
-        if ((IosMcProductFile + mc.port)->serial == (IosMcProductFile + (mc.port ^ 1))->serial) {
-            do {
-                while ((IosMcProductFile[mc.port].serial = mcMakeSerial()) == 0)
-                    ;
-            } while ((IosMcProductFile + mc.port)->serial ==
-                     (IosMcProductFile + (mc.port ^ 1))->serial);
+        if (!ICO_NTSCAUG6) {
+            (IosMcProductFile + mc.port)->fileNo = mc.fileNo;
+            if ((IosMcProductFile + mc.port)->serial ==
+                (IosMcProductFile + (mc.port ^ 1))->serial) {
+                do {
+                    while ((IosMcProductFile[mc.port].serial = mcMakeSerial()) == 0)
+                        ;
+                } while ((IosMcProductFile + mc.port)->serial ==
+                         (IosMcProductFile + (mc.port ^ 1))->serial);
+            }
+            mcSetSavedFile();
         }
-        mcSetSavedFile();
         iosMcSaveProductBlock(&mc);
         saveStep++;
         break;
@@ -2414,12 +3033,12 @@ int la_save_processing(int first)
         saveStep = 0;
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(41, 38);
+        return PAL_JPNKORCN_NTSCAUG6(41, 38, 37);
     }
     return -1;
 }
 
-inline int la_save_confirm_complete(int first, int item)
+static inline int la_save_confirm_complete_ntscaug6(int first, int item)
 {
     if (first) {
         previewInfo = *(struct McPreview *)IosMcPreviewInfo;
@@ -2428,10 +3047,39 @@ inline int la_save_confirm_complete(int first, int item)
         debug_StdPrintfDummy("save complete %d %d\n", fileMask, curFile);
     }
     if (item != -1) {
-        debug_StdPrintfDummy("%d %d %d\n", PAL_JPN_KORCN(264, 241, 235),
-                             PAL_JPN_KORCN(265, 242, 236), item);
+        debug_StdPrintfDummy("%d %d %d\n", 233, 234, item);
     }
-    switch (item + PAL_JPN_KORCN(0, 23, 29)) { /* JPN ids 23 lower, KOR ids 29 lower */
+    switch (item + PAL_JPNCN_KOR(0, 23, 29)) { /* JPN ids 23 lower, KOR ids 29 lower */
+    case 233:
+        systemStatus[5] = 0;
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 50;
+    case 234:
+        nextStage = 1;
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 59;
+    }
+    return -1;
+}
+
+inline int la_save_confirm_complete(int first, int item)
+{
+    if (ICO_NTSCAUG6) {
+        return la_save_confirm_complete_ntscaug6(first, item);
+    }
+    if (first) {
+        previewInfo = *(struct McPreview *)IosMcPreviewInfo;
+        fileMask = 0x3FF;
+        _la_set_preview_info();
+        debug_StdPrintfDummy("save complete %d %d\n", fileMask, curFile);
+    }
+    if (item != -1) {
+        debug_StdPrintfDummy("%d %d %d\n", PAL_JPNCN_KOR(264, 241, 235),
+                             PAL_JPNCN_KOR(265, 242, 236), item);
+    }
+    switch (item + PAL_JPNCN_KOR(0, 23, 29)) { /* JPN ids 23 lower, KOR ids 29 lower */
     case 264:
         systemStatus[5] = 0;
         lt_set_item_select_func(0);
@@ -2446,21 +3094,126 @@ inline int la_save_confirm_complete(int first, int item)
     return -1;
 }
 
-int la_end_confirm(void)
+static int la_end_confirm_ntsc(void)
 {
     int item;
 
     if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40))) {
         NEGATIVE_SE();
         item = lt_current_property_item();
-        if (item >= PAL_JPN_KORCN(270, 247, 241)) {
-            if (item < PAL_JPN_KORCN(272, 249, 243)) {
+        if (item >= 239) {
+            if (item < 241) {
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return 37;
+            }
+            if (item < 375) {
+                if (item >= 373) {
+                    lt_set_item_select_func(0);
+                    actionStarted = 0;
+                    return 53;
+                }
+            }
+        }
+    }
+    if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
+        debug_StdPrintfDummy("%d\n", lt_current_property_item());
+        switch (
+            lt_current_property_item() +
+            PAL_JPNCN_KOR(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
+        case 239:
+        case 373:
+            POSITIVE_SE();
+            gflagInit();
+            fightSoundProcessRequestPause();
+            fightSoundClose();
+            soundDataSegAllClose(0, 2);
+            nextStage = 1;
+            stgmgrForceSwitchWithFade(1, 0.025f, 4.0f);
+        case 240:
+            NEGATIVE_SE();
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 37;
+        case 374:
+            NEGATIVE_SE();
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 53;
+        }
+    }
+    return -1;
+}
+
+static int la_end_confirm_aug6(void)
+{
+    int item;
+
+    if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40))) {
+        NEGATIVE_SE();
+        item = lt_current_property_item();
+        if (item >= 239) {
+            if (item < 241) {
+                lt_set_item_select_func(0);
+                actionStarted = 0;
+                return 37;
+            }
+            if (item < 375) {
+                if (item >= 373) {
+                    lt_set_item_select_func(0);
+                    actionStarted = 0;
+                    return 53;
+                }
+            }
+        }
+    }
+    if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
+        debug_StdPrintfDummy("%d\n", lt_current_property_item());
+        switch (
+            lt_current_property_item() +
+            PAL_JPNCN_KOR(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
+        case 239:
+        case 373:
+            POSITIVE_SE();
+            gflagInit();
+            nextStage = 1;
+            stgmgrForceSwitchWithFade(1, 0.025f, 4.0f);
+        case 240:
+            NEGATIVE_SE();
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 37;
+        case 374:
+            NEGATIVE_SE();
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 53;
+        }
+    }
+    return -1;
+}
+
+int la_end_confirm(void)
+{
+    if (ICO_NTSC) {
+        return la_end_confirm_ntsc();
+    }
+    if (ICO_AUG6) {
+        return la_end_confirm_aug6();
+    }
+    int item;
+
+    if (lt_fade_status() == 2 && (pad[0].flags & PAL_JPNKORCN(LA_BACK, 0x40))) {
+        NEGATIVE_SE();
+        item = lt_current_property_item();
+        if (item >= PAL_JPNCN_KOR(270, 247, 241)) {
+            if (item < PAL_JPNCN_KOR(272, 249, 243)) {
                 lt_set_item_select_func(0);
                 actionStarted = 0;
                 return PAL_JPNKORCN(0x29, 0x26);
             }
-            if (item < PAL_JPN_KORCN(426, 403, 397)) {
-                if (item >= PAL_JPN_KORCN(424, 401, 395)) {
+            if (item < PAL_JPNCN_KOR(426, 403, 397)) {
+                if (item >= PAL_JPNCN_KOR(424, 401, 395)) {
                     lt_set_item_select_func(0);
                     actionStarted = 0;
                     return PAL_JPNKORCN(0x39, 0x36);
@@ -2472,7 +3225,7 @@ int la_end_confirm(void)
         debug_StdPrintfDummy("%d\n", lt_current_property_item());
         switch (
             lt_current_property_item() +
-            PAL_JPN_KORCN(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
+            PAL_JPNCN_KOR(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
         case 270:
         case 424:
             POSITIVE_SE();
@@ -2524,31 +3277,33 @@ inline int la_delete_start_check(int first)
     case -1:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x1E, 0x1B);
+        return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
     case 1:
         if ((curPortInfo->fileMask >> selectFile) & 1) {
             lt_set_item_select_func(0);
             actionStarted = 0;
-            return PAL_JPNKORCN(0x31, 0x2E);
+            return PAL_JPNKORCN_NTSCAUG6(0x31, 0x2E, 45);
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x21, 0x1E);
+        return PAL_JPNKORCN_NTSCAUG6(0x21, 0x1E, 29);
     }
     return -1;
 }
 
 inline int la_delete_confirm(int first, int item)
 {
-    switch (item + PAL_JPN_KORCN(0, 24, 30)) { /* JPN ids 24 lower, KOR ids 30 lower */
+    switch (item +
+            PAL_JPNCN_KOR_NTSCAUG6(
+                0, 24, 30, 31)) { /* JPNCN ids 24 lower, KOR ids 30 lower, NTSCAUG6 ids 31 lower */
     case 214:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x32, 0x2F);
+        return PAL_JPNKORCN_NTSCAUG6(0x32, 0x2F, 46);
     case 215:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x1E, 0x1B);
+        return PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
     }
     return -1;
 }
@@ -2582,7 +3337,7 @@ int la_delete_processing(int first)
     case 5:
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x33, 0x30);
+        return PAL_JPNKORCN_NTSCAUG6(0x33, 0x30, 47);
     }
     return -1;
 }
@@ -2594,7 +3349,7 @@ inline int la_delete_confirm_complete(void)
         goto fail;
     lt_set_item_select_func(0);
     actionStarted = 0;
-    ret = PAL_JPNKORCN(0x1E, 0x1B);
+    ret = PAL_JPNKORCN_NTSCAUG6(0x1E, 0x1B, 26);
     goto out;
 fail:
     ret = -1;
@@ -2615,8 +3370,19 @@ inline int la_game_loading(int first)
     return -1;
 }
 
+static inline void la_playtime_count_ntsc(void)
+{
+    if (systemStatus[5] == 0) {
+        IosMcPreviewInfo[1]++;
+    }
+}
+
 inline void la_playtime_count(void)
 {
+    if (ICO_NTSC) {
+        la_playtime_count_ntsc();
+        return;
+    }
     if (systemStatus[5] == 0) {
         IosMcPreviewInfo[2]++;
     }
@@ -2635,6 +3401,9 @@ int laoutActionPauseRequest = 0;
 
 int la_game_loop(int first)
 {
+    if (ICO_AUG6) {
+        IosMcPreviewInfo[1]++; /* the August preview counts the play time here */
+    }
     if (first) {
         if (fightSoundStopped != 0) {
             fightSoundProcessRequestStart();
@@ -2658,7 +3427,7 @@ int la_game_loop(int first)
         if (enable_game_pause == 0) {
             return -1;
         }
-        if (gflagChk(338) != 0) {
+        if (gflagChk(PAL_NTSC_AUG6(338, 307, 306)) != 0) {
             return -1;
         }
         systemStatus[5] = 1;
@@ -2666,7 +3435,7 @@ int la_game_loop(int first)
         adpcmPauseRequest(1);
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x39, 0x36);
+        return PAL_JPNKORCN_NTSCAUG6(0x39, 0x36, 53);
     }
     return -1;
 }
@@ -2681,7 +3450,7 @@ inline int la_game_demo_pause(int first)
     }
     lt_set_item_select_func(0);
     actionStarted = 0;
-    return PAL_JPNKORCN(0x37, 0x34);
+    return PAL_JPNKORCN_NTSCAUG6(0x37, 0x34, 51);
 }
 
 inline int la_game_demo(int first)
@@ -2691,9 +3460,9 @@ inline int la_game_demo(int first)
             iosPadDisable();
         }
     }
-    if ((pad[0].flags & 0x800) && gflagChk(388)) {
+    if ((pad[0].flags & 0x800) && gflagChk(PAL_NTSC_AUG6(388, 355, 354))) {
         debug_StdPrintfDummy("push start\n");
-        gflagOff(388);
+        gflagOff(PAL_NTSC_AUG6(388, 355, 354));
         title_demo_mode ^= 1;
         nextStage = stage_after_skipping_demo;
         stgmgrForceSwitchWithFade(nextStage, 8.0f, 4.0f);
@@ -2702,23 +3471,68 @@ inline int la_game_demo(int first)
         }
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x3F, 0x3C);
+        return PAL_JPNKORCN_NTSCAUG6(0x3F, 0x3C, 59);
+    }
+    return -1;
+}
+
+static inline int la_game_pause_ntsc(int first)
+{
+    if (first) {
+        systemStatus[5] = 1;
+        iosPadActStopAll();
+    }
+    if (lt_fade_status() != 2) {
+        return -1;
+    }
+    if (((pad[0].flags & 0x40) && lt_current_property_item() == 264) ||
+        (pad[0].flags & 0x800 | LA_BACK)) {
+        NEGATIVE_SE();
+        adpcmPauseRequest(0);
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 50;
+    }
+    return -1;
+}
+
+static inline int la_game_pause_aug6(int first)
+{
+    if (first) {
+        systemStatus[5] = 1;
+    }
+    if (lt_fade_status() != 2) {
+        return -1;
+    }
+    if (((pad[0].flags & 0x40) && lt_current_property_item() == 264) ||
+        (pad[0].flags & 0x800 | LA_BACK)) {
+        NEGATIVE_SE();
+        adpcmPauseRequest(0);
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 50;
     }
     return -1;
 }
 
 inline int la_game_pause(int first)
 {
+    if (ICO_NTSC) {
+        return la_game_pause_ntsc(first);
+    }
+    if (ICO_AUG6) {
+        return la_game_pause_aug6(first);
+    }
     if (first) {
         systemStatus[5] = 1;
         iosPadActStopAll();
-        texLayout[PAL_JPNKORCN(58, 55)].defaultItem = PAL_JPN_KORCN(308, 285, 279);
+        texLayout[PAL_JPNKORCN(58, 55)].defaultItem = PAL_JPNCN_KOR(308, 285, 279);
     }
     if (lt_fade_status() != 2) {
         return -1;
     }
     if (((pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) &&
-         lt_current_property_item() == PAL_JPN_KORCN(295, 272, 266)) ||
+         lt_current_property_item() == PAL_JPNCN_KOR(295, 272, 266)) ||
         (pad[0].flags & PAL_JPNKORCN(0x800 | LA_BACK, 0x840))) {
         NEGATIVE_SE();
         adpcmPauseRequest(0);
@@ -2733,8 +3547,68 @@ static int gameOverVoice = 0; /* derived name */
 
 static int gameOverVoiceOpened = 0; /* derived name */
 
+static int la_game_over_continue_ntscaug6(int first)
+{
+    if (first) {
+        enable_game_pause = 1;
+        iosPadEnable();
+        scpBoyControlReadDisable = 0;
+        systemStatus[5] = 1;
+        AdpcmFadeCloseAll(0x200);
+        soundSePlayModeStop(1);
+        soundSePlayModeStop(0);
+        iosPadActStopAll();
+        gameOverVoiceOpened = 0;
+    } else if (gameOverVoiceOpened == 0) {
+        if (AdpcmFreeAreaGet() != 0) {
+            gameOverVoice = openLayoutVoice(50);
+            gameOverVoiceOpened = 1;
+        }
+    } else if (gameOverVoice != 0) {
+        layoutVoice = soundDataOpenSync(&voiceOpenReq);
+        if (layoutVoice != (SqEntry *)ICO_INVALID_PTR) {
+            gameOverVoice = 0;
+            if (layoutVoice != 0) {
+                AdpcmPlay(layoutVoice->stream);
+                return -1;
+            }
+        }
+    } else {
+        switch (
+            lt_current_property_item() +
+            PAL_JPNCN_KOR(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
+        case 378:
+            if ((pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) == 0) {
+                return -1;
+            }
+            POSITIVE_SE();
+            systemStatus[4] = 1;
+            nextStage = gFlagSaveStage;
+            releaseGameLoopCursor();
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 59;
+        case 379:
+            if ((pad[0].flags & 0x40) == 0) {
+                return -1;
+            }
+            POSITIVE_SE();
+            gflagInit();
+            nextStage = 1;
+            releaseGameLoopCursor();
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            return 59;
+        }
+    }
+    return -1;
+}
+
 int la_game_over_continue(int first)
 {
+    if (ICO_NTSCAUG6) {
+        return la_game_over_continue_ntscaug6(first);
+    }
     if (first) {
         if (fadeStatus != 0) {
             scpFadeIn(3.0f);
@@ -2766,7 +3640,7 @@ int la_game_over_continue(int first)
     } else {
         switch (
             lt_current_property_item() +
-            PAL_JPN_KORCN(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
+            PAL_JPNCN_KOR(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
         case 429:
             if ((pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) == 0 || lt_fade_status() != 2) {
                 return -1;
@@ -2809,8 +3683,8 @@ static inline void keyconfigMaskAll(void) /* derived name */
     int i;
 
     for (i = 0; i < 48; i++) {
-        lt_mask_property(i + PAL_JPN_KORCN(342, 319, 313), 1);
-        lt_default_mask_property(i + PAL_JPN_KORCN(342, 319, 313), 1);
+        lt_mask_property(i + PAL_JPNCN_KOR_NTSCAUG6(342, 319, 313, 291), 1);
+        lt_default_mask_property(i + PAL_JPNCN_KOR_NTSCAUG6(342, 319, 313, 291), 1);
     }
 }
 
@@ -2855,7 +3729,7 @@ static inline int keyAssignIndex(int v) /* derived name */
 
 static int keyConfigMask = 0xFF; /* derived name */
 
-int la_key_config(int first)
+static int la_key_config_ntscaug6(int first)
 {
     int i;
     int sel;
@@ -2863,9 +3737,8 @@ int la_key_config(int first)
     int k;
     int n;
 
-    sel = lt_current_property_item() - PAL_JPN_KORCN(336, 313, 307);
+    sel = lt_current_property_item() - 285;
     if (first) {
-        texLayout[PAL_JPNKORCN(58, 55)].defaultItem = PAL_JPN_KORCN(323, 300, 294);
         for (i = 0; i < 16; i++) {
             if ((keyConfigMask >> i) & 1) {
                 keyConfigSlot[keyCodeIndex(iosPadConfCustom.bit[i])] = keyCodeIndex(1 << i);
@@ -2888,17 +3761,16 @@ int la_key_config(int first)
     }
     keyconfigMaskAll();
     for (i = 0; i < 6; i++) {
-        lt_mask_property(i * 8 + PAL_JPN_KORCN(342, 319, 313) + keyConfigSlot[i], 0);
-        lt_default_mask_property(i * 8 + PAL_JPN_KORCN(342, 319, 313) + keyConfigSlot[i], 0);
+        lt_mask_property(i * 8 + 291 + keyConfigSlot[i], 0);
     }
-    if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
-        if (lt_current_property_item() == PAL_JPN_KORCN(391, 368, 362)) {
+    if (pad[0].flags & 0x40) {
+        if (lt_current_property_item() == 340) {
             for (i = 7; i >= 0; i--) {
                 keyConfigSlot[i] = i;
             }
             NEGATIVE_SE();
         }
-        if (lt_current_property_item() == PAL_JPN_KORCN(390, 367, 361)) {
+        if (lt_current_property_item() == 339) {
             POSITIVE_SE();
             for (i = 0; i < 16; i++) {
                 if ((keyConfigMask >> i) & 1) {
@@ -2913,9 +3785,88 @@ int la_key_config(int first)
             }
             keyconfigMaskAll();
             for (i = 0; i < 6; i++) {
-                lt_default_mask_property(i * 8 + PAL_JPN_KORCN(342, 319, 313) + keyConfigSlot[i],
+                lt_default_mask_property(i * 8 + 291 + keyConfigSlot[i], 0);
+                lt_mask_property(i * 8 + 291 + keyConfigSlot[i], 0);
+            }
+            lt_set_item_select_func(0);
+            actionStarted = 0;
+            /* PC port: back to Settings > Controls, which opens this
+               screen now that the Options screen (58) is not reached */
+            return ui_settings_key_config_back();
+        }
+    }
+    if (pad[0].flags & 0x800) {
+        lt_set_item_select_func(0);
+        actionStarted = 0;
+        return 50;
+    }
+    return -1;
+}
+
+int la_key_config(int first)
+{
+    if (ICO_NTSCAUG6) {
+        return la_key_config_ntscaug6(first);
+    }
+    int i;
+    int sel;
+    int m;
+    int k;
+    int n;
+
+    sel = lt_current_property_item() - PAL_JPNCN_KOR(336, 313, 307);
+    if (first) {
+        texLayout[PAL_JPNKORCN(58, 55)].defaultItem = PAL_JPNCN_KOR(323, 300, 294);
+        for (i = 0; i < 16; i++) {
+            if ((keyConfigMask >> i) & 1) {
+                keyConfigSlot[keyCodeIndex(iosPadConfCustom.bit[i])] = keyCodeIndex(1 << i);
+            }
+        }
+    }
+    if (sel >= 0 && sel < 6) {
+        m = pad[0].flags & keyConfigMask;
+        if (m != 0 && m == pad[0].flags) {
+            k = keyCodeIndex(m);
+            POSITIVE_SE();
+            if (k != -1) {
+                n = keyAssignIndex(m);
+                if (n != -1) {
+                    keyConfigSlot[n] = keyConfigSlot[sel];
+                }
+                keyConfigSlot[sel] = k;
+            }
+        }
+    }
+    keyconfigMaskAll();
+    for (i = 0; i < 6; i++) {
+        lt_mask_property(i * 8 + PAL_JPNCN_KOR(342, 319, 313) + keyConfigSlot[i], 0);
+        lt_default_mask_property(i * 8 + PAL_JPNCN_KOR(342, 319, 313) + keyConfigSlot[i], 0);
+    }
+    if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
+        if (lt_current_property_item() == PAL_JPNCN_KOR(391, 368, 362)) {
+            for (i = 7; i >= 0; i--) {
+                keyConfigSlot[i] = i;
+            }
+            NEGATIVE_SE();
+        }
+        if (lt_current_property_item() == PAL_JPNCN_KOR(390, 367, 361)) {
+            POSITIVE_SE();
+            for (i = 0; i < 16; i++) {
+                if ((keyConfigMask >> i) & 1) {
+                    iosPadConfCustom.bit[i] = 0;
+                } else {
+                    iosPadConfCustom.bit[i] = 1 << i;
+                }
+            }
+            for (i = 0; i < 8; i++) {
+                iosPadConfCustom.bit[keyBitIndex(keyConfigCode[keyConfigSlot[i]])] =
+                    keyConfigCode[i];
+            }
+            keyconfigMaskAll();
+            for (i = 0; i < 6; i++) {
+                lt_default_mask_property(i * 8 + PAL_JPNCN_KOR(342, 319, 313) + keyConfigSlot[i],
                                          0);
-                lt_mask_property(i * 8 + PAL_JPN_KORCN(342, 319, 313) + keyConfigSlot[i], 0);
+                lt_mask_property(i * 8 + PAL_JPNCN_KOR(342, 319, 313) + keyConfigSlot[i], 0);
             }
             lt_set_item_select_func(0);
             actionStarted = 0;
@@ -2949,10 +3900,12 @@ static const int choiceItem_jpn[4] = {298, 299, 305, 306}; /* derived name */
 
 static const int choiceItem_pal[4] = {321, 322, 328, 329}; /* derived name */
 
-#define screenModeItem PAL_JPN_KORCN(screenModeItem_pal, screenModeItem_jpn, screenModeItem_kor)
+#define screenModeItem PAL_JPNCN_KOR(screenModeItem_pal, screenModeItem_jpn, screenModeItem_kor)
 #define screenModeAnim PAL_JPNKORCN(screenModeAnim_pal, screenModeAnim_jpn)
-#define choiceItem PAL_JPN_KORCN(choiceItem_pal, choiceItem_jpn, choiceItem_kor)
+#define choiceItem PAL_JPNCN_KOR(choiceItem_pal, choiceItem_jpn, choiceItem_kor)
 
+/* not reached on the port on any disc (the pause menu's Options opens Settings), so the USA
+   disc's and the August 2001 preview's own Options screen is not carried */
 int la_game_option(void)
 {
     int mode;
@@ -2967,7 +3920,7 @@ int la_game_option(void)
         sel = optionScreenMode;
         switch (
             lt_current_property_item() +
-            PAL_JPN_KORCN(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
+            PAL_JPNCN_KOR(0, 23, 29)) { /* JPN property ids 23 lower, KOR property ids 29 lower */
         case 300:
             if ((pad[0].flags & 0x8000) != 0) {
                 sel--;
@@ -3038,7 +3991,7 @@ int la_game_option(void)
     }
     lt_default_mask_property(choiceItem[optionControlType], 0);
     if ((pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) != 0) {
-        if (lt_current_property_item() == PAL_JPN_KORCN(330, 307, 301)) {
+        if (lt_current_property_item() == PAL_JPNCN_KOR(330, 307, 301)) {
             NEGATIVE_SE();
             lt_set_item_select_func(0);
             actionStarted = 0;
@@ -3046,18 +3999,18 @@ int la_game_option(void)
         }
     }
     if (mode == 0) {
-        lt_default_mask_property(PAL_JPN_KORCN(311, 288, 282), 0);
-        lt_default_mask_property(PAL_JPN_KORCN(312, 289, 283), 1);
+        lt_default_mask_property(PAL_JPNCN_KOR(311, 288, 282), 0);
+        lt_default_mask_property(PAL_JPNCN_KOR(312, 289, 283), 1);
     } else {
-        lt_default_mask_property(PAL_JPN_KORCN(311, 288, 282), 1);
-        lt_default_mask_property(PAL_JPN_KORCN(312, 289, 283), 0);
+        lt_default_mask_property(PAL_JPNCN_KOR(311, 288, 282), 1);
+        lt_default_mask_property(PAL_JPNCN_KOR(312, 289, 283), 0);
     }
     if (iosPadActRequestEnable != 0) {
-        lt_default_mask_property(PAL_JPN_KORCN(316, 293, 287), 0);
-        lt_default_mask_property(PAL_JPN_KORCN(317, 294, 288), 1);
+        lt_default_mask_property(PAL_JPNCN_KOR(316, 293, 287), 0);
+        lt_default_mask_property(PAL_JPNCN_KOR(317, 294, 288), 1);
     } else {
-        lt_default_mask_property(PAL_JPN_KORCN(316, 293, 287), 1);
-        lt_default_mask_property(PAL_JPN_KORCN(317, 294, 288), 0);
+        lt_default_mask_property(PAL_JPNCN_KOR(316, 293, 287), 1);
+        lt_default_mask_property(PAL_JPNCN_KOR(317, 294, 288), 0);
     }
     for (sel = 0; sel < 2; sel++) {
         lt_default_mask_property((choiceItem + 2)[sel], 1);
@@ -3072,7 +4025,7 @@ static inline void clearAdjustScreenMarks(void) /* derived name */
     int i;
 
     for (i = 0; i < 15; i++) {
-        lt_default_mask_property(i + PAL_JPN_KORCN(395, 372, 366), 1);
+        lt_default_mask_property(i + PAL_JPNCN_KOR_NTSCAUG6(395, 372, 366, 344), 1);
     }
 }
 
@@ -3080,7 +4033,14 @@ int la_adjust_screen(void)
 {
     int v;
 
-    texLayout[PAL_JPNKORCN(58, 55)].defaultItem = PAL_JPN_KORCN(324, 301, 295);
+    if (ICO_KOR) {
+        texLayout[55].defaultItem = 295;
+    } else if (ICO_JPNCN) {
+        texLayout[55].defaultItem = 301;
+    } else if (ICO_NTSCAUG6) {
+    } else {
+        texLayout[58].defaultItem = 324;
+    }
     lt_analog2Pad();
     if (pad[0].flags & 0x8000) {
         v = systemStatus[11];
@@ -3100,12 +4060,12 @@ int la_adjust_screen(void)
         systemStatus[11] = 7;
     }
     clearAdjustScreenMarks();
-    lt_default_mask_property(systemStatus[11] + PAL_JPN_KORCN(395, 372, 366), 0);
+    lt_default_mask_property(systemStatus[11] + PAL_JPNCN_KOR_NTSCAUG6(395, 372, 366, 344), 0);
     if (pad[0].flags & PAL_JPNKORCN(0x40, 0x20)) {
         POSITIVE_SE();
         lt_set_item_select_func(0);
         actionStarted = 0;
-        return PAL_JPNKORCN(0x3A, 0x37);
+        return PAL_JPNKORCN_NTSCAUG6(0x3A, 0x37, 54);
     }
     return -1;
 }

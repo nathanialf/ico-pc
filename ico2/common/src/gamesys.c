@@ -53,7 +53,13 @@ char stamp_str_jpn[] = "10/23/01 02:02:43";
 char stamp_str_pal[] = "12/12/01 17:53:37";
 
 /* each disc compares its own build stamp against the save area's */
-#define stamp_str PAL_JPN_KORCN(stamp_str_pal, stamp_str_jpn, stamp_str_kor)
+char stamp_str_ntsc[] = "08/18/01 22:22:20";
+
+char stamp_str_aug6[] = "08/07/01 14:51:53";
+
+#define stamp_str                                                                                  \
+    PAL_JPN_KORCN_NTSC_AUG6(stamp_str_pal, stamp_str_jpn, stamp_str_kor, stamp_str_ntsc,           \
+                            stamp_str_aug6)
 
 void *gameSysMemoryFuncList[] = {
     gamesysVersionLoad,
@@ -113,7 +119,7 @@ void gamesysObjInfoInit(void)
         gameSysObjInfo[i].stage = 0xFFFF;
     }
 
-    memset((char *)gamesysStageExitTime, 0, PAL_JPNKORCN(0x1A8, 0x1A0));
+    memset((char *)gamesysStageExitTime, 0, PAL_JPNKORNTSCAUG6CN(0x1A8, 0x1A0));
     backStageProcessInit();
 }
 
@@ -139,14 +145,14 @@ void gamesysObjInfoSave(GamesysMemCursor *h)
 
     *(long long *)(p + 0x40) = (*(long long *)(p + 0x40) & -3) | ((long long)save << 1);
 
-    gamesysMemoryHandlerWrite(h, gamesysStageExitTime, PAL_JPNKORCN(0x1A8, 0x1A0));
+    gamesysMemoryHandlerWrite(h, gamesysStageExitTime, PAL_JPNKORNTSCAUG6CN(0x1A8, 0x1A0));
 }
 
 void gamesysObjInfoLoad(GamesysMemCursor *h)
 {
     gamesysMemoryHandlerRead(h, &gamesysTimeCount, 4);
     gamesysMemoryHandlerRead(h, gameSysObjInfo, 0x2D80);
-    gamesysMemoryHandlerRead(h, gamesysStageExitTime, PAL_JPNKORCN(0x1A8, 0x1A0));
+    gamesysMemoryHandlerRead(h, gamesysStageExitTime, PAL_JPNKORNTSCAUG6CN(0x1A8, 0x1A0));
 }
 
 /* unsigned */
@@ -267,7 +273,7 @@ GamesysObjInfo *gamesysObjInfoBaseSet(GObj *self, int stage)
 
 void gamesysBackStageProcess(void)
 {
-    if (gameSysObjInfo[1].no == 148) {
+    if (gameSysObjInfo[1].no == PAL_NTSC_AUG6(148, 131, 130)) {
         gamesysGirlStage = gameSysObjInfo[1].stage;
     }
     gamesysTimeCount++;
@@ -310,6 +316,12 @@ static void gamesysHintInfoSave(GamesysMemCursor *self)
     char *buf;
     int size;
 
+    /* PC port: the USA disc and the August 2001 preview have no hint system and no
+       hint section in the save (their gameSysMemoryFuncList has no hint pair) */
+    if (ICO_NTSCAUG6) {
+        return;
+    }
+
     MakeHintSaveInfo();
     buf = GetBuffHintSaveInfo();
     size = GetSizeHintSaveInfo();
@@ -320,6 +332,11 @@ static void gamesysHintInfoLoad(GamesysMemCursor *self)
 {
     char *s1 = GetBuffHintSaveInfo();
     int s2 = GetSizeHintSaveInfo();
+
+    /* PC port: no hint section on the USA disc and the August 2001 preview (above) */
+    if (ICO_NTSCAUG6) {
+        return;
+    }
     if (s1 != 0) {
         memcpy(s1, self->base + self->offset, s2);
     }
@@ -537,7 +554,7 @@ void gamesysMemoryLoad(void **tbl, void *mem, void *arg)
         ((void (*)(void *, void *))tbl[0])(&cur, arg);
         tbl += 2;
     }
-    gflagOn(394);
+    gflagOn(PAL_NTSC_AUG6(394, 361, 360));
 }
 
 int gamesysVersionDiff = 0;

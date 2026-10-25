@@ -242,23 +242,25 @@ void InitStageLight(int stage)
     GlobalStageSetting.antiLevel0 = 24;
     GlobalStageSetting.antiLevel1 = 24;
 
-    for (i = 0; i < 4; i++) {
-        int *row = (int *)&GlobalStageSetting + i * 4;
+    if (!ICO_NTSCAUG6) {
+        for (i = 0; i < 4; i++) {
+            int *row = (int *)&GlobalStageSetting + i * 4;
 
-        row[0x130 / 4] = 128;
-        row[0x134 / 4] = 128;
-        row[0x138 / 4] = 128;
-        row[0x13C / 4] = (i + 1) * 8;
-        GlobalStageSetting.subMotionBlur[i] = 32;
-        GlobalStageSetting.antiLevel[i].a = 0;
-        GlobalStageSetting.antiLevel[i].b = 0;
+            row[0x130 / 4] = 128;
+            row[0x134 / 4] = 128;
+            row[0x138 / 4] = 128;
+            row[0x13C / 4] = (i + 1) * 8;
+            GlobalStageSetting.subMotionBlur[i] = 32;
+            GlobalStageSetting.antiLevel[i].a = 0;
+            GlobalStageSetting.antiLevel[i].b = 0;
+        }
+
+        GlobalStageSetting.grainScale = 3.0f;
+
+        GlobalStageSetting.handCameraLimitP = 120;
+        GlobalStageSetting.handCameraLimitV = 80;
+        GlobalStageSetting.zoomMaxInDemo = 200;
     }
-
-    GlobalStageSetting.grainScale = 3.0f;
-
-    GlobalStageSetting.handCameraLimitP = 120;
-    GlobalStageSetting.handCameraLimitV = 80;
-    GlobalStageSetting.zoomMaxInDemo = 200;
 
     tex_RemakeRegistersSampleMin(0);
 }
@@ -441,8 +443,8 @@ static void initParentLink(int id)
                 debug_StdPrintfDummy(
                     "\"%s\"の親子関係づけをしようとしましたが、自分を親にしようとしています。\n",
                     lay);
-                debug_assert(__FILE__, 502);
-                __assert(__FILE__, 502, "0");
+                debug_assert(__FILE__, LN(502, 502, 502, 487, 487, 484, 502));
+                __assert(__FILE__, LN(502, 502, 502, 487, 487, 484, 502), "0");
             }
             debug_StdPrintfDummy("Parentize \"%s\"\n", lay);
             GOBJ_SUB(self)->parent.obj = parent;
@@ -451,8 +453,8 @@ static void initParentLink(int id)
             /* tried to make "%s" a parent-child link, but the parent cannot be found */
             debug_StdPrintfDummy("\"%s\"の親子関係づけをしようとしましたが、親が見つかりません。\n",
                                  lay);
-            debug_assert(__FILE__, 511);
-            __assert(__FILE__, 511, "0");
+            debug_assert(__FILE__, LN(511, 511, 511, 496, 496, 511, 511));
+            __assert(__FILE__, LN(511, 511, 511, 496, 496, 511, 511), "0");
         }
     }
 }
@@ -508,10 +510,15 @@ void InitSceneObjects(int stage)
     ResetGObjProc();
     boyGObj = girlGObj = 0;
     boyPad = 0;
-    girlPad = 0;
-    gameover_flag = 0;
-    gameover_layout_flag = 0;
-    itemWatchOff = 0;
+    if (ICO_NTSCAUG6) {
+        gameover_flag = 0;
+        gameover_layout_flag = 0;
+    } else {
+        girlPad = 0;
+        gameover_flag = 0;
+        gameover_layout_flag = 0;
+        itemWatchOff = 0;
+    }
 
     debug_StdPrintfDummy("[\033[42m scene %d \033[m ]\n", stage);
 
@@ -560,7 +567,7 @@ int HotInitSceneObjects(int a0)
                 ObjKindEnt *e = &objKindData[idx];
                 void (*fn)(GObj *);
                 if (e->before != 0) {
-                    iosOmSendMail(node, 0x2F, node);
+                    iosOmSendMail(node, PAL_AUG6(0x2F, 46), node);
                 }
                 fn = e->hotInit;
                 if (fn != 0) {

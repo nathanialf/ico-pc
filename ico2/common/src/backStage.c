@@ -137,8 +137,230 @@ inline void backStageDebugTimeZero(void)
     kidnapTime = 0;
 }
 
+static void backStageProcessOutStage_ntsc(void)
+{
+    Vec16 a;
+    Vec16 b;
+    int done;
+    int i;
+    int gen;
+    void *p;
+    GObj *o;
+
+    done = 0;
+    if (gflagChk(361) != 0) {
+        kidnapState = 0;
+        done = 1;
+    }
+    if (gameSysObjInfo[1].stage == stage_no && done == 0) {
+        debug_StdPrintfDummy("girl nokori");
+        pinchTold = 0;
+        kidnapObjIdx = -1;
+        for (i = 2; i < 22; i++) {
+            if (gameSysObjInfo[i].no == 0) {
+                continue;
+            }
+            if (gameSysObjInfo[i].stage != stage_no) {
+                continue;
+            }
+            if (gameSysObjInfo[i].work[0] == 4) {
+                kidnapObjIdx = i;
+                break;
+            }
+        }
+        kidnapState = 0;
+        wayKidnap = 0;
+        if (kidnapObjIdx < 0) {
+            GObj *e = NearestEnemyFromGirl(&enemyDist);
+
+            if (e != 0) {
+                Act *m;
+
+                kidnapState = 1;
+                enemySec = enemyDist / 160.0f;
+                kidnapTime =
+                    (int)(enemySec * (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+                m = GOBJ_ACT(e);
+                kidnapObjIdx =
+                    (unsigned int)((char *)gamesysObjInfoPosSetStage(e, m->infoPos, 0, stage_no) -
+                                   (char *)gameSysObjInfo) >>
+                    6;
+            }
+        } else {
+            kidnapState = 2;
+            pinchTold = 1;
+        }
+        if (kidnapState == 1 || kidnapState == 2) {
+            gen = eBrainGetTargetGeneratorFromLabel(gameSysObjInfo[kidnapObjIdx].no);
+            p = isysGObjSearchFromObjLayoutID(gen);
+            if (p == 0) {
+                kidnapState = 0;
+            } else {
+                GetRootPosition(a.f, p);
+                GetRootPosition(b.f, girlGObj);
+                nestDist = WayLengthOfPos_Pos(a.f, b.f);
+                nestSec = nestDist / 100.0f;
+                carryTime = (int)(nestSec * (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+            }
+        } else if (stageData[stage_no].kidnapSeconds != 0) {
+            GetRootProjectionPosOfGObj(a.f, girlGObj);
+            wayKidnap = 1;
+            kidnapState = 1;
+            enemySec = (float)stageData[stage_no].kidnapSeconds;
+            kidnapTime = (int)(enemySec * (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+            if (WayPointWithRangeFromPos2(a.f, &GOBJ_ACT(girlGObj)->way, nestPos, 1) == 0) {
+                /* no ACTIVE connection was found */
+                debug_StdPrintfDummy("繋がりACTIVEでみつからなかった");
+                if (WayPointWithRangeFromPos2(a.f, &GOBJ_ACT(girlGObj)->way, nestPos, 0) == 0) {
+                    /* no connection was found, so the nest is placed at the heroine */
+                    debug_StdPrintfDummy("繋がりみつからなかったのでヒロインの位置に巣を配置");
+                    sceVu0CopyVector(nestPos, a.f);
+                }
+            }
+            nestDist = WayLengthOfPos_Pos(nestPos, a.f);
+            nestSec = nestDist / 100.0f;
+            carryTime = (int)(nestSec * (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+            if ((float)carryTime < (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 30.0f) {
+                carryTime = (int)((float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 30.0f);
+            }
+        }
+        if ((float)carryTime < (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 10.0f) {
+            carryTime = (int)((float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 10.0f);
+        }
+    } else {
+        o = isysGObjSearchFromObjKindID_begin(4);
+        while (o != 0) {
+            if (o->labelId == 3453) {
+                gamesysObjInfoCls(4, 3453);
+            }
+            o = isysGObjSearchFromObjKindID_next(o);
+        }
+        o = isysGObjSearchFromObjKindID_begin(33);
+        while (o != 0) {
+            if (o->labelId == 3454) {
+                gamesysObjInfoCls(33, 3454);
+            }
+            o = isysGObjSearchFromObjKindID_next(o);
+        }
+    }
+}
+
+static void backStageProcessOutStage_aug6(void)
+{
+    Vec16 a;
+    Vec16 b;
+    int i;
+    int gen;
+    void *p;
+    GObj *o;
+
+    if (gflagChk(360) != 0) {
+        kidnapState = 0;
+        return;
+    }
+    if (gameSysObjInfo[1].stage == stage_no) {
+        debug_StdPrintfDummy("girl nokori");
+        pinchTold = 0;
+        kidnapObjIdx = -1;
+        for (i = 2; i < 22; i++) {
+            if (gameSysObjInfo[i].no == 0) {
+                continue;
+            }
+            if (gameSysObjInfo[i].stage != stage_no) {
+                continue;
+            }
+            if (gameSysObjInfo[i].work[0] == 4) {
+                kidnapObjIdx = i;
+                break;
+            }
+        }
+        kidnapState = 0;
+        wayKidnap = 0;
+        if (kidnapObjIdx < 0) {
+            GObj *e = NearestEnemyFromGirl(&enemyDist);
+
+            if (e != 0) {
+                Act *m;
+
+                kidnapState = 1;
+                enemySec = enemyDist / 160.0f;
+                kidnapTime =
+                    (int)(enemySec * (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+                m = GOBJ_ACT(e);
+                kidnapObjIdx =
+                    (unsigned int)((char *)gamesysObjInfoPosSetStage(e, m->infoPos, 0, stage_no) -
+                                   (char *)gameSysObjInfo) >>
+                    6;
+            }
+        } else {
+            kidnapState = 2;
+            pinchTold = 1;
+        }
+        if (kidnapState == 1 || kidnapState == 2) {
+            gen = eBrainGetTargetGeneratorFromLabel(gameSysObjInfo[kidnapObjIdx].no);
+            p = isysGObjSearchFromObjLayoutID(gen);
+            if (p == 0) {
+                kidnapState = 0;
+            } else {
+                GetRootPosition(a.f, p);
+                GetRootPosition(b.f, girlGObj);
+                nestDist = WayLengthOfPos_Pos(a.f, b.f);
+                nestSec = nestDist / 100.0f;
+                carryTime = (int)(nestSec * (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+            }
+        } else if (stageData[stage_no].kidnapSeconds != 0) {
+            GetRootProjectionPosOfGObj(a.f, girlGObj);
+            wayKidnap = 1;
+            kidnapState = 1;
+            enemySec = (float)stageData[stage_no].kidnapSeconds;
+            kidnapTime = (int)(enemySec * (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+            if (WayPointWithRangeFromPos2(a.f, &GOBJ_ACT(girlGObj)->way, nestPos, 1) == 0) {
+                /* no ACTIVE connection was found */
+                debug_StdPrintfDummy("繋がりACTIVEでみつからなかった");
+                if (WayPointWithRangeFromPos2(a.f, &GOBJ_ACT(girlGObj)->way, nestPos, 0) == 0) {
+                    /* no connection was found, so the nest is placed at the heroine */
+                    debug_StdPrintfDummy("繋がりみつからなかったのでヒロインの位置に巣を配置");
+                    sceVu0CopyVector(nestPos, a.f);
+                }
+            }
+            nestDist = WayLengthOfPos_Pos(nestPos, a.f);
+            nestSec = nestDist / 100.0f;
+            carryTime = (int)(nestSec * (float)((60 - systemStatus[0] * 10) / systemStatus[1]));
+            if ((float)carryTime < (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 30.0f) {
+                carryTime = (int)((float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 30.0f);
+            }
+        }
+        if ((float)carryTime < (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 10.0f) {
+            carryTime = (int)((float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 10.0f);
+        }
+    } else {
+        o = isysGObjSearchFromObjKindID_begin(4);
+        while (o != 0) {
+            if (o->labelId == 3415) {
+                gamesysObjInfoCls(4, 3415);
+            }
+            o = isysGObjSearchFromObjKindID_next(o);
+        }
+        o = isysGObjSearchFromObjKindID_begin(33);
+        while (o != 0) {
+            if (o->labelId == 3416) {
+                gamesysObjInfoCls(33, 3416);
+            }
+            o = isysGObjSearchFromObjKindID_next(o);
+        }
+    }
+}
+
 void backStageProcessOutStage(void)
 {
+    if (ICO_NTSC) {
+        backStageProcessOutStage_ntsc();
+        return;
+    }
+    if (ICO_AUG6) {
+        backStageProcessOutStage_aug6();
+        return;
+    }
     Vec16 a;
     Vec16 b;
     int done;
@@ -245,8 +467,160 @@ void backStageProcessOutStage(void)
     }
 }
 
+static void backStageProcessMain_ntsc(void)
+{
+    Vec16 pos;
+    Vec16 rot;
+    Vec16 tmp;
+    GamesysObjInfo *g1;
+    GamesysObjInfo *g2;
+
+    gamesysAnotherStageTsuresari = 0;
+    /* yorda_safe: the off-screen kidnap and carry timers do not run, so the
+       shadows never take her while the boy is in another room */
+    if (ico_opt_yorda_safe()) {
+        return;
+    }
+    if (gflagChk(357) != 0) {
+        return;
+    }
+    if (current_layout_id != 50) {
+        return;
+    }
+    if (stage_no == gameSysObjInfo[1].stage) {
+        return;
+    }
+    switch (kidnapState) {
+    case 1:
+        if (kidnapTime-- < 0) {
+            kidnapState = 2;
+            if (wayKidnap == 0) {
+                GamesysObjInfo *s = &gameSysObjInfo[kidnapObjIdx];
+                sceVu0CopyVector(s->pos, gameSysObjInfo[1].pos);
+                s->work[0] = 4;
+            } else {
+                memset(&tmp, 0, sizeof(tmp));
+                tmp.f[0] = objLayout[3454].rot[0];
+                tmp.f[1] = objLayout[3454].rot[1];
+                tmp.f[2] = objLayout[3454].rot[2];
+                rot = tmp;
+                g1 = gamesysObjInfoPosNewStageSet(3453, 4, gameSysObjInfo[1].stage,
+                                                  gameSysObjInfo[1].pos, gameSysObjInfo[1].rot);
+                kidnapObjIdx = (unsigned int)((char *)g1 - (char *)gameSysObjInfo) >> 6;
+                pos.f[0] = nestPos[0];
+                pos.f[2] = nestPos[2];
+                pos.f[1] = nestPos[1] - 10.0f;
+                g2 = gamesysObjInfoPosNewStageSet(3454, 33, gameSysObjInfo[1].stage, pos.f, rot.f);
+                SetInfoSpKidnapGenerator(g2->work);
+                SetInfoSpKidnapEnemy(g1->work);
+                if (g1 != 0 && g2 != 0) {
+                    g1->work[0] = 4;
+                } else {
+                    debug_StdPrintfDummy("backstage timeLimit gamesys area error\n");
+                    kidnapState = 1;
+                }
+            }
+        }
+        break;
+    case 2:
+        if (CameraGetMode() != 4) {
+            if (pinchTold == 0) {
+                SetStatusBoy_OtherStageGirlPinch();
+                pinchTold = 1;
+            }
+            gamesysAnotherStageTsuresari = 1;
+            if (carryTime-- < 0) {
+                int st = gameSysObjInfo[1].stage;
+                RequestStageChangeKidnapEnd(
+                    st, eBrainGetTargetGeneratorFromLabel(gameSysObjInfo[kidnapObjIdx].no));
+            }
+        }
+        break;
+    }
+}
+
+static void backStageProcessMain_aug6(void)
+{
+    Vec16 pos;
+    Vec16 rot;
+    Vec16 tmp;
+    GamesysObjInfo *g1;
+    GamesysObjInfo *g2;
+
+    gamesysAnotherStageTsuresari = 0;
+    /* yorda_safe: the off-screen kidnap and carry timers do not run, so the
+       shadows never take her while the boy is in another room */
+    if (ico_opt_yorda_safe()) {
+        return;
+    }
+    if (gflagChk(356) != 0) {
+        return;
+    }
+    if (current_layout_id != 50) {
+        return;
+    }
+    if (stage_no == gameSysObjInfo[1].stage) {
+        return;
+    }
+    switch (kidnapState) {
+    case 1:
+        if (kidnapTime-- < 0) {
+            kidnapState = 2;
+            if (wayKidnap == 0) {
+                GamesysObjInfo *s = &gameSysObjInfo[kidnapObjIdx];
+                sceVu0CopyVector(s->pos, gameSysObjInfo[1].pos);
+                s->work[0] = 4;
+            } else {
+                memset(&tmp, 0, sizeof(tmp));
+                tmp.f[0] = objLayout[3416].rot[0];
+                tmp.f[1] = objLayout[3416].rot[1];
+                tmp.f[2] = objLayout[3416].rot[2];
+                rot = tmp;
+                g1 = gamesysObjInfoPosNewStageSet(3415, 4, gameSysObjInfo[1].stage,
+                                                  gameSysObjInfo[1].pos, gameSysObjInfo[1].rot);
+                kidnapObjIdx = (unsigned int)((char *)g1 - (char *)gameSysObjInfo) >> 6;
+                pos.f[0] = nestPos[0];
+                pos.f[2] = nestPos[2];
+                pos.f[1] = nestPos[1] - 10.0f;
+                g2 = gamesysObjInfoPosNewStageSet(3416, 33, gameSysObjInfo[1].stage, pos.f, rot.f);
+                SetInfoSpKidnapGenerator(g2->work);
+                SetInfoSpKidnapEnemy(g1->work);
+                if (g1 != 0 && g2 != 0) {
+                    g1->work[0] = 4;
+                } else {
+                    debug_StdPrintfDummy("backstage timeLimit gamesys area error\n");
+                    kidnapState = 1;
+                }
+            }
+        }
+        break;
+    case 2:
+        if (CameraGetMode() != 4) {
+            if (pinchTold == 0) {
+                SetStatusBoy_OtherStageGirlPinch();
+                pinchTold = 1;
+            }
+            gamesysAnotherStageTsuresari = 1;
+            if (carryTime-- < 0) {
+                int st = gameSysObjInfo[1].stage;
+                RequestStageChangeKidnapEnd(
+                    st, eBrainGetTargetGeneratorFromLabel(gameSysObjInfo[kidnapObjIdx].no));
+            }
+        }
+        break;
+    }
+}
+
 void backStageProcessMain(void)
 {
+    if (ICO_NTSC) {
+        backStageProcessMain_ntsc();
+        return;
+    }
+    if (ICO_AUG6) {
+        backStageProcessMain_aug6();
+        return;
+    }
     Vec16 pos;
     Vec16 rot;
     Vec16 tmp;
@@ -408,7 +782,7 @@ void backStageProcessInStage(float arg)
         if (gamesysStageExitTime[stage_no] == 0) {
             return;
         }
-        if (gflagChk(390) != 0) {
+        if (gflagChk(PAL_NTSC_AUG6(390, 357, 356)) != 0) {
             return;
         }
     }
@@ -417,10 +791,11 @@ void backStageProcessInStage(float arg)
         range = limit;
     }
     if (backStageGirlTargetEnemyGop == 0 && IsGirlEscortedInCurrentStage() == 0 &&
-        gflagChk(394) == 0 && gameSysObjInfo[1].stage == stage_no && warpGirlInStageSet == 0) {
+        gflagChk(PAL_NTSC_AUG6(394, 361, 360)) == 0 && gameSysObjInfo[1].stage == stage_no &&
+        warpGirlInStageSet == 0) {
         /* the heroine is not held, so the position is changed at random */
         debug_StdPrintfDummy("ヒロイン捕まっていないのでランダムで位置変更");
-        if (gflagChk(391) == 0) {
+        if (gflagChk(PAL_NTSC_AUG6(391, 358, 357)) == 0) {
             kidnapWarpToWaypoint(girlGObj, range);
         }
     }
@@ -430,7 +805,8 @@ void backStageProcessInStage(float arg)
             if (backStageGirlTargetEnemyGop != gobj) {
                 /* the heroine is not held */
                 debug_StdPrintfDummy("ヒロイン捕まってない");
-                if (gflagChk(391) == 0 && InqCapsuleGhostBossStage() == 0) {
+                if (gflagChk(PAL_NTSC_AUG6(391, 358, 357)) == 0 &&
+                    InqCapsuleGhostBossStage() == 0) {
                     kidnapWarpToWaypoint(gobj, range);
                 }
             } else {

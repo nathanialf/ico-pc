@@ -19,6 +19,7 @@
 #include "warpGirl.h"
 #include "DisplayP2O.h"
 #include "GsBase.h"
+#include "staticBlur.h"
 #include "Matrix.h"
 #include "darkVolume.h"
 #include "delayFreeManager.h"
@@ -54,6 +55,9 @@ StgSlot stageExitData[15] = {0};
 /* .sbss: the one-entry buffer of the stage manager's message queue, and the
    stage stgmgrNextStagePreLoadForceStageSet asks the preloader for. */
 static IosMsgWord stageMgrMsgBuf; /* derived name */
+
+/* the USA disc's and the August 2001 preview's queue holds four messages */
+static IosMsgWord stageMgrMsgBuf_ntscaug6[4]; /* derived name */
 
 static int stagePreLoadForceStageNo; /* derived name */
 
@@ -102,7 +106,11 @@ static void stop_free_resources(void)
     int i;
 
     debug_StdPrintfDummy("----- MASK LINK -----\n");
-    game_pause = 0;
+    if (ICO_AUG6) {
+        graphics_ready = 0;
+    } else {
+        game_pause = 0;
+    }
     for (i = 0; i < 8; i++) {
         isysGObjActiveLink(i, 0);
     }
@@ -126,7 +134,9 @@ static void stop_free_resources(void)
     iosMallocResetPartition(ios_partition_seki);
     iosMallocResetPartition(ios_partition_sugipon);
     iosMallocResetPartition(ios_partition_dmotion);
-    iosMallocResetPartition(ios_partition_oomori);
+    if (!ICO_AUG6) {
+        iosMallocResetPartition(ios_partition_oomori);
+    }
     iosMallocResetPartition(ios_partition_isys);
     ResetDynamicMotionManager();
     debug_StdPrintfDummy("here\n");
@@ -201,14 +211,22 @@ static void start_stage_Load_thread(int stage)
         stage_initialize();
         stageManagerFreeResourceFlag = 0;
         iosThreadCancelWakeup(0);
-        gsb_SetMotionBlur();
+        if (ICO_NTSCAUG6) {
+            SetMotionBlur(GlobalStageSetting.motionBlur);
+        } else {
+            gsb_SetMotionBlur();
+        }
         current_stage_no = stage;
         iosThreadCreateS(INITICOMISC_THREAD, 1, InitIcoMisc, &stage_no, ios_partition_root, 0x18000,
                          27);
         iosThreadStart(INITICOMISC_THREAD);
         flags = INITICOMISC_FLAGS;
         debug_StdPrintfDummy("auto stack %d\n", (int)flags & 1);
-        game_pause = 1;
+        if (ICO_AUG6) {
+            graphics_ready = 1;
+        } else {
+            game_pause = 1;
+        }
         debug_StdPrintfDummy("-----------------Enable VSync\n");
     } else {
         isysInitialize();
@@ -397,7 +415,11 @@ void StageManager(void)
     StgMgrMsg *msg;
 
     debug_StdPrintfDummy("stage manager() in\n");
-    iosMsgQueueCreate(&stageMgrMsgQ, &stageMgrMsgBuf, 1);
+    if (ICO_NTSCAUG6) {
+        iosMsgQueueCreate(&stageMgrMsgQ, stageMgrMsgBuf_ntscaug6, 4);
+    } else {
+        iosMsgQueueCreate(&stageMgrMsgQ, &stageMgrMsgBuf, 1);
+    }
     debug_StdPrintfDummy("IosCdLock %d\n", IosCdLock);
     WaitSema(IosCdLock);
     DeleteSema(IosCdLock);
@@ -444,7 +466,7 @@ void StageManager(void)
             ico_stage_change_to = msg->stage; /* PC port: kanbanTitleCover's target */
 #endif
             exit_stage(msg->stage);
-            lt_switch_layout(PAL_JPNKORCN(0x35, 50));
+            lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(0x35, 50, 49));
             systemStatus[6] = 1;
             systemStatus[5] = 1;
             stgMgrWakeupRequest = 1;
@@ -509,9 +531,13 @@ void stgmgrForceSwitch(int stage)
 {
     stageMgrMsg.cmd = 0;
     stageMgrMsg.stage = stage;
-    graphics_ready = 1;
+    if (ICO_AUG6) {
+        lock_execIcoMisc = 1;
+    } else {
+        graphics_ready = 1;
+    }
     stageMgrMsg.fadeOut = 0;
-    iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, 1);
+    iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, PAL_NTSCAUG6(1, 0));
 }
 
 void stgmgrForceSwitchWithFade(int stage, float fadeIn, float fadeOut)
@@ -530,6 +556,14 @@ void stgmgrForceSwitchWithFadeColor(int stage, float fadeIn, float fadeOut, unsi
     stageMgrMsg.g = g;
     stageMgrMsg.b = b;
     mpegPlayInitColor = 0x80000000 | (b << 16) | (g << 8) | r;
-    graphics_ready = 1;
-    iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, 1);
+    if (ICO_NTSC) {
+        graphics_ready = 1;
+        iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, 0);
+    } else if (ICO_AUG6) {
+        lock_execIcoMisc = 1;
+        iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, 0);
+    } else {
+        graphics_ready = 1;
+        iosMsgSend(&stageMgrMsgQ, (IosMsgWord)&stageMgrMsg, 1);
+    }
 }

@@ -176,8 +176,8 @@ static void disp_memory_partition_bar(void)
                         buf,
                         "DISP_MEMORY_PARTITION_BAR():\n\tINVALID MEMORY FREE AREA INDICATED IN PARTITION \"%s\"\n\tMALLOCED MEMORY'S NEXT_FREE: %p\n",
                         p->name, e);
-                    debug_assertMessage(__FILE__, 609, buf);
-                    __assert(__FILE__, 609, "e");
+                    debug_assertMessage(__FILE__, LN(609, 609, 609, 572, 566, 541, 609), buf);
+                    __assert(__FILE__, LN(609, 609, 609, 572, 566, 541, 609), "e");
                 }
             } while (e != 0);
         }
@@ -279,7 +279,7 @@ void ExecIcoMisc(void)
     if (debug_memory_bar != 0) {
         disp_memory_partition_bar();
     }
-    if (graphics_ready == 0) {
+    if (PAL_AUG6(graphics_ready, lock_execIcoMisc) == 0) {
         if (iosCdvdDiskStatusGet() == 0) {
             exec_layout_texture();
         }
@@ -293,7 +293,7 @@ void ExecIcoMisc(void)
 #ifdef ICO_RD
     kanbanTitleCover(); /* PC port: the cover over a stage change to the title */
 #endif
-    if (graphics_ready != 0) {
+    if (PAL_AUG6(graphics_ready, lock_execIcoMisc) != 0) {
         return;
     }
     if (systemStatus[5] == 0) {
@@ -305,7 +305,7 @@ void ExecIcoMisc(void)
         ExecGameOverEffect();
         seEnvMute = 0;
     } else {
-        if (current_layout_id == PAL_JPNKORCN(28, 25)) {
+        if (current_layout_id == PAL_JPNKORNTSCAUG6CN(28, 25)) {
             seEnvMute = 1;
         }
         if (seEnvMute != 0) {
@@ -328,7 +328,9 @@ void ExecIcoMisc(void)
         prevCameraPos = cam;
         if (cam != 0) {
             soundReqTickProc();
-            scpGirlHintVoiceTickProc(cam);
+            if (!ICO_NTSCAUG6) {
+                scpGirlHintVoiceTickProc(cam);
+            }
         }
         fightSoundProcess();
     }
@@ -336,12 +338,12 @@ void ExecIcoMisc(void)
     if (fall_death_active != 0) {
         if (boyGObj != 0) {
             if (GOBJ_SUB(boyGObj)->ctrl.fallHeight > 1000.0f) {
-                lt_switch_layout(PAL_JPNKORCN(62, 59));
+                lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(62, 59, 58));
             }
         }
         if (girlGObj != 0) {
             if (GOBJ_SUB(girlGObj)->ctrl.fallHeight > 1000.0f) {
-                lt_switch_layout(PAL_JPNKORCN(62, 59));
+                lt_switch_layout(PAL_JPNKORCN_NTSCAUG6(62, 59, 58));
             }
         }
     }
@@ -407,7 +409,9 @@ void InitIcoMisc(int *arg)
 
     if (systemStatus[3] != 0 && systemStatus[4] != 0) {
         gamesysMemoryLoad(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
-        scpBoyControlReadDisable = 0;
+        if (!ICO_AUG6) {
+            scpBoyControlReadDisable = 0;
+        }
         systemStatus[4] = 0;
     }
     if (thisIsYourStartStage != 1 && setActorsDebugPending != 0) {
@@ -473,7 +477,9 @@ void InitIcoMisc(int *arg)
     debug_StdPrintfDummy("InitParticleEffects\n");
     InitParticleEffects();
     InitStageMultiBgaManager();
-    InitializeWaterDot();
+    if (!ICO_NTSCAUG6) {
+        InitializeWaterDot();
+    }
     debug_StdPrintfDummy("InitSceneObjects( %d )\n", stage);
     InitSceneObjects(stage);
     InitWindManager(stage);
@@ -481,8 +487,8 @@ void InitIcoMisc(int *arg)
     init_layout_texture(stage);
 
     found = 0;
-    for (i = 0; i < 1145; i++) {
-        for (j = 0; j < 12; j++) {
+    for (i = 0; i < PAL_NTSC_AUG6(1145, 1084, 1086); i++) {
+        for (j = 0; j < PAL_NTSCAUG6(12, 5); j++) {
             id = motionKind[i].ent[j].id;
             if (id > 0xFFFF) {
                 continue;
@@ -490,7 +496,7 @@ void InitIcoMisc(int *arg)
             if (motionEffKind[id].done) {
                 continue;
             }
-            if (id == 24) {
+            if (id == PAL_NTSCAUG6(24, 19)) {
                 continue;
             }
             if (GetParticleEffectPackage(motionEffKind[id].pkg)[1] != 1) {
@@ -510,12 +516,18 @@ void InitIcoMisc(int *arg)
             "\033[36m動作はさせますが続けているとメモリの\n資源を食いつくします\nループではないものにデータを修正してください\033[m\n");
     }
     debug_StdPrintfDummy("Init Stage Animation\n");
-    gsb_ResetFilmNoise();
+    if (!ICO_NTSCAUG6) {
+        gsb_ResetFilmNoise();
+    }
     stage_Init();
     debug_StdPrintfDummy("Init Object Action\n");
     ObjAction_Init();
     InitStageChange();
-    graphics_ready = 0;
+    if (ICO_AUG6) {
+        lock_execIcoMisc = 0;
+    } else {
+        graphics_ready = 0;
+    }
     debug_StdPrintfDummy("load time %f sec\n", load_time / 60.0f);
     sndInit(stage);
     iosPadActInit();

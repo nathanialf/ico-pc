@@ -577,7 +577,9 @@ static const DbgOpt debugOption_pal[76] = {
 
 /* The two discs page through different SnapShot rows (the Japanese disc names
    seven sizes and counts snapshots up from 0); every other row is the same. */
-#define debugOption PAL_JPNKORCN(debugOption_pal, debugOption_jpn)
+/* the USA disc's and the August 2001 preview's option list is the Japanese build's less
+   seven rows; their SnapSize takes the Japanese names (snapshot as the Japanese disc's) */
+#define debugOption PAL_JPNKORNTSCAUG6CN(debugOption_pal, debugOption_jpn)
 
 /* the font window's line count */
 static int fontWindowLine = 0; /* derived name */
@@ -902,10 +904,10 @@ void debug_Assert(char *fmt, ...)
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    debug_assertMessage("src/debug.c", LN(1392, 1389, 1389, 1392, 1392, 1392, 1389), buf);
-    __assert("src/debug.c", LN(1392, 1389, 1389, 1392, 1392, 1392, 1389), "e");
-    debug_assert("src/debug.c", LN(1393, 1390, 1390, 1393, 1393, 1393, 1390));
-    __assert("src/debug.c", LN(1393, 1390, 1390, 1393, 1393, 1393, 1390), "0");
+    debug_assertMessage("src/debug.c", LN(1392, 1389, 1389, 1283, 1268, 1201, 1389), buf);
+    __assert("src/debug.c", LN(1392, 1389, 1389, 1283, 1268, 1201, 1389), "e");
+    debug_assert("src/debug.c", LN(1393, 1390, 1390, 1284, 1269, 1202, 1390));
+    __assert("src/debug.c", LN(1393, 1390, 1390, 1284, 1269, 1202, 1390), "0");
 }
 
 /* the host log file (the DEBUG build opens it) */
@@ -1000,7 +1002,7 @@ static void debug_SaveDebugOptionFile(void)
     if (fd) {
         debug_StdPrintfDummy("debug_SaveDebugOptionFile: host file open error.\n");
     } else {
-        for (i = 0; i < 76; i++) {
+        for (i = 0; i < PAL_NTSC_AUG6(76, 69, 67); i++) {
             sprintf(buf, "#%s\n", debugOption[i].name);
             sceWrite(fd, buf, strlen(buf));
             sprintf(buf, "%d\n", *debugOption[i].val);
@@ -1067,12 +1069,12 @@ static int debug_GetDebugOption(void)
         } while (++i < size);
     done:
         debugSceClose(fd);
-        if (cnt != 76) {
+        if (cnt != PAL_NTSC_AUG6(76, 69, 67)) {
             fd = -1;
             debug_StdPrintfDummy("debug_GetDebugOption:Found Debug Option file, But illegal.\n");
         } else {
             debug_StdPrintfDummy("Found Debug Option file.\n");
-            for (i = 0; i < 76; i++) {
+            for (i = 0; i < PAL_NTSC_AUG6(76, 69, 67); i++) {
                 debug_StdPrintfDummy("%s => %d\n", debugOption[i].name, *debugOption[i].val);
             }
         }
@@ -1131,15 +1133,17 @@ void debug_VariableInit(void)
     debug_zoom_per = 100;
     debug_debug_bar_start_item = 0;
     debug_ripple_roughness = 25;
-    debug_snapshot_num = PAL_JPNKORCN(100, 1);
+    debug_snapshot_num = PAL_JPNKORCN_NTSCAUG6(100, 1, 0);
     debug_snapshot_size = 0;
     debug_snapshot_format = 0;
     debug_ambient_volume = 0;
     debug_cloth_info = 0;
-    debug_hair_tight_level = 20;
-    debug_hair_gravity_level = 0;
-    debug_hair_bend_angle = 256;
-    debug_hair_collision = 0;
+    if (!ICO_NTSCAUG6) {
+        debug_hair_tight_level = 20;
+        debug_hair_gravity_level = 0;
+        debug_hair_bend_angle = 256;
+        debug_hair_collision = 0;
+    }
     debug_face_chest_ratio = 0;
     debug_face_rot_w_ratio = 0;
     debug_def_smpmin = 4;
@@ -1165,17 +1169,29 @@ void debug_VariableInit(void)
     debug_girl_detour_flag = 1;
     debug_col_old_proc = 0;
     debug_fly_limit_test = 0;
-    debug_lwskyomi_lookonly = 0;
-    debug_one_hit_only = 0;
-    debug_ignore_dodge = 0;
-    debug_hand_camera = 1;
-    debug_enemy_kidnap_timer = 1;
-    debug_girl_pad_control = 0;
-    debug_no_breast_hang = 0;
-    debug_snapshot_reserve = 0;
-    game_pause = 0;
+    if (ICO_NTSC) {
+        debug_lwskyomi_lookonly = 0;
+        debug_one_hit_only = 0;
+        debug_ignore_dodge = 0;
+        game_pause = 0;
+    } else if (ICO_AUG6) {
+        debug_lwskyomi_lookonly = 1;
+        graphics_ready = 0;
+    } else {
+        debug_lwskyomi_lookonly = 0;
+        debug_one_hit_only = 0;
+        debug_ignore_dodge = 0;
+        debug_hand_camera = 1;
+        debug_enemy_kidnap_timer = 1;
+        debug_girl_pad_control = 0;
+        debug_no_breast_hang = 0;
+        debug_snapshot_reserve = 0;
+        game_pause = 0;
+    }
     ChangeFieldCollisionDebugMode(0);
-    ChangeGirlControlMode(debug_girl_pad_control);
+    if (!ICO_NTSCAUG6) {
+        ChangeGirlControlMode(debug_girl_pad_control);
+    }
     /* PC port: in developer mode, [dev] debug_option non-zero loads
        the option table the Debug Mode page saved (TRIANGLE), as the
        development build's start-up check of its option file did.  Off: the
@@ -1227,7 +1243,7 @@ static void loadReport(char **dst, char *name, int size)
         *dst, size);
 }
 
-int debug_Load(char **dst, char *name, int kind)
+static int debug_Load_ntsc(char **dst, char *name, int kind)
 {
     char buf[256];
     int size;
@@ -1249,28 +1265,28 @@ int debug_Load(char **dst, char *name, int kind)
         case 0:
         default:
             *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c",
-                                  LN(1958, 1955, 1955, 1958, 1958, 1958, 1955));
+                                  LN(1958, 1955, 1955, 1817, 1798, 1719, 1955));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
-                                 (*dst + sz - ios_partition_seki->start) * 100.0f / 10059776.0f);
+                                 (*dst + sz - ios_partition_seki->start) * 100.0f / 10092544.0f);
             break;
         case 1:
             *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c",
-                                  LN(1965, 1962, 1962, 1965, 1965, 1965, 1962));
+                                  LN(1965, 1962, 1962, 1824, 1805, 1726, 1962));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 524288.0f,
                                  (*dst + sz - ios_partition_sugipon->start) * 100.0f / 524288.0f);
             break;
         case 2:
             *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c",
-                                  LN(1973, 1970, 1970, 1973, 1973, 1973, 1970));
+                                  LN(1973, 1970, 1970, 1832, 1813, 1734, 1970));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to static object area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 2.0f,
                                  (*dst + sz - ios_partition_common->start) * 100.0f / 2.0f);
             break;
         case 3:
             *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c",
-                                  LN(1982, 1979, 1979, 1982, 1982, 1982, 1979));
+                                  LN(1982, 1979, 1979, 1841, 1822, 1743, 1979));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 1179648.0f,
@@ -1278,7 +1294,7 @@ int debug_Load(char **dst, char *name, int kind)
             break;
         case 5:
             *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c",
-                                  LN(1991, 1988, 1988, 1991, 1991, 1991, 1988));
+                                  LN(1991, 1988, 1988, 1850, 1831, 1752, 1988));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
                                  sz * 100.0f / 3670016.0f,
@@ -1286,33 +1302,234 @@ int debug_Load(char **dst, char *name, int kind)
             break;
         case 6:
             *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c",
-                                  LN(2000, 1997, 1997, 2000, 2000, 2000, 1997));
+                                  LN(2000, 1997, 1997, 1859, 1840, 1761, 1997));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_hara->start) * 100.0f);
             break;
         case 7:
             *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c",
-                                  LN(2007, 2004, 2004, 2007, 2007, 2007, 2004));
+                                  LN(2007, 2004, 2004, 1866, 1847, 1768, 2004));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
                                  (*dst + sz - ios_partition_oomori->start) * 100.0f / 327680.0f);
             break;
         case 8:
             *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c",
-                                  LN(2014, 2011, 2011, 2014, 2014, 2014, 2011));
+                                  LN(2014, 2011, 2011, 1873, 1854, 1775, 2011));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to horagai-area.\n");
             break;
         case 9:
             *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c",
-                                  LN(2019, 2016, 2016, 2019, 2019, 2019, 2016));
+                                  LN(2019, 2016, 2016, 1878, 1859, 1780, 2016));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to sound-area.\n");
+            break;
+        case 10:
+            *dst = iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c", 1883);
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to sound_semi-area.\n");
+            break;
+        }
+    }
+    sceRead(fd, *dst, size);
+    debugSceClose(fd);
+    FlushCache(0);
+    sceGsSyncPath(0, 0);
+    return size;
+}
+
+static int debug_Load_aug6(char **dst, char *name, int kind)
+{
+    char buf[256];
+    int size;
+    int sz;
+    int fd;
+
+    sprintf(buf, "ico2Data/%s", name);
+    fd = debugSceOpen(buf, 1);
+    if (fd < 0) {
+        debug_StdPrintfDummy("file is not exist(%s)\n", name);
+        return -1;
+    }
+    size = sceLseek(fd, 0, 2);
+    sceLseek(fd, 0, 0);
+    sz = (size / 16 + 1) * 16;
+    {
+        /* the iosMallocDebug calls pass the source's own line numbers */
+        switch (kind) {
+        case 0:
+        default:
+            *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c",
+                                  LN(1958, 1955, 1955, 1817, 1798, 1719, 1955));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
+                                 (*dst + sz - ios_partition_seki->start) * 100.0f / 10092544.0f);
+            break;
+        case 1:
+            *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c",
+                                  LN(1965, 1962, 1962, 1824, 1805, 1726, 1962));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 524288.0f,
+                                 (*dst + sz - ios_partition_sugipon->start) * 100.0f / 524288.0f);
+            break;
+        case 2:
+            *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c",
+                                  LN(1973, 1970, 1970, 1832, 1813, 1734, 1970));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to static object area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 2.0f,
+                                 (*dst + sz - ios_partition_common->start) * 100.0f / 2.0f);
+            break;
+        case 3:
+            *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c",
+                                  LN(1982, 1979, 1979, 1841, 1822, 1743, 1979));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
+                                 sz * 100.0f / 1179648.0f,
+                                 (*dst + sz - ios_partition_smotion->start) * 100.0f / 1179648.0f);
+            break;
+        case 5:
+            *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c",
+                                  LN(1991, 1988, 1988, 1850, 1831, 1752, 1988));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
+                                 sz * 100.0f / 3670016.0f,
+                                 (*dst + sz - ios_partition_dmotion->start) * 100.0f / 3670016.0f);
+            break;
+        case 6:
+            *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c",
+                                  LN(2000, 1997, 1997, 1859, 1840, 1761, 1997));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
+                                 (*dst + sz - ios_partition_hara->start) * 100.0f);
+            break;
+        case 7:
+            *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c",
+                                  LN(2007, 2004, 2004, 1866, 1847, 1768, 2004));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
+                                 (*dst + sz - ios_partition_oomori->start) * 100.0f / 262144.0f);
+            break;
+        case 8:
+            *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c",
+                                  LN(2014, 2011, 2011, 1873, 1854, 1775, 2011));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to horagai-area.\n");
+            break;
+        case 9:
+            *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c",
+                                  LN(2019, 2016, 2016, 1878, 1859, 1780, 2016));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sound-area.\n");
             break;
         case 10:
             *dst = iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c",
-                                  LN(2024, 2021, 2021, 2024, 2024, 2024, 2021));
+                                  LN(2024, 2021, 2021, 2024, 1864, 1785, 2021));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to sound_semi-area.\n");
+            break;
+        }
+    }
+    sceRead(fd, *dst, size);
+    debugSceClose(fd);
+    FlushCache(0);
+    sceGsSyncPath(0, 0);
+    return size;
+}
+
+int debug_Load(char **dst, char *name, int kind)
+{
+    if (ICO_NTSC) {
+        return debug_Load_ntsc(dst, name, kind);
+    }
+    if (ICO_AUG6) {
+        return debug_Load_aug6(dst, name, kind);
+    }
+    char buf[256];
+    int size;
+    int sz;
+    int fd;
+
+    sprintf(buf, "ico2Data/%s", name);
+    fd = debugSceOpen(buf, 1);
+    if (fd < 0) {
+        debug_StdPrintfDummy("file is not exist(%s)\n", name);
+        return -1;
+    }
+    size = sceLseek(fd, 0, 2);
+    sceLseek(fd, 0, 0);
+    sz = (size / 16 + 1) * 16;
+    {
+        /* the iosMallocDebug calls pass the source's own line numbers */
+        switch (kind) {
+        case 0:
+        default:
+            *dst = iosMallocDebug(ios_partition_seki, sz, "src/debug.c",
+                                  LN(1958, 1955, 1955, 1817, 1798, 1719, 1955));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to seki area.(%2.1f%%)\n",
+                                 (*dst + sz - ios_partition_seki->start) * 100.0f / 10059776.0f);
+            break;
+        case 1:
+            *dst = iosMallocDebug(ios_partition_sugipon, sz, "src/debug.c",
+                                  LN(1965, 1962, 1962, 1824, 1805, 1726, 1962));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to sugi area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 524288.0f,
+                                 (*dst + sz - ios_partition_sugipon->start) * 100.0f / 524288.0f);
+            break;
+        case 2:
+            *dst = iosMallocDebug(ios_partition_common, sz, "src/debug.c",
+                                  LN(1973, 1970, 1970, 1832, 1813, 1734, 1970));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to static object area.(%2.1f%%/%2.1f%%)\n", sz * 100.0f / 2.0f,
+                                 (*dst + sz - ios_partition_common->start) * 100.0f / 2.0f);
+            break;
+        case 3:
+            *dst = iosMallocDebug(ios_partition_smotion, sz, "src/debug.c",
+                                  LN(1982, 1979, 1979, 1841, 1822, 1743, 1979));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to static motion area.(%2.1f%%/%2.1f%%)\n",
+                                 sz * 100.0f / 1179648.0f,
+                                 (*dst + sz - ios_partition_smotion->start) * 100.0f / 1179648.0f);
+            break;
+        case 5:
+            *dst = iosMallocDebug(ios_partition_dmotion, sz, "src/debug.c",
+                                  LN(1991, 1988, 1988, 1850, 1831, 1752, 1988));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to dynamic motion area.(%2.1f%%/%2.1f%%)\n",
+                                 sz * 100.0f / 3670016.0f,
+                                 (*dst + sz - ios_partition_dmotion->start) * 100.0f / 3670016.0f);
+            break;
+        case 6:
+            *dst = iosMallocDebug(ios_partition_hara, sz, "src/debug.c",
+                                  LN(2000, 1997, 1997, 1859, 1840, 1761, 1997));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to hara-area.(%2.1f%%)\n",
+                                 (*dst + sz - ios_partition_hara->start) * 100.0f);
+            break;
+        case 7:
+            *dst = iosMallocDebug(ios_partition_oomori, sz, "src/debug.c",
+                                  LN(2007, 2004, 2004, 1866, 1847, 1768, 2004));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to oomori area.(%2.1f%%)\n",
+                                 (*dst + sz - ios_partition_oomori->start) * 100.0f / 327680.0f);
+            break;
+        case 8:
+            *dst = iosMallocDebug(ios_partition_horagai, sz, "src/debug.c",
+                                  LN(2014, 2011, 2011, 1873, 1854, 1775, 2011));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to horagai-area.\n");
+            break;
+        case 9:
+            *dst = iosMallocDebug(ios_partition_sound, sz, "src/debug.c",
+                                  LN(2019, 2016, 2016, 1878, 1859, 1780, 2016));
+            loadReport(dst, name, size);
+            debug_StdPrintfDummy(" to sound-area.\n");
+            break;
+        case 10:
+            *dst = iosMallocDebug(ios_partition_sound_semi, sz, "src/debug.c",
+                                  LN(2024, 2021, 2021, 2024, 1864, 1785, 2021));
             loadReport(dst, name, size);
             debug_StdPrintfDummy(" to sound_semi-area.\n");
             break;
@@ -1331,7 +1548,12 @@ typedef unsigned long long GifTag[2] __attribute__((aligned(16))); /* derived na
 
 /* the GIF tag debug_MakeFont copies ahead of each font packet, as
    debug_exception's fontTag */
-static GifTag debugFontTag = {0x2000400000008000LL, 0x51}; /* derived name */
+static GifTag debugFontTag_pal = {0x2000400000008000LL, 0x51}; /* derived name */
+
+static unsigned long long debugFontTag_ntscaug6[2] = {0x2000400000008000LL,
+                                                      0x51}; /* derived name */
+
+#define debugFontTag PAL_NTSCAUG6(debugFontTag_pal, debugFontTag_ntscaug6)
 
 /* PC port: the glyph packets live in this buffer, not
    in the stage partition.  On the PS2 debug_Init (every stage_initialize,
@@ -1783,7 +2005,7 @@ static void debug_brainBar(void)
     gif_StartPacketPri(11);
     gif_SetAlpha(1, 2, c3.a);
     brain = &brainGirl;
-    for (i = 0; i < 40; i++) {
+    for (i = 0; i < PAL_NTSCAUG6(40, 20); i++) {
         b.x = 300;
         a.y = b.y = y;
         if (brain->tgt[i].gobj == 0) {
@@ -1800,7 +2022,7 @@ static void debug_brainBar(void)
             col = &c1;
         }
         gif_Line(&a.x, &b.x, 0xFFFFFFFFU, 0xFFFFFFFFU, col, 1);
-        if (brain->tgt[i].gobj->kind == 0x3D) {
+        if (brain->tgt[i].gobj->kind == PAL_NTSC_AUG6(0x3D, 0x3C, 59)) {
             /* a.z is never written: the copy reads it uninitialised */
             c.x = a.x;
             c.y = a.y;
@@ -1908,7 +2130,7 @@ static void debug_DrawBar(void)
     int len;
 
     flip = 0;
-    scale = 1.0f / (270000.0f / PAL_JPNKORCN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
+    scale = 1.0f / (270000.0f / PAL_JPNKORNTSCAUG6CN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
 
 
 
@@ -1925,7 +2147,7 @@ static void debug_DrawBar(void)
     sh = debug_debug_bar_multiply;
 
     gif_StartPacketPri(12);
-    gif_SetDrawEnviroment(2048, 0, ScreenWidth, ScreenHeight, 1, 0);
+    gif_SetDrawEnviroment(2048, 0, ScreenWidth, ScreenHeight, PAL_NTSCAUG6(1, 0), 0);
 
     gif_SetZWrite(0);
     gif_SetZTest(0);
@@ -2139,7 +2361,7 @@ void debug_DispBar(void)
     int va;
     int vb;
     int n;
-    inv = 1.0f / (270000.0f / PAL_JPNKORCN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
+    inv = 1.0f / (270000.0f / PAL_JPNKORNTSCAUG6CN((float)((60 - systemStatus[0] * 10) / systemStatus[1]), 30.0f));
     vb = (float)(debugBars[debugBarCount - 1].count * 100) * inv;
     va = (float)(drawTimerCount * 100) * inv;
 
@@ -2230,11 +2452,26 @@ static void debug_WriteBMP(int fd, int w, int h, unsigned int *src)
     hdr.biYPelsPerMeter = 0;
     hdr.biClrUsed = 0;
     hdr.biClrImportant = 0;
-    hdr.biWidth = w;
-    hdr.biHeight = h;
-    hdr.biSizeImage = w * h * 3;
-    hdr.bfSize = hdr.biSizeImage + 0x36;
-    sceWrite(fd, hdr.bfType, 0x36);
+    if (ICO_NTSCAUG6) {
+        /* both arms store the same: the test's load and its 1 stay in the ROM
+           (aug6 TRFILE debug.c:2885-2891, the 2886-2888 lines code-less) */
+        if (debug_snapshot_size == 1) {
+            hdr.biWidth = w;
+            hdr.biHeight = h;
+        } else {
+            hdr.biWidth = w;
+            hdr.biHeight = h;
+        }
+        hdr.biSizeImage = hdr.biWidth * hdr.biHeight * 3;
+        hdr.bfSize = hdr.biSizeImage + hdr.bfOffBits;
+        sceWrite(fd, hdr.bfType, hdr.bfOffBits);
+    } else {
+        hdr.biWidth = w;
+        hdr.biHeight = h;
+        hdr.biSizeImage = w * h * 3;
+        hdr.bfSize = hdr.biSizeImage + 0x36;
+        sceWrite(fd, hdr.bfType, 0x36);
+    }
     for (y = h - 1; y >= 0; y--) {
         s = (unsigned char *)&src[y * w];
         d = line;
@@ -2269,7 +2506,7 @@ int debug_SnapShot(int idx)
     size = ScreenWidth * ScreenHeight * 4;
     /* the European disc's SnapSize 0 is None; the Japanese disc's is
        Normal (debugSnapSizeName_jpn), which takes one like every size */
-    if (!ICO_JPNKORCN && debug_snapshot_size == 0) {
+    if (!ICO_JPNKORCN && !ICO_NTSCAUG6 && debug_snapshot_size == 0) {
         return -1;
     }
     /* PC port: the PS2 stored the scene buffer
@@ -2606,8 +2843,8 @@ static int debug_Mode(void)
     debug_PrintfDummy(10, 50, 0xFFFFFF00u, "DEBUG MODE");
     debug_PrintfDummy(138, 50, 0x00FFFF00u, "Push '\202' to save debug options.");
 
-    i = (modeSelect + 70) % 76;
-    end = (modeSelect + 83) % 76;
+    i = (modeSelect + PAL_NTSC_AUG6(70, 63, 61)) % PAL_NTSC_AUG6(76, 69, 67);
+    end = (modeSelect + PAL_NTSC_AUG6(83, 76, 74)) % PAL_NTSC_AUG6(76, 69, 67);
     j = 1;
     while (i != end) {
         if (debugOption[i].strs != 0) {
@@ -2615,15 +2852,15 @@ static int debug_Mode(void)
         } else {
             debug_PrintfDummy(18, j * 8 + 50, modeSelect == i ? (((modeBlink >> 3) & 1) ? blinkColor[0] : debugOption[i].col) : debugOption[i].col, "%c%s : %d", modeSelect == i ? 62 : 32, debugOption[i].name, *debugOption[i].val);
         }
-        if (++i == 76) i = 0;
+        if (++i == PAL_NTSC_AUG6(76, 69, 67)) i = 0;
         j++;
     }
 
     if (pad[0].rep & 0x4000) {
-        if (++modeSelect >= 76) modeSelect = 0;
+        if (++modeSelect >= PAL_NTSC_AUG6(76, 69, 67)) modeSelect = 0;
     }
     if (pad[0].rep & 0x1000) {
-        if (--modeSelect < 0) modeSelect = 75;
+        if (--modeSelect < 0) modeSelect = PAL_NTSC_AUG6(75, 68, 66);
     }
     if (pad[0].rep & 0x2000) {
         if (++*debugOption[modeSelect].val > debugOption[modeSelect].max)
@@ -2638,7 +2875,7 @@ static int debug_Mode(void)
             debugOption[modeSelect].func(*debugOption[modeSelect].val);
     }
     if (pad[0].flags & 0x20) {
-        for (i = 0; i < 76; i++) {
+        for (i = 0; i < PAL_NTSC_AUG6(76, 69, 67); i++) {
             if (debugOption[i].min == 0 && debugOption[i].max == 1)
                 debug_StdPrintfDummy("debug%s => %s\n", debugOption[i].name, modeValueName[*debugOption[i].val]);
             else
@@ -2853,10 +3090,10 @@ static int debug_SelectStageMain(int ret, int stage)
                 seEnvForceClose = on;
                 enable_game_pause = on;
                 kanbanInit(0);
-                gflagOn(394);
+                gflagOn(PAL_NTSC_AUG6(394, 361, 360));
                 scpBoyControlReadDisable = 0;
                 stgmgrForceSwitch(stage);
-                gflagOff(388);
+                gflagOff(PAL_NTSC_AUG6(388, 355, 354));
                 ACTGame_SetActors_Debug(stage, on);
             }
         }
@@ -2866,8 +3103,8 @@ static int debug_SelectStageMain(int ret, int stage)
 
 int debug_SelectStage(void)
 {
-    return debug_SelectStageMain(debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData,
-                                                               404, 0x20, 0, PAL_JPNKORCN(106, 104), &stageSelectNo),
+    return debug_SelectStageMain(PAL_JPNKORNTSCCN_AUG6(debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData,
+                                                               404, 0x20, 0, 106, &stageSelectNo), debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData, 404, 0x20, 0, 104, &stageSelectNo), debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData, sizeof(StgPre), 0x20, 0, 104, &stageSelectNo)),
                                  stageSelectNo);
 }
 
@@ -3205,7 +3442,9 @@ static int debug_mcLoadMainBlock(McMgr *mc)
         break;
     case 9:
         gamesysMemoryLoad(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
-        scpBoyControlReadDisable = 0;
+        if (!ICO_AUG6) {
+            scpBoyControlReadDisable = 0;
+        }
         loadState++;
         break;
     case 99:
@@ -3376,7 +3615,7 @@ int debug_SETest(int reset)
         seHandle = -1;
     }
     r = debug_SelectCsvWindowWithLineColor("SE LIST", 0xA, 0x3C, 0xA, seDef, 0x3C, 0,
-                                               0, 0x592, &seSelect, debug_SETest_color);
+                                               0, PAL_NTSC_AUG6(0x592, 0x56D, 1389), &seSelect, debug_SETest_color);
     if (r > 0) {
         seHandle = soundSeDefPlay(seSelect, 0, (float *)(GOBJ_SUB(boyGObj)->nodeMtx + 0x30), 1);
         return 0;
@@ -3453,7 +3692,7 @@ inline int debug_AdpcmTest(int first)
     if (first != 0) {
         adpcmHandle = -1;
     }
-    r = debug_SelectCsvWindow("ADPCM LIST", 10, 0x3C, 10, adpcmFile, 0x40, 0, 0, 0x69, &adpcmSelect);
+    r = debug_SelectCsvWindow("ADPCM LIST", 10, PAL_NTSC(0x3C, 60), 10, adpcmFile, PAL_NTSC(0x40, 64), 0, 0, PAL_NTSCAUG6(0x69, 96), &adpcmSelect);
     if (r > 0) {
         if (adpcmSelect != 0) {
             scpAdpcmPlayRequestFunc(adpcmSelect, 0, 1, 1, 1);
@@ -3556,8 +3795,30 @@ inline int debug_hintStart(void)
     return 1;
 }
 
+static inline int debug_ListActGobj_ntscaug6(DbgGobjEnt *list) /* derived name */
+{
+    void *g;
+    int n = 0;
+    for (g = isysGObjGetExist_begin(); g != 0; g = isysGObjGetExist_next(g)) {
+        int kind = ((GObj *)g)->kind;
+        switch (kind) {
+        case 1:
+        case 2:
+        case 4:
+        case 46:
+            list[n].name = objKindData[kind].name;
+            list[n].obj = g;
+            n++;
+        }
+    }
+    return n;
+}
+
 static inline int debug_ListActGobj(DbgGobjEnt *list) /* derived name */
 {
+    if (ICO_NTSCAUG6) {
+        return debug_ListActGobj_ntscaug6(list);
+    }
     void *g;
     int n = 0;
     for (g = isysGObjGetExist_begin(); g != 0; g = isysGObjGetExist_next(g)) {
@@ -3924,7 +4185,12 @@ DbgMenuItem debugMenu[27] = {
 };
 
 /* the open bug list debug_MenuHelp prints beside the menu */
-static char *debugMenuHelp[] = {"B2850   TOO HARD TO PICK UP LASER", "B2890   ILLEGAL CAGE CHAIN DYNAMICS", 0}; /* derived name */
+static char *debugMenuHelp_pal[] = {"B2850   TOO HARD TO PICK UP LASER", "B2890   ILLEGAL CAGE CHAIN DYNAMICS", 0}; /* derived name */
+
+static char *debugMenuHelp_ntscaug6[] = {"B1897   SPIDER ALIVE", "B2373   ENEMY FAIL FLY", "B2421   FLARE CLAMP FAIL",
+                                "A553/A580/B2432 THROUGH FLOOR @ SLOPE", 0}; /* derived name */
+
+#define debugMenuHelp PAL_NTSCAUG6(debugMenuHelp_pal, debugMenuHelp_ntscaug6)
 
 /* the menu's blink counter, state, cursor and the argument its entry gets */
 static int menuBlink = 0; /* derived name */
@@ -3938,7 +4204,7 @@ static int menuArg = 0; /* derived name */
 static inline void debug_MenuBlink(void) /* derived name */
 {
     if (menuBlink >> 4) {
-        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", PAL_JPN_KORCN("Jan 17 2002", "Nov  2 2001", "Jan  9 2002"), PAL_JPN_KORCN("15:37:26", "17:26:01", "19:03:40"));
+        debug_PrintfDummy(220, 60, 0x80C0FF80u, "DISC VER.%s %s", PAL_JPNCN_KOR_NTSC_AUG6("Jan 17 2002", "Nov  2 2001", "Jan  9 2002", "Aug 20 2001", "Aug  7 2001"), PAL_JPN_KOR_NTSC_AUG6_CN("15:37:26", "17:26:01", "19:03:40", "22:01:44", "15:03:20", "19:35:51"));
     }
     menuBlink++;
     if (menuBlink >= 0x41) {
@@ -3985,7 +4251,7 @@ void debug_Menu(void)
     }
     state = menuState;
     if (state == 1) {
-        r = debug_SelectCsvWindow("DEBUG MENU", 0xA, 0x32, 0xB, debugMenu, 0xC, 0, 1, 0x1B,
+        r = debug_SelectCsvWindow("DEBUG MENU", 0xA, 0x32, 0xB, debugMenu, 0xC, 0, 1, PAL_NTSC_AUG6(0x1B, 0x1A, 26),
                                   &menuSelect);
         switch (r) {
         case 0:
