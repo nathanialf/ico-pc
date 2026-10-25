@@ -155,6 +155,8 @@ int debug_disp_mesh = 1, debug_disp_particle = 1;
 int debug_font_flag;
 float inflateSec;
 int texturetranssize, GlobalTimer, currentScreenWidth;
+/* GsBase.c's; lineManager.c's 2001 arms clip to it (the European one to vsHeight) */
+int currentScreenHeight = H;
 void *girlGObj, *boyGObj;
 
 static unsigned char s_heap[48u << 20] __attribute__((aligned(16)));
