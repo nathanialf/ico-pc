@@ -129,8 +129,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   with the disc its first argument selects: the European disc's `BESCES-50760ico` and 0x1F0-byte
   product record (`save`), the Japanese disc's `BISCPS-11003ico` and 0x1E8-byte record, the same
   bytes up to 0x1E8 (`save_jpn`), the Korean disc's `BISCPS-56001ico` with the same 0x1E8 record
-  (`save_kor`); each imports a card holding its directory and one other disc's side by side and
-  the other disc's `.psu` beside their own ([SAVES.md](SAVES.md#tests)).
+  (`save_kor`), the Asian disc's `BISCPS-55001ico` with the same record (`save_cn`); each imports a card holding its directory and one other disc's side by side and
+  the other disc's `.psu` beside their own ([SAVES.md](SAVES.md#tests)). The North American,
+  August 2001 and June 2001 discs (a 0x18C-byte record) have no `save_<slug>` run yet: part B
+  lays the record out byte by byte, which waits for the merged `mcard.c` ([SAVES.md](SAVES.md#the-seven-discs)).
   A load reads `optionControlType` from `[gameplay] hold_type`, not from the card's `controlType`.
 
 ### port/core/test
@@ -264,6 +266,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   an unknown word, each name its language), `eBrainGetTarget` with Yorda safe off and on, and the
   `[mirror]` keys of the disc its second argument selects (`slot_N`, `jpn_slot_N`, `kor_slot_N`),
   the other discs' left as they were (`options`, `options_jpn`, `options_kor`).
+  The same runs exist for the other four discs (`options_ntsc`, `options_aug6`, `options_jun26`,
+  `options_cn`), and likewise `variants_<slug>`, `achievements_<slug>` and `credits_<slug>` for
+  `ntsc`, `aug6`, `jun26` and `cn`. `credits_test.c` holds each of the seven discs' STAFF1, scene
+  layout, roll offset, song, exit and boy record as literals (`test_region`); `achievements_test.c`
+  holds each disc's retail addresses, peek-row count and story-flag and preview sizes
+  (`kPeekWant`, checked against `gamestate.c`'s tables, which are written from
+  `config/symbol_addrs.<slug>.data.txt`: the North American, August 2001 and June 2001 discs have
+  `gFlag` and no `gFlagGameClear`, so 12 rows). `kanban_boot_cn` runs the Japanese program's check
+  on the Asian disc; the North American, August 2001 and June 2001 discs have their own boot check, so
+  they have no `kanban_boot` run until the merged `kanbanBoot.c` is read for its steps.
 - `photo_test.c`: photo mode's state and both cameras, identity, moves, limits; the Film effect's
   cycle off, 1 to 4, Deja vu (5), off, `film_effect = 5` read back as Deja vu and a value past it
   as off (`photo`).
@@ -981,7 +993,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`testSkipOpeningTitle`).
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
   (`settings_render`, which also draws the Touch screen page and the editor page); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,
-  `settings_render_kor`).
+  `settings_render_kor`); `cn` the same for the Asian disc (`settings_cn`, `settings_extra_cn`,
+  `settings_extras_cn`, `settings_render_cn`, `ui_cn`, `gallery_cn`, `model_viewer_cn`).
 - `strings_complete_test.c`: every language's table defines every `UiStrId`, none empty but
   `UI_STR_NONE`, each with the English entry's printf conversions; the four pack notes filled
   with each disc's serial (`ui_str_serial`); the sheet language's default and setter; the menu
