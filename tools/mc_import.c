@@ -5,7 +5,8 @@
  *
  * Imports ICO's saves (BESCES-50760ico, the European disc's, and
  * BISCPS-11003ico, the Japanese disc's, and
- * BISCPS-56001ico, the Korean disc's) from each PS2 memory card image
+ * BISCPS-56001ico, the Korean disc's, and the Asian, North American, August
+ * 2001 and June 2001 discs' directories: port/core/region.h mc_save_dir) from each PS2 memory card image
  * (.ps2, .bin) or .psu archive into the card folder SAVES, the folder
  * [paths] saves (or saves2) names (port/save/mc_import.c). Other games' entries are listed and left alone.
  * Exit 0 when every file gave a save, 1 when one held none, 2 on an error.
