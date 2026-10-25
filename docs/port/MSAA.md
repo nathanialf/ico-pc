@@ -130,7 +130,7 @@ replaces: `vkCmdResolveImage` is a copy there, while `msaa_resolve_ps` reads fou
 depth samples per pixel and takes the integer mean. That is the wrong machine to judge it on: on a
 GPU a 1376x896 fullscreen pass with eight loads per pixel is a fraction of a millisecond, and
 the saving is the second resolve, the stencil clear's extra pass and the fog reading a depth
-that no longer holds the clear along cracks. The real measure is the 10 s summary on a player's
+that holds no clear along cracks. The real measure is the 10 s summary on a player's
 machine (`window: msaa: N samples, resolves R per replay ...` and the `effects:` line's
 `MSAA resolve` entry): R must read 1.0 on gameplay frames (the double resolve read 1.0-1.8), and
 the entry's cost is the number to compare between releases. Lavapipe offers 1 and 4 samples
