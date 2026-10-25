@@ -612,6 +612,15 @@ void iosMcHandlerRead(McMgr *mp, unsigned char *buf, int len)
             return;
         }
 
+        /* PC port: the three 2001 discs' game block is one large read with nothing
+           read after it, so a copy cut short (0 bytes, or fewer than asked) matched
+           its own sum and loaded as a zeroed game; the European blocks end in the
+           option words' small reads, which give -15 here. Refuse it alike. */
+        if (ICO_NTSCAUG6JUN26 && mp->result < len) {
+            mp->result = -15;
+            return;
+        }
+
         mp->end = 0;
         mp->pos = 0;
         len = 0;
