@@ -28,7 +28,7 @@
  *     that sees the load's end and, the other order the threads can take,
  *     between the tick before it and that tick's kick.  The step ticks are
  *     the log's.
- * With a region slug ("jpn", "kor": ctests kanban_boot_jpn, kanban_boot_kor) the same runs on that disc,
+ * With a region slug ("jpn", "kor", "cn": ctests kanban_boot_jpn, kanban_boot_kor, kanban_boot_cn) the same runs on that disc,
  * whose card check is kanbanBootMcCheck_jpn: no language step, no video
  * step, no read of the card's system file (so neither cameraMove nor
  * palMode), NonLinearCameraMove 0 (the disc has no language word) and
@@ -73,7 +73,7 @@
 #include "../../../ico2/common/src/kanbanBoot.c"
 
 static int failures;
-static int s_jpn; /* the Japanese program's run (the Japanese and Korean discs) */
+static int s_jpn; /* the Japanese program's run (the Japanese, Korean and Asian discs) */
 
 /* the language main.c sets from [game] language "de": German (4) on the
    European disc, 0 on the Japanese one (no language word) */
@@ -668,8 +668,8 @@ int main(int argc, char **argv)
             printf("kanban_boot_test: no region %s\n", argv[2]);
             return 1;
         }
-        /* s_jpn: the Japanese program (the Japanese and Korean discs: ICO_JPNKOR) */
-        s_jpn = ICO_JPNKOR;
+        /* s_jpn: the Japanese program (the Japanese, Korean and Asian discs: ICO_JPNKORCN) */
+        s_jpn = ICO_JPNKORCN;
         /* select_disc (main_host.c): the Japanese program's word starts at 0 */
         systemStatus[0] = 0;
     }
@@ -684,10 +684,10 @@ int main(int argc, char **argv)
     {
         /* the item that starts without a card, and one that checks again:
            the European 41 (step 302; 40 stands for any other item), the
-           Japanese 11 and the Korean 5 (step 101's PAL_KOR(11, 5)), each
+           Japanese 11 and the Korean and Asian 5 (step 101's PAL_KORCN(11, 5)), each
            checked against the other disc's value */
-        const int startItem = !s_jpn ? 41 : ICO_KOR ? 5 : 11;
-        const int retryItem = !s_jpn ? 40 : ICO_KOR ? 11 : 5;
+        const int startItem = !s_jpn ? 41 : ICO_KORCN ? 5 : 11;
+        const int retryItem = !s_jpn ? 40 : ICO_KORCN ? 11 : 5;
         bootNoCard("no card", CARD_NONE, startItem, retryItem);
         bootNoCard("a full card", CARD_FULL, startItem, retryItem);
         bootSkipNoCard("Skip the opening, no card", CARD_NONE, startItem, retryItem);
