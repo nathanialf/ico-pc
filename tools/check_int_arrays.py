@@ -76,6 +76,11 @@ EXEMPT = {
     + "the default non-intra quantiser matrix of ISO/IEC 13818-2 (all 16).",
     ("ico2/fumi/src/commonact.c", "intrMotion"): _ICO2
     + "motion numbers per interrupt kind, indexed by the kind.",
+    # the discs' own rows of the same table (region data twins, config/region_twins.txt)
+    ("ico2/fumi/src/commonact.c", "intrMotion_pal"): _ICO2 + "as intrMotion, the European row.",
+    ("ico2/fumi/src/commonact.c", "intrMotion_ntsc"): _ICO2 + "as intrMotion, the USA disc's row.",
+    ("ico2/fumi/src/commonact.c", "intrMotion_aug6"): _ICO2
+    + "as intrMotion, the August 2001 preview's row.",
     ("ico2/seki/src/EnemyInit.c", "enemymodel01Kind15"): _ICO2
     + "-1-terminated part index lists per shadow kind.",
     ("ico2/seki/src/EnemyInit.c", "enemymodel01Kind4"): _ICO2 + "as Kind15.",
@@ -83,6 +88,9 @@ EXEMPT = {
     ("ico2/seki/src/DisplayFont.c", "fontKerning"): _ICO2
     + "per character, the first and last column of its cell in the font "
     "texture (metrics; the texture itself is loaded from the disc).",
+    ("ico2/seki/src/DisplayFont.c", "fontKerning_pal"): _ICO2 + "as fontKerning, the European row.",
+    ("ico2/seki/src/DisplayFont.c", "fontKerning_ntscaug6"): _ICO2
+    + "as fontKerning, the USA disc's and the August 2001 preview's row.",
     ("ico2/common/src/debug.c", "fontBitmap"): _ICO2
     + "the 8x8 1bpp debug-overlay font (256 glyphs). Glyph bitmaps are the "
     "closest thing to an asset on this list: flagged for review; "

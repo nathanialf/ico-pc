@@ -2524,7 +2524,9 @@ def audit_unit(src, fl, db, workdir):
         s.host_add = ad.extra + (s.const if s.kind != "recast" else 0)
 
     todo = [s for s in sites]
-    for rnd in range(16):
+    # a type resolves one call level a round; the twins' calls add levels (v0.9.0: 16 left
+    # act-wish.c's chkOrient and act-env.c's GetCollisCenterPositionSimple unresolved)
+    for rnd in range(64):
         rv.need = set()
         later = []
         for s in todo:
