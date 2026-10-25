@@ -606,7 +606,7 @@ static void apply_one(IcoTouchLayout *l, int ctl, const IcoTouchCtlEdit *c)
     const float q = l->unit;
     const int look = ctl == ICO_TOUCH_CTL_LOOK, z = ctl_zone(ctl);
     IcoTouchRect box0;
-    float s = c->scale, bw, bh, w, h, cx = 0.0f, cy = 0.0f, cxA, cyA;
+    float s = c->scale, bw, bh, w, h, cx = 0.0f, cy = 0.0f, cxA = 0.0f, cyA = 0.0f;
     int i;
 
     if (!base_size(l, ctl, c, &bw, &bh, &box0)) {

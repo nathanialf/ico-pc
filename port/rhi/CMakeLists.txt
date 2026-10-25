@@ -364,6 +364,10 @@ if(_ico_have_gl)
                                ${_ico_rhi_debug_default})
     target_compile_options(ico_rhi_opengl PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(ico_rhi_opengl PUBLIC SDL3::SDL3 PRIVATE ico_miniz)
+    if(NOT WIN32)
+        # d3d12_plan.c's floorf: lld does not take libm from SDL3's link line
+        target_link_libraries(ico_rhi_opengl PUBLIC m)
+    endif()
     message(STATUS "ico: OpenGL RHI built (ico_rhi_opengl)")
 endif()
 
