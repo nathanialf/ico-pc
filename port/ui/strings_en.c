@@ -629,25 +629,25 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING_LONG] =
         "Copying the disc image into the app. It is a large image: this takes a few minutes",
     [UI_STR_SECTION_VARIANTS] = "Game variants",
-    [UI_STR_OPT_VAR_TOUGHNESS] = "Shade toughness",
+    [UI_STR_OPT_VAR_TOUGHNESS] = "Shadow toughness",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
-        "American: every Shade as tough as on the North American disc, and no tougher on later playthroughs. Achievements stay on.",
+        "American: every Shadow as tough as on the North American disc, and no tougher on later playthroughs. Achievements stay on.",
     [UI_STR_VAL_VAR_AMERICAN] = "American",
     [UI_STR_VAL_VAR_NOT_TOUGHER] = "Not tougher later",
     [UI_STR_OPT_VAR_ONE_HIT] = "One hit per swing",
     [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
-        "Each swing of Ico’s weapon can hurt a Shade only once. Switches achievements off.",
-    [UI_STR_OPT_VAR_NEVER_DODGE] = "Shades never dodge",
+        "Each swing of Ico’s weapon can hurt a Shadow only once. Switches achievements off.",
+    [UI_STR_OPT_VAR_NEVER_DODGE] = "Shadows never dodge",
     [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] =
-        "The Shades never step aside from Ico’s swings. Switches achievements off.",
-    [UI_STR_OPT_VAR_AGGRESSION] = "Shade aggression",
+        "The Shadows never step aside from Ico’s swings. Switches achievements off.",
+    [UI_STR_OPT_VAR_AGGRESSION] = "Shadow aggression",
     [UI_STR_VAL_VAR_AGG_OWN] = "Their own",
     [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "Bold, patient",
     [UI_STR_VAL_VAR_AGG_BOLD_QUICK] = "Bold, quick",
     [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "Wary, patient",
     [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "Wary, quick",
     [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
-        "How the Shades fight: bold or wary, patient or quick. Their own keeps each Shade’s habits. Achievements stay on.",
+        "How the Shadows fight: bold or wary, patient or quick. Their own keeps each Shadow’s habits. Achievements stay on.",
     [UI_STR_OPT_VAR_NO_HINTS] = "No hints",
     [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
         "Yorda gives no hints about where to go, as on the North American disc. Achievements stay on.",
