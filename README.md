@@ -4,7 +4,9 @@ This is **ICO** (Sony Computer Entertainment, 2001) made to run as a normal
 program on a Windows or Linux PC, the Steam Deck, 64-bit ARM Linux
 handhelds, Android phones and tablets, iPhones and Apple-silicon Macs. It
 runs the game's own code, so it plays, sounds and feels like the
-PlayStation 2 game, from the European disc or the Japanese one. There are
+PlayStation 2 game, from the European, Japanese, Korean, North American or
+Asian disc, or from the August 2001 preview disc or the June 2001 magazine
+demo. There are
 extras, such as a sharper picture, widescreen
 and smoother motion. The sharper picture, widescreen and the other picture
 extras stay off until you turn them on, and the frame rate is not held to
@@ -13,9 +15,12 @@ the PS2's unless you choose Original. The mouse camera starts on.
 > [!IMPORTANT]
 > This project is not connected to Sony Interactive Entertainment or Team
 > Ico. *ICO* is a trademark of its owners. The game itself is not included
-> here or in the downloads. You need your own copy of the European disc
-> (SCES-50760), the Japanese disc (SCPS-11003) or the Korean disc
-> (SCPS-56001); the number is printed on the disc and on the case. Save it as a disc image file, and the program
+> here or in the downloads. You need your own copy of one of the seven discs
+> in [The seven discs](#the-seven-discs): the European disc (SCES-50760), the
+> Japanese disc (SCPS-11003), the Korean disc (SCPS-56001), the North American
+> disc (SCUS-97113), the Asian disc (SCPS-55001), the August 2001 preview disc
+> or the June 2001 magazine demo (SCUS-97158); the number is printed on the
+> disc and on the case. Save it as a disc image file, and the program
 > reads the game from it. More in the
 > [project's legal notes](https://github.com/nathanialf/ico-pc/blob/main/docs/LEGAL.md)
 > (written for developers).
@@ -23,12 +28,17 @@ the PS2's unless you choose Original. The mouse camera starts on.
 ## What you need
 
 - **Your own disc image of ICO: the European release (SCES-50760), the
-  Japanese release (SCPS-11003) or the Korean release (SCPS-56001).** The number is printed on the disc and
-  on the case. A disc image is one file that holds the whole disc. It ends
+  Japanese release (SCPS-11003), the Korean release (SCPS-56001), the North
+  American release (SCUS-97113), the Asian release (SCPS-55001), the August
+  2001 preview disc or the June 2001 magazine demo (SCUS-97158).** The number
+  is printed on the disc and on the case (the preview disc has none). A disc
+  image is one file that holds the whole disc. It ends
   in `.iso`, `.chd` or `.bin` (a `.bin` usually comes with a `.cue` file,
-  which also works). The Japanese release is a CD, so its image is most
-  often a `.bin` and a `.cue`. The American release and other editions do
-  not work. [Which disc to pick](#the-three-discs).
+  which also works). The Japanese, North American and preview discs are CDs,
+  so their images are most often a `.bin` and a `.cue`. The magazine demo is
+  a big image, because the magazine disc holds other games too: the program
+  needs the whole image once, at the first start. Other editions do not
+  work. [Which disc to pick](#the-seven-discs).
 - **Something to play on:**
   - a 64-bit Windows 10 or 11 PC, or a Linux PC, with an up-to-date
     graphics driver (any recent NVIDIA, AMD or Intel graphics card works);
@@ -55,9 +65,8 @@ the PS2's unless you choose Original. The mouse camera starts on.
 | Apple-silicon Mac, macOS 12 or newer | `-macos-arm64.dmg` (or `-macos-arm64.zip`) | Not tested by the maintainer either. The first time, right-click **ICO** and choose **Open** ([how](#mac)). |
 
 Not supported: 32-bit systems, Windows 7 and 8, Intel Macs, and any disc
-other than the European release (SCES-50760), the Japanese release
-(SCPS-11003) and the Korean release (SCPS-56001). Every download plays all
-three discs.
+other than the seven in [The seven discs](#the-seven-discs). Every download
+plays all seven.
 
 ## Install
 
@@ -158,11 +167,9 @@ up first with its own instructions.
    need it: your disc image does the same job.) That is expected: it has
    not seen your disc image yet.
 3. Copy your disc image into ICO's **Documents** folder through
-   LiveContainer's data-folder access, and name it `Ico_PAL.iso` (or
-   `Ico_PAL.chd`, `Ico_PAL.bin` or `Ico_PAL.cue`) for the European disc,
-   `Ico_JPN.iso` (or `Ico_JPN.chd`, `Ico_JPN.bin` or `Ico_JPN.cue`) for
-   the Japanese disc, or `Ico_KOR.iso` (or `Ico_KOR.chd`, `Ico_KOR.bin` or
-   `Ico_KOR.cue`) for the Korean disc. With a `.bin` and a `.cue`, copy both, rename only
+   LiveContainer's data-folder access, and name it for your disc (the table
+   in [The first start](#the-first-start) lists the names; the ending can be
+   `.iso`, `.chd`, `.bin` or `.cue`). With a `.bin` and a `.cue`, copy both, rename only
    the `.cue`, and leave the `.bin` with the name the `.cue` gives it. The
    iPhone version does not ask for the disc image, so
    it has to be there with one of those names.
@@ -183,37 +190,59 @@ what the game is doing the whole time
 ([the Android guide](docs/ANDROID.md#the-first-start) has the steps).
 
 On Windows and Linux you can skip the question. Put the disc image beside
-the program and name it `Ico_PAL.iso` (or `Ico_PAL.chd`, `Ico_PAL.bin` or
-`Ico_PAL.cue`) for the European disc, `Ico_JPN.iso` (or `Ico_JPN.chd`,
-`Ico_JPN.bin` or `Ico_JPN.cue`) for the Japanese disc, or `Ico_KOR.iso` (or
-`Ico_KOR.chd`, `Ico_KOR.bin` or `Ico_KOR.cue`) for the Korean disc. With a
-`.bin` and a `.cue`, put both there, rename only the `.cue`, and leave the `.bin` with
+the program and name it for your disc. The ending can be `.iso`, `.chd`,
+`.bin` or `.cue`; for example `Ico_PAL.iso` for the European disc.
+
+| Disc | Name (before the ending) |
+| --- | --- |
+| European | `Ico_PAL` |
+| Japanese | `Ico_JPN` |
+| Korean | `Ico_KOR` |
+| North American | `Ico_USA` |
+| Asian | `Ico_CN` |
+| August 2001 preview | `Ico_AUG6` |
+| June 2001 magazine demo | `Ico_JUN26` |
+
+With a `.bin` and a `.cue`, put both there, rename only the `.cue`, and leave the `.bin` with
 the name the `.cue` gives it. On Windows, "beside the program" means inside
 the `x64` folder.
 
-## The three discs
+## The seven discs
 
-The game plays the European release of ICO (SCES-50760), the Japanese
-release (SCPS-11003) and the Korean release (SCPS-56001). The disc image you
-give it at the first start decides which one you play. All three are the
-whole game; the differences are the
-original releases' own:
+The game plays seven discs: the European release of ICO (SCES-50760), the
+Japanese release (SCPS-11003), the Korean release (SCPS-56001), the North
+American release (SCUS-97113), the Asian release (SCPS-55001), the August 2001
+preview disc and the June 2001 magazine demo (SCUS-97158). The disc image you
+give it at the first start decides which one you play. The first five are the
+whole game; the differences are the original releases' own:
 
 - **The game's text.** The signs, menus and subtitles are the disc's own.
   The European disc has English, French, German, Italian and Spanish; the
-  Japanese disc has Japanese, and the Korean disc has Korean.
-- **Buttons.** On the Japanese disc and the Korean disc, Circle confirms and
+  Japanese disc has Japanese, the Korean disc has Korean, the North American
+  disc has English, and the Asian disc has Chinese menus.
+- **Buttons.** On the Japanese, Korean and Asian discs, Circle confirms and
   Cross goes back, as on those PS2 releases, and the menus this port adds do
-  the same. [More in Controls](docs/CONTROLS.md#the-japanese-and-korean-discs).
-- **Video mode.** The European disc offers 50 Hz or 60 Hz; the Japanese
-  disc and the Korean disc are always 60 Hz.
+  the same. The European and North American discs confirm with Cross.
+  [More in Controls](docs/CONTROLS.md#the-japanese-korean-and-asian-discs).
+- **Video mode.** The European disc offers 50 Hz or 60 Hz; the other discs
+  are always 60 Hz.
 - **The port's own menus** (Options, the extras, photo mode) can be shown in
   English, French, German, Italian, Spanish, Japanese or Korean, with the **Menu
   language** row on the first page of the Options menu
-  ([more](docs/OPTIONS.md#language)).
+  ([more](docs/OPTIONS.md#language)). There is no Chinese text for them yet:
+  on the Asian disc they are in English until you choose another language.
+- **The August 2001 preview disc** is a pre-release version of the game,
+  from before it came out, with English text. It is not the finished game:
+  it can differ from it in places, as the original disc does.
+- **The June 2001 magazine demo** is a playable demo that came on a magazine's
+  disc, which holds other games and demos too. Only ICO's part is used. The
+  program needs the whole disc image once, at the first start (about 4.4 GB),
+  and keeps only ICO's part afterwards (about 280 MB).
 
-Achievements, the music and models galleries, photo mode and the model
-viewer work with all three discs. Saves, texture packs and model packs are
+The model viewer (under Extras) is not right yet on the North American disc,
+the preview disc and the magazine demo: it can show the wrong model there.
+
+Saves, texture packs and model packs are
 kept apart for each disc, so you can set up more than one on the same
 device: see [Can I play more than one disc?](docs/FAQ.md#can-i-play-more-than-one-disc)
 
@@ -234,9 +263,10 @@ device: see [Can I play more than one disc?](docs/FAQ.md#can-i-play-more-than-on
   work. [How to set it up](docs/TROUBLESHOOTING.md#a-program-that-adds-frames-or-scales-the-game-lossless-scaling-does-not-work).
 - **Where are my saves?** In a folder the game makes for you.
   [Where that is](docs/PORTABLE_MODE.md#where-your-saves-are).
-- **Do the Japanese and Korean discs work?** Yes, the European disc
-  (SCES-50760), the Japanese disc (SCPS-11003) and the Korean disc
-  (SCPS-56001) all do. [The three discs](#the-three-discs).
+- **Which discs work?** The European disc (SCES-50760), the Japanese disc
+  (SCPS-11003), the Korean disc (SCPS-56001), the North American disc
+  (SCUS-97113), the Asian disc (SCPS-55001), the August 2001 preview disc and
+  the June 2001 magazine demo (SCUS-97158). [The seven discs](#the-seven-discs).
 
 [More questions and answers](docs/FAQ.md).
 
@@ -273,7 +303,7 @@ When something goes wrong, the game writes what happened into a file named
 When the game closes with an error it also writes a report file in the
 same folder, named `report-` and the date, ending in `.zip`. Open a report
 on the [issues page](https://github.com/nathanialf/ico-pc/issues), say which
-disc you play (the European, the Japanese or the Korean) and attach the newest report
+disc you play (the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo) and attach the newest report
 file, or `ico-pc.log` if there is none. [When something goes wrong](docs/TROUBLESHOOTING.md) explains the
 error messages and what to try first.
 
