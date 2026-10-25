@@ -1249,10 +1249,12 @@ void BeforeFunc(GObj *self)
             GOBJ_WORK(self)->prevHist[0] = old;
             w->actMode = intr->mode;
             w->flags18.ll = (w->flags18.ll & ~(PAL_NTSCAUG6(1LL << 39, 1LL << 35))) |
-                            ((unsigned long long)actModeTbl[w->actMode].bit10 *
+                            ((unsigned long long)PAL_NTSCAUG6(actModeTbl[w->actMode].bit10,
+                                                              actModeTbl[w->actMode].saveInfo) *
                              PAL_NTSCAUG6((1ULL << 39), (1ULL << 35)));
             w->flags18.ll = (w->flags18.ll & ~(PAL_NTSCAUG6(1LL << 50, 1LL << 45))) |
-                            ((unsigned long long)actModeTbl[intr->mode].bit12 *
+                            ((unsigned long long)PAL_NTSCAUG6(actModeTbl[intr->mode].bit12,
+                                                              actModeTbl[intr->mode].holdDir) *
                              PAL_NTSCAUG6((1ULL << 50), (1ULL << 45)));
             w->flags20.ll &= ~(PAL_NTSC_AUG6(1LL << 11, 1LL << 2, 1LL << 1));
             w->mail = (ActMail *)&actIntrList[actModeTbl[w->actMode].intrList];
