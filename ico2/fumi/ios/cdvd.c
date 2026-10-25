@@ -396,10 +396,12 @@ static void iosCdvdMgrStStart(IosCdvdHandle *self)
     }
     stReq.owner = (IosCdvdHandle *)self;
     stReq.buf = stagePreLoadBuff;
-    stReq.size = 0x380;
+    /* PC port: the ring is the whole preload buffer: 896 sectors, the June 2001 demo's 1024
+       (StageManager.c preloads up to 0x200000 bytes there; its own stream is the library's) */
+    stReq.size = PAL_JUN26(0x380, 0x400);
     stReq.count = stPreLoadCnt;
     stReq.writePos = stPreLoadCnt;
-    if (stPreLoadCnt >= 0x380) {
+    if (stPreLoadCnt >= PAL_JUN26(0x380, 0x400)) {
         stReq.writePos = 0;
     }
     stReq.readPos = 0;
