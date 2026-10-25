@@ -162,6 +162,8 @@ const IcoRegionInfo ico_region_info_cn = {
     .credits_roll_ms = 151050,
     .credits_entrance_exit = 216, /* exitData[216] leads to 58 (STAFF1); PAL's to 60 */
     .credits_boy_label = 54,      /* act-game.c ACTGame_SetActors_Debug, unchanged */
+    /* DATA.DF's directory (182 entries) holds STGSTAFF1.DF, STGSTAFF2.DF and STGSTAFF3.DF */
+    .credits_staff_packs = 1,
 
     .n_adpcm = 105, /* data_schema.cn.txt: these five as PAL */
     .n_sefile = 104,
