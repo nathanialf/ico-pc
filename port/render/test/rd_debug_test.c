@@ -580,12 +580,17 @@ static void checkMenuOpen(void)
 {
     const Pts *p;
     const int least = strPts("DEBUG MENU") + strPts("FIXED BUG ID LIST");
+    const int dev = s_dev;
 
     CHECK(s_bind.binds > 0 && s_bind.oneHit == &debug_one_hit_only &&
               s_bind.dodge == &debug_ignore_dodge && s_bind.battle == &debug_enemy_battle_type &&
               s_bind.demoCam == &debug_ignore_demo_camera && s_bind.hand == &debug_hand_camera &&
               s_bind.menuOpen == debug_MenuOpen,
           "debug_VariableInit binds the five switches and debug_MenuOpen (%d binds)", s_bind.binds);
+    /* developer mode on, as the Debug menu row needs (and as debug_Menu
+       runs only then, main.c): debug_PrintfDummy draws nothing without it,
+       and checkOptionFile leaves it off */
+    s_dev = 1;
     /* closed: a tick with no pad draws nothing */
     debug_Menu_off();
     debugBackGroundDisableFlag = 0;
@@ -615,6 +620,7 @@ static void checkMenuOpen(void)
     debug_Menu();
     p = endFrame();
     CHECK(p->n == 0 && debugBackGroundDisableFlag == 0, "Triangle closes it: %d points", p->n);
+    s_dev = dev;
 }
 
 static void checkFontWindow(void)
