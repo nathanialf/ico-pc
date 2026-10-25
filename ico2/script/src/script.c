@@ -347,7 +347,8 @@ void actSt25aQueenBeforeChk(GObj *volatile self);
 void actSt25aQueenBeforeChk(GObj *volatile self);
 
 /* object 1882's process: scrolls st25a.c's wall01 texture, then, until flag 286
-   is set, hands the actor queen_before_mes */
+   is set, hands the actor queen_before_mes; PC port: the June 2001 demo's object (only its
+   object table names it), so its own row and mail 377 (st25a.c's queen_before_mes_jun26) */
 inline void scpObj1882(GObj *volatile self) /* derived name */
 {
     GObj *x = self;
@@ -358,8 +359,8 @@ inline void scpObj1882(GObj *volatile self) /* derived name */
     _ACTWait(300);
     tex_SetUVScroll(wall01Tex, 0.0f, -0.3f, 0.0f, -0.001f, 0.0f, -0.7f, 1);
     if (gflagChk(286) == 0) {
-        queen_before_mes[0].func = actSt25aQueenBeforeChk;
-        act->mail = queen_before_mes;
+        queen_before_mes_jun26[0].func = actSt25aQueenBeforeChk;
+        act->mail = queen_before_mes_jun26;
         ACTSendMailCorrect(self, 377);
         _ACTWait(0);
     }

@@ -26,7 +26,9 @@ extern struct SqEntry *conte12;
 extern struct SqEntry *sd2;
 extern struct SqEntry *dead;
 void BoySekikaTexScroll(void);
-extern ActMail queen_before_mes[]; /* st25a.o .data: the queen-before actor mail list */
+/* PC port: st25a.o .data: the June 2001 demo's queen-before actor mail list (377/376), the one
+   row another TU sends (script.c's scpObj1882, which only the demo's object table names) */
+extern ActMail queen_before_mes_jun26[];
 /* st25a.o .data: the queen-appear actor mail list, per disc */
 extern ActMail queen_appear_mes_pal[];
 extern ActMail queen_appear_mes_ntsc[];
