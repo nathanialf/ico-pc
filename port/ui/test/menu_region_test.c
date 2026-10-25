@@ -1,10 +1,11 @@
-/* menu_region_test.c: the Japanese and Korean discs' menus as the port reads them.
+/* menu_region_test.c: the Japanese, Korean and Asian discs' menus as the port reads them.
  *
  * The port names the game's menus by number (a layout, a row, a button
- * glyph's rectangle); on the Japanese and Korean discs they are the disc's
- * own numbers, the region table's (port/core/region_jpn.c, region_kor.c;
- * the Korean build is the Japanese program with its own tex-property
- * table).  Over the disc's boot ELF's tables (the loader's copy of that
+ * glyph's rectangle); on the Japanese, Korean and Asian discs they are the
+ * disc's own numbers, the region table's (port/core/region_jpn.c,
+ * region_kor.c, region_cn.c; the Korean build is the Japanese program with
+ * its own tex-property table, the Asian one the Korean program on the
+ * Japanese tex-property table).  Over the disc's boot ELF's tables (the loader's copy of that
  * disc, port/data/gen/<slug>/):
  *
  *   text  every layout the region names runs the procedure it is named
@@ -20,7 +21,7 @@
  *         words of the pause menu and the title (their fill and their
  *         rim), and over them the disc's sheet ink, the port's own rows
  *         over these sheets are drawn with (menu_font.c kSheetInk[the
- *         row's menu_sheet]: UI_SHEET_JA, UI_SHEET_KO), printed and held to
+ *         row's menu_sheet]: UI_SHEET_JA, UI_SHEET_KO, UI_SHEET_ZH), printed and held to
  *         that table within menu_look's tolerances; and the port's geometry
  *         for the sheet language (menu_font.c sheetGeo): the title's and
  *         pause menu's words drawn by the port against the disc's rows of
@@ -49,8 +50,8 @@
  *   menu_region_test look SLUG BASE_ELF DISC_IMAGE
  *   menu_region_test dump SLUG BASE_ELF DISC_IMAGE OUT_DIR [BASE_ELF_PAL]
  *
- * SLUG is "jpn" or "kor" (ctests menu_text_jpn, menu_look_jpn, menu_text_kor,
- * menu_look_kor).  Exit 0, 1 on a failure, 77 without the ELF (or, for look
+ * SLUG is "jpn", "kor" or "cn" (ctests menu_text_jpn, menu_look_jpn,
+ * menu_text_kor, menu_look_kor, menu_text_cn, menu_look_cn).  Exit 0, 1 on a failure, 77 without the ELF (or, for look
  * and dump, the disc).
  */
 #include <math.h>
@@ -413,7 +414,12 @@ typedef struct InkExpect {
     double fill, rim;
 } InkExpect;
 
-static const InkExpect kInkExpect[] = {{"jpn", 251.5, 34.3}, {"kor", 252.8, 41.8}};
+/* The Asian disc's (Traditional Chinese sheets) is the Japanese disc's
+   numbers until menu_look_cn has measured SCPS-55001: this test prints
+   "sheet ink fill .. rim .." and fails against them, so the printed values
+   replace these two and kSheetInk[UI_SHEET_ZH] (menu_font.c). */
+static const InkExpect kInkExpect[] = {
+    {"jpn", 251.5, 34.3}, {"kor", 252.8, 41.8}, {"cn", 251.5, 34.3}};
 #define TOL_LEVEL 0.6 /* menu_look_test's: grey levels */
 
 static void testLook(IcoVfs *vfs)
@@ -842,7 +848,7 @@ typedef struct GeoWord {
     int id;
     const char *name;
     int row;   /* the disc's table's row */
-    int sheet; /* the geometry's sheet: UI_SHEET_JA_TITLE or UI_SHEET_JA, UI_SHEET_KO */
+    int sheet; /* the geometry's sheet: UI_SHEET_JA_TITLE or UI_SHEET_JA, UI_SHEET_KO, UI_SHEET_ZH */
     int held;
     int title;   /* the title screen's word (ui_menu_text_set_title) */
     double tolW; /* the width gate, a fraction of the disc's */
@@ -985,9 +991,9 @@ static void testGeometry(IcoVfs *vfs)
 {
     const IcoRegionInfo *r = ico_region_cur();
     /* the sheets' geometry: the Japanese disc has the title's own (T) and
-       the other screens' (O); the Korean disc one (UI_SHEET_KO) */
-    const int kor = r->menu_sheet == UI_SHEET_KO;
-    const int T = kor ? UI_SHEET_KO : UI_SHEET_JA_TITLE, O = kor ? UI_SHEET_KO : r->menu_sheet;
+       the other screens' (O); the Korean and Asian discs' one (UI_SHEET_KO, UI_SHEET_ZH) */
+    const int kor = r->menu_sheet == UI_SHEET_KO || r->menu_sheet == UI_SHEET_ZH;
+    const int T = kor ? r->menu_sheet : UI_SHEET_JA_TITLE, O = r->menu_sheet;
     const double tolT = GEO_TOL_W, tolO = kor ? GEO_TOL_W : GEO_TOL_W_OTHER;
     /* Options' words: the Japanese disc's rows (zoom 318, button config 300, sound 285 ...)
        moved by the distance of the pause menu's Options row from the Japanese disc's 271.
@@ -1421,7 +1427,11 @@ static int dump(IcoVfs *vfs, const char *outDir)
         }
         fprintf(ix, "%s %.1f %d \"%s\"%s rows %s\n", ps->name, rend[i].size, ps->box,
                 ui_str_in(lang, (UiStrId)ps->id),
-                (lang == UI_LANG_KO ? ui_strings_ko : ui_strings_ja)[ps->id] ? "" : " (English)",
+                (lang == UI_LANG_ZH   ? ui_strings_zh
+                 : lang == UI_LANG_KO ? ui_strings_ko
+                                      : ui_strings_ja)[ps->id]
+                    ? ""
+                    : " (English)",
                 at ? rows : "-");
     }
     {
@@ -1560,7 +1570,7 @@ int main(int argc, char **argv)
         }
     }
     if (s_set == NULL || strcmp(slug, "pal") == 0) {
-        fprintf(stderr, "menu_region_test: no region %s (jpn or kor)\n", slug);
+        fprintf(stderr, "menu_region_test: no region %s (jpn, kor or cn)\n", slug);
         return 2;
     }
     if (isDump && argc > 6) {
@@ -1597,6 +1607,10 @@ int main(int argc, char **argv)
         printf("menu_region_test: no region %s\n", slug);
         return 1;
     }
+    /* the port's words in the disc's language, drawn from the font that
+       language's ideographs come from (font.c ui__font_prefer_chinese) */
+    ui_set_language((UiLang)ico_region_cur()->ui_lang_default);
+    ui__font_prefer_chinese(ico_region_cur()->ui_lang_default == UI_LANG_ZH);
     if (strcmp(argv[1], "text") == 0) {
         testText();
     } else if (isDump) {
