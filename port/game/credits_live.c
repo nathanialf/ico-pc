@@ -10,8 +10,10 @@
  * environment sounds closed, stgmgrForceSwitchWithFade, then
  * ACTGame_SetActors_Debug, which gives the boy's records to the stage at
  * the first exit into it, exit 26), and the boy's record is then put at the
- * entrance the real ending uses, exit 216 from 26b4demo2
- * (ACTGame_StageChangeGObjID, as RequestStageChange does for him).  The
+ * entrance the real ending uses, the exit from 26b4demo2 into STAFF1 (216
+ * on the European disc, 212 on the 2001 discs: region.h
+ * credits_entrance_exit) (ACTGame_StageChangeGObjID, as RequestStageChange
+ * does for him).  The
  * stage's own objects run actStaff1 and the rest of the ending's staff
  * scenes as in the real ending (end.c); under the flag actStaff3RollChk
  * goes back to the title when the roll ends.
@@ -27,12 +29,15 @@
  * ends, would read through a null object.  It is put back as stage 1 is
  * entered again (StageManager.c, start_stage_Load_thread, after exit_stage
  * and before the stage's objects are built), with gamesysMemoryLoad as the
- * title's Load does, then the flags bit by bit (the load sets 394).
+ * title's Load does, then the flags bit by bit (ACTGame_SetActors_Debug
+ * sets 394, 361, 360 or 343 by the disc: act-game.c).
  *
  * The poll (once per vsync, after the game's threads) logs the stages and
  * the song.  A start that never reaches STAFF1 is a failure: logged, the
  * title requested and the state put back as it is entered, the flag kept
- * until then (a bound on each wait; see REACH_TICKS).
+ * until then (a bound on each wait; see REACH_TICKS).  A disc whose DATA.DF
+ * has no staff scenes (the June 2001 demo: region.h credits_staff_packs) is
+ * refused before anything changes, the reason logged.
  */
 #include <stdio.h>
 
@@ -80,17 +85,21 @@ extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned ch
 #define SONG_OPEN_MS 80
 
 /* the real ending's way into STAFF1: 26b4demo2's sixth exit (actConte14_13,
-   RequestStageChange(6, ...)), and the boy's object record (label 54, kind
-   1: ACTGame_SetActors_Debug's first row) */
-#define ENTRANCE_EXIT (ico_region_cur()->credits_entrance_exit) /* 216 on every disc */
-#define BOY_LABEL (ico_region_cur()->credits_boy_label)         /* 54 on every disc */
+   RequestStageChange(6, ...)), and the boy's object record (kind 1:
+   ACTGame_SetActors_Debug's first row), the disc's: exitData 216 and label
+   54 on the European, Japanese, Korean and Asian discs, exitData 212 (into
+   58 or 59, STAFF1) and label 51, 50 and 47 on the North American disc, the
+   August 2001 preview and the June 2001 demo (region.h) */
+#define ENTRANCE_EXIT (ico_region_cur()->credits_entrance_exit)
+#define BOY_LABEL (ico_region_cur()->credits_boy_label)
 #define BOY_KIND 1
 
 /* the story flags: gflag.c's bitmap, 400 flags on the European, Japanese, Korean and Asian
    discs, 368 on the USA disc and the August 2001 preview, 352 on the June 2001 demo
    (region.h gflag_count); kept at the largest, walked to the disc's count */
 #define GFLAG_MAX 400
-#define GFLAG_COUNT (ico_region_cur()->gflag_count)
+#define GFLAG_COUNT                                                                                \
+    (ico_region_cur()->gflag_count < GFLAG_MAX ? ico_region_cur()->gflag_count : GFLAG_MAX)
 /* Main ticks the stage change may take before it counts as failed (the
    load of STAFF1 takes a few hundred): REACH_TICKS with no stage change
    running, REACH_LIMIT whatever runs; then RETURN_TICKS for the title's
@@ -138,7 +147,7 @@ static void keepState(void)
 }
 
 /* the state as it was at the start; returns how many flags differed after
-   the load (the load itself sets 394) */
+   the load (ACTGame_SetActors_Debug sets the disc's 394, 361, 360 or 343) */
 static int restoreState(void)
 {
     int i;
@@ -166,6 +175,14 @@ static int restoreState(void)
 
 static int begin(void)
 {
+    /* first: the disc's own reason, wherever the game stands */
+    if (!ico_region_cur()->credits_staff_packs) {
+        fprintf(stderr,
+                "credits: failed: this disc (%s) has no staff roll: its DATA.DF holds no "
+                "STGSTAFF1.DF (stage %d), so the ending's staff scenes cannot be played\n",
+                ico_region_cur()->disc_id, ICO_CREDITS_STAGE);
+        return -1;
+    }
     if (s_phase != PH_IDLE || stage_no != ICO_CREDITS_TITLE_STAGE || systemStatus[6] != 0) {
         fprintf(stderr, "credits: failed: not on the title (stage %d, stage change %d)\n", stage_no,
                 systemStatus[6]);
