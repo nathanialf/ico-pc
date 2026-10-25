@@ -8244,7 +8244,7 @@ static void actBoyStart_jun26(GObj *self)
 
     startWaitCancel = 0;
 
-    ((Act *)work)->mainMail = (ActMail *)&actIntrList[67];
+    ((Act *)work)->mainMail = (ActMail *)&actIntrList[65];
 
     actCreateSubThread(subBoyBrainMain, 20);
     gopp_subBoyControl = (void *)actCreateSubThread(subBoyControl, 21);
