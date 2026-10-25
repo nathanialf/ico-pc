@@ -138,8 +138,11 @@ In that folder:
 - `memcard` holds your saves: the European disc's in `BESCES-50760ico`,
   the Japanese disc's in `BISCPS-11003ico`, the Korean disc's in
   `BISCPS-56001ico`, the Asian disc's in `BISCPS-55001ico`, the North American
-  disc's and the August 2001 preview's in `BASCUS-97113ico` and the June 2001
-  magazine demo's in `BISCUS-97113ico`.
+  disc's in `BASCUS-97113ico` and the June 2001 magazine demo's in
+  `BISCUS-97113ico`.
+- `memcard-preview` holds the August 2001 preview disc's saves (in its own
+  `BASCUS-97113ico`): they are not the North American disc's kind of save,
+  so they are kept apart. Copy it along with `memcard` when you back up.
 - `drivers` is where a graphics driver zip goes when the file picker will
   not open ([Using a different graphics
   driver](#using-a-different-graphics-driver)). The game makes the folder

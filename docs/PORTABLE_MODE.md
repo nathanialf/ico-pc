@@ -29,17 +29,19 @@ In the user folder:
   the Korean disc's in `BISCPS-56001ico`, the Asian disc's in
   `BISCPS-55001ico`, the June 2001 magazine demo's in `BISCUS-97113ico` and the
   North American disc's in `BASCUS-97113ico`, as on a PS2 memory card, so
-  they do not mix. The one exception: the August 2001 preview disc uses the
-  same folder as the North American disc (`BASCUS-97113ico`), as the two
-  discs did on a PS2, so playing one after the other uses the same save
-  files, and a save made on one can be overwritten from the other.
+  they do not mix.
+- `memcard-preview` is the August 2001 preview disc's own memory card. The
+  preview writes its saves under the same name as the North American disc
+  (`BASCUS-97113ico`), but they are not the same kind of save, so the game
+  keeps them in this folder of their own.
 - `config.toml` holds your settings.
 - The game's own data, copied from your disc image at the first start: one
   large file for each disc you set up.
 - `screenshots` holds the pictures you take in photo mode.
 - Your achievements, and any texture or model pack you put there.
 
-**Back up your saves** by copying the `memcard` folder somewhere safe.
+**Back up your saves** by copying the `memcard` folder (and `memcard-preview`,
+if you play the August 2001 preview) somewhere safe.
 
 **To uninstall,** delete the program's folder (or the AppImage file) and
 the user folder. On a
@@ -154,8 +156,12 @@ folder for its disc. It will not replace a save that is already there unless you
 From a PCSX2 memory card kept as a folder, you do not need the tool. Copy
 your disc's folder into `memcard`: `BESCES-50760ico` (European disc),
 `BISCPS-11003ico` (Japanese disc), `BISCPS-56001ico` (Korean disc),
-`BISCPS-55001ico` (Asian disc), `BASCUS-97113ico` (North American disc or August
-2001 preview) or `BISCUS-97113ico` (June 2001 magazine demo).
+`BISCPS-55001ico` (Asian disc), `BASCUS-97113ico` (North American disc) or
+`BISCUS-97113ico` (June 2001 magazine demo). A save of the August 2001
+preview goes in a `BASCUS-97113ico` folder inside `memcard-preview` instead.
+The tool files a `BASCUS-97113ico` folder from a memory card as the North
+American disc's; to import a preview save with it, give `memcard-preview` as
+the folder.
 
 After importing, check that the game lists the save.
 
@@ -172,3 +178,7 @@ saves2 = "memcard2"
 
 On a Mac, give the full path instead, for example
 `saves2 = "/Users/you/Library/Application Support/ico-pc/ico-pc/memcard2"`.
+
+The August 2001 preview disc uses folders beside the ones you name, with
+`-preview` added (`memcard2-preview` for the example above), as it does with
+`memcard-preview` for the first card.

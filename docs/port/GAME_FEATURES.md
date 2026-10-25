@@ -233,13 +233,22 @@ June 2001 twin, `InitEnemyGeo`, `CanThisEnemyFly`, `GetEnemyBattleType`, `GetEne
 `GetEnemyDefDodgeRange`, `GetEnemyDefParaIndex`) goes through `ENEMY_DEF(kind)`, i.e.
 `ico_variant_enemy_def(enemyKind, enemyKindRows, enemyKind_ntsc, enemyKindRows_ntsc, kind)`. It
 returns the disc's own row while Shadow toughness is not American and aggression is the Shadow's
-own; else a copy: American takes the USA row's life, scale, fly type and battle type and keeps the
+own; else a copy: American (only on a table of the USA one's 45 rows, `rows == usaRows`, and never
+on the June 2001 demo) takes the USA row's life, scale, fly type and battle type and keeps the
 disc's model, particle, `float0C` (the fly acceleration), dodge range and parameter row, and a row
 whose model is the disc's "no model" (the table's last row's) is left whole; an aggression other
 than Their own sets the battle type of every row (`actEnemyRestart`, which every spawn runs, reads
 it through `GetEnemyBattleType`). A kind outside the table reads its last row (logged once). The
 tables are `ico2/sugipon/src/enemyKind.c`'s, one per disc in the European record, with their row
-counts (`enemyKindRows_*`; the June 2001 demo's is its own 18 rows, the others 45).
+counts (`enemyKindRows_*`; the June 2001 demo's is its own 18 rows, the others 45). PC port: on the
+demo American is not offered (`ico_variant_offered`): its 18 rows are kinds of its own (other
+models and roles than the USA disc's first 18), and a by-index copy made ground Shadows fly and drew
+a scale-4 kind at 1.1. A config `american` there reads as Original with
+`variants: shade_toughness = american is not offered on the June 2001 demo (its enemy rows are its
+own); using original`, `ico_variant_set` gives Original for it, `ico_variant_step` passes over it
+(Original <-> Not tougher later), and the page's note is `UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO`
+(`settings.c` `variantNote`; No hints and No cutscene look-around show their `_2001` notes on the
+three 2001 discs, where `ico_hints_on` is 0 and `debug_VariableInit` leaves `debug_hand_camera` 0).
 `getEnemyRestartLife` (`enemy_act.c`) uses the first playthrough's factor (`gameParam[38]`) on
 every playthrough when Shadow toughness is American or Not tougher later; the 2001 builds' and the
 USA disc's restarts have no factor.
@@ -250,7 +259,7 @@ Local reads.
 | --- | --- |
 | No hints | `ico_hints_on()` (0 on the USA disc and the 2001 builds, and with No hints on): `LwsKyomiGeo` (`ico2/omori/src/lws_kyomi.c`) keeps the hint from being the stage's waiting one, so its timer stands still and a playing hint animation stops; `GirlAI` (`ico2/sugipon/src/girl.c`) does not ready or play the hint voice. The hints' finished and asleep flags (`FinishHint`, `SleepHint`, `WakeupHint`, set by the stage scripts), `Hint_Init` and the save's hint block are untouched, so a save keeps the scripts' progress and turning hints back on resumes them |
 | Queen barrier | `ico_variant_barrier_hits()` (5, or 7 on the June 2001 demo, unless chosen): `QueenBarrierGeo` and its June 2001 twin (the hit that breaks it) and `QueenBarrierDL` (the barrier's fade divisor), `ico2/ito/src/queen.c`; the tables indexed by the hit count have 11 rows |
-| Debug menu | the row's press (`port/ui/settings.c`) calls `ico_variants_debug_menu_pressed`, which opens the menu through the bound `debug_MenuOpen` (`menuState` 1 as SELECT sets it, `debugBackGroundDisableFlag` 1, the first row) and returns 1; Options then closes (`closeForDebugMenu`): from the title back to the title, from the pause menu into the game as the pause menu's Back does (`la_host_resume_play`, `ico2/common/src/layout_action.c`: the sound resumed, `la_game_loop`). `debug_Menu` runs in developer mode only (`main.c`), and the row shows only then. Unbound, the press logs and Options stays |
+| Debug menu | the row's press (`port/ui/settings.c`) calls `ico_variants_debug_menu_pressed`, which opens the menu through the bound `debug_MenuOpen` (`menuState` 1 as SELECT sets it, `debugBackGroundDisableFlag` 1, the first row) and returns 1; Options then closes (`closeForDebugMenu`): from the title back to the title, from the pause menu into the game as the pause menu's Back does (`la_host_resume_play`, `ico2/common/src/layout_action.c`: the sound resumed, `la_game_loop`). `debug_Menu` runs in developer mode only (`main.c`), and the row shows only then. Unbound, the press logs, Options stays and nothing is marked used (achievements stay on). PC port: on the June 2001 demo the row is never shown (`settings.c` `optShown`): its `debug.c` option table (67 rows against the demo's 62) and stage-select flags are the preview's; `variants: the Debug menu is not offered on the June 2001 demo (its debug tables are the preview's)` once, when Developer mode would show it. SELECT in Developer mode still opens the game's menu there (game code) |
 
 Log lines: `variants: the game's debug switches are bound (...)` once per `debug_VariableInit`;
 `variants: applied shade_toughness=... ; one_hit_only=... hand_camera=...` once per apply (a

@@ -80,7 +80,7 @@ discs' saves side by side and no disc sees another's (`port/core/region.h`
 | Korean, SCPS-56001 | `BISCPS-56001ico` | 0x1E8 bytes and a 4-byte sum, 492 bytes | 25,600 bytes |
 | Asian, SCPS-55001 | `BISCPS-55001ico` | 0x1E8 bytes and a 4-byte sum, 492 bytes | 25,600 bytes |
 | North American, SCUS-97113 | `BASCUS-97113ico` | 0x18C bytes and a 4-byte sum, 400 bytes | 25,600 bytes (25,596-byte block) |
-| August 2001 preview | `BASCUS-97113ico` (the North American disc's) | 0x18C bytes and a 4-byte sum, 400 bytes | 25,600 bytes (25,596-byte block) |
+| August 2001 preview | `BASCUS-97113ico` (the North American disc's name, in the card folder `memcard-preview`) | 0x18C bytes and a 4-byte sum, 400 bytes | 25,600 bytes (25,596-byte block) |
 | June 2001 demo, SCUS-97158 | `BISCUS-97113ico` | 0x18C bytes and a 4-byte sum, 400 bytes | 20,484 bytes (20,480-byte block) |
 
 The product file is the game's `McProductFile` record (`ico2/common/include/typedef.h`): twenty
@@ -118,10 +118,22 @@ configuration, with no `controlType`, current file, serial, `cameraMove` or `pal
 `ico2/common/include/typedef.h`, its `VERSION_NTSC`/`AUG6`/`JUN26` arm; the file summary differs
 inside it: the North American disc's has `playTime`, `sofa` and an unread word, the preview's and the
 demo's a `cleared` word, `playTime` and `sofa`). The North American disc and the preview write the
-same directory, `BASCUS-97113ico`: on a PS2 they share a card folder and the port keeps that, so the
-two discs' saves are one set of files, while their `[mirror]` and `achievements.toml` keys stay
-apart (`ntsc_`, `aug6_`). The importer tells a directory by the first row that has it, so a card
-holding that directory reports the North American disc. The demo's directory carries the North
+same directory, `BASCUS-97113ico`, but not the same records: the preview's file summaries are
+`stage`, `cleared`, `playTime`, `sofa` against the North American `stage`, `playTime`, `sofa`, unread
+word, and its story flags from 300 on are one lower (New Game 348 against 349, the queen 306 against
+307: `region_ntsc.c`, `region_aug6.c` `gflag_*`; upstream `layout_action.c` keepFlagNo). On one
+card each would misread and rewrite the other's saves, so the port gives the preview a card folder
+of its own beside the configured one (a PC port divergence): `IcoRegionInfo.mc_card_suffix`
+`"-preview"` (`port/core/region_aug6.c`), applied by `sceMcInit` to port 0's and port 1's folders
+through `ico_host_card_dir_beside` (`port/platform/host_config.c`), so the default is
+`memcard-preview/` beside `memcard/` and `saves2 = "cards2"` gives `cards2-preview`; the game still
+writes its own `BASCUS-97113ico` inside it. `sceMcInit` logs it once at boot: `saves: the preview
+disc's card folder is memcard-preview (its saves are not the USA disc's): <folder>`. Their
+`[mirror]` and `achievements.toml` keys stay apart too (`ntsc_`, `aug6_`). The importer never picks
+the preview's row (`mc_import.c` `save_dir_region` skips a row with `mc_card_suffix`), so a card
+holding that directory reports the North American disc, which is the only one a retail card can
+hold; a preview save is imported by naming `memcard-preview` as the folder. save_test's rows pin the
+suffix (the preview's only) and `ico_host_card_dir_beside`. The demo's directory carries the North
 American game's serial, `BISCUS-97113ico` (mcard.c's literal), not the demo disc's `SCUS-97158`.
 
 On the card these three discs write the record through `mc_product_to_2001` (`mcard.c`): the
@@ -218,6 +230,8 @@ The first `sceMcInit` reads the folders unless a caller set them first with
 - Port 1: `saves2=` in `ico-pc.ini`, else `[paths] saves2`, relative paths likewise; absent or
   empty, port 1 has no card. With two cards the log says `mc: two cards: port 0 ..., port 1 ...`
   (`port/platform/host_config.c` (`ico_host_saves2_dir`); `port/save/mc_host.c` (`sceMcInit`)).
+- On the August 2001 preview both folders get `-preview` appended (`memcard-preview`; see the
+  North American disc and the preview above; `port/save/mc_host.c` (`sceMcInit`)).
 
 Both functions read the game's own `ico-pc.ini` (`ico_host_ini_path`: the executable's folder, or
 the user folder in a macOS app bundle) over `config.toml` (`ico_ini_load_layered`), set no

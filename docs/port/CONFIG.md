@@ -122,7 +122,7 @@ It is written at these moments only:
 | key | type | default | read by |
 | --- | --- | --- | --- |
 | `iso` | string | `""` | the disc image (any of the seven discs: the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo); empty asks on the first start (`port/platform/main_host.c` (`find_iso`)) |
-| `saves` | string | `<user folder>/memcard` | the card in port 0 ([SAVES.md](SAVES.md); `host_config.c`, `ico_host_saves_dir`) |
+| `saves` | string | `<user folder>/memcard` | the card in port 0 ([SAVES.md](SAVES.md); `host_config.c`, `ico_host_saves_dir`); on the August 2001 preview the folder beside it with `-preview` appended |
 | `saves2` | string | absent: no card | the card in port 1 (`host_config.c` (`ico_host_saves2_dir`)) |
 | `keep_image` | bool | `false` | Android: keep the first start's copy of the disc image (`main_host.c` (`android_keep_image`)) |
 

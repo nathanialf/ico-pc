@@ -131,7 +131,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   product record (`save`), the Japanese disc's `BISCPS-11003ico` and 0x1E8-byte record, the same
   bytes up to 0x1E8 (`save_jpn`), the Korean disc's `BISCPS-56001ico` with the same 0x1E8 record
   (`save_kor`), the Asian disc's `BISCPS-55001ico` with the same record (`save_cn`), the North
-  American disc's `BASCUS-97113ico` and the August 2001 preview's (the same directory) with their
+  American disc's `BASCUS-97113ico` and the August 2001 preview's (the same directory, in its own
+  card folder `<card>-preview`: every row's `mc_card_suffix` and `ico_host_card_dir_beside`
+  checked, and the import files the directory as the North American disc's) with their
   own 0x18C-byte record and a 25,596-byte game block with no option words (`save_ntsc`,
   `save_aug6`), and the June 2001 demo's `BISCUS-97113ico` with the preview's record, a 20,480-byte
   game block and icon files that end in a 4-byte sum and are written only when absent
@@ -150,7 +152,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   config keys and the stage rows on each disc; `ico_region_info[]` against `config/regions.txt`
   (the program's argument) row for row, and the disc table `ico_discs` (`port/data/discs.c`,
   compiled in) against the same rows: slug, disc id, boot file, product name, archive and image
-  names; every value of the Japanese row, and the Korean row's resolved ids and fields (`region_select`).
+  names; every value of the Japanese row, the Korean row's resolved ids and fields, every field of
+  the North American, August 2001 and June 2001 rows (pinned), and `ico_region_stage` on the 2001
+  discs (the demo's own order by stage name) (`region_select`).
 
 ### port/data/test
 
@@ -241,8 +245,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `ico2/sugipon/src/enemyKind.c` (compiled in: the disc's own rows with nothing chosen, American on
   the European table = the USA life with the European dodge, model and parameter row, "no model"
   rows whole, aggression's battle type on every row, never past a table: the June 2001 demo's 18
-  rows) and the restart life's playthrough index (a copy of `getEnemyRestartLife`'s: 38 with
-  American or Not tougher later); one run per disc (`variants`, `variants_jpn`, `variants_kor`,
+  rows, never mapped by index), the restart life's playthrough index (a copy of
+  `getEnemyRestartLife`'s: 38 with American or Not tougher later) and `test_offered` (American is
+  not offered on `jun26`: the config, the setter and both step directions); one run per disc (`variants`, `variants_jpn`, `variants_kor`,
   `variants_<slug>`).
 - `hand_ik_test.c`: the hand records as `ACTGame_ConnectHand` sets them through the real
   `handManager.c`: every target finite, a NaN into `GetTableArcCos` giving 0 and a counted fault
@@ -1040,7 +1045,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
   (`settings_render`, which also draws the Touch screen page and the editor page); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,
   `settings_render_kor`); `cn` the same for the Asian disc (`settings_cn`, `settings_extra_cn`,
-  `settings_extras_cn`, `settings_render_cn`, `ui_cn`, `gallery_cn`, `model_viewer_cn`).
+  `settings_extras_cn`, `settings_render_cn`, `ui_cn`, `gallery_cn`, `model_viewer_cn`); `ntsc`,
+  `aug6` and `jun26` run settings_extra_test's Game variants page only (`settings_extra_ntsc`,
+  `settings_extra_aug6`, `settings_extra_jun26`: Cross confirms, the 2001 notes, the demo's 7-hit
+  barrier, its toughness row without American and no Debug menu row).
 - `strings_complete_test.c`: every language's table defines every `UiStrId`, none empty but
   `UI_STR_NONE`, each with the English entry's printf conversions; the four pack notes filled
   with each disc's serial (`ui_str_serial`); the sheet language's default and setter; the menu

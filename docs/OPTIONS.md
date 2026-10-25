@@ -489,7 +489,10 @@ game. Turn them off again and achievements come back.
 - **Shadow toughness:** **Original** keeps your disc's Shadows. **American**
   makes every Shadow as tough as on the North American disc, and no tougher on
   later playthroughs. **Not tougher later** keeps your disc's Shadows but they
-  do not get tougher on later playthroughs. Achievements stay on.
+  do not get tougher on later playthroughs. Achievements stay on. On the June
+  2001 magazine demo there is no **American** choice: the demo's Shadows are
+  not the North American disc's, so the row has Original and Not tougher
+  later only (an `american` set in `config.toml` counts as Original there).
 - **One hit per swing:** a swing of Ico's weapon can hurt a Shadow only once.
   Switches achievements off.
 - **Shadows never dodge:** Shadows never step aside from Ico's swings.
@@ -498,12 +501,16 @@ game. Turn them off again and achievements come back.
   Shadow as the game made it. The other four make them all **Bold** or
   **Wary**, and **patient** or **quick**. Achievements stay on.
 - **No hints:** Yorda gives no hints about where to go, as on the North
-  American disc. Achievements stay on.
+  American disc. Achievements stay on. The North American disc, the August
+  2001 preview and the June 2001 demo have no hints, so there it changes
+  nothing, and the line under it says so.
 - **Queen barrier:** how many hits it takes to break the Queen's barrier,
   5 or 7. Your disc's own number is shown until you choose. Achievements stay
   on.
 - **No cutscene look-around:** the right stick does not move the camera
-  during cutscenes. Achievements stay on.
+  during cutscenes. Achievements stay on. The North American disc, the August
+  2001 preview and the June 2001 demo have no look-around in cutscenes, so
+  there it changes nothing, and the line under it says so.
 - **Ignore cutscene cameras:** the game's cutscene cameras are not used.
   Cutscenes can look wrong, and the game may show places it never meant you to
   see. Switches achievements off.
@@ -511,7 +518,9 @@ game. Turn them off again and achievements come back.
   the game's own debug menu, made for the people who built the game. Options
   closes and the menu opens over the game, or over the title screen if you
   came from there; it works as the Select button opens it in Developer mode.
-  Switches achievements off.
+  Switches achievements off. The June 2001 magazine demo has no Debug menu
+  row: the demo's debug menu is not right for it (it is the August 2001
+  preview's).
 
 The same choices are kept in `config.toml`, under the heading `[variants]`.
 
