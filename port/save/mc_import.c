@@ -637,11 +637,16 @@ int ico_mc_import(const char *src, const char *saves, unsigned flags, IcoMcImpor
         char dirs[160] = "";
         int k;
 
-        /* every disc's directory: "BESCES-50760ico or BISCPS-11003ico or BISCPS-56001ico" */
+        /* every distinct directory, in the table's order ("BESCES-50760ico or
+           BISCPS-11003ico or ..."): the North American disc and the August 2001
+           preview share one, listed once */
         for (k = 0; k < ico_region_count(); k++) {
             size_t len = strlen(dirs);
 
-            snprintf(dirs + len, sizeof(dirs) - len, "%s%s", k > 0 ? " or " : "",
+            if (save_dir_region(ico_region_at(k)->mc_save_dir) != k) {
+                continue;
+            }
+            snprintf(dirs + len, sizeof(dirs) - len, "%s%s", len > 0 ? " or " : "",
                      ico_region_at(k)->mc_save_dir);
         }
         snprintf(res->why, sizeof(res->why), "no ICO save (%s) in %s", dirs, src);
