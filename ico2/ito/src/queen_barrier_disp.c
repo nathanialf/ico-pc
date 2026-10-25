@@ -209,8 +209,11 @@ void queen_barrier_disp_proc(GObj *g, float k)
 
     setGsReg(0x4C, ((long long)(gsFrame.fbw & 0x3F) << 16) | 64);
     setGsReg(0x40, ((long long)(gsFrame.w - 1) << 16) | ((long long)(ScreenHeight - 1) << 48));
-    setGsReg(0x18, (((long long)(2048 - gsFrame.w / 2) << 4) + screenOffsetX) |
-                       ((((long long)(2048 - ScreenHeight / 2) << 4) + screenOffsetY) << 32));
+    setGsReg(
+        0x18,
+        PAL_NTSCAUG6((((long long)(2048 - gsFrame.w / 2) << 4) + screenOffsetX) |
+                         ((((long long)(2048 - ScreenHeight / 2) << 4) + screenOffsetY) << 32),
+                     ((2048LL - gsFrame.w / 2) << 4) | (((2048LL - ScreenHeight / 2) << 4) << 32)));
 
     gif_SetGsReg(0x4E, 0x300000C0);
     gif_SetGsReg(0x47, 0x50000);

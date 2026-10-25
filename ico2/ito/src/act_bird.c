@@ -70,8 +70,158 @@ static void interp_vector_sa(float *dst, float *a, float *b, float sa)
     sceVu0DivVector(dst, sum, GetTableSin((short)(int)(ang * 10430.378f)));
 }
 
+static void birdBeforeFunc_ntsc(GObj *self)
+{
+    Act *act = GOBJ_ACT(self);
+    BirdWork *w = GOBJ_SUB(self)->work;
+    float there[4];
+    float here[4];
+    int i;
+    GObjMailQueue *q = (GObjMailQueue *)&self->mailBox;
+
+    for (i = 0; i < q->num; i++) {
+        GObjMailEntry *e = &q->e[i];
+        float len;
+
+        GetRootPosition(there, e->data);
+        GetRootPosition(here, self);
+        len = _GetLengthXZ(there, here);
+        switch (e->mail) {
+        case 393:
+            if (len < 200.0f) {
+                w->scared = 1;
+                GetRootPosition(w->scarer, e->data);
+            }
+            break;
+
+        case 394:
+            if (len < 250.0f) {
+                act->motReq = SetMotionRequest(self, 289, act->env.motOriReq);
+            }
+            break;
+
+        case 10: {
+            int st = GOBJ_SUB(self)->ctrl.motion;
+
+            if (st >= 1078 && st <= 1080) {
+                act->motReq = SetMotionRequest(self, 290, act->env.motOriReq);
+            }
+            break;
+        }
+
+        case 7:
+            act->motReq = SetMotionRequest(self, 289, act->env.motOriReq);
+            break;
+
+        case 26:
+        case 27:
+            act->motReq = SetMotionRequest(self, 289, act->env.motOriReq);
+            break;
+
+        case 389:
+            act->motReq = SetMotionRequest(self, 289, act->env.motOriReq);
+            break;
+
+        case 390:
+            act->motReq = SetMotionRequest(self, 289, act->env.motOriReq);
+            break;
+
+        case 391:
+            act->motReq = SetMotionRequest(self, 289, act->env.motOriReq);
+            break;
+
+        case 392:
+            act->motReq = SetMotionRequest(self, 289, act->env.motOriReq);
+            break;
+        }
+    }
+    q->num = 0;
+    /* the actor's motion orient request, refreshed from the copy the
+       sub-object keeps at 0x180 */
+    act->env.motOriReq = *(MotOriReq *)&GOBJ_SUB(self)->root.wall;
+}
+
+static void birdBeforeFunc_aug6(GObj *self)
+{
+    Act *act = GOBJ_ACT(self);
+    BirdWork *w = GOBJ_SUB(self)->work;
+    float there[4];
+    float here[4];
+    int i;
+    GObjMailQueue *q = (GObjMailQueue *)&self->mailBox;
+
+    for (i = 0; i < q->num; i++) {
+        GObjMailEntry *e = &q->e[i];
+        float len;
+
+        GetRootPosition(there, e->data);
+        GetRootPosition(here, self);
+        len = _GetLengthXZ(there, here);
+        switch (e->mail) {
+        case 389:
+            if (len < 200.0f) {
+                w->scared = 1;
+                GetRootPosition(w->scarer, e->data);
+            }
+            break;
+
+        case 390:
+            if (len < 250.0f) {
+                act->motReq = SetMotionRequest(self, 287, act->env.motOriReq);
+            }
+            break;
+
+        case 10: {
+            int st = GOBJ_SUB(self)->ctrl.motion;
+
+            if (st >= 1080 && st <= 1082) {
+                act->motReq = SetMotionRequest(self, 288, act->env.motOriReq);
+            }
+            break;
+        }
+
+        case 7:
+            act->motReq = SetMotionRequest(self, 287, act->env.motOriReq);
+            break;
+
+        case 26:
+        case 27:
+            act->motReq = SetMotionRequest(self, 287, act->env.motOriReq);
+            break;
+
+        case 385:
+            act->motReq = SetMotionRequest(self, 287, act->env.motOriReq);
+            break;
+
+        case 386:
+            act->motReq = SetMotionRequest(self, 287, act->env.motOriReq);
+            break;
+
+        case 387:
+            act->motReq = SetMotionRequest(self, 287, act->env.motOriReq);
+            break;
+
+        case 388:
+            act->motReq = SetMotionRequest(self, 287, act->env.motOriReq);
+            break;
+        }
+    }
+    q->num = 0;
+    /* the actor's motion orient request, refreshed from the copy the
+       sub-object keeps at 0x180 */
+    act->env.motOriReq = *(MotOriReq *)&GOBJ_SUB(self)->root.wall;
+}
+
 void birdBeforeFunc(GObj *self)
 {
+    if (ICO_NTSC) {
+        birdBeforeFunc_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        birdBeforeFunc_aug6(self);
+        return;
+    }
     Act *act = GOBJ_ACT(self);
     BirdWork *w = GOBJ_SUB(self)->work;
     float there[4];
@@ -233,8 +383,1058 @@ static __inline__ void set_wave(float *w, float a, float b, float step) /* deriv
 
 /* Actor sub-thread body: the actor scheduler resumes this frame after every
    _ACTWait yield, so the entry GObj lives in its stack home, not a register. */
+static void subBirdBrainMain_ntsc(void *volatile gobj)
+{
+    float startPos[4];
+    float lastPos[4];
+    float wave[8];
+    float homePos[4];
+    float pos[4];
+    float dir[4];
+    float mtx[4][4];
+    BirdWork *bw;
+    Act *act;
+    int frames;
+    int lastHit;
+    int count;
+    int ticks;
+    int away;
+    int lastState;
+    int state;
+    float sign;
+    float yaw;
+    float rot;
+    float hover;
+    float travel;
+
+    bw = GOBJ_SUB(gobj)->work;
+    frames = 0;
+
+    lastHit = 0;
+    count = 1;
+    ticks = 0;
+
+    hover = 0.0f;
+
+    yaw = hover;
+    rot = hover;
+    travel = hover;
+
+    away = 0;
+
+    act = GOBJ_ACT(gobj);
+
+    _ACTWait(1);
+
+    GetRootPosition(startPos, gobj);
+    GetRootPosition(lastPos, gobj);
+
+    lastState = GOBJ_SUB(gobj)->ctrl.motion;
+    /* the loop opens by reading the same field into `state` again */
+    state = GOBJ_SUB(gobj)->ctrl.motion;
+    while (1) {
+        int changed;
+        int hit;
+        int hold;
+        int blocked;
+        int noAvoid;
+        float phase;
+
+        state = GOBJ_SUB(gobj)->ctrl.motion;
+        phase = GOBJ_SUB(gobj)->ctrl.animFrame;
+        hit = GOBJ_SUB(gobj)->ctrl.frameEnd;
+
+        changed = 0;
+
+        blocked = 0;
+
+        sign = 1.0f;
+
+        GetRootPosition(pos, gobj);
+        _GetMotionDirection(dir, gobj);
+        GetRootMatrix(mtx, gobj);
+
+        if (state != lastState) {
+            count = 1;
+            changed = 1;
+
+            ticks = 0;
+        } else {
+            if (lastHit != 0) {
+                count++;
+            }
+        }
+
+        hold = (changed != 0 || hit != 0);
+        ticks++;
+
+        noAvoid = 0;
+        if (bw->scared != 0) {
+            switch (state) {
+            case 1078:
+            case 1079:
+            case 1080:
+            case 1081:
+                break;
+            default:
+                noAvoid = 1;
+                break;
+            }
+        }
+
+        if (noAvoid == 0 && state != 1073 && state != 1077) {
+            ClipWork wf;
+
+            float len = 100.0f;
+
+            float rad = 50.0f;
+            float fwd;
+            ClipWork wr;
+            ClipWork wl;
+            float tr[4];
+            float tl[4];
+            float avoid[4];
+            float nd[4];
+            float nrm[4];
+
+            if (state == 1078 || state == 1079) {
+                fwd = 300.0f;
+            } else {
+                fwd = 50.0f;
+                len = 50.0f;
+                rad = 10.0f;
+            }
+
+            wf.radius = rad;
+            CopyVector(wf.pt[0], pos);
+            sceVu0ScaleVectorXYZ(wf.pt[1], mtx[2], fwd);
+            sceVu0AddVector(wf.pt[1], wf.pt[1], pos);
+            ClipWall(&wf);
+
+            wr.radius = rad;
+            CopyVector(wr.pt[0], pos);
+            sceVu0ScaleVectorXYZ(tr, mtx[0], len);
+            sceVu0AddVector(wr.pt[1], pos, tr);
+            ClipWall(&wr);
+
+            wl.radius = rad;
+            CopyVector(wl.pt[0], pos);
+            sceVu0ScaleVectorXYZ(tl, mtx[0], -len);
+            sceVu0AddVector(wl.pt[1], pos, tl);
+            ClipWall(&wl);
+
+            if (wf.wall.elem != 0 || wr.wall.elem != 0 || wl.wall.elem != 0) {
+                blocked = 1;
+
+                if (wr.wall.elem != 0) {
+                    sceVu0ScaleVectorXYZ(avoid, tr, -1.0f);
+                    sign = -1.0f;
+                } else if (wl.wall.elem != 0) {
+                    sceVu0ScaleVectorXYZ(avoid, tl, -1.0f);
+                    sign = 1.0f;
+                } else {
+                    sceVu0Normalize(nrm, &wf.normal);
+
+                    CopyVector(avoid, nrm);
+                    sign = 1.0f;
+                    if (sceVu0InnerProduct(mtx[0], nrm) < 0.0f) {
+                        sign = -1.0f;
+                    }
+                }
+
+                travel = 0.0f;
+
+                rot = sign * rand_range_rad(1.0f, 2.0f);
+                interp_vector_sa(nd, dir, avoid, degrees_to_radians(5.0f));
+                SetMotionDirection(gobj, nd);
+            }
+        }
+
+        switch (state) {
+        case 1076:
+            Debug_WireString_Bird(pos, "EAT");
+            if (hold != 0) {
+                yaw = rand_range_rad(10.0f, 50.0f) / 3.0f;
+                if (blocked != 0) {
+                    yaw = yaw * sign;
+                } else if (random_unit() <= 0.5f) {
+                    yaw = -yaw;
+                }
+            }
+            if (phase >= 6.0f && phase < 9.0f) {
+                turn_bird(gobj, yaw);
+            }
+
+        case 1073:
+            if (gobj == CurrentTargetGObj) {
+                Debug_WireString_Bird(pos, "STOP TGT");
+                break;
+            }
+            if (hit != 0) {
+                Debug_WireString_Bird(pos, "STOP FIN");
+
+                if (bw->scared != 0) {
+                    float r = random_unit();
+                    if (r < 0.25f) {
+                        break;
+                    }
+                    if (r < 0.28f) {
+                        act->motReq = SetMotionRequest(gobj, 289, act->env.motOriReq);
+                        break;
+                    }
+                    if (random_unit() <= 0.5f) {
+                        act->motReq = SetMotionRequest(gobj, 285, act->env.motOriReq);
+                        break;
+                    }
+                    act->motReq = SetMotionRequest(gobj, 286, act->env.motOriReq);
+                    break;
+                } else {
+                    float r = random_unit();
+                    if (r < 0.25f) {
+                        break;
+                    }
+                    if (r < 0.28f) {
+                        act->motReq = SetMotionRequest(gobj, 289, act->env.motOriReq);
+                        break;
+                    }
+                    if (r < 0.4f) {
+                        act->motReq = SetMotionRequest(gobj, 288, act->env.motOriReq);
+                        break;
+                    }
+                    if (r < 0.7f) {
+                        act->motReq = SetMotionRequest(gobj, 287, act->env.motOriReq);
+                        break;
+                    }
+                    if (random_unit() <= 0.7f) {
+                        act->motReq = SetMotionRequest(gobj, 285, act->env.motOriReq);
+                        break;
+                    }
+                    act->motReq = SetMotionRequest(gobj, 286, act->env.motOriReq);
+                    break;
+                }
+            } else {
+                char buf[1024];
+
+                sprintf(buf, "STOP NO FIN %d,%1.1f", GOBJ_SUB(gobj)->ctrl.motion,
+                        GOBJ_SUB(gobj)->ctrl.animFrame);
+                Debug_WireString_Bird(pos, buf);
+                break;
+            }
+
+        case 1074:
+        case 1075:
+            Debug_WireString_Bird(pos, "STEP");
+            if (hold != 0) {
+                int q = 3;
+
+                if (bw->scared != 0) {
+                    float v[4];
+
+                    yaw = rand_range_rad(40.0f, 70.0f) / q;
+
+                    sceVu0SubVector(v, pos, bw->scarer);
+                    if (sceVu0InnerProduct(mtx[0], v) < 0.0f) {
+                        yaw = -yaw;
+                    }
+                } else {
+                    yaw = rand_range_rad(60.0f, 90.0f) / q;
+                    if (blocked != 0) {
+                        yaw = yaw * sign;
+                    } else if (random_unit() <= 0.5f) {
+                        yaw = -yaw;
+                    }
+                }
+            }
+            if (phase >= 3.0f && phase < 6.0f) {
+                turn_bird(gobj, yaw);
+            }
+            if (hit == 0) {
+                break;
+            }
+            act->motReq = SetMotionRequest(gobj, 284, act->env.motOriReq);
+
+            bw->scared = 0;
+            break;
+
+        case 1077:
+            Debug_WireString_Bird(pos, "GROOM");
+
+            act->motReq = SetMotionRequest(gobj, 284, act->env.motOriReq);
+            break;
+
+        case 1078:
+            Debug_WireString_Bird(pos, "FLY S");
+            if (changed != 0) {
+                float a = rand_range(180.0f, 300.0f) / 9.0f;
+                float b = rand_range(120.0f, 230.0f) / 9.0f;
+
+                wave[4] = 0.0f;
+                wave[5] = 0.0f;
+                set_wave(wave, a, b, 0.2f);
+                rot = rand_small_turn();
+
+                travel = 0.0f;
+                CopyVector(homePos, pos);
+                away = 0;
+            }
+
+            if (phase >= 7.0f) {
+                trans_bird(gobj, wave);
+                turn_bird(gobj, rot);
+            }
+            act->motReq = SetMotionRequest(gobj, 289, act->env.motOriReq);
+            break;
+
+        case 1079:
+            Debug_WireString_Bird(pos, "FLY");
+            if (changed != 0) {
+                if (random_unit() <= 0.5f) {
+                    pbga_start(&bw->bga, 441);
+                    _CopyVector(bw->bga->pos, pos);
+                    CopyQuaternion(bw->bga->rot, IdentityQuaternion);
+                }
+            }
+            if (changed != 0 || hover >= 80.0f) {
+                float a = rand_range(72.0f, 120.0f) / 3.0f;
+                float b = rand_range(48.0f, 92.0f) / 3.0f * 0.5f;
+                float p = 0.5f;
+
+                if (pos[1] < homePos[1] - 400.0f) {
+                    p = 1.0f;
+                }
+                if (homePos[1] + 400.0f < pos[1]) {
+                    p = 0.0f;
+                }
+                if (random_unit() <= p) {
+                    b = -b;
+                }
+
+                set_wave(wave, a, b, 1.0f / 60.0f);
+                hover = wave[6];
+            }
+
+            if (travel > 100.0f) {
+                rot = rand_small_turn();
+                travel = 0.0f;
+            }
+
+            if (away == 0 && _GetLengthXZ(pos, homePos) > 2000.0f) {
+                away = 1;
+            }
+
+            if (away != 0) {
+                float v[4];
+
+                if (_GetLengthXZ(pos, homePos) < 800.0f) {
+                    away = 0;
+                } else {
+                    sceVu0SubVector(v, homePos, pos);
+
+                    if (vector_angle_degree(v, dir) > 5.0f) {
+                        rot = degrees_to_radians(2.0f);
+                        if (sceVu0InnerProduct(v, mtx[0]) < 0.0f) {
+                            rot = degrees_to_radians(-2.0f);
+                        }
+                    }
+
+                    travel = 0.0f;
+                }
+            }
+
+            trans_bird(gobj, wave);
+            turn_bird(gobj, rot);
+
+            travel = travel + 1.0f;
+            GetRootPosition(pos, gobj);
+            _GetMotionDirection(dir, gobj);
+
+            {
+                float up[4];
+                float ahead[4];
+                ClipWork cf;
+                float sv[4];
+                float im[4][4];
+                float p2[4];
+                float sv2[4];
+                float sx;
+                float sy;
+                int attr;
+
+                memset(up, 0, 16);
+                up[1] = 180.0f;
+
+                sceVu0ScaleVector(ahead, dir, 100.0f);
+                CopyVector(cf.pt[0], pos);
+                sceVu0AddVector(cf.pt[1], cf.pt[0], up);
+                sceVu0AddVector(cf.pt[1], cf.pt[1], ahead);
+                ClipFloor(&cf);
+                attr = GetFloorAttribute(&cf);
+                if (cf.floor.elem != 0 && attr != 64 && attr != 80) {
+                    act->motReq = SetMotionRequest(gobj, 284, act->env.motOriReq);
+                }
+
+                apply_matrix_w1(sv, (char *)matrixptr + 0x100, pos);
+                sv[0] = sv[0] / sv[3] - 2048.0f;
+                sv[1] = sv[1] / sv[3] - 2048.0f;
+
+                /* PC port: ScreenWidth is SCALE here (sx in 4:3 half-widths,
+                   the unit of the 0.6 bound, which the frame's width scales) */
+                sx = sv[0] / (ScreenWidth / 2);
+                sy = sv[1] / (ScreenHeight / 2);
+                if (sv[3] > 0.0f && __builtin_fabsf(sx) < 0.6f * ((float)gsFrame.w / 512.0f) &&
+                    sy > -1.3f && sy < 0.5f) {
+                    float dy;
+
+                    sceVu0InversMatrix(im, (char *)matrixptr + 128);
+                    point_ahead(p2, pos, im[1]);
+                    apply_matrix_w1(sv2, (char *)matrixptr + 0x100, p2);
+                    sv2[1] = sv2[1] / sv2[3] - 2048.0f;
+                    dy = __builtin_fabsf(sv2[1] - sv[1]) / ScreenHeight;
+
+                    if (dy > 0.5f && (bw->bga == 0 || bw->bga->frame > 100.0f)) {
+                        pbga_start(&bw->bga, 441);
+                        _CopyVector(bw->bga->pos, pos);
+                        CopyQuaternion(bw->bga->rot, IdentityQuaternion);
+                    }
+                }
+            }
+
+            hover = hover + 1.0f;
+            break;
+
+        case 1080:
+            Debug_WireString_Bird(pos, "FLY E1");
+            if (changed != 0) {
+                float a = rand_range(340.0f, 565.0f) / 28.0f * 0.6f;
+                float b = -rand_range(225.0f, 250.0f) / 28.0f * 0.6f;
+
+                set_wave(wave, a, b, 1.0f / 7.0f);
+                if (random_unit() <= 0.5f) {
+                    pbga_start(&bw->bga, 441);
+                    _CopyVector(bw->bga->pos, pos);
+                    CopyQuaternion(bw->bga->rot, IdentityQuaternion);
+                }
+            }
+
+            trans_bird(gobj, wave);
+
+            if (count >= 3) {
+                act->motReq = SetMotionRequest(gobj, 289, act->env.motOriReq);
+            }
+            break;
+
+        case 1081: {
+            float p[4];
+            float q[4];
+            ClipWork cd;
+
+            Debug_WireString_Bird(pos, "FLY E2");
+            if (changed != 0) {
+                wave[5] = 0.0f;
+                set_wave(wave, 0.0f, 0.0f, 0.2f);
+            }
+
+            if (phase >= 0.0f && phase < 5.0f) {
+                trans_bird(gobj, wave);
+            }
+
+            GetRootPosition(p, gobj);
+            CopyVector(cd.pt[0], p);
+            GetRootPosition(cd.pt[1], gobj);
+            cd.pt[1][1] = cd.pt[1][1] + 50.0f;
+            ClipFloor(&cd);
+            if (cd.floor.elem != 0) {
+                float lim = -6.0f;
+
+                float y = cd.pt[2][1] + lim;
+                /* nothing reads `q` after this */
+                q[1] = lim;
+                if (y < p[1]) {
+                    p[1] = y;
+                    SetRootPosition(gobj, p);
+                }
+            }
+
+            if (hit != 0) {
+                act->motReq = SetMotionRequest(gobj, 284, act->env.motOriReq);
+            }
+            break;
+        }
+
+        default:
+            act->motReq = SetMotionRequest(gobj, 284, act->env.motOriReq);
+            break;
+        }
+
+        if (state != 1078) {
+            float rp[4];
+
+            if ((GOBJ_SUB(gobj)->ctrl.flags & 0x400) || CheckFloorAttribute(gobj, 64) ||
+                CheckFloorAttribute(gobj, 80)) {
+                GetRootPosition(rp, gobj);
+                rp[1] = GOBJ_SUB(gobj)->ctrl.waterY;
+                SetDirectRootPositionNoFitting(gobj, rp);
+                act->motReq = SetMotionRequest(gobj, 153, act->env.motOriReq);
+                EntryStageMultiBgaManager(428, rp, IdentityQuaternion);
+            }
+        }
+
+        {
+            float rp[4];
+
+            GetRootPosition(rp, gobj);
+            frames++;
+            if (_GetLength(rp, lastPos) < 3.0f) {
+            } else {
+                frames = 0;
+            }
+
+            sceVu0CopyVector(lastPos, rp);
+        }
+
+        if (state == 1079 &&
+            (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 30.0f < (float)frames &&
+            (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 30.0f < (float)ticks) {
+            debug_StdPrintfDummy("bird reset\n");
+            InitMotionOrient(gobj, 2119, 2165, -1, -1, 1073);
+
+            SetDirectRootPosition(gobj, startPos);
+            act->motReq = SetMotionRequest(gobj, 284, act->env.motOriReq);
+        }
+
+        lastState = state;
+
+        lastHit = hit;
+        _ACTWait(1);
+    }
+}
+
+static void subBirdBrainMain_aug6(void *volatile gobj)
+{
+    float startPos[4];
+    float lastPos[4];
+    float wave[8];
+    float homePos[4];
+    float pos[4];
+    float dir[4];
+    float mtx[4][4];
+    BirdWork *bw;
+    Act *act;
+    int frames;
+    int lastHit;
+    int count;
+    int ticks;
+    int away;
+    int lastState;
+    int state;
+    float sign;
+    float yaw;
+    float rot;
+    float hover;
+    float travel;
+
+    bw = GOBJ_SUB(gobj)->work;
+    frames = 0;
+
+    lastHit = 0;
+    count = 1;
+    ticks = 0;
+
+    hover = 0.0f;
+
+    yaw = hover;
+    rot = hover;
+    travel = hover;
+
+    away = 0;
+
+    act = GOBJ_ACT(gobj);
+
+    _ACTWait(1);
+
+    GetRootPosition(startPos, gobj);
+    GetRootPosition(lastPos, gobj);
+
+    lastState = GOBJ_SUB(gobj)->ctrl.motion;
+    /* the loop opens by reading the same field into `state` again */
+    state = GOBJ_SUB(gobj)->ctrl.motion;
+    while (1) {
+        int changed;
+        int hit;
+        int hold;
+        int blocked;
+        int noAvoid;
+        float phase;
+
+        state = GOBJ_SUB(gobj)->ctrl.motion;
+        phase = GOBJ_SUB(gobj)->ctrl.animFrame;
+        hit = GOBJ_SUB(gobj)->ctrl.frameEnd;
+
+        changed = 0;
+
+        blocked = 0;
+
+        sign = 1.0f;
+
+        GetRootPosition(pos, gobj);
+        _GetMotionDirection(dir, gobj);
+        GetRootMatrix(mtx, gobj);
+
+        if (state != lastState) {
+            count = 1;
+            changed = 1;
+
+            ticks = 0;
+        } else {
+            if (lastHit != 0) {
+                count++;
+            }
+        }
+
+        hold = (changed != 0 || hit != 0);
+        ticks++;
+
+        noAvoid = 0;
+        if (bw->scared != 0) {
+            switch (state) {
+            case 1080:
+            case 1081:
+            case 1082:
+            case 1083:
+                break;
+            default:
+                noAvoid = 1;
+                break;
+            }
+        }
+
+        if (noAvoid == 0 && state != 1075 && state != 1079) {
+            ClipWork wf;
+
+            float len = 100.0f;
+
+            float rad = 50.0f;
+            float fwd;
+            ClipWork wr;
+            ClipWork wl;
+            float tr[4];
+            float tl[4];
+            float avoid[4];
+            float nd[4];
+            float nrm[4];
+
+            if (state == 1080 || state == 1081) {
+                fwd = 300.0f;
+            } else {
+                fwd = 50.0f;
+                len = 50.0f;
+                rad = 10.0f;
+            }
+
+            wf.radius = rad;
+            CopyVector(wf.pt[0], pos);
+            sceVu0ScaleVectorXYZ(wf.pt[1], mtx[2], fwd);
+            sceVu0AddVector(wf.pt[1], wf.pt[1], pos);
+            ClipWall(&wf);
+
+            wr.radius = rad;
+            CopyVector(wr.pt[0], pos);
+            sceVu0ScaleVectorXYZ(tr, mtx[0], len);
+            sceVu0AddVector(wr.pt[1], pos, tr);
+            ClipWall(&wr);
+
+            wl.radius = rad;
+            CopyVector(wl.pt[0], pos);
+            sceVu0ScaleVectorXYZ(tl, mtx[0], -len);
+            sceVu0AddVector(wl.pt[1], pos, tl);
+            ClipWall(&wl);
+
+            if (wf.wall.elem != 0 || wr.wall.elem != 0 || wl.wall.elem != 0) {
+                blocked = 1;
+
+                if (wr.wall.elem != 0) {
+                    sceVu0ScaleVectorXYZ(avoid, tr, -1.0f);
+                    sign = -1.0f;
+                } else if (wl.wall.elem != 0) {
+                    sceVu0ScaleVectorXYZ(avoid, tl, -1.0f);
+                    sign = 1.0f;
+                } else {
+                    sceVu0Normalize(nrm, &wf.normal);
+
+                    CopyVector(avoid, nrm);
+                    sign = 1.0f;
+                    if (sceVu0InnerProduct(mtx[0], nrm) < 0.0f) {
+                        sign = -1.0f;
+                    }
+                }
+
+                travel = 0.0f;
+
+                rot = sign * rand_range_rad(1.0f, 2.0f);
+                interp_vector_sa(nd, dir, avoid, degrees_to_radians(5.0f));
+                SetMotionDirection(gobj, nd);
+            }
+        }
+
+        switch (state) {
+        case 1078:
+            Debug_WireString_Bird(pos, "EAT");
+            if (hold != 0) {
+                yaw = rand_range_rad(10.0f, 50.0f) / 3.0f;
+                if (blocked != 0) {
+                    yaw = yaw * sign;
+                } else if (random_unit() <= 0.5f) {
+                    yaw = -yaw;
+                }
+            }
+            if (phase >= 6.0f && phase < 9.0f) {
+                turn_bird(gobj, yaw);
+            }
+
+        case 1075:
+            if (gobj == CurrentTargetGObj) {
+                Debug_WireString_Bird(pos, "STOP TGT");
+                break;
+            }
+            if (hit != 0) {
+                Debug_WireString_Bird(pos, "STOP FIN");
+
+                if (bw->scared != 0) {
+                    float r = random_unit();
+                    if (r < 0.25f) {
+                        break;
+                    }
+                    if (r < 0.28f) {
+                        act->motReq = SetMotionRequest(gobj, 287, act->env.motOriReq);
+                        break;
+                    }
+                    if (random_unit() <= 0.5f) {
+                        act->motReq = SetMotionRequest(gobj, 283, act->env.motOriReq);
+                        break;
+                    }
+                    act->motReq = SetMotionRequest(gobj, 284, act->env.motOriReq);
+                    break;
+                } else {
+                    float r = random_unit();
+                    if (r < 0.25f) {
+                        break;
+                    }
+                    if (r < 0.28f) {
+                        act->motReq = SetMotionRequest(gobj, 287, act->env.motOriReq);
+                        break;
+                    }
+                    if (r < 0.4f) {
+                        act->motReq = SetMotionRequest(gobj, 286, act->env.motOriReq);
+                        break;
+                    }
+                    if (r < 0.7f) {
+                        act->motReq = SetMotionRequest(gobj, 285, act->env.motOriReq);
+                        break;
+                    }
+                    if (random_unit() <= 0.7f) {
+                        act->motReq = SetMotionRequest(gobj, 283, act->env.motOriReq);
+                        break;
+                    }
+                    act->motReq = SetMotionRequest(gobj, 284, act->env.motOriReq);
+                    break;
+                }
+            } else {
+                char buf[1024];
+
+                sprintf(buf, "STOP NO FIN %d,%1.1f", GOBJ_SUB(gobj)->ctrl.motion,
+                        GOBJ_SUB(gobj)->ctrl.animFrame);
+                Debug_WireString_Bird(pos, buf);
+                break;
+            }
+
+        case 1076:
+        case 1077:
+            Debug_WireString_Bird(pos, "STEP");
+            if (hold != 0) {
+                int q = 3;
+
+                if (bw->scared != 0) {
+                    float v[4];
+
+                    yaw = rand_range_rad(40.0f, 70.0f) / q;
+
+                    sceVu0SubVector(v, pos, bw->scarer);
+                    if (sceVu0InnerProduct(mtx[0], v) < 0.0f) {
+                        yaw = -yaw;
+                    }
+                } else {
+                    yaw = rand_range_rad(60.0f, 90.0f) / q;
+                    if (blocked != 0) {
+                        yaw = yaw * sign;
+                    } else if (random_unit() <= 0.5f) {
+                        yaw = -yaw;
+                    }
+                }
+            }
+            if (phase >= 3.0f && phase < 6.0f) {
+                turn_bird(gobj, yaw);
+            }
+            if (hit == 0) {
+                break;
+            }
+            act->motReq = SetMotionRequest(gobj, 282, act->env.motOriReq);
+
+            bw->scared = 0;
+            break;
+
+        case 1079:
+            Debug_WireString_Bird(pos, "GROOM");
+
+            act->motReq = SetMotionRequest(gobj, 282, act->env.motOriReq);
+            break;
+
+        case 1080:
+            Debug_WireString_Bird(pos, "FLY S");
+            if (changed != 0) {
+                float a = rand_range(180.0f, 300.0f) / 9.0f;
+                float b = rand_range(120.0f, 230.0f) / 9.0f;
+
+                wave[4] = 0.0f;
+                wave[5] = 0.0f;
+                set_wave(wave, a, b, 0.2f);
+                rot = rand_small_turn();
+
+                travel = 0.0f;
+                CopyVector(homePos, pos);
+                away = 0;
+            }
+
+            if (phase >= 7.0f) {
+                trans_bird(gobj, wave);
+                turn_bird(gobj, rot);
+            }
+            break;
+
+        case 1081:
+            Debug_WireString_Bird(pos, "FLY");
+            if (changed != 0) {
+                if (random_unit() <= 0.5f) {
+                    pbga_start(&bw->bga, 440);
+                    _CopyVector(bw->bga->pos, pos);
+                    CopyQuaternion(bw->bga->rot, IdentityQuaternion);
+                }
+            }
+            if (changed != 0 || hover >= 80.0f) {
+                float a = rand_range(72.0f, 120.0f) / 3.0f;
+                float b = rand_range(48.0f, 92.0f) / 3.0f * 0.5f;
+                float p = 0.5f;
+
+                if (pos[1] < homePos[1] - 400.0f) {
+                    p = 1.0f;
+                }
+                if (homePos[1] + 400.0f < pos[1]) {
+                    p = 0.0f;
+                }
+                if (random_unit() <= p) {
+                    b = -b;
+                }
+
+                set_wave(wave, a, b, 1.0f / 60.0f);
+                hover = wave[6];
+            }
+
+            if (travel > 100.0f) {
+                rot = rand_small_turn();
+                travel = 0.0f;
+            }
+
+            if (away == 0 && _GetLengthXZ(pos, homePos) > 2000.0f) {
+                away = 1;
+            }
+
+            if (away != 0) {
+                float v[4];
+
+                if (_GetLengthXZ(pos, homePos) < 800.0f) {
+                    away = 0;
+                } else {
+                    sceVu0SubVector(v, homePos, pos);
+
+                    if (vector_angle_degree(v, dir) > 5.0f) {
+                        rot = degrees_to_radians(2.0f);
+                        if (sceVu0InnerProduct(v, mtx[0]) < 0.0f) {
+                            rot = degrees_to_radians(-2.0f);
+                        }
+                    }
+
+                    travel = 0.0f;
+                }
+            }
+
+            trans_bird(gobj, wave);
+            turn_bird(gobj, rot);
+
+            travel = travel + 1.0f;
+            GetRootPosition(pos, gobj);
+            _GetMotionDirection(dir, gobj);
+
+            {
+                float up[4];
+                float ahead[4];
+                ClipWork cf;
+                float sv[4];
+                float im[4][4];
+                float p2[4];
+                float sv2[4];
+                float sx;
+                float sy;
+                int attr;
+
+                memset(up, 0, 16);
+                up[1] = 180.0f;
+
+                sceVu0ScaleVector(ahead, dir, 100.0f);
+                CopyVector(cf.pt[0], pos);
+                sceVu0AddVector(cf.pt[1], cf.pt[0], up);
+                sceVu0AddVector(cf.pt[1], cf.pt[1], ahead);
+                ClipFloor(&cf);
+                attr = GetFloorAttribute(&cf);
+                if (cf.floor.elem != 0 && attr != 64 && attr != 80) {
+                    act->motReq = SetMotionRequest(gobj, 282, act->env.motOriReq);
+                }
+
+                apply_matrix_w1(sv, (char *)matrixptr + 0x100, pos);
+                sv[0] = sv[0] / sv[3] - 2048.0f;
+                sv[1] = sv[1] / sv[3] - 2048.0f;
+
+                /* PC port: ScreenWidth is SCALE here (sx in 4:3 half-widths,
+                   the unit of the 0.6 bound, which the frame's width scales) */
+                sx = sv[0] / (ScreenWidth / 2);
+                sy = sv[1] / (ScreenHeight / 2);
+                if (sv[3] > 0.0f && __builtin_fabsf(sx) < 0.6f * ((float)gsFrame.w / 512.0f) &&
+                    sy > -1.3f && sy < 0.5f) {
+                    float dy;
+
+                    sceVu0InversMatrix(im, (char *)matrixptr + 128);
+                    point_ahead(p2, pos, im[1]);
+                    apply_matrix_w1(sv2, (char *)matrixptr + 0x100, p2);
+                    sv2[1] = sv2[1] / sv2[3] - 2048.0f;
+                    dy = __builtin_fabsf(sv2[1] - sv[1]) / ScreenHeight;
+
+                    if (dy > 0.5f && (bw->bga == 0 || bw->bga->frame > 100.0f)) {
+                        pbga_start(&bw->bga, 440);
+                        _CopyVector(bw->bga->pos, pos);
+                        CopyQuaternion(bw->bga->rot, IdentityQuaternion);
+                    }
+                }
+            }
+
+            hover = hover + 1.0f;
+            break;
+
+        case 1082:
+            Debug_WireString_Bird(pos, "FLY E1");
+            if (changed != 0) {
+                float a = rand_range(340.0f, 565.0f) / 28.0f * 0.6f;
+                float b = -rand_range(225.0f, 250.0f) / 28.0f * 0.6f;
+
+                set_wave(wave, a, b, 1.0f / 7.0f);
+                if (random_unit() <= 0.5f) {
+                    pbga_start(&bw->bga, 440);
+                    _CopyVector(bw->bga->pos, pos);
+                    CopyQuaternion(bw->bga->rot, IdentityQuaternion);
+                }
+            }
+
+            trans_bird(gobj, wave);
+
+            if (count >= 3) {
+                act->motReq = SetMotionRequest(gobj, 287, act->env.motOriReq);
+            }
+            break;
+
+        case 1083: {
+            float p[4];
+            float q[4];
+            ClipWork cd;
+
+            Debug_WireString_Bird(pos, "FLY E2");
+            if (changed != 0) {
+                wave[5] = 0.0f;
+                set_wave(wave, 0.0f, 0.0f, 0.2f);
+            }
+
+            if (phase >= 0.0f && phase < 5.0f) {
+                trans_bird(gobj, wave);
+            }
+
+            GetRootPosition(p, gobj);
+            CopyVector(cd.pt[0], p);
+            GetRootPosition(cd.pt[1], gobj);
+            cd.pt[1][1] = cd.pt[1][1] + 50.0f;
+            ClipFloor(&cd);
+            if (cd.floor.elem != 0) {
+                float lim = -6.0f;
+
+                float y = cd.pt[2][1] + lim;
+                /* nothing reads `q` after this */
+                q[1] = lim;
+                if (y < p[1]) {
+                    p[1] = y;
+                    SetRootPosition(gobj, p);
+                }
+            }
+
+            if (hit != 0) {
+                act->motReq = SetMotionRequest(gobj, 282, act->env.motOriReq);
+            }
+            break;
+        }
+
+        default:
+            act->motReq = SetMotionRequest(gobj, 282, act->env.motOriReq);
+            break;
+        }
+
+        if (GOBJ_SUB(gobj)->ctrl.flags & 0x400) {
+            act->motReq = SetMotionRequest(gobj, 287, act->env.motOriReq);
+        }
+
+        {
+            float rp[4];
+
+            GetRootPosition(rp, gobj);
+            frames++;
+            if (_GetLength(rp, lastPos) < 3.0f) {
+            } else {
+                frames = 0;
+            }
+
+            sceVu0CopyVector(lastPos, rp);
+        }
+
+        if (state == 1081 &&
+            (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 30.0f < (float)frames &&
+            (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 30.0f < (float)ticks) {
+            debug_StdPrintfDummy("bird reset\n");
+            InitMotionOrient(gobj, 2094, 2138, -1, -1, 1075);
+
+            SetDirectRootPosition(gobj, startPos);
+            act->motReq = SetMotionRequest(gobj, 282, act->env.motOriReq);
+        }
+
+        lastState = state;
+
+        lastHit = hit;
+        _ACTWait(1);
+    }
+}
+
 void subBirdBrainMain(void *volatile gobj)
 {
+    if (ICO_NTSC) {
+        subBirdBrainMain_ntsc(gobj);
+        return;
+    }
+    if (ICO_AUG6) {
+        subBirdBrainMain_aug6(gobj);
+        return;
+    }
     float startPos[4];
     float lastPos[4];
     float wave[8];
@@ -759,8 +1959,22 @@ void subBirdBrainMain(void *volatile gobj)
     }
 }
 
+static inline void subBirdControl_aug6(void *volatile gobj)
+{
+    _ACTWait(1);
+    while (1) {
+        Act *act = GOBJ_ACT(gobj);
+        Debug_StickControl(gobj);
+        _ACTWait(1);
+    }
+}
+
 inline void subBirdControl(void *volatile gobj)
 {
+    if (ICO_AUG6) {
+        subBirdControl_aug6(gobj);
+        return;
+    }
     _ACTWait(1);
     while (1) {
         Debug_StickControl(gobj);
@@ -785,7 +1999,7 @@ inline void actBirdStart(void *gobj)
     actCreateSubThread(subBirdBrainMain, 20);
     actCreateSubThread(subBirdControl, 21);
     actCreateSubThread(subBirdCollision, 21);
-    act->motReq = SetMotionRequest(gobj, 270, act->env.motOriReq);
+    act->motReq = SetMotionRequest(gobj, PAL_NTSC_AUG6(270, 238, 236), act->env.motOriReq);
 }
 
 static void Debug_WireString_Bird(float *pos, char *fmt, ...)
@@ -850,7 +2064,7 @@ void BirdDL(void *gobj)
             w->bga = 0;
         }
     }
-    if (stage_no == PAL_JPNKORCN(84, 82)) {
+    if (stage_no == PAL_JPNKORNTSCAUG6CN(84, 82)) {
         lightning_test();
     }
 }
@@ -859,11 +2073,12 @@ inline BirdWork *InitBirdGeo(GObj *gobj, void *home)
 {
     BirdWork *w;
 
-    w = iosMallocDebug(ios_partition_sugipon, sizeof(BirdWork), __FILE__, 978);
+    w = iosMallocDebug(ios_partition_sugipon, sizeof(BirdWork), __FILE__, PAL_AUG6(978, 959));
     memset(w, 0, sizeof(BirdWork));
     CopyVector(w->home, home);
     w->scared = 0;
-    InitMotionOrient(gobj, 2421, 2467, -1, -1, 1134);
+    InitMotionOrient(gobj, PAL_NTSC_AUG6(2421, 2119, 2094), PAL_NTSC_AUG6(2467, 2165, 2138), -1, -1,
+                     PAL_NTSC_AUG6(1134, 1073, 1075));
 
     GOBJ_SUB(gobj)->ctrl.floorFit = 1;
     GOBJ_SUB(gobj)->ctrl.cliffWallCheck = 0;
@@ -875,7 +2090,9 @@ inline BirdWork *InitBirdGeo(GObj *gobj, void *home)
     ((IntFloat *)&GOBJ_SUB(gobj)->ctrl.lastFrame)->f =
         ((IntFloat *)&GOBJ_SUB(gobj)->ctrl.animFrame)->f;
     GOBJ_SUB(gobj)->ctrl.waterDrag = 0;
-    SetLodLevel(gobj, 3);
+    if (!ICO_AUG6) {
+        SetLodLevel(gobj, 3);
+    }
     return w;
 }
 

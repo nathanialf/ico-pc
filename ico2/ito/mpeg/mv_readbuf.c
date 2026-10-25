@@ -1,5 +1,14 @@
 #include "mv_defs.h"
 #include "mv_readbuf.h"
+#include "memory.h"
+
+static void Free(int addr);
+
+/* the ring readBufCreate allocated */
+static void free_buffer(ReadBuf *self)
+{
+    Free((int)self->data);
+}
 
 int readBufCreate(ReadBuf *self)
 {
@@ -16,6 +25,12 @@ int readBufCreate(ReadBuf *self)
 }
 
 void readBufDelete(ReadBuf *self) {}
+
+/* this file's own Free (mv_defs.h) */
+static void Free(int addr)
+{
+    iosFree((void *)phys_addr(addr));
+}
 
 int readBufBeginPut(ReadBuf *self, void **p)
 {

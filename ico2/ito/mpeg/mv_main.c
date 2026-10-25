@@ -63,6 +63,14 @@ static int movieFrameNo = 0; /* derived name */
    audio decoder objects, the argument block the decode thread is started
    with, its 32 KB stack, and the DMA and interrupt enables saved per
    channel. */
+/* the stream file's 32 KB sector buffer is a DMA target, so the record is
+   64-byte aligned, as cdvd.c's iosCdvd */
+static char mpegStrFile[33216] __attribute__((aligned(64))); /* derived name */
+
+/* The stream file the movie is read through, the read buffer, the video and
+   audio decoder objects, the argument block the decode thread is started
+   with, its 32 KB stack, and the DMA and interrupt enables saved per
+   channel. */
 static char mpegStrFile[33216]; /* derived name */
 
 static ReadBuf mpegReadBuf; /* derived name */
@@ -98,8 +106,81 @@ static inline int audioIsPreset(void) /* derived name */
     return movieHasAudio ? audioDecIsPreset(&audioDec) : 1;
 }
 
+static int readMpeg_aug6(VideoDec *dec, ReadBuf *rb, char *strf, int (*poll)(void))
+{
+    void *p;
+    int eof;
+    void *q;
+    int abort = 0;
+    /* the read-starved pause is not finished in this build: nothing sets the
+       counter, and the code that would act on it is not compiled in */
+    int pauseCount = 0;
+    int started = 0;
+    int left;
+    int n;
+    int rd;
+    int size;
+    int len;
+
+    /* the stream's byte count, a word of cdvd.c's stream record, which
+       cdvd.h does not declare */
+    left = *(int *)(strf + 0x8180);
+    n = left;
+
+    while (pauseCount != 0 || (left >= 5 && videoDecGetState(dec) != 3)) {
+        if (dec->mpeg.frameCount >= 11) {
+            if (poll() != 0) {
+                abort = 1;
+                videoDecAbort(&videoDec);
+            }
+        }
+        size = readBufBeginPut(rb, &p);
+        if (n > 0 && size > 65535) {
+            rd = strFileRead(strf, p, 65536, &eof);
+            if (eof != 0) {
+                goto term;
+            }
+            readBufEndPut(rb, rd);
+            n -= rd;
+        }
+        switchThread();
+        len = readBufBeginGet(rb, &q);
+        if (len > 0) {
+            len = sceMpegDemuxPssRing(&dec->mpeg, q, len, (int)rb->data, rb->size);
+            left -= len;
+            readBufEndGet(rb, len);
+        }
+        proceedAudio();
+        if (started == 0 && voBufIsFull(&voBuf) && audioIsPreset()) {
+            startDisplay(1);
+            if (movieHasAudio != 0) {
+                audioDecStart(&audioDec);
+            }
+            started = 1;
+        }
+    }
+
+    while (videoDecFlush(dec) == 0) {
+        switchThread();
+    }
+    while (videoDecIsFlushed(dec) == 0 && videoDecGetState(dec) != 3) {
+        switchThread();
+    }
+
+term:
+    gsb_ClearFrameBuffer();
+    endDisplay();
+    if (movieHasAudio != 0) {
+        audioDecReset(&audioDec);
+    }
+    return abort;
+}
+
 static int readMpeg(VideoDec *dec, ReadBuf *rb, char *strf, int (*poll)(void))
 {
+    if (ICO_AUG6) {
+        return readMpeg_aug6(dec, rb, strf, poll);
+    }
     void *p;
     int eof;
     void *q;
@@ -189,7 +270,9 @@ static int initAll(char *name, int imageW, int imageH, int dbx, int dby, int mon
     struct ThreadParam th;
     int ret = 0;
 
-    moviePauseCount = 0;
+    if (!ICO_AUG6) {
+        moviePauseCount = 0;
+    }
     videoDec.intcHandler = -1;
     videoDec.dmacHandler = -1;
     decThreadStarted = 0;

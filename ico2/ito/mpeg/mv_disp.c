@@ -101,7 +101,7 @@ void dispClear(MvDispEnv *self, unsigned int col)
     r.x = 0;
     r.y = 0;
     r.w = self->width << 4;
-    r.h = ((self->height + 31) / 32 * 64 + self->height * PAL_JPNKORCN(2, 3)) << 4;
+    r.h = ((self->height + 31) / 32 * 64 + self->height * PAL_JPNKORNTSCAUG6CN(2, 3)) << 4;
 
     p = setGIFtag((int *)uncached_accel_addr((int)mvClearPacket), 14, 1, 0, 0, 0, 1, 4);
     setClearSprite(p, &r, col);
@@ -113,8 +113,42 @@ void dispClear(MvDispEnv *self, unsigned int col)
     sceGsSyncPath(0, 0);
 }
 
+static void setDispEnv_ntscaug6(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
+{
+    int *p;
+    int w = imageW;
+    int h = imageH / 2;
+
+    self->fbp[0] = 0;
+    self->fbp[1] = (w + 63) / 64 * 64 * ((h + 31) / 32 * 32) >> 11;
+    self->width = w;
+    self->height = h;
+    self->imageWidth = imageW;
+    self->imageHeight = imageH;
+
+    sceGsSetDefDispEnv(&self->env.gs, 0, imageW, imageH / 2, 0, 0);
+
+    p = (int *)uncached_accel_addr((int)mvDispPacket);
+    self->env.w.dispfbDB = (self->env.w.dispfbDB & ~0x7FF) | (dbx & 0x7FF);
+    self->env.w.dispfbDB = (self->env.w.dispfbDB & 0xFFC007FF) | ((dby & 0x7FF) << 11);
+
+    p = setGIFtag(p, 14, 1, 0, 0, 0, 1, 6);
+    p = setPRMODECONT(p, 1);
+    p = setFRAME_1(p, 0, (self->width + 63) / 64, 0, 0);
+    p = setTEST_1(p, 0, 0, 0, 0, 0, 0, 0, 0);
+    p = setSCISSOR_1(p, 0, self->width - 1, 0,
+                     PAL_JPNKORCN((self->height + 31) / 32 * 64 + self->height * 3,
+                                  (self->height + 31) / 32 * 64 + self->height * 3));
+    p = setXYOFFSET_1(p, 0, 0);
+    setCLAMP_1(p, 1, 1, 0, 0, 0, 0);
+}
+
 void setDispEnv(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
 {
+    if (ICO_NTSCAUG6) {
+        setDispEnv_ntscaug6(self, imageW, imageH, dbx, dby);
+        return;
+    }
     int *p;
     int w = PAL_JPNKORCN(720, imageW);
     int h = PAL_JPNKORCN(288, imageH / 2);
@@ -177,7 +211,7 @@ void dispCreate(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
     *(volatile int *)&dispField = 0;
     *(volatile int *)&dispSyncBusy = 0;
     sceGsSyncV(0);
-    sceGsResetGraph(0, 1, PAL_JPNKORCN(systemStatus[0] != 0 ? 3 : 2, 2), 1);
+    sceGsResetGraph(0, 1, PAL_JPNKORNTSCAUG6CN(systemStatus[0] != 0 ? 3 : 2, 2), 1);
     sceGsResetPath();
     setDispEnv(self, imageW, imageH, dbx, dby);
     sendDispEnv(self);
@@ -185,9 +219,190 @@ void dispCreate(MvDispEnv *self, int imageW, int imageH, int dbx, int dby)
 
 inline void dispDelete(MvDispEnv *self) {}
 
+static void dispSetTags_ntsc(MvDispEnv *self, int src, int image, int field, int x, int y, int w,
+                             int h, int texW, int texH)
+{
+    MvRect r;
+    MvRect uv;
+    MvRect r2;
+    MvRect uv2;
+    void *p = (void *)uncached_accel_addr(src);
+    int nx;
+    int ny;
+    int bw;
+    int bh;
+    int dbp;
+    int i;
+    int j;
+
+    nx = texW >> 4;
+    ny = texH >> 4;
+
+    r.x = 0;
+    r.y = ((self->height + 31) / 32 * 64 + self->height * 2) << 4;
+    r.w = texW << 4;
+    r.h = texH / 2 << 4;
+
+    if (field == 0) {
+        uv.x = 8;
+        uv.y = 8;
+        uv.w = texW << 4;
+        uv.h = texH << 4;
+
+        r2.x = x << 4;
+        r2.y = y << 4;
+        r2.w = w << 4;
+        r2.h = h << 4;
+
+        uv2.x = 8;
+        uv2.y = (self->height * 2 << 4) + 8;
+        uv2.w = texW << 4;
+        uv2.h = texH / 2 << 4;
+
+        bh = (self->height + 31) / 32;
+        bw = (self->width + 63) / 64;
+        dbp = bh * (bw << 6);
+        p = setDMAscTag(p, 0, 0, 0, 1, 0, 3);
+        p = setGIFtag(p, 14, 1, 0, 0, 0, 0, 2);
+        p = setBITBLTBUF(p, dbp, bw, 0);
+        p = setTRXREG(p, 16, 16);
+        for (i = 0; i < nx; i++) {
+            for (j = 0; j < ny; j++) {
+                p = setDMAscTag(p, 0, 0, 0, 1, 0, 4);
+                p = setGIFtag(p, 14, 1, 0, 0, 0, 0, 2);
+                p = setTRXPOS(p, 0, i << 4, j << 4);
+                p = setTRXDIR(p, 0);
+                p = setGIFtag(p, 0, 0, 2, 0, 0, 0, 64);
+                p = setDMAscTag(p, 0, phys_addr(image), 0, 3, 0, 64);
+                image += 1024;
+            }
+        }
+    } else {
+        uv.x = 8;
+        uv.y = 24;
+        uv.w = texW << 4;
+        uv.h = texH << 4;
+
+        r2.x = x << 4;
+        r2.y = (y + (self->height + 31) / 32 * 32) << 4;
+        r2.w = w << 4;
+        r2.h = h << 4;
+
+        uv2.x = 8;
+        uv2.y = (self->height * 2 << 4) + 8;
+        uv2.w = texW << 4;
+        uv2.h = texH / 2 << 4;
+    }
+
+    p = setDMAscTag(p, 0, 0, 0, 7, 0, 16);
+    p = setGIFtag(p, 14, 1, 0, 0, 0, 1, 15);
+    p = setTEXFLUSH(p);
+    p = setTEX1_1(p, 0, 0, 0, 0, 0, 0, 0);
+    p = setTEX0_1(p, (self->height + 31) / 32 * ((self->width + 63) / 64 << 6),
+                  (self->width + 63) / 64, 0, 10, 10, 0, 1, 0, 0, 0, 0, 0);
+    p = setTexSprite(p, &r, &uv);
+    p = setTEXFLUSH(p);
+    p = setTEX1_1(p, 0, 0, 1, 1, 0, 0, 0);
+    setTexSprite(p, &r2, &uv2);
+}
+
+static void dispSetTags_aug6(MvDispEnv *self, int src, int image, int field, int x, int y, int w,
+                             int h, int texW, int texH)
+{
+    MvRect r;
+    MvRect uv;
+    MvRect r2;
+    MvRect uv2;
+    void *p = (void *)uncached_accel_addr(src);
+    int nx;
+    int ny;
+    int bw;
+    int bh;
+    int dbp;
+    int i;
+    int j;
+
+    nx = texW >> 4;
+    ny = texH >> 4;
+
+    r.x = 0;
+    r.y = ((self->height + 31) / 32 * 64 + self->height * 2) << 4;
+    r.w = texW << 4;
+    r.h = texH / 2 << 4;
+
+    if (field == 0) {
+        uv.x = 8;
+        uv.y = 8;
+        uv.w = texW << 4;
+        uv.h = texH << 4;
+
+        r2.x = x << 4;
+        r2.y = y << 4;
+        r2.w = w << 4;
+        r2.h = h << 4;
+
+        uv2.x = 8;
+        uv2.y = (self->height * 2 << 4) + 8;
+        uv2.w = texW << 4;
+        uv2.h = texH / 2 << 4;
+        bh = (self->height + 31) / 32;
+        bw = (self->width + 63) / 64;
+        dbp = bh * (bw << 6);
+        p = setDMAscTag(p, 0, 0, 0, 1, 0, 3);
+        p = setGIFtag(p, 14, 1, 0, 0, 0, 0, 2);
+        p = setBITBLTBUF(p, dbp, bw, 0);
+        p = setTRXREG(p, 16, 16);
+        for (i = 0; i < nx; i++) {
+            for (j = 0; j < ny; j++) {
+                p = setDMAscTag(p, 0, 0, 0, 1, 0, 4);
+                p = setGIFtag(p, 14, 1, 0, 0, 0, 0, 2);
+                p = setTRXPOS(p, 0, i << 4, j << 4);
+                p = setTRXDIR(p, 0);
+                p = setGIFtag(p, 0, 0, 2, 0, 0, 0, 64);
+                p = setDMAscTag(p, 0, phys_addr(image), 0, 3, 0, 64);
+                image += 1024;
+            }
+        }
+    } else {
+        uv.x = 8;
+        uv.y = 24;
+        uv.w = texW << 4;
+        uv.h = texH << 4;
+
+        r2.x = x << 4;
+        r2.y = (y + (self->height + 31) / 32 * 32) << 4;
+        r2.w = w << 4;
+        r2.h = h << 4;
+
+        uv2.x = 8;
+        uv2.y = (self->height * 2 << 4) + 8;
+        uv2.w = texW << 4;
+        uv2.h = texH / 2 << 4;
+    }
+
+    p = setDMAscTag(p, 0, 0, 0, 7, 0, 16);
+    p = setGIFtag(p, 14, 1, 0, 0, 0, 1, 15);
+    p = setTEXFLUSH(p);
+    p = setTEX1_1(p, 0, 0, 0, 0, 0, 0, 0);
+    p = setTEX0_1(p, (self->height + 31) / 32 * ((self->width + 63) / 64 << 6),
+                  (self->width + 63) / 64, 0, 10, 10, 0, 1, 0, 0, 0, 0, 0);
+    p = setTexSprite(p, &r, &uv);
+    p = setTEXFLUSH(p);
+    p = setTEX1_1(p, 0, 0, 1, 1, 0, 0, 0);
+    setTexSprite(p, &r2, &uv2);
+}
+
 void dispSetTags(MvDispEnv *self, int src, int image, int field, int x, int y, int w, int h,
                  int texW, int texH)
 {
+    if (ICO_NTSC) {
+        dispSetTags_ntsc(self, src, image, field, x, y, w, h, texW, texH);
+        return;
+    }
+    if (ICO_AUG6) {
+        dispSetTags_aug6(self, src, image, field, x, y, w, h, texW, texH);
+        return;
+    }
     MvRect r;
     MvRect uv;
     MvRect r2;

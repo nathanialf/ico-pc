@@ -28,7 +28,7 @@ typedef struct VoBuf {  /* field names derived */
     volatile int idx;   /* 0x08, the slot the decoder writes next */
     volatile int count; /* 0x0C, the slots decoded and not yet shown */
     int max;            /* 0x10 */
-} VoBuf; /* derived name */
+} VoBuf;                /* derived name */
 
 extern VoBuf voBuf;
 int voBufCreate(VoBuf *self);

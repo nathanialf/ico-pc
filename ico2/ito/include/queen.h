@@ -21,4 +21,7 @@ void gene_enemy(volatile ICO_WORD g);
 void subQueenBrainMain(volatile ICO_WORD g);
 void subQueenControl(volatile ICO_WORD g);
 
+
+void subQueenCollision(volatile int g);
+
 #endif /* QUEEN_H */

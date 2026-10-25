@@ -5,6 +5,17 @@
 #include <eekernel.h>
 #include <sifrpc.h>
 #include <sound.h>
+#include "memory.h"
+
+static void Free(int addr);
+
+/* the EE side ring audioDecCreate allocated */
+static void free_buf(AudioDec *self)
+{
+    Free(self->ring);
+}
+
+#include "s_init.h"
 
 int audioDecCreate(AudioDec *self, int mono, int volume)
 {
@@ -34,10 +45,16 @@ int audioDecCreate(AudioDec *self, int mono, int volume)
     self->iopPos = 0;
     self->word50 = 0;
 
-    self->iopBuf = sceSifAllocIopHeap(size);
-    if (self->iopBuf == 0) {
-        debug_StdPrintfDummy("Cannot allocate IOP memory\n");
-        return 0;
+    if (ICO_AUG6) {
+        /* the IOP side buffer is the sound system's heap block (s_init.c) */
+        self->iopBuf = soundIopHeapAddrs;
+        debug_StdPrintfDummy("adrs %d\n", soundIopHeapAddrs);
+    } else {
+        self->iopBuf = sceSifAllocIopHeap(size);
+        if (self->iopBuf == 0) {
+            debug_StdPrintfDummy("Cannot allocate IOP memory\n");
+            return 0;
+        }
     }
     debug_StdPrintfDummy("Allocate IOP memory 0x%08x\n", self->iopBuf);
 
@@ -349,4 +366,12 @@ int pcmCallback(sceMpeg *mp, void *cbdata, void *anyData)
     k = copy2area(p0, n0, p1, n1, (char *)rd, first, (char *)base, rest);
     audioDecEndPut(ad, k);
     return 0 < k;
+}
+
+static void Free(int addr)
+{
+    /* the buffers are kept as addresses (alloc_zeroed), some at their
+       uncached-accelerated alias; the heap takes the block back with the
+       segment bits off */
+    iosFree((void *)phys_addr(addr));
 }
