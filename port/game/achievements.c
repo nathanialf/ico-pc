@@ -28,7 +28,8 @@
 
 /* stages (stageData rows; the names are the game's), the disc's own
    numbers from the region table (port/core/region.h ach_stages, in this
-   order; the same rows on both discs, 11 .. 39) */
+   order; the same rows on all seven discs, 11 .. 39: each disc's stageData
+   read by name) */
 enum {
     AS_GATE,       /* st04a (GATE_1ST), 11 */
     AS_GRAVE,      /* st18a (GRAVE), 13 */
@@ -63,7 +64,10 @@ _Static_assert(AS_COUNT == ICO_REGION_ACH_STAGES, "region.h ach_stages is this l
 #define STAGE_BITS 128
 _Static_assert(STAGE_BITS >= 106, "the European disc's stageData rows fit");
 
-/* story flags, the disc's (region.h; 338 and 354 on both discs) */
+/* story flags, the disc's (region.h: the queen 338 on the European,
+   Japanese, Korean and Asian discs, 307 on the North American, 306 on the
+   August 2001 preview, 292 on the June 2001 demo; the beach secret 354 on
+   the first four, none (-1) on the three 2001 discs) */
 #define GF_QUEEN_DEAD (ico_region_cur()->gflag_queen_dead) /* actSt25aQueenDeadChk */
 #define GF_BEACH_SECRET                                                                            \
     (ico_region_cur()->gflag_beach_secret) /* actSt27aEndChk: item
