@@ -194,6 +194,10 @@ typedef enum UiStrId {
     UI_STR_DISC_PAL,           /* its values, in config/regions.txt's order */
     UI_STR_DISC_JPN,
     UI_STR_DISC_KOR,
+    UI_STR_DISC_NTSC,
+    UI_STR_DISC_AUG6,
+    UI_STR_DISC_JUN26,
+    UI_STR_DISC_CN,
     UI_STR_REMAP_KEYBOARD,
     UI_STR_REMAP_GAMEPAD,
     UI_STR_REMAP_HINT,
