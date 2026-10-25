@@ -56,6 +56,11 @@
 int ico_opt_developer_mode(void);
 int ico_opt_debug_option(void);
 
+/* PC port: port/game/variants.h: the Game variants hold these debug
+   switches and open the debug menu (debug_VariableInit binds them) */
+void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
+                             int *ignore_demo_camera, int *hand_camera, void (*menu_open)(void));
+
 #ifdef ICO_RD
 
 #include "GifHost.h"
@@ -1199,6 +1204,13 @@ void debug_VariableInit(void)
     if (ico_opt_developer_mode() && ico_opt_debug_option() != 0) {
         debug_GetDebugOption();
     }
+    /* PC port: Options > Extras > Game variants: the switches they hold
+       (One hit per swing, Shadows never dodge, Shadow aggression, Ignore
+       cutscene cameras, No cutscene look-around) bound here, after the retail
+       values and the option file, and written at once; a variant at its
+       shipped value leaves its switch as set above (port/game/variants.c) */
+    ico_variants_bind_debug(&debug_one_hit_only, &debug_ignore_dodge, &debug_enemy_battle_type,
+                            &debug_ignore_demo_camera, &debug_hand_camera, debug_MenuOpen);
 }
 
 void debug_Init(void)
@@ -4292,6 +4304,18 @@ void debug_Menu(void)
 void debug_Menu_off(void)
 {
     menuState = 0;
+}
+
+/* PC port: what SELECT does in debug_Menu above (developer mode, main.c),
+   for Options > Extras > Game variants > Debug menu: the menu opens on its
+   first row; nothing changes while it is already open */
+void debug_MenuOpen(void)
+{
+    if (menuState == 0) {
+        debugBackGroundDisableFlag = 1;
+        menuState = 1;
+        menuSelect = 0;
+    }
 }
 
 /* the file debugSceOpen has open */
