@@ -241,6 +241,7 @@ LOOP_NORMAL_C_NOCLIP:
 	madday.xyzw acc, vf02, vf15y     lq.xyzw vf17, 4(vi02)
 
 	maddaz.xyzw acc, vf03, vf15z     ibeq vi15, vi00, CONT_NORMAL_C_NOCLIP
+#line 244 ""
 	maddw.xyzw vf29, vf04, vf00w     iaddiu vi02, vi02, 3
 	nop                              iaddiu vi05, vi00, 3
 CONT_NORMAL_C_NOCLIP:

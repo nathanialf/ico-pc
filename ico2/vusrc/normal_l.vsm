@@ -240,7 +240,9 @@ BEGIN_NORMAL_L_SPEC:
 ; twice) before quantizing, and has the I-bit 255.0f trick at 0x3810.
 START_NORMAL_L_SPEC:
 	nop                              xtop vi13
+#line LN(243, 243, 243, 243, 243, 242, 243) ""
 	nop                              iaddiu vi14, vi00, 32767
+#line LN(244, 244, 244, 244, 244, 243, 244) ""
 	nop                              iaddiu vi02, vi13, 1
 	nop                              ilwr.x vi04, (vi13)
 	nop                              lq.xyzw vf29, 0(vi13)

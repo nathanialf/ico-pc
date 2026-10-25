@@ -320,6 +320,7 @@ END_MESH_LIGHT_SPEC:
 ; BEGIN_MESH_NOLIGHT (so START_MESH_NOLIGHT can `b BEGIN_MESH_NOLIGHT` and hit the E-bit one bundle
 ; later).  Same shape as sub_0A30 / BEGIN_MESH_LIGHT.
 ; -----------------------------------------------------------------------
+#line LN(323, 323, 323, 323, 323, 318, 323) ""
 	nop                              nop                                    ; do nothing (entry / branch delay slot)
 BEGIN_MESH_NOLIGHT:
 	nop                              nop                                    ; START_MESH_NOLIGHT `b BEGIN_MESH_NOLIGHT` lands here
@@ -336,6 +337,7 @@ BEGIN_MESH_NOLIGHT:
 ; -----------------------------------------------------------------------
 START_MESH_NOLIGHT:
 	nop                              xtop vi13
+#line LN(339, 339, 339, 339, 339, 327, 339) ""
 	nop                              iaddiu vi14, vi00, 32767
 	nop                              iaddiu vi02, vi13, 1
 	nop                              ilwr.x vi04, (vi13)
