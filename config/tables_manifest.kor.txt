@@ -7,7 +7,7 @@
 #   func|obj <address> <name>
 #       an address a table's pointer word holds and the symbol the
 #       committed symbol lists name there (port/data/gen/kor/ee_symbols.c)
-# 75 rows, 913 functions, 1 objects.
+# 74 rows, 913 functions, 1 objects.
 row accessary data 0x002a5938 0x002a5d48 crc32=0x45ad329e
 row act-data-tbl data 0x002a5d48 0x002a5d84 crc32=0x06f0fcc8
 row act-intrlist data 0x002a5d88 0x002aaf90 crc32=0xc71e51fd

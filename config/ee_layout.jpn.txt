@@ -9,7 +9,7 @@
 #       kind: int float bytes (a union copied whole) bitword (a 4-byte union of a
 #       word and named bit-fields) bits (a struct bit-field) funcword dataword
 #   bitfield <union>.<path> bit=<from the union's first bit> width=<bits>
-# 72 record types.
+# 71 record types.
 upstream 3496140f784fdf2d0b10e30b3b3024046c586ce1
 record HintDef size=0x10 header=ico2/omori/include/lws_kyomi.h
 field stage off=0x0 size=4 count=1 kind=int signed=1
@@ -521,16 +521,6 @@ field motion off=0x0 size=4 count=1 kind=int signed=1
 field node off=0x4 size=4 count=1 kind=int signed=1
 field rate off=0x8 size=4 count=1 kind=float
 field frames off=0xC size=4 count=1 kind=int signed=1
-record EnemyDef size=0x1C header=ico2/sugipon/include/enemy.h
-field model off=0x0 size=4 count=1 kind=int signed=1
-field particle off=0x4 size=4 count=1 kind=int signed=1
-field life off=0x8 size=4 count=1 kind=float
-field float0C off=0xC size=4 count=1 kind=float
-field scale off=0x10 size=4 count=1 kind=float
-field dodge off=0x14 size=4 count=1 kind=float
-field paraIndex off=0x18 size=4 count=1 kind=bits bit=0 width=8 signed=1
-field flyType off=0x18 size=4 count=1 kind=bits bit=8 width=2 signed=0
-field battleType off=0x18 size=4 count=1 kind=bits bit=10 width=2 signed=0
 record EnemyMdlRec size=0x28 header=ico2/common/include/sceneManager.h
 field name off=0x0 size=1 count=32 kind=int signed=1
 field first off=0x20 size=4 count=1 kind=int signed=1

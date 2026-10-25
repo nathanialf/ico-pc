@@ -4213,10 +4213,10 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                              "Off",      "5 hits", "Off", "Off"};
     char p[1100], log[1024];
 
-    useConfig("version = 1\n");
     /* the rows are read in English on every disc (the Japanese and Korean
-       discs default to their own text) */
-    ico_opt_set_ui_language(UI_LANG_EN);
+       discs default to their own text; the title's boot re-applies the
+       config's choice, so it is the config's) */
+    useConfig("version = 1\n[ui]\nlanguage = \"en\"\n");
     ui_settings_apply_language();
     stage_no = title ? 1 : 11;
     const int mainL = enterMain(title);
