@@ -382,8 +382,7 @@ int ico_archive_info_acceptable(const IcoArchiveInfo *info, char *why, size_t wh
     }
     disc = ico_disc_by_id(info->disc_id);
     if (disc == NULL) {
-        say(why, whysize, "disc id '%s', this build plays %s and %s", info->disc_id,
-            ico_discs[0].id, ico_discs[1].id);
+        say(why, whysize, "disc id '%s', this build plays %s", info->disc_id, ico_disc_list_text());
         return 0;
     }
     if (strcmp(info->accepted_by, ICO_RULE_ISO_SHA1) != 0 &&
