@@ -97,9 +97,6 @@ extern int ico_region;
     (ICO_JUN26 ? (jun26) : ICO_NTSCAUG6 ? (ntscaug6) : ICO_JPNKORCN ? (jpnkorcn) : (pal))
 #define PAL_JPNCN_KOR_NTSCAUG6JUN26(pal, jpncn, kor, ntscaug6jun26) \
     (ICO_NTSCAUG6JUN26 ? (ntscaug6jun26) : ICO_KOR ? (kor) : ICO_JPNCN ? (jpncn) : (pal))
-#define PAL_JPN_KORCN_NTSCAUG6_JUN26(pal, jpn, korcn, ntscaug6, jun26) \
-    (ICO_JUN26 ? (jun26) : ICO_NTSCAUG6 ? (ntscaug6) : ICO_KORCN ? (korcn) : ICO_JPN ? (jpn) : \
-     (pal))
 #define PAL_JPNKORCN_NTSC_AUG6_JUN26(pal, jpnkorcn, ntsc, aug6, jun26) \
     (ICO_JUN26 ? (jun26) : ICO_AUG6 ? (aug6) : ICO_NTSC ? (ntsc) : ICO_JPNKORCN ? (jpnkorcn) : \
      (pal))

@@ -52,9 +52,12 @@ char *iOSMcSaveSeg_ntscaug6[6] = {"BASCUS-97113ico", "icon.sys",    "boy_blk.ico
 char *iOSMcSaveSeg_jun26[6] = {"BISCUS-97113ico", "icon.sys",    "boy_blk.ico",
                                "boy_blk.ico",     "boy_blk.ico", "game."};
 
+char *iOSMcSaveSeg_cn[6] = {"BISCPS-55001ico", "icon.sys",    "boy_blk.ico",
+                            "boy_blk.ico",     "boy_blk.ico", "game."};
+
 #define iOSMcSaveSeg                                                                               \
-    PAL_JPN_KORCN_NTSCAUG6_JUN26(iOSMcSaveSeg_pal, iOSMcSaveSeg_jpn, iOSMcSaveSeg_kor,             \
-                                 iOSMcSaveSeg_ntscaug6, iOSMcSaveSeg_jun26)
+    PAL_JPN_KOR_NTSCAUG6_JUN26_CN(iOSMcSaveSeg_pal, iOSMcSaveSeg_jpn, iOSMcSaveSeg_kor,            \
+                                  iOSMcSaveSeg_ntscaug6, iOSMcSaveSeg_jun26, iOSMcSaveSeg_cn)
 
 static int mcLockCount = 0; /* derived name */
 
