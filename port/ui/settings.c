@@ -2078,10 +2078,12 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return pref < 0 ? ui_str(UI_STR_VAL_AUTO) : menuLanguageName(pref);
     }
     case UI_OPT_DISC: {
-        static const UiStrId kDisc[ICO_REGION_COUNT] = {UI_STR_DISC_PAL, UI_STR_DISC_JPN,
-                                                        UI_STR_DISC_KOR};
-        _Static_assert(ICO_REGION_COUNT == 3 && ICO_REGION_PAL == 0 && ICO_REGION_JPN == 1 &&
-                           ICO_REGION_KOR == 2,
+        static const UiStrId kDisc[ICO_REGION_COUNT] = {
+            UI_STR_DISC_PAL,  UI_STR_DISC_JPN,   UI_STR_DISC_KOR, UI_STR_DISC_NTSC,
+            UI_STR_DISC_AUG6, UI_STR_DISC_JUN26, UI_STR_DISC_CN};
+        _Static_assert(ICO_REGION_COUNT == 7 && ICO_REGION_PAL == 0 && ICO_REGION_JPN == 1 &&
+                           ICO_REGION_KOR == 2 && ICO_REGION_NTSC == 3 && ICO_REGION_AUG6 == 4 &&
+                           ICO_REGION_JUN26 == 5 && ICO_REGION_CN == 6,
                        "a Disc value for each row of config/regions.txt");
         return ui_str(kDisc[discRow()]);
     }
