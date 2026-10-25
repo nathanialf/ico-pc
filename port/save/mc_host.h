@@ -12,7 +12,9 @@
    each other disc (BISCPS-55001ico, BASCUS-97113ico, BISCUS-97113ico: the
    directory the game names, port/core/region.h mc_save_dir).
    Call before sceMcInit; without it sceMcInit asks ico_host_saves_dir
-   (host_config.h: saves= in ico-pc.ini, else <pref dir>/memcard). The
+   (host_config.h: saves= in ico-pc.ini, else <pref dir>/memcard; PC port:
+   on the August 2001 preview the folder beside it, <that>-preview, whose
+   BASCUS-97113ico is the preview's own, not the North American disc's). The
    folder is created by the game's first Mkdir, never before. */
 void ico_mc_host_set_root(const char *dir);
 const char *ico_mc_host_root(void);

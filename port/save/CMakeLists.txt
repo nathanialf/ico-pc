@@ -10,7 +10,8 @@ target_include_directories(ico_save
 target_compile_options(ico_save PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 # iSignalSema and the vsync callback list; ico_host_saves_dir is host_config.c,
 # which ico_pc (and the test) compile themselves
-target_link_libraries(ico_save PUBLIC ico_platform)
+# ico_region: the selected disc's card folder (region.h mc_card_suffix)
+target_link_libraries(ico_save PUBLIC ico_platform ico_region)
 
 if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_save)
@@ -52,7 +53,8 @@ if(ICO_RUN_TESTS)
     # BISCPS-11003ico, a 0x1E8-byte product file) and save_kor (the Korean
     # disc, BISCPS-56001ico, the same 0x1E8 record) and save_cn (the Asian disc,
     # BISCPS-55001ico, the same).  save_ntsc and save_aug6 (the North American
-    # disc and the August 2001 preview, both BASCUS-97113ico) and save_jun26 (the
+    # disc and the August 2001 preview, both BASCUS-97113ico; the preview's in a
+    # card folder of its own, memcard-preview, which save_aug6 checks) and save_jun26 (the
     # June 2001 demo, BISCUS-97113ico) have a 0x18C-byte product file of their
     # own layout, which save_test part B lays out byte by byte, and game blocks
     # of 25596 (20480 on the demo) bytes with no option words.

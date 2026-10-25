@@ -9,7 +9,9 @@
  * <save directory>, game.000 ...}, the directory the game names (port/core
  * region.h mc_save_dir: BESCES-50760ico for the European disc,
  * BISCPS-11003ico for the Japanese one, BISCPS-56001ico for the Korean
- * one, and a row's own for each other disc), so the discs' saves share a card as on a PS2. The host names no directory and checks no file's size: the
+ * one, and a row's own for each other disc), so the discs' saves share a card as on a PS2
+ * (PC port: but the August 2001 preview's, whose card is a folder of its own
+ * beside it, memcard-preview: sceMcInit). The host names no directory and checks no file's size: the
  * product file is the region's mc_product_size and its 4-byte sum (0x1F0
  * on the European disc, 0x1E8 on the Japanese, Korean and Asian ones, 0x18C on
  * the three 2001 discs), as the game writes it.
@@ -31,6 +33,7 @@
 #include "host_config.h"
 #include "host_fs.h"
 #include "host_loop.h"
+#include "region.h" /* port/core: mc_card_suffix */
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -570,7 +573,30 @@ int sceMcInit(void)
         r2 = ico_host_saves2_dir(mc.root[1], sizeof(mc.root[1]));
         if (r2 < 0) {
             fprintf(stderr, "mc: the saves2 card folder path is too long; port 1 has no card\n");
-        } else if (r2 == 1) {
+        }
+        /* PC port: a disc whose saves cannot share the card (the August
+           2001 preview: its BASCUS-97113ico records are not the North
+           American disc's) has a card folder of its own beside each
+           configured one (host_config.h ico_host_card_dir_beside) */
+        if (ico_region_cur()->mc_card_suffix != NULL) {
+            const char *sfx = ico_region_cur()->mc_card_suffix;
+            int p;
+
+            for (p = 0; p < MC_PORTS; p++) {
+                if (mc.root[p][0] == '\0' ||
+                    ico_host_card_dir_beside(mc.root[p], sizeof(mc.root[p]), sfx) == 0) {
+                    continue;
+                }
+                fprintf(stderr, "mc: the port %d card folder path is too long with %s; %s\n", p,
+                        sfx, p == 0 ? "using memcard-preview" : "port 1 has no card");
+                snprintf(mc.root[p], sizeof(mc.root[p]), "%s", p == 0 ? "memcard-preview" : "");
+            }
+            fprintf(stderr,
+                    "saves: the preview disc's card folder is memcard-preview (its saves are not "
+                    "the USA disc's): %s\n",
+                    mc.root[0]);
+        }
+        if (r2 == 1 && mc.root[1][0] != '\0') {
             fprintf(stderr, "mc: two cards: port 0 %s, port 1 %s\n", mc.root[0], mc.root[1]);
         }
         mc.rootSet = 1;
