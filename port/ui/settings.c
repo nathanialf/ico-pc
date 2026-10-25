@@ -2180,7 +2180,18 @@ static int optShown(int opt, int link)
         return ico_opt_developer_mode(); /* for pack authors */
     }
     if (opt == UI_OPT_VAR_DEBUG_MENU) {
-        return ico_opt_developer_mode(); /* the game's debug menu */
+        /* the game's debug menu; PC port: not on the June 2001 demo, whose
+           debug.c option table and stage select are the preview's */
+        static int demoLogged;
+        if (ico_opt_developer_mode() && ICO_JUN26) {
+            if (!demoLogged) {
+                demoLogged = 1;
+                fprintf(stderr, "variants: the Debug menu is not offered on the June 2001 demo "
+                                "(its debug tables are the preview's)\n");
+            }
+            return 0;
+        }
+        return ico_opt_developer_mode();
     }
     if (opt == UI_OPT_REPORT_PICTURE) {
         /* the window build, developer mode or not: a player's report row */
