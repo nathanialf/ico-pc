@@ -21,8 +21,9 @@
  * region.h mc_save_dir: BESCES-50760ico for the European disc,
  * BISCPS-11003ico for the Japanese one, BISCPS-56001ico for the Korean one,
  * BISCPS-55001ico for the Asian one, BASCUS-97113ico for the North American
- * disc and the August 2001 preview (one directory, read as the first row
- * that names it) and BISCUS-97113ico for the June 2001 demo;
+ * disc (the August 2001 preview names it too, but its card is a folder of
+ * its own, memcard-preview, so an imported BASCUS-97113ico is always the
+ * North American disc's) and BISCUS-97113ico for the June 2001 demo;
  * a card may hold several); every other
  * entry is counted and named in the result. Every file is read before any
  * is written, and each is written to a dot-file copy moved over its name,
@@ -66,12 +67,18 @@ typedef struct {
 } Job;
 
 /* the region whose save directory is `name` (its row of config/regions.txt),
-   or -1 */
+   or -1. PC port: a row whose card is a folder of its own (mc_card_suffix,
+   the August 2001 preview) is never chosen: its directory, BASCUS-97113ico,
+   is the North American disc's, and a retail card can only hold that disc's
+   saves, so the import files it as the North American disc's */
 static int save_dir_region(const char *name)
 {
     int r;
 
     for (r = 0; r < ico_region_count(); r++) {
+        if (ico_region_at(r)->mc_card_suffix != NULL) {
+            continue;
+        }
         if (strcmp(name, ico_region_at(r)->mc_save_dir) == 0) {
             return r;
         }
@@ -641,8 +648,8 @@ int ico_mc_import(const char *src, const char *saves, unsigned flags, IcoMcImpor
         int k;
 
         /* every distinct directory, in the table's order ("BESCES-50760ico or
-           BISCPS-11003ico or ..."): the North American disc and the August 2001
-           preview share one, listed once */
+           BISCPS-11003ico or ..."): the North American disc's is listed once
+           (the August 2001 preview's row is never chosen: save_dir_region) */
         for (k = 0; k < ico_region_count(); k++) {
             size_t len = strlen(dirs);
 
