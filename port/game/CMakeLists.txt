@@ -12,8 +12,10 @@
 # for its constants and CLUT order only (nothing of rd is linked)
 # door_grace.c: the doorway fix's arm and arrival grace ([gameplay] door_fix),
 # called by the exit check in ico2/fumi/src/boyact.c
-# variants.c: the game variants' values ([variants]), their achievements rule and
-# the debug-menu hook's stub (variants.h)
+# variants.c: the game variants' values ([variants]), their achievements rule,
+# the debug switches and debug-menu opener the game binds, the hint rule and the
+# enemy row reader (variants.h); it names no game symbol (the game library is
+# linked before this one)
 add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c door_grace.c
             variants.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -82,10 +84,15 @@ endif()
 
 
 # The game variants (variants.h): the defaults, every [variants] key's round
-# trip through config.toml, the words a file may say and the achievements
-# rule. CPU only; one run per disc (the barrier's shipped number is the disc's).
-add_executable(variants_test test/variants_test.c ../platform/host_config.c)
-target_include_directories(variants_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+# trip through config.toml, the words a file may say, the achievements rule,
+# the bound debug switches and opener, the hint rule, and the enemy row reader
+# on the discs' tables (ico2/sugipon/src/enemyKind.c, data only, compiled in).
+# CPU only; one run per disc (the barrier's shipped number and the table are
+# the disc's).
+add_executable(variants_test test/variants_test.c ../platform/host_config.c
+               "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/enemyKind.c")
+target_include_directories(variants_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform"
+                           "${CMAKE_SOURCE_DIR}/ico2/sugipon/include")
 target_compile_options(variants_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(variants_test PRIVATE ico_options)
 if(ICO_RUN_TESTS)
