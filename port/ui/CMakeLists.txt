@@ -21,9 +21,10 @@
 #
 # The font files (Arimo, Noto Sans JP's subset for the characters Arimo
 # has no glyph for: the Japanese text, the language names, the button
-# marks, and Noto Sans KR's for the Hangul neither has: the Korean text) are
+# marks, Noto Sans KR's for the Hangul neither has: the Korean text, and
+# Noto Sans TC's for the Chinese text's ideographs) are
 # embedded as C arrays generated at build time (embed_font.cmake), so the
-# program needs no file beside them. _ui_font_srcs: the three, in every
+# program needs no file beside them. _ui_font_srcs: the four, in every
 # program that compiles font.c.
 #
 # The string tables (strings.c and strings_<lang>.c, _ui_string_srcs) read
@@ -61,9 +62,21 @@ add_custom_command(
     DEPENDS "${_ui_font_ko}" "${CMAKE_CURRENT_SOURCE_DIR}/embed_font.cmake"
     COMMENT "Embedding the UI font for Korean"
     VERBATIM)
-set(_ui_font_srcs "${_ui_font_c}" "${_ui_font_ja_c}" "${_ui_font_ko_c}")
+# the Chinese text's font (Noto Sans TC, the subset tools/subset_font_zh.py
+# makes): the ideographs the Japanese font lacks, and all of the Chinese
+# text's while the language is Chinese (font.c)
+set(_ui_font_zh "${CMAKE_SOURCE_DIR}/port/assets/fonts/NotoSansTC-Regular-subset.ttf")
+set(_ui_font_zh_c "${CMAKE_CURRENT_BINARY_DIR}/ui_font_zh_data.c")
+add_custom_command(
+    OUTPUT "${_ui_font_zh_c}"
+    COMMAND "${CMAKE_COMMAND}" "-DIN=${_ui_font_zh}" "-DOUT=${_ui_font_zh_c}" -DNAME=ui_font_zh_ttf
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/embed_font.cmake"
+    DEPENDS "${_ui_font_zh}" "${CMAKE_CURRENT_SOURCE_DIR}/embed_font.cmake"
+    COMMENT "Embedding the UI font for Chinese"
+    VERBATIM)
+set(_ui_font_srcs "${_ui_font_c}" "${_ui_font_ja_c}" "${_ui_font_ko_c}" "${_ui_font_zh_c}")
 set(_ui_string_srcs strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c
-                    strings_ja.c strings_ko.c)
+                    strings_ja.c strings_ko.c strings_zh.c)
 
 set(_ui_sources
     font.c
@@ -607,8 +620,11 @@ if((ICO_BASE_ELF_JPN OR ICO_BASE_ELF_KOR) AND TARGET ico_sheet_ref)
         add_test(NAME menu_text_kor COMMAND menu_region_test text kor "${ICO_BASE_ELF_KOR}")
         add_test(NAME menu_look_kor COMMAND menu_region_test look kor "${ICO_BASE_ELF_KOR}"
                  "${ICO_DISC_IMAGE_KOR}")
-        set_tests_properties(menu_text_jpn menu_look_jpn menu_text_kor menu_look_kor
-                             PROPERTIES SKIP_RETURN_CODE 77)
+        add_test(NAME menu_text_cn COMMAND menu_region_test text cn "${ICO_BASE_ELF_CN}")
+        add_test(NAME menu_look_cn COMMAND menu_region_test look cn "${ICO_BASE_ELF_CN}"
+                 "${ICO_DISC_IMAGE_CN}")
+        set_tests_properties(menu_text_jpn menu_look_jpn menu_text_kor menu_look_kor menu_text_cn
+                             menu_look_cn PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 endif()
 # font_edge_test: an overlay line of text presented at Enhanced
