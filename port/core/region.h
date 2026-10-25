@@ -81,11 +81,11 @@ typedef struct IcoRegionInfo {
     int has_game_language; /* the game picks a language (menus, subtitles) */
     /* the port's own text (port/ui): the language its Menu language row's
        Auto gives on this disc, a port/ui/strings.h UiLang (UI_LANG_JA 5,
-       UI_LANG_KO 6), or -1 for the game's own language (has_game_language),
+       UI_LANG_KO 6, UI_LANG_ZH 7), or -1 for the game's own language (has_game_language),
        else English (port/ui/ui_lang.c ui_lang_resolve); and the sheet
        language the disc's menu sheets are lettered in, the look and
        geometry of the port's words drawn over them (strings.h UI_SHEET_JA
-       5, UI_SHEET_KO 6), or -1 for the game's own language's sheets (the
+       5, UI_SHEET_KO 6, UI_SHEET_ZH 7), or -1 for the game's own language's sheets (the
        European disc's five, settings.c ui_settings_apply_language).  Plain
        numbers here: port/core does not include port/ui's headers;
        ctest strings_complete holds them to the UiLang and UI_SHEET_* ids. */
