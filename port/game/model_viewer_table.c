@@ -67,9 +67,15 @@ const int mv_modelCount = (int)(sizeof(mv_models) / sizeof(mv_models[0]));
 /* The id column each row of config/regions.txt reads: 0 pal_id, 1 jpn_id.
    The Korean disc's modelData is the Japanese one row for row (its
    model-path member equals the Japanese ELF's), so kor reads jpn_id
-   (tools/gen_mv_region.py --region kor --check, ctest model_viewer_kor). */
-static const unsigned char mv_id_column[ICO_REGION_COUNT] = {0, 1, 1};
-_Static_assert(ICO_REGION_COUNT == 3, "an id column for each row of config/regions.txt");
+   (tools/gen_mv_region.py --region kor --check, ctest model_viewer_kor); the
+   Asian disc's model-path member equals the Japanese one in all 72 members
+   of its set too (the X-cn comparison), so cn reads jpn_id.  The North
+   American, August 2001 and June 2001 discs have modelData of their own (1582,
+   1576 and 1474 rows against PAL's 1637; their rows carry two path strings
+   PAL's do not) and no column of their own yet: they read pal_id here, which
+   is NOT their rows (the viewer's ids on those three discs are owed:
+   docs/port/UI.md "Extras > Models"). */
+static const unsigned char mv_id_column[ICO_REGION_COUNT] = {0, 1, 1, 0, 0, 0, 1};
 
 int mv_model_id(const MvModel *m)
 {
