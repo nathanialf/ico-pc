@@ -17,10 +17,15 @@ number printed on the disc:
 
 - `SCES-50760` for the European disc;
 - `SCPS-11003` for the Japanese disc;
-- `SCPS-56001` for the Korean disc.
+- `SCPS-56001` for the Korean disc;
+- `SCUS-97113` for the North American disc, and also for the August 2001
+  preview disc, which has no number of its own and uses this folder;
+- `SCUS-97158` for the June 2001 magazine demo;
+- `SCPS-55001` for the Asian disc.
 
 Put a pack in the folder of the disc it was made for; the pack's own
-folder name usually says which. Of these three folders, the game reads only
+folder name usually says which. The North American disc and the preview read the same folder, so a
+pack covers whichever pictures have the same names on the disc you play. Of these six folders, the game reads only
 the one of the disc you play, so you can keep a pack in each. The other
 places a pack can go (`textures/replacements`, and picture files loose in
 `textures`, below) are read for every disc: a pack there shows on any
@@ -31,20 +36,24 @@ disc, so keep it in its disc's folder instead.
 The game comes with a folder for a pack for each disc:
 
 - Windows: `x64\textures\SCES-50760\replacements`,
-  `x64\textures\SCPS-11003\replacements` and
-  `x64\textures\SCPS-56001\replacements`
+  `x64\textures\SCPS-11003\replacements`,
+  `x64\textures\SCPS-56001\replacements`,
+  `x64\textures\SCUS-97113\replacements`,
+  `x64\textures\SCUS-97158\replacements` and
+  `x64\textures\SCPS-55001\replacements`
 - Linux and Steam Deck: `textures/SCES-50760/replacements`,
-  `textures/SCPS-11003/replacements` and `textures/SCPS-56001/replacements`,
-  next to `ico_pc`
+  `textures/SCPS-11003/replacements`, `textures/SCPS-56001/replacements`,
+  `textures/SCUS-97113/replacements`, `textures/SCUS-97158/replacements` and
+  `textures/SCPS-55001/replacements`, next to `ico_pc`
 - Android: see [the Android guide](ANDROID.md#where-your-files-are)
 - Mac and iPhone: the download has no such folder; make one as shown in
   [Other places a pack can go](#other-places-a-pack-can-go)
 
 A note named `README.txt` sits inside each to show you the right place.
 The examples below use the European disc's `SCES-50760`; for a pack for
-the Japanese disc, read `SCPS-11003` instead (`SCPS-56001` for the Korean disc).
+another disc, read that disc's number from the list above instead.
 
-A pack you download usually has a `SCES-50760` (or `SCPS-11003` or `SCPS-56001`) folder of
+A pack you download usually has a folder named after its disc's number (`SCES-50760`, `SCPS-11003`, ...) of
 its own, with a `replacements` folder inside. Copy the pack so that its
 files end up inside the game's `replacements` folder for the same disc.
 For example, on Windows a file from a pack for the European disc should
@@ -161,8 +170,10 @@ To get the pictures to work from:
 
 The game saves each picture of your disc as a PNG file, under the same name
 PCSX2 uses, in `textures/SCES-50760/dumps` (European disc) or
-`textures/SCPS-11003/dumps` (Japanese disc) or
-`textures/SCPS-56001/dumps` (Korean disc) in the folder with your saves. For
+`textures/SCPS-11003/dumps` (Japanese disc),
+`textures/SCPS-56001/dumps` (Korean disc), `textures/SCUS-97113/dumps` (North
+American disc and August 2001 preview), `textures/SCUS-97158/dumps` (June 2001
+magazine demo) or `textures/SCPS-55001/dumps` (Asian disc) in the folder with your saves. For
 the European disc that is about 1700 files and about 160 MB, so make sure
 there is room. A file already there is kept, so running it again only adds
 what is missing. The folder also gets a file named `manifest.txt` that
@@ -174,11 +185,12 @@ you start it.
 
 Many pictures on the disc share one name, so one replacement covers all of
 them. A spreadsheet per disc lists every file a pack can hold, where the
-picture is used, how many others share its name, and (for the Japanese and
-Korean discs) whether a European pack already covers it:
+picture is used, how many others share its name, and (for every disc but the
+European one) whether a European pack already covers it:
 [European](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/europe.csv),
 [Japanese](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/japan.csv),
-[Korean](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/korea.csv)
+[Korean](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/korea.csv),
+and one for each of the other four discs (`usa.csv`, `asia.csv`, `preview-2001-08.csv` and `demo-2001-06.csv`, in the same folder)
 (the columns are explained in
 [docs/textures/README.md](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/README.md)).
 
