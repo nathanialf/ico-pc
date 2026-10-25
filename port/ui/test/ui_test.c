@@ -363,7 +363,7 @@ static void testStrings(void)
     {
         const char *const *tables[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr, ui_strings_de,
                                                     ui_strings_it, ui_strings_es, ui_strings_ja,
-                                                    ui_strings_ko};
+                                                    ui_strings_ko, ui_strings_zh};
         static const char *const deja[UI_LANG_COUNT] = {
             "Deja vu",
             "D\xc3\xa9j\xc3\xa0 vu",
@@ -371,7 +371,8 @@ static void testStrings(void)
             "D\xc3\xa9j\xc3\xa0 vu",
             "D\xc3\xa9j\xc3\xa0 vu",
             "\xe3\x83\x87\xe3\x82\xb8\xe3\x83\xa3\xe3\x83\xb4",
-            "\xeb\x8d\xb0\xec\x9e\x90\xeb\xb7\x94"};
+            "\xeb\x8d\xb0\xec\x9e\x90\xeb\xb7\x94",
+            "\xE6\x97\xA2\xE8\xA6\x96\xE6\x84\x9F"};
         for (int l = 0; l < UI_LANG_COUNT; l++) {
             const char *t = tables[l][UI_STR_PHOTO_FILM_DEJA];
             CHECK(t != NULL && strcmp(t, deja[l]) == 0, "language %d: Deja vu is \"%s\"", l,
