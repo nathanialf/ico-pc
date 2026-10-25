@@ -314,16 +314,17 @@ single-precision code, with the additions and subtractions of the trigonometric 
 adder model (`port/math/newlib/ico_libm.c` (header comment)). [MATH.md](MATH.md) lists every
 function and where it is used.
 
-## Three discs, one program
+## Seven discs, one program
 
 The port is built to play more than one release of the game from one compiled program: the
-European disc (SCES-50760), the Japanese disc (SCPS-11003) and the Korean disc (SCPS-56001),
-listed in `config/regions.txt`.
+European disc (SCES-50760), the Japanese disc (SCPS-11003), the Korean disc (SCPS-56001), the
+North American disc (SCUS-97113), the August 2001 preview disc, the June 2001 magazine demo
+(SCUS-97158) and the Asian disc (SCPS-55001), listed in `config/regions.txt`.
 Their differences are inline blocks in the decompilation's one tree; here each becomes a run-time
 choice on the game's region index, `ico_region`, which is set once, when the disc image is
 identified, and is the European disc's 0 until then. The game code reads it through
 `ICO_<SLUG>` and the selector macros of `ico2/common/include/region.h`, the port's own code through
-`port/core/region.h`'s per-disc tables; one in-memory layout, the European one, serves all three.
+`port/core/region.h`'s per-disc tables; one in-memory layout, the European one, serves all seven.
 [GAME_CODE.md](GAME_CODE.md#regions) has the forms and the rule for adding a target.
 
 ## The port's own additions
