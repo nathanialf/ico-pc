@@ -403,12 +403,12 @@ Options once you have finished the game:
   None of them has a language choice of its own.
 - **Menu language** is the language of the menus this port adds (Options,
   the extras, photo mode's help, the messages): English, French, German,
-  Italian, Spanish, Japanese (日本語) or Korean (한국어). It starts on Auto:
-  Japanese with the Japanese disc, Korean with the Korean disc, and with the
+  Italian, Spanish, Japanese (日本語), Korean (한국어) or Chinese (繁體中文,
+  Traditional Chinese). It starts on Auto: Japanese with the Japanese disc,
+  Korean with the Korean disc, Chinese with the Asian disc, and with the
   European disc the game's language. The North American disc, the August 2001
-  preview and the June 2001 magazine demo start on English, and so does the
-  Asian disc, since the port has no Chinese text yet. It does not change the game's own
-  text, which is always the disc's.
+  preview and the June 2001 magazine demo start on English. It does not
+  change the game's own text, which is always the disc's.
 - **Disc** shows only when more than one disc is set up. It is the disc the
   game plays: Europe (SCES-50760), Japan (SCPS-11003), Korea (SCPS-56001), USA
   (SCUS-97113), Preview 2001-08 (the August 2001 preview), Demo 2001-06
