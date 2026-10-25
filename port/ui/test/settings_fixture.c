@@ -198,6 +198,14 @@ void tex_SetSamplingType(void *t, int mag, int min)
     (void)min;
 }
 
+/* sugipon's frameDependSequence.c; layout_texture.c's June 2001 demo arm plays its select sound
+   through it */
+void ExecuteSEPackage(struct GObj *gobj, int id)
+{
+    (void)gobj;
+    (void)id;
+}
+
 int soundSeDefPlay(int no, unsigned int a, float *b, int c)
 {
     (void)no;
