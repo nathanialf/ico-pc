@@ -144,6 +144,10 @@ static const UiSheetInk kSheetInk[UI_LANG_SHEET_COUNT] = {
        Japanese sheets'.  ctest menu_look_kor (menu_region_test.c) measured the
        disc at fill 252.8, rim 41.8 (kInkExpect there): the values here. */
     {1, 42, 253, 1, 0},
+    /* the Asian disc's sheets (UI_SHEET_ZH, Traditional Chinese): the
+       Japanese sheets' values as the first guess, until ctest menu_look_cn
+       (menu_region_test.c) measures the disc's Tex_menu01 (its kInkExpect) */
+    {1, 34, 252, 1, 0},
 };
 /* the dark, plain and grey inks and the light words without a halo: no
    rim, a white fill (the vertex colour makes them black, white or grey) */
@@ -355,17 +359,28 @@ void ui__menu_set_bold(float bx, float by)
 #define KO_GEO_WX 0.62f
 #define KO_GEO_GAP 7.5f
 #define KO_GEO_BOLD 0.0f
-static MfGeo s_cjkGeo[3] = {
+/* the Asian disc's (UI_SHEET_ZH): the Japanese sheets' geometry as the
+   first guess, one geometry for every screen (the title sheet letters its
+   words as the others do), until ctest menu_look_cn measures the disc */
+#define ZH_GEO_EM JA_GEO_EM
+#define ZH_GEO_WX JA_GEO_WX
+#define ZH_GEO_GAP JA_GEO_GAP
+#define ZH_GEO_BOLD JA_GEO_BOLD
+static MfGeo s_cjkGeo[4] = {
     {JA_GEO_EM, JA_GEO_WX, JA_GEO_GAP, JA_GEO_BOLD, JA_GEO_BOLD},
     {JA_TITLE_GEO_EM, JA_TITLE_GEO_WX, JA_TITLE_GEO_GAP, JA_TITLE_GEO_BOLD, JA_TITLE_GEO_BOLD},
     {KO_GEO_EM, KO_GEO_WX, KO_GEO_GAP, KO_GEO_BOLD, KO_GEO_BOLD},
+    {ZH_GEO_EM, ZH_GEO_WX, ZH_GEO_GAP, ZH_GEO_BOLD, ZH_GEO_BOLD},
 };
 static int s_titleSheet; /* ui_menu_text_set_title */
 
-/* UI_SHEET_JA_TITLE's, UI_SHEET_KO's, else UI_SHEET_JA's */
+/* UI_SHEET_JA_TITLE's, UI_SHEET_KO's, UI_SHEET_ZH's, else UI_SHEET_JA's */
 static MfGeo *jaGeo(int sheet)
 {
-    return &s_cjkGeo[sheet == UI_SHEET_JA_TITLE ? 1 : sheet == UI_SHEET_KO ? 2 : 0];
+    return &s_cjkGeo[sheet == UI_SHEET_JA_TITLE ? 1
+                     : sheet == UI_SHEET_KO     ? 2
+                     : sheet == UI_SHEET_ZH     ? 3
+                                                : 0];
 }
 
 void ui__menu_set_ja_geometry(int sheet, float em, float wx, float gap, float bx, float by)
@@ -396,7 +411,7 @@ int ui_menu_text_set_title(int on)
 }
 
 /* the current sheet's (ui_sheet_language, and on the Japanese disc the
-   title's or the other screens'; the Korean disc's one) */
+   title's or the other screens'; the Korean and Asian discs' one) */
 static MfGeo sheetGeo(void)
 {
     if (ui_sheet_language() == UI_SHEET_JA) {
@@ -404,6 +419,9 @@ static MfGeo sheetGeo(void)
     }
     if (ui_sheet_language() == UI_SHEET_KO) {
         return *jaGeo(UI_SHEET_KO);
+    }
+    if (ui_sheet_language() == UI_SHEET_ZH) {
+        return *jaGeo(UI_SHEET_ZH);
     }
     return (MfGeo){1.0f, 1.0f, -1.0f, s_boldX, s_boldY};
 }
@@ -1319,6 +1337,12 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
     h = hashBytes(h, &cls, sizeof(cls));
     if (sc > 1) {
         h = hashBytes(h, &sc, sizeof(sc));
+    }
+    /* Chinese text draws its ideographs from the Chinese font first
+       (font.c ui__font_prefer_chinese), the Japanese text's from the
+       Japanese one: the same words, another face */
+    if (ui__font_chinese_first()) {
+        h = hashBytes(h, "zh", 2);
     }
     for (int i = 0; i < MF_STRIPS; i++) {
         MfStrip *s = &s_mf.strips[i];
