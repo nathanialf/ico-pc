@@ -37,7 +37,11 @@ typedef struct AttackPack { /* field names derived */
 } __attribute__((aligned(16))) AttackPack; /* derived name */
 
 /* the zeroed template every pack starts from; group and group2 start at -1 */
-static const AttackPack attackPackInit = {0, 0, {0, 0}, 0, 0, -1, -1}; /* derived name */
+static const AttackPack attackPackInit_pal = {0, 0, {0, 0}, 0, 0, -1, -1}; /* derived name */
+
+static const AttackPack attackPackInit_ntscaug6 = {0, 0, {0, 0}, 0, -1, -1}; /* derived name */
+
+#define attackPackInit (*PAL_NTSCAUG6(&attackPackInit_pal, &attackPackInit_ntscaug6))
 
 #include "attackhit.h"
 #include <libvu0.h>
@@ -137,7 +141,7 @@ static inline int GetAttackKindIndex(Sub15C *p) /* derived name */
     int id = p->ctrl.motion;
     int i;
 
-    for (i = 0; i < 20; i++) {
+    for (i = 0; i < PAL_NTSCAUG6(20, 19); i++) {
         if (id == attackData[i].motion) {
             return i;
         }
@@ -182,20 +186,27 @@ static void MakeAttackPack_Actor(AttackPack *pack, GObj *gobj, GObj *weapon)
         }
         wk = CheckWeaponKind(weapon);
         WeaponCurPos(weapon, pack->center, pack->from, pack->to);
-        pack->radius0 = (weaponKind + wk)->radius;
-        pack->radius1 = 20.0f;
-        ((union PackPowerWord *)&pack->power)->f = attackData[k].power * weaponKind[wk].power;
-        pack->active = 1;
-        pack->sweep = ((weaponKind + wk)->flags >> 1) & 1;
-        if (pack->sweep == 0) {
-            return;
+        if (ICO_NTSCAUG6) {
+            pack->radius0 = weaponKind[wk].radius;
+            pack->radius1 = 20.0f;
+            pack->power = attackData[k].power * weaponKind[wk].power;
+            pack->active = 1;
+        } else {
+            pack->radius0 = (weaponKind + wk)->radius;
+            pack->radius1 = 20.0f;
+            ((union PackPowerWord *)&pack->power)->f = attackData[k].power * weaponKind[wk].power;
+            pack->active = 1;
+            pack->sweep = ((weaponKind + wk)->flags >> 1) & 1;
+            if (pack->sweep == 0) {
+                return;
+            }
+            _OrientGV(v0, pack->center, pack->to);
+            _OrientGV(v1, pack->from, pack->to);
+            sceVu0ScaleVector(v0, v0, pack->radius0);
+            sceVu0ScaleVector(v1, v1, pack->radius0);
+            sceVu0AddVector(pack->center, pack->to, v0);
+            sceVu0AddVector(pack->from, pack->to, v1);
         }
-        _OrientGV(v0, pack->center, pack->to);
-        _OrientGV(v1, pack->from, pack->to);
-        sceVu0ScaleVector(v0, v0, pack->radius0);
-        sceVu0ScaleVector(v1, v1, pack->radius0);
-        sceVu0AddVector(pack->center, pack->to, v0);
-        sceVu0AddVector(pack->from, pack->to, v1);
         break;
 
     case 0:
@@ -206,16 +217,23 @@ static void MakeAttackPack_Actor(AttackPack *pack, GObj *gobj, GObj *weapon)
         pack->from[0] = v0[0];
         pack->from[1] = v0[1];
         pack->from[2] = v0[2];
-        if (attackData[k].toRoot != 0) {
-            pack->to[0] = test_CURRENTROOT(gobj)[0];
-            pack->to[1] = test_CURRENTROOT(gobj)[1];
-            pack->to[2] = test_CURRENTROOT(gobj)[2];
-            pack->radius0 = _DistGV(pack->to, pack->center);
-        } else {
+        if (ICO_NTSCAUG6) {
             pack->to[0] = v0[0];
             pack->to[1] = v0[1];
             pack->to[2] = v0[2];
             pack->radius0 = attackData[k].radius;
+        } else {
+            if (attackData[k].toRoot != 0) {
+                pack->to[0] = test_CURRENTROOT(gobj)[0];
+                pack->to[1] = test_CURRENTROOT(gobj)[1];
+                pack->to[2] = test_CURRENTROOT(gobj)[2];
+                pack->radius0 = _DistGV(pack->to, pack->center);
+            } else {
+                pack->to[0] = v0[0];
+                pack->to[1] = v0[1];
+                pack->to[2] = v0[2];
+                pack->radius0 = attackData[k].radius;
+            }
         }
         pack->radius1 = attackData[k].radius;
         pack->power = attackData[k].power;
@@ -236,9 +254,47 @@ static void MakeAttackPack_Actor(AttackPack *pack, GObj *gobj, GObj *weapon)
 }
 
 /* shared by _AttackCenter and AttackCenter_WithDir */
+static inline void SetupAttackPack_ntscaug6(AttackPack *pack, GObj *gop, int group, float *pos,
+                                            float *ofs, float radius) /* derived name */
+{
+    *pack = attackPackInit;
+
+    pack->active = 1;
+    pack->actor = gop;
+    pack->group = group;
+    pack->group2 = group;
+    pack->center[0] = pos[0];
+    pack->center[1] = pos[1];
+    pack->center[2] = pos[2];
+    if (ofs != 0) {
+        sceVu0SubVector(pack->from, pack->center, ofs);
+    } else {
+        pack->from[0] = pos[0];
+        pack->from[1] = pos[1];
+        pack->from[2] = pos[2];
+    }
+    pack->to[0] = pos[0];
+    pack->to[1] = pos[1];
+    pack->to[2] = pos[2];
+
+    pack->radius1 = pack->radius0 = radius;
+
+    if (gop != 0 && gop->kind == 52) {
+        pack->thickness = pack->radius1 - 100.0f;
+    } else {
+        pack->thickness = 0.0f;
+    }
+
+    pack->power = 20.0f;
+}
+
 static inline void SetupAttackPack(AttackPack *pack, GObj *gop, int group, float *pos, float *ofs,
                                    float radius) /* derived name */
 {
+    if (ICO_NTSCAUG6) {
+        SetupAttackPack_ntscaug6(pack, gop, group, pos, ofs, radius);
+        return;
+    }
     *pack = attackPackInit;
 
     pack->active = 1;
@@ -283,12 +339,53 @@ typedef struct { /* field names derived */
 } AttackGroupTable; /* derived name */
 
 /* GObj kind -> attack class, terminated by kind -1 */
-static const AttackGroupTable attackGroupTable = {
+static const AttackGroupTable attackGroupTable_pal = {
     /* derived name */
     {{1, 0}, {4, 1}, {47, 1}, {54, 1}, {53, 1}, {53, 1}, {62, 1}, {2, 3}, {63, 1}, {-1, 0}}};
 
+static const AttackGroupTable attackGroupTable_ntsc = {
+    /* derived name */
+    {{1, 0}, {4, 1}, {46, 1}, {53, 1}, {52, 1}, {52, 1}, {61, 1}, {2, 3}, {62, 1}, {-1, 0}}};
+
+static const AttackGroupTable attackGroupTable_aug6 = {
+    /* derived name */
+    {{1, 0}, {4, 1}, {46, 1}, {53, 1}, {52, 1}, {52, 1}, {60, 1}, {2, 3}, {61, 1}, {-1, 0}}};
+
+#define attackGroupTable                                                                           \
+    (*PAL_NTSC_AUG6(&attackGroupTable_pal, &attackGroupTable_ntsc, &attackGroupTable_aug6))
+
+static int AttackCheckSameGroup_ntscaug6(GObj *self, GObj *other, GObj *third)
+{
+    (void)third; /* PC port: the European parameter, unused here */
+    AttackGroupTable tbl = attackGroupTable;
+    unsigned int g0 = 2;
+    unsigned int g1 = 2;
+    int i;
+
+    for (i = 0; tbl.p[i].kind >= 0; i++) {
+        if (self->kind == tbl.p[i].kind) {
+            g0 = tbl.p[i].cls;
+        }
+    }
+    for (i = 0; tbl.p[i].kind >= 0; i++) {
+        if (other->kind == tbl.p[i].kind) {
+            g1 = tbl.p[i].cls;
+        }
+    }
+    switch (g1) {
+    case 2:
+        return 1;
+    case 3:
+        return g0 < 2;
+    }
+    return g1 == g0;
+}
+
 static int AttackCheckSameGroup(GObj *self, GObj *other, GObj *third)
 {
+    if (ICO_NTSCAUG6) {
+        return AttackCheckSameGroup_ntscaug6(self, other, third);
+    }
     AttackGroupTable tbl = attackGroupTable;
     unsigned int g0 = 2;
     unsigned int g1 = 2;
@@ -321,8 +418,147 @@ static int AttackCheckSameGroup(GObj *self, GObj *other, GObj *third)
     return g1 == g0;
 }
 
+/* whether the attack's nodes include the target's focus node 35 */
+static inline int AttackHitFocusNode(GObj *self) /* derived name */
+{
+    int node = GetSkeltonFocusNode(self, 35);
+    int i;
+
+    for (i = 0; GOBJ_ACT(self)->enemy->hitNodes[i] != -1; i++) {
+        if (GOBJ_ACT(self)->enemy->hitNodes[i] == node) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void AttackMail_ntsc(GObj *self, AttackPack *pack)
+{
+    float v0[4];
+    float v1[4];
+    float v2[4];
+    GObj *attacker;
+    Act *aext;
+    GObj *weapon;
+    int group;
+    int kind;
+    int hard;
+    int mail;
+    float power;
+
+    attacker = pack->actor;
+    aext = GOBJ_ACT(attacker);
+    group = pack->group;
+    weapon = 0;
+    if (aext != 0) {
+        weapon = aext->weapon;
+    }
+    hard = 0;
+    if (group < 0) {
+        power = 10.0f;
+    } else if (weapon == 0) {
+        power = attackData[group].power;
+    } else {
+        kind = CheckWeaponKind(weapon);
+        power = attackData[group].power * weaponKind[kind].power;
+        hard = (weaponKind + kind)->flags & 1;
+    }
+    mail = 13;
+    if (GOBJ_ACT(self)->enemy->liftKind == 3) {
+        if (AttackHitFocusNode(self)) {
+            mail = 14;
+        }
+    }
+    iosOmSendMail(self, mail, attacker);
+
+    GOBJ_ACT(self)->attacker = attacker;
+    GOBJ_ACT(self)->damage = (int)power;
+    GOBJ_ACT(self)->hitGroup = pack->group2;
+    GOBJ_ACT(self)->downHit = attackData[group].down || pack->down;
+    GOBJ_ACT(self)->unguardable = attackData[group].unguardable || hard;
+    GOBJ_ACT(self)->stoneHit = attackData[group].stone;
+    if (attacker == boyGObj) {
+        aext->flags20.ll &= ~0x80000ULL;
+    }
+    GetRootPosition(v0, attacker);
+    GetRootPosition(v1, self);
+    sceVu0SubVector(v2, v0, v1);
+    sceVu0Normalize(v2, v2);
+    GOBJ_ACT(self)->attackDir[0] = v2[0];
+    GOBJ_ACT(self)->attackDir[1] = v2[1];
+    GOBJ_ACT(self)->attackDir[2] = v2[2];
+    if (pack->hasDir != 0) {
+        sceVu0ScaleVector(GOBJ_ACT(self)->attackDir, pack->dir, -1.0f);
+    }
+}
+
+static void AttackMail_aug6(GObj *self, AttackPack *pack)
+{
+    float v0[4];
+    float v1[4];
+    float v2[4];
+    GObj *attacker;
+    Act *aext;
+    GObj *weapon;
+    int group;
+    int kind;
+    int hard;
+    int mail;
+    float power;
+
+    attacker = pack->actor;
+    aext = GOBJ_ACT(attacker);
+    group = pack->group;
+    weapon = 0;
+    if (aext != 0) {
+        weapon = aext->weapon;
+    }
+    hard = 0;
+    if (group < 0) {
+        power = 10.0f;
+    } else if (weapon == 0) {
+        power = attackData[group].power;
+    } else {
+        kind = CheckWeaponKind(weapon);
+        power = attackData[group].power * weaponKind[kind].power;
+        hard = (weaponKind + kind)->flags & 1;
+    }
+    mail = 13;
+    if (GOBJ_ACT(self)->enemy->liftKind == 3) {
+        if (AttackHitFocusNode(self)) {
+            mail = 14;
+        }
+    }
+    iosOmSendMail(self, mail, attacker);
+
+    GOBJ_ACT(self)->attacker = attacker;
+    GOBJ_ACT(self)->damage = (int)power;
+    GOBJ_ACT(self)->hitGroup = pack->group2;
+    GOBJ_ACT(self)->downHit = attackData[group].down || pack->down;
+    GOBJ_ACT(self)->unguardable = attackData[group].unguardable || hard;
+    GOBJ_ACT(self)->stoneHit = attackData[group].stone;
+    GetRootPosition(v0, attacker);
+    GetRootPosition(v1, self);
+    sceVu0SubVector(v2, v0, v1);
+    sceVu0Normalize(v2, v2);
+    GOBJ_ACT(self)->attackDir[0] = v2[0];
+    GOBJ_ACT(self)->attackDir[1] = v2[1];
+    GOBJ_ACT(self)->attackDir[2] = v2[2];
+    if (pack->hasDir != 0) {
+        sceVu0ScaleVector(GOBJ_ACT(self)->attackDir, pack->dir, -1.0f);
+    }
+}
+
 static void AttackMail(GObj *self, AttackPack *pack)
 {
+    if (ICO_NTSC) {
+        AttackMail_ntsc(self, pack);
+        return;
+    }
+    if (ICO_AUG6) {
+        AttackMail_aug6(self, pack);
+        return;
+    }
     float v0[4];
     float v1[4];
     float v2[4];
@@ -389,8 +625,178 @@ static void AttackMail(GObj *self, AttackPack *pack)
     }
 }
 
+static int AttackCheckHit_ntsc(AttackPack *pack, GObj *gobj, short *out)
+{
+    float w[4];
+    unsigned char flags[112];
+    Sub15C *sk;
+    int n;
+    int i;
+    int j;
+    int hitR;
+    float rad;
+    float t;
+
+    sk = GOBJ_SUB(gobj);
+    n = sk->skelNodeNum;
+    if (n == 0) {
+        n = 1;
+    }
+    switch (gobj->kind) {
+    case 52:
+        rad = QueenBallRadius(gobj);
+        rad = rad + _ACTGame_GetParamF(29);
+        hitR = (int)rad;
+        i = 0;
+        break;
+
+    case 53:
+        if (QueenBarrierInqBreakable() == 0) {
+            hitR = 0;
+            i = 0;
+            break;
+        }
+        rad = QueenBarrierRadius(gobj);
+        rad = rad + _ACTGame_GetParamF(30);
+        hitR = (int)rad;
+        i = 0;
+        break;
+
+    case 62:
+        hitR = (int)GetAttackCheckBoundaryRadius(gobj);
+        i = 0;
+        break;
+
+    case 61:
+        hitR = 50;
+        i = 0;
+        break;
+
+    case 4:
+        hitR = (int)(GOBJ_ACT(gobj)->enemy->bodySize * 30.0f);
+        i = 0;
+        break;
+
+    default:
+        hitR = 30;
+        i = 0;
+        break;
+    }
+    for (i = 0; i < n; i++) {
+        flags[i] = 0;
+    }
+    for (t = 0.0f; t < pack->radius0; t += pack->radius1) {
+        _InterGV(w, pack->to, pack->center, t, pack->radius0 - t);
+        for (i = 0; i < n; i++) {
+            if (_DistSqGV((float *)(sk->nodeMtx + (i << 6) + 48), w) <
+                ((float)hitR + pack->radius1) * ((float)hitR + pack->radius1)) {
+                if (!(_DistSqGV((float *)(sk->nodeMtx + (i << 6) + 48), w) <
+                      ((float)hitR + pack->thickness) * ((float)hitR + pack->thickness))) {
+                    flags[i] = 1;
+                }
+            }
+        }
+    }
+    for (i = 0, j = 0; i < n; i++) {
+        if (flags[i] != 0) {
+            out[j] = i;
+            j++;
+        }
+    }
+    out[j] = -1;
+    return j;
+}
+
+static int AttackCheckHit_aug6(AttackPack *pack, GObj *gobj, short *out)
+{
+    float w[4];
+    unsigned char flags[112];
+    Sub15C *sk;
+    int n;
+    int i;
+    int j;
+    int hitR;
+    float rad;
+    float t;
+
+    sk = GOBJ_SUB(gobj);
+    n = sk->skelNodeNum;
+    if (n == 0) {
+        n = 1;
+    }
+    switch (gobj->kind) {
+    case 52:
+        rad = QueenBallRadius(gobj);
+        rad = rad + _ACTGame_GetParamF(29);
+        hitR = (int)rad;
+        i = 0;
+        break;
+
+    case 53:
+        if (QueenBarrierInqBreakable() == 0) {
+            hitR = 0;
+            i = 0;
+            break;
+        }
+        rad = QueenBarrierRadius(gobj);
+        rad = rad + _ACTGame_GetParamF(30);
+        hitR = (int)rad;
+        i = 0;
+        break;
+
+    case 61:
+        hitR = (int)GetAttackCheckBoundaryRadius(gobj);
+        i = 0;
+        break;
+
+    case 60:
+        hitR = 50;
+        i = 0;
+        break;
+
+    case 4:
+        hitR = (int)(GOBJ_ACT(gobj)->enemy->bodySize * 30.0f);
+        i = 0;
+        break;
+
+    default:
+        hitR = 30;
+        i = 0;
+        break;
+    }
+    for (i = 0; i < n; i++) {
+        flags[i] = 0;
+    }
+    for (t = 0.0f; t < pack->radius0; t += pack->radius1) {
+        _InterGV(w, pack->to, pack->center, t, pack->radius0 - t);
+        for (i = 0; i < n; i++) {
+            if (_DistSqGV((float *)(sk->nodeMtx + (i << 6) + 48), w) <
+                ((float)hitR + pack->radius1) * ((float)hitR + pack->radius1)) {
+                if (!(_DistSqGV((float *)(sk->nodeMtx + (i << 6) + 48), w) <
+                      ((float)hitR + pack->thickness) * ((float)hitR + pack->thickness))) {
+                    flags[i] = 1;
+                }
+            }
+        }
+    }
+    for (i = 0, j = 0; i < n; i++) {
+        if (flags[i] != 0) {
+            out[j] = i;
+            j++;
+        }
+    }
+    out[j] = -1;
+    return j;
+}
+
 static int AttackCheckHit(AttackPack *pack, GObj *gobj, short *out)
 {
+    if (ICO_NTSC) {
+        return AttackCheckHit_ntsc(pack, gobj, out);
+    }
+    if (ICO_AUG6) {
+        return AttackCheckHit_aug6(pack, gobj, out);
+    }
     float w[4];
     unsigned char flags[112];
     float v[3][4];
@@ -514,8 +920,125 @@ static int AttackCheckHit(AttackPack *pack, GObj *gobj, short *out)
     return j;
 }
 
+static GObj *AttackGenerate_ntsc(AttackPack *pack)
+{
+    GObj *g;
+    GObj *hit;
+
+    hit = 0;
+    if (pack->active == 0) {
+        return 0;
+    }
+    debug_StdPrintfDummy("flag ok\n");
+    for (g = isysGObjGetExist_begin(); g != 0; g = isysGObjGetExist_next(g)) {
+        if (g->active == 0) {
+            continue;
+        }
+        if (AttackCheckSameGroup_ntscaug6(pack->actor, g, 0) != 0) {
+            continue;
+        }
+        debug_StdPrintfDummy("group ok\n");
+        if (!(GOBJ_ACT(g) != 0 && GOBJ_ACT(g)->enemy != 0)) {
+            continue;
+        }
+        if (GOBJ_ACT(g)->hit != 0) {
+            continue;
+        }
+        debug_StdPrintfDummy("invincible ok\n");
+        if (g == boyGObj && ACTChkAttackIgnore_BOY(g, pack->actor) != 0) {
+            continue;
+        }
+        if (g == girlGObj && ACTChkAttackIgnore_GIRL(g, pack->actor) != 0) {
+            continue;
+        }
+        if (g->kind == 4 && ACTChkAttackIgnore_ENEMY(g, pack->actor) != 0) {
+            continue;
+        }
+        /* the enemy work records the nodes the attack hits */
+        if (AttackCheckHit(pack, g, GOBJ_ACT(g)->enemy->hitNodes) == 0) {
+            continue;
+        }
+        debug_StdPrintfDummy("geometry ok\n");
+        if (GOBJ_ACT(g) != 0 && GOBJ_ACT(g)->attacker != 0 &&
+            GOBJ_ACT(g)->hitGroup == pack->group2) {
+            debug_StdPrintfDummy("id equal error\n");
+            continue;
+        }
+        if (debug_one_hit_only != 0 && pack->actor == boyGObj && g->kind == 4 &&
+            ((int)(GOBJ_ACT(pack->actor)->flags20.ll >> 19) & 1) == 0) {
+            continue;
+        }
+        AttackMail(g, pack);
+        hit = g;
+        debug_StdPrintfDummy("mail send ok [%d]\n", pack->group2);
+        if (GOBJ_ACT(hit) != 0 && GOBJ_ACT(hit)->attacker != 0 && hit->kind == 4) {
+            /* the enemy work records the direction the attack came from */
+            _OrientGV(GOBJ_ACT(hit)->enemy->hitDir, pack->center, pack->from);
+        }
+    }
+    return hit;
+}
+
+static GObj *AttackGenerate_aug6(AttackPack *pack)
+{
+    GObj *g;
+    GObj *hit;
+
+    hit = 0;
+    if (pack->active == 0) {
+        return 0;
+    }
+    debug_StdPrintfDummy("flag ok\n");
+    for (g = isysGObjGetExist_begin(); g != 0; g = isysGObjGetExist_next(g)) {
+        if (g->active == 0) {
+            continue;
+        }
+        if (AttackCheckSameGroup_ntscaug6(pack->actor, g, 0) != 0) {
+            continue;
+        }
+        debug_StdPrintfDummy("group ok\n");
+        if (!(GOBJ_ACT(g) != 0 && GOBJ_ACT(g)->enemy != 0)) {
+            continue;
+        }
+        if (GOBJ_ACT(g)->hit != 0) {
+            continue;
+        }
+        if (g->kind == 4 && GOBJ_ACT(g)->actMode == 100) {
+            continue;
+        }
+        debug_StdPrintfDummy("invincible ok\n");
+        if (g == boyGObj && ACTChkAttackIgnore_BOY(g, pack->actor) != 0) {
+            continue;
+        }
+        /* the enemy work records the nodes the attack hits */
+        if (AttackCheckHit(pack, g, GOBJ_ACT(g)->enemy->hitNodes) == 0) {
+            continue;
+        }
+        debug_StdPrintfDummy("geometry ok\n");
+        if (GOBJ_ACT(g) != 0 && GOBJ_ACT(g)->attacker != 0 &&
+            GOBJ_ACT(g)->hitGroup == pack->group2) {
+            debug_StdPrintfDummy("id equal error\n");
+            continue;
+        }
+        AttackMail(g, pack);
+        hit = g;
+        debug_StdPrintfDummy("mail send ok [%d]\n", pack->group2);
+        if (GOBJ_ACT(hit) != 0 && GOBJ_ACT(hit)->attacker != 0 && hit->kind == 4) {
+            /* the enemy work records the direction the attack came from */
+            _OrientGV(GOBJ_ACT(hit)->enemy->hitDir, pack->center, pack->from);
+        }
+    }
+    return hit;
+}
+
 static GObj *AttackGenerate(AttackPack *pack)
 {
+    if (ICO_NTSC) {
+        return AttackGenerate_ntsc(pack);
+    }
+    if (ICO_AUG6) {
+        return AttackGenerate_aug6(pack);
+    }
     GObj *g;
     GObj *hit;
     short *nodes;
@@ -589,6 +1112,19 @@ inline void CommonAttackCenter(GObj *gobj)
     AttackGenerate(&pack);
 }
 
+/* the 2001 builds' AttackCenter (the European program has only _AttackCenter) */
+inline GObj *AttackCenter(GObj *gop, int group, float *pos, float *ofs, float radius)
+{
+    AttackPack pack;
+
+    if (gop == 0) {
+        debug_assert(__FILE__, LN(931, 931, 931, 749, 729, 931, 931));
+        __assert(__FILE__, LN(931, 931, 931, 749, 729, 931, 931), "gop!=NULL");
+    }
+    SetupAttackPack(&pack, gop, group, pos, ofs, radius);
+    return AttackGenerate(&pack);
+}
+
 inline GObj *_AttackCenter(GObj *gop, int group, float *pos, float *ofs, float radius, GObj *spare)
 {
     AttackPack pack;
@@ -607,8 +1143,8 @@ inline void AttackCenter_WithDir(GObj *gop, int group, float *pos, float *dir, f
     AttackPack pack;
 
     if (gop == 0) {
-        debug_assert(__FILE__, 951);
-        __assert(__FILE__, 951, "gop!=NULL");
+        debug_assert(__FILE__, LN(951, 951, 951, 768, 748, 951, 951));
+        __assert(__FILE__, LN(951, 951, 951, 768, 748, 951, 951), "gop!=NULL");
     }
     SetupAttackPack(&pack, gop, group, pos, dir, radius);
     if (dir != 0) {

@@ -43,15 +43,22 @@ static void RotateAccordingToStick_PatternThree(float *pitch, float *yaw, float 
     x = v[0];
     y = v[2];
 
-    if (len < 0.1f) {
-        if (handCameraMode == 0)
+    if (ICO_NTSCAUG6) {
+        if (len < 0.1f)
             spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(16);
         else
-            spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(18);
-    } else if (handCameraMode == 0)
-        spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(15);
-    else
-        spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(17);
+            spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(15);
+    } else {
+        if (len < 0.1f) {
+            if (handCameraMode == 0)
+                spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(16);
+            else
+                spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(18);
+        } else if (handCameraMode == 0)
+            spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(15);
+        else
+            spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(17);
+    }
 
     /* PC port: the mouse camera speed, applied by ico_mouse_camera_step */
     k = ico_mouse_camera_speed();
@@ -83,8 +90,38 @@ static void RotateAccordingToStick_PatternThree(float *pitch, float *yaw, float 
     *yaw += db;
 }
 
+static inline void SetCurrentInfo_ntscaug6(void *eye, void *at)
+{
+    float *p = handCameraWork;
+    float v[4];
+    float w[4];
+    float ang;
+    float t;
+    float mx;
+    float mn;
+
+    sceVu0SubVector(v, at, eye);
+    w[0] = v[0];
+    w[1] = 0.0f;
+    w[2] = v[2];
+    ang = _RotGVF(w, v);
+    p[4] = ang;
+    if (v[1] > 0.0f)
+        p[4] = -ang;
+
+    t = p[6] * 3.1415927f / 180.0f;
+    mx = (t < p[4]) ? p[4] : t;
+    p[2] = mx - p[4];
+    mn = (p[4] < -t) ? p[4] : -t;
+    p[3] = mn - p[4];
+}
+
 static void SetCurrentInfo(void *eye, void *at)
 {
+    if (ICO_NTSCAUG6) {
+        SetCurrentInfo_ntscaug6(eye, at);
+        return;
+    }
     float *p = handCameraWork;
     float v[4];
     float w[4];
@@ -194,8 +231,41 @@ inline void SetLimitHandCameraCorrect(float limitP, float limitV)
     handCameraWork[6] = limitV;
 }
 
+static inline void HandCameraCorrect_ntscaug6(void *eye, void *at, float stickX, float stickZ,
+                                              float rate)
+{
+    float *p = handCameraWork;
+    float savedYawLimit = p[5];
+    float savedPitchLimit = p[6];
+
+    handCameraRate = rate;
+
+    /* PC port: the mouse camera's full range lets the mouse look all the way
+       around and up to the pitch stop, never less than the area's own limits */
+    if (ico_mouse_camera_full_range()) {
+        if (p[5] < 180.0f)
+            p[5] = 180.0f;
+        if (p[6] < 85.0f)
+            p[6] = 85.0f;
+    }
+
+    SetCurrentInfo(eye, at);
+
+    RotateAccordingToStick_PatternThree(p, p + 1, stickX, -stickZ);
+
+    HandyCamera_TargetMoveType(eye, at);
+
+    /* PC port: the area's own limits again */
+    p[5] = savedYawLimit;
+    p[6] = savedPitchLimit;
+}
+
 void HandCameraCorrect(void *eye, void *at, int mode, float stickX, float stickZ, float rate)
 {
+    if (ICO_NTSCAUG6) {
+        HandCameraCorrect_ntscaug6(eye, at, stickX, stickZ, rate);
+        return;
+    }
     float *p = handCameraWork;
     float savedYawLimit = p[5];
     float savedPitchLimit = p[6];

@@ -180,7 +180,9 @@ void ConvertCameraSet(CameraSet2 *dst, union CameraSetIn *src)
     dst->rotY = atan2f(dir[0], dir[2]) * 32768.0f / 3.14159265f;
     dst->rotX = atan2f(dir[1], FSqrt(dir[0] * dir[0] + dir[2] * dir[2])) * -32768.0f / 3.14159265f;
     dst->fov = in.f[8];
-    dst->rotZ = 0;
+    if (!ICO_NTSCAUG6) {
+        dst->rotZ = 0;
+    }
 }
 
 static void MakeMatrixFromCameraSet2(void *dst, CameraSet2 *cs)
@@ -196,8 +198,30 @@ static void MakeMatrixFromCameraSet2(void *dst, CameraSet2 *cs)
     MatrixDrive_PopMatrix();
 }
 
+static void MakeCameraMatrix_ntscaug6(CameraSet2 *cs)
+{
+    MatrixDrive_PushMatrix();
+    sceVu0UnitMatrix(MatrixDrive_GetMatrix());
+    MatrixDrive_RotMatrixY(cs->rotY);
+    MatrixDrive_RotMatrixX(cs->rotX);
+    MatrixDrive_RotMatrixZ(cs->rotZ);
+    sceVu0TransposeMatrix(MatrixDrive_GetMatrix(), MatrixDrive_GetMatrix());
+    /* PC port: SCALE, the full-screen projection (GsBase.c) */
+    MatrixDrive_TransMatrix(-cs->pos[0], -cs->pos[1], -cs->pos[2]);
+    gsb_SetVSMatrix(ScreenWidth, ScreenHeight,
+                    GetTableCos((short)(int)(cs->fov * 32768.0f / 180.0f)) * 1024.0f /
+                        GetTableSin((short)(int)(cs->fov * 32768.0f / 180.0f)));
+    sceVu0CopyMatrix(matrixptr + 0x80, MatrixDrive_GetMatrix());
+    MatrixDrive_PopMatrix();
+    gsb_MakeCommonMatrix();
+}
+
 void MakeCameraMatrix(CameraSet2 *cs)
 {
+    if (ICO_NTSCAUG6) {
+        MakeCameraMatrix_ntscaug6(cs);
+        return;
+    }
     float mat[16];
     MakeMatrixFromCameraSet2(mat, cs);
     MatrixDrive_PushMatrix();
@@ -415,9 +439,20 @@ static CamTgt cameraTargetDefault =
     /* derived name */ {{0.0f, 100.0f, 0.0f, 0.0f}, {0.0f, 52.0f, 0.0f, 0.0f}};
 
 /* the cleared insert-camera request: no target, no blend, one cut pending */
-static InsertCameraWork insertCameraClear = {
+static InsertCameraWork insertCameraClear_pal = {
     /* derived name */
     0, 0, {0}, {0.0f, 0.0f, 0.0f}, {0}, {0.0f, 0.0f, 0.0f}, {0}, -1.0f, 0, 1, 0, 0, 1, {0}};
+
+static InsertCameraWork insertCameraClear_ntsc = {
+    /* derived name */
+    0, 0, {0}, {0.0f, 0.0f, 0.0f}, {0}, {0.0f, 0.0f, 0.0f}, {0}, 0, 1, 0, 0, {0}};
+
+static InsertCameraWork insertCameraClear_aug6 = {
+    /* derived name */
+    0, 0, {0}, {0.0f, 0.0f, 0.0f}, {0}, {0.0f, 0.0f, 0.0f}, {0}, 0, 1, 0, {0}};
+
+#define insertCameraClear                                                                          \
+    (*PAL_NTSC_AUG6(&insertCameraClear_pal, &insertCameraClear_ntsc, &insertCameraClear_aug6))
 
 /* clear the insert-camera request */
 static inline void InsertCamera_Clear(void) /* derived name */
@@ -453,13 +488,24 @@ void InitCamera(void)
     zoomRequest = 0;
     lwsCutBack = 0;
     CameraCalclated_f = 0;
-    FixViewInGameCameraFlag = 0;
-    InsertCameraWorkingFlag = 0;
-    monitorCameraHold = 0;
-    debug_zoom_per = 100;
-    handCameraLimitP = GlobalStageSetting.handCameraLimitP;
-    handCameraLimitV = GlobalStageSetting.handCameraLimitV;
-    zoomMaxInDemo = GlobalStageSetting.zoomMaxInDemo;
+    if (ICO_AUG6) {
+        InsertCameraWorkingFlag = 0;
+        FixViewInGameCameraFlag = 0;
+        debug_zoom_per = 100;
+    } else if (ICO_NTSC) {
+        FixViewInGameCameraFlag = 0;
+        InsertCameraWorkingFlag = 0;
+        monitorCameraHold = 0;
+        debug_zoom_per = 100;
+    } else {
+        FixViewInGameCameraFlag = 0;
+        InsertCameraWorkingFlag = 0;
+        monitorCameraHold = 0;
+        debug_zoom_per = 100;
+        handCameraLimitP = GlobalStageSetting.handCameraLimitP;
+        handCameraLimitV = GlobalStageSetting.handCameraLimitV;
+        zoomMaxInDemo = GlobalStageSetting.zoomMaxInDemo;
+    }
 }
 
 typedef struct { /* field names derived */
@@ -479,16 +525,25 @@ static inline void Camctrl_Exec(void) /* derived name */
     float pos[4];
     int last;
 
-    if (camctrl.pri != 0) {
-        insertCameraBlendTimer = 0;
-    }
-    if (insertCameraBlendTimer != 0) {
-        insertCameraBlendTimer = insertCameraBlendTimer - 1;
+    if (!ICO_NTSCAUG6) {
+        if (camctrl.pri != 0) {
+            insertCameraBlendTimer = 0;
+        }
+        if (insertCameraBlendTimer != 0) {
+            insertCameraBlendTimer = insertCameraBlendTimer - 1;
+        }
     }
     if ((last = camctrl.lastPri) == 1 && camctrl.pri == 0 && default_cameratarget_gobj != 0 &&
         IsPointIsInScreen(pos, test_CURRENTROOT(default_cameratarget_gobj)) < 0.0f) {
-        insertCameraBlendTimer = (60 - systemStatus[0] * 10) / systemStatus[1];
-        InsertCameraWorkingFlag = last;
+        if (ICO_NTSC) {
+            gamecamCutBack = last;
+            InsertCameraWorkingFlag = last;
+        } else if (ICO_AUG6) {
+            gamecamCutBack = last;
+        } else {
+            insertCameraBlendTimer = (60 - systemStatus[0] * 10) / systemStatus[1];
+            InsertCameraWorkingFlag = last;
+        }
     }
     CameraSetTargetGObj(camctrl.gobj, camctrl.subGObj);
     camctrl.lastPri = camctrl.pri;
@@ -522,10 +577,12 @@ static inline void InsertCamera_Step(void) /* derived name */
         if (insertCamera.count < insertCamera.frames) {
             insertCamera.count = insertCamera.count + 1;
             zoomRequest = insertCamera.zoom;
-            zoomBlend = insertCamera.blend;
+            if (!ICO_NTSCAUG6) {
+                zoomBlend = insertCamera.blend;
+            }
         } else {
             insertCamera.enable = 0;
-            gamecamCutBack = insertCamera.cutBack;
+            gamecamCutBack = PAL_NTSCAUG6(insertCamera.cutBack, 1);
         }
     }
 }
@@ -542,8 +599,366 @@ static inline void cameraSetMode(int mode) /* derived name */
 /* set when the monitor camera must start over */
 static int monitorCameraInit = 0; /* derived name */
 
+static void SetCameraMatrix_ntsc(GObj *self)
+{
+    float m[16];
+    GObj *gobj;
+    GObj *root;
+    int target;
+    int step;
+    IosPadCtx *p;
+    float zoom;
+
+    gobj = getCameraDefaultTargetGObj();
+    default_cameratarget_gobj = gobj;
+    CameraCalclated_f = 1;
+    InsertCameraWorkingFlag = 0;
+    FixViewInGameCameraFlag = 0;
+    Camctrl_Exec();
+    cameraZoom = 0.0f;
+    if (bga_GetCameraMatrix(m) != 0) {
+        cameraMode = 4;
+        cameraZoom = bga_GetZoom();
+    } else if (cameraMode == 4) {
+        cameraSetMode(3);
+        BackToGameCamera();
+        bga_ResetCamera();
+        gamecamCutBack = lwsCutBack;
+        lwsCutBack = 0;
+    }
+    InsertCamera_Step();
+    switch (cameraMode) {
+    case 0:
+        break;
+    case 2:
+        DebugCameraSemiAuto();
+        if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
+            debug_Printf(220, 10, 0xFFFFFF00, "FREECAM");
+        }
+        if ((pad[0].now & 2) != 0 && (pad[0].flags & 0x100) != 0) {
+            cameraSetMode(3);
+        }
+        break;
+    case 3:
+        CAM_HOST_CUT_IF(gamecamCutBack != 0); /* port: the cut back to the game camera */
+        SetCameraMatrix_Ico2(gamecamCutBack);
+        gamecamCutBack = 0;
+        if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
+            debug_Printf(220, 10, 0xFFFFFF00, "GAMECAM");
+        }
+        break;
+    case 1:
+    handCamera:
+        DebugCameraManual();
+        if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
+            debug_Printf(220, 10, 0xFFFFFF00, "HANDCAM");
+        }
+        if ((pad[0].flags & 0x100) != 0) {
+            cameraSetMode(3);
+        }
+        break;
+    case 4: {
+        float ofs[4];
+        float mt[16];
+
+        if (debug_ignore_demo_camera != 0) {
+            goto handCamera;
+        }
+        if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
+            debug_Printf(220, 10, 0xFFFFFF00, "PATHCAM");
+        }
+        if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
+            debug_Printf(310, 10, 0xFFFFFF00, "%d,%d,%d %d", (int)m[12], (int)m[13], (int)m[14],
+                         (int)cameraZoom);
+        }
+        zoom = cameraZoom;
+        if (zoom == 0.0f) {
+            if (zoom == 0.0f) {
+                zoom = GetTableCos((short)(int)(cameraSet.fov * 32768.0f / 180.0f)) * 1024.0f /
+                       GetTableSin((short)(int)(cameraSet.fov * 32768.0f / 180.0f));
+            }
+            cameraZoom = zoom;
+            cameraFov = cameraSet.fov;
+        } else {
+            cameraFov = atan2f(1024.0f / zoom, 1.0f) * 180.0f / 3.14159265f;
+        }
+        gsb_SetVSMatrix(ScreenWidth, ScreenHeight, cameraZoom); /* SCALE */
+        sceVu0CopyMatrix(matrixptr + 0x80, m);
+        gsb_MakeCommonMatrix();
+        sceVu0TransposeMatrix(mt, matrixptr + 0x80);
+        CopyVector(ofs, (float *)(matrixptr + 0x80) + 12);
+        ofs[3] = 0.0f;
+        sceVu0ApplyMatrix(cameraSet.pos, mt, ofs);
+        sceVu0ScaleVector(cameraSet.pos, cameraSet.pos, -1.0f);
+        break;
+    }
+    default: {
+        union CameraSetIn in;
+        float eye[4];
+        float rootPos[4];
+        union CamQuad ofs;
+        float ry;
+
+        root = default_cameratarget_gobj;
+        GetRootPosition(rootPos, root);
+        ofs = (union CamQuad){{0.0f, -200.0f, -500.0f, 0.0f}};
+        ry = (float)(int)(_GetDirection(test_CURRENTORIENT(root)) / 3.14159265f * 180.0f) *
+             3.14159265f / 180.0f;
+        _ApplyRyGV(ofs.f, ry);
+        sceVu0AddVector(eye, rootPos, ofs.f);
+        _InterGV(&in.f[4], rootPos, &prevCameraSet.f[4], 10.0f, 1.0f);
+        _InterGV(in.f, eye, prevCameraSet.f, 48.0f, 1.0f);
+        in.f[8] = 50.0f;
+        SetWSMatrix(&in);
+        prevCameraSet = in;
+        break;
+    }
+    }
+    Camctrl_ExitNormal();
+    {
+        static unsigned char zoomBaseInit = 1; /* derived name */
+        CamZoomStep zp[3] = {
+            {10, 200}, {10, 200}, {(int)_ACTGame_GetParamF(12), (int)_ACTGame_GetParamF(11)}};
+        IosPadCtx padCtx;
+        GObj *ply;
+
+        iosPadConnect(&padCtx, 0, 0, &iosPadConfDefault);
+        if (zoomBaseInit != 0) {
+            zoomBaseInit = 0;
+            zoomBase = debug_zoom_per;
+        }
+        iosPadRead(&padCtx);
+        ply = boyGObj;
+        if (ply != 0) {
+            p = &GOBJ_ACT(ply)->pad;
+        } else {
+            p = &padCtx;
+        }
+        if (zoomRequest != 0) {
+            step = 2;
+            zoomRequest = 0;
+        } else if (p->now & 2) {
+            step = 1;
+        } else {
+            step = 0;
+        }
+        zoomRangeMin = zoomBase;
+        zoomRangeMax = zoomBase + zp[step].max;
+        target = zoomBase;
+        if (step != 0) {
+            target = zoomRangeMax;
+        }
+        if (CAM_ABS(debug_zoom_per - target) < zp[step].step * 5) {
+            debug_zoom_per = (debug_zoom_per * 4 + target) / 5;
+        } else if (target < debug_zoom_per) {
+            debug_zoom_per = debug_zoom_per - zp[step].step;
+        } else if (debug_zoom_per < target) {
+            debug_zoom_per = debug_zoom_per + zp[step].step;
+        }
+        /* PC port: the range is empty (max == min) on some stages; the EE's
+           div.s gives +-Fmax there, IEEE gives Inf or NaN */
+        SetCameraZoomOffsetRatio(1.0f - ps2_div((float)(debug_zoom_per - zoomRangeMin),
+                                                (float)(zoomRangeMax - zoomRangeMin)));
+    }
+    /* the mode the last frame ran in */
+    {
+        static int lastCameraMode = 3; /* derived name */
+
+        GlobalTimer = 0;
+        if (lastCameraMode != cameraMode || monitorCameraInit != 0) {
+            GlobalTimer = 1;
+            CAM_HOST_CUT_IF(1); /* port: a camera mode change (path camera in or out) */
+        }
+        lastCameraMode = cameraMode;
+        monitorCameraInit = 0;
+    }
+}
+
+static void SetCameraMatrix_aug6(GObj *self)
+{
+    float m[16];
+    GObj *gobj;
+    GObj *root;
+    int target;
+    int step;
+    IosPadCtx *p;
+    float zoom;
+
+    gobj = getCameraDefaultTargetGObj();
+    default_cameratarget_gobj = gobj;
+    CameraCalclated_f = 1;
+    InsertCameraWorkingFlag = 0;
+    Camctrl_Exec();
+    cameraZoom = 0.0f;
+    if (bga_GetCameraMatrix(m) != 0) {
+        cameraMode = 4;
+        cameraZoom = bga_GetZoom();
+    } else if (cameraMode == 4) {
+        cameraSetMode(3);
+        BackToGameCamera();
+        bga_ResetCamera();
+        gamecamCutBack = lwsCutBack;
+        lwsCutBack = 0;
+    }
+    InsertCamera_Step();
+    switch (cameraMode) {
+    case 0:
+        break;
+    case 2:
+        DebugCameraSemiAuto();
+        if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
+            debug_Printf(220, 10, 0xFFFFFF00, "FREECAM");
+        }
+        if ((pad[0].now & 2) != 0 && (pad[0].flags & 0x100) != 0) {
+            cameraSetMode(3);
+        }
+        break;
+    case 3:
+        CAM_HOST_CUT_IF(gamecamCutBack != 0); /* port: the cut back to the game camera */
+        SetCameraMatrix_Ico2(gamecamCutBack);
+        gamecamCutBack = 0;
+        if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
+            debug_Printf(220, 10, 0xFFFFFF00, "GAMECAM");
+        }
+        break;
+    case 1:
+    handCamera:
+        DebugCameraManual();
+        if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
+            debug_Printf(220, 10, 0xFFFFFF00, "HANDCAM");
+        }
+        if ((pad[0].flags & 0x100) != 0) {
+            cameraSetMode(3);
+        }
+        break;
+    case 4: {
+        float ofs[4];
+        float mt[16];
+
+        if (debug_ignore_demo_camera != 0) {
+            goto handCamera;
+        }
+        if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
+            debug_Printf(220, 10, 0xFFFFFF00, "PATHCAM");
+        }
+        if (debug_font_flag3 != 0 || (debug_font_flag & 1) != 0) {
+            debug_Printf(310, 10, 0xFFFFFF00, "%d,%d,%d %d", (int)m[12], (int)m[13], (int)m[14],
+                         (int)cameraZoom);
+        }
+        zoom = cameraZoom;
+        if (zoom == 0.0f) {
+            if (zoom == 0.0f) {
+                zoom = GetTableCos((short)(int)(cameraSet.fov * 32768.0f / 180.0f)) * 1024.0f /
+                       GetTableSin((short)(int)(cameraSet.fov * 32768.0f / 180.0f));
+            }
+            cameraZoom = zoom;
+            cameraFov = cameraSet.fov;
+        } else {
+            cameraFov = atan2f(1024.0f / zoom, 1.0f) * 180.0f / 3.14159265f;
+        }
+        gsb_SetVSMatrix(ScreenWidth, ScreenHeight, cameraZoom); /* SCALE */
+        sceVu0CopyMatrix(matrixptr + 0x80, m);
+        gsb_MakeCommonMatrix();
+        sceVu0TransposeMatrix(mt, matrixptr + 0x80);
+        CopyVector(ofs, (float *)(matrixptr + 0x80) + 12);
+        ofs[3] = 0.0f;
+        sceVu0ApplyMatrix(cameraSet.pos, mt, ofs);
+        sceVu0ScaleVector(cameraSet.pos, cameraSet.pos, -1.0f);
+        break;
+    }
+    default: {
+        union CameraSetIn in;
+        float eye[4];
+        float rootPos[4];
+        union CamQuad ofs;
+        float ry;
+
+        root = default_cameratarget_gobj;
+        GetRootPosition(rootPos, root);
+        ofs = (union CamQuad){{0.0f, -200.0f, -500.0f, 0.0f}};
+        ry = (float)(int)(_GetDirection(test_CURRENTORIENT(root)) / 3.14159265f * 180.0f) *
+             3.14159265f / 180.0f;
+        _ApplyRyGV(ofs.f, ry);
+        sceVu0AddVector(eye, rootPos, ofs.f);
+        _InterGV(&in.f[4], rootPos, &prevCameraSet.f[4], 10.0f, 1.0f);
+        _InterGV(in.f, eye, prevCameraSet.f, 48.0f, 1.0f);
+        in.f[8] = 50.0f;
+        SetWSMatrix(&in);
+        prevCameraSet = in;
+        break;
+    }
+    }
+    Camctrl_ExitNormal();
+    {
+        static unsigned char zoomBaseInit = 1; /* derived name */
+        CamZoomStep zp[3] = {
+            {10, 200}, {10, 200}, {(int)_ACTGame_GetParamF(12), (int)_ACTGame_GetParamF(11)}};
+        IosPadCtx padCtx;
+        GObj *ply;
+
+        iosPadConnect(&padCtx, 0, 0, &iosPadConfDefault);
+        if (zoomBaseInit != 0) {
+            zoomBaseInit = 0;
+            zoomBase = debug_zoom_per;
+        }
+        iosPadRead(&padCtx);
+        ply = boyGObj;
+        if (ply != 0) {
+            p = &GOBJ_ACT(ply)->pad;
+        } else {
+            p = &padCtx;
+        }
+        if (zoomRequest != 0) {
+            step = 2;
+            zoomRequest = 0;
+        } else if (p->now & 2) {
+            step = 1;
+        } else {
+            step = 0;
+        }
+        zoomRangeMin = zoomBase;
+        zoomRangeMax = zoomBase + zp[step].max;
+        target = zoomBase;
+        if (step != 0) {
+            target = zoomRangeMax;
+        }
+        if (CAM_ABS(debug_zoom_per - target) < zp[step].step * 5) {
+            debug_zoom_per = (debug_zoom_per * 4 + target) / 5;
+        } else if (target < debug_zoom_per) {
+            debug_zoom_per = debug_zoom_per - zp[step].step;
+        } else if (debug_zoom_per < target) {
+            debug_zoom_per = debug_zoom_per + zp[step].step;
+        }
+        /* PC port: the range is empty (max == min) on some stages; the EE's
+           div.s gives +-Fmax there, IEEE gives Inf or NaN */
+        SetCameraZoomOffsetRatio(1.0f - ps2_div((float)(debug_zoom_per - zoomRangeMin),
+                                                (float)(zoomRangeMax - zoomRangeMin)));
+    }
+    /* the mode the last frame ran in */
+    {
+        static int lastCameraMode = 3; /* derived name */
+
+        /* set when the camera mode changes (the blurs read it) */
+        NonLinearCameraMove = 0;
+        if (lastCameraMode != cameraMode || monitorCameraInit != 0) {
+            NonLinearCameraMove = 1;
+            CAM_HOST_CUT_IF(1); /* port: a camera mode change (path camera in or out) */
+        }
+        lastCameraMode = cameraMode;
+        monitorCameraInit = 0;
+    }
+}
+
 void SetCameraMatrix(GObj *self)
 {
+    if (ICO_NTSC) {
+        SetCameraMatrix_ntsc(self);
+        return;
+    }
+    if (ICO_AUG6) {
+        SetCameraMatrix_aug6(self);
+        return;
+    }
     float m[16];
     GObj *gobj;
     GObj *root;
@@ -882,15 +1297,58 @@ void InsertCamera_Set(float *pos, float *tgt, int frames)
         insertCamera.tgt[2] = tgt[2];
         insertCamera.enable = 1;
         insertCamera.cut = 1;
-        insertCamera.cutType = 0;
+        if (ICO_AUG6) {
+            insertCamera.zoom = 1;
+        } else if (ICO_NTSC) {
+            insertCamera.cutType = 0;
+            insertCamera.zoom = 1;
+        } else {
+            insertCamera.cutType = 0;
+            insertCamera.zoom = 1;
+            insertCamera.cutBack = 1;
+            insertCamera.blend = -1.0f;
+        }
+    }
+}
+
+static void InsertCamera_SetNoraml_ntsc(float *pos, float *tgt, int frames, int cutType)
+{
+    if (InsertCamera_isEnable()) {
+        insertCamera.frames = frames;
+        insertCamera.count = 0;
+        sceVu0ScaleVector(insertCamera.pos, pos, -1.0f);
+        sceVu0ScaleVector(insertCamera.tgt, tgt, -1.0f);
+        insertCamera.enable = 1;
+        insertCamera.cut = 1;
+        insertCamera.cutType = cutType;
         insertCamera.zoom = 1;
-        insertCamera.cutBack = 1;
-        insertCamera.blend = -1.0f;
+    }
+}
+
+static void InsertCamera_SetNoraml_aug6(float *pos, float *tgt, int frames, int cutType)
+{
+    (void)cutType; /* PC port: the European parameter, unused here */
+    if (InsertCamera_isEnable()) {
+        insertCamera.frames = frames;
+        insertCamera.count = 0;
+        sceVu0ScaleVector(insertCamera.pos, pos, -1.0f);
+        sceVu0ScaleVector(insertCamera.tgt, tgt, -1.0f);
+        insertCamera.enable = 1;
+        insertCamera.cut = 1;
+        insertCamera.zoom = 1;
     }
 }
 
 void InsertCamera_SetNoraml(float *pos, float *tgt, int frames, int cutType)
 {
+    if (ICO_NTSC) {
+        InsertCamera_SetNoraml_ntsc(pos, tgt, frames, cutType);
+        return;
+    }
+    if (ICO_AUG6) {
+        InsertCamera_SetNoraml_aug6(pos, tgt, frames, cutType);
+        return;
+    }
     if (InsertCamera_isEnable()) {
         insertCamera.frames = frames;
         insertCamera.count = 0;
@@ -922,8 +1380,33 @@ void InsertCamera_SetDetail(float *pos, float *tgt, int frames, int cutType, int
     }
 }
 
+static void InsertCamera_Exec_aug6(float *cam, int *cut, int *enable)
+{
+    *cut = 0;
+    *enable = 0;
+    if (insertCamera.enable) {
+        if (insertCamera.cut) {
+            CAM_HOST_CUT_IF(insertCamera.cutType == 0); /* port: initMonitorCamera(1) */
+            *cut = 1;
+            insertCamera.cut = 0;
+        }
+        cam[0] = insertCamera.pos[0];
+        cam[1] = insertCamera.pos[1];
+        cam[2] = insertCamera.pos[2];
+        cam[4] = insertCamera.tgt[0];
+        cam[5] = insertCamera.tgt[1];
+        cam[6] = insertCamera.tgt[2];
+        *enable = 1;
+    }
+}
+
 void InsertCamera_Exec(float *cam, int *cut, int *cutType, int *enable)
 {
+    if (ICO_AUG6) {
+        *cutType = 0; /* PC port: the August preview has no cut type */
+        InsertCamera_Exec_aug6(cam, cut, enable);
+        return;
+    }
     *cut = 0;
     *cutType = 0;
     *enable = 0;

@@ -28,8 +28,44 @@ static struct {      /* field names derived */
    flags */
 static struct HintInfo hintDefault = {-1, -1, -1, 0}; /* derived name */
 
+static GObj *CreateKyomiGObj_ntsc(int no)
+{
+    (void)no; /* PC port: the European parameter, unused here */
+    float lay[16];
+    GObj *gobj;
+
+    memset(lay, 0, 64);
+    lay[8] = 1.0f;
+    lay[9] = 1.0f;
+    lay[10] = 1.0f;
+    gobj = CreateLayoutedGObj(60, 69, -1, 0, lay, 1, 7, 0);
+    brainStatusDefaultSet(&brainGirl, gobj, 1);
+    return gobj;
+}
+
+static GObj *CreateKyomiGObj_aug6(int no)
+{
+    (void)no; /* PC port: the European parameter, unused here */
+    float lay[16];
+    GObj *gobj;
+
+    memset(lay, 0, 64);
+    lay[8] = 1.0f;
+    lay[9] = 1.0f;
+    lay[10] = 1.0f;
+    gobj = CreateLayoutedGObj(59, 68, -1, 0, lay, 1, 7, 0);
+    brainStatusDefaultSet(&brainGirl, gobj, 1);
+    return gobj;
+}
+
 GObj *CreateKyomiGObj(int no)
 {
+    if (ICO_NTSC) {
+        return CreateKyomiGObj_ntsc(no);
+    }
+    if (ICO_AUG6) {
+        return CreateKyomiGObj_aug6(no);
+    }
     float lay[16];
     GObj *gobj;
     struct HintInfo *hint;
@@ -58,8 +94,17 @@ GObj *CreateKyomiGObj(int no)
 /* the hint timers, a window onto the per-hint elapsed-time array */
 static float *hintTimers; /* derived name */
 
+static void LwsKyomiGeo_ntscaug6(GObj *gobj)
+{
+    brainSubLevelGop(gobj, 0.1f);
+}
+
 void LwsKyomiGeo(GObj *gobj)
 {
+    if (ICO_NTSCAUG6) {
+        LwsKyomiGeo_ntscaug6(gobj);
+        return;
+    }
     struct HintInfo *hint;
     int i;
     unsigned char fin;

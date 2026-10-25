@@ -31,6 +31,9 @@ struct GObj;
 
 void CommonAttackCenter(struct GObj *gobj);
 
+
+struct GObj *AttackCenter(struct GObj *gop, int group, float *pos, float *ofs, float radius);
+
 struct GObj *_AttackCenter(struct GObj *gop, int group, float *pos, float *ofs, float radius,
                            struct GObj *spare);
 

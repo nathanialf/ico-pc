@@ -43,7 +43,7 @@ static void fightSoundProcessMain(void)
     if (systemStatus[5] == 0 && fightSoundPause != 1) {
         if (boyGObj != 0) {
             cond = 0;
-            if (_ACTCharStatus_Check(boyGObj, 17) != 0) {
+            if (_ACTCharStatus_Check(boyGObj, PAL_NTSCAUG6(17, 15)) != 0) {
                 cond = 1;
             }
         }
@@ -128,8 +128,8 @@ void fightSoundProcess(void)
         fightSoundState = 0;
         break;
     default:
-        debug_assert("src/fightSound.c", 255);
-        __assert("src/fightSound.c", 255, "0");
+        debug_assert("src/fightSound.c", LN(255, 255, 255, 255, 255, 248, 255));
+        __assert("src/fightSound.c", LN(255, 255, 255, 255, 255, 248, 255), "0");
     }
 }
 
