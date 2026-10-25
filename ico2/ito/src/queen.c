@@ -883,10 +883,27 @@ static void scale_m34(LVec *dst, void *src, float f)
     return sceVu0ScaleVector(dst + 2, dst + 2, f);
 }
 
+static void effect_end_func_jun26(int no)
+{
+    GObj *g = isysGObjSearchFromObjKindID_begin(45);
+    GObj *weapon = GOBJ_ACT(boyGObj)->weapon;
+
+    if (g != 0) {
+        ((QueenWork *)GOBJ_SUB(g)->work)->power += 1;
+    }
+    if (weapon != 0) {
+        LightTorchOnOfWeapon(weapon);
+    }
+}
+
 /* this file's own effect_end_func; itou_boss.c has its own */
 
 static void effect_end_func(int no)
 {
+    if (ICO_JUN26) {
+        effect_end_func_jun26(no);
+        return;
+    }
     GObj *g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
     GObj *weapon = GOBJ_ACT(boyGObj)->weapon;
 
@@ -908,8 +925,13 @@ typedef struct QueenUVScroll { /* field names derived */
 static const float genWaitRateSt25[11] /* derived name */ = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
                                                              1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
 
-static const float ballWaitRateSt25[11] /* derived name */ = {7.0f, 6.0f, 6.0f, 5.0f, 5.0f, 4.0f,
-                                                              4.0f, 4.0f, 4.0f, 4.0f, 4.0f};
+static const float ballWaitRateSt25_pal[11] /* derived name */ = {
+    7.0f, 6.0f, 6.0f, 5.0f, 5.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f, 4.0f};
+
+static const float ballWaitRateSt25_jun26[11] /* derived name */ = {
+    3.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+
+#define ballWaitRateSt25 PAL_JUN26(ballWaitRateSt25_pal, ballWaitRateSt25_jun26)
 
 static const float ballHoldRateSt25[11] /* derived name */ = {5.0f, 5.0f, 5.0f, 5.0f, 5.0f, 5.0f,
                                                               5.0f, 5.0f, 5.0f, 5.0f, 5.0f};
@@ -1002,7 +1024,49 @@ static void queenBeforeFunc_ntsc(GObj *g)
     act->env.motOriReq = *(MotOriReq *)&GOBJ_SUB(g)->root.wall;
 }
 
-static void queenBeforeFunc_aug6jun26(GObj *g)
+static void queenBeforeFunc_jun26(GObj *g)
+{
+    QVec pos;
+    QVec target;
+    GObjMailQueue *q = (GObjMailQueue *)&g->mailBox;
+    QueenWork *w = GOBJ_SUB(g)->work;
+    Act *act = GOBJ_ACT(g);
+    int i;
+
+    for (i = 0; i < q->num; i++) {
+        GObjMailEntry *e = &q->e[i];
+
+        switch (e->mail) {
+        case 44:
+            w->st.f.pause = 1;
+            break;
+        case 45:
+            w->st.f.pause = 0;
+            break;
+        case 13:
+            debug_StdPrintfDummy(queenAttackedMsg);
+            w->st.f.damaged = 1;
+            break;
+        case 18: {
+            GObj *boy = GOBJ_ACT(boyGObj)->weapon;
+
+            debug_StdPrintfDummy(enemyDeadMsg, boy);
+            if (e->data != 0 && boy != 0) {
+                GetRootPosition(pos.f, e->data);
+                GetRootPosition(target.f, boy);
+                GatherEffect_Set(12, &pos, IdentityQuaternion, &target, 2.5f, effect_end_func);
+            }
+            break;
+        }
+        }
+    }
+    q->num = 0;
+    /* the actor's motion orient request, refreshed from the copy the
+       sub-object keeps at 0x180 */
+    act->env.motOriReq = *(MotOriReq *)&GOBJ_SUB(g)->root.wall;
+}
+
+static void queenBeforeFunc_aug6(GObj *g)
 {
     QVec pos;
     QVec target;
@@ -1046,12 +1110,16 @@ static void queenBeforeFunc_aug6jun26(GObj *g)
 
 void queenBeforeFunc(GObj *g)
 {
+    if (ICO_JUN26) {
+        queenBeforeFunc_jun26(g);
+        return;
+    }
     if (ICO_NTSC) {
         queenBeforeFunc_ntsc(g);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        queenBeforeFunc_aug6jun26(g);
+    if (ICO_AUG6) {
+        queenBeforeFunc_aug6(g);
         return;
     }
     QVec pos;
@@ -1160,8 +1228,93 @@ static const QueenGenTable genEnemyTable_aug6jun26[2] = {
 
 static const char genEnemyStatFmt[] = "n_enemy_max:%d n_enemy:%d counter:%d"; /* derived name */
 
+static void gene_enemy_jun26(volatile ICO_WORD g)
+{
+    union { /* field names derived */
+        float f[4];
+        int i[4];
+    } pos;
+
+    QueenWork *w = GOBJ_SUB(g)->work;
+    const QueenGenTable *tbl;
+    GObj *o;
+    GObj *c;
+    GObj *e;
+    int num;
+    int total;
+    int alive;
+    int timer;
+    int wait;
+    int k;
+    GObj *obj;
+
+    o = isysGObjSearchFromObjKindID_begin(52);
+    num = (o != 0) ? ((QueenBarrierWork *)GOBJ_SUB(o)->work)->damage : 0;
+    tbl = (stage_no == 37) ? &genEnemyTable[0] : &genEnemyTable[1];
+
+    timer = 0;
+    total = 0;
+    for (c = isysGObjSearchFromObjKindID_begin(4); c != 0;
+         c = isysGObjSearchFromObjKindID_next(c)) {
+        total++;
+    }
+    _ACTWait(1);
+
+    for (;;) {
+        if ((w->st.all & 0xFF0000FF) == 0 && w->st.f.attack != 0) {
+            alive = 0;
+            e = isysGObjSearchFromObjKindID_begin(4);
+            while (e != 0 && isEnemyHyde(e) == 0) {
+                alive++;
+                e = isysGObjSearchFromObjKindID_next(e);
+            }
+            if (debug_font_flag & 1) {
+                debug_Printf(10, 90, -1, genEnemyStatFmt, total, alive, timer);
+            }
+            if (alive < total) {
+                if (timer > ((stage_no == 37) ? genWaitRateSt25 : genWaitRateDefault)[num] *
+                                ((60 - systemStatus[0] * 10) / systemStatus[1])) {
+                    if (stage_no == 37) {
+                        obj =
+                            isysGObjSearchFromObjLayoutID(tbl->list[(int)(_GetRandom() * tbl->n)]);
+                        if (obj != 0) {
+                            lw_pos_to_ico_pos(pos.f, queenSpawnPos[(int)(_GetRandom() * 6.0f)]);
+                            SetRootPosition(obj, pos.f);
+                            wait = (int)(((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.5f);
+                            for (k = 0; k <= wait; k++) {
+                                _ACTWait(1);
+                            }
+                            Generator_Call(obj);
+                            _ACTWait(1);
+                            while (stage_CheckAnimationFinish(398) == 0) {
+                                _ACTWait(1);
+                            }
+                            for (k = 0; k <= wait; k++) {
+                                _ACTWait(1);
+                            }
+                            pos.f[0] = 4294967296.0f;
+                            pos.f[1] = 4294967296.0f;
+                            pos.f[2] = 4294967296.0f;
+                            pos.i[3] = 0;
+                            SetRootPosition(obj, pos.f);
+                        }
+                        timer = 0;
+                    }
+                }
+            }
+            timer++;
+        }
+        _ACTWait(1);
+    }
+}
+
 void gene_enemy(volatile ICO_WORD g)
 {
+    if (ICO_JUN26) {
+        gene_enemy_jun26(g);
+        return;
+    }
+
     union { /* field names derived */
         float f[4];
         int i[4];
@@ -1317,10 +1470,10 @@ static inline void QueenStartAttack_inl(int flag) /* derived name */
 {
     GObj *g;
 
-    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
+    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6_JUN26(47, 46, 45));
     ((QueenWork *)GOBJ_SUB(g)->work)->st.f.attack = flag;
 
-    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(54, 53));
+    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6_JUN26(54, 53, 52));
     while (g != 0) {
         ((QueenBarrierWork *)GOBJ_SUB(g)->work)->active = 1;
         g = isysGObjSearchFromObjKindID_next(g);
@@ -1483,7 +1636,153 @@ static void subQueenBrainMain_ntsc(volatile ICO_WORD g)
     }
 }
 
-static void subQueenBrainMain_aug6jun26(volatile ICO_WORD g)
+static void subQueenBrainMain_jun26(volatile ICO_WORD g)
+{
+    QueenStatus st;
+    QVec rootPos;
+    QVec dir;
+    LVec target;
+    QueenWork *w;
+    int motionOk;
+    int first;
+    int wait;
+    char *ext;
+    int startFrame;
+    GObj *ball;
+    GObj *barrier;
+    QueenBallWork *ballw;
+    QueenBarrierWork *barrierw;
+    QueenWork *qw;
+    GObj *boy;
+    const QueenUVScroll *uv;
+
+    /* the actor record: the motion record SetMotionRequest returns is kept
+       in the QueenVal slot at 0x130, the request it takes is Act's
+       motOriReq */
+    ext = (char *)GOBJ_ACT(g);
+    w = GOBJ_SUB(g)->work;
+
+    motionOk = 0;
+    first = 1;
+    startFrame = frame_count;
+    wait = 1000;
+
+    _ACTWait(1);
+    if (stage_no != 37) {
+        QueenStartAttack_inl(first);
+    }
+    QueenStatusRestart((GObj *)g, &st);
+
+    for (;;) {
+        ball = isysGObjSearchFromObjKindID_begin(51);
+        barrier = isysGObjSearchFromObjKindID_begin(52);
+        QueenStatusUpdate((GObj *)g, &st);
+        if ((w->st.all & 0xFF0000FF) == 0 && w->st.f.attack != 0 && ball != 0 && barrier != 0) {
+            qw = GOBJ_SUB(g)->work;
+
+            GetRootPosition(rootPos.f, (GObj *)g);
+            _GetMotionDirection(dir.f, (GObj *)g);
+            ballw = GOBJ_SUB(ball)->work;
+            barrierw = GOBJ_SUB(barrier)->work;
+
+            if (qw->st.f.damaged != 0 && barrierw->active == 0) {
+                qw->st.f.dead = 1;
+                debug_StdPrintfDummy(queenDeadMsg);
+            }
+
+            if (barrierw->react != 0) {
+                if ((ICO_RAW(QueenVal, ext, 0x130, *(QueenVal *)&((Act *)ext)->motReq).motReq =
+                         SetMotionRequest((char *)g, 281, ((Act *)ext)->env.motOriReq)) != 0) {
+                    barrierw->react = 0;
+                }
+            }
+
+            switch (GOBJ_SUB(g)->ctrl.motion) {
+            case 1091:
+            case 1096:
+            case 1097:
+                GetRootPosition(target.v, boyGObj);
+                GOBJ_SUB(g)->root.lookPos[0] = target.v[0];
+                GOBJ_SUB(g)->root.lookPos[1] = target.v[1];
+                GOBJ_SUB(g)->root.lookPos[2] = target.v[2];
+                GOBJ_SUB(g)->root.lookMode = 1;
+            }
+
+            switch (GOBJ_SUB(g)->ctrl.motion) {
+            case 1092:
+            case 1093:
+            case 1094:
+            case 1095:
+            default:
+                ICO_RAW(QueenVal, ext, 0x130, *(QueenVal *)&((Act *)ext)->motReq).motReq =
+                    SetMotionRequest((char *)g, 1, ((Act *)ext)->env.motOriReq);
+                break;
+
+            case 1091:
+                motionOk = 1;
+                if ((ICO_RAW(QueenVal, ext, 0x130, *(QueenVal *)&((Act *)ext)->motReq).motReq =
+                         SetMotionRequest((char *)g, 279, ((Act *)ext)->env.motOriReq)) != 0) {
+                    if (first) {
+                        startFrame = frame_count;
+                        wait = (int)(*((stage_no == 37) ? &ballWaitRateSt25[barrierw->damage]
+                                                        : &ballWaitRateDefault[barrierw->damage]) *
+                                     ((60 - systemStatus[0] * 10) / systemStatus[1]));
+                    }
+                    first = 0;
+                }
+                break;
+
+            case 1096:
+                if (ballw->busy == 0 && frame_count - startFrame >= wait) {
+                    ICO_RAW(QueenVal, ext, 0x130, *(QueenVal *)&((Act *)ext)->motReq).motReq =
+                        SetMotionRequest((char *)g, 280, ((Act *)ext)->env.motOriReq);
+                }
+                break;
+
+            case 1097:
+                ICO_RAW(QueenVal, ext, 0x130, *(QueenVal *)&((Act *)ext)->motReq).motReq =
+                    SetMotionRequest((char *)g, 1, ((Act *)ext)->env.motOriReq);
+                if (GOBJ_SUB(g)->ctrl.animFrame > 15.0f && ballw->busy == 0 && motionOk != 0) {
+                    uv = (stage_no == 37) ? &ballUVScrollSt25[barrierw->damage]
+                                          : &ballUVScrollDefault[barrierw->damage];
+
+                    motionOk = 0;
+                    sceVu0ScaleVectorXYZ(&target, &dir, 100.0f);
+                    sceVu0AddVector(&target, &rootPos, &target);
+                    SetDirectRootPosition(ball, &target);
+                    ballw->busy = 1;
+                    ballw->live = 1;
+                    ballw->scale = 0.0f;
+                    startFrame = frame_count;
+                    wait = (int)(*((stage_no == 37) ? &ballWaitRateSt25[barrierw->damage]
+                                                    : &ballWaitRateDefault[barrierw->damage]) *
+                                 ((60 - systemStatus[0] * 10) / systemStatus[1]));
+                    tex_SetUVScroll(queenBallScrTexture, uv->v[0], uv->v[1], uv->v[2], uv->v[3],
+                                    uv->v[4], uv->v[5], 1);
+                }
+                break;
+
+            case 1098:
+                startFrame = frame_count;
+                wait = (int)(*((stage_no == 37) ? &ballHoldRateSt25[barrierw->damage]
+                                                : &ballHoldRateDefault[barrierw->damage]) *
+                             ((60 - systemStatus[0] * 10) / systemStatus[1]));
+                ICO_RAW(QueenVal, ext, 0x130, *(QueenVal *)&((Act *)ext)->motReq).motReq =
+                    SetMotionRequest((char *)g, 1, ((Act *)ext)->env.motOriReq);
+                break;
+            }
+        }
+        boy = GOBJ_ACT(boyGObj)->weapon;
+        if (boy != 0) {
+            GetRootPosition(target.v, boy);
+            ParticleEffects_SetAllGoal(&target);
+        }
+        ((QueenWork *)GOBJ_SUB(g)->work)->st.f.damaged = 0;
+        _ACTWait(1);
+    }
+}
+
+static void subQueenBrainMain_aug6(volatile ICO_WORD g)
 {
     QueenStatus st;
     QVec rootPos;
@@ -1632,12 +1931,16 @@ static void subQueenBrainMain_aug6jun26(volatile ICO_WORD g)
 
 void subQueenBrainMain(volatile ICO_WORD g)
 {
+    if (ICO_JUN26) {
+        subQueenBrainMain_jun26(g);
+        return;
+    }
     if (ICO_NTSC) {
         subQueenBrainMain_ntsc(g);
         return;
     }
-    if (ICO_AUG6JUN26) {
-        subQueenBrainMain_aug6jun26(g);
+    if (ICO_AUG6) {
+        subQueenBrainMain_aug6(g);
         return;
     }
     QueenStatus st;
@@ -1800,17 +2103,24 @@ static const int barrierLayoutSt25_pal[] = {2150}; /* derived name */
 
 static const int barrierLayoutSt25_ntsc[] = {1967}; /* derived name */
 
-static const int barrierLayoutSt25_aug6jun26[] = {1943}; /* derived name */
+static const int barrierLayoutSt25_aug6[] = {1943}; /* derived name */
+
+static const int barrierLayoutSt25_jun26[] = {1864}; /* derived name */
 
 #define barrierLayoutSt25                                                                          \
-    PAL_NTSC_AUG6JUN26(barrierLayoutSt25_pal, barrierLayoutSt25_ntsc, barrierLayoutSt25_aug6jun26)
+    PAL_NTSC_AUG6_JUN26(barrierLayoutSt25_pal, barrierLayoutSt25_ntsc, barrierLayoutSt25_aug6,     \
+                        barrierLayoutSt25_jun26)
 
 static const int barrierLayoutDefault_jpn[] = {3504}; /* derived name */
 
 static const int barrierLayoutDefault_pal[] = {3527}; /* derived name */
 
+static const int barrierLayoutDefault_jun26[] = {3065}; /* derived name */
+
 /* the Japanese disc's layout ids are 23 lower */
-#define barrierLayoutDefault PAL_JPNKORCN(barrierLayoutDefault_pal, barrierLayoutDefault_jpn)
+#define barrierLayoutDefault                                                                       \
+    PAL_JPNKORCN_JUN26(barrierLayoutDefault_pal, barrierLayoutDefault_jpn,                         \
+                       barrierLayoutDefault_jun26)
 
 static const char damageFmt[] = "damage:%d"; /* derived name */
 
@@ -1856,16 +2166,34 @@ void *InitQueenGeo(GObj *g)
     w->cloth = InitCloth4D(g, &queenClothMesh, queenClothHang);
     w->cloth2 = InitCloth4D(g, &queenClothMesh2, 0);
     ext->work = w;
-    InitMotionOrient(g, PAL_NTSC_AUG6JUN26(2407, 2105, 2080), PAL_NTSC_AUG6JUN26(2421, 2119, 2094),
-                     12, 24, PAL_NTSC_AUG6JUN26(1072, 1011, 1013));
+    InitMotionOrient(g, PAL_NTSC_AUG6_JUN26(2407, 2105, 2080, 2106),
+                     PAL_NTSC_AUG6_JUN26(2421, 2119, 2094, 2120), 12, 24,
+                     PAL_NTSC_AUG6_JUN26(1072, 1011, 1013, 1091));
     SetLodLevel(g, 2);
     actInitialize(g);
     actInitialize_ext_charcter(g);
     return w;
 }
 
+static void QueenGeo_jun26(GObj *g)
+{
+    QueenWork *w;
+
+    ExecMotionOrient(g);
+    SetActressLight(g, 35, 44, 374);
+    w = GOBJ_SUB(g)->work;
+    if (w->clothOn != 0) {
+        GetCloth4D(w->cloth, 3.0f, 0.98f);
+        GetCloth4D(w->cloth2, 5.0f, 0.9f);
+    }
+}
+
 void QueenGeo(GObj *g)
 {
+    if (ICO_JUN26) {
+        QueenGeo_jun26(g);
+        return;
+    }
     QueenWork *w;
 
     if (ICO_AUG6JUN26) {
@@ -1928,8 +2256,109 @@ static inline float WrapRad(float a) /* derived name */
     return a;
 }
 
+static void QueenBarrierGeo_jun26(GObj *g)
+{
+    QVec pos;
+    QVec rootPos;
+    QMat44 m1;
+    QMat3T rt;
+    QVec ofs;
+    QVec axis;
+    QMat44 m3;
+    QueenBarrierWork *w;
+    GObj *queen;
+    QueenWork *qw;
+    const int *tbl;
+    unsigned int i;
+    unsigned int found;
+    unsigned int mine;
+
+    memset(&pos, 0, sizeof(pos));
+    pos.f[1] = 2000.0f;
+    w = GOBJ_SUB(g)->work;
+    queen = isysGObjSearchFromObjKindID_begin(45);
+    qw = GOBJ_SUB(queen)->work;
+    if (stage_no == 37) {
+        tbl = barrierLayoutSt25;
+    } else {
+        tbl = barrierLayoutDefault;
+    }
+    mine = 0;
+    if (debug_font_flag & 1) {
+        debug_Printf(10, 70, 0xFFFFFFFF, damageFmt, w->damage);
+    }
+    for (i = 0; i < 1; i++) {
+        GObj *o = isysGObjSearchFromObjLayoutID(tbl[i]);
+
+        if (o == 0) {
+            continue;
+        }
+        if (((QueenBarrierWork *)GOBJ_SUB(o)->work)->active != 0) {
+            continue;
+        }
+        break;
+    }
+    found = i;
+    for (i = 0; i < 1; i++) {
+        if (g->labelId == tbl[i]) {
+            mine = i;
+            break;
+        }
+    }
+    GetRootPosition(rootPos.f, queen);
+    if (w->active == 0 || queen->active == 0 || (qw->st.all & 0xFF0000FF) != 0 ||
+        qw->st.f.attack == 0) {
+        GetRootMatrix(&m1, g);
+        sceVu0CopyVector(&m1.w, &pos);
+        CopyMatrix((void *)GOBJ_SUB(g)->nodeMtx, &m1);
+    } else {
+        axis.f[0] = 0.05235987901687622f;
+        axis.f[1] = 0.0872664675116539f;
+        axis.f[2] = 0.12217305600643158f;
+        axis.f[3] = 0.0f;
+        ofs = axis;
+        sceVu0ScaleVector(&ofs, &ofs,
+                          (float)(unsigned int)(-mine) * 0.019999999552965164f +
+                              0.05000000074505806f);
+        sceVu0AddVector(w->rot, w->rot, &ofs);
+        w->rot[0] = WrapRad(w->rot[0]);
+        w->rot[1] = WrapRad(w->rot[1]);
+        w->rot[2] = WrapRad(w->rot[2]);
+        UnitMatrix33(&rt.rot);
+        sceVu0CopyVector(&rt.trans, w->pos);
+        CopyMatrix((void *)GOBJ_SUB(g)->nodeMtx, &rt);
+    }
+    if (w->hit != 0 && mine == found - 1) {
+        void *weapon;
+
+        qw->power = 0;
+        weapon = (void *)GOBJ_ACT(boyGObj)->weapon;
+        if (weapon != 0) {
+            LightTorchOffOfWeapon(weapon);
+        }
+        qw->wait = 18;
+        ExecuteSEPackage(g, 81);
+        w->damage = w->damage + 1;
+        if (w->damage >= 7) {
+            GetRootMatrix(&m3, g);
+            sceVu0CopyVector(&m3.w, &pos);
+            CopyMatrix((void *)GOBJ_SUB(g)->nodeMtx, &m3);
+            w->active = 0;
+        }
+    }
+    if (qw->wait > 0) {
+        qw->wait = qw->wait - 1;
+    }
+    w->hit = 0;
+    queen_barrier_anim();
+}
+
 void QueenBarrierGeo(GObj *g)
 {
+    if (ICO_JUN26) {
+        QueenBarrierGeo_jun26(g);
+        return;
+    }
     QVec pos;
     QVec rootPos;
     QMat44 m1;
@@ -2030,7 +2459,7 @@ void QueenBarrierDL(GObj *g)
 {
     QueenBarrierWork *b = GOBJ_SUB(g)->work;
     if (b->active) {
-        queen_barrier_disp_proc(g, 1.0f - b->damage / 5.0f);
+        queen_barrier_disp_proc(g, 1.0f - b->damage / PAL_JUN26(5.0f, 7.0f));
     }
 }
 
@@ -2226,7 +2655,7 @@ static void QueenBallGeo_aug6jun26(GObj *g)
     float r;
 
     w = GOBJ_SUB(g)->work;
-    barrier = isysGObjSearchFromObjKindID_begin(53);
+    barrier = isysGObjSearchFromObjKindID_begin(PAL_JUN26(53, 52));
     num = (barrier != 0) ? ((QueenBarrierWork *)GOBJ_SUB(barrier)->work)->damage : 0;
     r = w->scale * 100.0f;
     hit = 0;
@@ -2240,9 +2669,10 @@ static void QueenBallGeo_aug6jun26(GObj *g)
             QVec objPos;
 
             GetRootPosition(objPos.f, o);
-            hit |= CheckQueenBallBox(&objPos, (QVec *)m[3], &queenPos, 130, 300.0f, -120, 600.0f);
+            hit |= CheckQueenBallBox(&objPos, (QVec *)m[3], &queenPos, PAL_JUN26(130, 110), 300.0f,
+                                     -PAL_JUN26(120, 150), 600.0f);
             bga = &queenBga[i];
-            CheckQueenBallRing(bga, 417, (QVec *)m[3], &objPos, r);
+            CheckQueenBallRing(bga, PAL_JUN26(417, 382), (QVec *)m[3], &objPos, r);
             if (*bga != 0) {
                 SetQueenBallOrient(*bga, (QVec *)m[3], &objPos);
             }
@@ -2254,7 +2684,7 @@ static void QueenBallGeo_aug6jun26(GObj *g)
 
         GetRootPosition(objPos.f, sword);
         hit |= CheckQueenBallBox(&objPos, (QVec *)m[3], &queenPos, 75, 300.0f, -150, 500.0f);
-        CheckQueenBallRing(&queenBga[2], 419, (QVec *)m[3], &objPos, r);
+        CheckQueenBallRing(&queenBga[2], PAL_JUN26(419, 384), (QVec *)m[3], &objPos, r);
     }
     if (hit) {
         GOBJ_SUB(g)->disp = 0;
@@ -2264,21 +2694,23 @@ static void QueenBallGeo_aug6jun26(GObj *g)
     if (w->attacked != 0) {
         w->live = 0;
         w->attacked = 0;
-        pbga_start(&w->bga, 414);
+        pbga_start(&w->bga, PAL_JUN26(414, 379));
         _CopyVector(w->bga->pos, m[3]);
         CopyQuaternion(w->bga->rot, IdentityQuaternion);
-        ExecuteSEPackage(g, 89);
+        ExecuteSEPackage(g, PAL_JUN26(89, 80));
     }
     if (w->live != 0) {
         UnitMatrix33((QMat3 *)m);
         scale_m34((LVec *)m, m, w->scale);
         CopyMatrix((void *)GOBJ_SUB(g)->nodeMtx, m);
-        if (hit == 0 && w->hit == 0 && AttackCenter(g, 16, m[3], 0, r) != 0) {
+        if (hit == 0 && w->hit == 0 && AttackCenter(g, PAL_JUN26(16, 18), m[3], 0, r) != 0) {
             w->hit = 1;
-            if (weapon != 0) {
-                ExecuteSEPackage(boyGObj, 92);
-            } else {
-                ExecuteSEPackage(boyGObj, 86);
+            if (!ICO_JUN26) {
+                if (weapon != 0) {
+                    ExecuteSEPackage(boyGObj, 92);
+                } else {
+                    ExecuteSEPackage(boyGObj, 86);
+                }
             }
         }
         if (r > 5000.0f) {
@@ -2480,7 +2912,7 @@ static void QueenBallDL_aug6jun26(GObj *g)
         p2o_DispVU1Default(g);
     }
     if (w->bga != 0) {
-        stage_SetScale(414, w->scale);
+        stage_SetScale(PAL_JUN26(414, 379), w->scale);
         if (stage_DispBgAnimation(&w->bga) != 0) {
             Act *act;
 
@@ -2496,9 +2928,9 @@ static void QueenBallDL_aug6jun26(GObj *g)
     q = queenBga;
     for (i = 0; i < 4; i++, q++) {
         if ((o = *q) != 0) {
-            long long id = *(long long *)o & 0x3FFF;
+            long long id = *(long long *)o & PAL_JUN26(0x3FFF, 0x7FFF);
 
-            if (id == 418 || id == 420) {
+            if (id == PAL_JUN26(418, 383) || id == PAL_JUN26(420, 385)) {
                 SetQueenBallOrient(o, &selfPos, &queenPos);
             }
             if (stage_DispBgAnimation(q) != 0) {
@@ -2562,8 +2994,25 @@ void QueenBallDL(GObj *g)
     }
 }
 
+static void actQueenStart_jun26(GObj *g)
+{
+    Act *sub = actInitialize(g);
+
+    actInitialize_ext_charcter(g);
+    _ACTWait(1);
+    actCreateSubThread(subQueenBrainMain, 20);
+    actCreateSubThread(subQueenControl, 21);
+    actCreateSubThread(gene_enemy, 21);
+    ICO_RAW(QueenVal, sub, 0x130, *(QueenVal *)&sub->motReq).motReq =
+        SetMotionRequest(g, 225, sub->env.motOriReq);
+}
+
 void actQueenStart(GObj *g)
 {
+    if (ICO_JUN26) {
+        actQueenStart_jun26(g);
+        return;
+    }
     Act *sub = actInitialize(g);
 
     actInitialize_ext_charcter(g);
@@ -2580,10 +3029,10 @@ void QueenStartAttack(void)
 {
     GObj *g;
 
-    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
+    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6_JUN26(47, 46, 45));
     ((QueenWork *)GOBJ_SUB(g)->work)->st.f.attack = 1;
 
-    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(54, 53));
+    g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6_JUN26(54, 53, 52));
     while (g != 0) {
         ((QueenBarrierWork *)GOBJ_SUB(g)->work)->active = 1;
         g = isysGObjSearchFromObjKindID_next(g);
@@ -2592,13 +3041,13 @@ void QueenStartAttack(void)
 
 int QueenInqDead(void)
 {
-    GObj *g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
+    GObj *g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6_JUN26(47, 46, 45));
     return ((QueenWork *)GOBJ_SUB(g)->work)->st.f.dead;
 }
 
 int QueenBoysWeaponPower(void)
 {
-    GObj *g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46));
+    GObj *g = isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6_JUN26(47, 46, 45));
     return ((QueenWork *)GOBJ_SUB(g)->work)->power;
 }
 
@@ -2612,7 +3061,7 @@ int QueenBarrierInqBreakable(void)
     QueenWork *b;
     int ret = 0;
 
-    b = GOBJ_SUB(isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6JUN26(47, 46)))->work;
+    b = GOBJ_SUB(isysGObjSearchFromObjKindID_begin(PAL_NTSCAUG6_JUN26(47, 46, 45)))->work;
     if (b->power > 0 || b->wait > 0) {
         ret = 1;
     }
@@ -2768,7 +3217,7 @@ static void queenBallBeforeFunc_aug6jun26(GObj *g)
         } else {
             debug_StdPrintfDummy(queenBallAttackedMsg);
             w->attacked = 1;
-            iosOmSendMail(boyGObj, 391, g);
+            iosOmSendMail(boyGObj, PAL_JUN26(391, 375), g);
         }
     }
     q->num = 0;
@@ -2809,7 +3258,7 @@ void *InitQueenBallGeo(GObj *g)
     Sub15C *ext = GOBJ_SUB(g);
 
     w = iosMallocDebug(ios_partition_sugipon, sizeof(QueenBallWork), queenFile,
-                       LN(1284, 1284, 1284, 1284, 1230, 1218, 1284));
+                       LN(1284, 1284, 1284, 1268, 1230, 1218, 1284));
     ext->work = w;
     memset(w, 0, sizeof(QueenBallWork));
     w->scale = 0.0f;

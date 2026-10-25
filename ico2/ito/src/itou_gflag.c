@@ -8,6 +8,11 @@ void itouGFlagInit(void)
 
 void itouGflagLoad(void)
 {
+    /* PC port: the June 2001 demo's save table has no itou pair (gamesys.c keeps one table
+       for every disc) */
+    if (ICO_JUN26) {
+        return;
+    }
     itou_boss_gflag_init();
 }
 
