@@ -144,10 +144,11 @@ static const UiSheetInk kSheetInk[UI_LANG_SHEET_COUNT] = {
        Japanese sheets'.  ctest menu_look_kor (menu_region_test.c) measured the
        disc at fill 252.8, rim 41.8 (kInkExpect there): the values here. */
     {1, 42, 253, 1, 0},
-    /* the Asian disc's sheets (UI_SHEET_ZH, Traditional Chinese): the
-       Japanese sheets' values as the first guess, until ctest menu_look_cn
-       (menu_region_test.c) measures the disc's Tex_menu01 (its kInkExpect) */
-    {1, 34, 252, 1, 0},
+    /* the Asian disc's sheets (UI_SHEET_ZH, Traditional Chinese), measured
+       by ctest menu_look_cn (menu_region_test.c) on SCPS-55001's Tex_menu01
+       option, mc04, title and scei sheets: fill 250.7 (palette white fbfbfb,
+       251), rim 39.4, one antialiasing step */
+    {1, 39, 251, 1, 0},
 };
 /* the dark, plain and grey inks and the light words without a halo: no
    rim, a white fill (the vertex colour makes them black, white or grey) */
@@ -359,13 +360,14 @@ void ui__menu_set_bold(float bx, float by)
 #define KO_GEO_WX 0.62f
 #define KO_GEO_GAP 7.5f
 #define KO_GEO_BOLD 0.0f
-/* the Asian disc's (UI_SHEET_ZH): the Japanese sheets' geometry as the
-   first guess, one geometry for every screen (the title sheet letters its
-   words as the others do), until ctest menu_look_cn measures the disc */
-#define ZH_GEO_EM JA_GEO_EM
-#define ZH_GEO_WX JA_GEO_WX
-#define ZH_GEO_GAP JA_GEO_GAP
-#define ZH_GEO_BOLD JA_GEO_BOLD
+/* the Asian disc's (UI_SHEET_ZH): one geometry for every screen (the title
+   sheet letters its words as the others do), the fit ctest menu_look_cn
+   found on SCPS-55001's Tex_menu01 (ICO_MENU_LOOK_JPN_FIT=1: em 1.02, wx
+   0.92, gap 10.0 at the search's upper bound, no bold; score 11.14) */
+#define ZH_GEO_EM 1.02f
+#define ZH_GEO_WX 0.92f
+#define ZH_GEO_GAP 10.0f
+#define ZH_GEO_BOLD 0.0f
 static MfGeo s_cjkGeo[4] = {
     {JA_GEO_EM, JA_GEO_WX, JA_GEO_GAP, JA_GEO_BOLD, JA_GEO_BOLD},
     {JA_TITLE_GEO_EM, JA_TITLE_GEO_WX, JA_TITLE_GEO_GAP, JA_TITLE_GEO_BOLD, JA_TITLE_GEO_BOLD},

@@ -419,7 +419,7 @@ typedef struct InkExpect {
    "sheet ink fill .. rim .." and fails against them, so the printed values
    replace these two and kSheetInk[UI_SHEET_ZH] (menu_font.c). */
 static const InkExpect kInkExpect[] = {
-    {"jpn", 251.5, 34.3}, {"kor", 252.8, 41.8}, {"cn", 251.5, 34.3}};
+    {"jpn", 251.5, 34.3}, {"kor", 252.8, 41.8}, {"cn", 250.7, 39.4}};
 #define TOL_LEVEL 0.6 /* menu_look_test's: grey levels */
 
 static void testLook(IcoVfs *vfs)

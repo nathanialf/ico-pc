@@ -4223,13 +4223,12 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                              "Off",      "5 hits", "Off", "Off"};
     char p[1100], log[1024];
 
-    /* the rows are read in English on every disc (the Japanese and Korean
-       discs default to their own text; the title's boot re-applies the
-       config's choice, so it is the config's) */
+    /* the rows are read in English on every disc (the Japanese, Korean and
+       Asian discs default to their own text): the config's choice, kept
+       through the boot (enterMainKeep) */
     useConfig("version = 1\n[ui]\nlanguage = \"en\"\n");
-    ui_settings_apply_language();
     stage_no = title ? 1 : 11;
-    const int mainL = enterMain(title);
+    const int mainL = enterMainKeep(title);
     const int exL = openPage(mainL, 8, UI_PAGE_EXTRAS);
     int el[9];
     const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 9);
@@ -4240,7 +4239,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
           title ? "title" : "pause");
     lt_ext_layout(exL)->curItem = el[4];
     frame(0);
-    press(0x40);
+    press(lt_ext_confirm_button()); /* Circle on the Japanese-program discs */
     const int varL = ui_settings_page_layout(UI_PAGE_VARIANTS);
     CHECK(settle(varL, 60), "%s: Cross on Game variants opens the page", who);
     for (int k = 0; k < 4; k++) {
@@ -4396,7 +4395,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     ico_opt_set_developer_mode(1);
     lt_ext_layout(exL)->curItem = el[4];
     frame(0);
-    press(0x40);
+    press(lt_ext_confirm_button()); /* Circle on the Japanese-program discs */
     CHECK(settle(varL, 60), "%s: Game variants again", who);
     for (int k = 0; k < 4; k++) {
         frame(0);
@@ -4415,7 +4414,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     CHECK(!ico_variants_suspend_achievements() || ico_opt_developer_mode(),
           "%s: nothing but Developer mode suspends before the press", who);
     varErrCapture();
-    press(0x40);
+    press(lt_ext_confirm_button()); /* Circle on the Japanese-program discs */
     varErrRelease(log, sizeof(log));
     CHECK(strstr(log, "variants: the Debug menu is opened from Options") != NULL,
           "%s: the press is logged (\"%s\")", who, log);
