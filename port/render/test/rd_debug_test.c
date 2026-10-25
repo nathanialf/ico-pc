@@ -25,6 +25,11 @@
  *     writes host0:thisIsYourDebugOption (a temporary folder here); with
  *     developer mode and debug_option 1 debug_VariableInit loads it back,
  *     with debug_option 0 or developer mode off it keeps the retail values;
+ *   - the Game variants' bind (port/game/variants.h): debug_VariableInit
+ *     hands over the five switches the variants hold and debug_MenuOpen;
+ *     the menu opened through that opener (as Options > Extras > Game
+ *     variants > Debug menu does) is up on each of the next three ticks with
+ *     no pad, its title and bug list drawn, and nothing drew while closed;
  *   - nothing reached the decoder as an undecoded register.
  * Then on a Vulkan device (exit 77 without one): a printed glyph changes
  * SCENE where its points fall, and debug_SnapShot writes a PNG under
@@ -61,6 +66,9 @@ void debug_PrintFontWindow(int col, const char *fmt, ...);
 void debug_FlushFont(void);
 void debug_Menu(void);
 void debug_Menu_off(void);
+void debug_MenuOpen(void);
+extern int debug_one_hit_only, debug_ignore_dodge, debug_enemy_battle_type,
+    debug_ignore_demo_camera, debug_hand_camera, debugBackGroundDisableFlag;
 int debug_SnapShot(int idx);
 void dl_Init(void);
 void dl_SetDLPriority(int pri);
@@ -286,6 +294,25 @@ UNUSED_FN(tex_ListTool)
 void ChangeFieldCollisionDebugMode(int on)
 {
     (void)on;
+}
+
+/* port/game/variants.c, called by debug_VariableInit: what it was given */
+static struct {
+    int binds;
+    int *oneHit, *dodge, *battle, *demoCam, *hand;
+    void (*menuOpen)(void);
+} s_bind;
+
+void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
+                             int *ignore_demo_camera, int *hand_camera, void (*menu_open)(void))
+{
+    s_bind.binds++;
+    s_bind.oneHit = one_hit;
+    s_bind.dodge = ignore_dodge;
+    s_bind.battle = battle_type;
+    s_bind.demoCam = ignore_demo_camera;
+    s_bind.hand = hand_camera;
+    s_bind.menuOpen = menu_open;
 }
 
 /* GsBase.h's sceVu0IVECTOR copy (debug_PrintCharacter) */
@@ -548,6 +575,48 @@ static void checkMenu(void)
     }
 }
 
+/* the Game variants' way in: the bind and the menu opened through it */
+static void checkMenuOpen(void)
+{
+    const Pts *p;
+    const int least = strPts("DEBUG MENU") + strPts("FIXED BUG ID LIST");
+
+    CHECK(s_bind.binds > 0 && s_bind.oneHit == &debug_one_hit_only &&
+              s_bind.dodge == &debug_ignore_dodge && s_bind.battle == &debug_enemy_battle_type &&
+              s_bind.demoCam == &debug_ignore_demo_camera && s_bind.hand == &debug_hand_camera &&
+              s_bind.menuOpen == debug_MenuOpen,
+          "debug_VariableInit binds the five switches and debug_MenuOpen (%d binds)", s_bind.binds);
+    /* closed: a tick with no pad draws nothing */
+    debug_Menu_off();
+    debugBackGroundDisableFlag = 0;
+    pad[0].flags = 0;
+    pad[0].now = 0;
+    pad[0].rep = 0;
+    debug_Menu();
+    p = endFrame();
+    CHECK(p->n == 0, "menu closed: %d points", p->n);
+    /* opened through the bound opener, no SELECT: up on each of three ticks */
+    if (s_bind.menuOpen != NULL) {
+        s_bind.menuOpen();
+    }
+    CHECK(debugBackGroundDisableFlag == 1, "debug_MenuOpen sets the background flag as SELECT");
+    for (int tick = 1; tick <= 3; tick++) {
+        debug_Menu();
+        p = endFrame();
+        CHECK(p->n >= least, "opened by debug_MenuOpen, tick %d: %d points, at least %d", tick,
+              p->n, least);
+    }
+    /* a second open while it is up changes nothing; Triangle closes it */
+    debug_MenuOpen();
+    pad[0].flags = 0x40;
+    debug_Menu();
+    endFrame();
+    pad[0].flags = 0;
+    debug_Menu();
+    p = endFrame();
+    CHECK(p->n == 0 && debugBackGroundDisableFlag == 0, "Triangle closes it: %d points", p->n);
+}
+
 static void checkFontWindow(void)
 {
     debug_PrintFontWindow(0xFFFFFF00, "hello\n");
@@ -785,6 +854,7 @@ int main(int argc, char **argv)
     checkMenu();
     checkFontWindow();
     checkOptionFile(root);
+    checkMenuOpen();
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded register writes", gif_HostUndecodedTotal());
     rd_shutdown();
     if (failures) {
