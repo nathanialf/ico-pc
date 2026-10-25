@@ -98,6 +98,15 @@ char *matrixptr;
 
 int debug_font_flag;
 
+/* debug.c's and GsBase.c's; only the 2001 builds' shadow twins and volume test read them */
+int debug_fullscreen_effect, debug_shadow_flag;
+
+int gsb_ClipBox(float *p)
+{
+    (void)p;
+    return 1;
+}
+
 StageSetting GlobalStageSetting;
 
 PadState pad[16];
