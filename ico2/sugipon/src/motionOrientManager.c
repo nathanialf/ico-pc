@@ -1426,7 +1426,7 @@ static void getMotionGeometry_jun26(void *self)
            rather than whatever the host's frame left there */
         v.f[3] = 0.0f;
         rv.f[3] = 0.0f;
-        if (motionKind[w->motion].blendKind == 228) {
+        if (motionKind[w->motion].blendKind == 207) {
             GetFloatingMotion(mot, w->animFrame, v.f, md, n, blendless, skel);
             GetFloatingMotionRootPos(rv.f, md, w->lastFrame);
         } else {
