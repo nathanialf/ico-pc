@@ -121,6 +121,9 @@ IosMemPart *ios_partition_root;
 
 IosMemPart *ios_partition_event;
 
+/* the June 2001 demo's icon write allocates from it (mcdata.c); the event partition here */
+IosMemPart *ios_partition_sound;
+
 /* the globals product_write and gameblock_write read, and the setters
    product_read and gameblock_read call */
 int systemStatus[12];
@@ -1146,6 +1149,7 @@ static void boot(void *arg)
     ios_partition_root =
         iosMallocInitPartition(ico_arena_ee_addr(0x760000), ico_arena_ee_addr(0x1FEFFF0));
     ios_partition_event = iosMallocSetPartition(ios_partition_root, 262144, 16);
+    ios_partition_sound = ios_partition_event;
     iosMsgInit();
     iosThreadCreate(&idleTh, 1, idle, 0, idleStack, sizeof idleStack, 0x1B);
     iosThreadStart(&idleTh);
