@@ -322,20 +322,55 @@ set(ICO_BASE_ELF_JUN26 "${CMAKE_SOURCE_DIR}/baserom/jun26/baseelf.elf" CACHE FIL
     "The June 2001 magazine demo's base ELF (CUS97113/SCPS_000.00) the loader test's reference tables are written from")
 set(ICO_BASE_ELF_CN "${CMAKE_SOURCE_DIR}/baserom/cn/baseelf.elf" CACHE FILEPATH
     "The Asian base ELF (SCPS_550.01) the loader test's reference tables are written from")
-# The members a disc's config/data_members.<slug>.txt lists. ICO_DATA_MEMBERS
-# is the union of every link order's (tools/gen_sources.py), so a member only
-# some discs have (the USA disc has no hint table, the June 2001 demo tables
-# PAL lacks) is in it: each disc's reference writes only its own members.
-function(ico_disc_members slug out)
+# The members a disc's config/data_members.<slug>.txt lists, and the table
+# symbols those rows name (name@offset): each disc's reference writes only
+# its own members. The symbols a set lacks (the USA disc has no hint table,
+# only the June 2001 demo has its enemy-set tables, the enemy table is
+# committed source on the discs merged since 2026-10-24) get a stub
+# definition and an absent list (ico_ref[_<slug>]_absent, NULL-terminated)
+# so tables_test links against every name of ICO_TABLE_SYMBOLS and checks
+# the loader left those host tables zero.
+function(ico_disc_members slug out_members out_symbols)
     file(STRINGS "${CMAKE_SOURCE_DIR}/config/data_members.${slug}.txt" _lines
          REGEX "^(data|rodata|sdata)[ \t]")
     set(_names "")
+    set(_syms "")
     foreach(_line ${_lines})
         string(REGEX REPLACE "^[a-z]+[ \t]+([^ \t]+).*$" "\\1" _name "${_line}")
         list(APPEND _names "${_name}")
+        string(REGEX MATCHALL "[A-Za-z0-9_]+@" _at "${_line}")
+        foreach(_a ${_at})
+            string(REGEX REPLACE "@$" "" _a "${_a}")
+            list(APPEND _syms "${_a}")
+        endforeach()
     endforeach()
     list(REMOVE_DUPLICATES _names)
-    set(${out} ${_names} PARENT_SCOPE)
+    list(REMOVE_DUPLICATES _syms)
+    set(${out_members} ${_names} PARENT_SCOPE)
+    set(${out_symbols} ${_syms} PARENT_SCOPE)
+endfunction()
+# ref[_<slug>]/absent.c: a definition per symbol the set's rows do not name
+# and the set's absent list (written at configure, replaced only when it
+# changes).
+function(ico_ref_absent prefix symbols out)
+    set(_text "/* Generated at configure (port/data/CMakeLists.txt): the table symbols this\n")
+    string(APPEND _text "   disc's member list does not name, each a stub so tables_test links, and\n")
+    string(APPEND _text "   the list tables_test skips (checking the host table stayed zero). */\n\n")
+    set(_absent "")
+    foreach(_sym ${ICO_TABLE_SYMBOLS})
+        if(NOT _sym IN_LIST symbols)
+            string(APPEND _text "char ${prefix}${_sym}[4];\n")
+            list(APPEND _absent "${_sym}")
+        endif()
+    endforeach()
+    string(APPEND _text "\nconst char *const ${prefix}absent[] = {\n")
+    foreach(_sym ${_absent})
+        string(APPEND _text "    \"${_sym}\",\n")
+    endforeach()
+    string(APPEND _text "    0,\n};\n")
+    file(WRITE "${out}.tmp" "${_text}")
+    configure_file("${out}.tmp" "${out}" COPYONLY)
+    file(REMOVE "${out}.tmp")
 endfunction()
 set(_ico_have_elftools 1)
 if(ICO_DATA_PYTHON)
@@ -350,11 +385,8 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
         "${CMAKE_SOURCE_DIR}/config/symbol_addrs.pal.txt"
         "${CMAKE_SOURCE_DIR}/config/symbol_addrs.pal.data.txt")
     set(_refs "")
-    ico_disc_members(pal _members_pal)
-    foreach(m ${ICO_DATA_MEMBERS})
-        if(NOT m IN_LIST _members_pal)
-            continue()
-        endif()
+    ico_disc_members(pal _members_pal _symbols_pal)
+    foreach(m ${_members_pal})
         set(out "${CMAKE_CURRENT_BINARY_DIR}/ref/${m}.c")
         add_custom_command(
             OUTPUT "${out}"
@@ -371,6 +403,8 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
         list(APPEND _renames "${sym}=ico_ref_${sym}")
     endforeach()
     set_source_files_properties(${_refs} PROPERTIES COMPILE_DEFINITIONS "${_renames}")
+    ico_ref_absent(ico_ref_ "${_symbols_pal}" "${CMAKE_CURRENT_BINARY_DIR}/ref/absent.c")
+    list(APPEND _refs "${CMAKE_CURRENT_BINARY_DIR}/ref/absent.c")
     # each other disc's reference (jpn, kor, ntsc, aug6, jun26, cn), when its ELF is present:
     # ico_ref_<slug>_<name>, gen_data_c.py --version <slug>, and
     # ICO_TABLES_TEST_<SLUG> for tables_test's table of references
@@ -390,11 +424,8 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
             "${CMAKE_SOURCE_DIR}/config/symbol_addrs.${_slug}.txt"
             "${CMAKE_SOURCE_DIR}/config/symbol_addrs.${_slug}.data.txt")
         set(_refs_slug "")
-        ico_disc_members(${_slug} _members_slug)
-        foreach(m ${ICO_DATA_MEMBERS})
-            if(NOT m IN_LIST _members_slug)
-                continue()
-            endif()
+        ico_disc_members(${_slug} _members_slug _symbols_slug)
+        foreach(m ${_members_slug})
             set(out "${CMAKE_CURRENT_BINARY_DIR}/ref_${_slug}/${m}.c")
             add_custom_command(
                 OUTPUT "${out}"
@@ -411,6 +442,9 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
             list(APPEND _renames_slug "${sym}=ico_ref_${_slug}_${sym}")
         endforeach()
         set_source_files_properties(${_refs_slug} PROPERTIES COMPILE_DEFINITIONS "${_renames_slug}")
+        ico_ref_absent(ico_ref_${_slug}_ "${_symbols_slug}"
+                       "${CMAKE_CURRENT_BINARY_DIR}/ref_${_slug}/absent.c")
+        list(APPEND _refs_slug "${CMAKE_CURRENT_BINARY_DIR}/ref_${_slug}/absent.c")
         list(APPEND _refs_other ${_refs_slug})
         list(APPEND _refs_defs ICO_TABLES_TEST_${_up}=1)
     endforeach()

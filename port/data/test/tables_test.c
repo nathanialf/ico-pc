@@ -25,7 +25,9 @@
  * config/ee_layout.<slug>.txt, with the defaults and the permuted bit words),
  * each table's records past the disc's count zero; then OTHER_ELF (the PAL
  * ELF) is refused by the disc's set and BASE_ELF by the PAL set, each naming
- * the disc it expects.
+ * the disc it expects. A table the set has no row for (ico_ref[_<slug>]_absent,
+ * port/data/CMakeLists.txt: the hint table on the USA disc, the June demo's
+ * enemy-set tables elsewhere) must stay zero on the host.
  * It exits 77 (skipped) when BASE_ELF is absent or the reference was not
  * built.
  */
@@ -39,6 +41,7 @@
 #define X(name) extern char name[], ico_ref_##name[];
 ICO_TABLE_SYMBOLS(X)
 #undef X
+extern const char *const ico_ref_absent[];
 
 typedef struct Sym {
     const char *name;
@@ -60,6 +63,7 @@ static const Sym syms_pal[] = {
 #define X(name) extern char ico_ref_jpn_##name[];
 ICO_TABLE_SYMBOLS(X)
 #undef X
+extern const char *const ico_ref_jpn_absent[];
 
 static const Sym syms_jpn[] = {
 #define X(name) {#name, name, ico_ref_jpn_##name},
@@ -72,6 +76,7 @@ static const Sym syms_jpn[] = {
 #define X(name) extern char ico_ref_kor_##name[];
 ICO_TABLE_SYMBOLS(X)
 #undef X
+extern const char *const ico_ref_kor_absent[];
 
 static const Sym syms_kor[] = {
 #define X(name) {#name, name, ico_ref_kor_##name},
@@ -84,6 +89,7 @@ static const Sym syms_kor[] = {
 #define X(name) extern char ico_ref_ntsc_##name[];
 ICO_TABLE_SYMBOLS(X)
 #undef X
+extern const char *const ico_ref_ntsc_absent[];
 
 static const Sym syms_ntsc[] = {
 #define X(name) {#name, name, ico_ref_ntsc_##name},
@@ -96,6 +102,7 @@ static const Sym syms_ntsc[] = {
 #define X(name) extern char ico_ref_aug6_##name[];
 ICO_TABLE_SYMBOLS(X)
 #undef X
+extern const char *const ico_ref_aug6_absent[];
 
 static const Sym syms_aug6[] = {
 #define X(name) {#name, name, ico_ref_aug6_##name},
@@ -108,6 +115,7 @@ static const Sym syms_aug6[] = {
 #define X(name) extern char ico_ref_jun26_##name[];
 ICO_TABLE_SYMBOLS(X)
 #undef X
+extern const char *const ico_ref_jun26_absent[];
 
 static const Sym syms_jun26[] = {
 #define X(name) {#name, name, ico_ref_jun26_##name},
@@ -120,6 +128,7 @@ static const Sym syms_jun26[] = {
 #define X(name) extern char ico_ref_cn_##name[];
 ICO_TABLE_SYMBOLS(X)
 #undef X
+extern const char *const ico_ref_cn_absent[];
 
 static const Sym syms_cn[] = {
 #define X(name) {#name, name, ico_ref_cn_##name},
@@ -131,28 +140,29 @@ static const Sym syms_cn[] = {
 typedef struct RefSet {
     const char *slug;
     const Sym *syms;
+    const char *const *absent; /* the symbols the set has no row for, NULL-terminated */
 } RefSet;
 
 static const RefSet ref_sets[] = {
 #ifdef ICO_TABLES_TEST_JPN
-    {"jpn", syms_jpn},
+    {"jpn", syms_jpn, ico_ref_jpn_absent},
 #endif
 #ifdef ICO_TABLES_TEST_KOR
-    {"kor", syms_kor},
+    {"kor", syms_kor, ico_ref_kor_absent},
 #endif
 #ifdef ICO_TABLES_TEST_NTSC
-    {"ntsc", syms_ntsc},
+    {"ntsc", syms_ntsc, ico_ref_ntsc_absent},
 #endif
 #ifdef ICO_TABLES_TEST_AUG6
-    {"aug6", syms_aug6},
+    {"aug6", syms_aug6, ico_ref_aug6_absent},
 #endif
 #ifdef ICO_TABLES_TEST_JUN26
-    {"jun26", syms_jun26},
+    {"jun26", syms_jun26, ico_ref_jun26_absent},
 #endif
 #ifdef ICO_TABLES_TEST_CN
-    {"cn", syms_cn},
+    {"cn", syms_cn, ico_ref_cn_absent},
 #endif
-    {NULL, NULL},
+    {NULL, NULL, NULL},
 };
 
 static int failures;
@@ -271,9 +281,38 @@ static int same_records(const IcoTableSet *set, const Sym *syms, const IcoTableR
     return same;
 }
 
+static int is_absent(const char *const *absent, const char *symbol)
+{
+    while (absent != NULL && *absent != NULL) {
+        if (strcmp(*absent, symbol) == 0) {
+            return 1;
+        }
+        absent++;
+    }
+    return 0;
+}
+
+/* The host array's bytes of a symbol this set has no row for: another set's
+   row names the same host array. 0 when no set has one. */
+static size_t host_size_any(const char *symbol)
+{
+    int k;
+
+    for (k = 0; k < ICO_TABLE_SET_COUNT; k++) {
+        const IcoTableRow *row = row_of(ico_table_sets[k], symbol);
+
+        if (row != NULL && row->record != NULL) {
+            return (size_t)row->host_count * row->record->host_size;
+        }
+    }
+    return 0;
+}
+
 /* Every table of the set against its compiled reference; the number that
-   differ. */
-static int compare_all(const IcoTableSet *set, const Sym *syms, int verbose)
+   differ. A symbol the set has no row for (absent) has no reference: its host
+   table must be zero. */
+static int compare_all(const IcoTableSet *set, const Sym *syms, const char *const *absent,
+                       int verbose)
 {
     size_t i;
     int bad = 0;
@@ -283,6 +322,24 @@ static int compare_all(const IcoTableSet *set, const Sym *syms, int verbose)
         size_t size;
         int same;
 
+        if (is_absent(absent, syms[i].name)) {
+            size_t k;
+
+            size = host_size_any(syms[i].name);
+            same = 1;
+            for (k = 0; k < size; k++) {
+                if (syms[i].host[k] != 0) {
+                    same = 0;
+                    break;
+                }
+            }
+            if (verbose) {
+                printf("%s %-26s %8zu bytes (no row in this set: zero)\n", same ? "    " : "DIFF",
+                       syms[i].name, size);
+            }
+            bad += !same;
+            continue;
+        }
         if (row == NULL) {
             /* staffRollNameDataNum: a derived int, no row of its own */
             same = memcmp(syms[i].host, syms[i].ref, sizeof(int)) == 0;
@@ -341,12 +398,14 @@ static int main_set(const IcoTableSet *set, const char *elf_path, const char *im
     size_t size, osize;
     IcoVfs *vfs = NULL;
     const Sym *syms = NULL;
+    const char *const *absent = NULL;
     uint32_t i;
     int rc;
 
     for (i = 0; ref_sets[i].slug != NULL; i++) {
         if (strcmp(set->slug, ref_sets[i].slug) == 0) {
             syms = ref_sets[i].syms;
+            absent = ref_sets[i].absent;
         }
     }
     if (syms == NULL) {
@@ -360,7 +419,7 @@ static int main_set(const IcoTableSet *set, const char *elf_path, const char *im
         printf("tables_test: no %s: skipped\n", elf_path);
         return 77;
     }
-    rc = compare_all(set, syms, 0);
+    rc = compare_all(set, syms, absent, 0);
     printf("     before loading, %d of %d tables differ from the %s reference\n", rc,
            (int)ICO_SYM_COUNT, set->slug);
     check(rc > 0, "before loading, the host tables are not the reference (the binary holds none)");
@@ -394,7 +453,7 @@ static int main_set(const IcoTableSet *set, const char *elf_path, const char *im
                    (unsigned)ico_tables_count((IcoTableId)row->id), (unsigned)row->host_count);
         }
     }
-    check(compare_all(set, syms, 1) == 0,
+    check(compare_all(set, syms, absent, 1) == 0,
           "every table equals the reference in the PAL record's form, the rest zero");
 
     /* each disc's ELF under the other's set: refused, naming the disc expected */
@@ -404,7 +463,8 @@ static int main_set(const IcoTableSet *set, const char *elf_path, const char *im
         printf("     %s\n", err);
         check(rc != 0 && strstr(err, set->product) != NULL,
               "the other disc's ELF is refused by this set, naming this set's disc");
-        check(compare_all(set, syms, 0) == 0, "a refused ELF leaves the tables as they were");
+        check(compare_all(set, syms, absent, 0) == 0,
+              "a refused ELF leaves the tables as they were");
         rc = ico_tables_load_elf(ico_table_sets[0], elf, size, err, sizeof(err));
         printf("     %s\n", err);
         check(rc != 0 && strstr(err, ico_table_sets[0]->product) != NULL,
@@ -429,6 +489,7 @@ int main(int argc, char **argv)
     const IcoTableRow *row;
     const IcoTableSet *set = &ico_table_set_pal;
     const Sym *syms = syms_pal;
+    const char *const *absent = ico_ref_absent;
     IcoVfs *vfs = NULL;
     int rc;
 
@@ -465,7 +526,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "tables_test: cannot read %s\n", argv[1]);
         return 2;
     }
-    rc = compare_all(set, syms, 0);
+    rc = compare_all(set, syms, absent, 0);
     printf("     before loading, %d of %d tables differ from the reference\n", rc,
            (int)ICO_SYM_COUNT);
     check(rc > 0, "before loading, the host tables are not the reference (the binary holds none)");
@@ -491,7 +552,8 @@ int main(int argc, char **argv)
     check(rc == 0, "the loader accepts the retail ELF");
     printf("     %u rows, %u records\n", (unsigned)ico_tables_loaded_rows(),
            (unsigned)ico_tables_loaded_records());
-    check(compare_all(set, syms, 1) == 0, "every table equals the PS2 build's compiled table");
+    check(compare_all(set, syms, absent, 1) == 0,
+          "every table equals the PS2 build's compiled table");
 
     /* one byte of one table changed: refused, nothing written */
     bad = malloc(size);
@@ -524,7 +586,7 @@ int main(int argc, char **argv)
     printf("     %s\n", err);
     check(rc != 0 && strstr(err, "sedef") != NULL && strstr(err, "CRC-32") != NULL,
           "the manifest CRC refuses the modified ELF, naming the table");
-    check(compare_all(set, syms, 0) == 0, "a refused ELF leaves the tables as they were");
+    check(compare_all(set, syms, absent, 0) == 0, "a refused ELF leaves the tables as they were");
 
     /* not an ELF at all */
     memset(bad, 0, 64);
