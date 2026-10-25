@@ -223,10 +223,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `variants_test.c`: the game variants (`port/game/variants.h`) on the CPU: every default is the game as
   shipped (the barrier's number the disc's: 5, 7 on `jun26`), every `[variants]` key steps through
   all its values, saves and reads back, a word or number that is no value reads as the default, the
-  setters clamp and the steps wrap, and the achievements rule (One hit per swing, Shades never
+  setters clamp and the steps wrap, and the achievements rule (One hit per swing, Shadows never
   dodge, Cutscene cameras ignored and a Debug menu press suspend; toughness, aggression, No hints,
-  the barrier and the look-around do not; a reload clears the Debug menu's mark); one run per disc
-  (`variants`, `variants_jpn`, `variants_kor`).
+  the barrier and the look-around do not; a reload clears the Debug menu's mark), and the game
+  hooks: the bound debug switches (untouched at the shipped values, each variant's value while it
+  is on, the aggression's four battle types, the game's value put back when it is switched off or
+  reloaded, written at the bind from a file, nothing written unbound), the Debug menu's opener
+  (bound: opened, 1; unbound: 0), `ico_hints_on` per disc, the enemy row reader on
+  `ico2/sugipon/src/enemyKind.c` (compiled in: the disc's own rows with nothing chosen, American on
+  the European table = the USA life with the European dodge, model and parameter row, "no model"
+  rows whole, aggression's battle type on every row, never past a table: the June 2001 demo's 18
+  rows) and the restart life's playthrough index (a copy of `getEnemyRestartLife`'s: 38 with
+  American or Not tougher later); one run per disc (`variants`, `variants_jpn`, `variants_kor`,
+  `variants_<slug>`).
 - `hand_ik_test.c`: the hand records as `ACTGame_ConnectHand` sets them through the real
   `handManager.c`: every target finite, a NaN into `GetTableArcCos` giving 0 and a counted fault
   (`hand_ik`).
@@ -557,7 +566,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   2x --stats --no-crack-fill` and matches `crack fill: off (the replay tool's --no-crack-fill)`
   and the `stats: crack fill off: 0 passes, 0 pixels filled` line.
 - `rd_crt_test.c`: the CRT filter's options and its shader (`rd_crt`, `rd_crt_fixed`).
-- `rd_debug_test.c`: `debug.c` on the host, recorded (`rd_debug`).
+- `rd_debug_test.c`: `debug.c` on the host, recorded (`rd_debug`); with the Game variants' bind
+  (`debug_VariableInit` hands `ico_variants_bind_debug` the five switches and `debug_MenuOpen`)
+  and the menu opened through that opener drawn on each of three ticks with no pad (title and bug
+  list), nothing while closed, Triangle closing it.
 - `rd_filter_test.c`: the model viewer's draw filter on synthetic keys (`rd_filter`).
 - `rd_fog_selftest_test.c` with `rd_fog_selftest.cmake`: the fog's self-test and probe; its log line
   matched for each path, MSAA counts, odd widths and [Full pixel](ARCHITECTURE.md#terms)
