@@ -51,10 +51,12 @@ if(ICO_RUN_TESTS)
     # disc, BESCES-50760ico) and save_jpn (the Japanese disc,
     # BISCPS-11003ico, a 0x1E8-byte product file) and save_kor (the Korean
     # disc, BISCPS-56001ico, the same 0x1E8 record) and save_cn (the Asian disc,
-    # BISCPS-55001ico, the same).  The North American, August 2001 and June
-    # 2001 discs (0x18C-byte product file, a different record) follow the
-    # merged mcard.c: save_test part B lays out that record
-    foreach(_slug pal jpn kor cn)
+    # BISCPS-55001ico, the same).  save_ntsc and save_aug6 (the North American
+    # disc and the August 2001 preview, both BASCUS-97113ico) and save_jun26 (the
+    # June 2001 demo, BISCUS-97113ico) have a 0x18C-byte product file of their
+    # own layout, which save_test part B lays out byte by byte, and game blocks
+    # of 25596 (20480 on the demo) bytes with no option words.
+    foreach(_slug pal jpn kor ntsc aug6 jun26 cn)
         if(_slug STREQUAL "pal")
             set(_name save)
         else()
