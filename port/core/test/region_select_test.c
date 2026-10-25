@@ -220,6 +220,9 @@ static void test_consistency(void)
         CHECK(r->pad_confirm != r->pad_back);
         CHECK(r->fixed_60hz == !r->has_50hz_row);
         CHECK(r->n_adpcm > r->stream_voice_last && r->gallery_title_theme <= r->stream_music_last);
+        /* every disc's DATA.DF holds STGSTAFF1.DF .. STGSTAFF3.DF but the June
+           2001 demo's (49 entries) */
+        CHECK(r->credits_staff_packs == !jun26);
     }
     CHECK(strcmp(ico_region_info_pal.key_prefix, "") == 0 &&
           strcmp(ico_region_info_pal.key_suffix, "") == 0);
@@ -322,6 +325,7 @@ static void test_jpn_values(void)
     NUM(credits_roll_ms, 151050);
     NUM(credits_entrance_exit, 216);
     NUM(credits_boy_label, 54);
+    NUM(credits_staff_packs, 1);
     NUM(n_adpcm, 105);
     NUM(n_sefile, 104);
     NUM(n_sedef, 1426);
@@ -455,6 +459,7 @@ static void test_kor_values(void)
     SAME(credits_roll_ms);
     SAME(credits_entrance_exit);
     SAME(credits_boy_label);
+    SAME(credits_staff_packs);
     SAME(n_adpcm);
     SAME(n_sefile);
     SAME(n_sedef);
@@ -558,6 +563,7 @@ static void test_cn_values(void)
     SAME(credits_roll_ms);
     SAME(credits_entrance_exit);
     SAME(credits_boy_label);
+    SAME(credits_staff_packs);
     SAME(n_adpcm);
     SAME(n_sefile);
     SAME(n_sedef);
