@@ -595,6 +595,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_EXPORT_TEXTURES_FAILED] = "テクスチャを書き出せませんでした",
     [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "フォルダー%sに\n書き込めませんでした",
     [UI_STR_LANG_KO] = "한국어",
+    [UI_STR_LANG_ZH] = "繁體中文",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "タッチ画面",
     [UI_STR_OPT_TOUCH_EDIT] = "配置の変更",
