@@ -533,7 +533,7 @@ int ico_gs_start_stage_used(void)
 int ico_gs_achievements_suspended(void)
 {
     /* the model viewer's stages are not play, nor the Extras credits'
-       playback of the ending; One hit per swing, Shades never dodge,
+       playback of the ending; One hit per swing, Shadows never dodge,
        Cutscene cameras ignored and the Debug menu (Game variants) are
        cheats like developer mode */
     return ico_gs_developer_mode() || ico_gs_start_stage_used() || ico_mv_active ||
