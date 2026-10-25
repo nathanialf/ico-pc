@@ -1346,7 +1346,28 @@ static BgaEntry boyBgaTable_jpn[] = {
     {-1},
 }; /* derived name */
 
-#define boyBgaTable PAL_JPNKORCN_JUN26(boyBgaTable_pal, boyBgaTable_jpn, boyBgaTable_jun26)
+/* PC port: the USA disc's and the August 2001 preview's rows (upstream's NTSC and AUG6 arms) */
+static BgaEntry boyBgaTable_ntsc[] = {
+    /* derived name */
+    {416, 0.0f, 7.0f, 1, 70, 1, 1, 1.0f},
+    {417, 0.0f, 0.0f, 0, 70, 0, 1, 1.0f},
+    {421, 0.0f, 0.0f, 0, 0, 0, 0, -1.0f},
+    {422, -10.0f, 23.0f, 1, 70, 1, 1, -1.0f},
+    {-1},
+}; /* derived name */
+
+static BgaEntry boyBgaTable_aug6[] = {
+    /* derived name */
+    {415, 0.0f, 7.0f, 1, 70, 1, 1, 1.0f},
+    {416, 0.0f, 0.0f, 0, 70, 0, 1, 1.0f},
+    {420, 0.0f, 0.0f, 0, 0, 0, 0, -1.0f},
+    {421, -10.0f, 23.0f, 1, 70, 1, 1, -1.0f},
+    {-1},
+}; /* derived name */
+
+#define boyBgaTable                                                                                \
+    PAL_JPNKORCN_NTSC_AUG6_JUN26(boyBgaTable_pal, boyBgaTable_jpn, boyBgaTable_ntsc,               \
+                                 boyBgaTable_aug6, boyBgaTable_jun26)
 
 /* PrivInsCam's initial value: subBoyCollision copies it whole into
    privInsCam. */
