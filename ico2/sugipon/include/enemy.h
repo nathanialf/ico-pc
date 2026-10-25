@@ -24,13 +24,13 @@ typedef struct {  /* field names derived */
    object it is drawn with, its life, the scale its model is drawn at, the
    dodge range, then the attribute word: the parameter row in bits 0-7, the
    fly type in bits 8-9 and the battle type in bits 10-11. */
-typedef struct {    /* field names derived */
-    int model;      /* 0x00, the model id, 0x610 for none */
-    int particle;   /* 0x04, the particle object, -1 for none */
-    float life;     /* 0x08 */
-    float float0C;  /* 0x0C */
-    float scale;    /* 0x10 */
-    float dodge;    /* 0x14 */
+typedef struct {   /* field names derived */
+    int model;     /* 0x00, the model id, 0x610 for none */
+    int particle;  /* 0x04, the particle object, -1 for none */
+    float life;    /* 0x08 */
+    float float0C; /* 0x0C */
+    float scale;   /* 0x10 */
+    float dodge;   /* 0x14 */
     int paraIndex : 8;
     unsigned int flyType : 2;
     unsigned int battleType : 2;
@@ -40,8 +40,26 @@ typedef struct {    /* field names derived */
 extern const EnemyDef enemyKind_pal[];
 extern const EnemyDef enemyKind_jpn[];
 extern const EnemyDef enemyKind_ntsc[];
-extern const EnemyDef enemyKind_aug6jun26[];
-#define enemyKind PAL_JPNKORCN_NTSC_AUG6JUN26(enemyKind_pal, enemyKind_jpn, enemyKind_ntsc, enemyKind_aug6jun26)
+extern const EnemyDef enemyKind_aug6[];
+extern const EnemyDef enemyKind_jun26[];
+
+#define enemyKind                                                                                  \
+    PAL_JPNKORCN_NTSC_AUG6_JUN26(enemyKind_pal, enemyKind_jpn, enemyKind_ntsc, enemyKind_aug6,     \
+                                 enemyKind_jun26)
+
+/* PC port: the rows of each table (enemyKind.c), and of the running disc's:
+   the Game variants' reader of a row (port/game/variants.c
+   ico_variant_enemy_def) never reads past them */
+extern const int enemyKindRows_pal;
+extern const int enemyKindRows_jpn;
+extern const int enemyKindRows_ntsc;
+extern const int enemyKindRows_aug6;
+extern const int enemyKindRows_jun26;
+
+#define enemyKindRows                                                                              \
+    PAL_JPNKORCN_NTSC_AUG6_JUN26(enemyKindRows_pal, enemyKindRows_jpn, enemyKindRows_ntsc,         \
+                                 enemyKindRows_aug6, enemyKindRows_jun26)
+
 extern const EnemyKindRange randomEnemyKind[];
 extern const int randomEnemyVariationKind[];
 int CanThisEnemyFly(struct GObj *self);
