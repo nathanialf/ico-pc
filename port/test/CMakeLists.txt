@@ -51,6 +51,14 @@ if(Python3_FOUND)
              COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/subset_font_ko.py" --check)
 endif()
 
+# font_subset_zh: the Chinese text's font (tools/subset_font_zh.py --check), the
+# same three checks for Noto Sans TC's subset: the Chinese table's and corpus'
+# characters outside Arimo's subset (but Hangul)
+if(Python3_FOUND)
+    add_test(NAME font_subset_zh
+             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/subset_font_zh.py" --check)
+endif()
+
 # content_table_chains: the Natural chains table
 # (port/render/rd_content_chain.c) against the disc's stage animations, and
 # every stage animation scanned for another chain let down by scaling
