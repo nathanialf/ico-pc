@@ -179,6 +179,8 @@ const IcoRegionInfo ico_region_info_kor = {
     .credits_roll_ms = 151050,
     .credits_entrance_exit = 216, /* exitData[216] leads to 58 (STAFF1) on the Korean ELF */
     .credits_boy_label = 54,      /* act-game.c ACTGame_SetActors_Debug, unchanged */
+    /* DATA.DF's directory (182 entries) holds STGSTAFF1.DF, STGSTAFF2.DF and STGSTAFF3.DF */
+    .credits_staff_packs = 1,
 
     /* sound: data_schema.kor.txt's counts are the Japanese (and PAL) ones,
        the tables equal to the Japanese ELF's; adpcmFile read by name on the
