@@ -1,4 +1,4 @@
-/* font_coverage_test.c: every character of the seven languages has a glyph
+/* font_coverage_test.c: every character of the eight languages has a glyph
  * in the port's faces.
  *
  * CPU only: font.c's cmap, no device.  Walks
@@ -18,9 +18,12 @@
  * Arimo is the first face (the menus' text is Arimo in the sheets' look),
  * Noto Sans JP's subset the second, for the characters Arimo has none for
  * (the Japanese table, the language names, the button marks), Noto Sans
- * KR's the third, for the Hangul neither has (the Korean table, 한국어);
- * the report lists the characters the three serve.  A Japanese character
- * is the second face's own glyph, a Hangul one the third's, not the
+ * KR's the third, for the Hangul neither has (the Korean table, 한국어),
+ * Noto Sans TC's the fourth, for the ideographs the others lack (the
+ * Chinese table, first of the faces after Arimo while the language is
+ * Chinese: ui__font_prefer_chinese); the report lists the characters the
+ * four serve.  A Japanese character is the second face's own glyph, a
+ * Hangul one the third's, a Chinese-only ideograph the fourth's, not the
  * fallback.
  *
  *   font_coverage_test CORPUS_DIR [BASE_ELF]
@@ -34,6 +37,7 @@
 #include "achievements.h"
 #include "ico_credits.h"
 #include "strings.h"
+#include "ui_internal.h" /* ui__font_prefer_chinese */
 
 /* credits.c's reads of the achievements (the roll lines need none) */
 int ico_ach_find(const char *id)
@@ -66,7 +70,7 @@ static int s_lang; /* the language the walk is in */
         }                                                                                          \
     } while (0)
 
-static const char *const kLangs[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko"};
+static const char *const kLangs[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh"};
 
 #define BMP_SEEN 0x10000
 static unsigned char s_seen[UI_LANG_COUNT][BMP_SEEN]; /* distinct code points a language draws */
@@ -244,9 +248,9 @@ static void putCp(char *out, size_t *n, size_t cap, uint32_t cp)
     }
 }
 
-/* the characters the seven languages draw (tables, the roll's port lines,
+/* the characters the eight languages draw (tables, the roll's port lines,
    corpus) that the fonts serve (Arimo, then Noto Sans JP's subset, then
-   Noto Sans KR's) */
+   Noto Sans KR's, then Noto Sans TC's) */
 static void reportFaces(void)
 {
     static char line[8192];
@@ -338,6 +342,34 @@ int main(int argc, char **argv)
                   (ko.w != q.w || ko.advance != q.advance) && ko.advance > 15.0f,
               "U+D55C at 20 px is its own glyph, a full em wide (%.1f)", (double)ko.advance);
         CHECK(!ui_font_has_glyph(0xD7A3), "U+D7A3, a syllable no table uses, is not in the subset");
+    }
+
+    /* the fourth font: an ideograph only the Chinese table uses (U+6B50, 歐
+       of 歐洲版; the Japanese table writes 欧, U+6B27) is its glyph, a full
+       em wide, with the Chinese face first or last; U+8FD4 (返, in both
+       tables) is drawn with either order, its glyph cached apart for each
+       (the same code point, two faces: ui__font_chinese_first) */
+    {
+        UiGlyph q, zh, back, backZh;
+        CHECK(ui_font_has_glyph(0x6B50) && ui_font_has_glyph(0x7E41) && ui_font_has_glyph(0x8FD4),
+              "the Chinese font's glyphs");
+        CHECK(ui_font_glyph('?', 20, &q) && ui_font_glyph(0x6B50, 20, &zh) &&
+                  (zh.w != q.w || zh.advance != q.advance) && zh.advance > 15.0f,
+              "U+6B50 at 20 px is its own glyph, a full em wide (%.1f)", (double)zh.advance);
+        CHECK(!ui__font_chinese_first(), "the Japanese face is first by default");
+        CHECK(ui_font_glyph(0x8FD4, 40, &back), "U+8FD4 at 40 px, Japanese face first");
+        ui__font_prefer_chinese(1);
+        CHECK(ui__font_chinese_first(), "the Chinese face first");
+        CHECK(ui_font_glyph(0x8FD4, 40, &backZh) && backZh.w > 0 && backZh.advance > 30.0f &&
+                  ui_font_glyph(0x6B50, 20, &zh) && zh.advance > 15.0f,
+              "U+8FD4 at 40 px, Chinese face first (%d x %d, advance %.1f)", backZh.w, backZh.h,
+              (double)backZh.advance);
+        ui__font_prefer_chinese(0);
+        CHECK(ui_font_glyph(0x8FD4, 40, &q) && q.x == back.x && q.y == back.y && q.w == back.w &&
+                  q.h == back.h && q.page == back.page,
+              "back to the Japanese face: the cached glyph is the same cell");
+        CHECK(!ui_font_has_glyph(0x0E01) && !ui_font_has_glyph(0xD7A3),
+              "Thai and an unused syllable are in no face");
     }
 
     int total = 0;
