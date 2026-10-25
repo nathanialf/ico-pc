@@ -19,7 +19,10 @@
  *
  * Only the game's directories are imported, each disc's (port/core
  * region.h mc_save_dir: BESCES-50760ico for the European disc,
- * BISCPS-11003ico for the Japanese one, BISCPS-56001ico for the Korean one;
+ * BISCPS-11003ico for the Japanese one, BISCPS-56001ico for the Korean one,
+ * BISCPS-55001ico for the Asian one, BASCUS-97113ico for the North American
+ * disc and the August 2001 preview (one directory, read as the first row
+ * that names it) and BISCUS-97113ico for the June 2001 demo;
  * a card may hold several); every other
  * entry is counted and named in the result. Every file is read before any
  * is written, and each is written to a dot-file copy moved over its name,
