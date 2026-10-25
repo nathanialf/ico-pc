@@ -829,12 +829,26 @@ const char *ico_disc_boots_text(void)
     size_t n = 0;
     int i;
 
-    text[0] = '\0';
+    int rows[ICO_REGION_COUNT], count = 0;
+
+    /* each boot file once (the North American disc and the August 2001
+       preview both boot SCUS_971.13) */
     for (i = 0; i < ICO_REGION_COUNT; i++) {
-        const char *sep = i == 0 ? "" : (i == ICO_REGION_COUNT - 1 ? " or " : ", ");
+        int k, seen = 0;
+
+        for (k = 0; k < count; k++) {
+            seen |= strcmp(ico_discs[rows[k]].boot_elf, ico_discs[i].boot_elf) == 0;
+        }
+        if (!seen) {
+            rows[count++] = i;
+        }
+    }
+    text[0] = '\0';
+    for (i = 0; i < count; i++) {
+        const char *sep = i == 0 ? "" : (i == count - 1 ? " or " : ", ");
 
         n += (size_t)snprintf(text + n, n < sizeof(text) ? sizeof(text) - n : 0, "%s%s", sep,
-                              ico_discs[i].boot_elf);
+                              ico_discs[rows[i]].boot_elf);
         if (n >= sizeof(text)) {
             text[sizeof(text) - 1] = '\0';
             break;
