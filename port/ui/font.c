@@ -46,13 +46,17 @@
    Noto Sans JP's subset for the characters Arimo has no glyph for (the
    Japanese table, the language names, the PlayStation button marks) and
    Noto Sans KR's for those neither has (the Korean table's Hangul, 한국어
-   in every table) */
+   in every table) and Noto Sans TC's for the rest (the Chinese table's
+   ideographs, 繁體中文 in every table; first of the three while the
+   language is Chinese, ui__font_prefer_chinese) */
 extern const unsigned char ui_font_ttf[];
 extern const unsigned int ui_font_ttf_size;
 extern const unsigned char ui_font_ja_ttf[];
 extern const unsigned int ui_font_ja_ttf_size;
 extern const unsigned char ui_font_ko_ttf[];
 extern const unsigned int ui_font_ko_ttf_size;
+extern const unsigned char ui_font_zh_ttf[];
+extern const unsigned int ui_font_zh_ttf_size;
 
 /* A size's pages are PAGE_MIN to PAGE_MAX texels wide, wider for big
    pixel sizes (an Enhanced 4K output rasterises the menu's 27 units at
@@ -108,7 +112,11 @@ static struct {
     float jaK;         /* its em scale over Arimo's: Arimo's units per one of its own */
     stbtt_fontinfo ko; /* the third font (hasKo) */
     int hasKo;
-    float koK;                               /* its em scale over Arimo's */
+    float koK;         /* its em scale over Arimo's */
+    stbtt_fontinfo zh; /* the fourth font (hasZh) */
+    int hasZh;
+    float zhK;    /* its em scale over Arimo's */
+    int preferZh; /* the port's language is Chinese: the fourth font before the second */
     int ascent, descent, lineGap, capHeight; /* font units (Arimo's: every line's metrics) */
     UiGsFrame frame;
     float scale;
@@ -210,8 +218,26 @@ bool ui_font_init(void)
     } else {
         fprintf(stderr, "ui: the embedded Korean font does not parse; Hangul drawn as '?'\n");
     }
+    off = ui_font_zh_ttf_size < 12 ? -1 : stbtt_GetFontOffsetForIndex(ui_font_zh_ttf, 0);
+    if (off >= 0 && stbtt_InitFont(&s_font.zh, ui_font_zh_ttf, off)) {
+        s_font.hasZh = 1;
+        s_font.zhK = stbtt_ScaleForMappingEmToPixels(&s_font.zh, 1.0f) /
+                     stbtt_ScaleForMappingEmToPixels(&s_font.info, 1.0f);
+    } else {
+        fprintf(stderr, "ui: the embedded Chinese font does not parse; Chinese drawn as '?'\n");
+    }
     s_font.inited = 1;
     return true;
+}
+
+void ui__font_prefer_chinese(int on)
+{
+    s_font.preferZh = on != 0;
+}
+
+int ui__font_chinese_first(void)
+{
+    return s_font.preferZh;
 }
 
 static void freeSize(SizeSet *z, int destroyTex)
@@ -508,38 +534,47 @@ static void noteMissing(uint32_t cp)
 
 /* A character's glyph: Arimo's, else the second font's (k its scale over
    Arimo's, so its metrics in Arimo's units are its own times k), else the
-   third's (Hangul), else Arimo's '?' (noted once) */
+   third's (Hangul), else the fourth's (the Chinese ideographs the second
+   lacks), else Arimo's '?' (noted once).  While the port's language is
+   Chinese the fourth comes before the second: the same ideograph is drawn
+   in its Traditional form, not the Japanese one. */
 typedef struct FontGlyph {
     const stbtt_fontinfo *info;
     int g;
     float k;
 } FontGlyph;
 
+static int fromFace(FontGlyph *f, const stbtt_fontinfo *face, int has, float k, uint32_t cp)
+{
+    if (!has) {
+        return 0;
+    }
+    const int g = stbtt_FindGlyphIndex(face, (int)cp);
+    if (g == 0) {
+        return 0;
+    }
+    f->info = face;
+    f->g = g;
+    f->k = k;
+    return 1;
+}
+
 static FontGlyph fontGlyph(uint32_t cp)
 {
     FontGlyph f = {&s_font.info, stbtt_FindGlyphIndex(&s_font.info, (int)cp), 1.0f};
-    if (f.g == 0 && cp != '?' && s_font.hasJa) {
-        const int g = stbtt_FindGlyphIndex(&s_font.ja, (int)cp);
-        if (g != 0) {
-            f.info = &s_font.ja;
-            f.g = g;
-            f.k = s_font.jaK;
-            return f;
-        }
+    if (f.g != 0 || cp == '?') {
+        return f;
     }
-    if (f.g == 0 && cp != '?' && s_font.hasKo) {
-        const int g = stbtt_FindGlyphIndex(&s_font.ko, (int)cp);
-        if (g != 0) {
-            f.info = &s_font.ko;
-            f.g = g;
-            f.k = s_font.koK;
-            return f;
-        }
+    if (s_font.preferZh && fromFace(&f, &s_font.zh, s_font.hasZh, s_font.zhK, cp)) {
+        return f;
     }
-    if (f.g == 0 && cp != '?') {
-        noteMissing(cp);
-        f.g = stbtt_FindGlyphIndex(&s_font.info, '?');
+    if (fromFace(&f, &s_font.ja, s_font.hasJa, s_font.jaK, cp) ||
+        fromFace(&f, &s_font.ko, s_font.hasKo, s_font.koK, cp) ||
+        fromFace(&f, &s_font.zh, s_font.hasZh, s_font.zhK, cp)) {
+        return f;
     }
+    noteMissing(cp);
+    f.g = stbtt_FindGlyphIndex(&s_font.info, '?');
     return f;
 }
 
@@ -563,12 +598,15 @@ static float kernUnits(uint32_t a, uint32_t b)
 
 static const UiGlyph *glyphIn(SizeSet *z, uint32_t cp)
 {
-    uint32_t h = (cp * 2654435761u) & (GLYPH_SLOTS - 1);
+    /* a slot is the code point and the face order's bit (the same
+       ideograph is another glyph in Chinese text, ui__font_prefer_chinese) */
+    const uint32_t key = cp | (s_font.preferZh ? 0x80000000u : 0u);
+    uint32_t h = (key * 2654435761u) & (GLYPH_SLOTS - 1);
     GlyphSlot *slot = NULL;
 
     for (int i = 0; i < GLYPH_SLOTS; i++) {
         GlyphSlot *s = &z->slots[(h + (uint32_t)i) & (GLYPH_SLOTS - 1)];
-        if (s->used && s->cp == cp) {
+        if (s->used && s->cp == key) {
             return &s->g;
         }
         if (!s->used) {
@@ -620,7 +658,7 @@ static const UiGlyph *glyphIn(SizeSet *z, uint32_t cp)
         out.h = hgt;
     }
     slot->used = 1;
-    slot->cp = cp;
+    slot->cp = key;
     slot->g = out;
     return &slot->g;
 }
@@ -660,7 +698,8 @@ bool ui_font_has_glyph(uint32_t cp)
 {
     return ui_font_init() && (stbtt_FindGlyphIndex(&s_font.info, (int)cp) != 0 ||
                               (s_font.hasJa && stbtt_FindGlyphIndex(&s_font.ja, (int)cp) != 0) ||
-                              (s_font.hasKo && stbtt_FindGlyphIndex(&s_font.ko, (int)cp) != 0));
+                              (s_font.hasKo && stbtt_FindGlyphIndex(&s_font.ko, (int)cp) != 0) ||
+                              (s_font.hasZh && stbtt_FindGlyphIndex(&s_font.zh, (int)cp) != 0));
 }
 
 const uint8_t *ui_font_page(int px, int page, int *w, int *h)
@@ -1240,8 +1279,8 @@ float ui__sheet_set_width(float k)
     return old;
 }
 
-/* The Japanese and Korean glyphs set proportionally (ui_internal.h
-   ui__sheet_set_kana_gap): below 0 off, else each Noto Sans JP or KR glyph with
+/* The Japanese, Korean and Chinese glyphs set proportionally (ui_internal.h
+   ui__sheet_set_kana_gap): below 0 off, else each Noto Sans JP, KR or TC glyph with
    an outline advances by its outline's width plus this many texels, its
    ink starting at the pen */
 static float s_kanaGap = -1.0f;
@@ -1259,7 +1298,8 @@ float ui__sheet_set_kana_gap(float gap)
 static float sheetAdvance(FontGlyph f, float sx, int scale, float *lead)
 {
     *lead = 0.0f;
-    if (s_kanaGap >= 0.0f && (f.info == &s_font.ja || f.info == &s_font.ko)) {
+    if (s_kanaGap >= 0.0f &&
+        (f.info == &s_font.ja || f.info == &s_font.ko || f.info == &s_font.zh)) {
         int x0, y0, x1, y1;
         if (stbtt_GetGlyphBox(f.info, f.g, &x0, &y0, &x1, &y1) && x1 > x0) {
             *lead = (float)x0 * f.k * sx;
