@@ -32,11 +32,14 @@ const IcoRegionInfo ico_region_info_jpn = {
     .has_50hz_row = 0,      /* NTSC only: no 50 Hz branches (docs/TARGETS.md) */
     .has_game_language = 0, /* kanbanBootMcCheck has no language step; jimaku.c
                                no per-language subtitles */
-    .ui_lang_default = 5,   /* UI_LANG_JA: the port's text Japanese, as the disc's */
-    .menu_sheet = 5,        /* UI_SHEET_JA: Tex_menu01's Japanese sheets */
-    .fixed_60hz = 1,        /* NTSC only: systemStatus starts 0, 60 Hz (a 30 Hz Main tick) */
-    .pad_confirm = 0x20,    /* Circle: targets/jpn/.../layout_action.c:148,2464 */
-    .pad_back = 0x40,       /* Cross: layout_action.c:150,2494,3066 */
+    /* has_hold_film_players: la_game_option: choiceItem_jpn, screenModeItem_jpn,
+       screenModeAnim_jpn (film_noise) */
+    .has_hold_film_players = 1,
+    .ui_lang_default = 5, /* UI_LANG_JA: the port's text Japanese, as the disc's */
+    .menu_sheet = 5,      /* UI_SHEET_JA: Tex_menu01's Japanese sheets */
+    .fixed_60hz = 1,      /* NTSC only: systemStatus starts 0, 60 Hz (a 30 Hz Main tick) */
+    .pad_confirm = 0x20,  /* Circle: targets/jpn/.../layout_action.c:148,2464 */
+    .pad_back = 0x40,     /* Cross: layout_action.c:150,2494,3066 */
 
     .reduction_crops_rows = 0, /* GsBase.c gsb_Reduction_jpn: SCISSOR rows 0 .. H/2-1 */
 

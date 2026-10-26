@@ -39,11 +39,14 @@ const IcoRegionInfo ico_region_info_kor = {
     .has_50hz_row = 0,      /* NTSC only: no 50 Hz branches (docs/TARGETS.md) */
     .has_game_language = 0, /* kanbanBootMcCheck has no language step; jimaku.c
                                no per-language subtitles */
-    .ui_lang_default = 6,   /* UI_LANG_KO: the port's text Korean, as the disc's */
-    .menu_sheet = 6,        /* UI_SHEET_KO: Tex_menu01's Korean sheets */
-    .fixed_60hz = 1,        /* NTSC only: systemStatus starts 0, 60 Hz (a 30 Hz Main tick) */
-    .pad_confirm = 0x20,    /* Circle: la_boot_confirm_memory_card under JPN||KOR */
-    .pad_back = 0x40,       /* Cross: layout_action.c:150,2494,3066 */
+    /* has_hold_film_players: la_game_option: choiceItem_kor, screenModeItem_kor,
+       screenModeAnim_jpn (film_noise) */
+    .has_hold_film_players = 1,
+    .ui_lang_default = 6, /* UI_LANG_KO: the port's text Korean, as the disc's */
+    .menu_sheet = 6,      /* UI_SHEET_KO: Tex_menu01's Korean sheets */
+    .fixed_60hz = 1,      /* NTSC only: systemStatus starts 0, 60 Hz (a 30 Hz Main tick) */
+    .pad_confirm = 0x20,  /* Circle: la_boot_confirm_memory_card under JPN||KOR */
+    .pad_back = 0x40,     /* Cross: layout_action.c:150,2494,3066 */
 
     .reduction_crops_rows = 0, /* GsBase.c gsb_Reduction_jpn (JPN||KOR): SCISSOR rows 0 .. H/2-1 */
 

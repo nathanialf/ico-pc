@@ -1,0 +1,138 @@
+/* settings_discs_test.c: the Options rows each disc has, over the shared
+ * fixture (settings_fixture.h), one disc per run: no argument the European
+ * disc, else the slug (ctests settings_discs, settings_discs_<slug> for the
+ * other six).  It holds the per-disc matrix of docs/port/GAME_FEATURES.md
+ * ("Options on each disc"): which rows a disc shows, from the title and
+ * from the pause menu, by the region table field that decides it.  The
+ * expectations are written out per disc (kExpect), not read from the
+ * table, so a change to a field is a change made here on purpose.  CPU
+ * only. */
+#include "settings_fixture.h"
+
+typedef struct {
+    const char *slug;
+    int hz50;       /* 50 Hz (Display, title only): has_50hz_row */
+    int language;   /* Game language (Main): has_game_language */
+    int circleBack; /* Circle goes back (Controls): pad_back is Triangle */
+    /* Hold type (Controls), Film effect and Players (Gameplay, the pause
+       menu, once cleared): has_hold_film_players */
+    int holdFilmPlayers;
+    int credits;   /* Extras > Credits (title): credits_staff_packs */
+    int debugMenu; /* Extras > Game variants > Debug menu (Developer mode): not jun26 */
+    int startFlag; /* the New Game screen's start flag: gflag_new_game */
+} Expect;
+
+static const Expect kExpect[] = {
+    {"pal", 1, 1, 1, 1, 1, 1, 382},  {"jpn", 0, 0, 0, 1, 1, 1, 382},
+    {"kor", 0, 0, 0, 1, 1, 1, 382},  {"ntsc", 0, 0, 1, 0, 1, 1, 349},
+    {"aug6", 0, 0, 1, 0, 1, 1, 348}, {"jun26", 0, 0, 1, 0, 0, 0, 333},
+    {"cn", 0, 0, 0, 1, 1, 1, 382},
+};
+
+static const Expect *expectFor(const char *slug)
+{
+    for (unsigned i = 0; i < sizeof(kExpect) / sizeof(kExpect[0]); i++) {
+        if (strcmp(kExpect[i].slug, slug) == 0) {
+            return &kExpect[i];
+        }
+    }
+    return NULL;
+}
+
+/* the rows every disc has, from both entries */
+static const UiSettingsOpt kEveryDisc[] = {
+    UI_OPT_MENU_LANGUAGE, UI_OPT_BRIGHTNESS,   UI_OPT_VIBRATION, UI_OPT_STICK_FIX, UI_OPT_YORDA,
+    UI_OPT_DOOR_FIX,      UI_OPT_SKIP_OPENING, UI_OPT_OUTPUT,    UI_OPT_DEVELOPER,
+};
+
+/* the rows the title shows and the pause menu does not (on every disc) */
+static void checkTitleRows(const Expect *e)
+{
+    useConfig("version = 1\n[ui]\nlanguage = \"en\"\n");
+    stage_no = 1;
+    gFlagGameClear = 1; /* the game rows' rule is the pause menu's, not the clear */
+    enterMainKeep(1);
+    CHECK(ui_settings_opt_shown(UI_OPT_VIDEO_MODE) == e->hz50, "%s title: 50 Hz %d, want %d",
+          e->slug, ui_settings_opt_shown(UI_OPT_VIDEO_MODE), e->hz50);
+    CHECK(ui_settings_opt_shown(UI_OPT_LANGUAGE) == e->language,
+          "%s title: Game language %d, want %d", e->slug, ui_settings_opt_shown(UI_OPT_LANGUAGE),
+          e->language);
+    CHECK(ui_settings_opt_shown(UI_OPT_CIRCLE_BACK) == e->circleBack,
+          "%s title: Circle goes back %d, want %d", e->slug,
+          ui_settings_opt_shown(UI_OPT_CIRCLE_BACK), e->circleBack);
+    CHECK(ui_settings_opt_shown(UI_OPT_HOLD_TYPE) == e->holdFilmPlayers,
+          "%s title: Hold type %d, want %d", e->slug, ui_settings_opt_shown(UI_OPT_HOLD_TYPE),
+          e->holdFilmPlayers);
+    /* the game's own rows are the pause menu's */
+    CHECK(!ui_settings_opt_shown(UI_OPT_FILM_EFFECT) && !ui_settings_opt_shown(UI_OPT_PLAYERS) &&
+              !ui_settings_opt_shown(UI_OPT_BRIGHTNESS),
+          "%s title: no Film effect, Players or Brightness", e->slug);
+    CHECK(ui_settings_opt_shown(UI_OPT_EXTRAS_MUSIC) && ui_settings_opt_shown(UI_OPT_EXTRAS_MODELS),
+          "%s title: Extras > Music and Models", e->slug);
+    CHECK(ui_settings_opt_shown(UI_OPT_MENU_LANGUAGE) && ui_settings_opt_shown(UI_OPT_STICK_FIX) &&
+              ui_settings_opt_shown(UI_OPT_SKIP_OPENING) && ui_settings_opt_shown(UI_OPT_YORDA),
+          "%s title: Menu language, stick fix, Skip the opening, Yorda", e->slug);
+    ico_opt_set_developer_mode(1);
+    CHECK(ui_settings_opt_shown(UI_OPT_VAR_DEBUG_MENU) == e->debugMenu,
+          "%s: the Debug menu row %d, want %d", e->slug,
+          ui_settings_opt_shown(UI_OPT_VAR_DEBUG_MENU), e->debugMenu);
+    ico_opt_set_developer_mode(0);
+    CHECK(!ui_settings_opt_shown(UI_OPT_VAR_DEBUG_MENU),
+          "%s: no Debug menu row without Developer mode", e->slug);
+}
+
+static void checkPauseRows(const Expect *e)
+{
+    useConfig("version = 1\n[ui]\nlanguage = \"en\"\n");
+    stage_no = 11;
+    gFlagGameClear = 1;
+    const int mainL = enterMainKeep(0);
+    for (unsigned i = 0; i < sizeof(kEveryDisc) / sizeof(kEveryDisc[0]); i++) {
+        CHECK(ui_settings_opt_shown(kEveryDisc[i]), "%s pause: row %d shown", e->slug,
+              (int)kEveryDisc[i]);
+    }
+    CHECK(!ui_settings_opt_shown(UI_OPT_VIDEO_MODE) &&
+              !ui_settings_opt_shown(UI_OPT_EXTRAS_MUSIC) &&
+              !ui_settings_opt_shown(UI_OPT_EXTRAS_CREDITS),
+          "%s pause: no 50 Hz, Music or Credits (the title's)", e->slug);
+    CHECK(ui_settings_opt_shown(UI_OPT_HOLD_TYPE) == e->holdFilmPlayers &&
+              ui_settings_opt_shown(UI_OPT_FILM_EFFECT) == e->holdFilmPlayers &&
+              ui_settings_opt_shown(UI_OPT_PLAYERS) == e->holdFilmPlayers,
+          "%s pause, cleared: Hold type %d, Film effect %d, Players %d, want %d", e->slug,
+          ui_settings_opt_shown(UI_OPT_HOLD_TYPE), ui_settings_opt_shown(UI_OPT_FILM_EFFECT),
+          ui_settings_opt_shown(UI_OPT_PLAYERS), e->holdFilmPlayers);
+    /* a row that is not shown is not reached: on the page as it opens, its
+       row is masked (layoutPage) */
+    openPage(mainL, -1, UI_PAGE_GAMEPLAY);
+    const int film = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT);
+    CHECK(film >= 0 && lt_ext_prop(film)->defaultMask == !e->holdFilmPlayers,
+          "%s pause: the Film effect row masked %d, want %d", e->slug,
+          film >= 0 ? lt_ext_prop(film)->defaultMask : -1, !e->holdFilmPlayers);
+    gFlagGameClear = 0;
+    CHECK(!ui_settings_opt_shown(UI_OPT_FILM_EFFECT) && !ui_settings_opt_shown(UI_OPT_PLAYERS),
+          "%s pause, not cleared: no Film effect or Players", e->slug);
+}
+
+int main(int argc, char **argv)
+{
+    snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
+    setEnv("LC_ALL", NULL);
+    setEnv("LANG", "en_GB.UTF-8");
+    const char *slug = argc > 2 ? argv[2] : "pal";
+    const Expect *e = expectFor(slug);
+    CHECK(e != NULL && ico_region_select(slug) == 0, "the %s disc", slug);
+    if (e != NULL) {
+        CHECK(ico_region_cur()->has_hold_film_players == e->holdFilmPlayers &&
+                  ico_region_cur()->has_50hz_row == e->hz50 &&
+                  ico_region_cur()->has_game_language == e->language &&
+                  ico_region_cur()->gflag_new_game == e->startFlag,
+              "%s: the region row's fields as the matrix says", slug);
+        checkTitleRows(e);
+        checkPauseRows(e);
+    }
+    gFlagGameClear = 0;
+    ico_opt_set_ui_language(-1);
+    CHECK(ico_region_select("pal") == 0, "the European disc again");
+    printf("settings_discs_test %s: %s\n", slug, failures ? "failed" : "ok");
+    return failures ? 1 : 0;
+}

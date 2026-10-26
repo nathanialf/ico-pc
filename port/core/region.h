@@ -86,6 +86,17 @@ typedef struct IcoRegionInfo {
     /* --- the game's options ------------------------------------------- */
     int has_50hz_row;      /* the game offers 50/60 Hz (the port's row too) */
     int has_game_language; /* the game picks a language (menus, subtitles) */
+    /* the game's Options screen has Hold type (A/B), Film effect and Players
+       (la_game_option's choiceItem and screenModeItem rows) and the game
+       reads them (optionControlType, optionScreenMode's film_noise
+       animations, girlControlMode): 1 on the European, Japanese, Korean and
+       Asian discs; 0 on the three 2001 discs, whose option screen has Sound
+       output and Vibration only (la_game_option_ntscaug6, _jun26), whose
+       hand is always the toggle (pad.trg & 8), whose stageTable has no
+       film_noise animation (reel_row -1) and whose Yorda brain does not give
+       way to a second pad (girl_act.c setNext): the Settings menu hides the
+       three rows there (settings.c optShown) */
+    int has_hold_film_players;
     /* the port's own text (port/ui): the language its Menu language row's
        Auto gives on this disc, a port/ui/strings.h UiLang (UI_LANG_JA 5,
        UI_LANG_KO 6, UI_LANG_ZH 7), or -1 for the game's own language (has_game_language),

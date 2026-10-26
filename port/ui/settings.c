@@ -2170,6 +2170,24 @@ static int optShown(int opt, int link)
         const int c = charsRowsFor();
         return c < 0 || ico_appearance_character(charPart(opt)) == c;
     }
+    if ((opt == UI_OPT_HOLD_TYPE || opt == UI_OPT_FILM_EFFECT || opt == UI_OPT_PLAYERS) &&
+        !ico_region_cur()->has_hold_film_players) {
+        /* PC port: the three 2001 discs' own Options screen has none of
+           these, and their game never reads them (region.h
+           has_hold_film_players): the hand is always the toggle, the stage
+           table has no film effect animations (a step would start another
+           animation at the European rows 67..70), and Yorda's brain does
+           not give way to a second pad */
+        static int hfpLogged;
+        if (!hfpLogged) {
+            hfpLogged = 1;
+            fprintf(stderr,
+                    "settings: no Hold type, Film effect or Players row on %s (the game has none: "
+                    "the hand is always the toggle)\n",
+                    ico_region_cur()->disc_id);
+        }
+        return 0;
+    }
     if (isGameOpt(opt) && onTitle()) {
         return 0;
     }

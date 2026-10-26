@@ -56,15 +56,18 @@ const IcoRegionInfo ico_region_info_aug6 = {
                                word 0 (no 50 Hz video mode) */
     .has_game_language = 0, /* kanbanBoot.c sets no NonLinearCameraMove (PAL's language
                                step and texFile's cameraMove are not in it) */
-    .ui_lang_default = 0,   /* UI_LANG_EN: the disc's text is English */
-    .menu_sheet = 0,        /* UI_LANG_EN: the disc's Tex_menu01 sheets are lettered in
+    /* has_hold_film_players: as the North American disc (la_game_option_ntscaug6,
+       _ACTCommonMailTest_aug6, reel_row -1) */
+    .has_hold_film_players = 0,
+    .ui_lang_default = 0, /* UI_LANG_EN: the disc's text is English */
+    .menu_sheet = 0,      /* UI_LANG_EN: the disc's Tex_menu01 sheets are lettered in
                                English; their own ink is not measured (menu_font.c
                                kSheetInk has no entry for this disc), so the European
                                English look is the one used */
-    .fixed_60hz = 1,        /* NTSC only: a 30 Hz Main tick */
-    .pad_confirm = 0x40,    /* Cross: layout_action.c la_vibe_select (pad[0].flags & 0x840,
+    .fixed_60hz = 1,      /* NTSC only: a 30 Hz Main tick */
+    .pad_confirm = 0x40,  /* Cross: layout_action.c la_vibe_select (pad[0].flags & 0x840,
                                Cross or Start), as PAL */
-    .pad_back = 0x10,       /* Triangle: la_vibe_select (pad[0].flags & 0x10) == 0, as PAL */
+    .pad_back = 0x10,     /* Triangle: la_vibe_select (pad[0].flags & 0x10) == 0, as PAL */
 
     .reduction_crops_rows = 0, /* GsBase.c gsb_Reduction: SCISSOR rows 0 .. H/2-1 (the
                                   European one crops 2 or 8), as the Japanese and North American discs */

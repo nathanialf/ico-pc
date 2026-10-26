@@ -56,15 +56,18 @@ const IcoRegionInfo ico_region_info_jun26 = {
     .has_game_language = 0, /* main.c takes the magazine menu's language from sceDemoStart
                                (demoDisc.c) and only prints it; main.c sets
                                NonLinearCameraMove 0: the game picks no language */
-    .ui_lang_default = 0,   /* UI_LANG_EN: the disc's text is English */
-    .menu_sheet = 0,        /* UI_LANG_EN: the disc's Tex_menu01 sheets (texFile 47..51)
+    /* has_hold_film_players: la_game_option_jun26: Sound output, Vibration; the hand always the
+       toggle (_ACTCommonMailTest_jun26); reel_row -1 */
+    .has_hold_film_players = 0,
+    .ui_lang_default = 0, /* UI_LANG_EN: the disc's text is English */
+    .menu_sheet = 0,      /* UI_LANG_EN: the disc's Tex_menu01 sheets (texFile 47..51)
                                are lettered in English; their own ink is not measured
                                (menu_font.c kSheetInk has no entry for this disc), so
                                the European English look is the one used */
-    .fixed_60hz = 1,        /* NTSC only: a 30 Hz Main tick */
-    .pad_confirm = 0x40,    /* Cross: layout_action.c la_vibe_select (pad[0].flags & 0x40)
+    .fixed_60hz = 1,      /* NTSC only: a 30 Hz Main tick */
+    .pad_confirm = 0x40,  /* Cross: layout_action.c la_vibe_select (pad[0].flags & 0x40)
                                and PSH_POSITIVE, as PAL */
-    .pad_back = 0x10,       /* Triangle: la_vibe_select's PSH_NEGATIVE (pad[0].flags &
+    .pad_back = 0x10,     /* Triangle: la_vibe_select's PSH_NEGATIVE (pad[0].flags &
                                0x10), as PAL */
 
     .reduction_crops_rows = 0, /* GsBase.c gsb_Reduction (the AUG6/JUN26 arm): SCISSOR rows
