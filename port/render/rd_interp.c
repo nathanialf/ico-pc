@@ -4243,7 +4243,19 @@ static bool morphDraw(RdCmd *o, const RdFrame *prev, const RdCmd *pc, const RdFr
  *   shadow colour for all the volumes), so it has no alpha to fade and a
  *   partial volume would leave the count unbalanced: the switch is the rule
  *   blendPrisms already applies to a prism of one tick only.
-
+ *
+ * Before the fade, a fading screen prim of cur only is paired with one of
+ * prev only that is the same draw under another key (pairSame): the same
+ * list, the same command but for its key and payload offset, every vertex
+ * the same in every byte (x, y, z, STQ, RGBA) and the same state block at
+ * the draw (stateDiff has nothing to emit either way: texture, blend,
+ * tests, scissor).  cur's is drawn whole and prev's is not drawn.  The
+ * game redraws such prims under a new key when only their owner changed:
+ * the load screen's black bars (layout_texture.c, one pair of 640-wide
+ * sprites per layout, keyed by the layout's row) at each change of layout.
+ * Faded, the two identical opaque bars covered 1 - t(1 - t) of the
+ * picture beneath, 0.75 at t = 0.5, and it showed through for a present or
+ * two (issue 139).  Prims that do not pair fade as before.
  *
  * A draw of prev only is inserted into s_out's list after the match of the
  * keyed draw before it in prev's list (else before the match of the one
@@ -4299,6 +4311,25 @@ static uint32_t s_umCmdsCap;
  * prev's not placed */
 static uint32_t s_umFadeIn, s_umFadeOut, s_umHalfIn, s_umHalfOut, s_umHeld;
 
+/* this present: fading screen prims of one tick each paired as the same
+ * draw (pairSame), cur's drawn whole and prev's dropped; counted once a
+ * pair */
+static uint32_t s_umPaired;
+
+/* pairSame's marks (s_umCur's, then s_umIns's) and its hash table */
+typedef struct UmSlot {
+    uint64_t h;  /* umKey of the draw */
+    uint32_t at; /* the s_umIns index + 1, 0: empty */
+} UmSlot;
+
+static uint8_t *s_umPair;
+
+static uint32_t s_umPairCap;
+
+static UmSlot *s_umSlots;
+
+static uint32_t s_umSlotsCap;
+
 /* this present: VU draws of prev alone drawn (prevAlone), and those that
  * could not be (not placed, state not reachable, block not re-based) */
 static uint32_t s_umPrevKept, s_umPrevHeld;
@@ -4318,6 +4349,11 @@ static void umFree(void)
     free(s_umCmds);
     free(s_umWant);
     free(s_umVu);
+    free(s_umPair);
+    free(s_umSlots);
+    s_umPair = NULL;
+    s_umSlots = NULL;
+    s_umPairCap = s_umSlotsCap = 0;
     s_umVu = NULL;
     s_umVuCap = 0;
     s_umWant = NULL;
@@ -4853,10 +4889,129 @@ static bool rebasePrev(float (*m)[4], const RdCmd *pc, uint32_t *ticks)
                      s_cam.vp, vuView(pc));
 }
 
+/* FNV-1a over n bytes, from h */
+static uint64_t umHashBytes(uint64_t h, const void *p, size_t n)
+{
+    const uint8_t *b = p;
+    for (size_t i = 0; i < n; i++) {
+        h = (h ^ b[i]) * 0x100000001B3ull;
+    }
+    return h;
+}
+
+/* a screen draw's command without its key and payload offset: the bytes
+ * of it pairSame compares */
+static RdCmd umBare(const RdCmd *c)
+{
+    RdCmd b = *c;
+    b.keyLo = b.keyHi = 0;
+    b.u[0] = 0;
+    return b;
+}
+
+/* the vertices of screen draw c of f, NULL when it has none or they are
+ * out of the payload */
+static const RdScreenVtx *umVerts(const RdFrame *f, const RdCmd *c)
+{
+    if (c->type != RDC_SCREEN || c->u[1] == 0 ||
+        c->u[1] > UINT32_MAX / (uint32_t)sizeof(RdScreenVtx)) {
+        return NULL;
+    }
+    return payloadAt(f, c->u[0], c->u[1] * (uint32_t)sizeof(RdScreenVtx));
+}
+
+static uint64_t umKey(uint32_t list, const RdCmd *c, const RdScreenVtx *v)
+{
+    const RdCmd b = umBare(c);
+    uint64_t h = umHashBytes(0xCBF29CE484222325ull, &list, sizeof(list));
+    h = umHashBytes(h, &b, sizeof(b));
+    return umHashBytes(h, v, (size_t)c->u[1] * sizeof(RdScreenVtx));
+}
+
+/* whether a and b are the same state: stateDiff has nothing to emit from
+ * one to the other, either way */
+static bool sameState(const RdStateBlock *a, const RdStateBlock *b)
+{
+    RdCmd tmp[RD_STATE_DIFF_MAX];
+    uint32_t n0 = 0, n1 = 0;
+    return stateDiff(a, b, tmp, &n0) && n0 == 0 && stateDiff(b, a, tmp, &n1) && n1 == 0;
+}
+
+/* The fading screen prims of cur only (s_umCur, cur's state at each in
+ * s_umSt) paired with those of prev only (s_umIns, prev's state at each in
+ * want) that are the same draw under another key (see above): marks
+ * pairCur[i] and pairIns[j] of each pair, each draw in one pair at most.
+ * A hash of (list, command, vertices) over prev's, then one probe per
+ * cur's: O(n). */
+static void pairSame(const RdFrame *prev, const RdFrame *cur, const RdStateBlock *want,
+                     uint8_t *pairCur, uint8_t *pairIns)
+{
+    uint32_t cand = 0;
+    for (uint32_t j = 0; j < s_umInsN; j++) {
+        const RdCmd *pc = &prev->lists[s_umIns[j].list].cmds[s_nodes[s_umIns[j].node].index];
+        cand += pc->type == RDC_SCREEN && alphaFades(&want[j]);
+    }
+    if (cand == 0 || cand > UINT32_MAX / 4u) {
+        return;
+    }
+    uint32_t size = 16;
+    while (size < 2u * cand) {
+        size <<= 1;
+    }
+    if (!growTo((void **)&s_umSlots, &s_umSlotsCap, size, sizeof(UmSlot))) {
+        return; /* out of memory: they fade */
+    }
+    memset(s_umSlots, 0, (size_t)size * sizeof(UmSlot));
+    for (uint32_t j = 0; j < s_umInsN; j++) {
+        const RdCmd *pc = &prev->lists[s_umIns[j].list].cmds[s_nodes[s_umIns[j].node].index];
+        const RdScreenVtx *v = umVerts(prev, pc);
+        if (!v || !alphaFades(&want[j])) {
+            continue;
+        }
+        const uint64_t h = umKey(s_umIns[j].list, pc, v);
+        uint32_t k = (uint32_t)h & (size - 1u);
+        while (s_umSlots[k].at != 0) {
+            k = (k + 1u) & (size - 1u);
+        }
+        s_umSlots[k].h = h;
+        s_umSlots[k].at = j + 1u;
+    }
+    for (uint32_t i = 0; i < s_umCurN; i++) {
+        const uint32_t l = s_umCur[i].list;
+        if (s_umCur[i].index >= cur->lists[l].count) {
+            continue;
+        }
+        const RdCmd *cc = &cur->lists[l].cmds[s_umCur[i].index];
+        const RdScreenVtx *cv = umVerts(cur, cc);
+        if (!cv || !alphaFades(&s_umSt[i])) {
+            continue;
+        }
+        const uint64_t h = umKey(l, cc, cv);
+        const RdCmd cb = umBare(cc);
+        for (uint32_t k = (uint32_t)h & (size - 1u); s_umSlots[k].at != 0;
+             k = (k + 1u) & (size - 1u)) {
+            const uint32_t j = s_umSlots[k].at - 1u;
+            if (s_umSlots[k].h != h || pairIns[j] || s_umIns[j].list != l) {
+                continue;
+            }
+            const RdCmd *pc = &prev->lists[l].cmds[s_nodes[s_umIns[j].node].index];
+            const RdCmd pb = umBare(pc);
+            const RdScreenVtx *pv = umVerts(prev, pc);
+            if (pv && memcmp(&pb, &cb, sizeof(cb)) == 0 &&
+                memcmp(pv, cv, (size_t)cc->u[1] * sizeof(RdScreenVtx)) == 0 &&
+                sameState(&s_umSt[i], &want[j])) {
+                pairCur[i] = 1;
+                pairIns[j] = 1;
+                break;
+            }
+        }
+    }
+}
+
 /* the unmatched screen prims and shadow volumes at t (see above), and the
  * VU draws of prev alone (prevAlone); after the blends and the morph pass,
  * which keep command indices */
-static void unmatchedPass(const RdFrame *prev, float t)
+static void unmatchedPass(const RdFrame *prev, const RdFrame *cur, float t)
 {
     s_umInsN = 0;
     /* prev's unplaced draws and their anchors: s_nodes is in list order */
@@ -4956,10 +5111,21 @@ static void unmatchedPass(const RdFrame *prev, float t)
     if (s_umInsN) {
         statesAt(prev, s_umQ, s_umInsN, s_umWant);
     }
+    /* the same draw under another key in each tick: cur's whole, prev's
+     * dropped (pairSame) */
+    uint8_t *pairCur = NULL, *pairIns = NULL;
+    if (s_umCurN && s_umInsN && growTo((void **)&s_umPair, &s_umPairCap, s_umCurN + s_umInsN, 1)) {
+        memset(s_umPair, 0, (size_t)s_umCurN + s_umInsN);
+        pairCur = s_umPair;
+        pairIns = s_umPair + s_umCurN;
+        pairSame(prev, cur, want, pairCur, pairIns);
+    }
     /* cur's unmatched draws: faded in, or from half way */
     for (uint32_t i = 0; i < s_umCurN; i++) {
         RdCmd *c = &s_out.lists[s_umCur[i].list].cmds[s_umCur[i].index];
-        if (c->type == RDC_SCREEN && alphaFades(&s_umSt[i])) {
+        if (pairCur && pairCur[i]) {
+            s_umPaired++; /* whole */
+        } else if (c->type == RDC_SCREEN && alphaFades(&s_umSt[i])) {
             RdScreenVtx *v = (RdScreenVtx *)(void *)outPayload(c);
             if (v) {
                 scaleAlpha(v, c->u[1], t);
@@ -4980,6 +5146,9 @@ static void unmatchedPass(const RdFrame *prev, float t)
     uint32_t keep = 0;
     for (uint32_t i = 0; i < s_umInsN; i++) {
         UmIns in = s_umIns[i];
+        if (pairIns && pairIns[i]) {
+            continue; /* cur's is drawn whole */
+        }
         const RdCmd *pc = &prev->lists[in.list].cmds[s_nodes[in.node].index];
         in.want = want[i];
         in.have = have[i];
@@ -5512,6 +5681,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     s_doneCount = 0;
     s_umCurN = 0;
     s_umFadeIn = s_umFadeOut = s_umHalfIn = s_umHalfOut = s_umHeld = 0;
+    s_umPaired = 0;
     s_umPrevKept = s_umPrevHeld = 0;
     s_lightRot = 0;
     s_turnFull = 0;
@@ -5690,11 +5860,12 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
         }
     }
     if (blend) {
-        unmatchedPass(prev, t); /* inserts commands, so after the passes above */
+        unmatchedPass(prev, cur, t); /* inserts commands, so after the passes above */
     }
     st.turnFull = s_turnFull;
     st.prevKept = s_umPrevKept;
     st.prevHeld = s_umPrevHeld;
+    st.screenPaired = s_umPaired;
     st.rebased = (uint32_t)s_rebased;
     st.rebasedCur = (uint32_t)s_rebasedCur;
     st.lightPaired = (uint32_t)s_lightPair;
@@ -5744,6 +5915,7 @@ static struct {
      * switched at half way, cur's and prev's; prev's not placed), lit draws
      * whose light matrix turned with the model */
     uint64_t fadeIn, fadeOut, halfIn, halfOut, held, lightRot;
+    uint64_t screenPaired; /* of them, pairs of one draw under two keys (pairSame) */
     /* lit draws whose previous lights were re-paired (pairLights), draws of
      * a key drawn several times paired by their place (placeSlot), grids
      * whose screen-space STs blended (s_gridScreenSt) and those pool.c's
@@ -5826,6 +5998,7 @@ static void presentLog(void)
     s_pres.halfIn += s_umHalfIn;
     s_pres.halfOut += s_umHalfOut;
     s_pres.held += s_umHeld;
+    s_pres.screenPaired += st->screenPaired;
     s_pres.lightRot += (uint64_t)s_lightRot;
     s_pres.lightPaired += st->lightPaired;
     s_pres.placed += st->placed;
@@ -5879,12 +6052,14 @@ static void presentLog(void)
     /* a third line: the unmatched draws and the scratch meshes */
     rd__log("interp: unmatched screen prims and shadow volumes: %llu faded in, %llu faded out, "
             "%llu of the tick drawn from half way, %llu of the tick before drawn until half way, "
-            "%llu of the tick before not placed; %llu lit draws whose lights turned with them; "
+            "%llu of the tick before not placed, %llu identical screen prims paired across a "
+            "layout change (drawn whole); %llu lit draws whose lights turned with them; "
             "at most %u of %u scratch meshes in a present (%llu bytes)",
             (unsigned long long)s_pres.fadeIn, (unsigned long long)s_pres.fadeOut,
             (unsigned long long)s_pres.halfIn, (unsigned long long)s_pres.halfOut,
-            (unsigned long long)s_pres.held, (unsigned long long)s_pres.lightRot, s_pres.scratchMax,
-            RD_INTERP_SCRATCH, (unsigned long long)s_pres.scratchBytesMax);
+            (unsigned long long)s_pres.held, (unsigned long long)s_pres.screenPaired,
+            (unsigned long long)s_pres.lightRot, s_pres.scratchMax, RD_INTERP_SCRATCH,
+            (unsigned long long)s_pres.scratchBytesMax);
     /* a fourth line: the lights' slots, the same-key instances, the pool's
      * screen-space STs, the ripples' shifted STs */
     rd__log("interp: %llu lit draws whose previous lights were re-paired by direction; %llu draws "
