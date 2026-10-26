@@ -59,7 +59,8 @@ static void pxToGrid(const RdOverlayCtx *ctx, float px, float py, float *gx, flo
 
 void ui_fps_draw_overlay(const RdOverlayCtx *ctx)
 {
-    static const uint8_t kColour[4] = {150, 255, 130, 235};
+    static const uint8_t kColour[4] = {
+        255, 255, 255, 235}; /* the overlay's own light text, not a colour of its own */
     char text[24];
     const int n = fps_value(&s_fps);
 
