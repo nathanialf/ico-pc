@@ -23,9 +23,11 @@
  *                  sample counts, ops and layouts.  The compatibility class
  *                  of a pipeline or a framebuffer (formats and samples
  *                  only) is a render pass of the same cache with fixed ops
- *                  and layouts (vkr_renderpass_compat).  Never evicted:
- *                  when the cache is full a pass is made, used and its
- *                  destroy deferred (VKR_GARBAGE_RENDERPASS), logged once.
+ *                  and layouts (vkr_renderpass_compat).  Never evicted and
+ *                  never destroyed before the device goes: an asynchronous
+ *                  pipeline compile may hold a pass of any age.  Past
+ *                  VKR_RP_CACHE entries the table doubles on the heap
+ *                  (logged once).
  *   framebuffers   VKR_FB_CACHE entries, keyed by the compatible render
  *                  pass, the views and the size.  An entry whose view is
  *                  destroyed goes with it (vkr_framebuffer_forget_view:
@@ -37,6 +39,7 @@
  * RHI's one thread); a compile thread only reads the immutable handle
  * vkr_pipe_prepare put in its create info. */
 #include "vk_internal.h"
+#include <stdlib.h>
 #include <string.h>
 
 #define VKR_H(x) ((uint64_t)(x))
@@ -71,7 +74,9 @@ typedef struct VkrFbEntry {
     uint64_t lastUse;
 } VkrFbEntry;
 
-static VkrRpEntry s_rp[VKR_RP_CACHE];
+static VkrRpEntry s_rpStatic[VKR_RP_CACHE];
+static VkrRpEntry *s_rp = s_rpStatic; /* s_rpStatic, then the heap once it is full */
+static uint32_t s_rpCap = VKR_RP_CACHE;
 static uint32_t s_rpCount;
 static VkrFbEntry s_fb[VKR_FB_CACHE];
 static uint32_t s_fbCount;
@@ -128,20 +133,29 @@ static VkRenderPass vkr_rp_lookup(const VkrRpKey *k)
     if (!rp) {
         return VK_NULL_HANDLE;
     }
-    if (s_rpCount < VKR_RP_CACHE) {
-        s_rp[s_rpCount].key = *k;
-        s_rp[s_rpCount].pass = rp;
-        s_rpCount++;
-    } else {
-        /* used by this frame's commands or pipeline creations only: gone
-         * when the frame slot comes round again */
+    if (s_rpCount == s_rpCap) {
+        /* a compatible pass may be handed to an asynchronous pipeline compile,
+         * so no pass is ever destroyed before the device: the table grows */
         if (!s_rpFullLogged) {
             s_rpFullLogged = true;
-            VKR_LOG("render pass cache full (%u): further render passes are made for one use",
-                    VKR_RP_CACHE);
+            VKR_LOG("render pass cache full (%u): the table grows, passes are kept", VKR_RP_CACHE);
         }
-        vkr_defer(VKR_GARBAGE_RENDERPASS, VKR_H(rp));
+        VkrRpEntry *grown = malloc((size_t)s_rpCap * 2u * sizeof(*grown));
+        if (!grown) {
+            /* out of memory: the old one-use rule, the frame's commands only */
+            vkr_defer(VKR_GARBAGE_RENDERPASS, VKR_H(rp));
+            return rp;
+        }
+        memcpy(grown, s_rp, (size_t)s_rpCount * sizeof(*grown));
+        if (s_rp != s_rpStatic) {
+            free(s_rp);
+        }
+        s_rp = grown;
+        s_rpCap *= 2u;
     }
+    s_rp[s_rpCount].key = *k;
+    s_rp[s_rpCount].pass = rp;
+    s_rpCount++;
     return rp;
 }
 
@@ -304,6 +318,11 @@ void vkr_renderpass_shutdown(void)
         vkDestroyRenderPass(g_vkr.device, s_rp[i].pass, NULL);
     }
     s_fbCount = s_rpCount = 0;
+    if (s_rp != s_rpStatic) {
+        free(s_rp);
+    }
+    s_rp = s_rpStatic;
+    s_rpCap = VKR_RP_CACHE;
     s_fbClock = 0;
     s_rpFullLogged = s_fbFullLogged = s_firstLogged = false;
 }
