@@ -1205,6 +1205,27 @@ are in a temporary folder named on the last line. `--backend NAME` also works on
 `gate-a`. The dumps are machine-local and never committed, so this is a local command; CI has no
 ctest for it.
 
+## The render suite on a Vulkan 1.1 driver
+
+`port/render/CMakeLists.txt` (the `VK11` block) registers render tests again under
+`ICO_VK_FAKE_API` (issue 145; the profiles in [RHI.md](RHI.md#vulkan), variable table), each in
+its own folder with the Vulkan run's expectations byte for byte, exit 77 a skip, and the label
+`vk11` besides `render`:
+
+- `ICO_VK_FAKE_API=1.1` (a stock 1.1 driver: the fence ring, `VkRenderPass` objects, no local
+  read, no driver properties, no image format list), folder `<build>/port/render/vk11/`:
+  `rd_pixel_vk11`, `rd_present_vk11`, `rd_crt_vk11`, `rd_debug_vk11`, `rd_raw_vk11`,
+  `rd_fog_vk11`, `rd_shadow_vk11`, `rd_interp_vk11`, `rd_msaa_vk11`, `rd_perf_vk11` (its pass and
+  barrier counts are `rd_perf`'s: the pass path changes no count) and `rd_mesh_vk11.1of4` to
+  `rd_mesh_vk11.4of4` (the disc's models; 77 without the disc image);
+- `ICO_VK_FAKE_API=1.1ext` (a 1.1 driver with the extensions: the KHR timeline semaphore and
+  dynamic rendering), folder `vk11ext/`: `rd_pixel_vk11ext`, `rd_present_vk11ext`.
+
+With `port/rhi`'s `rhi_vk_vk11` and `rhi_vk_swapchain_vk11` (the RHI cells and the window path,
+swapchain recreation included, on the fence ring and the `VkRenderPass` path under validation) they
+are `ctest -j1 -L vk11`. The OpenGL twins leave them out (a Vulkan fake). The real 1.1 loader and
+driver are not covered here: lavapipe is a 1.3 driver held to 1.1 by the switch.
+
 ## Tests that need the disc
 
 These cache variables point the tests at the player's files ([../BUILDING.md](../BUILDING.md#tests)
