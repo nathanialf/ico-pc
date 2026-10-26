@@ -119,13 +119,13 @@ static void testBuild(void)
         UI_STR_OPT_TOUCH_MODE, UI_STR_OPT_TOUCH_SIZE,  UI_STR_OPT_TOUCH_OPACITY,
         UI_STR_OPT_TOUCH_EDIT, UI_STR_OPT_TOUCH_SNAP,  UI_STR_OPT_TOUCH_GRID,
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
-    static const int gameOpts[] = {UI_OPT_YORDA,          UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,
-                                   UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING, UI_OPT_FILM_EFFECT,
-                                   UI_OPT_PLAYERS,        UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA,        UI_STR_OPT_STICK_FIX,
-                                   UI_STR_OPT_DOOR_FIX,     UI_STR_OPT_NATURAL_CHAINS,
-                                   UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS,      UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA,       UI_OPT_PIT_TIME,       UI_OPT_STICK_FIX,
+                                   UI_OPT_DOOR_FIX,    UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING,
+                                   UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,        UI_OPT_BACK};
+    static const int gameStrs[] = {
+        UI_STR_OPT_YORDA,       UI_STR_OPT_PIT_TIME,       UI_STR_OPT_STICK_FIX,
+        UI_STR_OPT_DOOR_FIX,    UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_SKIP_OPENING,
+        UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,        UI_STR_BACK};
     static const int listOpts[8] = {UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST,
                                     UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST};
     static const int listStrs[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -185,7 +185,7 @@ static void testBuild(void)
                   lt_ext_prop(cl[12])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
               "Touch screen opens its page");
     }
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 8), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 9), "gameplay rows");
     /* the pop-ups switch is an item of the list (first, before the achievements), not a row of its own */
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
     CHECK(labelsAre(UI_PAGE_REMAP, listOpts, listStrs, 8), "remap slots");
@@ -1763,6 +1763,29 @@ static void testValues(void)
           "stick fix on");
     ui_settings_step(UI_OPT_YORDA, 1);
     CHECK(ico_opt_yorda_safe() == 1, "yorda_safe on");
+    /* Time to rescue Yorda: Original, then Longer, Double, Triple, Half, Original around */
+    {
+        static const char *const kWord[5] = {"half", "original", "longer", "double", "triple"};
+        static const char *const kText[5] = {"Half", "Original", "Longer", "Double", "Triple"};
+        static const float kFactor[5] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f};
+        int k;
+
+        CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PIT_TIME) ==
+                  ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_YORDA) + 1,
+              "the Time to rescue Yorda row follows Yorda's");
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), "Original") == 0, "pit time default");
+        for (k = 2; k < 8; k++) {
+            ui_settings_step(UI_OPT_PIT_TIME, 1);
+            CHECK(ico_opt_pit_time() == k % 5 && ico_opt_pit_time_factor() == kFactor[k % 5] &&
+                      strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), kText[k % 5]) == 0 &&
+                      strcmp(ico_config_get_string("gameplay.pit_time", ""), kWord[k % 5]) == 0,
+                  "pit time step %d", k);
+        }
+        ui_settings_step(UI_OPT_PIT_TIME, -1);
+        CHECK(ico_opt_pit_time() == ICO_PIT_HALF, "pit time steps back");
+        ui_settings_step(UI_OPT_PIT_TIME, 1);
+        CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL, "pit time back to Original");
+    }
     ui_settings_step(UI_OPT_DEVELOPER, 1);
     CHECK(ico_opt_developer_mode() == 1, "developer mode on");
     ui_settings_step(UI_OPT_MOUSE_SENS, 1);
