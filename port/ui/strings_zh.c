@@ -37,6 +37,13 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_STICK_FIX] = "類比搖桿修正",
     [UI_STR_OPT_YORDA] = "影子不會抓走 Yorda",
     [UI_STR_OPT_YORDA_NOTE] = "適合想輕鬆遊玩的玩家。部分劇情場景仍會出現被抓走的畫面。",
+    [UI_STR_OPT_PIT_TIME] = "救出 Yorda 的時間",
+    [UI_STR_OPT_PIT_TIME_NOTE] =
+        "影子帶走 Yorda 所需的時間。使用上方的 Yorda 選項，影子就完全抓不走她。",
+    [UI_STR_VAL_PIT_HALF] = "一半",
+    [UI_STR_VAL_PIT_LONGER] = "稍長",
+    [UI_STR_VAL_PIT_DOUBLE] = "兩倍",
+    [UI_STR_VAL_PIT_TRIPLE] = "三倍",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",
