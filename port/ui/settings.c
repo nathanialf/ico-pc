@@ -215,6 +215,12 @@ typedef struct Page {
     int isList;
     UiList list;
     int version; /* the Main page's version row, -1: none (ui_settings_set_version) */
+    /* the window (layoutPage): the shown row in its first slot (an index
+       into the frame's shown rows), and the marks above and below it (-1:
+       the page's rows always fit) */
+    int offset;
+    int markUp;
+    int markDown;
 } Page;
 
 static Page s_pages[UI_PAGE_COUNT];
@@ -3162,127 +3168,48 @@ static void buildGalleryBar(void)
     ui_hint_build(&s_galHint, GAL_HINT_Y, NOTE_SIZE, ui_hint_gallery, UI_HINT_GAL_COUNT);
 }
 
-/* A page's first row and pitch (field lines) for n rows shown.  Every page
-   keeps Back's box inside the 226 lines and above the notes:
-     Display      from 36, 13 apart (at most twelve rows shown: Back at
-                  179, its box to 215; Video mode and Model pack are the
-                  title's)
-     Characters   from 40, 13 apart (twelve rows: Back at 183, its box to
-                  219); inside the model viewer CV_ROW_Y0 and CV_ROW_PITCH
-     Main         from 40: up to 8 rows 19 apart, 9 rows 17, 10 rows 15,
-                  11 rows 14, 12 rows 13, 13 rows 12 (Back at 184, its
-                  box to 224), 14 rows 11 (Back at 183, its box to 223),
-                  15 rows 10 (Back at 180, its box to 220: the Disc row
-                  with Language, Graphics driver and the developer rows)
-     Controls     from 40, up to 9 rows 18 apart, 10 rows 16 (Back at 184, its
-                  box to 220), 11 or 12 rows 13 (Back at 170 or 183, its
-                  box to 206 or 219); 13 to 15 from
-                  30, 11 apart (Back at 184, its box to 220: fourteen,
-                  the pause menu's with the mouse rows and Touch screen,
-                  Back at 173); 16 rows 10 apart (Back at 180, its box to
-                  216; no entry shows as many now)
-     Touch screen from 40, 18 apart (nine rows: Back at 184, its box to 220)
-     Effects      from 40, 18 apart, ten rows 16 (Back at 184, its box to 220);
-                  eleven or twelve rows 13 (twelve: Back at 183); thirteen
-                  (the title's) from 34, 13 apart (Back at 190, its box to
-                  226); fourteen (the pause menu's, with Brightness) from
-                  30, 12 apart (Back at 186, its box to 222)
-     the others   from 40, 18 apart */
-static int pagePitch(int page, int n, int *y0)
+/* The window (settings.h UI_SETTINGS_WIN_*): every Options page's rows
+   from WIN_Y0, WIN_PITCH field lines apart, in WIN_SLOTS slots, Back pinned
+   in the last; the rows past the other slots scroll (layoutPage,
+   scrollMove).  WIN_Y0 36, WIN_PITCH 17 and ten slots put Back at 189, its
+   box to 225, above the 226 lines; the notes (NOTE_Y 196) show only for
+   the cursor's row. */
+#define WIN_Y0 UI_SETTINGS_WIN_Y0
+#define WIN_PITCH UI_SETTINGS_WIN_PITCH
+#define WIN_SLOTS UI_SETTINGS_WIN_SLOTS
+#define WIN_SCROLL (WIN_SLOTS - 1) /* the slots that scroll; Back has the last */
+#define ROW_H UI_SETTINGS_ROW_H
+/* the marks: a font glyph each (U+25B2, U+25BC; Arimo has none, the
+   second font draws them, font.c), right of the value arrows (they end at
+   x 570); on Characters right of the swatches (578..614) */
+#define MARK_X 584
+#define MARK_W 32
+#define MARK_X_CHARS 618
+#define MARK_W_CHARS 20
+
+/* A page's first row and pitch (field lines): the window's, or inside the
+   model viewer Characters' panel (CV_ROW_Y0, CV_ROW_PITCH: at most eleven
+   rows, no window).  Returns 1 for the window. */
+static int pagePlaces(int page, int *y0, int *pitch)
 {
-    if (page == UI_PAGE_DISPLAY) {
-        (void)n;
-        *y0 = 36;
-        return 13; /* twelve rows with the Frame rate counter: Back at 179 */
+    if (page == UI_PAGE_CHARACTERS && ui_settings_characters_in_viewer()) {
+        /* inside the viewer: the shown character's rows, Switch,
+           Randomize, Reset and Back (Ico's eleven, Yorda's six) 11
+           apart from 30, Back at 140 or 85, clear of the note at 176
+           and the prompts at 196 */
+        *y0 = CV_ROW_Y0;
+        *pitch = CV_ROW_PITCH;
+        return 0;
     }
-    *y0 = 40;
-    if (page == UI_PAGE_VARIANTS && n > 9) {
-        return 16; /* ten rows (Developer mode's Debug menu): Back at 184 */
-    }
-    if (page == UI_PAGE_EFFECTS && n > 13) {
-        *y0 = 30;
-        return 12; /* fourteen rows: Back at 186, its box to 222 */
-    }
-    if (page == UI_PAGE_EFFECTS && n > 12) {
-        *y0 = 34;
-        return 13; /* thirteen rows: Back at 190, its box to 226 */
-    }
-    if (page == UI_PAGE_EFFECTS && n > 10) {
-        return 13; /* eleven or twelve: Back at 173 or 183 */
-    }
-    if (page == UI_PAGE_EFFECTS && n > 9) {
-        return 16; /* ten rows: Back at 184, its box to 220 */
-    }
-    if (page == UI_PAGE_CHARACTERS) {
-        if (ui_settings_characters_in_viewer()) {
-            /* inside the viewer: the shown character's rows, Switch,
-               Randomize, Reset and Back (Ico's eleven, Yorda's six) 11
-               apart from 30, Back at 140 or 85, clear of the note at 176
-               and the prompts at 196 */
-            *y0 = CV_ROW_Y0;
-            return CV_ROW_PITCH;
-        }
-        return 13;
-    }
-    if (page == UI_PAGE_MAIN && n > 17) {
-        /* eighteen, an rc build's with the Graphics link: from 26, Back at
-           179, its box to 219 */
-        *y0 = 26;
-        return 9;
-    }
-    if (page == UI_PAGE_MAIN && n > 16) {
-        /* seventeen (every row but Share a bug report, which an rc build
-           adds: the Graphics link and the Graphics driver link both): from
-           26, Back at 186, its box to 226 */
-        *y0 = 26;
-        return 10;
-    }
-    if (page == UI_PAGE_MAIN && n > 15) {
-        /* sixteen (every row: the Graphics driver link, Disc, Save a
-           picture for a bug report and both dumps): from 30, Back at 180,
-           its box to 220 */
-        *y0 = 30;
-        return 10;
-    }
-    if (page == UI_PAGE_MAIN) {
-        return n > 14   ? 10
-               : n > 13 ? 11
-               : n > 12 ? 12
-               : n > 11 ? 13
-               : n > 10 ? 14
-               : n > 9  ? 15
-               : n > 8  ? 17
-                        : 19;
-    }
-    if (page == UI_PAGE_CONTROLS && n > 9) {
-        /* the touch rows, the mouse rows and the game's pause-menu rows
-           make the page longer than the others (the table above) */
-        if (n > 15) {
-            /* sixteen: Back at 180, its box to 216, clear of the note */
-            *y0 = 30;
-            return 10;
-        }
-        if (n > 12) {
-            *y0 = 30;
-            return 11;
-        }
-        /* eleven (the title's with the mouse rows, no touch screen) or
-           twelve 13 apart: Back at 170 or 183 */
-        return n > 10 ? 13 : 16;
-    }
-    return 18;
+    *y0 = WIN_Y0;
+    *pitch = WIN_PITCH;
+    return 1;
 }
 
-static int rowY(int page, int i)
+/* the place a row is built at; layoutPage places the shown ones */
+static int rowY(int i)
 {
-    int y0;
-    /* the place a row is built at; layoutPage spaces the shown ones */
-    const int pitch = pagePitch(page,
-                                page == UI_PAGE_MAIN       ? 8
-                                : page == UI_PAGE_CONTROLS ? 7
-                                                           : 12,
-                                &y0);
-    return y0 + pitch * i;
+    return WIN_Y0 + WIN_PITCH * i;
 }
 
 /* The version in the Main page's top-right corner, small and greyed: the
@@ -3316,11 +3243,11 @@ static void addHeader(Page *pg, int strId)
 }
 
 /* label (+ value) rows of one option */
-static void addOption(Page *pg, int pageId, int opt, int strId, int link)
+static void addOption(Page *pg, int opt, int strId, int link)
 {
     Row *r = &pg->rows[pg->count];
-    int y = rowY(pageId, pg->count);
-    int h = pageId == UI_PAGE_MAIN ? 40 : 36;
+    int y = rowY(pg->count);
+    const int h = ROW_H;
     r->opt = opt;
     r->link = link;
     r->note = -1;
@@ -3341,6 +3268,22 @@ static void addOption(Page *pg, int pageId, int opt, int strId, int link)
         lt_ext_set_pointer_role(ar, LT_POINTER_RIGHT);
     }
     pg->count++;
+}
+
+/* a mark of the window (layoutPage shows it while rows are out of view
+   that way): a click or a tap on it is Up or Down (ui_mouse.c) */
+static int addMark(int pageId, const char *glyph, int role)
+{
+    const int chars = pageId == UI_PAGE_CHARACTERS;
+    const int m =
+        ui_settings_add_row(chars ? MARK_X_CHARS : MARK_X, WIN_Y0, chars ? MARK_W_CHARS : MARK_W,
+                            ROW_H, 0, -1, 0, glyph, NOTE_SIZE, UI_ALIGN_CENTER);
+    if (m >= 0) {
+        lt_ext_set_dim(m, 1);
+        lt_ext_set_pointer_role(m, role);
+        P(m)->defaultMask = 1;
+    }
+    return m;
 }
 
 static void addNote(Page *pg, int opt, int strId)
@@ -3389,10 +3332,11 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     memset(pg, 0, sizeof(*pg));
     pg->parent = parent;
     pg->version = -1;
+    pg->markUp = pg->markDown = -1;
     int first = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT;
     addHeader(pg, header);
     for (int i = 0; i < n && pg->count < MAX_ROWS; i++) { /* the tables are asserted to fit */
-        addOption(pg, id, opts[i], strs[i], links ? links[i] : -1);
+        addOption(pg, opts[i], strs[i], links ? links[i] : -1);
     }
     switch (id) {
     case UI_PAGE_MAIN:
@@ -3467,7 +3411,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         for (int i = 0; i < pg->count; i++) {
             Row *r = &pg->rows[i];
             if (r->opt == UI_OPT_EXTRAS_CREDITS) {
-                r->value = ui_settings_add_row(STEP_X, rowY(id, i), STEP_W, 36, 1, r->label, 0, " ",
+                r->value = ui_settings_add_row(STEP_X, rowY(i), STEP_W, 36, 1, r->label, 0, " ",
                                                0.0f, UI_ALIGN_CENTER);
             }
         }
@@ -3498,7 +3442,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
                 unsigned char rgba[4];
                 swatchColour(charPart(r->opt), rgba);
                 s_charSwatch[charPart(r->opt)] =
-                    lt_ext_add_rect(SWATCH_X, rowY(id, i) + SWATCH_DY, SWATCH_W, SWATCH_H, rgba);
+                    lt_ext_add_rect(SWATCH_X, rowY(i) + SWATCH_DY, SWATCH_W, SWATCH_H, rgba);
             }
         }
         int n = ui_settings_add_row(20, NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
@@ -3518,6 +3462,12 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     default:
         break;
     }
+    /* the window's marks, on a page that can show more rows than its slots
+       (U+25B2, U+25BC) */
+    if (pg->count > WIN_SLOTS) {
+        pg->markUp = addMark(id, "\xE2\x96\xB2", LT_POINTER_UP);
+        pg->markDown = addMark(id, "\xE2\x96\xBC", LT_POINTER_DOWN);
+    }
     int last = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT - 1;
     linkRows(pg);
     finishPage(pg, first, last);
@@ -3529,6 +3479,7 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
     memset(pg, 0, sizeof(*pg));
     pg->parent = parent;
     pg->isList = 1;
+    pg->markUp = pg->markDown = -1;
     int first = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT;
     addHeader(pg, header);
     int remap = id == UI_PAGE_REMAP;
@@ -3592,6 +3543,7 @@ static void buildTouchEditorPage(void)
     memset(pg, 0, sizeof(*pg));
     pg->parent = UI_PAGE_TOUCH;
     pg->version = -1;
+    pg->markUp = pg->markDown = -1;
     pg->layout = -1;
     const int row = ui_settings_add_row(120, 200, 400, 40, 0, -1, UI_STR_OPT_TOUCH_EDIT, NULL, 0.0f,
                                         UI_ALIGN_CENTER);
@@ -4742,17 +4694,19 @@ int ui_settings_reopen_page(int page)
         return -1;
     }
     /* as entryProc on an entry from this title: onTitle() holds, each page
-       opens on its first row ... */
+       opens on its first row, its window at the top ... */
     s_origin = cur;
     s_titleHandoff = s_titleReturn >= 0;
     s_titleReturn = -1;
     for (int p = 0; p < UI_PAGE_COUNT; p++) {
         if (s_pages[p].layout >= 0 && !s_pages[p].isList) {
             lt_ext_layout(s_pages[p].layout)->defaultItem = pageFirstNav(&s_pages[p]);
+            s_pages[p].offset = 0;
         }
     }
     /* ... but the pages above this one, each on the row that leads down
-       (Main on Extras), so Back retraces the path */
+       (Main on Extras), so Back retraces the path (the window scrolls to
+       that row when the page shows: layoutPage) */
     for (int child = page; s_pages[child].parent >= 0; child = s_pages[child].parent) {
         Page *up = &s_pages[s_pages[child].parent];
         for (int i = 0; i < up->count; i++) {
@@ -4868,10 +4822,12 @@ static int entryProc(int first, int item)
         s_origin = cur;
         /* the menu opens on its first row each time, as Options did, and so
            does each page under it (a page's default can be left on a row
-           this entry hides, as Button configuration's OK leaves Controls') */
+           this entry hides, as Button configuration's OK leaves Controls'),
+           its window at the top */
         for (int p = 0; p < UI_PAGE_COUNT; p++) {
             if (s_pages[p].layout >= 0 && !s_pages[p].isList) {
                 lt_ext_layout(s_pages[p].layout)->defaultItem = pageFirstNav(&s_pages[p]);
+                s_pages[p].offset = 0;
             }
         }
     }
@@ -5293,52 +5249,116 @@ static int rowLocked(const Row *r)
     return r->opt == UI_OPT_EXTRAS_CREDITS && !creditsUnlocked();
 }
 
-/* A page's rows as the entry in force shows them (optShown): Extras'
-   Music, Models and Credits only from the title, the game's settings only
-   from the pause menu, its Film effect and Players once the game is
-   cleared.  The visible rows are spaced evenly (pagePitch), linked in a
-   loop that skips the hidden ones, and the hidden ones are masked with
-   their values. */
-static void layoutPage(Page *pg, int id)
+/* whether row r of page id shows (optShown); the Graphics page is the
+   countdown alone while it runs */
+static int rowShown(int id, const Row *r)
 {
-    int shown[MAX_ROWS], n = 0;
+    const int countdown = id == UI_PAGE_GRAPHICS && s_gfx.state == GFX_COUNTDOWN &&
+                          (r->opt == UI_OPT_GRAPHICS_API || r->opt == UI_OPT_BACK);
+    return optShown(r->opt, r->link) && !countdown;
+}
+
+/* the page's shown rows (indexes into rows[]), top to bottom; the count */
+static int pageShown(const Page *pg, int id, int *shown)
+{
+    int n = 0;
     for (int i = 0; i < pg->count; i++) {
-        Row *r = &pg->rows[i];
-        /* the Graphics page is the countdown alone while it runs */
-        const int countdown = id == UI_PAGE_GRAPHICS && s_gfx.state == GFX_COUNTDOWN &&
-                              (r->opt == UI_OPT_GRAPHICS_API || r->opt == UI_OPT_BACK);
-        const int show = optShown(r->opt, r->link) && !countdown;
-        P(r->label)->defaultMask = !show;
-        lt_mask_property(r->label, !show);
-        /* a stepped value's row and its two arrows, added after the label */
-        const int nv = r->value < 0 ? 0 : steppable(r->opt) ? 3 : 1;
-        for (int j = 0; j < nv; j++) {
-            P(r->value + j)->defaultMask = !show;
-            lt_mask_property(r->value + j, !show);
-        }
-        if (show) {
+        if (rowShown(id, &pg->rows[i])) {
             shown[n++] = i;
         }
     }
-    int y0;
-    const int pitch = pagePitch(id, n, &y0);
+    return n;
+}
+
+/* The window over n shown rows: Back, the last row of every table, is
+   pinned in the last slot (the Graphics countdown hides it); the rows
+   before it scroll when there are more of them than WIN_SCROLL.  Sets
+   *scroll (the rows that scroll) and returns 1 when the page scrolls. */
+static int pageWindow(const Page *pg, int id, const int *shown, int n, int *scroll)
+{
+    int y0, pitch;
+    const int pin = n > 0 && pg->rows[shown[n - 1]].opt == UI_OPT_BACK;
+    *scroll = pin ? n - 1 : n;
+    return pagePlaces(id, &y0, &pitch) && *scroll > WIN_SCROLL;
+}
+
+/* the index among the shown rows of the row whose label is item, -1 */
+static int shownIndex(const Page *pg, const int *shown, int n, int item)
+{
+    for (int k = 0; k < n && item >= 0; k++) {
+        if (pg->rows[shown[k]].label == item) {
+            return k;
+        }
+    }
+    return -1;
+}
+
+/* a row's label, value and arrows masked or not, and placed at y */
+static void rowMask(const Row *r, int masked)
+{
+    P(r->label)->defaultMask = masked;
+    lt_mask_property(r->label, masked);
+    /* a stepped value's row and its two arrows, added after the label */
+    const int nv = r->value < 0 ? 0 : steppable(r->opt) ? 3 : 1;
+    for (int j = 0; j < nv; j++) {
+        P(r->value + j)->defaultMask = masked;
+        lt_mask_property(r->value + j, masked);
+    }
+}
+
+static void rowPlace(const Row *r, int y)
+{
+    P(r->label)->dispY = y;
+    const int nv = r->value < 0 ? 0 : steppable(r->opt) ? 3 : 1;
+    for (int j = 0; j < nv; j++) {
+        P(r->value + j)->dispY = y;
+    }
+}
+
+static void markShow(int mark, int on, int y)
+{
+    if (mark >= 0) {
+        P(mark)->defaultMask = !on;
+        lt_mask_property(mark, !on);
+        P(mark)->dispY = y;
+    }
+}
+
+/* A page's rows as the entry in force shows them (optShown): Extras'
+   Music, Models and Credits only from the title, the game's settings only
+   from the pause menu, its Film effect and Players once the game is
+   cleared.  The hidden ones are masked with their values; the shown ones
+   are linked in a loop and placed in the window: one slot each from
+   WIN_Y0, WIN_PITCH apart, Back in the slot after the last.  On a page
+   with more shown rows than WIN_SCROLL before Back, the window shows
+   WIN_SCROLL of them from pg->offset, moved so the cursor's row is in it
+   (a page entered on a row out of view: Back from a sub-page, a reopened
+   page), Back in the last slot; the rows out of view are masked as the
+   hidden ones are (the mouse never hits a masked row), their links stay
+   (scrollMove moves the cursor across the window's edges), and a mark
+   above and below the window shows while rows are out of view that way. */
+static void layoutPage(Page *pg, int id)
+{
+    int shown[MAX_ROWS], scroll;
+    for (int i = 0; i < pg->count; i++) {
+        rowMask(&pg->rows[i], !rowShown(id, &pg->rows[i]));
+    }
+    const int n = pageShown(pg, id, shown);
     for (int k = 0; k < n; k++) {
         Row *r = &pg->rows[shown[k]];
-        const int y = y0 + pitch * k;
-        P(r->label)->dispY = y;
-        const int nv = r->value < 0 ? 0 : steppable(r->opt) ? 3 : 1;
-        for (int j = 0; j < nv; j++) {
-            P(r->value + j)->dispY = y;
-        }
         P(r->label)->downItem = pg->rows[shown[(k + 1) % n]].label;
         P(r->label)->upItem = pg->rows[shown[(k + n - 1) % n]].label;
     }
     if (n == 0) {
+        pg->offset = 0;
+        markShow(pg->markUp, 0, WIN_Y0);
+        markShow(pg->markDown, 0, WIN_Y0);
         return;
     }
     /* a hidden row is never the cursor's: its links lead to the shown rows
        around it, and a cursor or default left on one (Button configuration's
-       OK from the pause menu, then the title) moves to the first shown row */
+       OK from the pause menu, then the title) moves to the first shown row.
+       The rows out of the window are shown rows: not these */
     LtProp *lay = pg->layout >= 0 ? lt_ext_layout(pg->layout) : NULL;
     for (int i = 0, k = 0; i < pg->count; i++) {
         Row *r = &pg->rows[i];
@@ -5355,6 +5375,139 @@ static void layoutPage(Page *pg, int id)
             lay->defaultItem = pg->rows[shown[0]].label;
         }
     }
+    int y0, pitch;
+    (void)pagePlaces(id, &y0, &pitch);
+    const int windowed = pageWindow(pg, id, shown, n, &scroll);
+    int off = 0;
+    if (windowed) {
+        off = pg->offset < 0                     ? 0
+              : pg->offset > scroll - WIN_SCROLL ? scroll - WIN_SCROLL
+                                                 : pg->offset;
+        /* the cursor's row in view (its default's while the layout has no
+           cursor yet) */
+        int k = lay ? shownIndex(pg, shown, n, lay->curItem) : -1;
+        if (k < 0 && lay) {
+            k = shownIndex(pg, shown, n, lay->defaultItem);
+        }
+        if (k >= 0 && k < scroll) {
+            off = k < off ? k : k >= off + WIN_SCROLL ? k - WIN_SCROLL + 1 : off;
+        }
+    }
+    pg->offset = off;
+    const int w = windowed ? WIN_SCROLL : scroll; /* the scrolling rows in view */
+    for (int k = 0; k < n; k++) {
+        const Row *r = &pg->rows[shown[k]];
+        if (k >= scroll) {
+            rowPlace(r, y0 + pitch * w); /* Back, after the rows in view */
+        } else if (k >= off && k < off + w) {
+            rowPlace(r, y0 + pitch * (k - off));
+        } else {
+            rowMask(r, 1); /* out of the window */
+        }
+    }
+    markShow(pg->markUp, windowed && off > 0, y0);
+    markShow(pg->markDown, windowed && off + w < scroll, y0 + pitch * (w - 1));
+}
+
+/* The window's edge moves, on a page that scrolls (layoutPage): Down on
+   the last row in view (not the last before Back) scrolls one row; Down on
+   Back with rows above the window out of view puts the window at the top;
+   Up on the first row in view (not the first) scrolls one row back; Up on
+   Back with rows below the window out of view puts the window at the end.
+   The page only moves the window, before the game's own move (layout_
+   texture.c default_item_select, after this proc in the same tick): the
+   row the cursor's link leads to is then in view and unmasked, and the
+   move is the game's on every disc, its sound and glow too (left to
+   itself it would follow the link onto a masked row, the 2001 discs', or
+   walk past it to the next row in view, the European disc's).  The game's
+   move is never switched off for the tick (lt_item_select_disable), so the
+   mouse wheel's queued notches go on (ui_mouse.c drops them after a tick
+   with the item select off).  Every other move is the game's: both rows
+   are in view.  Returns 1 when the window moved. */
+static void refreshPage(Page *pg, int id, int cur);
+
+static int scrollMove(Page *pg, int id, LtProp *lay, int flags)
+{
+    int shown[MAX_ROWS], scroll;
+    if (!(flags & (LT_PAD_UP | LT_PAD_DOWN)) || (flags & (PAD_OK | PAD_BACK))) {
+        return 0;
+    }
+    const int n = pageShown(pg, id, shown);
+    if (!pageWindow(pg, id, shown, n, &scroll)) {
+        return 0;
+    }
+    const int k = shownIndex(pg, shown, n, lay->curItem);
+    const int off = pg->offset;
+    const int back = scroll < n; /* Back pinned, at index scroll */
+    int to = off;
+    if (k < 0) {
+        return 0;
+    }
+    if (flags & LT_PAD_DOWN) {
+        if (k < scroll && k == off + WIN_SCROLL - 1 && k + 1 < scroll) {
+            to = off + 1;
+        } else if (back && k == scroll && off > 0) {
+            to = 0;
+        }
+    } else {
+        if (k < scroll && k == off && off > 0) {
+            to = off - 1;
+        } else if (back && k == scroll && off + WIN_SCROLL < scroll) {
+            to = scroll - WIN_SCROLL;
+        }
+    }
+    if (to == off) {
+        return 0;
+    }
+    pg->offset = to;
+    refreshPage(pg, id, lay->curItem);
+    return 1;
+}
+
+int ui_settings_page_scroll(UiSettingsPage page, int *shownByRule, int *offset, int *slots)
+{
+    int shown[MAX_ROWS], scroll;
+    if (!s_built || page < 0 || page >= UI_PAGE_COUNT || s_pages[page].isList ||
+        s_pages[page].count == 0) {
+        return -1;
+    }
+    const Page *pg = &s_pages[page];
+    const int n = pageShown(pg, page, shown);
+    const int windowed = pageWindow(pg, page, shown, n, &scroll);
+    if (shownByRule) {
+        *shownByRule = n;
+    }
+    if (offset) {
+        *offset = windowed ? pg->offset : 0;
+    }
+    if (slots) {
+        *slots = windowed ? WIN_SCROLL + (n - scroll) : n;
+    }
+    return windowed;
+}
+
+int ui_settings_row_shown(int label)
+{
+    for (int p = 0; s_built && p < UI_PAGE_COUNT && label >= 0; p++) {
+        for (int i = 0; i < s_pages[p].count; i++) {
+            if (s_pages[p].rows[i].label == label) {
+                return rowShown(p, &s_pages[p].rows[i]);
+            }
+        }
+    }
+    return 0;
+}
+
+int ui_settings_page_marks(UiSettingsPage page, int *up, int *down)
+{
+    const int ok = s_built && page >= 0 && page < UI_PAGE_COUNT;
+    if (up) {
+        *up = ok ? s_pages[page].markUp : -1;
+    }
+    if (down) {
+        *down = ok ? s_pages[page].markDown : -1;
+    }
+    return ok && s_pages[page].markUp >= 0 && s_pages[page].markDown >= 0;
 }
 
 /* the notes shown only while their row is locked (Anti-aliasing's says
@@ -5732,6 +5885,9 @@ static int settingsProc(int first, int item)
             refreshPage(pg, id, lay->curItem);
             return -1;
         }
+    }
+    if (scrollMove(pg, id, lay, flags)) {
+        return -1; /* the window moved; the game's move follows */
     }
     if (flags & PAD_BACK) {
         return leaveTo(id, parentLayout(pg));
