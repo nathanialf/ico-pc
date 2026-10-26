@@ -763,45 +763,77 @@ int rowWithText(UiSettingsPage page, const char *str)
     return -1;
 }
 
-/* the page in front: its shown rows top to bottom at least 13 field lines
-   apart (11 on a page of more than 13 rows, which starts higher: the
-   Controls page with the touch rows), below the header, the last one's box
-   inside the 226 lines */
+/* Back's y on an Options page that shows `shown` rows by its rule (Back
+   included): the window's last slot when they scroll, else the slot after
+   the last row */
+int winBackY(int shown)
+{
+    return WIN_SLOT_Y(shown > WIN_SLOTS ? WIN_SLOTS - 1 : shown - 1);
+}
+
+/* The page in front, in its window (settings.h UI_SETTINGS_WIN_*): the rows
+   in view exactly one slot each from WIN_Y0, WIN_PITCH apart, at most
+   WIN_SLOTS of them, Back in view and last, its box inside the 226 lines;
+   a row hidden by the page's rule masked; on a page whose rows fit
+   (shownByRule <= WIN_SLOTS) every row shown by the rule in view; the marks
+   shown exactly while rows are out of view above (offset > 0) or below. */
 void checkPageFits(UiSettingsPage page, const char *what)
 {
-    int labels[24];
-    const int n = ui_settings_page_rows(page, labels, NULL, NULL, 24);
-    int prev = -1, last = -1, shown = 0;
-    for (int i = 0; i < n; i++) {
-        shown += !lt_ext_prop(labels[i])->defaultMask;
-    }
-    /* Controls is the page that grows past the others (pagePitch) */
-    const int tall = page == UI_PAGE_CONTROLS ? 12 : 13;
-    /* the Main page's thirteen rows (Menu language, developer mode and
-       both dumps) 12 apart, fifteen (the Graphics driver link and Disc
-       too) 10 apart, sixteen (Save a picture for a bug report too) 10
-       apart from 30 (pagePitch) */
-    const int gap = shown > 15 && page == UI_PAGE_CONTROLS ? 10
-                    : shown > 14 && page == UI_PAGE_MAIN   ? 10
-                    : shown > tall                         ? 11
-                    : shown == 13 && page == UI_PAGE_MAIN  ? 12
-                                                           : 13;
-    /* an rc build's seventeen Main rows (Share a bug report, ICO_RC_TOOLS)
-       from 26 */
-    const int top = shown > 16 && page == UI_PAGE_MAIN ? 26 : shown > tall ? 30 : 34;
+    int labels[24], opts[24];
+    const int n = ui_settings_page_rows(page, labels, opts, NULL, 24);
+    int byRule = 0, offset = 0, slots = 0, up = -1, down = -1;
+    const int win = ui_settings_page_scroll(page, &byRule, &offset, &slots);
+    int rule = 0, slot = 0, last = -1, back = -1;
+    CHECK(win >= 0, "%s: an Options page (%d)", what, win);
     for (int i = 0; i < n; i++) {
         const LtProperty *r = lt_ext_prop(labels[i]);
-        if (r->defaultMask) {
+        const int shown = ui_settings_row_shown(labels[i]);
+        rule += shown;
+        if (opts[i] == UI_OPT_BACK && shown) {
+            back = i;
+        }
+        if (!shown) {
+            CHECK(r->defaultMask, "%s: row %d hidden by the rule is masked", what, i);
             continue;
         }
-        CHECK(prev < 0 ? r->dispY >= top : r->dispY >= prev + gap,
-              "%s: row %d at y %d (the one above at %d)", what, i, r->dispY, prev);
-        prev = r->dispY;
-        last = labels[i];
+        if (r->defaultMask) {
+            CHECK(win == 1, "%s: row %d is shown but out of view on a page that fits", what, i);
+            continue;
+        }
+        CHECK(r->dispY == WIN_SLOT_Y(slot), "%s: row %d in slot %d at y %d (want %d)", what, i,
+              slot, r->dispY, WIN_SLOT_Y(slot));
+        slot++;
+        last = i;
     }
-    CHECK(last >= 0 && lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH <= 226,
+    CHECK(rule == byRule, "%s: %d rows shown by the rule (the window says %d)", what, rule, byRule);
+    CHECK(slot == slots && slot <= WIN_SLOTS,
+          "%s: %d rows in view (the window says %d, at most %d)", what, slot, slots, WIN_SLOTS);
+    CHECK(win == 1 ? byRule > WIN_SLOTS : slot == byRule,
+          "%s: the window scrolls (%d) only with more than %d rows (%d, %d in view)", what, win,
+          WIN_SLOTS, byRule, slot);
+    CHECK(back < 0 || last == back, "%s: Back in view and last (%d, %d)", what, back, last);
+    CHECK(last >= 0 && lt_ext_prop(labels[last])->dispY + lt_ext_prop(labels[last])->dispH <= 226,
           "%s: the last row's box ends at %d", what,
-          last >= 0 ? lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH : -1);
+          last >= 0 ? lt_ext_prop(labels[last])->dispY + lt_ext_prop(labels[last])->dispH : -1);
+    ui_settings_page_marks(page, &up, &down);
+    const int scroll = back >= 0 ? byRule - 1 : byRule;
+    if (up >= 0) {
+        CHECK(lt_ext_prop(up)->defaultMask == !(win == 1 && offset > 0),
+              "%s: the up mark %s (offset %d)", what,
+              lt_ext_prop(up)->defaultMask ? "hidden" : "shown", offset);
+        CHECK(lt_ext_prop(up)->defaultMask || lt_ext_prop(up)->dispY == WIN_SLOT_Y(0),
+              "%s: the up mark beside the first slot (%d)", what, lt_ext_prop(up)->dispY);
+    }
+    if (down >= 0) {
+        CHECK(lt_ext_prop(down)->defaultMask == !(win == 1 && offset + WIN_SLOTS - 1 < scroll),
+              "%s: the down mark %s (offset %d of %d)", what,
+              lt_ext_prop(down)->defaultMask ? "hidden" : "shown", offset, scroll);
+        CHECK(lt_ext_prop(down)->defaultMask ||
+                  lt_ext_prop(down)->dispY == WIN_SLOT_Y(WIN_SLOTS - 2),
+              "%s: the down mark beside the last scrolling slot (%d)", what,
+              lt_ext_prop(down)->dispY);
+    }
+    CHECK(win == 0 || (up >= 0 && down >= 0), "%s: a page that scrolls has its marks", what);
 }
 
 /* the note row of `page` whose text starts with prefix, -1 */

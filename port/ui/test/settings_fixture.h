@@ -65,6 +65,12 @@
         }                                                                                          \
     } while (0)
 
+/* the Options pages' window (settings.h): the tests' positions */
+#define WIN_Y0 UI_SETTINGS_WIN_Y0
+#define WIN_PITCH UI_SETTINGS_WIN_PITCH
+#define WIN_SLOTS UI_SETTINGS_WIN_SLOTS
+#define WIN_SLOT_Y(slot) (WIN_Y0 + WIN_PITCH * (slot))
+
 /* the stubs' data, read and set by the tests */
 extern int ScreenWidth, ScreenHeight;
 extern float center_X, center_Y;
@@ -115,6 +121,7 @@ extern IcoGsSnapshot s_gs;
 void gsSampler(IcoGsSnapshot *out);
 int rowWithText(UiSettingsPage page, const char *str);
 void checkPageFits(UiSettingsPage page, const char *what);
+int winBackY(int shown);
 int noteStarting(UiSettingsPage page, const char *prefix);
 extern int s_packCount;
 int fakePackCount(void);
