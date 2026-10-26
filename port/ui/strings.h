@@ -100,8 +100,14 @@ typedef enum UiStrId {
     UI_STR_OPT_VIBRATION,
     /* Gameplay */
     UI_STR_OPT_STICK_FIX,
-    UI_STR_OPT_YORDA,      /* [gameplay] yorda_safe */
-    UI_STR_OPT_YORDA_NOTE, /* its explanation */
+    UI_STR_OPT_YORDA,         /* [gameplay] yorda_safe */
+    UI_STR_OPT_YORDA_NOTE,    /* its explanation */
+    UI_STR_OPT_PIT_TIME,      /* [gameplay] pit_time: the Time to rescue Yorda row */
+    UI_STR_OPT_PIT_TIME_NOTE, /* its explanation */
+    UI_STR_VAL_PIT_HALF,      /* its values (Original is UI_STR_VAL_ORIGINAL) */
+    UI_STR_VAL_PIT_LONGER,
+    UI_STR_VAL_PIT_DOUBLE,
+    UI_STR_VAL_PIT_TRIPLE,
     /* Language: each language's own name, the same in every table */
     UI_STR_LANG_EN,
     UI_STR_LANG_FR,
