@@ -423,6 +423,7 @@ static void video_settings(RdSettings *rs, int w, int h)
     /* off under the Original preset (ico_video_anti_alias); the renderer
        draws an MSAA count the device lacks as off (rd_aa_supported_mask) */
     rs->antiAlias = (uint8_t)ico_video_anti_alias();
+    rs->downsample = (uint8_t)(o.downsample == ICO_DOWNSAMPLE_BOX); /* PC port: issue 149 */
     rs->sceneWidth = (uint32_t)o.resW;
     rs->sceneHeight = (uint32_t)o.resH;
     rs->sceneScale = (float)o.resScale;
