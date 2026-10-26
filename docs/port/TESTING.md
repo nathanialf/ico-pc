@@ -621,7 +621,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`-DNEED_FILE`: SKIP without the dump; `-DNEED=rd: msaa: N samples`: SKIP where the device does
   not offer the count, which it then draws as off: lavapipe offers 4 only)
   ([MSAA.md](MSAA.md#the-crack-filler-after-the-resolve)).
-- `rd_crt_test.c`: the CRT filter's options and its shader (`rd_crt`, `rd_crt_fixed`).
+- `rd_crt_test.c`: the CRT filter's options and its shader (`rd_crt`, `rd_crt_fixed`); downsampling
+  changes no byte under the filter (`checkOff`).
 - `rd_debug_test.c`: `debug.c` on the host, recorded (`rd_debug`); with the Game variants' bind
   (`debug_VariableInit` hands `ico_variants_bind_debug` the five switches and `debug_MenuOpen`)
   and the menu opened through that opener drawn on each of three ticks with no pad (title and bug
@@ -833,7 +834,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   an old file's `window_size` among them (ignored, kept as written);
   the targets' scales include the work buffers and shadow levels at their GS sizes at every scale
   and Water reflections' block: its GS size under Original, the scene's scale under Sharp (4x at
-  4x), both the GS size at 1x (`checkScales`).
+  4x), both the GS size at 1x (`checkScales`); downsampling in force with a scale or a fixed size,
+  not at the `window` resolution or under the CRT filter, and the supersampling measured against
+  the GS grid (4x + SSAA2 is 4x, 2x + SSAA4 is 4x, 1x + SSAA2 is 2x; `checkScales`); without
+  anti-aliasing 4x into 640 x 480 and into 1600 x 1200 both take the window's reduce, byte for byte
+  the CPU's box average (`cpuReduce`), and 1x into 320 x 240 keeps the plain blit
+  (`checkAaOffReduce`); with downsampling at 2x and 4x into 640 x 480 and 2x into 512 x 384,
+  DISPLAY is the run's without it byte for byte, the downsampled DISPLAY
+  (`rd__read_present_downsample`) is `cpuReduce` of it byte for byte with the same passes and no
+  window reduce (`rd__last_present_reduce`), 4x + SSAA2 and 1x + SSAA2 present the downsampled 4x
+  and 2x byte for byte, and on smooth gradients the downsampled presents are within 4 LSB of the
+  1x present (`checkDownsample`).
 - `rd_raw_test.c`: the raw packet builders outside `seki` (`rd_raw`).
 - `rd_replay_tool_list.cmake`: `--list --no-device` on `rd_pixel`'s dump (`rd_replay_tool_list`).
 - `rd_replay_tool_pass_dump.cmake`: `--pass-dump`, `--target` and `--aspect` on that dump
@@ -1148,7 +1159,9 @@ The script tests under `port/render/test/` run the tool or a test program and ch
 and `rd_vuprepass_selftest.cmake`, which matches the `VU pre-pass: on|off (self-test ...)` line
 of the pre-passes', and `rd_crack.cmake`, which matches the crack filler's `crack fill:` lines,
 and `rd_vustage_ab.cmake` over the dump corpus (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
-`--present 640x480`; it requires `rd_pixel` to have run first (`FIXTURES_REQUIRED rd_dump`).
+`--present 640x480`; it requires `rd_pixel` to have run first (`FIXTURES_REQUIRED rd_dump`), as
+does `rd_replay_tool_downsample`, which adds `--enhanced --resolution 2x --downsample --stats` and
+passes on `present: downsample 1024x512 -> 512x256, window reduce off`.
 
 ## The render suite on OpenGL
 
