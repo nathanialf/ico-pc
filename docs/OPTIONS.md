@@ -618,7 +618,8 @@ Game, the screen after the Vibration question has a row for each, Off or
 On. Up and Down move between them, Left and Right pick, and Cross or Start
 starts the game.
 
-- **Mirror mode** plays the whole game flipped left to right.
+- **Mirror mode** plays the whole game flipped left to right. The sticks
+  and the D-pad both walk the way you press.
 - **New Game+** plays the second journey, the one the PS2 gives you after
   you finish the game. Yorda's words are translated, and the ending and
   some items change. It starts On when you begin from a finished game's

@@ -150,7 +150,7 @@ apart from `bindings.c` so that a build without `config.toml` does not pull in t
 `IcoVirtualPad` holds the buttons (the game's logical word, active high), the menus' word and
 four stick floats from -1 to +1, x to the right and y downwards (`port/input/input.h`).
 `ico_input_vpad_to_frame` turns it into a byte frame: the optional stick fix, the mirror (stick X
-negated on both sticks), then `ico_input_quantise` (0 to 128, the DualShock's idle; -1 to 0; +1 to
+negated on both sticks; the d-pad bits are not flipped here, because the menus are drawn pre-flipped, and the game's own d-pad to stick vector in `iosPadGetStick` swaps its Left and Right under `ico_opt_mirror()` instead), then `ico_input_quantise` (0 to 128, the DualShock's idle; -1 to 0; +1 to
 255) (`port/input/vpad.c`).
 
 The stick fix scales a stick vector by 1 + 0.2 x d / 45, d the angle in degrees to the nearest
