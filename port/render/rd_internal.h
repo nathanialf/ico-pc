@@ -459,19 +459,20 @@ bool rd__screen_area(const RdTargetRec *tc, const RdStateBlock *st, const RdScre
 bool rd__date_retake(uint32_t heldFor, uint32_t heldSerial, const RhiRect *held, uint32_t tcId,
                      uint32_t serial, const RhiRect *want, uint32_t tw, uint32_t th, RhiRect *take);
 /* Full pixel's clamp of a draw sampling a render target (rd_replay.c
- * drawWrap) against a draw the game wraps on purpose: whether texel
- * coordinates lo .. hi on an axis of size texels lie wholly in one period
- * of a REPEAT other than the first, [k size, (k + 1) size] with k != 0.
- * The GS then samples the texture's inside (puddle.c drawRipples: STs 1.05
- * to 1.95 of the block, the reflection's middle), where a clamp pins every
- * fragment to the edge texel (issue 106: bright flat ring segments).  The
- * screen-space lookups the clamp is for run from about 0 to size and stay
- * clamped. */
-bool rd__repeat_kept(float lo, float hi, float size);
-/* The axes (bit 0 S, bit 1 T) on which a screen-prim command's texel
- * coordinates on a tw x th texture keep REPEAT by that rule; uvFixed as the
- * command's (12.4 texels, else STQ normalised, divided per vertex) */
-uint32_t rd__screen_repeat_kept(const RdScreenVtx *v, uint32_t n, int uvFixed, float tw, float th);
+ * drawWrap) is for the screen-space copies of the frame (the pool's and
+ * the barrier's grids over their copies, SCENE, the work buffers), whose
+ * REPEAT wrapped to the far side of the picture in the opened columns.
+ * True for a render-to-texture block (RdTargetRec.block) smaller than the
+ * frame: a screen prim reading it keeps the game's REPEAT whatever its STs.
+ * The puddle's ripples (puddle.c drawRipple) sample the reflection block at
+ * STs in later periods, some across a period's end; clamped, those
+ * fragments took the block's edge and corner texels (issue 106: bright
+ * flat ring segments).  A frame-sized block (the dark volume's) and every
+ * VU draw keep the clamp. */
+bool rd__block_keeps_repeat(const RdTargetRec *src);
+/* rd_replay.c borderOpen: Full pixel, or the border mask on a cropped frame
+ * (rd__frame_cropped); the water line names the clamp's counts then */
+bool rd__border_open(void);
 
 /* GS Z to depth scale of a target id's depth buffer: PSMZ32, the default
  * (also for an unknown id), is 2^-33 on a float depth buffer (gs_math.hlsli

@@ -104,10 +104,10 @@ typedef struct DrawSetup {
      * less its left-out ones (fillDrawCB, common.hlsli gs_uv_norm); NULL
      * for every other texture */
     const RdTargetRec *texCrop;
-    /* the axes (bit 0 S, bit 1 T) a screen prim samples wholly past the
-     * first period of a REPEAT (rd__screen_repeat_kept): Full pixel keeps
-     * the game's wrap there (drawWrap) */
-    uint32_t repeatKept;
+    /* a screen-prim command (doScreen, doScreenWrap): its read of a block
+     * smaller than the frame keeps the game's REPEAT under the open
+     * border (drawWrap, rd__block_keeps_repeat) */
+    int screenPrim;
     /* DATE through the stencil bit (prepareDraw): bindDrawEx writes the
      * bit over dateWant (the texels the draw can touch, the whole target
      * when dateWantAll) in the draw's pass before it (rd__replay_date_take);

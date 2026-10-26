@@ -66,9 +66,9 @@
  *   ripples   a ripple (drawRipples, its STs 1.05 .. 1.95 of the block on
  *             REPEAT) drawn, and SCENE byte for byte the same with Full
  *             pixel on and off: the open border's clamp of a target read
- *             keeps a read wholly past the first period on REPEAT
- *             (rd__repeat_kept, issue 106; the rule's cases without a
- *             device); the dump line counts the read
+ *             leaves a screen prim's read of a block smaller than the frame
+ *             on REPEAT (rd__block_keeps_repeat, issue 106; the rule's
+ *             cases without a device); the dump line counts the reads
  *   16:9      Enhanced at 16:9, scene 1x (native blocks): the aspect alone
  *             widens nothing; the puddle's block 256 x 256 texels (its GS
  *             size) holding the 4:3 run's picture byte for byte; SCENE
@@ -2392,7 +2392,8 @@ static uint8_t s_ripBase[W * H * 4], s_ripOff[W * H * 4];
 /* Issue 106: the ripples (drawRipples, ADD FIX 0x60 under DATE) sample the
  * block at STs 1.05 .. 1.95 on REPEAT, the block's middle on the GS.  Full
  * pixel clamps a draw reading a render target at its edges, which pinned
- * every ripple fragment to the block's corner texel: flat bright segments.
+ * every ripple fragment to the block's corner texel: flat bright segments;
+ * a screen prim reading a block smaller than the frame keeps the REPEAT.
  * SCENE with a ripple is the same byte for byte with Full pixel on and off
  * (at 4:3 the option changes nothing else the puddle draws), and differs
  * from SCENE without the ripple */
@@ -2418,9 +2419,12 @@ static void ripplePixels(void)
     char line[1536];
     rd__water_dump_line(rd__last_frame(), line, sizeof(line));
     printf("  ripples dump line: %s\n", line);
+    /* the ripples and the copy: screen prims on the 256 x 256 block, both
+     * kept on REPEAT; the border closed (Full pixel off at 4:3) */
     CHECK(strstr(line, "2 read it") != NULL &&
-              strstr(line, "REPEAT 2, 1 of them wholly past the first period") != NULL,
-          "ripples: the dump line counts the ripples' read as wholly past the first period");
+              strstr(line, "REPEAT 2, 2 of them kept on REPEAT") != NULL &&
+              strstr(line, ": border closed;") != NULL,
+          "ripples: the dump line counts the ripples' and the copy's reads as kept on REPEAT");
     g_rd.settings.fullPixel = 1;
     recordPuddle();
     const int read = readTarget(rd_target(RD_TARGET_SCENE).id, s_img, W, H);
@@ -2896,34 +2900,30 @@ static void checkPuddleDumpLine(const char *what, const char *scale)
           what);
 }
 
-/* rd__repeat_kept (issue 106): a range wholly in a later period keeps
- * REPEAT, one from about 0 to the size (the screen-space lookups) or across
- * a period's end does not */
-static void repeatKeptChecks(void)
+/* rd__block_keeps_repeat (issue 106): a block smaller than the frame (the
+ * puddle's and the pool's reflection blocks, the barrier's copy) keeps the
+ * game's REPEAT for a screen prim; a frame-sized block (the dark volume's),
+ * a target that is no block and no target at all are clamped under an
+ * open border */
+static void blockKeepsRepeatChecks(void)
 {
-    CHECK(rd__repeat_kept(1.05f * 344.0f, 1.95f * 344.0f, 344.0f), "repeat kept: 1.05 .. 1.95");
-    CHECK(rd__repeat_kept(-0.9f * 256.0f, -0.1f * 256.0f, 256.0f), "repeat kept: -0.9 .. -0.1");
-    CHECK(rd__repeat_kept(256.0f, 512.0f, 256.0f), "repeat kept: the whole second period");
-    CHECK(!rd__repeat_kept(-0.5f, 256.5f, 256.0f), "repeat not kept: -0.5 .. 256.5");
-    CHECK(!rd__repeat_kept(13.25f, 243.625f, 256.0f), "repeat not kept: the copy's UVs");
-    CHECK(!rd__repeat_kept(200.0f, 300.0f, 256.0f), "repeat not kept: across the end");
-    CHECK(!rd__repeat_kept(300.0f, 600.0f, 256.0f), "repeat not kept: two periods");
-    CHECK(!rd__repeat_kept(1.0f, 2.0f, 0.0f), "repeat not kept: no size");
-    RdScreenVtx v[2];
-    memset(v, 0, sizeof(v));
-    v[0].s = 1.2f, v[0].t = 0.5f, v[0].q = 1.0f;
-    v[1].s = 1.8f, v[1].t = 1.5f, v[1].q = 1.0f;
-    CHECK(rd__screen_repeat_kept(v, 2, 0, 256.0f, 256.0f) == 1u,
-          "repeat kept: S on 1.2 .. 1.8, not T on 0.5 .. 1.5");
-    v[0].s = 16.0f * 300.0f, v[0].t = 16.0f * 300.0f;
-    v[1].s = 16.0f * 500.0f, v[1].t = 16.0f * 600.0f;
-    CHECK(rd__screen_repeat_kept(v, 2, 1, 256.0f, 256.0f) == 1u,
-          "repeat kept: 12.4 texels, S 300 .. 500, not T 300 .. 600");
+    RdTargetRec t;
+    memset(&t, 0, sizeof(t));
+    t.block = 1;
+    t.w = g_rd.gsW / 2u, t.h = 256;
+    CHECK(rd__block_keeps_repeat(&t), "block kept: a block half the frame across");
+    t.w = 344, t.h = g_rd.gsH + 1u;
+    CHECK(rd__block_keeps_repeat(&t), "block kept: a block of another height");
+    t.w = g_rd.gsW, t.h = g_rd.gsH;
+    CHECK(!rd__block_keeps_repeat(&t), "block clamped: a frame-sized block");
+    t.block = 0, t.w = 256, t.h = 256;
+    CHECK(!rd__block_keeps_repeat(&t), "block clamped: a target that is no block");
+    CHECK(!rd__block_keeps_repeat(NULL), "block clamped: no target");
 }
 
 static void recordingChecks(void)
 {
-    repeatKeptChecks();
+    blockKeepsRepeatChecks();
     decoderOnlyChecks();
     recordPuddle();
     checkPuddleRecording();
