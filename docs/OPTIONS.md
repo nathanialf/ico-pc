@@ -401,9 +401,8 @@ The first five are off unless you turn them on, on a phone too.
   half times), **Double** or **Triple**. The time is the shadow's dive with her
   (where the game's camera shows her in danger, its hard limit scales too),
   and Ico taking her hand still ends it, so a longer
-  time gives you more of a chance to get to her. Shadows that are frozen or
-  turned to stone still pause it, as in the original game. The row above, Shadows
-  never take Yorda, stops it altogether.
+  time gives you more of a chance to get to her. The row above, Shadows never
+  take Yorda, stops it altogether.
 - **Analogue stick fix** lets Ico run in any direction you push the stick,
   not only the eight the original game knows. It is also on the Controls
   page, and it is the same switch.
