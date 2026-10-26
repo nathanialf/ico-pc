@@ -856,6 +856,13 @@ int ico_log_limit_summary(char *out, size_t size);
 /* That as one log line, when there is any key (the run's end). */
 void ico_log_limit_log_summary(void);
 
+/* 1 for an exception code that only talks to a debugger (the thread-naming
+   exception 0x406D1388 and the OutputDebugString codes 0x40010006 and
+   0x4001000A): never a crash. */
+int ico_diag_benign_exception(unsigned int code);
+/* 1 once a fatal report has started (a crash or the watchdog). */
+int ico_diag_fatal_started(void);
+
 #ifdef _WIN32
 /* Windows: puts the vectored exception handler in, once the file dialog is
    behind us (shell extensions in it may raise and handle their own
