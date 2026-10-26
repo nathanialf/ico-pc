@@ -358,7 +358,7 @@ void rhi_end_commands(RhiCommandList cl)
     vkr_flush_barriers(c);
     if (c->inPass) {
         VKR_LOG("rhi_end_commands inside a render pass");
-        g_vkr.cmdEndRendering(c->cb);
+        vkr_pass_end(c);
         c->inPass = false;
     }
     /* Copies into READBACK buffers become visible to the host once this
@@ -925,13 +925,18 @@ static void vkr_pass_area_fits(uint32_t *w, uint32_t *h, VkrTexture *const *colo
     *h = mh;
 }
 
+/* The RHI pass as a VkrPassDesc (vk_internal.h), the hazard barriers its
+ * attachments need, then vkr_pass_begin (vk_renderpass.c): dynamic
+ * rendering, or a VkRenderPass and framebuffer (g_vkr.legacyPasses). */
 void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
     if (!c || !pass || pass->colorCount > RHI_MAX_COLOR_TARGETS) {
         return;
     }
-    VkRenderingAttachmentInfo color[RHI_MAX_COLOR_TARGETS];
+    VkrPassDesc d;
+    memset(&d, 0, sizeof(d));
+    d.colorCount = pass->colorCount;
     VkrTexture *colorTex[RHI_MAX_COLOR_TARGETS];
     VkrTexture *depthTex = NULL;
     for (uint32_t i = 0; i < pass->colorCount; i++) {
@@ -960,22 +965,22 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
             VKR_LOG("render pass: a readable colour target without local read");
             return;
         }
-        color[i] = (VkRenderingAttachmentInfo){
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = t->view,
-            /* read by the pass's RHI_DST_READ_ATTACHMENT pipelines */
-            .imageLayout = vkr_state_layout(
-                a->readable ? RHI_STATE_RENDER_TARGET_READ : RHI_STATE_RENDER_TARGET, t->rhiFormat),
-            .loadOp = vkr_loadOpMap[a->load < RHI_LOAD_COUNT ? a->load : 0].vk,
-            /* DONT_CARE when asked (a tiler skips the write-back) */
-            .storeOp = a->store == RHI_STORE_DONT_CARE ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                                       : VK_ATTACHMENT_STORE_OP_STORE,
-            .clearValue = cv,
-        };
+        VkrPassAttach *pa = &d.color[i];
+        pa->tex = t;
+        pa->view = t->view;
+        pa->format = t->format;
+        pa->samples = (VkSampleCountFlagBits)t->samples;
+        /* read by the pass's RHI_DST_READ_ATTACHMENT pipelines */
+        pa->layout = vkr_state_layout(
+            a->readable ? RHI_STATE_RENDER_TARGET_READ : RHI_STATE_RENDER_TARGET, t->rhiFormat);
+        pa->load = vkr_loadOpMap[a->load < RHI_LOAD_COUNT ? a->load : 0].vk;
+        /* DONT_CARE when asked (a tiler skips the write-back) */
+        pa->store = a->store == RHI_STORE_DONT_CARE ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                    : VK_ATTACHMENT_STORE_OP_STORE;
+        pa->stencilLoad = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        pa->stencilStore = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        pa->clear = cv;
     }
-    VkRenderingAttachmentInfo depth = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
-    VkRenderingAttachmentInfo stencil = {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
-    bool hasDepth = false, hasStencil = false;
     if (pass->depth.texture.id) {
         VkrTexture *t = vkr_get_texture(pass->depth.texture);
         if (!t) {
@@ -990,53 +995,71 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
          * attachment after rhi_cmd_local_read_barrier (the fog's local
          * read), the texture in RHI_STATE_RENDER_TARGET_READ
          * (RENDERING_LOCAL_READ, vkr_state_scope) */
-        VkImageLayout layout =
-            pass->depth.readOnlyDepth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
-            : pass->depth.readable    ? VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR
-                                      : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        VkClearValue cv = {.depthStencil = {pass->depth.clearDepth, pass->depth.clearStencil}};
-        hasDepth = true;
+        VkrPassAttach *pa = &d.depth;
+        d.hasDepth = true;
+        d.readOnlyDepth = pass->depth.readOnlyDepth;
         depthTex = t;
-        depth.imageView = t->view;
-        depth.imageLayout = layout;
-        depth.loadOp =
+        pa->tex = t;
+        pa->view = t->view;
+        pa->format = t->format;
+        pa->samples = (VkSampleCountFlagBits)t->samples;
+        pa->layout = pass->depth.readOnlyDepth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                     : pass->depth.readable    ? VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR
+                                               : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        pa->clear.depthStencil.depth = pass->depth.clearDepth;
+        pa->clear.depthStencil.stencil = pass->depth.clearStencil;
+        pa->load =
             vkr_loadOpMap[pass->depth.depthLoad < RHI_LOAD_COUNT ? pass->depth.depthLoad : 0].vk;
-        depth.storeOp = pass->depth.readOnlyDepth ? VK_ATTACHMENT_STORE_OP_NONE
-                        : pass->depth.store == RHI_STORE_DONT_CARE
-                            ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                            : VK_ATTACHMENT_STORE_OP_STORE;
-        depth.clearValue = cv;
+        pa->store = pass->depth.readOnlyDepth                  ? VK_ATTACHMENT_STORE_OP_NONE
+                    : pass->depth.store == RHI_STORE_DONT_CARE ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                               : VK_ATTACHMENT_STORE_OP_STORE;
+        pa->stencilLoad = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        pa->stencilStore = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         if (t->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
-            hasStencil = true;
-            stencil = depth;
-            stencil.loadOp =
+            d.hasStencil = true;
+            pa->stencilLoad =
                 vkr_loadOpMap[pass->depth.stencilLoad < RHI_LOAD_COUNT ? pass->depth.stencilLoad
                                                                        : 0]
                     .vk;
             /* the stencil's own store op; zero (RHI_STORE_STORE) keeps the
              * stencil */
-            stencil.storeOp = pass->depth.readOnlyDepth ? VK_ATTACHMENT_STORE_OP_NONE
-                              : pass->depth.stencilStore == RHI_STORE_DONT_CARE
-                                  ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-                                  : VK_ATTACHMENT_STORE_OP_STORE;
+            pa->stencilStore = pass->depth.readOnlyDepth ? VK_ATTACHMENT_STORE_OP_NONE
+                               : pass->depth.stencilStore == RHI_STORE_DONT_CARE
+                                   ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                   : VK_ATTACHMENT_STORE_OP_STORE;
         }
-        if (g_vkr.apiVersion < VK_API_VERSION_1_3 && pass->depth.readOnlyDepth) {
-            /* STORE_OP_NONE is core in 1.3 only */
-            depth.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            stencil.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        /* STORE_OP_NONE is core in 1.3 only.  Dynamic rendering keeps the
+         * version check (a 1.2 device stores, as it always has); a
+         * VkRenderPass takes it where an extension gave it (storeOpNone:
+         * VK_KHR/EXT_load_store_op_none, VK_QCOM_render_pass_store_ops) */
+        const bool noneOk =
+            g_vkr.legacyPasses ? g_vkr.storeOpNone : g_vkr.apiVersion >= VK_API_VERSION_1_3;
+        if (!noneOk && pass->depth.readOnlyDepth) {
+            pa->store = VK_ATTACHMENT_STORE_OP_STORE;
+            if (d.hasStencil) {
+                pa->stencilStore = VK_ATTACHMENT_STORE_OP_STORE;
+            }
         }
     }
     uint32_t areaW = pass->width, areaH = pass->height;
     vkr_pass_area_fits(&areaW, &areaH, colorTex, pass->colorCount, depthTex);
-    VkRenderingInfo ri = {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea = {{0, 0}, {areaW, areaH}},
-        .layerCount = 1,
-        .colorAttachmentCount = pass->colorCount,
-        .pColorAttachments = color,
-        .pDepthAttachment = hasDepth ? &depth : NULL,
-        .pStencilAttachment = hasStencil ? &stencil : NULL,
-    };
+    d.areaW = areaW;
+    d.areaH = areaH;
+    /* the framebuffer (legacy path): the attachments' common size, the
+     * area's without one */
+    d.fbW = areaW;
+    d.fbH = areaH;
+    if (pass->colorCount || depthTex) {
+        d.fbW = d.fbH = UINT32_MAX;
+        for (uint32_t i = 0; i < pass->colorCount; i++) {
+            d.fbW = colorTex[i]->width < d.fbW ? colorTex[i]->width : d.fbW;
+            d.fbH = colorTex[i]->height < d.fbH ? colorTex[i]->height : d.fbH;
+        }
+        if (depthTex) {
+            d.fbW = depthTex->width < d.fbW ? depthTex->width : d.fbW;
+            d.fbH = depthTex->height < d.fbH ? depthTex->height : d.fbH;
+        }
+    }
     if (c->globalOrder) {
         vkr_flush_barriers(c);
         vkr_order_writes(c->cb, true);
@@ -1052,7 +1075,7 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         for (uint32_t i = 0; i < pass->colorCount; i++) {
             /* a readable attachment is also read by the fragment shaders */
             const bool rd = pass->color[i].readable;
-            vkr_hz_image(&h, c, colorTex[i], color[i].imageLayout,
+            vkr_hz_image(&h, c, colorTex[i], d.color[i].layout,
                          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
                              (rd ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : 0u),
                          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
@@ -1065,13 +1088,13 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
          * a write access in Vulkan's synchronisation) */
         bool depthWrites = false;
         if (depthTex) {
-            depthWrites = depth.storeOp != VK_ATTACHMENT_STORE_OP_NONE ||
-                          depth.loadOp != VK_ATTACHMENT_LOAD_OP_LOAD ||
-                          (hasStencil && (stencil.storeOp != VK_ATTACHMENT_STORE_OP_NONE ||
-                                          stencil.loadOp != VK_ATTACHMENT_LOAD_OP_LOAD));
+            depthWrites = d.depth.store != VK_ATTACHMENT_STORE_OP_NONE ||
+                          d.depth.load != VK_ATTACHMENT_LOAD_OP_LOAD ||
+                          (d.hasStencil && (d.depth.stencilStore != VK_ATTACHMENT_STORE_OP_NONE ||
+                                            d.depth.stencilLoad != VK_ATTACHMENT_LOAD_OP_LOAD));
             /* a readable depth is also read by the fragment shaders */
             const bool rdz = pass->depth.readable;
-            vkr_hz_image(&h, c, depthTex, depth.imageLayout,
+            vkr_hz_image(&h, c, depthTex, d.depth.layout,
                          VKR_DEPTH_STAGES | (rdz ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT : 0u),
                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
                              (depthWrites ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT : 0) |
@@ -1088,7 +1111,9 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
             depthTex->hzAttach |= depthWrites ? VKR_HZ_ATTACH_WRITE : VKR_HZ_ATTACH_READ;
         }
     }
-    g_vkr.cmdBeginRendering(c->cb, &ri);
+    if (!vkr_pass_begin(c, &d)) {
+        return;
+    }
     c->inPass = true;
     c->areaW = areaW;
     c->areaH = areaH;
@@ -1109,7 +1134,7 @@ void rhi_cmd_end_render_pass(RhiCommandList cl)
         return;
     }
     vkr_flush_barriers(c);
-    g_vkr.cmdEndRendering(c->cb);
+    vkr_pass_end(c);
     c->inPass = false;
 }
 
