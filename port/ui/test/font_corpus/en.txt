@@ -10,6 +10,7 @@
 #   sound/ICO_SE/.., seDef names, "se %d", "%s %d/%d": a-z 0-9 '/' '_' '.' ' ');
 #   ico2/common/src/staffroll.c staffRollNameData: ASCII, the {..} codes are
 #   skipped by game_text.c rollText, '@' is drawn as U+00A9 and '\' as U+00A5.
+#   port/ui/settings.c the Options window's marks (addMark): U+25B2, U+25BC.
 0123456789
 :/.-%()
 …
@@ -18,3 +19,4 @@ abcdefghijklmnopqrstuvwxyz0123456789/_.
 sound/ICO_ADPCM/ sound/ICO_SE/ se 12 3/4
 ABCDEFGHIJKLMNOPQRSTUVWXYZ
 ©¥
+▲▼
