@@ -398,8 +398,9 @@ The first five are off unless you turn them on, on a phone too.
   story still show her being taken.
 - **Time to rescue Yorda** sets how long a shadow takes to pull Yorda into a
   pit once it has her there: **Half**, **Original**, **Longer** (one and a
-  half times), **Double** or **Triple**. The time counts from when the shadow
-  starts to sink with her, and Ico taking her hand still ends it, so a longer
+  half times), **Double** or **Triple**. The time is the shadow's dive with her
+  (where the game's camera shows her in danger, its hard limit scales too),
+  and Ico taking her hand still ends it, so a longer
   time gives you more of a chance to get to her. Shadows that are frozen or
   turned to stone still pause it, as in the original game. The row above, Shadows
   never take Yorda, stops it altogether.

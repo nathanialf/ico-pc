@@ -148,7 +148,7 @@ What to lower, in this order (Options):
 - **Resolution**.
 
 OpenGL on an older graphics card takes longer for each picture than Vulkan.
-If you chose OpenGL in **Options > Graphics API**, try Vulkan or Direct3D 12
+If you chose OpenGL in **Options > Graphics > Graphics API**, try Vulkan or Direct3D 12
 first.
 
 If the counter stays at 30 with these low, send `ico-pc.log` (the

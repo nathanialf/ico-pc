@@ -1,6 +1,6 @@
 **Please note:** Several things in this version have not been tried on real hardware, because nothing was run on a real machine while it was made. These are the whole reorganised and scrolling Options menu, Downsampling, the time to rescue Yorda, the change to how the game holds back extra pictures (including OpenGL), and Direct3D 11 on a real graphics card. If something looks wrong, please send `logs/ico-pc.log` and say what you chose in Options.
 
-Direct3D 11 may still show a black screen on some graphics cards. It has been given a new set of drawing tests on Microsoft's software renderer, and one known Direct3D 11 limitation is worked around, but it has still not been seen drawing the game on a real graphics card. If it stays black for you, choose Vulkan or Direct3D 12 in Options > Graphics API and send `logs/ico-pc.log` from a start with Direct3D 11.
+Direct3D 11 may still show a black screen on some graphics cards. It has been given a new set of drawing tests on Microsoft's software renderer, and one known Direct3D 11 limitation is worked around, but it has still not been seen drawing the game on a real graphics card. If it stays black for you, choose Vulkan or Direct3D 12 in Options > Graphics > Graphics API and send `logs/ico-pc.log` from a start with Direct3D 11.
 
 ## New
 
