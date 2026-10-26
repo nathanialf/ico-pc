@@ -1139,6 +1139,26 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
         .pDynamicState = &j->dy,
         .layout = j->layout,
     };
+    if (g_vkr.legacyPasses) {
+        /* no dynamic rendering: the render pass of the pipeline's
+         * compatibility class (vk_renderpass.c), made here on the calling
+         * thread; the compile threads only read the handle */
+        j->ci.pNext = NULL;
+        j->ci.renderPass = vkr_renderpass_compat(
+            d->colorCount, j->colorFormats,
+            d->depthFormat != RHI_FMT_UNKNOWN ? depthFmt : VK_FORMAT_UNDEFINED,
+            j->ms_.rasterizationSamples);
+        j->ci.subpass = 0;
+        if (!j->ci.renderPass) {
+            VKR_LOG("pipeline %s: no render pass for its targets",
+                    d->debugName ? d->debugName : "?");
+            vkDestroyPipelineLayout(g_vkr.device, j->layout, NULL);
+            vkr_pool_release(&g_vkr.pipelines, j->id);
+            vkr_pipe_failed(VK_SUCCESS);
+            j->id = 0;
+            return false;
+        }
+    }
     return true;
 }
 
