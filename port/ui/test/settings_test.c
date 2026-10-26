@@ -56,15 +56,21 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_BACK};
-    static const int picOpts[] = {UI_OPT_ANTI_ALIAS,   UI_OPT_FULL_HEIGHT,  UI_OPT_FILTER,
-                                  UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,   UI_OPT_CRT,
-                                  UI_OPT_CRT_STRENGTH, UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,
-                                  UI_OPT_BACK};
-    static const int picStrs[] = {UI_STR_OPT_AA,           UI_STR_OPT_FULL_HEIGHT,
-                                  UI_STR_OPT_FILTERING,    UI_STR_OPT_FULL_PIXEL,
-                                  UI_STR_OPT_BRIGHTNESS,   UI_STR_OPT_CRT,
-                                  UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_TEXTURE_PACK,
-                                  UI_STR_OPT_MODEL_PACK,   UI_STR_BACK};
+    static const int picOpts[] = {UI_OPT_ANTI_ALIAS, UI_OPT_DOWNSAMPLE,   UI_OPT_FULL_HEIGHT,
+                                  UI_OPT_FILTER,     UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,
+                                  UI_OPT_CRT,        UI_OPT_CRT_STRENGTH, UI_OPT_TEXTURE_PACK,
+                                  UI_OPT_MODEL_PACK, UI_OPT_BACK};
+    static const int picStrs[] = {UI_STR_OPT_AA,
+                                  UI_STR_OPT_DOWNSAMPLE,
+                                  UI_STR_OPT_FULL_HEIGHT,
+                                  UI_STR_OPT_FILTERING,
+                                  UI_STR_OPT_FULL_PIXEL,
+                                  UI_STR_OPT_BRIGHTNESS,
+                                  UI_STR_OPT_CRT,
+                                  UI_STR_OPT_CRT_STRENGTH,
+                                  UI_STR_OPT_TEXTURE_PACK,
+                                  UI_STR_OPT_MODEL_PACK,
+                                  UI_STR_BACK};
     static const int devOpts[] = {UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,
                                   UI_OPT_BACK};
     static const int devStrs[] = {UI_STR_OPT_DEVELOPER_MODE, UI_STR_OPT_DUMP_TEXTURES,
@@ -136,7 +142,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
     CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 5), "Graphics page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 8), "effects rows");
-    CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 10), "picture rows");
+    CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 11), "picture rows");
     CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 4), "developer rows");
     {
         /* Characters and Game variants (links), then Add to Steam and
@@ -501,6 +507,57 @@ static int rowWithPrefix(UiSettingsPage page, const char *prefix)
         }
     }
     return -1;
+}
+
+/* the Downsampling row (issue 149): on Picture right after Anti-aliasing,
+   Off by default, Right and Left both switch it, the preset is not changed,
+   [video] downsample is saved as "box", a file's "box" is read, and its note
+   is on the page */
+static void testDownsample(void)
+{
+    char p[1100];
+    IcoVideoOptions o;
+    int l[16], op[16];
+
+    useConfig("[video]\npreset = \"enhanced\"\n");
+    fakeTables();
+    lt_ext_reset();
+    ui_settings_reset();
+    ui_set_language(UI_LANG_EN);
+    ui_settings_install();
+    const int n = ui_settings_page_rows(UI_PAGE_PICTURE, l, op, NULL, 16);
+    CHECK(n > 2 && op[0] == UI_OPT_ANTI_ALIAS && op[1] == UI_OPT_DOWNSAMPLE,
+          "the row is on Picture right after Anti-aliasing");
+    CHECK(ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_DOWNSAMPLE) < 0, "not on Display");
+    CHECK(strcmp(ui_str(UI_STR_OPT_DOWNSAMPLE), "Downsampling") == 0, "its label");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_DOWNSAMPLE), "Off") == 0, "Off by default (%s)",
+          ui_settings_value_text(UI_OPT_DOWNSAMPLE));
+    CHECK(rowWithPrefix(UI_PAGE_PICTURE, "Draws the picture at the Resolution above") >= 0,
+          "its note is on the page");
+    ico_video_get(&o);
+    const int presetBefore = ico_video_preset(&o);
+    ui_settings_step(UI_OPT_DOWNSAMPLE, 1);
+    ico_video_get(&o);
+    CHECK(o.downsample == ICO_DOWNSAMPLE_BOX && ico_video_downsample() == ICO_DOWNSAMPLE_BOX &&
+              strcmp(ui_settings_value_text(UI_OPT_DOWNSAMPLE), "To original size") == 0,
+          "Right: To original size (%d \"%s\")", o.downsample,
+          ui_settings_value_text(UI_OPT_DOWNSAMPLE));
+    CHECK(ico_video_preset(&o) == presetBefore, "the preset is not changed");
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get(t, "video.downsample") != NULL &&
+              strcmp(ico_toml_get(t, "video.downsample"), "box") == 0,
+          "[video] downsample = \"box\"");
+    ico_toml_free(t);
+    ui_settings_step(UI_OPT_DOWNSAMPLE, -1);
+    ico_video_get(&o);
+    CHECK(o.downsample == ICO_DOWNSAMPLE_OFF &&
+              strcmp(ui_settings_value_text(UI_OPT_DOWNSAMPLE), "Off") == 0,
+          "Left: Off again");
+    useConfig("[video]\ndownsample = \"box\"\n");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_DOWNSAMPLE), "To original size") == 0,
+          "a file's box: To original size");
 }
 
 static void checkSavedPreset(const char *want)
@@ -2626,15 +2683,16 @@ static void testGameOptions(void)
                   rowShown(UI_PAGE_PICTURE, UI_OPT_FULL_HEIGHT),
               "title %d: Texture filtering and Full-height are on Picture", title);
         {
-            /* Anti-aliasing, Full-height and Texture filtering first, Full pixel
-               before Brightness and the CRT rows */
+            /* Anti-aliasing, Downsampling, Full-height and Texture filtering
+               first, Full pixel before Brightness and the CRT rows */
             int fl[16], fo[16];
             const int fn = ui_settings_page_rows(UI_PAGE_PICTURE, fl, fo, NULL, 16);
-            CHECK(fn > 5 && fo[0] == UI_OPT_ANTI_ALIAS && fo[1] == UI_OPT_FULL_HEIGHT &&
-                      fo[2] == UI_OPT_FILTER && fo[3] == UI_OPT_FULL_PIXEL &&
-                      fo[4] == UI_OPT_BRIGHTNESS && fo[5] == UI_OPT_CRT,
-                  "title %d: Picture starts Anti-aliasing, Full-height, Texture filtering, Full "
-                  "pixel, Brightness, CRT",
+            CHECK(fn > 6 && fo[0] == UI_OPT_ANTI_ALIAS && fo[1] == UI_OPT_DOWNSAMPLE &&
+                      fo[2] == UI_OPT_FULL_HEIGHT && fo[3] == UI_OPT_FILTER &&
+                      fo[4] == UI_OPT_FULL_PIXEL && fo[5] == UI_OPT_BRIGHTNESS &&
+                      fo[6] == UI_OPT_CRT,
+                  "title %d: Picture starts Anti-aliasing, Downsampling, Full-height, Texture "
+                  "filtering, Full pixel, Brightness, CRT",
                   title);
         }
         CHECK(rowShown(UI_PAGE_PICTURE, UI_OPT_CRT) &&
@@ -3652,6 +3710,7 @@ int main(int argc, char **argv)
     testVideoGate();
     testFramerate();
     testShowFps();
+    testDownsample();
     testPreset();
     testCapture();
     testBootSkip();
