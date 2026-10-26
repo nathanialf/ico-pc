@@ -667,8 +667,9 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
     }
     /* RHI_TEX_UINT_VIEW: an RGBA8_UNORM image also viewed as RGBA8_UINT
      * (the same texel class), the two formats listed so the driver can keep
-     * its compression for exactly those (Vulkan 1.2 VkImageFormatListCreateInfo;
-     * the device is 1.2 or later, vkr_create_device) */
+     * its compression for exactly those (Vulkan 1.2 VkImageFormatListCreateInfo,
+     * VK_KHR_image_format_list on a 1.1 device; without either the image is
+     * only mutable, g_vkr.formatList, vkr_create_device) */
     static const VkFormat uintPair[2] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_UINT};
     const bool uintView =
         (desc->usage & RHI_TEX_UINT_VIEW) && desc->format == RHI_FMT_RGBA8_UNORM &&
@@ -680,7 +681,7 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
     };
     VkImageCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .pNext = uintView ? &formatList : NULL,
+        .pNext = uintView && g_vkr.formatList ? &formatList : NULL,
         .flags = uintView ? VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT : 0u,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = vkFmt,
