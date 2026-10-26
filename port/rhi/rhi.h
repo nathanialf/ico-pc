@@ -1052,6 +1052,11 @@ typedef struct RhiStats {
      * not (Vulkan, vk_cmd.c vkr_flush_dynamic; 0 on D3D12) */
     uint64_t dynamicSets;
     uint64_t bindGroupBinds; /* bind group changes recorded (likewise) */
+    /* OpenGL: the entries of the groups bound (one bind each: a buffer
+     * range, a texture and its sampler, an image) and of them those skipped
+     * because their binding point already held the same (gl_cmd.c
+     * gl_bind_groups); 0 on the other backends, which bind a group whole */
+    uint64_t entryBinds, entryBindsSkipped;
     uint64_t draws, renderPasses, barriers, copies;
     uint64_t submits, presents;
     uint64_t fenceWaits, fenceWaitNs;
