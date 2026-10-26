@@ -1116,6 +1116,13 @@ void rhi_get_stats(RhiStats *out);
 #define RHI_MAX_TIMESTAMPS 256
 #define RHI_TIMESTAMP_WORDS (RHI_MAX_TIMESTAMPS / 32)
 #define RHI_TIMESTAMP_KEEP_BARRIERS 0x80000000u
+/* RHI_TIMESTAMP_ISSUE_TIME or-ed into the index: the backend also notes
+ * when the stamp was handed over, for the busy clock below
+ * (rhi_read_timestamps_busy); ignored by a backend without one.  Reading
+ * that time may hold the CPU until the driver has taken the commands
+ * before it (OpenGL glGetInteger64v(GL_TIMESTAMP)), so the renderer asks
+ * for it only in the replays it times pass by pass. */
+#define RHI_TIMESTAMP_ISSUE_TIME 0x40000000u
 
 /* index i in a bit set of timestamp indices (uint32_t[RHI_TIMESTAMP_WORDS]) */
 static inline bool rhi_ts_has(const uint32_t *set, uint32_t i)
@@ -1145,7 +1152,8 @@ uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max);
  * clock when stamp b was recorded.  So it is a lower bound of the GPU's
  * own time: work the GPU ran while the CPU was still handing the stretch
  * over does not count.  0 for an index not written; returns as
- * rhi_read_timestamps, or 0 when the backend does not measure it.
+ * rhi_read_timestamps, or 0 when the backend does not measure it or a
+ * stamp of the slot was written without RHI_TIMESTAMP_ISSUE_TIME.
  * OpenGL only (gl_device.c: a command list executes while it is recorded,
  * so a slow walk starves the GPU inside the timestamps' span); Vulkan,
  * D3D12 and D3D11 return 0 (their lists are submitted whole). */
