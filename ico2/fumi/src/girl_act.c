@@ -1360,8 +1360,11 @@ static inline float girlBrainGetTypeRatio(int type) /* derived name */
    reading `next` through the static chain; here it is a parameter */
 static __inline void setNext(int *next, int m)
 {
-    /* the 2001 builds take the mode whatever girlControlMode is */
-    if (!ICO_NTSCAUG6JUN26 && girlControlMode != 0 && girlBrainModeTable[m].flag != 0) {
+    /* PC port: the 2001 builds took the mode whatever girlControlMode was
+       (their girlBrainMain_DecideMode_<disc> never refused one); the port
+       refuses the flagged modes with Players 2 on every disc, as the
+       European build does (the table is the same on all) */
+    if (girlControlMode != 0 && girlBrainModeTable[m].flag != 0) {
         return;
     }
     *next = m;
@@ -3703,10 +3706,14 @@ static void subGirlBrain_Pulledup_ntsc(GObj *volatile self)
             _OrientXZGV(oz, test_CURRENTROOT((boyGObj)), test_CURRENTROOT((void *)self));
             ry = _RotyGV(sk, oz);
             if (0x15 <= ((ry < 0) ? -ry : ry)) {
-                if (0 < ry) {
-                    ATGoalTurnSet((void *)self, 3, 2, oz);
-                } else {
-                    ATGoalTurnSet((void *)self, 3, 1, oz);
+                /* PC port: not with Players 2 (the European
+                   subGirlBrain_Pulledup's girlControlMode == 0 guard) */
+                if (girlControlMode == 0) {
+                    if (0 < ry) {
+                        ATGoalTurnSet((void *)self, 3, 2, oz);
+                    } else {
+                        ATGoalTurnSet((void *)self, 3, 1, oz);
+                    }
                 }
             } else {
                 sub->flags18.ll |= 0x2000000000000;
@@ -3784,10 +3791,14 @@ static void subGirlBrain_Pulledup_jun26(GObj *volatile self)
             _OrientXZGV(oz, test_CURRENTROOT((boyGObj)), test_CURRENTROOT((void *)self));
             ry = _RotyGV(sk, oz);
             if (21 <= ((ry < 0) ? -ry : ry)) {
-                if (0 < ry) {
-                    ATGoalTurnSet((void *)self, 2, 2, oz);
-                } else {
-                    ATGoalTurnSet((void *)self, 2, 1, oz);
+                /* PC port: not with Players 2 (the European
+                   subGirlBrain_Pulledup's girlControlMode == 0 guard) */
+                if (girlControlMode == 0) {
+                    if (0 < ry) {
+                        ATGoalTurnSet((void *)self, 2, 2, oz);
+                    } else {
+                        ATGoalTurnSet((void *)self, 2, 1, oz);
+                    }
                 }
             } else {
                 sub->flags18.ll |= 0x800000000000;
@@ -3866,10 +3877,14 @@ static void subGirlBrain_Pulledup_aug6(GObj *volatile self)
             _OrientXZGV(oz, test_CURRENTROOT((boyGObj)), test_CURRENTROOT((void *)self));
             ry = _RotyGV(sk, oz);
             if (21 <= ((ry < 0) ? -ry : ry)) {
-                if (0 < ry) {
-                    ATGoalTurnSet((void *)self, 3, 2, oz);
-                } else {
-                    ATGoalTurnSet((void *)self, 3, 1, oz);
+                /* PC port: not with Players 2 (the European
+                   subGirlBrain_Pulledup's girlControlMode == 0 guard) */
+                if (girlControlMode == 0) {
+                    if (0 < ry) {
+                        ATGoalTurnSet((void *)self, 3, 2, oz);
+                    } else {
+                        ATGoalTurnSet((void *)self, 3, 1, oz);
+                    }
                 }
             } else {
                 sub->flags18.ll |= 0x1000000000000;
@@ -6365,10 +6380,15 @@ static void subGirlControl_ntsc(GObj *volatile self)
         _ACTWait(1);
     }
     iosPadConnect(&w.p->pad, 0, 1, &w.p->padConf);
+    girlPad = &w.p->pad; /* PC port: girl_act.c subGirlControl's, for Players 2 */
     for (;;) {
         if ((int)(w.p->flags18.ll >> 43) & 1) {
-            if ((void *)self == (void *)CurrentTargetGObj) {
-                iosPadConnect(&w.p->pad, 0, 0, &w.p->padConf);
+            /* PC port: Players 2 reads Yorda's pad from port 1, as the
+               European subGirlControl does (its read: the debug target or
+               girlControlMode, not while scpBoyControlReadDisable) */
+            if ((void *)self == (void *)CurrentTargetGObj ||
+                (girlControlMode != 0 && scpBoyControlReadDisable == 0)) {
+                iosPadConnect(&w.p->pad, 0, girlControlMode != 0, &w.p->padConf);
                 iosPadRead(&w.p->pad);
                 iosPadGetStick(&w.p->pad, &w.p->stick, 0, 2, 2, 0);
                 _GetMotionDirection(mdir, (void *)self);
@@ -6386,7 +6406,10 @@ static void subGirlControl_ntsc(GObj *volatile self)
             }
             /* the slow-walk states: flags18 bits 62, 52 and 51 (their names are not known);
                the 2001 builds' compiled-out debug display is not carried */
-            if ((w.p->flags18.ll &
+            /* PC port: not with Players 2 (the European subGirlControl's
+               girlControlMode == 0 guard) */
+            if (girlControlMode == 0 &&
+                (w.p->flags18.ll &
                  (0x4000000000000000 | 0x0010000000000000 | 0x0008000000000000)) != 0) {
                 if (w.p->stick.mag != 0.0f) {
                     w.p->stick.mag = 0.5f;
@@ -6484,13 +6507,18 @@ static void subGirlControl_ntsc(GObj *volatile self)
             }
             break;
         case 45:
-            if (w.p->stick.mag > 0.1f || ((int)(w.p->flags20.ll >> 3) & 1)) {
+            /* PC port: with Players 2 a forward stick only, and no count
+               from the boy (the European subGirlControl's case 45) */
+            if ((girlControlMode != 0 ? (w.p->stick.mag > 0.1f &&
+                                         (w.p->stick.angle >= -45 && w.p->stick.angle <= 45))
+                                      : (w.p->stick.mag > 0.1f)) ||
+                ((int)(w.p->flags20.ll >> 3) & 1)) {
                 ACTSendMailCorrect(self, 110);
                 ACTSendMailCorrect(self, 109);
             }
             hold = 0;
             push = 0;
-            if (((int *)boyGObj) != 0) {
+            if (((int *)boyGObj) != 0 && girlControlMode == 0) {
                 if (GOBJ_ACT(((int *)boyGObj))->actMode == 0x2D) {
                     push = GOBJ_ACT(((int *)boyGObj))->intrMot != 63;
                 } else {
@@ -6584,10 +6612,15 @@ static void subGirlControl_jun26(GObj *volatile self)
         _ACTWait(1);
     }
     iosPadConnect(&w.p->pad, 0, 1, &w.p->padConf);
+    girlPad = &w.p->pad; /* PC port: girl_act.c subGirlControl's, for Players 2 */
     for (;;) {
         if ((int)(w.p->flags18.ll >> 42) & 1) {
-            if ((void *)self == (void *)CurrentTargetGObj) {
-                iosPadConnect(&w.p->pad, 0, 0, &w.p->padConf);
+            /* PC port: Players 2 reads Yorda's pad from port 1, as the
+               European subGirlControl does (its read: the debug target or
+               girlControlMode, not while scpBoyControlReadDisable) */
+            if ((void *)self == (void *)CurrentTargetGObj ||
+                (girlControlMode != 0 && scpBoyControlReadDisable == 0)) {
+                iosPadConnect(&w.p->pad, 0, girlControlMode != 0, &w.p->padConf);
                 iosPadRead(&w.p->pad);
                 iosPadGetStick(&w.p->pad, &w.p->stick, 0, 2, 2, 0);
                 _GetMotionDirection(mdir, (void *)self);
@@ -6605,7 +6638,10 @@ static void subGirlControl_jun26(GObj *volatile self)
             }
             /* the slow-walk states: flags18 bits 62, 52 and 51 (their names are not known);
                the 2001 builds' compiled-out debug display is not carried */
-            if ((w.p->flags18.ll &
+            /* PC port: not with Players 2 (the European subGirlControl's
+               girlControlMode == 0 guard) */
+            if (girlControlMode == 0 &&
+                (w.p->flags18.ll &
                  (0x0800000000000000 | 0x0004000000000000 | 0x0002000000000000)) != 0) {
                 if (w.p->stick.mag != 0.0f) {
                     w.p->stick.mag = 0.5f;
@@ -6703,13 +6739,17 @@ static void subGirlControl_jun26(GObj *volatile self)
             }
             break;
         case 45:
-            if (w.p->stick.mag > 0.1f) {
+            /* PC port: with Players 2 a forward stick only, and no count
+               from the boy (the European subGirlControl's case 45) */
+            if (girlControlMode != 0
+                    ? (w.p->stick.mag > 0.1f && (w.p->stick.angle >= -45 && w.p->stick.angle <= 45))
+                    : (w.p->stick.mag > 0.1f)) {
                 ACTSendMailCorrect(self, 108);
                 ACTSendMailCorrect(self, 107);
             }
             hold = 0;
             push = 0;
-            if (((int *)boyGObj) != 0) {
+            if (((int *)boyGObj) != 0 && girlControlMode == 0) {
                 if (GOBJ_ACT(((int *)boyGObj))->actMode == 0x2D) {
                     push = GOBJ_ACT(((int *)boyGObj))->intrMot != 60;
                 } else {
@@ -6803,10 +6843,15 @@ static void subGirlControl_aug6(GObj *volatile self)
         _ACTWait(1);
     }
     iosPadConnect(&w.p->pad, 0, 1, &w.p->padConf);
+    girlPad = &w.p->pad; /* PC port: girl_act.c subGirlControl's, for Players 2 */
     for (;;) {
         if ((int)(w.p->flags18.ll >> 43) & 1) {
-            if ((void *)self == (void *)CurrentTargetGObj) {
-                iosPadConnect(&w.p->pad, 0, 0, &w.p->padConf);
+            /* PC port: Players 2 reads Yorda's pad from port 1, as the
+               European subGirlControl does (its read: the debug target or
+               girlControlMode, not while scpBoyControlReadDisable) */
+            if ((void *)self == (void *)CurrentTargetGObj ||
+                (girlControlMode != 0 && scpBoyControlReadDisable == 0)) {
+                iosPadConnect(&w.p->pad, 0, girlControlMode != 0, &w.p->padConf);
                 iosPadRead(&w.p->pad);
                 iosPadGetStick(&w.p->pad, &w.p->stick, 0, 2, 2, 0);
                 _GetMotionDirection(mdir, (void *)self);
@@ -6824,7 +6869,10 @@ static void subGirlControl_aug6(GObj *volatile self)
             }
             /* the slow-walk states: flags18 bits 62, 52 and 51 (their names are not known);
                the 2001 builds' compiled-out debug display is not carried */
-            if ((w.p->flags18.ll &
+            /* PC port: not with Players 2 (the European subGirlControl's
+               girlControlMode == 0 guard) */
+            if (girlControlMode == 0 &&
+                (w.p->flags18.ll &
                  (0x2000000000000000 | 0x0008000000000000 | 0x0004000000000000)) != 0) {
                 if (w.p->stick.mag != 0.0f) {
                     w.p->stick.mag = 0.5f;
@@ -6922,13 +6970,17 @@ static void subGirlControl_aug6(GObj *volatile self)
             }
             break;
         case 45:
-            if (w.p->stick.mag > 0.1f) {
+            /* PC port: with Players 2 a forward stick only, and no count
+               from the boy (the European subGirlControl's case 45) */
+            if (girlControlMode != 0
+                    ? (w.p->stick.mag > 0.1f && (w.p->stick.angle >= -45 && w.p->stick.angle <= 45))
+                    : (w.p->stick.mag > 0.1f)) {
                 ACTSendMailCorrect(self, 109);
                 ACTSendMailCorrect(self, 108);
             }
             hold = 0;
             push = 0;
-            if (((int *)boyGObj) != 0) {
+            if (((int *)boyGObj) != 0 && girlControlMode == 0) {
                 if (GOBJ_ACT(((int *)boyGObj))->actMode == 0x2D) {
                     push = GOBJ_ACT(((int *)boyGObj))->intrMot != 62;
                 } else {
@@ -9619,12 +9671,23 @@ static inline void actGirlHang_ntsc(GObj *volatile self)
 {
     /* rope-hang detected from the ACT parameter block */
     int hang = 0;
+    int rope = 0; /* PC port: Players 2 (below) */
 
     if (((int *)GOBJ_WORK(self)->modeHist)[1] == 87) {
         hang = ((int *)GOBJ_WORK(self)->modeHist)[0] == 4;
     }
+    /* PC port: the European actGirlHang's Players 2 branch: hung from a
+       jump, the plane is set and she stands after 5 s (the arm's own
+       ditch hang still stands at once) */
+    if (girlControlMode != 0 && ((int *)GOBJ_WORK(self)->modeHist)[0] == 4) {
+        rope = 1;
+        ACTAdjustPlane((void *)self, &GOBJ_WORK(self)->intrReq.a.wall);
+    }
     for (;;) {
         if (hang) {
+            ACTSendMailCorrect((void *)self, 183);
+        } else if (rope &&
+                   (60 - systemStatus[0] * 10) / systemStatus[1] * 5 < GOBJ_ACT(self)->modeFrame) {
             ACTSendMailCorrect((void *)self, 183);
         }
         _ACTWait(1);
@@ -9638,12 +9701,23 @@ static inline void actGirlHang_aug6jun26(GObj *volatile self)
     Act *s = GOBJ_ACT(self);
     /* rope-hang detected from the ACT parameter block */
     int hang = 0;
+    int rope = 0; /* PC port: Players 2 (below) */
 
     if (((int *)GOBJ_WORK(self)->modeHist)[1] == PAL_JUN26(87, 86)) {
         hang = ((int *)GOBJ_WORK(self)->modeHist)[0] == 4;
     }
+    /* PC port: the European actGirlHang's Players 2 branch: hung from a
+       jump, the plane is set and she stands after 5 s (the arm's own
+       ditch hang still stands at once) */
+    if (girlControlMode != 0 && ((int *)GOBJ_WORK(self)->modeHist)[0] == 4) {
+        rope = 1;
+        ACTAdjustPlane((void *)self, &GOBJ_WORK(self)->intrReq.a.wall);
+    }
     for (;;) {
         if (hang) {
+            ACTSendMailCorrect((void *)self, PAL_JUN26(180, 177));
+        } else if (rope &&
+                   (60 - systemStatus[0] * 10) / systemStatus[1] * 5 < GOBJ_ACT(self)->modeFrame) {
             ACTSendMailCorrect((void *)self, PAL_JUN26(180, 177));
         }
         _ACTWait(1);
