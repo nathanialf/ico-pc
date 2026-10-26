@@ -428,6 +428,8 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "Ouvre le menu de partage avec le journal et le dernier zip d’image, à envoyer par e-mail ou messagerie.",
 #endif
     [UI_STR_SECTION_EFFECTS] = "Effets",
+    [UI_STR_SECTION_PICTURE] = "Image",
+    [UI_STR_SECTION_DEVELOPER] = "Développeur",
     [UI_STR_OPT_EFFECT_GLOW] = "Lueur",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Profondeur de champ",
     [UI_STR_OPT_EFFECT_SOFTENING] = "Adoucissement de l’écran",

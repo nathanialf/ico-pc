@@ -429,6 +429,8 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Öffnet das Teilen-Menü mit dem Protokoll und der neuesten Bild-ZIP, zum Senden per E-Mail oder Chat.",
 #endif
     [UI_STR_SECTION_EFFECTS] = "Effekte",
+    [UI_STR_SECTION_PICTURE] = "Bild",
+    [UI_STR_SECTION_DEVELOPER] = "Entwickler",
     [UI_STR_OPT_EFFECT_GLOW] = "Leuchten",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Tiefenschärfe",
     [UI_STR_OPT_EFFECT_SOFTENING] = "Bildweichzeichnung",

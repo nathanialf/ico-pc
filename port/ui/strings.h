@@ -526,6 +526,9 @@ typedef enum UiStrId {
 #endif
     /* Options > Effects: the page, its five switches, its note */
     UI_STR_SECTION_EFFECTS,
+    /* Options > Picture and Options > Developer: the pages' names (Main's links) */
+    UI_STR_SECTION_PICTURE,
+    UI_STR_SECTION_DEVELOPER,
     UI_STR_OPT_EFFECT_GLOW,
     UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
     UI_STR_OPT_EFFECT_SOFTENING,

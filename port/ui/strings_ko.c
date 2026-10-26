@@ -428,6 +428,8 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_SHARE_REPORT_NOTE] = "로그와 사진 파일을 메일이나 메신저로 공유합니다.",
 #endif
     [UI_STR_SECTION_EFFECTS] = "효과",
+    [UI_STR_SECTION_PICTURE] = "화질",
+    [UI_STR_SECTION_DEVELOPER] = "개발자",
     [UI_STR_OPT_EFFECT_GLOW] = "빛 번짐",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "피사계 심도",
     [UI_STR_OPT_EFFECT_SOFTENING] = "화면 흐림",

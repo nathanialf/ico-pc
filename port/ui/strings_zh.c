@@ -422,6 +422,8 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "開啟分享選單，附上記錄檔與最新的畫面 zip，可用電子郵件或通訊軟體傳送。",
 #endif
     [UI_STR_SECTION_EFFECTS] = "特效",
+    [UI_STR_SECTION_PICTURE] = "畫質",
+    [UI_STR_SECTION_DEVELOPER] = "開發者",
     [UI_STR_OPT_EFFECT_GLOW] = "光暈",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "景深",
     [UI_STR_OPT_EFFECT_SOFTENING] = "畫面柔化",

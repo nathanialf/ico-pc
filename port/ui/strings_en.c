@@ -423,6 +423,8 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "Opens the share menu with the log and the newest picture zip, to send by email or a chat app.",
 #endif
     [UI_STR_SECTION_EFFECTS] = "Effects",
+    [UI_STR_SECTION_PICTURE] = "Picture",
+    [UI_STR_SECTION_DEVELOPER] = "Developer",
     [UI_STR_OPT_EFFECT_GLOW] = "Glow",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Depth of field",
     [UI_STR_OPT_EFFECT_SOFTENING] = "Screen softening",

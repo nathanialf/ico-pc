@@ -425,6 +425,8 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_SHARE_REPORT_NOTE] = "ログと写真のzipを、メールなどのアプリでシェアします。",
 #endif
     [UI_STR_SECTION_EFFECTS] = "エフェクト",
+    [UI_STR_SECTION_PICTURE] = "画質",
+    [UI_STR_SECTION_DEVELOPER] = "開発者",
     [UI_STR_OPT_EFFECT_GLOW] = "光のにじみ",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "被写界深度",
     [UI_STR_OPT_EFFECT_SOFTENING] = "画面のぼかし",

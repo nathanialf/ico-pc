@@ -426,6 +426,8 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
         "Apre il menu di condivisione con il registro e l’ultimo zip dell’immagine, da inviare per e-mail o chat.",
 #endif
     [UI_STR_SECTION_EFFECTS] = "Effetti",
+    [UI_STR_SECTION_PICTURE] = "Immagine",
+    [UI_STR_SECTION_DEVELOPER] = "Sviluppatore",
     [UI_STR_OPT_EFFECT_GLOW] = "Bagliore",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Profondità di campo",
     [UI_STR_OPT_EFFECT_SOFTENING] = "Ammorbidimento dello schermo",
