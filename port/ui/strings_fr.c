@@ -32,6 +32,13 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_OPT_YORDA] = "Les ombres n’enlèvent jamais Yorda",
     [UI_STR_OPT_YORDA_NOTE] =
         "Pour une partie moins stressante. Quelques scènes scriptées montrent encore l’enlèvement.",
+    [UI_STR_OPT_PIT_TIME] = "Temps pour sauver Yorda",
+    [UI_STR_OPT_PIT_TIME_NOTE] =
+        "Le temps qu’une ombre met à entraîner Yorda dans un gouffre. La ligne Yorda ci-dessus l’empêche complètement.",
+    [UI_STR_VAL_PIT_HALF] = "Moitié",
+    [UI_STR_VAL_PIT_LONGER] = "Plus long",
+    [UI_STR_VAL_PIT_DOUBLE] = "Double",
+    [UI_STR_VAL_PIT_TRIPLE] = "Triple",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",
