@@ -37,7 +37,9 @@
  *           texels it changed;
  * at 1x, under Original, under MSAA or with ICO_RD_CRACK_FILL=0 no fill
  * pass is drawn and the two replays are byte-identical.  With msaa
- * (MSAA4, the filler not drawn) the frame is replayed again without
+ * (MSAA4; the frame has no shadow, so the epoch is still open at the fog
+ * and the filler is not drawn: rd_crack_resolved_msaa2/4 fill a corpus
+ * room after the resolve) the frame is replayed again without
  * anti-aliasing and without the filler: along the edge the MSAA picture
  * holds at most 5 % of the texels with the clear's depth (the fog's table
  * entry 0) that the frame without anti-aliasing holds (the covered-majority
