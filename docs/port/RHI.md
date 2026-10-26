@@ -444,6 +444,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_FAKE_NO_MSAA` | 1 reports single sampling only |
 | `ICO_VK_FAKE_NO_DST` | 1 reports no destination read and no local read |
 | `ICO_VK_FAKE_ADRENO` | 1 takes the Qualcomm driver's branch: the attachment read not offered |
+| `ICO_VK_FAKE_API` | `1.1` uses the device as a Vulkan 1.1 driver without the extensions would have it; so far without timeline semaphores, the submissions tracked by the fence ring ([Bindings and synchronisation](#vulkan)); the line `ICO_VK_FAKE_API=1.1: the device is used without timeline semaphores`; another value is logged and hides nothing (`rhi_vk_vk11`, `rhi_vk_swapchain_vk11`, `rd_pixel_vk11`, `rd_present_vk11`, label `vk11`) |
 | `ICO_VK_ATTACHMENT_READ` | 1 offers the attachment read on Qualcomm's driver too; ico-pc.ini `attachment_read` |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
 | `ICO_VK_GLOBAL_BARRIERS` | 1 records a global barrier before every render pass and copy (`vk_cmd.c`) |
@@ -512,9 +513,21 @@ window passes it to the crash diagnostics, whose start-up retry deletes the file
 **Bindings and synchronisation.** A layout slot is a descriptor binding at the slot plus its type's
 shift (`port/rhi/vk/vk_enums.h` (`vkr_bindTypeMap`): b 0, t 16, s 32, u 48, the shifts DXC compiles
 with). Each frame slot owns a command pool, descriptor pools and the objects destroyed while it
-recorded; every submit signals the next value of one timeline semaphore that `rhi_wait_frame` waits
-on; the first submit after an acquire waits on its semaphore and the present on the image's
-`renderDone` (`port/rhi/vk/vk_pipeline.c`; `port/rhi/vk/vk_cmd.c`, header comment). Every buffer and
+recorded; every submit takes the next number of the port's counter (`VkrState.timelineValue`), which
+`rhi_wait_frame` waits for; the first submit after an acquire waits on its semaphore and the present on
+the image's `renderDone` (`port/rhi/vk/vk_pipeline.c`; `port/rhi/vk/vk_cmd.c`, header comment). The
+submission sync behind the counter (`port/rhi/vk/vk_sync.c`, `VkrSyncKind`) is one timeline semaphore
+whose value is the number (Vulkan 1.2), or on a device without timeline semaphores a ring of 8
+fences, number n signalling the fence at slot n % 8: one queue signals in submission order, so the
+newest fence found signalled gives the newest number finished exactly, and a submit whose slot still
+holds an unfinished number waits for it first (`rhi_vk: submission sync: submission N waits for
+submission M, the fence ring's 8 slots all in flight (logged once)`). The fence path starts with
+`rhi_vk: submission sync: a ring of 8 fences (no timeline semaphores...)`; it leaves out the empty
+present batch's wait for the previous number (the semaphore signal already covers every earlier
+submission on the queue), and the timeline path's submits are as before, field for field. The
+watchdog and the loss report read the counter on both paths (`vkr_sync_init`, `vkr_sync_submit`,
+`vkr_sync_reached`, `vkr_sync_wait`; `rhi_vk_vk11`'s sync cell: 24 submissions three times around
+the ring, the last clear read back, every one seen finished). Every buffer and
 texture has its own `VkDeviceMemory` (`port/rhi/vk/vk_resource.c`, header comment). Each memory kind
 tries an ordered list of memory types, and a type the driver refuses (a full heap) passes the
 allocation to the next: uploads go to a device-local, host-visible type first, but one whose heap is
@@ -1062,8 +1075,10 @@ renderer's [pass ring](RENDER.md#the-pass-ring) after it, before the message box
   each signals, the replay and frame numbers `rhi_set_submit_tag` set before it, and on Vulkan its
   command lists and whether it signalled a present; the report marks each finished or not against
   the value the GPU reached, or "state unknown" when that value cannot be read (a failed Vulkan
-  counter read; a removed D3D12 device's fence, which reads `UINT64_MAX`). A Vulkan wait that fails first logs how long it waited, the value it
-  waited for, the last one submitted and the one the GPU reached; once the device is lost no wait is
+  counter read; a removed D3D12 device's fence, which reads `UINT64_MAX`); the Vulkan header line
+  names the submission sync (`sync timeline` or `sync fences`). A Vulkan wait that fails first logs
+  how long it waited, the submission it waited for, the last one submitted, the sync and the one the
+  GPU reached; once the device is lost no wait is
   made again (`port/rhi/vk/vk_cmd.c` (`vkr_wait_value`, `vkr_note_submit`); `port/rhi/vk/vk_device.c`
   (`vkr_lost_report`, `vkr_report_submits`); `port/rhi/d3d12/d3d12_device.c` (`dx_lost_report`)).
 - **The driver's fault report** (Vulkan). `VK_EXT_device_fault` is enabled whenever the driver offers
@@ -1095,8 +1110,8 @@ renderer's [pass ring](RENDER.md#the-pass-ring) after it, before the message box
 
 **A device that hangs without a loss.** A driver may also never return from a wait and never
 report the device lost. `rhi_gpu_progress` gives another thread the GPU's progress as the
-submitting thread last saw it, without a call into the driver: the newest submission's timeline
-value, when it was made and its `rhi_set_submit_tag` replay and frame, the newest value seen
+submitting thread last saw it, without a call into the driver: the newest submission's number
+(the counter's, on either sync path), when it was made and its `rhi_set_submit_tag` replay and frame, the newest value seen
 finished (a wait that returned, a counter read before one, `rhi_wait_idle`), and the value a wait
 in progress blocks on with how long it has blocked. The submitting thread stores them with
 `__atomic` stores in `vkr_note_submit`, `vkr_wait_value` and `rhi_wait_idle`; a wait in progress
