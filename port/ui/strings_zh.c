@@ -565,7 +565,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "遊戲從標題畫面開始，不顯示 Sony 標誌與開場動畫。下次啟動時生效。",
     [UI_STR_OPT_AA] = "抗鋸齒",
     [UI_STR_OPT_AA_NOTE] =
-        "讓鋸齒狀的邊緣變平滑。超取樣會以較大的尺寸繪製再縮小；MSAA 會平滑形狀的邊緣。",
+        "讓鋸齒狀的邊緣變平滑。超取樣會以較大的尺寸繪製再縮小：2x 繪製 4 倍的像素，4x 繪製 16 倍。若影格率 60 時計數器降為 30，請改小。MSAA 會平滑形狀的邊緣。",
     [UI_STR_AA_OFF] = "關",
     [UI_STR_AA_SSAA2] = "2倍超取樣",
     [UI_STR_AA_SSAA4] = "4倍超取樣",
