@@ -701,11 +701,13 @@ static int render(void)
         const char *name;
     } pages[] = {{UI_PAGE_DISPLAY, 0, "settings_display.png"},
                  {UI_PAGE_DISPLAY, 10, "settings_display_videomode.png"},
+                 {UI_PAGE_PICTURE, 0, "settings_picture.png"},
                  {UI_PAGE_EFFECTS, 0, "settings_effects.png"},
                  {UI_PAGE_AUDIO, 0, "settings_audio.png"},
                  {UI_PAGE_CONTROLS, 1, "settings_controls.png"},
                  {UI_PAGE_GAMEPLAY, 0, "settings_gameplay.png"},
-                 {UI_PAGE_ACHIEVEMENTS, 0, "settings_achievements.png"}};
+                 {UI_PAGE_ACHIEVEMENTS, 0, "settings_achievements.png"},
+                 {UI_PAGE_DEVELOPER, 0, "settings_developer.png"}};
 
     for (unsigned i = 0; i < sizeof(pages) / sizeof(pages[0]); i++) {
         lt_ext_layout(mainL)->curItem = mainLink(pages[i].page);
@@ -957,12 +959,14 @@ static int render(void)
             int downs;
             const char *name;
         } pg[] = {{UI_PAGE_DISPLAY, 0, "settings_display"},
+                  {UI_PAGE_PICTURE, 0, "settings_picture"},
                   {UI_PAGE_EFFECTS, 0, "settings_effects"},
                   {UI_PAGE_AUDIO, 0, "settings_audio"},
                   {UI_PAGE_CONTROLS, 1, "settings_controls"},
                   {UI_PAGE_GAMEPLAY, 0, "settings_gameplay"},
                   {UI_PAGE_ACHIEVEMENTS, 0, "settings_achievements"},
-                  {UI_PAGE_EXTRAS, 2, "settings_extras"}};
+                  {UI_PAGE_EXTRAS, 2, "settings_extras"},
+                  {UI_PAGE_DEVELOPER, 0, "settings_developer"}};
 
         for (unsigned i = 0; i < sizeof(pg) / sizeof(pg[0]); i++) {
             lt_ext_layout(mainL)->curItem = mainLink(pg[i].page);
