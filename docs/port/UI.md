@@ -147,7 +147,7 @@ Circle (`port/ui/layout_ext.h` (`lt_ext_port_back_buttons`, `lt_ext_confirm_butt
 
 Each port row has a pointer role for the mouse: `LT_POINTER_AUTO` (an item is pointed at and a
 click is the disc's confirm on it, Cross, or Circle on the Japanese disc), `NONE` (never hit: a list heading, an empty slot), `LEFT` and `RIGHT` (a
-value's arrows, padded), `STEP` (a stepped value: a click is Right) (`port/ui/layout_ext.h`
+value's arrows, padded), `STEP` (a stepped value: a click is Right), `UP` and `DOWN` (a scroll mark: a click or a tap is Up or Down on the page's cursor, which does not move) (`port/ui/layout_ext.h`
 (`lt_ext_set_pointer_role`)).
 
 ## The Settings menu
