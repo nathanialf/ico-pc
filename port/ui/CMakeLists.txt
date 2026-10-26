@@ -228,6 +228,11 @@ if(ICO_RUN_TESTS)
                  COMMAND settings_extra_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
         add_test(NAME settings_discs_${_slug}
                  COMMAND settings_discs_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+        # settings_test's and settings_extras_test's other-disc runs (the
+        # disc's own confirm face, its title and pause rows, its Extras)
+        add_test(NAME settings_${_slug} COMMAND settings_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+        add_test(NAME settings_extras_${_slug}
+                 COMMAND settings_extras_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
     endforeach()
     # the settings executables write the same settings_test.toml in
     # this directory: never in parallel
@@ -236,7 +241,8 @@ if(ICO_RUN_TESTS)
                          settings_cn settings_extras_cn settings_extra_cn settings_extra_ntsc
                          settings_extra_aug6 settings_extra_jun26 settings_discs settings_discs_jpn
                          settings_discs_kor settings_discs_cn settings_discs_ntsc settings_discs_aug6
-                         settings_discs_jun26
+                         settings_discs_jun26 settings_ntsc settings_aug6 settings_jun26
+                         settings_extras_ntsc settings_extras_aug6 settings_extras_jun26
                          PROPERTIES RESOURCE_LOCK settings_toml)
 endif()
 
@@ -671,7 +677,14 @@ if(ICO_RUN_TESTS)
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME settings_render_cn COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}" cn
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
-    set_tests_properties(settings_render_jpn settings_render_kor settings_render_cn PROPERTIES
+    # and the three 2001 discs' (Cross confirms, Circle goes back to the title)
+    foreach(_slug ntsc aug6 jun26)
+        add_test(NAME settings_render_${_slug}
+                 COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}" ${_slug}
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    endforeach()
+    set_tests_properties(settings_render_jpn settings_render_kor settings_render_cn
+                         settings_render_ntsc settings_render_aug6 settings_render_jun26 PROPERTIES
                          RESOURCE_LOCK settings_toml SKIP_RETURN_CODE 77)
     add_test(NAME menu_text COMMAND menu_text_test "${ICO_DISC_IMAGE}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
