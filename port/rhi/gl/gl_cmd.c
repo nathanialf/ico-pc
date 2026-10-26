@@ -344,10 +344,14 @@ void gl_fbo_forget_texture(GLuint name)
     }
 }
 
-/* The framebuffer of a pass's attachments, bound to GL_FRAMEBUFFER; 0 when
- * OpenGL finds it incomplete (logged). */
+/* The framebuffer of a pass's attachments (or of a copy's or resolve's
+ * texture: the same cache, so no attach and detach per copy), bound to
+ * GL_FRAMEBUFFER; 0 when OpenGL finds it incomplete (logged as `what`'s,
+ * with `outcome`).  w and h key only a framebuffer without attachments;
+ * for the others they are the log's.  The one just returned is the most recently used, so a
+ * second call never evicts it (the resolve's pair). */
 static GLuint gl_fbo_get(GlTexture *const *colour, uint32_t colourCount, const GlTexture *depth,
-                         uint32_t w, uint32_t h)
+                         uint32_t w, uint32_t h, const char *what, const char *outcome)
 {
     GlFbo key;
     memset(&key, 0, sizeof(key));
@@ -415,9 +419,9 @@ static GLuint gl_fbo_get(GlTexture *const *colour, uint32_t colourCount, const G
     const GLenum status = glf.CheckFramebufferStatus(GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
         if (gl_log_rate(&s.fboIncomplete)) {
-            GL_LOG("render pass: framebuffer incomplete (status 0x%04x; %u colour, %s, %ux%u); "
-                   "the pass draws nothing (%u so far)",
-                   (unsigned)status, colourCount, depth ? "depth" : "no depth", w, h,
+            GL_LOG("%s: framebuffer incomplete (status 0x%04x; %u colour, %s, %ux%u); %s (%u so "
+                   "far)",
+                   what, (unsigned)status, colourCount, depth ? "depth" : "no depth", w, h, outcome,
                    s.fboIncomplete);
         }
         glf.BindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -681,7 +685,8 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
     }
     uint32_t areaW = pass->width, areaH = pass->height;
     gl_pass_area_check(&areaW, &areaH, colour, pass->colorCount, dt);
-    const GLuint fbo = gl_fbo_get(colour, pass->colorCount, dt, areaW, areaH);
+    const GLuint fbo = gl_fbo_get(colour, pass->colorCount, dt, areaW, areaH, "render pass",
+                                  "the pass draws nothing");
     if (!fbo) {
         return;
     }
@@ -1137,7 +1142,9 @@ void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t first
 
 /* ------------------------------------------------------------------ copies
  * Outside render passes.  The binding points they use are scratch
- * (gl_internal.h); the scratch framebuffers are detached after. */
+ * (gl_internal.h).  The texture to buffer copy and the resolve read and
+ * draw through the cached framebuffer of their texture (gl_fbo_get), so a
+ * copy changes no attachment; they leave framebuffer 0 bound. */
 static bool gl_copy_refused(const char *what, const char *why)
 {
     if (gl_log_rate(&s.badCopies)) {
@@ -1276,7 +1283,8 @@ void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, 
     g_gl.counts.copies++;
 }
 
-/* Through the scratch read framebuffer into the buffer bound as
+/* Through the texture's cached framebuffer (its colour at attachment 0 and
+ * read buffer, or its depth alone) into the buffer bound as
  * GL_PIXEL_PACK_BUFFER (glReadPixels), rows rowPitch bytes apart; the depth
  * aspect as 32-bit floats; integer formats as integers.  Into a buffer the
  * shaders read, the barrier for those reads follows. */
@@ -1310,13 +1318,11 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
         gl_copy_refused(what, "the rows are outside the buffer");
         return;
     }
-    const GLenum attachment = !fm->depth    ? GL_COLOR_ATTACHMENT0
-                              : fm->stencil ? GL_DEPTH_STENCIL_ATTACHMENT
-                                            : GL_DEPTH_ATTACHMENT;
-    glf.BindFramebuffer(GL_READ_FRAMEBUFFER, g_gl.scratchRead);
-    glf.FramebufferTexture2D(GL_READ_FRAMEBUFFER, attachment, GL_TEXTURE_2D, t->name, 0);
-    glf.ReadBuffer(fm->depth ? GL_NONE : GL_COLOR_ATTACHMENT0);
-    if (glf.CheckFramebufferStatus(GL_READ_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    GlTexture *const one[1] = {t};
+    const GLuint fbo = fm->depth
+                           ? gl_fbo_get(NULL, 0, t, t->width, t->height, what, "nothing copied")
+                           : gl_fbo_get(one, 1, NULL, t->width, t->height, what, "nothing copied");
+    if (!fbo) {
         gl_copy_refused(what, "the texture cannot be read through a framebuffer");
     } else {
         glf.BindBuffer(GL_PIXEL_PACK_BUFFER, db->name);
@@ -1339,13 +1345,13 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
                               GL_PIXEL_BUFFER_BARRIER_BIT);
         }
     }
-    glf.FramebufferTexture2D(GL_READ_FRAMEBUFFER, attachment, GL_TEXTURE_2D, 0, 0);
-    glf.BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glf.BindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 /* A multisampled RGBA8 texture into a single-sampled one of its size:
- * glBlitFramebuffer between the scratch framebuffers, the scissor test off
- * for it (each pixel the mean of its samples). */
+ * glBlitFramebuffer from the source's cached framebuffer to the
+ * destination's (gl_fbo_get), the scissor test off for it (each pixel the
+ * mean of its samples). */
 void rhi_cmd_resolve_color(RhiCommandList cl, RhiTexture src, RhiTexture dst)
 {
     GlCmdList *c = gl_cmd(cl);
@@ -1362,19 +1368,25 @@ void rhi_cmd_resolve_color(RhiCommandList cl, RhiTexture src, RhiTexture dst)
                         "and format");
         return;
     }
-    glf.BindFramebuffer(GL_READ_FRAMEBUFFER, g_gl.scratchRead);
-    glf.FramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, st->target, st->name, 0);
-    glf.ReadBuffer(GL_COLOR_ATTACHMENT0);
-    glf.BindFramebuffer(GL_DRAW_FRAMEBUFFER, g_gl.scratchDraw);
-    glf.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, dt->target, dt->name, 0);
-    const GLenum buf = GL_COLOR_ATTACHMENT0;
-    glf.DrawBuffers(1, &buf);
-    glf.Disable(GL_SCISSOR_TEST);
-    glf.BlitFramebuffer(0, 0, (GLint)st->width, (GLint)st->height, 0, 0, (GLint)dt->width,
-                        (GLint)dt->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glf.Enable(GL_SCISSOR_TEST);
-    glf.FramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, st->target, 0, 0);
-    glf.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, dt->target, 0, 0);
+    static const char what[] = "rhi_cmd_resolve_color";
+    GlTexture *const from[1] = {st};
+    GlTexture *const to[1] = {dt};
+    /* each framebuffer holds its texture at attachment 0, the read and draw
+       buffer (gl_fbo_get) */
+    const GLuint srcFbo =
+        gl_fbo_get(from, 1, NULL, st->width, st->height, what, "nothing resolved");
+    const GLuint dstFbo =
+        srcFbo ? gl_fbo_get(to, 1, NULL, dt->width, dt->height, what, "nothing resolved") : 0u;
+    if (srcFbo && dstFbo) {
+        glf.BindFramebuffer(GL_READ_FRAMEBUFFER, srcFbo);
+        glf.BindFramebuffer(GL_DRAW_FRAMEBUFFER, dstFbo);
+        glf.Disable(GL_SCISSOR_TEST);
+        glf.BlitFramebuffer(0, 0, (GLint)st->width, (GLint)st->height, 0, 0, (GLint)dt->width,
+                            (GLint)dt->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glf.Enable(GL_SCISSOR_TEST);
+        g_gl.counts.copies++;
+    } else {
+        gl_copy_refused(what, "a texture cannot be used through a framebuffer");
+    }
     glf.BindFramebuffer(GL_FRAMEBUFFER, 0);
-    g_gl.counts.copies++;
 }
