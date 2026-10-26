@@ -990,6 +990,9 @@ void rhi_get_stats(RhiStats *out)
     out->acquireNs = g_gl.acquireNs;
     out->fenceWaits = g_gl.fenceWaits;
     out->fenceWaitNs = g_gl.fenceWaitNs;
+    /* the swap returns at once and the driver waits for FIFO's queue in the
+     * next fence wait (gl_wait_sync): the display's wait is in fenceWaitNs */
+    out->fenceWaitsHoldDisplay = true;
     out->pipelinePoolSize = g_gl.pipelines.cap;
     out->pipelinesLive = g_gl.pipelines.next - g_gl.pipelines.freeCount;
     out->pipelinesPeak = g_gl.pipelines.next;
