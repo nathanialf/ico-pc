@@ -264,7 +264,7 @@ static struct {
     PaceBudget budget;
     PaceHist gpuHist;
     Uint64 gpuNs, displayWaitNs, fenceWaitNs, stepNs;
-    bool fenceHoldsDisplay; /* RhiStats.fenceWaitsHoldDisplay (OpenGL) */
+    bool fenceHoldsDisplay; /* RhiStats.fenceWaitsHoldDisplay (OpenGL), vsync on */
     /* a numeric cap above the refresh in mailbox mode held to one present
        a refresh (pace_cap_above_refresh): the refresh at this pace (0: not
        held), and its line written since the last settings change */
@@ -5399,15 +5399,15 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
        present are the display's (FIFO's full queue), the fence waits the
        GPU's: the present allowance excuses the first only, or the whole
        wait where the fence waits hold the display's (pace_display_wait:
-       OpenGL, issue 126) */
-    s_pres.fenceHoldsDisplay = st.fenceWaitsHoldDisplay;
+       OpenGL with vsync on, issue 126) */
+    s_pres.fenceHoldsDisplay = st.fenceWaitsHoldDisplay && s_pres.vsync;
     if (st.presents != before.presents && st.acquireNs + st.presentNs + st.fenceWaitNs != 0) {
         const Uint64 disp = (st.acquireNs - before.acquireNs) + (st.presentNs - before.presentNs);
         const Uint64 fence = st.fenceWaitNs - before.fenceWaitNs;
 
         s_pres.lockWaitNs = disp + fence < s_pres.cost ? disp + fence : s_pres.cost;
         s_pres.displayWaitNs =
-            pace_display_wait(disp, fence, s_pres.cost, st.fenceWaitsHoldDisplay);
+            pace_display_wait(disp, fence, s_pres.cost, s_pres.fenceHoldsDisplay);
         s_pres.fenceWaitNs = fence < s_pres.cost ? fence : s_pres.cost;
     } else {
         s_pres.lockWaitNs = s_pres.cost;
