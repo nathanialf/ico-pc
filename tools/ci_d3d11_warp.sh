@@ -19,7 +19,10 @@
 #       its debug-layer lines and the end of its log.  Exit 0 when every test
 #       passed, 1 otherwise; a test's own 77 ("no usable device") counts as a
 #       failure here, since WARP is always there; so does a "SKIP:" line in
-#       a test's log (the two self-test scripts exit 0 after printing it).
+#       a test's log (the two self-test scripts exit 0 after printing it),
+#       and so does any debug-layer error or corruption line in a test's log
+#       (the runtime drops the call it names, so a program can pass its own
+#       checks while drawing less than it should).
 #
 # ICO_D3D11_DEBUG=1 asks for the debug layer; the device line says whether
 # it was there ("debug layer on" / "asked for, not installed"), and its
@@ -122,6 +125,9 @@ run_test() {
     fi
     local errs
     errs=$(grep -a -c -E "rhi_d3d11 debug (error|corruption)" "$log" || true)
+    if [ "$verdict" = "passed" ] && [ "${errs:-0}" -gt 0 ]; then
+        verdict="FAILED (debug-layer errors)"
+    fi
     echo "   $verdict in $((t1 - t0)) s; debug-layer errors: ${errs:-0}"
     NAMES+=("$name")
     RESULTS+=("$verdict; $((t1 - t0)) s; debug-layer errors ${errs:-0}")
