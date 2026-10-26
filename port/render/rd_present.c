@@ -397,7 +397,21 @@ bool rd__apply_display(void)
     const float ssaaAsked = rd__crt_on() ? 1.0f : (float)rd__aa_ssaa_factor(aaMode);
     float ssaa = ssaaAsked;
     float perPx = 0.0f; /* the Resolution row's texels an output pixel, 0 unknown */
-    if (ssaa > 1.0f && st->outputWidth && st->outputHeight) {
+    /* Downsampling (RdSettings.downsample, issue 149): with a scale or a
+     * fixed size (never the "window" resolution, one texel an output pixel
+     * already) and no CRT filter (1x), the presenter box-averages DISPLAY
+     * to its GS size and presents that as 1x is presented.  The picture
+     * the window sees is then the GS grid, so the supersampling is
+     * measured against it: perPx is the scale (the smaller axis of a
+     * fixed size), 4x + SSAA2 adds nothing, 2x + SSAA4 draws 4x, 1x +
+     * SSAA2 draws 2x, and one reduce, the downsample, does both */
+    const bool down =
+        st->downsample && !rd__crt_on() && (scale > 0.0f || (st->sceneWidth && st->sceneHeight));
+    if (ssaa > 1.0f && down) {
+        perPx = scale > 0.0f ? scale : (w / gw < h / gh ? w / gw : h / gh);
+        const float need = ceilf(ssaa / perPx - 1e-4f);
+        ssaa = need < 1.0f ? 1.0f : (need > ssaa ? ssaa : need);
+    } else if (ssaa > 1.0f && st->outputWidth && st->outputHeight) {
         /* only as much as the picture lacks: a scene that already has
          * the factor's texels an output pixel both ways is supersampled
          * as it stands (8x at 48:9 on a 3840x2160 display is over 4 texels
@@ -463,7 +477,7 @@ bool rd__apply_display(void)
      * this runs on a settings change or a resize (rd_begin_frame's
      * settingsPending) and at init, never per frame */
     if (changed || aspect != g_rd.outAspect || filter != g_rd.filterUpgrade ||
-        vs != g_rd.vsyncApplied) {
+        vs != g_rd.vsyncApplied || down != g_rd.downsample) {
         char ssaaNote[96] = "";
         if (ssaaAsked > 1.0f && ssaa > 1.0f && ssaa < ssaaAsked) {
             snprintf(ssaaNote, sizeof(ssaaNote),
@@ -483,12 +497,13 @@ bool rd__apply_display(void)
         char frameNote[160];
         frameWords(frameNote, sizeof(frameNote), (uint32_t)gw, wexactFor(aspect));
         rd__log("display: scene %gx%g (%.0fx%.0f)%s, aspect %.3f, filter %u, %s height, "
-                "full pixel %s, vsync %s%s%s%s, %s",
+                "full pixel %s, vsync %s%s%s%s%s, %s",
                 (double)sx, (double)sy, floor((double)sceneW + 0.5), floor((double)(gh * sy) + 0.5),
                 crtLock ? " (CRT: 1x)" : "", (double)aspect, (unsigned)filter,
                 full ? "full" : "half", st->fullPixel ? "on" : "off", st->vsync ? "on" : "off",
                 aaMode == RD_AA_OFF ? "" : rd__aa_label(aaMode),
-                rd_aa_samples(aaMode) > 1u ? " (asked)" : "", ssaaNote, frameNote);
+                rd_aa_samples(aaMode) > 1u ? " (asked)" : "", ssaaNote,
+                down ? ", downsampled to original size" : "", frameNote);
     }
     if (changed) {
         g_rd.frameCropWe = cropWe;
@@ -499,6 +514,7 @@ bool rd__apply_display(void)
         g_rd.sceneFellBack = false;
     }
     g_rd.ssaa = ssaa;
+    g_rd.downsample = down;
     g_rd.outAspect = aspect;
     g_rd.filterUpgrade = filter;
     g_rd.fullHeight = full;
@@ -667,14 +683,26 @@ void rd__present_blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
  * one texel a pixel, nearest, mirrored as the box blit is.  The crop (sourceCrop) is
  * taken in the reduce.  Off, or at 1 texel a pixel or fewer, nothing here
  * runs and the box blit samples DISPLAY itself.  Without anti-aliasing the
- * same reduce runs when the scene is scaled and has more than two texels a
- * pixel on an axis (a resolution above the window's), where the box blit's
- * one bilinear tap would skip texels; never at scale 1. */
-static struct {
+ * same reduce runs when the scene is scaled and has more texels than the
+ * box has pixels on both axes (a resolution above the window's), where the
+ * box blit's one bilinear tap would skip texels; never at scale 1 (the
+ * Original preset and every 1x present keep the plain blit), and a mixed
+ * case (more texels across, fewer down) keeps the plain blit, as the
+ * reduce has no bilinear leg.  Downsampling (RdSettings.downsample) runs
+ * the same reduce once more, before steps 1 and 2: DISPLAY to its GS size,
+ * which is then presented as 1x is (rd__present_record), the window's
+ * reduce skipped. */
+typedef struct ReduceTex {
     RhiTexture tex;
     RhiState state;
     uint32_t w, h;
-} s_reduce;
+} ReduceTex;
+
+static ReduceTex s_reduce, s_down;
+
+/* the last present's reduces (rd__last_present_reduce): src w, h, dst w, h */
+static uint32_t s_redDown[4], s_redWin[4];
+static bool s_redNoted;
 
 /* the footprint of one of B pixels over an extent of S16 sixteenths
  * (a = S16 / B, b = S16 % B: aa_reduce_ps) */
@@ -686,6 +714,68 @@ static void reduceAxis(uint32_t s16, uint32_t b, uint32_t c16, uint32_t out[4])
     out[3] = c16;
 }
 
+/* *src (*sw x *sh, crop texels left out at each side across) box-averaged
+ * into t at dw x dh (made, or remade on a change of size, with usage
+ * besides a render target's and a sampled texture's); false (nothing
+ * recorded) when it cannot run.  On true *src, *sw, *sh are t's */
+static bool reduceInto(RhiCommandList cl, ReduceTex *t, const char *name, uint32_t usage,
+                       RhiTexture *src, uint32_t *sw, uint32_t *sh, float crop, uint32_t dw,
+                       uint32_t dh)
+{
+    const float c = crop > 0.0f ? crop : 0.0f;
+    const float ew = (float)*sw - 2.0f * c;
+    if (!t->tex.id || t->w != dw || t->h != dh) {
+        if (t->tex.id) {
+            rhi_destroy_texture(t->tex);
+        }
+        t->tex = rhi_create_texture(
+            &(RhiTextureDesc){dw, dh, 1, RHI_FMT_RGBA8_UNORM,
+                              RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | usage, name, 0});
+        t->state = RHI_STATE_UNDEFINED;
+        t->w = dw;
+        t->h = dh;
+    }
+    const RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_AA_REDUCE, RHI_FMT_RGBA8_UNORM);
+    const RhiPipeline pipe = rd__get_pipeline(&k);
+    if (!t->tex.id || !pipe.id) {
+        return false;
+    }
+    IcoDrawCB cb;
+    memset(&cb, 0, sizeof(cb));
+    reduceAxis((uint32_t)(ew * 16.0f + 0.5f), dw, (uint32_t)(c * 16.0f + 0.5f), cb.col);
+    reduceAxis(*sh * 16u, dh, 0u, cb.blend);
+    cb.mode[0] = *sw;
+    cb.mode[1] = *sh;
+    cb.uvRect[2] = cb.uvRect[3] = 1.0f;
+    cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
+    rd__transition(cl, t->tex, &t->state, RHI_STATE_RENDER_TARGET);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = t->tex;
+    p.color[0].load = RHI_LOAD_DONT_CARE;
+    p.colorCount = 1;
+    p.width = dw;
+    p.height = dh;
+    rhi_cmd_begin_render_pass(cl, &p);
+    const RhiViewport vp = {0.0f, 0.0f, (float)dw, (float)dh, 0.0f, 1.0f};
+    rhi_cmd_set_viewport(cl, &vp);
+    const RhiRect all = {0, 0, dw, dh};
+    rhi_cmd_set_scissor(cl, &all);
+    rd__set_pipeline(cl, pipe, &k);
+    rd__bind_uniform(cl, 0, rd__frame_group(dw, dh, 0.0f, 0.0f));
+    rd__bind_uniform(cl, 1, rd__draw_group(&cb));
+    rhi_cmd_set_bind_group(cl, 2,
+                           rd__tex_group(*src, rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
+                                                           RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
+    rhi_cmd_draw(cl, 3, 0, 1);
+    rhi_cmd_end_render_pass(cl);
+    rd__transition(cl, t->tex, &t->state, RHI_STATE_SHADER_READ);
+    *src = t->tex;
+    *sw = dw;
+    *sh = dh;
+    return true;
+}
+
 /* the reduce into s_reduce; false (nothing recorded) when it does not apply
  * or cannot run.  On true *src, *sw, *sh are the reduced texture's */
 static bool reduceRecord(RhiCommandList cl, RhiTexture *src, uint32_t *sw, uint32_t *sh,
@@ -694,73 +784,80 @@ static bool reduceRecord(RhiCommandList cl, RhiTexture *src, uint32_t *sw, uint3
     if (box->w == 0 || box->h == 0) {
         return false;
     }
-    const float ew = (float)*sw - 2.0f * (crop > 0.0f ? crop : 0.0f);
-    /* without anti-aliasing, a scaled scene more than two texels a pixel
-     * on an axis (a fixed resolution above the window's): the box blit's
-     * one bilinear tap would skip texels there */
-    if (rd__aa_mode() == RD_AA_OFF &&
-        !((g_rd.sceneSx != 1.0f || g_rd.sceneSy != 1.0f) &&
-          (ew > 2.0f * (float)box->w || (float)*sh > 2.0f * (float)box->h))) {
+    /* without anti-aliasing at scale 1: the plain box blit, byte for byte
+     * as before (the Original preset, every 1x present) */
+    if (rd__aa_mode() == RD_AA_OFF && g_rd.sceneSx == 1.0f && g_rd.sceneSy == 1.0f) {
         return false;
     }
+    const float ew = (float)*sw - 2.0f * (crop > 0.0f ? crop : 0.0f);
     float su0, su1;
     if (snapWindow(*sw, crop, box->w, &su0, &su1)) {
         return false; /* a texel a pixel: the box blit's whole-texel window */
     }
     if (!(ew > (float)box->w && (float)*sh > (float)box->h)) {
-        return false; /* one texel a pixel or fewer: the plain box blit */
+        return false; /* one texel a pixel or fewer on an axis: the plain box blit */
     }
-    if (!s_reduce.tex.id || s_reduce.w != box->w || s_reduce.h != box->h) {
-        if (s_reduce.tex.id) {
-            rhi_destroy_texture(s_reduce.tex);
-        }
-        s_reduce.tex = rhi_create_texture(&(RhiTextureDesc){box->w, box->h, 1, RHI_FMT_RGBA8_UNORM,
-                                                            RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
-                                                            "rd present reduce", 0});
-        s_reduce.state = RHI_STATE_UNDEFINED;
-        s_reduce.w = box->w;
-        s_reduce.h = box->h;
-    }
-    const RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_AA_REDUCE, RHI_FMT_RGBA8_UNORM);
-    const RhiPipeline pipe = rd__get_pipeline(&k);
-    if (!s_reduce.tex.id || !pipe.id) {
+    const uint32_t w0 = *sw, h0 = *sh;
+    if (!reduceInto(cl, &s_reduce, "rd present reduce", 0u, src, sw, sh, crop, box->w, box->h)) {
         return false;
     }
-    IcoDrawCB cb;
-    memset(&cb, 0, sizeof(cb));
-    reduceAxis((uint32_t)(ew * 16.0f + 0.5f), box->w,
-               (uint32_t)((crop > 0.0f ? crop : 0.0f) * 16.0f + 0.5f), cb.col);
-    reduceAxis(*sh * 16u, box->h, 0u, cb.blend);
-    cb.mode[0] = *sw;
-    cb.mode[1] = *sh;
-    cb.uvRect[2] = cb.uvRect[3] = 1.0f;
-    cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
-    rd__transition(cl, s_reduce.tex, &s_reduce.state, RHI_STATE_RENDER_TARGET);
-    RhiRenderPassDesc p;
-    memset(&p, 0, sizeof(p));
-    p.color[0].texture = s_reduce.tex;
-    p.color[0].load = RHI_LOAD_DONT_CARE;
-    p.colorCount = 1;
-    p.width = box->w;
-    p.height = box->h;
-    rhi_cmd_begin_render_pass(cl, &p);
-    const RhiViewport vp = {0.0f, 0.0f, (float)box->w, (float)box->h, 0.0f, 1.0f};
-    rhi_cmd_set_viewport(cl, &vp);
-    const RhiRect all = {0, 0, box->w, box->h};
-    rhi_cmd_set_scissor(cl, &all);
-    rd__set_pipeline(cl, pipe, &k);
-    rd__bind_uniform(cl, 0, rd__frame_group(box->w, box->h, 0.0f, 0.0f));
-    rd__bind_uniform(cl, 1, rd__draw_group(&cb));
-    rhi_cmd_set_bind_group(cl, 2,
-                           rd__tex_group(*src, rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
-                                                           RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
-    rhi_cmd_draw(cl, 3, 0, 1);
-    rhi_cmd_end_render_pass(cl);
-    rd__transition(cl, s_reduce.tex, &s_reduce.state, RHI_STATE_SHADER_READ);
-    *src = s_reduce.tex;
-    *sw = box->w;
-    *sh = box->h;
+    s_redWin[0] = w0;
+    s_redWin[1] = h0;
+    s_redWin[2] = box->w;
+    s_redWin[3] = box->h;
     return true;
+}
+
+/* Downsampling (RdSettings.downsample in force, g_rd.downsample): DISPLAY
+ * (*src, *sw x *sh) box-averaged to its GS size, disp->w x disp->h (twice
+ * the rows with the full-height scene, whose 1x DISPLAY has them), into
+ * s_down, when DISPLAY has more texels than that on both axes (a scaled
+ * DISPLAY is never cropped: no Full pixel guard, ox 0).  The reduce is
+ * aa_reduce_ps with no crop: integer, its rounding defined, the same bytes
+ * on every backend.  The present after it is 1x's: line doubling, the
+ * crop (sourceCrop of the GS width), the border mask and the mirror */
+static bool downsampleRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture *src,
+                             uint32_t *sw, uint32_t *sh)
+{
+    const uint32_t dw = disp->w, dh = g_rd.fullHeight ? disp->h * 2u : disp->h;
+    if (!g_rd.downsample || rd__crt_on() || disp->ox > 0.0f || dw == 0 || dh == 0 ||
+        !(*sw > dw && *sh > dh)) {
+        return false;
+    }
+    const uint32_t w0 = *sw, h0 = *sh;
+    if (!reduceInto(cl, &s_down, "rd present downsample", RHI_TEX_COPY_SRC, src, sw, sh, 0.0f, dw,
+                    dh)) {
+        return false;
+    }
+    s_redDown[0] = w0;
+    s_redDown[1] = h0;
+    s_redDown[2] = dw;
+    s_redDown[3] = dh;
+    return true;
+}
+
+bool rd__last_present_reduce(uint32_t down[4], uint32_t win[4])
+{
+    if (!s_redNoted) {
+        return false;
+    }
+    memcpy(down, s_redDown, sizeof(s_redDown));
+    memcpy(win, s_redWin, sizeof(s_redWin));
+    return true;
+}
+
+bool rd__read_present_downsample(void *dst, size_t dstSize, uint32_t *w, uint32_t *h)
+{
+    if (!g_rd.hasDevice || !s_down.tex.id || s_down.state == RHI_STATE_UNDEFINED) {
+        return false;
+    }
+    if (w) {
+        *w = s_down.w;
+    }
+    if (h) {
+        *h = s_down.h;
+    }
+    return rd__read_rhi_texture(s_down.tex, &s_down.state, s_down.w, s_down.h, dst, dstSize);
 }
 
 /* ------------------------------------------------------ the effects depth
@@ -1769,6 +1866,12 @@ void rd__present_record(RhiCommandList cl)
     RhiRect box;
     outputBox(s_outW, s_outH, &box);
     rd__note_present_box(s_outW, s_outH, &box); /* for the tests */
+    memset(s_redDown, 0, sizeof(s_redDown));
+    memset(s_redWin, 0, sizeof(s_redWin));
+    s_redNoted = true;
+    /* Downsampling: DISPLAY at its GS size first, then everything below as
+     * at 1x (step 1 reads src, sw, sh) */
+    const bool downsampled = downsampleRecord(cl, disp, &src, &sw, &sh);
     /* the CRT filter draws the box from DISPLAY's own lines (its
      * scanlines are the PS2's field lines), in place of steps 1 and 2; off,
      * or when it cannot draw, nothing below changes */
@@ -1808,7 +1911,7 @@ void rd__present_record(RhiCommandList cl)
     }
     /* the full-height scene: DISPLAY already has every line */
     if (!filtered && pr->lineDouble && !g_rd.fullHeight) {
-        const uint32_t lw = disp->tw, lh = disp->th * 2;
+        const uint32_t lw = sw, lh = sh * 2;
         if (!g_rd.presentLines.id || g_rd.presentLinesW != lw || g_rd.presentLinesH != lh) {
             if (g_rd.presentLines.id) {
                 rhi_destroy_texture(g_rd.presentLines);
@@ -1822,8 +1925,8 @@ void rd__present_record(RhiCommandList cl)
         }
         rd__transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_RENDER_TARGET);
         const RhiRect full = {0, 0, lw, lh};
-        blit(cl, disp->color, disp->tw, disp->th, g_rd.presentLines, RHI_FMT_RGBA8_UNORM, lw, lh,
-             RHI_LOAD_DONT_CARE, &full, NULL, pr->doubleFilter, 0, 0.0f, false);
+        blit(cl, src, sw, sh, g_rd.presentLines, RHI_FMT_RGBA8_UNORM, lw, lh, RHI_LOAD_DONT_CARE,
+             &full, NULL, pr->doubleFilter, 0, 0.0f, false);
         rd__transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_SHADER_READ);
         src = g_rd.presentLines;
         sw = lw;
@@ -1847,10 +1950,12 @@ void rd__present_record(RhiCommandList cl)
         /* the frame's columns past its exact width left out (none at 4:3) */
         float crop = sourceCrop(disp, sw);
         RdFilter scaleFilter = pr->scaleFilter;
-        /* anti-aliasing (or a scaled scene over two texels a pixel): the
-         * source box-averaged to the box first (reduceRecord; the reduce
-         * takes the crop; the box blit is then one texel a pixel, nearest) */
-        if (reduceRecord(cl, &src, &sw, &sh, &box, crop)) {
+        /* anti-aliasing (or a scaled scene with more texels than the box
+         * has pixels): the source box-averaged to the box first
+         * (reduceRecord; the reduce takes the crop; the box blit is then
+         * one texel a pixel, nearest).  Not after the downsample: its
+         * picture is presented as 1x is */
+        if (!downsampled && reduceRecord(cl, &src, &sw, &sh, &box, crop)) {
             crop = 0.0f;
             scaleFilter = RD_FILTER_NEAREST;
         }
@@ -1929,6 +2034,11 @@ void rd__present_shutdown(void)
         rhi_destroy_texture(s_reduce.tex); /* the supersampling's reduce */
     }
     memset(&s_reduce, 0, sizeof(s_reduce));
+    if (s_down.tex.id) {
+        rhi_destroy_texture(s_down.tex); /* the downsample's */
+    }
+    memset(&s_down, 0, sizeof(s_down));
+    s_redNoted = false;
     rd__crt_shutdown(); /* the CRT filter */
     /* the overlay's prims (the registration stays), the deferred text's list */
     free(s_ov.v);
