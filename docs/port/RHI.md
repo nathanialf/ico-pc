@@ -679,12 +679,12 @@ and whether the device runs on WARP.
 
 The Direct3D 11 backend (`port/rhi/d3d11/`, prefix `d3d11`, `rhi_backend_d3d11`) is for cards and
 drivers that have neither Vulkan nor Direct3D 12. It compiles in the `win-x64` and `win-x64-clang`
-cross builds. No device has run it yet (issue 126: on a GTX 750 Ti at feature level 11_0 both
-start-up self-tests read back their cleared target and the screen stayed black). CI's `windows`
-job is written to run the renderer's tests on it through WARP, Microsoft's software adapter
-([TESTING.md](TESTING.md#the-render-suite-on-direct3d-11-warp)); its first run is at the milestone
-push, so what follows is the design as written until that job's logs say otherwise. `port/rhi/d3d11/d3d11_internal.h` holds the shared state and states
-which file provides what.
+cross builds. No hardware device has been seen drawing with it (issue 126: on a GTX 750 Ti at
+feature level 11_0 both start-up self-tests read back their cleared target and the screen stayed
+black). CI's `windows` job runs the renderer's tests on it through WARP, Microsoft's software
+adapter, with the debug layer on ([TESTING.md](TESTING.md#the-render-suite-on-direct3d-11-warp));
+the rules the debug layer named there are in the **Debug layer rules** paragraph below.
+`port/rhi/d3d11/d3d11_internal.h` holds the shared state and states which file provides what.
 
 **Device** (`port/rhi/d3d11/d3d11_device.c`). `d3d11.dll` and `dxgi.dll` are loaded at run time and
 an injector beside the program is named as on D3D12. Adapters are enumerated discrete first; one is
@@ -725,7 +725,9 @@ on first use and kept. `rhi_begin_commands` hands out the next one; `rhi_end_com
 ranges the list read (below), then `ExecuteCommandList` on the immediate context in submit order,
 releases the executed `ID3D11CommandList` at once (a list kept alive still references the swapchain
 buffer it drew into, and `ResizeBuffers` returns `DXGI_ERROR_INVALID_CALL` while one is; the
-deferred context is kept), then ends the slot's `D3D11_QUERY_EVENT`. `rhi_wait_frame` moves to the next slot and polls its event
+deferred context is kept), and marks the slot's `D3D11_QUERY_EVENT` pending. `rhi_wait_frame` ends
+the event of the slot it leaves once, after all of that slot's work (a query is read before it is
+ended again, rule 4 below), moves to the next slot and polls its event
 (`GetData`, which also flushes; `Sleep(0)`, then `SwitchToThread`, between polls), then releases the
 slot's unsubmitted command lists, garbage and bind groups (`d11_recycle_frame`). `rhi_wait_idle` ends an event
 of its own and waits for it. A wait past 5 s logs
@@ -739,8 +741,9 @@ all `D3D11_USAGE_DEFAULT`. The command path notes each range a list reads from a
 per class (`d11_cmd_touch`: bind group uniforms and storage ranges, vertex and index ranges with
 their draws' extents, copy sources); `rhi_submit` writes each noted range from the shadow into that
 class's buffer with `UpdateSubresource1` before the list executes (`d11_buffer_flush`), so a list
-sees what the CPU wrote before its submit. Constant buffers take a partial update where the driver
-offers `ConstantBufferPartialUpdate`, else the whole buffer.
+sees what the CPU wrote before its submit. Constant buffers take a partial update with
+`D3D11_COPY_NO_OVERWRITE` where the driver offers `ConstantBufferPartialUpdate`, else the whole
+buffer (rule 1 below).
 
 The cost of those writes: the renderer's ring is
 VERTEX|INDEX|UNIFORM|STORAGE upload memory (`rd_upload.c` `newRing`), so it is three D3D11 buffers.
@@ -818,7 +821,8 @@ entry, the vertex range of each draw (`[first, first + count)` vertices of a per
 the instances of a per-instance one; an indexed draw's from the binding's offset to the buffer's
 end, the indices being unknown there), the index range of each indexed draw, and the source of a
 buffer copy. Copies: `rhi_cmd_copy_buffer` is `CopySubresourceRegion` into every part of a device
-buffer, or into a readback buffer's staging buffer; `rhi_cmd_copy_buffer_to_texture` (from an
+buffer (the structured part in whole 16-byte elements, rule 2 below), or into a readback buffer's
+staging buffer; `rhi_cmd_copy_buffer_to_texture` (from an
 upload buffer only, logged once otherwise) reads the shadow when it is recorded, with
 `UpdateSubresource1` and a box (BC regions rounded up to whole blocks as on D3D12), except where the
 driver leaves command lists to the runtime (`command lists emulated by the runtime` in the device
@@ -875,8 +879,43 @@ DXBC bytes.
 
 **Timestamps**. Per frame slot a `TIMESTAMP_DISJOINT` query begun at the slot's first submit and
 ended when `rhi_wait_frame` leaves it, around 256 `TIMESTAMP` queries the lists end; read when the
-slot comes round again. A disjoint frame's stamps are dropped (`rhi_d3d11: GPU timestamps: a frame's
-clock was disjoint ...`, once).
+slot comes round again, every query the slot ended, also when the stamps are dropped (rule 4
+below). A disjoint frame's stamps are dropped (`rhi_d3d11: GPU timestamps: a frame's clock was
+disjoint ...`, once).
+
+**Debug layer rules**. What the debug layer requires of this backend, each rule with the message
+id it reports when broken (`rhi_d3d11 debug <severity> (id N)` in the log). Where the debug layer
+reports an error, the runtime drops the call, with or without the debug layer, so a broken rule
+draws less than it should and nothing else says so.
+
+1. A partial update of a constant buffer (`UpdateSubresource1` with a box) passes
+   `D3D11_COPY_NO_OVERWRITE` or `D3D11_COPY_DISCARD`, and only on a device that reports
+   `ConstantBufferPartialUpdate` (error 288). Without the flag every uniform window the renderer
+   writes is dropped: the shaders read zeros, nothing reaches the targets, and the start-up
+   self-tests read back their clear colour. `d11_buffer_flush` passes `NO_OVERWRITE`, which is the
+   upload buffers' contract (the CPU writes a range no submitted list still reads, as Vulkan's
+   mapped memory requires); `DISCARD` would drop the rest of the buffer. The other parts take no
+   flag.
+2. A copy into a structured buffer covers whole elements of its stride, 16 bytes here (error 280,
+   "the width of the source box is not a multiple of the destination resource structure stride").
+   The mesh arena's copies (`rd_upload.c`) end at a mesh's last index, on any 4-byte boundary. The
+   structured part takes the 16-byte-aligned range around the copy from a part of the same buffer
+   the copy has just written (`d11_copy_into_structured`; the parts hold the same bytes, so the
+   bytes around the range stay the buffer's own); a storage-only buffer takes the aligned range
+   from the source and logs `rhi_d3d11: rhi_cmd_copy_buffer: N bytes into M of a storage-only
+   buffer cover part of a 16-byte element: the whole elements are copied from the source (logged
+   once)`.
+3. A pixel shader that writes `SV_Target1` with one target bound (warning 3146081, "The Pixel Shader
+   expects a Render Target View bound to slot 1, but none is bound") is valid: the second output is
+   discarded. The renderer's dual-output shaders (`common.hlsli` `DualOut`) are used with blending
+   that does not read `SRC1` as well (blending off, the premultiplied and destination-alpha forms);
+   with the `SRC1` factors the blend state consumes the output and the warning is not reported
+   (`rhi_d3d11_test`'s dual-source cells draw without it). The warning stays.
+4. A query is read with `GetData` (an `S_OK` answer) before it is begun or ended again (warnings 408
+   and 410; valid, the earlier results are abandoned). The slot's event is ended once per slot use,
+   at `rhi_wait_frame`, and polled when the slot comes round; every timestamp query and the disjoint
+   query a slot ended are read when it comes round, with `D3D11_ASYNC_GETDATA_DONOTFLUSH` for the
+   stamps (the slot's event has passed, so nothing waits).
 
 **Not implemented on Direct3D 11**: the destination read, the VU vertex pre-pass, the
 `gpu_checkpoints` breadcrumbs, mailbox with vsync, the display's timing of presents, and the
