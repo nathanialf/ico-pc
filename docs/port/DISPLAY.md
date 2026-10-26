@@ -176,6 +176,10 @@ with the rows, which read back as Enhanced or Custom (`port/game/video_options.c
 key says; the renderer draws an MSAA count the device lacks as off (`port/game/video_options.c`
 (`ico_video_anti_alias`); `port/platform/window_host.c` (`video_settings`)).
 
+**Downsampling.** `downsample` (`"off"` or `"box"`) is read and saved outside the preset, as
+`show_fps` is, and reaches the renderer as `RdSettings.downsample`; the renderer decides where it is
+in force ([downsampling](#downsampling)).
+
 **Fallbacks.** A key the parser does not understand logs one `video: ... not understood` line and
 takes the default (resolution, aspect, texture filter, window mode, anti-aliasing,
 frame rate, CRT mode); the texture pack sizes are clamped with a line; `window_mode` absent reads the `fullscreen`
@@ -805,7 +809,9 @@ texture for the tests and the [replay tool](ARCHITECTURE.md#terms) (`port/render
 header comment, `rd__present_box`). After the picture come the overlay (the port's popups and hints,
 in output pixels), the deferred text (Enhanced: the frame's text items laid out on the output) and
 the top layer (the touch controls); `rd_present_blank` draws the overlay alone (the start-up
-screens). With supersampling `aa_reduce_ps` box-averages DISPLAY to the box; with an effects program
+screens). With supersampling, or without anti-aliasing when a scaled scene has more texels than the
+box has pixels on both axes (never at scale 1), `aa_reduce_ps` box-averages DISPLAY to the box
+(`reduceRecord`); with an effects program
 and `effects_depth` `blit_depth_ps` writes the scene's depth beside it (`port/render/rd_present.c`).
 The UI box is the 4:3 part of the presentation box (`port/render/rd_present.c` (`rd_ui_box_of`)).
 Movies draw their own box ([FMV.md](FMV.md#the-picture-on-screen)).
@@ -817,6 +823,25 @@ takes is [RHI.md](RHI.md#vulkan)'s (Vulkan: mailbox when preferred, FIFO latest 
 default 2, puts the wait for the display in the replay's "acquire" phase). `ICO_VK_PRESENT_WAIT=1`
 gives the lock its SHOWN clock. A vsync change idles the device and rebuilds the swapchain
 (`port/render/rd_present.c` (`rd__apply_display`)).
+
+### Downsampling
+
+`RdSettings.downsample` (Options > Picture > Downsampling: To original size; `[video] downsample =
+"box"`, default `"off"`, kept outside the preset) draws the scene at the Resolution row's scale and
+box-averages DISPLAY to its GS size, `w x h` of the target record (twice the rows with the full-height
+scene), before the two blits above, which then draw it exactly as they draw Resolution 1x: the line
+doubling, the crop of the columns past the exact width, the border mask and the mirror. The reduce
+is `aa_reduce_ps` with no crop, into a texture of its own (`s_down`), integer with its rounding
+defined, so its bytes are the same on every backend; the reduce to the window's box is skipped
+after it (`port/render/rd_present.c` (`downsampleRecord`, `reduceInto`)). It is in force
+(`g_rd.downsample`) with a scale or a fixed size and no CRT filter; never at the `window`
+resolution (one texel an output pixel already); at 1x it is in force and does nothing (DISPLAY is
+its GS size) (`port/render/rd_present.c` (`rd__apply_display`)). With it, supersampling is measured
+against the GS grid instead of the window: `perPx` is the scale, so 4x with SSAA2 adds nothing (the
+`skipped: the resolution has 4.00 texels an output pixel` note), 2x with SSAA4 draws 4x and 1x with
+SSAA2 draws 2x, one reduce for both. The display line ends its options with `, downsampled to original
+size` and is logged again when that changes. The replay tool's `--downsample` sets it, and `--stats`
+prints `present: downsample WxH -> wxh, window reduce off|WxH -> wxh` (`rd__last_present_reduce`).
 
 ## Interpolation between ticks
 
