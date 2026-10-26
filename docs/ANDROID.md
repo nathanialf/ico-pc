@@ -387,10 +387,12 @@ it. If you do not have a problem, you can skip this.
    driver has been added, or that the file is not a driver package.
    On a phone without the system's own file picker, the game opens
    another file manager app instead, if one is installed.
-   If the file picker does not open, or the game says that no app on the
-   phone can choose a file, use the game's `drivers` folder instead:
-   with the USB cable, copy the zip into the `drivers` folder in the game's
-   folder ([where it is](#where-your-files-are)), open **Options > Graphics
+   If the file picker does not open, closes at once without letting you
+   choose, or the game says that no app on the phone can choose a file,
+   use the game's `drivers` folder instead: with the USB cable, copy the
+   zip into `Android/data/com.defnf.icopc/files/drivers` (the `drivers`
+   folder in the game's folder, [where it is](#where-your-files-are); the
+   game writes this path in its messages), open **Options > Graphics
    driver** again and choose **Add from the drivers folder**. That row only
    shows while there is a zip in the folder; Left and Right pick between
    zips if there are several. The game deletes the zip once the driver has
@@ -402,6 +404,13 @@ it. If you do not have a problem, you can skip this.
 
 To go back to the phone's own driver, set **Driver** to **Built-in**, or
 choose **Remove this driver** to delete it. Restart the game after either.
+
+A driver package is loaded by the game itself, not by the phone's system,
+so it can work on a phone whose own graphics driver or Vulkan version is
+too old for the game. This is also the way to try a different driver after
+the phone's own driver stopped responding while you played (the Qualcomm
+driver on some Snapdragon tablets does): after such a stop, the note under
+**Options > Graphics driver** names this route and the folder.
 
 If a driver does not start, the game falls back to the phone's own driver
 and tells you so. You can still play. The driver is not removed, so you can
@@ -418,12 +427,18 @@ these buttons:
 - **Choose a driver file**: the file picker opens. Pick a driver package
   zip you downloaded (step 1 above). The game adds it and asks you to
   close it and open it again: the driver is used from the next start.
-  This only works on phones with an Adreno chip.
+  This only works on phones with an Adreno chip. The box also names the
+  folder to copy the zip into if the picker does not open
+  (`Android/data/com.defnf.icopc/files/drivers`). A driver package is loaded
+  by the game itself, without the phone's own Vulkan loader, so it can work
+  where the phone's driver does not.
 - **Quit**: closes the game.
 
 If the file is not a driver package, the game says so and the box comes
-back, so you can try another one. If the picker cannot open and there is a
-driver zip in the `drivers` folder, the game adds the first one from there. If the driver does not start at the next
+back, so you can try another one. If the picker cannot open, or closes
+without a file (some phones' pickers do), and there is a driver zip in the
+`drivers` folder, the game adds the first one from there; with no zip in the
+folder, the box comes back and names the folder. If the driver does not start at the next
 start either, the game says so and shows the box again. Once the game runs,
 the driver stays chosen, and you can change it later in **Options >
 Graphics driver**.
