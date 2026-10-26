@@ -1998,6 +1998,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return buf;
     case UI_OPT_SHOW_FPS:
         return onOff(o.showFps);
+    case UI_OPT_DOWNSAMPLE:
+        return ui_str(o.downsample == ICO_DOWNSAMPLE_BOX ? UI_STR_VAL_DOWNSAMPLE_BOX : UI_STR_OFF);
     case UI_OPT_CRT:
         /* [video] crt and crt_mode as one value */
         return ui_str(
@@ -2375,6 +2377,8 @@ static int *videoSwitch(IcoVideoOptions *o, UiSettingsOpt opt)
         return &o->effectCinematicBars;
     case UI_OPT_SHOW_FPS:
         return &o->showFps;
+    case UI_OPT_DOWNSAMPLE:
+        return &o->downsample;
     case UI_OPT_FULL_PIXEL:
         return &o->fullPixel;
     default:
@@ -2508,6 +2512,7 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_EFFECT_WATER:
     case UI_OPT_EFFECT_CINEMATIC_BARS:
     case UI_OPT_SHOW_FPS:
+    case UI_OPT_DOWNSAMPLE:
     case UI_OPT_FULL_PIXEL: {
         /* the plain On/Off display rows (and Water reflections' Original
            and Sharp) */
@@ -3352,6 +3357,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_PICTURE:
         addNote(pg, UI_OPT_ANTI_ALIAS, UI_STR_OPT_AA_NOTE);
+        addNote(pg, UI_OPT_DOWNSAMPLE, UI_STR_OPT_DOWNSAMPLE_NOTE);
         addNote(pg, UI_OPT_TEXTURE_PACK, UI_STR_TEXTURE_PACK_NOTE);
         addNote(pg, UI_OPT_MODEL_PACK, UI_STR_MODEL_PACK_NOTE);
         break;
@@ -3902,15 +3908,21 @@ static void build(void)
     /* Picture: the picture's own rows (Brightness is the pause menu's, the
        Model pack the title's); the Downsampling row goes right after
        Anti-aliasing */
-    static const int picOpts[] = {UI_OPT_ANTI_ALIAS,   UI_OPT_FULL_HEIGHT,  UI_OPT_FILTER,
-                                  UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,   UI_OPT_CRT,
-                                  UI_OPT_CRT_STRENGTH, UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,
-                                  UI_OPT_BACK};
-    static const int picStrs[] = {UI_STR_OPT_AA,           UI_STR_OPT_FULL_HEIGHT,
-                                  UI_STR_OPT_FILTERING,    UI_STR_OPT_FULL_PIXEL,
-                                  UI_STR_OPT_BRIGHTNESS,   UI_STR_OPT_CRT,
-                                  UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_TEXTURE_PACK,
-                                  UI_STR_OPT_MODEL_PACK,   UI_STR_BACK};
+    static const int picOpts[] = {UI_OPT_ANTI_ALIAS, UI_OPT_DOWNSAMPLE,   UI_OPT_FULL_HEIGHT,
+                                  UI_OPT_FILTER,     UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,
+                                  UI_OPT_CRT,        UI_OPT_CRT_STRENGTH, UI_OPT_TEXTURE_PACK,
+                                  UI_OPT_MODEL_PACK, UI_OPT_BACK};
+    static const int picStrs[] = {UI_STR_OPT_AA,
+                                  UI_STR_OPT_DOWNSAMPLE,
+                                  UI_STR_OPT_FULL_HEIGHT,
+                                  UI_STR_OPT_FILTERING,
+                                  UI_STR_OPT_FULL_PIXEL,
+                                  UI_STR_OPT_BRIGHTNESS,
+                                  UI_STR_OPT_CRT,
+                                  UI_STR_OPT_CRT_STRENGTH,
+                                  UI_STR_OPT_TEXTURE_PACK,
+                                  UI_STR_OPT_MODEL_PACK,
+                                  UI_STR_BACK};
     /* Developer: Developer mode, and the dumps it unlocks */
     static const int devOpts[] = {UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,
                                   UI_OPT_BACK};
