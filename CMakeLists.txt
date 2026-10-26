@@ -369,6 +369,10 @@ endif()
 if(Python3_FOUND)
     add_test(NAME docs_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_docs.py")
     add_test(NAME texture_catalog COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/test/texture_catalog_test.py")
+    # the per-disc numbers at port sites go through the region table
+    # (tools/check_region_literals.py, its allow list; no build, no game)
+    add_test(NAME region_literals_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_region_literals.py")
+    add_test(NAME region_literals_selftest COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/test/region_literals_test.py")
 endif()
 
 # the June 2001 demo's VU1 programs against the retail ones (tools/vu_variant_diff.py,
