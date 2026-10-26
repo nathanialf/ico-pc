@@ -167,6 +167,38 @@ if(ICO_RUN_TESTS)
     add_test(NAME memory COMMAND memory_test)
 endif()
 
+# Issue 151: the game's inflate (fumi/ios/inflate.c) over its allocator and
+# its code-table blocks (memory.c, mblock.c), compiled as the game compiles
+# them: fixed-code deflate blocks decode and their tables are freed at the
+# close without an IOSFREE() assert, and a bad free's assert names the block's
+# allocation.  `synth` runs everywhere on streams the test holds; the disc
+# runs inflate the packs that hold fixed-code blocks (the Asian disc's
+# STGST13C.DF, stage 4, and STGST02A.DF; the Korean disc's STGSTAFF1.DF; the
+# August 2001 preview's STGST13C.DF) to their end and are skipped (77) without
+# the image.
+add_executable(inflate_test test/inflate_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/inflate.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/mblock.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/memory.c")
+target_include_directories(inflate_test PRIVATE ${_ico_fumi_incs})
+target_compile_definitions(inflate_test PRIVATE ${ICO_GAME_DEFINITIONS} ICO_HEAP_STATS=1)
+target_compile_options(inflate_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(inflate_test PRIVATE ico_port_data ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME inflate COMMAND inflate_test synth)
+    add_test(NAME inflate_disc_cn COMMAND inflate_test disc "${ICO_DISC_IMAGE_CN}" STGST13C.DF
+                                          9831100 483)
+    add_test(NAME inflate_disc_cn_st02a COMMAND inflate_test disc "${ICO_DISC_IMAGE_CN}"
+                                                STGST02A.DF 9486676 497)
+    add_test(NAME inflate_disc_kor COMMAND inflate_test disc "${ICO_DISC_IMAGE_KOR}"
+                                           STGSTAFF1.DF 7154080 232)
+    add_test(NAME inflate_disc_aug6 COMMAND inflate_test disc "${ICO_DISC_IMAGE_AUG6}"
+                                            STGST13C.DF 9656788 461)
+    set_tests_properties(inflate_disc_cn inflate_disc_cn_st02a inflate_disc_kor inflate_disc_aug6
+                         PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 # The game's thread, message and memory layers on the scheduler, driven by
 # simulated vsyncs.
 add_executable(ios_chain_test test/ios_chain_test.c
