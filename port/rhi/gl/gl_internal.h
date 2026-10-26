@@ -36,7 +36,8 @@
  *                   wait_idle, collect_garbage_now, set_submit_tag,
  *                   gpu_progress, cmd_checkpoint, cmd_begin_label,
  *                   cmd_end_label, timestamps_supported,
- *                   cmd_write_timestamp, read_timestamps, the pipeline
+ *                   cmd_write_timestamp, read_timestamps,
+ *                   read_timestamps_busy, the pipeline
  *                   cache entries, set_vulkan_loader, injector_name,
  *                   overlay_name, prefer_mailbox, present_mailbox,
  *                   set_exclusive_fullscreen, the present timing entries,
@@ -294,6 +295,15 @@ typedef struct GlFrame {
      * the indices written this frame */
     GLuint tsQuery[RHI_MAX_TIMESTAMPS];
     uint32_t tsWritten[RHI_TIMESTAMP_WORDS];
+    /* each index written with RHI_TIMESTAMP_ISSUE_TIME, its issue time: the
+     * GL time when the stamp and every command before it had been handed
+     * over (glGetInteger64v GL_TIMESTAMP, ARB_timer_query's latency
+     * measure); the stamps written without it; the indices in the order
+     * written (gl_device.c gl_collect_busy) */
+    uint64_t tsIssued[RHI_MAX_TIMESTAMPS];
+    uint32_t tsNoIssue;
+    uint8_t tsOrder[RHI_MAX_TIMESTAMPS];
+    uint32_t tsOrderCount;
 } GlFrame;
 
 /* --------------------------------------------------------------- device */
@@ -356,10 +366,13 @@ typedef struct GlState {
     bool preferMailbox, exclusiveFullscreen;
     uint64_t swapchains, presents, presentNs, acquireNs;
 
-    /* GPU timestamps (ARB_timer_query): the last recycled slot's, in ns */
+    /* GPU timestamps (ARB_timer_query): the last recycled slot's, in ns,
+     * and its busy clock (rhi_read_timestamps_busy, gl_collect_busy) */
     bool timestamps;
     uint64_t tsResult[RHI_MAX_TIMESTAMPS];
     uint32_t tsCount;
+    uint64_t tsBusy[RHI_MAX_TIMESTAMPS];
+    uint32_t tsBusyCount;
 
     /* rhi_set_submit_tag (kept for the logs) */
     uint32_t tagReplay, tagFrame;
