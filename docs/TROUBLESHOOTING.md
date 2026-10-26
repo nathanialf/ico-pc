@@ -387,7 +387,7 @@ disc image once more.
 
 **"Could not open the game window."** (on a computer) or **"Could not start the
 game's graphics."** (on a phone) Your graphics driver or graphics chip does
-not support Vulkan 1.2, the way the game talks to the graphics. Updating
+not support Vulkan 1.1 or later, the way the game talks to the graphics. Updating
 the graphics driver usually fixes it. On a phone, install the latest
 system update. The lines in the log that mention Vulkan say what is
 missing. If you added `backend=d3d12` to `ico-pc.ini` on Windows, delete
@@ -411,7 +411,7 @@ see what stopped it.
 
 **"ICO could not start the game's graphics with this phone's driver."**
 (on a phone) The phone's own graphics driver cannot run the game (the log
-may say "the Vulkan loader is 1.1"). A driver package is loaded by the game
+may say "the Vulkan loader is 1.0", or "device 0 (...) unsuitable" and the missing part). A driver package is loaded by the game
 itself, without the phone's own Vulkan loader, so it can work where the
 phone's driver does not. The box names the folder to copy the zip into if
 the file picker does not open (`Android/data/com.defnf.icopc/files/drivers`).

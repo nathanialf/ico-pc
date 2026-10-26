@@ -9,7 +9,7 @@
 ## What you need
 
 - **A 64-bit Android phone or tablet with Android 10 or later.** Its
-  graphics must support Vulkan 1.2 (the way the game talks to the
+  graphics must support Vulkan 1.1 or later (the way the game talks to the
   graphics). If you are not sure, install the game and start it: if your
   phone cannot run it, the game tells you when it starts and offers to use
   a graphics driver package instead, which only helps on a phone with an
@@ -445,7 +445,7 @@ Graphics driver**.
 
 ## Known limits
 
-- The game needs a graphics chip that supports Vulkan 1.2 (Vulkan is how the game talks to the
+- The game needs a graphics chip that supports Vulkan 1.1 or later (Vulkan is how the game talks to the
   graphics). Older or cheaper devices may not have it, and a system update does not always add it.
   On a phone with an Adreno chip, a graphics driver package can help; see
   [When the game cannot start with the phone's driver](#when-the-game-cannot-start-with-the-phones-driver).
