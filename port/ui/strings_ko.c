@@ -36,6 +36,13 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_YORDA] = "요르다가 그림자에게 잡혀가지 않음",
     [UI_STR_OPT_YORDA_NOTE] =
         "부담 없이 즐기고 싶은 분께. 일부 이벤트 장면에서는 요르다가 잡혀가는 모습이 나옵니다.",
+    [UI_STR_OPT_PIT_TIME] = "요르다를 구할 시간",
+    [UI_STR_OPT_PIT_TIME_NOTE] =
+        "그림자가 요르다를 데려가기까지의 시간입니다. 위의 요르다 항목을 켜면 잡혀가지 않습니다.",
+    [UI_STR_VAL_PIT_HALF] = "절반",
+    [UI_STR_VAL_PIT_LONGER] = "더 오래",
+    [UI_STR_VAL_PIT_DOUBLE] = "2배",
+    [UI_STR_VAL_PIT_TRIPLE] = "3배",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",
