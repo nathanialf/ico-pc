@@ -9,3 +9,4 @@
 - Direct3D 11 on Windows now draws the game. Before, the screen stayed black because the graphics driver's shader compiler refused the game's shaders.
 - With the OpenGL renderer, OBS's game capture of the game window is upright now. Before, the capture was upside down while the window itself looked right.
 - The black bars of the load screen no longer flicker when it changes at Frame rate 60.
+- With MSAA anti-aliasing on, the thin dotted lines of mist along seams above the original resolution are now filled in, as without it.
