@@ -961,6 +961,8 @@ static int iosPadDevReadFunc(void)
     return 0;
 }
 
+/* PC port: port/game/options.c (Mirror mode) */
+int ico_opt_mirror(void);
 /* PC port: port/input/pad_host.c */
 unsigned int ico_pad_menu_word(const void *libpad_buf);
 
@@ -1177,9 +1179,13 @@ static int iosPadGetStick_func(IosPadCtx *ctx, IosPadStick *st, int mode, int a3
             st->x = (int)ox;
             st->y = (int)oy;
 
-            if (ctx->now & 0x2000) {
+            /* PC port: Mirror mode flips the picture, so the d-pad's
+               Left and Right push the stick the other way (the sticks
+               are mirrored in port/input/vpad.c; the d-pad bits are not,
+               the menus are drawn pre-flipped). */
+            if (ctx->now & (ico_opt_mirror() ? 0x8000 : 0x2000)) {
                 st->x = (int)((float)(st->x + 255) * 0.5f);
-            } else if (ctx->now & 0x8000) {
+            } else if (ctx->now & (ico_opt_mirror() ? 0x2000 : 0x8000)) {
                 st->x = (int)((float)st->x * 0.5f);
             } else {
                 st->x = (int)((float)(st->x + 127) * 0.5f);
@@ -1321,9 +1327,13 @@ static int iosPadGetStick_ntscaug6jun26(IosPadCtx *ctx, void *out, int mode, int
             st->x = (int)ox;
             st->y = (int)oy;
 
-            if (ctx->now & 0x2000) {
+            /* PC port: Mirror mode flips the picture, so the d-pad's
+               Left and Right push the stick the other way (the sticks
+               are mirrored in port/input/vpad.c; the d-pad bits are not,
+               the menus are drawn pre-flipped). */
+            if (ctx->now & (ico_opt_mirror() ? 0x8000 : 0x2000)) {
                 st->x = (int)((float)(st->x + 255) * 0.5f);
-            } else if (ctx->now & 0x8000) {
+            } else if (ctx->now & (ico_opt_mirror() ? 0x2000 : 0x8000)) {
                 st->x = (int)((float)st->x * 0.5f);
             } else {
                 st->x = (int)((float)(st->x + 127) * 0.5f);
