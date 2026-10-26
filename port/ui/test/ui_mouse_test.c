@@ -239,6 +239,29 @@ static void testHits(void)
     CHECK(ui_mouse_hit_test(&lit, 1, 150.0f, 110.0f, &h) && h.item == 609 &&
               h.action == UI_MOUSE_ACT_CROSS,
           "a list's column: Cross on its label (%d)", h.item);
+    /* the scroll marks: a hit is Up / Down with no item (the cursor stays),
+       masked or hidden is not hit, and a mark needs no item links */
+    UiMouseRow mk = row(610, 584, 40, 32, 20);
+    mk.itemLinks = 0;
+    mk.role = UI_MOUSE_ROLE_UP;
+    CHECK(ui_mouse_hit_test(&mk, 1, 600.0f, 100.0f, &h) && h.row == 610 && h.item == -1 &&
+              h.action == UI_MOUSE_ACT_UP && h.layout == 80,
+          "an UP mark: Up, item -1 (%d %d %d)", h.row, h.item, h.action);
+    mk.role = UI_MOUSE_ROLE_DOWN;
+    CHECK(ui_mouse_hit_test(&mk, 1, 600.0f, 100.0f, &h) && h.item == -1 &&
+              h.action == UI_MOUSE_ACT_DOWN,
+          "a DOWN mark: Down, item -1 (%d %d)", h.item, h.action);
+    mk.ownerItem = 600; /* an owner changes nothing */
+    CHECK(ui_mouse_hit_test(&mk, 1, 600.0f, 100.0f, &h) && h.item == -1,
+          "a mark with an owner still moves no cursor (%d)", h.item);
+    CHECK(!ui_mouse_hit_test(&mk, 1, 570.0f, 100.0f, &h), "left of the mark: nothing");
+    mk.masked = 1;
+    CHECK(!ui_mouse_hit_test(&mk, 1, 600.0f, 100.0f, &h), "a masked DOWN mark is not hit");
+    mk.role = UI_MOUSE_ROLE_UP;
+    CHECK(!ui_mouse_hit_test(&mk, 1, 600.0f, 100.0f, &h), "a masked UP mark is not hit");
+    mk.masked = 0;
+    mk.visible = 0;
+    CHECK(!ui_mouse_hit_test(&mk, 1, 600.0f, 100.0f, &h), "a hidden UP mark is not hit");
     /* an arrow without an owner is no item */
     al.ownerItem = -1;
     CHECK(!ui_mouse_hit_test(&al, 1, 369.0f, 98.0f, &h), "an ownerless arrow is not hit");
