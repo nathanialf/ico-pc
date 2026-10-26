@@ -827,6 +827,14 @@ uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
     return n;
 }
 
+/* no busy clock (rhi.h): not measured on Direct3D 11 */
+uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
+{
+    (void)ns;
+    (void)max;
+    return 0;
+}
+
 /* ------------------------------------------------------------------ frames */
 static bool d11_frames_init(void)
 {
