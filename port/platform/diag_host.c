@@ -5180,9 +5180,14 @@ static void benign_note(DWORD code, const char *suffix)
         return;
     }
     seen[k] = who;
-    (void)code;
-    flog("diag: thread-name exception from %s ignored (thread %lu)%s", name,
-         (unsigned long)GetCurrentThreadId(), suffix);
+    if (code == 0x406D1388u) {
+        flog("diag: thread-name exception from %s ignored (thread %lu)%s", name,
+             (unsigned long)GetCurrentThreadId(), suffix);
+    } else {
+        /* the two OutputDebugString codes (DBG_PRINTEXCEPTION_C / _WIDE_C) */
+        flog("diag: debugger message 0x%08lx from %s ignored (thread %lu)%s", (unsigned long)code,
+             name, (unsigned long)GetCurrentThreadId(), suffix);
+    }
 }
 
 ICO_ENTRY static LONG CALLBACK vectored_handler(EXCEPTION_POINTERS *ep)
@@ -5206,7 +5211,11 @@ ICO_ENTRY static LONG CALLBACK vectored_handler(EXCEPTION_POINTERS *ep)
     if (ico_diag_benign_exception(r->ExceptionCode)) {
         /* what SDL's own temporary handler does: the raise returns */
         benign_note(r->ExceptionCode, "");
-        return EXCEPTION_CONTINUE_EXECUTION;
+        /* a raise that is not continuable cannot return: leave it to the next handler */
+        if (!(r->ExceptionFlags & EXCEPTION_NONCONTINUABLE)) {
+            return EXCEPTION_CONTINUE_EXECUTION;
+        }
+        return EXCEPTION_CONTINUE_SEARCH;
     }
     if (fatal_code(r->ExceptionCode) && (ours || r->ExceptionCode == EXCEPTION_STACK_OVERFLOW)) {
         crash_from_exception(ep);
@@ -5218,7 +5227,10 @@ ICO_ENTRY static LONG WINAPI unhandled_filter(EXCEPTION_POINTERS *ep)
 {
     if (ico_diag_benign_exception(ep->ExceptionRecord->ExceptionCode)) {
         benign_note(ep->ExceptionRecord->ExceptionCode, " (reached the unhandled filter)");
-        return EXCEPTION_CONTINUE_EXECUTION;
+        if (!(ep->ExceptionRecord->ExceptionFlags & EXCEPTION_NONCONTINUABLE)) {
+            return EXCEPTION_CONTINUE_EXECUTION;
+        }
+        /* not continuable: it is reported as a crash below */
     }
     crash_from_exception(ep);
     return EXCEPTION_EXECUTE_HANDLER;
