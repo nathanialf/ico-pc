@@ -200,6 +200,41 @@ void pace_budget_present(PaceBudget *b, bool newFrame)
     }
 }
 
+/* whether k presents a step leave the GPU the time (no GPU time known:
+   yes, the climb probes) */
+static bool budget_gate(uint64_t k, uint64_t gpuNs, uint64_t stepNs, uint64_t periodNs)
+{
+    return gpuNs == 0 || k * gpuNs + stepNs < periodNs;
+}
+
+/* a climb after the hold (pace_policy.h PaceBudget): straight back to where
+   the allowance started when the GPU has the time for it, else one more,
+   else refused */
+static void budget_climb(PaceBudget *b, uint64_t periodNs, uint64_t gpuNs, uint64_t stepNs)
+{
+    const unsigned home = b->unbind ? PACE_ALLOW_NONE : b->max;
+    unsigned k = b->unbind ? b->dropMost : b->max;
+
+    if (b->unbind && (k == 0 || k > b->max + 1)) {
+        k = b->max + 1; /* past max is unbound: max + 1 presents' worth at most */
+    }
+    if (budget_gate(k, gpuNs, stepNs, periodNs)) {
+        b->allow = home;
+        b->gateK = k;
+        b->climbs++;
+    } else if (budget_gate((uint64_t)b->allow + 1, gpuNs, stepNs, periodNs)) {
+        b->allow = b->allow < b->max ? b->allow + 1 : PACE_ALLOW_NONE;
+        b->gateK = b->allow == PACE_ALLOW_NONE ? b->max + 1 : b->allow;
+        b->climbs++;
+    } else {
+        b->gateK = b->allow + 1;
+        b->climbRefusals++;
+    }
+    if (b->allow == home) {
+        b->dropMost = 0; /* back where it started: the next drop starts afresh */
+    }
+}
+
 bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_t refreshNs,
                       uint64_t displayWaitNs, uint64_t gpuNs, uint64_t stepNs)
 {
@@ -207,35 +242,75 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
     /* the display's own wait, less than a refresh late: not the renderer
        (the lock's skip guard's exception) */
     const bool excused = displayWaitNs * 4 >= refreshNs && lateNs < refreshNs;
+    /* late at all, and late with an optional present (only that arms) */
+    const bool late = periodNs > 0 && lateNs >= periodNs / 2 && !excused;
+    const bool lateOptional = late && b->optional > 0;
+    /* a late step of new frames only confirms an armed drop when one below
+       the arming step's presents lowers the allowance */
+    const unsigned armBelow = b->armPresents > 0 ? b->armPresents - 1 : 0;
+    const bool lowers = b->optional > 0 || b->allow == PACE_ALLOW_NONE || armBelow < b->allow;
 
     if (lateNs > b->lateMaxNs) {
         b->lateMaxNs = lateNs;
     }
-    if (periodNs > 0 && lateNs >= periodNs / 2 && b->optional > 0 && !excused) {
-        /* one below the late step's presents, held */
-        b->allow = b->presents > 0 ? b->presents - 1 : 0;
-        if (b->allow > b->max) {
-            b->allow = b->max;
+    if (b->sinceDrop < UINT_MAX) {
+        b->sinceDrop++;
+    }
+    if (late && b->arm > 0 && lowers) {
+        /* the second late step while armed: the lateness lasts.  One below
+           this step's presents, or with new frames only in it the arming
+           step's; held */
+        unsigned allow = b->optional > 0 ? (b->presents > 0 ? b->presents - 1 : 0) : armBelow;
+
+        if (allow > b->max) {
+            allow = b->max;
+        }
+        if (b->allow == PACE_ALLOW_NONE || allow < b->allow) {
+            b->allow = allow;
+        }
+        b->dropAgo = PACE_ALLOW_HOLD - b->arm + 1;
+        b->dropPrevLateNs = b->armLateNs;
+        b->dropPrevPresents = b->armPresents;
+        if (b->armPresents > b->dropMost) {
+            b->dropMost = b->armPresents;
+        }
+        if (b->presents > b->dropMost) {
+            b->dropMost = b->presents;
         }
         b->hold = PACE_ALLOW_HOLD;
+        b->arm = PACE_ALLOW_HOLD;
         b->onTime = 0;
+        b->sinceDrop = 0;
         b->drops++;
         b->dropLateNs = lateNs;
         b->dropPresents = b->presents;
         if (b->allow < b->lowest) {
             b->lowest = b->allow;
         }
-    } else if (b->hold > 0) {
-        b->hold--;
-    } else if (b->allow != PACE_ALLOW_NONE && (b->allow < b->max || b->unbind) &&
-               ++b->onTime >= PACE_ALLOW_CLIMB) {
-        /* one more when the GPU has the time for it (unknown: probe); past
-           max, unbound again where the allowance started so */
-        if (gpuNs == 0 || ((uint64_t)b->allow + 1) * gpuNs + stepNs < periodNs) {
-            b->allow = b->allow < b->max ? b->allow + 1 : PACE_ALLOW_NONE;
-            b->climbs++;
+        if (b->optional > 0) {
+            /* the next drop's step before is this one */
+            b->armLateNs = lateNs;
+            b->armPresents = b->presents;
         }
+    } else if (lateOptional) {
+        /* the first late step: armed, nothing dropped (one hitch does not
+           bind); not a step on time */
+        b->arm = PACE_ALLOW_HOLD;
+        b->armLateNs = lateNs;
+        b->armPresents = b->presents;
+        b->arms++;
         b->onTime = 0;
+    } else {
+        if (b->arm > 0) {
+            b->arm--;
+        }
+        if (b->hold > 0) {
+            b->hold--;
+        } else if (b->allow != PACE_ALLOW_NONE && (b->allow < b->max || b->unbind) &&
+                   ++b->onTime >= PACE_ALLOW_CLIMB_STEP) {
+            budget_climb(b, periodNs, gpuNs, stepNs);
+            b->onTime = 0;
+        }
     }
     b->presents = 0;
     b->optional = 0;
@@ -246,6 +321,14 @@ void pace_budget_block(PaceBudget *b)
 {
     b->lowest = b->allow;
     b->lateMaxNs = 0;
+}
+
+uint64_t pace_display_wait(uint64_t dispNs, uint64_t fenceNs, uint64_t costNs,
+                           bool fenceHoldsDisplay)
+{
+    const uint64_t w = fenceHoldsDisplay ? dispNs + fenceNs : dispNs;
+
+    return w < costNs ? w : costNs;
 }
 
 /* resolution "auto": the cost samples */
