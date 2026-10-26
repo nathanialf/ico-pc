@@ -579,6 +579,10 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_AA] = "Anti-aliasing",
     [UI_STR_OPT_AA_NOTE] =
         "Attenua i bordi seghettati. Il supersampling disegna l’immagine più grande e poi la riduce: 2x disegna quattro volte i pixel, 4x sedici volte. Se il contatore scende a 30 con Frequenza fotogrammi 60, abbassalo. Il MSAA leviga i bordi delle forme.",
+    [UI_STR_OPT_DOWNSAMPLE] = "Riduzione",
+    [UI_STR_VAL_DOWNSAMPLE_BOX] = "Alla dimensione originale",
+    [UI_STR_OPT_DOWNSAMPLE_NOTE] =
+        "Disegna l’immagine alla risoluzione scelta sopra e la riduce alla dimensione originale del gioco. Richiede una risoluzione di 2x o più; non cambia nulla con il filtro CRT né con Finestra.",
     [UI_STR_AA_OFF] = "Disattivato",
     [UI_STR_AA_SSAA2] = "Supersampling 2x",
     [UI_STR_AA_SSAA4] = "Supersampling 4x",

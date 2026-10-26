@@ -576,6 +576,10 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_AA] = "Anti-aliasing",
     [UI_STR_OPT_AA_NOTE] =
         "Smooths jagged edges. Supersampling draws the picture larger and shrinks it: 2x draws four times the pixels, 4x sixteen times. If the counter drops to 30 at Frame rate 60, lower it. MSAA smooths the edges of shapes.",
+    [UI_STR_OPT_DOWNSAMPLE] = "Downsampling",
+    [UI_STR_VAL_DOWNSAMPLE_BOX] = "To original size",
+    [UI_STR_OPT_DOWNSAMPLE_NOTE] =
+        "Draws the picture at the Resolution above and shrinks it to the game's own size. Needs Resolution 2x or more; nothing changes with the CRT filter or at Window.",
     [UI_STR_AA_OFF] = "Off",
     [UI_STR_AA_SSAA2] = "2x supersampling",
     [UI_STR_AA_SSAA4] = "4x supersampling",

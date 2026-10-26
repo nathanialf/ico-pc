@@ -578,6 +578,10 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_AA] = "アンチエイリアス",
     [UI_STR_OPT_AA_NOTE] =
         "ギザギザの輪郭をなめらかにします。スーパーサンプリングは大きく描いて縮小します。2xは4倍、4xは16倍の画素を描きます。フレームレート60でカウンターが30に下がるときは、下げてください。MSAAは形の輪郭をなめらかにします。",
+    [UI_STR_OPT_DOWNSAMPLE] = "縮小表示",
+    [UI_STR_VAL_DOWNSAMPLE_BOX] = "元のサイズへ",
+    [UI_STR_OPT_DOWNSAMPLE_NOTE] =
+        "上の解像度で描いた映像を、ゲーム本来のサイズに縮小します。解像度が2x以上のときに働きます。CRTフィルタを使うときやウィンドウでは変わりません。",
     [UI_STR_AA_OFF] = "オフ",
     [UI_STR_AA_SSAA2] = "2xスーパーサンプリング",
     [UI_STR_AA_SSAA4] = "4xスーパーサンプリング",

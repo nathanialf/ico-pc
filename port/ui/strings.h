@@ -688,6 +688,11 @@ typedef enum UiStrId {
     /* Display > Anti-aliasing ([video] anti_aliasing), its note and values */
     UI_STR_OPT_AA,
     UI_STR_OPT_AA_NOTE,
+    /* Picture > Downsampling ([video] downsample): the row, its value (Off is
+       UI_STR_OFF) and its note */
+    UI_STR_OPT_DOWNSAMPLE,
+    UI_STR_VAL_DOWNSAMPLE_BOX,
+    UI_STR_OPT_DOWNSAMPLE_NOTE,
     UI_STR_AA_OFF,
     UI_STR_AA_SSAA2,
     UI_STR_AA_SSAA4,

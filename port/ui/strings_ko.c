@@ -577,6 +577,10 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_AA] = "안티에일리어싱",
     [UI_STR_OPT_AA_NOTE] =
         "들쭉날쭉한 윤곽을 매끄럽게 합니다. 슈퍼샘플링은 크게 그린 뒤 줄입니다. 2x는 점을 4배, 4x는 16배 그립니다. 프레임 레이트 60에서 카운터가 30으로 내려가면 줄이세요. MSAA는 도형의 윤곽을 매끄럽게 합니다.",
+    [UI_STR_OPT_DOWNSAMPLE] = "축소",
+    [UI_STR_VAL_DOWNSAMPLE_BOX] = "원래 크기로",
+    [UI_STR_OPT_DOWNSAMPLE_NOTE] =
+        "위의 해상도로 그린 화면을 게임 본래 크기로 줄입니다. 해상도가 2x 이상일 때 작동합니다. CRT 필터를 쓸 때와 창 크기에서는 바뀌지 않습니다.",
     [UI_STR_AA_OFF] = "끔",
     [UI_STR_AA_SSAA2] = "2x 슈퍼샘플링",
     [UI_STR_AA_SSAA4] = "4x 슈퍼샘플링",

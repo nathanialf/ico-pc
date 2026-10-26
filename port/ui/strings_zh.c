@@ -568,6 +568,10 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_AA] = "抗鋸齒",
     [UI_STR_OPT_AA_NOTE] =
         "讓鋸齒狀的邊緣變平滑。超取樣會以較大的尺寸繪製再縮小：2x 繪製 4 倍的像素，4x 繪製 16 倍。若影格率 60 時計數器降為 30，請改小。MSAA 會平滑形狀的邊緣。",
+    [UI_STR_OPT_DOWNSAMPLE] = "縮小",
+    [UI_STR_VAL_DOWNSAMPLE_BOX] = "縮至原始大小",
+    [UI_STR_OPT_DOWNSAMPLE_NOTE] =
+        "以上方設定的解析度繪製畫面，再縮小為遊戲原本的大小。解析度需為 2x 或以上；使用 CRT 濾鏡或視窗時不會有變化。",
     [UI_STR_AA_OFF] = "關",
     [UI_STR_AA_SSAA2] = "2倍超取樣",
     [UI_STR_AA_SSAA4] = "4倍超取樣",
