@@ -579,7 +579,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Das Spiel beginnt im Titelbildschirm, ohne das Sony-Schild und ohne die Eröffnungsszene. Gilt ab dem nächsten Start.",
     [UI_STR_OPT_AA] = "Kantenglättung",
     [UI_STR_OPT_AA_NOTE] =
-        "Glättet gezackte Kanten. Supersampling zeichnet das Bild größer und verkleinert es; MSAA glättet die Kanten von Formen.",
+        "Glättet gezackte Kanten. Supersampling zeichnet das Bild größer und verkleinert es: 2x zeichnet viermal so viele Pixel, 4x sechzehnmal so viele. Fällt die Anzeige bei Bildrate 60 auf 30, wähle weniger. MSAA glättet die Kanten von Formen.",
     [UI_STR_AA_OFF] = "Aus",
     [UI_STR_AA_SSAA2] = "Supersampling 2x",
     [UI_STR_AA_SSAA4] = "Supersampling 4x",
