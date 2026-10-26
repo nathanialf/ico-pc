@@ -145,6 +145,44 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
 /* A new 10 s block: lowest = allow, lateMaxNs = 0. */
 void pace_budget_block(PaceBudget *b);
 
+/* The allowance's event lines (window_host.c budget_lines writes them,
+ * "window: " before, the first 8 then every 100th), from the step that
+ * changed it and the window's last present: its whole time, its waits for
+ * the GPU (the fence waits) and for the display, whether the fence waits
+ * hold the display's (OpenGL), the GPU time a presented replay, the
+ * simulation step's time and the period the gate judged against.
+ *   PACE_BUDGET_TEXT_DROP: "presents held to A a step: the step ended L ms
+ *     late after P presents, K steps after one L2 ms late after P2 (the
+ *     last present C ms, waited F ms for the GPU and D ms for the display[,
+ *     the fence waits included: OpenGL]; GPU G ms a replay); back to H
+ *     after 120 steps on time if the GPU allows"
+ *   PACE_BUDGET_TEXT_CLIMB: "presents back to A a step|not held[ (where
+ *     they started)] after S steps (GPU G ms x K + step T ms under the
+ *     period P ms)"
+ *   PACE_BUDGET_TEXT_STAY: "presents stay at A a step: GPU G ms x K + step
+ *     T ms is not under the period P ms (S steps since the drop; back to H
+ *     when it is)"
+ * H "not held" on the timer path, "n a step" under the lock.  The length
+ * written, as snprintf. */
+typedef struct PaceBudgetWaits {
+    uint64_t costNs, fenceNs, displayNs, gpuNs, stepNs, periodNs;
+    bool fenceHoldsDisplay;
+} PaceBudgetWaits;
+
+enum { PACE_BUDGET_TEXT_DROP, PACE_BUDGET_TEXT_CLIMB, PACE_BUDGET_TEXT_STAY };
+
+int pace_budget_event_text(const PaceBudget *b, int kind, const PaceBudgetWaits *w, char *out,
+                           unsigned size);
+
+/* The 10 s line's allowance part: "; presents held to A a step|presents
+ * not held (lowest L|not held, R refused, D drops, C climbs, climbs refused
+ * X); GPU G ms a presented replay|noGpu" with the block's counts (the
+ * totals less the given ones at its start) and the GPU gate's time (0: not
+ * known, noGpu said instead).  The length written, as snprintf. */
+int pace_budget_block_text(const PaceBudget *b, unsigned refusedAt, unsigned dropsAt,
+                           unsigned climbsAt, unsigned climbRefusalsAt, uint64_t gpuNs,
+                           const char *noGpu, char *out, unsigned size);
+
 /* One present's wait for the display, the allowance's excuse: the acquire
  * and the present (dispNs) on a backend that keeps the display's wait
  * there, those and the fence waits (fenceNs) on one whose fence waits hold
@@ -630,6 +668,15 @@ double pace_intervals_mean(const PaceIntervals *s);
  * measured refresh is longer (a grid on the report runs faster than the
  * display); 0 when either is 0. */
 double pace_ppm(double measuredNs, double reportedNs);
+
+/* The 10 s line's display clock part under the lock ("display timing on:
+ * K presents timed, phase nudge +M ms, L late, E early", "display clock
+ * vblank (output NAME, measured T ms, slot +P ppm, phase +F ms)", ...,
+ * "display clock off"; docs/port/DISPLAY.md), the counts the block's (the
+ * totals less the given ones at its start), output the vblank clock's
+ * output name.  The length written, as snprintf. */
+int pace_lock_timing_text(const PaceLock *L, const char *output, unsigned seenAt, double nudgeAt,
+                          unsigned lateAt, unsigned earlyAt, char *out, unsigned size);
 
 /* The pictures the display showed, from a swapchain's own counts (DXGI's
  * frame statistics: PresentCount and PresentRefreshCount of the last
