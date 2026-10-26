@@ -451,6 +451,8 @@ leaves everything before it (`port/platform/diag_host.c` (header comment)). On A
 then puts the system's handlers back so the system still writes its tombstone
 (`port/platform/diag_host.c` (`restore_handlers`)).
 
+On Windows, three exception codes are messages to a debugger and never crashes: 0x406D1388 (the thread-naming exception, which SDL raises for every thread it makes and some drivers raise too) and the two OutputDebugString codes 0x40010006 and 0x4001000A. Both handlers return `EXCEPTION_CONTINUE_EXECUTION` for them (the raise returns to its caller, as SDL's own temporary handler does) and log `diag: thread-name exception from <module> ignored (thread <id>)` once per raising module, at most eight modules, the module being the first stack frame outside kernelbase.dll and ntdll.dll; the unhandled filter's line ends `(reached the unhandled filter)` (`port/platform/diag_host.c` (`ico_diag_benign_exception`, `benign_note`); issue 142, where the filter reported 0x406D1388 as a crash and the report's wait ended the run a minute later).
+
 A crash while the renderer builds a pipeline is a graphics driver crash: the activity note
 (`ico_diag_set_activity`) starts with "creating pipeline" or "creating the start-up pipelines". On
 Windows, Linux and macOS the handler then starts the program again at once, with
