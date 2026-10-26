@@ -634,6 +634,7 @@ enum {
     K_FOG,
     K_SHADERS,
     K_WINDOW,
+    K_SWAPCHAIN,
     K_COUNT
 };
 
@@ -669,6 +670,9 @@ static int key_of(const char *l)
     }
     if (starts(l, "window: ") && strstr(l, " preset (resolution ") != NULL) {
         return K_WINDOW;
+    }
+    if (starts(l, "rhi_vk: swapchain ")) {
+        return K_SWAPCHAIN;
     }
     return -1;
 }
