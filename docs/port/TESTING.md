@@ -1307,7 +1307,10 @@ the device line and each test's verdict, time and debug-layer error count). A fa
 in a collapsed group, its device line (`rhi_d3d11: <adapter> (D3D11, feature level ...)`), its
 first 40 debug-layer lines, its self-test lines (with `self-test failed on Direct3D 11; its last
 draw: ...`, [RHI.md](RHI.md#direct3d-11)) and its last 150 lines. A test's exit 77 ("no usable
-device") is a failure here, since WARP is always there; a test runs at most 2400 s.
+device") is a failure here, since WARP is always there, and so is a `SKIP:` line or any debug-layer
+error or corruption line in a test's log, whatever its exit status (the runtime drops the call the
+error names, so a program can pass its own checks while drawing less than it should); a test runs
+at most 2400 s.
 
 Not run there: the variants whose environment holds a Vulkan fake (`ICO_VK_FAKE_*`,
 `ICO_VK_ATTACHMENT_READ`: Direct3D 11 ignores them), the variants whose expected results name a
