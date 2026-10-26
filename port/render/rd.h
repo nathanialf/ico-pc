@@ -1916,7 +1916,10 @@ const char *rd_perf_target_name(int code);
  * and pipeline binds the RHI recorded in it, its GPU time (from its
  * timestamp to the next one, so the barriers before it and any work the
  * replay did not name in between count for it; -1 when a stamp is missing)
- * and the CPU time the replay took to record it, in microseconds. */
+ * and the CPU time the replay took to record it, in microseconds; where
+ * the backend has a busy clock (rhi.h rhi_read_timestamps_busy: OpenGL),
+ * busyValid and gpuBusyUs, the part of gpuUs the GPU ran after the work
+ * was handed over (the rest it waited for the CPU). */
 typedef struct RdPerfPass {
     uint8_t kind;   /* RD_PERF_PASS_* */
     uint8_t target; /* RdTargetId or RD_PERF_TARGET_* */
@@ -1925,6 +1928,8 @@ typedef struct RdPerfPass {
     uint16_t w, h;
     uint32_t draws, pipelineBinds;
     float gpuUs, cpuUs;
+    float gpuBusyUs;
+    uint8_t busyValid;
 } RdPerfPass;
 
 /* A piece's label as the window's summary writes it: the effect for a
@@ -2090,6 +2095,13 @@ typedef struct RdPerfRecord {
      * lists; the rest is the screen prims' vertices, the fog's table and the
      * alignment between them */
     uint64_t uploadTextureBytes, uploadUniformBytes, uploadInterpBytes, uploadStreamBytes;
+    /* The busy clock's share of gpuMs (rhi.h rhi_read_timestamps_busy,
+     * OpenGL, in the replays timed pass by pass): gpuBusyValid, and
+     * gpuBusyMs the GPU time over the same stamps less the GPU's waits for
+     * the CPU to hand the work over (a lower bound of the GPU's own time;
+     * gpuMs counts both) */
+    uint8_t gpuBusyValid;
+    double gpuBusyMs;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
@@ -2130,6 +2142,8 @@ typedef struct RdPerfPassAggEntry {
     uint16_t w, h;
     uint64_t passes, draws;
     double gpuMs, cpuMs;
+    double busyMs;  /* of gpuMs, the GPU busy time (RdPerfPass.gpuBusyUs) */
+    uint64_t busyN; /* the pieces that had one */
 } RdPerfPassAggEntry;
 
 typedef struct RdPerfPassAgg {
@@ -2148,7 +2162,8 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n);
  * 10 draws 1.21 ms, ... (5 of 47.0 passes a replay, 16 timed replays;
  * passes under 0.05 ms: 31.0 a replay, 0.62 ms)": the top entries by GPU
  * time, per timed replay ("N passes" only where an entry is not one pass a
- * replay); the length of the text in buf (cut to fit n) */
+ * replay; "4.12 ms (busy 1.30)" where its pieces had a busy time, OpenGL);
+ * the length of the text in buf (cut to fit n) */
 int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_t n);
 /* "47.0: render passes 32.0 (lists 9.0, fog 1.0, glow 17.0, ...), DATE
  * snapshot 1.5, ...": RdPerfRecord.passKinds and passEffects summed over
