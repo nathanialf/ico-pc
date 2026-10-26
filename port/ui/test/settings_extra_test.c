@@ -2973,9 +2973,10 @@ static void testAntiAlias(void)
         {
             int l[16], op[16];
             const int n = ui_settings_page_rows(UI_PAGE_PICTURE, l, op, NULL, 16);
-            CHECK(n > 3 && op[0] == UI_OPT_ANTI_ALIAS && op[1] == UI_OPT_FULL_HEIGHT &&
-                      op[2] == UI_OPT_FILTER,
-                  "title %d: Picture starts Anti-aliasing, Full-height picture, Texture filtering",
+            CHECK(n > 4 && op[0] == UI_OPT_ANTI_ALIAS && op[1] == UI_OPT_DOWNSAMPLE &&
+                      op[2] == UI_OPT_FULL_HEIGHT && op[3] == UI_OPT_FILTER,
+                  "title %d: Picture starts Anti-aliasing, Downsampling, Full-height picture, "
+                  "Texture filtering",
                   title);
         }
         CHECK(ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_ANTI_ALIAS) < 0 &&
