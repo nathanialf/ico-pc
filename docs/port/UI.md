@@ -211,8 +211,8 @@ default it to 0; [BUILDING.md](../BUILDING.md#release-candidate-tools)), and `MA
 (`ico_video_android`) while a handler is set (`ui_settings_set_share_report_handler`: the window
 host's `share_report_arm`; at `ICO_RC_TOOLS` 0 the setter keeps nothing). Cross logs `settings:
 share a bug report (an rc build's row)` and calls the handler once, with no popup (the system's
-share menu opens over the game). With all eighteen rows shown (the Graphics link too) the page starts at line 26, 9
-apart (Back at 179, its box to 219; `pagePitch`; no render check yet).
+share menu opens over the game). With all eighteen rows shown (the Graphics link too) the page
+scrolls in the window as every long page does ([The window](#the-window)).
 
 `buildOptionPage` makes a page: a centred header, then per option a right-aligned label and, for
 a stepped option, a centred value row and the two arrow rows owned by the label, with their pointer
@@ -231,10 +231,50 @@ its handler, Export textures only while a `UiTextureExportHost` is set, the wind
 `isExtrasOpt`, which is the three rows that leave the stage); the dump rows only in developer mode; the Touch screen link only with a touch screen; the
 window and mouse camera rows not on Android; the Graphics link only with two or more renderer names (`ui_settings_set_backend_names`), the Graphics driver link only with a driver host on an
 Adreno GPU (`port/ui/settings.c` (`optShown`, `isGameOpt`, `isExtrasOpt`)). `layoutPage` masks the
-hidden rows and spaces the shown ones by the page's pitch table, which keeps Back's box inside the
-226 lines and above the notes (`port/ui/settings.c` (`layoutPage`, `pagePitch`): Display is 13 apart from
-36 with its twelve rows on the title, Back at 179); Effects' fourteen
-rows from the pause menu (Brightness shown) are 12 apart from line 30, Back's box ending at 222.
+hidden rows, links the shown ones in a loop and places them in the window.
+
+### The window
+
+Every Options page places its shown rows in one window: one row a slot, `UI_SETTINGS_WIN_PITCH`
+(17) field lines apart from line `UI_SETTINGS_WIN_Y0` (36), at most `UI_SETTINGS_WIN_SLOTS` (10)
+slots, each row's box `UI_SETTINGS_ROW_H` (36) y units on every page, so Back's box ends at 225,
+inside the layout's 226 lines (`port/ui/settings.h`; `port/ui/settings.c` (`pagePlaces`,
+`layoutPage`)). The other spacing, 18 apart from line 40 in nine slots (Back's box to 220), is
+`UI_SETTINGS_WIN_TIGHT 0` in `settings.h`, one edit. Back, the last row of every table, is
+pinned in the last slot; a page whose rows before Back are more than the other nine slots
+scrolls them: `Page.offset` is the shown row in the first slot, clamped at every refresh and moved
+so the cursor's row is in view (its default's before the layout has a cursor), which covers Back
+from a sub-page onto a link out of view (`leaveTo`), `ui_settings_reopen_page` and
+`ui_settings_key_config_back`. The rows out of view are masked as the rule-hidden ones are (so the
+mouse never hits them, `ui_mouse.c`), their links stay the full loop; the hidden-row relocation
+(a cursor or default left on a hidden row moves to the first shown row) applies to rule-hidden rows
+only. `entryProc` and `ui_settings_reopen_page` put every window back at the top with the pages'
+defaults. The Graphics countdown hides Back: its two rows, nothing pinned, never scroll. The
+model viewer's Characters panel keeps `CV_ROW_Y0`/`CV_ROW_PITCH` and has no window.
+
+The game moves the cursor itself after the page's proc (`default_item_select`): the European disc's
+arm walks past masked rows, the 2001 discs' arms follow the link onto one. So `scrollMove`, in
+`settingsProc` before Triangle's leave, moves the window first on the four edge moves (Down on the
+last row in view when more rows follow before Back: one row; Down on Back with rows above out of
+view: to the top; Up on the first row in view with rows above: one row; Up on Back with rows below
+out of view: to the end), so that the row the cursor's link leads to is in view, and the game then
+makes the move as any other, its sound and glow too. It never switches the game's move off for the
+tick (`lt_item_select_disable`): the mouse drops its queued wheel notches after such a tick
+(`ui_mouse_tick`), and a notch is an Up or Down press, so three notches move three rows across the
+window's edge. Every other move is the game's alone (both rows in view).
+
+A page whose table is longer than the slots (Main, Display, Controls, Effects, Characters) has two
+marks, port text rows of the font's U+25B2 and U+25BC at `NOTE_SIZE`, greyed (`lt_ext_set_dim`),
+right of the value arrows at x 584, 32 wide (on Characters at x 618, 20 wide, right of the
+swatches): the up mark beside the first slot while rows above are out of view, the down mark
+beside the last scrolling slot while rows below are (`addMark`, `markShow`). Arimo has neither
+glyph; the Japanese font's subset carries them (they are in `font_corpus/en.txt`, so
+`tools/subset_font_ja.py` keeps them and `font_coverage` checks them). Their pointer roles are
+`LT_POINTER_UP` and `LT_POINTER_DOWN`: a click or a tap is an Up or Down press on the cursor's
+row. Characters' swatches follow their rows' masks and places (`charactersRefresh`). The tests
+read the window through `ui_settings_page_scroll` (rows shown by the rule, the offset, the rows in
+view), `ui_settings_page_marks` and `ui_settings_row_shown` (shown by the rule, in view or not),
+so a test can tell a row hidden by its rule from one scrolled out of view.
 
 ### Values and saving
 
@@ -264,8 +304,10 @@ A new option row needs:
    (`port/ui/settings.c` (`steppable`));
 2. its option and its label string in the page's tables in `build`, at the place it shows; each
    page's options, strings (and on Main and Controls, links) are parallel arrays the
-   `_Static_assert`s keep in step, and a page holds at most `MAX_ROWS` (16) rows, which `addOption`
-   places;
+   `_Static_assert`s keep in step, and a page holds at most `MAX_ROWS` rows; `addOption` builds
+   them and `layoutPage` places the shown ones in the window ([The window](#the-window)): a page
+   that grows past the window's slots scrolls, and a table longer than the slots gets the two
+   marks;
 3. its value text in `rawValue` and its setter in `ui_settings_step`, plus a case in `optShown`
    when it is not always shown and in `canStep` when it cannot always step;
 4. a `UI_STR_OPT_*` id in `port/ui/strings.h` and its text in each of `strings_en.c`,
@@ -276,7 +318,10 @@ A new option row needs:
 
 The `settings` test holds each page's rows as fixed lists (`port/ui/test/settings_test.c`
 (`testBuild`)), which gain the row; new cases go in `port/ui/test/settings_extra_test.c` (ctest
-`settings_extra`, with `checkPageFits` for the page's fit); `settings_render` draws the page and
+`settings_extra`, with `checkPageFits` for the page's window: the rows in view exactly one slot
+each, at most the window's slots, Back in view and last, the last box inside the 226 lines, every
+row the rule shows in view on a page that fits, the marks shown exactly while rows are out of view
+that way); `settings_render` draws the page and
 `font_coverage` checks the label's characters.
 
 ### Back
@@ -795,8 +840,8 @@ posture the host reports (`ico_touch_edits_reset`), Reset all layouts the three;
 confirm sound and log `touch: reset layout (...)`. Edit layout (`UI_OPT_TOUCH_EDIT`) is locked
 and dimmed with a note (`UI_STR_TOUCH_EDIT_LOCKED`) while Touch controls is Off or no editor host
 is set (`port/ui/settings.c` (`touchEditLocked`, `refreshPage`)). The Controls page has 14 rows
-with the link; `pagePitch` spaces 10 rows 16 apart, 11 or 12 rows 13 apart from line 40 and 13 or
-14 rows 11 apart from line 30.
+with the link from the pause menu, more than the window's slots: it scrolls
+([The window](#the-window)).
 
 Edit layout opens `UI_PAGE_TOUCH_LAYOUT`, a page of one masked row with no cursor, built as photo
 mode's is (`buildTouchEditorPage`). `settingsProc` hands it to `ui_touch_edit_proc` each tick
@@ -882,7 +927,8 @@ a press row after `UI_OPT_DEVELOPER` in the enum, so not stepped) and Back. The 
   menu's Back does (`la_host_resume_play`, then the region's `layout_play`), logging `settings:
   Options closed for the Debug menu (to the title|back to the game)`. With nothing bound it logs
   `variants: the Debug menu cannot open: the game has not bound it` and Options stays.
-- Pitch: nine rows 18 apart (Back at 184), ten with Debug menu 16 apart (`pagePitch`).
+- Places: the window's ([The window](#the-window)); ten rows with Debug menu fill its slots, Back
+  at 189.
 - Log lines: the values once at the first read (`variants: shade_toughness=... ignore_cutscene_cameras=0`),
   each change, the achievements rule when it changes (`variants: achievements are off (one_hit ...)`,
   `... are back on`), a value that is none (`variants: [variants] <key> = "<word>" is not a value; using
@@ -993,9 +1039,9 @@ two path strings PAL's do not). On the Japanese disc:
   start; with no pin the row shows the disc playing, which with several discs' data and no pin is the
   one the next start picks (the disc played last). Its note is `UI_STR_DISC_NOTE` ("Takes effect at
   the next start"). With every Main row shown (the Graphics and Graphics driver links, Language, Disc and the
-  two dump rows) the page has sixteen rows, 10 lines apart (`pagePitch`); with Save a picture for a
-  bug report too, seventeen, 10 apart from line 26 (`MAX_ROWS` is 17, 18 in an rc build, whose
-  eighteen rows are 9 apart: not rendered or checked on a phone). ctest `settings_extra` (`testDiscRow`,
+  two dump rows) the page has sixteen rows; with Save a picture for a bug report too, seventeen
+  (`MAX_ROWS` is 17, 18 in an rc build); the window scrolls them ([The window](#the-window)).
+  ctest `settings_extra` (`testDiscRow`,
   `testReportPicture`).
 - **Glyphs.** The button pictures are the Japanese sheet's (`Tex_menu01/option.tm2`): rows 155,
   321, 320 and 319 (Cross, Circle, Square, Triangle, 32 x 15 texels shown 30 high), 326, 323, 325
