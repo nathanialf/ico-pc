@@ -91,8 +91,8 @@ set(_ui_sources
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
 set_source_files_properties(layout_ext.c menu_font.c menu_text.c popup.c settings.c ui_list.c
-                            ui_hint.c gallery.c photo_ui.c ui_mouse.c touch_ui.c touch_edit_ui.c
-                            PROPERTIES
+                            ui_hint.c gallery.c photo_ui.c ui_mouse.c touch_ui.c ui_fps.c
+                            touch_edit_ui.c PROPERTIES
                             COMPILE_OPTIONS "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
@@ -135,8 +135,9 @@ endfunction()
 if(TARGET ico_pc)
     if(NOT ICO_HEADLESS AND TARGET ico_render)
         # touch_ui.c, the touch overlay's drawing (reads port/input's
-        # touch.h through ico_ui_settings' include path)
-        ico_ui_library(ico_ui ON ui_host.c touch_ui.c)
+        # touch.h through ico_ui_settings' include path); ui_fps.c, the
+        # Frame rate counter's
+        ico_ui_library(ico_ui ON ui_host.c touch_ui.c ui_fps.c)
         if(TARGET SDL3::SDL3-shared)
             # ui_host.c posts SDL_EVENT_QUIT for the title's "Quit to
             # desktop" (the headers only; ico_pc links SDL3)

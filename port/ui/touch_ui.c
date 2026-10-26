@@ -1105,11 +1105,42 @@ void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx)
     }
 }
 
+int ui_touch_top_gap(const struct RdOverlayCtx *ctx, float *x0, float *x1, float *y0)
+{
+    IcoTouchOverlay o;
+
+    if (!ctx || !s_source || !s_source(&o) || o.layout.outW == 0 || o.layout.outH == 0 ||
+        ctx->outW == 0 || ctx->outH == 0 || !(o.layout.unit > 0.0f)) {
+        return 0;
+    }
+    const float kx = (float)ctx->outW / (float)o.layout.outW;
+    const float ky = (float)ctx->outH / (float)o.layout.outH;
+    const float q = o.layout.unit;
+    const IcoTouchRect *sel = &o.layout.button[ICO_TOUCH_B_SELECT].rect;
+
+    /* the default layout (touch.c): the D-pad's Up key ends at L+33 q, Select
+       starts at the middle less 13 q; L2 sits in the corner before them and
+       the keys' row is T+3 q.  Two q of air on each side. */
+    *x0 = (o.layout.region.x + 35.0f * q) * kx;
+    *x1 = (sel->w > 0.0f ? sel->x - 2.0f * q : o.layout.region.x + o.layout.region.w) * kx;
+    *y0 = (o.layout.region.y + 3.0f * q) * ky;
+    return 1;
+}
+
 #else
 
 void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx)
 {
     (void)ctx;
+}
+
+int ui_touch_top_gap(const struct RdOverlayCtx *ctx, float *x0, float *x1, float *y0)
+{
+    (void)ctx;
+    (void)x0;
+    (void)x1;
+    (void)y0;
+    return 0;
 }
 
 #endif

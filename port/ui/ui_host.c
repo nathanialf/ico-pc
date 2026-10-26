@@ -23,8 +23,10 @@
 #include "settings.h"
 #include "strings.h"
 #include "touch_ui.h"
+#include "ui_fps.h"
 #include "ui_internal.h"
 #include "ui_mouse.h"
+#include "video_options.h"
 
 /* the game's side (GsBase.c, main.c; common/include/main.h) */
 extern int ScreenWidth;
@@ -57,6 +59,10 @@ static void hostOverlayTop(const RdOverlayCtx *ctx, void *user)
     const RdRect ui = rd_ui_box_of(&ctx->box); /* the 4:3 box the menus are drawn in */
     ui_mouse_set_view((int)ctx->outW, (int)ctx->outH, ui.x, ui.y, (int)ui.w, (int)ui.h);
     ui_touch_draw_overlay(ctx);
+    /* the Frame rate counter, over the touch controls (Options > Display) */
+    if (ico_video_show_fps()) {
+        ui_fps_draw_overlay(ctx);
+    }
 }
 #endif
 

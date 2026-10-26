@@ -48,6 +48,7 @@
 #include "../core/region.h" /* the dumps folder's serial */
 #include "touch_ui.h"
 #include "trace_host.h"
+#include "ui_fps.h"
 #include "ui_host.h"
 #include "popup.h" /* ui_popup_set_vsync_hz */
 #include "ui_mouse.h"
@@ -4951,6 +4952,7 @@ static void disp_block_reset(void)
    time; the longest replay names the frame that did. */
 static void pace_log(Uint64 now)
 {
+    ui_fps_tick(now);
     if (s_pres.statAt == 0) {
         uint32_t n;
 
@@ -5423,6 +5425,7 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
     s_pres.lastReturn = now;
     s_pres.presentedFrame = s_pres.frame;
     s_pres.statPresents++;
+    ui_fps_present();
 #ifdef __ANDROID__
     ico_gpu_driver_android_presented(); /* the driver's trial */
 #endif
