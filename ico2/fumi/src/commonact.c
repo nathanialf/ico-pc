@@ -7169,8 +7169,11 @@ static void _ACTCommonMailTest_ntsc(GObj *self, int stopCnt, int walkCnt, int ru
        caller: the boy and Yorda, subGirlControl_<disc>); the port's Hold type
        ([gameplay] hold_type in optionControlType, the disc's own B by
        default, which reads as before) is read as the European arm reads it:
-       A lets go when the boy's R1 is up */
-    if (optionControlType == 1 ? (s->pad.trg & 8) != 0 : self == boyGObj && (s->pad.now & 8) == 0) {
+       A lets go when the boy's R1 is up.  With Players 2 the toggle is the
+       boy's alone too, as in the European arm (Yorda's R1, the second
+       player's, is her call to the boy: subBoyCollision_<disc>) */
+    if (optionControlType == 1 ? (s->pad.trg & 8) != 0 && (self == boyGObj || girlControlMode == 0)
+                               : self == boyGObj && (s->pad.now & 8) == 0) {
         handoff_heroin();
     }
     m = (unsigned int)s->actMode;
@@ -7251,8 +7254,11 @@ static void _ACTCommonMailTest_jun26(GObj *self, int stopCnt, int walkCnt, int r
        caller: the boy and Yorda, subGirlControl_<disc>); the port's Hold type
        ([gameplay] hold_type in optionControlType, the disc's own B by
        default, which reads as before) is read as the European arm reads it:
-       A lets go when the boy's R1 is up */
-    if (optionControlType == 1 ? (s->pad.trg & 8) != 0 : self == boyGObj && (s->pad.now & 8) == 0) {
+       A lets go when the boy's R1 is up.  With Players 2 the toggle is the
+       boy's alone too, as in the European arm (Yorda's R1, the second
+       player's, is her call to the boy: subBoyCollision_<disc>) */
+    if (optionControlType == 1 ? (s->pad.trg & 8) != 0 && (self == boyGObj || girlControlMode == 0)
+                               : self == boyGObj && (s->pad.now & 8) == 0) {
         handoff_heroin();
     }
     m = (unsigned int)s->actMode;
@@ -7333,8 +7339,11 @@ static void _ACTCommonMailTest_aug6(GObj *self, int stopCnt, int walkCnt, int ru
        caller: the boy and Yorda, subGirlControl_<disc>); the port's Hold type
        ([gameplay] hold_type in optionControlType, the disc's own B by
        default, which reads as before) is read as the European arm reads it:
-       A lets go when the boy's R1 is up */
-    if (optionControlType == 1 ? (s->pad.trg & 8) != 0 : self == boyGObj && (s->pad.now & 8) == 0) {
+       A lets go when the boy's R1 is up.  With Players 2 the toggle is the
+       boy's alone too, as in the European arm (Yorda's R1, the second
+       player's, is her call to the boy: subBoyCollision_<disc>) */
+    if (optionControlType == 1 ? (s->pad.trg & 8) != 0 && (self == boyGObj || girlControlMode == 0)
+                               : self == boyGObj && (s->pad.now & 8) == 0) {
         handoff_heroin();
     }
     m = (unsigned int)s->actMode;
