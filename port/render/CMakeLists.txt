@@ -1145,6 +1145,53 @@ if(ICO_RUN_TESTS)
                      -P "${_crk}")
     set_tests_properties(rd_replay_tool_crack PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                          FIXTURES_REQUIRED rd_dump)
+    # issue 106: the reporter's drained-room dumps (copied into the corpus,
+    # build-host/tmp/corpus/dumps/ripple) at their settings with Full pixel
+    # on: the ripples' read of the puddle's block keeps REPEAT (rd_water.c
+    # rd__block_keeps_repeat), so the ring area holds no near-white pixel
+    # (2089 and 3014 before the fix), and the water line names the clamp's
+    # counts; the ripple wholly past the first period (10:04:36) and the
+    # mirror floor (the pool's grids over its scene copy, corpus puddle
+    # rd-00200) byte for byte as before on lavapipe.  Not Run without the dumps
+    set(_rip "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_ripple.cmake")
+    set(_rip_dir "${CMAKE_SOURCE_DIR}/build-host/tmp/corpus/dumps")
+    set(_rip_args "--enhanced|--aspect|16:9|--resolution|1920x1080|--full-height|--full-pixel|--aa|ssaa2|--present|1920x1080|--list")
+    set(_rip_py "")
+    if(Python3_FOUND)
+        set(_rip_py "-DPYTHON=${Python3_EXECUTABLE}")
+    endif()
+    add_test(NAME rd_replay_tool_ripple
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-094512-v13782.zip"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple.png"
+                     "-DARGS=${_rip_args}"
+                     "-DEXPECT=Full pixel on, border mask off: [0-9]+ render-target reads clamped, 2 block reads kept on REPEAT"
+                     "-DEXPECT2=block 344x256 GS with depth [^;]*REPEAT 2, 2 of them kept on REPEAT"
+                     -DBOX=870,430,1210,890 -DMAXBRIGHT=0 ${_rip_py} -P "${_rip}")
+    add_test(NAME rd_replay_tool_ripple_447
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-100447-v84109.zip"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_447.png"
+                     "-DARGS=${_rip_args}" "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
+                     -DBOX=90,700,400,1080 -DMAXBRIGHT=0 ${_rip_py} -P "${_rip}")
+    add_test(NAME rd_replay_tool_ripple_436
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${_rip_dir}/ripple/frame-20261024-100436-v83439.zip"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_436.png"
+                     "-DARGS=${_rip_args}" "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
+                     -DSHA=1f5bc959e661663bb1d2147ca2caa5dd4009d6e4ff2fdb3a5b090d759b86fca4
+                     ${_rip_py} -P "${_rip}")
+    add_test(NAME rd_replay_tool_mirror_floor
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${_rip_dir}/puddle/rd-00200.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_mirror_floor.png"
+                     "-DARGS=--enhanced|--resolution|2x|--full-pixel|--present|1024x896|--list"
+                     "-DEXPECT=Full pixel on, border mask off: [0-9]+ render-target reads clamped, 0 block reads kept on REPEAT"
+                     -DSHA=d4924b35b0d334b12de74acd1f2e8b05d28aa6605c50bc4e5c413e97a126c871
+                     ${_rip_py} -P "${_rip}")
+    set_tests_properties(rd_replay_tool_ripple rd_replay_tool_ripple_447 rd_replay_tool_ripple_436
+                         rd_replay_tool_mirror_floor
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
     # the fog on the depth's words copied out through a buffer
     # (ICO_RD_FOG_PATH=buffer, rd_fog_path.c: the fallback of a device whose
     # depth reads fail), on D32S8 and on D24S8 (the top byte masked off):
