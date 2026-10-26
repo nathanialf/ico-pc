@@ -176,7 +176,10 @@ static void ACTGetWish_FromPad_ntsc(GObj *self, float *dir)
             s->wish3.ll |= 0x100000;
             s->wish3.ll |= 0x200000;
             s->wish3.ll |= 0x400000;
-            if (self == girlGObj && (s->flags20.ll & 0x600000) == 0x600000) {
+            /* PC port: not with Players 2 (the European arm's
+               girlControlMode == 0 guard) */
+            if (self == girlGObj && girlControlMode == 0 &&
+                (s->flags20.ll & 0x600000) == 0x600000) {
                 s->wish3.ll &= ~0x1000;
             }
         }
@@ -184,6 +187,16 @@ static void ACTGetWish_FromPad_ntsc(GObj *self, float *dir)
 
     if (((int)(s->wish1.ll >> 13) & 1) && chkOrient((char *)s, dir, u, 80.0f)) {
         s->wish3.ll |= 0x2000;
+    }
+
+    /* PC port: act-wish.c's European ACTGetWish_FromPad (its girlControlMode
+       block after the wish1 bit 20 test): with Players 2 Yorda's two square
+       wishes, wish3 0x1000 and 0x2000 here, only while Square is held */
+    if (self == girlGObj && girlControlMode != 0) {
+        if (!(s->pad.now & 0x10)) {
+            s->wish3.ll &= ~0x1000;
+            s->wish3.ll &= ~0x2000;
+        }
     }
 
     s->wish3.ll |= 1ULL << 60;
@@ -429,6 +442,16 @@ static void ACTGetWish_FromPad_jun26(GObj *self, float *dir)
         s->wish2.ll |= 1ULL << 42;
     }
 
+    /* PC port: act-wish.c's European ACTGetWish_FromPad (its girlControlMode
+       block after the wish1 bit 20 test): with Players 2 Yorda's two square
+       wishes, wish2 bits 41 and 42 here, only while Square is held */
+    if (self == girlGObj && girlControlMode != 0) {
+        if (!(s->pad.now & 0x10)) {
+            s->wish2.ll &= ~(1ULL << 41);
+            s->wish2.ll &= ~(1ULL << 42);
+        }
+    }
+
     s->wish3.ll |= 0x200000;
 
     if (((int)(s->wish1.ll >> 52) & 1) && chkOrient((char *)s, dir, 0, 60.0f)) {
@@ -669,7 +692,9 @@ static void ACTGetWish_FromPad_aug6(GObj *self, float *dir)
             s->wish3.ll |= 0x100000;
             s->wish3.ll |= 0x200000;
             s->wish3.ll |= 0x400000;
-            if (self == girlGObj && (s->flags20.ll & 0xC000) == 0xC000) {
+            /* PC port: not with Players 2 (the European arm's
+               girlControlMode == 0 guard) */
+            if (self == girlGObj && girlControlMode == 0 && (s->flags20.ll & 0xC000) == 0xC000) {
                 s->wish3.ll &= ~0x1000;
             }
         }
@@ -677,6 +702,16 @@ static void ACTGetWish_FromPad_aug6(GObj *self, float *dir)
 
     if (((int)(s->wish1.ll >> 13) & 1) && chkOrient((char *)s, dir, u, 80.0f)) {
         s->wish3.ll |= 0x2000;
+    }
+
+    /* PC port: act-wish.c's European ACTGetWish_FromPad (its girlControlMode
+       block after the wish1 bit 20 test): with Players 2 Yorda's two square
+       wishes, wish3 0x1000 and 0x2000 here, only while Square is held */
+    if (self == girlGObj && girlControlMode != 0) {
+        if (!(s->pad.now & 0x10)) {
+            s->wish3.ll &= ~0x1000;
+            s->wish3.ll &= ~0x2000;
+        }
     }
 
     s->wish3.ll |= 1ULL << 59;

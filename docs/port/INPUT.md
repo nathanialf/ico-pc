@@ -61,7 +61,7 @@ window (`port/platform/window_host.c`) drives it (`port/input/input_sdl.h`, head
   rumble, each slot its port's motors (slots 2 and up follow port 0).
 - Gamepad slots (`open_pad`, `pad_slot`): slot 0 is the first player's pad, slot 1 the second's
   (libpad port 1, which `ico2/fumi/src/girl_act.c` connects to Yorda while `girlControlMode` is
-  set), slots 2..7 drive no port. A pad keeps its slot across a reconnection by serial, then
+  set, on every disc: `subGirlControl` and its 2001 arms), slots 2..7 drive no port. A pad keeps its slot across a reconnection by serial, then
   path, then a GUID no other known pad shares; a different pad plugged in while a player's slot
   stands empty takes that slot. The log names the slot (`input: gamepad slot N "<name>"`).
 

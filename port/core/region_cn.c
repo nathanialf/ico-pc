@@ -48,9 +48,8 @@ const IcoRegionInfo ico_region_info_cn = {
     .has_50hz_row = 0,      /* NTSC only: no 50 Hz branches (docs/TARGETS.md) */
     .has_game_language = 0, /* kanbanBootMcCheck has no language step; jimaku.c
                                no per-language subtitles */
-    /* has_film_players: the Korean program's la_game_option: screenModeItem_kor,
-       choiceItem_kor + 2 */
-    .has_film_players = 1,
+    /* has_film_effect: the Korean program's la_game_option: screenModeItem_kor */
+    .has_film_effect = 1,
     /* hold_type_own: A (the Korean program's: the shared _ACTCommonMailTest
        arm, optionControlType 0 at boot) */
     .hold_type_own = 0,

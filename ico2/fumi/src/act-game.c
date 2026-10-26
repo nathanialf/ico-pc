@@ -3283,7 +3283,9 @@ static void ActOrientTest_ntsc(GObj *self)
     }
     if (ORBIT(ORQ((char *)s, 1), 0) && ORBIT(ORM((char *)s, 1), 0)) {
         if (self == (girlGObj)) {
-            if (GOBJ_ACT(self)->actMode == 113) {
+            /* PC port: with Players 2 outside GIRLREADYMOVE too, as the
+               European ActOrientTest does */
+            if (girlControlMode != 0 || GOBJ_ACT(self)->actMode == 113) {
                 ACTSendMailCorrect(self, 107);
             }
         } else {
@@ -3661,7 +3663,9 @@ static void ActOrientTest_jun26(GObj *self)
     }
     if (ORBIT(ORQ((char *)s, 0), 62) && ORBIT(ORM((char *)s, 0), 30)) {
         if (self == (girlGObj)) {
-            if (GOBJ_ACT(self)->actMode == 112) {
+            /* PC port: with Players 2 outside GIRLREADYMOVE too, as the
+               European ActOrientTest does */
+            if (girlControlMode != 0 || GOBJ_ACT(self)->actMode == 112) {
                 ACTSendMailCorrect(self, 105);
             }
         } else {
@@ -4014,7 +4018,9 @@ static void ActOrientTest_aug6(GObj *self)
     }
     if (ORBIT(ORQ((char *)s, 1), 0) && ORBIT(ORM((char *)s, 1), 0)) {
         if (self == (girlGObj)) {
-            if (GOBJ_ACT(self)->actMode == 113) {
+            /* PC port: with Players 2 outside GIRLREADYMOVE too, as the
+               European ActOrientTest does */
+            if (girlControlMode != 0 || GOBJ_ACT(self)->actMode == 113) {
                 ACTSendMailCorrect(self, 106);
             }
         } else {

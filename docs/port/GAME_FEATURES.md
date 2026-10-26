@@ -305,7 +305,8 @@ hold the rest.
 | Effects: Brightness; Controls: Vibration, Button configuration (pause) | W | W | W | W | W | W | W | `systemStatus[11]`, `iosPadActRequestEnable`, `layout_key_config` (`la_key_config` and its 2001 arms go back to Settings); `settings_discs` |
 | Gameplay: stick fix, Yorda, door fix, natural chains | W | W | W | W | W | W | W | the hooks sit in every disc's arm (`backStage.c`, `ebrain.c`, `enemy_act.c`, `boyact.c` `CheckCollisionAttr_ntscaug6jun26`, `BgAnimation.c` `bga_CalcAnimation_<disc>`); `options_<slug>` |
 | Gameplay: Skip the opening | W | W | W | W | W | W | W | `kanbanBootMain`/`_jun26`, `actOpDemo01`/`_ntsc`/`_aug6jun26`; `kanban_boot_<slug>`, `settings_extra_<slug>` |
-| Gameplay: Film effect, Players (pause, once cleared) | W | W | W | H | H | H | W | `has_film_players` (no `film_noise` in the 2001 stage tables, `reel_row` -1; no 2001 arm reads `girlControlMode`: `subGirlControl_<disc>` reads Yorda's pad only as the debug target, and `setNext` ignores it there); `settings_discs` |
+| Gameplay: Film effect (pause, once cleared) | W | W | W | H | H | H | W | `has_film_effect` (no `film_noise` in the 2001 stage tables, `reel_row` -1); `settings_discs` |
+| Gameplay: Players (pause, once cleared) | W | W | W | W | W | W | W | the 2001 arms carry the European second-pad branches ([Players on the 2001 discs](#players-on-the-2001-discs)); the count kept per save beside the card there (`[players]`); `settings_discs`, `options_<slug>` |
 | Audio: Sound output | W | W | W | W | W | W | W | `soundOutputModeSet` on every disc; `options_<slug>` |
 | Main: Developer mode | W | W | W | W | W | W | W | `achievements_<slug>` (the suspension) |
 | Extras > Game variants: Debug menu | W | W | W | W | W | H | W | `ICO_JUN26` (the demo's debug tables are the preview's); `settings_discs`, `settings_extra_<slug>` |
@@ -326,8 +327,69 @@ hold the rest.
 
 A port site that writes one of these numbers itself, instead of reading the region table, is what
 `region_literals_check` (`tools/check_region_literals.py`, [TESTING.md](TESTING.md)) fails on.
-The log names each hidden row once: `settings: no Film effect or Players row on <disc id> (the
-game has neither)` and `extras: no Credits row on <disc id> (its disc holds no staff scenes)`.
+The log names each hidden row once: `settings: no Film effect row on <disc id> (the game has
+none)` and `extras: no Credits row on <disc id> (its disc holds no staff scenes)`.
+
+### Players on the 2001 discs
+
+Players 2 (`girlControlMode` 1: Yorda on the second pad) is the European program's. Every reader
+of `girlControlMode` sits in a European function body that branches at its head to the North
+American, August 2001 and June 2001 arms (`_ntsc`, `_aug6`, `_jun26`), and no arm reads it: their
+`subGirlControl_<disc>` reads Yorda's pad only while she is the debug target, from port 0. The
+port writes the European second-pad branch into each arm at its site, with the arm's own mode,
+mail and flag numbers; everything else in the arm stays the disc's. The numbers come from the
+discs' own tables: `actModeTbl`'s mode names (117 rows on the North American disc and the
+preview, 116 on the demo, to the European 120; the demo has no `ROPETURNSPECIAL`, so its rows from 67
+on sit one lower) and
+`actIntrList`'s mail rows (a mail is told by the modes it leads from and to). The sites:
+
+| European site (`ico2/fumi/src`) | with Players 2 it | 2001 arms | the port |
+| --- | --- | --- | --- |
+| `girl_act.c` `setNext` | refuses the brain modes whose `girlBrainModeTable` flag is set (Escape, Hide, Hesitate, HideAdvance) | inlined into `girlBrainMain_DecideMode_<disc>`, which never refused one | the gate reads `girlControlMode` on every disc (the table is the same) |
+| `girl_act.c` `subGirlControl` (the pad read) | reads Yorda's pad from port 1, unless `scpBoyControlReadDisable`; keeps `girlPad` | `subGirlControl_ntsc`, `_jun26`, `_aug6`: the read is the debug target's, port 0 | the read also when `girlControlMode` and not `scpBoyControlReadDisable`, from port `girlControlMode != 0`; `girlPad` kept |
+| `subGirlControl` (the slow walk) | skips the half-speed walk of the slow-walk states | the same block, the arm's own three flag bits | skipped with Players 2 |
+| `subGirlControl` (the turn) | turns her by the motion's `girlDirFrames` | `dirFrames` (the 2001 motion tables have no `girlDirFrames`; the port's row holds 0) | `dirFrames`, the disc's own |
+| `subGirlControl` cases 29 and 28 | no back-off mail just after the jump of mail 197 (`flags18` bit 56, `actCommonJump`) | no such mail on these discs (their STAND, WALK and RUN rows have three JUMP mails to the European four), so no flag | nothing to carry; the disc's own (its case 28 has no timer to skip) |
+| `subGirlControl` case 45 (`SOFA`) | gets up on a forward stick only; no hold or push count from the boy | the same case | the same, with the arm's mails |
+| `subGirlControl` (end) | `flags20` bit 26 while her R1 is held, for the boy's look | no reader of it | the boy's arms read her pad's R1 themselves (below) |
+| `girl_act.c` `subGirlBrain_Pulledup` | does not turn her toward the boy at the cliff foot | `subGirlBrain_Pulledup_<disc>`, the same turn | the turn skipped with Players 2 |
+| `girl_act.c` `subGirlCollision` | on stage 23, under a low ceiling, drops her from a climb (mail 428, STAND and CLIMB to FALL) | no mail leads from STAND or CLIMB to FALL | not carried (no mail to send) |
+| `girl_act.c` `actGirlHand`, `act-game.c` `_ACTMotDirSmzDirect`, `boyact.c` `subBoyCollision` (5737), `actBoyReadyMove`, `enemy_act.c` `subEnemyCollision`, `actEnemyKidnapBegin`, `commonact.c` `_ACTDebugPrint` | `girlDirFrames` for Yorda | `dirFrames` | the disc's own (`dirFrames`) |
+| `girl_act.c` `actGirlHang` | after a jump onto a ledge, the stand mail once she has hung 5 s | `actGirlHang_ntsc`, `_aug6jun26`: only the ditch hang, at once | the European branch: from a jump, `ACTAdjustPlane` and the arm's stand mail after 5 s |
+| `act-game.c` `ActOrientTest` | Yorda takes the orient mail outside `GIRLREADYMOVE` too | `ActOrientTest_ntsc` (mail 107), `_aug6` (106), `_jun26` (105), `GIRLREADYMOVE` 113, 113, 112 | the same condition |
+| `act-game.c` `ACTGame_CommonLoop` | parallel status 27 on wish bit 33 | the 2001 parallel bits run one lower from the European 28 (`enemy_act.c`'s `PAL_NTSCAUG6JUN26(0x1C, 27)`), so 27 has no row | not carried |
+| `act-env.c` `ACTGetEnvironment` | on stage 26 a tighter catch height for her jump to the boy at a ditch | the arms have no such catch block | not carried |
+| `act-wish.c` `ACTGetWish_FromPad` (968) | the single-player clear of her wish (`flags20` bits 37, 38) only without Players 2 | `_ntsc` (bits 21, 22), `_aug6` (14, 15); `_jun26` has none | the clear only without Players 2 |
+| `act-wish.c` `ACTGetWish_FromPad` (979) | her two square wishes only while Square is held | `wish3` 0x1000 and 0x2000 (`_ntsc`, `_aug6`), `wish2` bits 41 and 42 (`_jun26`) | the same, `pad.now & 0x10` |
+| `boyact.c` `subBoyCollision` (5944) | the boy looks at Yorda, and the camera turns to her when she is off screen, while her R1 is held | `subBoyCollision_ntsc`, `_jun26`, `_aug6`: only on the boy's own look | the arm's look and camera block also on Yorda's `pad.now & 8` |
+| `boyact.c` `pullup_check_heroin_position` | at the 3 m wall (`cliffSel` 300) she jumps to the boy's hand (mail 89, JUMP to PULLED_GO) | no mail leads from JUMP to PULLED_GO | not carried: the disc's own pull-up |
+| `boyact.c` `actBoyDitch3mReady` | no mails that walk her to the ditch | `actBoyDitch3mReady_<disc>`, the same two mails | skipped with Players 2 |
+| `commonact.c` `_ACTCommonMailTest` | R1 hands off for the boy only | `_ACTCommonMailTest_<disc>`'s toggle half, any caller | the toggle half for the boy only with Players 2 |
+| `ico2/script/src/op.c` `actOpDemo01` | a new game sets one player | `actOpDemo01_ntsc`, `_aug6jun26` set nothing | one player at a new game |
+| `ico2/fumi/ios/mcard.c` `gameblock_write`, `gameblock_read` | the save carries `girlControlMode` after the game block | the 2001 game block has no word after it (25,596 and 20,480 bytes, all the disc's) | kept beside the save in `config.toml` (`[players]`, below) |
+| `ico2/sugipon/src/frameDependSequence.c` `execVibCondition` | the motion's vibration on Yorda's pad | the 2001 motion effects have no condition ids (`execVib_ntscaug6jun26`) | none (no data) |
+
+The count is kept with each save on those discs in `config.toml`'s `[players]` (`ntsc_slot_N`,
+`aug6_slot_N`, `jun26_slot_N` = 1 or 2, with the save's game-block sum, as the mirror flag is;
+[CONFIG.md](CONFIG.md#players)): `la_load_processing` (and `_jun26`) sets `girlControlMode` from
+it after the card's load, and `la_save_processing` writes it after the save, on those discs only
+(`ico2/common/src/layout_action.c`; `port/game/options.h` (`ico_players_slot_saved`,
+`ico_players_slot_loaded`)). A save without an entry, or with another sum, loads as one player.
+`actOpDemo01_ntsc` and `_aug6jun26` set one player at a new game, as the European arm does. Every
+disc's girl thread reports the count each frame, and a change is logged once: `options: Players
+<1|2> on <disc id> (Yorda on the second controller, port 1 | Yorda led by the game)`; the sidecar
+logs `options: Players <n> kept for save slot <N> on <disc id>` and `options: Players <n> from save
+slot <N> on <disc id>` (with ` (no entry for this save: 1)` when there is none).
+
+What a tester should try, on each of the three discs, with a second controller plugged in and
+Players 2 set from the pause menu of a cleared save: Yorda walks and runs on the second stick and
+stops when it is let go; she does not run off or hide on her own when shadows come (the refused
+brain modes); holding R1 on the second controller turns Ico's head and the camera to her; Ico's
+R1 still takes and lets go of her hand in both Hold types, and her R1 never does; she sits and
+gets up from a sofa on a forward stick; at a ditch she is not walked to the edge for the jump;
+after a jump onto a ledge she stands up after about five seconds; at a ledge Ico pulls her up as
+usual. Then Players 1 again: she must behave as before. A save made with Players 2 loads with
+Players 2, a new game starts with 1.
 
 ## Achievements and the game-state view
 

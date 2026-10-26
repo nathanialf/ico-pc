@@ -523,6 +523,78 @@ static void test_mirror_slots(const char *dir)
     ico_opt_reload();
 }
 
+/* Players kept per save slot on the 2001 discs ([players], options.h): the
+   count each save was made with, tied to its sum, per disc; a save without
+   an entry or with another sum loads as one player.  Run for the three
+   2001 slugs on every disc's run, the selected disc restored after. */
+static void test_players_slots(const char *dir)
+{
+    static const char *const kDiscs[] = {"ntsc", "aug6", "jun26"};
+    const char *mine = ico_region_cur()->slug;
+    char path[512];
+    char buf[4096];
+    char want[64];
+    FILE *f;
+    unsigned d;
+
+    snprintf(path, sizeof(path), "%s/options_players_test.toml", dir);
+    remove(path);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    for (d = 0; d < sizeof(kDiscs) / sizeof(kDiscs[0]); d++) {
+        CHECK(ico_region_select(kDiscs[d]) == 0);
+        /* slot 3 saved with two players, slot 5 with one */
+        CHECK(ico_players_slot_saved(3, 0x1234u + d, 1) == 0);
+        CHECK(ico_players_slot_saved(5, 0xFFFFFFF0u, 0) == 0);
+    }
+    /* the next run: the file is read again */
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    for (d = 0; d < sizeof(kDiscs) / sizeof(kDiscs[0]); d++) {
+        CHECK(ico_region_select(kDiscs[d]) == 0);
+        CHECK(ico_players_slot_get(3, 0x1234u + d) == 1);
+        CHECK(ico_players_slot_get(5, 0xFFFFFFF0u) == 0);
+        CHECK(ico_players_slot_get(4, 0x1234u + d) == -1);  /* no entry */
+        CHECK(ico_players_slot_get(3, 0x9999u) == -1);      /* another save in slot 3 */
+        CHECK(ico_players_slot_get(-1, 0x1234u + d) == -1); /* not a slot */
+        /* each disc's slot 3 has its own sum: another disc's does not answer */
+        CHECK(ico_players_slot_get(3, 0x1234u + (d + 1) % 3) == -1);
+        /* the value girlControlMode takes at a load */
+        CHECK(ico_players_slot_loaded(3, 0x1234u + d) == 1);
+        CHECK(ico_players_slot_loaded(5, 0xFFFFFFF0u) == 0);
+        CHECK(ico_players_slot_loaded(7, 42u) == 0);
+        CHECK(ico_players_slot_loaded(3, 0x9999u) == 0);
+    }
+    /* saving over slot 3 with one player: the new count wins */
+    CHECK(ico_region_select("ntsc") == 0);
+    CHECK(ico_players_slot_saved(3, 0x5678u, 0) == 0);
+    CHECK(ico_players_slot_get(3, 0x5678u) == 0 && ico_players_slot_get(3, 0x1234u) == -1);
+    /* the file: the [players] table, each disc's prefix, the count 1 or 2 */
+    f = fopen(path, "rb");
+    CHECK(f != NULL);
+    if (f != NULL) {
+        size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+
+        buf[n] = '\0';
+        fclose(f);
+        CHECK(strstr(buf, "[players]") != NULL);
+        for (d = 0; d < sizeof(kDiscs) / sizeof(kDiscs[0]); d++) {
+            CHECK(ico_region_select(kDiscs[d]) == 0);
+            snprintf(want, sizeof(want), "\n%sslot_3 = %d", ico_region_cur()->key_prefix,
+                     d == 0 ? 1 : 2);
+            CHECK(strstr(buf, want) != NULL);
+            snprintf(want, sizeof(want), "\n%sslot_5 = 1", ico_region_cur()->key_prefix);
+            CHECK(strstr(buf, want) != NULL);
+            snprintf(want, sizeof(want), "\n%sslot_5_sum = 4294967280",
+                     ico_region_cur()->key_prefix);
+            CHECK(strstr(buf, want) != NULL);
+        }
+    }
+    CHECK(ico_region_select(mine) == 0);
+    remove(path);
+    ico_opt_reload();
+}
+
 /* The two discs' slots in one file: each disc's saves are another card
    directory, so slot 3 of one is not slot 3 of the other. The selected
    disc's write leaves the other's keys as they were, and the other's entry
@@ -1314,6 +1386,7 @@ int main(int argc, char **argv)
     test_mirror_slots(argc > 1 ? argv[1] : ".");
     test_hold_discs(argc > 1 ? argv[1] : ".");
     test_mirror_discs(argc > 1 ? argv[1] : ".");
+    test_players_slots(argc > 1 ? argv[1] : ".");
     test_brain();
     test_ui_language(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");

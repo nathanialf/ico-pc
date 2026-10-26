@@ -31,8 +31,8 @@ are kept in your save, as on the PS2:
 - Brightness (on the Effects page; Square puts back the normal value, 7)
 - Button configuration and Vibration (on the Controls page)
 - Film effect and Players (on the Gameplay page, once you have finished
-  the game; not on the North American disc, the August 2001 preview or the
-  June 2001 demo, whose game has neither)
+  the game; Film effect is not on the North American disc, the August 2001
+  preview or the June 2001 demo, whose game has no film looks)
 
 Hold type, on the Controls page, is the one PS2 setting that shows from the
 title screen as well, and on every disc. It is kept in the settings file, not
@@ -404,11 +404,19 @@ Options once you have finished the game:
 - **Film effect** is Off or 1 to 4, the game's own film look (a colour tint and grain) over the
   picture. Photo mode has its own Film effect, which works without finishing the game and adds
   one more look, Deja vu (see [Controls](CONTROLS.md#take-a-photo)).
-- **Players** is 1 or 2. With 2, a second controller controls Yorda.
+- **Players** is 1 or 2. With 2, a second controller controls Yorda: the
+  left stick walks her, and holding R1 on it makes Ico look her way. Ico
+  still takes her hand with his own R1. A new game starts with 1.
 
 The North American disc, the August 2001 preview and the June 2001 demo
-have neither row: those versions of the game have no film looks and no
-second player. Photo mode's Film effect still works on them.
+have no Film effect row: those versions of the game have no film looks.
+Photo mode's Film effect still works on them. Players is there on every
+disc. Those three discs' own game has no second player, so on them it is
+the European game's two-player mode carried over, and a few things the
+European game added for it are missing there: Yorda does not jump up to
+Ico's hand at the highest ledges (he pulls her up the usual way), and the
+second controller does not rumble. Your choice is kept with each save, as on the
+other discs.
 ## Language
 
 - **Language** is the game's own language: English, French, German,

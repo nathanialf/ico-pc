@@ -143,6 +143,8 @@ disc; `stage`, `cleared`, `playTime`, `sofa` on the preview and the demo), the s
 the output mode at 0x144, the vibration at 0x148 and the pad bytes at 0x14C; the memory record
 keeps the European layout. Their game block has no option words after it: 25,596 bytes on the
 North American disc and the preview, 20,480 bytes on the demo (`gameblock_write`), then the sum.
+The Players count the port offers there is kept beside the save instead, in `config.toml`'s
+`[players]` ([CONFIG.md](CONFIG.md#players)).
 All three ship `icon/icon.sys` (964 bytes) and `icon/boy_blk.ico` (95,624 bytes; the symbol tables'
 `iconFile` entries) and save them as `icon.sys` and `boy_blk.ico`. The demo writes each file
 with the 4-byte sum after it, writes its second and third `boy_blk.ico` segments as no-ops (a

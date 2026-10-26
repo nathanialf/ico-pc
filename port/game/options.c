@@ -140,7 +140,7 @@ void ico_opt_set_mirror_listener(void (*fn)(int on))
    kor_slot_N_sum (options.h) */
 #define MIRROR_NO_SUM (-1LL - 0xFFFFFFFFLL) /* outside the uint32 range */
 
-static int slot_keys(int slot, char *flag, char *sum, size_t size)
+static int section_slot_keys(const char *section, int slot, char *flag, char *sum, size_t size)
 {
     char base[24];
 
@@ -151,11 +151,16 @@ static int slot_keys(int slot, char *flag, char *sum, size_t size)
        slot_N for the European disc (the keys as always), jpn_slot_N and
        kor_slot_N for the Japanese and Korean ones (the region's key_prefix) */
     snprintf(base, sizeof(base), "slot_%d", slot);
-    if (ico_region_key_prefixed("mirror", base, flag, (int)size) != 0) {
+    if (ico_region_key_prefixed(section, base, flag, (int)size) != 0) {
         return -1;
     }
     snprintf(base, sizeof(base), "slot_%d_sum", slot);
-    return ico_region_key_prefixed("mirror", base, sum, (int)size);
+    return ico_region_key_prefixed(section, base, sum, (int)size);
+}
+
+static int slot_keys(int slot, char *flag, char *sum, size_t size)
+{
+    return section_slot_keys("mirror", slot, flag, sum, size);
 }
 
 int ico_mirror_slot_get(int slot, unsigned int sum)
@@ -191,6 +196,60 @@ int ico_mirror_slot_loaded(int slot, unsigned int sum)
 
     ico_opt_set_mirror(v > 0);
     return v > 0;
+}
+
+/* [players] slot_N, slot_N_sum (options.h): only for the discs whose card
+   has no girlControlMode word (the 2001 discs) */
+int ico_players_slot_get(int slot, unsigned int sum)
+{
+    char count[32], key[32];
+
+    if (section_slot_keys("players", slot, count, key, sizeof(count)) != 0) {
+        return -1;
+    }
+    if (ico_config_get_int(key, MIRROR_NO_SUM) != (long long)sum) {
+        return -1;
+    }
+    return ico_config_get_int(count, 1) == 2 ? 1 : 0;
+}
+
+int ico_players_slot_saved(int slot, unsigned int sum, int mode)
+{
+    char count[32], key[32];
+
+    if (section_slot_keys("players", slot, count, key, sizeof(count)) != 0) {
+        return -1;
+    }
+    if (ico_config_set_int(count, mode != 0 ? 2 : 1) != 0 ||
+        ico_config_set_int(key, (long long)sum) != 0 || ico_config_save() != 0) {
+        fprintf(stderr, "options: cannot write [players] %s\n", count);
+        return -1;
+    }
+    fprintf(stderr, "options: Players %d kept for save slot %d on %s\n", mode != 0 ? 2 : 1, slot,
+            ico_region_cur()->disc_id);
+    return 0;
+}
+
+int ico_players_slot_loaded(int slot, unsigned int sum)
+{
+    const int v = ico_players_slot_get(slot, sum);
+
+    fprintf(stderr, "options: Players %d from save slot %d on %s%s\n", v > 0 ? 2 : 1, slot,
+            ico_region_cur()->disc_id, v < 0 ? " (no entry for this save: 1)" : "");
+    return v > 0;
+}
+
+void ico_players_note(int mode)
+{
+    static int s_last = -1;
+
+    if ((mode != 0) == s_last) {
+        return;
+    }
+    s_last = mode != 0;
+    fprintf(stderr, "options: Players %d on %s (Yorda %s)\n", s_last ? 2 : 1,
+            ico_region_cur()->disc_id,
+            s_last ? "on the second controller, port 1" : "led by the game");
 }
 
 int ico_opt_developer_mode(void)

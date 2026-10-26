@@ -292,7 +292,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   bare `"hold"` and `hold_type_chosen = false`, A for a chosen `"hold"`, B for `"toggle"`, and the
   store's two keys), `test_video_show_fps` (`[video] show_fps`: off by default, a file's `true`
   read, a run-time 7 sanitized to 1, saved as `show_fps = true`/`false` and read back, the preset
-  untouched, Enhanced's shortcut leaving it alone), the video effects' keys (Water
+  untouched, Enhanced's shortcut leaving it alone), `test_players_slots` (selects each 2001 disc and checks the `[players]` count kept
+  per save slot and sum, a missing entry or another sum loading as one player, a later save
+  winning, each disc's prefix in the file), the video effects' keys (Water
   reflections' `effect_water_sharp` off by default, saved, outside the preset; Motion blur's
   `effect_motion_blur_mode`: `"original"` with no key, `"original"` and `"smooth"` read in any
   case, an unknown word as `"original"`, Smooth only with the switch on for the getter, kept
