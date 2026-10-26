@@ -32,6 +32,13 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_YORDA] = "Schatten entführen Yorda nie",
     [UI_STR_OPT_YORDA_NOTE] =
         "Für ein entspannteres Spiel. Einige geskriptete Szenen zeigen die Entführung weiterhin.",
+    [UI_STR_OPT_PIT_TIME] = "Zeit zur Rettung Yordas",
+    [UI_STR_OPT_PIT_TIME_NOTE] =
+        "Wie lange ein Schatten braucht, um Yorda in eine Grube zu ziehen. Die Yorda-Zeile darüber verhindert es ganz.",
+    [UI_STR_VAL_PIT_HALF] = "Halb",
+    [UI_STR_VAL_PIT_LONGER] = "Länger",
+    [UI_STR_VAL_PIT_DOUBLE] = "Doppelt",
+    [UI_STR_VAL_PIT_TRIPLE] = "Dreifach",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",
