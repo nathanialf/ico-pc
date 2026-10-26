@@ -5,6 +5,14 @@
 # -DEXPECT=<regex>, -DEXPECT2=<regex> (optional): each must match at least
 #   once (the "rd: crack fill: ..." state line, the --stats line)
 # -DDENY=<regex> (optional): must not match
+# -DNEED_FILE=<path> (optional): SKIP when it does not exist (a
+#   machine-local corpus dump)
+# -DNEED=<regex> (optional): SKIP when the run does not log it (an MSAA
+#   count the device does not offer is drawn as off)
+if(NEED_FILE AND NOT EXISTS "${NEED_FILE}")
+  message(STATUS "SKIP: ${NEED_FILE} is not on this machine")
+  return()
+endif()
 if(ARGS)
   string(REPLACE "|" ";" ARGS "${ARGS}")
 endif()
@@ -20,6 +28,10 @@ if(NOT rc EQUAL 0)
   message(FATAL_ERROR "${TOOL} exited ${rc}:\n${out}\n${err}")
 endif()
 set(all "${out}\n${err}")
+if(NEED AND NOT all MATCHES "${NEED}")
+  message(STATUS "SKIP: no \"${NEED}\" line (not offered on this device)")
+  return()
+endif()
 foreach(_x EXPECT EXPECT2)
   if(${_x})
     string(REGEX MATCHALL "${${_x}}" xs "${all}")
