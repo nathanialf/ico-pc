@@ -2038,7 +2038,8 @@ void rd__present_shutdown(void)
         rhi_destroy_texture(s_down.tex); /* the downsample's */
     }
     memset(&s_down, 0, sizeof(s_down));
-    s_redNoted = false;
+    /* the last present's reduces stay noted, as its box does, for the
+     * tests that read them after rd_shutdown */
     rd__crt_shutdown(); /* the CRT filter */
     /* the overlay's prims (the registration stays), the deferred text's list */
     free(s_ov.v);
