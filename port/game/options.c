@@ -305,6 +305,21 @@ int ico_opt_output_card(int card_mode)
     return ico_opt_output_resolve(card_mode);
 }
 
+int ico_opt_output_game(int live)
+{
+    static int s_logged = -3;
+    int g = s_game_known ? s_game_output : live;
+
+    if (g != live && s_logged != g * 4 + live) {
+        s_logged = g * 4 + live;
+        fprintf(
+            stderr,
+            "options: the card saves the game's own sound output (%s), not the override in force (%s)\n",
+            g == 1 ? "mono" : "stereo", live == 1 ? "mono" : "stereo");
+    }
+    return g;
+}
+
 void ico_opt_output_record(int mode)
 {
     s_game_output = mode;
