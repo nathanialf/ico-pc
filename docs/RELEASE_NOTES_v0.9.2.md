@@ -2,6 +2,7 @@
 
 ## New
 
+- Options > Gameplay > Time to rescue Yorda sets how long a shadow takes to pull Yorda into a pit: Half, Original, Longer, Double or Triple. It starts at Original, the game's own time. Shadows you have frozen or turned to stone still pause it.
 - When Direct3D 11 draws nothing, the game's log now says exactly how its start-up drawing checks drew, so one log shows what goes wrong.
 
 ## Fixed
