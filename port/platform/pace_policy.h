@@ -55,43 +55,68 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
  * past its due time and it made at least one optional present: a late step
  * of new frames only (a game hitch's catch-up, a load) is not the optional
  * presents' doing and no allowance would help it.  Excused: a step whose
- * last present waited a quarter of a refresh or more for the display (the
- * acquire and the present: FIFO's full queue) and that is less than a
- * refresh late, as the lock's skip guard has it; that lateness is the
- * display's own wait, not the renderer being slow.
+ * last present waited a quarter of a refresh or more for the display and
+ * that is less than a refresh late, as the lock's skip guard has it; that
+ * lateness is the display's own wait, not the renderer being slow.  The
+ * display's wait is the acquire and the present on Vulkan, D3D12 and
+ * D3D11; on a backend whose fence waits hold it too (OpenGL: the driver
+ * blocks in glClientWaitSync for FIFO's queue, RhiStats
+ * .fenceWaitsHoldDisplay) the caller passes the whole wait.
  *
- * On a late step the allowance goes to one below the step's presents
- * (allow = presents - 1), held there PACE_ALLOW_HOLD steps; after
- * PACE_ALLOW_CLIMB more steps on time it goes up by one, when the GPU gate
- * lets it: no GPU time known (0: no timestamps; the climb then probes) or
- * (allow + 1) presents' GPU time and a step within a period.  Never above
- * max (PACE_ALLOW_MAX on the timer path, n under the lock).  The timer
- * path's allowance starts unbound (allow PACE_ALLOW_NONE,
- * pace_budget_reset_unbound): nothing is refused until the first drop,
- * which goes to one below the step's presents and no higher than max, and
- * a climb past max returns it to unbound.  A resync does not reset it; a
- * new lock, a frame rate change and the window's pace reset do.  Cheap
- * presents never end a step late, and then nothing binds: the presents are
- * what they were without it. */
+ * A drop needs lateness that lasts (issue 130, v0.9.1: one hitch held an
+ * uncapped 4090 at 60 for the rest of the session): the first late step
+ * only arms it (arm = PACE_ALLOW_HOLD), and a second late step while armed
+ * (within PACE_ALLOW_HOLD steps of the one before) drops the allowance to
+ * one below that step's presents (allow = presents - 1, no higher than
+ * max), held there PACE_ALLOW_HOLD steps, armed again.  The second may be
+ * a step of new frames only (the GPU's queue still behind the in-betweens
+ * that armed it: the new frame's present waits for it): then one below the
+ * arming step's presents, when that lowers the allowance.  A machine late
+ * every step (cap 120 with two presents a step that empty the audio's lead,
+ * the GPU-bound lock at 30) drops at its second late step, one step after
+ * v0.8.6's rule did.
+ *
+ * The climb: after the hold, every PACE_ALLOW_CLIMB_STEP steps on time,
+ * straight back to where the allowance started (unbound on the timer path,
+ * max = n under the lock) when the GPU has the time for that many presents
+ * (K * gpuNs + stepNs < periodNs: K = n under the lock; on the timer path
+ * the most presents a late step of this drop made, no more than max + 1),
+ * else up by one when it has the time for one more ((allow + 1) * gpuNs +
+ * stepNs < periodNs; past max unbound again where it started so), else
+ * refused (climbRefusals: the 10 s line's "climbs refused", the caller's
+ * line).  No GPU time known (0: no timestamps) passes the gate: the climb
+ * probes, and a second late step drops it again.  A resync does not reset
+ * it; a new lock, a frame rate change and the window's pace reset do.
+ * Cheap presents never end a step late, and then nothing binds: the
+ * presents are what they were without it. */
 #define PACE_ALLOW_MAX 8
 #define PACE_ALLOW_NONE UINT_MAX /* allow: no limit (the timer path before a drop) */
 #define PACE_ALLOW_HOLD 60
-#define PACE_ALLOW_CLIMB 180
+#define PACE_ALLOW_CLIMB_STEP 60
 
 typedef struct PaceBudget {
     unsigned allow, max;   /* presents allowed a step, the new frame's included (a new frame's
                               own present is always allowed): PACE_ALLOW_NONE unbound; the
                               ceiling a drop leaves it at most */
-    bool unbind;           /* a climb past max returns allow to PACE_ALLOW_NONE */
+    bool unbind;           /* the allowance started unbound: a climb past max (or the climb
+                              straight back) returns allow to PACE_ALLOW_NONE */
     unsigned hold, onTime; /* steps left held after a drop; steps on time since */
+    unsigned arm;          /* steps left in which a late step drops (0: the next one arms) */
     unsigned presents;     /* this step's presents (new frames among them) */
     unsigned optional;     /* of them, of a frame already shown */
     unsigned refused;      /* optional presents refused (the caller counts) */
-    unsigned drops, climbs;
+    unsigned drops, climbs, climbRefusals, arms;
     unsigned lowest;       /* the lowest allow since the block's start (pace_budget_block) */
     uint64_t lateMaxNs;    /* the latest step since the block's start */
     uint64_t dropLateNs;   /* the last drop: how late its step ended */
     unsigned dropPresents; /* and its presents */
+    uint64_t armLateNs;    /* the last late step (armed or dropped): how late, its presents */
+    unsigned armPresents;
+    uint64_t dropPrevLateNs;            /* the late step before the last drop's: how late, its */
+    unsigned dropPrevPresents, dropAgo; /* presents, and how many steps before the drop it was */
+    unsigned dropMost;  /* the most presents a late step of this drop made (0: not held) */
+    unsigned sinceDrop; /* steps since the last drop */
+    unsigned gateK;     /* the last climb or refused climb: the presents its gate asked for */
 } PaceBudget;
 
 /* allow = max, the counts cleared (the lock: max n). */
@@ -119,6 +144,14 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
 
 /* A new 10 s block: lowest = allow, lateMaxNs = 0. */
 void pace_budget_block(PaceBudget *b);
+
+/* One present's wait for the display, the allowance's excuse: the acquire
+ * and the present (dispNs) on a backend that keeps the display's wait
+ * there, those and the fence waits (fenceNs) on one whose fence waits hold
+ * it too (fenceHoldsDisplay: RhiStats.fenceWaitsHoldDisplay, OpenGL); never
+ * more than the present's whole time costNs. */
+uint64_t pace_display_wait(uint64_t dispNs, uint64_t fenceNs, uint64_t costNs,
+                           bool fenceHoldsDisplay);
 
 /* The least time between two presents while the window presents between
  * game frames.  cap > 0: a frame rate limit, one present per 1/cap s.
