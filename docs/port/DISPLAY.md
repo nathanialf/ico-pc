@@ -770,7 +770,8 @@ matrices, the bones), a grid's vertices, particles' positions and sizes, screen 
 colour, shadow volumes prism by prism, and the overlay text's anchors and colours; matrices blend as
 a slerped rotation and a lerped stretch, and the camera is one rigid blend for the frame that every
 VU draw is re-based on. A draw snaps (shows the newer frame's data) without a match, when its shape
-changed or when it jumped; the whole frame snaps on a camera cut, a fade edge, a keep frame, a large
+changed or when it jumped (a screen prim of one tick only fades in or out; the same prim redrawn
+under a new key is drawn whole, [WORK_BUFFERS.md](WORK_BUFFERS.md#screen-sprites-redrawn-under-a-new-key-between-ticks)); the whole frame snaps on a camera cut, a fade edge, a keep frame, a large
 camera turn or move, and after the targets were recreated. CLUT animation, the rand-driven draws,
 the dissolve and film noise are held at the tick, and the feedback passes read the tick's first
 present's copies (`FEED_HELD`, `DISPLAY_HELD`), so the motion blur runs once a tick at any present

@@ -2746,7 +2746,8 @@ With `RdSettings.interpolate` on, `rd_end_frame` only closes the frame and the h
 blends and how is [DISPLAY.md](DISPLAY.md#interpolation-between-ticks)'s
 (`port/render/rd_interp.c`). `rd_present.c` shows DISPLAY in a box of the frame's aspect on the
 output, `rd_crt.c` replaces that blit under the CRT filter, and `rd_video.c` shows the FMV picture.
-All of it is [DISPLAY.md](DISPLAY.md).
+All of it is [DISPLAY.md](DISPLAY.md). Re-keyed screen prims:
+[WORK_BUFFERS.md](WORK_BUFFERS.md#screen-sprites-redrawn-under-a-new-key-between-ticks).
 
 **Rotation continuity.** A model matrix or a bone blends as a slerped rotation, and the slerp's
 short way (at most 180 degrees) is the motion only while the object turns less than half a turn a
