@@ -679,9 +679,9 @@ and whether the device runs on WARP.
 
 The Direct3D 11 backend (`port/rhi/d3d11/`, prefix `d3d11`, `rhi_backend_d3d11`) is for cards and
 drivers that have neither Vulkan nor Direct3D 12. It compiles in the `win-x64` and `win-x64-clang`
-cross builds. Until v0.9.2 it had run on no machine (issue 126: on a GTX 750 Ti at feature level
+cross builds. Before CI's `windows` job it had run on no machine (issue 126: on a GTX 750 Ti at feature level
 11_0 both start-up self-tests read back their cleared target and the screen stayed black); since
-v0.9.2 CI's `windows` job runs the renderer's tests on it through WARP, Microsoft's software
+CI's `windows` job runs the renderer's tests on it through WARP, Microsoft's software
 adapter ([TESTING.md](TESTING.md#the-render-suite-on-direct3d-11-warp)), so what follows is the
 design as written until that job's logs say otherwise. `port/rhi/d3d11/d3d11_internal.h` holds the shared state and states
 which file provides what.
