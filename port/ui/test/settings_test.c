@@ -3396,11 +3396,22 @@ static void testNewGameStartFlags(void)
 static void testOtherDisc(void)
 {
     const IcoRegionInfo *ri = ico_region_cur();
-    CHECK(
-        lt_ext_confirm_button() == 0x20 && lt_ext_port_back_buttons() == 0x50 &&
-            lt_ext_back_buttons() == 0x40,
-        "the Japanese program's pad convention (confirm %#x, the port's back %#x, the game's %#x)",
-        lt_ext_confirm_button(), lt_ext_port_back_buttons(), lt_ext_back_buttons());
+    /* the face that confirms on this disc and the one that goes back on the
+       port's screens: Circle and Cross on the Japanese program's discs
+       (jpn, kor, cn), Cross and Circle on the 2001 discs (ntsc, aug6,
+       jun26), as on the European disc */
+    const int conf = lt_ext_confirm_button();
+    const int other = (LT_PAD_CROSS | LT_PAD_CIRCLE) & ~conf;
+    if (ri->pad_back != LT_PAD_TRIANGLE) {
+        CHECK(conf == 0x20 && lt_ext_port_back_buttons() == 0x50 && lt_ext_back_buttons() == 0x40,
+              "the Japanese program's pad convention (confirm %#x, the port's back %#x, the "
+              "game's %#x)",
+              conf, lt_ext_port_back_buttons(), lt_ext_back_buttons());
+    } else {
+        CHECK(conf == 0x40 && lt_ext_port_back_buttons() == 0x30,
+              "the European pad convention on a 2001 disc (confirm %#x, the port's back %#x)", conf,
+              lt_ext_port_back_buttons());
+    }
     int mainL = enterMain(1);
     for (int k = 0; k < 4; k++) {
         frame(0);
@@ -3414,26 +3425,29 @@ static void testOtherDisc(void)
           "Auto: the port's text the disc's (%d), the sheets the disc's (%d)", ui_get_language(),
           ui_sheet_language());
     CHECK(!ui_settings_opt_shown(UI_OPT_VIDEO_MODE) && !ui_settings_opt_shown(UI_OPT_LANGUAGE) &&
-              !ui_settings_opt_shown(UI_OPT_CIRCLE_BACK) &&
+              ui_settings_opt_shown(UI_OPT_CIRCLE_BACK) == (ri->pad_back == LT_PAD_TRIANGLE) &&
               ui_settings_opt_shown(UI_OPT_MENU_LANGUAGE),
-          "no Video mode, Language or Circle goes back row; Menu language");
-    /* Circle opens Display, Cross goes back; Circle opens it again,
-       Triangle goes back; Cross on the main page goes back to the title */
+          "no Video mode or Language row, Circle goes back only where Triangle cancels; Menu "
+          "language");
+    /* the confirm face opens Display, the other face goes back; the confirm
+       face opens it again, Triangle goes back; the other face on the main
+       page goes back to the title (Circle and Cross on the Japanese
+       program's discs) */
     int labels[20];
     ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
     const int dispL = ui_settings_page_layout(UI_PAGE_DISPLAY);
     lt_ext_layout(mainL)->curItem = labels[0];
-    press(0x20);
-    CHECK(settle(dispL, 60), "Circle opens Display");
+    press(conf);
+    CHECK(settle(dispL, 60), "%#x opens Display", conf);
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
     CHECK(jpnRowShown(UI_PAGE_DISPLAY, UI_OPT_VIDEO_MODE) <= 0, "no Video mode row from the title");
-    press(0x40);
-    CHECK(settle(mainL, 60), "Cross goes back from Display");
+    press(other);
+    CHECK(settle(mainL, 60), "%#x goes back from Display", other);
     lt_ext_layout(mainL)->curItem = labels[0];
-    press(0x20);
-    CHECK(settle(dispL, 60), "Circle opens Display again");
+    press(conf);
+    CHECK(settle(dispL, 60), "%#x opens Display again", conf);
     press(0x10);
     CHECK(settle(mainL, 60), "Triangle goes back from Display");
     /* the pack and dump notes name the disc's folder */
@@ -3476,10 +3490,10 @@ static void testOtherDisc(void)
     CHECK(texProperty[49].dispY == 0 && texProperty[48].dispY == 0 &&
               texProperty[294].right != mainL,
           "no European title or pause row moved");
-    /* Cross on the main page: back to the title */
+    /* the other face on the main page: back to the title */
     lt_ext_layout(mainL)->curItem = labels[0];
-    press(0x40);
-    CHECK(settle(t, 60), "Cross goes back to the title (%d)", current_layout_id);
+    press(other);
+    CHECK(settle(t, 60), "%#x goes back to the title (%d)", other, current_layout_id);
     /* the pause menu's Options opens the menu: rows 271 .. 273 */
     lt_switch_layout(fxLayout(57));
     CHECK(settle(ri->layout_pause, 40), "the pause menu (%d)", ri->layout_pause);
@@ -3494,7 +3508,8 @@ int main(int argc, char **argv)
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
     if (argc > 2) {
-        /* another disc's run (ctests settings_jpn, settings_kor) */
+        /* another disc's run (ctests settings_jpn, _kor, _cn, _ntsc, _aug6,
+           _jun26) */
         CHECK(ico_region_select(argv[2]) == 0, "the %s region", argv[2]);
         testOtherDisc();
         printf("settings_test %s: %s\n", argv[2], failures ? "failed" : "ok");
