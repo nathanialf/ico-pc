@@ -796,6 +796,45 @@ static uint32_t d11_first_part(const D11Buffer *b)
     return D11_PART_COUNT;
 }
 
+/* A copy into the structured part (stride 16) must cover whole elements
+ * (the debug layer's error 280; without it the runtime drops the copy).
+ * The Vulkan backend copies bytes, so the part takes the 16-byte-aligned
+ * range around [dstOffset, dstOffset + size) from a part of the same
+ * buffer the copy has just written exactly (the parts hold the same bytes,
+ * so the bytes around the range stay the buffer's own).  A buffer with no
+ * other part takes the aligned range from the source instead, which writes
+ * the source's neighbouring bytes into those around the range (logged
+ * once).  Every part's size is a multiple of 256, so the aligned end fits. */
+static void d11_copy_into_structured(D11CommandList *c, D11Buffer *d, ID3D11Resource *sibling,
+                                     ID3D11Resource *from, const D11Buffer *s, uint64_t srcOffset,
+                                     uint64_t dstOffset, uint64_t size)
+{
+    static bool s_noSiblingLogged;
+    const uint64_t lo = dstOffset & ~(uint64_t)15u;
+    const uint64_t hi = d3dp_align_up(dstOffset + size, 16u);
+    if (sibling) {
+        D3D11_BOX box = {(UINT)lo, 0, 0, (UINT)hi, 1, 1};
+        ID3D11DeviceContext_CopySubresourceRegion(c->ctx, (ID3D11Resource *)d->part[D11_PART_SRV],
+                                                  0, (UINT)lo, 0, 0, sibling, 0, &box);
+        return;
+    }
+    const uint64_t head = dstOffset - lo;
+    if (srcOffset < head || srcOffset - head + (hi - lo) > s->size) {
+        D11_LOG("rhi_cmd_copy_buffer: %llu bytes into %llu of a storage buffer cover part of a "
+                "16-byte element and the source has no bytes around them; skipped",
+                (unsigned long long)size, (unsigned long long)dstOffset);
+        return;
+    }
+    if (d11_once(&s_noSiblingLogged)) {
+        D11_LOG("rhi_cmd_copy_buffer: %llu bytes into %llu of a storage-only buffer cover part of "
+                "a 16-byte element: the whole elements are copied from the source (logged once)",
+                (unsigned long long)size, (unsigned long long)dstOffset);
+    }
+    D3D11_BOX box = {(UINT)(srcOffset - head), 0, 0, (UINT)(srcOffset - head + (hi - lo)), 1, 1};
+    ID3D11DeviceContext_CopySubresourceRegion(c->ctx, (ID3D11Resource *)d->part[D11_PART_SRV], 0,
+                                              (UINT)lo, 0, 0, from, 0, &box);
+}
+
 void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, RhiBuffer dst,
                          uint64_t dstOffset, uint64_t size)
 {
@@ -832,11 +871,18 @@ void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, R
         d->stagingDirty = true;
     } else {
         /* a device buffer: every part it has gets the bytes */
+        ID3D11Resource *sibling = NULL; /* a part without the structure, written first */
         for (uint32_t i = 0; i < D11_PART_COUNT; i++) {
-            if (d->part[i]) {
+            if (!d->part[i]) {
+                continue;
+            }
+            if (i != D11_PART_SRV || (((dstOffset | size) & 15u) == 0)) {
                 ID3D11DeviceContext_CopySubresourceRegion(c->ctx, (ID3D11Resource *)d->part[i], 0,
                                                           (UINT)dstOffset, 0, 0, from, 0, &box);
+                sibling = sibling ? sibling : (ID3D11Resource *)d->part[i];
+                continue;
             }
+            d11_copy_into_structured(c, d, sibling, from, s, srcOffset, dstOffset, size);
         }
     }
     g_d11.counts.copies++;
