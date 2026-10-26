@@ -1089,7 +1089,9 @@ static int renderOtherDisc(const char *slug)
     }
     snprintf(png, sizeof(png), "settings_main_%s.png", slug);
     snap(png);
-    press(0x40); /* Cross: back to the title */
+    /* the face that does not confirm: back to the title (Cross on the
+       Japanese program's discs, Circle on the 2001 discs) */
+    press((LT_PAD_CROSS | LT_PAD_CIRCLE) & ~lt_ext_confirm_button());
     const int t = fxLayout(13);
     CHECK(settle(t, 60), "the title (%d)", current_layout_id);
     const int opt = ui_settings_entry_row(t), quit = ui_settings_quit_row(t);
