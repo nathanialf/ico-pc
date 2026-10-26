@@ -203,7 +203,9 @@ type row sets the key and the variable (`port/ui/settings.c` (`ui_settings_step`
 Options screen row, reached only on a disc whose layout tables are not recognised, calls
 `ico_opt_hold_type_toggled`, which writes the key and saves at once
 (`ico2/common/src/layout_action.c` (`la_game_option`, case 318); `port/game/options.c`). The
-North American disc has no option and is always the toggle.
+North American disc, the August 2001 preview and the June 2001 demo have no option and are always
+the toggle (`_ACTCommonMailTest_<disc>` reads `pad.trg & 8` alone), so the row is hidden there
+(`has_hold_film_players`, [Options on each disc](#options-on-each-disc)).
 
 ### Game variants
 
@@ -266,6 +268,51 @@ Log lines: `variants: the game's debug switches are bound (...)` once per `debug
 switch the variants do not hold shows as `(game's)`); `variants: enemy kind N is past this disc's M
 enemy rows; its last row stands in` once; `variants: the Debug menu cannot open: the game has not
 bound it`; `settings: Options closed for the Debug menu (to the title|back to the game)`.
+
+## Options on each disc
+
+Every row, screen and extra of the port against the seven discs (`config/regions.txt`: pal, jpn,
+kor, ntsc, aug6, jun26, cn), from the code. **W** works; **H** hidden on that disc, by the
+region table field named (`port/core/region.h`, `settings.c` `optShown`); **N** shown, with a note
+that it changes nothing there; **K** a known limit, described for players in the README. The
+`settings_discs` runs (`port/ui/test/settings_discs_test.c`, one per disc, its expectations written
+out per disc in `kExpect`) hold the H cells and the region fields behind them; the other tests named
+hold the rest.
+
+| row, screen or extra | pal | jpn | kor | ntsc | aug6 | jun26 | cn | decided by; held by |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Display: 50 Hz (title only) | W | H | H | H | H | H | H | `has_50hz_row`; `settings_discs`, `settings_<slug>` |
+| Main: Game language | W | H | H | H | H | H | H | `has_game_language`; `settings_discs`, `settings_<slug>` |
+| Main: Menu language | W | W | W | W | W | W | W | Auto is `ui_lang_default`, the sheets `menu_sheet`; `settings_<slug>`, `settings_render_<slug>` |
+| Controls: Hold type | W | W | W | H | H | H | W | `has_hold_film_players` (the 2001 builds always toggle: `_ACTCommonMailTest_<disc>`); `settings_discs` |
+| Controls: Circle goes back | W | H | H | W | W | W | H | `pad_back` is Triangle (`lt_ext_has_circle_back`); the 2001 arms cancel through `LA_BACK` too; `settings_discs`, `settings_<slug>` |
+| Effects: Brightness; Controls: Vibration, Button configuration (pause) | W | W | W | W | W | W | W | `systemStatus[11]`, `iosPadActRequestEnable`, `layout_key_config` (`la_key_config` and its 2001 arms go back to Settings); `settings_discs` |
+| Gameplay: stick fix, Yorda, door fix, natural chains | W | W | W | W | W | W | W | the hooks sit in every disc's arm (`backStage.c`, `ebrain.c`, `enemy_act.c`, `boyact.c` `CheckCollisionAttr_ntscaug6jun26`, `BgAnimation.c` `bga_CalcAnimation_<disc>`); `options_<slug>` |
+| Gameplay: Skip the opening | W | W | W | W | W | W | W | `kanbanBootMain`/`_jun26`, `actOpDemo01`/`_ntsc`/`_aug6jun26`; `kanban_boot_<slug>`, `settings_extra_<slug>` |
+| Gameplay: Film effect, Players (pause, once cleared) | W | W | W | H | H | H | W | `has_hold_film_players` (no `film_noise` in the 2001 stage tables, `reel_row` -1; `setNext` ignores `girlControlMode` there); `settings_discs` |
+| Audio: Sound output | W | W | W | W | W | W | W | `soundOutputModeSet` on every disc; `options_<slug>` |
+| Main: Developer mode | W | W | W | W | W | W | W | `achievements_<slug>` (the suspension) |
+| Extras > Game variants: Debug menu | W | W | W | W | W | H | W | `ICO_JUN26` (the demo's debug tables are the preview's); `settings_discs`, `settings_extra_<slug>` |
+| Extras > Game variants: Shadow toughness American | W | W | W | W | W | N | W | `ico_variant_offered`; `variants_<slug>`, `settings_extra_<slug>` |
+| Extras > Game variants: No hints, No cutscene look-around | W | W | W | N | N | N | W | `ico_hints_on` is not in `GirlAI_ntscaug6jun26`; `debug_hand_camera` stays 0; `settings_extra_<slug>` |
+| Extras > Game variants: the other rows | W | W | W | W | W | W | W | `variants_<slug>` |
+| Extras > Music | W | W | W | W | W | W | W | names by asset path, the region's stream bounds; `gallery`, `gallery_jpn`/`_kor`/`_cn` (the 2001 discs have no run: the test compares 105 rows) |
+| Extras > Models | W | W | W | K | K | K | W | the model table has a Japanese column only (`tools/gen_mv_region.py`); the README names the 2001 discs' wrong models and the demo's missing ones; `model_viewer_jpn`/`_kor`/`_cn` |
+| Extras > Characters | W | W | W | W | W | W | W | the characters' textures by name (`appearance.c`); `appearance`, `settings_extras` (from the title it runs in the model viewer) |
+| Extras > Credits (title, once unlocked) | W | W | W | W | W | H | W | `credits_staff_packs` (the demo's DATA.DF has no `STGSTAFF*.DF`); `settings_discs`, `settings_extras_<slug>`, `credits_<slug>` |
+| Extras > Export textures, Add to Steam | W | W | W | W | W | W | W | the running disc's `DATA.DF`; disc-independent |
+| Photo mode (Film effect 1 to 4, Deja vu) | W | W | W | W | W | W | W | the grain is `gsb_filmNoise` on every disc (the 2001 arm's call is the port's); no reel scratches where `reel_row` is -1 (logged) |
+| Achievements | W | W | W | W | W | W | W | `ach_stages`, `key_suffix`; `achievements_<slug>` |
+| The New Game screen (Mirror mode, New Game+) | W | W | W | W | W | W | W | the start flag `gflag_new_game` (issue 147); `settings` `testNewGameStartFlags`, `settings_discs` |
+| The title's Settings and Quit rows, the quit screen | W | W | W | W | W | W | W | `row_title_*` (placeTitle); `settings_<slug>`, `settings_render_<slug>` |
+| The pause menu's Options (and its Extras) | W | W | W | W | W | W | W | `row_pause_options`, `layout_pause`; `settings_<slug>`, `settings_extra_<slug>` |
+| Continue and the save slots | W | W | W | W | W | W | W | `layout_mc_files`, `row_mc_*`, `la_host_mc_slot_pickable`; `settings_extra` (pointer), `save` runs per disc |
+
+A port site that writes one of these numbers itself, instead of reading the region table, is what
+`region_literals_check` (`tools/check_region_literals.py`, [TESTING.md](TESTING.md)) fails on.
+The log names each hidden row once: `settings: no Hold type, Film effect or Players row on
+<disc id> (the game has none: the hand is always the toggle)` and `extras: no Credits row on <disc
+id> (its disc holds no staff scenes)`.
 
 ## Achievements and the game-state view
 
@@ -668,7 +715,8 @@ are [PLATFORM.md](PLATFORM.md#android-graphics-driver-packages)'s.
 
 ## Tests
 
-Each is a ctest: `options` (`port/game/test/options_test.c`: the defaults, the setters,
+Each is a ctest: `settings_discs` and its six other-disc runs (the rows each disc shows,
+[Options on each disc](#options-on-each-disc)), `options` (`port/game/test/options_test.c`: the defaults, the setters,
 `eBrainGetTarget` with Yorda safe), `door_grace`, `achievements`, `photo`, `appearance` and
 `appearance_disc`, `credits`, `title_logo` and `model_viewer_headless` (`port/game/CMakeLists.txt`);
 `gallery`, `gallery_sweep`, `credits_headless`, `model_viewer`, `model_viewer_cam`,
