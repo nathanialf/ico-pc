@@ -1160,12 +1160,19 @@ static void testCharacters(void)
     useConfig("version = 1\n");
 }
 
-/* settings_extras_test DIR SLUG (ctests settings_extras_jpn, settings_extras_kor):
-   Extras on the Japanese or Korean disc: opened with Circle from the title, its rows, Music opened
-   with Circle and left with Cross, Extras left with Triangle */
+/* settings_extras_test DIR SLUG (ctests settings_extras_jpn, _kor, _cn, _ntsc, _aug6,
+   _jun26): Extras on another disc: opened with the disc's confirm face from the title (Circle
+   on the Japanese program's discs, Cross on the 2001 discs), its rows, Music opened with it
+   and left with the other face, the Credits row where the disc holds the staff scenes,
+   Extras left with Triangle */
 static void testOtherDiscExtras(const char *slug)
 {
     CHECK(ico_region_select(slug) == 0, "the %s region", slug);
+    /* the disc's confirm face and the other one, the port's back (Circle
+       and Cross on the Japanese program's discs, Cross and Circle on the
+       2001 discs) */
+    const int conf = lt_ext_confirm_button();
+    const int other = (LT_PAD_CROSS | LT_PAD_CIRCLE) & ~conf;
     const int mainL = enterMain(1);
     int labels[20];
     const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
@@ -1176,17 +1183,22 @@ static void testOtherDiscExtras(const char *slug)
     }
     CHECK(ex >= 0, "an Extras row on the main page");
     lt_ext_layout(mainL)->curItem = ex;
-    press(0x20);
-    CHECK(settle(exL, 60), "Circle opens Extras");
+    press(conf);
+    CHECK(settle(exL, 60), "%#x opens Extras", conf);
     const int music = ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
     CHECK(music >= 0, "the Music row");
     if (music >= 0) {
         lt_ext_layout(exL)->curItem = music;
-        press(0x20);
-        CHECK(settle(ui_settings_page_layout(UI_PAGE_MUSIC), 60), "Circle opens Music");
-        press(0x40);
-        CHECK(settle(exL, 60), "Cross leaves Music");
+        press(conf);
+        CHECK(settle(ui_settings_page_layout(UI_PAGE_MUSIC), 60), "%#x opens Music", conf);
+        press(other);
+        CHECK(settle(exL, 60), "%#x leaves Music", other);
     }
+    /* Credits: on every disc but the June 2001 demo, whose disc holds no
+       staff scenes (region.h credits_staff_packs) */
+    CHECK(ui_settings_opt_shown(UI_OPT_EXTRAS_CREDITS) == ico_region_cur()->credits_staff_packs &&
+              ico_region_cur()->credits_staff_packs == (strcmp(slug, "jun26") != 0),
+          "%s: the Credits row %d", slug, ui_settings_opt_shown(UI_OPT_EXTRAS_CREDITS));
     press(0x10);
     CHECK(settle(mainL, 60), "Triangle leaves Extras");
     CHECK(ico_region_select("pal") == 0, "the European region again");
