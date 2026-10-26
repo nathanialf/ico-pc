@@ -1,0 +1,39 @@
+# tools/check_region_literals.py allow list:
+#   <file>  <category>  <snippet>  --  <reason naming the discs' numbers>
+# Each entry is a port site that writes a disc number as a literal, checked by
+# hand against the seven region tables (port/core/region_<slug>.c): the number
+# is the same on every disc, or the line is that disc's own arm.  The snippet
+# is a piece of the comment-stripped, space-collapsed line; an entry that
+# matches nothing is stale and fails the check.
+
+# stage 1, the boot logo and the title (stage_title): 1 on all seven discs
+ico2/common/src/layout_action.c  stage  nextStage = 1;  --  la_host_end_game: stage_title is 1 on all seven discs (pal jpn kor ntsc aug6 jun26 cn)
+ico2/common/src/layout_action.c  stage  stgmgrForceSwitchWithFade(1,  --  la_host_end_game: stage_title is 1 on all seven discs (pal jpn kor ntsc aug6 jun26 cn)
+port/input/mouse_look.c  stage  s->stage != 1  --  the title is stage 1 (stage_title) on all seven discs
+port/ui/photo_ui.c  stage  return stage_no > 1;  --  Photo mode past the title: stage_title is 1 on all seven discs
+# the save screen's area names: stages 3 .. 38 are the same rows on every disc
+# (the end stage is mapped first through stage_end/area_name_end_as)
+port/ui/settings.c  stage  if (stage < 3 || stage > 38) {  --  stageData rows 3..38 are the same stages on every disc (region.c ico_region_stage: rows 0..57 match on pal jpn kor ntsc aug6 cn; jun26 matches below 50)
+
+# la_title_continue_or_new (the pal/jpn/kor/cn body): the switch head adds
+# PAL_JPNCN_KOR(0, 29, 35), so the cases are the European rows on each disc
+ico2/common/src/layout_action.c  value  case 49:  --  the switch adds PAL_JPNCN_KOR(0, 29, 35): row 49 is Continue on pal, 20 on jpn/cn, 14 on kor (row_title_continue)
+ico2/common/src/layout_action.c  value  case 50:  --  the switch adds PAL_JPNCN_KOR(0, 29, 35): row 50 is New Game on pal, 21 on jpn/cn, 15 on kor (row_title_new)
+# a boot step number, not a table row
+ico2/common/src/kanbanBoot.c  value  mcCheckStep = 100;  --  kanbanBootMcCheck's own step 100 (a state of the card check, the same code on pal jpn kor cn), not a stream row
+# the enemy restart life's parameter row: the line above it in the game
+# (gFlagGameClear + 38) names the same row
+ico2/fumi/src/enemy_act.c  value  idx = 38;  --  getEnemyRestartLife (pal jpn kor cn; ntsc aug6 jun26 run actEnemyRestart_ntsc): parameter row 38, the game's own base on the line above, not a save-screen stage
+
+# the confirm and cancel bits by name where no disc's meaning is implied
+port/ui/layout_ext.c  pad  (s_circleBack ? LT_PAD_CIRCLE : 0)  --  lt_ext_back_buttons' Circle alias, reached only where pad_back is Triangle (pal ntsc aug6 jun26); jpn kor cn return pad_back alone above it
+port/ui/touch_edit_ui.c  pad  {LT_PAD_CIRCLE, ICO_PAD_CIRCLE},  --  a bit-for-bit translation table (menu pad word to the editor's word), the same on every disc
+port/ui/touch_edit_ui.c  pad  {LT_PAD_CROSS, ICO_PAD_CROSS},  --  a bit-for-bit translation table (menu pad word to the editor's word), the same on every disc
+
+# FINDINGS of the first scan (2026-10-26), each fixed by its own commit, which
+# takes its entry away (the entry is stale once the line is fixed):
+# 1. [dev] start_stage and switch_to accept stages up to 105, the European
+#    disc's last row (start_stage_max: pal 105; jpn kor ntsc aug6 cn 103;
+#    jun26 102), where gamestate.c already reads start_stage_max
+ico2/common/src/debug.c  value  n > 105  --  FINDING 1: start_stage_max is 105 on pal, 103 on jpn kor ntsc aug6 cn, 102 on jun26
+ico2/common/src/main.c  value  n > 105  --  FINDING 1: start_stage_max is 105 on pal, 103 on jpn kor ntsc aug6 cn, 102 on jun26
