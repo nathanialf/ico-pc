@@ -1403,7 +1403,7 @@ handling is pure C and tested on every platform (`port/platform/test/gpu_driver_
 
 Add a driver ends in one of seven answers (`UI_GPU_INSTALL_*`, `port/ui/settings.h`), each its own
 popup: `ADDED`, `BAD` (the zip was read and is not a package), `NOSPACE`, `CANCELLED` (a popup that names
-the drivers folder; it was silent before v0.9.1),
+the drivers folder),
 `NO_PICKER` (the picker could not be started for a reason other than a missing app, it answered
 without a file address, or there is no drivers root), `NO_PICKER_APP` (no installed app takes
 either picker intent, below) and `UNREADABLE` (the file would not open, the copy failed with space left,
