@@ -121,22 +121,23 @@ static void testExtras(void)
                 idx = i;
             }
         }
-        /* the Graphics link after Effects (two or more renderers only,
-           hidden here), Disc (with both discs' game data only) after Menu
-           language, Dump textures, Dump models and Save a picture for a bug
-           report (developer mode only, hidden here) before Back */
-        CHECK(n == 17 && idx == 11, "Extras is the row after Achievements (index %d of %d)", idx,
+        /* the Picture link after Display, the Graphics link after Effects
+           (two or more renderers only, hidden here), Disc (with both discs'
+           game data only) after Menu language, Save a picture for a bug
+           report (with a host handler only, hidden here) and the Developer
+           link before Back */
+        CHECK(n == 16 && idx == 12, "Extras is the row after Achievements (index %d of %d)", idx,
               n);
         CHECK(lt_ext_prop(ex)->right == ui_settings_page_layout(UI_PAGE_EXTRAS), "Extras opens");
         CHECK(lt_ext_prop(ex)->defaultMask == 0, "title %d: the Extras row is shown", title);
         /* the cursor: Achievements, Down */
-        lt_ext_layout(mainL)->curItem = labels[10];
+        lt_ext_layout(mainL)->curItem = labels[11];
         press(0x4000);
         CHECK(lt_ext_layout(mainL)->curItem == ex,
               "title %d: Down from Achievements lands on Extras", title);
-        /* the rows below follow: Back's y, eleven rows on both entries (the
+        /* the rows below follow: Back's y, twelve rows on both entries (the
            window scrolls: Back in its last slot) */
-        CHECK(lt_ext_prop(labels[16])->dispY == winBackY(11), "title %d: Back at y %d", title,
+        CHECK(lt_ext_prop(labels[15])->dispY == winBackY(12), "title %d: Back at y %d", title,
               lt_ext_prop(labels[16])->dispY);
         checkPageFits(UI_PAGE_MAIN, title ? "Main (title)" : "Main (pause)");
         if (!title) {
