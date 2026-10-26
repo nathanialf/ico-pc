@@ -681,6 +681,21 @@ static void checkOff(void)
     if (present(&o, 1)) {
         CHECK(fnv(s_out, 960 * 720 * 4) == off, "off: mode off at strength 1 is the plain present");
     }
+    /* downsampling (RdSettings.downsample) is not in force under the
+     * filter, which draws at 1x: Enhanced 2x through the scanlines with it
+     * on is the present without it, byte for byte */
+    RdSettings d = s;
+    d.preset = RD_PRESET_ENHANCED;
+    d.sceneScale = 2.0f;
+    rd_crt_settings(&d, RD_CRT_SCANLINES, 1.0f);
+    if (present(&d, 1)) {
+        const uint64_t crt = fnv(s_out, 960 * 720 * 4);
+        d.downsample = 1;
+        if (present(&d, 1)) {
+            CHECK(fnv(s_out, 960 * 720 * 4) == crt,
+                  "off: downsampling changes nothing under the CRT filter");
+        }
+    }
 }
 
 static void checkModes(void)
