@@ -55,6 +55,12 @@ static int target(const UiMouseRow *r, UiMouseHit *out)
         out->item = r->ownerItem;
         out->action = r->role == UI_MOUSE_ROLE_LEFT ? UI_MOUSE_ACT_LEFT : UI_MOUSE_ACT_RIGHT;
         break;
+    case UI_MOUSE_ROLE_UP:
+    case UI_MOUSE_ROLE_DOWN:
+        /* a scroll mark: no cursor move, a click is Up / Down on the cursor */
+        out->item = -1;
+        out->action = r->role == UI_MOUSE_ROLE_UP ? UI_MOUSE_ACT_UP : UI_MOUSE_ACT_DOWN;
+        break;
     default:
         if (!r->itemLinks && !r->reachable && r->ownerItem < 0) {
             return 0; /* a heading, a note, a picture: no item */

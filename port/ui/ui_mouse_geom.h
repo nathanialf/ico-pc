@@ -39,11 +39,21 @@ enum {
     UI_MOUSE_ROLE_NONE,
     UI_MOUSE_ROLE_LEFT,
     UI_MOUSE_ROLE_RIGHT,
-    UI_MOUSE_ROLE_STEP
+    UI_MOUSE_ROLE_STEP,
+    UI_MOUSE_ROLE_UP,
+    UI_MOUSE_ROLE_DOWN
 };
 
-/* what a click does: the pad button it adds */
-enum { UI_MOUSE_ACT_NONE = 0, UI_MOUSE_ACT_CROSS, UI_MOUSE_ACT_LEFT, UI_MOUSE_ACT_RIGHT };
+/* what a click does: the pad button it adds (UP / DOWN: a scroll mark, whose
+   hit has item -1, so the cursor does not move) */
+enum {
+    UI_MOUSE_ACT_NONE = 0,
+    UI_MOUSE_ACT_CROSS,
+    UI_MOUSE_ACT_LEFT,
+    UI_MOUSE_ACT_RIGHT,
+    UI_MOUSE_ACT_UP,
+    UI_MOUSE_ACT_DOWN
+};
 
 /* where the 2D layer's 4:3 box is on the output (rd_ui_box_of of the
    presenter's box, output pixels) */
