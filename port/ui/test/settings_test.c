@@ -1770,9 +1770,11 @@ static void testValues(void)
         static const float kFactor[5] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f};
         int k;
 
-        CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PIT_TIME) ==
-                  ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_YORDA) + 1,
-              "the Time to rescue Yorda row follows Yorda's");
+        CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PIT_TIME) >
+                      ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_YORDA) &&
+                  ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PIT_TIME) <
+                      ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX),
+              "the Time to rescue Yorda row sits between Yorda's and Stick fix's");
         CHECK(strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), "Original") == 0, "pit time default");
         for (k = 2; k < 8; k++) {
             ui_settings_step(UI_OPT_PIT_TIME, 1);
@@ -1781,6 +1783,8 @@ static void testValues(void)
                       strcmp(ico_config_get_string("gameplay.pit_time", ""), kWord[k % 5]) == 0,
                   "pit time step %d", k);
         }
+        /* six steps from Original end on Longer; back twice is Half */
+        ui_settings_step(UI_OPT_PIT_TIME, -1);
         ui_settings_step(UI_OPT_PIT_TIME, -1);
         CHECK(ico_opt_pit_time() == ICO_PIT_HALF, "pit time steps back");
         ui_settings_step(UI_OPT_PIT_TIME, 1);
@@ -2665,8 +2669,10 @@ static void testGameOptions(void)
     press(0x4000);
     press(0x4000);
     press(0x4000);
+    press(0x4000);
     CHECK(lt_ext_layout(gameL)->curItem == film,
-          "down five times from Yorda (past Natural chains and Skip the opening): Film effect");
+          "down six times from Yorda (past Time to rescue Yorda, Natural chains and Skip the "
+          "opening): Film effect");
     optionScreenMode = 0;
     s_filmCalls = 0;
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FILM_EFFECT), "Off") == 0, "film effect Off (%s)",
