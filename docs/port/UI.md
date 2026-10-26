@@ -948,7 +948,10 @@ two path strings PAL's do not). On the Japanese disc:
   [DIVERGENCES.md](DIVERGENCES.md) GL-11 records the convention.
 - **Rows.** The Circle goes back row, the 50 Hz Video mode row and the game's Language row are not
   shown (`lt_ext_has_circle_back`, `has_50hz_row`, `has_game_language`); the Menu language row is
-  shown on every disc (`port/ui/settings.c` (`optShown`, `ui_settings_opt_shown`)).
+  shown on every disc (`port/ui/settings.c` (`optShown`, `ui_settings_opt_shown`)). On the 2001
+  discs Hold type, Film effect and Players are not shown either (`has_hold_film_players`), and on
+  the June 2001 demo Extras > Credits (`credits_staff_packs`); every disc's rows are
+  [GAME_FEATURES.md](GAME_FEATURES.md#options-on-each-disc)'s matrix.
 - **Disc.** Main's Disc row, after Menu language, shows on every disc when more than one disc's game data
   is there: the window host passes `ico_host_disc_archive_present` (`port/platform/host_config.h`:
   each region's `archive_name` in the per-user folder or beside the program, the same test

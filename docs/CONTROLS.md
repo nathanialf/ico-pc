@@ -39,7 +39,9 @@ usual job, and the original button for its own.
 By default you keep R1 held to hold Yorda's hand. If you would rather press
 it once to take her hand and again to let go, choose **B (toggle)** under
 **Options > Controls > Hold type**, from the title screen or the pause
-menu. It works the same with every way of playing.
+menu. It works the same with every way of playing. On the North American
+disc, the August 2001 preview and the June 2001 demo it always works that
+way, and the row is not there.
 
 A few more keys on a computer:
 

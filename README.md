@@ -226,6 +226,14 @@ whole game; the differences are the original releases' own:
   [More in Controls](docs/CONTROLS.md#the-japanese-korean-and-asian-discs).
 - **Video mode.** The European disc offers 50 Hz or 60 Hz; the other discs
   are always 60 Hz.
+- **Options the disc's game does not have.** Options only shows what the
+  disc's own game has. Game language is there with the European disc only.
+  On the North American disc, the August 2001 preview and the June 2001
+  demo there is no Hold type (taking Yorda's hand always works as press
+  once, press again), no Film effect and no Players row, as on those
+  discs' own Options screen. The June 2001 demo has no Credits under
+  Extras, since its disc does not hold them.
+  [More in Options](docs/OPTIONS.md).
 - **The port's own menus** (Options, the extras, photo mode) can be shown in
   English, French, German, Italian, Spanish, Japanese, Korean or Traditional
   Chinese, with the **Menu language** row on the first page of the Options menu

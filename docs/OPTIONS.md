@@ -31,7 +31,8 @@ are kept in your save, as on the PS2:
 - Brightness (on the Effects page; Square puts back the normal value, 7)
 - Button configuration and Vibration (on the Controls page)
 - Film effect and Players (on the Gameplay page, once you have finished
-  the game)
+  the game; not on the North American disc, the August 2001 preview or the
+  June 2001 demo, whose game has neither)
 
 Hold type, on the Controls page, is the one PS2 setting that shows from the
 title screen as well. It is kept in the settings file, not in your save, so
@@ -315,9 +316,10 @@ A change takes effect the next time you start the game.
 - **Hold type** is **A (hold)**, where Yorda's hand stays held while you
   keep R1 down, or **B (toggle)**, where you press R1 once to take her hand
   and again to let go. A is how the European, Japanese, Korean and Asian discs
-  start; the North American disc always worked as B. It shows from the
-  title screen and the pause menu, and is kept in the settings file for
-  every save.
+  start. It shows from the title screen and the pause menu, and is kept in
+  the settings file for every save. The North American disc, the August 2001
+  preview and the June 2001 demo do not have this row: on those discs taking
+  Yorda's hand always works as B.
 - **Analogue stick fix** is the same switch as the one on the Gameplay
   page, shown here too so you find it with the other controls. Turn it on
   in either place and it is on in both.
@@ -393,6 +395,10 @@ Options once you have finished the game:
   picture. Photo mode has its own Film effect, which works without finishing the game and adds
   one more look, Deja vu (see [Controls](CONTROLS.md#take-a-photo)).
 - **Players** is 1 or 2. With 2, a second controller controls Yorda.
+
+The North American disc, the August 2001 preview and the June 2001 demo
+have neither row: those versions of the game have no film looks and no
+second player. Photo mode's Film effect still works on them.
 ## Language
 
 - **Language** is the game's own language: English, French, German,
@@ -444,7 +450,7 @@ Character Customization, Game variants and Achievement pop-ups.
   objects, and play their animations. [The viewer's controls](CONTROLS.md#look-at-the-models).
 - **Credits:** watch the ending credits again. It unlocks once you have
   finished the game. The June 2001 magazine demo has no ending credits on
-  its disc, so Credits does not play on it.
+  its disc, so the row is not there with that disc.
 - **Character Customization:** change the colours of Ico and Yorda.
   [Details below](#character-customization).
 - **Game variants:** change how the game plays.
