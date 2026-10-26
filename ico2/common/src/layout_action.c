@@ -1135,12 +1135,18 @@ void ico_diag_milestone(const char *fmt, ...);
    moment as each other, as on the PS2 */
 void la_host_new_game_go(void)
 {
-    if (titleAdpcm != 0) {
-        titleAdpcm->stream->fadeStep = 0x80;
+    /* PC port: the June 2001 demo's own arm (la_vibe_select_jun26) neither fades the
+       title music nor resets the key config, so its hand-off does neither either */
+    if (!ICO_JUN26) {
+        if (titleAdpcm != 0) {
+            titleAdpcm->stream->fadeStep = 0x80;
+        }
+        titleAdpcm = 0;
     }
-    titleAdpcm = 0;
     gflagInit();
-    keyconfig_reset();
+    if (!ICO_JUN26) {
+        keyconfig_reset();
+    }
     systemStatus[4] = 0;
     const char *disc = "";
     int flag = ico_region_new_game_flag(&disc);
