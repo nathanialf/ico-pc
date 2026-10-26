@@ -1286,8 +1286,14 @@ void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, 
 /* Through the texture's cached framebuffer (its colour at attachment 0 and
  * read buffer, or its depth alone) into the buffer bound as
  * GL_PIXEL_PACK_BUFFER (glReadPixels), rows rowPitch bytes apart; the depth
- * aspect as 32-bit floats; integer formats as integers.  Into a buffer the
- * shaders read, the barrier for those reads follows. */
+ * aspect as 32-bit floats; integer formats as integers.  No memory barrier
+ * after it, also into a buffer the shaders read (the VU pre-pass's record,
+ * read as a storage buffer by the next draws): glReadPixels is not a shader
+ * write, and OpenGL orders a GL command's buffer writes before the commands
+ * after it; glMemoryBarrier is for the writes of shaders (image stores,
+ * buffer variables, atomic counters: the glMemoryBarrier reference page).
+ * A source the shaders wrote as a storage image took its barrier at its
+ * RHI_STATE_STORAGE transition (rhi_cmd_barrier). */
 void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
                                     RhiRect region, RhiBuffer dst, uint64_t dstOffset,
                                     uint32_t rowPitch)
@@ -1339,11 +1345,6 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
         }
         glf.BindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         g_gl.counts.copies++;
-        if (db->usage & (RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM | RHI_BUF_STORAGE_READ)) {
-            glf.MemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT | GL_ELEMENT_ARRAY_BARRIER_BIT |
-                              GL_UNIFORM_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT |
-                              GL_PIXEL_BUFFER_BARRIER_BIT);
-        }
     }
     glf.BindFramebuffer(GL_FRAMEBUFFER, 0);
 }
