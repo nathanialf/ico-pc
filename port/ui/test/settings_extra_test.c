@@ -43,7 +43,7 @@ static int i17cDisplayHasWindowMode(void)
 
     openPage(mainL, 0, UI_PAGE_DISPLAY);
     const int row = ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_WINDOW_MODE);
-    return row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked;
+    return row >= 0 && ui_settings_row_shown(row);
 }
 
 static void testWindowMode(void)
@@ -339,7 +339,7 @@ static const UiGpuDriverHost kGpuHost = {
 static int an22bShown(UiSettingsPage page, UiSettingsOpt opt)
 {
     const int row = ui_settings_row_of(page, opt);
-    return row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked;
+    return row >= 0 && ui_settings_row_shown(row);
 }
 
 /* the main page's Graphics driver link: its row, -1 */
@@ -396,7 +396,7 @@ static void testGpuDriver(void)
     /* no host: no link; the Main page is the twelve it was */
     enterMain(1);
     frame(0);
-    CHECK(an22bLink() >= 0 && lt_ext_prop(an22bLink())->defaultMask,
+    CHECK(an22bLink() >= 0 && !ui_settings_row_shown(an22bLink()),
           "no host: the Graphics driver link is hidden");
 
     /* a host: the link shows after Effects and opens the page */
@@ -411,7 +411,7 @@ static void testGpuDriver(void)
         int labels[20];
         ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         const int link = an22bLink();
-        CHECK(link == labels[3] && !lt_ext_prop(link)->defaultMask,
+        CHECK(link == labels[3] && ui_settings_row_shown(link),
               "host: the link shows after Effects and Graphics (%d)", link);
         CHECK(lt_ext_prop(link)->right == ui_settings_page_layout(UI_PAGE_GPU_DRIVER),
               "the link opens the page");
@@ -624,44 +624,33 @@ static void testGpuDriver(void)
     for (int k = 0; k < 4; k++) {
         frame(0); /* the main page refreshes */
     }
-    CHECK(an22bLink() >= 0 && lt_ext_prop(an22bLink())->defaultMask,
+    CHECK(an22bLink() >= 0 && !ui_settings_row_shown(an22bLink()),
           "non-Adreno: the Graphics driver link is hidden");
     s_gpuAdreno = 1;
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
-    CHECK(an22bLink() >= 0 && !lt_ext_prop(an22bLink())->defaultMask,
-          "Adreno again: the link shows");
+    CHECK(an22bLink() >= 0 && ui_settings_row_shown(an22bLink()), "Adreno again: the link shows");
 
-    /* the Main page with the link and Developer mode: fourteen rows fit */
+    /* the Main page with the link and Developer mode: fourteen rows, in
+       the window */
     ico_opt_set_developer_mode(1);
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
     {
-        int labels[20], prev = -1, shown = 0, last = -1;
+        int labels[20], shown = 0;
         const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
-        for (int i = 0; i < n; i++) {
-            const LtProperty *r = lt_ext_prop(labels[i]);
-            if (r->defaultMask) {
-                continue;
-            }
-            CHECK(prev < 0 ? r->dispY >= 34 : r->dispY >= prev + 11, "row %d at y %d after %d", i,
-                  r->dispY, prev);
-            prev = r->dispY;
-            last = labels[i];
-            shown++;
-        }
-        CHECK(shown == 14, "fourteen rows shown (%d)", shown);
-        CHECK(last >= 0 && lt_ext_prop(last)->dispY == 40 + 11 * 13 &&
-                  lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH <= 226,
-              "Back at %d ends at %d", last >= 0 ? lt_ext_prop(last)->dispY : -1,
-              last >= 0 ? lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH : -1);
+        CHECK(ui_settings_page_scroll(UI_PAGE_MAIN, &shown, NULL, NULL) == 1 && shown == 14,
+              "fourteen rows shown, the page scrolls (%d)", shown);
+        const LtProperty *back = lt_ext_prop(labels[n - 1]);
+        CHECK(!back->defaultMask && back->dispY == winBackY(14), "Back at %d", back->dispY);
+        checkPageFits(UI_PAGE_MAIN, "Main (Graphics driver, developer mode)");
     }
     ico_opt_set_developer_mode(0);
     ui_settings_set_gpu_driver_host(NULL);
     frame(0);
-    CHECK(lt_ext_prop(an22bLink())->defaultMask, "the host removed: the link hides again");
+    CHECK(!ui_settings_row_shown(an22bLink()), "the host removed: the link hides again");
 
     /* the strings, in all five languages */
     static const UiStrId kIds[] = {
@@ -709,13 +698,12 @@ static void testGraphicsApi(void)
     int mainL = enterMain(1);
     frame(0);
     int link = graphicsLink();
-    CHECK(link >= 0 && lt_ext_prop(link)->defaultMask,
-          "no renderer names: the Graphics link hides");
+    CHECK(link >= 0 && !ui_settings_row_shown(link), "no renderer names: the Graphics link hides");
     ui_settings_set_backend_names(kNames, 1);
     mainL = enterMain(1);
     frame(0);
     link = graphicsLink();
-    CHECK(link >= 0 && lt_ext_prop(link)->defaultMask, "one renderer: the Graphics link hides");
+    CHECK(link >= 0 && !ui_settings_row_shown(link), "one renderer: the Graphics link hides");
 
     /* two or more: the link shows right after Effects */
     ui_settings_set_backend_names(kNames, 4);
@@ -723,7 +711,7 @@ static void testGraphicsApi(void)
     frame(0);
     link = graphicsLink();
     const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
-    CHECK(n > 3 && labels[2] == link && !lt_ext_prop(link)->defaultMask &&
+    CHECK(n > 3 && labels[2] == link && ui_settings_row_shown(link) &&
               strcmp(lt_ext_row_text(link), "Graphics") == 0,
           "four renderers: the Graphics link shows after Effects");
     const int pageL = openPage(mainL, 2, UI_PAGE_GRAPHICS);
@@ -947,6 +935,15 @@ static void testGraphicsApply(void)
               !gfxRowOn(UI_OPT_GRAPHICS_APPLY),
           "the countdown: Keep and Revert alone");
     CHECK(lt_ext_layout(pageL)->curItem == revert, "the cursor on Revert");
+    {
+        /* Back hidden by the countdown: nothing pinned, no window, Keep and
+           Revert from the window's first slot */
+        int shownN = 0, slots = 0;
+        CHECK(ui_settings_page_scroll(UI_PAGE_GRAPHICS, &shownN, NULL, &slots) == 0 &&
+                  shownN == 2 && slots == 2,
+              "the countdown: two rows, no window (%d, %d)", shownN, slots);
+        checkPageFits(UI_PAGE_GRAPHICS, "Graphics (the countdown)");
+    }
     {
         const int note = noteStarting(UI_PAGE_GRAPHICS, "Keep these settings?");
         CHECK(note >= 0 && strstr(lt_ext_row_text(note), "Reverting in 10 s") != NULL,
@@ -1280,7 +1277,7 @@ static void testDiscRow(void)
         int labels[20], shown = 0;
         const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         for (int i = 0; i < n; i++) {
-            const int on = !lt_ext_prop(labels[i])->defaultMask && !lt_ext_prop(labels[i])->masked;
+            const int on = ui_settings_row_shown(labels[i]);
             shown += on;
             if (!on) {
                 printf("  disc: hidden: %s\n", lt_ext_row_text(labels[i]));
@@ -1288,7 +1285,8 @@ static void testDiscRow(void)
         }
         const LtProperty *back = lt_ext_prop(labels[n - 1]);
         CHECK(shown == 15, "disc: every Main row shown (%d of %d)", shown, n);
-        CHECK(back->dispY == 40 + 14 * 10, "disc: fifteen rows 10 apart, Back at %d", back->dispY);
+        CHECK(back->dispY == winBackY(15), "disc: fifteen rows, Back in the last slot (%d)",
+              back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "disc: Back's box ends at %d",
               back->dispY + back->dispH);
         checkPageFits(UI_PAGE_MAIN, "Main (every row)");
@@ -1655,12 +1653,12 @@ static void testReportPicture(void)
         int labels[20], shown = 0;
         const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         for (int i = 0; i < n; i++) {
-            shown += !lt_ext_prop(labels[i])->defaultMask && !lt_ext_prop(labels[i])->masked;
+            shown += ui_settings_row_shown(labels[i]);
         }
         const LtProperty *back = lt_ext_prop(labels[n - 1]);
         CHECK(shown == 16, "report picture: every Main row shown (%d of %d)", shown, n);
-        CHECK(back->dispY == 30 + 15 * 10, "report picture: sixteen rows 10 apart, Back at %d",
-              back->dispY);
+        CHECK(back->dispY == winBackY(16),
+              "report picture: sixteen rows, Back in the last slot (%d)", back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "report picture: Back's box ends at %d",
               back->dispY + back->dispH);
         checkPageFits(UI_PAGE_MAIN, "Main (every row, Save a picture)");
@@ -1713,7 +1711,7 @@ static int mainRowsShown(int *labels, int max, int *n)
     int shown = 0;
     *n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, max);
     for (int i = 0; i < *n; i++) {
-        shown += !lt_ext_prop(labels[i])->defaultMask && !lt_ext_prop(labels[i])->masked;
+        shown += ui_settings_row_shown(labels[i]);
     }
     return shown;
 }
@@ -1776,7 +1774,7 @@ static void testShareReport(void)
           "rc tools: the row has its note");
     {
         const LtProperty *back = lt_ext_prop(labels[n - 1]);
-        CHECK(back->dispY == 26 + 16 * 10, "rc tools: seventeen rows 10 apart, Back at %d",
+        CHECK(back->dispY == winBackY(17), "rc tools: seventeen rows, Back in the last slot (%d)",
               back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "rc tools: Back's box ends at %d",
               back->dispY + back->dispH);
@@ -1997,8 +1995,7 @@ static void testMouseCamera(void)
             const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
             for (int i = 0; i < 6; i++) {
                 const int row = ui_settings_row_of(UI_PAGE_CONTROLS, kMouse[i]);
-                const int shown =
-                    row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked;
+                const int shown = row >= 0 && ui_settings_row_shown(row);
                 CHECK(shown == !android, "android %d, title %d: mouse row %d %s", android, title, i,
                       android ? "hidden" : "shown");
             }
@@ -2036,8 +2033,8 @@ static void testMouseCamera(void)
     }
     ico_video_set_android(0);
 
-    /* fourteen rows with a touch screen from the pause menu: 11 lines apart
-       from 30, the last box inside the 226 lines */
+    /* fourteen rows with a touch screen from the pause menu: the window's
+       slots full, the last box inside the 226 lines */
     s_i17aTouch = 1;
     ui_settings_set_touch_query(i17aTouch);
     const int mainL = enterMain(0);
@@ -2045,23 +2042,11 @@ static void testMouseCamera(void)
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
-    int labels[16], n = 0, prev = -1, last = -1;
-    const int c = ui_settings_page_rows(UI_PAGE_CONTROLS, labels, NULL, NULL, 16);
-    for (int i = 0; i < c; i++) {
-        const LtProperty *r = lt_ext_prop(labels[i]);
-        if (r->defaultMask) {
-            continue;
-        }
-        CHECK(prev < 0 ? r->dispY >= 28 : r->dispY >= prev + 11,
-              "fourteen rows: row %d at y %d (the one above at %d)", i, r->dispY, prev);
-        prev = r->dispY;
-        last = labels[i];
-        n++;
-    }
-    CHECK(n == 14, "fourteen rows shown (%d)", n);
-    CHECK(last >= 0 && lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH <= 226,
-          "fourteen rows: the last box ends at %d",
-          last >= 0 ? lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH : -1);
+    int n = 0, slots = 0;
+    CHECK(ui_settings_page_scroll(UI_PAGE_CONTROLS, &n, NULL, &slots) == 1 && n == 14 &&
+              slots == WIN_SLOTS,
+          "fourteen rows shown, %d in view (%d)", slots, n);
+    checkPageFits(UI_PAGE_CONTROLS, "Controls, fourteen rows (touch screen)");
     press(0x10);
     CHECK(settle(mainL, 60), "Controls: back");
     ui_settings_set_touch_query(NULL);
@@ -2759,7 +2744,7 @@ static void testDuplicatedRows(void)
         int shown = 0;
         const int n = ui_settings_page_rows(UI_PAGE_CONTROLS, labels, opts, NULL, 16);
         for (int j = 0; j < n; j++) {
-            shown += !lt_ext_prop(labels[j])->defaultMask;
+            shown += ui_settings_row_shown(labels[j]);
         }
         CHECK(shown == 14, "language %d: Controls shows fourteen rows (%d)", i, shown);
         CHECK(strcmp(lt_ext_row_text(ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX)),
@@ -2984,7 +2969,7 @@ static void testAntiAlias(void)
         const int mainL = enterMainKeep(title);
         openPage(mainL, 0, UI_PAGE_DISPLAY);
         const int row = ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_ANTI_ALIAS);
-        CHECK(row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked,
+        CHECK(row >= 0 && ui_settings_row_shown(row),
               "title %d: the Anti-aliasing row is on Display", title);
         CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Anti-aliasing") == 0,
               "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
@@ -3192,8 +3177,8 @@ static void testDoorFix(void)
         const int mainL = enterMain(title);
         openPage(mainL, 5, UI_PAGE_GAMEPLAY);
         const int row = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_DOOR_FIX);
-        CHECK(row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked,
-              "title %d: the East Reflector door fix row", title);
+        CHECK(row >= 0 && ui_settings_row_shown(row), "title %d: the East Reflector door fix row",
+              title);
         CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "East Reflector door fix") == 0,
               "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
         CHECK(ico_opt_door_fix() == 0 &&
@@ -3255,8 +3240,8 @@ static void testHoldType(void)
         const int mainL = enterMain(title);
         const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
         const int row = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE);
-        CHECK(row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked,
-              "title %d: the Hold type row is shown", title);
+        CHECK(row >= 0 && ui_settings_row_shown(row), "title %d: the Hold type row is shown",
+              title);
         CHECK(ico_opt_hold_choice() == ICO_HOLD_DISC && ico_opt_hold_type() == own &&
                   optionControlType == own &&
                   strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE), ownText) == 0,
@@ -3333,8 +3318,7 @@ static void testNaturalChains(void)
         const int mainL = enterMain(title);
         openPage(mainL, 5, UI_PAGE_GAMEPLAY);
         const int row = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_NATURAL_CHAINS);
-        CHECK(row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked,
-              "title %d: the Natural chains row", title);
+        CHECK(row >= 0 && ui_settings_row_shown(row), "title %d: the Natural chains row", title);
         CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Natural chains") == 0,
               "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
         /* between the door fix (and its note row) and the Film effect */
@@ -3394,8 +3378,7 @@ static void testSkipOpening(void)
         const int mainL = enterMain(title);
         openPage(mainL, 5, UI_PAGE_GAMEPLAY);
         const int row = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_SKIP_OPENING);
-        CHECK(row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked,
-              "title %d: the Skip the opening row", title);
+        CHECK(row >= 0 && ui_settings_row_shown(row), "title %d: the Skip the opening row", title);
         CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Skip the opening") == 0,
               "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
         /* between Natural chains (and its note row) and the Film effect */
@@ -3876,7 +3859,7 @@ static void testTouchPage(void)
         for (int k = 0; k < 4; k++) {
             frame(0);
         }
-        CHECK(tpLink() >= 0 && !lt_ext_prop(tpLink())->defaultMask,
+        CHECK(tpLink() >= 0 && ui_settings_row_shown(tpLink()),
               "title %d: the Touch screen row shown", title);
         for (int i = 0; i < 3; i++) {
             CHECK(ui_settings_row_of(UI_PAGE_CONTROLS, kRows[i]) < 0,
@@ -3911,7 +3894,7 @@ static void testTouchPage(void)
         for (int k = 0; k < 4; k++) {
             frame(0);
         }
-        CHECK(lt_ext_prop(tpLink())->defaultMask, "title %d: no touch screen, no row", title);
+        CHECK(!ui_settings_row_shown(tpLink()), "title %d: no touch screen, no row", title);
         press(LT_PAD_TRIANGLE);
         CHECK(settle(mainL, 60), "title %d: Controls: back again", title);
     }
@@ -4606,6 +4589,305 @@ static void testVariants(void)
 /* the same on the Japanese or Korean disc (ctests settings_extra_jpn,
    settings_extra_kor) and the three 2001 discs (settings_extra_ntsc, _aug6,
    _jun26): the page is every disc's */
+/* ------------------------------------------------------ the pages' window */
+
+/* the rows page shows by its rule (in the window or scrolled out of it),
+   top to bottom; the count */
+static int winShown(UiSettingsPage page, int *out, int max)
+{
+    int labels[24];
+    const int n = ui_settings_page_rows(page, labels, NULL, NULL, 24);
+    int k = 0;
+    for (int i = 0; i < n && k < max; i++) {
+        if (ui_settings_row_shown(labels[i])) {
+            out[k++] = labels[i];
+        }
+    }
+    return k;
+}
+
+/* the page's window offset now (-1: no option page) */
+static int winOffset(UiSettingsPage page)
+{
+    int off = -1;
+    ui_settings_page_scroll(page, NULL, &off, NULL);
+    return off;
+}
+
+/* the cursor of layout l on row and the window there (a frame) */
+static void winCursor(int l, int row)
+{
+    lt_ext_layout(l)->curItem = row;
+    frame(0);
+}
+
+/* The window on the pages with more rows than its slots (settings.c
+   layoutPage, scrollMove), on the disc slug: Effects from the title (every
+   row but Brightness, more than the slots hold) opens at the top with the
+   down mark only; the game's moves inside the window; Down on the window's
+   last row scrolls one row, Up on its first scrolls back; Up on the first
+   row wraps to Back (both in view) and Up on Back brings the end in view on
+   the last row; Down on Back brings the top back on the first row; three
+   wheel notches are three rows, across the window's edge; a click on a
+   mark is Up or Down on the cursor's row; the marks shown exactly while
+   rows are out of view that way (checkPageFits at each step).  Characters
+   from the pause menu: its swatches with their rows in and out of view, its
+   marks right of the swatches.  Controls with a touch screen: a reopen
+   from the title on Touch screen, then Back onto Controls' Touch screen
+   row, out of view at the window's top: the window scrolls to it. */
+static void testScroll(const char *slug)
+{
+    const int w = WIN_SLOTS - 1; /* the slots that scroll */
+    int sh[24], up = -1, down = -1;
+    char what[96];
+
+    useConfig("version = 1\n[ui]\nlanguage = \"en\"\n");
+    ui_settings_set_touch_query(NULL);
+    ui_mouse_reset();
+    ui_mouse_set_view(640, 480, 0, 0, 640, 480);
+    stage_no = 1;
+    int mainL = enterMainKeep(1);
+    const int fxL = openPage(mainL, 1, UI_PAGE_EFFECTS);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    LtProp *lay = lt_ext_layout(fxL);
+    const int n = winShown(UI_PAGE_EFFECTS, sh, 24);
+    const int scroll = n - 1; /* the rows before Back */
+    const int back = n > 0 ? sh[n - 1] : -1;
+    CHECK(back >= 0 && back == ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_BACK),
+          "%s: Effects ends in Back", slug);
+    CHECK(scroll >= w + 3, "%s: Effects from the title has more rows than the window (%d)", slug,
+          scroll);
+    CHECK(ui_settings_page_marks(UI_PAGE_EFFECTS, &up, &down) == 1, "%s: Effects has its marks",
+          slug);
+    if (scroll < w + 3 || up < 0 || down < 0) {
+        return;
+    }
+    CHECK(strcmp(lt_ext_row_text(up), "\xE2\x96\xB2") == 0 &&
+              strcmp(lt_ext_row_text(down), "\xE2\x96\xBC") == 0,
+          "%s: the marks' glyphs", slug);
+    CHECK(lt_ext_pointer_role(up) == LT_POINTER_UP && lt_ext_pointer_role(down) == LT_POINTER_DOWN,
+          "%s: a click on a mark is Up or Down", slug);
+    CHECK(lt_ext_prop(up)->dispX == 584 && lt_ext_prop(down)->dispX == 584,
+          "%s: the marks right of the value arrows (%d)", slug, lt_ext_prop(up)->dispX);
+    CHECK(lay->curItem == sh[0] && winOffset(UI_PAGE_EFFECTS) == 0, "%s: opens at the top (%d)",
+          slug, winOffset(UI_PAGE_EFFECTS));
+    CHECK(lt_ext_prop(up)->defaultMask && !lt_ext_prop(down)->defaultMask,
+          "%s: at the top the down mark only", slug);
+    snprintf(what, sizeof(what), "%s: Effects at the top", slug);
+    checkPageFits(UI_PAGE_EFFECTS, what);
+
+    /* inside the window the game's moves, no scroll */
+    for (int i = 0; i < w - 1; i++) {
+        press(LT_PAD_DOWN);
+    }
+    CHECK(lay->curItem == sh[w - 1] && winOffset(UI_PAGE_EFFECTS) == 0,
+          "%s: Down to the window's last row (%d)", slug, winOffset(UI_PAGE_EFFECTS));
+    /* Down at the window's end: one row scrolls in */
+    press(LT_PAD_DOWN);
+    CHECK(lay->curItem == sh[w] && winOffset(UI_PAGE_EFFECTS) == 1,
+          "%s: Down at the window's end: the next row, one scrolled (%d)", slug,
+          winOffset(UI_PAGE_EFFECTS));
+    CHECK(!lt_ext_prop(sh[w])->defaultMask && lt_ext_prop(sh[w])->dispY == WIN_SLOT_Y(w - 1) &&
+              lt_ext_prop(sh[0])->defaultMask && !lt_ext_prop(up)->defaultMask,
+          "%s: the new row in the last scrolling slot, the first out of view, the up mark (%d)",
+          slug, lt_ext_prop(sh[w])->dispY);
+    snprintf(what, sizeof(what), "%s: Effects scrolled one row", slug);
+    checkPageFits(UI_PAGE_EFFECTS, what);
+    /* Up at the window's start: one row back */
+    for (int i = 0; i < w - 1; i++) {
+        press(LT_PAD_UP);
+    }
+    CHECK(lay->curItem == sh[1] && winOffset(UI_PAGE_EFFECTS) == 1,
+          "%s: Up to the window's first row (%d)", slug, winOffset(UI_PAGE_EFFECTS));
+    press(LT_PAD_UP);
+    CHECK(lay->curItem == sh[0] && winOffset(UI_PAGE_EFFECTS) == 0,
+          "%s: Up at the window's start: the row above, the window at the top (%d)", slug,
+          winOffset(UI_PAGE_EFFECTS));
+    snprintf(what, sizeof(what), "%s: Effects back at the top", slug);
+    checkPageFits(UI_PAGE_EFFECTS, what);
+    /* Up on the first row: Back (the game's wrap); Up on Back with the end
+       out of view: the last row, the window at the end */
+    press(LT_PAD_UP);
+    CHECK(lay->curItem == back && winOffset(UI_PAGE_EFFECTS) == 0, "%s: Up from the top: Back",
+          slug);
+    press(LT_PAD_UP);
+    CHECK(lay->curItem == sh[scroll - 1] && winOffset(UI_PAGE_EFFECTS) == scroll - w,
+          "%s: Up on Back: the last row, the window at the end (%d, want %d)", slug,
+          winOffset(UI_PAGE_EFFECTS), scroll - w);
+    CHECK(lt_ext_prop(down)->defaultMask && !lt_ext_prop(up)->defaultMask,
+          "%s: at the end the up mark only", slug);
+    snprintf(what, sizeof(what), "%s: Effects at the end", slug);
+    checkPageFits(UI_PAGE_EFFECTS, what);
+    /* Down: Back; Down on Back with the top out of view: the first row */
+    press(LT_PAD_DOWN);
+    CHECK(lay->curItem == back && winOffset(UI_PAGE_EFFECTS) == scroll - w,
+          "%s: Down from the last row: Back, the window kept", slug);
+    press(LT_PAD_DOWN);
+    CHECK(lay->curItem == sh[0] && winOffset(UI_PAGE_EFFECTS) == 0,
+          "%s: Down on Back: the first row, the window at the top (%d)", slug,
+          winOffset(UI_PAGE_EFFECTS));
+    snprintf(what, sizeof(what), "%s: Effects at the top after Back", slug);
+    checkPageFits(UI_PAGE_EFFECTS, what);
+
+    /* three wheel notches: three rows, two of them across the window's
+       edge (the game's move each, so no notch is dropped) */
+    winCursor(fxL, sh[w - 2]);
+    mouseFrame();
+    mouseFrame();
+    ico_pointer_wheel(-3.0f);
+    for (int i = 0; i < 12; i++) {
+        mouseFrame();
+    }
+    frame(0);
+    frame(0);
+    CHECK(lay->curItem == sh[w + 1] && winOffset(UI_PAGE_EFFECTS) == 2,
+          "%s: three notches down: three rows (on %d, want %d; offset %d)", slug, lay->curItem,
+          sh[w + 1], winOffset(UI_PAGE_EFFECTS));
+    snprintf(what, sizeof(what), "%s: Effects after the wheel", slug);
+    checkPageFits(UI_PAGE_EFFECTS, what);
+
+    /* a click on the up mark with the cursor on the window's first row:
+       Up, a row back in view; on the down mark with the cursor on its last
+       scrolling row: Down, a row scrolled in */
+    winCursor(fxL, sh[2]);
+    pointAt(up);
+    mouseFrame();
+    CHECK(lay->curItem == sh[2], "%s: the pointer on a mark moves nothing", slug);
+    click();
+    mouseFrame();
+    frame(0);
+    frame(0);
+    CHECK(lay->curItem == sh[1] && winOffset(UI_PAGE_EFFECTS) == 1,
+          "%s: a click on the up mark: Up (offset %d)", slug, winOffset(UI_PAGE_EFFECTS));
+    winCursor(fxL, sh[1 + w - 1]);
+    pointAt(down);
+    mouseFrame();
+    click();
+    mouseFrame();
+    frame(0);
+    frame(0);
+    CHECK(lay->curItem == sh[1 + w] && winOffset(UI_PAGE_EFFECTS) == 2,
+          "%s: a click on the down mark: Down (offset %d)", slug, winOffset(UI_PAGE_EFFECTS));
+    snprintf(what, sizeof(what), "%s: Effects after the marks' clicks", slug);
+    checkPageFits(UI_PAGE_EFFECTS, what);
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(mainL, 60), "%s: Effects: back", slug);
+
+    /* Characters from the pause menu: the page (no viewer), its swatches
+       with their rows */
+    stage_no = 11;
+    mainL = enterMainKeep(0);
+    const int exL = openPage(mainL, -1, UI_PAGE_EXTRAS);
+    winCursor(exL, ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_LINK)); /* Characters */
+    press(lt_ext_confirm_button());
+    const int chL = ui_settings_page_layout(UI_PAGE_CHARACTERS);
+    CHECK(settle(chL, 60) && !ui_settings_characters_in_viewer(), "%s: Characters opens", slug);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    {
+        int cs[24], cl[24], co[24], sw[ICO_APP_PART_COUNT], nsw = 0, cu = -1, cd = -1;
+        const int cn = winShown(UI_PAGE_CHARACTERS, cs, 24);
+        const int rows = ui_settings_page_rows(UI_PAGE_CHARACTERS, cl, co, NULL, 24);
+        const LtProp *cp = lt_ext_layout(chL);
+        /* the swatches, one rect row per colour row in their order, at
+           x 578 */
+        for (int j = cp->first; j < cp->last && nsw < ICO_APP_PART_COUNT; j++) {
+            unsigned char c[4];
+            if (lt_ext_rect_color(j, c) == 0 && lt_ext_prop(j)->dispX == 578) {
+                sw[nsw++] = j;
+            }
+        }
+        CHECK(nsw == ICO_APP_PART_COUNT && rows > ICO_APP_PART_COUNT,
+              "%s: Characters' swatches (%d)", slug, nsw);
+        CHECK(cn > WIN_SLOTS && ui_settings_page_marks(UI_PAGE_CHARACTERS, &cu, &cd) == 1 &&
+                  lt_ext_prop(cu)->dispX == 618 && lt_ext_prop(cd)->dispX == 618,
+              "%s: Characters scrolls (%d rows), its marks right of the swatches", slug, cn);
+        /* to the end: Up from the first row to Back, Up on Back */
+        press(LT_PAD_UP);
+        press(LT_PAD_UP);
+        CHECK(cn > 1 && cp->curItem == cs[cn - 2] && winOffset(UI_PAGE_CHARACTERS) == cn - 1 - w,
+              "%s: Characters at the end (%d)", slug, winOffset(UI_PAGE_CHARACTERS));
+        snprintf(what, sizeof(what), "%s: Characters at the end", slug);
+        checkPageFits(UI_PAGE_CHARACTERS, what);
+        int out = 0;
+        for (int i = 0; i < nsw; i++) {
+            const LtProperty *lab = lt_ext_prop(cl[i]);
+            const LtProperty *s = lt_ext_prop(sw[i]);
+            out += lab->defaultMask;
+            CHECK(s->defaultMask == lab->defaultMask &&
+                      (lab->defaultMask || s->dispY == lab->dispY),
+                  "%s: swatch %d with its row (masked %d/%d, y %d/%d)", slug, i, s->defaultMask,
+                  lab->defaultMask, s->dispY, lab->dispY);
+        }
+        CHECK(out > 0, "%s: rows and swatches out of view at the end (%d)", slug, out);
+        press(LT_PAD_DOWN);
+        press(LT_PAD_DOWN);
+        CHECK(cp->curItem == cs[0] && winOffset(UI_PAGE_CHARACTERS) == 0,
+              "%s: Characters at the top again", slug);
+        for (int i = 0; i < nsw; i++) {
+            CHECK(!lt_ext_prop(sw[i])->defaultMask &&
+                      lt_ext_prop(sw[i])->dispY == lt_ext_prop(cl[i])->dispY,
+                  "%s: at the top swatch %d in view with its row", slug, i);
+        }
+        (void)co;
+    }
+
+    /* Controls with a touch screen: the reopen on Touch screen from the
+       title puts every window at the top and Controls' default on its
+       Touch screen row; Back from Touch screen lands there, the window
+       scrolled to it */
+    s_tpTouch = 1;
+    ui_settings_set_touch_query(tpTouch);
+    stage_no = 1;
+    mainL = enterMainKeep(1);
+    const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    {
+        int cs[24];
+        const int cn = winShown(UI_PAGE_CONTROLS, cs, 24);
+        const int link = tpLink();
+        int at = -1;
+        for (int i = 0; i < cn; i++) {
+            at = cs[i] == link ? i : at;
+        }
+        CHECK(cn > WIN_SLOTS && at >= w && at == cn - 2,
+              "%s: Controls scrolls (%d rows), Touch screen out of view at the top (%d)", slug, cn,
+              at);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "%s: Controls: back", slug);
+        press(LT_PAD_TRIANGLE);
+        const int t = fxLayout(13);
+        CHECK(settle(t, 60), "%s: the title", slug);
+        const int touchL = ui_settings_reopen_page(UI_PAGE_TOUCH);
+        CHECK(touchL == ui_settings_page_layout(UI_PAGE_TOUCH) &&
+                  winOffset(UI_PAGE_CONTROLS) == 0 && lt_ext_layout(ctlL)->defaultItem == link,
+              "%s: the reopen: Controls at the top, its default on Touch screen", slug);
+        lt_switch_layout(touchL);
+        CHECK(settle(touchL, 60), "%s: Touch screen up", slug);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(ctlL, 60), "%s: Back: Controls", slug);
+        frame(0);
+        CHECK(lt_ext_layout(ctlL)->curItem == link && !lt_ext_prop(link)->defaultMask &&
+                  winOffset(UI_PAGE_CONTROLS) == at - w + 1 &&
+                  lt_ext_prop(link)->dispY == WIN_SLOT_Y(w - 1),
+              "%s: Back from Touch screen: on its row, the window scrolled to it (%d, y %d)", slug,
+              winOffset(UI_PAGE_CONTROLS), lt_ext_prop(link)->dispY);
+        snprintf(what, sizeof(what), "%s: Controls back from Touch screen", slug);
+        checkPageFits(UI_PAGE_CONTROLS, what);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "%s: Controls: back to Main", slug);
+    }
+    ui_settings_set_touch_query(NULL);
+    s_tpTouch = 0;
+    ui_mouse_reset();
+    useConfig("version = 1\n");
+}
+
 static void testVariantsOtherDisc(const char *slug)
 {
     int debugPressed = 0;
@@ -4636,6 +4918,11 @@ int main(int argc, char **argv)
               "the %s disc: Cross confirms", argv[2]);
         CHECK(ico_region_select("pal") == 0, "the European disc again");
         testVariantsOtherDisc(argv[2]);
+        /* the Options pages' window on that disc (the game's own cursor
+           move, default_item_select, is that disc's) */
+        CHECK(ico_region_select(argv[2]) == 0, "the %s disc selected", argv[2]);
+        testScroll(argv[2]);
+        CHECK(ico_region_select("pal") == 0, "the European disc again");
         printf("settings_extra_test %s: %s\n", argv[2], failures ? "failed" : "ok");
         return failures ? 1 : 0;
     }
@@ -4705,6 +4992,8 @@ int main(int argc, char **argv)
     testVariants();
     /* the version in the Options menu */
     testVersion();
+    /* the Options pages' window */
+    testScroll("pal");
     /* Menu language, the Japanese and Korean discs */
     testMenuLanguage();
     testOtherDisc("jpn");
