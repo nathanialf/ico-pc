@@ -232,6 +232,14 @@ uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
     return n;
 }
 
+/* no busy clock (rhi.h): a command list goes to the queue whole at rhi_submit */
+uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
+{
+    (void)ns;
+    (void)max;
+    return 0;
+}
+
 /* ------------------------------------------------------------------ frames */
 static bool dx_new_list(ID3D12CommandAllocator **alloc, ID3D12GraphicsCommandList **cl)
 {
