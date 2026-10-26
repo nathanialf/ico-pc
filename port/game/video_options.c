@@ -78,6 +78,7 @@ void ico_video_defaults_for(IcoVideoOptions *o, int android)
     o->modelPack = 1;
     o->dumpModels = 0;
     o->showFps = 0;
+    o->downsample = ICO_DOWNSAMPLE_OFF;
     o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_DEFAULT;
     o->texturePackPrecache = 1;
     o->texturePackCacheMb = 0;
@@ -145,6 +146,24 @@ static const char *const kAspect[] = {"4:3", "16:10", "16:9", "21:9", "32:9", "4
 
 static const char *const kWindowMode[] = {"windowed", "borderless", "fullscreen"};
 static const char *const kFilter[] = {"original", "trilinear", "anisotropic"};
+
+static const char *const kDownsample[ICO_DOWNSAMPLE_COUNT] = {"off", "box"};
+
+int ico_video_parse_downsample(const char *s, int *ds)
+{
+    for (int i = 0; i < ICO_DOWNSAMPLE_COUNT; i++) {
+        if (lower_eq(s, kDownsample[i])) {
+            *ds = i;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+const char *ico_video_downsample_name(int ds)
+{
+    return ds >= 0 && ds < ICO_DOWNSAMPLE_COUNT ? kDownsample[ds] : kDownsample[ICO_DOWNSAMPLE_OFF];
+}
 
 static const char *const kAntiAlias[ICO_AA_COUNT] = {"off",   "ssaa2", "ssaa4",
                                                      "msaa2", "msaa4", "msaa8"};
@@ -398,6 +417,9 @@ static void sanitize(IcoVideoOptions *o)
     o->modelPack = o->modelPack != 0;
     o->dumpModels = o->dumpModels != 0;
     o->showFps = o->showFps != 0;
+    if (o->downsample < 0 || o->downsample >= ICO_DOWNSAMPLE_COUNT) {
+        o->downsample = ICO_DOWNSAMPLE_OFF;
+    }
     if (o->texturePackBudgetMb < ICO_TEXPACK_BUDGET_MIN) {
         o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_MIN;
     } else if (o->texturePackBudgetMb > ICO_TEXPACK_BUDGET_MAX) {
@@ -495,6 +517,11 @@ static void read_config(void)
     o.modelPack = ico_config_get_bool("video.model_pack", 1) != 0;
     o.dumpModels = ico_config_get_bool("video.dump_models", 0) != 0;
     o.showFps = ico_config_get_bool("video.show_fps", 0) != 0;
+    if (ico_video_parse_downsample(ico_config_get_string("video.downsample", "off"),
+                                   &o.downsample) != 0) {
+        o.downsample = ICO_DOWNSAMPLE_OFF;
+        fprintf(stderr, "video: downsample not understood; \"off\" used\n");
+    }
     {
         long long mb =
             ico_config_get_int("video.texture_pack_budget_mb", ICO_TEXPACK_BUDGET_DEFAULT);
@@ -641,6 +668,7 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.model_pack", o.modelPack);
     r |= ico_config_set_bool("video.dump_models", o.dumpModels);
     r |= ico_config_set_bool("video.show_fps", o.showFps);
+    r |= ico_config_set_string("video.downsample", ico_video_downsample_name(o.downsample));
     /* the config-only keys only when not at their defaults, as the CRT
        overrides: an absent key is the default */
     if (o.texturePackBudgetMb != ICO_TEXPACK_BUDGET_DEFAULT) {
@@ -864,6 +892,14 @@ int ico_video_show_fps(void)
         read_config();
     }
     return s_opt.showFps;
+}
+
+int ico_video_downsample(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.downsample;
 }
 
 int ico_video_framerate(void)

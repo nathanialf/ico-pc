@@ -36,6 +36,10 @@
  *                                       resolution, reduced) or multisampling; not under
  *                                       the Original preset (always off there); an MSAA
  *                                       count the GPU lacks draws as off
+ *   [video] downsample      "off"       "off" | "box": the scene drawn at the Resolution and
+ *                                       shrunk to the game's own size (any preset; the
+ *                                       renderer applies it at 2x or more, never with the
+ *                                       CRT filter or at "window")
  *   [video] crt             false       the CRT filter (any preset)
  *   [video] crt_mode        "consumer"  "scanlines" | "consumer" | "trinitron" | "pvm" |
  *                                       "shadow"
@@ -147,6 +151,9 @@ enum {
     ICO_AA_COUNT = 6
 };
 
+/* IcoVideoOptions.downsample: [video] downsample "off" | "box" */
+enum { ICO_DOWNSAMPLE_OFF = 0, ICO_DOWNSAMPLE_BOX = 1, ICO_DOWNSAMPLE_COUNT = 2 };
+
 typedef struct IcoVideoOptions {
     int resW, resH; /* resolution "WxH"; 0 x 0 with resScale 0: "window" */
     int resScale;   /* resolution "Nx": N (1..16); ICO_RES_AUTO: "auto"; 0 otherwise */
@@ -157,6 +164,7 @@ typedef struct IcoVideoOptions {
     int fullHeight; /* skip the reduction's vertical halving */
     int fullPixel;  /* the window's own pixels, no black border (full_pixel above) */
     int antiAlias;  /* ICO_AA_*, as written (ico_video_anti_alias: the one in force) */
+    int downsample; /* ICO_DOWNSAMPLE_*; outside the preset, as showFps */
     int framerate;  /* ICO_FRAMERATE_ORIGINAL, _UNCAPPED, or presents a second */
     /* the CRT filter: applied whatever the preset */
     int crt;           /* the filter on */
@@ -328,6 +336,11 @@ int ico_video_model_pack(void);
 int ico_video_dump_models(void);
 /* [video] show_fps, 1 (the Frame rate counter on) or 0 (the default) */
 int ico_video_show_fps(void);
+/* [video] downsample, ICO_DOWNSAMPLE_OFF (the default) or ICO_DOWNSAMPLE_BOX,
+   whatever the preset (the renderer decides where it is in force) */
+int ico_video_downsample(void);
+int ico_video_parse_downsample(const char *s, int *ds);
+const char *ico_video_downsample_name(int ds);
 /* The presentation rate in force: the framerate option, whatever
    the preset. */
 int ico_video_framerate(void);
