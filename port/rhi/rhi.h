@@ -1134,6 +1134,23 @@ bool rhi_timestamps_supported(void);
 void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index);
 uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max);
 
+/* The same slot's busy clock: for each index written, a time in ns that
+ * advances only while the GPU had the work handed to it, so the difference
+ * of two indices is the GPU time of the work between them apart from the
+ * time the GPU waited for the CPU to hand it over (the timestamps'
+ * difference counts both).  For each stretch from one stamp to the next in
+ * the order written, the clock advances by the stretch's span less the
+ * part before the stretch's last command had been handed over:
+ * max(0, ts[b] - max(ts[a], issued[b])), where issued[b] is the GPU's
+ * clock when stamp b was recorded.  So it is a lower bound of the GPU's
+ * own time: work the GPU ran while the CPU was still handing the stretch
+ * over does not count.  0 for an index not written; returns as
+ * rhi_read_timestamps, or 0 when the backend does not measure it.
+ * OpenGL only (gl_device.c: a command list executes while it is recorded,
+ * so a slow walk starves the GPU inside the timestamps' span); Vulkan,
+ * D3D12 and D3D11 return 0 (their lists are submitted whole). */
+uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max);
+
 /* Swapchain present mode with vsync on: mailbox (the newest
  * finished image is shown at each refresh, older ones are dropped; a present
  * never waits for the display) instead of FIFO.  Applies from the next
