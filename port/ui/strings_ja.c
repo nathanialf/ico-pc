@@ -32,6 +32,13 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_YORDA] = "ヨルダが影にさらわれない",
     [UI_STR_OPT_YORDA_NOTE] =
         "気軽に遊びたい方に。一部のイベントでは、さらわれる場面が表示されます。",
+    [UI_STR_OPT_PIT_TIME] = "ヨルダを助けるまでの時間",
+    [UI_STR_OPT_PIT_TIME_NOTE] =
+        "影がヨルダを連れ去るまでの時間です。上のヨルダの項目なら、さらわれなくなります。",
+    [UI_STR_VAL_PIT_HALF] = "半分",
+    [UI_STR_VAL_PIT_LONGER] = "やや長い",
+    [UI_STR_VAL_PIT_DOUBLE] = "2倍",
+    [UI_STR_VAL_PIT_TRIPLE] = "3倍",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",
