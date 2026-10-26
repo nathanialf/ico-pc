@@ -454,6 +454,14 @@ if(Python3_FOUND AND EXISTS "${ICO_DEPS_DIR}/dxc/bin/dxc")
     add_test(NAME spirv_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_spirv.py" --sizes "${CMAKE_BINARY_DIR}/shaders")
 endif()
 
+# the FXC gate over the HLSL text (tools/check_hlsl_fxc.py): no word FXC reserves
+# (pass, sample, line, ...) as a declared identifier. The Direct3D 11 backend
+# compiles the shaders with D3DCompile at run time, which DXC-built backends
+# do not exercise. Needs only Python.
+if(Python3_FOUND)
+    add_test(NAME hlsl_fxc_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_hlsl_fxc.py" "${CMAKE_SOURCE_DIR}/port/shaders")
+endif()
+
 # --- port/core: the game region (config/regions.txt) -------------------------
 add_subdirectory(port/core)
 
