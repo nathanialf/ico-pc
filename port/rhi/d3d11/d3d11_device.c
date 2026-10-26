@@ -1375,6 +1375,7 @@ void rhi_get_stats(RhiStats *out)
         out->pipelinesLive = g_d11.pipelines.next - g_d11.pipelines.freeCount;
         out->pipelinesPeak = g_d11.pipelines.next;
         out->pipelinePoolFull = g_d11.pipelines.full;
+        out->lastDrawText = d11_last_draw_text;
     }
 }
 
