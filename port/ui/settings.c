@@ -4816,6 +4816,25 @@ int ui_settings_note_row_of(UiSettingsPage page, UiSettingsOpt opt)
     return -1;
 }
 
+/* the note string id of a page's i-th row, -1 for none (tests) */
+int ui_settings_page_note_str(UiSettingsPage page, int i)
+{
+    if (page < 0 || page >= UI_PAGE_COUNT || i < 0 || i >= s_pages[page].count ||
+        s_pages[page].rows[i].note < 0) {
+        return -1;
+    }
+    return s_pages[page].rows[i].noteStr;
+}
+
+/* a note as the note row draws it (setNote's wrap and buffer), the length
+   of the text before the wrap (tests) */
+unsigned ui_settings_wrap_note(int strId, char *out, unsigned size)
+{
+    char text[256];
+    wrapText(noteText(strId, text, sizeof(text)), NOTE_SIZE, 580.0f, out, size);
+    return (unsigned)strlen(noteText(strId, text, sizeof(text)));
+}
+
 int ui_settings_row_of(UiSettingsPage page, UiSettingsOpt opt)
 {
     if (page < 0 || page >= UI_PAGE_COUNT) {

@@ -577,11 +577,11 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "El juego empieza en la pantalla de título, sin el cartel de Sony ni la escena de apertura. Se aplica en el próximo inicio.",
     [UI_STR_OPT_AA] = "Antialiasing",
     [UI_STR_OPT_AA_NOTE] =
-        "Suaviza los bordes dentados. El supermuestreo dibuja la imagen más grande y la reduce: 2x dibuja cuatro veces los píxeles, 4x dieciséis veces. Si el contador baja a 30 con Velocidad de fotogramas 60, reduce el valor. El MSAA suaviza los bordes de las formas.",
+        "Suaviza los bordes dentados. El supermuestreo dibuja 4 veces (2x) o 16 veces (4x) los píxeles; reduce el valor si el contador baja a 30.",
     [UI_STR_OPT_DOWNSAMPLE] = "Reducción",
     [UI_STR_VAL_DOWNSAMPLE_BOX] = "Al tamaño original",
     [UI_STR_OPT_DOWNSAMPLE_NOTE] =
-        "Dibuja la imagen con la resolución elegida arriba y la reduce al tamaño original del juego. Requiere una resolución de 2x o más; no cambia nada con el filtro CRT ni con Ventana.",
+        "Dibuja con la resolución de arriba y reduce al tamaño original. Requiere 2x o más; no con el filtro CRT ni con Ventana.",
     [UI_STR_AA_OFF] = "Desactivado",
     [UI_STR_AA_SSAA2] = "Supermuestreo 2x",
     [UI_STR_AA_SSAA4] = "Supermuestreo 4x",

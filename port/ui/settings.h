@@ -628,6 +628,11 @@ int ui_settings_page_rows(UiSettingsPage page, int *labels, int *opts, int *valu
 int ui_settings_row_of(UiSettingsPage page, UiSettingsOpt opt);
 /* the note row under a page's option, -1 for none (tests) */
 int ui_settings_note_row_of(UiSettingsPage page, UiSettingsOpt opt);
+/* the note string id of a page's i-th row, -1 for none (tests) */
+int ui_settings_page_note_str(UiSettingsPage page, int i);
+/* a note wrapped as its row draws it (a 256-byte buffer in setNote); returns
+   the text's length before the wrap (tests) */
+unsigned ui_settings_wrap_note(int strId, char *out, unsigned size);
 
 /* The Options pages' window (settings.c layoutPage): a page's rows sit
    UI_SETTINGS_WIN_PITCH field lines apart from UI_SETTINGS_WIN_Y0, in at

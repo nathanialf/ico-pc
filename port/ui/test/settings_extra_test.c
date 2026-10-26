@@ -3022,8 +3022,7 @@ static void testAntiAlias(void)
         const int mainL = enterMainKeep(1);
         const int dispL = openPage(mainL, 1, UI_PAGE_PICTURE);
         const int note = noteStarting(UI_PAGE_PICTURE, "Smooths jagged edges.");
-        CHECK(note >= 0 && strstr(lt_ext_row_text(note),
-                                  "Supersampling draws the picture larger and shrinks it") != NULL,
+        CHECK(note >= 0 && strstr(lt_ext_row_text(note), "Supersampling draws") != NULL,
               "the note text");
         lt_ext_layout(dispL)->curItem = ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_ANTI_ALIAS);
         frame(0);

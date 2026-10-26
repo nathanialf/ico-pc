@@ -509,6 +509,53 @@ static int rowWithPrefix(UiSettingsPage page, const char *prefix)
     return -1;
 }
 
+/* every page's note, in every language, as its row draws it: at most two
+   lines (the note row starts at y 196 of 226, so a third line is cut off),
+   and whole (setNote's 256-byte buffer drops the tail of a longer text) */
+static void stripBlanks(const char *in, char *out)
+{
+    for (; *in; in++) {
+        if (*in != ' ' && *in != '\n') {
+            *out++ = *in;
+        }
+    }
+    *out = '\0';
+}
+
+static void testNotesFit(void)
+{
+    static const char *const kLang[UI_LANG_COUNT] = {"en", "fr", "de", "it",
+                                                     "es", "ja", "ko", "zh"};
+    int checked = 0;
+    for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
+        ui_set_language((UiLang)lang);
+        for (int pg = 0; pg < UI_PAGE_COUNT; pg++) {
+            for (int i = 0; i < 40; i++) {
+                const int str = ui_settings_page_note_str((UiSettingsPage)pg, i);
+                char buf[256], a[512], b[512];
+                const char *nl;
+                if (str < 0) {
+                    continue;
+                }
+                const unsigned srcLen = ui_settings_wrap_note(str, buf, sizeof(buf));
+                nl = strchr(buf, '\n');
+                checked++;
+                CHECK(nl == NULL || strchr(nl + 1, '\n') == NULL,
+                      "%s page %d note %d: at most two lines (%s)", kLang[lang], pg, str, buf);
+                CHECK(srcLen < sizeof(buf) - 1, "%s page %d note %d: %u bytes, under the buffer",
+                      kLang[lang], pg, str, srcLen);
+                stripBlanks(buf, a);
+                stripBlanks(ui_str((UiStrId)str), b);
+                CHECK(ui_str_takes_serial((UiStrId)str) ||
+                          strstr(ui_str((UiStrId)str), "%s") != NULL || strcmp(a, b) == 0,
+                      "%s page %d note %d: the wrap kept the whole text", kLang[lang], pg, str);
+            }
+        }
+    }
+    ui_set_language(UI_LANG_EN);
+    CHECK(checked >= UI_LANG_COUNT * 10, "the notes were found (%d)", checked);
+}
+
 /* the Downsampling row (issue 149): on Picture right after Anti-aliasing,
    Off by default, Right and Left both switch it, the preset is not changed,
    [video] downsample is saved as "box", a file's "box" is read, and its note
@@ -532,7 +579,7 @@ static void testDownsample(void)
     CHECK(strcmp(ui_str(UI_STR_OPT_DOWNSAMPLE), "Downsampling") == 0, "its label");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_DOWNSAMPLE), "Off") == 0, "Off by default (%s)",
           ui_settings_value_text(UI_OPT_DOWNSAMPLE));
-    CHECK(rowWithPrefix(UI_PAGE_PICTURE, "Draws the picture at the Resolution above") >= 0,
+    CHECK(rowWithPrefix(UI_PAGE_PICTURE, "Draws at the Resolution above") >= 0,
           "its note is on the page");
     ico_video_get(&o);
     const int presetBefore = ico_video_preset(&o);
@@ -3713,6 +3760,7 @@ int main(int argc, char **argv)
     testFramerate();
     testShowFps();
     testDownsample();
+    testNotesFit();
     testPreset();
     testCapture();
     testBootSkip();

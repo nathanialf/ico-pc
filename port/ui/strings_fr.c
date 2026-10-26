@@ -581,11 +581,11 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "Le jeu démarre sur l’écran titre, sans le panneau Sony ni la scène d’ouverture. Appliqué au prochain démarrage.",
     [UI_STR_OPT_AA] = "Anticrénelage",
     [UI_STR_OPT_AA_NOTE] =
-        "Atténue les bords crénelés. Le supersampling dessine l’image en plus grand puis la réduit : 2x dessine quatre fois plus de pixels, 4x seize fois plus. Si le compteur tombe à 30 avec Fréquence d’images 60, baissez-le. Le MSAA lisse les bords des formes.",
+        "Atténue les bords crénelés. Le supersampling dessine 4 fois (2x) ou 16 fois (4x) plus de pixels ; baissez-le si le compteur tombe à 30.",
     [UI_STR_OPT_DOWNSAMPLE] = "Réduction",
     [UI_STR_VAL_DOWNSAMPLE_BOX] = "À la taille d’origine",
     [UI_STR_OPT_DOWNSAMPLE_NOTE] =
-        "Dessine l’image à la résolution choisie plus haut, puis la réduit à la taille d’origine du jeu. Demande une résolution de 2x ou plus ; rien ne change avec le filtre CRT ni avec Fenêtre.",
+        "Dessine à la résolution ci-dessus, puis réduit à la taille d’origine. Demande 2x ou plus ; pas avec le filtre CRT ni avec Fenêtre.",
     [UI_STR_AA_OFF] = "Désactivé",
     [UI_STR_AA_SSAA2] = "Supersampling 2x",
     [UI_STR_AA_SSAA4] = "Supersampling 4x",
