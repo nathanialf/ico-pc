@@ -260,6 +260,8 @@ static void passClose(const RhiStats *st, double nowMs)
     RdPerfPass *p = &s_passRec.pass[s_passRec.count - 1];
     p->draws = (uint32_t)(st->draws - s_passStats.draws);
     p->pipelineBinds = (uint32_t)(st->pipelineBinds - s_passStats.pipelineBinds);
+    p->entryBinds = (uint32_t)(st->entryBinds - s_passStats.entryBinds);
+    p->entrySkipped = (uint32_t)(st->entryBindsSkipped - s_passStats.entryBindsSkipped);
     p->cpuUs = (float)((nowMs - s_passCpu0) * 1000.0);
 }
 
@@ -736,6 +738,8 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
         const double ms = q->gpuUs >= 0.0f ? (double)q->gpuUs / 1e3 : 0.0;
         a->passes++;
         a->gpuMs += ms;
+        a->entryBinds += q->entryBinds;
+        a->entrySkipped += q->entrySkipped;
         if (q->gpuUs >= 0.0f && q->gpuUs < RD_PERF_PASS_SMALL_US) {
             a->small++;
             a->smallMs += ms;
@@ -823,10 +827,19 @@ int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_
     if (at + 1 < n) {
         /* OpenGL: the timed replays' busy time beside the span of the same
            pieces (the span also counts the GPU's waits for the CPU) */
-        char busy[80] = "";
-        if (a->busySpanMs > 0.0) {
-            snprintf(busy, sizeof(busy), "; GPU busy %.2f ms, span %.2f ms a timed replay",
-                     a->busyMs / r, a->busySpanMs / r);
+        char busy[160] = "";
+        int b = 0;
+        if (a->entryBinds) {
+            /* OpenGL: the groups' entries whose binding point already held
+               them (gl_cmd.c gl_bind_groups skips their binds) */
+            b = snprintf(busy, sizeof(busy),
+                         "; group entries %.0f a timed replay, %.0f already bound",
+                         (double)a->entryBinds / r, (double)a->entrySkipped / r);
+        }
+        if (a->busySpanMs > 0.0 && b >= 0 && (size_t)b < sizeof(busy)) {
+            snprintf(busy + b, sizeof(busy) - (size_t)b,
+                     "; GPU busy %.2f ms, span %.2f ms a timed replay", a->busyMs / r,
+                     a->busySpanMs / r);
         }
         snprintf(buf + at, n - at,
                  " (%u of %.1f passes a replay, %u timed replays; passes under 0.05 ms: %.1f a "

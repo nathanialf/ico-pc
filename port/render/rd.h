@@ -1930,6 +1930,9 @@ typedef struct RdPerfPass {
     float gpuUs, cpuUs;
     float gpuBusyUs;
     uint8_t busyValid;
+    /* OpenGL: the bound groups' entries in it and those skipped as already
+     * bound (RhiStats.entryBinds, entryBindsSkipped; 0 elsewhere) */
+    uint32_t entryBinds, entrySkipped;
 } RdPerfPass;
 
 /* A piece's label as the window's summary writes it: the effect for a
@@ -2156,6 +2159,7 @@ typedef struct RdPerfPassAgg {
     /* the pieces with a busy time (OpenGL): their busy time and their GPU
        time (the span between the same stamps) */
     double busyMs, busySpanMs;
+    uint64_t entryBinds, entrySkipped; /* the pieces' (OpenGL) */
     RdPerfPassAggEntry e[RD_PERF_PASS_AGG_MAX];
 } RdPerfPassAgg;
 
@@ -2167,7 +2171,9 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n);
  * time, per timed replay ("N passes" only where an entry is not one pass a
  * replay; "4.12 ms (busy 1.30)" where its pieces had a busy time, OpenGL,
  * and the trailer then ends "; GPU busy 9.10 ms, span 30.20 ms a timed
- * replay"); the length of the text in buf (cut to fit n) */
+ * replay", after "; group entries 2100 a timed replay, 1800 already bound"
+ * where the pieces bound some); the length of the text in buf (cut to fit
+ * n) */
 int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_t n);
 /* "47.0: render passes 32.0 (lists 9.0, fog 1.0, glow 17.0, ...), DATE
  * snapshot 1.5, ...": RdPerfRecord.passKinds and passEffects summed over
