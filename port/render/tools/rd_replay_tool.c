@@ -147,8 +147,8 @@
  *                         the crack filler's line (its passes, the pixels
  *                         it filled, every filled replay counted, the scale
  *                         and the reach, the fills drawn inside the
- *                         scene pass with the local fog, or why it did not
- *                         draw); then
+ *                         scene pass with the local fog, those drawn after
+ *                         the MSAA resolve, or why it did not draw); then
  *                         the region-mode mesh vertices in front of the eye
  *                         whose GS Z saturates (on the CPU, vu1_ref), which a
  *                         GPU-clipped triangle draws at their GS position in
@@ -2001,10 +2001,12 @@ int main(int argc, char **argv)
         rd__crack_fill_counts(&cc);
         printf("%s: stats: crack fill %s: %u passes, %llu pixels filled (%llu replays counted; "
                "scale %.4gx%.4g, reach %ux%u texels; %llu fogged replays above 1x not filled; "
-               "%llu fills inside the scene pass with the local fog)\n",
+               "%llu fills inside the scene pass with the local fog; %llu fills after the MSAA "
+               "resolve)\n",
                dump, cc.enabled ? "on" : "off", pr->crackFillPasses, (unsigned long long)cc.pixels,
                (unsigned long long)cc.counted, (double)cc.sx, (double)cc.sy, cc.rx, cc.ry,
-               (unsigned long long)cc.skipped, (unsigned long long)cc.folded);
+               (unsigned long long)cc.skipped, (unsigned long long)cc.folded,
+               (unsigned long long)cc.afterMsaa);
         uint32_t satDraws = 0;
         const uint64_t sat = satZVertices(rf, &satDraws);
         printf("%s: stats: VU corners with a saturated GS Z: %llu vertices of region-mode meshes "
