@@ -694,3 +694,15 @@ a washed-out title screen or menus you cannot read, attach the log to your
 report. The game checks at start that it draws see-through things right
 on your phone and uses a simpler way when it does not; the log says what
 it found.
+
+**The game stutters on the phone's own graphics driver.** On some Adreno
+phones and tablets (a Xiaomi Pad 6S Pro, for one) the phone's own graphics
+driver makes the game stutter, with long stops every few seconds, while a
+newer driver from the community does not. Try a Turnip driver package:
+**Options > Graphics driver**, **Add a driver**, then set **Driver** to it
+and restart ([the steps](ANDROID.md#using-a-different-graphics-driver)).
+On a tablet, a high **Resolution** with Vsync off and Frame rate
+Uncapped asks the most of the driver: set **Vsync** On, or **Frame rate**
+60, and lower the **Resolution** a step. If it still stutters, play for a
+minute and send the newest `report-` zip from `logs` (and `ico-pc.log`)
+with a [problem report](#send-a-problem-report).
