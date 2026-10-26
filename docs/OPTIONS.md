@@ -16,6 +16,14 @@ discs it is the other way round, as on those PS2 releases: Circle opens a
 page or confirms, and Cross goes back. Triangle still goes back in Options too
 ([more](CONTROLS.md#the-japanese-korean-and-asian-discs)).
 
+A page with more rows than fit on the screen shows ten at a time and
+scrolls as you move: Down on the last row you can see brings in the next
+one, and Up on the first brings back the one above. Back always stays at
+the bottom. A small grey arrow at the right edge, ▲ at the top or ▼ at the
+bottom, shows there are more rows that way. Clicking or tapping an arrow
+moves the cursor up or down a row, the same as the Up and Down buttons, and
+the mouse wheel moves one row a notch.
+
 In a released download, the version of the game is shown in small grey
 letters in the top-right corner of the Options menu's first page. Say
 which version you have when you report a problem.
