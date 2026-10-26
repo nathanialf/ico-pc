@@ -496,6 +496,11 @@ uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
     return be()->read_timestamps(ns, max);
 }
 
+uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
+{
+    return be()->read_timestamps_busy(ns, max);
+}
+
 void rhi_prefer_mailbox(bool on)
 {
     be()->prefer_mailbox(on);
