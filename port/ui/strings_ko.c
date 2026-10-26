@@ -390,6 +390,8 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_ACH_POPUPS] = "업적 알림",
     [UI_STR_VAL_HOLD_A] = "A (누르고 있기)",
     [UI_STR_VAL_HOLD_B] = "B (전환)",
+    [UI_STR_VAL_HOLD_DISC_A] = "디스크 그대로 (A)",
+    [UI_STR_VAL_HOLD_DISC_B] = "디스크 그대로 (B)",
     [UI_STR_HOLD_TYPE_NOTE] =
         "A: R1을 누르고 있는 동안 요르다의 손을 잡습니다. B: R1을 한 번 누르면 손을 잡고, 다시 누르면 놓습니다.",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "‘게임플레이’에도 있습니다.",

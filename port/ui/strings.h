@@ -483,6 +483,8 @@ typedef enum UiStrId {
     UI_STR_OPT_ACH_POPUPS, /* Achievements page: the achievement pop-ups, On/Off */
     UI_STR_VAL_HOLD_A,
     UI_STR_VAL_HOLD_B,
+    UI_STR_VAL_HOLD_DISC_A, /* Hold type: the disc's own, A on this disc */
+    UI_STR_VAL_HOLD_DISC_B, /* the disc's own, B */
     UI_STR_HOLD_TYPE_NOTE,
     UI_STR_STICK_FIX_ALSO_NOTE,  /* Controls: this row is also under Gameplay */
     UI_STR_ACH_POPUPS_ALSO_NOTE, /* Extras: this row is also under Achievements */

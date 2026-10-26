@@ -3192,12 +3192,18 @@ static void testDoorFix(void)
 }
 
 /* Controls > Hold type ([gameplay] hold_type): the row shows from the title
-   and the pause menu; a step sets the key and leaving Controls writes it to
+   and the pause menu on every disc; it starts at the disc's own (A on the
+   European, Japanese, Korean and Asian discs, B on the 2001 discs: region.h
+   hold_type_own); Right steps A (hold), then B (toggle); a step sets the
+   key (and hold_type_chosen) and leaving Controls writes it to
    config.toml; ui_settings_install (run from init_layout_texture at boot)
-   sets the game's optionControlType from the key, whatever the card held */
+   sets the game's optionControlType from the key, whatever the card held;
+   an earlier version's "hold" without hold_type_chosen is the disc's own */
 static void testHoldType(void)
 {
     char p[1100];
+    const int own = ico_region_cur()->hold_type_own;
+    const char *ownText = own ? "Disc’s own (B)" : "Disc’s own (A)";
 
     gFlagGameClear = 0;
     for (int title = 1; title >= 0; title--) {
@@ -3207,26 +3213,36 @@ static void testHoldType(void)
         const int row = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE);
         CHECK(row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked,
               "title %d: the Hold type row is shown", title);
-        CHECK(ico_opt_hold_type() == 0 && optionControlType == 0 &&
-                  strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE), "A (hold)") == 0,
-              "title %d: A by default", title);
+        CHECK(ico_opt_hold_choice() == ICO_HOLD_DISC && ico_opt_hold_type() == own &&
+                  optionControlType == own &&
+                  strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE), ownText) == 0,
+              "title %d: the disc's own by default (%s)", title,
+              ui_settings_value_text(UI_OPT_HOLD_TYPE));
         lt_ext_layout(ctlL)->curItem = row;
+        press(LT_PAD_RIGHT);
+        CHECK(ico_opt_hold_type() == 0 && optionControlType == 0 &&
+                  strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE), "A (hold)") == 0 &&
+                  strcmp(ico_config_get_string("gameplay.hold_type", ""), "hold") == 0,
+              "title %d: Right: A, the key set, the game's variable follows", title);
         press(LT_PAD_RIGHT);
         CHECK(ico_opt_hold_type() == 1 && optionControlType == 1 &&
                   strcmp(ico_config_get_string("gameplay.hold_type", ""), "toggle") == 0,
-              "title %d: Right: B, the key set, the game's variable follows", title);
+              "title %d: Right again: B", title);
         press(LT_PAD_TRIANGLE);
         CHECK(settle(mainL, 60), "title %d: Controls: back", title);
         path(p, sizeof(p), "settings_test.toml");
         IcoToml *t = ico_toml_load(p);
         const char *saved = t != NULL ? ico_toml_get(t, "gameplay.hold_type") : NULL;
-        CHECK(saved != NULL && strcmp(saved, "toggle") == 0,
-              "title %d: leaving Controls saved gameplay.hold_type = \"toggle\"", title);
+        CHECK(saved != NULL && strcmp(saved, "toggle") == 0 &&
+                  ico_toml_get_bool(t, "gameplay.hold_type_chosen", 0) == 1,
+              "title %d: leaving Controls saved gameplay.hold_type = \"toggle\", "
+              "hold_type_chosen = true",
+              title);
         if (t != NULL) {
             ico_toml_free(t);
         }
-        optionControlType = 0;
-        ico_opt_set_hold_type(0);
+        optionControlType = own;
+        ico_opt_set_hold_choice(ICO_HOLD_DISC);
     }
 
     /* at boot: the key wins over what the game's variable held */
@@ -3239,9 +3255,22 @@ static void testHoldType(void)
     ui_settings_install();
     CHECK(optionControlType == 1, "install again: the same");
     useConfig("version = 1\n");
+    optionControlType = !own;
+    ui_settings_install();
+    CHECK(optionControlType == own, "install: no key is the disc's own (%d)", optionControlType);
+    /* an earlier version's first-run "hold": the disc's own; with
+       hold_type_chosen (the row's), A on every disc */
+    useConfig("version = 1\n[gameplay]\nhold_type = \"hold\"\n");
+    optionControlType = !own;
+    ui_settings_install();
+    CHECK(optionControlType == own && ico_opt_hold_choice() == ICO_HOLD_DISC,
+          "install: an earlier \"hold\" is the disc's own (%d)", optionControlType);
+    useConfig("version = 1\n[gameplay]\nhold_type = \"hold\"\nhold_type_chosen = true\n");
     optionControlType = 1;
     ui_settings_install();
-    CHECK(optionControlType == 0, "install: no key is hold (%d)", optionControlType);
+    CHECK(optionControlType == 0 && ico_opt_hold_choice() == ICO_HOLD_HOLD,
+          "install: a chosen \"hold\" is A (%d)", optionControlType);
+    useConfig("version = 1\n");
     optionControlType = 0;
 }
 

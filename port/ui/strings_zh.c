@@ -386,6 +386,8 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_ACH_POPUPS] = "成就通知",
     [UI_STR_VAL_HOLD_A] = "A（按住）",
     [UI_STR_VAL_HOLD_B] = "B（切換）",
+    [UI_STR_VAL_HOLD_DISC_A] = "依光碟而定（A）",
+    [UI_STR_VAL_HOLD_DISC_B] = "依光碟而定（B）",
     [UI_STR_HOLD_TYPE_NOTE] =
         "A：按住 R1 期間牽著 Yorda 的手。B：按一下 R1 牽起她的手，再按一下放開。",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "「遊戲」中也有此項。",

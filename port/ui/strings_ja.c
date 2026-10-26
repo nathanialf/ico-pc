@@ -387,6 +387,8 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_ACH_POPUPS] = "実績の通知",
     [UI_STR_VAL_HOLD_A] = "A（押し続ける）",
     [UI_STR_VAL_HOLD_B] = "B（切り替え）",
+    [UI_STR_VAL_HOLD_DISC_A] = "ディスクのまま（A）",
+    [UI_STR_VAL_HOLD_DISC_B] = "ディスクのまま（B）",
     [UI_STR_HOLD_TYPE_NOTE] =
         "A：R1を押している間、ヨルダと手をつなぎます。B：R1を1回押すと手をつなぎ、もう一度押すと手を離します。",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "「ゲームプレイ」にもあります。",

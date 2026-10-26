@@ -2665,10 +2665,29 @@ static void testGameOptions(void)
           "Right: hold type B, kept as [gameplay] hold_type (%d)", optionControlType);
     const int hnote = noteStarting(UI_PAGE_CONTROLS, "A: keep R1");
     CHECK(hnote >= 0 && !lt_ext_prop(hnote)->masked, "the Hold type note on the cursor");
+    /* Right again: the disc's own (A on the European, Japanese, Korean and
+       Asian discs, B on the 2001 discs: region.h hold_type_own), then A */
+    press(0x2000);
+    {
+        const int own = ico_region_cur()->hold_type_own;
+        CHECK(ico_opt_hold_choice() == ICO_HOLD_DISC && ico_opt_hold_type() == own &&
+                  optionControlType == own &&
+                  strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE),
+                         own ? "Disc’s own (B)" : "Disc’s own (A)") == 0 &&
+                  strcmp(ico_config_get_string("gameplay.hold_type", ""), "disc") == 0,
+              "Right again: the disc's own (%d, %s)", optionControlType,
+              ui_settings_value_text(UI_OPT_HOLD_TYPE));
+    }
     press(0x2000);
     CHECK(ico_opt_hold_type() == 0 && optionControlType == 0 &&
-              strcmp(ico_config_get_string("gameplay.hold_type", ""), "hold") == 0,
-          "Right again: A");
+              strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE), "A (hold)") == 0 &&
+              strcmp(ico_config_get_string("gameplay.hold_type", ""), "hold") == 0 &&
+              ico_config_get_bool("gameplay.hold_type_chosen", 0) == 1,
+          "Right a third time: A, kept as hold with hold_type_chosen");
+    press(0x8000);
+    CHECK(ico_opt_hold_choice() == ICO_HOLD_DISC, "Left: the disc's own again");
+    press(0x2000);
+    CHECK(ico_opt_hold_choice() == ICO_HOLD_HOLD, "Right: A again");
     press(0x1000);
     press(0x1000);
     CHECK(lt_ext_layout(ctlL)->curItem == bc, "up twice: Button configuration");
@@ -2770,10 +2789,11 @@ static void testGameOptions(void)
     /* the strings in every language */
     static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
     static const int kIds[] = {
-        UI_STR_OPT_BRIGHTNESS,    UI_STR_OPT_VIBRATION,     UI_STR_OPT_HOLD_TYPE,
-        UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_FILM_EFFECT,   UI_STR_OPT_PLAYERS,
-        UI_STR_VAL_HOLD_A,        UI_STR_VAL_HOLD_B,        UI_STR_HOLD_TYPE_NOTE,
-        UI_STR_PLAYERS_NOTE,      UI_STR_BUTTON_CONFIG_NOTE};
+        UI_STR_OPT_BRIGHTNESS,    UI_STR_OPT_VIBRATION,      UI_STR_OPT_HOLD_TYPE,
+        UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_FILM_EFFECT,    UI_STR_OPT_PLAYERS,
+        UI_STR_VAL_HOLD_A,        UI_STR_VAL_HOLD_B,         UI_STR_HOLD_TYPE_NOTE,
+        UI_STR_PLAYERS_NOTE,      UI_STR_BUTTON_CONFIG_NOTE, UI_STR_VAL_HOLD_DISC_A,
+        UI_STR_VAL_HOLD_DISC_B};
     for (int i = 0; i < 5; i++) {
         for (unsigned k = 0; k < sizeof(kIds) / sizeof(kIds[0]); k++) {
             CHECK(ui_str_in(kLangs[i], (UiStrId)kIds[k])[0] != '\0', "string %d in language %d",

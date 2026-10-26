@@ -461,9 +461,10 @@ static void applyOutputMode(int restore)
     }
 }
 
-/* [gameplay] hold_type (port/game/options.h) is the game's hold type: the
-   card's value is not read back (fumi/ios/mcard.c), so install and the row
-   set the variable.  Idempotent. */
+/* [gameplay] hold_type (port/game/options.h) is the game's hold type, its
+   "disc" choice resolved for the disc played: the card's value is not read
+   back (fumi/ios/mcard.c), so install and the row set the variable.
+   Idempotent. */
 static void applyHoldType(void)
 {
     optionControlType = ico_opt_hold_type();
@@ -2036,9 +2037,15 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(ico_opt_circle_back());
     case UI_OPT_VIBRATION:
         return onOff(iosPadActRequestEnable);
-    case UI_OPT_HOLD_TYPE:
-        return ui_str(ico_opt_hold_type() == ICO_HOLD_TOGGLE ? UI_STR_VAL_HOLD_B
-                                                             : UI_STR_VAL_HOLD_A);
+    case UI_OPT_HOLD_TYPE: {
+        /* Disc's own (A|B), A (hold) or B (toggle): the letter of the disc's
+           own from the region table (hold_type_own) */
+        const int toggle = ico_opt_hold_type() == ICO_HOLD_TOGGLE;
+        if (ico_opt_hold_choice() == ICO_HOLD_DISC) {
+            return ui_str(toggle ? UI_STR_VAL_HOLD_DISC_B : UI_STR_VAL_HOLD_DISC_A);
+        }
+        return ui_str(toggle ? UI_STR_VAL_HOLD_B : UI_STR_VAL_HOLD_A);
+    }
     case UI_OPT_TOUCH_MODE: {
         static const int modeStr[3] = {UI_STR_OFF, UI_STR_VAL_AUTO, UI_STR_VAL_ALWAYS};
         const int m = touchModeInForce();
@@ -2113,7 +2120,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
    screen was: a load sets them from the save, so a change on the title
    would not last); the film effect and players once the game is cleared
    (layout_texture.c lt_property_visible).  Hold type is not one: it is
-   kept in [gameplay] hold_type, so it shows on the title too. */
+   kept in [gameplay] hold_type, so it shows on the title too, on every
+   disc. */
 static int isGameOpt(int opt)
 {
     return opt == UI_OPT_BRIGHTNESS || opt == UI_OPT_VIBRATION || opt == UI_OPT_BUTTON_CONFIG ||
@@ -2731,13 +2739,18 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         /* la_game_option's row 313 */
         iosPadActRequestEnable = iosPadActRequestEnable == 0;
         break;
-    case UI_OPT_HOLD_TYPE:
-        /* row 318, kept in [gameplay] hold_type */
-        ico_opt_set_hold_type(!ico_opt_hold_type());
-        ico_config_set_string("gameplay.hold_type", ico_opt_hold_type_name(ico_opt_hold_type()));
+    case UI_OPT_HOLD_TYPE: {
+        /* row 318, kept in [gameplay] hold_type (with hold_type_chosen):
+           Disc's own, A (hold), B (toggle) around */
+        static const int kChoices[3] = {ICO_HOLD_DISC, ICO_HOLD_HOLD, ICO_HOLD_TOGGLE};
+        const int c = ico_opt_hold_choice();
+        const int i = c == ICO_HOLD_HOLD ? 1 : c == ICO_HOLD_TOGGLE ? 2 : 0;
+        ico_opt_set_hold_choice(kChoices[stepIndex(i, 3, dir)]);
+        ico_opt_hold_choice_store();
         applyHoldType();
         s_dirtyConfig = 1;
         break;
+    }
     case UI_OPT_FILM_EFFECT: {
         /* row 300: 0..4 around, the stage animations with it */
         int m = optionScreenMode >= 0 && optionScreenMode < FILM_EFFECTS ? optionScreenMode : 0;

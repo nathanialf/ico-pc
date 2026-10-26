@@ -3,7 +3,8 @@
  * disc, else the slug (ctests settings_discs, settings_discs_<slug> for the
  * other six).  It holds the per-disc matrix of docs/port/GAME_FEATURES.md
  * ("Options on each disc"): which rows a disc shows, from the title and
- * from the pause menu, by the region table field that decides it.  The
+ * from the pause menu, by the region table field that decides it (and the
+ * Hold type row's starting value, the disc's own).  The
  * expectations are written out per disc (kExpect), not read from the
  * table, so a change to a field is a change made here on purpose.  CPU
  * only. */
@@ -14,19 +15,22 @@ typedef struct {
     int hz50;       /* 50 Hz (Display, title only): has_50hz_row */
     int language;   /* Game language (Main): has_game_language */
     int circleBack; /* Circle goes back (Controls): pad_back is Triangle */
-    /* Hold type (Controls), Film effect and Players (Gameplay, the pause
-       menu, once cleared): has_hold_film_players */
-    int holdFilmPlayers;
+    /* Film effect and Players (Gameplay, the pause menu, once cleared):
+       has_film_players; Hold type (Controls) shows on every disc */
+    int filmPlayers;
+    /* the disc's own Hold type, what the row starts at (no key): 0 A, 1 B
+       (hold_type_own) */
+    int holdOwn;
     int credits;   /* Extras > Credits (title): credits_staff_packs */
     int debugMenu; /* Extras > Game variants > Debug menu (Developer mode): not jun26 */
     int startFlag; /* the New Game screen's start flag: gflag_new_game */
 } Expect;
 
 static const Expect kExpect[] = {
-    {"pal", 1, 1, 1, 1, 1, 1, 382},  {"jpn", 0, 0, 0, 1, 1, 1, 382},
-    {"kor", 0, 0, 0, 1, 1, 1, 382},  {"ntsc", 0, 0, 1, 0, 1, 1, 349},
-    {"aug6", 0, 0, 1, 0, 1, 1, 348}, {"jun26", 0, 0, 1, 0, 0, 0, 333},
-    {"cn", 0, 0, 0, 1, 1, 1, 382},
+    {"pal", 1, 1, 1, 1, 0, 1, 1, 382},  {"jpn", 0, 0, 0, 1, 0, 1, 1, 382},
+    {"kor", 0, 0, 0, 1, 0, 1, 1, 382},  {"ntsc", 0, 0, 1, 0, 1, 1, 1, 349},
+    {"aug6", 0, 0, 1, 0, 1, 1, 1, 348}, {"jun26", 0, 0, 1, 0, 1, 0, 0, 333},
+    {"cn", 0, 0, 0, 1, 0, 1, 1, 382},
 };
 
 static const Expect *expectFor(const char *slug)
@@ -60,9 +64,12 @@ static void checkTitleRows(const Expect *e)
     CHECK(ui_settings_opt_shown(UI_OPT_CIRCLE_BACK) == e->circleBack,
           "%s title: Circle goes back %d, want %d", e->slug,
           ui_settings_opt_shown(UI_OPT_CIRCLE_BACK), e->circleBack);
-    CHECK(ui_settings_opt_shown(UI_OPT_HOLD_TYPE) == e->holdFilmPlayers,
-          "%s title: Hold type %d, want %d", e->slug, ui_settings_opt_shown(UI_OPT_HOLD_TYPE),
-          e->holdFilmPlayers);
+    CHECK(ui_settings_opt_shown(UI_OPT_HOLD_TYPE), "%s title: Hold type", e->slug);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_HOLD_TYPE),
+                 e->holdOwn ? "Disc’s own (B)" : "Disc’s own (A)") == 0 &&
+              optionControlType == e->holdOwn,
+          "%s title: Hold type %s (%d), want the disc's own %d", e->slug,
+          ui_settings_value_text(UI_OPT_HOLD_TYPE), optionControlType, e->holdOwn);
     /* the game's own rows are the pause menu's */
     CHECK(!ui_settings_opt_shown(UI_OPT_FILM_EFFECT) && !ui_settings_opt_shown(UI_OPT_PLAYERS) &&
               !ui_settings_opt_shown(UI_OPT_BRIGHTNESS),
@@ -98,19 +105,19 @@ static void checkPauseRows(const Expect *e)
               !ui_settings_opt_shown(UI_OPT_EXTRAS_MUSIC) &&
               !ui_settings_opt_shown(UI_OPT_EXTRAS_CREDITS),
           "%s pause: no 50 Hz, Music or Credits (the title's)", e->slug);
-    CHECK(ui_settings_opt_shown(UI_OPT_HOLD_TYPE) == e->holdFilmPlayers &&
-              ui_settings_opt_shown(UI_OPT_FILM_EFFECT) == e->holdFilmPlayers &&
-              ui_settings_opt_shown(UI_OPT_PLAYERS) == e->holdFilmPlayers,
-          "%s pause, cleared: Hold type %d, Film effect %d, Players %d, want %d", e->slug,
+    CHECK(ui_settings_opt_shown(UI_OPT_HOLD_TYPE) &&
+              ui_settings_opt_shown(UI_OPT_FILM_EFFECT) == e->filmPlayers &&
+              ui_settings_opt_shown(UI_OPT_PLAYERS) == e->filmPlayers,
+          "%s pause, cleared: Hold type %d (want 1), Film effect %d, Players %d, want %d", e->slug,
           ui_settings_opt_shown(UI_OPT_HOLD_TYPE), ui_settings_opt_shown(UI_OPT_FILM_EFFECT),
-          ui_settings_opt_shown(UI_OPT_PLAYERS), e->holdFilmPlayers);
+          ui_settings_opt_shown(UI_OPT_PLAYERS), e->filmPlayers);
     /* a row that is not shown is not reached: on the page as it opens, its
        row is masked (layoutPage) */
     openPage(mainL, -1, UI_PAGE_GAMEPLAY);
     const int film = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT);
-    CHECK(film >= 0 && lt_ext_prop(film)->defaultMask == !e->holdFilmPlayers,
+    CHECK(film >= 0 && lt_ext_prop(film)->defaultMask == !e->filmPlayers,
           "%s pause: the Film effect row masked %d, want %d", e->slug,
-          film >= 0 ? lt_ext_prop(film)->defaultMask : -1, !e->holdFilmPlayers);
+          film >= 0 ? lt_ext_prop(film)->defaultMask : -1, !e->filmPlayers);
     gFlagGameClear = 0;
     CHECK(!ui_settings_opt_shown(UI_OPT_FILM_EFFECT) && !ui_settings_opt_shown(UI_OPT_PLAYERS),
           "%s pause, not cleared: no Film effect or Players", e->slug);
@@ -125,7 +132,8 @@ int main(int argc, char **argv)
     const Expect *e = expectFor(slug);
     CHECK(e != NULL && ico_region_select(slug) == 0, "the %s disc", slug);
     if (e != NULL) {
-        CHECK(ico_region_cur()->has_hold_film_players == e->holdFilmPlayers &&
+        CHECK(ico_region_cur()->has_film_players == e->filmPlayers &&
+                  ico_region_cur()->hold_type_own == e->holdOwn &&
                   ico_region_cur()->credits_staff_packs == e->credits &&
                   ico_region_cur()->has_50hz_row == e->hz50 &&
                   ico_region_cur()->has_game_language == e->language &&

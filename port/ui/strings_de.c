@@ -390,6 +390,8 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_ACH_POPUPS] = "Erfolgs-Hinweise",
     [UI_STR_VAL_HOLD_A] = "A (halten)",
     [UI_STR_VAL_HOLD_B] = "B (umschalten)",
+    [UI_STR_VAL_HOLD_DISC_A] = "Wie die Disc (A)",
+    [UI_STR_VAL_HOLD_DISC_B] = "Wie die Disc (B)",
     [UI_STR_HOLD_TYPE_NOTE] =
         "A: R1 gedrückt halten, um Yordas Hand zu halten. B: R1 einmal drücken, um ihre Hand zu nehmen, erneut drücken zum Loslassen.",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "Auch unter Spiel.",
