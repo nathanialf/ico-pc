@@ -312,13 +312,16 @@ static void test_roll(void)
     CHECK(s_printed > 0 && s_printedDisc && s_printedHeading && s_printedName);
 }
 
-static void test_lock(const char *dir)
+static void test_lock(const char *dir, const char *slug)
 {
     char none[600], ini[600];
     FILE *f;
 
-    snprintf(none, sizeof(none), "%s/credits_no_config.toml", dir);
-    snprintf(ini, sizeof(ini), "%s/credits_unlock.ini", dir);
+    /* one pair of files a disc: the seven credits_* tests run side by side
+       under ctest --parallel (CI), and a shared name raced one test's
+       remove() against another's read (the arm64 job's credits_cn) */
+    snprintf(none, sizeof(none), "%s/credits_no_config_%s.toml", dir, slug);
+    snprintf(ini, sizeof(ini), "%s/credits_unlock_%s.ini", dir, slug);
     remove(none);
     ico_config_reset(none, none);
     CHECK(!ico_credits_unlocked());
@@ -489,7 +492,7 @@ int main(int argc, char **argv)
     }
     test_region();
     test_roll();
-    test_lock(argc > 1 ? argv[1] : ".");
+    test_lock(argc > 1 ? argv[1] : ".", argc > 2 ? argv[2] : "pal");
     test_engine_failure();
     if (failures) {
         fprintf(stderr, "credits_test: %d failure(s)\n", failures);
