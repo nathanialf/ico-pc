@@ -823,6 +823,15 @@ if(ICO_RUN_TESTS)
              COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
                      "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool.png" --present 640x480)
     set_tests_properties(rd_replay_tool PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    # Downsampling (issue 149): 2x DISPLAY box-averaged to its GS size (the
+    # dump's 512x512 GS frame at half height) before the present, named by --stats
+    add_test(NAME rd_replay_tool_downsample
+             COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_downsample.png" --present 640x480
+                     --enhanced --resolution 2x --downsample --stats)
+    set_tests_properties(rd_replay_tool_downsample PROPERTIES
+                         PASS_REGULAR_EXPRESSION "present: downsample 1024x512 -> 512x256, window reduce off"
+                         SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
     # the same dump listed without a device (--list --no-device)
     add_test(NAME rd_replay_tool_list
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
