@@ -1000,8 +1000,11 @@ point>: <why> (N so far)` (the first 8, then every 100th).
 
 **Swapchain** (`port/rhi/gl/gl_swapchain.c`). The backbuffer is an RGBA8 texture at the window's
 pixel size (so `rhi_swapchain_format` is `RHI_FMT_RGBA8_UNORM`); `rhi_present` blits it upside down
-into framebuffer 0 (stretched with linear filtering if the window's size has changed since), then
-`SDL_GL_SwapWindow`, timed into `presentNs`, and follows the window's size afterwards as the other
+into framebuffer 0 (stretched with linear filtering if the window's size has changed since) and
+leaves framebuffer 0 bound for read and draw, read buffer `GL_BACK`, through the swap (a capture
+hook such as OBS's game capture reads the bound read framebuffer's `GL_BACK` at the swap; the last
+pass's framebuffer, whose texture is top-down, came out upside down; every pass begin and copy binds
+its own framebuffer), then `SDL_GL_SwapWindow`, timed into `presentNs`, and follows the window's size afterwards as the other
 backends do. The swap interval is the vsync (1, or 0): `rhi_present_mode_name` says `fifo` or
 `immediate`. `rhi_present_shown` is false for a minimised or hidden window. `rhi_release_surface`
 drops the backbuffer and keeps the context; `rhi_recreate_surface` makes the same context current on

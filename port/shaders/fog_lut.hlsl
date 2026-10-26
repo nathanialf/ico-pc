@@ -162,8 +162,8 @@ GS_PS_ATTR GS_PS_OUT fog_lut_ps(FogPSIn i)
             ds = round(ds * g_param.y);
             d = round(d * g_param.y);
         }
-        bool pass = ztst == FOG_ZTST_GEQUAL ? ds >= d : (ztst == FOG_ZTST_GREATER ? ds > d : false);
-        if (!pass) {
+        bool passed = ztst == FOG_ZTST_GEQUAL ? ds >= d : (ztst == FOG_ZTST_GREATER ? ds > d : false);
+        if (!passed) {
             GS_DISCARD;
         }
         // a pixel that passed has a Z at most the sprite's (GEQUAL) or below

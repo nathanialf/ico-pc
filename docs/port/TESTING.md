@@ -1388,6 +1388,12 @@ the checker and checking its program with `--label`, never turning the tooling o
 in a window build with `ICO_RC_TOOLS` on; not on Android or a cross build)
 ([BUILDING.md](../BUILDING.md#release-candidate-tools)).
 
+`hlsl_fxc_check` runs `tools/check_hlsl_fxc.py` over `port/shaders` (Python only, no build products):
+it fails when a word FXC reserves (`pass`, `sample`, `line`, `point`, `linear`, `texture`, ...) is
+declared as a variable, parameter or struct member, because the Direct3D 11 backend compiles the
+HLSL with FXC at run time and DXC (Vulkan, OpenGL, Direct3D 12) accepts those names. It cannot see
+FXC's X4000 "potentially uninitialized variable" error class; that shows in a Windows log.
+
 `spirv_check` runs `tools/check_spirv.py --sizes` over the SPIR-V modules the build compiled
 (`<build>/shaders/*.spv`): a vertex shader has no vector of booleans, no `any()`/`all()` and no
 boolean select, and uses only the opcodes of the envelope's set (a loop, `dot()`, a
@@ -1428,7 +1434,9 @@ hand.
   (`shaders_pixel` and its variants, `vu1` for a VU shader, `gs_math`, `rhi_d3d12_plan`); on
   Windows `rhi_d3d12` and `compare_backends.cmd` for the DXIL side. Any shader change:
   `spirv_check` (the vertex shaders' shape and envelope, the size budget, no array-typed values,
-  no local array in a vertex shader). A change to a VU vertex shader or to the card test
+  no local array in a vertex shader) and `hlsl_fxc_check` (`python3 tools/check_hlsl_fxc.py`: no word
+  FXC reserves used as an identifier; FXC's "potentially uninitialized variable" errors it cannot
+  see). A change to a VU vertex shader or to the card test
   ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)): `vu1`, `vu1_mali`, `rd_native` and the frame
   gates ([Render gates](#render-gates)), whose pictures must not change.
 - A new achievement: `achievements`, which fails unless one of its runs unlocks every achievement

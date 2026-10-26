@@ -754,14 +754,14 @@ bool gs_alpha_discard(uint flagsZ, uint aref, uint a)
     if (!ate) {
         return false;
     }
-    bool pass = gs_alpha_pass(atst, aref, a);
+    bool passed = gs_alpha_pass(atst, aref, a);
     if (split == 1u) {
-        return !pass;
+        return !passed;
     }
     if (split == 2u) {
-        return pass;
+        return passed;
     }
-    return !pass; // AFAIL KEEP
+    return !passed; // AFAIL KEEP
 }
 
 // -------------------------------------------------------------- outputs

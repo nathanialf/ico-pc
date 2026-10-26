@@ -583,6 +583,10 @@ D3D11 preprocessing compiles on the build hosts. Only Windows runs FXC itself, s
 error (shader model 5.0 limits, FXC's own warnings) shows first in a Windows player's log
 (`cmake/IcoShaders.cmake`).
 
+The commonest FXC-only error is a word FXC reserves used as a name (`bool pass` failed every
+Direct3D 11 shader): `hlsl_fxc_check` (`tools/check_hlsl_fxc.py`) scans the HLSL for them.
+It cannot catch FXC's X4000 "potentially uninitialized variable" errors.
+
 ## GLSL for the OpenGL backend
 
 The OpenGL backend takes GLSL 4.30 text, translated from the SPIR-V the build already has, not
