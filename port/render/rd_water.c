@@ -19,7 +19,6 @@
  * Also the screen-space STs of pool.c's grids (rd_grid_screen_st): the
  * formula and scales wait here for the next rd_draw_vu_grid, which writes
  * them into its command (so dumps carry them). */
-#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -392,43 +391,14 @@ void rd__block_read(const RdTargetRec *src)
     }
 }
 
-/* ------------------------------------ a block read wholly past its period
- * rd_internal.h rd__repeat_kept: the open border's clamp of a target read
- * (rd_replay.c drawWrap) leaves the ripples' read on REPEAT (issue 106) */
-bool rd__repeat_kept(float lo, float hi, float size)
+/* ------------------------------------- a block read kept on REPEAT
+ * rd_internal.h rd__block_keeps_repeat: the open border's clamp of a target
+ * read (rd_replay.c drawWrap) is for the screen-space copies of the frame;
+ * a screen prim reading a block smaller than the frame keeps the game's
+ * wrap (the puddle's ripples, issue 106) */
+bool rd__block_keeps_repeat(const RdTargetRec *src)
 {
-    if (!(size > 0.0f) || !(hi >= lo)) {
-        return false;
-    }
-    const float k = floorf(lo / size);
-    return k != 0.0f && hi <= (k + 1.0f) * size;
-}
-
-/* the texel range of the vertices on each axis, as convVtx converts them
- * (without the scroll offset: a texel's fraction at most) */
-uint32_t rd__screen_repeat_kept(const RdScreenVtx *v, uint32_t n, int uvFixed, float tw, float th)
-{
-    if (n == 0) {
-        return 0;
-    }
-    float lo[2] = {INFINITY, INFINITY}, hi[2] = {-INFINITY, -INFINITY};
-    for (uint32_t i = 0; i < n; i++) {
-        float c[2];
-        if (uvFixed) {
-            c[0] = v[i].s * (1.0f / 16.0f);
-            c[1] = v[i].t * (1.0f / 16.0f);
-        } else {
-            const float q = v[i].q != 0.0f ? v[i].q : 1.0f;
-            c[0] = v[i].s / q * tw;
-            c[1] = v[i].t / q * th;
-        }
-        for (int a = 0; a < 2; a++) {
-            lo[a] = c[a] < lo[a] ? c[a] : lo[a];
-            hi[a] = c[a] > hi[a] ? c[a] : hi[a];
-        }
-    }
-    return (rd__repeat_kept(lo[0], hi[0], tw) ? 1u : 0u) |
-           (rd__repeat_kept(lo[1], hi[1], th) ? 2u : 0u);
+    return src && src->block && !(src->w == g_rd.gsW && src->h == g_rd.gsH);
 }
 
 /* ------------------------------------------- the F12 line (issue 106)
@@ -449,18 +419,22 @@ typedef struct WaterUse {
     uint32_t afail;   /* reads' RdAFail bits (when the alpha test is on) */
     uint32_t blend;   /* reads' RdBlend bits; bit RD_BLEND_COUNT: blending off */
     uint32_t repeat;  /* reads on REPEAT on an axis */
-    uint32_t kept;    /* of them, screen prims wholly past the first period on
-                         it (rd__screen_repeat_kept: REPEAT kept under Full pixel) */
+    uint32_t kept;    /* of them, screen prims of a block smaller than the frame
+                         (rd__block_keeps_repeat: REPEAT kept under an open border) */
 } WaterUse;
 
 typedef struct WaterLineAcc {
-    const RdFrame *f;
     WaterUse blocks[WATER_LINE_BLOCKS];
     uint32_t nBlocks, moreBlocks;
     WaterUse date[WATER_LINE_DATE]; /* DATE draws by colour target */
     uint32_t nDate;
     uint32_t packDraws;
     uint32_t datePackDraws; /* of them, DATE draws (the puddle's mask readers) */
+    /* the draws reading a render target on REPEAT on an axis: those the open
+     * border clamps at the target's edges (rd_replay.c drawWrap: the
+     * screen-space copies) and the block reads that keep the wrap
+     * (rd__block_keeps_repeat) */
+    uint32_t targetClamped, blockKept;
 } WaterLineAcc;
 
 static WaterUse *waterUse(WaterUse *u, uint32_t *n, uint32_t max, uint32_t id, uint32_t *more)
@@ -522,11 +496,19 @@ static void waterLineWalk(void *user, int list, uint32_t index, const RdCmd *c,
             u->into++;
         }
     }
+    const uint32_t rep =
+        (s->ds.wrap.s == RD_WRAP_REPEAT ? 1u : 0u) | (s->ds.wrap.t == RD_WRAP_REPEAT ? 2u : 0u);
+    int keeps = 0; /* a block read drawWrap leaves on REPEAT */
     if (s->ds.texEnabled) {
         const RdTexRec *t = rd__tex_rec(s->tex);
         if (t && t->kind == RD_TEXKIND_TARGET) {
             const RdTargetRec *src = rd__target_rec(t->target);
             readId = src && src->block ? t->target : 0;
+            keeps = c->type == RDC_SCREEN && rd__block_keeps_repeat(src);
+            if (rep) {
+                a->blockKept += keeps != 0;
+                a->targetClamped += keeps == 0;
+            }
         } else if (t && t->replacement) {
             a->packDraws++;
             a->datePackDraws += s->ds.test.date != RD_DATE_OFF;
@@ -537,16 +519,8 @@ static void waterLineWalk(void *user, int list, uint32_t index, const RdCmd *c,
         if (u) {
             u->reads++;
             waterNoteState(u, s);
-            const uint32_t rep = (s->ds.wrap.s == RD_WRAP_REPEAT ? 1u : 0u) |
-                                 (s->ds.wrap.t == RD_WRAP_REPEAT ? 2u : 0u);
             u->repeat += rep != 0;
-            const RdTargetRec *src = rd__target_rec(readId);
-            if (rep && c->type == RDC_SCREEN && src) {
-                const RdScreenVtx *v = (const RdScreenVtx *)(a->f->payload + c->u[0]);
-                u->kept +=
-                    (rd__screen_repeat_kept(v, c->u[1], c->b[2], (float)src->w, (float)src->h) &
-                     rep) != 0;
-            }
+            u->kept += rep != 0 && keeps;
         }
     }
     if (s->ds.test.date != RD_DATE_OFF) {
@@ -602,7 +576,6 @@ size_t rd__water_dump_line(const RdFrame *f, char *line, size_t cap)
         return waterPut(line, cap, at, "no frame");
     }
     memset(&a, 0, sizeof(a));
-    a.f = f;
     RdStateBlock s = f->startState;
     rd__walk(f, f->keep, &s, waterLineWalk, &a);
     const RdTargetRec *sc = rd__target_rec(RD_TARGET_SCENE + 1);
@@ -629,8 +602,8 @@ size_t rd__water_dump_line(const RdFrame *f, char *line, size_t cap)
             at = waterPut(line, cap, at, " (DATE off %u, alpha 0 %u, alpha 1 %u", u->date[0],
                           u->date[1], u->date[2]);
             at = waterPutStates(line, cap, at, u);
-            at = waterPut(line, cap, at, ", REPEAT %u, %u of them wholly past the first period",
-                          u->repeat, u->kept);
+            at = waterPut(line, cap, at, ", REPEAT %u, %u of them kept on REPEAT", u->repeat,
+                          u->kept);
             at = waterPut(line, cap, at, ")");
         }
     }
@@ -643,12 +616,20 @@ size_t rd__water_dump_line(const RdFrame *f, char *line, size_t cap)
                       rd__target_name(u->id), u->date[1], u->date[2]);
         at = waterPutStates(line, cap, at, u);
     }
-    /* Full pixel clamps a draw reading a render target at its edges,
-     * except on the axes the REPEAT reads above keep (issue 106: clamped,
-     * the ripples took the block's corner texel); the blend path the DATE
+    /* With the border open (Full pixel, or the mask on a cropped frame) a
+     * draw reading a render target on REPEAT is clamped at its edges (the
+     * screen-space copies of the frame), but a screen prim reading a block
+     * smaller than the frame keeps the wrap (issue 106: clamped, the
+     * ripples took the block's corner texel); the blend path the DATE
      * draws took */
-    at = waterPut(line, cap, at, "; Full pixel %s, border mask %s; blend %s, storage pass merge %s",
-                  g_rd.settings.fullPixel ? "on" : "off", g_rd.settings.borderMask ? "on" : "off",
+    at = waterPut(line, cap, at, "; Full pixel %s, border mask %s",
+                  g_rd.settings.fullPixel ? "on" : "off", g_rd.settings.borderMask ? "on" : "off");
+    at = rd__border_open() ? waterPut(line, cap, at,
+                                      ": %u render-target reads clamped, %u block reads kept on "
+                                      "REPEAT",
+                                      a.targetClamped, a.blockKept)
+                           : waterPut(line, cap, at, ": border closed");
+    at = waterPut(line, cap, at, "; blend %s, storage pass merge %s",
                   rd__blend_exact_name(g_rd.dstMode), g_rd.passMerge ? "on" : "off");
     if (a.packDraws) {
         at = waterPut(line, cap, at,
