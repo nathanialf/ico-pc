@@ -477,7 +477,8 @@ upload jobs alone may write to it. No secret, signing identity or game data is u
 every pushed `v*` tag (which also packages for arm64, see
 [Packages](#packages)): two Linux
 jobs (`ubuntu-24.04`), the `linux-arm64` job (`ubuntu-24.04-arm`) and the
-`android` job side by side, no secrets, no disc image. `linux` runs the steps
+`android` job side by side, then the `windows` job (`windows-2022`) after `linux`, no secrets, no
+disc image. `linux` runs the steps
 below in order; `extra` is a matrix of three runners, each with the same host
 packages, venv and (restored, never saved) toolchain cache, that builds one
 more preset; `linux-arm64` and `android` are described after the table.
@@ -498,10 +499,16 @@ more preset; `linux-arm64` and `android` are described after the table.
 | `linux-x64` headless | configure with `-DICO_LINK_EXE=ON`, build `all tests` (the targets `all` and `tests`), `ctest` |
 | `linux-x64` window | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` into `build-host/linux-x64-window`, build, `ctest` |
 | `linux-x64-clang` | build, `ctest` |
-| `win-x64` | cross-compile the window build; `ico_pc.exe` and `SDL3.dll` must exist; the tests are built, not run |
+| `win-x64` | cross-compile the window build; `ico_pc.exe` and `SDL3.dll` must exist; the tests are built, and the renderer's Direct3D 11 set with `SDL3.dll` is uploaded as the artifact `win-x64-warp-tests` (`tools/ci_d3d11_warp.sh stage`) for the `windows` job |
 | `extra`: `asan` | AddressSanitizer + UBSan (Debug, `-O1`), headless with `-DICO_LINK_EXE=ON`, build, `ctest` |
 | `extra`: `fptrap` | float divide-by-zero and invalid trap, headless with `-DICO_LINK_EXE=ON`, build, `ctest` |
 | `extra`: `win-x64-clang` | cross-compile the window build (`-DICO_HEADLESS=OFF`) with llvm-mingw clang; `ico_pc.exe` and `SDL3.dll` must exist |
+
+The `windows` job (`windows-2022`) starts when `linux` has finished: it downloads
+`win-x64-warp-tests`, tries to add the Direct3D 11 debug layer (Windows' optional feature
+Graphics Tools; not gating) and runs the renderer's tests on Direct3D 11 through WARP with
+`tools/ci_d3d11_warp.sh run` (Git Bash), keeping the logs as the artifact `d3d11-warp-logs`
+([TESTING.md](port/TESTING.md#the-render-suite-on-direct3d-11-warp)). Nothing is built on it.
 
 The `linux-arm64` job builds the `linux-arm64` preset on GitHub's arm64
 runner and runs its tests, with its own toolchain cache
