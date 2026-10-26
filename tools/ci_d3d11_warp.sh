@@ -18,7 +18,8 @@
 #       log to <log dir>/<test>.log; a failed test prints its device line,
 #       its debug-layer lines and the end of its log.  Exit 0 when every test
 #       passed, 1 otherwise; a test's own 77 ("no usable device") counts as a
-#       failure here, since WARP is always there.
+#       failure here, since WARP is always there; so does a "SKIP:" line in
+#       a test's log (the two self-test scripts exit 0 after printing it).
 #
 # ICO_D3D11_DEBUG=1 asks for the debug layer; the device line says whether
 # it was there ("debug layer on" / "asked for, not installed"), and its
@@ -114,6 +115,10 @@ run_test() {
         verdict="FAILED (timed out after 2400 s)"
     elif [ "$rc" -ne 0 ]; then
         verdict="FAILED (exit $rc)"
+    elif grep -a -q "SKIP:" "$log"; then
+        # the self-test scripts turn a program's 77 into cmake's exit 0 and
+        # print "SKIP: ..."; here a skip is a failure too
+        verdict="FAILED (skipped: no usable device)"
     fi
     local errs
     errs=$(grep -a -c -E "rhi_d3d11 debug (error|corruption)" "$log" || true)
