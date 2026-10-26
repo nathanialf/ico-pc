@@ -263,8 +263,8 @@ endif()
 # --- ico_rhi_vulkan -------------------------------------------------------------
 if(_ico_have_vk)
     set(_ico_vk_sources rhi_driver_version.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c
-                        vk/vk_pipeline.c vk/vk_present_mode.c vk/vk_resource.c vk/vk_swapchain.c
-                        vk/vk_sync.c)
+                        vk/vk_pipeline.c vk/vk_present_mode.c vk/vk_renderpass.c vk/vk_resource.c
+                        vk/vk_swapchain.c vk/vk_sync.c)
     if(ANDROID)
         # the window's surface through the loader in use (a
         # driver the program loaded, or the system's)

@@ -148,7 +148,12 @@ typedef enum VkrGarbageKind {
     VKR_GARBAGE_PIPELINE,
     VKR_GARBAGE_PIPELINE_LAYOUT,
     VKR_GARBAGE_SET_LAYOUT,
-    VKR_GARBAGE_SHADER
+    VKR_GARBAGE_SHADER,
+    /* vk_renderpass.c: a cached framebuffer whose view is destroyed (before
+     * the views: deferred in that order) or that the full cache replaced,
+     * and a render pass made for one use when its cache is full */
+    VKR_GARBAGE_FRAMEBUFFER,
+    VKR_GARBAGE_RENDERPASS
 } VkrGarbageKind;
 
 typedef struct VkrGarbage {
@@ -277,6 +282,36 @@ typedef struct VkrFrame {
     uint32_t tsWritten[RHI_TIMESTAMP_WORDS]; /* the indices written since the slot was recycled */
     bool tsReset; /* the pool's reset is recorded in this slot's first list */
 } VkrFrame;
+
+/* A render pass as both paths take it (vk_cmd.c rhi_cmd_begin_render_pass
+ * fills it, vk_renderpass.c vkr_pass_begin records it): per attachment its
+ * texture, view, format and sample count, the layout it is in for the pass
+ * (the port's state layout, vkr_state_layout: the hazard barriers before the
+ * pass read it, and a VkRenderPass makes no transition), the load and store
+ * ops (a depth-stencil format's stencil ops in stencilLoad/stencilStore; a
+ * colour target's are DONT_CARE) and the clear value; hasStencil: the depth
+ * format has a stencil aspect; readOnlyDepth as asked; the render area
+ * (vkr_pass_area_fits) and the framebuffer's size (the smallest
+ * attachment's, the render area's without one). */
+typedef struct VkrPassAttach {
+    VkrTexture *tex;
+    VkImageView view;
+    VkFormat format;
+    VkSampleCountFlagBits samples;
+    VkImageLayout layout;
+    VkAttachmentLoadOp load, stencilLoad;
+    VkAttachmentStoreOp store, stencilStore;
+    VkClearValue clear;
+} VkrPassAttach;
+
+typedef struct VkrPassDesc {
+    uint32_t colorCount;
+    VkrPassAttach color[RHI_MAX_COLOR_TARGETS];
+    bool hasDepth, hasStencil, readOnlyDepth;
+    VkrPassAttach depth;
+    uint32_t areaW, areaH;
+    uint32_t fbW, fbH;
+} VkrPassDesc;
 
 /* -------------------------------------------------------------- device */
 typedef struct VkrState {
@@ -621,6 +656,32 @@ bool vkr_sync_reached(uint64_t *out);
 VkResult vkr_sync_wait(uint64_t value);
 void vkr_sync_destroy(void);
 const char *vkr_sync_name(void);
+/* vk_renderpass.c, the render passes (VkrPassDesc; the file's header has
+ * the caches):
+ *   vkr_pass_begin     records the pass's begin on c: vkCmdBeginRendering
+ *                      (dynamic rendering) or vkCmdBeginRenderPass with the
+ *                      cached VkRenderPass and VkFramebuffer
+ *                      (g_vkr.legacyPasses); false (logged) when the legacy
+ *                      objects could not be made;
+ *   vkr_pass_end       its end;
+ *   vkr_renderpass_get the cached VkRenderPass of d (legacy);
+ *   vkr_renderpass_compat the render pass of a compatibility class (the
+ *                      formats and one sample count; depthFormat
+ *                      VK_FORMAT_UNDEFINED: none), for a pipeline's
+ *                      create info on the legacy path; VK_NULL_HANDLE when
+ *                      it could not be made;
+ *   vkr_framebuffer_forget_view the cached framebuffers using view go:
+ *                      deferred (rhi_destroy_texture, before its views), or
+ *                      at once with the device idle (now: a swapchain
+ *                      image's release);
+ *   vkr_renderpass_shutdown every cached object destroyed, the device idle. */
+bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d);
+void vkr_pass_end(VkrCmdList *c);
+VkRenderPass vkr_renderpass_get(const VkrPassDesc *d);
+VkRenderPass vkr_renderpass_compat(uint32_t colorCount, const VkFormat *colorFormats,
+                                   VkFormat depthFormat, VkSampleCountFlagBits samples);
+void vkr_framebuffer_forget_view(VkImageView view, bool now);
+void vkr_renderpass_shutdown(void);
 /* vk_cmd.c: rhi_gpu_progress's values back to none (a new device) */
 void vkr_progress_reset(void);
 

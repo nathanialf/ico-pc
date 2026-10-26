@@ -375,6 +375,12 @@ static void vkr_destroy_one(const VkrGarbage *e)
     case VKR_GARBAGE_SHADER:
         vkDestroyShaderModule(d, (VkShaderModule)h, NULL);
         break;
+    case VKR_GARBAGE_FRAMEBUFFER:
+        vkDestroyFramebuffer(d, (VkFramebuffer)h, NULL);
+        break;
+    case VKR_GARBAGE_RENDERPASS:
+        vkDestroyRenderPass(d, (VkRenderPass)h, NULL);
+        break;
     }
 }
 
@@ -758,6 +764,9 @@ void rhi_destroy_texture(RhiTexture h)
     if (!t || t->swapchain) {
         return;
     }
+    /* the VkRenderPass path's framebuffers on the view go first (a view
+     * made later may get the same handle) */
+    vkr_framebuffer_forget_view(t->view, false);
     vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->view));
     vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->depthView));
     vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->uintView));
@@ -799,7 +808,9 @@ void vkr_release_swapchain_image(uint32_t id)
     if (!t) {
         return;
     }
-    /* called after vkDeviceWaitIdle: destroy now */
+    /* called after vkDeviceWaitIdle: destroy now, the framebuffers on the
+     * view first */
+    vkr_framebuffer_forget_view(t->view, true);
     vkDestroyImageView(g_vkr.device, t->view, NULL);
     vkr_pool_release(&g_vkr.textures, id);
 }
@@ -922,6 +933,8 @@ void rhi_destroy_shader(RhiShader h)
 void vkr_release_all_objects(void)
 {
     VkDevice d = g_vkr.device;
+    /* the cached framebuffers and render passes, before the views */
+    vkr_renderpass_shutdown();
     for (uint32_t i = 0; i < g_vkr.buffers.next; i++) {
         if (g_vkr.buffers.live[i]) {
             VkrBuffer *b = (VkrBuffer *)(g_vkr.buffers.data + (size_t)i * sizeof(VkrBuffer));
