@@ -487,7 +487,7 @@ static void testGpuDriver(void)
               "after a loss: the note names Turnip and the folder (%s)",
               note >= 0 ? lt_ext_row_text(note) : "-");
     }
-    s_gpuFailed = 1;
+    s_gpuFailed = s_gpuSel; /* the chosen driver failed: gpuShowFailed looks at the choice */
     frame(0);
     {
         const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
