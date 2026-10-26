@@ -931,9 +931,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP, the hardware adapter, the swapchain on
   a hidden window, Vulkan for comparison), the cells' shaders compiled at run time from
   `rhi_test_hlsl.h`; a Windows GUI program that writes `rhi_d3d11_test.log` and shows a message box
-  (`rhi_d3d11`, registered on a native Windows build only). Built only: the `win-x64` and
-  `win-x64-clang` cross builds build it and do not run it, and it has not run on any Windows machine
-  yet.
+  (`rhi_d3d11`, registered on a native Windows build only). The `win-x64` and `win-x64-clang`
+  cross builds build it; CI's `windows` job runs it with `--console` on WARP
+  ([below](#the-render-suite-on-direct3d-11-warp)).
 - `rhi_d3d12_plan_test.c`: the D3D12 backend's state and barrier bookkeeping on the CPU
   (`rhi_d3d12_plan`).
 - `rhi_d3d11_shader_plan_test.c`: the Direct3D 11 backend's shader route on the CPU
@@ -1237,6 +1237,55 @@ swapchain recreation included, on the fence ring and the `VkRenderPass` path und
 are `ctest -j1 -L vk11`. The OpenGL twins leave them out (a Vulkan fake). The real 1.1 loader and
 driver are not covered here: lavapipe is a 1.3 driver held to 1.1 by the switch.
 
+## The render suite on Direct3D 11 (WARP)
+
+CI's `windows` job (`.github/workflows/ci.yml`, on `windows-2022`, after `linux`) runs the
+renderer's tests on the Direct3D 11 backend through WARP, Microsoft's software adapter (issue
+126: before it the backend had run on no device, and on a GTX 750 Ti both start-up self-tests read
+back their cleared target). Nothing is built on Windows: the `linux` job's `win-x64` step copies the
+programs below and `SDL3.dll` (their only import beyond the system's) into
+`build-host/win-x64-warp/` (`tools/ci_d3d11_warp.sh stage`) and uploads it as the artifact
+`win-x64-warp-tests`; the `windows` job downloads it and `tools/ci_d3d11_warp.sh run` (Git Bash)
+runs each program with `ICO_RHI_BACKEND=d3d11` (`port/rhi/rhi_backend.c` takes the default backend
+from it, as the OpenGL twins take `opengl`), `ICO_D3D11_ADAPTER=warp` and `ICO_D3D11_DEBUG=1`. A
+step before it tries to add the debug layer (the optional feature `Tools.Graphics.DirectX`,
+Graphics Tools); it does not gate, and the device line in each log says whether the layer was
+there (`debug layer on` or `asked for, not installed`). The tests carry their own expectations,
+the ones their OpenGL twins pass with, so a pass means Direct3D 11 draws what Vulkan and OpenGL
+draw:
+
+| program | how it runs | what a pass shows |
+| --- | --- | --- |
+| `rhi_d3d11_shader_plan_test` | as ctest's `rhi_d3d11_shader_plan` | the shader route's CPU half on Windows |
+| `rhi_d3d11_test --console` | the RHI cells on WARP; the hardware section skips (no GPU on the runner), so does Vulkan; the swapchain section on a hidden SDL window | the RHI's exact-texel cells on Direct3D 11, every debug-layer error a failure |
+| `rd_blend_selftest_test fixed` | through `rd_blend_selftest.cmake` as ctest's `rd_blend_selftest`, without its Vulkan profile line | the blend self-test passes (`fixed-function ok`) at start and after a new size |
+| `rd_fog_selftest_test inplace` | through `rd_fog_selftest.cmake`, results `inplace ok [0-2], copy not tried, buffer not tried` | the fog depth self-test passes and the probe lines are there |
+| `rd_pixel_test <work>` | as ctest's `rd_pixel` | the pixel cases, and the dump `rd_pixel_frame.rddump` |
+| `rd_replay_tool <dump> <png> --present 640x480 --stats --backend d3d11` | on rd_pixel's dump | the replay tool replays and presents on Direct3D 11 |
+| `rd_present_test <work>` | as ctest's `rd_present` | the presenter's frames |
+| `rd_msaa_test` | as ctest's `rd_msaa` | multisampling and its resolve |
+| `rd_crt_test <work>` | as ctest's `rd_crt` | the CRT passes |
+| `rd_mirror_test` | as ctest's `rd_mirror` | the mirror mode |
+
+Every log goes to the artifact `d3d11-warp-logs` (with `summary.md`, also the job's step summary:
+the device line and each test's verdict, time and debug-layer error count). A failed test prints,
+in a collapsed group, its device line (`rhi_d3d11: <adapter> (D3D11, feature level ...)`), its
+first 40 debug-layer lines, its self-test lines (with `self-test failed on Direct3D 11; its last
+draw: ...`, [RHI.md](RHI.md#direct3d-11)) and its last 150 lines. A test's exit 77 ("no usable
+device") is a failure here, since WARP is always there; a test runs at most 2400 s.
+
+Not run there: the variants whose environment holds a Vulkan fake (`ICO_VK_FAKE_*`,
+`ICO_VK_ATTACHMENT_READ`: Direct3D 11 ignores them), the variants whose expected results name a
+path Direct3D 11 has not (`rd_fog_selftest_all` and `_fallback` expect the buffer path, which the
+backend reports `unsupported`; `rd_fog_selftest_local` the local read; `rd_date_selftest` the
+stencil DATE; the blend's exact modes: no destination read, `rov` false), the vertex pre-pass
+self-tests (the pre-pass is off on Direct3D 11), the tests that need the disc or the machine-local
+dumps, and the rest of the render suite (a longer list is a matter of adding lines to the script;
+these are the ones issue 126 needs). WARP's filtering may round a filtered path an LSB away from
+lavapipe's where a test compares hashes (`rd_present`, `rd_crt`); such a failure names the check,
+and the integer paths are exact on every backend. The same tests on a real card are the user's
+rc check (Direct3D 11 with `ICO_D3D11_DEBUG=1` once).
+
 ## Tests that need the disc
 
 These cache variables point the tests at the player's files ([../BUILDING.md](../BUILDING.md#tests)
@@ -1531,14 +1580,15 @@ hand.
 
 | workflow | job | runner | what it runs |
 | --- | --- | --- | --- |
-| `ci.yml` | `linux` | `ubuntu-24.04` | the hygiene checks (no disc data, format, no `ICO_HOST` conditional, no region block, stack-layout, struct-cast and call-type audits, generated files fresh), then `linux-x64` headless and window builds with `ctest`, `linux-x64-clang` with `ctest`, and the `win-x64` cross build (tests built, not run) |
+| `ci.yml` | `linux` | `ubuntu-24.04` | the hygiene checks (no disc data, format, no `ICO_HOST` conditional, no region block, stack-layout, struct-cast and call-type audits, generated files fresh), then `linux-x64` headless and window builds with `ctest`, `linux-x64-clang` with `ctest`, and the `win-x64` cross build (tests built; the renderer's Direct3D 11 set uploaded for `windows`) |
+| `ci.yml` | `windows` | `windows-2022` | after `linux`: the renderer's tests from the `win-x64` build on Direct3D 11 through WARP, the debug layer tried ([above](#the-render-suite-on-direct3d-11-warp)) |
 | `ci.yml` | `extra` | `ubuntu-24.04` | a matrix of `asan` and `fptrap` (build `all tests`, `ctest`) and the `win-x64-clang` cross build |
 | `ci.yml` | `linux-arm64` | `ubuntu-24.04-arm` | the no-disc-data check, the `linux-arm64` preset with `ctest`, the filtered-pixel render tests in a step that does not gate, the arm64 package on release tags |
 | `ci.yml` | `android` | `ubuntu-24.04` | the debug APK (`assembleDebug`), `tools/check_android_flags.sh`, the APK structure checks |
 | `ios.yml` | `build`, `publish` | `macos-15`, `ubuntu-24.04` | the unsigned iPhone IPA for a published release, attached to it |
 | `ios.yml` | `build-macos`, `publish-macos` | `macos-15`, `ubuntu-24.04` | the macOS app for a published release, attached to it |
 
-(`.github/workflows/ci.yml`, jobs `linux`, `extra`, `linux-arm64`, `android`;
+(`.github/workflows/ci.yml`, jobs `linux`, `windows`, `extra`, `linux-arm64`, `android`;
 `.github/workflows/ios.yml`.)
 
 The triggers, steps and caches are [../BUILDING.md](../BUILDING.md#continuous-integration)'s.
