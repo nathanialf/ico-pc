@@ -637,7 +637,7 @@ computer, and it is how a phone or a handheld makes one.
 
 ## Developer mode
 
-**Developer** is the last page link on the Options menu's first page, just above Back. Developer mode is its first row (Options > Developer > Developer mode).
+**Developer** is a row on the Options menu's first page, just above Back. Developer mode is its first row (Options > Developer > Developer mode).
 
 Developer mode brings back the menu the game's makers used while they built
 it: while it is on, Select opens it. Leave it off for normal play. While it
