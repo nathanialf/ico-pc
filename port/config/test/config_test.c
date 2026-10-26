@@ -455,6 +455,9 @@ static void test_first_run(void)
     /* the Frame rate counter: Off, written with the file */
     CHECK(ico_config_get_bool("video.show_fps", 1) == 0);
     CHECK(text != NULL && strstr(text, "show_fps = false") != NULL);
+    /* Downsampling: off, written with the file */
+    CHECK_STR(ico_config_get_string("video.downsample", "?"), "off");
+    CHECK(text != NULL && strstr(text, "downsample = \"off\"") != NULL);
     CHECK(ico_config_get_bool("video.effect_cinematic_bars", 0) == 1);
     /* Water reflections: Original (the PS2's size) by default */
     CHECK(ico_config_get_bool("video.effect_water_sharp", 1) == 0);
