@@ -298,6 +298,22 @@ typedef struct D11CmdState {
     uint32_t vbStrideSet[RHI_MAX_VERTEX_ATTRS];
     uint32_t vbSet;      /* slots holding a buffer */
     uint32_t srvMask[2]; /* [RHI_STAGE_VERTEX], [RHI_STAGE_FRAGMENT]: t registers 0..31 */
+    /* the constant buffer window each b register holds in each stage
+     * ([RHI_STAGE_*][register]; NULL nothing bound): a repeat is not set
+     * again, and the same buffer with another window is unbound first
+     * (d3d11_cmd.c d11_set_cb: the runtime's documented VSSetConstantBuffers1
+     * fault, a changed window on the same buffer dropped) */
+    ID3D11Buffer *cbSet[2][D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT];
+    UINT cbFirst[2][D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT];
+    UINT cbNum[2][D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT];
+    /* the viewport and scissor last set, and the pass's targets (colour 0's
+     * size and format, the depth's size, 0 none): the last draw's state
+     * (d11_last_draw_text) */
+    D3D11_VIEWPORT vp;
+    D3D11_RECT sc;
+    uint32_t rtW, rtH, dsW, dsH;
+    DXGI_FORMAT rtFmt;
+    bool dsReadOnly;
 } D11CmdState;
 
 typedef struct D11CommandList {
@@ -527,6 +543,10 @@ void d11_set_name(ID3D11DeviceChild *o, const char *name);
  * set, and a vertex shader's dxbc and sig.  false with the reason in err
  * (the same on every later call). */
 bool d11_shader_compiled(D11Shader *s, char *err, size_t errn);
+
+/* d3d11_cmd.c: the last draw recorded, as text (RhiStats.lastDrawText:
+ * the renderer's self-test failure lines); NULL before the first draw */
+const char *d11_last_draw_text(void);
 
 /* d3d11_pipeline.c (D3D11-CMD) */
 D11Pipeline *d11_get_pipeline(uint32_t id);
