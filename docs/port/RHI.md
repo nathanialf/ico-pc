@@ -407,11 +407,12 @@ its log lines are in [SHADERS.md](SHADERS.md#direct3d-11-run-time-compile).
 **Device** (`port/rhi/vk/vk_device.c`). The loader must be Vulkan 1.1 or later; the instance asks
 for the loader's version at most 1.3, and a device is used at its own version at most the
 instance's (`vkr_effective_api`; an instance at 1.3 leaves a 1.4 device its 1.4 outside MoltenVK).
-A device needs Vulkan 1.1 at that version, dynamic rendering (core 1.3 or
-`VK_KHR_dynamic_rendering`; required until the `VkRenderPass` path exists, `VKR_LEGACY_PASSES` in
-`vk_internal.h`), the swapchain extension on a window, a graphics queue that can present, and RGBA8,
-RGBA8 UINT, R8, D32F and D32F_S8 or D24S8 formats; timeline semaphores are not required (without
-them the fence ring, [Bindings and synchronisation](#vulkan)). Devices score discrete 1000,
+A device needs Vulkan 1.1 at that version, the swapchain extension on a window, a graphics queue
+that can present, and RGBA8, RGBA8 UINT, R8, D32F and D32F_S8 or D24S8 formats; dynamic rendering
+(core 1.3 or `VK_KHR_dynamic_rendering`) and timeline semaphores are not required (without them
+`VkRenderPass` objects, [Render passes](#vulkan), and the fence ring,
+[Bindings and synchronisation](#vulkan); `VKR_LEGACY_PASSES` 0 in `vk_internal.h` makes dynamic
+rendering required again). Devices score discrete 1000,
 integrated 500, virtual 200, CPU 100, plus 10 for core 1.3, 5 for dual-source blending, 20 for
 dynamic rendering and 20 for timeline semaphores (`vkr_rate_device`). Below 1.2 the core 1.2 parts
 are taken by their KHR names when offered: `VK_KHR_create_renderpass2` and
@@ -458,7 +459,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_FAKE_NO_MSAA` | 1 reports single sampling only |
 | `ICO_VK_FAKE_NO_DST` | 1 reports no destination read and no local read |
 | `ICO_VK_FAKE_ADRENO` | 1 takes the Qualcomm driver's branch: the attachment read not offered |
-| `ICO_VK_FAKE_API` | `1.1` uses the device as a stock Vulkan 1.1 driver (Adreno 618 class): the instance and the device held to 1.1 (the KHR and EXT names of what is core later), and `VK_KHR_timeline_semaphore`, `VK_KHR_dynamic_rendering_local_read`, `VK_KHR_driver_properties`, `VK_KHR_image_format_list`, `VK_KHR_load_store_op_none`, `VK_EXT_load_store_op_none` and `VK_QCOM_render_pass_store_ops` reported absent (`vkr_fake_hidden`): the fence ring ([Bindings and synchronisation](#vulkan)), no local read, the driver unnamed; `VK_KHR_dynamic_rendering` is hidden too once the `VkRenderPass` path exists (`VKR_LEGACY_PASSES`); the line `ICO_VK_FAKE_API=1.1: the device is used as a Vulkan 1.1 driver without timeline semaphores, local read, driver properties, image format list or store op none`. `1.1ext` holds the versions to 1.1 and hides nothing (a 1.1 driver with the extensions: the timeline through `VK_KHR_timeline_semaphore`), local read off (it needs 1.3). Both compose with `ICO_VK_FAKE_LIMITS=mali`; the device line ends `; ICO_VK_FAKE_API=<profile>`; another value is logged and hides nothing (`rhi_vk_vk11`, `rhi_vk_swapchain_vk11`, `rd_pixel_vk11`, `rd_present_vk11`, label `vk11`) |
+| `ICO_VK_FAKE_API` | `1.1` uses the device as a stock Vulkan 1.1 driver (Adreno 618 class): the instance and the device held to 1.1 (the KHR and EXT names of what is core later), and `VK_KHR_timeline_semaphore`, `VK_KHR_dynamic_rendering_local_read`, `VK_KHR_driver_properties`, `VK_KHR_image_format_list`, `VK_KHR_load_store_op_none`, `VK_EXT_load_store_op_none` and `VK_QCOM_render_pass_store_ops` reported absent (`vkr_fake_hidden`): the fence ring ([Bindings and synchronisation](#vulkan)), no local read, the driver unnamed; `VK_KHR_dynamic_rendering` is hidden too (`VKR_LEGACY_PASSES`), so the passes are `VkRenderPass` objects ([Render passes](#vulkan)) and the device line says `render passes legacy`; the line `ICO_VK_FAKE_API=1.1: the device is used as a Vulkan 1.1 driver without timeline semaphores, dynamic rendering, local read, driver properties, image format list or store op none`. `1.1ext` holds the versions to 1.1 and hides nothing (a 1.1 driver with the extensions: the timeline through `VK_KHR_timeline_semaphore`, dynamic rendering through `VK_KHR_dynamic_rendering`), local read off (it needs 1.3). Both compose with `ICO_VK_FAKE_LIMITS=mali`; the device line ends `; ICO_VK_FAKE_API=<profile>`; another value is logged and hides nothing (`rhi_vk_vk11`, `rhi_vk_swapchain_vk11`, the render twins `rd_*_vk11` and `rd_pixel_vk11ext`, `rd_present_vk11ext`, label `vk11`: [TESTING.md](TESTING.md#the-render-suite-on-a-vulkan-11-driver)) |
 | `ICO_VK_ATTACHMENT_READ` | 1 offers the attachment read on Qualcomm's driver too; ico-pc.ini `attachment_read` |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
 | `ICO_VK_GLOBAL_BARRIERS` | 1 records a global barrier before every render pass and copy (`vk_cmd.c`) |
@@ -548,6 +549,32 @@ allocation to the next: uploads go to a device-local, host-visible type first, b
 under 1 GB (the PCIe BAR window without resizable BAR) takes uploads of up to 16 MB only, and once it
 refused an allocation it is tried last, so uploads go through system memory
 (`port/rhi/vk/vk_memory.c`, `vkr_memory_candidates`).
+
+**Render passes** (`port/rhi/vk/vk_renderpass.c`, header comment). `rhi_cmd_begin_render_pass`
+describes the pass once (`VkrPassDesc`: per attachment the view, format, samples, the layout the
+state tracking put it in, the load and store ops, the clear; the area and the framebuffer's size),
+issues the hazard barriers from it and records it with `vkr_pass_begin`: with dynamic rendering the
+`VkRenderingInfo` it always recorded, field for field; on a device without it
+(`VkrState.legacyPasses`, the device line's `render passes legacy`) `vkCmdBeginRenderPass` with a
+cached `VkRenderPass` (one subpass, no dependencies, every attachment's initial, subpass and final
+layout the one it is already in, so the pass makes no transition and the barriers before it order
+it; a pass without attachments a subpass without them) and a cached `VkFramebuffer`. A read-only
+depth stores with `STORE_OP_NONE` at 1.3 or where `VK_KHR_load_store_op_none`,
+`VK_EXT_load_store_op_none` or `VK_QCOM_render_pass_store_ops` gave it (`storeOpNone`), else with
+`STORE` (dynamic rendering keeps its 1.3 check). A pipeline on that path names the render pass of
+its compatibility class (formats and sample count, fixed ops and layouts; `vkr_renderpass_compat`,
+looked up in `vkr_pipe_prepare` on the calling thread) instead of chaining
+`VkPipelineRenderingCreateInfo`; the device chains no dynamic rendering feature and leaves
+`cmdBeginRendering` unset. The caches: 128 render passes, never evicted (when full a pass is made
+for one use and its destroy deferred: `rhi_vk: render pass cache full (128): further render passes
+are made for one use`), and 256 framebuffers keyed by the compatible pass, the views and the size
+(when full the least recently used is deferred: `rhi_vk: framebuffer cache full (256): ...`).
+`rhi_destroy_texture` defers its view's framebuffers before the views (`VKR_GARBAGE_FRAMEBUFFER`;
+a later view may reuse the handle), a swapchain image's release destroys them at once (the device
+idle), and `vkr_release_all_objects` destroys both caches first. The first pass made logs `rhi_vk:
+render passes: VkRenderPass objects (no dynamic rendering), the first with N colour target(s)...;
+read-only depth stored with STORE_OP_NONE|STORE (no store op none)`; a pass whose objects could not be
+made is not begun (`rhi_vk: render pass: no VkRenderPass or framebuffer for ...`).
 
 **Android surface.** With a driver the app loaded itself the instance belongs to another loader, so
 `vk_surface_android.c` makes the surface through the `vkGetInstanceProcAddr` given to volk instead
