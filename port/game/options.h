@@ -180,6 +180,10 @@ void ico_opt_output_toggled(int mode);
    or the save: Settings > Audio > Output's Stereo and Mono, which set the
    key themselves and save it on leaving the page with the rest. */
 void ico_opt_output_record(int mode);
+/* The mode the memory card saves: the game's own (the card's or the
+   Options screen's), not an explicit key's override in force; `live` (the
+   game's mode now) when the game's own is not known yet. */
+int ico_opt_output_game(int live);
 /* [gameplay] hold_type: the game's Hold type (optionControlType), kept in
    config.toml instead of the memory card: ICO_HOLD_HOLD (0, "hold", A: keep
    R1 held to hold Yorda's hand, the default) or ICO_HOLD_TOGGLE (1,

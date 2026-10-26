@@ -1848,9 +1848,8 @@ static void testAudio(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECTS), "30 %") == 0, "effects 30 %% (%s)",
           ui_settings_value_text(UI_OPT_EFFECTS));
 
-    /* output: Auto shows the game's mode; Stereo and Mono set it and (as
-       the Options screen's Sound row did) make it the game's own, so
-       Auto keeps the last one chosen */
+    /* output: Auto shows the game's own mode (the Options screen's, the
+       card's); Stereo and Mono are overrides that leave it alone */
     CHECK(strcmp(ui_settings_value_text(UI_OPT_OUTPUT), "Auto (Stereo)") == 0, "output Auto (%s)",
           ui_settings_value_text(UI_OPT_OUTPUT));
     s_outputMode = 1; /* the game's Options row: Mono */
@@ -1873,11 +1872,53 @@ static void testAudio(void)
           outFile0);
     ui_settings_step(UI_OPT_OUTPUT, -1);
     ui_settings_step(UI_OPT_OUTPUT, -1);
-    CHECK(ico_opt_output_mode() == ICO_OUTPUT_AUTO && s_outputMode == 0 &&
+    CHECK(ico_opt_output_mode() == ICO_OUTPUT_AUTO && s_outputMode == 1 &&
               strcmp(ico_config_get_string("audio.output", ""), "auto") == 0 &&
-              strcmp(ui_settings_value_text(UI_OPT_OUTPUT), "Auto (Stereo)") == 0,
-          "Auto again: the game's own mode, the last chosen (Stereo; %s)",
+              strcmp(ui_settings_value_text(UI_OPT_OUTPUT), "Auto (Mono)") == 0,
+          "Auto again: the game's own mode (Mono, set on its Options row), not the last override "
+          "(%s)",
           ui_settings_value_text(UI_OPT_OUTPUT));
+    /* both directions from Auto read Auto (x), then the same two values, with the same x */
+    {
+        char a0[32], a1[32], a2[32];
+        snprintf(a0, sizeof(a0), "%s", ui_settings_value_text(UI_OPT_OUTPUT));
+        ui_settings_step(UI_OPT_OUTPUT, 1);
+        ui_settings_step(UI_OPT_OUTPUT, 1);
+        ui_settings_step(UI_OPT_OUTPUT, 1);
+        snprintf(a1, sizeof(a1), "%s", ui_settings_value_text(UI_OPT_OUTPUT));
+        ui_settings_step(UI_OPT_OUTPUT, -1);
+        ui_settings_step(UI_OPT_OUTPUT, -1);
+        ui_settings_step(UI_OPT_OUTPUT, -1);
+        snprintf(a2, sizeof(a2), "%s", ui_settings_value_text(UI_OPT_OUTPUT));
+        CHECK(strcmp(a0, "Auto (Mono)") == 0 && strcmp(a1, a0) == 0 && strcmp(a2, a0) == 0,
+              "right x3 and left x3 return to the same Auto (x) (%s, %s, %s)", a0, a1, a2);
+        ui_settings_step(UI_OPT_OUTPUT, 1);
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_OUTPUT), "Stereo") == 0, "right: Stereo");
+        ui_settings_step(UI_OPT_OUTPUT, 1);
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_OUTPUT), "Mono") == 0, "right: Mono");
+        ui_settings_step(UI_OPT_OUTPUT, 1);
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_OUTPUT), a0) == 0, "right: Auto (x) again");
+        ui_settings_step(UI_OPT_OUTPUT, -1);
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_OUTPUT), "Mono") == 0, "left: Mono");
+        ui_settings_step(UI_OPT_OUTPUT, -1);
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_OUTPUT), "Stereo") == 0, "left: Stereo");
+        ui_settings_step(UI_OPT_OUTPUT, -1);
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_OUTPUT), a0) == 0, "left: Auto (x) again");
+        /* a Stereo override with the game's own Mono: the card saves Mono, the game plays Stereo */
+        ui_settings_step(UI_OPT_OUTPUT, 1);
+        CHECK(s_outputMode == 0 && ico_opt_output_game(soundOutputModeGet()) == 1,
+              "Stereo override: the card saves the game's own Mono (live %d, saved %d)",
+              s_outputMode, ico_opt_output_game(soundOutputModeGet()));
+        /* a card load (mcard.c: set the card's value, then the hook) re-applies the override */
+        s_outputMode = ico_opt_output_game(soundOutputModeGet());
+        soundOutputModeSet(ico_opt_output_card(soundOutputModeGet()));
+        CHECK(s_outputMode == 0 && ico_opt_output_game(soundOutputModeGet()) == 1,
+              "card load: the override is back, the game's own is the card's (%d)", s_outputMode);
+        ui_settings_step(UI_OPT_OUTPUT, -1);
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_OUTPUT), a0) == 0 && s_outputMode == 1,
+              "Auto again after the load: the game's own Mono (%s)",
+              ui_settings_value_text(UI_OPT_OUTPUT));
+    }
     ui_settings_step(UI_OPT_OUTPUT, -1);
     CHECK(ico_opt_output_mode() == ICO_OUTPUT_MONO, "Left from Auto wraps to Mono");
     /* explicit: the card's mode does not win, the Options row's change is

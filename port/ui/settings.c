@@ -2496,14 +2496,10 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         ico_opt_set_output_mode(m);
         ico_config_set_string("audio.output", ico_opt_output_name(m));
         applyOutputMode(1);
-        if (m != ICO_OUTPUT_AUTO) {
-            /* the rest of what the Options screen's Sound row (308)
-               does (applyOutputMode set the mode): the game's own mode, the
-               one its saves write and Auto shows, is this one too.  The
-               key is saved with the page's others on leaving, not at each
-               step (ico_opt_output_toggled's save) */
-            ico_opt_output_record(m);
-        }
+        /* Stereo and Mono are overrides only: they do not touch the game's
+           own mode (the one the game's Options screen sets and the card
+           saves), so Auto shows the same mode whichever way the row was
+           stepped.  The key is saved with the page's others on leaving. */
         s_dirtyConfig = 1;
         break;
     }

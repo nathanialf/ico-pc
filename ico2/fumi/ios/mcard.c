@@ -15,6 +15,8 @@
 
 /* port/game/options.h: [audio] output wins over the card's mode */
 extern int ico_opt_output_card(int card_mode);
+/* PC port: the card saves the game's own mode, not the Settings override */
+extern int ico_opt_output_game(int live);
 /* PC port: [gameplay] hold_type wins over the card's controlType (port/game/options.h) */
 extern int ico_opt_hold_type(void);
 
@@ -266,7 +268,8 @@ static void mc_product_from_2001(McProductFile *p, const unsigned char *d)
 static inline int product_write(McMgr *self)
 {
     (IosMcProductFile + self->port)->soundMode = systemStatus[11];
-    (IosMcProductFile + self->port)->outputMode = soundOutputModeGet();
+    (IosMcProductFile + self->port)->outputMode =
+        ico_opt_output_game(soundOutputModeGet()); /* PC port: see above */
     (IosMcProductFile + self->port)->vibration = iosPadActRequestEnable;
     if (ICO_JPNKORCN) {
         (IosMcProductFile + self->port)->controlType = optionControlType;
