@@ -1467,7 +1467,9 @@ void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
                   uint32_t instanceCount)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
-    if (!c || !c->pipeline) {
+    /* no open pass (the legacy pass begin failed, vk_renderpass.c): the draws
+     * until the pass end are skipped */
+    if (!c || !c->pipeline || !c->inPass) {
         return;
     }
     vkr_flush_barriers(c);
@@ -1482,7 +1484,9 @@ void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t first
                           int32_t vertexOffset, uint32_t instanceCount)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
-    if (!c || !c->pipeline) {
+    /* no open pass (the legacy pass begin failed, vk_renderpass.c): the draws
+     * until the pass end are skipped */
+    if (!c || !c->pipeline || !c->inPass) {
         return;
     }
     vkr_flush_barriers(c);

@@ -334,8 +334,14 @@ bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d)
         const VkRenderPass rp = vkr_renderpass_get(d);
         const VkFramebuffer fb = rp ? vkr_framebuffer_get(d) : VK_NULL_HANDLE;
         if (!fb) {
-            VKR_LOG("render pass: no VkRenderPass or framebuffer for %u colour target(s)%s",
-                    d->colorCount, d->hasDepth ? " and a depth target" : "");
+            static uint32_t s_beginFailed;
+            if (s_beginFailed < 8u) { /* the first 8 only; the pass's draws are then skipped */
+                s_beginFailed++;
+                VKR_LOG("render pass: no VkRenderPass or framebuffer for %u colour target(s)%s "
+                        "(the pass's draws are skipped)%s",
+                        d->colorCount, d->hasDepth ? " and a depth target" : "",
+                        s_beginFailed == 8u ? "; further such lines are not logged" : "");
+            }
             return false;
         }
         VkClearValue clear[VKR_RP_ATTACH];
