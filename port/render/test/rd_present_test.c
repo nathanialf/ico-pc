@@ -1416,6 +1416,67 @@ static void checkScales(void)
         s = before;
         applyWith(&s);
     }
+    /* downsampling (issue 149): in force with a scale or a fixed size, not
+     * at the "window" resolution or under the CRT filter; the
+     * supersampling measured against the GS grid (perPx = the scale), so
+     * at 4:3 in 1920x1440 4x + SSAA2 adds nothing (2 without it: 2048
+     * texels into 1920), 2x + SSAA4 draws 4x (8x without it), 1x + SSAA2
+     * draws 2x; 1x is in force and a no-op (DISPLAY is its GS size) */
+    {
+        const RdSettings before = s;
+        s.preset = RD_PRESET_ENHANCED;
+        s.aspect = 4.0f / 3.0f;
+        frameFor(s.aspect);
+        s.sceneWidth = s.sceneHeight = 0;
+        s.outputWidth = 1920;
+        s.outputHeight = 1440;
+        s.fullHeightScene = 0;
+        s.downsample = 1;
+        s.antiAlias = RD_AA_SSAA2;
+        s.sceneScale = 4.0f;
+        applyWith(&s);
+        CHECK(g_rd.downsample && g_rd.ssaa == 1.0f && g_rd.sceneSx == 4.0f && g_rd.sceneSy == 4.0f,
+              "scales: downsampled 4x + SSAA2 is 4x (%g, ssaa %g, down %d)", g_rd.sceneSx,
+              (double)g_rd.ssaa, (int)g_rd.downsample);
+        s.sceneScale = 2.0f;
+        s.antiAlias = RD_AA_SSAA4;
+        applyWith(&s);
+        CHECK(g_rd.downsample && g_rd.ssaa == 2.0f && g_rd.sceneSx == 4.0f,
+              "scales: downsampled 2x + SSAA4 is 4x (%g, ssaa %g)", g_rd.sceneSx,
+              (double)g_rd.ssaa);
+        s.downsample = 0;
+        applyWith(&s);
+        CHECK(!g_rd.downsample && g_rd.ssaa == 4.0f && g_rd.sceneSx == 8.0f,
+              "scales: 2x + SSAA4 without downsampling is 8x (%g, ssaa %g)", g_rd.sceneSx,
+              (double)g_rd.ssaa);
+        s.downsample = 1;
+        s.sceneScale = 1.0f;
+        s.antiAlias = RD_AA_SSAA2;
+        applyWith(&s);
+        CHECK(g_rd.downsample && g_rd.ssaa == 2.0f && g_rd.sceneSx == 2.0f,
+              "scales: downsampled 1x + SSAA2 is 2x (%g, ssaa %g)", g_rd.sceneSx,
+              (double)g_rd.ssaa);
+        s.antiAlias = RD_AA_OFF;
+        applyWith(&s);
+        CHECK(g_rd.downsample && g_rd.sceneSx == 1.0f,
+              "scales: downsampled 1x is in force at 1x (a no-op)");
+        s.sceneScale = 0.0f;
+        applyWith(&s);
+        CHECK(!g_rd.downsample, "scales: no downsampling at the window resolution");
+        s.sceneWidth = 2048;
+        s.sceneHeight = 1792;
+        applyWith(&s);
+        CHECK(g_rd.downsample, "scales: downsampling with a fixed size");
+        s.sceneWidth = s.sceneHeight = 0;
+        s.sceneScale = 4.0f;
+        s.crtMode = RD_CRT_SCANLINES;
+        s.crtStrength = 1.0f;
+        applyWith(&s);
+        CHECK(!g_rd.downsample && g_rd.sceneSx == 1.0f,
+              "scales: no downsampling under the CRT filter (1x)");
+        s = before;
+        applyWith(&s);
+    }
     s.aspect = 10.0f;
     applyWith(&s);
     CHECK(g_rd.outAspect == ICO_FRAME_ASPECT_MAX, "scales: the aspect is held to the maximum");
@@ -1830,11 +1891,19 @@ static void cpuReduce(const uint8_t *src, uint32_t sw, uint32_t sh, uint8_t *dst
     }
 }
 
-static uint8_t s_ssaaDisp[2048 * 2048 * 4], s_ssaaRef[1280 * 960 * 4], s_ssaaOut[1600 * 1200 * 4];
+static uint8_t s_ssaaDisp[2048 * 2048 * 4], s_ssaaRef[1600 * 1200 * 4], s_ssaaOut[1600 * 1200 * 4];
 
 /* the render passes the last ssaaRun's frame recorded, and its draws
  * above 1x (g_rd.above1xDraws) */
 static uint32_t s_ssaaPasses, s_ssaaA1x;
+
+/* ssaaRun's RdSettings.downsample; with it on, the run's downsampled
+ * DISPLAY (rd__read_present_downsample) in s_downOut, s_downW x s_downH,
+ * s_downOk when read */
+static int s_ssaaDown;
+static uint8_t s_downOut[512 * 512 * 4];
+static uint32_t s_downW, s_downH;
+static bool s_downOk;
 
 /* the rich frame at Enhanced, full height, 4:3 into outW x outH with the
  * anti-aliasing aa and scene scale scale: DISPLAY (into s_ssaaDisp when
@@ -1850,6 +1919,7 @@ static bool ssaaRun(int aa, float scale, uint32_t outW, uint32_t outH, int disp,
     s.outputWidth = outW;
     s.outputHeight = outH;
     s.antiAlias = (uint8_t)aa;
+    s.downsample = (uint8_t)s_ssaaDown;
     if (!rd_init(512, 512, &s, NULL)) {
         return false;
     }
@@ -1873,6 +1943,9 @@ static bool ssaaRun(int aa, float scale, uint32_t outW, uint32_t outH, int disp,
     uint32_t ow = 0, oh = 0, bw = 0, bh = 0;
     ok = ok && rd__read_present(s_ssaaOut, sizeof(s_ssaaOut), &ow, &oh) && ow == outW &&
          oh == outH && rd__last_present_box(&bw, &bh, box);
+    s_downW = s_downH = 0;
+    s_downOk = ok && s_ssaaDown &&
+               rd__read_present_downsample(s_downOut, sizeof(s_downOut), &s_downW, &s_downH);
     rd_destroy_texture(t);
     rd_shutdown();
     return ok;
@@ -1949,30 +2022,66 @@ static void checkSsaa(void)
           rhi_vk_validation_error_count());
 }
 
-/* Without anti-aliasing: a scaled scene with more than two texels a pixel
- * (4x, 2048 texels into a 640 x 480 box: 3.2 a pixel) is box-reduced as
- * the supersampling is, the present inside the box byte for byte DISPLAY
- * reduced on the CPU, one pass more than the same scale at 1.28 a pixel
- * (1600 x 1200: the box blit's one bilinear tap); at scale 1 into a small
- * window (512 into 320: 1.6 a pixel) the plain box blit stays, the same
- * passes as into a window larger than the frame (960 x 720). */
+/* The present inside box (of an output outW wide, s_ssaaOut) against
+ * DISPLAY (s_ssaaDisp, w x h) box-reduced on the CPU: the RGB bytes that
+ * differ, the worst difference in *worst; -1 when it cannot be compared */
+static int presentVsCpu(uint32_t outW, uint32_t w, uint32_t h, const RhiRect *box, int *worst)
+{
+    *worst = 0;
+    if (box->w == 0 || box->h == 0 || (size_t)box->w * 4u * box->h > sizeof(s_ssaaRef)) {
+        return -1;
+    }
+    cpuReduce(s_ssaaDisp, w, h, s_ssaaRef, box->w, box->h);
+    int bad = 0;
+    for (uint32_t y = 0; y < box->h; y++) {
+        for (uint32_t x = 0; x < box->w; x++) {
+            const uint8_t *g =
+                &s_ssaaOut[(((size_t)(box->y + (int32_t)y)) * outW + (size_t)box->x + x) * 4];
+            const uint8_t *c = &s_ssaaRef[((size_t)y * box->w + x) * 4];
+            for (int k = 0; k < 3; k++) {
+                const int e = abs((int)g[k] - (int)c[k]);
+                *worst = e > *worst ? e : *worst;
+                bad += e != 0;
+            }
+        }
+    }
+    return bad;
+}
+
+/* Without anti-aliasing: a scaled scene with more texels than the box has
+ * pixels on both axes is box-reduced as the supersampling is, the present
+ * inside the box byte for byte DISPLAY reduced on the CPU: 4x, 2048 texels
+ * into a 640 x 480 box (3.2 a pixel) and into 1600 x 1200 (1.28 a pixel,
+ * the box blit's one bilinear tap before issue 149), the same passes; at
+ * scale 1 into a small window (512 into 320: 1.6 a pixel) the plain box
+ * blit stays, the same passes as into a window larger than the frame
+ * (960 x 720). */
 static void checkAaOffReduce(void)
 {
     makeNoiseScene();
     uint32_t w = 0, h = 0;
     RhiRect box;
-    if (!ssaaRun(RD_AA_OFF, 4.0f, 1600, 1200, 0, &w, &h, &box)) {
+    if (!ssaaRun(RD_AA_OFF, 4.0f, 1600, 1200, 1, &w, &h, &box)) {
         CHECK(0, "aa off: the 4x run into 1600 x 1200");
         return;
     }
     const uint32_t passesLow = s_ssaaPasses;
+    {
+        int worstLow = 0;
+        const int badLow = presentVsCpu(1600, w, h, &box, &worstLow);
+        printf("  aa off 4x into 1600 x 1200: %ux%u -> box %ux%u, %d bytes differ, worst %d\n", w,
+               h, box.w, box.h, badLow, worstLow);
+        CHECK(badLow == 0,
+              "aa off 4x into 1600 x 1200: the present is DISPLAY box-reduced, byte for byte");
+    }
     if (!ssaaRun(RD_AA_OFF, 4.0f, 640, 480, 1, &w, &h, &box)) {
         CHECK(0, "aa off: the 4x run into 640 x 480");
         return;
     }
     const uint32_t passesHigh = s_ssaaPasses;
-    CHECK(passesHigh == passesLow + 1u,
-          "aa off: 3.2 texels a pixel adds the reduce's pass (%u, %u)", passesHigh, passesLow);
+    CHECK(passesHigh == passesLow,
+          "aa off: 3.2 and 1.28 texels a pixel both take the reduce's pass (%u, %u)", passesHigh,
+          passesLow);
     CHECK(w == 2048 && box.w > 0 && box.h > 0 && box.w * 4u * box.h <= sizeof(s_ssaaRef),
           "aa off: DISPLAY %ux%u, box %ux%u", w, h, box.w, box.h);
     if (w == 2048 && box.w > 0 && box.h > 0 && box.w * 4u * box.h <= sizeof(s_ssaaRef)) {
@@ -2006,6 +2115,117 @@ static void checkAaOffReduce(void)
     CHECK(s_ssaaPasses == passesBig, "aa off 1x: a small window keeps the plain blit (%u, %u)",
           s_ssaaPasses, passesBig);
     CHECK(rhi_vk_validation_error_count() == 0, "aa off: %u validation errors",
+          rhi_vk_validation_error_count());
+}
+
+/* Downsampling (RdSettings.downsample, issue 149), the rich frame at
+ * Enhanced, full height (ssaaRun): at 2x and 4x into 640 x 480 and 2x into
+ * 512 x 384, DISPLAY is byte for byte the run without it; the downsampled
+ * DISPLAY (512 x 512, the 1x full-height DISPLAY's size) is DISPLAY
+ * box-reduced on the CPU byte for byte (aa_reduce_ps); the passes are the
+ * run's without it (the downsample in place of the window's reduce, which
+ * the scaled scene takes there).  4x + SSAA2 is 4x (the supersampling
+ * measured against the GS grid) and 1x + SSAA2 is 2x: both presents byte
+ * for byte the downsampled run's.  On smooth gradients the downsampled
+ * presents are within a few LSB of the 1x present. */
+static uint8_t s_ds1x[640 * 480 * 4];
+
+static void checkDownsample(void)
+{
+    static const struct {
+        float scale;
+        uint32_t outW, outH;
+    } cases[] = {{2.0f, 640, 480}, {4.0f, 640, 480}, {2.0f, 512, 384}};
+
+    makeNoiseScene();
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        const float sc = cases[i].scale;
+        const uint32_t ow = cases[i].outW, oh = cases[i].outH;
+        uint32_t w = 0, h = 0, w2 = 0, h2 = 0;
+        RhiRect box;
+        s_ssaaDown = 0;
+        if (!ssaaRun(RD_AA_OFF, sc, ow, oh, 1, &w, &h, &box)) {
+            CHECK(0, "downsample %zu: the run without it", i);
+            continue;
+        }
+        const uint64_t dispOff = fnv(s_ssaaDisp, (size_t)w * h * 4);
+        const uint32_t passesOff = s_ssaaPasses;
+        s_ssaaDown = 1;
+        const bool ok = ssaaRun(RD_AA_OFF, sc, ow, oh, 1, &w2, &h2, &box);
+        s_ssaaDown = 0;
+        if (!ok) {
+            CHECK(0, "downsample %zu: the downsampled run", i);
+            continue;
+        }
+        const uint32_t passesDown = s_ssaaPasses;
+        const uint64_t presentDown = fnv(s_ssaaOut, (size_t)ow * oh * 4);
+        CHECK(w == w2 && h == h2 && fnv(s_ssaaDisp, (size_t)w2 * h2 * 4) == dispOff,
+              "downsample %zu: DISPLAY %ux%u byte for byte the run without it", i, w2, h2);
+        CHECK(s_downOk && s_downW == 512 && s_downH == 512,
+              "downsample %zu: the downsampled DISPLAY is 512x512 (%d, %ux%u)", i, (int)s_downOk,
+              s_downW, s_downH);
+        CHECK(passesDown == passesOff, "downsample %zu: %u passes, %u without it", i, passesDown,
+              passesOff);
+        uint32_t rd4[4] = {0}, rw4[4] = {0};
+        CHECK(rd__last_present_reduce(rd4, rw4) && rd4[0] == w2 && rd4[1] == h2 && rd4[2] == 512 &&
+                  rd4[3] == 512 && rw4[0] == 0,
+              "downsample %zu: the present noted %ux%u -> %ux%u, no window reduce (%u)", i, rd4[0],
+              rd4[1], rd4[2], rd4[3], rw4[0]);
+        if (s_downOk && s_downW == 512 && s_downH == 512) {
+            cpuReduce(s_ssaaDisp, w2, h2, s_ssaaRef, 512, 512);
+            int bad = 0;
+            for (size_t k = 0; k < (size_t)512 * 512 * 4; k++) {
+                bad += (k & 3) != 3 && s_downOut[k] != s_ssaaRef[k];
+            }
+            printf("  downsample %zu: %gx %ux%u -> 512x512, %d bytes differ from the CPU's\n", i,
+                   (double)sc, w2, h2, bad);
+            CHECK(bad == 0, "downsample %zu: DISPLAY box-reduced, byte for byte", i);
+        }
+        if (sc == 4.0f) {
+            s_ssaaDown = 1;
+            const bool okS = ssaaRun(RD_AA_SSAA2, sc, ow, oh, 0, &w2, &h2, &box);
+            s_ssaaDown = 0;
+            CHECK(okS && fnv(s_ssaaOut, (size_t)ow * oh * 4) == presentDown,
+                  "downsample %zu: 4x + SSAA2 presents the downsampled 4x byte for byte", i);
+        } else if (ow == 640) {
+            s_ssaaDown = 1;
+            const bool okS = ssaaRun(RD_AA_SSAA2, 1.0f, ow, oh, 0, &w2, &h2, &box);
+            s_ssaaDown = 0;
+            CHECK(okS && w2 == 1024 && fnv(s_ssaaOut, (size_t)ow * oh * 4) == presentDown,
+                  "downsample %zu: 1x + SSAA2 presents the downsampled 2x byte for byte (%ux%u)", i,
+                  w2, h2);
+        }
+    }
+    /* smooth gradients: the downsampled presents near the 1x present */
+    makeSmoothScene();
+    uint32_t w = 0, h = 0;
+    RhiRect box;
+    if (!ssaaRun(RD_AA_OFF, 1.0f, 640, 480, 0, &w, &h, &box)) {
+        CHECK(0, "downsample: the 1x run");
+        return;
+    }
+    memcpy(s_ds1x, s_ssaaOut, sizeof(s_ds1x));
+    const uint32_t passes1x = s_ssaaPasses;
+    for (int k = 0; k < 2; k++) {
+        const float sc = k ? 4.0f : 2.0f;
+        s_ssaaDown = 1;
+        const bool ok = ssaaRun(RD_AA_OFF, sc, 640, 480, 0, &w, &h, &box);
+        s_ssaaDown = 0;
+        if (!ok) {
+            CHECK(0, "downsample: the smooth %gx run", (double)sc);
+            continue;
+        }
+        int worst = 0;
+        for (size_t n = 0; n < sizeof(s_ds1x); n++) {
+            const int e = (n & 3) == 3 ? 0 : abs((int)s_ssaaOut[n] - (int)s_ds1x[n]);
+            worst = e > worst ? e : worst;
+        }
+        printf("  downsample smooth %gx: worst %d LSB from the 1x present; %u passes, 1x %u\n",
+               (double)sc, worst, s_ssaaPasses, passes1x);
+        CHECK(worst <= 4, "downsample smooth %gx: within 4 LSB of the 1x present (%d)", (double)sc,
+              worst);
+    }
+    CHECK(rhi_vk_validation_error_count() == 0, "downsample: %u validation errors",
           rhi_vk_validation_error_count());
 }
 
@@ -5167,6 +5387,7 @@ int main(int argc, char **argv)
     checkScale2();
     checkSsaa();
     checkAaOffReduce();
+    checkDownsample();
     checkFullHeight1x();
     checkSceneLimit();
     checkWide169();
