@@ -1099,6 +1099,15 @@ typedef struct RhiStats {
      * takes the whole wait as the display's (port/platform/window_host.c
      * present_once, pace_policy.h PaceBudget) */
     bool fenceWaitsHoldDisplay;
+    /* Direct3D 11 (d3d11_cmd.c d11_last_draw_text): a function giving the
+     * last draw recorded as one line of text (the viewport, scissor,
+     * targets, topology, the pipeline's blend, depth and rasterizer state,
+     * the constant buffer windows, the feature level and options; NULL
+     * before the first draw), which the self-tests' failure lines append
+     * (rd_blend_selftest.c, rd_fog_path.c: issue 126, both read back the
+     * cleared target).  A function, so the text is made only when a line
+     * wants it; NULL on the other backends */
+    const char *(*lastDrawText)(void);
 } RhiStats;
 
 void rhi_get_stats(RhiStats *out);
