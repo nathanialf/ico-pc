@@ -63,6 +63,33 @@ sample patterns are centred on the pixel centre: on a plane the smallest sample 
 the centre's depth, so a surface the game draws again after the close with GEQUAL passes where it
 passed at 1x.
 
+## The crack filler after the resolve
+
+The resolve closes gaps onto the clear thinner than half a pixel, not wider ones, and not a farther
+surface seen through a seam: a pixel any of whose samples lies on that surface takes its depth
+(the smallest covered sample), and the fog paints it at that surface's deeper level. Above 1x those pixels run along the seams as
+dotted lines of mist, as without MSAA before the crack filler (issue 26 with MSAA on: a ledge's
+top edge). The crack filler ([RENDER.md](RENDER.md#crack-filling-above-1x),
+`port/render/rd_crack_fill.c`) therefore runs on the resolved picture: `doFog`
+(`port/render/rd_replay.c`) passes the epoch's state at the fog (`RD_CRACK_MSAA_OPEN`,
+`RD_CRACK_MSAA_RESOLVED` or `RD_CRACK_MSAA_NONE`, `port/render/rd_replay.h`). In gameplay the
+epoch has closed at the shadow count's pass in list 3, so the filler reads SCENE's single-sampled
+colour and depth as `msaa_resolve_ps` wrote them (SCENE's own textures: `depthSampled` is as SCENE
+was made) and fills exactly as at the same scale without MSAA. The rules agree: the game clears
+SCENE's depth to GS Z 0, which is depth 0.0 (`rd__gs_depth`), the epoch's `clearDepth`, so a pixel
+the resolve leaves uncovered (the smallest of all its samples, the clear's) is the filler's
+"unwritten" depth 0, and a pixel on a farther surface is the discontinuity form's crack. While the
+epoch is still open at the fog (a frame without a shadow, where the fog may run per sample) the
+filler is not drawn: its snapshot of SCENE would go through `rd__transition` and close the epoch
+before the per-sample fog. Without MSAA and under the Original preset or at 1x nothing changes.
+
+Before the change, on lavapipe with the existing `rd_replay_tool --enhanced --stats`, the corpus
+room `lightning/rd-00300.rddump`: at 2x `crack fill on: 1 passes, 104 pixels filled` without
+anti-aliasing and `0 passes, 0 pixels filled ... 1 fogged replays above 1x not filled` with
+`--aa msaa4` (`not drawn on SCENE at scale 2x2: MSAA is asked for ...`, the epoch closed at list
+3); at 4x 324 and 0; `queen/rd-00200.rddump` 19 and 0 at 2x, 66 and 0 at 4x. `--aa msaa2` draws as
+off on lavapipe (it offers 4 samples only).
+
 ## The integer mean
 
 Each channel's mean is integer: the k samples' 8-bit values summed and `(sum + k / 2) / k`, so
@@ -102,6 +129,8 @@ make either module offers no MSAA count, the supersampling ones stay (`port/rend
 | `window: msaa: N samples, resolves R per replay, the last closed at list L` | the 10 s summary (`port/platform/window_host.c`); R is 1.0 or below |
 | `fog: in the MSAA epoch on the resolved picture (each pixel's smallest covered sample unless more than half its samples were uncovered: ...)` | once a run (`port/render/rd_replay.c` (`doFog`)) |
 | `msaa: msaa_resolve_ps was not made on this device ...` | start-up, a module missing |
+| `rd: crack fill: on above 1x (...); [dev] crack_fill = false turns it off (drawn after the MSAA resolve)` | the first fill on the resolved picture (`port/render/rd_crack_fill.c`); the 10 s summary adds `; A after the MSAA resolve`, `rd_replay_tool --stats` `; F fills after the MSAA resolve` |
+| `rd: crack fill: not drawn on SCENE at scale SXxSY: the MSAA epoch is still open at the fog (...) (reported once)` | a fog inside the open epoch |
 
 ## Tests
 
@@ -111,7 +140,12 @@ shadow reset, the close at list 3, SCENE byte for byte the frame's without the r
 than without anti-aliasing, the silhouettes still anti-aliased), beside the epoch's other cases.
 `rd_crack_msaa` (`port/render/test/rd_crack_test.c` `msaa`): along the crack the MSAA4 picture
 holds at most 5 % of the clear's-depth texels of the frame without anti-aliasing, and the slit
-wider than a pixel keeps the clear's fog.
+wider than a pixel keeps the clear's fog; its frame has no shadow, so the epoch is open at the fog
+and the filler's skip line is matched. `rd_crack_resolved_msaa2` and `rd_crack_resolved_msaa4`
+(`port/render/CMakeLists.txt`, `port/render/test/rd_crack.cmake`): the replay tool on the corpus
+room `lightning/rd-00300.rddump` at Enhanced 2x with `--aa msaa2` / `msaa4 --stats`, the fill drawn
+after the resolve with more than 0 pixels filled (SKIP without the dump or where the count is not
+offered).
 
 ## Measurements
 
