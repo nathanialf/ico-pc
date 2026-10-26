@@ -1083,7 +1083,7 @@ if(ICO_RUN_TESTS)
                      -P "${_crk}")
     add_test(NAME rd_crack_msaa
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=2|msaa"
-                     "-DEXPECT=rd: crack fill: not drawn on SCENE at scale 2x2: MSAA is asked for \\(its resolve gives a crack's pixel the surfaces beside it unless more than half its samples lie in the crack"
+                     "-DEXPECT=rd: crack fill: not drawn on SCENE at scale 2x2: the MSAA epoch is still open at the fog \\(a frame without a shadow: the fog may read the multisampled scene; the filler runs after the MSAA resolve"
                      -P "${_crk}")
     add_test(NAME rd_crack_off
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=2
@@ -1145,6 +1145,27 @@ if(ICO_RUN_TESTS)
                      -P "${_crk}")
     set_tests_properties(rd_replay_tool_crack PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                          FIXTURES_REQUIRED rd_dump)
+    # the filler after the MSAA resolve (issue 26 with MSAA on): a corpus
+    # room (lightning rd-00300, machine-local, SKIP without it) whose MSAA
+    # epoch closes at the shadow count's pass in list 3, before the fog, at
+    # Enhanced 2x with --aa msaa2 and msaa4: the state line says the fill
+    # was drawn after the resolve, the --stats line counts one fill pass
+    # with more than 0 pixels filled, none left unfilled, that fill after
+    # the resolve; SKIP where the device does not offer the count (no
+    # "rd: msaa: N samples" line: lavapipe offers 4 only)
+    set(_crk_room "${CMAKE_SOURCE_DIR}/build-host/tmp/corpus/dumps/lightning/rd-00300.rddump")
+    foreach(_s 2 4)
+        add_test(NAME rd_crack_resolved_msaa${_s}
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                         "-DARGS=${_crk_room}|${CMAKE_CURRENT_BINARY_DIR}/rd_crack_resolved_msaa${_s}.png|--enhanced|--resolution|2x|--aa|msaa${_s}|--stats"
+                         "-DNEED_FILE=${_crk_room}"
+                         "-DNEED=rd: msaa: ${_s} samples"
+                         "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail} \\(drawn after the MSAA resolve\\)"
+                         "-DEXPECT2=stats: crack fill on: 1 passes, [1-9][0-9]* pixels filled \\(1 replays counted; scale 2x2, reach 1x1 texels; 0 fogged replays above 1x not filled; 0 fills inside the scene pass with the local fog; 1 fills after the MSAA resolve\\)"
+                         "-DDENY=rd: crack fill: not drawn on SCENE" -P "${_crk}")
+        set_tests_properties(rd_crack_resolved_msaa${_s} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                                     TIMEOUT 600)
+    endforeach()
     # the fog on the depth's words copied out through a buffer
     # (ICO_RD_FOG_PATH=buffer, rd_fog_path.c: the fallback of a device whose
     # depth reads fail), on D32S8 and on D24S8 (the top byte masked off):
