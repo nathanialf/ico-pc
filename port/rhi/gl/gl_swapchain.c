@@ -135,13 +135,16 @@ bool rhi_present_statistics(uint64_t *presentCount, uint64_t *presentRefresh, ui
 
 /* The backbuffer into framebuffer 0, y flipped (and stretched to the
  * window's size if it has changed since the last resize), with the scissor
- * test off (a blit honours it); the framebuffer bindings and the scissor
- * test are put back for the command code. */
+ * test off (a blit honours it); the scissor test is put back for the
+ * command code.  Framebuffer 0 is left bound for read and draw, its read
+ * buffer GL_BACK, through SDL_GL_SwapWindow: PC port: a capture hook (OBS's
+ * game capture) reads the bound read framebuffer's GL_BACK at the swap, and
+ * with the last pass's framebuffer still bound it captured that pass's
+ * top-down texture (upside down).  Every pass begin and every copy binds the
+ * framebuffer it uses (gl_cmd.c gl_fbo_get, gl_cmd_activate), so
+ * nothing relies on the binding surviving the present. */
 static void gl_blit_backbuffer(const GlTexture *t, int ww, int wh)
 {
-    GLint prevRead = 0, prevDraw = 0;
-    glf.GetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevRead);
-    glf.GetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prevDraw);
     const GLboolean scissor = glf.IsEnabled(GL_SCISSOR_TEST);
     glf.BindFramebuffer(GL_READ_FRAMEBUFFER, g_gl.scratchRead);
     glf.FramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t->name, 0);
@@ -158,8 +161,8 @@ static void gl_blit_backbuffer(const GlTexture *t, int ww, int wh)
         glf.Enable(GL_SCISSOR_TEST);
     }
     glf.FramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
-    glf.BindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)prevRead);
-    glf.BindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)prevDraw);
+    glf.BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glf.ReadBuffer(GL_BACK);
 }
 
 void rhi_present(void)
