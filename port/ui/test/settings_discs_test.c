@@ -69,6 +69,9 @@ static void checkTitleRows(const Expect *e)
           "%s title: no Film effect, Players or Brightness", e->slug);
     CHECK(ui_settings_opt_shown(UI_OPT_EXTRAS_MUSIC) && ui_settings_opt_shown(UI_OPT_EXTRAS_MODELS),
           "%s title: Extras > Music and Models", e->slug);
+    CHECK(ui_settings_opt_shown(UI_OPT_EXTRAS_CREDITS) == e->credits,
+          "%s title: Extras > Credits %d, want %d", e->slug,
+          ui_settings_opt_shown(UI_OPT_EXTRAS_CREDITS), e->credits);
     CHECK(ui_settings_opt_shown(UI_OPT_MENU_LANGUAGE) && ui_settings_opt_shown(UI_OPT_STICK_FIX) &&
               ui_settings_opt_shown(UI_OPT_SKIP_OPENING) && ui_settings_opt_shown(UI_OPT_YORDA),
           "%s title: Menu language, stick fix, Skip the opening, Yorda", e->slug);
@@ -123,6 +126,7 @@ int main(int argc, char **argv)
     CHECK(e != NULL && ico_region_select(slug) == 0, "the %s disc", slug);
     if (e != NULL) {
         CHECK(ico_region_cur()->has_hold_film_players == e->holdFilmPlayers &&
+                  ico_region_cur()->credits_staff_packs == e->credits &&
                   ico_region_cur()->has_50hz_row == e->hz50 &&
                   ico_region_cur()->has_game_language == e->language &&
                   ico_region_cur()->gflag_new_game == e->startFlag,

@@ -2153,6 +2153,17 @@ static int optShown(int opt, int link)
     if (opt == UI_OPT_GPU_REMOVE) {
         return s_gpuHostSet && gpuSelected() >= 0;
     }
+    if (opt == UI_OPT_EXTRAS_CREDITS && !ico_region_cur()->credits_staff_packs) {
+        /* PC port: the June 2001 demo's DATA.DF holds no staff scenes
+           (region.h credits_staff_packs), so the playback could only refuse */
+        static int creditsLogged;
+        if (!creditsLogged) {
+            creditsLogged = 1;
+            fprintf(stderr, "extras: no Credits row on %s (its disc holds no staff scenes)\n",
+                    ico_region_cur()->disc_id);
+        }
+        return 0;
+    }
     if (isExtrasOpt(opt)) {
         return onTitle(); /* the Extras row itself shows from both */
     }
