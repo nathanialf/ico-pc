@@ -1659,21 +1659,48 @@ endif()
 # FIXP end
 
 # VK11: the render tests on a Vulkan 1.1 driver's absences (ICO_VK_FAKE_API=1.1,
-# port/rhi/vk/vk_device.c; issue 145): so far the submissions tracked by the
-# fence ring instead of the timeline semaphore (port/rhi/vk/vk_sync.c).  The
-# expectations are the Vulkan runs' own, byte for byte (the sync path changes
-# no command a list records).  Label vk11: ctest -j1 -L vk11 (with port/rhi's
-# rhi_vk_vk11 and rhi_vk_swapchain_vk11).
+# port/rhi/vk/vk_device.c; issue 145): the submissions tracked by the fence ring
+# instead of the timeline semaphore (port/rhi/vk/vk_sync.c), the render passes as
+# VkRenderPass and VkFramebuffer objects instead of dynamic rendering
+# (port/rhi/vk/vk_renderpass.c), no local read, no driver properties, no image
+# format list.  The _vk11ext pair runs ICO_VK_FAKE_API=1.1ext (a 1.1 driver with
+# the extensions: the KHR timeline semaphore and dynamic rendering).  The
+# expectations are the Vulkan runs' own, byte for byte (neither path changes a
+# pixel); rd_perf_vk11's pass and barrier counts are rd_perf's.  Label vk11:
+# ctest -j1 -L vk11 (with port/rhi's rhi_vk_vk11 and rhi_vk_swapchain_vk11).
 if(ICO_RUN_TESTS)
     set(_env_vk11 ${_env} "ICO_VK_FAKE_API=1.1")
     set(_v11 "${CMAKE_CURRENT_BINARY_DIR}/vk11")
     file(MAKE_DIRECTORY "${_v11}")
     add_test(NAME rd_pixel_vk11 COMMAND rd_pixel_test "${_v11}")
     add_test(NAME rd_present_vk11 COMMAND rd_present_test "${_v11}")
-    set_tests_properties(rd_pixel_vk11 rd_present_vk11
+    add_test(NAME rd_crt_vk11 COMMAND rd_crt_test "${_v11}")
+    add_test(NAME rd_debug_vk11 COMMAND rd_debug_test "${_v11}")
+    add_test(NAME rd_raw_vk11 COMMAND rd_raw_test)
+    add_test(NAME rd_fog_vk11 COMMAND rd_fog_test)
+    add_test(NAME rd_shadow_vk11 COMMAND rd_shadow_test)
+    add_test(NAME rd_interp_vk11 COMMAND rd_interp_test)
+    add_test(NAME rd_msaa_vk11 COMMAND rd_msaa_test)
+    add_test(NAME rd_perf_vk11 COMMAND rd_perf_test)
+    set(_vk11_tests rd_pixel_vk11 rd_present_vk11 rd_crt_vk11 rd_debug_vk11 rd_raw_vk11
+                    rd_fog_vk11 rd_shadow_vk11 rd_interp_vk11 rd_msaa_vk11 rd_perf_vk11)
+    # rd_mesh's four shards (the disc's models; 77 without the disc image)
+    foreach(_k RANGE 1 4)
+        add_test(NAME rd_mesh_vk11.${_k}of4 COMMAND rd_mesh_test "${ICO_DISC_IMAGE}" --shard ${_k}/4)
+        list(APPEND _vk11_tests rd_mesh_vk11.${_k}of4)
+    endforeach()
+    set_tests_properties(${_vk11_tests}
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_v11}"
                                     ENVIRONMENT "${_env_vk11}")
-    foreach(_t rd_pixel_vk11 rd_present_vk11)
+    set(_env_vk11ext ${_env} "ICO_VK_FAKE_API=1.1ext")
+    set(_v11x "${CMAKE_CURRENT_BINARY_DIR}/vk11ext")
+    file(MAKE_DIRECTORY "${_v11x}")
+    add_test(NAME rd_pixel_vk11ext COMMAND rd_pixel_test "${_v11x}")
+    add_test(NAME rd_present_vk11ext COMMAND rd_present_test "${_v11x}")
+    set_tests_properties(rd_pixel_vk11ext rd_present_vk11ext
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_v11x}"
+                                    ENVIRONMENT "${_env_vk11ext}")
+    foreach(_t ${_vk11_tests} rd_pixel_vk11ext rd_present_vk11ext)
         get_test_property(${_t} LABELS _labels)
         set_tests_properties(${_t} PROPERTIES LABELS "${_labels};vk11")
     endforeach()
