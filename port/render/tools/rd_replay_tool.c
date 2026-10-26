@@ -50,6 +50,10 @@
  *   --resolution R        the scene's resolution: WxH or Nx (default: the
  *                         --present box with --enhanced, else the GS size)
  *   --full-height         the full-height scene
+ *   --downsample          Downsampling: To original size (RdSettings.downsample):
+ *                         with a --resolution above 1x, DISPLAY box-averaged
+ *                         to its GS size before the present, which then
+ *                         draws it as at 1x; --stats names the reduce
  *   --full-pixel          the reduction draws the whole frame: no black border
  *   --border-mask         the game's Full pixel off: the same picture, the
  *                         border masked over it at present (rd__border_mask)
@@ -1440,7 +1444,8 @@ int main(int argc, char **argv)
                 "       [--loss-bisect] [--passes A[-B]] [--draws A[-B]] [--mask-marks]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
-                "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n",
+                "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n"
+                "       [--downsample (with --resolution above 1x)]\n",
                 argv[0]);
         return 1;
     }
@@ -1495,6 +1500,8 @@ int main(int argc, char **argv)
             s.preset = RD_PRESET_ENHANCED;
         } else if (strcmp(argv[i], "--full-height") == 0) {
             s.fullHeightScene = 1;
+        } else if (strcmp(argv[i], "--downsample") == 0) {
+            s.downsample = 1;
         } else if (strcmp(argv[i], "--full-pixel") == 0) {
             s.fullPixel = 1;
         } else if (strcmp(argv[i], "--border-mask") == 0) {
@@ -1975,6 +1982,19 @@ int main(int argc, char **argv)
          * static */
         printf("%s: stats: %u dynamic state sets (dynamic depth %s, blend %s)\n", dump,
                pr->dynamicSets, g_rd.dynDepth ? "on" : "off", g_rd.dynBlend ? "on" : "off");
+        /* the present's box reduces (rd_present.c): the downsample to the
+         * GS size (--downsample) and the reduce to the window's box */
+        uint32_t rdn[4], rwn[4];
+        if (pw && rd__last_present_reduce(rdn, rwn)) {
+            char dn[64] = "off", wn[64] = "off";
+            if (rdn[2]) {
+                snprintf(dn, sizeof(dn), "%ux%u -> %ux%u", rdn[0], rdn[1], rdn[2], rdn[3]);
+            }
+            if (rwn[2]) {
+                snprintf(wn, sizeof(wn), "%ux%u -> %ux%u", rwn[0], rwn[1], rwn[2], rwn[3]);
+            }
+            printf("%s: stats: present: downsample %s, window reduce %s\n", dump, dn, wn);
+        }
         /* the tiler passes (rd_replay.c: DATE through the stencil bit, the
          * fog's local read, the blur pairs folded) */
         printf("%s: stats: DATE snapshots %u, DATE stencil draws %u (%u setups); fog local draws "
