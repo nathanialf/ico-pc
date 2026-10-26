@@ -87,7 +87,8 @@ The product file is the game's `McProductFile` record (`ico2/common/include/type
 file summaries, the sound, output, vibration and control options, the pad configuration, the
 current file and the serial, then on the European disc `cameraMove` (`NonLinearCameraMove`, the
 language) at 0x1E8 and `palMode` (`systemStatus[0]`, 50 or 60 Hz) at 0x1EC. `controlType` is written from `optionControlType` but not read back into it: `[gameplay] hold_type`
-decides (`ico2/fumi/ios/mcard.c` (`gameblock_read`)). The Japanese disc's
+decides (`ico2/fumi/ios/mcard.c` (`gameblock_read`), and on the 2001 discs, whose record has no
+`controlType`, `gameblock_read_ntscaug6` and `gameblock_read_jun26`). The Japanese disc's
 record is the same fields up to 0x1E8 without those two words (upstream's
 `ico2/common/include/typedef.h`, the `VERSION_JPN` arm of `McProductFile`, aligned 8, against
 the European arm's 16). The one record in memory is the European layout on every disc; the

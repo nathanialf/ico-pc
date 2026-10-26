@@ -217,7 +217,8 @@ original game's behaviour (`port/game/options.h`, header comment).
 | `mirror` | bool | `false` | mirrored play, the value a run starts from until New Game or a load |
 | `natural_chains` | bool | `false` | a chain let down keeps its links' size |
 | `skip_opening` | bool | `false` | the boot starts at the title screen, without the Sony presents sign and the opening scene (from the next start); a pad recording's header records it |
-| `hold_type` | string | `"hold"` | `"hold"`: keep R1 held to hold Yorda's hand (the game's Hold type A); `"toggle"`: press R1 once to take it and again to let go (B). Wins over the memory card's `controlType`; another word reads as `"hold"` and is logged once. A pad recording's header records it |
+| `hold_type` | string | `"disc"` | `"disc"`: the disc's own way (A on the European, Japanese, Korean and Asian discs; B on the North American disc, the August 2001 preview and the June 2001 demo); `"hold"`: keep R1 held to hold Yorda's hand (the game's Hold type A); `"toggle"`: press R1 once to take it and again to let go (B). `"hold"` is read as a choice only beside `hold_type_chosen = true`, else as `"disc"`: a bare `"hold"` is the old first-run text, which every file written before `"disc"` existed holds. Wins over the memory card's `controlType`; another word reads as `"disc"` and is logged once. A pad recording's header records it |
+| `hold_type_chosen` | bool | absent | written `true` with every Hold type choice from Options; it makes a `"hold"` the player's A rather than the old first-run text. A pad recording's header records it |
 | `developer_mode` | bool | `false` | the development build's debug menu and options |
 
 ### [variants]

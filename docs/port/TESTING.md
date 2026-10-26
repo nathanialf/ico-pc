@@ -119,7 +119,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 ### port/config/test, port/null/test, port/save/test
 
 - `config_test.c`: `config.toml`'s reader and writer, round trips, the ini over `config.toml` over
-  default precedence, the first-run template (Hold type `hold`, `effect_motion_blur_mode =
+  default precedence, the first-run template (Hold type `disc`, no `hold_type_chosen`, `effect_motion_blur_mode =
   "original"`, the touch comments naming `format = 2`, the 0.7 to 3.0 size and the words `hidden`
   and `off`; `touch.format` and a `[touch.full]` line written and read back), the language answer, `[game] disc` (`auto`, the slugs, an unknown value as
   auto logged once a load) and `[game] last_disc` (read, written, not in the template), the wall
@@ -141,9 +141,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the other disc's `.psu` beside their own ([SAVES.md](SAVES.md#tests)). Part B lays each disc's record out byte by byte
   and pins every row's `mc_save_dir` to the game's own `iOSMcSaveSeg_*` name
   ([SAVES.md](SAVES.md#the-seven-discs)). A load reads `optionControlType` from `[gameplay]
-  hold_type`, not from the card's `controlType`; on the three 2001 discs the load does not touch it,
-  nor `optionScreenMode`, `girlControlMode` or the record's `fileNo` and `serial`, which the card
-  does not hold.
+  hold_type`, not from the card's `controlType` (no key: the disc's own, 0 on the four A discs, 1
+  on the 2001 discs; `toggle` 1 and a chosen `hold` 0 on every disc); on the three 2001 discs the
+  load does not touch `optionScreenMode`, `girlControlMode` or the record's `fileNo` and `serial`,
+  which the card does not hold.
 
 ### port/core/test
 
@@ -285,8 +286,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   dynamic pool empty and again with every motion loaded (some offered then).
 - `model_viewer_headless.cmake` with `model_viewer_pad.txt`: the headless game driven from boot to
   the first model, an animation and back (`model_viewer_headless`).
-- `options_test.c`: the gameplay options' defaults and setters (Hold type: `hold` by default, `toggle`
-  from the file, an unknown word as `hold`), the video effects' keys (Water
+- `options_test.c`: the gameplay options' defaults and setters (Hold type: the disc's own by default, `toggle`
+  from the file, an unknown word as the disc's own; `test_hold_discs` selects each of the seven
+  discs and checks the resolve: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 for no key, `"disc"`, a
+  bare `"hold"` and `hold_type_chosen = false`, A for a chosen `"hold"`, B for `"toggle"`, and the
+  store's two keys), the video effects' keys (Water
   reflections' `effect_water_sharp` off by default, saved, outside the preset; Motion blur's
   `effect_motion_blur_mode`: `"original"` with no key, `"original"` and `"smooth"` read in any
   case, an unknown word as `"original"`, Smooth only with the switch on for the getter, kept
@@ -1038,8 +1042,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   row and the page fitting from both menus; `settings_test.c` also
   `settings_extra_test.c`'s `testGraphicsApi` (Options > Graphics: the link hidden with no renderer names and with one, shown after Effects with four; the Graphics API row's value text and the `video.backend` key through Right round Vulkan, OpenGL, Direct3D 12, Direct3D 11 and Automatic, Left wrapping, the key saved after leaving the page, an unlinked value shown as written and stepped from Automatic) and `testGraphicsApply` (Graphics > Apply over a fake `UiGraphicsHost` running `vulkan`: Apply hidden without a host, for Automatic and Vulkan, with one renderer, shown for OpenGL with its note; Cross asks for `opengl` once; the countdown's Keep and Revert alone with the cursor on Revert and the note counting 10 then 9 s; 600 `ui_settings_vsync` calls at 60 Hz ask for `vulkan` with the timeout reason and put the value back to Automatic; Keep calls `kept()` and saves `[video] backend = "opengl"`; Revert and Triangle ask for the backend that ran and put the value back; a failed answer's popup names both renderers and puts the value the page found back (no Apply then); a refused one shows nothing and keeps the choice; a pending one is polled every frame with Cross ignored until it answers; `ui_settings_save_on_quit` during the countdown writes the value the page found, the countdown going on, and Keep then saves the choice; Automatic with the host's `automatic()` naming OpenGL offers no Apply while OpenGL runs and offers it on Vulkan; the strings translated in every language) and `settings_test.c`'s `testBuild` (the Main page's seventeen rows and the Graphics page's five: Graphics API, Apply, Keep, Revert, Back); the Main page's row lists in the settings tests read 20 rows; `settings_extra_test.c`'s Graphics driver case (`testGpuDriver`, a fake host) checks the seven answers' popups (picker not opened, no picker app, file unreadable among them) and the Add from the drivers folder row: hidden at 0 zips, shown at 2, Left and Right going round the names, Cross calling `installFileBegin` once for the shown zip with a second Cross ignored while it runs, the poll's popup; presses Right in photo mode through Deja vu and checks the popup's words (`ui__photo_film_word`)
   and holds the fixed row lists of Controls (14 rows) and Touch screen (9 rows);
-  `settings_extra_test.c` opens the Touch screen page (`testTouchPage`: the link only with a touch screen, the three overlay rows' values and save, both pages fitting from both entries) and the Edit layout page over a fake editor host and a real editor (`testTouchEditorPage`: open, Back to the Edit layout row with the edits kept, locked while Touch controls is Off or without a host, Snap to grid and Grid size saved as `touch.snap` and `touch.grid`, Reset layout and Reset all layouts), and steps Controls > Hold type from the title and the pause menu, checks the saved
-  `gameplay.hold_type` and that `ui_settings_install` sets `optionControlType` from it (`testHoldType`),
+  `settings_extra_test.c` opens the Touch screen page (`testTouchPage`: the link only with a touch screen, the three overlay rows' values and save, both pages fitting from both entries) and the Edit layout page over a fake editor host and a real editor (`testTouchEditorPage`: open, Back to the Edit layout row with the edits kept, locked while Touch controls is Off or without a host, Snap to grid and Grid size saved as `touch.snap` and `touch.grid`, Reset layout and Reset all layouts), and steps Controls > Hold type from the title and the pause menu (the disc's own first, then A, then B), checks the saved
+  `gameplay.hold_type` and `hold_type_chosen` and that `ui_settings_install` sets `optionControlType` from it, a bare `"hold"` (the old first-run text) as the disc's own (`testHoldType`),
   steps Effects > Water reflections between Original and Sharp, checks its
   note, its key and the page's fourteen rows (`testWaterReflections`), and Main's Disc row
   (`testDiscRow`: shown with more than one disc's game data only, its values and `[game] disc`, the page
@@ -1327,7 +1331,7 @@ headless build replays a player's session with `pad_script=<the file>`; it is on
 window build, in `logs/input-<time>.txt`, and off headless (`input_record=`). Its header records
 the values of `video.video_mode`, `game.language`, `gameplay.mirror`, `gameplay.stick_fix`,
 `gameplay.yorda_safe`, `gameplay.developer_mode`, `dev.start_stage`, `gameplay.door_fix`,
-`video.anti_aliasing`, `gameplay.hold_type` and `gameplay.skip_opening` (the boot's ticks), the eight `variants.*` keys (the barrier's is `(unset)` until chosen), and the native frame's width and aspect (`port/platform/main_host.c`,
+`video.anti_aliasing`, `gameplay.hold_type`, `gameplay.hold_type_chosen` and `gameplay.skip_opening` (the boot's ticks), the eight `variants.*` keys (the barrier's is `(unset)` until chosen), and the native frame's width and aspect (`port/platform/main_host.c`,
 `record_keys`, `record_header`; `ico_input_record_frame_lines`).
 
 The trace (`trace=` or `--trace FILE`) writes a header naming its columns and then one line per Main

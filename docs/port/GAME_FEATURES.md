@@ -193,19 +193,35 @@ with an explicit key, saves the key at once so the file and the card never disag
 
 ### Hold type
 
-`[gameplay] hold_type` is `"hold"` (the game's `optionControlType` 0, A: keep R1 held to hold Yorda's
-hand) or `"toggle"` (1, B: a press of R1 takes her hand, another lets go; `ico2/fumi/src/act-wish.c`,
-`ico2/fumi/src/commonact.c` (`handoff_heroin`), `ico2/fumi/src/boyact.c`). The key wins over the
-card: `gameblock_read` sets `optionControlType` from `ico_opt_hold_type`, not from the product
-file's `controlType`, which `product_write` still writes from the variable
-(`ico2/fumi/ios/mcard.c`); `ui_settings_install` sets it at boot (`applyHoldType`), and the Hold
-type row sets the key and the variable (`port/ui/settings.c` (`ui_settings_step`)). The game's own
-Options screen row, reached only on a disc whose layout tables are not recognised, calls
-`ico_opt_hold_type_toggled`, which writes the key and saves at once
-(`ico2/common/src/layout_action.c` (`la_game_option`, case 318); `port/game/options.c`). The
-North American disc, the August 2001 preview and the June 2001 demo have no option and are always
-the toggle (`_ACTCommonMailTest_<disc>` reads `pad.trg & 8` alone), so the row is hidden there
-(`has_hold_film_players`, [Options on each disc](#options-on-each-disc)).
+`[gameplay] hold_type` is `"disc"` (the default: the disc's own, the region row's `hold_type_own`),
+`"hold"` (the game's `optionControlType` 0, A: keep R1 held to hold Yorda's hand) or `"toggle"` (1,
+B: a press of R1 takes her hand, another lets go; `ico2/fumi/src/act-wish.c`,
+`ico2/fumi/src/commonact.c` (`handoff_heroin`), `ico2/fumi/src/boyact.c`). `ico_opt_hold_type`
+resolves the choice for the selected disc and is all the game sees: A on the European, Japanese,
+Korean and Asian discs, B on the North American disc, the August 2001 preview and the June 2001
+demo, whose own game has no option and always toggles (`_ACTCommonMailTest_<disc>` read
+`pad.trg & 8` alone). A `"hold"` counts as chosen only beside `hold_type_chosen = true` (every
+Options write sets it): the first-run text held `"hold"` until `"disc"` existed, so a bare one reads
+as `"disc"`, the same A on the four A discs and the toggle the 2001 discs always played; the file is
+never rewritten for it. The log line `options: hold type <disc's own|hold|toggle> (A|B) on <disc
+id>` is written once for each choice and disc. The key wins over the card: `gameblock_read` (and
+its 2001 arms `gameblock_read_ntscaug6`, `gameblock_read_jun26`) sets `optionControlType` from
+`ico_opt_hold_type`, not from the product file's `controlType`, which `product_write` still writes
+from the variable on the four discs whose record has it (`ico2/fumi/ios/mcard.c`);
+`ui_settings_install` sets it at boot and at every layout stage (`init_layout_texture`,
+`applyHoldType`), and the Hold type row steps Disc's own, A, B and sets the key and the variable
+(`port/ui/settings.c` (`ui_settings_step`)). On the 2001 discs the port reads the variable where
+the European arms do: `_ACTCommonMailTest_<disc>` lets go on the European arm's condition
+(`optionControlType == 1 ? trg : !now`, the release on R1 up for the boy only, since Yorda's
+`subGirlControl_<disc>` calls the arm too) and `subBoyControl_<disc>`'s case 38 sends its mail on
+`(optionControlType == 1 ? trg : now) & 8`; with the disc's own B both read `pad.trg & 8` as the
+disc did. Their `ACTGetWish_FromPad_<disc>` keeps `pad.trg & 8` for its R1 wish: on those discs
+that one bit is also the let-go while hands are held (`subBoyCollision_ntsc` case 68), so the
+European arm's `now` form would let go while R1 is held. The game's own Options screen row,
+reached only on a disc whose layout tables are not recognised, calls `ico_opt_hold_type_toggled`,
+which writes the key and saves at once (`ico2/common/src/layout_action.c` (`la_game_option`, case
+318); `port/game/options.c`). The row shows on every disc ([Options on each
+disc](#options-on-each-disc)).
 
 ### Game variants
 
@@ -284,12 +300,12 @@ hold the rest.
 | Display: 50 Hz (title only) | W | H | H | H | H | H | H | `has_50hz_row`; `settings_discs`, `settings_<slug>` |
 | Main: Game language | W | H | H | H | H | H | H | `has_game_language`; `settings_discs`, `settings_<slug>` |
 | Main: Menu language | W | W | W | W | W | W | W | Auto is `ui_lang_default`, the sheets `menu_sheet`; `settings_<slug>`, `settings_render_<slug>` |
-| Controls: Hold type | W | W | W | H | H | H | W | `has_hold_film_players` (the 2001 builds always toggle: `_ACTCommonMailTest_<disc>`); `settings_discs` |
+| Controls: Hold type | W | W | W | W | W | W | W | `hold_type_own`, the default `"disc"`: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 (the 2001 arms `_ACTCommonMailTest_<disc>` read `optionControlType` in the port); `settings_discs`, `options_<slug>`, `save` (per disc) |
 | Controls: Circle goes back | W | H | H | W | W | W | H | `pad_back` is Triangle (`lt_ext_has_circle_back`); the 2001 arms cancel through `LA_BACK` too; `settings_discs`, `settings_<slug>` |
 | Effects: Brightness; Controls: Vibration, Button configuration (pause) | W | W | W | W | W | W | W | `systemStatus[11]`, `iosPadActRequestEnable`, `layout_key_config` (`la_key_config` and its 2001 arms go back to Settings); `settings_discs` |
 | Gameplay: stick fix, Yorda, door fix, natural chains | W | W | W | W | W | W | W | the hooks sit in every disc's arm (`backStage.c`, `ebrain.c`, `enemy_act.c`, `boyact.c` `CheckCollisionAttr_ntscaug6jun26`, `BgAnimation.c` `bga_CalcAnimation_<disc>`); `options_<slug>` |
 | Gameplay: Skip the opening | W | W | W | W | W | W | W | `kanbanBootMain`/`_jun26`, `actOpDemo01`/`_ntsc`/`_aug6jun26`; `kanban_boot_<slug>`, `settings_extra_<slug>` |
-| Gameplay: Film effect, Players (pause, once cleared) | W | W | W | H | H | H | W | `has_hold_film_players` (no `film_noise` in the 2001 stage tables, `reel_row` -1; `setNext` ignores `girlControlMode` there); `settings_discs` |
+| Gameplay: Film effect, Players (pause, once cleared) | W | W | W | H | H | H | W | `has_film_players` (no `film_noise` in the 2001 stage tables, `reel_row` -1; no 2001 arm reads `girlControlMode`: `subGirlControl_<disc>` reads Yorda's pad only as the debug target, and `setNext` ignores it there); `settings_discs` |
 | Audio: Sound output | W | W | W | W | W | W | W | `soundOutputModeSet` on every disc; `options_<slug>` |
 | Main: Developer mode | W | W | W | W | W | W | W | `achievements_<slug>` (the suspension) |
 | Extras > Game variants: Debug menu | W | W | W | W | W | H | W | `ICO_JUN26` (the demo's debug tables are the preview's); `settings_discs`, `settings_extra_<slug>` |
@@ -310,9 +326,8 @@ hold the rest.
 
 A port site that writes one of these numbers itself, instead of reading the region table, is what
 `region_literals_check` (`tools/check_region_literals.py`, [TESTING.md](TESTING.md)) fails on.
-The log names each hidden row once: `settings: no Hold type, Film effect or Players row on
-<disc id> (the game has none: the hand is always the toggle)` and `extras: no Credits row on <disc
-id> (its disc holds no staff scenes)`.
+The log names each hidden row once: `settings: no Film effect or Players row on <disc id> (the
+game has neither)` and `extras: no Credits row on <disc id> (its disc holds no staff scenes)`.
 
 ## Achievements and the game-state view
 
