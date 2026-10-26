@@ -44,12 +44,27 @@
  * magenta on none after it): their dark texels of the clear's RGB 1,1,1
  * are the walls' mortar, not cracks.
  *
- * Not drawn: at scale 1 on both axes, under the Original preset, on any
- * replay with MSAA asked for (the fog then reads the multisampled scene or
- * the resolve's smallest sample, DIVERGENCES.md VD-22), in the fog's
+ * Not drawn: at scale 1 on both axes, under the Original preset, while
+ * the MSAA epoch is still open at the fog (a frame without a shadow: the
+ * fog may run per sample on SCENE_MS, and the filler's snapshot of SCENE
+ * would close the epoch first; DIVERGENCES.md VD-22), in the fog's
  * self-test, on a fog of another target than SCENE, without a sampleable
  * depth, and with [dev] crack_fill = false (ICO_RD_CRACK_FILL=0; the replay
  * tool's --no-crack-fill).
+ *
+ * After the MSAA resolve (issue 26 with MSAA on: the epoch closed before
+ * the fog, in gameplay at the shadow count's pass in list 3,
+ * docs/port/MSAA.md): the fill runs on the resolved SCENE as it does
+ * without MSAA.  msaa_resolve_ps wrote SCENE's single-sampled colour and
+ * depth (SCENE's own textures, so depthSampled is as SCENE was made); a
+ * pixel more than half of whose samples held the epoch's clear depth took
+ * the smallest of all its samples, the clear's: the game clears SCENE's
+ * depth to GS Z 0, which is 0.0 (rd__gs_depth), the "unwritten" of
+ * crack_front, so such a pixel is the crack it is at 1x.  Any other pixel
+ * took the smallest covered sample: a farther surface seen through a
+ * seam (any sample on it) gives the pixel its depth, the discontinuity
+ * form's crack.  Gaps onto the clear the resolve already closed are
+ * surfaces to the filler and stay.
  *
  * The fog's local read (RD_FOG_LOCAL, a tile-based GPU's path: the fog
  * draws in the scene pass, reading the depth as an input attachment): the
@@ -85,12 +100,14 @@
  *       its ends, with a texel in front at each end takes the nearer end);
  *       [dev] crack_fill = false turns it off      (start, a new scale;
  *       " (drawn inside the scene pass with the local fog)" after it once
- *       a fill was drawn so, and again without it when one is not)
+ *       a fill was drawn so, and again without it when one is not; the
+ *       same for " (drawn after the MSAA resolve)")
  *   rd: crack fill: T replays filled (scale SXxSY; reach RXxRY texels; not
  *       counted in the game[; F inside the scene pass with the local
- *       fog])                                      (10 s summary)
+ *       fog][; A after the MSAA resolve])          (10 s summary)
  *   rd: crack fill: N pixels filled over M replays counted of T filled
- *       (max K a replay; scale SXxSY; reach RXxRY texels[; F inside ...])
+ *       (max K a replay; scale SXxSY; reach RXxRY texels[; F inside ...]
+ *       [; A after ...])
  *       (the same, counting: the tests, the replay tool's --stats)
  *   rd: crack fill: the pass after the copies was not begun with the depth
  *       readable: the fill ends it and the fog begins it again (reported
@@ -110,8 +127,8 @@
 enum { SKIP_MSAA, SKIP_DEPTH, SKIP_PIPES, SKIP_MEMORY, SKIP_PASS, SKIP_COUNT };
 
 static const char *const kSkipWhy[SKIP_COUNT] = {
-    ("MSAA is asked for (its resolve gives a crack's pixel the surfaces beside it unless "
-     "more than half its samples lie in the crack: DIVERGENCES.md VD-22)"),
+    ("the MSAA epoch is still open at the fog (a frame without a shadow: the fog may read the "
+     "multisampled scene; the filler runs after the MSAA resolve: DIVERGENCES.md VD-22)"),
     "the scene's depth cannot be sampled on this device",
     "its shaders or pipelines are missing",
     "no memory for the copies of the scene's colour and depth",
@@ -122,12 +139,14 @@ static const char *const kSkipWhy[SKIP_COUNT] = {
 enum { WHY_PROFILE, WHY_DEV, WHY_FORCED };
 
 #define FOLD_TEXT " (drawn inside the scene pass with the local fog)"
+#define MSAA_TEXT " (drawn after the MSAA resolve)"
 
 static struct {
     bool enabled; /* ICO_RD_CRACK_FILL, the profile, or the replay tool's switch */
     int why;      /* WHY_* */
     bool countAll;
-    bool fold; /* the last fill drawn in the pass the local fog keeps */
+    bool fold;     /* the last fill drawn in the pass the local fog keeps */
+    bool resolved; /* the last fill drawn on the MSAA resolve's picture */
     /* the count's target and readback (one in flight) */
     RhiTexture countTex;
     RhiState countState;
@@ -137,15 +156,15 @@ static struct {
     bool pending;
     uint32_t pendingReplay, pendingW, pendingH, pendingPitch;
     /* since start */
-    uint64_t filled, counted, pixels, skipped, folded;
+    uint64_t filled, counted, pixels, skipped, folded, afterMsaa;
     uint32_t last, max;
     float sx, sy;
     uint32_t rx, ry;
     /* the 10 s block's (rd__crack_fill_block) */
-    uint64_t bFilled, bCounted, bPixels, bFolded, bSkip[SKIP_COUNT];
+    uint64_t bFilled, bCounted, bPixels, bFolded, bAfterMsaa, bSkip[SKIP_COUNT];
     uint32_t bMax;
     bool skipSaid[SKIP_COUNT];
-    char noted[384]; /* the last state line */
+    char noted[448]; /* the last state line */
 } s_cf;
 
 /* the replay tool's --no-crack-fill and the tests: -1 none, else the switch */
@@ -198,9 +217,9 @@ static void note(void)
                  "crack fill: on above 1x (scale %.4gx%.4g, reach %ux%u texels: a run of texels "
                  "no draw covered, or drawn over 1/%u of the depth behind both its ends, with a "
                  "texel in front at each end takes the nearer end); [dev] crack_fill = false "
-                 "turns it off%s%s",
+                 "turns it off%s%s%s",
                  (double)sx, (double)sy, rd__crack_fill_reach(sx), rd__crack_fill_reach(sy),
-                 RD_CRACK_BEHIND, s_cf.fold ? FOLD_TEXT : "", dev);
+                 RD_CRACK_BEHIND, s_cf.fold ? FOLD_TEXT : "", s_cf.resolved ? MSAA_TEXT : "", dev);
     }
     if (strcmp(line, s_cf.noted) != 0) {
         snprintf(s_cf.noted, sizeof(s_cf.noted), "%s", line);
@@ -319,6 +338,7 @@ void rd__crack_fill_counts(RdCrackCounts *out)
     out->max = s_cf.max;
     out->skipped = s_cf.skipped;
     out->folded = s_cf.folded;
+    out->afterMsaa = s_cf.afterMsaa;
     out->sx = s_cf.sx;
     out->sy = s_cf.sy;
     out->rx = s_cf.rx;
@@ -329,10 +349,15 @@ void rd__crack_fill_counts(RdCrackCounts *out)
 void rd__crack_fill_block(void)
 {
     note();
-    char fold[80] = "";
+    char fold[128] = "";
+    int at = 0;
     if (s_cf.bFolded) {
-        snprintf(fold, sizeof(fold), "; %llu inside the scene pass with the local fog",
-                 (unsigned long long)s_cf.bFolded);
+        at = snprintf(fold, sizeof(fold), "; %llu inside the scene pass with the local fog",
+                      (unsigned long long)s_cf.bFolded);
+    }
+    if (s_cf.bAfterMsaa && at >= 0 && (size_t)at < sizeof(fold)) {
+        snprintf(fold + at, sizeof(fold) - (size_t)at, "; %llu after the MSAA resolve",
+                 (unsigned long long)s_cf.bAfterMsaa);
     }
     if (s_cf.bFilled && !s_cf.bCounted) {
         rd__log("crack fill: %llu replays filled (scale %.4gx%.4g; reach %ux%u texels; not counted "
@@ -349,16 +374,17 @@ void rd__crack_fill_block(void)
     const uint64_t *k = s_cf.bSkip;
     /* MSAA is a choice (its own line once a run); the others are not */
     if (k[SKIP_DEPTH] | k[SKIP_PIPES] | k[SKIP_MEMORY] | k[SKIP_PASS]) {
-        rd__log("crack fill: %llu fogged replays above 1x not filled (%llu under MSAA, %llu "
-                "without a sampleable depth, %llu without its pipelines, %llu without memory for "
-                "its copies, %llu with the fog's pass not begun)",
-                (unsigned long long)(k[SKIP_MSAA] + k[SKIP_DEPTH] + k[SKIP_PIPES] + k[SKIP_MEMORY] +
-                                     k[SKIP_PASS]),
-                (unsigned long long)k[SKIP_MSAA], (unsigned long long)k[SKIP_DEPTH],
-                (unsigned long long)k[SKIP_PIPES], (unsigned long long)k[SKIP_MEMORY],
-                (unsigned long long)k[SKIP_PASS]);
+        rd__log(
+            "crack fill: %llu fogged replays above 1x not filled (%llu in an open MSAA epoch, %llu "
+            "without a sampleable depth, %llu without its pipelines, %llu without memory for "
+            "its copies, %llu with the fog's pass not begun)",
+            (unsigned long long)(k[SKIP_MSAA] + k[SKIP_DEPTH] + k[SKIP_PIPES] + k[SKIP_MEMORY] +
+                                 k[SKIP_PASS]),
+            (unsigned long long)k[SKIP_MSAA], (unsigned long long)k[SKIP_DEPTH],
+            (unsigned long long)k[SKIP_PIPES], (unsigned long long)k[SKIP_MEMORY],
+            (unsigned long long)k[SKIP_PASS]);
     }
-    s_cf.bFilled = s_cf.bCounted = s_cf.bPixels = s_cf.bFolded = 0;
+    s_cf.bFilled = s_cf.bCounted = s_cf.bPixels = s_cf.bFolded = s_cf.bAfterMsaa = 0;
     s_cf.bMax = 0;
     memset(s_cf.bSkip, 0, sizeof(s_cf.bSkip));
 }
@@ -556,7 +582,7 @@ static bool fillWork(Replay *r, RdTargetRec *tc, RdDepthCopy *copy, RhiPipeline 
     return fold;
 }
 
-void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCopy *copy, bool msaa,
+void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCopy *copy, int msaa,
                     bool local)
 {
     harvest(false);
@@ -567,7 +593,7 @@ void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCo
         (rd__fog_exact() && !rd__fog_probe_wanted())) {
         return;
     }
-    if (msaa) {
+    if (msaa == RD_CRACK_MSAA_OPEN) {
         skip(SKIP_MSAA, tc);
         return;
     }
@@ -603,10 +629,14 @@ void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCo
     if (s_cf.filled == filled) {
         return; /* not drawn (skipped for memory) */
     }
+    const bool resolved = msaa == RD_CRACK_MSAA_RESOLVED;
     s_cf.folded += fold;
     s_cf.bFolded += fold;
-    if (fold != s_cf.fold) {
+    s_cf.afterMsaa += resolved;
+    s_cf.bAfterMsaa += resolved;
+    if (fold != s_cf.fold || resolved != s_cf.resolved) {
         s_cf.fold = fold;
-        note(); /* the state line says where the fill is drawn */
+        s_cf.resolved = resolved;
+        note(); /* the state line says where and on what the fill is drawn */
     }
 }
