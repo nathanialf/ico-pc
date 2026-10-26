@@ -1,6 +1,7 @@
 ## New
 
 - Hold type (hold R1 to keep Yorda's hand, or press once to take it and once to let go) can now be chosen on the North American disc, the August 2001 preview and the June 2001 demo too; each disc starts with its own way.
+- A second player can take Yorda on the North American disc, the August 2001 preview and the June 2001 demo too, from the pause menu once the game has been finished.
 
 ## Fixed
 
@@ -11,7 +12,7 @@
 - Direct3D 11 on Windows now draws the game. Before, the screen stayed black because the graphics driver's shader compiler refused the game's shaders.
 - With the OpenGL renderer, OBS's game capture of the game window is upright now. Before, the capture was upside down while the window itself looked right.
 - The black bars of the load screen no longer flicker when it changes at Frame rate 60.
-- On the North American disc, the August 2001 preview and the June 2001 demo, Options no longer shows Film effect or Players. Those discs' own game has neither, and a Film effect change started an unrelated animation instead.
+- On the North American disc, the August 2001 preview and the June 2001 demo, Options no longer shows Film effect. Those discs' own game has no film looks, and a Film effect change started an unrelated animation instead.
 - On the June 2001 demo, Extras no longer shows Credits. The demo disc does not hold the credits' scenes, so the row could never play.
 - With MSAA anti-aliasing on, the thin dotted lines of mist along seams above the original resolution are now filled in, as without it.
 - With Full pixel on, the puddle ripples in the drained room no longer draw as bright white segments.
