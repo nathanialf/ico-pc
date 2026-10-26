@@ -2603,6 +2603,11 @@ static bool borderOpen(void)
     return g_rd.settings.fullPixel || (g_rd.settings.borderMask && rd__frame_cropped());
 }
 
+bool rd__border_open(void)
+{
+    return borderOpen();
+}
+
 /* Full pixel: a sprite the game tags RD_SPACE_FULLFRAME (a bar or fade that
  * spans the frame: layout_texture.c's spanning items and primary sprite,
  * the posts' rects) that ends one pixel short of the target's edge is moved
@@ -2832,17 +2837,18 @@ static RhiSampler gsLodSampler(const Replay *r, const DrawSetup *ds);
  * frame's outer columns the lookup wraps to the far side of the picture,
  * which the PS2's black border hid; with the border open it showed as a
  * strip of the far edge's colour.  Image textures keep their wrap, and so
- * does an axis on which a screen prim's coordinates lie wholly in a later
- * period of the REPEAT (ds->repeatKept, rd__repeat_kept: the puddle's
- * ripples, issue 106).  axis 0 is S, 1 T. */
-static RdWrap drawWrap(const Replay *r, const DrawSetup *ds, RdWrap w, int axis)
+ * does a screen prim reading a block smaller than the frame
+ * (rd__block_keeps_repeat: the puddle's ripples, issue 106). */
+static RdWrap drawWrap(const Replay *r, const DrawSetup *ds, RdWrap w)
 {
-    if (w == RD_WRAP_CLAMP || !borderOpen() || !ds->textured || !r->st.ds.texEnabled ||
-        (ds->repeatKept & (1u << axis))) {
+    if (w == RD_WRAP_CLAMP || !borderOpen() || !ds->textured || !r->st.ds.texEnabled) {
         return w;
     }
     const RdTexRec *t = rd__tex_rec(r->st.tex);
-    return t && t->kind == RD_TEXKIND_TARGET ? RD_WRAP_CLAMP : w;
+    if (!t || t->kind != RD_TEXKIND_TARGET) {
+        return w;
+    }
+    return ds->screenPrim && rd__block_keeps_repeat(rd__target_rec(t->target)) ? w : RD_WRAP_CLAMP;
 }
 
 /* FrameCB of the draw (r->frameBG), made again when the target, the frame
@@ -2905,12 +2911,12 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
     if (!scissorRect(r, tc, &sc)) {
         return (RhiBindGroup){0};
     }
-    RhiSampler smp = ds->gsLevels
-                         ? gsLodSampler(r, ds)
-                         : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                                      drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s, 0),
-                                      drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t, 1), ds->mipmapped,
-                                      ds->replacement);
+    RhiSampler smp =
+        ds->gsLevels
+            ? gsLodSampler(r, ds)
+            : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                         drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s),
+                         drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t), ds->mipmapped, ds->replacement);
     RhiBindGroup g2 = rd__tex_group_date(ds->tex, smp, ds->dateTex);
 
     /* a storage pass (the exact blend) stays open for the callers that
@@ -3073,8 +3079,8 @@ static RhiSampler gsLodSampler(const Replay *r, const DrawSetup *ds)
                         ? RD_SAMPLER_SET_MIP_LINEAR
                         : RD_SAMPLER_SET_MIP_NEAREST;
     const int i = (r->st.ds.magFilter ? 1 : 0) | (r->st.ds.minFilter ? 2 : 0) |
-                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s, 0) ? 4 : 0) |
-                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t, 1) ? 8 : 0);
+                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s) ? 4 : 0) |
+                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t) ? 8 : 0);
     return g_rd.samplers[set * RD_SAMPLER_COUNT + i];
 }
 
@@ -3214,9 +3220,8 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
          * (gsLodSampler) wraps */
         cb->mode[0] |= ICO_DF_NEAREST;
         if (ds->gsLevels) {
-            cb->mode[0] |=
-                (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s, 0) ? ICO_DF_TEXA_CLAMP_S : 0u) |
-                (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t, 1) ? ICO_DF_TEXA_CLAMP_T : 0u);
+            cb->mode[0] |= (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s) ? ICO_DF_TEXA_CLAMP_S : 0u) |
+                           (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t) ? ICO_DF_TEXA_CLAMP_T : 0u);
         }
     }
     if (spriteAbove1x(r, dp, ds)) {
@@ -3224,10 +3229,9 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
          * wrap its loads reproduce */
         cb->mode[0] |=
             ICO_DF_ABOVE1X |
-            (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s, 0) != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_S
-                                                                           : 0u) |
-            (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t, 1) != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_T
-                                                                           : 0u);
+            (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s) != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_S
+                                                                        : 0u) |
+            (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t) != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_T : 0u);
         cb->scale[3] = (float)ds->a1xSteps; /* the steps from the CPU, 0 the footprint's */
         g_rd.above1xDraws++;
     }
@@ -3579,11 +3583,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     ds.screenCopy = screenCopy(r, &ds, c->b[0], c->b[1]);
-    /* read only by drawWrap's clamp under the open border: not computed
-     * with the border closed (the vertices' texel range is a loop over
-     * every vertex of every screen command) */
-    ds.repeatKept =
-        borderOpen() ? rd__screen_repeat_kept(v, n, c->b[2], (float)ds.tw, (float)ds.th) : 0u;
+    ds.screenPrim = 1; /* drawWrap's block rule */
 
     /* geometry */
     setUvShift(ds.tc->sx, ds.tc->sy);
@@ -4100,8 +4100,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     const uint32_t n = c->u[1];
     const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
-    ds.repeatKept = /* drawWrap's only, as doScreen's */
-        borderOpen() ? rd__screen_repeat_kept(v, n, c->b[2], (float)ds.tw, (float)ds.th) : 0u;
+    ds.screenPrim = 1; /* drawWrap's block rule, as doScreen's */
     const uint64_t vOff = rd__ring_alloc((uint64_t)n * 6 * sizeof(IcoSpriteVertex), 16);
     if (vOff == ~0ull) {
         return;
@@ -4196,12 +4195,12 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     fillDrawCB(r, &dp[0], &ds, &cb);
     cb.mode[0] &= ~(uint32_t)ICO_DF_PREMUL;
     cb.param[0] = (float)wrapEquation(&r->st);
-    RhiSampler smp = ds.gsLevels
-                         ? gsLodSampler(r, &ds)
-                         : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                                      drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.s, 0),
-                                      drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.t, 1), ds.mipmapped,
-                                      ds.replacement);
+    RhiSampler smp =
+        ds.gsLevels
+            ? gsLodSampler(r, &ds)
+            : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                         drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.s),
+                         drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.t), ds.mipmapped, ds.replacement);
     rd__set_pipeline(s_cl, pa, NULL); /* wrapPipeline: every state static */
     rd__bind_uniform(s_cl, 0, frameGroupOf(tc, ox, oy, rd__target_z_scale(ds.tdId)));
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
