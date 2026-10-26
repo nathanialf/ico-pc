@@ -127,17 +127,16 @@ static const char *vkr_stage_name(VkPipelineStageFlagBits s)
 static void vkr_report_submits(void)
 {
     uint64_t reached = 0;
-    const bool known =
-        vkGetSemaphoreCounterValue(g_vkr.device, g_vkr.timeline, &reached) == VK_SUCCESS;
+    const bool known = vkr_sync_reached(&reached);
     const uint32_t n =
         g_vkr.submitCount < VKR_SUBMIT_HISTORY ? g_vkr.submitCount : VKR_SUBMIT_HISTORY;
-    VKR_LOG("loss report: the last %u submissions (timeline reached %s%llu%s):", n,
-            known ? "" : "unknown, ", (unsigned long long)(known ? reached : 0ull),
+    VKR_LOG("loss report: the last %u submissions (sync %s; the GPU reached %s%llu%s):", n,
+            vkr_sync_name(), known ? "" : "unknown, ", (unsigned long long)(known ? reached : 0ull),
             g_vkr.lostWaitValue ? "" : "; no wait failed");
     for (uint32_t k = 0; k < n; k++) {
         const uint32_t i = (g_vkr.submitCount - n + k) % VKR_SUBMIT_HISTORY;
         const uint64_t v = g_vkr.submits[i].value;
-        VKR_LOG("  timeline %llu: replay %u, frame %u, %u command list%s%s, %s%s",
+        VKR_LOG("  submission %llu: replay %u, frame %u, %u command list%s%s, %s%s",
                 (unsigned long long)v, g_vkr.submits[i].replay, g_vkr.submits[i].frame,
                 g_vkr.submits[i].lists, g_vkr.submits[i].lists == 1 ? "" : "s",
                 g_vkr.submits[i].present ? " + the present signal" : "",
@@ -1637,14 +1636,28 @@ static bool vkr_create_device(void)
         qEds3.pNext = dyn.pNext;
         dyn.pNext = &qEds3;
     }
+    /* the submission sync (vk_sync.c): the timeline semaphore, through
+     * VkPhysicalDeviceVulkan12Features at 1.2 and later, the extension's
+     * own features below 1.2; nothing for the fence ring (ICO_VK_FAKE_API=
+     * 1.1: a device without timeline semaphores) */
+    g_vkr.syncKind = g_vkr.fakeNoTimeline ? VKR_SYNC_FENCES : VKR_SYNC_TIMELINE;
     VkPhysicalDeviceVulkan12Features f12 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
         .pNext = &dyn,
         .timelineSemaphore = VK_TRUE,
     };
+    VkPhysicalDeviceTimelineSemaphoreFeaturesKHR fTimeline = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR,
+        .pNext = &dyn,
+        .timelineSemaphore = VK_TRUE,
+    };
+    void *syncFeatures = &dyn;
+    if (g_vkr.syncKind == VKR_SYNC_TIMELINE) {
+        syncFeatures = g_vkr.apiVersion >= VK_API_VERSION_1_2 ? (void *)&f12 : (void *)&fTimeline;
+    }
     VkPhysicalDeviceFeatures2 f2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .pNext = &f12,
+        .pNext = syncFeatures,
         .features =
             {
                 .dualSrcBlend = g_vkr.dualSrcBlend ? VK_TRUE : VK_FALSE,
@@ -1670,7 +1683,7 @@ static bool vkr_create_device(void)
             .pNext = &subset,
         };
         vkGetPhysicalDeviceFeatures2(g_vkr.phys, &query);
-        subset.pNext = &f12;
+        subset.pNext = syncFeatures;
         f2.pNext = &subset;
     }
 #endif
@@ -1789,16 +1802,9 @@ static bool vkr_create_device(void)
         g_vkr.cmdEndRendering = vkCmdEndRenderingKHR;
     }
 
-    VkSemaphoreTypeCreateInfo tci = {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
-        .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
-        .initialValue = 0,
-    };
-    VkSemaphoreCreateInfo sci = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, .pNext = &tci};
-    if (!VKR_CHECK(vkCreateSemaphore(g_vkr.device, &sci, NULL, &g_vkr.timeline))) {
+    if (!vkr_sync_init()) {
         return false;
     }
-    g_vkr.timelineValue = 0;
     vkr_progress_reset();
 
     VkCommandPoolCreateInfo pci = {
@@ -2131,9 +2137,7 @@ void rhi_shutdown(void)
         if (g_vkr.oneShotPool) {
             vkDestroyCommandPool(g_vkr.device, g_vkr.oneShotPool, NULL);
         }
-        if (g_vkr.timeline) {
-            vkDestroySemaphore(g_vkr.device, g_vkr.timeline, NULL);
-        }
+        vkr_sync_destroy();
         vkr_pipeline_cache_shutdown();
         vkDestroyDevice(g_vkr.device, NULL);
     }

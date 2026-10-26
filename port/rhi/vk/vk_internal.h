@@ -173,6 +173,35 @@ typedef struct VkrGarbage {
 /* swapchain images: the most a surface's swapchain may have (vk_swapchain.c) */
 #define VKR_MAX_SWAP_IMAGES 16u
 
+/* The submission sync (vk_sync.c): what tells the CPU a submission is done.
+ * Every submission gets the next number of the port's counter
+ * (VkrState.timelineValue); VKR_SYNC_TIMELINE signals that number on one
+ * timeline semaphore (Vulkan 1.2, or VK_KHR_timeline_semaphore), and
+ * VKR_SYNC_FENCES, for a device without it, signals a fence of a ring of
+ * VKR_SYNC_FENCE_RING, the fence of number n at slot n % VKR_SYNC_FENCE_RING
+ * (one queue signals in submission order, so the newest fence found
+ * signalled is exactly the newest number finished). */
+typedef enum VkrSyncKind { VKR_SYNC_TIMELINE, VKR_SYNC_FENCES } VkrSyncKind;
+
+#define VKR_SYNC_FENCE_RING 8u
+
+/* One vkQueueSubmit through vkr_sync_submit: the command buffers (possibly
+ * none), the binary semaphore to wait on first (the swapchain acquire,
+ * VK_NULL_HANDLE: none) at waitStage, afterAll: the batch is ordered after
+ * every earlier submission (the empty present batch: a wait on the
+ * timeline's previous number; the fence path has no such wait and needs
+ * none, a semaphore signal already covers every earlier submission on the
+ * queue), and the binary semaphore to signal (the image's renderDone,
+ * VK_NULL_HANDLE: none). */
+typedef struct VkrSubmitDesc {
+    const VkCommandBuffer *cbs;
+    uint32_t cbCount;
+    VkSemaphore wait;
+    VkPipelineStageFlags waitStage;
+    bool afterAll;
+    VkSemaphore signal;
+} VkrSubmitDesc;
+
 typedef struct VkrCmdList {
     VkCommandBuffer cb;
     bool recording;
@@ -377,9 +406,28 @@ typedef struct VkrState {
      * vkr_pass_area_fits: logged once, clamped; vkr_test_pass_area_count) */
     uint32_t passAreaBad;
 
-    /* timeline semaphore: one value per submit */
+    /* the submission sync (vk_sync.c, VkrSyncKind): timelineValue is the
+     * port's counter, the number of the newest submission (one per submit,
+     * whatever the kind: VkrFrame.waitValue, submits[], prog*,
+     * lostWaitValue count in it); timeline the semaphore that signals it
+     * (VKR_SYNC_TIMELINE) with its wait and counter read (the core entry
+     * points, the KHR ones below Vulkan 1.2); fences the ring
+     * (VKR_SYNC_FENCES), fenceValue the number each slot's fence signals (0:
+     * none pending), fenceFinished the newest number seen finished,
+     * fenceRecycleWaits the submits that had to wait for their slot's
+     * earlier number (logged the first time) */
+    VkrSyncKind syncKind;
     VkSemaphore timeline;
     uint64_t timelineValue;
+    PFN_vkWaitSemaphores waitSemaphores;
+    PFN_vkGetSemaphoreCounterValue getSemaphoreCounter;
+    VkFence fences[VKR_SYNC_FENCE_RING];
+    uint64_t fenceValue[VKR_SYNC_FENCE_RING];
+    uint64_t fenceFinished;
+    uint32_t fenceRecycleWaits;
+    /* ICO_VK_FAKE_API=1.1 (vk_device.c vkr_create_instance): the device is
+     * used as if it had no timeline semaphores (VKR_SYNC_FENCES) */
+    bool fakeNoTimeline;
 
     /* frames */
     VkrFrame frames[RHI_FRAMES_IN_FLIGHT];
@@ -518,6 +566,33 @@ static inline VkrFrame *vkr_cur_frame(void)
 void vkr_lost_report(void);
 /* vk_cmd.c: a submission into VkrState.submits */
 void vkr_note_submit(uint64_t value, uint32_t lists, bool present);
+/* vk_cmd.c: blocks until submission `value` of the port's counter has
+ * finished (0, or a lost device: returns at once), counted and seen by the
+ * watchdog (rhi_gpu_progress); a failed wait is logged and noted
+ * (lostWaitValue) */
+void vkr_wait_value(uint64_t value);
+
+/* vk_sync.c, the submission sync (VkrSyncKind):
+ *   vkr_sync_init     the timeline semaphore or the fence ring of
+ *                     g_vkr.syncKind, after the device (false: the call
+ *                     that failed is logged);
+ *   vkr_sync_submit   one vkQueueSubmit of d signalling the counter's next
+ *                     number, *outValue (timelineValue moves to it only
+ *                     when the submit succeeded); on the fence path a slot
+ *                     still pending is waited for first (vkr_wait_value);
+ *   vkr_sync_reached  the newest number finished, without blocking; false
+ *                     when the driver could not say (*out then the newest
+ *                     known finished, 0 on the timeline path);
+ *   vkr_sync_wait     blocks until `value` has finished (VK_SUCCESS) or the
+ *                     wait failed (its VkResult);
+ *   vkr_sync_destroy  the semaphore or the fences, with the device idle;
+ *   vkr_sync_name     "timeline" or "fences". */
+bool vkr_sync_init(void);
+bool vkr_sync_submit(const VkrSubmitDesc *d, uint64_t *outValue);
+bool vkr_sync_reached(uint64_t *out);
+VkResult vkr_sync_wait(uint64_t value);
+void vkr_sync_destroy(void);
+const char *vkr_sync_name(void);
 /* vk_cmd.c: rhi_gpu_progress's values back to none (a new device) */
 void vkr_progress_reset(void);
 

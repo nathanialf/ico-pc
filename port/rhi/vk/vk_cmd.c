@@ -3,12 +3,13 @@
  *
  * Synchronisation: RHI_FRAMES_IN_FLIGHT frame slots each own a command
  * pool, descriptor pools and the objects destroyed while they recorded.
- * Every submit signals the next value of one timeline semaphore, and
- * rhi_wait_frame waits for the value of a slot's last submit before it
- * reuses the slot.  The first submit after a swapchain acquire waits on
- * the acquire semaphore; the present waits on the image's renderDone
- * semaphore, which the presenting list's submit or an empty batch in
- * rhi_present signals (rhi_submit). */
+ * Every submit takes the next number of the port's counter, which the
+ * submission sync signals (vk_sync.c: a timeline semaphore, or a ring of
+ * fences on a device without one), and rhi_wait_frame waits for the number
+ * of a slot's last submit before it reuses the slot.  The first submit
+ * after a swapchain acquire waits on the acquire semaphore; the present
+ * waits on the image's renderDone semaphore, which the presenting list's
+ * submit or an empty batch in rhi_present signals (rhi_submit). */
 #include "vk_internal.h"
 #include "rhi_vk.h"
 #include <assert.h>
@@ -120,7 +121,7 @@ static void vkr_progress_wait(uint64_t value)
     __atomic_store_n(&g_vkr.progWaitingFor, value, __ATOMIC_RELEASE);
 }
 
-static void vkr_wait_value(uint64_t value)
+void vkr_wait_value(uint64_t value)
 {
     /* a lost device finishes nothing more: no wait (the first failed one
      * is the report's, vkr_lost_report) */
@@ -132,21 +133,15 @@ static void vkr_wait_value(uint64_t value)
      * in either call while the GPU hangs */
     uint64_t done = 0;
     vkr_progress_wait(value);
-    if (vkGetSemaphoreCounterValue(g_vkr.device, g_vkr.timeline, &done) == VK_SUCCESS) {
+    if (vkr_sync_reached(&done)) {
         vkr_progress_finished(done);
         if (done >= value) {
             vkr_progress_wait(0);
             return;
         }
     }
-    VkSemaphoreWaitInfo wi = {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-        .semaphoreCount = 1,
-        .pSemaphores = &g_vkr.timeline,
-        .pValues = &value,
-    };
     const uint64_t t0 = vkr_now_ns();
-    const VkResult r = vkWaitSemaphores(g_vkr.device, &wi, UINT64_MAX);
+    const VkResult r = vkr_sync_wait(value);
     vkr_progress_wait(0);
     const uint64_t waited = vkr_now_ns() - t0;
     if (r == VK_SUCCESS) {
@@ -157,12 +152,12 @@ static void vkr_wait_value(uint64_t value)
          * submissions between them never finished (the loss report names
          * their frames, vkr_lost_report) */
         uint64_t reached = 0;
-        const VkResult rc = vkGetSemaphoreCounterValue(g_vkr.device, g_vkr.timeline, &reached);
-        VKR_LOG("waited %.1f s for timeline value %llu (the last submitted is %llu); the GPU "
-                "reached %llu%s",
+        const bool known = vkr_sync_reached(&reached);
+        VKR_LOG("waited %.1f s for submission %llu (the last submitted is %llu; sync %s); the "
+                "GPU reached %llu%s",
                 (double)waited / 1e9, (unsigned long long)value,
-                (unsigned long long)g_vkr.timelineValue, (unsigned long long)reached,
-                rc == VK_SUCCESS ? "" : " (the counter read failed too)");
+                (unsigned long long)g_vkr.timelineValue, vkr_sync_name(),
+                (unsigned long long)reached, known ? "" : " (the counter read failed too)");
         if (!g_vkr.lostWaitValue) {
             g_vkr.lostWaitValue = value;
         }
@@ -366,8 +361,8 @@ void rhi_end_commands(RhiCommandList cl)
         g_vkr.cmdEndRendering(c->cb);
         c->inPass = false;
     }
-    /* Copies into READBACK buffers become visible to the host once the
-     * timeline value of this submission is reached. */
+    /* Copies into READBACK buffers become visible to the host once this
+     * submission has finished. */
     VkMemoryBarrier mb = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -380,20 +375,15 @@ void rhi_end_commands(RhiCommandList cl)
 }
 
 /* Submits command buffers (possibly none) with the frame's swapchain
- * semaphores attached as needed, signalling the next timeline value.
+ * semaphores attached as needed, taking the counter's next number
+ * (vkr_sync_submit).
  * forPresent: the batch also signals the acquired image's present
  * semaphore (renderDone), either as an empty batch after all frame work
  * (vkr_submit_present_signal) or as the submit of the list that moved the
  * image to PRESENT (rhi_submit). */
 static bool vkr_submit_batch(const VkCommandBuffer *cbs, uint32_t count, bool forPresent)
 {
-    VkSemaphore waitSems[2];
-    uint64_t waitValues[2];
-    VkPipelineStageFlags waitStages[2];
-    uint32_t waitCount = 0;
-    VkSemaphore sigSems[2];
-    uint64_t sigValues[2];
-    uint32_t sigCount = 0;
+    VkrSubmitDesc d = {.cbs = cbs, .cbCount = count};
     bool tookAcquire = false;
 
     if (g_vkr.acquireWaitPending) {
@@ -405,56 +395,24 @@ static bool vkr_submit_batch(const VkCommandBuffer *cbs, uint32_t count, bool fo
          * or a later one; the work before it, on other images, need not
          * wait for the presentation engine.  An empty batch keeps
          * ALL_COMMANDS. */
-        waitSems[waitCount] = g_vkr.acquireSem;
-        waitValues[waitCount] = 0;
-        waitStages[waitCount] = count ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-                                      : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-        waitCount++;
+        d.wait = g_vkr.acquireSem;
+        d.waitStage = count ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+                            : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
         g_vkr.acquireWaitPending = false;
         tookAcquire = true;
     }
     if (forPresent) {
-        if (count == 0) {
-            /* an empty batch after all frame work: the timeline wait
-             * orders it after every earlier submission */
-            waitSems[waitCount] = g_vkr.timeline;
-            waitValues[waitCount] = g_vkr.timelineValue;
-            waitStages[waitCount] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-            waitCount++;
-        }
+        /* an empty batch after all frame work: on the timeline path a wait
+         * for the previous number orders it after every earlier submission
+         * (the fence path has none: the semaphore signal below covers every
+         * earlier submission on the queue already) */
+        d.afterAll = count == 0;
         /* the binary semaphore the present waits on; a semaphore signal
          * covers the batch's commands and every earlier submission */
-        sigSems[sigCount] = g_vkr.renderDone[g_vkr.swapImage];
-        sigValues[sigCount] = 0;
-        sigCount++;
+        d.signal = g_vkr.renderDone[g_vkr.swapImage];
     }
-    uint64_t value = ++g_vkr.timelineValue;
-    sigSems[sigCount] = g_vkr.timeline;
-    sigValues[sigCount] = value;
-    sigCount++;
-
-    VkTimelineSemaphoreSubmitInfo ti = {
-        .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
-        .waitSemaphoreValueCount = waitCount,
-        .pWaitSemaphoreValues = waitValues,
-        .signalSemaphoreValueCount = sigCount,
-        .pSignalSemaphoreValues = sigValues,
-    };
-    VkSubmitInfo si = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .pNext = &ti,
-        .waitSemaphoreCount = waitCount,
-        .pWaitSemaphores = waitSems,
-        .pWaitDstStageMask = waitStages,
-        .commandBufferCount = count,
-        .pCommandBuffers = cbs,
-        .signalSemaphoreCount = sigCount,
-        .pSignalSemaphores = sigSems,
-    };
-    if (!VKR_CHECK(vkQueueSubmit(g_vkr.queue, 1, &si, VK_NULL_HANDLE))) {
-        /* nothing will signal the value: a later wait on it (the present
-         * batch's, vkr_wait_value) would never return */
-        g_vkr.timelineValue--;
+    uint64_t value = 0;
+    if (!vkr_sync_submit(&d, &value)) {
         /* a failed submit other than a device loss leaves its semaphores
          * as they were: the acquire semaphore is still signalled, and the
          * next submit must wait on it before the next acquire reuses it */
@@ -1804,21 +1762,8 @@ bool rhi_readback_texture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t 
         vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1,
                              &mb, 0, NULL, 0, NULL);
         vkEndCommandBuffer(cb);
-        uint64_t value = ++g_vkr.timelineValue;
-        VkTimelineSemaphoreSubmitInfo ti = {
-            .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
-            .signalSemaphoreValueCount = 1,
-            .pSignalSemaphoreValues = &value,
-        };
-        VkSubmitInfo si = {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .pNext = &ti,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &cb,
-            .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &g_vkr.timeline,
-        };
-        ok = VKR_CHECK(vkQueueSubmit(g_vkr.queue, 1, &si, VK_NULL_HANDLE));
+        uint64_t value = 0;
+        ok = vkr_sync_submit(&(VkrSubmitDesc){.cbs = &cb, .cbCount = 1}, &value);
         if (ok) {
             vkr_cur_frame()->waitValue = value;
             vkr_note_submit(value, 1, false);
@@ -1828,8 +1773,6 @@ bool rhi_readback_texture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t 
             if (ok) {
                 memcpy(dst, mapped, size);
             }
-        } else {
-            g_vkr.timelineValue--; /* not signalled (vkr_submit_batch) */
         }
         vkFreeCommandBuffers(g_vkr.device, g_vkr.oneShotPool, 1, &cb);
     }
