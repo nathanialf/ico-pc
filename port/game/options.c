@@ -78,6 +78,60 @@ void ico_opt_set_yorda_safe(int on)
     s_yorda_safe = on != 0;
 }
 
+/* [gameplay] pit_time (options.h): -1 not read yet, else ICO_PIT_* */
+static int s_pit_time = -1;
+static const char *const kPitNames[ICO_PIT_COUNT] = {"half", "original", "longer", "double",
+                                                     "triple"};
+static const float kPitFactors[ICO_PIT_COUNT] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f};
+
+static void log_pit_time(int v)
+{
+    fprintf(stderr, "gameplay: pit time %s (x%.1f)\n", kPitNames[v], (double)kPitFactors[v]);
+}
+
+int ico_opt_pit_time(void)
+{
+    if (s_pit_time < 0) {
+        const char *v = ico_config_get_string("gameplay.pit_time", "original");
+        int i;
+
+        s_pit_time = ICO_PIT_ORIGINAL;
+        for (i = 0; v != NULL && i < ICO_PIT_COUNT; i++) {
+            if (strcmp(v, kPitNames[i]) == 0) {
+                s_pit_time = i;
+                break;
+            }
+        }
+        if (v != NULL && i == ICO_PIT_COUNT) {
+            fprintf(stderr,
+                    "options: [gameplay] pit_time = \"%s\" is not one of half, original, longer, "
+                    "double, triple\n",
+                    v);
+        }
+        log_pit_time(s_pit_time);
+    }
+    return s_pit_time;
+}
+
+void ico_opt_set_pit_time(int v)
+{
+    v = v >= 0 && v < ICO_PIT_COUNT ? v : ICO_PIT_ORIGINAL;
+    if (v != s_pit_time) {
+        log_pit_time(v);
+    }
+    s_pit_time = v;
+}
+
+float ico_opt_pit_time_factor(void)
+{
+    return kPitFactors[ico_opt_pit_time()];
+}
+
+float ico_opt_pit_dive_ratio(int camera)
+{
+    return (camera != 0 ? 2.0f : 1.0f) / ico_opt_pit_time_factor();
+}
+
 int ico_opt_door_fix(void)
 {
     return get(&s_door_fix, "gameplay.door_fix");
@@ -486,6 +540,7 @@ void ico_opt_hold_type_toggled(int type)
 void ico_opt_reload(void)
 {
     s_stick_fix = s_yorda_safe = s_door_fix = s_mirror = s_developer_mode = s_circle_back = -1;
+    s_pit_time = -1;
     s_natural_chains = s_skip_opening = -1;
     s_output = -2;
     s_ui_language = -2;

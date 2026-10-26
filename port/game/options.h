@@ -12,6 +12,8 @@
  *
  *   [gameplay] stick_fix   false  the stick fix (off on every platform)
  *   [gameplay] yorda_safe  false  the shadows never take Yorda
+ *   [gameplay] pit_time    "original"  the time a shadow takes to pull Yorda
+ *                                 into a pit (half..triple)
  *   [gameplay] door_fix    false  holding hands, an arrival does not send
  *                                 Ico and Yorda straight back through the
  *                                 door they came in by (door_grace.h)
@@ -73,6 +75,23 @@ int ico_opt_stick_fix_default_for(int android);
 int ico_opt_stick_fix_default(void);
 int ico_opt_yorda_safe(void);
 void ico_opt_set_yorda_safe(int on);
+/* [gameplay] pit_time (default "original"): how long a shadow takes to pull
+   Yorda into a pit.  The names are half, original, longer, double, triple
+   (ICO_PIT_*); the time factors 0.5, 1, 1.5, 2, 3.  The dive's play speed is
+   1/factor (ico2/fumi/src/enemy_act.c actEnemyKidnapEnd).  Logs
+   "gameplay: pit time <name> (x<factor>)" at load and on change. */
+#define ICO_PIT_HALF 0
+#define ICO_PIT_ORIGINAL 1
+#define ICO_PIT_LONGER 2
+#define ICO_PIT_DOUBLE 3
+#define ICO_PIT_TRIPLE 4
+#define ICO_PIT_COUNT 5
+int ico_opt_pit_time(void);
+void ico_opt_set_pit_time(int v);
+float ico_opt_pit_time_factor(void);
+/* the dive's play-speed ratio actEnemyKidnapEnd reserves: 1/factor, or 2/factor
+   under a stage camera effect (the game's own 2x) */
+float ico_opt_pit_dive_ratio(int camera);
 /* [gameplay] door_fix (default false): the doorway fix of door_grace.h */
 int ico_opt_door_fix(void);
 void ico_opt_set_door_fix(int on);
