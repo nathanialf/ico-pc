@@ -49,7 +49,7 @@ list above instead of `SCES-50760`.
 2. Copy the pack's files into `replacements`. The pack's own folders
    inside it can stay as they are.
 3. Start the game.
-4. On the title screen, open **Options > Display** and check that **Model
+4. On the title screen, open **Options > Picture** and check that **Model
    pack** says **On**.
 
 That row turns the pack on and off at once, so you can compare. It says
@@ -94,10 +94,10 @@ these notes are written for it.
 
 ### Get the game's models out
 
-1. Turn on the **Developer mode** row on the Options menu's first page.
+1. Open **Options > Developer** and turn on **Developer mode**.
 2. Then do one of these:
    - To save everything as you play: turn on **Dump models**, the row that
-     appears under Developer mode. Every model part the game draws is
+     appears under Developer mode on the same page. Every model part the game draws is
      saved once. Parts that change shape every frame are not saved.
    - To save one model: open **Options > Extras > Models** on the title
      screen, pick the model, and press **Select** (Backspace on a
