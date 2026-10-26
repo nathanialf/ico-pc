@@ -23,11 +23,12 @@ Yes. Open **Options > Controls > Hold type** and choose **B (toggle)**.
 Then one press of R1 takes her hand and another press lets go. **A (hold)**
 is the other choice, where her hand stays held only while R1 is down.
 
-The European, Japanese, Korean and Asian discs start on A. The North American disc,
-the August 2001 preview and the June 2001 demo have no such choice and always
-work as B, so the row is not there with them. The row shows from the title
-screen as well as the pause menu, and it is kept in your settings, so it
-stays as you set it for every save.
+The row starts on **Disc's own**, which shows the disc's own way: A on the
+European, Japanese, Korean and Asian discs, B on the North American disc,
+the August 2001 preview and the June 2001 demo. Choose A there to keep R1
+held on those discs too. The row shows from the title screen as well as the
+pause menu, on every disc, and it is kept in your settings, so it stays as
+you set it for every save.
 
 ## The on-screen buttons are in my way
 

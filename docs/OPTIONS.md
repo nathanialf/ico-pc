@@ -35,8 +35,8 @@ are kept in your save, as on the PS2:
   June 2001 demo, whose game has neither)
 
 Hold type, on the Controls page, is the one PS2 setting that shows from the
-title screen as well. It is kept in the settings file, not in your save, so
-it stays as you set it whatever save you load.
+title screen as well, and on every disc. It is kept in the settings file, not
+in your save, so it stays as you set it whatever save you load.
 
 ## Display
 
@@ -313,13 +313,15 @@ A change takes effect the next time you start the game.
 - **Button configuration** opens the game's own screen for choosing which
   button does what. It applies on top of Remap controls. Pause menu only.
 - **Vibration** is On or Off, as the game's own setting. Pause menu only.
-- **Hold type** is **A (hold)**, where Yorda's hand stays held while you
-  keep R1 down, or **B (toggle)**, where you press R1 once to take her hand
-  and again to let go. A is how the European, Japanese, Korean and Asian discs
-  start. It shows from the title screen and the pause menu, and is kept in
-  the settings file for every save. The North American disc, the August 2001
-  preview and the June 2001 demo do not have this row: on those discs taking
-  Yorda's hand always works as B.
+- **Hold type** is **Disc's own**, **A (hold)**, where Yorda's hand stays
+  held while you keep R1 down, or **B (toggle)**, where you press R1 once to
+  take her hand and again to let go. **Disc's own** is how the disc you play
+  does it, and the row shows which that is: A on the European, Japanese,
+  Korean and Asian discs, B on the North American disc, the August 2001
+  preview and the June 2001 demo (their game has no Hold type of its own and
+  always works as B). Choosing A or B uses that way on every disc. It shows
+  from the title screen and the pause menu, on every disc, and is kept in
+  the settings file for every save.
 - **Analogue stick fix** is the same switch as the one on the Gameplay
   page, shown here too so you find it with the other controls. Turn it on
   in either place and it is on in both.

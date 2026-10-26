@@ -36,12 +36,13 @@ usual job, and the original button for its own.
 | Left stick (move) | left stick | W A S D (hold Left Shift to walk) | |
 | Right stick (look) | right stick | I J K L | move the mouse |
 
-By default you keep R1 held to hold Yorda's hand. If you would rather press
-it once to take her hand and again to let go, choose **B (toggle)** under
+On the European, Japanese, Korean and Asian discs you keep R1 held to hold
+Yorda's hand. On the North American disc, the August 2001 preview and the
+June 2001 demo you press it once to take her hand and again to let go. To
+play the other way, choose **A (hold)** or **B (toggle)** under
 **Options > Controls > Hold type**, from the title screen or the pause
-menu. It works the same with every way of playing. On the North American
-disc, the August 2001 preview and the June 2001 demo it always works that
-way, and the row is not there.
+menu; **Disc's own** goes back to the disc's way. It works the same with
+every way of playing.
 
 A few more keys on a computer:
 
@@ -290,8 +291,9 @@ pictures:
   top left corner, with L2 at the top. It moves around the menus.
 - **Cross, Circle, Square and Triangle** are in the lower right corner.
 - **R1** is the big button just above them. It holds Yorda's hand: keep a
-  finger on it, or, with **Hold type** on **B (toggle)**, tap it once to
-  take her hand and tap it again to let go.
+  finger on it, or, with **Hold type** on **B (toggle)** (the North
+  American disc's and the 2001 previews' own way), tap it once to take her
+  hand and tap it again to let go.
 - **R2** is in the top right corner.
 - **Start and Select** are at the top in the middle.
 - **The look pad** is the rest of the upper right part of the screen.
