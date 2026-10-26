@@ -336,10 +336,12 @@ typedef struct D11CommandList {
 typedef struct D11Frame {
     D11CommandList lists[D11_MAX_CMD_LISTS];
     uint32_t listCount;
-    /* D3D11_QUERY_EVENT, ended on the immediate context after each submit
-     * of the slot (the last end counts): rhi_wait_frame waits on it when
-     * the slot comes round again */
+    /* D3D11_QUERY_EVENT, ended on the immediate context once, when
+     * rhi_wait_frame leaves a slot that submitted work (eventPending: a
+     * submit or a readback copy since), after all of it; rhi_wait_frame
+     * waits on it when the slot comes round again (eventIssued) */
     ID3D11Query *event;
+    bool eventPending;
     bool eventIssued;
     D11BindGroup *groups;
     uint32_t groupCount, groupCap;
