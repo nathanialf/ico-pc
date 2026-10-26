@@ -442,11 +442,22 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   same frame may stay skipped; the timer path's loop under a fake clock keeps a 30 frames a second
   game on 39 ms presents at real time with no resync, where a frame skipped for one step only fell
   behind, and a 60 frames a second game on 20 ms presents through the late arm alone; the present
-  allowance's rule (`testBudgetRule`: the drop to one below a late step's presents, the hold, the
-  climb and its GPU gate, the display's wait excused, a late step of new frames only changing
-  nothing, never above the ceiling), the timer path's unbound start (`testBudgetUnbound`: 15
-  presents a step on time never refused, a drop held to the ceiling of 8, one climb past it
-  unbound again, the lock's allowance never unbound) and the timer path with a GPU queue
+  allowance's rule (`testBudgetRule`: one late step arming only, a second within 60 steps dropping
+  to one below its presents, a late step of new frames only confirming an armed drop, the arm's 60
+  steps, the hold, the climb straight back to the ceiling or by one and its GPU gate, a refused
+  climb counted, the display's wait excused, `pace_display_wait` with and without OpenGL's fence
+  waits, never above the ceiling), the timer path's unbound start (`testBudgetUnbound`: 15
+  presents a step on time never refused, a drop held to the ceiling of 8, the climb unbound again,
+  straight back to unbound at 4 ms of GPU, one at a time and then refused at 3 ms, the lock's
+  allowance never unbound), the reporters' sequences replayed from their logs
+  (`testBudgetHitch130`: issue 130's one late step leaves an uncapped 6 presents a step unbound
+  with nothing refused, two within 60 steps hold it to 1 and 120 steps later it is unbound again
+  at 1.2 ms of GPU, at 1 with a refused climb every 60 steps at 9 ms; `testBudgetSustained`: the
+  item-3 case held to 1, issue 139's GPU-bound lock held to 0; `testBudgetGlWait126`: issue 126's
+  OpenGL display wait excused, the same numbers on Vulkan dropping to 0 and back to 1 after 120
+  steps, the GPU-bound OpenGL blocks at 0; `testBudgetLines`: the drop, climb, refused-climb and
+  10 s words of those sequences and the lock's clock part, compared word for word), and the timer
+  path with a GPU queue
   (`testBudgetTimerLoop`: nothing binds at 4 or 12 ms of GPU a picture nor on back-to-back 1 ms
   presents, the in-betweens held at 20 ms so no step ends half a period late, FIFO's return past
   the deadline excused); the clamp of a cap above the refresh in
