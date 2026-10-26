@@ -19,16 +19,19 @@
  * is pace_loop_test's testLateSkipLock; testLateSkipLoop: the window's loop under a fake clock, a 30
  * frames a second game on 39 ms presents keeps real time with no resync and
  * every other frame at least, the one-step rule fell behind).
- * The present allowance (testBudgetRule: the drop, hold, climb, GPU gate,
- * excuse and limits; testBudgetUnbound: the timer path's start unbound, 15
- * presents a step never refused, a drop to max at most and the climb past
- * it unbound again; testBudgetTimerLoop: the timer path with a GPU queue,
+ * The present allowance (testBudgetRule: the arm, the drop, hold, climb,
+ * GPU gate, excuse and limits; testBudgetUnbound: the timer path's start
+ * unbound, 15 presents a step never refused, a drop to max at most and the
+ * climb back unbound; testBudgetHitch130, testBudgetSustained,
+ * testBudgetGlWait126: the reporters' sequences from their logs;
+ * testBudgetLines: the window's lines word for word; testBudgetTimerLoop: the timer path with a GPU queue,
  * nothing binds on a GPU that keeps up, back-to-back cheap presents
  * unchanged, the in-betweens dropped before a
  * step ends half a period late on one that does not, FIFO's display wait
  * excused).
  */
 #include <stdio.h>
+#include <string.h>
 #include "pace_policy.h"
 
 static int fails;
@@ -952,69 +955,111 @@ static unsigned budgetSteps(PaceBudget *b, unsigned steps, unsigned presents, bo
 }
 
 /* The present allowance (pace_budget_*): a late step with an optional
-   present drops it to one below the step's presents and holds it
-   PACE_ALLOW_HOLD steps, PACE_ALLOW_CLIMB steps on time take it up by one
-   when the GPU gate lets it; half a period is late; the display's own wait
-   less than a refresh late is excused; a late step of new frames only drops
-   nothing; a new frame is always allowed; never above max.  pace_hist_add's
-   median. */
+   present arms it, a second late step while armed (within PACE_ALLOW_HOLD
+   steps) drops it to one below that step's presents and holds it
+   PACE_ALLOW_HOLD steps; every PACE_ALLOW_CLIMB_STEP steps on time after
+   the hold it goes straight back to max when the GPU has the time for max
+   presents, else up by one when it has the time for one more, else the
+   climb is refused; half a period is late; the display's own wait less
+   than a refresh late is excused; late steps of new frames only arm
+   nothing, but one while armed confirms the drop (one below the arming
+   step's presents); a new frame is always allowed; never above max.
+   pace_display_wait's choice; pace_hist_add's median. */
 static void testBudgetRule(void)
 {
     PaceBudget b;
 
     pace_budget_reset(&b, PACE_ALLOW_MAX);
-    CHECK(b.allow == PACE_ALLOW_MAX && b.lowest == PACE_ALLOW_MAX && b.drops == 0);
-    /* two presents (a new frame and an in-between) and 10 ms late: 1 */
+    CHECK(b.allow == PACE_ALLOW_MAX && b.lowest == PACE_ALLOW_MAX && b.drops == 0 && b.arm == 0);
+    /* one late step (a new frame and an in-between, 10 ms late): armed only */
     pace_budget_present(&b, true);
     pace_budget_present(&b, false);
-    CHECK(pace_budget_step(&b, 10 * MS, PERIOD, REFRESH, 0, 0, 3 * MS));
+    CHECK(!pace_budget_step(&b, 10 * MS, PERIOD, REFRESH, 0, 0, 3 * MS));
+    CHECK(b.allow == PACE_ALLOW_MAX && b.arm == PACE_ALLOW_HOLD && b.arms == 1 && b.drops == 0);
+    CHECK(b.lateMaxNs == 10 * MS && b.presents == 0 && b.optional == 0);
+    /* the second while armed (the next step, 11 ms late): 1, held */
+    pace_budget_present(&b, true);
+    pace_budget_present(&b, false);
+    CHECK(pace_budget_step(&b, 11 * MS, PERIOD, REFRESH, 0, 0, 3 * MS));
     CHECK(b.allow == 1 && b.hold == PACE_ALLOW_HOLD && b.drops == 1 && b.lowest == 1);
-    CHECK(b.dropPresents == 2 && b.dropLateNs == 10 * MS && b.lateMaxNs == 10 * MS);
-    CHECK(b.presents == 0 && b.optional == 0);
+    CHECK(b.dropPresents == 2 && b.dropLateNs == 11 * MS && b.lateMaxNs == 11 * MS);
+    CHECK(b.dropAgo == 1 && b.dropPrevLateNs == 10 * MS && b.dropPrevPresents == 2);
+    CHECK(b.sinceDrop == 0 && b.arm == PACE_ALLOW_HOLD && b.presents == 0);
     /* at 1: an in-between first is allowed, none after a present; a new
        frame always */
     CHECK(pace_budget_allows(&b, false));
     pace_budget_present(&b, true);
     CHECK(!pace_budget_allows(&b, false) && pace_budget_allows(&b, true));
     CHECK(!pace_budget_step(&b, 0, PERIOD, REFRESH, 0, 0, 3 * MS));
-    /* held: 59 more on time, then 179 on time, still 1; the next climbs
-       (no GPU time: the climb probes) */
+    /* held: 59 more on time, then PACE_ALLOW_CLIMB_STEP - 1 on time, still
+       1; the next goes straight back to max (no GPU time: the climb probes) */
     CHECK(budgetSteps(&b, 59, 1, true, 0, 0, 0) == 0 && b.allow == 1 && b.hold == 0);
-    CHECK(budgetSteps(&b, PACE_ALLOW_CLIMB - 1, 1, true, 0, 0, 0) == 0 && b.allow == 1);
-    CHECK(budgetSteps(&b, 1, 1, true, 0, 0, 0) == 1 && b.allow == 2 && b.climbs == 1);
+    CHECK(budgetSteps(&b, PACE_ALLOW_CLIMB_STEP - 1, 1, true, 0, 0, 0) == 0 && b.allow == 1);
+    CHECK(budgetSteps(&b, 1, 1, true, 0, 0, 0) == 1 && b.allow == PACE_ALLOW_MAX && b.climbs == 1);
+    CHECK(b.gateK == PACE_ALLOW_MAX && b.sinceDrop == PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP);
+    CHECK(b.arm == 0);
     /* the GPU gate: 12 ms a picture and a 3 ms step leave no room for a
-       second present (2 * 12 + 3 > 16.68): no climb */
-    CHECK(budgetSteps(&b, 1, 2, true, 10 * MS, 0, 12 * MS) == 1 && b.allow == 1 && b.drops == 2);
-    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB, 1, true, 0, 0, 12 * MS) == 0);
-    CHECK(b.allow == 1 && b.climbs == 1);
-    /* 6 ms a picture (2 * 6 + 3 < 16.68): the next PACE_ALLOW_CLIMB climb */
-    CHECK(budgetSteps(&b, PACE_ALLOW_CLIMB, 1, true, 0, 0, 6 * MS) == 1 && b.allow == 2);
-    /* under half a period is not late */
-    CHECK(budgetSteps(&b, 1, 2, true, PERIOD / 2 - 1, 0, 0) == 0 && b.allow == 2);
-    CHECK(budgetSteps(&b, 1, 2, true, PERIOD / 2, 0, 0) == 1 && b.allow == 1);
+       second present (2 * 12 + 3 > 16.68): two late steps drop to 1 and
+       the climb is refused, asking for 2 */
+    CHECK(budgetSteps(&b, 2, 2, true, 10 * MS, 0, 12 * MS) == 1 && b.allow == 1 && b.drops == 2);
+    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP, 1, true, 0, 0, 12 * MS) == 0);
+    CHECK(b.allow == 1 && b.climbs == 1 && b.climbRefusals == 1 && b.gateK == 2);
+    /* 6 ms a picture: not max (8 * 6 + 3 > 16.68) but one more (2 * 6 + 3) */
+    CHECK(budgetSteps(&b, PACE_ALLOW_CLIMB_STEP, 1, true, 0, 0, 6 * MS) == 1 && b.allow == 2);
+    CHECK(b.gateK == 2 && b.climbs == 2);
+    /* 1 ms a picture (8 * 1 + 3 < 16.68): straight back to max */
+    CHECK(budgetSteps(&b, PACE_ALLOW_CLIMB_STEP, 1, true, 0, 0, 1 * MS) == 1);
+    CHECK(b.allow == PACE_ALLOW_MAX && b.gateK == PACE_ALLOW_MAX && b.climbs == 3);
+    /* under half a period is not late (nothing armed); half a period is */
+    CHECK(budgetSteps(&b, 2, 2, true, PERIOD / 2 - 1, 0, 0) == 0 && b.arm == 0 && b.arms == 2);
+    CHECK(budgetSteps(&b, 2, 2, true, PERIOD / 2, 0, 0) == 1 && b.allow == 1 && b.arms == 3);
     /* the display's wait (5 ms, a quarter of a refresh or more) with the
-       step less than a refresh late: excused; 3 ms is not the display's;
-       20 ms late is a refresh or more, not excused */
+       step less than a refresh late: excused, nothing armed; 3 ms is not
+       the display's; 20 ms late is a refresh or more, not excused */
     pace_budget_reset(&b, PACE_ALLOW_MAX);
-    CHECK(budgetSteps(&b, 1, 2, true, 10 * MS, 5 * MS, 0) == 0 && b.drops == 0);
-    CHECK(budgetSteps(&b, 1, 2, true, 7 * MS, 5 * MS, 0) == 0 && b.drops == 0);
-    CHECK(budgetSteps(&b, 1, 2, true, 10 * MS, 3 * MS, 0) == 1 && b.allow == 1);
+    CHECK(budgetSteps(&b, 2, 2, true, 10 * MS, 5 * MS, 0) == 0 && b.arms == 0 && b.drops == 0);
+    CHECK(budgetSteps(&b, 2, 2, true, 7 * MS, 5 * MS, 0) == 0 && b.arms == 0);
+    CHECK(budgetSteps(&b, 2, 2, true, 10 * MS, 3 * MS, 0) == 1 && b.allow == 1);
     pace_budget_reset(&b, PACE_ALLOW_MAX);
-    CHECK(budgetSteps(&b, 1, 2, true, 20 * MS, 5 * MS, 0) == 1 && b.allow == 1);
-    /* a late step of new frames only (a hitch's catch-up): nothing drops */
+    CHECK(budgetSteps(&b, 2, 2, true, 20 * MS, 5 * MS, 0) == 1 && b.allow == 1);
+    /* late steps of new frames only (a hitch's catch-up): nothing armed */
     pace_budget_reset(&b, PACE_ALLOW_MAX);
-    CHECK(budgetSteps(&b, 1, 1, true, 30 * MS, 0, 0) == 0 && b.allow == PACE_ALLOW_MAX);
-    CHECK(budgetSteps(&b, 1, 0, true, 30 * MS, 0, 0) == 0 && b.drops == 0);
-    /* a late step with one in-between: 0; a new frame still presented */
-    CHECK(budgetSteps(&b, 1, 1, false, 10 * MS, 0, 0) == 1 && b.allow == 0 && b.lowest == 0);
+    CHECK(budgetSteps(&b, 2, 1, true, 30 * MS, 0, 0) == 0 && b.allow == PACE_ALLOW_MAX);
+    CHECK(budgetSteps(&b, 2, 0, true, 30 * MS, 0, 0) == 0 && b.arms == 0 && b.drops == 0);
+    /* a late step of new frames only while armed: the lateness lasts, one
+       below the arming step's presents (3 - 1); at 2 another lowers
+       nothing and is no drop */
+    pace_budget_reset(&b, PACE_ALLOW_MAX);
+    CHECK(budgetSteps(&b, 1, 3, true, 10 * MS, 0, 0) == 0 && b.arms == 1);
+    CHECK(budgetSteps(&b, 1, 1, true, 12 * MS, 0, 0) == 1 && b.allow == 2);
+    CHECK(b.dropPresents == 1 && b.dropAgo == 1 && b.dropPrevPresents == 3);
+    CHECK(budgetSteps(&b, 1, 1, true, 12 * MS, 0, 0) == 0 && b.drops == 1 && b.allow == 2);
+    /* late steps with one in-between: 0; a new frame still presented */
+    pace_budget_reset(&b, PACE_ALLOW_MAX);
+    CHECK(budgetSteps(&b, 2, 1, false, 10 * MS, 0, 0) == 1 && b.allow == 0 && b.lowest == 0);
     CHECK(pace_budget_allows(&b, true) && !pace_budget_allows(&b, false));
     /* the block: lowest from the allowance now, the latest step cleared */
     pace_budget_block(&b);
     CHECK(b.lowest == 0 && b.lateMaxNs == 0);
-    /* never above max: the lock's n = 2 climbs no further */
+    /* the arm lasts PACE_ALLOW_HOLD steps: a late step 61 steps after the
+       one before arms again, one 60 steps after drops */
     pace_budget_reset(&b, 2);
+    CHECK(budgetSteps(&b, 1, 2, true, 10 * MS, 0, 0) == 0 && b.arm == PACE_ALLOW_HOLD);
+    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD, 1, true, 0, 0, 0) == 0 && b.arm == 0);
+    CHECK(budgetSteps(&b, 1, 2, true, 10 * MS, 0, 0) == 0 && b.arms == 2 && b.drops == 0);
+    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD - 1, 1, true, 0, 0, 0) == 0 && b.arm == 1);
     CHECK(budgetSteps(&b, 1, 2, true, 10 * MS, 0, 0) == 1 && b.allow == 1);
+    CHECK(b.dropAgo == PACE_ALLOW_HOLD && b.drops == 1);
+    /* never above max: the lock's n = 2 back to 2 and no further */
     CHECK(budgetSteps(&b, 2000, 1, true, 0, 0, 0) == 1 && b.allow == 2 && b.max == 2);
+    CHECK(b.climbs == 1 && b.climbRefusals == 0);
+    /* pace_display_wait: the acquire and the present, or with the fence
+       waits where they hold the display's wait (OpenGL); never above the
+       present's time */
+    CHECK(pace_display_wait(1 * MS, 8 * MS, 20 * MS, false) == 1 * MS);
+    CHECK(pace_display_wait(1 * MS, 8 * MS, 20 * MS, true) == 9 * MS);
+    CHECK(pace_display_wait(1 * MS, 30 * MS, 20 * MS, true) == 20 * MS);
+    CHECK(pace_display_wait(25 * MS, 0, 20 * MS, false) == 20 * MS);
     /* pace_hist_add: the median of the last PACE_HIST_LEN */
     {
         PaceHist g = {0};
@@ -1030,9 +1075,13 @@ static void testBudgetRule(void)
 
 /* The timer path's allowance (pace_budget_reset_unbound): unbound at the
    start, so 15 presents a step (a new frame and 14 in-betweens) with no late
-   step are never refused and nothing changes; a late step of 15 drops it to
-   max (8), not 14, and the climb past max after the hold makes it unbound
-   again; a drop to 1 climbs one at a time to max and then unbound. */
+   step are never refused and nothing changes; two late steps of 15 drop it
+   to max (8), not 14, and the climb after the hold makes it unbound again
+   (no GPU time: the climb probes, max + 1 presents' worth asked); two late
+   steps of 2 with 4 ms a picture go straight back to unbound; a drop from a
+   late step of 5 to 1 with 3 ms a picture climbs one at a time to 4 (5 * 3
+   + 3 is not under 16.68) and is refused there, and unbound once the GPU
+   takes 1 ms. */
 static void testBudgetUnbound(void)
 {
     PaceBudget b;
@@ -1051,29 +1100,345 @@ static void testBudgetUnbound(void)
     }
     CHECK(refused == 0 && changes == 0 && b.allow == PACE_ALLOW_NONE && b.drops == 0);
     CHECK(b.climbs == 0 && b.lowest == PACE_ALLOW_NONE);
-    /* a late step of 15: held to max, not 14 */
-    CHECK(budgetSteps(&b, 1, 15, true, 10 * MS, 0, 0) == 1 && b.allow == PACE_ALLOW_MAX);
-    CHECK(b.drops == 1 && b.lowest == PACE_ALLOW_MAX && b.dropPresents == 15);
-    /* the hold and PACE_ALLOW_CLIMB - 1 on time: still max; the next: unbound */
-    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB - 1, 1, true, 0, 0, 0) == 0);
+    /* two late steps of 15: held to max, not 14 */
+    CHECK(budgetSteps(&b, 2, 15, true, 10 * MS, 0, 0) == 1 && b.allow == PACE_ALLOW_MAX);
+    CHECK(b.drops == 1 && b.lowest == PACE_ALLOW_MAX && b.dropPresents == 15 && b.dropMost == 15);
+    /* the hold and PACE_ALLOW_CLIMB_STEP - 1 on time: still max; the next: unbound */
+    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP - 1, 1, true, 0, 0, 0) == 0);
     CHECK(b.allow == PACE_ALLOW_MAX);
     CHECK(budgetSteps(&b, 1, 1, true, 0, 0, 0) == 1 && b.allow == PACE_ALLOW_NONE);
-    CHECK(b.climbs == 1);
+    CHECK(b.climbs == 1 && b.gateK == PACE_ALLOW_MAX + 1 && b.dropMost == 0);
     /* unbound: no climb counted on time */
     CHECK(budgetSteps(&b, 1000, 1, true, 0, 0, 0) == 0 && b.climbs == 1);
-    /* a drop to 1, then one a climb: 2 .. max, then unbound */
-    CHECK(budgetSteps(&b, 1, 2, true, 10 * MS, 0, 0) == 1 && b.allow == 1);
-    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD, 1, true, 0, 0, 0) == 0 && b.allow == 1);
-    CHECK(budgetSteps(&b, PACE_ALLOW_CLIMB * (PACE_ALLOW_MAX - 1), 1, true, 0, 0, 0) ==
-          PACE_ALLOW_MAX - 1);
-    CHECK(b.allow == PACE_ALLOW_MAX);
-    CHECK(budgetSteps(&b, PACE_ALLOW_CLIMB, 1, true, 0, 0, 0) == 1 && b.allow == PACE_ALLOW_NONE);
+    /* two late steps of 2 and 4 ms a picture (2 * 4 + 3 < 16.68): 1, then
+       straight back to unbound */
+    CHECK(budgetSteps(&b, 2, 2, true, 10 * MS, 0, 4 * MS) == 1 && b.allow == 1);
+    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP - 1, 1, true, 0, 0, 4 * MS) == 0);
+    CHECK(b.allow == 1);
+    CHECK(budgetSteps(&b, 1, 1, true, 0, 0, 4 * MS) == 1 && b.allow == PACE_ALLOW_NONE);
+    CHECK(b.gateK == 2 && b.climbs == 2);
+    /* a late step of 5, then one of 2: 1, the most presents 5; at 3 ms a
+       picture one at a time to 4, then refused (5 * 3 + 3 > 16.68) */
+    CHECK(budgetSteps(&b, 1, 5, true, 10 * MS, 0, 3 * MS) == 0 && b.arm == PACE_ALLOW_HOLD);
+    CHECK(budgetSteps(&b, 1, 2, true, 10 * MS, 0, 3 * MS) == 1 && b.allow == 1 && b.dropMost == 5);
+    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP, 1, true, 0, 0, 3 * MS) == 1);
+    CHECK(b.allow == 2 && b.gateK == 2);
+    CHECK(budgetSteps(&b, 2 * PACE_ALLOW_CLIMB_STEP, 1, true, 0, 0, 3 * MS) == 2 && b.allow == 4);
+    CHECK(budgetSteps(&b, PACE_ALLOW_CLIMB_STEP, 1, true, 0, 0, 3 * MS) == 0 && b.allow == 4);
+    CHECK(b.climbRefusals == 1 && b.gateK == 5);
+    /* the GPU at 1 ms (5 * 1 + 3 < 16.68): unbound */
+    CHECK(budgetSteps(&b, PACE_ALLOW_CLIMB_STEP, 1, true, 0, 0, 1 * MS) == 1);
+    CHECK(b.allow == PACE_ALLOW_NONE && b.gateK == 5 && b.dropMost == 0);
     /* the block's lowest from an unbound allowance: unbound */
     pace_budget_block(&b);
     CHECK(b.lowest == PACE_ALLOW_NONE);
     /* the lock's allowance (pace_budget_reset) never goes unbound */
     pace_budget_reset(&b, 2);
     CHECK(!b.unbind && budgetSteps(&b, 2000, 1, true, 0, 0, 0) == 0 && b.allow == 2);
+}
+
+/* The reporters' sequences (the evidence logs, build-host/tmp/v092/
+   evidence/), replayed through the allowance as the window drives it:
+   each step wants `want` presents, a new frame's first every `newEvery`
+   steps (0: none, every present of a frame already shown), a present past
+   the allowance refused (counted); a step that made at least lateFrom
+   presents (and one or more) ends lateNs late, its last present having
+   waited waitNs for the display.  The period, the refresh, the GPU time a
+   presented replay and the simulation step's time are the sequence's. */
+typedef struct BudgetSeq {
+    PaceBudget b;
+    unsigned k, refused, changes;
+    uint64_t periodNs, refreshNs, gpuNs, stepNs;
+} BudgetSeq;
+
+static void seqSteps(BudgetSeq *q, unsigned steps, unsigned want, unsigned newEvery,
+                     uint64_t lateNs, unsigned lateFrom, uint64_t waitNs)
+{
+    for (unsigned s = 0; s < steps; s++, q->k++) {
+        const bool newFrame = newEvery != 0 && q->k % newEvery == 0;
+        unsigned made = 0;
+
+        for (unsigned i = 0; i < want; i++) {
+            if (!pace_budget_allows(&q->b, newFrame && i == 0)) {
+                q->refused++;
+                q->b.refused++; /* as the window counts them */
+                continue;
+            }
+            pace_budget_present(&q->b, newFrame && i == 0);
+            made++;
+        }
+        q->changes += pace_budget_step(&q->b, made > 0 && made >= lateFrom ? lateNs : 0,
+                                       q->periodNs, q->refreshNs, waitNs, q->gpuNs, q->stepNs)
+                          ? 1u
+                          : 0u;
+    }
+}
+
+/* the window's climb line for a sequence (window_host.c budget_lines) */
+static void seqClimbLine(const char *who, const BudgetSeq *q)
+{
+    const PaceBudget *b = &q->b;
+
+    if (b->allow == PACE_ALLOW_NONE) {
+        printf("pace_policy_test: %s: presents back to not held after %u steps (GPU %.1f ms x %u + "
+               "step %.1f ms under the period %.1f ms)\n",
+               who, b->sinceDrop, (double)q->gpuNs / 1e6, b->gateK, (double)q->stepNs / 1e6,
+               (double)q->periodNs / 1e6);
+    } else {
+        printf(
+            "pace_policy_test: %s: presents at %u a step, %u steps since the drop (GPU %.1f ms x "
+            "%u + step %.1f ms against the period %.1f ms; %u climbs, %u refused)\n",
+            who, b->allow, b->sinceDrop, (double)q->gpuNs / 1e6, b->gateK, (double)q->stepNs / 1e6,
+            (double)q->periodNs / 1e6, b->climbs, b->climbRefusals);
+    }
+}
+
+/* issue 130 (evidence/130/ico-pc-previous-v091.log, RTX 4090, uncapped,
+   immediate, 360 Hz): block 1 made 6.7 presents a step with the GPU at
+   1.2 ms a presented replay in block 2; line 909's step ended 8.7 ms late
+   after 2 presents (the display's wait 0.1 ms), line 982's 12.6 ms after
+   2.  v0.9.1 held the presents to 1 a step at the first and needed 8
+   climbs of 180 steps (28 s on time) to be unbound again.  Now: one such
+   step only arms (600 steps of 6 presents either side, nothing refused,
+   unbound); two within 60 steps drop to 1, and 120 steps on time later it
+   is unbound again (2 * 1.2 + 0.5 < 16.68), nothing refused after; with
+   the GPU at 9 ms (2 * 9 + 0.5 > 16.68) it stays at 1, a refused climb
+   every 60 steps. */
+static void testBudgetHitch130(void)
+{
+    const uint64_t refresh360 = 2777778ull, wait = 100000ull, gpu = 1200000ull;
+    BudgetSeq q = {.periodNs = PERIOD, .refreshNs = refresh360, .gpuNs = gpu, .stepNs = MS / 2};
+
+    pace_budget_reset_unbound(&q.b, PACE_ALLOW_MAX);
+    seqSteps(&q, 600, 6, 2, 0, 0, wait);
+    seqSteps(&q, 1, 2, 0, 8700000ull, 2, wait);
+    seqSteps(&q, 600, 6, 2, 0, 0, wait);
+    printf("pace_policy_test: issue 130, one step 8.7 ms late among 1200 of 6 presents: allowance "
+           "%s, %u armed, %u drops, %u refused\n",
+           q.b.allow == PACE_ALLOW_NONE ? "not held" : "held", q.b.arms, q.b.drops, q.refused);
+    CHECK(q.b.allow == PACE_ALLOW_NONE && q.refused == 0 && q.changes == 0);
+    CHECK(q.b.arms == 1 && q.b.drops == 0 && q.b.lowest == PACE_ALLOW_NONE);
+    for (int g = 0; g < 2; g++) {
+        unsigned refused;
+
+        q = (BudgetSeq){.periodNs = PERIOD,
+                        .refreshNs = refresh360,
+                        .gpuNs = g ? 9 * MS : gpu,
+                        .stepNs = MS / 2};
+        pace_budget_reset_unbound(&q.b, PACE_ALLOW_MAX);
+        seqSteps(&q, 600, 6, 2, 0, 0, wait);
+        seqSteps(&q, 1, 2, 0, 8700000ull, 2, wait);
+        seqSteps(&q, 30, 6, 2, 0, 0, wait);
+        seqSteps(&q, 1, 2, 0, 12600000ull, 2, wait);
+        printf("pace_policy_test: issue 130, a second late step %u steps after the first: presents "
+               "held to %u a step (the step %.1f ms late after %u presents, the one before %.1f "
+               "ms after %u)\n",
+               q.b.dropAgo, q.b.allow, (double)q.b.dropLateNs / 1e6, q.b.dropPresents,
+               (double)q.b.dropPrevLateNs / 1e6, q.b.dropPrevPresents);
+        CHECK(q.b.allow == 1 && q.b.drops == 1 && q.b.dropAgo == 31 && q.refused == 0);
+        CHECK(q.b.dropPrevLateNs == 8700000ull && q.b.dropMost == 2);
+        seqSteps(&q, PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP - 1, 6, 2, 0, 0, wait);
+        CHECK(q.b.allow == 1 && q.refused == 5 * (PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP - 1));
+        seqSteps(&q, 1, 6, 2, 0, 0, wait);
+        seqClimbLine(g ? "issue 130, GPU 9 ms" : "issue 130", &q);
+        refused = q.refused;
+        seqSteps(&q, 600, 6, 2, 0, 0, wait);
+        if (!g) {
+            CHECK(q.b.allow == PACE_ALLOW_NONE && q.b.climbs == 1 && q.b.gateK == 2);
+            CHECK(q.b.climbRefusals == 0 && q.refused == refused && q.b.drops == 1);
+        } else {
+            CHECK(q.b.allow == 1 && q.b.climbs == 0 && q.b.gateK == 2);
+            CHECK(q.b.climbRefusals == 11 && q.refused == refused + 5 * 600);
+        }
+    }
+}
+
+/* Lateness that lasts is still held.  The issue-130 item-3 case (v0.8.6:
+   cap 120, two presents a step empty the audio's lead): every step that
+   makes two presents ends 9 ms late, the GPU 9 ms a picture: held to 1 at
+   the second step and kept there (2 * 9 + 0.5 > 16.68: a refused climb
+   every 60 steps), one drop in all.  Issue 139 (evidence/139: Frame rate
+   60, 4x supersampling on an RTX 2000 Ada, the vsync lock n = 1): the GPU
+   19 ms a picture and a 2 ms step, every step with a present 10 ms late:
+   armed at the first in-between's step, held to 0 at the next late step
+   (the new frame's: the lateness lasts) and kept there (1 * 19 + 2 >
+   16.67): exactly the game's own 30 frames a second. */
+static void testBudgetSustained(void)
+{
+    const uint64_t lockPeriod = 16667ull * 1000;
+    BudgetSeq q = {.periodNs = PERIOD, .refreshNs = 2777778ull, .gpuNs = 9 * MS, .stepNs = MS / 2};
+
+    pace_budget_reset_unbound(&q.b, PACE_ALLOW_MAX);
+    seqSteps(&q, 600, 2, 2, 9 * MS, 2, 0);
+    seqClimbLine("item 3, cap 120", &q);
+    CHECK(q.b.allow == 1 && q.b.drops == 1 && q.b.lowest == 1 && q.b.dropAgo == 1);
+    CHECK(q.b.climbs == 0 && q.b.climbRefusals == 8 && q.b.gateK == 2 && q.refused == 598);
+    q = (BudgetSeq){
+        .periodNs = lockPeriod, .refreshNs = lockPeriod, .gpuNs = 19 * MS, .stepNs = 2 * MS};
+    pace_budget_reset(&q.b, 1);
+    seqSteps(&q, 600, 1, 2, 10 * MS, 1, 0);
+    seqClimbLine("issue 139, the lock at 1", &q);
+    CHECK(q.b.allow == 0 && q.b.drops == 1 && q.b.lowest == 0 && q.b.dropAgo == 1);
+    CHECK(q.b.climbs == 0 && q.b.climbRefusals == 8 && q.b.gateK == 1 && q.refused == 299);
+}
+
+/* Issue 126 (evidence/126/ico-pc-opengl-v091.log, GTX 750 Ti, OpenGL,
+   vsync lock n = 1 at 60): line 413's step ended 8.9 ms late after 1
+   present whose fences waited 8.3 ms and whose swap 0.1 ms, GPU 3.6 ms a
+   replay.  On OpenGL the fence wait is FIFO's queue (pace_display_wait
+   with fenceHoldsDisplay: 8.4 ms, a quarter of a refresh or more, and the
+   step less than a refresh late): two such steps two apart are excused,
+   nothing armed, the lock's 1 kept.  The same numbers from Vulkan, whose
+   fence waits are the GPU's (0.1 ms the display's), drop to 0 at the
+   second, and 120 steps on time later back to 1 (1 * 3.6 + 2 < 16.67).
+   The GPU-bound OpenGL blocks (line 343, GPU 22 ms; line 429's step 22.0
+   ms late, the fence 14.6 ms, the swap 1.6 ms) are a refresh or more late,
+   not excused: held to 0, the game's own 30, as the card's time says. */
+static void testBudgetGlWait126(void)
+{
+    const uint64_t lockPeriod = 16667ull * 1000;
+
+    for (int gl = 1; gl >= 0; gl--) {
+        BudgetSeq q = {
+            .periodNs = lockPeriod, .refreshNs = lockPeriod, .gpuNs = 3600000ull, .stepNs = 2 * MS};
+        const uint64_t wait = pace_display_wait(100000ull, 8300000ull, 20800000ull, gl != 0);
+
+        pace_budget_reset(&q.b, 1);
+        seqSteps(&q, 100, 1, 2, 0, 0, 0);
+        seqSteps(&q, 1, 1, 0, 8900000ull, 1, wait);
+        seqSteps(&q, 1, 1, 0, 0, 0, 0);
+        seqSteps(&q, 1, 1, 0, 8900000ull, 1, wait);
+        printf("pace_policy_test: issue 126 line 413 twice on %s: the display's wait %.1f ms, "
+               "allowance %u (%u armed, %u drops)\n",
+               gl ? "OpenGL" : "Vulkan", (double)wait / 1e6, q.b.allow, q.b.arms, q.b.drops);
+        if (gl) {
+            CHECK(wait == 8400000ull);
+            CHECK(q.b.allow == 1 && q.b.arms == 0 && q.b.drops == 0 && q.changes == 0);
+        } else {
+            CHECK(wait == 100000ull);
+            CHECK(q.b.allow == 0 && q.b.arms == 1 && q.b.drops == 1 && q.b.dropAgo == 2);
+            seqSteps(&q, PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP - 1, 1, 2, 0, 0, 0);
+            CHECK(q.b.allow == 0 && q.refused == 60);
+            seqSteps(&q, 1, 1, 2, 0, 0, 0);
+            seqClimbLine("issue 126 on Vulkan", &q);
+            CHECK(q.b.allow == 1 && q.b.climbs == 1 && q.b.gateK == 1);
+        }
+    }
+    {
+        BudgetSeq q = {
+            .periodNs = lockPeriod, .refreshNs = lockPeriod, .gpuNs = 22 * MS, .stepNs = 2 * MS};
+        const uint64_t wait = pace_display_wait(1600000ull, 14600000ull, 22700000ull, true);
+
+        pace_budget_reset(&q.b, 1);
+        seqSteps(&q, 600, 1, 2, 22 * MS, 1, wait);
+        seqClimbLine("issue 126, GPU-bound on OpenGL", &q);
+        CHECK(wait == 16200000ull && q.b.allow == 0 && q.b.drops == 1);
+        CHECK(q.b.climbRefusals == 8 && q.refused == 299);
+    }
+}
+
+/* The window's lines (pace_budget_event_text, pace_budget_block_text,
+   pace_lock_timing_text) word for word on the reporters' sequences: issue
+   130's drop at its second late step, its climb back to unbound at 1.2 ms
+   of GPU and its refused climb at 9 ms; issue 126's GPU-bound OpenGL drop
+   naming the fence waits; issue 139's 10 s line; the lock's clock part. */
+static bool textIs(const char *got, const char *want)
+{
+    if (strcmp(got, want) != 0) {
+        printf("pace_policy_test: got  \"%s\"\npace_policy_test: want \"%s\"\n", got, want);
+        return false;
+    }
+    printf("pace_policy_test: window: %s\n", got);
+    return true;
+}
+
+static void testBudgetLines(void)
+{
+    const uint64_t lockPeriod = 16667ull * 1000, wait = 100000ull;
+    char t[400];
+
+    for (int g = 0; g < 2; g++) {
+        BudgetSeq q = {.periodNs = PERIOD,
+                       .refreshNs = 2777778ull,
+                       .gpuNs = g ? 9 * MS : 1200000ull,
+                       .stepNs = MS / 2};
+        PaceBudgetWaits w = {22 * MS, 21500000ull, wait, 1 * MS, MS / 2, PERIOD, false};
+
+        pace_budget_reset_unbound(&q.b, PACE_ALLOW_MAX);
+        seqSteps(&q, 600, 6, 2, 0, 0, wait);
+        seqSteps(&q, 1, 2, 0, 8700000ull, 2, wait);
+        seqSteps(&q, 30, 6, 2, 0, 0, wait);
+        seqSteps(&q, 1, 2, 0, 12600000ull, 2, wait);
+        pace_budget_event_text(&q.b, PACE_BUDGET_TEXT_DROP, &w, t, sizeof(t));
+        CHECK(textIs(t, "presents held to 1 a step: the step ended 12.6 ms late after 2 presents, "
+                        "31 steps after one 8.7 ms late after 2 (the last present 22.0 ms, waited "
+                        "21.5 ms for the GPU and 0.1 ms for the display; GPU 1.0 ms a replay); "
+                        "back to not held after 120 steps on time if the GPU allows"));
+        seqSteps(&q, PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP, 6, 2, 0, 0, wait);
+        w.gpuNs = q.gpuNs;
+        if (!g) {
+            pace_budget_event_text(&q.b, PACE_BUDGET_TEXT_CLIMB, &w, t, sizeof(t));
+            CHECK(textIs(t, "presents back to not held (where they started) after 120 steps (GPU "
+                            "1.2 ms x 2 + step 0.5 ms under the period 16.7 ms)"));
+        } else {
+            pace_budget_event_text(&q.b, PACE_BUDGET_TEXT_STAY, &w, t, sizeof(t));
+            CHECK(textIs(t, "presents stay at 1 a step: GPU 9.0 ms x 2 + step 0.5 ms is not under "
+                            "the period 16.7 ms (120 steps since the drop; back to not held when "
+                            "it is)"));
+        }
+    }
+    {
+        BudgetSeq q = {
+            .periodNs = lockPeriod, .refreshNs = lockPeriod, .gpuNs = 22 * MS, .stepNs = 2 * MS};
+        const PaceBudgetWaits w = {22700000ull, 14600000ull, 16200000ull, 22 * MS,
+                                   2 * MS,      lockPeriod,  true};
+
+        pace_budget_reset(&q.b, 1);
+        seqSteps(&q, 3, 1, 2, 22 * MS, 1, w.displayNs);
+        pace_budget_event_text(&q.b, PACE_BUDGET_TEXT_DROP, &w, t, sizeof(t));
+        CHECK(textIs(t, "presents held to 0 a step: the step ended 22.0 ms late after 1 presents, "
+                        "1 steps after one 22.0 ms late after 1 (the last present 22.7 ms, waited "
+                        "14.6 ms for the GPU and 16.2 ms for the display, the fence waits "
+                        "included: OpenGL; GPU 22.0 ms a replay); back to 1 a step after 120 steps "
+                        "on time if the GPU allows"));
+    }
+    {
+        BudgetSeq q = {
+            .periodNs = lockPeriod, .refreshNs = lockPeriod, .gpuNs = 19 * MS, .stepNs = 2 * MS};
+
+        pace_budget_reset(&q.b, 1);
+        seqSteps(&q, 600, 1, 2, 10 * MS, 1, 0);
+        pace_budget_block_text(&q.b, 0, 0, 0, 0, q.gpuNs, "no GPU timestamps", t, sizeof(t));
+        CHECK(textIs(t, "; presents held to 0 a step (lowest 0, 299 refused, 1 drops, 0 climbs, "
+                        "climbs refused 8); GPU 19.0 ms a presented replay"));
+        pace_budget_block(&q.b);
+        pace_budget_block_text(&q.b, q.b.refused, q.b.drops, q.b.climbs, q.b.climbRefusals, 0,
+                               "no GPU timestamps", t, sizeof(t));
+        CHECK(textIs(t, "; presents held to 0 a step (lowest 0, 0 refused, 0 drops, 0 climbs, "
+                        "climbs refused 0); no GPU timestamps"));
+    }
+    {
+        PaceBudget b;
+
+        pace_budget_reset_unbound(&b, PACE_ALLOW_MAX);
+        pace_budget_block_text(&b, 0, 0, 0, 0, 0, "GPU not timed yet", t, sizeof(t));
+        CHECK(textIs(t, "; presents not held (lowest not held, 0 refused, 0 drops, 0 climbs, "
+                        "climbs refused 0); GPU not timed yet"));
+    }
+    {
+        PaceLock L = {0};
+
+        pace_lock_timing_text(&L, "", 0, 0.0, 0, 0, t, sizeof(t));
+        CHECK(textIs(t, "display clock off"));
+        L.clockKind = PACE_CLOCK_KIND_VBLANK;
+        L.clock = PACE_CLOCK_ON;
+        L.measuredNs = L.slotNs = 16664500.0;
+        L.refreshNs = 16666667ull;
+        L.vbPhaseNs = 1.0e6;
+        pace_lock_timing_text(&L, "\\\\.\\DISPLAY1", 0, 0.0, 0, 0, t, sizeof(t));
+        CHECK(textIs(t, "display clock vblank (output \\\\.\\DISPLAY1, measured 16.6645 ms, slot "
+                        "-130 ppm, phase +1.00 ms)"));
+    }
 }
 
 /* window_host.c pace's timer path with the present allowance under a fake
@@ -1253,6 +1618,10 @@ int main(void)
     PaceHist h = {0};
     testBudgetRule();
     testBudgetUnbound();
+    testBudgetHitch130();
+    testBudgetSustained();
+    testBudgetGlWait126();
+    testBudgetLines();
     testBudgetTimerLoop();
     testLateSkipLate();
     testLateSkipSlow();
