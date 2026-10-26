@@ -5002,6 +5002,20 @@ static int reporter_create(void)
     return 1;
 }
 
+/* Exception codes that are messages to a debugger, never faults: the thread
+   naming exception (MS_VC_EXCEPTION, raised by SDL for every thread it
+   makes, and by drivers) and the two OutputDebugString codes. The Windows
+   handlers ignore them; the table is portable so a test can read it. */
+int ico_diag_benign_exception(unsigned int code)
+{
+    return code == 0x406D1388u || code == 0x40010006u || code == 0x4001000Au;
+}
+
+int ico_diag_fatal_started(void)
+{
+    return fatal_once != 0;
+}
+
 /* --- Crash handlers ------------------------------------------------------------------- */
 
 #ifdef _WIN32
@@ -5121,6 +5135,56 @@ static void crash_from_exception(EXCEPTION_POINTERS *ep)
     crash_common();
 }
 
+/* A benign exception (ico_diag_benign_exception) was raised on this thread:
+   log it once per raising module, at most 8 modules. The raiser is the first
+   stack frame outside kernelbase.dll and ntdll.dll (the VEH runs on the
+   raising thread). Nothing here allocates or takes the log lock. */
+static void benign_note(DWORD code, const char *suffix)
+{
+    static volatile LONG seen_count;
+    static HMODULE seen[8];
+    void *frames[16];
+    USHORT n, i;
+    HMODULE who = NULL;
+    char path[MAX_PATH];
+    const char *name = "unknown module";
+    LONG k;
+
+    n = CaptureStackBackTrace(0, 16, frames, NULL);
+    for (i = 0; i < n; i++) {
+        HMODULE m = NULL;
+        const char *b;
+        if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                (LPCSTR)frames[i], &m) ||
+            GetModuleFileNameA(m, path, sizeof path) == 0) {
+            continue;
+        }
+        b = strrchr(path, '\\');
+        b = b != NULL ? b + 1 : path;
+        if (_stricmp(b, "kernelbase.dll") == 0 || _stricmp(b, "ntdll.dll") == 0 ||
+            _stricmp(b, "kernel32.dll") == 0) {
+            continue;
+        }
+        who = m;
+        name = b;
+        break;
+    }
+    for (k = 0; k < seen_count && k < 8; k++) {
+        if (seen[k] == who) {
+            return;
+        }
+    }
+    k = InterlockedIncrement(&seen_count) - 1;
+    if (k >= 8) {
+        return;
+    }
+    seen[k] = who;
+    (void)code;
+    flog("diag: thread-name exception from %s ignored (thread %lu)%s", name,
+         (unsigned long)GetCurrentThreadId(), suffix);
+}
+
 ICO_ENTRY static LONG CALLBACK vectored_handler(EXCEPTION_POINTERS *ep)
 {
     EXCEPTION_RECORD *r = ep->ExceptionRecord;
@@ -5139,6 +5203,11 @@ ICO_ENTRY static LONG CALLBACK vectored_handler(EXCEPTION_POINTERS *ep)
             ours = _strnicmp(b, "msvcrt", 6) == 0 || _strnicmp(b, "ucrtbase", 8) == 0;
         }
     }
+    if (ico_diag_benign_exception(r->ExceptionCode)) {
+        /* what SDL's own temporary handler does: the raise returns */
+        benign_note(r->ExceptionCode, "");
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
     if (fatal_code(r->ExceptionCode) && (ours || r->ExceptionCode == EXCEPTION_STACK_OVERFLOW)) {
         crash_from_exception(ep);
     }
@@ -5147,6 +5216,10 @@ ICO_ENTRY static LONG CALLBACK vectored_handler(EXCEPTION_POINTERS *ep)
 
 ICO_ENTRY static LONG WINAPI unhandled_filter(EXCEPTION_POINTERS *ep)
 {
+    if (ico_diag_benign_exception(ep->ExceptionRecord->ExceptionCode)) {
+        benign_note(ep->ExceptionRecord->ExceptionCode, " (reached the unhandled filter)");
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
     crash_from_exception(ep);
     return EXCEPTION_EXECUTE_HANDLER;
 }

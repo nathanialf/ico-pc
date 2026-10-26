@@ -172,7 +172,12 @@
 #include "startup_retry.h"
 #include "symmap.h"
 
-#if !defined(_WIN32)
+#if defined(_WIN32)
+/* windows.h clashes with eekernel.h's thread calls: the one call needed */
+__declspec(dllimport) void __stdcall RaiseException(unsigned long code, unsigned long flags,
+                                                    unsigned long n,
+                                                    const unsigned long long *args);
+#else
 
 #include <dirent.h>
 #include <pthread.h>
@@ -1468,16 +1473,42 @@ static void clear_dir(const char *dir)
 
 #endif
 
+/* The benign-code table: debugger messages are never crashes. */
+static void benign_cases(void)
+{
+    CHECK(ico_diag_benign_exception(0x406D1388u));
+    CHECK(ico_diag_benign_exception(0x40010006u));
+    CHECK(ico_diag_benign_exception(0x4001000Au));
+    CHECK(!ico_diag_benign_exception(0xC0000005u)); /* access violation */
+    CHECK(!ico_diag_benign_exception(0xC0000409u)); /* fast fail */
+    CHECK(!ico_diag_benign_exception(0xE06D7363u)); /* C++ throw: not ours to judge */
+    CHECK(!ico_diag_benign_exception(0x40010005u)); /* Ctrl+C */
+    CHECK(!ico_diag_benign_exception(0));
+}
+
 int main(int argc, char **argv)
 {
 #if defined(_WIN32)
     (void)argc;
     (void)argv;
+    benign_cases();
+    {
+        /* the thread-name exception with the handlers installed returns and
+           is not a crash (it used to park the thread 60 s and end the run) */
+        unsigned long long info[3] = {0x1000, 0, 0};
+        ico_diag_init("diag_test_benign.log");
+        ico_diag_arm_vectored();
+        RaiseException(0x406D1388u, 0, 3, info);
+        RaiseException(0x40010006u, 0, 0, NULL);
+        CHECK(!ico_diag_fatal_started());
+    }
     /* the child modes compile here too; only the POSIX driver runs them */
-    (void)fails;
     (void)run_child;
-    printf("diag_test: skipped (POSIX only)\n");
-    return 77;
+    if (fails != 0) {
+        return 1;
+    }
+    printf("diag_test: the benign cases only (the rest is POSIX only)\n");
+    return 0;
 #else
     char log[256];
     char *s;
@@ -1488,6 +1519,7 @@ int main(int argc, char **argv)
         run_child(argv[1], argv[2]);
         return 0;
     }
+    benign_cases();
     snprintf(log, sizeof log, "diag_test_%d.log", (int)getpid());
 
     r = run(argv[0], "lines", log);
