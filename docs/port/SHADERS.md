@@ -34,11 +34,19 @@ compiles the same entry with macros (DXC `-D`) under the key `<name><s>`.
 library holding `shaders_gen.c` with `shaders_gen.h` on its public include path
 (`cmake/IcoShaders.cmake`, header comment).
 
-**Flags.** SPIR-V: `-spirv -fspv-target-env=vulkan1.2` with `-fvk-b-shift 0`, `-fvk-t-shift 16`,
+**Flags.** SPIR-V: `-spirv -fspv-target-env=vulkan1.1` with `-fvk-b-shift 0`, `-fvk-t-shift 16`,
 `-fvk-s-shift 32`, `-fvk-u-shift 48` (all spaces), so a register number is the
 [RHI](ARCHITECTURE.md#terms) slot and the Vulkan binding is the slot plus 0, 16, 32 or 48. Both
 targets: `-O3 -WX -I port/shaders` (a shader warning fails the build; no `-Zi`, no debug info in the
 blobs) (`cmake/IcoShaders.cmake` (`ICO_DXC_SPIRV_FLAGS`, `ICO_DXC_COMMON_FLAGS`)).
+
+The SPIR-V target is Vulkan 1.1 (SPIR-V 1.3) so the blobs load on Vulkan 1.1 drivers. DXC 1.9.2609.5
+emits identical instruction streams at 1.1 and 1.2 for every shader class here (no 8/16-bit storage,
+wave operations, demote or memory model); only the module header version and each OpEntryPoint's
+interface list differ (SPIR-V 1.4 and later list every global, 1.3 only Input/Output). Nothing reads
+the header version: the table test checks the magic number only. Contingency: if a future shader
+needs SPIR-V 1.4 or later, add a second blob column (`spv11`, the 1.1-targeted blob) to the manifest
+and an `RhiLimits.spirvMax`, and pick the column at pipeline creation; do not raise the single target.
 
 **Outputs.** Each entry writes `<build>/shaders/<name>.spv` and, with `ICO_SHADERS_DXIL` on (the
 default), `<name>.dxil`. With Ninja or Makefiles a second DXC command writes a `-MF` dependency

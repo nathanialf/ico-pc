@@ -94,7 +94,11 @@ set(ICO_SHADER_OUT_DIR "${CMAKE_BINARY_DIR}/shaders")
 
 # The flags that map HLSL registers to the Vulkan backend's bindings: b0.. at
 # 0, t at 16, s at 32, u at 48 (the register number is the RHI slot).
-set(ICO_DXC_SPIRV_FLAGS -spirv -fspv-target-env=vulkan1.2
+# Target vulkan1.1 (SPIR-V 1.3), not 1.2: the blobs then load on Vulkan 1.1
+# devices. DXC emits identical instruction streams at both targets for every
+# shader here; only the header version and OpEntryPoint's interface list
+# (SPIR-V 1.4+ lists every global) differ.
+set(ICO_DXC_SPIRV_FLAGS -spirv -fspv-target-env=vulkan1.1
     -fvk-b-shift 0 all -fvk-t-shift 16 all -fvk-s-shift 32 all -fvk-u-shift 48 all)
 # -WX: a shader warning fails the build. -Zi is not used: no debug info in the
 # embedded blobs.
