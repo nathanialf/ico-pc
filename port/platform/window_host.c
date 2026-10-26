@@ -264,6 +264,7 @@ static struct {
     PaceBudget budget;
     PaceHist gpuHist;
     Uint64 gpuNs, displayWaitNs, fenceWaitNs, stepNs;
+    bool fenceHoldsDisplay; /* RhiStats.fenceWaitsHoldDisplay (OpenGL) */
     /* a numeric cap above the refresh in mailbox mode held to one present
        a refresh (pace_cap_above_refresh): the refresh at this pace (0: not
        held), and its line written since the last settings change */
@@ -272,7 +273,7 @@ static struct {
     /* the 10 s line's allowance counts at the block's start, and the
        allowance they are of (the timer path's or the lock's) */
     const PaceBudget *budgetAtOf;
-    unsigned budgetRefusedAt, budgetDropsAt, budgetClimbsAt;
+    unsigned budgetRefusedAt, budgetDropsAt, budgetClimbsAt, budgetClimbRefusalsAt;
 } s_pres;
 
 /* The timer path's present allowance starts again, unbound until a drop (a
@@ -283,6 +284,7 @@ static void timer_budget_reset(void)
     pace_budget_reset_unbound(&s_pres.budget, PACE_ALLOW_MAX);
     if (s_pres.budgetAtOf == &s_pres.budget) {
         s_pres.budgetRefusedAt = s_pres.budgetDropsAt = s_pres.budgetClimbsAt = 0;
+        s_pres.budgetClimbRefusalsAt = 0;
     }
 }
 
@@ -354,6 +356,9 @@ static struct {
     uint32_t msaaCloseAt; /* the block's last epoch close (rd.h RdPerfRecord.msaaCloseAt) */
     uint64_t bufCreated, bufDestroyed, texCreated, texDestroyed, allocs, fenceWaits, waitIdles,
         readbacks;
+    /* present calls over 50 ms and the longest (present_blocked) */
+    unsigned presentBlocked;
+    double presentBlockedMaxMs;
 } s_perf;
 
 /* The display under the vsync lock, for the 10 s display line
@@ -4468,6 +4473,29 @@ static void slow_replay_longest(void)
     }
 }
 
+/* A replay whose present phase (RdPerfRecord.presentMs: the driver's
+   present call) took over 50 ms: the 10 s count, and over 250 ms a line
+   naming the driver (issue 123: 363-583 ms in Qualcomm's
+   vkQueuePresentKHR) */
+static void present_blocked(const RdPerfRecord *r)
+{
+    const RhiLimits *l = rhi_limits();
+    char fr[16];
+
+    s_perf.presentBlocked++;
+    s_perf.presentBlockedMaxMs =
+        r->presentMs > s_perf.presentBlockedMaxMs ? r->presentMs : s_perf.presentBlockedMaxMs;
+    if (r->presentMs > 250.0) {
+        ico_log_limited("window: present blocked",
+                        "window: a present blocked %.0f ms in the driver's present call (replay "
+                        "%u; %s on %s, %s; present %s, framerate %s)",
+                        r->presentMs, r->replay, rhi_backend_kind_name(rhi_backend()),
+                        rhi_adapter_name(), l && l->driverText ? l->driverText : "driver unknown",
+                        rhi_present_mode_name(),
+                        ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)));
+    }
+}
+
 /* The finished records into the block's sums and the CSV */
 static void perf_drain(void)
 {
@@ -4480,6 +4508,9 @@ static void perf_drain(void)
             /* the present allowance's GPU gate: a presented replay's GPU
                time (two replays late), the median of the last 8 */
             s_pres.gpuNs = pace_hist_add(&s_pres.gpuHist, (Uint64)(r.gpuMs * 1e6));
+        }
+        if (r.presented && r.presentMs > 50.0) {
+            present_blocked(&r);
         }
 #ifdef ICO_IOS
         continue; /* Keep automatic resolution's samples without benchmark output. */
@@ -4651,6 +4682,15 @@ static void perf_log(void)
             s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0, s_pres.stepMaxMs,
             (double)(cardStrips - s_pres.cardStrips) / steps,
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
+    if (s_perf.presentBlocked != 0) {
+        char fr[16];
+
+        fprintf(stderr,
+                "window: present blocked %u times over 50 ms, longest %.0f ms (mode %s, "
+                "framerate %s)\n",
+                s_perf.presentBlocked, s_perf.presentBlockedMaxMs, rhi_present_mode_name(),
+                ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)));
+    }
     if (s_perf.gpuN) {
         /* the GPU time per replay by list and by picture effect (each
            effect's time is inside its list's, the CRT filter's inside the
@@ -5016,39 +5056,13 @@ static void pace_log(Uint64 now)
         char timing[160];
 
         ratio = r > 0.0 ? r : (s_pres.audioRatio > 0.0 ? s_pres.audioRatio : 1.0);
-        if (L->clockKind == PACE_CLOCK_KIND_SHOWN && L->clock == PACE_CLOCK_ON) {
-            snprintf(timing, sizeof(timing),
-                     "display timing on: %u presents timed, phase nudge %+.3f ms, %u late, %u "
-                     "early",
-                     L->seen - s_pres.lockSeenAt, (L->nudgeSum - s_pres.lockNudgeAt) / 1e6,
-                     L->late - s_pres.lockLateAt, L->early - s_pres.lockEarlyAt);
-        } else if (L->clockKind == PACE_CLOCK_KIND_SHOWN) {
-            snprintf(timing, sizeof(timing), "display timing %s",
-                     L->clock == PACE_CLOCK_LEFT_ERROR ? "stopped"
-                                                       : "left (its refresh was off the report)");
-        } else if (L->clockKind == PACE_CLOCK_KIND_VBLANK && L->clock == PACE_CLOCK_ON) {
-            char name[64];
+        char name[64] = "";
 
+        if (L->clockKind == PACE_CLOCK_KIND_VBLANK && L->clock == PACE_CLOCK_ON) {
             ico_display_clock_name(name, sizeof(name));
-            if (L->measuredNs > 0.0) {
-                /* the slot against the report (+: longer), and the step's
-                   offset after the last vblank (+: after it) */
-                snprintf(timing, sizeof(timing),
-                         "display clock vblank (output %s, measured %.4f ms, slot %+.0f ppm, "
-                         "phase %+.2f ms)",
-                         name, L->measuredNs / 1e6, pace_ppm(L->slotNs, (double)L->refreshNs),
-                         L->vbPhaseNs / 1e6);
-            } else {
-                snprintf(timing, sizeof(timing), "display clock vblank (output %s, measuring)",
-                         name);
-            }
-        } else if (L->clockKind == PACE_CLOCK_KIND_VBLANK) {
-            snprintf(timing, sizeof(timing), "display clock %s",
-                     L->clock == PACE_CLOCK_LEFT_ERROR ? "stopped"
-                                                       : "left (its interval was off the report)");
-        } else {
-            snprintf(timing, sizeof(timing), "display clock off");
         }
+        pace_lock_timing_text(L, name, s_pres.lockSeenAt, s_pres.lockNudgeAt, s_pres.lockLateAt,
+                              s_pres.lockEarlyAt, timing, sizeof(timing));
         snprintf(lock, sizeof(lock),
                  "lock held (grid %.4f ms, %u present%s a step, %s, audio rate x%.4f, %s, %u "
                  "waited for the display, %u skipped)",
@@ -5080,41 +5094,25 @@ static void pace_log(Uint64 now)
        where it holds the in-between presents, its lowest this block, the
        presents it refused, its drops and climbs, and the GPU time its climb
        is gated on */
-    char budget[192];
+    char budget[256];
     {
         PaceBudget *b = s_pres.lockN > 0 ? &s_pres.lock.budget : &s_pres.budget;
-        char gpu[48], held[40], lowest[24];
-
         if (s_pres.budgetAtOf != b || b->refused < s_pres.budgetRefusedAt ||
-            b->drops < s_pres.budgetDropsAt || b->climbs < s_pres.budgetClimbsAt) {
+            b->drops < s_pres.budgetDropsAt || b->climbs < s_pres.budgetClimbsAt ||
+            b->climbRefusals < s_pres.budgetClimbRefusalsAt) {
             s_pres.budgetAtOf = b;
             s_pres.budgetRefusedAt = s_pres.budgetDropsAt = s_pres.budgetClimbsAt = 0;
+            s_pres.budgetClimbRefusalsAt = 0;
         }
-        if (s_pres.gpuNs != 0) {
-            snprintf(gpu, sizeof(gpu), "GPU %.1f ms a presented replay",
-                     (double)s_pres.gpuNs / 1e6);
-        } else {
-            snprintf(gpu, sizeof(gpu), "%s",
-                     rhi_timestamps_supported() ? "GPU not timed yet" : "no GPU timestamps");
-        }
-        /* the timer path before its first drop, or climbed back past its
-           ceiling: unbound, nothing held */
-        if (b->allow == PACE_ALLOW_NONE) {
-            snprintf(held, sizeof(held), "presents not held");
-        } else {
-            snprintf(held, sizeof(held), "presents held to %u a step", b->allow);
-        }
-        if (b->lowest == PACE_ALLOW_NONE) {
-            snprintf(lowest, sizeof(lowest), "not held");
-        } else {
-            snprintf(lowest, sizeof(lowest), "%u", b->lowest);
-        }
-        snprintf(budget, sizeof(budget), "; %s (lowest %s, %u refused, %u drops, %u climbs); %s",
-                 held, lowest, b->refused - s_pres.budgetRefusedAt, b->drops - s_pres.budgetDropsAt,
-                 b->climbs - s_pres.budgetClimbsAt, gpu);
+        pace_budget_block_text(b, s_pres.budgetRefusedAt, s_pres.budgetDropsAt,
+                               s_pres.budgetClimbsAt, s_pres.budgetClimbRefusalsAt, s_pres.gpuNs,
+                               rhi_timestamps_supported() ? "GPU not timed yet"
+                                                          : "no GPU timestamps",
+                               budget, sizeof(budget));
         s_pres.budgetRefusedAt = b->refused;
         s_pres.budgetDropsAt = b->drops;
         s_pres.budgetClimbsAt = b->climbs;
+        s_pres.budgetClimbRefusalsAt = b->climbRefusals;
         pace_budget_block(b); /* a new block: its lowest from now */
     }
     fprintf(
@@ -5398,13 +5396,17 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
        nothing (then all of it the display's).  Never more than the present
        (a rebuild's first present is paused out above).  The acquire and the
        present are the display's (FIFO's full queue), the fence waits the
-       GPU's: the present allowance excuses the first only */
+       GPU's: the present allowance excuses the first only, or the whole
+       wait where the fence waits hold the display's (pace_display_wait:
+       OpenGL, issue 126) */
+    s_pres.fenceHoldsDisplay = st.fenceWaitsHoldDisplay;
     if (st.presents != before.presents && st.acquireNs + st.presentNs + st.fenceWaitNs != 0) {
         const Uint64 disp = (st.acquireNs - before.acquireNs) + (st.presentNs - before.presentNs);
         const Uint64 fence = st.fenceWaitNs - before.fenceWaitNs;
 
         s_pres.lockWaitNs = disp + fence < s_pres.cost ? disp + fence : s_pres.cost;
-        s_pres.displayWaitNs = disp < s_pres.cost ? disp : s_pres.cost;
+        s_pres.displayWaitNs =
+            pace_display_wait(disp, fence, s_pres.cost, st.fenceWaitsHoldDisplay);
         s_pres.fenceWaitNs = fence < s_pres.cost ? fence : s_pres.cost;
     } else {
         s_pres.lockWaitNs = s_pres.cost;
@@ -5477,30 +5479,29 @@ static uint64_t lock_io_display_waited(void *u, uint64_t costNs)
     return s_pres.displayWaitNs;
 }
 
-/* A drop of the present allowance (pace_budget_step returned a change and
-   counted a drop): the event line, the first 8 then every 100th */
-static void budget_drop_line(const PaceBudget *b)
+/* The present allowance's events after a pace_budget_step (its counts
+   before given): the drop, climb and refused-climb lines
+   (pace_budget_event_text), the first 8 then every 100th */
+static void budget_lines(const PaceBudget *b, unsigned drops, unsigned climbs, unsigned refusals,
+                         Uint64 period)
 {
-    char back[24];
+    const PaceBudgetWaits w = {
+        s_pres.cost, s_pres.fenceWaitNs,      s_pres.displayWaitNs, s_pres.gpuNs, s_pres.stepNs,
+        period,      s_pres.fenceHoldsDisplay};
+    char t[400];
 
-    /* where the next climb goes: one more, or (the timer path at its
-       ceiling) unbound again */
-    if (b->allow < b->max) {
-        snprintf(back, sizeof(back), "%u", b->allow + 1);
-    } else if (b->unbind) {
-        snprintf(back, sizeof(back), "not held");
-    } else {
-        snprintf(back, sizeof(back), "%u", b->max);
+    if (b->drops != drops) {
+        pace_budget_event_text(b, PACE_BUDGET_TEXT_DROP, &w, t, sizeof(t));
+        ico_log_limited("window: presents held", "window: %s", t);
     }
-    ico_log_limited("window: presents held",
-                    "window: presents held to %u a step: the step ended %.1f ms late after %u "
-                    "presents (the last present %.1f ms, waited %.1f ms for the GPU and %.1f ms "
-                    "for the display; GPU %.1f ms a replay); back to %s after %u steps on time if "
-                    "the GPU allows",
-                    b->allow, (double)b->dropLateNs / 1e6, b->dropPresents,
-                    (double)s_pres.cost / 1e6, (double)s_pres.fenceWaitNs / 1e6,
-                    (double)s_pres.displayWaitNs / 1e6, (double)s_pres.gpuNs / 1e6, back,
-                    PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB);
+    if (b->climbs != climbs) {
+        pace_budget_event_text(b, PACE_BUDGET_TEXT_CLIMB, &w, t, sizeof(t));
+        ico_log_limited("window: presents back", "window: %s", t);
+    }
+    if (b->climbRefusals != refusals) {
+        pace_budget_event_text(b, PACE_BUDGET_TEXT_STAY, &w, t, sizeof(t));
+        ico_log_limited("window: presents stay", "window: %s", t);
+    }
 }
 
 /* the window on the screen: off it, nothing is presented */
@@ -5641,6 +5642,7 @@ static void pace_locked(unsigned n, Uint64 period)
         if (s_pres.budgetAtOf == &s_pres.lock.budget) {
             /* the lock's allowance started again (pace_lock_reset) */
             s_pres.budgetRefusedAt = s_pres.budgetDropsAt = s_pres.budgetClimbsAt = 0;
+            s_pres.budgetClimbRefusalsAt = 0;
         }
         s_pres.lockWaitNs = 0;
         s_pres.nextPresent = 0;
@@ -5686,12 +5688,13 @@ static void pace_locked(unsigned n, Uint64 period)
     /* the present allowance's GPU gate (pace_policy.h PaceBudget) */
     s_pres.lock.gpuNs = s_pres.gpuNs;
     s_pres.lock.stepNs = s_pres.stepNs;
-    const unsigned drops = s_pres.lock.budget.drops;
+    const unsigned drops = s_pres.lock.budget.drops, climbs = s_pres.lock.budget.climbs;
+    const unsigned refusals = s_pres.lock.budget.climbRefusals;
 
     s_deadline = pace_lock_vsync(&s_pres.lock, &io, newFrame != 0);
-    if (s_pres.lock.budget.drops != drops) {
-        budget_drop_line(&s_pres.lock.budget);
-    }
+    /* the gate's period: the lock's step (pace_lock_vsync) */
+    budget_lines(&s_pres.lock.budget, drops, climbs, refusals,
+                 (Uint64)(s_pres.lock.slotNs * (double)s_pres.lock.n));
     /* the lag the lock dropped, as the resync lines count it */
     s_pres.statResyncs += s_pres.lock.resyncs - s_pres.lockResyncs;
     s_pres.statDropped += s_pres.lock.droppedNs - s_pres.lockDroppedNs;
@@ -6017,13 +6020,12 @@ static void pace(int hz)
     now = SDL_GetTicksNS();
     {
         /* the present allowance: the step ends now (a resync keeps it) */
-        const unsigned drops = s_pres.budget.drops;
+        const unsigned drops = s_pres.budget.drops, climbs = s_pres.budget.climbs;
+        const unsigned refusals = s_pres.budget.climbRefusals;
 
-        if (pace_budget_step(&s_pres.budget, now > s_deadline ? now - s_deadline : 0, period,
-                             refresh, s_pres.displayWaitNs, s_pres.gpuNs, s_pres.stepNs) &&
-            s_pres.budget.drops != drops) {
-            budget_drop_line(&s_pres.budget);
-        }
+        (void)pace_budget_step(&s_pres.budget, now > s_deadline ? now - s_deadline : 0, period,
+                               refresh, s_pres.displayWaitNs, s_pres.gpuNs, s_pres.stepNs);
+        budget_lines(&s_pres.budget, drops, climbs, refusals, period);
     }
     pace_log(now);
     if (now > s_deadline && now - s_deadline > RESYNC_NS) {
