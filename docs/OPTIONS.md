@@ -36,7 +36,7 @@ Some rows are the PS2's own settings, the ones the original Options screen
 had. They only show up when you open Options from the pause menu, and they
 are kept in your save, as on the PS2:
 
-- Brightness (on the Effects page; Square puts back the normal value, 7)
+- Brightness (on the Picture page; Square puts back the normal value, 7)
 - Button configuration and Vibration (on the Controls page)
 - Film effect and Players (on the Gameplay page, once you have finished
   the game; Film effect is not on the North American disc, the August 2001
@@ -48,7 +48,7 @@ in your save, so it stays as you set it whatever save you load.
 
 ## Display
 
-How the picture looks.
+The window, the picture's size and shape, and the speed.
 
 - **Preset** is a shortcut for four rows: Resolution, Aspect ratio,
   Texture filtering and Full-height picture. **Original** sets them back to
@@ -56,8 +56,8 @@ How the picture looks.
   window, fits it to the window's shape, smooths the textures and shows
   the full-height picture. Once you change one of those four rows yourself,
   it says **Custom**. Two of those four rows, Full-height picture and
-  Texture filtering, are on the Effects page. The shortcut also sets Full
-  pixel (Effects page): Enhanced turns it on, Original turns it off.
+  Texture filtering, are on the Picture page. The shortcut also sets Full
+  pixel (Picture page): Enhanced turns it on, Original turns it off.
 - **Resolution** is how sharp the picture is: 1x is the PS2's, up to 16x,
   or the size of your window. Very high values need a lot of graphics
   memory; when your graphics card cannot hold the picture, the game lowers
@@ -91,32 +91,6 @@ How the picture looks.
   The game draws the extra width itself (nothing is stretched), so on a wider
   picture you see more of the world to the sides, and it looks the way the
   original did. Menus, subtitles and movies stay in a 4:3 box in the middle.
-- **Anti-aliasing** smooths jagged edges. The choices go in this order:
-  **Off**, **MSAA 2x**, **MSAA 4x**, **MSAA 8x**, **2x supersampling** and
-  **4x supersampling**. Off draws the picture as it is. MSAA smooths the
-  edges of shapes and is lighter to run; a choice your graphics card cannot
-  do is skipped when you step through the row. Supersampling draws the
-  picture at a larger size and shrinks it back, which smooths everything
-  (including the insides of textures) but needs more from your graphics
-  card. MSAA smooths the world as it is drawn before the shadows and the
-  mist; the mist, the glow and everything drawn after them are not smoothed
-  by it (supersampling smooths those too). A gap thinner than half a pixel
-  between two pieces of the world does not show as a line of mist with
-  MSAA; a wider gap does, as in the original.
-  While the Preset is **Original**, this row stays at **Off** and cannot be
-  changed. Pick **Enhanced**, or change one of the Preset's rows, to use
-  it. The row shows your saved choice. When the game is not using it,
-  because your graphics card cannot do it, or cannot do it with the fog
-  effect, it says **(off: not available)** after the name and the picture
-  is drawn without it.
-- **Downsampling** is **Off** or **To original size**. To original size
-  draws the picture at the **Resolution** above, then shrinks it to the
-  game's own size before showing it, so each screen pixel is an average of
-  the larger picture. The picture then looks like the game's own, smoothed
-  by the extra detail. It needs a Resolution of 2x or more (higher draws
-  more); nothing changes with the CRT filter, at **Window**, or when the
-  Resolution is 1x. It works with either Preset and with Anti-aliasing:
-  supersampling is then counted against the game's own size.
 - **Window mode** is **Fullscreen**, **Borderless** or **Windowed**.
   Fullscreen takes the whole screen. Borderless is a window without a
   frame that fills the screen; other programs can draw over it or scale
@@ -137,11 +111,6 @@ How the picture looks.
   and Vertical sync on, the game waits until the screen is ready for a new
   picture before it draws one, so the picture you see is as fresh as it
   can be.
-- **Texture pack** turns an installed texture pack On or Off. It says
-  **None installed** when there is none. [About texture packs](TEXTURE_PACKS.md).
-- **Model pack** turns an installed model pack On or Off. It says **None
-  installed** when there is none. This row is only on the title screen's
-  Options. [About model packs](MODEL_PACKS.md).
 - **Frame rate** is Original (as on the PS2), Uncapped, or a fixed limit of
   60, 120, 144 or 240 frames a second. On a computer it starts at Uncapped.
   With Vertical sync on, Uncapped follows your screen: one new picture each
@@ -170,17 +139,66 @@ How the picture looks.
   disc: the other six discs always run at 60 Hz, as they did on the
   PS2.
 
-## Effects
+## Picture
 
 This page is in the Options menu, right under Display.
 
-The picture's finish, the CRT filter and the game's own picture effects.
+How the picture is drawn and finished: smoothing, the picture's size and sharpness, brightness, the CRT filter and the packs.
 
+- **Anti-aliasing** smooths jagged edges. The choices go in this order:
+  **Off**, **MSAA 2x**, **MSAA 4x**, **MSAA 8x**, **2x supersampling** and
+  **4x supersampling**. Off draws the picture as it is. MSAA smooths the
+  edges of shapes and is lighter to run; a choice your graphics card cannot
+  do is skipped when you step through the row. Supersampling draws the
+  picture at a larger size and shrinks it back, which smooths everything
+  (including the insides of textures) but needs more from your graphics
+  card. MSAA smooths the world as it is drawn before the shadows and the
+  mist; the mist, the glow and everything drawn after them are not smoothed
+  by it (supersampling smooths those too). A gap thinner than half a pixel
+  between two pieces of the world does not show as a line of mist with
+  MSAA; a wider gap does, as in the original.
+  While the Preset is **Original**, this row stays at **Off** and cannot be
+  changed. Pick **Enhanced**, or change one of the Preset's rows, to use
+  it. The row shows your saved choice. When the game is not using it,
+  because your graphics card cannot do it, or cannot do it with the fog
+  effect, it says **(off: not available)** after the name and the picture
+  is drawn without it.
+- **Downsampling** is **Off** or **To original size**. To original size
+  draws the picture at the **Resolution** on the Display page, then shrinks it to the
+  game's own size before showing it, so each screen pixel is an average of
+  the larger picture. The picture then looks like the game's own, smoothed
+  by the extra detail. It needs a Resolution of 2x or more (higher draws
+  more); nothing changes with the CRT filter, at **Window**, or when the
+  Resolution is 1x. It works with either Preset and with Anti-aliasing:
+  supersampling is then counted against the game's own size.
 - **Full-height picture** shows every line of the picture. The PS2 showed
   half of them, which looks a little softer.
 - **Texture filtering** is how smooth the textures look up close: Original
   (as on the PS2), Trilinear (smooth) or Anisotropic (smooth, and sharper
   on surfaces seen at an angle).
+- **Full pixel (exact screen pixels)** makes the picture out of your
+  screen's own pixels: each pixel of the game's picture is one pixel on your
+  screen, so nothing is rounded, cropped or stretched, and the strip the PS2
+  hid under its thin black border is shown too. The two outermost columns
+  of dots at each side, which the PS2 never showed and the game does not
+  always draw, show the picture next to them instead of what the game left
+  there. With this row off on a wide screen those columns are hidden or
+  under the black border, and the picture next to them is copied into them
+  the same way before the game makes its glow from the picture, so the
+  glow does not spread what the game left there. On a 4:3 screen with this
+  row off they stay as the PS2 had them. The picture is exactly as
+  wide as the window shows it, at every size and shape of window. It needs
+  Resolution set to the size of your window (the Enhanced Preset picks it).
+  With Original, a fixed Resolution (1x to 16x), the CRT filter or
+  supersampling, this row only opens up the thin black border. Picking the
+  Enhanced Preset turns it on, and you can turn it on or off here at any
+  time. Off shows the same picture, the same size and just as sharp, with
+  the PS2's thin black border laid over its edges as the PS2 did: a few
+  dots at the sides and a little more at the top and bottom. Nothing is
+  shrunk or moved; the border only covers the edge. With Video mode at
+  50 Hz the border at the top and bottom is a little taller. With Aspect
+  ratio at 4:3, or at a shape the game's picture fills exactly (such as
+  48:9), Off is the PS2's own picture and border, exactly as before.
 - **Brightness** sets how bright the picture is. Square puts back the
   normal value, 7.
 - **CRT filter** makes the picture look like an old tube television. Off
@@ -190,6 +208,19 @@ The picture's finish, the CRT filter and the game's own picture effects.
   lines would look like a fine mesh on a sharper picture). Texture packs
   still show through it. To adjust a style's details, see
   [the lines you can change in a file](#settings-you-can-only-change-in-a-file).
+- **Texture pack** turns an installed texture pack On or Off. It says
+  **None installed** when there is none. [About texture packs](TEXTURE_PACKS.md).
+- **Model pack** turns an installed model pack On or Off. It says **None
+  installed** when there is none. This row is only on the title screen's
+  Options. [About model packs](MODEL_PACKS.md).
+
+Changes you make here show in photo mode at once.
+
+## Effects
+
+This page is in the Options menu, right under Picture.
+
+The game's own picture effects.
 
 The game's own effects are each On or Off (Motion blur is Off, Original
 or Smooth, and Water reflections is Original or Sharp). All On, with Motion
@@ -223,34 +254,6 @@ and that is how the game starts.
   during cutscenes. With them Off you see the whole picture, and the
   subtitles are not dimmed.
 
-The last row is not one of the game's effects:
-
-- **Full pixel (exact screen pixels)** makes the picture out of your
-  screen's own pixels: each pixel of the game's picture is one pixel on your
-  screen, so nothing is rounded, cropped or stretched, and the strip the PS2
-  hid under its thin black border is shown too. The two outermost columns
-  of dots at each side, which the PS2 never showed and the game does not
-  always draw, show the picture next to them instead of what the game left
-  there. With this row off on a wide screen those columns are hidden or
-  under the black border, and the picture next to them is copied into them
-  the same way before the game makes its glow from the picture, so the
-  glow does not spread what the game left there. On a 4:3 screen with this
-  row off they stay as the PS2 had them. The picture is exactly as
-  wide as the window shows it, at every size and shape of window. It needs
-  Resolution set to the size of your window (the Enhanced Preset picks it).
-  With Original, a fixed Resolution (1x to 16x), the CRT filter or
-  supersampling, this row only opens up the thin black border. Picking the
-  Enhanced Preset turns it on, and you can turn it on or off here at any
-  time. Off shows the same picture, the same size and just as sharp, with
-  the PS2's thin black border laid over its edges as the PS2 did: a few
-  dots at the sides and a little more at the top and bottom. Nothing is
-  shrunk or moved; the border only covers the edge. With Video mode at
-  50 Hz the border at the top and bottom is a little taller. With Aspect
-  ratio at 4:3, or at a shape the game's picture fills exactly (such as
-  48:9), Off is the PS2's own picture and border, exactly as before.
-
-The Preset on the Display page sets Texture filtering, Full-height picture and Full pixel on this
-page too (Enhanced turns Full pixel on, Original turns it off), but it does not change the rest.
 Changes you make here show in photo mode at once.
 
 ## Graphics
@@ -623,7 +626,7 @@ drawn from the camera with every effect the game has.
 
 ## Save a picture for a bug report
 
-**Save a picture for a bug report** is the row just above Developer mode
+**Save a picture for a bug report** is the row just above Developer
 on the Options menu's first page. It is always there, and you do not need
 Developer mode for it. It saves what is on the screen 3 seconds after you
 press it, so leave the menu right away. It goes into the `dumps` folder as
@@ -634,6 +637,8 @@ computer, and it is how a phone or a handheld makes one.
 
 ## Developer mode
 
+**Developer** is the last page link on the Options menu's first page, just above Back. Developer mode is its first row (Options > Developer > Developer mode).
+
 Developer mode brings back the menu the game's makers used while they built
 it: while it is on, Select opens it. Leave it off for normal play. While it
 is on, you cannot earn achievements, and they stay off for the rest of that
@@ -641,7 +646,7 @@ game even after you turn it off, until you go back to the title screen. A
 game you save in that time keeps them off when you load it again, until
 you start a New Game.
 
-With Developer mode on, two more rows show up under it, for people who
+With Developer mode on, two more rows show up under it on the same page, for people who
 make packs:
 
 - **Dump textures** saves every texture as a picture file when the game
@@ -723,8 +728,9 @@ Under `[video]`:
 | `backend = ""` | The Graphics API row of the Graphics page: empty is Automatic, or `"vulkan"`, `"opengl"`, `"d3d12"` or `"d3d11"` where your download has it. Used from the next start. [Choosing the renderer](#choosing-the-renderer). |
 | `gpu_driver = ""` | Android only. The Driver row of the Graphics driver page: empty is the phone's own driver. The game also writes a `gpu_driver_failed` line when a driver did not start. [About Android](ANDROID.md#using-a-different-graphics-driver). |
 | `show_fps = false` | The Frame rate counter row on the Display page. `true` shows the frames per second in the top-left corner of the screen. |
-| `model_pack = true` | The Model pack row. `false` shows the game's own models. |
-| `dump_models = false` | The Dump models row. Only works with Developer mode on. |
+| `downsample = "off"` | The Downsampling row on the Picture page: `"off"` or `"box"` (To original size). |
+| `model_pack = true` | The Model pack row on the Picture page. `false` shows the game's own models. |
+| `dump_models = false` | The Dump models row on the Developer page. Only works with Developer mode on. |
 | `effects_depth = true` | Lets an effects program such as ReShade see how far away things are. [About ReShade](RESHADE.md). |
 | `texture_pack_budget_mb`, `texture_pack_precache`, `texture_pack_cache_mb` | How much memory a texture pack may use. [About texture packs](TEXTURE_PACKS.md#if-the-pack-uses-a-lot-of-memory). |
 
