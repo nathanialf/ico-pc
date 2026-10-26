@@ -109,7 +109,7 @@ game's own. The game comes with a `textures` folder for one.
    On a Mac or an iPhone the download has no such folder: [the full
    guide](TEXTURE_PACKS.md) shows where to make one.
 2. Start the game.
-3. Open **Options > Display** and check that **Texture pack** says **On**.
+3. Open **Options > Picture** and check that **Texture pack** says **On**.
 
 Packs made for PCSX2, a program that plays PS2 games on a PC, work as they are. You do not need to
 rename or convert anything. [The full guide](TEXTURE_PACKS.md) has more.
@@ -162,7 +162,7 @@ lines around it, shows how long the card takes for a picture.
 The PS2 itself drew a thin black border around the picture, a few dots wide
 at the sides and a little more at the top and bottom, and the game keeps
 it. To hide it, turn on **Full pixel (exact screen pixels)** in
-**Options > Effects** (it is on by default with the Enhanced Preset).
+**Options > Picture** (it is on by default with the Enhanced Preset).
 It shows the strip of picture the PS2 hid under the border, so the picture
 fills the box. Nothing is cut off or enlarged, and the picture stays as
 sharp as it is without the option. With Video mode at 50 Hz (European
