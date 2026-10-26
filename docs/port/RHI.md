@@ -404,11 +404,25 @@ its log lines are in [SHADERS.md](SHADERS.md#direct3d-11-run-time-compile).
 
 ## Vulkan
 
-**Device** (`port/rhi/vk/vk_device.c`). A device needs Vulkan 1.2, dynamic rendering (core 1.3 or
-the extension), timeline semaphores, the swapchain extension on a window, a graphics queue that can
-present, and RGBA8, RGBA8 UINT, R8, D32F and D32F_S8 or D24S8 formats. Devices score discrete 1000,
-integrated 500, virtual 200, CPU 100, plus 10 for core 1.3 and 5 for dual-source blending
-(`vkr_rate_device`). The adapter line gives the PCI vendor and device ids (`device 10de:1b80`) and
+**Device** (`port/rhi/vk/vk_device.c`). The loader must be Vulkan 1.1 or later; the instance asks
+for the loader's version at most 1.3, and a device is used at its own version at most the
+instance's (`vkr_effective_api`; an instance at 1.3 leaves a 1.4 device its 1.4 outside MoltenVK).
+A device needs Vulkan 1.1 at that version, dynamic rendering (core 1.3 or
+`VK_KHR_dynamic_rendering`; required until the `VkRenderPass` path exists, `VKR_LEGACY_PASSES` in
+`vk_internal.h`), the swapchain extension on a window, a graphics queue that can present, and RGBA8,
+RGBA8 UINT, R8, D32F and D32F_S8 or D24S8 formats; timeline semaphores are not required (without
+them the fence ring, [Bindings and synchronisation](#vulkan)). Devices score discrete 1000,
+integrated 500, virtual 200, CPU 100, plus 10 for core 1.3, 5 for dual-source blending, 20 for
+dynamic rendering and 20 for timeline semaphores (`vkr_rate_device`). Below 1.2 the core 1.2 parts
+are taken by their KHR names when offered: `VK_KHR_create_renderpass2` and
+`VK_KHR_depth_stencil_resolve` (which `VK_KHR_dynamic_rendering` needs there),
+`VK_KHR_timeline_semaphore`, `VK_KHR_driver_properties` (without it the driver is unnamed and its
+`VkDriverId` 0) and `VK_KHR_image_format_list` (without it the UINT views' images are only mutable);
+on a 1.1 device, or one without dynamic rendering, below 1.3 the first of
+`VK_KHR_load_store_op_none`, `VK_EXT_load_store_op_none` and `VK_QCOM_render_pass_store_ops`
+offered (`VkrState.storeOpNone`). Local read needs 1.3. The device line ends `; render passes
+dynamic|legacy; sync timeline|fences` (and `; ICO_VK_FAKE_API=<profile>` under the switch). The
+adapter line gives the PCI vendor and device ids (`device 10de:1b80`) and
 the driver's name and version, decoded by
 `rhi_driver_version_text`: NVIDIA's own driver as major 10 bits, minor 8, a third part 8 and a
 fourth 6, Intel's Windows driver as major 18 bits and minor 14, every other driver in the Vulkan
@@ -419,9 +433,9 @@ rasterization-order attachment access with `VK_KHR_dynamic_rendering_local_read`
 itself (`RhiLimits.localRead`: a pass's own attachments read as input attachments after
 `rhi_cmd_local_read_barrier`) is enabled wherever the device offers it, whatever the destination
 read: `VK_KHR_dynamic_rendering_local_read`, or on a Vulkan 1.4 device without the extension
-`VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead` (the effective version is the
-instance's at most, 1.3, so that branch waits for the instance to ask for 1.4), and the device line
-ends `; local read yes|no` (`yes (Vulkan 1.4)` for the core feature) (`port/rhi/vk/vk_device.c`
+`VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead` (`vkr_effective_api`: under MoltenVK
+the instance's at most, 1.3, so there that branch waits for the instance to ask for 1.4), and the
+device line ends `; local read yes|no` (`yes (Vulkan 1.4)` for the core feature) (`port/rhi/vk/vk_device.c`
 (`vkr_create_device`)). `ICO_VK_FAKE_NO_DST` leaves it off too. D3D12 reports none. The attachment
 read is not offered on Qualcomm's own Adreno driver (vendor 0x5143, `VkDriverId`
 `QUALCOMM_PROPRIETARY` or unknown; not Mesa's Turnip): its reads return wrong colours (issue 89,
@@ -444,7 +458,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_FAKE_NO_MSAA` | 1 reports single sampling only |
 | `ICO_VK_FAKE_NO_DST` | 1 reports no destination read and no local read |
 | `ICO_VK_FAKE_ADRENO` | 1 takes the Qualcomm driver's branch: the attachment read not offered |
-| `ICO_VK_FAKE_API` | `1.1` uses the device as a Vulkan 1.1 driver without the extensions would have it; so far without timeline semaphores, the submissions tracked by the fence ring ([Bindings and synchronisation](#vulkan)); the line `ICO_VK_FAKE_API=1.1: the device is used without timeline semaphores`; another value is logged and hides nothing (`rhi_vk_vk11`, `rhi_vk_swapchain_vk11`, `rd_pixel_vk11`, `rd_present_vk11`, label `vk11`) |
+| `ICO_VK_FAKE_API` | `1.1` uses the device as a stock Vulkan 1.1 driver (Adreno 618 class): the instance and the device held to 1.1 (the KHR and EXT names of what is core later), and `VK_KHR_timeline_semaphore`, `VK_KHR_dynamic_rendering_local_read`, `VK_KHR_driver_properties`, `VK_KHR_image_format_list`, `VK_KHR_load_store_op_none`, `VK_EXT_load_store_op_none` and `VK_QCOM_render_pass_store_ops` reported absent (`vkr_fake_hidden`): the fence ring ([Bindings and synchronisation](#vulkan)), no local read, the driver unnamed; `VK_KHR_dynamic_rendering` is hidden too once the `VkRenderPass` path exists (`VKR_LEGACY_PASSES`); the line `ICO_VK_FAKE_API=1.1: the device is used as a Vulkan 1.1 driver without timeline semaphores, local read, driver properties, image format list or store op none`. `1.1ext` holds the versions to 1.1 and hides nothing (a 1.1 driver with the extensions: the timeline through `VK_KHR_timeline_semaphore`), local read off (it needs 1.3). Both compose with `ICO_VK_FAKE_LIMITS=mali`; the device line ends `; ICO_VK_FAKE_API=<profile>`; another value is logged and hides nothing (`rhi_vk_vk11`, `rhi_vk_swapchain_vk11`, `rd_pixel_vk11`, `rd_present_vk11`, label `vk11`) |
 | `ICO_VK_ATTACHMENT_READ` | 1 offers the attachment read on Qualcomm's driver too; ico-pc.ini `attachment_read` |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
 | `ICO_VK_GLOBAL_BARRIERS` | 1 records a global barrier before every render pass and copy (`vk_cmd.c`) |
