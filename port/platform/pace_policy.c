@@ -323,6 +323,119 @@ void pace_budget_block(PaceBudget *b)
     b->lateMaxNs = 0;
 }
 
+static double ms_of(uint64_t ns)
+{
+    return (double)ns / 1e6;
+}
+
+int pace_budget_event_text(const PaceBudget *b, int kind, const PaceBudgetWaits *w, char *out,
+                           unsigned size)
+{
+    char home[24], to[24];
+
+    if (b->unbind) {
+        snprintf(home, sizeof(home), "not held");
+    } else {
+        snprintf(home, sizeof(home), "%u a step", b->max);
+    }
+    if (kind == PACE_BUDGET_TEXT_DROP) {
+        return snprintf(
+            out, size,
+            "presents held to %u a step: the step ended %.1f ms late after %u presents, "
+            "%u steps after one %.1f ms late after %u (the last present %.1f ms, "
+            "waited %.1f ms for the GPU and %.1f ms for the display%s; GPU %.1f ms a "
+            "replay); back to %s after %u steps on time if the GPU allows",
+            b->allow, ms_of(b->dropLateNs), b->dropPresents, b->dropAgo, ms_of(b->dropPrevLateNs),
+            b->dropPrevPresents, ms_of(w->costNs), ms_of(w->fenceNs), ms_of(w->displayNs),
+            w->fenceHoldsDisplay ? ", the fence waits included: OpenGL" : "", ms_of(w->gpuNs), home,
+            PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP);
+    }
+    if (kind == PACE_BUDGET_TEXT_CLIMB) {
+        if (b->allow == PACE_ALLOW_NONE) {
+            snprintf(to, sizeof(to), "not held");
+        } else {
+            snprintf(to, sizeof(to), "%u a step", b->allow);
+        }
+        return snprintf(
+            out, size,
+            "presents back to %s%s after %u steps (GPU %.1f ms x %u + step %.1f ms "
+            "under the period %.1f ms)",
+            to, b->allow == (b->unbind ? PACE_ALLOW_NONE : b->max) ? " (where they started)" : "",
+            b->sinceDrop, ms_of(w->gpuNs), b->gateK, ms_of(w->stepNs), ms_of(w->periodNs));
+    }
+    return snprintf(out, size,
+                    "presents stay at %u a step: GPU %.1f ms x %u + step %.1f ms is not under the "
+                    "period %.1f ms (%u steps since the drop; back to %s when it is)",
+                    b->allow, ms_of(w->gpuNs), b->gateK, ms_of(w->stepNs), ms_of(w->periodNs),
+                    b->sinceDrop, home);
+}
+
+int pace_budget_block_text(const PaceBudget *b, unsigned refusedAt, unsigned dropsAt,
+                           unsigned climbsAt, unsigned climbRefusalsAt, uint64_t gpuNs,
+                           const char *noGpu, char *out, unsigned size)
+{
+    char held[40], lowest[24], gpu[48];
+
+    /* the timer path before its first drop, or back where it started:
+       unbound, nothing held */
+    if (b->allow == PACE_ALLOW_NONE) {
+        snprintf(held, sizeof(held), "presents not held");
+    } else {
+        snprintf(held, sizeof(held), "presents held to %u a step", b->allow);
+    }
+    if (b->lowest == PACE_ALLOW_NONE) {
+        snprintf(lowest, sizeof(lowest), "not held");
+    } else {
+        snprintf(lowest, sizeof(lowest), "%u", b->lowest);
+    }
+    if (gpuNs != 0) {
+        snprintf(gpu, sizeof(gpu), "GPU %.1f ms a presented replay", ms_of(gpuNs));
+    } else {
+        snprintf(gpu, sizeof(gpu), "%s", noGpu);
+    }
+    return snprintf(out, size,
+                    "; %s (lowest %s, %u refused, %u drops, %u climbs, climbs refused %u); %s",
+                    held, lowest, b->refused - refusedAt, b->drops - dropsAt, b->climbs - climbsAt,
+                    b->climbRefusals - climbRefusalsAt, gpu);
+}
+
+int pace_lock_timing_text(const PaceLock *L, const char *output, unsigned seenAt, double nudgeAt,
+                          unsigned lateAt, unsigned earlyAt, char *out, unsigned size)
+{
+    int n;
+
+    if (L->clockKind == PACE_CLOCK_KIND_SHOWN && L->clock == PACE_CLOCK_ON) {
+        n = snprintf(out, size,
+                     "display timing on: %u presents timed, phase nudge %+.3f ms, %u late, %u "
+                     "early",
+                     L->seen - seenAt, (L->nudgeSum - nudgeAt) / 1e6, L->late - lateAt,
+                     L->early - earlyAt);
+    } else if (L->clockKind == PACE_CLOCK_KIND_SHOWN) {
+        n = snprintf(out, size, "display timing %s",
+                     L->clock == PACE_CLOCK_LEFT_ERROR ? "stopped"
+                                                       : "left (its refresh was off the report)");
+    } else if (L->clockKind == PACE_CLOCK_KIND_VBLANK && L->clock == PACE_CLOCK_ON) {
+        if (L->measuredNs > 0.0) {
+            /* the slot against the report (+: longer), and the step's
+               offset after the last vblank (+: after it) */
+            n = snprintf(out, size,
+                         "display clock vblank (output %s, measured %.4f ms, slot %+.0f ppm, "
+                         "phase %+.2f ms)",
+                         output, L->measuredNs / 1e6, pace_ppm(L->slotNs, (double)L->refreshNs),
+                         L->vbPhaseNs / 1e6);
+        } else {
+            n = snprintf(out, size, "display clock vblank (output %s, measuring)", output);
+        }
+    } else if (L->clockKind == PACE_CLOCK_KIND_VBLANK) {
+        n = snprintf(out, size, "display clock %s",
+                     L->clock == PACE_CLOCK_LEFT_ERROR ? "stopped"
+                                                       : "left (its interval was off the report)");
+    } else {
+        n = snprintf(out, size, "display clock off");
+    }
+    return n;
+}
+
 uint64_t pace_display_wait(uint64_t dispNs, uint64_t fenceNs, uint64_t costNs,
                            bool fenceHoldsDisplay)
 {
