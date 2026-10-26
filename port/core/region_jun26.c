@@ -56,9 +56,9 @@ const IcoRegionInfo ico_region_info_jun26 = {
     .has_game_language = 0, /* main.c takes the magazine menu's language from sceDemoStart
                                (demoDisc.c) and only prints it; main.c sets
                                NonLinearCameraMove 0: the game picks no language */
-    /* has_film_players: la_game_option_jun26: Sound output, Vibration; reel_row -1;
-       no second-pad Yorda (subGirlControl_jun26) */
-    .has_film_players = 0,
+    /* has_film_effect: la_game_option_jun26: Sound output, Vibration; reel_row -1;
+       Players as on the North American disc (the _jun26 arms) */
+    .has_film_effect = 0,
     /* hold_type_own: B, the toggle (_ACTCommonMailTest_jun26: pad.trg & 8) */
     .hold_type_own = 1,
     .ui_lang_default = 0, /* UI_LANG_EN: the disc's text is English */

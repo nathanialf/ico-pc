@@ -2189,19 +2189,17 @@ static int optShown(int opt, int link)
         const int c = charsRowsFor();
         return c < 0 || ico_appearance_character(charPart(opt)) == c;
     }
-    if ((opt == UI_OPT_FILM_EFFECT || opt == UI_OPT_PLAYERS) &&
-        !ico_region_cur()->has_film_players) {
-        /* PC port: the three 2001 discs' own Options screen has neither,
-           and their game never reads them (region.h has_film_players): the
-           stage table has no film effect animations (a step would start
-           another animation at the European rows 67..70), and no arm of
-           theirs reads girlControlMode (no second-pad Yorda).  Hold type
-           shows on every disc (the 2001 arms read optionControlType) */
-        static int fpLogged;
-        if (!fpLogged) {
-            fpLogged = 1;
-            fprintf(stderr,
-                    "settings: no Film effect or Players row on %s (the game has neither)\n",
+    if (opt == UI_OPT_FILM_EFFECT && !ico_region_cur()->has_film_effect) {
+        /* PC port: the three 2001 discs' own Options screen has no film
+           effect, and their stage table has no film effect animations
+           (region.h has_film_effect; a step would start another animation
+           at the European rows 67..70).  Players shows on every disc (the
+           port carries the second-pad Yorda into the 2001 arms), and Hold
+           type too (the 2001 arms read optionControlType) */
+        static int filmLogged;
+        if (!filmLogged) {
+            filmLogged = 1;
+            fprintf(stderr, "settings: no Film effect row on %s (the game has none)\n",
                     ico_region_cur()->disc_id);
         }
         return 0;

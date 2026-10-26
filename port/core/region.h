@@ -86,19 +86,17 @@ typedef struct IcoRegionInfo {
     /* --- the game's options ------------------------------------------- */
     int has_50hz_row;      /* the game offers 50/60 Hz (the port's row too) */
     int has_game_language; /* the game picks a language (menus, subtitles) */
-    /* the game's Options screen has Film effect and Players (la_game_option's
-       screenModeItem and choiceItem + 2 rows) and the game reads them
-       (optionScreenMode's film_noise animations, girlControlMode): 1 on the
-       European, Japanese, Korean and Asian discs; 0 on the three 2001 discs,
-       whose option screen has Sound output and Vibration only
-       (la_game_option_ntscaug6, _jun26), whose stageTable has no film_noise
-       animation (reel_row -1) and whose game has no second-pad Yorda (their
-       subGirlControl, ACTGetWish_FromPad, subBoyCollision, ACTGame_CommonLoop
-       and the other girlControlMode readers are the disc's own arms, none of
-       which reads it; girl_act.c setNext ignores it): the Settings menu hides
-       the two rows there (settings.c optShown).  Hold type is on every disc
-       (hold_type_own). */
-    int has_film_players;
+    /* the game's Options screen has Film effect (la_game_option's
+       screenModeItem rows) and the game reads it (optionScreenMode's
+       film_noise animations): 1 on the European, Japanese, Korean and Asian
+       discs; 0 on the three 2001 discs, whose option screen has Sound output
+       and Vibration only (la_game_option_ntscaug6, _jun26) and whose
+       stageTable has no film_noise animation (reel_row -1): the Settings menu
+       hides the row there (settings.c optShown).  Players (girlControlMode)
+       is on every disc: the port carries the European second-pad branches
+       into the 2001 arms (docs/port/GAME_FEATURES.md, "Players on the 2001
+       discs").  Hold type is on every disc too (hold_type_own). */
+    int has_film_effect;
     /* the disc's own Hold type, what [gameplay] hold_type = "disc" (the
        default) plays: 0 (ICO_HOLD_HOLD, port/game/options.h: A, keep R1 held)
        on the European, Japanese, Korean and Asian discs, whose

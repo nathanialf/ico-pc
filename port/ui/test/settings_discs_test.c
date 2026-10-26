@@ -15,9 +15,10 @@ typedef struct {
     int hz50;       /* 50 Hz (Display, title only): has_50hz_row */
     int language;   /* Game language (Main): has_game_language */
     int circleBack; /* Circle goes back (Controls): pad_back is Triangle */
-    /* Film effect and Players (Gameplay, the pause menu, once cleared):
-       has_film_players; Hold type (Controls) shows on every disc */
-    int filmPlayers;
+    /* Film effect (Gameplay, the pause menu, once cleared): has_film_effect;
+       Players (the same page and rule) and Hold type (Controls) show on every
+       disc */
+    int film;
     /* the disc's own Hold type, what the row starts at (no key): 0 A, 1 B
        (hold_type_own) */
     int holdOwn;
@@ -106,18 +107,25 @@ static void checkPauseRows(const Expect *e)
               !ui_settings_opt_shown(UI_OPT_EXTRAS_CREDITS),
           "%s pause: no 50 Hz, Music or Credits (the title's)", e->slug);
     CHECK(ui_settings_opt_shown(UI_OPT_HOLD_TYPE) &&
-              ui_settings_opt_shown(UI_OPT_FILM_EFFECT) == e->filmPlayers &&
-              ui_settings_opt_shown(UI_OPT_PLAYERS) == e->filmPlayers,
-          "%s pause, cleared: Hold type %d (want 1), Film effect %d, Players %d, want %d", e->slug,
-          ui_settings_opt_shown(UI_OPT_HOLD_TYPE), ui_settings_opt_shown(UI_OPT_FILM_EFFECT),
-          ui_settings_opt_shown(UI_OPT_PLAYERS), e->filmPlayers);
+              ui_settings_opt_shown(UI_OPT_FILM_EFFECT) == e->film &&
+              ui_settings_opt_shown(UI_OPT_PLAYERS),
+          "%s pause, cleared: Hold type %d (want 1), Film effect %d (want %d), Players %d (want 1)",
+          e->slug, ui_settings_opt_shown(UI_OPT_HOLD_TYPE),
+          ui_settings_opt_shown(UI_OPT_FILM_EFFECT), e->film,
+          ui_settings_opt_shown(UI_OPT_PLAYERS));
     /* a row that is not shown is not reached: on the page as it opens, its
        row is masked (layoutPage) */
     openPage(mainL, -1, UI_PAGE_GAMEPLAY);
     const int film = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT);
-    CHECK(film >= 0 && lt_ext_prop(film)->defaultMask == !e->filmPlayers,
+    CHECK(film >= 0 && lt_ext_prop(film)->defaultMask == !e->film,
           "%s pause: the Film effect row masked %d, want %d", e->slug,
-          film >= 0 ? lt_ext_prop(film)->defaultMask : -1, !e->filmPlayers);
+          film >= 0 ? lt_ext_prop(film)->defaultMask : -1, !e->film);
+    /* Players is reached on every disc once cleared (the 2001 discs too:
+       the port carries the second-pad Yorda into their arms) */
+    const int players = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS);
+    CHECK(players >= 0 && lt_ext_prop(players)->defaultMask == 0,
+          "%s pause: the Players row masked %d, want 0", e->slug,
+          players >= 0 ? lt_ext_prop(players)->defaultMask : -1);
     gFlagGameClear = 0;
     CHECK(!ui_settings_opt_shown(UI_OPT_FILM_EFFECT) && !ui_settings_opt_shown(UI_OPT_PLAYERS),
           "%s pause, not cleared: no Film effect or Players", e->slug);
@@ -132,7 +140,7 @@ int main(int argc, char **argv)
     const Expect *e = expectFor(slug);
     CHECK(e != NULL && ico_region_select(slug) == 0, "the %s disc", slug);
     if (e != NULL) {
-        CHECK(ico_region_cur()->has_film_players == e->filmPlayers &&
+        CHECK(ico_region_cur()->has_film_effect == e->film &&
                   ico_region_cur()->hold_type_own == e->holdOwn &&
                   ico_region_cur()->credits_staff_packs == e->credits &&
                   ico_region_cur()->has_50hz_row == e->hz50 &&
