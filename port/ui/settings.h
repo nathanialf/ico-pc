@@ -422,6 +422,13 @@ typedef enum UiSettingsPage {
     /* Extras > Game variants (port/game/variants.h): the eight [variants]
        rows, the Debug menu (Developer mode only), Back */
     UI_PAGE_VARIANTS,
+    /* Picture (main page, after Display): the picture's own rows
+       (Anti-aliasing, Full-height picture, Texture filtering, Full pixel,
+       Brightness, CRT, the texture and model packs), Back */
+    UI_PAGE_PICTURE,
+    /* Developer (main page, before Back): Developer mode, Dump textures,
+       Dump models, Back */
+    UI_PAGE_DEVELOPER,
     UI_PAGE_COUNT
 } UiSettingsPage;
 

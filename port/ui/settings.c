@@ -2305,10 +2305,8 @@ static int optShown(int opt, int link)
         return ico_region_cur()->has_game_language;
     }
     if (opt == UI_OPT_VIDEO_MODE || opt == UI_OPT_MODEL_PACK) {
-        /* it changes only from the title (onTitle); the pause menu's
-           Display page has no room for a row that cannot step once Texture
-           pack is there (fourteen rows do not fit 13 lines apart); Model
-           pack is the title's too, for the same reason */
+        /* both change only from the title (onTitle): the video mode is
+           read at boot, and the model pack is loaded with the game's data */
         return onTitle();
     }
     return 1;
@@ -3344,9 +3342,6 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_LANGUAGE, UI_STR_LANGUAGE_NOTE);
         addNote(pg, UI_OPT_MENU_LANGUAGE, UI_STR_MENU_LANGUAGE_NOTE);
         addNote(pg, UI_OPT_DISC, UI_STR_DISC_NOTE);
-        addNote(pg, UI_OPT_DEVELOPER, UI_STR_DEVELOPER_NOTE);
-        addNote(pg, UI_OPT_DUMP_TEXTURES, UI_STR_DUMP_TEXTURES_NOTE);
-        addNote(pg, UI_OPT_DUMP_MODELS, UI_STR_DUMP_MODELS_NOTE);
         addNote(pg, UI_OPT_REPORT_PICTURE, UI_STR_REPORT_PICTURE_NOTE);
 #if ICO_RC_TOOLS
         addNote(pg, UI_OPT_SHARE_REPORT, UI_STR_SHARE_REPORT_NOTE);
@@ -3354,9 +3349,16 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_DISPLAY:
         addNote(pg, UI_OPT_RESOLUTION, UI_STR_RESOLUTION_CRT_NOTE);
+        break;
+    case UI_PAGE_PICTURE:
         addNote(pg, UI_OPT_ANTI_ALIAS, UI_STR_OPT_AA_NOTE);
         addNote(pg, UI_OPT_TEXTURE_PACK, UI_STR_TEXTURE_PACK_NOTE);
         addNote(pg, UI_OPT_MODEL_PACK, UI_STR_MODEL_PACK_NOTE);
+        break;
+    case UI_PAGE_DEVELOPER:
+        addNote(pg, UI_OPT_DEVELOPER, UI_STR_DEVELOPER_NOTE);
+        addNote(pg, UI_OPT_DUMP_TEXTURES, UI_STR_DUMP_TEXTURES_NOTE);
+        addNote(pg, UI_OPT_DUMP_MODELS, UI_STR_DUMP_MODELS_NOTE);
         break;
     case UI_PAGE_AUDIO:
         break;
@@ -3818,32 +3820,41 @@ static void build(void)
 {
     /* Extras (after Achievements), from both entries (its Music,
        Models and Credits only from the title, layoutPage) */
-    /* Save a picture for a bug report above Developer mode, always shown
-       (with a host handler), and in an rc build Share a bug report below it
-       (ICO_RC_TOOLS, on a phone); Dump textures and Dump models under
-       Developer mode, shown while it is on */
+    /* Display, Picture, Effects, Graphics, Graphics driver, Audio, Controls
+       and Gameplay open their pages; Save a picture for a bug report stays
+       on this page, always shown (with a host handler), and in an rc build
+       Share a bug report below it (ICO_RC_TOOLS, on a phone); the Developer
+       page last, before Back (Developer mode, and under it Dump textures
+       and Dump models, shown while it is on) */
     static const int mainOpts[] = {
-        UI_OPT_LINK,           UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
-        UI_OPT_LINK,           UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LANGUAGE,
-        UI_OPT_MENU_LANGUAGE,  UI_OPT_DISC,          UI_OPT_LINK,        UI_OPT_LINK,
-        UI_OPT_REPORT_PICTURE,
+        UI_OPT_LINK,         UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK,           UI_OPT_LINK,
+        UI_OPT_LINK,         UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LANGUAGE,       UI_OPT_MENU_LANGUAGE,
+        UI_OPT_DISC,         UI_OPT_LINK, UI_OPT_LINK, UI_OPT_REPORT_PICTURE,
 #if ICO_RC_TOOLS
         UI_OPT_SHARE_REPORT,
 #endif
-        UI_OPT_DEVELOPER,      UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
-    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,      UI_STR_SECTION_EFFECTS,
-                                   UI_STR_SECTION_GRAPHICS,     UI_STR_SECTION_GPU_DRIVER,
-                                   UI_STR_SECTION_AUDIO,        UI_STR_SECTION_CONTROLS,
-                                   UI_STR_SECTION_GAMEPLAY,     UI_STR_SECTION_LANGUAGE,
-                                   UI_STR_OPT_MENU_LANGUAGE,    UI_STR_OPT_DISC,
-                                   UI_STR_SECTION_ACHIEVEMENTS, UI_STR_EXTRAS,
+        UI_OPT_LINK,         UI_OPT_BACK};
+    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
+                                   UI_STR_SECTION_PICTURE,
+                                   UI_STR_SECTION_EFFECTS,
+                                   UI_STR_SECTION_GRAPHICS,
+                                   UI_STR_SECTION_GPU_DRIVER,
+                                   UI_STR_SECTION_AUDIO,
+                                   UI_STR_SECTION_CONTROLS,
+                                   UI_STR_SECTION_GAMEPLAY,
+                                   UI_STR_SECTION_LANGUAGE,
+                                   UI_STR_OPT_MENU_LANGUAGE,
+                                   UI_STR_OPT_DISC,
+                                   UI_STR_SECTION_ACHIEVEMENTS,
+                                   UI_STR_EXTRAS,
                                    UI_STR_OPT_REPORT_PICTURE,
 #if ICO_RC_TOOLS
                                    UI_STR_OPT_SHARE_REPORT,
 #endif
-                                   UI_STR_OPT_DEVELOPER_MODE,   UI_STR_OPT_DUMP_TEXTURES,
-                                   UI_STR_OPT_DUMP_MODELS,      UI_STR_BACK};
+                                   UI_STR_SECTION_DEVELOPER,
+                                   UI_STR_BACK};
     static const int mainLinks[] = {UI_PAGE_DISPLAY,
+                                    UI_PAGE_PICTURE,
                                     UI_PAGE_EFFECTS,
                                     UI_PAGE_GRAPHICS,
                                     UI_PAGE_GPU_DRIVER,
@@ -3859,9 +3870,7 @@ static void build(void)
 #if ICO_RC_TOOLS
                                     -1,
 #endif
-                                    -1,
-                                    -1,
-                                    -1,
+                                    UI_PAGE_DEVELOPER,
                                     -1};
     /* the Graphics API page (its link needs two or more renderers) */
     static const int apiOpts[] = {UI_OPT_GRAPHICS_API, UI_OPT_GRAPHICS_APPLY, UI_OPT_GRAPHICS_KEEP,
@@ -3874,34 +3883,39 @@ static void build(void)
     static const int gpuStrs[] = {UI_STR_OPT_GPU_DRIVER, UI_STR_GPU_DRIVER_ADD,
                                   UI_STR_GPU_DRIVER_ADD_FILE, UI_STR_GPU_DRIVER_REMOVE,
                                   UI_STR_BACK};
-    static const int fxOpts[] = {UI_OPT_FULL_HEIGHT,
-                                 UI_OPT_FILTER,
-                                 UI_OPT_BRIGHTNESS,
-                                 UI_OPT_CRT,
-                                 UI_OPT_CRT_STRENGTH,
-                                 UI_OPT_EFFECT_GLOW,
+    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,
                                  UI_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_OPT_EFFECT_SOFTENING,
                                  UI_OPT_EFFECT_MOTION_BLUR,
                                  UI_OPT_EFFECT_FOG,
                                  UI_OPT_EFFECT_WATER,
                                  UI_OPT_EFFECT_CINEMATIC_BARS,
-                                 UI_OPT_FULL_PIXEL,
                                  UI_OPT_BACK};
-    static const int fxStrs[] = {UI_STR_OPT_FULL_HEIGHT,
-                                 UI_STR_OPT_FILTERING,
-                                 UI_STR_OPT_BRIGHTNESS,
-                                 UI_STR_OPT_CRT,
-                                 UI_STR_OPT_CRT_STRENGTH,
-                                 UI_STR_OPT_EFFECT_GLOW,
+    static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,
                                  UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_FOG,
                                  UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
-                                 UI_STR_OPT_FULL_PIXEL,
                                  UI_STR_BACK};
+    /* Picture: the picture's own rows (Brightness is the pause menu's, the
+       Model pack the title's); the Downsampling row goes right after
+       Anti-aliasing */
+    static const int picOpts[] = {UI_OPT_ANTI_ALIAS,   UI_OPT_FULL_HEIGHT,  UI_OPT_FILTER,
+                                  UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,   UI_OPT_CRT,
+                                  UI_OPT_CRT_STRENGTH, UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,
+                                  UI_OPT_BACK};
+    static const int picStrs[] = {UI_STR_OPT_AA,           UI_STR_OPT_FULL_HEIGHT,
+                                  UI_STR_OPT_FILTERING,    UI_STR_OPT_FULL_PIXEL,
+                                  UI_STR_OPT_BRIGHTNESS,   UI_STR_OPT_CRT,
+                                  UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_TEXTURE_PACK,
+                                  UI_STR_OPT_MODEL_PACK,   UI_STR_BACK};
+    /* Developer: Developer mode, and the dumps it unlocks */
+    static const int devOpts[] = {UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,
+                                  UI_OPT_BACK};
+    static const int devStrs[] = {UI_STR_OPT_DEVELOPER_MODE, UI_STR_OPT_DUMP_TEXTURES,
+                                  UI_STR_OPT_DUMP_MODELS, UI_STR_BACK};
     /* Characters after Credits (from both entries; the other three
        from the title only) */
     static const int extrasOpts[] = {
@@ -3954,18 +3968,15 @@ static void build(void)
                                    UI_STR_CHAR_RANDOMIZE,
                                    UI_STR_CHAR_RESET,
                                    UI_STR_BACK};
-    /* every Display row always shown, Frame rate included; Full-height
-       picture, Texture filtering and Brightness (the pause menu's) are the
-       Effects page's, first there */
-    static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION,  UI_OPT_ASPECT,
-                                   UI_OPT_ANTI_ALIAS,   UI_OPT_WINDOW_MODE, UI_OPT_VSYNC,
-                                   UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,  UI_OPT_FRAMERATE,
-                                   UI_OPT_SHOW_FPS,     UI_OPT_VIDEO_MODE,  UI_OPT_BACK};
+    /* every Display row always shown, Frame rate included (the picture's
+       own rows are the Picture page's) */
+    static const int dispOpts[] = {UI_OPT_PRESET,      UI_OPT_RESOLUTION, UI_OPT_ASPECT,
+                                   UI_OPT_WINDOW_MODE, UI_OPT_VSYNC,      UI_OPT_FRAMERATE,
+                                   UI_OPT_SHOW_FPS,    UI_OPT_VIDEO_MODE, UI_OPT_BACK};
     static const int dispStrs[] = {
-        UI_STR_OPT_PRESET,       UI_STR_OPT_RESOLUTION,  UI_STR_OPT_ASPECT,
-        UI_STR_OPT_AA,           UI_STR_OPT_WINDOW_MODE, UI_STR_OPT_VSYNC,
-        UI_STR_OPT_TEXTURE_PACK, UI_STR_OPT_MODEL_PACK,  UI_STR_OPT_FRAMERATE,
-        UI_STR_OPT_SHOW_FPS,     UI_STR_OPT_VIDEO_MODE,  UI_STR_BACK};
+        UI_STR_OPT_PRESET,      UI_STR_OPT_RESOLUTION, UI_STR_OPT_ASPECT,
+        UI_STR_OPT_WINDOW_MODE, UI_STR_OPT_VSYNC,      UI_STR_OPT_FRAMERATE,
+        UI_STR_OPT_SHOW_FPS,    UI_STR_OPT_VIDEO_MODE, UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
@@ -4015,6 +4026,10 @@ static void build(void)
                    "a string and a link for each Touch screen row");
     _Static_assert(N_OF(touchOpts) <= MAX_ROWS, "the touchOpts rows fit the page's row budget");
     _Static_assert(sizeof(fxOpts) == sizeof(fxStrs), "a string for each Effects row");
+    _Static_assert(sizeof(picOpts) == sizeof(picStrs), "a string for each Picture row");
+    _Static_assert(sizeof(devOpts) == sizeof(devStrs), "a string for each Developer row");
+    _Static_assert(N_OF(picOpts) <= MAX_ROWS, "the picOpts rows fit the page's row budget");
+    _Static_assert(N_OF(devOpts) <= MAX_ROWS, "the devOpts rows fit the page's row budget");
     _Static_assert(sizeof(gpuOpts) == sizeof(gpuStrs), "a string for each Graphics driver row");
     _Static_assert(sizeof(gameOpts) == sizeof(gameStrs), "a string for each Gameplay row");
     _Static_assert(sizeof(extrasOpts) == sizeof(extrasStrs) &&
@@ -4043,6 +4058,10 @@ static void build(void)
                     -1);
     buildOptionPage(UI_PAGE_DISPLAY, UI_STR_SECTION_DISPLAY, dispOpts, dispStrs, NULL,
                     N_OF(dispOpts), UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_PICTURE, UI_STR_SECTION_PICTURE, picOpts, picStrs, NULL, N_OF(picOpts),
+                    UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_DEVELOPER, UI_STR_SECTION_DEVELOPER, devOpts, devStrs, NULL,
+                    N_OF(devOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_AUDIO, UI_STR_SECTION_AUDIO, audioOpts, audioStrs, NULL,
                     N_OF(audioOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_CONTROLS, UI_STR_SECTION_CONTROLS, ctlOpts, ctlStrs, ctlLinks,
