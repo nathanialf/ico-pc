@@ -1,6 +1,7 @@
 ## New
 
 - Hold type (hold R1 to keep Yorda's hand, or press once to take it and once to let go) can now be chosen on the North American disc, the August 2001 preview and the June 2001 demo too; each disc starts with its own way.
+- Options > Display > Frame rate counter shows the frames per second in the corner of the screen. It starts Off.
 
 ## Fixed
 

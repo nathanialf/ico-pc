@@ -154,6 +154,7 @@ display option, the [preset](ARCHITECTURE.md#terms) rule and the pacing belong t
 | `dump_textures` | bool | `false` | write each texture under its PCSX2 name |
 | `model_pack` | bool | `true` | load an installed model pack |
 | `dump_models` | bool | `false` | save each model part as glTF |
+| `show_fps` | bool | `false` | the Frame rate counter: the presented frames per second as small text in the screen's top-left corner |
 | `texture_pack_budget_mb` | int | `2048` | file only; graphics memory for replacements, 128..65536 |
 | `texture_pack_precache` | bool | `true` | file only; read the whole pack into memory at start |
 | `texture_pack_cache_mb` | int | `0` | file only; memory for that read, 0 (half the computer's) or 128..65536 |

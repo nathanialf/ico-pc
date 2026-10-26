@@ -119,7 +119,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 ### port/config/test, port/null/test, port/save/test
 
 - `config_test.c`: `config.toml`'s reader and writer, round trips, the ini over `config.toml` over
-  default precedence, the first-run template (Hold type `disc`, no `hold_type_chosen`, `effect_motion_blur_mode =
+  default precedence, the first-run template (Hold type `disc`, no `hold_type_chosen`, `show_fps = false`, `effect_motion_blur_mode =
   "original"`, the touch comments naming `format = 2`, the 0.7 to 3.0 size and the words `hidden`
   and `off`; `touch.format` and a `[touch.full]` line written and read back), the language answer, `[game] disc` (`auto`, the slugs, an unknown value as
   auto logged once a load) and `[game] last_disc` (read, written, not in the template), the wall
@@ -290,7 +290,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   from the file, an unknown word as the disc's own; `test_hold_discs` selects each of the seven
   discs and checks the resolve: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 for no key, `"disc"`, a
   bare `"hold"` and `hold_type_chosen = false`, A for a chosen `"hold"`, B for `"toggle"`, and the
-  store's two keys), the video effects' keys (Water
+  store's two keys), `test_video_show_fps` (`[video] show_fps`: off by default, a file's `true`
+  read, a run-time 7 sanitized to 1, saved as `show_fps = true`/`false` and read back, the preset
+  untouched, Enhanced's shortcut leaving it alone), the video effects' keys (Water
   reflections' `effect_water_sharp` off by default, saved, outside the preset; Motion blur's
   `effect_motion_blur_mode`: `"original"` with no key, `"original"` and `"smooth"` read in any
   case, an unknown word as `"original"`, Smooth only with the switch on for the getter, kept
@@ -426,6 +428,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   present a step after the first second, no step late, the alphas on the grid; a GPU-bound phone
   at 60 Hz presents its new frames only and keeps real time; both print the rule before's numbers
   beside) (`pace_loop`).
+- `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
+  the first second, 50 presents a second give 50 at every whole second, a second that ran 1.5 s long
+  divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays
+  counted through the renderer's count being zeroed after a tick (100 a second, none lost), a
+  change of mode starting the second again, a time going backwards changing nothing (`fps_counter`).
 - `pace_policy_test.c`: the slow-present decision, Resolution "auto"'s steps, the gap between
   presents, the vsync lock's n and alphas and its period's sanity, and the vblank clock's laws on a
   synthetic display, and the late-present skip: a whole period behind skips, with or without
@@ -1037,6 +1044,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   back with the same letters, no word in the plain font (`menu_text`).
 - `settings_test.c`, `settings_extra_test.c`, `settings_extras_test.c`: the Settings menu over
   fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c`'s
+  `testShowFps` steps Display > Frame rate counter (Off by default, Right then Left both switch it, the preset kept, `[video] show_fps` saved as `true`, a file's `true` read; the Display row lists are twelve rows with the new row after Frame rate, and the pause menu's Display page is ten with Video mode and Model pack hidden, both at 13 lines apart from 36); `ui_fps.c` itself is in the window build only and has no test (the number is `fps_counter_test`'s; a hand check: the corner, legible, off by default; on a phone with the touch controls on the top edge between the D-pad and Select);
   `testEffects` steps Motion blur round Off, Original (the default) and Smooth, each step saved as
   `effect_motion_blur` and `effect_motion_blur_mode` with the getters at once, the note under the
   row and the page fitting from both menus; `settings_test.c` also

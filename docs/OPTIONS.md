@@ -141,6 +141,14 @@ How the picture looks.
   your screen's refresh rate (see your system's display settings). If a
   faint trailing image stays while you move, try another limit, or on
   Windows the Direct3D 12 renderer ([Choosing the renderer](#choosing-the-renderer)).
+- **Frame rate counter** is Off or On, and starts Off. On shows how many
+  pictures the game is putting on the screen each second, as a small
+  number such as "60 fps" in the top-left corner of the screen. It is
+  drawn over the picture at your screen's own sharpness, so the CRT filter
+  does not touch it. With the touch controls showing, the number stands on
+  the top edge between the D-pad and Select, where no control sits, so
+  nothing covers it. It updates once a second and shows nothing until the
+  first second has passed.
 - **Video mode** is PAL 50 Hz or 60 Hz. The normal choice is 60 Hz. This
   row is only on the title screen's Options, and only with the European
   disc: the other six discs always run at 60 Hz, as they did on the
@@ -683,6 +691,7 @@ Under `[video]`:
 | `crt_curvature` | How much the screen bulges, from `0.0` to `0.25`. Missing keeps the style's own value. |
 | `backend = ""` | The Graphics API row of the Graphics page: empty is Automatic, or `"vulkan"`, `"opengl"`, `"d3d12"` or `"d3d11"` where your download has it. Used from the next start. [Choosing the renderer](#choosing-the-renderer). |
 | `gpu_driver = ""` | Android only. The Driver row of the Graphics driver page: empty is the phone's own driver. The game also writes a `gpu_driver_failed` line when a driver did not start. [About Android](ANDROID.md#using-a-different-graphics-driver). |
+| `show_fps = false` | The Frame rate counter row on the Display page. `true` shows the frames per second in the top-left corner of the screen. |
 | `model_pack = true` | The Model pack row. `false` shows the game's own models. |
 | `dump_models = false` | The Dump models row. Only works with Developer mode on. |
 | `effects_depth = true` | Lets an effects program such as ReShade see how far away things are. [About ReShade](RESHADE.md). |

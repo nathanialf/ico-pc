@@ -123,6 +123,14 @@ the PS2 gives. Motion blur also has Smooth, which moves the trail on with
 every frame you see instead of once for each of the game's frames.
 [What each one does](OPTIONS.md#effects).
 
+## How do I see how many frames a second I get?
+
+Open **Options > Display** and turn **Frame rate counter** On. A small
+number such as "60 fps" appears in the top-left corner of the screen,
+updated once a second. With the touch controls showing, it stands on the top
+edge between the D-pad and Select. Turn it Off the same way.
+[What the row does](OPTIONS.md#display).
+
 ## Why is there a thin black border around the picture?
 
 The PS2 itself drew a thin black border around the picture, a few dots wide

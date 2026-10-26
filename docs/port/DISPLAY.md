@@ -25,7 +25,8 @@ are [RHI.md](RHI.md).
 | `port/render/rd_present.c` | DISPLAY to the output: the box, line doubling, the overlay, the display options as scales |
 | `port/render/rd_interp.c` | presenting between ticks; the present clock |
 | `port/render/rd_crt.c`, `port/shaders/crt.hlsl` | the CRT filter |
-| `port/platform/test/` | `pace_loop_test.c`, `pace_policy_test.c`, `perf_block_test.c`, `window_video_test.c`, `hotkeys_test.c` |
+| `port/platform/fps_counter.h`, `fps_counter.c` | the Frame rate counter's presents per second, free of SDL and rd ([UI.md](UI.md#the-frame-rate-counter)) |
+| `port/platform/test/` | `fps_counter_test.c`, `pace_loop_test.c`, `pace_policy_test.c`, `perf_block_test.c`, `window_video_test.c`, `hotkeys_test.c` |
 
 ## The native frame
 

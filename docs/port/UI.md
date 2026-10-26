@@ -29,6 +29,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `tools/subset_font_zh.py` | makes and checks the fourth font's subset |
 | `port/ui/popup.h`, `popup.c` | the notification popups |
 | `port/ui/touch_ui.h`, `touch_ui.c` | the touch overlay's drawing |
+| `port/ui/ui_fps.h`, `ui_fps.c` | the Frame rate counter: its text on the top layer and the calls that feed its number (`port/platform/fps_counter.h`) |
 | `port/ui/ui_mouse.h`, `ui_mouse.c`, `ui_mouse_geom.h`, `ui_mouse_geom.c` | the mouse pointer in menus: the glue and the arithmetic |
 | `port/ui/gallery.h`, `gallery.c`, `gallery_play.c` | Extras > Music: the list and its engine |
 | `port/ui/photo_ui.h`, `photo_ui.c` | photo mode's screen and its help panel |
@@ -179,7 +180,7 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 | page | rows |
 | --- | --- |
 | Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics (`UI_PAGE_GRAPHICS`), Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Save a picture for a bug report, (an rc build on Android: Share a bug report,) Developer mode, Dump textures, Dump models, Back |
-| Display | Preset, Resolution, Aspect, Anti-aliasing, Window mode, Vsync, Texture pack, Model pack, Frame rate, Video mode, Back |
+| Display | Preset, Resolution, Aspect, Anti-aliasing, Window mode, Vsync, Texture pack, Model pack, Frame rate, Frame rate counter (`UI_OPT_SHOW_FPS`, `[video] show_fps`, Off or On), Video mode, Back |
 | Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects (Motion blur Off, Original or Smooth, `UI_OPT_EFFECT_MOTION_BLUR`, stepped round with `stepIndex` and its note `UI_STR_EFFECT_MOTION_BLUR_NOTE`) with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Full pixel, Back |
 | Graphics | Graphics API (`UI_OPT_GRAPHICS_API`: Automatic, then each name `ui_settings_set_backend_names` was given as Vulkan, OpenGL, Direct3D 12 or Direct3D 11; the shown value and the step base are the config's `video.backend`, an unlinked value shows as written and steps from Automatic; a step writes `video.backend` ("" for Automatic) and sets `s_dirtyConfig`, so the file is written on leaving; the note `UI_STR_GRAPHICS_API_NOTE` says Apply switches now and the choice is otherwise used from the next start), Apply (`UI_OPT_GRAPHICS_APPLY`, shown while a `UiGraphicsHost` is set, two or more names, no switch under way and the row's value, Automatic counting as the host's `automatic()` (the backend Automatic started this run) or else `vulkan`, a linked name that is not the host's `running()`; note `UI_STR_GRAPHICS_APPLY_NOTE`), Keep and Revert (`UI_OPT_GRAPHICS_KEEP`, `UI_OPT_GRAPHICS_REVERT`, shown only in the countdown, which hides Graphics API and Back), Back (the link and the page only with two or more names) |
 | Graphics driver | Driver, Add a driver, Add from the drivers folder (`UI_OPT_GPU_ADD_FILE`, stepped over `fileName(i)`, shown while `fileCount()` is above 0, Cross calls `installFileBegin`), Remove this driver, Back (Android) |
@@ -231,7 +232,8 @@ its handler, Export textures only while a `UiTextureExportHost` is set, the wind
 window and mouse camera rows not on Android; the Graphics link only with two or more renderer names (`ui_settings_set_backend_names`), the Graphics driver link only with a driver host on an
 Adreno GPU (`port/ui/settings.c` (`optShown`, `isGameOpt`, `isExtrasOpt`)). `layoutPage` masks the
 hidden rows and spaces the shown ones by the page's pitch table, which keeps Back's box inside the
-226 lines and above the notes (`port/ui/settings.c` (`layoutPage`, `pagePitch`)); Effects' fourteen
+226 lines and above the notes (`port/ui/settings.c` (`layoutPage`, `pagePitch`): Display is 13 apart from
+36 with its twelve rows on the title, Back at 179); Effects' fourteen
 rows from the pause menu (Brightness shown) are 12 apart from line 30, Back's box ending at 222.
 
 ### Values and saving
@@ -757,6 +759,31 @@ loaded yet, the left stick's ring, run ring and knob, the look pad's ring and do
 brighter (`port/ui/touch_ui.h`, header comment). It draws only while the copy's opacity is above
 0. It is on the presenter's top layer (`rd_set_present_overlay_top`), never through the CRT
 filter (`port/ui/ui_host.c` (`hostOverlayTop`)). [INPUT.md](INPUT.md) has the touch input.
+
+### The Frame rate counter
+
+`ui_fps.c` draws Options > Display > Frame rate counter (`[video] show_fps`, default off, an On/Off
+row stepped like Vsync): one `ui_draw_text` per present on the same top layer, called from
+`hostOverlayTop` after the touch controls when `ico_video_show_fps()` is set. The text is
+"<n> <fps unit>" (`UI_STR_FPS_UNIT`, the Frame rate row's unit), lime green (150, 255, 130 at
+alpha 235), no background, 3.5 % of the output's height (at least 18 pixels), left and top aligned
+a margin of 1.2 % of the output's height (at least 6) in from the corner of the output (the whole
+screen, not the 4:3 picture: `pxToGrid` maps an output pixel to the font's grid, which reaches
+outside 0..640 on a wide screen). The number is made by `port/platform/fps_counter.c` (free of SDL
+and rd, `fps_counter_test`): the presents over the last second or more, the figure the 10 s line
+gives as "presents/s", 0 until the first second (nothing is drawn while it is 0). `window_host.c`
+only calls `ui_fps_tick(now)` at the top of `pace_log` and `ui_fps_present()` after a present
+(`window_host.c` is within a few hundred bytes of the 256 KiB per-file gate: the rest lives here and in
+`fps_counter.c`); `ui_fps_tick` passes the renderer's replay count (`rd_replay_time_max(0, ...)`,
+which the 10 s line zeroes: a smaller count than the last is a zeroing) and `rd_interpolation_active()`.
+With interpolation on the counter counts the window's presents, with it off the replays, as the 10 s
+line does. The counting runs whether or not the option is on. While a touch layout exists
+(`ui_touch_top_gap`) the corner is Left 2's, so the text starts 35 q in from the layout's left edge
+(just right of the D-pad's Up key at 33 q) at the keys' row (3 q down) and is shrunk by 8 % steps (to
+12 pixels at least) until it fits before Select's left less 2 q (`touch.c` header: the default
+places). A player's edited layout can put a control there; the counter does not look. The log says
+"window: frame rate counter on" or "off" when the option changes (and "on" at the start when it is
+on).
 
 ## The touch layout editor
 
