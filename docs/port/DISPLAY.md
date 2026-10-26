@@ -312,10 +312,11 @@ unshown, so a gap between the two is not a slowdown), the block's seconds, prese
 a second, the vsyncs and the simulated rate, the resyncs and the lag they dropped, the new frames
 the late-present skip left unpresented (`skipped N presents (late L, slow S)`: by arm, the timer
 path's and the lock's together, the lock having the late arm only, [Pacing](#pacing)), the present
-allowance of the path in use (`presents held to A a step (lowest L, R refused, D drops, C climbs)`,
-or `presents not held (...)` while the timer path's allowance is unbound, and `lowest not held` when
-it was unbound all block: the allowance now and its lowest in the block, the in-between presents it
-refused and its drops and climbs in the block; then `GPU G ms a presented replay`, the median of the last 8 presented replays'
+allowance of the path in use (`presents held to A a step (lowest L, R refused, D drops, C climbs,
+climbs refused X)`, or `presents not held (...)` while the timer path's allowance is unbound, and
+`lowest not held` when it was unbound all block: the allowance now and its lowest in the block, the
+in-between presents it refused, its drops and climbs and the climbs its GPU gate refused in the
+block; then `GPU G ms a presented replay`, the median of the last 8 presented replays'
 GPU time its climb is gated on, or `no GPU timestamps` where the backend has none, or
 `GPU not timed yet`; [The present allowance](#the-present-allowance)), the longest [replay](ARCHITECTURE.md#terms) and the replay count with how many
 were over a refresh, the slow
@@ -344,13 +345,32 @@ lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,
   multiple;
 - `lock off`.
 
-**Event lines.** A drop of the present allowance writes
-`window: presents held to A a step: the step ended L ms late after P presents (the last present C
-ms, waited F ms for the GPU and D ms for the display; GPU G ms a replay); back to A+1 after 240 steps
-on time if the GPU allows` (`back to not held` on the timer path at its ceiling) (one line; the first 8, then every 100th, `ico_log_limited`); climbs are
-counted only. A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
+**Event lines.** The present allowance writes three, each one line, the first 8 then every 100th
+(`ico_log_limited`; `port/platform/window_host.c` (`budget_lines`), the words from
+`port/platform/pace_policy.c` (`pace_budget_event_text`, unit-tested word for word)):
+
+- a drop: `window: presents held to A a step: the step ended L ms late after P presents, K steps
+  after one L2 ms late after P2 (the last present C ms, waited F ms for the GPU and D ms for the
+  display[, the fence waits included: OpenGL]; GPU G ms a replay); back to H after 120 steps on time
+  if the GPU allows` (K and L2, P2: the late step that armed it; H `not held` on the timer path,
+  `n a step` under the lock; the OpenGL words where the display's wait is the whole wait, below);
+- a climb: `window: presents back to A a step|not held[ (where they started)] after S steps (GPU G
+  ms x K + step T ms under the period P ms)` (S steps since the drop, K the presents the gate
+  asked for);
+- a refused climb: `window: presents stay at A a step: GPU G ms x K + step T ms is not under the
+  period P ms (S steps since the drop; back to H when it is)`.
+
+A late step that only armed the allowance is not logged (the 10 s line's `step late max` has it).
+A present whose present call (the replay's `present` phase: `vkQueuePresentKHR`, `Present`, the
+swap) took over 250 ms writes `window: a present blocked M ms in the driver's present call (replay
+R; API on ADAPTER, DRIVER; present MODE, framerate X)` (the first 8,
+then every 100th; `present_blocked`), and the replays line is followed, in a block with any present
+call over 50 ms, by `window: present blocked N times over 50 ms, longest M ms (mode MODE, framerate
+X)` (`perf_log`; issue 123: the Adreno 740 on Qualcomm's driver spent 363-583 ms inside
+`vkQueuePresentKHR`). Both read the replay records' present time (`perf_drain`); nothing new is
+timed. A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
 is above the display's X Hz: presenting once a refresh (mailbox)` once after each settings change
-(`port/platform/window_host.c` (`budget_drop_line`, `pace`)).
+(`port/platform/window_host.c` (`pace`)).
 
 **The display line** (`window: display: ...`, under the lock only): the vblanks taken in the block,
 their mean interval with its minimum and maximum and the rate, the refresh SDL reports, the
@@ -554,22 +574,40 @@ was: a further present of a frame already shown is refused once the step has mad
 skip and before the skip guard, a refused slot passing as a skipped one does, so the next present's
 alpha stays the grid's.
 
-- **Late**: a step that ends (the next step's start) half a period or more past its due time and
-  made at least one in-between present. A late step of new frames only (a hitch's catch-up, a load)
-  is not the in-betweens' doing and changes nothing.
+- **Late**: a step that ends (the next step's start) half a period or more past its due time.
+  Only a late step that made at least one in-between present arms the allowance; a late step of new
+  frames only (a hitch's catch-up, a load) is not the in-betweens' doing and arms nothing.
 - **Excused**: the last present waited a quarter of a refresh or more for the display (the acquire
   and the present: FIFO's full queue; not the fence waits, which are the GPU behind) and the step is
   less than a refresh late, the skip guard's exception restated. `present_once` takes the two waits
   from the backend's counts (`RhiStats`: `acquireNs` and `presentNs` against `fenceWaitNs`); where
-  the backend times nothing the whole present counts as the display's.
-- **Drop**: on a late step the allowance goes to one below that step's presents, at most its
-  ceiling (below), held `PACE_ALLOW_HOLD` (60) steps.
-- **Climb**: after `PACE_ALLOW_CLIMB` (180) further steps on time it goes up by one when the GPU
-  gate lets it: `(allow + 1) * G + step < period`, G the median of the last 8 presented replays'
-  GPU time (`perf_drain`, `pace_hist_add`; two replays late) and step the simulation step's own
-  time; with no GPU time (no timestamps) the climb probes on time alone. The ceiling is
-  `PACE_ALLOW_MAX` (8) on the timer path, where one more climb from it makes the allowance unbound
-  again, and n under the lock, which it never passes.
+  the backend times nothing the whole present counts as the display's. A backend whose fence waits
+  hold the display's wait sets `RhiStats.fenceWaitsHoldDisplay` and the whole wait is the
+  display's (`pace_display_wait`): OpenGL, whose swap returns at once while the driver waits for
+  FIFO's queue inside the next `glClientWaitSync` (issue 126: a GTX 750 Ti under the n = 1 lock
+  logged `waited 8.3 ms for the GPU and 0.1 ms for the display` with 3.6 ms of GPU a replay, and
+  v0.9.1 held it to the game's 30 on those cheap scenes). Vulkan, D3D12 and D3D11 keep the
+  display's wait in the acquire (D3D11 and D3D12: the frame latency wait) and the present, and
+  their fence waits are the GPU's.
+- **Armed, then dropped**: the first late step (with an in-between) only arms the allowance for
+  `PACE_ALLOW_HOLD` (60) steps; a second late step while armed drops it to one below that step's
+  presents, at most its ceiling (below), held 60 steps and armed again. The second may be a step of
+  new frames only (the GPU still behind the in-betweens that armed it: the new frame's present
+  waits for it), and then the drop is to one below the arming step's presents, when that lowers the
+  allowance. One hitch (issue 130, v0.9.1: one late step held an uncapped RTX 4090 at one present a
+  step, 60 a second, for the rest of the session) arms and expires; a machine late every step drops
+  at its second late step, one step after the v0.8.6 rule did.
+- **Climb**: after the hold, every `PACE_ALLOW_CLIMB_STEP` (60) steps on time, straight back to
+  where it started (unbound on the timer path, n under the lock) when the GPU gate lets that many
+  presents (`K * G + step < period`: K = n under the lock; on the timer path the most presents a
+  late step of this drop made, no more than the ceiling + 1), else up by one when the gate lets
+  one more (`(allow + 1) * G + step < period`), else the climb is refused and counted. G is the
+  median of the last 8 presented replays' GPU time (`perf_drain`, `pace_hist_add`; two replays
+  late) and step the simulation step's own time; with no GPU time (no timestamps) the gate passes:
+  the climb probes, and a second late step drops it again. The ceiling is `PACE_ALLOW_MAX` (8) on
+  the timer path, where one more climb from it makes the allowance unbound again, and n under the
+  lock, which it never passes. From a drop to unbound again takes 120 steps (2 s) when the GPU has
+  the time; v0.9.1 took a climb every 180 steps, eight from 1 to unbound (28 s).
 - A resync does not reset it; a new lock, a frame rate change, leaving the lock and the pace reset
   (back from the background) do.
 
@@ -586,11 +624,19 @@ before keeps up to about 16 ms of GPU a picture in that model (the cost guard ho
 the GPU's pace); at 20 ms its steps end 11.6 ms late and the allowance keeps them under half a
 period. A GPU-bound phone (20 ms a picture at 60 Hz, n = 1) presents its new frames only, 30 a
 second on time, where the rule before presented 50 a second with steps up to 32 ms late; the
-allowance may reach 0 under the n = 1 lock.
+allowance may reach 0 under the n = 1 lock. The reporters' sequences are replayed in
+`pace_policy_test`: issue 130's one late step among 6 presents a step leaves it unbound, two within
+60 steps hold it to 1 and 120 steps later it is unbound again with 1.2 ms of GPU, at 1 with 9 ms
+(`testBudgetHitch130`); the item-3 case (cap 120, two presents a step 9 ms late) at 1 and issue
+139's GPU-bound lock (19 ms of GPU, 4x supersampling) at 0, the game's own 30
+(`testBudgetSustained`); issue 126's OpenGL wait excused where Vulkan's same numbers drop and
+come back, and its GPU-bound OpenGL blocks at 0 (`testBudgetGlWait126`); the drop, climb, refused
+climb and 10 s words on those sequences (`testBudgetLines`, with the lock's clock part,
+`pace_lock_timing_text`).
 
 Limits: D3D12 has no mailbox and may lack timestamps (as may OpenGL without `ARB_timer_query` and
 Direct3D 11 where its timestamp queries cannot be made), so the climb
-probes on time alone there: one step a little late every 4 s while the GPU stays too slow. The Steam
+probes on time alone there: two steps a little late every 2 s while the GPU stays too slow. The Steam
 Deck at a cap of 90 is the FIFO timer path with `pace_fifo_hold`; its present that returns on a
 vblank up to a refresh past the deadline is the display's wait and is excused.
 
@@ -928,7 +974,7 @@ one's pixels: for a measurement, not for play.
 | test | checks |
 | --- | --- |
 | `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), the present allowance with the fence (`test120Budget`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`) |
-| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`), the timer path's unbound start (`testBudgetUnbound`) and the timer path with a GPU queue (`testBudgetTimerLoop`) |
+| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`), the timer path's unbound start (`testBudgetUnbound`), the reporters' sequences (`testBudgetHitch130`, `testBudgetSustained`, `testBudgetGlWait126`), the window's allowance and clock words (`testBudgetLines`) and the timer path with a GPU queue (`testBudgetTimerLoop`) |
 | `port/platform/test/perf_block_test.c` | a block's sums and maxima, the replays over the threshold, the longest-phase text, a reset |
 | `port/platform/test/window_video_test.c` | the window mode requests and their readback on SDL's offscreen driver (77 without one): fullscreen at the desktop's size, Borderless, Windowed back at 960 x 720; Fullscreen through `ico_window_video_mode` holds the desktop's mode (its size and refresh rate) or, where the driver takes none, no mode, and `ico_window_video_desktop_mode` returns which. Whether the display goes exclusive and the swapchain's `VK_EXT_full_screen_exclusive` request are the window system's and a Windows driver's: no test here sees them (lavapipe has no such extension) |
 | `port/platform/test/hotkeys_test.c` | F11, F12, the stats period, F12's file names |
