@@ -306,7 +306,7 @@ else.
 that stays on the screen). Save a picture of it for the report:
 
 1. In **Options**, choose **Save a picture for a bug report**, the row just
-   above Developer mode on the first page (you do not need Developer mode
+   above Developer on the first page (you do not need Developer mode
    for it).
 2. Leave the menu right away. 3 seconds after you chose the row, the game
    saves what is on the screen in the `dumps` folder of the game's folder:
