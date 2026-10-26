@@ -581,8 +581,18 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
     uint32_t loaderVersion = volkGetInstanceVersion();
 #endif
     if (loaderVersion < VK_API_VERSION_1_2) {
+#ifdef __ANDROID__
+        /* issue 145: a driver package (Options > Graphics driver, or a zip
+           in the drivers folder) is loaded by the game itself, past the
+           system's loader */
+        VKR_LOG("the Vulkan loader is %u.%u; 1.2 or later is required. A graphics driver package "
+                "(Options > Graphics driver, or a .zip file in the game's drivers folder) is "
+                "loaded by the game itself and does not use the system's loader",
+                VK_API_VERSION_MAJOR(loaderVersion), VK_API_VERSION_MINOR(loaderVersion));
+#else
         VKR_LOG("the Vulkan loader is %u.%u; 1.2 or later is required",
                 VK_API_VERSION_MAJOR(loaderVersion), VK_API_VERSION_MINOR(loaderVersion));
+#endif
         return false;
     }
 #ifdef ICO_RHI_MOLTENVK
