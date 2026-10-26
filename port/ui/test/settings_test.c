@@ -460,12 +460,14 @@ static void testShowFps(void)
     CHECK(strcmp(ui_str(UI_STR_OPT_SHOW_FPS), "Frame rate counter") == 0, "its label");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_SHOW_FPS), "Off") == 0, "Off by default (%s)",
           ui_settings_value_text(UI_OPT_SHOW_FPS));
+    ico_video_get(&o);
+    const int presetBefore = ico_video_preset(&o); /* a lone preset key sets nothing: Original */
     ui_settings_step(UI_OPT_SHOW_FPS, 1);
     ico_video_get(&o);
     CHECK(o.showFps == 1 && ico_video_show_fps() == 1 &&
               strcmp(ui_settings_value_text(UI_OPT_SHOW_FPS), "On") == 0,
           "Right: On (%d \"%s\")", o.showFps, ui_settings_value_text(UI_OPT_SHOW_FPS));
-    CHECK(ico_video_preset(&o) == ICO_VIDEO_ENHANCED, "the preset is not changed");
+    CHECK(ico_video_preset(&o) == presetBefore, "the preset is not changed");
     CHECK(ui_settings_save() == 0, "save");
     path(p, sizeof(p), "settings_test.toml");
     IcoToml *t = ico_toml_load(p);
