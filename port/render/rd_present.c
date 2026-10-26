@@ -480,12 +480,11 @@ bool rd__apply_display(void)
         vs != g_rd.vsyncApplied || down != g_rd.downsample) {
         char ssaaNote[96] = "";
         if (ssaaAsked > 1.0f && ssaa > 1.0f && ssaa < ssaaAsked) {
-            snprintf(ssaaNote, sizeof(ssaaNote),
-                     " (at %gx: the resolution has %.2f texels an output pixel)", (double)ssaa,
-                     (double)perPx);
+            snprintf(ssaaNote, sizeof(ssaaNote), " (at %gx: the resolution has %.2f texels %s)",
+                     (double)ssaa, (double)perPx, down ? "a GS pixel" : "an output pixel");
         } else if (ssaaAsked > 1.0f && !(ssaa > 1.0f)) {
-            snprintf(ssaaNote, sizeof(ssaaNote),
-                     " (skipped: the resolution has %.2f texels an output pixel)", (double)perPx);
+            snprintf(ssaaNote, sizeof(ssaaNote), " (skipped: the resolution has %.2f texels %s)",
+                     (double)perPx, down ? "a GS pixel" : "an output pixel");
         }
         /* the scene's texels (SCENE's texture: the frame's exact width
          * alone with Full pixel, rd__target_scale_of) */
@@ -503,7 +502,8 @@ bool rd__apply_display(void)
                 full ? "full" : "half", st->fullPixel ? "on" : "off", st->vsync ? "on" : "off",
                 aaMode == RD_AA_OFF ? "" : rd__aa_label(aaMode),
                 rd_aa_samples(aaMode) > 1u ? " (asked)" : "", ssaaNote,
-                down ? ", downsampled to original size" : "", frameNote);
+                down && (sx > 1.0f || sy > 1.0f) ? ", downsampled to original size" : "",
+                frameNote);
     }
     if (changed) {
         g_rd.frameCropWe = cropWe;
