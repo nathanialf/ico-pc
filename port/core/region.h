@@ -208,6 +208,11 @@ extern const IcoRegionInfo *const ico_region_info[ICO_REGION_COUNT];
 /* The selected region's table: ico_region_info[ico_region]. */
 const IcoRegionInfo *ico_region_cur(void);
 
+/* The selected disc's own "start the new game" story flag (gflag_new_game),
+   and through disc_id (when not NULL) the disc's id for the log: what
+   la_host_new_game_go raises after the New Game screen's confirm. */
+int ico_region_new_game_flag(const char **disc_id);
+
 /* Selects the region by its slug ("pal", "jpn", "kor"): 0, or -1 for a slug that
    is not a row (NULL too), which keeps the selection. The program calls it
    once, when the disc image is identified, before any game code runs. */

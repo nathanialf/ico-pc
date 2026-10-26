@@ -1116,11 +1116,19 @@ int la_vibe_select(void)
     return PAL_JPNKORCN(0xC, 0x9);
 }
 
+/* port/core/region.c: the disc's own start flag, and its id for the log */
+int ico_region_new_game_flag(const char **disc_id);
+/* port/platform/diag_host.h: a milestone line in the log */
+void ico_diag_milestone(const char *fmt, ...);
+
 /* PC port: the start la_vibe_select's confirm made,
    run by the New Game screen's confirm (port/ui/settings.c) once the player
    has picked: the title music fades, the game flags and the key config are
-   reset and gflag 382 starts the new game, at the same moment as each
-   other, as on the PS2 */
+   reset and the disc's own start flag (382 on the European, Japanese, Korean
+   and Asian discs, 349 on the North American, 348 on the August 2001
+   preview, 333 on the June 2001 demo: the region table's gflag_new_game,
+   which the opening's wait in op.c reads) starts the new game, at the same
+   moment as each other, as on the PS2 */
 void la_host_new_game_go(void)
 {
     if (titleAdpcm != 0) {
@@ -1130,7 +1138,10 @@ void la_host_new_game_go(void)
     gflagInit();
     keyconfig_reset();
     systemStatus[4] = 0;
-    gflagOn(382);
+    const char *disc = "";
+    int flag = ico_region_new_game_flag(&disc);
+    ico_diag_milestone("new game: start flag %d raised (%s)", flag, disc);
+    gflagOn(flag);
 }
 
 /* PC port: whether the mouse may pick file slot 0..9 on the memory card

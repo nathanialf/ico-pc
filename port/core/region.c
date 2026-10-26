@@ -20,6 +20,15 @@ const IcoRegionInfo *ico_region_cur(void)
     return ico_region_info[ico_region];
 }
 
+int ico_region_new_game_flag(const char **disc_id)
+{
+    const IcoRegionInfo *r = ico_region_cur();
+    if (disc_id != NULL) {
+        *disc_id = r->disc_id;
+    }
+    return r->gflag_new_game;
+}
+
 int ico_region_count(void)
 {
     return ICO_REGION_COUNT;
