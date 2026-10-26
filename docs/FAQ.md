@@ -131,6 +131,32 @@ updated once a second. With the touch controls showing, it stands on the top
 edge between the D-pad and Select. Turn it Off the same way.
 [What the row does](OPTIONS.md#display).
 
+## The counter shows 30 at Frame rate 60
+
+The game makes 30 new pictures a second of its own and fills the gaps with
+pictures in between, so 60 a second needs the graphics card to draw every
+screen refresh in time. When a picture takes longer than one refresh of the
+screen, the game shows only its own pictures (30 a second) until the card
+has the time again, so the game keeps its normal speed. It goes back to 60
+within a couple of seconds once the card keeps up. A card that is always
+too slow stays at 30.
+
+What to lower, in this order (Options):
+
+- **Anti-aliasing**: 2x supersampling draws four times the pixels and 4x
+  draws sixteen times, which is by far the heaviest choice. Try MSAA or Off.
+- **Resolution**.
+
+OpenGL on an older graphics card takes longer for each picture than Vulkan.
+If you chose OpenGL in **Options > Graphics API**, try Vulkan or Direct3D 12
+first.
+
+If the counter stays at 30 with these low, send `ico-pc.log` (the
+[first section](TROUBLESHOOTING.md#the-log-file) of the troubleshooting page
+says where it is) after a minute of play. Every 10 seconds the log writes a
+line that starts with `window:` and says "presented fps"; that line, with the
+lines around it, shows how long the card takes for a picture.
+
 ## Why is there a thin black border around the picture?
 
 The PS2 itself drew a thin black border around the picture, a few dots wide
