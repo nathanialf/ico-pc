@@ -2095,6 +2095,13 @@ typedef struct RdInterpStats {
      * (rd_mesh.h RdVuCards) at one tick only, the clip mode having changed
      * between REGION and SCISSOR (rd_interp.c blendVu) */
     uint32_t sizeTailBlended;
+    /* screen prims of one tick each, faded otherwise (rd_interp.c
+     * alphaFades), paired because cur's is prev's in every byte but the
+     * key: the same list, command, vertices and state (a layout change
+     * that redraws the same full-frame bars under the new layout's keys,
+     * issue 139); cur's is drawn whole and prev's not, so the picture
+     * under them never shows through a cross-fade (rd_interp.c pairSame) */
+    uint32_t screenPaired;
 } RdInterpStats;
 
 /* Rotation-aware blending of an affine 4 x 4 (column-major, w row 0 0 0
