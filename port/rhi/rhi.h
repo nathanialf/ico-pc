@@ -1091,6 +1091,14 @@ typedef struct RhiStats {
     uint64_t pipelinePoolSize, pipelinesLive, pipelinesPeak;
     uint64_t pipelinePoolFull, pipelineFailures;
     int64_t pipelineLastError;
+    /* A property of the backend, not a count: its fence waits (fenceWaitNs)
+     * hold the display's wait as well as the GPU's (OpenGL: under FIFO the
+     * driver blocks in glClientWaitSync, not in the swap, for the display's
+     * queue).  Vulkan, D3D12 and D3D11 keep the display's wait in acquireNs
+     * and presentNs alone (false).  The window's present allowance then
+     * takes the whole wait as the display's (port/platform/window_host.c
+     * present_once, pace_policy.h PaceBudget) */
+    bool fenceWaitsHoldDisplay;
 } RhiStats;
 
 void rhi_get_stats(RhiStats *out);
