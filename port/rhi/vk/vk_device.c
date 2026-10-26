@@ -586,9 +586,9 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
      * and 1.3); =1.1 also hides what a stock 1.1 driver (Adreno 618
      * class) lacks, vkr_device_has_ext: timeline semaphores (the fence
      * ring, vk_sync.c), local read, the driver properties, the image format
-     * list and the store op none (and, once the VkRenderPass path exists,
-     * dynamic rendering); =1.1ext hides nothing (a 1.1 driver with the
-     * extensions) */
+     * list, the store op none and dynamic rendering (the VkRenderPass
+     * path, vk_renderpass.c); =1.1ext hides nothing (a 1.1 driver with the
+     * extensions: dynamic rendering by its KHR name) */
     g_vkr.fakeApi = NULL;
     g_vkr.fakeHideExts = false;
     g_vkr.fakeNoTimeline = false;
@@ -909,8 +909,8 @@ static bool vkr_device_timeline(VkPhysicalDevice pd, uint32_t api)
  * device needs Vulkan 1.1 (at the version it is used at,
  * vkr_effective_api); dynamic rendering (core 1.3 or VK_KHR_dynamic_rendering)
  * and timeline semaphores score instead of being required (without them the
- * VkRenderPass path and the fence ring, vk_sync.c), except dynamic rendering
- * while this build has no VkRenderPass path (VKR_LEGACY_PASSES) */
+ * VkRenderPass path, vk_renderpass.c, and the fence ring, vk_sync.c; with
+ * VKR_LEGACY_PASSES at 0 dynamic rendering is required again) */
 static int vkr_rate_device(VkPhysicalDevice pd, uint32_t *outQueue, const char **why)
 {
     VkPhysicalDeviceProperties p;
@@ -1743,6 +1743,9 @@ static bool vkr_create_device(void)
         }
     }
 
+    /* the head of the feature chain (dynamicRendering); on the VkRenderPass
+     * path (legacyPasses) the chain starts at what dyn points to instead
+     * (featHead below): the feature is neither offered nor enabled there */
     VkPhysicalDeviceDynamicRenderingFeatures dyn = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
         .dynamicRendering = VK_TRUE,
@@ -1799,17 +1802,18 @@ static bool vkr_create_device(void)
     if (g_vkr.syncKind == VKR_SYNC_TIMELINE && !core12) {
         exts[extCount++] = VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME;
     }
+    void *featHead = g_vkr.legacyPasses ? dyn.pNext : (void *)&dyn;
     VkPhysicalDeviceVulkan12Features f12 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-        .pNext = &dyn,
+        .pNext = featHead,
         .timelineSemaphore = VK_TRUE,
     };
     VkPhysicalDeviceTimelineSemaphoreFeaturesKHR fTimeline = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR,
-        .pNext = &dyn,
+        .pNext = featHead,
         .timelineSemaphore = VK_TRUE,
     };
-    void *syncFeatures = &dyn;
+    void *syncFeatures = featHead;
     if (g_vkr.syncKind == VKR_SYNC_TIMELINE) {
         syncFeatures = g_vkr.apiVersion >= VK_API_VERSION_1_2 ? (void *)&f12 : (void *)&fTimeline;
     }
@@ -1952,10 +1956,14 @@ static bool vkr_create_device(void)
         g_vkr.timestampPeriod = g_vkr.props.limits.timestampPeriod;
         g_vkr.timestampMask = bits >= 64 ? ~0ull : ((1ull << bits) - 1ull);
     }
+    /* the VkRenderPass path (legacyPasses) records vkCmdBeginRenderPass and
+     * leaves these NULL (vk_renderpass.c) */
+    g_vkr.cmdBeginRendering = NULL;
+    g_vkr.cmdEndRendering = NULL;
     if (core13) {
         g_vkr.cmdBeginRendering = vkCmdBeginRendering;
         g_vkr.cmdEndRendering = vkCmdEndRendering;
-    } else {
+    } else if (!g_vkr.legacyPasses) {
         g_vkr.cmdBeginRendering = vkCmdBeginRenderingKHR;
         g_vkr.cmdEndRendering = vkCmdEndRenderingKHR;
     }

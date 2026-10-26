@@ -191,11 +191,12 @@ typedef enum VkrSyncKind { VKR_SYNC_TIMELINE, VKR_SYNC_FENCES } VkrSyncKind;
 #define VKR_SYNC_FENCE_RING 8u
 
 /* The render passes of a device without dynamic rendering (core 1.3 or
- * VK_KHR_dynamic_rendering): classic VkRenderPass objects, which this
- * build does not have yet.  While it is 0 such a device is unsuitable
- * (vkr_rate_device, "no dynamic rendering") and ICO_VK_FAKE_API=1.1 keeps
- * VK_KHR_dynamic_rendering; the render pass path sets it to 1. */
-#define VKR_LEGACY_PASSES 0
+ * VK_KHR_dynamic_rendering): classic VkRenderPass objects
+ * (vk_renderpass.c, g_vkr.legacyPasses), and ICO_VK_FAKE_API=1.1 hides
+ * VK_KHR_dynamic_rendering so its runs take them.  Set to 0, such a device
+ * is unsuitable again (vkr_rate_device, "no dynamic rendering") and the
+ * 1.1 profile keeps the extension. */
+#define VKR_LEGACY_PASSES 1
 
 /* One vkQueueSubmit through vkr_sync_submit: the command buffers (possibly
  * none), the binary semaphore to wait on first (the swapchain acquire,
@@ -478,7 +479,8 @@ typedef struct VkrState {
     bool fakeNoTimeline;
     /* the paths the device's version and extensions give (vkr_create_device;
      * driverProps vkr_driver_text): legacyPasses, render passes as VkRenderPass
-     * objects (no dynamic rendering; never while VKR_LEGACY_PASSES is 0);
+     * objects (no dynamic rendering: vk_renderpass.c; cmdBeginRendering and
+     * cmdEndRendering stay NULL);
      * driverProps, VkPhysicalDeviceDriverProperties queried (Vulkan 1.2 or
      * VK_KHR_driver_properties; without it driverID is 0 and the driver
      * unnamed); formatList, VkImageFormatListCreateInfo chained for the UINT
