@@ -9,3 +9,5 @@
 - Direct3D 11 on Windows now draws the game. Before, the screen stayed black because the graphics driver's shader compiler refused the game's shaders.
 - With the OpenGL renderer, OBS's game capture of the game window is upright now. Before, the capture was upside down while the window itself looked right.
 - The black bars of the load screen no longer flicker when it changes at Frame rate 60.
+- On the North American disc, the August 2001 preview and the June 2001 demo, Options no longer shows Hold type, Film effect or Players. Those discs' own game has none of them: holding Yorda's hand there always works as B (press R1 once to take her hand, again to let go), and a Film effect change started an unrelated animation instead.
+- On the June 2001 demo, Extras no longer shows Credits. The demo disc does not hold the credits' scenes, so the row could never play.
