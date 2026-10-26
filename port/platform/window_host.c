@@ -1232,10 +1232,6 @@ static int progress_present_notes(const char *title, const char *phase, int pct,
                                   const char *note0, const char *note1);
 
 #ifdef __ANDROID__
-static const char k_driver_box[] =
-    "ICO could not start the game's graphics with this phone's driver. It needs Vulkan 1.2. "
-    "On a phone with an Adreno (Qualcomm) chip you can choose a graphics driver package "
-    "instead (a .zip file, for example Turnip).";
 static const char k_driver_next_start[] =
     "The game will use the driver package at the next start. Please close and open ICO again.";
 
@@ -1253,10 +1249,11 @@ static const char k_driver_next_start[] =
 static void choose_driver(void)
 {
     static const char *const labels[2] = {"Choose a driver file", "Quit"};
-    char folder[160], why[128];
+    char folder[160], why[512];
 
     /* Enter chooses a file, Escape quits */
-    while (ico_android_message_box_buttons(s_window, k_driver_box, labels, 2, 0, 1) == 0) {
+    while (ico_android_message_box_buttons(s_window, ico_gpu_driver_android_box_text(), labels, 2,
+                                           0, 1) == 0) {
         if (!ico_gpu_driver_android_choose(folder, sizeof(folder), why, sizeof(why))) {
             fprintf(stderr, "window: no graphics driver package was added: %s\n", why);
             ico_android_message_box(why, 1);
@@ -2165,6 +2162,7 @@ open_window:
                 "why)\n",
                 backend);
 #ifdef __ANDROID__
+        ico_gpu_driver_android_no_device_note();
         choose_driver();
 #endif
     }
@@ -2209,6 +2207,9 @@ open_window:
         return -1;
 #endif
     }
+#ifdef __ANDROID__
+    ico_gpu_driver_android_device_up(customDriver); /* issue 123 */
+#endif
     /* Apply's switch back to the start's choice (window_switch.c) */
     ico_window_switch_started(backendExplicit, backend);
     /* whether the crash handler's first step would be to delete the file */

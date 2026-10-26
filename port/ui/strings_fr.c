@@ -541,12 +541,16 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "Le pilote choisi n’a pas démarré la dernière fois. Le pilote du téléphone est utilisé.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "Pas assez d’espace pour ajouter ce pilote.",
     [UI_STR_GPU_DRIVER_NO_PICKER] =
-        "Le sélecteur de fichiers n’a pas pu s’ouvrir. Vous pouvez copier le fichier zip du pilote dans le dossier drivers du jeu.",
+        "Le sélecteur de fichiers n’a pas pu s’ouvrir. Vous pouvez copier le fichier zip du pilote dans le dossier drivers du jeu : %s",
     [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
-        "Aucune application de cet appareil ne permet de choisir un fichier. Copiez le fichier zip du pilote dans le dossier drivers du jeu.",
+        "Aucune application de cet appareil ne permet de choisir un fichier. Copiez le fichier zip du pilote dans le dossier drivers du jeu : %s",
     [UI_STR_GPU_DRIVER_UNREADABLE] =
         "Le fichier choisi n’a pas pu être lu. Copiez-le d’abord sur cet appareil, puis choisissez-le à nouveau.",
     [UI_STR_GPU_DRIVER_ADD_FILE] = "Ajouter depuis le dossier drivers",
+    [UI_STR_GPU_DRIVER_CANCELLED] =
+        "Aucun fichier n’a été choisi. Si le sélecteur de fichiers ne s’affiche pas sur cet appareil, copiez le fichier zip du pilote dans le dossier drivers du jeu et utilisez Ajouter depuis le dossier drivers : %s",
+    [UI_STR_GPU_DRIVER_NOTE_LOST] =
+        "Les graphismes ont cessé de répondre avec le pilote Qualcomm de cet appareil. Un pilote Turnip peut aider : ajoutez-en un ici, ou copiez son fichier zip dans le dossier drivers du jeu (%s). Appliqué au prochain démarrage.",
     [UI_STR_QUIT_GAME] = "Quitter le jeu",
     [UI_STR_QUIT_GAME_CONFIRM] = "Quitter le jeu ?",
     /* Controls > the mouse camera rows */

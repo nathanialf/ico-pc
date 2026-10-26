@@ -57,6 +57,22 @@ void ico_gpu_driver_android_init_failed(void);
    marker cleared; 0 with a sentence for the player in why (not a package,
    no space, no file chosen). */
 int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn);
+/* The drivers folder's path as a file manager shows it ("Android/data/
+   com.defnf.icopc/files/drivers"; the internal storage's root left out),
+   for the messages that send the player to it; valid until the next call. */
+const char *ico_gpu_driver_android_folder_text(void);
+/* The previous start lost the graphics device on the phone's own Qualcomm
+   driver: logs it once, with the driver package route, and makes the
+   Graphics driver row's note name that route. */
+void ico_gpu_driver_android_note_loss_on_stock(void);
+/* The start-up box's text (window_host.c choose_driver), with the folder. */
+const char *ico_gpu_driver_android_box_text(void);
+/* No device could be made: the log line before the box. */
+void ico_gpu_driver_android_no_device_note(void);
+/* rd_init made a device: after a device loss at the previous start, on the
+   phone's own Qualcomm driver (customDriver 0), see
+   ico_gpu_driver_android_note_loss_on_stock. */
+void ico_gpu_driver_android_device_up(int customDriver);
 /* After each present that reached the screen. */
 void ico_gpu_driver_android_presented(void);
 /* At a normal end, before the renderer shuts down: a trial still running

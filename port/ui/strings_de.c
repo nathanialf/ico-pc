@@ -541,12 +541,16 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Der gewählte Treiber startete beim letzten Mal nicht. Der Treiber des Telefons ist in Gebrauch.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "Nicht genug Speicherplatz für diesen Treiber.",
     [UI_STR_GPU_DRIVER_NO_PICKER] =
-        "Die Dateiauswahl konnte nicht geöffnet werden. Sie können die Zip-Datei des Treibers stattdessen in den Ordner drivers des Spiels kopieren.",
+        "Die Dateiauswahl konnte nicht geöffnet werden. Sie können die Zip-Datei des Treibers stattdessen in den Ordner drivers des Spiels kopieren: %s",
     [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
-        "Auf diesem Gerät gibt es keine App zum Auswählen einer Datei. Kopieren Sie die Zip-Datei des Treibers in den Ordner drivers des Spiels.",
+        "Auf diesem Gerät gibt es keine App zum Auswählen einer Datei. Kopieren Sie die Zip-Datei des Treibers in den Ordner drivers des Spiels: %s",
     [UI_STR_GPU_DRIVER_UNREADABLE] =
         "Die gewählte Datei konnte nicht gelesen werden. Kopieren Sie sie zuerst auf dieses Gerät und wählen Sie sie dann erneut.",
     [UI_STR_GPU_DRIVER_ADD_FILE] = "Aus dem Ordner drivers hinzufügen",
+    [UI_STR_GPU_DRIVER_CANCELLED] =
+        "Es wurde keine Datei gewählt. Erscheint die Dateiauswahl auf diesem Gerät nicht, kopieren Sie die Zip-Datei des Treibers in den Ordner drivers des Spiels und nutzen Sie Aus dem Ordner drivers hinzufügen: %s",
+    [UI_STR_GPU_DRIVER_NOTE_LOST] =
+        "Die Grafik hat mit dem Qualcomm-Treiber dieses Geräts nicht mehr reagiert. Ein Turnip-Treiberpaket kann helfen: Fügen Sie eines hier hinzu oder kopieren Sie seine Zip-Datei in den Ordner drivers des Spiels (%s). Gilt ab dem nächsten Start.",
     [UI_STR_QUIT_GAME] = "Spiel beenden",
     [UI_STR_QUIT_GAME_CONFIRM] = "Spiel beenden?",
     /* Controls > the mouse camera rows */

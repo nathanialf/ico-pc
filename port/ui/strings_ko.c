@@ -537,12 +537,16 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "선택한 드라이버가 지난번에 시작되지 않았습니다. 기기 내장 드라이버를 사용하고 있습니다.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "공간이 부족해서 추가할 수 없습니다",
     [UI_STR_GPU_DRIVER_NO_PICKER] =
-        "파일 선택 화면을 열 수 없습니다. 대신 드라이버 zip 파일을 게임의 drivers 폴더에 복사할 수 있습니다",
+        "파일 선택 화면을 열 수 없습니다. 대신 드라이버 zip 파일을 게임의 drivers 폴더에 복사할 수 있습니다: %s",
     [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
-        "이 기기에는 파일을 고를 수 있는 앱이 없습니다. 드라이버 zip 파일을 게임의 drivers 폴더에 복사하세요",
+        "이 기기에는 파일을 고를 수 있는 앱이 없습니다. 드라이버 zip 파일을 게임의 drivers 폴더에 복사하세요: %s",
     [UI_STR_GPU_DRIVER_UNREADABLE] =
         "선택한 파일을 읽을 수 없습니다. 먼저 이 기기로 복사한 뒤 다시 선택하세요",
     [UI_STR_GPU_DRIVER_ADD_FILE] = "drivers 폴더에서 추가",
+    [UI_STR_GPU_DRIVER_CANCELLED] =
+        "선택한 파일이 없습니다. 이 기기에서 파일 선택 화면이 열리지 않으면 드라이버 zip 파일을 게임의 drivers 폴더에 복사한 뒤 drivers 폴더에서 추가를 사용하세요: %s",
+    [UI_STR_GPU_DRIVER_NOTE_LOST] =
+        "이 기기의 Qualcomm 드라이버에서 그래픽이 제대로 작동하지 않았습니다. Turnip 드라이버를 추가하거나 그 zip 파일을 게임의 drivers 폴더에 복사하세요 (%s). 다음 실행부터 적용됩니다.",
     [UI_STR_QUIT_GAME] = "게임 종료",
     [UI_STR_QUIT_GAME_CONFIRM] = "게임을 종료하시겠습니까?",
     [UI_STR_OPT_MOUSE_INVERT] = "마우스 상하 반전",

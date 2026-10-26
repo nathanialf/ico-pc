@@ -410,7 +410,12 @@ there. Please send `logs/ico-pc.log` (the lines starting `window:` and `rhi_d3d1
 see what stopped it.
 
 **"ICO could not start the game's graphics with this phone's driver."**
-(on a phone) The phone's own graphics driver cannot run the game. The box
+(on a phone) The phone's own graphics driver cannot run the game (the log
+may say "the Vulkan loader is 1.1"). A driver package is loaded by the game
+itself, without the phone's own Vulkan loader, so it can work where the
+phone's driver does not. The box names the folder to copy the zip into if
+the file picker does not open (`Android/data/com.defnf.icopc/files/drivers`).
+The box
 offers **Choose a driver file**: on a phone with an Adreno (Qualcomm
 Snapdragon) chip, pick a graphics driver package, a zip file such as
 Turnip from the "AdrenoToolsDrivers" releases by K11MCH1 on GitHub. The
@@ -424,7 +429,8 @@ later in Options > Graphics driver. See
 
 **"The file picker could not be opened."** (on a phone, after **Add a
 driver**) The phone would not open its file picker. Copy the driver's zip
-file into the `drivers` folder in the game's folder with the USB cable, then
+file into `Android/data/com.defnf.icopc/files/drivers` (the `drivers` folder
+in the game's folder; the message names the path) with the USB cable, then
 choose **Add from the drivers folder** in Options > Graphics driver (see
 [Using a different graphics driver](ANDROID.md#using-a-different-graphics-driver)).
 If you report it, send `ico-pc.log` from right after you pressed **Add a
@@ -436,6 +442,24 @@ app that can offer a file to pick. Use the same way: copy the zip into the
 `drivers` folder and choose **Add from the drivers folder**. The
 `gpu driver: the file picker` line in `ico-pc.log` says what the phone
 answered.
+
+**"No file was chosen."** (on a phone, after **Add a driver**, or in the box
+at the start) The file picker closed without a file: either you backed out,
+or the phone's picker closes at once. The game names the folder to use
+instead, `Android/data/com.defnf.icopc/files/drivers`: copy the zip into it
+and choose **Add from the drivers folder** (at the start, the box adds the
+first zip from that folder by itself). If the picker never answered at all,
+the game stops waiting after the picker's screen has closed, or after two
+minutes. The `gpu driver:` and `file picker:` lines in `ico-pc.log` say what
+the phone answered.
+
+**Driver note after the graphics stopped (Options > Graphics driver).** On a
+phone with a Qualcomm Snapdragon chip, when the graphics stopped responding
+on the phone's own driver, the note under the page names the Turnip driver
+package route and the folder. A package is loaded by the game itself and may
+not stop where the phone's own driver does. On a tablet, also set
+**Vertical sync** on and **Frame rate** to 60 instead of Uncapped, and do not
+use the highest Resolution.
 
 **"No disc image was chosen."** (on a phone) You left the file picker
 without choosing a file. Start the game again and choose your ICO disc

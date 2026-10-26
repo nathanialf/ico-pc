@@ -212,6 +212,15 @@ typedef struct UiGpuDriverHost {
     int (*fileCount)(void);
     const char *(*fileName)(int i);
     int (*installFileBegin)(int i);
+    /* the drivers folder's path as the player finds it in a file manager
+       ("Android/data/com.defnf.icopc/files/drivers"); named by the popups
+       and notes that send the player to it. May be NULL (a plain "drivers"
+       then). */
+    const char *(*folderPath)(void);
+    /* nonzero: the previous start lost the graphics device on the phone's
+       own Qualcomm driver (the Graphics driver row's note then names the
+       driver package route). May be NULL (0). */
+    int (*lostOnStock)(void);
 } UiGpuDriverHost;
 
 /* NULL (or never called) hides the link and the page. The struct is copied. */

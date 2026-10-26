@@ -530,11 +530,15 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_FAILED] = "您選擇的驅動程式上次未能啟動，目前使用手機本身的驅動程式。",
     [UI_STR_GPU_DRIVER_NOSPACE] = "空間不足，無法新增此驅動程式。",
     [UI_STR_GPU_DRIVER_NO_PICKER] =
-        "無法開啟檔案選擇器。您可以改為將驅動程式的 zip 檔複製到遊戲的 drivers 資料夾。",
+        "無法開啟檔案選擇器。您可以改為將驅動程式的 zip 檔複製到遊戲的 drivers 資料夾：%s",
     [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
-        "此裝置上沒有可選擇檔案的應用程式。請改為將驅動程式的 zip 檔複製到遊戲的 drivers 資料夾。",
+        "此裝置上沒有可選擇檔案的應用程式。請改為將驅動程式的 zip 檔複製到遊戲的 drivers 資料夾：%s",
     [UI_STR_GPU_DRIVER_UNREADABLE] = "無法讀取所選的檔案。請先將它複製到此裝置，再重新選擇。",
     [UI_STR_GPU_DRIVER_ADD_FILE] = "從 drivers 資料夾新增",
+    [UI_STR_GPU_DRIVER_CANCELLED] =
+        "未選擇任何檔案。若此裝置上沒有出現檔案選擇器，請將驅動程式的 zip 檔複製到遊戲的 drivers 資料夾，再使用「從 drivers 資料夾新增」：%s",
+    [UI_STR_GPU_DRIVER_NOTE_LOST] =
+        "此裝置的 Qualcomm 驅動程式讓畫面停止回應。Turnip 驅動程式可能有用：在此新增，或將其 zip 檔複製到遊戲的 drivers 資料夾（%s）。下次啟動時生效。",
     [UI_STR_QUIT_GAME] = "結束遊戲",
     [UI_STR_QUIT_GAME_CONFIRM] = "要結束遊戲嗎？",
     /* Controls > the mouse camera rows */

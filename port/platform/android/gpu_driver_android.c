@@ -12,11 +12,13 @@
 #include <stdio.h>
 #include <string.h>
 #include "config.h"
+#include "diag_host.h"
 #include "gpu_driver.h"
 #include "host_android.h"
 #include "host_fs.h"
 #include "iso_import.h"
 #include "rhi.h"
+#include "rhi_driver_version.h"
 
 #define KEY_DRIVER "video.gpu_driver"
 #define KEY_FAILED "video.gpu_driver_failed"
@@ -334,6 +336,20 @@ static int s_fromFolder;
    the state says DONE */
 static char s_installed[160];
 
+/* The picker watch (issue 135): some phones' pickers close without any
+   answer (the activity comes back to the front with no onActivityResult) or
+   never open at all, and the wait would not end. The pick ends as CANCELLED
+   once the activity has come back to the front PICK_RESUME_GRACE_MS ago
+   with no answer (an answer arrives before the resume), or after
+   PICK_TIMEOUT_MS whatever happened. Read and written on the game's thread
+   only (host_install_begin, pick_watch). */
+#define PICK_RESUME_GRACE_MS 2000u
+#define PICK_TIMEOUT_MS 120000u
+static Uint64 s_pickStartMs;
+static Uint64 s_pickResumedMs;
+static int s_pickResumed; /* the resume was seen (s_pickResumedMs is its time) */
+static int s_pickResumeBase;
+
 static void install_done(int result)
 {
     SDL_SetAtomicInt(&s_installResult, result);
@@ -433,25 +449,129 @@ static void pick_done(void *user, int gen, const char *uri, const char *why)
                 SDL_GetAtomicInt(&s_pickGen));
         return;
     }
-    if (uri == NULL && why != NULL) {
+    if (uri != NULL) {
+        /* the file: the state moves on only if the watch has not ended the
+           pick in the same moment */
+        if (!SDL_CompareAndSwapAtomicInt(&s_installState, INSTALL_PICKING, INSTALL_COPYING)) {
+            fprintf(stderr, "gpu driver: a late answer for pick %d (the wait had ended) ignored\n",
+                    gen);
+            return;
+        }
+        log_answer(gen, uri);
+        snprintf(s_uri, sizeof(s_uri), "%s", uri);
+        s_fromFolder = 0;
+        start_install_thread();
+        return;
+    }
+    if (why != NULL) {
         fprintf(stderr, "gpu driver: the file picker failed: %s\n", why);
         install_done(UI_GPU_INSTALL_NO_PICKER);
         return;
     }
-    if (uri == NULL) {
-        fprintf(stderr, "gpu driver: the file picker answered (pick %d): closed without a file\n",
-                gen);
-        install_done(UI_GPU_INSTALL_CANCELLED);
+    fprintf(stderr,
+            "gpu driver: the file picker answered (pick %d): closed without a file, %llu ms after "
+            "it opened\n",
+            gen, (unsigned long long)(SDL_GetTicks() - s_pickStartMs));
+    install_done(UI_GPU_INSTALL_CANCELLED);
+}
+
+/* ends a pick the picker never answered (see PICK_RESUME_GRACE_MS) as
+   CANCELLED, with the reason in the log; the late answer, if any, finds the
+   state moved on and is dropped */
+static void pick_watch(void)
+{
+    if (SDL_GetAtomicInt(&s_installState) != INSTALL_PICKING) {
         return;
     }
-    log_answer(gen, uri);
-    snprintf(s_uri, sizeof(s_uri), "%s", uri);
-    s_fromFolder = 0;
-    SDL_SetAtomicInt(&s_installState, INSTALL_COPYING);
-    start_install_thread();
+    const Uint64 now = SDL_GetTicks();
+    const char *why = NULL;
+    if (ico_android_resume_count() != s_pickResumeBase) {
+        if (!s_pickResumed) {
+            s_pickResumed = 1;
+            s_pickResumedMs = now;
+            fprintf(stderr,
+                    "gpu driver: the app came back to the front %llu ms after the picker opened "
+                    "(pick %d); no answer yet\n",
+                    (unsigned long long)(now - s_pickStartMs), SDL_GetAtomicInt(&s_pickGen));
+        }
+        if (now - s_pickResumedMs >= PICK_RESUME_GRACE_MS) {
+            why = "the app came back to the front with no answer";
+        }
+    }
+    if (why == NULL && now - s_pickStartMs >= PICK_TIMEOUT_MS) {
+        why = "no answer within 120 s";
+    }
+    if (why == NULL) {
+        return;
+    }
+    SDL_SetAtomicInt(&s_installResult, UI_GPU_INSTALL_CANCELLED);
+    if (SDL_CompareAndSwapAtomicInt(&s_installState, INSTALL_PICKING, INSTALL_DONE)) {
+        fprintf(stderr,
+                "gpu driver: the file picker (pick %d) gave no answer: %s (%llu ms); the "
+                "wait is over\n",
+                SDL_GetAtomicInt(&s_pickGen), why, (unsigned long long)(now - s_pickStartMs));
+    }
 }
 
 /* --- the Settings page's host ---------------------------------------------------- */
+
+/* the drivers folder as a file manager shows it: the path without the
+   internal storage's root ("/storage/emulated/0/"), which the phone's file
+   apps leave out ("Android/data/com.defnf.icopc/files/drivers"); another
+   root (an SD card) stays whole. Empty before the paths are known. */
+const char *ico_gpu_driver_android_folder_text(void)
+{
+    static char text[ICO_ANDROID_PATH_MAX];
+    const IcoAndroidPaths *p = ico_android_paths();
+
+    if (p == NULL || p->drivers[0] == '\0') {
+        return "";
+    }
+    const char *path = p->drivers;
+    if (strncmp(path, "/storage/emulated/", 18) == 0) {
+        const char *slash = strchr(path + 18, '/');
+        if (slash != NULL) {
+            path = slash + 1;
+        }
+    }
+    snprintf(text, sizeof(text), "%s", path);
+    return text;
+}
+
+/* the previous start lost the graphics device on the phone's own Qualcomm
+   driver (window_host.c, once the device is up): the Graphics driver row's
+   note then names the driver package route */
+static int s_lostOnStock;
+
+void ico_gpu_driver_android_note_loss_on_stock(void)
+{
+    if (!s_lostOnStock) {
+        s_lostOnStock = 1;
+        fprintf(stderr,
+                "gpu driver: the previous start lost the graphics device on this phone's own "
+                "Qualcomm driver; a Turnip driver package (Options > Graphics driver > Add a "
+                "driver, or a zip file in %s) is loaded by the game itself, without the "
+                "system's driver\n",
+                ico_gpu_driver_android_folder_text());
+    }
+}
+
+/* rd_init made a device (window_host.c): the previous start lost the graphics
+   device and this one runs on the phone's own Qualcomm driver (no driver
+   package loaded; Turnip reports Qualcomm's vendor id too, hence
+   customDriver) */
+void ico_gpu_driver_android_device_up(int customDriver)
+{
+    if (!customDriver && rhi_limits() != NULL && rhi_limits()->vendorId == RHI_VENDOR_QUALCOMM &&
+        ico_diag_startup_end_count(ICO_DIAG_END_LOSS) > 0) {
+        ico_gpu_driver_android_note_loss_on_stock();
+    }
+}
+
+static int host_lost_on_stock(void)
+{
+    return s_lostOnStock;
+}
 
 static int host_count(void)
 {
@@ -512,6 +632,7 @@ static const char *host_file_name(int i)
 
 static int install_busy(void)
 {
+    pick_watch();
     const int state = SDL_GetAtomicInt(&s_installState);
     return state == INSTALL_PICKING || state == INSTALL_COPYING;
 }
@@ -530,6 +651,9 @@ static int host_install_begin(void)
         install_done(UI_GPU_INSTALL_NO_PICKER);
         return 0;
     }
+    s_pickStartMs = SDL_GetTicks();
+    s_pickResumed = 0;
+    s_pickResumeBase = ico_android_resume_count();
     SDL_SetAtomicInt(&s_installState, INSTALL_PICKING);
     /* any type: the package's own check says whether the file is one */
     char why[512];
@@ -586,6 +710,7 @@ static const char *result_text(int r)
 
 static int host_install_poll(void)
 {
+    pick_watch();
     const int state = SDL_GetAtomicInt(&s_installState);
     if (state == INSTALL_PICKING || state == INSTALL_COPYING) {
         return UI_GPU_INSTALL_PENDING;
@@ -641,6 +766,8 @@ static const UiGpuDriverHost k_host = {
     .fileCount = host_files_count,
     .fileName = host_file_name,
     .installFileBegin = host_install_file_begin,
+    .folderPath = ico_gpu_driver_android_folder_text,
+    .lostOnStock = host_lost_on_stock,
 };
 
 const UiGpuDriverHost *ico_gpu_driver_android_host(void)
@@ -649,6 +776,44 @@ const UiGpuDriverHost *ico_gpu_driver_android_host(void)
 }
 
 /* --- the start-up choice, before there is a device ------------------------------ */
+
+/* The start-up box (window_host.c choose_driver): why the game cannot start,
+   the driver package route, and the folder for a zip when the picker does
+   not open. */
+const char *ico_gpu_driver_android_box_text(void)
+{
+    static char box[768];
+    const char *where = ico_gpu_driver_android_folder_text();
+
+    snprintf(box, sizeof(box),
+             "ICO could not start the game's graphics with this phone's driver.\n\n"
+             "On a phone with an Adreno (Qualcomm) chip you can choose a graphics driver "
+             "package instead (a .zip file, for example Turnip). The game loads a package "
+             "itself, without the phone's own Vulkan loader, so it can work where the phone's "
+             "driver does not.\n\n"
+             "If the file picker does not appear, copy the zip file into this folder and "
+             "choose again:\n%s",
+             where[0] != '\0' ? where : "drivers");
+    return box;
+}
+
+/* no device could be made (window_host.c, before the box): the log says
+   which way past the system's loader there is */
+void ico_gpu_driver_android_no_device_note(void)
+{
+    fprintf(stderr,
+            "window: a graphics driver package (chosen in the box, in Options > Graphics driver, "
+            "or a .zip file in %s) is loaded by the game itself, without the system's Vulkan "
+            "loader\n",
+            ico_gpu_driver_android_folder_text());
+}
+
+/* the folder's words, "drivers" when the paths are not known */
+static const char *p_drivers_text(void)
+{
+    const char *t = ico_gpu_driver_android_folder_text();
+    return t[0] != '\0' ? t : "drivers";
+}
 
 int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn)
 {
@@ -666,12 +831,15 @@ int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn
         SDL_PumpEvents();
         SDL_Delay(20);
     }
-    if ((r == UI_GPU_INSTALL_NO_PICKER || r == UI_GPU_INSTALL_NO_PICKER_APP) &&
+    if ((r == UI_GPU_INSTALL_NO_PICKER || r == UI_GPU_INSTALL_NO_PICKER_APP ||
+         r == UI_GPU_INSTALL_CANCELLED) &&
         host_files_count() > 0) {
-        /* no picker: the first zip in the drivers folder, if the player put one there */
-        fprintf(stderr,
-                "gpu driver: no file picker at the start; trying %s from the drivers folder\n",
-                host_file_name(0));
+        /* no picker, or one that closed without a file (some phones' pickers
+           do at once, issue 135): the first zip in the drivers folder, if
+           the player put one there */
+        fprintf(stderr, "gpu driver: %s at the start; trying %s from the drivers folder (%s)\n",
+                r == UI_GPU_INSTALL_CANCELLED ? "no file from the picker" : "no file picker",
+                host_file_name(0), p_drivers_text());
         if (host_install_file_begin(0) == 0) {
             while ((r = host_install_poll()) == UI_GPU_INSTALL_PENDING) {
                 SDL_PumpEvents();
@@ -681,12 +849,22 @@ int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn
     }
     if (r != UI_GPU_INSTALL_ADDED) {
         snprintf(why, whyn, "%s",
-                 r == UI_GPU_INSTALL_NOSPACE         ? "Not enough free space."
-                 : r == UI_GPU_INSTALL_CANCELLED     ? "No file was chosen."
-                 : r == UI_GPU_INSTALL_NO_PICKER     ? "The file picker could not be opened."
-                 : r == UI_GPU_INSTALL_NO_PICKER_APP ? "No app on this device can choose a file."
+                 r == UI_GPU_INSTALL_NOSPACE      ? "Not enough free space."
                  : r == UI_GPU_INSTALL_UNREADABLE ? "The chosen file could not be read."
-                                                  : "That file is not a graphics driver package.");
+                 : r == UI_GPU_INSTALL_CANCELLED  ? "No file was chosen."
+                 : r == UI_GPU_INSTALL_NO_PICKER  ? "The file picker could not be opened."
+                 : r == UI_GPU_INSTALL_NO_PICKER_APP
+                     ? "No app on this device can choose a file."
+                     : "That file is not a graphics driver package.");
+        if (r == UI_GPU_INSTALL_CANCELLED || r == UI_GPU_INSTALL_NO_PICKER ||
+            r == UI_GPU_INSTALL_NO_PICKER_APP) {
+            /* the way that needs no picker */
+            const size_t n0 = strlen(why);
+            snprintf(why + n0, whyn - n0,
+                     " You can copy the driver's zip file into this folder instead, then "
+                     "choose again:\n%s",
+                     p_drivers_text());
+        }
         return 0;
     }
     const int i = find_folder(s_installed); /* host_install_poll refreshed the list */

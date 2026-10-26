@@ -1402,7 +1402,8 @@ replaced by the phone's own driver with a message box
 handling is pure C and tested on every platform (`port/platform/test/gpu_driver_test.c`).
 
 Add a driver ends in one of seven answers (`UI_GPU_INSTALL_*`, `port/ui/settings.h`), each its own
-popup: `ADDED`, `BAD` (the zip was read and is not a package), `NOSPACE`, `CANCELLED` (silent),
+popup: `ADDED`, `BAD` (the zip was read and is not a package), `NOSPACE`, `CANCELLED` (a popup that names
+the drivers folder; it was silent before v0.9.1),
 `NO_PICKER` (the picker could not be started for a reason other than a missing app, it answered
 without a file address, or there is no drivers root), `NO_PICKER_APP` (no installed app takes
 either picker intent, below) and `UNREADABLE` (the file would not open, the copy failed with space left,
@@ -1415,13 +1416,35 @@ zips the player copied by USB; `ico_gpu_driver_list_zips` lists the `*.zip` file
 zip's path (`SDL_IOFromFile` takes a plain path) and deletes the zip after `ADDED`. `<files>`
 is the internal folder when shared storage is not writable, so the folder can be the install
 root itself; the listing skips everything but top-level zips, so that is harmless. The
-start-up box (`ico_gpu_driver_android_choose`) falls back to the first zip there on `NO_PICKER`
-and `NO_PICKER_APP`. Log lines, all `gpu driver:` on stderr: `Add a driver: opening the file
+start-up box (`ico_gpu_driver_android_choose`) falls back to the first zip there on `NO_PICKER`,
+`NO_PICKER_APP` and `CANCELLED` (some ROMs answer `RESULT_CANCELED` at once, issue 135); with no zip
+there its sentence names the folder. The popups, the box and the Graphics driver row's note name
+the folder through `ico_gpu_driver_android_folder_text` (the start-up box's text is
+`ico_gpu_driver_android_box_text`; `window_host.c` is at its size cap, so the Android wording lives here) (`UiGpuDriverHost.folderPath`;
+`IcoAndroidPaths.drivers` without the internal storage root `/storage/emulated/<n>/`, as the phone's
+file apps show it), as a `%s` in the table strings (`NO_PICKER`, `NO_PICKER_APP`, `CANCELLED`,
+`NOTE_LOST`), put in by `settings.c` `fmtText` and wrapped (`UI_POPUP_TEXT` is 384 bytes).
+
+A pick that never answers ends as `CANCELLED` (`pick_watch`, called by `host_install_poll` and
+`install_busy`): `IcoActivity.onResume` counts into `ico_android_resume_count`
+(`nativeResumed`), and 2 s after a resume that came with no answer (an answer arrives before the
+resume), or 120 s after the start, the wait is over; the late answer finds the state moved on.
+Log lines of this: `the app came back to the front N ms after the picker opened (pick N); no
+answer yet`, `the file picker (pick N) gave no answer: <why> (N ms); the wait is over`, and
+`closed without a file, N ms after it opened`; `ico_pc: file picker: pick N: onActivityResult
+resultCode <n> (OK|CANCELED), data null|present, a file|no file` from the Java side. Log lines, all `gpu driver:` on stderr: `Add a driver: opening the file
 picker (pick N)`, `Add from the drivers folder: <name> (pick N)`, `the file picker answered
-(pick N): content://<authority>/...` or `closed without a file`, `the file picker failed:
+(pick N): content://<authority>/...` or `closed without a file, N ms after it opened`, `the file picker failed:
 <why>`, `a late answer for pick N (now M) ignored`, `the file picker could not open: <why>`, `Add a
 driver ended: ADDED|NOT A PACKAGE|NO SPACE|NO PICKER|NO PICKER APP|UNREADABLE|CANCELLED`, and the
-install thread's own.
+install thread's own. After a device loss on the phone's own Qualcomm driver (no package loaded;
+`ico_gpu_driver_android_device_up`, called by `window_host.c` after `rd_init`: `vendorId` Qualcomm and
+`ICO_DIAG_END_LOSS` above 0),
+`gpu driver: the previous start lost the graphics device on this phone's own Qualcomm driver; a
+Turnip driver package ... is loaded by the game itself, without the system's driver` is logged
+once and the row's note becomes `UI_STR_GPU_DRIVER_NOTE_LOST` (a failed driver's note still wins).
+When no device starts, `window: a graphics driver package (...) is loaded by the game itself,
+without the system's Vulkan loader` precedes the box.
 
 ### The file picker
 

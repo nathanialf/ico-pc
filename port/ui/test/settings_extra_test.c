@@ -320,9 +320,21 @@ static int gpuFileBegin(int i)
     return 0;
 }
 
-static const UiGpuDriverHost kGpuHost = {gpuCount,      gpuName,      gpuSelected, gpuSelect,
-                                         gpuLastFailed, gpuAdreno,    gpuBegin,    gpuPoll,
-                                         gpuRemove,     gpuFileCount, gpuFileName, gpuFileBegin};
+static int s_gpuLost;
+
+static const char *gpuFolderPath(void)
+{
+    return "Android/data/test/files/drivers";
+}
+
+static int gpuLostOnStock(void)
+{
+    return s_gpuLost;
+}
+
+static const UiGpuDriverHost kGpuHost = {
+    gpuCount, gpuName,   gpuSelected,  gpuSelect,   gpuLastFailed, gpuAdreno,     gpuBegin,
+    gpuPoll,  gpuRemove, gpuFileCount, gpuFileName, gpuFileBegin,  gpuFolderPath, gpuLostOnStock};
 
 static int an22bShown(UiSettingsPage page, UiSettingsOpt opt)
 {
@@ -464,6 +476,27 @@ static void testGpuDriver(void)
         CHECK(note >= 0 && strstr(lt_ext_row_text(note), "Adreno") != NULL,
               "a new choice: the note is the Adreno line again");
     }
+    /* a loss on the phone's own Qualcomm driver: the note names the driver
+       package route and the folder's path; a failed driver's note wins */
+    s_gpuLost = 1;
+    frame(0);
+    {
+        const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        CHECK(note >= 0 && strstr(lt_ext_row_text(note), "Turnip") != NULL &&
+                  strstr(lt_ext_row_text(note), "Android/data/test/files/drivers") != NULL,
+              "after a loss: the note names Turnip and the folder (%s)",
+              note >= 0 ? lt_ext_row_text(note) : "-");
+    }
+    s_gpuFailed = 1;
+    frame(0);
+    {
+        const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        CHECK(note >= 0 && strstr(lt_ext_row_text(note), "did not start") != NULL,
+              "a loss and a failed driver: the failed driver's note");
+    }
+    s_gpuFailed = -1;
+    s_gpuLost = 0;
+    frame(0);
 
     /* Add: the picker opens, the page polls every frame until it answers */
     frame(0);
@@ -482,19 +515,26 @@ static void testGpuDriver(void)
     static const struct {
         int result;
         const char *title;
+        const char *body; /* the popup's body with its line breaks as spaces, "" for none */
     } kAnswers[] = {
-        {UI_GPU_INSTALL_BAD, "This file is not a driver package."},
-        {UI_GPU_INSTALL_NOSPACE, "Not enough space to add this driver."},
-        {UI_GPU_INSTALL_NO_PICKER,
+        {UI_GPU_INSTALL_BAD, "This file is not a driver package.", ""},
+        {UI_GPU_INSTALL_NOSPACE, "Not enough space to add this driver.", ""},
+        /* the folder routes: the page's name, the sentence and the folder's
+           path (this host's own) */
+        {UI_GPU_INSTALL_NO_PICKER, "Graphics driver",
          "The file picker could not be opened. You can copy the driver\xE2\x80\x99s zip "
-         "file into the game\xE2\x80\x99s drivers folder instead."},
-        {UI_GPU_INSTALL_NO_PICKER_APP,
+         "file into the game\xE2\x80\x99s drivers folder instead: Android/data/test/files/drivers"},
+        {UI_GPU_INSTALL_NO_PICKER_APP, "Graphics driver",
          "No app on this device can choose a file. Copy the driver\xE2\x80\x99s zip file "
-         "into the game\xE2\x80\x99s drivers folder instead."},
+         "into the game\xE2\x80\x99s drivers folder instead: Android/data/test/files/drivers"},
         {UI_GPU_INSTALL_UNREADABLE,
          "The chosen file could not be read. Copy it onto this device first, then "
-         "choose it again."},
-        {UI_GPU_INSTALL_CANCELLED, ""}};
+         "choose it again.",
+         ""},
+        {UI_GPU_INSTALL_CANCELLED, "Graphics driver",
+         "No file was chosen. If the file picker does not appear on this device, copy the "
+         "driver\xE2\x80\x99s zip file into the game\xE2\x80\x99s drivers folder and use "
+         "Add from the drivers folder: Android/data/test/files/drivers"}};
 
     for (unsigned i = 0; i < sizeof(kAnswers) / sizeof(kAnswers[0]); i++) {
         ui_popup_reset();
@@ -504,8 +544,14 @@ static void testGpuDriver(void)
         frame(0);
         CHECK(strcmp(ui_popup_title(), kAnswers[i].title) == 0, "answer %d: \"%s\"",
               kAnswers[i].result, ui_popup_title());
-        CHECK((kAnswers[i].title[0] != '\0') == ui_popup_active(), "answer %d: popup or silence",
-              kAnswers[i].result);
+        CHECK(ui_popup_active(), "answer %d: a popup", kAnswers[i].result);
+        char body[UI_POPUP_TEXT];
+        snprintf(body, sizeof(body), "%s", ui_popup_body());
+        for (char *c = body; *c != '\0'; c++) {
+            *c = *c == '\n' ? ' ' : *c;
+        }
+        CHECK(strcmp(body, kAnswers[i].body) == 0, "answer %d: body \"%s\"", kAnswers[i].result,
+              body);
     }
 
     /* Add from the drivers folder: hidden with no zip, shown with two, Left
@@ -618,17 +664,15 @@ static void testGpuDriver(void)
     CHECK(lt_ext_prop(an22bLink())->defaultMask, "the host removed: the link hides again");
 
     /* the strings, in all five languages */
-    static const UiStrId kIds[] = {UI_STR_SECTION_GPU_DRIVER,       UI_STR_OPT_GPU_DRIVER,
-                                   UI_STR_VAL_GPU_BUILTIN,          UI_STR_GPU_DRIVER_ADD,
-                                   UI_STR_GPU_DRIVER_REMOVE,        UI_STR_GPU_DRIVER_NOTE,
-                                   UI_STR_GPU_DRIVER_ADDED,         UI_STR_GPU_DRIVER_BAD,
-                                   UI_STR_GPU_DRIVER_REMOVED,       UI_STR_GPU_DRIVER_FAILED,
-                                   UI_STR_GPU_DRIVER_NOSPACE,       UI_STR_QUIT_GAME,
-                                   UI_STR_QUIT_GAME_CONFIRM,        UI_STR_GPU_DRIVER_NO_PICKER,
-                                   UI_STR_GPU_DRIVER_NO_PICKER_APP, UI_STR_GPU_DRIVER_UNREADABLE,
-                                   UI_STR_GPU_DRIVER_ADD_FILE,      UI_STR_SECTION_GRAPHICS,
-                                   UI_STR_OPT_GRAPHICS_API,         UI_STR_VAL_GRAPHICS_AUTOMATIC,
-                                   UI_STR_GRAPHICS_API_NOTE};
+    static const UiStrId kIds[] = {
+        UI_STR_SECTION_GPU_DRIVER,     UI_STR_OPT_GPU_DRIVER,       UI_STR_VAL_GPU_BUILTIN,
+        UI_STR_GPU_DRIVER_ADD,         UI_STR_GPU_DRIVER_REMOVE,    UI_STR_GPU_DRIVER_NOTE,
+        UI_STR_GPU_DRIVER_ADDED,       UI_STR_GPU_DRIVER_BAD,       UI_STR_GPU_DRIVER_REMOVED,
+        UI_STR_GPU_DRIVER_FAILED,      UI_STR_GPU_DRIVER_NOSPACE,   UI_STR_QUIT_GAME,
+        UI_STR_QUIT_GAME_CONFIRM,      UI_STR_GPU_DRIVER_NO_PICKER, UI_STR_GPU_DRIVER_NO_PICKER_APP,
+        UI_STR_GPU_DRIVER_UNREADABLE,  UI_STR_GPU_DRIVER_ADD_FILE,  UI_STR_GPU_DRIVER_CANCELLED,
+        UI_STR_GPU_DRIVER_NOTE_LOST,   UI_STR_SECTION_GRAPHICS,     UI_STR_OPT_GRAPHICS_API,
+        UI_STR_VAL_GRAPHICS_AUTOMATIC, UI_STR_GRAPHICS_API_NOTE};
     static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
     for (int l = 0; l < 5; l++) {
         for (unsigned i = 0; i < sizeof(kIds) / sizeof(kIds[0]); i++) {

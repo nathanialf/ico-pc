@@ -608,6 +608,27 @@ out:
     return rc;
 }
 
+/* how many times the activity came back to the front (IcoActivity.onResume
+   -> nativeResumed), counted from the process start; the picker watch in
+   gpu_driver_android.c compares it with the count at the pick's start: a
+   picker that was closed without an answer (some ROMs' pickers) still ends
+   in a resume */
+static SDL_AtomicInt s_resumes;
+
+int ico_android_resume_count(void)
+{
+    return SDL_GetAtomicInt(&s_resumes);
+}
+
+/* IcoActivity.nativeResumed (a static native method), on the activity's
+   thread */
+JNIEXPORT void JNICALL Java_com_defnf_icopc_IcoActivity_nativeResumed(JNIEnv *env, jclass cls)
+{
+    (void)env;
+    (void)cls;
+    SDL_AddAtomicInt(&s_resumes, 1);
+}
+
 /* a Java string's UTF-8 copy (SDL_free), NULL for null or no memory */
 static char *pick_string(JNIEnv *env, jstring s)
 {
