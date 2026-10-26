@@ -129,8 +129,11 @@ static void testExtras(void)
         CHECK(n == 16 && idx == 12, "Extras is the row after Achievements (index %d of %d)", idx,
               n);
         CHECK(lt_ext_prop(ex)->right == ui_settings_page_layout(UI_PAGE_EXTRAS), "Extras opens");
-        CHECK(lt_ext_prop(ex)->defaultMask == 0, "title %d: the Extras row is shown", title);
-        /* the cursor: Achievements, Down */
+        CHECK(ui_settings_row_shown(ex),
+              "title %d: the Extras row is shown (by its rule; the "
+              "window may hold it out of view until the cursor comes near)",
+              title);
+        /* the cursor: Achievements, Down (the window follows the cursor) */
         lt_ext_layout(mainL)->curItem = labels[11];
         press(0x4000);
         CHECK(lt_ext_layout(mainL)->curItem == ex,

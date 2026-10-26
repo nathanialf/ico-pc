@@ -853,8 +853,9 @@ static void testNavigation(void)
     press(0x40); /* Cross */
     int mainL = ui_settings_page_layout(UI_PAGE_MAIN);
     CHECK(settle(mainL, 60), "Cross opens the Settings menu (%d)", current_layout_id);
-    /* down to Language (row 6), right: French */
-    for (int i = 0; i < 5; i++) {
+    /* down to Language (past Picture, Effects, Audio, Controls, Gameplay; the
+       Graphics links are hidden here), right: French */
+    for (int i = 0; i < 6; i++) {
         press(0x4000);
     }
     CHECK(lt_ext_layout(mainL)->curItem == ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_LANGUAGE),
@@ -892,7 +893,8 @@ static void testNavigation(void)
     press(0x4000);
     press(0x4000);
     press(0x4000);
-    press(0x40); /* Controls */
+    press(0x4000); /* Picture, Effects, Audio, Controls */
+    press(0x40);   /* Controls */
     int ctlL = ui_settings_page_layout(UI_PAGE_CONTROLS);
     CHECK(settle(ctlL, 60), "Controls");
     press(0x40); /* Remap controls */
