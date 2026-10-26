@@ -174,16 +174,18 @@ is not drawn (`port/game/title_logo.h`; [The title](#the-title)).
 ### Pages
 
 `build` makes every page from tables of rows, string ids and links; `_Static_assert`s keep the
-tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/settings.c` (`build`);
+tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a page (`port/ui/settings.c` (`build`);
 `port/ui/settings.h` (`UiSettingsPage`)):
 
 | page | rows |
 | --- | --- |
-| Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics (`UI_PAGE_GRAPHICS`), Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Save a picture for a bug report, (an rc build on Android: Share a bug report,) Developer mode, Dump textures, Dump models, Back |
-| Display | Preset, Resolution, Aspect, Anti-aliasing, Window mode, Vsync, Texture pack, Model pack, Frame rate, Frame rate counter (`UI_OPT_SHOW_FPS`, `[video] show_fps`, Off or On), Video mode, Back |
-| Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects (Motion blur Off, Original or Smooth, `UI_OPT_EFFECT_MOTION_BLUR`, stepped round with `stepIndex` and its note `UI_STR_EFFECT_MOTION_BLUR_NOTE`) with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Full pixel, Back |
+| Main (`UI_PAGE_MAIN`) | Display, Picture (`UI_PAGE_PICTURE`), Effects, Graphics (`UI_PAGE_GRAPHICS`), Graphics driver, Audio, Controls, Gameplay, Language, Menu language, Disc, Achievements, Extras, Save a picture for a bug report, (an rc build on Android: Share a bug report,) Developer (`UI_PAGE_DEVELOPER`), Back |
+| Display | Preset, Resolution, Aspect, Window mode, Vsync, Frame rate, Frame rate counter (`UI_OPT_SHOW_FPS`, `[video] show_fps`, Off or On), Video mode, Back |
+| Picture | Anti-aliasing, Downsampling (`UI_OPT_DOWNSAMPLE`, `[video] downsample`, Off or To original size), Full height, Filtering, Full pixel, Brightness (pause menu only), CRT filter, CRT strength, Texture pack, Model pack (title only), Back |
+| Effects | the six game effects (Motion blur Off, Original or Smooth, `UI_OPT_EFFECT_MOTION_BLUR`, stepped round with `stepIndex` and its note `UI_STR_EFFECT_MOTION_BLUR_NOTE`) with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Cinematic bars last, Back |
 | Graphics | Graphics API (`UI_OPT_GRAPHICS_API`: Automatic, then each name `ui_settings_set_backend_names` was given as Vulkan, OpenGL, Direct3D 12 or Direct3D 11; the shown value and the step base are the config's `video.backend`, an unlinked value shows as written and steps from Automatic; a step writes `video.backend` ("" for Automatic) and sets `s_dirtyConfig`, so the file is written on leaving; the note `UI_STR_GRAPHICS_API_NOTE` says Apply switches now and the choice is otherwise used from the next start), Apply (`UI_OPT_GRAPHICS_APPLY`, shown while a `UiGraphicsHost` is set, two or more names, no switch under way and the row's value, Automatic counting as the host's `automatic()` (the backend Automatic started this run) or else `vulkan`, a linked name that is not the host's `running()`; note `UI_STR_GRAPHICS_APPLY_NOTE`), Keep and Revert (`UI_OPT_GRAPHICS_KEEP`, `UI_OPT_GRAPHICS_REVERT`, shown only in the countdown, which hides Graphics API and Back), Back (the link and the page only with two or more names) |
 | Graphics driver | Driver, Add a driver, Add from the drivers folder (`UI_OPT_GPU_ADD_FILE`, stepped over `fileName(i)`, shown while `fileCount()` is above 0, Cross calls `installFileBegin`), Remove this driver, Back (Android) |
+| Developer | Developer mode, Dump textures, Dump models (the two dump rows only with Developer mode on), Back |
 | Audio | Volume, Music, Effects, Output, Device, Back |
 | Controls | Remap (a list), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, Touch screen (a link, with a touch screen only), Back |
 | Touch screen (`UI_PAGE_TOUCH`) | Touch controls, Touch size, Touch opacity, Edit layout (`UI_OPT_TOUCH_EDIT`), Snap to grid, Grid size, Reset layout, Reset all layouts, Back |
@@ -195,7 +197,7 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 | Music | the music gallery, a list |
 | Characters | nine colour rows, Switch, Randomize, Reset, Back |
 
-**Save a picture for a bug report** is an action row on Main directly above Developer mode
+**Save a picture for a bug report** is an action row on Main directly above the Developer link
 (`UI_OPT_REPORT_PICTURE`), a player's row shown with developer mode on or off while a host handler is set
 (`ui_settings_set_frame_dump_handler`: the window host's `report_picture_arm`, which runs F12's
 `frame_dump` 3 s later; none headless). Cross calls the handler once, logs `settings: a picture
@@ -207,11 +209,11 @@ seconds") with `UI_STR_REPORT_PICTURE_ARMED_BODY`; its note is `UI_STR_REPORT_PI
 strings (`UI_STR_OPT_SHARE_REPORT`, `UI_STR_SHARE_REPORT_NOTE`, all seven tables), the table
 entries, its note and its Cross case are inside `#if ICO_RC_TOOLS` (`settings.h` and `strings.h`
 default it to 0; [BUILDING.md](../BUILDING.md#release-candidate-tools)), and `MAX_ROWS` is
-`16 + ICO_RC_TOOLS`. It sits directly below Save a picture for a bug report and shows on Android
+`17 + ICO_RC_TOOLS`. It sits directly below Save a picture for a bug report and shows on Android
 (`ico_video_android`) while a handler is set (`ui_settings_set_share_report_handler`: the window
 host's `share_report_arm`; at `ICO_RC_TOOLS` 0 the setter keeps nothing). Cross logs `settings:
 share a bug report (an rc build's row)` and calls the handler once, with no popup (the system's
-share menu opens over the game). With all eighteen rows shown (the Graphics link too) the page
+share menu opens over the game). With all seventeen rows shown (the Graphics link too) the page
 scrolls in the window as every long page does ([The window](#the-window)).
 
 `buildOptionPage` makes a page: a centred header, then per option a right-aligned label and, for
@@ -1039,7 +1041,7 @@ two path strings PAL's do not). On the Japanese disc:
   start; with no pin the row shows the disc playing, which with several discs' data and no pin is the
   one the next start picks (the disc played last). Its note is `UI_STR_DISC_NOTE` ("Takes effect at
   the next start"). With every Main row shown (the Graphics and Graphics driver links, Language, Disc and the
-  two dump rows) the page has sixteen rows; with Save a picture for a bug report too, seventeen
+  Developer link) the page has sixteen rows, the report picture row included
   (`MAX_ROWS` is 17, 18 in an rc build); the window scrolls them ([The window](#the-window)).
   ctest `settings_extra` (`testDiscRow`,
   `testReportPicture`).
