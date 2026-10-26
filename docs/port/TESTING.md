@@ -1268,8 +1268,7 @@ driver are not covered here: lavapipe is a 1.3 driver held to 1.1 by the switch.
 
 CI's `windows` job (`.github/workflows/ci.yml`, on `windows-2022`, after `linux`) runs the
 renderer's tests on the Direct3D 11 backend through WARP, Microsoft's software adapter (issue
-126: before it the backend had run on no device, and on a GTX 750 Ti both start-up self-tests read
-back their cleared target). Nothing is built on Windows: the `linux` job's `win-x64` step copies the
+126: on a GTX 750 Ti both start-up self-tests read back their cleared target). Nothing is built on Windows: the `linux` job's `win-x64` step copies the
 programs below and `SDL3.dll` (their only import beyond the system's) into
 `build-host/win-x64-warp/` (`tools/ci_d3d11_warp.sh stage`) and uploads it as the artifact
 `win-x64-warp-tests`; the `windows` job downloads it and `tools/ci_d3d11_warp.sh run` (Git Bash)

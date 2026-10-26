@@ -589,8 +589,9 @@ alpha stays the grid's.
   hold the display's wait sets `RhiStats.fenceWaitsHoldDisplay` and the whole wait is the
   display's (`pace_display_wait`): OpenGL, whose swap returns at once while the driver waits for
   FIFO's queue inside the next `glClientWaitSync` (issue 126: a GTX 750 Ti under the n = 1 lock
-  logged `waited 8.3 ms for the GPU and 0.1 ms for the display` with 3.6 ms of GPU a replay, and
-  the earlier rule held it to the game's 30 on those cheap scenes). Vulkan, D3D12 and D3D11 keep the
+  logged `waited 8.3 ms for the GPU and 0.1 ms for the display` with 3.6 ms of GPU a replay; the
+  GPU's wait alone would have held it to the game's 30 on those cheap scenes). Only with vsync on:
+  with it off the fence waits are the GPU's alone. Vulkan, D3D12 and D3D11 keep the
   display's wait in the acquire (D3D11 and D3D12: the frame latency wait) and the present, and
   their fence waits are the GPU's.
 - **Armed, then dropped**: the first late step (with an in-between) only arms the allowance for
@@ -598,9 +599,8 @@ alpha stays the grid's.
   presents, at most its ceiling (below), held 60 steps and armed again. The second may be a step of
   new frames only (the GPU still behind the in-betweens that armed it: the new frame's present
   waits for it), and then the drop is to one below the arming step's presents, when that lowers the
-  allowance. One hitch (issue 130: under the earlier rule one late step held an uncapped RTX 4090 at one present a
-  step, 60 a second, for the rest of the session) arms and expires; a machine late every step drops
-  at its second late step, one step after the earlier rule did.
+  allowance. One hitch (issue 130: an uncapped RTX 4090 held at one present a step, 60 a second, after a single
+  late step) only arms and expires; a machine late every step drops at its second late step.
 - **Climb**: after the hold, every `PACE_ALLOW_CLIMB_STEP` (60) steps on time, straight back to
   where it started (unbound on the timer path, n under the lock) when the GPU gate lets that many
   presents (`K * G + step < period`: K = n under the lock; on the timer path the most presents a
@@ -611,7 +611,7 @@ alpha stays the grid's.
   the climb probes, and a second late step drops it again. The ceiling is `PACE_ALLOW_MAX` (8) on
   the timer path, where one more climb from it makes the allowance unbound again, and n under the
   lock, which it never passes. From a drop to unbound again takes 120 steps (2 s) when the GPU has
-  the time; the earlier rule took a climb every 180 steps, eight from 1 to unbound (28 s).
+  the time.
 - A resync does not reset it; a new lock, a frame rate change, leaving the lock and the pace reset
   (back from the background) do.
 

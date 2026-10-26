@@ -4,7 +4,7 @@
 #
 # The renderer's tests on Direct3D 11 through WARP (Microsoft's software
 # adapter), for CI's `windows` job (.github/workflows/ci.yml; issue 126:
-# the Direct3D 11 backend had never run on any device before this job).
+# the Direct3D 11 backend is exercised on no other CI device).
 #
 #   tools/ci_d3d11_warp.sh stage <win-x64 build dir> <out dir>
 #       (Linux, the `linux` job) copies the test programs below and the DLL

@@ -64,6 +64,8 @@ HISTORY = [
     r"\bbefore version\b",
     r"\bthis version\b",
     r"\bwas (added|fixed|changed)\b",
+    r"\bearlier rule\b",
+    r"\bbefore this job\b",
 ]
 CODES = [
     r"\b(R[0-9][a-z]?|P[0-9]|AN-[0-9]+[a-z]?|I[0-9]+[a-z]|B[0-9]|Y[0-9]|AA[0-9])\b",

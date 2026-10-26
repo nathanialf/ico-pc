@@ -184,8 +184,8 @@ jobs:
           key: ccache-linux-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-${{ github.sha }}
 
   # The renderer's tests on Direct3D 11 through WARP, Microsoft's software
-  # adapter, on GitHub's Windows runner (issue 126: before this job the
-  # Direct3D 11 backend had never run on any device). The programs are the
+  # adapter, on GitHub's Windows runner (issue 126: the Direct3D 11 backend
+  # is exercised on no other CI device). The programs are the
   # `linux` job's win-x64 cross build (its artifact win-x64-warp-tests);
   # tools/ci_d3d11_warp.sh runs each with ICO_RHI_BACKEND=d3d11 and
   # ICO_D3D11_ADAPTER=warp and its own expectations, prints a failed test's
