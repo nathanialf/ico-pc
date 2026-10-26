@@ -29,12 +29,13 @@ endif()
 
 # Defaults are the original behaviour, the config and run-time setters, and
 # eBrainGetTarget (ico2/omori/src/ebrain.c, compiled into the test) under the
-# yorda_safe hook.
+# yorda_safe hook, and pit_time's ratio and its four hooks in enemy_act.c (a text scan).
 add_executable(options_test test/options_test.c ../platform/host_config.c)
 ico_include_dirs(omori _ico_options_incs)
 target_include_directories(options_test PRIVATE ${_ico_options_incs}
     "${CMAKE_SOURCE_DIR}/port/platform")
-target_compile_definitions(options_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_definitions(options_test PRIVATE ${ICO_GAME_DEFINITIONS}
+    ICO_ENEMY_ACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/enemy_act.c")
 target_compile_options(options_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS} -Wno-unused-parameter -Wno-unused-variable
                        -Wno-unused-function)

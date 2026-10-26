@@ -6,6 +6,7 @@
  * (ico2/omori/src/ebrain.c, compiled in below so its statics are in reach)
  * with yorda_safe off and on, on a synthetic slot set.
  */
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "config.h"
@@ -107,6 +108,7 @@ static void test_defaults(void)
     CHECK(ico_opt_stick_fix_default() == 0);
     CHECK(ico_opt_stick_fix() == ico_opt_stick_fix_default());
     CHECK(ico_opt_yorda_safe() == 0);
+    CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL && ico_opt_pit_time_factor() == 1.0f);
     CHECK(ico_opt_door_fix() == 0);
     CHECK(ico_opt_mirror() == 0);
     CHECK(ico_opt_developer_mode() == 0);
@@ -153,6 +155,12 @@ static void test_defaults(void)
     CHECK(ico_opt_yorda_safe() == 1);
     ico_opt_set_yorda_safe(0);
     CHECK(ico_opt_yorda_safe() == 0);
+    ico_opt_set_pit_time(ICO_PIT_TRIPLE);
+    CHECK(ico_opt_pit_time() == ICO_PIT_TRIPLE && ico_opt_pit_time_factor() == 3.0f);
+    ico_opt_set_pit_time(ICO_PIT_HALF);
+    CHECK(ico_opt_pit_time_factor() == 0.5f);
+    ico_opt_set_pit_time(99); /* out of range reads original */
+    CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL);
     ico_opt_set_stick_fix(1);
     ico_opt_set_mirror(1);
     CHECK(ico_opt_stick_fix() == 1 && ico_opt_mirror() == 1);
@@ -199,6 +207,27 @@ static void test_config(const char *dir)
     ico_opt_set_yorda_safe(0); /* the run-time value wins until a reload */
     CHECK(ico_opt_yorda_safe() == 0);
     remove(path);
+    /* pit_time: each name reads its factor; an unknown word reads original */
+    {
+        static const char *const names[] = {"half",   "original", "longer",
+                                            "double", "triple",   "bogus"};
+        static const float want[] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 1.0f};
+        int i;
+
+        for (i = 0; i < 6; i++) {
+            f = fopen(path, "wb");
+            if (f == NULL) {
+                failures++;
+                break;
+            }
+            fprintf(f, "[gameplay]\npit_time = \"%s\"\n", names[i]);
+            fclose(f);
+            ico_config_reset(path, "/nonexistent/options_test.ini");
+            ico_opt_reload();
+            CHECK(ico_opt_pit_time_factor() == want[i]);
+        }
+        remove(path);
+    }
     /* debug_option is an int; a non-number or an absent key reads 0 */
     f = fopen(path, "wb");
     if (f != NULL) {
@@ -361,6 +390,74 @@ static void test_ui_language(const char *dir)
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_opt_reload();
     CHECK(ico_opt_ui_language() == -1);
+}
+
+/* --- pit_time: the dive ratio and the hook in actEnemyKidnapEnd ---------- */
+
+/* the number of times `needle` occurs in the text */
+static int count_of(const char *text, const char *needle)
+{
+    int n = 0;
+    const char *p = text;
+
+    while ((p = strstr(p, needle)) != NULL) {
+        n++;
+        p += strlen(needle);
+    }
+    return n;
+}
+
+static void test_pit_time(void)
+{
+    static const float factor[ICO_PIT_COUNT] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f};
+    const char *slug = ico_region_cur()->slug;
+    char *text = NULL;
+    FILE *f = fopen(ICO_ENEMY_ACT_SRC, "rb");
+    long n = 0;
+    char hook[96];
+    int motion;
+    int v;
+
+    /* the ratio reserved: 1/factor, 2/factor under a camera effect, on every disc */
+    for (v = 0; v < ICO_PIT_COUNT; v++) {
+        ico_opt_set_pit_time(v);
+        CHECK(ico_opt_pit_time_factor() == factor[v]);
+        CHECK(ico_opt_pit_dive_ratio(0) == 1.0f / factor[v]);
+        CHECK(ico_opt_pit_dive_ratio(1) == 2.0f / factor[v]);
+    }
+    ico_opt_set_pit_time(ICO_PIT_ORIGINAL);
+    /* original: the game's own values, bit for bit */
+    CHECK(ico_opt_pit_dive_ratio(0) == 1.0f && ico_opt_pit_dive_ratio(1) == 2.0f);
+
+    /* the source: one hook in each of the four loops, this disc's motion among
+       them, the three camera timeouts scaled, the frame-50 test untouched */
+    if (f == NULL) {
+        fprintf(stderr, "cannot read %s\n", ICO_ENEMY_ACT_SRC);
+        failures++;
+        return;
+    }
+    fseek(f, 0, SEEK_END);
+    n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    text = (char *)malloc((size_t)n + 1);
+    if (text == NULL || fread(text, 1, (size_t)n, f) != (size_t)n) {
+        failures++;
+        fclose(f);
+        free(text);
+        return;
+    }
+    text[n] = 0;
+    fclose(f);
+    CHECK(count_of(text, "ico_opt_pit_dive_ratio(") == 4 + 1 /* the declaration */);
+    CHECK(count_of(text, "* 5 * ico_opt_pit_time_factor() <") == 3);
+    CHECK(count_of(text, "50.0f < GOBJ_SUB(self)->ctrl.animFrame") >= 4);
+    motion = strcmp(slug, "jun26") == 0  ? 938
+             : strcmp(slug, "aug6") == 0 ? 905
+             : strcmp(slug, "ntsc") == 0 ? 903
+                                         : 952;
+    snprintf(hook, sizeof(hook), "ctrl.motion == %d && ico_opt_pit_time_factor() != 1.0f", motion);
+    CHECK(count_of(text, hook) == 1);
+    free(text);
 }
 
 static void test_brain(void)
@@ -1387,6 +1484,7 @@ int main(int argc, char **argv)
     test_hold_discs(argc > 1 ? argv[1] : ".");
     test_mirror_discs(argc > 1 ? argv[1] : ".");
     test_players_slots(argc > 1 ? argv[1] : ".");
+    test_pit_time();
     test_brain();
     test_ui_language(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");
