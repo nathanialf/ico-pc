@@ -2396,6 +2396,10 @@ typedef struct RdContext {
     /* the supersampling factor in force (rd__apply_display): 1, 2 or 4,
      * already in sceneReqSx/Sy; rd_scene_scale_lowered divides it out */
     float ssaa;
+    /* RdSettings.downsample in force (rd__apply_display: asked, a scale or
+     * a fixed size, no CRT filter): the presenter box-averages DISPLAY to
+     * its GS size before steps 1 and 2 (rd__present_record) */
+    bool downsample;
     /* a scene-sized texture made after the named targets (a shadow count, a
      * depth copy, a snapshot, the wrap accumulator) could not be allocated
      * while the scene scale was above 1: rd_begin_frame then halves the
@@ -2800,6 +2804,12 @@ void rd__output_follow_swapchain(void);
  * is recorded; false before the first */
 void rd__note_present_box(uint32_t outW, uint32_t outH, const RhiRect *box);
 bool rd__last_present_box(uint32_t *outW, uint32_t *outH, RhiRect *box);
+/* For the tests and the replay tool's --stats: the last present's two
+ * box reduces as src w, src h, dst w, dst h (all 0 when that reduce did
+ * not run): down, DISPLAY to its GS size (RdSettings.downsample); win, the
+ * source to the window's box (anti-aliasing, a scaled scene larger than
+ * the box).  False before the first present */
+bool rd__last_present_reduce(uint32_t down[4], uint32_t win[4]);
 void rd__present_finish(void);
 void rd__present_shutdown(void);
 
@@ -3243,6 +3253,9 @@ bool rd__read_target(RdTarget t, void *dst, size_t dstSize, uint32_t *w, uint32_
 bool rd__read_target_depth(RdTarget t, float *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* Reads the headless presenter output (RGBA8). */
 bool rd__read_present(void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
+/* The last present's downsampled DISPLAY (RdSettings.downsample: its GS
+ * size, RGBA8, tightly packed); false when no present has drawn it (tests) */
+bool rd__read_present_downsample(void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* The effects depth of the last present (RdSettings.effectsDepth), outW x
  * outH floats; false when no present has drawn it (tests). */
 bool rd__read_present_depth(float *dst, size_t dstSize, uint32_t *w, uint32_t *h);
