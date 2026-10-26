@@ -538,12 +538,16 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
         "Il driver scelto non si è avviato l’ultima volta. È in uso il driver del telefono.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "Spazio insufficiente per aggiungere questo driver.",
     [UI_STR_GPU_DRIVER_NO_PICKER] =
-        "Impossibile aprire il selettore di file. Puoi copiare il file zip del driver nella cartella drivers del gioco.",
+        "Impossibile aprire il selettore di file. Puoi copiare il file zip del driver nella cartella drivers del gioco: %s",
     [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
-        "Nessuna app su questo dispositivo permette di scegliere un file. Copia il file zip del driver nella cartella drivers del gioco.",
+        "Nessuna app su questo dispositivo permette di scegliere un file. Copia il file zip del driver nella cartella drivers del gioco: %s",
     [UI_STR_GPU_DRIVER_UNREADABLE] =
         "Impossibile leggere il file scelto. Copialo prima su questo dispositivo, poi sceglilo di nuovo.",
     [UI_STR_GPU_DRIVER_ADD_FILE] = "Aggiungi dalla cartella drivers",
+    [UI_STR_GPU_DRIVER_CANCELLED] =
+        "Nessun file scelto. Se il selettore di file non compare su questo dispositivo, copia il file zip del driver nella cartella drivers del gioco e usa Aggiungi dalla cartella drivers: %s",
+    [UI_STR_GPU_DRIVER_NOTE_LOST] =
+        "La grafica ha smesso di rispondere con il driver Qualcomm di questo dispositivo. Un driver Turnip può aiutare: aggiungine uno qui o copia il suo file zip nella cartella drivers del gioco (%s). Si applica al prossimo avvio.",
     [UI_STR_QUIT_GAME] = "Esci dal gioco",
     [UI_STR_QUIT_GAME_CONFIRM] = "Uscire dal gioco?",
     /* Controls > the mouse camera rows */
