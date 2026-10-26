@@ -427,6 +427,7 @@ static const char *const record_keys[] = {
     "gameplay.mirror",
     "gameplay.stick_fix",
     "gameplay.yorda_safe",
+    "gameplay.pit_time",
     "gameplay.developer_mode",
     "dev.start_stage",
     "gameplay.door_fix",
