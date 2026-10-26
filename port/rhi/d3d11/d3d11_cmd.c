@@ -127,6 +127,25 @@ static void d11_pass_area_check(uint32_t *w, uint32_t *h, const RhiRenderPassDes
     *h = mh;
 }
 
+/* A colour target and a depth target of different sizes in one pass: the
+ * Vulkan and D3D12 backends draw where both are (the area clamped,
+ * d11_pass_area_check); Direct3D 11 binds a depth-stencil view only with
+ * render target views of its own dimensions (OMSetRenderTargets refuses the
+ * pair, which leaves the pass with no target).  The first 8 pairs are
+ * logged with their sizes, as an event, so a log says whether a pass met
+ * it; the debug layer names the refusal itself. */
+static void d11_pair_size_note(const D11Texture *colour, const D11Texture *depth)
+{
+    static uint32_t s_n;
+    if (s_n >= 8u) {
+        return;
+    }
+    s_n++;
+    D11_LOG("render pass: colour target %ux%u with a depth target %ux%u: Direct3D 11 binds a "
+            "depth-stencil view only with targets of its size (the first 8 reported)",
+            colour->width, colour->height, depth->width, depth->height);
+}
+
 void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
 {
     D11CommandList *c = d11_rec(cl);
@@ -154,6 +173,15 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         dsv = pass->depth.readOnlyDepth ? dt->dsvRO : dt->dsv;
     }
     d11_unbind_srvs(c);
+    if (dt && pass->colorCount && (dt->width != ct[0]->width || dt->height != ct[0]->height)) {
+        d11_pair_size_note(ct[0], dt);
+    }
+    c->st.rtW = pass->colorCount ? ct[0]->width : 0u;
+    c->st.rtH = pass->colorCount ? ct[0]->height : 0u;
+    c->st.rtFmt = pass->colorCount ? ct[0]->resFormat : DXGI_FORMAT_UNKNOWN;
+    c->st.dsW = dt ? dt->width : 0u;
+    c->st.dsH = dt ? dt->height : 0u;
+    c->st.dsReadOnly = dt && pass->depth.readOnlyDepth;
     /* the store ops are ignored: Direct3D 11 keeps what a pass drew, a valid
      * DONT_CARE (rhi.h) */
     ID3D11DeviceContext_OMSetRenderTargets(c->ctx, pass->colorCount, pass->colorCount ? rtv : NULL,
@@ -240,6 +268,7 @@ void rhi_cmd_set_viewport(RhiCommandList cl, const RhiViewport *v)
     /* D3D's clip space is the RHI's: no flip (the Vulkan backend flips) */
     D3D11_VIEWPORT vp = {v->x, v->y, v->w, v->h, v->minDepth, v->maxDepth};
     ID3D11DeviceContext_RSSetViewports(c->ctx, 1, &vp);
+    c->st.vp = vp;
 }
 
 void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *r)
@@ -250,6 +279,7 @@ void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *r)
     }
     D3D11_RECT sc = {r->x, r->y, r->x + (LONG)r->w, r->y + (LONG)r->h};
     ID3D11DeviceContext_RSSetScissorRects(c->ctx, 1, &sc);
+    c->st.sc = sc;
 }
 
 /* ------------------------------------------------------------------ state */
@@ -389,6 +419,44 @@ void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
 }
 
 /* ------------------------------------------------------------------- draws */
+/* One constant buffer window into register `slot` of a stage
+ * (RHI_STAGE_*).  A window equal to the one the register holds is not set
+ * again.  The same buffer with another window is unbound first: Microsoft
+ * documents that the runtime may drop a VSSetConstantBuffers1 (and the
+ * other stages') that names the buffer already bound with only the
+ * offset or size changed (the remarks' "Calling VSSetConstantBuffers1 with
+ * command list emulation", whose workaround is this NULL bind); the port
+ * binds every draw's uniforms that way, windows of one ring buffer.  NULL
+ * (a binding the group could not use) binds nothing, without windows, as
+ * the remarks require of a NULL buffer. */
+static void d11_set_cb(D11CommandList *c, uint32_t stage, uint32_t slot, ID3D11Buffer *cb,
+                       UINT first, UINT num)
+{
+    ID3D11Buffer **held = &c->st.cbSet[stage][slot];
+    if (*held == cb &&
+        (!cb || (c->st.cbFirst[stage][slot] == first && c->st.cbNum[stage][slot] == num))) {
+        return;
+    }
+    ID3D11Buffer *none = NULL;
+    const bool sameBuffer = cb && *held == cb;
+    if (stage == RHI_STAGE_VERTEX) {
+        if (sameBuffer) {
+            ID3D11DeviceContext1_VSSetConstantBuffers1(c->ctx1, slot, 1, &none, NULL, NULL);
+        }
+        ID3D11DeviceContext1_VSSetConstantBuffers1(c->ctx1, slot, 1, &cb, cb ? &first : NULL,
+                                                   cb ? &num : NULL);
+    } else {
+        if (sameBuffer) {
+            ID3D11DeviceContext1_PSSetConstantBuffers1(c->ctx1, slot, 1, &none, NULL, NULL);
+        }
+        ID3D11DeviceContext1_PSSetConstantBuffers1(c->ctx1, slot, 1, &cb, cb ? &first : NULL,
+                                                   cb ? &num : NULL);
+    }
+    *held = cb;
+    c->st.cbFirst[stage][slot] = cb ? first : 0u;
+    c->st.cbNum[stage][slot] = cb ? num : 0u;
+}
+
 /* One bind group entry into its registers in the stages it names (none
  * named: both).  Uniforms are constant buffer windows (11.1 offsets, in
  * 16-byte constants), storage buffers structured SRVs, textures SRVs and
@@ -418,10 +486,10 @@ static void d11_bind_entry(D11CommandList *c, const D11BindEntry *e, const uint3
             first = num = 0;
         }
         if (stages & D11_STAGE_VS) {
-            ID3D11DeviceContext1_VSSetConstantBuffers1(c->ctx1, e->slot, 1, &cb, &first, &num);
+            d11_set_cb(c, RHI_STAGE_VERTEX, e->slot, cb, first, num);
         }
         if (stages & D11_STAGE_PS) {
-            ID3D11DeviceContext1_PSSetConstantBuffers1(c->ctx1, e->slot, 1, &cb, &first, &num);
+            d11_set_cb(c, RHI_STAGE_FRAGMENT, e->slot, cb, first, num);
         }
         return;
     }
@@ -540,6 +608,146 @@ static D11Pipeline *d11_flush(D11CommandList *c)
     return p;
 }
 
+/* ------------------------------------------------- the last draw's state
+ * A copy of what the draw ran with (under 200 bytes, no call into the
+ * runtime), made into text only when asked (rhi_get_stats' lastDrawText):
+ * what a self-test that read back its cleared target needs to say which
+ * state the draw had (issue 126).  The constant buffer windows of b0..b3,
+ * the registers the shaders use (common.hlsli, vu_common.hlsli). */
+#define D11_SNAP_CB 4u
+
+typedef struct D11DrawSnap {
+    uint64_t index; /* 1-based draw count since rhi_init; 0 none yet */
+    bool indexed;
+    uint32_t count, instances;
+    D3D11_VIEWPORT vp;
+    D3D11_RECT sc;
+    uint32_t rtW, rtH, dsW, dsH;
+    DXGI_FORMAT rtFmt;
+    bool dsReadOnly;
+    uint32_t vbSet;
+    uint8_t stencilRef;
+    bool cb[2][D11_SNAP_CB];
+    UINT cbFirst[2][D11_SNAP_CB], cbNum[2][D11_SNAP_CB];
+    ID3D11BlendState *blend;
+    ID3D11DepthStencilState *ds;
+    ID3D11RasterizerState *rs;
+    D3D11_PRIMITIVE_TOPOLOGY topo;
+    bool ps, il;
+    uint32_t bindingMask;
+} D11DrawSnap;
+
+static D11DrawSnap s_snap;
+static char s_snapText[1024];
+
+static void d11_snap(const D11CommandList *c, const D11Pipeline *p, bool indexed, uint32_t count,
+                     uint32_t instances)
+{
+    s_snap.index = g_d11.counts.draws + 1u;
+    s_snap.indexed = indexed;
+    s_snap.count = count;
+    s_snap.instances = instances;
+    s_snap.vp = c->st.vp;
+    s_snap.sc = c->st.sc;
+    s_snap.rtW = c->st.rtW;
+    s_snap.rtH = c->st.rtH;
+    s_snap.dsW = c->st.dsW;
+    s_snap.dsH = c->st.dsH;
+    s_snap.rtFmt = c->st.rtFmt;
+    s_snap.dsReadOnly = c->st.dsReadOnly;
+    s_snap.vbSet = c->st.vbSet;
+    s_snap.stencilRef = c->st.stencilRef;
+    for (uint32_t st = 0; st < 2; st++) {
+        for (uint32_t i = 0; i < D11_SNAP_CB; i++) {
+            s_snap.cb[st][i] = c->st.cbSet[st][i] != NULL;
+            s_snap.cbFirst[st][i] = c->st.cbFirst[st][i];
+            s_snap.cbNum[st][i] = c->st.cbNum[st][i];
+        }
+    }
+    s_snap.blend = p->blend;
+    s_snap.ds = p->ds;
+    s_snap.rs = p->rs;
+    s_snap.topo = p->topo;
+    s_snap.ps = p->ps != NULL;
+    s_snap.il = p->il != NULL;
+    s_snap.bindingMask = p->bindingMask;
+}
+
+/* "b0 32@0 b1 16@4096" for a stage's bound windows (constants: count@first) */
+static void d11_cb_text(const D11DrawSnap *sn, uint32_t stage, char *out, size_t n)
+{
+    size_t k = 0;
+    out[0] = '\0';
+    for (uint32_t i = 0; i < D11_SNAP_CB && k + 1 < n; i++) {
+        if (!sn->cb[stage][i]) {
+            continue;
+        }
+        const int w = snprintf(out + k, n - k, "%sb%u %u@%u", k ? " " : "", i, sn->cbNum[stage][i],
+                               sn->cbFirst[stage][i]);
+        if (w < 0 || (size_t)w >= n - k) {
+            break;
+        }
+        k += (size_t)w;
+    }
+    if (!out[0]) {
+        snprintf(out, n, "none");
+    }
+}
+
+const char *d11_last_draw_text(void)
+{
+    /* none yet, or one from before an rhi_shutdown (its state objects are
+     * gone; the count started again at rhi_init) */
+    if (!s_snap.index || !g_d11.initialised || s_snap.index > g_d11.counts.draws) {
+        return NULL;
+    }
+    const D11DrawSnap *st = &s_snap;
+    D3D11_BLEND_DESC bd;
+    D3D11_DEPTH_STENCIL_DESC dd;
+    D3D11_RASTERIZER_DESC rd;
+    memset(&bd, 0, sizeof(bd));
+    memset(&dd, 0, sizeof(dd));
+    memset(&rd, 0, sizeof(rd));
+    if (s_snap.blend) {
+        ID3D11BlendState_GetDesc(s_snap.blend, &bd);
+    }
+    if (s_snap.ds) {
+        ID3D11DepthStencilState_GetDesc(s_snap.ds, &dd);
+    }
+    if (s_snap.rs) {
+        ID3D11RasterizerState_GetDesc(s_snap.rs, &rd);
+    }
+    const D3D11_RENDER_TARGET_BLEND_DESC *b0 = &bd.RenderTarget[0];
+    char vsCb[160], psCb[160];
+    d11_cb_text(st, RHI_STAGE_VERTEX, vsCb, sizeof(vsCb));
+    d11_cb_text(st, RHI_STAGE_FRAGMENT, psCb, sizeof(psCb));
+    snprintf(
+        s_snapText, sizeof(s_snapText),
+        "draw %llu (%s, %u x %u): viewport %g,%g %gx%g depth %g..%g; scissor %ld,%ld..%ld,%ld; "
+        "target %ux%u format %d, depth %ux%u%s; topology %d, pixel shader %s, input layout %s "
+        "(vertex buffers 0x%x bound 0x%x); blend %s %d/%d op %d, mask 0x%x; depth %s write %d "
+        "func %d, stencil %s ref %u; cull %d, scissor test %s, depth clip %s; constants "
+        "vertex %s, pixel %s; feature level %s, constant buffer offsets yes, partial updates "
+        "%s, command lists %s",
+        (unsigned long long)s_snap.index, s_snap.indexed ? "indexed" : "plain", s_snap.count,
+        s_snap.instances, (double)st->vp.TopLeftX, (double)st->vp.TopLeftY, (double)st->vp.Width,
+        (double)st->vp.Height, (double)st->vp.MinDepth, (double)st->vp.MaxDepth, (long)st->sc.left,
+        (long)st->sc.top, (long)st->sc.right, (long)st->sc.bottom, st->rtW, st->rtH, (int)st->rtFmt,
+        st->dsW, st->dsH, st->dsReadOnly ? " read-only" : "", (int)s_snap.topo,
+        s_snap.ps ? "yes" : "none", s_snap.il ? "yes" : "none", s_snap.bindingMask, st->vbSet,
+        b0->BlendEnable ? "on" : "off", (int)b0->SrcBlend, (int)b0->DestBlend, (int)b0->BlendOp,
+        (unsigned)b0->RenderTargetWriteMask, dd.DepthEnable ? "on" : "off", (int)dd.DepthWriteMask,
+        (int)dd.DepthFunc, dd.StencilEnable ? "on" : "off", (unsigned)st->stencilRef,
+        (int)rd.CullMode, rd.ScissorEnable ? "on" : "off", rd.DepthClipEnable ? "on" : "off", vsCb,
+        psCb,
+        g_d11.featureLevel == D3D_FEATURE_LEVEL_11_1   ? "11_1"
+        : g_d11.featureLevel == D3D_FEATURE_LEVEL_11_0 ? "11_0"
+                                                       : "other",
+        g_d11.cbPartialUpdate ? "yes" : "no",
+        g_d11.driverCommandLists ? "by the driver" : "emulated by the runtime");
+    return s_snapText;
+}
+
 void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
                   uint32_t instanceCount)
 {
@@ -550,6 +758,7 @@ void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
     }
     const uint32_t inst = instanceCount ? instanceCount : 1u;
     d11_flush_vertex_buffers(c, p, false, firstVertex, vertexCount, inst);
+    d11_snap(c, p, false, vertexCount, inst);
     ID3D11DeviceContext_DrawInstanced(c->ctx, vertexCount, inst, firstVertex, 0);
     g_d11.counts.draws++;
 }
@@ -569,6 +778,7 @@ void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t first
         const uint64_t lo = c->st.ibOffset + (uint64_t)firstIndex * is;
         d11_cmd_touch(c, c->st.ib, D11_PART_VI, lo, lo + (uint64_t)indexCount * is);
     }
+    d11_snap(c, p, true, indexCount, inst);
     ID3D11DeviceContext_DrawIndexedInstanced(c->ctx, indexCount, inst, firstIndex, vertexOffset, 0);
     g_d11.counts.draws++;
 }
