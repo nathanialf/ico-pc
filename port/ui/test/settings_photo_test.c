@@ -673,6 +673,25 @@ static int render(void)
     }
     frame(0);
     snap("settings_main.png");
+    /* the window scrolled: nine Downs from the first row (on a disc whose
+       Main page has more rows than the window's slots, the rows above out
+       of view and the up mark shown) */
+    {
+        int labels[24], off = -1, shown = 0;
+        ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 24);
+        lt_ext_layout(mainL)->curItem = labels[0];
+        frame(0);
+        for (int i = 0; i < 9; i++) {
+            press(LT_PAD_DOWN);
+        }
+        frame(0);
+        const int win = ui_settings_page_scroll(UI_PAGE_MAIN, &shown, &off, NULL);
+        CHECK(win == (shown > WIN_SLOTS) && (win == 0 || off > 0),
+              "Main after nine Downs: the window %s (%d rows, offset %d)",
+              win ? "scrolled" : "not needed", shown, off);
+        checkPageFits(UI_PAGE_MAIN, "Main scrolled (render)");
+        snap("settings_main_scrolled.png");
+    }
 
     /* each page by the main page's row that opens it (mainLink: the rows
        move when one is added, as the Graphics link after Effects did) */
