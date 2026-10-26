@@ -198,6 +198,10 @@
  *             every camera it stays dropped; the tick's own picture (alpha
  *             1) carries neither, alpha 0 (the tick before's camera, a
  *             present between the ticks) both
+ *   bars      the same fading screen sprite under another key in each tick
+ *             (the load screen's bars at a change of layout) is drawn once,
+ *             whole; other geometry or state still cross-fades
+ *             (rd_interp_bars_test.inc)
  */
 #include <math.h>
 #include <stdio.h>
@@ -2538,12 +2542,14 @@ static void volume(int x0, RdKey key)
  * volumes KS then KT; cur: KM, a fading KN, an opaque KR, volumes KS, KU */
 static void recordUnmatched(int second)
 {
-    static const uint8_t grey[4] = {90, 90, 90, 0x80};
+    static const uint8_t grey[4] = {90, 90, 90, 0x80}, grey2[4] = {60, 60, 60, 0x80};
     rd_begin_frame();
     frameHead();
     sprite(second ? 4 : 0, 0, (second ? 4 : 0) + 10, 10, grey, RD_KEY(&kObjU, 0, 0)); /* KM */
     rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
-    sprite(20, 0, 30, 10, grey, RD_KEY(&kObjU, second ? 2 : 1, 0)); /* KN / KP: fade */
+    /* KN another grey than KP: the same sprite under another key would pair
+     * (rd_interp.c pairSame, rd_interp_bars_test.inc) */
+    sprite(20, 0, 30, 10, second ? grey2 : grey, RD_KEY(&kObjU, second ? 2 : 1, 0)); /* KN / KP */
     rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
     sprite(40, 0, 50, 10, grey, RD_KEY(&kObjU, second ? 4 : 3, 0)); /* KR / KQ: opaque */
     rd_select_list(3);
@@ -2624,6 +2630,8 @@ static void testUnmatched(void)
     const RdScreenVtx *m = screenVtx(f, findKey(f, 0, kM, 0));
     CHECK(m && m[0].x == OX + 2 * 16, "the matched sprite blends as before");
 }
+
+#include "rd_interp_bars_test.inc"
 
 /* two emitters' batches (2 and 3 particles) in list 6, keyed by emitter as
  * MicroCode.c keys prim_DispParticle's (RD_KEY(emitter, 18, 0)); with
@@ -5817,6 +5825,7 @@ static void runCpu(void)
     testDeferredText();
     testMorph();
     testUnmatched();
+    testBars();
     testParticleOrder();
     testLightTurn();
     testMorphLimits();
