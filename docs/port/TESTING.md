@@ -567,7 +567,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   near each other in depth, so the cracks hold the plane's depth and colour and are filled the
   same (the discontinuity form) while the slit keeps the plane;
   at 1x, under Original, under MSAA4 and with `ICO_RD_CRACK_FILL=0` (`rd_crack_1x`,
-  `rd_crack_original`, `rd_crack_msaa`, `rd_crack_off`) no fill pass and the same bytes; under
+  `rd_crack_original`, `rd_crack_msaa`, `rd_crack_off`) no fill pass and the same bytes (under
+  MSAA4 the frame has no shadow, so the epoch is still open at the fog and the skip line says so); under
   MSAA4 the frame is replayed again without anti-aliasing and the filler: along the edge the
   MSAA4 picture holds at most 5 % of its texels with the clear's depth (colours without a depth
   readback) and the slit keeps the clear's fog on every texel; the same
@@ -586,7 +587,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   Each run's `rd: crack fill:` state line is matched (`-DEXPECT`, `-DEXPECT2`; `-DDENY` must not
   match); `rd_replay_tool_crack` runs the tool on `rd_pixel`'s dump with `--enhanced --resolution
   2x --stats --no-crack-fill` and matches `crack fill: off (the replay tool's --no-crack-fill)`
-  and the `stats: crack fill off: 0 passes, 0 pixels filled` line.
+  and the `stats: crack fill off: 0 passes, 0 pixels filled` line. `rd_crack_resolved_msaa2` and
+  `rd_crack_resolved_msaa4` run the tool on the corpus room `lightning/rd-00300.rddump`
+  (machine-local under `build-host/tmp/corpus/dumps/`, SKIP without it) with `--enhanced
+  --resolution 2x --aa msaa2|msaa4 --stats`: its MSAA epoch closes at the shadow count's pass in
+  list 3, before the fog, so the filler draws on the resolved picture: the state line ends `(drawn
+  after the MSAA resolve)`, the stats line reads `crack fill on: 1 passes, M pixels filled` with M
+  above 0, no replay left unfilled and `1 fills after the MSAA resolve`, and no `not drawn` line
+  (`-DNEED_FILE`: SKIP without the dump; `-DNEED=rd: msaa: N samples`: SKIP where the device does
+  not offer the count, which it then draws as off: lavapipe offers 4 only)
+  ([MSAA.md](MSAA.md#the-crack-filler-after-the-resolve)).
 - `rd_crt_test.c`: the CRT filter's options and its shader (`rd_crt`, `rd_crt_fixed`).
 - `rd_debug_test.c`: `debug.c` on the host, recorded (`rd_debug`); with the Game variants' bind
   (`debug_VariableInit` hands `ico_variants_bind_debug` the five switches and `debug_MenuOpen`)
