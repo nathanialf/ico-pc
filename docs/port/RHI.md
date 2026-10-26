@@ -679,8 +679,11 @@ and whether the device runs on WARP.
 
 The Direct3D 11 backend (`port/rhi/d3d11/`, prefix `d3d11`, `rhi_backend_d3d11`) is for cards and
 drivers that have neither Vulkan nor Direct3D 12. It compiles in the `win-x64` and `win-x64-clang`
-cross builds; it has not run on any Windows machine, so everything below is the design as written,
-not behaviour anyone has seen. `port/rhi/d3d11/d3d11_internal.h` holds the shared state and states
+cross builds. Until v0.9.2 it had run on no machine (issue 126: on a GTX 750 Ti at feature level
+11_0 both start-up self-tests read back their cleared target and the screen stayed black); since
+v0.9.2 CI's `windows` job runs the renderer's tests on it through WARP, Microsoft's software
+adapter ([TESTING.md](TESTING.md#the-render-suite-on-direct3d-11-warp)), so what follows is the
+design as written until that job's logs say otherwise. `port/rhi/d3d11/d3d11_internal.h` holds the shared state and states
 which file provides what.
 
 **Device** (`port/rhi/d3d11/d3d11_device.c`). `d3d11.dll` and `dxgi.dll` are loaded at run time and
@@ -802,7 +805,11 @@ shaders and the three state objects, the blend constant and stencil reference wi
 with the new value. At a draw each dirty bind group of the pipeline's layouts binds its entries to
 their own registers in the stages the slot names (both when it names none): uniforms as constant
 buffer windows (`VSSetConstantBuffers1`/`PSSetConstantBuffers1`, first constant = (offset +
-dynamic offset) / 16, the window whole 256-byte blocks), storage buffers and textures as SRVs,
+dynamic offset) / 16, the window whole 256-byte blocks; `d11_set_cb`: a window equal to the one the
+register holds is not set again, and the same buffer with another window is unbound first, the
+workaround Microsoft documents in the `VSSetConstantBuffers1` remarks for a runtime that drops a
+call naming the bound buffer with only its offset or size changed; every draw's uniforms are
+windows of the one ring buffer), storage buffers and textures as SRVs,
 samplers (the point/clamp default for an empty slot); the destination read's storage texture is
 never bound (`rov` false). `rhi_cmd_set_depth_state` and `rhi_cmd_set_blend_state` log once and do
 nothing (`dynamicDepth`/`dynamicBlend` false). Every range a list reads from an upload buffer is
@@ -825,6 +832,23 @@ readback buffer through its staging texture and is skipped otherwise
 the fog paths (`rd_fog_path.c`: the buffer path's depth copy, the fog probe and the edge probe),
 all gated off on Direct3D 11, and `rd_crack_fill.c`'s count copy, which goes into a readback
 buffer and so is served).
+
+A pass whose colour target and depth target differ in size logs `rhi_d3d11: render pass: colour
+target WxH with a depth target WxH: Direct3D 11 binds a depth-stencil view only with targets of its
+size (the first 8 reported)`: Vulkan and D3D12 draw where both are, while Direct3D 11's
+`OMSetRenderTargets` refuses a depth-stencil view whose dimensions are not the targets' (the debug
+layer names it), which would leave the pass with no target; the line is a diagnostic, nothing
+changes. Each draw keeps a copy of its state (viewport, scissor, target and depth sizes and format,
+topology, whether a pixel shader and an input layout are bound, the vertex buffers, the b0..b3
+windows per stage, the pipeline's state objects), made into one line only when asked:
+`RhiStats.lastDrawText` (a function, NULL on the other backends), which the blend and fog
+self-tests append when they fail (`rd: blend: self-test failed on Direct3D 11; its last draw:
+draw N (plain|indexed, V x I): viewport x,y wxh depth a..b; scissor l,t..r,b; target WxH format F,
+depth WxH[ read-only]; topology T, pixel shader yes|none, input layout yes|none (vertex buffers
+0x.. bound 0x..); blend on|off S/D op O, mask 0x.; depth on|off write W func F, stencil on|off ref
+R; cull C, scissor test on|off, depth clip on|off; constants vertex b0 N@F ..., pixel ...; feature
+level 11_1|11_0, constant buffer offsets yes, partial updates yes|no, command lists by the
+driver|emulated by the runtime`, and the same after `rd: fog: self-test failed on Direct3D 11`).
 
 **Swapchain** (`d3d11_swapchain.c`). As D3D12's (three BGRA8 buffers, the frame latency waitable
 object, tearing without vsync, the frame statistics, the resize at a present after the window's
@@ -864,8 +888,11 @@ the uploads at submit, `UpdateSubresource1` with a box on a deferred context of 
 records command lists itself and the texture-and-copy route where it does not,
 `CopySubresourceRegion` into a constant buffer part of a device buffer, FXC's acceptance of every
 game entry under `vs_5_0`/`ps_5_0`, the input layouts against FXC's input signatures, the
-flip-model resize, the first `rhi_init` on a real card and on WARP. `rhi_d3d11_test.exe` (below,
-[Tests](#tests)) is the first thing to run on a Windows machine.
+flip-model resize, the first `rhi_init` on a real card. CI's `windows` job (WARP, the debug layer
+where the runner can add it) is the first evidence on any of these; its logs are the artifact
+`d3d11-warp-logs`. On a Windows machine, `rhi_d3d11_test.exe` (below, [Tests](#tests)) is the first
+thing to run, and the game with `ICO_D3D11_DEBUG=1` once the Graphics Tools optional feature is
+installed (the debug layer's first error goes to the log).
 
 **Test extras** (`port/rhi/d3d11/rhi_d3d11.h`): the debug layer's error count, whether it is active,
 whether the device runs on WARP, and the feature level.
@@ -1265,7 +1292,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 | `rhi_d3d11_shader_plan_test.c` | `d3d11_shader.c`'s portable part on every host: the macros text, the include lookup, the flat-register rule over the game's sources and `rhi_test_hlsl.h` (checked against `rhi_test.hlsl`), the cache key over every table entry, the cache file's round trip and the corrupt files it refuses, the failure log's limit; ctest `rhi_d3d11_shader_plan` |
 | `rhi_gl_test.c` | the common cells on OpenGL with the driver's debug output failing the run, the copies the cells do not make (a colour region into a vertex-read device buffer and on into a readback buffer, a D32F_S8 depth as floats, RGBA32_UINT words, each at a wider row pitch; a target made after one whose framebuffer was dropped), and six swapchain frames on SDL's offscreen driver with a resize; ctest `rhi_gl`, and `rhi_gl_nodual` under `ICO_GL_FAKE_NO_DUAL=1`, both on llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `SDL_VIDEO_DRIVER=offscreen`), skipped without a context |
 | `rhi_d3d12_test.c` | Windows, double-clickable: the cells on WARP, on the hardware adapter, the swapchain on a hidden window, then Vulkan for comparison; writes `rhi_d3d12_test.log` and shows a message box (`--console` for ctest); ctest `rhi_d3d12` |
-| `rhi_d3d11_test.c` | Windows, double-clickable, as `rhi_d3d12_test.c` on Direct3D 11 (the cells' shaders compiled at run time from `rhi_test_hlsl.h` through a one-source table; the destination-read cell skipped by the limits); writes `rhi_d3d11_test.log`; ctest `rhi_d3d11` on a native Windows build only. Built, not run: nothing has run it yet |
+| `rhi_d3d11_test.c` | Windows, double-clickable, as `rhi_d3d12_test.c` on Direct3D 11 (the cells' shaders compiled at run time from `rhi_test_hlsl.h` through a one-source table; the destination-read cell skipped by the limits); writes `rhi_d3d11_test.log`; ctest `rhi_d3d11` on a native Windows build only; CI's `windows` job runs it with `--console` (WARP; the hardware and Vulkan sections skip on the runner) |
 | `compare_backends.cmd`, `compare_png.ps1` | Windows: every dump in `dumps\` rendered by `rd_replay_tool` on both backends, DISPLAY and the presented picture, each pair compared texel by texel and passing within 1 LSB (DISPLAY is expected identical) |
 | `shaders/rhi_test.hlsl`, `gen_shaders.sh` | the tests' shaders, committed as `rhi_test_spv.h` and `rhi_test_dxil.h` so the tests build without DXC, and as `rhi_test_hlsl.h` (the text as a C string, its registers flat under `ICO_D3D11`) for a run-time compile |
 
