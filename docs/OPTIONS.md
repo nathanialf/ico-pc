@@ -294,7 +294,10 @@ A change takes effect the next time you start the game.
 - **Volume, Music volume and Effects volume** set how loud everything is.
 - **Sound output** is Auto, Stereo or Mono. Auto is the normal choice: it
   follows the sound setting of your memory card, as the PS2 did, and the row
-  shows which one is in use, for example **Auto (Stereo)**.
+  shows which one is in use, for example **Auto (Stereo)**. Stereo and Mono
+  override the card for the game, but they do not change what Auto shows or
+  what the game saves to the memory card: that stays the card's own setting,
+  which you change on the game's own Options screen.
 - **Output device** picks the speakers or headphones to use. The default is
   your system's choice.
 
