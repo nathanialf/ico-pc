@@ -216,16 +216,24 @@ void rd__scene_border_arm(const Replay *r);
  * recorded sprite reading the accumulator with FIX'; false when Smooth is
  * not in force for this replay (the sprite is then drawn as recorded) */
 bool rd__blur_smooth_sprite(Replay *r, const RdFrame *f, const RdCmd *c);
+
 /* rd_crack_fill.c: the crack filler (rd_internal.h rd__crack_fill_*), from
  * doFog before the fog reads the depth (after the pass before the fog
  * ended, but on the local read): tc the fog's colour target, tz its
  * depth's (the filler draws when they are SCENE both), copy the fog's depth
  * copy object (filled here with SCENE's depth before the fill, as the copy
- * path fills it), msaa an MSAA epoch open or asked for this replay (not
- * drawn then), local the fog draws by the local read (fogLocalFor): the
+ * path fills it), msaa the MSAA epoch at the fog (RD_CRACK_MSAA_*: open,
+ * not drawn then; closed this replay, drawn on the resolved picture; or
+ * neither), local the fog draws by the local read (fogLocalFor): the
  * fill is drawn in a pass begun with the depth readable and left open, the
  * one the fog keeps */
-void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCopy *copy, bool msaa,
+enum {
+    RD_CRACK_MSAA_NONE,     /* no MSAA, or the epoch not opened yet: single-sampled */
+    RD_CRACK_MSAA_OPEN,     /* the epoch open at the fog (per-sample fog): not drawn */
+    RD_CRACK_MSAA_RESOLVED, /* the epoch closed before the fog (msaaEnd's resolve) */
+};
+
+void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCopy *copy, int msaa,
                     bool local);
 /* the target's passes readable for the exact blend's attachment read (exactReadable) */
 bool rd__replay_exact_readable(uint32_t target);
