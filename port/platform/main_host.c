@@ -1770,14 +1770,14 @@ static int open_window(void)
 #ifdef ICO_ANDROID_UI
         ico_host_fatal(log_file(),
                        "Could not start the game's graphics.\n"
-                       "ICO needs a device whose graphics support Vulkan 1.2 (most "
-                       "phones and tablets from 2022 on). Install the latest system "
+                       "ICO needs a device whose graphics support Vulkan 1.1 or later (nearly "
+                       "every phone and tablet of the last years). Install the latest system "
                        "update and try again; the log says why.%s",
                        more);
 #else
         ico_host_fatal(log_file(),
                        "Could not open the game window.\n"
-                       "The game needs a graphics driver with Vulkan 1.2 or later. "
+                       "The game needs a graphics driver with Vulkan 1.1 or later. "
                        "Update your graphics driver and try again; the log says "
                        "why.%s",
                        more);
