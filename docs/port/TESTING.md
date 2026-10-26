@@ -408,6 +408,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `hotkeys_test.c`: F12, Shift+F12 and F11, repeats ignored, no other key taken (`hotkeys`).
 - `ios_chain_test.c`: the game's thread, message and memory layer on the fiber scheduler under
   simulated vsyncs (`ios_chain`).
+- `inflate_test.c`: the game's inflate (`fumi/ios/inflate.c`) over its allocator and code-table
+  blocks (`memory.c`, `mblock.c`) on the arena (issue 151): a stream of one fixed-code deflate
+  block, and one of a dynamic, an empty stored and a fixed-code block, inflate byte for byte and
+  close without an `IOSFREE()` assert, the fixed-only one leaving 0 bytes in use; a pointer 8 bytes
+  into a block asserts with the line naming the block's allocation (`inflate`). On the discs, the
+  packs that hold a fixed-code block inflate to their end with their member count and close
+  cleanly: the Asian disc's `STGST13C.DF` (stage 4) and `STGST02A.DF`, the Korean disc's
+  `STGSTAFF1.DF`, the August 2001 preview's `STGST13C.DF` (`inflate_disc_cn`,
+  `inflate_disc_cn_st02a`, `inflate_disc_kor`, `inflate_disc_aug6`; skipped without the image).
 - `lifecycle_test.c`: the mobile lifecycle's step tables on fake operations (`lifecycle`).
 - `memory_test.c`: the game's allocator over the arena, [partitions](ARCHITECTURE.md#terms) at the
   EE's offsets (`memory`).
