@@ -2153,6 +2153,9 @@ typedef struct RdPerfPassAgg {
     uint64_t small;        /* of them, under 0.05 ms on the GPU */
     uint64_t dropped;      /* pieces whose entry found no room (in passes only) */
     double gpuMs, smallMs; /* the pieces' GPU time, and the small ones' */
+    /* the pieces with a busy time (OpenGL): their busy time and their GPU
+       time (the span between the same stamps) */
+    double busyMs, busySpanMs;
     RdPerfPassAggEntry e[RD_PERF_PASS_AGG_MAX];
 } RdPerfPassAgg;
 
@@ -2162,8 +2165,9 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n);
  * 10 draws 1.21 ms, ... (5 of 47.0 passes a replay, 16 timed replays;
  * passes under 0.05 ms: 31.0 a replay, 0.62 ms)": the top entries by GPU
  * time, per timed replay ("N passes" only where an entry is not one pass a
- * replay; "4.12 ms (busy 1.30)" where its pieces had a busy time, OpenGL);
- * the length of the text in buf (cut to fit n) */
+ * replay; "4.12 ms (busy 1.30)" where its pieces had a busy time, OpenGL,
+ * and the trailer then ends "; GPU busy 9.10 ms, span 30.20 ms a timed
+ * replay"); the length of the text in buf (cut to fit n) */
 int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_t n);
 /* "47.0: render passes 32.0 (lists 9.0, fog 1.0, glow 17.0, ...), DATE
  * snapshot 1.5, ...": RdPerfRecord.passKinds and passEffects summed over

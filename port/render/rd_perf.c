@@ -770,6 +770,8 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
         if (q->busyValid) {
             e->busyMs += (double)q->gpuBusyUs / 1e3;
             e->busyN++;
+            a->busyMs += (double)q->gpuBusyUs / 1e3;
+            a->busySpanMs += ms;
         }
     }
 }
@@ -819,10 +821,18 @@ int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_
         at += (size_t)w;
     }
     if (at + 1 < n) {
+        /* OpenGL: the timed replays' busy time beside the span of the same
+           pieces (the span also counts the GPU's waits for the CPU) */
+        char busy[80] = "";
+        if (a->busySpanMs > 0.0) {
+            snprintf(busy, sizeof(busy), "; GPU busy %.2f ms, span %.2f ms a timed replay",
+                     a->busyMs / r, a->busySpanMs / r);
+        }
         snprintf(buf + at, n - at,
                  " (%u of %.1f passes a replay, %u timed replays; passes under 0.05 ms: %.1f a "
-                 "replay, %.2f ms)",
-                 shown, (double)a->passes / r, a->replays, (double)a->small / r, a->smallMs / r);
+                 "replay, %.2f ms%s)",
+                 shown, (double)a->passes / r, a->replays, (double)a->small / r, a->smallMs / r,
+                 busy);
     }
     return (int)strlen(buf);
 }

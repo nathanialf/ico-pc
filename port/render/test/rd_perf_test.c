@@ -716,7 +716,8 @@ static void checkPassTexts(void)
     rd_perf_pass_agg_add(&agg, busy, 4);
     rd_perf_pass_agg_text(&agg, 1, buf, sizeof(buf));
     CHECK(strcmp(buf, "list 0 SCENE 848x448 420 draws 4.12 ms (busy 1.30) (1 of 4.0 passes a "
-                      "replay, 1 timed replays; passes under 0.05 ms: 2.0 a replay, 0.07 ms)") == 0,
+                      "replay, 1 timed replays; passes under 0.05 ms: 2.0 a replay, 0.07 ms; GPU "
+                      "busy 1.30 ms, span 4.12 ms a timed replay)") == 0,
           "top passes with a busy time: %s", buf);
     rd_perf_pass_agg_reset(&agg);
     rd_perf_pass_agg_add(&agg, p, 4);
