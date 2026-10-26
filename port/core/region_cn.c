@@ -48,9 +48,12 @@ const IcoRegionInfo ico_region_info_cn = {
     .has_50hz_row = 0,      /* NTSC only: no 50 Hz branches (docs/TARGETS.md) */
     .has_game_language = 0, /* kanbanBootMcCheck has no language step; jimaku.c
                                no per-language subtitles */
-    /* has_hold_film_players: the Korean program's la_game_option: choiceItem_kor,
-       screenModeItem_kor */
-    .has_hold_film_players = 1,
+    /* has_film_players: the Korean program's la_game_option: screenModeItem_kor,
+       choiceItem_kor + 2 */
+    .has_film_players = 1,
+    /* hold_type_own: A (the Korean program's: the shared _ACTCommonMailTest
+       arm, optionControlType 0 at boot) */
+    .hold_type_own = 0,
     .ui_lang_default = 7, /* UI_LANG_ZH: the port's text Traditional Chinese, as the disc's */
     .menu_sheet = 7,      /* UI_SHEET_ZH: Tex_menu01's Traditional Chinese sheets */
     .fixed_60hz = 1,      /* NTSC only: systemStatus starts 0, 60 Hz (a 30 Hz Main tick) */

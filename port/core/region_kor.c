@@ -39,9 +39,12 @@ const IcoRegionInfo ico_region_info_kor = {
     .has_50hz_row = 0,      /* NTSC only: no 50 Hz branches (docs/TARGETS.md) */
     .has_game_language = 0, /* kanbanBootMcCheck has no language step; jimaku.c
                                no per-language subtitles */
-    /* has_hold_film_players: la_game_option: choiceItem_kor, screenModeItem_kor,
+    /* has_film_players: la_game_option: screenModeItem_kor, choiceItem_kor + 2,
        screenModeAnim_jpn (film_noise) */
-    .has_hold_film_players = 1,
+    .has_film_players = 1,
+    /* hold_type_own: A (the shared _ACTCommonMailTest arm: optionControlType
+       0 lets go when R1 is up; main.c optionControlType 0 at boot) */
+    .hold_type_own = 0,
     .ui_lang_default = 6, /* UI_LANG_KO: the port's text Korean, as the disc's */
     .menu_sheet = 6,      /* UI_SHEET_KO: Tex_menu01's Korean sheets */
     .fixed_60hz = 1,      /* NTSC only: systemStatus starts 0, 60 Hz (a 30 Hz Main tick) */

@@ -56,9 +56,11 @@ const IcoRegionInfo ico_region_info_aug6 = {
                                word 0 (no 50 Hz video mode) */
     .has_game_language = 0, /* kanbanBoot.c sets no NonLinearCameraMove (PAL's language
                                step and texFile's cameraMove are not in it) */
-    /* has_hold_film_players: as the North American disc (la_game_option_ntscaug6,
-       _ACTCommonMailTest_aug6, reel_row -1) */
-    .has_hold_film_players = 0,
+    /* has_film_players: as the North American disc (la_game_option_ntscaug6,
+       reel_row -1, subGirlControl_aug6) */
+    .has_film_players = 0,
+    /* hold_type_own: B, the toggle (_ACTCommonMailTest_aug6: pad.trg & 8) */
+    .hold_type_own = 1,
     .ui_lang_default = 0, /* UI_LANG_EN: the disc's text is English */
     .menu_sheet = 0,      /* UI_LANG_EN: the disc's Tex_menu01 sheets are lettered in
                                English; their own ink is not measured (menu_font.c

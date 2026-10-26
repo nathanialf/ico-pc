@@ -32,9 +32,12 @@ const IcoRegionInfo ico_region_info_jpn = {
     .has_50hz_row = 0,      /* NTSC only: no 50 Hz branches (docs/TARGETS.md) */
     .has_game_language = 0, /* kanbanBootMcCheck has no language step; jimaku.c
                                no per-language subtitles */
-    /* has_hold_film_players: la_game_option: choiceItem_jpn, screenModeItem_jpn,
+    /* has_film_players: la_game_option: screenModeItem_jpn, choiceItem_jpn + 2,
        screenModeAnim_jpn (film_noise) */
-    .has_hold_film_players = 1,
+    .has_film_players = 1,
+    /* hold_type_own: A (the shared _ACTCommonMailTest arm: optionControlType
+       0 lets go when R1 is up; main.c optionControlType 0 at boot) */
+    .hold_type_own = 0,
     .ui_lang_default = 5, /* UI_LANG_JA: the port's text Japanese, as the disc's */
     .menu_sheet = 5,      /* UI_SHEET_JA: Tex_menu01's Japanese sheets */
     .fixed_60hz = 1,      /* NTSC only: systemStatus starts 0, 60 Hz (a 30 Hz Main tick) */

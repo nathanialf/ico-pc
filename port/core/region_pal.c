@@ -24,9 +24,12 @@ const IcoRegionInfo ico_region_info_pal = {
 
     .has_50hz_row = 1,
     .has_game_language = 1,
-    /* has_hold_film_players: la_game_option: choiceItem_pal, screenModeItem_pal,
+    /* has_film_players: la_game_option: screenModeItem_pal, choiceItem_pal + 2,
        screenModeAnim_pal (film_noise_l1..l4) */
-    .has_hold_film_players = 1,
+    .has_film_players = 1,
+    /* hold_type_own: A, the game's own (_ACTCommonMailTest: optionControlType
+       0 lets go when R1 is up; main.c optionControlType 0 at boot) */
+    .hold_type_own = 0,
     .ui_lang_default = -1, /* Auto: the game's language (NonLinearCameraMove) */
     .menu_sheet = -1,      /* the game's language's sheets, one of the five */
     .fixed_60hz = 0,       /* systemStatus[0] from the boot's video mode (gamestate.c:359-367) */

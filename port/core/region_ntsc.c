@@ -40,10 +40,13 @@ const IcoRegionInfo ico_region_info_ntsc = {
     .has_50hz_row = 0,      /* NTSC only: no 50 Hz branches */
     .has_game_language = 0, /* kanbanBoot.c sets no NonLinearCameraMove (PAL's language
                                step and texFile's cameraMove are not in it) */
-    /* has_hold_film_players: la_game_option_ntscaug6: Sound output, Vibration; the hand always
-       the toggle (_ACTCommonMailTest_ntsc pad.trg & 8); no film_noise
-       (reel_row -1); setNext ignores girlControlMode */
-    .has_hold_film_players = 0,
+    /* has_film_players: la_game_option_ntscaug6: Sound output, Vibration; no
+       film_noise (reel_row -1); no second-pad Yorda (subGirlControl_ntsc reads
+       Yorda's pad only as the debug target; no _ntsc arm reads girlControlMode) */
+    .has_film_players = 0,
+    /* hold_type_own: B, the toggle (_ACTCommonMailTest_ntsc lets go on
+       pad.trg & 8 alone; the game has no Hold type of its own) */
+    .hold_type_own = 1,
     .ui_lang_default = 0, /* UI_LANG_EN: the disc's text is English */
     .menu_sheet = 0,      /* UI_LANG_EN: the disc's Tex_menu01 sheets are lettered in
                                English; their own ink is not measured (menu_font.c
