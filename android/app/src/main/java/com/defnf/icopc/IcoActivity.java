@@ -344,6 +344,24 @@ public class IcoActivity extends SDLActivity {
         }
     }
 
+    // The activity came back to the front: counted on the native side
+    // (host_android.c nativeResumed), so a picker that closes without any
+    // answer still ends the wait (issue 135). A missing native method is
+    // ignored.
+    private static native void nativeResumed();
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (!SDLActivity.mBrokenLibraries) {
+            try {
+                nativeResumed();
+            } catch (UnsatisfiedLinkError e) {
+                // libmain.so without the method: the timeout ends the wait
+            }
+        }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode != PICK_REQUEST) {
@@ -370,6 +388,12 @@ public class IcoActivity extends SDLActivity {
         if (SDLActivity.mBrokenLibraries) {
             return;
         }
+        pickNote("pick " + sPickGen + ": onActivityResult resultCode " + resultCode
+                + (resultCode == RESULT_OK ? " (OK)" : resultCode == RESULT_CANCELED
+                        ? " (CANCELED)" : "")
+                + ", data " + (data == null ? "null" : "present")
+                + ", " + (uri != null ? "a file" : why != null ? "no file: " + why
+                        : "no file"));
         try {
             nativePickDone(sPickGen, uri, why);
         } catch (UnsatisfiedLinkError e) {
