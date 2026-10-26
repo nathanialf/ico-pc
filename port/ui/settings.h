@@ -620,6 +620,44 @@ int ui_settings_page_rows(UiSettingsPage page, int *labels, int *opts, int *valu
 int ui_settings_row_of(UiSettingsPage page, UiSettingsOpt opt);
 /* the note row under a page's option, -1 for none (tests) */
 int ui_settings_note_row_of(UiSettingsPage page, UiSettingsOpt opt);
+
+/* The Options pages' window (settings.c layoutPage): a page's rows sit
+   UI_SETTINGS_WIN_PITCH field lines apart from UI_SETTINGS_WIN_Y0, in at
+   most UI_SETTINGS_WIN_SLOTS slots, the last of them Back's; a page with
+   more rows than that scrolls the rest through the other slots (Back
+   stays in its slot), with a mark above and below the window while rows
+   are out of view.  Each row's box is UI_SETTINGS_ROW_H y units: the last
+   one ends at 36 + 17 * 9 + 36 = 225, inside the layout's 226 lines.
+   UI_SETTINGS_WIN_TIGHT 0 is the other spacing (18 apart from 40, nine
+   slots: Back's box to 220); the tests read the numbers from here.  The
+   model viewer's Characters panel keeps its own spacing and no window. */
+#define UI_SETTINGS_WIN_TIGHT 1
+#if UI_SETTINGS_WIN_TIGHT
+#define UI_SETTINGS_WIN_Y0 36
+#define UI_SETTINGS_WIN_PITCH 17
+#define UI_SETTINGS_WIN_SLOTS 10
+#else
+#define UI_SETTINGS_WIN_Y0 40
+#define UI_SETTINGS_WIN_PITCH 18
+#define UI_SETTINGS_WIN_SLOTS 9
+#endif
+#define UI_SETTINGS_ROW_H 36
+/* A page's window now: *shownByRule the rows the entry and the game's
+   state show (optShown; a row out of the window still counts), *offset
+   the first scrolling row in the window's first slot (an index into the
+   shown rows), *slots the rows in view (Back's included).  Returns 1 while
+   the page scrolls, 0 when every shown row fits, -1 for a page with no
+   option rows (the lists, the touch layout editor).  Any pointer may be
+   NULL (tests). */
+int ui_settings_page_scroll(UiSettingsPage page, int *shownByRule, int *offset, int *slots);
+/* A page's two marks, the rows above and below the window (*up, *down;
+   -1 on a page whose rows always fit).  Returns 1 when the page has them
+   (tests). */
+int ui_settings_page_marks(UiSettingsPage page, int *up, int *down);
+/* Whether the row whose label is `label` shows by its page's rule (the
+   entry, the game's state: optShown), in the window or scrolled out of it;
+   0 for a row of no page (tests). */
+int ui_settings_row_shown(int label);
 /* The value text an option shows now (tests). */
 const char *ui_settings_value_text(UiSettingsOpt opt);
 /* Steps an option by dir (-1 left, +1 right) through its setter, as a
