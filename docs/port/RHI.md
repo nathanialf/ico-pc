@@ -171,7 +171,7 @@ and `carefulPipelines`, why its start-up set is made under the careful policy
 ([RENDER.md](RENDER.md#the-fallback-entries), [RENDER.md](RENDER.md#the-start-up-set))
 (`port/rhi/rhi.h` (`RhiLimits`)).
 
-**Device and swapchain.** `rhi_init` takes an `SDL_Window` (NULL: headless, no swapchain),
+**Device and swapchain.** Each Vulkan swapchain creation that changes the mode, image count or size logs one `rhi_vk: swapchain` line (extent, images asked and got, present mode, surface format and colour space, composite alpha, pre-transform, the window's pixel size, SDL's video driver) and the first also a `rhi_vk: surface formats` line, so a driver-side mismatch reads from a log alone; the device report keeps the latest of the swapchain line. `rhi_init` takes an `SDL_Window` (NULL: headless, no swapchain),
 [vsync](ARCHITECTURE.md#terms), debug layers and the app name. `rhi_device_lost` turns true once the
 device is gone; the backend logs the reason and its [loss report](#device-loss) once and the window
 ends the session.
