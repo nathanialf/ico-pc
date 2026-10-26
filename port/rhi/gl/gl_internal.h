@@ -457,6 +457,10 @@ void gl_release_all_objects(void);
 /* gl_cmd.c: a texture's GL name is about to be deleted (its deferred
  * delete runs): the framebuffers the command code keeps for it go. */
 void gl_fbo_forget_texture(GLuint name);
+/* gl_cmd.c: nothing bound at the binding points the bind groups use is
+ * taken as known (a buffer, texture or sampler is about to be deleted:
+ * OpenGL unbinds it and may hand its name out again). */
+void gl_forget_units(void);
 /* gl_cmd.c: the command state at rhi_init (after the device defaults) and
  * at rhi_shutdown (its cached framebuffers deleted while the context is
  * current). */
