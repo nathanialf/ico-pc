@@ -185,6 +185,13 @@ typedef enum VkrSyncKind { VKR_SYNC_TIMELINE, VKR_SYNC_FENCES } VkrSyncKind;
 
 #define VKR_SYNC_FENCE_RING 8u
 
+/* The render passes of a device without dynamic rendering (core 1.3 or
+ * VK_KHR_dynamic_rendering): classic VkRenderPass objects, which this
+ * build does not have yet.  While it is 0 such a device is unsuitable
+ * (vkr_rate_device, "no dynamic rendering") and ICO_VK_FAKE_API=1.1 keeps
+ * VK_KHR_dynamic_rendering; the render pass path sets it to 1. */
+#define VKR_LEGACY_PASSES 0
+
 /* One vkQueueSubmit through vkr_sync_submit: the command buffers (possibly
  * none), the binary semaphore to wait on first (the swapchain acquire,
  * VK_NULL_HANDLE: none) at waitStage, afterAll: the batch is ordered after
@@ -425,9 +432,30 @@ typedef struct VkrState {
     uint64_t fenceValue[VKR_SYNC_FENCE_RING];
     uint64_t fenceFinished;
     uint32_t fenceRecycleWaits;
-    /* ICO_VK_FAKE_API=1.1 (vk_device.c vkr_create_instance): the device is
-     * used as if it had no timeline semaphores (VKR_SYNC_FENCES) */
+    /* ICO_VK_FAKE_API (vk_device.c vkr_create_instance): the profile in
+     * force ("1.1", "1.1ext"; NULL: none), both holding the instance and the
+     * device to Vulkan 1.1; fakeHideExts: the 1.1 profile, whose device
+     * also lacks the extensions a stock Vulkan 1.1 driver has not
+     * (vkr_device_has_ext), so it has no timeline semaphores
+     * (fakeNoTimeline, VKR_SYNC_FENCES) */
+    const char *fakeApi;
+    bool fakeHideExts;
     bool fakeNoTimeline;
+    /* the paths the device's version and extensions give (vkr_create_device;
+     * driverProps vkr_driver_text): legacyPasses, render passes as VkRenderPass
+     * objects (no dynamic rendering; never while VKR_LEGACY_PASSES is 0);
+     * driverProps, VkPhysicalDeviceDriverProperties queried (Vulkan 1.2 or
+     * VK_KHR_driver_properties; without it driverID is 0 and the driver
+     * unnamed); formatList, VkImageFormatListCreateInfo chained for the UINT
+     * views (Vulkan 1.2 or VK_KHR_image_format_list); storeOpNone,
+     * VK_ATTACHMENT_STORE_OP_NONE taken (Vulkan 1.3, or below it on a
+     * Vulkan 1.1 device or one without dynamic rendering
+     * VK_KHR_load_store_op_none, VK_EXT_load_store_op_none or
+     * VK_QCOM_render_pass_store_ops, whose NONE_QCOM is the same value) */
+    bool legacyPasses;
+    bool driverProps;
+    bool formatList;
+    bool storeOpNone;
 
     /* frames */
     VkrFrame frames[RHI_FRAMES_IN_FLIGHT];

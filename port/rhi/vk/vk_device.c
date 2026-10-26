@@ -468,23 +468,32 @@ static bool vkr_has_instance_ext(const char *name)
     return found;
 }
 
-#ifdef ICO_RHI_MOLTENVK
-/* The instance's API version (vkr_create_instance): linked straight to
- * MoltenVK there is no loader above the driver, so the instance asks for
- * no more than the driver reports */
+/* The instance's API version (vkr_create_instance): the loader's at most
+ * 1.3 (linked straight to MoltenVK there is no loader above the driver, so
+ * that is the driver's), and 1.1 under ICO_VK_FAKE_API */
 static uint32_t s_instanceApi = VK_API_VERSION_1_3;
+
+/* The version a device of this API version is used at: no more than the
+ * instance's.  An instance at 1.3 leaves a newer device its own version
+ * outside MoltenVK (VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead,
+ * vkr_create_device, and the device line, as before Vulkan 1.1 devices
+ * were taken) */
+static uint32_t vkr_effective_api(uint32_t deviceApi)
+{
+#ifndef ICO_RHI_MOLTENVK
+    if (s_instanceApi >= VK_API_VERSION_1_3) {
+        return deviceApi;
+    }
 #endif
+    return deviceApi < s_instanceApi ? deviceApi : s_instanceApi;
+}
 
 /* Whether a device of this API version takes the Vulkan 1.3 core paths
- * (dynamic rendering, VkPhysicalDeviceVulkan13Features): its own version,
- * and under MoltenVK the instance's too */
+ * (dynamic rendering, VkPhysicalDeviceVulkan13Features): its version as
+ * used (vkr_effective_api) */
 static bool vkr_core13(uint32_t deviceApi)
 {
-#ifdef ICO_RHI_MOLTENVK
-    return deviceApi >= VK_API_VERSION_1_3 && s_instanceApi >= VK_API_VERSION_1_3;
-#else
-    return deviceApi >= VK_API_VERSION_1_3;
-#endif
+    return vkr_effective_api(deviceApi) >= VK_API_VERSION_1_3;
 }
 
 /* VK_EXT_debug_utils is enabled on the instance (validation, or
@@ -571,18 +580,36 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
         s_debugUtilsExt = true;
     }
 
-    /* ICO_VK_FAKE_API=1.1: a Vulkan 1.1 driver's absences on any device,
-     * for the tests (rhi_vk_vk11, rd_pixel_vk11, ...); so far the timeline
-     * semaphores: the submissions are tracked by the fence ring (vk_sync.c) */
+    /* ICO_VK_FAKE_API: a Vulkan 1.1 driver on any device, for the tests
+     * (rhi_vk_vk11, rd_pixel_vk11, ...).  Both profiles hold the instance
+     * and the device to Vulkan 1.1 (the KHR names of what is core in 1.2
+     * and 1.3); =1.1 also hides what a stock 1.1 driver (Adreno 618
+     * class) lacks, vkr_device_has_ext: timeline semaphores (the fence
+     * ring, vk_sync.c), local read, the driver properties, the image format
+     * list and the store op none (and, once the VkRenderPass path exists,
+     * dynamic rendering); =1.1ext hides nothing (a 1.1 driver with the
+     * extensions) */
+    g_vkr.fakeApi = NULL;
+    g_vkr.fakeHideExts = false;
     g_vkr.fakeNoTimeline = false;
     {
         const char *fake = getenv("ICO_VK_FAKE_API");
         if (fake && fake[0]) {
             if (strcmp(fake, "1.1") == 0) {
+                g_vkr.fakeApi = "1.1";
+                g_vkr.fakeHideExts = true;
                 g_vkr.fakeNoTimeline = true;
-                VKR_LOG("ICO_VK_FAKE_API=1.1: the device is used without timeline semaphores");
+                VKR_LOG("ICO_VK_FAKE_API=1.1: the device is used as a Vulkan 1.1 driver without "
+                        "timeline semaphores, %slocal read, driver properties, image format list "
+                        "or store op none",
+                        VKR_LEGACY_PASSES ? "dynamic rendering, " : "");
+            } else if (strcmp(fake, "1.1ext") == 0) {
+                g_vkr.fakeApi = "1.1ext";
+                VKR_LOG("ICO_VK_FAKE_API=1.1ext: the device is used as a Vulkan 1.1 driver with "
+                        "the extensions it offers");
             } else {
-                VKR_LOG("ICO_VK_FAKE_API=%s: not a known profile (1.1); nothing is hidden", fake);
+                VKR_LOG("ICO_VK_FAKE_API=%s: not a known profile (1.1, 1.1ext); nothing is hidden",
+                        fake);
             }
         }
     }
@@ -594,27 +621,26 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
 #else
     uint32_t loaderVersion = volkGetInstanceVersion();
 #endif
-    if (loaderVersion < VK_API_VERSION_1_2) {
+    if (loaderVersion < VK_API_VERSION_1_1) {
 #ifdef __ANDROID__
         /* issue 145: a driver package (Options > Graphics driver, or a zip
            in the drivers folder) is loaded by the game itself, past the
            system's loader */
-        VKR_LOG("the Vulkan loader is %u.%u; 1.2 or later is required. A graphics driver package "
+        VKR_LOG("the Vulkan loader is %u.%u; 1.1 or later is required. A graphics driver package "
                 "(Options > Graphics driver, or a .zip file in the game's drivers folder) is "
                 "loaded by the game itself and does not use the system's loader",
                 VK_API_VERSION_MAJOR(loaderVersion), VK_API_VERSION_MINOR(loaderVersion));
 #else
-        VKR_LOG("the Vulkan loader is %u.%u; 1.2 or later is required",
+        VKR_LOG("the Vulkan loader is %u.%u; 1.1 or later is required",
                 VK_API_VERSION_MAJOR(loaderVersion), VK_API_VERSION_MINOR(loaderVersion));
 #endif
         return false;
     }
-#ifdef ICO_RHI_MOLTENVK
     s_instanceApi = loaderVersion < VK_API_VERSION_1_3 ? loaderVersion : VK_API_VERSION_1_3;
+    if (g_vkr.fakeApi && s_instanceApi > VK_API_VERSION_1_1) {
+        s_instanceApi = VK_API_VERSION_1_1;
+    }
     const uint32_t instanceApi = s_instanceApi;
-#else
-    const uint32_t instanceApi = VK_API_VERSION_1_3;
-#endif
     VkApplicationInfo app = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pApplicationName = desc->appName ? desc->appName : "ico",
@@ -655,8 +681,38 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
 }
 
 /* ------------------------------------------------------- device selection */
+/* ICO_VK_FAKE_API=1.1: the device extensions a stock Vulkan 1.1 driver
+ * (Adreno 618 class) does not offer, reported absent */
+static bool vkr_fake_hidden(const char *name)
+{
+    static const char *const hidden[] = {
+        VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
+        VK_KHR_DYNAMIC_RENDERING_LOCAL_READ_EXTENSION_NAME,
+        VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME,
+        VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
+        VK_KHR_LOAD_STORE_OP_NONE_EXTENSION_NAME,
+        VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME,
+        VK_QCOM_RENDER_PASS_STORE_OPS_EXTENSION_NAME,
+#if VKR_LEGACY_PASSES
+        VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+#endif
+    };
+    if (!g_vkr.fakeHideExts) {
+        return false;
+    }
+    for (size_t i = 0; i < sizeof hidden / sizeof hidden[0]; i++) {
+        if (strcmp(name, hidden[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool vkr_device_has_ext(VkPhysicalDevice pd, const char *name)
 {
+    if (vkr_fake_hidden(name)) {
+        return false;
+    }
     uint32_t n = 0;
     vkEnumerateDeviceExtensionProperties(pd, NULL, &n, NULL);
     VkExtensionProperties *props = calloc(n ? n : 1, sizeof(*props));
@@ -780,9 +836,10 @@ static VkFormat vkr_choose_depth_stencil(VkPhysicalDevice pd, bool *fake)
 /* "; device 10de:1b80; driver NVIDIA 581.57, version 581.57" for the
  * adapter line: the PCI vendor and device ids (the form d3d12_device.c's
  * unnamed adapter takes), the driver's name and its own version text
- * (VK_KHR_driver_properties, core in Vulkan 1.2, which every device the
- * renderer takes has), and driverVersion decoded the vendor's way
- * (rhi_driver_version.h) */
+ * (VK_KHR_driver_properties, core in Vulkan 1.2; a Vulkan 1.1 device
+ * without the extension has neither: "driver (unnamed)", driverID 0, which
+ * rhi_driver_version.h reads as unknown, the vendor id deciding), and
+ * driverVersion decoded the vendor's way (rhi_driver_version.h) */
 static char s_driverText[600];
 /* the robust access in force, for RhiLimits.robustText, and whether it is
    off by the default (RhiLimits.robustDefaultOff) */
@@ -794,9 +851,11 @@ static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDevicePropertie
     VkPhysicalDeviceDriverProperties dp = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
     };
+    g_vkr.driverProps = vkr_effective_api(p->apiVersion) >= VK_API_VERSION_1_2 ||
+                        vkr_device_has_ext(pd, VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME);
     VkPhysicalDeviceProperties2 p2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-        .pNext = &dp,
+        .pNext = g_vkr.driverProps ? &dp : NULL,
     };
     char ver[32];
     vkGetPhysicalDeviceProperties2(pd, &p2);
@@ -821,21 +880,54 @@ static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDevicePropertie
              dp.driverInfo, ver);
 }
 
+/* Whether the device has timeline semaphores at the version it is used at
+ * (api, vkr_effective_api): VkPhysicalDeviceVulkan12Features at 1.2 and
+ * later, VK_KHR_timeline_semaphore's own features below */
+static bool vkr_device_timeline(VkPhysicalDevice pd, uint32_t api)
+{
+    if (api >= VK_API_VERSION_1_2) {
+        VkPhysicalDeviceVulkan12Features f12 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+        VkPhysicalDeviceFeatures2 f2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                                        .pNext = &f12};
+        vkGetPhysicalDeviceFeatures2(pd, &f2);
+        return f12.timelineSemaphore == VK_TRUE;
+    }
+    if (!vkr_device_has_ext(pd, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME)) {
+        return false;
+    }
+    VkPhysicalDeviceTimelineSemaphoreFeaturesKHR ft = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR};
+    VkPhysicalDeviceFeatures2 f2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                                    .pNext = &ft};
+    vkGetPhysicalDeviceFeatures2(pd, &f2);
+    return ft.timelineSemaphore == VK_TRUE;
+}
+
 /* Returns a score (higher is better) or -1 when the device cannot run the
- * renderer.  *outQueue receives the graphics(+present) queue family. */
+ * renderer.  *outQueue receives the graphics(+present) queue family.  The
+ * device needs Vulkan 1.1 (at the version it is used at,
+ * vkr_effective_api); dynamic rendering (core 1.3 or VK_KHR_dynamic_rendering)
+ * and timeline semaphores score instead of being required (without them the
+ * VkRenderPass path and the fence ring, vk_sync.c), except dynamic rendering
+ * while this build has no VkRenderPass path (VKR_LEGACY_PASSES) */
 static int vkr_rate_device(VkPhysicalDevice pd, uint32_t *outQueue, const char **why)
 {
     VkPhysicalDeviceProperties p;
     vkGetPhysicalDeviceProperties(pd, &p);
-    if (p.apiVersion < VK_API_VERSION_1_2) {
-        *why = "Vulkan 1.2 not supported";
+    const uint32_t api = vkr_effective_api(p.apiVersion);
+    if (api < VK_API_VERSION_1_1) {
+        *why = "Vulkan 1.1 not supported";
         return -1;
     }
     bool core13 = vkr_core13(p.apiVersion);
-    if (!core13 && !vkr_device_has_ext(pd, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)) {
+    const bool dynamic = core13 || vkr_device_has_ext(pd, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+#if !VKR_LEGACY_PASSES
+    if (!dynamic) {
         *why = "no dynamic rendering";
         return -1;
     }
+#endif
     if (g_vkr.surface && !vkr_device_has_ext(pd, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
         *why = "no swapchain extension";
         return -1;
@@ -845,15 +937,7 @@ static int vkr_rate_device(VkPhysicalDevice pd, uint32_t *outQueue, const char *
      * over an otherwise equal one */
     VkPhysicalDeviceFeatures f;
     vkGetPhysicalDeviceFeatures(pd, &f);
-    VkPhysicalDeviceVulkan12Features f12 = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
-    VkPhysicalDeviceFeatures2 f2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                                    .pNext = &f12};
-    vkGetPhysicalDeviceFeatures2(pd, &f2);
-    if (!f12.timelineSemaphore) {
-        *why = "no timeline semaphores";
-        return -1;
-    }
+    const bool timeline = vkr_device_timeline(pd, api);
     const VkFormatFeatureFlags rt =
         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
     const VkFormatFeatureFlags ds = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -919,6 +1003,13 @@ static int vkr_rate_device(VkPhysicalDevice pd, uint32_t *outQueue, const char *
     }
     if (f.dualSrcBlend) {
         score += 5;
+    }
+    /* a device with them is preferred over an otherwise equal one */
+    if (dynamic) {
+        score += 20;
+    }
+    if (timeline) {
+        score += 20;
     }
     return score;
 }
@@ -1075,14 +1166,10 @@ static bool vkr_is_tiler(uint32_t vendor); /* below, with the vendor table */
 static bool vkr_create_device(void)
 {
     bool core13 = vkr_core13(g_vkr.props.apiVersion);
-    g_vkr.apiVersion = g_vkr.props.apiVersion;
-#ifdef ICO_RHI_MOLTENVK
     /* the version the device is used at: no more than the instance's */
-    if (g_vkr.apiVersion > s_instanceApi) {
-        g_vkr.apiVersion = s_instanceApi;
-    }
-#endif
-    const char *exts[24];
+    g_vkr.apiVersion = vkr_effective_api(g_vkr.props.apiVersion);
+    const bool core12 = g_vkr.apiVersion >= VK_API_VERSION_1_2;
+    const char *exts[32];
     uint32_t extCount = 0;
     if (g_vkr.surface) {
         exts[extCount++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
@@ -1104,8 +1191,55 @@ static bool vkr_create_device(void)
         }
     }
 #endif
-    if (!core13) {
+    /* render passes: dynamic rendering (core 1.3, VK_KHR_dynamic_rendering
+     * below, with on a 1.1 device VK_KHR_create_renderpass2 and
+     * VK_KHR_depth_stencil_resolve, which it needs there), or VkRenderPass
+     * objects without it (legacyPasses) */
+    g_vkr.legacyPasses =
+        !core13 && !vkr_device_has_ext(g_vkr.phys, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+#if !VKR_LEGACY_PASSES
+    if (g_vkr.legacyPasses) {
+        VKR_LOG("no dynamic rendering, and this build has no VkRenderPass path");
+        return false;
+    }
+#endif
+    if (!core13 && !g_vkr.legacyPasses) {
         exts[extCount++] = VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME;
+        if (!core12) {
+            exts[extCount++] = VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME;
+            exts[extCount++] = VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME;
+        }
+    }
+    /* what is core in Vulkan 1.2, by its KHR name on a 1.1 device: the
+     * driver properties (vkr_driver_text queried them already) and the
+     * image format list of the UINT views (vk_resource.c) when offered; the
+     * timeline semaphores below, with the sync */
+    g_vkr.formatList =
+        core12 || vkr_device_has_ext(g_vkr.phys, VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
+    if (!core12 && g_vkr.driverProps) {
+        exts[extCount++] = VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME;
+    }
+    if (!core12 && g_vkr.formatList) {
+        exts[extCount++] = VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME;
+    }
+    /* VK_ATTACHMENT_STORE_OP_NONE (a read-only depth's store): core in 1.3;
+     * below, on a 1.1 device or one without dynamic rendering (the
+     * VkRenderPass path), the first of the KHR, EXT and QCOM extensions
+     * offered.  A 1.2 device with dynamic rendering keeps its extensions as
+     * they were (the read-only depth stores, vk_cmd.c) */
+    g_vkr.storeOpNone = core13;
+    if (!core13 && (!core12 || g_vkr.legacyPasses)) {
+        static const char *const storeNone[] = {
+            VK_KHR_LOAD_STORE_OP_NONE_EXTENSION_NAME,
+            VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME,
+            VK_QCOM_RENDER_PASS_STORE_OPS_EXTENSION_NAME,
+        };
+        for (size_t i = 0; i < sizeof storeNone / sizeof storeNone[0] && !g_vkr.storeOpNone; i++) {
+            if (vkr_device_has_ext(g_vkr.phys, storeNone[i])) {
+                exts[extCount++] = storeNone[i];
+                g_vkr.storeOpNone = true;
+            }
+        }
     }
 #ifdef ICO_RHI_MOLTENVK
     /* the subset MoltenVK implements, with its features (below) */
@@ -1190,7 +1324,10 @@ static bool vkr_create_device(void)
             !extOrder &&
             vkr_device_has_ext(g_vkr.phys,
                                VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME);
+        /* local read needs Vulkan 1.3 (VK_KHR_dynamic_rendering_local_read
+         * depends on it): never under ICO_VK_FAKE_API, whose device is 1.1 */
         const bool extLocal =
+            (g_vkr.fakeApi == NULL || g_vkr.apiVersion >= VK_API_VERSION_1_3) &&
             vkr_device_has_ext(g_vkr.phys, VK_KHR_DYNAMIC_RENDERING_LOCAL_READ_EXTENSION_NAME);
         const bool core14 = !extLocal && g_vkr.apiVersion >= VK_API_VERSION_1_4;
         VkPhysicalDeviceVulkan14Features q14 = {
@@ -1653,9 +1790,15 @@ static bool vkr_create_device(void)
     }
     /* the submission sync (vk_sync.c): the timeline semaphore, through
      * VkPhysicalDeviceVulkan12Features at 1.2 and later, the extension's
-     * own features below 1.2; nothing for the fence ring (ICO_VK_FAKE_API=
-     * 1.1: a device without timeline semaphores) */
-    g_vkr.syncKind = g_vkr.fakeNoTimeline ? VKR_SYNC_FENCES : VKR_SYNC_TIMELINE;
+     * own features below 1.2 (VK_KHR_timeline_semaphore enabled); nothing
+     * for the fence ring, on a device without timeline semaphores (a 1.1
+     * driver without the extension; ICO_VK_FAKE_API=1.1) */
+    g_vkr.syncKind = !g_vkr.fakeNoTimeline && vkr_device_timeline(g_vkr.phys, g_vkr.apiVersion)
+                         ? VKR_SYNC_TIMELINE
+                         : VKR_SYNC_FENCES;
+    if (g_vkr.syncKind == VKR_SYNC_TIMELINE && !core12) {
+        exts[extCount++] = VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME;
+    }
     VkPhysicalDeviceVulkan12Features f12 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
         .pNext = &dyn,
@@ -2132,12 +2275,18 @@ bool rhi_init(const RhiDeviceDesc *desc)
             return false;
         }
     }
-    VKR_LOG("%s (Vulkan %u.%u.%u%s)%s%s; index values up to %u (full 32-bit range %s)",
+    /* the line ends with the paths the version gave: the render passes
+     * (dynamic rendering or VkRenderPass objects) and the submission sync
+     * (vk_sync.c), and the ICO_VK_FAKE_API profile in force */
+    VKR_LOG("%s (Vulkan %u.%u.%u%s)%s%s; index values up to %u (full 32-bit range %s); render "
+            "passes %s; sync %s%s%s",
             g_vkr.adapterName, VK_API_VERSION_MAJOR(g_vkr.apiVersion),
             VK_API_VERSION_MINOR(g_vkr.apiVersion), VK_API_VERSION_PATCH(g_vkr.apiVersion),
             s_driverText, g_vkr.moltenvk ? "; MoltenVK" : "", g_vkr.surface ? "" : ", headless",
             g_vkr.limits.maxDrawIndexedIndexValue,
-            g_vkr.limits.fullDrawIndexUint32 ? "offered" : "not offered");
+            g_vkr.limits.fullDrawIndexUint32 ? "offered" : "not offered",
+            g_vkr.legacyPasses ? "legacy" : "dynamic", vkr_sync_name(),
+            g_vkr.fakeApi ? "; ICO_VK_FAKE_API=" : "", g_vkr.fakeApi ? g_vkr.fakeApi : "");
     return true;
 }
 
