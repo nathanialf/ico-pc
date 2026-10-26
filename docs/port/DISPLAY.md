@@ -117,15 +117,21 @@ targets: [RENDER.md](RENDER.md#frames-and-targets)).
 (Full pixel on, or the mask on a cropped frame: `borderOpen`): the game leaves its screen-space
 lookups (the mirror floors' copy of the scene, the reflections) on REPEAT, and at the frame's outer
 columns they wrapped to the far side of the picture, which the PS2's border hid
-(`port/render/rd_replay.c` (`drawWrap`); ctest `rd_present` (`checkFullPixelTargetWrap`)). A screen
-prim whose texel coordinates lie wholly in one period of the REPEAT past the first keeps the wrap on
-that axis (`port/render/rd_water.c` (`rd__repeat_kept`, `rd__screen_repeat_kept`);
-`DrawSetup.repeatKept`): the puddle's ripples (`ico2/sugipon/src/puddle.c` (`drawRipple`)) sample
-the reflection block at STs 1.05 to 1.95, its middle on the GS, and clamped every fragment took the
-block's corner texel, so the ring's segments came out flat and bright (issue 106, on every wide
-frame since the clamp). A lookup that runs from about 0 to the size, or across a period's end, stays
-clamped. Only screen prims carry the range on the CPU; the VU draws keep the clamp (ctest
-`rd_water`, the ripples).
+(`port/render/rd_replay.c` (`drawWrap`); ctest `rd_present` (`checkFullPixelTargetWrap`)).
+The clamp is for the copies of the frame read in screen space (the pool's and the queen barrier's
+grids over their copies of the scene, SCENE, the work buffers): a screen prim reading a
+render-to-texture block smaller than the frame keeps the game's REPEAT whatever its coordinates
+(`port/render/rd_water.c` (`rd__block_keeps_repeat`);
+`DrawSetup.screenPrim`). The puddle's ripples (`ico2/sugipon/src/puddle.c` (`drawRipple`)) sample
+the reflection block at STs in later periods of the REPEAT, a ring often across a period's end;
+clamped, those fragments took the block's edge and corner texels, so the ring's segments came out
+flat and bright (issue 106: 2089 and 3014 near-white pixels in the ring areas of the reporter's
+2026-10-24 dumps at their settings; a rule on the coordinates alone missed a ring across a period's
+end). The puddle's copy over the frame reads the block inside its edges, the same either way. A
+frame-sized block (the dark volume's) and every VU draw keep the clamp. The `--list` water line and
+the F12 line name the counts: `Full pixel on, border mask off: N render-target reads clamped, M
+block reads kept on REPEAT` (ctest `rd_water`, the ripples; `rd_replay_tool_ripple`,
+`rd_replay_tool_ripple_447`, `rd_replay_tool_ripple_436`, `rd_replay_tool_mirror_floor`).
 
 **The [scene scale](ARCHITECTURE.md#terms)** comes from the Resolution row in `rd__apply_display`:
 "Nx" is the GS size times N; "WxH" that size; "window" the presentation box (only with the Enhanced
