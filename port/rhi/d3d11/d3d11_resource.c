@@ -291,9 +291,17 @@ void d11_buffer_flush(D11Buffer *b, ID3D11DeviceContext1 *ctx, uint32_t part, ui
                                                     b->shadow, 0, 0, 0);
             continue;
         }
+        /* a box on a constant buffer is valid only with NO_OVERWRITE or
+         * DISCARD (the debug layer's error 288; without the flag the
+         * runtime drops the update and the shaders read stale constants).
+         * NO_OVERWRITE is the upload contract: the CPU writes a range only
+         * once no submitted list reads it any more (as Vulkan's mapped
+         * memory requires), and DISCARD would lose the rest of the buffer.
+         * The other parts take no flag. */
+        const UINT flags = i == D11_PART_CB ? D3D11_COPY_NO_OVERWRITE : 0u;
         D3D11_BOX box = {(UINT)lo, 0, 0, (UINT)hi, 1, 1};
         ID3D11DeviceContext1_UpdateSubresource1(ctx, (ID3D11Resource *)b->part[i], 0, &box,
-                                                b->shadow + lo, 0, 0, 0);
+                                                b->shadow + lo, 0, 0, flags);
     }
 }
 
@@ -1042,10 +1050,9 @@ bool rhi_readback_texture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t 
     }
     ID3D11DeviceContext_CopySubresourceRegion(g_d11.ctx, (ID3D11Resource *)staging, 0, 0, 0, 0,
                                               (ID3D11Resource *)t->res, 0, NULL);
-    /* the copy waits with the slot's work: end the slot's event after it */
-    D11Frame *f = d11_cur_frame();
-    ID3D11DeviceContext_End(g_d11.ctx, (ID3D11Asynchronous *)f->event);
-    f->eventIssued = true;
+    /* the copy waits with the slot's work: the slot's event, ended when
+     * rhi_wait_frame leaves the slot, comes after it */
+    d11_cur_frame()->eventPending = true;
     D3D11_MAPPED_SUBRESOURCE m;
     memset(&m, 0, sizeof(m));
     const uint64_t t0 = d11_now_ns();
