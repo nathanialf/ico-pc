@@ -142,6 +142,10 @@ static void actOpDemo01_ntsc(GObj *volatile self)
     actInitialize(self);
     _ACTWait(1);
 
+    /* PC port: one player at a new game, as the European actOpDemo01 sets
+       (girlControlMode = 0; the port offers Players on this disc too) */
+    girlControlMode = 0;
+
     stgmgrNextStagePreLoadForceStageSet(0);
 
     actCreateSubThread(actSubMpegReturnPreload, 21);
@@ -283,6 +287,10 @@ static void actOpDemo01_aug6jun26(GObj *volatile self)
 
     actInitialize(self);
     _ACTWait(1);
+
+    /* PC port: one player at a new game, as the European actOpDemo01 sets
+       (girlControlMode = 0; the port offers Players on this disc too) */
+    girlControlMode = 0;
 
     if (!ICO_JUN26) {
         stgmgrNextStagePreLoadForceStageSet(0);
