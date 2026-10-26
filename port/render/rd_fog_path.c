@@ -1372,6 +1372,18 @@ static bool runSelftest(void)
                     rd__fog_path_name(p), err[p], xs[worst[p]], ys[worst[p]], cell[worst[p]][0]);
         }
     }
+    if (!passed) {
+        /* on Direct3D 11: the state of the test's last draw (issue 126:
+           both paths read back the cleared target), from the backend
+           (RhiStats.lastDrawText, NULL on the other backends) */
+        RhiStats st;
+        memset(&st, 0, sizeof(st));
+        rhi_get_stats(&st);
+        const char *draw = st.lastDrawText ? st.lastDrawText() : NULL;
+        if (draw) {
+            rd__log("fog: self-test failed on Direct3D 11; its last draw: %s", draw);
+        }
+    }
     return result[chosen] == ST_OK;
 }
 
