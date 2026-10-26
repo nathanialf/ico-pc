@@ -1245,6 +1245,76 @@ static void test_video_models(const char *dir)
     ico_video_reload();
 }
 
+/* [video] downsample (issue 149, default "off"): the default, the file read
+   ("box", any case; an unknown word is off), the run-time value sanitized,
+   the round trip, and the preset untouched either way (it is no preset row) */
+static void test_video_downsample(const char *dir)
+{
+    char path[512];
+    IcoVideoOptions o, d;
+    const char *text;
+    FILE *f;
+    int v = -1;
+
+    ico_video_defaults(&d);
+    CHECK(d.downsample == ICO_DOWNSAMPLE_OFF);
+    CHECK(ico_video_parse_downsample("BOX", &v) == 0 && v == ICO_DOWNSAMPLE_BOX);
+    CHECK(ico_video_parse_downsample("off", &v) == 0 && v == ICO_DOWNSAMPLE_OFF);
+    CHECK(ico_video_parse_downsample("on", &v) != 0);
+    CHECK(strcmp(ico_video_downsample_name(ICO_DOWNSAMPLE_BOX), "box") == 0);
+    CHECK(strcmp(ico_video_downsample_name(99), "off") == 0);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.downsample == ICO_DOWNSAMPLE_OFF && ico_video_downsample() == ICO_DOWNSAMPLE_OFF &&
+          ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    snprintf(path, sizeof(path), "%s/options_downsample_test.toml", dir);
+    f = fopen(path, "wb");
+    if (f == NULL) {
+        fprintf(stderr, "cannot write %s\n", path);
+        failures++;
+        return;
+    }
+    fputs("[video]\ndownsample = \"box\"\n", f);
+    fclose(f);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.downsample == ICO_DOWNSAMPLE_BOX && ico_video_downsample() == ICO_DOWNSAMPLE_BOX &&
+          ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    o.downsample = 7;
+    ico_video_set(&o);
+    ico_video_get(&o);
+    CHECK(o.downsample == ICO_DOWNSAMPLE_OFF && ico_video_downsample() == ICO_DOWNSAMPLE_OFF);
+    o.downsample = ICO_DOWNSAMPLE_BOX;
+    ico_video_set(&o);
+    CHECK(ico_video_save() == 0);
+    text = read_text(path);
+    CHECK(text != NULL && strstr(text, "downsample = \"box\"") != NULL);
+    o.downsample = ICO_DOWNSAMPLE_OFF;
+    ico_video_set(&o);
+    CHECK(ico_video_save() == 0);
+    text = read_text(path);
+    CHECK(text != NULL && strstr(text, "downsample = \"off\"") != NULL);
+    /* an unknown word reads as off */
+    f = fopen(path, "wb");
+    if (f != NULL) {
+        fputs("[video]\ndownsample = \"sharp\"\n", f);
+        fclose(f);
+    }
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.downsample == ICO_DOWNSAMPLE_OFF);
+    /* Enhanced's shortcut leaves it alone */
+    o.downsample = ICO_DOWNSAMPLE_BOX;
+    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+    CHECK(o.downsample == ICO_DOWNSAMPLE_BOX && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+    remove(path);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+}
+
 /* [video] show_fps (the Frame rate counter, default off): the default, the
    file read, the run-time value sanitized to 0 or 1, the round trip, and
    the preset untouched either way */
@@ -1493,6 +1563,7 @@ int main(int argc, char **argv)
     test_video_anti_alias(argc > 1 ? argv[1] : ".");
     test_video_models(argc > 1 ? argv[1] : ".");
     test_video_show_fps(argc > 1 ? argv[1] : ".");
+    test_video_downsample(argc > 1 ? argv[1] : ".");
     test_video_auto(argc > 1 ? argv[1] : ".");
     test_video_interpolate();
     if (failures != 0) {
