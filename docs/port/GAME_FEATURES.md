@@ -305,7 +305,8 @@ hold the rest.
 | Effects: Brightness; Controls: Vibration, Button configuration (pause) | W | W | W | W | W | W | W | `systemStatus[11]`, `iosPadActRequestEnable`, `layout_key_config` (`la_key_config` and its 2001 arms go back to Settings); `settings_discs` |
 | Gameplay: stick fix, Yorda, door fix, natural chains | W | W | W | W | W | W | W | the hooks sit in every disc's arm (`backStage.c`, `ebrain.c`, `enemy_act.c`, `boyact.c` `CheckCollisionAttr_ntscaug6jun26`, `BgAnimation.c` `bga_CalcAnimation_<disc>`); `options_<slug>` |
 | Gameplay: Skip the opening | W | W | W | W | W | W | W | `kanbanBootMain`/`_jun26`, `actOpDemo01`/`_ntsc`/`_aug6jun26`; `kanban_boot_<slug>`, `settings_extra_<slug>` |
-| Gameplay: Film effect, Players (pause, once cleared) | W | W | W | H | H | H | W | `has_film_players` (no `film_noise` in the 2001 stage tables, `reel_row` -1; no 2001 arm reads `girlControlMode`: `subGirlControl_<disc>` reads Yorda's pad only as the debug target, and `setNext` ignores it there); `settings_discs` |
+| Gameplay: Film effect (pause, once cleared) | W | W | W | H | H | H | W | `has_film_effect` (no `film_noise` in the 2001 stage tables, `reel_row` -1); `settings_discs` |
+| Gameplay: Players (pause, once cleared) | W | W | W | W | W | W | W | the 2001 arms carry the European second-pad branches ([Players on the 2001 discs](#players-on-the-2001-discs)); the count kept per save beside the card there (`[players]`); `settings_discs`, `options_<slug>` |
 | Audio: Sound output | W | W | W | W | W | W | W | `soundOutputModeSet` on every disc; `options_<slug>` |
 | Main: Developer mode | W | W | W | W | W | W | W | `achievements_<slug>` (the suspension) |
 | Extras > Game variants: Debug menu | W | W | W | W | W | H | W | `ICO_JUN26` (the demo's debug tables are the preview's); `settings_discs`, `settings_extra_<slug>` |
@@ -326,8 +327,8 @@ hold the rest.
 
 A port site that writes one of these numbers itself, instead of reading the region table, is what
 `region_literals_check` (`tools/check_region_literals.py`, [TESTING.md](TESTING.md)) fails on.
-The log names each hidden row once: `settings: no Film effect or Players row on <disc id> (the
-game has neither)` and `extras: no Credits row on <disc id> (its disc holds no staff scenes)`.
+The log names each hidden row once: `settings: no Film effect row on <disc id> (the game has
+none)` and `extras: no Credits row on <disc id> (its disc holds no staff scenes)`.
 
 ### Players on the 2001 discs
 
@@ -367,6 +368,28 @@ on sit one lower) and
 | `ico2/script/src/op.c` `actOpDemo01` | a new game sets one player | `actOpDemo01_ntsc`, `_aug6jun26` set nothing | one player at a new game |
 | `ico2/fumi/ios/mcard.c` `gameblock_write`, `gameblock_read` | the save carries `girlControlMode` after the game block | the 2001 game block has no word after it (25,596 and 20,480 bytes, all the disc's) | kept beside the save in `config.toml` (`[players]`, below) |
 | `ico2/sugipon/src/frameDependSequence.c` `execVibCondition` | the motion's vibration on Yorda's pad | the 2001 motion effects have no condition ids (`execVib_ntscaug6jun26`) | none (no data) |
+
+The count is kept with each save on those discs in `config.toml`'s `[players]` (`ntsc_slot_N`,
+`aug6_slot_N`, `jun26_slot_N` = 1 or 2, with the save's game-block sum, as the mirror flag is;
+[CONFIG.md](CONFIG.md#players)): `la_load_processing` (and `_jun26`) sets `girlControlMode` from
+it after the card's load, and `la_save_processing` writes it after the save, on those discs only
+(`ico2/common/src/layout_action.c`; `port/game/options.h` (`ico_players_slot_saved`,
+`ico_players_slot_loaded`)). A save without an entry, or with another sum, loads as one player.
+`actOpDemo01_ntsc` and `_aug6jun26` set one player at a new game, as the European arm does. Every
+disc's girl thread reports the count each frame, and a change is logged once: `options: Players
+<1|2> on <disc id> (Yorda on the second controller, port 1 | Yorda led by the game)`; the sidecar
+logs `options: Players <n> kept for save slot <N> on <disc id>` and `options: Players <n> from save
+slot <N> on <disc id>` (with ` (no entry for this save: 1)` when there is none).
+
+What a tester should try, on each of the three discs, with a second controller plugged in and
+Players 2 set from the pause menu of a cleared save: Yorda walks and runs on the second stick and
+stops when it is let go; she does not run off or hide on her own when shadows come (the refused
+brain modes); holding R1 on the second controller turns Ico's head and the camera to her; Ico's
+R1 still takes and lets go of her hand in both Hold types, and her R1 never does; she sits and
+gets up from a sofa on a forward stick; at a ditch she is not walked to the edge for the jump;
+after a jump onto a ledge she stands up after about five seconds; at a ledge Ico pulls her up as
+usual. Then Players 1 again: she must behave as before. A save made with Players 2 loads with
+Players 2, a new game starts with 1.
 
 ## Achievements and the game-state view
 

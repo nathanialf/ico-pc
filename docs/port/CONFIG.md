@@ -14,7 +14,7 @@ files are written, and how libscf's system configuration is answered from them.
 | `port/config/sysconf.h`, `sysconf.c` | libscf (`sceScfGetLanguage`, `sceScfGetTimeZone`, `sceScfGetSummerTime`) and the boot screens' language and video mode |
 | `port/platform/host_config.h`, `host_config.c` | the ini reader, `ini_map` (the toml keys the ini may override), the TOML reader and writer, the user folder, portable mode, the card folders |
 | `port/game/video_options.h` | the `[video]` key table and their reader |
-| `port/game/options.h` | the `[gameplay]`, `[game] circle_back`, `[ui] language`, `[audio] output`, `[mirror]` and `[dev] debug_option` keys |
+| `port/game/options.h` | the `[gameplay]`, `[game] circle_back`, `[ui] language`, `[audio] output`, `[mirror]`, `[players]` and `[dev] debug_option` keys |
 | `port/input/input_config.c`, `port/input/input.h` | the `[input]` keys and the bindings |
 | `port/game/photo_mode.h` | `[photo]` |
 | `port/game/appearance.h` | `[characters]` |
@@ -104,7 +104,8 @@ It is written at these moments only:
 - when the game's own Stereo/Mono row changes with `[audio] output` set to stereo or mono
   (`port/game/options.c` (`ico_opt_output_toggled`));
 - when a save is written, for the slot's `[mirror]` entry (`port/game/options.c`
-  (`ico_mirror_slot_saved`));
+  (`ico_mirror_slot_saved`)), and on the 2001 discs its `[players]` entry
+  (`ico_players_slot_saved`);
 - in photo mode, for `hide_ui` and `film_effect` (`port/game/photo_mode.c`);
 - on Android, when a graphics driver is chosen, fails or is removed
   (`port/platform/android/gpu_driver_android.c`); with unsaved changes, on Android when the app is
@@ -264,6 +265,22 @@ slot_1 = true
 slot_1_sum = 4660
 jpn_slot_1 = false
 jpn_slot_1_sum = 22136
+```
+
+### [players]
+
+`slot_N` (int, 1 or 2) and `slot_N_sum` (the save's game-block checksum) for save file N, on the
+North American disc, the August 2001 preview and the June 2001 demo only (`ntsc_slot_N`,
+`aug6_slot_N`, `jun26_slot_N` and their `_sum`): the Players count (`girlControlMode`) each save
+was made with. The other discs keep it in the card's save file after the game block; these discs'
+game block has no word for it ([SAVES.md](SAVES.md#the-seven-discs)). A slot without an entry, or
+whose checksum differs, loads as one player (`port/game/options.h` (`ico_players_slot_saved`,
+`ico_players_slot_loaded`); [GAME_FEATURES.md](GAME_FEATURES.md#players-on-the-2001-discs)).
+
+```toml
+[players]
+ntsc_slot_1 = 2
+ntsc_slot_1_sum = 4660
 ```
 
 `achievements.toml`, the other per-user file, keys its per-disc entries the same way:

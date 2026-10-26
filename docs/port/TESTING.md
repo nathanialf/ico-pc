@@ -290,7 +290,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   from the file, an unknown word as the disc's own; `test_hold_discs` selects each of the seven
   discs and checks the resolve: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 for no key, `"disc"`, a
   bare `"hold"` and `hold_type_chosen = false`, A for a chosen `"hold"`, B for `"toggle"`, and the
-  store's two keys), the video effects' keys (Water
+  store's two keys; `test_players_slots` selects each 2001 disc and checks the `[players]` count kept
+  per save slot and sum, a missing entry or another sum loading as one player, a later save
+  winning, each disc's prefix in the file), the video effects' keys (Water
   reflections' `effect_water_sharp` off by default, saved, outside the preset; Motion blur's
   `effect_motion_blur_mode`: `"original"` with no key, `"original"` and `"smooth"` read in any
   case, an unknown word as `"original"`, Smooth only with the switch on for the getter, kept
