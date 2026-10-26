@@ -2233,14 +2233,14 @@ DATE with DATM 1, so they draw only where the surface set the bit; leveldown and
 test NEVER and AFAIL RGB_ONLY. An F12 adds one line to the log after the box cull's,
 
 ```
-rd: dump: frame N: water reflections original|sharp; scene SXxSY; block WxH GS with depth at TWxTH texels (SXxSY, the scene's scale|not the scene's scale): D draws into it, R read it (DATE off a, alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0, REPEAT r, k of them wholly past the first period); DATE draws on SCENE: alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0 2; Full pixel on|off, border mask on|off; blend exact (interlock|rov|attachment read)|fixed-function (rounds up), storage pass merge on|off; K draws sampled a texture-pack replacement (blank in the dump), P of them DATE draws; MSAA 8x (resolve: colour the mean of the samples, depth the smallest sample): the last replay's DATE snapshots of SCENE S, A of them read the resolved picture (C closed the epoch), of other targets O
+rd: dump: frame N: water reflections original|sharp; scene SXxSY; block WxH GS with depth at TWxTH texels (SXxSY, the scene's scale|not the scene's scale): D draws into it, R read it (DATE off a, alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0, REPEAT r, k of them kept on REPEAT); DATE draws on SCENE: alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0 2; Full pixel on|off, border mask on|off: N render-target reads clamped, M block reads kept on REPEAT|border closed; blend exact (interlock|rov|attachment read)|fixed-function (rounds up), storage pass merge on|off; K draws sampled a texture-pack replacement (blank in the dump), P of them DATE draws; MSAA 8x (resolve: colour the mean of the samples, depth the smallest sample): the last replay's DATE snapshots of SCENE S, A of them read the resolved picture (C closed the epoch), of other targets O
 ```
 
 (one line; a part with nothing to say is left out): each render-to-texture block a draw of the frame
 wrote or read, at which scale it was drawn, the draws into it and the DATE, AFAIL, blends and wrap
-of the draws that read it (`REPEAT r`: the reads on REPEAT on an axis; `k of them`: screen prims
-whose coordinates lie wholly past its first period there, which keep the wrap under an open border:
-the ripples, [DISPLAY.md](DISPLAY.md)), the DATE draws by target, the border and the blend path in
+of the draws that read it (`REPEAT r`: the reads on REPEAT on an axis; `k of them`: screen prims,
+which keep the wrap under an open border: the ripples, [DISPLAY.md](DISPLAY.md)), the DATE draws by
+target, the border (N, M: the open border's clamp) and the blend path in
 force (Full pixel, the border mask, the destination read and the storage pass merge), and how many draws sampled a texture pack's picture,
 which a dump carries blank, so a replay of that dump cannot show what they drew
 (`port/render/rd_water.c` (`rd__water_dump_line`); `port/render/rd_dump.c` (`rd_dump_on_demand`)).
