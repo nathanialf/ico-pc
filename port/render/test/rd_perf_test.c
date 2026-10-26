@@ -65,6 +65,15 @@
 #include "rd_mesh.h"
 #include "rd_passring.h"
 
+/* a sanitizer build (gcc defines __SANITIZE_*, clang answers __has_feature) */
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+#define RD_PERF_SANITIZED 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer)
+#define RD_PERF_SANITIZED 1
+#endif
+#endif
+
 static int s_fail;
 
 #define CHECK(cond, ...)                                                                           \
@@ -561,6 +570,13 @@ static void checkGroups(const char *what, const Sum *s)
  * would count the software GPU's work: not checked there, said once. */
 static bool cpuBudgetApplies(const char *what)
 {
+#ifdef RD_PERF_SANITIZED
+    /* a sanitizer build runs the walk two to three times slower, and CI runs
+       four tests at once: the budget is the release build's (the asan job's
+       rd_perf_attachment measured 21.96 ms against 20 ms in the v0.9.1 run) */
+    printf("%s: the CPU budget is not checked under a sanitizer\n", what);
+    return false;
+#endif
     if (rhi_backend() == RHI_BACKEND_OPENGL) {
         printf("%s: the CPU budget is not checked on OpenGL (the driver shades inside the "
                "draw calls)\n",
