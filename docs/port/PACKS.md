@@ -194,7 +194,7 @@ files and the note is what keeps the folder: `textures/<serial>/replacements/` a
 packs and playing needs nothing in it; to copy a pack keeping its own folders so its files end up
 under that disc's `textures/<serial>/replacements/` next to the program (the examples name
 `SCES-50760`), a pack one level too high being
-found too; that Options > Display > Texture pack then reads On and `logs/ico-pc.log` says how many
+found too; that Options > Picture > Texture pack then reads On and `logs/ico-pc.log` says how many
 textures were found; that with portable mode the pack may also go in
 `userdata/textures/SCES-50760/replacements/`; and that packs made for PCSX2 work as they are
 (`pkg_stage_textures_readme`). The models note says the same for model packs and points at
