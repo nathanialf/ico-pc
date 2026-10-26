@@ -1811,7 +1811,7 @@ void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
     VkrCmdList *c = vkr_get_cmd(cl);
     VkrFrame *f = vkr_cur_frame();
     const bool keep = (index & RHI_TIMESTAMP_KEEP_BARRIERS) != 0;
-    index &= ~RHI_TIMESTAMP_KEEP_BARRIERS;
+    index &= ~(RHI_TIMESTAMP_KEEP_BARRIERS | RHI_TIMESTAMP_ISSUE_TIME); /* no busy clock here */
     if (!c || !f->queryPool || !f->tsReset || index >= RHI_MAX_TIMESTAMPS ||
         rhi_ts_has(f->tsWritten, index)) {
         return;
