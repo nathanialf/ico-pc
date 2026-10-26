@@ -65,6 +65,14 @@ const char *ico_gpu_driver_android_folder_text(void);
    driver: logs it once, with the driver package route, and makes the
    Graphics driver row's note name that route. */
 void ico_gpu_driver_android_note_loss_on_stock(void);
+/* The start-up box's text (window_host.c choose_driver), with the folder. */
+const char *ico_gpu_driver_android_box_text(void);
+/* No device could be made: the log line before the box. */
+void ico_gpu_driver_android_no_device_note(void);
+/* rd_init made a device: after a device loss at the previous start, on the
+   phone's own Qualcomm driver (customDriver 0), see
+   ico_gpu_driver_android_note_loss_on_stock. */
+void ico_gpu_driver_android_device_up(int customDriver);
 /* After each present that reached the screen. */
 void ico_gpu_driver_android_presented(void);
 /* At a normal end, before the renderer shuts down: a trial still running

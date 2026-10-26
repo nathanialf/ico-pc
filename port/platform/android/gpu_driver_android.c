@@ -12,11 +12,13 @@
 #include <stdio.h>
 #include <string.h>
 #include "config.h"
+#include "diag_host.h"
 #include "gpu_driver.h"
 #include "host_android.h"
 #include "host_fs.h"
 #include "iso_import.h"
 #include "rhi.h"
+#include "rhi_driver_version.h"
 
 #define KEY_DRIVER "video.gpu_driver"
 #define KEY_FAILED "video.gpu_driver_failed"
@@ -554,6 +556,18 @@ void ico_gpu_driver_android_note_loss_on_stock(void)
     }
 }
 
+/* rd_init made a device (window_host.c): the previous start lost the graphics
+   device and this one runs on the phone's own Qualcomm driver (no driver
+   package loaded; Turnip reports Qualcomm's vendor id too, hence
+   customDriver) */
+void ico_gpu_driver_android_device_up(int customDriver)
+{
+    if (!customDriver && rhi_limits() != NULL && rhi_limits()->vendorId == RHI_VENDOR_QUALCOMM &&
+        ico_diag_startup_end_count(ICO_DIAG_END_LOSS) > 0) {
+        ico_gpu_driver_android_note_loss_on_stock();
+    }
+}
+
 static int host_lost_on_stock(void)
 {
     return s_lostOnStock;
@@ -762,6 +776,37 @@ const UiGpuDriverHost *ico_gpu_driver_android_host(void)
 }
 
 /* --- the start-up choice, before there is a device ------------------------------ */
+
+/* The start-up box (window_host.c choose_driver): why the game cannot start,
+   the driver package route, and the folder for a zip when the picker does
+   not open. */
+const char *ico_gpu_driver_android_box_text(void)
+{
+    static char box[768];
+    const char *where = ico_gpu_driver_android_folder_text();
+
+    snprintf(box, sizeof(box),
+             "ICO could not start the game's graphics with this phone's driver.\n\n"
+             "On a phone with an Adreno (Qualcomm) chip you can choose a graphics driver "
+             "package instead (a .zip file, for example Turnip). The game loads a package "
+             "itself, without the phone's own Vulkan loader, so it can work where the phone's "
+             "driver does not.\n\n"
+             "If the file picker does not appear, copy the zip file into this folder and "
+             "choose again:\n%s",
+             where[0] != '\0' ? where : "drivers");
+    return box;
+}
+
+/* no device could be made (window_host.c, before the box): the log says
+   which way past the system's loader there is */
+void ico_gpu_driver_android_no_device_note(void)
+{
+    fprintf(stderr,
+            "window: a graphics driver package (chosen in the box, in Options > Graphics driver, "
+            "or a .zip file in %s) is loaded by the game itself, without the system's Vulkan "
+            "loader\n",
+            ico_gpu_driver_android_folder_text());
+}
 
 /* the folder's words, "drivers" when the paths are not known */
 static const char *p_drivers_text(void)
