@@ -4862,6 +4862,28 @@ static void subBoyCollision_ntsc(GObj *volatile self)
                     }
                 }
             }
+            /* PC port: boyact.c's European subBoyCollision (its look block's
+               girl flags20 bit 26 test, which subGirlControl sets while her
+               R1 is held): with Players 2 the second player's R1 (Yorda's
+               pad, read by subGirlControl_ntsc) turns the boy's look and the camera
+               to her, as the arm's own look does with girlLookInScreen 0 */
+            if (!(((int)(sub->wish0.ll >> 44) & 1) && ((int)(sub->wish2.ll >> 44) & 1)) &&
+                girlControlMode != 0 && girlGObj != 0 && (GOBJ_ACT(girlGObj)->pad.now & 8)) {
+                _ACTLookTarget_Set((void *)self, girlGObj, 0, 4, 2);
+                if (girlLookInScreen == 0 && ((int)(sub->flags20.ll >> 12) & 1)) {
+                    if ((int)(sub->flags20.ll >> 13) & 1) {
+                        void *lo = isysGObjSearchFromObjLayoutID(4);
+
+                        if (lo != 0) {
+                            ScpCallCameraGetTarget((float *)tgt);
+                            SetRootPosition(lo, tgt);
+                            Camctrl_SetTarget(self, lo, 1);
+                        }
+                    } else {
+                        Camctrl_SetTarget(self, girlGObj, 1);
+                    }
+                }
+            }
             {
                 int i;
                 float near = 3.40282347e+38f; /* FLT_MAX */
@@ -5211,6 +5233,18 @@ static void subBoyCollision_jun26(GObj *volatile self)
                     }
                 }
             }
+            /* PC port: boyact.c's European subBoyCollision (its look block's
+               girl flags20 bit 26 test, which subGirlControl sets while her
+               R1 is held): with Players 2 the second player's R1 (Yorda's
+               pad, read by subGirlControl_jun26) turns the boy's look and the camera
+               to her, as the arm's own look does with girlLookInScreen 0 */
+            if (!(((int)(sub->wish0.ll >> 44) & 1) && ((int)(sub->wish2.ll >> 12) & 1)) &&
+                girlControlMode != 0 && girlGObj != 0 && (GOBJ_ACT(girlGObj)->pad.now & 8)) {
+                _ACTLookTarget_Set((void *)self, girlGObj, 0, 4, 2);
+                if (girlLookInScreen == 0) {
+                    Camctrl_SetTarget(self, girlGObj, 1);
+                }
+            }
             {
                 int i;
                 float near = 3.40282347e+38f; /* FLT_MAX */
@@ -5537,6 +5571,28 @@ static void subBoyCollision_aug6(GObj *volatile self)
                         } else {
                             Camctrl_SetTarget(self, girlGObj, 1);
                         }
+                    }
+                }
+            }
+            /* PC port: boyact.c's European subBoyCollision (its look block's
+               girl flags20 bit 26 test, which subGirlControl sets while her
+               R1 is held): with Players 2 the second player's R1 (Yorda's
+               pad, read by subGirlControl_aug6) turns the boy's look and the camera
+               to her, as the arm's own look does with girlLookInScreen 0 */
+            if (!(((int)(sub->wish0.ll >> 44) & 1) && ((int)(sub->wish2.ll >> 44) & 1)) &&
+                girlControlMode != 0 && girlGObj != 0 && (GOBJ_ACT(girlGObj)->pad.now & 8)) {
+                _ACTLookTarget_Set((void *)self, girlGObj, 0, 4, 2);
+                if (girlLookInScreen == 0 && ((int)(sub->flags20.ll >> 9) & 1)) {
+                    if ((int)(sub->flags20.ll >> 10) & 1) {
+                        void *lo = isysGObjSearchFromObjLayoutID(4);
+
+                        if (lo != 0) {
+                            ScpCallCameraGetTarget((float *)scr);
+                            SetRootPosition(lo, scr);
+                            Camctrl_SetTarget(self, lo, 1);
+                        }
+                    } else {
+                        Camctrl_SetTarget(self, girlGObj, 1);
                     }
                 }
             }
@@ -7526,14 +7582,19 @@ static void actBoyDitch3mReady_ntsc(GObj *volatile self)
         } else if (b != 0) {
             ACTSendMailCorrect(self, 364);
         } else {
-            if (ditch_check_heroin_position() != 0) {
-                if (girlGObj != 0) {
-                    iosOmSendMail(girlGObj, 366, isysCurrentGObj);
+            /* PC port: not with Players 2 (the European
+               actBoyDitch3mReady's girlControlMode == 0 guard: the second
+               player walks Yorda to the ditch) */
+            if (girlControlMode == 0) {
+                if (ditch_check_heroin_position() != 0) {
+                    if (girlGObj != 0) {
+                        iosOmSendMail(girlGObj, 366, isysCurrentGObj);
+                    }
                 }
-            }
-            if (IsCorrectPosition(girlGObj) == 0) {
-                if (girlGObj != 0) {
-                    iosOmSendMail(girlGObj, 367, isysCurrentGObj);
+                if (IsCorrectPosition(girlGObj) == 0) {
+                    if (girlGObj != 0) {
+                        iosOmSendMail(girlGObj, 367, isysCurrentGObj);
+                    }
                 }
             }
             if (GOBJ_ACT(girlGObj)->actMode == 4) {
@@ -7598,14 +7659,19 @@ static void actBoyDitch3mReady_jun26(GObj *volatile self)
         if (a != 0 && (sub->pad.now & 8) == 0) {
             ACTSendMailCorrect(self, 344);
         } else {
-            if (ditch_check_heroin_position() != 0) {
-                if (girlGObj != 0) {
-                    iosOmSendMail(girlGObj, 346, isysCurrentGObj);
+            /* PC port: not with Players 2 (the European
+               actBoyDitch3mReady's girlControlMode == 0 guard: the second
+               player walks Yorda to the ditch) */
+            if (girlControlMode == 0) {
+                if (ditch_check_heroin_position() != 0) {
+                    if (girlGObj != 0) {
+                        iosOmSendMail(girlGObj, 346, isysCurrentGObj);
+                    }
                 }
-            }
-            if (IsCorrectPosition(girlGObj) == 0) {
-                if (girlGObj != 0) {
-                    iosOmSendMail(girlGObj, 347, isysCurrentGObj);
+                if (IsCorrectPosition(girlGObj) == 0) {
+                    if (girlGObj != 0) {
+                        iosOmSendMail(girlGObj, 347, isysCurrentGObj);
+                    }
                 }
             }
             if (GOBJ_ACT(girlGObj)->actMode == 4) {
@@ -7676,14 +7742,19 @@ static void actBoyDitch3mReady_aug6(GObj *volatile self)
         } else if (b != 0) {
             ACTSendMailCorrect(self, 360);
         } else {
-            if (ditch_check_heroin_position() != 0) {
-                if (girlGObj != 0) {
-                    iosOmSendMail(girlGObj, 362, isysCurrentGObj);
+            /* PC port: not with Players 2 (the European
+               actBoyDitch3mReady's girlControlMode == 0 guard: the second
+               player walks Yorda to the ditch) */
+            if (girlControlMode == 0) {
+                if (ditch_check_heroin_position() != 0) {
+                    if (girlGObj != 0) {
+                        iosOmSendMail(girlGObj, 362, isysCurrentGObj);
+                    }
                 }
-            }
-            if (IsCorrectPosition(girlGObj) == 0) {
-                if (girlGObj != 0) {
-                    iosOmSendMail(girlGObj, 363, isysCurrentGObj);
+                if (IsCorrectPosition(girlGObj) == 0) {
+                    if (girlGObj != 0) {
+                        iosOmSendMail(girlGObj, 363, isysCurrentGObj);
+                    }
                 }
             }
             if (GOBJ_ACT(girlGObj)->actMode == 4) {
