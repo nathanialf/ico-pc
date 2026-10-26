@@ -4,7 +4,9 @@ The targets `staticBlur.c`'s effects and the screen softening draw through on th
 SCENE, their sizes at each frame width, the glow chain's rectangles in them, the column the glow's
 blur leaves on a frame wider than the PS2's, what stays in them from one frame to the next, the
 work clear that shows a texel read before it was drawn, and how the puddle's ripples sample their
-reflection block between ticks, and where the crack filler is drawn on a tile-based GPU. The sprites themselves are drawn by the GS
+reflection block between ticks, and where the crack filler is drawn on a tile-based GPU, and
+(not a work buffer, kept here because RENDER.md is at its size cap) how a screen sprite redrawn under
+a new key between ticks is paired. The sprites themselves are drawn by the GS
 sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 
 ## Files
@@ -18,6 +20,7 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `ico2/sugipon/src/staticBlur.c` | the effects, their rectangles in the PS2's numbers and the port's widening (`SB_X`, `sbShrinkAt`, `sbShrinkSpan`, `sbWorkRect`) |
 | `port/render/rd_crack_fill.c` | the crack fill drawn inside the local fog's pass (`rd__crack_fill`'s `local`) |
 | `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
+| `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
 
 ## Sizes per frame width
 
@@ -184,6 +187,38 @@ with "N re-projected draws with their texture shifted (the ripples)". ctest `rd_
 without the shift, a strip under a pushed camera unmarked) and `testRippleStPixels` (on a device:
 every strip pixel samples a 256 x 256 gradient where it stands within one level half way through a
 pan, more than two levels off without the shift) pin it.
+
+## Screen sprites redrawn under a new key between ticks
+
+A screen prim (RDC_SCREEN) of one tick only, with no match in the other tick, fades with t when its
+blend fades with its vertex alpha (`alphaFades`: C = As, D = Cd, ABE on, PABE off), the tick's in
+and the tick before's out ([RENDER.md](RENDER.md#interpolation-and-presentation),
+`port/render/rd_interp.c` (`unmatchedPass`)). The load screen's black bars are the game's own
+640-wide sprites, one pair per layout (`ico2/common/src/layout_texture.c`: grid lines 0 and 200,
+640 x 70 and 640 x 60, texProperty 178/179 to 431/432 in layouts 17 to 64), keyed by the layout's row
+(`LT_HOST_KEY(e, 0)`). When the screen changes layout, the old bars exist in the tick before only
+and the new ones in the tick only: the same sprites under other keys. Cross-faded, two identical
+opaque bars cover 1 - t(1 - t) of the picture beneath, 0.75 at t = 0.5, so a quarter of it
+showed through for a present or two at each change of layout and before a save loaded, at any
+frame rate but Original (issue 139).
+
+Before the fade, `pairSame` pairs each fading screen prim of the tick only with one of the tick
+before only that is the same draw: the same list, the same command but for its key and payload
+offset, every vertex the same in every byte (X, Y, Z, STQ, RGBA) and the same state block at the
+draw (`stateDiff` has nothing to emit either way: texture, blend and its FIX, tests, scissor). The
+tick's is drawn whole and the tick before's is not drawn; each draw pairs once at most; a hash of
+(list, command, vertices) over the tick before's candidates and one probe for each of the tick's
+keeps it linear. Everything that does not pair fades as before, and a prim that does not fade (the
+switch at t = 0.5) is not paired: it is already drawn whole on either side. No game code changes.
+
+The 10 s `interp:` summary's third line counts them after the draws not placed: "N identical
+screen prims paired across a layout change (drawn whole)" (`RdInterpStats.screenPaired`), and they
+are not counted in its "faded in" and "faded out". ctest `rd_interp_test`'s `testBars`
+(`port/render/test/rd_interp_bars_test.inc`) pins it: two ticks whose top and bottom bars carry
+different keys and the same geometry draw the tick's bars once each at full alpha at t = 0.25 and
+0.5 and the tick before's not at all, 2 pairs; with the tick's bars 4 pixels taller, or drawn with
+another blend FIX, nothing pairs and both fade (0x40 each half way). `testUnmatched`'s fading
+sprites differ in colour between the ticks, so they still cross-fade.
 
 ## The crack fill inside the local fog's pass
 
