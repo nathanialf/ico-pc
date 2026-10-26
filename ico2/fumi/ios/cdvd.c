@@ -555,6 +555,11 @@ static inline PackFunc getPackLoader(char *name, int *kind) /* derived name */
     return 0;
 }
 
+/* PC port: port/data/cdvd_host.h: a pack load is logged with its name, place
+   and member count (issue 151: the log did not say which pack was read) */
+extern void ico_cdvd_host_pack_load(const char *name, unsigned int lsn, unsigned int size,
+                                    int members, int inflating);
+
 /* Three prints are compiled out here: the file count, each member's name and
  * the load time.  Their format strings stay in .rodata after "try load %s\n",
  * and the timer and DMA status calls whose values only the prints used
@@ -606,6 +611,8 @@ static void iosCdvdMgrPackLoad(IosCdvdHandle *self)
         }
         systemStatus[7] = *num;
         systemStatus[8] = 0;
+        ico_cdvd_host_pack_load(self->name, self->file.lsn, self->file.size, *num,
+                                (self->ctl.ll & 1) == 1); /* PC port */
         size = *num * sizeof(PackEnt);
         ent = (PackEnt *)iosMallocDebug(ios_partition_seki, size, __FILE__,
                                         LN(1174, 1164, 1174, 898, 872, 872, 1174));
