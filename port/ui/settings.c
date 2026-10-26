@@ -368,6 +368,10 @@ static int stepIndex(int i, int n, int dir)
     return ((i + dir) % n + n) % n;
 }
 
+/* [gameplay] pit_time's words, in ICO_PIT_* order */
+static const char *const kPitWords[ICO_PIT_COUNT] = {"half", "original", "longer", "double",
+                                                     "triple"};
+
 static const float kMouseSens[] = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f};
 /* the Mouse camera speed row's steps; the last one is "Instant" */
 static const float kMouseCamSpeed[] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 5.0f, 10.0f};
@@ -2107,6 +2111,12 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return girlControlMode != 0 ? "2" : "1";
     case UI_OPT_YORDA:
         return onOff(ico_opt_yorda_safe());
+    case UI_OPT_PIT_TIME: {
+        static const int pitStr[ICO_PIT_COUNT] = {UI_STR_VAL_PIT_HALF, UI_STR_VAL_ORIGINAL,
+                                                  UI_STR_VAL_PIT_LONGER, UI_STR_VAL_PIT_DOUBLE,
+                                                  UI_STR_VAL_PIT_TRIPLE};
+        return ui_str(pitStr[ico_opt_pit_time()]);
+    }
     case UI_OPT_DOOR_FIX:
         return onOff(ico_opt_door_fix());
     case UI_OPT_NATURAL_CHAINS:
@@ -2704,6 +2714,13 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_YORDA:
         ico_opt_set_yorda_safe(!ico_opt_yorda_safe());
         ico_config_set_bool("gameplay.yorda_safe", ico_opt_yorda_safe());
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_PIT_TIME:
+        /* Half, Original, Longer, Double, Triple around; the factor is read at the
+           next dive (options.h) */
+        ico_opt_set_pit_time(stepIndex(ico_opt_pit_time(), ICO_PIT_COUNT, dir));
+        ico_config_set_string("gameplay.pit_time", kPitWords[ico_opt_pit_time()]);
         s_dirtyConfig = 1;
         break;
     case UI_OPT_DOOR_FIX:
@@ -3439,6 +3456,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_GAMEPLAY:
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
+        addNote(pg, UI_OPT_PIT_TIME, UI_STR_OPT_PIT_TIME_NOTE);
         addNote(pg, UI_OPT_DOOR_FIX, UI_STR_OPT_DOOR_FIX_NOTE);
         addNote(pg, UI_OPT_NATURAL_CHAINS, UI_STR_OPT_NATURAL_CHAINS_NOTE);
         addNote(pg, UI_OPT_SKIP_OPENING, UI_STR_OPT_SKIP_OPENING_NOTE);
@@ -4030,13 +4048,13 @@ static void build(void)
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
     static const int touchLinks[] = {-1, -1, -1, UI_PAGE_TOUCH_LAYOUT, -1, -1, -1, -1, -1};
     /* the game's Film effect and Players, once the game is cleared */
-    static const int gameOpts[] = {UI_OPT_YORDA,          UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,
-                                   UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING, UI_OPT_FILM_EFFECT,
-                                   UI_OPT_PLAYERS,        UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA,        UI_STR_OPT_STICK_FIX,
-                                   UI_STR_OPT_DOOR_FIX,     UI_STR_OPT_NATURAL_CHAINS,
-                                   UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS,      UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA,       UI_OPT_PIT_TIME,       UI_OPT_STICK_FIX,
+                                   UI_OPT_DOOR_FIX,    UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING,
+                                   UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,        UI_OPT_BACK};
+    static const int gameStrs[] = {
+        UI_STR_OPT_YORDA,       UI_STR_OPT_PIT_TIME,       UI_STR_OPT_STICK_FIX,
+        UI_STR_OPT_DOOR_FIX,    UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_SKIP_OPENING,
+        UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,        UI_STR_BACK};
     _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
                    "a string and a link for each Controls row");

@@ -484,6 +484,7 @@ typedef enum UiSettingsOpt {
     /* Gameplay */
     UI_OPT_STICK_FIX,
     UI_OPT_YORDA,
+    UI_OPT_PIT_TIME,       /* [gameplay] pit_time: Half, Original, Longer, Double, Triple */
     UI_OPT_DOOR_FIX,       /* [gameplay] door_fix, the doorway fix */
     UI_OPT_NATURAL_CHAINS, /* [gameplay] natural_chains (port/render/rd_chain.h) */
     UI_OPT_SKIP_OPENING,   /* [gameplay] skip_opening: the boot starts at the title */
