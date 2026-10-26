@@ -976,25 +976,31 @@ inline void debug_SaveStartStageFile(int stage)
     debug_openLog();
 }
 
+/* PC port: port/core/region.c: a start_stage value as a stage of the
+   running disc (1 .. its last row, the region table's start_stage_max), else
+   -1; and that last row */
+int ico_region_start_stage(const char *value, int *max);
+
 inline int debug_TryToGetStartStage(void)
 {
     /* PC port: the developer key [dev] start_stage, which host_config.c hands over as
        ICO_START_STAGE, takes the place of the development build's
-       start-stage file: Main (common/src/main.c) clamps the value to 1..105
-       and switches to that stage instead of stage 1.  Unset or not a number:
-       -1, the retail path. */
+       start-stage file: Main (common/src/main.c) switches to that stage
+       instead of stage 1.  A stage of the running disc: 1..105 on the
+       European disc, 1..103 on the Japanese, Korean, Asian and North
+       American discs and the August 2001 preview, 1..102 on the June 2001
+       demo (the region table's start_stage_max; it was 105 on every disc,
+       which started the other discs in a row past their table).  Unset:
+       -1, the retail path; not a stage of this disc: -1 and a line. */
     const char *v = getenv("ICO_START_STAGE");
-    char *end;
-    long n;
+    int max = 0;
+    int n = ico_region_start_stage(v, &max);
 
-    if (v == NULL || v[0] == '\0') {
-        return -1;
+    if (n < 0 && v != NULL && v[0] != '\0') {
+        fprintf(stderr, "start_stage %s refused: this disc's stages are 1..%d; booting normally\n",
+                v, max);
     }
-    n = strtol(v, &end, 10);
-    if (*end != '\0' || n <= 0 || n > 105) {
-        return -1;
-    }
-    return (int)n;
+    return n;
 }
 
 static void debug_SaveDebugOptionFile(void)

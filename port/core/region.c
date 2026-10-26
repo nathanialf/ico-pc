@@ -29,6 +29,27 @@ int ico_region_new_game_flag(const char **disc_id)
     return r->gflag_new_game;
 }
 
+int ico_region_start_stage(const char *value, int *max)
+{
+    const int last = ico_region_cur()->start_stage_max;
+    long n = 0;
+    int i;
+
+    if (max != NULL) {
+        *max = last;
+    }
+    if (value == NULL || value[0] == '\0') {
+        return -1;
+    }
+    for (i = 0; value[i] != '\0'; i++) {
+        if (value[i] < '0' || value[i] > '9' || n > 100000) {
+            return -1;
+        }
+        n = n * 10 + (value[i] - '0');
+    }
+    return n >= 1 && n <= last ? (int)n : -1;
+}
+
 int ico_region_count(void)
 {
     return ICO_REGION_COUNT;

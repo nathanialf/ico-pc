@@ -30,10 +30,3 @@ port/ui/layout_ext.c  pad  (s_circleBack ? LT_PAD_CIRCLE : 0)  --  lt_ext_back_b
 port/ui/touch_edit_ui.c  pad  {LT_PAD_CIRCLE, ICO_PAD_CIRCLE},  --  a bit-for-bit translation table (menu pad word to the editor's word), the same on every disc
 port/ui/touch_edit_ui.c  pad  {LT_PAD_CROSS, ICO_PAD_CROSS},  --  a bit-for-bit translation table (menu pad word to the editor's word), the same on every disc
 
-# FINDINGS of the first scan (2026-10-26), each fixed by its own commit, which
-# takes its entry away (the entry is stale once the line is fixed):
-# 1. [dev] start_stage and switch_to accept stages up to 105, the European
-#    disc's last row (start_stage_max: pal 105; jpn kor ntsc aug6 cn 103;
-#    jun26 102), where gamestate.c already reads start_stage_max
-ico2/common/src/debug.c  value  n > 105  --  FINDING 1: start_stage_max is 105 on pal, 103 on jpn kor ntsc aug6 cn, 102 on jun26
-ico2/common/src/main.c  value  n > 105  --  FINDING 1: start_stage_max is 105 on pal, 103 on jpn kor ntsc aug6 cn, 102 on jun26

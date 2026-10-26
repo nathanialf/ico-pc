@@ -9,7 +9,8 @@
  * file, the program's argument, read at test time); and every Japanese,
  * Korean and Asian value the table was resolved to (region_jpn.c,
  * region_kor.c, region_cn.c), so a change to one is a change made on
- * purpose. CPU only.
+ * purpose; the [dev] start_stage reader's range on each of the seven discs
+ * (ico_region_start_stage). CPU only.
  */
 #include <stdio.h>
 #include <string.h>
@@ -1071,6 +1072,48 @@ static void test_stage(void)
     CHECK(ico_region_select("pal") == 0);
 }
 
+/* [dev] start_stage and switch_to take a stage of the running disc
+   (ico_region_start_stage, which debug.c, main.c and gamestate.c read): the
+   last is the disc's own last row, 105 European, 103 on the five 104-row
+   discs, 102 on the June 2001 demo; one past it, 0, a sign, a space, a
+   letter, "" and NULL are refused, with the last row handed back */
+static void test_start_stage(void)
+{
+    static const struct {
+        const char *slug;
+        int last;
+        const char *last_s, *past_s;
+    } k[] = {
+        {"pal", 105, "105", "106"},  {"jpn", 103, "103", "104"},  {"kor", 103, "103", "104"},
+        {"ntsc", 103, "103", "104"}, {"aug6", 103, "103", "104"}, {"jun26", 102, "102", "103"},
+        {"cn", 103, "103", "104"},
+    };
+
+    unsigned i;
+
+    for (i = 0; i < sizeof(k) / sizeof(k[0]); i++) {
+        int max = -1;
+
+        CHECK(ico_region_select(k[i].slug) == 0);
+        CHECK(ico_region_cur()->start_stage_max == k[i].last);
+        CHECK(ico_region_start_stage("1", &max) == 1 && max == k[i].last);
+        CHECK(ico_region_start_stage("40", NULL) == 40);
+        CHECK(ico_region_start_stage(k[i].last_s, NULL) == k[i].last);
+        max = -1;
+        CHECK(ico_region_start_stage(k[i].past_s, &max) == -1 && max == k[i].last);
+        CHECK(ico_region_start_stage("105", NULL) == (k[i].last == 105 ? 105 : -1));
+        CHECK(ico_region_start_stage("0", NULL) == -1);
+        CHECK(ico_region_start_stage("-3", NULL) == -1);
+        CHECK(ico_region_start_stage("+5", NULL) == -1);
+        CHECK(ico_region_start_stage(" 5", NULL) == -1);
+        CHECK(ico_region_start_stage("12a", NULL) == -1);
+        CHECK(ico_region_start_stage("99999999999", NULL) == -1);
+        CHECK(ico_region_start_stage("", NULL) == -1);
+        CHECK(ico_region_start_stage(NULL, NULL) == -1);
+    }
+    CHECK(ico_region_select("pal") == 0);
+}
+
 int main(int argc, char **argv)
 {
     test_select();
@@ -1084,5 +1127,6 @@ int main(int argc, char **argv)
     test_jun26_values();
     test_keys();
     test_stage();
+    test_start_stage();
     return ico_check_summary("region_select_test");
 }

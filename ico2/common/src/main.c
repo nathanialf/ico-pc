@@ -162,6 +162,9 @@ void ico_photo_view_tick(void);
 void ico_title_logo_update(void);
 /* script/include/script.h, which this file does not include */
 int RequestStageChange(int no, GObj *g, GObj *girl, float speed, float wait);
+/* port/core/region.c: a [dev] start_stage/switch_to value as a stage of the
+   running disc, else -1; and that disc's last stage */
+int ico_region_start_stage(const char *value, int *max);
 
 /* a developer key's decimal value, 0 to 100000000; -1 when unset, empty
    or not a number */
@@ -207,11 +210,18 @@ static void ico_dev_switch_stage(void)
     if (state < 0) {
         const char *v = getenv("ICO_SWITCH_TO");
         const char *w = getenv("ICO_SWITCH_AT");
-        int n = ico_dev_number(v);
+        int max = 0;
+        /* a stage of the running disc (region.c: 1..105 European, 1..103
+           Japanese, Korean, Asian, North American, August 2001 preview,
+           1..102 June 2001 demo; it was 105 on every disc) */
+        int n = ico_region_start_stage(v, &max);
         int t = ico_dev_number(w);
 
         state = 0;
-        if (n <= 0 || n > 105 || (w != NULL && w[0] != '\0' && t < 0)) {
+        if (n < 0 && v != NULL && v[0] != '\0') {
+            ico_diag_milestone("dev: switch_to %s refused: this disc's stages are 1..%d", v, max);
+        }
+        if (n <= 0 || (w != NULL && w[0] != '\0' && t < 0)) {
             return;
         }
         to = n;

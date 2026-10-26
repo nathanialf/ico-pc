@@ -517,17 +517,11 @@ int ico_gs_yorda_safe(void)
 
 int ico_gs_start_stage_used(void)
 {
-    /* the value debug_TryToGetStartStage (common/src/debug.c) takes: 2..105
-       (2..103 on the Japanese disc) starts somewhere other than the boot */
-    const char *v = getenv("ICO_START_STAGE");
-    char *end;
-    long n;
-
-    if (v == NULL || v[0] == '\0') {
-        return 0;
-    }
-    n = strtol(v, &end, 10);
-    return *end == '\0' && n > 1 && n <= ico_region_cur()->start_stage_max;
+    /* the value debug_TryToGetStartStage (common/src/debug.c) takes, through
+       the same reader (port/core/region.c ico_region_start_stage): 2..105 on
+       the European disc, 2..103 on the 104-row discs, 2..102 on the June 2001
+       demo, starts somewhere other than the boot */
+    return ico_region_start_stage(getenv("ICO_START_STAGE"), NULL) > 1;
 }
 
 int ico_gs_achievements_suspended(void)

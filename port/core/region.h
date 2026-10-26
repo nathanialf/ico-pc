@@ -213,6 +213,16 @@ const IcoRegionInfo *ico_region_cur(void);
    la_host_new_game_go raises after the New Game screen's confirm. */
 int ico_region_new_game_flag(const char **disc_id);
 
+/* A [dev] start_stage or switch_to value (ICO_START_STAGE, ICO_SWITCH_TO:
+   decimal digits only) as a stage of the selected disc: 1 ..
+   start_stage_max (105 on the European disc, 103 on the Japanese, Korean,
+   Asian and North American discs and the August 2001 preview, 102 on the
+   June 2001 demo), else -1 (NULL and "" too); through max (when not NULL)
+   that disc's last stage, for the refusal's log line.  debug.c
+   debug_TryToGetStartStage, main.c ico_dev_switch_stage and gamestate.c
+   ico_gs_start_stage_used read it, so all three agree on every disc. */
+int ico_region_start_stage(const char *value, int *max);
+
 /* Selects the region by its slug ("pal", "jpn", "kor"): 0, or -1 for a slug that
    is not a row (NULL too), which keeps the selection. The program calls it
    once, when the disc image is identified, before any game code runs. */
