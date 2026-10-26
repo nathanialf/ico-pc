@@ -8,3 +8,4 @@
 - On Windows, a message some graphics drivers and libraries send to debuggers when they name a thread was taken for a crash on some computers; the game then closed about a minute later. It is ignored now and the log says who sent it.
 - Direct3D 11 on Windows now draws the game. Before, the screen stayed black because the graphics driver's shader compiler refused the game's shaders.
 - With the OpenGL renderer, OBS's game capture of the game window is upright now. Before, the capture was upside down while the window itself looked right.
+- The black bars of the load screen no longer flicker when it changes at Frame rate 60.
