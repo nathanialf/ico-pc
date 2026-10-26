@@ -32,6 +32,13 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_YORDA] = "Le ombre non rapiscono mai Yorda",
     [UI_STR_OPT_YORDA_NOTE] =
         "Per una partita meno stressante. Alcune scene scriptate mostrano ancora il rapimento.",
+    [UI_STR_OPT_PIT_TIME] = "Tempo per salvare Yorda",
+    [UI_STR_OPT_PIT_TIME_NOTE] =
+        "Quanto tempo impiega un’ombra a trascinare Yorda in una fossa. La riga Yorda qui sopra lo impedisce del tutto.",
+    [UI_STR_VAL_PIT_HALF] = "Metà",
+    [UI_STR_VAL_PIT_LONGER] = "Più lungo",
+    [UI_STR_VAL_PIT_DOUBLE] = "Doppio",
+    [UI_STR_VAL_PIT_TRIPLE] = "Triplo",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",
