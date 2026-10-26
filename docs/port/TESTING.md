@@ -1094,12 +1094,26 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the prompts and the boot's hand-over to the title with Skip the opening
   (`testSkipOpeningTitle`).
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
-  (`settings_render`, which also draws the Touch screen page and the editor page); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,
+  (`settings_render`, which also draws the Touch screen page, the editor page and the main page
+  scrolled by nine Downs, `settings_main_scrolled.png`); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,
   `settings_render_kor`); `cn` the same for the Asian disc (`settings_cn`, `settings_extra_cn`,
   `settings_extras_cn`, `settings_render_cn`, `ui_cn`, `gallery_cn`, `model_viewer_cn`); `ntsc`,
-  `aug6` and `jun26` run settings_extra_test's Game variants page only (`settings_extra_ntsc`,
-  `settings_extra_aug6`, `settings_extra_jun26`: Cross confirms, the 2001 notes, the demo's 7-hit
-  barrier, its toughness row without American and no Debug menu row).
+  `aug6` and `jun26` run settings_extra_test's Game variants page and the Options window
+  (`testScroll`) only (`settings_extra_ntsc`, `settings_extra_aug6`, `settings_extra_jun26`: Cross
+  confirms, the 2001 notes, the demo's 7-hit barrier, its toughness row without American and no
+  Debug menu row; the window's edge moves through that disc's own cursor move).
+- `settings_extra_test.c`'s `testScroll` (the Options window, [UI.md](UI.md#the-window)): Effects
+  from the title opens at the top with the down mark only; Down on the window's last row scrolls one
+  row, Up on its first scrolls back; Up on the first row wraps to Back and Up on Back shows the end
+  on the last row; Down on Back shows the top on the first row; three wheel notches move three rows
+  across the edge; a click on a mark is Up or Down on the cursor's row; Characters from the pause
+  menu keeps its swatches with their rows in and out of view and its marks right of the swatches; a
+  reopen on Touch screen from the title, then Back, lands on Controls' Touch screen row with the
+  window scrolled to it. `checkPageFits` (the fixture) checks a page's window at every step: the
+  rows in view one slot each from `UI_SETTINGS_WIN_Y0`, at most `UI_SETTINGS_WIN_SLOTS`, Back in
+  view and last, every row the rule shows in view on a page that fits, the marks shown exactly
+  while rows are out of view that way. `testGraphicsApply` checks the countdown (Back hidden: two
+  rows, no window).
 - `strings_complete_test.c`: every language's table defines every `UiStrId`, none empty but
   `UI_STR_NONE`, each with the English entry's printf conversions; the four pack notes filled
   with each disc's serial (`ui_str_serial`); the sheet language's default and setter; the menu
