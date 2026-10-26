@@ -31,45 +31,46 @@
 
 static void testBuild(void)
 {
-    static const int mainOpts[] = {UI_OPT_LINK,           UI_OPT_LINK,      UI_OPT_LINK,
-                                   UI_OPT_LINK,           UI_OPT_LINK,      UI_OPT_LINK,
-                                   UI_OPT_LINK,           UI_OPT_LANGUAGE,  UI_OPT_MENU_LANGUAGE,
-                                   UI_OPT_DISC,           UI_OPT_LINK,      UI_OPT_LINK,
-                                   UI_OPT_REPORT_PICTURE, UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES,
-                                   UI_OPT_DUMP_MODELS,    UI_OPT_BACK};
+    static const int mainOpts[] = {
+        UI_OPT_LINK,     UI_OPT_LINK,           UI_OPT_LINK, UI_OPT_LINK,
+        UI_OPT_LINK,     UI_OPT_LINK,           UI_OPT_LINK, UI_OPT_LINK,
+        UI_OPT_LANGUAGE, UI_OPT_MENU_LANGUAGE,  UI_OPT_DISC, UI_OPT_LINK,
+        UI_OPT_LINK,     UI_OPT_REPORT_PICTURE, UI_OPT_LINK, UI_OPT_BACK};
     static const int apiOpts[] = {UI_OPT_GRAPHICS_API, UI_OPT_GRAPHICS_APPLY, UI_OPT_GRAPHICS_KEEP,
                                   UI_OPT_GRAPHICS_REVERT, UI_OPT_BACK};
     static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_GRAPHICS_APPLY,
                                   UI_STR_GRAPHICS_KEEP, UI_STR_GRAPHICS_REVERT, UI_STR_BACK};
-    static const int fxOpts[] = {UI_OPT_FULL_HEIGHT,
-                                 UI_OPT_FILTER,
-                                 UI_OPT_BRIGHTNESS,
-                                 UI_OPT_CRT,
-                                 UI_OPT_CRT_STRENGTH,
-                                 UI_OPT_EFFECT_GLOW,
+    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,
                                  UI_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_OPT_EFFECT_SOFTENING,
                                  UI_OPT_EFFECT_MOTION_BLUR,
                                  UI_OPT_EFFECT_FOG,
                                  UI_OPT_EFFECT_WATER,
                                  UI_OPT_EFFECT_CINEMATIC_BARS,
-                                 UI_OPT_FULL_PIXEL,
                                  UI_OPT_BACK};
-    static const int fxStrs[] = {UI_STR_OPT_FULL_HEIGHT,
-                                 UI_STR_OPT_FILTERING,
-                                 UI_STR_OPT_BRIGHTNESS,
-                                 UI_STR_OPT_CRT,
-                                 UI_STR_OPT_CRT_STRENGTH,
-                                 UI_STR_OPT_EFFECT_GLOW,
+    static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,
                                  UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_FOG,
                                  UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
-                                 UI_STR_OPT_FULL_PIXEL,
                                  UI_STR_BACK};
+    static const int picOpts[] = {UI_OPT_ANTI_ALIAS,   UI_OPT_FULL_HEIGHT,  UI_OPT_FILTER,
+                                  UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,   UI_OPT_CRT,
+                                  UI_OPT_CRT_STRENGTH, UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,
+                                  UI_OPT_BACK};
+    static const int picStrs[] = {UI_STR_OPT_AA,           UI_STR_OPT_FULL_HEIGHT,
+                                  UI_STR_OPT_FILTERING,    UI_STR_OPT_FULL_PIXEL,
+                                  UI_STR_OPT_BRIGHTNESS,   UI_STR_OPT_CRT,
+                                  UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_TEXTURE_PACK,
+                                  UI_STR_OPT_MODEL_PACK,   UI_STR_BACK};
+    static const int devOpts[] = {UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,
+                                  UI_OPT_BACK};
+    static const int devStrs[] = {UI_STR_OPT_DEVELOPER_MODE, UI_STR_OPT_DUMP_TEXTURES,
+                                  UI_STR_OPT_DUMP_MODELS, UI_STR_BACK};
     static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
+                                   UI_STR_SECTION_PICTURE,
                                    UI_STR_SECTION_EFFECTS,
                                    UI_STR_SECTION_GRAPHICS,
                                    UI_STR_SECTION_GPU_DRIVER,
@@ -82,19 +83,15 @@ static void testBuild(void)
                                    UI_STR_SECTION_ACHIEVEMENTS,
                                    UI_STR_EXTRAS,
                                    UI_STR_OPT_REPORT_PICTURE,
-                                   UI_STR_OPT_DEVELOPER_MODE,
-                                   UI_STR_OPT_DUMP_TEXTURES,
-                                   UI_STR_OPT_DUMP_MODELS,
+                                   UI_STR_SECTION_DEVELOPER,
                                    UI_STR_BACK};
-    static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION,  UI_OPT_ASPECT,
-                                   UI_OPT_ANTI_ALIAS,   UI_OPT_WINDOW_MODE, UI_OPT_VSYNC,
-                                   UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,  UI_OPT_FRAMERATE,
-                                   UI_OPT_SHOW_FPS,     UI_OPT_VIDEO_MODE,  UI_OPT_BACK};
+    static const int dispOpts[] = {UI_OPT_PRESET,      UI_OPT_RESOLUTION, UI_OPT_ASPECT,
+                                   UI_OPT_WINDOW_MODE, UI_OPT_VSYNC,      UI_OPT_FRAMERATE,
+                                   UI_OPT_SHOW_FPS,    UI_OPT_VIDEO_MODE, UI_OPT_BACK};
     static const int dispStrs[] = {
-        UI_STR_OPT_PRESET,       UI_STR_OPT_RESOLUTION,  UI_STR_OPT_ASPECT,
-        UI_STR_OPT_AA,           UI_STR_OPT_WINDOW_MODE, UI_STR_OPT_VSYNC,
-        UI_STR_OPT_TEXTURE_PACK, UI_STR_OPT_MODEL_PACK,  UI_STR_OPT_FRAMERATE,
-        UI_STR_OPT_SHOW_FPS,     UI_STR_OPT_VIDEO_MODE,  UI_STR_BACK};
+        UI_STR_OPT_PRESET,      UI_STR_OPT_RESOLUTION, UI_STR_OPT_ASPECT,
+        UI_STR_OPT_WINDOW_MODE, UI_STR_OPT_VSYNC,      UI_STR_OPT_FRAMERATE,
+        UI_STR_OPT_SHOW_FPS,    UI_STR_OPT_VIDEO_MODE, UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
@@ -136,9 +133,11 @@ static void testBuild(void)
     ui_settings_reset();
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
-    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 17), "main page rows");
+    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
     CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 5), "Graphics page rows");
-    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 14), "effects rows");
+    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 8), "effects rows");
+    CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 10), "picture rows");
+    CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 4), "developer rows");
     {
         /* Characters and Game variants (links), then Add to Steam and
            Export textures (hidden without a host) before the pop-ups and
@@ -170,7 +169,7 @@ static void testBuild(void)
                                       UI_STR_OPT_VAR_DEBUG_MENU,  UI_STR_BACK};
         CHECK(labelsAre(UI_PAGE_VARIANTS, varOpts, varStrs, 10), "Game variants page rows");
     }
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 12),
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 9),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 14), "controls rows");
@@ -259,7 +258,7 @@ static void testBuild(void)
     lt_ext_reset();
     ui_settings_reset();
     ui_settings_install();
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 12), "display rows (Enhanced)");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 9), "display rows (Enhanced)");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FRAMERATE), "144 fps") == 0, "framerate 144 (%s)",
           ui_settings_value_text(UI_OPT_FRAMERATE));
 }
@@ -2588,6 +2587,17 @@ static int rowShown(UiSettingsPage page, UiSettingsOpt opt)
     return row >= 0 && ui_settings_row_shown(row);
 }
 
+/* the rows the page shows by its rule (in the window or scrolled out) */
+static int winShownCount(UiSettingsPage page)
+{
+    int labels[24], k = 0;
+    const int n = ui_settings_page_rows(page, labels, NULL, NULL, 24);
+    for (int i = 0; i < n; i++) {
+        k += ui_settings_row_shown(labels[i]);
+    }
+    return k;
+}
+
 /* the game's Options screen's settings on the pages.  Brightness
  * (Display), Button configuration, Vibration and Hold type (Controls) show
  * from the pause menu only, Film effect and Players (Gameplay) only there
@@ -2609,26 +2619,34 @@ static void testGameOptions(void)
         checkPageFits(UI_PAGE_DISPLAY, title ? "Display (title)" : "Display (pause)");
         press(0x10);
         CHECK(settle(mainL, 60), "Display: back");
-        openPage(mainL, 1, UI_PAGE_EFFECTS);
-        CHECK(rowShown(UI_PAGE_EFFECTS, UI_OPT_BRIGHTNESS) == !title, "title %d: Brightness %s",
+        openPage(mainL, 1, UI_PAGE_PICTURE);
+        CHECK(rowShown(UI_PAGE_PICTURE, UI_OPT_BRIGHTNESS) == !title, "title %d: Brightness %s",
               title, title ? "hidden" : "shown");
-        CHECK(rowShown(UI_PAGE_EFFECTS, UI_OPT_FILTER) &&
-                  rowShown(UI_PAGE_EFFECTS, UI_OPT_FULL_HEIGHT),
-              "title %d: Texture filtering and Full-height are on Effects", title);
+        CHECK(rowShown(UI_PAGE_PICTURE, UI_OPT_FILTER) &&
+                  rowShown(UI_PAGE_PICTURE, UI_OPT_FULL_HEIGHT),
+              "title %d: Texture filtering and Full-height are on Picture", title);
         {
-            /* the three first, before the CRT rows */
+            /* Anti-aliasing, Full-height and Texture filtering first, Full pixel
+               before Brightness and the CRT rows */
             int fl[16], fo[16];
-            const int fn = ui_settings_page_rows(UI_PAGE_EFFECTS, fl, fo, NULL, 16);
-            CHECK(fn > 3 && fo[0] == UI_OPT_FULL_HEIGHT && fo[1] == UI_OPT_FILTER &&
-                      fo[2] == UI_OPT_BRIGHTNESS && fo[3] == UI_OPT_CRT,
-                  "title %d: Effects starts Full-height, Texture filtering, Brightness, CRT",
+            const int fn = ui_settings_page_rows(UI_PAGE_PICTURE, fl, fo, NULL, 16);
+            CHECK(fn > 5 && fo[0] == UI_OPT_ANTI_ALIAS && fo[1] == UI_OPT_FULL_HEIGHT &&
+                      fo[2] == UI_OPT_FILTER && fo[3] == UI_OPT_FULL_PIXEL &&
+                      fo[4] == UI_OPT_BRIGHTNESS && fo[5] == UI_OPT_CRT,
+                  "title %d: Picture starts Anti-aliasing, Full-height, Texture filtering, Full "
+                  "pixel, Brightness, CRT",
                   title);
         }
-        CHECK(rowShown(UI_PAGE_EFFECTS, UI_OPT_CRT) &&
-                  rowShown(UI_PAGE_EFFECTS, UI_OPT_CRT_STRENGTH) &&
+        CHECK(rowShown(UI_PAGE_PICTURE, UI_OPT_CRT) &&
+                  rowShown(UI_PAGE_PICTURE, UI_OPT_CRT_STRENGTH) &&
                   !rowShown(UI_PAGE_DISPLAY, UI_OPT_CRT) &&
-                  ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_CRT_STRENGTH) < 0,
-              "title %d: the CRT rows are on Effects, not Display", title);
+                  ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_CRT_STRENGTH) < 0 &&
+                  ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_CRT) < 0,
+              "title %d: the CRT rows are on Picture, not Display or Effects", title);
+        checkPageFits(UI_PAGE_PICTURE, title ? "Picture (title)" : "Picture (pause)");
+        press(0x10);
+        CHECK(settle(mainL, 60), "Picture: back");
+        openPage(mainL, 2, UI_PAGE_EFFECTS);
         checkPageFits(UI_PAGE_EFFECTS, title ? "Effects (title)" : "Effects (pause)");
         press(0x10);
         CHECK(settle(mainL, 60), "Effects: back");
@@ -2833,18 +2851,18 @@ static void testGameOptions(void)
     /* Square on the row: the default again (the adjust screen's Default) */
     {
         const int mainB = enterMain(0);
-        const int dispL = openPage(mainB, 1, UI_PAGE_EFFECTS);
-        lt_ext_layout(dispL)->curItem = ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_BRIGHTNESS);
+        const int dispL = openPage(mainB, 1, UI_PAGE_PICTURE);
+        lt_ext_layout(dispL)->curItem = ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_BRIGHTNESS);
         frame(0);
         press(0x0080);
         CHECK(systemStatus[11] == 7 && settle(dispL, 4), "Square: brightness 7 again (%d)",
               systemStatus[11]);
         systemStatus[11] = 3;
-        lt_ext_layout(dispL)->curItem = ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_CRT);
+        lt_ext_layout(dispL)->curItem = ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_CRT);
         press(0x0080);
         CHECK(systemStatus[11] == 3, "Square on another row: no reset (%d)", systemStatus[11]);
         press(0x10);
-        CHECK(settle(mainB, 60), "Effects: back");
+        CHECK(settle(mainB, 60), "Picture: back");
     }
     systemStatus[11] = 0;
 
@@ -2971,7 +2989,7 @@ static void testList(void)
    step then doing nothing; On/Off with one), its note, Dump textures on
    the main page in developer mode only, and the [video] keys' round trip
    through the config. */
-/* the texture pack note sits on the Display page, whose notes must stay one
+/* the texture pack note sits on the Picture page, whose notes must stay one
    line to keep clear of Back: checked in the European disc's five
    languages (the game's language picks the port's) */
 static void testTexturePackNoteLines(void)
@@ -2980,9 +2998,9 @@ static void testTexturePackNoteLines(void)
     int tn;
     s_packCount = 883;
     ui_settings_set_texture_pack_count(fakePackCount);
-    openPage(mainL, 0, UI_PAGE_DISPLAY);
-    tn = rowWithPrefix(UI_PAGE_DISPLAY, "PCSX2 packs:");
-    CHECK(tn >= 0, "the texture pack note on the Display page");
+    openPage(mainL, 1, UI_PAGE_PICTURE);
+    tn = rowWithPrefix(UI_PAGE_PICTURE, "PCSX2 packs:");
+    CHECK(tn >= 0, "the texture pack note on the Picture page");
     for (int lang = 0; lang < UI_LANG_PAL_COUNT && tn >= 0; lang++) {
         const char *want = ui_str_in((UiLang)lang, UI_STR_TEXTURE_PACK_NOTE);
         NonLinearCameraMove = 2 + lang; /* the game's language: 2 EN .. 6 ES */
@@ -3029,14 +3047,14 @@ static void testTexturePack(void)
     CHECK(o.texturePack == 1 && strcmp(ui_settings_value_text(UI_OPT_TEXTURE_PACK), "On") == 0,
           "Left: On");
     {
-        /* the Display page's notes are one line, clear of Back (as the CRT
-           note); the main page's dump note at most two */
-        int tn = rowWithPrefix(UI_PAGE_DISPLAY, "PCSX2 packs:");
-        int dn = rowWithPrefix(UI_PAGE_MAIN, "For pack makers:");
+        /* the Picture page's notes are one line, clear of Back (as the CRT
+           note); the Developer page's dump note at most two */
+        int tn = rowWithPrefix(UI_PAGE_PICTURE, "PCSX2 packs:");
+        int dn = rowWithPrefix(UI_PAGE_DEVELOPER, "For pack makers:");
         const char *nl;
-        CHECK(tn >= 0, "the Display note");
+        CHECK(tn >= 0, "the Picture note");
         CHECK(tn >= 0 && strchr(lt_ext_row_text(tn), '\n') == NULL,
-              "the Display note is one line: %s", tn >= 0 ? lt_ext_row_text(tn) : "");
+              "the Picture note is one line: %s", tn >= 0 ? lt_ext_row_text(tn) : "");
         CHECK(dn >= 0, "the dump row's note");
         nl = dn >= 0 ? strchr(lt_ext_row_text(dn), '\n') : NULL;
         CHECK(nl == NULL || strchr(nl + 1, '\n') == NULL, "the dump note is at most two lines");
@@ -3116,37 +3134,49 @@ static void testTexturePack(void)
 
     /* Dump textures is shown in developer mode only */
     int mainL = enterMain(1);
-    CHECK(!rowShown(UI_PAGE_MAIN, UI_OPT_DUMP_TEXTURES), "dump row hidden");
+    CHECK(!rowShown(UI_PAGE_DEVELOPER, UI_OPT_DUMP_TEXTURES), "dump row hidden");
     ico_opt_set_developer_mode(1);
     for (int k = 0; k < 4; k++) {
         frame(0); /* the page refreshes */
     }
-    CHECK(rowShown(UI_PAGE_MAIN, UI_OPT_DUMP_TEXTURES), "dump row shown in developer mode");
+    CHECK(rowShown(UI_PAGE_DEVELOPER, UI_OPT_DUMP_TEXTURES), "dump row shown in developer mode");
     {
         int labels[20];
         const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         const LtProperty *back = lt_ext_prop(labels[n - 1]);
-        CHECK(back->dispY == winBackY(13), "thirteen rows: Back in the window's last slot (%d)",
+        CHECK(back->dispY == winBackY(12), "twelve rows: Back in the window's last slot (%d)",
               back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "Back's box ends at %d", back->dispY + back->dispH);
         checkPageFits(UI_PAGE_MAIN, "Main (title, developer mode)");
+        /* the Developer page: its three rows and Back */
+        openPage(mainL, -1, UI_PAGE_DEVELOPER);
+        CHECK(winShownCount(UI_PAGE_DEVELOPER) == 4,
+              "Developer: Developer mode, the two dumps, Back");
+        checkPageFits(UI_PAGE_DEVELOPER, "Developer (title, developer mode)");
+        press(0x10);
+        CHECK(settle(mainL, 60), "Developer: back");
     }
     ico_opt_set_developer_mode(0);
     for (int k = 0; k < 4; k++) {
         frame(0); /* the page refreshes */
     }
-    CHECK(!rowShown(UI_PAGE_MAIN, UI_OPT_DUMP_TEXTURES), "hidden again");
-    /* the Display page with the row, from the title */
-    openPage(mainL, 0, UI_PAGE_DISPLAY);
-    CHECK(rowShown(UI_PAGE_DISPLAY, UI_OPT_TEXTURE_PACK), "the Texture pack row");
-    checkPageFits(UI_PAGE_DISPLAY, "Display with Texture pack (title)");
+    CHECK(!rowShown(UI_PAGE_DEVELOPER, UI_OPT_DUMP_TEXTURES), "hidden again");
+    openPage(mainL, -1, UI_PAGE_DEVELOPER);
+    CHECK(winShownCount(UI_PAGE_DEVELOPER) == 2, "developer mode off: Developer mode and Back");
+    checkPageFits(UI_PAGE_DEVELOPER, "Developer (title)");
+    press(0x10);
+    CHECK(settle(mainL, 60), "Developer: back");
+    /* the Picture page with the row, from the title */
+    openPage(mainL, -1, UI_PAGE_PICTURE);
+    CHECK(rowShown(UI_PAGE_PICTURE, UI_OPT_TEXTURE_PACK), "the Texture pack row");
+    checkPageFits(UI_PAGE_PICTURE, "Picture with Texture pack (title)");
     ui_settings_set_texture_pack_count(NULL);
     useConfig("version = 1\n");
 }
 
-/* Display > Model pack (title only; "None installed" without the
+/* Picture > Model pack (title only; "None installed" without the
    hook or with a count of 0, the step then doing nothing; On/Off with
-   one), its note, Dump models on the main page in developer mode only
+   one), its note, Dump models on the Developer page in developer mode only
    (switched off with it), and the [video] keys' round trip. */
 static void testModelPack(void)
 {
@@ -3185,36 +3215,39 @@ static void testModelPack(void)
 
     /* shown from the title only; both entries fit */
     int mainL = enterMain(1);
-    openPage(mainL, 0, UI_PAGE_DISPLAY);
-    CHECK(rowShown(UI_PAGE_DISPLAY, UI_OPT_MODEL_PACK), "title: the Model pack row");
-    checkPageFits(UI_PAGE_DISPLAY, "Display with Model pack (title)");
+    openPage(mainL, -1, UI_PAGE_PICTURE);
+    CHECK(rowShown(UI_PAGE_PICTURE, UI_OPT_MODEL_PACK), "title: the Model pack row");
+    checkPageFits(UI_PAGE_PICTURE, "Picture with Model pack (title)");
     {
-        int tn = rowWithPrefix(UI_PAGE_DISPLAY, "Model packs:");
+        int tn = rowWithPrefix(UI_PAGE_PICTURE, "Model packs:");
         CHECK(tn >= 0 && strchr(lt_ext_row_text(tn), '\n') == NULL,
               "the Model pack note: one line");
     }
     mainL = enterMain(0);
-    openPage(mainL, 0, UI_PAGE_DISPLAY);
-    CHECK(!rowShown(UI_PAGE_DISPLAY, UI_OPT_MODEL_PACK), "pause menu: the Model pack row hidden");
-    checkPageFits(UI_PAGE_DISPLAY, "Display (pause)");
+    openPage(mainL, -1, UI_PAGE_PICTURE);
+    CHECK(!rowShown(UI_PAGE_PICTURE, UI_OPT_MODEL_PACK), "pause menu: the Model pack row hidden");
+    checkPageFits(UI_PAGE_PICTURE, "Picture (pause)");
 
     /* Dump models: developer mode only, switched off with it */
     mainL = enterMain(1);
-    CHECK(!rowShown(UI_PAGE_MAIN, UI_OPT_DUMP_MODELS), "dump models row hidden");
+    CHECK(!rowShown(UI_PAGE_DEVELOPER, UI_OPT_DUMP_MODELS), "dump models row hidden");
     ui_settings_step(UI_OPT_DEVELOPER, 1);
     CHECK(ico_opt_developer_mode(), "Developer on");
     for (int k = 0; k < 4; k++) {
         frame(0); /* the page refreshes */
     }
-    CHECK(rowShown(UI_PAGE_MAIN, UI_OPT_DUMP_MODELS), "dump models row shown in developer mode");
+    CHECK(rowShown(UI_PAGE_DEVELOPER, UI_OPT_DUMP_MODELS),
+          "dump models row shown in developer mode");
     checkPageFits(UI_PAGE_MAIN, "Main (title, developer mode, Dump models)");
+    openPage(mainL, -1, UI_PAGE_DEVELOPER);
+    checkPageFits(UI_PAGE_DEVELOPER, "Developer (title, developer mode, Dump models)");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_DUMP_MODELS), "Off") == 0, "dump models: Off");
     ui_settings_step(UI_OPT_DUMP_MODELS, 1);
     ico_video_get(&o);
     CHECK(o.dumpModels == 1 && strcmp(ui_settings_value_text(UI_OPT_DUMP_MODELS), "On") == 0,
           "dump models: On");
     {
-        int dn = rowWithPrefix(UI_PAGE_MAIN, "For pack makers: saves each model");
+        int dn = rowWithPrefix(UI_PAGE_DEVELOPER, "For pack makers: saves each model");
         const char *nl = dn >= 0 ? strchr(lt_ext_row_text(dn), '\n') : NULL;
         CHECK(dn >= 0, "the dump models note");
         CHECK(nl == NULL || strchr(nl + 1, '\n') == NULL,
