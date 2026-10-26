@@ -1658,6 +1658,28 @@ if(ICO_RUN_TESTS)
 endif()
 # FIXP end
 
+# VK11: the render tests on a Vulkan 1.1 driver's absences (ICO_VK_FAKE_API=1.1,
+# port/rhi/vk/vk_device.c; issue 145): so far the submissions tracked by the
+# fence ring instead of the timeline semaphore (port/rhi/vk/vk_sync.c).  The
+# expectations are the Vulkan runs' own, byte for byte (the sync path changes
+# no command a list records).  Label vk11: ctest -j1 -L vk11 (with port/rhi's
+# rhi_vk_vk11 and rhi_vk_swapchain_vk11).
+if(ICO_RUN_TESTS)
+    set(_env_vk11 ${_env} "ICO_VK_FAKE_API=1.1")
+    set(_v11 "${CMAKE_CURRENT_BINARY_DIR}/vk11")
+    file(MAKE_DIRECTORY "${_v11}")
+    add_test(NAME rd_pixel_vk11 COMMAND rd_pixel_test "${_v11}")
+    add_test(NAME rd_present_vk11 COMMAND rd_present_test "${_v11}")
+    set_tests_properties(rd_pixel_vk11 rd_present_vk11
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_v11}"
+                                    ENVIRONMENT "${_env_vk11}")
+    foreach(_t rd_pixel_vk11 rd_present_vk11)
+        get_test_property(${_t} LABELS _labels)
+        set_tests_properties(${_t} PROPERTIES LABELS "${_labels};vk11")
+    endforeach()
+endif()
+# VK11 end
+
 # ---- The render suite a second time, on the OpenGL backend (issue 126) ----
 # ico_rhi_vk links every backend and rhi_backend.c takes ICO_RHI_BACKEND from the
 # environment as the default one, so the same test programs run on OpenGL with no
