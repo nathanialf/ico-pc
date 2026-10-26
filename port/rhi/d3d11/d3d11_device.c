@@ -781,12 +781,26 @@ static void d11_collect_timestamps(D11Frame *f)
     memset(f->tsWritten, 0, sizeof(f->tsWritten));
     const bool begun = f->tsDisjointBegun;
     f->tsDisjointBegun = false;
-    if (!any || !begun || !g_d11.timestamps || g_d11.deviceLost) {
+    if (!begun || !g_d11.timestamps || g_d11.deviceLost) {
         return;
     }
+    /* every query the slot ended is read before it is begun or ended
+     * again, also when its results are dropped (the debug layer's
+     * warnings 408 and 410 otherwise: a re-used query whose results were
+     * never fetched); the slot's event has passed, so nothing waits */
     D3D11_QUERY_DATA_TIMESTAMP_DISJOINT dj;
     memset(&dj, 0, sizeof(dj));
-    if (d11_spin(f->tsDisjoint, &dj, sizeof(dj)) != S_OK) {
+    const bool djOk = d11_spin(f->tsDisjoint, &dj, sizeof(dj)) == S_OK;
+    UINT64 stamps[RHI_MAX_TIMESTAMPS];
+    for (uint32_t i = 0; i < RHI_MAX_TIMESTAMPS; i++) {
+        stamps[i] = 0;
+        if (rhi_ts_has(m, i) && ID3D11DeviceContext_GetData(
+                                    g_d11.ctx, (ID3D11Asynchronous *)f->ts[i], &stamps[i],
+                                    sizeof(stamps[i]), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK) {
+            stamps[i] = 0;
+        }
+    }
+    if (!any || !djOk) {
         return;
     }
     if (dj.Disjoint || dj.Frequency == 0) {
@@ -800,13 +814,8 @@ static void d11_collect_timestamps(D11Frame *f)
     }
     const uint64_t freq = dj.Frequency;
     for (uint32_t i = 0; i < RHI_MAX_TIMESTAMPS; i++) {
-        if (!rhi_ts_has(m, i)) {
-            continue;
-        }
-        UINT64 t = 0;
-        if (ID3D11DeviceContext_GetData(g_d11.ctx, (ID3D11Asynchronous *)f->ts[i], &t, sizeof(t),
-                                        D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK &&
-            t) {
+        const UINT64 t = stamps[i];
+        if (rhi_ts_has(m, i) && t) {
             g_d11.tsResult[i] = t / freq * 1000000000ull + t % freq * 1000000000ull / freq;
             g_d11.tsCount = i + 1;
         }
@@ -916,6 +925,13 @@ void rhi_wait_frame(void)
     D11Frame *old = d11_cur_frame();
     if (old->tsDisjointBegun && old->tsDisjoint) {
         ID3D11DeviceContext_End(g_d11.ctx, (ID3D11Asynchronous *)old->tsDisjoint);
+    }
+    /* the slot's event after all of its work (its submits, a readback's
+     * copy): ended once per use, so it is always read before its next End */
+    if (old->eventPending) {
+        ID3D11DeviceContext_End(g_d11.ctx, (ID3D11Asynchronous *)old->event);
+        old->eventPending = false;
+        old->eventIssued = true;
     }
     g_d11.frameIndex++;
     d11_recycle_frame(d11_cur_frame());
@@ -1118,9 +1134,8 @@ void rhi_submit(RhiCommandList cl)
     for (uint32_t w = 0; w < RHI_TIMESTAMP_WORDS; w++) {
         f->tsWritten[w] |= c->tsMask[w];
     }
-    /* the slot's event: the last submit's end is the one waited for */
-    ID3D11DeviceContext_End(g_d11.ctx, (ID3D11Asynchronous *)f->event);
-    f->eventIssued = true;
+    /* the slot's event is ended once, when rhi_wait_frame leaves the slot */
+    f->eventPending = true;
     d11_note_submit(c->serial);
     d11_drain_messages();
 }
