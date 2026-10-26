@@ -2,11 +2,13 @@
 # baserom/. Tests that need the user's disc exit 77 and ctest reports them as
 # skipped (SKIP_RETURN_CODE in the CMakeLists), which is not a failure.
 # docs/BUILDING.md ("Continuous integration") describes the jobs: `linux`
-# (the hygiene checks and the four main builds), `extra`, a matrix of the
+# (the hygiene checks and the four main builds), `windows`, the renderer's
+# tests from the `linux` job's win-x64 build run on Direct3D 11 through WARP
+# on a Windows runner (after `linux`), `extra`, a matrix of the
 # sanitizer, float-trap and Windows clang builds, `linux-arm64`, the arm64
 # Linux build and tests on an arm64 runner (and on a pushed v* tag the arm64
 # package), and `android`, the APK build and
-# its structural checks; all four run side by side.
+# its structural checks; all but `windows` run side by side.
 name: ci
 
 on:
@@ -156,12 +158,23 @@ jobs:
           $CMAKE/cmake --build build-host/linux-x64-clang --parallel --target all tests
           $CMAKE/ctest --test-dir build-host/linux-x64-clang --output-on-failure --parallel 4
 
-      - name: win-x64 (cross-compiled; the tests are built, not run)
+      - name: win-x64 (cross-compiled; the tests are built, the `windows` job runs some)
         run: |
           $CMAKE/cmake --preset win-x64 -DICO_LINK_EXE=ON
           $CMAKE/cmake --build build-host/win-x64 --parallel --target all tests
           test -f build-host/win-x64/ico_pc.exe
           test -f build-host/win-x64/SDL3.dll
+          # the renderer's tests the `windows` job runs on Direct3D 11
+          # through WARP, with SDL3.dll (their only non-system import)
+          tools/ci_d3d11_warp.sh stage build-host/win-x64 build-host/win-x64-warp
+
+      - name: Upload the win-x64 test programs (for the `windows` job)
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-x64-warp-tests
+          path: build-host/win-x64-warp/
+          retention-days: 7
+          if-no-files-found: error
 
       - name: ccache (save)
         if: ${{ !cancelled() }}
@@ -169,6 +182,61 @@ jobs:
         with:
           path: ~/.cache/ccache
           key: ccache-linux-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-${{ github.sha }}
+
+  # The renderer's tests on Direct3D 11 through WARP, Microsoft's software
+  # adapter, on GitHub's Windows runner (issue 126: before this job the
+  # Direct3D 11 backend had never run on any device). The programs are the
+  # `linux` job's win-x64 cross build (its artifact win-x64-warp-tests);
+  # tools/ci_d3d11_warp.sh runs each with ICO_RHI_BACKEND=d3d11 and
+  # ICO_D3D11_ADAPTER=warp and its own expectations, prints a failed test's
+  # device line, debug-layer lines and log end, and the logs are kept as an
+  # artifact. ICO_D3D11_DEBUG=1 asks for the debug layer: the step before
+  # tries to add it (Windows' optional feature "Graphics Tools") and the
+  # device line in each log says whether it was there; its absence fails
+  # nothing. docs/port/TESTING.md ("The render suite on Direct3D 11 (WARP)")
+  # lists what runs.
+  windows:
+    needs: linux
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The win-x64 test programs
+        uses: actions/download-artifact@v4
+        with:
+          name: win-x64-warp-tests
+          path: warp
+
+      - name: Direct3D 11 debug layer (Graphics Tools; not gating)
+        continue-on-error: true
+        timeout-minutes: 20
+        shell: pwsh
+        run: |
+          $cap = Get-WindowsCapability -Online -Name 'Tools.Graphics.DirectX*'
+          $cap | Format-Table -AutoSize Name, State
+          if ($cap -and $cap.State -ne 'Installed') { $cap | Add-WindowsCapability -Online | Out-Null }
+          Get-WindowsCapability -Online -Name 'Tools.Graphics.DirectX*' | Format-Table -AutoSize Name, State
+          if (Test-Path "$env:WINDIR\System32\d3d11_3SDKLayers.dll") { 'd3d11_3SDKLayers.dll: present' } else { 'd3d11_3SDKLayers.dll: absent' }
+
+      - name: Renderer tests on Direct3D 11 (WARP)
+        shell: bash
+        env:
+          ICO_RHI_BACKEND: d3d11
+          ICO_D3D11_ADAPTER: warp
+          ICO_D3D11_DEBUG: '1'
+        run: tools/ci_d3d11_warp.sh run warp warp-logs
+
+      - name: Upload the logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3d11-warp-logs
+          path: |
+            warp-logs/
+            warp/work/*.png
+          retention-days: 14
+          if-no-files-found: warn
 
   # The presets the main job does not build, one runner each so the job
   # stays well inside its timeout. Each restores the toolchain the `linux`
