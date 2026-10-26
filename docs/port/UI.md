@@ -765,7 +765,7 @@ filter (`port/ui/ui_host.c` (`hostOverlayTop`)). [INPUT.md](INPUT.md) has the to
 `ui_fps.c` draws Options > Display > Frame rate counter (`[video] show_fps`, default off, an On/Off
 row stepped like Vsync): one `ui_draw_text` per present on the same top layer, called from
 `hostOverlayTop` after the touch controls when `ico_video_show_fps()` is set. The text is
-"<n> <fps unit>" (`UI_STR_FPS_UNIT`, the Frame rate row's unit), lime green (150, 255, 130 at
+"<n> <fps unit>" (`UI_STR_FPS_UNIT`, the Frame rate row's unit), white (255, 255, 255 at
 alpha 235), no background, 3.5 % of the output's height (at least 18 pixels), left and top aligned
 a margin of 1.2 % of the output's height (at least 6) in from the corner of the output (the whole
 screen, not the 4:3 picture: `pxToGrid` maps an output pixel to the font's grid, which reaches
