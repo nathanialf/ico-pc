@@ -681,7 +681,7 @@ static int render(void)
         int downs;
         const char *name;
     } pages[] = {{UI_PAGE_DISPLAY, 0, "settings_display.png"},
-                 {UI_PAGE_DISPLAY, 9, "settings_display_videomode.png"},
+                 {UI_PAGE_DISPLAY, 10, "settings_display_videomode.png"},
                  {UI_PAGE_EFFECTS, 0, "settings_effects.png"},
                  {UI_PAGE_AUDIO, 0, "settings_audio.png"},
                  {UI_PAGE_CONTROLS, 1, "settings_controls.png"},

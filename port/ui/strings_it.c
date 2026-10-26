@@ -507,6 +507,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_EFFECT_WATER_NOTE] =
         "Nitido disegna i riflessi nell’acqua alla risoluzione scelta; Originale mantiene i riflessi più morbidi della PS2.",
     [UI_STR_VAL_SMOOTH] = "Fluido",
+    [UI_STR_OPT_SHOW_FPS] = "Contatore fotogrammi",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
         "Originale fa avanzare la scia con i fotogrammi del gioco. Fluido la fa avanzare a ogni fotogramma mostrato, con la stessa lunghezza di scia.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Bande cinema",

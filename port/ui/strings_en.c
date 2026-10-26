@@ -504,6 +504,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_EFFECT_WATER_NOTE] =
         "Sharp draws the reflections in water at the resolution you chose; Original keeps the PS2’s softer reflections.",
     [UI_STR_VAL_SMOOTH] = "Smooth",
+    [UI_STR_OPT_SHOW_FPS] = "Frame rate counter",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
         "Original moves the trail on with the game’s own frames. Smooth moves it on with every frame shown, the same length of trail.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Cinematic bars",

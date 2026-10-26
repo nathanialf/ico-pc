@@ -507,6 +507,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_EFFECT_WATER_NOTE] =
         "‘선명하게’는 수면의 반사를 선택한 해상도로 그립니다. ‘오리지널’은 PS2의 부드러운 반사 그대로입니다.",
     [UI_STR_VAL_SMOOTH] = "부드럽게",
+    [UI_STR_OPT_SHOW_FPS] = "프레임 레이트 표시",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
         "‘오리지널’은 블러를 게임의 프레임마다 움직입니다. ‘부드럽게’는 표시되는 프레임마다 움직이며 블러의 크기는 그대로입니다.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "위아래 검은 띠",

@@ -716,6 +716,8 @@ typedef enum UiStrId {
     /* Effects > Motion blur: Off (UI_STR_OFF), Original (UI_STR_VAL_ORIGINAL)
        or Smooth, and the note under the row */
     UI_STR_VAL_SMOOTH,
+    /* Display > Frame rate counter (the value is Off/On) */
+    UI_STR_OPT_SHOW_FPS,
     UI_STR_EFFECT_MOTION_BLUR_NOTE,
     /* the Korean language's own name, the same in every table (the Menu
        language row, after UI_STR_LANG_JA) */

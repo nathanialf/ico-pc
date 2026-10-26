@@ -89,18 +89,12 @@ static void testBuild(void)
     static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION,  UI_OPT_ASPECT,
                                    UI_OPT_ANTI_ALIAS,   UI_OPT_WINDOW_MODE, UI_OPT_VSYNC,
                                    UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,  UI_OPT_FRAMERATE,
-                                   UI_OPT_VIDEO_MODE,   UI_OPT_BACK};
-    static const int dispStrs[] = {UI_STR_OPT_PRESET,
-                                   UI_STR_OPT_RESOLUTION,
-                                   UI_STR_OPT_ASPECT,
-                                   UI_STR_OPT_AA,
-                                   UI_STR_OPT_WINDOW_MODE,
-                                   UI_STR_OPT_VSYNC,
-                                   UI_STR_OPT_TEXTURE_PACK,
-                                   UI_STR_OPT_MODEL_PACK,
-                                   UI_STR_OPT_FRAMERATE,
-                                   UI_STR_OPT_VIDEO_MODE,
-                                   UI_STR_BACK};
+                                   UI_OPT_SHOW_FPS,     UI_OPT_VIDEO_MODE,  UI_OPT_BACK};
+    static const int dispStrs[] = {
+        UI_STR_OPT_PRESET,       UI_STR_OPT_RESOLUTION,  UI_STR_OPT_ASPECT,
+        UI_STR_OPT_AA,           UI_STR_OPT_WINDOW_MODE, UI_STR_OPT_VSYNC,
+        UI_STR_OPT_TEXTURE_PACK, UI_STR_OPT_MODEL_PACK,  UI_STR_OPT_FRAMERATE,
+        UI_STR_OPT_SHOW_FPS,     UI_STR_OPT_VIDEO_MODE,  UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
@@ -176,7 +170,7 @@ static void testBuild(void)
                                       UI_STR_OPT_VAR_DEBUG_MENU,  UI_STR_BACK};
         CHECK(labelsAre(UI_PAGE_VARIANTS, varOpts, varStrs, 10), "Game variants page rows");
     }
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11),
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 12),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 14), "controls rows");
@@ -265,7 +259,7 @@ static void testBuild(void)
     lt_ext_reset();
     ui_settings_reset();
     ui_settings_install();
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 11), "display rows (Enhanced)");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 12), "display rows (Enhanced)");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FRAMERATE), "144 fps") == 0, "framerate 144 (%s)",
           ui_settings_value_text(UI_OPT_FRAMERATE));
 }
@@ -446,6 +440,45 @@ static void testFramerate(void)
               strcmp(ico_toml_get(t, "video.framerate"), "uncapped") == 0,
           "[video] framerate = \"uncapped\"");
     ico_toml_free(t);
+}
+
+/* the Frame rate counter row: Off by default, Right and Left both switch it,
+   the preset is not changed, [video] show_fps is saved, a file's true is
+   read, and the row is on the Display page with its table text */
+static void testShowFps(void)
+{
+    char p[1100];
+    IcoVideoOptions o;
+
+    useConfig("[video]\npreset = \"enhanced\"\n");
+    fakeTables();
+    lt_ext_reset();
+    ui_settings_reset();
+    ui_set_language(UI_LANG_EN);
+    ui_settings_install();
+    CHECK(ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_SHOW_FPS) >= 0, "the row on Display");
+    CHECK(strcmp(ui_str(UI_STR_OPT_SHOW_FPS), "Frame rate counter") == 0, "its label");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_SHOW_FPS), "Off") == 0, "Off by default (%s)",
+          ui_settings_value_text(UI_OPT_SHOW_FPS));
+    ui_settings_step(UI_OPT_SHOW_FPS, 1);
+    ico_video_get(&o);
+    CHECK(o.showFps == 1 && ico_video_show_fps() == 1 &&
+              strcmp(ui_settings_value_text(UI_OPT_SHOW_FPS), "On") == 0,
+          "Right: On (%d \"%s\")", o.showFps, ui_settings_value_text(UI_OPT_SHOW_FPS));
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ENHANCED, "the preset is not changed");
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get(t, "video.show_fps") != NULL &&
+              strcmp(ico_toml_get(t, "video.show_fps"), "true") == 0,
+          "[video] show_fps = true");
+    ico_toml_free(t);
+    ui_settings_step(UI_OPT_SHOW_FPS, -1);
+    ico_video_get(&o);
+    CHECK(o.showFps == 0 && strcmp(ui_settings_value_text(UI_OPT_SHOW_FPS), "Off") == 0,
+          "Left: Off again");
+    useConfig("[video]\nshow_fps = true\n");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_SHOW_FPS), "On") == 0, "a file's true: On");
 }
 
 /* the Preset row reads Original, Enhanced or Custom, and its step is the
@@ -3551,6 +3584,7 @@ int main(int argc, char **argv)
     testAudio();
     testVideoGate();
     testFramerate();
+    testShowFps();
     testPreset();
     testCapture();
     testBootSkip();

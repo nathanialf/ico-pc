@@ -1957,6 +1957,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         }
         snprintf(buf, size, "%d %s", o.framerate, ui_str(UI_STR_FPS_UNIT));
         return buf;
+    case UI_OPT_SHOW_FPS:
+        return onOff(o.showFps);
     case UI_OPT_CRT:
         /* [video] crt and crt_mode as one value */
         return ui_str(
@@ -2330,6 +2332,8 @@ static int *videoSwitch(IcoVideoOptions *o, UiSettingsOpt opt)
         return &o->effectWaterSharp;
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return &o->effectCinematicBars;
+    case UI_OPT_SHOW_FPS:
+        return &o->showFps;
     case UI_OPT_FULL_PIXEL:
         return &o->fullPixel;
     default:
@@ -2462,6 +2466,7 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_EFFECT_FOG:
     case UI_OPT_EFFECT_WATER:
     case UI_OPT_EFFECT_CINEMATIC_BARS:
+    case UI_OPT_SHOW_FPS:
     case UI_OPT_FULL_PIXEL: {
         /* the plain On/Off display rows (and Water reflections' Original
            and Sharp) */
@@ -3112,8 +3117,9 @@ static void buildGalleryBar(void)
 
 /* A page's first row and pitch (field lines) for n rows shown.  Every page
    keeps Back's box inside the 226 lines and above the notes:
-     Display      from 36, 14 apart (at most eleven rows shown; Video mode
-                  and Model pack are the title's)
+     Display      from 36, 13 apart (at most twelve rows shown: Back at
+                  179, its box to 215; Video mode and Model pack are the
+                  title's)
      Characters   from 40, 13 apart (twelve rows: Back at 183, its box to
                   219); inside the model viewer CV_ROW_Y0 and CV_ROW_PITCH
      Main         from 40: up to 8 rows 19 apart, 9 rows 17, 10 rows 15,
@@ -3140,7 +3146,7 @@ static int pagePitch(int page, int n, int *y0)
     if (page == UI_PAGE_DISPLAY) {
         (void)n;
         *y0 = 36;
-        return 14;
+        return 13; /* twelve rows with the Frame rate counter: Back at 179 */
     }
     *y0 = 40;
     if (page == UI_PAGE_VARIANTS && n > 9) {
@@ -3954,18 +3960,12 @@ static void build(void)
     static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION,  UI_OPT_ASPECT,
                                    UI_OPT_ANTI_ALIAS,   UI_OPT_WINDOW_MODE, UI_OPT_VSYNC,
                                    UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,  UI_OPT_FRAMERATE,
-                                   UI_OPT_VIDEO_MODE,   UI_OPT_BACK};
-    static const int dispStrs[] = {UI_STR_OPT_PRESET,
-                                   UI_STR_OPT_RESOLUTION,
-                                   UI_STR_OPT_ASPECT,
-                                   UI_STR_OPT_AA,
-                                   UI_STR_OPT_WINDOW_MODE,
-                                   UI_STR_OPT_VSYNC,
-                                   UI_STR_OPT_TEXTURE_PACK,
-                                   UI_STR_OPT_MODEL_PACK,
-                                   UI_STR_OPT_FRAMERATE,
-                                   UI_STR_OPT_VIDEO_MODE,
-                                   UI_STR_BACK};
+                                   UI_OPT_SHOW_FPS,     UI_OPT_VIDEO_MODE,  UI_OPT_BACK};
+    static const int dispStrs[] = {
+        UI_STR_OPT_PRESET,       UI_STR_OPT_RESOLUTION,  UI_STR_OPT_ASPECT,
+        UI_STR_OPT_AA,           UI_STR_OPT_WINDOW_MODE, UI_STR_OPT_VSYNC,
+        UI_STR_OPT_TEXTURE_PACK, UI_STR_OPT_MODEL_PACK,  UI_STR_OPT_FRAMERATE,
+        UI_STR_OPT_SHOW_FPS,     UI_STR_OPT_VIDEO_MODE,  UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,

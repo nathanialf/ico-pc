@@ -431,6 +431,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_FILTER,
     UI_OPT_FULL_HEIGHT,
     UI_OPT_FRAMERATE,    /* [video] framerate, stepped through its values */
+    UI_OPT_SHOW_FPS,     /* [video] show_fps: Off/On, default Off (the Frame rate counter) */
     UI_OPT_CRT,          /* [video] crt and crt_mode in one row */
     UI_OPT_CRT_STRENGTH, /* [video] crt_strength, 0..100 % in tens */
     UI_OPT_TEXTURE_PACK, /* [video] texture_pack: On/Off, "None installed" without a pack */

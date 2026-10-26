@@ -502,6 +502,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_EFFECT_WATER_NOTE] =
         "「清晰」以您選擇的解析度描繪水中的倒影；「原版」保留 PS2 較柔和的倒影。",
     [UI_STR_VAL_SMOOTH] = "平滑",
+    [UI_STR_OPT_SHOW_FPS] = "顯示影格率",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
         "「原版」依遊戲本身的影格推進殘影；「平滑」依畫面顯示的每一格推進，殘影長度相同。",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "電影黑邊",
