@@ -109,6 +109,14 @@ How the picture looks.
   because your graphics card cannot do it, or cannot do it with the fog
   effect, it says **(off: not available)** after the name and the picture
   is drawn without it.
+- **Downsampling** is **Off** or **To original size**. To original size
+  draws the picture at the **Resolution** above, then shrinks it to the
+  game's own size before showing it, so each screen pixel is an average of
+  the larger picture. The picture then looks like the game's own, smoothed
+  by the extra detail. It needs a Resolution of 2x or more (higher draws
+  more); nothing changes with the CRT filter, at **Window**, or when the
+  Resolution is 1x. It works with either Preset and with Anti-aliasing:
+  supersampling is then counted against the game's own size.
 - **Window mode** is **Fullscreen**, **Borderless** or **Windowed**.
   Fullscreen takes the whole screen. Borderless is a window without a
   frame that fills the screen; other programs can draw over it or scale
