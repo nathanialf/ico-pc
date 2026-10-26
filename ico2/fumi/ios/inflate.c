@@ -272,14 +272,18 @@ static inline int huft_free(char *p)
     char *next;
     if (p == (char *)0)
         goto end;
-    p -= 8;
+    /* PC port: the table's link entry is the huft in front of it (huft_build:
+       the block starts there, its v.t holds the next table), which the EE's
+       spelling (p -= 8, the link at p + 4) only finds with its 8-byte struct
+       huft; on the host the huft is 16 bytes and v.t is at 8 (issue 151) */
+    p = (char *)((struct huft *)p - 1);
     while (1) {
-        next = *(char **)(p + 4);
+        next = (char *)((struct huft *)p)->v.t;
         iosFree(p);
         p = next;
         if (p == (char *)0)
             break;
-        p -= 8;
+        p = (char *)((struct huft *)p - 1);
     }
 end:
     return 0;
@@ -634,28 +638,34 @@ void close_inflate_handler(InflateHandler *h)
 {
     char *p;
     if (h->tl != 0) {
+        /* PC port: the fixed-code tables (inflate_fixed: the only ones
+           iosMallocDebug gives, the dynamic ones are the mblock's), walked
+           from each table's link entry as huft_free walks them: the EE's
+           p -= 8 and p + 4 freed 8 bytes into the block on the host, which
+           IOSFREE's magic check stopped (issue 151: the Asian disc's
+           STGST13C.DF has one fixed-code block) */
         p = (char *)h->td;
         if (p != 0) {
-            p -= 8;
+            p = (char *)((struct huft *)p - 1);
             for (;;) {
                 char *node = p;
-                p = *(char **)(p + 4);
+                p = (char *)((struct huft *)node)->v.t;
                 iosFree(node);
                 if (p == 0)
                     break;
-                p -= 8;
+                p = (char *)((struct huft *)p - 1);
             }
         }
         p = (char *)h->tl;
         if (p != 0) {
-            p -= 8;
+            p = (char *)((struct huft *)p - 1);
             for (;;) {
                 char *node = p;
-                p = *(char **)(p + 4);
+                p = (char *)((struct huft *)node)->v.t;
                 iosFree(node);
                 if (p == 0)
                     break;
-                p -= 8;
+                p = (char *)((struct huft *)p - 1);
             }
         }
         h->tl = 0;
