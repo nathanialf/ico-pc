@@ -2080,7 +2080,9 @@ static void subBoyControl_jun26(GObj *volatile self)
             } else {
                 ACTSendMailCorrect(self, 301);
             }
-            if (s->pad.trg & 8) {
+            /* PC port: the European arm's form (optionControlType, the port's
+               Hold type: the disc's own B by default reads pad.trg as before) */
+            if ((optionControlType == 1 ? s->pad.trg : s->pad.now) & 8) {
                 ACTSendMailCorrect(self, 60);
             }
 #ifdef DEBUG
@@ -2707,7 +2709,9 @@ static void subBoyControl_aug6(GObj *volatile self)
             } else {
                 ACTSendMailCorrect(self, 310);
             }
-            if (s->pad.trg & 8) {
+            /* PC port: the European arm's form (optionControlType, the port's
+               Hold type: the disc's own B by default reads pad.trg as before) */
+            if ((optionControlType == 1 ? s->pad.trg : s->pad.now) & 8) {
                 ACTSendMailCorrect(self, 61);
             }
 #ifdef DEBUG
@@ -3340,7 +3344,9 @@ static void subBoyControl_ntsc(GObj *volatile self)
             } else {
                 ACTSendMailCorrect(self, 314);
             }
-            if (s->pad.trg & 8) {
+            /* PC port: the European arm's form (optionControlType, the port's
+               Hold type: the disc's own B by default reads pad.trg as before) */
+            if ((optionControlType == 1 ? s->pad.trg : s->pad.now) & 8) {
                 ACTSendMailCorrect(self, 62);
             }
 #ifdef DEBUG

@@ -333,6 +333,9 @@ static inline int gameblock_read_jun26(McMgr *self, void *buf)
     soundOutputModeSet((IosMcProductFile + self->port)->outputMode);
     soundOutputModeSet(ico_opt_output_card(soundOutputModeGet()));
     iosPadActRequestEnable = (IosMcProductFile + self->port)->vibration;
+    /* PC port: the disc's card has no controlType; the Hold type is
+       [gameplay] hold_type's, as on the European path */
+    optionControlType = ico_opt_hold_type();
     *(McBlk *)iosPadConfCustom.bit = *(McBlk *)(IosMcProductFile + self->port)->padConf;
     return self->result;
 }
@@ -344,6 +347,9 @@ static inline int gameblock_read_ntscaug6(McMgr *self, void *buf)
     soundOutputModeSet((IosMcProductFile + self->port)->outputMode);
     soundOutputModeSet(ico_opt_output_card(soundOutputModeGet()));
     iosPadActRequestEnable = (IosMcProductFile + self->port)->vibration;
+    /* PC port: the disc's card has no controlType; the Hold type is
+       [gameplay] hold_type's, as on the European path */
+    optionControlType = ico_opt_hold_type();
     *(McBlk *)iosPadConfCustom.bit = *(McBlk *)(IosMcProductFile + self->port)->padConf;
     return self->result;
 }

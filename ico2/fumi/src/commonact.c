@@ -7165,7 +7165,12 @@ static void _ACTCommonMailTest_ntsc(GObj *self, int stopCnt, int walkCnt, int ru
     unsigned int m;
 
     s = GOBJ_ACT(self);
-    if (s->pad.trg & 8) {
+    /* PC port: the disc's game always toggles (pad.trg & 8, for every
+       caller: the boy and Yorda, subGirlControl_<disc>); the port's Hold type
+       ([gameplay] hold_type in optionControlType, the disc's own B by
+       default, which reads as before) is read as the European arm reads it:
+       A lets go when the boy's R1 is up */
+    if (optionControlType == 1 ? (s->pad.trg & 8) != 0 : self == boyGObj && (s->pad.now & 8) == 0) {
         handoff_heroin();
     }
     m = (unsigned int)s->actMode;
@@ -7242,7 +7247,12 @@ static void _ACTCommonMailTest_jun26(GObj *self, int stopCnt, int walkCnt, int r
     unsigned int m;
 
     s = GOBJ_ACT(self);
-    if (s->pad.trg & 8) {
+    /* PC port: the disc's game always toggles (pad.trg & 8, for every
+       caller: the boy and Yorda, subGirlControl_<disc>); the port's Hold type
+       ([gameplay] hold_type in optionControlType, the disc's own B by
+       default, which reads as before) is read as the European arm reads it:
+       A lets go when the boy's R1 is up */
+    if (optionControlType == 1 ? (s->pad.trg & 8) != 0 : self == boyGObj && (s->pad.now & 8) == 0) {
         handoff_heroin();
     }
     m = (unsigned int)s->actMode;
@@ -7319,7 +7329,12 @@ static void _ACTCommonMailTest_aug6(GObj *self, int stopCnt, int walkCnt, int ru
     unsigned int m;
 
     s = GOBJ_ACT(self);
-    if (s->pad.trg & 8) {
+    /* PC port: the disc's game always toggles (pad.trg & 8, for every
+       caller: the boy and Yorda, subGirlControl_<disc>); the port's Hold type
+       ([gameplay] hold_type in optionControlType, the disc's own B by
+       default, which reads as before) is read as the European arm reads it:
+       A lets go when the boy's R1 is up */
+    if (optionControlType == 1 ? (s->pad.trg & 8) != 0 : self == boyGObj && (s->pad.now & 8) == 0) {
         handoff_heroin();
     }
     m = (unsigned int)s->actMode;

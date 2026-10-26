@@ -1060,12 +1060,14 @@ static void driver(void *arg)
     CHECK(systemStatus[11] == 2 && soundOutputMode == 1 && iosPadActRequestEnable == 1);
     if (ICO_NTSCAUG6JUN26) {
         /* the 2001 discs keep no option words and no controlType on the card:
-           the game's load leaves the three alone (as cleared above) */
-        CHECK(optionControlType == 0 && optionScreenMode == 0 && girlControlMode == 0);
+           the game's load leaves the two option words alone (as cleared
+           above) and sets the Hold type from [gameplay] hold_type (no config:
+           the disc's own, B, 1) */
+        CHECK(optionControlType == 1 && optionScreenMode == 0 && girlControlMode == 0);
         CHECK(iosPadConfCustom.bit[15] == 0x10F);
     } else {
         /* the card's controlType (3 here) is written but not read back: the
-           variable is [gameplay] hold_type's (no config: hold, 0) */
+           variable is [gameplay] hold_type's (no config: the disc's own, A, 0) */
         CHECK(optionControlType == 0 && optionScreenMode == 0x01020304);
         CHECK(girlControlMode == 0x0A0B0C0D && iosPadConfCustom.bit[15] == 0x10F);
     }
@@ -1084,8 +1086,26 @@ static void driver(void *arg)
         req.fileNo = 1;
         iosMcLoadGameBlock(&req, back);
         wait_request();
-        /* (the 2001 discs' load has no such line: it stays 0) */
-        CHECK(req.result == 0 && optionControlType == (ICO_NTSCAUG6JUN26 ? 0 : 1));
+        CHECK(req.result == 0 && optionControlType == 1);
+        remove("save_test_hold.toml");
+    }
+    /* with hold_type = "hold" (and hold_type_chosen, the Options row's), a
+       load makes it 0 on every disc, the 2001 discs too */
+    {
+        FILE *cf = fopen("save_test_hold.toml", "wb");
+
+        CHECK(cf != NULL);
+        if (cf != NULL) {
+            fputs("[gameplay]\nhold_type = \"hold\"\nhold_type_chosen = true\n", cf);
+            fclose(cf);
+        }
+        ico_config_reset("save_test_hold.toml", "/nonexistent/save_test.ini");
+        ico_opt_reload();
+        optionControlType = 1;
+        req.fileNo = 1;
+        iosMcLoadGameBlock(&req, back);
+        wait_request();
+        CHECK(req.result == 0 && optionControlType == 0);
         remove("save_test_hold.toml");
         ico_config_reset("/nonexistent/save_test.toml", "/nonexistent/save_test.ini");
         ico_opt_reload();
