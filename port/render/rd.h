@@ -383,6 +383,15 @@ typedef struct RdSettings {
      * Original preset, and an MSAA value outside rd_aa_supported_mask()
      * draws as OFF. */
     uint8_t antiAlias;
+    /* Downsampling ([video] downsample = "box", issue 149): the scene drawn
+     * at the Resolution row's scale (and the supersampling's, measured
+     * against the GS grid) is box-averaged to the game's own size, GS
+     * pixels, before the presentation, which then draws it as it draws
+     * Resolution 1x (rd_present.c rd__present_record).  In force only with
+     * a scale or a fixed size above 1x, never with the CRT filter or the
+     * "window" resolution (rd__apply_display: g_rd.downsample).  0 in a
+     * zeroed RdSettings: off, nothing changes */
+    uint8_t downsample;
     /* Full pixel off in the game (the host sets it with fullPixel 0): the
      * picture is Full pixel on's, the reduction drawing the whole frame as
      * above (rd_replay.c), and the presenter draws the game's border over
