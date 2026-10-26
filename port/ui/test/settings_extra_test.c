@@ -123,12 +123,9 @@ static void testCinematicBars(void)
     useConfig("version = 1\n");
     enterMain(0);
     const int n = ui_settings_page_rows(UI_PAGE_EFFECTS, rows, opts, NULL, 16);
-    CHECK(n >= 5 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_FULL_PIXEL &&
-              opts[n - 3] == UI_OPT_EFFECT_CINEMATIC_BARS && opts[n - 4] == UI_OPT_EFFECT_WATER &&
-              opts[n - 5] == UI_OPT_EFFECT_FOG,
-          "bars: the row sits after Fog and Water reflections, before Full pixel and Back (%d "
-          "rows)",
-          n);
+    CHECK(n >= 4 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_EFFECT_CINEMATIC_BARS &&
+              opts[n - 3] == UI_OPT_EFFECT_WATER && opts[n - 4] == UI_OPT_EFFECT_FOG,
+          "bars: the row sits after Fog and Water reflections, before Back (%d rows)", n);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FULL_PIXEL), "Off") == 0,
           "full pixel: Off by default");
     ui_settings_step(UI_OPT_FULL_PIXEL, 1);
@@ -393,7 +390,7 @@ static void testGpuDriver(void)
     ui_settings_set_gpu_driver_host(NULL);
     ui_popup_reset();
 
-    /* no host: no link; the Main page is the twelve it was */
+    /* no host: the link is there and hidden */
     enterMain(1);
     frame(0);
     CHECK(an22bLink() >= 0 && !ui_settings_row_shown(an22bLink()),
@@ -411,12 +408,12 @@ static void testGpuDriver(void)
         int labels[20];
         ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         const int link = an22bLink();
-        CHECK(link == labels[3] && ui_settings_row_shown(link),
+        CHECK(link == labels[4] && ui_settings_row_shown(link),
               "host: the link shows after Effects and Graphics (%d)", link);
         CHECK(lt_ext_prop(link)->right == ui_settings_page_layout(UI_PAGE_GPU_DRIVER),
               "the link opens the page");
     }
-    const int gpuL = openPage(mainL, 3, UI_PAGE_GPU_DRIVER);
+    const int gpuL = openPage(mainL, 4, UI_PAGE_GPU_DRIVER);
     const int driver = ui_settings_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_GPU_DRIVER), "Built-in") == 0, "Built-in at first");
     CHECK(an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD), "Add shows on an Adreno");
@@ -632,7 +629,7 @@ static void testGpuDriver(void)
     }
     CHECK(an22bLink() >= 0 && ui_settings_row_shown(an22bLink()), "Adreno again: the link shows");
 
-    /* the Main page with the link and Developer mode: fourteen rows, in
+    /* the Main page with the link and Developer mode: thirteen rows, in
        the window */
     ico_opt_set_developer_mode(1);
     for (int k = 0; k < 4; k++) {
@@ -641,10 +638,10 @@ static void testGpuDriver(void)
     {
         int labels[20], shown = 0;
         const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
-        CHECK(ui_settings_page_scroll(UI_PAGE_MAIN, &shown, NULL, NULL) == 1 && shown == 14,
-              "fourteen rows shown, the page scrolls (%d)", shown);
+        CHECK(ui_settings_page_scroll(UI_PAGE_MAIN, &shown, NULL, NULL) == 1 && shown == 13,
+              "thirteen rows shown, the page scrolls (%d)", shown);
         const LtProperty *back = lt_ext_prop(labels[n - 1]);
-        CHECK(!back->defaultMask && back->dispY == winBackY(14), "Back at %d", back->dispY);
+        CHECK(!back->defaultMask && back->dispY == winBackY(13), "Back at %d", back->dispY);
         checkPageFits(UI_PAGE_MAIN, "Main (Graphics driver, developer mode)");
     }
     ico_opt_set_developer_mode(0);
@@ -711,10 +708,10 @@ static void testGraphicsApi(void)
     frame(0);
     link = graphicsLink();
     const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
-    CHECK(n > 3 && labels[2] == link && ui_settings_row_shown(link) &&
+    CHECK(n > 3 && labels[3] == link && ui_settings_row_shown(link) &&
               strcmp(lt_ext_row_text(link), "Graphics") == 0,
           "four renderers: the Graphics link shows after Effects");
-    const int pageL = openPage(mainL, 2, UI_PAGE_GRAPHICS);
+    const int pageL = openPage(mainL, 3, UI_PAGE_GRAPHICS);
     const int row = ui_settings_row_of(UI_PAGE_GRAPHICS, UI_OPT_GRAPHICS_API);
     CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Graphics API") == 0, "the Graphics API row");
     CHECK(noteStarting(UI_PAGE_GRAPHICS, "Apply switches now; without Apply") >= 0,
@@ -877,7 +874,7 @@ static void testGraphicsApply(void)
     useConfig("version = 1\n");
     const int mainL = enterMain(1);
     frame(0);
-    int pageL = openPage(mainL, 2, UI_PAGE_GRAPHICS);
+    int pageL = openPage(mainL, 3, UI_PAGE_GRAPHICS);
     {
         int labels[8];
         const int n = ui_settings_page_rows(UI_PAGE_GRAPHICS, labels, NULL, NULL, 8);
@@ -996,7 +993,7 @@ static void testGraphicsApply(void)
     }
 
     /* Revert: OpenGL again, the value back to OpenGL */
-    pageL = openPage(mainL, 2, UI_PAGE_GRAPHICS);
+    pageL = openPage(mainL, 3, UI_PAGE_GRAPHICS);
     ui_settings_step(UI_OPT_GRAPHICS_API, -1);
     frame(0);
     CHECK(gfxRowOn(UI_OPT_GRAPHICS_APPLY), "Vulkan on OpenGL: Apply shows");
@@ -1154,7 +1151,7 @@ static int fakeDiscPresent(const char *archiveName)
    with two or more (the step visits only discs with game data), after Menu language; European disc / Japanese disc, written
    to [game] disc (read at the next start) with its note; with no pin it
    shows the disc playing.  With every Main row shown (the Graphics driver
-   link, Language, Disc and the two developer rows: fifteen) the rows are
+   link, Language, Disc and the Picture and Developer links: fourteen) the rows are
    10 apart and the page fits. */
 static void testDiscRow(void)
 {
@@ -1262,7 +1259,7 @@ static void testDiscRow(void)
     s_discHave = 3u;
     ui_settings_set_disc_handler(fakeDiscPresent);
 
-    /* every Main row: fifteen, 10 apart, Back's box inside the page */
+    /* every Main row: fourteen, 10 apart, Back's box inside the page */
     s_gpuN = 0;
     s_gpuSel = -1;
     s_gpuFailed = -1;
@@ -1284,8 +1281,8 @@ static void testDiscRow(void)
             }
         }
         const LtProperty *back = lt_ext_prop(labels[n - 1]);
-        CHECK(shown == 15, "disc: every Main row shown (%d of %d)", shown, n);
-        CHECK(back->dispY == winBackY(15), "disc: fifteen rows, Back in the last slot (%d)",
+        CHECK(shown == 14, "disc: every Main row shown (%d of %d)", shown, n);
+        CHECK(back->dispY == winBackY(14), "disc: fourteen rows, Back in the last slot (%d)",
               back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "disc: Back's box ends at %d",
               back->dispY + back->dispH);
@@ -1559,8 +1556,8 @@ static void testExportTextures(void)
    mode on or off does not hide it; Cross calls the handler once (the host
    arms its frame dump) and shows the popup, the cursor staying on the
    page.
-   With every Main row shown (the Graphics driver link, Disc and the three
-   developer rows: sixteen) the rows are 10 apart from 30 and the page
+   With every Main row shown (the Graphics driver link, Disc and the Picture and
+   Developer links: fifteen) the rows are 10 apart from 30 and the page
    fits.  The label fits its box in every language and every string is
    translated. */
 static int s_reportCalls;
@@ -1593,14 +1590,14 @@ static void testReportPicture(void)
         int labels[20];
         const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         const int rp = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_REPORT_PICTURE);
-        const int dev = ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DEVELOPER);
+        const int dev = mainLink(UI_PAGE_DEVELOPER);
         int at = -1, devAt = -1;
         for (int i = 0; i < n; i++) {
             at = labels[i] == rp ? i : at;
             devAt = labels[i] == dev ? i : devAt;
         }
-        CHECK(at >= 0 && at + 1 == devAt, "report picture: directly above Developer mode (%d, %d)",
-              at, devAt);
+        CHECK(at >= 0 && at + 1 == devAt,
+              "report picture: directly above the Developer link (%d, %d)", at, devAt);
         checkPageFits(UI_PAGE_MAIN, "Main (Save a picture, developer mode off)");
     }
     ico_opt_set_developer_mode(1); /* after enterMain, which reloads the options */
@@ -1620,10 +1617,10 @@ static void testReportPicture(void)
         int at = -1, dev = -1;
         for (int i = 0; i < n; i++) {
             at = labels[i] == row ? i : at;
-            dev = labels[i] == ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_DEVELOPER) ? i : dev;
+            dev = labels[i] == mainLink(UI_PAGE_DEVELOPER) ? i : dev;
         }
-        CHECK(at >= 0 && at + 1 == dev, "report picture: directly above Developer mode (%d, %d)",
-              at, dev);
+        CHECK(at >= 0 && at + 1 == dev,
+              "report picture: directly above the Developer link (%d, %d)", at, dev);
     }
     s_reportCalls = 0;
     ui_popup_reset();
@@ -1636,7 +1633,7 @@ static void testReportPicture(void)
     CHECK(current_layout_id == mainL, "report picture: stays on the page");
     ui_popup_reset();
 
-    /* every Main row: sixteen, from 30, 10 apart, Back's box inside */
+    /* every Main row: fifteen, from 30, 10 apart, Back's box inside */
     s_gpuN = 0;
     s_gpuSel = -1;
     s_gpuFailed = -1;
@@ -1656,9 +1653,9 @@ static void testReportPicture(void)
             shown += ui_settings_row_shown(labels[i]);
         }
         const LtProperty *back = lt_ext_prop(labels[n - 1]);
-        CHECK(shown == 16, "report picture: every Main row shown (%d of %d)", shown, n);
-        CHECK(back->dispY == winBackY(16),
-              "report picture: sixteen rows, Back in the last slot (%d)", back->dispY);
+        CHECK(shown == 15, "report picture: every Main row shown (%d of %d)", shown, n);
+        CHECK(back->dispY == winBackY(15),
+              "report picture: fifteen rows, Back in the last slot (%d)", back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "report picture: Back's box ends at %d",
               back->dispY + back->dispH);
         checkPageFits(UI_PAGE_MAIN, "Main (every row, Save a picture)");
@@ -1689,7 +1686,7 @@ static void testReportPicture(void)
 /* Main > Share a bug report, an rc build's row alone (ICO_RC_TOOLS, the
    release candidates' tooling; docs/BUILDING.md).  rc_tools_off: in the
    default build, on a phone with every other Main row shown and a share
-   handler set, the page has its sixteen rows shown (seventeen built: the
+   handler set, the page has its fifteen rows shown (sixteen built: the
    Graphics link hides, a phone's build linking Vulkan alone), none of them
    the share row,
    and no string of the English table is its text (a release has no such
@@ -1697,7 +1694,7 @@ static void testReportPicture(void)
    ICO_RC_TOOLS: the row shows on a phone with a handler, directly below
    Save a picture for a bug report, with its note; not on a desktop, not
    without a handler; Cross calls the handler once and stays on the page;
-   the seventeen rows are 10 apart from 26 and the page fits; the label
+   the sixteen rows are 10 apart from 26 and the page fits; the label
    fits and both strings are translated. */
 static int s_shareCalls;
 
@@ -1746,8 +1743,8 @@ static void testShareReport(void)
         textRow = strcmp(lt_ext_row_text(labels[i]), kText) == 0 ? i : textRow;
     }
 #if !ICO_RC_TOOLS
-    CHECK(n == 17 && shown == 16,
-          "rc_tools_off: Main has its sixteen rows shown on a phone with a share handler (%d, %d "
+    CHECK(n == 16 && shown == 15,
+          "rc_tools_off: Main has its fifteen rows shown on a phone with a share handler (%d, %d "
           "shown)",
           n, shown);
     CHECK(textRow < 0, "rc_tools_off: no Main row is \"%s\" (row %d)", kText, textRow);
@@ -1764,7 +1761,7 @@ static void testShareReport(void)
         at = labels[i] == row ? i : at;
         picAt = labels[i] == pic ? i : picAt;
     }
-    CHECK(n == 18 && shown == 17, "rc tools: seventeen Main rows shown on a phone (%d, %d)", n,
+    CHECK(n == 17 && shown == 16, "rc tools: sixteen Main rows shown on a phone (%d, %d)", n,
           shown);
     CHECK(row >= 0 && an22bShown(UI_PAGE_MAIN, UI_OPT_SHARE_REPORT) && at == textRow,
           "rc tools: the row shows as \"%s\" (%d, %d)", kText, at, textRow);
@@ -1774,7 +1771,7 @@ static void testShareReport(void)
           "rc tools: the row has its note");
     {
         const LtProperty *back = lt_ext_prop(labels[n - 1]);
-        CHECK(back->dispY == winBackY(17), "rc tools: seventeen rows, Back in the last slot (%d)",
+        CHECK(back->dispY == winBackY(16), "rc tools: sixteen rows, Back in the last slot (%d)",
               back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "rc tools: Back's box ends at %d",
               back->dispY + back->dispH);
@@ -2926,10 +2923,10 @@ static void testResolutionCycle(void)
     CHECK(o.aspect == ICO_ASPECT_48_9, "Left from Auto is 48:9");
 }
 
-/* Display > Anti-aliasing ([video] anti_aliasing): a row on Display (the
-   effect rows are on Effects), Off by default, stepping
+/* Picture > Anti-aliasing ([video] anti_aliasing): the Picture page's first
+   row (Display and Effects have none of the picture's rows), Off by default, stepping
    only through the values the renderer's mask lists, saved as its name,
-   greyed and Off under the Original preset, with its note; both pages fit
+   greyed and Off under the Original preset, with its note; the pages fit
    with and without the game finished */
 static unsigned s_aaMask;
 
@@ -2967,60 +2964,70 @@ static void testAntiAlias(void)
         useConfig("version = 1\n[video]\npreset = \"enhanced\"\n");
         stage_no = title ? 1 : 11;
         const int mainL = enterMainKeep(title);
-        openPage(mainL, 0, UI_PAGE_DISPLAY);
-        const int row = ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_ANTI_ALIAS);
+        openPage(mainL, 1, UI_PAGE_PICTURE);
+        const int row = ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_ANTI_ALIAS);
         CHECK(row >= 0 && ui_settings_row_shown(row),
-              "title %d: the Anti-aliasing row is on Display", title);
+              "title %d: the Anti-aliasing row is on Picture", title);
         CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Anti-aliasing") == 0,
               "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
         {
             int l[16], op[16];
-            const int n = ui_settings_page_rows(UI_PAGE_DISPLAY, l, op, NULL, 16);
-            CHECK(n > 4 && op[2] == UI_OPT_ASPECT && op[3] == UI_OPT_ANTI_ALIAS &&
-                      op[4] == UI_OPT_WINDOW_MODE,
-                  "title %d: Anti-aliasing sits between Aspect ratio and Window mode", title);
+            const int n = ui_settings_page_rows(UI_PAGE_PICTURE, l, op, NULL, 16);
+            CHECK(n > 3 && op[0] == UI_OPT_ANTI_ALIAS && op[1] == UI_OPT_FULL_HEIGHT &&
+                      op[2] == UI_OPT_FILTER,
+                  "title %d: Picture starts Anti-aliasing, Full-height picture, Texture filtering",
+                  title);
         }
-        CHECK(ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_ANTI_ALIAS) < 0,
-              "title %d: not on Effects", title);
+        CHECK(ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_ANTI_ALIAS) < 0 &&
+                  ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_ANTI_ALIAS) < 0,
+              "title %d: not on Display or Effects", title);
         CHECK(ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_FILTER) < 0 &&
                   ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_FULL_HEIGHT) < 0 &&
-                  ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_BRIGHTNESS) < 0,
-              "title %d: Texture filtering, Full-height picture and Brightness left Display",
+                  ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_BRIGHTNESS) < 0 &&
+                  ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_FILTER) < 0 &&
+                  ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_FULL_HEIGHT) < 0 &&
+                  ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_BRIGHTNESS) < 0,
+              "title %d: Texture filtering, Full-height picture and Brightness are not on "
+              "Display or Effects",
               title);
-        CHECK(ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_FILTER) >= 0 &&
-                  ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_FULL_HEIGHT) >= 0 &&
-                  ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_BRIGHTNESS) >= 0,
-              "title %d: they are on Effects", title);
+        CHECK(ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_FILTER) >= 0 &&
+                  ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_FULL_HEIGHT) >= 0 &&
+                  ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_BRIGHTNESS) >= 0,
+              "title %d: they are on Picture", title);
+        press(0x10);
+        CHECK(settle(mainL, 60), "Picture: back");
         for (int cleared = 0; cleared < 2; cleared++) {
             gFlagGameClear = cleared;
             frame(0);
+            openPage(mainL, 0, UI_PAGE_DISPLAY);
             checkPageFits(UI_PAGE_DISPLAY, cleared ? "Display (game finished)" : "Display");
             press(0x10);
             CHECK(settle(mainL, 60), "Display: back");
-            openPage(mainL, 1, UI_PAGE_EFFECTS);
+            openPage(mainL, 1, UI_PAGE_PICTURE);
+            checkPageFits(UI_PAGE_PICTURE, cleared ? "Picture (game finished)" : "Picture");
+            press(0x10);
+            CHECK(settle(mainL, 60), "Picture: back");
+            openPage(mainL, 2, UI_PAGE_EFFECTS);
             checkPageFits(UI_PAGE_EFFECTS, cleared ? "Effects (game finished)" : "Effects");
             press(0x10);
             CHECK(settle(mainL, 60), "Effects: back");
-            openPage(mainL, 0, UI_PAGE_DISPLAY);
         }
         gFlagGameClear = 0;
-        press(0x10);
-        CHECK(settle(mainL, 60), "Display: back");
     }
 
     /* the note, on the cursor */
     {
         useConfig("version = 1\n[video]\npreset = \"enhanced\"\n");
         const int mainL = enterMainKeep(1);
-        const int dispL = openPage(mainL, 0, UI_PAGE_DISPLAY);
-        const int note = noteStarting(UI_PAGE_DISPLAY, "Smooths jagged edges.");
+        const int dispL = openPage(mainL, 1, UI_PAGE_PICTURE);
+        const int note = noteStarting(UI_PAGE_PICTURE, "Smooths jagged edges.");
         CHECK(note >= 0 && strstr(lt_ext_row_text(note),
                                   "Supersampling draws the picture larger and shrinks it") != NULL,
               "the note text");
-        lt_ext_layout(dispL)->curItem = ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_ANTI_ALIAS);
+        lt_ext_layout(dispL)->curItem = ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_ANTI_ALIAS);
         frame(0);
         CHECK(note >= 0 && !lt_ext_prop(note)->masked, "the note shows on the cursor");
-        lt_ext_layout(dispL)->curItem = ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_PRESET);
+        lt_ext_layout(dispL)->curItem = ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_FULL_HEIGHT);
         frame(0);
         CHECK(note >= 0 && lt_ext_prop(note)->masked == 1, "the note hides elsewhere");
         press(0x10);
@@ -3031,7 +3038,7 @@ static void testAntiAlias(void)
     enterMainKeep(1);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_ANTI_ALIAS), "Off") == 0, "default: Off (%s)",
           ui_settings_value_text(UI_OPT_ANTI_ALIAS));
-    CHECK(!rowDimmed(UI_PAGE_DISPLAY, UI_OPT_ANTI_ALIAS), "Enhanced: the row is not greyed");
+    CHECK(!rowDimmed(UI_PAGE_PICTURE, UI_OPT_ANTI_ALIAS), "Enhanced: the row is not greyed");
 
     static const struct {
         int aa;
@@ -3140,12 +3147,12 @@ static void testAntiAlias(void)
         ico_video_get(&o);
         o.antiAlias = ICO_AA_SSAA2;
         ico_video_set(&o);
-        const int dispL = openPage(mainL, 0, UI_PAGE_DISPLAY);
+        const int dispL = openPage(mainL, 1, UI_PAGE_PICTURE);
         frame(0);
         CHECK(strcmp(ui_settings_value_text(UI_OPT_ANTI_ALIAS), "Off") == 0,
               "Original: reads Off (%s)", ui_settings_value_text(UI_OPT_ANTI_ALIAS));
-        CHECK(rowDimmed(UI_PAGE_DISPLAY, UI_OPT_ANTI_ALIAS), "Original: the row is greyed");
-        lt_ext_layout(dispL)->curItem = ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_ANTI_ALIAS);
+        CHECK(rowDimmed(UI_PAGE_PICTURE, UI_OPT_ANTI_ALIAS), "Original: the row is greyed");
+        lt_ext_layout(dispL)->curItem = ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_ANTI_ALIAS);
         press(0x2000);
         ico_video_get(&o);
         CHECK(o.antiAlias == ICO_AA_SSAA2 && ico_video_anti_alias() == ICO_AA_OFF,
@@ -3156,7 +3163,7 @@ static void testAntiAlias(void)
         /* the Preset to Enhanced frees it */
         ui_settings_step(UI_OPT_PRESET, 1);
         frame(0);
-        CHECK(!rowDimmed(UI_PAGE_DISPLAY, UI_OPT_ANTI_ALIAS), "Enhanced preset: not greyed");
+        CHECK(!rowDimmed(UI_PAGE_PICTURE, UI_OPT_ANTI_ALIAS), "Enhanced preset: not greyed");
         press(0x10);
     }
     ui_settings_set_aa_mask_query(NULL);
@@ -4622,9 +4629,9 @@ static void winCursor(int l, int row)
 }
 
 /* The window on the pages with more rows than its slots (settings.c
-   layoutPage, scrollMove), on the disc slug: Effects from the title (every
-   row but Brightness, more than the slots hold) opens at the top with the
-   down mark only; the game's moves inside the window; Down on the window's
+   layoutPage, scrollMove), on the disc slug: Controls from the pause menu
+   with a touch screen (the longest option page of the regroup, more rows
+   than the slots hold) opens at the top with the down mark only; the game's moves inside the window; Down on the window's
    last row scrolls one row, Up on its first scrolls back; Up on the first
    row wraps to Back (both in view) and Up on Back brings the end in view on
    the last row; Down on Back brings the top back on the first row; three
@@ -4645,21 +4652,23 @@ static void testScroll(const char *slug)
     ui_settings_set_touch_query(NULL);
     ui_mouse_reset();
     ui_mouse_set_view(640, 480, 0, 0, 640, 480);
-    stage_no = 1;
-    int mainL = enterMainKeep(1);
-    const int fxL = openPage(mainL, 1, UI_PAGE_EFFECTS);
+    s_tpTouch = 1;
+    ui_settings_set_touch_query(tpTouch);
+    stage_no = 11;
+    int mainL = enterMainKeep(0);
+    const int fxL = openPage(mainL, -1, UI_PAGE_CONTROLS);
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
     LtProp *lay = lt_ext_layout(fxL);
-    const int n = winShown(UI_PAGE_EFFECTS, sh, 24);
+    const int n = winShown(UI_PAGE_CONTROLS, sh, 24);
     const int scroll = n - 1; /* the rows before Back */
     const int back = n > 0 ? sh[n - 1] : -1;
-    CHECK(back >= 0 && back == ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_BACK),
-          "%s: Effects ends in Back", slug);
-    CHECK(scroll >= w + 3, "%s: Effects from the title has more rows than the window (%d)", slug,
-          scroll);
-    CHECK(ui_settings_page_marks(UI_PAGE_EFFECTS, &up, &down) == 1, "%s: Effects has its marks",
+    CHECK(back >= 0 && back == ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_BACK),
+          "%s: Controls ends in Back", slug);
+    CHECK(scroll >= w + 3, "%s: Controls from the pause menu has more rows than the window (%d)",
+          slug, scroll);
+    CHECK(ui_settings_page_marks(UI_PAGE_CONTROLS, &up, &down) == 1, "%s: Controls has its marks",
           slug);
     if (scroll < w + 3 || up < 0 || down < 0) {
         return;
@@ -4671,65 +4680,65 @@ static void testScroll(const char *slug)
           "%s: a click on a mark is Up or Down", slug);
     CHECK(lt_ext_prop(up)->dispX == 584 && lt_ext_prop(down)->dispX == 584,
           "%s: the marks right of the value arrows (%d)", slug, lt_ext_prop(up)->dispX);
-    CHECK(lay->curItem == sh[0] && winOffset(UI_PAGE_EFFECTS) == 0, "%s: opens at the top (%d)",
-          slug, winOffset(UI_PAGE_EFFECTS));
+    CHECK(lay->curItem == sh[0] && winOffset(UI_PAGE_CONTROLS) == 0, "%s: opens at the top (%d)",
+          slug, winOffset(UI_PAGE_CONTROLS));
     CHECK(lt_ext_prop(up)->defaultMask && !lt_ext_prop(down)->defaultMask,
           "%s: at the top the down mark only", slug);
-    snprintf(what, sizeof(what), "%s: Effects at the top", slug);
-    checkPageFits(UI_PAGE_EFFECTS, what);
+    snprintf(what, sizeof(what), "%s: Controls at the top", slug);
+    checkPageFits(UI_PAGE_CONTROLS, what);
 
     /* inside the window the game's moves, no scroll */
     for (int i = 0; i < w - 1; i++) {
         press(LT_PAD_DOWN);
     }
-    CHECK(lay->curItem == sh[w - 1] && winOffset(UI_PAGE_EFFECTS) == 0,
-          "%s: Down to the window's last row (%d)", slug, winOffset(UI_PAGE_EFFECTS));
+    CHECK(lay->curItem == sh[w - 1] && winOffset(UI_PAGE_CONTROLS) == 0,
+          "%s: Down to the window's last row (%d)", slug, winOffset(UI_PAGE_CONTROLS));
     /* Down at the window's end: one row scrolls in */
     press(LT_PAD_DOWN);
-    CHECK(lay->curItem == sh[w] && winOffset(UI_PAGE_EFFECTS) == 1,
+    CHECK(lay->curItem == sh[w] && winOffset(UI_PAGE_CONTROLS) == 1,
           "%s: Down at the window's end: the next row, one scrolled (%d)", slug,
-          winOffset(UI_PAGE_EFFECTS));
+          winOffset(UI_PAGE_CONTROLS));
     CHECK(!lt_ext_prop(sh[w])->defaultMask && lt_ext_prop(sh[w])->dispY == WIN_SLOT_Y(w - 1) &&
               lt_ext_prop(sh[0])->defaultMask && !lt_ext_prop(up)->defaultMask,
           "%s: the new row in the last scrolling slot, the first out of view, the up mark (%d)",
           slug, lt_ext_prop(sh[w])->dispY);
-    snprintf(what, sizeof(what), "%s: Effects scrolled one row", slug);
-    checkPageFits(UI_PAGE_EFFECTS, what);
+    snprintf(what, sizeof(what), "%s: Controls scrolled one row", slug);
+    checkPageFits(UI_PAGE_CONTROLS, what);
     /* Up at the window's start: one row back */
     for (int i = 0; i < w - 1; i++) {
         press(LT_PAD_UP);
     }
-    CHECK(lay->curItem == sh[1] && winOffset(UI_PAGE_EFFECTS) == 1,
-          "%s: Up to the window's first row (%d)", slug, winOffset(UI_PAGE_EFFECTS));
+    CHECK(lay->curItem == sh[1] && winOffset(UI_PAGE_CONTROLS) == 1,
+          "%s: Up to the window's first row (%d)", slug, winOffset(UI_PAGE_CONTROLS));
     press(LT_PAD_UP);
-    CHECK(lay->curItem == sh[0] && winOffset(UI_PAGE_EFFECTS) == 0,
+    CHECK(lay->curItem == sh[0] && winOffset(UI_PAGE_CONTROLS) == 0,
           "%s: Up at the window's start: the row above, the window at the top (%d)", slug,
-          winOffset(UI_PAGE_EFFECTS));
-    snprintf(what, sizeof(what), "%s: Effects back at the top", slug);
-    checkPageFits(UI_PAGE_EFFECTS, what);
+          winOffset(UI_PAGE_CONTROLS));
+    snprintf(what, sizeof(what), "%s: Controls back at the top", slug);
+    checkPageFits(UI_PAGE_CONTROLS, what);
     /* Up on the first row: Back (the game's wrap); Up on Back with the end
        out of view: the last row, the window at the end */
     press(LT_PAD_UP);
-    CHECK(lay->curItem == back && winOffset(UI_PAGE_EFFECTS) == 0, "%s: Up from the top: Back",
+    CHECK(lay->curItem == back && winOffset(UI_PAGE_CONTROLS) == 0, "%s: Up from the top: Back",
           slug);
     press(LT_PAD_UP);
-    CHECK(lay->curItem == sh[scroll - 1] && winOffset(UI_PAGE_EFFECTS) == scroll - w,
+    CHECK(lay->curItem == sh[scroll - 1] && winOffset(UI_PAGE_CONTROLS) == scroll - w,
           "%s: Up on Back: the last row, the window at the end (%d, want %d)", slug,
-          winOffset(UI_PAGE_EFFECTS), scroll - w);
+          winOffset(UI_PAGE_CONTROLS), scroll - w);
     CHECK(lt_ext_prop(down)->defaultMask && !lt_ext_prop(up)->defaultMask,
           "%s: at the end the up mark only", slug);
-    snprintf(what, sizeof(what), "%s: Effects at the end", slug);
-    checkPageFits(UI_PAGE_EFFECTS, what);
+    snprintf(what, sizeof(what), "%s: Controls at the end", slug);
+    checkPageFits(UI_PAGE_CONTROLS, what);
     /* Down: Back; Down on Back with the top out of view: the first row */
     press(LT_PAD_DOWN);
-    CHECK(lay->curItem == back && winOffset(UI_PAGE_EFFECTS) == scroll - w,
+    CHECK(lay->curItem == back && winOffset(UI_PAGE_CONTROLS) == scroll - w,
           "%s: Down from the last row: Back, the window kept", slug);
     press(LT_PAD_DOWN);
-    CHECK(lay->curItem == sh[0] && winOffset(UI_PAGE_EFFECTS) == 0,
+    CHECK(lay->curItem == sh[0] && winOffset(UI_PAGE_CONTROLS) == 0,
           "%s: Down on Back: the first row, the window at the top (%d)", slug,
-          winOffset(UI_PAGE_EFFECTS));
-    snprintf(what, sizeof(what), "%s: Effects at the top after Back", slug);
-    checkPageFits(UI_PAGE_EFFECTS, what);
+          winOffset(UI_PAGE_CONTROLS));
+    snprintf(what, sizeof(what), "%s: Controls at the top after Back", slug);
+    checkPageFits(UI_PAGE_CONTROLS, what);
 
     /* three wheel notches: three rows, two of them across the window's
        edge (the game's move each, so no notch is dropped) */
@@ -4742,11 +4751,11 @@ static void testScroll(const char *slug)
     }
     frame(0);
     frame(0);
-    CHECK(lay->curItem == sh[w + 1] && winOffset(UI_PAGE_EFFECTS) == 2,
+    CHECK(lay->curItem == sh[w + 1] && winOffset(UI_PAGE_CONTROLS) == 2,
           "%s: three notches down: three rows (on %d, want %d; offset %d)", slug, lay->curItem,
-          sh[w + 1], winOffset(UI_PAGE_EFFECTS));
-    snprintf(what, sizeof(what), "%s: Effects after the wheel", slug);
-    checkPageFits(UI_PAGE_EFFECTS, what);
+          sh[w + 1], winOffset(UI_PAGE_CONTROLS));
+    snprintf(what, sizeof(what), "%s: Controls after the wheel", slug);
+    checkPageFits(UI_PAGE_CONTROLS, what);
 
     /* a click on the up mark with the cursor on the window's first row:
        Up, a row back in view; on the down mark with the cursor on its last
@@ -4759,8 +4768,8 @@ static void testScroll(const char *slug)
     mouseFrame();
     frame(0);
     frame(0);
-    CHECK(lay->curItem == sh[1] && winOffset(UI_PAGE_EFFECTS) == 1,
-          "%s: a click on the up mark: Up (offset %d)", slug, winOffset(UI_PAGE_EFFECTS));
+    CHECK(lay->curItem == sh[1] && winOffset(UI_PAGE_CONTROLS) == 1,
+          "%s: a click on the up mark: Up (offset %d)", slug, winOffset(UI_PAGE_CONTROLS));
     winCursor(fxL, sh[1 + w - 1]);
     pointAt(down);
     mouseFrame();
@@ -4768,12 +4777,12 @@ static void testScroll(const char *slug)
     mouseFrame();
     frame(0);
     frame(0);
-    CHECK(lay->curItem == sh[1 + w] && winOffset(UI_PAGE_EFFECTS) == 2,
-          "%s: a click on the down mark: Down (offset %d)", slug, winOffset(UI_PAGE_EFFECTS));
-    snprintf(what, sizeof(what), "%s: Effects after the marks' clicks", slug);
-    checkPageFits(UI_PAGE_EFFECTS, what);
+    CHECK(lay->curItem == sh[1 + w] && winOffset(UI_PAGE_CONTROLS) == 2,
+          "%s: a click on the down mark: Down (offset %d)", slug, winOffset(UI_PAGE_CONTROLS));
+    snprintf(what, sizeof(what), "%s: Controls after the marks' clicks", slug);
+    checkPageFits(UI_PAGE_CONTROLS, what);
     press(LT_PAD_TRIANGLE);
-    CHECK(settle(mainL, 60), "%s: Effects: back", slug);
+    CHECK(settle(mainL, 60), "%s: Controls: back", slug);
 
     /* Characters from the pause menu: the page (no viewer), its swatches
        with their rows */
@@ -4976,7 +4985,7 @@ int main(int argc, char **argv)
     testEscapeNewGame();
     /* Display > Resolution and Aspect ratio cycles */
     testResolutionCycle();
-    /* Display > Anti-aliasing, the Display/Effects split */
+    /* Picture > Anti-aliasing, the Display/Picture/Effects split */
     testAntiAlias();
     /* Gameplay > East Reflector door fix */
     testDoorFix();
