@@ -3441,7 +3441,8 @@ void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *origi
  * rd__crack_fill_shutdown  rd_shutdown: the count's target and buffer */
 typedef struct RdCrackCounts {
     uint64_t filled, counted, pixels, skipped;
-    uint64_t folded; /* of the filled, drawn in the pass the local fog keeps */
+    uint64_t folded;    /* of the filled, drawn in the pass the local fog keeps */
+    uint64_t afterMsaa; /* of the filled, drawn on the MSAA resolve's picture */
     uint32_t last, max;
     float sx, sy;
     uint32_t rx, ry;

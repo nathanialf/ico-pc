@@ -2458,9 +2458,8 @@ frame at 2x (lightning rd-00200 22, rd-00300 105, queen rd-00200 49, at the inde
 in one-texel runs behind both neighbours, a farther surface seen through a seam: the
 discontinuity form's share.
 
-Not drawn at scale 1 on both axes, under the Original preset, on any replay with MSAA asked for
-(the fog then reads the multisampled scene or the resolve's smallest sample, VD-22; the filler
-would change that picture's edges), in the fog's self-test (`rd__fog_exact` without the probe),
+Not drawn at scale 1 on both axes, under the Original preset, while the MSAA epoch is open at the
+fog (it draws after the resolve: [MSAA.md](MSAA.md#the-crack-filler-after-the-resolve)), in the fog's self-test (`rd__fog_exact` without the probe),
 for a fog of any target but SCENE, without a sampleable depth (`RhiLimits.depthSampled`), and with
 `[dev] crack_fill = false` (`ICO_RD_CRACK_FILL=0`; the replay tool's `--no-crack-fill`). On by
 default where the device profile has `crackFill`: every class, tile-based GPUs included. Its two

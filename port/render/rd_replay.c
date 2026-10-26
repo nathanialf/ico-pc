@@ -4813,8 +4813,15 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
             return;
         }
     }
-    /* above 1x the pixels no draw covered between drawn ones (rd_crack_fill.c) */
-    rd__crack_fill(r, tc, tz, &s_fogDepth, s_ms.active || s_ms.want > 1u, local);
+    /* above 1x the pixels no draw covered between drawn ones (rd_crack_fill.c);
+     * not while the MSAA epoch is open (its snapshot of SCENE would close
+     * it ahead of the per-sample fog below), on the resolved picture once
+     * it closed (in gameplay at the shadow count's pass, list 3) */
+    rd__crack_fill(r, tc, tz, &s_fogDepth,
+                   s_ms.active  ? RD_CRACK_MSAA_OPEN
+                   : s_ms.ended ? RD_CRACK_MSAA_RESOLVED
+                                : RD_CRACK_MSAA_NONE,
+                   local);
     /* the GS's BITBLT of the Z buffer to 0x2800: the depth in place, its
      * copy, its words or the pass's own depth attachment (g_rd.fogPath);
      * the pass below binds the colour target alone but on the local read,

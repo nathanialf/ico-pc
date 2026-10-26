@@ -11,3 +11,4 @@
 - The black bars of the load screen no longer flicker when it changes at Frame rate 60.
 - On the North American disc, the August 2001 preview and the June 2001 demo, Options no longer shows Hold type, Film effect or Players. Those discs' own game has none of them: holding Yorda's hand there always works as B (press R1 once to take her hand, again to let go), and a Film effect change started an unrelated animation instead.
 - On the June 2001 demo, Extras no longer shows Credits. The demo disc does not hold the credits' scenes, so the row could never play.
+- With MSAA anti-aliasing on, the thin dotted lines of mist along seams above the original resolution are now filled in, as without it.
