@@ -1262,7 +1262,7 @@ switches the tests and their registrations use:
 | `ICO_FIXED_CLOCK` | `clock.c` | the wall clock fixed at 2002-01-01 unless `0` |
 | `ICO_GALLERY_PLAY` | `gallery.c` | a play script for the music gallery |
 | `ICO_UI_POPUP_TEST` | `ui_host.c` | the test popup at [Main tick](ARCHITECTURE.md#terms) 100 and every 150 ticks after (`[dev] popup_test`) |
-| `ICO_START_STAGE` | `ico2/common/src/debug.c` (`debug_TryToGetStartStage`), `gamestate.c` | `[dev] start_stage` handed over: a stage 2 to 105 to start in, which suspends achievements |
+| `ICO_START_STAGE` | `ico2/common/src/debug.c` (`debug_TryToGetStartStage`), `gamestate.c` | `[dev] start_stage` handed over: a stage 2 to the disc's last (105 on the European disc, 103 on the 104-row discs, 102 on the June 2001 demo: `ico_region_start_stage`) to start in, which suspends achievements; another value logs `start_stage N refused` |
 | `ICO_TTY` | `kernel_host.c` | the game's `scePrintf` to stdout |
 | `ICO_FMV_DECODE` | `movie.c` | 0 skips decoding in any build; the timing is unchanged |
 | `ICO_RD_DUMP_EVERY`, `_DIR`, `_INTERP`, `_FROM` | `rd_core.c` | the frame dumps `ico-pc.ini` hands to rd |
