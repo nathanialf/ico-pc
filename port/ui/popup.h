@@ -21,7 +21,7 @@ extern "C" {
 #endif
 
 #define UI_POPUP_QUEUE 8
-#define UI_POPUP_TEXT 128
+#define UI_POPUP_TEXT 384
 /* timing: 0.3 s in, 4 s held, 0.3 s out, counted in vsyncs at the rate
    ui_popup_set_vsync_hz gives (50 by default: 15, 200, 15; 60: 18, 240, 18) */
 #define UI_POPUP_SLIDE_TENTHS 3
