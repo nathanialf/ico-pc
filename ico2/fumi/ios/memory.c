@@ -80,6 +80,56 @@ typedef struct IosMemTag { /* field names derived */
     char c[16];
 } IosMemTag; /* derived name */
 
+/* PC port: the block a pointer IOSFREE() finds no block header in front of
+   lies in, appended to the assert's message (issue 151: inflate.c freed 8
+   bytes into its code tables' blocks, and the magic lines alone did not say
+   whose block it was).  The nearest allocated block's header below the
+   pointer, searched back 1 MB a quadword at a time inside the EE RAM arena,
+   and the file and line its allocation names. */
+int ico_arena_contains(const void *p, __SIZE_TYPE__ n); /* port/platform/arena.h */
+
+static void iosFreeOwner(const void *ptr, char *out, int n)
+{
+    const char *top = (const char *)((IosMemAddr)ptr & ADDR_MASK);
+    const IosMemNode *cand;
+    const char *start;
+    int back;
+    int len;
+
+    for (back = 0; back < 0x100000; back += 16) {
+        cand = (const IosMemNode *)(top - back - NODE_SIZE);
+        if (!ico_arena_contains(cand, sizeof(IosMemNode))) {
+            break;
+        }
+        if (memcmp(cand->tag, "<ALLOC>________", 16) != 0) {
+            continue;
+        }
+        /* the name is the file's first 11 characters, space padded, then the line */
+        len = 11;
+        while (len > 0 && cand->name[len - 1] == ' ') {
+            len--;
+        }
+        start = (const char *)cand + NODE_SIZE;
+        if ((const char *)ptr < start + ((unsigned int)cand->size << 4)) {
+            snprintf(out, n,
+                     "\tPC port: the pointer is %d bytes into a block of %u bytes allocated by "
+                     "%.*s line %d\n",
+                     (int)((const char *)ptr - start), (unsigned int)cand->size << 4, len,
+                     cand->name, cand->line);
+        } else {
+            snprintf(out, n,
+                     "\tPC port: the pointer is in no allocated block; the nearest below it (%u "
+                     "bytes, allocated by %.*s line %d) ends %d bytes before it\n",
+                     (unsigned int)cand->size << 4, len, cand->name, cand->line,
+                     (int)((const char *)ptr - start - ((unsigned int)cand->size << 4)));
+        }
+        return;
+    }
+    snprintf(
+        out, n,
+        "\tPC port: no allocated block header 1 MB or less below the pointer in the EE RAM arena\n");
+}
+
 /* the node name the heap walk copies out before printing it */
 /* */
 static char nodeName[32]; /* derived name */
@@ -482,6 +532,7 @@ void *iosFree(void *ptr)
     if (strcmp(node->tag, "<ALLOC>________") != 0) {
         sprintf(buf, "IOSFREE():\n\tPREV MAGIC: %s\n\t CUR MAGIC: %s\n\tNEXT MAGIC: %s\n",
                 node->prev->tag, node->tag, node->next->tag);
+        iosFreeOwner(ptr, buf + strlen(buf), (int)(sizeof(buf) - strlen(buf))); /* PC port */
         debug_assertMessage(__FILE__, PAL_AUG6JUN26(836, 820), buf);
         __assert(__FILE__, PAL_AUG6JUN26(836, 820), "e");
         return 0;
@@ -766,6 +817,7 @@ void *iosReallocDebug(void *ptr, unsigned int size)
     if (strcmp(node->tag, "<ALLOC>________") != 0) {
         sprintf(buf, "IOSFREE():\n\tPREV MAGIC: %s\n\t CUR MAGIC: %s\n\tNEXT MAGIC: %s\n",
                 node->prev->tag, node->tag, node->next->tag);
+        iosFreeOwner(ptr, buf + strlen(buf), (int)(sizeof(buf) - strlen(buf))); /* PC port */
         debug_assertMessage(__FILE__, PAL_AUG6JUN26(1199, 1183), buf);
         __assert(__FILE__, PAL_AUG6JUN26(1199, 1183), "e");
         return 0;
