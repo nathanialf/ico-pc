@@ -1279,6 +1279,7 @@ static void testNewGameScreen(void)
     CHECK(ico_opt_mirror() == 1, "Cross: the run is mirrored");
     CHECK(gFlagGameClear == 1, "Cross: New Game+ On sets the cleared flag");
     CHECK(s_newGames == games + 1, "the game starts (gflagOn(382))");
+    CHECK(s_lastStartFlag == 382, "the European disc's own start flag (%d)", s_lastStartFlag);
     press(0x40);
     press(0x800);
     CHECK(s_newGames == games + 1, "once");
@@ -3297,6 +3298,52 @@ static int jpnRowShown(UiSettingsPage page, UiSettingsOpt opt)
     return -1;
 }
 
+/* The New Game screen's confirm starts the game with each disc's own start
+   flag (port/core/region.h gflag_new_game: 382 on the European, Japanese,
+   Korean and Asian discs, 349 North American, 348 August 2001 preview, 333
+   June 2001 demo), the numbers each disc's la_vibe_select raises and its
+   opening waits on (issue 147: the North American disc's screen raised 382
+   and nothing started).  The fixture's la_host_new_game_go records the
+   table's number as the game's does; Start confirms on every disc. */
+static void testNewGameStartFlags(void)
+{
+    static const struct {
+        const char *slug;
+        int flag;
+    } discs[] = {{"ntsc", 349}, {"aug6", 348}, {"jun26", 333},
+                 {"jpn", 382},  {"kor", 382},  {"cn", 382}};
+
+    for (size_t d = 0; d < sizeof(discs) / sizeof(discs[0]); d++) {
+        CHECK(ico_region_select(discs[d].slug) == 0, "the %s disc selected", discs[d].slug);
+        useConfig("version = 1\n");
+        fakeTables();
+        lt_ext_reset();
+        ui_settings_reset();
+        memset(pad, 0, sizeof(pad));
+        pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+        NonLinearCameraMove = 2;
+        gFlagGameClear = 0;
+        init_layout_texture(2);
+        const int vibe = ico_region_cur()->layout_vibe;
+        settle(vibe, 4);
+        const int games = s_newGames;
+        s_lastStartFlag = 0;
+        int ml = ui_new_game_screen_enter();
+        CHECK(ml >= 0, "%s: the New Game screen is installed", discs[d].slug);
+        lt_switch_layout(ml);
+        CHECK(settle(ml, 60), "%s: the New Game screen (%d)", discs[d].slug, current_layout_id);
+        press(0x800); /* Start */
+        CHECK(s_newGames == games + 1, "%s: the game starts", discs[d].slug);
+        CHECK(s_lastStartFlag == discs[d].flag, "%s: start flag %d (got %d)", discs[d].slug,
+              discs[d].flag, s_lastStartFlag);
+        CHECK(ico_region_cur()->gflag_new_game == discs[d].flag, "%s: the table's number",
+              discs[d].slug);
+    }
+    CHECK(ico_region_select("pal") == 0, "the European disc again");
+    useConfig("version = 1\n");
+    fakeTables();
+}
+
 /* settings_test DIR SLUG: the Japanese or Korean disc (ctests settings_jpn,
    settings_kor; port/core/region_<slug>.c) over the fixture's tables at that
    disc's numbers (the region row's title, pause and layout fields): the rows it has not (Video
@@ -3420,6 +3467,7 @@ int main(int argc, char **argv)
     testPhoto();
     testPauseStats();
     testNewGameScreen();
+    testNewGameStartFlags();
     testQuit();
     testCirclePortScreens();
     testCircleGameMenu();

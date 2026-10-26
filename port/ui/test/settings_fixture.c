@@ -108,6 +108,7 @@ void la_host_resume_play(void)
 }
 
 int s_newGames;
+int s_lastStartFlag; /* the flag the real la_host_new_game_go raises: the disc's own */
 int s_mcSaveSlots;
 
 /* fumi/sound/s_init.c: the game's stereo (0) or mono (1) output */
@@ -150,6 +151,7 @@ int ico_audio_sdl_reopen(const char *name)
 void la_host_new_game_go(void)
 {
     s_newGames++;
+    s_lastStartFlag = ico_region_new_game_flag(NULL);
 }
 
 /* layout_action.c: the memory card screen's mouse pick of a slot, on the Save screen only */
