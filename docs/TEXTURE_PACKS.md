@@ -73,7 +73,7 @@ them into `textures/SCES-50760/replacements`.
 Then:
 
 1. Start the game.
-2. Open **Options > Display** and check that **Texture pack** says **On**.
+2. Open **Options > Picture** and check that **Texture pack** says **On**.
 
 That row turns the pack on and off at once, so you can compare. It says
 **None installed** if the game found no pack. Anything the pack does not
@@ -207,7 +207,7 @@ The export saves what the disc holds as pictures. It cannot save:
 
 For those, play with the game saving them as they appear:
 
-1. Turn on the **Developer mode** row on the Options menu's first page.
+1. Open **Options > Developer** and turn on **Developer mode**.
 2. Turn on **Dump textures**, the row that appears under it.
 3. Play to the place where the texture appears.
 
