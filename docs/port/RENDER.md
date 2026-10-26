@@ -2142,10 +2142,10 @@ output. At scale 1 `param[3]` is 0 and the entry is read as the GS reads it; so 
 self-test's draws and the probe's frame at any scale (`port/render/rd_fog_path.c`
 (`rd__fog_exact`)).
 
-**The present.** Without anti-aliasing, a scaled scene with more than two texels a window pixel on
-an axis (a fixed resolution above the window's) is box-averaged to the box first, as
-anti-aliasing does, since the box blit's one bilinear tap would skip texels there
-(`port/render/rd_present.c` (`reduceRecord`)). Never at scale 1.
+**The present.** Without anti-aliasing, a scaled scene with more texels than the box has pixels on
+both axes is box-averaged to the box first, as anti-aliasing does (the box blit's one bilinear tap
+skips texels), never at scale 1 (`port/render/rd_present.c` (`reduceRecord`)); downsampling:
+[DISPLAY.md](DISPLAY.md#downsampling).
 
 **Left as they are.** The work buffers' chains run at the PS2's sizes and their draws back onto the
 frame take the GS's filter ([The glow size](#the-glow-size)). The reduction SCENE to DISPLAY is never above 2:1 in texels
