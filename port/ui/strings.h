@@ -652,6 +652,8 @@ typedef enum UiStrId {
     UI_STR_GPU_DRIVER_NO_PICKER_APP,
     UI_STR_GPU_DRIVER_UNREADABLE,
     UI_STR_GPU_DRIVER_ADD_FILE,
+    UI_STR_GPU_DRIVER_CANCELLED,
+    UI_STR_GPU_DRIVER_NOTE_LOST,
     UI_STR_QUIT_GAME,
     UI_STR_QUIT_GAME_CONFIRM,
     /* Controls > Invert mouse up/down (the mouse camera's
