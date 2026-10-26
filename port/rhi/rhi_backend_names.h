@@ -85,6 +85,7 @@
 #define rhi_timestamps_supported RHI__NAME(timestamps_supported)
 #define rhi_cmd_write_timestamp   RHI__NAME(cmd_write_timestamp)
 #define rhi_read_timestamps      RHI__NAME(read_timestamps)
+#define rhi_read_timestamps_busy RHI__NAME(read_timestamps_busy)
 #define rhi_prefer_mailbox       RHI__NAME(prefer_mailbox)
 #define rhi_present_mailbox      RHI__NAME(present_mailbox)
 #define rhi_set_exclusive_fullscreen RHI__NAME(set_exclusive_fullscreen)

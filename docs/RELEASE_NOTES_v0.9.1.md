@@ -4,6 +4,7 @@
 - Hold type (hold R1 to keep Yorda's hand, or press once to take it and once to let go) can now be chosen on the North American disc, the August 2001 preview and the June 2001 demo too; each disc starts with its own way.
 - Options > Display > Frame rate counter shows the frames per second in the corner of the screen. It starts Off.
 - A second player can take Yorda on the North American disc, the August 2001 preview and the June 2001 demo too, from the pause menu once the game has been finished.
+- With the OpenGL renderer, the game repeats less work for each picture, and the log now tells the graphics card's own time apart from the time it spends waiting for the rest of the game. If OpenGL runs slower than Vulkan on your computer, a log of a minute's play shows which of the two holds it back.
 
 ## Fixed
 

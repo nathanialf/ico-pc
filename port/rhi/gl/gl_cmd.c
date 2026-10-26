@@ -25,6 +25,10 @@
 
 #define GL_UNKNOWN_NAME 0xFFFFFFFFu
 #define GL_FBO_MAX 256u
+/* the binding points whose binds gl_bind_groups shadows (uniform blocks,
+ * storage buffers, texture and image units below it; the translated
+ * shaders use up to 21) */
+#define GL_SHADOW_POINTS 64u
 
 /* the fixed-function state OpenGL holds, per draw buffer and face */
 typedef struct GlRaster {
@@ -39,6 +43,12 @@ typedef struct GlRaster {
     GLint sRef[2];
     GLuint sRead[2], sWrite[2];
 } GlRaster;
+
+/* a buffer range bound at an indexed binding point */
+typedef struct GlRangeBind {
+    GLuint name;
+    uint64_t offset, size;
+} GlRangeBind;
 
 /* a cached framebuffer: its attachments' names (an attachment-less one
  * keyed by its default size) */
@@ -56,6 +66,11 @@ static struct {
     GlRaster raster;
     GLuint ppo, vao;   /* bound now; GL_UNKNOWN_NAME when not known */
     GlCmdList *active; /* the list the last command was on */
+    /* what gl_bind_groups last gave each binding point, so a bind of the
+     * same is skipped (gl_forget_units: every name GL_UNKNOWN_NAME) */
+    GlRangeBind uniform[GL_SHADOW_POINTS], storage[GL_SHADOW_POINTS];
+    GLuint texName[GL_SHADOW_POINTS], sampler[GL_SHADOW_POINTS], image[GL_SHADOW_POINTS];
+    GLenum texTarget[GL_SHADOW_POINTS];
     GlFbo fbos[GL_FBO_MAX];
     uint32_t fboCount;
     uint64_t fboClock;
@@ -329,10 +344,14 @@ void gl_fbo_forget_texture(GLuint name)
     }
 }
 
-/* The framebuffer of a pass's attachments, bound to GL_FRAMEBUFFER; 0 when
- * OpenGL finds it incomplete (logged). */
+/* The framebuffer of a pass's attachments (or of a copy's or resolve's
+ * texture: the same cache, so no attach and detach per copy), bound to
+ * GL_FRAMEBUFFER; 0 when OpenGL finds it incomplete (logged as `what`'s,
+ * with `outcome`).  w and h key only a framebuffer without attachments;
+ * for the others they are the log's.  The one just returned is the most recently used, so a
+ * second call never evicts it (the resolve's pair). */
 static GLuint gl_fbo_get(GlTexture *const *colour, uint32_t colourCount, const GlTexture *depth,
-                         uint32_t w, uint32_t h)
+                         uint32_t w, uint32_t h, const char *what, const char *outcome)
 {
     GlFbo key;
     memset(&key, 0, sizeof(key));
@@ -400,9 +419,9 @@ static GLuint gl_fbo_get(GlTexture *const *colour, uint32_t colourCount, const G
     const GLenum status = glf.CheckFramebufferStatus(GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
         if (gl_log_rate(&s.fboIncomplete)) {
-            GL_LOG("render pass: framebuffer incomplete (status 0x%04x; %u colour, %s, %ux%u); "
-                   "the pass draws nothing (%u so far)",
-                   (unsigned)status, colourCount, depth ? "depth" : "no depth", w, h,
+            GL_LOG("%s: framebuffer incomplete (status 0x%04x; %u colour, %s, %ux%u); %s (%u so "
+                   "far)",
+                   what, (unsigned)status, colourCount, depth ? "depth" : "no depth", w, h, outcome,
                    s.fboIncomplete);
         }
         glf.BindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -416,11 +435,30 @@ static GLuint gl_fbo_get(GlTexture *const *colour, uint32_t colourCount, const G
 }
 
 /* ------------------------------------------------------------ lifecycle */
+/* Nothing bound at the binding points is taken as known: the next bind of
+ * each is made.  Needed where a name the shadow holds may stop being bound
+ * there: a delete (OpenGL unbinds a deleted buffer, texture or sampler from
+ * every point, and may hand its name out again), and a new list (the
+ * deletes of a recycle ran before it).  Nothing else binds these points:
+ * the creates, copies, readbacks and the present use texture unit 0 and the
+ * non-indexed buffer targets (gl_internal.h, scratch), and framebuffer
+ * attachments are not bindings of a unit. */
+void gl_forget_units(void)
+{
+    memset(s.uniform, 0xFF, sizeof(s.uniform));
+    memset(s.storage, 0xFF, sizeof(s.storage));
+    memset(s.texName, 0xFF, sizeof(s.texName));
+    memset(s.sampler, 0xFF, sizeof(s.sampler));
+    memset(s.image, 0xFF, sizeof(s.image));
+    memset(s.texTarget, 0xFF, sizeof(s.texTarget));
+}
+
 static void gl_forget_bindings(void)
 {
     s.rasterValid = false;
     s.ppo = s.vao = GL_UNKNOWN_NAME;
     s.active = NULL;
+    gl_forget_units();
 }
 
 void gl_cmd_init(void)
@@ -647,7 +685,8 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
     }
     uint32_t areaW = pass->width, areaH = pass->height;
     gl_pass_area_check(&areaW, &areaH, colour, pass->colorCount, dt);
-    const GLuint fbo = gl_fbo_get(colour, pass->colorCount, dt, areaW, areaH);
+    const GLuint fbo = gl_fbo_get(colour, pass->colorCount, dt, areaW, areaH, "render pass",
+                                  "the pass draws nothing");
     if (!fbo) {
         return;
     }
@@ -907,9 +946,31 @@ void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
 }
 
 /* ------------------------------------------------------------------ draws */
+/* An indexed buffer range: true when the point already holds it (the
+ * shadow), else the shadow takes it and the caller binds. */
+static bool gl_range_bound(GlRangeBind *shadow, uint32_t point, GLuint name, uint64_t offset,
+                           uint64_t size)
+{
+    if (point >= GL_SHADOW_POINTS) {
+        return false;
+    }
+    GlRangeBind *h = &shadow[point];
+    if (h->name == name && h->offset == offset && h->size == size) {
+        return true;
+    }
+    h->name = name;
+    h->offset = offset;
+    h->size = size;
+    return false;
+}
+
 /* The bind groups set since the last draw: each entry one bind
  * (gl_internal.h, "bind groups"), a dynamic uniform at its base plus the
- * group's bind-time offset of its rank. */
+ * group's bind-time offset of its rank; an entry whose point already holds
+ * what it binds (the shadow, s.uniform ...) is skipped and counted
+ * (RhiStats.entryBindsSkipped).  Groups are dirty at almost every draw (a
+ * frame's groups are made per draw, the dynamic offsets move), while most
+ * of their entries bind what the draw before bound. */
 static void gl_bind_groups(GlCmdList *c)
 {
     for (uint32_t g = 0; g < RHI_MAX_BIND_SLOTS && c->groupDirty; g++) {
@@ -922,29 +983,62 @@ static void gl_bind_groups(GlCmdList *c)
         }
         const GlBindEntry *e = gl_bind_entries(bg);
         for (uint32_t k = 0; k < bg->count; k++, e++) {
+            const uint32_t pt = e->point;
+            bool skipped = false;
             switch (e->kind) {
             case GL_BIND_UNIFORM: {
                 const uint64_t off =
                     e->offset + (e->dyn < RHI_MAX_DYNAMIC_OFFSETS ? c->offsets[g][e->dyn] : 0u);
-                glf.BindBufferRange(GL_UNIFORM_BUFFER, e->point, e->name, (GLintptr)off,
-                                    (GLsizeiptr)e->size);
+                skipped = gl_range_bound(s.uniform, pt, e->name, off, e->size);
+                if (!skipped) {
+                    glf.BindBufferRange(GL_UNIFORM_BUFFER, pt, e->name, (GLintptr)off,
+                                        (GLsizeiptr)e->size);
+                }
                 break;
             }
             case GL_BIND_STORAGE:
-                glf.BindBufferRange(GL_SHADER_STORAGE_BUFFER, e->point, e->name,
-                                    (GLintptr)e->offset, (GLsizeiptr)e->size);
+                skipped = gl_range_bound(s.storage, pt, e->name, e->offset, e->size);
+                if (!skipped) {
+                    glf.BindBufferRange(GL_SHADER_STORAGE_BUFFER, pt, e->name, (GLintptr)e->offset,
+                                        (GLsizeiptr)e->size);
+                }
                 break;
-            case GL_BIND_TEXTURE:
-                glf.ActiveTexture(GL_TEXTURE0 + e->point);
-                glf.BindTexture(e->target, e->name);
-                glf.BindSampler(e->point, e->sampler);
+            case GL_BIND_TEXTURE: {
+                /* the texture (per target: a unit holds one of each) and the
+                   sampler apart */
+                const bool known = pt < GL_SHADOW_POINTS;
+                const bool texSame =
+                    known && s.texName[pt] == e->name && s.texTarget[pt] == e->target;
+                const bool samplerSame = known && s.sampler[pt] == e->sampler;
+                if (!texSame) {
+                    glf.ActiveTexture(GL_TEXTURE0 + pt);
+                    glf.BindTexture(e->target, e->name);
+                }
+                if (!samplerSame) {
+                    glf.BindSampler(pt, e->sampler);
+                }
+                if (known) {
+                    s.texName[pt] = e->name;
+                    s.texTarget[pt] = e->target;
+                    s.sampler[pt] = e->sampler;
+                }
+                skipped = texSame && samplerSame;
                 break;
+            }
             case GL_BIND_IMAGE:
-                glf.BindImageTexture(e->point, e->name, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA8);
+                skipped = pt < GL_SHADOW_POINTS && s.image[pt] == e->name;
+                if (!skipped) {
+                    glf.BindImageTexture(pt, e->name, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA8);
+                    if (pt < GL_SHADOW_POINTS) {
+                        s.image[pt] = e->name;
+                    }
+                }
                 break;
             default:
                 break;
             }
+            g_gl.counts.entryBinds++;
+            g_gl.counts.entryBindsSkipped += skipped;
         }
         g_gl.counts.bindGroupBinds++;
     }
@@ -1048,7 +1142,9 @@ void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t first
 
 /* ------------------------------------------------------------------ copies
  * Outside render passes.  The binding points they use are scratch
- * (gl_internal.h); the scratch framebuffers are detached after. */
+ * (gl_internal.h).  The texture to buffer copy and the resolve read and
+ * draw through the cached framebuffer of their texture (gl_fbo_get), so a
+ * copy changes no attachment; they leave framebuffer 0 bound. */
 static bool gl_copy_refused(const char *what, const char *why)
 {
     if (gl_log_rate(&s.badCopies)) {
@@ -1187,10 +1283,17 @@ void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, 
     g_gl.counts.copies++;
 }
 
-/* Through the scratch read framebuffer into the buffer bound as
+/* Through the texture's cached framebuffer (its colour at attachment 0 and
+ * read buffer, or its depth alone) into the buffer bound as
  * GL_PIXEL_PACK_BUFFER (glReadPixels), rows rowPitch bytes apart; the depth
- * aspect as 32-bit floats; integer formats as integers.  Into a buffer the
- * shaders read, the barrier for those reads follows. */
+ * aspect as 32-bit floats; integer formats as integers.  No memory barrier
+ * after it, also into a buffer the shaders read (the VU pre-pass's record,
+ * read as a storage buffer by the next draws): glReadPixels is not a shader
+ * write, and OpenGL orders a GL command's buffer writes before the commands
+ * after it; glMemoryBarrier is for the writes of shaders (image stores,
+ * buffer variables, atomic counters: the glMemoryBarrier reference page).
+ * A source the shaders wrote as a storage image took its barrier at its
+ * RHI_STATE_STORAGE transition (rhi_cmd_barrier). */
 void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
                                     RhiRect region, RhiBuffer dst, uint64_t dstOffset,
                                     uint32_t rowPitch)
@@ -1221,13 +1324,11 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
         gl_copy_refused(what, "the rows are outside the buffer");
         return;
     }
-    const GLenum attachment = !fm->depth    ? GL_COLOR_ATTACHMENT0
-                              : fm->stencil ? GL_DEPTH_STENCIL_ATTACHMENT
-                                            : GL_DEPTH_ATTACHMENT;
-    glf.BindFramebuffer(GL_READ_FRAMEBUFFER, g_gl.scratchRead);
-    glf.FramebufferTexture2D(GL_READ_FRAMEBUFFER, attachment, GL_TEXTURE_2D, t->name, 0);
-    glf.ReadBuffer(fm->depth ? GL_NONE : GL_COLOR_ATTACHMENT0);
-    if (glf.CheckFramebufferStatus(GL_READ_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    GlTexture *const one[1] = {t};
+    const GLuint fbo = fm->depth
+                           ? gl_fbo_get(NULL, 0, t, t->width, t->height, what, "nothing copied")
+                           : gl_fbo_get(one, 1, NULL, t->width, t->height, what, "nothing copied");
+    if (!fbo) {
         gl_copy_refused(what, "the texture cannot be read through a framebuffer");
     } else {
         glf.BindBuffer(GL_PIXEL_PACK_BUFFER, db->name);
@@ -1244,19 +1345,14 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
         }
         glf.BindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         g_gl.counts.copies++;
-        if (db->usage & (RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM | RHI_BUF_STORAGE_READ)) {
-            glf.MemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT | GL_ELEMENT_ARRAY_BARRIER_BIT |
-                              GL_UNIFORM_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT |
-                              GL_PIXEL_BUFFER_BARRIER_BIT);
-        }
     }
-    glf.FramebufferTexture2D(GL_READ_FRAMEBUFFER, attachment, GL_TEXTURE_2D, 0, 0);
-    glf.BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glf.BindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 /* A multisampled RGBA8 texture into a single-sampled one of its size:
- * glBlitFramebuffer between the scratch framebuffers, the scissor test off
- * for it (each pixel the mean of its samples). */
+ * glBlitFramebuffer from the source's cached framebuffer to the
+ * destination's (gl_fbo_get), the scissor test off for it (each pixel the
+ * mean of its samples). */
 void rhi_cmd_resolve_color(RhiCommandList cl, RhiTexture src, RhiTexture dst)
 {
     GlCmdList *c = gl_cmd(cl);
@@ -1273,19 +1369,25 @@ void rhi_cmd_resolve_color(RhiCommandList cl, RhiTexture src, RhiTexture dst)
                         "and format");
         return;
     }
-    glf.BindFramebuffer(GL_READ_FRAMEBUFFER, g_gl.scratchRead);
-    glf.FramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, st->target, st->name, 0);
-    glf.ReadBuffer(GL_COLOR_ATTACHMENT0);
-    glf.BindFramebuffer(GL_DRAW_FRAMEBUFFER, g_gl.scratchDraw);
-    glf.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, dt->target, dt->name, 0);
-    const GLenum buf = GL_COLOR_ATTACHMENT0;
-    glf.DrawBuffers(1, &buf);
-    glf.Disable(GL_SCISSOR_TEST);
-    glf.BlitFramebuffer(0, 0, (GLint)st->width, (GLint)st->height, 0, 0, (GLint)dt->width,
-                        (GLint)dt->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glf.Enable(GL_SCISSOR_TEST);
-    glf.FramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, st->target, 0, 0);
-    glf.FramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, dt->target, 0, 0);
+    static const char what[] = "rhi_cmd_resolve_color";
+    GlTexture *const from[1] = {st};
+    GlTexture *const to[1] = {dt};
+    /* each framebuffer holds its texture at attachment 0, the read and draw
+       buffer (gl_fbo_get) */
+    const GLuint srcFbo =
+        gl_fbo_get(from, 1, NULL, st->width, st->height, what, "nothing resolved");
+    const GLuint dstFbo =
+        srcFbo ? gl_fbo_get(to, 1, NULL, dt->width, dt->height, what, "nothing resolved") : 0u;
+    if (srcFbo && dstFbo) {
+        glf.BindFramebuffer(GL_READ_FRAMEBUFFER, srcFbo);
+        glf.BindFramebuffer(GL_DRAW_FRAMEBUFFER, dstFbo);
+        glf.Disable(GL_SCISSOR_TEST);
+        glf.BlitFramebuffer(0, 0, (GLint)st->width, (GLint)st->height, 0, 0, (GLint)dt->width,
+                            (GLint)dt->height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glf.Enable(GL_SCISSOR_TEST);
+        g_gl.counts.copies++;
+    } else {
+        gl_copy_refused(what, "a texture cannot be used through a framebuffer");
+    }
     glf.BindFramebuffer(GL_FRAMEBUFFER, 0);
-    g_gl.counts.copies++;
 }

@@ -148,7 +148,7 @@ void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
     DxCmdList *c = dx_get_cmd(cl);
     DxFrame *f = dx_cur_frame();
     /* the barrier flag (Vulkan's held-back image barriers) has no meaning here */
-    index &= ~RHI_TIMESTAMP_KEEP_BARRIERS;
+    index &= ~(RHI_TIMESTAMP_KEEP_BARRIERS | RHI_TIMESTAMP_ISSUE_TIME); /* no busy clock here */
     if (!c || !g_dx.timestamps || !f->tsHeap || !c->recording || index >= RHI_MAX_TIMESTAMPS ||
         rhi_ts_has(f->tsWritten, index) || rhi_ts_has(c->tsMask, index)) {
         return;
@@ -230,6 +230,14 @@ uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
     const uint32_t n = g_dx.tsCount < max ? g_dx.tsCount : max;
     memcpy(ns, g_dx.tsResult, (size_t)n * sizeof(uint64_t));
     return n;
+}
+
+/* no busy clock (rhi.h): a command list goes to the queue whole at rhi_submit */
+uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
+{
+    (void)ns;
+    (void)max;
+    return 0;
 }
 
 /* ------------------------------------------------------------------ frames */

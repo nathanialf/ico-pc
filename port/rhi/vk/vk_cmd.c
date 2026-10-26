@@ -1811,7 +1811,7 @@ void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
     VkrCmdList *c = vkr_get_cmd(cl);
     VkrFrame *f = vkr_cur_frame();
     const bool keep = (index & RHI_TIMESTAMP_KEEP_BARRIERS) != 0;
-    index &= ~RHI_TIMESTAMP_KEEP_BARRIERS;
+    index &= ~(RHI_TIMESTAMP_KEEP_BARRIERS | RHI_TIMESTAMP_ISSUE_TIME); /* no busy clock here */
     if (!c || !f->queryPool || !f->tsReset || index >= RHI_MAX_TIMESTAMPS ||
         rhi_ts_has(f->tsWritten, index)) {
         return;
@@ -1831,4 +1831,12 @@ uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
     const uint32_t n = g_vkr.tsCount < max ? g_vkr.tsCount : max;
     memcpy(ns, g_vkr.tsResult, (size_t)n * sizeof(uint64_t));
     return n;
+}
+
+/* no busy clock (rhi.h): a command buffer goes to the queue whole at rhi_submit */
+uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
+{
+    (void)ns;
+    (void)max;
+    return 0;
 }

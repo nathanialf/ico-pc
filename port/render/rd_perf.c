@@ -260,6 +260,8 @@ static void passClose(const RhiStats *st, double nowMs)
     RdPerfPass *p = &s_passRec.pass[s_passRec.count - 1];
     p->draws = (uint32_t)(st->draws - s_passStats.draws);
     p->pipelineBinds = (uint32_t)(st->pipelineBinds - s_passStats.pipelineBinds);
+    p->entryBinds = (uint32_t)(st->entryBinds - s_passStats.entryBinds);
+    p->entrySkipped = (uint32_t)(st->entryBindsSkipped - s_passStats.entryBindsSkipped);
     p->cpuUs = (float)((nowMs - s_passCpu0) * 1000.0);
 }
 
@@ -300,7 +302,8 @@ void rd__perf_pass(RhiCommandList cl, int kind, uint32_t target, uint32_t w, uin
     RhiStats st;
     rhi_get_stats(&st);
     passClose(&st, now);
-    rhi_cmd_write_timestamp(cl, (RD_PERF_TS_PASS0 + s_passRec.count) | RHI_TIMESTAMP_KEEP_BARRIERS);
+    rhi_cmd_write_timestamp(cl, (RD_PERF_TS_PASS0 + s_passRec.count) | RHI_TIMESTAMP_KEEP_BARRIERS |
+                                    RHI_TIMESTAMP_ISSUE_TIME);
     RdPerfPass *p = &s_passRec.pass[s_passRec.count++];
     memset(p, 0, sizeof(*p));
     p->kind = (uint8_t)kind;
@@ -322,21 +325,30 @@ void rd__perf_pass_end(RhiCommandList cl)
     RhiStats st;
     rhi_get_stats(&st);
     passClose(&st, rd__now_ms());
-    rhi_cmd_write_timestamp(cl, (RD_PERF_TS_PASS0 + s_passRec.count) | RHI_TIMESTAMP_KEEP_BARRIERS);
+    rhi_cmd_write_timestamp(cl, (RD_PERF_TS_PASS0 + s_passRec.count) | RHI_TIMESTAMP_KEEP_BARRIERS |
+                                    RHI_TIMESTAMP_ISSUE_TIME);
     s_passRec.closed = true;
 }
 
-/* a timed replay's pieces, their GPU times from its slot's stamps, into the
-   queue (the oldest dropped when nobody takes them) */
-static void passFinish(PassTable *t, const uint64_t *ts, uint32_t n)
+/* a timed replay's pieces, their GPU times from its slot's stamps (and
+   their busy times from its busy clock, nb 0 without one), into the queue
+   (the oldest dropped when nobody takes them) */
+static void passFinish(PassTable *t, const uint64_t *ts, uint32_t n, const uint64_t *busy,
+                       uint32_t nb)
 {
     for (uint32_t k = 0; k < t->count; k++) {
         const uint32_t a = RD_PERF_TS_PASS0 + k, b = a + 1u;
         RdPerfPass *p = &t->pass[k];
         p->gpuUs = -1.0f;
+        p->gpuBusyUs = 0.0f;
+        p->busyValid = 0;
         if (b < n && ts[a] != 0 && ts[b] != 0 && ts[b] >= ts[a] &&
             (k + 1u < t->count || t->closed)) {
             p->gpuUs = (float)((double)(ts[b] - ts[a]) / 1e3);
+            if (b < nb && busy[a] != 0 && busy[b] >= busy[a]) {
+                p->gpuBusyUs = (float)((double)(busy[b] - busy[a]) / 1e3);
+                p->busyValid = 1;
+            }
         }
     }
     if (s_passCount == RD_PERF_PASS_QUEUE) {
@@ -459,9 +471,14 @@ void rd__perf_collect_gpu(void)
     s_pendingValid[slot] = false;
     uint64_t ts[RHI_MAX_TIMESTAMPS];
     const uint32_t n = g_rd.hasDevice ? rhi_read_timestamps(ts, RHI_MAX_TIMESTAMPS) : 0;
+    /* the busy clock (OpenGL): the same stamps without the GPU's waits for
+       the CPU */
+    uint64_t busy[RHI_MAX_TIMESTAMPS];
+    const uint32_t nb = n ? rhi_read_timestamps_busy(busy, RHI_MAX_TIMESTAMPS) : 0;
     if (n > RD_PERF_TS_BEGIN && ts[RD_PERF_TS_BEGIN] != 0) {
         const uint64_t t0 = ts[RD_PERF_TS_BEGIN];
         uint64_t prev = t0, last = t0;
+        uint32_t lastIndex = RD_PERF_TS_BEGIN;
         double stretch = 0.0; /* since the last RD_PERF_TS_* stamp */
         bool prepass = false; /* RD_PERF_TS_PREPASS came: LISTS ends the pre-pass */
         for (uint32_t k = 0; k < ps->count; k++) {
@@ -492,12 +509,18 @@ void rd__perf_collect_gpu(void)
                 stretch = 0.0;
             }
             prev = last = ts[i];
+            lastIndex = i;
         }
         r->gpuMs = (double)(last - t0) / 1e6;
         r->gpuValid = 1;
+        if (lastIndex < nb && busy[RD_PERF_TS_BEGIN] != 0 &&
+            busy[lastIndex] >= busy[RD_PERF_TS_BEGIN]) {
+            r->gpuBusyMs = (double)(busy[lastIndex] - busy[RD_PERF_TS_BEGIN]) / 1e6;
+            r->gpuBusyValid = 1;
+        }
     }
     if (r->passTimed) {
-        passFinish(&s_passPending[slot], ts, n);
+        passFinish(&s_passPending[slot], ts, n, busy, nb);
     }
     push(r);
 }
@@ -616,8 +639,12 @@ static void stamp(RhiCommandList cl, uint32_t index)
         index != RD_PERF_TS_PREPASS && index != RD_PERF_TS_PRESENT) {
         return;
     }
-    rhi_cmd_write_timestamp(cl, index >= RD_PERF_TS_COUNT ? index | RHI_TIMESTAMP_KEEP_BARRIERS
-                                                          : index);
+    /* a replay timed pass by pass: each stamp's issue time too, for the busy
+       clock (rhi.h RHI_TIMESTAMP_ISSUE_TIME: it may hold the CPU on
+       OpenGL, so not in every replay) */
+    const uint32_t issue = s_passOn ? RHI_TIMESTAMP_ISSUE_TIME : 0u;
+    rhi_cmd_write_timestamp(
+        cl, (index >= RD_PERF_TS_COUNT ? index | RHI_TIMESTAMP_KEEP_BARRIERS : index) | issue);
     s_stamps.written |= 1u << index;
     s_stamps.order[s_stamps.count++] = (uint8_t)index;
     s_stamps.post[index] = (int8_t)s_post;
@@ -711,6 +738,8 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
         const double ms = q->gpuUs >= 0.0f ? (double)q->gpuUs / 1e3 : 0.0;
         a->passes++;
         a->gpuMs += ms;
+        a->entryBinds += q->entryBinds;
+        a->entrySkipped += q->entrySkipped;
         if (q->gpuUs >= 0.0f && q->gpuUs < RD_PERF_PASS_SMALL_US) {
             a->small++;
             a->smallMs += ms;
@@ -742,6 +771,12 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
         e->draws += q->draws;
         e->gpuMs += ms;
         e->cpuMs += (double)q->cpuUs / 1e3;
+        if (q->busyValid) {
+            e->busyMs += (double)q->gpuBusyUs / 1e3;
+            e->busyN++;
+            a->busyMs += (double)q->gpuBusyUs / 1e3;
+            a->busySpanMs += ms;
+        }
     }
 }
 
@@ -775,10 +810,14 @@ int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_
         if (pr < 0.95 || pr > 1.05) {
             snprintf(passes, sizeof(passes), " %.1f passes", pr);
         }
+        char busy[32] = "";
+        if (e->busyN) {
+            snprintf(busy, sizeof(busy), " (busy %.2f)", e->busyMs / r);
+        }
         const int w =
-            snprintf(buf + at, n - at, "%s%s %s %ux%u%s %.0f draws %.2f ms", shown ? ", " : "",
+            snprintf(buf + at, n - at, "%s%s %s %ux%u%s %.0f draws %.2f ms%s", shown ? ", " : "",
                      label, rd_perf_target_name(e->target), (unsigned)e->w, (unsigned)e->h, passes,
-                     (double)e->draws / r, e->gpuMs / r);
+                     (double)e->draws / r, e->gpuMs / r, busy);
         if (w < 0 || (size_t)w >= n - at) {
             at = n - 1;
             break;
@@ -786,10 +825,27 @@ int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_
         at += (size_t)w;
     }
     if (at + 1 < n) {
+        /* OpenGL: the timed replays' busy time beside the span of the same
+           pieces (the span also counts the GPU's waits for the CPU) */
+        char busy[160] = "";
+        int b = 0;
+        if (a->entryBinds) {
+            /* OpenGL: the groups' entries whose binding point already held
+               them (gl_cmd.c gl_bind_groups skips their binds) */
+            b = snprintf(busy, sizeof(busy),
+                         "; group entries %.0f a timed replay, %.0f already bound",
+                         (double)a->entryBinds / r, (double)a->entrySkipped / r);
+        }
+        if (a->busySpanMs > 0.0 && b >= 0 && (size_t)b < sizeof(busy)) {
+            snprintf(busy + b, sizeof(busy) - (size_t)b,
+                     "; GPU busy %.2f ms, span %.2f ms a timed replay", a->busyMs / r,
+                     a->busySpanMs / r);
+        }
         snprintf(buf + at, n - at,
                  " (%u of %.1f passes a replay, %u timed replays; passes under 0.05 ms: %.1f a "
-                 "replay, %.2f ms)",
-                 shown, (double)a->passes / r, a->replays, (double)a->small / r, a->smallMs / r);
+                 "replay, %.2f ms%s)",
+                 shown, (double)a->passes / r, a->replays, (double)a->small / r, a->smallMs / r,
+                 busy);
     }
     return (int)strlen(buf);
 }

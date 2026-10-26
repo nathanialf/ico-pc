@@ -957,8 +957,28 @@ then runs the slot's deletes, resets its bind group arena and reads its timestam
 glFinish`) leaves the slot without a fence; unless a later submit of the slot places one, its
 recycle waits with `glFinish` (`GlFrame.needFinish`). GPU timestamps
 are `glQueryCounter(GL_TIMESTAMP)` on a query object per index and slot, made at its first use,
-read once the fence has passed (`rhi_gl: GPU timestamps: on (glQueryCounter, 256 per frame
-slot)`). `rhi_wait_idle` is `glFinish`.
+read once the fence has passed (`rhi_gl: GPU timestamps: on (glQueryCounter, 256 per frame slot;
+in the replays timed pass by pass each stamp's issue time is read ...)`). `rhi_wait_idle` is
+`glFinish`.
+
+**The busy clock** (`rhi_read_timestamps_busy`, `gl_device.c` `gl_collect_busy`). A list executes
+while it is recorded, so when the walk is slower than the GPU the GPU idles between the commands
+and the span between two stamps counts that wait. A `GL_TIME_ELAPSED` query would read the same span (ARB_timer_query: its timer starts and stops
+when the earlier commands have completed). A stamp written with `RHI_TIMESTAMP_ISSUE_TIME` also
+reads `glGetInteger64v(GL_TIMESTAMP)`, the GL time once the stamp and everything before it were
+handed over (the extension's own latency example); the slot's clock starts at its first stamp
+and each stretch from stamp a to stamp b adds `max(0, ts[b] - max(ts[a], issued[b]))`, the span
+less the part before the stretch's last command arrived. That is a lower bound of the GPU's own
+time: work it ran while the CPU was still handing the stretch over does not count, so on a GPU
+that keeps up with a slow walk the busy time reads low. The get may hold the CPU until a threaded
+driver has taken the commands before it, so the renderer asks for it only in the replays it
+times pass by pass (one every 250 ms, `rd_perf.c`); a slot with a stamp without the flag has no
+clock. The renderer keeps the timed replay's busy time beside its GPU time
+(`RdPerfRecord.gpuBusyMs`) and each piece's (`RdPerfPass.gpuBusyUs`); the window's 10 s line
+`window: GPU top passes:` gives each entry's `N ms (busy N)` and ends `...; GPU busy N ms, span N
+ms a timed replay)`, the pieces' busy time and the span of the same pieces. Vulkan, Direct3D 12
+and Direct3D 11 read no clock (their lines are unchanged). `rhi_gl_test`'s busy cell checks the
+clock against the timestamps, `rd_perf_gl` each timed record and piece.
 
 **Pipelines** (`port/rhi/gl/gl_pipeline.c`). A pipeline is a program pipeline object holding the
 two separable programs (`glUseProgramStages`), a vertex array object holding the vertex layout
@@ -998,7 +1018,17 @@ pipeline's stride; the element array buffer is the VAO's too, bound after it), t
 whose id or offsets changed (`glBindBufferRange` for uniform and storage buffers, the dynamic
 uniforms at their base plus the bind-time offset; `glActiveTexture` + `glBindTexture` +
 `glBindSampler` at the texture's unit; `glBindImageTexture` for the storage image), and the
-fixed-function state. That state is shadowed (`GlRaster`): a draw calls only what differs from what
+fixed-function state. A group is dirty at almost every draw (the frame's groups are made per draw
+and the dynamic offsets move) while most of its entries bind what the draw before bound, so the
+binding points below 64 are shadowed (`gl_bind_groups`: the buffer, offset and size per uniform
+and storage point, the texture with its target and the sampler per unit, the image per image
+unit) and an entry the point already holds is skipped: `RhiStats.entryBinds` counts the entries,
+`entryBindsSkipped` those skipped (0 on the other backends), and the `GPU top passes` line of a
+timed replay adds `; group entries N a timed replay, N already bound`. The shadow is forgotten
+(`gl_forget_units`) at every `rhi_begin_commands` and every deferred delete of a buffer, texture
+or sampler (OpenGL unbinds a deleted object and may hand its name out again); nothing else binds
+those points (creates, copies, readbacks and the present use texture unit 0 and the non-indexed
+buffer targets). The fixed-function state is shadowed (`GlRaster`): a draw calls only what differs from what
 OpenGL holds (`glEnablei`/`glDisablei(GL_BLEND)`, `glBlendFuncSeparatei`,
 `glBlendEquationSeparatei`, `glColorMaski` per draw buffer, the depth test, `glDepthMask`,
 `glDepthFunc`, the stencil test, `glStencilFuncSeparate` with the list's reference,
@@ -1044,12 +1074,19 @@ does nothing (`localRead` is false). Copies run outside passes on the scratch bi
 `glTexSubImage2D` with `GL_UNPACK_ROW_LENGTH` from the row pitch (row by row for a pitch that is no
 whole number of texels), BC formats `glCompressedTexSubImage2D` by whole block rows;
 `rhi_cmd_copy_texture` is `glCopyImageSubData` (depth and stencil together); the texture to buffer
-copy (the VU vertex pre-pass's record, the fog's depth words, dumps) attaches the texture to the
-scratch read framebuffer and calls `glReadPixels` into the buffer bound as `GL_PIXEL_PACK_BUFFER`
-with `GL_PACK_ROW_LENGTH` (the depth aspect as `GL_DEPTH_COMPONENT`/`GL_FLOAT`, integer formats as
-integers), followed by a `glMemoryBarrier` for vertex, index, uniform and storage reads when the
-buffer is one the shaders read; `rhi_cmd_resolve_color` is `glBlitFramebuffer` between the two
-scratch framebuffers, `GL_NEAREST`, the scissor test off. A refused copy logs `rhi_gl: <entry
+copy (the VU vertex pre-pass's record, the fog's depth words, dumps) reads through the texture's
+own framebuffer from the render passes' cache (its colour at attachment 0, or its depth alone), so
+no copy attaches or detaches anything, and calls `glReadPixels` into the buffer bound as
+`GL_PIXEL_PACK_BUFFER` with `GL_PACK_ROW_LENGTH` (the depth aspect as
+`GL_DEPTH_COMPONENT`/`GL_FLOAT`, integer formats as integers). No `glMemoryBarrier` follows, also
+into a buffer the shaders read: `glReadPixels` is not a shader write, OpenGL orders a command's
+buffer writes before the later commands' reads, and the barrier is for the writes of shaders (the
+`glMemoryBarrier` reference page); a source the shaders wrote as a storage image took its barrier
+at its `RHI_STATE_STORAGE` transition. `rhi_cmd_resolve_color` is `glBlitFramebuffer` from the
+source's cached framebuffer to the destination's, `GL_NEAREST`, the scissor test off. Both leave
+framebuffer 0 bound; an incomplete framebuffer logs `rhi_gl: <entry point>: framebuffer
+incomplete (...); nothing copied|nothing resolved (N so far)`. The scratch framebuffers remain for
+`rhi_readback_texture` and the present's blit. A refused copy logs `rhi_gl: <entry
 point>: <why> (N so far)` (the first 8, then every 100th).
 
 **Swapchain** (`port/rhi/gl/gl_swapchain.c`). The backbuffer is an RGBA8 texture at the window's

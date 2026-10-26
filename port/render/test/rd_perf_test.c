@@ -686,10 +686,13 @@ static void checkPassTexts(void)
                       "pipeline_binds,gpu_us,cpu_us\n") == 0,
           "csv header: %s", buf);
     const RdPerfPass p[4] = {
-        {RD_PERF_PASS_RENDER, RD_TARGET_SCENE, 0, -1, 848, 448, 420, 300, 4120.0f, 900.0f},
-        {RD_PERF_PASS_RENDER, RD_TARGET_WORK1, 7, RD_PERF_POST_GLOW, 256, 128, 1, 1, 60.0f, 5.0f},
-        {RD_PERF_PASS_RENDER, RD_TARGET_WORK1, 7, RD_PERF_POST_GLOW, 256, 128, 1, 1, 40.0f, 5.0f},
-        {RD_PERF_PASS_DATE, RD_TARGET_SCENE, 3, -1, 848, 448, 1, 1, 30.0f, 2.0f},
+        {RD_PERF_PASS_RENDER, RD_TARGET_SCENE, 0, -1, 848, 448, 420, 300, 4120.0f, 900.0f, 0.0f, 0,
+         0, 0},
+        {RD_PERF_PASS_RENDER, RD_TARGET_WORK1, 7, RD_PERF_POST_GLOW, 256, 128, 1, 1, 60.0f, 5.0f,
+         0.0f, 0, 0, 0},
+        {RD_PERF_PASS_RENDER, RD_TARGET_WORK1, 7, RD_PERF_POST_GLOW, 256, 128, 1, 1, 40.0f, 5.0f,
+         0.0f, 0, 0, 0},
+        {RD_PERF_PASS_DATE, RD_TARGET_SCENE, 3, -1, 848, 448, 1, 1, 30.0f, 2.0f, 0.0f, 0, 0, 0},
     };
     rd_perf_pass_csv_line(12, 34, 1, &p[1], buf, sizeof(buf));
     CHECK(strcmp(buf, "12,34,1,render pass,7,glow,WORK1,256,128,1,1,60.0,5.0\n") == 0,
@@ -704,6 +707,25 @@ static void checkPassTexts(void)
                       "passes a replay, 2 timed replays; passes under 0.05 ms: 2.0 a replay, "
                       "0.07 ms)") == 0,
           "top passes: %s", buf);
+    /* a busy clock (OpenGL): the entry's busy time after its span, the
+       others as before */
+    RdPerfPass busy[4];
+    memcpy(busy, p, sizeof(busy));
+    busy[0].gpuBusyUs = 1300.0f;
+    busy[0].busyValid = 1;
+    busy[0].entryBinds = 2100;
+    busy[0].entrySkipped = 1800;
+    rd_perf_pass_agg_reset(&agg);
+    rd_perf_pass_agg_add(&agg, busy, 4);
+    rd_perf_pass_agg_text(&agg, 1, buf, sizeof(buf));
+    CHECK(strcmp(buf, "list 0 SCENE 848x448 420 draws 4.12 ms (busy 1.30) (1 of 4.0 passes a "
+                      "replay, 1 timed replays; passes under 0.05 ms: 2.0 a replay, 0.07 ms; group "
+                      "entries 2100 a timed replay, 1800 already bound; GPU busy 1.30 ms, span "
+                      "4.12 ms a timed replay)") == 0,
+          "top passes with a busy time: %s", buf);
+    rd_perf_pass_agg_reset(&agg);
+    rd_perf_pass_agg_add(&agg, p, 4);
+    rd_perf_pass_agg_add(&agg, p, 4);
     double kinds[RD_PERF_PASS_KIND_COUNT] = {0}, effects[RD_PERF_POST_COUNT] = {0};
     kinds[RD_PERF_PASS_RENDER] = 6.0;
     kinds[RD_PERF_PASS_DATE] = 2.0;
@@ -831,6 +853,22 @@ static void checkPieces(const RdPerfRecord *r, const RdPerfPass *p, uint32_t n, 
         CHECK(kinds[t] == r->passKinds[t], "passes: replay %u: %u pieces of %s, counted %u",
               r->replay, kinds[t], rd_perf_pass_kind_name(t), (unsigned)r->passKinds[t]);
     }
+    /* the busy clock (rhi.h rhi_read_timestamps_busy): on OpenGL each timed
+       piece's busy time within its span and the timed record's within its
+       GPU time; no other backend has one (checkPieces sees timed records
+       only) */
+    const bool gl = rhi_backend() == RHI_BACKEND_OPENGL;
+    for (uint32_t i = 0; i < n; i++) {
+        CHECK(p[i].busyValid == (gl && p[i].gpuUs >= 0.0f) &&
+                  (!p[i].busyValid ||
+                   (p[i].gpuBusyUs >= 0.0f && p[i].gpuBusyUs <= p[i].gpuUs + 0.01f)),
+              "passes: replay %u piece %u busy %d %.1f us of %.1f us", r->replay, i,
+              (int)p[i].busyValid, (double)p[i].gpuBusyUs, (double)p[i].gpuUs);
+    }
+    CHECK(r->gpuBusyValid == (gl && r->gpuValid) &&
+              (!r->gpuBusyValid || (r->gpuBusyMs >= 0.0 && r->gpuBusyMs <= r->gpuMs + 1e-6)),
+          "passes: replay %u busy %d %.3f ms of %.3f ms", r->replay, (int)r->gpuBusyValid,
+          r->gpuBusyMs, r->gpuMs);
     if (r->gpuValid) {
         const double total = r->gpuMs * 1000.0;
         CHECK(untimed == 0, "passes: replay %u: %u pieces without a GPU time", r->replay, untimed);

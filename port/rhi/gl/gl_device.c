@@ -461,12 +461,18 @@ static void gl_wait_sync(GLsync s)
 /* The slot just recycled (its fence waited for): its stamps into
  * g_gl.tsResult (GL_TIMESTAMP results are ns); rhi_read_timestamps hands
  * them back. */
+static void gl_collect_busy(GlFrame *f);
+
 static void gl_collect_timestamps(GlFrame *f)
 {
     g_gl.tsCount = 0;
     memset(g_gl.tsResult, 0, sizeof(g_gl.tsResult));
+    g_gl.tsBusyCount = 0;
+    memset(g_gl.tsBusy, 0, sizeof(g_gl.tsBusy));
     if (!g_gl.timestamps) {
         memset(f->tsWritten, 0, sizeof(f->tsWritten));
+        f->tsOrderCount = 0;
+        f->tsNoIssue = 0;
         return;
     }
     for (uint32_t i = 0; i < RHI_MAX_TIMESTAMPS; i++) {
@@ -485,7 +491,48 @@ static void gl_collect_timestamps(GlFrame *f)
             g_gl.tsCount = i + 1;
         }
     }
+    if (f->tsNoIssue == 0) {
+        gl_collect_busy(f);
+    }
     memset(f->tsWritten, 0, sizeof(f->tsWritten));
+    f->tsOrderCount = 0;
+    f->tsNoIssue = 0;
+}
+
+/* The slot's busy clock (rhi.h rhi_read_timestamps_busy) from its stamps
+ * and their issue times (every stamp written with
+ * RHI_TIMESTAMP_ISSUE_TIME, else no clock), walked in the order written: it starts at the
+ * first stamp's time and each stretch adds its span less the part before
+ * its last command was handed over (the GPU waiting for the CPU), at least
+ * 0 and at most the span.  A command list here executes while it is
+ * recorded, so a slow walk leaves the GPU idle inside the timestamps' span;
+ * a GL_TIME_ELAPSED query would not tell that apart: its timer starts and
+ * stops when the earlier commands have completed (ARB_timer_query), the
+ * same span.  A stamp without a result (or before the one ahead of it)
+ * reads 0 and the walk goes on past it. */
+static void gl_collect_busy(GlFrame *f)
+{
+    uint64_t clock = 0, prev = 0;
+    bool started = false;
+    for (uint32_t k = 0; k < f->tsOrderCount; k++) {
+        const uint32_t i = f->tsOrder[k];
+        const uint64_t t = g_gl.tsResult[i];
+        if (!t || (started && t < prev)) {
+            continue; /* no result, or out of order: skipped, as rd_perf.c does */
+        }
+        if (!started) {
+            clock = t;
+            started = true;
+        } else {
+            const uint64_t from = f->tsIssued[i] > prev ? f->tsIssued[i] : prev;
+            clock += t > from ? t - from : 0u;
+        }
+        prev = t;
+        g_gl.tsBusy[i] = clock;
+        if (i + 1u > g_gl.tsBusyCount) {
+            g_gl.tsBusyCount = i + 1u;
+        }
+    }
 }
 
 static void gl_recycle_frame(GlFrame *f)
@@ -566,7 +613,11 @@ static void gl_timestamps_init(void)
         return;
     }
     g_gl.timestamps = true;
-    GL_LOG("GPU timestamps: on (glQueryCounter, %u per frame slot)", (unsigned)RHI_MAX_TIMESTAMPS);
+    GL_LOG("GPU timestamps: on (glQueryCounter, %u per frame slot; in the replays timed pass "
+           "by pass each stamp's issue time is read with glGetInteger64v(GL_TIMESTAMP), so the "
+           "logs give their GPU busy time, what the GPU ran after the work was handed over, "
+           "apart from the span between stamps, which also counts the GPU waiting for the CPU)",
+           (unsigned)RHI_MAX_TIMESTAMPS);
 }
 
 bool rhi_timestamps_supported(void)
@@ -577,7 +628,8 @@ bool rhi_timestamps_supported(void)
 void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
 {
     /* the barrier flag (Vulkan's held-back image barriers) has no meaning here */
-    index &= ~RHI_TIMESTAMP_KEEP_BARRIERS;
+    const bool issue = (index & RHI_TIMESTAMP_ISSUE_TIME) != 0;
+    index &= ~(RHI_TIMESTAMP_KEEP_BARRIERS | RHI_TIMESTAMP_ISSUE_TIME);
     GlFrame *f = gl_cur_frame();
     if (!g_gl.timestamps || index >= RHI_MAX_TIMESTAMPS || !gl_get_cmd(cl) ||
         rhi_ts_has(f->tsWritten, index)) {
@@ -591,6 +643,20 @@ void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
     }
     glf.QueryCounter(f->tsQuery[index], GL_TIMESTAMP);
     rhi_ts_add(f->tsWritten, index);
+    /* the GL time with the stamp handed over (the busy clock's issue time):
+       it does not wait for the GPU, but may for the driver to take the
+       commands before it (a threaded driver), so only when asked */
+    f->tsIssued[index] = 0;
+    if (issue) {
+        GLint64 now = 0;
+        glf.GetInteger64v(GL_TIMESTAMP, &now);
+        f->tsIssued[index] = now > 0 ? (uint64_t)now : 0u;
+    } else {
+        f->tsNoIssue++;
+    }
+    if (f->tsOrderCount < RHI_MAX_TIMESTAMPS) {
+        f->tsOrder[f->tsOrderCount++] = (uint8_t)index;
+    }
 }
 
 uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
@@ -600,6 +666,16 @@ uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
     }
     const uint32_t n = g_gl.tsCount < max ? g_gl.tsCount : max;
     memcpy(ns, g_gl.tsResult, (size_t)n * sizeof(uint64_t));
+    return n;
+}
+
+uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
+{
+    if (!ns || !g_gl.timestamps) {
+        return 0;
+    }
+    const uint32_t n = g_gl.tsBusyCount < max ? g_gl.tsBusyCount : max;
+    memcpy(ns, g_gl.tsBusy, (size_t)n * sizeof(uint64_t));
     return n;
 }
 

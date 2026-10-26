@@ -50,13 +50,16 @@ static void gl_delete_now(uint8_t kind, GLuint name)
 {
     switch (kind) {
     case GL_GARBAGE_BUFFER:
+        gl_forget_units();
         glf.DeleteBuffers(1, &name);
         break;
     case GL_GARBAGE_TEXTURE:
         gl_fbo_forget_texture(name);
+        gl_forget_units();
         glf.DeleteTextures(1, &name);
         break;
     case GL_GARBAGE_SAMPLER:
+        gl_forget_units();
         glf.DeleteSamplers(1, &name);
         break;
     case GL_GARBAGE_PROGRAM:

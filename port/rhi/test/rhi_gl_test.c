@@ -6,7 +6,8 @@
  * device buffer the vertex stage reads and on into a readback buffer, the
  * depth aspect of a D32F_S8 target as floats, an RGBA32_UINT target as
  * integers, each at a row pitch wider than the region; and a pass on a
- * texture made after one whose framebuffer was dropped), and the window
+ * texture made after one whose framebuffer was dropped), the busy clock
+ * (busyCell: rhi_read_timestamps_busy against the timestamps), and the window
  * path (swapchainPass: six frames on an SDL offscreen window, cleared,
  * read back and presented, with a resize).
  *
@@ -189,6 +190,103 @@ static int copyCell(void)
     return failures;
 }
 
+/* The busy clock (rhi.h rhi_read_timestamps_busy): stamps 0, 1 and 3 of
+ * one frame around two clears, written with RHI_TIMESTAMP_ISSUE_TIME, read
+ * when the slot comes round again; the clock starts at stamp 0's time,
+ * reads 0 for stamp 2 (not written), never runs backwards and never
+ * advances more than the timestamps between two stamps.  Then a frame with
+ * one stamp written without the flag: no clock (0 read), the timestamps
+ * kept.  0 passed (or no timestamps: skipped), 1 failed. */
+static int busyCell(void)
+{
+    enum { BW = 16, BH = 16 };
+
+    if (!rhi_create_backend("opengl")) {
+        return 0;
+    }
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_gl_test busy clock"};
+    if (!rhi_init(&dd)) {
+        return 0;
+    }
+    if (!rhi_timestamps_supported()) {
+        rhi_test_log("rhi_gl_test: busy cell skipped (no GPU timestamps)\n");
+        rhi_shutdown();
+        return 0;
+    }
+    int failures = 0;
+    const float rgba[4] = {0.25f, 0.5f, 0.75f, 1.0f};
+    const RhiTexture noTex = {0};
+    RhiTexture col = rhi_create_texture(&(RhiTextureDesc){BW, BH, 1, RHI_FMT_RGBA8_UNORM,
+                                                          RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC,
+                                                          "busy colour", 0});
+    if (!col.id) {
+        rhi_test_log("FAIL busy cell: resources\n");
+        rhi_shutdown();
+        return 1;
+    }
+    rhi_wait_frame();
+    RhiCommandList cl = rhi_begin_commands();
+    rhi_cmd_write_timestamp(cl, 0 | RHI_TIMESTAMP_ISSUE_TIME);
+    clearPass(cl, col, rgba, noTex, 0.0f, BW, BH);
+    rhi_cmd_write_timestamp(cl, 1 | RHI_TIMESTAMP_ISSUE_TIME);
+    clearPass(cl, col, rgba, noTex, 0.0f, BW, BH);
+    rhi_cmd_write_timestamp(cl, 3 | RHI_TIMESTAMP_ISSUE_TIME | RHI_TIMESTAMP_KEEP_BARRIERS);
+    rhi_end_commands(cl);
+    rhi_submit(cl);
+    for (int i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        rhi_wait_frame(); /* the last one recycles the slot written above */
+    }
+    uint64_t ts[8], busy[8];
+    memset(ts, 0, sizeof(ts));
+    memset(busy, 0, sizeof(busy));
+    const uint32_t n = rhi_read_timestamps(ts, 8);
+    const uint32_t nb = rhi_read_timestamps_busy(busy, 8);
+    if (n != 4 || nb != 4 || ts[0] == 0 || ts[1] < ts[0] || ts[3] < ts[1]) {
+        rhi_test_log("FAIL busy cell: %u stamps and %u busy values read (want 4 and 4)\n", n, nb);
+        failures++;
+    } else if (busy[0] != ts[0] || busy[2] != 0 || busy[1] < busy[0] || busy[3] < busy[1] ||
+               busy[1] - busy[0] > ts[1] - ts[0] || busy[3] - busy[1] > ts[3] - ts[1]) {
+        rhi_test_log("FAIL busy cell: busy %llu %llu %llu %llu against stamps %llu %llu %llu\n",
+                     (unsigned long long)busy[0], (unsigned long long)busy[1],
+                     (unsigned long long)busy[2], (unsigned long long)busy[3],
+                     (unsigned long long)ts[0], (unsigned long long)ts[1],
+                     (unsigned long long)ts[3]);
+        failures++;
+    } else {
+        rhi_test_log("rhi_gl_test: busy cell: span %llu ns, busy %llu ns\n",
+                     (unsigned long long)(ts[3] - ts[0]), (unsigned long long)(busy[3] - busy[0]));
+    }
+    /* a stamp without the flag: no busy clock for the slot */
+    cl = rhi_begin_commands();
+    rhi_cmd_write_timestamp(cl, 0 | RHI_TIMESTAMP_ISSUE_TIME);
+    clearPass(cl, col, rgba, noTex, 0.0f, BW, BH);
+    rhi_cmd_write_timestamp(cl, 1);
+    rhi_end_commands(cl);
+    rhi_submit(cl);
+    for (int i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        rhi_wait_frame();
+    }
+    const uint32_t n2 = rhi_read_timestamps(ts, 8);
+    const uint32_t nb2 = rhi_read_timestamps_busy(busy, 8);
+    if (n2 != 2 || nb2 != 0) {
+        rhi_test_log("FAIL busy cell: a stamp without the issue time: %u stamps and %u busy "
+                     "values read (want 2 and 0)\n",
+                     n2, nb2);
+        failures++;
+    }
+    rhi_destroy_texture(col);
+    rhi_wait_idle();
+    rhi_shutdown();
+    if (rhi_gl_debug_error_count()) {
+        rhi_test_log("FAIL busy cell: %u debug output error(s)\n", rhi_gl_debug_error_count());
+        failures++;
+    }
+    if (!failures) {
+        rhi_test_log("rhi_gl_test: busy cell passed\n");
+    }
+    return failures;
+}
+
 /* One frame on the backbuffer at w x h: clear to a colour from n, read it
  * back (RGBA8: rhi_swapchain_format), present.  0, or 1 with the reason. */
 static int swapFrame(int n, uint32_t w, uint32_t h)
@@ -309,6 +407,7 @@ int main(void)
     }
     int failures = rc != 0;
     failures += copyCell();
+    failures += busyCell();
     const int swap = swapchainPass();
     failures += swap == 1;
     if (failures) {

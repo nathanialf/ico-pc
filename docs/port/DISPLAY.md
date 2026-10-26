@@ -422,7 +422,13 @@ other O` (`perf_log`, `perf_passes_add`).
   times about 0.08 ms is the fixed cost of the small passes. A `list 0` `SCENE` entry with hundreds
   of draws is geometry; a SCENE entry with few draws and a millisecond or more at its native size is
   a pass broken by a load or store (a copy or a read of the target in the middle of the list); `glow
-  WORK1 256x128` with its pass count is the blur chain.
+  WORK1 256x128` with its pass count is the blur chain. On OpenGL an entry reads `X.XX ms (busy
+  B.BB)` and the parenthesis ends `; group entries N a timed replay, M already bound; GPU busy B ms,
+  span X ms a timed replay`: OpenGL runs the commands while the replay records them, so X also
+  counts the graphics card waiting for the CPU, and B is what it ran once the work was handed over
+  (a lower bound of its own time, [RHI.md](RHI.md#opengl), the busy clock). X well above B with a
+  long walk in the replays line is the CPU feeding the card too slowly, not the card; M is the
+  binds the backend skipped as already made.
 - `window: GPU ms per replay: lists 0-12 ...; effects: ...; present ...; VU pre-pass ...` and the
   replays line's GPU part: the per-list and per-effect times. On a tile-based GPU the work of a pass
   is done where the pass ends, not where its commands were recorded, so a list's or an effect's time

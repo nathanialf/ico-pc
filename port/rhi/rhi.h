@@ -1052,6 +1052,11 @@ typedef struct RhiStats {
      * not (Vulkan, vk_cmd.c vkr_flush_dynamic; 0 on D3D12) */
     uint64_t dynamicSets;
     uint64_t bindGroupBinds; /* bind group changes recorded (likewise) */
+    /* OpenGL: the entries of the groups bound (one bind each: a buffer
+     * range, a texture and its sampler, an image) and of them those skipped
+     * because their binding point already held the same (gl_cmd.c
+     * gl_bind_groups); 0 on the other backends, which bind a group whole */
+    uint64_t entryBinds, entryBindsSkipped;
     uint64_t draws, renderPasses, barriers, copies;
     uint64_t submits, presents;
     uint64_t fenceWaits, fenceWaitNs;
@@ -1116,6 +1121,13 @@ void rhi_get_stats(RhiStats *out);
 #define RHI_MAX_TIMESTAMPS 256
 #define RHI_TIMESTAMP_WORDS (RHI_MAX_TIMESTAMPS / 32)
 #define RHI_TIMESTAMP_KEEP_BARRIERS 0x80000000u
+/* RHI_TIMESTAMP_ISSUE_TIME or-ed into the index: the backend also notes
+ * when the stamp was handed over, for the busy clock below
+ * (rhi_read_timestamps_busy); ignored by a backend without one.  Reading
+ * that time may hold the CPU until the driver has taken the commands
+ * before it (OpenGL glGetInteger64v(GL_TIMESTAMP)), so the renderer asks
+ * for it only in the replays it times pass by pass. */
+#define RHI_TIMESTAMP_ISSUE_TIME 0x40000000u
 
 /* index i in a bit set of timestamp indices (uint32_t[RHI_TIMESTAMP_WORDS]) */
 static inline bool rhi_ts_has(const uint32_t *set, uint32_t i)
@@ -1133,6 +1145,24 @@ static inline void rhi_ts_add(uint32_t *set, uint32_t i)
 bool rhi_timestamps_supported(void);
 void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index);
 uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max);
+
+/* The same slot's busy clock: for each index written, a time in ns that
+ * advances only while the GPU had the work handed to it, so the difference
+ * of two indices is the GPU time of the work between them apart from the
+ * time the GPU waited for the CPU to hand it over (the timestamps'
+ * difference counts both).  For each stretch from one stamp to the next in
+ * the order written, the clock advances by the stretch's span less the
+ * part before the stretch's last command had been handed over:
+ * max(0, ts[b] - max(ts[a], issued[b])), where issued[b] is the GPU's
+ * clock when stamp b was recorded.  So it is a lower bound of the GPU's
+ * own time: work the GPU ran while the CPU was still handing the stretch
+ * over does not count.  0 for an index not written; returns as
+ * rhi_read_timestamps, or 0 when the backend does not measure it or a
+ * stamp of the slot was written without RHI_TIMESTAMP_ISSUE_TIME.
+ * OpenGL only (gl_device.c: a command list executes while it is recorded,
+ * so a slow walk starves the GPU inside the timestamps' span); Vulkan,
+ * D3D12 and D3D11 return 0 (their lists are submitted whole). */
+uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max);
 
 /* Swapchain present mode with vsync on: mailbox (the newest
  * finished image is shown at each refresh, older ones are dropped; a present

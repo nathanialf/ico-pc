@@ -89,6 +89,7 @@
     X(timestamps_supported)                                                                        \
     X(cmd_write_timestamp)                                                                         \
     X(read_timestamps)                                                                             \
+    X(read_timestamps_busy)                                                                        \
     X(prefer_mailbox)                                                                              \
     X(present_mailbox)                                                                             \
     X(set_exclusive_fullscreen)                                                                    \

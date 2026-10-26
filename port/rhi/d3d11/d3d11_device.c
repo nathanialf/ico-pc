@@ -751,7 +751,8 @@ void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
 {
     D11CommandList *c = d11_get_cmd(cl);
     D11Frame *f = d11_cur_frame();
-    index &= ~RHI_TIMESTAMP_KEEP_BARRIERS; /* no held-back barriers here */
+    /* no held-back barriers and no busy clock here */
+    index &= ~(RHI_TIMESTAMP_KEEP_BARRIERS | RHI_TIMESTAMP_ISSUE_TIME);
     if (!c || !g_d11.timestamps || !c->recording || index >= RHI_MAX_TIMESTAMPS ||
         rhi_ts_has(f->tsWritten, index) || rhi_ts_has(c->tsMask, index)) {
         return;
@@ -825,6 +826,14 @@ uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
     const uint32_t n = g_d11.tsCount < max ? g_d11.tsCount : max;
     memcpy(ns, g_d11.tsResult, (size_t)n * sizeof(uint64_t));
     return n;
+}
+
+/* no busy clock (rhi.h): not measured on Direct3D 11 */
+uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
+{
+    (void)ns;
+    (void)max;
+    return 0;
 }
 
 /* ------------------------------------------------------------------ frames */
