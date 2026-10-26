@@ -610,6 +610,22 @@ static bool runSelftest(void)
                 kEntryName[e], v[e].result == R_FAIL ? "fail" : "ok", v[e].err, what, x, y, p[0],
                 p[1], p[2], p[3], want[0], want[1], want[2], want[3]);
     }
+    /* a failed entry on Direct3D 11: the state of the test's last draw
+       (issue 126: every entry read back the cleared target), from the
+       backend (RhiStats.lastDrawText, NULL on the other backends) */
+    bool anyFail = false;
+    for (int e = 0; e < E_COUNT; e++) {
+        anyFail = anyFail || v[e].result == R_FAIL;
+    }
+    if (anyFail) {
+        RhiStats st;
+        memset(&st, 0, sizeof(st));
+        rhi_get_stats(&st);
+        const char *draw = st.lastDrawText ? st.lastDrawText() : NULL;
+        if (draw) {
+            rd__log("blend: self-test failed on Direct3D 11; its last draw: %s", draw);
+        }
+    }
     if (askedEntry >= 0) {
         return v[askedEntry].result == R_OK;
     }
