@@ -244,9 +244,18 @@ int lt_ext_rect_color(int index, unsigned char rgba[4]);
    hit.  NONE: never hit (a list's heading or empty slot).  LEFT / RIGHT: a value's
    arrows, a click is Left / Right on the owner item (their boxes padded so
    the small arrows are easy to hit).  STEP: a stepped value, a click is
-   Right on the owner item (Cross does nothing on a stepped row).  Cleared
-   by lt_ext_reset; -1 for an index that is not a port row. */
-enum { LT_POINTER_AUTO = 0, LT_POINTER_NONE, LT_POINTER_LEFT, LT_POINTER_RIGHT, LT_POINTER_STEP };
+   Right on the owner item (Cross does nothing on a stepped row).  UP / DOWN: a scroll
+   mark, a click is Up / Down on the page's cursor, which does not move (the
+   hit's item is -1).  Cleared by lt_ext_reset; -1 for an index that is not a port row. */
+enum {
+    LT_POINTER_AUTO = 0,
+    LT_POINTER_NONE,
+    LT_POINTER_LEFT,
+    LT_POINTER_RIGHT,
+    LT_POINTER_STEP,
+    LT_POINTER_UP,
+    LT_POINTER_DOWN
+};
 
 int lt_ext_set_pointer_role(int index, int role);
 /* LT_POINTER_AUTO for a game row or an index outside the tables */
