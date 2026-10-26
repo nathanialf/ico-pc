@@ -119,6 +119,27 @@ int ico_mirror_slot_saved(int slot, unsigned int sum);
 int ico_mirror_slot_loaded(int slot, unsigned int sum);
 /* The stored entry: 1 or 0, -1 when there is none or its sum differs. */
 int ico_mirror_slot_get(int slot, unsigned int sum);
+/* Players (the game's girlControlMode: 0 one player, 1 two, Yorda on the
+   second controller) of each save slot on the discs whose game block has no
+   word for it (the North American disc, the August 2001 preview and the
+   June 2001 demo: mcard.c gameblock_write writes it after the game block on
+   the others), kept in config.toml as the mirror flag is:
+     [players] slot_N = 1 or 2          the count when slot N was saved
+               slot_N_sum = <uint32>    that save's game-block checksum
+   with the region's key_prefix (ntsc_, aug6_, jun26_).  _saved writes both
+   keys and saves the file (0, or -1 when it cannot be written; logged both
+   ways); _loaded returns the value to set girlControlMode to (0 without a
+   matching entry: one player), logged; _get the stored value, 1 or 0, -1
+   for none or another sum.  The game calls them from layout_action.c's
+   load and save steps on those discs only. */
+int ico_players_slot_saved(int slot, unsigned int sum, int mode);
+int ico_players_slot_loaded(int slot, unsigned int sum);
+int ico_players_slot_get(int slot, unsigned int sum);
+/* The girl's control thread on the 2001 discs (girl_act.c
+   subGirlControl_<disc>) reports girlControlMode each frame; a change is
+   logged once: "options: Players <1|2> on <disc id> (Yorda on the second
+   controller, port 1 | Yorda led by the game)". */
+void ico_players_note(int mode);
 /* Developer mode: Main calls debug_Menu each tick
    (SELECT opens it), the retail build's dummy debug prints draw through the
    debug font, and debug_VariableInit may load a saved option table.

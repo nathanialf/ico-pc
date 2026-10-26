@@ -339,6 +339,10 @@ int ico_mirror_slot_loaded(int slot, unsigned int sum);
 /* port/game/achievements.h: the run state kept per save slot */
 void ico_ach_slot_saved(int slot, unsigned int sum);
 int ico_ach_slot_loaded(int slot, unsigned int sum);
+/* port/game/options.h: Players (girlControlMode) kept per save slot on the
+   2001 discs, whose game block has no word for it (mcard.c gameblock_write) */
+int ico_players_slot_saved(int slot, unsigned int sum, int mode);
+int ico_players_slot_loaded(int slot, unsigned int sum);
 void ico_opt_mirror_reset(void);
 /* port/game/options.h: the Stereo/Mono row's choice, for [audio] output */
 void ico_opt_output_toggled(int mode);
@@ -2646,6 +2650,11 @@ static int la_load_processing_jun26(int first)
         playTime((struct McPreview *)IosMcPreviewInfo, &hour, &min, &sec);
         ico_mirror_slot_loaded(mc.fileNo, (unsigned int)mc.sum); /* the slot's mirror flag */
         ico_ach_slot_loaded(mc.fileNo, (unsigned int)mc.sum);    /* the slot's achievement run */
+        if (ICO_NTSCAUG6JUN26) {
+            /* PC port: Players, kept beside the save on these discs (the
+               European gameblock_read reads it from the card) */
+            girlControlMode = ico_players_slot_loaded(mc.fileNo, (unsigned int)mc.sum);
+        }
         debug_StdPrintfDummy("stage no %d\n", gFlagSaveStage);
         seEnvForceClose = 1;
         soundDataSegAllClose(0, 2);
@@ -2747,6 +2756,11 @@ int la_load_processing(int first)
         }
         ico_mirror_slot_loaded(mc.fileNo, (unsigned int)mc.sum); /* the slot's mirror flag */
         ico_ach_slot_loaded(mc.fileNo, (unsigned int)mc.sum);    /* the slot's achievement run */
+        if (ICO_NTSCAUG6JUN26) {
+            /* PC port: Players, kept beside the save on these discs (the
+               European gameblock_read reads it from the card) */
+            girlControlMode = ico_players_slot_loaded(mc.fileNo, (unsigned int)mc.sum);
+        }
         debug_StdPrintfDummy("stage no %d\n", gFlagSaveStage);
         seEnvForceClose = 1;
         if (titleAdpcm != 0) {
@@ -4252,6 +4266,11 @@ int la_save_processing(int first)
     case 10:
         ico_mirror_slot_saved(mc.fileNo, (unsigned int)mc.sum); /* the run's mirror flag */
         ico_ach_slot_saved(mc.fileNo, (unsigned int)mc.sum);    /* the achievement run */
+        if (ICO_NTSCAUG6JUN26) {
+            /* PC port: Players, kept beside the save on these discs (the
+               European gameblock_write writes it to the card) */
+            ico_players_slot_saved(mc.fileNo, (unsigned int)mc.sum, girlControlMode);
+        }
         saveStep = 0;
         lt_set_item_select_func(0);
         actionStarted = 0;
