@@ -117,6 +117,11 @@ typedef void (*IcoAndroidPickFn)(void *user, int gen, const char *uri, const cha
 int ico_android_pick_file(int gen, IcoAndroidPickFn fn, void *user, int *noApp, char *why,
                           size_t n);
 
+/* How many times the activity has come back to the front since the process
+   started (IcoActivity.onResume). A picker closed without any answer still
+   ends in one more resume. */
+int ico_android_resume_count(void);
+
 /* ICO_RC_TOOLS: the release candidates' tooling (port/ui/settings.h); 0 in
    every other build, which has none of what follows */
 #ifndef ICO_RC_TOOLS
