@@ -201,6 +201,24 @@ if(ICO_RUN_TESTS)
     add_test(NAME movie_pad COMMAND movie_pad_test)
 endif()
 
+# Issue 144: Mirror mode and the d-pad.  The game's iosPadGetStick (pad.c) over
+# a centred stick and the d-pad bits, mirror off and on, both disc copies: the
+# synthesised x flips with the option, y and a deflected stick do not.
+add_executable(pad_mirror_test test/pad_mirror_test.c host_config.c
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/thread.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/message.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/memory.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/pad.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/shockdriver.c")
+target_include_directories(pad_mirror_test PRIVATE ${_ico_fumi_incs})
+target_compile_definitions(pad_mirror_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(pad_mirror_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(pad_mirror_test PRIVATE ico_port_null ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME pad_mirror COMMAND pad_mirror_test)
+endif()
+
 # The window mode requests' readback (window_video.c) on SDL's
 # offscreen video driver. SDL3 is found by port/rhi, configured after this
 # directory, so the test is defined once the top level is done; exit 77

@@ -405,6 +405,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   EE's offsets (`memory`).
 - `movie_pad_test.c`: the pad as a movie's skip check sees it from inside the player's loop
   (`movie_pad`).
+- `pad_mirror_test.c`: the game's `iosPadGetStick` d-pad to stick vector on both disc copies, Mirror
+  mode off and on: the synthesised x flips, y and a deflected stick do not (`pad_mirror`).
 - `pump_watch_test.c`: the event pump's history for its slow-pump lines: the window messages' names
   (the display's power, the power and device-change kinds, an unknown id), the noisy ones left out,
   repeats counted, the newest 16 messages and 8 SDL events kept newest first with their age, the
