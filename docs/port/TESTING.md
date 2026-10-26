@@ -1375,6 +1375,19 @@ fixture (one row per name, the first user and the count of the others, the size 
 the European column, `--check` returning 1 on a changed file, repeatable output). It needs Python only
 ([PACKS.md](PACKS.md#exporting-every-texture-of-the-disc)).
 
+`region_literals_check` runs `tools/check_region_literals.py`: at the port's sites (every C file
+under `port/` but the tests, the generated tables and the region tables, and the port's blocks in the
+17 game files that carry port hooks) a layout, menu row, story flag, stage or pad bit written as a
+number, or the European value of a region table field that differs between the discs, is a finding
+unless the line routes it through `ico_region_cur()`, a `PAL_<SET>` selector or an `ICO_<SET>`
+predicate, or sits in a disc's own arm (a function named `_ntsc`, `_jun26`, ...). Issue 147 was
+this shape (`gflagOn(382)` on the North American disc). `tools/check_region_literals_allow.txt`
+lists the sites checked by hand, each with the discs' numbers; a stale entry fails too. `--list`
+prints every finding. `region_literals_selftest` (`tools/test/region_literals_test.py`) plants one
+finding per category in a temporary tree (`tools/test/region_literals/`) and checks that each is
+found once, that routed lines and the game's own lines are not, and the allow list's rules. Both
+need Python only.
+
 `docs_check` runs `tools/check_docs.py` over README.md, `docs/*.md` and `docs/port/*.md`: relative
 links and their anchors, history and package-code wording, issue numbers and internal words in the
 player guides, TODOs, and the package's list of player guides; `tools/check_docs_allow.txt` holds
@@ -1454,6 +1467,8 @@ hand.
 - A change to the renderer that either backend runs: `ctest -j1 -L gl` ([The render suite on
   OpenGL](#the-render-suite-on-opengl)) besides `-L render`, and `native_frame_check.py compare`
   when the pictures of a dump may differ between the backends.
+- A port site that names a layout, menu row, story flag, stage or pad bit: `region_literals_check`
+  (the number goes through `port/core/region.h`, or into the allow list with each disc's number).
 - A change to these documents: `docs_check`.
 
 ## CI
