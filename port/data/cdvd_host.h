@@ -75,6 +75,15 @@ void ico_cdvd_host_stats(IcoCdvdStats *out);
    retried`) for the first 8 retries and then every 100th. */
 void ico_cdvd_host_bg_retry(const char *name, unsigned int lsn, int error);
 
+/* The game's pack loader (ico2/fumi/ios/cdvd.c, iosCdvdMgrPackLoad) has read
+   the header of the pack `name` (the disc's spelling, "\STGST13C.DF;1"):
+   its first sector, its bytes on the disc, the members its header counts and
+   whether it is read through the game's inflate.  Logged (`cdvd: pack ...`)
+   once per load, a stage change's event, so a failure during or right after
+   a load names the pack; the first 64 loads, then every 100th. */
+void ico_cdvd_host_pack_load(const char *name, unsigned int lsn, unsigned int size, int members,
+                             int inflating);
+
 /* Whether sceCdInit registered ico_cdvd_host_vsync with the host loop. */
 int ico_cdvd_host_vsync_hooked(void);
 
