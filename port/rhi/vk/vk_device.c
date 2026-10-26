@@ -571,6 +571,21 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
         s_debugUtilsExt = true;
     }
 
+    /* ICO_VK_FAKE_API=1.1: a Vulkan 1.1 driver's absences on any device,
+     * for the tests (rhi_vk_vk11, rd_pixel_vk11, ...); so far the timeline
+     * semaphores: the submissions are tracked by the fence ring (vk_sync.c) */
+    g_vkr.fakeNoTimeline = false;
+    {
+        const char *fake = getenv("ICO_VK_FAKE_API");
+        if (fake && fake[0]) {
+            if (strcmp(fake, "1.1") == 0) {
+                g_vkr.fakeNoTimeline = true;
+                VKR_LOG("ICO_VK_FAKE_API=1.1: the device is used without timeline semaphores");
+            } else {
+                VKR_LOG("ICO_VK_FAKE_API=%s: not a known profile (1.1); nothing is hidden", fake);
+            }
+        }
+    }
 #ifdef ICO_RHI_MOLTENVK
     uint32_t loaderVersion = VK_API_VERSION_1_0;
     if (!VKR_CHECK(vkEnumerateInstanceVersion(&loaderVersion))) {
