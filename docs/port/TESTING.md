@@ -632,7 +632,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   tick's first present and the later ones, none for DISPLAY under Motion blur: Smooth, FEED128's
   unchanged, the motion blur's record as recorded; FIX' of 32 at 1, 2, 4 and 10 presents and at
   the ends); its rotation cases live in `rd_interp_turn_test.inc` and its seams cases in
-  `rd_interp_seams_test.inc`, included where they stood;
+  `rd_interp_seams_test.inc`, included where they stood, and its bars case in
+  `rd_interp_bars_test.inc` (`testBars`: the same screen sprite under another key in each tick is
+  drawn once, whole; a taller one or another blend FIX still cross-fades,
+  [WORK_BUFFERS.md](WORK_BUFFERS.md#screen-sprites-redrawn-under-a-new-key-between-ticks));
   rotation continuity (`testRotationContinuity`): a rigid draw and a bone turning
   170 then 190 degrees a tick stand at 265 degrees half way (on forward the long way, not back to
   85), at 217.5 at alpha 0.25 and at the tick's pose at alpha 1; 190 degrees with no turn before
