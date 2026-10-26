@@ -43,6 +43,9 @@
 #include "wireLetter.h"
 #include "lineManager.h" /* PC port: DrawLine, declared (the 2001 builds' way marker) */
 
+/* PC port: port/game/options.h, the Players log (a change of girlControlMode
+   is logged once, from the girl's control thread) */
+extern void ico_players_note(int mode);
 static void _girlBrainHide_MakeHidePoint(float *p, float dist);
 static int isEnterHideadv(void);
 
@@ -6382,6 +6385,7 @@ static void subGirlControl_ntsc(GObj *volatile self)
     iosPadConnect(&w.p->pad, 0, 1, &w.p->padConf);
     girlPad = &w.p->pad; /* PC port: girl_act.c subGirlControl's, for Players 2 */
     for (;;) {
+        ico_players_note(girlControlMode); /* PC port: logged on a change */
         if ((int)(w.p->flags18.ll >> 43) & 1) {
             /* PC port: Players 2 reads Yorda's pad from port 1, as the
                European subGirlControl does (its read: the debug target or
@@ -6614,6 +6618,7 @@ static void subGirlControl_jun26(GObj *volatile self)
     iosPadConnect(&w.p->pad, 0, 1, &w.p->padConf);
     girlPad = &w.p->pad; /* PC port: girl_act.c subGirlControl's, for Players 2 */
     for (;;) {
+        ico_players_note(girlControlMode); /* PC port: logged on a change */
         if ((int)(w.p->flags18.ll >> 42) & 1) {
             /* PC port: Players 2 reads Yorda's pad from port 1, as the
                European subGirlControl does (its read: the debug target or
@@ -6845,6 +6850,7 @@ static void subGirlControl_aug6(GObj *volatile self)
     iosPadConnect(&w.p->pad, 0, 1, &w.p->padConf);
     girlPad = &w.p->pad; /* PC port: girl_act.c subGirlControl's, for Players 2 */
     for (;;) {
+        ico_players_note(girlControlMode); /* PC port: logged on a change */
         if ((int)(w.p->flags18.ll >> 43) & 1) {
             /* PC port: Players 2 reads Yorda's pad from port 1, as the
                European subGirlControl does (its read: the debug target or
@@ -7054,6 +7060,7 @@ void subGirlControl(GObj *volatile self)
     iosPadConnect(&w.p->pad, 0, 1, &w.p->padConf);
     girlPad = &w.p->pad;
     for (;;) {
+        ico_players_note(girlControlMode); /* PC port: logged on a change */
         if ((int)(w.p->flags18.ll >> 48) & 1) {
             if (scpBoyControlReadDisable == 0 &&
                 ((void *)self == (void *)CurrentTargetGObj || girlControlMode != 0))
