@@ -229,8 +229,9 @@ whole game; the differences are the original releases' own:
 - **Options the disc's game does not have.** Options only shows what the
   disc's own game has. Game language is there with the European disc only.
   On the North American disc, the August 2001 preview and the June 2001
-  demo there is no Film effect and no Players row, as on those discs' own
-  Options screen. Hold type is there on every disc and starts on the
+  demo there is no Film effect row, as on those discs' own Options screen.
+  Players (a second controller for Yorda) and Hold type are there on every
+  disc, though those three discs' own game has neither. Hold type and starts on the
   disc's own way (on those three discs, press R1 once to take Yorda's
   hand and again to let go). The June 2001 demo has no Credits under
   Extras, since its disc does not hold them.
