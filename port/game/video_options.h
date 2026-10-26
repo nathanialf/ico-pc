@@ -46,6 +46,7 @@
  *   [video] dump_textures   false       write each texture under its PCSX2 name (pack authors)
  *   [video] model_pack      true        load a model pack (replacement models) when one is installed
  *   [video] dump_models     false       save each model part as a glTF file (pack makers)
+ *   [video] show_fps        false       the frames per second in the screen's top-left corner
  *   [video] texture_pack_budget_mb
  *                           2048        config only: GPU memory for replacements, 128..65536
  *   [video] texture_pack_precache
@@ -169,6 +170,7 @@ typedef struct IcoVideoOptions {
     int dumpTextures;        /* each texture written under its PCSX2 name */
     int modelPack;           /* replacement models from an installed pack drawn */
     int dumpModels;          /* each model part saved as a glTF file (Developer mode) */
+    int showFps;             /* the frames per second in the screen's top-left corner (ui_fps.c) */
     int texturePackBudgetMb; /* config only: the replacements' GPU memory */
     int texturePackPrecache; /* config only: the pack read into memory at start */
     int texturePackCacheMb;  /* config only: the RAM that read-ahead may use (0: half the
@@ -324,6 +326,8 @@ const char *ico_video_anti_alias_name(int aa);
    dump_models (the dump also needs Developer mode, which the caller checks). */
 int ico_video_model_pack(void);
 int ico_video_dump_models(void);
+/* [video] show_fps, 1 (the Frame rate counter on) or 0 (the default) */
+int ico_video_show_fps(void);
 /* The presentation rate in force: the framerate option, whatever
    the preset. */
 int ico_video_framerate(void);

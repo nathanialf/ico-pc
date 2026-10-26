@@ -452,6 +452,9 @@ static void test_first_run(void)
     CHECK_STR(ico_config_get_string("video.effect_motion_blur_mode", "?"), "original");
     CHECK(text != NULL && strstr(text, "effect_motion_blur_mode = \"original\"") != NULL);
     CHECK(ico_config_get_bool("video.effect_fog", 0) == 1);
+    /* the Frame rate counter: Off, written with the file */
+    CHECK(ico_config_get_bool("video.show_fps", 1) == 0);
+    CHECK(text != NULL && strstr(text, "show_fps = false") != NULL);
     CHECK(ico_config_get_bool("video.effect_cinematic_bars", 0) == 1);
     /* Water reflections: Original (the PS2's size) by default */
     CHECK(ico_config_get_bool("video.effect_water_sharp", 1) == 0);

@@ -1076,6 +1076,62 @@ static void test_video_models(const char *dir)
     ico_video_reload();
 }
 
+/* [video] show_fps (the Frame rate counter, default off): the default, the
+   file read, the run-time value sanitized to 0 or 1, the round trip, and
+   the preset untouched either way */
+static void test_video_show_fps(const char *dir)
+{
+    char path[512];
+    IcoVideoOptions o, d;
+    const char *text;
+    FILE *f;
+
+    ico_video_defaults(&d);
+    CHECK(d.showFps == 0);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.showFps == 0 && ico_video_show_fps() == 0 &&
+          ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    snprintf(path, sizeof(path), "%s/options_showfps_test.toml", dir);
+    f = fopen(path, "wb");
+    if (f == NULL) {
+        fprintf(stderr, "cannot write %s\n", path);
+        failures++;
+        return;
+    }
+    fputs("[video]\nshow_fps = true\n", f);
+    fclose(f);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.showFps == 1 && ico_video_show_fps() == 1 &&
+          ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    o.showFps = 7;
+    ico_video_set(&o);
+    ico_video_get(&o);
+    CHECK(o.showFps == 1 && ico_video_show_fps() == 1);
+    CHECK(ico_video_save() == 0);
+    text = read_text(path);
+    CHECK(text != NULL && strstr(text, "show_fps = true") != NULL);
+    o.showFps = 0;
+    ico_video_set(&o);
+    CHECK(ico_video_save() == 0);
+    text = read_text(path);
+    CHECK(text != NULL && strstr(text, "show_fps = false") != NULL);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.showFps == 0 && ico_video_show_fps() == 0);
+    /* Enhanced's shortcut leaves it alone */
+    o.showFps = 1;
+    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+    CHECK(o.showFps == 1 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+    remove(path);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+}
+
 /* Resolution "auto" (parsed, named, read, saved and read
    back, kept by sanitize) on any build; the Android rules (checked here on
    any computer through ico_video_set_android / ico_video_defaults_for): the
@@ -1265,6 +1321,7 @@ int main(int argc, char **argv)
     test_video_full_pixel(argc > 1 ? argv[1] : ".");
     test_video_anti_alias(argc > 1 ? argv[1] : ".");
     test_video_models(argc > 1 ? argv[1] : ".");
+    test_video_show_fps(argc > 1 ? argv[1] : ".");
     test_video_auto(argc > 1 ? argv[1] : ".");
     test_video_interpolate();
     if (failures != 0) {

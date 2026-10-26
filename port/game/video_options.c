@@ -77,6 +77,7 @@ void ico_video_defaults_for(IcoVideoOptions *o, int android)
     o->dumpTextures = 0;
     o->modelPack = 1;
     o->dumpModels = 0;
+    o->showFps = 0;
     o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_DEFAULT;
     o->texturePackPrecache = 1;
     o->texturePackCacheMb = 0;
@@ -396,6 +397,7 @@ static void sanitize(IcoVideoOptions *o)
     o->dumpTextures = o->dumpTextures != 0;
     o->modelPack = o->modelPack != 0;
     o->dumpModels = o->dumpModels != 0;
+    o->showFps = o->showFps != 0;
     if (o->texturePackBudgetMb < ICO_TEXPACK_BUDGET_MIN) {
         o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_MIN;
     } else if (o->texturePackBudgetMb > ICO_TEXPACK_BUDGET_MAX) {
@@ -492,6 +494,7 @@ static void read_config(void)
     o.dumpTextures = ico_config_get_bool("video.dump_textures", 0) != 0;
     o.modelPack = ico_config_get_bool("video.model_pack", 1) != 0;
     o.dumpModels = ico_config_get_bool("video.dump_models", 0) != 0;
+    o.showFps = ico_config_get_bool("video.show_fps", 0) != 0;
     {
         long long mb =
             ico_config_get_int("video.texture_pack_budget_mb", ICO_TEXPACK_BUDGET_DEFAULT);
@@ -637,6 +640,7 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.dump_textures", o.dumpTextures);
     r |= ico_config_set_bool("video.model_pack", o.modelPack);
     r |= ico_config_set_bool("video.dump_models", o.dumpModels);
+    r |= ico_config_set_bool("video.show_fps", o.showFps);
     /* the config-only keys only when not at their defaults, as the CRT
        overrides: an absent key is the default */
     if (o.texturePackBudgetMb != ICO_TEXPACK_BUDGET_DEFAULT) {
@@ -852,6 +856,14 @@ int ico_video_dump_models(void)
         read_config();
     }
     return s_opt.dumpModels;
+}
+
+int ico_video_show_fps(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.showFps;
 }
 
 int ico_video_framerate(void)
