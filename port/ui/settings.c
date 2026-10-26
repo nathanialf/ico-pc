@@ -946,7 +946,10 @@ static int gpuShowFailed(void)
 
 static void gpuRefresh(Page *pg)
 {
-    const int note = gpuShowFailed() ? UI_STR_GPU_DRIVER_FAILED : UI_STR_GPU_DRIVER_NOTE;
+    const int note = gpuShowFailed() ? UI_STR_GPU_DRIVER_FAILED
+                     : s_gpuHostSet && s_gpuHost.lostOnStock != NULL && s_gpuHost.lostOnStock()
+                         ? UI_STR_GPU_DRIVER_NOTE_LOST
+                         : UI_STR_GPU_DRIVER_NOTE;
     for (int k = 0; k < pg->count; k++) {
         if (pg->rows[k].note >= 0) {
             pg->rows[k].noteStr = note;
@@ -1002,6 +1005,28 @@ static void gpuAddFile(void)
     }
 }
 
+static const char *fmtText(UiStrId id, const char *want, const int *v, const char *str, char *buf,
+                           unsigned size);
+static void wrapText(const char *text, float size, float width, char *out, unsigned outSize);
+
+/* the drivers folder's path for the popups and notes */
+static const char *gpuFolderText(void)
+{
+    const char *p = s_gpuHostSet && s_gpuHost.folderPath != NULL ? s_gpuHost.folderPath() : NULL;
+    return p != NULL && p[0] != '\0' ? p : "drivers";
+}
+
+/* a popup that sends the player to the drivers folder: the table string
+   with the folder's path put in, broken into lines (the popup does not
+   break Latin text) under the page's name */
+static void gpuFolderPopup(UiStrId id)
+{
+    char text[UI_POPUP_TEXT], body[UI_POPUP_TEXT];
+    fmtText(id, "s", NULL, gpuFolderText(), text, sizeof(text));
+    wrapText(text, 21.0f, 540.0f, body, sizeof(body));
+    ui_popup_push(ui_str(UI_STR_SECTION_GPU_DRIVER), body);
+}
+
 static void gpuPoll(void)
 {
     if (!s_gpuPending || !s_gpuHostSet) {
@@ -1019,12 +1044,16 @@ static void gpuPoll(void)
     } else if (r == UI_GPU_INSTALL_NOSPACE) {
         ui_popup_push(ui_str(UI_STR_GPU_DRIVER_NOSPACE), "");
     } else if (r == UI_GPU_INSTALL_NO_PICKER) {
-        ui_popup_push(ui_str(UI_STR_GPU_DRIVER_NO_PICKER), "");
+        gpuFolderPopup(UI_STR_GPU_DRIVER_NO_PICKER);
     } else if (r == UI_GPU_INSTALL_NO_PICKER_APP) {
-        ui_popup_push(ui_str(UI_STR_GPU_DRIVER_NO_PICKER_APP), "");
+        gpuFolderPopup(UI_STR_GPU_DRIVER_NO_PICKER_APP);
     } else if (r == UI_GPU_INSTALL_UNREADABLE) {
         ui_popup_push(ui_str(UI_STR_GPU_DRIVER_UNREADABLE), "");
-    } /* cancelled: nothing to say */
+    } else {
+        /* the picker closed without a file (some phones' pickers answer so
+           at once, or never open): the folder route is named */
+        gpuFolderPopup(UI_STR_GPU_DRIVER_CANCELLED);
+    }
 }
 
 /* Remove this driver: the built-in one is chosen first, then the host
@@ -3043,6 +3072,9 @@ static int s_noteLang[LT_EXT_MAX_PROPERTIES];
    through their %s (strings.h ui_str_serial) */
 static const char *noteText(int strId, char *out, size_t size)
 {
+    if (strId == UI_STR_GPU_DRIVER_NOTE_LOST) {
+        return fmtText((UiStrId)strId, "s", NULL, gpuFolderText(), out, (unsigned)size);
+    }
     if (ui_str_takes_serial((UiStrId)strId)) {
         return ui_str_serial((UiStrId)strId, out, size);
     }
