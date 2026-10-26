@@ -338,38 +338,88 @@ void ico_opt_output_toggled(int mode)
     }
 }
 
-/* [gameplay] hold_type (options.h): -1 not read yet, else ICO_HOLD_* */
-static int s_hold_type = -1;
+/* [gameplay] hold_type (options.h): -1 not read yet, else ICO_HOLD_DISC,
+   ICO_HOLD_HOLD or ICO_HOLD_TOGGLE */
+static int s_hold_choice = -1;
+
+int ico_opt_hold_choice(void)
+{
+    if (s_hold_choice < 0) {
+        const char *v = ico_config_get_string("gameplay.hold_type", "disc");
+
+        if (v != NULL && strcmp(v, "toggle") == 0) {
+            s_hold_choice = ICO_HOLD_TOGGLE;
+        } else if (v != NULL && strcmp(v, "hold") == 0) {
+            /* every version before 0.9.1 wrote "hold" into a new file: the
+               player's choice only beside hold_type_chosen (options.h) */
+            s_hold_choice = ico_config_get_bool("gameplay.hold_type_chosen", 0) != 0
+                                ? ICO_HOLD_HOLD
+                                : ICO_HOLD_DISC;
+        } else {
+            s_hold_choice = ICO_HOLD_DISC;
+            if (v != NULL && strcmp(v, "disc") != 0) {
+                fprintf(stderr,
+                        "options: [gameplay] hold_type = \"%s\" is not one of disc, hold, "
+                        "toggle\n",
+                        v);
+            }
+        }
+    }
+    return s_hold_choice;
+}
 
 int ico_opt_hold_type(void)
 {
-    if (s_hold_type < 0) {
-        const char *v = ico_config_get_string("gameplay.hold_type", "hold");
+    /* the choice and disc last logged */
+    static int loggedChoice = -1;
+    static const IcoRegionInfo *loggedDisc;
+    const IcoRegionInfo *r = ico_region_cur();
+    const int choice = ico_opt_hold_choice();
+    const int type = choice == ICO_HOLD_DISC
+                         ? (r->hold_type_own != 0 ? ICO_HOLD_TOGGLE : ICO_HOLD_HOLD)
+                         : choice;
 
-        s_hold_type = v != NULL && strcmp(v, "toggle") == 0 ? ICO_HOLD_TOGGLE : ICO_HOLD_HOLD;
-        if (v != NULL && strcmp(v, "toggle") != 0 && strcmp(v, "hold") != 0) {
-            fprintf(stderr, "options: [gameplay] hold_type = \"%s\" is not one of hold, toggle\n",
-                    v);
-        }
+    if (choice != loggedChoice || r != loggedDisc) {
+        loggedChoice = choice;
+        loggedDisc = r;
+        fprintf(stderr, "options: hold type %s (%s) on %s\n",
+                choice == ICO_HOLD_DISC   ? "disc's own"
+                : choice == ICO_HOLD_HOLD ? "hold"
+                                          : "toggle",
+                type == ICO_HOLD_TOGGLE ? "B" : "A", r->disc_id);
     }
-    return s_hold_type;
+    return type;
+}
+
+void ico_opt_set_hold_choice(int choice)
+{
+    s_hold_choice = choice == ICO_HOLD_HOLD || choice == ICO_HOLD_TOGGLE ? choice : ICO_HOLD_DISC;
 }
 
 void ico_opt_set_hold_type(int type)
 {
-    s_hold_type = type != 0 ? ICO_HOLD_TOGGLE : ICO_HOLD_HOLD;
+    s_hold_choice = type != 0 ? ICO_HOLD_TOGGLE : ICO_HOLD_HOLD;
 }
 
-const char *ico_opt_hold_type_name(int type)
+const char *ico_opt_hold_type_name(int choice)
 {
-    return type != 0 ? "toggle" : "hold";
+    return choice == ICO_HOLD_HOLD ? "hold" : choice == ICO_HOLD_TOGGLE ? "toggle" : "disc";
+}
+
+int ico_opt_hold_choice_store(void)
+{
+    if (ico_config_set_string("gameplay.hold_type",
+                              ico_opt_hold_type_name(ico_opt_hold_choice())) != 0 ||
+        ico_config_set_bool("gameplay.hold_type_chosen", 1) != 0) {
+        return -1;
+    }
+    return 0;
 }
 
 void ico_opt_hold_type_toggled(int type)
 {
     ico_opt_set_hold_type(type);
-    if (ico_config_set_string("gameplay.hold_type", ico_opt_hold_type_name(s_hold_type)) != 0 ||
-        ico_config_save() != 0) {
+    if (ico_opt_hold_choice_store() != 0 || ico_config_save() != 0) {
         fprintf(stderr, "options: cannot write [gameplay] hold_type\n");
     }
 }
@@ -380,7 +430,7 @@ void ico_opt_reload(void)
     s_natural_chains = s_skip_opening = -1;
     s_output = -2;
     s_ui_language = -2;
-    s_hold_type = -1;
+    s_hold_choice = -1;
     /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();
     /* the game variants ([variants], variants.h) */

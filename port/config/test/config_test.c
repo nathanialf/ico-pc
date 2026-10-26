@@ -468,8 +468,9 @@ static void test_first_run(void)
     CHECK(ico_config_get_bool("gameplay.natural_chains", 1) == 0); /* Natural chains, off */
     CHECK(ico_config_get_bool("gameplay.skip_opening", 1) == 0);   /* Skip the opening, off */
     CHECK(text != NULL && strstr(text, "skip_opening = false") != NULL);
-    CHECK_STR(ico_config_get_string("gameplay.hold_type", "?"), "hold"); /* Hold type A */
-    CHECK(text != NULL && strstr(text, "hold_type = \"hold\"") != NULL);
+    CHECK_STR(ico_config_get_string("gameplay.hold_type", "?"), "disc"); /* the disc's own */
+    CHECK(text != NULL && strstr(text, "hold_type = \"disc\"") != NULL);
+    CHECK(ico_config_get_string("gameplay.hold_type_chosen", NULL) == NULL); /* not chosen */
     /* the game variants: every line the game as shipped; the barrier's
        number is left out (the disc's own) */
     CHECK_STR(ico_config_get_string("variants.shade_toughness", "?"), "original");

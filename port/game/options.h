@@ -26,9 +26,12 @@
  *                                 Sony presents sign and no opening scene
  *                                 (common/src/kanbanBoot.c, script/src/op.c);
  *                                 a pad-recording key (boot timing)
- *   [gameplay] hold_type   "hold" Yorda's hand: "hold" keeps R1 held (the
- *                                 game's Hold type A); "toggle" takes it with
- *                                 one press and lets go with another (B)
+ *   [gameplay] hold_type   "disc" Yorda's hand: "disc" plays the disc's own
+ *                                 way (A on the European, Japanese, Korean and
+ *                                 Asian discs, B on the three 2001 discs);
+ *                                 "hold" keeps R1 held (the game's Hold type
+ *                                 A); "toggle" takes it with one press and
+ *                                 lets go with another (B)
  *   [gameplay] developer_mode
  *                          false  the development build's debug menu and
  *                                 debug options
@@ -185,19 +188,39 @@ void ico_opt_output_record(int mode);
    game's mode now) when the game's own is not known yet. */
 int ico_opt_output_game(int live);
 /* [gameplay] hold_type: the game's Hold type (optionControlType), kept in
-   config.toml instead of the memory card: ICO_HOLD_HOLD (0, "hold", A: keep
-   R1 held to hold Yorda's hand, the default) or ICO_HOLD_TOGGLE (1,
-   "toggle", B: press R1 once to take her hand, again to let go).  Another
-   word reads as "hold", logged once.  The memory card hook (fumi/ios/mcard.c
-   gameblock_read) and Settings (ui_settings_install, the Hold type row)
-   copy it into optionControlType; options.c itself touches no game
-   variable. */
+   config.toml instead of the memory card.  The key holds a choice:
+   ICO_HOLD_DISC ("disc", the default: the disc's own, port/core/region.h
+   hold_type_own), ICO_HOLD_HOLD ("hold", A: keep R1 held to hold Yorda's
+   hand) or ICO_HOLD_TOGGLE ("toggle", B: press R1 once to take her hand,
+   again to let go).  Another word reads as "disc", logged once.  Every
+   version before 0.9.1 wrote "hold" into a new config.toml, and the 2001
+   discs' game never read it, so a "hold" is the player's choice only with
+   [gameplay] hold_type_chosen = true beside it (written with every choice
+   from Options); without it "hold" reads as "disc" (the same A on the
+   European, Japanese, Korean and Asian discs; the toggle the 2001 discs
+   always played).  config.toml is never rewritten for this.
+   ico_opt_hold_type() is the type in force, ICO_HOLD_HOLD or
+   ICO_HOLD_TOGGLE, the choice resolved for the selected disc (a log line
+   once for each choice and disc: "options: hold type <disc's own|hold|
+   toggle> (A|B) on <disc id>").  The memory card hook (fumi/ios/mcard.c
+   gameblock_read and its 2001 arms) and Settings (ui_settings_install,
+   the Hold type row) copy it into optionControlType; options.c itself
+   touches no game variable. */
 #define ICO_HOLD_HOLD 0
 #define ICO_HOLD_TOGGLE 1
+#define ICO_HOLD_DISC 2
 int ico_opt_hold_type(void);
+/* the choice, ICO_HOLD_DISC, ICO_HOLD_HOLD or ICO_HOLD_TOGGLE */
+int ico_opt_hold_choice(void);
+/* sets the choice (another value reads as ICO_HOLD_DISC) for this run */
+void ico_opt_set_hold_choice(int choice);
+/* the explicit type: 0 sets ICO_HOLD_HOLD, anything else ICO_HOLD_TOGGLE */
 void ico_opt_set_hold_type(int type);
-/* "hold" or "toggle": the key's text */
-const char *ico_opt_hold_type_name(int type);
+/* the key's word of a choice: "hold", "toggle" or "disc" */
+const char *ico_opt_hold_type_name(int choice);
+/* Writes the run's choice into [gameplay] hold_type and hold_type_chosen
+   (true) without saving the file: 0, or -1 when it cannot be set. */
+int ico_opt_hold_choice_store(void);
 /* The Options screen hook (common/src/layout_action.c, the Hold type row
    318, reached only on a disc whose layout tables are not recognised): sets
    the type, writes the key and saves config.toml at once. */

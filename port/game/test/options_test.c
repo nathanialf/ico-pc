@@ -132,16 +132,21 @@ static void test_defaults(void)
     ico_opt_set_skip_opening(1);
     ico_opt_reload();
     CHECK(ico_opt_skip_opening() == 0);
-    /* Hold type: hold (0) by default, the setter keeps 0 or 1, a reload
-       goes back to the config's (absent: hold) */
-    CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
+    /* Hold type: the disc's own by default (the region row's hold_type_own),
+       the setter keeps 0 or 1, a reload goes back to the config's (absent:
+       the disc's own) */
+    CHECK(ico_opt_hold_choice() == ICO_HOLD_DISC);
+    CHECK(ico_opt_hold_type() == ico_region_cur()->hold_type_own);
     ico_opt_set_hold_type(5);
-    CHECK(ico_opt_hold_type() == ICO_HOLD_TOGGLE);
+    CHECK(ico_opt_hold_type() == ICO_HOLD_TOGGLE && ico_opt_hold_choice() == ICO_HOLD_TOGGLE);
     ico_opt_set_hold_type(0);
-    CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
+    CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD && ico_opt_hold_choice() == ICO_HOLD_HOLD);
+    ico_opt_set_hold_choice(7);
+    CHECK(ico_opt_hold_choice() == ICO_HOLD_DISC);
     ico_opt_set_hold_type(1);
     ico_opt_reload();
-    CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
+    CHECK(ico_opt_hold_choice() == ICO_HOLD_DISC);
+    CHECK(ico_opt_hold_type() == ico_region_cur()->hold_type_own);
     ico_opt_set_developer_mode(3);
     CHECK(ico_opt_developer_mode() == 1);
     ico_opt_set_yorda_safe(5);
@@ -184,11 +189,13 @@ static void test_config(const char *dir)
     /* developer mode and the debug option file switch */
     CHECK(ico_opt_developer_mode() == 1);
     CHECK(ico_opt_debug_option() == 1);
-    /* hold_type: absent in this file reads hold; "toggle" reads 1; an
-       unknown word reads hold; the names round trip */
-    CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
-    CHECK(strcmp(ico_opt_hold_type_name(0), "hold") == 0);
-    CHECK(strcmp(ico_opt_hold_type_name(1), "toggle") == 0);
+    /* hold_type: absent in this file reads the disc's own; "toggle" reads
+       1; an unknown word reads the disc's own; the names round trip */
+    CHECK(ico_opt_hold_choice() == ICO_HOLD_DISC);
+    CHECK(ico_opt_hold_type() == ico_region_cur()->hold_type_own);
+    CHECK(strcmp(ico_opt_hold_type_name(ICO_HOLD_HOLD), "hold") == 0);
+    CHECK(strcmp(ico_opt_hold_type_name(ICO_HOLD_TOGGLE), "toggle") == 0);
+    CHECK(strcmp(ico_opt_hold_type_name(ICO_HOLD_DISC), "disc") == 0);
     ico_opt_set_yorda_safe(0); /* the run-time value wins until a reload */
     CHECK(ico_opt_yorda_safe() == 0);
     remove(path);
@@ -228,9 +235,85 @@ static void test_config(const char *dir)
         fclose(f);
         ico_config_reset(path, "/nonexistent/options_test.ini");
         ico_opt_reload();
-        CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
+        CHECK(ico_opt_hold_choice() == ICO_HOLD_DISC);
+        CHECK(ico_opt_hold_type() == ico_region_cur()->hold_type_own);
         remove(path);
     }
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+}
+
+/* [gameplay] hold_type per disc: "disc" (and no key) is A on the European,
+   Japanese, Korean and Asian discs and B on the three 2001 discs (their
+   game always toggles); "hold" and "toggle" are the same on every disc,
+   except that an earlier version's "hold" (no hold_type_chosen beside it:
+   every new config.toml before 0.9.1 had it) is the disc's own; the store
+   writes the word and hold_type_chosen.  Each slug selected in turn, the
+   run's own disc again at the end. */
+static void test_hold_discs(const char *dir)
+{
+    static const struct {
+        const char *slug;
+        int own;
+    } kDiscs[] = {{"pal", ICO_HOLD_HOLD},    {"jpn", ICO_HOLD_HOLD},    {"kor", ICO_HOLD_HOLD},
+                  {"ntsc", ICO_HOLD_TOGGLE}, {"aug6", ICO_HOLD_TOGGLE}, {"jun26", ICO_HOLD_TOGGLE},
+                  {"cn", ICO_HOLD_HOLD}};
+
+    static const struct {
+        const char *text; /* the file's [gameplay] lines */
+        int choice;       /* ICO_HOLD_*, -1: the disc's own type */
+    } kFiles[] = {
+        {"", -1},
+        {"hold_type = \"disc\"\n", -1},
+        {"hold_type = \"hold\"\n", -1},
+        {"hold_type = \"hold\"\nhold_type_chosen = false\n", -1},
+        {"hold_type = \"hold\"\nhold_type_chosen = true\n", ICO_HOLD_HOLD},
+        {"hold_type = \"toggle\"\n", ICO_HOLD_TOGGLE},
+        {"hold_type = \"disc\"\nhold_type_chosen = true\n", -1},
+    };
+
+    const char *mine = ico_region_cur()->slug;
+    char path[512];
+
+    snprintf(path, sizeof(path), "%s/options_test_hold.toml", dir);
+    for (unsigned d = 0; d < sizeof(kDiscs) / sizeof(kDiscs[0]); d++) {
+        CHECK(ico_region_select(kDiscs[d].slug) == 0);
+        CHECK(ico_region_cur()->hold_type_own == kDiscs[d].own);
+        for (unsigned k = 0; k < sizeof(kFiles) / sizeof(kFiles[0]); k++) {
+            FILE *f = fopen(path, "wb");
+
+            CHECK(f != NULL);
+            if (f == NULL) {
+                continue;
+            }
+            fprintf(f, "[gameplay]\n%s", kFiles[k].text);
+            fclose(f);
+            ico_config_reset(path, "/nonexistent/options_test.ini");
+            ico_opt_reload();
+            if (kFiles[k].choice < 0) {
+                CHECK(ico_opt_hold_choice() == ICO_HOLD_DISC);
+                CHECK(ico_opt_hold_type() == kDiscs[d].own);
+            } else {
+                CHECK(ico_opt_hold_choice() == kFiles[k].choice);
+                CHECK(ico_opt_hold_type() == kFiles[k].choice);
+            }
+            remove(path);
+        }
+        /* the store: the word and hold_type_chosen; read back, the choice */
+        ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+        ico_opt_reload();
+        ico_opt_set_hold_choice(ICO_HOLD_HOLD);
+        CHECK(ico_opt_hold_choice_store() == 0);
+        CHECK(strcmp(ico_config_get_string("gameplay.hold_type", ""), "hold") == 0);
+        CHECK(ico_config_get_bool("gameplay.hold_type_chosen", 0) == 1);
+        ico_opt_reload();
+        CHECK(ico_opt_hold_type() == ICO_HOLD_HOLD);
+        ico_opt_set_hold_choice(ICO_HOLD_DISC);
+        CHECK(ico_opt_hold_choice_store() == 0);
+        ico_opt_reload();
+        CHECK(ico_opt_hold_choice() == ICO_HOLD_DISC && ico_opt_hold_type() == kDiscs[d].own);
+    }
+    CHECK(ico_region_select(mine) == 0);
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_opt_reload();
 }
@@ -1173,6 +1256,7 @@ int main(int argc, char **argv)
     test_defaults();
     test_config(argc > 1 ? argv[1] : ".");
     test_mirror_slots(argc > 1 ? argv[1] : ".");
+    test_hold_discs(argc > 1 ? argv[1] : ".");
     test_mirror_discs(argc > 1 ? argv[1] : ".");
     test_brain();
     test_ui_language(argc > 1 ? argv[1] : ".");

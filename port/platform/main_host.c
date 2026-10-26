@@ -432,6 +432,7 @@ static const char *const record_keys[] = {
     "gameplay.door_fix",
     "video.anti_aliasing",
     "gameplay.hold_type",
+    "gameplay.hold_type_chosen", /* an earlier "hold" without it is the disc's own */
     "gameplay.skip_opening",
     /* the game variants (port/game/variants.h): each changes the simulation */
     "variants.shade_toughness",
