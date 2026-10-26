@@ -2216,7 +2216,7 @@ static void testVideoGate(void)
             continue;
         }
         while (vm < n && opts[vm] != UI_OPT_VIDEO_MODE) {
-            downs += !lt_ext_prop(labels[vm])->defaultMask;
+            downs += ui_settings_row_shown(labels[vm]); /* in view or scrolled out */
             vm++;
         }
         CHECK(downs == vm, "title %d: every row above Video mode is shown", title);
@@ -2580,10 +2580,12 @@ static void testListWrap(int count)
 
 /* ---------------------------------------------- the game's settings */
 
+/* whether opt's row shows on page by the page's rule (in the window or
+   scrolled out of it) */
 static int rowShown(UiSettingsPage page, UiSettingsOpt opt)
 {
     const int row = ui_settings_row_of(page, opt);
-    return row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked;
+    return row >= 0 && ui_settings_row_shown(row);
 }
 
 /* the game's Options screen's settings on the pages.  Brightness
@@ -3124,7 +3126,8 @@ static void testTexturePack(void)
         int labels[20];
         const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 20);
         const LtProperty *back = lt_ext_prop(labels[n - 1]);
-        CHECK(back->dispY == 40 + 12 * 12, "thirteen rows 12 lines apart: Back at %d", back->dispY);
+        CHECK(back->dispY == winBackY(13), "thirteen rows: Back in the window's last slot (%d)",
+              back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "Back's box ends at %d", back->dispY + back->dispH);
         checkPageFits(UI_PAGE_MAIN, "Main (title, developer mode)");
     }
@@ -3381,20 +3384,20 @@ static void testTouch(void)
         int mainL = enterMain(title);
         openPage(mainL, 4, UI_PAGE_CONTROLS);
         const int link = touchLink();
-        CHECK(link >= 0 && lt_ext_prop(link)->defaultMask,
-              "title %d: Touch screen hidden (no query)", title);
+        CHECK(link >= 0 && !ui_settings_row_shown(link), "title %d: Touch screen hidden (no query)",
+              title);
         s_touchAnswer = 0;
         ui_settings_set_touch_query(fakeTouch);
         for (int k = 0; k < 4; k++) {
             frame(0); /* the page refreshes */
         }
-        CHECK(link >= 0 && lt_ext_prop(link)->defaultMask,
+        CHECK(link >= 0 && !ui_settings_row_shown(link),
               "title %d: Touch screen hidden (no touch screen)", title);
         s_touchAnswer = 1;
         for (int k = 0; k < 4; k++) {
             frame(0);
         }
-        CHECK(link >= 0 && !lt_ext_prop(link)->defaultMask &&
+        CHECK(link >= 0 && ui_settings_row_shown(link) &&
                   strcmp(lt_ext_row_text(link), "Touch screen") == 0,
               "title %d: Touch screen shown with a touch screen", title);
         CHECK(lt_ext_prop(link)->downItem == ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_BACK),
@@ -3409,15 +3412,15 @@ static void testTouch(void)
     useConfig("version = 1\n");
 }
 
-/* whether opt has a row on page that the frame shows (its label row not
-   masked by default): -1 for no row of opt on the page */
+/* whether opt has a row on page that the page's rule shows (in the window
+   or scrolled out of it): -1 for no row of opt on the page */
 static int jpnRowShown(UiSettingsPage page, UiSettingsOpt opt)
 {
     int labels[32], opts[32];
     const int n = ui_settings_page_rows(page, labels, opts, NULL, 32);
     for (int i = 0; i < n; i++) {
         if (opts[i] == (int)opt) {
-            return !lt_ext_prop(labels[i])->defaultMask;
+            return ui_settings_row_shown(labels[i]);
         }
     }
     return -1;
