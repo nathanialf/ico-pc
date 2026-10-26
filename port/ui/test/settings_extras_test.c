@@ -134,9 +134,11 @@ static void testExtras(void)
         press(0x4000);
         CHECK(lt_ext_layout(mainL)->curItem == ex,
               "title %d: Down from Achievements lands on Extras", title);
-        /* the rows below follow: Back's y, eleven rows on both entries */
-        CHECK(lt_ext_prop(labels[16])->dispY == 40 + 14 * 10, "title %d: Back at y %d", title,
+        /* the rows below follow: Back's y, eleven rows on both entries (the
+           window scrolls: Back in its last slot) */
+        CHECK(lt_ext_prop(labels[16])->dispY == winBackY(11), "title %d: Back at y %d", title,
               lt_ext_prop(labels[16])->dispY);
+        checkPageFits(UI_PAGE_MAIN, title ? "Main (title)" : "Main (pause)");
         if (!title) {
             continue;
         }
@@ -658,7 +660,7 @@ static void testCharacters(void)
         CHECK(n == 13, "%s: thirteen rows (%d)", who, n);
         checkPageFits(UI_PAGE_CHARACTERS, title ? "Characters (title)" : "Characters (pause)");
         CHECK(lt_ext_prop(lb[9])->defaultMask, "%s: Switch only inside the viewer", who);
-        CHECK(lt_ext_prop(lb[12])->dispY == 40 + 13 * 11, "%s: Back at y %d", who,
+        CHECK(lt_ext_prop(lb[12])->dispY == winBackY(12), "%s: Back at y %d", who,
               lt_ext_prop(lb[12])->dispY);
 
         /* every value starts Original, a swatch on each colour row, 9 apart
@@ -1107,7 +1109,7 @@ static void testCharacters(void)
             CHECK(lt_ext_prop(el2[3])->right == l, "pause: the Characters row links the page");
         }
         CHECK(lt_ext_prop(lb[9])->defaultMask && lt_ext_prop(lb[0])->dispX == 44 &&
-                  lt_ext_layout(l)->colA == 0.6f && lt_ext_prop(lb[12])->dispY == 40 + 13 * 11,
+                  lt_ext_layout(l)->colA == 0.6f && lt_ext_prop(lb[12])->dispY == winBackY(12),
               "pause: the Options page's places (Switch hidden, label x %d, Back y %d)",
               lt_ext_prop(lb[0])->dispX, lt_ext_prop(lb[12])->dispY);
         press(0x0008);
