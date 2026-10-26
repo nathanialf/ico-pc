@@ -316,7 +316,7 @@ game saves three files in a `dumps` folder in the folder with your saves
 
 Without a keyboard (a phone, a handheld), choose **Save a picture for a
 bug report** on the Options menu's first page (the row just above
-Developer mode; you do not need Developer mode for it) and leave the menu
+Developer; you do not need Developer mode for it) and leave the menu
 at once: 3 seconds later the game saves the same files. On Android the
 `dumps` folder is in the game's folder
 ([where it is](ANDROID.md#where-your-files-are)).
