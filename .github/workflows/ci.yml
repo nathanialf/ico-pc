@@ -210,7 +210,7 @@ jobs:
 
       - name: Direct3D 11 debug layer (Graphics Tools; not gating)
         continue-on-error: true
-        timeout-minutes: 20
+        timeout-minutes: 5
         shell: pwsh
         run: |
           $cap = Get-WindowsCapability -Online -Name 'Tools.Graphics.DirectX*'
