@@ -718,6 +718,18 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
             found = true;
         }
     }
+    /* what the surface offers (first 8) and whether the pick was the first
+     * offered, for the swapchain line below and its once-per-run list */
+    char fmtList[160];
+    fmtList[0] = '\0';
+    for (uint32_t i = 0; i < nf && i < 8; i++) {
+        const size_t used = strlen(fmtList);
+        snprintf(fmtList + used, sizeof(fmtList) - used, "%s%d/%d", i ? " " : "",
+                 (int)fmts[i].format, (int)fmts[i].colorSpace);
+    }
+    const bool pickedFirst =
+        nf && fmts[0].format == pick.format && fmts[0].colorSpace == pick.colorSpace;
+    const uint32_t nOffered = nf;
     free(fmts);
     if (!found) {
         VKR_LOG("surface offers neither BGRA8 nor RGBA8 UNORM; using format %d", (int)pick.format);
@@ -883,9 +895,36 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
         s_loggedCount = n;
         s_loggedW = w;
         s_loggedH = h;
-        VKR_LOG("swapchain %ux%u, %u images, present mode %s (vsync %s%s); offered: %s", w, h, n,
-                vkr_present_mode_name(ci.presentMode), vsync ? "on" : "off",
-                vsync && s_preferMailbox ? ", mailbox preferred" : "", offered);
+        /* the window's own pixel size and SDL's video driver (x11, wayland,
+         * windows, android, ...): a driver-side mismatch (the swapchain
+         * extent against the window, a format or alpha the compositor
+         * treats differently) reads from this line alone */
+        int winW = 0, winH = 0;
+        const char *drv = "?";
+#ifdef ICO_RHI_HAVE_SDL
+        if (g_vkr.window) {
+            SDL_GetWindowSizeInPixels((SDL_Window *)g_vkr.window, &winW, &winH);
+        }
+        if (SDL_GetCurrentVideoDriver()) {
+            drv = SDL_GetCurrentVideoDriver();
+        }
+#endif
+        VKR_LOG("swapchain %ux%u, %u images, present mode %s (vsync %s%s); offered: %s; "
+                "format %d colour space %d (%s offered, %s), composite alpha 0x%x, "
+                "pre-transform 0x%x, images asked %u got %u, window %dx%d pixels, video driver %s",
+                w, h, n, vkr_present_mode_name(ci.presentMode), vsync ? "on" : "off",
+                vsync && s_preferMailbox ? ", mailbox preferred" : "", offered, (int)pick.format,
+                (int)pick.colorSpace, pickedFirst ? "first" : "not first",
+                found ? "wanted" : "fallback", (unsigned)ci.compositeAlpha,
+                (unsigned)ci.preTransform, count, n, winW, winH, drv);
+    }
+    {
+        static bool s_formatsLogged;
+        if (!s_formatsLogged) {
+            s_formatsLogged = true;
+            VKR_LOG("surface formats (%u offered, first 8 as format/colour space): %s",
+                    (unsigned)nOffered, fmtList);
+        }
     }
     return true;
 }
