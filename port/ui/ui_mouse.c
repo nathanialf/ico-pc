@@ -20,7 +20,9 @@ _Static_assert((int)UI_MOUSE_ROLE_AUTO == (int)LT_POINTER_AUTO &&
                    (int)UI_MOUSE_ROLE_NONE == (int)LT_POINTER_NONE &&
                    (int)UI_MOUSE_ROLE_LEFT == (int)LT_POINTER_LEFT &&
                    (int)UI_MOUSE_ROLE_RIGHT == (int)LT_POINTER_RIGHT &&
-                   (int)UI_MOUSE_ROLE_STEP == (int)LT_POINTER_STEP,
+                   (int)UI_MOUSE_ROLE_STEP == (int)LT_POINTER_STEP &&
+                   (int)UI_MOUSE_ROLE_UP == (int)LT_POINTER_UP &&
+                   (int)UI_MOUSE_ROLE_DOWN == (int)LT_POINTER_DOWN,
                "ui_mouse_geom.h's roles are layout_ext.h's");
 
 /* the game's side (common/; layout_texture.h declares the lt_* calls) */
@@ -233,6 +235,8 @@ void ui_mouse_tick(void)
                    on the Japanese disc) */
                 pad[0].flags |= hit.action == UI_MOUSE_ACT_LEFT    ? LT_PAD_LEFT
                                 : hit.action == UI_MOUSE_ACT_RIGHT ? LT_PAD_RIGHT
+                                : hit.action == UI_MOUSE_ACT_UP    ? LT_PAD_UP
+                                : hit.action == UI_MOUSE_ACT_DOWN  ? LT_PAD_DOWN
                                                                    : lt_ext_confirm_button();
             }
         }
