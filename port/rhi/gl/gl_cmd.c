@@ -25,6 +25,10 @@
 
 #define GL_UNKNOWN_NAME 0xFFFFFFFFu
 #define GL_FBO_MAX 256u
+/* the binding points whose binds gl_bind_groups shadows (uniform blocks,
+ * storage buffers, texture and image units below it; the translated
+ * shaders use up to 21) */
+#define GL_SHADOW_POINTS 64u
 
 /* the fixed-function state OpenGL holds, per draw buffer and face */
 typedef struct GlRaster {
@@ -39,6 +43,12 @@ typedef struct GlRaster {
     GLint sRef[2];
     GLuint sRead[2], sWrite[2];
 } GlRaster;
+
+/* a buffer range bound at an indexed binding point */
+typedef struct GlRangeBind {
+    GLuint name;
+    uint64_t offset, size;
+} GlRangeBind;
 
 /* a cached framebuffer: its attachments' names (an attachment-less one
  * keyed by its default size) */
@@ -56,6 +66,11 @@ static struct {
     GlRaster raster;
     GLuint ppo, vao;   /* bound now; GL_UNKNOWN_NAME when not known */
     GlCmdList *active; /* the list the last command was on */
+    /* what gl_bind_groups last gave each binding point, so a bind of the
+     * same is skipped (gl_forget_units: every name GL_UNKNOWN_NAME) */
+    GlRangeBind uniform[GL_SHADOW_POINTS], storage[GL_SHADOW_POINTS];
+    GLuint texName[GL_SHADOW_POINTS], sampler[GL_SHADOW_POINTS], image[GL_SHADOW_POINTS];
+    GLenum texTarget[GL_SHADOW_POINTS];
     GlFbo fbos[GL_FBO_MAX];
     uint32_t fboCount;
     uint64_t fboClock;
@@ -416,11 +431,30 @@ static GLuint gl_fbo_get(GlTexture *const *colour, uint32_t colourCount, const G
 }
 
 /* ------------------------------------------------------------ lifecycle */
+/* Nothing bound at the binding points is taken as known: the next bind of
+ * each is made.  Needed where a name the shadow holds may stop being bound
+ * there: a delete (OpenGL unbinds a deleted buffer, texture or sampler from
+ * every point, and may hand its name out again), and a new list (the
+ * deletes of a recycle ran before it).  Nothing else binds these points:
+ * the creates, copies, readbacks and the present use texture unit 0 and the
+ * non-indexed buffer targets (gl_internal.h, scratch), and framebuffer
+ * attachments are not bindings of a unit. */
+void gl_forget_units(void)
+{
+    memset(s.uniform, 0xFF, sizeof(s.uniform));
+    memset(s.storage, 0xFF, sizeof(s.storage));
+    memset(s.texName, 0xFF, sizeof(s.texName));
+    memset(s.sampler, 0xFF, sizeof(s.sampler));
+    memset(s.image, 0xFF, sizeof(s.image));
+    memset(s.texTarget, 0xFF, sizeof(s.texTarget));
+}
+
 static void gl_forget_bindings(void)
 {
     s.rasterValid = false;
     s.ppo = s.vao = GL_UNKNOWN_NAME;
     s.active = NULL;
+    gl_forget_units();
 }
 
 void gl_cmd_init(void)
@@ -907,9 +941,31 @@ void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
 }
 
 /* ------------------------------------------------------------------ draws */
+/* An indexed buffer range: true when the point already holds it (the
+ * shadow), else the shadow takes it and the caller binds. */
+static bool gl_range_bound(GlRangeBind *shadow, uint32_t point, GLuint name, uint64_t offset,
+                           uint64_t size)
+{
+    if (point >= GL_SHADOW_POINTS) {
+        return false;
+    }
+    GlRangeBind *h = &shadow[point];
+    if (h->name == name && h->offset == offset && h->size == size) {
+        return true;
+    }
+    h->name = name;
+    h->offset = offset;
+    h->size = size;
+    return false;
+}
+
 /* The bind groups set since the last draw: each entry one bind
  * (gl_internal.h, "bind groups"), a dynamic uniform at its base plus the
- * group's bind-time offset of its rank. */
+ * group's bind-time offset of its rank; an entry whose point already holds
+ * what it binds (the shadow, s.uniform ...) is skipped and counted
+ * (RhiStats.entryBindsSkipped).  Groups are dirty at almost every draw (a
+ * frame's groups are made per draw, the dynamic offsets move), while most
+ * of their entries bind what the draw before bound. */
 static void gl_bind_groups(GlCmdList *c)
 {
     for (uint32_t g = 0; g < RHI_MAX_BIND_SLOTS && c->groupDirty; g++) {
@@ -922,29 +978,62 @@ static void gl_bind_groups(GlCmdList *c)
         }
         const GlBindEntry *e = gl_bind_entries(bg);
         for (uint32_t k = 0; k < bg->count; k++, e++) {
+            const uint32_t pt = e->point;
+            bool skipped = false;
             switch (e->kind) {
             case GL_BIND_UNIFORM: {
                 const uint64_t off =
                     e->offset + (e->dyn < RHI_MAX_DYNAMIC_OFFSETS ? c->offsets[g][e->dyn] : 0u);
-                glf.BindBufferRange(GL_UNIFORM_BUFFER, e->point, e->name, (GLintptr)off,
-                                    (GLsizeiptr)e->size);
+                skipped = gl_range_bound(s.uniform, pt, e->name, off, e->size);
+                if (!skipped) {
+                    glf.BindBufferRange(GL_UNIFORM_BUFFER, pt, e->name, (GLintptr)off,
+                                        (GLsizeiptr)e->size);
+                }
                 break;
             }
             case GL_BIND_STORAGE:
-                glf.BindBufferRange(GL_SHADER_STORAGE_BUFFER, e->point, e->name,
-                                    (GLintptr)e->offset, (GLsizeiptr)e->size);
+                skipped = gl_range_bound(s.storage, pt, e->name, e->offset, e->size);
+                if (!skipped) {
+                    glf.BindBufferRange(GL_SHADER_STORAGE_BUFFER, pt, e->name, (GLintptr)e->offset,
+                                        (GLsizeiptr)e->size);
+                }
                 break;
-            case GL_BIND_TEXTURE:
-                glf.ActiveTexture(GL_TEXTURE0 + e->point);
-                glf.BindTexture(e->target, e->name);
-                glf.BindSampler(e->point, e->sampler);
+            case GL_BIND_TEXTURE: {
+                /* the texture (per target: a unit holds one of each) and the
+                   sampler apart */
+                const bool known = pt < GL_SHADOW_POINTS;
+                const bool texSame =
+                    known && s.texName[pt] == e->name && s.texTarget[pt] == e->target;
+                const bool samplerSame = known && s.sampler[pt] == e->sampler;
+                if (!texSame) {
+                    glf.ActiveTexture(GL_TEXTURE0 + pt);
+                    glf.BindTexture(e->target, e->name);
+                }
+                if (!samplerSame) {
+                    glf.BindSampler(pt, e->sampler);
+                }
+                if (known) {
+                    s.texName[pt] = e->name;
+                    s.texTarget[pt] = e->target;
+                    s.sampler[pt] = e->sampler;
+                }
+                skipped = texSame && samplerSame;
                 break;
+            }
             case GL_BIND_IMAGE:
-                glf.BindImageTexture(e->point, e->name, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA8);
+                skipped = pt < GL_SHADOW_POINTS && s.image[pt] == e->name;
+                if (!skipped) {
+                    glf.BindImageTexture(pt, e->name, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA8);
+                    if (pt < GL_SHADOW_POINTS) {
+                        s.image[pt] = e->name;
+                    }
+                }
                 break;
             default:
                 break;
             }
+            g_gl.counts.entryBinds++;
+            g_gl.counts.entryBindsSkipped += skipped;
         }
         g_gl.counts.bindGroupBinds++;
     }
