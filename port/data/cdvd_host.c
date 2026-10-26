@@ -290,6 +290,19 @@ void ico_cdvd_host_bg_retry(const char *name, unsigned int lsn, int error)
     }
 }
 
+void ico_cdvd_host_pack_load(const char *name, unsigned int lsn, unsigned int size, int members,
+                             int inflating)
+{
+    static unsigned int loads;
+
+    loads++;
+    if (loads > 64 && loads % 100 != 0) {
+        return;
+    }
+    fprintf(stderr, "cdvd: pack %s at lsn %u, %u bytes on the disc%s: %d members (load %u)\n",
+            name != NULL ? name : "?", lsn, size, inflating ? " (deflated)" : "", members, loads);
+}
+
 int ico_cdvd_host_busy(void)
 {
     return cd.busy;
