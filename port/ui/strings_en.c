@@ -32,6 +32,13 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_YORDA] = "Shadows never take Yorda",
     [UI_STR_OPT_YORDA_NOTE] =
         "For a less stressful game. A few scripted scenes still show the capture.",
+    [UI_STR_OPT_PIT_TIME] = "Time to rescue Yorda",
+    [UI_STR_OPT_PIT_TIME_NOTE] =
+        "How long a shadow takes to pull Yorda into a pit. The Yorda row above stops it altogether.",
+    [UI_STR_VAL_PIT_HALF] = "Half",
+    [UI_STR_VAL_PIT_LONGER] = "Longer",
+    [UI_STR_VAL_PIT_DOUBLE] = "Double",
+    [UI_STR_VAL_PIT_TRIPLE] = "Triple",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",
