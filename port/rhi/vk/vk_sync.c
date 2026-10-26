@@ -32,6 +32,7 @@
  * timeline path's submits are the ones made before the fence path existed,
  * field for field. */
 #include "vk_internal.h"
+#include "rhi_vk.h"
 #include <string.h>
 
 bool vkr_sync_init(void)
@@ -261,4 +262,15 @@ bool vkr_sync_submit(const VkrSubmitDesc *d, uint64_t *outValue)
     g_vkr.timelineValue = value;
     *outValue = value;
     return true;
+}
+
+/* rhi_vk.h, for rhi_vk_test's sync cell */
+const char *vkr_test_sync_kind(void)
+{
+    return vkr_sync_name();
+}
+
+uint32_t vkr_test_sync_recycle_waits(void)
+{
+    return g_vkr.fenceRecycleWaits;
 }

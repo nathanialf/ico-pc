@@ -5,8 +5,10 @@
  * while the device is up and at shutdown, each with a version
  * one header, read back at the next init, a file of another device or of
  * garbage ignored and replaced), the drop of other builds' cache files
- * (vkr_cache_drop_others), and the pipeline pool (poolCell: every
- * pipeline the pool holds, RHI_PIPELINE_POOL_MAX, made and alive at once).
+ * (vkr_cache_drop_others), the pipeline pool (poolCell: every
+ * pipeline the pool holds, RHI_PIPELINE_POOL_MAX, made and alive at once)
+ * and the submission sync (syncCell: the timeline semaphore, or the fence
+ * ring under ICO_VK_FAKE_API=1.1, ctest rhi_vk_vk11).
  *
  * Exit 0 on success, 1 on a mismatch or a validation error, 77 (skipped)
  * when no Vulkan device can be created.  Set VK_ICD_FILENAMES to pick a
@@ -645,6 +647,99 @@ static int poolCell(void)
     return failures + (int)rhi_vk_validation_error_count();
 }
 
+/* The submission sync (vk_sync.c): the kind in use is the timeline
+ * semaphore, or the fence ring under ICO_VK_FAKE_API=1.1 (ctest
+ * rhi_vk_vk11); then three frames of 8 command lists each (24 submissions,
+ * three times around the ring of 8: slots taken again while their frame's
+ * slot is still in flight, waits for numbers whose fence slot holds a
+ * later one), each list clearing a 4x4 target to its own colour, and a
+ * readback: the last list's colour, every submission counted
+ * (rhi_gpu_progress: 25 more submitted) and all of them seen finished
+ * after the readback's wait; no validation message. */
+static int syncCell(void)
+{
+    const char *api = getenv("ICO_VK_FAKE_API");
+    const bool fences = api && strcmp(api, "1.1") == 0;
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test sync"};
+    if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
+        rhi_test_log("FAIL sync cell: init\n");
+        return 1;
+    }
+    int failures = 0;
+#define SYNC_CHECK(cond, ...)                                                                      \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            rhi_test_log("FAIL sync cell: " __VA_ARGS__);                                          \
+            failures++;                                                                            \
+        }                                                                                          \
+    } while (0)
+    const char *kind = vkr_test_sync_kind();
+    SYNC_CHECK(strcmp(kind, fences ? "fences" : "timeline") == 0, "sync %s (want %s)\n", kind,
+               fences ? "fences" : "timeline");
+    RhiTexture tgt = rhi_create_texture(&(RhiTextureDesc){
+        4, 4, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "sync", 0});
+    SYNC_CHECK(tgt.id != 0, "target\n");
+    RhiGpuProgress p0, p1;
+    rhi_gpu_progress(&p0);
+    uint32_t made = 0;
+    uint8_t last[4] = {0, 0, 0, 0};
+    for (uint32_t frame = 0; frame < 3u && tgt.id; frame++) {
+        rhi_wait_frame();
+        for (uint32_t k = 0; k < 8u; k++) {
+            const uint32_t n = frame * 8u + k;
+            RhiCommandList cl = rhi_begin_commands();
+            RhiTextureBarrier pre = {tgt, n == 0 ? RHI_STATE_UNDEFINED : RHI_STATE_COPY_SRC,
+                                     RHI_STATE_RENDER_TARGET};
+            rhi_cmd_barrier(cl, &pre, 1);
+            RhiRenderPassDesc rp = {0};
+            rp.color[0].texture = tgt;
+            rp.color[0].load = RHI_LOAD_CLEAR;
+            /* exact in UNORM8: n * 10 / 255 */
+            last[0] = (uint8_t)(n * 10u);
+            last[1] = (uint8_t)(255u - n * 10u);
+            last[2] = (uint8_t)(n & 1u ? 255u : 0u);
+            last[3] = 255u;
+            for (int c = 0; c < 4; c++) {
+                rp.color[0].clear[c] = (float)last[c] / 255.0f;
+            }
+            rp.colorCount = 1;
+            rp.width = rp.height = 4;
+            rhi_cmd_begin_render_pass(cl, &rp);
+            rhi_cmd_end_render_pass(cl);
+            RhiTextureBarrier post = {tgt, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+            rhi_cmd_barrier(cl, &post, 1);
+            rhi_end_commands(cl);
+            rhi_submit(cl);
+            made++;
+        }
+    }
+    uint8_t img[4 * 4 * 4];
+    uint32_t pitch = 0;
+    const bool read =
+        tgt.id && rhi_readback_texture(tgt, RHI_ASPECT_COLOR, img, sizeof(img), &pitch);
+    rhi_gpu_progress(&p1);
+    rhi_test_log("sync cell: %s, %u lists submitted, %llu submissions (%llu finished), %u waits "
+                 "for a fence slot\n",
+                 kind, made, (unsigned long long)(p1.submitted - p0.submitted),
+                 (unsigned long long)p1.finished, vkr_test_sync_recycle_waits());
+    SYNC_CHECK(made == 24u && read && pitch == 16u && memcmp(&img[0], last, 4) == 0 &&
+                   memcmp(&img[15 * 4], last, 4) == 0,
+               "%u lists, read %d pitch %u, %u %u %u %u (want %u %u %u %u)\n", made, (int)read,
+               pitch, img[0], img[1], img[2], img[3], last[0], last[1], last[2], last[3]);
+    SYNC_CHECK(p1.submitted - p0.submitted == 25u && p1.finished == p1.submitted &&
+                   p1.waitingFor == 0,
+               "%llu submitted (want 25), %llu finished of %llu, waiting for %llu\n",
+               (unsigned long long)(p1.submitted - p0.submitted), (unsigned long long)p1.finished,
+               (unsigned long long)p1.submitted, (unsigned long long)p1.waitingFor);
+    SYNC_CHECK(fences || vkr_test_sync_recycle_waits() == 0,
+               "%u fence slot waits on the timeline\n", vkr_test_sync_recycle_waits());
+    rhi_destroy_texture(tgt);
+#undef SYNC_CHECK
+    rhi_wait_idle();
+    rhi_shutdown();
+    return failures + (int)rhi_vk_validation_error_count();
+}
+
 int main(void)
 {
     const RhiTestConfig cfg = {"vulkan", "rhi_vk_test", true, NULL, rhi_vk_validation_error_count};
@@ -653,7 +748,7 @@ int main(void)
         return rc;
     }
     return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell() ||
-            poolCell())
+            poolCell() || syncCell())
                ? 1
                : 0;
 }

@@ -77,6 +77,13 @@ void vkr_test_fail_texels_above(uint64_t texels);
 uint32_t vkr_test_pass_area_count(void);
 void vkr_test_pass_area_no_assert(bool on);
 
+/* For rhi_vk_test's sync cell (vk_sync.c): the submission sync in use,
+ * "timeline" or "fences" (ICO_VK_FAKE_API=1.1), and the submits since
+ * rhi_init that waited for their fence slot's earlier submission (the
+ * fence ring all in flight; 0 on the timeline path). */
+const char *vkr_test_sync_kind(void);
+uint32_t vkr_test_sync_recycle_waits(void);
+
 #ifdef __cplusplus
 }
 

@@ -511,6 +511,18 @@ if(_ico_have_vk)
         set(_ico_vk_mali_env ${_ico_vk_test_env} "ICO_VK_FAKE_LIMITS=mali")
         set_tests_properties(rhi_vk_mali PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_mali_env}")
+        # the cells on a Vulkan 1.1 driver's absences (ICO_VK_FAKE_API=1.1,
+        # vk_device.c): the submissions tracked by the fence ring instead of
+        # the timeline semaphore (vk_sync.c); the sync cell checks the kind.
+        # Label vk11 (ctest -L vk11), with port/render's _vk11 twins
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vk11")
+        add_test(NAME rhi_vk_vk11 COMMAND rhi_vk_test
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vk11")
+        set(_ico_vk_vk11_env ${_ico_vk_test_env} "ICO_VK_FAKE_API=1.1")
+        set_tests_properties(rhi_vk_vk11 PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_vk11_env}")
+        get_test_property(rhi_vk_vk11 LABELS _ico_vk11_labels)
+        set_tests_properties(rhi_vk_vk11 PROPERTIES LABELS "${_ico_vk11_labels};vk11")
         if(TARGET rhi_vk_swapchain_test)
             add_test(NAME rhi_vk_swapchain COMMAND rhi_vk_swapchain_test)
             set_tests_properties(rhi_vk_swapchain PROPERTIES SKIP_RETURN_CODE 77)
@@ -518,6 +530,15 @@ if(_ico_have_vk)
                 set_tests_properties(rhi_vk_swapchain PROPERTIES ENVIRONMENT
                                      "${_ico_vk_test_env}")
             endif()
+            # the window path (acquire, the present batch, recreation) on
+            # the fence ring
+            add_test(NAME rhi_vk_swapchain_vk11 COMMAND rhi_vk_swapchain_test
+                     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vk11")
+            set_tests_properties(rhi_vk_swapchain_vk11 PROPERTIES SKIP_RETURN_CODE 77
+                                 ENVIRONMENT "${_ico_vk_vk11_env}")
+            get_test_property(rhi_vk_swapchain_vk11 LABELS _ico_vk11_labels)
+            set_tests_properties(rhi_vk_swapchain_vk11 PROPERTIES LABELS
+                                 "${_ico_vk11_labels};vk11")
         endif()
     endif()
 endif()
