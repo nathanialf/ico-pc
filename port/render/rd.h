@@ -2087,6 +2087,18 @@ typedef struct RdPerfRecord {
      * a frame blended between two ticks, a draw marked RD_VU_TICK_CAMERAS,
      * vuSource), once a draw whether the pre-pass recorded it or not */
     uint32_t vuTickDraws;
+    /* The draw-merge count (rd_replay_vu.c vuMergeNote; counting only, no
+     * draw or record changes): per list the VU draws that could join the
+     * previous draw's run (vuMergeDraws) and the runs started (vuMergeRuns:
+     * a draw that cannot join, or cannot be merged at all, is a run of
+     * one); of the runs begun after a draw in the same pass, vuMergeBlocked
+     * the first differing key: 0 pipeline, 1 texture group (or stream
+     * group), 2 DrawCB bytes, 3 split or DATE stencil or storage pass or
+     * skinned or something else drawn between, 4 scissor, FrameCB or
+     * target.  prepassBatches the distinct (stage key, FrameCB, stream
+     * buffer, bones class) of the pre-pass's draws (vuPreDraws of them) */
+    uint32_t vuMergeDraws[RD_LIST_COUNT], vuMergeRuns[RD_LIST_COUNT], vuMergeBlocked[5];
+    uint32_t prepassBatches;
     double gpuPrepassMs;
     /* The per-pass timing (rd_perf_passes_of; docs/port/RENDER.md,
      * "Performance records").  passKinds: the pieces of GPU work begun, by
