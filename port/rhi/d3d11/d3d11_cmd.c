@@ -89,6 +89,7 @@ static void d11_unbind_srvs(D11CommandList *c)
                                                      (ID3D11ShaderResourceView **)s_null);
         }
         c->st.srvMask[st] = 0;
+        memset(c->st.srvSet[st], 0, sizeof(c->st.srvSet[st]));
     }
     c->st.groupDirty = D11_GROUPS_ALL;
 }
@@ -421,14 +422,17 @@ void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
 /* ------------------------------------------------------------------- draws */
 /* One constant buffer window into register `slot` of a stage
  * (RHI_STAGE_*).  A window equal to the one the register holds is not set
- * again.  The same buffer with another window is unbound first: Microsoft
- * documents that the runtime may drop a VSSetConstantBuffers1 (and the
- * other stages') that names the buffer already bound with only the
- * offset or size changed (the remarks' "Calling VSSetConstantBuffers1 with
- * command list emulation", whose workaround is this NULL bind); the port
- * binds every draw's uniforms that way, windows of one ring buffer.  NULL
- * (a binding the group could not use) binds nothing, without windows, as
- * the remarks require of a NULL buffer. */
+ * again.  The same buffer with another window is unbound first when the
+ * runtime emulates command lists: Microsoft documents that the runtime's
+ * emulation may drop a VSSetConstantBuffers1 (and the other stages') that
+ * names the buffer already bound with only the offset or size changed (the
+ * remarks' "Calling VSSetConstantBuffers1 with command list emulation",
+ * whose workaround, for emulated command lists only, is this NULL bind);
+ * the port binds every draw's uniforms that way, windows of one ring
+ * buffer.  A driver that records command lists itself (DriverCommandLists,
+ * the start-up line's "command lists by the driver") takes the window
+ * alone.  NULL (a binding the group could not use) binds nothing, without
+ * windows, as the remarks require of a NULL buffer. */
 static void d11_set_cb(D11CommandList *c, uint32_t stage, uint32_t slot, ID3D11Buffer *cb,
                        UINT first, UINT num)
 {
@@ -438,7 +442,7 @@ static void d11_set_cb(D11CommandList *c, uint32_t stage, uint32_t slot, ID3D11B
         return;
     }
     ID3D11Buffer *none = NULL;
-    const bool sameBuffer = cb && *held == cb;
+    const bool sameBuffer = cb && *held == cb && !g_d11.driverCommandLists;
     if (stage == RHI_STAGE_VERTEX) {
         if (sameBuffer) {
             ID3D11DeviceContext1_VSSetConstantBuffers1(c->ctx1, slot, 1, &none, NULL, NULL);
@@ -506,12 +510,15 @@ static void d11_bind_entry(D11CommandList *c, const D11BindEntry *e, const uint3
         if (srv && e->type == RHI_BIND_STORAGE_BUFFER) {
             d11_cmd_touch(c, e->buffer, D11_PART_SRV, e->lo, e->hi);
         }
-        if (stages & D11_STAGE_VS) {
+        /* a register already holding the view is not set again */
+        if ((stages & D11_STAGE_VS) && c->st.srvSet[RHI_STAGE_VERTEX][e->slot] != srv) {
             ID3D11DeviceContext_VSSetShaderResources(c->ctx, e->slot, 1, &srv);
+            c->st.srvSet[RHI_STAGE_VERTEX][e->slot] = srv;
             c->st.srvMask[RHI_STAGE_VERTEX] |= 1u << e->slot;
         }
-        if (stages & D11_STAGE_PS) {
+        if ((stages & D11_STAGE_PS) && c->st.srvSet[RHI_STAGE_FRAGMENT][e->slot] != srv) {
             ID3D11DeviceContext_PSSetShaderResources(c->ctx, e->slot, 1, &srv);
+            c->st.srvSet[RHI_STAGE_FRAGMENT][e->slot] = srv;
             c->st.srvMask[RHI_STAGE_FRAGMENT] |= 1u << e->slot;
         }
         return;
@@ -525,11 +532,14 @@ static void d11_bind_entry(D11CommandList *c, const D11BindEntry *e, const uint3
             return;
         }
         ID3D11SamplerState *smp = e->smp ? e->smp : g_d11.defaultSampler;
-        if (stages & D11_STAGE_VS) {
+        /* a register already holding the sampler is not set again */
+        if ((stages & D11_STAGE_VS) && c->st.smpSet[RHI_STAGE_VERTEX][e->slot] != smp) {
             ID3D11DeviceContext_VSSetSamplers(c->ctx, e->slot, 1, &smp);
+            c->st.smpSet[RHI_STAGE_VERTEX][e->slot] = smp;
         }
-        if (stages & D11_STAGE_PS) {
+        if ((stages & D11_STAGE_PS) && c->st.smpSet[RHI_STAGE_FRAGMENT][e->slot] != smp) {
             ID3D11DeviceContext_PSSetSamplers(c->ctx, e->slot, 1, &smp);
+            c->st.smpSet[RHI_STAGE_FRAGMENT][e->slot] = smp;
         }
         return;
     }
