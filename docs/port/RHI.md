@@ -96,7 +96,13 @@ resources).
 **States** (`RhiState`): UNDEFINED, RENDER_TARGET, DEPTH_WRITE, DEPTH_READ (test without write, also
 sampleable; a stencil-only writer uses DEPTH_WRITE with `depthWrite` false), SHADER_READ, COPY_SRC,
 COPY_DST, PRESENT, STORAGE and RENDER_TARGET_READ. A barrier is needed only when a texture changes
-state: two writes in the same state are ordered by the backend. Buffers have no barriers: a buffer
+state: two writes in the same state are ordered by the backend. STORAGE is the exception on every
+backend: fragment shader stores are ordered within a pass (the interlock or ROV) and by the barrier
+that takes the texture out of STORAGE, not across two passes that leave it there (the Vulkan hazard
+tracking records attachment and transfer writes only; OpenGL's `glMemoryBarrier` and D3D12's
+transition go at that barrier), so two storage passes on one texture have a barrier out of STORAGE
+between them, which the renderer's `endPass` always records (`port/rhi/rhi.h`, commands;
+`port/render/rd_replay.c` (`endPass`)). Buffers have no barriers: a buffer
 copy is made visible to every later read and waits for every earlier read of its destination, and
 so is a texture-to-buffer copy into a device buffer a shader reads (one made for vertex, index,
 uniform or storage reads: the pre-pass's record buffer). The Vulkan backend folds that copy's wait
