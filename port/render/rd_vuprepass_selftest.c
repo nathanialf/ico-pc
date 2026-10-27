@@ -45,7 +45,9 @@
  * when their replay drew every command through them (two passes, the draws
  * the frame's commands make: a vertex draw a mesh, two a particle command,
  * the rule and planes stages a mesh and the tick stage's two for the ticks
- * copy; no draw the old way) and the two blocks are equal byte for byte.
+ * copy, counted one an entry and stage whether or not the pre-pass's
+ * batches merged them, rd__vu_prepass_entry_draws; no draw the old way) and
+ * the two blocks are equal byte for byte.
  * A difference, a pipeline that could not be made (its draws then take
  * their programs' entries) or a device error turns the pre-passes off for
  * the run (g_rd.vuPrepass); the window calls this before the start-up set,
@@ -58,6 +60,8 @@
  *     particles byte for byte, 48 vertices and 4 sprites in 16 pre-pass
  *     draws (2 passes, 90 triangle slots), N of M pixels drawn) on SCENE
  *     WxH at TWxTH texels in T ms
+ *   (the pre-pass draws as made: 16 one an entry and stage, fewer under the
+ *   batches, g_rd.vuPreBatch)
  *   rd: VU pre-pass: off (self-test: the pictures differ: N of M bytes, the
  *     first at texel X,Y: R,G,B,A want R,G,B,A) on SCENE ...
  *
@@ -512,7 +516,10 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
         const RdPerfRecord r = g_rdPerf; /* the record the replay with it closed */
         /* the draws the frame makes through the pre-passes: pass V a vertex
          * draw a mesh and two for the sprites, pass T the rule and planes
-         * stages a mesh and the tick stage's two for the ticks copy */
+         * stages a mesh and the tick stage's two for the ticks copy, counted
+         * one an entry and stage whatever the batches merged them into
+         * (g_rd.vuPreBatch: r.vuPreDraws the draws made) */
+        const uint32_t entryDraws = rd__vu_prepass_entry_draws();
         const uint32_t meshes = M_COUNT + (fallbackPlain() ? 0u : 1u);
         const uint32_t wantDraws = meshes + 2u + 2u * meshes + (meshes > M_COUNT ? 2u : 0u);
         g_rd.msaaBlocked = wasBlocked;
@@ -520,13 +527,13 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
             v->on = false;
             snprintf(v->text, sizeof v->text, "the device failed in the replay %s the pre-pass",
                      refOk ? "with" : "without");
-        } else if (r.vuPrePasses != 2 || r.vuPreDraws != wantDraws || r.vuPreFallbacks != 0 ||
+        } else if (r.vuPrePasses != 2 || entryDraws != wantDraws || r.vuPreFallbacks != 0 ||
                    r.vuPreSprites != ST_SPRITES) {
             v->on = false;
             snprintf(v->text, sizeof v->text,
                      "a pipeline could not be made (%u passes, %u of %u pre-pass draws, %u "
                      "sprites, %u draws the old way)",
-                     r.vuPrePasses, r.vuPreDraws, wantDraws, r.vuPreSprites, r.vuPreFallbacks);
+                     r.vuPrePasses, entryDraws, wantDraws, r.vuPreSprites, r.vuPreFallbacks);
         } else {
             size_t diff = 0, first = 0, drawn = 0;
             for (size_t i = 0; i < size; i++) {
