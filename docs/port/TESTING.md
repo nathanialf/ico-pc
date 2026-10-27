@@ -970,7 +970,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rhi_vk_mali`).
 - `rhi_d3d12_test.c`: the same checks on D3D12, a Windows GUI program that writes a log and shows
   a message box (`rhi_d3d12`).
-- `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP, the hardware adapter, the swapchain on
+- `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP; WARP again with
+  `ICO_D3D11_FAKE_NO_PARTIAL_CB=1`, the upload buffers' constant buffers mapped as on a device
+  without partial constant buffer updates; the upload ring's written mark on WARP, where a submit
+  must write exactly the bytes under the mark that its copy reads, 4096 of 8192, then 1024 in the
+  next frame, 2064 for marks 512, 2050 and 1000 in one frame, and all 8192 of a buffer never noted,
+  each read back byte for byte; the hardware adapter, the swapchain on
   a hidden window, Vulkan for comparison), the cells' shaders compiled at run time from
   `rhi_test_hlsl.h`; a Windows GUI program that writes `rhi_d3d11_test.log` and shows a message box
   (`rhi_d3d11`, registered on a native Windows build only). The `win-x64` and `win-x64-clang`
@@ -1318,7 +1323,7 @@ draw:
 | program | how it runs | what a pass shows |
 | --- | --- | --- |
 | `rhi_d3d11_shader_plan_test` | as ctest's `rhi_d3d11_shader_plan` | the shader route's CPU half on Windows |
-| `rhi_d3d11_test --console` | the RHI cells on WARP; the hardware section skips (no GPU on the runner), so does Vulkan; the swapchain section on a hidden SDL window | the RHI's exact-texel cells on Direct3D 11, every debug-layer error a failure |
+| `rhi_d3d11_test --console` | the RHI cells on WARP, again with the constant buffers mapped, and the written mark's byte counts; the hardware section skips (no GPU on the runner), so does Vulkan; the swapchain section on a hidden SDL window | the RHI's exact-texel cells on Direct3D 11 on both constant buffer paths, a submit's upload writes cut at the written mark, every debug-layer error a failure |
 | `rd_blend_selftest_test fixed` | through `rd_blend_selftest.cmake` as ctest's `rd_blend_selftest`, without its Vulkan profile line | the blend self-test passes (`fixed-function ok`) at start and after a new size |
 | `rd_fog_selftest_test inplace` | through `rd_fog_selftest.cmake`, results `inplace ok [0-2], copy not tried, buffer not tried` | the fog depth self-test passes and the probe lines are there |
 | `rd_pixel_test <work>` | as ctest's `rd_pixel` | the pixel cases, and the dump `rd_pixel_frame.rddump` |
