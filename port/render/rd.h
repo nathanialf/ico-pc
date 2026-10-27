@@ -1980,8 +1980,11 @@ typedef struct RdPerfRecord {
      * commands make one by one (a command's passes); screenDraws: the draws
      * recorded after consecutive commands under the same state are merged */
     uint32_t screenCmds, screenDraws;
-    uint64_t uploadBytes;            /* everything written into the upload ring */
-    uint64_t meshUploadBytes;        /* of which mesh streams and indices */
+    uint64_t uploadBytes;     /* everything written into the upload ring */
+    uint64_t meshUploadBytes; /* of which mesh streams and indices */
+    /* Direct3D 11: the bytes its submits wrote from the upload buffers' CPU
+     * copies into the GPU's (RhiStats.uploadWriteBytes); 0 elsewhere */
+    uint64_t backendWriteBytes;
     double gpuMs;                    /* first timestamp to last */
     double gpuUploadMs;              /* the upload copies at the head */
     double gpuListMs[RD_LIST_COUNT]; /* per command list (0 for a list not replayed) */
