@@ -1376,8 +1376,15 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vuprepass_selftest_off
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test>
                      -DMODE=notrun "-DLINE=off \\(self-test not run\\)" -P "${_vst}")
+    # the same with the pre-pass's draws one an entry and stage
+    # (ICO_RD_VU_PREPASS_BATCH=0: the vu_X_pre_vs builds, as before the
+    # batches; rd_replay_vu.c vuPrepassRun)
+    add_test(NAME rd_vuprepass_selftest_unbatched
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}" -P "${_vst}")
     set(_vst_tests rd_vuprepass_selftest rd_vuprepass_selftest_plain
-                   rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off)
+                   rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off
+                   rd_vuprepass_selftest_unbatched)
     set_tests_properties(${_vst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     if(_env)
         set_tests_properties(rd_vuprepass_selftest rd_vuprepass_selftest_plain
@@ -1385,6 +1392,8 @@ if(ICO_RUN_TESTS)
     endif()
     set_tests_properties(rd_vuprepass_selftest_sabotage
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_SABOTAGE=1")
+    set_tests_properties(rd_vuprepass_selftest_unbatched
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_BATCH=0")
     set_tests_properties(rd_vuprepass_selftest_off
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS=0")
     # odd texel counts under MSAA (1935x1080 is 645x360 at scale 3;
@@ -1550,6 +1559,22 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_vustage_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
     if(_env)
         set_tests_properties(rd_vustage_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    # rd_vubatch_ab (test/rd_vubatch_ab.cmake): the same dumps through the
+    # record one point draw an entry and stage (ICO_RD_VU_PREPASS_BATCH=0)
+    # and in the pre-pass's batches (rd_replay_vu.c vuPrepassRun), at
+    # Original 4:3 1x, Enhanced 4:3 2x and Enhanced 16:9 2x under
+    # ICO_RD_BLEND=fixed: every named target byte for byte, the same
+    # vertices, fewer pre-pass draws batched; SKIP as rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vubatch_ab")
+    add_test(NAME rd_vubatch_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vubatch_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vubatch_ab.cmake")
+    set_tests_properties(rd_vubatch_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_vubatch_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
 endif()
 # The blend policy (rd_dst_read.c)
@@ -1735,7 +1760,7 @@ endif()
 #    rd_fog_selftest_local_sabotage (ico_rd_gl_twin skips these by itself)
 #  * the tests that start the game (model_viewer_headless, gallery_sweep,
 #    credits_headless) or work on the replay tool's files (rd_replay_tool*,
-#    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, the native frame
+#    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, rd_vubatch_ab, the native frame
 #    gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
 #    on both backends)
 #  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_mip, rd_passring,
@@ -1844,7 +1869,7 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         # has not (localRead false: the copy and inplace paths, DATE by snapshot)
         rd_vuprepass_selftest rd_vuprepass_selftest_plain
         rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off rd_vuprepass_selftest_ticks
-        rd_vuprepass_selftest_sabotage_tri)
+        rd_vuprepass_selftest_sabotage_tri rd_vuprepass_selftest_unbatched)
     foreach(_n IN LISTS _ico_rd_gl_tests)
         ico_rd_gl_twin(${_n})
     endforeach()
