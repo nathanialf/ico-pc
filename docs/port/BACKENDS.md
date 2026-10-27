@@ -61,6 +61,15 @@ On OpenGL the table has no GLSL for the input-attachment builds (`fog_lut_local_
 three are optional modules and are left out as if missing from the table, and the `_dstatt` twins
 are made only for the attachment blend, which OpenGL does not offer.
 
+Vulkan's dynamic blend on RADV (Mesa 25.x) and RDNA3 (Radeon RX 7000): the driver takes a SRC1
+factor in the dynamic blend equation as dual-source blending even on a draw with blending off, and
+on these cards the pixel shader then pairs neighbouring pixels' outputs, so a one-output draw after
+a dual-source one loses every other column (issues 146 and 154). The Vulkan backend therefore sends
+the equation on every change, blending on or off, on every driver; `RhiStats.dualLeftovers` counts
+the draws that would have kept a SRC1 equation ([RHI.md](RHI.md#dynamic-state)). OpenGL (radeonsi
+was clean for reporter 154) already sent the blend function on every change; Direct3D 11 and 12
+have static blend state only.
+
 ## The device profile on OpenGL and Direct3D 11
 
 Both classes take the desktop column whatever the vendor; what differs from desktop Vulkan comes
@@ -158,5 +167,8 @@ The OpenGL runs of the renderer's suite are the `_gl` tests ([TESTING.md](TESTIN
 - The OpenGL fallback in the window: not started in the container (the game is not run there).
 - The switch from the menu (Apply): no switch between any two backends has run.
 - An OpenGL driver below 4.5 (no MSAA values) has not been met.
+- The equation fix on a Radeon RX 7000 card with Mesa 25 RADV: the cause is read from Mesa's
+  source; lavapipe, NVIDIA and Intel ignore the factors with blending off, so only the counters and
+  the colours at an even and an odd column are checked here.
 - Direct3D 11: nothing has run on Windows; the profile text, the pre-pass line and the robust
   words are from the limits `d3d11_device.c` reports.
