@@ -140,7 +140,9 @@
  *                         groups created (rd's uniform and texture groups
  *                         apart), bind group and pipeline binds, ring bytes,
  *                         pipeline barriers and copies, the screen-prim
- *                         draws one per command and merged; a second line:
+ *                         draws one per command and merged (on Direct3D
+ *                         11 a line of the bytes its submits wrote to the
+ *                         GPU, RdPerfRecord.backendWriteBytes); a second line:
  *                         the exact blend's destination-read draws, storage
  *                         passes and pass switches, the glow's passes, the
  *                         target snapshots copied and swapped, the draws
@@ -190,7 +192,8 @@
  *                         replays, CPU mean (min) ms: total, interp, wait,
  *                         acquire, upload, walk, bind, submit, present;
  *                         per replay: ring, uniform and interp KB, draws,
- *                         pipeline and bind group binds",
+ *                         pipeline and bind group binds" (on Direct3D 11
+ *                         a line of the KB its submits wrote to the GPU),
  *                         then the first replay's interp alone; with
  *                         --interp DISPLAY after the first and the last of
  *                         them compared byte for byte ("pictures
@@ -1225,6 +1228,7 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
 
     double sum[P_COUNT] = {0}, low[P_COUNT] = {0};
     double ring = 0.0, uniform = 0.0, interp = 0.0, draws = 0.0, pipes = 0.0, groups = 0.0;
+    double d3d11 = 0.0; /* RdPerfRecord.backendWriteBytes (Direct3D 11 only) */
     RdPerfRecord first;
     uint8_t *pic[2] = {NULL, NULL};
     size_t cap[2] = {0, 0}, size[2] = {0, 0};
@@ -1257,6 +1261,7 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
             low[p] = k == 0 || v[p] < low[p] ? v[p] : low[p];
         }
         ring += (double)r.uploadBytes;
+        d3d11 += (double)r.backendWriteBytes;
         uniform += (double)r.uploadUniformBytes;
         interp += (double)r.uploadInterpBytes;
         draws += r.draws;
@@ -1286,6 +1291,11 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
                sum[P_SUBMIT] / m, low[P_SUBMIT], sum[P_PRESENT] / m, low[P_PRESENT],
                ring / m / 1024.0, uniform / m / 1024.0, interp / m / 1024.0, draws / m, pipes / m,
                groups / m);
+        if (d3d11 > 0.0) {
+            /* the ring's bytes Direct3D 11's submits copied to the GPU */
+            printf("%s: time: Direct3D 11 submits wrote %.1f KB to the GPU a replay\n", dump,
+                   d3d11 / m / 1024.0);
+        }
         printf("%s: time: the first replay: interp %.3f ms, total %.3f\n", dump, first.interpMs,
                first.totalMs);
     }
@@ -1967,6 +1977,10 @@ int main(int argc, char **argv)
                pr->textureGroups, pr->bindGroupBinds, pr->pipelineBinds,
                (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->screenCmds,
                pr->screenDraws);
+        if (pr->backendWriteBytes) {
+            printf("%s: stats: Direct3D 11 submits wrote %llu bytes to the GPU\n", dump,
+                   (unsigned long long)pr->backendWriteBytes);
+        }
         printf("%s: stats: %u destination-read draws, %u storage passes, %u pass switches for the "
                "exact blend; glow %u passes; snapshots %u copied, %u swapped; %u draws resampled "
                "above 1x\n",
