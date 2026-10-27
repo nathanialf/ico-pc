@@ -1322,6 +1322,20 @@ void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
     c->dynSet |= RHI_DYN_BLEND;
 }
 
+/* whether a blend equation reads the shader's second output (a SRC1
+ * factor: dual-source blending) */
+static bool vkr_dual_factor(VkBlendFactor f)
+{
+    return f == VK_BLEND_FACTOR_SRC1_COLOR || f == VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR ||
+           f == VK_BLEND_FACTOR_SRC1_ALPHA || f == VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
+}
+
+static bool vkr_eq_dual(const VkColorBlendEquationEXT *eq)
+{
+    return vkr_dual_factor(eq->srcColorBlendFactor) || vkr_dual_factor(eq->dstColorBlendFactor) ||
+           vkr_dual_factor(eq->srcAlphaBlendFactor) || vkr_dual_factor(eq->dstAlphaBlendFactor);
+}
+
 /* before a draw: the bound pipeline's dynamic groups as the draw needs
  * them (rhi_cmd_set_depth_state's comment) */
 static void vkr_flush_dynamic(VkrCmdList *c)
@@ -1371,9 +1385,24 @@ static void vkr_flush_dynamic(VkrCmdList *c)
             g_vkr.stats.dynamicSets++;
             h->enable = w->enable;
         }
-        /* the equation matters only while blending: one left over from an
-         * earlier draw stays until a blended draw needs another */
-        if (all || (w->enable && memcmp(&w->eq, &h->eq, sizeof(w->eq)) != 0)) {
+        /* the equation is always the draw's own, blending on or off (a
+         * draw with blending off wants the zeroed one, vk_pipeline.c
+         * vkr_blend_state): RADV on Mesa 25.x decides dual-source blending
+         * from the factors alone, whatever the enable (radv_cmd_buffer.c
+         * radv_emit_color_blend and the PS epilog state; Mesa 26.2 checks
+         * the enable first, radv_is_dual_src_enabled), and on RDNA3 the
+         * pixel shader epilog then swaps the two exports between
+         * neighbouring pixels, so a one-output shader after a SRC1 blend
+         * left every other column undefined (issues 146 and 154).  Sent on
+         * every driver; blendEqOffSets counts the commands for draws with
+         * blending off, dualLeftovers those that replaced a SRC1 equation */
+        if (all || memcmp(&w->eq, &h->eq, sizeof(w->eq)) != 0) {
+            if (!w->enable) {
+                g_vkr.stats.blendEqOffSets++;
+                if (!all && vkr_eq_dual(&h->eq)) {
+                    g_vkr.stats.dualLeftovers++;
+                }
+            }
             g_vkr.cmdSetColorBlendEquation(c->cb, 0, 1, &w->eq);
             g_vkr.stats.dynamicSets++;
             h->eq = w->eq;
