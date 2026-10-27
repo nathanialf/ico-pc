@@ -151,17 +151,37 @@ static void push(const RdPerfRecord *r)
     s_count++;
 }
 
+/* Direct3D 11's submit writes of the records popped since the last
+ * rd_perf_backend_text, and their count */
+static uint64_t s_backendBytes;
+static uint32_t s_backendReplays;
+
 bool rd_perf_pop(RdPerfRecord *out)
 {
     if (s_count == 0) {
         return false;
     }
+    s_backendBytes += s_queue[s_head].backendWriteBytes;
+    s_backendReplays++;
     if (out) {
         *out = s_queue[s_head];
     }
     s_head = (s_head + 1) % RD_PERF_QUEUE;
     s_count--;
     return true;
+}
+
+const char *rd_perf_backend_text(void)
+{
+    static char s_text[64];
+    s_text[0] = '\0';
+    if (s_backendBytes && s_backendReplays) {
+        snprintf(s_text, sizeof(s_text), "; Direct3D 11 submits wrote %.0f KB to the GPU",
+                 (double)s_backendBytes / s_backendReplays / 1024.0);
+    }
+    s_backendBytes = 0;
+    s_backendReplays = 0;
+    return s_text;
 }
 
 /* ------------------------------------------------------------ the passes
