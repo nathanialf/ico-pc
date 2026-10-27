@@ -88,7 +88,12 @@ formats).
 per-frame ring, persistently mapped) or READBACK. Textures take a size, mip levels, a format, a
 usage mask and a sample count (2, 4 or 8 from `RhiLimits.msaaCounts`: multisampled targets are never
 copied or read back, only resolved by `rhi_cmd_resolve_color` or read by a shader). STORAGE and
-INPUT_ATTACHMENT usages exist for the destination read and the [local read](#local-read). Create
+INPUT_ATTACHMENT usages exist for the destination read and the [local read](#local-read).
+`rhi_buffer_note_written(b, hi)` tells the backend that the CPU wrote nothing at or past byte `hi`
+of an UPLOAD buffer since the frame slot began (the frame's first call sets the mark, later ones
+raise it); the renderer's ring calls it from every allocation (`rd__ring_alloc`). Direct3D 11 writes
+only the bytes under the mark from its CPU copy at a submit ([Direct3D 11](#direct3d-11), **The
+written mark**); Vulkan, Direct3D 12 and OpenGL read the mapped memory itself and ignore it. Create
 and destroy are not frame-safe:
 destruction is deferred until the frames that may use the handle have retired (`port/rhi/rhi.h`,
 resources).
@@ -208,6 +213,8 @@ null groups included, where Vulkan counts only the slots it binds a caller's gro
 (`port/rhi/vk/vk_cmd.c` (`vkr_flush_bind_groups`)). So for the same draws D3D12's two bind group
 figures read higher than Vulkan's.
 Both backends fill the pipeline pool's fields ([The pipeline pool](#the-pipeline-pool)).
+`uploadWriteBytes` is Direct3D 11's alone: the bytes its submits wrote from upload buffers' CPU
+copies into their GPU buffers ([Direct3D 11](#direct3d-11), **The written mark**); 0 elsewhere.
 The Vulkan-only fields read 0 on D3D12: the memory gauges (live and peak allocations, their bytes,
 the device's limit), `memoryAllocs`, `memoryFrees`, `memoryFallbacks`, `orderBarriers`
 (`port/rhi/rhi.h` (`RhiStats`); `port/rhi/vk/vk_swapchain.c` (`rhi_acquire_backbuffer`,
@@ -726,15 +733,20 @@ fails with `rhi_d3d11: Direct3D 11.1 is needed (...)` (`d11_require_11_1`). Each
 `rhi_d3d11: adapter N: <name>` as on D3D12, and the device line is
 
 `rhi_d3d11: <adapter> (D3D11, feature level 11_1|11_0[, WARP][; driver version a.b.c.d]); 11.1
-interfaces yes, partial constant buffer updates yes|no, command lists by the driver|emulated by the
-runtime; tearing yes|no|n/a; debug layer on|off|asked for, not installed; shader cache <dir>|none[;
-headless]`
+interfaces yes, partial constant buffer updates yes|no (upload constant buffers mapped: discard,
+then no-overwrite)|no (upload constant buffers mapped: discard under the written mark), command
+lists by the driver|emulated by the runtime; tearing yes|no|n/a; debug layer on|off|asked for, not
+installed; shader cache <dir>|none[; headless]`
+
+(the two `no` forms: the device has `MapNoOverwriteOnDynamicConstantBuffer` or not, **Upload
+buffers** below)
 
 | variable | effect |
 | --- | --- |
 | `ICO_D3D11_DEBUG` | 1 the debug layer (`D3D11_CREATE_DEVICE_DEBUG`, its info queue drained into the log as `rhi_d3d11 debug <severity> (id N): <text>`) and the DXGI debug factory; 0 off |
 | `ICO_D3D11_ADAPTER` | `warp`, an adapter index or a substring of its name |
 | `ICO_DX_FAKE_NO_TIMESTAMPS` | 1 turns GPU timestamps off, as on D3D12 |
+| `ICO_D3D11_FAKE_NO_PARTIAL_CB` | 1 takes the path of a device without partial constant buffer updates (the upload buffers' constant buffers mapped) on any device; logs `rhi_d3d11: partial constant buffer updates: off (ICO_D3D11_FAKE_NO_PARTIAL_CB)` (`rhi_d3d11_test`'s section 1b) |
 | `ICO_D3D11_FRAME_LATENCY` | the swapchain's frame latency, as `ICO_D3D12_FRAME_LATENCY` |
 
 A failed call logs `rhi_d3d11: <call> failed (HRESULT 0x...) at <file>:<line>`; a lost device is
@@ -766,29 +778,60 @@ of its own and waits for it. A wait past 5 s logs
 a CPU copy (the shadow) whose address never changes, as the renderer keeps the pointer. A buffer is
 up to three D3D11 buffers, one per bind class its usage asks for (vertex and index; constant, which
 Direct3D 11 binds alone; structured shader resource, which cannot carry the vertex or index flag),
-all `D3D11_USAGE_DEFAULT`. The command path notes each range a list reads from an upload buffer,
+`D3D11_USAGE_DEFAULT` (the constant one `D3D11_USAGE_DYNAMIC` on a device without partial updates,
+below). The command path notes each range a list reads from an upload buffer,
 per class (`d11_cmd_touch`: bind group uniforms and storage ranges, vertex and index ranges with
 their draws' extents, copy sources); `rhi_submit` writes each noted range from the shadow into that
 class's buffer with `UpdateSubresource1` before the list executes (`d11_buffer_flush`), so a list
 sees what the CPU wrote before its submit. Constant buffers take a partial update with
-`D3D11_COPY_NO_OVERWRITE` where the driver offers `ConstantBufferPartialUpdate`, else the whole
-buffer (rule 1 below).
+`D3D11_COPY_NO_OVERWRITE` where the driver offers `ConstantBufferPartialUpdate` (rule 1 below).
 
-The cost of those writes: the renderer's ring is
-VERTEX|INDEX|UNIFORM|STORAGE upload memory (`rd_upload.c` `newRing`), so it is three D3D11 buffers.
-Each list's notes are one span per buffer and class, the lowest to the highest byte it read. The
-VU draws' bind group (`rd_replay_vu.c` `vuGroup`, cached per buffer) binds the ring as storage from
-byte 0 to its whole size (or `maxStorageRange`) and passes the stream's start in a uniform, so the
-storage class's note is the whole bound range and every `rhi_submit` with a VU draw writes the
-ring's full capacity (4 MB at first, grown and never shrunk; hundreds of MB after a stage change
-with many pack replacements) into the structured buffer, plus the uniform and index spans. The
-vertex class is written only for the sprite pipelines (the only ones with vertex bindings), from
-each draw's first to last vertex; the indexed draws are the VU draws, which have no vertex
-bindings, so their "binding offset to the buffer end" rule (`d11_flush_vertex_buffers`) does not
-come into play today. No narrower range is known inside the RHI without the renderer saying which
-bytes a frame wrote (a ring high-water mark per frame slot, or the VU group bound over the stream
-only); that is the fix if the copies show up on the old cards this backend is for, and it is not
-measured: Direct3D 11 has run only on WARP. Uniform bindings are windows into the
+**The written mark.** The renderer's ring is VERTEX|INDEX|UNIFORM|STORAGE upload memory
+(`rd_upload.c` `newRing`), so it is three D3D11 buffers. Each list's notes are one span per buffer
+and class, the lowest to the highest byte it read. The VU draws' bind group (`rd_replay_vu.c`
+`vuGroup`, cached per buffer) binds the ring as storage from byte 0 to its whole size (or
+`maxStorageRange`) and passes the stream's start in a uniform, so the storage class's note is the
+whole bound range; an indexed draw's vertex note runs to the buffer's end. Written as noted, every
+`rhi_submit` with a VU draw would copy the ring's full capacity (4 MB at first, grown and never
+shrunk; about 11 MB on issue 126's GTX 750 Ti, hundreds of MB after a stage change with many pack
+replacements) into the structured buffer, plus the uniform and vertex spans. So the renderer says
+which bytes a frame wrote: `rd__ring_alloc` calls
+`rhi_buffer_note_written(ring, end)` with the end of what it has handed out (`port/render/rd_replay.c`;
+the ring is append-only within a replay, every write lands at an offset it handed out, and the
+other backends' hook is a no-op). The buffer keeps the mark with the frame it was noted in
+(`D11Buffer.written`, `writtenFrame`: the frame's first note sets it, later ones raise it), and
+`rhi_submit` cuts each noted range at the mark before writing it (`d11_buffer_written_end`): the
+storage note of the whole ring becomes the bytes the frame wrote. The cut is made at the submit,
+not when the range is noted, because a group bound once (the storage view) serves draws whose
+bytes were allocated after its bind. A byte past the mark is one this frame did not write, so no
+list reads it as this frame's data; a buffer never noted is written over every noted range as
+before. `d11_buffer_flush` still rounds each range out to 16 bytes inside the buffer, so the
+structured part's writes stay whole elements (rule 2 below) at a mark on any byte. The written
+bytes a submit makes are counted in `RhiStats.uploadWriteBytes` (`RdPerfRecord.backendWriteBytes`;
+the window's `uploaded KB per replay` line ends `; Direct3D 11 submits wrote N KB to the GPU`,
+[DISPLAY.md](DISPLAY.md#the-stats-lines); the replay tool's `--stats` and `--time` print a line
+of them on Direct3D 11). The first note logs `rhi_d3d11: upload writes: a submit writes the ranges
+its lists read under the renderer's written mark (the first: N of the ring's M bytes); constant
+buffers by range (partial updates)|mapped, ...|written whole (logged once)`.
+
+**Constant buffers without partial updates.** A device without `ConstantBufferPartialUpdate`
+(possible at feature level 11_0) cannot take a box on a constant buffer, so `UpdateSubresource1`
+would write the whole constant buffer at every submit. An upload buffer's constant part is there a
+`D3D11_USAGE_DYNAMIC` buffer (`D11Buffer.cbMapped`; only beside another part, which stays the copy
+source) that `rhi_submit` maps on the immediate context and fills with the noted range from the
+shadow (`d11_cb_map_write`): a frame's first map of it is `D3D11_MAP_WRITE_DISCARD` (a fresh copy,
+so the lists of earlier frames still in flight keep theirs), later maps in the frame
+`D3D11_MAP_WRITE_NO_OVERWRITE` when the device has `MapNoOverwriteOnDynamicConstantBuffer`. That
+writes no byte a list already submitted may still read with other values: within a frame the ring
+only grows, so a range two lists read is written again with the same bytes, as rule 1 already
+relies on for `UpdateSubresource1`. Without `MapNoOverwriteOnDynamicConstantBuffer` every map is a
+`DISCARD` that writes everything the frame wrote, from 0 to the written mark (or the whole buffer
+when never noted). A buffer whose DYNAMIC part cannot be made logs `rhi_d3d11: buffer <name>: no
+DYNAMIC constant buffer of N bytes: written whole at each submit instead (logged once)` and keeps
+the whole-buffer write; a failed map logs once and leaves that submit's constants stale. Issue 126's
+card reports partial updates, so it never takes this path; `ICO_D3D11_FAKE_NO_PARTIAL_CB=1` takes it
+on any device (`rhi_d3d11_test` section 1b runs the cells so on WARP under the debug layer). Uniform
+bindings are windows into the
 constant buffer (`VSSetConstantBuffers1` and `PSSetConstantBuffers1`, first constant = offset / 16,
 whole 256-byte blocks); storage bindings are structured SRVs of 16-byte elements, eight kept per
 buffer. `RHI_MEM_DEVICE` buffers are filled by copies; an `RHI_MEM_READBACK` buffer is a staging
@@ -838,11 +881,16 @@ with the new value. At a draw each dirty bind group of the pipeline's layouts bi
 their own registers in the stages the slot names (both when it names none): uniforms as constant
 buffer windows (`VSSetConstantBuffers1`/`PSSetConstantBuffers1`, first constant = (offset +
 dynamic offset) / 16, the window whole 256-byte blocks; `d11_set_cb`: a window equal to the one the
-register holds is not set again, and the same buffer with another window is unbound first, the
-workaround Microsoft documents in the `VSSetConstantBuffers1` remarks for a runtime that drops a
-call naming the bound buffer with only its offset or size changed; every draw's uniforms are
-windows of the one ring buffer), storage buffers and textures as SRVs,
-samplers (the point/clamp default for an empty slot); the destination read's storage texture is
+register holds is not set again, and where the runtime emulates command lists (`command lists
+emulated by the runtime` in the device line) the same buffer with another window is unbound first,
+the workaround Microsoft documents in the `VSSetConstantBuffers1` remarks ("Calling
+VSSetConstantBuffers1 with command list emulation") for the emulation dropping a call naming the
+bound buffer with only its offset or size changed; a driver that records command lists itself takes
+the new window alone (one call a stage for a changed window, not two); every draw's
+uniforms are windows of the one ring buffer), storage buffers and textures as SRVs,
+samplers (the point/clamp default for an empty slot), each SRV and sampler register set only when
+it does not already hold that view or sampler (`D11CmdState.srvSet`, `smpSet`, per stage; a pass's
+start clears the SRVs with their record); the destination read's storage texture is
 never bound (`rov` false). `rhi_cmd_set_depth_state` and `rhi_cmd_set_blend_state` log once and do
 nothing (`dynamicDepth`/`dynamicBlend` false). Every range a list reads from an upload buffer is
 noted with `d11_cmd_touch` as it is recorded: the uniform window and storage range of each bound
@@ -951,7 +999,11 @@ draws less than it should and nothing else says so.
 memory gauges.
 
 **Unverified**, all of it, and these first: the upload ranges each list notes (a range left out
-draws stale data), the constant buffer windows' offsets, the order of the deferred lists against
+draws stale data), the written mark's cut (a read past the ring's written end would draw stale
+data; CI's render suite on WARP draws through it), the mapped constant buffers of a device without
+partial updates (a `DYNAMIC` buffer mapped on the immediate context and read by command lists
+recorded on deferred contexts; WARP has partial updates, so only `ICO_D3D11_FAKE_NO_PARTIAL_CB=1`
+reaches it), the single window bind on a driver that records command lists, the constant buffer windows' offsets, the order of the deferred lists against
 the uploads at submit, `UpdateSubresource1` with a box on a deferred context of a driver that
 records command lists itself and the texture-and-copy route where it does not,
 `CopySubresourceRegion` into a constant buffer part of a device buffer, FXC's acceptance of every
