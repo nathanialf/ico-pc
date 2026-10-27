@@ -951,6 +951,11 @@ void vkr_release_all_objects(void)
             if (t->depthView) {
                 vkDestroyImageView(d, t->depthView, NULL);
             }
+            /* the RGBA8_UINT view (RHI_TEX_UINT_VIEW), as rhi_destroy_texture
+             * frees it */
+            if (t->uintView) {
+                vkDestroyImageView(d, t->uintView, NULL);
+            }
             if (!t->swapchain) {
                 vkDestroyImage(d, t->image, NULL);
                 vkr_free_memory(t->memory, t->memSize);
