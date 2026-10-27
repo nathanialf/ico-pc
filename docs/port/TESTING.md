@@ -552,7 +552,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   and the attachment read's Qualcomm rule; the mode left in force, the forest's tint under it, the
   targets without the attachment read where it is off, the self-test again at a new scene size;
   its log lines matched plain, sabotaged, under the fake Adreno, with each `ICO_RD_BLEND` and
-  without a destination read (`rd_blend_selftest*`). The fixed-function blend is the default
+  without a destination read (`rd_blend_selftest*`); its 21 samples include the after cell, an
+  opaque cell drawn after the blended draws and read at an even and an odd texel column (`after
+  cell, even column`, `after cell, odd column` in a failure line), which a driver that keeps a
+  dual-source equation with blending off fails. The fixed-function blend is the default
   everywhere, so the exact paths are covered by opt-in runs: `rd_blend_selftest_blend_attachment`,
   `_blend_exact` and `_blend_storage` name the mode, and `rd_pixel_attachment`,
   `rd_fog_attachment`, `rd_present_attachment`, `rd_crt_attachment` and `rd_perf_attachment` run
@@ -990,7 +993,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rhi_vk_swapchain`).
 - Helpers: `rhi_test_common.c`/`.h` (the shared cells, seven of whose pipelines come from one
   `rhi_create_pipelines` call with a failing description among them, and the fill-rule cell:
-  edges through pixel centres under the top-left rule on every backend), `shaders/`
+  edges through pixel centres under the top-left rule on every backend; and the dynamic state
+  cell, `dynamicCell`, whose last case, `dualLeftoverCell`, draws an opaque quad after a SRC1
+  lerp on one dynamic-blend pipeline and wants exactly 2 dynamic commands for it, `blendEqOffSets`
+  and `dualLeftovers` 1 each and its colour exact at an even and an odd column, skipped without
+  dual-source blending or dynamic blend, as under `rhi_vk_nodual` and `rhi_gl_nodual`), `shaders/`
   (`rhi_test.hlsl`, its compiled headers and `gen_shaders.sh`), and `compare_backends.cmd` with
   `compare_png.ps1`, which render every dump on Vulkan and D3D12 on Windows and compare the PNGs
   within 1 LSB.
