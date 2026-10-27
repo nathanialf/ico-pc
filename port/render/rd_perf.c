@@ -597,6 +597,7 @@ void rd__perf_end(void)
         r->readbacks = D(readbacks);
 #undef D
         r->fenceWaitMs = (double)(s.fenceWaitNs - s_last.fenceWaitNs) / 1e6;
+        r->backendWriteBytes = s.uploadWriteBytes - s_last.uploadWriteBytes;
         if (r->walkMs > WALK_SLOW_MS) {
             walkBreakdown(r);
         }
