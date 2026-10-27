@@ -185,6 +185,12 @@ target_compile_definitions(inflate_test PRIVATE ${ICO_GAME_DEFINITIONS} ICO_HEAP
 target_compile_options(inflate_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(inflate_test PRIVATE ico_port_data ico_platform)
+# The test frees a pointer 8 bytes into a block on purpose (the EE walk's
+# mistake on the host); iosFree reads the 16-byte-aligned header in front of
+# it, which UBSan's alignment check reports.  Only this target drops that check.
+if(ICO_SANITIZE)
+    target_compile_options(inflate_test PRIVATE $<$<COMPILE_LANGUAGE:C>:-fno-sanitize=alignment>)
+endif()
 if(ICO_RUN_TESTS)
     add_test(NAME inflate COMMAND inflate_test synth)
     add_test(NAME inflate_disc_cn COMMAND inflate_test disc "${ICO_DISC_IMAGE_CN}" STGST13C.DF
