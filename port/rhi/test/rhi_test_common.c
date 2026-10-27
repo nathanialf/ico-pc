@@ -835,6 +835,133 @@ static void dstReadCell(const Ctx *c, RhiDstRead kind)
     rhi_destroy_buffer(ring);
 }
 
+/* The blend equation on a draw with blending off (vk_cmd.c
+ * vkr_flush_dynamic, issues 146 and 154): on one dynamic-blend pipeline
+ * with the dual-source shader, a SRC1 lerp quad on the left half of a
+ * 16 x 8 target, then the opaque blend state and a quad on the right half.
+ * The second draw records exactly 2 dynamic commands (the enable and the
+ * equation: the zeroed one replaces the SRC1 one; the mask is unchanged),
+ * blendEqOffSets and dualLeftovers each +1, and the quad's colour is exact
+ * at an even and an odd column (RADV on Mesa 25 on RDNA3 left the odd one
+ * undefined while the SRC1 equation stayed).  Skipped without dual-source
+ * blending or dynamic blend. */
+static void dualLeftoverCell(const Ctx *c)
+{
+    enum { TW = 16, TH = 8 };
+
+    const RhiLimits *lim = rhi_limits();
+    if (!lim->dualSourceBlend || !lim->dynamicBlend || !c->psDual.id) {
+        rhi_test_log("SKIP %s: dynamic state: the dual-source equation on a draw without "
+                     "blending (dual-source %d, dynamic blend %d)\n",
+                     s_label, (int)lim->dualSourceBlend, (int)lim->dynamicBlend);
+        return;
+    }
+    rhi_wait_frame();
+    const RhiFormat CF = RHI_FMT_RGBA8_UNORM;
+    const RhiBlendState opaque = {.writeMask = 0xF};
+    const RhiBlendState lerp1 = {true,
+                                 RHI_BF_SRC1_ALPHA,
+                                 RHI_BF_ONE_MINUS_SRC1_ALPHA,
+                                 RHI_BO_ADD,
+                                 RHI_BF_ONE,
+                                 RHI_BF_ZERO,
+                                 RHI_BO_ADD,
+                                 0xF};
+    RhiPipelineDesc d;
+    pipelineDesc(c, c->psDual, CF, RHI_FMT_UNKNOWN, &opaque, NULL, "dyn dual leftover", 0u, &d);
+    d.dynamic = RHI_DYN_BLEND;
+    RhiPipeline pipe = rhi_create_pipeline(&d);
+    RhiTexture tgt = rhi_create_texture(&(RhiTextureDesc){
+        TW, TH, 1, CF, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "dyn dual colour", 0});
+    /* the uniform block at 0, the vertices after it (at 256 or the
+     * uniform alignment) */
+    const uint64_t ua = lim->uniformAlign > 256u ? lim->uniformAlign : 256u;
+    const uint64_t vtxOff = ua;
+    RhiBuffer buf = rhi_create_buffer(&(RhiBufferDesc){vtxOff + 12u * sizeof(Vtx),
+                                                       RHI_BUF_VERTEX | RHI_BUF_UNIFORM,
+                                                       RHI_MEM_UPLOAD, "dyn dual ring"});
+    uint8_t *map = buf.id ? rhi_map_buffer(buf) : NULL;
+    RhiBinding b0 = {0};
+    b0.slot = 0;
+    b0.type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC;
+    b0.buffer = buf;
+    b0.offset = 0;
+    b0.size = sizeof(TestCB);
+    RhiBindGroupDesc bd0 = {c->l0, &b0, 1};
+    const RhiBindGroup g0 = map ? rhi_create_bind_group(&bd0) : (RhiBindGroup){0};
+    if (!pipe.id || !tgt.id || !map || !g0.id) {
+        rhi_test_log("FAIL %s: dynamic state: the dual-source leftover's resources\n", s_label);
+        failures++;
+        return;
+    }
+    const TestCB cb = {{0.0f, 0.0f, 0.0f, 0.5f}, {0, 0, 0, 0}};
+    memcpy(map, &cb, sizeof(cb));
+    Vtx v[12];
+    quad(&v[0], 0, 0, TW / 2, TH, TW, TH, 0.0f, 255, 255, 0, 255);   /* the SRC1 lerp */
+    quad(&v[6], TW / 2, 0, TW, TH, TW, TH, 0.0f, 60, 140, 220, 255); /* the opaque quad */
+    memcpy(map + vtxOff, v, sizeof(v));
+
+    RhiCommandList cl = rhi_begin_commands();
+    RhiTextureBarrier b = {tgt, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+    rhi_cmd_barrier(cl, &b, 1);
+    RhiRenderPassDesc rp;
+    memset(&rp, 0, sizeof(rp));
+    rp.color[0].texture = tgt;
+    rp.color[0].load = RHI_LOAD_CLEAR;
+    rp.color[0].clear[0] = rp.color[0].clear[1] = rp.color[0].clear[2] = 10.0f / 255.0f;
+    rp.color[0].clear[3] = 1.0f;
+    rp.colorCount = 1;
+    rp.width = TW;
+    rp.height = TH;
+    rhi_cmd_begin_render_pass(cl, &rp);
+    rhi_cmd_set_vertex_buffer(cl, 0, buf, vtxOff);
+    rhi_cmd_set_pipeline(cl, pipe);
+    const uint32_t zero = 0;
+    rhi_cmd_set_bind_group_offsets(cl, 0, g0, &zero, 1);
+    rhi_cmd_set_blend_state(cl, &lerp1);
+    rhi_cmd_draw(cl, 6, 0, 1);
+    RhiStats s0, s1;
+    rhi_get_stats(&s0);
+    rhi_cmd_set_blend_state(cl, &opaque);
+    rhi_cmd_draw(cl, 6, 6, 1);
+    rhi_get_stats(&s1);
+    rhi_cmd_end_render_pass(cl);
+    RhiTextureBarrier b1 = {tgt, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+    rhi_cmd_barrier(cl, &b1, 1);
+    rhi_end_commands(cl);
+    rhi_submit(cl);
+    static uint8_t img[TW * TH * 4];
+    uint32_t pitch = 0;
+    if (!rhi_readback_texture(tgt, RHI_ASPECT_COLOR, img, sizeof(img), &pitch)) {
+        rhi_test_log("FAIL %s: dynamic state: the dual-source leftover's readback\n", s_label);
+        failures++;
+        return;
+    }
+    const uint64_t sets = s1.dynamicSets - s0.dynamicSets;
+    const uint64_t off = s1.blendEqOffSets - s0.blendEqOffSets;
+    const uint64_t left = s1.dualLeftovers - s0.dualLeftovers;
+    rhi_test_log("%s: dynamic state: an opaque draw after a dual-source one: %llu dynamic "
+                 "commands, %llu equations for a draw without blending, %llu replacing a "
+                 "dual-source one (want 2, 1, 1)\n",
+                 s_label, (unsigned long long)sets, (unsigned long long)off,
+                 (unsigned long long)left);
+    if (sets != 2 || off != 1 || left != 1) {
+        rhi_test_log("FAIL %s: dynamic state: the dual-source equation on a draw without "
+                     "blending was not replaced\n",
+                     s_label);
+        failures++;
+    }
+    const int before = failures;
+    expectRGBA(img, pitch, 10, 3, 60, 140, 220, 255, 310); /* an even column */
+    expectRGBA(img, pitch, 11, 3, 60, 140, 220, 255, 310); /* an odd column */
+    if (failures != before) {
+        rhi_test_log("FAIL %s: dynamic state: the opaque quad after a dual-source draw\n", s_label);
+    }
+    rhi_destroy_pipeline(pipe);
+    rhi_destroy_texture(tgt);
+    rhi_destroy_buffer(buf);
+}
+
 /* The dynamic depth and blend state (rhi.h RhiPipelineDesc.dynamic,
  * rhi_cmd_set_depth_state, rhi_cmd_set_blend_state; RhiLimits.dynamicDepth,
  * dynamicBlend): a 64 x 16 RGBA8 target with a D32F+S8 depth cleared to 0,
@@ -851,7 +978,8 @@ static void dstReadCell(const Ctx *c, RhiDstRead kind)
  * cell's draw sets its group again (3 commands a group); after the cells
  * a repeat of the values in force sets nothing, on the same pipeline and on
  * another dynamic one (RhiStats.dynamicSets).  Without dynamic state only
- * the static pass and its maxThreads batch run. */
+ * the static pass and its maxThreads batch run.  Then dualLeftoverCell: the
+ * equation an opaque draw after a dual-source one records. */
 static void dynamicCell(const Ctx *c)
 {
     enum { DW = 64, DH = 16, DC = 8, NCASE = 16, NV = NCASE * 18 + 3 };
@@ -1082,6 +1210,7 @@ static void dynamicCell(const Ctx *c)
                      (unsigned long long)(perDraw * NCASE), (unsigned long long)repeat);
         failures++;
     }
+    dualLeftoverCell(c);
     rhi_destroy_pipeline(pBase);
     rhi_destroy_pipeline(pProbe);
     for (int i = 0; i < NCASE; i++) {
