@@ -573,7 +573,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd_vuprepass_selftest_plain`, `rd_vuprepass_selftest_sabotage`,
   `rd_vuprepass_selftest_sabotage_tri`, `rd_vuprepass_selftest_ticks`,
   `rd_vuprepass_selftest_off`); the device profile's class ends with the backend's name (`Vulkan):`,
-  `OpenGL):`) and is the desktop column on OpenGL and Direct3D 11.
+  `OpenGL):`) and is the desktop column on OpenGL and Direct3D 11. With the pre-pass on, its draws
+  are batched (`g_rd.vuPreBatch`) unless `ICO_RD_VU_PREPASS_BATCH=0`, which
+  `rd_vuprepass_selftest_unbatched` sets (the self-test one draw an entry and stage).
 - `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
   paths, `*` globs, a missing dump named and skipped, none at all `SKIP`) replayed by
   `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
@@ -593,6 +595,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `blocked by` counts. N counts every VU draw, so the mean is draws per run. The batches are the
   distinct (stage key, FrameCB, stream buffer, bones zero or not) of the pre-pass's draws; 0 with
   the pre-pass off.
+- `rd_vubatch_ab.cmake`: the same dumps through the record twice, one point draw an entry and
+  stage (`ICO_RD_VU_PREPASS_BATCH=0`) and in the pre-pass's batches, at Original 4:3 1x, Enhanced
+  4:3 2x and Enhanced 16:9 2x under `ICO_RD_BLEND=fixed`: every named target's PNG byte for byte,
+  every VU command through the record in both, the same vertices, no more pre-pass draws batched
+  and fewer where one an entry made two or more; each run's draws printed, and the totals
+  (`rd_vubatch_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)). SKIP as
+  `rd_vustage_ab`.
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's
@@ -1198,7 +1207,7 @@ The script tests under `port/render/test/` run the tool or a test program and ch
 `rd_blend_selftest.cmake`, which matches the `blend: ... (self-test: ...)` line of the blend's,
 and `rd_vuprepass_selftest.cmake`, which matches the `VU pre-pass: on|off (self-test ...)` line
 of the pre-passes', and `rd_crack.cmake`, which matches the crack filler's `crack fill:` lines,
-and `rd_vustage_ab.cmake` over the dump corpus (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
+and `rd_vustage_ab.cmake` and `rd_vubatch_ab.cmake` over the dump corpus (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
 `--present 640x480`; it requires `rd_pixel` to have run first (`FIXTURES_REQUIRED rd_dump`), as
 does `rd_replay_tool_downsample`, which adds `--enhanced --resolution 2x --downsample --stats` and
 passes on `present: downsample 1024x512 -> 512x256, window reduce off`.
@@ -1233,7 +1242,7 @@ Not twinned: any test whose environment holds `ICO_VK_FAKE_*` or `ICO_VK_ATTACHM
 `rd_crack_tiler`, `rd_crack_tiler_on`, `rd_blend_selftest*`, `rd_date_selftest_sabotage`,
 `rd_fog_selftest_local_sabotage`; `ico_rd_gl_twin` skips these itself), the tests that start the
 game or work on the replay tool's files (`rd_replay_tool*`, `rd_fog_depth_copy_dump*`,
-`rd_vustage_ab`, the frame gates, `coverage_corpus`; the compare below covers the dumps), and the
+`rd_vustage_ab`, `rd_vubatch_ab`, the frame gates, `coverage_corpus`; the compare below covers the dumps), and the
 tests with no device (`rd_alpha_plan`, `rd_fx_frame`, `rd_vu_frac`, `rd_mip`, `rd_passring`,
 `rd_filter`, `rd_bisect_plan`, `rd_stream_audit`, `fog_lut*`, `gsb_cull*`, `texpack*`, `gltf`).
 The two-pass blend copies (`*_nodual`, `ICO_RD_NO_DUAL=1`, the renderer's own switch) are
@@ -1416,6 +1425,7 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_PLAIN` | `rd_pipeline.c` | 1: every VU draw with the VU vertex shaders' plain variants, as on a device of the table (`kVuPlainOnly`); the replay tool's pictures at a wide aspect then show the plain-only picture ([RENDER.md](RENDER.md#the-fallback-entries)) |
 | `ICO_RD_VU_EXTENDED` | `rd_pipeline.c` | 1: the extended variants whatever the device table or `ICO_RD_VU_PLAIN` says |
 | `ICO_RD_VU_PREPASS` | `rd_replay_vu.c` | 0: no VU vertex pre-pass, every VU draw the old way (`[dev] vu_prepass = false`); the tests switch it with `rd__set_vu_prepass` ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)) |
+| `ICO_RD_VU_PREPASS_BATCH` | `rd_replay_vu.c` | 0: the VU pre-pass's draws one an entry and stage instead of batched (`[dev] vu_prepass_batch = false`; `rd_vubatch_ab`, `rd_vuprepass_selftest_unbatched`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)) |
 | `ICO_RD_PERF_LIST_STAMPS` | `rd_perf.c` | 0: no list or effect timestamp (`[dev] perf_list_stamps = false`); `rd_perf_test` switches it with `rd__set_perf_list_stamps` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
 | `ICO_RD_PERF_PASSES` | `rd_perf.c` | 1: every replay timed pass by pass (`[dev] perf_passes = true`; the window writes `ico-pc-passes.csv`); `rd_perf_test` and the replay tool's `--pass-times` switch it with `rd__set_perf_passes` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
 | `ICO_RHI_BACKEND`, `ICO_VK_DEVICE`, `ICO_D3D12_ADAPTER` | `rhi_backend.c`, `vk_device.c`, `d3d12_device.c` | pick the backend, the Vulkan device, the D3D12 adapter (`warp`) |
