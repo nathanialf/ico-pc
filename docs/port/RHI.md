@@ -325,8 +325,22 @@ core names on 1.3, the EXT ones otherwise). The sets keep the values the next dr
 records only what differs from the values the command buffer holds, and every command of a group
 after the bind of a pipeline with that group static (that bind replaced them). So binds of two
 dynamic pipelines with the same values record nothing more, and a draw gets exactly the values a
-static pipeline of its state would have given it. `RhiStats.dynamicSets` counts the commands
-recorded. A draw on a dynamic pipeline whose sets were not made since its bind takes the
+static pipeline of its state would have given it. The blend equation is one of those values with
+blending off too: a draw without blending wants the zeroed equation (zero factors, adds;
+`vk_pipeline.c` `vkr_blend_state`), and it is recorded whenever it differs from the one held, not
+only while blending: an equation left by an earlier blended draw must not stay on the draws without
+blending. RADV on Mesa 25.x decides dual-source blending
+from the factors alone on the dynamic path, whatever the enable (`radv_cmd_buffer.c`
+`radv_emit_color_blend` and the pixel shader epilog state; the static path checks the enable first,
+and Mesa 26.2 does on both, `radv_is_dual_src_enabled`). On RDNA3 (Radeon RX 7000, GFX11) the pixel
+shader epilog then swaps the two exports between horizontally neighbouring pixels, so a one-output
+shader after a SRC1 blend (the renderer's LERP and DST_FIX sprites) left every other column
+undefined: issues 146 and 154, the whole picture striped black with bright dots from the title on.
+The equation is now always the draw's own, on every driver. `RhiStats.dynamicSets` counts the
+commands recorded; of them `blendEqOffSets` the equations recorded for draws with blending off, and
+of these `dualLeftovers` those that replaced an equation with a SRC1 factor (the draws that were
+striped). The replay tool's `--stats` line shows both (`<n> dynamic state sets (...) (<a> for draws
+without blending, <b> of them replacing a dual-source one)`). A draw on a dynamic pipeline whose sets were not made since its bind takes the
 pipeline's own values and is logged once (`rhi_vk: dynamic state: a draw with its pipeline's depth
 left unset since the bind ...`). The device's line: `rhi_vk: dynamic state: depth test, write and
 compare yes (Vulkan 1.3); blend enable, equation and write mask yes
@@ -334,7 +348,12 @@ compare yes (Vulkan 1.3); blend enable, equation and write mask yes
 false, `=blend` the blend alone, for an A/B of the same frames; `[dev] dynamic_state = false` or
 `depth` exports them ([CONFIG.md](CONFIG.md#dev)), and the line then says `no ([dev] dynamic_state =
 false, ICO_VK_FAKE_NO_DYNAMIC=1)` or `no ([dev] dynamic_state = depth, ICO_VK_FAKE_NO_DYNAMIC=blend)` (`rhi_vk_test`'s dynamic cell draws
-the renderer's depth tests, blends and masks static and dynamic, texel-equal; [Tests](#tests)).
+the renderer's depth tests, blends and masks static and dynamic, texel-equal, then an opaque draw
+after a SRC1 lerp on one dynamic-blend pipeline: exactly 2 commands for it (the enable and the
+equation), `blendEqOffSets` and `dualLeftovers` 1 each, and its colour exact on an even and an odd
+column; [Tests](#tests)). OpenGL counts the equation the same way, in Vulkan's terms
+(`gl_cmd.c` `gl_count_dynamic`); it already sent the blend function whenever it changed, whatever the
+enable.
 
 ### Local read
 
@@ -1331,7 +1350,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 
 | test | checks |
 | --- | --- |
-| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), the fill rule (`fillRuleCell`: two quads with every edge through pixel centres, the top and left edges' pixels taken and the bottom and right ones left, the shared edge's row once), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state) |
+| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), the fill rule (`fillRuleCell`: two quads with every edge through pixel centres, the top and left edges' pixels taken and the bottom and right ones left, the shared edge's row once), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state; then `dualLeftoverCell`, an opaque draw after a SRC1 lerp on one dynamic-blend pipeline: 2 commands, `blendEqOffSets` and `dualLeftovers` +1, the colour exact on an even and an odd column; skipped without dual-source blending or dynamic blend) |
 | `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored; the drop of other builds' cache files in a temporary folder: the current file, its `.tmp` and unrelated names stay), and the pipeline pool filled (`poolCell`, [The pipeline pool](#the-pipeline-pool); not under the fake switches); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
 | `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |
