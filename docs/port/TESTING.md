@@ -583,6 +583,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   A dump with no VU command (the four 2D dumps of the corpus) records no pre-pass and passes with 0
   passes; the records' camera is the one each command's draw uses (the walk follows the field's half
   pixel as `replayFrame` does). SKIP without the list, its dumps or a device (`rd_vustage_ab`).
+- `rd_replay_tool --stats` also prints two counting lines (no draw or record changes): `VU merge:
+  N draws in M runs (mean R a run); blocked by ...; per list: L:N/M ...` and `VU pre-pass batches:
+  B distinct (stage, frame, stream, bones) of D draws`. A run is consecutive VU draws of one pass
+  that could be one GPU draw: equal pipeline, texture and stream groups, DrawCB bytes (FNV-1a),
+  scissor, FrameCB and target, each a single planned pass with no DATE stencil, no storage or
+  destination-read pass and no skin, with no other draw between them; a draw that cannot join (or
+  cannot merge at all) starts a run of its own, and the first key that differed is added to the
+  `blocked by` counts. N counts every VU draw, so the mean is draws per run. The batches are the
+  distinct (stage key, FrameCB, stream buffer, bones zero or not) of the pre-pass's draws; 0 with
+  the pre-pass off.
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's
