@@ -4,4 +4,4 @@
 
 ## Fixed
 
-- With Direct3D 11, the game spends less time handing each picture to the graphics card.
+- With Direct3D 11, the game no longer copies its whole drawing buffer to the graphics card for every picture, only the part it wrote.
