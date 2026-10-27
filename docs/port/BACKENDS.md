@@ -107,6 +107,35 @@ order's `cache` step never applies there. Direct3D 11 keeps its compiled shaders
 `pipelines-<build>.d3d11` beside where the Vulkan cache file would be, and reports it as loaded
 when a start had hits ([RHI.md](RHI.md#direct3d-11)).
 
+## What Direct3D 11 costs the CPU a picture
+
+Direct3D 11 is the one backend whose GPU does not read the renderer's upload ring in place: each
+submit copies the ranges its list reads from the ring's CPU copy into up to three D3D11 buffers
+(vertex and index, constant, structured), and every bind group is set register by register on a
+deferred context. On issue 126's GTX 750 Ti and two-core i3 the submit phase took about 6 ms of an
+11 ms CPU picture (`window: N replays: CPU ... submit 6.1`). Three mechanisms keep that down without
+changing a byte the GPU reads ([RHI.md](RHI.md#direct3d-11) has them in full):
+
+- **The written mark.** The renderer's ring tells the backend where its writes end
+  (`rhi_buffer_note_written`, called from `rd__ring_alloc`; a no-op on Vulkan, Direct3D 12 and
+  OpenGL), and a submit writes no byte past it. Without the mark the VU draws' storage view over
+  the whole ring makes every submit copy the ring's whole capacity (about 11 MB there) while a
+  picture writes about 1.3 MB (the log's `1270 KB uploaded` a replay).
+- **Two constant buffer strategies.** A device with partial constant buffer updates (issue 126's
+  card, WARP) writes the uniform windows' span with `UpdateSubresource1` and a box. One without
+  them maps a `DYNAMIC` constant buffer and writes the range read (`DISCARD` at a frame's first
+  map, then `NO_OVERWRITE` where the device allows it on constant buffers) instead of writing the
+  whole buffer at every submit; the device line names which.
+- **Fewer binding calls.** An SRV or sampler register already holding the view or sampler is not
+  set again, per stage, as with constant buffer windows; and a changed window on the same
+  constant buffer is one call instead of a NULL bind plus the call, except where the runtime
+  emulates command lists (Microsoft's workaround is for the emulation only).
+
+The bytes a submit copies are in the window's `uploaded KB per replay` line on Direct3D 11
+([DISPLAY.md](DISPLAY.md#the-stats-lines)). None of this has run on hardware; CI's WARP job with the
+debug layer is the gate, and `rhi_d3d11_test` checks the mark's byte counts and runs the cells on
+the mapped constant buffers (`ICO_D3D11_FAKE_NO_PARTIAL_CB=1`).
+
 ## The window and the order the backends are tried in
 
 `[video] backend` (`backend=` in `ico-pc.ini`, the Options > Graphics row) names `vulkan`,
