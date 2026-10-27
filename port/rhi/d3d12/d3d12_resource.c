@@ -189,6 +189,14 @@ void rhi_unmap_buffer(RhiBuffer h)
     (void)h; /* persistently mapped; upload heaps are write-combined and coherent */
 }
 
+/* rhi.h: the GPU reads the mapped memory itself, so there is nothing to
+ * write at a submit (Direct3D 11 uses the mark) */
+void rhi_buffer_note_written(RhiBuffer h, uint64_t hi)
+{
+    (void)h;
+    (void)hi;
+}
+
 /* -------------------------------------------------------------- textures */
 DxTexture *dx_get_texture(RhiTexture t)
 {
