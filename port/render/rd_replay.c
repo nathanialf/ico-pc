@@ -691,6 +691,9 @@ uint64_t rd__ring_alloc(uint64_t size, uint64_t align)
         return ~0ull;
     }
     s_ringOff = off + size;
+    /* the ring is append-only within a replay: Direct3D 11 writes no byte
+     * past this to the GPU at a submit (rhi.h; a no-op elsewhere) */
+    rhi_buffer_note_written(g_rd.ring[s_slot], s_ringOff);
     return off;
 }
 
