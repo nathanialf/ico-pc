@@ -2139,8 +2139,7 @@ static void vkr_fill_limits(void)
     o->rasterOrderAttachment = g_vkr.rasterOrder;
     o->rasterOrderOff = g_vkr.rasterOrderOff[0] ? g_vkr.rasterOrderOff : NULL;
     o->moltenvk = g_vkr.moltenvk;
-    /* v0.7.10: the device profile's facts (rhi.h); the dynamic state and
-     * the UINT view are false until the backend implements them */
+    /* v0.7.10: the device profile's facts (rhi.h) */
     o->localRead = g_vkr.localRead;
     o->vendorId = g_vkr.props.vendorID;
     o->dynamicDepth = g_vkr.dynDepth;
