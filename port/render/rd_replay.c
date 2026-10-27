@@ -258,15 +258,18 @@ bool rd__gpu_init(void *sdlWindow)
     g_rd.layoutTex = makeLayout(s2, 3, "rd tex");
     g_rd.layoutInt = makeLayout(s3, 2, "rd int");
     /* the VU programs' group 1 (vu_common.hlsli): the stream, DrawCB,
-     * VuCB, VuBoneCB and the vertex pre-pass's record (vu_rec_buf) */
-    static const RhiBindSlot s4[5] = {{0, RHI_BIND_STORAGE_BUFFER, VS},
+     * VuCB, VuBoneCB, the vertex pre-pass's record (vu_rec_buf) and the
+     * upload ring as a storage buffer (vu_ring: the pre-pass's batches read
+     * their entries' VuCB and VuBoneCB there, rd_replay_vu.c vuPrepassRun) */
+    static const RhiBindSlot s4[6] = {{0, RHI_BIND_STORAGE_BUFFER, VS},
                                       {1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS},
                                       /* VuCB and the record also to the pixel side: the
                                        * per-triangle planes are read there */
                                       {2, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS},
                                       {3, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
-                                      {4, RHI_BIND_STORAGE_BUFFER, VS | FS}};
-    g_rd.layoutVu = makeLayout(s4, 5, "rd vu");
+                                      {4, RHI_BIND_STORAGE_BUFFER, VS | FS},
+                                      {5, RHI_BIND_STORAGE_BUFFER, VS}};
+    g_rd.layoutVu = makeLayout(s4, 6, "rd vu");
     bool ok = g_rd.layoutFrame.id && g_rd.layoutDraw.id && g_rd.layoutTex.id && g_rd.layoutInt.id &&
               g_rd.layoutVu.id;
     /* the exact blend's group 3 (rd_dst_read.c): the target as a storage
