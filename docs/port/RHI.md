@@ -679,11 +679,15 @@ and whether the device runs on WARP.
 
 The Direct3D 11 backend (`port/rhi/d3d11/`, prefix `d3d11`, `rhi_backend_d3d11`) is for cards and
 drivers that have neither Vulkan nor Direct3D 12. It compiles in the `win-x64` and `win-x64-clang`
-cross builds. No hardware device has been seen drawing with it (issue 126: on a GTX 750 Ti at
-feature level 11_0 both start-up self-tests read back their cleared target and the screen stayed
-black). CI's `windows` job runs the renderer's tests on it through WARP, Microsoft's software
+cross builds. CI's `windows` job runs the renderer's tests on it through WARP, Microsoft's software
 adapter, with the debug layer on ([TESTING.md](TESTING.md#the-render-suite-on-direct3d-11-warp));
-the rules the debug layer named there are in the **Debug layer rules** paragraph below.
+all of them pass there with no debug-layer error, and the rules the debug layer named are in the
+**Debug layer rules** paragraph below. No hardware device has been seen drawing with it (issue 126:
+on a GTX 750 Ti at feature level 11_0 both start-up self-tests read back their cleared target and
+the screen stayed black; the cause found on WARP, the uniform updates the runtime dropped, is fixed
+but not confirmed on that card). The fog probe's log line reads `z=n/a idx=n/a` here: a depth
+texture is copied only into a readback buffer, so the probe has no depth texels, and
+`rd_fog_selftest.cmake` accepts that only when the log has `rhi_d3d11:` lines.
 `port/rhi/d3d11/d3d11_internal.h` holds the shared state and states which file provides what.
 
 **Device** (`port/rhi/d3d11/d3d11_device.c`). `d3d11.dll` and `dxgi.dll` are loaded at run time and
@@ -759,7 +763,7 @@ bindings, so their "binding offset to the buffer end" rule (`d11_flush_vertex_bu
 come into play today. No narrower range is known inside the RHI without the renderer saying which
 bytes a frame wrote (a ring high-water mark per frame slot, or the VU group bound over the stream
 only); that is the fix if the copies show up on the old cards this backend is for, and it is not
-measured: Direct3D 11 has not run on any Windows machine. Uniform bindings are windows into the
+measured: Direct3D 11 has run only on WARP. Uniform bindings are windows into the
 constant buffer (`VSSetConstantBuffers1` and `PSSetConstantBuffers1`, first constant = offset / 16,
 whole 256-byte blocks); storage bindings are structured SRVs of 16-byte elements, eight kept per
 buffer. `RHI_MEM_DEVICE` buffers are filled by copies; an `RHI_MEM_READBACK` buffer is a staging
