@@ -1979,9 +1979,13 @@ int main(int argc, char **argv)
                dump, pr->texaDraws, pr->gridDraws, pr->uintDraws);
         /* the dynamic state (rd_pipeline.c rd__set_pipeline): the depth and
          * blend commands the binds above needed, none where every state is
-         * static */
-        printf("%s: stats: %u dynamic state sets (dynamic depth %s, blend %s)\n", dump,
-               pr->dynamicSets, g_rd.dynDepth ? "on" : "off", g_rd.dynBlend ? "on" : "off");
+         * static; of them the blend equations for draws without blending
+         * and those that replaced a dual-source one (vk_cmd.c
+         * vkr_flush_dynamic, issues 146 and 154) */
+        printf("%s: stats: %u dynamic state sets (dynamic depth %s, blend %s) (%u for draws "
+               "without blending, %u of them replacing a dual-source one)\n",
+               dump, pr->dynamicSets, g_rd.dynDepth ? "on" : "off", g_rd.dynBlend ? "on" : "off",
+               pr->blendEqOffSets, pr->dualLeftovers);
         /* the present's box reduces (rd_present.c): the downsample to the
          * GS size (--downsample) and the reduce to the window's box */
         uint32_t rdn[4], rwn[4];
