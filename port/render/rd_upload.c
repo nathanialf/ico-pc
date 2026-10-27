@@ -123,6 +123,10 @@ uint64_t rd__estimate_ring(const RdFrame *f, int keep)
                 total += sizeof(IcoVuBoneCB) + align + (uint64_t)p.streamQw * 16 + align;
                 /* the vertex pre-pass's VuCB (rd_replay_vu.c rd__vu_prepass) */
                 total += sizeof(IcoVuCB) + align;
+                /* its batches (g_rd.vuPreBatch, rd_replay_vu.c preBatchDraw):
+                 * a table entry for each of the command's at most five
+                 * stage draws, and at worst a batch (its DrawCB) each */
+                total += 5 * 16 + 16 + 5 * (sizeof(IcoDrawCB) + align);
                 total += (uint64_t)p.batchCount * (p.vertsPerBatch + 1) * 12 + 16;
                 const RdMeshRec *m = c->type <= RDC_SKINNED ? rd__mesh_rec(c->u[0]) : NULL;
                 if (m) {
