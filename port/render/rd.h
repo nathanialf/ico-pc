@@ -1959,6 +1959,10 @@ typedef struct RdPerfRecord {
     uint32_t buffersCreated, buffersDestroyed, texturesCreated, texturesDestroyed;
     uint32_t memoryAllocs, memoryFrees, bindGroups, pipelineBinds, bindGroupBinds;
     uint32_t dynamicSets; /* dynamic depth and blend commands (RhiStats.dynamicSets) */
+    /* of those, the blend equations for draws without blending and those
+     * that replaced a dual-source one (RhiStats.blendEqOffSets,
+     * dualLeftovers) */
+    uint32_t blendEqOffSets, dualLeftovers;
     uint32_t draws, renderPasses, barriers, copies, fenceWaits, waitIdles, readbacks;
     uint32_t textureUploads, meshUploads, tempClears, dateSnapshots, exactBlends;
     uint32_t pipelineCreates; /* pipelines created (a key the start-up set missed) */

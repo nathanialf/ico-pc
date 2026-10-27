@@ -585,6 +585,8 @@ void rd__perf_end(void)
         r->bindGroups = D(bindGroups);
         r->pipelineBinds = D(pipelineBinds);
         r->dynamicSets = D(dynamicSets);
+        r->blendEqOffSets = D(blendEqOffSets);
+        r->dualLeftovers = D(dualLeftovers);
         r->bindGroupBinds = D(bindGroupBinds);
         r->draws = D(draws);
         r->renderPasses = D(renderPasses);
