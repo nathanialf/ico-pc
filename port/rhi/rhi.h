@@ -1058,6 +1058,14 @@ typedef struct RhiStats {
      * and the five others, each one): a value equal to the one in force is
      * not (Vulkan, vk_cmd.c vkr_flush_dynamic; 0 on D3D12) */
     uint64_t dynamicSets;
+    /* of those, the blend equation commands recorded for a draw with
+     * blending off (blendEqOffSets), and of these the ones whose replaced
+     * equation held a SRC1 factor (dualLeftovers): RADV on Mesa 25 reads a
+     * SRC1 factor as dual-source blending even with blending off, which on
+     * RDNA3 cards loses every other column of a one-output draw (issues 146
+     * and 154; vk_cmd.c vkr_flush_dynamic; OpenGL counts the same, 0 on
+     * Direct3D 11 and 12) */
+    uint64_t blendEqOffSets, dualLeftovers;
     uint64_t bindGroupBinds; /* bind group changes recorded (likewise) */
     /* OpenGL: the entries of the groups bound (one bind each: a buffer
      * range, a texture and its sampler, an image) and of them those skipped
