@@ -75,12 +75,15 @@ ID3D11Buffer *d11_buffer_any_part(const D11Buffer *b)
     return NULL;
 }
 
-static bool d11_make_part(D11Buffer *b, uint32_t part, UINT bind, const char *name)
+/* dynamic: a DYNAMIC buffer the CPU maps (the CB part of an upload buffer
+ * on a device without partial constant buffer updates, d11_buffer_flush) */
+static bool d11_make_part(D11Buffer *b, uint32_t part, UINT bind, const char *name, bool dynamic)
 {
     D3D11_BUFFER_DESC d;
     memset(&d, 0, sizeof(d));
     d.ByteWidth = (UINT)b->size;
-    d.Usage = D3D11_USAGE_DEFAULT;
+    d.Usage = dynamic ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
+    d.CPUAccessFlags = dynamic ? D3D11_CPU_ACCESS_WRITE : 0u;
     d.BindFlags = bind;
     if (part == D11_PART_SRV) {
         /* StructuredBuffer<float4> (vu_common.hlsli): 16-byte elements */
@@ -173,17 +176,37 @@ static RhiBuffer createBuffer(const RhiBufferDesc *desc)
         const UINT vi = ((u & RHI_BUF_VERTEX) ? D3D11_BIND_VERTEX_BUFFER : 0u) |
                         ((u & RHI_BUF_INDEX) ? D3D11_BIND_INDEX_BUFFER : 0u);
         if (vi) {
-            ok = d11_make_part(b, D11_PART_VI, vi, desc->debugName);
+            ok = d11_make_part(b, D11_PART_VI, vi, desc->debugName, false);
         }
         if (ok && (u & RHI_BUF_UNIFORM)) {
-            ok = d11_make_part(b, D11_PART_CB, D3D11_BIND_CONSTANT_BUFFER, desc->debugName);
+            /* without partial constant buffer updates an upload buffer's
+             * CB part is mapped at the submits (the range read, not the
+             * whole buffer); only beside another part, which stays the
+             * copy source (d3d11_cmd.c d11_first_part), as a DYNAMIC
+             * buffer is no copy's business here */
+            const bool mapped = g_d11.cbMapUpload && desc->memory == RHI_MEM_UPLOAD &&
+                                (vi || (u & RHI_BUF_STORAGE_READ));
+            ok = d11_make_part(b, D11_PART_CB, D3D11_BIND_CONSTANT_BUFFER, desc->debugName, mapped);
+            if (!ok && mapped) {
+                static bool s_dynLogged;
+                if (!s_dynLogged) {
+                    s_dynLogged = true;
+                    D11_LOG("buffer %s: no DYNAMIC constant buffer of %llu bytes: written whole at "
+                            "each submit instead (logged once)",
+                            desc->debugName ? desc->debugName : "?", (unsigned long long)size);
+                }
+                ok = d11_make_part(b, D11_PART_CB, D3D11_BIND_CONSTANT_BUFFER, desc->debugName,
+                                   false);
+            } else {
+                b->cbMapped = mapped;
+            }
         }
         if (ok && (u & RHI_BUF_STORAGE_READ)) {
-            ok = d11_make_part(b, D11_PART_SRV, D3D11_BIND_SHADER_RESOURCE, desc->debugName);
+            ok = d11_make_part(b, D11_PART_SRV, D3D11_BIND_SHADER_RESOURCE, desc->debugName, false);
         }
         if (ok && !d11_buffer_any_part(b)) {
             /* copies only (COPY_SRC/COPY_DST): a buffer without a bind flag */
-            ok = d11_make_part(b, D11_PART_VI, 0u, desc->debugName);
+            ok = d11_make_part(b, D11_PART_VI, 0u, desc->debugName, false);
         }
     }
     if (ok && desc->memory != RHI_MEM_DEVICE) {
@@ -269,6 +292,85 @@ void rhi_unmap_buffer(RhiBuffer h)
     (void)h; /* the shadow stays; uploads are written at the submits that read them */
 }
 
+void rhi_buffer_note_written(RhiBuffer h, uint64_t hi)
+{
+    static bool s_logged;
+    D11Buffer *b = d11_get_buffer(h);
+    if (!b || b->kind != RHI_MEM_UPLOAD || !b->shadow) {
+        return;
+    }
+    hi = hi < b->size ? hi : b->size;
+    const uint64_t frame = g_d11.frameIndex + 1u;
+    if (b->writtenFrame != frame) {
+        /* the frame's first allocation: the ring starts again at 0 */
+        b->writtenFrame = frame;
+        b->written = hi;
+    } else if (hi > b->written) {
+        b->written = hi;
+    }
+    if (!s_logged) {
+        s_logged = true;
+        D11_LOG("upload writes: a submit writes the ranges its lists read under the renderer's "
+                "written mark (the first: %llu of the ring's %llu bytes); constant buffers %s "
+                "(logged once)",
+                (unsigned long long)b->written, (unsigned long long)b->size,
+                g_d11.cbPartialUpdate ? "by range (partial updates)"
+                : b->cbMapped         ? (g_d11.cbMapNoOverwrite
+                                             ? "mapped, the range read (discard, then no-overwrite)"
+                                             : "mapped, discard under the mark")
+                                      : "written whole");
+    }
+}
+
+uint64_t d11_buffer_written_end(const D11Buffer *b)
+{
+    return b->writtenFrame ? b->written : b->size;
+}
+
+/* The CB part of an UPLOAD buffer as a DYNAMIC buffer (cbMapped): [lo, hi)
+ * of the shadow through Map on the immediate context, before the list that
+ * reads it executes.  A frame's first map is DISCARD (a new copy: the lists
+ * of earlier frames still in flight keep theirs), later ones NO_OVERWRITE
+ * (the ring is append-only within a frame, so the bytes a list already
+ * executed may read are never changed; a range two lists read is written
+ * again with the same bytes); without NO_OVERWRITE on dynamic constant
+ * buffers every map is DISCARD and writes all the frame wrote, from 0 to
+ * the written mark.  Returns the bytes written. */
+static uint64_t d11_cb_map_write(D11Buffer *b, uint64_t lo, uint64_t hi)
+{
+    static bool s_failLogged;
+    const uint64_t frame = g_d11.frameIndex + 1u;
+    D3D11_MAP type = D3D11_MAP_WRITE_DISCARD;
+    if (b->cbDiscardFrame == frame) {
+        if (g_d11.cbMapNoOverwrite) {
+            type = D3D11_MAP_WRITE_NO_OVERWRITE;
+        } else {
+            lo = 0;
+            hi = d3dp_align_up(d11_buffer_written_end(b), 16u);
+            hi = hi < b->size ? hi : b->size;
+        }
+    }
+    D3D11_MAPPED_SUBRESOURCE m;
+    memset(&m, 0, sizeof(m));
+    const HRESULT hr =
+        ID3D11DeviceContext_Map(g_d11.ctx, (ID3D11Resource *)b->part[D11_PART_CB], 0, type, 0, &m);
+    if (FAILED(hr) || !m.pData) {
+        if (!s_failLogged) {
+            s_failLogged = true;
+            D11_LOG("upload writes: Map of a constant buffer failed (HRESULT 0x%08lx): its "
+                    "constants this submit are stale (logged once)",
+                    (unsigned long)hr);
+        }
+        return 0;
+    }
+    if (type == D3D11_MAP_WRITE_DISCARD) {
+        b->cbDiscardFrame = frame;
+    }
+    memcpy((uint8_t *)m.pData + lo, b->shadow + lo, (size_t)(hi - lo));
+    ID3D11DeviceContext_Unmap(g_d11.ctx, (ID3D11Resource *)b->part[D11_PART_CB], 0);
+    return hi - lo;
+}
+
 void d11_buffer_flush(D11Buffer *b, ID3D11DeviceContext1 *ctx, uint32_t part, uint64_t lo,
                       uint64_t hi)
 {
@@ -285,10 +387,15 @@ void d11_buffer_flush(D11Buffer *b, ID3D11DeviceContext1 *ctx, uint32_t part, ui
         if (!b->part[i] || (part < D11_PART_COUNT && part != i)) {
             continue;
         }
+        if (i == D11_PART_CB && b->cbMapped) {
+            g_d11.counts.uploadWriteBytes += d11_cb_map_write(b, lo, hi);
+            continue;
+        }
         if (i == D11_PART_CB && !g_d11.cbPartialUpdate) {
             /* no partial constant buffer updates: the whole buffer */
             ID3D11DeviceContext1_UpdateSubresource1(ctx, (ID3D11Resource *)b->part[i], 0, NULL,
                                                     b->shadow, 0, 0, 0);
+            g_d11.counts.uploadWriteBytes += b->size;
             continue;
         }
         /* a box on a constant buffer is valid only with NO_OVERWRITE or
@@ -302,6 +409,7 @@ void d11_buffer_flush(D11Buffer *b, ID3D11DeviceContext1 *ctx, uint32_t part, ui
         D3D11_BOX box = {(UINT)lo, 0, 0, (UINT)hi, 1, 1};
         ID3D11DeviceContext1_UpdateSubresource1(ctx, (ID3D11Resource *)b->part[i], 0, &box,
                                                 b->shadow + lo, 0, 0, flags);
+        g_d11.counts.uploadWriteBytes += hi - lo;
     }
 }
 
