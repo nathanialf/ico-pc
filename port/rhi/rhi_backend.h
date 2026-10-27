@@ -38,6 +38,7 @@
     X(destroy_buffer)                                                                              \
     X(map_buffer)                                                                                  \
     X(unmap_buffer)                                                                                \
+    X(buffer_note_written)                                                                         \
     X(create_texture)                                                                              \
     X(destroy_texture)                                                                             \
     X(create_sampler)                                                                              \
