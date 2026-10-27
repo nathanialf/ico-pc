@@ -9,6 +9,8 @@
 #   once for each of the two sizes (the centre cell and the four corner
 #   cells of the self-test's grid; the centre texel can sit on the edge of
 #   cells 7 and 8 across or down, so the centre is 119, 120, 135 or 136).
+#   On Direct3D 11 (the log has "rhi_d3d11:" lines) z and idx read n/a: that
+#   backend has no depth region copy into a device buffer.
 # -DTOOL=<rd_fog_selftest_test> -DFOG_PATH=<inplace|copy|buffer>
 # -DARGS=<w|h|scale|aa> (optional: the scene's GS size, scale and RdAntiAlias)
 # -DRESULTS=<regex of the self-test's results>
@@ -39,6 +41,16 @@ string(REGEX MATCHALL
        "fog: probe ${FOG_PATH} z=${hex}(,${hex})(,${hex})(,${hex})(,${hex}) idx=(119|120|135|136),0,15,240,255 out=${hex}(,${hex})(,${hex})(,${hex})(,${hex})"
        probes "${err}")
 list(LENGTH probes nprobes)
+if(NOT nprobes EQUAL 2 AND err MATCHES "rhi_d3d11: ")
+  # Direct3D 11 copies a depth texture only into a readback buffer, never a
+  # region of it into a device buffer, so the probe has no depth texels there
+  # (rd_fog_path.c depthRegionCopies): z and idx read n/a, the colours are read
+  # as everywhere.  The fogged grid check above is what proves the fog.
+  string(REGEX MATCHALL
+         "fog: probe ${FOG_PATH} z=n/a idx=n/a out=${hex}(,${hex})(,${hex})(,${hex})(,${hex})"
+         probes "${err}")
+  list(LENGTH probes nprobes)
+endif()
 if(NOT nprobes EQUAL 2)
   message(FATAL_ERROR "${nprobes} \"fog: probe ${FOG_PATH} ... idx=<centre>,0,15,240,255\" lines, "
                       "2 expected:\n${err}")
