@@ -318,6 +318,81 @@ static void passSplit(Replay *r)
     s_splitSerial = r->passSerial;
 }
 
+/* The draw-merge count (RdPerfRecord vuMerge*; counting only).  The last VU
+ * draw's tuple: a draw equal to it on every key, with the predicates a
+ * merged draw needs, could join its run in one GPU draw.  A new pass, a
+ * draw of anything else between (g_rd.stats.draws moved) or a draw that
+ * cannot merge ends the run. */
+typedef struct VuMergeLast {
+    bool valid;
+    uint32_t replay, pass, pipe, g1, g2, frame, frameOff, color, draws;
+    uint64_t cbHash;
+    RhiRect sc;
+} VuMergeLast;
+
+static VuMergeLast s_mergeLast;
+
+static uint64_t vuFnv(const void *data, size_t n)
+{
+    const uint8_t *b = data;
+    uint64_t h = 1469598103934665603ull;
+    for (size_t i = 0; i < n; i++) {
+        h = (h ^ b[i]) * 1099511628211ull;
+    }
+    return h;
+}
+
+/* eligible: single planned pass, no DATE stencil, no destination read, not
+ * skinned.  Called right after the draw's first pass is recorded
+ * (g_rd.stats.draws is past it). */
+static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t g1, uint32_t g2,
+                        const IcoDrawCB *cb)
+{
+    const int list = rd__replay_list();
+    if (list < 0 || list >= RD_LIST_COUNT) {
+        return;
+    }
+    VuMergeLast t;
+    memset(&t, 0, sizeof(t));
+    t.valid = eligible;
+    t.replay = g_rdPerf.replay;
+    t.pass = r->passSerial;
+    t.pipe = pipe;
+    t.g1 = g1;
+    t.g2 = g2;
+    t.frame = r->frameBG.group.id;
+    t.frameOff = r->frameBG.offset;
+    t.color = r->st.color;
+    t.draws = g_rd.stats.draws;
+    t.cbHash = vuFnv(cb, sizeof(*cb));
+    t.sc = r->sc;
+    const VuMergeLast *l = &s_mergeLast;
+    const bool samePass = l->valid && l->replay == t.replay && l->pass == t.pass;
+    /* nothing drawn between: this draw is one past the last one's count */
+    const bool adjacent = samePass && l->draws + 1u == t.draws;
+    if (adjacent && eligible && l->pipe == t.pipe && l->g2 == t.g2 && l->g1 == t.g1 &&
+        l->cbHash == t.cbHash && l->frame == t.frame && l->frameOff == t.frameOff &&
+        l->color == t.color && memcmp(&l->sc, &t.sc, sizeof(t.sc)) == 0) {
+        g_rdPerf.vuMergeDraws[list]++;
+    } else {
+        g_rdPerf.vuMergeRuns[list]++;
+        if (samePass) {
+            uint32_t why = 4;
+            if (l->pipe != t.pipe) {
+                why = 0;
+            } else if (l->g2 != t.g2 || l->g1 != t.g1) {
+                why = 1;
+            } else if (l->cbHash != t.cbHash) {
+                why = 2;
+            } else if (!eligible || !adjacent) {
+                why = 3;
+            }
+            g_rdPerf.vuMergeBlocked[why]++;
+        }
+    }
+    s_mergeLast = t;
+}
+
 /* One VU draw call under the planned passes of state s.  vs: the vertex
  * shader, RD_VS_VU_MAIN or RD_VS_VU_PARTICLE_MAIN for a command the
  * pre-passes recorded (vu_main_vs's pipelines carry RD_PROG_PRELIT whatever
@@ -431,6 +506,13 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         }
         if (!rd__no_dual_second(dp, i)) {
             g_rd.stats.draws++;
+        }
+        if (i == 0) {
+            /* PC port: counting only (vuMergeNote) */
+            vuMergeNote(r,
+                        np == 1 && !r->dateStNow && dp[0].key.dst == RHI_DST_READ_NONE &&
+                            s_zeroBonesFor == g_rd.replayCounter && bonesOff == s_zeroBones,
+                        p.id, g1.id, g2.id, &cb);
         }
     }
     r->st = saved;
@@ -895,6 +977,40 @@ void rd__vu_prepass(const RdFrame *f, int keep)
     s_preRunning = false;
 }
 
+/* The pre-pass's batch count (RdPerfRecord prepassBatches; counting only):
+ * the distinct (stage key, FrameCB group and offset, stream buffer, bones
+ * class: the shared zero block or not) of the draws vuStageDraw makes, a
+ * table stamped with the replay so it needs no clearing */
+#define VU_BATCH_SLOTS 8192u
+static uint64_t s_batchKey[VU_BATCH_SLOTS];
+static uint32_t s_batchStamp[VU_BATCH_SLOTS];
+
+static void vuBatchNote(const VuPre *e, const RdPipeKeyInt *key)
+{
+    const bool zero = s_zeroBonesFor == g_rd.replayCounter && e->src.bonesOff == s_zeroBones;
+    uint64_t h = 1469598103934665603ull;
+    const uint64_t parts[5] = {key->vs, key->gs.colorMask, e->frame.group.id,
+                               ((uint64_t)e->frame.offset << 32) | e->src.streamBuf.id,
+                               zero ? 1u : 0u};
+    for (int i = 0; i < 5; i++) {
+        h = (h ^ parts[i]) * 1099511628211ull;
+        h ^= h >> 29;
+    }
+    h |= 1u;
+    uint32_t at = (uint32_t)(h % VU_BATCH_SLOTS);
+    for (uint32_t n = 0; n < VU_BATCH_SLOTS; n++, at = (at + 1u) % VU_BATCH_SLOTS) {
+        if (s_batchStamp[at] != g_rdPerf.replay) {
+            s_batchStamp[at] = g_rdPerf.replay;
+            s_batchKey[at] = h;
+            g_rdPerf.prepassBatches++;
+            return;
+        }
+        if (s_batchKey[at] == h) {
+            return;
+        }
+    }
+}
+
 /* one draw of entry e into the record (pass V's vertex and sprite stages,
  * pass T's stages): its VuCB with vu_tri.w = w, its draws' FrameCB, the
  * key, count points; false when it could not be recorded (the ring full, a
@@ -935,6 +1051,7 @@ static bool vuStageDraw(const VuPre *e, IcoVuCB *vcb, uint64_t dOff, const RdPip
         rd__win_vu_note(0, key, vcb, e->src.vs, 0, e->first, count);
     }
     rd__replay_draw(rd__replay_cl(), count, 0, 1);
+    vuBatchNote(e, key);
     return true;
 }
 
