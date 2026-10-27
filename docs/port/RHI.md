@@ -329,17 +329,17 @@ static pipeline of its state would have given it. The blend equation is one of t
 blending off too: a draw without blending wants the zeroed equation (zero factors, adds;
 `vk_pipeline.c` `vkr_blend_state`), and it is recorded whenever it differs from the one held, not
 only while blending: an equation left by an earlier blended draw must not stay on the draws without
-blending. RADV on Mesa 25.x decides dual-source blending
+blending. RADV on Mesa 25 (25.2.8 and 25.3-devel read) decides dual-source blending
 from the factors alone on the dynamic path, whatever the enable (`radv_cmd_buffer.c`
 `radv_emit_color_blend` and the pixel shader epilog state; the static path checks the enable first,
-and Mesa 26.2 does on both, `radv_is_dual_src_enabled`). On RDNA3 (Radeon RX 7000, GFX11) the pixel
+and Mesa 26.2.4 and later do on both, `radv_is_dual_src_enabled`). On RDNA3 (Radeon RX 7000, GFX11) the pixel
 shader epilog then swaps the two exports between horizontally neighbouring pixels, so a one-output
 shader after a SRC1 blend (the renderer's LERP and DST_FIX sprites) left every other column
 undefined: issues 146 and 154, the whole picture striped black with bright dots from the title on.
 The equation is now always the draw's own, on every driver. `RhiStats.dynamicSets` counts the
 commands recorded; of them `blendEqOffSets` the equations recorded for draws with blending off, and
-of these `dualLeftovers` those that replaced an equation with a SRC1 factor (the draws that were
-striped). The replay tool's `--stats` line shows both (`<n> dynamic state sets (...) (<a> for draws
+of these `dualLeftovers` those that replaced an equation with a SRC1 factor (one for each run of
+draws without blending that would otherwise keep a dual-source equation). The replay tool's `--stats` line shows both (`<n> dynamic state sets (...) (<a> for draws
 without blending, <b> of them replacing a dual-source one)`). A draw on a dynamic pipeline whose sets were not made since its bind takes the
 pipeline's own values and is logged once (`rhi_vk: dynamic state: a draw with its pipeline's depth
 left unset since the bind ...`). The device's line: `rhi_vk: dynamic state: depth test, write and
