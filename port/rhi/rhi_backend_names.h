@@ -34,6 +34,7 @@
 #define rhi_destroy_buffer       RHI__NAME(destroy_buffer)
 #define rhi_map_buffer           RHI__NAME(map_buffer)
 #define rhi_unmap_buffer         RHI__NAME(unmap_buffer)
+#define rhi_buffer_note_written  RHI__NAME(buffer_note_written)
 #define rhi_create_texture       RHI__NAME(create_texture)
 #define rhi_destroy_texture      RHI__NAME(destroy_texture)
 #define rhi_create_sampler       RHI__NAME(create_sampler)
