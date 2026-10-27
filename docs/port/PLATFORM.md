@@ -1177,14 +1177,6 @@ Android the disc is identified after the window opens, so the line first says `d
 yet` and is logged again with the disc in its place once it is known, which the report file's copy
 keeps.
 
-A Vulkan picture with every other column black and bright dots on a Radeon RX 7000 card with Mesa
-25 RADV (issues 146 and 154: the driver read a leftover dual-source blend equation on draws without
-blending, [RHI.md](RHI.md#dynamic-state)) does not show in the summary or in an F12 dump, which is
-saved before the card draws it; the backend now sends the equation on every change, and a driver
-that still drops those columns fails the blend self-test at its after cell (`rd: blend: self-test:
-fixed-function fail <n> at after cell, odd column (texel <x>,<y>): ...`) and takes the two-pass
-blend, which the summary then shows as `fixed-function fail <n> -> two-pass ok <m>`
-([RENDER.md](RENDER.md#destination-reads-and-blend-paths)).
 
 `ico_diag_set_summary` flushes the C library's held lines first, so on Windows the line follows the
 device and window lines in the file, and keeps the text for the report file. The 10 s block's
@@ -1194,6 +1186,15 @@ device and window lines in the file, and keeps the text for the report file. The
 (`RhiStats` `pipelinesLive`, `pipelinesPeak`, `pipelinePoolSize`, `pipelineFailures` and
 `pipelinePoolFull`; [RHI.md](RHI.md#the-pipeline-pool)), so a log shows a pool that ran out
 (`port/platform/window_host.c` (`perf_log`)).
+
+A Vulkan picture with every other column black and bright dots on a Radeon RX 7000 card with Mesa
+25 RADV (issues 146 and 154: the driver read a leftover dual-source blend equation on draws without
+blending, [RHI.md](RHI.md#dynamic-state)) does not show in the summary or in an F12 dump, which is
+saved before the card draws it; the backend now sends the equation on every change, and a driver
+that still drops those columns fails the blend self-test at its after cell (`rd: blend: self-test:
+fixed-function fail <n> at after cell, odd column (texel <x>,<y>): ...`) and takes the two-pass
+blend, which the summary then shows as `fixed-function fail <n> -> two-pass ok <m>`
+([RENDER.md](RENDER.md#destination-reads-and-blend-paths)).
 
 ### Rate-limited lines
 
