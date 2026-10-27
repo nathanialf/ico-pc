@@ -223,6 +223,11 @@ void rhi_unmap_buffer(RhiBuffer b)
     be()->unmap_buffer(b);
 }
 
+void rhi_buffer_note_written(RhiBuffer b, uint64_t hi)
+{
+    be()->buffer_note_written(b, hi);
+}
+
 RhiTexture rhi_create_texture(const RhiTextureDesc *desc)
 {
     return be()->create_texture(desc);
