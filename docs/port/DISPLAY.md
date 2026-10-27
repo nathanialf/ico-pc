@@ -423,7 +423,13 @@ the count of passes a replay and of those under 0.05 ms; only with GPU timestamp
 `window: passes per replay N: render passes R (lists L, <effect> E, ...), <kind> K, ...` (what a
 replay begins, by kind, every replay) and `window: CPU walk ms per replay by list 0-12: ...;
 uploaded KB per replay: textures T, meshes M (interpolated I), uniform blocks U, VU streams S,
-other O` (`perf_log`, `perf_passes_add`).
+other O[; Direct3D 11 submits wrote W KB to the GPU]` (`perf_log`, `perf_passes_add`). The
+uploaded KB are what the replay wrote into the upload ring; the last part, on Direct3D 11 only, is
+what that backend's submits then copied from the ring's CPU copy to the GPU
+(`RdPerfRecord.backendWriteBytes`, `RhiStats.uploadWriteBytes`; the block's mean from
+`port/render/rd_perf.c` (`rd_perf_backend_text`)): the ranges the lists read, cut at
+the ring's written end ([RHI.md](RHI.md#direct3d-11), **The written mark**). On the other backends
+the GPU reads the ring itself and the part is left out.
 
 **Reading the lines for a speed report.** Four lines carry the evidence, with the start's
 `ico_pc: summary:` and `rhi_vk:` device lines (`port/platform/window_host.c` (`perf_log`,
