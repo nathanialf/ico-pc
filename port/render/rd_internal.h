@@ -1608,6 +1608,12 @@ bool rd__vu_policy_init(const RhiLimits *lim);
  *                     RGBA32_UINT targets, no depth, points, no blend */
 void rd__vu_prepass_init(const RhiLimits *lim);
 void rd__set_vu_prepass(bool on);
+/* the last pre-pass's draws as one an entry and stage would make them (a
+ * mesh or grid command's vertex draw, a particle command's two, pass T's
+ * rule, tick and planes draws), whatever g_rd.vuPreBatch merged them into
+ * (RdPerfRecord.vuPreDraws counts the draws made): the self-test's check
+ * that every command went through the pre-passes */
+uint32_t rd__vu_prepass_entry_draws(void);
 
 /* rd_vuprepass_selftest's sabotage (ICO_RD_VU_PREPASS_SABOTAGE), while the
  * mode is not RD_VU_SABOTAGE_OFF: VERTEX the first mesh or grid command's
@@ -2287,7 +2293,8 @@ typedef struct RdContext {
 
     /* GPU objects (rd_replay.c / rd_pipeline.c) */
     RhiBindGroupLayout layoutFrame, layoutDraw, layoutTex, layoutInt;
-    RhiBindGroupLayout layoutVu; /* t0 stream, b1 DrawCB, b2 VuCB, b3 VuBoneCB */
+    RhiBindGroupLayout layoutVu; /* t0 stream, b1 DrawCB, b2 VuCB, b3 VuBoneCB, t4 record,
+                                    t5 the ring */
     RhiShader vs[RD_VS_COUNT], fs[RD_FS_COUNT];
     RdProfile profile; /* rd__profile_init */
     /* the fallback's program entries (rd__vu_policy_init; docs/port/RENDER.md
@@ -2312,6 +2319,19 @@ typedef struct RdContext {
      * and why not */
     bool vuPrepass;
     char vuPrepassWhy[160];
+    /* the pre-pass's batches (rd_replay_vu.c vuPrepassRun; docs/port/
+     * VU1_PROGRAMS.md "The pre-pass's batches"): vuPreBatch one point draw
+     * a run of entries with the same stage key, FrameCB and group 1, through
+     * the batch builds of the pre-pass entries and record stages (vsBatch:
+     * vu_X_batch_pre_vs for RD_VS_VU_PRE_PRELIT .. RD_VS_VU_PRE_GRID_SPEC
+     * and RD_VS_VU_TRI_RULE_PRE .. RD_VS_VU_PARTICLE_PRE, 0 for the
+     * others, made by rd__vu_prepass_init with the pre-pass on); false
+     * ([dev] vu_prepass_batch = false, ICO_RD_VU_PREPASS_BATCH=0, or a batch
+     * module missing) one draw an entry through vs[], as before them.  The
+     * pipeline keys are the same either way (rd_pipeline.c takes the module
+     * by this flag); it is set once a run, before any pipeline */
+    bool vuPreBatch;
+    RhiShader vsBatch[RD_VS_COUNT];
     /* the *_nodual twins of the gs_dual_out entries (0 for the
      * others), and whether the two-pass blend is in force (no dualSrcBlend,
      * ICO_RD_NO_DUAL or rd_set_no_dual) */
