@@ -794,7 +794,10 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         layouts[1] = g_rd.layoutVu;
         layouts[2] = g_rd.layoutTex;
         memset(d, 0, sizeof(*d));
-        d->vertex = g_rd.vs[k->vs];
+        /* the batch build under the pre-pass's batches (g_rd.vuPreBatch,
+         * set once a run before any pipeline; rd_replay_vu.c vuPrepassRun) */
+        d->vertex =
+            g_rd.vuPreBatch && g_rd.vsBatch[k->vs].id ? g_rd.vsBatch[k->vs] : g_rd.vs[k->vs];
         d->fragment = g_rd.fs[RD_FS_VU_PRE];
         if (!d->vertex.id || !d->fragment.id) {
             return false;
