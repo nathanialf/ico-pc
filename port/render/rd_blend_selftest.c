@@ -9,10 +9,15 @@
  * around the leaves' clear texels, washed the title out and drew the menus
  * white on white, while the same frames are right through the same path
  * on lavapipe.  A driver whose dual-source blend is wrong is caught the
- * same way, and takes the two-pass fallback.
+ * same way, and takes the two-pass fallback.  So is one that keeps a
+ * dual-source equation on a draw with blending off: issues 146 and 154,
+ * RADV on Mesa 25 on Radeon RX 7000 cards, every other column of every
+ * blend-off draw after a dual-source one lost (the after cell below; the
+ * backends send the equation on every change now, vk_cmd.c
+ * vkr_flush_dynamic).
  *
  * The frame, built here and never recorded (rd_fog_path.c's helpers), on
- * SCENE at its real size and scale, in a block of 256 x 64 GS pixels in its
+ * SCENE at its real size and scale, in a block of 256 x 96 GS pixels in its
  * middle, list 0, Z ALWAYS without write, COLCLAMP 1, FBA 0, PABE 0:
  *   row 0  eight 32 x 32 cells, each a destination pixel of PCSX2's capture
  *          of the forest (rd_pixel_test.c kTint), then the forest's tint
@@ -25,9 +30,14 @@
  *          x 64..160: a cell, then two LERP draws, A over 64..128 and B over
  *          96..160: where they overlap B must blend over A's result;
  *          x 160..256: a cell, then one glyph quad through the text sheet's
- *          shader (font_sheet_ps, the largest destination-read shader).
- * The samples are the centres of the regions (and six points in the
- * glyph), copied out of SCENE and read back.  The modelled samples are
+ *          shader (font_sheet_ps, the largest destination-read shader);
+ *   row 2  x 0..64: the after cell, opaque (ABE 0), drawn after every
+ *          blended draw: it must be its own colour on an even and an odd
+ *          texel column (a driver that keeps the LERP's dual-source
+ *          equation with blending off leaves the odd one undefined).
+ * The samples are the centres of the regions (six points in the glyph, two
+ * neighbouring texel columns in the after cell), copied out of SCENE and
+ * read back.  The modelled samples are
  * compared with the GS arithmetic, the glyph's with the fixed-function
  * run's pixels (the shader's colour is the same in every mode; only the
  * blend differs, by at most the blender's rounding).
@@ -57,6 +67,10 @@
  * (ICO_RD_BLEND_SABOTAGE=attachment):
  *   blend: self-test: attachment fail 241 at tint cell 0 (texel 625,625):
  *     255,255,255,4 want 21,28,14,4
+ * and on a driver that loses the odd columns (the two-pass fallback then
+ * tried, as for any fixed-function failure):
+ *   blend: self-test: fixed-function fail N at after cell, odd column
+ *     (texel x,y): ...
  *
  * ICO_RD_BLEND_SABOTAGE=attachment,storage,fixed,twopass (tests): those
  * entries' read-back samples are made white, as a driver whose read (or
@@ -70,7 +84,7 @@
 #include "rd_internal.h"
 
 #define BT_W 256 /* the block, GS pixels */
-#define BT_H 64
+#define BT_H 96  /* three rows: 32 + 32 + 32 */
 
 #define TOL_EXACT 1 /* levels */
 #define TOL_FIXED 2
@@ -106,11 +120,15 @@ static const uint8_t kOverB[4] = {10, 240, 120, 0x60};
 
 static const uint8_t kGlyphCell[4] = {90, 70, 50, 0x80};
 static const uint8_t kGlyphInk[4] = {0x80, 0x80, 0x80, 0x80};
+
+/* the opaque cell drawn after the blended draws (row 2) */
+static const uint8_t kAfterCell[4] = {170, 30, 110, 0x80};
+
 #define SHEET_W 40
 #define SHEET_H 12
 
 #define N_GLYPH 6
-#define N_SAMPLES (8 + 2 + 3 + N_GLYPH)
+#define N_SAMPLES (8 + 2 + 3 + N_GLYPH + 2)
 
 typedef struct Sample {
     int16_t x, y;     /* GS pixels in the block */
@@ -119,6 +137,9 @@ typedef struct Sample {
     int idx;          /* logged after what when numbered */
     bool numbered;
     int want[4];
+    /* 0: the texel x the GS pixel maps to; 1: the even column at or
+     * before it, 2: the odd one after that (texelOf; the after cell) */
+    uint8_t column;
 } Sample;
 
 static Sample s_samples[N_SAMPLES];
@@ -142,7 +163,7 @@ static void buildSamples(void)
     int n = 0;
     for (int i = 0; i < 8; i++) {
         Sample *s = &s_samples[n++];
-        *s = (Sample){(int16_t)(i * 32 + 16), 16, true, "tint cell", i, true, {0}};
+        *s = (Sample){(int16_t)(i * 32 + 16), 16, true, "tint cell", i, true, {0}, 0};
         for (int ch = 0; ch < 3; ch++) {
             s->want[ch] = kTint[i].pcsx2[ch];
         }
@@ -154,25 +175,27 @@ static void buildSamples(void)
                               "leaf, clear texel",
                               0,
                               false,
-                              {kLeafCell[0], kLeafCell[1], kLeafCell[2], kLeafTex[3]}};
+                              {kLeafCell[0], kLeafCell[1], kLeafCell[2], kLeafTex[3]},
+                              0};
     s_samples[n++] = (Sample){48,
                               48,
                               true,
                               "leaf, opaque texel",
                               0,
                               false,
-                              {kLeafTex[4], kLeafTex[5], kLeafTex[6], kLeafTex[7]}};
+                              {kLeafTex[4], kLeafTex[5], kLeafTex[6], kLeafTex[7]},
+                              0};
     const int cell[4] = {kOverCell[0], kOverCell[1], kOverCell[2], kOverCell[3]};
     int a[4], ab[4], b[4];
     lerp4(kOverA, cell, a);
     lerp4(kOverB, a, ab);
     lerp4(kOverB, cell, b);
     s_samples[n++] =
-        (Sample){80, 48, true, "overlap, first draw", 0, false, {a[0], a[1], a[2], a[3]}};
+        (Sample){80, 48, true, "overlap, first draw", 0, false, {a[0], a[1], a[2], a[3]}, 0};
     s_samples[n++] = (Sample){
-        112, 48, true, "overlap, second over first", 0, false, {ab[0], ab[1], ab[2], ab[3]}};
+        112, 48, true, "overlap, second over first", 0, false, {ab[0], ab[1], ab[2], ab[3]}, 0};
     s_samples[n++] =
-        (Sample){144, 48, true, "overlap, second draw", 0, false, {b[0], b[1], b[2], b[3]}};
+        (Sample){144, 48, true, "overlap, second draw", 0, false, {b[0], b[1], b[2], b[3]}, 0};
     for (int g = 0; g < N_GLYPH; g++) {
         s_samples[n++] = (Sample){(int16_t)(176 + (g % 3) * 24),
                                   (int16_t)(44 + (g / 3) * 8),
@@ -180,7 +203,18 @@ static void buildSamples(void)
                                   "glyph",
                                   g,
                                   true,
-                                  {0}};
+                                  {0},
+                                  0};
+    }
+    for (int k = 0; k < 2; k++) {
+        s_samples[n++] = (Sample){32,
+                                  80,
+                                  true,
+                                  k ? "after cell, odd column" : "after cell, even column",
+                                  0,
+                                  false,
+                                  {kAfterCell[0], kAfterCell[1], kAfterCell[2], kAfterCell[3]},
+                                  (uint8_t)(k + 1)};
     }
 }
 
@@ -301,6 +335,10 @@ static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, RdTex
          rd__st_push(f, 0, RDC_TEXTURE_OFF) && pushSprites(f, bx, by, &overA, 1) &&
          pushSprites(f, bx, by, &overB, 1) && pushTexture(f, sheet, RD_TEXFN_MODULATE) &&
          pushSprites(f, bx, by, &glyph, 1);
+    /* the after cell: blending off after the dual-source LERPs */
+    const Rect after = {0, 64, 64, 96, kAfterCell, 0, 0, 0, 0};
+    ok = ok && rd__st_push(f, 0, RDC_TEXTURE_OFF) && pushBlend(f, 0) &&
+         pushSprites(f, bx, by, &after, 1);
     return ok;
 }
 
@@ -324,6 +362,11 @@ static void texelOf(const RdTargetRec *t, const Sample *s, uint32_t *x, uint32_t
     const double gy = (double)((t->h - BT_H) / 2) + s->y + 0.5;
     const double tx = t->ox > 0.0f ? gx * t->sx - t->ox : gx * t->tw / t->w;
     *x = tx < 0.0 ? 0u : (tx >= (double)t->tw ? t->tw - 1u : (uint32_t)tx);
+    if (s->column) {
+        /* the even column at or before x, or the odd one after it */
+        *x = (*x & ~1u) + (s->column == 2 ? 1u : 0u);
+        *x = *x >= t->tw ? t->tw - 1u : *x;
+    }
     const double ty = gy * t->th / t->h;
     *y = ty >= (double)t->th ? t->th - 1u : (uint32_t)ty;
 }
