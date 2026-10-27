@@ -538,6 +538,12 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_prepass", "true"), "1") == 0);
     CHECK(ico_dev_env_value("vu_prepass", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.vu_prepass"), "vu_prepass") == 0);
+    /* vu_prepass_batch: the pre-pass's batches' A/B switch
+       (port/render/rd_replay_vu.c preBatchInit) */
+    CHECK(strcmp(ico_dev_env_name("vu_prepass_batch"), "ICO_RD_VU_PREPASS_BATCH") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_prepass_batch", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_prepass_batch", "true"), "1") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_prepass_batch"), "vu_prepass_batch") == 0);
     /* crack_fill: the crack filler above 1x's A/B switch
        (port/render/rd_crack_fill.c rd__crack_fill_init) */
     CHECK(strcmp(ico_dev_env_name("crack_fill"), "ICO_RD_CRACK_FILL") == 0);

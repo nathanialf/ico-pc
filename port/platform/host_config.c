@@ -529,6 +529,9 @@ static const struct {
     /* false: the VU vertex pre-pass off, every VU draw the old way (an
        A/B; port/render/rd_replay_vu.c rd__vu_prepass_init) */
     {"dev.vu_prepass", "vu_prepass"},
+    /* false: the VU pre-pass's draws one an entry and stage instead of one a
+       batch (an A/B; port/render/rd_replay_vu.c preBatchInit) */
+    {"dev.vu_prepass_batch", "vu_prepass_batch"},
     /* false: the crack filler above 1x off (an A/B), true: on, as the
        device profile has it on every class (port/render/rd_crack_fill.c
        rd__crack_fill_init) */
@@ -579,6 +582,9 @@ static const struct {
     /* port/render/rd_replay_vu.c rd__vu_prepass_init: 0 draws without the
        vertex pre-pass */
     {"vu_prepass", "ICO_RD_VU_PREPASS"},
+    /* port/render/rd_replay_vu.c preBatchInit: 0 draws the pre-pass one
+       draw an entry and stage */
+    {"vu_prepass_batch", "ICO_RD_VU_PREPASS_BATCH"},
     /* port/render/rd_crack_fill.c rd__crack_fill_init: 0 leaves the pixels
        no draw covered above 1x to the fog, 1 fills them on a tile-based GPU
        too */
