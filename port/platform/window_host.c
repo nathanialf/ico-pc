@@ -4743,10 +4743,11 @@ static void perf_log(void)
         fprintf(stderr,
                 "window: CPU walk ms per replay by list 0-12: %s; uploaded KB per replay: "
                 "textures %.0f, meshes %.0f (interpolated %.0f), uniform blocks %.0f, VU streams "
-                "%.0f, other %.0f\n",
+                "%.0f, other %.0f%s\n",
                 walk, s_perf.texBytes / n / 1024.0, s_perf.meshBytes / n / 1024.0,
                 s_perf.interpBytes / n / 1024.0, s_perf.uniformBytes / n / 1024.0,
-                s_perf.streamBytes / n / 1024.0, (other > 0.0 ? other : 0.0) / n / 1024.0);
+                s_perf.streamBytes / n / 1024.0, (other > 0.0 ? other : 0.0) / n / 1024.0,
+                rd_perf_backend_text());
     }
     fprintf(stderr,
             "window: per replay %.0f draws, %.0f passes, %.0f pipeline and %.0f bind group binds, "
