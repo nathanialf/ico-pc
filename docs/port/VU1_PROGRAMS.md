@@ -18,7 +18,7 @@ shaders, and what the port draws of what the programs drop.
 | `port/render/rd_mesh.h`, `rd_mesh.c` | the mesh path: meshes, per-list VU images, the draws, the strip marks |
 | `port/render/vu1_ref/vu1_ref.h` | the CPU references' interface, and the CPU mirror of the region rule |
 | `port/render/vu1_ref/vu1_*.c` | the references: state and uploads, normal, cluster, mesh, particle, scissor |
-| `port/shaders/vu_common.hlsli` | what the VU shaders share: VuCB, flags, the region rule |
+| `port/shaders/vu_common.hlsli` | what the VU shaders share: VuCB, flags, the region rule, the pre-pass's batch reads |
 | `port/shaders/vu_{prelit,lit,skin,grid,particle}.hlsl` | one shader per program |
 | `port/shaders/test/vu1_test.c` | the references against hand traces and against the shaders |
 | `port/render/test/rd_native_test.c` | the native frame's centre rule, the region rule's strip test |
@@ -368,6 +368,55 @@ one at either tick, so a card never enters the picture between the ticks
 triangles, T ms a step`), and a slow step's line the step's own, inside the game threads' time
 ([DISPLAY.md](DISPLAY.md#the-stats-lines); `rd_vu_card_counts`, `port/render/rd.h`).
 
+## The pre-pass's batches
+
+The vertex and triangle pre-passes ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)) make
+one point draw for each command and stage they record: a mesh or grid command's vertex draw, a
+particle command's two sprite draws (slots A and B), and in the triangle pass the rule, the two tick
+and the planes draws of each mesh or grid command, about a thousand point draws a frame. Each draw
+binds its own VuCB (with `vu_tri.w` its stage's) and VuBoneCB as dynamic offsets into the upload
+ring, so the vertex work is small and the cost is the draws themselves (the GTX 750 Ti of issue 126
+spent 2.0 to 2.7 ms a picture on 1,074 of them under Vulkan, about 12 ms under OpenGL).
+
+With the batches (`g_rd.vuPreBatch`, the default; `port/render/rd_replay_vu.c` (`vuPrepassRun`,
+`preItem`, `preBatchesDraw`, `preBatchDraw`)) those draws become items: each still copies its VuCB
+into the ring exactly as before (its record fields, its row assignment, slots A, B and C and the
+vertex base are unchanged), and the items of a pass are ordered by stage key, FrameCB and group 1
+(the stream's buffer, the record and the ring), keeping the record's order within each. Every run of
+up to 64 items with the same three is one point draw through the stage's batch build,
+`vu_X_batch_pre_vs` (the ten `vu_X_pre_vs` entries and the four record stages compiled with
+`ICO_VU_PRE_BATCH`). The batch's table, one `uint4` an item (x the item's first `SV_VertexID` in the
+draw, y its VuCB's float4 index in the ring, z its VuBoneCB's, w 0), is copied into the ring, and
+the batch's DrawCB (slot b1, which no record stage reads otherwise) carries the table's float4 index
+in `aux0.x` and its length in `aux0.y`. Group 1 binds the ring once more at t5, from offset 0 to the
+device's largest storage range (`ringRange`), as a `StructuredBuffer<float4>`
+(`port/shaders/vu_common.hlsli` (`vu_ring`)).
+
+A batch build begins with `vu_pre_batch_entry`: a binary search over the table's x of six fixed
+steps (no loop: [SHADERS.md](SHADERS.md#the-envelope)) finds the vertex's item, its VuCB's vectors
+(`vu_draw`, `vu_batch`, `vu_strip`, `vu_mark`, `vu_rec`, `vu_lo`, `vu_hi`, `vu_tri`) are loaded into
+statics under the cbuffer's names, and `vu_mem`, `vu_ticks` and `vu_bone` are read an element at a
+time through `VU_MEM`, `VU_TICK` and `VU_BONE` (in the other builds `vu_mem[i]` and so on, the
+modules unchanged word for word). The vertex is then the item's own (`SV_VertexID` less the item's
+x), and every function runs as in the item's own draw on the same bytes, so each item writes the
+words it wrote alone, at the same texels. The items of a pass write disjoint texels, so their new
+order does not change the record. Skinned (cluster) items batch like the others: their bones are
+read from their VuBoneCB in the ring. The batch builds are 2,350 to 17,244 words, within the
+pre-pass entries' plain budget.
+
+An item whose VuCB or VuBoneCB lies past the range t5 binds, or a batch whose table or DrawCB does
+not fit the ring, leaves its command to the old way (its program's entry), as a ring that is full
+does for one draw an entry. `[dev] vu_prepass_batch = false` (`ICO_RD_VU_PREPASS_BATCH=0`) keeps
+one draw an entry and stage through the `vu_X_pre_vs` builds, as before the batches (an A/B; the
+same pipeline keys, `port/render/rd_pipeline.c` takes the module by the flag, set once at start).
+The start line says which: `rd: VU pre-pass: on: ...; its draws batched: one point draw a run of up
+to 64 entries with the same stage, FrameCB and group 1 ...` or `... its draws one an entry and
+stage ([dev] vu_prepass_batch = false, ICO_RD_VU_PREPASS_BATCH=0)`, and the summary line adds `;
+pre-pass draws batched` or `; pre-pass draws one an entry` after the pre-pass's state. The 10 s
+statistics and `rd_replay_tool --stats` count the draws made (`RdPerfRecord.vuPreDraws`: one a
+batch); the start-up self-test checks the draws one an entry and stage would make
+(`rd__vu_prepass_entry_draws`).
+
 ## Tests
 
 `vu1` (`port/shaders/test/vu1_test.c`) has three parts. Part a: hand traces, a few vertices per
@@ -391,3 +440,10 @@ wall drawn as the PS2 out of the box and clipped in every other state; a card an
 strip adding nothing; a card joined to a passing strip or through another packet of its part drawn
 as the wall), and the attribute planes' anchor (`port/render/test/rd_native_test.c`, header
 comment). Running the tests is [TESTING.md](TESTING.md).
+
+`rd_vubatch_ab` (`port/render/test/rd_vubatch_ab.cmake`) replays the dumps of
+`tools/vustage_dumps.txt` through the record one draw an entry (`ICO_RD_VU_PREPASS_BATCH=0`) and in
+batches, at Original 4:3 1x, Enhanced 4:3 2x and Enhanced 16:9 2x: every target byte for byte, the
+same vertices, fewer pre-pass draws batched. `rd_vuprepass_selftest_unbatched` runs the pre-pass's
+start-up self-test one draw an entry; the other `rd_vuprepass_selftest` runs check that the
+default draws batched ([The pre-pass's batches](#the-pre-passs-batches)).
