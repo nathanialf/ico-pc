@@ -46,7 +46,7 @@ VuVtx vu_grid_vertex(uint v, uint variant)
             o.rgba = vu_rgba(col); // :368 ftoi0 of the batch colour, no clamp
         }
         // :177 add.xy ST + UV offset; :189 mulq.xyz
-        precise float3 s = float3(st.xy + vu_mem[2].xy, st.z) * q;
+        precise float3 s = float3(st.xy + VU_MEM(2).xy, st.z) * q;
         o.stq = s;
     }
     return o;
@@ -85,17 +85,20 @@ VuVSOut vu_grid_spec_vs(uint vid : SV_VertexID)
 }
 
 // The vertex pre-pass: vertex vu_rec.z + id of each variant
-VuPreOut vu_grid_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_grid_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_grid_vertex(vu_rec.z + id, VU_GRID));
 }
 
-VuPreOut vu_grid_lit_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_grid_lit_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_grid_vertex(vu_rec.z + id, VU_GRID_LIT));
 }
 
-VuPreOut vu_grid_spec_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_grid_spec_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_grid_vertex(vu_rec.z + id, VU_GRID_SPEC));
 }

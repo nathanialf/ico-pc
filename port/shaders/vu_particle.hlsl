@@ -118,8 +118,8 @@ uint vu_particle_probe(VuSprite s, uint field)
 bool vu_particle_tick(float4 h, float4 e, uint t, float4 clipMin, float4 clipMax, float4 frame)
 {
     uint b = 4u * t;
-    precise float4 hk = vu_ticks[b] * h.x + vu_ticks[b + 1u] * h.y + vu_ticks[b + 2u] * h.z +
-                        vu_ticks[b + 3u] * h.w;
+    precise float4 hk = VU_TICK(b) * h.x + VU_TICK(b + 1u) * h.y + VU_TICK(b + 2u) * h.z +
+                        VU_TICK(b + 3u) * h.w;
     float q = vu_rcp(hk.w);
     precise float2 p0 = (hk.xy - e.xy) * q;
     precise float2 p1 = (hk.xy + e.xy) * q;
@@ -221,8 +221,9 @@ VuVSOut vu_particle_vs(uint vid : SV_VertexID)
 // writing slot A (vu_tri.x + id: the flags, the colour, r.xy; x1; y1) and 1
 // slot B (vu_tri.y + id: a1; x0; y0).  The flags: VU_TF_KEPT the sprite is
 // drawn, VU_TF_EXACT its planes hold (the exact viewport)
-VuPreOut vu_particle_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_particle_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     VuSprite s = vu_particle(id);
     uint kept = s.shown ? 1u : 0u;
     // vu_particle_vs's drop

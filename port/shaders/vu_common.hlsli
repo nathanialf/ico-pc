@@ -16,6 +16,9 @@
 //                  (vu_rec_vertex) and the triangle pre-pass's triangles and
 //                  sprites (the record stages below), read by the main
 //                  vertex shaders and, for the attribute planes, vu_ps
+//   t5  vu_ring    the upload ring from offset 0: the pre-pass's batch
+//                  builds (ICO_VU_PRE_BATCH, below) read each entry's VuCB
+//                  and VuBoneCB there instead of b2 and b3
 //
 // Drawing: the mesh programs are drawn as an indexed triangle list whose
 // index value (SV_VertexID; vertexOffset / BaseVertexLocation must be 0) is
@@ -116,6 +119,7 @@
 // vu_lo, vu_hi  the triangle stage: the program's region test bounds
 //          (vu_inside; the cluster's VU memory 0 and 1, the others VU_LO0
 //          and VU_HI4094)
+#ifndef ICO_VU_PRE_BATCH
 cbuffer VuCB : ICO_REG(b2, 1)
 {
     float4 vu_mem[36];
@@ -138,6 +142,91 @@ cbuffer VuBoneCB : ICO_REG(b3, 1)
 {
     float4 vu_bone[240];
 };
+
+// The arrays' elements, read one at a time (the batch build below reads
+// them from vu_ring)
+#define VU_MEM(i) vu_mem[i]
+#define VU_TICK(i) vu_ticks[i]
+#define VU_BONE(i) vu_bone[i]
+// a pre-pass entry's vertex: SV_VertexID itself (the batch build's
+// vu_pre_batch_entry finds its entry first)
+#define VU_PRE_ENTRY(vid) (vid)
+#else
+// The pre-pass's batches (ICO_VU_PRE_BATCH: the vu_X_batch_pre_vs builds
+// of the pre-pass entries and record stages; docs/port/VU1_PROGRAMS.md,
+// "The pre-pass's batches"; rd_replay_vu.c vuPrepassRun): one point draw
+// for a run of entries with the same pipeline, FrameCB and group 1.  Each
+// entry's VuCB and VuBoneCB lie in the upload ring where the cbuffer build
+// binds them (cbCopy), read here through vu_ring, the ring from offset 0
+// (t5), at the float4 indices the batch's table gives.  The table is a run
+// of uint4 in the ring too, from float4 g_aux0.x of the batch's DrawCB,
+// g_aux0.y entries (at most VU_PRE_BATCH_MAX), one an entry in the order of
+// the draw's vertices:
+//   x the entry's first SV_VertexID in the draw (entry 0: 0)
+//   y its VuCB's first float4 in vu_ring
+//   z its VuBoneCB's first float4
+//   w 0
+// vu_pre_batch_entry finds a vertex's entry (a fixed binary search over x:
+// six steps, no loop) and loads its VuCB's vectors into the statics below,
+// which the functions read under the cbuffer's names; vu_mem, vu_ticks and
+// vu_bone are read an element at a time (VU_MEM, VU_TICK, VU_BONE).  The
+// same bytes the cbuffers would hold: every word computed is the same.
+StructuredBuffer<float4> vu_ring : ICO_REG(t5, 1);
+static uint4 vu_draw;
+static uint4 vu_batch;
+static uint4 vu_strip;
+static uint4 vu_mark;
+static uint4 vu_rec;
+static float4 vu_lo;
+static float4 vu_hi;
+static uint4 vu_tri;
+// the entry's VuCB and VuBoneCB: their first float4 in vu_ring
+static uint vu_pre_v;
+static uint vu_pre_b;
+// IcoVuCB's float4 indices (shader_consts.h): mem 0..35, draw 36, batch
+// 37, strip 38, ticks 39..46, mark 47, rec 48, lo 49, hi 50, tri 51
+#define VU_MEM(i) vu_ring[vu_pre_v + (i)]
+#define VU_TICK(i) vu_ring[vu_pre_v + 39u + (i)]
+#define VU_BONE(i) vu_ring[vu_pre_b + (i)]
+#define VU_PRE_BATCH_MAX 64u
+#define VU_PRE_ENTRY(vid) vu_pre_batch_entry(vid)
+
+// One step of the search: entry e + s when the table has it and it starts
+// at or before vid
+uint vu_pre_batch_step(uint e, uint s, uint vid)
+{
+    uint m = e + s;
+    uint r = e;
+    if (m < g_aux0.y && vid >= asuint(vu_ring[g_aux0.x + m].x)) {
+        r = m;
+    }
+    return r;
+}
+
+// SV_VertexID vid's entry: its VuCB's vectors into the statics, its
+// VuCB's and VuBoneCB's places; the vertex within the entry
+uint vu_pre_batch_entry(uint vid)
+{
+    uint e = vu_pre_batch_step(0u, 32u, vid);
+    e = vu_pre_batch_step(e, 16u, vid);
+    e = vu_pre_batch_step(e, 8u, vid);
+    e = vu_pre_batch_step(e, 4u, vid);
+    e = vu_pre_batch_step(e, 2u, vid);
+    e = vu_pre_batch_step(e, 1u, vid);
+    uint4 t = asuint(vu_ring[g_aux0.x + e]);
+    vu_pre_v = t.y;
+    vu_pre_b = t.z;
+    vu_draw = asuint(vu_ring[t.y + 36u]);
+    vu_batch = asuint(vu_ring[t.y + 37u]);
+    vu_strip = asuint(vu_ring[t.y + 38u]);
+    vu_mark = asuint(vu_ring[t.y + 47u]);
+    vu_rec = asuint(vu_ring[t.y + 48u]);
+    vu_lo = vu_ring[t.y + 49u];
+    vu_hi = vu_ring[t.y + 50u];
+    vu_tri = asuint(vu_ring[t.y + 51u]);
+    return vid - t.x;
+}
+#endif
 
 StructuredBuffer<float4> vu_stream : ICO_REG(t0, 1);
 
@@ -248,7 +337,7 @@ float4 vu_mat(float4 c0, float4 c1, float4 c2, float4 c3, float4 v, float w)
 
 float4 vu_matm(uint at, float4 v, float w)
 {
-    return vu_mat(vu_mem[at], vu_mem[at + 1u], vu_mem[at + 2u], vu_mem[at + 3u], v, w);
+    return vu_mat(VU_MEM(at), VU_MEM(at + 1u), VU_MEM(at + 2u), VU_MEM(at + 3u), v, w);
 }
 
 // ftoi0 / ftoi4: truncation, saturating at +-2^31 like the VU (?: between
@@ -1257,8 +1346,8 @@ VuVtx vu_tick_vertex(VuVtx v, uint k, float4 lo, float4 hi)
 {
     VuVtx o = vu_vtx_init();
     uint b = 4u * k;
-    precise float4 h = vu_ticks[b] * v.h.x + vu_ticks[b + 1u] * v.h.y + vu_ticks[b + 2u] * v.h.z +
-                       vu_ticks[b + 3u] * v.h.w;
+    precise float4 h = VU_TICK(b) * v.h.x + VU_TICK(b + 1u) * v.h.y + VU_TICK(b + 2u) * v.h.z +
+                       VU_TICK(b + 3u) * v.h.w;
     o.h = h;
     vu_divide(o);
     o.inside = vu_inside(o.p, o.h.w, lo, hi);
@@ -1366,7 +1455,7 @@ bool vu_strip_card(uint kick)
     if (i >= vu_strip.z) {
         return false;
     }
-    uint4 q = asuint(vu_bone[min(vu_strip.w + (i >> 6), 239u)]);
+    uint4 q = asuint(VU_BONE(min(vu_strip.w + (i >> 6), 239u)));
     uint s = (i >> 4) & 3u;
     uint word = q.x;
     word = s == 1u ? q.y : word;

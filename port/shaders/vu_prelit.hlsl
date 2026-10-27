@@ -32,7 +32,7 @@ VuVtx vu_prelit_vertex(uint v, uint mode)
         o.inside = vu_inside(o.p, o.h.w, VU_LO0, VU_HI4094);
     }
     // :157 add.xyz vf21 = ST + (UV offset xy, 0); :172 mulq.xyz
-    precise float3 s = (st.xyz + float3(vu_mem[2].xy, 0.0)) * q;
+    precise float3 s = (st.xyz + float3(VU_MEM(2).xy, 0.0)) * q;
     o.stq = s;
     // :173 ftoi0 of the colour as sent
     o.rgba = vu_rgba(col);
@@ -60,8 +60,9 @@ VuVSOut vu_prelit_vs(uint vid : SV_VertexID)
 
 // The vertex pre-pass: vertex vu_rec.z + id, the clip mode vu_prelit_vs
 // takes
-VuPreOut vu_prelit_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_prelit_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_prelit_vertex(vu_rec.z + id, vu_draw.z & VU_CLIP_MASK));
 }
 

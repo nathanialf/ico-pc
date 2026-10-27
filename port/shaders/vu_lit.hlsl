@@ -19,8 +19,8 @@ uint4 vu_lit_colour(float4 n, float4 col, bool spec)
 {
     float4 l = vu_matm(28u, n, n.w);
     l = max(l, 0.0);
-    float4 c4 = spec ? float4(0.0, 0.0, 0.0, 1.0) : vu_mem[35];
-    float4 c = vu_mat(vu_mem[32], vu_mem[33], vu_mem[34], c4, l, l.w);
+    float4 c4 = spec ? float4(0.0, 0.0, 0.0, 1.0) : VU_MEM(35);
+    float4 c = vu_mat(VU_MEM(32), VU_MEM(33), VU_MEM(34), c4, l, l.w);
     c = max(c, 0.0);
     if (spec) {
         precise float3 s = c.xyz * c.xyz;
@@ -42,7 +42,7 @@ float3 vu_reflect_st(float4 pos, float4 n)
     d2 = d2 + v.z * v.z;
     precise float rq = d2 == 0.0 ? 3.40282347e38 : 1.0 / sqrt(abs(d2));
     // :393-396 the normal in view space: MV rotation * n (+ vf00 * n.w)
-    float4 nv = vu_mat(vu_mem[24], vu_mem[25], vu_mem[26], float4(0.0, 0.0, 0.0, 1.0), n, n.w);
+    float4 nv = vu_mat(VU_MEM(24), VU_MEM(25), VU_MEM(26), float4(0.0, 0.0, 0.0, 1.0), n, n.w);
     precise float3 d = v.xyz * rq;
     // :416, :420-422 dn = (d.x*n.x + d.y*n.y) + d.z*n.z
     precise float3 t = d * nv.xyz;
@@ -53,7 +53,7 @@ float3 vu_reflect_st(float4 pos, float4 n)
     r = r + nv.xyz * dn;
     r = r + d * dn;
     // :433-436 inverse view rotation * r (+ vf00 * 1)
-    float4 w = vu_mat(vu_mem[12], vu_mem[13], vu_mem[14], float4(0.0, 0.0, 0.0, 1.0),
+    float4 w = vu_mat(VU_MEM(12), VU_MEM(13), VU_MEM(14), float4(0.0, 0.0, 0.0, 1.0),
                       float4(r, 1.0), 1.0);
     // :440 z + z; :444 xy + 2z; :450-452 xy * 0.125 + 1.0 * 0.25
     precise float z2 = w.z + w.z;
@@ -87,7 +87,7 @@ VuVtx vu_lit_vertex(uint v, uint mode, uint variant)
         o.rgba = vu_rgba(col);
     } else {
         // :164 add.xy ST + UV offset; :176 mulq.xyz
-        precise float3 s = float3(st.xy + vu_mem[2].xy, st.z) * q;
+        precise float3 s = float3(st.xy + VU_MEM(2).xy, st.z) * q;
         o.stq = s;
         o.rgba = vu_lit_colour(n, col, variant == VU_LIT_SPEC);
     }
@@ -137,17 +137,20 @@ VuVSOut vu_reflect_vs(uint vid : SV_VertexID)
 }
 
 // The vertex pre-pass: vertex vu_rec.z + id of each variant
-VuPreOut vu_lit_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_lit_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_lit_vertex(vu_rec.z + id, vu_lit_mode(VU_LIT), VU_LIT));
 }
 
-VuPreOut vu_lit_spec_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_lit_spec_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_lit_vertex(vu_rec.z + id, vu_lit_mode(VU_LIT_SPEC), VU_LIT_SPEC));
 }
 
-VuPreOut vu_reflect_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_reflect_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_lit_vertex(vu_rec.z + id, vu_lit_mode(VU_REFLECT), VU_REFLECT));
 }

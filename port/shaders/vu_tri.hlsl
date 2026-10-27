@@ -26,8 +26,9 @@
 
 // slot A: the flags (vu_common.hlsli VU_TF_*), the anchor's colour and
 // place, the STQ planes' change across and down with the plane distance's
-VuPreOut vu_tri_rule_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     uint kick = vu_rec.z + 2u + id;
     uint rule = vu_rec.w;
     uint mode = rule & VU_CLIP_MASK;
@@ -121,8 +122,9 @@ VuPreOut vu_tri_rule_pre_vs(uint id : SV_VertexID)
 // fails a comparison, so such a corner keeps the test), the conditions
 // alone, without the cut (in a wide frame most of the triangles beside the
 // picture are in front of the eye: the tick tests are left out for them)
-VuPreOut vu_tri_tick_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_tri_tick_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     uint kick = vu_rec.z + 2u + id;
     VuVtx a = vu_rec_vertex(kick - 2u);
     VuVtx b = vu_rec_vertex(kick - 1u);
@@ -142,8 +144,9 @@ VuPreOut vu_tri_tick_pre_vs(uint id : SV_VertexID)
 
 // slot B: the STQ planes' values at the anchor with the plane distance's,
 // the colour planes (vu_attr_planes, vu_plane_out)
-VuPreOut vu_tri_planes_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_tri_planes_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     uint kick = vu_rec.z + 2u + id;
     VuVtx a = vu_rec_vertex(kick - 2u);
     VuVtx b = vu_rec_vertex(kick - 1u);

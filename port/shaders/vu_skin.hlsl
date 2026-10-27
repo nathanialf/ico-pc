@@ -17,13 +17,13 @@
 float4 vu_bone_mat(uint addr, float4 v, float w)
 {
     uint i = min(addr - 16u, 236u); // 60 bones: addresses 16..252
-    return vu_mat(vu_bone[i], vu_bone[i + 1u], vu_bone[i + 2u], vu_bone[i + 3u], v, w);
+    return vu_mat(VU_BONE(i), VU_BONE(i + 1u), VU_BONE(i + 2u), VU_BONE(i + 3u), v, w);
 }
 
 float4 vu_bone_rot(uint addr, float4 v)
 {
     uint i = min(addr - 16u, 236u); // 60 bones: addresses 16..252
-    return vu_mat(vu_bone[i], vu_bone[i + 1u], vu_bone[i + 2u], float4(0.0, 0.0, 0.0, 1.0), v,
+    return vu_mat(VU_BONE(i), VU_BONE(i + 1u), VU_BONE(i + 2u), float4(0.0, 0.0, 0.0, 1.0), v,
                   v.w);
 }
 
@@ -46,7 +46,7 @@ VuVtx vu_skin_vertex(uint v, uint variant)
     o.h = vu_matm(4u, float4(pb, 1.0), 1.0);
     float q = vu_divide(o);
     // :253-265 lo = mem[0] < p < mem[1] = hi on x, y, w
-    o.inside = vu_inside(o.p, o.h.w, vu_mem[0], vu_mem[1]);
+    o.inside = vu_inside(o.p, o.h.w, VU_MEM(0), VU_MEM(1));
     {
         // :208-223 N = B0 rot n w0 + B1 rot n w1, w = 1; :232-235 L1 * N
         float4 n0 = vu_bone_rot(b0, n);
@@ -56,8 +56,8 @@ VuVtx vu_skin_vertex(uint v, uint variant)
         float4 l = vu_matm(28u, float4(nb, 1.0), 1.0);
         l = max(l, 0.0);
         // :246-250 L2 with the ambient column; code 22 (:391) vf00 instead
-        float4 c4 = variant == VU_SKIN_SPEC ? float4(0.0, 0.0, 0.0, 1.0) : vu_mem[35];
-        float4 c = vu_mat(vu_mem[32], vu_mem[33], vu_mem[34], c4, l, l.w);
+        float4 c4 = variant == VU_SKIN_SPEC ? float4(0.0, 0.0, 0.0, 1.0) : VU_MEM(35);
+        float4 c = vu_mat(VU_MEM(32), VU_MEM(33), VU_MEM(34), c4, l, l.w);
         c = max(c, 0.0);
         if (variant != VU_SKIN) {
             precise float3 s = c.xyz * c.xyz; // :397 / :568
@@ -68,10 +68,10 @@ VuVtx vu_skin_vertex(uint v, uint variant)
         }
         precise float3 rgb = col.xyz * c.xyz;
         // code 24 scales alpha by mem[2].w, the cluster fade (:562)
-        precise float a = variant == VU_SKIN_DEBUG ? col.w * vu_mem[2].w : col.w;
+        precise float a = variant == VU_SKIN_DEBUG ? col.w * VU_MEM(2).w : col.w;
         o.rgba = vu_rgba(min(float4(rgb, a), 255.0));
         // :255 STQ = ST * q, no UV offset; code 24 adds mem[2].xy (:505, :596)
-        float2 uv = variant == VU_SKIN_DEBUG ? vu_mem[2].xy : float2(0.0, 0.0);
+        float2 uv = variant == VU_SKIN_DEBUG ? VU_MEM(2).xy : float2(0.0, 0.0);
         precise float2 s2 = variant == VU_SKIN_DEBUG ? st.xy + uv : st.xy;
         precise float3 s = float3(s2, st.z) * q;
         o.stq = s;
@@ -91,8 +91,8 @@ VuVSOut vu_skin_main(uint vid, uint variant)
     VuVtx b = vu_skin_vertex(kick - 1u, variant);
     VuVtx c = vu_skin_vertex(kick, variant);
     // the marks: VU_MARK_JOINED (rd_mesh.c markJoinedStrips)
-    return vu_mesh_out(a, b, c, kick, vid & 3u, vu_kick_marks(kick), VU_CLIP_REGION, vu_mem[0],
-                       vu_mem[1], false);
+    return vu_mesh_out(a, b, c, kick, vid & 3u, vu_kick_marks(kick), VU_CLIP_REGION, VU_MEM(0),
+                       VU_MEM(1), false);
 }
 
 VuVSOut vu_skin_vs(uint vid : SV_VertexID)
@@ -111,17 +111,20 @@ VuVSOut vu_skin_debug_vs(uint vid : SV_VertexID)
 }
 
 // The vertex pre-pass: vertex vu_rec.z + id of each variant
-VuPreOut vu_skin_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_skin_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_skin_vertex(vu_rec.z + id, VU_SKIN));
 }
 
-VuPreOut vu_skin_spec_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_skin_spec_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_skin_vertex(vu_rec.z + id, VU_SKIN_SPEC));
 }
 
-VuPreOut vu_skin_debug_pre_vs(uint id : SV_VertexID)
+VuPreOut vu_skin_debug_pre_vs(uint vid : SV_VertexID)
 {
+    uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_skin_vertex(vu_rec.z + id, VU_SKIN_DEBUG));
 }
