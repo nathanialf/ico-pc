@@ -1111,12 +1111,20 @@ void rhi_submit(RhiCommandList cl)
         D11_RELEASE(c->list);
         return;
     }
-    /* what the list reads from upload buffers, from their shadows */
+    /* what the list reads from upload buffers, from their shadows: no byte
+     * at or past the buffer's written mark (rhi_buffer_note_written; the
+     * ring's whole-buffer reads, the VU storage view and an indexed draw's
+     * vertices to the buffer's end, reach only what this frame wrote).  The
+     * mark is taken here, not when the range was noted: a group bound once
+     * (the storage view over the whole ring) serves draws whose bytes were
+     * written after its bind */
     for (uint32_t i = 0; i < c->touchCount; i++) {
         RhiBuffer h = {c->touch[i].buffer};
         D11Buffer *b = d11_get_buffer(h);
         if (b) {
-            d11_buffer_flush(b, g_d11.ctx1, c->touch[i].part, c->touch[i].lo, c->touch[i].hi);
+            const uint64_t end = d11_buffer_written_end(b);
+            const uint64_t hi = c->touch[i].hi < end ? c->touch[i].hi : end;
+            d11_buffer_flush(b, g_d11.ctx1, c->touch[i].part, c->touch[i].lo, hi);
         }
     }
     if (g_d11.timestamps && !f->tsDisjointBegun) {
@@ -1211,6 +1219,15 @@ static bool d11_require_11_1(void)
         return false;
     }
     g_d11.cbPartialUpdate = o.ConstantBufferPartialUpdate != FALSE;
+    /* the path of the devices without them, on any device (the debug
+     * layer's check of the mapped constant buffers on WARP) */
+    const char *noPartial = getenv("ICO_D3D11_FAKE_NO_PARTIAL_CB");
+    if (noPartial && noPartial[0] && noPartial[0] != '0') {
+        g_d11.cbPartialUpdate = false;
+        D11_LOG("partial constant buffer updates: off (ICO_D3D11_FAKE_NO_PARTIAL_CB)");
+    }
+    g_d11.cbMapUpload = !g_d11.cbPartialUpdate;
+    g_d11.cbMapNoOverwrite = o.MapNoOverwriteOnDynamicConstantBuffer != FALSE;
     D3D11_FEATURE_DATA_THREADING th;
     memset(&th, 0, sizeof(th));
     if (SUCCEEDED(ID3D11Device_CheckFeatureSupport(g_d11.device, D3D11_FEATURE_THREADING, &th,
@@ -1300,7 +1317,11 @@ bool rhi_init(const RhiDeviceDesc *desc)
     D11_LOG("%s (D3D11, feature level %s%s%s); 11.1 interfaces yes, partial constant buffer "
             "updates %s, command lists %s; tearing %s; debug layer %s; shader cache %s%s",
             g_d11.adapterName, d11_level_name(g_d11.featureLevel), g_d11.warp ? ", WARP" : "",
-            s_driverText, g_d11.cbPartialUpdate ? "yes" : "no",
+            s_driverText,
+            g_d11.cbPartialUpdate ? "yes"
+            : g_d11.cbMapNoOverwrite
+                ? "no (upload constant buffers mapped: discard, then no-overwrite)"
+                : "no (upload constant buffers mapped: discard under the written mark)",
             g_d11.driverCommandLists ? "by the driver" : "emulated by the runtime",
             g_d11.swapchain ? (g_d11.tearing ? "yes" : "no") : "n/a",
             g_d11.info ? "on" : (debug ? "asked for, not installed" : "off"),
