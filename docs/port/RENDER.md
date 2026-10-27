@@ -938,8 +938,8 @@ would have had and the picture is the same byte for byte. `rd__pipe_key_equal` c
 modulo the normalisation (a key as a planner made it matches the set's). The draws that differed
 only in those fields (the AFAIL halves, the Z-write alternations, the blend paths of one shader)
 share one pipeline, so the set is smaller and fewer binds change the pipeline; `rd_replay_tool
---stats` prints `<n> dynamic state sets (dynamic depth on|off, blend on|off)`, the commands
-recorded (`RhiStats.dynamicSets`). The log says which at `rd_init`, `rd: pipelines: dynamic state:
+--stats` prints `<n> dynamic state sets (dynamic depth on|off, blend on|off) (<a> for draws without
+blending, <b> ...)`, the commands recorded ([RHI.md](RHI.md#dynamic-state)). The log says which at `rd_init`, `rd: pipelines: dynamic state:
 depth and blend (the Z test, Z write, blend and colour mask set at each draw, out of the pipeline
 keys)` (or `depth (...)`, `blend (...)`, `none (every state in the pipeline keys)`), and the
 start-up set's line carries ` (dynamic depth, blend)` after `created at start-up`; the first-use
@@ -1622,12 +1622,13 @@ any device (`rd_blend_selftest_moltenvk_storage`).
 wrong picture with no error anywhere, so `rd_blend_selftest` checks the blend in force on the
 device at start, on every device, as the fog's self-test checks its depth reads ([The fog path and
 its self-test](#the-fog-path-and-its-self-test)). A frame of its own (never recorded or
-presented) is drawn on SCENE at its real size and scale, MSAA held off, in a 256 x 64 GS pixel
+presented) is drawn on SCENE at its real size and scale, MSAA held off, in a 256 x 96 GS pixel
 block in its middle: eight cells of PCSX2's forest pixels under the forest's tint sprite
 (`rd_pixel_test.c` `kTint`), a textured LERP quad whose clear texel must leave the colour behind it
 (the leaf case), two overlapping LERP draws (the second must blend over the first's result) and a
-glyph through the text sheet's shader. Nineteen samples are copied out and read back (one
-256 x 64 block, one readback; its pipelines are keys of the start-up set). The fixed-function
+glyph through the text sheet's shader, then an opaque cell read at an even and an odd texel column
+(a dual-source equation kept with blending off, [RHI.md](RHI.md#dynamic-state)). 21 samples are
+read back (one readback; its pipelines are keys of the start-up set). The fixed-function
 blend runs first, the reference, within 2 levels of the GS arithmetic; if it fails, the two-pass
 fallback (`rd_set_no_dual`) is tried and kept when it passes. Then, only when `[dev] blend` opted
 into an exact mode the device has (`rd__dst_asked`), that mode runs, within 1 level of the GS
