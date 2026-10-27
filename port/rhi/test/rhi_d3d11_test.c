@@ -7,6 +7,11 @@
  *
  *   1. the cells on WARP, the software adapter every Windows has (the
  *      reference run: it does not depend on a GPU driver)
+ *  1b. the cells on WARP again with ICO_D3D11_FAKE_NO_PARTIAL_CB=1: the
+ *      upload buffers' constant buffers mapped, the path of the devices
+ *      without partial constant buffer updates
+ *  1c. the written mark (rhi_buffer_note_written) on WARP: a submit writes
+ *      the bytes its lists read under the mark and no more
  *   2. the cells on the default hardware adapter (skipped when there is
  *      none: the default is then WARP again)
  *   3. the swapchain on a hidden SDL window: six frames of clear, readback
@@ -167,6 +172,116 @@ static int runSwapchain(void)
 }
 #endif
 
+/* ----------------------------------------------------------- written mark */
+/* One frame: the ring's bytes [0, 8192) a seeded pattern, the marks noted
+ * in turn, a copy of [0, 8192) into a readback buffer.  The submit must
+ * write exactly the last mark's bytes (RhiStats.uploadWriteBytes: the copy
+ * reads the buffer's vertex part only) and the copy's first `mark` bytes
+ * must be the pattern. */
+static int markFrame(RhiBuffer up, RhiBuffer rb, const uint64_t *marks, uint32_t n, uint8_t seed,
+                     uint64_t want)
+{
+    enum { SPAN = 8192 };
+
+    rhi_wait_frame();
+    uint8_t *m = rhi_map_buffer(up);
+    if (!m) {
+        rhi_test_log("FAIL written mark: the upload buffer did not map\n");
+        return 1;
+    }
+    for (uint32_t i = 0; i < SPAN; i++) {
+        m[i] = (uint8_t)(i * 7u + seed);
+    }
+    rhi_unmap_buffer(up);
+    for (uint32_t i = 0; i < n; i++) {
+        rhi_buffer_note_written(up, marks[i]);
+    }
+    RhiStats s0, s1;
+    rhi_get_stats(&s0);
+    RhiCommandList cl = rhi_begin_commands();
+    rhi_cmd_copy_buffer(cl, up, 0, rb, 0, SPAN);
+    rhi_submit(cl);
+    rhi_get_stats(&s1);
+    rhi_wait_idle();
+    int failures = 0;
+    const uint64_t wrote = s1.uploadWriteBytes - s0.uploadWriteBytes;
+    if (wrote != want) {
+        rhi_test_log("FAIL written mark (seed %u): the submit wrote %llu bytes, expected %llu\n",
+                     seed, (unsigned long long)wrote, (unsigned long long)want);
+        failures++;
+    }
+    const uint8_t *r = rhi_map_buffer(rb);
+    for (uint64_t i = 0; r && i < want && i < SPAN; i++) {
+        if (r[i] != (uint8_t)(i * 7u + seed)) {
+            rhi_test_log("FAIL written mark (seed %u): byte %llu read %u, expected %u\n", seed,
+                         (unsigned long long)i, r[i], (uint8_t)(i * 7u + seed));
+            failures++;
+            break;
+        }
+    }
+    if (!r) {
+        rhi_test_log("FAIL written mark: the readback buffer did not map\n");
+        failures++;
+    }
+    return failures;
+}
+
+static int runWrittenMark(void)
+{
+    if (!rhi_create_backend("d3d11")) {
+        rhi_test_log("SKIP written mark: no Direct3D 11 backend in this build\n");
+        return 77;
+    }
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test written mark"};
+    if (!rhi_init(&dd)) {
+        rhi_test_log("SKIP written mark: no usable device (see messages above)\n");
+        return 77;
+    }
+    if (!acceptWarp()) {
+        rhi_shutdown();
+        return 77;
+    }
+    int failures = 0;
+    /* the renderer's ring's usage (port/render/rd_upload.c), and a buffer
+     * never noted */
+    RhiBuffer up = rhi_create_buffer(&(RhiBufferDesc){
+        65536,
+        RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM | RHI_BUF_STORAGE_READ | RHI_BUF_COPY_SRC,
+        RHI_MEM_UPLOAD, "mark ring"});
+    RhiBuffer plain = rhi_create_buffer(
+        &(RhiBufferDesc){65536, RHI_BUF_VERTEX | RHI_BUF_COPY_SRC, RHI_MEM_UPLOAD, "no mark"});
+    RhiBuffer rb = rhi_create_buffer(
+        &(RhiBufferDesc){65536, RHI_BUF_COPY_DST, RHI_MEM_READBACK, "mark readback"});
+    if (!up.id || !plain.id || !rb.id) {
+        rhi_test_log("FAIL written mark: buffers not created\n");
+        failures++;
+    } else {
+        /* a mark under the copy: only the mark's bytes */
+        const uint64_t a[] = {4096};
+        failures += markFrame(up, rb, a, 1, 1, 4096);
+        /* the next frame starts the mark again, lower than the last */
+        const uint64_t b[] = {1024};
+        failures += markFrame(up, rb, b, 1, 2, 1024);
+        /* within a frame the mark only rises; an unaligned mark is written
+         * to its 16-byte end */
+        const uint64_t c[] = {512, 2050, 1000};
+        failures += markFrame(up, rb, c, 3, 3, 2064);
+        /* never noted: the whole range read */
+        failures += markFrame(plain, rb, NULL, 0, 4, 8192);
+    }
+    rhi_destroy_buffer(up);
+    rhi_destroy_buffer(plain);
+    rhi_destroy_buffer(rb);
+    rhi_wait_idle();
+    rhi_shutdown();
+    if (rhi_d3d11_debug_error_count()) {
+        rhi_test_log("FAIL %u debug layer error(s)\n", rhi_d3d11_debug_error_count());
+        failures++;
+    }
+    rhi_test_log("written mark: %s\n", failures ? "FAIL" : "all checks passed");
+    return failures ? 1 : 0;
+}
+
 /* ------------------------------------------------------------------- main */
 static void logPath(char *out, size_t size)
 {
@@ -221,6 +336,19 @@ int main(int argc, char **argv)
     char warpAdapter[128];
     snprintf(warpAdapter, sizeof(warpAdapter), "%s", s_adapter);
 
+    /* 1b: WARP with the upload buffers' constant buffers mapped */
+    rhi_test_log("\n== 1b. Direct3D 11 on WARP, constant buffers mapped "
+                 "(ICO_D3D11_FAKE_NO_PARTIAL_CB=1)\n");
+    _putenv("ICO_D3D11_FAKE_NO_PARTIAL_CB=1");
+    const RhiTestConfig warpMapped = {"d3d11", "rhi_d3d11_test (WARP, mapped constants)", true,
+                                      acceptWarp, rhi_d3d11_debug_error_count};
+    int rcMapped = rhi_test_run_cells(&warpMapped);
+    _putenv("ICO_D3D11_FAKE_NO_PARTIAL_CB=");
+
+    /* 1c: the written mark */
+    rhi_test_log("\n== 1c. Direct3D 11 on WARP: the upload ring's written mark\n");
+    int rcMark = runWrittenMark();
+
     /* 2: the hardware adapter */
     rhi_test_log("\n== 2. Direct3D 11 on the default hardware adapter\n");
     _putenv("ICO_D3D11_ADAPTER=");
@@ -246,12 +374,15 @@ int main(int argc, char **argv)
     const RhiTestConfig vk = {"vulkan", "rhi_d3d11_test (Vulkan)", false, NULL, NULL};
     int rcVk = rhi_test_run_cells(&vk);
 
-    bool failed = rcWarp == 1 || rcHw == 1 || rcSwap == 1 || rcVk == 1;
+    bool failed =
+        rcWarp == 1 || rcMapped == 1 || rcMark == 1 || rcHw == 1 || rcSwap == 1 || rcVk == 1;
     bool ran = rcWarp == 0 || rcHw == 0 || rcSwap == 0;
     char summary[1024];
     snprintf(summary, sizeof(summary),
              "%s\n\n"
              "1. Direct3D 11 on WARP (%s): %s\n"
+             "1b. the same, constant buffers mapped: %s\n"
+             "1c. the upload ring's written mark: %s\n"
              "2. Direct3D 11 on hardware (%s): %s\n"
              "3. Direct3D 11 swapchain: %s\n"
              "4. Vulkan (comparison): %s\n"
@@ -260,8 +391,8 @@ int main(int argc, char **argv)
              failed ? "rhi_d3d11_test: FAILED"
              : ran  ? "rhi_d3d11_test: PASSED"
                     : "rhi_d3d11_test: nothing could run",
-             warpAdapter[0] ? warpAdapter : "-", verdict(rcWarp), hwAdapter, verdict(rcHw),
-             verdict(rcSwap), verdict(rcVk),
+             warpAdapter[0] ? warpAdapter : "-", verdict(rcWarp), verdict(rcMapped),
+             verdict(rcMark), hwAdapter, verdict(rcHw), verdict(rcSwap), verdict(rcVk),
              s_debugActive ? "on (errors fail the test)"
                            : "not installed (Settings > Optional features > Graphics Tools "
                              "adds it)",
