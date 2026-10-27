@@ -819,6 +819,17 @@ void rhi_destroy_buffer(RhiBuffer b);
  * does. */
 void *rhi_map_buffer(RhiBuffer b);
 void rhi_unmap_buffer(RhiBuffer b);
+/* UPLOAD only: the CPU has written nothing at or past byte `hi` of the
+ * buffer since the current frame slot began (rhi_wait_frame), so a list of
+ * this frame reads no byte at or past it that this frame wrote.  The
+ * renderer's ring calls it from each allocation with the end of what it has
+ * handed out (port/render/rd_replay.c rd__ring_alloc; the ring is
+ * append-only within a frame).  The first call of a frame sets the mark,
+ * later ones raise it.  Direct3D 11 writes only the bytes under the mark
+ * from the buffer's CPU copy at a submit (d3d11_device.c rhi_submit); a
+ * buffer never noted is written over every range a list reads, as before.
+ * Vulkan, Direct3D 12 and OpenGL read the mapped memory itself: a no-op. */
+void rhi_buffer_note_written(RhiBuffer b, uint64_t hi);
 
 RhiTexture rhi_create_texture(const RhiTextureDesc *desc);
 void rhi_destroy_texture(RhiTexture t);
@@ -1123,6 +1134,11 @@ typedef struct RhiStats {
      * cleared target).  A function, so the text is made only when a line
      * wants it; NULL on the other backends */
     const char *(*lastDrawText)(void);
+    /* Direct3D 11: the bytes the submits wrote from upload buffers' CPU
+     * copies into their GPU buffers (UpdateSubresource1 and the mapped
+     * constant buffers; d3d11_resource.c d11_buffer_flush), a count; 0 on
+     * the other backends, whose GPU reads the mapped memory itself */
+    uint64_t uploadWriteBytes;
 } RhiStats;
 
 void rhi_get_stats(RhiStats *out);
