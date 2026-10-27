@@ -210,8 +210,9 @@ static inline uint32_t gl_bind_point(RhiBindType type, uint32_t slot)
 
 /* The dynamic depth and blend groups (rhi_cmd_set_depth_state,
  * rhi_cmd_set_blend_state) in OpenGL's terms: the values a draw wants and
- * the values the list last gave (RhiStats.dynamicSets counts the commands
- * the Vulkan backend would record for them). */
+ * the values the list last gave, the blend equation in Vulkan's terms
+ * (RhiStats.dynamicSets counts the commands the Vulkan backend would record
+ * for them). */
 typedef struct GlDepthDyn {
     bool test, write;
     GLenum func;
