@@ -1313,7 +1313,9 @@ the CPU's list; a grid's every strip) and a particle command's sprites, and numb
 slots: pass V's rows first (each command's vertices, then two slots a sprite), pass T's after
 them (two slots a kick of the command's range, three under the tick cameras; a position of the
 range that is no kick, a strip start, has its slots and is never read), for the commands in order
-while both fit 1024 rows. Pass V (load don't care, store): a draw a mesh or grid command, `n`
+while both fit 1024 rows (the draws below batched:
+[VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)). Pass V (load don't care, store): a draw
+a mesh or grid command, `n`
 points through the program's pre-pass entry (`vu_X_pre_vs`, the program's own vertex function on
 vertex `first + SV_VertexID`, its outputs as flat `uint4` varyings at the point's texel,
 `PointSize` 1), and two draws a particle command through `vu_particle_pre_vs` (`vu_tri.w` 0 slot
@@ -1328,7 +1330,7 @@ slot C's x and y, each written without reading the other), and `vu_tri_planes_pr
 its rows are copied after pass V's. A frame slot has its own buffer, so a replay never rewrites
 what the GPU may still read for the previous one; the textures are shared, ordered by their
 barriers. Both grow by powers of two, from 16 rows (16,384 slots) to 1,024, every slot's buffer at
-once (so the replays after the one that grew them create nothing), logged as `rd: VU pre-pass: the
+once, logged as `rd: VU pre-pass: the
 record holds 32768 slots (32 rows, 1536 KB a frame slot)`; group 1 binds the record at t4 (to the
 vertex and the pixel side), and a 256-byte buffer before there is one (the slot's upload ring when
 even that could not be made, logged once: no shader reads t4 then). A record that cannot be made
