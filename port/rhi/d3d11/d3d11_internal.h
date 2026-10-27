@@ -139,6 +139,16 @@ typedef struct D11Buffer {
     uint64_t texDstOffset;
     D11SrvCacheEntry srvs[D11_SRV_CACHE];
     uint32_t srvNext;
+    /* UPLOAD: the written mark (rhi_buffer_note_written): the CPU wrote
+     * nothing at or past `written` in the frame whose g_d11.frameIndex + 1
+     * is writtenFrame (0: never noted, a submit writes every range read).
+     * rhi_submit writes no byte at or past it (d11_buffer_written_end). */
+    uint64_t written, writtenFrame;
+    /* UPLOAD: the CB part is a DYNAMIC buffer the submits Map (devices
+     * without partial constant buffer updates, d11_buffer_flush); the
+     * frame (g_d11.frameIndex + 1) of its last DISCARD map */
+    bool cbMapped;
+    uint64_t cbDiscardFrame;
 } D11Buffer;
 
 /* --------------------------------------------------------------- textures */
@@ -298,6 +308,12 @@ typedef struct D11CmdState {
     uint32_t vbStrideSet[RHI_MAX_VERTEX_ATTRS];
     uint32_t vbSet;      /* slots holding a buffer */
     uint32_t srvMask[2]; /* [RHI_STAGE_VERTEX], [RHI_STAGE_FRAGMENT]: t registers 0..31 */
+    /* the SRV and the sampler each t and s register holds in each stage
+     * ([RHI_STAGE_*][register]; NULL nothing, as a new recording starts):
+     * a repeat is not set again (d11_bind_entry).  d11_unbind_srvs clears
+     * srvSet with the registers */
+    ID3D11ShaderResourceView *srvSet[2][32];
+    ID3D11SamplerState *smpSet[2][D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT];
     /* the constant buffer window each b register holds in each stage
      * ([RHI_STAGE_*][register]; NULL nothing bound): a repeat is not set
      * again, and the same buffer with another window is unbound first
@@ -378,6 +394,12 @@ typedef struct D11State {
      * (UpdateSubresource1 with a box on a constant buffer; without them a
      * flush writes the whole CB part) */
     bool cbPartialUpdate;
+    /* without them: the upload buffers' CB parts are DYNAMIC and mapped
+     * (cbMapUpload; ICO_D3D11_FAKE_NO_PARTIAL_CB=1 takes this path on any
+     * device), mapped D3D11_MAP_WRITE_NO_OVERWRITE after a frame's first
+     * DISCARD when the device has MapNoOverwriteOnDynamicConstantBuffer
+     * (cbMapNoOverwrite), else DISCARD with every byte under the mark */
+    bool cbMapUpload, cbMapNoOverwrite;
     /* D3D11_FEATURE_THREADING: the driver records command lists itself
      * (false: the runtime emulates them); for the summary line */
     bool driverCommandLists, driverConcurrentCreates;
@@ -520,9 +542,15 @@ ID3D11Buffer *d11_buffer_part(const D11Buffer *b, uint32_t part);
 ID3D11Buffer *d11_buffer_any_part(const D11Buffer *b);
 /* UPLOAD: writes [lo, hi) of the shadow into part `part` (D11_PART_COUNT:
  * every part) through ctx's UpdateSubresource1 (16-byte aligned; a
- * constant buffer whole when the device has no partial updates). */
+ * constant buffer whole when the device has no partial updates, or mapped
+ * when its CB part is DYNAMIC: cbMapped).  ctx is the immediate context.
+ * Counted in RhiStats.uploadWriteBytes. */
 void d11_buffer_flush(D11Buffer *b, ID3D11DeviceContext1 *ctx, uint32_t part, uint64_t lo,
                       uint64_t hi);
+/* UPLOAD: the end of what the CPU may have written this frame (the written
+ * mark of rhi_buffer_note_written), the buffer's size when never noted:
+ * rhi_submit writes no byte at or past it. */
+uint64_t d11_buffer_written_end(const D11Buffer *b);
 /* A structured SRV (16-byte elements) over [offset, offset + size) of the
  * buffer's SRV part, from its cache; NULL when the range is invalid. */
 ID3D11ShaderResourceView *d11_buffer_srv(D11Buffer *b, uint64_t offset, uint64_t size);
