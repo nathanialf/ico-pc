@@ -12,7 +12,8 @@
  *      (g_rd.vuPrepass) and returns false only when it turned it off;
  *   2. the summary text (rd_summary_text) says so: "VU pre-pass on
  *      (self-test: ok)", "VU pre-pass off (self-test: the pictures differ"
- *      or "VU pre-pass off by the settings"; and the device profile's
+ *      or "VU pre-pass off by the settings"; with it on, its draws batched
+ *      (g_rd.vuPreBatch) unless ICO_RD_VU_PREPASS_BATCH=0; and the device profile's
  *      class (rd_profile.c) names the backend, OpenGL and D3D11 in the
  *      desktop column: "immediate-mode GPU (... OpenGL):";
  *   3. the reachable set (rd__enumerate_reachable, what the window makes
@@ -152,6 +153,15 @@ int main(int argc, char **argv)
                        : notRun ? "; VU pre-pass off by the settings ("
                                 : "; VU pre-pass off (self-test: the pictures differ: ";
     CHECK(strstr(sum, want) != NULL, "the summary lacks \"%s\"", want);
+    if (wantOn) {
+        /* the pre-pass's draws batched unless ICO_RD_VU_PREPASS_BATCH=0
+           (rd_replay_vu.c preBatchInit): the self-test above ran that way */
+        const char *b = getenv("ICO_RD_VU_PREPASS_BATCH");
+        const bool wantBatch = !(b && strcmp(b, "0") == 0);
+        printf("  the pre-pass's draws %s\n", g_rd.vuPreBatch ? "batched" : "one an entry");
+        CHECK(g_rd.vuPreBatch == wantBatch, "the pre-pass's draws %s, %s expected",
+              g_rd.vuPreBatch ? "batched" : "one an entry", wantBatch ? "batched" : "one an entry");
+    }
     {
         /* the class ends with the backend's name: "(Mesa, Vulkan):",
            "(OpenGL):" (llvmpipe names no vendor gl_device.c knows) */
