@@ -154,6 +154,20 @@ ico_add_shader(vu_tri_tick_pre_vs vu_tri.hlsl vu_tri_tick_pre_vs vertex)
 ico_add_shader(vu_tri_planes_pre_vs vu_tri.hlsl vu_tri_planes_pre_vs vertex)
 ico_add_shader(vu_particle_main_vs vu_particle.hlsl vu_particle_main_vs vertex)
 ico_add_shader(vu_particle_pre_vs vu_particle.hlsl vu_particle_pre_vs vertex)
+# The pre-pass's batch builds (vu_X_batch_pre_vs)
+# the ten pre-pass entries and the four record stages read their VuCB and
+# VuBoneCB from the upload ring at t5 (ICO_VU_PRE_BATCH, vu_common.hlsli
+# vu_pre_batch_entry), so one point draw records many entries
+# (rd_replay_vu.c vuPrepassRun; [dev] vu_prepass_batch = false draws through
+# the builds above, one an entry)
+foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:skin skin_debug:skin
+        grid:grid grid_lit:grid grid_spec:grid tri_rule:tri tri_tick:tri tri_planes:tri
+        particle:particle)
+    string(REGEX REPLACE ":.*" "" _e "${_v}")
+    string(REGEX REPLACE ".*:" "" _f "${_v}")
+    ico_add_shader(vu_${_e}_batch_pre_vs vu_${_f}.hlsl vu_${_e}_pre_vs vertex
+                   DEFINES ICO_VU_PRE_BATCH=1)
+endforeach()
 # The 2D plane builds (sprite_*_ps_planes and their twins)
 # the screen-prim triangles with their planes (rd_screen_planes.c): the
 # planes build of sprite.hlsl (ICO_SPRITE_PLANES), whose SpriteVSOut and

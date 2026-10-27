@@ -98,6 +98,17 @@ static const char *const expectedPrepass[] = {
     "vu_particle_main_vs",
 };
 
+/* the pre-pass's batch builds (ICO_VU_PRE_BATCH, vu_common.hlsli: the
+ * entries above reading their VuCB and VuBoneCB from the ring at t5 for a
+ * draw of many entries; rd_replay_vu.c vuPrepassRun, g_rd.vuPreBatch) */
+static const char *const expectedBatch[] = {
+    "vu_prelit_batch_pre_vs",     "vu_lit_batch_pre_vs",      "vu_lit_spec_batch_pre_vs",
+    "vu_reflect_batch_pre_vs",    "vu_skin_batch_pre_vs",     "vu_skin_spec_batch_pre_vs",
+    "vu_skin_debug_batch_pre_vs", "vu_grid_batch_pre_vs",     "vu_grid_lit_batch_pre_vs",
+    "vu_grid_spec_batch_pre_vs",  "vu_tri_rule_batch_pre_vs", "vu_tri_tick_batch_pre_vs",
+    "vu_tri_planes_batch_pre_vs", "vu_particle_batch_pre_vs",
+};
+
 /* entries the record path retired: the triangle stage of the vertex
  * records alone (vu_tri_vs) and the fallback's own pixel shaders (the
  * programs' entries draw with vu_ps and vu_texa_ps, as the main shaders) */
@@ -378,6 +389,13 @@ int main(void)
             failures++;
         }
     }
+    const size_t nBatch = sizeof(expectedBatch) / sizeof(expectedBatch[0]);
+    for (size_t i = 0; i < nBatch; i++) {
+        if (!ico_find_shader(expectedBatch[i])) {
+            printf("FAIL %s: not in the table\n", expectedBatch[i]);
+            failures++;
+        }
+    }
     for (size_t i = 0; i < sizeof(retired) / sizeof(retired[0]); i++) {
         if (ico_find_shader(retired[i])) {
             printf("FAIL %s: still in the table\n", retired[i]);
@@ -392,7 +410,8 @@ int main(void)
         }
     }
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
-                        nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nSmooth + nCrack;
+                        nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nSmooth +
+                        nCrack;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;
