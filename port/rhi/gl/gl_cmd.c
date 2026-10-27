@@ -264,10 +264,39 @@ static void gl_want_raster(const GlCmdList *c, const GlPipeline *p, GlRaster *w)
     }
 }
 
+/* the blend equation as the Vulkan backend records it: the factors and
+ * operations with blending on, zero factors and adds with it off
+ * (vk_pipeline.c vkr_blend_state), so the counts below match its */
+static GlBlendDyn gl_count_eq(const GlBlendDyn *b)
+{
+    GlBlendDyn e;
+    memset(&e, 0, sizeof(e));
+    e.src = e.dst = e.srcA = e.dstA = GL_ZERO;
+    e.eq = e.eqA = GL_FUNC_ADD;
+    if (b->enable) {
+        e.src = b->src;
+        e.dst = b->dst;
+        e.eq = b->eq;
+        e.srcA = b->srcA;
+        e.dstA = b->dstA;
+        e.eqA = b->eqA;
+    }
+    return e;
+}
+
+static bool gl_dual_factor(GLenum f)
+{
+    return f == GL_SRC1_COLOR || f == GL_ONE_MINUS_SRC1_COLOR || f == GL_SRC1_ALPHA ||
+           f == GL_ONE_MINUS_SRC1_ALPHA;
+}
+
 /* RhiStats.dynamicSets: the commands the Vulkan backend records for the
  * bound pipeline's dynamic groups at this draw (vk_cmd.c vkr_flush_dynamic):
  * every command of a group after a bind of a pipeline with it static, else
- * those whose value changed; the blend equation only while blending. */
+ * those whose value changed, the blend equation blending on or off (as
+ * Vulkan forms it, gl_count_eq); blendEqOffSets and dualLeftovers likewise.
+ * OpenGL itself sends the blend function and equation whenever they change,
+ * whatever the enable (gl_apply_raster). */
 static void gl_count_dynamic(GlCmdList *c, const GlPipeline *p)
 {
     static bool s_unsetLogged;
@@ -300,15 +329,24 @@ static void gl_count_dynamic(GlCmdList *c, const GlPipeline *p)
             g_gl.counts.dynamicSets++;
             h->enable = w->enable;
         }
-        if (all || (w->enable && (w->src != h->src || w->dst != h->dst || w->eq != h->eq ||
-                                  w->srcA != h->srcA || w->dstA != h->dstA || w->eqA != h->eqA))) {
+        /* h holds the equation as counted (gl_count_eq), not OpenGL's */
+        const GlBlendDyn e = gl_count_eq(w);
+        if (all || e.src != h->src || e.dst != h->dst || e.eq != h->eq || e.srcA != h->srcA ||
+            e.dstA != h->dstA || e.eqA != h->eqA) {
             g_gl.counts.dynamicSets++;
-            h->src = w->src;
-            h->dst = w->dst;
-            h->eq = w->eq;
-            h->srcA = w->srcA;
-            h->dstA = w->dstA;
-            h->eqA = w->eqA;
+            if (!w->enable) {
+                g_gl.counts.blendEqOffSets++;
+                if (!all && (gl_dual_factor(h->src) || gl_dual_factor(h->dst) ||
+                             gl_dual_factor(h->srcA) || gl_dual_factor(h->dstA))) {
+                    g_gl.counts.dualLeftovers++;
+                }
+            }
+            h->src = e.src;
+            h->dst = e.dst;
+            h->eq = e.eq;
+            h->srcA = e.srcA;
+            h->dstA = e.dstA;
+            h->eqA = e.eqA;
         }
         if (all || w->mask != h->mask) {
             g_gl.counts.dynamicSets++;
