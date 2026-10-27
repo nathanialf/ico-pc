@@ -187,9 +187,13 @@ target_compile_options(inflate_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_L
 target_link_libraries(inflate_test PRIVATE ico_port_data ico_platform)
 # The test frees a pointer 8 bytes into a block on purpose (the EE walk's
 # mistake on the host); iosFree reads the 16-byte-aligned header in front of
-# it, which UBSan's alignment check reports.  Only this target drops that check.
+# it, which UBSan's alignment check reports, and its assert message then
+# reads the shifted node's neighbours: the shifted `next` lands on the block's
+# free_prev, NULL for a block in use, so the message's "%s" of that node's
+# tag (at offset 0) is a NULL member access UBSan reports (glibc prints
+# "(null)").  Only this target drops those two checks.
 if(ICO_SANITIZE)
-    target_compile_options(inflate_test PRIVATE $<$<COMPILE_LANGUAGE:C>:-fno-sanitize=alignment>)
+    target_compile_options(inflate_test PRIVATE $<$<COMPILE_LANGUAGE:C>:-fno-sanitize=alignment,null>)
 endif()
 if(ICO_RUN_TESTS)
     add_test(NAME inflate COMMAND inflate_test synth)
