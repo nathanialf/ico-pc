@@ -154,10 +154,23 @@ static bool recEnsure(uint32_t rows)
     return s_recBuf[rd__ring_slot()].id != 0;
 }
 
+/* The bytes of the slot's upload ring t5 binds (vu_ring: the pre-pass's
+ * batches read their VuCB and VuBoneCB there): the ring from offset 0, to
+ * the device's largest storage range (16-byte elements) */
+static uint64_t ringRange(void)
+{
+    uint64_t range = g_rd.ringCap[rd__ring_slot()];
+    const uint64_t maxRange = rhi_limits()->maxStorageRange;
+    if (maxRange && range > maxRange) {
+        range = maxRange;
+    }
+    return range & ~(uint64_t)15u;
+}
+
 /* The VU layout's group binds the stream's whole buffer (the
  * mesh arena chunk or the ring) at t0, the ring at offset 0 for the
- * three dynamic uniforms and the slot's record buffer at t4, so it is made
- * once per stream buffer and replay;
+ * three dynamic uniforms, the slot's record buffer at t4 and the ring
+ * again at t5 (ringRange), so it is made once per stream buffer and replay;
  * a draw selects its stream through VuCB's vu_draw.x (the qword index of
  * its first batch, vu_common.hlsli) and its blocks through the bind-time
  * offsets.  A stream whose end lies past the device's largest storage range
@@ -165,7 +178,7 @@ static bool recEnsure(uint32_t rows)
 #define RD_VU_GROUPS (RD_MESH_CHUNKS + 2) /* every arena chunk and the ring */
 
 typedef struct VuEntry {
-    uint32_t epoch, buffer, rec;
+    uint32_t epoch, buffer, rec, ring;
     uint64_t range;
     RhiBindGroup group;
 } VuEntry;
@@ -174,7 +187,7 @@ static VuEntry s_vuGroups[RD_VU_GROUPS];
 
 static RhiBindGroup vuGroupMake(RhiBuffer streamBuf, uint64_t streamOff, uint64_t streamSize)
 {
-    RhiBinding b[5];
+    RhiBinding b[6];
     memset(b, 0, sizeof(b));
     b[0].slot = 0;
     b[0].type = RHI_BIND_STORAGE_BUFFER;
@@ -193,7 +206,12 @@ static RhiBindGroup vuGroupMake(RhiBuffer streamBuf, uint64_t streamOff, uint64_
     b[4].slot = 4;
     b[4].type = RHI_BIND_STORAGE_BUFFER;
     b[4].buffer = recBinding(&b[4].size);
-    return rd__replay_bind_group(g_rd.layoutVu, b, 5);
+    b[5].slot = 5;
+    b[5].type = RHI_BIND_STORAGE_BUFFER;
+    b[5].buffer = g_rd.ring[rd__ring_slot()];
+    b[5].offset = 0;
+    b[5].size = ringRange();
+    return rd__replay_bind_group(g_rd.layoutVu, b, 6);
 }
 
 /* The group for a stream at streamOff of streamBuf (bufSize bytes); *base
@@ -218,7 +236,7 @@ static RhiBindGroup vuGroup(RhiBuffer streamBuf, uint64_t bufSize, uint64_t stre
     for (int i = 0; i < RD_VU_GROUPS; i++) {
         VuEntry *e = &s_vuGroups[i];
         if (e->epoch == rd__replay_bind_epoch() && e->buffer == streamBuf.id && e->rec == rec &&
-            e->range == range) {
+            e->ring == g_rd.ring[rd__ring_slot()].id && e->range == range) {
             return e->group;
         }
         if (!free && e->epoch != rd__replay_bind_epoch()) {
@@ -230,6 +248,7 @@ static RhiBindGroup vuGroup(RhiBuffer streamBuf, uint64_t bufSize, uint64_t stre
         free->epoch = rd__replay_bind_epoch();
         free->buffer = streamBuf.id;
         free->rec = rec;
+        free->ring = g_rd.ring[rd__ring_slot()].id;
         free->range = range;
         free->group = g;
     }
@@ -953,6 +972,10 @@ static int s_preSabotage;
 /* rd__vu_prepass is recording (rd__vu_prepass_running) */
 static bool s_preRunning;
 
+/* rd__vu_prepass_entry_draws: the last pre-pass's draws one an entry and
+   stage */
+static uint32_t s_preEntryDraws;
+
 bool rd__vu_prepass_running(void)
 {
     return s_preRunning;
@@ -969,6 +992,7 @@ void rd__vu_prepass(const RdFrame *f, int keep)
 {
     s_preN = s_preAt = 0;
     s_preReplay = 0;
+    s_preEntryDraws = 0;
     if (!g_rd.vuPrepass) {
         return;
     }
@@ -1097,6 +1121,209 @@ static void vuRecPassCopy(uint32_t row0, uint32_t rows, bool muted)
                 plane * k + (uint64_t)row0 * ICO_VU_REC_W * 16u, ICO_VU_REC_W * 16u);
         }
     }
+}
+
+/* ------------------------------------------------ the pre-pass's batches
+ * docs/port/VU1_PROGRAMS.md, "The pre-pass's batches".  Under g_rd.vuPreBatch
+ * a pass's entry draws (vuStageDraw's: one an entry and stage) become items:
+ * each still copies its VuCB (vu_tri.w its stage's) into the ring as
+ * vuStageDraw does, with its VuBoneCB there already (vuSource); the items
+ * are ordered by (stage key, FrameCB, group 1), the record's order kept
+ * within each, and each run of up to RD_VU_PRE_BATCH_MAX items with the same
+ * three is one point draw through the stage's batch build
+ * (vu_X_batch_pre_vs): its table, a uint4 an item (the item's first
+ * SV_VertexID in the draw, its VuCB's and VuBoneCB's float4 in the ring),
+ * copied into the ring; its DrawCB (b1, which no record stage reads
+ * otherwise) aux0.x the table's float4 in the ring, aux0.y its items.  The
+ * shaders read the ring at t5 (vu_common.hlsli vu_ring,
+ * vu_pre_batch_entry), the same bytes the cbuffers would hold, so each
+ * entry writes the words it writes in its own draw, at the same texels; the
+ * items of a pass write disjoint texels, so their order does not change
+ * the record. */
+#define RD_VU_PRE_BATCH_MAX 64u /* vu_common.hlsli VU_PRE_BATCH_MAX */
+
+typedef struct PreItem {
+    VuPre *e;
+    RhiBindGroup g1;
+    uint64_t vOff;  /* its VuCB in the ring */
+    uint32_t count; /* its points */
+    uint32_t seq;   /* its place in the record's order */
+    RdPipeKeyInt key;
+} PreItem;
+
+static PreItem *s_items;
+static uint32_t s_itemCap, s_itemN;
+static uint32_t *s_itemOrder;
+
+uint32_t rd__vu_prepass_entry_draws(void)
+{
+    return s_preEntryDraws;
+}
+
+/* room for n more items; false when it cannot be had */
+static bool preItemsReserve(uint32_t n)
+{
+    if (s_itemN + n <= s_itemCap) {
+        return true;
+    }
+    uint32_t cap = s_itemCap ? s_itemCap : 512u;
+    while (cap < s_itemN + n) {
+        cap *= 2u;
+    }
+    PreItem *items = realloc(s_items, (size_t)cap * sizeof(*items));
+    if (!items) {
+        return false;
+    }
+    s_items = items;
+    uint32_t *order = realloc(s_itemOrder, (size_t)cap * sizeof(*order));
+    if (!order) {
+        return false;
+    }
+    s_itemOrder = order;
+    s_itemCap = cap;
+    return true;
+}
+
+/* entry e's draw of the stage key with VuCB vcb (vu_tri.w = w) as an item:
+ * its group 1 (vu_draw.x), its VuCB in the ring; false when it could not be
+ * (the ring full, its VuCB or VuBoneCB past what t5 binds, no group) */
+static bool preItem(VuPre *e, IcoVuCB *vcb, const RdPipeKeyInt *key, uint32_t w, uint32_t count,
+                    PreItem *out)
+{
+    vcb->tri[3] = w;
+    if (g_rdWin.first && g_rdWin.filter == 1) {
+        /* the loss bisect's MASK_MARKS (vuDraw's): every triangle unmarked */
+        memset(vcb->mark, 0, sizeof(vcb->mark));
+    }
+    memset(out, 0, sizeof(*out));
+    out->g1 = vuGroup(e->src.streamBuf, e->src.streamBufSize, e->src.streamOff, e->src.streamSize,
+                      &vcb->draw[0]);
+    out->vOff = cbCopy(vcb, sizeof(*vcb), rhi_limits()->uniformAlign);
+    const uint64_t range = ringRange();
+    if (!out->g1.id || out->vOff == ~0ull || out->vOff + sizeof(IcoVuCB) > range ||
+        e->src.bonesOff + sizeof(IcoVuBoneCB) > range) {
+        return false;
+    }
+    out->e = e;
+    out->count = count;
+    out->key = *key;
+    return true;
+}
+
+/* the items' order: stage key (its vertex shader and colour mask, the only
+   fields the record's keys differ in: rd__vu_stage_key), FrameCB, group 1,
+   then the record's */
+static int preItemCmp(const void *a, const void *b)
+{
+    const PreItem *x = &s_items[*(const uint32_t *)a], *y = &s_items[*(const uint32_t *)b];
+    const uint32_t kx = (uint32_t)x->key.vs << 4 | x->key.gs.colorMask;
+    const uint32_t ky = (uint32_t)y->key.vs << 4 | y->key.gs.colorMask;
+    if (kx != ky) {
+        return kx < ky ? -1 : 1;
+    }
+    if (x->e->frame.group.id != y->e->frame.group.id) {
+        return x->e->frame.group.id < y->e->frame.group.id ? -1 : 1;
+    }
+    if (x->e->frame.offset != y->e->frame.offset) {
+        return x->e->frame.offset < y->e->frame.offset ? -1 : 1;
+    }
+    if (x->g1.id != y->g1.id) {
+        return x->g1.id < y->g1.id ? -1 : 1;
+    }
+    return x->seq < y->seq ? -1 : (x->seq > y->seq ? 1 : 0);
+}
+
+static bool preItemSameBatch(const PreItem *x, const PreItem *y)
+{
+    return x->key.vs == y->key.vs && x->key.gs.colorMask == y->key.gs.colorMask &&
+           x->e->frame.group.id == y->e->frame.group.id &&
+           x->e->frame.offset == y->e->frame.offset && x->g1.id == y->g1.id;
+}
+
+/* one batch: the items order[0 .. n) (n <= RD_VU_PRE_BATCH_MAX) as one point
+ * draw: 1 drawn, 0 only its key named (rd__pipeline_gathering), -1 it could
+ * not be drawn (the ring full, its pipeline missing) */
+static int preBatchDraw(const uint32_t *order, uint32_t n)
+{
+    const PreItem *f = &s_items[order[0]];
+    const RhiPipeline p = rd__get_pipeline(&f->key);
+    if (!p.id) {
+        return rd__pipeline_gathering() ? 0 : -1;
+    }
+    uint32_t tab[RD_VU_PRE_BATCH_MAX][4];
+    uint32_t points = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        const PreItem *it = &s_items[order[i]];
+        tab[i][0] = points;
+        tab[i][1] = (uint32_t)(it->vOff / 16u);
+        tab[i][2] = (uint32_t)(it->e->src.bonesOff / 16u);
+        tab[i][3] = 0;
+        points += it->count;
+    }
+    const uint64_t ua = rhi_limits()->uniformAlign;
+    const uint64_t tOff = cbCopy(tab, (uint64_t)n * 16u, 16);
+    if (tOff == ~0ull || tOff + (uint64_t)n * 16u > ringRange()) {
+        return -1;
+    }
+    IcoDrawCB cb;
+    memset(&cb, 0, sizeof(cb));
+    cb.aux0[0] = (uint32_t)(tOff / 16u);
+    cb.aux0[1] = n;
+    const uint64_t dOff = cbCopy(&cb, sizeof(cb), ua);
+    if (dOff == ~0ull) {
+        return -1;
+    }
+    /* VuCB and VuBoneCB bound at the first item's (the batch build reads
+       neither: every item's are read through t5) */
+    const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)f->vOff, (uint32_t)f->e->src.bonesOff};
+    rd__set_pipeline(rd__replay_cl(), p, &f->key);
+    rd__bind_uniform(rd__replay_cl(), 0, f->e->frame); /* the commands' draws' FrameCB */
+    rhi_cmd_set_bind_group_offsets(rd__replay_cl(), 1, f->g1, offs, 3);
+    if (g_rdWin.first && g_rdWin.drawLast && g_rdWin.passes == g_rdWin.last) {
+        /* the draw note: the batch's first command's, its class the
+           program's own entry (rd__win_vu_note), the batch's points */
+        const VuPre *e = f->e;
+        g_rdVuCur.type = e->cmd->type;
+        g_rdVuCur.prog = e->src.p.prog;
+        g_rdVuCur.clip = e->src.p.clip;
+        g_rdVuCur.batch = e->src.p.firstBatch;
+        g_rdVuCur.index = NULL;
+        g_rdVuCur.marks = NULL;
+        g_rdVuCur.markCount = 0;
+        g_rdVuCur.mesh = e->src.m ? e->src.m->name : NULL;
+        rd__win_vu_note(0, &f->key, &e->src.vcb, e->src.vs, 0, e->first, points);
+    }
+    rd__replay_draw(rd__replay_cl(), points, 0, 1);
+    return 1;
+}
+
+/* the pass's items as batches; an item of a batch that could not be drawn
+ * leaves its command to the old way (VuPre.rec 0); the draws made */
+static uint32_t preBatchesDraw(void)
+{
+    for (uint32_t i = 0; i < s_itemN; i++) {
+        s_itemOrder[i] = i;
+    }
+    qsort(s_itemOrder, s_itemN, sizeof(*s_itemOrder), preItemCmp);
+    uint32_t draws = 0;
+    for (uint32_t i = 0; i < s_itemN;) {
+        uint32_t n = 1;
+        while (i + n < s_itemN && n < RD_VU_PRE_BATCH_MAX &&
+               preItemSameBatch(&s_items[s_itemOrder[i]], &s_items[s_itemOrder[i + n]])) {
+            n++;
+        }
+        const int drawn = preBatchDraw(&s_itemOrder[i], n);
+        if (drawn >= 0) {
+            draws += (uint32_t)drawn;
+        } else {
+            for (uint32_t k = 0; k < n; k++) {
+                s_items[s_itemOrder[i + k]].e->rec = 0; /* drawn the old way */
+            }
+        }
+        i += n;
+    }
+    s_itemN = 0;
+    return draws;
 }
 
 static void vuPrepassRun(const RdFrame *f, int keep)
@@ -1305,7 +1532,56 @@ static void vuPrepassRun(const RdFrame *f, int keep)
                                                              usedV, 0, vEnd, 0, 0, -1));
     bool muted = rd__win_muted();
     vuRecPassBegin(0, usedV);
-    for (uint32_t i = 0; i < s_preN; i++) {
+    const bool batched = g_rd.vuPreBatch;
+    uint32_t entryDraws = 0;
+    for (uint32_t i = 0; batched && i < s_preN; i++) {
+        /* the batches' items (one an entry, two a particle command), then
+         * their draws */
+        VuPre *e = &s_pre[i];
+        if (!e->rec) {
+            continue;
+        }
+        IcoVuCB vcb = e->src.vcb;
+        vuPreRecord(e, &vcb);
+        PreItem it[2];
+        if (e->particle) {
+            /* the sprite stage, slot A then slot B */
+            const RdPipeKeyInt key = rd__vu_stage_key(RD_VS_VU_PARTICLE_PRE, 0xF);
+            if (!preItemsReserve(2) || !preItem(e, &vcb, &key, 0, e->count, &it[0]) ||
+                !preItem(e, &vcb, &key, 1, e->count, &it[1])) {
+                e->rec = 0; /* drawn the old way */
+                continue;
+            }
+            for (uint32_t k = 0; k < 2; k++) {
+                it[k].seq = s_itemN;
+                s_items[s_itemN++] = it[k];
+            }
+            continue;
+        }
+        if (s_preSabotage == RD_VU_SABOTAGE_VERTEX && vertDraws == 0) {
+            vcb.rec[0] += 1u; /* rd_vuprepass_selftest's sabotage: written a texel on */
+        }
+        const RdPipeKeyInt key = rd__vu_pre_key(e->preVs);
+        if (!preItemsReserve(1) || !preItem(e, &vcb, &key, 0, e->count, &it[0])) {
+            e->rec = 0; /* drawn the old way */
+            continue;
+        }
+        it[0].seq = s_itemN;
+        s_items[s_itemN++] = it[0];
+        vertDraws++;
+    }
+    if (batched) {
+        draws += preBatchesDraw();
+        for (uint32_t i = 0; i < s_preN; i++) {
+            const VuPre *e = &s_pre[i];
+            if (e->rec) {
+                sprites += e->particle ? e->count : 0u;
+                verts += e->particle ? 0u : e->count;
+                entryDraws += e->particle ? 2u : 1u;
+            }
+        }
+    }
+    for (uint32_t i = 0; !batched && i < s_preN; i++) {
         VuPre *e = &s_pre[i];
         if (!e->rec) {
             continue;
@@ -1351,7 +1627,59 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         muted = rd__win_muted();
         vuRecPassBegin(rowsV, usedT);
         bool firstTri = true;
-        for (uint32_t i = 0; i < s_preN; i++) {
+        for (uint32_t i = 0; batched && i < s_preN; i++) {
+            /* the batches' items: the rule, tick (R, G) and planes stages
+             * of each command, then their draws */
+            VuPre *e = &s_pre[i];
+            if (!e->rec || e->particle) {
+                continue;
+            }
+            IcoVuCB vcb = e->src.vcb;
+            vuPreRecord(e, &vcb);
+            const uint32_t kicks = e->count - 2u;
+            IcoVuCB rule = vcb;
+            if (s_preSabotage == RD_VU_SABOTAGE_TRI && firstTri) {
+                rule.tri[0] += 1u; /* the self-test's sabotage: slot A written a slot on */
+            }
+            firstTri = false;
+            PreItem it[4];
+            uint32_t n = 0;
+            const RdPipeKeyInt kr = rd__vu_stage_key(RD_VS_VU_TRI_RULE_PRE, 0xF);
+            bool ok = preItemsReserve(4) && preItem(e, &rule, &kr, 0, kicks, &it[n++]);
+            if (ok && e->ticks) {
+                IcoVuCB tick = vcb;
+                if (s_preSabotage == RD_VU_SABOTAGE_TICKS) {
+                    /* the self-test's sabotage: tick 1 tested at tick 0's
+                       camera */
+                    memcpy(tick.ticks[4], tick.ticks[0], 4 * sizeof(tick.ticks[0]));
+                }
+                const RdPipeKeyInt k0 = rd__vu_stage_key(RD_VS_VU_TRI_TICK_PRE, 0x1);
+                const RdPipeKeyInt k1 = rd__vu_stage_key(RD_VS_VU_TRI_TICK_PRE, 0x2);
+                ok = preItem(e, &tick, &k0, 0, kicks, &it[n++]) &&
+                     preItem(e, &tick, &k1, 1, kicks, &it[n++]);
+            }
+            const RdPipeKeyInt kp = rd__vu_stage_key(RD_VS_VU_TRI_PLANES_PRE, 0xF);
+            ok = ok && preItem(e, &vcb, &kp, 0, kicks, &it[n++]);
+            if (!ok) {
+                e->rec = 0; /* drawn the old way (its vertices' slots unread) */
+                continue;
+            }
+            for (uint32_t k = 0; k < n; k++) {
+                it[k].seq = s_itemN;
+                s_items[s_itemN++] = it[k];
+            }
+        }
+        if (batched) {
+            draws += preBatchesDraw();
+            for (uint32_t i = 0; i < s_preN; i++) {
+                const VuPre *e = &s_pre[i];
+                if (e->rec && !e->particle) {
+                    entryDraws += e->ticks ? 4u : 2u;
+                    triSlots += vuPreTSlots(e);
+                }
+            }
+        }
+        for (uint32_t i = 0; !batched && i < s_preN; i++) {
             VuPre *e = &s_pre[i];
             if (!e->rec || e->particle) {
                 continue;
@@ -1396,13 +1724,28 @@ static void vuPrepassRun(const RdFrame *f, int keep)
     g_rdPerf.vuPreVertices = verts;
     g_rdPerf.vuPreSprites = sprites;
     g_rdPerf.vuTriSlots = triSlots;
+    /* the draws made: one a batch under g_rd.vuPreBatch, else one an
+       entry and stage (s_preEntryDraws either way) */
     g_rdPerf.vuPreDraws = draws;
+    s_preEntryDraws = batched ? entryDraws : draws;
 }
 
 /* rd__gpu_shutdown: the record's textures and buffers, the entries */
 void rd__vu_prepass_shutdown(void)
 {
     recFree();
+    for (int v = 0; v < RD_VS_COUNT; v++) {
+        if (g_rd.vsBatch[v].id) {
+            rhi_destroy_shader(g_rd.vsBatch[v]);
+        }
+        g_rd.vsBatch[v] = (RhiShader){0};
+    }
+    g_rd.vuPreBatch = false;
+    free(s_items);
+    free(s_itemOrder);
+    s_items = NULL;
+    s_itemOrder = NULL;
+    s_itemCap = s_itemN = 0;
     if (s_recNull.id) {
         rhi_destroy_buffer(s_recNull);
     }
@@ -1424,6 +1767,72 @@ void rd_set_vu_prepass_off(const char *reason)
 bool rd_vu_prepass_on(void)
 {
     return g_rd.vuPrepass;
+}
+
+/* how the pre-pass draws (rd__vu_prepass_init's line) */
+static char s_preBatchWhy[192];
+
+/* The pre-pass's batches (g_rd.vuPreBatch) with the pre-pass on: the batch
+ * builds of the ten pre-pass entries and the four record stages
+ * (vu_X_pre_vs's is vu_X_batch_pre_vs), unless [dev] vu_prepass_batch =
+ * false (ICO_RD_VU_PREPASS_BATCH=0); one missing keeps one draw an entry.
+ * Before any pipeline (the keys are the same either way, rd_pipeline.c) */
+static void preBatchInit(void)
+{
+    for (int v = 0; v < RD_VS_COUNT; v++) {
+        if (g_rd.vsBatch[v].id) {
+            rhi_destroy_shader(g_rd.vsBatch[v]);
+        }
+        g_rd.vsBatch[v] = (RhiShader){0};
+    }
+    g_rd.vuPreBatch = false;
+    const char *env = getenv("ICO_RD_VU_PREPASS_BATCH");
+    if (env && strcmp(env, "0") == 0) {
+        snprintf(s_preBatchWhy, sizeof(s_preBatchWhy),
+                 "one an entry and stage ([dev] vu_prepass_batch = false, "
+                 "ICO_RD_VU_PREPASS_BATCH=0)");
+        return;
+    }
+    if (!g_rd.vuPrepass) {
+        s_preBatchWhy[0] = '\0';
+        return;
+    }
+    bool ok = true;
+    for (int v = 0; v < RD_VS_COUNT && ok; v++) {
+        if (!rd__vs_is_vu_pre((uint8_t)v) && !rd__vs_is_vu_stage((uint8_t)v)) {
+            continue;
+        }
+        /* vu_X_pre_vs -> vu_X_batch_pre_vs */
+        const char *e = rd__vs_name((uint8_t)v);
+        const size_t n = strlen(e);
+        char name[64];
+        if (n < 7 || strcmp(e + n - 7, "_pre_vs") != 0) {
+            ok = false;
+            break;
+        }
+        snprintf(name, sizeof(name), "%.*s_batch_pre_vs", (int)(n - 7), e);
+        g_rd.vsBatch[v] = rd__make_shader(name);
+        if (!g_rd.vsBatch[v].id) {
+            rd__log("VU pre-pass: %s could not be made: its draws are one an entry", name);
+            ok = false;
+        }
+    }
+    if (!ok) {
+        for (int v = 0; v < RD_VS_COUNT; v++) {
+            if (g_rd.vsBatch[v].id) {
+                rhi_destroy_shader(g_rd.vsBatch[v]);
+            }
+            g_rd.vsBatch[v] = (RhiShader){0};
+        }
+        snprintf(s_preBatchWhy, sizeof(s_preBatchWhy),
+                 "one an entry and stage (a batch module could not be made)");
+        return;
+    }
+    g_rd.vuPreBatch = true;
+    snprintf(s_preBatchWhy, sizeof(s_preBatchWhy),
+             "batched: one point draw a run of up to %u entries with the same stage, FrameCB and "
+             "group 1 ([dev] vu_prepass_batch = false: one an entry and stage)",
+             RD_VU_PRE_BATCH_MAX);
 }
 
 void rd__vu_prepass_init(const RhiLimits *lim)
@@ -1480,12 +1889,13 @@ void rd__vu_prepass_init(const RhiLimits *lim)
                 "no bound on its bytes a pixel assumed; the start-up self-test checks it",
                 rhi_adapter_name());
     }
+    preBatchInit();
     if (g_rd.vuPrepass) {
         rd__log("VU pre-pass: on: each mesh and grid vertex and triangle and each sprite "
                 "evaluated once before the lists (two passes), %u bytes a record slot in %u "
                 "RGBA32_UINT targets, two slots a triangle (three under the tick cameras); [dev] "
-                "vu_prepass = false draws the old way",
-                ICO_VU_REC_BYTES, ICO_VU_REC_PLANES);
+                "vu_prepass = false draws the old way; its draws %s",
+                ICO_VU_REC_BYTES, ICO_VU_REC_PLANES, s_preBatchWhy);
     } else {
         rd__log("VU pre-pass: off %s: every VU draw evaluates its triangle's corners in the "
                 "triangle's own vertex shader",
