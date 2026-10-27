@@ -2138,6 +2138,11 @@ typedef struct RdPerfRecord {
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
  * dropped when nobody pops); false when there is none. */
 bool rd_perf_pop(RdPerfRecord *out);
+/* "; Direct3D 11 submits wrote N KB to the GPU": the mean backendWriteBytes
+ * a record of those rd_perf_pop handed out since the last call, "" when
+ * they wrote none (every other backend); the count starts again.  The
+ * window's uploaded KB line ends with it (docs/port/DISPLAY.md). */
+const char *rd_perf_backend_text(void);
 
 /* The CPU time of the replay finished last (its RdPerfRecord.totalMs,
  * popped or not): with interpolation off the window's pacing reads the
