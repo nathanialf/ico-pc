@@ -2019,6 +2019,32 @@ int main(int argc, char **argv)
                dump, g_rd.vuPrepass ? "on" : "off", pr->vuPrePasses, pr->vuPreVertices,
                pr->vuPreDraws, pr->vuPreFallbacks, pr->vuPreSprites, pr->vuTriSlots,
                pr->vuTickDraws);
+        /* the draw-merge count (rd_replay_vu.c vuMergeNote): how many VU
+         * draws could join the draw before them (same pipeline, textures,
+         * DrawCB bytes, scissor and FrameCB, one pass, no DATE stencil,
+         * storage pass or skin), counting only; and the pre-pass's batches */
+        {
+            uint32_t md = 0, mr = 0;
+            char per[13 * 28];
+            size_t pn = 0;
+            per[0] = '\0';
+            for (int l = 0; l < RD_LIST_COUNT; l++) {
+                md += pr->vuMergeDraws[l] + pr->vuMergeRuns[l];
+                mr += pr->vuMergeRuns[l];
+                pn +=
+                    (size_t)snprintf(per + pn, sizeof(per) - pn, "%s%d:%u/%u", l ? " " : "", l,
+                                     pr->vuMergeDraws[l] + pr->vuMergeRuns[l], pr->vuMergeRuns[l]);
+            }
+            printf("%s: stats: VU merge: %u draws in %u runs (mean %.1f a run); blocked by "
+                   "pipeline %u, texture group %u, DrawCB %u, split/DATE/dst %u, scissor/FrameCB "
+                   "%u; per list: %s\n",
+                   dump, md, mr, mr ? (double)md / (double)mr : 0.0, pr->vuMergeBlocked[0],
+                   pr->vuMergeBlocked[1], pr->vuMergeBlocked[2], pr->vuMergeBlocked[3],
+                   pr->vuMergeBlocked[4], per);
+            printf("%s: stats: VU pre-pass batches: %u distinct (stage, frame, stream, bones) of "
+                   "%u draws\n",
+                   dump, pr->prepassBatches, pr->vuPreDraws);
+        }
         /* the crack filler above 1x (rd_crack_fill.c): its count read back */
         rd__crack_fill_wait();
         RdCrackCounts cc;
