@@ -873,7 +873,14 @@ void rhi_destroy_pipeline(RhiPipeline p);
  * second for texture uploads.  Lists are submitted in order.  Barriers are
  * needed only when a texture changes state: two writes in the same state
  * (copy after copy into one texture, render pass after render pass on one
- * target) are ordered by the backend. */
+ * target) are ordered by the backend.  RHI_STATE_STORAGE is the exception
+ * on every backend: fragment shader stores are ordered within a pass (the
+ * interlock or ROV) and by the barrier that takes the texture out of
+ * STORAGE, never across two passes that leave it in STORAGE (the Vulkan
+ * hazard tracking records attachment and transfer writes only, OpenGL's
+ * glMemoryBarrier and D3D12's transition go at the barrier).  A caller
+ * moves the texture out of STORAGE between two storage passes on it, as
+ * the renderer's endPass does (rd_replay.c). */
 RhiCommandList rhi_begin_commands(void);
 void rhi_end_commands(RhiCommandList cl);
 void rhi_submit(RhiCommandList cl);
