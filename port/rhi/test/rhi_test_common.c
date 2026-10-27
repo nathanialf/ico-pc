@@ -843,7 +843,7 @@ static void dstReadCell(const Ctx *c, RhiDstRead kind)
  * equation: the zeroed one replaces the SRC1 one; the mask is unchanged),
  * blendEqOffSets and dualLeftovers each +1, and the quad's colour is exact
  * at an even and an odd column (RADV on Mesa 25 on RDNA3 left the odd one
- * undefined while the SRC1 equation stayed).  Skipped without dual-source
+ * wrong while the SRC1 equation stayed).  Skipped without dual-source
  * blending or dynamic blend. */
 static void dualLeftoverCell(const Ctx *c)
 {
