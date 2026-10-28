@@ -44,6 +44,19 @@
  *      of SCENE byte for byte and its composite back the sampler's bilinear
  *      between the same texels within 2, not counted above 1x; the passes
  *      counted (g_rd.above1xDraws), none in the 1x run.
+ *   o  the count resolved in one draw from the stencil view against the
+ *      seven stencil-tested draws (and the box reduction above 1x;
+ *      RdProfile.shadowOne flipped between two recordings of the same
+ *      frame): the count at its GS size (rd__shadow_count_read), the three
+ *      blur levels and SCENE byte for byte, for the synthetic volumes,
+ *      Shadow.c's model and a rectangle at sub-pixel offsets, at 1x, at
+ *      scale 2 and at 1931 x 1093 texels (a fractional scale both ways);
+ *      each recording resolved by the path asked (g_rdPerf.shadowOne,
+ *      shadowSeven).  The count's bytes for n = 0, 1, 63, 64, 128 and 255
+ *      (rd__shadow_table_texel, the one draw's table) against 4 n mod 256
+ *      and A = 0x80 where that is non-zero.  Without the view (a backend
+ *      whose RhiLimits.stencilView is false) the comparison is skipped
+ *      with a line.
  * Every pipeline created is enumerated; no validation errors. */
 #include <math.h>
 #include <stdarg.h>
@@ -1325,6 +1338,193 @@ static void checkScaledIntegral(void)
     rd_shutdown();
 }
 
+/* ---------------------------------- (o) one draw against seven draws */
+
+/* the one draw's table against the GS colour sum, for the counts the brief
+ * names (no device) */
+static void checkTable(void)
+{
+    static const int kN[] = {0, 1, 63, 64, 128, 255};
+    for (size_t i = 0; i < sizeof(kN) / sizeof(kN[0]); i++) {
+        uint8_t t[4];
+        rd__shadow_table_texel((uint32_t)kN[i] & RD_SHADOW_STENCIL_MASK, t);
+        const uint8_t c = wrappedColour(kN[i]);
+        CHECK(t[0] == c && t[1] == c && t[2] == c && t[3] == (c ? 0x80 : 0),
+              "(o) table: n = %d gives %u %u %u %u, the GS %u %u %u %u", kN[i], t[0], t[1], t[2],
+              t[3], c, c, c, c ? 0x80 : 0);
+    }
+}
+
+typedef struct AbPics {
+    uint8_t *cnt, *lv[3], *scene;
+    uint32_t cw, ch, sw, sh;
+} AbPics;
+
+static void abFree(AbPics *p)
+{
+    free(p->cnt);
+    for (int l = 0; l < 3; l++) {
+        free(p->lv[l]);
+    }
+    free(p->scene);
+    memset(p, 0, sizeof(*p));
+}
+
+/* the frame recorded and replayed with the one draw (one) or the seven
+ * draws, and its pictures read back; false (reported) when one is missing */
+static bool abRecord(int vol, bool one, AbPics *p, const char *what)
+{
+    static const int kAll[4] = {0, kBlend[1], kBlend[2], kBlend[3]};
+    memset(p, 0, sizeof(*p));
+    g_rd.profile.shadowOne = one;
+    recordFrame(vol, kAll);
+    CHECK(one ? (g_rdPerf.shadowOne >= 1 && g_rdPerf.shadowSeven == 0)
+              : (g_rdPerf.shadowSeven >= 1 && g_rdPerf.shadowOne == 0),
+          "(o) %s: the %s path resolved the count (one %u, seven %u)", what,
+          one ? "one-draw" : "seven-draw", g_rdPerf.shadowOne, g_rdPerf.shadowSeven);
+    const RdTargetRec *c = rd__target_rec(s_count.id);
+    const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
+    if (!c || !sc) {
+        CHECK(0, "(o) %s: no count or SCENE target", what);
+        return false;
+    }
+    p->cw = c->w;
+    p->ch = c->h;
+    p->sw = sc->tw;
+    p->sh = sc->th;
+    p->cnt = malloc((size_t)p->cw * p->ch * 4);
+    p->scene = malloc((size_t)p->sw * p->sh * 4);
+    bool ok = p->cnt && p->scene;
+    uint32_t w = 0, h = 0;
+    ok = ok && rd__shadow_count_read(s_count.id, p->cnt, (size_t)p->cw * p->ch * 4, &w, &h) &&
+         w == p->cw && h == p->ch;
+    CHECK(ok, "(o) %s: the count at its GS size %ux%u read back", what, p->cw, p->ch);
+    for (int l = 0; l < 3 && ok; l++) {
+        const uint32_t s = 256u >> l;
+        p->lv[l] = malloc((size_t)s * s * 4);
+        ok = p->lv[l] && readTarget(rd_target((RdTargetId)(RD_TARGET_SHADOW0 + l)), p->lv[l], s, s);
+    }
+    ok = ok && readTarget(rd_target(RD_TARGET_SCENE), p->scene, p->sw, p->sh);
+    return ok;
+}
+
+/* the first texel that differs (-1 none), the count of those that do */
+static long firstDiff(const uint8_t *a, const uint8_t *b, size_t texels, size_t *n)
+{
+    long first = -1;
+    *n = 0;
+    for (size_t i = 0; i < texels; i++) {
+        if (memcmp(&a[i * 4], &b[i * 4], 4) != 0) {
+            if (first < 0) {
+                first = (long)i;
+            }
+            (*n)++;
+        }
+    }
+    return first;
+}
+
+static void abCompareOne(const uint8_t *a, const uint8_t *b, uint32_t w, uint32_t h,
+                         const char *what, const char *pic)
+{
+    size_t n = 0;
+    const long f = firstDiff(a, b, (size_t)w * h, &n);
+    CHECK(f < 0,
+          "(o) %s: %s differs between the one draw and the seven draws at %zu of %u texels, the "
+          "first (%ld,%ld): %02X%02X%02X%02X for %02X%02X%02X%02X",
+          what, pic, n, w * h, f < 0 ? 0L : f % (long)w, f < 0 ? 0L : f / (long)w,
+          f < 0 ? 0 : a[f * 4], f < 0 ? 0 : a[f * 4 + 1], f < 0 ? 0 : a[f * 4 + 2],
+          f < 0 ? 0 : a[f * 4 + 3], f < 0 ? 0 : b[f * 4], f < 0 ? 0 : b[f * 4 + 1],
+          f < 0 ? 0 : b[f * 4 + 2], f < 0 ? 0 : b[f * 4 + 3]);
+}
+
+/* one frame through both paths, every picture compared; the count's
+ * non-zero texels counted so a comparison of empty counts says so */
+static void abFrame(int vol, const char *what)
+{
+    AbPics one, seven;
+    const bool okOne = abRecord(vol, true, &one, what);
+    const bool okSeven = abRecord(vol, false, &seven, what);
+    g_rd.profile.shadowOne = true;
+    if (okOne && okSeven) {
+        abCompareOne(one.cnt, seven.cnt, one.cw, one.ch, what, "the count");
+        for (int l = 0; l < 3; l++) {
+            char pic[16];
+            snprintf(pic, sizeof pic, "SHADOW%d", l);
+            abCompareOne(one.lv[l], seven.lv[l], 256u >> l, 256u >> l, what, pic);
+        }
+        abCompareOne(one.scene, seven.scene, one.sw, one.sh, what, "SCENE");
+        size_t lit = 0;
+        for (size_t i = 0; i < (size_t)one.cw * one.ch; i++) {
+            lit += one.cnt[i * 4 + 3] != 0;
+        }
+        CHECK(lit > 0, "(o) %s: the count is empty", what);
+        printf("  (o) %s: count %ux%u (%zu texels shadowed), SCENE %ux%u: one draw = seven draws\n",
+               what, one.cw, one.ch, lit, one.sw, one.sh);
+    }
+    abFree(&one);
+    abFree(&seven);
+}
+
+/* the frames at the renderer's current scale */
+static void abFrames(const char *scale)
+{
+    char what[64];
+    gif_HostForgetTextures();
+    gif_HostFrameReset();
+    dl_Clear();
+    snprintf(what, sizeof what, "%s, synthetic volumes", scale);
+    abFrame(VOL_SYNTH, what);
+    snprintf(what, sizeof what, "%s, Shadow.c's model", scale);
+    abFrame(VOL_MODEL, what);
+    for (int k = 0; k < 4; k++) {
+        s_subOff = 4 * k + 3;
+        snprintf(what, sizeof what, "%s, a rectangle at +%d/16", scale, s_subOff);
+        abFrame(VOL_SUB, what);
+    }
+    s_subOff = 0;
+}
+
+/* (o) above 1x: at scale 2 and at 1931 x 1093 texels (Enhanced) */
+static void checkOneScaled(void)
+{
+    if (!rhi_limits()->stencilView) {
+        return;
+    }
+
+    static const struct {
+        float scale;
+        uint32_t tw, th;
+        const char *what;
+    } kRuns[] = {{2.0f, 0, 0, "scale 2"}, {0.0f, 1931, 1093, "1931x1093 texels"}};
+
+    for (size_t i = 0; i < sizeof(kRuns) / sizeof(kRuns[0]); i++) {
+        RdSettings st;
+        memset(&st, 0, sizeof(st));
+        st.preset = RD_PRESET_ENHANCED;
+        st.outputWidth = 640;
+        st.outputHeight = 480;
+        st.aspect = 4.0f / 3.0f;
+        st.sceneScale = kRuns[i].scale;
+        st.sceneWidth = kRuns[i].tw;
+        st.sceneHeight = kRuns[i].th;
+        if (!rd_init(W, H, &st, NULL)) {
+            CHECK(0, "(o) rd_init at %s", kRuns[i].what);
+            continue;
+        }
+        if (!g_rd.profile.shadowOne) {
+            printf("  (o) %s: the profile has the seven draws (%s): not compared\n", kRuns[i].what,
+                   rd__profile_text());
+            rd_shutdown();
+            continue;
+        }
+        abFrames(kRuns[i].what);
+        CHECK(rhi_vk_validation_error_count() == 0, "(o) %s: %u validation errors", kRuns[i].what,
+              rhi_vk_validation_error_count());
+        rd_shutdown();
+    }
+}
+
 /* ---------------------------------- (w) a strip across a 48:9 side
  *
  * On a frame 2048 wide (48:9) the edge clip is GSB_SHADOW_CLIP_MAX.  A
@@ -1427,6 +1627,7 @@ int main(void)
     recordFrame(VOL_MODEL, kAll);
     checkRecording();
     checkLevelScale();
+    checkTable();
     rd_shutdown();
     /* the same on a frame 1376 wide (32:9), as GsBase.c's latch leaves it */
     {
@@ -1530,6 +1731,13 @@ int main(void)
     if (readTarget(s_count, s_cnt, W, H)) {
         checkModel();
     }
+    /* (o) at 1x: the one draw against the seven draws */
+    if (!rhi_limits()->stencilView || !g_rd.profile.shadowOne) {
+        printf("  (o) no stencil view, or the profile has the seven draws (%s): not compared\n",
+               rd__profile_text());
+    } else {
+        abFrames("1x");
+    }
 
     checkPipelines();
     CHECK(g_rd.above1xDraws == 0, "1x: %u passes drawn above 1x", g_rd.above1xDraws);
@@ -1538,6 +1746,7 @@ int main(void)
     CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
     rd_shutdown();
     checkScaledIntegral();
+    checkOneScaled();
     if (failures) {
         printf("rd_shadow_test: %d failures\n", failures);
         return 1;
