@@ -832,8 +832,10 @@ buffers by range (partial updates)|mapped, ...|written whole (logged once)`.
 **Constant buffers without partial updates.** A device without `ConstantBufferPartialUpdate`
 (possible at feature level 11_0) cannot take a box on a constant buffer, so `UpdateSubresource1`
 would write the whole constant buffer at every submit. An upload buffer's constant part is there a
-`D3D11_USAGE_DYNAMIC` buffer (`D11Buffer.cbMapped`; only beside another part, which stays the copy
-source) that `rhi_submit` maps on the immediate context and fills with the noted range from the
+`D3D11_USAGE_DYNAMIC` buffer (`D11Buffer.cbMapped`; only beside another part; a copy reads the
+first part, `d11_first_part`, which is this one for a buffer with constant and storage parts but no
+vertex or index part: legal, a DYNAMIC buffer is readable by the GPU, and no such upload buffer
+exists today) that `rhi_submit` maps on the immediate context and fills with the noted range from the
 shadow (`d11_cb_map_write`): a frame's first map of it is `D3D11_MAP_WRITE_DISCARD` (a fresh copy,
 so the lists of earlier frames still in flight keep theirs), later maps in the frame
 `D3D11_MAP_WRITE_NO_OVERWRITE` when the device has `MapNoOverwriteOnDynamicConstantBuffer`. That
