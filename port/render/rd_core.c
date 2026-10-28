@@ -670,12 +670,20 @@ static int displayClass(int id)
  * before, 256, 128 and 64 texels over 512 screen columns, composited back
  * with bilinear magnification).  On a wide frame the levels are as much
  * wider as the frame, so the penumbra is the same number of screen pixels
- * at every aspect.  Their composites into a scaled SCENE take the above-1x
- * B-spline (rd_replay.c spriteAbove1x); the work buffers' draws onto the
- * frame do not (rd__work_class). */
+ * at every aspect.  Their composites into a scaled SCENE take one bilinear
+ * tap as at 1x, the above-1x B-spline only with [dev] shadow_bspline
+ * (rd_fx_plan.c rd__sprite_above1x); the work buffers' draws onto the
+ * frame take the GS's filter too (rd__work_class). */
 static int shadowLevel(int id)
 {
     return id == RD_TARGET_SHADOW0 || id == RD_TARGET_SHADOW1 || id == RD_TARGET_SHADOW2;
+}
+
+/* rd__shadow_level (rd_internal.h): SHADOW0, SHADOW1 or SHADOW2 */
+bool rd__shadow_level(const RdTargetRec *t)
+{
+    return t && t->named && t >= g_rd.targets && t < g_rd.targets + RD_TARGET_COUNT &&
+           shadowLevel((int)(t - g_rd.targets));
 }
 
 /* rd__work_class (rd_internal.h): a named target that is neither
