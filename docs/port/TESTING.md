@@ -292,7 +292,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   bare `"hold"` and `hold_type_chosen = false`, A for a chosen `"hold"`, B for `"toggle"`, and the
   store's two keys), `test_video_show_fps` (`[video] show_fps`: off by default, a file's `true`
   read, a run-time 7 sanitized to 1, saved as `show_fps = true`/`false` and read back, the preset
-  untouched, Enhanced's shortcut leaving it alone), `test_players_slots` (selects each 2001 disc and checks the `[players]` count kept
+  untouched, Enhanced's shortcut leaving it alone), `test_video_changes_text` (the window's
+  `display changed` words: none for equal options, Custom 2x auto to Original as `preset Custom
+  -> Original, resolution 2x -> 1x, aspect auto -> 4:3`, the fields in order, cut at the size),
+  `test_players_slots` (selects each 2001 disc and checks the `[players]` count kept
   per save slot and sum, a missing entry or another sum loading as one player, a later save
   winning, each disc's prefix in the file), the video effects' keys (Water
   reflections' `effect_water_sharp` off by default, saved, outside the preset; Motion blur's
@@ -667,6 +670,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`debug_VariableInit` hands `ico_variants_bind_debug` the five switches and `debug_MenuOpen`)
   and the menu opened through that opener drawn on each of three ticks with no pad (title and bug
   list), nothing while closed, Triangle closing it.
+- `rd_display_change_test.c`: a display change while the game runs (`rd_display_change`, and
+  `rd_display_change_gl`): a frame of VU meshes under linear filters, strips, sprites and the
+  reduction; a fresh start at Original (1x), then a second start at Original with the start-up
+  set, switched to Enhanced at an output whose box gives a fractional scale and back to Original.
+  At each state two frames are recorded and replayed: neither replay makes a pipeline
+  (`RdPerfRecord.pipelineCreates` 0, `rd__pipeline_count` unchanged after the frame's
+  `rd_begin_frame`), the switch to Enhanced makes the no-planes twins at its `rd_begin_frame` and
+  its second replay draws VU passes through `vu_np_ps` (where the twin is loaded and the blend is
+  fixed-function), and back at Original the second replay's draws, render passes, pipeline binds,
+  blur folds, glow passes, no-planes passes, above-1x draws and crack fill passes are the fresh
+  start's and DISPLAY is the fresh start's, byte for byte
+  ([DISPLAY.md](DISPLAY.md#video-options-and-presets), run-time changes). The window's half (the
+  present allowance started again) has no test: the window is not run in the tests.
 - `rd_filter_test.c`: the model viewer's draw filter on synthetic keys (`rd_filter`).
 - `rd_fog_selftest_test.c` with `rd_fog_selftest.cmake`: the fog's self-test and probe; its log line
   matched for each path, MSAA counts, odd widths and [Full pixel](ARCHITECTURE.md#terms)
