@@ -201,7 +201,15 @@ bool rd__replay_date_clear(Replay *r, const DrawSetup *ds, const RhiRect *area)
  * covers columns 0..254 (9 of 10 fold, as before); at 16:9 (688) 1..342
  * with the strip on column 0 (9 of 10); at 48:9 (2048) and 60:9 (2560)
  * the last column moves in by one at one pair (cx1 1021 -> 1020, 1276 ->
- * 1275), which the next-pair rule refuses there (8 of 10). */
+ * 1275), which the next-pair rule refuses there (8 of 10).  The fold
+ * looks for a pair at every staticBlur sprite, so after a pair drawn as
+ * two passes it also sees (pass 2 of blur(n), pass 1 of blur(n + 1)), the
+ * same shape with WORK0 as the intermediate; folded, that draws pass 1 of
+ * blur(n + 1) without the strip after it, and pass 2 of blur(n + 1) would
+ * read the strip's columns as an earlier pass left them.  So a fold whose
+ * drawn pass the strip would follow is refused (on a wide frame the
+ * unfixed rule folded nine such shifted pairs at 16:9 in place of the
+ * true ones). */
 typedef struct BlurFoldPass {
     RdPostRec p;
     float uv[4];
@@ -496,6 +504,14 @@ bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c)
     const uint32_t i2 = blurFoldAhead(&q, s_loop.index);
     if (i2 >= s_loop.count || !blurFoldPass(&q, f, &s_loop.cmds[i2], &p2) ||
         s_loop.cmds[i2].b[0] != c->b[0] || !blurFoldPair(&p1, &p2)) {
+        return false;
+    }
+    /* the pass the fold draws is pass 2's: where the glow's edge strip would
+     * follow it (a pass 1 of blur(n) folded as the second of a pair that
+     * starts at the pass 2 before it, after a pair drawn as two passes), the
+     * strip's columns would keep an earlier pass's bytes, so no fold */
+    if (rd__replay_glow_edge_columns(&q, f, &s_loop.cmds[i2]) > 0) {
+        blurFoldRefused(r, &p1, "the glow's edge strip follows its pass 2");
         return false;
     }
     if (!blurFoldOk(&p1, &p2)) {
