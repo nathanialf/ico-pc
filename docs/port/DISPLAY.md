@@ -879,6 +879,30 @@ still picture is the same within a level. k is the present clock's tick over its
 timer path, the presents the tick before counted under the vsync lock, 1 for the first tick; at
 one present a tick FIX' is FIX ([RENDER.md](RENDER.md#the-motion-blur-under-smooth)).
 
+**The still re-present.** A between-tick present whose frame would draw the bytes of the tick's last
+rendered present shows that picture again instead of replaying it (`port/render/rd_reshow.c`,
+header comment). `rd__interp_frame` hashes the frame it builds with xxh3 before the feedback head
+copies (`outHash`): every list's commands, the payload, the start state, the camera, the VU common
+block, the ticks' cameras, the head scalars (number, scene size, aspect, exact width, fade, text
+items) and the scratch meshes of the present with the mesh each was made from (a scratch mesh's id
+is reused across presents). The meshes the draws name are versioned by frame number, so a frame's
+ids name the same bytes at every present of the tick. The hash is taken only with the camera still
+(`s_cam.still`) or no blended camera, and never under Motion blur: Smooth (its trail is a
+per-present accumulator) or with a video up. `rd__present_blended` shows the picture again when the
+hash equals the last rendered present's of the same frame, no other replay ran since
+(`g_rd.replayCounter`) and what the frame does not carry is unchanged: the settings, DISPLAY's and
+SCENE's textures and sizes, no texture waiting to upload (`texDirtyCount`), the device alive. The
+replay is the empty keep frame's (no pass; the present chain draws DISPLAY again) with the frame's
+exact width and camera and the deferred text laid out from the frame
+(`rd__overlay_reshow_text`). A tick's first present is always rendered. FEED128 and DISPLAY are
+where the rendered present left them, which is where the skipped one would have left them (it
+starts from the held copies and draws the same frame). `[dev] still_represent = false`
+(`ICO_RD_STILL_REPRESENT=0`) renders every present; the 10 s `interp:` line says
+`still re-present ([dev] still_represent = true): N of M presents shown again without a replay;
+rendered: ...` with the reasons, the window's uploaded-KB line ends `; N presents re-shown without a
+replay`, `RdPerfRecord.reshown` marks the replay, and `rd_replay_tool --presents` ends each present's
+line `shown again` or `rendered`.
+
 **The alpha.** On the timer path the window takes alpha from a present clock: it advances by the
 running mean of the intervals between presents and moves towards the measured time by an eighth of
 the error a present; an error over half a tick, a pause of more than four steps or time going
