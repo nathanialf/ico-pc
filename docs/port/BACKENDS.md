@@ -95,8 +95,8 @@ from the limits above. [RENDER.md](RENDER.md#the-device-profile) has the other c
 The class name carries the vendor where the backend knows it and the backend's name:
 
 ```
-rd: profile: immediate-mode GPU (OpenGL): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold on; robust access off (OpenGL); local read no; uint views work and scene; alpha plan on; fx plan on; fx local read off; VU planes whole scales only; shadow count one draw; pipelines the start-up set
-rd: profile: immediate-mode GPU (NVIDIA, D3D11): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold on; robust access D3D11's own; local read n/a; uint views off; alpha plan on; fx plan on; fx local read off; VU planes whole scales only; shadow count one draw; pipelines the start-up set
+rd: profile: immediate-mode GPU (OpenGL): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold on; robust access off (OpenGL); local read no; uint views work and scene; alpha plan on; fx plan on; fx local read off; VU planes whole scales only; shadow count one draw; shadow edges: bilinear; pipelines the start-up set
+rd: profile: immediate-mode GPU (NVIDIA, D3D11): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold on; robust access D3D11's own; local read n/a; uint views off; alpha plan on; fx plan on; fx local read off; VU planes whole scales only; shadow count one draw; shadow edges: bilinear; pipelines the start-up set
 ```
 
 The stencil views of the four backends (`RHI_ASPECT_STENCIL`, [RHI.md](RHI.md)) are what the
