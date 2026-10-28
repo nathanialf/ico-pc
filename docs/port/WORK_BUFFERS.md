@@ -6,8 +6,9 @@ blur leaves on a frame wider than the PS2's, what stays in them from one frame t
 work clear that shows a texel read before it was drawn, and how the puddle's ripples sample their
 reflection block between ticks, and where the crack filler is drawn on the fog's local path, and
 (not work buffers, kept here because RENDER.md is at its size cap) how a screen sprite redrawn under
-a new key between ticks is paired, how desktop Vulkan decides on the local reads at start and how
-the shadow count is read from the stencil in one draw. The sprites themselves are drawn by the GS
+a new key between ticks is paired, how desktop Vulkan decides on the local reads at start, how
+the shadow count is read from the stencil in one draw and how the shadow levels are composited above
+1x. The sprites themselves are drawn by the GS
 sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 
 ## Files
@@ -23,6 +24,7 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `port/render/rd_profile.c`, `port/render/rd_local_probe.c` | the desktop's local reads (`RdProfile.desktopLocal`) and their start-up cost probe (`rd__local_probe`) |
 | `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
 | `port/render/rd_replay.c`, `port/render/rd_shadow_one.c`, `port/render/rd_shadow_selftest.c`, `port/shaders/blit.hlsl` | the shadow count in one draw (`shadowCountOne` picks the destination, `rd__shadow_one_draw` draws `shadow_count_ps`) and its start-up self-test (`rd__shadow_selftest`) |
+| `port/render/rd_fx_plan.c`, `port/render/rd_profile.c` | the shadow composites above 1x: one bilinear tap unless `RdProfile.shadowBspline` (`rd__sprite_above1x`) |
 | `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
 
 ## Sizes per frame width
@@ -464,3 +466,60 @@ byte for byte, with every band centre against the table:
 A difference turns `shadowOne` off (`(self-test)`); `[dev] shadow_one = true` keeps it ("kept by
 [dev] shadow_one"); `ICO_RD_SHADOW_SABOTAGE=1` makes the table wrong at m = 1 so the failure path
 runs (ctest `rd_shadow_selftest_sabotage`).
+
+## The shadow edges above 1x
+
+`shadow_Draw` composites the three blur levels into SCENE in list 3, SHADOW2, SHADOW1 and SHADOW0
+in that order (the v4251 frame: commands 3:42, 3:47 and 3:52), each a sprite over the whole frame,
+LERP by the texel's alpha (ALPHA blend 4), the alpha test GREATER 0 and DATE against the receiver
+mask ([RENDER.md](RENDER.md#shadows)). A level texel covers 2, 4 or 8 GS pixels on each axis
+(SHADOW0 is W / 2 x 256 for a frame of W x 448, `namedTargetDesc`), and the levels stay at scale 1
+at every scale ([RENDER.md](RENDER.md#above-1x), "Left as they are"). On a SCENE at scale s each
+composite therefore steps 1 / (2 s), 1 / (4 s) or 1 / (8 s) level texels a texel, under half a
+texel on both axes whenever s > 1.
+
+Flagged `DF_ABOVE1X`, `sprite_above1x` takes the cubic B-spline for them as four bilinear taps
+(`sprite_bspline4`): about 268 lane-ops a pixel against about 103 for the plain path (the pixel
+diet's DXC walk of the composite), on three full-frame draws. `rd__sprite_above1x`
+(`port/render/rd_fx_plan.c`, which `fillDrawCB` in `rd_replay.c` calls with the shadow count's
+GS-size texture) leaves a pass unflagged when its texture
+is a shadow level (`rd__shadow_level`, `port/render/rd_core.c`) and `RdProfile.shadowBspline` is
+off, the default on every class. `sprite_ps` then samples as at 1x: `gs_sample`, one hardware
+bilinear tap at the texel's interpolated UV, which `setUvShift` places at the GS's coordinate of
+the texel's centre. TFX, TEXA, the alpha test, the blend and DATE are the same code either way, in
+one shader; the work buffers' draws onto the frame are sampled the same way
+(`rd__work_class`). Every other `DF_ABOVE1X` pass keeps its kernel: the softening's SCENE into AA0
+(the box), the reduction's fallback sprite, and a sprite that magnifies another scale-1 target that
+is not a work buffer more than twofold (a render-to-texture block at its GS size, from 3x).
+
+**What changes on screen.** Only the penumbra. Where a level is constant over the two kernels'
+joint support (level texels i0 - 1 to i0 + 2 about the sample point, i0 = floor(u - 0.5)) both give
+the same bytes; inside it the bilinear is a little sharper (a level texel's spread has a standard
+deviation of 0.41 texel against the B-spline's 0.58) and its slope changes at each level texel, so
+along a diagonal shadow edge the steps of the level grid (4, 8 or 16 texels a level texel at 2x for SHADOW0..2)
+can show where the B-spline rounds them off. The expected size is up to about 10 to 15 levels of a
+channel along the edges, none elsewhere; at 1x nothing changes (no pass is flagged at scale 1).
+The orchestrator's A/B measures it on the dump corpus at Enhanced 2x (`rd_replay_tool --pass-dump`
+with `ICO_RD_SHADOW_BSPLINE=1` against the default); whether it is visible decides an Options row.
+
+**The switch and the lines.** `[dev] shadow_bspline = true` (`ICO_RD_SHADOW_BSPLINE=1`,
+[CONFIG.md](CONFIG.md)) sets `shadowBspline` and the composites take the B-spline again (the A/B,
+[DIVERGENCES.md](DIVERGENCES.md#video) VD-18 and VD-24). The profile's start line and the summary
+say `shadow edges: bilinear` or `shadow edges: b-spline ([dev])`; the first composite that takes the
+bilinear above 1x logs once
+
+    rd: shadow edges: the composites above 1x take one bilinear tap (SHADOW2 at scale 1 into a target at scale 2x2, as at 1x); [dev] shadow_bspline = true draws the cubic B-spline (reported once)
+
+and `rd_replay_tool --stats`' `draws resampled above 1x` does not count the composites
+(`RdPerfRecord.a1xDraws`).
+
+**Tests.** `rd_shadow` (`port/render/test/rd_shadow_test.c`, case s) draws each composite alone at
+scale 4: by default not flagged and within 3 levels of the float bilinear of the level at each
+texel's UV, then with `shadowBspline` flagged and within 3 (4 on the fixed-function blender) of
+`above1x_ref.c`'s B-spline. `rd_shadow_edges` (`rd_shadow_test edges`, case x) records the same
+frames at scale 2 (the synthetic volumes, Shadow.c's model, a rectangle at +7/16) with each kernel:
+the levels byte for byte, no pass above 1x with the bilinear and at least the three composites with
+the B-spline, and SCENE byte for byte at every texel except where a composited level is not
+constant over the joint support widened by one texel for a rounding tie (level texels i0 - 2 to
+i0 + 3: N = 3 level texels, 12, 24 and 48 SCENE texels for SHADOW0..2 at 2x), with some texels
+differing (the histogram of |d| is printed).
