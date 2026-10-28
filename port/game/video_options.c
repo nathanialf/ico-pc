@@ -930,3 +930,64 @@ unsigned ico_video_cut_serial(void)
 {
     return s_cutSerial;
 }
+
+/* ico_video_changes_text's preset word, as the window's lines write it */
+static const char *preset_label(const IcoVideoOptions *o)
+{
+    const int p = ico_video_preset(o);
+
+    return p == ICO_VIDEO_ORIGINAL ? "Original" : (p == ICO_VIDEO_ENHANCED ? "Enhanced" : "Custom");
+}
+
+/* one field: ", name old -> new" when old and new differ */
+static void changes_field(char *out, unsigned size, const char *name, const char *was,
+                          const char *now)
+{
+    const size_t len = strlen(out);
+
+    if (strcmp(was, now) != 0 && len < size) {
+        snprintf(out + len, size - len, "%s%s %s -> %s", len ? ", " : "", name, was, now);
+    }
+}
+
+int ico_video_changes_text(const IcoVideoOptions *was, const IcoVideoOptions *now, char *out,
+                           unsigned size)
+{
+    const IcoVideoOptions *p = was, *o = now;
+    char a[32], b[32];
+
+    if (size == 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    changes_field(out, size, "preset", preset_label(p), preset_label(o));
+    changes_field(out, size, "resolution", ico_video_resolution_name(p, a, sizeof(a)),
+                  ico_video_resolution_name(o, b, sizeof(b)));
+    changes_field(out, size, "aspect", ico_video_aspect_name(p->aspect),
+                  ico_video_aspect_name(o->aspect));
+    changes_field(out, size, "window mode", ico_video_window_mode_name(p->windowMode),
+                  ico_video_window_mode_name(o->windowMode));
+    changes_field(out, size, "vsync", p->vsync ? "on" : "off", o->vsync ? "on" : "off");
+    changes_field(out, size, "texture filter", ico_video_filter_name(p->filter),
+                  ico_video_filter_name(o->filter));
+    changes_field(out, size, "height", p->fullHeight ? "full" : "half",
+                  o->fullHeight ? "full" : "half");
+    changes_field(out, size, "framerate", ico_video_framerate_name(p->framerate, a, sizeof(a)),
+                  ico_video_framerate_name(o->framerate, b, sizeof(b)));
+    changes_field(out, size, "crt", p->crt ? ico_video_crt_mode_name(p->crtMode) : "off",
+                  o->crt ? ico_video_crt_mode_name(o->crtMode) : "off");
+    snprintf(a, sizeof(a), "%.2f", (double)p->crtStrength);
+    snprintf(b, sizeof(b), "%.2f", (double)o->crtStrength);
+    changes_field(out, size, "crt strength", a, b);
+    changes_field(out, size, "texture pack", p->texturePack ? "on" : "off",
+                  o->texturePack ? "on" : "off");
+    changes_field(out, size, "dump textures", p->dumpTextures ? "on" : "off",
+                  o->dumpTextures ? "on" : "off");
+    changes_field(out, size, "model pack", p->modelPack ? "on" : "off",
+                  o->modelPack ? "on" : "off");
+    changes_field(out, size, "dump models", p->dumpModels ? "on" : "off",
+                  o->dumpModels ? "on" : "off");
+    changes_field(out, size, "motion blur", ico_video_motion_blur_name(p),
+                  ico_video_motion_blur_name(o));
+    return (int)strlen(out);
+}
