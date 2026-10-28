@@ -102,7 +102,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "sprite_ps_planes", "sprite_texa_ps_planes", "sprite_stq_ps_planes", "fog_lut_local_ps",
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
     "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
-    "crack_fill_ps", "crack_count_ps", "shadow_count_ps"};
+    "crack_fill_ps", "crack_count_ps", "shadow_count_ps", "crack_fill1_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -332,7 +332,7 @@ bool rd__gpu_init(void *sdlWindow)
             continue;
         }
         if (i >= RD_FS_OPTIONAL_FIRST && !optionalBuilt(s_fsNames[i])) {
-            continue; /* as the vertex loop's */
+            continue;
         }
         /* without dual-source blending the gs_dual_out entries are not
          * created (their second output needs the feature); their *_nodual
