@@ -204,7 +204,58 @@ differs from the window's state; never on a resize's
 forced call, so a refused request is not made again at every size event), the rest through
 `rd_set_settings` at the next frame, which recreates targets and the swapchain as needed. A change
 also logs one `window: display changed:` line naming only the fields that differ
-(`port/platform/window_host.c` (`video_apply`, `video_log_changes`)).
+(`port/game/video_options.c` (`ico_video_changes_text`); `port/platform/window_host.c`
+(`video_apply`, `video_log_changes`)).
+
+What a display change derives again, as a fresh start at the new options would (a PowerVR
+DXT-48 phone's log, below):
+
+- **The present allowance and the GPU times** ([the present allowance](#the-present-allowance)):
+  the timer path's allowance starts unbound again, a lock starts again, and the GPU time the climb
+  gate reads (the median of the last 8 replays) is emptied; the `display changed` line ends
+  `; the present allowance (held to N a step|not held) and GPU times start again`
+  (`video_log_changes`). The phone: at Custom 2x its GPU (24-29 ms a picture) held the presents to
+  0 a step; after the switch to Original the hold stayed, every replay a tick's first (the glow's
+  chain drawn at each, 22 passes, none pasted between ticks), the GPU at 19.5-21 ms a presented
+  replay (each pass 1.2 to 1.7 times its time in a fresh start at Original on the same menu, the
+  same draws: the GPU's clock under the lighter load is the likely reason, not proven from the
+  log) against the gate's period of 16.7 ms, every climb refused (`climbs refused 10` in each
+  10 s block), 30 pictures a second where a fresh start at Original showed 67-88. The renderer's own counts were the fresh start's (939 against 940 draws a
+  replay, the same alpha plan, no no-planes pass; the glow and fx plan counts higher by the chain
+  drawn at every replay).
+- **The renderer's state** (`rd_begin_frame`, `port/render/rd_core.c` (`logDerived`)): the scene
+  scale and the targets, the preset's rules (the VU region rule, the planes at a fractional
+  scale, GS levels at Original, the crack fill's reach) are read from the settings at each draw
+  or set by `rd__apply_display`; a change of scale or preset logs them in one line, `rd: display
+  change: derived: preset P, frame W GS wide, scene SxS (whole|fractional), VU planes kept|dropped
+  (vu_np_ps), VU region rule the PS2's|extended, texture filter F, VU pre-pass on|off, fog path N;
+  profile ...`, so a reporter's log after a change compares with a fresh start's lines.
+- **The pipelines** (`port/render/rd_pipeline.c` (`rd__display_pipelines`)): after the settings
+  apply (and after a frame-width reset, `rd_reset_scene`), the reachable set of the new state
+  (`rd__enumerate_reachable`: the preset, the scale and with it the `vu_np_ps` twins of a
+  fractional scale, the crack fill's and the blur fold's keys; the above-1x sprites' kernel is a
+  draw constant, no key) is held
+  against the cache and the keys it lacks are made as the start-up set's are: in batches on the
+  driver's threads (`createKeys`), under the window's policy (a careful device's batches of 8, its
+  memory budget, the system's low-memory signal), the pipeline cache written after them on a phone,
+  before the frame replays. The window shows its graphics screen meanwhile ("Changing the display",
+  "Preparing graphics (n of m)", after 250 ms) and takes the window's events
+  (`rd_set_display_progress`, `display_progress`); each pipeline finished counts as progress for
+  the watchdog, which sees no Main tick meanwhile (`ico_diag_note_progress`). One line: `rd: display change: N pipelines of
+  the new state made in M batches, X ms (K of its T keys missing, ...)` (with `0 ... (its T keys
+  made already)` when the targets were made again and nothing was missing), the slowest compiles
+  after it; a key that still misses is made on first use with its `made on first use` line. A run
+  without a start-up set (`rd_pipelines_lazy`) stays on first use. The phone: Original -> Enhanced at
+  2364x1080 (scale 2.8125 x 2.41) made the twins on first use, 640-700 ms each on the main thread;
+  the heartbeat stopped advancing and the log ended without an exit line.
+- **Not derived again** (no state of the old options): the blur fold's "reported once a width"
+  memos are log limits, not decisions; the fold is decided per replay from the commands
+  (`rd_replay_tiler.c`). The phone's log after the switch to Original has, once each, `blur fold:
+  WORK1 256x256 ... pass 1 draws columns 1..255` (a fresh start at Original: `0..254`; at 2x the
+  848-wide frame's pass 1 started at column 1) and `shadow command without a depth-stencil target
+  of the colour target's size: skipped`, neither repeated and the replays' counts after them the
+  fresh start's: read as one frame of the old width replayed on the new targets (not proven from
+  the log).
 
 **Auto resolution** (`resolution = "auto"`) starts the scene at the window's size and lowers it
 while the presents take too long: every 2 s window of samples (at least 8), when the median cost is
@@ -620,8 +671,9 @@ alpha stays the grid's.
   the timer path, where one more climb from it makes the allowance unbound again, and n under the
   lock, which it never passes. From a drop to unbound again takes 120 steps (2 s) when the GPU has
   the time.
-- A resync does not reset it; a new lock, a frame rate change, leaving the lock and the pace reset
-  (back from the background) do.
+- A resync does not reset it; a new lock, a frame rate change, leaving the lock, the pace reset
+  (back from the background) and a display change (the GPU times with it:
+  [run-time changes](#video-options-and-presets)) do.
 
 Presents that keep up never end a step half a period late, and then nothing binds: the presents
 are those of the rule before (`pace_policy_test` (`testBudgetTimerLoop`): a GPU of 4 or 12 ms a
