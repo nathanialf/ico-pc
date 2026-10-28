@@ -597,10 +597,13 @@ RhiBindGroup rhi_create_bind_group(const RhiBindGroupDesc *desc)
             }
             /* RHI_ASPECT_UINT: the RGBA8_UINT view of an RHI_TEX_UINT_VIEW
              * texture; a texture without one keeps its own view (the
-             * renderer asks only for textures made with the bit) */
-            VkImageView v = (b->aspect == RHI_ASPECT_DEPTH && t->depthView) ? t->depthView
-                            : (b->aspect == RHI_ASPECT_UINT && t->uintView) ? t->uintView
-                                                                            : t->view;
+             * renderer asks only for textures made with the bit).
+             * RHI_ASPECT_STENCIL: the stencil-aspect view, in the same
+             * depth-stencil read-only layout as the depth's */
+            VkImageView v = (b->aspect == RHI_ASPECT_DEPTH && t->depthView)       ? t->depthView
+                            : (b->aspect == RHI_ASPECT_UINT && t->uintView)       ? t->uintView
+                            : (b->aspect == RHI_ASPECT_STENCIL && t->stencilView) ? t->stencilView
+                                                                                  : t->view;
             ii[n] = (VkDescriptorImageInfo){VK_NULL_HANDLE, v, vkr_sampled_layout(t)};
             w[n].pImageInfo = &ii[n];
             break;
