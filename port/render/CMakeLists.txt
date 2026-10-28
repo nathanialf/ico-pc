@@ -158,6 +158,7 @@ add_library(ico_render STATIC
     rd_upload.c # the upload ring and the uploads before a replay's first pass
     rd_screen_planes.c # the screen-prim triangles' planes
     rd_shadow.c
+    rd_shadow_one.c # the shadow count resolved in one draw from the stencil view
     rd_shadow_selftest.c # the shadow count's one draw: the start-up check on the device
     rd_tex.c
     rd_water.c # block targets, aliases, camera scopes
