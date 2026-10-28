@@ -144,6 +144,31 @@ The bytes a submit copies are in the window's `uploaded KB per replay` line on D
 debug layer is the gate, and `rhi_d3d11_test` checks the mark's byte counts and runs the cells on
 the mapped constant buffers (`ICO_D3D11_FAKE_NO_PARTIAL_CB=1`).
 
+## What the bind diet cuts (OpenGL and Direct3D 11)
+
+On issue 126's i3-2120 the OpenGL walk of the bind groups took about 8 ms a picture (`group
+entries 8459 a timed replay, 5953 already bound`). Three cuts, none changing a byte the GPU reads:
+
+- **The VU draws' DrawCB goes through the content cache.** It was copied into the ring for every
+  planned pass; it now takes the offset of `rd__draw_cb_offset` (rd_replay.c, the same cache the 2D
+  draws' `rd__draw_group` uses, keyed by the block's bytes), so equal blocks across draws and
+  passes share one copy and b1's dynamic offset repeats, which every backend's "already bound"
+  check skips. The pre-pass batch draws' DrawCBs (`aux0` carries the batch table index) keep their
+  own copies. The window's `uniform blocks` KB drops by the repeats and nothing else changes.
+- **OpenGL: one `glBindBuffersRange` for a run of uniform points** (`GL_ARB_multi_bind`, core in
+  4.4; the limits line says `multi bind yes|no`): the group's uniforms that need a bind and sit at
+  consecutive points (the VU group's b1..b3) are one call. Without it, one `glBindBufferRange`
+  each as before.
+- **OpenGL: a slot's group is not walked again** when it holds the same group id and offsets as the
+  last walk of that slot (set to another group and back between two draws): the shadow is cleared
+  with the per-point shadows (`gl_forget_units`, at every new list), and a slot's shadow is dropped
+  when another slot's walk changes a point it holds. The skipped group's entries count in `group
+  entries N` as already bound, so N is unchanged and M rises; N minus M is what is still bound.
+
+Direct3D 11 needed nothing more: `d11_set_cb` skips a window already bound for the stage (both
+stages are checked apart), so a repeating DrawCB offset costs no call, and the NULL-plus-set pair
+happens only where the runtime emulates command lists (above).
+
 ## The window and the order the backends are tried in
 
 `[video] backend` (`backend=` in `ico-pc.ini`, the Options > Graphics row) names `vulkan`,
