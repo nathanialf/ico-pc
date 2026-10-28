@@ -495,6 +495,10 @@ static void d11_fill_limits(void)
     o->dynamicDepth = false;
     o->dynamicBlend = false;
     o->uintView = false;
+    /* the stencil read (RHI_ASPECT_STENCIL): an SRV of the depth-stencil's
+     * stencil plane (d3d11_resource.c), the value in green */
+    o->stencilView = true;
+    o->stencilViewChannel = 1;
     o->vuFallbackPlain = NULL;
     o->carefulPipelines = NULL;
     o->compilerVersion = NULL;
