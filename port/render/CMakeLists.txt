@@ -1076,6 +1076,7 @@ if(ICO_RUN_TESTS)
     set(_crk "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack.cmake")
     set(_crk_on "rd: crack fill: on above 1x \\(scale")
     set(_crk_tail "texels: a run of texels no draw covered, or drawn over 1/64 of the depth behind both its ends, with a texel in front at each end takes the nearer end\\). \\[dev\\] crack_fill = false turns it off")
+    set(_crk_one "rd: crack fill: the reach-1 shader \\(crack_fill1_ps: the four neighbours first\\) \\(scale 2x2, reach 1x1 texels\\)")
     foreach(_c "2|2x2, reach 1x1" "4|4x4, reach 2x2" "frac|2.81[23]x2.411, reach 2x2")
         string(REPLACE "|" ";" _cl "${_c}")
         list(GET _cl 0 _a)
@@ -1086,9 +1087,15 @@ if(ICO_RUN_TESTS)
         elseif(_a STREQUAL "4")
             set(_n rd_crack_4x)
         endif()
+        # a reach of 1x1 draws crack_fill1_ps (and the test replays the general shader on the
+        # same frame and compares every byte)
+        set(_e2 "")
+        if(_x MATCHES "reach 1x1")
+            set(_e2 "${_crk_one}")
+        endif()
         add_test(NAME ${_n}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=${_a}
-                         "-DEXPECT=${_crk_on} ${_x} ${_crk_tail}" -P "${_crk}")
+                         "-DEXPECT=${_crk_on} ${_x} ${_crk_tail}" "-DEXPECT2=${_e2}" -P "${_crk}")
     endforeach()
     # over a backdrop (a far plane writing Z first): the cracks hold its
     # depth and colour and are filled by the discontinuity form
@@ -1098,9 +1105,13 @@ if(ICO_RUN_TESTS)
         list(GET _cl 0 _a)
         list(GET _cl 1 _x)
         list(GET _cl 2 _n)
+        set(_e2 "")
+        if(_x MATCHES "reach 1x1")
+            set(_e2 "${_crk_one}")
+        endif()
         add_test(NAME ${_n}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=${_a}|backdrop"
-                         "-DEXPECT=${_crk_on} ${_x} ${_crk_tail}" -P "${_crk}")
+                         "-DEXPECT=${_crk_on} ${_x} ${_crk_tail}" "-DEXPECT2=${_e2}" -P "${_crk}")
     endforeach()
     add_test(NAME rd_crack_1x
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> -DARGS=1
