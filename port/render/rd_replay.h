@@ -335,8 +335,18 @@ int rd__replay_glow_edge_columns(const Replay *r, const RdFrame *f, const RdCmd 
  *                     into the record, copied into the frame slot's record
  *                     buffer
  * rd__vu_prepass_shutdown  the record's textures and buffers, the entries
- *                     (rd__gpu_shutdown) */
+ *                     (rd__gpu_shutdown)
+ * rd__replay_vu_flush the draw merge's open run drawn (docs/port/
+ *                     VU1_PROGRAMS.md, "The draw merge"): before anything
+ *                     else is recorded into the replay (endPass,
+ *                     rd__replay_flush_run, the walk before every command but
+ *                     the VU draws and the state, the list's end)
+ * rd__replay_vu_flush_post  the run drawn when the GPU timing's effect
+ *                     changes from the one it was held under (the walk,
+ *                     before perfPost) */
 void rd__replay_vu(Replay *r, const RdFrame *f, const RdCmd *c);
+void rd__replay_vu_flush(Replay *r);
+void rd__replay_vu_flush_post(Replay *r, int post);
 void rd__vu_prepass(const RdFrame *f, int keep);
 void rd__vu_prepass_shutdown(void);
 
