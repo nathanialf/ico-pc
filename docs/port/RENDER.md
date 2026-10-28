@@ -1717,6 +1717,8 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | `fxDstLocal` (`[dev] fx_dst_local`) | on (probe) | off | on where local read is offered | same | same | same | same |
 | `vuPlanesFrac` (`[dev] vu_planes`) | on | on | on | on | on | on | on |
 | `crackFill` (`[dev] crack_fill`) | on | on | on | on | on | on | on |
+| `shadowOne` (`[dev] shadow_one`) | on | off | on | on | on | on | on |
+| `shadowBspline` (`[dev] shadow_bspline`) | off | off | off | off | off | off | off |
 
 The blend row is `rd_dst_read.c`'s ([Destination reads and blend
 paths](#destination-reads-and-blend-paths)), robust access the Vulkan backend's
@@ -1752,7 +1754,7 @@ asks for what the device lacks leaves the flag off and logs `rd: profile: [dev] 
 (no local read): not on this device, the flag stays off` (`fx_dst_local` asked for without local read logs the same
 line with `[dev] fx_dst_local (no local read)`). A self-test that finds its mechanism
 wrong turns the flag off (`rd__profile_self_test_off`): the flag is marked `(self-test)` and the
-line `rd: profile: <flag> off (self-test)` is logged. The start line, once a run:
+line `rd: profile: <flag> off (self-test)` is logged. The start line, once a run (abridged):
 
 ```
 rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores kept; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; alpha plan on; fx plan on; fx local read on; VU planes whole scales only; pipelines the start-up set
@@ -1761,7 +1763,7 @@ rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog loc
 On desktop Vulkan with local read, "(probe)" marks the three local-read flags where the start-up cost probe
 found them slower, and both lines end with its words: [WORK_BUFFERS.md](WORK_BUFFERS.md#the-desktops-local-read-and-its-probe).
 
-and the `ico_pc: summary:` line carries the flags as in force after the blend's text
+and the `ico_pc: summary:` line (abridged) carries the flags as in force after the blend's text
 (`rd__profile_text`; `port/render/rd_core.c` (`rd_summary_text`)): `profile tile-based GPU
 (Imagination, Vulkan): fog local on, DATE stencil, depth stores kept, blur fold on, local read
 yes, uint views off, alpha plan on, fx plan on, fx local on, VU planes whole scales only`. The four planner flags read
