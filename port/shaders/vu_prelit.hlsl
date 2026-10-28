@@ -41,6 +41,7 @@ VuVtx vu_prelit_vertex(uint v, uint mode)
 
 VuVSOut vu_prelit_vs(uint vid : SV_VertexID)
 {
+    vid = VU_MERGE_ENTRY(vid); // the merge build: the draw's own value
     uint mode = vu_draw.z & VU_CLIP_MASK;
     bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
     uint kick = vid >> 2;
