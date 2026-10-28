@@ -35,8 +35,9 @@
  * The start-up set: at a fractional scene scale (g_rd.sceneSx, sceneSy: the
  * scale the scene-class targets take, rd_core.c rd__target_scale_of) each
  * vu_ps key gets its vu_np_ps twin (rd__vu_pixel_fs_enum); at a whole scale
- * none.  A scale changed later (a resize, the fallback halving) makes the
- * twins it needs on first use.
+ * none.  A scale changed later (a display change, a resize, a new frame
+ * width, the fallback halving) has the twins it needs made at the change,
+ * before a replay draws at it (rd_pipeline.c rd__display_pipelines).
  *
  * The log: the profile's start line ("VU planes whole scales only", or
  * "every scale" under [dev] vu_planes = false), one line a run the first
