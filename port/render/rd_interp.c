@@ -156,6 +156,7 @@
 #include "rd_camera_blend.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "xxh3.h"
 
 /* ------------------------------------------------------------ the result */
 
@@ -4099,6 +4100,10 @@ static uint32_t s_scratch[RD_INTERP_SCRATCH];
 
 static uint32_t s_scratchUsed;
 
+/* which meshes made the scratch ones this present, in draw order (the still
+ * re-present's hash: a scratch slot is reused with another mesh's data) */
+static uint64_t s_scrMix;
+
 /* the mesh draws morphDraw saw blended, in list order */
 static struct {
     uint32_t list, index;
@@ -4217,7 +4222,10 @@ static bool morphDraw(RdCmd *o, const RdFrame *prev, const RdCmd *pc, const RdFr
             }
         }
     }
-    o->u[0] = s->gen << 16 | (uint32_t)(s - g_rd.meshes + 1);
+    const uint32_t scr = s->gen << 16 | (uint32_t)(s - g_rd.meshes + 1);
+    const uint64_t two[2] = {s_scrMix, (uint64_t)o->u[0] << 32 | scr};
+    s_scrMix = xxh3_64(two, sizeof(two));
+    o->u[0] = scr;
     return true;
 }
 
@@ -5658,6 +5666,91 @@ static void feedback(int firstOfTick)
     }
 }
 
+/* ------------------------------------------------- still re-present
+ *
+ * The hash of the frame just built (s_out) is the proof that the picture is
+ * the one the last present of the tick drew.  Everything the replay of s_out
+ * reads is in it: every list's commands (state, targets, draws with their
+ * mesh ids, texture ids and payload offsets), the payload (blocks, bones,
+ * grid vertices, screen prims, text items, post records), the start state,
+ * the camera, the VU common block, the ticks' cameras, the head scalars
+ * (number, scene size, aspect, exact width, fade, text items, camera flags),
+ * and the scratch meshes this present made (their stream, index, batches and
+ * kick marks, and which mesh each came from: the id of a scratch mesh is
+ * reused).  Meshes the draws name are versioned by frame number
+ * (rd__mesh_stream_at), so a frame's ids name the same bytes at every present
+ * of the tick.  What is not in the frame is checked by the caller
+ * (rd__present_blended): settings, targets, dirty textures, other replays. */
+static uint64_t s_hash;
+static bool s_hashOk;
+
+static uint64_t mixHash(uint64_t acc, uint64_t part)
+{
+    const uint64_t two[2] = {acc, part};
+    return xxh3_64(two, sizeof(two));
+}
+
+static uint64_t bytesHash(const void *p, size_t n)
+{
+    return n ? xxh3_64(p, n) : 0;
+}
+
+static uint64_t outHash(void)
+{
+    const RdFrame *f = &s_out;
+    uint64_t h = 0;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        h = mixHash(h, f->lists[l].count);
+        h = mixHash(h, bytesHash(f->lists[l].cmds, (size_t)f->lists[l].count * sizeof(RdCmd)));
+    }
+    h = mixHash(h, bytesHash(f->payload, f->payloadSize));
+    h = mixHash(h, bytesHash(&f->startState, sizeof(f->startState)));
+    h = mixHash(h, bytesHash(&f->camera, sizeof(f->camera)));
+    h = mixHash(h, f->hasVu ? bytesHash(&f->vu, sizeof(f->vu)) : 0);
+    h = mixHash(h, f->hasTickCams ? bytesHash(f->tickCams, sizeof(f->tickCams)) : 0);
+    uint32_t sc[24];
+    memset(sc, 0, sizeof(sc));
+    sc[0] = f->hasCamera;
+    sc[1] = f->number;
+    sc[2] = f->keep;
+    sc[3] = f->gsW;
+    sc[4] = f->gsH;
+    memcpy(&sc[5], &f->aspect, 4);
+    memcpy(&sc[6], &f->wExact, 4);
+    sc[7] = f->cullW;
+    sc[8] = f->hasVu;
+    sc[9] = f->headValid;
+    sc[10] = f->cut;
+    sc[11] = f->fade;
+    sc[12] = f->freeCamera;
+    sc[13] = f->textItems;
+    sc[14] = f->hasTickCams;
+    sc[15] = f->payloadSize;
+    h = mixHash(h, bytesHash(sc, sizeof(sc)));
+    h = mixHash(h, bytesHash(f->headStart, 4 * sizeof(f->headStart)));
+    h = mixHash(h, s_scrMix);
+    for (uint32_t i = 0; i < s_scratchUsed; i++) {
+        const RdMeshRec *m = rd__mesh_rec(s_scratch[i]);
+        h = mixHash(h, s_scratch[i]);
+        if (!m) {
+            continue;
+        }
+        h = mixHash(h, bytesHash(m->stream, (size_t)m->vertexCount * m->qwPerVertex * 16));
+        h = mixHash(h, bytesHash(m->index, (size_t)m->indexCount * 4));
+        h = mixHash(h, bytesHash(m->batches, (size_t)m->batchCount * sizeof(RdVuBatchRec)));
+        h = mixHash(h, bytesHash(m->kickMark, m->markCount));
+    }
+    return h;
+}
+
+uint64_t rd__interp_frame_hash(bool *ok)
+{
+    if (ok) {
+        *ok = s_hashOk;
+    }
+    return s_hash;
+}
+
 const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float alpha,
                                 int firstOfTick, RdInterpStats *stats)
 {
@@ -5687,6 +5780,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     s_turnFull = 0;
     s_lightPair = s_placed = s_gridSt = s_gridStCam = 0;
     s_pivotMesh = 0; /* the pivots are recomputed per present */
+    s_scrMix = 0;
     if (s_track) {
         memset(s_ord, 0, sizeof(s_ord));
     }
@@ -5884,6 +5978,10 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                    ? (s_worldPrevRaw < s_worldCurRaw ? s_worldPrevRaw : s_worldCurRaw)
                    : 0u;
     st.camOffWhy = blend ? s_camOff : RD_CAM_OFF_NONE;
+    /* the still re-present's hash: before the head copies, which differ
+     * between a tick's first present and the later ones */
+    s_hashOk = !(blend && s_cam.on && !s_cam.still) && !g_rd.settings.motionBlurSmooth;
+    s_hash = s_hashOk ? outHash() : 0;
     feedback(firstOfTick);
     if (stats) {
         *stats = st;
@@ -6172,6 +6270,7 @@ static void presentLog(void)
     s_snapTopN = 0;
     rd__blur_smooth_block(); /* Motion blur: Smooth's line, when it drew */
     rd__crack_fill_block();  /* the crack filler's, when it filled or was kept off */
+    rd__reshow_block();      /* the still re-present's */
     const uint32_t number = s_pres.number;
     const uint32_t tickPresents = s_pres.tickPresents, lastTickPresents = s_pres.lastTickPresents;
     memset(&s_pres, 0, sizeof(s_pres));
@@ -6321,7 +6420,7 @@ bool rd_present(float alpha)
         return false;
     }
     rd__blur_smooth_arm(first, k); /* Motion blur: Smooth's present */
-    return rd__replay_frame(f, 0, true);
+    return rd__present_blended(f, first, true);
 }
 
 /* ---------------------------------------------------------- present clock */
