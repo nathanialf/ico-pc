@@ -177,7 +177,7 @@ number the RHI slot (`port/shaders/common.hlsli`, header comment; `port/rhi/rhi.
 | 0 | `b0` | FrameCB, once per frame |
 | 1 | `b1` | DrawCB, per draw or post pass (crt.hlsl's CrtCB takes the same slot) |
 | 1 | `b2`, `b3`, `t0`, `t4` | the VU programs' VuCB and VuBoneCB (bones, card bits), the VU vertex stream, and the pre-passes' record (`vu_rec_buf`, `StructuredBuffer<uint4>`, three planes); VuCB and the record are visible to the pixel stage too (`vu_ps` reads the planes) |
-| 1 | `t5` | the upload ring from offset 0 (`vu_ring`, `StructuredBuffer<float4>`, vertex stage): the pre-pass's batch builds (`vu_X_batch_pre_vs`, `ICO_VU_PRE_BATCH`) read each entry's VuCB and VuBoneCB and the batch's table there, the table found through DrawCB's `aux0` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)); every VU group binds it (Direct3D 11's leave it unbound: no batch module there), the other builds do not read it |
+| 1 | `t5` | the upload ring from the replay's VU base on (`vu_ring`, `StructuredBuffer<float4>`, vertex stage; `rd_replay_vu.c` `s_ringBase`, 256-aligned, after the uploads): the pre-pass's batch builds (`vu_X_batch_pre_vs`, `ICO_VU_PRE_BATCH`) read each entry's VuCB and VuBoneCB and the batch's table there, the table found through DrawCB's `aux0` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)); the draw merge's builds (`vu_X_merge_vs`, `vu_X_merge_plain_vs`, `vu_merge_main_vs`, `ICO_VU_MERGE`) read each draw's VuCB and VuBoneCB and the run's table there, the table found through b2's `mark.w` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)); every VU group binds it (Direct3D 11's leave it unbound: no batch module and no merge there), the other builds do not read it |
 | 2 | `t1`..`t4`, `s1`..`s4` | textures and samplers |
 | 3 | `u0` | the destination read's target (`_dstrov`); `_dstatt` reads binding 16 of set 3 as an input attachment |
 
@@ -512,6 +512,15 @@ shaders (`_main_vs`) to the plain budget and asks a plain variant only of the te
 entries (`tools/check_spirv.py` `PROGRAM_ENTRIES`, gates `size per variant` and `variants`). With
 the pre-passes a device compiles the two main shaders, the ten pre-pass entries and the five
 record stages in place of the program entries, none over 16,515 words.
+
+The draw merge's builds (`ICO_VU_MERGE`: `vu_X_merge_vs` and `vu_X_merge_plain_vs` of the seven
+mesh and grid programs but the skinned ones, `vu_merge_main_vs`;
+[VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) are the same entries reading VuCB and VuBoneCB
+from t5 through a four-step search, about 500 words above each: `vu_lit_merge_vs` 51,857 of
+`VS_BUDGET`, `vu_lit_merge_plain_vs` 23,811 and `vu_merge_main_vs` 6,719 of the plain budget (a
+`_merge_plain_vs` and a `_main_vs` are held to it), none with a finding. With the merge on (every
+device but Direct3D 11) a device compiles them in place of the plain builds of the same entries,
+whose modules the merge leaves unchanged word for word (`VU_MERGE_ENTRY(vid)` is `vid` there).
 
 Every plain module is smaller than the same module of the last set that built on the Adreno 740 in
 words, instructions and blocks.
