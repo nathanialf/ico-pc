@@ -486,11 +486,11 @@ bytes. At pass 1 the replay looks ahead over the list (`s_loop`): state commands
 commands, the next pass 1; it folds when both passes are textured from each other at scale 1
 without a crop (the same size and origin), LINEAR, CLAMP, no blend, alpha test, DATE, destination
 read or depth, the colour mask whole, the same flags, TEXA and TEX0 size, every WORK1 texel pass 2
-weighs (a weight above 0) inside the texels pass 1 covers, and the next pass 1 covers the same
-texels, so the chain's last pair, drawn as two passes, writes WORK1 as the unfolded chain did; the
+weighs (a weight above 0) holding pass 1's bytes (its coverage, or the glow's edge strip), and the
+next pass 1 leaving its bytes in those texels or more, so WORK1 ends as the unfolded chain's; the
 loop then skips to pass 2 with the state applied. WORK0 is read through its snapshot (the swap
-where the fold covers it whole). At 4:3 a chain of ten pairs folds nine; on a wider frame the
-shrink's anchor moves the pass-1 coverage between pairs and fewer fold (`port/render/rd_blur_border.c`
+where the fold covers it whole). Of ten pairs 9 fold at 4:3 and 16:9, 8 at 48:9
+([WORK_BUFFERS.md](WORK_BUFFERS.md#the-blur-fold-on-a-wide-frame)) (`port/render/rd_blur_border.c`
 (`rd__blur_post_sprite`); `port/render/rd_replay_tiler.c` (`rd__replay_blur_fold`, `blurFoldPass`,
 `blurFoldOk`); `port/shaders/fx_sprite.hlsl` (`fx_blur2_ps`);
 `port/shaders/shader_consts.h` (`IcoDrawCB.aux0`)). Start line, once: `rd: blur fold: on (<class
@@ -1705,7 +1705,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | `fogLocal` | on (probe) | off | on where local read is offered | same | same | same | same |
 | `dateStencil` | on (probe) | off | on where local read is offered | same | same | same | same |
 | `storePlan` | off | off | off | off | off | off | off |
-| `blurFold` | off | off | on | on | off (the G52 is bound by its ALU) | on | on |
+| `blurFold` | on | on | on | on | off (the G52 is bound by its ALU) | on | on |
 | robust access | off | its own bounds rules | off | off | off | off | off |
 | `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
 | `uintViewWork`, `uintViewScene` | on where the backend has the view | off (`RhiLimits.uintView` false on D3D12) | off | off | off | off | off |
