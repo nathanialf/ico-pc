@@ -162,6 +162,9 @@ typedef struct D11Texture {
     ID3D11DepthStencilView *dsv;   /* writable */
     ID3D11DepthStencilView *dsvRO; /* read-only depth and stencil */
     ID3D11ShaderResourceView *srv; /* RHI_TEX_SAMPLED: colour, or the depth plane */
+    /* RHI_TEX_SAMPLED D32F_S8, single-sampled: the stencil plane
+     * (X32_TYPELESS_G8X24_UINT, RHI_ASPECT_STENCIL), NULL otherwise */
+    ID3D11ShaderResourceView *srvStencil;
     bool swapchain;
 } D11Texture;
 
