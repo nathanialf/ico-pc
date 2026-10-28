@@ -819,6 +819,12 @@ if(ICO_RUN_TESTS)
     set_tests_properties(modelpack PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_shadow COMMAND rd_shadow_test)
     set_tests_properties(rd_shadow PROPERTIES SKIP_RETURN_CODE 77)
+    # the shadow composites' two kernels above 1x (rd_shadow_test.c case x):
+    # the same frames at scale 2 with one bilinear tap (the default) and with
+    # the B-spline ([dev] shadow_bspline), SCENE equal byte for byte but
+    # within N texels of a shadow edge (the kernels' joint support)
+    add_test(NAME rd_shadow_edges COMMAND rd_shadow_test edges)
+    set_tests_properties(rd_shadow_edges PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_fog COMMAND rd_fog_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_fog PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME fog_lut COMMAND fog_lut_test)
@@ -990,7 +996,7 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase ${rd_mesh_SHARDS} modelpack
-                             rd_shadow rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_native PROPERTIES ENVIRONMENT
+                             rd_shadow rd_shadow_edges rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_native PROPERTIES ENVIRONMENT
                                                                            "${_env}")
         set_tests_properties(${rd_blur_SHARDS} PROPERTIES ENVIRONMENT "${_env}")
     endif()
@@ -1948,8 +1954,8 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
     set(_ico_rd_gl_tests
         # the programs
         rd_state rd_pixel rd_native rd_layout rd_tex rd_gsbase ${rd_mesh_SHARDS} modelpack
-        rd_shadow rd_fog ${rd_blur_SHARDS} rd_water rd_raw rd_debug rd_present rd_crt rd_mirror
-        rd_msaa rd_perf rd_interp rd_boot_present rd_dst_usage
+        rd_shadow rd_shadow_edges rd_fog ${rd_blur_SHARDS} rd_water rd_raw rd_debug rd_present
+        rd_crt rd_mirror rd_msaa rd_perf rd_interp rd_boot_present rd_dst_usage
         # the two-pass blend (ICO_RD_NO_DUAL=1 is the renderer's own switch, not a Vulkan fake)
         rd_pixel_nodual rd_present_nodual rd_fog_nodual rd_shadow_nodual rd_water_nodual
         rd_raw_nodual rd_mirror_nodual rd_interp_nodual rd_msaa_nodual rd_crack_nodual
