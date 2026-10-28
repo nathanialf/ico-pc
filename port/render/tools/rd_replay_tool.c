@@ -2080,6 +2080,13 @@ int main(int argc, char **argv)
             printf("%s: stats: VU pre-pass batches: %u distinct (stage, frame, stream, bones) of "
                    "%u draws\n",
                    dump, pr->prepassBatches, pr->vuPreDraws);
+            /* the draw merge as drawn (rd_replay_vu.c rd__replay_vu_flush;
+             * g_rd.vuMerge): the merge builds' draws and the GPU draws they
+             * took */
+            printf("%s: stats: VU merge: %u draws in %u GPU draws (%u merged into %u, %u alone; "
+                   "merge %s)\n",
+                   dump, pr->vuMergeIn + pr->vuMergeAlone, pr->vuMergeGpu + pr->vuMergeAlone,
+                   pr->vuMergeIn, pr->vuMergeGpu, pr->vuMergeAlone, g_rd.vuMerge ? "on" : "off");
         }
         /* the crack filler above 1x (rd_crack_fill.c): its count read back */
         rd__crack_fill_wait();
