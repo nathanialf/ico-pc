@@ -436,8 +436,7 @@ runs` counts them: about half of the VU draws of a gameplay frame could join the
 With the merge (`g_rd.vuMerge`, the default; `port/render/rd_replay_vu.c` (`vuDraw`, `vuRunTake`,
 `rd__replay_vu_flush`)) such a draw is held in an open run instead of drawn. A draw joins the run
 when it has one planned pass, an index list, a merge build (below), no DATE through the stencil bit,
-no destination read, is not one of code 36's cut and kick draws, is outside the loss bisect's window
-and the pass split, and has the same pipeline key, group 1 (the stream buffer, the record, the ring),
+no destination read, is outside the loss bisect's window and the pass split, and has the same pipeline key, group 1 (the stream buffer, the record, the ring),
 group 2 (the textures and the sampler), DrawCB bytes, FrameCB, scissor, render pass and GPU timing
 effect as the run, up to 16 draws whose raised index values (below) stay within the device's
 (`maxDrawIndexedIndexValue`). Anything else that records ends the run first
@@ -468,7 +467,9 @@ uses and reads `vu_mem`, `vu_ticks` and `vu_bone` an element at a time from t5
 ([The pre-pass's batches](#the-pre-passs-batches)), and returns the value less the raise: the draw's
 own `kick * 4 + corner`. Every function then runs on the same bytes as the draw's own, so the
 triangles, their order and every pixel are the same. The pixel shaders read nothing of VuCB (the
-main shader hands the planes over as flat varyings), so they are unchanged.
+main shader hands the planes over as flat varyings); code 36's cut and kick draws merge like any
+other, each reading its own `CUT_ONLY` / `KICK_ONLY` flag through the table, where they share a
+pipeline key ([The fused scissor pair](#the-fused-scissor-pair)).
 
 Every pipeline of those vertex shaders takes its merge build while the merge is on (the keys are the
 same: `port/render/rd_pipeline.c` takes the module by `g_rd.vuMerge`, set once at start, so the
@@ -482,8 +483,63 @@ textures, DrawCB, FrameCB and scissor drawn as one indexed draw of up to 16, ...
 off ...`, and the summary line has `VU merge on` or `VU merge off` after the pre-pass. `rd_replay_tool
 --stats` prints `VU merge: N draws in M GPU draws (K merged into G, A alone; merge on)` beside the
 count of what could join, and the window's 10 s line `VU merge: N draws a replay in G GPU draws, A
-alone` (`RdPerfRecord.vuMergeIn`, `vuMergeGpu`, `vuMergeAlone`). The merge builds are 6,719 to
-51,857 words (`vu_lit_merge_vs`), within their budgets, about 500 words above the plain builds.
+alone` (`RdPerfRecord.vuMergeIn`, `vuMergeGpu`, `vuMergeAlone`). The merge builds are 6,770 to
+51,903 words (`vu_lit_merge_vs`), within their budgets, about 500 words above the plain builds.
+
+## The fused scissor pair
+
+Code 36 (`normal_c` and `normal_l`'s scissor programs) kicks the fans `SCISSOR_COMMON` clips while
+its loop runs, before the batch's own strip, and the fans' PRIM (the common block's 0x5D) has ABE
+on. So each of its batches is two draws (`port/render/rd_replay_vu.c` `doVuDraw`): first the
+triangles the VU clips (`ICO_VU_CUT_ONLY`) under the state with PRIM.ABE forced on, then the
+triangles the strip kicks (`ICO_VU_KICK_ONLY`) under the state as it is; each draw runs the whole
+batch through the vertex shader and leaves the other's triangles degenerate. Where the state's ABE
+is off the two draws differ in the pipeline key's blend and alternate, so the draw merge cannot join
+any of them: on the PowerVR phone's 2x frame 560 of 701 VU draws a replay were such pairs, and 47
+draws merged.
+
+Fused (`g_rd.vuFuse`, on with the merge; `vuFuseVerdict`), the kick draw takes its cut's state, so
+its pipeline, key and DrawCB, with `ICO_VU_FUSED` (2048) beside `ICO_VU_KICK_ONLY` in its VuCB. The
+merge builds of `vu_prelit_vs`, `vu_lit_vs` and `vu_main_vs` mark its triangles (`vu_common.hlsli`
+`vu_fused_out`: `VuVSOut.r.w` 1, a flat lane that was always 0) and `vu_ps` and `vu_texa_ps` write
+their pixels as `gs_dual_out` writes a PABE pixel whose As has its MSB clear (`vu_dual_out_fused`):
+c0 = Cs with FBA's MSB, c1 1.0 for the lerps ((Cs - Cd) * 1 + Cd) and 0 for Cd*FIX + Cs
+(`DF_C1_DST`), so the blender stores Cs, which is what the kick's own pipeline (blending off) stores
+from the same c0. The draws, their triangles and their order are unchanged (each batch's cuts, then
+its kicks; the merge keeps the draws' order), so where a cut and a kick overlap the result is the
+same; the colour, alpha, depth and stencil arithmetic is the same: the picture is the same byte for
+byte. The cut and its kick now share every key, so the merge joins consecutive batches of a mesh,
+up to 16 draws (8 batches) a GPU draw. The vertex work is unchanged (each batch still runs through
+the vertex shader twice, once a draw); what goes is the GPU draws.
+
+The verdict is taken once a command (its state, target and pass are the same for every batch) and
+counted once a batch. A pair is fused only where all of these hold, else kept apart for the first
+that fails:
+
+| reason | the pair is kept apart when |
+|---|---|
+| fuse off | `[dev] vu_fuse = false` (`ICO_RD_VU_FUSE=0`), or the draw merge off (Direct3D 11, `vu_merge = false`) |
+| no merge build | the draw's vertex shader or the fallback's has no merge build (only those mark the kicks) |
+| passes | either state's plan is not one pass: the alpha test's split, or no dual-source blending (a lerp is two passes there) |
+| dst/DATE | a destination read (the exact blend) or DATE through the stencil bit |
+| blend form | the cut's blend is not a lerp or Cd*FIX + Cs: the premultiplied adds and subtracts (ONE, ONE) and the Ad forms cannot drop Cd per pixel (`rd_pipeline.c` `keyBlendPath`, `blendState`) |
+| no planes | the cut's pixel shader is `vu_np_ps` (a fractional scale): it does not read `r` |
+| plans differ | the kick's plan is not the cut's with the blend off: the cut's pass with the key's blend, the flags `FIX_FACTOR`, `PREMUL` and `C1_DST`, the clamped FIX and `dstWant` as the alpha plan's blending off sets them (`rd_alpha_plan.c`) must equal the kick's pass in every other field (shaders, depth, mask, alpha test, flags) |
+
+A pair whose two plans are equal already (the state's ABE on, or the alpha plan's blending off on
+the cut) is counted as under one pipeline already and drawn as before: it merged without the fuse.
+
+The start line names it after the merge's words: `rd: VU merge: on: ...; code 36's cut and kick
+draws of a batch fused: the kicks under the cut's pipeline, their pixels unblended, ...` or `...; the
+fuse off ([dev] vu_fuse = false, ICO_RD_VU_FUSE=0): ...`; the summary line has `VU fuse on` or `VU
+fuse off` after `VU merge`. `rd_replay_tool --stats` prints `VU fuse: N pairs fused, M kept apart
+(blend form K, plans differ L, passes P, dst/DATE D, no planes Q, no merge build B, fuse off F), S
+under one pipeline already; fuse on`, and the window's 10 s line `VU fuse: N pairs a replay fused, S
+one pipeline already, M kept apart (...)` with the same reasons (`RdPerfRecord.vuFusePairs`,
+`vuFuseSame`, `vuFuseKept`). The marks cost the five merge builds of those entries 46 to 51 words
+and `vu_ps` and `vu_texa_ps` 142 each; the other builds (`vu_np_ps`, the `_nodual` and destination-read twins, every build
+without `ICO_VU_MERGE`) are the same word for word. `rd_vufuse_ab` is its byte gate
+([TESTING.md](TESTING.md)).
 
 ## Tests
 
@@ -523,3 +579,12 @@ programs' own entries (`ICO_RD_VU_PREPASS=0`), at Original 4:3 1x, Enhanced 4:3 
 joined, and fewer over the list. `rd_vuprepass_selftest_unmerged` runs the start-up self-test with
 the merge off; the other `rd_vuprepass_selftest` runs check that it is on and draw through it
 ([The draw merge](#the-draw-merge)).
+
+`rd_vufuse_ab` (`port/render/test/rd_vufuse_ab.cmake`) replays the same dumps and the PowerVR
+phone's frame (`tools/vufuse_dumps.txt`) with the merge on, code 36's kicks under their own
+pipelines (`ICO_RD_VU_FUSE=0`) and fused, at the phone's profile (the programs' own entries, 2x at
+2.189 presented at 2364x1080), through the programs' own entries at Enhanced 4:3 2x and through the
+record at Enhanced 4:3 and 16:9 2x: every target byte for byte, the same pairs counted, the fused
+run's GPU draws exactly the other's less what the merge joined beyond it, and at each setting with
+pairs some fused and fewer GPU draws. The `rd_vuprepass_selftest` runs check the fuse is on with the
+merge unless `ICO_RD_VU_FUSE=0` ([The fused scissor pair](#the-fused-scissor-pair)).
