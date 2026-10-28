@@ -316,6 +316,13 @@ StructuredBuffer<float4> vu_stream : ICO_REG(t0, 1);
 // order.
 #define VU_F_CUT_ONLY 32u
 #define VU_F_KICK_ONLY 64u
+// With VU_F_KICK_ONLY: the kick draw of a fused pair (rd_replay_vu.c
+// vuFuseVerdict), drawn under its cut draw's pipeline (PRIM.ABE on) so the
+// draw merge can join the two; its triangles carry VuVSOut.r.w = 1 (the
+// merge builds alone set it: vu_fused_out) and vu_ps writes their pixels
+// unblended, as gs_dual_out writes a PABE pixel whose As has its MSB clear
+// (vu_dual_out_fused): the blender gives Cs, the kick drawn with ABE off.
+#define VU_F_FUSED 2048u
 // Photo mode's free camera (RdCamera.freeCamera): every triangle failing the
 // region test, and every particle outside its x/y window, is drawn
 // GPU-clipped over the whole picture, a vertex behind the eye or not, in
@@ -592,7 +599,9 @@ struct VuVSOut {
     // The triangle's attribute planes (vu_attr_planes): col, stq and plane
     // at its first corner (a0: col, a1: stq, plane) and per texel across
     // (x0, x1) and down (y0, y1); r.xy the corner in texels from the
-    // target's centre, r.z 1 when the planes hold (vu_pixel_attrs).
+    // target's centre, r.z 1 when the planes hold (vu_pixel_attrs), r.w 1
+    // on the kick triangles of a fused scissor pair (vu_fused_out: their
+    // pixels written unblended), else 0.
     VK_LOC(3) nointerpolation float4 a0 : TEXCOORD2;
     VK_LOC(4) nointerpolation float4 a1 : TEXCOORD3;
     VK_LOC(5) nointerpolation float4 x0 : TEXCOORD4;
@@ -1730,6 +1739,23 @@ uint vu_probe_field(VuVtx v, uint field)
     return r;
 }
 
+// r.w of a VU vertex output (VuVSOut.r) in clip mode `mode`: 1 on every
+// triangle of the kick draw of a fused scissor pair (VU_CLIP_SCISSOR with
+// VU_F_FUSED), whose pixels vu_ps writes unblended; set after the planes
+// (vu_attr_planes, vu_rec_planes write r whole).  Only the merge builds
+// read the flag: rd_replay_vu.c fuses a pair only where its draws go
+// through them.  A program without a scissor mode passes a literal mode,
+// and its builds keep r.w 0 without a test.
+VuVSOut vu_fused_out(VuVSOut o, uint mode)
+{
+#ifdef ICO_VU_MERGE
+    if (mode == VU_CLIP_SCISSOR) {
+        o.r.w = (vu_draw.z & VU_F_FUSED) != 0u ? 1.0 : 0.0;
+    }
+#endif
+    return o;
+}
+
 // What a mesh program draws of the triangle kick-2, kick-1, kick (a, b, c)
 // at its corner (0..2) under its marks (vu_kick_marks): mode VU_CLIP_*, the programs without
 // a scissor or no-test variant passing VU_CLIP_REGION whatever vu_draw.z
@@ -1753,7 +1779,7 @@ VuVSOut vu_mesh_out(VuVtx a, VuVtx b, VuVtx c, uint kick, uint corner, uint mark
             o = vu_later_out(o, a, b, c);
         }
     }
-    return o;
+    return vu_fused_out(o, mode);
 }
 
 // ------------------------------------------------- the vertex pre-pass
@@ -2081,12 +2107,45 @@ DualOut vu_dual_out_f(float4 col, uint flags, uint fix)
     return o;
 }
 
-// the entry's output: the fixed-function blend's c0 and c1
-#define VU_RETURN(col, pos) return vu_dual_out_f(col, g_mode.x, g_blend.y)
+// the entry's output (i its input): the fixed-function blend's c0 and c1;
+// a fused pair's kick pixel unblended (VuVSOut.r.w, vu_dual_out_fused) in
+// the builds with the planes and dual-source blending, the only ones a
+// fused pair draws with (the no-planes twins do not read r, and without
+// dual-source blending a cut is two passes, which rd_replay_vu.c never
+// fuses)
+#if defined(ICO_VU_NO_PLANES) || defined(ICO_NO_DUAL)
+#define VU_RETURN(col, i) return vu_dual_out_f(col, g_mode.x, g_blend.y)
+#else
+// A pixel of a fused pair's kick (fused not 0: VU_F_FUSED, VuVSOut.r.w),
+// under its cut's pipeline (PRIM.ABE on), written as vu_dual_out_f writes a
+// PABE pixel whose As has its MSB clear: c0 = Cs (FBA's MSB on the alpha),
+// c1 1.0 for the lerps and 0 for Cd*FIX + Cs (DF_C1_DST), so the blender
+// stores Cs, the c0 the kick's own pipeline (blending off) stores
+// (rd_replay_vu.c fuses no pair of another blend form); every other pixel
+// as vu_dual_out_f writes it.
+DualOut vu_dual_out_fused(float4 col, uint flags, uint fix, float fused)
+{
+    if (fused != 0.0) {
+        const uint ia = uint(col.a);
+        float a = col.a;
+        if ((flags & DF_FBA) != 0u) {
+            a = float(ia | 0x80u);
+        }
+        const float c1 = (flags & DF_C1_DST) != 0u ? 0.0 : 1.0;
+        DualOut o;
+        o.c0 = float4(col.rgb, a) * (1.0 / 255.0);
+        o.c1 = float4(c1, c1, c1, c1);
+        return o;
+    }
+    return vu_dual_out_f(col, flags, fix);
+}
+
+#define VU_RETURN(col, i) return vu_dual_out_fused(col, g_mode.x, g_blend.y, i.r.w)
+#endif
 #else
 // the destination-read builds blend in the shader (gs_dst_pixel), on the
-// integers
-#define VU_RETURN(col, pos) GS_RETURN(uint4(col), pos)
+// integers (a fused pair has no destination read)
+#define VU_RETURN(col, i) GS_RETURN(uint4(col), i.pos)
 #endif
 
 // ------------------------------------------------------ the pixel's input
