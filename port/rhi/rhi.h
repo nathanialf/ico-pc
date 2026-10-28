@@ -199,14 +199,21 @@ typedef struct RhiTextureDesc {
     uint32_t samples;
 } RhiTextureDesc;
 
-/* Views: a depth-stencil texture is sampled either as depth (fog, DoF) or
- * never as stencil; an RGBA8 target can be viewed as RGB24-with-TA0 by the
- * shader, which is a shader concern, not a view.  So one view kind is enough
- * beyond the default: the depth aspect. */
+/* Views: a depth-stencil texture is sampled as depth (fog, DoF) or, where
+ * RhiLimits.stencilView says so, as stencil (the shadow count read in one
+ * draw, port/render/rd_replay.c); an RGBA8 target can be viewed as
+ * RGB24-with-TA0 by the shader, which is a shader concern, not a view. */
 typedef enum RhiViewAspect {
     RHI_ASPECT_COLOR = 0,
     RHI_ASPECT_DEPTH = 1,
-    RHI_ASPECT_UINT = 2 /* the RGBA8_UINT view of an RHI_TEX_UINT_VIEW texture */
+    RHI_ASPECT_UINT = 2, /* the RGBA8_UINT view of an RHI_TEX_UINT_VIEW texture */
+    /* the stencil of a single-sampled RHI_FMT_D32F_S8 texture made with
+     * RHI_TEX_SAMPLED, as unsigned integers (HLSL Texture2D<uint4>, read
+     * with Load; no sampler filters it), in RHI_STATE_DEPTH_READ: the 8-bit
+     * value in the channel RhiLimits.stencilViewChannel names.  Only where
+     * RhiLimits.stencilView; a sampled-texture binding only (never a copy
+     * or a readback aspect) */
+    RHI_ASPECT_STENCIL = 3
 } RhiViewAspect;
 
 typedef enum RhiFilter { RHI_FILTER_NEAREST = 0, RHI_FILTER_LINEAR = 1 } RhiFilter;
@@ -678,6 +685,15 @@ typedef struct RhiLimits {
     bool dynamicDepth;
     bool dynamicBlend;
     bool uintView;
+    /* RHI_ASPECT_STENCIL bindings of a sampled D32F_S8 texture read its
+     * stencil (Vulkan a VK_IMAGE_ASPECT_STENCIL_BIT view, D3D12 and D3D11 an
+     * X32_TYPELESS_G8X24_UINT view, OpenGL a texture view with
+     * GL_DEPTH_STENCIL_TEXTURE_MODE GL_STENCIL_INDEX); stencilViewChannel the
+     * channel the value arrives in, 0 red (Vulkan, OpenGL) or 1 green
+     * (Direct3D's G8 plane).  false: the binding reads what the default
+     * view reads, and the renderer keeps its stencil-tested draws. */
+    bool stencilView;
+    uint8_t stencilViewChannel;
     /* Why the VU fallback's program entries are the plain ones on this
      * device ("Adreno 740, issue 107": the driver hung the whole device
      * compiling the extended ones; Vulkan, vk_device.c kVuPlainOnly), NULL
