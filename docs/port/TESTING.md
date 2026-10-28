@@ -608,7 +608,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the pre-pass off. What the draw merge drew is the line after them: `VU merge: N draws in M GPU
   draws (K merged into G, A alone; merge on)`, N the draws through the merge builds, K of them in
   runs of two or more drawn as G GPU draws, A drawn one a GPU draw (`merge off` and zeros with
-  `ICO_RD_VU_MERGE=0`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)).
+  `ICO_RD_VU_MERGE=0`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)). Then code 36's pairs
+  (one a batch): `VU fuse: N pairs fused, M kept apart (blend form K, plans differ L, passes P,
+  dst/DATE D, no planes Q, no merge build B, fuse off F), S under one pipeline already; fuse on`, N
+  the batches whose kick took its cut's pipeline, M those kept apart by the first reason that held,
+  S those whose two draws had one plan without the fuse (`fuse off` and every pair with ABE off
+  under `fuse off F` with `ICO_RD_VU_FUSE=0` or the merge off;
+  [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)).
 - `rd_vubatch_ab.cmake`: the same dumps through the record twice, one point draw an entry and
   stage (`ICO_RD_VU_PREPASS_BATCH=0`) and in the pre-pass's batches, at Original 4:3 1x, Enhanced
   4:3 2x and Enhanced 16:9 2x under `ICO_RD_BLEND=fixed`: every named target's PNG byte for byte,
@@ -624,6 +630,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   exactly the other's less what its runs joined (K less G of the `VU merge` line), and fewer over
   the whole list; each pair's draws printed (`rd_vumerge_ab`;
   [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)). SKIP as `rd_vustage_ab`.
+- `rd_vufuse_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` (the PowerVR phone's
+  2x frame) twice with the draw merge on, code 36's kicks under their own pipelines
+  (`ICO_RD_VU_FUSE=0`) and the fused scissor pair, at four settings under `ICO_RD_BLEND=fixed`: the
+  phone's profile (`ICO_RD_VU_PREPASS=0`, `--enhanced --resolution 2x --aspect 2.189 --present
+  2364x1080`; a narrower dump skips it), the programs' entries at Enhanced 4:3 2x, and the record at
+  Enhanced 4:3 and 16:9 2x: every named target's PNG (and `PRESENT.png`) byte for byte, `fuse off`
+  with no pair fused against `fuse on`, the same pairs counted by both (the `VU fuse` line's fused,
+  kept apart and one-pipeline counts), the fused run's GPU draws exactly the other's less the
+  difference of what the merge joined (K less G of each run's `VU merge` line), and at every
+  setting that counted pairs with ABE off some fused and fewer GPU draws in total; each pair's
+  counts printed (`rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). SKIP
+  as `rd_vustage_ab`.
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's
@@ -1529,6 +1547,7 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_PREPASS` | `rd_replay_vu.c` | 0: no VU vertex pre-pass, every VU draw the old way (`[dev] vu_prepass = false`); the tests switch it with `rd__set_vu_prepass` ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)) |
 | `ICO_RD_VU_PREPASS_BATCH` | `rd_replay_vu.c` | 0: the VU pre-pass's draws one an entry and stage instead of batched (`[dev] vu_prepass_batch = false`; `rd_vubatch_ab`, `rd_vuprepass_selftest_unbatched`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)) |
 | `ICO_RD_VU_MERGE` | `rd_replay_vu.c` | 0: every VU draw a GPU draw of its own instead of the draw merge (`[dev] vu_merge = false`; `rd_vumerge_ab`, `rd_vuprepass_selftest_unmerged`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) |
+| `ICO_RD_VU_FUSE` | `rd_replay_vu.c` | 0: code 36's kick draws under their own pipelines instead of the fused scissor pair (`[dev] vu_fuse = false`; `rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)) |
 | `ICO_RD_PERF_LIST_STAMPS` | `rd_perf.c` | 0: no list or effect timestamp (`[dev] perf_list_stamps = false`); `rd_perf_test` switches it with `rd__set_perf_list_stamps` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
 | `ICO_RD_PERF_PASSES` | `rd_perf.c` | 1: every replay timed pass by pass (`[dev] perf_passes = true`; the window writes `ico-pc-passes.csv`); `rd_perf_test` and the replay tool's `--pass-times` switch it with `rd__set_perf_passes` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
 | `ICO_RHI_BACKEND`, `ICO_VK_DEVICE`, `ICO_D3D12_ADAPTER` | `rhi_backend.c`, `vk_device.c`, `d3d12_device.c` | pick the backend, the Vulkan device, the D3D12 adapter (`warp`) |
