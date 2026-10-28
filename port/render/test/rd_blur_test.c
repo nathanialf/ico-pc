@@ -436,9 +436,9 @@ static int named(uint32_t id)
 }
 
 static const char *const kTargetNames[RD_TARGET_COUNT] = {
-    "SCENE",     "DISPLAY",   "SHADOW0",  "SHADOW1",   "SHADOW2",   "WORK0",
-    "WORK1",     "WORK2",     "WORK3",    "AA0",       "AA1",       "FEED128",
-    "DATE_SNAP", "AURA_WORK", "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD"};
+    "SCENE",    "DISPLAY",   "SHADOW0",   "SHADOW1",      "SHADOW2",   "WORK0",     "WORK1",
+    "WORK2",    "WORK3",     "AA0",       "AA1",          "FEED128",   "DATE_SNAP", "AURA_WORK",
+    "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD", "WORK3_HELD"};
 
 static const char *tname(uint32_t id)
 {
@@ -1109,14 +1109,15 @@ static void checkRecordingWide(void)
     static const struct {
         int id;
         uint32_t w, h;
-    } kSizes[] = {{RD_TARGET_SCENE, 2048, H},      {RD_TARGET_DISPLAY, 2048, H / 2},
-                  {RD_TARGET_SHADOW0, 1024, 256},  {RD_TARGET_SHADOW1, 512, 128},
-                  {RD_TARGET_SHADOW2, 256, 64},    {RD_TARGET_WORK0, 1024, 128},
-                  {RD_TARGET_WORK1, 1024, 256},    {RD_TARGET_WORK2, 2048, H},
-                  {RD_TARGET_WORK3, 1024, 128},    {RD_TARGET_AA0, 1024, 256},
-                  {RD_TARGET_AA1, 512, 128},       {RD_TARGET_FEED128, 512, 128},
-                  {RD_TARGET_AURA_WORK, 2048, H},  {RD_TARGET_AURA_TAP, 512, 128},
-                  {RD_TARGET_WORK2_PAD, 1024, 64}, {RD_TARGET_FEED_HELD, 512, 128}};
+    } kSizes[] = {{RD_TARGET_SCENE, 2048, H},       {RD_TARGET_DISPLAY, 2048, H / 2},
+                  {RD_TARGET_SHADOW0, 1024, 256},   {RD_TARGET_SHADOW1, 512, 128},
+                  {RD_TARGET_SHADOW2, 256, 64},     {RD_TARGET_WORK0, 1024, 128},
+                  {RD_TARGET_WORK1, 1024, 256},     {RD_TARGET_WORK2, 2048, H},
+                  {RD_TARGET_WORK3, 1024, 128},     {RD_TARGET_AA0, 1024, 256},
+                  {RD_TARGET_AA1, 512, 128},        {RD_TARGET_FEED128, 512, 128},
+                  {RD_TARGET_AURA_WORK, 2048, H},   {RD_TARGET_AURA_TAP, 512, 128},
+                  {RD_TARGET_WORK2_PAD, 1024, 64},  {RD_TARGET_FEED_HELD, 512, 128},
+                  {RD_TARGET_WORK3_HELD, 1024, 128}};
 
     for (size_t i = 0; i < sizeof(kSizes) / sizeof(kSizes[0]); i++) {
         const RdTargetRec *t = rd__target_rec(rd_target((RdTargetId)kSizes[i].id).id);
@@ -1295,7 +1296,8 @@ static int workBuffer(int n)
 {
     return n == RD_TARGET_WORK0 || n == RD_TARGET_WORK1 || n == RD_TARGET_WORK3 ||
            n == RD_TARGET_AA0 || n == RD_TARGET_AA1 || n == RD_TARGET_FEED128 ||
-           n == RD_TARGET_AURA_TAP || n == RD_TARGET_WORK2_PAD || n == RD_TARGET_FEED_HELD;
+           n == RD_TARGET_AURA_TAP || n == RD_TARGET_WORK2_PAD || n == RD_TARGET_FEED_HELD ||
+           n == RD_TARGET_WORK3_HELD;
 }
 
 /* (above1x) the distinct resampled passes: source, destination, the axes'
