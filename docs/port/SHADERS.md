@@ -177,7 +177,7 @@ number the RHI slot (`port/shaders/common.hlsli`, header comment; `port/rhi/rhi.
 | 0 | `b0` | FrameCB, once per frame |
 | 1 | `b1` | DrawCB, per draw or post pass (crt.hlsl's CrtCB takes the same slot) |
 | 1 | `b2`, `b3`, `t0`, `t4` | the VU programs' VuCB and VuBoneCB (bones, card bits), the VU vertex stream, and the pre-passes' record (`vu_rec_buf`, `StructuredBuffer<uint4>`, three planes); VuCB and the record are visible to the pixel stage too (`vu_ps` reads the planes) |
-| 1 | `t5` | the upload ring from offset 0 (`vu_ring`, `StructuredBuffer<float4>`, vertex stage): the pre-pass's batch builds (`vu_X_batch_pre_vs`, `ICO_VU_PRE_BATCH`) read each entry's VuCB and VuBoneCB and the batch's table there, the table found through DrawCB's `aux0` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)); every VU group binds it, the other builds do not read it |
+| 1 | `t5` | the upload ring from offset 0 (`vu_ring`, `StructuredBuffer<float4>`, vertex stage): the pre-pass's batch builds (`vu_X_batch_pre_vs`, `ICO_VU_PRE_BATCH`) read each entry's VuCB and VuBoneCB and the batch's table there, the table found through DrawCB's `aux0` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)); every VU group binds it (Direct3D 11's leave it unbound: no batch module there), the other builds do not read it |
 | 2 | `t1`..`t4`, `s1`..`s4` | textures and samplers |
 | 3 | `u0` | the destination read's target (`_dstrov`); `_dstatt` reads binding 16 of set 3 as an input attachment |
 
