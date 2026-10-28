@@ -2269,6 +2269,39 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                                 int firstOfTick, RdInterpStats *stats);
 void rd__interp_shutdown(void);
 
+/* Still re-present (rd_interp.c): a between-tick picture that would be the
+ * bytes of the tick's last rendered one is shown again (the empty keep
+ * frame's replay, no passes) instead of rendered.  rd__interp_frame hashes
+ * the frame it builds (rd__interp_frame_hash: ok false when the camera moved,
+ * Smooth is on or the switch is off); rd__present_blended replays rf, or
+ * shows the picture again when rd__reshow_why says RD_RESHOW_SHOWN.
+ * [dev] still_represent = false (ICO_RD_STILL_REPRESENT=0) renders every
+ * present. */
+enum {
+    RD_RESHOW_SHOWN = 0, /* the same bytes: shown again */
+    RD_RESHOW_OFF,       /* the switch is off, or Smooth's trail, a video, no device */
+    RD_RESHOW_MOVING,    /* no hash: the camera moved */
+    RD_RESHOW_FIRST,     /* a tick's first present */
+    RD_RESHOW_STALE,     /* no picture of this tick before, or another replay since */
+    RD_RESHOW_DIFF,      /* the frame's hash differs from the last rendered one's */
+    RD_RESHOW_STATE,     /* settings, targets or textures changed since */
+    RD_RESHOW_COUNT
+};
+
+typedef struct RdReshowIn {
+    bool enabled, smooth, video, hashOk, first, haveRef, stateSame;
+    uint32_t number, refNumber;
+    uint64_t hash, refHash, replay, refReplay;
+} RdReshowIn;
+
+int rd__reshow_why(const RdReshowIn *in);
+uint64_t rd__interp_frame_hash(bool *ok);
+bool rd__present_blended(const RdFrame *rf, int first, bool present);
+void rd__reshow_block(void);        /* the 10 s summary's line (rd_interp.c presentLog) */
+uint64_t rd__reshow_count(int why); /* presents counted so far in this block, per RD_RESHOW_* */
+void rd__overlay_reshow_text(const RdFrame *f); /* rd_present.c: lay the deferred text out from f */
+void rd__perf_reshown(void); /* rd_perf.c: the next replay is a re-shown present */
+
 /* rd_present.c's capture (rd.h rd_capture_presented): whether one is armed;
  * captureRecord (rd_present.c) copies the output into the capture texture
  * (from rd__present_record, before the overlay); rd__capture_finish reads it
