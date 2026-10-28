@@ -3,7 +3,7 @@
  * device.
  *
  *   equal       two ticks with the same keyed and unkeyed sprites, the camera
- *               still: the frame built at alpha 0.25, 0.5, 0.75 and 1 hashes
+ *               still: the frame built at alpha 0.25, 0.5, 0.75 and 0.999 hashes
  *               the same, as a tick's first present and as a later one (the
  *               head copies of the feedback passes are not in it), and
  *               rd__reshow_why says shown again
