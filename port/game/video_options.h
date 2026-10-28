@@ -389,5 +389,12 @@ void ico_video_set_preset(IcoVideoOptions *o, int preset);
 const char *ico_video_preset_name(int preset);
 /* "window", "WxH", "Nx" or "auto" into buf (at least 24 bytes). */
 const char *ico_video_resolution_name(const IcoVideoOptions *o, char *buf, unsigned size);
+/* The window's "display changed" words: each option that differs between was
+   and now as ", name old -> new" (the first without the comma), in the
+   startup line's words ("preset Custom -> Original, resolution 2x -> 1x,
+   aspect auto -> 4:3"), into out; "" when none differs (a resize's forced
+   apply).  Returns the length written. */
+int ico_video_changes_text(const IcoVideoOptions *was, const IcoVideoOptions *now, char *out,
+                           unsigned size);
 
 #endif /* ICO_PORT_GAME_VIDEO_OPTIONS_H */
