@@ -20,7 +20,8 @@
  * at scale 1, the reduced count above it: rd__shadow_count_read) is read
  * back each time.  The one draw stays when its count equals the seven
  * draws' byte for byte and every band's centre holds the count's colour
- * (rd__shadow_table_texel of n mod 64); otherwise the flag goes off
+ * (rd__shadow_table_texel of n mod 64); otherwise, or when the test
+ * cannot run (no SCENE, no frame), the flag goes off
  * (rd__profile_self_test_off: "(self-test)") and the seven draws resolve
  * the count.  MSAA is held off for both replays (the count's pass closes
  * the epoch in the game; here SCENE's colour is the count target).  One
@@ -159,8 +160,15 @@ bool rd__shadow_selftest(void)
     }
     const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
     RdTargetRec *t = rd__target_rec(scene);
+    /* an early return leaves the one draw unverified: off, as on a
+     * difference, unless [dev] shadow_one set it */
+    const bool kept = (g_rd.profile.devSet & RD_PROFILE_SHADOW_ONE) != 0;
     if (!t || !t->withDepth || !t->color.id || !t->depth.id || t->format != RHI_FMT_RGBA8_UNORM) {
-        rd__log("shadow count: self-test: no SCENE target to run it on");
+        rd__log("shadow count: self-test: no SCENE target to run it on%s",
+                kept ? "; kept by [dev] shadow_one" : "");
+        if (!kept) {
+            rd__profile_self_test_off(RD_PROFILE_SHADOW_ONE);
+        }
         return false;
     }
     const uint32_t w = t->w, h = t->h;
@@ -171,7 +179,11 @@ bool rd__shadow_selftest(void)
         free(one);
         free(seven);
         rd__frame_free(&f);
-        rd__log("shadow count: self-test: could not build its frame");
+        rd__log("shadow count: self-test: could not build its frame%s",
+                kept ? "; kept by [dev] shadow_one" : "");
+        if (!kept) {
+            rd__profile_self_test_off(RD_PROFILE_SHADOW_ONE);
+        }
         return false;
     }
     if (rd__shadow_sabotaged()) {
@@ -204,7 +216,6 @@ bool rd__shadow_selftest(void)
     const int centres = doneOne ? centresOk(one, w, h, &bad) : 0;
     const int want = 2 * (SB_BANDS + 1);
     const bool passed = doneOne && doneSeven && tookOne && diff == 0 && centres == want;
-    const bool kept = (g_rd.profile.devSet & RD_PROFILE_SHADOW_ONE) != 0;
     char res[192];
     if (!doneOne || !doneSeven) {
         snprintf(res, sizeof res, "error (%s replay or readback)",
