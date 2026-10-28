@@ -589,13 +589,18 @@ static bool d11_create_views(D11Texture *t, const D11FormatMap *fm, UINT bind)
             return false;
         }
         /* the stencil plane (RHI_ASPECT_STENCIL: the shadow count's one
-         * draw), its value in green (RhiLimits.stencilViewChannel 1) */
-        if (fm->stencil && !ms && t->rhiFormat == RHI_FMT_D32F_S8) {
+         * draw), its value in green (RhiLimits.stencilViewChannel 1).
+         * Optional: a refused view keeps the texture, and
+         * RhiLimits.stencilView goes false for the device (logged once),
+         * which turns the one draw off (rd_shadow_one.c: the seven draws) */
+        if (fm->stencil && !ms && t->rhiFormat == RHI_FMT_D32F_S8 && g_d11.limits.stencilView) {
             v.Format = DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;
             if (!D11_CHECK(ID3D11Device_CreateShaderResourceView(
                     g_d11.device, (ID3D11Resource *)t->res, &v, &t->srvStencil))) {
                 t->srvStencil = NULL;
-                return false;
+                g_d11.limits.stencilView = false;
+                D11_LOG("the stencil view was not made: no stencil views on this device from "
+                        "now (the shadow count takes the seven draws)");
             }
         }
     }
