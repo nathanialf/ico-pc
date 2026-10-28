@@ -161,15 +161,27 @@ geometry of `staticBlur.c` `blurPass` (`sbShrinkAt`, `sbShrinkSpan`) and pinned 
 
 At 48:9 and 60:9 one pair's next pass 1 covers one column fewer on the right (blur(13) and
 blur(15)); that pair is drawn as two passes, and the column it leaves stays its bytes as in the
-unfolded chain. With the strip off a wide frame folds none. A pair drawn as two passes where the
-profile folds is logged once a WORK1 width and reason:
+unfolded chain.
+
+The fold looks for a pair at every staticBlur sprite, so after a pair drawn as two passes it also
+sees pass 2 of `blur(n)` and pass 1 of `blur(n + 1)`, the same shape with WORK0 as the
+intermediate. Folded, that draws pass 1 of `blur(n + 1)` without the strip after it, and the next
+pass 2 would read the strip's columns as an earlier pass left them; so a fold whose drawn pass the
+strip would follow is refused. Without that rule the true pairs at 16:9 were refused (their tap
+on column 0) and the nine shifted ones folded (`--stats` `blur pairs folded 9`, the glow's
+WORK1 passes one each): exact only where the strip's columns happen to hold the same bytes
+from pass to pass. With the strip off (`--no-glow-edge`) the shifted pairs may fold: nothing
+draws those columns in the frame either way.
+
+A pair drawn as two passes where the profile folds is logged once a WORK1 width and reason:
 
 ```
 rd: blur fold: WORK1 344x256: a pair drawn as two passes (the chain's last pair) after 9 folded in this replay; pass 1 draws columns 1..342, holds its bytes from column 0 (reported once a width and reason)
 ```
 
-(the reasons: `the chain's last pair`, `pass 2 weighs a WORK1 texel pass 1 does not leave its bytes
-in`, `the next pair's pass 1 leaves its bytes in fewer WORK1 texels`).
+(the reasons: `the chain's last pair`, `the glow's edge strip follows its pass 2`, `pass 2 weighs
+a WORK1 texel pass 1 does not leave its bytes in`, `the next pair's pass 1 leaves its bytes in
+fewer WORK1 texels`).
 
 ## What stays from one frame to the next
 
