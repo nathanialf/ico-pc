@@ -2002,7 +2002,7 @@ typedef struct RdPerfRecord {
      * closed (no epoch), else the list + 1, RD_LIST_COUNT + 1 the replay's
      * end */
     uint8_t msaaCloseAt;
-    uint8_t _pad2;
+    uint8_t reshown; /* a between-tick present shown again without a replay (rd_reshow.c) */
     /* MSAA (RdSettings.antiAlias): the replay's sample count (0 without)
      * and the epoch's resolves of SCENE (0 or 1 a replay) */
     uint32_t msaaSamples, msaaResolves;
