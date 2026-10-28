@@ -240,7 +240,7 @@ glow's, the depth of field's, the softening's and the aura's chains) are the PS2
 resolution, so each chain runs the PS2's passes on the PS2's texels, and a pass that draws a work
 buffer back onto the scaled frame reads it with the GS's own filter at the frame's finer grid
 (`port/render/rd_core.c` (`rd__target_scale_of`, `rd__work_class`); `port/render/rd_replay.c`
-(`blurAbove1xSteps`, `spriteAbove1x`)). The filter is the one the game sets: the glow's paste WORK3 -> SCENE
+(`blurAbove1xSteps`), `rd_fx_plan.c` (`rd__sprite_above1x`)). The filter is the one the game sets: the glow's paste WORK3 -> SCENE
 (`ico2/sugipon/src/staticBlur.c` (`pasteFullScreenFlare`); the title dump's 7:367) and the depth
 of field's four pastes WORK0 -> SCENE (`pasteToFB`) draw under TEX1 0x60, MMAG and MMIN both
 LINEAR (written by `eyeBlur` and `pasteToFB`; the dump's `FILTER 1 1` at 7:341), and the eye
@@ -250,7 +250,7 @@ SCENE texel therefore takes the GS's U and V at its own GS position (12.4, the t
 between the same four work texels the PS2 blends there (`gs_bilerp`): the PS2's 256 x 128 glow
 magnified as the GS magnifies it, sampled more finely; at 1x it is the GS's picture byte for byte.
 The softening's AA0 and AA1 back over SCENE (`sprite_ps`) take the draw's own sampler, as at 1x
-(`spriteAbove1x`). The draws from SCENE, WORK2 or AURA_WORK into a work buffer keep the area box
+(`rd__sprite_above1x`). The draws from SCENE, WORK2 or AURA_WORK into a work buffer keep the area box
 ([Above 1x](#above-1x)). `rd_blur_test`'s `effects_scaled` and `above1x` cases compare every
 target with a CPU model of that arithmetic at 2x and 4x to the bit, and `rd_shadow_test`'s 4x
 softening the composite with the bilinear between AA0's texels
@@ -2088,8 +2088,9 @@ CPU model at scale to the bit, and every comparison at scale 1 finds no sprite f
 **The sprite passes over targets.** `fillDrawCB` sets `DF_ABOVE1X` (`ICO_DF_ABOVE1X`, bit 25) on a
 pass of `sprite_ps`, `sprite_aa1_ps` or `sprite_stq_ps` whose texture is a colour view of a target,
 both filters linear, no GS levels, and the texture's scale is not the bound target's, with the
-draw's wrap in `DF_TEXA_CLAMP_S/T` (`port/render/rd_replay.c` (`spriteAbove1x`, `fillDrawCB`)).
-These are the shadow composites (the levels at scale 1 into SCENE, 1/2s to 1/8s texel a pixel), the
+draw's wrap in `DF_TEXA_CLAMP_S/T` (`port/render/rd_fx_plan.c` (`rd__sprite_above1x`), `rd_replay.c` (`fillDrawCB`)).
+These are the shadow composites (the levels at scale 1 into SCENE, 1/2s to 1/8s texel a pixel) with
+`[dev] shadow_bspline` only, the
 softening's SCENE into AA0 (a box), and the reduction's fallback sprite (SCENE
 into DISPLAY on a scaled target, `rd__blur_screen_fallback`) when an axis leaves the GS's filter at
 its steps as `blurAbove1xSteps` computes them; at full height and scale 1 DISPLAY has twice the GS's
@@ -2115,12 +2116,8 @@ a half step:
   combines them, exact;
 - otherwise the pass samples as before (`gs_sample`).
 
-The B-spline serves the shadow composites (a work buffer never meets it: [The glow
-size](#the-glow-size)): it spreads a level texel with a
-standard deviation of 0.58 texel against the bilinear's 0.41, so the penumbra is a little softer,
-without the bilinear's corners along a diagonal; `rd_shadow_test` checks each composite at 4x
-against the CPU B-spline and that a row across the shadow falls and rises once
-(`port/render/test/rd_shadow_test.c` (`checkComposite4x`)). The GS
+By default the shadow composites take one bilinear tap, as at 1x; the B-spline (a softer
+penumbra) is the A/B ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-edges-above-1x)). The GS
 levels' filter of the Original preset (`rd__gs_filter_int`: [Textures](#textures)) is for images
 only, so it never meets the flag (`port/render/rd_pipeline.c` (`rd__gs_filter_int`)). The flag is never set when the
 two scales are equal, nor on the reduction at the GS's filter, so never at scale 1;
