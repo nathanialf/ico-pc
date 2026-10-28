@@ -464,6 +464,63 @@ uint32_t rd__a1x_sprite_steps(const Replay *r, const DrawSetup *ds, const IcoSpr
     return steps; /* 0 on both axes: the GS's filter there (gs_rs_kind), as the footprint's */
 }
 
+/* ------------------------------------------------ the sprite passes above 1x
+ * rd_replay.c fillDrawCB's DF_ABOVE1X (common.hlsli): a pass of sprite_ps,
+ * sprite_aa1_ps or sprite_stq_ps whose texture is a colour view of a target,
+ * both filters linear, no GS levels, the texture's scale not the bound
+ * target's: the softening's SCENE into AA0, the reduction's fallback sprite
+ * when an axis leaves the GS's filter (a1xGs); never a work buffer.  The
+ * shadow chain's first level reads the count already box-averaged to its GS
+ * size (rd_replay.c shadowReduce, the texture redId), at scale 1 as the
+ * levels are.  The scales are equal for every target at scale 1 but
+ * DISPLAY's rows at full height (sy 2), which only the reduction reads into,
+ * one SCENE row a DISPLAY row (a1xGs), so never at scale 1.
+ *
+ * The shadow composites (a level, SHADOW0..2 at scale 1, into a scaled
+ * SCENE: an eighth to a half of a level texel a texel, the B-spline's range
+ * of sprite.hlsl sprite_above1x on both axes) are not flagged unless
+ * RdProfile.shadowBspline ([dev] shadow_bspline = true): sprite_ps samples
+ * them as at 1x, one hardware bilinear tap at the texel's own UV, as it
+ * samples a work buffer onto the frame (docs/port/WORK_BUFFERS.md "The
+ * shadow edges above 1x"); TFX, the alpha test, the blend and DATE as
+ * before.  The first such composite logs its line once. */
+int rd__sprite_above1x(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds, uint32_t redId)
+{
+    const RdDrawState *d = &r->st.ds;
+    if (r->a1xGs || !ds->textured || !d->texEnabled || ds->gsLevels || ds->replacement || !ds->tc ||
+        d->magFilter != RD_FILTER_LINEAR || d->minFilter != RD_FILTER_LINEAR ||
+        (dp->key.fs != RD_FS_SPRITE && dp->key.fs != RD_FS_SPRITE_AA1 &&
+         dp->key.fs != RD_FS_SPRITE_STQ && dp->key.fs != RD_FS_SPRITE_PLANES &&
+         dp->key.fs != RD_FS_SPRITE_STQ_PLANES)) {
+        return 0;
+    }
+    const RdTexRec *t = rd__tex_rec(r->st.tex);
+    if (!t || t->kind != RD_TEXKIND_TARGET || t->view == RD_VIEW_DEPTH) {
+        return 0;
+    }
+    const RdTargetRec *src = rd__target_rec(t->target);
+    if (!src || rd__work_class(src)) {
+        return 0;
+    }
+    /* the shadow count at its GS size (resolveTexture) is at scale 1 */
+    const int red = redId && ds->tex.id == redId;
+    if ((red ? 1.0f : src->sx) == ds->tc->sx && (red ? 1.0f : src->sy) == ds->tc->sy) {
+        return 0;
+    }
+    if (rd__shadow_level(src) && !g_rd.profile.shadowBspline) {
+        static bool logged;
+        if (!logged) {
+            logged = true;
+            rd__log("shadow edges: the composites above 1x take one bilinear tap (%s at scale "
+                    "1 into a target at scale %.4gx%.4g, as at 1x); [dev] shadow_bspline = "
+                    "true draws the cubic B-spline (reported once)",
+                    rd__target_name(t->target), (double)ds->tc->sx, (double)ds->tc->sy);
+        }
+        return 0;
+    }
+    return 1;
+}
+
 /* -------------------------------------------- the reduction's black sprite
  * rd_post.c's reduction clears DISPLAY with an untextured opaque sprite
  * before the textured one.  On a scaled target it is a hardware sprite
