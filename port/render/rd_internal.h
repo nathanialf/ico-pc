@@ -487,7 +487,7 @@ float rd__gs_depth(uint32_t z, float scale);
 
 RdTargetRec *rd__target_rec(uint32_t id);
 /* Whether t is a work buffer: WORK0, WORK1, WORK3, AA0, AA1, FEED128,
- * AURA_TAP, WORK2_PAD or FEED_HELD (a named target neither scene-class nor
+ * AURA_TAP, WORK2_PAD, FEED_HELD or WORK3_HELD (a named target neither scene-class nor
  * a shadow level: rd_core.c rd__target_scale_of).  They keep the PS2's
  * sizes at every scale, and a draw that reads one onto a scaled target
  * reads it with the GS's own filter at that target's finer grid, as the
@@ -2316,6 +2316,36 @@ uint64_t rd__reshow_count(int why); /* presents counted so far in this block, pe
 void rd__overlay_reshow_text(const RdFrame *f); /* rd_present.c: lay the deferred text out from f */
 void rd__perf_reshown(void); /* rd_perf.c: the next replay is a re-shown present */
 
+/* The glow held between ticks (rd_glow_hold.c): a tick's first present
+ * copies the glow its chain drew (WORK3) into WORK3_HELD, and its later
+ * presents skip the chain (the mask into WORK2, the reduction into WORK0,
+ * the blur and the eye blur) and paste the copy.  rd__glow_hold edits f
+ * (rd__interp_frame's frame, after the hash) and says what it did, one of
+ * RD_GLOW_*; [dev] glow_redraw = true (ICO_RD_GLOW_REDRAW=1) draws the chain
+ * at every present. */
+enum {
+    RD_GLOW_HELD = 0, /* a later present: the chain skipped, the tick's glow pasted */
+    RD_GLOW_FIRST,    /* a tick's first present: drawn, and kept */
+    RD_GLOW_NONE,     /* the frame draws no glow */
+    RD_GLOW_DEV,      /* a later present, the switch on: drawn */
+    RD_GLOW_NO_COPY,  /* a later present without this tick's copy: drawn */
+    RD_GLOW_READ,     /* a later present whose other draws read the chain's buffers: drawn */
+    RD_GLOW_COUNT
+};
+
+int rd__glow_hold(RdFrame *f, int firstOfTick);
+const char *rd__glow_hold_text(int why); /* "glow held", "glow redrawn (...)", ... */
+int rd__glow_hold_last(void);            /* the last rd__glow_hold's RD_GLOW_* */
+void rd__glow_hold_block(void);          /* the 10 s summary's line (rd_interp.c presentLog) */
+uint64_t rd__glow_hold_count(int why);   /* presents counted in this block, per RD_GLOW_* */
+void rd__perf_glow_held(void);           /* rd_perf.c: the next replay pastes the held glow */
+/* rd_interp.c, for rd_glow_hold.c: whether c under st writes or samples the
+ * target id; an RDC_COPY of all of from into to (sizeOf's size) inserted at
+ * index at of list l of the frame rd__interp_frame builds */
+int rd__interp_writes(const RdCmd *c, const RdStateBlock *st, uint32_t id);
+int rd__interp_reads(const RdCmd *c, const RdStateBlock *st, uint32_t id);
+bool rd__interp_copy_at(int l, uint32_t at, uint32_t from, uint32_t to, uint32_t sizeOf);
+
 /* rd_present.c's capture (rd.h rd_capture_presented): whether one is armed;
  * captureRecord (rd_present.c) copies the output into the capture texture
  * (from rd__present_record, before the overlay); rd__capture_finish reads it
@@ -3360,8 +3390,8 @@ void rd__clear_new_targets(void);
 /* rd_upload.c, the work clear (a diagnostic: ICO_RD_WORK_CLEAR=RRGGBB in
  * the environment, rd_replay_tool --work-clear RRGGBB): at the head of
  * every replay, after rd__clear_new_targets, the colour of every live
- * target but SCENE, DISPLAY and the across-frames feedback (DISPLAY_HELD,
- * FEED128, FEED_HELD) cleared to RRGGBB with alpha 0x80, so a texel a
+ * target but SCENE, DISPLAY and the held copies (DISPLAY_HELD, FEED128,
+ * FEED_HELD, WORK3_HELD) cleared to RRGGBB with alpha 0x80, so a texel a
  * frame reads before any of its draws wrote it shows that colour
  * downstream.  rd__set_work_clear overrides the environment (on, rgb);
  * rd__work_clear_count the replays it cleared at. */
@@ -3468,12 +3498,13 @@ bool rd__read_texture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t 
  * CPU in its bottom half, which loads as the image made again from the
  * coverage of its top half, rd_dump.c sheetFromHalo); 12 the disc's region
  * slug after cullW (char[RD_DUMP_REGION_BYTES], NUL-padded: "pal", "jpn";
- * an older dump is "pal", RdDumpInfo.region).
+ * an older dump is "pal", RdDumpInfo.region); 13 RD_TARGET_WORK3_HELD, a
+ * 19th fixed target (the glow held between ticks).
  * rd__dump_frame writes this version; rd__load_frame reads 3 to it, and a
  * dump before 10 loads as the 4:3 frame (aspect 4/3, wExact 512, cullW 512).
  * A dump holds the picture as drawn at its width: a replay can crop it to a
  * narrower aspect, never widen it (rd_replay_tool). */
-#define RD_DUMP_VERSION 12u
+#define RD_DUMP_VERSION 13u
 #define RD_DUMP_REGION_BYTES 8
 bool rd__dump_frame(const RdFrame *f, const char *path);
 bool rd__load_frame(const char *path, RdFrame *out);
