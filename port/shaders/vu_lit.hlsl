@@ -123,17 +123,17 @@ VuVSOut vu_lit_main(uint vid, uint variant)
 
 VuVSOut vu_lit_vs(uint vid : SV_VertexID)
 {
-    return vu_lit_main(vid, VU_LIT);
+    return vu_lit_main(VU_MERGE_ENTRY(vid), VU_LIT);
 }
 
 VuVSOut vu_lit_spec_vs(uint vid : SV_VertexID)
 {
-    return vu_lit_main(vid, VU_LIT_SPEC);
+    return vu_lit_main(VU_MERGE_ENTRY(vid), VU_LIT_SPEC);
 }
 
 VuVSOut vu_reflect_vs(uint vid : SV_VertexID)
 {
-    return vu_lit_main(vid, VU_REFLECT);
+    return vu_lit_main(VU_MERGE_ENTRY(vid), VU_REFLECT);
 }
 
 // The vertex pre-pass: vertex vu_rec.z + id of each variant
