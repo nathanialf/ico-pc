@@ -1684,6 +1684,25 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_vumerge_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_vufuse_ab (test/rd_vufuse_ab.cmake): the same dumps and the phone's
+    # frame (tools/vufuse_dumps.txt) with code 36's kicks under their own
+    # pipelines (ICO_RD_VU_FUSE=0) and with the fused scissor pair
+    # (rd_replay_vu.c vuFuseVerdict), at the phone's profile (the programs'
+    # entries, 2x at 2.189 presented at 2364x1080) and Enhanced 2x 4:3 and
+    # 16:9 through the entries and the record, under ICO_RD_BLEND=fixed:
+    # every named target byte for byte, the pairs fused where counted, the
+    # GPU draws fewer by what the merge joined; SKIP as rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab")
+    add_test(NAME rd_vufuse_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/vufuse_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vufuse_ab.cmake")
+    set_tests_properties(rd_vufuse_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_vufuse_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
 endif()
 # The blend policy (rd_dst_read.c)
 # rd_dst_usage_test: the fixed-function blend by default makes no
@@ -1928,6 +1947,7 @@ endif()
 #  * the tests that start the game (model_viewer_headless, gallery_sweep,
 #    credits_headless) or work on the replay tool's files (rd_replay_tool*,
 #    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, rd_vubatch_ab, rd_vumerge_ab,
+#    rd_vufuse_ab,
 #    the native frame gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
 #    on both backends)
 #  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_mip, rd_passring,
