@@ -610,6 +610,12 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_planes", "1"), "1") == 0);
     CHECK(ico_dev_env_value("vu_planes", "fractional") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.vu_planes"), "vu_planes") == 0);
+    /* shadow_one: the shadow count's one draw on/off (rd_replay.c) */
+    CHECK(strcmp(ico_dev_env_name("shadow_one"), "ICO_RD_SHADOW_ONE") == 0);
+    CHECK(strcmp(ico_dev_env_value("shadow_one", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("shadow_one", "on"), "1") == 0);
+    CHECK(ico_dev_env_value("shadow_one", "seven") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.shadow_one"), "shadow_one") == 0);
     /* dynamic_state: the variable names what is static (vk_device.c) */
     CHECK(strcmp(ico_dev_env_name("dynamic_state"), "ICO_VK_FAKE_NO_DYNAMIC") == 0);
     CHECK(strcmp(ico_dev_env_value("dynamic_state", "true"), "0") == 0);
