@@ -1043,6 +1043,33 @@ static void createNamedTargets(void)
     rd__crack_fill_scene_made(); /* the crack filler's line at the scale made */
 }
 
+bool rd__scene_textures_remake(void)
+{
+    RdTargetRec *t = &g_rd.targets[RD_TARGET_SCENE];
+    if (!g_rd.hasDevice || !t->live) {
+        return false;
+    }
+    /* what was made from SCENE's textures first (createNamedTargets' order) */
+    rd__scene_border_free();
+    rd__scene_caches_free();
+    rd__effects_depth_free();
+    rd__target_destroy_gpu(t);
+    t->dstUsage = 0; /* rd__target_create_gpu's, for the flags in force */
+    const bool ok = rd__target_create_gpu(t, s_targetNames[RD_TARGET_SCENE]);
+    t->clearPending = 1;
+    return ok;
+}
+
+void rd__targets_remake(void)
+{
+    if (!g_rd.hasDevice) {
+        return;
+    }
+    rhi_wait_idle();
+    createNamedTargets();
+    rd__temp_target_pool_clear(); /* made with the flags before */
+}
+
 void rd__note_scene_pressure(void)
 {
     if (g_rd.hasDevice && (g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f)) {
@@ -1675,7 +1702,8 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
         return false;
     }
     g_rd.hasDevice = true;
-    rd__profile_init(); /* the device profile (rd_profile.c) */
+    g_rd.windowed = sdlWindow != NULL; /* the game: the desktop's local reads (rd_profile.c) */
+    rd__profile_init();                /* the device profile (rd_profile.c) */
     /* the two-pass blend without dual-source blending (a
      * device without dualSrcBlend; ICO_RD_NO_DUAL=1 forces it for tests) */
     const char *noDual = getenv("ICO_RD_NO_DUAL");
