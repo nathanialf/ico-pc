@@ -6,7 +6,8 @@ blur leaves on a frame wider than the PS2's, what stays in them from one frame t
 work clear that shows a texel read before it was drawn, and how the puddle's ripples sample their
 reflection block between ticks, and where the crack filler is drawn on the fog's local path, and
 (not work buffers, kept here because RENDER.md is at its size cap) how a screen sprite redrawn under
-a new key between ticks is paired and how desktop Vulkan decides on the local reads at start. The sprites themselves are drawn by the GS
+a new key between ticks is paired, how desktop Vulkan decides on the local reads at start and how
+the shadow count is read from the stencil in one draw. The sprites themselves are drawn by the GS
 sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 
 ## Files
@@ -21,6 +22,7 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `port/render/rd_crack_fill.c` | the crack fill drawn inside the local fog's pass (`rd__crack_fill`'s `local`) |
 | `port/render/rd_profile.c`, `port/render/rd_local_probe.c` | the desktop's local reads (`RdProfile.desktopLocal`) and their start-up cost probe (`rd__local_probe`) |
 | `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
+| `port/render/rd_replay.c`, `port/render/rd_shadow_selftest.c`, `port/shaders/blit.hlsl` | the shadow count in one draw (`shadowCountOne`, `shadow_count_ps`) and its start-up self-test (`rd__shadow_selftest`) |
 | `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
 
 ## Sizes per frame width
@@ -324,3 +326,69 @@ with `ICO_RD_LOCAL_PROBE=1`, the local reads' time counted a quarter or four tim
 `ICO_RD_LOCAL_PROBE_SABOTAGE=fast|slow`: kept, the fog's path local at both scene sizes; off,
 `DATE stencil off (probe)` and the fog in place at both sizes). The real cost on an immediate-mode
 GPU is measured by the probe line of a reporter's log; no hardware number exists before it.
+
+## The shadow count in one draw
+
+The shadow volumes count on the stencil of SCENE's depth, bits 0-5 holding n mod 64 for n the net
+count of faces in front of the scene ([RENDER.md](RENDER.md#shadows)). The resolve
+(`RDC_SHADOW_RESOLVE`, `port/render/rd_replay.c` (`doShadowResolve`)) turned that into the colour
+the GS sum leaves in FBP 0x142 with seven full-frame draws on the count target at the scene's
+scale, its colour cleared to 0 at the pass's load: draw k (0..5) `blit_ps` with colour 4 << k,
+blend ONE + ONE, RGB written, the stencil test EQUAL to 1 << k under read mask 1 << k; draw 6 colour
+A = 0x80, A written, the stencil test NOTEQUAL 0 under read mask 0x3F (`rd__shadow_resolve_key`,
+`port/render/rd_pipeline.c` (`shadowStencil`)). With m = stencil & 0x3F the count target's texel
+is therefore
+
+    R = G = B = 4 m (0..252, the sum of 4 << k over the bits set; never saturating)
+    A = 0x80 where m != 0, else 0
+
+Above 1x `shadowReduce` then box-averages the scaled count into `s_shadowRed` at its GS size
+(`box_reduce_ps`), which `resolveTexture` hands to the first blur level (the only reader of the
+count: the next command reads it as SHADOW0's texture). That average is float arithmetic, not
+integer: for output pixel p, lo = floor(p) * f - (ox, 0) and hi = lo + f (f = `DrawCB.param.xy`,
+the source texels per pixel, `tc->sx` on x with Full pixel's left-out texels ox in
+`DrawCB.scale.z`), the texels [max(floor(lo), 0), min(ceil(hi), size)) visited rows outer and
+columns inner, each added as `sum += Load(x, y) * (wx * wy)` with wy = min(hi.y, y + 1) - max(lo.y,
+y) and wx likewise, and the pixel `sum / (f.x * f.y)`, stored by the RGBA8 target's float to UNORM
+conversion. At scale 2 every weight is 1 and the mean of four multiples of 4 (or of 0 and 0x80) is
+a whole number, but at 4x a mean of 16 texels can fall on a half (two texels of 4 among 16 zeros),
+so an integer rewrite would not round as the float sum does.
+
+`shadowCountOne` (`RdProfile.shadowOne`) does both in one draw at the GS size: `shadow_count_ps`
+(`port/shaders/blit.hlsl`, behind `blit_vs`) loads the stencil of each texel of the pixel's box
+through the depth's stencil view (`RHI_ASPECT_STENCIL`, the depth in DEPTH_READ, the channel
+`RhiLimits.stencilViewChannel` in `DrawCB.mode.x`), masks it to m and loads the texel m of a 64 x 1
+RGBA8_UNORM table holding the bytes above (`rd__shadow_table_texel`, uploaded once). Reading the
+table with `Load` gives each term the float the seven draws' count gives `box_reduce_ps` (an
+RGBA8_UNORM texel's conversion does not depend on which texture holds it), and the loop is
+`box_reduce_ps`'s, the same expressions in the same order over the same `DrawCB` (SPIR-V and DXIL of
+the two entries carry the same arithmetic instructions in the same sequence); at scale 1
+(f = 1) a pixel is its one table texel (v * 1 / 1 = v). So the bytes the levels read are the seven
+draws' and the reduction's. At scale 1 it writes the count target itself; above 1x it writes
+`s_shadowRed` and leaves the scaled count target undrawn (a per-frame temporary target nothing else
+reads). A reset that no volume pass took is recorded first as its stencil clear (`endPass`), so a
+frame without volumes reads zeros. Under MSAA the count's pass has already closed the epoch
+([MSAA.md](MSAA.md#where-the-epoch-closes)): the stencil is SCENE's single-sampled one, so the one
+draw covers every anti-aliasing setting.
+
+**Where the seven draws stay.** A backend without the view (`RhiLimits.stencilView` false, or a
+depth-stencil that cannot be sampled, `depthSampled`), `[dev] shadow_one = false`
+(`ICO_RD_SHADOW_ONE=0`, the A/B), and a device whose self-test finds the one draw wrong. The
+start-up set holds the seven draws' and the reduction's pipelines as before and the one draw's
+where the profile has it. The profile's start line and the summary say which: `shadow count one
+draw`, `shadow count seven draws`, with ` ([dev])` or ` (self-test)` after it when that decided;
+`rd_replay_tool --stats` prints `shadow count: N in one draw, M in seven draws` for the replay
+(`RdPerfRecord.shadowOne`, `shadowSeven`).
+
+**The self-test** (`port/render/rd_shadow_selftest.c`, run with DATE's on the fog self-test's first
+run and again when SCENE is made at a new size): a frame of its own on SCENE (its colour as the
+count target) counts 71 bands, band k at k in the top half and -k in the bottom half, the edges a
+sub-pixel off the pixel grid, resolves it through both paths and compares the count at its GS size
+byte for byte, with every band centre against the table:
+
+    rd: shadow count: one draw (self-test: equal to the seven draws over 688x448, 142 band centres ok) on SCENE 688x448 at 1376x896 texels
+    rd: shadow count: seven draws (self-test: one draw differs at 17 of 308224 texels, the first (40,300): 00040480 for 04040480) on SCENE 688x448 at 1376x896 texels
+
+A difference turns `shadowOne` off (`(self-test)`); `[dev] shadow_one = true` keeps it ("kept by
+[dev] shadow_one"); `ICO_RD_SHADOW_SABOTAGE=1` makes the table wrong at m = 1 so the failure path
+runs (ctest `rd_shadow_selftest_sabotage`).
