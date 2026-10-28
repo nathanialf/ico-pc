@@ -534,12 +534,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   SCENE's size at Enhanced 2x with the full-height scene, freed by `rd_shutdown`
   (`checkMotionBlurSmoothScaled`); the `glow_edge_wide` shard runs the flare at 512, 848 and 2048
   GS pixels wide: one frame against the CPU model (which draws the replay's strip over the
-  columns the blur's first pass leaves, `rd__glow_edge_strip`), ten strips a frame and none at
-  4:3, WORK1's left columns the bytes of its first drawn one, then a frame with nothing cleared
+  columns the blur's first pass leaves, `rd__glow_edge_strip`), ten strips a frame with the pairs
+  the blur fold draws as one pass (which draw none) and none at 4:3, WORK1's left columns the bytes of its first drawn one, then a frame with nothing cleared
   in it replayed over magenta and over green work buffers (`rd__set_work_clear`): SCENE the same
   bytes both ways, and without the strip different in the left eighth of a wide frame alone
   (`checkGlowEdgeWide`; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-glows-left-edge)). The
-  `shrinks_wide_device` shard's model draws the strip too.
+  `shrinks_wide_device` shard's model draws the strip too. The `blur_fold_wide` shard runs the
+  flare at 512, 688, 2048 and 2560 GS pixels wide with the blur fold on: 9, 9, 8 and 8 pairs
+  folded, every target against the CPU model (the strip in it), the same frame replayed with the
+  fold off against the model again (the folded and unfolded chains the same bytes at every
+  width), and with the strip off no pair folded on a wide frame (`checkBlurFoldWide`;
+  [WORK_BUFFERS.md](WORK_BUFFERS.md#the-blur-fold-on-a-wide-frame)).
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
   `gs_dst_channel` for every Cd and Ad, the premultiplied term through the fixed-function add and
