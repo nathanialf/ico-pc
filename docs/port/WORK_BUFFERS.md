@@ -4,9 +4,9 @@ The targets `staticBlur.c`'s effects and the screen softening draw through on th
 SCENE, their sizes at each frame width, the glow chain's rectangles in them, the column the glow's
 blur leaves on a frame wider than the PS2's, what stays in them from one frame to the next, the
 work clear that shows a texel read before it was drawn, and how the puddle's ripples sample their
-reflection block between ticks, and where the crack filler is drawn on a tile-based GPU, and
-(not a work buffer, kept here because RENDER.md is at its size cap) how a screen sprite redrawn under
-a new key between ticks is paired. The sprites themselves are drawn by the GS
+reflection block between ticks, and where the crack filler is drawn on the fog's local path, and
+(not work buffers, kept here because RENDER.md is at its size cap) how a screen sprite redrawn under
+a new key between ticks is paired and how desktop Vulkan decides on the local reads at start. The sprites themselves are drawn by the GS
 sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 
 ## Files
@@ -19,6 +19,7 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `port/render/rd_blur_border.c` | the strip drawn after the blur's first pass (`glowEdge`, from `rd__blur_post_sprite`) |
 | `ico2/sugipon/src/staticBlur.c` | the effects, their rectangles in the PS2's numbers and the port's widening (`SB_X`, `sbShrinkAt`, `sbShrinkSpan`, `sbWorkRect`) |
 | `port/render/rd_crack_fill.c` | the crack fill drawn inside the local fog's pass (`rd__crack_fill`'s `local`) |
+| `port/render/rd_profile.c`, `port/render/rd_local_probe.c` | the desktop's local reads (`RdProfile.desktopLocal`) and their start-up cost probe (`rd__local_probe`) |
 | `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
 | `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
 
@@ -222,8 +223,10 @@ sprites differ in colour between the ticks, so they still cross-fade.
 
 ## The crack fill inside the local fog's pass
 
-The crack filler is described in [RENDER.md](RENDER.md#crack-filling-above-1x). On a tile-based
-GPU the fog draws by the local read (`RD_FOG_LOCAL`): inside the scene pass, reading the depth as an input attachment. The copies end
+The crack filler is described in [RENDER.md](RENDER.md#crack-filling-above-1x). Where the fog
+draws by the local read (`RD_FOG_LOCAL`: a tile-based GPU, and desktop Vulkan where its probe kept
+the local reads, [below](#the-desktops-local-read-and-its-probe)), it draws inside the scene pass,
+reading the depth as an input attachment. The copies end
 that pass, so the fill is drawn in the pass begun again over SCENE and its depth, both loaded, the
 depth readable (`rd__replay_begin_pass`, as `bindDraw` begins it), and that pass is left open:
 `doFog` keeps it (`bindDrawKeep`: colour, depth and readability match) and its local-read barrier
@@ -239,3 +242,85 @@ time, copies and draw, is the picture effect `crack fill` (`RD_PERF_POST_CRACK`)
 the folded pass is labelled `fog`. Tests: `rd_crack_tiler`, `rd_crack_tiler_on`,
 `rd_crack_tiler_fold`, `rd_crack_tiler_fold_mali` ([TESTING.md](TESTING.md)); the fold's SCENE
 equals the unfolded replay's byte for byte.
+
+Nothing in `rd_crack_fill.c` asks for a tile-based GPU: the fold is taken whenever `doFog` draws by
+the local read (`fogLocalFor`, which reads the profile's `fogLocal` and the fog's path, not the
+class) and SCENE's depth was made for it (`RD_DST_USAGE_LOCAL_DEPTH`), so on desktop Vulkan it
+follows the probe's verdict.
+
+## The desktop's local read and its probe
+
+The three local-read paths (the fog's depth read inside the scene pass, `fogLocal`; DATE through
+the stencil bit, `dateStencil`; the motion blur's and the other post sprites' destination read,
+`fxDstLocal`; [RENDER.md](RENDER.md#the-device-profile)) draw the same bytes as the snapshot paths:
+their self-tests check it on the device at start (`rd_date_selftest.c`, `rd_fog_path.c`,
+`rd_fx_plan.c`); the A/B of `build-host/tmp/v0710/x2-ab.sh` (lavapipe, the desktop class, the
+fog's and DATE's paths forced by their `[dev]` keys) found every target of three dumps at 1x and 2x
+identical but the DATE snapshot, which the stencil path does not make; and `rd_blur_test`'s case l
+draws the motion blur through the local read on lavapipe with every target equal to the CPU model.
+On an immediate-mode GPU they save, a picture: the three R8 DATE snapshot
+passes and their pass breaks, the fog's two depth transitions and two pass breaks, the motion
+blur's copy of SCENE (4.9 MB at 2x), and fold the crack fill into the fog's pass. What they may
+cost there: SCENE's colour and depth are made with the input-attachment usage and sit in the
+local-read layout (`VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR`, `port/rhi/vk/vk_cmd.c`
+(`rhi_cmd_begin_render_pass`)) for the whole scene pass, which a driver may answer by giving up the
+colour and depth compression of lists 0-2. Which is larger on a given GPU is not known, so the
+desktop class decides it on the device.
+
+**The default.** `rd__profile_init` (`port/render/rd_profile.c`) turns `fogLocal`, `dateStencil`
+and `fxDstLocal` on for the desktop Vulkan class (not a tile-based GPU, not MoltenVK) where the
+device has local read (`RhiLimits.localRead`: `VK_KHR_dynamic_rendering_local_read`, or Vulkan
+1.4's feature) and `rd_init` was given a window (`g_rd.windowed`: the game). D3D12, D3D11 and
+OpenGL have no local read and keep the snapshots. A headless run (the replay tool, the tests) keeps
+the snapshots unless `ICO_RD_LOCAL_PROBE` is set: `1` the game's default and its probe (where the
+self-tests run: `rd_fog_selftest`), `0` the local reads without the probe. The `[dev]` keys
+`fog_path`, `date_path` and `fx_dst_local` still set each flag; one of them set leaves the probe
+out (`desktop local read on ([dev])` or `off ([dev])`).
+
+**The probe** (`port/render/rd_local_probe.c` (`rd__local_probe`)), once a renderer, after the
+first run of the self-tests (`rd_fog_selftest`: DATE's, the fx local read's, the fog's), where
+the flags they left on include one of the three. A frame of its own, never recorded or presented,
+on SCENE at its real size and scale: list 0 clears SCENE and draws 8 full-frame layers of 16 x 16
+untextured sprites, each layer nearer than the last (Z test GEQUAL, Z written), half the cells
+with alpha 0x80; list 3 three full-frame DATE sprites (DATM 1, 0, 1); list 4 the fog (`RD_POST_FOG`
+with a table, as `ZFog.c` records it); list 7 the motion blur's sprite (ALPHA LERP FIX 0x20 over
+the whole frame). One untimed replay first (the pipelines made, the GPU awake), then blocks of two
+replays with the local reads (the flags and the fog's path as the self-tests left them) and two
+through the snapshots (the three flags off, the fog through the path the desktop order tries first,
+in place where the depth is sampled), SCENE's textures made again before each block
+(`rd__scene_textures_remake`: the input-attachment usage follows the flags), a second round only
+while the first took under 20 ms of the CPU's clock. MSAA is held off (the local reads never draw
+inside the MSAA epoch); the fog's own probes do not take these replays (`rd__fog_timing`), and the
+fog draws as in a game frame (the crack fill before it above 1x under Enhanced). Each replay's GPU
+time is its record's (`RdPerfRecord.gpuMs`, the first timestamp to the last list's), read once two
+more replays (a clear of SCENE: `RHI_FRAMES_IN_FLIGHT`) have brought the stamps in
+(`rd__perf_gpu_ms_of`); the least of each way counts.
+
+**The verdict** (`rd__local_probe_keep`): the local reads stay unless their least time is more than
+5 % (`RD_LOCAL_PROBE_TOLERANCE`) above the snapshots'. Off: the three flags go off, each with
+`rd: profile: <flag> off (probe)` and `(probe)` after it in the profile's words
+(`rd__profile_probe_off`), every named target is made again without the usages
+(`rd__targets_remake`), and the fog's self-test runs again in the desktop order (in place first),
+so the depth path in force is one that passed. Without GPU timestamps (or with `[dev]
+perf_list_stamps = false`) the probe does not run and the local reads stay. The line:
+
+```
+rd: profile: local read on the desktop: kept (probe 0.412 vs 0.530 ms): the local reads vs the snapshots, the least of 4 and 4 replays of its frame on SCENE 688x448 at 1376x896 texels; kept unless more than 5 % slower; 9.8 ms
+rd: profile: local read on the desktop: off (probe: slower, 0.611 vs 0.530 ms): ...
+rd: profile: local read on the desktop: kept (not probed: no GPU timestamps)
+```
+
+and the profile's start line and the `ico_pc: summary:` line end with the desktop's words
+(`; desktop local read on (the probe follows the self-tests)` at start, `, desktop local read kept
+(probe 0.412 vs 0.530 ms)` in the summary; `off (no window: ...)` in a headless run). The numbers
+are the probe frame's, not a game picture's: they say which way is cheaper on that GPU, not by how
+much a picture gains. The snapshot pipelines the start-up set left out (it was gathered with the
+local reads on) are made at the probe's first snapshot replay; the probe's wall time in the line
+includes them.
+
+**Tests.** `rd_local_probe_rule` (`rd_local_probe_test`: the verdict on synthetic times, no
+device); `rd_local_probe_kept` and `rd_local_probe_off` (lavapipe through `rd_fog_selftest_test`
+with `ICO_RD_LOCAL_PROBE=1`, the local reads' time counted a quarter or four times by
+`ICO_RD_LOCAL_PROBE_SABOTAGE=fast|slow`: kept, the fog's path local at both scene sizes; off,
+`DATE stencil off (probe)` and the fog in place at both sizes). The real cost on an immediate-mode
+GPU is measured by the probe line of a reporter's log; no hardware number exists before it.
