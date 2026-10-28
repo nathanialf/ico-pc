@@ -1156,7 +1156,7 @@ Once a start, after the device line, the self-tests and the window line, the win
 with what a report usually asks:
 
 ```
-ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; window mode ...; blend fixed-function (self-test: fixed-function ok 1); profile immediate-mode GPU (NVIDIA, Vulkan): fog local off, DATE snapshot, depth stores kept, blur fold off, local read yes, uint views work and scene, alpha plan on, fx plan on, fx local off, VU planes whole scales only; index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders one set; VU pre-pass on (self-test: ok); pipelines the start-up set; index values up to 4294967295; robust access off (the default; gpu_robust = true turns it on); controller Xbox Series X Controller (DirectInput scan on); disc SCES-50760 (the European disc); user profile
+ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; window mode ...; blend fixed-function (self-test: fixed-function ok 1); profile immediate-mode GPU (NVIDIA, Vulkan): fog local on, DATE stencil, depth stores kept, blur fold off, local read yes, uint views work and scene, alpha plan on, fx plan on, fx local on, VU planes whole scales only, desktop local read kept (probe 0.412 vs 0.530 ms); index values dense (marks in the stream); fog local (self-test: ...); VU shaders one set; VU pre-pass on (self-test: ok); pipelines the start-up set; index values up to 4294967295; robust access off (the default; gpu_robust = true turns it on); controller Xbox Series X Controller (DirectInput scan on); disc SCES-50760 (the European disc); user profile
 ```
 
 (`port/platform/window_host.c` (`log_summary`); `port/render/rd_core.c` (`rd_summary_text`, from
@@ -1164,8 +1164,10 @@ the self-tests' results); `port/render/rd_profile.c` (`rd__profile_text`); `port
 (`RhiLimits.driverText`, `robustText`)). The blend is the self-test's
 ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)): `fixed-function` by default, an exact
 mode with `; kept by [dev] blend` where the player opted in; the profile is the device class and
-its flags as in force, `([dev])` after one a `[dev]` key set and `(self-test)` after one a self-test
-turned off ([RENDER.md](RENDER.md#the-device-profile)). The controller
+its flags as in force, `([dev])` after one a `[dev]` key set, `(self-test)` after one a self-test
+turned off and `(probe)` after one the desktop's local-read probe turned off, and on desktop Vulkan
+with local read the probe's verdict last ([RENDER.md](RENDER.md#the-device-profile),
+[WORK_BUFFERS.md](WORK_BUFFERS.md#the-desktops-local-read-and-its-probe)). The controller
 is what SDL has connected then ("none yet" when the pad arrives later; its own `input: gamepad`
 line follows), on Windows with whether SDL's DirectInput scan is on (`[dev] joystick_directinput`);
 the VU shaders are `one set, fallback plain (issue 107)` on a device whose fallback takes the
