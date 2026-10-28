@@ -192,8 +192,9 @@ endforeach()
 # the fog's depth read inside the scene pass by local read (RD_FOG_LOCAL,
 # rd_replay.c doFog), with its two-pass twin; DATE through the stencil bit's
 # setup (rd_replay_tiler.c rd__replay_date_take); a staticBlur pair folded into one pass
-# (rd_replay_tiler.c rd__replay_blur_fold). Vulkan only in use; their DXIL is a plain
-# build, never used
+# (rd_replay_tiler.c rd__replay_blur_fold). The fold is on every backend (RdProfile.blurFold:
+# every class but Mali), so fx_blur2_ps's DXIL and GLSL are used; the other three are
+# Vulkan only in use, their DXIL a plain build, never used
 ico_add_shader(fog_lut_local_ps fog_lut.hlsl fog_lut_ps fragment DEFINES FOG_LOCAL=1)
 ico_add_shader(fog_lut_local_ps fog_lut.hlsl fog_lut_ps fragment
                DEFINES FOG_LOCAL=1 ICO_NO_DUAL=1 SUFFIX _nodual)
