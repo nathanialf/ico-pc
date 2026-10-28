@@ -332,6 +332,7 @@ typedef struct GlState {
     bool hasInterlock;      /* ARB_fragment_shader_interlock */
     bool hasAnisotropy;     /* GL_MAX_TEXTURE_MAX_ANISOTROPY (4.6 or the extensions) */
     bool hasTimerQuery;
+    bool hasMultiBind; /* glBindBuffersRange (4.4 or ARB_multi_bind) */
     bool hasS3tc, hasBptc;
     GLint uboAlign, ssboAlign; /* the offset alignments of uniform and storage ranges */
     GLint maxUniformBlockSize;
