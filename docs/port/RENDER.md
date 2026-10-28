@@ -2175,7 +2175,7 @@ writes A = 0x80 where the count is not 0, the TEXA expansion of the PSMCT24 read
 faces does not matter on either side, so the triangles are drawn as two lists, increments then
 decrements (`port/render/rd_shadow.c`; `port/render/rd.h` (`rd_shadow_count_target`,
 `rd_shadow_tris`, `rd_shadow_resolve`); `port/render/rd_replay.c` (`doShadowStrip`,
-`doShadowResolve`)).
+`doShadowResolve`)). One draw: [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-count-in-one-draw).
 
 The stencil's bits: 0-5 the count (`RD_SHADOW_STENCIL_MASK`, the only bits the count writes and
 the resolve reads), 6 DATE's (`RD_DATE_STENCIL_BIT`: its setup writes it alone and its draws read
