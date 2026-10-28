@@ -41,7 +41,7 @@
  *                 false sets it, read there, and the filler's own line
  *                 says which)
  *
- * (1) The desktop's local reads (v0.9.4): on where the device has local
+ * (1) The desktop's local reads: on where the device has local
  * read (VK_KHR_dynamic_rendering_local_read or Vulkan 1.4's) and the
  * renderer runs with a window (the game), guarded by the cost probe
  * (rd_local_probe.c), which runs once after the self-tests and turns the
