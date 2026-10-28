@@ -40,7 +40,7 @@ bool pace_slow_present(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_
 
 /* One cost into the history's ring (count and next only; over and slow
  * untouched) and the median of the last PACE_HIST_LEN: window_host.c's GPU
- * time a presented replay for the present allowance's GPU gate. */
+ * time a timed presented replay for the present allowance's GPU gate. */
 uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
 
 /* ------------------------------------------------------------------------
@@ -88,11 +88,40 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
  * probes, and a second late step drops it again.  A resync does not reset
  * it; a new lock, a frame rate change and the window's pace reset do.
  * Cheap presents never end a step late, and then nothing binds: the
- * presents are what they were without it. */
+ * presents are what they were without it.
+ *
+ * Paced by the GPU (issue 130, v0.9.4: the timer path with vsync off,
+ * pace_budget_reset_paced; FIFO, mailbox and the lock keep the whole-number
+ * allowance above).  A whole number a step cannot say "between 1 and 2": a
+ * card needing 8.3-16.7 ms a picture was held to 1 a step, 60 a second,
+ * where it could present about 80.  With the GPU's time known (gpuNs > 0)
+ * an in-between present may start while
+ *     (presents so far this step + 1) * gpuNs + stepNs <= periodNs + carryNs
+ * (pace_budget_allows_paced), the new frame's own present always made and
+ * counted.  carryNs is the time the step before left unused,
+ *     carry' = min(periodNs, max(0, periodNs + carry - presents * gpuNs - stepNs)),
+ * reset to 0 by a late step (as above: half a period or more, not excused)
+ * and halved by a step that ended past its due time by less.  So the
+ * presents a step average (periodNs - stepNs) / gpuNs, the GPU's own pace:
+ * 12 ms pictures and a 0.5 ms step give 1,1,2 a step (80 a second), 9 ms
+ * ones 1,2,2,2,1,... (107), 17 ms ones the new frames and an in-between
+ * where the steps before left the time (57 a second with a game frame
+ * every two steps: the GPU's own 58), and no step is late by the rule's
+ * own count.  The arm, drop and hold above stay
+ * as the safety net (the held allowance binds as well as the budget); after
+ * the hold the climb is straight home at the first step on time (the
+ * budget is the gate: no PACE_ALLOW_CLIMB_STEP probe, gateK 0).  With no
+ * GPU time (0) the whole-number allowance and its probing climb are as
+ * above.  pacedTenths is the budget's presents a step in tenths, rounded
+ * ((periodNs - stepNs) * 10 / gpuNs, PACE_PACED_HIGH at 10 * PACE_ALLOW_MAX
+ * or more, "not held"), pacedChanges counts its changes for the window's
+ * event line. */
 #define PACE_ALLOW_MAX 8
 #define PACE_ALLOW_NONE UINT_MAX /* allow: no limit (the timer path before a drop) */
 #define PACE_ALLOW_HOLD 60
 #define PACE_ALLOW_CLIMB_STEP 60
+#define PACE_PACED_HIGH (10u * PACE_ALLOW_MAX) /* pacedTenths: the budget binds nothing */
+#define PACE_PACED_UNKNOWN UINT_MAX            /* pacedTenths: no GPU time judged yet */
 
 typedef struct PaceBudget {
     unsigned allow, max;   /* presents allowed a step, the new frame's included (a new frame's
@@ -114,9 +143,16 @@ typedef struct PaceBudget {
     unsigned armPresents;
     uint64_t dropPrevLateNs;            /* the late step before the last drop's: how late, its */
     unsigned dropPrevPresents, dropAgo; /* presents, and how many steps before the drop it was */
-    unsigned dropMost;  /* the most presents a late step of this drop made (0: not held) */
-    unsigned sinceDrop; /* steps since the last drop */
-    unsigned gateK;     /* the last climb or refused climb: the presents its gate asked for */
+    unsigned dropMost;     /* the most presents a late step of this drop made (0: not held) */
+    unsigned sinceDrop;    /* steps since the last drop */
+    unsigned gateK;        /* the last climb or refused climb: the presents its gate asked for
+                           (0: a paced climb, the budget its gate) */
+    bool paced;            /* the in-betweens paced by the GPU's time when known (the timer
+                             path with vsync off: pace_budget_reset_paced) */
+    uint64_t carryNs;      /* paced: the time the step before left unused, at most a period */
+    unsigned pacedTenths;  /* paced: the budget's presents a step in tenths at the last step
+                             with a GPU time (PACE_PACED_HIGH: not held; PACE_PACED_UNKNOWN) */
+    unsigned pacedChanges; /* the changes of pacedTenths (the caller's event line) */
 } PaceBudget;
 
 /* allow = max, the counts cleared (the lock: max n). */
@@ -129,6 +165,22 @@ void pace_budget_reset_unbound(PaceBudget *b, unsigned max);
 /* Whether a present may be made now: always for a new frame, else while the
  * step's presents are below the allowance. */
 bool pace_budget_allows(const PaceBudget *b, bool newFrame);
+
+/* The timer path's allowance paced by the GPU: pace_budget_reset_unbound
+ * and paced (the rule above). */
+void pace_budget_reset_paced(PaceBudget *b, unsigned max);
+
+/* Whether a present may be made now on a paced allowance: always for a new
+ * frame; else while the step's presents are below the allowance and, paced
+ * with the GPU's time known (gpuNs > 0), while (presents + 1) * gpuNs +
+ * stepNs fits periodNs + carryNs.  Not paced, or gpuNs 0: as
+ * pace_budget_allows. */
+bool pace_budget_allows_paced(const PaceBudget *b, bool newFrame, uint64_t gpuNs, uint64_t stepNs,
+                              uint64_t periodNs);
+
+/* The budget's presents a step in tenths, rounded: (periodNs - stepNs) * 10
+ * / gpuNs, PACE_PACED_HIGH at or above it, PACE_PACED_UNKNOWN for gpuNs 0. */
+unsigned pace_budget_paced_tenths(uint64_t gpuNs, uint64_t stepNs, uint64_t periodNs);
 
 /* A present made (newFrame: of a frame not shown before). */
 void pace_budget_present(PaceBudget *b, bool newFrame);
@@ -149,7 +201,7 @@ void pace_budget_block(PaceBudget *b);
  * "window: " before, the first 8 then every 100th), from the step that
  * changed it and the window's last present: its whole time, its waits for
  * the GPU (the fence waits) and for the display, whether the fence waits
- * hold the display's (OpenGL), the GPU time a presented replay, the
+ * hold the display's (OpenGL), the GPU time a timed replay, the
  * simulation step's time and the period the gate judged against.
  *   PACE_BUDGET_TEXT_DROP: "presents held to A a step: the step ended L ms
  *     late after P presents, K steps after one L2 ms late after P2 (the
@@ -162,23 +214,37 @@ void pace_budget_block(PaceBudget *b);
  *   PACE_BUDGET_TEXT_STAY: "presents stay at A a step: GPU G ms x K + step
  *     T ms is not under the period P ms (S steps since the drop; back to H
  *     when it is)"
- * H "not held" on the timer path, "n a step" under the lock.  The length
- * written, as snprintf. */
+ *   PACE_BUDGET_TEXT_PACED: "presents paced by the GPU: N.N a step|not held
+ *     (GPU G ms a picture, period P ms)" (pacedTenths; not held at
+ *     PACE_PACED_HIGH)
+ * H "not held" on the timer path, "n a step" under the lock.  Paced with
+ * the GPU's time known (gpuNs > 0) the drop's ending is "back to paced by
+ * the GPU after 60 steps on time" (no "if the GPU allows") and the climb (gateK 0) "presents back to
+ * paced by the GPU (where they started) after S steps (GPU G ms a picture,
+ * step T ms, period P ms)".  The length written, as snprintf. */
 typedef struct PaceBudgetWaits {
     uint64_t costNs, fenceNs, displayNs, gpuNs, stepNs, periodNs;
     bool fenceHoldsDisplay;
 } PaceBudgetWaits;
 
-enum { PACE_BUDGET_TEXT_DROP, PACE_BUDGET_TEXT_CLIMB, PACE_BUDGET_TEXT_STAY };
+enum {
+    PACE_BUDGET_TEXT_DROP,
+    PACE_BUDGET_TEXT_CLIMB,
+    PACE_BUDGET_TEXT_STAY,
+    PACE_BUDGET_TEXT_PACED
+};
 
 int pace_budget_event_text(const PaceBudget *b, int kind, const PaceBudgetWaits *w, char *out,
                            unsigned size);
 
 /* The 10 s line's allowance part: "; presents held to A a step|presents
- * not held (lowest L|not held, R refused, D drops, C climbs, climbs refused
- * X); GPU G ms a presented replay|noGpu" with the block's counts (the
- * totals less the given ones at its start) and the GPU gate's time (0: not
- * known, noGpu said instead).  The length written, as snprintf. */
+ * paced to N.N a step|presents not held (lowest L|not held, R refused, D
+ * drops, C climbs, climbs refused X); GPU G ms a timed replay|noGpu" with
+ * the block's counts (the totals less the given ones at its start) and the
+ * GPU gate's time (0: not known, noGpu said instead): the median of the
+ * last 8 timed presented replays (window_host.c perf_drain), not the
+ * block's mean.  "paced to" while unbound, paced, the GPU's time known and
+ * pacedTenths under PACE_PACED_HIGH.  The length written, as snprintf. */
 int pace_budget_block_text(const PaceBudget *b, unsigned refusedAt, unsigned dropsAt,
                            unsigned climbsAt, unsigned climbRefusalsAt, uint64_t gpuNs,
                            const char *noGpu, char *out, unsigned size);
