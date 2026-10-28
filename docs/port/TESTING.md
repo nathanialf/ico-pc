@@ -543,7 +543,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   flare at 512, 688, 2048 and 2560 GS pixels wide with the blur fold on: 9, 9, 8 and 8 pairs
   folded, every target against the CPU model (the strip in it), the same frame replayed with the
   fold off against the model again (the folded and unfolded chains the same bytes at every
-  width), and with the strip off no pair folded on a wide frame (`checkBlurFoldWide`;
+  width), and with the strip off every target still the model's (`checkBlurFoldWide`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-blur-fold-on-a-wide-frame)).
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
