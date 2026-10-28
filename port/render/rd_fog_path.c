@@ -1426,6 +1426,7 @@ bool rd_fog_selftest(void)
         g_rd.dateRan = true;
         (void)rd_date_selftest();
         (void)rd__fx_local_selftest(); /* it reads the readable passes DATE's path keeps */
+        (void)rd__shadow_selftest();   /* the shadow count's one draw (rd_shadow_selftest.c) */
     }
     s_st.armed = true;
     bool ok = runSelftest();
@@ -1477,6 +1478,7 @@ void rd__fog_scene_remade(void)
     s_st.th = t->th;
     s_probe.armed = true;
     if (s_st.armed) {
+        (void)rd__shadow_selftest(); /* the count's one draw at the new size and scale */
         (void)runSelftest();
     }
 }
