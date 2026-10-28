@@ -1415,6 +1415,15 @@ static bool textRegion(const TextPending *t, const TextSeg *g, RhiRect *out)
     return true;
 }
 
+/* rd_reshow.c: a re-shown present has no frame to walk; the text is laid out
+ * from the frame it shows again */
+static const RdFrame *s_reshowText;
+
+void rd__overlay_reshow_text(const RdFrame *f)
+{
+    s_reshowText = f;
+}
+
 static void textCollect(const RdFrame *f, int keep)
 {
     s_text.n = 0;
@@ -1508,7 +1517,7 @@ static void overlayCollect(const RdFrame *f, int keep, const RhiRect *filmBox)
     if (s_ov.textFn && f && !filmBox && g_rd.settings.preset == RD_PRESET_ENHANCED && !crt &&
         !s_blank) {
         g_rd.deferText = true;
-        textCollect(f, keep);
+        textCollect(s_reshowText ? s_reshowText : f, s_reshowText ? 0 : keep);
     }
     s_ov.textBatches = s_ov.bCount;
     if (s_ov.fn) {
