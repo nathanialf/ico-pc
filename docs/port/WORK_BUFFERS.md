@@ -83,11 +83,9 @@ earlier picture down the left edge, rows 0 .. 31 of the buffer being the top qua
 screen. On the phone it reached 12 output columns and rows 0 .. 277 of 1080, and a replay of the
 same dump (fresh targets) did not show it.
 
-The blur fold (`RdProfile.blurFold`, the tilers) draws a pair as one pass and computes pass 1's
-texels in the shader with no coverage test, so it would not read the column; but its condition
-(`rd__replay_blur_fold`'s `blurFoldOk`: every texel pass 2 weighs inside pass 1's coverage) fails
-at every wide frame for that reason, so on a phone the pairs are drawn as two passes, as on the
-desktop.
+The blur fold (`RdProfile.blurFold`) draws a pair as one pass and computes pass 1's texels in the
+shader; on a wide frame it reads the column as the glow's edge strip leaves it
+([The blur fold on a wide frame](#the-blur-fold-on-a-wide-frame)).
 
 The depth of field (`depthField`) has the same anchor on its six passes and leaves columns 1 .. 2
 of its buffers holding an earlier pass of the same frame (its copies draw from column 1, the
@@ -119,7 +117,59 @@ rd: glow: on a frame 848 GS pixels wide the blur's first pass leaves WORK1's col
 ```
 
 `rd__set_glow_edge_fill(false)` (tests; `rd_replay_tool --no-glow-edge`) draws the glow as
-recorded; `rd__glow_edge_count` counts the strips (ten a glow frame at a wide frame).
+recorded; `rd__glow_edge_count` counts the strips (ten a glow frame at a wide frame, less the pairs
+the blur fold draws as one pass: those draw no pass 1 and so no strip).
+
+## The blur fold on a wide frame
+
+The blur fold (`RdProfile.blurFold`: every device class but Mali; `[dev] blur_fold` overrides) draws a pair of `blur(n)` as one pass into WORK0 through `fx_blur2_ps`, which computes
+each WORK1 texel pass 2 weighs from WORK0 as pass 1 writes it ([RENDER.md](RENDER.md#the-replay),
+"The blur pair fold"; `port/render/rd_replay_tiler.c` (`rd__replay_blur_fold`, `blurFoldFirst`,
+`blurFoldOk`), `port/shaders/fx_sprite.hlsl` (`fx_blur2_ps`)). On a frame wider than 512 GS
+pixels pass 1's rect starts `d` sixteenths right of WORK1's pixel 0, so it covers from column
+`cx0 = ceil(d / 16)` (1 at 16:9), while pass 2's first pixel weighs column 0 (13/16 at 16:9): a
+fold that took only taps inside pass 1's coverage would fold no pair there.
+
+Those columns are not left as an earlier frame had them: the glow's edge strip
+([The glow's left edge](#the-glows-left-edge)) draws columns `0 .. cx0 - 1` after every pass 1
+drawn as a pass, each texel pass 1's texel at column `cx0` on its row (the strip's `n` is `cx0`
+whenever its scissor starts at column 0). So the fold now counts the texels that hold pass 1's
+bytes from column 0 when the strip applies (`BlurFoldPass.first`, from
+`rd__replay_glow_edge_columns`), and `fx_blur2_ps` reads a tap left of `cx0` as pass 1's pixel at
+`cx0` (`DrawCB.mode.w`, AREF elsewhere; the fold has no alpha test). Reading WORK1 itself there
+would not do: a folded pair draws no strip, so WORK1's columns hold the previous pair's strip (or
+an earlier frame's), not this pass 1's. Without the strip (`--no-glow-edge`) the taps there would
+read texels no draw of this frame wrote, and such a pair is drawn as two passes.
+
+Why WORK1 ends with the chain's bytes: a pair folds only when the next pair's pass 1 leaves its
+bytes in every texel this one would have (columns `first .. cx1`, rows `cy0 .. cy1`, its own
+coverage and strip), by induction in every texel of the first pair after it drawn as two passes,
+whose pass 1 (and strip) writes them before its pass 2 reads WORK1; the chain's last pair is
+always drawn as two passes. A texel outside is written by no folded pair either way. Equal
+coverage is not needed; a subset is enough by the same induction.
+
+The pairs a chain of ten folds (`rd_replay_tool DUMP x --stats`: `blur pairs folded N`), from the
+geometry of `staticBlur.c` `blurPass` (`sbShrinkAt`, `sbShrinkSpan`) and pinned by `rd_blur_test`'s
+`blur_fold_wide` shard:
+
+| frame | WORK1 | pass 1 columns (cx0 .. cx1) | pass 2's taps | folded |
+| --- | --- | --- | --- | --- |
+| 512 (4:3) | 256 | 0 .. 254 | 0 .. 254 | 9 |
+| 688 (16:9) | 344 | 1 .. 342, strip on column 0 | 0 .. 342 | 9 |
+| 2048 (48:9) | 1024 | 2 or 3 .. 1021, then .. 1020 from blur(14) | 1 .. 1021 | 8 |
+| 2560 (60:9) | 1280 | 2 to 4 .. 1276, then .. 1275 from blur(16) | 2 .. 1276 | 8 |
+
+At 48:9 and 60:9 one pair's next pass 1 covers one column fewer on the right (blur(13) and
+blur(15)); that pair is drawn as two passes, and the column it leaves stays its bytes as in the
+unfolded chain. With the strip off a wide frame folds none. A pair drawn as two passes where the
+profile folds is logged once a WORK1 width and reason:
+
+```
+rd: blur fold: WORK1 344x256: a pair drawn as two passes (the chain's last pair) after 9 folded in this replay; pass 1 draws columns 1..342, holds its bytes from column 0 (reported once a width and reason)
+```
+
+(the reasons: `the chain's last pair`, `pass 2 weighs a WORK1 texel pass 1 does not leave its bytes
+in`, `the next pair's pass 1 leaves its bytes in fewer WORK1 texels`).
 
 ## What stays from one frame to the next
 
