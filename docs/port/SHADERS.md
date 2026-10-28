@@ -516,11 +516,16 @@ record stages in place of the program entries, none over 16,515 words.
 The draw merge's builds (`ICO_VU_MERGE`: `vu_X_merge_vs` and `vu_X_merge_plain_vs` of the seven
 mesh and grid programs but the skinned ones, `vu_merge_main_vs`;
 [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) are the same entries reading VuCB and VuBoneCB
-from t5 through a four-step search, about 500 words above each: `vu_lit_merge_vs` 51,857 of
-`VS_BUDGET`, `vu_lit_merge_plain_vs` 23,811 and `vu_merge_main_vs` 6,719 of the plain budget (a
+from t5 through a four-step search, about 500 words above each: `vu_lit_merge_vs` 51,903 of
+`VS_BUDGET`, `vu_lit_merge_plain_vs` 23,857 and `vu_merge_main_vs` 6,770 of the plain budget (a
 `_merge_plain_vs` and a `_main_vs` are held to it), none with a finding. With the merge on (every
 device but Direct3D 11) a device compiles them in place of the plain builds of the same entries,
 whose modules the merge leaves unchanged word for word (`VU_MERGE_ENTRY(vid)` is `vid` there).
+The merge builds of `prelit`, `lit` and the main shader also set `VuVSOut.r.w` on the kick
+triangles of a fused scissor pair (`vu_fused_out`, 46 to 51 words; the others pass a literal clip
+mode and are unchanged), which `vu_ps` and `vu_texa_ps` read (`vu_dual_out_fused`, 142 words each;
+their no-planes, no-dual and destination-read twins are unchanged word for word)
+([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)).
 
 Every plain module is smaller than the same module of the last set that built on the Adreno 740 in
 words, instructions and blocks.
