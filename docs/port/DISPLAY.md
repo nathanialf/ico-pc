@@ -424,7 +424,9 @@ the count of passes a replay and of those under 0.05 ms; only with GPU timestamp
 replay begins, by kind, every replay) and `window: CPU walk ms per replay by list 0-12: ...;
 uploaded KB per replay: textures T, meshes M (interpolated I), uniform blocks U, VU streams S,
 other O[; Direct3D 11 submits wrote W KB to the GPU]` (`perf_log`, `perf_passes_add`). The
-uploaded KB are what the replay wrote into the upload ring; the last part, on Direct3D 11 only, is
+uploaded KB are what the replay wrote into the upload ring (the uniform blocks part counts each
+distinct block once: the VU draws' DrawCBs share copies through the content cache, so equal blocks
+count once); the last part, on Direct3D 11 only, is
 what that backend's submits then copied from the ring's CPU copy to the GPU
 (`RdPerfRecord.backendWriteBytes`, `RhiStats.uploadWriteBytes`; the block's mean from
 `port/render/rd_perf.c` (`rd_perf_backend_text`)): the ranges the lists read, cut at
