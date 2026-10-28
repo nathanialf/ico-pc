@@ -2071,6 +2071,11 @@ typedef struct RdPerfRecord {
      * passes that counted what it filled (the tests and the replay tool's
      * --stats only; the count is read back later, rd__crack_fill_counts) */
     uint32_t crackFillPasses, crackCountPasses;
+    /* The shadow count's resolves this replay (rd_replay.c doShadowResolve):
+     * shadowOne in one draw reading the stencil (shadowCountOne),
+     * shadowSeven through the seven stencil-tested draws (and the box
+     * reduction above 1x) */
+    uint32_t shadowOne, shadowSeven;
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
      * docs/port/RENDER.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:
