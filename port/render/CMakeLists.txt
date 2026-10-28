@@ -1248,7 +1248,7 @@ if(ICO_RUN_TESTS)
                      "-DDUMP=${_rip_dir}/ripple/frame-20261024-100436-v83439.zip"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_ripple_436.png"
                      "-DARGS=${_rip_args}" "-DEXPECT=REPEAT 2, 2 of them kept on REPEAT"
-                     -DSHA=1f5bc959e661663bb1d2147ca2caa5dd4009d6e4ff2fdb3a5b090d759b86fca4
+                     -DSHA=984695adef5d6d26cc065d7bff996b0234b600cc2c0fd87cd50c365a3cc083aa
                      ${_rip_py} -P "${_rip}")
     add_test(NAME rd_replay_tool_mirror_floor
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
@@ -1256,7 +1256,7 @@ if(ICO_RUN_TESTS)
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_mirror_floor.png"
                      "-DARGS=--enhanced|--resolution|2x|--full-pixel|--present|1024x896|--list"
                      "-DEXPECT=Full pixel on, border mask off: [0-9]+ render-target reads clamped, 0 block reads kept on REPEAT"
-                     -DSHA=d4924b35b0d334b12de74acd1f2e8b05d28aa6605c50bc4e5c413e97a126c871
+                     -DSHA=613d1be7e8d7c1437ffa90c237eed6dfb7db2995e39a708270403afee18e1d28
                      ${_rip_py} -P "${_rip}")
     set_tests_properties(rd_replay_tool_ripple rd_replay_tool_ripple_447 rd_replay_tool_ripple_436
                          rd_replay_tool_mirror_floor
