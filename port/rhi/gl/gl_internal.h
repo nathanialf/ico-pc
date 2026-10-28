@@ -96,7 +96,11 @@ typedef struct GlBuffer {
 typedef struct GlTexture {
     GLuint name;
     GLuint uintView; /* RHI_TEX_UINT_VIEW: the GL_RGBA8UI view (glTextureView), 0 none */
-    GLenum target;   /* GL_TEXTURE_2D or GL_TEXTURE_2D_MULTISAMPLE */
+    /* a sampled single-sampled D32F_S8 texture's stencil (RHI_ASPECT_STENCIL):
+     * a glTextureView of it with GL_DEPTH_STENCIL_TEXTURE_MODE GL_STENCIL_INDEX,
+     * 0 none */
+    GLuint stencilView;
+    GLenum target; /* GL_TEXTURE_2D or GL_TEXTURE_2D_MULTISAMPLE */
     RhiFormat format;
     uint32_t width, height, mips, usage;
     uint32_t samples; /* 1, or the multisampled count */
