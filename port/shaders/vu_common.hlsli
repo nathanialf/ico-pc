@@ -16,9 +16,11 @@
 //                  (vu_rec_vertex) and the triangle pre-pass's triangles and
 //                  sprites (the record stages below), read by the main
 //                  vertex shaders and, for the attribute planes, vu_ps
-//   t5  vu_ring    the upload ring from offset 0: the pre-pass's batch
-//                  builds (ICO_VU_PRE_BATCH, below) read each entry's VuCB
-//                  and VuBoneCB there instead of b2 and b3
+//   t5  vu_ring    the upload ring from the replay's VU work on
+//                  (rd_replay_vu.c s_ringBase): the pre-pass's batch builds
+//                  (ICO_VU_PRE_BATCH, below) and the draw merge's
+//                  (ICO_VU_MERGE) read each entry's VuCB and VuBoneCB there
+//                  instead of b2 and b3
 //
 // Drawing: the mesh programs are drawn as an indexed triangle list whose
 // index value (SV_VertexID; vertexOffset / BaseVertexLocation must be 0) is
@@ -119,7 +121,7 @@
 // vu_lo, vu_hi  the triangle stage: the program's region test bounds
 //          (vu_inside; the cluster's VU memory 0 and 1, the others VU_LO0
 //          and VU_HI4094)
-#ifndef ICO_VU_PRE_BATCH
+#if !defined(ICO_VU_PRE_BATCH) && !defined(ICO_VU_MERGE)
 cbuffer VuCB : ICO_REG(b2, 1)
 {
     float4 vu_mem[36];
@@ -151,14 +153,17 @@ cbuffer VuBoneCB : ICO_REG(b3, 1)
 // a pre-pass entry's vertex: SV_VertexID itself (the batch build's
 // vu_pre_batch_entry finds its entry first)
 #define VU_PRE_ENTRY(vid) (vid)
+// a main shader's or program entry's index value: SV_VertexID itself (the
+// merge build's vu_merge_entry finds its draw first)
+#define VU_MERGE_ENTRY(vid) (vid)
 #else
 // The pre-pass's batches (ICO_VU_PRE_BATCH: the vu_X_batch_pre_vs builds
 // of the pre-pass entries and record stages; docs/port/VU1_PROGRAMS.md,
 // "The pre-pass's batches"; rd_replay_vu.c vuPrepassRun): one point draw
 // for a run of entries with the same pipeline, FrameCB and group 1.  Each
 // entry's VuCB and VuBoneCB lie in the upload ring where the cbuffer build
-// binds them (cbCopy), read here through vu_ring, the ring from offset 0
-// (t5), at the float4 indices the batch's table gives.  The table is a run
+// binds them (cbCopy), read here through vu_ring, the ring from the
+// replay's VU work on (t5), at the float4 indices the batch's table gives.  The table is a run
 // of uint4 in the ring too, from float4 g_aux0.x of the batch's DrawCB,
 // g_aux0.y entries (at most VU_PRE_BATCH_MAX), one an entry in the order of
 // the draw's vertices:
@@ -188,8 +193,10 @@ static uint vu_pre_b;
 #define VU_MEM(i) vu_ring[vu_pre_v + (i)]
 #define VU_TICK(i) vu_ring[vu_pre_v + 39u + (i)]
 #define VU_BONE(i) vu_ring[vu_pre_b + (i)]
+#ifdef ICO_VU_PRE_BATCH
 #define VU_PRE_BATCH_MAX 64u
 #define VU_PRE_ENTRY(vid) vu_pre_batch_entry(vid)
+#define VU_MERGE_ENTRY(vid) (vid)
 
 // One step of the search: entry e + s when the table has it and it starts
 // at or before vid
@@ -226,6 +233,72 @@ uint vu_pre_batch_entry(uint vid)
     vu_tri = asuint(vu_ring[t.y + 51u]);
     return vid - t.x;
 }
+#else
+// The draw merge (ICO_VU_MERGE: the vu_X_merge_vs and vu_X_merge_plain_vs
+// builds of the mesh and grid programs' entries and vu_merge_main_vs of
+// vu_main_vs; docs/port/VU1_PROGRAMS.md, "The draw merge"; rd_replay_vu.c
+// vuDraw, vuRunFlush): consecutive draws with the same pipeline, groups,
+// DrawCB, FrameCB and scissor are one indexed draw.  Each draw's VuCB and
+// VuBoneCB lie in the upload ring as the cbuffer build binds them, read
+// through vu_ring (t5) at the float4 indices of the run's table, a run of
+// uint4 in vu_ring from float4 vu_merge_head.w (the lane IcoVuCB.mark[3],
+// which nothing else reads, of the VuCB bound at b2: the run's first
+// draw's), one a draw in the order of the index list, at most
+// VU_MERGE_MAX:
+//   x the draw's first rebased index value (draw 0: the table's draws)
+//   y its VuCB's first float4 in vu_ring
+//   z its VuBoneCB's first float4
+//   w what its values were raised by (draw 0: 0; the index value less w is
+//     the draw's own, kick * 4 + corner, mod 2^32)
+// A draw alone is a table of one.  vu_merge_entry finds an index value's
+// draw (a fixed binary search over x: four steps, no loop) and loads its
+// VuCB's vectors into the statics above as vu_pre_batch_entry does; the same
+// bytes the cbuffers would hold: every word computed is the same.
+cbuffer VuCB : ICO_REG(b2, 1)
+{
+    float4 vu_merge_skip[47];
+    uint4 vu_merge_head;
+};
+#define VU_PRE_ENTRY(vid) (vid)
+#define VU_MERGE_MAX 16u
+#define VU_MERGE_ENTRY(vid) vu_merge_entry(vid)
+
+// One step of the search: draw e + s when the table has it and its values
+// start at or before vid
+uint vu_merge_step(uint e, uint s, uint vid, uint tab, uint n)
+{
+    uint m = e + s;
+    uint r = e;
+    if (m < n && vid >= asuint(vu_ring[tab + m].x)) {
+        r = m;
+    }
+    return r;
+}
+
+// Index value vid's draw: its VuCB's vectors into the statics, its VuCB's
+// and VuBoneCB's places; the draw's own index value
+uint vu_merge_entry(uint vid)
+{
+    uint tab = vu_merge_head.w;
+    uint n = asuint(vu_ring[tab].x);
+    uint e = vu_merge_step(0u, 8u, vid, tab, n);
+    e = vu_merge_step(e, 4u, vid, tab, n);
+    e = vu_merge_step(e, 2u, vid, tab, n);
+    e = vu_merge_step(e, 1u, vid, tab, n);
+    uint4 t = asuint(vu_ring[tab + e]);
+    vu_pre_v = t.y;
+    vu_pre_b = t.z;
+    vu_draw = asuint(vu_ring[t.y + 36u]);
+    vu_batch = asuint(vu_ring[t.y + 37u]);
+    vu_strip = asuint(vu_ring[t.y + 38u]);
+    vu_mark = asuint(vu_ring[t.y + 47u]);
+    vu_rec = asuint(vu_ring[t.y + 48u]);
+    vu_lo = vu_ring[t.y + 49u];
+    vu_hi = vu_ring[t.y + 50u];
+    vu_tri = asuint(vu_ring[t.y + 51u]);
+    return vid - t.w;
+}
+#endif
 #endif
 
 StructuredBuffer<float4> vu_stream : ICO_REG(t0, 1);
