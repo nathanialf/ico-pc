@@ -98,6 +98,21 @@ and destroy are not frame-safe:
 destruction is deferred until the frames that may use the handle have retired (`port/rhi/rhi.h`,
 resources).
 
+**Views** (`RhiViewAspect`, a sampled-texture binding's `aspect`): COLOR the texture's own view;
+DEPTH a depth-stencil's depth (the fog, the crack filler, the MSAA resolves); UINT the RGBA8_UINT
+view of an `RHI_TEX_UINT_VIEW` texture (`RhiLimits.uintView`); STENCIL a single-sampled sampled
+D32F_S8's stencil as unsigned integers (HLSL `Texture2D<uint4>`, read with `Load`, the texture in
+DEPTH_READ), where `RhiLimits.stencilView`: Vulkan a `VK_IMAGE_ASPECT_STENCIL_BIT` view made with
+the image beside its depth-only view (`vk_resource.c`), the depth-stencil read-only layout as the
+depth's; Direct3D 12 an SRV of plane 1 of the `R32G8X24_TYPELESS` resource as
+`X32_TYPELESS_G8X24_UINT` (`d3d12_pipeline.c`); Direct3D 11 the same format's SRV made with the
+texture (`D11Texture.srvStencil`); OpenGL a `glTextureView` of the `GL_DEPTH32F_STENCIL8` storage
+whose `GL_DEPTH_STENCIL_TEXTURE_MODE` is `GL_STENCIL_INDEX` (`GlTexture.stencilView`; the texture
+itself keeps the depth mode), bound without a sampler object. The value arrives in red on Vulkan
+and OpenGL and in green on Direct3D (`RhiLimits.stencilViewChannel` 0 or 1); a shader takes the
+channel from its constants. The shadow count's one draw is the only reader
+([WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-count-in-one-draw)).
+
 **States** (`RhiState`): UNDEFINED, RENDER_TARGET, DEPTH_WRITE, DEPTH_READ (test without write, also
 sampleable; a stencil-only writer uses DEPTH_WRITE with `depthWrite` false), SHADER_READ, COPY_SRC,
 COPY_DST, PRESENT, STORAGE and RENDER_TARGET_READ. A barrier is needed only when a texture changes
