@@ -37,10 +37,12 @@
  *   f  at scene scale 4 the first blur level's integral of a
  *      rectangle moved by quarter pixels varies by under 0.5 % (the count is
  *      box-reduced to the GS size before level 1 samples it).
- *   s  above 1x at scene scale 4: each composite against above1x_ref.c's
- *      B-spline of its level within 2 LSB (3 on the fixed-function
- *      blender), a row across the shadow falling
- *      and rising once; the softening's AA0 (at its GS size) the area box
+ *   s  above 1x at scene scale 4: each composite, not flagged above 1x,
+ *      against the sampler's bilinear of its level at each texel's UV (as
+ *      at 1x) within 3 LSB; then with RdProfile.shadowBspline ([dev]
+ *      shadow_bspline) flagged and against above1x_ref.c's B-spline of its
+ *      level within 3 LSB (4 on the fixed-function blender), a row across
+ *      the shadow falling and rising once; the softening's AA0 (at its GS size) the area box
  *      of SCENE byte for byte and its composite back the sampler's bilinear
  *      between the same texels within 2, not counted above 1x; the passes
  *      counted (g_rd.above1xDraws), none in the 1x run.
@@ -57,6 +59,19 @@
  *      and A = 0x80 where that is non-zero.  Without the view (a backend
  *      whose RhiLimits.stencilView is false) the comparison is skipped
  *      with a line.
+ *   x  (`rd_shadow_test edges`, ctest rd_shadow_edges: this case alone)
+ *      the two kernels at scene scale 2: the same frame (the synthetic
+ *      volumes, Shadow.c's model, a rectangle at a sub-pixel offset, all
+ *      three composites) replayed with one bilinear tap (the default) and
+ *      with the B-spline (RdProfile.shadowBspline flipped between two
+ *      recordings): the count's levels byte for byte, the composites
+ *      flagged above 1x only with the B-spline, and SCENE equal byte for
+ *      byte at every texel but those within N of a shadow edge, N the two
+ *      kernels' joint support (level texels i0 - 1 .. i0 + 2 about the
+ *      sample point) and one texel each side for a rounding tie: a texel
+ *      may differ only where a composited level is not constant over that
+ *      4 x 4 + 1 window (at 2x, N = 3 level texels = 12, 24 and 48 SCENE
+ *      texels for levels 1, 2 and 3); some texels do differ.
  * Every pipeline created is enumerated; no validation errors. */
 #include <math.h>
 #include <stdarg.h>
@@ -1039,12 +1054,16 @@ static void checkLevelScale(void)
  *
  * The composites at scene scale 4 (Enhanced): each level (scale 1, the
  * PS2's size) is magnified into SCENE by 8, 16 or 32 texels a level
- * texel, which the replay draws with the cubic B-spline (common.hlsli
- * DF_ABOVE1X): SCENE against above1x_ref.c's B-spline of the level as read
- * back, at each texel's GS sample point, then MODULATE and the LERP,
- * within 2 LSB (the B-spline is four bilinear taps of the sampler there);
- * a row across the shadow falls and rises once (no bump the bilinear's
- * corners would leave across a diagonal, no overshoot).  Then the
+ * texel, which the replay draws by default with one bilinear tap of the
+ * sampler at the texel's UV, as at 1x (not flagged DF_ABOVE1X:
+ * rd_fx_plan.c rd__sprite_above1x): SCENE against the float bilinear of
+ * the level as read back, then MODULATE and the LERP, within 3 LSB.  With
+ * RdProfile.shadowBspline ([dev] shadow_bspline) the cubic B-spline
+ * (common.hlsli DF_ABOVE1X): SCENE against above1x_ref.c's B-spline of the
+ * level, at each texel's GS sample point, within 3 LSB (the B-spline is
+ * four bilinear taps of the sampler there); a row across the shadow falls
+ * and rises once (no bump the bilinear's corners would leave across a
+ * diagonal, no overshoot).  Then the
  * softening's passes (rd_post.c AA_DOWNSAMPLE and AA_COMPOSITE: SCENE at 4
  * into AA0 at its GS size, a step of 8 texels, the area box, exact; AA0
  * back over SCENE, an eighth of a texel a texel, read as at 1x: the
@@ -1096,20 +1115,41 @@ static void compositeTexel(const A1xImg *lv, int l, int x, int y, int a1x, int t
     a1x_resample(a1xFetch, (void *)lv, c16x, c16y, step, step, 1, t);
 }
 
-static void checkComposite4x(int l)
+/* the level-l composite's texel at SCENE texel (x, y) as sprite_ps samples
+ * it without DF_ABOVE1X (the default, as at 1x): the sampler's bilinear at
+ * the texel's UV, the float filter's value converted with ties either way
+ * (tie bit 0 the alpha, bit 1 the colour, as checkComposite) */
+static void compositeTexelBilinear(const A1xImg *lv, int l, int x, int y, int tie, uint32_t t[4])
+{
+    float f[4];
+    bilinear(lv->px, lv->w, lv->h, (float)(0.25 + gsAt(x, S4) / (double)(1 << l)),
+             (float)(0.25 + gsAt(y, S4) / (double)(1 << l)), f);
+    for (int c = 0; c < 4; c++) {
+        t[c] = (uint32_t)texel(f[c], c == 3 ? (tie & 1) : (tie & 2));
+    }
+}
+
+/* level l's composite at scale 4: bspline the B-spline ([dev]
+ * shadow_bspline), else the default's one bilinear tap */
+static void checkComposite4x(int l, bool bspline)
 {
     int one[4] = {0, 0, 0, 0};
     one[l] = kBlend[l];
     s_subOff = 0;
+    g_rd.profile.shadowBspline = bspline;
     const uint32_t before = g_rd.above1xDraws;
     recordFrame(VOL_SUB, one);
+    g_rd.profile.shadowBspline = false;
+    const char *kern = bspline ? "B-spline" : "bilinear";
     const int n = 256 >> (l - 1);
     if (!readTarget(rd_target((RdTargetId)(RD_TARGET_SHADOW0 + l - 1)), s_lv[l - 1], (uint32_t)n,
                     (uint32_t)n) ||
         !readTarget(rd_target(RD_TARGET_SCENE), s_big, S4W, S4H)) {
         return;
     }
-    CHECK(g_rd.above1xDraws > before, "(s) level %d: the composite drawn above 1x", l);
+    CHECK(bspline ? g_rd.above1xDraws > before : g_rd.above1xDraws == before,
+          "(s) level %d (%s): %u passes drawn above 1x (%s)", l, kern, g_rd.above1xDraws - before,
+          bspline ? "the composite flagged" : "none: sampled as at 1x");
     const A1xImg lv = {s_lv[l - 1], n, n};
     int worst = 0, wx = 0, wy = 0, shadowed = 0, worstTent = 0;
     for (int y = 0; y < S4H; y++) {
@@ -1117,11 +1157,16 @@ static void checkComposite4x(int l)
             const uint8_t *g = &s_big[((size_t)y * S4W + x) * 4];
             int best = 999, bestTent = 999;
             for (int k = 0; k < 16; k++) {
-                /* k bit 0: the bilinear (else the B-spline); bits 1..2: the
+                /* k bit 0: the other reference (with the B-spline the GS's
+                 * bilinear, with the default the B-spline); bits 1..2: the
                  * ties; bit 3: a float blender's LERP (else the GS's) */
                 int o[3] = {kRecv[0], kRecv[1], kRecv[2]};
                 uint32_t t[4];
-                compositeTexel(&lv, l, x, y, !(k & 1), (k >> 1) & 3, t);
+                if (bspline || (k & 1)) {
+                    compositeTexel(&lv, l, x, y, bspline ? !(k & 1) : 1, (k >> 1) & 3, t);
+                } else {
+                    compositeTexelBilinear(&lv, l, x, y, (k >> 1) & 3, t);
+                }
                 const int as = mod7((int)t[3], one[l]);
                 if (as != 0 && x < S4W / 2) {
                     for (int c = 0; c < 3; c++) {
@@ -1165,10 +1210,19 @@ static void checkComposite4x(int l)
             dir = sg != 0 ? sg : dir;
         }
     }
-    printf("  (s) 4x level %d: %d texels shadowed, max %d LSB from the B-spline reference (at "
-           "%d,%d), %d from the bilinear's; the row at GS y 120 turns %d times in 3 channels\n",
-           l, shadowed, worst, wx, wy, worstTent, turns);
+    printf("  (s) 4x level %d (%s): %d texels shadowed, max %d LSB from the %s reference (at "
+           "%d,%d), %d from the %s's; the row at GS y 120 turns %d times in 3 channels\n",
+           l, kern, shadowed, worst, bspline ? "B-spline" : "sampler's bilinear", wx, wy, worstTent,
+           bspline ? "GS bilinear" : "B-spline", turns);
     CHECK(shadowed > 0, "(s) level %d: the receiver is shadowed at 4x", l);
+    if (!bspline) {
+        /* the sampler's own fraction precision and the blender's rounding,
+           as the softening's composite back over SCENE (2) plus the
+           MODULATE before it */
+        CHECK(worst <= 3, "(s) level %d at 4x: max difference %d from the bilinear at (%d,%d)", l,
+              worst, wx, wy);
+        return;
+    }
     /* the fixed-function blender rounds its LERP once more (checkComposite);
        the B-spline's four hardware bilinear taps carry the sampler's own
        fraction precision (lavapipe on arm64 lands 3 away from the
@@ -1330,7 +1384,8 @@ static void checkScaledIntegral(void)
     CHECK(hi > 0.0 && (hi - lo) / hi < 0.005, "level 1 integral varies by %.2f %% with the offset",
           hi > 0.0 ? 100.0 * (hi - lo) / hi : 0.0);
     for (int l = 1; l <= 3; l++) {
-        checkComposite4x(l);
+        checkComposite4x(l, false);
+        checkComposite4x(l, true);
     }
     checkSoftening4x();
     CHECK(rhi_vk_validation_error_count() == 0, "scale 4: %u validation errors",
@@ -1525,6 +1580,161 @@ static void checkOneScaled(void)
     }
 }
 
+/* ---------------------------------- (x) the two kernels at scale 2 */
+
+#define EDGE_S 2
+
+/* level l (1..3, size n) is constant over the window of texels lo..hi on
+ * both axes about the SCENE texel's sample point (CLAMP, as sampled) */
+static bool edgeFlat(const uint8_t *lv, int n, int x0, int x1, int y0, int y1)
+{
+    const uint8_t *ref = NULL;
+    for (int y = y0; y <= y1; y++) {
+        for (int x = x0; x <= x1; x++) {
+            const int cx = x < 0 ? 0 : x >= n ? n - 1 : x;
+            const int cy = y < 0 ? 0 : y >= n ? n - 1 : y;
+            const uint8_t *p = &lv[((size_t)cy * n + cx) * 4];
+            if (!ref) {
+                ref = p;
+            } else if (memcmp(p, ref, 4) != 0) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/* SCENE texel (x, y) at scale EDGE_S lies within N of a shadow edge: some
+ * composited level is not constant over the kernels' joint support about
+ * its sample point (the bilinear's texels i0, i0 + 1 and the B-spline's
+ * i0 - 1 .. i0 + 2, i0 = floor(u - 0.5) at the level's U u), widened by one
+ * texel each side for the 12.4 rounding's tie */
+static bool nearEdge(uint8_t *const lv[3], int x, int y)
+{
+    for (int l = 1; l <= 3; l++) {
+        const int n = 256 >> (l - 1);
+        const double u = 0.25 + (((double)x + 0.5) / EDGE_S - 0.5) / (double)(1 << l);
+        const double v = 0.25 + (((double)y + 0.5) / EDGE_S - 0.5) / (double)(1 << l);
+        const int ix = (int)floor(u - 0.5), iy = (int)floor(v - 0.5);
+        if (!edgeFlat(lv[l - 1], n, ix - 2, ix + 3, iy - 2, iy + 3)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* the frame recorded with the kernel asked, its levels and SCENE read */
+static bool edgeRecord(int vol, bool bspline, AbPics *p, uint32_t *a1x, const char *what)
+{
+    static const int kAll[4] = {0, kBlend[1], kBlend[2], kBlend[3]};
+    memset(p, 0, sizeof(*p));
+    g_rd.profile.shadowBspline = bspline;
+    const uint32_t before = g_rd.above1xDraws;
+    recordFrame(vol, kAll);
+    g_rd.profile.shadowBspline = false;
+    *a1x = g_rd.above1xDraws - before;
+    const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
+    if (!sc) {
+        CHECK(0, "(x) %s: no SCENE target", what);
+        return false;
+    }
+    p->sw = sc->tw;
+    p->sh = sc->th;
+    p->scene = malloc((size_t)p->sw * p->sh * 4);
+    bool ok = p->scene != NULL;
+    for (int l = 0; l < 3 && ok; l++) {
+        const uint32_t n = 256u >> l;
+        p->lv[l] = malloc((size_t)n * n * 4);
+        ok = p->lv[l] && readTarget(rd_target((RdTargetId)(RD_TARGET_SHADOW0 + l)), p->lv[l], n, n);
+    }
+    return ok && readTarget(rd_target(RD_TARGET_SCENE), p->scene, p->sw, p->sh);
+}
+
+static void edgeFrame(int vol, const char *what)
+{
+    AbPics bi, bs;
+    uint32_t a1xBi = 0, a1xBs = 0;
+    const bool okBi = edgeRecord(vol, false, &bi, &a1xBi, what);
+    const bool okBs = edgeRecord(vol, true, &bs, &a1xBs, what);
+    CHECK(a1xBi == 0 && a1xBs >= 3,
+          "(x) %s: passes above 1x: %u with the bilinear (none), %u with the B-spline (the three "
+          "composites)",
+          what, a1xBi, a1xBs);
+    if (okBi && okBs && bi.sw == bs.sw && bi.sh == bs.sh) {
+        for (int l = 0; l < 3; l++) {
+            const uint32_t n = 256u >> l;
+            CHECK(memcmp(bi.lv[l], bs.lv[l], (size_t)n * n * 4) == 0,
+                  "(x) %s: SHADOW%d differs between the kernels", what, l);
+        }
+        size_t diff = 0, far = 0;
+        int maxd = 0, fx = -1, fy = -1;
+        int hist[4] = {0, 0, 0, 0}; /* |d| 1, 2..3, 4..7, 8 and up */
+        for (uint32_t y = 0; y < bi.sh; y++) {
+            for (uint32_t x = 0; x < bi.sw; x++) {
+                const uint8_t *a = &bi.scene[((size_t)y * bi.sw + x) * 4];
+                const uint8_t *b = &bs.scene[((size_t)y * bi.sw + x) * 4];
+                if (memcmp(a, b, 4) == 0) {
+                    continue;
+                }
+                diff++;
+                int d = 0;
+                for (int c = 0; c < 4; c++) {
+                    const int e = abs((int)a[c] - (int)b[c]);
+                    d = e > d ? e : d;
+                }
+                maxd = d > maxd ? d : maxd;
+                hist[d >= 8 ? 3 : d >= 4 ? 2 : d >= 2 ? 1 : 0]++;
+                if (!nearEdge(bi.lv, (int)x, (int)y) && far++ == 0) {
+                    fx = (int)x, fy = (int)y;
+                }
+            }
+        }
+        printf("  (x) %s at %dx: SCENE %ux%u, %zu texels differ between the bilinear and the "
+               "B-spline (max %d; |d| 1: %d, 2-3: %d, 4-7: %d, 8+: %d), %zu of them farther than N "
+               "from a shadow edge\n",
+               what, EDGE_S, bi.sw, bi.sh, diff, maxd, hist[0], hist[1], hist[2], hist[3], far);
+        CHECK(far == 0,
+              "(x) %s: %zu texels differ farther than N from a shadow edge, the first (%d,%d)",
+              what, far, fx, fy);
+        CHECK(diff > 0, "(x) %s: the two kernels give the same SCENE", what);
+    } else {
+        CHECK(0, "(x) %s: the pictures were not read (or differ in size)", what);
+    }
+    abFree(&bi);
+    abFree(&bs);
+}
+
+/* (x): the frames at scene scale 2 (Enhanced); false without a device */
+static bool checkEdges2x(void)
+{
+    RdSettings st;
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ENHANCED;
+    st.outputWidth = 640;
+    st.outputHeight = 480;
+    st.aspect = 4.0f / 3.0f;
+    st.sceneScale = (float)EDGE_S;
+    if (!rd_init(W, H, &st, NULL)) {
+        printf("rd_shadow_test edges: SKIP: no usable Vulkan device\n");
+        return false;
+    }
+    dl_Init();
+    CHECK(!g_rd.profile.shadowBspline, "(x) the profile's default is the bilinear (%s)",
+          rd__profile_text());
+    gif_HostForgetTextures();
+    gif_HostFrameReset();
+    dl_Clear();
+    edgeFrame(VOL_SYNTH, "synthetic volumes");
+    edgeFrame(VOL_MODEL, "Shadow.c's model");
+    s_subOff = 7;
+    edgeFrame(VOL_SUB, "a rectangle at +7/16");
+    s_subOff = 0;
+    CHECK(rhi_vk_validation_error_count() == 0, "(x) %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    return true;
+}
+
 /* ---------------------------------- (w) a strip across a 48:9 side
  *
  * On a frame 2048 wide (48:9) the edge clip is GSB_SHADOW_CLIP_MAX.  A
@@ -1611,12 +1821,24 @@ static void checkWideClip(void)
           n / 3, maxX, want, 0xFFEF);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     static const int kAll[4] = {0, kBlend[1], kBlend[2], kBlend[3]};
     setMatrices();
     buildModel();
+    if (argc > 1 && strcmp(argv[1], "edges") == 0) {
+        /* (x) alone (ctest rd_shadow_edges) */
+        if (!checkEdges2x()) {
+            return 77;
+        }
+        if (failures) {
+            printf("rd_shadow_test edges: %d failures\n", failures);
+            return 1;
+        }
+        printf("rd_shadow_test edges: ok\n");
+        return 0;
+    }
 
     /* (e) recording */
     if (!rd__init_record_only(W, H)) {
