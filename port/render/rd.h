@@ -2124,6 +2124,13 @@ typedef struct RdPerfRecord {
      * target.  prepassBatches the distinct (stage key, FrameCB, stream
      * buffer, bones class) of the pre-pass's draws (vuPreDraws of them) */
     uint32_t vuMergeDraws[RD_LIST_COUNT], vuMergeRuns[RD_LIST_COUNT], vuMergeBlocked[5];
+    /* The draw merge as drawn (rd_replay_vu.c vuRunFlush; g_rd.vuMerge):
+     * vuMergeIn the VU draws drawn inside a merged GPU draw (a run of two
+     * or more), vuMergeGpu those GPU draws, vuMergeAlone the merge builds'
+     * draws drawn one a GPU draw (a run of one, or a draw that cannot merge:
+     * two passes, DATE through the stencil, a destination read, code 36's
+     * pairs); 0 with the merge off */
+    uint32_t vuMergeIn, vuMergeGpu, vuMergeAlone;
     uint32_t prepassBatches;
     double gpuPrepassMs;
     /* The per-pass timing (rd_perf_passes_of; docs/port/RENDER.md,
