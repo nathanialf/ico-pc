@@ -10,12 +10,12 @@
  * before F12 and the loss dump zip beside the frame: `rd_replay_tool
  * frame.zip out.png --interp 0.5 frame.zip`) (extracted to a temporary file in the temp folder, deleted at exit).
  * The replay runs as the disc the dump was drawn on (its region, dump
- * version 12; the European disc for an older dump): the reduction's crop
+ * version 12 and later; the European disc for an older dump): the reduction's crop
  * and the border mask are that disc's.
  *
  * NAME is a named target (SCENE, DISPLAY (default), SHADOW0..2, WORK0..3,
  * AA0, AA1, FEED128, AURA_WORK, AURA_TAP, WORK2_PAD, FEED_HELD,
- * DISPLAY_HELD); an unknown name is an error (exit 1, the names listed).
+ * DISPLAY_HELD, WORK3_HELD); an unknown name is an error (exit 1, the names listed).
  * --pass-dump DIR renders the frame once and writes every one of those
  * targets to DIR/<NAME>.png (DIR must exist; <out.png> is unused, give -),
  * and with --present WxH the presented picture to DIR/PRESENT.png (a second
@@ -77,7 +77,7 @@
  *                         A/B of the filler)
  *   --work-clear RRGGBB   every target but SCENE, DISPLAY and the feedback
  *                         kept across frames (DISPLAY_HELD, FEED128,
- *                         FEED_HELD) cleared to RRGGBB at the head of the
+ *                         FEED_HELD, WORK3_HELD) cleared to RRGGBB at the head of the
  *                         replay (rd_upload.c, ICO_RD_WORK_CLEAR for the
  *                         game): a texel the frame reads before drawing it
  *                         shows the colour downstream (issue 129's stale
@@ -198,7 +198,8 @@
  *                         --interp DISPLAY after the first and the last of
  *                         them compared byte for byte ("pictures
  *                         identical", else the bytes that differ and exit
- *                         1)
+ *                         1) and the replays that pasted the first's glow
+ *                         ("glow held in N of M replays", rd_glow_hold.c)
  *   --prev DUMP           (repeatable, oldest first) replays DUMP in the same
  *                         context before <dump>, so the targets a frame
  *                         reads back from the frame before (the motion
@@ -250,7 +251,11 @@
  *                         presents (the first the tick's first present),
  *                         each written to <out>-p<k>.png (<out> without its
  *                         .png); the motion blur takes k = N presents a
- *                         tick.  Under --motion-blur original the N
+ *                         tick.  Each line names the glow: "glow drawn"
+ *                         at the first, "glow held" at a later present
+ *                         that pasted the first's (rd_glow_hold.c;
+ *                         ICO_RD_GLOW_REDRAW=1 draws it at every one,
+ *                         "glow redrawn ([dev] glow_redraw)"), "no glow".  Under --motion-blur original the N
  *                         pictures' motion blur is one (DISPLAY_HELD), under
  *                         smooth its trail moves on at each.  Each line
  *                         ends "rendered" or "shown again": a present whose
@@ -297,9 +302,9 @@
 #include "font.h"                        /* port/ui: the overlay test's text */
 
 static const char *const kNames[] = {
-    "SCENE", "DISPLAY",   "SHADOW0",  "SHADOW1",   "SHADOW2",   "WORK0",
-    "WORK1", "WORK2",     "WORK3",    "AA0",       "AA1",       "FEED128",
-    "",      "AURA_WORK", "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD"};
+    "SCENE",    "DISPLAY",   "SHADOW0",   "SHADOW1",      "SHADOW2",   "WORK0", "WORK1",
+    "WORK2",    "WORK3",     "AA0",       "AA1",          "FEED128",   "",      "AURA_WORK",
+    "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD", "WORK3_HELD"};
 
 static const char *const kCmdNames[RDC_COUNT] = {
     "NOP",          "TEST",           "BLEND",     "ABE",         "ZWRITE",       "FBA",
@@ -1232,7 +1237,8 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
 
     double sum[P_COUNT] = {0}, low[P_COUNT] = {0};
     double ring = 0.0, uniform = 0.0, interp = 0.0, draws = 0.0, pipes = 0.0, groups = 0.0;
-    double d3d11 = 0.0; /* RdPerfRecord.backendWriteBytes (Direct3D 11 only) */
+    double d3d11 = 0.0;    /* RdPerfRecord.backendWriteBytes (Direct3D 11 only) */
+    uint32_t glowHeld = 0; /* RdPerfRecord.glowHeld: replays that pasted the held glow */
     RdPerfRecord first;
     uint8_t *pic[2] = {NULL, NULL};
     size_t cap[2] = {0, 0}, size[2] = {0, 0};
@@ -1271,6 +1277,7 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
         draws += r.draws;
         pipes += r.pipelineBinds;
         groups += r.bindGroupBinds;
+        glowHeld += r.glowHeld;
         if (k == 0) {
             first = r;
         }
@@ -1302,6 +1309,10 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
         }
         printf("%s: time: the first replay: interp %.3f ms, total %.3f\n", dump, first.interpMs,
                first.totalMs);
+        if (interpPrev) {
+            /* rd_glow_hold.c: the later replays of the tick paste the first's glow */
+            printf("%s: time: glow held in %u of %d replays\n", dump, glowHeld, n);
+        }
     }
     if (ok && interpPrev) {
         /* two sizes: every byte of the larger counts */
@@ -1407,6 +1418,7 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
         const float a = interpT * (float)(k + 1) / (float)presentsN;
         RdInterpStats ist;
         const RdFrame *rf = rd__interp_frame(pf, f, a, k == 0, &ist);
+        const int glow = rd__glow_hold_last(); /* rd_glow_hold.c: held or drawn */
         if (!rf) {
             fprintf(stderr, "%s: --presents: rd__interp_frame failed at present %d\n", dump, k);
             rc = 1;
@@ -1431,10 +1443,11 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
         uint64_t drawn = 0, restarts = 0;
         rd__blur_smooth_counts(&drawn, &restarts, NULL);
         printf("%s: present %d of %d at alpha %.4f (snap %u): %ux%u -> %s; motion blur %s (%llu "
-               "drawn through the accumulator, %llu restarts); %s\n",
+               "drawn through the accumulator, %llu restarts); %s; %s\n",
                dump, k, presentsN, (double)a, ist.snap, w, h, ok ? name : "(failed)",
                motionSmooth ? "smooth" : "original", (unsigned long long)drawn,
-               (unsigned long long)restarts, reshown ? "shown again" : "rendered");
+               (unsigned long long)restarts, rd__glow_hold_text(glow),
+               reshown ? "shown again" : "rendered");
         rc = ok ? 0 : 1;
     }
     free(px);
