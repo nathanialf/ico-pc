@@ -154,7 +154,7 @@ static void push(const RdPerfRecord *r)
 /* Direct3D 11's submit writes of the records popped since the last
  * rd_perf_backend_text, and their count */
 static uint64_t s_backendBytes;
-static uint32_t s_backendReplays;
+static uint32_t s_backendReplays, s_reshownReplays;
 
 bool rd_perf_pop(RdPerfRecord *out)
 {
@@ -163,6 +163,7 @@ bool rd_perf_pop(RdPerfRecord *out)
     }
     s_backendBytes += s_queue[s_head].backendWriteBytes;
     s_backendReplays++;
+    s_reshownReplays += s_queue[s_head].reshown;
     if (out) {
         *out = s_queue[s_head];
     }
@@ -188,14 +189,23 @@ bool rd__perf_gpu_ms_of(uint32_t replay, double *ms)
 
 const char *rd_perf_backend_text(void)
 {
-    static char s_text[64];
+    static char s_text[160];
+    size_t at = 0;
     s_text[0] = '\0';
     if (s_backendBytes && s_backendReplays) {
-        snprintf(s_text, sizeof(s_text), "; Direct3D 11 submits wrote %.0f KB to the GPU",
-                 (double)s_backendBytes / s_backendReplays / 1024.0);
+        at = (size_t)snprintf(s_text, sizeof(s_text),
+                              "; Direct3D 11 submits wrote %.0f KB to the GPU",
+                              (double)s_backendBytes / s_backendReplays / 1024.0);
+    }
+    if (s_reshownReplays) {
+        /* the replays above are counted with these: a re-shown present is a replay of no passes */
+        snprintf(s_text + at, sizeof(s_text) - at,
+                 "; %u presents re-shown without a replay ([dev] still_represent)",
+                 s_reshownReplays);
     }
     s_backendBytes = 0;
     s_backendReplays = 0;
+    s_reshownReplays = 0;
     return s_text;
 }
 
@@ -449,6 +459,14 @@ void rd__perf_alpha(float alpha, int firstOfTick)
     s_first = (uint8_t)(firstOfTick != 0);
 }
 
+/* the next replay is a re-shown present (rd_reshow.c) */
+static uint8_t s_reshownNext;
+
+void rd__perf_reshown(void)
+{
+    s_reshownNext = 1;
+}
+
 void rd__perf_readback_ms(double ms)
 {
     s_readbackMs += ms;
@@ -466,6 +484,8 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
     g_rdPerf.readbackMs = s_readbackMs; /* since the previous replay */
     g_rdPerf.alpha = s_alpha;
     g_rdPerf.firstOfTick = s_first;
+    g_rdPerf.reshown = s_reshownNext;
+    s_reshownNext = 0;
     s_alpha = -1.0f;
     s_first = 0;
     s_interpMs = s_readbackMs = 0.0;
