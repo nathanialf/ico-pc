@@ -1747,6 +1747,8 @@ RdPipeKeyInt rd__shadow_count_key(void);
  * RGB 4 m, A 0x80 where m != 0, else 0 */
 #define RD_SHADOW_TABLE_SIZE 64
 void rd__shadow_table_texel(uint32_t m, uint8_t rgba[4]);
+/* frees the one draw's table (rd__shadow_shutdown) */
+void rd__shadow_one_shutdown(void);
 /* The count the shadow levels read after the resolve of the count target
  * `color` (an RdTarget id): at its GS size, RGBA8, w * h * 4 bytes, the
  * reduced texture above 1x, the target's own colour at 1x; false when no
@@ -1767,7 +1769,7 @@ void rd__shadow_count_forget(void);
  * Returns whether the path in force passed. */
 bool rd__shadow_selftest(void);
 /* ICO_RD_SHADOW_SABOTAGE=1: the one draw's table holds a wrong texel at
- * m = 1 (rd_replay.c shadowTableMake), so the self-test's failure path runs
+ * m = 1 (rd_shadow_one.c tableMake), so the self-test's failure path runs
  * (read once) */
 bool rd__shadow_sabotaged(void);
 /* The shadow families above under the states the game draws them with
