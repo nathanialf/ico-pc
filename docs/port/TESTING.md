@@ -717,14 +717,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   stage 40 or with photo mode closed, the veil alone without the row (`checkDejaReel`; the
   evaluator there stands in for the game's).
 - `rd_still_test.c`: the still re-present's hash and decision (`rd_still`, no device): two ticks with
-  the same sprites and a still camera hash the same at alpha 0.25, 0.5, 0.75 and 1, as a first and as
+  the same sprites and a still camera hash the same at alpha 0.25, 0.5, 0.75 and 0.999 (the presenter's top), as a first and as
   a later present (the head copies are not in it); one colour word of the second tick, a sprite that
   moves, a moving camera and Motion blur: Smooth change or withhold it; `rd__reshow_why` for every
   input. The pictures: `rd_replay_tool DUMP out.png --interp 0.9 DUMP --interp-any --presents 3
   --present WxH` (a dump as its own tick before: nothing moves) writes the same PNGs with and without
   `ICO_RD_STILL_REPRESENT=0`, and its lines say which presents were `shown again`.
 - `rd_replay_tool_still.cmake` (`rd_replay_tool_still`): the still re-present on a corpus dump as its own tick
-  before, 4 presents at 2x 16:9: presents 1 to 3 end `; shown again`, and all four pictures are the same bytes
+  before, 4 presents at Enhanced 4:3 2x at 1280x960: presents 1 to 3 end `; shown again`, and all four pictures are the same bytes
   as with `ICO_RD_STILL_REPRESENT=0` (Not Run without the dump).
 - `rd_replay_tool_glow_hold.cmake`: the glow held between ticks (`port/render/rd_glow_hold.c`)
   against its chain drawn at every present (`ICO_RD_GLOW_REDRAW=1`), on two consecutive godrays
