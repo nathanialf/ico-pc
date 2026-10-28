@@ -1964,6 +1964,27 @@ typedef struct RdPerfPass {
  * ("DATE snapshot"); the length written, as snprintf */
 int rd_perf_pass_label(const RdPerfPass *p, char *buf, size_t n);
 
+/* Why a code 36 batch's cut and kick draws were kept apart
+ * (RdPerfRecord.vuFuseKept; rd_replay_vu.c vuFuseVerdict, in this order):
+ * OFF the fuse off ([dev] vu_fuse = false, or the draw merge off); BUILD
+ * the program's entry has no merge build (only those mark the kick's
+ * pixels); PASSES a plan of two passes or more (the alpha test's split, no
+ * dual-source blending); DST a destination read or DATE through the
+ * stencil bit; BLEND the cut's blend form cannot give Cs per pixel (the
+ * premultiplied adds and subtracts, the Ad forms, Cd*As + Cd); PLANES the
+ * cut's pixel shader without the planes (vu_np_ps, which does not read the
+ * mark); PLANS the two plans differ in more than the blend */
+enum {
+    RD_VU_FUSE_OFF,
+    RD_VU_FUSE_BUILD,
+    RD_VU_FUSE_PASSES,
+    RD_VU_FUSE_DST,
+    RD_VU_FUSE_BLEND,
+    RD_VU_FUSE_PLANES,
+    RD_VU_FUSE_PLANS,
+    RD_VU_FUSE_WHY_COUNT
+};
+
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
     uint32_t frame;  /* the replayed frame's number */
@@ -2131,6 +2152,14 @@ typedef struct RdPerfRecord {
      * two passes, DATE through the stencil, a destination read, code 36's
      * pairs); 0 with the merge off */
     uint32_t vuMergeIn, vuMergeGpu, vuMergeAlone;
+    /* The fused scissor pairs (rd_replay_vu.c doVuDraw, vuFuseVerdict;
+     * g_rd.vuFuse): of code 36's batches (a cut draw and a kick draw each),
+     * vuFusePairs those whose kick took its cut's pipeline (PRIM.ABE on),
+     * its pixels written unblended (ICO_VU_FUSED), so the draw merge may
+     * join them; vuFuseSame those whose two draws had one plan already
+     * (the state's ABE on, or the alpha plan's blending off); vuFuseKept
+     * the others, by reason (RD_VU_FUSE_*) */
+    uint32_t vuFusePairs, vuFuseSame, vuFuseKept[RD_VU_FUSE_WHY_COUNT];
     uint32_t prepassBatches;
     double gpuPrepassMs;
     /* The per-pass timing (rd_perf_passes_of; docs/port/RENDER.md,
