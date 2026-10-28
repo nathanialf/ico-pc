@@ -368,12 +368,17 @@ a second, the vsyncs and the simulated rate, the resyncs and the lag they droppe
 the late-present skip left unpresented (`skipped N presents (late L, slow S)`: by arm, the timer
 path's and the lock's together, the lock having the late arm only, [Pacing](#pacing)), the present
 allowance of the path in use (`presents held to A a step (lowest L, R refused, D drops, C climbs,
-climbs refused X)`, or `presents not held (...)` while the timer path's allowance is unbound, and
+climbs refused X)`, or `presents paced to N.N a step (...)` while the timer path's allowance is
+unbound and [paced by the GPU](#the-present-allowance) at under 8 a step (N.N the budget's presents
+a step, `(period - step) / G`), or `presents not held (...)` while it is unbound otherwise, and
 `lowest not held` when it was unbound all block: the allowance now and its lowest in the block, the
 in-between presents it refused, its drops and climbs and the climbs its GPU gate refused in the
-block; then `GPU G ms a presented replay`, the median of the last 8 presented replays'
-GPU time its climb is gated on, or `no GPU timestamps` where the backend has none, or
-`GPU not timed yet`; [The present allowance](#the-present-allowance)), the longest [replay](ARCHITECTURE.md#terms) and the replay count with how many
+block; then `GPU G ms a timed replay`, the median of the last 8 timed presented replays' GPU time
+(`perf_drain`, `pace_hist_add`) that the climb's gate and the paced budget read, not the block's
+mean (the replays line's `GPU` is the mean over the block's replays: issue 130's log had this
+field at 14.1 ms, then named `a presented replay`, beside a block mean of 1.44 ms), or `no
+GPU timestamps` where the backend has none, or `GPU not timed yet`;
+[The present allowance](#the-present-allowance)), the longest [replay](ARCHITECTURE.md#terms) and the replay count with how many
 were over a refresh, the slow
 steps, the frame rate option (with `(held to the display's X Hz)` while a cap above the refresh
 presents once a refresh, [the present gap](#pacing)), the present mode, the display's refresh with presents a refresh, the
@@ -400,7 +405,7 @@ lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,
   multiple;
 - `lock off`.
 
-**Event lines.** The present allowance writes three, each one line, the first 8 then every 100th
+**Event lines.** The present allowance writes four, each one line, the first 8 then every 100th
 (`ico_log_limited`; `port/platform/window_host.c` (`budget_lines`), the words from
 `port/platform/pace_policy.c` (`pace_budget_event_text`, unit-tested word for word)):
 
@@ -413,7 +418,14 @@ lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,
   ms x K + step T ms under the period P ms)` (S steps since the drop, K the presents the gate
   asked for);
 - a refused climb: `window: presents stay at A a step: GPU G ms x K + step T ms is not under the
-  period P ms (S steps since the drop; back to H when it is)`.
+  period P ms (S steps since the drop; back to H when it is)`;
+- the paced budget (the timer path with vsync off), when its value rounded to a tenth changes:
+  `window: presents paced by the GPU: N.N a step|not held (GPU G ms a picture, period P ms)` (`not
+  held` at 8 a step or more).
+
+Paced with the GPU's time known, the drop ends `back to paced by the GPU after 60 steps on time`
+and its climb reads `window: presents back to paced by the GPU (where they started) after S steps
+(GPU G ms a picture, step T ms, period P ms)`; no refused climb is written there.
 
 A late step that only armed the allowance is not logged (the 10 s line's `step late max` has it).
 A present whose present call (the replay's `present` phase: `vkQueuePresentKHR`, `Present`, the
@@ -674,9 +686,26 @@ alpha stays the grid's.
 - A resync does not reset it; a new lock, a frame rate change, leaving the lock, the pace reset
   (back from the background) and a display change (the GPU times with it:
   [run-time changes](#video-options-and-presets)) do.
+- **Paced by the GPU** (issue 130; the timer path with vsync off: Uncapped and numeric
+  rates; FIFO, the mailbox clamp above the refresh and the lock keep the whole-number rule above).
+  A whole number a step cannot say "between 1 and 2": an RTX 4090 at 16x needing 11-17 ms a
+  picture was held to 1 a step, 60 a second, by the climb gate (`2 x 12 + step` is over the
+  period), where the uncapped presents without an allowance had been 60-89 a second. With G known an in-between present may start while
+  `(presents so far this step + 1) x G + step <= period + carry` (`pace_budget_allows_paced`; the
+  new frame's own present is always made and counted), carry being the time the step before left
+  unused, `min(period, max(0, period + carry - presents x G - step))`, reset to 0 by a late step
+  and halved by a step that ended past its due time by less than half a period. The presents a step
+  then average `(period - step) / G`, the GPU's own pace: with a 0.5 ms step, 12 ms pictures give
+  1, 1, 2 a step (80 a second), 9 ms ones 1, 2, 2, 2, 1, ... (107), 17 ms ones with a game frame
+  every two steps never two in a step (57, under the GPU's own 58), 1 ms ones bind nothing. The
+  step term keeps a margin: the simulation step and the GPU partly overlap, so the budget is a
+  little under what the GPU could do. The arm, drop and hold stay as the safety net (the held
+  allowance binds as well as the budget); the climb after the hold is straight home at its last
+  step (no 60-step probe: the budget is the gate). With no GPU time (no timestamps, or not timed
+  yet) the whole-number rule and its probing climb are as above.
 
-Presents that keep up never end a step half a period late, and then nothing binds: the presents
-are those of the rule before (`pace_policy_test` (`testBudgetTimerLoop`): a GPU of 4 or 12 ms a
+Presents that keep up never end a step half a period late, and then the whole-number allowance
+binds nothing: the presents are those of the rule before (`pace_policy_test` (`testBudgetTimerLoop`): a GPU of 4 or 12 ms a
 picture at 120 a second, and back-to-back presents of 1 ms (Uncapped without vsync, about 13 a
 step), the same presents to the one; `testBudgetUnbound`: 15 presents a step on time are never
 refused). At 120 Hz under the lock with the fence (a
@@ -696,7 +725,12 @@ allowance may reach 0 under the n = 1 lock. The reporters' sequences are replaye
 (`testBudgetSustained`); issue 126's OpenGL wait excused where Vulkan's same numbers drop and
 come back, and its GPU-bound OpenGL blocks at 0 (`testBudgetGlWait126`); the drop, climb, refused
 climb and 10 s words on those sequences (`testBudgetLines`, with the lock's clock part,
-`pace_lock_timing_text`).
+`pace_lock_timing_text`, and the paced words). The paced budget: `testBudgetPaced` (the 12, 9, 17
+and 1 ms patterns above, no timestamps as before, the safety net and the straight climb) and
+`testBudgetPacedLoop` (the timer path's fake clock, back to back with a 3 ms step: at 12, 9, 17
+and 20 ms no step a quarter of a period late, no drop, at least the budget's presents and never
+more GPU time than there was; 25 ms the new frames only; 1 ms the rule before's presents to the
+one).
 
 Limits: D3D12 has no mailbox and may lack timestamps (as may OpenGL without `ARB_timer_query` and
 Direct3D 11 where its timestamp queries cannot be made), so the climb
@@ -1097,7 +1131,7 @@ one's pixels: for a measurement, not for play.
 | test | checks |
 | --- | --- |
 | `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), the present allowance with the fence (`test120Budget`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`) |
-| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`), the timer path's unbound start (`testBudgetUnbound`), the reporters' sequences (`testBudgetHitch130`, `testBudgetSustained`, `testBudgetGlWait126`), the window's allowance and clock words (`testBudgetLines`) and the timer path with a GPU queue (`testBudgetTimerLoop`) |
+| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`), the timer path's unbound start (`testBudgetUnbound`), the reporters' sequences (`testBudgetHitch130`, `testBudgetSustained`, `testBudgetGlWait126`), the window's allowance and clock words (`testBudgetLines`), the timer path with a GPU queue (`testBudgetTimerLoop`) and paced by the GPU (`testBudgetPaced`, `testBudgetPacedLoop`) |
 | `port/platform/test/perf_block_test.c` | a block's sums and maxima, the replays over the threshold, the longest-phase text, a reset |
 | `port/platform/test/window_video_test.c` | the window mode requests and their readback on SDL's offscreen driver (77 without one): fullscreen at the desktop's size, Borderless, Windowed back at 960 x 720; Fullscreen through `ico_window_video_mode` holds the desktop's mode (its size and refresh rate) or, where the driver takes none, no mode, and `ico_window_video_desktop_mode` returns which. Whether the display goes exclusive and the swapchain's `VK_EXT_full_screen_exclusive` request are the window system's and a Windows driver's: no test here sees them (lavapipe has no such extension) |
 | `port/platform/test/hotkeys_test.c` | F11, F12, the stats period, F12's file names |
