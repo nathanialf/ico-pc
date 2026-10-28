@@ -1290,6 +1290,9 @@ typedef enum RdFsId {
     /* shadow_count_ps: the shadow count read from the stencil in one draw
      * (rd_replay.c shadowCountOne; RdProfile.shadowOne), behind blit_vs */
     RD_FS_SHADOW_COUNT,
+    /* crack_fill1_ps: crack_fill_ps for a reach of at most 1 texel on each
+     * axis (CRACK_REACH_1; key rd__crack_fill_key(2)) */
+    RD_FS_CRACK_FILL1,
     RD_FS_COUNT
 } RdFsId;
 
@@ -1787,8 +1790,9 @@ int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, int path, RdDrawPass
  * shaders are made; appends to out[0..n). */
 uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 /* The crack filler's keys (rd_crack_fill.c), blit_vs into RGBA8: count 0
- * crack_fill_ps with the scene depth (D32F_S8) attached, its test ALWAYS
- * with writes (SV_Depth), no blend; count 1 crack_count_ps alone. */
+ * crack_fill_ps with the scene depth (D32F_S8) attached, its test ALWAYS with
+ * writes (SV_Depth), no blend; count 2 crack_fill1_ps the same; count 1
+ * crack_count_ps alone. */
 RdPipeKeyInt rd__crack_fill_key(int count);
 /* the MSAA epoch's resolve into SCENE (rd_replay.c msaaEnd): msaa_resolve_ps
  * into RGBA8 with D32F_S8 (depthOnly 0), depth_resolve_ps into D32F_S8 alone
@@ -3632,6 +3636,7 @@ typedef struct RdCrackCounts {
 void rd__crack_fill_init(void);
 void rd__crack_fill_scene_made(void);
 void rd__crack_fill_set_enabled(bool on);
+void rd__crack_fill_force_general(bool on); /* tests: crack_fill_ps at a reach of 1 */
 void rd__crack_fill_count_all(bool on);
 void rd__crack_fill_wait(void);
 void rd__crack_fill_counts(RdCrackCounts *out);
