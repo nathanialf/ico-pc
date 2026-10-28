@@ -63,7 +63,7 @@ static const char *const expectedDiet[] = {"vu_np_ps",      "vu_np_ps_nodual",
 static const char *const expectedSmooth[] = {"fx_acc_ps", "fx_acc_resolve_ps"};
 
 /* the crack filler above 1x (blit.hlsl; port/render/rd_crack_fill.c) */
-static const char *const expectedCrack[] = {"crack_fill_ps", "crack_count_ps"};
+static const char *const expectedCrack[] = {"crack_fill_ps", "crack_count_ps", "crack_fill1_ps"};
 
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */

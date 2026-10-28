@@ -212,6 +212,9 @@ ico_add_shader(fx_acc_resolve_ps fx_sprite.hlsl fx_acc_resolve_ps fragment)
 # behind blit_vs; used on both backends
 ico_add_shader(crack_fill_ps blit.hlsl crack_fill_ps fragment)
 ico_add_shader(crack_count_ps blit.hlsl crack_count_ps fragment)
+# the same fill for a reach of at most 1 texel on each axis (2x on a whole
+# scale): the four neighbours first (CRACK_REACH_1), the same bytes
+ico_add_shader(crack_fill1_ps blit.hlsl crack_fill_ps fragment DEFINES CRACK_REACH_1=1)
 # The shadow count read from the stencil in one draw (port/render/rd_replay.c
 # shadowCountOne: the stencil view and the count's table, box_reduce_ps's
 # average above 1x), behind blit_vs; used on every backend with the view
