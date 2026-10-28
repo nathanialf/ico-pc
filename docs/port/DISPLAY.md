@@ -903,6 +903,20 @@ rendered: ...` with the reasons, the window's uploaded-KB line ends `; N present
 replay`, `RdPerfRecord.reshown` marks the replay, and `rd_replay_tool --presents` ends each present's
 line `shown again` or `rendered`.
 
+**The glow between ticks.** A tick's later presents paste the glow its first present drew instead
+of drawing list 7's glow chain again (`port/render/rd_glow_hold.c`; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-glow-between-ticks),
+[DIVERGENCES.md](DIVERGENCES.md) VD-24): the first copies WORK3 into WORK3_HELD after the chain,
+the later ones skip the chain's 17 passes (the mask, the reduction, the blur, the eye blur) and copy
+WORK3_HELD back before the paste. On a still tick the picture is the same bytes; during a pan the
+glow's halo is the tick's first present's, half a tick behind the scene. The edit is made after the
+still re-present's hash: two presents of a tick whose frames hash alike paste the same glow, so the
+re-present stays exact. `[dev] glow_redraw = true` (`ICO_RD_GLOW_REDRAW=1`) draws the chain at every
+present; the 10 s `interp:` line says `glow between ticks: held: N later presents pasted the tick's
+glow without its chain; ...` (or `redrawn ([dev] glow_redraw = true)`) with the presents that drew it
+and why, the window's uploaded-KB line ends `; N between-tick pictures pasted the tick's glow without
+its chain`, `RdPerfRecord.glowHeld` marks the replay, and `rd_replay_tool --presents` names it before
+`rendered`: `glow drawn (the tick's first present)`, `glow held`, `glow redrawn (...)` or `no glow`.
+
 **The alpha.** On the timer path the window takes alpha from a present clock: it advances by the
 running mean of the intervals between presents and moves towards the measured time by an eighth of
 the error a present; an error over half a tick, a pause of more than four steps or time going
