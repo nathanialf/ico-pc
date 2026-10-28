@@ -670,7 +670,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   stencil fail ...` and `profile: DATE stencil off (self-test)` (`rd_date_selftest_sabotage`);
   with `ICO_RD_FOG_SABOTAGE=local`, `local fail N, copy ok N`, the copy taken at both sizes and
   `profile: fog local off (self-test)` (`rd_fog_selftest_local_sabotage`). Both scripts take
-  `-DEXTRA` and `-DEXTRA2`, regexes that must each match the log at least once. The desktop's
+  `-DEXTRA` and `-DEXTRA2`, regexes that must each match the log at least once. With
+  `rd_shadow_selftest.cmake`, the shadow count's self-test, which the fog's first run and its run
+  at the second scene size run: every `shadow count: one draw (self-test: equal to the seven draws
+  over WxH, 142 band centres ok)` line matched, at least one (`rd_shadow_selftest`); with
+  `ICO_RD_SHADOW_SABOTAGE=1`, `shadow count: seven draws (self-test: one draw differs ...)` and
+  `profile: shadow count one draw off (self-test)` (`rd_shadow_selftest_sabotage`); both with
+  `_gl` twins. The desktop's
   local-read probe after the first self-tests (`ICO_RD_LOCAL_PROBE=1`, lavapipe being the desktop
   class with local read): with `ICO_RD_LOCAL_PROBE_SABOTAGE=fast` the local reads kept, the fog
   local at both sizes and `profile: local read on the desktop: kept (probe x vs y ms)`
@@ -924,6 +930,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   composite against the CPU B-spline within 2 LSB and a row across the shadow falling and rising
   once, the softening's AA0 (at its GS size) the area box of SCENE and its composite back the
   bilinear between AA0's texels, not counted above 1x (`checkComposite4x`, `checkSoftening4x`).
+  Case o: the count resolved in one draw from the stencil view against the seven stencil-tested
+  draws (`RdProfile.shadowOne` flipped between two recordings of one frame), the count at its GS
+  size (`rd__shadow_count_read`), SHADOW0-2 and SCENE byte for byte for the synthetic volumes,
+  Shadow.c's model and a rectangle at four sub-pixel offsets, at 1x, at scale 2 and at 1931 x 1093
+  texels (fractional on both axes), each recording resolved by the path asked
+  (`g_rdPerf.shadowOne`, `shadowSeven`); the one draw's table for n = 0, 1, 63, 64, 128 and 255
+  against 4 n mod 256 (`checkTable`, no device). Its `_gl` twin compares OpenGL's stencil view the
+  same way; without the view the comparison prints a line and is skipped.
 - `rd_state_test.c`: the recording half of rd without a GPU: list order, defaults, state leakage,
   the alpha test's plan for every Z write, AFAIL, ATE and alpha mask (one draw where the test decides
   nothing, `testAlphaMerge`), the start-up set's VU keys by variant and with the VU vertex
@@ -1434,6 +1448,8 @@ switches the tests and their registrations use:
 | `ICO_RD_LOCAL_PROBE` | `rd_profile.c`, `rd_local_probe.c` | in a headless run (no window), 1 the game's desktop local reads and their start-up probe where the self-tests run, 0 the local reads without the probe; unset there, the desktop class keeps the snapshots (`rd_local_probe_kept`, `rd_local_probe_off`) |
 | `ICO_RD_LOCAL_PROBE_SABOTAGE` | `rd_local_probe.c` | `slow` counts the local reads' probe time 4 times (turned off), `fast` a quarter (kept) (`rd_local_probe_off`, `rd_local_probe_kept`) |
 | `ICO_RD_FOG_SABOTAGE` | `rd_fog_path.c` | makes named paths fail the self-test (`rd_fog_selftest_fallback`; `local`: `rd_fog_selftest_local_sabotage`) |
+| `ICO_RD_SHADOW_ONE` | `rd_profile.c` | 0: the shadow count's seven stencil-tested draws (and the box reduction above 1x) instead of the one draw ([dev] `shadow_one`); 1 the one draw where the backend has the stencil view, kept whatever the self-test finds |
+| `ICO_RD_SHADOW_SABOTAGE` | `rd_replay.c`, `rd_shadow_selftest.c` | 1: the one draw's table is wrong at m = 1, so the shadow count's self-test fails and the seven draws resolve the count (`rd_shadow_selftest_sabotage`) |
 | `ICO_RD_DATE_SABOTAGE` | `rd_replay_tiler.c`, `rd_date_selftest.c` | 1: DATE's setup writes 0 into the stencil bit where the alpha's MSB is 1, so the self-test fails (`rd_date_selftest_sabotage`) |
 | `ICO_RD_BLEND_SABOTAGE` | `rd_blend_selftest.c` | makes named blend modes read white in the blend's self-test (`rd_blend_selftest_sabotage*`) |
 | `ICO_RD_VU_PREPASS_SABOTAGE` | `rd_vuprepass_selftest.c`, `rd_replay_vu.c` | 1: the pre-passes' self-test draws its first command's vertex records a texel off; `tri`: its triangles' slot A a slot off; `ticks`: the tick stage's tick 1 at tick 0's camera; each fails it and the pre-pass is turned off (`rd_vuprepass_selftest_sabotage`, `_sabotage_tri`, `_ticks`) |
