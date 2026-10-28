@@ -563,6 +563,11 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("perf_list_stamps", "false"), "0") == 0);
     CHECK(strcmp(ico_dev_env_value("perf_list_stamps", "true"), "1") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.perf_list_stamps"), "perf_list_stamps") == 0);
+    /* still_represent: a between-tick picture shown again (rd_reshow.c switchOn) */
+    CHECK(strcmp(ico_dev_env_name("still_represent"), "ICO_RD_STILL_REPRESENT") == 0);
+    CHECK(strcmp(ico_dev_env_value("still_represent", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("still_represent", "true"), "1") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.still_represent"), "still_represent") == 0);
     /* the device profile's flags (port/render/rd_profile.c rd__profile_init):
        date_path stencil or snapshot as they are, store_plan and blur_fold
        on/off, uint_view on/off or work */
