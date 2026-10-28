@@ -71,17 +71,17 @@ VuVSOut vu_grid_main(uint vid, uint variant)
 
 VuVSOut vu_grid_vs(uint vid : SV_VertexID)
 {
-    return vu_grid_main(vid, VU_GRID);
+    return vu_grid_main(VU_MERGE_ENTRY(vid), VU_GRID);
 }
 
 VuVSOut vu_grid_lit_vs(uint vid : SV_VertexID)
 {
-    return vu_grid_main(vid, VU_GRID_LIT);
+    return vu_grid_main(VU_MERGE_ENTRY(vid), VU_GRID_LIT);
 }
 
 VuVSOut vu_grid_spec_vs(uint vid : SV_VertexID)
 {
-    return vu_grid_main(vid, VU_GRID_SPEC);
+    return vu_grid_main(VU_MERGE_ENTRY(vid), VU_GRID_SPEC);
 }
 
 // The vertex pre-pass: vertex vu_rec.z + id of each variant
