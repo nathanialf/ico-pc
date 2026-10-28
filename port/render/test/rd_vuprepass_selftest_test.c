@@ -13,7 +13,9 @@
  *   2. the summary text (rd_summary_text) says so: "VU pre-pass on
  *      (self-test: ok)", "VU pre-pass off (self-test: the pictures differ"
  *      or "VU pre-pass off by the settings"; with it on, its draws batched
- *      (g_rd.vuPreBatch) unless ICO_RD_VU_PREPASS_BATCH=0; and the device profile's
+ *      (g_rd.vuPreBatch) unless ICO_RD_VU_PREPASS_BATCH=0; the draw merge
+ *      on (g_rd.vuMerge, "VU merge on") unless ICO_RD_VU_MERGE=0 or on
+ *      Direct3D 11, the self-test's pictures drawn through it; and the device profile's
  *      class (rd_profile.c) names the backend, OpenGL and D3D11 in the
  *      desktop column: "immediate-mode GPU (... OpenGL):";
  *   3. the reachable set (rd__enumerate_reachable, what the window makes
@@ -161,6 +163,17 @@ int main(int argc, char **argv)
         printf("  the pre-pass's draws %s\n", g_rd.vuPreBatch ? "batched" : "one an entry");
         CHECK(g_rd.vuPreBatch == wantBatch, "the pre-pass's draws %s, %s expected",
               g_rd.vuPreBatch ? "batched" : "one an entry", wantBatch ? "batched" : "one an entry");
+    }
+    {
+        /* the draw merge on unless ICO_RD_VU_MERGE=0 or on Direct3D 11
+           (rd_replay_vu.c vuMergeInit): the self-test's draws went through it */
+        const char *m = getenv("ICO_RD_VU_MERGE");
+        const bool wantMerge = !(m && strcmp(m, "0") == 0) && rhi_backend() != RHI_BACKEND_D3D11;
+        printf("  the draw merge %s\n", g_rd.vuMerge ? "on" : "off");
+        CHECK(g_rd.vuMerge == wantMerge, "the draw merge %s, %s expected",
+              g_rd.vuMerge ? "on" : "off", wantMerge ? "on" : "off");
+        const char *mw = wantMerge ? "; VU merge on; " : "; VU merge off; ";
+        CHECK(strstr(sum, mw) != NULL, "the summary lacks \"%s\"", mw);
     }
     {
         /* the class ends with the backend's name: "(Mesa, Vulkan):",
