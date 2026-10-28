@@ -602,7 +602,8 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
         *h = 64;
         break;
     case RD_TARGET_WORK0:
-    case RD_TARGET_WORK3: /* TBP 0x3000, 256 x 128 at 4:3 */
+    case RD_TARGET_WORK3:      /* TBP 0x3000, 256 x 128 at 4:3 */
+    case RD_TARGET_WORK3_HELD: /* WORK3's copy (rd_glow_hold.c) */
         *w = gsW / 2;
         *h = 128;
         break;
@@ -769,9 +770,9 @@ void rd__target_scale_of(RdTargetRec *t, int named)
 }
 
 static const char *const s_targetNames[RD_TARGET_COUNT] = {
-    "SCENE",         "DISPLAY",   "SHADOW0",  "SHADOW1",   "SHADOW2",   "WORK0",
-    "WORK1",         "WORK2",     "WORK3",    "AA0",       "AA1",       "FEED128",
-    "DATE_SNAPSHOT", "AURA_WORK", "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD"};
+    "SCENE",    "DISPLAY",   "SHADOW0",   "SHADOW1",      "SHADOW2",   "WORK0",         "WORK1",
+    "WORK2",    "WORK3",     "AA0",       "AA1",          "FEED128",   "DATE_SNAPSHOT", "AURA_WORK",
+    "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD", "WORK3_HELD"};
 
 const char *rd__target_name(uint32_t id)
 {
