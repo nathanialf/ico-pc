@@ -670,7 +670,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   stencil fail ...` and `profile: DATE stencil off (self-test)` (`rd_date_selftest_sabotage`);
   with `ICO_RD_FOG_SABOTAGE=local`, `local fail N, copy ok N`, the copy taken at both sizes and
   `profile: fog local off (self-test)` (`rd_fog_selftest_local_sabotage`). Both scripts take
-  `-DEXTRA` and `-DEXTRA2`, regexes that must each match the log at least once.
+  `-DEXTRA` and `-DEXTRA2`, regexes that must each match the log at least once. The desktop's
+  local-read probe after the first self-tests (`ICO_RD_LOCAL_PROBE=1`, lavapipe being the desktop
+  class with local read): with `ICO_RD_LOCAL_PROBE_SABOTAGE=fast` the local reads kept, the fog
+  local at both sizes and `profile: local read on the desktop: kept (probe x vs y ms)`
+  (`rd_local_probe_kept`); with `slow` turned off, `DATE stencil off (probe)`, every target made
+  again and the fog in place at both sizes (`rd_local_probe_off`)
+  ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-desktops-local-read-and-its-probe)).
+- `rd_local_probe_test.c`: the local-read probe's verdict on synthetic times, no device: kept up to
+  5 % slower, off above, kept with a time missing (`rd_local_probe_rule`).
 - `rd_fog_test.c`: the depth fog of `fog_DrawFog` on the CPU and on the device, every depth path
   (`rd_fog`, `rd_fog_*`; the local read from the start in `rd_fog_local`, the other paths' replays
   the same bytes); at 2x a depth ramp's fog alpha equals the above-1x formula (the table
@@ -1249,7 +1257,7 @@ Not twinned: any test whose environment holds `ICO_VK_FAKE_*` or `ICO_VK_ATTACHM
 game or work on the replay tool's files (`rd_replay_tool*`, `rd_fog_depth_copy_dump*`,
 `rd_vustage_ab`, `rd_vubatch_ab`, the frame gates, `coverage_corpus`; the compare below covers the dumps), and the
 tests with no device (`rd_alpha_plan`, `rd_fx_frame`, `rd_vu_frac`, `rd_mip`, `rd_passring`,
-`rd_filter`, `rd_bisect_plan`, `rd_stream_audit`, `fog_lut*`, `gsb_cull*`, `texpack*`, `gltf`).
+`rd_filter`, `rd_bisect_plan`, `rd_stream_audit`, `rd_local_probe_rule`, `fog_lut*`, `gsb_cull*`, `texpack*`, `gltf`).
 The two-pass blend copies (`*_nodual`, `ICO_RD_NO_DUAL=1`, the renderer's own switch) are
 twinned. The sources decide what else skips: `ctest -L gl` output lists the skipped ones.
 
@@ -1423,6 +1431,8 @@ switches the tests and their registrations use:
 | `ICO_RD_DATE_PATH` | `rd_profile.c`, `rd_date_selftest.c` | `stencil` DATE through the stencil bit wherever the device has local read, kept whatever the self-test finds; `snapshot` the R8 snapshot (`rd_date_selftest`) |
 | `ICO_RD_BLUR_FOLD` | `rd_profile.c` | 1 folds the staticBlur pairs (`fx_blur2_ps`) on any device, 0 never (the A/B of the replay tool's `--pass-dump`) |
 | `ICO_RD_DEPTH_COPY` | `rd_fog_path.c` | 0 samples the depth in place, 1 copies it |
+| `ICO_RD_LOCAL_PROBE` | `rd_profile.c`, `rd_local_probe.c` | in a headless run (no window), 1 the game's desktop local reads and their start-up probe where the self-tests run, 0 the local reads without the probe; unset there, the desktop class keeps the snapshots (`rd_local_probe_kept`, `rd_local_probe_off`) |
+| `ICO_RD_LOCAL_PROBE_SABOTAGE` | `rd_local_probe.c` | `slow` counts the local reads' probe time 4 times (turned off), `fast` a quarter (kept) (`rd_local_probe_off`, `rd_local_probe_kept`) |
 | `ICO_RD_FOG_SABOTAGE` | `rd_fog_path.c` | makes named paths fail the self-test (`rd_fog_selftest_fallback`; `local`: `rd_fog_selftest_local_sabotage`) |
 | `ICO_RD_DATE_SABOTAGE` | `rd_replay_tiler.c`, `rd_date_selftest.c` | 1: DATE's setup writes 0 into the stencil bit where the alpha's MSB is 1, so the self-test fails (`rd_date_selftest_sabotage`) |
 | `ICO_RD_BLEND_SABOTAGE` | `rd_blend_selftest.c` | makes named blend modes read white in the blend's self-test (`rd_blend_selftest_sabotage*`) |
