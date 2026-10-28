@@ -160,7 +160,8 @@ const char *ico_config_ini_key(const char *toml_path);
    (the variable names what is static); pipeline_set full, careful or lazy as they are; pass_split a
    count; gpu_*, attachment_read, storage_pass_merge, store_plan,
    blur_fold, uint_view, alpha_plan, fx_plan, fx_dst_local, vu_planes,
-   shadow_one, shadow_bspline, vu_prepass, crack_fill and joystick_directinput 1/true/on/yes ->
+   shadow_one, shadow_bspline, vu_prepass, vu_prepass_batch, still_represent, glow_redraw,
+   crack_fill and joystick_directinput (every other key: the default branch) 1/true/on/yes ->
    "1", 0/false/off/no -> "0". ico_ini_export sets them. */
 const char *ico_dev_env_name(const char *key);
 const char *ico_dev_env_value(const char *key, const char *value);
