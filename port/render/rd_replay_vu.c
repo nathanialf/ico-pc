@@ -24,7 +24,10 @@
  * mesh's stream and index list, copied into the ring once per replay.
  * Scissor batches (code 36) are two draws per batch: the triangles
  * SCISSOR_COMMON clips (ICO_VU_CUT_ONLY) with PRIM.ABE forced on, as the
- * fans' PRIM 0x5D has it, then the strip's own kicks (ICO_VU_KICK_ONLY). */
+ * fans' PRIM 0x5D has it, then the strip's own kicks (ICO_VU_KICK_ONLY);
+ * where the blend form and the plans allow, the kicks under the cut's
+ * pipeline with their pixels unblended (ICO_VU_FUSED: the fused pair,
+ * vuFuseVerdict), so the draw merge joins the two. */
 
 static uint32_t s_zeroBonesFor; /* replay counter of s_zeroBones */
 
@@ -463,9 +466,10 @@ static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t 
  * no DATE through the stencil bit, no destination read, outside the loss
  * bisect's window and the pass split, is held in the open run instead of
  * drawn (vuRunTake); code 36's cut and kick draws too, since the merge
- * builds read each draw's own VuCB (its ICO_VU_CUT_ONLY / KICK_ONLY flag)
- * through the table, though a cut (ABE forced on) and its kick seldom
- * share a pipeline key.  The next
+ * builds read each draw's own VuCB (its ICO_VU_CUT_ONLY / KICK_ONLY /
+ * FUSED flags) through the table: a cut (ABE forced on) and its kick share
+ * a pipeline key where the state has ABE on or the pair is fused
+ * (vuFuseVerdict).  The next
  * such draw joins it when it has the same pipeline key, group 1 (the
  * stream buffer), group 2 (the textures), DrawCB bytes, FrameCB, scissor,
  * pass and GPU timing effect, up to RD_VU_MERGE_MAX draws whose raised
@@ -764,6 +768,130 @@ void rd__replay_vu_flush_post(Replay *r, int post)
     }
 }
 
+/* The passes of a VU draw under state s (vuDraw): the screen planner's,
+ * the alpha plan's under the command's As range (s_vuAlpha, doVuDraw), as
+ * VU keys (vs, the program, vu_ps or vu_texa_ps, the clip plane, the twin
+ * without the planes at a fractional scale), the exact blend's and the
+ * two-pass blend's expansion; their count */
+static int vuPlan(const Replay *r, const RdStateBlock *s, const DrawSetup *ds, uint8_t prog,
+                  uint8_t vs, const IcoVuCB *vcb, RdDrawPass dp[8])
+{
+    RdDrawPass pl[2];
+    int npl = rd__plan_screen_draw(s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, ds->tc->format,
+                                   ds->depthFmt, pl);
+    rd__plan_screen_draw_alpha(s, s_vuAlpha, pl, &npl); /* the command's As range (doVuDraw) */
+    for (int i = 0; i < npl; i++) {
+        /* the meshes' main shader serves every program (RD_PROG_PRELIT);
+         * the sprites' keeps the particles' program */
+        pl[i].key.gs.program = vs == RD_VS_VU_MAIN ? RD_PROG_PRELIT : prog;
+        pl[i].key.vs = vs;
+        /* the planner's sprite_texa_ps becomes vu_texa_ps */
+        pl[i].key.fs = pl[i].key.fs == RD_FS_SPRITE_TEXA ? RD_FS_VU_TEXA : RD_FS_VU;
+        if (vcb->batch[2] != 0u) {
+            /* a clip plane (rd_chain.h): the pixels past it are discarded,
+             * which the exact blend's storage path must know (rd_dst_read.c
+             * passDiscards) */
+            pl[i].flags |= ICO_DF_PLANE;
+        }
+        /* the pixel side at a fractional scale (rd_pixel_plan.c) */
+        pl[i].key.fs = (uint8_t)rd__vu_pixel_fs((RdFsId)pl[i].key.fs, s, ds->tc, &pl[i]);
+    }
+    /* the exact blend's passes, two passes without dual-source blend */
+    return rd__replay_expand_passes(r, pl, npl, dp);
+}
+
+/* ------------------------------------------------ the fused scissor pair
+ * docs/port/VU1_PROGRAMS.md, "The fused scissor pair".  A code 36 batch is
+ * two draws (doVuDraw): its cut fans (ICO_VU_CUT_ONLY) under the state with
+ * PRIM.ABE forced on, then its kicks (ICO_VU_KICK_ONLY) under the state.
+ * With the state's ABE off the two draws differ in the pipeline key's blend
+ * and the draw merge cannot join them.  Fused, the kick draw takes the
+ * cut's state and so its pipeline, DrawCB and key, with ICO_VU_FUSED: the
+ * merge builds mark its triangles (VuVSOut.r.w, vu_common.hlsli
+ * vu_fused_out) and vu_ps writes their pixels as gs_dual_out writes a PABE
+ * pixel whose As has its MSB clear, c0 = Cs and c1 1.0 for the lerps or 0
+ * for Cd*FIX + Cs (DF_C1_DST), so the blender stores Cs: what the kick's own
+ * pipeline (blending off) stores.  The same triangles in the same order (a
+ * batch's cuts, then its kicks; the merge keeps the draws' order), the same
+ * colour, alpha, depth and stencil arithmetic: byte for byte the same.
+ * Fused only where that holds, for the whole command (its state, target and
+ * pass are the same for every batch): the draw merge on and both entries
+ * (the draw's and the fallback's) with a merge build (BUILD); each state's
+ * plan one pass (PASSES: no alpha-test split, dual-source blending) with
+ * no destination read and no DATE through the stencil bit (DST); the
+ * cut's blend a lerp or Cd*FIX + Cs (BLEND: the premultiplied adds and
+ * subtracts and the Ad forms cannot drop Cd); the cut's pixel shader with
+ * the planes (PLANES: vu_np_ps does not read the mark); the kick's plan the
+ * cut's but for the blend (PLANS: the key's blend, the flags FIX_FACTOR,
+ * PREMUL and C1_DST, the clamped FIX and dstWant, as the alpha plan's
+ * blending off normalises them, rd_alpha_plan.c) */
+enum { VU_FUSE_YES = -1, VU_FUSE_SAME = -2 }; /* else RD_VU_FUSE_*, the reason kept apart */
+
+static bool vuPassEqual(const RdDrawPass *a, const RdDrawPass *b)
+{
+    return memcmp(&a->key, &b->key, sizeof(a->key)) == 0 && a->flags == b->flags &&
+           a->modeZ == b->modeZ && a->aref == b->aref && a->fix == b->fix && a->fixGs == b->fixGs &&
+           a->dstWant == b->dstWant && a->csOnly == b->csOnly;
+}
+
+/* the verdict on the command's pairs: VU_FUSE_YES fused, VU_FUSE_SAME the
+ * two draws under one plan already (the state's ABE on, or the alpha plan's
+ * blending off on the cut), else the reason they are kept apart.  fan: the
+ * cut's state (ABE on); vs, progVs: the draw's entry and the fallback's */
+static int vuFuseVerdict(const Replay *r, const RdStateBlock *fan, const DrawSetup *ds,
+                         uint8_t prog, uint8_t vs, uint8_t progVs, const IcoVuCB *vcb)
+{
+    if (r->st.ds.abe) {
+        return VU_FUSE_SAME;
+    }
+    if (!g_rd.vuFuse) {
+        return RD_VU_FUSE_OFF;
+    }
+    if (!g_rd.vsMerge[vs].id || !g_rd.vsMerge[progVs].id) {
+        return RD_VU_FUSE_BUILD;
+    }
+    /* the planners' counts as they were: the draws plan again (vuDraw) */
+    const uint32_t onePass = g_rdPerf.alphaOnePass, opaque = g_rdPerf.alphaOpaque;
+    const uint32_t noPlanes = g_rdPerf.vuNoPlanes;
+    RdDrawPass cut[8], kick[8];
+    const int nc = vuPlan(r, fan, ds, prog, vs, vcb, cut);
+    const int nk = vuPlan(r, &r->st, ds, prog, vs, vcb, kick);
+    g_rdPerf.alphaOnePass = onePass;
+    g_rdPerf.alphaOpaque = opaque;
+    g_rdPerf.vuNoPlanes = noPlanes;
+    bool same = nc == nk;
+    for (int i = 0; same && i < nc; i++) {
+        same = vuPassEqual(&cut[i], &kick[i]);
+    }
+    if (same) {
+        return VU_FUSE_SAME;
+    }
+    if (nc != 1 || nk != 1) {
+        return RD_VU_FUSE_PASSES;
+    }
+    if (r->dateStNow || cut[0].key.dst != RHI_DST_READ_NONE ||
+        kick[0].key.dst != RHI_DST_READ_NONE) {
+        return RD_VU_FUSE_DST;
+    }
+    const RdBlendPath bp = cut[0].key.colorFmt == RHI_FMT_RGBA8_UINT
+                               ? RD_BP_NONE
+                               : rd__blend_path(cut[0].key.gs.blend);
+    if (bp != RD_BP_LERP && bp != RD_BP_DST_FIX) {
+        return RD_VU_FUSE_BLEND;
+    }
+    if (cut[0].key.fs != RD_FS_VU && cut[0].key.fs != RD_FS_VU_TEXA) {
+        return RD_VU_FUSE_PLANES;
+    }
+    /* the cut's pass as the planner makes it with ABE off (rd_alpha_plan.c
+     * rd__plan_screen_draw_alpha's normalisation) */
+    RdDrawPass off = cut[0];
+    off.key.gs.blend = RD_BLEND_COUNT;
+    off.flags &= ~(uint32_t)(ICO_DF_FIX_FACTOR | ICO_DF_PREMUL | ICO_DF_C1_DST);
+    off.fix = r->st.ds.blendFix;
+    off.dstWant = 0;
+    return vuPassEqual(&off, &kick[0]) ? VU_FUSE_YES : RD_VU_FUSE_PLANS;
+}
+
 /* One VU draw call under the planned passes of state s.  vs: the vertex
  * shader, RD_VS_VU_MAIN or RD_VS_VU_PARTICLE_MAIN for a command the
  * pre-passes recorded (vu_main_vs's pipelines carry RD_PROG_PRELIT whatever
@@ -803,28 +931,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         return;
     }
     const uint64_t ua = rhi_limits()->uniformAlign;
-    RdDrawPass pl[2], dp[8];
-    int npl = rd__plan_screen_draw(s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, ds->tc->format,
-                                   ds->depthFmt, pl);
-    rd__plan_screen_draw_alpha(s, s_vuAlpha, pl, &npl); /* the command's As range (doVuDraw) */
-    for (int i = 0; i < npl; i++) {
-        /* the meshes' main shader serves every program (RD_PROG_PRELIT);
-         * the sprites' keeps the particles' program */
-        pl[i].key.gs.program = vs == RD_VS_VU_MAIN ? RD_PROG_PRELIT : prog;
-        pl[i].key.vs = vs;
-        /* the planner's sprite_texa_ps becomes vu_texa_ps */
-        pl[i].key.fs = pl[i].key.fs == RD_FS_SPRITE_TEXA ? RD_FS_VU_TEXA : RD_FS_VU;
-        if (vcb->batch[2] != 0u) {
-            /* a clip plane (rd_chain.h): the pixels past it are discarded,
-             * which the exact blend's storage path must know (rd_dst_read.c
-             * passDiscards) */
-            pl[i].flags |= ICO_DF_PLANE;
-        }
-        /* the pixel side at a fractional scale (rd_pixel_plan.c) */
-        pl[i].key.fs = (uint8_t)rd__vu_pixel_fs((RdFsId)pl[i].key.fs, s, ds->tc, &pl[i]);
-    }
-    /* the exact blend's passes, two passes without dual-source blend */
-    const int np = rd__replay_expand_passes(r, pl, npl, dp);
+    RdDrawPass dp[8];
+    const int np = vuPlan(r, s, ds, prog, vs, vcb, dp);
     /* each pass's pipeline: the main shader's, or (it could not be made)
      * the program's own entry, which ignores the record (logged once) */
     RdPipeKeyInt keys[8];
@@ -2298,6 +2406,11 @@ const char *rd__vu_merge_text(void)
     return g_rd.vuMerge ? "on" : "off";
 }
 
+const char *rd__vu_fuse_text(void)
+{
+    return g_rd.vuFuse ? "on" : "off";
+}
+
 static void vuMergeFree(void)
 {
     for (int v = 0; v < RD_VS_COUNT; v++) {
@@ -2307,6 +2420,7 @@ static void vuMergeFree(void)
         g_rd.vsMerge[v] = (RhiShader){0};
     }
     g_rd.vuMerge = false;
+    g_rd.vuFuse = false;
 }
 
 static void vuMergeInit(void)
@@ -2344,7 +2458,18 @@ static void vuMergeInit(void)
             vuMergeFree();
         }
     }
-    rd__log("VU merge: %s", s_mergeWhy);
+    /* the fused scissor pair (vuFuseVerdict): with the merge alone */
+    const char *fenv = getenv("ICO_RD_VU_FUSE");
+    const bool fuseOff = fenv && strcmp(fenv, "0") == 0;
+    g_rd.vuFuse = g_rd.vuMerge && !fuseOff;
+    rd__log("VU merge: %s; %s", s_mergeWhy,
+            g_rd.vuFuse ? "code 36's cut and kick draws of a batch fused: the kicks under the "
+                          "cut's pipeline, their pixels unblended, where the blend is a lerp or "
+                          "Cd*FIX + Cs and the plans agree ([dev] vu_fuse = false keeps the "
+                          "kicks' own pipeline)"
+            : fuseOff   ? "the fuse off ([dev] vu_fuse = false, ICO_RD_VU_FUSE=0): code 36's "
+                          "kicks under their own pipeline"
+                        : "the fuse off with the merge");
 }
 
 void rd__vu_prepass_init(const RhiLimits *lim)
@@ -2580,6 +2705,13 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     kick.draw[2] |= ICO_VU_KICK_ONLY;
     RdStateBlock fan = r->st;
     fan.ds.abe = 1; /* the fans' PRIM is the common block's 0x5D: ABE on */
+    /* the fused pair: the kicks under the cut's state, their pixels
+     * unblended (vuFuseVerdict) */
+    const int fuse = vuFuseVerdict(r, &fan, &ds, p.prog, vs, progVs, &vcb);
+    if (fuse == VU_FUSE_YES) {
+        kick.draw[2] |= ICO_VU_FUSED;
+    }
+    const RdStateBlock *kickSt = fuse == VU_FUSE_YES ? &fan : &r->st;
     for (uint32_t b = p.firstBatch; b < last; b++) {
         const RdVuBatchRec *br = &m->batches[b];
         const uint32_t end = rd__vu_sheet_end(m, br->firstIndex + br->indexCount, extended);
@@ -2589,9 +2721,16 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         if (g_rdWin.first && g_rdWin.drawLast) {
             g_rdVuCur.batch = b;
         }
+        if (fuse == VU_FUSE_YES) {
+            g_rdPerf.vuFusePairs++;
+        } else if (fuse == VU_FUSE_SAME) {
+            g_rdPerf.vuFuseSame++;
+        } else {
+            g_rdPerf.vuFuseKept[fuse]++;
+        }
         vuDraw(r, &fan, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
                streamSize, &cut, bonesOff, &mix, br->firstIndex, end - br->firstIndex);
-        vuDraw(r, &r->st, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
+        vuDraw(r, kickSt, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
                streamSize, &kick, bonesOff, &mix, br->firstIndex, end - br->firstIndex);
     }
 }
