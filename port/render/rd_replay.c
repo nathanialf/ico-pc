@@ -3133,40 +3133,6 @@ static void sheetParam(const RdTexRec *t, float param[4])
     }
 }
 
-/* Above 1x (common.hlsli DF_ABOVE1X): a pass of sprite_ps, sprite_aa1_ps
- * or sprite_stq_ps whose texture is a colour view of a target, both filters
- * linear, no GS levels, the texture's scale not the bound target's: the
- * shadow levels (scale 1) composited into SCENE, the softening's SCENE into
- * AA0, the reduction's fallback sprite when an axis leaves the GS's filter
- * (a1xGs); never a work buffer.  The shadow chain's
- * first level reads the count already box-averaged to its GS size
- * (shadowReduce), at scale 1 as the levels are.  The scales are equal for
- * every target at scale 1 but DISPLAY's rows at full height (sy 2), which
- * only the reduction reads into, one SCENE row a DISPLAY row (a1xGs), so
- * never at scale 1. */
-static int spriteAbove1x(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds)
-{
-    const RdDrawState *d = &r->st.ds;
-    if (r->a1xGs || !ds->textured || !d->texEnabled || ds->gsLevels || ds->replacement || !ds->tc ||
-        d->magFilter != RD_FILTER_LINEAR || d->minFilter != RD_FILTER_LINEAR ||
-        (dp->key.fs != RD_FS_SPRITE && dp->key.fs != RD_FS_SPRITE_AA1 &&
-         dp->key.fs != RD_FS_SPRITE_STQ && dp->key.fs != RD_FS_SPRITE_PLANES &&
-         dp->key.fs != RD_FS_SPRITE_STQ_PLANES)) {
-        return 0;
-    }
-    const RdTexRec *t = rd__tex_rec(r->st.tex);
-    if (!t || t->kind != RD_TEXKIND_TARGET || t->view == RD_VIEW_DEPTH) {
-        return 0;
-    }
-    const RdTargetRec *src = rd__target_rec(t->target);
-    if (!src || rd__work_class(src)) {
-        return 0;
-    }
-    /* the shadow count at its GS size (resolveTexture) is at scale 1 */
-    const int red = s_shadowRed.id && ds->tex.id == s_shadowRed.id;
-    return (red ? 1.0f : src->sx) != ds->tc->sx || (red ? 1.0f : src->sy) != ds->tc->sy;
-}
-
 /* DrawCB for one planned pass: sprite_ps and vu_ps read the same fields. */
 static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds, IcoDrawCB *cb)
 {
@@ -3241,7 +3207,7 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
                            (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t) ? ICO_DF_TEXA_CLAMP_T : 0u);
         }
     }
-    if (spriteAbove1x(r, dp, ds)) {
+    if (rd__sprite_above1x(r, dp, ds, s_shadowRed.id)) {
         /* above 1x: the step's kernel (sprite.hlsl sprite_above1x), the
          * wrap its loads reproduce */
         cb->mode[0] |=
