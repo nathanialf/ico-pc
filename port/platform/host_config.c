@@ -515,6 +515,10 @@ static const struct {
        one draw reading the stencil (an A/B; port/render/rd_replay.c
        shadowCountOne) */
     {"dev.shadow_one", "shadow_one"},
+    /* true: the shadow composites above 1x through the cubic B-spline
+       instead of one bilinear tap (an A/B; port/render/rd_fx_plan.c
+       rd__sprite_above1x) */
+    {"dev.shadow_bspline", "shadow_bspline"},
     /* the Vulkan dynamic depth and blend state: true (the default) as the
        device offers it, depth the depth alone, false neither (every
        pipeline static; port/rhi/vk/vk_device.c) */
@@ -578,6 +582,7 @@ static const struct {
     {"fx_dst_local", "ICO_RD_FX_DST_LOCAL"},
     {"vu_planes", "ICO_RD_VU_PLANES"},
     {"shadow_one", "ICO_RD_SHADOW_ONE"},
+    {"shadow_bspline", "ICO_RD_SHADOW_BSPLINE"},
     /* port/rhi/vk/vk_device.c (the dynamic state): 1 both static, blend the
        blend static, 0 as the device offers */
     {"dynamic_state", "ICO_VK_FAKE_NO_DYNAMIC"},
