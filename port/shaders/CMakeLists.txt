@@ -168,6 +168,21 @@ foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:sk
     ico_add_shader(vu_${_e}_batch_pre_vs vu_${_f}.hlsl vu_${_e}_pre_vs vertex
                    DEFINES ICO_VU_PRE_BATCH=1)
 endforeach()
+# The draw merge's builds (vu_X_merge_vs, vu_X_merge_plain_vs, vu_merge_main_vs)
+# the mesh and grid programs' entries (both variants) and vu_main_vs read
+# every draw's VuCB and VuBoneCB from the upload ring at t5 through the run's
+# table (ICO_VU_MERGE, vu_common.hlsli vu_merge_entry), so consecutive draws
+# with the same state are one indexed draw (rd_replay_vu.c vuDraw; [dev]
+# vu_merge = false draws through the builds above, one draw a command)
+foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit grid:grid grid_lit:grid
+        grid_spec:grid)
+    string(REGEX REPLACE ":.*" "" _e "${_v}")
+    string(REGEX REPLACE ".*:" "" _f "${_v}")
+    ico_add_shader(vu_${_e}_merge_vs vu_${_f}.hlsl vu_${_e}_vs vertex DEFINES ICO_VU_MERGE=1)
+    ico_add_shader(vu_${_e}_merge_plain_vs vu_${_f}.hlsl vu_${_e}_vs vertex
+                   DEFINES ICO_VU_MERGE=1 ICO_VU_PLAIN=1)
+endforeach()
+ico_add_shader(vu_merge_main_vs vu_tri.hlsl vu_main_vs vertex DEFINES ICO_VU_MERGE=1)
 # The 2D plane builds (sprite_*_ps_planes and their twins)
 # the screen-prim triangles with their planes (rd_screen_planes.c): the
 # planes build of sprite.hlsl (ICO_SPRITE_PLANES), whose SpriteVSOut and
