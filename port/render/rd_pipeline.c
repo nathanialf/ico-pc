@@ -1946,6 +1946,7 @@ static double s_setSavedMs;
 /* the counts of one createKeys */
 typedef struct PreCounts {
     uint32_t failed, compiled, threads;
+    uint32_t batches;   /* the rhi_create_pipelines calls made */
     uint32_t stoppedAt; /* the keys gone over when the progress function stopped it */
     int stop;
     /* why the policy's budget stopped the set ("" if it did not): the rest
@@ -2081,6 +2082,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             }
             RhiPipelineBatch batch = {preWait, &pb, bms, 1, s_setPolicy.maxThreads};
             pb.base = first;
+            c->batches++;
             const long beforeKb = budgeted ? residentKb() : -1;
             RhiStats st0, st1;
             rhiPipeCounts(&st0);
@@ -2312,6 +2314,88 @@ uint32_t rd__pipeline_create_gathered(bool *stopped)
             s_count - before, m, rd__now_ms() - t0, c.failed, c.compiled, c.threads,
             c.threads == 1 ? "" : "s", c.stop ? "; stopped (the game is closing)" : "");
     return m;
+}
+
+/* The display change's progress function (rd_set_display_progress) */
+static RdPipelineProgressFn s_displayFn;
+static void *s_displayCtx;
+
+void rd_set_display_progress(RdPipelineProgressFn fn, void *ctx)
+{
+    s_displayFn = fn;
+    s_displayCtx = fn != NULL ? ctx : NULL;
+}
+
+/* A display change (rd_core.c rd_begin_frame, after the settings and the
+ * targets): the reachable set of the new state (rd__enumerate_reachable:
+ * the preset, the scene scale and with it the no-planes twins, rd_pixel_plan.c)
+ * against the cache, the keys it lacks made as the start-up set makes its
+ * keys (createKeys: in batches on the driver's threads, under the window's
+ * policy, the display change's progress function running between and
+ * while they compile), before the first replay at the new state draws
+ * through them.  Only after a start-up set (the window's runs; a run on
+ * first use, rd_pipelines_lazy, stays one).  On a PowerVR DXT-48 phone
+ * Original -> Enhanced at 2364x1080 (2.8125 x 2.41) made the vu_np_ps twins
+ * on first use at 640-700 ms each on the main thread and the game stopped.
+ * logAlways: a line when nothing was missing too (the targets were made
+ * again). */
+void rd__display_pipelines(bool logAlways)
+{
+    static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
+    static RdPipeKeyInt miss[RD_PIPELINE_CACHE_MAX];
+    if (!g_rd.hasDevice || !s_startupSet || s_lazy.on) {
+        if (logAlways && g_rd.hasDevice && s_lazy.on) {
+            rd__log("display change: pipelines made on first use (no start-up set on this run)");
+        }
+        return;
+    }
+    const double t0 = rd__now_ms();
+    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_CACHE_MAX);
+    const uint32_t m = n < RD_PIPELINE_CACHE_MAX ? n : RD_PIPELINE_CACHE_MAX;
+    uint32_t k = 0;
+    for (uint32_t i = 0; i < m; i++) {
+        RdPipeKeyInt tmp;
+        bool found;
+        (void)probeKey(drawKey(&keys[i], &tmp), &found);
+        if (!found) {
+            miss[k++] = keys[i];
+        }
+    }
+    if (k == 0) {
+        if (logAlways) {
+            rd__log("display change: 0 pipelines of the new state made in 0 batches, %.1f ms (its "
+                    "%u keys made already)",
+                    rd__now_ms() - t0, n);
+        }
+        return;
+    }
+    const uint32_t before = s_count;
+    const RdPipelineProgressFn fn = s_progressFn;
+    void *const ctx = s_progressCtx;
+    static PreTimes times;
+    PreCounts c;
+    memset(&times, 0, sizeof(times));
+    s_setSavedMs = t0;
+    s_progressFn = s_displayFn;
+    s_progressCtx = s_displayCtx;
+    createKeys(miss, k, false, &times, &c);
+    s_progressFn = fn;
+    s_progressCtx = ctx;
+    rd__log("display change: %u pipelines of the new state made in %u batches, %.1f ms (%u of its "
+            "%u keys missing, %u failed; %u compiled on %u thread%s, the longest %.2f s)%s%s",
+            s_count - before, c.batches, rd__now_ms() - t0, k, n, c.failed, c.compiled, c.threads,
+            c.threads == 1 ? "" : "s", times.n ? (double)times.ms[0] / 1000.0 : 0.0,
+            c.stop ? "; stopped (the game is closing): the rest on first use" : "",
+            c.budget[0] ? "; stopped at the policy's budget: the rest on first use" : "");
+    if (c.budget[0]) {
+        rd__log("display change: %s", c.budget);
+    }
+    if (c.compiled) {
+        preTimesLog(&times);
+    }
+    if (!c.stop && cacheKeptPerBatch()) {
+        (void)rhi_pipeline_cache_save(); /* the next change, or start, finds them */
+    }
 }
 
 uint32_t rd__pipeline_count(void)
