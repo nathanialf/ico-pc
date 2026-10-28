@@ -2642,6 +2642,7 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     }
     switch (k->fs) {
     case RD_FS_BOX_REDUCE:
+    case RD_FS_SHADOW_COUNT:
         return RD_KF_SHADOW;
     case RD_FS_FOG:
     case RD_FS_FOG_BUFFER:
@@ -3079,6 +3080,13 @@ RdPipeKeyInt rd__shadow_reduce_key(void)
     return rd__post_key(RD_VS_BLIT, RD_FS_BOX_REDUCE, RHI_FMT_RGBA8_UNORM);
 }
 
+/* The count in one draw (rd_replay.c shadowCountOne): RGBA8 like the
+ * count, no depth attachment (the stencil is read through its view) */
+RdPipeKeyInt rd__shadow_count_key(void)
+{
+    return rd__post_key(RD_VS_BLIT, RD_FS_SHADOW_COUNT, RHI_FMT_RGBA8_UNORM);
+}
+
 RdPipeKeyInt rd__shadow_resolve_key(int pass)
 {
     RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_RGBA8_UNORM);
@@ -3110,6 +3118,13 @@ uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_
     }
     const RdPipeKeyInt kr = rd__shadow_reduce_key(); /* box reduction to the GS size */
     n = rd__add_pipe_key(out, max, n, &kr);
+    /* the count in one draw where the profile has it; the seven draws and
+     * the reduction above stay in the set, its fallback (a self-test that
+     * turns the one draw off, [dev] shadow_count) */
+    if (g_rd.profile.shadowOne && g_rd.fs[RD_FS_SHADOW_COUNT].id) {
+        const RdPipeKeyInt k1 = rd__shadow_count_key();
+        n = rd__add_pipe_key(out, max, n, &k1);
+    }
     return n;
 }
 
