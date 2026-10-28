@@ -2087,6 +2087,21 @@ int main(int argc, char **argv)
                    "merge %s)\n",
                    dump, pr->vuMergeIn + pr->vuMergeAlone, pr->vuMergeGpu + pr->vuMergeAlone,
                    pr->vuMergeIn, pr->vuMergeGpu, pr->vuMergeAlone, g_rd.vuMerge ? "on" : "off");
+            /* code 36's cut and kick pairs (rd_replay_vu.c vuFuseVerdict;
+             * g_rd.vuFuse): fused, kept apart by reason, under one pipeline
+             * already */
+            uint32_t kept = 0;
+            for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
+                kept += pr->vuFuseKept[k];
+            }
+            printf("%s: stats: VU fuse: %u pairs fused, %u kept apart (blend form %u, plans "
+                   "differ %u, passes %u, dst/DATE %u, no planes %u, no merge build %u, fuse off "
+                   "%u), %u under one pipeline already; fuse %s\n",
+                   dump, pr->vuFusePairs, kept, pr->vuFuseKept[RD_VU_FUSE_BLEND],
+                   pr->vuFuseKept[RD_VU_FUSE_PLANS], pr->vuFuseKept[RD_VU_FUSE_PASSES],
+                   pr->vuFuseKept[RD_VU_FUSE_DST], pr->vuFuseKept[RD_VU_FUSE_PLANES],
+                   pr->vuFuseKept[RD_VU_FUSE_BUILD], pr->vuFuseKept[RD_VU_FUSE_OFF], pr->vuFuseSame,
+                   g_rd.vuFuse ? "on" : "off");
         }
         /* the crack filler above 1x (rd_crack_fill.c): its count read back */
         rd__crack_fill_wait();
