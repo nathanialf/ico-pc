@@ -280,6 +280,18 @@ uint32_t rd__a1x_sprite_steps(const Replay *r, const DrawSetup *ds, const IcoSpr
                               uint32_t nv, uint8_t prim);
 bool rd__fx_reduction_clears(Replay *r, const RdScreenVtx v[2], float col[4]);
 void rd__replay_end_pass(Replay *r);
+/* box_reduce_ps's DrawCB for the count target tc, its scaled texels into
+ * its GS size (shadowReduce; shadow_count_ps reads the same fields): the
+ * source texels per output pixel, the source size, a Full pixel source's
+ * left-out texels (rd_shadow_one.c) */
+void rd__shadow_reduce_cb(const RdTargetRec *tc, IcoDrawCB *cb);
+/* rd_shadow_one.c: the shadow count of the state block's targets tc
+ * (colour) and td (depth-stencil) in one draw (shadow_count_ps) into dst at
+ * tc's GS size, reduceCb rd__shadow_reduce_cb's; the open pass ended first.
+ * False, nothing drawn, when the stencil view, the pipeline, the table or
+ * the bind group is missing (the seven draws then). */
+bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, RhiTexture dst,
+                         RhiState *dstState, const IcoDrawCB *reduceCb);
 void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds,
                             IcoDrawCB *cb);
 /* rd_replay_tiler.c (docs/port/RENDER.md, "The replay").
