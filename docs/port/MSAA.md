@@ -26,6 +26,11 @@ are anti-aliased, and the fog, the list 5 additive meshes, the glow and the aura
 resolved picture. A frame without a shadow keeps the epoch open to the fog, which then runs per
 sample where the device shades per sample.
 
+The shadow count is read after that close, from SCENE's single-sampled stencil, whichever way it
+is resolved (the seven stencil-tested draws or the one draw through the stencil view,
+[WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-count-in-one-draw)): the two give the same bytes with
+anti-aliasing on or off, so the one draw needs no MSAA fallback.
+
 ## The resolve rule
 
 A sample is uncovered when its depth equals the depth the epoch cleared SCENE_MS's depth to,
