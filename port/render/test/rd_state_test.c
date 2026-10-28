@@ -27,8 +27,9 @@
  *              round-trip; version 8 and older dumps (no tex1Lod, no level
  *              words) still load; RDC_AA1 and RdStateBlock.aa1 round-trip, and a
  *              version 3 dump (no aa1) still loads, with AA1 off; a version
- *              5 and a version 7 dump's temps at the handles FEED_HELD and
- *              DISPLAY_HELD (appended after them) are recreated
+ *              5, a version 7 and a version 12 dump's temps at the handles
+ *              FEED_HELD, DISPLAY_HELD and WORK3_HELD (appended after them)
+ *              are recreated
  *   dump v10   the native frame (aspect, wExact, cullW) after gsH round-trips
  *              and peeks (rd__dump_peek); a version 9 dump loads as the 4:3
  *              frame; a header the renderer cannot size is refused; the
@@ -591,7 +592,8 @@ static void testAlphaMerge(void)
 /* A dump written before a fixed target was appended: version 5 (before
    RD_TARGET_FEED_HELD) had 16 fixed targets, so its first temporary slot
    has low half 17, FEED_HELD's handle now; versions 6 and 7 (before
-   RD_TARGET_DISPLAY_HELD) had 17, so theirs is 18, DISPLAY_HELD's.
+   RD_TARGET_DISPLAY_HELD) had 17, so theirs is 18, DISPLAY_HELD's;
+   versions 8 to 12 (before RD_TARGET_WORK3_HELD) had 18, so theirs is 19.
    The dump at path with its temp's handle moved to that slot and its
    version set loads with the temp recreated and remapped, not read as the
    fixed target. */
@@ -657,7 +659,7 @@ static void testDumpOldTemps(const RdFrame *f, const char *path, const char *dir
             tid = f->lists[7].cmds[i].u[0];
         }
     }
-    CHECK(slot == (ver <= 5u ? 17u : 18u) && (tid & 0xFFFF) > slot,
+    CHECK(slot == (ver <= 5u ? 17u : (ver <= 7u ? 18u : 19u)) && (tid & 0xFFFF) > slot,
           "v%u: the fixed target's handle %u, the temp's slot past it (%#x)", ver, slot, tid);
     FILE *fp = fopen(path, "rb");
     long size = 0;
@@ -678,7 +680,9 @@ static void testDumpOldTemps(const RdFrame *f, const char *path, const char *dir
         free(buf);
         return;
     }
-    dumpTo8(buf, &size);
+    if (ver <= 8u) {
+        dumpTo8(buf, &size); /* version 12: this layout, the version word alone differs */
+    }
     /* every field holding the temp's handle (the commands, the state
        blocks, its view's texture header, the temp section) */
     const uint32_t old = (tid & 0xFFFF0000u) | slot;
@@ -883,6 +887,7 @@ static void testDump(const char *dir)
     }
     testDumpOldTemps(f, path, dir, 5u, RD_TARGET_FEED_HELD);
     testDumpOldTemps(f, path, dir, 7u, RD_TARGET_DISPLAY_HELD);
+    testDumpOldTemps(f, path, dir, 12u, RD_TARGET_WORK3_HELD);
     remove(path);
 }
 
