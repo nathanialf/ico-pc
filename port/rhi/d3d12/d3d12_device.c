@@ -670,8 +670,13 @@ static void dx_fill_limits(void)
      * a D3D12 run's glow has been checked against Vulkan's */
     o->uintView = false;
     /* the stencil read (RHI_ASPECT_STENCIL): an SRV of the depth-stencil's
-     * plane 1 (d3d12_pipeline.c), the value in green */
-    o->stencilView = true;
+     * plane 1 (d3d12_pipeline.c), the value in green.  Implemented, but
+     * off for the reason uintView is: it has never run on a Windows
+     * machine, and the start-up self-test catches wrong bytes, not a
+     * removed device; the shadow count keeps its seven draws here.  The
+     * follow-up: a Windows run of the shadow self-test on D3D12
+     * (rd_shadow_selftest.c), then true */
+    o->stencilView = false;
     o->stencilViewChannel = 1;
     o->vuFallbackPlain = NULL;
     o->carefulPipelines = NULL;
