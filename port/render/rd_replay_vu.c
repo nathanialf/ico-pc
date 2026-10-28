@@ -498,7 +498,9 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         }
         IcoDrawCB cb;
         rd__replay_fill_draw_cb(r, &dp[i], ds, &cb);
-        const uint64_t dOff = cbCopy(&cb, sizeof(cb), ua);
+        /* PC port: through the 2D draws' content cache, so equal DrawCBs
+         * (across draws and passes) share one ring copy and one b1 offset */
+        const uint64_t dOff = rd__draw_cb_offset(&cb);
         if (dOff == ~0ull) {
             continue;
         }
