@@ -773,7 +773,7 @@ void rd__bind_uniform(RhiCommandList cl, uint32_t group, RdUniform u)
 }
 
 /* uniform blocks by content: the same DrawCB in one replay is written once
- * (and binding the group with the offset already bound records nothing) */
+ * (uniformOffset, ~0ull: ring full; the offset already bound records nothing) */
 #define RD_UNIFORM_CACHE 512
 #define RD_UNIFORM_CACHE_BYTES 256
 
@@ -785,13 +785,8 @@ typedef struct UniformEntry {
 
 static UniformEntry s_uniformCache[RD_UNIFORM_CACHE];
 
-static RdUniform uniformGroup(RhiBindGroupLayout layout, uint32_t slot, const void *data,
-                              uint32_t size)
+static uint64_t uniformOffset(RhiBindGroupLayout layout, const void *data, uint32_t size)
 {
-    RdUniform u = {dynamicGroup(layout, slot, size), 0};
-    if (!u.group.id) {
-        return u;
-    }
     UniformEntry *e = NULL;
     uint32_t h = 0;
     if (size <= RD_UNIFORM_CACHE_BYTES) {
@@ -799,26 +794,35 @@ static RdUniform uniformGroup(RhiBindGroupLayout layout, uint32_t slot, const vo
         e = &s_uniformCache[h % RD_UNIFORM_CACHE];
         if (e->epoch == s_bindEpoch && e->hash == h && e->layout == layout.id && e->size == size &&
             memcmp(e->data, data, size) == 0) {
-            u.offset = e->offset;
-            return u;
+            return e->offset;
         }
     }
     const uint64_t off = rd__ring_alloc(size, rhi_limits()->uniformAlign);
     if (off == ~0ull) {
-        return (RdUniform){{0}, 0};
+        return off;
     }
     memcpy(g_rd.ringMap[s_slot] + off, data, size);
     g_rdPerf.uploadUniformBytes += size;
-    u.offset = (uint32_t)off;
     if (e) {
         e->epoch = s_bindEpoch;
         e->hash = h;
         e->layout = layout.id;
         e->size = size;
-        e->offset = u.offset;
+        e->offset = (uint32_t)off;
         memcpy(e->data, data, size);
     }
-    return u;
+    return off;
+}
+
+static RdUniform uniformGroup(RhiBindGroupLayout layout, uint32_t slot, const void *data,
+                              uint32_t size)
+{
+    RdUniform u = {dynamicGroup(layout, slot, size), 0};
+    if (!u.group.id) {
+        return u;
+    }
+    const uint64_t off = uniformOffset(layout, data, size);
+    return off == ~0ull ? (RdUniform){{0}, 0} : (RdUniform){u.group, (uint32_t)off};
 }
 
 /* The camera of the frame being replayed: the frame's own, else the
@@ -1044,6 +1048,11 @@ static RdUniform frameGroupOf(const RdTargetRec *tc, float ox, float oy, float z
 RdUniform rd__draw_group(const void *drawCB)
 {
     return uniformGroup(g_rd.layoutDraw, 1, drawCB, sizeof(IcoDrawCB));
+}
+
+uint64_t rd__draw_cb_offset(const void *drawCB)
+{
+    return uniformOffset(g_rd.layoutDraw, drawCB, sizeof(IcoDrawCB));
 }
 
 RdUniform rd__crt_group(const void *crtCB)
