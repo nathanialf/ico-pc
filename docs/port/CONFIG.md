@@ -505,6 +505,10 @@ store (`backend`, `unlock_credits`):
 | `audio_sync` | `true`: the audio renders on the game's clock, once per vsync with the queue and cushion of the push, instead of on the audio device's (exported as `ICO_AUDIO_SYNC=1`; `false`, the default, exports `0`); for comparing the two when a report is about sound ([AUDIO.md](AUDIO.md#the-outputs-clock)) |
 | `unlock_credits` | as `[dev] unlock_credits` |
 
+The desktop's local reads and their start-up probe have no `[dev]` key of their own: `ICO_RD_LOCAL_PROBE` is an
+environment switch for headless runs (see [TESTING.md](TESTING.md#environment-switches)); the three paths they
+switch can still be forced with `[dev] fog_path`, `date_path` and `fx_dst_local`.
+
 At start `ico_ini_export` logs the `[dev]` keys of `config.toml` the game itself writes (`pipeline_set`,
 `vu_prepass`, `gpu_robust`) in one line, `ico_pc: [dev] keys kept from an earlier start: pipeline_set =
 lazy, ...`, so a log shows whether an old fallback is in force; no line when none is set.
