@@ -363,29 +363,47 @@ uint64_t rd__glow_edge_count(void)
     return s_glowEdgeDraws;
 }
 
+/* the strip glowEdge draws after c under r's state: its columns 0 .. n -
+ * 1 (n returned, 0: none) and *strip its record */
+static int glowEdgeStrip(const Replay *r, const RdFrame *f, const RdCmd *c, RdPostRec *strip)
+{
+    if (!s_glowEdge || (c->b[0] != RD_POST_FLARE && c->b[0] != RD_POST_BLOOM) ||
+        !r->st.ds.texEnabled) {
+        return 0;
+    }
+    const RdTexRec *tx = rd__tex_rec(r->st.tex);
+    if (!tx || tx->kind != RD_TEXKIND_TARGET || tx->view == RD_VIEW_DEPTH) {
+        return 0;
+    }
+    RdPostRec p;
+    memcpy(&p, f->payload + c->u[1], sizeof(p));
+    const RdTargetRec *dst = rd__target_rec(r->st.color), *src = rd__target_rec(tx->target);
+    const int n = rd__glow_edge_strip(c->b[0], &p, (int32_t)r->st.gsW, dst, src, strip);
+    return n > 0 ? n : 0;
+}
+
+int rd__replay_glow_edge_columns(const Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    RdPostRec strip;
+    return glowEdgeStrip(r, f, c, &strip);
+}
+
 /* After pass 1 of blur(n) on a wide frame: the WORK1 columns its rect
  * leaves (rd__glow_edge_strip) drawn as its first drawn column, through
  * rd__replay_blur_sprite_draw with a record of their own (the recorded
  * frame untouched), in the same state: so pass 2 reads this frame's glow
  * there and not what an earlier frame left (issue 129: the sun's shrink
  * from the opening, carried down the left edge of every room after it).
- * At 4:3 no sprite qualifies: the PS2's picture, byte for byte. */
+ * At 4:3 no sprite qualifies: the PS2's picture, byte for byte.  A pair
+ * the blur fold draws as one pass (rd_replay_tiler.c) draws no pass 1 and
+ * so no strip: the fold reads those columns as the strip would have left
+ * them, pass 1's texel at column n. */
 static void glowEdge(Replay *r, const RdFrame *f, const RdCmd *c)
 {
-    if (!s_glowEdge || (c->b[0] != RD_POST_FLARE && c->b[0] != RD_POST_BLOOM) ||
-        !r->st.ds.texEnabled) {
-        return;
-    }
-    const RdTexRec *tx = rd__tex_rec(r->st.tex);
-    if (!tx || tx->kind != RD_TEXKIND_TARGET || tx->view == RD_VIEW_DEPTH) {
-        return;
-    }
     static RdPostRec s_rec;
     static RdFrame s_sf;
-    RdPostRec p, strip;
-    memcpy(&p, f->payload + c->u[1], sizeof(p));
-    const RdTargetRec *dst = rd__target_rec(r->st.color), *src = rd__target_rec(tx->target);
-    const int n = rd__glow_edge_strip(c->b[0], &p, (int32_t)r->st.gsW, dst, src, &strip);
+    RdPostRec strip;
+    const int n = glowEdgeStrip(r, f, c, &strip);
     if (n <= 0) {
         return;
     }
