@@ -621,6 +621,14 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("shadow_one", "on"), "1") == 0);
     CHECK(ico_dev_env_value("shadow_one", "seven") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.shadow_one"), "shadow_one") == 0);
+    /* shadow_bspline: the shadow composites above 1x through the B-spline
+       instead of one bilinear tap (port/render/rd_fx_plan.c
+       rd__sprite_above1x) */
+    CHECK(strcmp(ico_dev_env_name("shadow_bspline"), "ICO_RD_SHADOW_BSPLINE") == 0);
+    CHECK(strcmp(ico_dev_env_value("shadow_bspline", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("shadow_bspline", "false"), "0") == 0);
+    CHECK(ico_dev_env_value("shadow_bspline", "cubic") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.shadow_bspline"), "shadow_bspline") == 0);
     /* dynamic_state: the variable names what is static (vk_device.c) */
     CHECK(strcmp(ico_dev_env_name("dynamic_state"), "ICO_VK_FAKE_NO_DYNAMIC") == 0);
     CHECK(strcmp(ico_dev_env_value("dynamic_state", "true"), "0") == 0);
