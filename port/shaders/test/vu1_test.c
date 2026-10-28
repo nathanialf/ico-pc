@@ -3319,9 +3319,18 @@ static void testVariantPlumbing(void)
      * beside the others, and the block keeps its 832 bytes (shader_consts.h's assert) */
     const uint32_t others[] = {ICO_VU_CLIP_MASK, ICO_VU_PROBE,    ICO_VU_CUT_ONLY,
                                ICO_VU_KICK_ONLY, ICO_VU_EXTENDED, ICO_VU_BEHIND_EYE,
-                               ICO_VU_TICKS};
+                               ICO_VU_TICKS,     ICO_VU_FUSED};
     if (ICO_VU_JUN26 != 1024u) {
         FAILF("variant: ICO_VU_JUN26 is %u, vu_common.hlsli says 1024\n", (unsigned)ICO_VU_JUN26);
+    }
+    /* the fused pair's flag (vu_common.hlsli VU_F_FUSED): its own bit too */
+    if (ICO_VU_FUSED != 2048u) {
+        FAILF("variant: ICO_VU_FUSED is %u, vu_common.hlsli says 2048\n", (unsigned)ICO_VU_FUSED);
+    }
+    for (size_t i = 0; i + 1 < sizeof(others) / sizeof(others[0]); i++) {
+        if ((others[i] & (uint32_t)ICO_VU_FUSED) != 0u) {
+            FAILF("variant: ICO_VU_FUSED shares a bit with flag 0x%x\n", (unsigned)others[i]);
+        }
     }
     for (size_t i = 0; i < sizeof(others) / sizeof(others[0]); i++) {
         if ((others[i] & (uint32_t)ICO_VU_JUN26) != 0u) {
