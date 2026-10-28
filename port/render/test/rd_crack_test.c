@@ -433,6 +433,41 @@ int main(int argc, char **argv)
             CHECK(c1.skipped > c0.skipped, "the MSAA replay not counted as left unfilled");
         }
     }
+    if (active && !msaa && rx <= 1u && ry <= 1u) {
+        /* a reach of 1 on both axes draws crack_fill1_ps (the four
+           neighbours first); the general crack_fill_ps on the same frame
+           gives every byte of colour and depth the same, and the same
+           count */
+        rd__crack_fill_force_general(true);
+        Picture gen;
+        memset(&gen, 0, sizeof(gen));
+        RdCrackCounts g0, g1;
+        rd__crack_fill_wait();
+        rd__crack_fill_counts(&g0);
+        const bool okGen = replay(true, &gen) && gen.w == w && gen.h == h;
+        rd__crack_fill_wait();
+        rd__crack_fill_counts(&g1);
+        rd__crack_fill_force_general(false);
+        CHECK(okGen, "SCENE readback with the general shader");
+        size_t dPx = 0, dZ = 0;
+        for (size_t i = 0; okGen && i < (size_t)w * h; i++) {
+            dPx += memcmp(&gen.px[i * 4], &on.px[i * 4], 4) != 0;
+            dZ += on.z && gen.z && memcmp(&gen.z[i], &on.z[i], sizeof(float)) != 0;
+        }
+        printf("  the general shader on the same frame: %zu texels' colour and %zu depths differ "
+               "from the reach-1 shader's; counted %llu and %llu pixels\n",
+               dPx, dZ, (unsigned long long)(c1.pixels - c0.pixels),
+               (unsigned long long)(g1.pixels - g0.pixels));
+        CHECK(dPx == 0 && dZ == 0, "reach-1 against general: %zu colours, %zu depths differ", dPx,
+              dZ);
+        CHECK(g1.counted - g0.counted == 1 && g1.pixels - g0.pixels == c1.pixels - c0.pixels,
+              "the general shader counted %llu pixels over %llu replays, the reach-1 %llu",
+              (unsigned long long)(g1.pixels - g0.pixels),
+              (unsigned long long)(g1.counted - g0.counted),
+              (unsigned long long)(c1.pixels - c0.pixels));
+        free(gen.px);
+        free(gen.z);
+    }
     if (inPass) {
         /* one fill in the scene pass the local fog keeps: one render pass
            more than without the filler, the count's apart */
