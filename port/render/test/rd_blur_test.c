@@ -3869,13 +3869,16 @@ static void checkBlurFold(void)
         const uint32_t f = g_rdPerf.blurFolds; /* the frame's replay (runFrame) */
         folds += f;
         frames += f > 0;
-        /* a chain of ten pairs folds nine, or eight where a pass 1 covers a
-           column fewer than the pair before (the wide-frame fold); a frame
-           holds one or two chains; post mode 2 (the depth of field alone, no
-           glow chain) has one foldable pair since the wide-frame fold, its
-           bytes checked against the model by effectsFrame */
-        CHECK(f == 0 || f == 8 || f == 9 || (f >= 16 && f <= 18) || (post == 2 && f == 1),
-              "(b) post mode %d: %u pairs folded, 8 or 9 a chain expected", post, f);
+        /* the blur chain of ten pairs folds nine, or eight where a pass 1
+           covers a column fewer than the pair before (the wide-frame fold);
+           the depth of field (post modes 2, 3, 5, 7) has one foldable pair
+           since the wide-frame fold; every fold's bytes are checked against
+           the model by effectsFrame */
+        const uint32_t depth = (post == 2 || post == 3 || post == 5 || post == 7) ? 1u : 0u;
+        const uint32_t chain = post == 2 ? 0u : 1u;
+        CHECK(f == chain * 8u + depth || f == chain * 9u + depth,
+              "(b) post mode %d: %u pairs folded, %u or %u expected", post, f, chain * 8u + depth,
+              chain * 9u + depth);
     }
     InitializeStaticBlur(); /* sun off */
     CHECK(folds > 0, "(b) no blur pair folded");
