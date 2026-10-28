@@ -544,6 +544,11 @@ static const struct {
        same state merged into one (an A/B; port/render/rd_replay_vu.c
        vuMergeInit) */
     {"dev.vu_merge", "vu_merge"},
+    /* false: code 36's cut and kick draws of a batch under their own
+       pipelines instead of the kick under the cut's, its pixels unblended,
+       so the merge joins them (an A/B; port/render/rd_replay_vu.c
+       vuFuseVerdict) */
+    {"dev.vu_fuse", "vu_fuse"},
     /* false: the crack filler above 1x off (an A/B), true: on, as the
        device profile has it on every class (port/render/rd_crack_fill.c
        rd__crack_fill_init) */
@@ -608,6 +613,9 @@ static const struct {
     /* port/render/rd_replay_vu.c vuMergeInit: 0 draws every VU draw as a
        GPU draw of its own, through the programs' plain builds */
     {"vu_merge", "ICO_RD_VU_MERGE"},
+    /* port/render/rd_replay_vu.c vuMergeInit: 0 draws code 36's kicks
+       under their own pipeline (no fused pair) */
+    {"vu_fuse", "ICO_RD_VU_FUSE"},
     /* port/render/rd_crack_fill.c rd__crack_fill_init: 0 leaves the pixels
        no draw covered above 1x to the fog, 1 fills them on a tile-based GPU
        too */
