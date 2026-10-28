@@ -1881,6 +1881,14 @@ void rd_resume_frame(void)
     g_rd.discardOpen = true;
 }
 
+/* A display change's pipelines (rd__display_pipelines), on the host stack
+ * as the driver's compiles need; arg non-NULL: the targets were made again
+ * (the line even when nothing was missing) */
+static void displayPipelines(void *arg)
+{
+    rd__display_pipelines(arg != NULL);
+}
+
 static void fogSceneRemade(void *arg)
 {
     (void)arg;
@@ -1911,6 +1919,10 @@ void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight)
     }
     if (g_rd.hasDevice) {
         rd__on_host(fogSceneRemade, NULL); /* a new SCENE size: the fog's probe and self-test */
+        /* the scale the new width gives (aspect auto at the window's
+           resolution): the pipelines it reaches, before a replay draws at
+           it (rd__display_pipelines; a line only when it made some) */
+        rd__on_host(displayPipelines, NULL);
     }
 }
 
@@ -2134,6 +2146,29 @@ static void blurSmoothChanged(void *arg)
                                                         : "Motion blur: Original chosen");
 }
 
+/* What a display change derived, in one line (a PowerVR phone that switched
+ * 2x -> Original drew slower than a fresh start at Original; the log could
+ * not say which decisions were the start's): the state the reachable set and
+ * the draws read, then the device profile's words as in force */
+static void logDerived(void)
+{
+    const float sx = g_rd.sceneSx, sy = g_rd.sceneSy;
+    const bool whole = sx == (float)(int)sx && sy == (float)(int)sy;
+    const bool enhanced = g_rd.settings.preset == RD_PRESET_ENHANCED;
+    const bool dropped =
+        g_rd.profile.vuPlanesFrac && enhanced && !whole && g_rd.dstMode == RD_BLEND_EXACT_OFF;
+    rd__log("display change: derived: preset %s, frame %u GS wide, scene %gx%g (%s), VU planes "
+            "%s, VU region rule %s, texture filter %u, VU pre-pass %s, fog path %u (the crack "
+            "fill's own line says its state); profile %s",
+            enhanced ? "Enhanced" : "Original", g_rd.gsW, (double)sx, (double)sy,
+            whole ? "whole" : "fractional",
+            dropped                     ? "dropped (vu_np_ps)"
+            : g_rd.profile.vuPlanesFrac ? "kept"
+                                        : "kept (every scale)",
+            rd__vu_extended() ? "extended" : "the PS2's", (unsigned)g_rd.filterUpgrade,
+            g_rd.vuPrepass ? "on" : "off", (unsigned)g_rd.fogPath, rd__profile_text());
+}
+
 typedef struct ReplayCall {
     const RdFrame *f;
     int keep;
@@ -2172,6 +2207,7 @@ void rd_begin_frame(void)
         const bool waterChanged = g_rd.settings.waterSharp != g_rd.pendingSettings.waterSharp;
         const bool blurChanged =
             g_rd.settings.motionBlurSmooth != g_rd.pendingSettings.motionBlurSmooth;
+        const bool presetChanged = g_rd.settings.preset != g_rd.pendingSettings.preset;
         g_rd.settings = g_rd.pendingSettings;
         g_rd.settingsPending = false;
         if (packOff) {
@@ -2211,6 +2247,16 @@ void rd_begin_frame(void)
         if (g_rd.hasDevice) {
             rd__on_host(fogAaReconcile, NULL);
         }
+        /* a new scale or preset: what it derived, and the pipelines its
+         * draws reach made before this frame replays (rd__display_pipelines;
+         * on a settings change, never per frame) */
+        if (recreated || presetChanged) {
+            logDerived();
+        }
+        if (g_rd.hasDevice) {
+            static char recreatedMark;
+            rd__on_host(displayPipelines, recreated ? (void *)&recreatedMark : NULL);
+        }
     }
     /* A scene-sized texture made since the last frame did not fit
      * (rd__note_scene_pressure): the scale comes down by half here, between
@@ -2227,6 +2273,7 @@ void rd_begin_frame(void)
             g_rd.sceneSy = ny;
             g_rd.sceneFellBack = true;
             rd__on_host(recreateTargets, NULL);
+            rd__on_host(displayPipelines, NULL); /* 3x halved is 1.5x: the twins */
             g_rd.interpFloor = g_rd.frameCounter + 1;
         }
     }
