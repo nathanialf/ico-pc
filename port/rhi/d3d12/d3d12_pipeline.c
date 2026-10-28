@@ -284,9 +284,17 @@ static bool dx_write_resource(const RhiBindSlot *s, const RhiBinding *b,
         const DxFormatMap *fm = &dx_formatMap[t->rhiFormat];
         D3D12_SHADER_RESOURCE_VIEW_DESC v;
         memset(&v, 0, sizeof(v));
-        /* depth formats are always viewed as depth (plane 0), whatever the
-         * aspect: stencil is never sampled (rhi.h) */
+        /* depth formats are viewed as depth (plane 0), but for
+         * RHI_ASPECT_STENCIL (below) */
         v.Format = t->swapchain ? t->resFormat : fm->view;
+        /* the stencil (RHI_ASPECT_STENCIL): plane 1 of the R32G8X24_TYPELESS
+         * resource as X32_TYPELESS_G8X24_UINT, the value in green
+         * (RhiLimits.stencilViewChannel 1), single-sampled only */
+        const bool stencil = b->aspect == RHI_ASPECT_STENCIL && !t->swapchain && fm->stencil &&
+                             t->rhiFormat == RHI_FMT_D32F_S8 && t->samples <= 1u;
+        if (stencil) {
+            v.Format = DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;
+        }
         if (b->aspect == RHI_ASPECT_UINT && !t->swapchain && t->rhiFormat == RHI_FMT_RGBA8_UNORM &&
             (t->usage & RHI_TEX_UINT_VIEW)) {
             /* the RGBA8_UINT view: the resource is R8G8B8A8_TYPELESS
@@ -301,6 +309,7 @@ static bool dx_write_resource(const RhiBindSlot *s, const RhiBinding *b,
         } else {
             v.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
             v.Texture2D.MipLevels = t->mips;
+            v.Texture2D.PlaneSlice = stencil ? 1u : 0u;
         }
         ID3D12Device_CreateShaderResourceView(g_dx.device, t->res, &v, h);
         return true;
