@@ -544,6 +544,13 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_prepass_batch", "false"), "0") == 0);
     CHECK(strcmp(ico_dev_env_value("vu_prepass_batch", "true"), "1") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.vu_prepass_batch"), "vu_prepass_batch") == 0);
+    /* vu_merge: the draw merge's A/B switch (port/render/rd_replay_vu.c
+       vuMergeInit) */
+    CHECK(strcmp(ico_dev_env_name("vu_merge"), "ICO_RD_VU_MERGE") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_merge", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_merge", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("vu_merge", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_merge"), "vu_merge") == 0);
     /* crack_fill: the crack filler above 1x's A/B switch
        (port/render/rd_crack_fill.c rd__crack_fill_init) */
     CHECK(strcmp(ico_dev_env_name("crack_fill"), "ICO_RD_CRACK_FILL") == 0);
