@@ -1017,6 +1017,11 @@ typedef struct RdProfile {
     /* the crack filler above 1x on by default on every class
      * (rd_crack_fill.c); [dev] crack_fill over it */
     bool crackFill;
+    /* the shadow count resolved in one draw reading the stencil through
+     * its view (RhiLimits.stencilView; rd_replay.c shadowCountOne), not the
+     * seven stencil-tested draws and the box reduction; [dev] shadow_count
+     * over it, its self-test (rd_shadow_selftest.c) after it */
+    bool shadowOne;
     /* rd_profile.c: the device class's name for the lines; per flag
      * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
      * turned it off (rd__profile_self_test_off) */
@@ -1047,6 +1052,7 @@ enum {
     RD_PROFILE_FX_PLAN = 1u << 7,
     RD_PROFILE_FX_DST_LOCAL = 1u << 8,
     RD_PROFILE_VU_PLANES = 1u << 9,
+    RD_PROFILE_SHADOW_ONE = 1u << 10,
 };
 
 /* fills g_rd.profile from the device (rd_profile.c); called by rd_init after
@@ -1281,6 +1287,9 @@ typedef enum RdFsId {
      * block a texel; keys rd__crack_fill_key, in the fog's family */
     RD_FS_CRACK_FILL,
     RD_FS_CRACK_COUNT,
+    /* shadow_count_ps: the shadow count read from the stencil in one draw
+     * (rd_replay.c shadowCountOne; RdProfile.shadowOne), behind blit_vs */
+    RD_FS_SHADOW_COUNT,
     RD_FS_COUNT
 } RdFsId;
 
@@ -1729,6 +1738,38 @@ RdPipeKeyInt rd__shadow_volume_key(const RdStateBlock *s, RhiFormat colorFmt, in
 RdPipeKeyInt rd__shadow_resolve_key(int pass);
 RdPipeKeyInt rd__shadow_reduce_key(void); /* box_reduce_ps: the count at the GS size */
 #define RD_SHADOW_RESOLVE_PASSES 7
+/* The count in one draw (RdProfile.shadowOne; rd_replay.c shadowCountOne):
+ * shadow_count_ps behind blit_vs into an RGBA8 target of the GS size, no
+ * depth attachment, the stencil read through its view (RHI_ASPECT_STENCIL) */
+RdPipeKeyInt rd__shadow_count_key(void);
+/* The table shadow_count_ps reads the count's bytes from: texel m (0..63)
+ * the RGBA the seven draws write for a stencil whose bits 0-5 hold m:
+ * RGB 4 m, A 0x80 where m != 0, else 0 */
+#define RD_SHADOW_TABLE_SIZE 64
+void rd__shadow_table_texel(uint32_t m, uint8_t rgba[4]);
+/* The count the shadow levels read after the resolve of the count target
+ * `color` (an RdTarget id): at its GS size, RGBA8, w * h * 4 bytes, the
+ * reduced texture above 1x, the target's own colour at 1x; false when no
+ * resolve of that target is held (tests, the shadow self-test).  Waits for
+ * the GPU. */
+bool rd__shadow_count_read(uint32_t color, void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
+/* Drops the reduced count's hold on its target (the shadow self-test, whose
+ * count target is SCENE) */
+void rd__shadow_count_forget(void);
+/* The shadow count's self-test (rd_shadow_selftest.c), where the profile
+ * has the one draw (RdProfile.shadowOne): a frame of its own on SCENE (its
+ * colour as the count target, its depth's stencil) counts known volumes
+ * and is resolved through the one draw and through the seven draws; the
+ * count at its GS size is read back each time and compared byte for byte.
+ * A difference turns the flag off ("(self-test)"; the seven draws from
+ * then on).  Logs "shadow count: ..." once a run; run by rd_fog_selftest's
+ * first run and again when SCENE is made at a new size.  Waits for the GPU.
+ * Returns whether the path in force passed. */
+bool rd__shadow_selftest(void);
+/* ICO_RD_SHADOW_SABOTAGE=1: the one draw's table holds a wrong texel at
+ * m = 1 (rd_replay.c shadowTableMake), so the self-test's failure path runs
+ * (read once) */
+bool rd__shadow_sabotaged(void);
 /* The shadow families above under the states the game draws them with
  * (Shadow.c: TEST 0x50000); appends to out[0..n). */
 uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_t n);
