@@ -2145,6 +2145,11 @@ static void vkr_fill_limits(void)
     o->dynamicDepth = g_vkr.dynDepth;
     o->dynamicBlend = g_vkr.dynBlend;
     o->uintView = true; /* mutable-format images, core in 1.2 (vk_resource.c) */
+    /* the stencil aspect's own view of every sampled depth-stencil image
+     * (vk_resource.c), the value in red; sampling a depth-stencil format
+     * is the depth's sampled-image feature */
+    o->stencilView = g_vkr.dsSampled;
+    o->stencilViewChannel = 0;
     /* the VU shader variants' device table (kVuPlainOnly) and the
      * compiler's line, for the renderer's log (rd__vu_policy_init) */
     vkr_vu_plain_only();
