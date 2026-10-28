@@ -2,7 +2,7 @@
  * port/render/rd_glow_hold.c
  *
  * The glow held between ticks (docs/port/WORK_BUFFERS.md, "The glow
- * between ticks"; DIVERGENCES.md VD-24).  Above Frame rate Original every
+ * between ticks"; DIVERGENCES.md VD-25).  Above Frame rate Original every
  * present of a tick replays the whole frame, and list 7's glow (the flare
  * and the bloom, staticBlur.c makeFullScreenFlareBefore/After and
  * pasteFullScreenFlare) is a chain of about 31 passes: the mask SCENE ->
