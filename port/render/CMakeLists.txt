@@ -158,6 +158,7 @@ add_library(ico_render STATIC
     rd_upload.c # the upload ring and the uploads before a replay's first pass
     rd_screen_planes.c # the screen-prim triangles' planes
     rd_shadow.c
+    rd_shadow_selftest.c # the shadow count's one draw: the start-up check on the device
     rd_tex.c
     rd_water.c # block targets, aliases, camera scopes
     rd_video.c # the FMV picture (port/fmv/rd_video.h)
@@ -1648,6 +1649,32 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_date_selftest.cmake")
     set_tests_properties(rd_date_selftest PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                      ENVIRONMENT "${_env_date_stencil}")
+    # the shadow count's self-test (rd_shadow_selftest.c): the one draw
+    # equal to the seven draws byte for byte at both scene sizes of the
+    # tool (a wide scene at scale 2 with Full pixel's left-out texels, then
+    # another size), every band centre the count's colour; sabotaged (the
+    # one draw's table wrong at m = 1), the one draw differs, the profile's
+    # flag goes off and the seven draws resolve the count (no second line:
+    # nothing to check then); [dev] shadow_one = false, no self-test and the
+    # profile's words "shadow count seven draws ([dev])"
+    add_test(NAME rd_shadow_selftest
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     "-DPATH=one draw"
+                     "-DRESULTS=equal to the seven draws over [0-9]+x[0-9]+, 142 band centres ok"
+                     "-DEXTRA=profile: .*shadow count one draw"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_selftest.cmake")
+    set_tests_properties(rd_shadow_selftest PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                       ENVIRONMENT "${_env}")
+    add_test(NAME rd_shadow_selftest_sabotage
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     "-DPATH=seven draws"
+                     "-DRESULTS=one draw differs at [0-9]+ of [0-9]+ texels, the first \\([0-9]+,[0-9]+\\): [0-9A-F]+ for [0-9A-F]+"
+                     "-DEXTRA=profile: shadow count one draw off \\(self-test\\)"
+                     "-DEXTRA2=shadow count: ICO_RD_SHADOW_SABOTAGE: "
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_selftest.cmake")
+    set_tests_properties(rd_shadow_selftest_sabotage
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                    ENVIRONMENT "${_env};ICO_RD_SHADOW_SABOTAGE=1")
 endif()
 
 # The desktop's local reads and their start-up cost probe (rd_local_probe.c):
@@ -1910,6 +1937,7 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         # has not (localRead false: the copy and inplace paths, DATE by snapshot);
         # nor rd_local_probe_kept and rd_local_probe_off (the desktop's probe of
         # Vulkan's local read: never on OpenGL)
+        rd_shadow_selftest rd_shadow_selftest_sabotage
         rd_vuprepass_selftest rd_vuprepass_selftest_plain
         rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off rd_vuprepass_selftest_ticks
         rd_vuprepass_selftest_sabotage_tri rd_vuprepass_selftest_unbatched)
