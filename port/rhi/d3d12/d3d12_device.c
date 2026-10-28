@@ -669,6 +669,10 @@ static void dx_fill_limits(void)
      * mistake in it would draw a wrong glow on the whole backend; true once
      * a D3D12 run's glow has been checked against Vulkan's */
     o->uintView = false;
+    /* the stencil read (RHI_ASPECT_STENCIL): an SRV of the depth-stencil's
+     * plane 1 (d3d12_pipeline.c), the value in green */
+    o->stencilView = true;
+    o->stencilViewChannel = 1;
     o->vuFallbackPlain = NULL;
     o->carefulPipelines = NULL;
     o->compilerVersion = NULL;
