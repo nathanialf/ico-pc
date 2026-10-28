@@ -444,8 +444,8 @@ the GPU reads the ring itself and the part is left out.
   On a tile-based phone each pass has a fixed cost of about 0.05 to 0.15 ms
   (`RD_PERF_PASS_SMALL_US`), so N above about 45 at Original 1x says the pass structure is where the
   time goes. On a tile-based profile `DATE snapshot` and `fog depth read` read 0 where the local read
-  is on (the profile's `DATE stencil` and `fog local on`), and the title frame's glow passes are 26 with
-  the blur fold on (35 without: each folded pair's one pass is begun and timed as the glow's, as its
+  is on (the profile's `DATE stencil` and `fog local on`). The title frame's glow passes are 26 with
+  the blur fold on (every class but Mali; 35 without: each folded pair's one pass is begun and timed as the glow's, as its
   pass 2 was, `port/render/rd_replay_tiler.c` (`rd__replay_blur_fold`)). A storage-path count in the hundreds is the exact blend
   (the opt-in), not the default.
 - `window: GPU top passes: <label> <target> WxH [N passes] D draws X.XX ms, ... (K of P passes a
