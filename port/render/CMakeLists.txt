@@ -1752,7 +1752,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_local_probe_kept
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
                      -DFOG_PATH=local
-                     "-DRESULTS=local ok [0-2], copy not tried, inplace not tried, buffer not tried"
+                     "-DRESULTS=local ok [0-2], inplace not tried, copy not tried, buffer not tried"
                      "-DEXTRA=profile: local read on the desktop: kept \\(probe [0-9.]+ vs [0-9.]+ ms\\): "
                      "-DEXTRA2=profile: ICO_RD_LOCAL_PROBE_SABOTAGE: "
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
