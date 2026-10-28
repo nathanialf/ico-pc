@@ -626,6 +626,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd_crack_backdrop_frac`) a far plane writes Z over the frame first and the two triangles lie
   near each other in depth, so the cracks hold the plane's depth and colour and are filled the
   same (the discontinuity form) while the slit keeps the plane;
+  Where the reach is 1 on both axes (`rd_crack`, `rd_crack_backdrop`, the 2x cases and their `_gl` twins) the
+  frame is also replayed with the general shader (`rd__crack_fill_force_general`): every byte of colour and
+  depth and the count are the reach-1 shader's (`crack_fill1_ps`), and the `rd: crack fill: the reach-1 shader`
+  line is matched (`EXPECT2`).
   at 1x, under Original, under MSAA4 and with `ICO_RD_CRACK_FILL=0` (`rd_crack_1x`,
   `rd_crack_original`, `rd_crack_msaa`, `rd_crack_off`) no fill pass and the same bytes (under
   MSAA4 the frame has no shadow, so the epoch is still open at the fog and the skip line says so); under
@@ -719,6 +723,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   input. The pictures: `rd_replay_tool DUMP out.png --interp 0.9 DUMP --interp-any --presents 3
   --present WxH` (a dump as its own tick before: nothing moves) writes the same PNGs with and without
   `ICO_RD_STILL_REPRESENT=0`, and its lines say which presents were `shown again`.
+- `rd_replay_tool_still.cmake` (`rd_replay_tool_still`): the still re-present on a corpus dump as its own tick
+  before, 4 presents at 2x 16:9: presents 1 to 3 end `; shown again`, and all four pictures are the same bytes
+  as with `ICO_RD_STILL_REPRESENT=0` (Not Run without the dump).
 - `rd_replay_tool_glow_hold.cmake`: the glow held between ticks (`port/render/rd_glow_hold.c`)
   against its chain drawn at every present (`ICO_RD_GLOW_REDRAW=1`), on two consecutive godrays
   dumps (`build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01076` and `rd-01077`; Not Run without
