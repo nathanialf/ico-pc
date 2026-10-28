@@ -834,6 +834,12 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
     d->vertex = k->vs >= RD_VS_VU_PRELIT && k->vs <= RD_VS_VU_PARTICLE && g_rd.vsFallback[k->vs].id
                     ? g_rd.vsFallback[k->vs]
                     : g_rd.vs[k->vs];
+    /* the draw merge's build of a mesh or grid program's entry or of
+     * vu_main_vs (g_rd.vuMerge, set once a run before any pipeline; its
+     * draws bind the run's table, rd_replay_vu.c vuDraw) */
+    if (g_rd.vuMerge && g_rd.vsMerge[k->vs].id) {
+        d->vertex = g_rd.vsMerge[k->vs];
+    }
     if (!d->vertex.id) {
         return false;
     }
@@ -1078,7 +1084,9 @@ static void keyVsName(const RdPipeKeyInt *k, char *out, size_t size)
 {
     const char *v = rd__vs_name(k->vs);
     const size_t n = strlen(v);
-    if (keyPlain(k) && n > 3) {
+    if (g_rd.vuMerge && g_rd.vsMerge[k->vs].id) {
+        rd__vu_merge_name(k->vs, keyPlain(k), out, size); /* the draw merge's build */
+    } else if (keyPlain(k) && n > 3) {
         snprintf(out, size, "%.*s_plain_vs", (int)(n - 3), v);
     } else {
         snprintf(out, size, "%s", v);
