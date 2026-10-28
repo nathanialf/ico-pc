@@ -169,7 +169,16 @@ int rd__glow_hold(RdFrame *f, int firstOfTick)
     }
     /* what the frame reads of the buffers once the chain is gone: a buffer
      * the chain drew is stale until another draw writes it (WORK3 from the
-     * copy back, after the chain's last write) */
+     * copy back, after the chain's last write).  Any write counts as
+     * covering the buffer: this scan cannot decide a draw's covered texels
+     * or the texels a sampling draw reads (both follow from the replay's
+     * transforms and UVs), so a partial write followed by a wider read
+     * reads, outside the write, what earlier presents left there: the
+     * tick's chain on a still tick (the same bytes as a redraw), the tick's
+     * first present's during a pan, as the held glow itself.  The one such
+     * case known is the depth of field's column 0 of WORK0 and WORK1
+     * (WORK_BUFFERS.md, VD-25); an exact rule would redraw the chain at
+     * every present with the depth of field */
     unsigned stale = 0;
     st = f->startState;
     for (int l = head; l < RD_LIST_COUNT; l++) {
