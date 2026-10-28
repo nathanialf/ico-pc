@@ -460,9 +460,12 @@ static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t 
 /* ------------------------------------------------------ the merge's run
  * docs/port/VU1_PROGRAMS.md, "The draw merge".  With g_rd.vuMerge a VU
  * draw of one planned pass, indexed, through a merge build (vsMerge), with
- * no DATE through the stencil bit, no destination read, not one of code
- * 36's cut and kick draws, outside the loss bisect's window and the pass
- * split, is held in the open run instead of drawn (vuRunTake).  The next
+ * no DATE through the stencil bit, no destination read, outside the loss
+ * bisect's window and the pass split, is held in the open run instead of
+ * drawn (vuRunTake); code 36's cut and kick draws too, since the merge
+ * builds read each draw's own VuCB (its ICO_VU_CUT_ONLY / KICK_ONLY flag)
+ * through the table, though a cut (ABE forced on) and its kick seldom
+ * share a pipeline key.  The next
  * such draw joins it when it has the same pipeline key, group 1 (the
  * stream buffer), group 2 (the textures), DrawCB bytes, FrameCB, scissor,
  * pass and GPU timing effect, up to RD_VU_MERGE_MAX draws whose raised
@@ -851,9 +854,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     const RdStateBlock saved = r->st;
     r->st = *s; /* fillDrawCB reads the state the passes were planned from */
     if (g_rd.vuMerge && np == 1 && indexed && pipes[0].id && !own && g_rd.vsMerge[keys[0].vs].id &&
-        !r->dateStNow && keys[0].dst == RHI_DST_READ_NONE &&
-        (vcb->draw[2] & (ICO_VU_CUT_ONLY | ICO_VU_KICK_ONLY)) == 0u && !g_rdWin.first &&
-        !g_rd.passSplit && r->passOpen) {
+        !r->dateStNow && keys[0].dst == RHI_DST_READ_NONE && !g_rdWin.first && !g_rd.passSplit &&
+        r->passOpen) {
         /* the draw merge: held in the run (drawn when it ends) */
         IcoDrawCB cb;
         rd__replay_fill_draw_cb(r, &dp[0], ds, &cb);
