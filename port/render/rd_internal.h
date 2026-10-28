@@ -3357,6 +3357,9 @@ void rd__set_replay_camera(const RdCamera *cam);
 bool rd__camera_probe(const RdCamera *cam, const float p[4], float out[3][4]);
 /* DrawCB (group 1). */
 RdUniform rd__draw_group(const void *drawCB);
+/* the ring offset of a DrawCB through the same content cache (no group): the
+   VU draws bind their own group and only need b1's offset; ~0ull: ring full */
+uint64_t rd__draw_cb_offset(const void *drawCB);
 /* crt.hlsl's CrtCB (IcoCrtCB) in DrawCB's dynamic slot and
  * layout; the layout's dynamic group is cached per block size, so the two
  * sizes need not match (rd_replay.c dynamicGroup). */
