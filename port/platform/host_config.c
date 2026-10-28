@@ -511,6 +511,10 @@ static const struct {
     {"dev.fx_plan", "fx_plan"},
     {"dev.fx_dst_local", "fx_dst_local"},
     {"dev.vu_planes", "vu_planes"},
+    /* false: the shadow count's seven stencil-tested draws instead of its
+       one draw reading the stencil (an A/B; port/render/rd_replay.c
+       shadowCountOne) */
+    {"dev.shadow_one", "shadow_one"},
     /* the Vulkan dynamic depth and blend state: true (the default) as the
        device offers it, depth the depth alone, false neither (every
        pipeline static; port/rhi/vk/vk_device.c) */
@@ -570,6 +574,7 @@ static const struct {
     {"fx_plan", "ICO_RD_FX_PLAN"},
     {"fx_dst_local", "ICO_RD_FX_DST_LOCAL"},
     {"vu_planes", "ICO_RD_VU_PLANES"},
+    {"shadow_one", "ICO_RD_SHADOW_ONE"},
     /* port/rhi/vk/vk_device.c (the dynamic state): 1 both static, blend the
        blend static, 0 as the device offers */
     {"dynamic_state", "ICO_VK_FAKE_NO_DYNAMIC"},
