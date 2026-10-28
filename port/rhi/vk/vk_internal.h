@@ -72,7 +72,9 @@ typedef struct VkrTexture {
     VkDeviceSize memSize;  /* the allocation's size (vkr_allocate) */
     VkImageView view;      /* all aspects: attachments, colour sampling */
     VkImageView depthView; /* depth aspect only, depth-stencil formats that are sampled */
-    VkImageView uintView;  /* RGBA8_UINT, an RHI_TEX_UINT_VIEW texture's (RHI_ASPECT_UINT) */
+    /* stencil aspect only, the same textures single-sampled (RHI_ASPECT_STENCIL) */
+    VkImageView stencilView;
+    VkImageView uintView; /* RGBA8_UINT, an RHI_TEX_UINT_VIEW texture's (RHI_ASPECT_UINT) */
     VkFormat format;
     RhiFormat rhiFormat;
     VkImageAspectFlags aspects;
