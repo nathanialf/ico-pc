@@ -905,7 +905,7 @@ line `shown again` or `rendered`.
 
 **The glow between ticks.** A tick's later presents paste the glow its first present drew instead
 of drawing list 7's glow chain again (`port/render/rd_glow_hold.c`; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-glow-between-ticks),
-[DIVERGENCES.md](DIVERGENCES.md) VD-24): the first copies WORK3 into WORK3_HELD after the chain,
+[DIVERGENCES.md](DIVERGENCES.md) VD-25): the first copies WORK3 into WORK3_HELD after the chain,
 the later ones skip the chain's 17 passes (the mask, the reduction, the blur, the eye blur) and copy
 WORK3_HELD back before the paste. On a still tick the picture is the same bytes; during a pan the
 glow's halo is the tick's first present's, half a tick behind the scene. The edit is made after the
