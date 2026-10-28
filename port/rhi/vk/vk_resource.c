@@ -745,12 +745,21 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
     }
     /* the stencil read (RHI_ASPECT_STENCIL: the shadow count's one draw),
      * a sampled single-sampled depth-stencil texture's: its 8-bit value
-     * as an unsigned integer in red */
+     * as an unsigned integer in red.  Optional: a driver that refuses the
+     * view (MoltenVK's X32_Stencil8 view, unverified) keeps the texture,
+     * and RhiLimits.stencilView goes false for the device (logged once),
+     * which turns the one draw off (rd_shadow_one.c: the seven draws
+     * resolve the count; the stencil aspect is then never bound, so the
+     * all-aspects view is never sampled) */
     t->stencilView = VK_NULL_HANDLE;
     if ((fm->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) && (desc->usage & RHI_TEX_SAMPLED) &&
-        samples == 1u &&
+        samples == 1u && g_vkr.limits.stencilView &&
         !vkr_create_view(t->image, vkFmt, VK_IMAGE_ASPECT_STENCIL_BIT, mips, &t->stencilView)) {
-        goto fail;
+        t->stencilView = VK_NULL_HANDLE;
+        g_vkr.limits.stencilView = false;
+        VKR_LOG("texture %s: the stencil view was not made: no stencil views on this device "
+                "from now (the shadow count takes the seven draws)",
+                desc->debugName ? desc->debugName : "?");
     }
     t->uintView = VK_NULL_HANDLE;
     if (uintView && !vkr_create_uint_view(t->image, mips, &t->uintView)) {
