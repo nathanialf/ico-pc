@@ -28,7 +28,12 @@
  * nothing binds on a GPU that keeps up, back-to-back cheap presents
  * unchanged, the in-betweens dropped before a
  * step ends half a period late on one that does not, FIFO's display wait
- * excused).
+ * excused: the whole-number allowance, vsync on or no GPU time);
+ * testBudgetPaced: the timer path with vsync off paced by the GPU's time
+ * (12 ms a picture 1,1,2 a step, 9 ms 1,2,2,2,1, 17 ms never two, 1 ms not
+ * held, no timestamps as before, the late-step safety net and the straight
+ * climb); testBudgetPacedLoop: the same under the fake clock, no step a
+ * quarter of a period late, the presents the GPU's budget.
  */
 #include <stdio.h>
 #include <string.h>
@@ -954,6 +959,40 @@ static unsigned budgetSteps(PaceBudget *b, unsigned steps, unsigned presents, bo
     return changes;
 }
 
+/* the paced allowance's steps as the window drives them: each step tries
+   `want` presents, the first of a new frame every newEvery steps, the
+   in-betweens through pace_budget_allows_paced with the GPU's time gpuNs
+   and a step of stepNs, stopping at the first refused (counted, as the
+   window counts it); each step ends lateNs late.  The presents made, each
+   step's in counts[] when given */
+static unsigned pacedSteps(PaceBudget *b, unsigned steps, unsigned want, unsigned newEvery,
+                           uint64_t gpuNs, uint64_t stepNs, uint64_t lateNs, unsigned *counts)
+{
+    unsigned total = 0;
+
+    for (unsigned k = 0; k < steps; k++) {
+        const bool newFrame = newEvery != 0 && k % newEvery == 0;
+        unsigned made = 0;
+
+        for (unsigned i = 0; i < want; i++) {
+            const bool fresh = newFrame && i == 0;
+
+            if (!pace_budget_allows_paced(b, fresh, gpuNs, stepNs, PERIOD)) {
+                b->refused++;
+                break;
+            }
+            pace_budget_present(b, fresh);
+            made++;
+        }
+        (void)pace_budget_step(b, lateNs, PERIOD, REFRESH, 0, gpuNs, stepNs);
+        if (counts != NULL) {
+            counts[k] = made;
+        }
+        total += made;
+    }
+    return total;
+}
+
 /* The present allowance (pace_budget_*): a late step with an optional
    present arms it, a second late step while armed (within PACE_ALLOW_HOLD
    steps) drops it to one below that step's presents and holds it
@@ -1410,7 +1449,7 @@ static void testBudgetLines(void)
         seqSteps(&q, 600, 1, 2, 10 * MS, 1, 0);
         pace_budget_block_text(&q.b, 0, 0, 0, 0, q.gpuNs, "no GPU timestamps", t, sizeof(t));
         CHECK(textIs(t, "; presents held to 0 a step (lowest 0, 299 refused, 1 drops, 0 climbs, "
-                        "climbs refused 8); GPU 19.0 ms a presented replay"));
+                        "climbs refused 8); GPU 19.0 ms a timed replay"));
         pace_budget_block(&q.b);
         pace_budget_block_text(&q.b, q.b.refused, q.b.drops, q.b.climbs, q.b.climbRefusals, 0,
                                "no GPU timestamps", t, sizeof(t));
@@ -1424,6 +1463,49 @@ static void testBudgetLines(void)
         pace_budget_block_text(&b, 0, 0, 0, 0, 0, "GPU not timed yet", t, sizeof(t));
         CHECK(textIs(t, "; presents not held (lowest not held, 0 refused, 0 drops, 0 climbs, "
                         "climbs refused 0); GPU not timed yet"));
+    }
+    {
+        /* paced by the GPU (12 ms a picture, a 0.5 ms step): the budget's
+           line, the 10 s part, the drop's ending and the straight climb;
+           1 ms: not held */
+        PaceBudget b;
+        PaceBudgetWaits w = {22 * MS, 21500000ull, wait, 12 * MS, MS / 2, PERIOD, false};
+
+        pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
+        (void)pacedSteps(&b, 120, 8, 1, 12 * MS, MS / 2, 0, NULL);
+        pace_budget_event_text(&b, PACE_BUDGET_TEXT_PACED, &w, t, sizeof(t));
+        CHECK(textIs(t, "presents paced by the GPU: 1.3 a step (GPU 12.0 ms a picture, period "
+                        "16.7 ms)"));
+        pace_budget_block_text(&b, 0, 0, 0, 0, 12 * MS, "GPU not timed yet", t, sizeof(t));
+        CHECK(textIs(t, "; presents paced to 1.3 a step (lowest not held, 120 refused, 0 drops, 0 "
+                        "climbs, climbs refused 0); GPU 12.0 ms a timed replay"));
+        pace_budget_present(&b, true);
+        pace_budget_present(&b, false);
+        (void)pace_budget_step(&b, 10 * MS, PERIOD, REFRESH, 0, 12 * MS, MS / 2);
+        pace_budget_present(&b, true);
+        pace_budget_present(&b, false);
+        (void)pace_budget_step(&b, 11 * MS, PERIOD, REFRESH, 0, 12 * MS, MS / 2);
+        pace_budget_event_text(&b, PACE_BUDGET_TEXT_DROP, &w, t, sizeof(t));
+        CHECK(textIs(t, "presents held to 1 a step: the step ended 11.0 ms late after 2 presents, "
+                        "1 steps after one 10.0 ms late after 2 (the last present 22.0 ms, waited "
+                        "21.5 ms for the GPU and 0.1 ms for the display; GPU 12.0 ms a replay); "
+                        "back to paced by the GPU after 60 steps on time"));
+        pace_budget_block_text(&b, 120, 0, 0, 0, 12 * MS, "GPU not timed yet", t, sizeof(t));
+        CHECK(textIs(t, "; presents held to 1 a step (lowest 1, 0 refused, 1 drops, 0 climbs, "
+                        "climbs refused 0); GPU 12.0 ms a timed replay"));
+        (void)pacedSteps(&b, PACE_ALLOW_HOLD, 8, 1, 12 * MS, MS / 2, 0, NULL);
+        pace_budget_event_text(&b, PACE_BUDGET_TEXT_CLIMB, &w, t, sizeof(t));
+        CHECK(textIs(t, "presents back to paced by the GPU (where they started) after 60 steps "
+                        "(GPU 12.0 ms a picture, step 0.5 ms, period 16.7 ms)"));
+        pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
+        (void)pacedSteps(&b, 10, 8, 1, 1 * MS, MS / 2, 0, NULL);
+        w.gpuNs = 1 * MS;
+        pace_budget_event_text(&b, PACE_BUDGET_TEXT_PACED, &w, t, sizeof(t));
+        CHECK(textIs(t, "presents paced by the GPU: not held (GPU 1.0 ms a picture, period 16.7 "
+                        "ms)"));
+        pace_budget_block_text(&b, 0, 0, 0, 0, 1 * MS, "GPU not timed yet", t, sizeof(t));
+        CHECK(textIs(t, "; presents not held (lowest not held, 0 refused, 0 drops, 0 climbs, "
+                        "climbs refused 0); GPU 1.0 ms a timed replay"));
     }
     {
         PaceLock L = {0};
@@ -1450,14 +1532,16 @@ static void testBudgetLines(void)
    each (ready[k] = max(ready[k-1], submit) + gpuNs); the lag dropped past
    100 ms.  fifoPastNs: a present of a frame already shown returns that long
    past the deadline (FIFO blocking to a vblank), a wait for the display, or
-   for the GPU with waitAsGpu.  budget false: the rule before. */
+   for the GPU with waitAsGpu.  budget false: the rule before.  paced: the
+   timer path with vsync off (pace_budget_reset_paced, the GPU's time
+   gpuNs known); else the whole-number allowance (vsync on). */
 typedef struct BudgetRun {
     unsigned frames, presents, shown, refused, resyncs, drops, climbs, allow, lowest;
     uint64_t lateMax; /* the latest step after the first second */
 } BudgetRun;
 
 static BudgetRun budgetLoop(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bool budget,
-                            uint64_t fifoPastNs, bool waitAsGpu)
+                            uint64_t fifoPastNs, bool waitAsGpu, bool paced)
 {
     const uint64_t own = 1 * MS, stepNs = 3 * MS, resyncNs = 100 * MS;
     PaceHist h = {0};
@@ -1469,7 +1553,11 @@ static BudgetRun budgetLoop(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bool
     uint32_t frame = 0, presented = 0, skipFrame = 0;
     bool skipOpen = false, slow = false;
 
-    pace_budget_reset_unbound(&b, PACE_ALLOW_MAX); /* as window_host.c timer_budget_reset */
+    if (paced) {
+        pace_budget_reset_paced(&b, PACE_ALLOW_MAX); /* as window_host.c timer_budget_reset */
+    } else {
+        pace_budget_reset_unbound(&b, PACE_ALLOW_MAX); /* vsync on: the whole-number rule */
+    }
     for (unsigned k = 0; k < steps; k++) {
         t += stepNs;
         if (k % 2 == 0) {
@@ -1490,7 +1578,11 @@ static BudgetRun budgetLoop(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bool
                 /* the cost guard, then the allowance as the last term */
                 const bool old = t >= deadline || slow || t + cost > deadline;
 
-                if (old || (budget && !pace_budget_allows(&b, false))) {
+                const bool allowed =
+                    paced ? pace_budget_allows_paced(&b, false, gpuNs, stepNs, PERIOD)
+                          : pace_budget_allows(&b, false);
+
+                if (old || (budget && !allowed)) {
                     r.refused += old ? 0u : 1u;
                     t = t < deadline ? deadline : t;
                     break;
@@ -1566,8 +1658,8 @@ static void testBudgetTimerLoop(void)
 
     for (int g = 0; g < 2; g++) {
         const uint64_t gpu = g ? 12 * MS : 4 * MS;
-        const BudgetRun old = budgetLoop(600, gpu, gap, false, 0, false);
-        const BudgetRun r = budgetLoop(600, gpu, gap, true, 0, false);
+        const BudgetRun old = budgetLoop(600, gpu, gap, false, 0, false, false);
+        const BudgetRun r = budgetLoop(600, gpu, gap, true, 0, false, false);
 
         CHECK(r.presents == old.presents && r.drops == 0 && r.refused == 0);
         CHECK(r.resyncs == 0 && old.resyncs == 0 && r.lateMax < PERIOD / 2);
@@ -1578,8 +1670,8 @@ static void testBudgetTimerLoop(void)
            GPU of 1 ms, about 13 presents a step held only by the cost guard
            (more than PACE_ALLOW_MAX, which bound them before the allowance
            started unbound): the presents are the rule before's to the one */
-        const BudgetRun old = budgetLoop(600, 1 * MS, 0, false, 0, false);
-        const BudgetRun r = budgetLoop(600, 1 * MS, 0, true, 0, false);
+        const BudgetRun old = budgetLoop(600, 1 * MS, 0, false, 0, false, false);
+        const BudgetRun r = budgetLoop(600, 1 * MS, 0, true, 0, false, false);
 
         printf("pace_policy_test: back-to-back presents of 1 ms: %u presents (%.1f a step), the "
                "rule before %u, %u refused, %u drops\n",
@@ -1588,8 +1680,8 @@ static void testBudgetTimerLoop(void)
         CHECK(r.presents > 600u * PACE_ALLOW_MAX && r.allow == PACE_ALLOW_NONE);
     }
     {
-        const BudgetRun old = budgetLoop(600, 20 * MS, gap, false, 0, false);
-        const BudgetRun r = budgetLoop(600, 20 * MS, gap, true, 0, false);
+        const BudgetRun old = budgetLoop(600, 20 * MS, gap, false, 0, false, false);
+        const BudgetRun r = budgetLoop(600, 20 * MS, gap, true, 0, false, false);
 
         printf("pace_policy_test: a GPU of 20 ms a picture at 120 a second: the rule before %u "
                "presents, latest step %.1f ms; the allowance %u presents, latest step %.1f ms, "
@@ -1603,13 +1695,153 @@ static void testBudgetTimerLoop(void)
         CHECK(r.presents <= 600 && r.presents >= r.frames);
     }
     {
-        const BudgetRun old = budgetLoop(600, 2 * MS, 0, false, 10 * MS, false);
-        const BudgetRun r = budgetLoop(600, 2 * MS, 0, true, 10 * MS, false);
-        const BudgetRun gpu = budgetLoop(600, 2 * MS, 0, true, 10 * MS, true);
+        const BudgetRun old = budgetLoop(600, 2 * MS, 0, false, 10 * MS, false, false);
+        const BudgetRun r = budgetLoop(600, 2 * MS, 0, true, 10 * MS, false, false);
+        const BudgetRun gpu = budgetLoop(600, 2 * MS, 0, true, 10 * MS, true, false);
 
         CHECK(r.drops == 0 && r.presents == old.presents && r.refused == 0);
         CHECK(gpu.drops > 0 && gpu.presents < old.presents);
         CHECK(r.resyncs == 0 && gpu.resyncs == 0 && gpu.shown == gpu.frames);
+    }
+}
+
+/* The timer path paced by the GPU (pace_budget_reset_paced; issue 130,
+   v0.9.4): with the GPU's time known an in-between starts while (presents
+   + 1) * GPU + step fits the period and what the step before left unused,
+   so the presents a step average (period - step) / GPU.  A new frame every
+   step, 8 presents wanted, a 0.5 ms step, 120 steps (2 s):
+   12 ms a picture: 1,1,2 a step, 161 presents (80 a second; a whole number
+   a step held it to 1, 60 a second), the budget 1.3 a step;
+   9 ms: 1,2,2,2,1, 215 (107 a second), 1.8 a step;
+   17 ms with a game frame every two steps: never two in a step, 114 (57 a
+   second, the GPU's own 58: 114 x 17 ms is under 120 periods), 1.0 a step;
+   1 ms: 8 a step never refused, the budget "not held".
+   No step is late in any of them, nothing drops.  No GPU time (0: no
+   timestamps): the whole-number allowance as testBudgetUnbound (15 a step
+   never refused, two late steps of 15 drop to 8, the probe after 120 steps
+   unbound again).  The safety net: a step 10 ms late leaves no time
+   carried and arms; a second late step drops to 1 held 60 steps (no
+   in-between at 1 whatever the time carried) and the 60th is straight back
+   (the budget the gate, gateK 0); a step past its due time by less than
+   half a period halves the time carried. */
+static void testBudgetPaced(void)
+{
+    const uint64_t step = MS / 2;
+    unsigned c[120];
+    PaceBudget b;
+
+    pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
+    CHECK(b.paced && b.unbind && b.allow == PACE_ALLOW_NONE && b.max == PACE_ALLOW_MAX);
+    CHECK(b.carryNs == 0 && b.pacedTenths == PACE_PACED_UNKNOWN && b.pacedChanges == 0);
+    CHECK(pacedSteps(&b, 120, 8, 1, 12 * MS, step, 0, c) == 161);
+    CHECK(c[0] == 1 && c[1] == 1 && c[2] == 2 && c[3] == 1 && c[4] == 1 && c[5] == 2);
+    CHECK(b.pacedTenths == 13 && b.pacedChanges == 1 && b.carryNs <= PERIOD);
+    CHECK(b.arms == 0 && b.drops == 0 && b.allow == PACE_ALLOW_NONE && b.refused == 120);
+    printf("pace_policy_test: paced, 12 ms a picture: %u %u %u %u %u %u a step, %.1f a second\n",
+           c[0], c[1], c[2], c[3], c[4], c[5], 161.0 / 120.0 * 1e9 / (double)PERIOD);
+
+    pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
+    CHECK(pacedSteps(&b, 120, 8, 1, 9 * MS, step, 0, c) == 215);
+    CHECK(c[0] == 1 && c[1] == 2 && c[2] == 2 && c[3] == 2 && c[4] == 1);
+    CHECK(b.pacedTenths == 18 && b.arms == 0 && b.drops == 0);
+
+    pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
+    CHECK(pacedSteps(&b, 120, 8, 2, 17 * MS, step, 0, c) == 114);
+    for (unsigned k = 0; k < 120; k++) {
+        CHECK(c[k] <= 1);
+    }
+    CHECK(114u * 17 * MS < 120u * PERIOD && b.pacedTenths == 10 && b.drops == 0);
+
+    pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
+    CHECK(pacedSteps(&b, 120, 8, 1, 1 * MS, step, 0, NULL) == 960 && b.refused == 0);
+    CHECK(b.pacedTenths == PACE_PACED_HIGH && b.allow == PACE_ALLOW_NONE);
+
+    /* no GPU time: the whole-number allowance and its probing climb */
+    pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
+    CHECK(pacedSteps(&b, 600, 15, 1, 0, step, 0, NULL) == 15u * 600 && b.refused == 0);
+    CHECK(b.pacedTenths == PACE_PACED_UNKNOWN && b.carryNs == 0);
+    CHECK(budgetSteps(&b, 2, 15, true, 10 * MS, 0, 0) == 1 && b.allow == PACE_ALLOW_MAX);
+    CHECK(budgetSteps(&b, PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP - 1, 1, true, 0, 0, 0) == 0);
+    CHECK(b.allow == PACE_ALLOW_MAX);
+    CHECK(budgetSteps(&b, 1, 1, true, 0, 0, 0) == 1 && b.allow == PACE_ALLOW_NONE);
+    CHECK(b.climbs == 1 && b.gateK == PACE_ALLOW_MAX + 1);
+
+    /* the safety net at 12 ms a picture */
+    pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
+    (void)pacedSteps(&b, 30, 8, 1, 12 * MS, step, 0, NULL);
+    pace_budget_present(&b, true);
+    pace_budget_present(&b, false);
+    CHECK(!pace_budget_step(&b, 10 * MS, PERIOD, REFRESH, 0, 12 * MS, step));
+    CHECK(b.arms == 1 && b.drops == 0 && b.carryNs == 0 && b.allow == PACE_ALLOW_NONE);
+    pace_budget_present(&b, true);
+    pace_budget_present(&b, false);
+    CHECK(pace_budget_step(&b, 11 * MS, PERIOD, REFRESH, 0, 12 * MS, step));
+    CHECK(b.allow == 1 && b.drops == 1 && b.hold == PACE_ALLOW_HOLD && b.carryNs == 0);
+    CHECK(pacedSteps(&b, PACE_ALLOW_HOLD - 1, 8, 1, 12 * MS, step, 0, NULL) == PACE_ALLOW_HOLD - 1);
+    CHECK(b.allow == 1 && b.hold == 1 && b.carryNs == PERIOD && b.climbs == 0);
+    CHECK(pacedSteps(&b, 1, 8, 1, 12 * MS, step, 0, NULL) == 1);
+    CHECK(b.allow == PACE_ALLOW_NONE && b.climbs == 1 && b.gateK == 0);
+    CHECK(b.sinceDrop == PACE_ALLOW_HOLD && b.dropMost == 0 && b.climbRefusals == 0);
+    /* back home with a period carried: two at once */
+    CHECK(pacedSteps(&b, 1, 8, 1, 12 * MS, step, 0, NULL) == 2);
+    /* past its due time by less than half a period: half the time carried */
+    {
+        PaceBudget e;
+
+        pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
+        (void)pacedSteps(&b, 4, 1, 1, 12 * MS, step, 0, NULL);
+        e = b;
+        (void)pacedSteps(&b, 1, 1, 1, 12 * MS, step, 0, NULL);
+        (void)pacedSteps(&e, 1, 1, 1, 12 * MS, step, 3 * MS, NULL);
+        CHECK(b.carryNs > 0 && e.carryNs == b.carryNs / 2 && e.arms == 0);
+    }
+}
+
+/* The timer path paced by the GPU under the same fake clock (Uncapped
+   without vsync: back to back, gap 0; a 3 ms step, so the budget is
+   (16.68 - 3) / GPU presents a step).  12, 9, 17 and 20 ms a picture: no
+   step ends a quarter of a period late, nothing drops, every frame
+   presented, no resync, and the presents are the budget's (at least
+   600 x (period - step) / GPU less 5) without asking the GPU for more than
+   the time there was (presents x GPU within 601 periods); at 20 ms the
+   whole-number allowance ended steps 13 ms late before its drop.  25 ms (a
+   GPU-bound phone's picture): the new frames only, the game's own 30.
+   1 ms: the presents of the whole-number rule to the one (13 a step, held
+   only by the cost guard). */
+static void testBudgetPacedLoop(void)
+{
+    static const unsigned gpus[] = {12, 9, 17, 20};
+    const uint64_t stepNs = 3 * MS;
+
+    for (unsigned i = 0; i < sizeof(gpus) / sizeof(gpus[0]); i++) {
+        const uint64_t gpu = gpus[i] * MS;
+        const BudgetRun old = budgetLoop(600, gpu, 0, true, 0, false, false);
+        const BudgetRun r = budgetLoop(600, gpu, 0, true, 0, false, true);
+
+        printf("pace_policy_test: paced, back to back, GPU %u ms a picture: %u presents (%.2f a "
+               "step), latest step %.1f ms, %u drops; the whole-number allowance %u presents, "
+               "latest step %.1f ms, %u drops\n",
+               gpus[i], r.presents, (double)r.presents / 600.0, (double)r.lateMax / 1e6, r.drops,
+               old.presents, (double)old.lateMax / 1e6, old.drops);
+        CHECK(r.lateMax < PERIOD / 4 && r.drops == 0 && r.resyncs == 0);
+        CHECK(r.shown == r.frames && r.allow == PACE_ALLOW_NONE);
+        CHECK((uint64_t)r.presents * gpu <= 601u * PERIOD);
+        CHECK((uint64_t)r.presents + 5 >= 600u * (PERIOD - stepNs) / gpu);
+        if (gpus[i] == 20) {
+            CHECK(old.lateMax >= PERIOD / 2 && old.drops >= 1);
+        }
+    }
+    {
+        const BudgetRun r = budgetLoop(600, 25 * MS, 0, true, 0, false, true);
+
+        CHECK(r.presents == r.frames && r.shown == r.frames && r.lateMax < PERIOD / 4);
+        CHECK(r.drops == 0 && r.resyncs == 0);
+    }
+    {
+        const BudgetRun old = budgetLoop(600, 1 * MS, 0, true, 0, false, false);
+        const BudgetRun r = budgetLoop(600, 1 * MS, 0, true, 0, false, true);
+
+        CHECK(r.presents == old.presents && r.refused == 0 && r.drops == 0);
     }
 }
 
@@ -1623,6 +1855,8 @@ int main(void)
     testBudgetGlWait126();
     testBudgetLines();
     testBudgetTimerLoop();
+    testBudgetPaced();
+    testBudgetPacedLoop();
     testLateSkipLate();
     testLateSkipSlow();
     testLateSkipNeverTwice();
