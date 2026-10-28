@@ -2620,7 +2620,7 @@ blend (the twin has no destination-read build) (`port/render/rd_pixel_plan.c`
 (`rd__screen_planes_want`)). Every whole scale, Original's 1x among them, keeps the planes
 everywhere, so its pictures are unchanged. At a fractional scene scale (`g_rd.sceneSx`,
 `sceneSy` at the start-up set) each `vu_ps` key of the start-up set has its `vu_np_ps` twin
-(`rd__vu_pixel_fs_enum`); a scale reached later makes the twins on first use. The log: the
+(`rd__vu_pixel_fs_enum`); a later scale's are made at its change (DISPLAY.md). The log: the
 profile's start line (`VU planes whole scales only`, or `every scale`), one `planes:` line a run
 the first time a target drops them, and `vu no-planes N` (the VU passes drawn through `vu_np_ps`)
 in `--stats` and the 10 s `window:` line.
