@@ -109,6 +109,21 @@ static const char *const expectedBatch[] = {
     "vu_tri_planes_batch_pre_vs", "vu_particle_batch_pre_vs",
 };
 
+/* the draw merge's builds (ICO_VU_MERGE, vu_common.hlsli: the mesh and grid
+ * programs' entries, both variants, and vu_main_vs reading every draw's
+ * VuCB and VuBoneCB from the ring at t5 for a draw of many; rd_replay_vu.c
+ * vuDraw, g_rd.vuMerge) */
+static const char *const expectedMerge[] = {
+    "vu_prelit_merge_vs",         "vu_lit_merge_vs",
+    "vu_lit_spec_merge_vs",       "vu_reflect_merge_vs",
+    "vu_grid_merge_vs",           "vu_grid_lit_merge_vs",
+    "vu_grid_spec_merge_vs",      "vu_prelit_merge_plain_vs",
+    "vu_lit_merge_plain_vs",      "vu_lit_spec_merge_plain_vs",
+    "vu_reflect_merge_plain_vs",  "vu_grid_merge_plain_vs",
+    "vu_grid_lit_merge_plain_vs", "vu_grid_spec_merge_plain_vs",
+    "vu_merge_main_vs",
+};
+
 /* entries the record path retired: the triangle stage of the vertex
  * records alone (vu_tri_vs) and the fallback's own pixel shaders (the
  * programs' entries draw with vu_ps and vu_texa_ps, as the main shaders) */
@@ -393,6 +408,13 @@ int main(void)
     for (size_t i = 0; i < nBatch; i++) {
         if (!ico_find_shader(expectedBatch[i])) {
             printf("FAIL %s: not in the table\n", expectedBatch[i]);
+            failures++;
+        }
+    }
+    const size_t nMerge = sizeof(expectedMerge) / sizeof(expectedMerge[0]);
+    for (size_t i = 0; i < nMerge; i++) {
+        if (!ico_find_shader(expectedMerge[i])) {
+            printf("FAIL %s: not in the table\n", expectedMerge[i]);
             failures++;
         }
     }
