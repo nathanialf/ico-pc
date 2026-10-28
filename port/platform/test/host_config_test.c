@@ -568,6 +568,12 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("still_represent", "false"), "0") == 0);
     CHECK(strcmp(ico_dev_env_value("still_represent", "true"), "1") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.still_represent"), "still_represent") == 0);
+    /* glow_redraw: the glow's chain drawn at every between-tick present
+       (rd_glow_hold.c redrawOn) */
+    CHECK(strcmp(ico_dev_env_name("glow_redraw"), "ICO_RD_GLOW_REDRAW") == 0);
+    CHECK(strcmp(ico_dev_env_value("glow_redraw", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("glow_redraw", "false"), "0") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.glow_redraw"), "glow_redraw") == 0);
     /* the device profile's flags (port/render/rd_profile.c rd__profile_init):
        date_path stencil or snapshot as they are, store_plan and blur_fold
        on/off, uint_view on/off or work */
