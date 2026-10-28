@@ -117,7 +117,9 @@
  * FEED128 (the aura's) in FEED_HELD and DISPLAY (the motion blur's old
  * frame) in DISPLAY_HELD, and the later presents start from them again, so
  * every present of a tick draws the same feedback and FEED128 and DISPLAY
- * advance once per tick as on the PS2.
+ * advance once per tick as on the PS2.  The glow (list 7's flare and
+ * bloom): the first present keeps its WORK3 in WORK3_HELD and the later
+ * ones paste that instead of drawing the chain again (rd_glow_hold.c).
  *
  * The motion blur.  On the PS2 the sprite draws the previous
  * DISPLAY as Cs over the new SCENE with ALPHA (Cs - Cd) FIX / 128 + Cd
@@ -5599,27 +5601,44 @@ static bool readsAnyTarget(const RdStateBlock *st)
  * list l */
 static void headCopy(int l, uint32_t from, uint32_t to, uint32_t sizeOf)
 {
+    (void)rd__interp_copy_at(l, 0, from, to, sizeOf);
+}
+
+int rd__interp_writes(const RdCmd *c, const RdStateBlock *st, uint32_t id)
+{
+    return writesTarget(c, st, id);
+}
+
+int rd__interp_reads(const RdCmd *c, const RdStateBlock *st, uint32_t id)
+{
+    return readsTarget(c, st, id);
+}
+
+bool rd__interp_copy_at(int l, uint32_t at, uint32_t from, uint32_t to, uint32_t sizeOf)
+{
     RdCmdList *cl = &s_out.lists[l];
     const RdTargetRec *t = rd__target_rec(sizeOf);
     uint32_t off;
-    RdCopyRec *r = t ? (RdCopyRec *)(void *)outAppend(sizeof(RdCopyRec), &off) : NULL;
+    RdCopyRec *r =
+        t && at <= cl->count ? (RdCopyRec *)(void *)outAppend(sizeof(RdCopyRec), &off) : NULL;
     if (!r) {
-        return;
+        return false;
     }
     memset(r, 0, sizeof(*r));
     r->w = t->w;
     r->h = t->h;
     if (!growTo((void **)&cl->cmds, &cl->cap, cl->count + 1, sizeof(RdCmd))) {
-        return;
+        return false;
     }
-    memmove(&cl->cmds[1], &cl->cmds[0], (size_t)cl->count * sizeof(RdCmd));
+    memmove(&cl->cmds[at + 1], &cl->cmds[at], (size_t)(cl->count - at) * sizeof(RdCmd));
     cl->count++;
-    RdCmd *c = &cl->cmds[0];
+    RdCmd *c = &cl->cmds[at];
     memset(c, 0, sizeof(*c));
     c->type = RDC_COPY;
     c->u[0] = from;
     c->u[1] = to;
     c->u[2] = off;
+    return true;
 }
 
 /* The feedback passes' inputs, held at the tick.  A frame that writes FEED128
@@ -5983,6 +6002,9 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     s_hashOk = !(blend && s_cam.on && !s_cam.still) && !g_rd.settings.motionBlurSmooth;
     s_hash = s_hashOk ? outHash() : 0;
     feedback(firstOfTick);
+    /* the glow kept from the tick's first present (rd_glow_hold.c): after
+     * the hash too, which the held glow leaves exact */
+    (void)rd__glow_hold(&s_out, firstOfTick);
     if (stats) {
         *stats = st;
     }
@@ -6271,6 +6293,7 @@ static void presentLog(void)
     rd__blur_smooth_block(); /* Motion blur: Smooth's line, when it drew */
     rd__crack_fill_block();  /* the crack filler's, when it filled or was kept off */
     rd__reshow_block();      /* the still re-present's */
+    rd__glow_hold_block();   /* the glow held between ticks */
     const uint32_t number = s_pres.number;
     const uint32_t tickPresents = s_pres.tickPresents, lastTickPresents = s_pres.lastTickPresents;
     memset(&s_pres, 0, sizeof(s_pres));
