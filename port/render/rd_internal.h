@@ -495,10 +495,14 @@ RdTargetRec *rd__target_rec(uint32_t id);
  * the depth of field's and the aura's pastes into SCENE take
  * fx_sprite_ps's bilinear or nearest at each texel's GS position
  * (rd_replay.c blurAbove1xSteps), the softening's AA0 and AA1 back over
- * SCENE sprite_ps's own sampling (spriteAbove1x).  The game's draws from a
+ * SCENE sprite_ps's own sampling (rd_fx_plan.c rd__sprite_above1x).  The game's draws from a
  * work buffer onto the frame all magnify (half a texel a GS pixel or
  * less); draws from SCENE, WORK2 or AURA_WORK into one keep the box */
 bool rd__work_class(const RdTargetRec *t);
+/* a shadow blur level, SHADOW0..2 (rd_core.c shadowLevel): scale 1 at every
+ * scale, composited into SCENE with one bilinear tap above 1x unless
+ * RdProfile.shadowBspline (rd_fx_plan.c rd__sprite_above1x) */
+bool rd__shadow_level(const RdTargetRec *t);
 /* a target's name: SCENE, DISPLAY, ... for a named one, "block" for a
  * render-to-texture block, "temporary" for another temporary, "gone" */
 const char *rd__target_name(uint32_t id);
@@ -1022,6 +1026,11 @@ typedef struct RdProfile {
      * seven stencil-tested draws and the box reduction; [dev] shadow_count
      * over it, its self-test (rd_shadow_selftest.c) after it */
     bool shadowOne;
+    /* the shadow composites above 1x through the cubic B-spline
+     * (sprite.hlsl sprite_above1x), not one bilinear tap as at 1x (the
+     * default on every class); [dev] shadow_bspline = true sets it, an A/B
+     * (rd_fx_plan.c rd__sprite_above1x) */
+    bool shadowBspline;
     /* rd_profile.c: the device class's name for the lines; per flag
      * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
      * turned it off (rd__profile_self_test_off) */
@@ -1053,6 +1062,7 @@ enum {
     RD_PROFILE_FX_DST_LOCAL = 1u << 8,
     RD_PROFILE_VU_PLANES = 1u << 9,
     RD_PROFILE_SHADOW_ONE = 1u << 10,
+    RD_PROFILE_SHADOW_BSPLINE = 1u << 11,
 };
 
 /* fills g_rd.profile from the device (rd_profile.c); called by rd_init after
