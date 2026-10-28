@@ -403,6 +403,16 @@ target_compile_options(rd_msaa_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_W
 target_include_directories(rd_msaa_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_msaa_test PRIVATE ico_render)
 
+# rd_display_change_test: a display change while the game runs (rd_core.c
+# rd_begin_frame, rd_pipeline.c rd__display_pipelines): from Original with
+# the start-up set to Enhanced at a fractional scale and back, no replay makes
+# a pipeline on first use (the change made the new state's), and back at
+# Original the replay's counts and DISPLAY are a fresh start's, byte for byte.
+add_executable(rd_display_change_test test/rd_display_change_test.c)
+target_compile_options(rd_display_change_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_display_change_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_display_change_test PRIVATE ico_render)
+
 # rd_perf_test: a synthetic game-shaped frame replayed 200
 # times and recorded 200 times: no resource is created or destroyed and no
 # texture or static mesh uploaded again in steady state, and the CPU time of
@@ -772,7 +782,8 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blend_selftest_test
                   rd_vuprepass_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
-                  rd_perf_test rd_boot_present_test rd_crt_test texpack_load_test gsb_cull_test
+                  rd_perf_test rd_display_change_test rd_boot_present_test rd_crt_test
+                  texpack_load_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
                   rd_fx_frame_test rd_vu_frac_test rd_crack_test rd_local_probe_test)
 
@@ -973,6 +984,8 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_msaa PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_perf COMMAND rd_perf_test)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_display_change COMMAND rd_display_change_test)
+    set_tests_properties(rd_display_change PROPERTIES SKIP_RETURN_CODE 77)
     foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac)
         add_test(NAME ${_t} COMMAND ${_t}_test)
         set_tests_properties(${_t} PROPERTIES SKIP_RETURN_CODE 77)
@@ -997,7 +1010,7 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase ${rd_mesh_SHARDS} modelpack
-                             rd_shadow rd_shadow_edges rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_native PROPERTIES ENVIRONMENT
+                             rd_shadow rd_shadow_edges rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_display_change rd_native PROPERTIES ENVIRONMENT
                                                                            "${_env}")
         set_tests_properties(${rd_blur_SHARDS} PROPERTIES ENVIRONMENT "${_env}")
     endif()
@@ -1977,7 +1990,7 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         # the programs
         rd_state rd_pixel rd_native rd_layout rd_tex rd_gsbase ${rd_mesh_SHARDS} modelpack
         rd_shadow rd_shadow_edges rd_fog ${rd_blur_SHARDS} rd_water rd_raw rd_debug rd_present
-        rd_crt rd_mirror rd_msaa rd_perf rd_interp rd_boot_present rd_dst_usage
+        rd_crt rd_mirror rd_msaa rd_perf rd_display_change rd_interp rd_boot_present rd_dst_usage
         # the two-pass blend (ICO_RD_NO_DUAL=1 is the renderer's own switch, not a Vulkan fake)
         rd_pixel_nodual rd_present_nodual rd_fog_nodual rd_shadow_nodual rd_water_nodual
         rd_raw_nodual rd_mirror_nodual rd_interp_nodual rd_msaa_nodual rd_crack_nodual
