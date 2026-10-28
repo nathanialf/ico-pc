@@ -1118,6 +1118,15 @@ static int synthetic(void)
             "prepass: %llu passes in %u replays, %u..%u vertices, %llu draws",
             (unsigned long long)rest.prePasses, rest.n, rest.preVertMin, rest.preVertMax,
             (unsigned long long)rest.preDraws);
+        /* the batches cut draws (G1): strictly fewer than one an entry
+         * (rd_vubatch_ab proves the bytes the same) */
+        if (g_rd.vuPreBatch) {
+            CHECK(rest.preDraws < (uint64_t)DRAWS * rest.n,
+                  "prepass: %llu draws in %u replays, batched: want fewer than %llu (one an entry)",
+                  (unsigned long long)rest.preDraws, rest.n, (unsigned long long)DRAWS * rest.n);
+        } else {
+            printf("prepass: the draws are one an entry (no batch modules): the cut not checked\n");
+        }
         CHECK(rest.preFallbacks == 0, "prepass: %llu mesh draws drawn the old way",
               (unsigned long long)rest.preFallbacks);
         if (rest.barrierMax == 0) {
