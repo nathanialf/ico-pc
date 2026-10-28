@@ -252,7 +252,11 @@
  *                         .png); the motion blur takes k = N presents a
  *                         tick.  Under --motion-blur original the N
  *                         pictures' motion blur is one (DISPLAY_HELD), under
- *                         smooth its trail moves on at each
+ *                         smooth its trail moves on at each.  Each line
+ *                         ends "rendered" or "shown again": a present whose
+ *                         frame hashes as the last rendered one's is shown
+ *                         again (rd_reshow.c; ICO_RD_STILL_REPRESENT=0
+ *                         renders every one, the pictures the same)
  *   --interp-any          (with --interp) PREV is taken for the tick right
  *                         before <dump> whatever their frame numbers (dumps
  *                         saved some ticks apart, as the F12 sets are): no
@@ -1412,7 +1416,9 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
         char name[1100];
         snprintf(name, sizeof(name), "%s-p%d.png", stem, k);
         uint32_t w = 0, h = 0;
-        bool ok = rd__replay_frame(rf, (int)rf->keep, pw != 0);
+        const uint64_t shown0 = rd__reshow_count(RD_RESHOW_SHOWN);
+        bool ok = rd__present_blended(rf, k == 0, pw != 0);
+        const bool reshown = rd__reshow_count(RD_RESHOW_SHOWN) != shown0;
         if (ok && pw) {
             ok = writePresent(name, ow, oh, want, pw, ph);
             w = pw;
@@ -1425,10 +1431,10 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
         uint64_t drawn = 0, restarts = 0;
         rd__blur_smooth_counts(&drawn, &restarts, NULL);
         printf("%s: present %d of %d at alpha %.4f (snap %u): %ux%u -> %s; motion blur %s (%llu "
-               "drawn through the accumulator, %llu restarts)\n",
+               "drawn through the accumulator, %llu restarts); %s\n",
                dump, k, presentsN, (double)a, ist.snap, w, h, ok ? name : "(failed)",
                motionSmooth ? "smooth" : "original", (unsigned long long)drawn,
-               (unsigned long long)restarts);
+               (unsigned long long)restarts, reshown ? "shown again" : "rendered");
         rc = ok ? 0 : 1;
     }
     free(px);
