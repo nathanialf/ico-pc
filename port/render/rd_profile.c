@@ -16,7 +16,7 @@
  *   storePlan     off on every class: the store plan is not in the renderer
  *                 (docs/port/RENDER.md "The device profile"); [dev]
  *                 store_plan sets the flag, which nothing reads
- *   blurFold      off      off     on        on       off   on       on
+ *   blurFold      on       on      on        on       off   on       on
  *   robust access off: the Vulkan backend's default (vk_device.c;
  *                 gpu_robust = true turns it on); D3D12 and D3D11 their
  *                 own bounds; OpenGL the backend's RhiLimits.robustText
@@ -309,7 +309,7 @@ void rd__profile_init(void)
     p->fogLocal = local;
     p->dateStencil = local;
     p->storePlan = false; /* the store plan is not implemented: nothing reads the flag */
-    p->blurFold = tile && c != PC_MALI;
+    p->blurFold = c != PC_MALI;
     p->uintViewWork = !tile && lim->uintView;
     p->uintViewScene = !tile && lim->uintView;
     p->carefulSet = false;
