@@ -526,6 +526,14 @@ void rd__temp_target_free(uint32_t id);
 /* Destroys the parked temporary targets' textures (a scale
  * change, shutdown). */
 void rd__temp_target_pool_clear(void);
+/* rd_local_probe.c: SCENE's textures made again at the same size with the
+ * profile's flags in force (the input-attachment usage DATE's and the
+ * fog's local reads give its colour and depth, rd__target_create_gpu), the
+ * caches made from them freed; and every named target made again so
+ * (rd_core.c createNamedTargets, after rhi_wait_idle).  The contents are
+ * lost: SCENE starts from its clear. */
+bool rd__scene_textures_remake(void);
+void rd__targets_remake(void);
 /* A scene-sized allocation failed: asks for a lower scene scale at the next
  * rd_begin_frame, when the scene is above 1x (nothing to give back at 1x). */
 void rd__note_scene_pressure(void);
@@ -1014,7 +1022,17 @@ typedef struct RdProfile {
      * turned it off (rd__profile_self_test_off) */
     char cls[96];
     uint16_t devSet, selfTestOff;
-    char text[512]; /* the summary's words, as in force */
+    /* the desktop class with local read (Vulkan, not a tile-based GPU):
+     * desktopLocal its default for fogLocal, dateStencil and fxDstLocal
+     * (on with a window, or ICO_RD_LOCAL_PROBE set), localProbe the cost
+     * probe still to run (rd_local_probe.c), probeOff the flags the probe
+     * turned off ("(probe)"), localWords what the lines say of it ("" on
+     * any other class) */
+    bool desktopLocal;
+    bool localProbe;
+    uint16_t probeOff;
+    char localWords[96];
+    char text[640]; /* the summary's words, as in force */
 } RdProfile;
 
 /* RdProfile's flags, for its marks (devSet, selfTestOff) */
@@ -1042,6 +1060,40 @@ const char *rd__profile_text(void);
  * in the summary's words, and one line "rd: profile: <flag> off
  * (self-test)". */
 void rd__profile_self_test_off(unsigned flag);
+/* The three flags of the local-read paths (the desktop's probe) */
+#define RD_PROFILE_LOCAL_BITS                                                                      \
+    ((unsigned)RD_PROFILE_FOG_LOCAL | (unsigned)RD_PROFILE_DATE_STENCIL |                          \
+     (unsigned)RD_PROFILE_FX_DST_LOCAL)
+/* The desktop's local-read words after the probe (or after it was not
+ * run): RdProfile.localWords set, the summary's words made again, the probe
+ * no longer due.  rd__profile_probe_off turns the local-read flags that
+ * are on off, "(probe)" after each in the summary's words, one line
+ * "rd: profile: <flag> off (probe)" for each. */
+void rd__profile_local_words(const char *words);
+void rd__profile_probe_off(void);
+
+/* The desktop's local-read cost probe (rd_local_probe.c; docs/port/
+ * WORK_BUFFERS.md "The desktop's local read and its probe").  Once a
+ * renderer, after the self-tests (rd_fog_selftest's first run), on the
+ * desktop class with RdProfile.localProbe: a frame of its own (full-frame
+ * layers with depth in list 0, three DATE composites in list 3, the fog in
+ * list 4, the motion blur's sprite in list 7) is replayed on SCENE at its
+ * real size with the local reads and through the snapshots (offPath the
+ * fog's depth path then), SCENE's textures made for each, MSAA held off,
+ * and the GPU's time of each replay read from its timestamps.  Returns 1
+ * when the local reads stay (not slower than the snapshots by more than
+ * RD_LOCAL_PROBE_TOLERANCE, or not measurable: no timestamps), 0 when it
+ * turned them off (rd__profile_probe_off, every named target made again;
+ * the caller chooses the fog's depth path again), -1 when it did not run
+ * (not due, the self-tests turned the flags off, a [dev] key set them).
+ * Logs one line:
+ *   rd: profile: local read on the desktop: kept (probe 0.412 vs 0.530 ms:
+ *       ...)
+ * rd__local_probe_keep is its verdict on the two least times (ms; a time
+ * not above 0: kept). */
+#define RD_LOCAL_PROBE_TOLERANCE 0.05
+int rd__local_probe(int offPath);
+bool rd__local_probe_keep(double localMs, double snapMs);
 
 /* ------------------------------------------------------------ pipelines */
 typedef enum RdVsId {
@@ -2288,6 +2340,9 @@ typedef struct RdContext {
      * renderer (once per rd_init: a renderer switched in the process tests
      * its own device) */
     bool dateRan;
+    /* rd_init was given a window (the game; rd__profile_init: the desktop's
+     * local reads and their probe), not a headless run */
+    bool windowed;
     /* the open frame is closed without a picture (rd_resume_frame) */
     bool discardOpen;
 
@@ -2753,6 +2808,14 @@ void rd__set_perf_passes(bool on);
  * pass are written (rd_perf.c stamp).  rd__set_perf_list_stamps for the
  * tests */
 void rd__set_perf_list_stamps(bool on);
+/* the list stamps are written (not [dev] perf_list_stamps = false) */
+bool rd__perf_list_stamps_on(void);
+/* The GPU time (ms, its first timestamp to its last) of replay number
+ * `replay` (RdPerfRecord.replay), once its timestamps came in (the replay
+ * RHI_FRAMES_IN_FLIGHT later) and while its record waits for rd_perf_pop;
+ * false when it is not there or has no timestamps.  The record stays
+ * queued. */
+bool rd__perf_gpu_ms_of(uint32_t replay, double *ms);
 /* RdPerfPass.target for target id `id` (rd_core.c) */
 uint8_t rd__target_code(uint32_t id);
 /* rd_set_host_call's hook, or fn(arg) directly (rd_core.c) */
@@ -3008,6 +3071,10 @@ void rd__fog_probe_finish(void);
  * doFog reads the table at the exact entry of the depth's index (Z >> 16),
  * not between entries above 1x, so both measure the depth read alone. */
 bool rd__fog_exact(void);
+/* The local-read probe's replays (rd_local_probe.c): the fog draws as in
+ * a game frame (between entries above 1x, the crack fill before it), and
+ * neither the fog's probe nor its edge probe takes them. */
+void rd__fog_timing(bool on);
 /* The self-tests' frames (rd_fog_path.c, rd_blend_selftest.c), built here,
  * never recorded: rd__st_push appends a zeroed command of type to list
  * (NULL when out of memory), rd__st_push1 one with b[0] = v, rd__st_test
