@@ -375,6 +375,11 @@ static void gl_fill_limits(void)
     o->dynamicDepth = true;
     o->dynamicBlend = true;
     o->uintView = true; /* glTextureView, core in 4.3 */
+    /* the stencil read: a texture view in the stencil-index mode
+     * (GL_DEPTH_STENCIL_TEXTURE_MODE, core in 4.3; gl_resource.c), the value
+     * in red */
+    o->stencilView = true;
+    o->stencilViewChannel = 0;
     o->vuFallbackPlain = NULL;
     o->compilerVersion = NULL;
     o->carefulPipelines = NULL;
