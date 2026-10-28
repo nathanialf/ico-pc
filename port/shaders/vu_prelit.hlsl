@@ -72,13 +72,13 @@ VuPreOut vu_prelit_pre_vs(uint vid : SV_VertexID)
 GS_PS_ATTR GS_PS_OUT vu_ps(VuPSIn i)
 {
     const float4 col = vu_pixel(i);
-    VU_RETURN(col, i.pos);
+    VU_RETURN(col, i);
 }
 
 GS_PS_ATTR GS_PS_OUT vu_texa_ps(VuPSIn i)
 {
     const float4 col = vu_pixel_texa(i);
-    VU_RETURN(col, i.pos);
+    VU_RETURN(col, i);
 }
 
 // The probe's input: the position and the colour (location 0 of VuVSOut)
