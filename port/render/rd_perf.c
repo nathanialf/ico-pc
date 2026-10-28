@@ -153,9 +153,11 @@ static void push(const RdPerfRecord *r)
 
 /* Direct3D 11's submit writes of the records popped since the last
  * rd_perf_backend_text, and their count; the re-shown presents and the
- * rendered ones that pasted the held glow among them */
+ * rendered ones that pasted the held glow among them; the draw merge's
+ * draws (RdPerfRecord vuMergeIn, vuMergeGpu, vuMergeAlone) */
 static uint64_t s_backendBytes;
 static uint32_t s_backendReplays, s_reshownReplays, s_glowHeldReplays;
+static uint64_t s_mergeIn, s_mergeGpu, s_mergeAlone;
 
 bool rd_perf_pop(RdPerfRecord *out)
 {
@@ -166,6 +168,9 @@ bool rd_perf_pop(RdPerfRecord *out)
     s_backendReplays++;
     s_reshownReplays += s_queue[s_head].reshown;
     s_glowHeldReplays += s_queue[s_head].glowHeld && !s_queue[s_head].reshown;
+    s_mergeIn += s_queue[s_head].vuMergeIn;
+    s_mergeGpu += s_queue[s_head].vuMergeGpu;
+    s_mergeAlone += s_queue[s_head].vuMergeAlone;
     if (out) {
         *out = s_queue[s_head];
     }
@@ -191,7 +196,7 @@ bool rd__perf_gpu_ms_of(uint32_t replay, double *ms)
 
 const char *rd_perf_backend_text(void)
 {
-    static char s_text[256];
+    static char s_text[384];
     size_t at = 0;
     s_text[0] = '\0';
     if (s_backendBytes && s_backendReplays) {
@@ -208,15 +213,25 @@ const char *rd_perf_backend_text(void)
     }
     if (s_glowHeldReplays) {
         /* rendered between-tick presents that pasted the tick's glow (rd_glow_hold.c) */
+        const int n = snprintf(s_text + at, sizeof(s_text) - at,
+                               "; %u between-tick pictures pasted the tick's glow without its "
+                               "chain ([dev] glow_redraw)",
+                               s_glowHeldReplays);
+        at += n > 0 && (size_t)n < sizeof(s_text) - at ? (size_t)n : 0;
+    }
+    if ((s_mergeIn || s_mergeAlone) && s_backendReplays) {
+        /* the draw merge (rd_replay_vu.c): per replay, the VU draws joined
+           into GPU draws of two or more, those GPU draws, the draws alone */
+        const double n = (double)s_backendReplays;
         snprintf(s_text + at, sizeof(s_text) - at,
-                 "; %u between-tick pictures pasted the tick's glow without its chain ([dev] "
-                 "glow_redraw)",
-                 s_glowHeldReplays);
+                 "; VU merge: %.0f draws a replay in %.0f GPU draws, %.0f alone ([dev] vu_merge)",
+                 (double)s_mergeIn / n, (double)s_mergeGpu / n, (double)s_mergeAlone / n);
     }
     s_backendBytes = 0;
     s_backendReplays = 0;
     s_reshownReplays = 0;
     s_glowHeldReplays = 0;
+    s_mergeIn = s_mergeGpu = s_mergeAlone = 0;
     return s_text;
 }
 
