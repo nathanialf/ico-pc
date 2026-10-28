@@ -70,7 +70,7 @@ typedef struct Replay {
        starts with: a post sprite's effect ends with its list */
     int perfPost, perfPending, perfPendingPost, perfTargetEffect;
     /* the reduction's fallback sprite being drawn keeps the GS's filter on
-     * both axes (doBlurSpriteDraw: blurAbove1xSteps 0), so spriteAbove1x
+     * both axes (doBlurSpriteDraw: blurAbove1xSteps 0), so rd__sprite_above1x
      * leaves its flag off */
     int a1xGs;
     /* the tiler passes (rd_replay.c).  passDepthReadable: the open pass
@@ -271,6 +271,10 @@ bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x);
  *                    ch of *identity) or one value for every Cd and Ad
  *                    (rgb[ch]); RGBAQ rgba
  * rd__a1x_sprite_steps  a sprite command's above-1x steps (DrawSetup.a1xSteps)
+ * rd__sprite_above1x  fillDrawCB: 1 when a pass takes DF_ABOVE1X (sprite.hlsl
+ *                    sprite_above1x); redId the shadow count's GS-size
+ *                    texture (rd_replay.c s_shadowRed), 0 none; the shadow
+ *                    composites only with RdProfile.shadowBspline
  * rd__fx_reduction_clears  the reduction's black sprite on a scaled target
  *                    (the pair v as doBlurSpriteDraw draws it) is the clear
  *                    of colour col (doBlurSpriteDraw records it)
@@ -278,6 +282,7 @@ bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x);
 bool rd__fx_fold(const RdDrawState *d, const uint8_t rgba[4], uint8_t *identity, uint8_t rgb[3]);
 uint32_t rd__a1x_sprite_steps(const Replay *r, const DrawSetup *ds, const IcoSpriteVertex *v,
                               uint32_t nv, uint8_t prim);
+int rd__sprite_above1x(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds, uint32_t redId);
 bool rd__fx_reduction_clears(Replay *r, const RdScreenVtx v[2], float col[4]);
 void rd__replay_end_pass(Replay *r);
 /* box_reduce_ps's DrawCB for the count target tc, its scaled texels into
