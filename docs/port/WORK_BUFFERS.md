@@ -491,6 +491,14 @@ draw covers every anti-aliasing setting.
 **Where the seven draws stay.** A backend without the view (`RhiLimits.stencilView` false, or a
 depth-stencil that cannot be sampled, `depthSampled`), `[dev] shadow_one = false`
 (`ICO_RD_SHADOW_ONE=0`, the A/B), and a device whose self-test finds the one draw wrong. The
+view is optional: a backend that cannot make it for a texture (Vulkan, OpenGL or Direct3D 11; a
+MoltenVK stencil-aspect view or an old GL texture-view driver may refuse) keeps the texture with its
+depth, logs `texture NAME: the stencil view was not made: no stencil views on this device from now
+(the shadow count takes the seven draws)` once (Direct3D 11's line has no texture name) and turns
+`RhiLimits.stencilView` off; the next one-draw resolve then turns `shadowOne` off for good, `[dev]`
+or not (`profile: shadow count one draw off (self-test)`), and the stencil aspect is never bound
+(Vulkan would otherwise sample the all-aspects view of a depth-stencil image). The self-test reports
+`not run (the backend could not make a stencil view)`. The
 start-up set holds the seven draws' and the reduction's pipelines as before and the one draw's
 where the profile has it. The profile's start line and the summary say which: `shadow count one
 draw`, `shadow count seven draws`, with ` ([dev])` or ` (self-test)` after it when that decided;
