@@ -691,7 +691,10 @@ typedef struct RhiLimits {
      * GL_DEPTH_STENCIL_TEXTURE_MODE GL_STENCIL_INDEX); stencilViewChannel the
      * channel the value arrives in, 0 red (Vulkan, OpenGL) or 1 green
      * (Direct3D's G8 plane).  false: the binding reads what the default
-     * view reads, and the renderer keeps its stencil-tested draws. */
+     * view reads, and the renderer keeps its stencil-tested draws.  The
+     * view is optional: a backend that cannot make it for a texture keeps
+     * the texture and sets this false for the device from then on (logged
+     * once); the renderer then turns its one draw off (rd_shadow_one.c). */
     bool stencilView;
     uint8_t stencilViewChannel;
     /* Why the VU fallback's program entries are the plain ones on this
