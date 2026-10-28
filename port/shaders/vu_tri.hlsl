@@ -171,6 +171,7 @@ VuPreOut vu_tri_planes_pre_vs(uint vid : SV_VertexID)
 // program's entry hands them over)
 VuVSOut vu_main_vs(uint vid : SV_VertexID)
 {
+    vid = VU_MERGE_ENTRY(vid); // the merge build: the draw's own value
     bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
     uint kick = vid >> 2;
     uint corner = vid & 3u;
