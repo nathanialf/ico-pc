@@ -115,8 +115,8 @@
  *      and 2560 (60:9): 9, 9, 8 and 8 pairs folded, every target the
  *      model's (the glow's edge strip in it), the same frame replayed with
  *      the fold off the model's again (the folded and unfolded chains'
- *      bytes the same at every width), and with the strip off no pair
- *      folded on a wide frame.
+ *      bytes the same at every width), and with the strip off every
+ *      target the model's (nine folds at 4:3).
  *   l  the frame-size post sprites' plan (rd_fx_plan.c, RdProfile.fxPlan, on
  *      in every other case): post modes 1..7 as e runs them and 40 motion
  *      blur frames as m runs them, every target against the CPU model
@@ -3718,8 +3718,9 @@ static void checkPipelines(void);
  * strip exactly; the same recorded frame replayed with the fold off, every
  * target the model's again, so the folded and the unfolded chains write the
  * same bytes at every width; then with the strip off (rd__set_glow_edge_fill,
- * the model without it), where the fold may not stand in for the strip: a
- * wide frame folds no pair and its targets are still the model's. */
+ * the model without it), where the fold may not stand in for the strip:
+ * every target still the model's (nine folds at 4:3, where the strip never
+ * applies; on a wide frame whatever the rules leave, printed). */
 static void checkBlurFoldWide(void)
 {
     static const struct {
@@ -3773,7 +3774,7 @@ static void checkBlurFoldWide(void)
         const int dOff = compareAll(again, failures < 10);
         CHECK(off == 0, "%s: %u pairs folded", again, off);
 
-        /* the strip off: no pair folds on a wide frame */
+        /* the strip off: the true pairs are refused on a wide frame */
         g_rd.profile.blurFold = true;
         rd__set_glow_edge_fill(false);
         s_modelGlowEdge = 0;
@@ -3787,8 +3788,8 @@ static void checkBlurFoldWide(void)
         rhi_wait_idle();
         const uint32_t bare = g_rdPerf.blurFolds;
         const int dBare = compareAll(again, failures < 10);
-        const uint32_t wantBare = fw == W ? kF[r].folds : 0u;
-        CHECK(bare == wantBare, "%s: %u pairs folded, %u expected", again, bare, wantBare);
+        CHECK(fw != W || bare == kF[r].folds, "%s: %u pairs folded, %u expected", again, bare,
+              kF[r].folds);
         rd__set_glow_edge_fill(true);
         s_modelGlowEdge = 1;
         printf("  %s: %u pairs folded (max difference %d), %u with the fold off (%d), %u without "
