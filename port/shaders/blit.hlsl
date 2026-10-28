@@ -8,6 +8,7 @@
 //   aa_reduce_ps the supersampled DISPLAY box-averaged to the present box
 //   msaa_resolve_ps, depth_resolve_ps, depth_upsample_ps the MSAA epoch
 //   crack_fill_ps, crack_count_ps the crack filler above 1x (rd_crack_fill.c)
+//   crack_fill1_ps crack_fill_ps for a reach of at most 1 (CRACK_REACH_1)
 // Texture function flags are DrawCB.g_mode.x: with DF_TEXTURED clear the
 // pass writes the tint colour alone (fade, letterbox).
 #include "common.hlsli"
@@ -348,6 +349,37 @@ bool crack_behind(Texture2D<float> z, int2 p, int2 step, int a, int b, float da,
     return e - dp > e * share;
 }
 
+#ifdef CRACK_REACH_1
+// crack_fill1_ps's crack_at (CRACK_REACH_1: the reach is 0 or 1 on each axis,
+// 2x on a whole scale): a run of one texel has the immediate neighbours for
+// its ends, so the decision below is crack_at's with l = r = u = d = 1 and
+// reads nothing farther than crack_behind does. The four neighbours are read
+// first and a texel with no pair of them in front of it along an enabled axis
+// (every ordinary surface texel) is left at once.
+bool crack_at(Texture2D<float> z, int2 p, int2 size, int2 reach, float share, out int2 from)
+{
+    from = p;
+    float dp = crack_depth(z, p, size);
+    float dl = crack_depth(z, p + int2(-1, 0), size);
+    float dr = crack_depth(z, p + int2(1, 0), size);
+    float du = crack_depth(z, p + int2(0, -1), size);
+    float dd = crack_depth(z, p + int2(0, 1), size);
+    bool hx = reach.x >= 1 && crack_front(dl, dp, share) && crack_front(dr, dp, share);
+    bool hy = reach.y >= 1 && crack_front(du, dp, share) && crack_front(dd, dp, share);
+    if (!hx && !hy) {
+        return false;
+    }
+    if (hx && (dp == 0.0 || crack_behind(z, p, int2(1, 0), 1, 1, dl, dr, dp, size, share))) {
+        from = p + int2(-1, 0);
+        return true;
+    }
+    if (hy && (dp == 0.0 || crack_behind(z, p, int2(0, 1), 1, 1, du, dd, dp, size, share))) {
+        from = p + int2(0, -1);
+        return true;
+    }
+    return false;
+}
+#else
 // p a crack of the depth copy z: from the texel it takes
 bool crack_at(Texture2D<float> z, int2 p, int2 size, int2 reach, float share, out int2 from)
 {
@@ -371,6 +403,7 @@ bool crack_at(Texture2D<float> z, int2 p, int2 size, int2 reach, float share, ou
     }
     return run <= CRACK_REACH_MAX;
 }
+#endif
 
 struct CrackFillOut {
     VK_LOC(0) float4 c : SV_Target0;
