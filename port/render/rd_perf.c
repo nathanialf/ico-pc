@@ -171,6 +171,21 @@ bool rd_perf_pop(RdPerfRecord *out)
     return true;
 }
 
+bool rd__perf_gpu_ms_of(uint32_t replay, double *ms)
+{
+    for (uint32_t k = 0; k < s_count; k++) {
+        const RdPerfRecord *r = &s_queue[(s_head + k) % RD_PERF_QUEUE];
+        if (r->replay == replay) {
+            if (!r->gpuValid) {
+                return false;
+            }
+            *ms = r->gpuMs;
+            return true;
+        }
+    }
+    return false;
+}
+
 const char *rd_perf_backend_text(void)
 {
     static char s_text[64];
@@ -259,6 +274,11 @@ void rd__set_perf_passes(bool on)
 void rd__set_perf_list_stamps(bool on)
 {
     s_noListStamps = !on;
+}
+
+bool rd__perf_list_stamps_on(void)
+{
+    return !s_noListStamps;
 }
 
 bool rd_perf_passes_mode(void)
