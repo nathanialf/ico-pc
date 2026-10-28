@@ -308,13 +308,18 @@ void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSet
  *                       applied
  * rd__replay_fold_list  the list the loop walks (NULL at its end), the
  *                       list number and the frame head's half pixel;
- *                       rd__replay_fold_at the command being replayed */
+ *                       rd__replay_fold_at the command being replayed
+ * rd__replay_glow_edge_columns (rd_blur_border.c) the WORK1 columns 0 ..
+ *                       n - 1 the glow's edge strip draws after c, pass 1
+ *                       of blur(n) on a wide frame, under r's state, as
+ *                       c's texels at its first drawn column n; 0: none */
 bool rd__replay_date_take(Replay *r, const DrawSetup *ds);
 bool rd__replay_date_clear(Replay *r, const DrawSetup *ds, const RhiRect *area);
 bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c);
 void rd__replay_fold_list(const RdCmd *cmds, uint32_t count, int list, uint32_t headHalf);
 void rd__replay_fold_at(uint32_t index);
 uint32_t rd__replay_fold_skip(void);
+int rd__replay_glow_edge_columns(const Replay *r, const RdFrame *f, const RdCmd *c);
 /* rd_replay_vu.c.
  * rd__replay_vu       a VU draw under its camera's picture
  * rd__vu_prepass      before list 0 (replayFrame, after the uploads and
