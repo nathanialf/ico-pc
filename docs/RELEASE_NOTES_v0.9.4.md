@@ -11,3 +11,4 @@
 
 - At wide aspect ratios on phones, tablets and Macs, the glow's left edge could keep a thin strip from an earlier blur step.
 - Changing the display settings while playing could leave the game slower until a restart, and on phones switching to a resolution that is not a whole multiple could stop the game while it prepared its graphics. The game now prepares them with a progress screen right after the change.
+- With the frame rate on Uncapped and vsync off, a graphics card that can draw more than 60 but fewer than 120 pictures a second was held at exactly 60 during play after the first few seconds. It now shows as many pictures as the card can draw in time.
