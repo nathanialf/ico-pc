@@ -43,6 +43,7 @@ in the renderer assumes BGRA.
 | `rasterOrderAttachment` | where offered | false | false | false | the exact attachment blend offered |
 | `dualSourceBlend` | where offered | true | `GL_MAX_DUAL_SOURCE_DRAW_BUFFERS` >= 1 | true | the one-pass blend, else the `_nodual` twins |
 | `uintView` | true | false | true (`glTextureView`) | false | `uintViewWork`, `uintViewScene` |
+| `stencilView` (`stencilViewChannel`) | where the depth-stencil is sampled: a `VK_IMAGE_ASPECT_STENCIL_BIT` view (red) | true: an SRV of plane 1, `X32_TYPELESS_G8X24_UINT` (green) | true: a `glTextureView` in `GL_STENCIL_INDEX` mode (red) | true: an SRV of `X32_TYPELESS_G8X24_UINT` (green) | `shadowOne`: the shadow count in one draw |
 | `dynamicDepth`, `dynamicBlend` | where offered | false | true | false | dynamic state (`[dev] dynamic_state`) |
 | `colorBytesPerPixel` | 0 (MoltenVK: the GPU's) | 0 | 0 | 32 | the VU vertex pre-pass needs 48 or 0 (no bound) |
 | `msaaCounts` | the device's | the device's | `glGetInternalformativ` of RGBA8, RGBA8UI, D32F_S8 | `CheckMultisampleQualityLevels` | the MSAA values offered, with `depth_resolve_ps` made |
@@ -89,13 +90,20 @@ from the limits above. [RENDER.md](RENDER.md#the-device-profile) has the other c
 | dynamic state | on | none |
 | `alphaPlan`, `fxPlan`, `vuPlanesFrac` | on | on |
 | `crackFill` | on | on |
+| `shadowOne` | on (`stencilView`) | on (`stencilView`) |
 
 The class name carries the vendor where the backend knows it and the backend's name:
 
 ```
-rd: profile: immediate-mode GPU (OpenGL): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access off (OpenGL); local read no; uint views work and scene; alpha plan on; fx plan on; fx local read off; VU planes whole scales only; pipelines the start-up set
-rd: profile: immediate-mode GPU (NVIDIA, D3D11): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access D3D11's own; local read n/a; uint views off; alpha plan on; fx plan on; fx local read off; VU planes whole scales only; pipelines the start-up set
+rd: profile: immediate-mode GPU (OpenGL): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access off (OpenGL); local read no; uint views work and scene; alpha plan on; fx plan on; fx local read off; VU planes whole scales only; shadow count one draw; pipelines the start-up set
+rd: profile: immediate-mode GPU (NVIDIA, D3D11): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access D3D11's own; local read n/a; uint views off; alpha plan on; fx plan on; fx local read off; VU planes whole scales only; shadow count one draw; pipelines the start-up set
 ```
+
+The stencil views of the four backends (`RHI_ASPECT_STENCIL`, [RHI.md](RHI.md)) are what the
+shadow count's one draw reads ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-count-in-one-draw));
+Vulkan's (on lavapipe) and OpenGL's (on llvmpipe, the `_gl` twins) run in the suite, Direct3D 11's
+in the WARP job; Direct3D 12's has not run on a device. Every one is checked at start by the
+count's self-test, which falls back to the seven draws on a wrong byte.
 
 OpenGL's vendor comes from `GL_VENDOR` and `GL_RENDERER` (`gl_vendor_id`: NVIDIA, AMD, Intel;
 llvmpipe names none), Direct3D 11's from the adapter. The `ico_pc: summary:` line names the
