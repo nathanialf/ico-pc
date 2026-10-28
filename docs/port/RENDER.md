@@ -2338,7 +2338,7 @@ on, and one log line `fog: depth path` names it with every result (`rd: fog: dep
 (self-test: local ok 0, copy not tried, inplace not tried, buffer not tried) on SCENE ...`; run
 again when the desktop's probe turns local off); a
 local read that fails turns `fogLocal` off (`(self-test)`), and the order is then the local one
-without it (copy, inplace, buffer). The local trial counts only where the fog drew through the
+without it (desktop: inplace, copy, buffer; else copy, inplace, buffer). The local trial counts only where the fog drew through the
 local read (`g_rdPerf.fogLocalDraws`). Under MSAA it never does (`port/render/rd_replay.c`
 (`fogLocalFor`): the epoch), and the path draws its MSAA fallback there (the per-sample fog or the
 copy), which is what the trial measured: the line says `local not measured (MSAA: its fallback ok
