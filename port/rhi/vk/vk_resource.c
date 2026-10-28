@@ -743,6 +743,15 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
     } else {
         t->depthView = VK_NULL_HANDLE;
     }
+    /* the stencil read (RHI_ASPECT_STENCIL: the shadow count's one draw),
+     * a sampled single-sampled depth-stencil texture's: its 8-bit value
+     * as an unsigned integer in red */
+    t->stencilView = VK_NULL_HANDLE;
+    if ((fm->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) && (desc->usage & RHI_TEX_SAMPLED) &&
+        samples == 1u &&
+        !vkr_create_view(t->image, vkFmt, VK_IMAGE_ASPECT_STENCIL_BIT, mips, &t->stencilView)) {
+        goto fail;
+    }
     t->uintView = VK_NULL_HANDLE;
     if (uintView && !vkr_create_uint_view(t->image, mips, &t->uintView)) {
         goto fail;
@@ -759,6 +768,9 @@ fail:
     }
     if (t->depthView) {
         vkDestroyImageView(g_vkr.device, t->depthView, NULL);
+    }
+    if (t->stencilView) {
+        vkDestroyImageView(g_vkr.device, t->stencilView, NULL);
     }
     vkDestroyImage(g_vkr.device, t->image, NULL);
     vkr_free_memory(t->memory, req.size);
@@ -777,6 +789,7 @@ void rhi_destroy_texture(RhiTexture h)
     vkr_framebuffer_forget_view(t->view, false);
     vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->view));
     vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->depthView));
+    vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->stencilView));
     vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->uintView));
     vkr_defer(VKR_GARBAGE_IMAGE, VKR_H(t->image));
     vkr_defer_memory(t->memory, t->memSize);
@@ -958,6 +971,9 @@ void vkr_release_all_objects(void)
             }
             if (t->depthView) {
                 vkDestroyImageView(d, t->depthView, NULL);
+            }
+            if (t->stencilView) {
+                vkDestroyImageView(d, t->stencilView, NULL);
             }
             /* the RGBA8_UINT view (RHI_TEX_UINT_VIEW), as rhi_destroy_texture
              * frees it */
