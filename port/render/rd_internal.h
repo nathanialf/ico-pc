@@ -1701,6 +1701,8 @@ uint32_t rd__vu_prepass_entry_draws(void);
  * ("on: ...", "off ...") for the summary line */
 void rd__vu_merge_name(uint8_t vs, bool plain, char *out, size_t size);
 const char *rd__vu_merge_text(void);
+/* The fused scissor pair (g_rd.vuFuse): "on" or "off" for the summary line */
+const char *rd__vu_fuse_text(void);
 
 /* rd_vuprepass_selftest's sabotage (ICO_RD_VU_PREPASS_SABOTAGE), while the
  * mode is not RD_VU_SABOTAGE_OFF: VERTEX the first mesh or grid command's
@@ -2535,6 +2537,14 @@ typedef struct RdContext {
      * any pipeline */
     bool vuMerge;
     RhiShader vsMerge[RD_VS_COUNT];
+    /* the fused scissor pair (rd_replay_vu.c vuFuseVerdict; docs/port/
+     * VU1_PROGRAMS.md "The fused scissor pair"): with the draw merge on, a
+     * code 36 batch's kick draw takes its cut draw's pipeline (PRIM.ABE
+     * on), its pixels written unblended (ICO_VU_FUSED), where the blend
+     * form and the plans allow, so the merge joins the two; false ([dev]
+     * vu_fuse = false, ICO_RD_VU_FUSE=0, or the merge off) the kick under
+     * its own state, as before.  Set with vuMerge, once a run */
+    bool vuFuse;
     /* the *_nodual twins of the gs_dual_out entries (0 for the
      * others), and whether the two-pass blend is in force (no dualSrcBlend,
      * ICO_RD_NO_DUAL or rd_set_no_dual) */
