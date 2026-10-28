@@ -4,4 +4,6 @@
 
 ## Fixed
 
+- On phones and other tile-based graphics chips at wide aspect ratios, the glow's left edge could be built from a stale strip of the previous blur step.
+
 - With Direct3D 11, the game no longer copies its whole drawing buffer to the graphics card for every picture, only the part it wrote.
