@@ -312,6 +312,16 @@ the local read (`fogLocalFor`, which reads the profile's `fogLocal` and the fog'
 class) and SCENE's depth was made for it (`RD_DST_USAGE_LOCAL_DEPTH`), so on desktop Vulkan it
 follows the probe's verdict.
 
+At a reach of 1 texel on both axes (2x on a whole scale) the fill draws `crack_fill1_ps`
+(`CRACK_REACH_1`, selected in `rd_crack_fill.c`): the four neighbours are read first and a texel
+with no pair of them in front of it along an axis is left at once. A run of one texel has the
+immediate neighbours for its ends, so the decision is the general one's with `l = r = u = d = 1`
+and the bytes are the same; 5 depth loads a texel against 13 for `crack_fill_ps`, and a texel with
+no pair in front (every plain surface texel) reads nothing more. The general shader keeps the full
+loop: a texel with no neighbour in front at distance 1 can still be a crack of 2 or 3 texels, so
+the early exit does not hold at a reach above 1. `rd_crack_test` replays the frame with
+`rd__crack_fill_force_general` and compares every byte of colour and depth.
+
 ## The desktop's local read and its probe
 
 The three local-read paths (the fog's depth read inside the scene pass, `fogLocal`; DATE through
