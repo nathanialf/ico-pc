@@ -727,7 +727,7 @@ the fallback if a device still faults on a pass of many VU draws. It is refused,
 multisampled pass, a storage pass, a pass the exact blend's attachment read made readable
 (`port/render/rd_replay.c` (`rd__replay_exact_readable`)), and inside a draw that takes DATE
 through the stencil bit (`Replay.dateStNow`: the bit lives in its pass only). A pass readable only
-for DATE's stencil bit or the fog's local read (every SCENE pass on a tile-based profile) is split:
+for DATE's stencil bit or the fog's local read (every SCENE pass where the profile has them) is split:
 it is begun again readable, and the next DATE draw takes the bit again in it
 (`port/render/rd_replay_tiler.c` (`rd__replay_date_take`)). Its passes are not
 passes of the loss bisect's window. The picture is the same byte for byte
@@ -1702,8 +1702,8 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | flag | desktop Vulkan | D3D12 | Adreno (Qualcomm's driver) | Adreno (Turnip) | Mali | PowerVR, other tile-based | Apple / MoltenVK |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | blend | fixed-function; `[dev] blend` opts into an exact mode | fixed-function; `[dev] blend = storage` opts into the ROV | fixed-function | fixed-function | fixed-function | fixed-function | fixed-function |
-| `fogLocal` | off | off | on where local read is offered | same | same | same | same |
-| `dateStencil` | off | off | on where local read is offered | same | same | same | same |
+| `fogLocal` | on (probe) | off | on where local read is offered | same | same | same | same |
+| `dateStencil` | on (probe) | off | on where local read is offered | same | same | same | same |
 | `storePlan` | off | off | off | off | off | off | off |
 | `blurFold` | off | off | on | on | off (the G52 is bound by its ALU) | on | on |
 | robust access | off | its own bounds rules | off | off | off | off | off |
@@ -1714,7 +1714,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | dynamic state (`[dev] dynamic_state`) | on where offered | none | off (the same phone; `[dev] dynamic_state = true` turns it on) | off | off | off | off |
 | `alphaPlan` (`[dev] alpha_plan`) | on | on | on | on | on | on | on |
 | `fxPlan` (`[dev] fx_plan`) | on | on | on | on | on | on | on |
-| `fxDstLocal` (`[dev] fx_dst_local`) | off | off | on where local read is offered | same | same | same | same |
+| `fxDstLocal` (`[dev] fx_dst_local`) | on (probe) | off | on where local read is offered | same | same | same | same |
 | `vuPlanesFrac` (`[dev] vu_planes`) | on | on | on | on | on | on | on |
 | `crackFill` (`[dev] crack_fill`) | on | on | on | on | on | on | on |
 
@@ -1726,7 +1726,7 @@ flags are decisions: `fogLocal` offers the fog's `local` path, tried first by it
 staticBlur pairs ([The replay](#the-replay)); `storePlan` has no mechanism. `alphaPlan` offers the alpha/blend
 planner ([The alpha plan](#pipelines)), `fxPlan` the frame-size post sprites drawn without their snapshot
 ([Post passes](#post-passes)), `fxDstLocal` the post sprites that read their destination by the local read
-inside the open pass (tile-based classes where the device has local read; it needs `fx_local_ps` and is decided
+inside the open pass (it needs `fx_local_ps` and is decided
 by its self-test), and `vuPlanesFrac` the 3D pixel shaders without the attribute planes on a target at a
 fractional scale ([Screen planes](#screen-planes)). A target is made with
 `RHI_TEX_UINT_VIEW` by class when `uintViewWork` (the work buffers, `rd__work_class`) or
@@ -1756,8 +1756,10 @@ line `rd: profile: <flag> off (self-test)` is logged. The start line, once a run
 
 ```
 rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores kept; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; alpha plan on; fx plan on; fx local read on; VU planes whole scales only; pipelines the start-up set
-rd: profile: immediate-mode GPU (Mesa, Vulkan): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views work and scene; alpha plan on; fx plan on; fx local read off; VU planes whole scales only; pipelines the start-up set
 ```
+
+On desktop Vulkan with local read, "(probe)" marks the three local-read flags where the start-up cost probe
+found them slower, and both lines end with its words: [WORK_BUFFERS.md](WORK_BUFFERS.md#the-desktops-local-read-and-its-probe).
 
 and the `ico_pc: summary:` line carries the flags as in force after the blend's text
 (`rd__profile_text`; `port/render/rd_core.c` (`rd_summary_text`)): `profile tile-based GPU
@@ -1926,7 +1928,7 @@ whose key the pipeline cache cannot give (looked up before anything is recorded)
 share `fx_sprite_ps`'s coverage, UV and tests (`port/shaders/fx_sprite.hlsl`). Their keys are in the
 start-up set (`rd__fx_enumerate`: the colour mask A of `fx_sprite_ps`, `fx_frame_ps` without blend
 and with the premultiplied add and subtract, `fx_local_ps` where the profile has it, each in
-`rd__enumerate_reachable_blur`'s depth states). `fxDstLocal` is on for the tile-based classes with
+`rd__enumerate_reachable_blur`'s depth states). `fxDstLocal` is on where the profile has
 local read (`[dev] fx_dst_local`, `ICO_RD_FX_DST_LOCAL=1|0`); its self-test runs after DATE's
 (`rd_fog_selftest`): a frame on SCENE of four cells under an untextured LERP FIX 0x20 sprite,
 replayed with the local read and through the snapshot, the cells' centres read back against the
@@ -2336,7 +2338,8 @@ differs, read back and compared with the GS arithmetic, for each path in the pla
 (desktop: inplace, copy, buffer; tile-based or D24S8: copy, inplace, buffer; local first wherever
 it is offered, and left out of the line where not). The first that passes is the path from then
 on, and one log line `fog: depth path` names it with every result (`rd: fog: depth path local
-(self-test: local ok 0, copy not tried, inplace not tried, buffer not tried) on SCENE ...`); a
+(self-test: local ok 0, copy not tried, inplace not tried, buffer not tried) on SCENE ...`; run
+again when the desktop's probe turns local off); a
 local read that fails turns `fogLocal` off (`(self-test)`), and the order is then the local one
 without it (copy, inplace, buffer). The local trial counts only where the fog drew through the
 local read (`g_rdPerf.fogLocalDraws`). Under MSAA it never does (`port/render/rd_replay.c`
@@ -2471,7 +2474,7 @@ copy of SCENE's colour and of its depth (12 bytes a texel copied, 99 MB at 3840 
 pass reading thirteen depth texels per texel (the runs' ends, both axes) and four more where a
 drawn texel lies behind both ends of a run (the texels beyond them); the depth copy texture (8 bytes a texel) is the copy path's own and is made on the other paths.
 
-On a tile-based GPU the fill is drawn inside the scene pass the fog's local read keeps ([the fold](WORK_BUFFERS.md#the-crack-fill-inside-the-local-fogs-pass)).
+On the local path the fill is drawn inside the scene pass the fog's local read keeps ([the fold](WORK_BUFFERS.md#the-crack-fill-inside-the-local-fogs-pass)).
 
 The count, only under `rd__crack_fill_count_all` (the tests, the replay tool's `--stats`; never in
 the game, and a missing count pipeline leaves the fill uncounted): `crack_count_ps` runs the
