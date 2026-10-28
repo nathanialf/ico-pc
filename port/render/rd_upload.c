@@ -712,7 +712,7 @@ static void workClearEnv(void)
 static bool workClearKeeps(int i)
 {
     return i == RD_TARGET_SCENE || i == RD_TARGET_DISPLAY || i == RD_TARGET_DISPLAY_HELD ||
-           i == RD_TARGET_FEED128 || i == RD_TARGET_FEED_HELD;
+           i == RD_TARGET_FEED128 || i == RD_TARGET_FEED_HELD || i == RD_TARGET_WORK3_HELD;
 }
 
 /* rd_internal.h rd__set_work_clear: every other live target's colour
@@ -767,7 +767,7 @@ static void workClear(void)
     }
     if (s_wc.count++ == 0) {
         rd__log("work clear: every target but SCENE, DISPLAY and the feedback kept across frames "
-                "(DISPLAY_HELD, FEED128, FEED_HELD) cleared to %06X before every frame "
+                "(DISPLAY_HELD, FEED128, FEED_HELD, WORK3_HELD) cleared to %06X before every frame "
                 "(ICO_RD_WORK_CLEAR, a diagnostic): %d named (%s) and %d temporaries; a texel a "
                 "frame reads before drawing it shows that colour",
                 (unsigned)s_wc.rgb, named, names, temps);
