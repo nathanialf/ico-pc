@@ -442,3 +442,44 @@ float4 camera_probe_ps(BlitVSOut i) : SV_Target0
                   float(bits >> 24)) *
            (1.0 / 255.0);
 }
+
+// shadow_count_ps (rd_replay.c shadowCountOne): the shadow count read
+// from the stencil in one draw, byte for byte what the seven stencil-tested
+// draws of the resolve (rd__shadow_resolve_key) and box_reduce_ps after them
+// leave. t1 is the depth-stencil's stencil view (RHI_ASPECT_STENCIL, the
+// value in channel g_mode.x: 0 red, 1 green), t2 the count's table: 64 x 1
+// RGBA8_UNORM, texel m = (4 m, 4 m, 4 m, m != 0 ? 0x80 : 0), the bytes the
+// seven draws write for a stencil whose bits 0-5 (RD_SHADOW_STENCIL_MASK)
+// hold m. The table is read with Load, as box_reduce_ps reads the count: an
+// RGBA8_UNORM texel's float is the same whichever texture holds it, so
+// every term below is the term box_reduce_ps adds. The loop is
+// box_reduce_ps's, the same order and the same expressions, over the same
+// DrawCB (g_param, g_scale.z); at scale 1 (g_param.xy 1) it is the table's
+// texel alone (v * 1 / 1 = v). Drawn with blit_vs into an RGBA8 target of
+// the GS size, the viewport the target.
+Texture2D<uint4> g_shadowStencil : ICO_REG(t1, 2);
+Texture2D<float4> g_shadowTable : ICO_REG(t2, 2);
+
+float4 shadow_count_texel(int x, int y)
+{
+    uint4 s = g_shadowStencil.Load(int3(x, y, 0));
+    uint m = (g_mode.x != 0u ? s.y : s.x) & 0x3Fu;
+    return g_shadowTable.Load(int3(int(m), 0, 0));
+}
+
+float4 shadow_count_ps(BlitVSOut i) : SV_Target0
+{
+    float2 lo = floor(i.pos.xy) * g_param.xy - float2(g_scale.z, 0.0);
+    float2 hi = lo + g_param.xy;
+    int2 first = max(int2(floor(lo)), int2(0, 0));
+    int2 last = min(min(int2(ceil(hi)), int2(g_param.zw)), first + BLIT_SPAN_MAX);
+    float4 sum = float4(0.0, 0.0, 0.0, 0.0);
+    for (int y = first.y; y < last.y; y++) {
+        float wy = min(hi.y, float(y + 1)) - max(lo.y, float(y));
+        for (int x = first.x; x < last.x; x++) {
+            float wx = min(hi.x, float(x + 1)) - max(lo.x, float(x));
+            sum += shadow_count_texel(x, y) * (wx * wy);
+        }
+    }
+    return sum / (g_param.x * g_param.y);
+}
