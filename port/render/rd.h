@@ -2027,11 +2027,13 @@ typedef struct RdPerfRecord {
     uint32_t glowPasses, snapshots, snapSwaps;
     /* a1xDraws: the draw passes that took the above-1x kernels (the area
      * box, the B-spline, the fog's table read between its entries:
-     * rd_replay.c spriteAbove1x, blurAbove1xSteps, doFog), g_rd.above1xDraws
-     * counted per replay; each planned pass of a draw counts (fillDrawCB
-     * runs per pass: the AFAIL split's two, the two-pass blend's two), so a
-     * draw can count twice; 0 at scale 1.  A work buffer drawn onto the
-     * frame is never among them (rd_internal.h rd__work_class) */
+     * rd_fx_plan.c rd__sprite_above1x, rd_replay.c blurAbove1xSteps,
+     * doFog), g_rd.above1xDraws counted per replay; each planned pass of a
+     * draw counts (fillDrawCB runs per pass: the AFAIL split's two, the
+     * two-pass blend's two), so a draw can count twice; 0 at scale 1.  A
+     * work buffer drawn onto the frame is never among them (rd_internal.h
+     * rd__work_class), nor a shadow composite unless [dev] shadow_bspline
+     * (RdProfile.shadowBspline) */
     uint32_t a1xDraws;
     /* texaDraws: the draw passes through the per-texel TEXA filter
      * (sprite_texa_ps, vu_texa_ps, sprite_stq_ps's four taps: a 24- or
