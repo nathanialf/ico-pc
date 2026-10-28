@@ -70,7 +70,7 @@ function(glow_run _case _mode _what)
   list(LENGTH held n_held)
   list(LENGTH redrawn n_redrawn)
   list(LENGTH first n_first)
-  if(_mode STREQUAL "held")
+  if("${_mode}" STREQUAL "held") # quoted: a variable named held (the match list) exists
     set(_want_held ${last})
     set(_want_redrawn 0)
   else()
