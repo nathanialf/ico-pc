@@ -40,6 +40,12 @@
  *                 its copies and one pass; [dev] crack_fill = true or
  *                 false sets it, read there, and the filler's own line
  *                 says which)
+ *   shadowOne     on on every class whose backend reads a depth-stencil's
+ *                 stencil through a view (RhiLimits.stencilView, with
+ *                 depthSampled): the shadow count resolved in one draw
+ *                 (rd_replay.c shadowCountOne), else the seven
+ *                 stencil-tested draws and the box reduction; its
+ *                 self-test (rd_shadow_selftest.c) compares the two
  *
  * (1) The desktop's local reads: on where the device has local
  * read (VK_KHR_dynamic_rendering_local_read or Vulkan 1.4's) and the
@@ -75,7 +81,8 @@
  * (fogLocal on; inplace, copy or buffer: off), ICO_RD_DATE_PATH=stencil|
  * snapshot, ICO_RD_STORE_PLAN=1|0, ICO_RD_BLUR_FOLD=1|0, ICO_RD_UINT_VIEW=
  * 1|work|0 (both views, the work buffers' only, none), ICO_RD_ALPHA_PLAN=
- * 1|0, ICO_RD_FX_PLAN=1|0, ICO_RD_FX_DST_LOCAL=1|0, ICO_RD_VU_PLANES=1|0.  A flag a [dev] key
+ * 1|0, ICO_RD_FX_PLAN=1|0, ICO_RD_FX_DST_LOCAL=1|0, ICO_RD_VU_PLANES=1|0,
+ * ICO_RD_SHADOW_ONE=1|0 (1 asks for the one draw, held to the view).  A flag a [dev] key
  * set carries "([dev])" in the lines; one the device cannot do stays off
  * and gets a line of its own.  A self-test that finds its mechanism wrong
  * turns the flag off (rd__profile_self_test_off: "(self-test)"); the
@@ -87,12 +94,14 @@
  *     fog local on; DATE stencil; depth stores planned; blur fold on; robust
  *     access off (the default; gpu_robust = true turns it on); local read
  *     yes; uint views off; alpha plan on; fx plan on; fx local read on;
- *     VU planes whole scales only; pipelines the start-up set
+ *     VU planes whole scales only; shadow count one draw; pipelines the
+ *     start-up set
  *
  * and the summary's words (rd__profile_text, after the blend's):
  *   tile-based GPU (Imagination, Vulkan): fog local on, DATE stencil, depth
  *   stores planned, blur fold on, local read yes, uint views off, alpha
- *   plan on, fx plan on, fx local on, VU planes whole scales only
+ *   plan on, fx plan on, fx local on, VU planes whole scales only, shadow
+ *   count one draw
  *
  * On the desktop class with local read both end with the desktop's local
  * reads ("; desktop local read on (the probe follows the self-tests)" in
@@ -252,12 +261,19 @@ static const char *planesWords(const RdProfile *p)
     return p->vuPlanesFrac ? "whole scales only" : "every scale";
 }
 
+/* the shadow count's words: "one draw" or "seven draws" */
+static const char *shadowWords(const RdProfile *p)
+{
+    return p->shadowOne ? "one draw" : "seven draws";
+}
+
 /* the summary's words, as in force */
 static void makeText(RdProfile *p)
 {
     snprintf(p->text, sizeof p->text,
              "%s: fog local %s%s, DATE %s%s, depth stores %s%s, blur fold %s%s, local read %s, "
-             "uint views %s%s, alpha plan %s%s, fx plan %s%s, fx local %s%s, VU planes %s%s%s%s",
+             "uint views %s%s, alpha plan %s%s, fx plan %s%s, fx local %s%s, VU planes %s%s, "
+             "shadow count %s%s%s%s",
              p->cls, p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
              p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
              p->storePlan ? "planned" : "kept", mark(p, RD_PROFILE_STORE_PLAN),
@@ -265,8 +281,8 @@ static void makeText(RdProfile *p)
              uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",
              mark(p, RD_PROFILE_ALPHA_PLAN), p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN),
              p->fxDstLocal ? "on" : "off", mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p),
-             mark(p, RD_PROFILE_VU_PLANES), p->localWords[0] ? ", desktop local read " : "",
-             p->localWords);
+             mark(p, RD_PROFILE_VU_PLANES), shadowWords(p), mark(p, RD_PROFILE_SHADOW_ONE),
+             p->localWords[0] ? ", desktop local read " : "", p->localWords);
 }
 
 void rd__profile_init(void)
@@ -302,6 +318,8 @@ void rd__profile_init(void)
     p->fxDstLocal = local;
     p->vuPlanesFrac = true;
     p->crackFill = true; /* rd_crack_fill.c reads ICO_RD_CRACK_FILL over it */
+    const bool stencilView = lim->stencilView && lim->depthSampled;
+    p->shadowOne = stencilView;
 
     /* the [dev] keys, through the host's environment */
     const char *notHere = NULL; /* a [dev] key asked for what the device lacks */
@@ -365,6 +383,13 @@ void rd__profile_init(void)
         p->vuPlanesFrac = planes == 1;
         p->devSet |= RD_PROFILE_VU_PLANES;
     }
+    const int shadow = envBool("ICO_RD_SHADOW_ONE");
+    if (shadow >= 0) {
+        p->shadowOne = shadow == 1 && stencilView;
+        p->devSet |= RD_PROFILE_SHADOW_ONE;
+        notHere = shadow == 1 && !stencilView ? "[dev] shadow_one (no stencil view on this backend)"
+                                              : notHere;
+    }
 
     /* the desktop's local-read words before the probe (rd_local_probe.c
        sets them after it) */
@@ -406,7 +431,8 @@ void rd__profile_init(void)
                        (asked == RD_BLEND_EXACT_STORAGE && (lim->fragmentInterlock || lim->rov));
     rd__log("profile: %s: blend %s%s; fog local %s%s; DATE %s%s; depth stores %s%s; blur fold "
             "%s%s; robust access %s; local read %s; uint views %s%s; alpha plan %s%s; fx plan "
-            "%s%s; fx local read %s%s; VU planes %s%s; pipelines the start-up set%s%s%s",
+            "%s%s; fx local read %s%s; VU planes %s%s; shadow count %s%s; pipelines the start-up "
+            "set%s%s%s",
             p->cls, exact ? rd__blend_exact_name(asked) : "fixed-function", exact ? " ([dev])" : "",
             p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
             p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
@@ -422,8 +448,9 @@ void rd__profile_init(void)
             uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",
             mark(p, RD_PROFILE_ALPHA_PLAN), p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN),
             p->fxDstLocal ? "on" : "off", mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p),
-            mark(p, RD_PROFILE_VU_PLANES), p->carefulSet ? " (careful)" : "",
-            p->localWords[0] ? "; desktop local read " : "", p->localWords);
+            mark(p, RD_PROFILE_VU_PLANES), shadowWords(p), mark(p, RD_PROFILE_SHADOW_ONE),
+            p->carefulSet ? " (careful)" : "", p->localWords[0] ? "; desktop local read " : "",
+            p->localWords);
     if (notHere) {
         rd__log("profile: %s: not on this device, the flag stays off", notHere);
     }
@@ -448,6 +475,7 @@ void rd__profile_self_test_off(unsigned flag)
         {RD_PROFILE_FX_PLAN, offsetof(RdProfile, fxPlan), "fx plan"},
         {RD_PROFILE_FX_DST_LOCAL, offsetof(RdProfile, fxDstLocal), "fx local read"},
         {RD_PROFILE_VU_PLANES, offsetof(RdProfile, vuPlanesFrac), "VU planes rule"},
+        {RD_PROFILE_SHADOW_ONE, offsetof(RdProfile, shadowOne), "shadow count one draw"},
     };
 
     for (size_t i = 0; i < sizeof kFlags / sizeof kFlags[0]; i++) {
