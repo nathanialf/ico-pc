@@ -1539,6 +1539,33 @@ static void test_video_interpolate(void)
     ico_video_set(&keep);
 }
 
+/* The window's "display changed" words (ico_video_changes_text): the fields
+   that differ in order, in the startup line's words, "" when none does; a
+   phone's switch from Custom 2x auto to Original, written as the window
+   wrote it before the words moved here */
+static void test_video_changes_text(void)
+{
+    IcoVideoOptions was, now;
+    char line[512];
+
+    ico_video_defaults(&now);
+    ico_video_set_preset(&now, ICO_VIDEO_ORIGINAL);
+    CHECK(ico_video_changes_text(&now, &now, line, sizeof(line)) == 0 && line[0] == '\0');
+    was = now;
+    was.resScale = 2;
+    was.aspect = ICO_ASPECT_AUTO;
+    CHECK(ico_video_preset(&was) == ICO_VIDEO_CUSTOM);
+    CHECK(ico_video_changes_text(&was, &now, line, sizeof(line)) == (int)strlen(line));
+    CHECK(strcmp(line, "preset Custom -> Original, resolution 2x -> 1x, aspect auto -> 4:3") == 0);
+    was = now;
+    was.vsync = !now.vsync;
+    was.texturePack = !now.texturePack;
+    (void)ico_video_changes_text(&was, &now, line, sizeof(line));
+    CHECK(strstr(line, "vsync ") == line && strstr(line, ", texture pack ") != NULL);
+    /* cut at the size, never past it */
+    CHECK(ico_video_changes_text(&was, &now, line, 8) < 8 && strlen(line) < 8);
+}
+
 /* options_test DIR [SLUG]: SLUG the selected disc (config/regions.txt: pal,
    the default, jpn or kor) */
 int main(int argc, char **argv)
@@ -1566,6 +1593,7 @@ int main(int argc, char **argv)
     test_video_downsample(argc > 1 ? argv[1] : ".");
     test_video_auto(argc > 1 ? argv[1] : ".");
     test_video_interpolate();
+    test_video_changes_text();
     if (failures != 0) {
         fprintf(stderr, "options_test: %d failure(s)\n", failures);
         return 1;
