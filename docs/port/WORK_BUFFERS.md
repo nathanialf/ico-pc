@@ -233,7 +233,13 @@ drawing into it (the sun's glare onto SCENE from WORK1, `eyeBlur` mode 1), witho
 (a target made again since), and under `[dev] glow_redraw = true` (`ICO_RD_GLOW_REDRAW=1`), the A/B,
 whose first presents make no copy. The depth of field's copies leave column 0 of WORK0 and WORK1
 undrawn ([The glow chain at a wide frame](#the-glow-chain-at-a-wide-frame)): at a held present it
-reads the chain's column 0 of the tick's first present there, part of the held glow. The still
+reads the chain's column 0 of the tick's first present there, part of the held glow. That is the
+general rule's one known case: any write into one of the chain's buffers counts as covering it,
+because the scan cannot decide which texels a draw covers or a sampling draw reads (both follow
+from the replay's transforms and UVs), so a partial write followed by a wider read reads, outside
+the write, what earlier presents left there: the same bytes as a redraw on a still tick, the
+tick's first present's during a pan, as the held glow itself. An exact rule would draw the chain
+at every present with the depth of field. The still
 re-present ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)) hashes the frame before this edit:
 two presents of a tick whose frames hash alike paste the same glow, held or drawn by the first.
 Event lines: the 10 s summary's
