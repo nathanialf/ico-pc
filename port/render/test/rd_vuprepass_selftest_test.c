@@ -15,7 +15,9 @@
  *      or "VU pre-pass off by the settings"; with it on, its draws batched
  *      (g_rd.vuPreBatch) unless ICO_RD_VU_PREPASS_BATCH=0; the draw merge
  *      on (g_rd.vuMerge, "VU merge on") unless ICO_RD_VU_MERGE=0 or on
- *      Direct3D 11, the self-test's pictures drawn through it; and the device profile's
+ *      Direct3D 11, the self-test's pictures drawn through it, and the
+ *      fused scissor pair with it (g_rd.vuFuse, "VU fuse on") unless
+ *      ICO_RD_VU_FUSE=0; and the device profile's
  *      class (rd_profile.c) names the backend, OpenGL and D3D11 in the
  *      desktop column: "immediate-mode GPU (... OpenGL):";
  *   3. the reachable set (rd__enumerate_reachable, what the window makes
@@ -174,6 +176,15 @@ int main(int argc, char **argv)
               g_rd.vuMerge ? "on" : "off", wantMerge ? "on" : "off");
         const char *mw = wantMerge ? "; VU merge on; " : "; VU merge off; ";
         CHECK(strstr(sum, mw) != NULL, "the summary lacks \"%s\"", mw);
+        /* the fused scissor pair with the merge unless ICO_RD_VU_FUSE=0
+           (rd_replay_vu.c vuMergeInit) */
+        const char *fu = getenv("ICO_RD_VU_FUSE");
+        const bool wantFuse = wantMerge && !(fu && strcmp(fu, "0") == 0);
+        printf("  the fused scissor pair %s\n", g_rd.vuFuse ? "on" : "off");
+        CHECK(g_rd.vuFuse == wantFuse, "the fused scissor pair %s, %s expected",
+              g_rd.vuFuse ? "on" : "off", wantFuse ? "on" : "off");
+        const char *fw = wantFuse ? "; VU fuse on; " : "; VU fuse off; ";
+        CHECK(strstr(sum, fw) != NULL, "the summary lacks \"%s\"", fw);
     }
     {
         /* the class ends with the backend's name: "(Mesa, Vulkan):",
