@@ -2019,6 +2019,9 @@ int main(int argc, char **argv)
                "%u (fog path %s); blur pairs folded %u\n",
                dump, pr->dateSnapshots, pr->dateStencilDraws, pr->dateStencilTakes,
                pr->fogLocalDraws, rd__fog_path_name(g_rd.fogPath), pr->blurFolds);
+        /* the shadow count's resolves (rd_replay.c doShadowResolve) */
+        printf("%s: stats: shadow count: %u in one draw, %u in seven draws (profile %s)\n", dump,
+               pr->shadowOne, pr->shadowSeven, g_rd.profile.shadowOne ? "one draw" : "seven draws");
         /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
         printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
                "additive, %u local; vu no-planes %u\n",
