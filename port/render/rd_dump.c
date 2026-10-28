@@ -61,6 +61,8 @@
  *   slots start one later; an older dump's temps start at low half 17)
  *   (version 8: RD_TARGET_DISPLAY_HELD appended, the same again; a
  *   version 6 or 7 dump's temps start at low half 18)
+ *   (version 13: RD_TARGET_WORK3_HELD appended, the same again; a version
+ *   8 to 12 dump's temps start at low half 19)
  *   (RDC_MESH's b[4], RD_VU_VIEW_*, rd_mesh.h: 0 in the dumps from before
  *   it, which the interpolation takes for a part placed through the view,
  *   as it always did; the version is unchanged)
@@ -631,8 +633,9 @@ bool rd__load_frame(const char *path, RdFrame *out)
     }
     /* version 6 appended RD_TARGET_FEED_HELD: an older dump's handles have
        16 fixed targets, so its first temporary slot's low half is 17;
-       version 8 RD_TARGET_DISPLAY_HELD: 17 before it, low half 18 */
-    tgtMap.fixedCount = ver <= 5u ? 16u : (ver <= 7u ? 17u : RD_TARGET_COUNT);
+       version 8 RD_TARGET_DISPLAY_HELD: 17 before it, low half 18;
+       version 13 RD_TARGET_WORK3_HELD: 18 before it, low half 19 */
+    tgtMap.fixedCount = ver <= 5u ? 16u : (ver <= 7u ? 17u : (ver <= 12u ? 18u : RD_TARGET_COUNT));
     ok = r32(fp, &out->gsW) && r32(fp, &out->gsH);
     out->aspect = 4.0f / 3.0f;
     out->wExact = (float)ICO_FRAME_BASE_W;
