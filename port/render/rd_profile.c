@@ -11,8 +11,8 @@
  *                 Vulkan           Qualcomm  Turnip                  MoltenVK
  *   blend         fixed-function on every class; [dev] blend opts into an
  *                 exact mode (rd_dst_read.c)
- *   fogLocal      off      off     on where the device has local read
- *   dateStencil   off      off     on where the device has local read
+ *   fogLocal      on (1)   off     on where the device has local read
+ *   dateStencil   on (1)   off     on where the device has local read
  *   storePlan     off on every class: the store plan is not in the renderer
  *                 (docs/port/RENDER.md "The device profile"); [dev]
  *                 store_plan sets the flag, which nothing reads
@@ -30,7 +30,7 @@
  *                 RdPipelineSetPolicy's, rd_pipeline.c)
  *   alphaPlan     on on every class (rd_alpha_plan.c)
  *   fxPlan        on on every class (rd_fx_plan.c)
- *   fxDstLocal    off      off     on where the device has local read
+ *   fxDstLocal    on (1)   off     on where the device has local read
  *                 (fx_local_ps, rd_fx_plan.c)
  *   vuPlanesFrac  on on every class: the VU pixel side without the planes
  *                 at a fractional scale (rd_pixel_plan.c)
@@ -41,13 +41,26 @@
  *                 false sets it, read there, and the filler's own line
  *                 says which)
  *
+ * (1) The desktop's local reads (v0.9.4): on where the device has local
+ * read (VK_KHR_dynamic_rendering_local_read or Vulkan 1.4's) and the
+ * renderer runs with a window (the game), guarded by the cost probe
+ * (rd_local_probe.c), which runs once after the self-tests and turns the
+ * three off where the local reads draw slower than the snapshots
+ * ("(probe)").  The worry it answers: a readable attachment sits in the
+ * local-read layout for the whole scene pass, which may cost an
+ * immediate-mode GPU's colour and depth compression.  A headless run (the
+ * replay tool, the tests: no window) keeps the snapshots unless
+ * ICO_RD_LOCAL_PROBE is set: 1 the game's default and its probe (where the
+ * self-tests run), 0 the local reads without the probe.  Where the device
+ * has no local read the three stay off.
+ *
  * The OpenGL and D3D11 classes take the desktop column whatever the
  * vendor (neither backend reports a tiler: gl_device.c, d3d11_device.c);
  * what differs from desktop Vulkan comes from their limits, not the class:
  * no UINT view on D3D11 (uintView false: both uint views off), the VU
  * vertex pre-pass off on D3D11 (colorBytesPerPixel 32, rd_replay_vu.c
  * rd__vu_prepass_init) and on on OpenGL (0), no local read on either
- * (docs/port/BACKENDS.md).
+ * (docs/port/BACKENDS.md), so none of the local reads.
  *
  * The Mali row keeps the blur fold off: the G52 is bound by its ALU, which
  * the fold does not spare.  A tile-based GPU of another vendor (Samsung,
@@ -65,7 +78,10 @@
  * 1|0, ICO_RD_FX_PLAN=1|0, ICO_RD_FX_DST_LOCAL=1|0, ICO_RD_VU_PLANES=1|0.  A flag a [dev] key
  * set carries "([dev])" in the lines; one the device cannot do stays off
  * and gets a line of its own.  A self-test that finds its mechanism wrong
- * turns the flag off (rd__profile_self_test_off: "(self-test)").
+ * turns the flag off (rd__profile_self_test_off: "(self-test)"); the
+ * desktop's probe turns the local reads off where they are slower
+ * (rd__profile_probe_off: "(probe)").  A [dev] key that sets any of the
+ * three local-read flags on the desktop class leaves the probe out.
  *
  *   rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function;
  *     fog local on; DATE stencil; depth stores planned; blur fold on; robust
@@ -77,6 +93,11 @@
  *   tile-based GPU (Imagination, Vulkan): fog local on, DATE stencil, depth
  *   stores planned, blur fold on, local read yes, uint views off, alpha
  *   plan on, fx plan on, fx local on, VU planes whole scales only
+ *
+ * On the desktop class with local read both end with the desktop's local
+ * reads ("; desktop local read on (the probe follows the self-tests)" in
+ * the start line, ", desktop local read kept (probe 0.412 vs 0.530 ms)" in
+ * the summary once the probe ran; rd_local_probe.c lists the words).
  */
 #include <stddef.h>
 #include <stdio.h>
@@ -209,6 +230,9 @@ static const char *mark(const RdProfile *p, unsigned bits)
     if (p->selfTestOff & bits) {
         return " (self-test)";
     }
+    if (p->probeOff & bits) {
+        return " (probe)";
+    }
     return (p->devSet & bits) ? " ([dev])" : "";
 }
 
@@ -233,7 +257,7 @@ static void makeText(RdProfile *p)
 {
     snprintf(p->text, sizeof p->text,
              "%s: fog local %s%s, DATE %s%s, depth stores %s%s, blur fold %s%s, local read %s, "
-             "uint views %s%s, alpha plan %s%s, fx plan %s%s, fx local %s%s, VU planes %s%s",
+             "uint views %s%s, alpha plan %s%s, fx plan %s%s, fx local %s%s, VU planes %s%s%s%s",
              p->cls, p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
              p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
              p->storePlan ? "planned" : "kept", mark(p, RD_PROFILE_STORE_PLAN),
@@ -241,7 +265,8 @@ static void makeText(RdProfile *p)
              uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",
              mark(p, RD_PROFILE_ALPHA_PLAN), p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN),
              p->fxDstLocal ? "on" : "off", mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p),
-             mark(p, RD_PROFILE_VU_PLANES));
+             mark(p, RD_PROFILE_VU_PLANES), p->localWords[0] ? ", desktop local read " : "",
+             p->localWords);
 }
 
 void rd__profile_init(void)
@@ -256,10 +281,17 @@ void rd__profile_init(void)
     const bool tile = c != PC_DESKTOP && c != PC_D3D12 && c != PC_OPENGL && c != PC_D3D11;
     p->tiler = lim->tiler;
     p->localRead = lim->localRead;
+    /* the desktop's local reads (the file comment's (1)): with a window, or
+       as ICO_RD_LOCAL_PROBE asks in a headless run */
+    const bool desk = c == PC_DESKTOP && p->localRead;
+    const int probeEnv = envBool("ICO_RD_LOCAL_PROBE");
+    p->desktopLocal = desk && (g_rd.windowed || probeEnv >= 0);
+    p->localProbe = p->desktopLocal && probeEnv != 0;
+    const bool local = (tile || p->desktopLocal) && p->localRead;
 
     /* the table (the file comment) */
-    p->fogLocal = tile && p->localRead;
-    p->dateStencil = tile && p->localRead;
+    p->fogLocal = local;
+    p->dateStencil = local;
     p->storePlan = false; /* the store plan is not implemented: nothing reads the flag */
     p->blurFold = tile && c != PC_MALI;
     p->uintViewWork = !tile && lim->uintView;
@@ -267,7 +299,7 @@ void rd__profile_init(void)
     p->carefulSet = false;
     p->alphaPlan = true;
     p->fxPlan = true;
-    p->fxDstLocal = tile && p->localRead;
+    p->fxDstLocal = local;
     p->vuPlanesFrac = true;
     p->crackFill = true; /* rd_crack_fill.c reads ICO_RD_CRACK_FILL over it */
 
@@ -334,6 +366,24 @@ void rd__profile_init(void)
         p->devSet |= RD_PROFILE_VU_PLANES;
     }
 
+    /* the desktop's local-read words before the probe (rd_local_probe.c
+       sets them after it) */
+    if (desk) {
+        const bool any = p->fogLocal || p->dateStencil || p->fxDstLocal;
+        if (p->devSet & RD_PROFILE_LOCAL_BITS) {
+            p->localProbe = false; /* the [dev] keys decide: no probe */
+            snprintf(p->localWords, sizeof p->localWords, "%s ([dev])", any ? "on" : "off");
+        } else if (!p->desktopLocal) {
+            snprintf(p->localWords, sizeof p->localWords,
+                     "off (no window: the game's probe not run; ICO_RD_LOCAL_PROBE=1 asks for "
+                     "it)");
+        } else if (!p->localProbe) {
+            snprintf(p->localWords, sizeof p->localWords, "on (not probed: ICO_RD_LOCAL_PROBE=0)");
+        } else {
+            snprintf(p->localWords, sizeof p->localWords, "on (the probe follows the self-tests)");
+        }
+    }
+
     /* the class's name: "tile-based GPU (Imagination, Vulkan)" */
     {
         char vbuf[24];
@@ -356,7 +406,7 @@ void rd__profile_init(void)
                        (asked == RD_BLEND_EXACT_STORAGE && (lim->fragmentInterlock || lim->rov));
     rd__log("profile: %s: blend %s%s; fog local %s%s; DATE %s%s; depth stores %s%s; blur fold "
             "%s%s; robust access %s; local read %s; uint views %s%s; alpha plan %s%s; fx plan "
-            "%s%s; fx local read %s%s; VU planes %s%s; pipelines the start-up set%s",
+            "%s%s; fx local read %s%s; VU planes %s%s; pipelines the start-up set%s%s%s",
             p->cls, exact ? rd__blend_exact_name(asked) : "fixed-function", exact ? " ([dev])" : "",
             p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
             p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
@@ -372,7 +422,8 @@ void rd__profile_init(void)
             uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",
             mark(p, RD_PROFILE_ALPHA_PLAN), p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN),
             p->fxDstLocal ? "on" : "off", mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p),
-            mark(p, RD_PROFILE_VU_PLANES), p->carefulSet ? " (careful)" : "");
+            mark(p, RD_PROFILE_VU_PLANES), p->carefulSet ? " (careful)" : "",
+            p->localWords[0] ? "; desktop local read " : "", p->localWords);
     if (notHere) {
         rd__log("profile: %s: not on this device, the flag stays off", notHere);
     }
@@ -405,6 +456,39 @@ void rd__profile_self_test_off(unsigned flag)
             *f = false;
             p->selfTestOff |= (uint16_t)kFlags[i].bit;
             rd__log("profile: %s off (self-test)", kFlags[i].name);
+        }
+    }
+    makeText(p);
+}
+
+void rd__profile_local_words(const char *words)
+{
+    RdProfile *p = &g_rd.profile;
+    snprintf(p->localWords, sizeof p->localWords, "%s", words ? words : "");
+    p->localProbe = false;
+    makeText(p);
+}
+
+void rd__profile_probe_off(void)
+{
+    RdProfile *p = &g_rd.profile;
+
+    static const struct {
+        unsigned bit;
+        size_t offset;
+        const char *name;
+    } kLocal[] = {
+        {RD_PROFILE_FOG_LOCAL, offsetof(RdProfile, fogLocal), "fog local"},
+        {RD_PROFILE_DATE_STENCIL, offsetof(RdProfile, dateStencil), "DATE stencil"},
+        {RD_PROFILE_FX_DST_LOCAL, offsetof(RdProfile, fxDstLocal), "fx local read"},
+    };
+
+    for (size_t i = 0; i < sizeof kLocal / sizeof kLocal[0]; i++) {
+        bool *f = (bool *)((char *)p + kLocal[i].offset);
+        if (*f) {
+            *f = false;
+            p->probeOff |= (uint16_t)kLocal[i].bit;
+            rd__log("profile: %s off (probe)", kLocal[i].name);
         }
     }
     makeText(p);
