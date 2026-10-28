@@ -110,7 +110,13 @@
  *      fold on, every target against the CPU model of the two passes
  *      exactly (WORK0 and WORK1 too: blur(n), n = 10..19, nine pairs a
  *      chain folded and the last drawn as two passes), the folds counted
- *      (RdPerfRecord.blurFolds) and every pipeline created enumerated.
+ *      (RdPerfRecord.blurFolds) and every pipeline created enumerated;
+ *      then (blur_fold_wide) the flare at W 512, 688 (16:9), 2048 (48:9)
+ *      and 2560 (60:9): 9, 9, 8 and 8 pairs folded, every target the
+ *      model's (the glow's edge strip in it), the same frame replayed with
+ *      the fold off the model's again (the folded and unfolded chains'
+ *      bytes the same at every width), and with the strip off no pair
+ *      folded on a wide frame.
  *   l  the frame-size post sprites' plan (rd_fx_plan.c, RdProfile.fxPlan, on
  *      in every other case): post modes 1..7 as e runs them and 40 motion
  *      blur frames as m runs them, every target against the CPU model
@@ -3566,7 +3572,8 @@ static void checkMotionBlurWide(void)
  * WORK1 424 wide, pass 1 of blur(n) 5..8 sixteenths right of WORK1's
  * pixel 0, column 0 left) and 2048 (48:9: 24..37 sixteenths, columns 0..2
  * left), and W 512 (4:3, no strip).  One frame against the CPU model (the
- * strip in it), the strips counted (ten a frame, none at 4:3) and WORK1's
+ * strip in it), the strips counted (ten a frame with the pairs the blur
+ * fold draws as one pass, which draw none; none at 4:3) and WORK1's
  * columns 0 .. n - 1 the bytes of column n (n from the last pair's
  * shrink, 25 sixteenths).  Then a frame of the same picture with nothing
  * cleared in it, replayed with every work buffer first cleared to magenta
@@ -3634,9 +3641,12 @@ static void checkGlowEdgeWide(void)
         FullScreenEffectAfter();
         runFrame(what, failures < 10);
         const uint64_t strips = rd__glow_edge_count() - e0;
-        CHECK(fw == W ? strips == 0 : (strips > 0 && strips % 10 == 0),
-              "%s: %llu strips drawn (ten a replay, none at 4:3)", what,
-              (unsigned long long)strips);
+        /* a pair the blur fold draws as one pass draws no pass 1 and so no
+           strip (the profile folds on every class but Mali) */
+        const uint32_t folds = g_rdPerf.blurFolds;
+        CHECK(fw == W ? strips == 0 : (strips > 0 && strips + folds == 10),
+              "%s: %llu strips drawn, %u pairs folded (ten together a replay, no strip at 4:3)",
+              what, (unsigned long long)strips, folds);
         /* the last pass 1 (blur(19), shrink 25): columns 0 .. n - 1 left */
         const int a = ww / 2 - 128, sh = (a * 16 * 25 + 2048) / 4096, n = (sh + 15) / 16;
         uint32_t w1w = 0, w1h = 0;
@@ -3670,10 +3680,10 @@ static void checkGlowEdgeWide(void)
         geReplay(what, f, 0x00FF00u, s_geB, fw);
         rd__set_glow_edge_fill(true);
         const int off = geDiffColumn(s_geA, s_geB, fw);
-        printf("  (w) glow edge at W %d: %llu strips, WORK1 columns 0..%d drawn as column %d; "
-               "SCENE over magenta and green work buffers differs up to column %d with the strip, "
-               "%d without it\n",
-               fw, (unsigned long long)strips, n - 1, n, on, off);
+        printf("  (w) glow edge at W %d: %llu strips (%u pairs folded), WORK1 columns 0..%d drawn "
+               "as column %d; SCENE over magenta and green work buffers differs up to column %d "
+               "with the strip, %d without it\n",
+               fw, (unsigned long long)strips, folds, n - 1, n, on, off);
         CHECK(on < 0,
               "%s: SCENE depends on what the work buffers held before the frame (up to "
               "column %d)",
@@ -3699,6 +3709,102 @@ static void checkGlowEdgeWide(void)
 }
 
 static void checkPipelines(void);
+
+/* (b) the blur fold on the native frame (rd_replay_tiler.c, "the blur pair
+ * fold"): the flare (post 1, blur(n) n = 10..19) at W 512 (4:3), 688
+ * (16:9), 2048 (48:9) and ICO_FRAME_W_MAX (2560, 60:9) with the fold on,
+ * its pairs counted (9, 9, 8 and 8 a chain: the geometry in that comment),
+ * every target against the CPU model of the two passes and the glow's edge
+ * strip exactly; the same recorded frame replayed with the fold off, every
+ * target the model's again, so the folded and the unfolded chains write the
+ * same bytes at every width; then with the strip off (rd__set_glow_edge_fill,
+ * the model without it), where the fold may not stand in for the strip: a
+ * wide frame folds no pair and its targets are still the model's. */
+static void checkBlurFoldWide(void)
+{
+    static const struct {
+        int fw;
+        uint32_t folds;
+    } kF[4] = {{W, 9}, {688, 9}, {2048, 8}, {ICO_FRAME_W_MAX, 8}};
+
+    const int screenHeight = ScreenHeight, status0 = systemStatus[0];
+    ScreenHeight = QH;
+    systemStatus[0] = 0;
+    GlobalTimer = 0;
+    rd_shutdown();
+    cpuFree();
+    for (int r = 0; r < 4; r++) {
+        const int fw = kF[r].fw;
+        char what[64], again[112];
+        setFrameWidth(fw);
+        setStage(1, 0, 64);
+        snprintf(what, sizeof(what), "(b) blur fold W %d", fw);
+        qInit(what, RD_PRESET_ORIGINAL, 0.0f, 0);
+        cpuInit();
+        if (!g_rd.fs[RD_FS_FX_BLUR2].id) {
+            printf("  %s: skipped (no fx_blur2_ps)\n", what);
+            rd_shutdown();
+            cpuFree();
+            continue;
+        }
+        const bool was = g_rd.profile.blurFold;
+        g_rd.profile.blurFold = true;
+        rd__set_glow_edge_fill(true);
+        s_modelGlowEdge = 1;
+        clearAll(); /* in the frame: each replay of it starts from the same targets */
+        dl_SetDLPriority(0);
+        putImageAt(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), fw, QH, 0, QH, 0, 1);
+        putImageAt(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), fw, QH, 180, 260,
+                   Q_Z_FACE, 1);
+        FullScreenEffectBefore();
+        FullScreenEffectAfter();
+        const int dOn = runFrame(what, failures < 10);
+        const uint32_t on = g_rdPerf.blurFolds;
+        CHECK(on == kF[r].folds, "%s: %u pairs folded, %u expected", what, on, kF[r].folds);
+        const RdFrame *f = rd__last_frame();
+
+        /* the same frame, the fold off */
+        g_rd.profile.blurFold = false;
+        snprintf(again, sizeof(again), "%s, the fold off", what);
+        rhi_wait_idle();
+        CHECK(rd__replay_frame(f, 0, false), "%s: replay", again);
+        rhi_wait_idle();
+        const uint32_t off = g_rdPerf.blurFolds;
+        const int dOff = compareAll(again, failures < 10);
+        CHECK(off == 0, "%s: %u pairs folded", again, off);
+
+        /* the strip off: no pair folds on a wide frame */
+        g_rd.profile.blurFold = true;
+        rd__set_glow_edge_fill(false);
+        s_modelGlowEdge = 0;
+        snprintf(again, sizeof(again), "%s, the glow's edge strip off", what);
+        s_unexpected = 0;
+        cpuFrame(f);
+        CHECK(s_unexpected == 0, "%s: %d commands the CPU model does not know", again,
+              s_unexpected);
+        rhi_wait_idle();
+        CHECK(rd__replay_frame(f, 0, false), "%s: replay", again);
+        rhi_wait_idle();
+        const uint32_t bare = g_rdPerf.blurFolds;
+        const int dBare = compareAll(again, failures < 10);
+        const uint32_t wantBare = fw == W ? kF[r].folds : 0u;
+        CHECK(bare == wantBare, "%s: %u pairs folded, %u expected", again, bare, wantBare);
+        rd__set_glow_edge_fill(true);
+        s_modelGlowEdge = 1;
+        printf("  %s: %u pairs folded (max difference %d), %u with the fold off (%d), %u without "
+               "the glow's edge strip (%d)\n",
+               what, on, dOn, off, dOff, bare, dBare);
+        checkPipelines(); /* the fold's key enumerated while the profile folds */
+        CHECK(rhi_vk_validation_error_count() == 0, "%s: %u validation errors", what,
+              rhi_vk_validation_error_count());
+        g_rd.profile.blurFold = was;
+        rd_shutdown();
+        cpuFree();
+    }
+    setFrameWidth(W);
+    ScreenHeight = screenHeight;
+    systemStatus[0] = status0;
+}
 
 /* ============================================== (u) the UINT views */
 
@@ -3891,6 +3997,7 @@ static const IcoShardCase k_cases[] = {
     {"feedback_wide", 25},
     {"shrinks_wide_device", 3},
     {"glow_edge_wide", 2},
+    {"blur_fold_wide", 4},
     {"motion_blur_wide", 4},
     {"above1x", 38},
     {"effects_scaled", 4},
@@ -4041,6 +4148,9 @@ int main(int argc, char **argv)
     }
     if (ico_shard_take("glow_edge_wide")) {
         checkGlowEdgeWide(); /* the glow's left edge: re-initialises rd (W 512, 848, 2048) */
+    }
+    if (ico_shard_take("blur_fold_wide")) {
+        checkBlurFoldWide(); /* the blur fold: re-initialises rd (W 512, 688, 2048, 2560) */
     }
     if (ico_shard_take("motion_blur_wide")) {
         checkMotionBlurWide(); /* the motion blur's 4:3 columns: re-initialises rd */
