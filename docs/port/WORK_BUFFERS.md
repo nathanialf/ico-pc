@@ -498,7 +498,10 @@ depth, logs `texture NAME: the stencil view was not made: no stencil views on th
 `RhiLimits.stencilView` off; the next one-draw resolve then turns `shadowOne` off for good, `[dev]`
 or not (`profile: shadow count one draw off (self-test)`), and the stencil aspect is never bound
 (Vulkan would otherwise sample the all-aspects view of a depth-stencil image). The self-test reports
-`not run (the backend could not make a stencil view)`. The
+`not run (the backend could not make a stencil view)`. Direct3D 12 has the view off
+(`stencilView = false`, as `uintView`: never run on a Windows machine, and the self-test catches
+wrong bytes, not a removed device) until a Windows run of the shadow self-test there; it keeps the
+seven draws. The
 start-up set holds the seven draws' and the reduction's pipelines as before and the one draw's
 where the profile has it. The profile's start line and the summary say which: `shadow count one
 draw`, `shadow count seven draws`, with ` ([dev])` or ` (self-test)` after it when that decided;
