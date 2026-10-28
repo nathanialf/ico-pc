@@ -192,6 +192,42 @@ bool pace_budget_allows(const PaceBudget *b, bool newFrame)
     return newFrame || b->presents < b->allow;
 }
 
+void pace_budget_reset_paced(PaceBudget *b, unsigned max)
+{
+    pace_budget_reset_unbound(b, max);
+    b->paced = true;
+    b->pacedTenths = PACE_PACED_UNKNOWN;
+}
+
+bool pace_budget_allows_paced(const PaceBudget *b, bool newFrame, uint64_t gpuNs, uint64_t stepNs,
+                              uint64_t periodNs)
+{
+    if (newFrame) {
+        return true;
+    }
+    if (b->presents >= b->allow) {
+        return false;
+    }
+    /* the GPU's time for one more picture this step, against the period
+       and what the step before left unused */
+    return !b->paced || gpuNs == 0 ||
+           ((uint64_t)b->presents + 1) * gpuNs + stepNs <= periodNs + b->carryNs;
+}
+
+unsigned pace_budget_paced_tenths(uint64_t gpuNs, uint64_t stepNs, uint64_t periodNs)
+{
+    uint64_t t;
+
+    if (gpuNs == 0) {
+        return PACE_PACED_UNKNOWN;
+    }
+    if (stepNs >= periodNs) {
+        return 0;
+    }
+    t = ((periodNs - stepNs) * 20 / gpuNs + 1) / 2;
+    return t >= PACE_PACED_HIGH ? PACE_PACED_HIGH : (unsigned)t;
+}
+
 void pace_budget_present(PaceBudget *b, bool newFrame)
 {
     b->presents++;
@@ -235,6 +271,17 @@ static void budget_climb(PaceBudget *b, uint64_t periodNs, uint64_t gpuNs, uint6
     }
 }
 
+/* paced with the GPU's time known (pace_policy.h): the climb is straight
+   home, the budget its gate (gateK 0) */
+static void budget_paced_home(PaceBudget *b)
+{
+    b->allow = PACE_ALLOW_NONE;
+    b->gateK = 0;
+    b->climbs++;
+    b->dropMost = 0;
+    b->onTime = 0;
+}
+
 bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_t refreshNs,
                       uint64_t displayWaitNs, uint64_t gpuNs, uint64_t stepNs)
 {
@@ -249,6 +296,9 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
        the arming step's presents lowers the allowance */
     const unsigned armBelow = b->armPresents > 0 ? b->armPresents - 1 : 0;
     const bool lowers = b->optional > 0 || b->allow == PACE_ALLOW_NONE || armBelow < b->allow;
+    /* the timer path with vsync off and the GPU's time known: the
+       in-betweens paced by it (pace_policy.h) */
+    const bool pacedGpu = b->paced && gpuNs > 0;
 
     if (lateNs > b->lateMaxNs) {
         b->lateMaxNs = lateNs;
@@ -306,11 +356,44 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
         }
         if (b->hold > 0) {
             b->hold--;
+            if (b->hold == 0 && pacedGpu && b->allow != PACE_ALLOW_NONE) {
+                /* paced with the GPU's time known: the budget is the gate,
+                   straight home at the hold's last step */
+                budget_paced_home(b);
+            }
+        } else if (pacedGpu && b->allow != PACE_ALLOW_NONE) {
+            /* the hold ended while the GPU's time was not known */
+            budget_paced_home(b);
         } else if (b->allow != PACE_ALLOW_NONE && (b->allow < b->max || b->unbind) &&
                    ++b->onTime >= PACE_ALLOW_CLIMB_STEP) {
             budget_climb(b, periodNs, gpuNs, stepNs);
             b->onTime = 0;
         }
+    }
+    if (pacedGpu) {
+        /* the time this step left unused, carried to the next (at most a
+           period); a late step leaves none, one past its due time by less
+           half */
+        const uint64_t used = (uint64_t)b->presents * gpuNs + stepNs;
+        const uint64_t avail = periodNs + b->carryNs;
+        const unsigned tenths = pace_budget_paced_tenths(gpuNs, stepNs, periodNs);
+        uint64_t carry = avail > used ? avail - used : 0;
+
+        if (carry > periodNs) {
+            carry = periodNs;
+        }
+        if (late) {
+            carry = 0;
+        } else if (lateNs > 0 && !excused) {
+            carry /= 2;
+        }
+        b->carryNs = carry;
+        if (tenths != b->pacedTenths) {
+            b->pacedTenths = tenths;
+            b->pacedChanges++;
+        }
+    } else {
+        b->carryNs = 0;
     }
     b->presents = 0;
     b->optional = 0;
@@ -332,11 +415,22 @@ int pace_budget_event_text(const PaceBudget *b, int kind, const PaceBudgetWaits 
                            unsigned size)
 {
     char home[24], to[24];
+    const bool pacedGpu = b->paced && w->gpuNs > 0;
 
     if (b->unbind) {
         snprintf(home, sizeof(home), "not held");
     } else {
         snprintf(home, sizeof(home), "%u a step", b->max);
+    }
+    if (kind == PACE_BUDGET_TEXT_PACED) {
+        if (b->pacedTenths >= PACE_PACED_HIGH) {
+            snprintf(to, sizeof(to), "not held");
+        } else {
+            snprintf(to, sizeof(to), "%u.%u a step", b->pacedTenths / 10, b->pacedTenths % 10);
+        }
+        return snprintf(out, size,
+                        "presents paced by the GPU: %s (GPU %.1f ms a picture, period %.1f ms)", to,
+                        ms_of(w->gpuNs), ms_of(w->periodNs));
     }
     if (kind == PACE_BUDGET_TEXT_DROP) {
         return snprintf(
@@ -344,11 +438,20 @@ int pace_budget_event_text(const PaceBudget *b, int kind, const PaceBudgetWaits 
             "presents held to %u a step: the step ended %.1f ms late after %u presents, "
             "%u steps after one %.1f ms late after %u (the last present %.1f ms, "
             "waited %.1f ms for the GPU and %.1f ms for the display%s; GPU %.1f ms a "
-            "replay); back to %s after %u steps on time if the GPU allows",
+            "replay); back to %s after %u steps on time%s",
             b->allow, ms_of(b->dropLateNs), b->dropPresents, b->dropAgo, ms_of(b->dropPrevLateNs),
             b->dropPrevPresents, ms_of(w->costNs), ms_of(w->fenceNs), ms_of(w->displayNs),
-            w->fenceHoldsDisplay ? ", the fence waits included: OpenGL" : "", ms_of(w->gpuNs), home,
-            PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP);
+            w->fenceHoldsDisplay ? ", the fence waits included: OpenGL" : "", ms_of(w->gpuNs),
+            pacedGpu ? "paced by the GPU" : home,
+            pacedGpu ? PACE_ALLOW_HOLD : PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP,
+            pacedGpu ? "" : " if the GPU allows");
+    }
+    if (kind == PACE_BUDGET_TEXT_CLIMB && b->allow == PACE_ALLOW_NONE && b->gateK == 0) {
+        return snprintf(
+            out, size,
+            "presents back to paced by the GPU (where they started) after %u steps (GPU "
+            "%.1f ms a picture, step %.1f ms, period %.1f ms)",
+            b->sinceDrop, ms_of(w->gpuNs), ms_of(w->stepNs), ms_of(w->periodNs));
     }
     if (kind == PACE_BUDGET_TEXT_CLIMB) {
         if (b->allow == PACE_ALLOW_NONE) {
@@ -378,7 +481,10 @@ int pace_budget_block_text(const PaceBudget *b, unsigned refusedAt, unsigned dro
 
     /* the timer path before its first drop, or back where it started:
        unbound, nothing held */
-    if (b->allow == PACE_ALLOW_NONE) {
+    if (b->allow == PACE_ALLOW_NONE && b->paced && gpuNs != 0 && b->pacedTenths < PACE_PACED_HIGH) {
+        snprintf(held, sizeof(held), "presents paced to %u.%u a step", b->pacedTenths / 10,
+                 b->pacedTenths % 10);
+    } else if (b->allow == PACE_ALLOW_NONE) {
         snprintf(held, sizeof(held), "presents not held");
     } else {
         snprintf(held, sizeof(held), "presents held to %u a step", b->allow);
@@ -389,7 +495,7 @@ int pace_budget_block_text(const PaceBudget *b, unsigned refusedAt, unsigned dro
         snprintf(lowest, sizeof(lowest), "%u", b->lowest);
     }
     if (gpuNs != 0) {
-        snprintf(gpu, sizeof(gpu), "GPU %.1f ms a presented replay", ms_of(gpuNs));
+        snprintf(gpu, sizeof(gpu), "GPU %.1f ms a timed replay", ms_of(gpuNs));
     } else {
         snprintf(gpu, sizeof(gpu), "%s", noGpu);
     }
