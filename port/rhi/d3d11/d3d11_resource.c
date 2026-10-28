@@ -520,9 +520,9 @@ D11Texture *d11_get_texture(RhiTexture t)
 
 static void d11_texture_release(D11Texture *t, bool now)
 {
-    IUnknown *objs[5] = {(IUnknown *)t->rtv, (IUnknown *)t->dsv, (IUnknown *)t->dsvRO,
-                         (IUnknown *)t->srv, (IUnknown *)t->res};
-    for (int i = 0; i < 5; i++) {
+    IUnknown *objs[6] = {(IUnknown *)t->rtv, (IUnknown *)t->dsv,        (IUnknown *)t->dsvRO,
+                         (IUnknown *)t->srv, (IUnknown *)t->srvStencil, (IUnknown *)t->res};
+    for (int i = 0; i < 6; i++) {
         if (objs[i]) {
             if (now) {
                 IUnknown_Release(objs[i]);
@@ -534,6 +534,7 @@ static void d11_texture_release(D11Texture *t, bool now)
     t->rtv = NULL;
     t->dsv = t->dsvRO = NULL;
     t->srv = NULL;
+    t->srvStencil = NULL;
     t->res = NULL;
 }
 
@@ -586,6 +587,16 @@ static bool d11_create_views(D11Texture *t, const D11FormatMap *fm, UINT bind)
                                                              &v, &t->srv))) {
             t->srv = NULL;
             return false;
+        }
+        /* the stencil plane (RHI_ASPECT_STENCIL: the shadow count's one
+         * draw), its value in green (RhiLimits.stencilViewChannel 1) */
+        if (fm->stencil && !ms && t->rhiFormat == RHI_FMT_D32F_S8) {
+            v.Format = DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;
+            if (!D11_CHECK(ID3D11Device_CreateShaderResourceView(
+                    g_d11.device, (ID3D11Resource *)t->res, &v, &t->srvStencil))) {
+                t->srvStencil = NULL;
+                return false;
+            }
         }
     }
     return true;
@@ -1037,7 +1048,9 @@ static bool d11_fill_entry(D11BindEntry *e, const RhiBindSlot *s, const RhiBindi
                     s->slot);
             return false;
         }
-        e->srv = t->srv; /* RHI_ASPECT_UINT: no UINT view here (RhiLimits.uintView false) */
+        /* RHI_ASPECT_UINT: no UINT view here (RhiLimits.uintView false);
+         * RHI_ASPECT_STENCIL: the stencil plane's view where there is one */
+        e->srv = b->aspect == RHI_ASPECT_STENCIL && t->srvStencil ? t->srvStencil : t->srv;
         return true;
     }
     case RHI_BIND_SAMPLER: {
