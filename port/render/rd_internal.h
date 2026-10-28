@@ -1621,6 +1621,13 @@ uint32_t rd__pipeline_create_gathered(bool *stopped);
  * clears them) */
 uint32_t rd__pipeline_gathered(RdPipeKeyInt *out, uint32_t max);
 uint32_t rd__pipeline_count(void);
+/* A display change (rd_begin_frame, after the settings applied and the
+ * targets made again): the new state's reachable keys the cache lacks made
+ * in batches as the start-up set's are, with the display change's progress
+ * function (rd_set_display_progress); "display change: N pipelines of the
+ * new state made in M batches, X ms (...)".  Nothing on a run without a
+ * start-up set.  logAlways: the line when nothing was missing too. */
+void rd__display_pipelines(bool logAlways);
 /* The time the pipelines made at first use took, in all, ms
  * (rd__get_pipeline; the replay's walk breakdown). */
 double rd__pipeline_create_ms(void);
