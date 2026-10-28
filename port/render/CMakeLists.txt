@@ -134,6 +134,7 @@ add_library(ico_render STATIC
     rd_frame.c
     rd_fx_plan.c # the frame-size post sprites' plan: fixed-function forms, local read
     rd_interp.c # interpolation between the retained frames
+    rd_reshow.c # a between-tick picture the same as the last rendered one's is shown again
     rd_join.c
     rd_local_probe.c # the desktop's local reads: the start-up cost probe
     rd_mesh.c
@@ -364,6 +365,14 @@ add_executable(rd_filter_test test/rd_filter_test.c)
 target_compile_options(rd_filter_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_filter_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_filter_test PRIVATE ico_render)
+
+# rd_still_test: the still re-present (rd_reshow.c): the frame hash that is the
+# proof a between-tick picture repeats the tick's last rendered one, and the
+# decision on synthetic frames recorded without a device.
+add_executable(rd_still_test test/rd_still_test.c)
+target_compile_options(rd_still_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_still_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_still_test PRIVATE ico_render)
 
 # rd_interp_test: the presenter's interpolation between the
 # retained frames (rd_interp.c): keyed draws blend by alpha, the snap rules,
@@ -761,7 +770,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_layout_test rd_tex_test rd_gsbase_test rd_mesh_test modelpack_test
                   rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blend_selftest_test
                   rd_vuprepass_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
-                  rd_present_test rd_filter_test rd_interp_test rd_mirror_test rd_msaa_test rd_mip_test
+                  rd_present_test rd_filter_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_perf_test rd_boot_present_test rd_crt_test texpack_load_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
                   rd_fx_frame_test rd_vu_frac_test rd_crack_test rd_local_probe_test)
@@ -950,6 +959,7 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_crt PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_filter COMMAND rd_filter_test)
     add_test(NAME rd_interp COMMAND rd_interp_test)
+    add_test(NAME rd_still COMMAND rd_still_test)
     add_test(NAME rd_mirror COMMAND rd_mirror_test)
     set_tests_properties(rd_mirror PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_msaa COMMAND rd_msaa_test)
@@ -1233,6 +1243,17 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_replay_tool_ripple rd_replay_tool_ripple_447 rd_replay_tool_ripple_436
                          rd_replay_tool_mirror_floor
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
+    # the still re-present (rd_reshow.c): a corpus dump as its own tick before
+    # (nothing moves), 4 presents at 2x and 16:9: presents 1..3 shown again, all
+    # 4 pictures byte for byte the ones rendered with ICO_RD_STILL_REPRESENT=0
+    # (the lavapipe A/B; Not Run without the dump)
+    add_test(NAME rd_replay_tool_still
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${CMAKE_SOURCE_DIR}/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00428.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_still" -DPRESENTS=4
+                     "-DARGS=--enhanced|--aspect|16:9|--resolution|2x|--present|1920x1080"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_still.cmake")
+    set_tests_properties(rd_replay_tool_still PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
     # the fog on the depth's words copied out through a buffer
     # (ICO_RD_FOG_PATH=buffer, rd_fog_path.c: the fallback of a device whose
     # depth reads fail), on D32S8 and on D24S8 (the top byte masked off):
