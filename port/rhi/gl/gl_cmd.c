@@ -71,6 +71,17 @@ static struct {
     GlRangeBind uniform[GL_SHADOW_POINTS], storage[GL_SHADOW_POINTS];
     GLuint texName[GL_SHADOW_POINTS], sampler[GL_SHADOW_POINTS], image[GL_SHADOW_POINTS];
     GLenum texTarget[GL_SHADOW_POINTS];
+
+    /* PC port: the group each slot last had walked in full and the offsets
+     * it had, with the points (per GL_BIND_* kind) its entries hold; a slot
+     * set to the same group and offsets again binds nothing
+     * (gl_bind_groups; id 0: none) */
+    struct {
+        uint32_t id;
+        uint32_t off[RHI_MAX_DYNAMIC_OFFSETS];
+        uint64_t points[4];
+    } grp[RHI_MAX_BIND_SLOTS];
+
     GlFbo fbos[GL_FBO_MAX];
     uint32_t fboCount;
     uint64_t fboClock;
@@ -489,6 +500,7 @@ void gl_forget_units(void)
     memset(s.sampler, 0xFF, sizeof(s.sampler));
     memset(s.image, 0xFF, sizeof(s.image));
     memset(s.texTarget, 0xFF, sizeof(s.texTarget));
+    memset(s.grp, 0, sizeof(s.grp));
 }
 
 static void gl_forget_bindings(void)
@@ -1019,6 +1031,23 @@ static void gl_bind_groups(GlCmdList *c)
         if (!bg) {
             continue;
         }
+        /* PC port: the group and offsets this slot already holds (set to
+         * another group and back between two draws): nothing to walk */
+        if (s.grp[g].id == c->groups[g] &&
+            memcmp(s.grp[g].off, c->offsets[g], sizeof(s.grp[g].off)) == 0) {
+            g_gl.counts.entryBinds += bg->count;
+            g_gl.counts.entryBindsSkipped += bg->count;
+            g_gl.counts.bindGroupBinds++;
+            continue;
+        }
+        /* the dynamic uniforms to bind, in one glBindBuffersRange per run of
+         * consecutive points when the driver has it (ARB_multi_bind) */
+        GLuint mName[RHI_MAX_BIND_SLOTS * 4];
+        GLintptr mOff[RHI_MAX_BIND_SLOTS * 4];
+        GLsizeiptr mSize[RHI_MAX_BIND_SLOTS * 4];
+        uint32_t mPt[RHI_MAX_BIND_SLOTS * 4], mN = 0;
+        uint64_t held[4] = {0, 0, 0, 0}, changed[4] = {0, 0, 0, 0};
+        bool tracked = true;
         const GlBindEntry *e = gl_bind_entries(bg);
         for (uint32_t k = 0; k < bg->count; k++, e++) {
             const uint32_t pt = e->point;
@@ -1028,7 +1057,16 @@ static void gl_bind_groups(GlCmdList *c)
                 const uint64_t off =
                     e->offset + (e->dyn < RHI_MAX_DYNAMIC_OFFSETS ? c->offsets[g][e->dyn] : 0u);
                 skipped = gl_range_bound(s.uniform, pt, e->name, off, e->size);
-                if (!skipped) {
+                if (skipped) {
+                    break;
+                }
+                if (g_gl.hasMultiBind && mN < RHI_MAX_BIND_SLOTS * 4u) {
+                    mPt[mN] = pt;
+                    mName[mN] = e->name;
+                    mOff[mN] = (GLintptr)off;
+                    mSize[mN] = (GLsizeiptr)e->size;
+                    mN++;
+                } else {
                     glf.BindBufferRange(GL_UNIFORM_BUFFER, pt, e->name, (GLintptr)off,
                                         (GLsizeiptr)e->size);
                 }
@@ -1075,9 +1113,42 @@ static void gl_bind_groups(GlCmdList *c)
             default:
                 break;
             }
+            if (e->kind < 4u) {
+                if (pt < GL_SHADOW_POINTS) {
+                    held[e->kind] |= 1ull << pt;
+                    changed[e->kind] |= skipped ? 0ull : 1ull << pt;
+                } else {
+                    tracked = false;
+                }
+            }
             g_gl.counts.entryBinds++;
             g_gl.counts.entryBindsSkipped += skipped;
         }
+        for (uint32_t i = 0; i < mN;) {
+            uint32_t n = 1;
+            while (i + n < mN && mPt[i + n] == mPt[i] + n) {
+                n++;
+            }
+            if (n == 1) {
+                glf.BindBufferRange(GL_UNIFORM_BUFFER, mPt[i], mName[i], mOff[i], mSize[i]);
+            } else {
+                glf.BindBuffersRange(GL_UNIFORM_BUFFER, mPt[i], (GLsizei)n, mName + i, mOff + i,
+                                     mSize + i);
+            }
+            i += n;
+        }
+        /* a point this walk changed is no longer what another slot's group
+         * left there */
+        for (uint32_t h = 0; h < RHI_MAX_BIND_SLOTS; h++) {
+            for (uint32_t k = 0; k < 4u && h != g && s.grp[h].id; k++) {
+                if (s.grp[h].points[k] & changed[k]) {
+                    s.grp[h].id = 0;
+                }
+            }
+        }
+        s.grp[g].id = tracked ? c->groups[g] : 0u;
+        memcpy(s.grp[g].off, c->offsets[g], sizeof(s.grp[g].off));
+        memcpy(s.grp[g].points, held, sizeof(held));
         g_gl.counts.bindGroupBinds++;
     }
     c->groupDirty = 0;
