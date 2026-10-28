@@ -219,6 +219,10 @@ typedef enum RdTargetId {
      * later presents when the frame reads DISPLAY (the motion blur; rd_interp.c
      * feedback); DISPLAY's size and scale */
     RD_TARGET_DISPLAY_HELD,
+    /* host only: WORK3, the glow the tick's first present pasted, kept for
+     * the tick's later presents, which paste it again instead of drawing
+     * the glow's chain (rd_glow_hold.c); WORK3's size */
+    RD_TARGET_WORK3_HELD,
     RD_TARGET_COUNT
 } RdTargetId;
 
@@ -2002,7 +2006,8 @@ typedef struct RdPerfRecord {
      * closed (no epoch), else the list + 1, RD_LIST_COUNT + 1 the replay's
      * end */
     uint8_t msaaCloseAt;
-    uint8_t reshown; /* a between-tick present shown again without a replay (rd_reshow.c) */
+    uint8_t reshown;  /* a between-tick present shown again without a replay (rd_reshow.c) */
+    uint8_t glowHeld; /* a between-tick present that pasted the tick's glow (rd_glow_hold.c) */
     /* MSAA (RdSettings.antiAlias): the replay's sample count (0 without)
      * and the epoch's resolves of SCENE (0 or 1 a replay) */
     uint32_t msaaSamples, msaaResolves;
