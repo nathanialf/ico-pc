@@ -154,12 +154,20 @@ static bool recEnsure(uint32_t rows)
     return s_recBuf[rd__ring_slot()].id != 0;
 }
 
-/* The bytes of the slot's upload ring t5 binds (vu_ring: the pre-pass's
- * batches read their VuCB and VuBoneCB there): the ring from offset 0, to
- * the device's largest storage range (16-byte elements) */
+/* t5's first byte in the slot's upload ring this replay (vu_ring: the
+ * pre-pass's batches and the draw merge read their VuCB, VuBoneCB and
+ * tables there): the ring's offset when the replay's VU work begins
+ * (rd__vu_prepass, after the texture and mesh uploads), 256-aligned, so a
+ * ring that a frame's texture uploads grew past the device's largest
+ * storage range still binds every block the VU draws put after it */
+static uint64_t s_ringBase;
+
+/* The bytes of the slot's upload ring t5 binds: the ring from s_ringBase,
+ * to the device's largest storage range (16-byte elements) */
 static uint64_t ringRange(void)
 {
-    uint64_t range = g_rd.ringCap[rd__ring_slot()];
+    const uint64_t cap = g_rd.ringCap[rd__ring_slot()];
+    uint64_t range = cap > s_ringBase ? cap - s_ringBase : 0u;
     const uint64_t maxRange = rhi_limits()->maxStorageRange;
     if (maxRange && range > maxRange) {
         range = maxRange;
@@ -167,10 +175,23 @@ static uint64_t ringRange(void)
     return range & ~(uint64_t)15u;
 }
 
+/* a block of size bytes at ring offset off as t5 reads it: its first
+ * float4 from s_ringBase; false when t5 does not hold it whole */
+static bool ringIndex(uint64_t off, uint64_t size, uint32_t *out)
+{
+    if (off == ~0ull || off < s_ringBase || off - s_ringBase + size > ringRange() ||
+        (off - s_ringBase) / 16u > UINT32_MAX) {
+        return false;
+    }
+    *out = (uint32_t)((off - s_ringBase) / 16u);
+    return true;
+}
+
 /* The VU layout's group binds the stream's whole buffer (the
  * mesh arena chunk or the ring) at t0, the ring at offset 0 for the
  * three dynamic uniforms, the slot's record buffer at t4 and the ring
- * again at t5 (ringRange), so it is made once per stream buffer and replay;
+ * again at t5 (from s_ringBase, ringRange), so it is made once per stream
+ * buffer and replay;
  * a draw selects its stream through VuCB's vu_draw.x (the qword index of
  * its first batch, vu_common.hlsli) and its blocks through the bind-time
  * offsets.  A stream whose end lies past the device's largest storage range
@@ -179,7 +200,7 @@ static uint64_t ringRange(void)
 
 typedef struct VuEntry {
     uint32_t epoch, buffer, rec, ring;
-    uint64_t range;
+    uint64_t range, base;
     RhiBindGroup group;
 } VuEntry;
 
@@ -218,7 +239,7 @@ static RhiBindGroup vuGroupMake(RhiBuffer streamBuf, uint64_t streamOff, uint64_
     b[5].slot = 5;
     b[5].type = RHI_BIND_STORAGE_BUFFER;
     b[5].buffer = g_rd.ring[rd__ring_slot()];
-    b[5].offset = 0;
+    b[5].offset = s_ringBase;
     b[5].size = ringRange();
     return rd__replay_bind_group(g_rd.layoutVu, b, 6);
 }
@@ -245,7 +266,8 @@ static RhiBindGroup vuGroup(RhiBuffer streamBuf, uint64_t bufSize, uint64_t stre
     for (int i = 0; i < RD_VU_GROUPS; i++) {
         VuEntry *e = &s_vuGroups[i];
         if (e->epoch == rd__replay_bind_epoch() && e->buffer == streamBuf.id && e->rec == rec &&
-            e->ring == g_rd.ring[rd__ring_slot()].id && e->range == range) {
+            e->ring == g_rd.ring[rd__ring_slot()].id && e->range == range &&
+            e->base == s_ringBase) {
             return e->group;
         }
         if (!free && e->epoch != rd__replay_bind_epoch()) {
@@ -259,6 +281,7 @@ static RhiBindGroup vuGroup(RhiBuffer streamBuf, uint64_t bufSize, uint64_t stre
         free->rec = rec;
         free->ring = g_rd.ring[rd__ring_slot()].id;
         free->range = range;
+        free->base = s_ringBase;
         free->group = g;
     }
     return g;
@@ -346,19 +369,32 @@ static void passSplit(Replay *r)
     s_splitSerial = r->passSerial;
 }
 
-/* The draw-merge count (RdPerfRecord vuMerge*; counting only).  The last VU
- * draw's tuple: a draw equal to it on every key, with the predicates a
- * merged draw needs, could join its run in one GPU draw.  A new pass, a
- * draw of anything else between (g_rd.stats.draws moved) or a draw that
- * cannot merge ends the run. */
+/* The draw-merge count (RdPerfRecord vuMergeDraws, vuMergeRuns,
+ * vuMergeBlocked; counting only, beside what the merge draws: vuMergeIn,
+ * vuMergeGpu, vuMergeAlone).  The last VU draw's tuple: a draw equal to it
+ * on every key, with the predicates a merged draw needs, could join its run
+ * in one GPU draw.  A new pass, a draw of anything else between
+ * (g_rd.stats.draws moved past what the VU draws drew, s_mergeExpect) or a
+ * draw that cannot merge ends the run. */
 typedef struct VuMergeLast {
     bool valid;
-    uint32_t replay, pass, pipe, g1, g2, frame, frameOff, color, draws;
+    uint32_t replay, pass, pipe, g1, g2, frame, frameOff, color;
     uint64_t cbHash;
     RhiRect sc;
 } VuMergeLast;
 
 static VuMergeLast s_mergeLast;
+
+/* g_rd.stats.draws as it stands when nothing but the VU draws of this file
+ * drew since the last note (ownDraw keeps it in step) */
+static uint32_t s_mergeExpect;
+
+/* a GPU draw of the VU draws: counted, and in step for the note */
+static void ownDraw(void)
+{
+    g_rd.stats.draws++;
+    s_mergeExpect++;
+}
 
 static uint64_t vuFnv(const void *data, size_t n)
 {
@@ -371,8 +407,7 @@ static uint64_t vuFnv(const void *data, size_t n)
 }
 
 /* eligible: single planned pass, no DATE stencil, no destination read, not
- * skinned.  Called right after the draw's first pass is recorded
- * (g_rd.stats.draws is past it). */
+ * skinned.  Called once a VU draw is drawn or held in the merge's run */
 static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t g1, uint32_t g2,
                         const IcoDrawCB *cb)
 {
@@ -391,13 +426,12 @@ static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t 
     t.frame = r->frameBG.group.id;
     t.frameOff = r->frameBG.offset;
     t.color = r->st.color;
-    t.draws = g_rd.stats.draws;
     t.cbHash = vuFnv(cb, sizeof(*cb));
     t.sc = r->sc;
     const VuMergeLast *l = &s_mergeLast;
     const bool samePass = l->valid && l->replay == t.replay && l->pass == t.pass;
-    /* nothing drawn between: this draw is one past the last one's count */
-    const bool adjacent = samePass && l->draws + 1u == t.draws;
+    /* nothing drawn between but the VU draws' own */
+    const bool adjacent = samePass && g_rd.stats.draws == s_mergeExpect;
     if (adjacent && eligible && l->pipe == t.pipe && l->g2 == t.g2 && l->g1 == t.g1 &&
         l->cbHash == t.cbHash && l->frame == t.frame && l->frameOff == t.frameOff &&
         l->color == t.color && memcmp(&l->sc, &t.sc, sizeof(t.sc)) == 0) {
@@ -419,6 +453,311 @@ static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t 
         }
     }
     s_mergeLast = t;
+    s_mergeExpect = g_rd.stats.draws;
+}
+
+/* ------------------------------------------------------ the merge's run
+ * docs/port/VU1_PROGRAMS.md, "The draw merge".  With g_rd.vuMerge a VU
+ * draw of one planned pass, indexed, through a merge build (vsMerge), with
+ * no DATE through the stencil bit, no destination read, not one of code
+ * 36's cut and kick draws, outside the loss bisect's window and the pass
+ * split, is held in the open run instead of drawn (vuRunTake).  The next
+ * such draw joins it when it has the same pipeline key, group 1 (the
+ * stream buffer), group 2 (the textures), DrawCB bytes, FrameCB, scissor,
+ * pass and GPU timing effect, up to RD_VU_MERGE_MAX draws whose raised
+ * index values stay within the device's (maxDrawIndexedIndexValue).
+ * Anything else recorded draws the run first (rd__replay_vu_flush: the
+ * replay's endPass and rd__replay_flush_run, the walk before every command
+ * but the VU draws and the state, a change of the timing effect, the
+ * list's end, a VU draw under DATE, any VU draw drawn alone).  The run is
+ * one draw: a run of one its own list; a longer one its draws' index lists
+ * copied into the ring one after the other, each but the first raised past
+ * the values before it, and a table in the ring (vu_common.hlsli
+ * vu_merge_entry) giving each draw's first raised value, VuCB, VuBoneCB
+ * and raise, the merge builds reading each draw's VuCB through t5 by it.
+ * The same triangles in the same order through the same words: the
+ * picture is the same byte for byte. */
+#define RD_VU_MERGE_MAX 16u /* vu_common.hlsli VU_MERGE_MAX */
+
+/* A VU draw's index list: the bound list (buf at off; id 0: not indexed),
+ * the same values on the CPU (a mesh's RdMeshRec.index) or, cpu NULL, a
+ * grid's shape (ICO_VU_INDEX(b * vpb + v, c) for v 2 .. vpb - 1 of each
+ * batch b, doVuDraw) */
+typedef struct VuIdx {
+    RhiBuffer buf;
+    uint64_t off;
+    const uint32_t *cpu;
+    uint32_t gridBatches, gridVpb;
+} VuIdx;
+
+typedef struct VuRunDraw {
+    IcoVuCB vcb;
+    uint64_t bonesOff;
+    VuIdx ix;
+    uint32_t first, count;
+    uint32_t lo, hi; /* its values' range (vuRunRange) */
+    bool ranged;
+} VuRunDraw;
+
+static struct {
+    uint32_t n; /* the draws held; 0: no run */
+    uint32_t replay, pass;
+    int post;
+    RdPipeKeyInt key;
+    RhiPipeline p;
+    RhiBindGroup g1, g2;
+    RdUniform frame;
+    RhiRect sc;
+    IcoDrawCB cb;
+    uint64_t dOff;
+    uint64_t top; /* the next draw's first raised value (two draws or more) */
+    VuRunDraw d[RD_VU_MERGE_MAX];
+} s_run;
+
+/* the largest index value a draw may hold (never the restart value
+ * 0xFFFFFFFF) */
+static uint32_t maxIndexValue(void)
+{
+    const uint32_t m = rhi_limits()->maxDrawIndexedIndexValue;
+    return m == 0u ? 0xFFFFFFu : (m < 0xFFFFFFFEu ? m : 0xFFFFFFFEu);
+}
+
+/* the span instrumentation's list or range (rd_core.c rd__span_*) of a
+ * draw's index list */
+static void vuSpanOf(const VuIdx *ix)
+{
+    if (ix->cpu) {
+        rd__span_idx(ix->cpu);
+    } else if (ix->gridVpb >= 3u && ix->gridBatches > 0u) {
+        rd__span_range(ICO_VU_INDEX(2u, 0u), ICO_VU_INDEX(ix->gridBatches * ix->gridVpb - 1u, 2u));
+    } else {
+        rd__span_idx(NULL);
+    }
+}
+
+/* a held draw's lowest and highest index value */
+static void vuRunRange(VuRunDraw *d)
+{
+    if (d->ranged) {
+        return;
+    }
+    if (d->ix.cpu) {
+        uint32_t lo = UINT32_MAX, hi = 0;
+        const uint32_t *v = d->ix.cpu + d->first;
+        for (uint32_t i = 0; i < d->count; i++) {
+            lo = v[i] < lo ? v[i] : lo;
+            hi = v[i] > hi ? v[i] : hi;
+        }
+        d->lo = lo;
+        d->hi = hi;
+    } else {
+        d->lo = ICO_VU_INDEX(2u, 0u);
+        d->hi = ICO_VU_INDEX(d->ix.gridBatches * d->ix.gridVpb - 1u, 2u);
+    }
+    d->ranged = true;
+}
+
+/* a held draw's index values raised by add, into out (its count) */
+static void vuRunWrite(const VuRunDraw *d, uint32_t add, uint32_t *out)
+{
+    if (d->ix.cpu) {
+        const uint32_t *v = d->ix.cpu + d->first;
+        for (uint32_t i = 0; i < d->count; i++) {
+            out[i] = v[i] + add;
+        }
+        return;
+    }
+    const uint32_t vpb = d->ix.gridVpb;
+    uint32_t k = 0;
+    for (uint32_t b = 0; b < d->ix.gridBatches; b++) {
+        for (uint32_t v = 2; v < vpb && k < d->count; v++) {
+            for (uint32_t c = 0; c < 3u && k < d->count; c++) {
+                out[k++] = ICO_VU_INDEX(b * vpb + v, c) + add;
+            }
+        }
+    }
+}
+
+/* a run that could not be drawn (the ring full or past t5; a pass ended
+ * without drawing it, which every endPass prevents): logged once */
+static void vuRunLost(uint32_t n, const char *why)
+{
+    static bool logged; /* once a run */
+    if (!logged) {
+        logged = true;
+        rd__log("VU merge: a run of %u draws not drawn (%s; reported once)", n, why);
+    }
+}
+
+void rd__replay_vu_flush(Replay *r)
+{
+    const uint32_t n = s_run.n;
+    if (n == 0) {
+        return;
+    }
+    s_run.n = 0;
+    if (s_run.replay != g_rd.replayCounter || !r->passOpen || s_run.pass != r->passSerial) {
+        vuRunLost(n, "its pass ended first");
+        return;
+    }
+    const RhiCommandList cl = rd__replay_cl();
+    const uint64_t ua = rhi_limits()->uniformAlign;
+    /* the table: x the draw's first raised value (draw 0: the draws), y
+     * its VuCB, z its VuBoneCB (float4 indices in t5), w its raise */
+    uint32_t tab[RD_VU_MERGE_MAX][4];
+    uint32_t tAt;
+    const uint64_t tOff = rd__ring_alloc((uint64_t)n * 16u, 16);
+    if (!ringIndex(tOff, (uint64_t)n * 16u, &tAt)) {
+        vuRunLost(n, "the ring full or its table past t5");
+        return;
+    }
+    uint64_t vOff0 = 0;
+    uint32_t total = 0, next = 0;
+    for (uint32_t k = 0; k < n; k++) {
+        VuRunDraw *d = &s_run.d[k];
+        d->vcb.mark[3] = tAt; /* vu_merge_head.w: IcoVuCB.mark's lane nothing else reads */
+        const uint64_t vOff = cbCopy(&d->vcb, sizeof(d->vcb), ua);
+        uint32_t vAt, bAt;
+        if (!ringIndex(vOff, sizeof(IcoVuCB), &vAt) ||
+            !ringIndex(d->bonesOff, sizeof(IcoVuBoneCB), &bAt)) {
+            vuRunLost(n, "the ring full or a VuCB past t5");
+            return;
+        }
+        if (k == 0) {
+            vOff0 = vOff;
+        }
+        uint32_t add = 0;
+        if (n > 1) {
+            vuRunRange(d); /* every draw of a run of two or more was ranged (vuRunTake) */
+            if (k == 0) {
+                next = d->hi + 1u;
+            } else {
+                add = next - d->lo;
+                tab[k][0] = next;
+                next += d->hi - d->lo + 1u;
+            }
+        }
+        tab[k][1] = vAt;
+        tab[k][2] = bAt;
+        tab[k][3] = add;
+        total += d->count;
+    }
+    tab[0][0] = n;
+    memcpy(g_rd.ringMap[rd__ring_slot()] + tOff, tab, (size_t)n * 16u);
+    /* the index list: a run of one its own, a longer one the draws' lists
+     * raised one after the other */
+    const VuRunDraw *d0 = &s_run.d[0];
+    RhiBuffer ib = d0->ix.buf;
+    uint64_t ibOff = d0->ix.off;
+    uint32_t first = d0->first, count = d0->count;
+    if (n > 1) {
+        const uint64_t iOff = rd__ring_alloc((uint64_t)total * 4u, 16);
+        if (iOff == ~0ull) {
+            vuRunLost(n, "the ring full");
+            return;
+        }
+        uint32_t *out = (uint32_t *)(g_rd.ringMap[rd__ring_slot()] + iOff);
+        for (uint32_t k = 0, at = 0; k < n; k++) {
+            vuRunWrite(&s_run.d[k], tab[k][3], out + at);
+            at += s_run.d[k].count;
+        }
+        g_rdPerf.uploadStreamBytes += (uint64_t)total * 4u;
+        ib = g_rd.ring[rd__ring_slot()];
+        ibOff = iOff;
+        first = 0;
+        count = total;
+        rd__span_range(d0->lo, next - 1u);
+        g_rdPerf.vuMergeIn += n;
+        g_rdPerf.vuMergeGpu++;
+    } else {
+        vuSpanOf(&d0->ix);
+        g_rdPerf.vuMergeAlone++;
+    }
+    /* the run's scissor where the draw being bound set its own since (it
+     * is set back after) */
+    const RhiRect now = r->sc;
+    const bool scMoved = memcmp(&now, &s_run.sc, sizeof(now)) != 0;
+    if (scMoved) {
+        rhi_cmd_set_scissor(cl, &s_run.sc);
+    }
+    rhi_cmd_set_index_buffer(cl, ib, ibOff, true);
+    /* b2 the first draw's VuCB (its mark[3] the table), b3 its VuBoneCB
+       (the merge builds read neither else) */
+    const uint32_t offs[3] = {(uint32_t)s_run.dOff, (uint32_t)vOff0, (uint32_t)d0->bonesOff};
+    rd__set_pipeline(cl, s_run.p, &s_run.key);
+    rd__bind_uniform(cl, 0, s_run.frame);
+    rhi_cmd_set_bind_group_offsets(cl, 1, s_run.g1, offs, 3);
+    rhi_cmd_set_bind_group(cl, 2, s_run.g2);
+    rd__replay_dst_bind(r, &s_run.key); /* nothing for these keys */
+    rd__span_draw(first, count);
+    rd__replay_draw_indexed(cl, count, first, 0, 1);
+    ownDraw();
+    if (scMoved) {
+        rhi_cmd_set_scissor(cl, &now);
+    }
+}
+
+/* Holds a draw in the open run, or (it does not join) draws the run and
+ * opens one with it; false when it cannot be held (its DrawCB not in the
+ * ring): the caller draws it alone */
+static bool vuRunTake(Replay *r, const RdPipeKeyInt *key, RhiPipeline p, RhiBindGroup g1,
+                      RhiBindGroup g2, const IcoDrawCB *cb, const IcoVuCB *vcb, uint64_t bonesOff,
+                      const VuIdx *ix, uint32_t first, uint32_t count)
+{
+    VuRunDraw nd;
+    nd.vcb = *vcb;
+    nd.bonesOff = bonesOff;
+    nd.ix = *ix;
+    nd.first = first;
+    nd.count = count;
+    nd.lo = nd.hi = 0;
+    nd.ranged = false;
+    if (s_run.n && s_run.n < RD_VU_MERGE_MAX && s_run.replay == g_rd.replayCounter && r->passOpen &&
+        s_run.pass == r->passSerial && s_run.post == r->perfPost && s_run.p.id == p.id &&
+        memcmp(&s_run.key, key, sizeof(*key)) == 0 && s_run.g1.id == g1.id &&
+        s_run.g2.id == g2.id && s_run.frame.group.id == r->frameBG.group.id &&
+        s_run.frame.offset == r->frameBG.offset && memcmp(&s_run.sc, &r->sc, sizeof(r->sc)) == 0 &&
+        memcmp(&s_run.cb, cb, sizeof(*cb)) == 0) {
+        /* raised past the run's values, within the device's */
+        if (s_run.n == 1) {
+            vuRunRange(&s_run.d[0]);
+            s_run.top = (uint64_t)s_run.d[0].hi + 1u;
+        }
+        vuRunRange(&nd);
+        const uint64_t last = s_run.top + (nd.hi - nd.lo);
+        if (last <= maxIndexValue()) {
+            s_run.d[s_run.n++] = nd;
+            s_run.top = last + 1u;
+            return true;
+        }
+    }
+    rd__replay_vu_flush(r);
+    const uint64_t dOff = rd__draw_cb_offset(cb);
+    if (dOff == ~0ull) {
+        return false;
+    }
+    s_run.replay = g_rd.replayCounter;
+    s_run.pass = r->passSerial;
+    s_run.post = r->perfPost;
+    s_run.key = *key;
+    s_run.p = p;
+    s_run.g1 = g1;
+    s_run.g2 = g2;
+    s_run.frame = r->frameBG;
+    s_run.sc = r->sc;
+    s_run.cb = *cb;
+    s_run.dOff = dOff;
+    s_run.top = 0;
+    s_run.d[0] = nd;
+    s_run.n = 1;
+    return true;
+}
+
+void rd__replay_vu_flush_post(Replay *r, int post)
+{
+    if (s_run.n && s_run.post != post) {
+        rd__replay_vu_flush(r); /* the run's draw belongs to the effect before */
+    }
 }
 
 /* One VU draw call under the planned passes of state s.  vs: the vertex
@@ -427,16 +766,21 @@ static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t 
  * the program: rd_mesh.c enumerateVuDraws), else the program's own entry
  * progVs, which the draw also takes when the main shader's pipeline cannot
  * be made.  Both draw with vu_ps / vu_texa_ps (the planned passes' ids:
- * VuVSOut, the planes as flat varyings either way). */
+ * VuVSOut, the planes as flat varyings either way).  ix: its index list
+ * (not indexed: buf 0), first and count in it (vertices when not indexed).
+ * With the draw merge (g_rd.vuMerge) a draw that can merge is held in the
+ * run (vuRunTake); any other draws the run first, then itself, a table of
+ * one where a pass goes through a merge build. */
 static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBindGroup g2,
                    uint8_t prog, uint8_t vs, uint8_t progVs, RhiBuffer streamBuf,
                    uint64_t streamBufSize, uint64_t streamOff, uint64_t streamSize,
-                   const IcoVuCB *vcb0, uint64_t bonesOff, int indexed, uint32_t first,
+                   const IcoVuCB *vcb0, uint64_t bonesOff, const VuIdx *ix, uint32_t first,
                    uint32_t count)
 {
     if (count == 0) {
         return;
     }
+    const bool indexed = ix->buf.id != 0;
     const bool recorded = vs == RD_VS_VU_MAIN || vs == RD_VS_VU_PARTICLE_MAIN;
     if (g_rd.vuPrepass && !recorded && (rd__vu_pre_vs(progVs) || progVs == RD_VS_VU_PARTICLE)) {
         g_rdPerf.vuPreFallbacks++; /* a VU draw the pre-passes did not record */
@@ -477,19 +821,15 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     }
     /* the exact blend's passes, two passes without dual-source blend */
     const int np = rd__replay_expand_passes(r, pl, npl, dp);
-    /* VuCB once a draw: every pass of it reads the same block */
-    const uint64_t vOff = cbCopy(vcb, sizeof(*vcb), ua);
-    if (vOff == ~0ull) {
-        return;
-    }
-    const RdStateBlock saved = r->st;
-    r->st = *s; /* fillDrawCB reads the state the passes were planned from */
+    /* each pass's pipeline: the main shader's, or (it could not be made)
+     * the program's own entry, which ignores the record (logged once) */
+    RdPipeKeyInt keys[8];
+    RhiPipeline pipes[8];
+    bool own = false;
     for (int i = 0; i < np; i++) {
-        RdPipeKeyInt key = dp[i].key;
-        RhiPipeline p = rd__get_pipeline(&key);
-        if (!p.id && recorded && !rd__pipeline_gathering()) {
-            /* the main shader's pipeline could not be made: the program's
-             * own entry, which ignores the record (logged once) */
+        keys[i] = dp[i].key;
+        pipes[i] = rd__get_pipeline(&keys[i]);
+        if (!pipes[i].id && recorded && !rd__pipeline_gathering()) {
             static bool logged; /* once a run */
             if (!logged) {
                 logged = true;
@@ -497,11 +837,76 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
                         "programs' own vertex shaders (reported once)",
                         rd__vs_name(vs));
             }
-            key.vs = progVs;
-            key.gs.program = prog;
-            p = rd__get_pipeline(&key);
+            keys[i].vs = progVs;
+            keys[i].gs.program = prog;
+            pipes[i] = rd__get_pipeline(&keys[i]);
             g_rdPerf.vuPreFallbacks++;
+            own = true;
         }
+    }
+    /* M0's predicates for the count (vuMergeNote) */
+    const bool noteable = np == 1 && !r->dateStNow && dp[0].key.dst == RHI_DST_READ_NONE &&
+                          s_zeroBonesFor == g_rd.replayCounter && bonesOff == s_zeroBones;
+    const RdStateBlock saved = r->st;
+    r->st = *s; /* fillDrawCB reads the state the passes were planned from */
+    if (g_rd.vuMerge && np == 1 && indexed && pipes[0].id && !own && g_rd.vsMerge[keys[0].vs].id &&
+        !r->dateStNow && keys[0].dst == RHI_DST_READ_NONE &&
+        (vcb->draw[2] & (ICO_VU_CUT_ONLY | ICO_VU_KICK_ONLY)) == 0u && !g_rdWin.first &&
+        !g_rd.passSplit && r->passOpen) {
+        /* the draw merge: held in the run (drawn when it ends) */
+        IcoDrawCB cb;
+        rd__replay_fill_draw_cb(r, &dp[0], ds, &cb);
+        rd__replay_dst_pass_mode(r, &keys[0]); /* a storage pass ends first (its run drawn) */
+        if (vuRunTake(r, &keys[0], pipes[0], g1, g2, &cb, vcb, bonesOff, ix, first, count)) {
+            if (dp[0].key.gs.colorMask & 8) {
+                r->writeSerial++;
+            }
+            vuMergeNote(r, noteable, pipes[0].id, g1.id, g2.id, &cb);
+            r->st = saved;
+            return;
+        }
+    }
+    rd__replay_vu_flush(r); /* the run's draw before this one's */
+    /* a merge build reads VuCB through a table, here of this draw alone */
+    bool table = false;
+    for (int i = 0; i < np; i++) {
+        table = table || (g_rd.vuMerge && pipes[i].id && g_rd.vsMerge[keys[i].vs].id);
+    }
+    uint64_t tOff = ~0ull;
+    uint32_t tAt = 0;
+    if (table) {
+        tOff = rd__ring_alloc(16, 16);
+        if (!ringIndex(tOff, 16, &tAt)) {
+            vuRunLost(1, "the ring full or its table past t5");
+            r->st = saved;
+            return;
+        }
+        vcbAt.mark[3] = tAt; /* vu_merge_head.w */
+    }
+    /* VuCB once a draw: every pass of it reads the same block */
+    const uint64_t vOff = cbCopy(vcb, sizeof(*vcb), ua);
+    if (vOff == ~0ull) {
+        r->st = saved;
+        return;
+    }
+    if (table) {
+        uint32_t t[4] = {1u, 0u, 0u, 0u};
+        if (!ringIndex(vOff, sizeof(IcoVuCB), &t[1]) ||
+            !ringIndex(bonesOff, sizeof(IcoVuBoneCB), &t[2])) {
+            vuRunLost(1, "a VuCB past t5");
+            r->st = saved;
+            return;
+        }
+        memcpy(g_rd.ringMap[rd__ring_slot()] + tOff, t, sizeof(t));
+        g_rdPerf.vuMergeAlone++;
+    }
+    if (indexed) {
+        rhi_cmd_set_index_buffer(rd__replay_cl(), ix->buf, ix->off, true);
+        vuSpanOf(ix);
+    }
+    for (int i = 0; i < np; i++) {
+        const RdPipeKeyInt key = keys[i];
+        const RhiPipeline p = pipes[i];
         if (!p.id) {
             continue;
         }
@@ -535,14 +940,11 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             r->writeSerial++;
         }
         if (!rd__no_dual_second(dp, i)) {
-            g_rd.stats.draws++;
+            ownDraw();
         }
         if (i == 0) {
             /* PC port: counting only (vuMergeNote) */
-            vuMergeNote(r,
-                        np == 1 && !r->dateStNow && dp[0].key.dst == RHI_DST_READ_NONE &&
-                            s_zeroBonesFor == g_rd.replayCounter && bonesOff == s_zeroBones,
-                        p.id, g1.id, g2.id, &cb);
+            vuMergeNote(r, noteable, p.id, g1.id, g2.id, &cb);
         }
     }
     r->st = saved;
@@ -1001,6 +1403,11 @@ static void vuPrepassRun(const RdFrame *f, int keep);
 
 void rd__vu_prepass(const RdFrame *f, int keep)
 {
+    /* t5's base this replay: past the uploads (ringRange) */
+    s_ringBase = rd__ring_alloc(0, 256);
+    if (s_ringBase == ~0ull || s_ringBase + 256u > g_rd.ringCap[rd__ring_slot()]) {
+        s_ringBase = 0; /* the ring full: t5 from its start, as before */
+    }
     s_preN = s_preAt = 0;
     s_preReplay = 0;
     s_preEntryDraws = 0;
@@ -1210,9 +1617,9 @@ static bool preItem(VuPre *e, IcoVuCB *vcb, const RdPipeKeyInt *key, uint32_t w,
     out->g1 = vuGroup(e->src.streamBuf, e->src.streamBufSize, e->src.streamOff, e->src.streamSize,
                       &vcb->draw[0]);
     out->vOff = cbCopy(vcb, sizeof(*vcb), rhi_limits()->uniformAlign);
-    const uint64_t range = ringRange();
-    if (!out->g1.id || out->vOff == ~0ull || out->vOff + sizeof(IcoVuCB) > range ||
-        e->src.bonesOff + sizeof(IcoVuBoneCB) > range) {
+    uint32_t at;
+    if (!out->g1.id || !ringIndex(out->vOff, sizeof(IcoVuCB), &at) ||
+        !ringIndex(e->src.bonesOff, sizeof(IcoVuBoneCB), &at)) {
         return false;
     }
     out->e = e;
@@ -1266,19 +1673,20 @@ static int preBatchDraw(const uint32_t *order, uint32_t n)
     for (uint32_t i = 0; i < n; i++) {
         const PreItem *it = &s_items[order[i]];
         tab[i][0] = points;
-        tab[i][1] = (uint32_t)(it->vOff / 16u);
-        tab[i][2] = (uint32_t)(it->e->src.bonesOff / 16u);
+        tab[i][1] = (uint32_t)((it->vOff - s_ringBase) / 16u); /* in t5 (preItem) */
+        tab[i][2] = (uint32_t)((it->e->src.bonesOff - s_ringBase) / 16u);
         tab[i][3] = 0;
         points += it->count;
     }
     const uint64_t ua = rhi_limits()->uniformAlign;
     const uint64_t tOff = cbCopy(tab, (uint64_t)n * 16u, 16);
-    if (tOff == ~0ull || tOff + (uint64_t)n * 16u > ringRange()) {
+    uint32_t tAt;
+    if (!ringIndex(tOff, (uint64_t)n * 16u, &tAt)) {
         return -1;
     }
     IcoDrawCB cb;
     memset(&cb, 0, sizeof(cb));
-    cb.aux0[0] = (uint32_t)(tOff / 16u);
+    cb.aux0[0] = tAt;
     cb.aux0[1] = n;
     const uint64_t dOff = cbCopy(&cb, sizeof(cb), ua);
     if (dOff == ~0ull) {
@@ -1742,6 +2150,8 @@ static void vuPrepassRun(const RdFrame *f, int keep)
 }
 
 /* rd__gpu_shutdown: the record's textures and buffers, the entries */
+static void vuMergeFree(void); /* the draw merge's modules (below) */
+
 void rd__vu_prepass_shutdown(void)
 {
     recFree();
@@ -1752,6 +2162,7 @@ void rd__vu_prepass_shutdown(void)
         g_rd.vsBatch[v] = (RhiShader){0};
     }
     g_rd.vuPreBatch = false;
+    vuMergeFree();
     free(s_items);
     free(s_itemOrder);
     s_items = NULL;
@@ -1846,6 +2257,93 @@ static void preBatchInit(void)
              RD_VU_PRE_BATCH_MAX);
 }
 
+/* ------------------------------------------------------- the draw merge
+ * docs/port/VU1_PROGRAMS.md, "The draw merge".  g_rd.vuMerge: every draw
+ * of a mesh or grid program's entry and of vu_main_vs goes through the
+ * program's merge build (vsMerge: vu_X_merge_vs, vu_X_merge_plain_vs where
+ * the fallback takes the plain variant, vu_merge_main_vs), which reads its
+ * VuCB and VuBoneCB through t5 by a table (vu_common.hlsli vu_merge_entry),
+ * so consecutive draws with the same state are one indexed draw (vuDraw,
+ * vuRunTake, rd__replay_vu_flush).  Off: [dev] vu_merge = false
+ * (ICO_RD_VU_MERGE=0), Direct3D 11 (its run-time compile and its views of
+ * the ring are not set up for t5 in the main draws), or a merge module
+ * missing.  Before any pipeline (the keys are the same either way,
+ * rd_pipeline.c) */
+static char s_mergeWhy[224];
+
+/* the mesh and grid programs' entries and the main shader with a merge
+ * build (the skinned programs and the particles have none: their draws are
+ * drawn one a command) */
+static const uint8_t kMergeVs[] = {RD_VS_VU_PRELIT,    RD_VS_VU_LIT,  RD_VS_VU_LIT_SPEC,
+                                   RD_VS_VU_REFLECT,   RD_VS_VU_GRID, RD_VS_VU_GRID_LIT,
+                                   RD_VS_VU_GRID_SPEC, RD_VS_VU_MAIN};
+
+void rd__vu_merge_name(uint8_t vs, bool plain, char *out, size_t size)
+{
+    if (vs == RD_VS_VU_MAIN) {
+        snprintf(out, size, "vu_merge_main_vs");
+        return;
+    }
+    /* vu_X_vs -> vu_X_merge_vs, vu_X_merge_plain_vs */
+    const char *e = rd__vs_name(vs);
+    const size_t n = strlen(e);
+    snprintf(out, size, "%.*s_merge%s_vs", (int)(n > 3 ? n - 3 : 0), e, plain ? "_plain" : "");
+}
+
+const char *rd__vu_merge_text(void)
+{
+    return g_rd.vuMerge ? "on" : "off";
+}
+
+static void vuMergeFree(void)
+{
+    for (int v = 0; v < RD_VS_COUNT; v++) {
+        if (g_rd.vsMerge[v].id) {
+            rhi_destroy_shader(g_rd.vsMerge[v]);
+        }
+        g_rd.vsMerge[v] = (RhiShader){0};
+    }
+    g_rd.vuMerge = false;
+}
+
+static void vuMergeInit(void)
+{
+    vuMergeFree();
+    const char *env = getenv("ICO_RD_VU_MERGE");
+    if (env && strcmp(env, "0") == 0) {
+        snprintf(s_mergeWhy, sizeof(s_mergeWhy),
+                 "off ([dev] vu_merge = false, ICO_RD_VU_MERGE=0): one GPU draw a VU draw");
+    } else if (rhi_backend() == RHI_BACKEND_D3D11) {
+        snprintf(s_mergeWhy, sizeof(s_mergeWhy),
+                 "off on Direct3D 11 (the main draws do not bind t5 there): one GPU draw a VU "
+                 "draw");
+    } else {
+        bool ok = true;
+        for (size_t i = 0; i < sizeof(kMergeVs) && ok; i++) {
+            const uint8_t v = kMergeVs[i];
+            char name[64];
+            rd__vu_merge_name(v, v != RD_VS_VU_MAIN && g_rd.vuFallbackPlain, name, sizeof(name));
+            g_rd.vsMerge[v] = rd__make_shader(name);
+            if (!g_rd.vsMerge[v].id) {
+                snprintf(s_mergeWhy, sizeof(s_mergeWhy),
+                         "off (%s could not be made): one GPU draw a VU draw", name);
+                ok = false;
+            }
+        }
+        if (ok) {
+            g_rd.vuMerge = true;
+            snprintf(s_mergeWhy, sizeof(s_mergeWhy),
+                     "on: consecutive mesh and grid draws with the same pipeline, textures, "
+                     "DrawCB, FrameCB and scissor drawn as one indexed draw of up to %u, through "
+                     "the programs' merge builds ([dev] vu_merge = false draws one a command)",
+                     RD_VU_MERGE_MAX);
+        } else {
+            vuMergeFree();
+        }
+    }
+    rd__log("VU merge: %s", s_mergeWhy);
+}
+
 void rd__vu_prepass_init(const RhiLimits *lim)
 {
     g_rd.vuPrepassWhy[0] = '\0';
@@ -1901,6 +2399,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
                 rhi_adapter_name());
     }
     preBatchInit();
+    vuMergeInit(); /* the draw merge's modules (the fallback's variant is chosen) */
     if (g_rd.vuPrepass) {
         rd__log("VU pre-pass: on: each mesh and grid vertex and triangle and each sprite "
                 "evaluated once before the lists (two passes), %u bytes a record slot in %u "
@@ -1936,6 +2435,12 @@ void rd__replay_vu(Replay *r, const RdFrame *f, const RdCmd *c)
 static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     rd__span_idx(NULL);
+    if (r->st.ds.test.date != RD_DATE_OFF) {
+        /* DATE: its snapshot or its stencil bit is recorded as the draw is
+           bound (rd__replay_prepare_draw, rd__replay_bind_draw_keep), after
+           the merge's run */
+        rd__replay_vu_flush(r);
+    }
     /* the source rd__vu_prepass set up, or the command's own now */
     const VuPre *pre = vuPreFind(c);
     VuSource local;
@@ -2017,10 +2522,9 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         }
         /* the span from the grid's shape, not from idx (the mapped ring is
          * uncached memory): ICO_VU_INDEX(2, 0) to ICO_VU_INDEX(the last
-         * batch's last vertex, 2) */
-        if (vpb >= 3u && p.batchCount > 0u) {
-            rd__span_range(ICO_VU_INDEX(2u, 0u), ICO_VU_INDEX(p.batchCount * vpb - 1u, 2u));
-        }
+         * batch's last vertex, 2) (vuSpanOf); the merge rewrites the list
+         * from the shape too (vuRunWrite) */
+        const VuIdx gix = {g_rd.ring[rd__ring_slot()], iOff, NULL, p.batchCount, vpb};
         for (uint32_t b = 0, k = 0; b < p.batchCount; b++) {
             for (uint32_t v = 2; v < vpb; v++) {
                 for (uint32_t cc = 0; cc < 3; cc++) {
@@ -2032,9 +2536,8 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         if (!g2.id) {
             return;
         }
-        rhi_cmd_set_index_buffer(rd__replay_cl(), g_rd.ring[rd__ring_slot()], iOff, true);
         vuDraw(r, &r->st, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
-               streamSize, &vcb, bonesOff, 1, 0, ni);
+               streamSize, &vcb, bonesOff, &gix, 0, ni);
         return;
     }
     if (c->type == RDC_PARTICLES) {
@@ -2042,17 +2545,17 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         if (!g2.id) {
             return;
         }
+        const VuIdx none = {{0}, 0, NULL, 0, 0}; /* not indexed */
         vuDraw(r, &r->st, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
-               streamSize, &vcb, bonesOff, 0, 0, 6 * p.vertsPerBatch);
+               streamSize, &vcb, bonesOff, &none, 0, 6 * p.vertsPerBatch);
         return;
     }
-    /* static and skinned meshes */
+    /* static and skinned meshes: the device's list, the same on the CPU */
     RhiBindGroup g2 = rd__replay_bind_draw_keep(r, &ds);
     if (!g2.id) {
         return;
     }
-    rhi_cmd_set_index_buffer(rd__replay_cl(), indexBuf, indexOff, true);
-    rd__span_idx(m->index);
+    const VuIdx mix = {indexBuf, indexOff, m->index, 0, 0};
     uint32_t last = p.firstBatch + p.batchCount;
     if (last > m->batchCount || p.batchCount == 0) {
         last = m->batchCount;
@@ -2065,7 +2568,7 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         const uint32_t end = rd__vu_sheet_end(m, b1->firstIndex + b1->indexCount, extended);
         if (end > b0->firstIndex) {
             vuDraw(r, &r->st, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
-                   streamSize, &vcb, bonesOff, 1, b0->firstIndex, end - b0->firstIndex);
+                   streamSize, &vcb, bonesOff, &mix, b0->firstIndex, end - b0->firstIndex);
         }
         return;
     }
@@ -2084,8 +2587,8 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
             g_rdVuCur.batch = b;
         }
         vuDraw(r, &fan, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
-               streamSize, &cut, bonesOff, 1, br->firstIndex, end - br->firstIndex);
+               streamSize, &cut, bonesOff, &mix, br->firstIndex, end - br->firstIndex);
         vuDraw(r, &r->st, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
-               streamSize, &kick, bonesOff, 1, br->firstIndex, end - br->firstIndex);
+               streamSize, &kick, bonesOff, &mix, br->firstIndex, end - br->firstIndex);
     }
 }
