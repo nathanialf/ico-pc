@@ -172,7 +172,8 @@
      * ARB_buffer_storage (4.4); gl_device.c checks them */                              \
     X(0, PFNGLCLIPCONTROLPROC, ClipControl)                                              \
     X(0, PFNGLBUFFERSTORAGEPROC, BufferStorage)                                          \
-    X(0, PFNGLTEXTUREBARRIERPROC, TextureBarrier)
+    X(0, PFNGLTEXTUREBARRIERPROC, TextureBarrier)                                        \
+    X(0, PFNGLBINDBUFFERSRANGEPROC, BindBuffersRange)
 /* clang-format on */
 
 #define GL__FIELD(req, type, name) type name;
