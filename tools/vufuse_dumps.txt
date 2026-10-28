@@ -1,0 +1,9 @@
+# Dump list for rd_vufuse_ab (port/render/test/rd_vufuse_ab.cmake), read with
+# tools/vustage_dumps.txt: the frames that list does not hold.  MACHINE-LOCAL:
+# these are paths on the maintainer's machine; the dumps themselves are never
+# committed.  Missing files are reported and skipped.  Relative paths are
+# relative to this file; '*' globs are allowed.
+#
+# the PowerVR phone's v0.9.4-rc2 frame at 2x, aspect 2.189 (701 VU draws, 560
+# of them code 36's cut and kick pairs)
+/primary/dev/ico-pc/build-host/tmp/v094/evidence/android-rc2/dump/frame-20261028-151709-v2199.rddump
