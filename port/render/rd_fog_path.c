@@ -47,16 +47,19 @@
  * the GS arithmetic (index = Z >> 16, LUT, MODULATE by 0x80, the LERP with
  * As, alpha As; rd_fog_test's model) for each path in the platform's order
  * (desktop: inplace, copy, buffer; tile-based or D24S8: copy, inplace,
- * buffer; local first wherever the profile offers it).  The first that
- * passes is the path from then on; none passing, buffer is kept (if the
- * device has it) and the log says so loudly:
+ * buffer; local first wherever the profile offers it, so the desktop's is
+ * local, inplace, copy, buffer).  The first that passes is the path from
+ * then on; none passing, buffer is kept (if the device has it) and the log
+ * says so loudly:
  *   fog: depth path <name> (self-test: inplace ok 0, copy ok 0, buffer ok 0)
  * A path the profile does not offer (local without local read) is left out of
  * the line.  The local path failing turns the profile's fogLocal off
  * ("(self-test)", rd__profile_self_test_off); the order is then the
  * local one without it (copy, inplace, buffer), so a later run picks what
- * this one did.  The local trial counts only where the fog drew through
- * the local read (g_rdPerf.fogLocalDraws): under MSAA it never does
+ * this one did; on the desktop class it is the desktop order (inplace,
+ * copy, buffer), as after the probe's "off".  The local trial counts only
+ * where the fog drew through the local read (g_rdPerf.fogLocalDraws):
+ * under MSAA it never does
  * (rd_replay.c fogLocalFor: the epoch), and the path then draws its MSAA
  * fallback (the per-sample fog or the copy), which is what the trial
  * measured; the line says so,
@@ -88,6 +91,9 @@ static const uint8_t kOrderTiler[RD_FOG_PATH_COUNT] = {RD_FOG_COPY, RD_FOG_INPLA
                                                        RD_FOG_LOCAL};
 static const uint8_t kOrderLocal[RD_FOG_PATH_COUNT] = {RD_FOG_LOCAL, RD_FOG_COPY, RD_FOG_INPLACE,
                                                        RD_FOG_BUFFER};
+/* the desktop class with its local read: local, then the desktop order */
+static const uint8_t kOrderDesktopLocal[RD_FOG_PATH_COUNT] = {RD_FOG_LOCAL, RD_FOG_INPLACE,
+                                                              RD_FOG_COPY, RD_FOG_BUFFER};
 
 /* the environment, read at rd__fog_path_init */
 static int s_override = -1; /* the path ICO_RD_FOG_PATH or ICO_RD_DEPTH_COPY names */
@@ -190,10 +196,14 @@ static bool depthIs24(void)
 static const uint8_t *platformOrder(void)
 {
     if (rd__fog_local_offered()) {
-        return kOrderLocal;
+        const bool desk = g_rd.profile.desktopLocal && !rhi_limits()->tiler && !depthIs24();
+        return desk ? kOrderDesktopLocal : kOrderLocal;
     }
-    /* the local order without local, once its self-test turned it off */
-    const bool localOff = (g_rd.profile.selfTestOff & RD_PROFILE_FOG_LOCAL) != 0;
+    /* the local order without local, once its self-test turned it off;
+     * not on the desktop class, whose order without local is its own (in
+     * place first), as after the probe's "off" */
+    const bool localOff =
+        (g_rd.profile.selfTestOff & RD_PROFILE_FOG_LOCAL) != 0 && !g_rd.profile.desktopLocal;
     const bool tiler = g_rd.hasDevice && rhi_limits()->tiler;
     return localOff || tiler || depthIs24() ? kOrderTiler : kOrderDesktop;
 }
