@@ -323,15 +323,26 @@ static RhiTexture createTexture(const RhiTextureDesc *desc, bool backbuffer)
     /* the stencil read (RHI_ASPECT_STENCIL: the shadow count's one draw): a
      * view of the same depth-stencil storage whose texture mode is the
      * stencil index, so a usampler2D reads the 8-bit value in red; the
-     * texture itself keeps the depth mode the fog samples */
-    if (ok && desc->format == RHI_FMT_D32F_S8 && (desc->usage & RHI_TEX_SAMPLED) && samples <= 1u) {
+     * texture itself keeps the depth mode the fog samples.  Optional: a
+     * driver that refuses the view keeps the texture, and
+     * RhiLimits.stencilView goes false for the context (logged once),
+     * which turns the one draw off (rd_shadow_one.c: the seven draws) */
+    if (ok && desc->format == RHI_FMT_D32F_S8 && (desc->usage & RHI_TEX_SAMPLED) && samples <= 1u &&
+        g_gl.limits.stencilView) {
         glf.GenTextures(1, &t->stencilView);
         glf.TextureView(t->stencilView, t->target, t->name, fm->internal, 0, mips, 0, 1);
         glf.BindTexture(t->target, t->stencilView);
         gl_texture_params(t->target, mips);
         glf.TexParameteri(t->target, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_STENCIL_INDEX);
         glf.BindTexture(t->target, 0);
-        ok = gl_check("rhi_create_texture (stencil view)");
+        if (!gl_check("rhi_create_texture (stencil view)")) {
+            glf.DeleteTextures(1, &t->stencilView);
+            t->stencilView = 0;
+            g_gl.limits.stencilView = false;
+            GL_LOG("texture %s: the stencil view was not made: no stencil views on this context "
+                   "from now (the shadow count takes the seven draws)",
+                   desc->debugName ? desc->debugName : "?");
+        }
     }
     if (!ok) {
         GL_LOG("texture %s: %ux%u format %d, %u levels, %u samples not made",
