@@ -606,62 +606,29 @@ static const char *video_preset_label(const IcoVideoOptions *o)
     return p == ICO_VIDEO_ORIGINAL ? "Original" : (p == ICO_VIDEO_ENHANCED ? "Enhanced" : "Custom");
 }
 
-/* The CRT filter's state in one word: "off" or its mode */
-static const char *video_crt_label(const IcoVideoOptions *o)
-{
-    return o->crt ? ico_video_crt_mode_name(o->crtMode) : "off";
-}
-
-/* One field of the "display changed" line: ", name old -> new" */
-static void video_log_field(char *line, size_t size, const char *name, const char *was,
-                            const char *now)
-{
-    const size_t len = strlen(line);
-
-    if (strcmp(was, now) != 0 && len < size) {
-        snprintf(line + len, size - len, "%s%s %s -> %s", len ? ", " : "", name, was, now);
-    }
-}
-
-/* One line per change of the display options after startup,
-   naming only the fields that differ, in the startup line's words; nothing
-   when nothing did (a resize's forced apply) */
+/* One line per change of the display options after startup, the fields
+   that differ (video_options.h ico_video_changes_text); nothing when none
+   did (a resize's forced apply).  A change starts the present allowance and
+   the GPU times again: they were the old state's (a PowerVR phone: held at 0 a step
+   from 2x, kept after the switch to Original, the climb judged on the
+   held state's GPU time; a fresh start at Original was not held) */
 static void video_log_changes(const IcoVideoOptions *o)
 {
-    const IcoVideoOptions *p = &s_videoLast;
-    char line[512] = "", a[32], b[32];
+    const PaceBudget *b = s_pres.lockN ? &s_pres.lock.budget : &s_pres.budget;
+    char line[512], held[48] = "not held";
 
-    video_log_field(line, sizeof(line), "preset", video_preset_label(p), video_preset_label(o));
-    video_log_field(line, sizeof(line), "resolution", ico_video_resolution_name(p, a, sizeof(a)),
-                    ico_video_resolution_name(o, b, sizeof(b)));
-    video_log_field(line, sizeof(line), "aspect", ico_video_aspect_name(p->aspect),
-                    ico_video_aspect_name(o->aspect));
-    video_log_field(line, sizeof(line), "window mode", ico_video_window_mode_name(p->windowMode),
-                    ico_video_window_mode_name(o->windowMode));
-    video_log_field(line, sizeof(line), "vsync", p->vsync ? "on" : "off", o->vsync ? "on" : "off");
-    video_log_field(line, sizeof(line), "texture filter", ico_video_filter_name(p->filter),
-                    ico_video_filter_name(o->filter));
-    video_log_field(line, sizeof(line), "height", p->fullHeight ? "full" : "half",
-                    o->fullHeight ? "full" : "half");
-    video_log_field(line, sizeof(line), "framerate",
-                    ico_video_framerate_name(p->framerate, a, sizeof(a)),
-                    ico_video_framerate_name(o->framerate, b, sizeof(b)));
-    video_log_field(line, sizeof(line), "crt", video_crt_label(p), video_crt_label(o));
-    snprintf(a, sizeof(a), "%.2f", (double)p->crtStrength);
-    snprintf(b, sizeof(b), "%.2f", (double)o->crtStrength);
-    video_log_field(line, sizeof(line), "crt strength", a, b);
-    video_log_field(line, sizeof(line), "texture pack", p->texturePack ? "on" : "off",
-                    o->texturePack ? "on" : "off");
-    video_log_field(line, sizeof(line), "dump textures", p->dumpTextures ? "on" : "off",
-                    o->dumpTextures ? "on" : "off");
-    video_log_field(line, sizeof(line), "model pack", p->modelPack ? "on" : "off",
-                    o->modelPack ? "on" : "off");
-    video_log_field(line, sizeof(line), "dump models", p->dumpModels ? "on" : "off",
-                    o->dumpModels ? "on" : "off");
-    video_log_field(line, sizeof(line), "motion blur", ico_video_motion_blur_name(p),
-                    ico_video_motion_blur_name(o));
-    if (line[0] != '\0') {
-        fprintf(stderr, "window: display changed: %s\n", line);
+    if (ico_video_changes_text(&s_videoLast, o, line, sizeof(line)) > 0) {
+        if (s_pres.lockN ? b->allow < b->max : b->allow != PACE_ALLOW_NONE) {
+            snprintf(held, sizeof(held), "held to %u a step", b->allow);
+        }
+        fprintf(stderr,
+                "window: display changed: %s; the present allowance (%s) and GPU times "
+                "start again\n",
+                line, held);
+        timer_budget_reset();
+        s_pres.lockN = 0;
+        s_pres.gpuNs = 0;
+        memset(&s_pres.gpuHist, 0, sizeof(s_pres.gpuHist));
     }
     s_videoLast = *o;
 }
@@ -1234,6 +1201,7 @@ typedef struct PipeScreen {
 static const char *s_pipeTitle = "Starting ICO";
 
 static int pipeline_progress(void *ctx, uint32_t done, uint32_t total);
+static int display_progress(void *ctx, uint32_t done, uint32_t total);
 static int progress_present_notes(const char *title, const char *phase, int pct, int allowCancel,
                                   const char *note0, const char *note1);
 
@@ -2379,6 +2347,7 @@ open_window:
         rd_set_pipeline_progress(pipeline_progress, &screen);
         rd_precreate_pipelines();
         rd_set_pipeline_progress(NULL, NULL);
+        rd_set_display_progress(display_progress, &screen);
         ico_diag_set_pipelines(0, 0, 0);
         if (rd_pipelines_lazy_on()) {
             /* the careful policy's budget stopped the set: the rest of the
@@ -2593,6 +2562,7 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
         rd_set_pipeline_progress(pipeline_progress, &screen);
         rd_precreate_pipelines();
         rd_set_pipeline_progress(NULL, NULL);
+        rd_set_display_progress(display_progress, &screen);
         s_pipeTitle = "Starting ICO";
         ico_diag_set_pipelines(0, 0, 0);
         if (!s_quitLatched && !rhi_device_lost()) {
@@ -4246,6 +4216,26 @@ static int pipeline_progress(void *ctx, uint32_t done, uint32_t total)
     /* the present itself took time: the next draw is measured from its end */
     p->lastNs = SDL_GetTicksNS();
     return stop || s_quitLatched;
+}
+
+/* a display change's pipelines (rd_set_display_progress), from the game's
+   step: the same screen under its own title; each pipeline finished is
+   progress for the watchdog (no Main tick meanwhile), a compile that never
+   ends is not */
+static int display_progress(void *ctx, uint32_t done, uint32_t total)
+{
+    static uint32_t last;
+    const char *was = s_pipeTitle;
+    int stop;
+
+    if (done == 0 || done > last) {
+        ico_diag_note_progress();
+    }
+    last = done;
+    s_pipeTitle = "Changing the display";
+    stop = pipeline_progress(ctx, done, total);
+    s_pipeTitle = was;
+    return stop;
 }
 
 /* ico-pc-perf.csv in the logs folder, beside ico-pc.log
