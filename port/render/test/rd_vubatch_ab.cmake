@@ -78,6 +78,11 @@ foreach(dump IN LISTS dumps)
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed
                             "${TOOL}" "${dump}" /dev/null --pass-dump "${dirBatch}" --stats ${args_${s}}
                     RESULT_VARIABLE rcBatch OUTPUT_VARIABLE outBatch ERROR_VARIABLE errBatch)
+    if(NOT rcOne EQUAL 0 AND "${errOne}" MATCHES "cannot show")
+      # a dump drawn at 4:3 cannot be replayed at 16:9: that setting is skipped for it
+      message(STATUS "${dump} ${s}: skipped (${errOne})")
+      continue()
+    endif()
     if(NOT rcOne EQUAL 0 OR NOT rcBatch EQUAL 0)
       message(SEND_ERROR "${dump} ${s}: exit ${rcOne} (one draw an entry) and ${rcBatch} "
                          "(batched):\n${errOne}\n${errBatch}")
