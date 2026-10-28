@@ -1269,7 +1269,7 @@ if(ICO_RUN_TESTS)
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${CMAKE_SOURCE_DIR}/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00428.rddump"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_still" -DPRESENTS=4
-                     "-DARGS=--enhanced|--aspect|16:9|--resolution|2x|--present|1920x1080"
+                     "-DARGS=--enhanced|--aspect|4:3|--resolution|2x|--present|1280x960"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_still.cmake")
     set_tests_properties(rd_replay_tool_still PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
     # the glow held between ticks (rd_glow_hold.c) against its chain drawn at

@@ -1102,12 +1102,16 @@ static int synthetic(void)
               "prepass: %llu created, %llu destroyed, %llu allocations after the first two",
               (unsigned long long)rest.created, (unsigned long long)rest.destroyed,
               (unsigned long long)rest.allocs);
-        CHECK(rest.n > 0 && rest.prePasses >= rest.n && rest.prePasses <= 2u * rest.n &&
-                  rest.preVertMin > 0 && rest.preVertMin == rest.preVertMax &&
-                  rest.preDraws >= (uint64_t)DRAWS * rest.n,
-              "prepass: %llu passes in %u replays, %u..%u vertices, %llu draws",
-              (unsigned long long)rest.prePasses, rest.n, rest.preVertMin, rest.preVertMax,
-              (unsigned long long)rest.preDraws);
+        CHECK(
+            rest.n > 0 && rest.prePasses >= rest.n && rest.prePasses <= 2u * rest.n &&
+                rest.preVertMin > 0 && rest.preVertMin == rest.preVertMax &&
+                rest.preDraws >= rest.n &&
+                rest.preDraws <=
+                    (uint64_t)DRAWS * 5u *
+                        rest.n, /* batched (G1): one draw a batch, at most the old one an entry and stage */
+            "prepass: %llu passes in %u replays, %u..%u vertices, %llu draws",
+            (unsigned long long)rest.prePasses, rest.n, rest.preVertMin, rest.preVertMax,
+            (unsigned long long)rest.preDraws);
         CHECK(rest.preFallbacks == 0, "prepass: %llu mesh draws drawn the old way",
               (unsigned long long)rest.preFallbacks);
         if (rest.barrierMax == 0) {

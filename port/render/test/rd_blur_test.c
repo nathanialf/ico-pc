@@ -3866,12 +3866,17 @@ static void checkBlurFold(void)
     for (int post = 1; post <= 7; post++) {
         const int d = effectsFrame(post, post == 1);
         worst = d > worst ? d : worst;
-        folds += g_rdPerf.blurFolds; /* the frame's replay (runFrame) */
-        frames += g_rdPerf.blurFolds > 0;
+        const uint32_t f = g_rdPerf.blurFolds; /* the frame's replay (runFrame) */
+        folds += f;
+        frames += f > 0;
+        /* a chain of ten pairs folds nine, or eight where a pass 1 covers a
+           column fewer than the pair before (the wide-frame fold, D2); a
+           frame holds one or two chains */
+        CHECK(f == 0 || f == 8 || f == 9 || (f >= 16 && f <= 18),
+              "(b) post mode %d: %u pairs folded, 8 or 9 a chain expected", post, f);
     }
     InitializeStaticBlur(); /* sun off */
     CHECK(folds > 0, "(b) no blur pair folded");
-    CHECK(folds % 9 == 0, "(b) %u pairs folded: nine a chain expected", folds);
     printf("  (b) the blur fold: %u pairs folded in %u frames, max difference %d\n", folds, frames,
            worst);
     checkPipelines(); /* the fold's key enumerated while the profile folds */

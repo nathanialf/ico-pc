@@ -20,7 +20,7 @@ static const char *const expected[] = {
     "vu_particle_vs",  "vu_prelit_vs",     "vu_probe_ps",      "vu_ps",
     "vu_reflect_vs",   "vu_skin_debug_vs", "vu_skin_spec_vs",  "vu_skin_vs",
     "vu_texa_ps",      "wrap_acc_ps",      "wrap_resolve_ps",  "yuv_field_ps",
-    "yuv_ps",          "yuv_vs",
+    "yuv_ps",          "yuv_vs",           "shadow_count_ps", /* the shadow count in one draw (rd_shadow_one.c) */
 };
 
 /* the screen-prim triangles with their colour and STQ planes
