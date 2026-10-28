@@ -22,7 +22,7 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `port/render/rd_crack_fill.c` | the crack fill drawn inside the local fog's pass (`rd__crack_fill`'s `local`) |
 | `port/render/rd_profile.c`, `port/render/rd_local_probe.c` | the desktop's local reads (`RdProfile.desktopLocal`) and their start-up cost probe (`rd__local_probe`) |
 | `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
-| `port/render/rd_replay.c`, `port/render/rd_shadow_selftest.c`, `port/shaders/blit.hlsl` | the shadow count in one draw (`shadowCountOne`, `shadow_count_ps`) and its start-up self-test (`rd__shadow_selftest`) |
+| `port/render/rd_replay.c`, `port/render/rd_shadow_one.c`, `port/render/rd_shadow_selftest.c`, `port/shaders/blit.hlsl` | the shadow count in one draw (`shadowCountOne` picks the destination, `rd__shadow_one_draw` draws `shadow_count_ps`) and its start-up self-test (`rd__shadow_selftest`) |
 | `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
 
 ## Sizes per frame width
@@ -354,7 +354,7 @@ conversion. At scale 2 every weight is 1 and the mean of four multiples of 4 (or
 a whole number, but at 4x a mean of 16 texels can fall on a half (two texels of 4 among 16 zeros),
 so an integer rewrite would not round as the float sum does.
 
-`shadowCountOne` (`RdProfile.shadowOne`) does both in one draw at the GS size: `shadow_count_ps`
+`shadowCountOne` (`RdProfile.shadowOne`; the draw in `port/render/rd_shadow_one.c` (`rd__shadow_one_draw`)) does both in one draw at the GS size: `shadow_count_ps`
 (`port/shaders/blit.hlsl`, behind `blit_vs`) loads the stencil of each texel of the pixel's box
 through the depth's stencil view (`RHI_ASPECT_STENCIL`, the depth in DEPTH_READ, the channel
 `RhiLimits.stencilViewChannel` in `DrawCB.mode.x`), masks it to m and loads the texel m of a 64 x 1
