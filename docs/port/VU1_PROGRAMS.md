@@ -390,7 +390,10 @@ draw, y its VuCB's float4 index in the ring, z its VuBoneCB's, w 0), is copied i
 the batch's DrawCB (slot b1, which no record stage reads otherwise) carries the table's float4 index
 in `aux0.x` and its length in `aux0.y`. Group 1 binds the ring once more at t5, from offset 0 to the
 device's largest storage range (`ringRange`), as a `StructuredBuffer<float4>`
-(`port/shaders/vu_common.hlsli` (`vu_ring`)).
+(`port/shaders/vu_common.hlsli` (`vu_ring`)). Direct3D 11 never makes a batch module (no
+pre-pass there), so its VU groups leave t5 unbound (the layout keeps the slot): a bound storage
+range is written to the GPU up to the ring's written mark at every submit there, and the ring would
+otherwise be written for every list with a VU draw, even when no draw streams from it.
 
 A batch build begins with `vu_pre_batch_entry`: a binary search over the table's x of six fixed
 steps (no loop: [SHADERS.md](SHADERS.md#the-envelope)) finds the vertex's item, its VuCB's vectors
