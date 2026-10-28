@@ -320,12 +320,28 @@ static RhiTexture createTexture(const RhiTextureDesc *desc, bool backbuffer)
         glf.BindTexture(t->target, 0);
         ok = gl_check("rhi_create_texture (UINT view)");
     }
+    /* the stencil read (RHI_ASPECT_STENCIL: the shadow count's one draw): a
+     * view of the same depth-stencil storage whose texture mode is the
+     * stencil index, so a usampler2D reads the 8-bit value in red; the
+     * texture itself keeps the depth mode the fog samples */
+    if (ok && desc->format == RHI_FMT_D32F_S8 && (desc->usage & RHI_TEX_SAMPLED) && samples <= 1u) {
+        glf.GenTextures(1, &t->stencilView);
+        glf.TextureView(t->stencilView, t->target, t->name, fm->internal, 0, mips, 0, 1);
+        glf.BindTexture(t->target, t->stencilView);
+        gl_texture_params(t->target, mips);
+        glf.TexParameteri(t->target, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_STENCIL_INDEX);
+        glf.BindTexture(t->target, 0);
+        ok = gl_check("rhi_create_texture (stencil view)");
+    }
     if (!ok) {
         GL_LOG("texture %s: %ux%u format %d, %u levels, %u samples not made",
                desc->debugName ? desc->debugName : "?", desc->width, desc->height,
                (int)desc->format, mips, samples);
         if (t->uintView) {
             glf.DeleteTextures(1, &t->uintView);
+        }
+        if (t->stencilView) {
+            glf.DeleteTextures(1, &t->stencilView);
         }
         glf.DeleteTextures(1, &t->name);
         d3dp_pool_release(&g_gl.textures, id);
@@ -353,6 +369,7 @@ void rhi_destroy_texture(RhiTexture h)
         return; /* the swapchain's image is gl_swapchain.c's */
     }
     gl_defer(GL_GARBAGE_TEXTURE, t->uintView);
+    gl_defer(GL_GARBAGE_TEXTURE, t->stencilView);
     gl_defer(GL_GARBAGE_TEXTURE, t->name);
     g_gl.counts.texturesDestroyed++;
     d3dp_pool_release(&g_gl.textures, h.id);
@@ -823,13 +840,16 @@ static bool gl_make_entry(const RhiBindGroupDesc *d, const D3dpLayout *l, uint32
         }
         const GlFormat *fm = gl_format(t->format);
         const bool uintView = b->aspect == RHI_ASPECT_UINT && t->uintView;
+        const bool stencilView = b->aspect == RHI_ASPECT_STENCIL && t->stencilView;
         e->kind = GL_BIND_TEXTURE;
-        e->name = uintView ? t->uintView : t->name;
+        e->name = uintView ? t->uintView : stencilView ? t->stencilView : t->name;
         e->target = t->target;
         /* GL filters neither integer nor multisampled textures (an
-         * integer texture under a filtering sampler is incomplete) */
-        e->sampler =
-            (fm->integer || uintView || t->samples > 1u) ? 0u : gl_texture_sampler(d, l, s->slot);
+         * integer texture under a filtering sampler is incomplete); the
+         * stencil index is an integer (its view's own NEAREST state) */
+        e->sampler = (fm->integer || uintView || stencilView || t->samples > 1u)
+                         ? 0u
+                         : gl_texture_sampler(d, l, s->slot);
         return true;
     }
     case RHI_BIND_STORAGE_TEXTURE: {
