@@ -1262,9 +1262,9 @@ if(ICO_RUN_TESTS)
                          rd_replay_tool_mirror_floor
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
     # the still re-present (rd_reshow.c): a corpus dump as its own tick before
-    # (nothing moves), 4 presents at 2x and 16:9: presents 1..3 shown again, all
-    # 4 pictures byte for byte the ones rendered with ICO_RD_STILL_REPRESENT=0
-    # (the lavapipe A/B; Not Run without the dump)
+    # (nothing moves), 4 presents at Enhanced 4:3 2x at 1280x960: presents
+    # 1..3 shown again, all 4 pictures byte for byte the ones rendered with
+    # ICO_RD_STILL_REPRESENT=0 (the lavapipe A/B; Not Run without the dump)
     add_test(NAME rd_replay_tool_still
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${CMAKE_SOURCE_DIR}/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00428.rddump"
