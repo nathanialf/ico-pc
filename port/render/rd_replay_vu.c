@@ -229,11 +229,12 @@ static RhiBindGroup vuGroupMake(RhiBuffer streamBuf, uint64_t streamOff, uint64_
     b[4].buffer = recBinding(&b[4].size);
     /* t5, the ring the pre-pass's batch modules stream from: the layout
      * keeps the slot everywhere, but Direct3D 11 never makes a batch
-     * module (no pre-pass there), and a bound storage range is rewritten
+     * module (no pre-pass there) nor a merge module (vuMergeInit: the
+     * merge is off there), and a bound storage range is rewritten
      * up to the written mark at every submit (d3d11_cmd.c, the SRV part's
      * touch): there the bind is skipped, so a submit writes only the bytes
      * its draws stream (the slot reads zeros, which no module reads) */
-    if (!g_rd.vuPreBatch && rhi_backend() == RHI_BACKEND_D3D11) {
+    if (!g_rd.vuPreBatch && !g_rd.vuMerge && rhi_backend() == RHI_BACKEND_D3D11) {
         return rd__replay_bind_group(g_rd.layoutVu, b, 5);
     }
     b[5].slot = 5;
