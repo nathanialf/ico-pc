@@ -3,7 +3,7 @@
 The targets `staticBlur.c`'s effects and the screen softening draw through on their way back into
 SCENE, their sizes at each frame width, the glow chain's rectangles in them, the column the glow's
 blur leaves on a frame wider than the PS2's, what stays in them from one frame to the next, the
-work clear that shows a texel read before it was drawn, and how the puddle's ripples sample their
+glow a tick's later presents paste from its first, the work clear that shows a texel read before it was drawn, and how the puddle's ripples sample their
 reflection block between ticks, and where the crack filler is drawn on the fog's local path, and
 (not work buffers, kept here because RENDER.md is at its size cap) how a screen sprite redrawn under
 a new key between ticks is paired, how desktop Vulkan decides on the local reads at start, how
@@ -19,6 +19,7 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `port/render/rd_upload.c` | the clear of a new target (`rd__clear_new_targets`) and the work clear (`workClear`) |
 | `port/render/rd_blur.c` | the strip over the glow's left edge (`rd__glow_edge_strip`) |
 | `port/render/rd_blur_border.c` | the strip drawn after the blur's first pass (`glowEdge`, from `rd__blur_post_sprite`) |
+| `port/render/rd_glow_hold.c` | the glow between ticks: WORK3 kept in WORK3_HELD at a tick's first present, the chain skipped and the copy pasted at its later ones (`rd__glow_hold`) |
 | `ico2/sugipon/src/staticBlur.c` | the effects, their rectangles in the PS2's numbers and the port's widening (`SB_X`, `sbShrinkAt`, `sbShrinkSpan`, `sbWorkRect`) |
 | `port/render/rd_crack_fill.c` | the crack fill drawn inside the local fog's pass (`rd__crack_fill`'s `local`) |
 | `port/render/rd_profile.c`, `port/render/rd_local_probe.c` | the desktop's local reads (`RdProfile.desktopLocal`) and their start-up cost probe (`rd__local_probe`) |
@@ -38,6 +39,7 @@ size per 512 columns of the frame (`port/render/rd_core.c` (`namedTargetDesc`)):
 | WORK0, WORK3 | 256 x 128 | W / 2 x 128 |
 | WORK1, AA0, SHADOW0 | 256 x 256 | W / 2 x 256 (the glow uses its top 128 rows) |
 | AA1, FEED128, FEED_HELD, AURA_TAP, SHADOW1 | 128 x 128 | W / 4 x 128 |
+| WORK3_HELD | (none: the host's) | W / 2 x 128, WORK3's |
 | WORK2_PAD | 256 x 64 | W / 2 x 64 |
 | SHADOW2 | 64 x 64 | W / 8 x 64 |
 | WORK2, AURA_WORK, DATE_SNAPSHOT | the frame | W x H, the scene's scale |
@@ -193,20 +195,61 @@ and at a new frame width (`rd_reset_scene`, from `ico2/seki/src/GsBase.c` when t
 another `gsFrame.w`; `port/render/rd_core.c`). One line each time, for the first eight:
 
 ```
-rd: work targets: 18 named targets made and cleared (the frame 848 GS pixels wide): what the work buffers held from earlier frames is gone (reported for the first 8)
+rd: work targets: 19 named targets made and cleared (the frame 848 GS pixels wide): what the work buffers held from earlier frames is gone (reported for the first 8)
 ```
 
 Between those, a target holds its last frame's texels. The frame reads them by design in DISPLAY
 (the motion blur and the keep pass), FEED128 (the aura's feedback) and their held copies
-DISPLAY_HELD and FEED_HELD (a tick's later presents, [DISPLAY.md](DISPLAY.md)); the motion blur's
+DISPLAY_HELD and FEED_HELD (a tick's later presents, [DISPLAY.md](DISPLAY.md)), and WORK3_HELD, the
+glow of a tick's first present that its later presents paste
+([The glow between ticks](#the-glow-between-ticks)); the motion blur's
 Smooth accumulator is a texture of its own, not a target, and the RGBA8 target it resolves into is
 drawn before the sprite reads it ([RENDER.md](RENDER.md#the-motion-blur-under-smooth)). Anywhere
 else, a texel read before the frame drew it is a bug of this kind.
 
+## The glow between ticks
+
+Above Frame rate Original every present of a tick replays the whole frame, so the glow's chain
+([The glow chain at a wide frame](#the-glow-chain-at-a-wide-frame): the mask SCENE into WORK2 with
+`fillWork2`'s band and the sun's fans, the reduction into WORK0, the ten blur pairs, the eye blur
+into WORK3 with the sun's ghosts, shrink and tint, the WORK0 alpha fill) ran at each present, 20
+passes at 4:3 2x with the blur fold, 17 of them on the work buffers (`rd_replay_tool --stats
+--pass-times` on the godrays dump rd-01077: `glow 20 passes`, the three on SCENE `cleanUpFB`'s two
+and the paste). `port/render/rd_glow_hold.c` (`rd__glow_hold`, from `rd__interp_frame` after the
+feedback head copies):
+
+- a tick's first present draws the chain and copies WORK3 into WORK3_HELD (WORK3's size, made with
+  the named targets, never cleared by the work clear) right after the chain's last write of WORK3;
+- its later presents turn the chain's draws into no-ops (the FLARE, BLOOM and EYE_BLUR sprites and
+  the screen draws into WORK0, WORK1, WORK2, WORK2_PAD or WORK3 in the chain's list) and copy
+  WORK3_HELD back into WORK3 in the last one's place: one 256 x 128 copy for 17 passes. The flare's
+  draws into SCENE (`cleanUpFB`), the paste, the depth of field and the motion blur run as ever.
+
+The later presents' glow is the tick's first present's: the same bytes on a still tick (the chain is
+a function of the frame), and during a pan the halo half a tick's pan behind the scene, near the
+glow's bright regions only, as the motion blur's old frame and the aura's feedback already are. The
+chain is drawn after all at a later present when another draw reads one of its buffers before
+drawing into it (the sun's glare onto SCENE from WORK1, `eyeBlur` mode 1), without this tick's copy
+(a target made again since), and under `[dev] glow_redraw = true` (`ICO_RD_GLOW_REDRAW=1`), the A/B,
+whose first presents make no copy. The depth of field's copies leave column 0 of WORK0 and WORK1
+undrawn ([The glow chain at a wide frame](#the-glow-chain-at-a-wide-frame)): at a held present it
+reads the chain's column 0 of the tick's first present there, part of the held glow. The still
+re-present ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)) hashes the frame before this edit:
+two presents of a tick whose frames hash alike paste the same glow, held or drawn by the first.
+Event lines: the 10 s summary's
+
+```
+rd: interp: glow between ticks: held: N later presents pasted the tick's glow without its chain; the chain drawn at A first presents, B later ones with [dev] glow_redraw, C without this tick's copy, D whose other draws read its buffers; E presents without a glow
+```
+
+and the `window:` uploaded-KB line's `; N between-tick pictures pasted the tick's glow without its
+chain ([dev] glow_redraw)`. ctest `rd_replay_tool_glow_hold` and `build-host/tmp/v094/after/v2-ab.sh`
+are the A/B ([TESTING.md](TESTING.md)).
+
 ## The work clear
 
 `ICO_RD_WORK_CLEAR=RRGGBB` in the environment (the game), or `rd_replay_tool --work-clear RRGGBB`,
-clears every live target's colour but SCENE, DISPLAY, DISPLAY_HELD, FEED128 and FEED_HELD to that
+clears every live target's colour but SCENE, DISPLAY, DISPLAY_HELD, FEED128, FEED_HELD and WORK3_HELD to that
 colour with alpha 0x80 at the head of every replay, after `rd__clear_new_targets`
 (`port/render/rd_upload.c` (`workClear`); `rd__set_work_clear` overrides the environment). A texel
 the frame reads before drawing it then carries the colour downstream: in a target (`--target
@@ -214,7 +257,7 @@ NAME`), in a pass's picture (`--pass-dump DIR`), or on screen. The depth and ste
 one clear pass a target a frame, so it is a diagnostic only. One line at its first replay:
 
 ```
-rd: work clear: every target but SCENE, DISPLAY and the feedback kept across frames (DISPLAY_HELD, FEED128, FEED_HELD) cleared to FF00FF before every frame (ICO_RD_WORK_CLEAR, a diagnostic): 13 named (SHADOW0 SHADOW1 ... WORK2_PAD) and N temporaries; a texel a frame reads before drawing it shows that colour
+rd: work clear: every target but SCENE, DISPLAY and the feedback kept across frames (DISPLAY_HELD, FEED128, FEED_HELD, WORK3_HELD) cleared to FF00FF before every frame (ICO_RD_WORK_CLEAR, a diagnostic): 13 named (SHADOW0 SHADOW1 ... WORK2_PAD) and N temporaries; a texel a frame reads before drawing it shows that colour
 ```
 
 A replay with the work clear against the same replay without it differs exactly where the frame
