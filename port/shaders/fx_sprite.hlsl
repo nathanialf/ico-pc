@@ -450,15 +450,21 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
 // size, the same origin), both passes textured from the other target,
 // LINEAR, CLAMP, no blend, no alpha test, no DATE, no destination read, the
 // colour mask whole, no depth, the same flags, TEXA, TEX0 size and origin;
-// every WORK1 tap pass 2 weighs (a weight above 0) inside the texels pass 1
-// covers; and the next pair's pass 1 covering the same texels, so the pair
-// drawn last as two passes leaves WORK1 as the chain did. The two textures
-// may differ in size (WORK1 is 256 x 256, WORK0 256 x 128): each fetch
-// clamps on its own.
+// every WORK1 tap pass 2 weighs (a weight above 0) inside the texels that
+// hold pass 1's bytes: those it covers, and on a frame wider than 512 GS
+// pixels the columns 0 .. cx0 - 1 left of its rect, which the glow's edge
+// strip (rd_blur_border.c glowEdge) draws after it as its column cx0, so
+// a tap there is pass 1's pixel at cx0; and the next pair's pass 1 leaving
+// its bytes in the same texels or more, so the pair drawn as two passes
+// after it leaves WORK1 as the chain did. The two textures may differ in
+// size (WORK1 is 256 x 256, WORK0 256 x 128 at 4:3): each fetch clamps on
+// its own.
 // Bindings: t1 WORK0 as it was before the pair (its snapshot), t2 unused.
 // DrawCB: pass 2's fields as fx_sprite_ps reads them (g_param its rect,
 // g_uvRect its UVs, g_col its colour, g_aux1 its reciprocals and fx_texel's
-// TEX0 size, the same for both, g_tex.zw WORK1's size), and pass 1's:
+// TEX0 size, the same for both, g_tex.zw WORK1's size), g_mode.w (AREF in
+// fx_sprite_ps; no alpha test here) pass 1's first drawn WORK1 column cx0,
+// and pass 1's:
 //   g_aux0   x x0 | y0 << 16, y x1 | y1 << 16 (its rect, 12.4),
 //            z u0 | v0 << 16, w u1 | v1 << 16 (its UVs, 12.4)
 //   g_scale  xy WORK0's size (its texture, t1: the clamp of its fetch),
@@ -566,12 +572,15 @@ float4 fx_blur2_ps(float4 pos : SV_Position) : SV_Target0
     const int uu = u - 8, vv = v - 8;
     const int2 i0 = int2(uu >> 4, vv >> 4);
     const uint fu = uint(uu & 15), fv = uint(vv & 15);
-    // pass 2's fetch of WORK1 (g_tex.zw texels), each texel pass 1's pixel
+    // pass 2's fetch of WORK1 (g_tex.zw texels), each texel pass 1's pixel;
+    // a column left of pass 1's first (cx0, g_mode.w) its pixel at cx0, as
+    // the glow's edge strip draws it (a weight of 0 there without the strip)
     const int2 o = int2(ox, oy), w1 = int2(g_tex.zw);
-    const uint4 a = fx2_pass1(fx2_addr(i0, flags, w1), o, flags);
-    const uint4 b = fx2_pass1(fx2_addr(i0 + int2(1, 0), flags, w1), o, flags);
-    const uint4 c = fx2_pass1(fx2_addr(i0 + int2(0, 1), flags, w1), o, flags);
-    const uint4 d = fx2_pass1(fx2_addr(i0 + int2(1, 1), flags, w1), o, flags);
+    const int2 lo = int2(int(g_mode.w), 0);
+    const uint4 a = fx2_pass1(max(fx2_addr(i0, flags, w1), lo), o, flags);
+    const uint4 b = fx2_pass1(max(fx2_addr(i0 + int2(1, 0), flags, w1), lo), o, flags);
+    const uint4 c = fx2_pass1(max(fx2_addr(i0 + int2(0, 1), flags, w1), lo), o, flags);
+    const uint4 d = fx2_pass1(max(fx2_addr(i0 + int2(1, 1), flags, w1), lo), o, flags);
     uint4 res = fx2_tfx(gs_bilerp(a, b, c, d, fu, fv), g_col, flags);
     res.a = res.a | ((flags & FXF_FBA) != 0u ? 0x80u : 0u);
     return float4(res) * (1.0 / 255.0);
