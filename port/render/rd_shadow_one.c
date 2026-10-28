@@ -113,6 +113,12 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, RhiTexture
 {
     const RdPipeKeyInt k = rd__shadow_count_key();
     const RhiLimits *lim = rhi_limits();
+    if (!lim->stencilView && g_rd.profile.shadowOne) {
+        /* the backend could not make a stencil view (it turns
+         * RhiLimits.stencilView off and logs it once): the one draw goes
+         * off for good, [dev] or not, and the seven draws resolve the count */
+        rd__profile_self_test_off(RD_PROFILE_SHADOW_ONE);
+    }
     if (!g_rd.fs[RD_FS_SHADOW_COUNT].id || !lim->stencilView || !td->depthSampled || !dst.id) {
         return false;
     }
