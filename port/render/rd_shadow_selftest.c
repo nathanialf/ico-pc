@@ -30,7 +30,7 @@
  *   shadow count: seven draws (self-test: one draw differs at 17 of
  *     308224 texels, the first (40,300): 00040480 for 04040480) on SCENE ...
  * ICO_RD_SHADOW_SABOTAGE=1 makes the one draw's table wrong at m = 1
- * (rd_replay.c shadowTableMake reads it through rd__shadow_sabotaged), so
+ * (rd_shadow_one.c tableMake reads it through rd__shadow_sabotaged), so
  * the failure path runs (ctest rd_shadow_selftest_sabotage).
  * ICO_RD_SHADOW_ONE=1 ([dev] shadow_one) keeps the one draw whatever it
  * finds ("kept by [dev] shadow_one").  Where the profile has the seven
