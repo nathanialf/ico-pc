@@ -102,7 +102,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "sprite_ps_planes", "sprite_texa_ps_planes", "sprite_stq_ps_planes", "fog_lut_local_ps",
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
     "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
-    "crack_fill_ps", "crack_count_ps"};
+    "crack_fill_ps", "crack_count_ps", "shadow_count_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -2134,6 +2134,8 @@ static RhiState s_shadowRedState;
 static uint32_t s_shadowRedW, s_shadowRedH;
 
 static uint32_t s_shadowRedFor; /* the count target (RdTarget id) s_shadowRed holds; 0 none */
+
+static uint32_t s_shadowCountFor; /* the count target the last resolve wrote; 0 none */
 
 /* Whether a draw blends by As (PRIM.ABE with C = As): its
  * texture's alpha is opacity, which the Enhanced mips must not raise. */
@@ -4413,6 +4415,7 @@ static void doShadowReset(Replay *r)
     }
     endPass(r);
     s_shadowRedFor = 0; /* a new count starts */
+    s_shadowCountFor = 0;
     /* The stencil clear is not recorded yet: the next pass on the depth
      * takes it as its stencil load op (beginPass), else it is recorded as
      * its own pass (flushStencilClear) at the next endPass or transition
@@ -4516,6 +4519,8 @@ void rd__shadow_shutdown(void)
     s_shadowRed = (RhiTexture){0};
     s_shadowRedW = s_shadowRedH = 0;
     s_shadowRedFor = 0;
+    s_shadowCountFor = 0;
+    rd__shadow_one_shutdown(); /* the one draw's table */
 }
 
 /* The count at the GS size.  The first blur level reads the count with a
@@ -4527,23 +4532,30 @@ void rd__shadow_shutdown(void)
  * size (box_reduce_ps) into s_shadowRed and resolveTexture hands that to
  * whatever samples the count as a texture, so the level reads what the
  * PS2's did.  Unscaled targets (Original) never come here. */
-static void shadowReduce(Replay *r, RdTargetRec *tc)
+/* s_shadowRed at tc's GS size; false when it cannot be made */
+static bool shadowRedMake(const RdTargetRec *tc)
 {
-    s_shadowRedFor = 0;
     if (!s_shadowRed.id || s_shadowRedW != tc->w || s_shadowRedH != tc->h) {
         if (s_shadowRed.id) {
             rhi_destroy_texture(s_shadowRed);
         }
-        s_shadowRed = rhi_create_texture(&(RhiTextureDesc){tc->w, tc->h, 1, RHI_FMT_RGBA8_UNORM,
-                                                           RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
-                                                           "rd shadow count reduced", 0});
+        s_shadowRed = rhi_create_texture(
+            &(RhiTextureDesc){tc->w, tc->h, 1, RHI_FMT_RGBA8_UNORM,
+                              RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC,
+                              "rd shadow count reduced", 0});
         s_shadowRedState = RHI_STATE_UNDEFINED;
         s_shadowRedW = tc->w;
         s_shadowRedH = tc->h;
     }
+    return s_shadowRed.id != 0;
+}
+
+static void shadowReduce(Replay *r, RdTargetRec *tc)
+{
+    s_shadowRedFor = 0;
     RdPipeKeyInt k = rd__shadow_reduce_key(); /* RGBA8, like the count */
     RhiPipeline pipe = rd__get_pipeline(&k);
-    if (!s_shadowRed.id || !pipe.id) {
+    if (!shadowRedMake(tc) || !pipe.id) {
         return;
     }
     endPass(r);
@@ -4562,19 +4574,7 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
     const RhiRect all = {0, 0, tc->w, tc->h};
     rhi_cmd_set_scissor(s_cl, &all);
     IcoDrawCB cb;
-    memset(&cb, 0, sizeof(cb));
-    cb.uvRect[2] = cb.uvRect[3] = 1.0f;
-    cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
-    cb.param[0] = (float)tc->tw / (float)tc->w;
-    cb.param[1] = (float)tc->th / (float)tc->h;
-    cb.param[2] = (float)tc->tw;
-    cb.param[3] = (float)tc->th;
-    if (tc->ox > 0.0f) {
-        /* Full pixel: GS pixel x is texels x sx - ox (blit.hlsl
-         * box_reduce_ps) */
-        cb.param[0] = tc->sx;
-        cb.scale[2] = tc->ox;
-    }
+    rd__shadow_reduce_cb(tc, &cb);
     rd__set_pipeline(s_cl, pipe, &k);
     rd__bind_uniform(s_cl, 0, rd__frame_group(tc->w, tc->h, 0.0f, 0.0f));
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
@@ -4588,11 +4588,39 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
     s_shadowRedFor = r->st.color;
 }
 
+/* The count in one draw (rd_shadow_one.c): into the count target at
+ * scale 1, else into s_shadowRed (the scaled target is left undrawn: the
+ * levels read s_shadowRed, resolveTexture).  False: the seven draws run. */
+static bool shadowCountOne(Replay *r, RdTargetRec *tc, RdTargetRec *td)
+{
+    const bool scaled = tc->tw != tc->w || tc->th != tc->h;
+    if (scaled && !shadowRedMake(tc)) {
+        return false;
+    }
+    IcoDrawCB cb;
+    rd__shadow_reduce_cb(tc, &cb);
+    if (!rd__shadow_one_draw(r, tc, td, scaled ? s_shadowRed : tc->color,
+                             scaled ? &s_shadowRedState : &tc->colorState, &cb)) {
+        return false;
+    }
+    if (scaled) {
+        rd__transition(s_cl, s_shadowRed, &s_shadowRedState, RHI_STATE_SHADER_READ);
+        s_shadowRedFor = r->st.color;
+    }
+    return true;
+}
+
 static void doShadowResolve(Replay *r)
 {
     RdTargetRec *td;
     RdTargetRec *tc = shadowTargets(r, &td);
     if (!tc) {
+        return;
+    }
+    s_shadowRedFor = 0;
+    if (g_rd.profile.shadowOne && shadowCountOne(r, tc, td)) {
+        rd__stencil_close(&s_stencil.w, td->depth.id);
+        s_shadowCountFor = r->st.color;
         return;
     }
     static const float zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -4634,6 +4662,33 @@ static void doShadowResolve(Replay *r)
     if (tc->tw != tc->w || tc->th != tc->h) {
         shadowReduce(r, tc);
     }
+    g_rdPerf.shadowSeven++;
+    s_shadowCountFor = r->st.color;
+}
+
+bool rd__shadow_count_read(uint32_t color, void *dst, size_t dstSize, uint32_t *w, uint32_t *h)
+{
+    RdTargetRec *t = rd__target_rec(color);
+    if (!g_rd.hasDevice || !color || color != s_shadowCountFor || !t) {
+        return false;
+    }
+    if (w) {
+        *w = t->w;
+    }
+    if (h) {
+        *h = t->h;
+    }
+    if (t->tw != t->w || t->th != t->h) {
+        return s_shadowRedFor == color && s_shadowRed.id &&
+               rd__read_rhi_texture(s_shadowRed, &s_shadowRedState, t->w, t->h, dst, dstSize);
+    }
+    return rd__read_rhi_texture(t->color, &t->colorState, t->tw, t->th, dst, dstSize);
+}
+
+void rd__shadow_count_forget(void)
+{
+    s_shadowRedFor = 0;
+    s_shadowCountFor = 0;
 }
 
 /* ------------------------------------------------------------------- fog
