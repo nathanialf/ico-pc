@@ -1695,6 +1695,12 @@ void rd__set_vu_prepass(bool on);
  * (RdPerfRecord.vuPreDraws counts the draws made): the self-test's check
  * that every command went through the pre-passes */
 uint32_t rd__vu_prepass_entry_draws(void);
+/* The draw merge (rd_replay_vu.c; g_rd.vuMerge): the merge build's name of
+ * a vertex shader's key (vu_X_merge_vs, vu_X_merge_plain_vs with plain,
+ * vu_merge_main_vs) for the pipeline lines, and the start line's words
+ * ("on: ...", "off ...") for the summary line */
+void rd__vu_merge_name(uint8_t vs, bool plain, char *out, size_t size);
+const char *rd__vu_merge_text(void);
 
 /* rd_vuprepass_selftest's sabotage (ICO_RD_VU_PREPASS_SABOTAGE), while the
  * mode is not RD_VU_SABOTAGE_OFF: VERTEX the first mesh or grid command's
@@ -2514,6 +2520,21 @@ typedef struct RdContext {
      * by this flag); it is set once a run, before any pipeline */
     bool vuPreBatch;
     RhiShader vsBatch[RD_VS_COUNT];
+    /* the draw merge (rd_replay_vu.c vuDraw, vuMergeInit; docs/port/
+     * VU1_PROGRAMS.md "The draw merge"): vuMerge consecutive VU draws with
+     * the same pipeline, groups, DrawCB, FrameCB and scissor drawn as one
+     * indexed draw, every draw of a mesh or grid program's entry or of
+     * vu_main_vs through its merge build (vsMerge: vu_X_merge_vs, or
+     * vu_X_merge_plain_vs where the fallback takes the plain variant, for
+     * RD_VS_VU_PRELIT .. RD_VS_VU_REFLECT and RD_VS_VU_GRID ..
+     * RD_VS_VU_GRID_SPEC, vu_merge_main_vs for RD_VS_VU_MAIN; 0 for the
+     * others, drawn one a command as before); false ([dev] vu_merge = false,
+     * ICO_RD_VU_MERGE=0, Direct3D 11 or a merge module missing) every draw
+     * through vs[] and vsFallback[].  The keys are the same either way
+     * (rd_pipeline.c takes the module by this flag); set once a run, before
+     * any pipeline */
+    bool vuMerge;
+    RhiShader vsMerge[RD_VS_COUNT];
     /* the *_nodual twins of the gs_dual_out entries (0 for the
      * others), and whether the two-pass blend is in force (no dualSrcBlend,
      * ICO_RD_NO_DUAL or rd_set_no_dual) */
