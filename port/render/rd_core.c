@@ -102,7 +102,7 @@ void rd_summary_text(char *out, size_t size)
     }
     snprintf(out, size,
              "blend %s; profile %s; index values dense (marks in the stream); fog %s; VU shaders "
-             "%s%s; VU pre-pass %s%s; pipelines %s (pool %d, cache %d)",
+             "%s%s; VU pre-pass %s%s; VU merge %s; pipelines %s (pool %d, cache %d)",
              g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
              rd__profile_text()[0] ? rd__profile_text() : "(not decided)",
              g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
@@ -112,6 +112,7 @@ void rd_summary_text(char *out, size_t size)
              !g_rd.vuPrepass   ? ""
              : g_rd.vuPreBatch ? "; pre-pass draws batched"
                                : "; pre-pass draws one an entry",
+             rd__vu_merge_text(), /* the draw merge (rd_replay_vu.c vuMergeInit) */
              careful && rd__pipelines_lazy_on()
                  ? "the careful start-up set, stopped at its budget (the rest on first use)"
              : rd__pipelines_lazy_on() ? "on first use (no start-up set)"
