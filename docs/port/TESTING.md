@@ -939,8 +939,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rd_depth_copy_dump.cmake`: a player dump with the fog replayed with the depth in place, copied
   and through a buffer, SCENE byte for byte the same (`rd_fog_depth_copy_dump`, `_d24s8`).
 - `rd_shadow_test.c`: the shadow count on the stencil (`rd_shadow`); at scene scale 4 each
-  composite against the CPU B-spline within 2 LSB and a row across the shadow falling and rising
-  once, the softening's AA0 (at its GS size) the area box of SCENE and its composite back the
+  composite, not flagged above 1x, against the float bilinear of its level within 3 LSB, then with
+  `RdProfile.shadowBspline` ([dev] `shadow_bspline`) against the CPU B-spline within 3 (4 on the
+  fixed-function blender) and a row across the shadow falling and rising once, the softening's AA0 (at its GS size) the area box of SCENE and its composite back the
   bilinear between AA0's texels, not counted above 1x (`checkComposite4x`, `checkSoftening4x`).
   Case o: the count resolved in one draw from the stencil view against the seven stencil-tested
   draws (`RdProfile.shadowOne` flipped between two recordings of one frame), the count at its GS
@@ -949,7 +950,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   texels (fractional on both axes), each recording resolved by the path asked
   (`g_rdPerf.shadowOne`, `shadowSeven`); the one draw's table for n = 0, 1, 63, 64, 128 and 255
   against 4 n mod 256 (`checkTable`, no device). Its `_gl` twin compares OpenGL's stencil view the
-  same way; without the view the comparison prints a line and is skipped.
+  same way; without the view the comparison prints a line and is skipped. Case x
+  (`rd_shadow_test edges`, ctest `rd_shadow_edges` and its `_gl` twin): the shadow composites'
+  two kernels at scale 2, the same frames (the synthetic volumes, Shadow.c's model, a rectangle at
+  +7/16) recorded with one bilinear tap (the default) and with the B-spline (`shadowBspline`
+  flipped between two recordings): SHADOW0-2 byte for byte, no pass above 1x with the bilinear and
+  the three composites with the B-spline, SCENE byte for byte except within N of a shadow edge (a
+  composited level not constant over level texels i0 - 2 to i0 + 3, the kernels' joint support and
+  a tie: N = 3 level texels), some texels differing; the |d| histogram printed (`checkEdges2x`;
+  [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-edges-above-1x)).
 - `rd_state_test.c`: the recording half of rd without a GPU: list order, defaults, state leakage,
   the alpha test's plan for every Z write, AFAIL, ATE and alpha mask (one draw where the test decides
   nothing, `testAlphaMerge`), the start-up set's VU keys by variant and with the VU vertex
@@ -1461,6 +1470,7 @@ switches the tests and their registrations use:
 | `ICO_RD_LOCAL_PROBE_SABOTAGE` | `rd_local_probe.c` | `slow` counts the local reads' probe time 4 times (turned off), `fast` a quarter (kept) (`rd_local_probe_off`, `rd_local_probe_kept`) |
 | `ICO_RD_FOG_SABOTAGE` | `rd_fog_path.c` | makes named paths fail the self-test (`rd_fog_selftest_fallback`; `local`: `rd_fog_selftest_local_sabotage`) |
 | `ICO_RD_SHADOW_ONE` | `rd_profile.c` | 0: the shadow count's seven stencil-tested draws (and the box reduction above 1x) instead of the one draw ([dev] `shadow_one`); 1 the one draw where the backend has the stencil view, kept whatever the self-test finds |
+| `ICO_RD_SHADOW_BSPLINE` | `rd_profile.c` | 1: the shadow composites above 1x through the cubic B-spline instead of one bilinear tap ([dev] `shadow_bspline`; `rd_fx_plan.c` `rd__sprite_above1x`); `rd_shadow_test` flips `RdProfile.shadowBspline` itself |
 | `ICO_RD_SHADOW_SABOTAGE` | `rd_shadow_one.c`, `rd_shadow_selftest.c` | 1: the one draw's table is wrong at m = 1, so the shadow count's self-test fails and the seven draws resolve the count (`rd_shadow_selftest_sabotage`) |
 | `ICO_RD_DATE_SABOTAGE` | `rd_replay_tiler.c`, `rd_date_selftest.c` | 1: DATE's setup writes 0 into the stencil bit where the alpha's MSB is 1, so the self-test fails (`rd_date_selftest_sabotage`) |
 | `ICO_RD_BLEND_SABOTAGE` | `rd_blend_selftest.c` | makes named blend modes read white in the blend's self-test (`rd_blend_selftest_sabotage*`) |
