@@ -181,9 +181,12 @@ bool rd__shadow_selftest(void)
     g_rd.msaaBlocked = true; /* SCENE's colour is this count's target */
     const bool doneOne = run(&f, scene, one, size, w, h);
     const bool tookOne = g_rdPerf.shadowOne > 0; /* the replay's own record (rd__perf_begin) */
-    g_rd.profile.shadowOne = false;              /* the seven draws' replay */
+    /* a stencil view the backend could not make turned the one draw off
+     * inside that replay (rd__shadow_one_draw): it stays off */
+    const bool viewLost = !rhi_limits()->stencilView;
+    g_rd.profile.shadowOne = false; /* the seven draws' replay */
     const bool doneSeven = run(&f, scene, seven, size, w, h) && g_rdPerf.shadowSeven > 0;
-    g_rd.profile.shadowOne = true;
+    g_rd.profile.shadowOne = !viewLost;
     g_rd.msaaBlocked = wasBlocked;
     rd__frame_free(&f);
     rd__shadow_count_forget(); /* the count's target was SCENE */
@@ -206,6 +209,8 @@ bool rd__shadow_selftest(void)
     if (!doneOne || !doneSeven) {
         snprintf(res, sizeof res, "error (%s replay or readback)",
                  doneOne ? "seven draws'" : "one draw's");
+    } else if (viewLost) {
+        snprintf(res, sizeof res, "not run (the backend could not make a stencil view)");
     } else if (!tookOne) {
         snprintf(res, sizeof res, "not run (no resolve took the one draw)");
     } else if (diff) {
@@ -229,7 +234,7 @@ bool rd__shadow_selftest(void)
     }
     rd__log("shadow count: %s (self-test: %s)%s on SCENE %ux%u at %ux%u texels",
             g_rd.profile.shadowOne ? "one draw" : "seven draws", res,
-            !passed && kept ? "; kept by [dev] shadow_one" : "", w, h, t->tw, t->th);
+            !passed && kept && !viewLost ? "; kept by [dev] shadow_one" : "", w, h, t->tw, t->th);
     free(one);
     free(seven);
     return passed;
