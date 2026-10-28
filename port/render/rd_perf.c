@@ -154,10 +154,12 @@ static void push(const RdPerfRecord *r)
 /* Direct3D 11's submit writes of the records popped since the last
  * rd_perf_backend_text, and their count; the re-shown presents and the
  * rendered ones that pasted the held glow among them; the draw merge's
- * draws (RdPerfRecord vuMergeIn, vuMergeGpu, vuMergeAlone) */
+ * draws (RdPerfRecord vuMergeIn, vuMergeGpu, vuMergeAlone); the fused
+ * scissor pairs (vuFusePairs, vuFuseSame, vuFuseKept) */
 static uint64_t s_backendBytes;
 static uint32_t s_backendReplays, s_reshownReplays, s_glowHeldReplays;
 static uint64_t s_mergeIn, s_mergeGpu, s_mergeAlone;
+static uint64_t s_fusePairs, s_fuseSame, s_fuseKept[RD_VU_FUSE_WHY_COUNT];
 
 bool rd_perf_pop(RdPerfRecord *out)
 {
@@ -171,6 +173,11 @@ bool rd_perf_pop(RdPerfRecord *out)
     s_mergeIn += s_queue[s_head].vuMergeIn;
     s_mergeGpu += s_queue[s_head].vuMergeGpu;
     s_mergeAlone += s_queue[s_head].vuMergeAlone;
+    s_fusePairs += s_queue[s_head].vuFusePairs;
+    s_fuseSame += s_queue[s_head].vuFuseSame;
+    for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
+        s_fuseKept[k] += s_queue[s_head].vuFuseKept[k];
+    }
     if (out) {
         *out = s_queue[s_head];
     }
@@ -196,7 +203,7 @@ bool rd__perf_gpu_ms_of(uint32_t replay, double *ms)
 
 const char *rd_perf_backend_text(void)
 {
-    static char s_text[384];
+    static char s_text[768];
     size_t at = 0;
     s_text[0] = '\0';
     if (s_backendBytes && s_backendReplays) {
@@ -223,15 +230,38 @@ const char *rd_perf_backend_text(void)
         /* the draw merge (rd_replay_vu.c): per replay, the VU draws joined
            into GPU draws of two or more, those GPU draws, the draws alone */
         const double n = (double)s_backendReplays;
+        const int k = snprintf(
+            s_text + at, sizeof(s_text) - at,
+            "; VU merge: %.0f draws a replay in %.0f GPU draws, %.0f alone ([dev] vu_merge)",
+            (double)s_mergeIn / n, (double)s_mergeGpu / n, (double)s_mergeAlone / n);
+        at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
+    }
+    uint64_t kept = 0;
+    for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
+        kept += s_fuseKept[k];
+    }
+    if ((s_fusePairs || s_fuseSame || kept) && s_backendReplays) {
+        /* code 36's pairs (rd_replay_vu.c vuFuseVerdict): per replay, fused,
+           under one pipeline already, kept apart and why */
+        const double n = (double)s_backendReplays;
         snprintf(s_text + at, sizeof(s_text) - at,
-                 "; VU merge: %.0f draws a replay in %.0f GPU draws, %.0f alone ([dev] vu_merge)",
-                 (double)s_mergeIn / n, (double)s_mergeGpu / n, (double)s_mergeAlone / n);
+                 "; VU fuse: %.0f pairs a replay fused, %.0f one pipeline already, %.0f kept "
+                 "apart (fuse off %.0f, no merge build %.0f, passes %.0f, dst/DATE %.0f, blend "
+                 "form %.0f, no planes %.0f, plans differ %.0f) ([dev] vu_fuse)",
+                 (double)s_fusePairs / n, (double)s_fuseSame / n, (double)kept / n,
+                 (double)s_fuseKept[RD_VU_FUSE_OFF] / n, (double)s_fuseKept[RD_VU_FUSE_BUILD] / n,
+                 (double)s_fuseKept[RD_VU_FUSE_PASSES] / n, (double)s_fuseKept[RD_VU_FUSE_DST] / n,
+                 (double)s_fuseKept[RD_VU_FUSE_BLEND] / n,
+                 (double)s_fuseKept[RD_VU_FUSE_PLANES] / n,
+                 (double)s_fuseKept[RD_VU_FUSE_PLANS] / n);
     }
     s_backendBytes = 0;
     s_backendReplays = 0;
     s_reshownReplays = 0;
     s_glowHeldReplays = 0;
     s_mergeIn = s_mergeGpu = s_mergeAlone = 0;
+    s_fusePairs = s_fuseSame = 0;
+    memset(s_fuseKept, 0, sizeof(s_fuseKept));
     return s_text;
 }
 
