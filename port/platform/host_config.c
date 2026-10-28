@@ -540,6 +540,10 @@ static const struct {
     /* false: the VU pre-pass's draws one an entry and stage instead of one a
        batch (an A/B; port/render/rd_replay_vu.c preBatchInit) */
     {"dev.vu_prepass_batch", "vu_prepass_batch"},
+    /* false: every VU draw one GPU draw instead of consecutive ones with the
+       same state merged into one (an A/B; port/render/rd_replay_vu.c
+       vuMergeInit) */
+    {"dev.vu_merge", "vu_merge"},
     /* false: the crack filler above 1x off (an A/B), true: on, as the
        device profile has it on every class (port/render/rd_crack_fill.c
        rd__crack_fill_init) */
@@ -601,6 +605,9 @@ static const struct {
     /* port/render/rd_replay_vu.c preBatchInit: 0 draws the pre-pass one
        draw an entry and stage */
     {"vu_prepass_batch", "ICO_RD_VU_PREPASS_BATCH"},
+    /* port/render/rd_replay_vu.c vuMergeInit: 0 draws every VU draw as a
+       GPU draw of its own, through the programs' plain builds */
+    {"vu_merge", "ICO_RD_VU_MERGE"},
     /* port/render/rd_crack_fill.c rd__crack_fill_init: 0 leaves the pixels
        no draw covered above 1x to the fog, 1 fills them on a tile-based GPU
        too */
