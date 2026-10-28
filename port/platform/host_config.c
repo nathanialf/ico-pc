@@ -546,6 +546,9 @@ static const struct {
     /* false: no GPU timestamp inside a render pass (the lists' and the
        effects' times read 0; port/render/rd_perf.c stamp) */
     {"dev.perf_list_stamps", "perf_list_stamps"},
+    /* false: every between-tick present rendered, none shown again (an A/B;
+       port/render/rd_reshow.c switchOn) */
+    {"dev.still_represent", "still_represent"},
     /* false: SDL's DirectInput controller scan off (issue 105; window_host.c
        joystick_scan_hints) */
     {"dev.joystick_directinput", "joystick_directinput"},
@@ -600,6 +603,8 @@ static const struct {
     /* port/render/rd_perf.c rd__perf_passes_init: 0 writes no list or effect
        timestamp (none inside a render pass) */
     {"perf_list_stamps", "ICO_RD_PERF_LIST_STAMPS"},
+    /* port/render/rd_reshow.c switchOn: 0 renders every present */
+    {"still_represent", "ICO_RD_STILL_REPRESENT"},
     /* port/platform/window_host.c joystick_scan_hints: 0 sets
        SDL_HINT_JOYSTICK_DIRECTINPUT to 0 before SDL_Init */
     {"joystick_directinput", "ICO_JOYSTICK_DIRECTINPUT"},
