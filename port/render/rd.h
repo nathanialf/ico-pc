@@ -620,6 +620,17 @@ uint32_t rd_precreate_pipelines(void);
  * Kept across calls until cleared. */
 typedef int (*RdPipelineProgressFn)(void *ctx, uint32_t done, uint32_t total);
 void rd_set_pipeline_progress(RdPipelineProgressFn fn, void *ctx);
+/* The progress function of a display change (a preset, resolution or
+ * aspect change while the game runs): rd_begin_frame makes the pipelines
+ * the new state reaches and the start-up set did not hold (a fractional
+ * scale's no-planes twins among them) before the frame replays, in batches
+ * on the driver's threads, calling fn(ctx, done, total) as
+ * rd_set_pipeline_progress's function is called, on the thread that
+ * applies the settings (the game's step, on the host stack).  The window
+ * shows its "Preparing graphics" screen from it and takes the window's
+ * events.  NULL (the default): the batches run without one.  Kept until
+ * cleared. */
+void rd_set_display_progress(RdPipelineProgressFn fn, void *ctx);
 /* The longest single compile of the start-up set so far, in ms, as the
  * worker measured it (updated after each batch; 0 before the first). */
 float rd_precreate_longest_ms(void);
