@@ -257,7 +257,7 @@ static struct {
     uint32_t presentDumpFrame;
     int presentDumpPrev;
     /* the present allowance on the timer path (pace_policy.h PaceBudget;
-       under the lock lock.budget): the GPU time a presented replay (the
+       under the lock lock.budget): the GPU time a timed replay (the
        median of the last 8, perf_drain; 0: no timestamps yet), the last
        present's waits for the display (the acquire and the present) and for
        the GPU (the fence waits), the simulation step's time (ico_window_pace) */
@@ -281,7 +281,7 @@ static struct {
    line with it */
 static void timer_budget_reset(void)
 {
-    pace_budget_reset_unbound(&s_pres.budget, PACE_ALLOW_MAX);
+    pace_budget_reset_paced(&s_pres.budget, PACE_ALLOW_MAX);
     if (s_pres.budgetAtOf == &s_pres.budget) {
         s_pres.budgetRefusedAt = s_pres.budgetDropsAt = s_pres.budgetClimbsAt = 0;
         s_pres.budgetClimbRefusalsAt = 0;
@@ -4496,8 +4496,9 @@ static void perf_drain(void)
     while (rd_perf_pop(&r)) {
         auto_res_sample(&r);
         if (r.presented && r.gpuValid) {
-            /* the present allowance's GPU gate: a presented replay's GPU
-               time (two replays late), the median of the last 8 */
+            /* the present allowance's GPU gate and budget: a timed
+               replay's GPU time (two replays late), the median of the
+               last 8 (not the replays line's block mean) */
             s_pres.gpuNs = pace_hist_add(&s_pres.gpuHist, (Uint64)(r.gpuMs * 1e6));
         }
         if (r.presented && r.presentMs > 50.0) {
@@ -5472,10 +5473,10 @@ static uint64_t lock_io_display_waited(void *u, uint64_t costNs)
 }
 
 /* The present allowance's events after a pace_budget_step (its counts
-   before given): the drop, climb and refused-climb lines
+   before given): the drop, climb, refused-climb and GPU budget lines
    (pace_budget_event_text), the first 8 then every 100th */
 static void budget_lines(const PaceBudget *b, unsigned drops, unsigned climbs, unsigned refusals,
-                         Uint64 period)
+                         unsigned paced, Uint64 period)
 {
     const PaceBudgetWaits w = {
         s_pres.cost, s_pres.fenceWaitNs,      s_pres.displayWaitNs, s_pres.gpuNs, s_pres.stepNs,
@@ -5493,6 +5494,10 @@ static void budget_lines(const PaceBudget *b, unsigned drops, unsigned climbs, u
     if (b->climbRefusals != refusals) {
         pace_budget_event_text(b, PACE_BUDGET_TEXT_STAY, &w, t, sizeof(t));
         ico_log_limited("window: presents stay", "window: %s", t);
+    }
+    if (b->pacedChanges != paced) {
+        pace_budget_event_text(b, PACE_BUDGET_TEXT_PACED, &w, t, sizeof(t));
+        ico_log_limited("window: presents paced", "window: %s", t);
     }
 }
 
@@ -5685,7 +5690,7 @@ static void pace_locked(unsigned n, Uint64 period)
 
     s_deadline = pace_lock_vsync(&s_pres.lock, &io, newFrame != 0);
     /* the gate's period: the lock's step (pace_lock_vsync) */
-    budget_lines(&s_pres.lock.budget, drops, climbs, refusals,
+    budget_lines(&s_pres.lock.budget, drops, climbs, refusals, s_pres.lock.budget.pacedChanges,
                  (Uint64)(s_pres.lock.slotNs * (double)s_pres.lock.n));
     /* the lag the lock dropped, as the resync lines count it */
     s_pres.statResyncs += s_pres.lock.resyncs - s_pres.lockResyncs;
@@ -5806,6 +5811,8 @@ static void pace(int hz)
     }
     s_pres.budget.presents = 0; /* the step's presents (pace_budget_step) */
     s_pres.budget.optional = 0;
+    /* paced by the GPU's time with vsync off only (pace_policy.h) */
+    s_pres.budget.paced = !s_pres.vsync;
     s_deadline += period;
     s_pres.statVsyncs++;
     const int newFrame = frame_seen(s_deadline - period);
@@ -5951,12 +5958,14 @@ static void pace(int hz)
         /* off the screen: no present again */
         /* nor one past the present allowance (pace_policy.h PaceBudget):
            after a step that ended half a period late, the in-betweens a
-           step are held below what that step made */
+           step are held below what that step made; paced, one more only
+           while the GPU has the time for it (pace_policy.h) */
         if (s_pres.presentedFrame == s_pres.frame) {
             const int guard = now >= s_deadline || s_pres.paceSlow || s_pres.offScreen ||
                               (!s_pres.fifoLock && now + s_pres.cost > s_deadline);
 
-            if (guard || !pace_budget_allows(&s_pres.budget, false)) {
+            if (guard || !pace_budget_allows_paced(&s_pres.budget, false, s_pres.gpuNs,
+                                                   s_pres.stepNs, period)) {
                 if (!guard) {
                     s_pres.budget.refused++;
                 }
@@ -6014,10 +6023,11 @@ static void pace(int hz)
         /* the present allowance: the step ends now (a resync keeps it) */
         const unsigned drops = s_pres.budget.drops, climbs = s_pres.budget.climbs;
         const unsigned refusals = s_pres.budget.climbRefusals;
+        const unsigned paced = s_pres.budget.pacedChanges;
 
         (void)pace_budget_step(&s_pres.budget, now > s_deadline ? now - s_deadline : 0, period,
                                refresh, s_pres.displayWaitNs, s_pres.gpuNs, s_pres.stepNs);
-        budget_lines(&s_pres.budget, drops, climbs, refusals, period);
+        budget_lines(&s_pres.budget, drops, climbs, refusals, paced, period);
     }
     pace_log(now);
     if (now > s_deadline && now - s_deadline > RESYNC_NS) {
