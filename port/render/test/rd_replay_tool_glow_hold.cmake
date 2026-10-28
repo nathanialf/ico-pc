@@ -60,11 +60,13 @@ function(glow_run _case _mode _what)
   if(NOT rc EQUAL 0)
     message(FATAL_ERROR "${TOOL} (${_case} ${_mode} ${_what}) exited ${rc}:\n${out}\n${err}")
   endif()
-  string(REGEX MATCHALL "present [0-9]+ of [0-9]+[^\n]*; glow held;" held "${out}")
-  string(REGEX MATCHALL "present [0-9]+ of [0-9]+[^\n]*; glow redrawn \\(\\[dev\\] glow_redraw\\);"
-                        redrawn "${out}")
-  string(REGEX MATCHALL "present 0 of [0-9]+[^\n]*; glow drawn \\(the tick's first present\\);"
-                        first "${out}")
+  # the ";" in the tool's lines would split the match lists: flattened first
+  string(REPLACE ";" "," flat "${out}")
+  string(REGEX MATCHALL "present [0-9]+ of [0-9]+[^\n]*, glow held," held "${flat}")
+  string(REGEX MATCHALL "present [0-9]+ of [0-9]+[^\n]*, glow redrawn \\(\\[dev\\] glow_redraw\\),"
+                        redrawn "${flat}")
+  string(REGEX MATCHALL "present 0 of [0-9]+[^\n]*, glow drawn \\(the tick's first present\\),"
+                        first "${flat}")
   list(LENGTH held n_held)
   list(LENGTH redrawn n_redrawn)
   list(LENGTH first n_first)

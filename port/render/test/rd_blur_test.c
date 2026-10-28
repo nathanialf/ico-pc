@@ -3870,9 +3870,11 @@ static void checkBlurFold(void)
         folds += f;
         frames += f > 0;
         /* a chain of ten pairs folds nine, or eight where a pass 1 covers a
-           column fewer than the pair before (the wide-frame fold, D2); a
-           frame holds one or two chains */
-        CHECK(f == 0 || f == 8 || f == 9 || (f >= 16 && f <= 18),
+           column fewer than the pair before (the wide-frame fold); a frame
+           holds one or two chains; post mode 2 (the depth of field alone, no
+           glow chain) has one foldable pair since the wide-frame fold, its
+           bytes checked against the model by effectsFrame */
+        CHECK(f == 0 || f == 8 || f == 9 || (f >= 16 && f <= 18) || (post == 2 && f == 1),
               "(b) post mode %d: %u pairs folded, 8 or 9 a chain expected", post, f);
     }
     InitializeStaticBlur(); /* sun off */
