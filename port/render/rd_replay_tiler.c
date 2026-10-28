@@ -168,19 +168,40 @@ bool rd__replay_date_clear(Replay *r, const DrawSetup *ds, const RhiRect *area)
 /* ------------------------------------------------------ the blur pair fold
  * staticBlur.c's blur(n) is two sprites, pass 1 WORK0 -> WORK1 (the rect
  * shrunk) and pass 2 WORK1 -> WORK0 (the UVs shrunk), n = 10..19 (RdProfile
- * .blurFold: tile-based GPUs, where a pass costs more than the ALU; [dev]
- * blur_fold).  rd__replay_blur_fold draws such a pair as one pass into WORK0
- * through fx_blur2_ps, which computes each WORK1 texel pass 2 weighs from
- * WORK0 the way pass 1 would have written it: the two passes' integers in
- * their order, so WORK0 gets the bytes the two passes give.  WORK1 is not
- * drawn; the pair drawn last as two passes (the next post sprite is not
- * another pass 1) writes it as the chain did.  The replay recognises a pair
- * at its pass 1 by looking ahead over the list's commands: state commands
- * up to pass 2 (applied to a copy of the state), state commands up to the
- * next pair's pass 1.  Every condition below makes the fold exact by
- * construction (blurFoldPass, blurFoldOk); a pair that misses one is drawn
- * as two passes.  The loop then skips the commands up to pass 2 (s_loop.skip),
- * their state applied. */
+ * .blurFold: every device class but Mali, whose ALU-bound G52 the fold does
+ * not spare; [dev] blur_fold).  rd__replay_blur_fold draws such a pair as
+ * one pass into WORK0 through fx_blur2_ps, which computes each WORK1 texel
+ * pass 2 weighs from WORK0 the way pass 1 would have written it: the two
+ * passes' integers in their order, so WORK0 gets the bytes the two passes
+ * give.  WORK1 is not drawn; the pair drawn last as two passes (the next
+ * post sprite is not another pass 1) writes it as the chain did.  The
+ * replay recognises a pair at its pass 1 by looking ahead over the list's
+ * commands: state commands up to pass 2 (applied to a copy of the state),
+ * state commands up to the next pair's pass 1.  Every condition below makes
+ * the fold exact by construction (blurFoldPass, blurFoldOk); a pair that
+ * misses one is drawn as two passes.  The loop then skips the commands up
+ * to pass 2 (s_loop.skip), their state applied.
+ *
+ * On a frame wider than 512 GS pixels pass 1's rect starts d = 1..50
+ * sixteenths right of WORK1's pixel 0 (staticBlur.c anchors its shrink at
+ * the 4:3 part), so it draws from column cx0 = ceil(d / 16) (1 at 16:9, 2
+ * or 3 at 48:9, up to 4 at 60:9), while pass 2's first pixel weighs
+ * column 0 (13/16 at 16:9).  Those columns hold the glow's edge strip
+ * (rd_blur_border.c glowEdge), drawn after every pass 1 drawn as a pass:
+ * pass 1's texel at column cx0 on each of its rows.  So a pass 1 with the
+ * strip leaves its bytes in columns 0 .. cx1 (BlurFoldPass.first 0), and
+ * fx_blur2_ps reads a tap left of cx0 as pass 1's pixel at cx0 (DrawCB
+ * mode.w); without the strip (--no-glow-edge) first is cx0 and such a
+ * pair is drawn as two passes.  WORK1 after the chain: each folded pair's written texels
+ * (columns first .. cx1, rows cy0 .. cy1) lie inside the next pair's
+ * (blurFoldOk's look-ahead), so inside those of the first pair after it
+ * drawn as two passes, whose pass 1 (and strip) writes them before its
+ * pass 2 reads WORK1 and leaves them as the unfolded chain does; a texel
+ * outside is written by no folded pair either way.  At 4:3 every pair
+ * covers columns 0..254 (9 of 10 fold, as before); at 16:9 (688) 1..342
+ * with the strip on column 0 (9 of 10); at 48:9 (2048) and 60:9 (2560)
+ * the last column moves in by one at one pair (cx1 1021 -> 1020, 1276 ->
+ * 1275), which the next-pair rule refuses there (8 of 10). */
 typedef struct BlurFoldPass {
     RdPostRec p;
     float uv[4];
@@ -189,6 +210,12 @@ typedef struct BlurFoldPass {
     int32_t ox, oy; /* the origin FrameCB gives the target (12.4) */
     /* the texels the sprite covers (its rect and scissor), inclusive */
     int32_t cx0, cy0, cx1, cy1;
+    int32_t sx; /* the scissor's first column */
+    /* the first WORK1 column that holds this pass's bytes after it: 0 where
+     * the glow's edge strip draws columns 0 .. cx0 - 1 as column cx0
+     * (rd__replay_glow_edge_columns, set by rd__replay_blur_fold for a pass
+     * 1), else cx0 */
+    int32_t first;
 } BlurFoldPass;
 
 /* the loop's list for the look-ahead (replayFrame): its commands, the
@@ -310,6 +337,8 @@ static bool blurFoldPass(const Replay *q, const RdFrame *f, const RdCmd *c, Blur
     out->cx1 = a1;
     out->cy0 = b0;
     out->cy1 = b1;
+    out->sx = sc.x;
+    out->first = a0;
     out->tc = tc;
     out->src = src;
     out->tfmt = t->src;
@@ -330,7 +359,8 @@ static int32_t blurFoldU(int32_t X, int32_t x0, int32_t x1, int32_t u0, int32_t 
 /* The texels pass 2 weighs on one axis (a weight above 0: from floor((U -
  * 8) / 16) to ceil((U - 8) / 16) at each covered pixel, monotonic in U),
  * clamped as fx_texel clamps (CLAMP on the TEX0 size lsz, then the texture
- * asz): inside [lo, hi] of pass 1's covered texels.  And the bound
+ * asz): inside [lo, hi], the texels that hold pass 1's bytes (its covered
+ * ones, on x from column 0 with the glow's edge strip).  And the bound
  * fx2_pass1's gs_div_trunc needs (|n| < d 2^21) at every texel of pass 1's
  * texture. */
 static bool blurFoldAxis(int32_t c0, int32_t c1, int32_t o, int32_t x0, int32_t x1, int32_t u0,
@@ -358,20 +388,24 @@ static bool blurFoldBound(int32_t o, int32_t x0, int32_t x1, int32_t u0, int32_t
     return m * (du < 0 ? -du : du) < ((int64_t)x1 - x0) * (1ll << 21);
 }
 
-/* the pair (a, b) folds into one pass: b reads a's target and writes its
- * source, the same flags, TEXA, TEX0 size and origin, b's every weighed
- * WORK1 texel inside a's coverage, the bound of a's divides */
+/* (a, b) is a pair: b reads a's target and writes its source, the same
+ * flags, TEXA, TEX0 size and origin */
+static bool blurFoldPair(const BlurFoldPass *a, const BlurFoldPass *b)
+{
+    return b->src == a->tc && b->tc == a->src && b->flags == a->flags && b->mode1 == a->mode1 &&
+           a->ox == b->ox && a->oy == b->oy && a->p.scalar[0] == b->p.scalar[0] &&
+           a->p.scalar[1] == b->p.scalar[1];
+}
+
+/* the pair (a, b) folds into one pass: b's every weighed WORK1 texel among
+ * those holding a's bytes (a->first .. cx1, cy0 .. cy1), the bound of a's
+ * divides */
 static bool blurFoldOk(const BlurFoldPass *a, const BlurFoldPass *b)
 {
-    if (b->src != a->tc || b->tc != a->src || b->flags != a->flags || b->mode1 != a->mode1 ||
-        a->ox != b->ox || a->oy != b->oy || a->p.scalar[0] != b->p.scalar[0] ||
-        a->p.scalar[1] != b->p.scalar[1]) {
-        return false;
-    }
     const int32_t lszx = (int32_t)rintf(b->p.scalar[0]), lszy = (int32_t)rintf(b->p.scalar[1]);
     const RdTargetRec *w1 = a->tc;
     return blurFoldAxis(b->cx0, b->cx1, b->ox, (int32_t)b->p.rect[0], (int32_t)b->p.rect[2],
-                        (int32_t)b->uv[0], (int32_t)b->uv[2], lszx, (int32_t)w1->tw, a->cx0,
+                        (int32_t)b->uv[0], (int32_t)b->uv[2], lszx, (int32_t)w1->tw, a->first,
                         a->cx1) &&
            blurFoldAxis(b->cy0, b->cy1, b->oy, (int32_t)b->p.rect[1], (int32_t)b->p.rect[3],
                         (int32_t)b->uv[1], (int32_t)b->uv[3], lszy, (int32_t)w1->th, a->cy0,
@@ -380,6 +414,44 @@ static bool blurFoldOk(const BlurFoldPass *a, const BlurFoldPass *b)
                          (int32_t)a->uv[2], (int32_t)w1->tw) &&
            blurFoldBound(a->oy, (int32_t)a->p.rect[1], (int32_t)a->p.rect[3], (int32_t)a->uv[1],
                          (int32_t)a->uv[3], (int32_t)w1->th);
+}
+
+/* a pass 1 (c under r's state, *p from blurFoldPass): p->first 0 where the
+ * glow's edge strip draws WORK1's columns 0 .. cx0 - 1 after it as its
+ * column cx0 (its columns exactly: the strip's n is cx0 and the scissor
+ * starts at column 0), else cx0 */
+static void blurFoldFirst(const Replay *r, const RdFrame *f, const RdCmd *c, BlurFoldPass *p)
+{
+    const int n = rd__replay_glow_edge_columns(r, f, c);
+    p->first = n > 0 && n == p->cx0 && p->sx == 0 ? 0 : p->cx0;
+}
+
+/* A pair the profile would fold drawn as two passes: once a WORK1 width
+ * and reason, the pairs folded before it in this replay (a reporter's log
+ * says how many of a chain's ten pairs fold on that frame) */
+static void blurFoldRefused(const Replay *r, const BlurFoldPass *p1, const char *why)
+{
+    static struct {
+        uint32_t w;
+        const char *why;
+    } s_logged[12];
+
+    const uint32_t w = p1->tc->tw;
+    for (size_t k = 0; k < sizeof(s_logged) / sizeof(s_logged[0]); k++) {
+        if (s_logged[k].w == w && s_logged[k].why == why) {
+            return;
+        }
+        if (s_logged[k].w == 0) {
+            s_logged[k].w = w;
+            s_logged[k].why = why;
+            rd__log("blur fold: %s %ux%u: a pair drawn as two passes (%s) after %u folded in "
+                    "this replay; pass 1 draws columns %d..%d, holds its bytes from column %d "
+                    "(reported once a width and reason)",
+                    rd__target_name(r->st.color), (unsigned)w, (unsigned)p1->tc->th, why,
+                    (unsigned)g_rdPerf.blurFolds, (int)p1->cx0, (int)p1->cx1, (int)p1->first);
+            return;
+        }
+    }
 }
 
 /* the commands after s_loop.cmds[from] up to the next one that is not a
@@ -418,22 +490,34 @@ bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!blurFoldPass(r, f, c, &p1)) {
         return false;
     }
+    blurFoldFirst(r, f, c, &p1);
     static Replay q; /* the state after pass 2 (a replay's fields: large) */
     q = *r;
     const uint32_t i2 = blurFoldAhead(&q, s_loop.index);
     if (i2 >= s_loop.count || !blurFoldPass(&q, f, &s_loop.cmds[i2], &p2) ||
-        s_loop.cmds[i2].b[0] != c->b[0] || !blurFoldOk(&p1, &p2)) {
+        s_loop.cmds[i2].b[0] != c->b[0] || !blurFoldPair(&p1, &p2)) {
         return false;
     }
-    /* the next pair's pass 1: the same targets and texels covered, so the
-     * last pair, drawn as two passes, writes WORK1 over every texel a folded
-     * pass 1 would have */
+    if (!blurFoldOk(&p1, &p2)) {
+        blurFoldRefused(r, &p1, "pass 2 weighs a WORK1 texel pass 1 does not leave its bytes in");
+        return false;
+    }
+    /* the next pair's pass 1: the same targets, and every texel this pass
+     * 1 would have left its bytes in among its own (on x from column 0
+     * with the glow's edge strip), so the first pair after it drawn as two
+     * passes writes WORK1 over every texel a folded pass 1 would have
+     * before its pass 2 reads it */
     static Replay q3;
     q3 = q;
     const uint32_t i3 = blurFoldAhead(&q3, i2);
     if (i3 >= s_loop.count || !blurFoldPass(&q3, f, &s_loop.cmds[i3], &p3) ||
-        s_loop.cmds[i3].b[0] != c->b[0] || p3.tc != p1.tc || p3.src != p1.src || p3.cx0 != p1.cx0 ||
-        p3.cx1 != p1.cx1 || p3.cy0 != p1.cy0 || p3.cy1 != p1.cy1) {
+        s_loop.cmds[i3].b[0] != c->b[0] || p3.tc != p1.tc || p3.src != p1.src) {
+        blurFoldRefused(r, &p1, "the chain's last pair");
+        return false;
+    }
+    blurFoldFirst(&q3, f, &s_loop.cmds[i3], &p3);
+    if (p3.first > p1.first || p3.cx1 < p1.cx1 || p3.cy0 > p1.cy0 || p3.cy1 < p1.cy1) {
+        blurFoldRefused(r, &p1, "the next pair's pass 1 leaves its bytes in fewer WORK1 texels");
         return false;
     }
     RdPipeKeyInt key = rd__blur_fold_key(&q.st, p2.tc->format);
@@ -487,7 +571,10 @@ bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c)
     cb.mode[1] = p2.mode1;
     cb.mode[2] = r->st.ds.test.atst | ((uint32_t)(r->st.ds.test.ate != 0) << 8) |
                  ((uint32_t)r->st.ds.test.afail << 16);
-    cb.mode[3] = r->st.ds.test.aref;
+    /* no alpha test here (blurFoldPass), so not AREF: pass 1's first drawn
+     * WORK1 column, which a tap left of it reads (the glow's edge strip;
+     * with first == cx0 only taps of weight 0 lie there) */
+    cb.mode[3] = (uint32_t)p1.cx0;
     cb.blend[0] =
         rd__alpha_register(r->st.ds.blend < RD_BLEND_COUNT ? r->st.ds.blend : RD_BLEND_LERP_AS);
     cb.blend[1] = r->st.ds.blendFix;
