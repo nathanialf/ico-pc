@@ -1152,7 +1152,8 @@ static bool depthWantsReadable(const RdTargetRec *c, const RdTargetRec *d);
 
 static void endPass(Replay *r)
 {
-    flushScreenRun(r); /* the run's draw goes before anything after it */
+    flushScreenRun(r);      /* the run's draw goes before anything after it */
+    rd__replay_vu_flush(r); /* and the VU draw merge's (never both open) */
     if (r->passOpen) {
         rhi_cmd_end_render_pass(s_cl);
         r->passOpen = 0;
@@ -5870,6 +5871,13 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
             if (c->type != RDC_SCREEN && c->type != RDC_NOP && c->type != RDC_OVERLAY_TEXT) {
                 flushScreenRun(&r); /* the run's draw before this action's */
             }
+            if (c->type < RDC_MESH || c->type > RDC_PARTICLES) {
+                if (c->type != RDC_NOP && c->type != RDC_OVERLAY_TEXT) {
+                    rd__replay_vu_flush(&r); /* the VU draw merge's run likewise */
+                }
+            } else {
+                rd__replay_vu_flush_post(&r, r.perfPost); /* its draw before a new effect's */
+            }
             if (c->type == RDC_POST_STUB && rd__perf_post_of_kind(c->b[0]) >= 0) {
                 r.perfPost = rd__perf_post_of_kind(c->b[0]);
             }
@@ -5932,6 +5940,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
         }
         rd__replay_fold_list(NULL, 0, l, headHalf);
         flushScreenRun(&r); /* a run does not cross a list (its timestamp) */
+        rd__replay_vu_flush(&r);
         rd__perf_stamp(s_cl, RD_PERF_TS_LIST0 + (uint32_t)l);
         /* the next list's work is the effect of the target in force, not
          * of this list's last post sprite: the motion blur, the last sprite
@@ -6273,6 +6282,7 @@ uint32_t rd__replay_msaa_want(void)
 void rd__replay_flush_run(Replay *r)
 {
     flushScreenRun(r);
+    rd__replay_vu_flush(r); /* the VU draw merge's run (rd_replay_vu.c) */
 }
 
 void rd__replay_end_pass(Replay *r)
