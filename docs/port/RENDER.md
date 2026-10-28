@@ -557,8 +557,7 @@ here and marks every triangle of a grid of two strips or more joined, as the dra
 index values: dense (marks in the stream)`.
 A mesh, grid or particle command the pre-passes recorded draws through `vu_main_vs` (or
 `vu_particle_main_vs`) and `vu_ps` over that record ([The vertex and triangle
-pre-passes](#the-vertex-and-triangle-pre-passes)). Consecutive draws with one state are one GPU
-draw ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)).
+pre-passes](#the-vertex-and-triangle-pre-passes)).
 What the flags do is [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule). `ICO_RD_VU_OFFGRID=1`, a
 developer switch, lets the [VU1](ARCHITECTURE.md#terms) programs output X and Y off the GS's 1/16
 grid on a scaled target under the Enhanced preset; otherwise every preset keeps the GS's
