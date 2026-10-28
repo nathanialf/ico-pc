@@ -9,4 +9,4 @@
 
 ## Fixed
 
-- On phones and other tile-based graphics chips at wide aspect ratios, the glow's left edge could be built from a stale strip of the previous blur step.
+- At wide aspect ratios on phones, tablets and Macs, the glow's left edge could keep a thin strip from an earlier blur step.
