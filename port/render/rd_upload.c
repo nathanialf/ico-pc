@@ -128,11 +128,18 @@ uint64_t rd__estimate_ring(const RdFrame *f, int keep)
                  * stage draws, and at worst a batch (its DrawCB) each */
                 total += 5 * 16 + 16 + 5 * (sizeof(IcoDrawCB) + align);
                 total += (uint64_t)p.batchCount * (p.vertsPerBatch + 1) * 12 + 16;
+                /* the draw merge (g_rd.vuMerge, rd_replay_vu.c vuDraw): a
+                 * table entry each of the command's draws and its run's
+                 * table, and its index list once more in its run's (a
+                 * grid's from its shape, a mesh's at most its whole list) */
+                total += (passes / 4u + 1u) * 32u + 256u;
+                total += (uint64_t)p.batchCount * (p.vertsPerBatch + 1) * 12 + 16;
                 const RdMeshRec *m = c->type <= RDC_SKINNED ? rd__mesh_rec(c->u[0]) : NULL;
                 if (m) {
                     total += (uint64_t)m->vertexCount * m->qwPerVertex * 16 +
                              (uint64_t)rd__mesh_mark_qw(m) * 16 + (uint64_t)m->indexCount * 4 +
                              2 * align;
+                    total += (uint64_t)m->indexCount * 4 + 16; /* its run's copy */
                 }
             }
         }
