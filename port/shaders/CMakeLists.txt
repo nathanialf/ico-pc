@@ -211,6 +211,10 @@ ico_add_shader(fx_acc_resolve_ps fx_sprite.hlsl fx_acc_resolve_ps fragment)
 # behind blit_vs; used on both backends
 ico_add_shader(crack_fill_ps blit.hlsl crack_fill_ps fragment)
 ico_add_shader(crack_count_ps blit.hlsl crack_count_ps fragment)
+# The shadow count read from the stencil in one draw (port/render/rd_replay.c
+# shadowCountOne: the stencil view and the count's table, box_reduce_ps's
+# average above 1x), behind blit_vs; used on every backend with the view
+ico_add_shader(shadow_count_ps blit.hlsl shadow_count_ps fragment)
 # The blur sprite's UINT-view build (fx_sprite_u_ps)
 # fx_sprite_ps reading its textures through their RGBA8_UINT views
 # (RHI_TEX_UINT_VIEW; rd_replay.c doBlurSpriteDraw)
