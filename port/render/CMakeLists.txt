@@ -135,6 +135,7 @@ add_library(ico_render STATIC
     rd_fx_plan.c # the frame-size post sprites' plan: fixed-function forms, local read
     rd_interp.c # interpolation between the retained frames
     rd_reshow.c # a between-tick picture the same as the last rendered one's is shown again
+    rd_glow_hold.c # the between-tick presents paste the glow of the tick's first present
     rd_join.c
     rd_local_probe.c # the desktop's local reads: the start-up cost probe
     rd_mesh.c
@@ -1271,6 +1272,27 @@ if(ICO_RUN_TESTS)
                      "-DARGS=--enhanced|--aspect|16:9|--resolution|2x|--present|1920x1080"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_still.cmake")
     set_tests_properties(rd_replay_tool_still PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
+    # the glow held between ticks (rd_glow_hold.c) against its chain drawn at
+    # every present (ICO_RD_GLOW_REDRAW=1), 2 presents a tick at Enhanced 4:3
+    # 2x, every present rendered: a still tick (rd-01076 as its own tick
+    # before) the same bytes both ways, SCENE and the presented picture; a
+    # moving one (rd-01076 then rd-01077) the first present the same bytes and
+    # the later one differing only within 128 texels of the glow's mask (WORK2)
+    # (the lavapipe A/B; Not Run without the dumps)
+    set(_gh "${CMAKE_SOURCE_DIR}/build-host/tmp/pcsx2cmp/godrays/port2/keep")
+    set(_gh_py "")
+    if(Python3_FOUND)
+        set(_gh_py "-DPYTHON=${Python3_EXECUTABLE}")
+    endif()
+    add_test(NAME rd_replay_tool_glow_hold
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DSTILL=${_gh}/rd-01076.rddump" "-DPREV=${_gh}/rd-01076.rddump"
+                     "-DMOVE=${_gh}/rd-01077.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_glow_hold" -DPRESENTS=2
+                     -DREACH=128 "-DARGS=--enhanced|--aspect|4:3|--resolution|2x" ${_gh_py}
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_glow_hold.cmake")
+    set_tests_properties(rd_replay_tool_glow_hold PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                             TIMEOUT 900)
     # the fog on the depth's words copied out through a buffer
     # (ICO_RD_FOG_PATH=buffer, rd_fog_path.c: the fallback of a device whose
     # depth reads fail), on D32S8 and on D24S8 (the top byte masked off):
