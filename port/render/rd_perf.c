@@ -152,9 +152,10 @@ static void push(const RdPerfRecord *r)
 }
 
 /* Direct3D 11's submit writes of the records popped since the last
- * rd_perf_backend_text, and their count */
+ * rd_perf_backend_text, and their count; the re-shown presents and the
+ * rendered ones that pasted the held glow among them */
 static uint64_t s_backendBytes;
-static uint32_t s_backendReplays, s_reshownReplays;
+static uint32_t s_backendReplays, s_reshownReplays, s_glowHeldReplays;
 
 bool rd_perf_pop(RdPerfRecord *out)
 {
@@ -164,6 +165,7 @@ bool rd_perf_pop(RdPerfRecord *out)
     s_backendBytes += s_queue[s_head].backendWriteBytes;
     s_backendReplays++;
     s_reshownReplays += s_queue[s_head].reshown;
+    s_glowHeldReplays += s_queue[s_head].glowHeld && !s_queue[s_head].reshown;
     if (out) {
         *out = s_queue[s_head];
     }
@@ -189,7 +191,7 @@ bool rd__perf_gpu_ms_of(uint32_t replay, double *ms)
 
 const char *rd_perf_backend_text(void)
 {
-    static char s_text[160];
+    static char s_text[256];
     size_t at = 0;
     s_text[0] = '\0';
     if (s_backendBytes && s_backendReplays) {
@@ -199,13 +201,22 @@ const char *rd_perf_backend_text(void)
     }
     if (s_reshownReplays) {
         /* the replays above are counted with these: a re-shown present is a replay of no passes */
+        const int n = snprintf(s_text + at, sizeof(s_text) - at,
+                               "; %u presents re-shown without a replay ([dev] still_represent)",
+                               s_reshownReplays);
+        at += n > 0 && (size_t)n < sizeof(s_text) - at ? (size_t)n : 0;
+    }
+    if (s_glowHeldReplays) {
+        /* rendered between-tick presents that pasted the tick's glow (rd_glow_hold.c) */
         snprintf(s_text + at, sizeof(s_text) - at,
-                 "; %u presents re-shown without a replay ([dev] still_represent)",
-                 s_reshownReplays);
+                 "; %u between-tick pictures pasted the tick's glow without its chain ([dev] "
+                 "glow_redraw)",
+                 s_glowHeldReplays);
     }
     s_backendBytes = 0;
     s_backendReplays = 0;
     s_reshownReplays = 0;
+    s_glowHeldReplays = 0;
     return s_text;
 }
 
@@ -467,6 +478,14 @@ void rd__perf_reshown(void)
     s_reshownNext = 1;
 }
 
+/* the next replay pastes the tick's held glow (rd_glow_hold.c) */
+static uint8_t s_glowHeldNext;
+
+void rd__perf_glow_held(void)
+{
+    s_glowHeldNext = 1;
+}
+
 void rd__perf_readback_ms(double ms)
 {
     s_readbackMs += ms;
@@ -485,7 +504,9 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
     g_rdPerf.alpha = s_alpha;
     g_rdPerf.firstOfTick = s_first;
     g_rdPerf.reshown = s_reshownNext;
+    g_rdPerf.glowHeld = s_glowHeldNext;
     s_reshownNext = 0;
+    s_glowHeldNext = 0;
     s_alpha = -1.0f;
     s_first = 0;
     s_interpMs = s_readbackMs = 0.0;
