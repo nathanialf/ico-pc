@@ -2,7 +2,7 @@
 # on the dump rd_pixel leaves behind.
 #   - an unknown --target and a --aspect wider than the dump (a 4:3 dump
 #     cannot show 16:9) exit 1 with their messages; neither needs a device
-#   - --pass-dump DIR renders once and writes <TARGET>.png for the 17 named
+#   - --pass-dump DIR renders once and writes <TARGET>.png for the 18 named
 #     targets and PRESENT.png with --present; a PNG each (the signature), and
 #     the DISPLAY one equal to a run of --target DISPLAY of its own.  Exit 77
 #     (no device) skips this half.
@@ -30,7 +30,7 @@ if(NOT rc EQUAL 1 OR NOT err MATCHES "a dump drawn at 4:3 cannot show 16:9: capt
 endif()
 
 set(names SCENE DISPLAY SHADOW0 SHADOW1 SHADOW2 WORK0 WORK1 WORK2 WORK3 AA0 AA1 FEED128
-    AURA_WORK AURA_TAP WORK2_PAD FEED_HELD DISPLAY_HELD)
+    AURA_WORK AURA_TAP WORK2_PAD FEED_HELD DISPLAY_HELD WORK3_HELD)
 execute_process(COMMAND "${TOOL}" "${DUMP}" - --pass-dump "${OUT}" --present 640x480
                 RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
 if(rc EQUAL 77)
@@ -67,4 +67,4 @@ file(SHA256 "${OUT}/PRESENT.png" b)
 if(NOT rc EQUAL 0 OR NOT a STREQUAL b)
   message(FATAL_ERROR "PRESENT.png of --pass-dump differs from --present 640x480 (rc ${rc})")
 endif()
-message(STATUS "rd_replay_tool_pass_dump: 17 targets and PRESENT in one run")
+message(STATUS "rd_replay_tool_pass_dump: 18 targets and PRESENT in one run")
