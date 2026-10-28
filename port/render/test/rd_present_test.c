@@ -1260,10 +1260,11 @@ static void frameFor(float aspect)
    scene's scale (rd__target_scale_of): the PS2's sizes at every resolution */
 static int workAtGsSize(void)
 {
-    static const int kIds[] = {RD_TARGET_WORK0,    RD_TARGET_WORK1,     RD_TARGET_WORK3,
-                               RD_TARGET_AA0,      RD_TARGET_AA1,       RD_TARGET_FEED128,
-                               RD_TARGET_AURA_TAP, RD_TARGET_WORK2_PAD, RD_TARGET_FEED_HELD,
-                               RD_TARGET_SHADOW0,  RD_TARGET_SHADOW1,   RD_TARGET_SHADOW2};
+    static const int kIds[] = {RD_TARGET_WORK0,     RD_TARGET_WORK1,     RD_TARGET_WORK3,
+                               RD_TARGET_AA0,       RD_TARGET_AA1,       RD_TARGET_FEED128,
+                               RD_TARGET_AURA_TAP,  RD_TARGET_WORK2_PAD, RD_TARGET_FEED_HELD,
+                               RD_TARGET_SHADOW0,   RD_TARGET_SHADOW1,   RD_TARGET_SHADOW2,
+                               RD_TARGET_WORK3_HELD};
     int ok = 1;
     for (size_t i = 0; i < sizeof(kIds) / sizeof(kIds[0]); i++) {
         RdTargetRec t;
