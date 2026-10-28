@@ -1465,9 +1465,15 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vuprepass_selftest_unbatched
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}" -P "${_vst}")
+    # and with every VU draw a GPU draw of its own (ICO_RD_VU_MERGE=0: the
+    # programs' and the main shader's plain builds, as before the draw
+    # merge; rd_replay_vu.c vuMergeInit)
+    add_test(NAME rd_vuprepass_selftest_unmerged
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}" -P "${_vst}")
     set(_vst_tests rd_vuprepass_selftest rd_vuprepass_selftest_plain
                    rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off
-                   rd_vuprepass_selftest_unbatched)
+                   rd_vuprepass_selftest_unbatched rd_vuprepass_selftest_unmerged)
     set_tests_properties(${_vst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     if(_env)
         set_tests_properties(rd_vuprepass_selftest rd_vuprepass_selftest_plain
@@ -1477,6 +1483,8 @@ if(ICO_RUN_TESTS)
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_SABOTAGE=1")
     set_tests_properties(rd_vuprepass_selftest_unbatched
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_BATCH=0")
+    set_tests_properties(rd_vuprepass_selftest_unmerged
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_MERGE=0")
     set_tests_properties(rd_vuprepass_selftest_off
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS=0")
     # odd texel counts under MSAA (1935x1080 is 645x360 at scale 3;
@@ -1658,6 +1666,23 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_vubatch_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
     if(_env)
         set_tests_properties(rd_vubatch_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    # rd_vumerge_ab (test/rd_vumerge_ab.cmake): the same dumps with every VU
+    # draw a GPU draw of its own (ICO_RD_VU_MERGE=0) and with the draw merge
+    # (rd_replay_vu.c vuDraw), through the record and through the programs'
+    # entries (ICO_RD_VU_PREPASS=0, the tile-based GPUs' path), at Original
+    # 4:3 1x, Enhanced 4:3 2x and Enhanced 16:9 2x under ICO_RD_BLEND=fixed:
+    # every named target byte for byte, the GPU draws fewer by what the runs
+    # joined; SKIP as rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab")
+    add_test(NAME rd_vumerge_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vumerge_ab.cmake")
+    set_tests_properties(rd_vumerge_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_vumerge_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
 endif()
 # The blend policy (rd_dst_read.c)
@@ -1902,8 +1927,8 @@ endif()
 #    rd_fog_selftest_local_sabotage (ico_rd_gl_twin skips these by itself)
 #  * the tests that start the game (model_viewer_headless, gallery_sweep,
 #    credits_headless) or work on the replay tool's files (rd_replay_tool*,
-#    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, rd_vubatch_ab, the native frame
-#    gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
+#    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, rd_vubatch_ab, rd_vumerge_ab,
+#    the native frame gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
 #    on both backends)
 #  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_mip, rd_passring,
 #    rd_filter, rd_bisect_plan, rd_stream_audit, fog_lut*, gsb_cull*, texpack*, gltf)
@@ -2014,7 +2039,8 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         rd_shadow_selftest rd_shadow_selftest_sabotage
         rd_vuprepass_selftest rd_vuprepass_selftest_plain
         rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off rd_vuprepass_selftest_ticks
-        rd_vuprepass_selftest_sabotage_tri rd_vuprepass_selftest_unbatched)
+        rd_vuprepass_selftest_sabotage_tri rd_vuprepass_selftest_unbatched
+        rd_vuprepass_selftest_unmerged)
     foreach(_n IN LISTS _ico_rd_gl_tests)
         ico_rd_gl_twin(${_n})
     endforeach()
