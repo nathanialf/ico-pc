@@ -145,6 +145,8 @@ static struct {
     bool enabled; /* ICO_RD_CRACK_FILL, the profile, or the replay tool's switch */
     int why;      /* WHY_* */
     bool countAll;
+    bool general;  /* tests: the general shader at a reach of 1 */
+    int said1;     /* crack_fill1_ps's event: -1 not said, else 0/1 */
     bool fold;     /* the last fill drawn in the pass the local fog keeps */
     bool resolved; /* the last fill drawn on the MSAA resolve's picture */
     /* the count's target and readback (one in flight) */
@@ -233,6 +235,7 @@ void rd__crack_fill_init(void)
     const RhiBuffer buf = s_cf.buf;
     const bool countAll = s_cf.countAll;
     memset(&s_cf, 0, sizeof(s_cf));
+    s_cf.said1 = -1;
     s_cf.countTex = tex; /* freed by rd__crack_fill_shutdown */
     s_cf.buf = buf;
     s_cf.countAll = countAll;
@@ -256,6 +259,11 @@ void rd__crack_fill_scene_made(void)
 {
     s_cf.pending = false; /* a count at the old size is dropped */
     note();
+}
+
+void rd__crack_fill_force_general(bool on)
+{
+    s_cf.general = on;
 }
 
 void rd__crack_fill_set_enabled(bool on)
@@ -602,9 +610,22 @@ void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCo
         skip(SKIP_DEPTH, tc);
         return;
     }
-    const RdPipeKeyInt kFill = rd__crack_fill_key(0), kCount = rd__crack_fill_key(1);
-    const RhiPipeline pFill =
-        g_rd.fs[RD_FS_CRACK_FILL].id ? rd__get_pipeline(&kFill) : (RhiPipeline){0};
+    /* a reach of at most 1 texel on both axes takes crack_fill1_ps (the
+     * same texels, the four neighbours read first) */
+    const bool one = !s_cf.general && g_rd.fs[RD_FS_CRACK_FILL1].id &&
+                     rd__crack_fill_reach(tc->sx) <= 1u && rd__crack_fill_reach(tc->sy) <= 1u;
+    const RdPipeKeyInt kFill = rd__crack_fill_key(one ? 2 : 0), kCount = rd__crack_fill_key(1);
+    const RhiPipeline pFill = g_rd.fs[one ? RD_FS_CRACK_FILL1 : RD_FS_CRACK_FILL].id
+                                  ? rd__get_pipeline(&kFill)
+                                  : (RhiPipeline){0};
+    if (pFill.id && s_cf.said1 != (int)one) {
+        s_cf.said1 = one;
+        rd__log("crack fill: %s (scale %.4gx%.4g, reach %ux%u texels)",
+                one ? "the reach-1 shader (crack_fill1_ps: the four neighbours first)"
+                    : "the general shader (crack_fill_ps)",
+                (double)tc->sx, (double)tc->sy, rd__crack_fill_reach(tc->sx),
+                rd__crack_fill_reach(tc->sy));
+    }
     /* the count's pipeline only where counting (the tests, --stats): a
      * missing one leaves the fill drawn, uncounted */
     const RhiPipeline pCount = s_cf.countAll && g_rd.fs[RD_FS_CRACK_COUNT].id
