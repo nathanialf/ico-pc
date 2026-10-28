@@ -135,6 +135,7 @@ add_library(ico_render STATIC
     rd_fx_plan.c # the frame-size post sprites' plan: fixed-function forms, local read
     rd_interp.c # interpolation between the retained frames
     rd_join.c
+    rd_local_probe.c # the desktop's local reads: the start-up cost probe
     rd_mesh.c
     rd_msaa.c # the MSAA epoch's resolve pass (the covered-majority rule) and its close line
     rd_passring.c # the last passes recorded, for the device-loss report
@@ -530,6 +531,13 @@ target_compile_options(rd_fog_selftest_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${IC
 target_include_directories(rd_fog_selftest_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_fog_selftest_test PRIVATE ico_render)
 
+# rd_local_probe_test: the desktop's local-read probe's verdict
+# (rd_local_probe.c rd__local_probe_keep) on synthetic times, no device.
+add_executable(rd_local_probe_test test/rd_local_probe_test.c)
+target_compile_options(rd_local_probe_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_local_probe_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_local_probe_test PRIVATE ico_render)
+
 # rd_crack_test: the crack filler above 1x (rd_crack_fill.c): a 1/16 GS
 # pixel crack between two triangles filled before the fog at 2x, 4x and a
 # fractional scale, a slit wider than the reach kept, nothing else changed,
@@ -754,7 +762,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_present_test rd_filter_test rd_interp_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_perf_test rd_boot_present_test rd_crt_test texpack_load_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
-                  rd_fx_frame_test rd_vu_frac_test rd_crack_test)
+                  rd_fx_frame_test rd_vu_frac_test rd_crack_test rd_local_probe_test)
 
 if(ICO_RUN_TESTS)
     add_test(NAME rd_state COMMAND rd_state_test "${CMAKE_CURRENT_BINARY_DIR}")
@@ -1641,6 +1649,39 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_date_selftest PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                      ENVIRONMENT "${_env_date_stencil}")
 endif()
+
+# The desktop's local reads and their start-up cost probe (rd_local_probe.c):
+# the verdict's rule on synthetic times (rd_local_probe_rule, no device), then
+# the probe on lavapipe (the desktop class, with local read) through
+# rd_fog_selftest_test with ICO_RD_LOCAL_PROBE=1 (a headless run keeps the
+# snapshots without it), the local reads' time biased by
+# ICO_RD_LOCAL_PROBE_SABOTAGE so both verdicts run: fast, the local reads
+# kept (the fog's depth path local at both scene sizes, "kept (probe x vs y
+# ms)"); slow, turned off ("DATE stencil off (probe)", every named target
+# made again, the fog's self-test run again: in place at both sizes)
+if(ICO_RUN_TESTS)
+    add_test(NAME rd_local_probe_rule COMMAND rd_local_probe_test)
+    add_test(NAME rd_local_probe_kept
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     -DFOG_PATH=local
+                     "-DRESULTS=local ok [0-2], copy not tried, inplace not tried, buffer not tried"
+                     "-DEXTRA=profile: local read on the desktop: kept \\(probe [0-9.]+ vs [0-9.]+ ms\\): "
+                     "-DEXTRA2=profile: ICO_RD_LOCAL_PROBE_SABOTAGE: "
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
+    set_tests_properties(rd_local_probe_kept
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                    ENVIRONMENT "${_env};ICO_RD_LOCAL_PROBE=1;ICO_RD_LOCAL_PROBE_SABOTAGE=fast")
+    add_test(NAME rd_local_probe_off
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     -DFOG_PATH=inplace
+                     "-DRESULTS=inplace ok [0-2], copy not tried, buffer not tried"
+                     "-DEXTRA=profile: local read on the desktop: off \\(probe: slower, [0-9.]+ vs [0-9.]+ ms\\): "
+                     "-DEXTRA2=profile: DATE stencil off \\(probe\\)"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
+    set_tests_properties(rd_local_probe_off
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                    ENVIRONMENT "${_env};ICO_RD_LOCAL_PROBE=1;ICO_RD_LOCAL_PROBE_SABOTAGE=slow")
+endif()
 # ---- FIXT: the tiler self-tests' failure paths ----
 # Under the MoltenVK report (ICO_VK_FAKE_LIMITS=moltenvk: the Apple row of the
 # device profile, fogLocal and dateStencil on as the profile's own, not
@@ -1866,7 +1907,9 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         rd_fog_selftest_7740 rd_fog_selftest_msaa_fallback ${_fullpixel}
         # not rd_fog_selftest_local and rd_date_selftest: their expected results
         # name the local-read fog path and the DATE stencil path, which OpenGL
-        # has not (localRead false: the copy and inplace paths, DATE by snapshot)
+        # has not (localRead false: the copy and inplace paths, DATE by snapshot);
+        # nor rd_local_probe_kept and rd_local_probe_off (the desktop's probe of
+        # Vulkan's local read: never on OpenGL)
         rd_vuprepass_selftest rd_vuprepass_selftest_plain
         rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off rd_vuprepass_selftest_ticks
         rd_vuprepass_selftest_sabotage_tri rd_vuprepass_selftest_unbatched)
