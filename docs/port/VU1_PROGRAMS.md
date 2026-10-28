@@ -388,10 +388,13 @@ up to 64 items with the same three is one point draw through the stage's batch b
 `ICO_VU_PRE_BATCH`). The batch's table, one `uint4` an item (x the item's first `SV_VertexID` in the
 draw, y its VuCB's float4 index in the ring, z its VuBoneCB's, w 0), is copied into the ring, and
 the batch's DrawCB (slot b1, which no record stage reads otherwise) carries the table's float4 index
-in `aux0.x` and its length in `aux0.y`. Group 1 binds the ring once more at t5, from offset 0 to the
-device's largest storage range (`ringRange`), as a `StructuredBuffer<float4>`
-(`port/shaders/vu_common.hlsli` (`vu_ring`)). Direct3D 11 never makes a batch module (no
-pre-pass there), so its VU groups leave t5 unbound (the layout keeps the slot): a bound storage
+in `aux0.x` and its length in `aux0.y`. Group 1 binds the ring once more at t5, from the replay's VU
+base (`s_ringBase`: the ring's offset, 256-aligned, when `rd__vu_prepass` begins, after the texture
+and mesh uploads, so a frame whose texture uploads grow the ring past the device's largest storage
+range still reaches every block the VU draws put after them) to that range (`ringRange`), as a
+`StructuredBuffer<float4>` (`port/shaders/vu_common.hlsli` (`vu_ring`)); every index into it counts
+from the base. Direct3D 11 never makes a batch module (no
+pre-pass there) and has the draw merge off, so its VU groups leave t5 unbound (the layout keeps the slot): a bound storage
 range is written to the GPU up to the ring's written mark at every submit there, and the ring would
 otherwise be written for every list with a VU draw, even when no draw streams from it.
 
@@ -419,6 +422,68 @@ pre-pass draws batched` or `; pre-pass draws one an entry` after the pre-pass's 
 statistics and `rd_replay_tool --stats` count the draws made (`RdPerfRecord.vuPreDraws`: one a
 batch); the start-up self-test checks the draws one an entry and stage would make
 (`rd__vu_prepass_entry_draws`).
+
+## The draw merge
+
+Every VU command is at least one GPU draw, whatever the game's culling said of it
+([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)), and its cost on the GPU is per draw,
+not per triangle: a PowerVR phone spent about 11 us a draw, 9.4 to 11.9 ms a picture on list 0's
+~900 draws at 2x (a reporter's log). Consecutive draws very often share every state but their
+VuCB: the same pipeline, the same stream buffer (one mesh arena chunk holds many meshes), the same
+textures, the same DrawCB bytes, FrameCB and scissor (the `--stats` line `VU merge: N draws in M
+runs` counts them: about half of the VU draws of a gameplay frame could join the draw before them).
+
+With the merge (`g_rd.vuMerge`, the default; `port/render/rd_replay_vu.c` (`vuDraw`, `vuRunTake`,
+`rd__replay_vu_flush`)) such a draw is held in an open run instead of drawn. A draw joins the run
+when it has one planned pass, an index list, a merge build (below), no DATE through the stencil bit,
+no destination read, is not one of code 36's cut and kick draws, is outside the loss bisect's window
+and the pass split, and has the same pipeline key, group 1 (the stream buffer, the record, the ring),
+group 2 (the textures and the sampler), DrawCB bytes, FrameCB, scissor, render pass and GPU timing
+effect as the run, up to 16 draws whose raised index values (below) stay within the device's
+(`maxDrawIndexedIndexValue`). Anything else that records ends the run first
+(`rd__replay_vu_flush`): the replay's `endPass` and `rd__replay_flush_run`, the walk before every
+command but the VU draws and the state commands, a new timing effect, the list's end, a VU draw
+under DATE (its snapshot or its stencil bit is recorded as it is bound) and every VU draw drawn
+alone. The run's draw sets the run's scissor where the draw being bound set its own since, and sets
+it back after.
+
+The run is one indexed draw. A run of one draws its own index list. A longer run copies its draws'
+index lists into the ring one after the other: the first draw's values as they are, each later
+draw's raised by `next - lo` (its lowest value `lo` moved to one past the highest value before it),
+so the draws' values are disjoint and in order. A table of one `uint4` a draw goes into the ring
+too: x the draw's first raised value (draw 0: the table's length), y its VuCB's float4 index in t5,
+z its VuBoneCB's, w its raise. The VuCB of every draw is copied into the ring as before, and its
+`mark[3]` lane, which nothing else reads, holds the table's index; b2 is bound at the first draw's.
+A draw alone through a merge build gets a table of one (its VuCB, raise 0). The span check of issue
+95 (`rd__span_range`) measures the run's raised values.
+
+The merge builds are the mesh and grid programs' entries and the main shader compiled with
+`ICO_VU_MERGE` (`vu_X_merge_vs` for `prelit`, `lit`, `lit_spec`, `reflect`, `grid`, `grid_lit` and
+`grid_spec`, their `vu_X_merge_plain_vs` where the fallback takes the plain variant
+([SHADERS.md](SHADERS.md#the-variants)), `vu_merge_main_vs`). Each entry begins with
+`VU_MERGE_ENTRY(vid)` (in the other builds `vid` itself, the modules unchanged word for word):
+`vu_merge_entry` reads the table's index from b2's `mark.w`, finds the index value's draw by a
+binary search over x of four fixed steps, loads its VuCB's vectors into the statics the batch build
+uses and reads `vu_mem`, `vu_ticks` and `vu_bone` an element at a time from t5
+([The pre-pass's batches](#the-pre-passs-batches)), and returns the value less the raise: the draw's
+own `kick * 4 + corner`. Every function then runs on the same bytes as the draw's own, so the
+triangles, their order and every pixel are the same. The pixel shaders read nothing of VuCB (the
+main shader hands the planes over as flat varyings), so they are unchanged.
+
+Every pipeline of those vertex shaders takes its merge build while the merge is on (the keys are the
+same: `port/render/rd_pipeline.c` takes the module by `g_rd.vuMerge`, set once at start, so the
+start-up set and the pipeline count do not change). The skinned programs and the particles have no
+merge build: their draws are one a command, as before. The merge serves both paths: the record's
+main shader and the programs' own entries (the tile-based GPUs', whose pre-pass is off). It is off
+on Direct3D 11 (its main draws do not bind t5), by `[dev] vu_merge = false` (`ICO_RD_VU_MERGE=0`:
+one GPU draw a VU draw through the plain builds, an A/B), or when a merge module is missing. The
+start line says which: `rd: VU merge: on: consecutive mesh and grid draws with the same pipeline,
+textures, DrawCB, FrameCB and scissor drawn as one indexed draw of up to 16, ...` or `rd: VU merge:
+off ...`, and the summary line has `VU merge on` or `VU merge off` after the pre-pass. `rd_replay_tool
+--stats` prints `VU merge: N draws in M GPU draws (K merged into G, A alone; merge on)` beside the
+count of what could join, and the window's 10 s line `VU merge: N draws a replay in G GPU draws, A
+alone` (`RdPerfRecord.vuMergeIn`, `vuMergeGpu`, `vuMergeAlone`). The merge builds are 6,719 to
+51,857 words (`vu_lit_merge_vs`), within their budgets, about 500 words above the plain builds.
 
 ## Tests
 
@@ -450,3 +515,11 @@ batches, at Original 4:3 1x, Enhanced 4:3 2x and Enhanced 16:9 2x: every target 
 same vertices, fewer pre-pass draws batched. `rd_vuprepass_selftest_unbatched` runs the pre-pass's
 start-up self-test one draw an entry; the other `rd_vuprepass_selftest` runs check that the
 default draws batched ([The pre-pass's batches](#the-pre-passs-batches)).
+
+`rd_vumerge_ab` (`port/render/test/rd_vumerge_ab.cmake`) replays the same dumps with every VU draw a
+GPU draw of its own (`ICO_RD_VU_MERGE=0`) and with the merge, through the record and through the
+programs' own entries (`ICO_RD_VU_PREPASS=0`), at Original 4:3 1x, Enhanced 4:3 2x and Enhanced 16:9
+2x: every target byte for byte, the merged run's GPU draws exactly the other's less what its runs
+joined, and fewer over the list. `rd_vuprepass_selftest_unmerged` runs the start-up self-test with
+the merge off; the other `rd_vuprepass_selftest` runs check that it is on and draw through it
+([The draw merge](#the-draw-merge)).
