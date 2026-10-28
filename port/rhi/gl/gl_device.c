@@ -761,6 +761,8 @@ static bool gl_check_version(void)
                          gl_has_extension("GL_ARB_texture_filter_anisotropic") ||
                          gl_has_extension("GL_EXT_texture_filter_anisotropic");
     g_gl.hasTimerQuery = gl_version_at_least(3, 3) || gl_has_extension("GL_ARB_timer_query");
+    g_gl.hasMultiBind = (gl_version_at_least(4, 4) || gl_has_extension("GL_ARB_multi_bind")) &&
+                        glf.BindBuffersRange;
     g_gl.hasS3tc = gl_has_extension("GL_EXT_texture_compression_s3tc");
     g_gl.hasBptc = gl_version_at_least(4, 2) || gl_has_extension("GL_ARB_texture_compression_bptc");
     snprintf(g_gl.adapterName, sizeof(g_gl.adapterName), "%s", gl_str(GL_RENDERER));
@@ -878,14 +880,15 @@ bool rhi_init(const RhiDeviceDesc *desc)
            g_gl.major, g_gl.minor, g_gl.core ? "core" : "compatibility", g_gl.versionText,
            gl_str(GL_SHADING_LANGUAGE_VERSION), g_gl.window ? "" : ", headless",
            l->maxDrawIndexedIndexValue);
-    GL_LOG("limits: uniform align %u, dual-source %s, MSAA %s, interlock %s (image units %d), "
-           "texture barrier %s, BC %s, anisotropy %.0f, max texture %u, entry points %u (%u "
-           "optional missing), debug output %s, clip origin lower left (vertex y negated)",
-           l->uniformAlign, l->dualSourceBlend ? "yes" : (s_fakeNoDual ? "no (faked)" : "no"), msaa,
-           l->fragmentInterlock ? "yes" : "no", g_gl.maxImageUnits,
-           g_gl.hasTextureBarrier ? "yes" : "no", l->bcTextures ? "yes" : "no",
-           (double)l->maxAnisotropy, l->maxTextureSize, gl_loader_count(), optionalMissing,
-           g_gl.debug ? "on" : "off");
+    GL_LOG(
+        "limits: uniform align %u, dual-source %s, MSAA %s, interlock %s (image units %d), "
+        "texture barrier %s, multi bind %s, BC %s, anisotropy %.0f, max texture %u, entry "
+        "points %u (%u optional missing), debug output %s, clip origin lower left (vertex y negated)",
+        l->uniformAlign, l->dualSourceBlend ? "yes" : (s_fakeNoDual ? "no (faked)" : "no"), msaa,
+        l->fragmentInterlock ? "yes" : "no", g_gl.maxImageUnits,
+        g_gl.hasTextureBarrier ? "yes" : "no", g_gl.hasMultiBind ? "yes" : "no",
+        l->bcTextures ? "yes" : "no", (double)l->maxAnisotropy, l->maxTextureSize,
+        gl_loader_count(), optionalMissing, g_gl.debug ? "on" : "off");
     /* the translated shaders' storage buffers (bindings 16 + t, t up to 5,
      * read by the VU vertex shaders: the stream t0, the record t4, the
      * ring t5 in the pre-pass's batch builds, three in one vertex shader)
