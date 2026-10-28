@@ -6,8 +6,9 @@
  *            attachment as an input attachment (Vulkan local read,
  *            RhiLimits.localRead; fog_lut_local_ps, rd_replay.c doFog):
  *            no pass ends and nothing is copied.  Offered where the
- *            device profile has it (RdProfile.fogLocal: a tile-based GPU
- *            with local read), tried first there; a fog whose depth is not
+ *            device profile has it (RdProfile.fogLocal: a device with
+ *            local read, a tile-based GPU or the desktop class where its
+ *            probe kept it), tried first there; a fog whose depth is not
  *            its colour target's own at that size takes the copy;
  *   inplace  the depth target sampled where it is (RHI_STATE_DEPTH_READ);
  *   copy     a whole copy of it (vkCmdCopyImage into a second depth-stencil
@@ -50,7 +51,7 @@
  * passes is the path from then on; none passing, buffer is kept (if the
  * device has it) and the log says so loudly:
  *   fog: depth path <name> (self-test: inplace ok 0, copy ok 0, buffer ok 0)
- * A path the profile does not offer (local on a desktop GPU) is left out of
+ * A path the profile does not offer (local without local read) is left out of
  * the line.  The local path failing turns the profile's fogLocal off
  * ("(self-test)", rd__profile_self_test_off); the order is then the
  * local one without it (copy, inplace, buffer), so a later run picks what
@@ -65,7 +66,10 @@
  * the self-test runs again (rd__fog_aa_reconcile) and measures the local
  * read itself.  Without MSAA a local trial that drew no local fog is
  * "local not run", a failure.  The first run runs DATE's self-test
- * (rd_date_selftest.c) before its own.
+ * (rd_date_selftest.c) before its own, and the desktop's local-read cost
+ * probe after it (rd_local_probe.c); when the probe turns the local reads
+ * off, the self-test runs again without the local path (the desktop
+ * order), so the path in force is one that passed.
  */
 #include <math.h>
 #include <stdio.h>
@@ -119,6 +123,7 @@ static struct {
 static struct {
     bool armed;       /* rd_fog_selftest ran: a new SCENE size runs it again */
     bool running;     /* its replays: no probe */
+    bool timing;      /* the local-read probe's replays: no probe, the fog as in a game frame */
     uint32_t samples; /* the MSAA sample count it last ran under (1: none) */
     bool localMsaa;   /* its local trial measured the MSAA fallback, not the local read */
     uint32_t w, h, tw, th;
@@ -384,7 +389,12 @@ static uint32_t gsZOf(uint32_t word, bool d24, float scale)
 
 bool rd__fog_probe_wanted(void)
 {
-    return g_rd.hasDevice && s_probe.armed && !s_probe.pending && !s_st.running;
+    return g_rd.hasDevice && s_probe.armed && !s_probe.pending && !s_st.running && !s_st.timing;
+}
+
+void rd__fog_timing(bool on)
+{
+    s_st.timing = on;
 }
 
 bool rd__fog_exact(void)
@@ -775,8 +785,8 @@ static void edgeHarvest(void)
 bool rd__fog_edge_due(bool want, const RdFogSource *src, const RdTargetRec *tz)
 {
     edgeHarvest();
-    if (!want || !g_rd.hasDevice || s_st.running || s_edge.pending || !tz || tz->tw < 4 ||
-        tz->th == 0 || g_rd.gsW < 2u * RD_FOG_EDGE_COLS ||
+    if (!want || !g_rd.hasDevice || s_st.running || s_st.timing || s_edge.pending || !tz ||
+        tz->tw < 4 || tz->th == 0 || g_rd.gsW < 2u * RD_FOG_EDGE_COLS ||
         !(depthRegionCopies() || src->aspect == RHI_ASPECT_COLOR)) {
         return false;
     }
@@ -1387,6 +1397,23 @@ static bool runSelftest(void)
     return result[chosen] == ST_OK;
 }
 
+/* The depth path the local-read probe's snapshot replays fog through: the
+ * one asked for, else the first the desktop order has on this device (the
+ * path the self-test would try first without the local read) */
+static int probeOffPath(void)
+{
+    if (s_override >= 0 && s_override != RD_FOG_LOCAL && rd__fog_path_supported(s_override)) {
+        return s_override;
+    }
+    for (int i = 0; i < RD_FOG_PATH_COUNT; i++) {
+        const int p = kOrderDesktop[i];
+        if (p != RD_FOG_LOCAL && rd__fog_path_supported(p)) {
+            return p;
+        }
+    }
+    return RD_FOG_COPY;
+}
+
 bool rd_fog_selftest(void)
 {
     if (!g_rd.inited || !g_rd.hasDevice) {
@@ -1394,13 +1421,21 @@ bool rd_fog_selftest(void)
     }
     /* DATE's self-test once a renderer (rd_init clears it), before the
        fog's first */
-    if (!g_rd.dateRan) {
+    const bool first = !g_rd.dateRan;
+    if (first) {
         g_rd.dateRan = true;
         (void)rd_date_selftest();
         (void)rd__fx_local_selftest(); /* it reads the readable passes DATE's path keeps */
     }
     s_st.armed = true;
-    return runSelftest();
+    bool ok = runSelftest();
+    /* the desktop's local reads timed against the snapshots, once a
+       renderer after its self-tests (rd_local_probe.c); turned off, the
+       depth path is chosen again without the local read */
+    if (first && rd__local_probe(probeOffPath()) == 0) {
+        ok = runSelftest();
+    }
+    return ok;
 }
 
 void rd__fog_aa_reconcile(void)
