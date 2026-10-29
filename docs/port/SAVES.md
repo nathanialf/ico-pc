@@ -127,7 +127,7 @@ reader. The host keeps the European `McFileInfo` on every disc and `mc_product_f
 first four, so on these discs the words named `cleared` and `playTime` hold the play time and the
 sofa: `layout_action.c` reads them through `la_preview_play` / `la_preview_sofa`, and the game-state
 view through the region row's `mc_preview_play` (1) and `mc_preview_sofa` (2) (the European
-program's 2 and 3). Before v0.9.5 the North American disc's summaries were converted to the European
+program's 2 and 3). Earlier the North American disc's summaries were converted to the European
 places while the game kept writing the disc's, so every save put the sofa where the play time goes
 and a load restarted the count (issue 160). The North American disc and the preview write the
 same directory, `BASCUS-97113ico`, but not the same records: the preview's story flags from 300 on

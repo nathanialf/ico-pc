@@ -536,7 +536,7 @@ The European, Japanese, Korean and Chinese discs draw the volume faces with the 
 the North American disc and the 2001 previews (August 6 and June 26) with 0x08 and 0xF8
 (`ico2/seki/src/Shadow.c` `emitVolumeStrip` and `emitVolumeStrip_jun26`,
 `PAL_NTSCAUG6JUN26`). So the GS leaves 4 n mod 256 on the first group and 8 n mod 256 = 8 (n mod
-32) on the second: the step, 4 or 8 (issue 159: before v0.9.5 the host hook `shadowHostStripPos`
+32) on the second: the step, 4 or 8 (issue 159: earlier the host hook `shadowHostStripPos`
 compared the face byte with 0x04 only, so every face of the second group counted as a decrement
 and the resolve wrote a near-white count, which the composite turned into a light magenta patch on
 the green-grey floors).
@@ -547,7 +547,7 @@ the green-grey floors).
   step in `b[0]`: 8, or 0 for the step 4, so the European disc's commands, its dumps and every
   older dump keep their bytes (`rd__shadow_step` reads it). A dump replays with its disc's step on
   any machine; `rd_replay_tool --list` prints `step N` on both commands and `tris +1 A -1 B` on
-  each volume command. A North American dump recorded before v0.9.5 has `+1 0` on every volume
+  each volume command. A North American dump recorded before the fix has `+1 0` on every volume
   command: its signs were lost at recording, and no replay can bring its shadow back.
 - **The volumes** are the same draws for both steps (write mask 0x3F): the stencil's n mod 64
   holds n mod 32 in its low five bits, 32 dividing 64.

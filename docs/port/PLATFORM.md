@@ -972,7 +972,7 @@ backend's progress (`hang`, `hangnodump`, `hangnot` in `port/platform/test/diag_
 lines, the dump before the report, the report's line, the box, the activity file's loss and the next
 start's count, the loss without a dump, and the freeze with no wait in progress.
 
-**The GPU hang limit** (v0.9.5, issue 123: a minute of black screen before the box on an Adreno
+**The GPU hang limit** (issue 123: a minute of black screen before the box on an Adreno
 740). The same end comes as soon as one wait for the GPU has lasted the limit, half the watchdog
 (`watchdog = 30`: 15 s; at least 2 s; `watchdog = 0` turns both off), not after the later limit's
 2 x `watchdog` without a Main tick. The watchdog's thread polls the backend's progress four times a

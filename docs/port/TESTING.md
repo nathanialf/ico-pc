@@ -1665,7 +1665,7 @@ rd_replay_tool loss.zip out.png --enhanced --resolution 3x --full-height --full-
   --present 3048x2032
 ```
 
-The list is issue 123's (a Qualcomm tiler on the v0.8.2 and v0.9.1 builds); for another phone
+The list is issue 123's (a Qualcomm tiler, two builds); for another phone
 the `rd: profile:` start line of its log says which switches its renderer ran with, the window
 line its resolution and screen size (`--resolution`, `--present`), and the loss diagnostics line
 whether robust access was on (`ICO_GPU_ROBUST`). `ICO_VK_VALIDATION=1` needs `VK_ADD_LAYER_PATH`
