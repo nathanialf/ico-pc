@@ -137,13 +137,31 @@ void gflagLoad(GamesysMemCursor *fp)
     }
 }
 
+/* PC port: port/core/region.c (the disc's flag count, the region table's
+   gflag_count) and port/platform/diag_host.h (a rate-limited log line) */
+int ico_region_gflag_count(void);
+void ico_host_gflag_range(int id, int write, int count, void *caller);
+
+/* PC port: a diagnostic only, the game's access goes ahead unchanged: an id
+   at or past the disc's flag count (a table of another disc's numbers, as
+   issue 160's keep list was) is logged with its caller */
+#define GFLAG_RANGE_NOTE(id, write)                                                                \
+    do {                                                                                           \
+        const int count_ = ico_region_gflag_count();                                               \
+        if ((unsigned int)(id) >= (unsigned int)count_) {                                          \
+            ico_host_gflag_range((id), (write), count_, __builtin_return_address(0));              \
+        }                                                                                          \
+    } while (0)
+
 int gflagChk(int bit_idx)
 {
+    GFLAG_RANGE_NOTE(bit_idx, 0); /* PC port */
     return (PAL_NTSCAUG6JUN26(gflags[bit_idx >> 3], gFlag[bit_idx >> 3]) >> (bit_idx & 7)) & 1;
 }
 
 void gflagOn(int bit_idx)
 {
+    GFLAG_RANGE_NOTE(bit_idx, 1); /* PC port */
     if (ICO_NTSCAUG6JUN26) {
         gFlag[bit_idx >> 3] |= 1 << (bit_idx & 7);
     } else {
@@ -153,6 +171,7 @@ void gflagOn(int bit_idx)
 
 void gflagOff(int bit_idx)
 {
+    GFLAG_RANGE_NOTE(bit_idx, 2); /* PC port */
     if (ICO_NTSCAUG6JUN26) {
         gFlag[bit_idx >> 3] &= ~(1 << (bit_idx & 7));
     } else {
