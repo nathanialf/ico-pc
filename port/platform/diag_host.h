@@ -519,8 +519,9 @@ void ico_diag_startup_activity_background(int background);
    count above 0), also ask the set to stop (ico_diag_low_memory_stop);
    the flag is set before the line is logged, from any thread. */
 void ico_diag_note_low_memory(int level);
-/* The start-up set's loop (rd.h rd_set_low_memory_fn), between two
-   batches: 1 when a low-memory signal asked the set to stop
+/* The start-up set's loop (rd.h rd_set_low_memory_fn): between two
+   batches, and under the careful policy (one thread, the cache written
+   each batch) before each pipeline: 1 when a low-memory signal asked the set to stop
    (ico_diag_note_low_memory), why holding the strongest level's name
    ("running critical", "running low"), else 0. A 1 marks the stop for
    ico_diag_startup_activity_budget_stop. Any thread. */
