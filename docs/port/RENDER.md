@@ -497,11 +497,9 @@ where the fold covers it whole). Of ten pairs 9 fold at 4:3 and 16:9, 8 at 48:9
 or [dev] blur_fold>): each staticBlur pair but a chain's last drawn as one pass (fx_blur2_ps)`;
 `--stats`: `blur pairs folded N`.
 
-**Store ops.** Every pass stores its colour and depth; the stencil's store follows the shadow
-window (`rd__stencil_ops_packed`). A plan that stores DONT_CARE for a depth or colour nothing reads
-later is not implemented: whether the next recorded frame or a keep replay's retained lists
-(`rd__first_list`) read a target cannot be known at a pass's begin, and nothing proves it there.
-`RdProfile.storePlan` is off on every class and nothing reads it.
+**Store ops.** Every pass stores its colour; a pass after its depth's last touch neither loads nor
+stores the depth ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)); else the stencil's store
+follows the shadow window (`rd__stencil_ops_packed`).
 
 **Exact blends.** `RDC_EXACT_BLEND` (from `rd_post` with `exactInt`) runs the GS integer blend
 through `blend_int` on RGBA8_UINT copies of both targets and copies the result back; source and
@@ -1704,7 +1702,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | blend | fixed-function; `[dev] blend` opts into an exact mode | fixed-function; `[dev] blend = storage` opts into the ROV | fixed-function | fixed-function | fixed-function | fixed-function | fixed-function |
 | `fogLocal` | on (probe) | off | on where local read is offered | same | same | same | same |
 | `dateStencil` | on (probe) | off | on where local read is offered | same | same | same | same |
-| `storePlan` | off | off | off | off | off | off | off |
+| `storePlan` | on | on | on | on | on | on | on |
 | `blurFold` | on | on | on | on | off (the G52 is bound by its ALU) | on | on |
 | robust access | off | its own bounds rules | off | off | off | off | off |
 | `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
@@ -1725,7 +1723,7 @@ paths](#destination-reads-and-blend-paths)), robust access the Vulkan backend's
 (`port/rhi/vk/vk_device.c`; [RHI.md](RHI.md#device-loss)); the profile reports both. The other
 flags are decisions: `fogLocal` offers the fog's `local` path, tried first by its self-test,
 `dateStencil` DATE through the stencil bit, decided by its self-test, `blurFold` the folded
-staticBlur pairs ([The replay](#the-replay)); `storePlan` has no mechanism. `alphaPlan` offers the alpha/blend
+staticBlur pairs ([The replay](#the-replay)); `storePlan` [the store plan](WORK_BUFFERS.md#the-store-plan). `alphaPlan` offers the alpha/blend
 planner ([The alpha plan](#pipelines)), `fxPlan` the frame-size post sprites drawn without their snapshot
 ([Post passes](#post-passes)), `fxDstLocal` the post sprites that read their destination by the local read
 inside the open pass (it needs `fx_local_ps` and is decided
@@ -1757,7 +1755,7 @@ wrong turns the flag off (`rd__profile_self_test_off`): the flag is marked `(sel
 line `rd: profile: <flag> off (self-test)` is logged. The start line, once a run (abridged):
 
 ```
-rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores kept; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; alpha plan on; fx plan on; fx local read on; VU planes whole scales only; pipelines the start-up set
+rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores planned; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; alpha plan on; fx plan on; fx local read on; VU planes whole scales only; pipelines the start-up set
 ```
 
 On desktop Vulkan with local read, "(probe)" marks the three local-read flags where the start-up cost probe
@@ -1765,7 +1763,7 @@ found them slower, and both lines end with its words: [WORK_BUFFERS.md](WORK_BUF
 
 and the `ico_pc: summary:` line (abridged) carries the flags as in force after the blend's text
 (`rd__profile_text`; `port/render/rd_core.c` (`rd_summary_text`)): `profile tile-based GPU
-(Imagination, Vulkan): fog local on, DATE stencil, depth stores kept, blur fold on, local read
+(Imagination, Vulkan): fog local on, DATE stencil, depth stores planned, blur fold on, local read
 yes, uint views off, alpha plan on, fx plan on, fx local on, VU planes whole scales only`. The four planner flags read
 `on`/`off` and `whole scales only`/`every scale` (`vuPlanesFrac` off); a flag a key or a self-test changed is marked as the others are. The Vulkan version is not in the class name (`RhiLimits` does not carry
 it); the `rhi_vk:` device line has it.
