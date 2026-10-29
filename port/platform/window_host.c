@@ -5818,8 +5818,8 @@ static void pace(int hz)
     }
     s_pres.budget.presents = 0; /* the step's presents (pace_budget_step) */
     s_pres.budget.optional = 0;
-    /* paced by the GPU's time with vsync off only (pace_policy.h) */
-    s_pres.budget.paced = !s_pres.vsync;
+    /* paced by the GPU's time: vsync off or mailbox in use (pace_policy.h) */
+    s_pres.budget.paced = pace_budget_paced_mode(s_pres.vsync, rhi_present_mailbox());
     s_deadline += period;
     s_pres.statVsyncs++;
     const int newFrame = frame_seen(s_deadline - period);
@@ -5971,8 +5971,7 @@ static void pace(int hz)
             const int guard = now >= s_deadline || s_pres.paceSlow || s_pres.offScreen ||
                               (!s_pres.fifoLock && now + s_pres.cost > s_deadline);
 
-            if (guard || !pace_budget_allows_paced(&s_pres.budget, false, s_pres.gpuNs,
-                                                   s_pres.stepNs, period)) {
+            if (guard || !pace_budget_allows_paced(&s_pres.budget, false, s_pres.gpuNs, period)) {
                 if (!guard) {
                     s_pres.budget.refused++;
                 }
