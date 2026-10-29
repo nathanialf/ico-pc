@@ -1995,6 +1995,14 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
     static RhiBindGroupLayout bl[RD_PIPE_BATCH][4];
     static RhiPipeline bp[RD_PIPE_BATCH];
     static float bms[RD_PIPE_BATCH];
+    static uint32_t bIdx[RD_PIPE_BATCH]; /* each batch key's place in keys */
+    /* the careful policy (one thread, the cache written after each batch):
+     * the low-memory signal is asked before each pipeline, not only after
+     * the batch (issue 161: a batch in flight under "running critical" took
+     * 3.3 s while the whole device froze).  Other policies keep the check
+     * after the batch: their batches run on threads at once. */
+    const bool perPipe = times != NULL && s_lowMemoryFn != NULL && s_setPolicy.cacheEachBatch &&
+                         s_setPolicy.maxThreads == 1u;
     /* a failed key's line: when it was asked for */
     const char *when = times != NULL ? "in the start-up set" : "in a replay's gathered keys";
     PreBatch pb = {0, m, 0, 0};
@@ -2049,6 +2057,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                 continue;
             }
             bk[nb] = *k;
+            bIdx[nb] = i;
             dstKind = kind;
             nb++;
         }
@@ -2094,18 +2103,48 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             RhiPipelineBatch batch = {preWait, &pb, bms, 1, s_setPolicy.maxThreads};
             pb.base = first;
             c->batches++;
+            uint32_t made = nb;
+            char lowMem[48];
+            lowMem[0] = '\0';
+            bool lowMidBatch = false;
             const long beforeKb = budgeted ? residentKb() : -1;
             RhiStats st0, st1;
             rhiPipeCounts(&st0);
             const double bt0 = rd__now_ms();
-            rhi_create_pipelines(bd, nb, bp, &batch);
+            if (perPipe) {
+                made = 0;
+                for (uint32_t j = 0; j < nb; j++) {
+                    if (s_lowMemoryFn(lowMem, sizeof(lowMem)) != 0) {
+                        lowMidBatch = true;
+                        break;
+                    }
+                    RhiPipelineBatch one = {preWait, &pb, bms + j, 1, s_setPolicy.maxThreads};
+                    pb.base = bIdx[j];
+                    rhi_create_pipelines(&bd[j], 1, &bp[j], &one);
+                    made = j + 1;
+                    if (one.threads > batch.threads) {
+                        batch.threads = one.threads;
+                    }
+                    if (pb.stop) {
+                        break;
+                    }
+                }
+                if (made < nb) {
+                    /* the keys not made stay for first use */
+                    i = bIdx[made];
+                }
+            } else {
+                rhi_create_pipelines(bd, nb, bp, &batch);
+            }
             const double batchMs = rd__now_ms() - bt0;
             rhiPipeCounts(&st1);
             /* the batch's failures share one reason (failReason says when
                the batch had two) */
             char why[224];
             failReason(&st0, &st1, why, sizeof(why));
-            batchTimes(bk, bms, nb, first + 1, i, m, batchMs, batch.threads);
+            if (made > 0) {
+                batchTimes(bk, bms, made, first + 1, i, m, batchMs, batch.threads);
+            }
             if (times != NULL && i < m &&
                 (s_setPolicy.cacheEachBatch || rd__now_ms() - s_setSavedMs >= RD_SET_SAVE_MS) &&
                 cacheKeptPerBatch()) {
@@ -2116,9 +2155,19 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                 (void)rhi_pipeline_cache_save();
                 s_setSavedMs = rd__now_ms();
             }
-            char lowMem[48];
-            if (times != NULL && i < m && s_lowMemoryFn != NULL &&
-                s_lowMemoryFn(lowMem, sizeof(lowMem)) != 0) {
+            if (lowMidBatch) {
+                /* the signal came inside the batch: pipelines `made` of the
+                 * batch's `nb` are done, the set stops before the next */
+                snprintf(c->budget, sizeof(c->budget),
+                         "(memory budget: the system reported low memory (%s) at pipeline %u of "
+                         "%u (in the batch, %u of its %u made); the rest is made as the game "
+                         "needs it)",
+                         lowMem, i + 1, m, made, nb);
+                rd__log("pipelines: the start-up set stopped at pipeline %u of %u, inside a batch "
+                        "of %u (%u made), at the system's low-memory signal (%s)",
+                        i + 1, m, nb, made, lowMem);
+            } else if (!perPipe && times != NULL && i < m && s_lowMemoryFn != NULL &&
+                       s_lowMemoryFn(lowMem, sizeof(lowMem)) != 0) {
                 /* the system reported low memory (issue 128: the Adreno
                  * 740 handheld's system took the process's pages back and
                  * ended it while its set went on): the set stops here,
@@ -2153,7 +2202,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             if (batch.threads > c->threads) {
                 c->threads = batch.threads;
             }
-            for (uint32_t j = 0; j < nb; j++) {
+            for (uint32_t j = 0; j < made; j++) {
                 bool found;
                 const uint32_t at = probeKey(&bk[j], &found);
                 if (bms[j] > s_preLongestMs) {
