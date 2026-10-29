@@ -1904,6 +1904,7 @@ static void _la_mask_preview_info(void)
 static inline void playTime_jun26(struct McPreview *p, int *hour, int *min,
                                   int *sec) /* derived name */
 {
+    /* PC port: la_preview_play, the disc's play-time word */
     *sec = (la_preview_play(p) / FRAME_RATE) % 60;
     *min = (la_preview_play(p) / (FRAME_RATE * 60)) % 60;
     *hour = (la_preview_play(p) / (FRAME_RATE * 3600)) % 100;
@@ -1915,7 +1916,7 @@ static inline void playTime_jun26(struct McPreview *p, int *hour, int *min,
 static inline void playTime_aug6(struct McPreview *p, int *hour, int *min,
                                  int *sec) /* derived name */
 {
-    int frames = la_preview_play(p);
+    int frames = la_preview_play(p); /* PC port: the disc's play-time word */
 
     *sec = (frames / FRAME_RATE) % 60;
     *min = (frames / (FRAME_RATE * 60)) % 60;
@@ -1937,7 +1938,7 @@ static inline void playTime(struct McPreview *p, int *hour, int *min, int *sec) 
         playTime_aug6(p, hour, min, sec);
         return;
     }
-    int frames = la_preview_play(p);
+    int frames = la_preview_play(p); /* PC port: the disc's play-time word */
     int fps = ((60 - systemStatus[0] * 10) / systemStatus[1]) * systemStatus[1];
 
     *sec = (frames / fps) % 60;
@@ -1988,6 +1989,7 @@ static void _la_set_preview_info_jun26(void)
 
     n = previewInfo.stage;
     if (n >= 3 && n < 56) {
+        /* PC port: la_preview_sofa, the disc's sofa word */
         switch (la_preview_sofa(&previewInfo) + 42) { /* the demo's ids 42 lower */
         case 329:
             n = 39;
@@ -2053,6 +2055,7 @@ static void _la_set_preview_info(void)
         }
     }
     if (n >= 3 && n < 56) {
+        /* PC port: la_preview_sofa, the disc's sofa word */
         switch (la_preview_sofa(&previewInfo) +
                 PAL_NTSC_AUG6JUN26(0, 30, 31)) { /* NTSC ids 30 lower, AUG6 ids 31 lower */
         case 329:
@@ -2650,7 +2653,7 @@ static inline void gflagRestoreState(void) /* derived name */
         if (keepFlags[i]) {
             gflagOn(keepFlagWord(i)); /* PC port: keepFlagNo[i] */
         } else {
-            gflagOff(keepFlagWord(i));
+            gflagOff(keepFlagWord(i)); /* PC port: keepFlagNo[i] */
         }
     }
 }
