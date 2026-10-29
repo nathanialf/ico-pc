@@ -1972,8 +1972,10 @@ int rd_perf_pass_label(const RdPerfPass *p, char *buf, size_t n);
  * dual-source blending); DST a destination read or DATE through the
  * stencil bit; BLEND the cut's blend form cannot give Cs per pixel (the
  * premultiplied adds and subtracts, the Ad forms, Cd*As + Cd); PLANES the
- * cut's pixel shader without the planes (vu_np_ps, which does not read the
- * mark); PLANS the two plans differ in more than the blend */
+ * cut's pixel shader reads no mark (neither vu_ps / vu_texa_ps, which read
+ * VuVSOut.r.w, nor a no-planes twin without a clip plane, which reads the
+ * plane distance's sign: none expected); PLANS the two plans differ in more
+ * than the blend */
 enum {
     RD_VU_FUSE_OFF,
     RD_VU_FUSE_BUILD,
