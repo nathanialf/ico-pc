@@ -997,7 +997,9 @@ static void gpu_dump_stub(void)
 }
 
 /* "hang": the dump noted; "hangnodump": no dump function; "hangnot": no
-   wait for the GPU in progress. The later limit (1 s) ends the run. */
+   wait for the GPU in progress. The later limit (1 s) ends the run.
+   "hanglimit": the GPU hang limit (2 s) ends it before the later limit
+   (60 s), the dump noted. */
 static void hang_child(const char *mode, const char *log)
 {
     char path[300];
@@ -1005,10 +1007,17 @@ static void hang_child(const char *mode, const char *log)
     ico_diag_set_version("test 1");
     (void)ico_diag_startup_activity_begin(path, 0);
     gpu_fake_waiting = strcmp(mode, "hangnot") != 0;
-    ico_diag_set_gpu_hang(gpu_fake, strcmp(mode, "hang") == 0 ? gpu_dump_stub : NULL);
+    ico_diag_set_gpu_hang(gpu_fake, strcmp(mode, "hang") == 0 || strcmp(mode, "hanglimit") == 0
+                                        ? gpu_dump_stub
+                                        : NULL);
     ico_diag_set_fatal_ui(loss_box, NULL);
     fake_ticks = 1;
-    ico_diag_start(0, 1);
+    if (strcmp(mode, "hanglimit") == 0) {
+        ico_diag_set_gpu_hang_limit(2.0);
+        ico_diag_start(0, 60);
+    } else {
+        ico_diag_start(0, 1);
+    }
     ico_diag_present_enter();
     pause_ms(5000);
     ico_diag_log("test: the watchdog did not fire");
@@ -2015,6 +2024,32 @@ int main(int argc, char **argv)
         if (fails) {
             printf("--- hangnot log ---\n%s\n", read_file(log));
         }
+        remove(act);
+        remove(ends);
+        /* the GPU hang limit (issue 123: ico_diag_set_gpu_hang_limit, 2 s
+           here): the GPU hang's end comes at the limit, not at the later
+           limit (60 s), its WATCHDOG line naming the submission and the
+           limit, the rest the hang's (the dump, the hang's loss line) */
+        r = run(argv[0], "hanglimit", log);
+        s = read_file(log);
+        CHECK(r == 4);
+        CHECK(strstr(s, "GPU hang limit 2.0 s for one wait for the GPU (0 = off)") != NULL);
+        CHECK(strstr(s, "ico_pc: WATCHDOG: the GPU: submission 263 not finished after 60 s "
+                        "(limit 2 s); the newest is 263, the newest seen finished 262\nico_pc: "
+                        "the graphics driver did not finish the picture (submission 263 has not "
+                        "finished after a 60 s wait)\n") != NULL);
+        CHECK(strstr(s, "test: hang dump\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the run ended: the graphics driver stopped responding "
+                        "(watchdog)\n") != NULL);
+        CHECK(strstr(s, "test: the watchdog did not fire") == NULL);
+        CHECK(strstr(s, "no new Main tick") == NULL);
+        CHECK(strcmp(read_file(act),
+                     "test 1\n\nloss dump (the driver hung): /logs/loss-hang.zip") == 0);
+        if (fails) {
+            printf("--- hanglimit log ---\n%s\n", read_file(log));
+        }
+        remove(act);
+        remove(ends);
         clear_dir(rdir);
         rmdir(rdir);
     }
