@@ -172,7 +172,11 @@ typedef enum RdStencilMode {
     RD_STENCIL_DATE_TEST0,
     RD_STENCIL_DATE_TEST1,
     RD_STENCIL_DATE_TEST0_SET,
-    RD_STENCIL_DATE_TEST1_CLR
+    RD_STENCIL_DATE_TEST1_CLR,
+    /* the shadow resolve's A on a disc whose count steps by 8 (rd_shadow.c
+     * "The step"): NOTEQUAL 0 under read mask 0x1F, the five bits 8 n mod
+     * 256 keeps */
+    RD_STENCIL_TEST_NONZERO5
 } RdStencilMode;
 
 typedef enum RdTargetFormat {
@@ -1461,7 +1465,9 @@ void rd_shadow_strip(const float (*v)[4], uint32_t count, float sign, RdKey key)
  * face colour 0x04 or 0xFC by its facing, so a pixel ends at 4 n mod 256
  * for n the net count of the faces in front of the scene.  rd keeps n mod
  * 64 in the stencil of the bound depth target (INCR_WRAP / DECR_WRAP under
- * write mask 0x3F) and writes the same colour at the resolve.
+ * write mask 0x3F) and writes the same colour at the resolve.  The North
+ * American disc and the 2001 previews use 0x08 and 0xF8, the step 8: a
+ * pixel ends at 8 n mod 256 = 8 (n mod 32), the count's low five bits.
  *
  * rd_shadow_count_target  the per-frame stand-in for FBP 0x142: an RGBA8
  *                       target of the scene size gsW x gsH, created by the
@@ -1469,20 +1475,25 @@ void rd_shadow_strip(const float (*v)[4], uint32_t count, float sign, RdKey key)
  *                       outside a frame
  * rd_shadow_reset        shadow_Reset's clear of FBP 0x142: the stencil of
  *                       the bound depth target to 0 (the colour target is
- *                       written whole by the resolve)
+ *                       written whole by the resolve); the step 4
+ * rd_shadow_reset_step   the same with the disc's step, 4 (0x04 / 0xFC) or
+ *                       8 (0x08 / 0xF8; anything else is taken as 4): the
+ *                       reset and the resolve after it carry it, so a dump
+ *                       replays with it on any machine
  * rd_shadow_tris         shadow_RenderVolume's strips as triangles: v holds
  *                       3 x triCount XYZ2 (x, y, z; the rest unused), sign[t]
  *                       > 0 for a triangle whose last vertex had the colour
- *                       0x04 (flat shading), < 0 for 0xFC.  Depth-tested
- *                       with the state's TEST against the bound depth
- *                       target, no colour or depth writes
+ *                       0x04 or 0x08 (flat shading), < 0 for 0xFC or
+ *                       0xF8.  Depth-tested with the state's TEST against
+ *                       the bound depth target, no colour or depth writes
  * rd_shadow_resolve      the count into the bound colour target: RGB =
- *                       4 n mod 256, A = 0x80 where that is not 0, else 0
+ *                       step x n mod 256, A = 0x80 where that is not 0, else 0
  *                       (the TEXA expansion shadow_Draw's PSMCT24 read of
  *                       FBP 0x142 applies, TA0 0x80 AEM, baked so the chain
  *                       filters expanded texels as the GS does) */
 RdTarget rd_shadow_count_target(uint32_t gsW, uint32_t gsH);
 void rd_shadow_reset(void);
+void rd_shadow_reset_step(uint32_t step);
 void rd_shadow_tris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, RdKey key);
 void rd_shadow_resolve(void);
 
