@@ -29,6 +29,11 @@ int ico_region_new_game_flag(const char **disc_id)
     return r->gflag_new_game;
 }
 
+int ico_region_gflag_count(void)
+{
+    return ico_region_cur()->gflag_count;
+}
+
 int ico_region_start_stage(const char *value, int *max)
 {
     const int last = ico_region_cur()->start_stage_max;

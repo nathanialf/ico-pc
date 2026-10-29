@@ -234,6 +234,11 @@ const IcoRegionInfo *ico_region_cur(void);
    la_host_new_game_go raises after the New Game screen's confirm. */
 int ico_region_new_game_flag(const char **disc_id);
 
+/* The selected disc's story flag count (gflag_count): gflag.c's
+   gflagChk/gflagOn/gflagOff log an id at or past it (diag_host.h
+   ico_host_gflag_range). */
+int ico_region_gflag_count(void);
+
 /* A [dev] start_stage or switch_to value (ICO_START_STAGE, ICO_SWITCH_TO:
    decimal digits only) as a stage of the selected disc: 1 ..
    start_stage_max (105 on the European disc, 103 on the Japanese, Korean,
