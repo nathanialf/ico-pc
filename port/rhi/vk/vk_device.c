@@ -1637,8 +1637,20 @@ static bool vkr_create_device(void)
         }
         snprintf(s_robustText, sizeof s_robustText, "%s", robustSay);
         s_robustDefaultOff = !g_vkr.robust && !wantRobust && robustSaid != 0;
+        /* the host's GPU hang limit (port/platform/gpu_hang.h; main_host.c
+           sets ICO_GPU_HANG_LIMIT before the window opens): one wait for
+           the GPU that long ends the run as a GPU hang */
+        const char *hangEnv = getenv("ICO_GPU_HANG_LIMIT");
+        char hangSay[48];
+        if (hangEnv == NULL || hangEnv[0] == '\0') {
+            snprintf(hangSay, sizeof hangSay, "not set (the watchdog's own limits)");
+        } else if (strtod(hangEnv, NULL) <= 0.0) {
+            snprintf(hangSay, sizeof hangSay, "off (watchdog = 0)");
+        } else {
+            snprintf(hangSay, sizeof hangSay, "%.0f s", strtod(hangEnv, NULL));
+        }
         VKR_LOG("loss diagnostics: fault report %s; checkpoints %s; resource addresses %s; robust "
-                "access %s",
+                "access %s; hang limit %s",
                 g_vkr.deviceFault ? "on" : "not offered",
                 g_vkr.checkpoints ? "on (gpu_checkpoints)"
                 : wantCheck       ? "asked for, not offered"
@@ -1646,7 +1658,7 @@ static bool vkr_create_device(void)
                 g_vkr.addressReport ? "on (gpu_checkpoints)"
                 : wantCheck         ? "asked for, not offered"
                                     : "off",
-                robustSay);
+                robustSay, hangSay);
     }
 
     /* The dynamic state (RhiLimits.dynamicDepth, dynamicBlend; rd's
