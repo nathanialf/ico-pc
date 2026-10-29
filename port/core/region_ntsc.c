@@ -37,6 +37,12 @@ const IcoRegionInfo ico_region_info_ntsc = {
                                          mcard.c product_write's sizeof; no cameraMove or
                                          palMode, no 8-byte member */
 
+    /* IosMcPreviewInfo's words (layout_action.c, the 2001 arms): stage, play
+       time (la_playtime_count / la_game_loop's [1]), sofa (la_save_processing's
+       [2]), a word no code reads; the decomp's McPreview of these discs */
+    .mc_preview_play = 1,
+    .mc_preview_sofa = 2,
+
     .has_50hz_row = 0,      /* NTSC only: no 50 Hz branches */
     .has_game_language = 0, /* kanbanBoot.c sets no NonLinearCameraMove (PAL's language
                                step and texFile's cameraMove are not in it) */

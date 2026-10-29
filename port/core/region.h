@@ -82,6 +82,13 @@ typedef struct IcoRegionInfo {
        directory with records of another layout (port/save/mc_host.c
        sceMcInit) */
     const char *mc_card_suffix;
+    /* the card preview record the game keeps in IosMcPreviewInfo
+       (port/game/gamestate.c's snapshot): the word holding the play time in
+       frames and the one holding the save's sofa (GetSaveSofaLayoutID).  The
+       European program's record is stage, cleared, play time, sofa; the 2001
+       discs' stage, play time, sofa (issue 160) */
+    int mc_preview_play;
+    int mc_preview_sofa;
 
     /* --- the game's options ------------------------------------------- */
     int has_50hz_row;      /* the game offers 50/60 Hz (the port's row too) */

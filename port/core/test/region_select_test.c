@@ -224,6 +224,13 @@ static void test_consistency(void)
         /* every disc's DATA.DF holds STGSTAFF1.DF .. STGSTAFF3.DF but the June
            2001 demo's (49 entries) */
         CHECK(r->credits_staff_packs == !jun26);
+        /* the card preview's play time and sofa words: [2] and [3] of the
+           European program's record, [1] and [2] of the 2001 discs' (issue
+           160) */
+        {
+            const int y2001 = strcmp(r->slug, "ntsc") == 0 || aug6 || jun26;
+            CHECK(r->mc_preview_play == (y2001 ? 1 : 2) && r->mc_preview_sofa == (y2001 ? 2 : 3));
+        }
     }
     CHECK(strcmp(ico_region_info_pal.key_prefix, "") == 0 &&
           strcmp(ico_region_info_pal.key_suffix, "") == 0);

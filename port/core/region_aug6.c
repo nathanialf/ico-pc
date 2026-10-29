@@ -46,11 +46,17 @@ const IcoRegionInfo ico_region_info_aug6 = {
                                          mcard.c product_write's sizeof; no cameraMove or
                                          palMode, no 8-byte member */
     /* PC port: the preview's card is a folder of its own, memcard-preview
-       beside memcard: its records are not the North American disc's (mcard.c
-       product file summaries stage, cleared, playTime, sofa against stage,
-       playTime, sofa, word10; story flags from 300 on one lower, gflag_new_game
-       348 against 349), so one card would mix them */
+       beside memcard: its records are not the North American disc's (the
+       product file's previews are the same four words, stage, play time,
+       sofa and an unread word, but the story flags from 300 on are one lower,
+       gflag_new_game 348 against 349), so one card would mix them */
     .mc_card_suffix = "-preview",
+
+    /* IosMcPreviewInfo's words (layout_action.c, the 2001 arms): stage, play
+       time (la_playtime_count / la_game_loop's [1]), sofa (la_save_processing's
+       [2]), a word no code reads; the decomp's McPreview of these discs */
+    .mc_preview_play = 1,
+    .mc_preview_sofa = 2,
 
     .has_50hz_row = 0,      /* NTSC only: main.c systemStatus starts {0, 2, ...}, nothing sets
                                word 0 (no 50 Hz video mode) */
