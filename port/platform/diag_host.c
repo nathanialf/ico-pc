@@ -1157,6 +1157,26 @@ void ico_host_gflag_range(int id, int write, int count, void *caller)
                     what[write >= 0 && write <= 2 ? write : 0], count, d);
 }
 
+void ico_host_item_held(int kind, int motion, int girl)
+{
+    if (!inited) {
+        return;
+    }
+    ico_log_limited("item: an item taken", "ico_pc: item: %s takes an item of kind %d (motion %d)",
+                    girl ? "Yorda" : "Ico", kind, motion);
+}
+
+void ico_host_item_watch_null(int motion, float frame, float anim_frame)
+{
+    if (!inited) {
+        return;
+    }
+    ico_log_limited("item watch: null item skipped",
+                    "ico_pc: item watch: a mode-2 motion %d at frame %g (item frame %g) with no "
+                    "item held: the null read skipped",
+                    motion, (double)anim_frame, (double)frame);
+}
+
 void ico_host_stage_switch(int stage, float fade_in, float fade_out, int cmd, int queued,
                            int queued_stage)
 {

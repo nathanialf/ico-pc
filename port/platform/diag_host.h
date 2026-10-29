@@ -905,6 +905,17 @@ void ico_host_kanban_step(int boot_step, int mc_check_step);
    line "gflag: flag <id> read|set|cleared past the disc's <count> flags
    (from <caller>)", key "gflag: flag id past the disc's flags". */
 void ico_host_gflag_range(int id, int write, int count, void *caller);
+/* fumi/src/act-game.c ItemHold: Ico (girl 0) or Yorda (girl 1) took an
+   item of kind `kind` (sugipon item.h GetItemKind) in motion `motion`. A
+   rate-limited line "item: Ico|Yorda takes an item of kind K (motion M)",
+   key "item: an item taken" (the first 8, then every 100th). */
+void ico_host_item_held(int kind, int motion, int girl);
+/* fumi/src/act-game.c ACTItemWatchMotion_ntscaug6jun26, case 2: a mode-2
+   motion before its frame with no item held, where the 2001 builds read a
+   null item (the port keeps the later builds' guard). A rate-limited line
+   "item watch: a mode-2 motion M at frame A (item frame F) with no item
+   held: the null read skipped", key "item watch: null item skipped". */
+void ico_host_item_watch_null(int motion, float frame, float anim_frame);
 /* common/src/StageManager.c stgmgrForceSwitch and
    stgmgrForceSwitchWithFadeColor: a stage-switch request (cmd 0 without a
    fade, 1 with one), the message queue holding `queued` untaken requests
