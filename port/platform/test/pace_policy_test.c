@@ -170,21 +170,6 @@ static void testAutoResolution(void)
    as "uncapped" does (the clamp: 120 on 60 Hz); a limit equal to the
    refresh or below it, and any limit under FIFO, keep their own;
    "uncapped" without vsync has no gap */
-/* pace_gap_adapt: a wait over an eighth of a refresh grows the gap by the
-   wait (to four times the base), no wait shrinks it a sixteenth of a refresh
-   toward the base, never below it */
-static void testGapAdapt(void)
-{
-    const uint64_t r = 8333333, base = r - r / 16;
-
-    CHECK(pace_gap_adapt(0, base, 0, r) == base);
-    CHECK(pace_gap_adapt(base, base, 7200000, r) == base + 7200000);
-    CHECK(pace_gap_adapt(base, base, r / 8, r) == base);
-    CHECK(pace_gap_adapt(base * 4, base, 9000000, r) == base * 4);
-    CHECK(pace_gap_adapt(base + 7200000, base, 0, r) == base + 7200000 - r / 16);
-    CHECK(pace_gap_adapt(base + 100, base, 0, r) == base);
-}
-
 static void testPresentGap(void)
 {
     static const struct {
@@ -2035,7 +2020,6 @@ int main(void)
 
     testAutoResolution();
     testPresentGap();
-    testGapAdapt();
     testCapEqualsRefresh();
     testLimiterGrid();
     testLockTable();

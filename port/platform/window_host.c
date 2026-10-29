@@ -152,7 +152,6 @@ static struct {
     Uint64 tickAt, tickPrev; /* the pace deadlines (simulated time) the last two frames closed at */
     Uint64 lastPresent;      /* the last present's start (the alpha clock's) */
     Uint64 nextPresent;      /* when the next present is due (0: now); pace_next_present keeps */
-    Uint64 gapAdapt;         /* the uncapped mailbox gap adapted to the display (pace_gap_adapt) */
     Uint64 cost;             /* how long the last rd_present took */
     PaceHist paceHist;       /* the last presents' costs (pace_policy.h) */
     bool paceSlow;           /* pace_slow_present after the last present */
@@ -473,7 +472,7 @@ static void video_settings(RdSettings *rs, int w, int h)
         0; /* the clamp's line again after a settings change */
     if (s_pres.framerate != ico_video_framerate()) {
         /* a new limit starts a new grid and a new present allowance */
-        s_pres.nextPresent = s_pres.gapAdapt = 0;
+        s_pres.nextPresent = 0;
         timer_budget_reset();
     }
     s_pres.framerate = ico_video_framerate();
@@ -5867,8 +5866,8 @@ static void pace(int hz)
     {
         /* "uncapped" under a mailbox swapchain (vsync on, or off with no
            immediate mode: Android's compositor blocks a present once its
-           queue is full): one a refresh, adapted to the display's pace.
-           Immediate: back to back (pace_present_gap) */
+           queue is full): one a refresh.  Immediate: back to back
+           (pace_present_gap) */
         const int uncappedMailbox =
             s_pres.framerate == ICO_FRAMERATE_UNCAPPED && rhi_present_mailbox();
         gap = s_pres.fifoLock ? 0
@@ -5876,9 +5875,6 @@ static void pace(int hz)
                                                  rhi_present_mailbox(), refresh);
         if (!gap) {
             s_pres.nextPresent = 0;
-        } else if (uncappedMailbox) {
-            gap = s_pres.gapAdapt =
-                pace_gap_adapt(s_pres.gapAdapt, gap, s_pres.displayWaitNs, refresh);
         }
         if (uncappedMailbox && !s_pres.vsync && !s_pres.mailboxOffLogged) {
             s_pres.mailboxOffLogged = 1;

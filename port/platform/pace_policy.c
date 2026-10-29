@@ -47,24 +47,6 @@ uint64_t pace_present_gap(int cap, bool uncappedVsync, bool mailbox, uint64_t re
     return cap > 0 ? 1000000000ull / (uint64_t)cap : 0;
 }
 
-uint64_t pace_gap_adapt(uint64_t prev, uint64_t base, uint64_t waitNs, uint64_t refreshNs)
-{
-    /* a present that waited for the display found the compositor's queue
-       full (an Android mailbox at a reported 120 Hz consumed fewer): the gap
-       grows by the wait, up to four refreshes; a present that did not wait
-       lets it shrink a sixteenth of a refresh back toward the base */
-    const uint64_t most = base * 4;
-    uint64_t g = prev < base ? base : prev;
-
-    if (waitNs * 8 > refreshNs) {
-        g = g + waitNs > most ? most : g + waitNs;
-    } else if (g > base) {
-        const uint64_t step = refreshNs / 16;
-        g = g - base > step ? g - step : base;
-    }
-    return g;
-}
-
 bool pace_cap_equals_refresh(int cap, uint64_t refreshNs)
 {
     if (cap <= 0 || refreshNs == 0) {
@@ -310,7 +292,7 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
        (the lock's skip guard's exception).  Paced (vsync off or mailbox,
        Vulkan: the fence waits are counted apart), also a step late by no
        more than that wait and a refresh: a mailbox present blocked on a
-       full compositor queue, which the gap adapts to (pace_gap_adapt); not
+       phone's compositor, excused while it lasts; not
        under FIFO or the lock, where OpenGL's fence waits count as the
        display's and the wait cannot tell a slow card apart */
     const bool excused = displayWaitNs * 4 >= refreshNs &&

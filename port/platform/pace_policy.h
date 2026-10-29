@@ -289,15 +289,6 @@ uint64_t pace_display_wait(uint64_t dispNs, uint64_t fenceNs, uint64_t costNs,
  * 0 (no gap: back to back) otherwise, i.e. "uncapped" without vsync. */
 uint64_t pace_present_gap(int cap, bool uncappedVsync, bool mailbox, uint64_t refreshNs);
 
-/* The "uncapped under mailbox" gap adapted to the display's real pace: prev
- * the gap in force (0 at first), base pace_present_gap's, waitNs the last
- * present's wait for the display, refreshNs the reported refresh; grows by
- * a wait over an eighth of a refresh (to four times the base), else shrinks
- * a sixteenth of a refresh toward the base.  A phone's compositor that
- * takes fewer presents than its panel reports blocked each present and
- * held the game's step with it. */
-uint64_t pace_gap_adapt(uint64_t prev, uint64_t base, uint64_t waitNs, uint64_t refreshNs);
-
 /* True when a numeric cap (cap > 0) asks for more presents than the
  * display's refresh in mailbox mode: 1e9 / cap below refreshNs and the cap
  * not equal to the refresh (pace_cap_equals_refresh: 60 on 59.94 or 60.00
