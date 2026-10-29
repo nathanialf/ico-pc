@@ -370,7 +370,7 @@ path's and the lock's together, the lock having the late arm only, [Pacing](#pac
 allowance of the path in use (`presents held to A a step (lowest L, R refused, D drops, C climbs,
 climbs refused X)`, or `presents paced to N.N a step (...)` while the timer path's allowance is
 unbound and [paced by the GPU](#the-present-allowance) at under 8 a step (N.N the budget's presents
-a step, `(period - step) / G`), or `presents not held (...)` while it is unbound otherwise, and
+a step, `period / G`), or `presents not held (...)` while it is unbound otherwise, and
 `lowest not held` when it was unbound all block: the allowance now and its lowest in the block, the
 in-between presents it refused, its drops and climbs and the climbs its GPU gate refused in the
 block; then `GPU G ms a timed replay`, the median of the last 8 timed presented replays' GPU time
@@ -419,7 +419,8 @@ lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,
   asked for);
 - a refused climb: `window: presents stay at A a step: GPU G ms x K + step T ms is not under the
   period P ms (S steps since the drop; back to H when it is)`;
-- the paced budget (the timer path with vsync off), when its value rounded to a tenth changes:
+- the paced budget (the timer path with vsync off or mailbox), when its value rounded to a tenth
+  changes:
   `window: presents paced by the GPU: N.N a step|not held (GPU G ms a picture, period P ms)` (`not
   held` at 8 a step or more).
 
@@ -689,23 +690,36 @@ alpha stays the grid's.
 - A resync does not reset it; a new lock, a frame rate change, leaving the lock, the pace reset
   (back from the background) and a display change (the GPU times with it:
   [run-time changes](#video-options-and-presets)) do.
-- **Paced by the GPU** (issue 130; the timer path with vsync off: Uncapped and numeric
-  rates; FIFO, the mailbox clamp above the refresh and the lock keep the whole-number rule above).
-  A whole number a step cannot say "between 1 and 2": an RTX 4090 at 16x needing 11-17 ms a
-  picture was held to 1 a step, 60 a second, by the climb gate (`2 x 12 + step` is over the
-  period), where the uncapped presents without an allowance had been 60-89 a second. With G known an in-between present may start while
-  `(presents so far this step + 1) x G + step <= period + carry` (`pace_budget_allows_paced`; the
-  new frame's own present is always made and counted), carry being the time the step before left
-  unused, `min(period, max(0, period + carry - presents x G - step))`, reset to 0 by a late step
-  and halved by a step that ended past its due time by less than half a period. The presents a step
-  then average `(period - step) / G`, the GPU's own pace: with a 0.5 ms step, 12 ms pictures give
-  1, 1, 2 a step (80 a second), 9 ms ones 1, 2, 2, 2, 1, ... (107), 17 ms ones with a game frame
-  every two steps never two in a step (57, under the GPU's own 58), 1 ms ones bind nothing. The
-  step term keeps a margin: the simulation step and the GPU partly overlap, so the budget is a
-  little under what the GPU could do. The arm, drop and hold stay as the safety net (the held
-  allowance binds as well as the budget); the climb after the hold is straight home at its last
-  step (no 60-step probe: the budget is the gate). With no GPU time (no timestamps, or not timed
-  yet) the whole-number rule and its probing climb are as above.
+- **Paced by the GPU** (issue 130; the timer path where a present never waits for the display:
+  vsync off (immediate) or the swapchain in mailbox mode, `pace_budget_paced_mode` with
+  `rhi_present_mailbox`, so never on D3D12 with vsync on and not where the surface keeps FIFO;
+  Uncapped and numeric rates, the mailbox clamp above the refresh included). A whole number a step cannot say "between 1 and 2":
+  an RTX 4090 at 16x needing 11-17 ms a picture was held to 1 a step, 60 a second, by the climb
+  gate (`2 x 12 + step` is over the period), where the uncapped presents without an allowance had
+  been 60-89 a second; a PowerVR phone with vsync off needing 20 ms a picture was held to the
+  game's own 30 (the first paced rule, `2 x G + step <= period + carry`, needed 47 ms in at most
+  33.4) where the GPU could draw 50 a second. With G known the budget is a signed running balance
+  of GPU time, `balance`, within one period either way: every present, the new frame's (always
+  made) too, owes G, every step pays a period, and an in-between present may start while
+  `balance - (presents so far this step + 1) x G >= -period` (`pace_budget_allows_paced`): the
+  GPU's backlog never passes one period, the latency bound. At the step's end (`pace_budget_step`)
+  `balance = clamp(balance - presents x G + period, -period, +period)`, then 0 after a late step
+  (the safety net's lateness: half a period or more, not excused) and a positive balance halved
+  by a step that ended past its due time by less. There is no step term: the simulation step
+  runs while the GPU draws. The presents a step then average `period / G`, the GPU's own pace;
+  with a game frame every two steps 12 ms pictures give 83 a second (1, 1, 2 a step), 9 ms 111,
+  17 ms 58, 20 ms 50, 25 ms 40 (one in-between every six steps), 29 ms the new frames only (30:
+  a step after a new frame never has the time for one more within a period owed), 1 ms ones bind
+  nothing. A new frame the GPU cannot keep up with is still made; the balance stops at a period
+  owed, so a lighter scene gets its in-betweens back within a few steps. The arm, drop and hold
+  stay as the safety net (the held allowance binds as well as the budget); the climb after the
+  hold is straight home at its last step (no 60-step probe: the budget is the gate). With no GPU
+  time (no timestamps, or not timed yet) the whole-number rule and its probing climb are as above.
+- **FIFO keeps the whole-number rule** (vsync on without mailbox, the cap equal to the refresh,
+  and the lock): a present there blocks until the display takes it, so the display's refresh, not
+  the GPU, sets the pace; an in-between costs a whole refresh of the step's time whatever the GPU
+  needs, and a balance of GPU time would allow presents the display then makes the step wait for.
+  The display-wait excuse above already keeps that wait from counting against the GPU.
 
 Presents that keep up never end a step half a period late, and then the whole-number allowance
 binds nothing: the presents are those of the rule before (`pace_policy_test` (`testBudgetTimerLoop`): a GPU of 4 or 12 ms a
@@ -728,12 +742,15 @@ allowance may reach 0 under the n = 1 lock. The reporters' sequences are replaye
 (`testBudgetSustained`); issue 126's OpenGL wait excused where Vulkan's same numbers drop and
 come back, and its GPU-bound OpenGL blocks at 0 (`testBudgetGlWait126`); the drop, climb, refused
 climb and 10 s words on those sequences (`testBudgetLines`, with the lock's clock part,
-`pace_lock_timing_text`, and the paced words). The paced budget: `testBudgetPaced` (the 12, 9, 17
-and 1 ms patterns above, no timestamps as before, the safety net and the straight climb) and
-`testBudgetPacedLoop` (the timer path's fake clock, back to back with a 3 ms step: at 12, 9, 17
-and 20 ms no step a quarter of a period late, no drop, at least the budget's presents and never
-more GPU time than there was; 25 ms the new frames only; 1 ms the rule before's presents to the
-one).
+`pace_lock_timing_text`, and the paced words). The paced budget: `testBudgetPaced` (vsync off
+and mailbox paced, FIFO not; the 12, 9, 17, 20, 25, 29 and 1 ms rates above over 120 steps with
+the lowest balance each ends a step with, never past a period owed; a new frame every step on a
+29 ms GPU holds the balance at a period owed, no in-between; no timestamps as before; the safety
+net, the straight climb and the halving) and `testBudgetPacedLoop` (the timer path's fake clock,
+back to back with a 3 ms step and a game frame every two steps: at 12, 9, 17, 20 and 25 ms no
+step a quarter of a period late, no drop, no picture queued behind more than a period of GPU
+time, at least `600 x period / G - 5` presents in 600 steps and never more GPU time than there
+was; 29 ms the new frames only; 1 ms the rule before's presents to the one).
 
 Limits: D3D12 has no mailbox and may lack timestamps (as may OpenGL without `ARB_timer_query` and
 Direct3D 11 where its timestamp queries cannot be made), so the climb
