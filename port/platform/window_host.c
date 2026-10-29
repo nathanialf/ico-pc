@@ -2895,7 +2895,6 @@ static int device_lost_quit(void)
                      "github.com/nathanialf/ico-pc/issues and attach the newest file in logs "
                      "that starts with report- (this time: %s): it shows what was being drawn.",
                      report);
-            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC", text, s_window);
         } else if (dumpName[0] != '\0') {
             snprintf(also, sizeof(also), " and the file %s beside it", dumpName);
         } else {
@@ -2910,8 +2909,14 @@ static int device_lost_quit(void)
                      "drawn.",
                      logs[0] != '\0' ? " (" : "", logs, logs[0] != '\0' ? "/ico-pc.log)" : "", also,
                      dumpName[0] != '\0' ? "together they show" : "it says");
-            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC", text, s_window);
         }
+#ifdef __ANDROID__
+        const char *note = ico_gpu_driver_android_hang_note(); /* issue 123 */
+        if (note != NULL) {
+            snprintf(text + strlen(text), sizeof(text) - strlen(text), "\n\n%s", note);
+        }
+#endif
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC", text, s_window);
 #else
         char text[1024];
         char also[256];
