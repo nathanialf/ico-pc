@@ -230,9 +230,9 @@ static sceVu0IVECTOR barLine[4][2] = {{{0, 3, 0, 0}, {7, 3, 0, 0}},
 /* .data: the game-flag ids the load carries across gflagInit, each disc's
    own five (that build's flag numbers; the last is its "new game started"
    flag).  On the June 2001 demo progressive_bar's table barLine follows the
-   list, then the key-config tables; on the other discs the key-config
-   tables follow it directly.  The keep/restore loops below walk twenty
-   words. */
+   list (16-aligned, at .data+0x20), then the key-config tables; on the
+   other discs the key-config tables follow it (8-aligned, at .data+0x18).
+   The keep/restore loops below walk twenty words. */
 static int keepFlagNo_pal[5] = {388, 384, 383, 385, 382}; /* PAL, JPN, KOR, CN; derived name */
 
 static int keepFlagNo_ntsc[5] = {355, 351, 350, 352, 349}; /* derived name */
@@ -249,10 +249,14 @@ static int keyConfigSlot[8] = {1, 2, 3, 4, 5, 0, 0, 0}; /* derived name */
 
 /* PC port: the keep/restore loops read twenty words from the disc's
    keepFlagNo: its five ids, then what follows the list in that disc's EE
-   .data (the first fifteen words of barLine on the June 2001 demo,
-   keyConfigCode and the first seven keyConfigSlot on every other disc), so
-   a load also keeps those words as game flag ids.  The host keeps the
-   arrays apart and reads the same twenty words, in the disc's order,
+   .data, the alignment's zero padding included (the decomp's objects:
+   keepFlagNo at .data+0, 20 bytes; keyConfigCode at +0x18 and keyConfigSlot
+   at +0x38 on every disc but the June 2001 demo, barLine at +0x20 there).
+   So the walk is the five ids, one zero word, keyConfigCode[0..7] and
+   keyConfigSlot[0..5] on those discs, and the five ids, three zero words
+   and barLine's first twelve words on the June 2001 demo; a load keeps
+   those words as game flag ids too (flag 0 for a pad word).  The host keeps
+   the arrays apart and reads the same twenty words, in the disc's order,
    through this (issue 160: one European list on every disc re-raised the
    North American disc's new-game flag 349 on Continue). */
 static int keepFlagWord(unsigned int i) /* PC port */
@@ -265,8 +269,19 @@ static int keepFlagWord(unsigned int i) /* PC port */
     }
     j = i - 5;
     if (ICO_JUN26) {
+        /* the zero padding at .data+0x14 to 0x1F, then barLine */
+        if (j < 3) {
+            return 0;
+        }
+        j -= 3;
         return barLine[j / 8][(j / 4) % 2][j % 4];
     }
+    /* the zero padding word at .data+0x14, then keyConfigCode and
+       keyConfigSlot[0..5] */
+    if (j == 0) {
+        return 0;
+    }
+    j -= 1;
     return j < 8 ? keyConfigCode[j] : keyConfigSlot[j - 8];
 }
 
@@ -278,6 +293,18 @@ void la_host_keep_words(int out[20])
 
     for (i = 0; i < 20; i++) {
         out[i] = keepFlagWord(i);
+    }
+}
+
+/* PC port: for the keep-flag test only, the key-config slots as the
+   Button configuration screen leaves them (its first entry and its reset
+   item set keyConfigSlot[k] = k) */
+void la_host_set_key_config_slots(const int slots[8])
+{
+    unsigned int i;
+
+    for (i = 0; i < 8; i++) {
+        keyConfigSlot[i] = slots[i];
     }
 }
 
