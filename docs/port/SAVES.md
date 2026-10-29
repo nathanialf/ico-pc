@@ -116,12 +116,22 @@ The other three discs (the North American disc, the August 2001 preview and the 
 shorter product file, 0x18C bytes (`mc_product_size`): upstream's `McProductFile` for them is twenty
 16-byte file summaries (0x140), then the sound, output and vibration options and the 64-byte pad
 configuration, with no `controlType`, current file, serial, `cameraMove` or `palMode` (upstream's
-`ico2/common/include/typedef.h`, its `VERSION_NTSC`/`AUG6`/`JUN26` arm; the file summary differs
-inside it: the North American disc's has `playTime`, `sofa` and an unread word, the preview's and the
-demo's a `cleared` word, `playTime` and `sofa`). The North American disc and the preview write the
-same directory, `BASCUS-97113ico`, but not the same records: the preview's file summaries are
-`stage`, `cleared`, `playTime`, `sofa` against the North American `stage`, `playTime`, `sofa`, unread
-word, and its story flags from 300 on are one lower (New Game 348 against 349, the queen 306 against
+`ico2/common/include/typedef.h`, its `VERSION_NTSC`/`AUG6`/`JUN26` arm). Each file summary is four
+words on all three discs: the stage, the play time in frames, the sofa and a word no code reads.
+That is how their code uses the record (upstream's 2001 `McPreview` in `layout_action.c`:
+`la_playtime_count` and `la_game_loop` count `IosMcPreviewInfo[1]`, `la_save_processing` puts the
+sofa in `[2]`, and the record is copied whole between `IosMcPreviewInfo` and the product file);
+upstream's `McFileInfo` names for the preview and the demo (`cleared`, `playTime`, `sofa`) have no
+reader. The host keeps the European `McFileInfo` on every disc and `mc_product_from_2001` /
+`mc_product_to_2001` (`ico2/fumi/ios/mcard.c`) move the four words in the disc's order into its
+first four, so on these discs the words named `cleared` and `playTime` hold the play time and the
+sofa: `layout_action.c` reads them through `la_preview_play` / `la_preview_sofa`, and the game-state
+view through the region row's `mc_preview_play` (1) and `mc_preview_sofa` (2) (the European
+program's 2 and 3). Before v0.9.5 the North American disc's summaries were converted to the European
+places while the game kept writing the disc's, so every save put the sofa where the play time goes
+and a load restarted the count (issue 160). The North American disc and the preview write the
+same directory, `BASCUS-97113ico`, but not the same records: the preview's story flags from 300 on
+are one lower (New Game 348 against 349, the queen 306 against
 307: `region_ntsc.c`, `region_aug6.c` `gflag_*`; upstream `layout_action.c` keepFlagNo). On one
 card each would misread and rewrite the other's saves, so the port gives the preview a card folder
 of its own beside the configured one (a PC port divergence): `IcoRegionInfo.mc_card_suffix`

@@ -134,7 +134,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   American disc's `BASCUS-97113ico` and the August 2001 preview's (the same directory, in its own
   card folder `<card>-preview`: every row's `mc_card_suffix` and `ico_host_card_dir_beside`
   checked, and the import files the directory as the North American disc's) with their
-  own 0x18C-byte record and a 25,596-byte game block with no option words (`save_ntsc`,
+  own 0x18C-byte record (each file summary the host record's first four words in order) and a
+  25,596-byte game block with no option words (`save_ntsc`,
   `save_aug6`), and the June 2001 demo's `BISCUS-97113ico` with the preview's record, a 20,480-byte
   game block and icon files that end in a 4-byte sum and are written only when absent
   (`save_jun26`); each imports a card holding its directory and one other disc's side by side and
@@ -155,7 +156,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   compiled in) against the same rows: slug, disc id, boot file, product name, archive and image
   names; every value of the Japanese row, the Korean row's resolved ids and fields, every field of
   the North American, August 2001 and June 2001 rows (pinned), and `ico_region_stage` on the 2001
-  discs (the demo's own order by stage name) (`region_select`).
+  discs (the demo's own order by stage name), and every row's card preview words
+  (`mc_preview_play` and `mc_preview_sofa`: 2 and 3 on the European program's discs, 1 and 2 on
+  the 2001 discs) (`region_select`).
 
 ### port/data/test
 
@@ -223,7 +226,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   condition, suspension, `achievements.toml` round trips, the popup gap (125 Main ticks at 25 Hz,
   150 at 30 Hz) and every disc's keys in one file (`stats.stages` / `stats.stages_jpn` / `stats.stages_kor`,
   `run.slot_N_*` / `run.jpn_slot_N_*` / `run.kor_slot_N_*`, one set of unlocks), with the disc its
-  second argument selects (`achievements`, `achievements_jpn`, `achievements_kor`).
+  second argument selects (`achievements`, `achievements_jpn`, `achievements_kor`); the play time
+  and the save's sofa are written to each disc's own preview words (literals: `[2]`/`[3]` on the
+  European program's discs, `[1]`/`[2]` on the 2001 discs: issue 160).
 - `appearance_disc_test.c`: the characters' colours against the disc's CLUTs (`appearance_disc`).
 - `appearance_test.c`: the recolour on synthetic CLUTs: identity, coverage, swatches, randomize
   (`appearance`).
@@ -1296,8 +1301,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   scrolled by nine Downs, `settings_main_scrolled.png`, and the Picture and Developer pages, `settings_picture.png` and `settings_developer.png`); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,
   `settings_render_kor`); `cn` the same for the Asian disc (`settings_cn`, `settings_extra_cn`,
   `settings_extras_cn`, `settings_render_cn`, `ui_cn`, `gallery_cn`, `model_viewer_cn`); `ntsc`,
-  `aug6` and `jun26` run settings_extra_test's Game variants page and the Options window
-  (`testScroll`) only (`settings_extra_ntsc`, `settings_extra_aug6`, `settings_extra_jun26`: Cross
+  `aug6` and `jun26` run settings_extra_test's Game variants page, the Options window
+  (`testScroll`) and the boot's hand-over to the title with Skip the opening
+  (`testSkipOpeningTitle`: the boot's layout 4 handing over to 51, the title 9; issue 160) only
+  (`settings_extra_ntsc`, `settings_extra_aug6`, `settings_extra_jun26`: Cross
   confirms, the 2001 notes, the demo's 7-hit barrier, its toughness row without American and no
   Debug menu row; the window's edge moves through that disc's own cursor move).
 - `settings_extra_test.c`'s `testScroll` (the Options window, [UI.md](UI.md#the-window)): Controls
