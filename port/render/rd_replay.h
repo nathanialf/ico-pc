@@ -299,6 +299,23 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, RhiTexture
                          RhiState *dstState, const IcoDrawCB *reduceCb);
 void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds,
                             IcoDrawCB *cb);
+/* rd_const_read.c: a staticBlur sprite whose source target holds only its
+ * last clear drawn untextured in that colour (docs/port/WORK_BUFFERS.md, "A
+ * cleared source read as its colour").
+ * rd__const_cmd        every command the list loop walks
+ *                      (rd__replay_fold_at): the actions counted
+ * rd__const_note_clear rd_replay.c pendClear: target id's colour cleared
+ *                      to col (k / 255)
+ * rd__const_read       doBlurSpriteDraw, a sprite into tc (tcId) sampling
+ *                      target src (srcId) with TEXFMT tfmt: true when src
+ *                      held only its clear, p->rgba then the texture
+ *                      function's colour of it (the sprite drawn
+ *                      untextured); counts RdPerfRecord.constReads /
+ *                      constKept (rd__const_reads_on: rd_internal.h) */
+void rd__const_cmd(const RdCmd *c);
+void rd__const_note_clear(uint32_t id, const RdTargetRec *t, const float col[4]);
+bool rd__const_read(const RdTargetRec *tc, uint32_t tcId, const RdTargetRec *src, uint32_t srcId,
+                    const RdDrawState *d, RdPostRec *p, uint32_t tfmt);
 /* rd_replay_tiler.c (docs/port/RENDER.md, "The replay").
  * rd__replay_date_take  DATE's stencil bit written in the draw's pass
  *                       (bindDrawEx, a draw with DrawSetup.dateStencil);
