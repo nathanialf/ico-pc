@@ -558,6 +558,13 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_fuse", "true"), "1") == 0);
     CHECK(ico_dev_env_value("vu_fuse", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.vu_fuse"), "vu_fuse") == 0);
+    /* constant_reads: a cleared source read as its colour, the A/B switch
+       (port/render/rd_const_read.c rd__const_reads_on) */
+    CHECK(strcmp(ico_dev_env_name("constant_reads"), "ICO_RD_CONSTANT_READS") == 0);
+    CHECK(strcmp(ico_dev_env_value("constant_reads", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("constant_reads", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("constant_reads", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.constant_reads"), "constant_reads") == 0);
     /* crack_fill: the crack filler above 1x's A/B switch
        (port/render/rd_crack_fill.c rd__crack_fill_init) */
     CHECK(strcmp(ico_dev_env_name("crack_fill"), "ICO_RD_CRACK_FILL") == 0);
