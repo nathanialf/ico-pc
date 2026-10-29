@@ -227,6 +227,17 @@ static const PeekWant kPeekWant[] = {
     {0x00679410u, 0x00272D30u, 0, 0x0067AB3Cu, 0x002695B8u, 12, 44, 16},           /* jun26 */
     {0x00633890u, 0x002A3040u, 0x00634548u, 0x0063513Cu, 0x00299940u, 13, 50, 24}, /* cn */
 };
+/* IosMcPreviewInfo's play time word on each disc, in config/regions.txt's
+   order, as literals: [2] on the European program's discs (la_playtime_count
+   counts IosMcPreviewInfo[2]), [1] on the North American disc and the 2001
+   previews (their la_playtime_count / la_game_loop count [1], and
+   la_save_processing puts the sofa in [2]: the decomp's 2001 McPreview); the
+   sofa is the word after it (issue 160) */
+static const int kPreviewPlay[] = {2, 2, 2, 1, 1, 1, 2};
+#define PLAY (kPreviewPlay[ico_region])
+#define SOFA (kPreviewPlay[ico_region] + 1)
+_Static_assert(sizeof(kPreviewPlay) / sizeof(kPreviewPlay[0]) == ICO_REGION_COUNT,
+               "a preview layout for each row of config/regions.txt");
 _Static_assert(sizeof(kPeekWant) / sizeof(kPeekWant[0]) == ICO_REGION_COUNT,
                "a row of retail addresses for each row of config/regions.txt");
 
@@ -240,7 +251,7 @@ static void test_view(void)
     g.stage_no = ST_WINDMILL;
     g.stage_name = "st09a (WINDMILL)";
     g.game_clear = 1;
-    g.mc_preview[2] = 50 * 3725; /* frames at 50 a second: 1 h 2 min 5 s */
+    g.mc_preview[PLAY] = 50 * 3725; /* frames at 50 a second: 1 h 2 min 5 s */
     g.weapon_kind = 5;
     g.hand_held = 1;
     g.girl_present = 1;
@@ -293,7 +304,7 @@ static void test_view(void)
         }
         CHECK(ico_gs_peek(layout, 4, &v) == 0 &&
               v == (unsigned)R->layout_save_complete); /* current_layout_id */
-        CHECK(ico_gs_peek(preview + 8, 4, &v) == 0 && v == 50u * 3725u);
+        CHECK(ico_gs_peek(preview + 4u * (unsigned)PLAY, 4, &v) == 0 && v == 50u * 3725u);
         CHECK(ico_gs_peek(preview + w->previewBytes - 4, 4, &v) == 0);
         CHECK(ico_gs_peek(preview + w->previewBytes, 4, &v) == -1);
         if (pal) {
@@ -335,7 +346,7 @@ static void test_signals(void)
 
     /* polled: a save (layout 38 then 41), a load (25), a new game (382) */
     g.layout = R->layout_pause; /* any layout before the save-complete one */
-    g.mc_preview[3] = 1203;
+    g.mc_preview[SOFA] = 1203;
     ticks(1);
     g.layout = R->layout_save_complete;
     ticks(1);
@@ -469,7 +480,7 @@ static void save_on(int sofa)
 {
     g.layout = R->layout_pause; /* any layout before the save-complete one */
     ticks(1);
-    g.mc_preview[3] = sofa;
+    g.mc_preview[SOFA] = sofa;
     g.layout = R->layout_save_complete;
     ticks(1);
     g.layout = R->layout_play;
@@ -479,7 +490,7 @@ static void save_on(int sofa)
 static void ending(int clear_before, int play_seconds)
 {
     g.game_clear = clear_before;
-    g.mc_preview[2] = play_seconds * 50;
+    g.mc_preview[PLAY] = play_seconds * 50;
     ico_gs_signal(ICO_GS_EV_ENDING, clear_before);
     ticks(1);
 }
@@ -761,7 +772,7 @@ static void test_persistence(void)
 
     start("persist");
     new_game();
-    g.mc_preview[2] = 50 * 754;
+    g.mc_preview[PLAY] = 50 * 754;
     stage(ST_GATE);
     stage(ST_WINDMILL);
     kills(3);
