@@ -6528,6 +6528,11 @@ inline void ACTGame_SendSoundMail(GObj *self, int mail, GObj *from, int mot, int
     }
 }
 
+/* PC port: port/platform/diag_host.h (rate-limited log lines: an item
+   taken, and the North American twin's mode-2 null read skipped) */
+void ico_host_item_held(int kind, int motion, int girl);
+void ico_host_item_watch_null(int motion, float frame, float anim_frame);
+
 static void ItemHold(Act *sub, GObj *self) /* derived name */
 {
     if (sub->heldItem.i != 0) {
@@ -6537,6 +6542,8 @@ static void ItemHold(Act *sub, GObj *self) /* derived name */
         return;
     }
     HoldItem(sub->heldItem.p, self);
+    /* PC port: a line per item taken (rate-limited), so a log shows pickups happen */
+    ico_host_item_held(GetItemKind(sub->heldItem.p), GOBJ_SUB(self)->ctrl.motion, self == girlGObj);
 }
 
 static void ItemRelease(Act *sub) /* derived name */
@@ -6587,11 +6594,18 @@ static void ACTItemWatchMotion_ntscaug6jun26(GObj *self)
     case 2:
         if ((float)frame < GOBJ_SUB(self)->ctrl.animFrame) {
             ItemHold(sub, self);
-        } else {
+        } else if (sub->heldItem.i != 0) {
+            /* PC port: the 2001 builds read a null item here (the EE reads
+               its low RAM, the host faults); the later builds' guard, as
+               the European arm below */
             float pos[4];
             GetRootPosition(pos, sub->heldItem.p);
             SetDirectRootPositionNoFittingWithNodePoint(self, 0x16, pos, 0.2f);
             debug_StdPrintfDummy("!!\n");
+        } else {
+            /* PC port: the null read skipped, logged (rate-limited) */
+            ico_host_item_watch_null(GOBJ_SUB(self)->ctrl.motion, (float)frame,
+                                     GOBJ_SUB(self)->ctrl.animFrame);
         }
         break;
 
