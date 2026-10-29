@@ -307,11 +307,14 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
 {
     const unsigned before = b->allow;
     /* the display's own wait, less than a refresh late: not the renderer
-       (the lock's skip guard's exception; a mailbox present blocked on a
-       full compositor queue is not excused further: OpenGL's fence waits
-       count as the display's, so the wait cannot tell a slow card apart;
-       the gap adapts instead, pace_gap_adapt) */
-    const bool excused = displayWaitNs * 4 >= refreshNs && lateNs < refreshNs;
+       (the lock's skip guard's exception).  Paced (vsync off or mailbox,
+       Vulkan: the fence waits are counted apart), also a step late by no
+       more than that wait and a refresh: a mailbox present blocked on a
+       full compositor queue, which the gap adapts to (pace_gap_adapt); not
+       under FIFO or the lock, where OpenGL's fence waits count as the
+       display's and the wait cannot tell a slow card apart */
+    const bool excused = displayWaitNs * 4 >= refreshNs &&
+                         (lateNs < refreshNs || (b->paced && lateNs <= displayWaitNs + refreshNs));
     /* late at all, and late with an optional present (only that arms) */
     const bool late = periodNs > 0 && lateNs >= periodNs / 2 && !excused;
     const bool lateOptional = late && b->optional > 0;
