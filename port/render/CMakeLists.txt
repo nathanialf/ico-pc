@@ -1687,13 +1687,15 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_vumerge_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_vufuse_ab (test/rd_vufuse_ab.cmake): the same dumps and the phone's
-    # frame (tools/vufuse_dumps.txt) with code 36's kicks under their own
+    # frames (tools/vufuse_dumps.txt) with code 36's kicks under their own
     # pipelines (ICO_RD_VU_FUSE=0) and with the fused scissor pair
     # (rd_replay_vu.c vuFuseVerdict), at the phone's profile (the programs'
-    # entries, 2x at 2.189 presented at 2364x1080) and Enhanced 2x 4:3 and
-    # 16:9 through the entries and the record, under ICO_RD_BLEND=fixed:
-    # every named target byte for byte, the pairs fused where counted, the
-    # GPU draws fewer by what the merge joined; SKIP as rd_vustage_ab
+    # entries, 2x at 2.189 presented at 2364x1080, and Resolution Auto: the
+    # no-planes twins) and Enhanced 2x 4:3 and 16:9 through the entries and
+    # the record, under ICO_RD_BLEND=fixed: every named target byte for byte,
+    # the pairs fused where counted (on every phone frame at both phone
+    # settings), none kept apart for the pixel shader, the GPU draws fewer
+    # by what the merge joined; SKIP as rd_vustage_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab")
     add_test(NAME rd_vufuse_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
@@ -1701,7 +1703,7 @@ if(ICO_RUN_TESTS)
                      "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/vufuse_dumps.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vufuse_ab.cmake")
-    set_tests_properties(rd_vufuse_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    set_tests_properties(rd_vufuse_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 5400)
     if(_env)
         set_tests_properties(rd_vufuse_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
