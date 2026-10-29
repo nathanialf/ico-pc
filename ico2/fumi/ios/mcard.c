@@ -189,12 +189,19 @@ _Static_assert(offsetof(McProductFile, cameraMove) == MC_PRODUCT_FILE_JPN_SIZE,
 _Static_assert(offsetof(McProductFile, palMode) == 0x1EC,
                "McProductFile: palMode is the last European word");
 
-/* PC port: the USA disc's and the August 2001 preview's product file, 0x18C bytes, is laid
+/* PC port: the USA disc's and the 2001 previews' product file, 0x18C bytes, is laid
    out otherwise (typedef.h keeps the European McProductFile on every disc): twenty
-   16-byte previews (USA: stage, play time, sofa, a word no code reads; the preview:
-   stage, cleared, play time, sofa), then the sound mode, the output mode, the vibration
-   and the 64 pad bytes.  The card gets the disc's own bytes, converted from and to the
-   host record. */
+   16-byte previews, then the sound mode, the output mode, the vibration and the 64 pad
+   bytes.  The card gets the disc's own bytes, converted from and to the host record.
+   A preview's four words are stage, play time, sofa and a word no code reads on all
+   three discs (the decomp's 2001 McPreview: la_playtime_count / la_game_loop count
+   IosMcPreviewInfo[1], la_save_processing puts the sofa in [2]), and the game copies
+   the record whole between IosMcPreviewInfo and the product file, so the host record
+   keeps them in the disc's order in its first four words (the European names cleared,
+   playTime and sofa hold the play time, the sofa and the unread word there; the 2001
+   readers in layout_action.c read them by their place).  Converting the North
+   American disc's to the European places instead put the sofa where the game's play
+   time went on every save (issue 160). */
 #define MC_PRODUCT_FILE_2001_SIZE 0x18C
 
 static unsigned char mcProduct2001[MC_PRODUCT_FILE_2001_SIZE];
@@ -221,16 +228,11 @@ static void mc_product_to_2001(const McProductFile *p, unsigned char *d)
     for (i = 0; i < 20; i++) {
         const McFileInfo *f = &p->file[i];
 
+        /* the disc's order, word for word (above) */
         w[0] = (int)f->stage;
-        if (ICO_AUG6JUN26) {
-            w[1] = f->cleared;
-            w[2] = f->playTime;
-            w[3] = f->sofa;
-        } else {
-            w[1] = f->playTime;
-            w[2] = f->sofa;
-            w[3] = f->word10;
-        }
+        w[1] = f->cleared;
+        w[2] = f->playTime;
+        w[3] = f->sofa;
         memcpy(d + i * 16, w, 16);
     }
     memcpy(d + 0x140, &p->soundMode, 4);
@@ -249,15 +251,10 @@ static void mc_product_from_2001(McProductFile *p, const unsigned char *d)
 
         memcpy(w, d + i * 16, 16);
         f->stage = (unsigned int)w[0];
-        if (ICO_AUG6JUN26) {
-            f->cleared = w[1];
-            f->playTime = w[2];
-            f->sofa = w[3];
-        } else {
-            f->playTime = w[1];
-            f->sofa = w[2];
-            f->word10 = w[3];
-        }
+        f->cleared = w[1];
+        f->playTime = w[2];
+        f->sofa = w[3];
+        f->word10 = 0;
     }
     memcpy(&p->soundMode, d + 0x140, 4);
     memcpy(&p->outputMode, d + 0x144, 4);
@@ -283,6 +280,15 @@ static inline int product_write(McMgr *self)
     if (ICO_NTSCAUG6JUN26) {
         mc_product_2001_note();
         mc_product_to_2001(IosMcProductFile + self->port, mcProduct2001);
+        if (self->fileNo >= 0 && self->fileNo < 20) {
+            int pw[3];
+
+            /* PC port: the preview as the card gets it (issue 160) */
+            memcpy(pw, mcProduct2001 + self->fileNo * 16, sizeof(pw));
+            ico_diag_milestone("mc: product write, file %d's preview: stage %d, play time %d "
+                               "frames, sofa %d",
+                               self->fileNo, pw[0], pw[1], pw[2]);
+        }
         iosMcHandlerWrite(self, mcProduct2001, MC_PRODUCT_FILE_2001_SIZE);
         return 0;
     }
