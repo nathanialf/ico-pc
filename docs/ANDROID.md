@@ -43,6 +43,10 @@
 
 To update, install the new version over the old one in the same way. Your
 saves stay.
+Close other apps first: the game prepares its graphics in full once after
+every update. If the phone froze and you had to restart it during an update
+and the game then shows "bad ELF magic", see
+[the fix](TROUBLESHOOTING.md#the-first-start-takes-a-long-time).
 
 A test build someone gave you (not from the releases page) may block
 installing a release over it; then you must uninstall the test build
