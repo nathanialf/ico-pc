@@ -880,5 +880,21 @@ void ico_host_thread_func(int id, void *func, int priority);
 /* common/src/kanbanBoot.c kanbanBootMain: its two step variables, logged
    when they change. */
 void ico_host_kanban_step(int boot_step, int mc_check_step);
+/* script/src/gflag.c gflagChk (write 0), gflagOn (1), gflagOff (2): an id
+   at or past the disc's flag count `count` (region.h
+   ico_region_gflag_count), the game's access going ahead: a rate-limited
+   line "gflag: flag <id> read|set|cleared past the disc's <count> flags
+   (from <caller>)", key "gflag: flag id past the disc's flags". */
+void ico_host_gflag_range(int id, int write, int count, void *caller);
+/* common/src/StageManager.c stgmgrForceSwitch and
+   stgmgrForceSwitchWithFadeColor: a stage-switch request (cmd 0 without a
+   fade, 1 with one), the message queue holding `queued` untaken requests
+   before it, the stage of the request already in the single message when
+   it does. Lines "stage switch request: stage S, fade in F out G, cmd C,
+   by thread #N name" (the first 200, then every 10th) and, when queued is
+   not 0, "a second stage switch request while one is queued (stage A then
+   B, N queued)" (rate-limited). */
+void ico_host_stage_switch(int stage, float fade_in, float fade_out, int cmd, int queued,
+                           int queued_stage);
 
 #endif /* ICO_PLATFORM_DIAG_HOST_H */

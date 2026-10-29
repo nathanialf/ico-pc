@@ -1127,6 +1127,45 @@ void ico_host_kanban_step(int boot_step, int mc_check_step)
     }
 }
 
+void ico_host_gflag_range(int id, int write, int count, void *caller)
+{
+    static const char *const what[3] = {"read", "set", "cleared"};
+    char d[96];
+
+    if (!inited) {
+        return;
+    }
+    describe((uintptr_t)caller, d, sizeof d);
+    ico_log_limited("gflag: flag id past the disc's flags",
+                    "ico_pc: gflag: flag %d %s past the disc's %d flags (from %s)", id,
+                    what[write >= 0 && write <= 2 ? write : 0], count, d);
+}
+
+void ico_host_stage_switch(int stage, float fade_in, float fade_out, int cmd, int queued,
+                           int queued_stage)
+{
+    char p[160];
+    char tmp[80];
+    int cur;
+
+    if (!inited) {
+        return;
+    }
+    prefix(p, sizeof p);
+    cur = ico_sched_current();
+    ico_log_limited_n("stage switch request", 200u, 10u,
+                      "ico_pc: %s stage switch request: stage %d, fade in %g out %g, cmd %d, by "
+                      "thread #%d %s",
+                      p, stage, (double)fade_in, (double)fade_out, cmd, cur,
+                      thread_name(cur, tmp, sizeof tmp));
+    if (queued > 0) {
+        ico_log_limited("stage switch request while one is queued",
+                        "ico_pc: %s a second stage switch request while one is queued (stage %d "
+                        "then %d, %d queued)",
+                        p, queued_stage, stage, queued);
+    }
+}
+
 /* what an abort() is called in the crash report, on both systems */
 #define ABORT_WHAT "abort() (an assertion or a fatal error; see the last failure message)"
 
