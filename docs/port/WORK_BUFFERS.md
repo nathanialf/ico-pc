@@ -522,12 +522,54 @@ count target) counts 71 bands, band k at k in the top half and -k in the bottom 
 sub-pixel off the pixel grid, resolves it through both paths and compares the count at its GS size
 byte for byte, with every band centre against the table:
 
-    rd: shadow count: one draw (self-test: equal to the seven draws over 688x448, 142 band centres ok) on SCENE 688x448 at 1376x896 texels
-    rd: shadow count: seven draws (self-test: one draw differs at 17 of 308224 texels, the first (40,300): 00040480 for 04040480) on SCENE 688x448 at 1376x896 texels
+    rd: shadow count: one draw (self-test: equal to the seven draws over 688x448, 142 band centres ok) on SCENE 688x448 at 1376x896 texels, step 4
+    rd: shadow count: seven draws (self-test: one draw differs at 17 of 308224 texels, the first (40,300): 00040480 for 04040480) on SCENE 688x448 at 1376x896 texels, step 4
 
 A difference turns `shadowOne` off (`(self-test)`); `[dev] shadow_one = true` keeps it ("kept by
 [dev] shadow_one"); `ICO_RD_SHADOW_SABOTAGE=1` makes the table wrong at m = 1 so the failure path
-runs (ctest `rd_shadow_selftest_sabotage`).
+runs (ctest `rd_shadow_selftest_sabotage`). The self-test resolves under the running disc's step
+(below).
+
+## The shadow count's step
+
+The European, Japanese, Korean and Chinese discs draw the volume faces with the colours 0x04 and 0xFC;
+the North American disc and the 2001 previews (August 6 and June 26) with 0x08 and 0xF8
+(`ico2/seki/src/Shadow.c` `emitVolumeStrip` and `emitVolumeStrip_jun26`,
+`PAL_NTSCAUG6JUN26`). So the GS leaves 4 n mod 256 on the first group and 8 n mod 256 = 8 (n mod
+32) on the second: the step, 4 or 8 (issue 159: before v0.9.5 the host hook `shadowHostStripPos`
+compared the face byte with 0x04 only, so every face of the second group counted as a decrement
+and the resolve wrote a near-white count, which the composite turned into a light magenta patch on
+the green-grey floors).
+
+- **Recording.** `shadowHostStripPos`'s sign compares the face byte with the disc's own front
+  colour (`PAL_NTSCAUG6JUN26(0x04, 0x08)`); `shadowHostReset` calls
+  `rd_shadow_reset_step(PAL_NTSCAUG6JUN26(4, 8))`. The reset and the resolve after it carry the
+  step in `b[0]`: 8, or 0 for the step 4, so the European disc's commands, its dumps and every
+  older dump keep their bytes (`rd__shadow_step` reads it). A dump replays with its disc's step on
+  any machine; `rd_replay_tool --list` prints `step N` on both commands and `tris +1 A -1 B` on
+  each volume command. A North American dump recorded before v0.9.5 has `+1 0` on every volume
+  command: its signs were lost at recording, and no replay can bring its shadow back.
+- **The volumes** are the same draws for both steps (write mask 0x3F): the stencil's n mod 64
+  holds n mod 32 in its low five bits, 32 dividing 64.
+- **The seven draws** (`rd__shadow_resolve_pass`, `port/render/rd_shadow_one.c`): step 4, passes
+  k = 0..5 add 4 << k, the A pass tests the six bits (`RD_STENCIL_TEST_NONZERO`), the bytes as
+  before; step 8, passes k = 0..4 add 8 << k (at most 248), bit 5 has no pass (8 << 5 is 256, 0 in
+  eight bits), and the A pass tests the five bits (`RD_STENCIL_TEST_NONZERO5`, read mask 0x1F), so
+  n = 32 is no shadow, as on the GS. The bit passes' keys are the same for both steps (the colour is
+  the `DrawCB`'s); the step 8 adds one key, its A pass, which the start-up set holds only when the
+  running disc counts by 8 (`rd__shadow_disc_step`): the European set keeps its count.
+- **The one draw** reads a table of its step (`rd__shadow_table_texel(m, step)`: under the step 8
+  RGB 8 (m mod 32), A 0x80 where m mod 32 is not 0), one 64 x 1 texture each, made at its first use;
+  `shadow_count_ps` is unchanged.
+- **The log.** The first reset of a run logs `shadow count: step 8 (the disc's face colours 0x08 /
+  0xF8), five bits` (or `step 4 ... six bits`), again only if the step changes; the self-test's line
+  ends with `step N`.
+- **Tests.** `rd_shadow_test` case 8: Shadow.c's model recorded under the North American disc
+  (colours 0x08 / 0xF8 in the packet, the recorded signs the packet's with both present, `b[0]` 8 on
+  the reset and the resolve; the European recordings `b[0]` 0), the step 8's table for n = 0, 1, 31,
+  32, 33, 63, 64, 255, -1, -33, and on the device the synthetic volumes' count against 8 n mod 256
+  through the seven draws and the one draw, the one draw against the seven draws, every pipeline
+  created enumerated.
 
 ## The shadow edges above 1x
 
