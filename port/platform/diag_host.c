@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fiber.h"
+#include "gpu_hang.h"
 #include "host_fs.h"
 #include "rd_bisect_plan.h"
 #include "report.h"
@@ -150,6 +151,11 @@ static volatile int effects_program;
    loss dump, set once before the game */
 static int (*volatile gpu_progress_fn)(IcoDiagGpu *out);
 static void (*volatile gpu_dump_fn)(void);
+/* ico_diag_set_gpu_hang_limit (gpu_hang.h): in milliseconds, 0 off; set
+   before ico_diag_start */
+static volatile unsigned int gpu_hang_limit_ms;
+/* ico_diag_set_gpu_hang_note: the sentence the Android hang box ends with */
+static const char *(*volatile gpu_hang_note_fn)(void);
 static void (*exit_hook)(const char *reason);
 
 #ifndef _WIN32
@@ -918,6 +924,16 @@ void ico_diag_set_gpu_hang(int (*progress)(IcoDiagGpu *out), void (*dump)(void))
 {
     gpu_progress_fn = progress;
     gpu_dump_fn = dump;
+}
+
+void ico_diag_set_gpu_hang_limit(double seconds)
+{
+    gpu_hang_limit_ms = seconds > 0.0 ? (unsigned int)(seconds * 1000.0 + 0.5) : 0u;
+}
+
+void ico_diag_set_gpu_hang_note(const char *(*note)(void))
+{
+    gpu_hang_note_fn = note;
 }
 
 /* the backend's progress into *g: 1 when it tracks it (no call into the
@@ -4610,7 +4626,7 @@ static void watchdog_fire(const char *reason)
 {
     char where[96];
     char tmp[80];
-    char box[512];
+    char box[1024];
     IcoDiagGpu gpu;
     int tracked, hang;
     if (fatal_once++) {
@@ -4720,11 +4736,24 @@ static void watchdog_fire(const char *reason)
     /* the reason is in the log; the box says what happened in plain words
        (a GPU hang: a device loss's, window_host.c device_lost_quit) */
 #ifdef __ANDROID__
-    snprintf(box, sizeof box, "%s",
-             hang ? "The graphics driver stopped responding while the game was drawing, so the "
-                    "game has to close.\n\nStart the game again. If this happens every time at "
-                    "the same place, please report it at github.com/nathanialf/ico-pc/issues."
-                  : "ICO stopped responding, so it has to close.");
+    {
+        /* the device's own Qualcomm driver: the Options route to a Turnip
+           driver package (the window's note, ico_diag_set_gpu_hang_note) */
+        const char *(*notefn)(void) = gpu_hang_note_fn;
+        const char *note = hang && notefn != NULL ? notefn() : NULL;
+
+        snprintf(box, sizeof box, "%s%s%s",
+                 hang ? "The graphics driver stopped responding while the game was drawing, so "
+                        "the game has to close.\n\nStart the game again. If this happens every "
+                        "time at the same place, please report it at "
+                        "github.com/nathanialf/ico-pc/issues."
+                      : "ICO stopped responding, so it has to close.",
+                 note != NULL && note[0] != '\0' ? "\n\n" : "", note != NULL ? note : "");
+        if (note != NULL && note[0] != '\0') {
+            flog("ico_pc: the box names the graphics driver route (the device's own Qualcomm "
+                 "driver)");
+        }
+    }
 #else
     snprintf(box, sizeof box, "%s",
              hang ? "The graphics card stopped responding while the game was drawing, so the "
@@ -4798,6 +4827,9 @@ static void watchdog_loop(void)
     unsigned int first_s = wd_first_s;
     unsigned int later_s = wd_later_s;
     char reason[200];
+    /* the GPU hang limit's watch (gpu_hang.h): the wait it counts */
+    IcoGpuHangWatch hang_watch;
+    memset(&hang_watch, 0, sizeof hang_watch);
     for (;;) {
         double now;
         unsigned int ticks;
@@ -4807,6 +4839,9 @@ static void watchdog_loop(void)
         double os_cur;
         unsigned long long os_since;
         unsigned int lim;
+        double poll_dt;
+        int poll_counted;
+        unsigned int hang_ms;
         if (epoch != __atomic_load_n(&wd_epoch, __ATOMIC_ACQUIRE)) {
             /* the limits were just set (ico_diag_start): both count from now */
             epoch = __atomic_load_n(&wd_epoch, __ATOMIC_ACQUIRE);
@@ -4839,6 +4874,8 @@ static void watchdog_loop(void)
             os_gap_since = os_since;
             os_gap = 0.0;
         }
+        poll_dt = now - last_poll;
+        poll_counted = poll_dt <= SUSPEND_GAP_S && !wd_paused;
         if (now - last_poll > SUSPEND_GAP_S || wd_paused) {
             /* the clock jumped between two polls: the system slept (Windows'
                GetTickCount64 counts sleep and hibernation) or the process was
@@ -4921,6 +4958,28 @@ static void watchdog_loop(void)
                 ico_diag_log("ico_pc: watchdog: %s", detail);
             }
         }
+        /* The GPU hang limit (gpu_hang.h, issue 123): one wait for a
+           submission the GPU has not finished, seen for the limit's time
+           (counted as the limits below count), ends the run as the GPU
+           hang now (watchdog_fire: the pass ring, the loss dump, the loss
+           count, the box), not after the later limit's 2 x watchdog; only
+           while a limit is in force, like the bound below. One end: this
+           thread runs either, once (fatal_once). */
+        hang_ms = gpu_hang_limit_ms;
+        if (hang_ms != 0 && (first_s != 0 || later_s != 0)) {
+            IcoDiagGpu g;
+            if (gpu_state(&g) &&
+                ico_gpu_hang_step(&hang_watch, (double)hang_ms / 1000.0, g.waiting_for, g.finished,
+                                  poll_dt, poll_counted)) {
+                snprintf(reason, sizeof reason,
+                         "the GPU: submission %llu not finished after %.0f s (limit %.0f s); the "
+                         "newest is %llu, the newest seen finished %llu",
+                         g.waiting_for, g.waiting_s, (double)hang_ms / 1000.0, g.submitted,
+                         g.finished);
+                watchdog_fire(reason);
+                continue;
+            }
+        }
         /* the bound only while a limit is in force: with the watchdog off
            ([dev] watchdog = 0), and on Android before the game starts
            (ico_diag_start_reporter, the start-up set's progress pump), a
@@ -4995,8 +5054,9 @@ void ico_diag_start(unsigned int first_s, unsigned int later_s)
     ico_diag_log("ico_pc: diagnostics: heartbeat every %.0f s; watchdog: first Main tick within "
                  "%u s, then a new one or a movie picture within %u s (0 = off); time the system "
                  "holds the window's event pump is not counted, up to %u s for one wait (0 = no "
-                 "limit)",
-                 HEARTBEAT_S, first_s, later_s, os_wait_limit_s);
+                 "limit); GPU hang limit %.1f s for one wait for the GPU (0 = off)",
+                 HEARTBEAT_S, first_s, later_s, os_wait_limit_s,
+                 (double)gpu_hang_limit_ms / 1000.0);
 }
 
 void ico_diag_start_reporter(void)

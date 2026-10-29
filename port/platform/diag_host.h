@@ -162,6 +162,25 @@ typedef struct IcoDiagGpu {
 } IcoDiagGpu;
 
 void ico_diag_set_gpu_hang(int (*progress)(IcoDiagGpu *out), void (*dump)(void));
+/* The GPU hang limit (gpu_hang.h, issue 123): the seconds one wait for a
+   submission the GPU has not finished (the progress above: waiting_for
+   above finished) may last before the run ends as the GPU hang above,
+   without waiting for the watchdog's limits; 0 (the default) off. The
+   host sets half the watchdog (ini watchdog=S: 15 s by default, at least
+   2 s, 0 with the watchdog off) before ico_diag_start, whose line names
+   it. The watchdog's thread polls the progress four times a second and
+   counts the wait's time as it counts its limits (not while paused, not
+   across a suspend), only while a limit is in force (ico_diag_start with
+   one not 0). At the limit the WATCHDOG line is "the GPU: submission V
+   not finished after W s (limit L s); the newest is S, the newest seen
+   finished D", the rest the GPU hang's above. Both ends run on the
+   watchdog's thread, once: the first wins. */
+void ico_diag_set_gpu_hang_limit(double seconds);
+/* A sentence the GPU hang's box ends with on Android, or NULL/"" for none
+   (the window: the device's own Qualcomm driver names the Options route
+   to a Turnip driver package); called on the watchdog's thread at the
+   end, so it may only read state set before. */
+void ico_diag_set_gpu_hang_note(const char *(*note)(void));
 
 /* The main thread is inside a call that waits on the operating system and
    runs none of the game's code (the window's event pump, SDL_PollEvent):
