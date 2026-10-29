@@ -501,8 +501,9 @@ draws merged.
 Fused (`g_rd.vuFuse`, on with the merge; `vuFuseVerdict`), the kick draw takes its cut's state, so
 its pipeline, key and DrawCB, with `ICO_VU_FUSED` (2048) beside `ICO_VU_KICK_ONLY` in its VuCB. The
 merge builds of `vu_prelit_vs`, `vu_lit_vs` and `vu_main_vs` mark its triangles (`vu_common.hlsli`
-`vu_fused_out`: `VuVSOut.r.w` 1, a flat lane that was always 0) and `vu_ps` and `vu_texa_ps` write
-their pixels as `gs_dual_out` writes a PABE pixel whose As has its MSB clear (`vu_dual_out_fused`):
+`vu_fused_out`: `VuVSOut.r.w` 1, a flat lane that was always 0, and the plane distance -1 where the
+draw has no clip plane, see below) and `vu_ps` and `vu_texa_ps` write their pixels as `gs_dual_out`
+writes a PABE pixel whose As has its MSB clear (`vu_dual_out_fused`):
 c0 = Cs with FBA's MSB, c1 1.0 for the lerps ((Cs - Cd) * 1 + Cd) and 0 for Cd*FIX + Cs
 (`DF_C1_DST`), so the blender stores Cs, which is what the kick's own pipeline (blending off) stores
 from the same c0. The draws, their triangles and their order are unchanged (each batch's cuts, then
@@ -511,6 +512,22 @@ same; the colour, alpha, depth and stencil arithmetic is the same: the picture i
 byte. The cut and its kick now share every key, so the merge joins consecutive batches of a mesh,
 up to 16 draws (8 batches) a GPU draw. The vertex work is unchanged (each batch still runs through
 the vertex shader twice, once a draw); what goes is the GPU draws.
+
+At a fractional scale (the phone's Resolution Auto, 2364x1080 with Full height and Full pixel:
+4.617x2.109) the VU draws go through the no-planes twins `vu_np_ps` and `vu_texa_np_ps`
+(`port/render/rd_pixel_plan.c`), which read locations 0 to 2 of `VuVSOut` alone and so not `r`.
+Their mark is the plane distance's sign: `VuVSOut.plane` is the chain's clip-plane distance only
+where the draw has a clip plane (`vu_batch.z`, `ICO_DF_PLANE`), and otherwise 1 and read by nothing,
+so `vu_fused_out` sets it to -1 on a fused kick's triangles where `vu_batch.z` is 0. A constant over
+the triangle, its interpolation is negative exactly on those triangles. A twin never draws a
+clip-plane draw (`rd__vu_pixel_fs` keeps the planes for `ICO_DF_PLANE`), and under a clip plane a
+pixel with a negative distance is discarded before its output in any case. The twins' dual-source
+builds take the mark as one more argument of `vu_dual_out_f` (`fused` not 0 joins the PABE rule's
+unblended case: the same c0 and c1 as `vu_dual_out_fused`); every unfused pixel's arithmetic is
+unchanged, and every other build keeps the function as it was (`VU_FUSED_ARG`, `VU_FUSED_OR`). The
+`_nodual` twins are unchanged: without dual-source blending a cut is two passes and never fuses. On
+the phone's three frames the existing tool counted every pair kept apart for the twins at Resolution
+Auto (257, 355 and 398 pairs) where 2x fused them all.
 
 The verdict is taken once a command (its state, target and pass are the same for every batch) and
 counted once a batch. A pair is fused only where all of these hold, else kept apart for the first
@@ -523,7 +540,7 @@ that fails:
 | passes | either state's plan is not one pass: the alpha test's split, or no dual-source blending (a lerp is two passes there) |
 | dst/DATE | a destination read (the exact blend) or DATE through the stencil bit |
 | blend form | the cut's blend is not a lerp or Cd*FIX + Cs: the premultiplied adds and subtracts (ONE, ONE) and the Ad forms cannot drop Cd per pixel (`rd_pipeline.c` `keyBlendPath`, `blendState`) |
-| no planes | the cut's pixel shader is `vu_np_ps` (a fractional scale): it does not read `r` |
+| no planes | the cut's pixel shader reads no mark: neither `vu_ps` / `vu_texa_ps` (`r.w`) nor a no-planes twin without `ICO_DF_PLANE` (the plane's sign). None expected: a twin never draws a clip plane's draw |
 | plans differ | the kick's plan is not the cut's with the blend off: the cut's pass with the key's blend, the flags `FIX_FACTOR`, `PREMUL` and `C1_DST`, the clamped FIX and `dstWant` as the alpha plan's blending off sets them (`rd_alpha_plan.c`) must equal the kick's pass in every other field (shaders, depth, mask, alpha test, flags) |
 
 A pair whose two plans are equal already (the state's ABE on, or the alpha plan's blending off on
@@ -536,9 +553,11 @@ fuse off` after `VU merge`. `rd_replay_tool --stats` prints `VU fuse: N pairs fu
 (blend form K, plans differ L, passes P, dst/DATE D, no planes Q, no merge build B, fuse off F), S
 under one pipeline already; fuse on`, and the window's 10 s line `VU fuse: N pairs a replay fused, S
 one pipeline already, M kept apart (...)` with the same reasons (`RdPerfRecord.vuFusePairs`,
-`vuFuseSame`, `vuFuseKept`). The marks cost the five merge builds of those entries 46 to 51 words
-and `vu_ps` and `vu_texa_ps` 142 each; the other builds (`vu_np_ps`, the `_nodual` and destination-read twins, every build
-without `ICO_VU_MERGE`) are the same word for word. `rd_vufuse_ab` is its byte gate
+`vuFuseSame`, `vuFuseKept`). The marks cost the five merge builds of those entries 93 to 108 words
+(46 to 51 for `r.w`, 47 to 57 for the plane's sign: `vu_lit_merge_vs` 51,950, `vu_lit_merge_plain_vs`
+23,904, `vu_merge_main_vs` 6,827), `vu_ps` and `vu_texa_ps` 142 each and `vu_np_ps` and
+`vu_texa_np_ps` 44 each (4,927 and 11,063); the other builds (the `_nodual` and destination-read
+twins, every build without `ICO_VU_MERGE`) are the same word for word. `rd_vufuse_ab` is its byte gate
 ([TESTING.md](TESTING.md)).
 
 ## Tests
@@ -581,10 +600,12 @@ the merge off; the other `rd_vuprepass_selftest` runs check that it is on and dr
 ([The draw merge](#the-draw-merge)).
 
 `rd_vufuse_ab` (`port/render/test/rd_vufuse_ab.cmake`) replays the same dumps and the PowerVR
-phone's frame (`tools/vufuse_dumps.txt`) with the merge on, code 36's kicks under their own
+phone's frames (`tools/vufuse_dumps.txt`) with the merge on, code 36's kicks under their own
 pipelines (`ICO_RD_VU_FUSE=0`) and fused, at the phone's profile (the programs' own entries, 2x at
-2.189 presented at 2364x1080), through the programs' own entries at Enhanced 4:3 2x and through the
-record at Enhanced 4:3 and 16:9 2x: every target byte for byte, the same pairs counted, the fused
-run's GPU draws exactly the other's less what the merge joined beyond it, and at each setting with
-pairs some fused and fewer GPU draws. The `rd_vuprepass_selftest` runs check the fuse is on with the
+2.189 presented at 2364x1080, and Resolution Auto: 2364x1080 with Full height and Full pixel, the
+no-planes twins), through the programs' own entries at Enhanced 4:3 2x and through the record at
+Enhanced 4:3 and 16:9 2x: every target byte for byte, the same pairs counted, none kept apart for
+the pixel shader (no planes 0), the fused run's GPU draws exactly the other's less what the merge
+joined beyond it, at each setting with pairs some fused and fewer GPU draws, and on each phone frame
+some fused at both phone settings. The `rd_vuprepass_selftest` runs check the fuse is on with the
 merge unless `ICO_RD_VU_FUSE=0` ([The fused scissor pair](#the-fused-scissor-pair)).
