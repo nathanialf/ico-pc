@@ -15,19 +15,23 @@
  *   left edge to the right side over the whole height, and decrements twice
  *   over the bottom half),
  * so the stencil holds every value 0..63 (n mod 64, both signs, 64 among
- * them), and resolves it.  The frame is replayed through the one draw and
+ * them), and resolves it under the running disc's step
+ * (rd__shadow_disc_step: 4, or 8 on the North American disc and the 2001
+ * previews, which the reset and the resolve carry, so the one draw reads
+ * that step's table).  The frame is replayed through the one draw and
  * through the seven draws, and the count at its GS size (the count target
  * at scale 1, the reduced count above it: rd__shadow_count_read) is read
  * back each time.  The one draw stays when its count equals the seven
  * draws' byte for byte and every band's centre holds the count's colour
- * (rd__shadow_table_texel of n mod 64); otherwise, or when the test
- * cannot run (no SCENE, no frame), the flag goes off
+ * (rd__shadow_table_texel of n mod 64 under the step); otherwise, or when
+ * the test cannot run (no SCENE, no frame), the flag goes off
  * (rd__profile_self_test_off: "(self-test)") and the seven draws resolve
  * the count.  MSAA is held off for both replays (the count's pass closes
  * the epoch in the game; here SCENE's colour is the count target).  One
  * line:
  *   shadow count: one draw (self-test: equal to the seven draws over
- *     688x448, 142 band centres ok) on SCENE 688x448 at 1376x896 texels
+ *     688x448, 142 band centres ok) on SCENE 688x448 at 1376x896 texels,
+ *     step 4
  *   shadow count: seven draws (self-test: one draw differs at 17 of
  *     308224 texels, the first (40,300): 00040480 for 04040480) on SCENE ...
  * ICO_RD_SHADOW_SABOTAGE=1 makes the one draw's table wrong at m = 1
@@ -84,15 +88,23 @@ static void quad(RdScreenVtx *o, int32_t x0, int32_t y0, int32_t x1, int32_t y1)
     }
 }
 
-static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h)
+static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, uint32_t step)
 {
     memset(f, 0, sizeof(*f));
     rd__reset_state_block(&f->startState);
     f->gsW = w;
     f->gsH = h;
+    /* the reset and the resolve carry the step as the recorder writes it
+     * (rd_internal.h RDC_SHADOW_RESET) */
+    const uint8_t b0 = (uint8_t)(step == 8 ? 8 : 0);
+    RdCmd *rc = NULL;
     bool ok = rd__st_target(f, 3, scene, w, h) && rd__st_push(f, 3, RDC_TEXTURE_OFF) &&
               rd__st_push1(f, 3, RDC_ABE, 0) && rd__st_test(f, 3, SB_TEST) &&
-              rd__st_push1(f, 3, RDC_ZWRITE, RD_ZWRITE_OFF) && rd__st_push(f, 3, RDC_SHADOW_RESET);
+              rd__st_push1(f, 3, RDC_ZWRITE, RD_ZWRITE_OFF) &&
+              (rc = rd__st_push(f, 3, RDC_SHADOW_RESET)) != NULL;
+    if (rc) {
+        rc->b[0] = b0;
+    }
     /* SB_BANDS increments, then twice as many decrements */
     const uint32_t inc = SB_BANDS * 6u, dec = SB_BANDS * 12u;
     RdScreenVtx *v = calloc(inc + dec, sizeof(*v));
@@ -117,7 +129,11 @@ static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h)
         c->u[2] = (inc + dec) * (uint32_t)sizeof(RdScreenVtx);
         c->u[3] = dec;
     }
-    return c && rd__st_push(f, 3, RDC_SHADOW_RESOLVE);
+    RdCmd *rv = c ? rd__st_push(f, 3, RDC_SHADOW_RESOLVE) : NULL;
+    if (rv) {
+        rv->b[0] = b0;
+    }
+    return rv != NULL;
 }
 
 /* One replay of f, the count at its GS size into px (w * h * 4) */
@@ -130,7 +146,7 @@ static bool run(const RdFrame *f, uint32_t scene, uint8_t *px, size_t size, uint
 
 /* the band centres the one draw got right: band k's centre column, the
  * middle of each half */
-static int centresOk(const uint8_t *px, uint32_t w, uint32_t h, int *bad)
+static int centresOk(const uint8_t *px, uint32_t w, uint32_t h, uint32_t step, int *bad)
 {
     int ok = 0;
     *bad = -1;
@@ -142,7 +158,7 @@ static int centresOk(const uint8_t *px, uint32_t w, uint32_t h, int *bad)
             const uint32_t y = half ? h * 3u / 4u : h / 4u;
             const int n = half ? -k : k;
             uint8_t want[4];
-            rd__shadow_table_texel((uint32_t)n & RD_SHADOW_STENCIL_MASK, want);
+            rd__shadow_table_texel((uint32_t)n & RD_SHADOW_STENCIL_MASK, step, want);
             if (memcmp(&px[((size_t)y * w + x) * 4u], want, 4) == 0) {
                 ok++;
             } else if (*bad < 0) {
@@ -175,7 +191,8 @@ bool rd__shadow_selftest(void)
     const size_t size = (size_t)w * h * 4u;
     uint8_t *one = malloc(size), *seven = malloc(size);
     static RdFrame f;
-    if (!one || !seven || !buildFrame(&f, scene, w, h)) {
+    const uint32_t step = rd__shadow_disc_step();
+    if (!one || !seven || !buildFrame(&f, scene, w, h, step)) {
         free(one);
         free(seven);
         rd__frame_free(&f);
@@ -213,7 +230,7 @@ bool rd__shadow_selftest(void)
         }
     }
     int bad = -1;
-    const int centres = doneOne ? centresOk(one, w, h, &bad) : 0;
+    const int centres = doneOne ? centresOk(one, w, h, step, &bad) : 0;
     const int want = 2 * (SB_BANDS + 1);
     const bool passed = doneOne && doneSeven && tookOne && diff == 0 && centres == want;
     char res[192];
@@ -243,9 +260,10 @@ bool rd__shadow_selftest(void)
     if (!passed && !kept) {
         rd__profile_self_test_off(RD_PROFILE_SHADOW_ONE);
     }
-    rd__log("shadow count: %s (self-test: %s)%s on SCENE %ux%u at %ux%u texels",
+    rd__log("shadow count: %s (self-test: %s)%s on SCENE %ux%u at %ux%u texels, step %u",
             g_rd.profile.shadowOne ? "one draw" : "seven draws", res,
-            !passed && kept && !viewLost ? "; kept by [dev] shadow_one" : "", w, h, t->tw, t->th);
+            !passed && kept && !viewLost ? "; kept by [dev] shadow_one" : "", w, h, t->tw, t->th,
+            step);
     free(one);
     free(seven);
     return passed;
