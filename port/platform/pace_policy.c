@@ -199,8 +199,14 @@ void pace_budget_reset_paced(PaceBudget *b, unsigned max)
     b->pacedTenths = PACE_PACED_UNKNOWN;
 }
 
-bool pace_budget_allows_paced(const PaceBudget *b, bool newFrame, uint64_t gpuNs, uint64_t stepNs,
-                              uint64_t periodNs)
+bool pace_budget_paced_mode(bool vsync, bool mailbox)
+{
+    /* a present never waits for the display: vsync off (immediate) or
+       mailbox; FIFO's blocking present keeps the whole-number allowance */
+    return !vsync || mailbox;
+}
+
+bool pace_budget_allows_paced(const PaceBudget *b, bool newFrame, uint64_t gpuNs, uint64_t periodNs)
 {
     if (newFrame) {
         return true;
@@ -208,23 +214,19 @@ bool pace_budget_allows_paced(const PaceBudget *b, bool newFrame, uint64_t gpuNs
     if (b->presents >= b->allow) {
         return false;
     }
-    /* the GPU's time for one more picture this step, against the period
-       and what the step before left unused */
+    /* one more picture leaves the GPU's backlog within a period */
     return !b->paced || gpuNs == 0 ||
-           ((uint64_t)b->presents + 1) * gpuNs + stepNs <= periodNs + b->carryNs;
+           b->balanceNs - ((int64_t)b->presents + 1) * (int64_t)gpuNs >= -(int64_t)periodNs;
 }
 
-unsigned pace_budget_paced_tenths(uint64_t gpuNs, uint64_t stepNs, uint64_t periodNs)
+unsigned pace_budget_paced_tenths(uint64_t gpuNs, uint64_t periodNs)
 {
     uint64_t t;
 
     if (gpuNs == 0) {
         return PACE_PACED_UNKNOWN;
     }
-    if (stepNs >= periodNs) {
-        return 0;
-    }
-    t = ((periodNs - stepNs) * 20 / gpuNs + 1) / 2;
+    t = (periodNs * 20 / gpuNs + 1) / 2;
     return t >= PACE_PACED_HIGH ? PACE_PACED_HIGH : (unsigned)t;
 }
 
@@ -371,29 +373,27 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
         }
     }
     if (pacedGpu) {
-        /* the time this step left unused, carried to the next (at most a
-           period); a late step leaves none, one past its due time by less
-           half */
-        const uint64_t used = (uint64_t)b->presents * gpuNs + stepNs;
-        const uint64_t avail = periodNs + b->carryNs;
-        const unsigned tenths = pace_budget_paced_tenths(gpuNs, stepNs, periodNs);
-        uint64_t carry = avail > used ? avail - used : 0;
+        /* the balance: less the step's presents' GPU time (the new frame's
+           included), a period more for the next step, kept within a period
+           either way; a late step owes nothing, one past its due time by
+           less halves what is left */
+        const int64_t p = (int64_t)periodNs;
+        int64_t bal = b->balanceNs - (int64_t)b->presents * (int64_t)gpuNs + p;
+        const unsigned tenths = pace_budget_paced_tenths(gpuNs, periodNs);
 
-        if (carry > periodNs) {
-            carry = periodNs;
-        }
+        bal = bal > p ? p : bal < -p ? -p : bal;
         if (late) {
-            carry = 0;
-        } else if (lateNs > 0 && !excused) {
-            carry /= 2;
+            bal = 0;
+        } else if (lateNs > 0 && !excused && bal > 0) {
+            bal /= 2;
         }
-        b->carryNs = carry;
+        b->balanceNs = bal;
         if (tenths != b->pacedTenths) {
             b->pacedTenths = tenths;
             b->pacedChanges++;
         }
     } else {
-        b->carryNs = 0;
+        b->balanceNs = 0;
     }
     b->presents = 0;
     b->optional = 0;
