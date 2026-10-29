@@ -85,6 +85,23 @@ ICO_LAYOUT_AT(struct McPreview, word10, McFileInfo, word10);
 
 ICO_LAYOUT_SIZE(struct McPreview, McFileInfo);
 
+/* PC port: a preview's play time and sofa.  On the 2001 discs the record is
+   stage, play time, sofa and a word no code reads (the decomp's 2001
+   McPreview: la_playtime_count and la_game_loop count IosMcPreviewInfo[1],
+   la_save_processing puts the sofa in [2]); the host's McPreview keeps the
+   European names and the card code keeps the disc's order
+   (ico2/fumi/ios/mcard.c), so there the words named cleared and playTime
+   hold them (issue 160) */
+static inline int la_preview_play(const struct McPreview *p) /* port */
+{
+    return ICO_NTSCAUG6JUN26 ? p->cleared : p->playTime;
+}
+
+static inline int la_preview_sofa(const struct McPreview *p) /* port */
+{
+    return ICO_NTSCAUG6JUN26 ? p->playTime : p->sofa;
+}
+
 /* .sbss, thirteen words: the port-0 lock state _la_set_current_port_2 records and the one
    _la_set_current_port_lock_2 records, the lock results for port 0 and port 1
    of _la_set_current_port_new, the icoMisc lock saved by the logo, the title
@@ -1860,9 +1877,9 @@ static void _la_mask_preview_info(void)
 static inline void playTime_jun26(struct McPreview *p, int *hour, int *min,
                                   int *sec) /* derived name */
 {
-    *sec = (p->playTime / FRAME_RATE) % 60;
-    *min = (p->playTime / (FRAME_RATE * 60)) % 60;
-    *hour = (p->playTime / (FRAME_RATE * 3600)) % 100;
+    *sec = (la_preview_play(p) / FRAME_RATE) % 60;
+    *min = (la_preview_play(p) / (FRAME_RATE * 60)) % 60;
+    *hour = (la_preview_play(p) / (FRAME_RATE * 3600)) % 100;
 }
 
 /* the play time of a save record split into hours, minutes and seconds and
@@ -1871,7 +1888,7 @@ static inline void playTime_jun26(struct McPreview *p, int *hour, int *min,
 static inline void playTime_aug6(struct McPreview *p, int *hour, int *min,
                                  int *sec) /* derived name */
 {
-    int frames = p->playTime;
+    int frames = la_preview_play(p);
 
     *sec = (frames / FRAME_RATE) % 60;
     *min = (frames / (FRAME_RATE * 60)) % 60;
@@ -1893,7 +1910,7 @@ static inline void playTime(struct McPreview *p, int *hour, int *min, int *sec) 
         playTime_aug6(p, hour, min, sec);
         return;
     }
-    int frames = p->playTime;
+    int frames = la_preview_play(p);
     int fps = ((60 - systemStatus[0] * 10) / systemStatus[1]) * systemStatus[1];
 
     *sec = (frames / fps) % 60;
@@ -1944,7 +1961,7 @@ static void _la_set_preview_info_jun26(void)
 
     n = previewInfo.stage;
     if (n >= 3 && n < 56) {
-        switch (previewInfo.sofa + 42) { /* the demo's ids 42 lower */
+        switch (la_preview_sofa(&previewInfo) + 42) { /* the demo's ids 42 lower */
         case 329:
             n = 39;
             break;
@@ -2009,7 +2026,7 @@ static void _la_set_preview_info(void)
         }
     }
     if (n >= 3 && n < 56) {
-        switch (previewInfo.sofa +
+        switch (la_preview_sofa(&previewInfo) +
                 PAL_NTSC_AUG6JUN26(0, 30, 31)) { /* NTSC ids 30 lower, AUG6 ids 31 lower */
         case 329:
             n = 39;
