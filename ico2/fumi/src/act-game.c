@@ -177,7 +177,8 @@ inline int ACTGame_CheckHandMotion(GObj *boy, GObj *girl)
 static inline int ACTGame_CheckItemMotion_ntscaug6jun26(GObj *self)
 {
     const MotionRec *rec = &motionKind[GOBJ_SUB(self)->ctrl.motion];
-    return rec->modeBits.h.hi & 7;
+    /* PC port: the host holds the item mode at the European bits 19-21 */
+    return (rec->modeBits.w >> 19) & 7;
 }
 
 inline int ACTGame_CheckItemMotion(GObj *self)
@@ -6573,8 +6574,12 @@ static void ACTItemThrow(Act *sub, GObj *self)
 static void ACTItemWatchMotion_ntscaug6jun26(GObj *self)
 {
     Act *sub = GOBJ_ACT(self);
-    int mode;
-    int frame;
+    /* PC port: the disc's own build reads the item mode at motion bits 16-18; the host loader
+       holds it at the European bits 19-21 (config/motion_bits.ntsc.txt, modeBits), like the
+       European arm below */
+    MotionRec *rec = &motionKind[GOBJ_SUB(self)->ctrl.motion];
+    int mode = rec->modeBits.w >> 19;
+    int frame = rec->modeBits.b;
 
     mode &= 7;
 
