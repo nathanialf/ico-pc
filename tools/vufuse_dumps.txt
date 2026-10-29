@@ -1,5 +1,6 @@
 # Dump list for rd_vufuse_ab (port/render/test/rd_vufuse_ab.cmake), read with
-# tools/vustage_dumps.txt: the frames that list does not hold.  MACHINE-LOCAL:
+# tools/vustage_dumps.txt: the phone's frames, each of which must fuse some
+# code 36 pairs at both phone settings (2x and Resolution Auto).  MACHINE-LOCAL:
 # these are paths on the maintainer's machine; the dumps themselves are never
 # committed.  Missing files are reported and skipped.  Relative paths are
 # relative to this file; '*' globs are allowed.
@@ -7,3 +8,9 @@
 # the PowerVR phone's v0.9.4-rc2 frame at 2x, aspect 2.189 (701 VU draws, 560
 # of them code 36's cut and kick pairs)
 /primary/dev/ico-pc/build-host/tmp/v094/evidence/android-rc2/dump/frame-20261028-151709-v2199.rddump
+# the PowerVR phone's v0.9.4-rc1 frame (Resolution Auto, 2364x1080: 382 pairs,
+# 355 of them kept apart for the no-planes pixel shader before the twins read
+# the mark)
+/primary/dev/ico-pc/build-host/tmp/v094/evidence/android-dump/frame-20261028-105852-v4103.rddump
+# the PowerVR phone's v0.9.4-rc3 frame (the [dev] perf_passes run's dump)
+/primary/dev/ico-pc/dist/frame-20261028-173610-v4657.zip
