@@ -1799,6 +1799,7 @@ static void pendClear(Replay *r, uint32_t id, RdTargetRec *t, const float col[4]
     s_pend.p.clearDepth = rd__gs_depth(z, rd__target_z_scale(id));
     s_pend.colorTex = t->color.id;
     s_pend.depthTex = depth ? t->depth.id : 0;
+    rd__const_note_clear(id, t, col); /* rd_const_read.c */
 }
 
 static void doClear(Replay *r, const RdCmd *c)
@@ -5549,6 +5550,10 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
                 textured = 1;
             } else {
                 src = NULL;
+            }
+            if (src && rd__const_read(tc, r->st.color, src, t->target, d, &p, tfmt)) {
+                src = NULL; /* drawn untextured in its clear's colour (rd_const_read.c) */
+                textured = 0;
             }
         }
     }
