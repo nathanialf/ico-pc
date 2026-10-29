@@ -210,20 +210,59 @@ static sceVu0IVECTOR barLine[4][2] = {{{0, 3, 0, 0}, {7, 3, 0, 0}},
                                       {{3, 0, 0, 0}, {3, 7, 0, 0}},
                                       {{7, 0, 0, 0}, {0, 7, 0, 0}}}; /* derived name */
 
-/* .data: the game-flag ids the load carries across gflagInit.  The list
-   holds five ids and the key-config tables follow it; the keep/restore loops
-   below walk twenty words. */
+/* .data: the game-flag ids the load carries across gflagInit, each disc's
+   own five (that build's flag numbers; the last is its "new game started"
+   flag).  On the June 2001 demo progressive_bar's table barLine follows the
+   list, then the key-config tables; on the other discs the key-config
+   tables follow it directly.  The keep/restore loops below walk twenty
+   words. */
+static int keepFlagNo_pal[5] = {388, 384, 383, 385, 382}; /* PAL, JPN, KOR, CN; derived name */
 
-/* The keep/restore loops read twenty words from keepFlagNo: the five ids, then
-   keyConfigCode and the first seven keyConfigSlot, which follow it in the EE's
-   .data (so a load also keeps those game flag ids and the key-config slots).  The host holds the three as one
-   array so the walk is in bounds and reads the same words. */
-static int keepWords[21] = {388, 384, 383, 385, 382, 16, 128, 32, 64, 8, 2,
-                            1,   4,   1,   2,   3,   4,  5,   0,  0,  0};
+static int keepFlagNo_ntsc[5] = {355, 351, 350, 352, 349}; /* derived name */
 
-#define keepFlagNo keepWords
-#define keyConfigCode (keepWords + 5)
-#define keyConfigSlot (keepWords + 13)
+static int keepFlagNo_aug6[5] = {354, 350, 349, 351, 348}; /* derived name */
+
+static int keepFlagNo_jun26[5] = {339, 335, 334, 336, 333}; /* derived name */
+
+/* the eight pad button codes the key-config screen offers, and the
+   six-plus-two slot assignments it edits. */
+static int keyConfigCode[8] = {16, 128, 32, 64, 8, 2, 1, 4}; /* derived name */
+
+static int keyConfigSlot[8] = {1, 2, 3, 4, 5, 0, 0, 0}; /* derived name */
+
+/* PC port: the keep/restore loops read twenty words from the disc's
+   keepFlagNo: its five ids, then what follows the list in that disc's EE
+   .data (the first fifteen words of barLine on the June 2001 demo,
+   keyConfigCode and the first seven keyConfigSlot on every other disc), so
+   a load also keeps those words as game flag ids.  The host keeps the
+   arrays apart and reads the same twenty words, in the disc's order,
+   through this (issue 160: one European list on every disc re-raised the
+   North American disc's new-game flag 349 on Continue). */
+static int keepFlagWord(unsigned int i) /* PC port */
+{
+    unsigned int j;
+
+    if (i < 5) {
+        return PAL_NTSC_AUG6_JUN26(keepFlagNo_pal, keepFlagNo_ntsc, keepFlagNo_aug6,
+                                   keepFlagNo_jun26)[i];
+    }
+    j = i - 5;
+    if (ICO_JUN26) {
+        return barLine[j / 8][(j / 4) % 2][j % 4];
+    }
+    return j < 8 ? keyConfigCode[j] : keyConfigSlot[j - 8];
+}
+
+/* PC port: the twenty words the load's walk reads on the selected disc,
+   for the keep-flag test (port/game/test/keep_flags_test.c) */
+void la_host_keep_words(int out[20])
+{
+    unsigned int i;
+
+    for (i = 0; i < 20; i++) {
+        out[i] = keepFlagWord(i);
+    }
+}
 
 /* the memory-card request block the layout actions drive */
 McMgr mc = {{0}};
@@ -2554,7 +2593,7 @@ static inline void gflagKeepState(void) /* derived name */
     unsigned int i;
 
     for (i = 0; i < 20; i++) {
-        keepFlags[i] = gflagChk(keepFlagNo[i]);
+        keepFlags[i] = gflagChk(keepFlagWord(i)); /* PC port: keepFlagNo[i] */
     }
 }
 
@@ -2565,11 +2604,44 @@ static inline void gflagRestoreState(void) /* derived name */
 
     for (i = 0; i < 20; i++) {
         if (keepFlags[i]) {
-            gflagOn(keepFlagNo[i]);
+            gflagOn(keepFlagWord(i)); /* PC port: keepFlagNo[i] */
         } else {
-            gflagOff(keepFlagNo[i]);
+            gflagOff(keepFlagWord(i));
         }
     }
+}
+
+/* PC port: the five kept ids' values in the save just read, taken between
+   gamesysMemoryLoad and gflagRestoreState for la_host_load_log */
+static int loadSavedKeep[5];
+
+static void la_host_load_saved(void) /* PC port */
+{
+    unsigned int i;
+
+    for (i = 0; i < 5; i++) {
+        loadSavedKeep[i] = gflagChk(keepFlagWord(i));
+    }
+}
+
+/* PC port: one line a load, after gflagRestoreState: the slot, the stage
+   the save goes to and each kept id as "id=in the save/after the restore",
+   with the disc's new-game flag (the fifth id on every disc), so a log
+   shows what a Continue kept */
+static void la_host_load_log(int slot) /* PC port */
+{
+    int f[5];
+    unsigned int i;
+
+    for (i = 0; i < 5; i++) {
+        f[i] = keepFlagWord(i);
+    }
+    ico_diag_milestone("load: slot %d, stage %d; kept flags (id=in the save/kept) %d=%d/%d "
+                       "%d=%d/%d %d=%d/%d %d=%d/%d %d=%d/%d; new game flag %d",
+                       slot, gFlagSaveStage, f[0], loadSavedKeep[0], gflagChk(f[0]), f[1],
+                       loadSavedKeep[1], gflagChk(f[1]), f[2], loadSavedKeep[2], gflagChk(f[2]),
+                       f[3], loadSavedKeep[3], gflagChk(f[3]), f[4], loadSavedKeep[4],
+                       gflagChk(f[4]), ico_region_new_game_flag(NULL));
 }
 
 static int loadStep = 0; /* derived name */
@@ -2608,7 +2680,9 @@ static int la_load_processing_jun26(int first)
         gflagKeepState();
         gflagInit();
         gamesysMemoryLoad(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
+        la_host_load_saved(); /* PC port: for the load's log line */
         gflagRestoreState();
+        la_host_load_log(mc.fileNo); /* PC port */
         systemStatus[3] = 1;
         systemStatus[4] = 1;
         /* falls through */
@@ -2749,7 +2823,9 @@ int la_load_processing(int first)
         gflagKeepState();
         gflagInit();
         gamesysMemoryLoad(gameSysMemoryFuncList, gameSysMainSaveBuff, 0);
+        la_host_load_saved(); /* PC port: for the load's log line */
         gflagRestoreState();
+        la_host_load_log(mc.fileNo); /* PC port */
         systemStatus[3] = 1;
         systemStatus[4] = 1;
         debug_StdPrintfDummy("case 10\n");
