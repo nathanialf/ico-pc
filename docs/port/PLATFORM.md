@@ -904,6 +904,22 @@ ticks and the current thread (`ico_diag_milestone`), and game threads are named 
 `iosThreadCreate` runs (`ico_host_thread_func`). `ico_diag_float_fault` logs a NaN that reaches game
 code the PS2 never fed one (`port/platform/diag_host.h` (`ico_diag_float_fault`)).
 
+**Loads, stage switches and story flags (issue 160).** A save's load logs one milestone after it
+restores the flags it keeps across `gflagInit` (`ico2/common/src/layout_action.c`
+`la_host_load_log`): `load: slot 0, stage 41; kept flags (id=in the save/kept) 355=0/0 351=0/0
+350=0/0 352=0/0 349=1/0; new game flag 349`, each disc's own five ids (the fifth is its new-game
+flag; the twenty words the walk reads per disc are checked by ctest `keep_flags` and its six disc
+runs). Every stage-switch request (`ico2/common/src/StageManager.c` `stgmgrForceSwitch`,
+`stgmgrForceSwitchWithFadeColor`, through `ico_host_stage_switch`) logs `stage switch request:
+stage S, fade in F out G, cmd C, by thread #N name` with the milestone prefix (the first 200, then
+every 10th), and a request made while the stage manager's queue still holds an untaken one adds `a
+second stage switch request while one is queued (stage A then B, N queued)`: the retail game can
+ask twice in one Main tick (a Continue's load and the title's new-game wait did, and the stage
+loaded twice). `gflagChk`, `gflagOn` and `gflagOff` (`ico2/script/src/gflag.c`) log an id at or
+past the disc's flag count (`ico_region_gflag_count`, the region table's `gflag_count`) as `gflag:
+flag ID read|set|cleared past the disc's COUNT flags (from CALLER)`, rate-limited; the game's
+access goes ahead unchanged.
+
 **A GPU hang.** When the watchdog fires (either limit; not the pump's bound) while the main thread
 is blocked in a wait for the GPU and the work it waits for has not finished
 ([RHI.md](RHI.md#device-loss), `rhi_gpu_progress`: the wait's value above the newest seen finished),
