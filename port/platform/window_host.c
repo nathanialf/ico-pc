@@ -151,11 +151,11 @@ static struct {
     uint32_t presentedFrame; /* the frame of the last present */
     Uint64 tickAt, tickPrev; /* the pace deadlines (simulated time) the last two frames closed at */
     Uint64 lastPresent;      /* the last present's start (the alpha clock's) */
-    Uint64
-        nextPresent;   /* when the next present is due (0: now); the grid pace_next_present keeps */
-    Uint64 cost;       /* how long the last rd_present took */
-    PaceHist paceHist; /* the last presents' costs (pace_policy.h) */
-    bool paceSlow;     /* pace_slow_present after the last present */
+    Uint64 nextPresent;      /* when the next present is due (0: now); pace_next_present keeps */
+    Uint64 gapAdapt;         /* the uncapped mailbox gap adapted to the display (pace_gap_adapt) */
+    Uint64 cost;             /* how long the last rd_present took */
+    PaceHist paceHist;       /* the last presents' costs (pace_policy.h) */
+    bool paceSlow;           /* pace_slow_present after the last present */
     /* a frame pace left unpresented since the last present (pace_late_skip)
        and its number */
     bool skipOpen;
@@ -473,7 +473,7 @@ static void video_settings(RdSettings *rs, int w, int h)
         0; /* the clamp's line again after a settings change */
     if (s_pres.framerate != ico_video_framerate()) {
         /* a new limit starts a new grid and a new present allowance */
-        s_pres.nextPresent = 0;
+        s_pres.nextPresent = s_pres.gapAdapt = 0;
         timer_budget_reset();
     }
     s_pres.framerate = ico_video_framerate();
@@ -5859,20 +5859,16 @@ static void pace(int hz)
     /* a present with vsync on blocks up to one display refresh; that wait is
        not the renderer being slow. A 60 Hz display under the 59.94 Hz
        simulation (refresh 16.67 ms against the 16.68 ms period) sits on
-       that edge and would fall back to one present per game frame. Slow
-       means a present costing more than a display refresh plus half a
-       simulated period (pace_policy.h: the cost is smoothed, with
-       hysteresis, and the limit is higher with an effects program
-       loaded). */
+       that edge and would fall back to one present per game frame. Slow:
+       a present costing over a refresh plus half a period (pace_policy.h:
+       smoothed, with hysteresis, higher with an effects program). */
     Uint64 gap;
     const Uint64 refresh = display_refresh_ns(period);
     {
-        /* "uncapped" under a mailbox swapchain (vsync on, or vsync off with
-           no immediate mode: an Android compositor's mailbox present blocks
-           once its queue is full, which held a phone's step 20-30 ms): one
-           present a refresh.  Immediate mode: back to back.  A cap equal to
-           the refresh: FIFO is the timer (s_pres.fifoLock).  Any other cap
-           its own gap (pace_policy.h pace_present_gap, pace_next_present) */
+        /* "uncapped" under a mailbox swapchain (vsync on, or off with no
+           immediate mode: Android's compositor blocks a present once its
+           queue is full): one a refresh, adapted to the display's pace.
+           Immediate: back to back (pace_present_gap) */
         const int uncappedMailbox =
             s_pres.framerate == ICO_FRAMERATE_UNCAPPED && rhi_present_mailbox();
         gap = s_pres.fifoLock ? 0
@@ -5880,6 +5876,9 @@ static void pace(int hz)
                                                  rhi_present_mailbox(), refresh);
         if (!gap) {
             s_pres.nextPresent = 0;
+        } else if (uncappedMailbox) {
+            gap = s_pres.gapAdapt =
+                pace_gap_adapt(s_pres.gapAdapt, gap, s_pres.displayWaitNs, refresh);
         }
         if (uncappedMailbox && !s_pres.vsync && !s_pres.mailboxOffLogged) {
             s_pres.mailboxOffLogged = 1;
