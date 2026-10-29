@@ -162,6 +162,7 @@ add_library(ico_render STATIC
     rd_shadow.c
     rd_shadow_one.c # the shadow count resolved in one draw from the stencil view
     rd_shadow_selftest.c # the shadow count's one draw: the start-up check on the device
+    rd_store_plan.c # the depth stores and loads a replay drops: no later pass touches the depth
     rd_tex.c
     rd_water.c # block targets, aliases, camera scopes
     rd_video.c # the FMV picture (port/fmv/rd_video.h)
@@ -1703,6 +1704,26 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_vufuse_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_store_plan_ab (test/rd_store_plan_ab.cmake): the same dumps and the
+    # phone's frame with every depth store kept (ICO_RD_STORE_PLAN=0), with the
+    # store plan (rd_store_plan.c) and with every depth store dropped
+    # (ICO_RD_STORE_PLAN=all), under ICO_RD_STORE_POISON=1 (a load the plan
+    # leaves undefined clears to garbage: lavapipe keeps the contents itself),
+    # at the phone's profile and the desktop's at 4:3 and 16:9 2x, under
+    # ICO_RD_BLEND=fixed: every named target byte for byte with the plan, depth
+    # stores dropped, and some target changed by the wrong plan; SKIP as
+    # rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/store_plan_ab")
+    add_test(NAME rd_store_plan_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/vufuse_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/store_plan_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_store_plan_ab.cmake")
+    set_tests_properties(rd_store_plan_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_store_plan_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
 endif()
 # The blend policy (rd_dst_read.c)
 # rd_dst_usage_test: the fixed-function blend by default makes no
@@ -1947,7 +1968,7 @@ endif()
 #  * the tests that start the game (model_viewer_headless, gallery_sweep,
 #    credits_headless) or work on the replay tool's files (rd_replay_tool*,
 #    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, rd_vubatch_ab, rd_vumerge_ab,
-#    rd_vufuse_ab,
+#    rd_vufuse_ab, rd_store_plan_ab,
 #    the native frame gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
 #    on both backends)
 #  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_mip, rd_passring,
