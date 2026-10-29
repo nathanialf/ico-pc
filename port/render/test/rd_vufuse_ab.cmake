@@ -5,12 +5,17 @@
 # ICO_RD_BLEND=fixed and the draw merge on, rd_replay_tool's --pass-dump with
 # --stats twice: with ICO_RD_VU_FUSE=0 (every kick under its own pipeline, as
 # before the fuse) and with the fuse (a pair the blend form and the plans allow
-# drawn with the kick under its cut's pipeline, its pixels unblended), at four
+# drawn with the kick under its cut's pipeline, its pixels unblended), at five
 # settings:
 #   phone    the PowerVR phone's profile: the programs' own entries
 #            (ICO_RD_VU_PREPASS=0, a tile-based GPU's path), Enhanced 2x at the
 #            dump's 2.189 aspect, presented at 2364x1080 (a dump narrower than
 #            2.189 cannot show it: skipped for it);
+#   phoneauto the same at the phone's Resolution Auto: the output size
+#            2364x1080 with Full height and Full pixel (2366x1080 texels, a
+#            fractional scale: the VU draws through the no-planes twins,
+#            vu_np_ps, which read the kick's mark from the plane distance's
+#            sign);
 #   own43    the programs' own entries, Enhanced 4:3 2x;
 #   rec43    the record (the pre-passes on, the desktop's path), Enhanced 4:3 2x;
 #   rec169   the record, Enhanced 16:9 2x.
@@ -19,13 +24,17 @@
 # fused, both runs must count the same pairs (fused, kept apart and under one
 # pipeline already), the fused run's GPU draws must be the other's less what
 # its merge joined beyond the other's (draws merged less the GPU draws they
-# took, from each run's "VU merge:" line), and at every setting where pairs
-# were counted some must be fused, with fewer GPU draws.  Each pair's draws and
+# took, from each run's "VU merge:" line), no pair may be kept apart for the
+# no-planes pixel shader (every pixel shader a pair draws with reads the mark),
+# at every setting where pairs were counted some must be fused, with fewer GPU
+# draws, and every dump of the second list (tools/vufuse_dumps.txt: the phone's
+# frames) must have some fused at both phone settings.  Each pair's draws and
 # pairs are printed.  A missing list or dump is named and skipped; no dump
 # read, or no device: SKIP (77).
-# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DEXTRA=<a second dump list>
+# -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DEXTRA=<the phone's dump list>
 # -DOUT=<a folder the test may write>
 set(dumps "")
+set(phoneDumps "")
 foreach(list IN ITEMS "${LIST}" "${EXTRA}")
   if(list STREQUAL "" OR NOT EXISTS "${list}")
     message(STATUS "${list}: no dump list, skipped")
@@ -41,18 +50,21 @@ foreach(list IN ITEMS "${LIST}" "${EXTRA}")
     if(NOT IS_ABSOLUTE "${l}")
       set(l "${listDir}/${l}")
     endif()
+    set(found "")
     if(l MATCHES "[*]")
-      file(GLOB matched "${l}")
-      list(SORT matched)
-      if(matched)
-        list(APPEND dumps ${matched})
-      else()
+      file(GLOB found "${l}")
+      list(SORT found)
+      if(NOT found)
         message(STATUS "${l}: no dump matches, skipped")
       endif()
     elseif(EXISTS "${l}")
-      list(APPEND dumps "${l}")
+      set(found "${l}")
     else()
       message(STATUS "${l}: no such dump, skipped")
+    endif()
+    list(APPEND dumps ${found})
+    if(list STREQUAL "${EXTRA}")
+      list(APPEND phoneDumps ${found})
     endif()
   endforeach()
 endforeach()
@@ -63,9 +75,12 @@ if(ndumps EQUAL 0)
   return()
 endif()
 
-set(settings "phone" "own43" "rec43" "rec169")
+set(settings "phone" "phoneauto" "own43" "rec43" "rec169")
 set(args_phone --enhanced --resolution 2x --aspect 2.189 --present 2364x1080)
 set(env_phone "ICO_RD_VU_PREPASS=0")
+set(args_phoneauto --enhanced --resolution 2364x1080 --full-height --full-pixel --aspect 2.189
+                   --present 2364x1080)
+set(env_phoneauto "ICO_RD_VU_PREPASS=0")
 set(args_own43 --enhanced --resolution 2x --aspect 4:3)
 set(env_own43 "ICO_RD_VU_PREPASS=0")
 set(args_rec43 --enhanced --resolution 2x --aspect 4:3)
@@ -74,7 +89,7 @@ set(args_rec169 --enhanced --resolution 2x --aspect 16:9)
 set(env_rec169 "")
 set(drawsRe "stats: ([0-9]+) draws, [0-9]+ passes")
 set(mergeRe "stats: VU merge: [0-9]+ draws in [0-9]+ GPU draws \\(([0-9]+) merged into ([0-9]+), [0-9]+ alone, merge (on|off)\\)")
-set(fuseRe "stats: VU fuse: ([0-9]+) pairs fused, ([0-9]+) kept apart \\(blend form ([0-9]+), plans differ ([0-9]+), passes [0-9]+, dst/DATE [0-9]+, no planes [0-9]+, no merge build [0-9]+, fuse off ([0-9]+)\\), ([0-9]+) under one pipeline already, fuse (on|off)")
+set(fuseRe "stats: VU fuse: ([0-9]+) pairs fused, ([0-9]+) kept apart \\(blend form ([0-9]+), plans differ ([0-9]+), passes [0-9]+, dst/DATE [0-9]+, no planes ([0-9]+), no merge build [0-9]+, fuse off ([0-9]+)\\), ([0-9]+) under one pipeline already, fuse (on|off)")
 set(compared 0)
 set(failures 0)
 foreach(s IN LISTS settings)
@@ -139,9 +154,10 @@ foreach(dump IN LISTS dumps)
       set(kept${run} "${CMAKE_MATCH_2}")
       set(blend${run} "${CMAKE_MATCH_3}")
       set(plans${run} "${CMAKE_MATCH_4}")
-      set(off${run} "${CMAKE_MATCH_5}")
-      set(same${run} "${CMAKE_MATCH_6}")
-      set(state${run} "${CMAKE_MATCH_7}")
+      set(noPlanes${run} "${CMAKE_MATCH_5}")
+      set(off${run} "${CMAKE_MATCH_6}")
+      set(same${run} "${CMAKE_MATCH_7}")
+      set(state${run} "${CMAKE_MATCH_8}")
     endforeach()
     if(NOT ok)
       math(EXPR failures "${failures} + 1")
@@ -163,8 +179,20 @@ foreach(dump IN LISTS dumps)
     # the same VU draws either way: the GPU draws differ by what the merge joined
     math(EXPR want "${nOff} - (${savedOn} - ${savedOff})")
     message(STATUS "${dump} ${s}: ${pairsOn} pairs, ${fusedOn} fused, ${keptOn} kept apart "
-                   "(blend form ${blendOn}, plans differ ${plansOn}), ${sameOn} under one "
-                   "pipeline already; GPU draws ${nOff} kicks apart, ${nOn} fused")
+                   "(blend form ${blendOn}, plans differ ${plansOn}, no planes ${noPlanesOn}), "
+                   "${sameOn} under one pipeline already; GPU draws ${nOff} kicks apart, "
+                   "${nOn} fused")
+    if(NOT noPlanesOn EQUAL 0)
+      message(SEND_ERROR "${dump} ${s}: ${noPlanesOn} pairs kept apart for a pixel shader "
+                         "that reads no mark (no planes)")
+      math(EXPR failures "${failures} + 1")
+    endif()
+    list(FIND phoneDumps "${dump}" isPhone)
+    if(NOT isPhone EQUAL -1 AND s MATCHES "^phone" AND NOT fusedOn GREATER 0)
+      message(SEND_ERROR "${dump} ${s}: a phone frame with no pair fused (${pairsOn} pairs, "
+                         "${sameOn} under one pipeline already)")
+      math(EXPR failures "${failures} + 1")
+    endif()
     if(NOT nOn EQUAL want)
       message(SEND_ERROR "${dump} ${s}: ${nOn} GPU draws fused, ${want} expected (${nOff} less "
                          "the merge's ${savedOn} joined draws against ${savedOff})")
@@ -215,4 +243,6 @@ if(compared EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} or ${EXTRA} could be compared")
   return()
 endif()
-message(STATUS "rd_vufuse_ab: ${compared} targets equal over ${ndumps} dumps at 4 settings")
+list(LENGTH settings nsettings)
+message(STATUS "rd_vufuse_ab: ${compared} targets equal over ${ndumps} dumps at ${nsettings} "
+               "settings")
