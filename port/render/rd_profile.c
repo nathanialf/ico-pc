@@ -13,9 +13,13 @@
  *                 exact mode (rd_dst_read.c)
  *   fogLocal      on (1)   off     on where the device has local read
  *   dateStencil   on (1)   off     on where the device has local read
- *   storePlan     off on every class: the store plan is not in the renderer
- *                 (docs/port/RENDER.md "The device profile"); [dev]
- *                 store_plan sets the flag, which nothing reads
+ *   storePlan     on on every class: a pass after its depth's last touch in
+ *                 the replay neither loads nor stores the depth and its
+ *                 stencil (rd_store_plan.c, docs/port/WORK_BUFFERS.md "The
+ *                 store plan"); D3D12, D3D11 and OpenGL keep the contents
+ *                 either way.  [dev] store_plan = false keeps every load and
+ *                 store; ICO_RD_STORE_PLAN=all (tests) drops every depth
+ *                 store (storeAll)
  *   blurFold      on       on      on        on       off   on       on
  *   robust access off: the Vulkan backend's default (vk_device.c;
  *                 gpu_robust = true turns it on); D3D12 and D3D11 their
@@ -82,7 +86,7 @@
  * The [dev] keys override one flag at a time, through the environment the
  * host exports (port/platform/host_config.c): ICO_RD_FOG_PATH=local
  * (fogLocal on; inplace, copy or buffer: off), ICO_RD_DATE_PATH=stencil|
- * snapshot, ICO_RD_STORE_PLAN=1|0, ICO_RD_BLUR_FOLD=1|0, ICO_RD_UINT_VIEW=
+ * snapshot, ICO_RD_STORE_PLAN=1|0|all, ICO_RD_BLUR_FOLD=1|0, ICO_RD_UINT_VIEW=
  * 1|work|0 (both views, the work buffers' only, none), ICO_RD_ALPHA_PLAN=
  * 1|0, ICO_RD_FX_PLAN=1|0, ICO_RD_FX_DST_LOCAL=1|0, ICO_RD_VU_PLANES=1|0,
  * ICO_RD_SHADOW_ONE=1|0 (1 asks for the one draw, held to the view),
@@ -271,6 +275,12 @@ static const char *shadowWords(const RdProfile *p)
     return p->shadowOne ? "one draw" : "seven draws";
 }
 
+/* the depth stores' words: "planned", "kept" or "all dropped (test)" */
+static const char *storeWords(const RdProfile *p)
+{
+    return !p->storePlan ? "kept" : p->storeAll ? "all dropped (test)" : "planned";
+}
+
 /* the shadow composites' kernel above 1x: "bilinear" or "b-spline" */
 static const char *edgeWords(const RdProfile *p)
 {
@@ -286,14 +296,14 @@ static void makeText(RdProfile *p)
              "shadow count %s%s, shadow edges: %s%s%s%s",
              p->cls, p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
              p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
-             p->storePlan ? "planned" : "kept", mark(p, RD_PROFILE_STORE_PLAN),
-             p->blurFold ? "on" : "off", mark(p, RD_PROFILE_BLUR_FOLD), p->localRead ? "yes" : "no",
-             uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",
-             mark(p, RD_PROFILE_ALPHA_PLAN), p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN),
-             p->fxDstLocal ? "on" : "off", mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p),
-             mark(p, RD_PROFILE_VU_PLANES), shadowWords(p), mark(p, RD_PROFILE_SHADOW_ONE),
-             edgeWords(p), mark(p, RD_PROFILE_SHADOW_BSPLINE),
-             p->localWords[0] ? ", desktop local read " : "", p->localWords);
+             storeWords(p), mark(p, RD_PROFILE_STORE_PLAN), p->blurFold ? "on" : "off",
+             mark(p, RD_PROFILE_BLUR_FOLD), p->localRead ? "yes" : "no", uintWords(p),
+             mark(p, UINT_BITS), p->alphaPlan ? "on" : "off", mark(p, RD_PROFILE_ALPHA_PLAN),
+             p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN), p->fxDstLocal ? "on" : "off",
+             mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p), mark(p, RD_PROFILE_VU_PLANES),
+             shadowWords(p), mark(p, RD_PROFILE_SHADOW_ONE), edgeWords(p),
+             mark(p, RD_PROFILE_SHADOW_BSPLINE), p->localWords[0] ? ", desktop local read " : "",
+             p->localWords);
 }
 
 void rd__profile_init(void)
@@ -319,7 +329,7 @@ void rd__profile_init(void)
     /* the table (the file comment) */
     p->fogLocal = local;
     p->dateStencil = local;
-    p->storePlan = false; /* the store plan is not implemented: nothing reads the flag */
+    p->storePlan = true; /* rd_store_plan.c; nothing changes where the device keeps the contents */
     p->blurFold = c != PC_MALI;
     p->uintViewWork = !tile && lim->uintView;
     p->uintViewScene = !tile && lim->uintView;
@@ -355,7 +365,12 @@ void rd__profile_init(void)
         p->devSet |= RD_PROFILE_DATE_STENCIL;
     }
     const int store = envBool("ICO_RD_STORE_PLAN");
-    if (store >= 0) {
+    const char *storeEnv = getenv("ICO_RD_STORE_PLAN");
+    if (storeEnv && strcmp(storeEnv, "all") == 0) {
+        /* the tests' wrong plan: every depth store dropped (rd_store_plan_ab) */
+        p->storePlan = p->storeAll = true;
+        p->devSet |= RD_PROFILE_STORE_PLAN;
+    } else if (store >= 0) {
         p->storePlan = store == 1;
         p->devSet |= RD_PROFILE_STORE_PLAN;
     }
@@ -453,8 +468,8 @@ void rd__profile_init(void)
             p->cls, exact ? rd__blend_exact_name(asked) : "fixed-function", exact ? " ([dev])" : "",
             p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
             p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
-            p->storePlan ? "planned" : "kept", mark(p, RD_PROFILE_STORE_PLAN),
-            p->blurFold ? "on" : "off", mark(p, RD_PROFILE_BLUR_FOLD),
+            storeWords(p), mark(p, RD_PROFILE_STORE_PLAN), p->blurFold ? "on" : "off",
+            mark(p, RD_PROFILE_BLUR_FOLD),
             lim->robustText ? lim->robustText
             : c == PC_D3D11 ? "D3D11's own"
             : d3d           ? "D3D12's own"
