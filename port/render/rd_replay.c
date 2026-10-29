@@ -4536,7 +4536,7 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
 {
     s_shadowRedFor = 0;
     RdPipeKeyInt k = rd__shadow_reduce_key(); /* RGBA8, like the count */
-    RhiPipeline pipe = rd__get_pipeline(&k);
+    RhiPipeline pipe = rd__get_pipeline_held(&k);
     if (!shadowRedMake(tc) || !pipe.id) {
         return;
     }
@@ -4550,8 +4550,12 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
     p.colorCount = 1;
     p.width = tc->w;
     p.height = tc->h;
-    rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, 0, tc->w, tc->h, r->perfPost);
+    rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, r->st.color, tc->w, tc->h, r->perfPost);
     rhi_cmd_begin_render_pass(s_cl, &p);
+    /* the ring as the one draw's */
+    rhi_cmd_checkpoint(s_cl,
+                       passPush(RD_PASSK_PASS, r->st.color, tc->w, tc->h, 0, 0, 0, 0, r->perfPost));
+    (void)rd__get_pipeline(&k);
     setViewport(tc->w, tc->h);
     const RhiRect all = {0, 0, tc->w, tc->h};
     rhi_cmd_set_scissor(s_cl, &all);

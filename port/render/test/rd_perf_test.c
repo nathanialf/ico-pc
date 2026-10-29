@@ -824,8 +824,9 @@ static void checkPieces(const RdPerfRecord *r, const RdPerfPass *p, uint32_t n, 
             continue;
         }
         entries++;
-        /* the next piece the ring notes (a render pass without a target,
-           the shadow count's reduction, is not in the ring) */
+        /* the next piece the ring notes (a render pass without a target
+           is not in the ring; the shadow count's reduction is, as the
+           count target's pass at its GS size, since v0.9.5) */
         while (k < n && (!ringKind(p[k].kind) || (p[k].kind == RD_PERF_PASS_RENDER &&
                                                   p[k].target == RD_PERF_TARGET_NONE))) {
             k++;
