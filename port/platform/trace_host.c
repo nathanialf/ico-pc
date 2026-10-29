@@ -61,10 +61,14 @@ void ico_host_main_tick(void)
         ico_diag_milestone("stage_no %d -> %d", logged_stage, stage_no);
         logged_stage = stage_no;
     }
-    /* the menu screen (layout_action.c's numbers: 12 the title
-       with Continue, 20 the load's card check, 19 the file select, 25 the
-       load itself), so a log that ends after Continue says which step it
-       reached */
+    /* the menu screen (layout_action.c's numbers), so a log that ends
+       after Continue says which step it reached.  The numbers are each
+       disc's own (its region table's layout_* rows,
+       port/core/region_<disc>.c): on the European disc 12 is the title with
+       Continue, 20 the load's card check, 19 the file select, 25 the load
+       itself; on the North American disc 9 is the title with Continue, 11
+       the file select, 22 the load itself, 50 play and 49 the stage
+       manager's loading screen (StageManager.c's lt_switch_layout) */
     if (current_layout_id != logged_layout) {
         ico_diag_milestone("menu screen %d -> %d", logged_layout, current_layout_id);
         logged_layout = current_layout_id;
