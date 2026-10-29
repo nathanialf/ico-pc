@@ -2050,6 +2050,11 @@ int main(int argc, char **argv)
                pr->storePlanMode == 2   ? "all"
                : pr->storePlanMode == 1 ? "on"
                                         : "off");
+        /* a cleared source read as its colour (rd_const_read.c) */
+        printf("%s: stats: constant reads %s: %u sprites drawn in a cleared source's colour, %u "
+               "target reads kept (the source drawn since its clear, or not cleared this "
+               "replay)\n",
+               dump, rd__const_reads_on() ? "on" : "off", pr->constReads, pr->constKept);
         /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
         printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
                "additive, %u local; vu no-planes %u\n",
