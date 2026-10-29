@@ -85,7 +85,9 @@ typedef struct IcoGsSnapshot {
     int layout;     /* current_layout_id */
     int system_status[12];
     int mc_preview[6]; /* IosMcPreviewInfo: [0] stage, [1] clear, [2] play
-                          time in frames, [3] couch id */
+                          time in frames, [3] couch id; on the 2001 discs
+                          [1] play time, [2] couch id (the region row's
+                          mc_preview_play and mc_preview_sofa) */
     unsigned char gflags[ICO_GS_GFLAG_BYTES];
     /* derived (only when actors_valid) */
     int actors_valid; /* the boy's and girl's objects are readable now */

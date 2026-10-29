@@ -232,6 +232,10 @@ static int flag_in(const IcoGsSnapshot *s, int n)
 /* la_save_confirm_complete, la_save_processing's success */
 #define LAYOUT_SAVE_COMPLETE (ico_region_cur()->layout_save_complete)
 #define GFLAG_NEW_GAME (ico_region_cur()->gflag_new_game) /* gflagOn(382), layout_action.c:738 */
+/* the card preview's play time and sofa words: [2] and [3] of the European
+   program's record, [1] and [2] of the 2001 discs' (issue 160) */
+#define PREVIEW_PLAY (ico_region_cur()->mc_preview_play)
+#define PREVIEW_SOFA (ico_region_cur()->mc_preview_sofa)
 #define STAGE_TITLE (ico_region_cur()->stage_title)
 
 void ico_gs_tick(void)
@@ -281,7 +285,7 @@ void ico_gs_tick(void)
         s_count[ICO_GS_EV_STAGE_ENTER] != 0 || (s_prev.valid && s_prev.stage_no != s_snap.stage_no);
     if (s_prev.valid && s_snap.layout == LAYOUT_SAVE_COMPLETE &&
         s_prev.layout != LAYOUT_SAVE_COMPLETE) {
-        raise_now(ICO_GS_EV_SAVE_DONE, s_snap.mc_preview[3]);
+        raise_now(ICO_GS_EV_SAVE_DONE, s_snap.mc_preview[PREVIEW_SOFA]);
     }
     if (s_prev.valid && s_snap.layout == LAYOUT_LOAD_PROCESSING &&
         s_prev.layout != LAYOUT_LOAD_PROCESSING) {
@@ -383,7 +387,9 @@ int ico_gs_tick_hz(void)
 
 unsigned int ico_gs_play_frames(void)
 {
-    return s_snap.mc_preview[2] > 0 ? (unsigned int)s_snap.mc_preview[2] : 0u;
+    const int frames = s_snap.mc_preview[PREVIEW_PLAY];
+
+    return frames > 0 ? (unsigned int)frames : 0u;
 }
 
 unsigned int ico_gs_play_seconds(void)
