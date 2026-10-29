@@ -1704,6 +1704,9 @@ void rd__vu_merge_name(uint8_t vs, bool plain, char *out, size_t size);
 const char *rd__vu_merge_text(void);
 /* The fused scissor pair (g_rd.vuFuse): "on" or "off" for the summary line */
 const char *rd__vu_fuse_text(void);
+/* A cleared source read as its colour (rd_const_read.c): false under [dev]
+ * constant_reads = false (ICO_RD_CONSTANT_READS=0, the A/B) */
+bool rd__const_reads_on(void);
 
 /* rd_vuprepass_selftest's sabotage (ICO_RD_VU_PREPASS_SABOTAGE), while the
  * mode is not RD_VU_SABOTAGE_OFF: VERTEX the first mesh or grid command's
