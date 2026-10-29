@@ -1004,6 +1004,7 @@ typedef struct RdProfile {
     bool fogLocal;      /* the fog reads the depth in the scene pass (RD_FOG_LOCAL first) */
     bool dateStencil;   /* DATE through the stencil bit, not the R8 snapshot */
     bool storePlan;     /* store-op DONT_CARE for depth and targets nothing reads later */
+    bool storeAll;      /* every depth store dropped (ICO_RD_STORE_PLAN=all, tests) */
     bool blurFold;      /* the staticBlur pairs folded into one pass each */
     bool uintViewWork;  /* the work-class targets get the RGBA8_UINT view */
     bool uintViewScene; /* SCENE, WORK2 and DISPLAY too (immediate-mode GPUs) */
@@ -3374,6 +3375,25 @@ uint64_t rd__ring_alloc(uint64_t size, uint64_t align);
 RhiCommandList rd__replay_cl(void);
 uint32_t rd__ring_slot(void);
 RdStencilWindow *rd__replay_stencil(void);
+/* The store plan (rd_store_plan.c; RdProfile.storePlan; docs/port/
+ * WORK_BUFFERS.md "The store plan"): rd__store_plan_scan reads the
+ * replayed lists of f before the walk (before rd__clear_new_targets); the
+ * walk sets g_rdStoreOrd to the command it replays (the lists' commands
+ * counted in order from the first replayed list, state commands included;
+ * past a list's last after it); beginPass hands every pass's depth ops to
+ * rd__store_plan_pass (d: its depth target, NULL without one or in the
+ * MSAA epoch), which drops the depth's and stencil's loads and stores
+ * where no command from g_rdStoreOrd on touches the depth (counted in
+ * RdPerfRecord.store*); rd__store_plan_end closes the replay (no plan
+ * outside one); rd__store_plan_readback: target's depth is read after its
+ * replays from now on (rd__read_target_depth) */
+extern uint32_t g_rdStoreOrd;
+void rd__store_plan_scan(const RdFrame *f, int keep);
+void rd__store_plan_pass(const RdTargetRec *d, uint32_t did, RhiLoadOp *depthLoad,
+                         RhiLoadOp *stencilLoad, RhiStoreOp *depthStore, RhiStoreOp *stencilStore,
+                         float *clearDepth, uint8_t *clearStencil);
+void rd__store_plan_end(void);
+void rd__store_plan_readback(uint32_t target);
 /* rd_replay.c helpers rd_upload.c shares: the alpha coverage a texture's
  * Enhanced mips keep, whether a target's passes begin readable, and
  * rd__stencil_ops with the depth copy's stencil load and store. */
