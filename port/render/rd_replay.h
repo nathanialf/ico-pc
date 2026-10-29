@@ -292,11 +292,18 @@ void rd__replay_end_pass(Replay *r);
 void rd__shadow_reduce_cb(const RdTargetRec *tc, IcoDrawCB *cb);
 /* rd_shadow_one.c: the shadow count of the state block's targets tc
  * (colour) and td (depth-stencil) in one draw (shadow_count_ps) into dst at
- * tc's GS size, reduceCb rd__shadow_reduce_cb's; the open pass ended first.
+ * tc's GS size, reduceCb rd__shadow_reduce_cb's, through the table of the
+ * count's step (4 or 8); the open pass ended first.
  * False, nothing drawn, when the stencil view, the pipeline, the table or
  * the bind group is missing (the seven draws then). */
-bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, RhiTexture dst,
+bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t step, RhiTexture dst,
                          RhiState *dstState, const IcoDrawCB *reduceCb);
+/* rd_shadow_one.c: resolve pass `pass` (0 .. RD_SHADOW_RESOLVE_PASSES - 1)
+ * of rd_replay.c doShadowResolve's seven draws under the count's step: its
+ * key, its DrawCB (the colour it adds, step << pass, or the A 0x80 it
+ * writes) and its stencil reference; false where the step has no such pass
+ * (step 8's bit 5: 8 << 5 is 256, nothing in eight bits) */
+bool rd__shadow_resolve_pass(uint32_t step, int pass, RdPipeKeyInt *k, IcoDrawCB *cb, uint8_t *ref);
 void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds,
                             IcoDrawCB *cb);
 /* rd_const_read.c: a staticBlur sprite whose source target holds only its
