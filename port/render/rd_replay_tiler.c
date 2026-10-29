@@ -251,6 +251,9 @@ void rd__replay_fold_at(uint32_t index)
 {
     s_loop.index = index;
     s_loop.skip = 0;
+    if (index < s_loop.count) {
+        rd__const_cmd(&s_loop.cmds[index]); /* the actions walked (rd_const_read.c) */
+    }
 }
 
 uint32_t rd__replay_fold_skip(void)
