@@ -570,6 +570,11 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
         if (c->type != RDC_TEXTURE_OFF && c->type != RDC_NOP && c->type != RDC_UVOFFSET) {
             printf(" %u", c->b[0]);
         }
+    } else if (c->type == RDC_SHADOW_RESET || c->type == RDC_SHADOW_RESOLVE) {
+        printf(" step %u", rd__shadow_step(c)); /* rd_shadow.c "The step" */
+    } else if (c->type == RDC_SHADOW_STRIP && c->b[0] == RD_SHADOW_TRIS) {
+        /* the triangles that count +1 and -1 (an older North American dump: +1 none) */
+        printf(" tris +1 %u -1 %u", c->u[0] / 3, c->u[3] / 3);
     } else if (c->type == RDC_CLEAR) {
         printf(" %s rgba %u,%u,%u,%u depth %u z %u", targetName(c->u[0], nb[0]), c->b[0], c->b[1],
                c->b[2], c->b[3], c->b[4], c->u[1]);
