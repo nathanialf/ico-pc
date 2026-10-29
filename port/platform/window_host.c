@@ -349,6 +349,9 @@ static struct {
        opaque draws, the frame-size plan's constant, additive and local-read
        sprites, the VU passes without the planes (rd.h RdPerfRecord) */
     uint64_t alphaOnePass, alphaOpaque, fxConstant, fxAdditive, fxLocal, vuNoPlanes;
+    /* the sprites drawn in a cleared source's colour and the target reads
+       kept (rd.h RdPerfRecord.constReads, constKept) */
+    uint64_t constReads, constKept;
     /* draws that read a water block at a scale other than the scene's
        (rd.h RdPerfRecord.blockOtherScaleReads, issue 106) */
     uint64_t blockOtherScale;
@@ -4589,6 +4592,8 @@ static void perf_drain(void)
         s_perf.fxAdditive += r.fxAdditive;
         s_perf.fxLocal += r.fxLocal;
         s_perf.vuNoPlanes += r.vuNoPlanes;
+        s_perf.constReads += r.constReads;
+        s_perf.constKept += r.constKept;
         s_perf.pipeCreates += r.pipelineCreates;
         s_perf.msaaResolves += r.msaaResolves;
         if (r.msaaSamples > s_perf.msaaSamples) {
@@ -4765,9 +4770,11 @@ static void perf_log(void)
        flags are the rd: profile line's) */
     fprintf(stderr,
             "window: pixel diet per replay: alpha plan %.1f one-pass, %.1f opaque; fx plan %.1f "
-            "constant, %.1f additive, %.1f local; vu no-planes %.1f\n",
+            "constant, %.1f additive, %.1f local; vu no-planes %.1f; constant reads %.1f "
+            "(%.1f target reads kept)\n",
             s_perf.alphaOnePass / n, s_perf.alphaOpaque / n, s_perf.fxConstant / n,
-            s_perf.fxAdditive / n, s_perf.fxLocal / n, s_perf.vuNoPlanes / n);
+            s_perf.fxAdditive / n, s_perf.fxLocal / n, s_perf.vuNoPlanes / n, s_perf.constReads / n,
+            s_perf.constKept / n);
     if (s_perf.msaaSamples) {
         /* the anti-aliasing's cost: its resolves' GPU time is the effects'
            "MSAA resolve" above (one a replay at most); where the last
