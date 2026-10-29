@@ -820,8 +820,12 @@ static int vuPlan(const Replay *r, const RdStateBlock *s, const DrawSetup *ds, u
  * plan one pass (PASSES: no alpha-test split, dual-source blending) with
  * no destination read and no DATE through the stencil bit (DST); the
  * cut's blend a lerp or Cd*FIX + Cs (BLEND: the premultiplied adds and
- * subtracts and the Ad forms cannot drop Cd); the cut's pixel shader with
- * the planes (PLANES: vu_np_ps does not read the mark); the kick's plan the
+ * subtracts and the Ad forms cannot drop Cd); the cut's pixel shader one
+ * that reads a mark (PLANES): vu_ps and vu_texa_ps read r.w, their
+ * no-planes twins at a fractional scale (rd_pixel_plan.c) the plane
+ * distance's sign, which vu_fused_out sets to -1 on the kick's triangles
+ * where the draw has no clip plane (a twin never draws one; ICO_DF_PLANE
+ * on a twin's pass would keep the pair apart); the kick's plan the
  * cut's but for the blend (PLANS: the key's blend, the flags FIX_FACTOR,
  * PREMUL and C1_DST, the clamped FIX and dstWant, as the alpha plan's
  * blending off normalises them, rd_alpha_plan.c) */
@@ -879,7 +883,11 @@ static int vuFuseVerdict(const Replay *r, const RdStateBlock *fan, const DrawSet
     if (bp != RD_BP_LERP && bp != RD_BP_DST_FIX) {
         return RD_VU_FUSE_BLEND;
     }
-    if (cut[0].key.fs != RD_FS_VU && cut[0].key.fs != RD_FS_VU_TEXA) {
+    const uint8_t fs = cut[0].key.fs;
+    const bool planes = fs == RD_FS_VU || fs == RD_FS_VU_TEXA;
+    const bool twin =
+        (fs == RD_FS_VU_NP || fs == RD_FS_VU_TEXA_NP) && !(cut[0].flags & ICO_DF_PLANE);
+    if (!planes && !twin) {
         return RD_VU_FUSE_PLANES;
     }
     /* the cut's pass as the planner makes it with ABE off (rd_alpha_plan.c
