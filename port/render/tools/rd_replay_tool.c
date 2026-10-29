@@ -2041,6 +2041,15 @@ int main(int argc, char **argv)
         /* the shadow count's resolves (rd_replay.c doShadowResolve) */
         printf("%s: stats: shadow count: %u in one draw, %u in seven draws (profile %s)\n", dump,
                pr->shadowOne, pr->shadowSeven, g_rd.profile.shadowOne ? "one draw" : "seven draws");
+        /* the store plan (rd_replay.c storePlanScan): the depth stores (and
+         * loads) dropped where no later command touches the depth */
+        printf("%s: stats: stores: %u depth and %u colour stores dropped a replay of %u passes "
+               "(%u with a depth; store plan %s)\n",
+               dump, pr->storeDepthDropped, pr->storeColorDropped, pr->storePasses,
+               pr->storeDepthPasses,
+               pr->storePlanMode == 2   ? "all"
+               : pr->storePlanMode == 1 ? "on"
+                                        : "off");
         /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
         printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
                "additive, %u local; vu no-planes %u\n",
