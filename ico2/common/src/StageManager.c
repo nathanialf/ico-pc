@@ -607,8 +607,16 @@ inline void CheckPoint(void)
     }
 }
 
+/* PC port: port/platform/diag_host.h: a log line for each stage-switch
+   request, and one more when the queue still holds an untaken one (issue
+   160: a Continue's load and the title's new-game wait both asked for a
+   switch in one Main tick, and the stage loaded twice) */
+void ico_host_stage_switch(int stage, float fade_in, float fade_out, int cmd, int queued,
+                           int queued_stage);
+
 void stgmgrForceSwitch(int stage)
 {
+    ico_host_stage_switch(stage, 0.0f, 0.0f, 0, stageMgrMsgQ.num, stageMgrMsg.stage); /* PC port */
     stageMgrMsg.cmd = 0;
     stageMgrMsg.stage = stage;
     if (ICO_AUG6JUN26) {
@@ -628,6 +636,8 @@ void stgmgrForceSwitchWithFade(int stage, float fadeIn, float fadeOut)
 void stgmgrForceSwitchWithFadeColor(int stage, float fadeIn, float fadeOut, unsigned char r,
                                     unsigned char g, unsigned char b)
 {
+    ico_host_stage_switch(stage, fadeIn, fadeOut, 1, stageMgrMsgQ.num,
+                          stageMgrMsg.stage); /* PC port */
     stageMgrMsg.cmd = 1;
     stageMgrMsg.stage = stage;
     stageMgrMsg.fadeOut = fadeOut;
