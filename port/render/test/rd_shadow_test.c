@@ -76,8 +76,8 @@
  *      face colours 0x08 / 0xF8; rd_shadow.c "The step") without a device:
  *      Shadow.c's model recorded with ico_region the North American disc:
  *      the packet's colours are 0x08 / 0xF8 and the recorded signs are the
- *      packet's (both signs present: before v0.9.5 every face was recorded
- *      as a decrement), the reset and the resolve carry b[0] 8 (the European
+ *      packet's (both signs present: before the shadow step change every
+ *      face was recorded as a decrement), the reset and the resolve carry b[0] 8 (the European
  *      recordings b[0] 0, the step 4, their bytes unchanged); the one draw's
  *      table for the step 8 against 8 n mod 256 for n = 0, 1, 31, 32, 33,
  *      63, 64, 255.  On the device (the seven draws, and the one draw where
