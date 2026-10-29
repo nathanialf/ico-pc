@@ -1383,9 +1383,11 @@ device-loss order's `robust` step (`port/platform/startup_retry.h`) exports `ICO
 its run, which only a platform that can start the game again reaches, and only a run whose caller
 sets `StartupRetryRun.robustOffDefault`. One start-up line says what is on:
 `rhi_vk: loss diagnostics: fault report on|not offered; checkpoints ...; resource addresses ...;
-robust access ...` (`off (the default; gpu_robust = true turns it on)`, `off (gpu_robust)`, or `on,
+robust access ...; hang limit ...` (`off (the default; gpu_robust = true turns it on)`, `off (gpu_robust)`, or `on,
 buffers (robustness2) and images (robustness2) (gpu_robust)`, `(the restart after the graphics card
-stopped responding)` at the robust step) (`port/rhi/vk/vk_device.c` (`vkr_create_device`)). Both switches come from the
+stopped responding)` at the robust step; the hang limit `15 s`, `off (watchdog = 0)`, or `not set
+(the watchdog's own limits)` in a tool: the GPU hang limit the host exports as
+`ICO_GPU_HANG_LIMIT`, [PLATFORM.md](PLATFORM.md)) (`port/rhi/vk/vk_device.c` (`vkr_create_device`)). Both switches come from the
 environment (`ICO_GPU_CHECKPOINTS`, `ICO_GPU_ROBUST`) or ico-pc.ini's `[dev]` keys
 ([CONFIG.md](CONFIG.md#dev)).
 

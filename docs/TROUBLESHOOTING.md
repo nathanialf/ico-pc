@@ -133,8 +133,9 @@ updating the graphics driver usually fixes it.
 
 **A black screen that never changes.** If the picture freezes or stays
 black and nothing changes, the graphics driver may have stopped
-responding without saying so. Wait: after about a minute the game closes
-by itself. Windows, Linux and Android show a message ("The graphics card stopped
+responding without saying so. Wait: the game closes by itself, after
+about 15 seconds when it draws with Vulkan (always on a phone) and after
+about a minute with the other Graphics API choices. Windows, Linux and Android show a message ("The graphics card stopped
 responding while the game was drawing", on a phone "The graphics driver
 stopped responding while the game was drawing"). Your last save is kept. Start the game
 again: the game treats this like any other time the graphics stop (see
@@ -500,7 +501,12 @@ left off if it was not finished, and the game then starts as usual.
 
 **"The graphics driver stopped responding while the game was drawing ..."**
 (on a phone) The phone's graphics driver failed while drawing a picture,
-and the game has to close; your last save is kept. Start the game again.
+and the game has to close; your last save is kept. When the driver stops
+without saying so, the game notices within about 15 seconds of a still
+picture and shows this message. On a phone with a Qualcomm Snapdragon chip
+that uses its own graphics driver, the message ends with the other route:
+a Turnip driver package, chosen under **Options > Graphics driver > Add a
+driver** and used from the next start (see the driver note above). Start the game again.
 That start has the graphics driver check every read it makes, for that
 start only, which can keep it from stopping (the game may run a little
 slower). If the graphics driver stops again in that start or in the one

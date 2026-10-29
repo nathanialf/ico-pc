@@ -972,6 +972,31 @@ backend's progress (`hang`, `hangnodump`, `hangnot` in `port/platform/test/diag_
 lines, the dump before the report, the report's line, the box, the activity file's loss and the next
 start's count, the loss without a dump, and the freeze with no wait in progress.
 
+**The GPU hang limit** (v0.9.5, issue 123: a minute of black screen before the box on an Adreno
+740). The same end comes as soon as one wait for the GPU has lasted the limit, half the watchdog
+(`watchdog = 30`: 15 s; at least 2 s; `watchdog = 0` turns both off), not after the later limit's
+2 x `watchdog` without a Main tick. The watchdog's thread polls the backend's progress four times a
+second and counts one wait for one unfinished submission the way it counts its limits (not while
+paused in the background, not across a suspend; only while a limit is in force), and at the limit
+runs `watchdog_fire` with the reason `the GPU: submission V not finished after W s (limit L s); the
+newest is S, the newest seen finished D`; the lines, the dump, the loss line, the report and the
+box are the GPU hang's above. Both ends run on the watchdog's thread and `watchdog_fire` runs once,
+so the first wins. The waits themselves are unchanged: the main thread blocked in the driver is not
+the one that ends the run, so no backend wait was bounded for it. Only a backend that tracks its
+submissions (`rhi_gpu_progress`: Vulkan) has the limit; Direct3D 12, Direct3D 11 and OpenGL track
+none (on Windows the system resets a GPU that stops for 2 s and the backend sees the device
+removed). The host sets it before the window opens (`port/platform/main_host.c`
+(`set_gpu_hang_limit`): `ico_pc: GPU hang limit 15.0 s (half the watchdog's 30 s, at least 2 s; 0 =
+off): ...`, and `ICO_GPU_HANG_LIMIT` for the Vulkan backend's loss diagnostics line, `...; hang
+limit 15 s`); the diagnostics' start line names it (`GPU hang limit 15.0 s for one wait for the GPU
+(0 = off)`). The arithmetic and the watch are `port/platform/gpu_hang.h` (ctest `gpu_hang`); ctest
+`diag`'s `hanglimit` ends a faked wait at a 2 s limit before a 60 s later limit. On Android, when the
+start runs on the device's own Qualcomm driver (no driver package), the hang's box and the device
+loss's end with one more sentence in the menu's language, the Options > Graphics driver > Add a
+driver route to a Turnip package (`UI_STR_GPU_HANG_TURNIP`;
+`port/platform/android/gpu_driver_android.c` (`ico_gpu_driver_android_hang_note`), registered with
+`ico_diag_set_gpu_hang_note`).
+
 The window build logs a stats block every 10 s. A host step longer than `[dev] slow_step_ms`
 (default 8, 0 off) logs a slow-step line ([DISPLAY.md](DISPLAY.md#pacing);
 `port/platform/window_host.c` (`slow_step`); `port/platform/host_loop.h` (`IcoStepProfile`)).
