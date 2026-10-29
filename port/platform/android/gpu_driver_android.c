@@ -19,6 +19,7 @@
 #include "iso_import.h"
 #include "rhi.h"
 #include "rhi_driver_version.h"
+#include "strings.h" /* port/ui: the hang box's driver route (UI_STR_GPU_HANG_TURNIP) */
 
 #define KEY_DRIVER "video.gpu_driver"
 #define KEY_FAILED "video.gpu_driver_failed"
@@ -542,6 +543,10 @@ const char *ico_gpu_driver_android_folder_text(void)
    driver (window_host.c, once the device is up): the Graphics driver row's
    note then names the driver package route */
 static int s_lostOnStock;
+/* this start runs on the phone's own Qualcomm driver (no driver package:
+   ico_gpu_driver_android_device_up); the boxes after the driver stopped
+   responding then name the driver package route (issue 123) */
+static int s_onStock;
 
 void ico_gpu_driver_android_note_loss_on_stock(void)
 {
@@ -562,10 +567,18 @@ void ico_gpu_driver_android_note_loss_on_stock(void)
    customDriver) */
 void ico_gpu_driver_android_device_up(int customDriver)
 {
-    if (!customDriver && rhi_limits() != NULL && rhi_limits()->vendorId == RHI_VENDOR_QUALCOMM &&
-        ico_diag_startup_end_count(ICO_DIAG_END_LOSS) > 0) {
+    s_onStock =
+        !customDriver && rhi_limits() != NULL && rhi_limits()->vendorId == RHI_VENDOR_QUALCOMM;
+    if (s_onStock && ico_diag_startup_end_count(ICO_DIAG_END_LOSS) > 0) {
         ico_gpu_driver_android_note_loss_on_stock();
     }
+    /* the GPU hang's box (the watchdog's end) ends with it too */
+    ico_diag_set_gpu_hang_note(ico_gpu_driver_android_hang_note);
+}
+
+const char *ico_gpu_driver_android_hang_note(void)
+{
+    return s_onStock ? ui_str(UI_STR_GPU_HANG_TURNIP) : NULL;
 }
 
 static int host_lost_on_stock(void)

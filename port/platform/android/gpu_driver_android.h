@@ -73,6 +73,14 @@ void ico_gpu_driver_android_no_device_note(void);
    phone's own Qualcomm driver (customDriver 0), see
    ico_gpu_driver_android_note_loss_on_stock. */
 void ico_gpu_driver_android_device_up(int customDriver);
+/* The sentence the boxes after the graphics driver stopped responding end
+   with (the GPU hang's, diag_host.c, registered by device_up through
+   ico_diag_set_gpu_hang_note; the device loss's, window_host.c
+   device_lost_quit) when this start runs on the phone's own Qualcomm
+   driver: the Options > Graphics driver > Add a driver route to a Turnip
+   package, in the menu's language; NULL otherwise. Any thread (a table
+   read). */
+const char *ico_gpu_driver_android_hang_note(void);
 /* After each present that reached the screen. */
 void ico_gpu_driver_android_presented(void);
 /* At a normal end, before the renderer shuts down: a trial still running
