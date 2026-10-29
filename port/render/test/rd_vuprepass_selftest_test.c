@@ -150,7 +150,7 @@ int main(int argc, char **argv)
     CHECK(kept == (wantOn || notRun), "the self-test returned %s", kept ? "true" : "false");
 
     /* 2. */
-    char sum[640];
+    char sum[2048];
     rd_summary_text(sum, sizeof(sum));
     printf("  summary: %s\n", sum);
     const char *want = wantOn   ? "; VU pre-pass on (self-test: ok); "

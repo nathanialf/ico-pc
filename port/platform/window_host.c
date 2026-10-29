@@ -1553,7 +1553,7 @@ static const char *summary_joystick_scan(void)
 
 static void log_summary(const IcoVideoOptions *o, const char *res, const char *fr)
 {
-    char rd[1024], pads[160]; /* rd: the blend, then the device profile's words, ... */
+    char rd[2048], pads[160]; /* rd: the blend, then the device profile's words, ... */
     int n = 0;
     SDL_JoystickID *ids = SDL_GetGamepads(&n);
     const RhiLimits *l = rhi_limits();
