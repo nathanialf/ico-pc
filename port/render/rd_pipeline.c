@@ -2145,13 +2145,15 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             if (made > 0) {
                 batchTimes(bk, bms, made, first + 1, i, m, batchMs, batch.threads);
             }
-            if (times != NULL && i < m &&
+            if (times != NULL && i < m && made > 0 &&
                 (s_setPolicy.cacheEachBatch || rd__now_ms() - s_setSavedMs >= RD_SET_SAVE_MS) &&
                 cacheKeptPerBatch()) {
                 /* the start-up set (times: not a replay's gathered keys) on
                  * a phone or a tablet, or after every batch under a policy
                  * that asks: a desktop's set writes once, at its end (the
-                 * window's write) */
+                 * window's write); not when the low-memory signal came
+                 * before the batch's first pipeline (nothing new to write,
+                 * and the system is short of memory) */
                 (void)rhi_pipeline_cache_save();
                 s_setSavedMs = rd__now_ms();
             }
