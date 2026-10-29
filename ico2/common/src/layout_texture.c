@@ -1141,10 +1141,16 @@ void lt_host_point_item(int no, int item)
    lt_switch_layout asked for now is taken.  lt_switch_layout drops a
    request while a fade runs (fadeState != 2); the Start skip of the opening
    always finds this state, since the scene waits for its stream and 30
-   ticks before it reads Start. */
+   ticks before it reads Start.  The boot layout is init_layout_texture's:
+   7 on the European disc, 4 on every other (the Japanese program's discs
+   and the North American disc and the 2001 previews alike).  Comparing
+   against the Japanese program's 4 alone left the 2001 discs' check true
+   while their boot layout was still up, so actOpDemo01_ntsc's title request
+   came before the boot's hand-over and was dropped: the title without its
+   menu (issue 160). */
 int lt_host_boot_settled(void)
 {
-    return current_layout_id != PAL_JPNKORCN(7, 4) && fadeState == 2;
+    return current_layout_id != PAL_JPNKORNTSCAUG6JUN26CN(7, 4) && fadeState == 2;
 }
 
 /* init_textures_of_specified_property is a file static, as is
