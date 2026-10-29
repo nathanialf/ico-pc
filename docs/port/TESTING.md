@@ -642,18 +642,23 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the whole list; each pair's draws printed (`rd_vumerge_ab`;
   [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)). SKIP as `rd_vustage_ab`.
 - `rd_vufuse_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` (the PowerVR phone's
-  2x frame) twice with the draw merge on, code 36's kicks under their own pipelines
-  (`ICO_RD_VU_FUSE=0`) and the fused scissor pair, at four settings under `ICO_RD_BLEND=fixed`: the
+  three frames) twice with the draw merge on, code 36's kicks under their own pipelines
+  (`ICO_RD_VU_FUSE=0`) and the fused scissor pair, at five settings under `ICO_RD_BLEND=fixed`: the
   phone's profile (`ICO_RD_VU_PREPASS=0`, `--enhanced --resolution 2x --aspect 2.189 --present
-  2364x1080`; a narrower dump skips it), the programs' entries at Enhanced 4:3 2x, and the record at
+  2364x1080`; a narrower dump skips it) and the same at its Resolution Auto (`--resolution 2364x1080
+  --full-height --full-pixel`, a fractional scale: the no-planes twins), the programs' entries at
+  Enhanced 4:3 2x, and the record at
   Enhanced 4:3 and 16:9 2x: every named target's PNG (and `PRESENT.png`) byte for byte, `fuse off`
   with no pair fused against `fuse on`, the same pairs counted by both (the `VU fuse` line's fused,
   kept apart and one-pipeline counts), the fused run's GPU draws exactly the other's less the
-  difference of what the merge joined (K less G of each run's `VU merge` line), and at every
-  setting that counted pairs with ABE off some fused and fewer GPU draws in total; each pair's
-  counts printed (`rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). SKIP
+  difference of what the merge joined (K less G of each run's `VU merge` line), no pair kept apart
+  for the pixel shader (`no planes 0`: every pixel shader a pair draws with reads the mark), at
+  every setting that counted pairs with ABE off some fused and fewer GPU draws in total, and on
+  every phone frame some fused at both phone settings; each pair's counts printed
+  (`rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). SKIP
   as `rd_vustage_ab`.
-- `rd_store_plan_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` three times under
+- `rd_store_plan_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` (the phone's three
+  frames) three times under
   `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` (a depth or stencil load the plan leaves
   undefined clears to 0.5 and 0x5A instead: lavapipe keeps an attachment's contents whatever its
   load and store ops say, measured on Mesa 25.0.7, so without the poison a wrong plan draws the same
