@@ -27,7 +27,6 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
 | `port/render/rd_replay.c`, `port/render/rd_shadow_one.c`, `port/render/rd_shadow_selftest.c`, `port/shaders/blit.hlsl` | the shadow count in one draw (`shadowCountOne` picks the destination, `rd__shadow_one_draw` draws `shadow_count_ps`) and its start-up self-test (`rd__shadow_selftest`) |
 | `port/render/rd_fx_plan.c`, `port/render/rd_profile.c` | the shadow composites above 1x: one bilinear tap unless `RdProfile.shadowBspline` (`rd__sprite_above1x`) |
-| `port/render/rd_const_read.c`, `port/render/rd_replay.c`, `port/render/rd_replay_tiler.c` | a post sprite whose source holds only its last clear drawn in that colour (`rd__const_read`, from `doBlurSpriteDraw`; the clear noted in `pendClear`, the actions counted from `rd__replay_fold_at`) |
 | `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
 | `port/render/rd_store_plan.c`, `port/render/rd_replay.c`, `port/render/rd_profile.c` | the store plan: the scan before the walk (`rd__store_plan_scan`), each pass's depth ops (`rd__store_plan_pass` from `beginPass`), the walk's command count (`g_rdStoreOrd`), the profile's `storePlan` |
 
@@ -587,5 +586,198 @@ constant over the joint support widened by one texel for a rounding tie (level t
 i0 + 3: N = 3 level texels, 12, 24 and 48 SCENE texels for SHADOW0..2 at 2x), with some texels
 differing (the histogram of |d| is printed).
 
-1x, which passes leave a depth neither loaded nor stored (the store plan), a source that holds only its clear read as its colour, and which full-frame reads stay at a large
-scale. The sprites themselves are drawn by the GS
+## The store plan
+
+A tile-based GPU loads every attachment a pass loads into its tile memory when the pass begins and
+writes every attachment it stores back when the pass ends. SCENE's depth (D32F with its stencil) is
+about 10 MB at 2364x1080, and on the PowerVR phone each full-frame touch of the picture costs about
+1 ms (its per-pass timing, `[dev] perf_passes`); every pass drawn on SCENE has SCENE's
+depth bound (`prepareDrawEx` binds the state's depth whatever the Z test), so before the plan each
+such pass loaded and stored it, read or not. `RdProfile.storePlan` (on for every device class,
+`port/render/rd_profile.c`) drops those loads and stores where the depth is provably not needed.
+
+**The scan.** At the head of each replay (`replayFrame`, before `rd__clear_new_targets`; an
+interpolated present's blended frame too), `rd__store_plan_scan` (`port/render/rd_store_plan.c`)
+walks the replayed lists with their state, numbering the commands in order (state commands
+included, from the first replayed list), and records for every depth texture the last command that
+touches its depth or stencil:
+
+- a draw (screen prims, the VU draws, a post sprite) on the state's depth with the Z test on (ZTE
+  and not ALWAYS), Z write on, DATE on (the stencil bit) or PRIM.AA1 (its stencil pairs);
+- a draw whose texture is a target's depth view (`RD_VIEW_DEPTH`);
+- the three shadow commands (the stencil count and the volumes' Z test);
+- the fog: the state's depth, the colour target's (the crack filler copies and fills it) and a depth
+  view the texture names;
+- a command type the scan does not know: every depth.
+
+Copies, exact blends and clears touch none (a clear only writes). The walk counts the same numbers
+(`g_rdStoreOrd`, set for each command and past each list's last).
+
+**The rule.** A pass begun while command k is replayed holds the work of command k and later ones
+only: a screen run or a VU merge is flushed into the pass it was recorded in, a pending clear or
+shadow reset is recorded no earlier than the command that needs it, and the blur fold reads ahead,
+never back. So when a depth's last touch lies before k, nothing in that pass or after it reads or
+writes the depth: `beginPass` (through `rd__store_plan_pass`) sets its load and store to DONT_CARE
+(a pending clear stays a CLEAR load) and the stencil's with it, unless the shadow window is open on
+that depth (`rd__stencil_live`). Every other pass keeps its loads and stores, so the pass that holds
+the last touch still stores the depth (`beginPass` cannot know where its pass will end). Not planned
+either: the passes into SCENE_MS (the MSAA epoch), and the passes begun outside `beginPass` (the new
+targets' clears, the shadow reset's own pass, the crack filler's own pass, the MSAA resolves). The
+colour attachments are all stored: the colour's readers (texture reads of a target, copies, the
+present, the feedback kept across ticks, a keep frame's retained DISPLAY) are not provable at a
+pass's begin (`storeColorDropped` stays 0).
+
+On the PowerVR phone's 2x frame (`tools/vufuse_dumps.txt`, read from `rd_replay_tool --list`)
+the last touch of SCENE's depth is list 5's fog meshes (GEQUAL tested); after it SCENE's depth is
+bound by list 11's screen sprites (a screen draw binds the state's depth whatever its Z test; a post
+sprite without a Z test or Z write binds none, `rd__blur_key`), so those are the passes the plan
+drops on that frame. The fog's own pass and list 5's keep their stores.
+
+**After the replay.** The plan treats a depth as touched after the replay (every pass keeps it) when:
+
+- the present reads SCENE's depth (Options' effects depth, `RdSettings.effectsDepth`: `depthBlit`
+  in `port/render/rd_present.c`, also on a re-shown present);
+- a replay found the depth read before its clear (the head clear `RDC_CLEAR` with depth, or the new
+  target's clear): a frame drawing on the depth the replay before left, as a keep frame
+  (`rd__first_list`) would if its lists 11 and 12 tested SCENE's depth. That depth's stores are kept
+  from then on and the log says so once (for the first four a run):
+
+      rd: store plan: SCENE's depth is read in list 11 before this replay clears it (frame 1234, a keep frame): its stores are kept from now on (the replay before had dropped its last store: this picture may show a depth left undefined)
+
+  The last clause appears only when the replay before had dropped that depth's last store: that one
+  picture may show it (in practice the memory holds what the last stored pass left, above). Every
+  frame of the dump corpus that touches a depth (`tools/vustage_dumps.txt` and the phone's, read with
+  `rd_replay_tool --list`) clears SCENE's depth at list 0's head before any read, and the 2D frames
+  touch none; one frame (the issue-95 loss frame) Z-tests list 11's text against SCENE's depth, so a
+  keep frame drawing such text would be the first case of this rule;
+- a caller read the depth back (`rd__read_target_depth`, the tests): kept from then on, logged
+  `rd: store plan: SCENE's depth is read back: its stores are kept from now on`;
+- the replay has a pass window (`rd_replay_tool`'s bisect reads targets mid-frame): no plan at all.
+
+The passes the plan drops lie after the depth's last touch and draw nothing into it, so a device that
+skips the write-back leaves the memory as the last stored pass wrote it; Vulkan calls the contents
+undefined, which only matters to a reader the plan does not see (the next frame, above).
+
+**The backends.** Vulkan passes the ops through (`port/rhi/vk/vk_cmd.c`: dynamic rendering's
+attachment ops, or the legacy `VkRenderPass` cached by its ops, its pipelines made against the
+ops-free compatible pass). Direct3D 12, Direct3D 11 and OpenGL ignore the store ops and keep the
+contents (`d3d12_cmd.c`, `d3d11_cmd.c`, `gl_cmd.c`; no `DiscardResource` or
+`glInvalidateFramebuffer`: those backends run on desktop GPUs, where nothing is gained). lavapipe
+keeps the contents whatever the load and store ops say (measured with a two-pass probe on Mesa
+25.0.7: a DONT_CARE load, store or both left the colour, the depth and the stencil as the first pass
+cleared them).
+
+**The switch and the lines.** `[dev] store_plan = false` (`ICO_RD_STORE_PLAN=0`,
+[CONFIG.md](CONFIG.md)) keeps every load and store; the profile's start line and the summary say
+`depth stores planned` or `depth stores kept ([dev])`. `ICO_RD_STORE_PLAN=all` (tests only) drops
+every depth store and keeps the loads, a wrong plan (`depth stores all dropped (test)`). The window's
+10 s line about the uploads ends with
+
+    ; stores: N depth and M colour stores dropped a replay of P passes (planned; [dev] store_plan)
+
+(the means per replay; `every store kept` when no replay planned) and `rd_replay_tool --stats` prints
+`stores: N depth and M colour stores dropped a replay of P passes (D with a depth; store plan on)`
+(`RdPerfRecord.storeDepthDropped`, `storeColorDropped`, `storePasses`, `storeDepthPasses`,
+`storePlanMode`; [TESTING.md](TESTING.md)).
+
+**The test.** `rd_store_plan_ab` ([TESTING.md](TESTING.md)) replays the corpus and the phone's frame
+with every store kept, with the plan and with every depth store dropped, under
+`ICO_RD_STORE_POISON=1`: a load the plan leaves undefined (a load it made DONT_CARE, or a load after a
+store it dropped) clears the depth to 0.5 and the stencil to 0x5A instead, the garbage a tile-based
+GPU may leave, since lavapipe itself keeps the contents. The plan must give every target byte for
+byte; dropping every depth store must change some target.
+
+## A cleared source read as its colour
+
+The aura (`staticBlur.c` `auraInspireBefore`, list 8) clears AURA_WORK, the frame's size at the
+scene's scale, with a black sprite over the whole of it (which the replay records as the pass's
+clear, `blurSpriteClears`), and the frame's aura objects are then drawn into it. `auraInspireAfter`'s
+first sprite (`reduceCopyAlphaChannelOfWork1ToWork0`) reads the whole of AURA_WORK into WORK0 through
+the box above 1x. With no aura object on screen nothing is drawn into AURA_WORK between the two, and
+that sprite read a 2.5 Mpix clear at the phone's 2366 x 1080 to compute one colour: the phone's
+pass timing (`[dev] perf_passes`, 3176 replays) has the AURA_WORK pass with 0 draws in every one of its
+1540 aura replays and the WORK0 pass after it at 1.65 ms.
+
+`rd__const_read` (`port/render/rd_const_read.c`, called by `doBlurSpriteDraw` for a sprite sampling
+another target) draws such a sprite untextured, its RGBAQ the texture function of the clear's
+colour, and the source is not read. The bytes are the same:
+
+- every texel of a cleared target holds the clear's bytes C (the load op over the whole render area,
+  or the pass `flushClear` records), so every tap any kernel loads is C, whatever the wrap and the
+  clamp (`fx_load`: floor(C / 255 * 255 + 0.5) = C; the UINT view returns C);
+- TEXA leaves an RGBA32 texel as it is (`gs_texa_expand`); a 24- or 16-bit source format is not
+  taken;
+- each kernel returns C for taps that are all C: nearest the one tap; the GS bilinear `gs_bilerp`
+  C + (((C - C) f) >> 4); above 1x the weights of an axis sum to its divisor D (the box's overlaps
+  of [lo, lo + S) tile it, S = D; the B-spline's four sum to 24576; a GS axis 16 - f + f or 1), so
+  the row R = C Dx, R' = (16 C Dx + Dx / 2) / Dx = 16 C, and t = (16 C Dy + 8 Dy) / (16 Dy) = C;
+- `fx_tfx(C, RGBAQ)` is computed on the CPU in the same integers (`constTfx`), and `fx_sprite_ps`'s
+  untextured colour is RGBAQ itself; the alpha test, DATE, the blend and FBA read only that colour
+  after the texture function. The forms an untextured sprite can then take (the clear of
+  `blurSpriteClears`, the fx plan's constant fold) are exact for an untextured sprite of that colour.
+
+What makes the colour known: `pendClear` (`port/render/rd_replay.c`), the one place a replay's clears
+are queued, notes the clear of an RGBA8_UNORM target with the count of actions walked so far in the
+replay (`rd__const_cmd`, called for every command from the list loop's `rd__replay_fold_at`: every
+command but the state deltas, the NOPs and the deferred text). The note serves a sprite only when
+that sprite's own command is the next action: any action between (a draw of any kind, a copy, an
+exact blend, a shadow resolve, the second sprite of a folded blur pair) may write the target and
+ends it, whichever target it names. SCENE is never taken (the MSAA epoch moves its clear to SCENE_MS
+and resolves it back), nor a target whose colour texture changed since the note (`blurSwapTarget`),
+nor a sprite sampling its own target; a sprite drawn into the noted target ends the note. With an
+aura object drawn, the AURA_WORK read is kept as before.
+
+The first sprite drawn so logs once, the summary line says `constant reads on` or `constant reads
+off`, the 10 s pixel diet line counts `constant reads N (M target reads kept)` a replay, and
+`rd_replay_tool --stats` prints `constant reads on: N sprites drawn in a cleared source's colour, M
+target reads kept (the source drawn since its clear, or not cleared this replay)`
+(`RdPerfRecord.constReads`, `constKept`):
+
+    rd: constant reads: a sprite into WORK0 read AURA_WORK, which held only its clear (0,0,0,0): drawn with its colour (0,0,0,0), the source not read (reported once; [dev] constant_reads = false reads it)
+
+`[dev] constant_reads = false` (`ICO_RD_CONSTANT_READS=0`) reads every source as before, the A/B
+of ctest `rd_constant_reads_ab` (`port/render/test/rd_constant_reads_ab.cmake`: every named
+target's PNG equal byte for byte, the same target reads counted either way, the phone's frames of
+`tools/constant_reads_dumps.txt` served at the phone's settings). AURA_WORK's clear itself is still
+recorded (its pass, 1.27 ms on the phone, is the store of the cleared 10 MB; a target the frame
+never reads after its clear is the depth and colour store plan's question, not this one's).
+
+## The full-frame reads at a large scale
+
+On the phone at 2366 x 1080 (5.6 times the PS2's pixels) every pass that touches the whole frame
+costs about 1 ms a 10 MB read or written. The effects' full-frame reads and what became of them:
+
+| read | pass (the phone's timing, mean) | kept or not |
+| --- | --- | --- |
+| aura: AURA_WORK into WORK0 (`reduceCopyAlphaChannelOfWork1ToWork0`, box 2 x 4 GS texels a texel) | WORK0 424 x 128, 1.65 ms | served by the clear's colour when no aura object is drawn ([above](#a-cleared-source-read-as-its-colour)) |
+| aura: SCENE into FEED128 (`copyCurrentFBToFeedBackArea`, the feedback, box 4 x 4 GS texels a texel) | FEED128 212 x 128, 1.6 ms | kept: SCENE is the picture |
+| shadows: the count at its GS size | temporary 848 x 448, 2.4 ms | kept: it reads SCENE's stencil, not a colour ([the shadow count in one draw](#the-shadow-count-in-one-draw)) |
+| glow: SCENE's alpha into WORK2 (`makeMaskPatternToWork2`) | WORK2 2366 x 1080, 2.9 ms | kept (below) |
+
+**A reduced copy of SCENE would not give the same bytes.** The FEED128 read's kernel above 1x is
+the area box of the step about the GS's own sample point (`common.hlsli` GS_RS_BOX, `fx_sprite_ps`):
+the GS samples U = 64 k + 8 (12.4) for FEED128 pixel k, the centre of GS texel 4 k, so the box of
+4 GS texels about it spans GS texels [4 k - 1.5, 4 k + 2.5), half a GS texel off their edges at
+every scale, and it is summed in integers with the weights in 1/32 texel and two roundings (the row
+to 1/16, then the texel). A GS-size copy averaged per GS texel (`box_reduce_ps`, float weights, one
+rounding by the UNORM store) cannot weigh half a GS texel, and the GS's own bilinear at the GS size
+would take one texel in sixteen (the PS2's point sample, which the box above 1x replaces on
+purpose). At a whole scale the box's taps would line up with the copy's blocks only for a 1:1 read
+of SCENE into a target at scale 1 of the GS size, which no frame has; and even there the copy's
+float average rounds a half one way or the other by the driver, where the box rounds it up. So no
+draw reads such a copy and none is made.
+
+**The glow's WORK2 is the game's mask, not a copy.** `makeFullScreenFlareBefore` fills WORK2
+(`fillWork2`, recorded as WORK2's clear), draws the sun's fans into it when the sun is up
+(`dispSun`), then `makeMaskPatternToWork2` draws SCENE into it 1:1 with MODULATE by RGBAQ 0 (the fx
+plan's alpha-only form, `FXF_ALPHA_ONLY`) and the alpha test LESS 0x81 with AFAIL KEEP: a texel holds
+SCENE's alpha (bilinear at the texel's own GS position) where that alpha is under 0x81, else the
+fill. `reduceWork2ToWork0` reads all of it into WORK0 through the box (2 x 3.5 GS texels a
+texel). It is not a snapshot for the paste (the paste reads WORK3) and not the blur fold's. Removing
+it byte for byte means the reduction computing each WORK2 texel it weighs from SCENE (four alpha
+loads, the coverage of the guard texels under Full pixel, the alpha test, the fill) in one new
+`fx_frame_ps` form with the mask's sprite in a second block, only where nothing else drew into WORK2
+since the fill and nothing reads WORK2 after the reduction; WORK2's own bytes would then differ
+from the reference (the pass dump's WORK2.png). Not done: the expected saving on the
+phone is the WORK2 pass (2.9 ms in a glow replay, about 1.3 ms a replay over the phone's capture) less
+the reduction's four loads a tap.
