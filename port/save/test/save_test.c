@@ -956,15 +956,13 @@ static void driver(void *arg)
         /* the disc's own record: 16-byte previews, then the three options and
            the pad bytes at 0x140 (no controlType, fileNo, serial, cameraMove,
            palMode) */
+        /* the host record's first four preview words, word for word: the
+           game copies IosMcPreviewInfo (stage, play time, sofa, an unread
+           word on these discs) whole into it (issue 160) */
         le32(want + 0x00, 7);
-        if (ICO_AUG6JUN26) {
-            le32(want + 0x04, 1); /* cleared */
-            le32(want + 0x08, 1234);
-            le32(want + 0x0C, 5);
-        } else {
-            le32(want + 0x04, 1234); /* the USA disc has no cleared word */
-            le32(want + 0x08, 5);
-        }
+        le32(want + 0x04, 1);
+        le32(want + 0x08, 1234);
+        le32(want + 0x0C, 5);
         le32(want + 19 * 16, 0xFFFFFFFFu);
         le32(want + 0x140, 2);
         le32(want + 0x144, 1);
@@ -1031,11 +1029,12 @@ static void driver(void *arg)
     CHECK(req.result == 0);
     CHECK(IosMcProductFile[0].file[0].stage == 7 && IosMcProductFile[0].file[0].playTime == 1234);
     if (ICO_NTSCAUG6JUN26) {
-        /* the 2001 record holds the previews and the options only: the USA
-           disc's has no cleared word, the others' no unread word; the record's
-           fileNo, serial, controlType, cameraMove and palMode stay as cleared */
+        /* the 2001 record holds the previews (four words each, back in the
+           host record's first four) and the options only; the fifth word and
+           the record's fileNo, serial, controlType, cameraMove and palMode
+           stay as cleared */
         CHECK(IosMcProductFile[0].file[0].sofa == 5);
-        CHECK(IosMcProductFile[0].file[0].cleared == (ICO_AUG6JUN26 ? 1 : 0));
+        CHECK(IosMcProductFile[0].file[0].cleared == 1);
         CHECK(IosMcProductFile[0].file[0].word10 == 0);
         CHECK(IosMcProductFile[0].file[19].stage == 0xFFFFFFFFu);
         CHECK(IosMcProductFile[0].soundMode == 2 && IosMcProductFile[0].outputMode == 1);
