@@ -114,6 +114,8 @@ typedef enum RdCmdType {
                        * (doFog) and the rd__is_blur_kind kinds (rd__blur_post_sprite) replay; any
                        * other kind is a stub (skipped, logged once) */
     /* rd_shadow.c: on the state block's colour and depth targets */
+    /* b[0] of both: the count's step when it is 8 (rd.h rd_shadow_reset_step),
+     * else 0, the step 4 (the European disc's, and every older dump) */
     RDC_SHADOW_RESET,   /* the depth target's stencil to 0 */
     RDC_SHADOW_RESOLVE, /* the stencil count into the colour target (rd.h rd_shadow_resolve) */
     /* PRIM.AA1 (dump version 4): a state delta numbered after the actions,
@@ -192,8 +194,16 @@ static inline int rd__cmd_is_state(uint8_t type)
 
 /* RDC_SHADOW_STRIP's b[0]. */
 #define RD_SHADOW_TRIS 1
-/* The stencil bits the shadow count keeps: n mod 64, as 4 n mod 256 wraps. */
+/* The stencil bits the shadow count keeps: n mod 64, as 4 n mod 256 wraps
+ * (the step 8's 8 n mod 256 reads the low five of them, RD_SHADOW_STEP8_MASK). */
 #define RD_SHADOW_STENCIL_MASK 0x3Fu
+#define RD_SHADOW_STEP8_MASK 0x1Fu
+/* The step a shadow reset or resolve command carries (its b[0]): 8 or 4 */
+uint32_t rd__shadow_step(const RdCmd *c);
+/* The step of the running disc's count (Shadow.c's face colours: 8 on the
+ * North American disc and the 2001 previews, else 4), for what runs before
+ * or without a recorded reset: the start-up set, the shadow self-test */
+uint32_t rd__shadow_disc_step(void);
 /* The stencil bit DATE's stencil path keeps the destination alpha's MSB in
  * (rd_replay_tiler.c rd__replay_date_take; RD_STENCIL_DATE_*): the count writes bits
  * 0-5 only (RD_SHADOW_STENCIL_MASK) and its resolve reads no other, so bit
@@ -1769,10 +1779,12 @@ bool rd__pipe_key_equal(const RdPipeKeyInt *a, const RdPipeKeyInt *b);
  * (sprite_world_vs / sprite_ps, colour mask 0, the state's Z test without Z
  * write, stencil INCR_WRAP or, with decr, DECR_WRAP under write mask
  * RD_SHADOW_STENCIL_MASK, on a D32F_S8 depth target), and the resolve's
- * passes (blit_vs / blit_ps): pass k in 0..5 adds 4 << k to RGB where
- * stencil bit k is set, pass 6 writes A where the count is not 0. */
+ * passes (blit_vs / blit_ps): pass k in 0..5 adds step << k to RGB where
+ * stencil bit k is set (step 8: k in 0..4, bit 5 has no pass), pass 6
+ * writes A where the count is not 0 (step 8: its low five bits,
+ * RD_STENCIL_TEST_NONZERO5). */
 RdPipeKeyInt rd__shadow_volume_key(const RdStateBlock *s, RhiFormat colorFmt, int decr);
-RdPipeKeyInt rd__shadow_resolve_key(int pass);
+RdPipeKeyInt rd__shadow_resolve_key(int pass, uint32_t step);
 RdPipeKeyInt rd__shadow_reduce_key(void); /* box_reduce_ps: the count at the GS size */
 #define RD_SHADOW_RESOLVE_PASSES 7
 /* The count in one draw (RdProfile.shadowOne; rd_replay.c shadowCountOne):
@@ -1781,9 +1793,10 @@ RdPipeKeyInt rd__shadow_reduce_key(void); /* box_reduce_ps: the count at the GS 
 RdPipeKeyInt rd__shadow_count_key(void);
 /* The table shadow_count_ps reads the count's bytes from: texel m (0..63)
  * the RGBA the seven draws write for a stencil whose bits 0-5 hold m:
- * RGB 4 m, A 0x80 where m != 0, else 0 */
+ * RGB 4 m, A 0x80 where m != 0, else 0; under the step 8 RGB 8 (m mod 32),
+ * A 0x80 where m mod 32 != 0 (one table a step) */
 #define RD_SHADOW_TABLE_SIZE 64
-void rd__shadow_table_texel(uint32_t m, uint8_t rgba[4]);
+void rd__shadow_table_texel(uint32_t m, uint32_t step, uint8_t rgba[4]);
 /* frees the one draw's table (rd__shadow_shutdown) */
 void rd__shadow_one_shutdown(void);
 /* The count the shadow levels read after the resolve of the count target
