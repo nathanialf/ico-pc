@@ -549,6 +549,10 @@ static const struct {
        so the merge joins them (an A/B; port/render/rd_replay_vu.c
        vuFuseVerdict) */
     {"dev.vu_fuse", "vu_fuse"},
+    /* false: a post sprite whose source target holds only its last clear
+       reads the target as before instead of being drawn in the clear's
+       colour (an A/B; port/render/rd_const_read.c) */
+    {"dev.constant_reads", "constant_reads"},
     /* false: the crack filler above 1x off (an A/B), true: on, as the
        device profile has it on every class (port/render/rd_crack_fill.c
        rd__crack_fill_init) */
@@ -616,6 +620,9 @@ static const struct {
     /* port/render/rd_replay_vu.c vuMergeInit: 0 draws code 36's kicks
        under their own pipeline (no fused pair) */
     {"vu_fuse", "ICO_RD_VU_FUSE"},
+    /* port/render/rd_const_read.c rd__const_reads_on: 0 reads a cleared
+       source as before */
+    {"constant_reads", "ICO_RD_CONSTANT_READS"},
     /* port/render/rd_crack_fill.c rd__crack_fill_init: 0 leaves the pixels
        no draw covered above 1x to the fog, 1 fills them on a tile-based GPU
        too */
