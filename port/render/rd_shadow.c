@@ -32,6 +32,24 @@
  * (n = 64, 128, 192, ...): the GS colour is 0 there (no shadow), the
  * stencil not.  rd_shadow_test checks n = 64, 128 and 256.
  *
+ * The step
+ * --------
+ * The North American disc and the 2001 previews draw the faces with 0x08
+ * and 0xF8 (Shadow.c emitVolumeStrip, PAL_NTSCAUG6JUN26), so a pixel ends
+ * at 8 n mod 256 = 8 (n mod 32).  The volumes are the same draws (the
+ * stencil's n mod 64 holds n mod 32 in its low five bits, 32 dividing 64);
+ * the resolve reads the five: passes k = 0..4 add 8 << k (8 + ... + 128 =
+ * 248 at most), bit 5 has no pass (8 << 5 = 256 is 0 in eight bits), and
+ * the A pass tests the five bits (RD_STENCIL_TEST_NONZERO5), so n = 32 is
+ * no shadow, as on the GS.  Shadow.c passes its step at each reset
+ * (rd_shadow_reset_step); the reset and the resolve commands carry it in
+ * b[0] (8, or 0 for 4: the European disc's commands and every older dump
+ * keep their bytes), so a dump replays with its disc's step anywhere.
+ * The one draw reads a table of its step (rd_shadow_one.c).  Before
+ * v0.9.5 the host hook took every 0x08 face for a decrement (its test was
+ * the European 0x04): those discs' older dumps hold every face as a
+ * decrement (RDC_SHADOW_STRIP u[0] 0), which no replay can undo.
+ *
  * The A the resolve writes is the TEXA expansion of the PSMCT24 read, not
  * the alpha the GS stored (As = 0x80 wherever a face was drawn); nothing
  * reads FBP 0x142 as 32 bits, and baking the expansion lets the chain's
@@ -49,6 +67,7 @@
  */
 #include <string.h>
 #include "rd_internal.h"
+#include "../core/region.h" /* the running disc's step (rd__shadow_disc_step) */
 
 RdTarget rd_shadow_count_target(uint32_t gsW, uint32_t gsH)
 {
@@ -68,14 +87,48 @@ RdTarget rd_shadow_count_target(uint32_t gsW, uint32_t gsH)
     return (RdTarget){s_id};
 }
 
+/* the step of the last reset recorded (the game thread's), for the
+ * resolve after it */
+static uint32_t s_recStep = 4;
+
+uint32_t rd__shadow_step(const RdCmd *c)
+{
+    return c && c->b[0] == 8 ? 8u : 4u;
+}
+
+uint32_t rd__shadow_disc_step(void)
+{
+    return PAL_NTSCAUG6JUN26(4u, 8u); /* Shadow.c's 0x04 / 0x08 face colours */
+}
+
+void rd_shadow_reset_step(uint32_t step)
+{
+    static uint32_t s_logged;
+    step = step == 8 ? 8u : 4u;
+    if (step != s_logged) {
+        /* once a run, and again if the disc's step changes */
+        rd__log("shadow count: step %u (the disc's face colours 0x%02X / 0x%02X), %s bits", step,
+                step, 256u - step, step == 8 ? "five" : "six");
+        s_logged = step;
+    }
+    s_recStep = step;
+    RdCmd *c = rd__push(RDC_SHADOW_RESET);
+    if (c) {
+        c->b[0] = (uint8_t)(step == 8 ? 8 : 0);
+    }
+}
+
 void rd_shadow_reset(void)
 {
-    rd__push(RDC_SHADOW_RESET);
+    rd_shadow_reset_step(4);
 }
 
 void rd_shadow_resolve(void)
 {
-    rd__push(RDC_SHADOW_RESOLVE);
+    RdCmd *c = rd__push(RDC_SHADOW_RESOLVE);
+    if (c) {
+        c->b[0] = (uint8_t)(s_recStep == 8 ? 8 : 0);
+    }
 }
 
 void rd_shadow_tris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, RdKey key)
