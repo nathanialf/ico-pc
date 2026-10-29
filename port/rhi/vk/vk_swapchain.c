@@ -834,7 +834,9 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
         g_vkr.retired = old;
     }
     g_vkr.swapchain = sc;
-    g_vkr.mailbox = vsync && ci.presentMode == VK_PRESENT_MODE_MAILBOX_KHR;
+    g_vkr.mailbox =
+        ci.presentMode ==
+        VK_PRESENT_MODE_MAILBOX_KHR; /* the actual mode: vsync off falls back to it where immediate is not offered (Android) */
     g_vkr.presentMode = ci.presentMode;
     g_vkr.swapWidth = w;
     g_vkr.swapHeight = h;
