@@ -675,7 +675,8 @@ static RhiCompare depthCompare(uint8_t ztst)
  * Volumes: both faces INCR_WRAP or DECR_WRAP where the depth test passes,
  * written through RD_SHADOW_STENCIL_MASK, so the stencil holds n mod 64 as
  * 4 n mod 256 wraps.  Resolve bit k: EQUAL to the reference 1 << k under
- * read mask 1 << k; resolve A: NOTEQUAL 0 under the count's mask.  The
+ * read mask 1 << k; resolve A: NOTEQUAL 0 under the count's mask (the step
+ * 8's: under its five bits, RD_STENCIL_TEST_NONZERO5).  The
  * resolve passes write no stencil.
  * DATE's stencil bit (RD_DATE_STENCIL_BIT, the reference
  * RD_DATE_STENCIL_BIT for every one of them, rd_replay.c): CLEAR replaces
@@ -701,8 +702,10 @@ static void shadowStencil(uint8_t mode, RhiDepthStencilState *ds)
         ds->stencilWriteMask = RD_SHADOW_STENCIL_MASK;
         break;
     case RD_STENCIL_TEST_NONZERO:
+    case RD_STENCIL_TEST_NONZERO5:
         f.compare = RHI_CMP_NOTEQUAL;
-        ds->stencilReadMask = RD_SHADOW_STENCIL_MASK;
+        ds->stencilReadMask =
+            mode == RD_STENCIL_TEST_NONZERO5 ? RD_SHADOW_STEP8_MASK : RD_SHADOW_STENCIL_MASK;
         ds->stencilWriteMask = 0;
         break;
     case RD_STENCIL_DATE_CLEAR:
@@ -2761,7 +2764,7 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
         break;
     }
     if (k->gs.stencil == RD_STENCIL_INCR || k->gs.stencil == RD_STENCIL_DECR ||
-        k->gs.stencil == RD_STENCIL_TEST_NONZERO) {
+        k->gs.stencil == RD_STENCIL_TEST_NONZERO || k->gs.stencil == RD_STENCIL_TEST_NONZERO5) {
         return RD_KF_SHADOW;
     }
     return RD_KF_2D;
@@ -3186,18 +3189,20 @@ RdPipeKeyInt rd__shadow_count_key(void)
     return rd__post_key(RD_VS_BLIT, RD_FS_SHADOW_COUNT, RHI_FMT_RGBA8_UNORM);
 }
 
-RdPipeKeyInt rd__shadow_resolve_key(int pass)
+RdPipeKeyInt rd__shadow_resolve_key(int pass, uint32_t step)
 {
     RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_RGBA8_UNORM);
     k.depthFmt = RHI_FMT_D32F_S8;
     if (pass < 6) {
-        /* additive (ONE, ONE): the six bits' 4 << k sum to 4 n, at most 252 */
+        /* additive (ONE, ONE): the six bits' 4 << k sum to 4 n, at most
+         * 252, the step 8's five bits' 8 << k to 8 n, at most 248 (the
+         * colour is the DrawCB's: the bit keys are the same for both) */
         k.gs.blend = RD_BLEND_CS_AS_ADD_CD;
         k.gs.colorMask = 0x7;
         k.gs.stencil = (uint8_t)(RD_STENCIL_RESOLVE_BIT0 + pass);
     } else {
         k.gs.colorMask = 0x8;
-        k.gs.stencil = RD_STENCIL_TEST_NONZERO;
+        k.gs.stencil = step == 8 ? RD_STENCIL_TEST_NONZERO5 : RD_STENCIL_TEST_NONZERO;
     }
     return k;
 }
@@ -3212,8 +3217,14 @@ uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_
         n = rd__add_pipe_key(out, max, n, &k);
     }
     for (int p = 0; p < RD_SHADOW_RESOLVE_PASSES; p++) {
-        const RdPipeKeyInt k = rd__shadow_resolve_key(p);
+        const RdPipeKeyInt k = rd__shadow_resolve_key(p, 4);
         n = rd__add_pipe_key(out, max, n, &k);
+    }
+    /* the step 8's A pass where the running disc counts by 8 (its bit
+     * passes are the step 4's keys); the European set keeps its count */
+    if (rd__shadow_disc_step() == 8) {
+        const RdPipeKeyInt k8 = rd__shadow_resolve_key(RD_SHADOW_RESOLVE_PASSES - 1, 8);
+        n = rd__add_pipe_key(out, max, n, &k8);
     }
     const RdPipeKeyInt kr = rd__shadow_reduce_key(); /* box reduction to the GS size */
     n = rd__add_pipe_key(out, max, n, &kr);
