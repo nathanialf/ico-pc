@@ -662,7 +662,7 @@ static void display_layout(Kanban *k)
    speed 8, the game over quit at 0.4, the credits' return at 16: gsb_fade,
    speed / 2 a frame); then, once the box is black as well, the whole
    frame: the fade-out has reached level 128 (fadeColor[3], rising), or
-   the loading layout (0x35, lt_switch_layout in the stage manager) is
+   the loading layout (TITLE_COVER_LOADING, the stage manager's) is
    fully in (lt_fade_status 2: End Game's case, whose fade never shows).
    The title's own fade starts at level 144 (gsb_fade), already black, so
    the cover ends when fadeColor[3] has reached 128 on that fade
@@ -678,9 +678,13 @@ static void display_layout(Kanban *k)
    in-game area change keeps its look. */
 extern int kanbanBootEnd;
 
-#define TITLE_COVER_BANDS 1      /* titleCoverOn: the bands beside the 4:3 box */
-#define TITLE_COVER_FRAME 2      /* the whole frame */
-#define TITLE_COVER_LOADING 0x35 /* the loading layout (StageManager.c) */
+#define TITLE_COVER_BANDS 1 /* titleCoverOn: the bands beside the 4:3 box */
+#define TITLE_COVER_FRAME 2 /* the whole frame */
+/* the loading layout, the stage manager's lt_switch_layout (StageManager.c):
+   0x35 on the European disc, 50 on the Japanese program's discs, 49 on the
+   North American disc and the 2001 previews (0x35 alone left the cover's
+   whole-frame phase to the fade on every other disc) */
+#define TITLE_COVER_LOADING PAL_JPNKORCN_NTSCAUG6JUN26(0x35, 50, 49)
 
 static int titleCoverOn; /* port: 0, or the cover's phase */
 
