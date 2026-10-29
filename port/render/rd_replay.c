@@ -4577,7 +4577,7 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
 /* The count in one draw (rd_shadow_one.c): into the count target at
  * scale 1, else into s_shadowRed (the scaled target is left undrawn: the
  * levels read s_shadowRed, resolveTexture).  False: the seven draws run. */
-static bool shadowCountOne(Replay *r, RdTargetRec *tc, RdTargetRec *td)
+static bool shadowCountOne(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t step)
 {
     const bool scaled = tc->tw != tc->w || tc->th != tc->h;
     if (scaled && !shadowRedMake(tc)) {
@@ -4585,7 +4585,7 @@ static bool shadowCountOne(Replay *r, RdTargetRec *tc, RdTargetRec *td)
     }
     IcoDrawCB cb;
     rd__shadow_reduce_cb(tc, &cb);
-    if (!rd__shadow_one_draw(r, tc, td, scaled ? s_shadowRed : tc->color,
+    if (!rd__shadow_one_draw(r, tc, td, step, scaled ? s_shadowRed : tc->color,
                              scaled ? &s_shadowRedState : &tc->colorState, &cb)) {
         return false;
     }
@@ -4596,7 +4596,7 @@ static bool shadowCountOne(Replay *r, RdTargetRec *tc, RdTargetRec *td)
     return true;
 }
 
-static void doShadowResolve(Replay *r)
+static void doShadowResolve(Replay *r, const RdCmd *c)
 {
     RdTargetRec *td;
     RdTargetRec *tc = shadowTargets(r, &td);
@@ -4604,7 +4604,8 @@ static void doShadowResolve(Replay *r)
         return;
     }
     s_shadowRedFor = 0;
-    if (g_rd.profile.shadowOne && shadowCountOne(r, tc, td)) {
+    const uint32_t step = rd__shadow_step(c); /* rd_shadow.c "The step" */
+    if (g_rd.profile.shadowOne && shadowCountOne(r, tc, td, step)) {
         rd__stencil_close(&s_stencil.w, td->depth.id);
         s_shadowCountFor = r->st.color;
         return;
@@ -4619,25 +4620,21 @@ static void doShadowResolve(Replay *r)
     RhiBindGroup g2 = rd__tex_group(g_rd.dummy, rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
                                                             RD_WRAP_CLAMP, RD_WRAP_CLAMP));
     for (int pass = 0; pass < RD_SHADOW_RESOLVE_PASSES; pass++) {
-        const RdPipeKeyInt k = rd__shadow_resolve_key(pass);
+        RdPipeKeyInt k;
+        IcoDrawCB cb;
+        uint8_t ref;
+        if (!rd__shadow_resolve_pass(step, pass, &k, &cb, &ref)) {
+            continue;
+        }
         RhiPipeline p = rd__get_pipeline(&k);
         if (!p.id) {
             continue;
         }
-        IcoDrawCB cb;
-        memset(&cb, 0, sizeof(cb));
-        if (pass < 6) {
-            cb.col[0] = cb.col[1] = cb.col[2] = 4u << pass;
-        } else {
-            cb.col[3] = 0x80;
-        }
-        cb.uvRect[2] = cb.uvRect[3] = 1.0f;
-        cb.tex[0] = cb.tex[1] = cb.tex[2] = cb.tex[3] = 1.0f;
         rd__set_pipeline(s_cl, p, &k);
         rd__bind_uniform(s_cl, 0, g0);
         rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(s_cl, 2, g2);
-        rhi_cmd_set_stencil_ref(s_cl, pass < 6 ? (uint8_t)(1u << pass) : 0);
+        rhi_cmd_set_stencil_ref(s_cl, ref);
         drawCmd(s_cl, 3, 0, 1);
     }
     endPass(r);
@@ -5930,7 +5927,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 doShadowStrip(&r, f, c);
                 break;
             case RDC_SHADOW_RESOLVE:
-                doShadowResolve(&r);
+                doShadowResolve(&r, c);
                 break;
             case RDC_POST_STUB:
                 if (c->b[0] == RD_POST_FOG) {
