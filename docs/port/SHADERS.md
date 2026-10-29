@@ -138,7 +138,10 @@ take from either ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)).
   and the plane distance; 12 input components with the position, against 40), a prefix of every
   VU vertex shader's output, so the main shaders and the programs' own entries feed it unchanged
   (DXC packs the prefix as the whole signature packs it: the same D3D12 registers). No
-  destination-read twins: under an exact blend the draws keep `vu_ps`.
+  destination-read twins: under an exact blend the draws keep `vu_ps`. A fused scissor pair's kick
+  is marked for them by the plane distance's sign (-1 where the draw has no clip plane, which every
+  twin's draw is), not by `r.w`
+  ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)).
 - the frame-size sprite builds (`port/render/rd_fx_plan.c`): `fx_sprite_ps` built again with
   `ICO_FX_FRAME=1` as `fx_frame_ps` (the open pass's forms: `FXF_ALPHA_ONLY`, the alpha alone;
   `FXF_OUT_PREMUL`, the premultiplied term for the fixed-function add or subtract; no blend and no
@@ -495,8 +498,8 @@ in: `vu_prelit_pre_vs` 2,120 words (483 instructions, 36 blocks), `vu_lit_pre_vs
 (3,600, 305), `vu_tri_tick_pre_vs` 16,614 (3,462, 212), `vu_tri_planes_pre_vs` 4,269 (972, 90),
 `vu_particle_pre_vs` 8,801 (2,071, 200), `vu_main_vs` 6,277 (1,481, 174), `vu_particle_main_vs`
 4,249 (986, 102); `vu_ps` 5,512 (1,311, 191) and `vu_texa_ps` 11,655 (2,804, 477), the one pixel
-shader of both ways, and the no-planes builds `vu_np_ps` 4,887 (1,176, 187) and `vu_texa_np_ps`
-11,023 (2,668, 473), and their `_nodual` twins `vu_np_ps_nodual` 4,952 (1,196, 193) and
+shader of both ways, and the no-planes builds `vu_np_ps` 4,927 (1,187, 189) and `vu_texa_np_ps`
+11,063 (2,679, 475), and their `_nodual` twins `vu_np_ps_nodual` 4,952 (1,196, 193) and
 `vu_texa_np_ps_nodual` 11,088 (2,688, 479). The frame-size sprite modules (words, instructions,
 blocks): `fx_sprite_ps` 8,557 (2,087, 360), `fx_frame_ps` 11,439 (2,771, 476), `fx_local_ps` 8,561
 (2,088, 360), `fx_blur2_ps` 14,883 (3,491, 558). By the live-path walk (the SPIR-V executed for one pixel, its arithmetic
@@ -516,15 +519,17 @@ record stages in place of the program entries, none over 16,515 words.
 The draw merge's builds (`ICO_VU_MERGE`: `vu_X_merge_vs` and `vu_X_merge_plain_vs` of the seven
 mesh and grid programs but the skinned ones, `vu_merge_main_vs`;
 [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) are the same entries reading VuCB and VuBoneCB
-from t5 through a four-step search, about 500 words above each: `vu_lit_merge_vs` 51,903 of
-`VS_BUDGET`, `vu_lit_merge_plain_vs` 23,857 and `vu_merge_main_vs` 6,770 of the plain budget (a
+from t5 through a four-step search, about 500 words above each: `vu_lit_merge_vs` 51,950 of
+`VS_BUDGET`, `vu_lit_merge_plain_vs` 23,904 and `vu_merge_main_vs` 6,827 of the plain budget (a
 `_merge_plain_vs` and a `_main_vs` are held to it), none with a finding. With the merge on (every
 device but Direct3D 11) a device compiles them in place of the plain builds of the same entries,
 whose modules the merge leaves unchanged word for word (`VU_MERGE_ENTRY(vid)` is `vid` there).
 The merge builds of `prelit`, `lit` and the main shader also set `VuVSOut.r.w` on the kick
-triangles of a fused scissor pair (`vu_fused_out`, 46 to 51 words; the others pass a literal clip
-mode and are unchanged), which `vu_ps` and `vu_texa_ps` read (`vu_dual_out_fused`, 142 words each;
-their no-planes, no-dual and destination-read twins are unchanged word for word)
+triangles of a fused scissor pair, and the plane distance to -1 where the draw has no clip plane
+(`vu_fused_out`, 93 to 108 words; the others pass a literal clip mode and are unchanged), which
+`vu_ps` and `vu_texa_ps` read (`r.w`: `vu_dual_out_fused`, 142 words each) and the no-planes twins
+`vu_np_ps` and `vu_texa_np_ps` (the plane's sign: one more argument of `vu_dual_out_f`, 44 words
+each); their no-dual and destination-read twins are unchanged word for word
 ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)).
 
 Every plain module is smaller than the same module of the last set that built on the Adreno 740 in
