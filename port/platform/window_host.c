@@ -269,7 +269,7 @@ static struct {
        a refresh (pace_cap_above_refresh): the refresh at this pace (0: not
        held), and its line written since the last settings change */
     Uint64 capAboveNs;
-    int capAboveLogged;
+    int capAboveLogged, mailboxOffLogged;
     /* the 10 s line's allowance counts at the block's start, and the
        allowance they are of (the timer path's or the lock's) */
     const PaceBudget *budgetAtOf;
@@ -469,7 +469,8 @@ static void video_settings(RdSettings *rs, int w, int h)
 
         s_pres.legacyAlpha = e != NULL && e[0] != '\0' && e[0] != '0';
     }
-    s_pres.capAboveLogged = 0; /* the clamp's line again after a settings change */
+    s_pres.capAboveLogged = s_pres.mailboxOffLogged =
+        0; /* the clamp's line again after a settings change */
     if (s_pres.framerate != ico_video_framerate()) {
         /* a new limit starts a new grid and a new present allowance */
         s_pres.nextPresent = 0;
@@ -5866,24 +5867,24 @@ static void pace(int hz)
     Uint64 gap;
     const Uint64 refresh = display_refresh_ns(period);
     {
-        /* "uncapped" with vsync on (s_pres.mailbox: rhi_prefer_mailbox):
-           a little less than one display refresh between presents, in
-           mailbox mode as under FIFO, so the presents average about one a
-           refresh (the log's "presents a refresh" figure).
-           Two a refresh in mailbox mode drew a picture the display never
-           showed for every one it did, which kept a handheld's GPU near its
-           limit; a phone also lost the time for the game.  Without vsync
-           "uncapped" is back to back.  A cap equal to the refresh has no
-           gap: FIFO's blocking present is the timer (s_pres.fifoLock).
-           Any other cap is its own gap, on the drift-free grid
-           (pace_policy.h pace_present_gap, pace_next_present) */
-        gap = s_pres.fifoLock
-                  ? 0
-                  : pace_present_gap(s_pres.framerate,
-                                     s_pres.framerate == ICO_FRAMERATE_UNCAPPED && s_pres.mailbox,
-                                     rhi_present_mailbox(), refresh);
+        /* "uncapped" under a mailbox swapchain (vsync on, or vsync off with
+           no immediate mode: an Android compositor's mailbox present blocks
+           once its queue is full, which held a phone's step 20-30 ms): one
+           present a refresh.  Immediate mode: back to back.  A cap equal to
+           the refresh: FIFO is the timer (s_pres.fifoLock).  Any other cap
+           its own gap (pace_policy.h pace_present_gap, pace_next_present) */
+        const int uncappedMailbox =
+            s_pres.framerate == ICO_FRAMERATE_UNCAPPED && rhi_present_mailbox();
+        gap = s_pres.fifoLock ? 0
+                              : pace_present_gap(s_pres.framerate, uncappedMailbox != 0,
+                                                 rhi_present_mailbox(), refresh);
         if (!gap) {
             s_pres.nextPresent = 0;
+        }
+        if (uncappedMailbox && !s_pres.vsync && !s_pres.mailboxOffLogged) {
+            s_pres.mailboxOffLogged = 1;
+            fprintf(stderr, "window: vsync off: the display offers no immediate mode; uncapped "
+                            "presents once a refresh (mailbox)\n");
         }
         /* a cap above the refresh in mailbox mode presents once a refresh
            as "uncapped" does (pace_policy.h pace_cap_above_refresh): the
