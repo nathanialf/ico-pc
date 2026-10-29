@@ -57,6 +57,27 @@ if(ICO_RUN_TESTS)
     endforeach()
 endif()
 
+# The twenty words a load keeps across gflagInit on each disc
+# (ico2/common/src/layout_action.c, compiled into the test whole, the rest of
+# the game it names stubbed by keep_flags_stubs.c): the disc's own five
+# game-flag ids and the words after them in its .data, the fifth the disc's
+# new-game flag, all below its flag count (issue 160).  CPU only.
+add_executable(keep_flags_test test/keep_flags_test.c test/keep_flags_stubs.c
+    "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_action.c")
+ico_include_dirs(common _ico_keep_flags_incs)
+target_include_directories(keep_flags_test PRIVATE ${_ico_keep_flags_incs}
+    "${CMAKE_SOURCE_DIR}/port/include" "${CMAKE_SOURCE_DIR}/port/ui")
+target_compile_definitions(keep_flags_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(keep_flags_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(keep_flags_test PRIVATE ico_region)
+if(ICO_RUN_TESTS)
+    add_test(NAME keep_flags COMMAND keep_flags_test pal)
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        add_test(NAME keep_flags_${_slug} COMMAND keep_flags_test ${_slug})
+    endforeach()
+endif()
+
 # IsPointIsInScreen's x bound (ico2/omori/src/poly-flat.c, compiled into the
 # test) at gsFrame.w = 512 and wider: the PS2's 4:3 window at every width
 # (its callers are camera decisions, and the camera is the original's).  Stubs for the
