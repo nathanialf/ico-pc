@@ -151,7 +151,7 @@ bool rd__const_read(const RdTargetRec *tc, uint32_t tcId, const RdTargetRec *src
     const bool held = s_held.valid && s_held.replay == g_rd.replayCounter &&
                       s_actionsReplay == g_rd.replayCounter && s_held.actions + 1u == s_actions &&
                       s_held.id == srcId && src && s_held.tex == src->color.id;
-    const bool take = rd__const_reads_on() && held && src != tc && tfmt == 0u /* RGBA32 */;
+    const bool take = rd__const_reads_on() && held && src != tc && tfmt == RD_TEXSRC_RGBA32;
     if (s_held.valid && s_held.id == tcId) {
         s_held.valid = false; /* the sprite draws into the noted target */
     }
