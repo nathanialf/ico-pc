@@ -8,7 +8,8 @@ reflection block between ticks, and where the crack filler is drawn on the fog's
 (not work buffers, kept here because RENDER.md is at its size cap) how a screen sprite redrawn under
 a new key between ticks is paired, how desktop Vulkan decides on the local reads at start, how
 the shadow count is read from the stencil in one draw, how the shadow levels are composited above
-1x and which passes leave a depth neither loaded nor stored (the store plan). The sprites themselves are drawn by the GS
+1x, which passes leave a depth neither loaded nor stored (the store plan), a source that holds only its clear read as its colour, and which full-frame reads stay at a large
+scale. The sprites themselves are drawn by the GS
 sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 
 ## Files
@@ -26,6 +27,7 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
 | `port/render/rd_replay.c`, `port/render/rd_shadow_one.c`, `port/render/rd_shadow_selftest.c`, `port/shaders/blit.hlsl` | the shadow count in one draw (`shadowCountOne` picks the destination, `rd__shadow_one_draw` draws `shadow_count_ps`) and its start-up self-test (`rd__shadow_selftest`) |
 | `port/render/rd_fx_plan.c`, `port/render/rd_profile.c` | the shadow composites above 1x: one bilinear tap unless `RdProfile.shadowBspline` (`rd__sprite_above1x`) |
+| `port/render/rd_const_read.c`, `port/render/rd_replay.c`, `port/render/rd_replay_tiler.c` | a post sprite whose source holds only its last clear drawn in that colour (`rd__const_read`, from `doBlurSpriteDraw`; the clear noted in `pendClear`, the actions counted from `rd__replay_fold_at`) |
 | `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
 | `port/render/rd_store_plan.c`, `port/render/rd_replay.c`, `port/render/rd_profile.c` | the store plan: the scan before the walk (`rd__store_plan_scan`), each pass's depth ops (`rd__store_plan_pass` from `beginPass`), the walk's command count (`g_rdStoreOrd`), the profile's `storePlan` |
 
@@ -585,103 +587,5 @@ constant over the joint support widened by one texel for a rounding tie (level t
 i0 + 3: N = 3 level texels, 12, 24 and 48 SCENE texels for SHADOW0..2 at 2x), with some texels
 differing (the histogram of |d| is printed).
 
-## The store plan
-
-A tile-based GPU loads every attachment a pass loads into its tile memory when the pass begins and
-writes every attachment it stores back when the pass ends. SCENE's depth (D32F with its stencil) is
-about 10 MB at 2364x1080, and on the PowerVR phone each full-frame touch of the picture costs about
-1 ms (its per-pass timing, `[dev] perf_passes`); every pass drawn on SCENE has SCENE's
-depth bound (`prepareDrawEx` binds the state's depth whatever the Z test), so before the plan each
-such pass loaded and stored it, read or not. `RdProfile.storePlan` (on for every device class,
-`port/render/rd_profile.c`) drops those loads and stores where the depth is provably not needed.
-
-**The scan.** At the head of each replay (`replayFrame`, before `rd__clear_new_targets`; an
-interpolated present's blended frame too), `rd__store_plan_scan` (`port/render/rd_store_plan.c`)
-walks the replayed lists with their state, numbering the commands in order (state commands
-included, from the first replayed list), and records for every depth texture the last command that
-touches its depth or stencil:
-
-- a draw (screen prims, the VU draws, a post sprite) on the state's depth with the Z test on (ZTE
-  and not ALWAYS), Z write on, DATE on (the stencil bit) or PRIM.AA1 (its stencil pairs);
-- a draw whose texture is a target's depth view (`RD_VIEW_DEPTH`);
-- the three shadow commands (the stencil count and the volumes' Z test);
-- the fog: the state's depth, the colour target's (the crack filler copies and fills it) and a depth
-  view the texture names;
-- a command type the scan does not know: every depth.
-
-Copies, exact blends and clears touch none (a clear only writes). The walk counts the same numbers
-(`g_rdStoreOrd`, set for each command and past each list's last).
-
-**The rule.** A pass begun while command k is replayed holds the work of command k and later ones
-only: a screen run or a VU merge is flushed into the pass it was recorded in, a pending clear or
-shadow reset is recorded no earlier than the command that needs it, and the blur fold reads ahead,
-never back. So when a depth's last touch lies before k, nothing in that pass or after it reads or
-writes the depth: `beginPass` (through `rd__store_plan_pass`) sets its load and store to DONT_CARE
-(a pending clear stays a CLEAR load) and the stencil's with it, unless the shadow window is open on
-that depth (`rd__stencil_live`). Every other pass keeps its loads and stores, so the pass that holds
-the last touch still stores the depth (`beginPass` cannot know where its pass will end). Not planned
-either: the passes into SCENE_MS (the MSAA epoch), and the passes begun outside `beginPass` (the new
-targets' clears, the shadow reset's own pass, the crack filler's own pass, the MSAA resolves). The
-colour attachments are all stored: the colour's readers (texture reads of a target, copies, the
-present, the feedback kept across ticks, a keep frame's retained DISPLAY) are not provable at a
-pass's begin (`storeColorDropped` stays 0).
-
-On the PowerVR phone's 2x frame (`tools/vufuse_dumps.txt`, read from `rd_replay_tool --list`)
-the last touch of SCENE's depth is list 5's fog meshes (GEQUAL tested); after it SCENE's depth is
-bound by list 11's screen sprites (a screen draw binds the state's depth whatever its Z test; a post
-sprite without a Z test or Z write binds none, `rd__blur_key`), so those are the passes the plan
-drops on that frame. The fog's own pass and list 5's keep their stores.
-
-**After the replay.** The plan treats a depth as touched after the replay (every pass keeps it) when:
-
-- the present reads SCENE's depth (Options' effects depth, `RdSettings.effectsDepth`: `depthBlit`
-  in `port/render/rd_present.c`, also on a re-shown present);
-- a replay found the depth read before its clear (the head clear `RDC_CLEAR` with depth, or the new
-  target's clear): a frame drawing on the depth the replay before left, as a keep frame
-  (`rd__first_list`) would if its lists 11 and 12 tested SCENE's depth. That depth's stores are kept
-  from then on and the log says so once (for the first four a run):
-
-      rd: store plan: SCENE's depth is read in list 11 before this replay clears it (frame 1234, a keep frame): its stores are kept from now on (the replay before had dropped its last store: this picture may show a depth left undefined)
-
-  The last clause appears only when the replay before had dropped that depth's last store: that one
-  picture may show it (in practice the memory holds what the last stored pass left, above). Every
-  frame of the dump corpus that touches a depth (`tools/vustage_dumps.txt` and the phone's, read with
-  `rd_replay_tool --list`) clears SCENE's depth at list 0's head before any read, and the 2D frames
-  touch none; one frame (the issue-95 loss frame) Z-tests list 11's text against SCENE's depth, so a
-  keep frame drawing such text would be the first case of this rule;
-- a caller read the depth back (`rd__read_target_depth`, the tests): kept from then on, logged
-  `rd: store plan: SCENE's depth is read back: its stores are kept from now on`;
-- the replay has a pass window (`rd_replay_tool`'s bisect reads targets mid-frame): no plan at all.
-
-The passes the plan drops lie after the depth's last touch and draw nothing into it, so a device that
-skips the write-back leaves the memory as the last stored pass wrote it; Vulkan calls the contents
-undefined, which only matters to a reader the plan does not see (the next frame, above).
-
-**The backends.** Vulkan passes the ops through (`port/rhi/vk/vk_cmd.c`: dynamic rendering's
-attachment ops, or the legacy `VkRenderPass` cached by its ops, its pipelines made against the
-ops-free compatible pass). Direct3D 12, Direct3D 11 and OpenGL ignore the store ops and keep the
-contents (`d3d12_cmd.c`, `d3d11_cmd.c`, `gl_cmd.c`; no `DiscardResource` or
-`glInvalidateFramebuffer`: those backends run on desktop GPUs, where nothing is gained). lavapipe
-keeps the contents whatever the load and store ops say (measured with a two-pass probe on Mesa
-25.0.7: a DONT_CARE load, store or both left the colour, the depth and the stencil as the first pass
-cleared them).
-
-**The switch and the lines.** `[dev] store_plan = false` (`ICO_RD_STORE_PLAN=0`,
-[CONFIG.md](CONFIG.md)) keeps every load and store; the profile's start line and the summary say
-`depth stores planned` or `depth stores kept ([dev])`. `ICO_RD_STORE_PLAN=all` (tests only) drops
-every depth store and keeps the loads, a wrong plan (`depth stores all dropped (test)`). The window's
-10 s line about the uploads ends with
-
-    ; stores: N depth and M colour stores dropped a replay of P passes (planned; [dev] store_plan)
-
-(the means per replay; `every store kept` when no replay planned) and `rd_replay_tool --stats` prints
-`stores: N depth and M colour stores dropped a replay of P passes (D with a depth; store plan on)`
-(`RdPerfRecord.storeDepthDropped`, `storeColorDropped`, `storePasses`, `storeDepthPasses`,
-`storePlanMode`; [TESTING.md](TESTING.md)).
-
-**The test.** `rd_store_plan_ab` ([TESTING.md](TESTING.md)) replays the corpus and the phone's frame
-with every store kept, with the plan and with every depth store dropped, under
-`ICO_RD_STORE_POISON=1`: a load the plan leaves undefined (a load it made DONT_CARE, or a load after a
-store it dropped) clears the depth to 0.5 and the stencil to 0x5A instead, the garbage a tile-based
-GPU may leave, since lavapipe itself keeps the contents. The plan must give every target byte for
-byte; dropping every depth store must change some target.
+1x, which passes leave a depth neither loaded nor stored (the store plan), a source that holds only its clear read as its colour, and which full-frame reads stay at a large
+scale. The sprites themselves are drawn by the GS
