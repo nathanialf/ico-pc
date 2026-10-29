@@ -124,6 +124,7 @@ add_library(ico_render STATIC
     rd_blur.c # staticBlur.c's sprites
     rd_blur_border.c # the post sprites' replay: the reduction's open border, its outer columns
     rd_blur_smooth.c # Motion blur: Smooth, the motion blur's accumulator
+    rd_const_read.c # a sprite whose source holds only its clear drawn in that colour
     rd_core.c
     rd_crack_fill.c # above 1x: the pixels no draw covered between drawn ones, before the fog
     rd_crt.c # the CRT filter at present time
@@ -1724,6 +1725,26 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_store_plan_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_constant_reads_ab (test/rd_constant_reads_ab.cmake): the same dumps
+    # and the phone's frames (tools/constant_reads_dumps.txt) with every post
+    # sprite reading its source (ICO_RD_CONSTANT_READS=0) and with a source
+    # that holds only its clear drawn as its colour (rd_const_read.c), at the
+    # phone's profile at 2x and at its Resolution Auto size and at the
+    # desktop's Enhanced 2x 4:3 and 16:9, under ICO_RD_BLEND=fixed: every
+    # named target byte for byte, the same target reads either way, the
+    # phone's frames served; SKIP as rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/constant_reads_ab")
+    add_test(NAME rd_constant_reads_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/constant_reads_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/constant_reads_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_constant_reads_ab.cmake")
+    set_tests_properties(rd_constant_reads_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_constant_reads_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
 endif()
 # The blend policy (rd_dst_read.c)
 # rd_dst_usage_test: the fixed-function blend by default makes no
@@ -1968,7 +1989,7 @@ endif()
 #  * the tests that start the game (model_viewer_headless, gallery_sweep,
 #    credits_headless) or work on the replay tool's files (rd_replay_tool*,
 #    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, rd_vubatch_ab, rd_vumerge_ab,
-#    rd_vufuse_ab, rd_store_plan_ab,
+#    rd_vufuse_ab, rd_store_plan_ab, rd_constant_reads_ab,
 #    the native frame gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
 #    on both backends)
 #  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_mip, rd_passring,
