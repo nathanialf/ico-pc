@@ -250,7 +250,7 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
     if (planes != 0u) {
         o = vu_rec_planes(o, a0, vu_tri.x + kick, vu_tri.y + kick);
     }
-    return vu_fused_out(o, mode); // a fused pair's kick: r.w (the merge build)
+    return vu_fused_out(o, mode); // a fused pair's kick: r.w, plane (the merge build)
 }
 
 // The pre-pass's targets: the record's three planes
