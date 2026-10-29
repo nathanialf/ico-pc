@@ -1549,6 +1549,11 @@ RdPipeKeyInt rd__post_key(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
 RdPipeKeyInt rd__present_depth_key(RhiFormat colorFmt);
 /* The pipeline for k, created on first use.  0 without a device. */
 RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k);
+/* The same, not noted on the pass ring's newest entry
+ * (rd__passring_pipeline_hold): for a pass that looks its pipeline up
+ * before its own entry is pushed, then asks again after it (rd_replay.c
+ * shadowReduce, rd__shadow_one_draw; rd_shadow_one.c) */
+RhiPipeline rd__get_pipeline_held(const RdPipeKeyInt *k);
 /* Binds p and sets the dynamic state the key asks for where the device
  * left it dynamic (RhiLimits.dynamicDepth / dynamicBlend: the depth test,
  * write and compare, the blend and the colour mask), from the

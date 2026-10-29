@@ -108,6 +108,14 @@ static bool tableMake(RhiCommandList cl)
     return true;
 }
 
+RhiPipeline rd__get_pipeline_held(const RdPipeKeyInt *k)
+{
+    rd__passring_pipeline_hold(1);
+    const RhiPipeline p = rd__get_pipeline(k);
+    rd__passring_pipeline_hold(0);
+    return p;
+}
+
 bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, RhiTexture dst,
                          RhiState *dstState, const IcoDrawCB *reduceCb)
 {
@@ -122,7 +130,7 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, RhiTexture
     if (!g_rd.fs[RD_FS_SHADOW_COUNT].id || !lim->stencilView || !td->depthSampled || !dst.id) {
         return false;
     }
-    RhiPipeline pipe = rd__get_pipeline(&k);
+    RhiPipeline pipe = rd__get_pipeline_held(&k);
     if (!pipe.id) {
         return false;
     }
@@ -166,6 +174,7 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, RhiTexture
      * device-loss report; the seven draws' pass was the target's) */
     rhi_cmd_checkpoint(cl, rd__replay_pass_push(RD_PASSK_PASS, r->st.color, tc->w, tc->h, 0, 0, 0,
                                                 0, r->perfPost));
+    (void)rd__get_pipeline(&k); /* the cache's hit: its pipeline on this entry */
     rd__replay_viewport(tc->w, tc->h);
     const RhiRect all = {0, 0, tc->w, tc->h};
     rhi_cmd_set_scissor(cl, &all);
