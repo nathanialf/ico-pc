@@ -88,7 +88,9 @@ static void shadowHostBegin(void *obj)
     shadowHost.obj = obj;
 }
 
-/* position i (0..9) of a strip at XYZ2 v, its RGBAQ 0x04 (plus) or 0xFC */
+/* position i (0..9) of a strip at XYZ2 v, its RGBAQ the front face's
+   (plus: 0x04, 0x08 on the North American disc and the 2001 previews) or
+   the back face's (0xFC, 0xF8) */
 static void shadowHostStripPos(int i, const int *v, int plus)
 {
     RdScreenVtx c;
@@ -127,7 +129,8 @@ static void shadowHostReset(void)
     rd_abe(0);
     rd_gouraud(0);
     rd_texture_off();
-    rd_shadow_reset();
+    /* PC port: the count's step is the face colour's, 4 or 8 (emitVolumeStrip) */
+    rd_shadow_reset_step(PAL_NTSCAUG6JUN26(4u, 8u));
     /* FBA, TEXA, TEST, ALPHA, COLCLAMP */
     rd_fba(0);
     rd_tex_a(RD_TEXA_80_80);
@@ -1318,7 +1321,8 @@ static inline unsigned long long *emitVolumeStrip_jun26(unsigned long long *p,
         v = vi[k];
         *p = (long long)v[0] | ((long long)v[1] << 16) | ((long long)v[2] << 32);
 #ifdef ICO_RD
-        shadowHostStripPos(i, v, (unsigned char)p[-1] == 0x04);
+        /* PC port: plus is the disc's own front-face byte, 0x04 or 0x08 */
+        shadowHostStripPos(i, v, (unsigned char)p[-1] == PAL_NTSCAUG6JUN26(0x04, 0x08));
 #endif
     }
     return p;
@@ -1365,7 +1369,8 @@ static inline unsigned long long *emitVolumeStrip(unsigned long long *p,
         v = vi[k];
         *p = (long long)v[0] | ((long long)v[1] << 16) | ((long long)v[2] << 32);
 #ifdef ICO_RD
-        shadowHostStripPos(i, v, (unsigned char)p[-1] == 0x04);
+        /* PC port: plus is the disc's own front-face byte, 0x04 or 0x08 */
+        shadowHostStripPos(i, v, (unsigned char)p[-1] == PAL_NTSCAUG6JUN26(0x04, 0x08));
 #endif
     }
     return p;
