@@ -494,7 +494,10 @@ what that backend's submits then copied from the ring's CPU copy to the GPU
 (`RdPerfRecord.backendWriteBytes`, `RhiStats.uploadWriteBytes`; the block's mean from
 `port/render/rd_perf.c` (`rd_perf_backend_text`)): the ranges the lists read, cut at
 the ring's written end ([RHI.md](RHI.md#direct3d-11), **The written mark**). On the other backends
-the GPU reads the ring itself and the part is left out.
+the GPU reads the ring itself and the part is left out. Every backend's line ends with the store
+plan's means per replay, `; stores: N depth and M colour stores dropped a replay of P passes
+(planned; [dev] store_plan)` (`every store kept` with the plan off;
+[WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)).
 
 **Reading the lines for a speed report.** Four lines carry the evidence, with the start's
 `ico_pc: summary:` and `rhi_vk:` device lines (`port/platform/window_host.c` (`perf_log`,
@@ -542,7 +545,7 @@ the GPU reads the ring itself and the part is left out.
   flag is off ([RENDER.md](RENDER.md#performance-records); the flags are in the `rd: profile:` line).
 
 The device class and its flags are in `ico_pc: summary:` (`profile <class>: fog local on|off, DATE
-stencil|snapshot, depth stores kept, blur fold on|off, local read yes|no, uint views ...`, a
+stencil|snapshot, depth stores planned|kept, blur fold on|off, local read yes|no, uint views ...`, a
 `([dev])` or `(self-test)` mark on a flag a key set or a self-test turned off) and in the one
 `rd: profile:` line; the blend is in `blend fixed-function (self-test: ...)`. A speed report is
 worth acting on with the `rhi_vk:` device line, the summary, these four lines from one block at
