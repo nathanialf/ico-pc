@@ -8,6 +8,7 @@ static RdPassReplay s_replays[RD_PASSRING_REPLAYS];
 static uint32_t s_replayCount; /* ever */
 static uint32_t s_curReplay, s_curFrame;
 static uint8_t s_curKeep, s_curList = 255;
+static uint8_t s_pipeHold; /* rd__passring_pipeline_hold */
 
 static RdPassReplay *curReplay(void)
 {
@@ -66,9 +67,14 @@ const void *rd__passring_push(RdPassKind kind, uint32_t color, uint32_t cw, uint
     return (const void *)(uintptr_t)e->seq;
 }
 
+void rd__passring_pipeline_hold(int on)
+{
+    s_pipeHold = on ? 1u : 0u;
+}
+
 void rd__passring_pipeline(uint32_t id, uint8_t vs, uint8_t fs, uint8_t dst)
 {
-    if (!s_seq) {
+    if (!s_seq || s_pipeHold) {
         return;
     }
     RdPassRec *e = &s_ring[(s_seq - 1) % RD_PASSRING_SIZE];
@@ -98,6 +104,7 @@ void rd__passring_reset(void)
     s_curReplay = s_curFrame = 0;
     s_curKeep = 0;
     s_curList = 255;
+    s_pipeHold = 0;
 }
 
 uint32_t rd_passring_count(void)

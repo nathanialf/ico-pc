@@ -84,6 +84,11 @@ const void *rd__passring_push(RdPassKind kind, uint32_t color, uint32_t cw, uint
 /* the newest entry, while it is a render pass, exact blend or VU
  * pre-pass (either): the pipeline asked for (rd_pipeline.c rd__get_pipeline) */
 void rd__passring_pipeline(uint32_t id, uint8_t vs, uint8_t fs, uint8_t dst);
+/* on: rd__passring_pipeline notes nothing until turned off again (a pass
+ * that looks its pipeline up before its own entry is pushed: rd_replay.c
+ * shadowReduce, rd_shadow_one.c rd__shadow_one_draw; without it the
+ * lookup lands on the entry before, the pass still open or just ended) */
+void rd__passring_pipeline_hold(int on);
 /* the newest entry, an upload batch: its bytes */
 void rd__passring_bytes(uint64_t bytes);
 /* empties the ring and the replay table (tests) */

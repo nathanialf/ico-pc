@@ -15,7 +15,11 @@
  *             them; the VU vertex pre-pass with its vertices and record
  *             and the pipeline it asked for
  *   bisect    the loss bisect's line for a pass, a copy and a pass of
- *             unknown count, in the same words */
+ *             unknown count, in the same words
+ *   hold      the shadow reduce's order (rd_replay.c shadowReduce): its
+ *             pipeline looked up under the hold leaves the seven draws'
+ *             entry alone; the reduce's own entry, pushed next, takes it
+ *             when asked again; reset lets the hold go */
 #include "rd_passring.h"
 #include <stdio.h>
 #include <string.h>
@@ -209,6 +213,34 @@ static void testBisect(void)
                        "(640x448), pipeline 409 (vs 7 fs 5 dst 0)") == 0);
 }
 
+static void testHold(void)
+{
+    rd__passring_reset();
+    rd__passring_frame(7, 90, 0);
+    rd__passring_list(3);
+    /* the seven draws' pass on the count target (scaled), its last pipeline */
+    rd__passring_push(RD_PASSK_PASS, 45482004u, 1728, 1344, 1, 1728, 1344, 0, -1);
+    rd__passring_pipeline(371, 2, 21, 0);
+    /* the reduce looks its pipeline up before its pass begins */
+    rd__passring_pipeline_hold(1);
+    rd__passring_pipeline(366, 2, 13, 0);
+    rd__passring_pipeline_hold(0);
+    CHECK(rd_passring_get(0)->pipeline == 371 && rd_passring_get(0)->fs == 21);
+    /* its own entry at the GS size, then the pipeline asked again */
+    rd__passring_push(RD_PASSK_PASS, 45482004u, 576, 448, 0, 0, 0, 0, -1);
+    rd__passring_pipeline(366, 2, 13, 0);
+    CHECK(rd_passring_count() == 2);
+    CHECK(rd_passring_get(1)->pipeline == 366 && rd_passring_get(1)->fs == 13);
+    CHECK(rd_passring_get(1)->cw == 576 && rd_passring_get(1)->ch == 448);
+    CHECK(rd_passring_get(0)->pipeline == 371);
+    /* a hold left on is let go by reset */
+    rd__passring_pipeline_hold(1);
+    rd__passring_reset();
+    rd__passring_push(RD_PASSK_PASS, 1, 8, 8, 0, 0, 0, 0, -1);
+    rd__passring_pipeline(5, 1, 1, 0);
+    CHECK(rd_passring_get(0)->pipeline == 5);
+}
+
 int main(void)
 {
     testOrder();
@@ -217,6 +249,7 @@ int main(void)
     testFormat();
     testVuPre();
     testBisect();
+    testHold();
     printf("rd_passring_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }
