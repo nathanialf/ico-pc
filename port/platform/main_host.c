@@ -115,6 +115,7 @@
 #include "diag_host.h"
 #include "extract.h"
 #include "fpenv.h"
+#include "gpu_hang.h"
 #include "host_config.h"
 #include "host_fs.h"
 #include "../core/region.h" /* the disc's region (select_disc) */
@@ -2013,6 +2014,35 @@ static void open_model_pack(const char *exe_dir)
 }
 #endif
 
+/* The GPU hang limit (gpu_hang.h, issue 123): half the watchdog's, before
+   the window opens, so the graphics backend's loss diagnostics line names
+   it (ICO_GPU_HANG_LIMIT, port/rhi/vk/vk_device.c); a watchdog= that is
+   not a number takes the default here (the watchdog's own read below ends
+   the run on it) */
+static void set_gpu_hang_limit(const IcoIni *ini)
+{
+    unsigned long watchdog = WATCHDOG_DEFAULT_S;
+    const char *v = ico_ini_get(ini, "watchdog");
+    char text[32];
+    double limit;
+
+    if (v != NULL && v[0] != '\0' && parse_count(v, &watchdog) != 0) {
+        watchdog = WATCHDOG_DEFAULT_S;
+    }
+    limit = ico_gpu_hang_limit_s(watchdog);
+    ico_diag_set_gpu_hang_limit(limit);
+    snprintf(text, sizeof(text), "%.1f", limit);
+#ifdef _WIN32
+    _putenv_s("ICO_GPU_HANG_LIMIT", text);
+#else
+    setenv("ICO_GPU_HANG_LIMIT", text, 1);
+#endif
+    fprintf(stderr,
+            "ico_pc: GPU hang limit %s s (half the watchdog's %lu s, at least %.0f s; 0 = off): "
+            "one wait for the GPU this long ends the run as a GPU hang\n",
+            text, watchdog, ICO_GPU_HANG_MIN_S);
+}
+
 /* the watchdog, from the limit in seconds (0 off) */
 static void start_watchdog(unsigned long watchdog)
 {
@@ -2232,6 +2262,7 @@ static int host_main(int argc, char **argv)
         }
     }
 
+    set_gpu_hang_limit(&ini);
 #ifdef ICO_ANDROID_UI
     /* Android: the window first, the first start's picker, copy and
        progress are shown in it (SDL has one window there) */
