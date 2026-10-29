@@ -699,4 +699,6 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "Cette version du jeu ne donne aucun indice : cela ne change rien. Les succès restent actifs.",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "Dans cette version du jeu, on ne peut pas regarder autour pendant les cinématiques : cela ne change rien. Les succès restent actifs.",
+    [UI_STR_GPU_HANG_TURNIP] =
+        "Avec le pilote Qualcomm de cet appareil, un pilote Turnip peut aider : ajoutez-en un dans Options > Pilote graphique > Ajouter un pilote. Appliqué au prochain démarrage.",
 };

@@ -675,4 +675,6 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "這個版本的遊戲沒有提示，所以不會有任何改變。成就維持開啟。",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "這個版本的過場動畫本來就不能環顧四周，所以不會有任何改變。成就維持開啟。",
+    [UI_STR_GPU_HANG_TURNIP] =
+        "此裝置的 Qualcomm 驅動程式可改用 Turnip 驅動程式：在 選項 > 圖形驅動程式 > 新增驅動程式 新增。下次啟動時生效。",
 };

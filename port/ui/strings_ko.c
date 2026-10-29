@@ -693,4 +693,6 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "이 버전에는 힌트가 없어서 효과가 없습니다. 업적은 그대로 유지됩니다.",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "이 버전은 컷신 중에 둘러볼 수 없어서 효과가 없습니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_GPU_HANG_TURNIP] =
+        "이 기기의 Qualcomm 드라이버에서는 Turnip 드라이버를 추가하세요 (옵션 > 그래픽 드라이버 > 드라이버 추가). 다음 실행부터 적용됩니다.",
 };

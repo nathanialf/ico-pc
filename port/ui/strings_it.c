@@ -695,4 +695,6 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
         "Questa versione del gioco non dà suggerimenti, quindi non cambia nulla. Gli obiettivi restano attivi.",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "In questa versione del gioco la visuale non si muove durante i filmati, quindi non cambia nulla. Gli obiettivi restano attivi.",
+    [UI_STR_GPU_HANG_TURNIP] =
+        "Con il driver Qualcomm di questo dispositivo, un driver Turnip può aiutare: aggiungine uno in Opzioni > Driver grafico > Aggiungi un driver. Si applica al prossimo avvio.",
 };

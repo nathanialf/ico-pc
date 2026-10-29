@@ -695,4 +695,6 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "Esta versión del juego no da pistas, así que no cambia nada. Los logros siguen activos.",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "En esta versión del juego la cámara no se mueve durante las escenas, así que no cambia nada. Los logros siguen activos.",
+    [UI_STR_GPU_HANG_TURNIP] =
+        "Con el controlador Qualcomm de este dispositivo, un controlador Turnip puede ayudar: añade uno en Opción > Controlador gráfico > Añadir un controlador. Se aplica en el próximo inicio.",
 };

@@ -691,4 +691,6 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "This version of the game gives no hints, so this changes nothing. Achievements stay on.",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "This version of the game has no look-around in cutscenes, so this changes nothing. Achievements stay on.",
+    [UI_STR_GPU_HANG_TURNIP] =
+        "On this device’s own Qualcomm driver, a Turnip driver package can help: add one under Options > Graphics driver > Add a driver. It is used from the next start.",
 };

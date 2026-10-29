@@ -700,4 +700,6 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Diese Version des Spiels gibt keine Hinweise, also ändert das nichts. Die Erfolge bleiben aktiv.",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "In dieser Version des Spiels kann man sich in Zwischensequenzen nicht umsehen, also ändert das nichts. Die Erfolge bleiben aktiv.",
+    [UI_STR_GPU_HANG_TURNIP] =
+        "Mit dem Qualcomm-Treiber dieses Geräts kann ein Turnip-Treiberpaket helfen: Fügen Sie eines unter Optionen > Grafiktreiber > Treiber hinzufügen hinzu. Gilt ab dem nächsten Start.",
 };

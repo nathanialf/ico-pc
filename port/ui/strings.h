@@ -825,6 +825,12 @@ typedef enum UiStrId {
     UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO,
     UI_STR_OPT_VAR_NO_HINTS_NOTE_2001,
     UI_STR_OPT_VAR_NO_LOOK_NOTE_2001,
+    /* PC port: the last sentence of the Android box after the graphics
+       driver stopped responding (a GPU hang or a device loss), on the
+       device's own Qualcomm driver: the Options route to a Turnip driver
+       package (port/platform/android/gpu_driver_android.c
+       ico_gpu_driver_android_hang_note, issue 123) */
+    UI_STR_GPU_HANG_TURNIP,
     UI_STR_COUNT
 } UiStrId;
 
