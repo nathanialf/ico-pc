@@ -160,6 +160,10 @@ static uint64_t s_backendBytes;
 static uint32_t s_backendReplays, s_reshownReplays, s_glowHeldReplays;
 static uint64_t s_mergeIn, s_mergeGpu, s_mergeAlone;
 static uint64_t s_fusePairs, s_fuseSame, s_fuseKept[RD_VU_FUSE_WHY_COUNT];
+/* the store plan's (RdPerfRecord storePasses, storeDepthDropped,
+ * storeColorDropped) and the replays it planned */
+static uint64_t s_storePasses, s_storeDepth, s_storeColor;
+static uint32_t s_storePlanned;
 
 bool rd_perf_pop(RdPerfRecord *out)
 {
@@ -178,6 +182,10 @@ bool rd_perf_pop(RdPerfRecord *out)
     for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
         s_fuseKept[k] += s_queue[s_head].vuFuseKept[k];
     }
+    s_storePasses += s_queue[s_head].storePasses;
+    s_storeDepth += s_queue[s_head].storeDepthDropped;
+    s_storeColor += s_queue[s_head].storeColorDropped;
+    s_storePlanned += s_queue[s_head].storePlanMode != 0;
     if (out) {
         *out = s_queue[s_head];
     }
@@ -203,7 +211,7 @@ bool rd__perf_gpu_ms_of(uint32_t replay, double *ms)
 
 const char *rd_perf_backend_text(void)
 {
-    static char s_text[768];
+    static char s_text[1024];
     size_t at = 0;
     s_text[0] = '\0';
     if (s_backendBytes && s_backendReplays) {
@@ -244,16 +252,28 @@ const char *rd_perf_backend_text(void)
         /* code 36's pairs (rd_replay_vu.c vuFuseVerdict): per replay, fused,
            under one pipeline already, kept apart and why */
         const double n = (double)s_backendReplays;
+        const int k = snprintf(
+            s_text + at, sizeof(s_text) - at,
+            "; VU fuse: %.0f pairs a replay fused, %.0f one pipeline already, %.0f kept "
+            "apart (fuse off %.0f, no merge build %.0f, passes %.0f, dst/DATE %.0f, blend "
+            "form %.0f, no planes %.0f, plans differ %.0f) ([dev] vu_fuse)",
+            (double)s_fusePairs / n, (double)s_fuseSame / n, (double)kept / n,
+            (double)s_fuseKept[RD_VU_FUSE_OFF] / n, (double)s_fuseKept[RD_VU_FUSE_BUILD] / n,
+            (double)s_fuseKept[RD_VU_FUSE_PASSES] / n, (double)s_fuseKept[RD_VU_FUSE_DST] / n,
+            (double)s_fuseKept[RD_VU_FUSE_BLEND] / n, (double)s_fuseKept[RD_VU_FUSE_PLANES] / n,
+            (double)s_fuseKept[RD_VU_FUSE_PLANS] / n);
+        at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
+    }
+    if (s_storePasses && s_backendReplays) {
+        /* the store plan (rd_replay.c): per replay, the depth stores (and
+           loads) dropped and the colour stores dropped, of the walk's
+           passes; "planned" when a replay of them planned */
+        const double n = (double)s_backendReplays;
         snprintf(s_text + at, sizeof(s_text) - at,
-                 "; VU fuse: %.0f pairs a replay fused, %.0f one pipeline already, %.0f kept "
-                 "apart (fuse off %.0f, no merge build %.0f, passes %.0f, dst/DATE %.0f, blend "
-                 "form %.0f, no planes %.0f, plans differ %.0f) ([dev] vu_fuse)",
-                 (double)s_fusePairs / n, (double)s_fuseSame / n, (double)kept / n,
-                 (double)s_fuseKept[RD_VU_FUSE_OFF] / n, (double)s_fuseKept[RD_VU_FUSE_BUILD] / n,
-                 (double)s_fuseKept[RD_VU_FUSE_PASSES] / n, (double)s_fuseKept[RD_VU_FUSE_DST] / n,
-                 (double)s_fuseKept[RD_VU_FUSE_BLEND] / n,
-                 (double)s_fuseKept[RD_VU_FUSE_PLANES] / n,
-                 (double)s_fuseKept[RD_VU_FUSE_PLANS] / n);
+                 "; stores: %.0f depth and %.0f colour stores dropped a replay of %.0f passes "
+                 "(%s; [dev] store_plan)",
+                 (double)s_storeDepth / n, (double)s_storeColor / n, (double)s_storePasses / n,
+                 s_storePlanned ? "planned" : "every store kept");
     }
     s_backendBytes = 0;
     s_backendReplays = 0;
@@ -262,6 +282,8 @@ const char *rd_perf_backend_text(void)
     s_mergeIn = s_mergeGpu = s_mergeAlone = 0;
     s_fusePairs = s_fuseSame = 0;
     memset(s_fuseKept, 0, sizeof(s_fuseKept));
+    s_storePasses = s_storeDepth = s_storeColor = 0;
+    s_storePlanned = 0;
     return s_text;
 }
 
