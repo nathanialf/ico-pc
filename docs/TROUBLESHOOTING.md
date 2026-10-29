@@ -135,9 +135,15 @@ updating the graphics driver usually fixes it.
 black and nothing changes, the graphics driver may have stopped
 responding without saying so. Wait: the game closes by itself, after
 about 15 seconds when it draws with Vulkan (always on a phone) and after
-about a minute with the other Graphics API choices. Windows, Linux and Android show a message ("The graphics card stopped
-responding while the game was drawing", on a phone "The graphics driver
-stopped responding while the game was drawing"). Your last save is kept. Start the game
+about a minute with the other Graphics API choices. Windows, Linux and
+Android show a message ("The graphics card stopped responding while the
+game was drawing", on a phone "The graphics driver stopped responding while
+the game was drawing"). Your last save is kept. On a phone that uses its own
+Qualcomm (Adreno) driver, the message ends by pointing at **Options >
+Graphics driver > Add a driver**: a Turnip driver package often runs the
+game without the stop (see
+["ICO could not start the game's graphics with this phone's driver"](#error-messages)
+for where to get one and how to add it). Start the game
 again: the game treats this like any other time the graphics stop (see
 [The game closes by itself](#the-game-closes-by-itself) and the messages
 under [Error messages](#error-messages)): it keeps a copy of the picture
