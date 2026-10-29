@@ -614,7 +614,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the batches whose kick took its cut's pipeline, M those kept apart by the first reason that held,
   S those whose two draws had one plan without the fuse (`fuse off` and every pair with ABE off
   under `fuse off F` with `ICO_RD_VU_FUSE=0` or the merge off;
-  [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)).
+  [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). And the store plan's: `stores: N
+  depth and M colour stores dropped a replay of P passes (D with a depth; store plan on)`, N the
+  passes whose depth (and stencil) was neither loaded nor stored, M 0 (the plan keeps every colour),
+  P the passes the walk began and D those with a depth outside the MSAA epoch (`store plan off`
+  and N 0 with `ICO_RD_STORE_PLAN=0`, `all` and N = D with `ICO_RD_STORE_PLAN=all`;
+  [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)).
 - `rd_vubatch_ab.cmake`: the same dumps through the record twice, one point draw an entry and
   stage (`ICO_RD_VU_PREPASS_BATCH=0`) and in the pre-pass's batches, at Original 4:3 1x, Enhanced
   4:3 2x and Enhanced 16:9 2x under `ICO_RD_BLEND=fixed`: every named target's PNG byte for byte,
@@ -642,6 +647,20 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   setting that counted pairs with ABE off some fused and fewer GPU draws in total; each pair's
   counts printed (`rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). SKIP
   as `rd_vustage_ab`.
+- `rd_store_plan_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` three times under
+  `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` (a depth or stencil load the plan leaves
+  undefined clears to 0.5 and 0x5A instead: lavapipe keeps an attachment's contents whatever its
+  load and store ops say, measured on Mesa 25.0.7, so without the poison a wrong plan draws the same
+  bytes there): every depth store kept (`ICO_RD_STORE_PLAN=0`), the store plan, and every depth
+  store dropped (`ICO_RD_STORE_PLAN=all`, a wrong plan), at three settings: the phone's profile
+  (`ICO_RD_VU_PREPASS=0`, `ICO_RD_FOG_PATH=local`, `ICO_RD_DATE_PATH=stencil`, `--enhanced
+  --resolution 2x --aspect 2.189 --present 2364x1080`; a narrower dump skips it) and the record at
+  Enhanced 4:3 and 16:9 2x: with the plan every named target's PNG (and `PRESENT.png`) byte for
+  byte against every store kept, `store plan off` with nothing dropped, `on` and `all` with the same
+  passes and passes with a depth, `all` dropping every one of those, the plan dropping some over the
+  whole list, and the wrong plan changing at least one target over the whole list (the poison shows
+  a dropped store that a later pass reads); each run's counts printed (`rd_store_plan_ab`;
+  [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)). SKIP as `rd_vustage_ab`.
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's
@@ -1547,6 +1566,8 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_PREPASS` | `rd_replay_vu.c` | 0: no VU vertex pre-pass, every VU draw the old way (`[dev] vu_prepass = false`); the tests switch it with `rd__set_vu_prepass` ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)) |
 | `ICO_RD_VU_PREPASS_BATCH` | `rd_replay_vu.c` | 0: the VU pre-pass's draws one an entry and stage instead of batched (`[dev] vu_prepass_batch = false`; `rd_vubatch_ab`, `rd_vuprepass_selftest_unbatched`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)) |
 | `ICO_RD_VU_MERGE` | `rd_replay_vu.c` | 0: every VU draw a GPU draw of its own instead of the draw merge (`[dev] vu_merge = false`; `rd_vumerge_ab`, `rd_vuprepass_selftest_unmerged`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) |
+| `ICO_RD_STORE_PLAN` | `rd_profile.c`, `rd_store_plan.c` | 0: every depth store kept (`[dev] store_plan = false`); 1 the store plan (the default); `all`: every depth store dropped, a wrong plan for `rd_store_plan_ab` ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)) |
+| `ICO_RD_STORE_POISON` | `rd_store_plan.c` | 1: a depth or stencil load the store plan leaves undefined clears to 0.5 and 0x5A instead, the garbage a tile-based GPU may leave (`rd_store_plan_ab`) |
 | `ICO_RD_VU_FUSE` | `rd_replay_vu.c` | 0: code 36's kick draws under their own pipelines instead of the fused scissor pair (`[dev] vu_fuse = false`; `rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)) |
 | `ICO_RD_PERF_LIST_STAMPS` | `rd_perf.c` | 0: no list or effect timestamp (`[dev] perf_list_stamps = false`); `rd_perf_test` switches it with `rd__set_perf_list_stamps` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
 | `ICO_RD_PERF_PASSES` | `rd_perf.c` | 1: every replay timed pass by pass (`[dev] perf_passes = true`; the window writes `ico-pc-passes.csv`); `rd_perf_test` and the replay tool's `--pass-times` switch it with `rd__set_perf_passes` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
