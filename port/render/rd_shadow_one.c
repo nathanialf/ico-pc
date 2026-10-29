@@ -8,7 +8,9 @@
  * draw at the GS size: it loads the stencil of each texel of a pixel's box
  * through the depth's stencil view (RHI_ASPECT_STENCIL, the depth in
  * RHI_STATE_DEPTH_READ) and the count's bytes for it from a 64 x 1 table
- * (rd__shadow_table_texel), and averages them in box_reduce_ps's order over
+ * of the count's step (rd__shadow_table_texel: one table for the step 4,
+ * one for the step 8, rd_shadow.c "The step"; the shader is the same), and
+ * averages them in box_reduce_ps's order over
  * box_reduce_ps's DrawCB (rd__shadow_reduce_cb).  rd_replay.c
  * shadowCountOne picks the destination (the count target at scale 1, the
  * reduced count above it); rd_shadow_selftest.c checks the result against
@@ -19,12 +21,13 @@
 #include "rd_internal.h"
 #include "rd_replay.h"
 
-/* the table, uploaded once a renderer */
-static RhiTexture s_table;
+/* the tables, [0] the step 4's, [1] the step 8's, each uploaded once a
+ * renderer, at its first use */
+static RhiTexture s_table[2];
 
-static RhiState s_tableState;
+static RhiState s_tableState[2];
 
-static bool s_tableReady;
+static bool s_tableReady[2];
 
 bool rd__shadow_sabotaged(void)
 {
@@ -36,11 +39,30 @@ bool rd__shadow_sabotaged(void)
     return s_sab == 1;
 }
 
-void rd__shadow_table_texel(uint32_t m, uint8_t rgba[4])
+void rd__shadow_table_texel(uint32_t m, uint32_t step, uint8_t rgba[4])
 {
-    m &= RD_SHADOW_STENCIL_MASK;
-    rgba[0] = rgba[1] = rgba[2] = (uint8_t)(4u * m);
+    m &= step == 8 ? RD_SHADOW_STEP8_MASK : RD_SHADOW_STENCIL_MASK;
+    rgba[0] = rgba[1] = rgba[2] = (uint8_t)((step == 8 ? 8u : 4u) * m);
     rgba[3] = m ? 0x80u : 0u;
+}
+
+bool rd__shadow_resolve_pass(uint32_t step, int pass, RdPipeKeyInt *k, IcoDrawCB *cb, uint8_t *ref)
+{
+    const int bits = step == 8 ? 5 : 6;
+    if (pass >= bits && pass < 6) {
+        return false; /* step 8's bit 5: 256, nothing in eight bits */
+    }
+    *k = rd__shadow_resolve_key(pass, step);
+    memset(cb, 0, sizeof(*cb));
+    if (pass < 6) {
+        cb->col[0] = cb->col[1] = cb->col[2] = (step == 8 ? 8u : 4u) << pass;
+    } else {
+        cb->col[3] = 0x80;
+    }
+    cb->uvRect[2] = cb->uvRect[3] = 1.0f;
+    cb->tex[0] = cb->tex[1] = cb->tex[2] = cb->tex[3] = 1.0f;
+    *ref = pass < 6 ? (uint8_t)(1u << pass) : 0;
+    return true;
 }
 
 void rd__shadow_reduce_cb(const RdTargetRec *tc, IcoDrawCB *cb)
@@ -62,26 +84,28 @@ void rd__shadow_reduce_cb(const RdTargetRec *tc, IcoDrawCB *cb)
 
 void rd__shadow_one_shutdown(void)
 {
-    if (s_table.id) {
-        rhi_destroy_texture(s_table);
+    for (int i = 0; i < 2; i++) {
+        if (s_table[i].id) {
+            rhi_destroy_texture(s_table[i]);
+        }
+        s_table[i] = (RhiTexture){0};
+        s_tableReady[i] = false;
     }
-    s_table = (RhiTexture){0};
-    s_tableReady = false;
 }
 
-/* the table made and its texels uploaded through the ring (outside a pass,
- * in the replay's list) */
-static bool tableMake(RhiCommandList cl)
+/* the step's table (i 1: the step 8's) made and its texels uploaded
+ * through the ring (outside a pass, in the replay's list) */
+static bool tableMake(RhiCommandList cl, int i)
 {
-    if (s_tableReady) {
+    if (s_tableReady[i]) {
         return true;
     }
-    if (!s_table.id) {
-        s_table = rhi_create_texture(
-            &(RhiTextureDesc){RD_SHADOW_TABLE_SIZE, 1, 1, RHI_FMT_RGBA8_UNORM,
-                              RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd shadow count table", 0});
-        s_tableState = RHI_STATE_UNDEFINED;
-        if (!s_table.id) {
+    if (!s_table[i].id) {
+        s_table[i] = rhi_create_texture(&(RhiTextureDesc){
+            RD_SHADOW_TABLE_SIZE, 1, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST,
+            i ? "rd shadow count table (step 8)" : "rd shadow count table", 0});
+        s_tableState[i] = RHI_STATE_UNDEFINED;
+        if (!s_table[i].id) {
             return false;
         }
     }
@@ -95,16 +119,16 @@ static bool tableMake(RhiCommandList cl)
     const uint32_t slot = rd__ring_slot();
     uint8_t *p = g_rd.ringMap[slot] + off;
     for (uint32_t m = 0; m < RD_SHADOW_TABLE_SIZE; m++) {
-        rd__shadow_table_texel(m, p + m * 4u);
+        rd__shadow_table_texel(m, i ? 8u : 4u, p + m * 4u);
     }
     if (rd__shadow_sabotaged()) {
-        p[4] ^= 0x04u; /* m = 1: R 0, not 4 (the self-test's failure path) */
+        p[4] ^= 0x04u; /* m = 1: R 0 (4) or 12 (8), not the step (the self-test's failure path) */
     }
-    rd__transition(cl, s_table, &s_tableState, RHI_STATE_COPY_DST);
-    rhi_cmd_copy_buffer_to_texture(cl, g_rd.ring[slot], off, pitch, s_table, 0,
+    rd__transition(cl, s_table[i], &s_tableState[i], RHI_STATE_COPY_DST);
+    rhi_cmd_copy_buffer_to_texture(cl, g_rd.ring[slot], off, pitch, s_table[i], 0,
                                    (RhiRect){0, 0, RD_SHADOW_TABLE_SIZE, 1});
-    rd__transition(cl, s_table, &s_tableState, RHI_STATE_SHADER_READ);
-    s_tableReady = true;
+    rd__transition(cl, s_table[i], &s_tableState[i], RHI_STATE_SHADER_READ);
+    s_tableReady[i] = true;
     return true;
 }
 
@@ -116,9 +140,10 @@ RhiPipeline rd__get_pipeline_held(const RdPipeKeyInt *k)
     return p;
 }
 
-bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, RhiTexture dst,
+bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t step, RhiTexture dst,
                          RhiState *dstState, const IcoDrawCB *reduceCb)
 {
+    const int ti = step == 8 ? 1 : 0;
     const RdPipeKeyInt k = rd__shadow_count_key();
     const RhiLimits *lim = rhi_limits();
     if (!lim->stencilView && g_rd.profile.shadowOne) {
@@ -138,7 +163,7 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, RhiTexture
      * and any open pass ends */
     rd__replay_end_pass(r);
     RhiCommandList cl = rd__replay_cl();
-    if (!tableMake(cl)) {
+    if (!tableMake(cl, ti)) {
         return false;
     }
     RhiBinding b[3];
@@ -152,7 +177,7 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, RhiTexture
     b[1].sampler = rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
     b[2].slot = 2;
     b[2].type = RHI_BIND_SAMPLED_TEXTURE;
-    b[2].texture = s_table;
+    b[2].texture = s_table[ti];
     b[2].aspect = RHI_ASPECT_COLOR;
     const RhiBindGroup g2 = rd__replay_bind_group(g_rd.layoutTex, b, 3);
     if (!g2.id) {
