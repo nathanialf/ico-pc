@@ -17,12 +17,23 @@ on:
     # a release tag also builds the Linux arm64 package (the linux-arm64 job)
     tags: ['v*']
   pull_request:
+  # the arm64 package of a release whose tag's run failed its tests for a
+  # reason fixed since (a test's tolerance): only the linux-arm64 job runs,
+  # from the dispatched branch, labelled with the tag, after checking that
+  # the branch differs from the tag only under tests, docs and .github
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag whose linux-arm64 package to build from this branch (vX.Y.Z); the release must exist"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # a dispatched run (the arm64 package) never cancels main's push run
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -35,6 +46,7 @@ env:
 
 jobs:
   linux:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
@@ -196,6 +208,7 @@ jobs:
   # nothing. docs/port/TESTING.md ("The render suite on Direct3D 11 (WARP)")
   # lists what runs.
   windows:
+    if: github.event_name != 'workflow_dispatch'
     needs: linux
     runs-on: windows-2022
     timeout-minutes: 180
@@ -242,6 +255,7 @@ jobs:
   # stays well inside its timeout. Each restores the toolchain the `linux`
   # job caches (and fetches it on a miss); only `linux` saves it.
   extra:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
@@ -402,31 +416,44 @@ jobs:
       # nothing more. The preset names
       # plain gcc; a gcc directory first on PATH makes that the gcc 14 the
       # tests above were built with.
+      # A dispatched run names a tag instead: the package is built from the
+      # dispatched branch, which must match the tag's commit everywhere but
+      # the tests, the docs and the workflows (the tag's own run failed a
+      # test since fixed; the game's sources are the tag's).
+      - name: The dispatched branch matches the tag outside tests, docs and workflows
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git fetch --depth=1 origin "refs/tags/${{ inputs.tag }}:refs/tags/${{ inputs.tag }}"
+          changed=$(git diff --name-only "${{ inputs.tag }}" HEAD -- . ':!*/test/*' ':!docs/*' ':!.github/*')
+          [ -z "$changed" ] || { echo "differs from ${{ inputs.tag }}:"; echo "$changed"; exit 1; }
+
       - name: Package linux-arm64 (release tags only)
-        if: github.event_name == 'push' && github.ref_type == 'tag'
+        if: (github.event_name == 'push' && github.ref_type == 'tag') || github.event_name == 'workflow_dispatch'
+        env:
+          LABEL: ${{ inputs.tag || github.ref_name }}
         run: |
           mkdir -p "$RUNNER_TEMP/gcc14"
           ln -sf "$(command -v "$ICO_CC")" "$RUNNER_TEMP/gcc14/gcc"
-          PATH="$RUNNER_TEMP/gcc14:$PATH" tools/package_linux.sh "$GITHUB_REF_NAME"
+          PATH="$RUNNER_TEMP/gcc14:$PATH" tools/package_linux.sh "$LABEL"
           cd dist
-          for n in "ico-pc-$GITHUB_REF_NAME-linux-arm64.tar.gz" \
-              "ico-pc-$GITHUB_REF_NAME-linux-arm64-portable.tar.gz"; do
+          for n in "ico-pc-$LABEL-linux-arm64.tar.gz" \
+              "ico-pc-$LABEL-linux-arm64-portable.tar.gz"; do
             sha256sum "$n" > "$n.sha256"
           done
 
       - name: Upload the linux-arm64 package (release tags only)
-        if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'tag' }}
+        if: ${{ !cancelled() && ((github.event_name == 'push' && github.ref_type == 'tag') || github.event_name == 'workflow_dispatch') }}
         uses: actions/upload-artifact@v4
         with:
-          name: ico-pc-${{ github.ref_name }}-linux-arm64
+          name: ico-pc-${{ inputs.tag || github.ref_name }}-linux-arm64
           path: |
-            dist/ico-pc-${{ github.ref_name }}-linux-arm64.tar.gz
-            dist/ico-pc-${{ github.ref_name }}-linux-arm64.tar.gz.sha256
-            dist/ico-pc-${{ github.ref_name }}-linux-arm64-portable.tar.gz
-            dist/ico-pc-${{ github.ref_name }}-linux-arm64-portable.tar.gz.sha256
-            dist/ico-pc-${{ github.ref_name }}-linux-aarch64.AppImage
-            dist/ico-pc-${{ github.ref_name }}-linux-aarch64.AppImage.sha256
-            build-host/pkg-linux-arm64-${{ github.ref_name }}.log
+            dist/ico-pc-${{ inputs.tag || github.ref_name }}-linux-arm64.tar.gz
+            dist/ico-pc-${{ inputs.tag || github.ref_name }}-linux-arm64.tar.gz.sha256
+            dist/ico-pc-${{ inputs.tag || github.ref_name }}-linux-arm64-portable.tar.gz
+            dist/ico-pc-${{ inputs.tag || github.ref_name }}-linux-arm64-portable.tar.gz.sha256
+            dist/ico-pc-${{ inputs.tag || github.ref_name }}-linux-aarch64.AppImage
+            dist/ico-pc-${{ inputs.tag || github.ref_name }}-linux-aarch64.AppImage.sha256
+            build-host/pkg-linux-arm64-${{ inputs.tag || github.ref_name }}.log
           retention-days: 30
           if-no-files-found: error
 
@@ -435,6 +462,7 @@ jobs:
   # cache has its own key (it also holds the Android SDL3 build) and is saved by
   # this job.
   android:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:

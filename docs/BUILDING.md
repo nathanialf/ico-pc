@@ -617,7 +617,12 @@ The release's arm64 archive is built by CI on GitHub's arm64 runner. Pushing a `
 once its gating tests pass, runs `tools/package_linux.sh <tag>` and uploads
 both archives (normal and portable), the aarch64 AppImage, their `.sha256` files and the packaging log as the artifact
 `ico-pc-<tag>-linux-arm64` (kept 30 days). Pull requests and pushes to main
-never package. To fetch it (the artifact keeps the `dist/` and
+never package. When the tag's run failed a test for a reason fixed since (a
+test's tolerance on the arm64 runner), `gh workflow run ci.yml -f tag=<tag>`
+on main runs the `linux-arm64` job alone from main, labelled with the tag,
+after checking that main differs from the tag only under the tests, `docs/`
+and `.github/` (the game's sources are the tag's; `VERSION.txt` names main's
+commit). To fetch it (the artifact keeps the `dist/` and
 `build-host/` folders):
 
 ```sh

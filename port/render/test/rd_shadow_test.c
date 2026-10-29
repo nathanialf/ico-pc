@@ -1218,8 +1218,9 @@ static void checkComposite4x(int l, bool bspline)
     if (!bspline) {
         /* the sampler's own fraction precision and the blender's rounding,
            as the softening's composite back over SCENE (2) plus the
-           MODULATE before it */
-        CHECK(worst <= 3, "(s) level %d at 4x: max difference %d from the bilinear at (%d,%d)", l,
+           MODULATE before it; lavapipe on arm64 lands 4 away from the
+           reference where x86 lands 2 (the v0.9.4 tag's CI run) */
+        CHECK(worst <= 4, "(s) level %d at 4x: max difference %d from the bilinear at (%d,%d)", l,
               worst, wx, wy);
         return;
     }
