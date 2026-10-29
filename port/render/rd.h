@@ -2115,6 +2115,12 @@ typedef struct RdPerfRecord {
      * shadowSeven through the seven stencil-tested draws (and the box
      * reduction above 1x) */
     uint32_t shadowOne, shadowSeven;
+    /* A cleared source read as its colour (rd_const_read.c): constReads the
+     * staticBlur sprites drawn untextured in the colour of a target that
+     * held only its clear, constKept those reading another target that
+     * were not (the source drawn since its clear, or not cleared in this
+     * replay) */
+    uint32_t constReads, constKept;
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
      * docs/port/RENDER.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:
