@@ -1,4 +1,4 @@
-#The post effects' work buffers
+# The post effects' work buffers
 
 The targets `staticBlur.c`'s effects and the screen softening draw through on their way back into
 SCENE, their sizes at each frame width, the glow chain's rectangles in them, the column the glow's
@@ -58,7 +58,6 @@ samples `U(X) = u0 + (X - x0) (u1 - u0) / (x1 - x0)`, truncated; LINEAR weighs t
 WORK3 over SCENE. `blur(n)` is two sprites:
 
 - pass 1, WORK0 into WORK1: the rect shrunk by `rm = n + 6` sixteenths, the UV from 8;
-
 - pass 2, WORK1 into WORK0: the rect whole, the UV shrunk by `um = n + 6`.
 
 On the PS2 both shrinks are at the right and bottom edges: pass 2's UV stops short of the columns
@@ -514,7 +513,6 @@ seven draws. The
 start-up set holds the seven draws' and the reduction's pipelines as before and the one draw's
 where the profile has it. The profile's start line and the summary say which: `shadow count one
 draw`, `shadow count seven draws`, with ` ([dev])` or ` (self-test)` after it when that decided;
-
 `rd_replay_tool --stats` prints `shadow count: N in one draw, M in seven draws` for the replay
 (`RdPerfRecord.shadowOne`, `shadowSeven`).
 
@@ -535,7 +533,6 @@ runs (ctest `rd_shadow_selftest_sabotage`). The self-test resolves under the run
 ## The shadow count's step
 
 The European, Japanese, Korean and Chinese discs draw the volume faces with the colours 0x04 and 0xFC;
-
 the North American disc and the 2001 previews (August 6 and June 26) with 0x08 and 0xF8
 (`ico2/seki/src/Shadow.c` `emitVolumeStrip` and `emitVolumeStrip_jun26`,
 `PAL_NTSCAUG6JUN26`). So the GS leaves 4 n mod 256 on the first group and 8 n mod 256 = 8 (n mod
@@ -563,7 +560,6 @@ the green-grey floors).
   running disc counts by 8 (`rd__shadow_disc_step`): the European set keeps its count.
 - **The one draw** reads a table of its step (`rd__shadow_table_texel(m, step)`: under the step 8
   RGB 8 (m mod 32), A 0x80 where m mod 32 is not 0), one 64 x 1 texture each, made at its first use;
-
   `shadow_count_ps` is unchanged.
 - **The log.** The first reset of a run logs `shadow count: step 8 (the disc's face colours 0x08 /
   0xF8), five bits` (or `step 4 ... six bits`), again only if the step changes; the self-test's line
@@ -650,12 +646,10 @@ touches its depth or stencil:
 
 - a draw (screen prims, the VU draws, a post sprite) on the state's depth with the Z test on (ZTE
   and not ALWAYS), Z write on, DATE on (the stencil bit) or PRIM.AA1 (its stencil pairs);
-
 - a draw whose texture is a target's depth view (`RD_VIEW_DEPTH`);
 - the three shadow commands (the stencil count and the volumes' Z test);
 - the fog: the state's depth, the colour target's (the crack filler copies and fills it) and a depth
   view the texture names;
-
 - a command type the scan does not know: every depth.
 
 Copies, exact blends and clears touch none (a clear only writes). The walk counts the same numbers
@@ -685,7 +679,6 @@ drops on that frame. The fog's own pass and list 5's keep their stores.
 
 - the present reads SCENE's depth (Options' effects depth, `RdSettings.effectsDepth`: `depthBlit`
   in `port/render/rd_present.c`, also on a re-shown present);
-
 - a replay found the depth read before its clear (the head clear `RDC_CLEAR` with depth, or the new
   target's clear): a frame drawing on the depth the replay before left, as a keep frame
   (`rd__first_list`) would if its lists 11 and 12 tested SCENE's depth. That depth's stores are kept
@@ -699,7 +692,6 @@ drops on that frame. The fog's own pass and list 5's keep their stores.
   `rd_replay_tool --list`) clears SCENE's depth at list 0's head before any read, and the 2D frames
   touch none; one frame (the issue-95 loss frame) Z-tests list 11's text against SCENE's depth, so a
   keep frame drawing such text would be the first case of this rule;
-
 - a caller read the depth back (`rd__read_target_depth`, the tests): kept from then on, logged
   `rd: store plan: SCENE's depth is read back: its stores are kept from now on`;
 - the replay has a pass window (`rd_replay_tool`'s bisect reads targets mid-frame): no plan at all.
@@ -755,10 +747,8 @@ colour, and the source is not read. The bytes are the same:
 - every texel of a cleared target holds the clear's bytes C (the load op over the whole render area,
   or the pass `flushClear` records), so every tap any kernel loads is C, whatever the wrap and the
   clamp (`fx_load`: floor(C / 255 * 255 + 0.5) = C; the UINT view returns C);
-
 - TEXA leaves an RGBA32 texel as it is (`gs_texa_expand`); a 24- or 16-bit source format is not
   taken;
-
 - each kernel returns C for taps that are all C: nearest the one tap; the GS bilinear `gs_bilerp`
   C + (((C - C) f) >> 4); above 1x the weights of an axis sum to its divisor D (the box's overlaps
   of [lo, lo + S) tile it, S = D; the B-spline's four sum to 24576; a GS axis 16 - f + f or 1), so
