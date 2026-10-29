@@ -1349,6 +1349,10 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
                            depthRead ? RHI_STATE_RENDER_TARGET_READ : RHI_STATE_DEPTH_WRITE);
         }
     }
+    RhiStoreOp depthStore = RHI_STORE_STORE; /* the store plan (rd_store_plan.c) */
+    uint8_t clearStencil = 0;
+    rd__store_plan_pass(ms ? NULL : d, did, &depthLoad, &stencilLoad, &depthStore, &stencilStore,
+                        &clearDepth, &clearStencil);
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
     p.color[0].texture = colorTex;
@@ -1364,9 +1368,10 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
         p.depth.texture = depthTex;
         p.depth.depthLoad = depthLoad;
         p.depth.stencilLoad = stencilLoad;
+        p.depth.store = depthStore;
         p.depth.stencilStore = stencilStore;
         p.depth.clearDepth = clearDepth;
-        p.depth.clearStencil = 0;
+        p.depth.clearStencil = clearStencil;
         p.depth.readable = depthRead;
     }
     p.width = c->tw;
@@ -5824,6 +5829,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     rd__join_parts(f, keep);     /* the card test over a part's packets (rd_join.c) */
     rd__upload_meshes(f, keep);
     rd__passring_bytes(s_ringOff);
+    rd__store_plan_scan(f, keep); /* before the new targets' clears */
     rd__clear_new_targets();
     g_rdPerf.uploadMs += (t1 = rd__now_ms()) - t;
     t = t1;
@@ -5844,6 +5850,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     memset(&s_pend, 0, sizeof(s_pend)); /* no clear pending from another replay */
     msaaFrameBegin(&r);                 /* the MSAA epoch's count and scene pair */
     const uint32_t headHalf = sceneHeadHalf(f);
+    uint32_t planBase = 0; /* the list's first command, counted as the store plan counts */
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
         rd__passring_list(l);
@@ -5851,6 +5858,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
         rd__replay_fold_list(list->cmds, list->count, l, headHalf);
         for (uint32_t i = 0; i < list->count; i++) {
             const RdCmd *c = &list->cmds[i];
+            g_rdStoreOrd = planBase + i;
             rd__replay_fold_at(i);
             if (g_rdWin.first) {
                 /* the draw note's place (rd__replay_set_window_draws) */
@@ -5939,6 +5947,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
             }
         }
         rd__replay_fold_list(NULL, 0, l, headHalf);
+        g_rdStoreOrd = planBase += list->count;
         flushScreenRun(&r); /* a run does not cross a list (its timestamp) */
         rd__replay_vu_flush(&r);
         rd__perf_stamp(s_cl, RD_PERF_TS_LIST0 + (uint32_t)l);
@@ -5954,6 +5963,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     msaaEnd(&r,
             RD_MSAA_CLOSE_END); /* an epoch still open: SCENE resolved before anything reads it */
     endPass(&r);
+    rd__store_plan_end();
     s_ms.r = NULL;
     rd__diag_frame(f, s_ms.want);
     s_vpExact = false; /* the present sets its own viewports */
@@ -6082,6 +6092,7 @@ bool rd__read_target_depth(RdTarget target, float *dst, size_t dstSize, uint32_t
         dstSize < (size_t)t->tw * t->th * sizeof(float)) {
         return false;
     }
+    rd__store_plan_readback(target.id); /* read after its replays from now on */
     if (w) {
         *w = t->tw;
     }
