@@ -614,21 +614,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the batches whose kick took its cut's pipeline, M those kept apart by the first reason that held,
   S those whose two draws had one plan without the fuse (`fuse off` and every pair with ABE off
   under `fuse off F` with `ICO_RD_VU_FUSE=0` or the merge off;
-<<<<<<< HEAD
   [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). And the store plan's: `stores: N
   depth and M colour stores dropped a replay of P passes (D with a depth; store plan on)`, N the
   passes whose depth (and stencil) was neither loaded nor stored, M 0 (the plan keeps every colour),
   P the passes the walk began and D those with a depth outside the MSAA epoch (`store plan off`
   and N 0 with `ICO_RD_STORE_PLAN=0`, `all` and N = D with `ICO_RD_STORE_PLAN=all`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)).
-=======
-  [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). After the shadow count's line, `constant
+  After the shadow count's line, `constant
   reads on: N sprites drawn in a cleared source's colour, M target reads kept (the source drawn since
   its clear, or not cleared this replay)`: N the post sprites drawn untextured in the colour of a
   source target that held only its last clear, M those reading another target that were not (`off`
   and N 0 with `ICO_RD_CONSTANT_READS=0`, every read then counted in M;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)).
->>>>>>> ca3d0db58 (TESTING.md: rd_constant_reads_ab, the --stats constant reads line and ICO_RD_CONSTANT_READS)
 - `rd_vubatch_ab.cmake`: the same dumps through the record twice, one point draw an entry and
   stage (`ICO_RD_VU_PREPASS_BATCH=0`) and in the pre-pass's batches, at Original 4:3 1x, Enhanced
   4:3 2x and Enhanced 16:9 2x under `ICO_RD_BLEND=fixed`: every named target's PNG byte for byte,
@@ -656,7 +653,6 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   setting that counted pairs with ABE off some fused and fewer GPU draws in total; each pair's
   counts printed (`rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). SKIP
   as `rd_vustage_ab`.
-<<<<<<< HEAD
 - `rd_store_plan_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` three times under
   `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` (a depth or stencil load the plan leaves
   undefined clears to 0.5 and 0x5A instead: lavapipe keeps an attachment's contents whatever its
@@ -671,7 +667,6 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   whole list, and the wrong plan changing at least one target over the whole list (the poison shows
   a dropped store that a later pass reads); each run's counts printed (`rd_store_plan_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)). SKIP as `rd_vustage_ab`.
-=======
 - `rd_constant_reads_ab.cmake`: the same dumps and those of `tools/constant_reads_dumps.txt` (the
   PowerVR phone's two frames, the aura with no aura object) twice, every post sprite reading
   its source (`ICO_RD_CONSTANT_READS=0`) and a source holding only its clear drawn as its colour, at
@@ -683,7 +678,6 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   reads counted by both (served plus kept against the other's kept), and every phone frame served at
   both phone settings; each pair's counts printed (`rd_constant_reads_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)). SKIP as `rd_vustage_ab`.
->>>>>>> ca3d0db58 (TESTING.md: rd_constant_reads_ab, the --stats constant reads line and ICO_RD_CONSTANT_READS)
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's
