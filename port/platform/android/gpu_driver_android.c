@@ -578,7 +578,9 @@ void ico_gpu_driver_android_device_up(int customDriver)
 
 const char *ico_gpu_driver_android_hang_note(void)
 {
-    return s_onStock ? ui_str(UI_STR_GPU_HANG_TURNIP) : NULL;
+    /* English, as the boxes it ends are (one language in a box); the
+       Options rows keep the menu's language */
+    return s_onStock ? ui_str_in(UI_LANG_EN, UI_STR_GPU_HANG_TURNIP) : NULL;
 }
 
 static int host_lost_on_stock(void)
