@@ -6,6 +6,7 @@ target_sources(ico_platform PRIVATE
     diag_host.c
     fiber.c
     fps_counter.c
+    gpu_hang.c
     hotkeys.c
     kernel_host.c
     pace_policy.c
@@ -73,7 +74,9 @@ target_link_libraries(startup_retry_test PRIVATE ico_platform)
 if(ICO_RUN_TESTS)
     add_test(NAME startup_retry COMMAND startup_retry_test)
 endif()
-foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch)
+# gpu_hang: the GPU hang limit's arithmetic and its watch (gpu_hang.c, issue 123)
+foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch
+          gpu_hang)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
