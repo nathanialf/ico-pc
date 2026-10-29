@@ -46,7 +46,7 @@
  * b[0] (8, or 0 for 4: the European disc's commands and every older dump
  * keep their bytes), so a dump replays with its disc's step anywhere.
  * The one draw reads a table of its step (rd_shadow_one.c).  Before
- * v0.9.5 the host hook took every 0x08 face for a decrement (its test was
+ * the shadow step change the host hook took every 0x08 face for a decrement (its test was
  * the European 0x04): those discs' older dumps hold every face as a
  * decrement (RDC_SHADOW_STRIP u[0] 0), which no replay can undo.
  *
