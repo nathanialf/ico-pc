@@ -8,3 +8,4 @@
 - On the North American disc and the 2001 preview discs, the save screen shows each save's play time again, and the play time and couch count in the stats and achievements are right. A save made on the North American disc with an earlier version lost its play time; it counts on from about zero after it is loaded.
 - When the graphics driver stops responding, the game notices within about 15 seconds instead of a minute, saves its report and tells you; on Android with the device's own Qualcomm driver the message also points at Options > Graphics driver.
 - On the North American disc, Ico's shadow is drawn dark again instead of as a light pink patch.
+- On phones, when the system runs short of memory while the game prepares its graphics, the game stops at once instead of finishing the group it was on.
