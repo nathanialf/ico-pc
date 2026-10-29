@@ -318,10 +318,12 @@ StructuredBuffer<float4> vu_stream : ICO_REG(t0, 1);
 #define VU_F_KICK_ONLY 64u
 // With VU_F_KICK_ONLY: the kick draw of a fused pair (rd_replay_vu.c
 // vuFuseVerdict), drawn under its cut draw's pipeline (PRIM.ABE on) so the
-// draw merge can join the two; its triangles carry VuVSOut.r.w = 1 (the
-// merge builds alone set it: vu_fused_out) and vu_ps writes their pixels
-// unblended, as gs_dual_out writes a PABE pixel whose As has its MSB clear
-// (vu_dual_out_fused): the blender gives Cs, the kick drawn with ABE off.
+// draw merge can join the two; its triangles carry VuVSOut.r.w = 1, and
+// without a clip plane VuVSOut.plane = -1 (the merge builds alone set them:
+// vu_fused_out), and vu_ps (r.w) and its no-planes twin vu_np_ps (the
+// plane's sign) write their pixels unblended, as gs_dual_out writes a PABE
+// pixel whose As has its MSB clear (vu_dual_out_fused): the blender gives
+// Cs, the kick drawn with ABE off.
 #define VU_F_FUSED 2048u
 // Photo mode's free camera (RdCamera.freeCamera): every triangle failing the
 // region test, and every particle outside its x/y window, is drawn
@@ -595,7 +597,10 @@ struct VuVSOut {
     VK_LOC(0) noperspective float4 col : COLOR0; // RGBA 0..255, the GS interpolates in screen space
     VK_LOC(1)
     noperspective float3 stq : TEXCOORD0; // S, T, Q linear in screen space, divided per pixel
-    VK_LOC(2) noperspective float plane : TEXCOORD1; // vu_plane_distance; drawn where >= 0
+    // vu_plane_distance, drawn where >= 0 under a clip plane (DF_PLANE);
+    // without one 1, or -1 on the kick triangles of a fused scissor pair
+    // (vu_fused_out: the mark the no-planes twins read, which have no r)
+    VK_LOC(2) noperspective float plane : TEXCOORD1;
     // The triangle's attribute planes (vu_attr_planes): col, stq and plane
     // at its first corner (a0: col, a1: stq, plane) and per texel across
     // (x0, x1) and down (y0, y1); r.xy the corner in texels from the
@@ -1742,7 +1747,13 @@ uint vu_probe_field(VuVtx v, uint field)
 // r.w of a VU vertex output (VuVSOut.r) in clip mode `mode`: 1 on every
 // triangle of the kick draw of a fused scissor pair (VU_CLIP_SCISSOR with
 // VU_F_FUSED), whose pixels vu_ps writes unblended; set after the planes
-// (vu_attr_planes, vu_rec_planes write r whole).  Only the merge builds
+// (vu_attr_planes, vu_rec_planes write r whole).  The no-planes twins
+// (vu_np_ps, vu_texa_np_ps) read locations 0 to 2 alone, so the same
+// triangles carry plane = -1 for them where the draw has no clip plane
+// (vu_batch.z 0: the plane is then 1 and read by nothing, DF_PLANE unset;
+// rd_pixel_plan.c draws a clip plane's draws with the planes, so a twin
+// never has one): a constant over the triangle, its interpolation
+// negative exactly on those triangles.  Only the merge builds
 // read the flag: rd_replay_vu.c fuses a pair only where its draws go
 // through them.  A program without a scissor mode passes a literal mode,
 // and its builds keep r.w 0 without a test.
@@ -1750,7 +1761,11 @@ VuVSOut vu_fused_out(VuVSOut o, uint mode)
 {
 #ifdef ICO_VU_MERGE
     if (mode == VU_CLIP_SCISSOR) {
-        o.r.w = (vu_draw.z & VU_F_FUSED) != 0u ? 1.0 : 0.0;
+        const uint fused = (vu_draw.z & VU_F_FUSED) != 0u ? 1u : 0u;
+        o.r.w = fused != 0u ? 1.0 : 0.0;
+        // (1 or 0 each: flags combined after they are computed are uints)
+        const uint mark = fused & (vu_batch.z == 0u ? 1u : 0u);
+        o.plane = mark != 0u ? -1.0 : o.plane;
     }
 #endif
     return o;
@@ -2052,12 +2067,23 @@ float4 vu_texture_function_f(float4 tex, float4 col, uint flags)
 #if ICO_DST_MODE == 0
 // gs_dual_out on the integers above: the same c0 and c1, float for float
 // (c0 = the byte / 255, c1 = the factor / 128).  The alpha's MSB tests (PABE,
-// FBA) on the integer itself.
-DualOut vu_dual_out_f(float4 col, uint flags, uint fix)
+// FBA) on the integer itself.  The no-planes twins with dual-source
+// blending (vu_np_ps, vu_texa_np_ps) take one more argument, fused: not 0
+// on a fused pair's kick pixel (VU_RETURN), which is written as the PABE
+// pixel whose As has its MSB clear is (vu_dual_out_fused's rule); every
+// other build has the function as it was.
+#if defined(ICO_VU_NO_PLANES) && !defined(ICO_NO_DUAL)
+#define VU_FUSED_ARG , float fused
+#define VU_FUSED_OR fused != 0.0 ||
+#else
+#define VU_FUSED_ARG
+#define VU_FUSED_OR
+#endif
+DualOut vu_dual_out_f(float4 col, uint flags, uint fix VU_FUSED_ARG)
 {
     const float f = (flags & DF_FIX_FACTOR) != 0u ? float(fix) : col.a;
     const uint ia = uint(col.a);
-    const bool unblended = (flags & DF_PABE) != 0u && (ia & 0x80u) == 0u;
+    const bool unblended = VU_FUSED_OR((flags & DF_PABE) != 0u && (ia & 0x80u) == 0u);
     float a = col.a;
     if ((flags & DF_FBA) != 0u) {
         a = float(ia | 0x80u);
@@ -2108,15 +2134,19 @@ DualOut vu_dual_out_f(float4 col, uint flags, uint fix)
 }
 
 // the entry's output (i its input): the fixed-function blend's c0 and c1;
-// a fused pair's kick pixel unblended (VuVSOut.r.w, vu_dual_out_fused) in
-// the builds with the planes and dual-source blending, the only ones a
-// fused pair draws with (the no-planes twins do not read r, and without
-// dual-source blending a cut is two passes, which rd_replay_vu.c never
-// fuses)
-#if defined(ICO_VU_NO_PLANES) || defined(ICO_NO_DUAL)
+// a fused pair's kick pixel unblended (vu_dual_out_fused) in the builds
+// with dual-source blending, the only ones a fused pair draws with (without
+// it a cut is two passes, which rd_replay_vu.c never fuses): marked by
+// VuVSOut.r.w with the planes, by a negative plane in the no-planes twins
+// (vu_fused_out; a twin never draws a clip plane's draw, and under one a
+// negative plane's pixel is discarded before this)
+#ifdef ICO_NO_DUAL
 #define VU_RETURN(col, i) return vu_dual_out_f(col, g_mode.x, g_blend.y)
+#elif defined(ICO_VU_NO_PLANES)
+#define VU_RETURN(col, i) return vu_dual_out_f(col, g_mode.x, g_blend.y, i.plane < 0.0 ? 1.0 : 0.0)
 #else
-// A pixel of a fused pair's kick (fused not 0: VU_F_FUSED, VuVSOut.r.w),
+// A pixel of a fused pair's kick (fused not 0: VU_F_FUSED, VuVSOut.r.w or
+// the twins' negative plane),
 // under its cut's pipeline (PRIM.ABE on), written as vu_dual_out_f writes a
 // PABE pixel whose As has its MSB clear: c0 = Cs (FBA's MSB on the alpha),
 // c1 1.0 for the lerps and 0 for Cd*FIX + Cs (DF_C1_DST), so the blender
