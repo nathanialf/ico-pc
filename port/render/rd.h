@@ -2162,6 +2162,17 @@ typedef struct RdPerfRecord {
     uint32_t vuFusePairs, vuFuseSame, vuFuseKept[RD_VU_FUSE_WHY_COUNT];
     uint32_t prepassBatches;
     double gpuPrepassMs;
+    /* The store plan (rd_replay.c storePlanScan; RdProfile.storePlan): of
+     * the render passes the walk began (storePasses; not the passes begun
+     * outside it, docs/port/WORK_BUFFERS.md "The store plan"), those with a
+     * depth outside the MSAA epoch (storeDepthPasses), the depth stores
+     * dropped (storeDepthDropped: the depth and its stencil neither loaded
+     * nor stored) and the colour stores dropped (storeColorDropped: 0, the
+     * plan keeps every colour); storePlanMode 0 every store kept ([dev]
+     * store_plan = false, or a pass window), 1 the plan, 2 every depth
+     * store dropped (ICO_RD_STORE_PLAN=all, tests) */
+    uint32_t storePasses, storeDepthPasses, storeDepthDropped, storeColorDropped;
+    uint8_t storePlanMode;
     /* The per-pass timing (rd_perf_passes_of; docs/port/RENDER.md,
      * "Performance records").  passKinds: the pieces of GPU work begun, by
      * RD_PERF_PASS_* (every replay); passEffects: of the render passes, those
