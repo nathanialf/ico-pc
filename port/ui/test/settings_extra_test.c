@@ -3449,11 +3449,15 @@ static void testSkipOpening(void)
    decided) */
 static int s_bootEnded, s_sceneFirst;
 
+/* la_boot_memory_card_check's hand-over: the scene layout, 0x37 on the
+   European disc, 0x34 on the Japanese program's, 0x33 on the 2001 discs */
+#define BOOT_HANDS_OVER_TO PAL_JPNKORCN_NTSCAUG6JUN26(0x37, 0x34, 0x33)
+
 static int bootCheckProc(int first, int item)
 {
     (void)first;
     (void)item;
-    return s_bootEnded ? PAL_JPNKORCN(0x37, 0x34) : -1; /* la_boot_memory_card_check */
+    return s_bootEnded ? BOOT_HANDS_OVER_TO : -1; /* la_boot_memory_card_check */
 }
 
 static int sceneProc(int first, int item)
@@ -3468,8 +3472,9 @@ static int sceneProc(int first, int item)
    layouts */
 static void bootToEnd(const char *slug)
 {
-    /* the Japanese program's boot layout on the Japanese, Korean and Asian discs */
-    const int boot = PAL_JPNKORCN(7, 4);
+    /* init_layout_texture's boot layout: the European disc's 7, 4 on every
+       other (the Japanese program's discs and the 2001 discs: issue 160) */
+    const int boot = PAL_JPNKORNTSCAUG6JUN26CN(7, 4);
     const int scene = fxLayout(55);
 
     fakeTables();
@@ -3510,7 +3515,7 @@ static void testSkipOpeningTitle(const char *slug)
     const int scene = fxLayout(55);
     const int title = fxLayout(12);
 
-    CHECK(PAL_JPNKORCN(0x37, 0x34) == scene, "%s: the boot's layout hands over to %d", slug, scene);
+    CHECK(BOOT_HANDS_OVER_TO == scene, "%s: the boot's layout hands over to %d", slug, scene);
     /* 50 Hz and 60 Hz: 25 and 30 ticks a second */
     for (int hz60 = 0; hz60 < 2; hz60++) {
         systemStatus[0] = hz60 ? 0 : 1;
@@ -4921,8 +4926,10 @@ int main(int argc, char **argv)
         /* ctests settings_extra_ntsc, _aug6, _jun26: the three 2001 discs
            (Cross confirms, as on the European disc): Extras > Game variants
            on that disc (the demo's 7-hit barrier and its toughness row, the
-           2001 discs' notes). The Japanese-program runs' other checks
-           (Circle confirms, the boot's layout 0x34) are not these discs' */
+           2001 discs' notes), the Options window, and Skip the opening's
+           title with its menu (the boot's layout 4, handing over to 0x33:
+           issue 160). The Japanese-program runs' pad, pointer and hint
+           checks (Circle confirms) are not these discs' */
         CHECK(ico_region_select(argv[2]) == 0 && lt_ext_confirm_button() == 0x40,
               "the %s disc: Cross confirms", argv[2]);
         CHECK(ico_region_select("pal") == 0, "the European disc again");
@@ -4932,6 +4939,8 @@ int main(int argc, char **argv)
         CHECK(ico_region_select(argv[2]) == 0, "the %s disc selected", argv[2]);
         testScroll(argv[2]);
         CHECK(ico_region_select("pal") == 0, "the European disc again");
+        /* Skip the opening: the title's menu after the boot, on that disc */
+        testSkipOpeningTitle(argv[2]);
         printf("settings_extra_test %s: %s\n", argv[2], failures ? "failed" : "ok");
         return failures ? 1 : 0;
     }
