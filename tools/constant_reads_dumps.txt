@@ -1,0 +1,13 @@
+# Dump list for rd_constant_reads_ab (port/render/test/rd_constant_reads_ab.cmake),
+# read with tools/vustage_dumps.txt: the phone's frames, each of which must
+# read a cleared source as its colour at the phone's settings (the aura with
+# no aura object: AURA_WORK holds its clear when auraInspireAfter reads it).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  Missing files are reported and skipped.
+# Relative paths are relative to this file; '*' globs are allowed.
+#
+# the PowerVR phone's v0.9.4-rc1 frame (Resolution Auto, 2364x1080; the aura
+# in list 8, no glow)
+/primary/dev/ico-pc/build-host/tmp/v094/evidence/android-dump/frame-20261028-105852-v4103.rddump
+# the PowerVR phone's v0.9.4-rc3 frame (the [dev] perf_passes run's dump)
+/primary/dev/ico-pc/dist/frame-20261028-173610-v4657.zip
