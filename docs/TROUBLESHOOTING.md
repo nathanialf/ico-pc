@@ -124,6 +124,18 @@ If your `config.toml` has a line `vu_plain_only = true` or
 `vu_extended = true`, the game ignores it: every device now prepares the
 same 3D graphics. You can delete the line.
 
+If you had to restart the phone by force while an update was installing or
+while the game was on **Preparing graphics** for the first time after it,
+the game may then refuse to open and show a box titled "SDL Error" saying a
+library "has bad ELF magic". The restart cut the update's files short, so
+the installed copy of the game is damaged. Your saves and settings are not
+what is damaged. To fix it, uninstall the game and install the same
+download again. Uninstalling also deletes the game's folder with your
+saves, so first copy the `memcard` folder to a computer
+([where it is](ANDROID.md#where-your-files-are)). Before you install an
+update, close the other apps: after every update the game prepares its
+graphics in full once, and that needs the memory.
+
 ## The screen stays black
 
 If the screen stays black but you can hear the game, the game is running
