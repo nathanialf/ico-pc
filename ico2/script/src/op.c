@@ -131,7 +131,12 @@ extern int ico_opt_skip_opening(void);
 static int opDemoEntered; /* port */
 
 /* PC port: port/platform/diag_host.c: a line in the log */
-extern void ico_host_milestone(const char *what);
+extern void ico_diag_milestone(const char *fmt, ...);
+
+/* PC port: the ticks Skip the opening waited for the boot's menu screen to
+   settle, for the log line (none on a 2001 disc before issue 160's fix: the
+   check took the boot layout for settled) */
+static int opBootWait; /* port */
 
 static void actOpDemo01_ntsc(GObj *volatile self)
 {
@@ -177,11 +182,14 @@ static void actOpDemo01_ntsc(GObj *volatile self)
         if (ico_opt_skip_opening() && opDemoMode == 0) {
             opDemoMode = 1;
             opDemoNextMode = 2;
+            opBootWait = 0;
             while (lt_host_boot_settled() == 0) {
                 _ACTWait(1);
+                opBootWait++;
             }
-            ico_host_milestone("boot: Skip the opening: the menu screen has settled, the title's "
-                               "menu is asked for");
+            ico_diag_milestone("boot: Skip the opening: the menu screen has settled on layout %d "
+                               "after %d ticks, the title's menu is asked for",
+                               current_layout_id, opBootWait);
         }
     }
 
@@ -327,11 +335,14 @@ static void actOpDemo01_aug6jun26(GObj *volatile self)
         if (ico_opt_skip_opening() && opDemoMode == 0) {
             opDemoMode = 1;
             opDemoNextMode = 2;
+            opBootWait = 0;
             while (lt_host_boot_settled() == 0) {
                 _ACTWait(1);
+                opBootWait++;
             }
-            ico_host_milestone("boot: Skip the opening: the menu screen has settled, the title's "
-                               "menu is asked for");
+            ico_diag_milestone("boot: Skip the opening: the menu screen has settled on layout %d "
+                               "after %d ticks, the title's menu is asked for",
+                               current_layout_id, opBootWait);
         }
     }
 
@@ -492,11 +503,14 @@ void actOpDemo01(GObj *volatile self)
         if (ico_opt_skip_opening() && opDemoMode == 0) {
             opDemoMode = 1;
             opDemoNextMode = 2;
+            opBootWait = 0;
             while (lt_host_boot_settled() == 0) {
                 _ACTWait(1);
+                opBootWait++;
             }
-            ico_host_milestone("boot: Skip the opening: the menu screen has settled, the title's "
-                               "menu is asked for");
+            ico_diag_milestone("boot: Skip the opening: the menu screen has settled on layout %d "
+                               "after %d ticks, the title's menu is asked for",
+                               current_layout_id, opBootWait);
         }
     }
 
