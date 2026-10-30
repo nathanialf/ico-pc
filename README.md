@@ -45,8 +45,9 @@ the PS2's unless you choose Original. The mouse camera starts on.
   - a Steam Deck;
   - a 64-bit ARM Linux handheld or board with an up-to-date graphics
     driver;
-  - or a 64-bit Android phone or tablet with Android 10 or later, usually
-    one from 2022 or newer. [More about Android](docs/ANDROID.md);
+  - or a 64-bit Android phone or tablet with Android 8 or later and
+    Vulkan 1.0 graphics, usually one from 2017 or newer.
+    [More about Android](docs/ANDROID.md);
   - or an iPhone (iOS 15 or newer) or an Apple-silicon Mac (macOS 12 or
     newer); see [Supported platforms](#supported-platforms).
 - **About 1 GB of free space** for the game's files, which the first start
@@ -60,7 +61,7 @@ the PS2's unless you choose Original. The mouse camera starts on.
 | Linux PC, 64-bit x86: Debian 13, Ubuntu 24.04 or newer | `-linux-x86_64.AppImage`, or `-linux.tar.gz` (or `-linux-portable.tar.gz`) | Built and checked by the automatic tests for every release. Draws with Vulkan, or OpenGL if your graphics driver has no Vulkan ([how](docs/OPTIONS.md#choosing-the-renderer)); OpenGL has only been checked on a software renderer. |
 | Steam Deck | `-linux-x86_64.AppImage` or `-linux.tar.gz` | Supported; [Steam Deck tips](docs/TROUBLESHOOTING.md#steam-deck). |
 | Linux handheld or board, 64-bit ARM: Debian 13, Ubuntu 24.04 or newer | `-linux-aarch64.AppImage`, or `-linux-arm64.tar.gz` (or `-linux-arm64-portable.tar.gz`) | Built for every release. |
-| Android phone or tablet, 64-bit, Android 10 or newer (usually 2022 or newer) | `-android.apk` | Supported. It can be slower than on a PC. [The Android guide](docs/ANDROID.md). |
+| Android phone or tablet, 64-bit, Android 8 or newer with Vulkan 1.0 graphics (usually 2017 or newer) | `-android.apk` | Supported. It can be slower than on a PC. Graphics driver packages need Android 9 or newer. [The Android guide](docs/ANDROID.md). |
 | iPhone, iOS 15 or newer, through [LiveContainer](https://github.com/LiveContainer/LiveContainer) | `-ios-unsigned.ipa` | The maintainer has no Apple device, so these builds are not tested here; problem reports are welcome. |
 | Apple-silicon Mac, macOS 12 or newer | `-macos-arm64.dmg` (or `-macos-arm64.zip`) | Not tested by the maintainer either. The first time, right-click **ICO** and choose **Open** ([how](#mac)). |
 
