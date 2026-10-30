@@ -6,6 +6,8 @@
 #include "door_grace.h"
 
 #include "options.h"
+#include "../platform/state_port.h"
+#include "../platform/state_registry.h"
 
 /* the pending arm from the last exit fired by Ico */
 static int s_armed;
@@ -16,6 +18,20 @@ static int s_arm_holding;
 /* the grace: frames left and the stage it leads back to */
 static int s_left;
 static int s_from = -1;
+
+/* The save state's blocks (state_port.h). */
+int ico_door_grace_state_register(void)
+{
+    int rc = 0;
+
+    rc |= ico_state_register("door_grace.armed", &s_armed, sizeof s_armed, 0);
+    rc |= ico_state_register("door_grace.arm_from", &s_arm_from, sizeof s_arm_from, 0);
+    rc |= ico_state_register("door_grace.arm_to", &s_arm_to, sizeof s_arm_to, 0);
+    rc |= ico_state_register("door_grace.arm_holding", &s_arm_holding, sizeof s_arm_holding, 0);
+    rc |= ico_state_register("door_grace.left", &s_left, sizeof s_left, 0);
+    rc |= ico_state_register("door_grace.from", &s_from, sizeof s_from, 0);
+    return rc != 0 ? -1 : 0;
+}
 
 void ico_door_grace_arm(int from_stage, int to_stage, int holding_hands)
 {
