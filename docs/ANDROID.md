@@ -17,13 +17,13 @@
   Adreno chip (most phones with a Qualcomm Snapdragon processor; see
   [Using a different graphics driver](#using-a-different-graphics-driver)).
   Graphics driver packages need Android 9 or later.
-- **Android 11 phones and tablets, such as the Logitech G Cloud (Adreno 618).**
-  The game has run on the older graphics driver those devices ship (Vulkan
-  1.1) since version 0.9.1, but no one has confirmed it on a real device yet.
-  When you start the game, look in its log (`logs/ico-pc.log`) for a line like
-  `<name of the graphics chip> (Vulkan 1.1.x) ...; render passes legacy; sync fences`.
-  That line means the game is using the Vulkan 1.1 route. If you try it, please
-  tell us how it went and send that log.
+- **Android 11 devices such as the Logitech G Cloud (Adreno 618)** ship an
+  older graphics driver (Vulkan 1.1). The game is built to run on it, but no
+  one has confirmed it on a real device yet. If you try it, look in
+  `logs/ico-pc.log` for a line like
+  `<name of the graphics chip> (Vulkan 1.1.x) ...; render passes legacy; sync fences`
+  (it means the Vulkan 1.1 route is in use), and tell us how it went with that
+  log.
 - **Your own disc image of ICO**: the European release (SCES-50760), the
   Japanese release (SCPS-11003), the Korean release (SCPS-56001), the North
   American release (SCUS-97113), the Asian release (SCPS-55001), the August
