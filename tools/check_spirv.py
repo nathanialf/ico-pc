@@ -97,6 +97,11 @@ Gates:
              (a local array indexed at run time is memory the compiler lays
              out). Pixel shaders may (font_sheet_ps, yuv_ps: built fine on
              the same drivers).
+  version    every module's header carries SPIR-V version 1.0 (word 1 is
+             0x00010000): the blobs are built for Vulkan 1.0
+             (cmake/IcoShaders.cmake, -fspv-target-env=vulkan1.0) so they
+             load on a Vulkan 1.0 driver (Android 8, issue 158); a module at
+             a later version is one a 1.0 driver may refuse.
   precise    every VU vertex shader (vu_*_vs: the programs' entries, their
              plain variants, the pre-passes' and the main shaders) carries
              the NoContraction decoration (HLSL precise: no fused multiply-
@@ -195,13 +200,15 @@ OTHER_NAMES = {77: "OpVectorExtractDynamic", 78: "OpVectorInsertDynamic", 126: "
 PROGRAM_ENTRIES = ("vu_prelit_vs", "vu_lit_vs", "vu_lit_spec_vs", "vu_reflect_vs", "vu_skin_vs",
                    "vu_skin_spec_vs", "vu_skin_debug_vs", "vu_grid_vs", "vu_grid_lit_vs",
                    "vu_grid_spec_vs")
+# the header's version word every module carries (SPIR-V 1.0, Vulkan 1.0)
+SPIRV_VERSION = 0x00010000
 VS_BUDGET = 56000
 VS_PLAIN_BUDGET = 25700
 PS_BUDGET = 78560
 
 
 def decode(path):
-    """(words, [(op, operands)]) of one module, or a string saying why not"""
+    """(words, [(op, operands)], version word) of one module, or a string saying why not"""
     data = open(path, "rb").read()
     if len(data) < 20 or len(data) % 4 or struct.unpack("<I", data[:4])[0] != 0x07230203:
         return "not a SPIR-V module"
@@ -214,7 +221,7 @@ def decode(path):
             return "malformed: zero word count at word %d" % i
         insts.append((words[i] & 0xFFFF, words[i + 1:i + wc]))
         i += wc
-    return len(words), insts
+    return len(words), insts, words[1]
 
 
 def check(path, sizes=None):
@@ -222,7 +229,7 @@ def check(path, sizes=None):
     d = decode(path)
     if isinstance(d, str):
         return [d]
-    nwords, insts = d
+    nwords, insts, version = d
     arrays = set()      # type ids that are arrays
     pointee = {}        # pointer type id -> pointed type id
     value_type = {}     # result id -> result type id (for the typed instructions)
@@ -245,6 +252,9 @@ def check(path, sizes=None):
     bsel = sum(1 for op, ops in insts if op == OP_SELECT and ops[0] in bools | bvecs)
     anyall = census.get(OP_ANY, 0) + census.get(OP_ALL, 0)
     out = []
+    if version != SPIRV_VERSION:
+        out.append("version: SPIR-V %d.%d, not 1.0 (header word 0x%08x)" %
+                   ((version >> 16) & 0xFF, (version >> 8) & 0xFF, version))
     counts = {}
     local = 0
     # the decorations: OpDecorate target, decoration; OpMemberDecorate
