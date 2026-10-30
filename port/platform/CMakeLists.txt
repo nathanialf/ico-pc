@@ -16,6 +16,9 @@ target_sources(ico_platform PRIVATE
     report.c
     sched.c
     startup_retry.c
+    state_check.c
+    state_file.c
+    state_registry.c
     state_reloc.c
     symmap.c
     vm_reserve.c
@@ -46,6 +49,11 @@ endif()
 # check of the game data ranges, game_data_range.h): the program only
 if(TARGET ico_pc)
     target_sources(ico_pc PRIVATE game_data_verify.c)
+endif()
+# state_port.c registers the port's save state blocks (state_port.h), which
+# live in libraries the platform layer does not link: the program only
+if(TARGET ico_pc)
+    target_sources(ico_pc PRIVATE state_port.c)
 endif()
 # The commit the program was built from (ICO_BUILD_COMMIT in the
 # generated ico_build_commit.h, "git describe --always --dirty"), for the pad
@@ -85,8 +93,9 @@ endif()
 # gpu_hang: the GPU hang limit's arithmetic and its watch (gpu_hang.c, issue 123)
 # state_fiber: save states' fiber pool, a suspended fiber saved and restored
 # into a second pool, and the relocation words (fiber.c, state_reloc.c)
+# state_registry: the save state registry's table (state_registry.c)
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
-          gpu_hang state_fiber)
+          gpu_hang state_fiber state_registry)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -171,6 +180,16 @@ if(ICO_RUN_TESTS)
     add_test(NAME game_data_range COMMAND game_data_range_test)
 endif()
 
+# state_format: the save state file (state_file.c) written on its thread and
+# read back, every header refusal, bad and truncated files, the build id; it
+# writes under the build folder
+add_executable(state_format_test test/state_format_test.c)
+target_compile_options(state_format_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(state_format_test PRIVATE ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME state_format COMMAND state_format_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 # host_fs.h on a non-ASCII (UTF-8) path in the build tree
 add_executable(host_fs_test test/host_fs_test.c)
 target_compile_options(host_fs_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -241,6 +260,23 @@ if(ICO_RUN_TESTS)
                                             STGST13C.DF 9656788 461)
     set_tests_properties(inflate_disc_cn inflate_disc_cn_st02a inflate_disc_kor inflate_disc_aug6
                          PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# Save states' relocation (state_reloc.c, state_check.c): the scan over
+# synthetic regions with pointers into each moved range, near misses,
+# floats and EE word pairs; the program's image range; the game heap's
+# typed walk over a real partition (fumi/ios/memory.c, compiled as the game
+# compiles it) copied to another address and relocated; the thread and
+# handler checks.
+add_executable(state_reloc_test test/state_reloc_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/memory.c")
+target_include_directories(state_reloc_test PRIVATE ${_ico_fumi_incs})
+target_compile_definitions(state_reloc_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(state_reloc_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(state_reloc_test PRIVATE ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME state_reloc COMMAND state_reloc_test)
 endif()
 
 # The game's thread, message and memory layers on the scheduler, driven by
