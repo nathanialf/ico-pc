@@ -12,6 +12,7 @@ target_sources(ico_platform PRIVATE
     kernel_host.c
     pace_policy.c
     perf_block.c
+    pipeline_skip.c
     pump_watch.c
     report.c
     sched.c
@@ -90,12 +91,15 @@ target_link_libraries(startup_retry_test PRIVATE ico_platform)
 if(ICO_RUN_TESTS)
     add_test(NAME startup_retry COMMAND startup_retry_test)
 endif()
+# pipeline_skip: the record of a pipeline family a device's driver stopped in
+# (pipeline_skip.c, issue 161): the note's family, the value written and read
+# back, the device and driver match, the [dev] clear
 # gpu_hang: the GPU hang limit's arithmetic and its watch (gpu_hang.c, issue 123)
 # state_fiber: save states' fiber pool, a suspended fiber saved and restored
 # into a second pool, and the relocation words (fiber.c, state_reloc.c)
 # state_registry: the save state registry's table (state_registry.c)
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
-          gpu_hang state_fiber state_registry)
+          gpu_hang state_fiber state_registry pipeline_skip)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
