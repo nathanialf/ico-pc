@@ -2008,10 +2008,14 @@ static __inline__ void speedRatioDebugOverride(float *ratio) /* derived name */
 #endif
 }
 
+/* PC port: port/game/options.c: [gameplay] shadow_speed, the factor 0.75 to 1.5 */
+extern float ico_opt_shadow_speed_factor(void);
+
 inline void ACTGame_SetMotionPlaySpeedRatio_Exec(GObj *self)
 {
     float ratio;
     int keep;
+    int diveMotion;
 
     ratio = 1.0f;
     keep = (unsigned int)(int)GOBJ_ACT(self)->enemy->speedRatioPri < 3 && self == girlGObj;
@@ -2027,6 +2031,16 @@ inline void ACTGame_SetMotionPlaySpeedRatio_Exec(GObj *self)
     }
     if (keep) {
         ratio = 1.0f;
+    }
+    /* PC port: [gameplay] shadow_speed (port/game/options.c) scales a shadow's walking,
+       running and flying; the ratio multiplies the motion's play speed, and the ground speed
+       is the motion's root motion, so both scale in step.  Left alone: a frozen shadow (the
+       0.0001 freeze) and the pit dive (this disc's kidnap-end motion), which [gameplay]
+       pit_time owns. */
+    diveMotion = ICO_JUN26 ? 938 : ICO_NTSC ? 903 : ICO_AUG6 ? 905 : 952;
+    if (((struct GObj *)self)->kind == 4 && ratio > 0.001f &&
+        ico_opt_shadow_speed_factor() != 1.0f && GOBJ_SUB(self)->ctrl.motion != diveMotion) {
+        ratio *= ico_opt_shadow_speed_factor();
     }
     speedRatioDebugOverride(&ratio);
     SetMotionPlaySpeedRatio(self, ratio);
