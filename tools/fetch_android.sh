@@ -18,7 +18,7 @@
 #                          plugin runs (android/local.properties, cmake.dir)
 #   tools/toolchain/deps/sdl3/android-arm64/
 #                          SDL3 (zlib) built from the release source tarball
-#                          with the NDK for arm64-v8a, android-29, shared only:
+#                          with the NDK for arm64-v8a, android-26, shared only:
 #                            lib/cmake/SDL3, include/   the CMake package
 #                            jniLibs/arm64-v8a/libSDL3.so
 #                            java/org/libsdl/app/       SDL's Java glue (the
@@ -89,7 +89,7 @@ JOBS="${ICO_JOBS:-2}"
 NDK_VERSION="${ICO_ANDROID_NDK_VERSION:-28.2.13676358}"
 BUILD_TOOLS_VERSION="${ICO_ANDROID_BUILD_TOOLS_VERSION:-35.0.0}"
 COMPILE_SDK="${ICO_ANDROID_COMPILE_SDK:-35}"
-ANDROID_PLATFORM_LEVEL="android-29"
+ANDROID_PLATFORM_LEVEL="android-26"
 
 # --- 1. The SDK packages -------------------------------------------------------
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
