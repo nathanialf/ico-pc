@@ -17,6 +17,8 @@
 #include "host_loop.h"
 #include "clock.h"
 #include "sched.h"
+#include "state_port.h"
+#include "state_registry.h"
 #include "trace_host.h"
 
 /* The game's main (common/src/main.c, renamed by CMakeLists.txt) and its
@@ -40,6 +42,17 @@ static unsigned int vsyncs;
 static int field;
 
 static IcoStepProfile profile;
+
+/* The save state's blocks (state_port.h): the vsync count the timers and
+   the presenter count from and the field the next vsync reports. */
+int ico_host_loop_state_register(void)
+{
+    int rc = 0;
+
+    rc |= ico_state_register("host_loop.vsyncs", &vsyncs, sizeof vsyncs, 0);
+    rc |= ico_state_register("host_loop.field", &field, sizeof field, 0);
+    return rc != 0 ? -1 : 0;
+}
 
 /* The EE's main thread starts at priority 0 and libkernl's InitThread
    (sce/libkernl/thread.c, run by _InitSys before main) sets it to 1. */
@@ -76,6 +89,9 @@ void ico_host_init(void)
     ico_clock_set_mode_word(systemStatus);
     ico_sched_reset();
     ico_sched_set_fiber_start_hook(ico_fpenv_sim_enter);
+    /* the port's blocks in the save state registry, before the game runs
+       (state_port.h; the result is kept for state_host.c) */
+    (void)ico_state_register_port();
     ico_sched_boot(boot_main, NULL, BOOT_PRIORITY);
     ico_sched_run();
 }
