@@ -969,7 +969,11 @@ static const char *delta_word(int which, const StateRanges *rg)
 }
 
 /* the failed load's way back: every region from the backup, the scheduler
-   with nothing moved; the game goes on as before the load */
+   with nothing moved; the game goes on as before the load.  Called with
+   the audio lock held; a way back that fails lets the lock go before the
+   fatal end (review finding 9: ico_host_fatal's box and exit close the
+   audio device, which waits for the callback blocked on that lock), which
+   never returns */
 static void roll_back(const Copy *backup, void *pobj_new)
 {
     static IcoSchedImage img;
@@ -982,6 +986,7 @@ static void roll_back(const Copy *backup, void *pobj_new)
 #endif
     identity_reloc(&id);
     if (parse_fibers(backup, &img) != 0 || ico_sched_state_restore(&img, &id) != 0) {
+        ico_audio_unlock();
         ico_host_fatal(NULL, "state: a failed load could not put the game back; it cannot go on");
     }
 }
