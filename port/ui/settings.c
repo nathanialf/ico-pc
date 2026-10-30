@@ -1109,6 +1109,28 @@ void ui_settings_set_steam_handler(int (*fn)(void))
 static UiTextureExportHost s_texExportHost;
 static int s_texExportHostSet, s_texExportPending;
 
+/* The Save states host (settings.h).  Kept here until the page lands (the
+   page, the pause row and the Extras link read it); a load's sync has no
+   page to close yet. */
+static UiStatesHost s_statesHost;
+static int s_statesHostSet;
+
+void ui_settings_set_states_host(const UiStatesHost *host)
+{
+    s_statesHostSet =
+        host != NULL && host->list != NULL && host->request != NULL && host->can_save != NULL;
+    if (s_statesHostSet) {
+        s_statesHost = *host;
+    }
+}
+
+void ui_settings_sync_after_state_load(void)
+{
+    /* no page to close until it lands; the host is its */
+    (void)s_statesHost;
+    (void)s_statesHostSet;
+}
+
 void ui_settings_set_texture_export_host(const UiTextureExportHost *host)
 {
     s_texExportHostSet =
