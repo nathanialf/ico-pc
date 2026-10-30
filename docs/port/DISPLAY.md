@@ -366,7 +366,9 @@ failed), the game frames shown and the frame numbers (which also count the frame
 unshown, so a gap between the two is not a slowdown), the block's seconds, presented and game frames
 a second, the vsyncs and the simulated rate, the resyncs and the lag they dropped, the new frames
 the late-present skip left unpresented (`skipped N presents (late L, slow S)`: by arm, the timer
-path's and the lock's together, the lock having the late arm only, [Pacing](#pacing)), the present
+path's and the lock's together, the lock having the late arm only, [Pacing](#pacing)); at Frame
+rate Original `steps late N (frames not presented M)`, the steps that ended past their period and
+the frames its late skip left out ([Pacing](#pacing), item 1), then the present
 allowance of the path in use (`presents held to A a step (lowest L, R refused, D drops, C climbs,
 climbs refused X)`, or `presents paced to N.N a step (...)` while the timer path's allowance is
 unbound and [paced by the GPU](#the-present-allowance) at under 8 a step (N.N the budget's presents
@@ -586,10 +588,32 @@ than 100 ms behind (`RESYNC_NS`) the lag is dropped and counted instead of run o
 with a fake clock and swapchain; `window_host.c` only supplies its I/O (`pace`, `pace_locked`, the
 `lock_io_*` callbacks of `PaceLockIo`). Three paths:
 
-1. **Frame rate Original**: `rd_end_frame` presented the frame once inside the step; the window only
-   sleeps to the deadline (`pace`). No present is skipped: one replay a game frame, as the PS2
-   draws, so a renderer that cannot draw a frame within its step slows the game, and the pacer
-   drops the lag past 100 ms (a resync).
+1. **Frame rate Original**: `rd_end_frame` replays and presents the frame once inside the step; the
+   window only sleeps to the deadline (`pace`). The rule is a rate requirement: the game steps at
+   the disc's rate (50 or 59.94 a second) in real time whatever the GPU, and the pictures float with
+   their cost. Before a frame's replay the renderer asks the window (`rd_set_replay_gate`,
+   `orig_gate`, `port/platform/window_lines.c` (`window_orig_gate`)): a frame whose step is already a whole period or more past its due time
+   at that point (the late arm of the timer path's skip) is neither replayed nor presented, and the
+   last picture stays on the screen (`port/platform/pace_policy.h` (`pace_original_present`)). A
+   keep frame (a fade or a menu drawn over the picture before it) is always drawn. The skipped
+   frame's step ends at once and pays back a period of the debt, so a picture of G ms against a
+   period of P ms comes about `1000 / (G + step)` times a second (all of them while a step and its
+   picture fit the period), the steps stay at the disc's rate, and the lag behind real time stays
+   under a period plus one picture: the audio's 120 ms lead ([AUDIO.md](AUDIO.md#the-outputs-clock))
+   is not reached for a picture up to about 70 ms. There is no "never two in a row": a skipped
+   frame is never shown later, and a picture over two periods needs two skips to every present.
+   The swapchain takes mailbox where the surface offers it, as the timer path does (`video_settings`),
+   so that present never waits for the display inside the step; FIFO only without mailbox
+   (Direct3D 11 and 12, OpenGL, some surfaces), where a wait for the display shows as a late step
+   and the next frame's replay is the one left out. A replayed frame draws the same picture as
+   before (the gate decides only whether it is replayed: Original at 4:3 1x stays the PS2's
+   picture byte for byte); the tools and tests set no gate and replay every frame.
+   `pace_policy_test` (`testOriginalRule`, `testOriginalLoop`) holds the rates: 9 to 17 ms a
+   picture at 20 ms every frame presented, no skip; 20 to 90 ms 50 steps a second of real time,
+   about `1000 / (G + 1)` presents a second, no resync; without the skip a 30 ms picture ran the game
+   under its rate. Issue 123's case: without the skip a 25-45 ms picture (an Adreno 740 at 3x)
+   runs the game under its rate, the audio reaches its bound and holds back, and the title's sound
+   comes and goes.
 2. **The timer path** (any other frame rate without the lock): presents at the current alpha until
    the deadline. No further present of a frame already shown once the deadline has passed, while
    presents are slow, off the screen, (except with a cap equal to the refresh) when the last
