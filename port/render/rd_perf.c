@@ -154,11 +154,12 @@ static void push(const RdPerfRecord *r)
 /* Direct3D 11's submit writes of the records popped since the last
  * rd_perf_backend_text, and their count; the re-shown presents and the
  * rendered ones that pasted the held glow among them; the draw merge's
- * draws (RdPerfRecord vuMergeIn, vuMergeGpu, vuMergeAlone); the fused
- * scissor pairs (vuFusePairs, vuFuseSame, vuFuseKept) */
+ * draws (RdPerfRecord vuMergeIn, vuMergeGpu, vuMergeAlone) and why draws
+ * stayed apart (vuMergeBlocked); the fused scissor pairs (vuFusePairs,
+ * vuFuseSame, vuFuseKept) */
 static uint64_t s_backendBytes;
 static uint32_t s_backendReplays, s_reshownReplays, s_glowHeldReplays;
-static uint64_t s_mergeIn, s_mergeGpu, s_mergeAlone;
+static uint64_t s_mergeIn, s_mergeGpu, s_mergeAlone, s_mergeBlocked[5];
 static uint64_t s_fusePairs, s_fuseSame, s_fuseKept[RD_VU_FUSE_WHY_COUNT];
 /* the store plan's (RdPerfRecord storePasses, storeDepthDropped,
  * storeColorDropped) and the replays it planned */
@@ -177,6 +178,9 @@ bool rd_perf_pop(RdPerfRecord *out)
     s_mergeIn += s_queue[s_head].vuMergeIn;
     s_mergeGpu += s_queue[s_head].vuMergeGpu;
     s_mergeAlone += s_queue[s_head].vuMergeAlone;
+    for (int k = 0; k < 5; k++) {
+        s_mergeBlocked[k] += s_queue[s_head].vuMergeBlocked[k];
+    }
     s_fusePairs += s_queue[s_head].vuFusePairs;
     s_fuseSame += s_queue[s_head].vuFuseSame;
     for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
@@ -211,7 +215,7 @@ bool rd__perf_gpu_ms_of(uint32_t replay, double *ms)
 
 const char *rd_perf_backend_text(void)
 {
-    static char s_text[1024];
+    static char s_text[1536];
     size_t at = 0;
     s_text[0] = '\0';
     if (s_backendBytes && s_backendReplays) {
@@ -236,12 +240,19 @@ const char *rd_perf_backend_text(void)
     }
     if ((s_mergeIn || s_mergeAlone) && s_backendReplays) {
         /* the draw merge (rd_replay_vu.c): per replay, the VU draws joined
-           into GPU draws of two or more, those GPU draws, the draws alone */
+           into GPU draws of two or more, those GPU draws, the draws alone,
+           and what kept a draw from the run before it (vuMergeNote's first
+           differing key, as rd_replay_tool --stats prints it) */
         const double n = (double)s_backendReplays;
-        const int k = snprintf(
-            s_text + at, sizeof(s_text) - at,
-            "; VU merge: %.0f draws a replay in %.0f GPU draws, %.0f alone ([dev] vu_merge)",
-            (double)s_mergeIn / n, (double)s_mergeGpu / n, (double)s_mergeAlone / n);
+        const int k =
+            snprintf(s_text + at, sizeof(s_text) - at,
+                     "; VU merge: %.0f draws a replay in %.0f GPU draws, %.0f alone (kept apart by "
+                     "pipeline %.0f, texture group %.0f, DrawCB %.0f, split/DATE/dst %.0f, "
+                     "scissor/FrameCB %.0f) ([dev] vu_merge)",
+                     (double)s_mergeIn / n, (double)s_mergeGpu / n, (double)s_mergeAlone / n,
+                     (double)s_mergeBlocked[0] / n, (double)s_mergeBlocked[1] / n,
+                     (double)s_mergeBlocked[2] / n, (double)s_mergeBlocked[3] / n,
+                     (double)s_mergeBlocked[4] / n);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
     uint64_t kept = 0;
@@ -280,6 +291,7 @@ const char *rd_perf_backend_text(void)
     s_reshownReplays = 0;
     s_glowHeldReplays = 0;
     s_mergeIn = s_mergeGpu = s_mergeAlone = 0;
+    memset(s_mergeBlocked, 0, sizeof(s_mergeBlocked));
     s_fusePairs = s_fuseSame = 0;
     memset(s_fuseKept, 0, sizeof(s_fuseKept));
     s_storePasses = s_storeDepth = s_storeColor = 0;
