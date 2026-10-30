@@ -44,6 +44,10 @@ void ico_ach_init(const char *path);
 /* The host loop, once per vsync, with the Main tick count
    (ico_host_main_ticks): runs ico_ach_tick once for each new Main tick. */
 void ico_ach_host_poll(unsigned int main_ticks);
+/* A save state's load put the Main tick back (port/game/state_host.c): the
+   poll counts on from main_ticks, nothing re-checked or skipped twice.
+   The unlocks and the lifetime counters are kept (a load rewinds neither). */
+void ico_ach_host_state_loaded(unsigned int main_ticks);
 /* One Main tick: ico_gs_tick, then every locked achievement's condition,
    the popup queue, and the counters' write when due. */
 void ico_ach_tick(void);
