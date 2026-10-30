@@ -564,17 +564,17 @@ code points it holds are listed on the `subset:` line of `embed_font.cmake`, whi
 
 A character Arimo has no glyph for is drawn from a second embedded font, a subset of Noto Sans JP
 Regular (SIL OFL 1.1; `port/assets/fonts/NotoSansJP-Regular-subset.ttf` into `ui_font_ja_ttf[]`,
-142,792 bytes, 752 code points): the Japanese table, the language names and the PlayStation
+149,948 bytes, 779 code points): the Japanese table, the language names and the PlayStation
 button marks □ △ ○ (`port/ui/font.c` (`fontGlyph`)). Its metrics are scaled to Arimo's em (`jaK`),
 a pair across the two fonts has no kerning, and every line keeps Arimo's ascent and line height,
 so Latin text draws as before; the sheet rasteriser (`ui__sheet_raster_line`, the menus' look)
 takes the same glyphs. A character neither has (Hangul) is drawn from a third embedded font, a
 subset of Noto Sans KR Regular (SIL OFL 1.1; `port/assets/fonts/NotoSansKR-Regular-subset.ttf`
-into `ui_font_ko_ttf[]`, 84,372 bytes, 655 code points: the Hangul of every table, 한국어 being
+into `ui_font_ko_ttf[]`, 88,124 bytes, 676 code points: the Hangul of every table, 한국어 being
 in all of them, and the Korean table's other characters outside Arimo), scaled to Arimo's em in
 the same way (`koK`; `port/ui/font.c` (`fontGlyph`)). A fourth, a subset of Noto Sans TC Regular
-(SIL OFL 1.1; `port/assets/fonts/NotoSansTC-Regular-subset.ttf` into `ui_font_zh_ttf[]`, 219,264
-bytes, 893 code points: the Chinese table's and corpus' characters outside Arimo, Hangul left to
+(SIL OFL 1.1; `port/assets/fonts/NotoSansTC-Regular-subset.ttf` into `ui_font_zh_ttf[]`, 221,184
+bytes, 899 code points: the Chinese table's and corpus' characters outside Arimo, Hangul left to
 Noto Sans KR), holds the ideographs of the Chinese table (`zhK`). The order is Arimo, Noto Sans JP,
 Noto Sans KR, Noto Sans TC, so a character two fonts hold (the button marks, the CJK punctuation)
 comes from the same font whatever the language, and the Japanese and Korean text draw exactly as

@@ -217,6 +217,7 @@ original game's behaviour (`port/game/options.h`, header comment).
 | `stick_fix` | bool | `false` | the stick fix (`ico_opt_stick_fix_default`); the input layer reads it too |
 | `yorda_safe` | bool | `false` | the shadows never take Yorda |
 | `pit_time` | string | `"original"` | how long a shadow takes to pull Yorda into a pit: `"half"`, `"original"`, `"longer"`, `"double"` or `"triple"` (time factors 0.5, 1, 1.5, 2, 3; the dive's play speed is 1/factor, the camera effect's 5 s timeout scales with it); an unknown word reads `"original"` and logs; recorded in the pad recording's header |
+| `shadow_speed` | string | `"original"` | how fast shadows walk, run and fly: `"slower"`, `"original"`, `"faster"` or `"fastest"` (factors 0.75, 1, 1.25, 1.5); an unknown word reads `"original"` and logs; recorded in the pad recording's header |
 | `door_fix` | bool | `false` | an arrival holding hands does not send the pair back through the door |
 | `mirror` | bool | `false` | mirrored play, the value a run starts from until New Game or a load |
 | `natural_chains` | bool | `false` | a chain let down keeps its links' size |

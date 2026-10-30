@@ -1,3 +1,7 @@
+## New
+
+- Options > Gameplay > Shadow speed: shadows walk, run and fly slower or faster than on the PlayStation 2 (Slower, Original, Faster, Fastest).
+
 ## Fixed
 
 - The game no longer pauses for a moment every half minute while you lead Yorda on a slow drive (the achievements file is now written in the background).
