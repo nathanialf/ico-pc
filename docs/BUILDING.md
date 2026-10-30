@@ -144,8 +144,8 @@ the packages below with `sdkmanager`; `SKIP_SDK_INSTALL=1` only checks them.
 | `tools/toolchain/android.env` | the paths and versions above, read by the CMake toolchain file and `android/app/build.gradle` |
 | `android/local.properties` | `sdk.dir` and `cmake.dir` for this checkout (gitignored); every checkout runs the script once |
 
-The Gradle project is `android/` (arm64-v8a only, `minSdk` 29, `targetSdk`
-35). `cd android && ./gradlew --no-daemon assembleDebug [-PicoLabel=<label>]`
+The Gradle project is `android/` (arm64-v8a only, `minSdk` 26, `targetSdk`
+35: Android 8, issue 158; the native code is built for `android-26`). `cd android && ./gradlew --no-daemon assembleDebug [-PicoLabel=<label>]`
 builds the debug APK into `android/app/build/outputs/apk/debug/`;
 `assembleRelease` builds `app-release-unsigned.apk`. `-PicoLabel` sets the
 version name (default: `git describe`); `icoNativeJobs` sets the native build
@@ -578,7 +578,7 @@ structure; the game is not run:
 | `tools/check_no_rom.sh` | the IP scan |
 | `./gradlew --no-daemon assembleDebug -PicoLabel=ci` | the debug APK |
 | `tools/check_android_flags.sh` | the game's semantics options reach the NDK clang for every `ico2/` and `port/` source; no game unit writes an object it declares const (`tools/check_const_writes.py`: clang deletes such stores where gcc keeps them; the `const_write_audit` test runs it on native clang builds); no game or `port/math` object holds a fused multiply-add; no object stores onto its stack protector's guard (`tools/check_stack_guard.py`: only the Android build has `-fstack-protector-strong`, so a write past a local array ends the run on a phone alone) |
-| APK checks | `lib/arm64-v8a/libmain.so`, `libSDL3.so`, `assets/VERSION.txt` and `assets/NOTICES.txt` are in the APK; `libSDL3.so` and exactly three libadrenotools hook libraries (`libmain_hook.so`, `libhook_impl.so`, `libfile_redirect_hook.so`) are there; every `LOAD` segment of every library has alignment `0x4000` (`llvm-readelf -lW`); `zipalign -c -P 16 -v 4`; `aapt2 dump badging` shows `minSdkVersion:'29'` and `targetSdkVersion:'35'`; the manifest (`aapt2 dump xmltree`) has `resizeableActivity` true, a theme, `extractNativeLibs` true and a `configChanges` list that includes `density`; `libmain.so` exports `SDL_main` (`llvm-nm -D`); `strings libmain.so` finds no `DXBC` |
+| APK checks | `lib/arm64-v8a/libmain.so`, `libSDL3.so`, `assets/VERSION.txt` and `assets/NOTICES.txt` are in the APK; `libSDL3.so` and exactly three libadrenotools hook libraries (`libmain_hook.so`, `libhook_impl.so`, `libfile_redirect_hook.so`) are there; every `LOAD` segment of every library has alignment `0x4000` (`llvm-readelf -lW`); `zipalign -c -P 16 -v 4`; `aapt2 dump badging` shows `minSdkVersion:'26'` and `targetSdkVersion:'35'`; the manifest (`aapt2 dump xmltree`) has `resizeableActivity` true, a theme, `extractNativeLibs` true and a `configChanges` list that includes `density`; `libmain.so` exports `SDL_main` (`llvm-nm -D`); `strings libmain.so` finds no `DXBC` |
 | artifact `ico-pc-android-debug` | the APK, the unstripped `libmain.so` and `ico_pc.map`, kept 14 days |
 
 Run the same steps locally before pushing.
