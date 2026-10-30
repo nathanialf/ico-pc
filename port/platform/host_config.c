@@ -584,6 +584,10 @@ static const struct {
        policy (small batches on one thread), "full" the set (the default;
        the careful one on a device of the table) */
     {"dev.pipeline_set", "pipeline_set"},
+    /* the start-up set's free-memory floor on Android in MB (issue 161;
+       diag_host.c memory_floor_stop): auto, the default, the larger of
+       1536 MB and 15 % of the device's memory; 0 off */
+    {"dev.pipeline_memory_floor_mb", "pipeline_memory_floor_mb"},
     /* the texture decode pool's worker threads: auto (the default: 2, 1 on
        a machine with 2 hardware threads or fewer), 0 every decode on the
        game thread as before (an A/B), 1 to 4 (port/render/rd_tex_decode.c) */
@@ -653,6 +657,8 @@ static const struct {
     /* port/platform/window_host.c: "lazy" skips the start-up set,
        "careful" makes it under the careful policy */
     {"pipeline_set", "ICO_PIPELINE_SET"},
+    /* port/platform/diag_host.c memory_floor_stop: the floor in MB, 0 off */
+    {"pipeline_memory_floor_mb", "ICO_PIPELINE_MEMORY_FLOOR_MB"},
     /* port/audio/audio_host.c ico_audio_host_init: 1 renders the audio on
        the game's clock (the sync path) instead of the device's */
     {"audio_sync", "ICO_AUDIO_SYNC"},
@@ -729,6 +735,17 @@ const char *ico_dev_env_value(const char *key, const char *value)
     }
     if (strcmp(key, "pipeline_set") == 0) {
         return value_is(value, sets) ? value : NULL;
+    }
+    if (strcmp(key, "pipeline_memory_floor_mb") == 0) {
+        /* auto, or whole MB 0 (off) to 1048576 (memory_floor.h
+           ico_memory_floor_setting reads it) */
+        char *end = NULL;
+        const long n = strtol(value, &end, 10);
+        if (strcmp(value, "auto") == 0 ||
+            (end != value && *end == '\0' && n >= 0 && n <= 1048576L)) {
+            return value;
+        }
+        return value_is(value, off) ? "0" : NULL;
     }
     if (strcmp(key, "texture_decode_threads") == 0) {
         /* auto, 0 (off: the game thread decodes) to 4 worker threads */
