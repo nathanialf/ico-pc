@@ -882,8 +882,8 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
            force shows in the log */
         {
             static const char *const kept[] = {"dev.pipeline_set", "dev.vu_prepass",
-                                               "dev.gpu_robust"};
-            char line[256] = "";
+                                               "dev.gpu_robust", "dev.pipeline_skip"};
+            char line[384] = "";
             size_t i;
 
             for (i = 0; t != NULL && i < sizeof(kept) / sizeof(kept[0]); i++) {
