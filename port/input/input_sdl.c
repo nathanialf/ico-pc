@@ -305,6 +305,42 @@ static void touch_fitted_log(const IcoTouchLayout *l)
     }
 }
 
+/* after the start-up "layout edits" line: one line per EDITED control of the
+   layout in play, "touch: start: hidden at 12,98 150 x 70 px (size medium)",
+   in window pixels after the safe-area placement and the clamps, so a layout
+   can be read from the log alone. Again only when the lines change (a new
+   window size, a fold, Done in the editor). */
+static void touch_boxes_log(const IcoTouchLayout *l)
+{
+    static const char *const kState[3] = {"shown", "hidden", "off"};
+    static char s_last[1536];
+    char text[1536] = "";
+    const IcoTouchEdits *e = ico_input_live_touch_edits();
+    int c;
+
+    if (l->rule < 0 || l->rule >= ICO_TOUCH_POSTURES) {
+        return;
+    }
+    for (c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
+        IcoTouchRect b;
+        const int st = ico_touch_ctl_state(l, c);
+        const size_t used = strlen(text);
+
+        if (!e->ctl[l->rule][c].set || !ico_touch_ctl_box(l, c, &b) || st < 0 || st > 2) {
+            continue;
+        }
+        snprintf(
+            text + used, sizeof(text) - used, "touch: %s: %s at %d,%d %d x %d px (size %s)\n",
+            ico_touch_ctl_name(c), kState[st], (int)b.x, (int)b.y, (int)b.w, (int)b.h,
+            ico_touch_size_names[s_bind.touch_size >= 0 && s_bind.touch_size < 3 ? s_bind.touch_size
+                                                                                 : 1]);
+    }
+    if (strcmp(text, s_last) != 0) {
+        fputs(text, stderr);
+        snprintf(s_last, sizeof(s_last), "%s", text);
+    }
+}
+
 static void touch_rebuild(void)
 {
     IcoTouchInsets in = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -328,6 +364,7 @@ static void touch_rebuild(void)
     if (!s_touchEdit.active) {
         touch_states_log(&s_touchLayout);
         touch_fitted_log(&s_touchLayout);
+        touch_boxes_log(&s_touchLayout);
     }
 }
 
@@ -507,6 +544,10 @@ int ico_input_sdl_touch_overlay(IcoTouchOverlay *out)
    a new finger replaced. */
 static uint64_t s_tapFinger;
 static int s_tapDown;
+/* the finger a row tap took from a Hidden control: the controls never see
+   it, down to its lift */
+static uint64_t s_eatenFinger;
+static int s_eaten;
 
 static void touch_tap_drop(void)
 {
@@ -523,7 +564,9 @@ static int confirm_ctl(void)
     return ico_region_cur()->pad_confirm == 0x20 ? ICO_TOUCH_CTL_CIRCLE : ICO_TOUCH_CTL_CROSS;
 }
 
-static void touch_menu_tap(const SDL_Event *e, int kind)
+/* Returns 1 when this event is a finger the row tap took from a Hidden
+   control (touch_finger then keeps it from the controls). */
+static int touch_menu_tap(const SDL_Event *e, int kind)
 {
 #if defined(__ANDROID__) || defined(ICO_IOS)
     const int phone = 1;
@@ -547,10 +590,37 @@ static void touch_menu_tap(const SDL_Event *e, int kind)
             }
         }
         if (!ico_pointer_menu() || !ico_touch_menu_taps(&s_touchLayout) ||
-            !ico_touch_accepts(mode, s_raw.gamepads) ||
-            ico_touch_blocks_menu_tap(&s_touchLayout, e->tfinger.x * (float)s_touchLayout.outW,
-                                      e->tfinger.y * (float)s_touchLayout.outH, confirm_ctl())) {
-            return;
+            !ico_touch_accepts(mode, s_raw.gamepads)) {
+            return 0;
+        }
+        {
+            static int s_coverLogged;
+            const float px = e->tfinger.x * (float)s_touchLayout.outW;
+            const float py = e->tfinger.y * (float)s_touchLayout.outH;
+            int ctl = -1, layout = -1, row = -1;
+            const int cover = ico_touch_menu_tap_cover(&s_touchLayout, px, py, confirm_ctl(), &ctl);
+
+            if (cover != ICO_TOUCH_COVER_NONE) {
+                /* a control lies under the finger: a drawn one wins; a
+                   Hidden one (not drawn) gives way to a menu row under the
+                   finger, and then the finger is the row's alone */
+                const int onRow = ico_pointer_row_at(e->tfinger.x, e->tfinger.y, &layout, &row);
+
+                if (onRow && (++s_coverLogged <= 8 || s_coverLogged % 100 == 0)) {
+                    fprintf(stderr,
+                            "touch: tap at %d,%d on menu row %d (layout %d) over %s %s: the "
+                            "%s (%d)\n",
+                            (int)px, (int)py, row, layout,
+                            cover == ICO_TOUCH_COVER_HIDDEN ? "hidden" : "shown",
+                            ico_touch_ctl_name(ctl),
+                            cover == ICO_TOUCH_COVER_HIDDEN ? "row" : "control", s_coverLogged);
+                }
+                if (cover == ICO_TOUCH_COVER_SHOWN || !onRow) {
+                    return 0;
+                }
+                s_eaten = 1;
+                s_eatenFinger = id;
+            }
         }
         if (!s_tapLogged) {
             s_tapLogged = 1;
@@ -568,6 +638,7 @@ static void touch_menu_tap(const SDL_Event *e, int kind)
         s_tapDown = 0;
         ico_pointer_button(0);
     }
+    return s_eaten && id == s_eatenFinger;
 }
 
 static void touch_finger(const SDL_Event *e, int kind)
@@ -581,7 +652,12 @@ static void touch_finger(const SDL_Event *e, int kind)
                              e->tfinger.y, kind, e->tfinger.timestamp);
         return;
     }
-    touch_menu_tap(e, kind);
+    if (touch_menu_tap(e, kind)) {
+        if (kind == ICO_TOUCH_UP || kind == ICO_TOUCH_CANCEL) {
+            s_eaten = 0;
+        }
+        return;
+    }
     ico_touch_event(&s_touch, (uint64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, kind,
                     e->tfinger.timestamp);
 }
@@ -589,6 +665,7 @@ static void touch_finger(const SDL_Event *e, int kind)
 static void touch_cancel(void)
 {
     touch_tap_drop();
+    s_eaten = 0;
     if (s_touchEdit.active) {
         /* focus lost: the editor drops a drag and keeps its edits */
         ico_touch_edit_event(&s_touchEdit, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
