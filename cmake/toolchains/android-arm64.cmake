@@ -30,7 +30,7 @@ set(ANDROID_NDK "${ANDROID_NDK}" CACHE PATH "Android NDK")
 
 set(ANDROID_ABI arm64-v8a)
 if(NOT ANDROID_PLATFORM)
-    set(ANDROID_PLATFORM android-29)
+    set(ANDROID_PLATFORM android-26)
 endif()
 set(ANDROID_STL c++_static)
 include("${ANDROID_NDK}/build/cmake/android.toolchain.cmake")
