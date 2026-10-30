@@ -2065,6 +2065,48 @@ if(ICO_RUN_TESTS)
     endforeach()
 endif()
 # VK11S end
+# VK10: the render tests on a Vulkan 1.0 driver (ICO_VK_FAKE_API=1.0,
+# port/rhi/vk/vk_device.c; issue 158, Android 8): the instance created at
+# Vulkan 1.0 with VK_KHR_get_physical_device_properties2 (the KHR queries),
+# the device at 1.0 with VK_KHR_maintenance1 and VK_KHR_maintenance2, the
+# core 1.1 entry points cleared (a core 1.1 call left unguarded stops the
+# run), and what =1.1 hides hidden (the fence ring, VkRenderPass objects, no
+# local read, driver properties or image format list); with
+# ICO_VK_FAKE_NO_DYNAMIC=1 every pipeline state static, as on Android (the
+# combination an Android 8 phone runs).  The expectations are the Vulkan
+# runs' own, byte for byte; rd_perf_vk10's pass and barrier counts are
+# rd_perf's.  Label vk10: ctest -j1 -L vk10 (with port/rhi's rhi_vk_vk10 and
+# rhi_vk_swapchain_vk10).
+if(ICO_RUN_TESTS)
+    set(_env_vk10 ${_env} "ICO_VK_FAKE_API=1.0" "ICO_VK_FAKE_NO_DYNAMIC=1")
+    set(_v10 "${CMAKE_CURRENT_BINARY_DIR}/vk10")
+    file(MAKE_DIRECTORY "${_v10}")
+    add_test(NAME rd_pixel_vk10 COMMAND rd_pixel_test "${_v10}")
+    add_test(NAME rd_present_vk10 COMMAND rd_present_test "${_v10}")
+    add_test(NAME rd_crt_vk10 COMMAND rd_crt_test "${_v10}")
+    add_test(NAME rd_debug_vk10 COMMAND rd_debug_test "${_v10}")
+    add_test(NAME rd_raw_vk10 COMMAND rd_raw_test)
+    add_test(NAME rd_fog_vk10 COMMAND rd_fog_test)
+    add_test(NAME rd_shadow_vk10 COMMAND rd_shadow_test)
+    add_test(NAME rd_interp_vk10 COMMAND rd_interp_test)
+    add_test(NAME rd_msaa_vk10 COMMAND rd_msaa_test)
+    add_test(NAME rd_perf_vk10 COMMAND rd_perf_test)
+    set(_vk10_tests rd_pixel_vk10 rd_present_vk10 rd_crt_vk10 rd_debug_vk10 rd_raw_vk10
+                    rd_fog_vk10 rd_shadow_vk10 rd_interp_vk10 rd_msaa_vk10 rd_perf_vk10)
+    # rd_mesh's four shards (the disc's models; 77 without the disc image)
+    foreach(_k RANGE 1 4)
+        add_test(NAME rd_mesh_vk10.${_k}of4 COMMAND rd_mesh_test "${ICO_DISC_IMAGE}" --shard ${_k}/4)
+        list(APPEND _vk10_tests rd_mesh_vk10.${_k}of4)
+    endforeach()
+    set_tests_properties(${_vk10_tests}
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_v10}"
+                                    ENVIRONMENT "${_env_vk10}")
+    foreach(_t ${_vk10_tests})
+        get_test_property(${_t} LABELS _labels)
+        set_tests_properties(${_t} PROPERTIES LABELS "${_labels};vk10")
+    endforeach()
+endif()
+# VK10 end
 
 # ---- The render suite a second time, on the OpenGL backend (issue 126) ----
 # ico_rhi_vk links every backend and rhi_backend.c takes ICO_RHI_BACKEND from the
