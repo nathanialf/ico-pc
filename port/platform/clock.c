@@ -5,6 +5,8 @@
  */
 #include "clock.h"
 #include "host_loop.h"
+#include "state_port.h"
+#include "state_registry.h"
 #include <eeregs.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,6 +73,20 @@ static unsigned long long vsync_den = 50;
 static unsigned long long hblank_hz = 15625;
 
 static unsigned long long carry[TIMERS]; /* numerator left over, over vsync_den * 65536 */
+
+/* The save state's blocks (state_port.h): the rate the last vsync set and
+   the fractions carried into the next step.  The counters themselves are
+   in ico_hw_eeio (hwregs.c). */
+int ico_clock_state_register(void)
+{
+    int rc = 0;
+
+    rc |= ico_state_register("clock.vsync_num", &vsync_num, sizeof vsync_num, 0);
+    rc |= ico_state_register("clock.vsync_den", &vsync_den, sizeof vsync_den, 0);
+    rc |= ico_state_register("clock.hblank_hz", &hblank_hz, sizeof hblank_hz, 0);
+    rc |= ico_state_register("clock.carry", carry, sizeof carry, 0);
+    return rc != 0 ? -1 : 0;
+}
 
 static volatile unsigned int *timer_count(int n)
 {
