@@ -444,7 +444,7 @@ target_link_libraries(rd_perf_test PRIVATE ico_render)
 # planners (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c), CPU only: the
 # alpha range's truth table and the blend identities, the frame-size fold and
 # the premultiplied identity, the planes rule's truth table and the VS->PS
-# prefix match.
+# prefix match, and the sprite planes' skip (issue 161).
 foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac)
     add_executable(${_t}_test test/${_t}_test.c)
     target_compile_options(${_t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -1722,6 +1722,24 @@ if(ICO_RUN_TESTS)
                                                      LABELS mali)
     if(_env)
         set_tests_properties(rd_vumerge_mali PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    # rd_noplanes_ab (test/rd_noplanes_ab.cmake, issue 161): the dumps of the
+    # machine-local list tools/noplanes_dumps.txt (the title and the boot,
+    # each drawing one screen-prim triangle key with planes, and a capture
+    # that draws none) with the sprite planes builds and without them
+    # (ICO_RD_NO_SPRITE_PLANES=1, the fallback [dev] pipeline_skip turns on):
+    # the capture byte for byte, the title's and the boot's commands through
+    # the plain builds counted and their differing targets listed; SKIP as
+    # rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/noplanes_ab")
+    add_test(NAME rd_noplanes_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/noplanes_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/noplanes_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_noplanes_ab.cmake")
+    set_tests_properties(rd_noplanes_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
+    if(_env)
+        set_tests_properties(rd_noplanes_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_vufuse_ab (test/rd_vufuse_ab.cmake): the same dumps and the phone's
     # frames (tools/vufuse_dumps.txt) with code 36's kicks under their own
