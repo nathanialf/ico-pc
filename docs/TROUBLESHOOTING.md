@@ -191,6 +191,22 @@ the moments the sound could not keep up. A short click when you go from one
 area to the next is the game stopping its sounds all at once, as it does on
 the PlayStation 2; the log writes down how loud each one was.
 
+## The sound cuts out or the game pauses briefly during loads
+
+The game reads its data and writes your saves where you put them. If that
+is a network drive, a USB stick or another slow drive, a load can take a
+fraction of a second or more, the game stops for that long, and the sound
+can cut out while it does. Open `ico-pc.log` (see [the log
+file](#the-log-file)) and look at the lines that start with `ico_pc: game
+data` and `ico_pc: user folder`: they say "on a network drive" or "on a
+removable drive" when that is where the folder is, and a line right after
+says so again. The `summary` line near the top ends with the same
+information ("drives: data fixed, user network"). Copy the game to a drive
+inside the computer and start it from there. In
+[portable mode](PORTABLE_MODE.md#keep-everything-in-one-folder) the saves
+sit beside the game, so a game on a network drive has its saves there too:
+turn portable mode off to keep the saves on the computer.
+
 ## No sound on Linux
 
 Open `ico-pc.log` (see [The log file](#the-log-file)) and look for the
