@@ -792,6 +792,16 @@ bool rd_vuprepass_selftest(void);
  * statistics line. */
 double rd_replay_time_max(int reset, uint32_t *count);
 void rd_set_host_call(RdHostCall call);
+/* Frame rate Original (interpolation off): asked on the host (rd__on_host)
+ * before rd_end_frame replays and presents a frame, with the frame's keep
+ * flag; false leaves the frame unreplayed and unpresented (the last picture
+ * stays on the screen), so a renderer slower than the game's step does not
+ * hold the simulation below its rate (window_host.c's late skip at
+ * Original, pace_policy.h pace_original_present).  NULL (the default, tests
+ * and tools) replays every frame.  Nothing else of the frame changes: a
+ * replayed frame draws the same picture as without the gate. */
+typedef bool (*RdReplayGate)(int keep);
+void rd_set_replay_gate(RdReplayGate gate);
 /* dl_Clear without dl_Swap (gsb_UpdateGSSystem(1)
  * on the movie path, gsb_UpdateGSSystem before gsSystemReady): the lists
  * recorded since rd_begin_frame are dropped unreplayed, as the PS2 drops a
