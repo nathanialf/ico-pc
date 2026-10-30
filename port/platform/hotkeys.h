@@ -34,9 +34,11 @@
 
 typedef enum IcoHotkey {
     ICO_HOTKEY_NONE,
-    ICO_HOTKEY_FRAME_DUMP,  /* F12 */
-    ICO_HOTKEY_STATS_FAST,  /* F11 */
-    ICO_HOTKEY_ASPECT_SWEEP /* Shift+F12 */
+    ICO_HOTKEY_FRAME_DUMP,   /* F12 */
+    ICO_HOTKEY_STATS_FAST,   /* F11 */
+    ICO_HOTKEY_ASPECT_SWEEP, /* Shift+F12 */
+    ICO_HOTKEY_STATE_SAVE,   /* save states: slot 1 (window_host.c dispatches) */
+    ICO_HOTKEY_STATE_LOAD
 } IcoHotkey;
 
 /* The action of a key-down event (SDL keycode, whether it is a repeat), no
