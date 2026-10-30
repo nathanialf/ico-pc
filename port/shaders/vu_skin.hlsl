@@ -31,12 +31,15 @@ VuVtx vu_skin_vertex(uint v, uint variant)
 {
     VuVtx o = vu_vtx_init();
     uint at = vu_vertex_qw(v);
-    float4 pos = vu_stream[at];
-    float4 n = vu_stream[at + 1u];
-    float4 wt = vu_stream[at + 2u];
-    float4 st = vu_stream[at + 3u];
-    float4 col = vu_stream[at + 4u];
-    uint b0 = asuint(wt.x), b1 = asuint(wt.z);
+    float4 pos = vu_stream_f(at);
+    float4 n = vu_stream_f(at + 1u);
+    // the weight qword: x, z the bones' VU addresses (integers, read as
+    // integers: vu_common.hlsli, Integer lanes), y, w the weights
+    uint4 wtb = vu_stream_u(at + 2u);
+    float4 wt = asfloat(wtb);
+    float4 st = vu_stream_f(at + 3u);
+    float4 col = vu_stream_f(at + 4u);
+    uint b0 = wtb.x, b1 = wtb.z;
     // cluster.vsm:196-223 P = B0 (pos, 1) w0 + B1 (pos, 1) w1, w = 1
     float4 p0 = vu_bone_mat(b0, pos, 1.0);
     float4 p1 = vu_bone_mat(b1, pos, 1.0);
