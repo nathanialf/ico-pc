@@ -5230,6 +5230,9 @@ void ico_window_pace(int hz)
         if (s_pres.slowMs > 0.0 && ms > s_pres.slowMs) {
             slow_step(ms);
         }
+        /* a late step the audio held sound back in: what it was doing */
+        window_hold_line(ms - 1000.0 / (hz > 0 ? hz : 60), ico_audio_sdl_held_ms(), s_pres.decodes,
+                         s_pres.pipeCreates);
     }
     rd_vu_card_counts(&s_pres.stepCardStrips, &s_pres.stepCardTris, &s_pres.stepCardMs);
     if (s_pres.pausePendingNs) {
