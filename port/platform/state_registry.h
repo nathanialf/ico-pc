@@ -15,7 +15,7 @@
 #define ICO_STATE_SCAN 1u  /* may hold host pointers: the relocation scan runs over it */
 #define ICO_STATE_AUDIO 2u /* copied and restored under ico_audio_lock */
 #define ICO_STATE_CLOCK 4u /* a counter the load rewinds (main ticks, the pad script's cursor) */
-#define ICO_STATE_MAX_ENTRIES 64
+#define ICO_STATE_MAX_ENTRIES 96
 
 /* Registers [p, p+n) under `name` (a string literal; kept by pointer).
    Returns 0, or -1 when the table is full or the name repeats. */
