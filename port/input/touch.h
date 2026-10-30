@@ -372,6 +372,23 @@ int ico_touch_menu_taps(const IcoTouchLayout *l);
    from a row the player has no other way to confirm. */
 int ico_touch_blocks_menu_tap(const IcoTouchLayout *l, float x, float y, int confirmCtl);
 
+/* The box of control ctl on the layout in output pixels (the D-pad's four
+   keys together, the stick's circle at home, the look pad's area, a button's
+   rect): 1 with *out filled, 0 for a control out of range. Off controls have
+   their box too. */
+int ico_touch_ctl_box(const IcoTouchLayout *l, int ctl, IcoTouchRect *out);
+
+/* What lies under a finger going down at (x, y) over a menu, as
+   ico_touch_blocks_menu_tap decides it but told apart by what the player
+   sees: ICO_TOUCH_COVER_SHOWN (a drawn control, alpha above 0: it wins
+   over a menu row), ICO_TOUCH_COVER_HIDDEN (only controls that are not drawn,
+   Hidden: a menu row under the finger wins over them) or
+   ICO_TOUCH_COVER_NONE. *ctl (if not NULL) gets that control
+   (ICO_TOUCH_CTL_*, the D-pad for its keys), -1 for none. */
+enum { ICO_TOUCH_COVER_NONE = 0, ICO_TOUCH_COVER_HIDDEN = 1, ICO_TOUCH_COVER_SHOWN = 2 };
+
+int ico_touch_menu_tap_cover(const IcoTouchLayout *l, float x, float y, int confirmCtl, int *ctl);
+
 /* Clear every finger and output, look_decay to ICO_TOUCH_LOOK_DECAY (set
    the bindings' mouse_decay after), and show the overlay from nowNs with
    its fade in. */

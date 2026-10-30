@@ -894,6 +894,101 @@ int ico_touch_blocks_menu_tap(const IcoTouchLayout *l, float x, float y, int con
             in_rect(&l->stickArea, x, y));
 }
 
+int ico_touch_ctl_box(const IcoTouchLayout *l, int ctl, IcoTouchRect *out)
+{
+    const int z = ctl_zone(ctl);
+
+    if (ctl == ICO_TOUCH_CTL_DPAD) {
+        float x0 = l->button[ICO_TOUCH_B_UP].rect.x, y0 = l->button[ICO_TOUCH_B_UP].rect.y;
+        float x1 = x0, y1 = y0;
+        int k;
+
+        for (k = ICO_TOUCH_B_UP; k <= ICO_TOUCH_B_RIGHT; k++) {
+            const IcoTouchRect *r = &l->button[k].rect;
+
+            x0 = r->x < x0 ? r->x : x0;
+            y0 = r->y < y0 ? r->y : y0;
+            x1 = r->x + r->w > x1 ? r->x + r->w : x1;
+            y1 = r->y + r->h > y1 ? r->y + r->h : y1;
+        }
+        *out = rect(x0, y0, x1 - x0, y1 - y0);
+    } else if (ctl == ICO_TOUCH_CTL_STICK) {
+        *out = rect(l->stickHomeX - l->stickR, l->stickHomeY - l->stickR, 2.0f * l->stickR,
+                    2.0f * l->stickR);
+    } else if (ctl == ICO_TOUCH_CTL_LOOK) {
+        *out = l->lookArea;
+    } else if (z >= 0) {
+        *out = l->button[z].rect;
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
+/* the control a button zone belongs to (the D-pad's four keys are one) */
+static int zone_ctl(int z)
+{
+    int c;
+
+    if (z >= ICO_TOUCH_B_UP && z <= ICO_TOUCH_B_RIGHT) {
+        return ICO_TOUCH_CTL_DPAD;
+    }
+    for (c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
+        if (ctl_zone(c) == z) {
+            return c;
+        }
+    }
+    return -1;
+}
+
+int ico_touch_menu_tap_cover(const IcoTouchLayout *l, float x, float y, int confirmCtl, int *ctl)
+{
+    int z, cover = ICO_TOUCH_COVER_NONE, who = -1;
+
+    for (z = 0; z < ICO_TOUCH_BUTTONS; z++) {
+        const IcoTouchButton *b = &l->button[z];
+        int in;
+
+        if (!b->active) {
+            continue;
+        }
+        if (b->round) {
+            const float r = 0.5f * b->rect.w;
+            const float dx = x - (b->rect.x + r), dy = y - (b->rect.y + r);
+
+            in = dx * dx + dy * dy <= r * r;
+        } else {
+            in = in_rect(&b->rect, x, y);
+        }
+        if (!in) {
+            continue;
+        }
+        if (b->alpha > 0.0f) {
+            cover = ICO_TOUCH_COVER_SHOWN;
+            who = zone_ctl(z);
+            break; /* a drawn control wins whatever lies under it */
+        }
+        if (cover == ICO_TOUCH_COVER_NONE) {
+            cover = ICO_TOUCH_COVER_HIDDEN;
+            who = zone_ctl(z);
+        }
+    }
+    if (cover != ICO_TOUCH_COVER_SHOWN && l->stickActive &&
+        ico_touch_ctl_state(l, confirmCtl) != ICO_TOUCH_OFF && in_rect(&l->stickArea, x, y)) {
+        if (l->stickAlpha > 0.0f) {
+            cover = ICO_TOUCH_COVER_SHOWN;
+            who = ICO_TOUCH_CTL_STICK;
+        } else if (cover == ICO_TOUCH_COVER_NONE) {
+            cover = ICO_TOUCH_COVER_HIDDEN;
+            who = ICO_TOUCH_CTL_STICK;
+        }
+    }
+    if (ctl != NULL) {
+        *ctl = who;
+    }
+    return cover;
+}
+
 int ico_touch_menu_taps(const IcoTouchLayout *l)
 {
     return ico_touch_ctl_state(l, ICO_TOUCH_CTL_DPAD) == ICO_TOUCH_OFF ||
