@@ -368,7 +368,9 @@ renamed zero-filled section between the markers that bound the range. A build wh
 did not come out right turns save states off at start-up with a line in the log, and the
 `game_data_range` and `game_data_ranges_binary` tests fail.
 
-At run time, the environment variable `ICO_TTY` (any value) turns on the
+### Run-time switches
+
+The environment variable `ICO_TTY` (any value) turns on the
 game's `scePrintf` output on stdout, which the retail game sent to the
 development kit's TTY; it is off otherwise (`port/platform/kernel_host.c`,
 `scePrintf`). Release programs have no console, so use it with `--console` on a program started
