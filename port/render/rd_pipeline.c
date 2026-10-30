@@ -2716,13 +2716,20 @@ bool rd__vu_policy_init(const RhiLimits *lim)
     /* the fallback's program entries */
     g_rd.vuFallbackPlain = false;
     g_rd.vuPlainWhy[0] = '\0';
+    /* PC port: the reason's kind, for the start-up line (issues 163/164: a
+     * report shows which set drew and why on its first VU line) */
+    const char *kind = "extended set (no device-table row, no lost start, no [dev] setting asks "
+                       "for the plain one)";
     if (lim && lim->vuFallbackPlain) {
         snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "on this device (%s)",
                  lim->vuFallbackPlain);
+        kind = "plain set by the device table";
     } else if (envOn("ICO_RD_VU_PLAIN")) {
         snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "by ICO_RD_VU_PLAIN=1");
+        kind = "plain set by [dev] (ICO_RD_VU_PLAIN=1)";
     } else if (s_vuHostWhy[0]) {
         snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "(%s)", s_vuHostWhy);
+        kind = "plain set after a lost start";
     }
     bool plain = g_rd.vuPlainWhy[0] != '\0';
     if (plain && envOn("ICO_RD_VU_EXTENDED")) {
@@ -2731,6 +2738,7 @@ bool rd__vu_policy_init(const RhiLimits *lim)
                 g_rd.vuPlainWhy);
         plain = false;
         g_rd.vuPlainWhy[0] = '\0';
+        kind = "extended set by [dev] (ICO_RD_VU_EXTENDED=1)";
     }
     /* the ten mesh entries' plain modules (vu_X_vs's is vu_X_plain_vs;
      * rd_replay.c rd__gpu_shutdown destroys them), made only when the
@@ -2751,6 +2759,7 @@ bool rd__vu_policy_init(const RhiLimits *lim)
             }
             plain = false;
             g_rd.vuPlainWhy[0] = '\0';
+            kind = "extended set (a plain module missing from this build)";
         }
     }
     g_rd.vuFallbackPlain = plain;
@@ -2767,11 +2776,13 @@ bool rd__vu_policy_init(const RhiLimits *lim)
     char mn[64], fn[64];
     const uint32_t mw = vuLargest(kMain, (uint32_t)sizeof(kMain), mn, sizeof(mn));
     const uint32_t fw = vuLargest(entries, (uint32_t)sizeof(entries), fn, sizeof(fn));
-    rd__log("VU shaders: the record path's modules on every device (largest %s %u words); the "
-            "fallback's program entries %s%s%s (largest %s %u words), in the start-up set only "
-            "with the vertex pre-pass off",
-            mn, mw, plain ? "plain " : "extended", plain ? g_rd.vuPlainWhy : "",
-            plain ? ": no wide-screen rule and no tick cameras on those draws" : "", fn, fw);
+    /* PC port: which set the program entries (and the draw merge's builds,
+     * rd_replay_vu.c vuMergeInit) take and why, first (issues 163/164) */
+    rd__log("VU shaders: %s%s%s: the program entries (largest %s %u words) and the mesh and grid "
+            "draws' merge builds of the same set%s; the record path's modules on every device "
+            "(largest %s %u words), in the start-up set only with the vertex pre-pass off",
+            kind, plain ? " " : "", plain ? g_rd.vuPlainWhy : "", fn, fw,
+            plain ? " (no wide-screen rule and no tick cameras on those draws)" : "", mn, mw);
     return true;
 }
 
