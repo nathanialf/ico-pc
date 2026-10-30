@@ -352,6 +352,25 @@ typedef struct UiStatesHost {
 } UiStatesHost;
 
 void ui_settings_set_states_host(const UiStatesHost *host);
+
+/* The page's slot pictures: load(png path, &w, &h) reads the PNG and makes
+   the texture (an RdTex id, 0 on failure; w and h its real size), destroy(id)
+   releases it.  The default is the renderer's (texpack_load_png and
+   rd_create_texture; none without ICO_RD, so the pictures stay empty);
+   tests set fakes, NULL puts the default back. */
+typedef struct UiStatesTexFuncs {
+    unsigned int (*load)(const char *png_path, int *w, int *h);
+    void (*destroy)(unsigned int tex);
+} UiStatesTexFuncs;
+
+void ui_settings_set_states_tex_funcs(const UiStatesTexFuncs *funcs);
+/* The rows of a slot's card (tests): out = {picture, label, action word,
+   arrow left, arrow right, area and play time, date, status line}; the
+   status line is shared by the four.  Returns 8, or 0 when the page is not
+   built (no host at the build) or slot is outside 0..UI_STATES_SLOTS-1. */
+int ui_settings_states_card(int slot, int out[8]);
+/* The pause menu's Save states row, -1 when not built (tests) */
+int ui_settings_states_row(void);
 /* After a load: the menu closes its page and puts the cursor on the pause
    menu's Save states row (the restored game is on the pause layout). */
 void ui_settings_sync_after_state_load(void);
@@ -466,6 +485,11 @@ typedef enum UiSettingsPage {
     /* Developer (main page, before Back): Developer mode, Dump textures,
        Dump models, Back */
     UI_PAGE_DEVELOPER,
+    /* Extras > Save states, and the pause menu's Save states row (only
+       built while a UiStatesHost is set before ui_settings_install): four
+       cards, each a picture, "Slot N" with its action, the area and play
+       time, and the date */
+    UI_PAGE_STATES,
     UI_PAGE_COUNT
 } UiSettingsPage;
 
@@ -622,6 +646,9 @@ typedef enum UiSettingsOpt {
     /* Game variants' Debug menu: a press row, shown while Developer mode
        is on (ico_variants_debug_menu_pressed) */
     UI_OPT_VAR_DEBUG_MENU,
+    /* Save states page: a slot's card (its label row; the action word is
+       the value row) */
+    UI_OPT_STATE_SLOT,
 #if ICO_RC_TOOLS
     /* Main's row "Share a bug report" below it, rc builds on Android alone
        (ui_settings_set_share_report_handler) */
