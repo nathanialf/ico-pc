@@ -113,6 +113,7 @@
 #include "../core/region.h" /* the disc a dump was drawn on (version 12) */
 #include "rd_mesh.h"
 #include "rd_passring.h"
+#include "rd_tex.h"
 #include "shader_consts.h"
 
 #define MAX_REFS 4096
@@ -275,6 +276,7 @@ bool rd__dump_frame(const RdFrame *f, const char *path)
     if (!f || !path) {
         return false;
     }
+    rdtex_settle(); /* the texels the decode pool still owes (rd_tex_decode.h) */
     static IdSet texs, temps, meshes;
     texs.n = temps.n = meshes.n = 0;
     collectRefs(f, &texs, &temps, &meshes);
