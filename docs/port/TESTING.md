@@ -752,11 +752,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   SKIP as `rd_vustage_ab`.
 - `rd_noplanes_ab.cmake`: the dumps of `tools/noplanes_dumps.txt` (the title's and the boot's
   frames, each drawing one screen-prim triangle key with planes, and a capture drawing none; a line
-  is the dump, `expect=same|report` and the tool's setting arguments) with the sprite planes builds
-  and under `ICO_RD_NO_SPRITE_PLANES=1` (issue 161's fallback): the second run's line that the builds
-  are off, `sprite no-planes 0` in the first; `expect=same` every named target's PNG byte for byte
-  and no command through the fallback, `expect=report` at least one command through it and the
-  targets that differ listed (`rd_noplanes_ab`;
+  is the dump, `expect=same|fallback:N|report` and the tool's setting arguments) with the sprite
+  planes builds and under `ICO_RD_NO_SPRITE_PLANES=1` (issue 161's fallback): the second run's line
+  that the builds are off, `sprite no-planes 0` in the first; `expect=same` every named target's PNG
+  byte for byte and no command through the fallback, `expect=fallback:N` byte for byte with N
+  commands through it (the title's and the boot's dumps: 2), `expect=report` at least one command
+  through it and the targets that differ listed (`rd_noplanes_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)). SKIP as `rd_vustage_ab`.
 - `rd_vumerge_ab_pixel` and `rd_vufuse_ab_pixel`: the two scripts above on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):
