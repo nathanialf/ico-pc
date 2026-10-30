@@ -13,6 +13,8 @@
  */
 #include "sif_host.h"
 #include "iop_ram.h"
+#include "state_port.h"
+#include "state_registry.h"
 #include <sifdev.h>
 #include <sifrpc.h>
 #include <stdint.h>
@@ -33,6 +35,25 @@ static unsigned int lastSid;
 static unsigned int lastRpc;
 
 static unsigned int rpcCount;
+
+/* the ids sceSifLoadModule and sceSifSetDma hand out */
+static int moduleId;
+
+static int dmaId;
+
+/* The save state's blocks (state_port.h): the counters and the ids the game
+   holds.  The server table is host callbacks registered at start-up. */
+int ico_sif_host_state_register(void)
+{
+    int rc = 0;
+
+    rc |= ico_state_register("sif.last_sid", &lastSid, sizeof lastSid, 0);
+    rc |= ico_state_register("sif.last_rpc", &lastRpc, sizeof lastRpc, 0);
+    rc |= ico_state_register("sif.rpc_count", &rpcCount, sizeof rpcCount, 0);
+    rc |= ico_state_register("sif.module_id", &moduleId, sizeof moduleId, 0);
+    rc |= ico_state_register("sif.dma_id", &dmaId, sizeof dmaId, 0);
+    return rc != 0 ? -1 : 0;
+}
 
 void ico_sif_host_last_rpc(unsigned int *sid, unsigned int *rpc, unsigned int *count)
 {
@@ -111,8 +132,6 @@ int sceSifLoadFileReset(void)
 
 int sceSifLoadModule(void *name, int arglen, int args)
 {
-    static int moduleId;
-
     (void)name;
     (void)arglen;
     (void)args;
@@ -143,7 +162,6 @@ int sceSifFreeIopHeap(int addr)
    dest.  Returns a nonzero transfer id (0 is the PS2's "not queued"). */
 int sceSifSetDma(struct sceSifDmaData *sdd, int len)
 {
-    static int dmaId;
     int i;
 
     if (sdd == NULL || len <= 0) {
