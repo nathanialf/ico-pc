@@ -230,6 +230,17 @@ figures read higher than Vulkan's.
 Both backends fill the pipeline pool's fields ([The pipeline pool](#the-pipeline-pool)).
 `uploadWriteBytes` is Direct3D 11's alone: the bytes its submits wrote from upload buffers' CPU
 copies into their GPU buffers ([Direct3D 11](#direct3d-11), **The written mark**); 0 elsewhere.
+`videoMemBudget`, `videoMemUsage` and `videoMemAvailable` are Direct3D 11's and 12's: the adapter's
+local video memory segment as `IDXGIAdapter3::QueryVideoMemoryInfo` gives it (the budget Windows
+grants this process, its current usage, and what it can still reserve), in bytes. The backends ask
+at most every 250 ms (`d11_video_memory`, `dx_video_memory`: the query is a kernel call, and
+`rhi_get_stats` runs every replay); the adapter is queried for `IDXGIAdapter3` once at start, and
+when it is not offered (or answers a budget of 0) the fields read 0 and the init log says
+`video memory budget: not reported by this adapter`. 0 on Vulkan and OpenGL. The window prints them
+in the 10 s `window: memory:` line, in `window: slow replay` lines whose fence wait is over 50 ms,
+and once a block when the usage reaches 90 % of the budget (`port/platform/window_lines.c`;
+[WORK_BUFFERS.md](WORK_BUFFERS.md#the-upload-ring-shrinks) for the other half of issue 126's
+memory finding).
 The Vulkan-only fields read 0 on D3D12: the memory gauges (live and peak allocations, their bytes,
 the device's limit), `memoryAllocs`, `memoryFrees`, `memoryFallbacks`, `orderBarriers`
 (`port/rhi/rhi.h` (`RhiStats`); `port/rhi/vk/vk_swapchain.c` (`rhi_acquire_backbuffer`,
