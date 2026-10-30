@@ -1476,9 +1476,10 @@ static int mount_archive(const char *path, const IcoDiscInfo *want, const IcoDis
     ico_vfs_set_disc(vfs);
     fprintf(stderr,
             "ico_pc: game data %s (%s, %u files, %llu bytes; from an image with SHA-1 %s, "
-            "accepted by %s)\n",
+            "accepted by %s)%s\n",
             path, info.disc_id, (unsigned)info.stored, (unsigned long long)info.file_bytes,
-            info.iso_sha1, info.accepted_by);
+            info.iso_sha1, info.accepted_by, ico_host_drive_note(ICO_DRIVE_DATA, path));
+    ico_host_drive_warn(ICO_DRIVE_DATA);
     *disc = row;
     return 0;
 }
@@ -2228,8 +2229,10 @@ static int host_main(int argc, char **argv)
         char user[ICO_PATH_MAX];
 
         ico_host_pref_dir(user, sizeof(user));
-        fprintf(stderr, "ico_pc: user folder %s (%s)\n", user,
-                ico_host_pref_is_portable() ? "portable" : "user profile");
+        fprintf(stderr, "ico_pc: user folder %s (%s)%s\n", user,
+                ico_host_pref_is_portable() ? "portable" : "user profile",
+                ico_host_drive_note(ICO_DRIVE_USER, user));
+        ico_host_drive_warn(ICO_DRIVE_USER);
         /* the report file of an abnormal end (report.h): its files' places
            now, the oldest reports beyond the newest few deleted */
         if (logs_ready) {
