@@ -21,6 +21,7 @@ endif()
 include(cmake/IcoFlags.cmake)
 include(cmake/IcoSources.cmake)
 include(cmake/IcoExclusions.cmake)
+include(cmake/IcoStateSections.cmake)
 
 # ICO_HEADLESS=OFF (the default) is the windowed ico_pc: the seki layer
 # draws through port/render (ICO_RD) into an SDL3 window. ON is the headless
@@ -230,6 +231,9 @@ foreach(lib ${ICO_GAME_OBJECT_LIBS})
 endforeach()
 add_library(ico_game STATIC ${ICO_GAME_OBJECTS})
 set_target_properties(ico_game PROPERTIES LINKER_LANGUAGE C)
+# the game's .data and .bss in sections of their own, for save states
+# (cmake/IcoStateSections.cmake, port/platform/game_data_range.h)
+ico_state_sections(ico_game ${ICO_GAME_OBJECT_LIBS})
 # the game code reads the region's index, ico_region (port/core)
 target_link_libraries(ico_game PUBLIC ico_region)
 
@@ -448,6 +452,22 @@ if(Python3_FOUND)
         add_test(NAME rc_tools_binary
                  COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_rc_text.py"
                          --expect ${_ico_rc_expect} "$<TARGET_FILE:ico_pc>")
+    endif()
+endif()
+
+# the game's .data/.bss ranges (save states; cmake/IcoStateSections.cmake): the
+# checker's own cases, and this build's program read with the toolchain's nm
+# (not run, so a cross build checks it too): the game's globals, its file
+# statics among them, inside the ranges and the port's outside
+if(Python3_FOUND)
+    add_test(NAME game_data_ranges_selftest
+             COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_game_data_ranges.py"
+                     --selftest)
+    if(TARGET ico_pc AND CMAKE_NM AND NOT APPLE AND NOT ANDROID)
+        add_test(NAME game_data_ranges_binary
+                 COMMAND "${Python3_EXECUTABLE}" -I
+                         "${CMAKE_SOURCE_DIR}/tools/check_game_data_ranges.py"
+                         --nm "${CMAKE_NM}" "$<TARGET_FILE:ico_pc>")
     endif()
 endif()
 
