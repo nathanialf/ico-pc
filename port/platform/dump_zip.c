@@ -161,6 +161,66 @@ int ico_frame_dump_zip(const char *zip_path, const char *dump_path, const char *
     return files_zip(zip_path, paths, n, log_path, why, why_size);
 }
 
+int ico_zip_add_file(const char *zip_path, const char *file_path, const char *entry, char *why,
+                     size_t why_size, size_t *added_size)
+{
+    mz_zip_archive rd, wr;
+    size_t zsize = 0, fsize = 0, osize = 0;
+    void *zdata = read_all(zip_path, &zsize), *fdata = read_all(file_path, &fsize), *out = NULL;
+    int r = -1;
+
+    memset(&rd, 0, sizeof(rd));
+    memset(&wr, 0, sizeof(wr));
+    if (zdata == NULL) {
+        say(why, why_size, "cannot read the zip", zip_path);
+    } else if (fdata == NULL || fsize == 0) {
+        say(why, why_size, "cannot read the file", file_path);
+    } else if (!mz_zip_reader_init_mem(&rd, zdata, zsize, 0)) {
+        say(why, why_size, "cannot open the zip",
+            mz_zip_get_error_string(mz_zip_get_last_error(&rd)));
+    } else {
+        int ok = mz_zip_writer_init_heap(&wr, 0, 0) != 0;
+        const mz_uint n = mz_zip_reader_get_num_files(&rd);
+
+        for (mz_uint i = 0; ok && i < n; i++) {
+            ok = mz_zip_writer_add_from_zip_reader(&wr, &rd, i) != 0;
+        }
+        /* a PNG is already deflated (stored blocks inside): the zip still
+           shrinks it, so the default level */
+        ok = ok && mz_zip_writer_add_mem(&wr, entry, fdata, fsize, MZ_DEFAULT_LEVEL) != 0;
+        ok = ok && mz_zip_writer_finalize_heap_archive(&wr, &out, &osize) != 0;
+        mz_zip_writer_end(&wr);
+        mz_zip_reader_end(&rd);
+        if (!ok) {
+            say(why, why_size, "cannot rebuild the zip", NULL);
+        } else {
+            /* a temporary file renamed over the zip: a write that fails
+               half way leaves the zip as it was */
+            char tmp[4200];
+
+            snprintf(tmp, sizeof(tmp), "%s.tmp", zip_path);
+            FILE *f = ico_fopen(tmp, "wb");
+            const int wrote = f != NULL && fwrite(out, 1, osize, f) == osize;
+
+            if (f != NULL && fclose(f) != 0) {
+                r = -1;
+            } else if (wrote && ico_rename_replace(tmp, zip_path) == 0) {
+                r = 0;
+            }
+            if (r < 0) {
+                ico_remove(tmp);
+                say(why, why_size, "cannot write", zip_path);
+            } else if (added_size != NULL) {
+                *added_size = fsize;
+            }
+        }
+        mz_free(out);
+    }
+    free(zdata);
+    free(fdata);
+    return r;
+}
+
 int ico_loss_dump_zip(const char *zip_path, const char *lost_path, const char *before_path,
                       const char *log_path, char *why, size_t why_size)
 {

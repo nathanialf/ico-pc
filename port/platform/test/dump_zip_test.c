@@ -14,7 +14,8 @@
  * also of F12's pair (ico_frame_dump_zip with the tick before); its path
  * (ico_loss_dump_path); the pruning
  * (ico_loss_dump_prune) keeps the newest loss zips by name and leaves
- * every other file alone.
+ * every other file alone.  ico_zip_add_file: the bug-report picture added to
+ * a finished zip, its entries kept.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -152,6 +153,59 @@ static void test_loss(const char *base)
     snprintf(zip, sizeof(zip), "%s/no-such-folder", dir);
     CHECK(ico_loss_dump_prune(zip, 3) == -1);
     ico_rmdir(dir);
+}
+
+/* ico_zip_add_file: the bug-report picture added to a finished zip; the
+   entries it held stay with their bytes, the new one is there, a missing
+   file or zip changes nothing */
+static void test_add(const char *base)
+{
+    char dump[1200], log[1200], png[1200], zip[1200], why[160];
+    char rd[700], pic[5000], text[] = "a log\n";
+    size_t added = 0;
+    mz_zip_archive z;
+
+    snprintf(dump, sizeof(dump), "%s/add-v1.rddump", base);
+    snprintf(log, sizeof(log), "%s/add.log", base);
+    snprintf(png, sizeof(png), "%s/add-present.png", base);
+    snprintf(zip, sizeof(zip), "%s/add.zip", base);
+    for (size_t i = 0; i < sizeof(rd); i++) {
+        rd[i] = (char)(i * 5 + 1);
+    }
+    for (size_t i = 0; i < sizeof(pic); i++) {
+        pic[i] = (char)(i * 3 + (i >> 4));
+    }
+    CHECK(put(dump, rd, sizeof(rd)) == 0);
+    CHECK(put(log, text, sizeof(text) - 1) == 0);
+    CHECK(put(png, pic, sizeof(pic)) == 0);
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, log, why, sizeof(why)) == 0);
+    CHECK(ico_zip_add_file(zip, png, "add-present.png", why, sizeof(why), &added) == 0);
+    CHECK(added == sizeof(pic));
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 3);
+    CHECK(entry_is(&z, "add-v1.rddump", rd, sizeof(rd)));
+    CHECK(entry_is(&z, "add.log", text, sizeof(text) - 1));
+    CHECK(entry_is(&z, "add-present.png", pic, sizeof(pic)));
+    mz_zip_reader_end(&z);
+    /* the first .rddump is still the frame */
+    {
+        void *first = ico_dump_zip_extract(zip, &added, NULL, 0);
+
+        CHECK(first != NULL && added == sizeof(rd));
+        free(first);
+    }
+    /* a missing picture: refused, the zip as it was */
+    remove(png);
+    why[0] = '\0';
+    CHECK(ico_zip_add_file(zip, png, "x.png", why, sizeof(why), NULL) == -1);
+    CHECK(why[0] != '\0');
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 3);
+    mz_zip_reader_end(&z);
+    remove(zip);
+    CHECK(ico_zip_add_file(zip, log, "x.txt", why, sizeof(why), NULL) == -1);
+    remove(log);
 }
 
 int main(int argc, char **argv)
@@ -320,6 +374,7 @@ int main(int argc, char **argv)
     }
 
     test_loss(argv[1]);
+    test_add(argv[1]);
 
     printf("dump_zip_test: %s\n", fails ? "FAILED" : "ok");
     return fails ? 1 : 0;

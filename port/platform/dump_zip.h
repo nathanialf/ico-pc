@@ -23,6 +23,14 @@
 int ico_frame_dump_zip(const char *zip_path, const char *dump_path, const char *prev_path,
                        const char *log_path, char *why, size_t why_size);
 
+/* Adds the file file_path to the zip zip_path (a zip this code wrote) under
+   the name entry, keeping every entry it holds (the bug-report picture:
+   the presented PNG exists only after the next present, so after the zip).
+   0: added; -1: the zip is as it was, why (when not NULL) holding the
+   reason.  *added_size (when not NULL) is the file's size in bytes. */
+int ico_zip_add_file(const char *zip_path, const char *file_path, const char *entry, char *why,
+                     size_t why_size, size_t *added_size);
+
 /* The device-loss dump (window_host.c device_lost_quit): zip_path holding
    lost_path, then before_path (NULL or "": none), then log_path, each under
    its own name, as ico_frame_dump_zip writes its one dump (the same
