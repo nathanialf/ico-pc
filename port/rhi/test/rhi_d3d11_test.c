@@ -15,6 +15,8 @@
  *  1d. one upload buffer at two storage slots of one group on WARP (t0 from
  *      its start, t5 from an offset: the draw merge's binding), more views
  *      of it than the backend keeps
+ *  1e. the video memory figures of RhiStats on WARP (DXGI reports a budget
+ *      for it too): a budget, a usage, and two reads inside 250 ms equal
  *   2. the cells on the default hardware adapter (skipped when there is
  *      none: the default is then WARP again)
  *   3. the swapchain on a hidden SDL window: six frames of clear, readback
@@ -227,6 +229,49 @@ static int markFrame(RhiBuffer up, RhiBuffer rb, const uint64_t *marks, uint32_t
         failures++;
     }
     return failures;
+}
+
+/* RhiStats' video memory (IDXGIAdapter3::QueryVideoMemoryInfo, local
+ * segment): WARP reports a budget; the reads inside the 250 ms interval
+ * give the same figures (the query is a kernel call, not made per replay) */
+static int runVideoMemory(void)
+{
+    if (!rhi_create_backend("d3d11")) {
+        rhi_test_log("SKIP video memory: no Direct3D 11 backend in this build\n");
+        return 77;
+    }
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test video memory"};
+    if (!rhi_init(&dd)) {
+        rhi_test_log("SKIP video memory: no usable device (see messages above)\n");
+        return 77;
+    }
+    if (!acceptWarp()) {
+        rhi_shutdown();
+        return 77;
+    }
+    int failures = 0;
+    RhiStats a, b;
+    rhi_get_stats(&a);
+    rhi_get_stats(&b);
+    rhi_test_log("  video memory: budget %llu MB, usage %llu MB, available to reserve %llu MB\n",
+                 (unsigned long long)(a.videoMemBudget >> 20),
+                 (unsigned long long)(a.videoMemUsage >> 20),
+                 (unsigned long long)(a.videoMemAvailable >> 20));
+    if (a.videoMemBudget == 0) {
+        rhi_test_log("FAIL video memory: no budget reported\n");
+        failures++;
+    }
+    if (a.videoMemAvailable > a.videoMemBudget) {
+        rhi_test_log("FAIL video memory: more available to reserve than the budget\n");
+        failures++;
+    }
+    if (a.videoMemBudget != b.videoMemBudget || a.videoMemUsage != b.videoMemUsage ||
+        a.videoMemAvailable != b.videoMemAvailable) {
+        rhi_test_log("FAIL video memory: two reads inside 250 ms differ\n");
+        failures++;
+    }
+    rhi_shutdown();
+    return failures ? 1 : 0;
 }
 
 static int runWrittenMark(void)
@@ -561,6 +606,10 @@ int main(int argc, char **argv)
     rhi_test_log("\n== 1d. Direct3D 11 on WARP: one upload buffer at t0 and t5\n");
     int rcViews = runTwoViews();
 
+    /* 1e: the video memory figures */
+    rhi_test_log("\n== 1e. Direct3D 11 on WARP: the video memory budget\n");
+    int rcMem = runVideoMemory();
+
     /* 2: the hardware adapter */
     rhi_test_log("\n== 2. Direct3D 11 on the default hardware adapter\n");
     _putenv("ICO_D3D11_ADAPTER=");
@@ -586,8 +635,8 @@ int main(int argc, char **argv)
     const RhiTestConfig vk = {"vulkan", "rhi_d3d11_test (Vulkan)", false, NULL, NULL};
     int rcVk = rhi_test_run_cells(&vk);
 
-    bool failed = rcWarp == 1 || rcMapped == 1 || rcMark == 1 || rcViews == 1 || rcHw == 1 ||
-                  rcSwap == 1 || rcVk == 1;
+    bool failed = rcWarp == 1 || rcMapped == 1 || rcMark == 1 || rcViews == 1 || rcMem == 1 ||
+                  rcHw == 1 || rcSwap == 1 || rcVk == 1;
     bool ran = rcWarp == 0 || rcHw == 0 || rcSwap == 0;
     char summary[1024];
     snprintf(summary, sizeof(summary),
@@ -596,6 +645,7 @@ int main(int argc, char **argv)
              "1b. the same, constant buffers mapped: %s\n"
              "1c. the upload ring's written mark: %s\n"
              "1d. one upload buffer at t0 and t5: %s\n"
+             "1e. the video memory budget: %s\n"
              "2. Direct3D 11 on hardware (%s): %s\n"
              "3. Direct3D 11 swapchain: %s\n"
              "4. Vulkan (comparison): %s\n"
@@ -605,8 +655,8 @@ int main(int argc, char **argv)
              : ran  ? "rhi_d3d11_test: PASSED"
                     : "rhi_d3d11_test: nothing could run",
              warpAdapter[0] ? warpAdapter : "-", verdict(rcWarp), verdict(rcMapped),
-             verdict(rcMark), verdict(rcViews), hwAdapter, verdict(rcHw), verdict(rcSwap),
-             verdict(rcVk),
+             verdict(rcMark), verdict(rcViews), verdict(rcMem), hwAdapter, verdict(rcHw),
+             verdict(rcSwap), verdict(rcVk),
              s_debugActive ? "on (errors fail the test)"
                            : "not installed (Settings > Optional features > Graphics Tools "
                              "adds it)",
