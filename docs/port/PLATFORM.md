@@ -373,8 +373,8 @@ linked program's symbol table at test time, the game's file statics (`texTable`,
 
 A save state is a snapshot of the whole running game taken at the host loop's quiescent point,
 written to a file and put back later (`port/platform/state.h`). This section is the file, the
-registry of the port's globals and the relocation; the save and load sequences are
-`port/game/state_host.c`'s.
+registry of the port's globals and the relocation, then the save and load sequences
+(`port/game/state_host.c`, [Saving and loading](#saving-and-loading)).
 
 ### The file
 
@@ -432,7 +432,7 @@ the hash (`ICO_STATE_OTHER_SETTINGS`, the detail `key=saved (now cur)`).
 
 The port's own simulation globals are not in the game's data ranges, so each owner registers its
 blocks by name (`ico_state_register(name, p, n, flags)`, `port/platform/state_registry.h`, at most
-`ICO_STATE_MAX_ENTRIES` 64). `ico_state_register_port` (`port/platform/state_port.c`, in the
+`ICO_STATE_MAX_ENTRIES` 96). `ico_state_register_port` (`port/platform/state_port.c`, in the
 program only) calls the owners' functions once from `ico_host_init`, before the game's first
 thread, in a fixed order, so the table is the same in every run of a build (`state_port.h` says
 what each owner registers and why):
@@ -451,8 +451,10 @@ what each owner registers and why):
 | `door_grace.c` | `door_grace.armed`, `.arm_from`, `.arm_to`, `.arm_holding`, `.left`, `.from` | |
 | `gfx_null.c` | `dma.channels` | |
 | `host_loop.c` | `host_loop.vsyncs`, `host_loop.field` | |
+| `port/audio/audio_host.c` (`ico_audio_state_register`) | `spu2.state` (the SPU2: RAM, cores, register shadow, time, event queue, DMA channels and their callbacks, the IRQ callback, the reverb presets; not the render's scratch or the statistics), `spu2_sd.time`, `spu2_sd.effect_attr`, `mix_gain.tag`, `mix_gain.cache`, `mix_gain.ready` (the gains themselves are the player's settings), `sndn2.host` (the driver's pages, counters, reply and pitch table), `sndn2.carry`, `sndn2.staging`, `sndn2.adpcm`, `sndn2.queue`, `sndn2.q_write`, `sndn2.q_read`, `sndn2.pending`, `sndn2.pcm`, `audio.vsync_index` (which vsyncs render 801 frames at 59.94 Hz) | AUDIO; SCAN on `spu2.state` and `sndn2.host` |
+| `sce/libsndn2/sound.c` (`ico_sound_state_register`) | the EE sequencer's .bss: `sound.vab`, `sound.slot`, `sound.seq`, `sound.com`, `sound.packet`, `sound.iop2ee`, `sound.iop2ee_p`, `sound.se`, `sound.head`, `sound.client`, `sound.vab_hd`, `sound.seq_body`, `sound.hd_rel` (compiled into the sound library, so outside the game's data ranges) | AUDIO; SCAN on the pointer blocks |
 
-43 blocks, about 2.1 MB, most of it IOP RAM. SCAN marks a block that may hold host addresses (the
+72 blocks, over 4 MB, most of it IOP RAM and the SPU2's RAM (2 MB each). SCAN marks a block that may hold host addresses (the
 relocation scans it); AUDIO one copied under the audio lock; CLOCK a counter a load rewinds with
 the game (the Main tick count, and with it the pad script's position). Not registered: the
 scheduler's tables (`ico_sched_state_save` and `_restore` move their pointers themselves; a
@@ -490,6 +492,103 @@ pinned) and `pobjImageTables`' host block (POBJ). A word matches a range when `l
   caller in the image's code and that call's name in the image, every INTC and DMAC handler in
   the image's code (`ico_kernel_state_handlers`). A failure names the first offender; the load
   then puts its backup back (`ICO_STATE_SELF_CHECK`).
+
+### Saving and loading
+
+`port/game/state_host.c` (the program, both builds; `port/game/state_rules.c` holds the
+decisions without the game, unit-tested by `state_host`) implements `state.h`. Requests
+(`ico_state_request_save/load/delete`, from the Save states page's host in `main_host.c`, F5 and
+F9 in `window_host.c`) are latched and performed by `ico_state_host_poll`, which `main_host.c`
+calls right after `ico_host_step`: every game fiber waits in a kernel call, the scheduler is not
+dispatching, no interrupt or host call is open. The first call checks the build once: not a
+sanitizer build, the fibers on minicoro's assembly backend, `ico_state_register_port` complete,
+`ico_game_data_ranges_verify` passed, the image found, the arena and the pool there, a folder
+under the pref dir (`<pref>/states/<slug>`, the files folder on Android); else save states are off
+for the run (`ico_state_available` 0, the reason in `ico_state_off_reason` and the log).
+
+**The conditions** (`ico_state_conditions`, in this order): save states on; for a save, the
+pause menu or a port page over it (`systemStatus[5]` set, past the title stage, the current
+layout the disc's pause layout or a port layout); no stage switch (`systemStatus[6]` 0); no memory
+card command (`ico_mc_host_pending`); the drive idle (`ico_cdvd_host_idle`: no command waiting
+for a vsync, no thread in `sceCdSync(0)`, no stream); no movie (`ico_movie_open`); not photo mode,
+the Extras credits or the music gallery. A load needs no pause: it runs from the title's Extras
+page too.
+
+**A save** copies, at the poll: the audio blocks under `ico_audio_lock`, then the arena, the two
+game data ranges, the other registered blocks, the scheduler's tables and each live fiber
+(`ico_sched_state_save`: its control block page and its stack from the saved stack pointer minus
+128 bytes to the top), `pobjImageTables`' block when a model is being loaded, and the ranges
+(the image, the arena, the pool and its slot size, the game data, the pobj block, whether each was
+pinned or fixed, the renderer's highest mesh generation). The header gets the identity, the disc,
+the simulation keys, the time, the play time, the stage, the Main tick and the vsync count.
+`ico_state_file_write` packs and writes on its thread; the next polls collect the result (the
+popup and the `saved` line come then). The copy is about 55 MB at most and is freed when the
+write is collected. In the window build the next frame presented after the save is the slot's
+picture: `window_host.c` reads the DISPLAY target (`rd_read_display`) once
+`ico_state_wants_thumbnail` says so and hands it to `ico_state_thumbnail`, which box-filters it to
+320 pixels wide and writes `slot<n>.png` on a thread of its own (the pause menu is in it). No
+picture within about two seconds (a minimized window): none, logged.
+
+**A load** first collects a write in flight, checks the conditions, reads the header and checks
+it against this run's (`ico_state_header_check`), inflates every section into new buffers and
+checks their sizes against this build's, then, under `ico_audio_lock`:
+
+1. the textures' live serial counter read (`tex_HostNextSerial`, the window build), the packet
+   scratch block freed (`pac_HostStateFixup(1)`), the live `pobjImageTables` block kept aside;
+2. the backup: copies of the arena, the game data, the registered blocks and the scheduler with
+   its fibers;
+3. the game data, the arena and the registered blocks copied in; the scheduler and its fibers
+   put back with the relocation (`ico_sched_state_restore`, which discards the live fibers);
+4. when any range moved, the conservative scan over the arena, the game data, every SCAN block
+   and the copy of the pobj block; then the scratch pointer the game data brought back forgotten
+   (`pac_HostStateFixup(0)`) and the pobj copy installed (`PObj_SetImageTables`);
+5. the self-checks (`ico_state_reloc_check`, heap root `ios_partition_root`); a failure, or a
+   scheduler that would not restore, puts the backup back (the scheduler restored from its copy
+   with nothing moved), frees the pobj copy and refuses with `ICO_STATE_SELF_CHECK`: the game goes
+   on as before;
+6. committed: the old pobj block freed, every loaded texture given a new serial above both runs'
+   (`tex_HostReserialAll`), every VU mesh retired and the mesh generations put above the saving
+   run's (`rd_drop_vu_meshes`, so no packet's old mesh id names a mesh made after the load), the
+   scene latch cleared so the next frame remakes the scene targets (`gsb_HostSceneRelatch`).
+
+Then, unlocked: the audio output's queue dropped (`ico_audio_host_flush`,
+[AUDIO.md](AUDIO.md)), the cached voice volumes issued again under the gains now; a camera cut at
+the load and again at the next poll, so the presenter does not blend the old picture into the
+restored one ([WORK_BUFFERS.md](WORK_BUFFERS.md)); the game-state view's baseline taken again
+(`ico_gs_rebaseline`, the run's and the session's counters kept: [DIVERGENCES.md](DIVERGENCES.md));
+the achievements' per-tick poll told the Main tick went back (`ico_ach_host_state_loaded`); the pad
+recording's line `# state loaded slot N (Main tick T)`; the menu told
+(`ui_settings_sync_after_state_load`); the simulation's FP mode set again. The Main tick and the
+pad script's position are CLOCK blocks: a load rewinds them with the game. The memory peak of a
+load is the staging and the backup, about 110 MB.
+
+**Delete** removes `slot<n>.ics` and `slot<n>.png`. **The listing** (`ico_state_list`) reads the
+four headers and checks each against this run (`loadable`, `why_not`), cached until a save, a
+load, a delete or a change of the simulation keys.
+
+**The [dev] keys** (`main_host.c` reads them, `ico_state_dev_set`): `state_save_at = "<tick>:<slot>"`
+and `state_load_at = "<tick>:<slot>"` save and load once when the Main tick reaches the value
+(the save under the same conditions as any other, so the game must be paused);
+`state_hash_at = "<tick>"` logs `state: hash <xxh3-64> of arena+gdata+gbss at tick N` each time the
+tick reaches it (again after a load brought the tick back). The headless round trip uses them.
+
+**Log lines** (prefix `state:`):
+
+| line | when |
+| --- | --- |
+| `state: save states on: <n> blocks (<bytes> bytes, <bytes> of them audio), build id <16 hex>, <fixed image\|relocatable image>, arena <pinned\|not pinned>, fiber pool <pinned\|not pinned>, folder <dir>` | once, the first poll |
+| `state: save states are off: <reason>` | once, instead of the line above |
+| `state: the game's data ranges are not bracketed on this build (<why>): save states are off` | once, the verify failed |
+| `state: saved slot N (<path>): arena <raw> -> <packed>, gdata ..., gbss ..., reg ..., audio ..., sched ..., fibers ..., pobj ..., ranges ...; <k> fibers; copy <ms> ms, write <ms> ms, file <bytes> bytes` | a save written |
+| `state: loaded slot N (saved at Main tick T, stage S): deltas module +0x0 (fixed image), arena +0x0 (pinned), pool +0x0 (pinned), pobj ... ; words rewritten [(nothing moved)] arena .., gdata .., gbss .., registry .., pobj ..; checks P partitions, B blocks, T threads, H handlers; K fibers; apply <ms> ms` | a load done |
+| `state: refused <save\|load\|delete> slot N: <reason>[: <detail>]` | every refusal: save states off, not on the pause menu, a stage switch, the card, the disc, a movie, another mode (photo mode, the credits, the music gallery), the slot empty, a damaged file, another build (its commit), another disc, another platform, settings differ (`key=saved (now cur)`), the self-checks (the failing check; the backup restored), the file not written (why), busy |
+| `state: deleted slot N` | a delete |
+| `state: slot N's picture written (<path>, WxH)`, `... could not be written`, `state: slot N has no picture (no frame was presented)` | the picture |
+| `state: [dev] save at Main tick ..., load at ..., hash at ...` and `state: hash ...` | the [dev] keys |
+| `audio: the output's queue dropped after a save state's load` | a load in the window build |
+| `stats: the baseline taken again after a save state's load (stage S); the run's counters kept` | a load |
+
+With developer mode on, the scan logs each moved word (`state: moved the word at ...`).
 
 ## Register pages
 
