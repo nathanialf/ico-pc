@@ -410,7 +410,16 @@ void ClearStreamMotionEntry(GObj *gobj)
 /* the cleared entry every slot is reset to */
 static SMotion emptyEntry_pal = {0, 0, -1, -1, -1, {0}, 0}; /* derived name */
 
-static SMotion emptyEntry_ntscaug6jun26 = {0, 0, -1, -1, {0}, 0}; /* derived name */
+/* PC port: the 2001 builds' entry has no next word (decomp
+   streamMotionManager.c lines 61-100, 392 and 412); the host keeps the
+   later layout for every disc, so the 2001 values are placed by name (the
+   positional list gave the same words, next 0 standing for obj). */
+static SMotion emptyEntry_ntscaug6jun26 = {.nodeNum = 0,
+                                           .shapeNum = 0,
+                                           .size = -1,
+                                           .cur = -1,
+                                           .obj = {0},
+                                           .finishFunc = 0}; /* derived name */
 
 #define emptyEntry (*PAL_NTSCAUG6JUN26(&emptyEntry_pal, &emptyEntry_ntscaug6jun26))
 
