@@ -213,8 +213,9 @@ ico_settings_test(settings_test test/settings_test.c)
 # hide the title's logo
 ico_settings_test(settings_extras_test test/settings_extras_test.c)
 # settings_states_test: the Save states page, the pause menu's row at pitch 16
-# and the Extras link over a fake host (the other discs' runs: the pause rows
-# and the link on their numbers)
+# and the Continue screen's Square prompt over a fake host and a fake Continue
+# screen; Extras has no Save states row (the other discs' runs: the pause
+# rows, Extras and the prompt on their numbers)
 ico_settings_test(settings_states_test test/settings_states_test.c)
 # settings_extra_test: more Settings menu tests; each settings test file
 # stays well under the source size cap (tools/check_no_rom.sh), so new

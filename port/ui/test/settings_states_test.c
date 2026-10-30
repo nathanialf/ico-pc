@@ -1,9 +1,12 @@
 /* settings_states_test.c: the Save states page, the pause menu's row and the
- * Extras link (settings.c, "the Save states page"), over the shared fixture
- * (settings_fixture.h) with a fake UiStatesHost and fake picture textures.
- * CPU only; the host's own work (files, memory) is state_host_test's. */
+ * Continue screen's prompt (settings.c, "the Save states page"), over the
+ * shared fixture (settings_fixture.h) with a fake UiStatesHost, fake picture
+ * textures and a fake Continue screen.  CPU only; the host's own work
+ * (files, memory) is state_host_test's. */
 #include "settings_fixture.h"
+#include "pointer.h"
 #include "popup.h"
+#include "ui_mouse.h"
 
 #include <time.h>
 
@@ -131,6 +134,48 @@ static void errRelease(char *out, size_t n)
     }
 }
 
+/* The Continue screen as the fixture plays it: the file select (19 on the
+   European disc, la_mc_load_file_select; no rows of its own here) linked to
+   the files' layout (14, la_mc_file_select) holding the ten files' item rows
+   at their places (x 210 + 50 k, y 70 and 90).  The files' fake returns the
+   file under the cursor on the confirm, as the game's does; the file
+   select's fake records the item it is handed and its first ticks. */
+static int s_lfItem = -2, s_lfFirsts;
+
+static int fakeFileSelect(int first, int item)
+{
+    (void)first;
+    (void)item;
+    const int cur = texLayout[fxLayout(14)].curItem - ico_region_cur()->row_mc_item;
+    return (pad[0].flags & lt_ext_confirm_button()) ? cur : -1;
+}
+
+static int fakeLoadFiles(int first, int item)
+{
+    s_lfFirsts += first != 0;
+    s_lfItem = item;
+    return -1;
+}
+
+static void fakeContinue(void)
+{
+    const int lf = fxLayout(19), mf = fxLayout(14), it = ico_region_cur()->row_mc_item;
+    for (int i = 0; i < 10; i++) {
+        setRow(it + i, -1, -1, i < 5 ? it + i + 5 : -1, i >= 5 ? it + i - 5 : -1, -1, -1,
+               i < 5 ? 70 : 90);
+        texProperty[it + i].dispX = 210 + 50 * (i % 5);
+        texProperty[it + i].dispW = 20;
+        texProperty[it + i].dispH = 30;
+    }
+    setLayout(mf, it, it + 10, it, -1);
+    setLayout(lf, it + 10, it + 10, -1, mf);
+    texLayout[mf].proc = fakeFileSelect;
+    texLayout[lf].proc = fakeLoadFiles;
+    s_mcFilesShown = 0;
+    s_lfItem = -2;
+    s_lfFirsts = 0;
+}
+
 /* the pause menu or the title built fresh, with or without the host (it is
    read when the menus are built) */
 static void startMenus(int withHost, int stage)
@@ -141,6 +186,7 @@ static void startMenus(int withHost, int stage)
     resetFakes();
     useConfig("version = 1\n");
     fakeTables();
+    fakeContinue();
     lt_ext_reset();
     ui_settings_reset();
     memset(pad, 0, sizeof(pad));
@@ -168,30 +214,22 @@ static int pauseToStates(void)
     return l;
 }
 
-/* the page opened from the title: Settings, Extras, Save states */
-static int titleToStates(void)
+/* the Continue screen, its files shown (the card check done) */
+static void toContinue(void)
 {
-    const int t = fxLayout(13);
-    lt_switch_layout(t);
-    CHECK(settle(t, 60), "the title");
-    press(0x4000);
-    press(lt_ext_confirm_button());
-    const int mainL = ui_settings_page_layout(UI_PAGE_MAIN);
-    CHECK(settle(mainL, 60), "the title opens Settings");
-    const int exL = openPage(mainL, -1, UI_PAGE_EXTRAS);
-    int labels[16];
-    const int n = ui_settings_page_rows(UI_PAGE_EXTRAS, labels, NULL, NULL, 16);
-    int link = -1;
-    for (int i = 0; i < n; i++) {
-        if (lt_ext_prop(labels[i])->right == ui_settings_page_layout(UI_PAGE_STATES)) {
-            link = labels[i];
-        }
-    }
-    CHECK(link >= 0, "the Extras page links the Save states page");
-    lt_ext_layout(exL)->curItem = link;
-    press(lt_ext_confirm_button());
+    lt_switch_layout(fxLayout(19));
+    CHECK(settle(fxLayout(19), 60), "the Continue screen (%d)", current_layout_id);
+    s_mcFilesShown = 1;
+    frame(0);
+}
+
+/* the page opened from the Continue screen: Square */
+static int continueToStates(void)
+{
+    toContinue();
+    press(LT_PAD_SQUARE);
     const int l = ui_settings_page_layout(UI_PAGE_STATES);
-    CHECK(settle(l, 60), "the Save states page from Extras (%d)", current_layout_id);
+    CHECK(settle(l, 60), "the Save states page from the Continue screen (%d)", current_layout_id);
     return l;
 }
 
@@ -296,14 +334,13 @@ static void testPauseRows(void)
           "no host, no stage: Back where the data has it");
 }
 
-/* Extras: a Save states link after Credits from both entries when the host
-   was set; not there without it */
-static void testExtrasLink(void)
+/* Extras: nine rows from both entries, host or not, none of them Save states */
+static void testExtrasRows(void)
 {
     for (int title = 0; title < 2; title++) {
         for (int host = 0; host < 2; host++) {
             startMenus(host, 11);
-            int labels[24], opts[24];
+            int labels[24];
             if (title) {
                 const int t = fxLayout(13);
                 lt_switch_layout(t);
@@ -315,39 +352,197 @@ static void testExtrasLink(void)
             }
             const int ml = ui_settings_page_layout(UI_PAGE_MAIN);
             CHECK(settle(ml, 60), "title %d: the menu", title);
-            const int exL = openPage(ml, -1, UI_PAGE_EXTRAS);
-            const int n = ui_settings_page_rows(UI_PAGE_EXTRAS, labels, opts, NULL, 24);
-            CHECK(n == (host ? 10 : 9), "title %d, host %d: %d Extras rows", title, host, n);
-            int link = -1;
+            openPage(ml, -1, UI_PAGE_EXTRAS);
+            const int n = ui_settings_page_rows(UI_PAGE_EXTRAS, labels, NULL, NULL, 24);
+            CHECK(n == 9, "title %d, host %d: %d Extras rows", title, host, n);
             for (int i = 0; i < n; i++) {
-                if (strcmp(txt(labels[i]), ui_str(UI_STR_STATES)) == 0) {
-                    link = i;
-                }
+                CHECK(strcmp(txt(labels[i]), ui_str(UI_STR_STATES)) != 0 &&
+                          lt_ext_prop(labels[i])->right != ui_settings_page_layout(UI_PAGE_STATES),
+                      "title %d, host %d: Extras row %d is no Save states link", title, host, i);
             }
-            if (!host) {
-                CHECK(link < 0, "no host: no Save states row");
-                continue;
-            }
-            CHECK(link == 3 && opts[link] == UI_OPT_LINK && opts[2] == UI_OPT_EXTRAS_CREDITS &&
-                      strcmp(txt(labels[4]), ui_str(UI_STR_SECTION_CHARACTERS)) == 0,
-                  "title %d: Save states after Credits, before Characters (row %d, then \"%s\")",
-                  title, link, link >= 0 && link + 1 < n ? txt(labels[link + 1]) : "");
-            if (link < 0) {
-                continue; /* no row to open: labels[-1] would steer the cursor anywhere */
-            }
-            CHECK(lt_ext_prop(labels[link])->right == ui_settings_page_layout(UI_PAGE_STATES),
-                  "the row opens the page");
-            CHECK(ui_settings_row_shown(labels[link]) == 1, "title %d: the row is shown", title);
-            lt_ext_layout(exL)->curItem = labels[link];
-            press(lt_ext_confirm_button());
-            const int sl = ui_settings_page_layout(UI_PAGE_STATES);
-            CHECK(settle(sl, 60), "title %d: Cross opens the page", title);
-            press(0x10);
-            CHECK(settle(exL, 60), "title %d: Back to Extras", title);
-            CHECK(lt_ext_layout(exL)->curItem == labels[link],
-                  "title %d: the cursor on the Save states row", title);
         }
     }
+}
+
+/* the mouse: one Main tick as main.c runs it (the pointer's tick, then the
+   layouts), the pointer on the middle of row j of a 640 x 480 view */
+static void mouseFrame(void)
+{
+    pad[0].flags = pad[0].now = 0;
+    ui_mouse_tick();
+    frame(pad[0].flags);
+}
+
+static void pointAt(int j)
+{
+    const LtProperty *e = lt_ext_prop(j);
+    const float gx = (float)e->dispX + (float)(e->dispW ? e->dispW : e->texW) * 0.5f;
+    const float gy = 2.0f * (float)e->dispY + (float)(e->dispH ? e->dispH : e->texH) * 0.5f;
+    ico_pointer_move(gx / 640.0f, (gy - 2.0f) / 448.0f);
+}
+
+/* The Continue screen's prompt: with the host, a layout with no cursor
+   between the file select and the files' layout, Square and "Save states"
+   under the frame of the file picture, shown once the files are; the
+   files' confirm reaches the file select unchanged through it; Square (or a
+   click on the prompt) opens the page with Load and Delete only, Back
+   returns to the Continue screen, which starts again (reads the card).
+   Without the host nothing of it, the item handed on as before. */
+static void testContinue(void)
+{
+    char log[512];
+    const int lf = fxLayout(19), mf = fxLayout(14), it = ico_region_cur()->row_mc_item;
+    const int conf = lt_ext_confirm_button();
+
+    /* no host: the file select links the files, the item as it was */
+    startMenus(0, 1);
+    CHECK(ui_settings_states_prompt_layout() == -1 && texLayout[lf].link == mf,
+          "no host: no prompt, the file select links %d (want %d)", texLayout[lf].link, mf);
+    toContinue();
+    texLayout[mf].curItem = it + 3;
+    frame(conf);
+    CHECK(s_lfItem == 3, "no host: the confirm on file 4 reaches the file select as 3 (%d)",
+          s_lfItem);
+    frame(LT_PAD_SQUARE);
+    frame(0);
+    CHECK(current_layout_id == lf, "no host: Square does nothing (%d)", current_layout_id);
+
+    /* the host: the prompt's layout in the chain */
+    startMenus(1, 1);
+    s_canSave = 0; /* the host's answer on the title */
+    const int pl = ui_settings_states_prompt_layout();
+    CHECK(pl >= LT_GAME_LAYOUT_COUNT, "the prompt's layout (%d)", pl);
+    if (pl < 0) {
+        return;
+    }
+    const LtProp *pp = lt_ext_layout(pl);
+    CHECK(texLayout[lf].link == pl && pp->link == mf && pp->curItem == -1 && pp->defaultItem == -1,
+          "the file select links the prompt (%d), the prompt the files (%d), no cursor",
+          texLayout[lf].link, pp->link);
+    CHECK(pp->last - pp->first == 2 && lt_ext_is_glyph_row(lt_ext_prop(pp->first)) &&
+              strcmp(txt(pp->first + 1), ui_str(UI_STR_STATES)) == 0,
+          "the prompt: a glyph and \"%s\"", txt(pp->first + 1));
+    const int glyph = pp->first, words = pp->first + 1;
+    int uv[4];
+    lt_ext_glyph_source(LT_GLYPH_SQUARE, uv);
+    CHECK(lt_ext_prop(glyph)->texU == uv[0] && lt_ext_prop(glyph)->texV == uv[1] &&
+              lt_ext_prop(glyph)->texW == uv[2] && lt_ext_prop(glyph)->texH == uv[3],
+          "the glyph is Square's (the disc's own rectangle)");
+    CHECK(lt_ext_pointer_role(glyph) == LT_POINTER_SQUARE &&
+              lt_ext_pointer_role(words) == LT_POINTER_SQUARE,
+          "both rows: a click is Square");
+    /* installed again: the chain kept, not doubled */
+    errCapture();
+    ui_settings_install();
+    errRelease(log, sizeof(log));
+    CHECK(texLayout[lf].link == pl && pp->link == mf && strstr(log, "no Save states") == NULL,
+          "installed again: the same chain (\"%s\")", log);
+
+    /* hidden until the card check shows the files */
+    lt_switch_layout(lf);
+    CHECK(settle(lf, 60), "the Continue screen");
+    CHECK(lt_ext_prop(words)->masked && lt_ext_prop(glyph)->masked,
+          "the prompt hidden before the files show");
+    frame(LT_PAD_SQUARE);
+    frame(0);
+    CHECK(current_layout_id == lf, "Square before the files show: nothing (%d)", current_layout_id);
+    s_mcFilesShown = 1;
+    frame(0);
+    const LtProperty *pw = lt_ext_prop(words), *pg = lt_ext_prop(glyph);
+    CHECK(!pw->masked && !pg->masked, "the prompt shown with the files");
+    /* its place: under the file picture's frame (to line 180 on the
+       European disc, 169 on the others), above the OK / Back bar (200),
+       across the middle */
+    CHECK(pw->dispY == 183 && pw->dispY + pw->dispH / 2 <= 200 && pg->dispY > 180 &&
+              pg->dispY + pg->dispH / 2 <= 200,
+          "the prompt's lines: words %d..%d, glyph %d..%d", pw->dispY, pw->dispY + pw->dispH / 2,
+          pg->dispY, pg->dispY + pg->dispH / 2);
+    CHECK(pg->dispX + pg->dispW <= pw->dispX && pg->dispX > 100 && pw->dispX + pw->dispW < 540 &&
+              abs((pg->dispX + pw->dispX + pw->dispW) / 2 - 320) <= 4,
+          "Square left of the words, the pair centred (%d .. %d)", pg->dispX,
+          pw->dispX + pw->dispW);
+
+    /* the files' confirm reaches the file select unchanged through the prompt */
+    texLayout[mf].curItem = it + 7;
+    frame(conf);
+    CHECK(s_lfItem == 7, "the confirm on file 8 reaches the file select as 7 (%d)", s_lfItem);
+    frame(0);
+    CHECK(s_lfItem == -1, "no confirm: -1 handed on (%d)", s_lfItem);
+    /* Square with the confirm: the file's, not the page */
+    frame(conf | LT_PAD_SQUARE);
+    frame(0);
+    CHECK(current_layout_id == lf, "Square with the confirm: no page (%d)", current_layout_id);
+
+    /* Square opens the page */
+    const int sl = ui_settings_page_layout(UI_PAGE_STATES);
+    const int leaves = s_leaves, firsts = s_lfFirsts;
+    errCapture();
+    frame(LT_PAD_SQUARE);
+    errRelease(log, sizeof(log));
+    CHECK(s_leaves == leaves + 1 && strstr(log, "opened from the Continue screen") != NULL,
+          "Square: the file select left (%d), logged (\"%s\")", s_leaves - leaves, log);
+    CHECK(settle(sl, 60), "Square opens the page (%d)", current_layout_id);
+    CHECK(s_leaves >= leaves + 2, "the page's first tick clears the file select's filter again");
+    int c[4][8];
+    memset(c, 0xFF, sizeof(c)); /* -1 rows if the page is missing: no cursor on garbage */
+    for (int i = 0; i < UI_STATES_SLOTS; i++) {
+        cardRows(i, c[i]);
+    }
+    CHECK(strcmp(txt(c[0][2]), ui_str(UI_STR_STATES_ACT_LOAD)) == 0 &&
+              strcmp(txt(c[1][2]), " ") == 0,
+          "from Continue: slot 1 \"%s\", the empty slot \"%s\" (no Save)", txt(c[0][2]),
+          txt(c[1][2]));
+    lt_ext_layout(sl)->curItem = c[0][1];
+    press(LT_PAD_RIGHT);
+    CHECK(strcmp(txt(c[0][2]), ui_str(UI_STR_STATES_ACT_DELETE)) == 0,
+          "Right: \"%s\" (Load, Delete only)", txt(c[0][2]));
+    press(LT_PAD_RIGHT);
+    CHECK(strcmp(txt(c[0][2]), ui_str(UI_STR_STATES_ACT_LOAD)) == 0, "Right again: \"%s\"",
+          txt(c[0][2]));
+    {
+        const char *hint = ui_str(UI_STR_STATES_TITLE_HINT), *line = txt(c[0][7]);
+        const size_t n = strcspn(line, "\n");
+        CHECK(n > 0 && strncmp(line, hint, n) == 0, "the title's line: \"%s\"", line);
+    }
+    CHECK(ui_settings_covers_title() == 1, "the page covers the title (the logo down)");
+
+    /* Back: the Continue screen again, from its first tick */
+    errCapture();
+    press(LT_PAD_TRIANGLE);
+    errRelease(log, sizeof(log));
+    CHECK(settle(lf, 60), "Back returns to the Continue screen (%d)", current_layout_id);
+    CHECK(s_lfFirsts == firsts + 1 && strstr(log, "back to the Continue screen") != NULL,
+          "the file select starts again (%d first ticks), logged (\"%s\")", s_lfFirsts - firsts,
+          log);
+    CHECK(texLayout[lf].link == pl && pp->link == mf && texLayout[mf].curItem == it,
+          "the chain as it was, the files' cursor on its default (%d)", texLayout[mf].curItem);
+    CHECK(s_destroys == 2, "the pictures released (%d)", s_destroys);
+    texLayout[mf].curItem = it + 2;
+    frame(conf);
+    CHECK(s_lfItem == 2, "after Back: the confirm on file 3 reaches the file select (%d)",
+          s_lfItem);
+    frame(0);
+
+    /* a click on the prompt is Square */
+    ui_mouse_reset();
+    ui_mouse_set_view(640, 480, 0, 0, 640, 480);
+    pointAt(words);
+    mouseFrame();
+    ico_pointer_button(1);
+    ico_pointer_button(0);
+    mouseFrame();
+    CHECK(settle(sl, 60), "a click on the prompt opens the page (%d)", current_layout_id);
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(lf, 60), "Back again");
+    ui_mouse_set_view(0, 0, 0, 0, 0, 0);
+
+    /* a load from the page: the pause menu's row, as from the pause menu */
+    continueToStates();
+    ui_settings_sync_after_state_load();
+    idle(3);
+    CHECK(current_layout_id == fxLayout(57) || settle(fxLayout(57), 60),
+          "a load from the Continue screen's page closes it to the pause menu (%d)",
+          current_layout_id);
 }
 
 /* the four cards from the fake host: texts, geometry, pictures */
@@ -601,7 +796,7 @@ static void testTitle(void)
 {
     startMenus(1, 11);
     s_canSave = 0;
-    const int sl = titleToStates();
+    const int sl = continueToStates();
     int c[4][8];
     for (int i = 0; i < UI_STATES_SLOTS; i++) {
         cardRows(i, c[i]);
@@ -623,7 +818,7 @@ static void testTitle(void)
     CHECK(s_requests == 1 && s_reqAct == UI_STATES_ACT_LOAD && s_reqSlot == 4,
           "the title loads slot 4 (%d: %d, %d)", s_requests, s_reqAct, s_reqSlot);
     press(0x10);
-    CHECK(settle(ui_settings_page_layout(UI_PAGE_EXTRAS), 60), "Back to Extras");
+    CHECK(settle(fxLayout(19), 60), "Back to the Continue screen");
     CHECK(s_destroys == 2, "the pictures released (%d)", s_destroys);
     /* the pause menu's wording of the same line */
     startMenus(1, 11);
@@ -692,16 +887,19 @@ int main(int argc, char **argv)
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
     if (argc > 2) {
-        /* the other discs: the pause rows and the Extras link on their numbers */
+        /* the other discs: the pause rows, Extras and the Continue screen's
+           prompt on their numbers */
         CHECK(ico_region_select(argv[2]) == 0, "the %s region", argv[2]);
         testPauseRows();
-        testExtrasLink();
+        testExtrasRows();
+        testContinue();
         CHECK(ico_region_select("pal") == 0, "the European region again");
         printf("settings_states_test %s: %s\n", argv[2], failures ? "failed" : "ok");
         return failures ? 1 : 0;
     }
     testPauseRows();
-    testExtrasLink();
+    testExtrasRows();
+    testContinue();
     testCards();
     testActions();
     testConfirm();
