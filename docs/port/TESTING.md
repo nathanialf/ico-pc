@@ -390,6 +390,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   line and a short buffer (`share_report`).
 - `dump_zip_test.c`: F12's zip (with the tick before as its second `.rddump`), the aspect sweep's zip and the device-loss zip (the lost frame first, the second `.rddump` the frame before, the pruning to the newest three), written and read back with miniz
   (`dump_zip`).
+- `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
+  on this toolchain's compiler and linker, over a stand-in game library (`game_data_fixture.c`)
+  given `ico_game`'s section treatment and the game's options: the ranges exist; every writable
+  object of the stand-in (initialised, zero-filled, a table of addresses, file and function
+  statics) lies inside, the zero-filled ones in the bss range (all in the data range in clang's
+  Windows build), and the program's own globals and the stand-in's constants outside; initial
+  values, zero fill and addresses survive the rename; a copy of the ranges written back restores
+  the stand-in's globals and leaves the program's alone (not under AddressSanitizer, whose red
+  zones the ranges hold); `ico_game_data_ranges_check`'s failure texts and edges on made-up
+  ranges (`game_data_range`).
 - `fiber_test.c`: [fibers](ARCHITECTURE.md#terms) switched round-robin with their stacks checked,
   deep stacks, the FP state inside a fiber (`fiber`, `fiber_guard`).
 - `ico_thread_test.c`: a thread runs and joins, a mutex and condition hand a value across, the clock does not run backwards (`ico_thread`).
@@ -1811,6 +1821,13 @@ the checker and checking its program with `--label`, never turning the tooling o
 `rc_tools_binary` runs `tools/check_rc_text.py --expect absent` on this build's `ico_pc` (`present`
 in a window build with `ICO_RC_TOOLS` on; not on Android or a cross build)
 ([BUILDING.md](../BUILDING.md#release-candidate-tools)).
+
+`game_data_ranges_selftest` runs `tools/check_game_data_ranges.py --selftest` (made-up nm tables:
+the ELF and PE bounds, a symbol on either side, a file static twice, no bounds, brackets out of
+order). `game_data_ranges_binary` reads this build's `ico_pc` with the toolchain's `nm` (not on
+Android or Apple; a cross build too, since nothing runs): ten of the game's globals, the file
+statics `texTable` and `cdvdThreadStack` among them, inside the game data ranges and four of the
+port's outside ([PLATFORM.md](PLATFORM.md#game-data-ranges)).
 
 `hlsl_fxc_check` runs `tools/check_hlsl_fxc.py` over `port/shaders` (Python only, no build products):
 it fails when a word FXC reserves (`pass`, `sample`, `line`, `point`, `linear`, `texture`, ...) is
