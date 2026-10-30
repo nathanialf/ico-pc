@@ -123,6 +123,13 @@ int ico_gs_girl_carried_by_enemy(int act_mode, int carrier_is_enemy);
 void ico_gs_tick(void);
 /* Forgets everything (signals, counters, the run); tests and a new profile. */
 void ico_gs_reset(void);
+/* After a save state's load (port/game/state_host.c): the snapshot sampled
+   now and taken as the previous one too, so nothing rises between the game
+   before the load and the restored one (no stage entry, flag or capture is
+   seen); the pending signals dropped.  The run (fresh, captures, game
+   overs) and the session's counters are kept: a load does not rewind them
+   (docs/port/DIVERGENCES.md). */
+void ico_gs_rebaseline(void);
 /* Main ticks seen by ico_gs_tick */
 unsigned int ico_gs_ticks(void);
 
