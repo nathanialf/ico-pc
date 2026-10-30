@@ -293,7 +293,7 @@ static RdMeshRec *meshAlloc(uint32_t *id)
             if (m->live) {
                 continue;
             }
-            uint32_t gen = ((m->gen ? m->gen : s_genFloor) + 1) & 0xFFFF;
+            uint32_t gen = ((m->gen > s_genFloor ? m->gen : s_genFloor) + 1) & 0xFFFF;
             memset(m, 0, sizeof(*m));
             m->gen = gen ? gen : 1;
             m->live = 1;
@@ -1977,6 +1977,24 @@ void rd_vu_mesh_retire(bool (*pred)(uint64_t hash, bool replaced, void *user), v
             s_staleCount++;
         }
     }
+}
+
+uint32_t rd_vu_mesh_gen_high(void)
+{
+    uint32_t high = s_genFloor;
+    for (uint32_t i = 0; g_rd.meshes && i < RD_MAX_MESHES; i++) {
+        if (g_rd.meshes[i].gen > high) {
+            high = g_rd.meshes[i].gen;
+        }
+    }
+    return high;
+}
+
+void rd_drop_vu_meshes(uint32_t savedGenHigh)
+{
+    const uint32_t high = rd_vu_mesh_gen_high();
+    rd_vu_mesh_retire(NULL, NULL);
+    s_genFloor = (savedGenHigh > high ? savedGenHigh : high) & 0xFFFF;
 }
 
 void rd__vu_mesh_sweep_stale(void)
