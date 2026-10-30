@@ -449,10 +449,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   under a fake clock and a fake swapchain, with and without the display clock, at 60, 59.94 and
   120 Hz and on a display that drifts from its report, and its late-present skip (39 ms presents
   of a 30 frames a second game keep real time, never two frames in a row unpresented), and the
-  present allowance with the fence (`test120Budget`: at 120 Hz and 12 ms of GPU a picture one
-  present a step after the first second, no step late, the alphas on the grid; a GPU-bound phone
-  at 60 Hz presents its new frames only and keeps real time; both print the rule before's numbers
-  beside) (`pace_loop`).
+  present allowance with the fence (`test120Budget`: at 120 Hz and 12 ms of GPU a picture about
+  one present a step after the first second, the lock's probes failing back to one with no step a
+  period late, no climb refused, the alphas on the grid; a GPU-bound phone at 60 Hz presents its
+  new frames and under 33 a second with the probes and keeps real time; both print the rule
+  before's numbers beside) (`pace_loop`).
 - `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
   the first second, 50 presents a second give 50 at every whole second, a second that ran 1.5 s long
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays
@@ -467,20 +468,25 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   behind, and a 60 frames a second game on 20 ms presents through the late arm alone; the present
   allowance's rule (`testBudgetRule`: one late step arming only, a second within 60 steps dropping
   to one below its presents, a late step of new frames only confirming an armed drop, the arm's 60
-  steps, the hold, the climb straight back to the ceiling or by one and its GPU gate, a refused
-  climb counted, the display's wait excused, `pace_display_wait` with and without OpenGL's fence
+  steps, the hold, the lock's climb a probe straight back to the ceiling that holds through its 60
+  steps, the display's wait excused, `pace_display_wait` with and without OpenGL's fence
   waits, never above the ceiling), the timer path's unbound start (`testBudgetUnbound`: 15
   presents a step on time never refused, a drop held to the ceiling of 8, the climb unbound again,
-  straight back to unbound at 4 ms of GPU, one at a time and then refused at 3 ms, the lock's
-  allowance never unbound), the reporters' sequences replayed from their logs
+  straight back to unbound at 4 ms of GPU, one at a time and then refused at 3 ms by the GPU gate,
+  the lock's allowance never unbound), the reporters' sequences replayed from their logs
   (`testBudgetHitch130`: issue 130's one late step leaves an uncapped 6 presents a step unbound
   with nothing refused, two within 60 steps hold it to 1 and 120 steps later it is unbound again
   at 1.2 ms of GPU, at 1 with a refused climb every 60 steps at 9 ms; `testBudgetSustained`: the
-  item-3 case held to 1, issue 139's GPU-bound lock held to 0; `testBudgetGlWait126`: issue 126's
-  OpenGL display wait excused, the same numbers on Vulkan dropping to 0 and back to 1 after 120
-  steps, the GPU-bound OpenGL blocks at 0; `testBudgetLines`: the drop, climb, refused-climb and
-  10 s words of those sequences and the lock's clock part, compared word for word), and the timer
-  path with a GPU queue
+  item-3 case held to 1, issue 139's GPU-bound lock held to 0 with two failed probes (302
+  presents in 600 steps); `testBudgetGlWait126`: issue 126's OpenGL display wait excused, the
+  same numbers on Vulkan dropping to 0 and back to 1 after 120 steps, the GPU-bound OpenGL blocks
+  at 0; `testBudgetLines`: the drop, climb, refused-climb and 10 s words of those sequences (the
+  GPU figure named `GPU span`, `GPU busy` for a busy time) and the lock's clock part, compared
+  word for word), the lock's probe as rates (`testBudgetProbe126`: issue 126's D3D11 drop with a
+  15 ms span the old gate refused, back at 1 a step 120 steps later and 600 presents in the next
+  600 steps, 60 a second; `testBudgetProbeWait`: failed probes doubling the wait to 240, 480,
+  960 and 960 steps with the new frames only between, a probe failed at its 60th step, one that
+  holds setting the wait back to 120), and the timer path with a GPU queue
   (`testBudgetTimerLoop`: nothing binds at 4 or 12 ms of GPU a picture nor on back-to-back 1 ms
   presents, the in-betweens held at 20 ms so no step ends half a period late, FIFO's return past
   the deadline excused); the clamp of a cap above the refresh in
