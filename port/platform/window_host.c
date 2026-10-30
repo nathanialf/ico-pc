@@ -520,7 +520,7 @@ static void video_settings(RdSettings *rs, int w, int h)
         }
         s_pres.gridLock = grid;
         s_pres.fifoLock = fifo && !grid; /* the timer path's FIFO (no lock) */
-        s_pres.mailbox = s_pres.vsync && !fifo;
+        s_pres.mailbox = (s_pres.vsync && !fifo) || (rs->vsync && !rs->interpolate);
     }
     rhi_prefer_mailbox(s_pres.mailbox != 0);
 }
@@ -1741,6 +1741,12 @@ static SDL_Window *window_create(int mode, int w, int h, int x, int y)
     return win;
 }
 
+/* Original's replay gate (window_lines.h) */
+static bool orig_gate(int keep)
+{
+    return window_orig_gate(keep, SDL_GetTicksNS(), s_deadline, s_pres.paceHz);
+}
+
 /* What hangs on a new window in mode, at the start and when the renderer
    is switched: the exclusive request, the screensaver, the message hook,
    the host call, the pipeline cache's file (the backend's own), the mode */
@@ -1779,6 +1785,7 @@ static void window_attach(int mode)
     /* the replay, the present and the FMV picture run on the host stack in
        the host FP mode, not on the game's 256 KB fiber stacks */
     rd_set_host_call(ico_sched_call_on_host);
+    rd_set_replay_gate(orig_gate);
     /* the Vulkan pipeline cache in the per-user folder: a later start of
        the same build creates the renderer's pipelines from it
        (rhi_set_pipeline_cache_path;
@@ -5107,12 +5114,14 @@ static void pace_log(Uint64 now)
         s_pres.budgetClimbRefusalsAt = b->climbRefusals;
         pace_budget_block(b); /* a new block: its lowest from now */
     }
+    const char *ow = window_orig_words(!rd_interpolation_active());
+
     fprintf(
         stderr,
         "window: %u presents, %u movie presents%s and %u game frames (%u frame numbers) in "
         "%.1f s: %.1f "
         "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
-        "%.0f ms; skipped %u presents (late %u, slow %u)%s; longest replay %.1f ms of %u, %u "
+        "%.0f ms; skipped %u presents (late %u, slow %u)%s%s; longest replay %.1f ms of %u, %u "
         "over a refresh; %u steps over %.0f ms; "
         "framerate %s%s, present "
         "%s, display %.2f Hz (%.3f presents a refresh), window %dx%d%s; step late max %.1f "
@@ -5121,12 +5130,14 @@ static void pace_log(Uint64 now)
         fn - s_pres.statFrameNo, sec, s_pres.statPresents / sec, s_pres.statFrames / sec,
         s_pres.statVsyncs, s_pres.statVsyncs / sec, s_pres.statResyncs,
         (double)s_pres.statDropped / 1e6, s_pres.statSkipLate + s_pres.statSkipSlow,
-        s_pres.statSkipLate, s_pres.statSkipSlow, budget, maxMs, replays, s_perf.ph.over,
+        s_pres.statSkipLate, s_pres.statSkipSlow, ow, budget, maxMs, replays, s_perf.ph.over,
         s_pres.slowSteps, s_pres.slowMs, ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)),
         held, rhi_present_mode_name(), dm != NULL ? (double)dm->refresh_rate : 0.0,
         dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate : 0.0,
         pw, ph, window_fullscreen() ? " fullscreen" : "", (double)s_pres.lateMaxNs / 1e6,
         s_pres.pumpMaxMs, lock);
+    window_hold_block(s_pres.stepSumMs, s_pres.stepCount, s_pres.stepMaxMs, s_pres.paceHz,
+                      s_perf.ph.total, s_perf.ph.n, !rd_interpolation_active(), fr);
     /* the audio's 10 s line (out_sdl.c; the pull path's only) */
     ico_audio_sdl_log_summary();
     if (s_pres.lockN > 0) {
@@ -5827,6 +5838,10 @@ static void pace(int hz)
         /* framerate "original": rd_end_frame presented the frame once; the
            picture is held until the next.  That present's start-up log line
            (the frame whole: t 1) */
+        RdPresentInfo pi;
+        const bool whole =
+            newFrame && rd_last_present_info(&pi) && pi.frame == s_pres.frame && !pi.keep;
+
         if (newFrame) {
             boot_log(1.0f);
             /* that present ran inside the step (rd_end_frame's replay):
@@ -5841,6 +5856,7 @@ static void pace(int hz)
                                                  display_refresh_ns(period)));
         }
         now = SDL_GetTicksNS();
+        window_orig_step(now >= s_deadline, whole ? rd_last_replay_ms() : -1.0);
         if (now < s_deadline) {
             SDL_DelayPrecise(s_deadline - now);
         } else if (now - s_deadline > RESYNC_NS) {
@@ -6081,6 +6097,7 @@ void ico_window_close(void)
     ui_host_shutdown();
     disp_clock_stop();
     rd_set_host_call(NULL);
+    rd_set_replay_gate(NULL);
     rd_shutdown();
     if (s_window != NULL) {
         SDL_DestroyWindow(s_window);
