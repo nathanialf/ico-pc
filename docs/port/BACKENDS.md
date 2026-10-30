@@ -252,4 +252,6 @@ The OpenGL runs of the renderer's suite are the `_gl` tests ([TESTING.md](TESTIN
   words are from the limits `d3d11_device.c` reports.
 - The draw merge on Direct3D 11 on hardware: CI's WARP job compiles (FXC) and draws the prelit
   program's merge build only (`rd_pixel_vu.rddump`); the other six merge builds pass the DXC
-  check under `ICO_D3D11=1` (`shaders_d3d11_check`), not FXC.
+  check under `ICO_D3D11=1` (`shaders_d3d11_check`), not FXC. A build FXC refuses on a player's
+  machine turns the merge off from the next replay (`rd: VU merge: off: the driver could not
+  compile ...`); only the faked failure (`rd_vumerge_fallback`) has run that path.
