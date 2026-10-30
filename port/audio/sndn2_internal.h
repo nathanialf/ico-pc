@@ -54,4 +54,12 @@ void st_pcm_effect(uint32_t id);                                 /* 0x4E */
 void st_pcm_bufmode(uint32_t mask, uint32_t off, uint32_t mode); /* 0x4F */
 uint32_t st_pcm_read_off(int ch);
 
+/* --- Save states (state_registry.h; audio_host.c ico_audio_state_register) --- */
+/* the driver's pages, counters, reply, pitch table and carried packets
+   (sndn2_host.c; the reply pointer is scanned) */
+int sndn2_host_state_register(void);
+/* the ADPCM voices, the event queue and its cursors, the staging buffer
+   and the PCM channels (stream.c) */
+int sndn2_stream_state_register(void);
+
 #endif
