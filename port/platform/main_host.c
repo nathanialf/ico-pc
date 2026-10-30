@@ -126,6 +126,7 @@
 #include "ico_version.h" /* ICO_VERSION_LABEL, generated (CMakeLists.txt; "" in a development build) */
 #include "input_record.h"
 #include "pad_script.h"
+#include "sim_keys.h" /* the recording's config keys */
 #include "tables.h"
 #include "trace_host.h"
 #include "options.h"       /* the recording's effective stick_fix */
@@ -420,34 +421,6 @@ static void timestamp(char *out, size_t size, const char *fmt)
 
 /* --- the pad recording (port/input/input_record.h) ---------------------- */
 
-/* The config values the simulation depends on, written into the recording's
-   header and compared when a recording is replayed as the pad script. */
-static const char *const record_keys[] = {
-    "video.video_mode",
-    "game.language",
-    "gameplay.mirror",
-    "gameplay.stick_fix",
-    "gameplay.yorda_safe",
-    "gameplay.pit_time",
-    "gameplay.shadow_speed",
-    "gameplay.developer_mode",
-    "dev.start_stage",
-    "gameplay.door_fix",
-    "video.anti_aliasing",
-    "gameplay.hold_type",
-    "gameplay.hold_type_chosen", /* an earlier "hold" without it is the disc's own */
-    "gameplay.skip_opening",
-    /* the game variants (port/game/variants.h): each changes the simulation */
-    "variants.shade_toughness",
-    "variants.one_hit",
-    "variants.never_dodge",
-    "variants.aggression",
-    "variants.no_hints",
-    "variants.barrier_hits",
-    "variants.no_cutscene_look",
-    "variants.ignore_cutscene_cameras",
-};
-
 #define RECORD_MAGIC "# ico-pc input recording"
 
 static const char *fixed_clock_now(void)
@@ -473,8 +446,12 @@ static void record_header(char *out, size_t size, const char *stamp)
         RECORD_MAGIC);
     PUT("# build %s\n", ICO_BUILD_COMMIT);
     PUT("# started %s\n", stamp);
-    for (i = 0; i < sizeof(record_keys) / sizeof(record_keys[0]); i++) {
-        PUT("# config %s = %s\n", record_keys[i], ico_config_get_string(record_keys[i], "(unset)"));
+    /* the config values the simulation depends on (sim_keys.h: the save
+       states hash the same list), compared when a recording is replayed as
+       the pad script */
+    for (i = 0; ICO_SIM_KEYS[i] != NULL; i++) {
+        PUT("# config %s = %s\n", ICO_SIM_KEYS[i],
+            ico_config_get_string(ICO_SIM_KEYS[i], "(unset)"));
     }
     PUT("# effective fixed_clock = %s\n", fixed_clock_now());
     /* the stick_fix value the run used (config.toml's, else the default:
