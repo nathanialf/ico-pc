@@ -2920,8 +2920,14 @@ bool rd_dump_prev_frame(const char *path)
 bool rd_read_display(void *dst, uint32_t *w, uint32_t *h)
 {
     RdTargetRec *t = rd__target_rec(RD_TARGET_DISPLAY + 1);
-    if (!t || !dst) {
+    if (!t) {
         return false;
+    }
+    if (!dst) {
+        /* the buffer a read needs (the guard columns still in) */
+        *w = t->tw;
+        *h = t->th;
+        return true;
     }
     if (!rd__read_target(rd_target(RD_TARGET_DISPLAY), dst, (size_t)t->tw * t->th * 4, w, h)) {
         return false;
