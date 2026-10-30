@@ -32,6 +32,8 @@
 #ifndef PORT_UI_LAYOUT_EXT_H
 #define PORT_UI_LAYOUT_EXT_H
 
+#include <stdint.h>
+
 #include "layout_texture.h" /* LtProp, LtProperty, texLayout, texProperty */
 
 #ifdef __cplusplus
@@ -228,6 +230,22 @@ int lt_ext_port_back_buttons(void);
 int lt_ext_has_circle_back(void);
 void lt_ext_set_circle_back(int on);
 int lt_ext_circle_back(void);
+
+/* An image row (the save-state slots' pictures): the box (x, y, w, h) as
+   lt_ext_add_rect takes it, drawn with the texture `tex` (an RdTex id) over
+   its texels (0, 0)..(texW, texH), modulated by the row's colour (its fade),
+   where a label would be (no glow); -1 when full.  lt_ext_set_image changes
+   the texture (0, or a zero size: nothing is drawn, an empty slot or the
+   headless build); -1 for an index that is not an image row.  The texture is
+   the PAGE's, not the row's: the page creates it with rd_create_texture and
+   destroys it with rd_destroy_texture (port/render/rd.h, the entry
+   ui/font.c and ui/menu_font.c release their atlas pages with), after
+   setting the row's texture to 0 or before the next draw of the row; the
+   row never frees it.  lt_ext_reset drops every row.  lt_ext_row_image reads
+   the texture and size back (tests; 0 for a row that is not an image). */
+int lt_ext_add_image(int x, int y, int w, int h);
+int lt_ext_set_image(int index, uint32_t tex, int texW, int texH);
+uint32_t lt_ext_row_image(int index, int *texW, int *texH);
 
 /* A rect row's colour changed after it was added (Settings >
    Extras > Characters' swatches): rgba as lt_ext_add_rect takes it (GS,
