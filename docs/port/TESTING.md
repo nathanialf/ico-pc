@@ -750,6 +750,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   device's, and `expect=` the plain run's merged figure (826 into 87 on the 164 frame)
   (`rd_vumerge_mali`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge-without-dual-source-blending)).
   SKIP as `rd_vustage_ab`.
+- `rd_noplanes_ab.cmake`: the dumps of `tools/noplanes_dumps.txt` (the title's and the boot's
+  frames, each drawing one screen-prim triangle key with planes, and a capture drawing none; a line
+  is the dump, `expect=same|report` and the tool's setting arguments) with the sprite planes builds
+  and under `ICO_RD_NO_SPRITE_PLANES=1` (issue 161's fallback): the second run's line that the builds
+  are off, `sprite no-planes 0` in the first; `expect=same` every named target's PNG byte for byte
+  and no command through the fallback, `expect=report` at least one command through it and the
+  targets that differ listed (`rd_noplanes_ab`;
+  [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)). SKIP as `rd_vustage_ab`.
 - `rd_vumerge_ab_pixel` and `rd_vufuse_ab_pixel`: the two scripts above on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):
   `rd_pixel_vu.rddump` (the VU seams' S4 at Original 1x: 64 code-32 draws of one prelit mesh
@@ -1756,6 +1764,7 @@ switches the tests and their registrations use:
 | `ICO_RD_FAKE_MERGE_FAIL` | `rd_pipeline.c` | 1: the first pipeline made with a draw merge build is destroyed and kept as failed, as a build the driver refused; the merge goes off from the next replay (`rd_vumerge_fallback`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) |
 | `ICO_RD_VU_FUSE` | `rd_replay_vu.c` | 0: code 36's kick draws under their own pipelines instead of the fused scissor pair (`[dev] vu_fuse = false`; `rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)) |
 | `ICO_RD_CONSTANT_READS` | `rd_const_read.c` | 0: a post sprite whose source target holds only its last clear reads the target as before instead of being drawn in the clear's colour (`[dev] constant_reads = false`; `rd_constant_reads_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)) |
+| `ICO_RD_NO_SPRITE_PLANES` | `rd_screen_planes.c` | 1: the sprite planes builds off for the run, the screen-prim triangles through the plain sprite builds, as `[dev] pipeline_skip` makes it on a device whose driver stopped creating them (issue 161; `rd_noplanes_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)) |
 | `ICO_RD_PERF_LIST_STAMPS` | `rd_perf.c` | 0: no list or effect timestamp (`[dev] perf_list_stamps = false`); `rd_perf_test` switches it with `rd__set_perf_list_stamps` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
 | `ICO_RD_PERF_PASSES` | `rd_perf.c` | 1: every replay timed pass by pass (`[dev] perf_passes = true`; the window writes `ico-pc-passes.csv`); `rd_perf_test` and the replay tool's `--pass-times` switch it with `rd__set_perf_passes` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
 | `ICO_RHI_BACKEND`, `ICO_VK_DEVICE`, `ICO_D3D12_ADAPTER` | `rhi_backend.c`, `vk_device.c`, `d3d12_device.c` | pick the backend, the Vulkan device, the D3D12 adapter (`warp`) |
