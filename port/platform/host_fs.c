@@ -8,6 +8,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <stdio.h>
+#if !defined(_WIN32)
+#if defined(__APPLE__)
+#include <sys/mount.h>
+#include <sys/param.h>
+#else
+#include <sys/vfs.h>
+#endif
+#endif
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -463,4 +472,178 @@ int ico_dir_walk(const char *dir, int depth, IcoDirWalkFn fn, void *user)
         return -1;
     }
     return files;
+}
+
+/* ---- the drive a path sits on ---- */
+
+static int drive_word(char *out, size_t n, const char *w)
+{
+    if (n == 0) {
+        return -1;
+    }
+    if (strlen(w) >= n) {
+        out[0] = '\0';
+        return -1;
+    }
+    strcpy(out, w);
+    return 0;
+}
+
+int ico_host_drive_kind(const char *path, char *out, size_t n)
+{
+    if (out == NULL || n == 0) {
+        return -1;
+    }
+    out[0] = '\0';
+    if (path == NULL || path[0] == '\0') {
+        return drive_word(out, n, "unknown");
+    }
+#ifdef _WIN32
+    {
+        wchar_t *wp = ico_widen(path);
+        wchar_t full[MAX_PATH * 2];
+        wchar_t root[4];
+        const char *w = "unknown";
+        DWORD got;
+
+        if (wp == NULL) {
+            return drive_word(out, n, "unknown");
+        }
+        got = GetFullPathNameW(wp, (DWORD)(sizeof(full) / sizeof(full[0])), full, NULL);
+        free(wp);
+        if (got == 0 || got >= sizeof(full) / sizeof(full[0])) {
+            return drive_word(out, n, "unknown");
+        }
+        if (full[0] == L'\\' && full[1] == L'\\' && full[2] != L'?' && full[2] != L'.') {
+            w = "network"; /* \\server\share */
+        } else if (full[0] == L'\\' && full[1] == L'\\' && full[2] == L'?' && full[3] == L'\\' &&
+                   (full[4] == L'U' || full[4] == L'u') && (full[5] == L'N' || full[5] == L'n') &&
+                   (full[6] == L'C' || full[6] == L'c') && full[7] == L'\\') {
+            w = "network"; /* \\?\UNC\server\share */
+        } else {
+            const wchar_t *d = full;
+
+            if (full[0] == L'\\' && full[1] == L'\\' && (full[2] == L'?' || full[2] == L'.') &&
+                full[3] == L'\\') {
+                d = full + 4;
+            }
+            if (d[0] != L'\0' && d[1] == L':') {
+                root[0] = d[0];
+                root[1] = L':';
+                root[2] = L'\\';
+                root[3] = L'\0';
+                switch (GetDriveTypeW(root)) {
+                case DRIVE_FIXED:
+                    w = "fixed";
+                    break;
+                case DRIVE_REMOVABLE:
+                    w = "removable";
+                    break;
+                case DRIVE_REMOTE:
+                    w = "network";
+                    break;
+                case DRIVE_RAMDISK:
+                    w = "RAM disk";
+                    break;
+                case DRIVE_CDROM:
+                    w = "CD-ROM";
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+        return drive_word(out, n, w);
+    }
+#else
+    {
+        struct statfs sf;
+        const char *w = "fixed";
+
+        if (statfs(path, &sf) != 0) {
+            return drive_word(out, n, "unknown");
+        }
+#ifdef __APPLE__
+        if (strcmp(sf.f_fstypename, "nfs") == 0 || strcmp(sf.f_fstypename, "smbfs") == 0 ||
+            strcmp(sf.f_fstypename, "afpfs") == 0 || strcmp(sf.f_fstypename, "webdav") == 0) {
+            w = "network";
+        }
+#else
+        switch ((unsigned long)sf.f_type) {
+        case 0x6969UL:     /* NFS */
+        case 0x517BUL:     /* SMB */
+        case 0xFF534D42UL: /* CIFS */
+        case 0xFE534D42UL: /* SMB2 */
+        case 0x00C36400UL: /* Ceph */
+        case 0x5346414FUL: /* AFS */
+        case 0x01021997UL: /* 9p */
+            w = "network";
+            break;
+        case 0x65735546UL: /* FUSE (sshfs, ntfs-3g, exfat ...: the medium is not known) */
+            w = "fuse";
+            break;
+        case 0x01021994UL: /* tmpfs */
+        case 0x858458F6UL: /* ramfs */
+            w = "RAM disk";
+            break;
+        default:
+            break;
+        }
+#endif
+        return drive_word(out, n, w);
+    }
+#endif
+}
+
+static char drive_kinds[2][16] = {"unknown", "unknown"};
+
+static const char *drive_suffix(const char *kind)
+{
+    if (strcmp(kind, "network") == 0) {
+        return " on a network drive";
+    }
+    if (strcmp(kind, "removable") == 0) {
+        return " on a removable drive";
+    }
+    if (strcmp(kind, "CD-ROM") == 0) {
+        return " on a CD or DVD drive";
+    }
+    return "";
+}
+
+const char *ico_host_drive_note(int which, const char *path)
+{
+    char kind[16];
+
+    if (which < 0 || which > 1) {
+        return "";
+    }
+    if (ico_host_drive_kind(path, kind, sizeof(kind)) != 0) {
+        snprintf(kind, sizeof(kind), "unknown");
+    }
+    snprintf(drive_kinds[which], sizeof(drive_kinds[which]), "%s", kind);
+    return drive_suffix(kind);
+}
+
+void ico_host_drive_warn(int which)
+{
+    static const char *const place[2] = {"the game data", "the save folder"};
+    const char *note;
+
+    if (which < 0 || which > 1) {
+        return;
+    }
+    note = drive_suffix(drive_kinds[which]);
+    if (note[0] != '\0') {
+        fprintf(stderr,
+                "ico_pc: %s is%s: loads%s can stall and the sound can cut out while they do; a "
+                "local drive is faster\n",
+                place[which], note, which == ICO_DRIVE_USER ? " and saves" : "");
+    }
+}
+
+void ico_host_drive_summary(char *out, size_t n)
+{
+    snprintf(out, n, "drives: data %s, user %s", drive_kinds[ICO_DRIVE_DATA],
+             drive_kinds[ICO_DRIVE_USER]);
 }

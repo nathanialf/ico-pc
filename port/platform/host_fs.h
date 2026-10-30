@@ -78,4 +78,29 @@ wchar_t *ico_widen(const char *s);
 int ico_narrow(const wchar_t *s, char *out, size_t size);
 
 #endif
+
+/* The kind of drive the path sits on, as a word in out: "fixed", "removable",
+   "network", "RAM disk", "CD-ROM", "fuse" (a user-space file system whose
+   medium is not known) or "unknown" (the path is empty or cannot be asked
+   about). Windows: GetDriveTypeW on the path's root (a UNC path is
+   network). Linux and Android: the file system type of statfs (nfs, smb,
+   cifs, ceph, afs and 9p are network; tmpfs and ramfs are RAM disk).
+   macOS and iOS: f_fstypename (nfs, smbfs, afpfs, webdav are network).
+   Returns 0, or -1 when out is too small (out is then empty). */
+int ico_host_drive_kind(const char *path, char *out, size_t n);
+
+/* Notes a place the port reads or writes (which: ICO_DRIVE_DATA or
+   ICO_DRIVE_USER) for the start-up lines: returns the words to append to the
+   place's line (" on a network drive", " on a removable drive", else "") and
+   remembers the kind for the summary. */
+enum { ICO_DRIVE_DATA = 0, ICO_DRIVE_USER = 1 };
+
+const char *ico_host_drive_note(int which, const char *path);
+/* After that line: the one warning line to stderr when the noted drive is a
+   network, removable or CD one ("the game data is on a network drive: ..."). */
+void ico_host_drive_warn(int which);
+/* "drives: data fixed, user network" for the summary line (a place not yet
+   noted reads "unknown") */
+void ico_host_drive_summary(char *out, size_t n);
+
 #endif /* ICO_PLATFORM_HOST_FS_H */
