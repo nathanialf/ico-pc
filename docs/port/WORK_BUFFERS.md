@@ -209,6 +209,18 @@ Smooth accumulator is a texture of its own, not a target, and the RGBA8 target i
 drawn before the sprite reads it ([RENDER.md](RENDER.md#the-motion-blur-under-smooth)). Anywhere
 else, a texel read before the frame drew it is a bug of this kind.
 
+### After a save state's load
+
+A load ([PLATFORM.md](PLATFORM.md#saving-and-loading)) puts back the game's own copy of the
+latch above with the rest of its data, so `gsb_HostSceneRelatch` clears it: the next frame's
+latch calls `rd_reset_scene` and every named target is made and cleared again, as at a new frame
+width, so no work buffer carries the picture from before the load. The load also signals a camera
+cut (`ico_video_camera_cut`) at once and at the next poll, when the first restored frame is the
+one being recorded, so the presenter does not blend the old picture into the restored one; the
+loaded textures get new serials (`tex_HostReserialAll`) and every VU mesh is retired with the
+mesh generations moved above the saving run's (`rd_drop_vu_meshes`, `port/render/rd_mesh.h`), so
+each is built again from the restored packets.
+
 ## The glow between ticks
 
 Above Frame rate Original every present of a tick replays the whole frame, so the glow's chain
