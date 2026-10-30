@@ -281,6 +281,13 @@ static void evict(void)
  * the game kept from before (a packet's mesh, Packet.c pac_HostMeshFor)
  * names no mesh of this renderer and is built again (rd_vu_mesh_valid) */
 static uint32_t s_genFloor;
+/* The slots live at rd_drop_vu_meshes: the next generation of each goes
+ * above the floor once, when it is next taken (a free slot's is raised at
+ * the drop itself).  The floor applies once per slot, so a slot keeps the
+ * full 16-bit cycle after a wrap (review finding 3: a floor applied at
+ * every allocation shrank a wrapped slot's cycle to 0xFFFF - floor values,
+ * and a stale packet id could name a new mesh). */
+static uint8_t s_floorPending[RD_MAX_MESHES / 8];
 
 static RdMeshRec *meshAlloc(uint32_t *id)
 {
@@ -293,7 +300,13 @@ static RdMeshRec *meshAlloc(uint32_t *id)
             if (m->live) {
                 continue;
             }
-            uint32_t gen = ((m->gen > s_genFloor ? m->gen : s_genFloor) + 1) & 0xFFFF;
+            /* a slot first used since rd_init starts above the floor */
+            uint32_t base = m->gen ? m->gen : s_genFloor;
+            if (s_floorPending[i >> 3] & (1u << (i & 7))) {
+                s_floorPending[i >> 3] &= (uint8_t)~(1u << (i & 7));
+                base = base > s_genFloor ? base : s_genFloor;
+            }
+            uint32_t gen = (base + 1) & 0xFFFF;
             memset(m, 0, sizeof(*m));
             m->gen = gen ? gen : 1;
             m->live = 1;
@@ -1995,6 +2008,16 @@ void rd_drop_vu_meshes(uint32_t savedGenHigh)
     const uint32_t high = rd_vu_mesh_gen_high();
     rd_vu_mesh_retire(NULL, NULL);
     s_genFloor = (savedGenHigh > high ? savedGenHigh : high) & 0xFFFF;
+    /* the floor once per slot: a free one's generation now, a live one's
+     * when it is next taken (meshAlloc) */
+    for (uint32_t i = 0; g_rd.meshes && i < RD_MAX_MESHES; i++) {
+        RdMeshRec *m = &g_rd.meshes[i];
+        if (!m->live) {
+            m->gen = m->gen > s_genFloor ? m->gen : s_genFloor;
+        } else {
+            s_floorPending[i >> 3] |= (uint8_t)(1u << (i & 7));
+        }
+    }
 }
 
 void rd__vu_mesh_sweep_stale(void)
@@ -2024,6 +2047,8 @@ void rd__mesh_shutdown(void)
             s_genFloor = g_rd.meshes[i].gen;
         }
     }
+    /* the next rd_init's slots start at 0: the floor rule for a first use */
+    memset(s_floorPending, 0, sizeof(s_floorPending));
     s_staleCount = 0;
 }
 

@@ -995,6 +995,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rd_mesh_test.c`: the mesh path from `Packet.c` to the VU shaders (`rd_mesh`, sharded), each
   device case's frame replayed again with the VU vertex pre-pass switched, the picture byte for
   byte the same, and every pipeline created in the set of either setting (`gpuCase`); the
+  `mesh_gen` shard: a save state load's generation floor (`rd_drop_vu_meshes`) applies once a
+  slot, so a slot wraps through the full 16-bit cycle after it (0xFFF1..0xFFFF, 1, 2, ...); the
   content table's four sandstorm sheets and the tiles appended to them (`sheetTableChecks`), one
   sheet on the device at 4:3 byte for byte the same with and without the tiles and at 16:9 the
   columns beside it drawn (`sheetPixels`), and the `photo_veil` shard: the veil's two layers at

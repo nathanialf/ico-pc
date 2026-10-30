@@ -68,6 +68,9 @@
  *            their entries (pac_HostStrips): the table, the I's through
  *            p2o_MakePacket, and with the disc image given as the argument
  *            their geometry (below, "strip order"); recording only
+ *   mesh_gen the generation floor of rd_drop_vu_meshes applies once a slot:
+ *            a slot wraps through the full 16-bit cycle after it (review
+ *            finding 3); recording only
  *   model packs  the mesh identity, replacements from a
  *            tagless stream, one drawn in the prelit packet's place,
  *            rd_vu_mesh_retire and the sweep; recording only
@@ -2370,6 +2373,54 @@ static uint64_t synthHashByHand(const Synth *s)
     return xxh3_64(buf, sizeof(buf));
 }
 
+/* Review finding 3: rd_drop_vu_meshes' generation floor applies once a
+ * slot.  A free slot after a drop at 0xFFF0 takes 0xFFF1..0xFFFF, wraps to
+ * 1 and goes on 2, 3, ... (the full 16-bit cycle; the old rule took the
+ * floor at every allocation, so it went back to 0xFFF1 after the wrap); a
+ * slot live at the drop takes a generation above the floor once it is
+ * freed and taken again.  Recording only. */
+static void genFloorChecks(void)
+{
+    static Synth s;
+    synthPacket(&s, 0x0C, 0);
+    RdMesh a = rd_create_vu_mesh(&s.d);
+    CHECK(a.id != 0, "gen floor: a mesh");
+    if (!a.id) {
+        return;
+    }
+    const uint32_t slot = a.id & 0xFFFF;
+    rd_destroy_vu_mesh(a);
+    rd_drop_vu_meshes(0xFFF0);
+    uint32_t gens[24];
+    int sameSlot = 1;
+    for (int k = 0; k < 24; k++) {
+        RdMesh m = rd_create_vu_mesh(&s.d);
+        sameSlot &= (m.id & 0xFFFF) == slot;
+        gens[k] = m.id >> 16;
+        rd_destroy_vu_mesh(m);
+    }
+    CHECK(sameSlot, "gen floor: every mesh in the freed slot %u", slot);
+    CHECK(gens[0] == 0xFFF1 && gens[14] == 0xFFFF && gens[15] == 1 && gens[16] == 2 &&
+              gens[23] == 9,
+          "gen floor: 0xFFF1..0xFFFF then 1, 2, ... 9 (got %#x %#x %#x %#x %#x)", gens[0], gens[14],
+          gens[15], gens[16], gens[23]);
+    /* a slot live at the drop: above the floor once taken again */
+    RdMesh b = rd_create_vu_mesh(&s.d);
+    rd_drop_vu_meshes(0);
+    rd_destroy_vu_mesh(b);
+    RdMesh c = rd_create_vu_mesh(&s.d);
+    RdMesh d = {0};
+    if (c.id) {
+        rd_destroy_vu_mesh(c);
+        d = rd_create_vu_mesh(&s.d);
+        rd_destroy_vu_mesh(d);
+    }
+    CHECK((b.id & 0xFFFF) == slot && (c.id & 0xFFFF) == slot && (c.id >> 16) > 0xFFF0 &&
+              (d.id >> 16) == (((c.id >> 16) + 1) & 0xFFFF ? ((c.id >> 16) + 1) & 0xFFFF : 1),
+          "gen floor: a slot live at the drop takes %#x (above 0xFFF0), then %#x", c.id >> 16,
+          d.id >> 16);
+}
+
 static void hashChecks(void)
 {
     static Synth a, b;
@@ -3497,10 +3548,10 @@ static void recordingChecks(void)
 /* the cases in the order main() runs them (ico_shard.h); the weights are seconds of a whole
    run */
 static const IcoShardCase k_cases[] = {
-    {"recording", 1},        {"strip_disc", 1},  {"box_disc_0", 14},      {"box_disc_1", 14},
-    {"box_disc_2", 15},      {"box_disc_3", 15}, {"gpu_prims", 1},        {"stretch_same", 1},
-    {"closing_original", 1}, {"chain", 1},       {"stretch_enhanced", 1}, {"photo_veil", 1},
-    {"photo_reel", 1},
+    {"recording", 1},    {"strip_disc", 1},       {"box_disc_0", 14}, {"box_disc_1", 14},
+    {"box_disc_2", 15},  {"box_disc_3", 15},      {"mesh_gen", 1},    {"gpu_prims", 1},
+    {"stretch_same", 1}, {"closing_original", 1}, {"chain", 1},       {"stretch_enhanced", 1},
+    {"photo_veil", 1},   {"photo_reel", 1},
 };
 
 int main(int argc, char **argv)
@@ -3528,6 +3579,9 @@ int main(int argc, char **argv)
         if (ico_shard_take(boxCases[q])) {
             boxDiscChecks(argc > 1 ? argv[1] : NULL, q);
         }
+    }
+    if (ico_shard_take("mesh_gen")) {
+        genFloorChecks(); /* retires every VU mesh: the recording phase's last */
     }
     rd_shutdown();
     if (failures) {
