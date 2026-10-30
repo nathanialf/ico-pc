@@ -18,6 +18,8 @@
  *         on Android)
  *   F11   the window: stats lines every second for 30 s instead of every
  *         10 s; again turns it off
+ *   F5    save states: save to slot 1 (window_host.c dispatches)
+ *   F9    save states: load slot 1
  *
  * None of these keys is bindable (port/input/keys.def has F1 to F4 only), and
  * a held key's repeats do nothing.
@@ -27,8 +29,11 @@
 
 #include <stddef.h>
 
-/* SDL3's SDLK_F11 and SDLK_F12 (SDL_SCANCODE_TO_KEYCODE of scancodes 68
-   and 69); window_host.c checks them against SDL's at compile time. */
+/* SDL3's SDLK_F5, SDLK_F9, SDLK_F11 and SDLK_F12 (SDL_SCANCODE_TO_KEYCODE of
+   scancodes 62, 66, 68 and 69); window_host.c checks them against SDL's at
+   compile time. */
+#define ICO_HOTKEY_KEY_F5 0x4000003Eu
+#define ICO_HOTKEY_KEY_F9 0x40000042u
 #define ICO_HOTKEY_KEY_F11 0x40000044u
 #define ICO_HOTKEY_KEY_F12 0x40000045u
 
@@ -37,8 +42,8 @@ typedef enum IcoHotkey {
     ICO_HOTKEY_FRAME_DUMP,   /* F12 */
     ICO_HOTKEY_STATS_FAST,   /* F11 */
     ICO_HOTKEY_ASPECT_SWEEP, /* Shift+F12 */
-    ICO_HOTKEY_STATE_SAVE,   /* save states: slot 1 (window_host.c dispatches) */
-    ICO_HOTKEY_STATE_LOAD
+    ICO_HOTKEY_STATE_SAVE,   /* F5: save states, slot 1 (window_host.c dispatches) */
+    ICO_HOTKEY_STATE_LOAD    /* F9: slot 1 */
 } IcoHotkey;
 
 /* The action of a key-down event (SDL keycode, whether it is a repeat), no
