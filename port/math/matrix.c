@@ -10,6 +10,8 @@
 
 #include "ico_math.h"
 #include "../../ico2/seki/include/Matrix.h"
+#include "../platform/state_port.h"
+#include "../platform/state_registry.h"
 
 typedef float vec4[4];
 
@@ -345,6 +347,12 @@ void _MakeLightColorMatrix(void *dst, void *s0, void *s1, void *s2, void *s3)
  * Advance: take bits 4 and 22, shift left one, XOR the two into bit 0
  * (the polynomial is PCSX2's and is unverified on hardware). */
 static uint32_t vu0R = 0x3F800000u;
+
+/* The save state's block (state_port.h). */
+int ico_matrix_state_register(void)
+{
+    return ico_state_register("vu0.r", &vu0R, sizeof vu0R, 0);
+}
 
 static uint32_t r_bits(uint32_t x)
 {
