@@ -470,7 +470,8 @@ static bool vkr_has_instance_ext(const char *name)
 
 /* The instance's API version (vkr_create_instance): the loader's at most
  * 1.3 (linked straight to MoltenVK there is no loader above the driver, so
- * that is the driver's), and 1.1 under ICO_VK_FAKE_API */
+ * that is the driver's; 1.0 on a Vulkan 1.0 loader, issue 158), 1.1 under
+ * ICO_VK_FAKE_API=1.1 and 1.1ext, 1.0 under ICO_VK_FAKE_API=1.0 */
 static uint32_t s_instanceApi = VK_API_VERSION_1_3;
 
 /* The version a device of this API version is used at: no more than the
@@ -499,6 +500,110 @@ static bool vkr_core13(uint32_t deviceApi)
 /* VK_EXT_debug_utils is enabled on the instance (validation, or
  * gpu_checkpoints for the address binding report) */
 static bool s_debugUtilsExt;
+
+/* VK_KHR_get_physical_device_properties2 on a Vulkan 1.0 loader (issue 158:
+ * Android 8's loader has no vkEnumerateInstanceVersion): required there and
+ * enabled on the instance; its two queries, found through the instance
+ * (NULL when the extension is not enabled: a 1.1 or later instance) */
+static PFN_vkGetPhysicalDeviceFeatures2KHR s_features2Khr;
+static PFN_vkGetPhysicalDeviceProperties2KHR s_props2Khr;
+
+/* Whether the core Vulkan 1.1 queries (vkGetPhysicalDeviceFeatures2,
+ * vkGetPhysicalDeviceProperties2) may be used on this device: at the
+ * version it is used at (vkr_effective_api) 1.1 or later, and found */
+static bool vkr_props2_core(VkPhysicalDevice pd)
+{
+    VkPhysicalDeviceProperties p;
+    vkGetPhysicalDeviceProperties(pd, &p);
+    return vkr_effective_api(p.apiVersion) >= VK_API_VERSION_1_1 &&
+           VKR_FUNCTION_AVAILABLE(vkGetPhysicalDeviceFeatures2) &&
+           VKR_FUNCTION_AVAILABLE(vkGetPhysicalDeviceProperties2);
+}
+
+/* Whether the extended queries (a structure chain on the features or the
+ * properties) reach this device: the core ones, or the KHR ones of a 1.0
+ * loader.  Without them (a Vulkan 1.0 device on a 1.1 or later loader)
+ * every extension whose features are queried is taken as absent, and the
+ * device is created without VkPhysicalDeviceFeatures2 (vkr_create_device) */
+static bool vkr_has_props2(VkPhysicalDevice pd)
+{
+    return vkr_props2_core(pd) || (s_features2Khr != NULL && s_props2Khr != NULL);
+}
+
+#ifndef ICO_RHI_MOLTENVK
+/* ICO_VK_FAKE_API=1.0: the core Vulkan 1.1 entry points volk loaded,
+ * cleared, as a Vulkan 1.0 loader and driver have none (the system's loader
+ * still hands out the instance-level ones for an instance created at 1.0).
+ * A core 1.1 call the port makes without its guard then stops the test at
+ * a NULL call instead of passing on lavapipe and failing on the phone.
+ * device: the device-level ones (after volkLoadDevice), else the instance's */
+static void vkr_fake_10_entry_points(bool device)
+{
+    if (!device) {
+        vkEnumeratePhysicalDeviceGroups = NULL;
+        vkGetPhysicalDeviceExternalBufferProperties = NULL;
+        vkGetPhysicalDeviceExternalFenceProperties = NULL;
+        vkGetPhysicalDeviceExternalSemaphoreProperties = NULL;
+        vkGetPhysicalDeviceFeatures2 = NULL;
+        vkGetPhysicalDeviceFormatProperties2 = NULL;
+        vkGetPhysicalDeviceImageFormatProperties2 = NULL;
+        vkGetPhysicalDeviceMemoryProperties2 = NULL;
+        vkGetPhysicalDeviceProperties2 = NULL;
+        vkGetPhysicalDeviceQueueFamilyProperties2 = NULL;
+        vkGetPhysicalDeviceSparseImageFormatProperties2 = NULL;
+        return;
+    }
+    vkBindBufferMemory2 = NULL;
+    vkBindImageMemory2 = NULL;
+    vkCmdDispatchBase = NULL;
+    vkCmdSetDeviceMask = NULL;
+    vkCreateDescriptorUpdateTemplate = NULL;
+    vkCreateSamplerYcbcrConversion = NULL;
+    vkDestroyDescriptorUpdateTemplate = NULL;
+    vkDestroySamplerYcbcrConversion = NULL;
+    vkGetBufferMemoryRequirements2 = NULL;
+    vkGetDescriptorSetLayoutSupport = NULL;
+    vkGetDeviceGroupPeerMemoryFeatures = NULL;
+    vkGetDeviceQueue2 = NULL;
+    vkGetImageMemoryRequirements2 = NULL;
+    vkGetImageSparseMemoryRequirements2 = NULL;
+    vkTrimCommandPool = NULL;
+    vkUpdateDescriptorSetWithTemplate = NULL;
+}
+#endif
+
+/* vkGetPhysicalDeviceFeatures2 by the core or the KHR entry point; with
+ * neither, the core features alone and the chain left as it was set up
+ * (each feature off).  Returns whether the chain was filled. */
+static bool vkr_features2(VkPhysicalDevice pd, VkPhysicalDeviceFeatures2 *f2)
+{
+    if (vkr_props2_core(pd)) {
+        vkGetPhysicalDeviceFeatures2(pd, f2);
+        return true;
+    }
+    if (s_features2Khr != NULL) {
+        s_features2Khr(pd, f2);
+        return true;
+    }
+    vkGetPhysicalDeviceFeatures(pd, &f2->features);
+    return false;
+}
+
+/* vkGetPhysicalDeviceProperties2 likewise; with neither entry point the
+ * core properties alone, the chain left as it was set up */
+static bool vkr_props2(VkPhysicalDevice pd, VkPhysicalDeviceProperties2 *p2)
+{
+    if (vkr_props2_core(pd)) {
+        vkGetPhysicalDeviceProperties2(pd, p2);
+        return true;
+    }
+    if (s_props2Khr != NULL) {
+        s_props2Khr(pd, p2);
+        return true;
+    }
+    vkGetPhysicalDeviceProperties(pd, &p2->properties);
+    return false;
+}
 
 static bool vkr_create_instance(const RhiDeviceDesc *desc)
 {
@@ -588,14 +693,30 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
      * ring, vk_sync.c), local read, the driver properties, the image format
      * list, the store op none and dynamic rendering (the VkRenderPass
      * path, vk_renderpass.c); =1.1ext hides nothing (a 1.1 driver with the
-     * extensions: dynamic rendering by its KHR name) */
+     * extensions: dynamic rendering by its KHR name).  =1.0 (issue 158,
+     * Android 8; rhi_vk_vk10, rd_pixel_vk10, ...) creates the instance at
+     * Vulkan 1.0 as a 1.0 loader would, with
+     * VK_KHR_get_physical_device_properties2 (the KHR queries), hides what
+     * =1.1 hides, keeps VK_KHR_maintenance1 and VK_KHR_maintenance2 (the
+     * device takes them below 1.1, vkr_create_device), and clears the core
+     * 1.1 entry points the loader still hands out (vkr_fake_10_entry_points),
+     * so a core 1.1 call left unguarded stops the test */
     g_vkr.fakeApi = NULL;
     g_vkr.fakeHideExts = false;
     g_vkr.fakeNoTimeline = false;
     {
         const char *fake = getenv("ICO_VK_FAKE_API");
         if (fake && fake[0]) {
-            if (strcmp(fake, "1.1") == 0) {
+            if (strcmp(fake, "1.0") == 0) {
+                g_vkr.fakeApi = "1.0";
+                g_vkr.fakeHideExts = true;
+                g_vkr.fakeNoTimeline = true;
+                VKR_LOG("ICO_VK_FAKE_API=1.0: the device is used as a Vulkan 1.0 driver (a 1.0 "
+                        "instance with VK_KHR_get_physical_device_properties2) without timeline "
+                        "semaphores, %slocal read, driver properties, image format list or store "
+                        "op none",
+                        VKR_LEGACY_PASSES ? "dynamic rendering, " : "");
+            } else if (strcmp(fake, "1.1") == 0) {
                 g_vkr.fakeApi = "1.1";
                 g_vkr.fakeHideExts = true;
                 g_vkr.fakeNoTimeline = true;
@@ -608,7 +729,8 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
                 VKR_LOG("ICO_VK_FAKE_API=1.1ext: the device is used as a Vulkan 1.1 driver with "
                         "the extensions it offers");
             } else {
-                VKR_LOG("ICO_VK_FAKE_API=%s: not a known profile (1.1, 1.1ext); nothing is hidden",
+                VKR_LOG("ICO_VK_FAKE_API=%s: not a known profile (1.0, 1.1, 1.1ext); nothing is "
+                        "hidden",
                         fake);
             }
         }
@@ -621,17 +743,40 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
 #else
     uint32_t loaderVersion = volkGetInstanceVersion();
 #endif
-    if (loaderVersion < VK_API_VERSION_1_1) {
+    /* a Vulkan 1.0 loader (issue 158: Android 8.0 and 8.1, whose loader
+     * has no vkEnumerateInstanceVersion, so volk reports 1.0) is taken
+     * with VK_KHR_get_physical_device_properties2, for the extended
+     * queries the 1.1 core gives (vkr_features2, vkr_props2);
+     * ICO_VK_FAKE_API=1.0 creates the instance the same way */
+    const bool fake10 = g_vkr.fakeApi != NULL && strcmp(g_vkr.fakeApi, "1.0") == 0;
+    const bool loader10 = loaderVersion < VK_API_VERSION_1_1 || fake10;
+    bool props2Ext = false;
+    if (loader10 && loaderVersion >= VK_API_VERSION_1_0 &&
+        vkr_has_instance_ext(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        bool listed = false;
+        for (uint32_t i = 0; i < extCount; i++) {
+            listed = listed ||
+                     strcmp(exts[i], VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) == 0;
+        }
+        if (!listed) {
+            exts[extCount++] = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
+        }
+        props2Ext = true;
+        VKR_LOG("Vulkan %s loader: VK_KHR_get_physical_device_properties2",
+                fake10 ? "1.0 (ICO_VK_FAKE_API=1.0)" : "1.0");
+    } else if (loader10) {
 #ifdef __ANDROID__
         /* issue 145: a driver package (Options > Graphics driver, or a zip
            in the drivers folder) is loaded by the game itself, past the
-           system's loader */
-        VKR_LOG("the Vulkan loader is %u.%u; 1.1 or later is required. A graphics driver package "
-                "(Options > Graphics driver, or a .zip file in the game's drivers folder) is "
-                "loaded by the game itself and does not use the system's loader",
+           system's loader (Android 9 and later: libadrenotools) */
+        VKR_LOG("the Vulkan loader is %u.%u without VK_KHR_get_physical_device_properties2; 1.0 "
+                "with it, or 1.1 or later, is required. A graphics driver package (Options > "
+                "Graphics driver, or a .zip file in the game's drivers folder, Android 9 or "
+                "later) is loaded by the game itself and does not use the system's loader",
                 VK_API_VERSION_MAJOR(loaderVersion), VK_API_VERSION_MINOR(loaderVersion));
 #else
-        VKR_LOG("the Vulkan loader is %u.%u; 1.1 or later is required",
+        VKR_LOG("the Vulkan loader is %u.%u without VK_KHR_get_physical_device_properties2; 1.0 "
+                "with it, or 1.1 or later, is required",
                 VK_API_VERSION_MAJOR(loaderVersion), VK_API_VERSION_MINOR(loaderVersion));
 #endif
         return false;
@@ -639,6 +784,9 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
     s_instanceApi = loaderVersion < VK_API_VERSION_1_3 ? loaderVersion : VK_API_VERSION_1_3;
     if (g_vkr.fakeApi && s_instanceApi > VK_API_VERSION_1_1) {
         s_instanceApi = VK_API_VERSION_1_1;
+    }
+    if (fake10) {
+        s_instanceApi = VK_API_VERSION_1_0;
     }
     const uint32_t instanceApi = s_instanceApi;
     VkApplicationInfo app = {
@@ -664,6 +812,24 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
 #ifndef ICO_RHI_MOLTENVK
     volkLoadInstanceOnly(g_vkr.instance);
 #endif
+    s_features2Khr = NULL;
+    s_props2Khr = NULL;
+    if (props2Ext) {
+        s_features2Khr = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(
+            g_vkr.instance, "vkGetPhysicalDeviceFeatures2KHR");
+        s_props2Khr = (PFN_vkGetPhysicalDeviceProperties2KHR)vkGetInstanceProcAddr(
+            g_vkr.instance, "vkGetPhysicalDeviceProperties2KHR");
+        if (s_features2Khr == NULL || s_props2Khr == NULL) {
+            VKR_LOG("VK_KHR_get_physical_device_properties2: its queries were not found");
+            s_features2Khr = NULL;
+            s_props2Khr = NULL;
+        }
+    }
+#ifndef ICO_RHI_MOLTENVK
+    if (fake10) {
+        vkr_fake_10_entry_points(false);
+    }
+#endif
 
     if (g_vkr.debugUtils) {
         VkDebugUtilsMessengerCreateInfoEXT mci = {
@@ -681,8 +847,9 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
 }
 
 /* ------------------------------------------------------- device selection */
-/* ICO_VK_FAKE_API=1.1: the device extensions a stock Vulkan 1.1 driver
- * (Adreno 618 class) does not offer, reported absent */
+/* ICO_VK_FAKE_API=1.1 and =1.0: the device extensions a stock Vulkan 1.1
+ * driver (Adreno 618 class) does not offer, reported absent (=1.0 keeps
+ * VK_KHR_maintenance1 and VK_KHR_maintenance2, which a 1.0 device takes) */
 static bool vkr_fake_hidden(const char *name)
 {
     static const char *const hidden[] = {
@@ -851,14 +1018,17 @@ static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDevicePropertie
     VkPhysicalDeviceDriverProperties dp = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES,
     };
-    g_vkr.driverProps = vkr_effective_api(p->apiVersion) >= VK_API_VERSION_1_2 ||
-                        vkr_device_has_ext(pd, VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME);
+    /* the extended query exists (vkr_has_props2): a Vulkan 1.0 device
+     * without it reads as a 1.1 device without the extension */
+    g_vkr.driverProps =
+        vkr_has_props2(pd) && (vkr_effective_api(p->apiVersion) >= VK_API_VERSION_1_2 ||
+                               vkr_device_has_ext(pd, VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME));
     VkPhysicalDeviceProperties2 p2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
         .pNext = g_vkr.driverProps ? &dp : NULL,
     };
     char ver[32];
-    vkGetPhysicalDeviceProperties2(pd, &p2);
+    vkr_props2(pd, &p2);
     dp.driverName[VK_MAX_DRIVER_NAME_SIZE - 1] = '\0';
     dp.driverInfo[VK_MAX_DRIVER_INFO_SIZE - 1] = '\0';
     rhi_driver_version_text(p->vendorID, (uint32_t)dp.driverID, p->driverVersion, ver, sizeof ver);
@@ -890,7 +1060,7 @@ static bool vkr_device_timeline(VkPhysicalDevice pd, uint32_t api)
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
         VkPhysicalDeviceFeatures2 f2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                         .pNext = &f12};
-        vkGetPhysicalDeviceFeatures2(pd, &f2);
+        vkr_features2(pd, &f2);
         return f12.timelineSemaphore == VK_TRUE;
     }
     if (!vkr_device_has_ext(pd, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME)) {
@@ -900,28 +1070,35 @@ static bool vkr_device_timeline(VkPhysicalDevice pd, uint32_t api)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR};
     VkPhysicalDeviceFeatures2 f2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                     .pNext = &ft};
-    vkGetPhysicalDeviceFeatures2(pd, &f2);
+    vkr_features2(pd, &f2);
     return ft.timelineSemaphore == VK_TRUE;
 }
 
 /* Returns a score (higher is better) or -1 when the device cannot run the
  * renderer.  *outQueue receives the graphics(+present) queue family.  The
  * device needs Vulkan 1.1 (at the version it is used at,
- * vkr_effective_api); dynamic rendering (core 1.3 or VK_KHR_dynamic_rendering)
- * and timeline semaphores score instead of being required (without them the
- * VkRenderPass path, vk_renderpass.c, and the fence ring, vk_sync.c; with
- * VKR_LEGACY_PASSES at 0 dynamic rendering is required again) */
+ * vkr_effective_api), or Vulkan 1.0 with VK_KHR_maintenance1 (issue 158,
+ * Android 8: the negative-height viewport, vk_cmd.c rhi_cmd_set_viewport,
+ * and the transfer format features; VK_KHR_maintenance2, the UINT view's
+ * usage, vk_resource.c, is taken when offered); dynamic rendering (core
+ * 1.3 or VK_KHR_dynamic_rendering, never below 1.1: it needs 1.1's
+ * multiview and render pass 2) and timeline semaphores score instead of
+ * being required (without them the VkRenderPass path, vk_renderpass.c, and
+ * the fence ring, vk_sync.c; with VKR_LEGACY_PASSES at 0 dynamic rendering
+ * is required again) */
 static int vkr_rate_device(VkPhysicalDevice pd, uint32_t *outQueue, const char **why)
 {
     VkPhysicalDeviceProperties p;
     vkGetPhysicalDeviceProperties(pd, &p);
     const uint32_t api = vkr_effective_api(p.apiVersion);
-    if (api < VK_API_VERSION_1_1) {
-        *why = "Vulkan 1.1 not supported";
+    const bool core11 = api >= VK_API_VERSION_1_1;
+    if (!core11 && !vkr_device_has_ext(pd, VK_KHR_MAINTENANCE_1_EXTENSION_NAME)) {
+        *why = "Vulkan 1.0 without VK_KHR_maintenance1 (1.1, or 1.0 with it, is required)";
         return -1;
     }
     bool core13 = vkr_core13(p.apiVersion);
-    const bool dynamic = core13 || vkr_device_has_ext(pd, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    const bool dynamic =
+        core13 || (core11 && vkr_device_has_ext(pd, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME));
 #if !VKR_LEGACY_PASSES
     if (!dynamic) {
         *why = "no dynamic rendering";
@@ -999,6 +1176,10 @@ static int vkr_rate_device(VkPhysicalDevice pd, uint32_t *outQueue, const char *
         break;
     }
     if (core13) {
+        score += 10;
+    }
+    /* a Vulkan 1.1 device is preferred over a 1.0 one */
+    if (core11) {
         score += 10;
     }
     if (f.dualSrcBlend) {
@@ -1182,6 +1363,7 @@ static bool vkr_create_device(void)
      * dependency and the present-mode query that takes the same chain */
     if (g_vkr.surface && g_vkr.surfaceCaps2 &&
         VKR_FUNCTION_AVAILABLE(vkGetPhysicalDeviceSurfaceCapabilities2KHR) &&
+        vkr_has_props2(g_vkr.phys) &&
         vkr_device_has_ext(g_vkr.phys, "VK_EXT_full_screen_exclusive")) {
         g_vkr.presentModes2 =
             vkGetInstanceProcAddr(g_vkr.instance, "vkGetPhysicalDeviceSurfacePresentModes2EXT");
@@ -1195,8 +1377,10 @@ static bool vkr_create_device(void)
      * below, with on a 1.1 device VK_KHR_create_renderpass2 and
      * VK_KHR_depth_stencil_resolve, which it needs there), or VkRenderPass
      * objects without it (legacyPasses) */
+    const bool core11 = g_vkr.apiVersion >= VK_API_VERSION_1_1;
     g_vkr.legacyPasses =
-        !core13 && !vkr_device_has_ext(g_vkr.phys, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+        !core13 &&
+        (!core11 || !vkr_device_has_ext(g_vkr.phys, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME));
 #if !VKR_LEGACY_PASSES
     if (g_vkr.legacyPasses) {
         VKR_LOG("no dynamic rendering, and this build has no VkRenderPass path");
@@ -1209,6 +1393,25 @@ static bool vkr_create_device(void)
             exts[extCount++] = VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME;
             exts[extCount++] = VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME;
         }
+    }
+    /* what is core in Vulkan 1.1, by its KHR name on a 1.0 device (issue
+     * 158; vkr_rate_device required VK_KHR_maintenance1): maintenance1 (the
+     * negative-height viewport) and maintenance2 when offered (the UINT
+     * view's VkImageViewUsageCreateInfo, viewUsage: without it the view
+     * keeps the image's usages, vk_resource.c vkr_create_uint_view) */
+    g_vkr.viewUsage = true;
+    if (!core11) {
+        exts[extCount++] = VK_KHR_MAINTENANCE_1_EXTENSION_NAME;
+        g_vkr.viewUsage = vkr_device_has_ext(g_vkr.phys, VK_KHR_MAINTENANCE_2_EXTENSION_NAME);
+        if (g_vkr.viewUsage) {
+            exts[extCount++] = VK_KHR_MAINTENANCE_2_EXTENSION_NAME;
+        }
+        VKR_LOG("Vulkan 1.0 device: VK_KHR_maintenance1; VK_KHR_maintenance2 %s; extended "
+                "queries %s",
+                g_vkr.viewUsage ? "yes" : "no (the UINT views keep the image's usages)",
+                vkr_has_props2(g_vkr.phys)
+                    ? "yes (VK_KHR_get_physical_device_properties2)"
+                    : "no (no loader extension: the optional features are off)");
     }
     /* what is core in Vulkan 1.2, by its KHR name on a 1.1 device: the
      * driver properties (vkr_driver_text queried them already) and the
@@ -1352,7 +1555,7 @@ static bool vkr_create_device(void)
         if (chain) {
             VkPhysicalDeviceFeatures2 q = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                            .pNext = chain};
-            vkGetPhysicalDeviceFeatures2(g_vkr.phys, &q);
+            vkr_features2(g_vkr.phys, &q);
         }
         g_vkr.interlock = !fake && !fakeNoInterlock && extInterlock &&
                           qInterlock.fragmentShaderPixelInterlock &&
@@ -1470,7 +1673,7 @@ static bool vkr_create_device(void)
             qPid.pNext = &qPw;
             VkPhysicalDeviceFeatures2 q = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                            .pNext = &qPid};
-            vkGetPhysicalDeviceFeatures2(g_vkr.phys, &q);
+            vkr_features2(g_vkr.phys, &q);
             offered = qPid.presentId && qPw.presentWait;
         }
         g_vkr.presentWait = vkr_present_wait_wanted(offered, asked, canThread);
@@ -1511,7 +1714,7 @@ static bool vkr_create_device(void)
             vkr_device_has_ext(g_vkr.phys, VK_EXT_PRESENT_MODE_FIFO_LATEST_READY_EXTENSION_NAME)) {
             VkPhysicalDeviceFeatures2 q = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                            .pNext = &qLatest};
-            vkGetPhysicalDeviceFeatures2(g_vkr.phys, &q);
+            vkr_features2(g_vkr.phys, &q);
             g_vkr.fifoLatestReady = qLatest.presentModeFifoLatestReady != 0;
         }
         if (wanted) {
@@ -1561,7 +1764,7 @@ static bool vkr_create_device(void)
             wantCheck && s_debugUtilsExt &&
             vkr_device_has_ext(g_vkr.phys, VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME);
         const bool extCheck =
-            wantCheck &&
+            wantCheck && vkr_has_props2(g_vkr.phys) &&
             vkr_device_has_ext(g_vkr.phys, VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
         void *chain = NULL;
         if (extFault) {
@@ -1579,7 +1782,7 @@ static bool vkr_create_device(void)
         if (chain) {
             VkPhysicalDeviceFeatures2 q = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                            .pNext = chain};
-            vkGetPhysicalDeviceFeatures2(g_vkr.phys, &q);
+            vkr_features2(g_vkr.phys, &q);
         }
         g_vkr.deviceFault = extFault && qFault.deviceFault;
         g_vkr.robust = wantRobust && avail.robustBufferAccess == VK_TRUE;
@@ -1713,7 +1916,7 @@ static bool vkr_create_device(void)
         if (chain) {
             VkPhysicalDeviceFeatures2 q = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                            .pNext = chain};
-            vkGetPhysicalDeviceFeatures2(g_vkr.phys, &q);
+            vkr_features2(g_vkr.phys, &q);
         }
         edsExt = !fakeAll && hasEds && qEds.extendedDynamicState;
         g_vkr.dynDepth = !fakeAll && !tilerOff && (core13 || edsExt);
@@ -1856,7 +2059,7 @@ static bool vkr_create_device(void)
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
             .pNext = &subset,
         };
-        vkGetPhysicalDeviceFeatures2(g_vkr.phys, &query);
+        vkr_features2(g_vkr.phys, &query);
         subset.pNext = syncFeatures;
         f2.pNext = &subset;
     }
@@ -1876,11 +2079,22 @@ static bool vkr_create_device(void)
         .enabledExtensionCount = extCount,
         .ppEnabledExtensionNames = exts,
     };
+    /* a Vulkan 1.0 device without the extended queries (vkr_has_props2)
+     * takes no VkPhysicalDeviceFeatures2: the core features through
+     * pEnabledFeatures, and the rest of the chain (each structure there was
+     * queried off, so nothing is chained) */
+    if (!vkr_has_props2(g_vkr.phys)) {
+        ci.pNext = f2.pNext;
+        ci.pEnabledFeatures = &f2.features;
+    }
     if (!VKR_CHECK(vkCreateDevice(g_vkr.phys, &ci, NULL, &g_vkr.device))) {
         return false;
     }
 #ifndef ICO_RHI_MOLTENVK
     volkLoadDevice(g_vkr.device);
+    if (g_vkr.fakeApi != NULL && strcmp(g_vkr.fakeApi, "1.0") == 0) {
+        vkr_fake_10_entry_points(true);
+    }
 #endif
     vkGetDeviceQueue(g_vkr.device, g_vkr.queueFamily, 0, &g_vkr.queue);
     if (g_vkr.presentWait) {
@@ -2312,6 +2526,21 @@ bool rhi_init(const RhiDeviceDesc *desc)
             g_vkr.legacyPasses ? "legacy" : "dynamic", vkr_sync_name(),
             g_vkr.fakeApi ? "; ICO_VK_FAKE_API=" : "", g_vkr.fakeApi ? g_vkr.fakeApi : "");
     return true;
+}
+
+uint32_t vkr_test_api_version(void)
+{
+    return g_vkr.apiVersion;
+}
+
+bool vkr_test_legacy_passes(void)
+{
+    return g_vkr.legacyPasses;
+}
+
+bool vkr_test_view_usage(void)
+{
+    return g_vkr.viewUsage;
 }
 
 void rhi_shutdown(void)
