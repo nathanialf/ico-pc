@@ -573,7 +573,11 @@ static bool vkr_create_view(VkImage image, VkFormat fmt, VkImageAspectFlags aspe
  * with the two formats listed), sampled only: the view's usage is
  * restricted to SAMPLED (Vulkan 1.1 VkImageViewUsageCreateInfo), so the
  * image's attachment and copy usages, which the UNORM format carries, are
- * not asked of the UINT one */
+ * not asked of the UINT one.  A Vulkan 1.0 device without
+ * VK_KHR_maintenance2 (g_vkr.viewUsage false, issue 158) has no such
+ * structure: the view keeps the image's usages, which RGBA8_UINT takes as
+ * well (sampled, storage and copies are features Vulkan 1.0 requires of
+ * it; the colour attachment vkr_rate_device checks) */
 static bool vkr_create_uint_view(VkImage image, uint32_t mips, VkImageView *out)
 {
     const VkImageViewUsageCreateInfo use = {
@@ -582,7 +586,7 @@ static bool vkr_create_uint_view(VkImage image, uint32_t mips, VkImageView *out)
     };
     VkImageViewCreateInfo vi = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .pNext = &use,
+        .pNext = g_vkr.viewUsage ? &use : NULL,
         .image = image,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
         .format = VK_FORMAT_R8G8B8A8_UINT,
