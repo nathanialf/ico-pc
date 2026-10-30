@@ -1275,6 +1275,13 @@ void ico_ach_tick(void)
     }
 }
 
+void ico_ach_host_state_loaded(unsigned int main_ticks)
+{
+    /* the restored Main tick is earlier: the per-tick check resumes from it
+       (the poll's catch-up loop would count up to it through the wrap) */
+    s_last_main_tick = main_ticks;
+}
+
 void ico_ach_host_poll(unsigned int main_ticks)
 {
     if (!s_inited) {
