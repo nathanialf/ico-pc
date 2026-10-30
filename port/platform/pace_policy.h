@@ -93,8 +93,9 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
  * steps (probeLeft): a late step in them drops it again (a failed probe:
  * probeFailed the steps since the climb) and doubles probeWait, to
  * PACE_PROBE_WAIT_MAX at most; a probe that lasts them sets probeWait back
- * to PACE_PROBE_WAIT.  The GPU figure on D3D11 and Vulkan is the timed
- * replay's stamp span, the GPU's waits for the CPU's submissions in it: a
+ * to PACE_PROBE_WAIT.  The GPU figure is the timed replay's stamp span on
+ * every backend (RdPerfRecord.gpuMs, rd_perf.c rd__perf_collect_gpu: the
+ * first stamp to the last), the GPU's waits for the CPU's submissions in it: a
  * 750 Ti reading 12 to 15 ms presented 60 a second with 598 of 601
  * presents waiting for the display, yet the gate (1 * 14 + 5 > 16.7) held
  * the lock at 30 for up to 3600 steps.  So under the lock the figure is
