@@ -13,8 +13,10 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/main_host.c` | the program's `main` (desktop) or `ico_host_main` (Android, iOS): log, ini, game data, tables, window, the vsync loop |
 | `port/platform/host_loop.c`, `host_loop.h` | `ico_host_init`, `ico_host_step`, the step profile |
 | `port/platform/vsync_hooks.c` | the on-vsync callback list |
-| `port/platform/fiber.c`, `fiber.h` | the context switch over minicoro (`port/third_party/minicoro`), guarded stacks |
-| `port/platform/sched.c`, `sched.h` | the EE thread and semaphore model; `ico_sched_call_on_host` |
+| `port/platform/fiber.c`, `fiber.h` | the context switch over minicoro (`port/third_party/minicoro`), the slot pool with guarded stacks, a suspended fiber's save state image |
+| `port/platform/sched.c`, `sched.h` | the EE thread and semaphore model; `ico_sched_call_on_host`; the scheduler's save state image |
+| `port/platform/vm_reserve.c`, `vm_reserve.h` | address space reserved at a chosen address, committed and decommitted (the pinned arena, the fiber pool) |
+| `port/platform/state_reloc.c`, `state_reloc.h` | a save state's address ranges and their deltas; the relocation word functions |
 | `port/platform/kernel_host.c`, `kernel_host.h` | the EE kernel calls of `port/compat/eekernel.h`; the INTC table |
 | `port/platform/arena.c`, `arena.h` | the EE RAM arena and the heap statistics |
 | `port/platform/hwregs.c` | the EE I/O and GS privileged register pages as plain memory |
@@ -85,10 +87,57 @@ costs rendering and speed on MoltenVK there (`port/platform/ios/main_ios.c` (`ma
 Each [fiber](ARCHITECTURE.md#terms) is an asymmetric coroutine over minicoro: `ico_fiber_resume`
 runs it on its own stack until it calls `ico_fiber_yield` (`port/platform/fiber.h`). The scheduler
 is the only resumer, so every switch between two game threads goes fiber, scheduler, fiber. Stacks
-are 256 KB (`ICO_FIBER_STACK_SIZE`). With minicoro's assembly backend (x86-64 Linux and Windows,
-arm64) the stack has a no-access guard page below it, so an overflow faults instead of corrupting
-the fiber's control block (`port/platform/fiber.c` (the stack allocation section);
-`ico_fiber_has_guard_page`).
+are 256 KB (`ICO_FIBER_STACK_SIZE`). Every preset uses minicoro's assembly backend (x86-64 Linux
+and Windows, arm64), and the stack has a no-access guard page below it, so an overflow faults
+instead of corrupting the fiber's control block (`ico_fiber_has_guard_page`; the `fiber_guard`
+test).
+
+### The pool
+
+Every fiber lives in one of 256 slots (`ICO_FIBER_POOL_SLOTS`) of one address space reservation
+(`port/platform/fiber.c` (the pool section)). A slot is a header page (the `IcoFiber` record, then
+minicoro's `mco_coro` and switch context, placed where minicoro's `_mco_create_context` puts them
+in its one-block layout), the guard page (minicoro's storage area, one page long), the stack and
+minicoro's 16 spare bytes, rounded up to 64 KB, the Windows reservation granularity (320 KB with
+4 KB pages, about 80 MB of address space for the pool). A slot is committed when a fiber is
+created in it and decommitted when the fiber is destroyed (a fresh no-access mapping over it on
+POSIX, `MEM_DECOMMIT` on Windows), so a long session keeps only the live fibers' pages
+(`port/platform/vm_reserve.c`). `ico_fiber_create_in_slot(slot, fn, arg)` takes a given slot and
+refuses a used one; `ico_fiber_create` takes the highest free slot, for the tests and tools, so it
+stays clear of the scheduler's slots, which count up from 1.
+
+The pool is reserved at `ICO_FIBER_POOL_BASE` (0x3C10000000, 256 MB above the arena's pinned base)
+when that address is free: `mmap` with `MAP_FIXED_NOREPLACE` on Linux and Android (an older
+kernel takes the flag as a hint, so the address is checked and a miss unmapped), `mmap` with the
+address as a hint on Apple (checked), `VirtualAlloc` at the address on Windows. When it is taken
+the pool goes anywhere, with one line: `fiber: pool reserved at <address> (the pinned base was
+taken)`. `ico_fiber_pool_pinned` says which; `ico_fiber_pool_init_at` moves an empty pool (the
+tests' second pool at another address).
+
+### Save state images
+
+A save state (`port/platform/state.h`) holds each game thread's fiber as its slot's header
+page and the used part of its stack: from the saved stack pointer minus 128 bytes (the System V
+red zone) to the stack's top (`ico_fiber_slot_save`, which points into the live slot and copies
+nothing). `ico_fiber_slot_restore` commits the same slot of the current pool and copies both back
+at the same offsets, then moves the addresses they hold (`port/platform/state_reloc.h`):
+
+- typed: the saved return address (`rip`; `lr` and `x30` on arm64) by the module delta; the stack
+  pointer (`rsp`; `sp`) and, on Windows, the TEB stack words minicoro's switch swaps
+  (`stack_base`, `stack_limit`, `dealloc_stack`) by the pool delta, each checked to land in the
+  slot's stack; minicoro's own pointers (`context`, `stack_base`, `storage`, `user_data`,
+  `allocator_data`, `func`, `dealloc_cb`) and the record's `co` set for the slot, each checked
+  against its old value plus its delta; the record's `fn` by the module delta;
+- the conservative scan (`ico_state_reloc_word`): the other callee-saved registers (`rbx`, `rbp`,
+  `r12` to `r15`, and `rdi`, `rsi` on Windows; `x19` to `x29` on arm64; `rbp` and `x29` are
+  scanned, not typed, since code built without frame pointers keeps anything in them), the
+  record's `arg`, and every 8-byte word of the restored stack;
+- never: the vector registers (`xmm6` to `xmm15`, `d8` to `d15`); `back_ctx` is cleared (the next
+  resume writes it).
+
+A check that fails frees the slot again and the restore returns -1. `ico_fiber_slot_discard`
+drops a slot without running its fiber (a load replaces every live thread). The calls work on
+the host context only, with the assembly backend on x86-64 and arm64.
 
 The game's own thread stacks (`mainThreadStack`, the stacks `iosThreadCreate` is handed) are
 still allocated and stamped with `<THREAD_SP>` marks by the game, so its memory use is the PS2's
@@ -139,6 +188,17 @@ run, higher ones woken by an interrupt do, and `ico_sched_run` returns to the ho
 thread is the highest ready one, until the next vsync (`port/platform/sched.h` (Busy waits);
 `port/platform/kernel_host.c` (`VSync`); `port/null/gfx_null.c` (`sceGsSyncV`);
 `ico2/common/src/main.c` (`idle`)).
+
+Thread id N runs in pool slot N (`ico_sched_start_thread` calls `ico_fiber_create_in_slot`), so a
+loaded state's threads get their stacks back at the same offsets. `ico_sched_state_save` and
+`ico_sched_state_restore` (`port/platform/sched.h`) work at the host loop's quiescent point only
+(no thread on the CPU, the dispatcher idle, no interrupt open, no host call pending): the
+scheduler's simulation state is one block (the thread and semaphore tables, the ready queues, the
+current and last thread, the vsync and switch counts) plus every started thread's fiber image.
+The restore checks the image against itself before it changes anything, discards every live
+fiber, copies the block, moves its host pointers (`entry`, `note`, `note_caller` typed by the
+module delta; `arg`, `stack`, `gp` by the scan) and restores each saved fiber into its slot; a
+failure after the discard leaves the scheduler empty for the caller to put its backup back.
 
 Host work too deep for a 256 KB fiber stack (the GPU driver's replay, pipeline creation, present)
 goes through `ico_sched_call_on_host`: from a fiber the thread yields, the dispatcher runs the
@@ -235,7 +295,12 @@ fast as it can. [DISPLAY.md](DISPLAY.md#pacing) describes the paths and the vsyn
 `ico_arena_init` allocates one block of `ICO_ARENA_EE_SIZE` (32 MB) plus `ICO_ARENA_HEADROOM`
 (8 MB), zero filled (`VirtualAlloc` on Windows, `mmap` elsewhere), with its base 1 MB aligned so
 every address keeps the EE's residue modulo any alignment up to 1 MB
-(`port/platform/arena.h`; `port/platform/arena.c` (`ico_arena_init`)). `ico_arena_ee_addr(ee)`
+(`port/platform/arena.h`; `port/platform/arena.c` (`ico_arena_init`)). It is pinned at
+`ICO_ARENA_PIN_BASE` (0x3C00000000, inside the 39-bit address space of the smallest arm64 Android
+kernels) when that address is free, by the same calls as the fiber pool ([The pool](#the-pool)), so
+a save state's pointers into it stay valid in the next run; when the address is taken it goes
+anywhere with the line `arena: pinned base unavailable, save states will relocate`
+(`ico_arena_pinned`). `ico_arena_ee_addr(ee)`
 is the host address of EE physical address `ee`. `ico_host_init` logs the base, which turns the
 object pointers in the renderer's draw keys back into EE addresses
 (`port/platform/host_loop.c` (`ico_host_init`)).
