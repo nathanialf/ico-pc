@@ -442,6 +442,31 @@ if(TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS)
                          SKIP_REGULAR_EXPRESSION "model_viewer_headless: skipped")
 endif()
 
+# state_roundtrip_headless: save states in the headless program in stage
+# 22, driven by test/state_roundtrip_pad.txt (test/state_roundtrip_headless.cmake):
+# a save on the pause menu, play, a hash, the load, the same play again and
+# the hash equal. state_roundtrip_headless_settings: a state saved by one
+# run is refused by a second with a simulation key changed, which names the
+# key and goes on. The disc image is needed; save states are off on a
+# sanitizer build; both skipped then (cmake -P cannot exit 77 at CMake 3.25,
+# so the skip is the message). Game runs, so alone.
+if(TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS)
+    foreach(_mode roundtrip settings)
+        set(_test state_roundtrip_headless)
+        if(_mode STREQUAL "settings")
+            set(_test state_roundtrip_headless_settings)
+        endif()
+        add_test(NAME ${_test}
+                 COMMAND "${CMAKE_COMMAND}" "-DICO_PC=$<TARGET_FILE:ico_pc>" "-DISO=${ICO_DISC_IMAGE}"
+                         "-DPAD=${CMAKE_CURRENT_SOURCE_DIR}/test/state_roundtrip_pad.txt"
+                         "-DDIR=${CMAKE_CURRENT_BINARY_DIR}/${_test}_run" "-DMODE=${_mode}"
+                         "-DSANITIZE=${ICO_SANITIZE}"
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/state_roundtrip_headless.cmake")
+        set_tests_properties(${_test} PROPERTIES RUN_SERIAL TRUE TIMEOUT 300
+                             SKIP_REGULAR_EXPRESSION "${_test}: skipped")
+    endforeach()
+endif()
+
 # credits_test: the game's staffroll.c over a short table in the disc's forms,
 # with the font stubbed to record the posted and printed lines: the port
 # credit's lines come after the disc's, the heading then the name in the
