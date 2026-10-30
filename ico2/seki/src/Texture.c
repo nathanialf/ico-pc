@@ -580,9 +580,10 @@ static RdTex texHostTexture(int id)
     smp.wrapT = RD_WRAP_REPEAT;
     smp.tex1Lod = tex1Lod;
     /* the characters' colours decode from a recoloured copy of the
-       CLUT (appearance.h); rdtex_store decodes before it returns
-       (rd_tex.c rdtex_store -> rdtex_decode), so the copy on the stack
-       is enough.  t->clut.addr is never written (texHostClutCheck and the
+       CLUT (appearance.h); rdtex_store decodes before it returns or
+       queues the decode with a copy of the bytes (rd_tex.c store,
+       rd_tex_decode.h), so the copy on the stack is enough.
+       t->clut.addr is never written (texHostClutCheck and the
        CLUT scroll compare it), and texHostPack names and dumps the
        original */
     draw = im;
