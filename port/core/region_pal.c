@@ -66,6 +66,7 @@ const IcoRegionInfo ico_region_info_pal = {
     .layout_play = 54,           /* ui_mouse.c:31, mouse_look.h:37 */
     .layout_scene = 55,          /* ui_mouse.c:32, mouse_look.h:38, credits.c:66 */
     .layout_mc_files = 14,       /* ui_mouse.c:35, layout_action.c:1024 */
+    .layout_load_files = 19,     /* texLayout[19] la_mc_load_file_select, its link 14 */
     .layout_load = 25,           /* gamestate.c:217 */
     .layout_save_complete = 41,  /* gamestate.c:218 */
 

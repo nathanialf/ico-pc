@@ -160,8 +160,9 @@ typedef struct IcoRegionInfo {
     int layout_play;           /* la_game_loop */
     int layout_scene;          /* la_game_demo (the empty layout of a scene) */
     int layout_mc_files;       /* la_mc_file_select */
-    int layout_load;           /* la_load_processing */
-    int layout_save_complete;  /* la_save_confirm_complete */
+    int layout_load_files; /* la_mc_load_file_select (the Continue screen, linked to the above) */
+    int layout_load;       /* la_load_processing */
+    int layout_save_complete; /* la_save_confirm_complete */
 
     /* --- menu rows (texProperty rows) ----------------------------------- */
     int property_count;    /* LT_GAME_PROPERTY_COUNT */

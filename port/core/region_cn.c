@@ -95,6 +95,7 @@ const IcoRegionInfo ico_region_info_cn = {
     .layout_play = 51,          /* texLayout[51] la_game_loop */
     .layout_scene = 52,         /* texLayout[52] la_game_demo */
     .layout_mc_files = 11,      /* texLayout[11] la_mc_file_select; layout_action.c:1026 */
+    .layout_load_files = 16,    /* texLayout[16] la_mc_load_file_select, its link 11 */
     .layout_load = 22,          /* texLayout[22] la_load_processing */
     .layout_save_complete = 38, /* texLayout[38] la_save_confirm_complete */
 

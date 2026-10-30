@@ -116,6 +116,7 @@ const IcoRegionInfo ico_region_info_jun26 = {
     .layout_play = 50,          /* texLayout[50] la_game_loop */
     .layout_scene = 51,         /* texLayout[51] la_game_demo */
     .layout_mc_files = 11,      /* texLayout[11] la_mc_file_select */
+    .layout_load_files = 16,    /* texLayout[16] la_mc_load_file_select, its link 11 */
     .layout_load = 22,          /* texLayout[22] la_load_processing */
     .layout_save_complete = 37, /* texLayout[37] la_save_confirm_complete */
 
