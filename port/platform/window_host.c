@@ -56,6 +56,7 @@
 #include "window_host.h"
 #include "window_lines.h"
 #include "window_pipeline_skip.h"
+#include "window_sweep.h"
 #include "window_lifecycle.h"
 #include "window_pump_win.h"
 #include "window_switch.h"
@@ -252,6 +253,9 @@ static struct {
     Uint64 fastUntil;
     /* F12's presented-picture PNG while its capture is pending ("": none) */
     char presentPng[ICO_PATH_MAX];
+    /* the bug-report capture's zip, which the presented picture is added to
+       once it is written (empty: F12's, or the zip was not written) */
+    char reportZip[ICO_PATH_MAX];
     /* the present that took it: the record of the first present_once after
        the capture was armed (presentInfoPending until then; presentInfoHave
        once noted), the frame the dump holds and whether the zip holds the
@@ -2991,6 +2995,11 @@ static int device_lost_quit(void)
     return 1;
 }
 
+/* picture limit for the bug-report capture: the presented picture goes in
+   the zip at most this wide (rd_capture_presented_max box-downscales it): a
+   1920 x 1080 PNG is ~6.2 MB stored, less in the zip */
+#define REPORT_PICTURE_MAX_W 1920u
+
 /* F12, the frame on the screen for a bug report, in <pref>/dumps: a PNG
    and a zip of the rd dump, the tick before's (rd_dump_prev_frame: with it
    rd_replay_tool --interp rebuilds the pictures between the two, where the
@@ -3000,7 +3009,9 @@ static int device_lost_quit(void)
    loose .rddump deleted by ico_frame_dump_zip once the zip is written; when the zip fails the
    .rddump is kept. The log is logs/ico-pc.log, a file on Android too; with
    --console there is none and the zip holds the dump alone. */
-static void frame_dump(void)
+/* forReport: Settings' bug-report capture (the presented picture goes into
+   the zip too); F12 leaves the PNG loose as ever */
+static void frame_dump(int forReport)
 {
     char pref[ICO_PATH_MAX], dir[ICO_PATH_MAX], dump[ICO_PATH_MAX], png[ICO_PATH_MAX],
         zip[ICO_PATH_MAX], prev[ICO_PATH_MAX + 8], why[160];
@@ -3031,8 +3042,10 @@ static void frame_dump(void)
        present (the .png above is the whole DISPLAY frame, which at 16:9 is
        wider than the window's picture; tools/native_frame_check.py reads
        that one) */
+    s_pres.reportZip[0] = '\0';
     if (ico_frame_present_path(dir, stamp, s_pres.presentPng, sizeof(s_pres.presentPng)) == 0 &&
-        !rd_capture_presented(s_pres.presentPng)) {
+        !(forReport ? rd_capture_presented_max(s_pres.presentPng, REPORT_PICTURE_MAX_W)
+                    : rd_capture_presented(s_pres.presentPng))) {
         fprintf(stderr, "window: F12: the presented picture could not be armed\n");
         s_pres.presentPng[0] = '\0';
     }
@@ -3053,6 +3066,9 @@ static void frame_dump(void)
                                 sizeof(why));
     }
     s_pres.presentDumpPrev = havePrev && zr >= 0;
+    if (forReport && zr >= 0 && s_pres.presentPng[0] != '\0') {
+        snprintf(s_pres.reportZip, sizeof(s_pres.reportZip), "%s", zip);
+    }
     if (zr < 0) {
         fprintf(stderr, "window: dump: zip not written: %s%s\n", why,
                 ok ? "; the .rddump is kept" : "");
@@ -3063,6 +3079,13 @@ static void frame_dump(void)
             zr >= 0 ? zip : "",
             havePrev ? "with the tick before: rd_replay_tool --interp rebuilds the pictures between"
                      : "without the tick before");
+    if (forReport) {
+        fprintf(stderr, "window: bug report: %s\n",
+                s_pres.reportZip[0] != '\0'
+                    ? "the presented picture goes into the zip when it is written (at most 1920 "
+                      "px wide)"
+                    : "the zip or the picture was not made, the zip has no picture");
+    }
 }
 
 /* Settings > Save a picture for a bug report (the Main page; settings.h
@@ -3083,7 +3106,7 @@ static void report_picture_pump(void)
     }
     s_reportDumpAt = 0;
     fprintf(stderr, "window: the picture for a bug report (Settings, 3 s after the press):\n");
-    frame_dump();
+    frame_dump(1);
 }
 
 #if ICO_RC_TOOLS && defined(__ANDROID__)
@@ -3138,155 +3161,6 @@ static void share_report_pump(void)
     }
 }
 #endif
-
-/* Shift+F12 in photo mode, the aspect sweep: the paused frame captured at
-   4:3, 16:9, 32:9, 48:9 and 60:9 into <pref>/dumps/sweep-<time>.zip, each
-   aspect's <aspect>.rddump and <aspect>.png (dump_zip.h ico_sweep_zip), for
-   tools/native_frame_check.py.
-
-   The game builds its frame at the width gsFrame holds, latched at each
-   flip from ico_video_frame (GsBase.c gsbHostFrameLatch), so the sweep forces
-   the aspect there (ico_video_frame_force_aspect) and waits.  At the next
-   flip the latch makes the new width and remakes rd's scene-sized targets
-   (rd_reset_scene, the 50/60 Hz switch's path), and the paused tick that
-   follows draws from the photo camera (photo_view.c ico_photo_view_tick) and
-   rebuilds the game's matrices at that width, +0x280 the cull's included,
-   each tick: no game state is touched.  Once the last closed frame is a frame
-   at the width and SWEEP_SETTLE closed frames have followed it (the feedback
-   passes and the blended picture settle), the normal F12 path takes it
-   (rd_dump_on_demand: the .rddump and the DISPLAY .png at the native width).
-   After the last aspect, or on leaving photo mode or a timeout, the forcing
-   is cleared: the next flip latches the live width back with its
-   rd_reset_scene.  The window shows the sweep's frames meanwhile (a second
-   or two); the presentation's aspect stays the live one. */
-#define SWEEP_SETTLE 4
-#define SWEEP_TIMEOUT_PUMPS 900
-
-static struct {
-    int active, idx, captured, seen, waited;
-    unsigned lastNumber;
-    char prefix[ICO_PATH_MAX], zip[ICO_PATH_MAX];
-} s_sweep;
-
-static void sweep_finish(const char *reason)
-{
-    char why[160];
-
-    ico_video_frame_force_aspect(0.0f);
-    s_sweep.active = 0;
-    why[0] = '\0';
-    if (reason != NULL) {
-        fprintf(stderr, "window: aspect sweep: %s\n", reason);
-    }
-    if (s_sweep.captured > 0) {
-        ico_host_log_flush();
-        const int n = ico_sweep_zip(s_sweep.zip, s_sweep.prefix, why, sizeof(why));
-
-        if (n >= 0) {
-            fprintf(stderr, "window: aspect sweep: %d of %d aspects in %s\n", n, ICO_SWEEP_COUNT,
-                    s_sweep.zip);
-        } else {
-            fprintf(stderr, "window: aspect sweep: zip not written: %s; the loose files are kept\n",
-                    why);
-        }
-    } else {
-        fprintf(stderr, "window: aspect sweep: nothing captured\n");
-    }
-}
-
-static void sweep_start(void)
-{
-    char pref[ICO_PATH_MAX], dir[ICO_PATH_MAX], stamp[32];
-    const time_t now = time(NULL);
-    const struct tm *tm = localtime(&now);
-
-    if (s_sweep.active) {
-        return;
-    }
-    if (!ico_photo_active()) {
-        fprintf(stderr, "window: aspect sweep: Shift+F12 works in photo mode only\n");
-        return;
-    }
-    if (tm == NULL || strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", tm) == 0) {
-        snprintf(stamp, sizeof(stamp), "unknown");
-    }
-    ico_host_pref_dir(pref, sizeof(pref));
-    if (ico_path_join(dir, sizeof(dir), pref, "dumps") != 0 || ico_make_dir(dir) != 0 ||
-        ico_sweep_paths(dir, stamp, s_sweep.prefix, sizeof(s_sweep.prefix), s_sweep.zip,
-                        sizeof(s_sweep.zip)) != 0) {
-        fprintf(stderr, "window: aspect sweep: no usable dumps folder under %s\n", pref);
-        return;
-    }
-    s_sweep.active = 1;
-    s_sweep.idx = 0;
-    s_sweep.captured = 0;
-    s_sweep.seen = 0;
-    s_sweep.waited = 0;
-    s_sweep.lastNumber = 0;
-    fprintf(stderr, "window: aspect sweep: starts, %d aspects\n", ICO_SWEEP_COUNT);
-    ico_video_frame_force_aspect(ico_sweep_aspect_value(0));
-}
-
-/* one pump of the sweep: capture the aspect in force once its frame has
-   settled, then ask for the next */
-static void sweep_pump(void)
-{
-    IcoFrame want;
-    uint32_t number = 0, w = 0;
-    float aspect = 0.0f;
-    char dump[ICO_PATH_MAX], png[ICO_PATH_MAX];
-
-    if (!s_sweep.active) {
-        return;
-    }
-    if (!ico_photo_active()) {
-        sweep_finish("left photo mode");
-        return;
-    }
-    if (++s_sweep.waited > SWEEP_TIMEOUT_PUMPS) {
-        fprintf(stderr, "window: aspect sweep: no frame at %s after %d vsyncs\n",
-                ico_sweep_aspect_name(s_sweep.idx), SWEEP_TIMEOUT_PUMPS);
-        sweep_finish("gave up");
-        return;
-    }
-    ico_frame_make(&want, ico_sweep_aspect_value(s_sweep.idx), 448);
-    if (!rd_last_frame_native(&number, &aspect, &w) || (int)w != want.w ||
-        aspect < want.aspect - 1e-3f || aspect > want.aspect + 1e-3f) {
-        s_sweep.seen = 0;
-        return;
-    }
-    if (number != s_sweep.lastNumber) {
-        s_sweep.lastNumber = number;
-        s_sweep.seen++;
-    }
-    if (s_sweep.seen < SWEEP_SETTLE) {
-        return;
-    }
-    if (snprintf(dump, sizeof(dump), "%s%s.rddump", s_sweep.prefix,
-                 ico_sweep_aspect_name(s_sweep.idx)) >= (int)sizeof(dump) ||
-        snprintf(png, sizeof(png), "%s%s.png", s_sweep.prefix,
-                 ico_sweep_aspect_name(s_sweep.idx)) >= (int)sizeof(png)) {
-        sweep_finish("the capture path is too long");
-        return;
-    }
-    if (rd_dump_on_demand(dump, png)) {
-        s_sweep.captured++;
-        fprintf(stderr, "window: aspect sweep: %s at frame %u, GS width %u\n",
-                ico_sweep_aspect_name(s_sweep.idx), (unsigned)number, (unsigned)w);
-    } else {
-        fprintf(stderr, "window: aspect sweep: %s could not be written\n",
-                ico_sweep_aspect_name(s_sweep.idx));
-    }
-    s_sweep.idx++;
-    s_sweep.seen = 0;
-    s_sweep.waited = 0;
-    s_sweep.lastNumber = 0;
-    if (s_sweep.idx >= ICO_SWEEP_COUNT) {
-        sweep_finish(NULL);
-    } else {
-        ico_video_frame_force_aspect(ico_sweep_aspect_value(s_sweep.idx));
-    }
-}
 
 /* Cross in photo mode: the picture shown at the next present into
    <pref>/<[photo] png_dir>/ico-<time>.png (rd_capture_presented); the
@@ -3385,6 +3259,27 @@ static void photo_pump(void)
                 }
                 fprintf(stderr, "window: F12: %s %s%s\n", r > 0 ? "wrote" : "could not write", path,
                         what);
+                if (s_pres.reportZip[0] != '\0') {
+                    char why[160], entry[ICO_PATH_MAX];
+                    size_t bytes = 0;
+                    const char *b = strrchr(path, '/');
+#ifdef _WIN32
+                    const char *b2 = strrchr(path, '\\');
+
+                    b = b2 != NULL && (b == NULL || b2 > b) ? b2 : b;
+#endif
+                    snprintf(entry, sizeof(entry), "%s", b != NULL ? b + 1 : path);
+                    why[0] = '\0';
+                    if (r > 0 && ico_zip_add_file(s_pres.reportZip, path, entry, why, sizeof(why),
+                                                  &bytes) == 0) {
+                        fprintf(stderr, "window: bug report: %s (%zu bytes) added to %s\n", entry,
+                                bytes, s_pres.reportZip);
+                    } else {
+                        fprintf(stderr, "window: bug report: the picture is not in %s: %s\n",
+                                s_pres.reportZip, r > 0 ? why : "it could not be written");
+                    }
+                    s_pres.reportZip[0] = '\0';
+                }
                 s_pres.presentPng[0] = '\0';
                 s_pres.presentInfoPending = s_pres.presentInfoHave = 0;
             } else {
@@ -3799,9 +3694,9 @@ int ico_window_pump(void)
         case SDL_EVENT_KEY_DOWN:
             hotkey = ico_hotkey_for_mod(e.key.key, e.key.repeat, (e.key.mod & SDL_KMOD_SHIFT) != 0);
             if (hotkey == ICO_HOTKEY_FRAME_DUMP) {
-                frame_dump();
+                frame_dump(0);
             } else if (hotkey == ICO_HOTKEY_ASPECT_SWEEP) {
-                sweep_start();
+                window_sweep_start();
             } else if (hotkey == ICO_HOTKEY_STATS_FAST) {
                 stats_fast_toggle();
             } else if (hotkey == ICO_HOTKEY_STATE_SAVE || hotkey == ICO_HOTKEY_STATE_LOAD) {
@@ -3963,7 +3858,7 @@ int ico_window_pump(void)
 
         photo_pump();                /* photo mode's captures */
         state_thumb_pump();          /* a save state's picture */
-        sweep_pump();                /* Shift+F12's aspect sweep */
+        window_sweep_pump();         /* Shift+F12's aspect sweep */
         set_capture(capture_mode()); /* play and photo mode */
         pointer_visibility();        /* the pointer in the menus */
         pump_slow("captures and the pointer", t1);

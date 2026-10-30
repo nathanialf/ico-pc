@@ -334,8 +334,10 @@ that stays on the screen). Save a picture of it for the report:
 2. Leave the menu right away. 3 seconds after you chose the row, the game
    saves what is on the screen in the `dumps` folder of the game's folder:
    a `.zip` file whose name starts with `frame-` and the date and time, and
-   pictures with the same name. Send the `.zip` (it holds the log too) and
-   the picture ending in `-present.png`.
+   pictures with the same name. The `.zip` holds the saved frame, the log
+   and a picture of what the screen showed (the file ending in
+   `-present.png`, at most 1920 pixels wide), so the `.zip` alone is
+   enough to send.
 
 If you cannot get to the menu while it shows, the game can save
 recordings of its frames by itself instead. Add this line to the text file
