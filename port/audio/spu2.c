@@ -123,6 +123,12 @@ static struct {
     spu2_reverb_preset presets[SPU2_REVERB_MODES];
 } S;
 
+void *spu2_state_block(size_t *bytes)
+{
+    *bytes = sizeof S;
+    return &S;
+}
+
 /* How the render went (spu2_get_stats; not reset by spu2_reset), and the
    voices cut short since the last spu2_take_cuts (key_off) */
 static spu2_stats stats;
