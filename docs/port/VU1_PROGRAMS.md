@@ -393,10 +393,12 @@ base (`s_ringBase`: the ring's offset, 256-aligned, when `rd__vu_prepass` begins
 and mesh uploads, so a frame whose texture uploads grow the ring past the device's largest storage
 range still reaches every block the VU draws put after them) to that range (`ringRange`), as a
 `StructuredBuffer<float4>` (`port/shaders/vu_common.hlsli` (`vu_ring`)); every index into it counts
-from the base. Direct3D 11 never makes a batch module (no
-pre-pass there) and has the draw merge off, so its VU groups leave t5 unbound (the layout keeps the slot): a bound storage
-range is written to the GPU up to the ring's written mark at every submit there, and the ring would
-otherwise be written for every list with a VU draw, even when no draw streams from it.
+from the base. Direct3D 11 never makes a batch module (no pre-pass there) but binds t5 for the
+draw merge (from v0.9.6; issue 126). A bound storage range is written to the GPU up to the ring's
+written mark at every submit there, so with the merge off (`[dev] vu_merge = false`, or a merge
+module missing) its VU groups leave t5 unbound (the layout keeps the slot) and a submit writes
+only the bytes its draws stream; with the merge on, the bytes t5 adds are the ones the merge
+builds read ([BACKENDS.md](BACKENDS.md#what-direct3d-11-costs-the-cpu-a-picture)).
 
 A batch build begins with `vu_pre_batch_entry`: a binary search over the table's x of six fixed
 steps (no loop: [SHADERS.md](SHADERS.md#the-envelope)) finds the vertex's item, its VuCB's vectors
@@ -475,9 +477,15 @@ Every pipeline of those vertex shaders takes its merge build while the merge is 
 same: `port/render/rd_pipeline.c` takes the module by `g_rd.vuMerge`, set once at start, so the
 start-up set and the pipeline count do not change). The skinned programs and the particles have no
 merge build: their draws are one a command, as before. The merge serves both paths: the record's
-main shader and the programs' own entries (the tile-based GPUs', whose pre-pass is off). It is off
-on Direct3D 11 (its main draws do not bind t5), by `[dev] vu_merge = false` (`ICO_RD_VU_MERGE=0`:
-one GPU draw a VU draw through the plain builds, an A/B), or when a merge module is missing. The
+main shader and the programs' own entries (the tile-based GPUs' and Direct3D 11's, whose pre-pass
+is off). It is off by `[dev] vu_merge = false` (`ICO_RD_VU_MERGE=0`: one GPU draw a VU draw
+through the plain builds, an A/B), or when a merge module is missing. Before v0.9.6 it was also
+off on Direct3D 11 (`off on Direct3D 11 (the main draws do not bind t5 there)`); there a module is
+only its description until the first pipeline that uses it (the backend compiles the HLSL with
+FXC in its pipeline workers), so the start line adds `(Direct3D 11: compiled at their first
+pipeline, t5 bound)` and a build FXC refuses shows as that pipeline's `pipeline creation failed
+...` line, which then ends `; vertex shader vu_X_merge_vs, the draw merge's build ([dev] vu_merge
+= false avoids it)`: its draws are skipped as any failed key's, not drawn one a command. The
 start line says which: `rd: VU merge: on: consecutive mesh and grid draws with the same pipeline,
 textures, DrawCB, FrameCB and scissor drawn as one indexed draw of up to 16, ...` or `rd: VU merge:
 off ...`, and the summary line has `VU merge on` or `VU merge off` after the pre-pass. `rd_replay_tool
@@ -535,7 +543,7 @@ that fails:
 
 | reason | the pair is kept apart when |
 |---|---|
-| fuse off | `[dev] vu_fuse = false` (`ICO_RD_VU_FUSE=0`), or the draw merge off (Direct3D 11, `vu_merge = false`) |
+| fuse off | `[dev] vu_fuse = false` (`ICO_RD_VU_FUSE=0`), or the draw merge off (`vu_merge = false`, a merge module missing) |
 | no merge build | the draw's vertex shader or the fallback's has no merge build (only those mark the kicks) |
 | passes | either state's plan is not one pass: the alpha test's split, or no dual-source blending (a lerp is two passes there) |
 | dst/DATE | a destination read (the exact blend) or DATE through the stencil bit |
