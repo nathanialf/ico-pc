@@ -247,6 +247,7 @@ static void test_consistency(void)
           strcmp(ico_region_info_cn.key_suffix, ico_region_info_jpn.key_suffix) != 0 &&
           strcmp(ico_region_info_cn.key_suffix, ico_region_info_kor.key_suffix) != 0);
     CHECK(ico_region_info_pal.mc_product_size == 0x1F0);
+    CHECK(ico_region_info_pal.layout_load_files == 19 && ico_region_info_pal.layout_mc_files == 14);
     CHECK(ico_region_info_pal.reduction_crops_rows == 1);
 }
 
@@ -301,6 +302,7 @@ static void test_jpn_values(void)
     NUM(layout_play, 51);
     NUM(layout_scene, 52);
     NUM(layout_mc_files, 11);
+    NUM(layout_load_files, 16);
     NUM(layout_load, 22);
     NUM(layout_save_complete, 38);
     NUM(property_count, 412);
@@ -448,6 +450,7 @@ static void test_kor_values(void)
     SAME(layout_play);
     SAME(layout_scene);
     SAME(layout_mc_files);
+    SAME(layout_load_files);
     SAME(layout_load);
     SAME(layout_save_complete);
     SAME(anim_none);
@@ -543,6 +546,7 @@ static void test_cn_values(void)
     SAME(layout_play);
     SAME(layout_scene);
     SAME(layout_mc_files);
+    SAME(layout_load_files);
     SAME(layout_load);
     SAME(layout_save_complete);
     SAME(row_pause_back);
@@ -649,6 +653,7 @@ static void test_ntsc_values(void)
     CHECK(x->layout_play == 50);
     CHECK(x->layout_scene == 51);
     CHECK(x->layout_mc_files == 11);
+    CHECK(x->layout_load_files == 16);
     CHECK(x->layout_load == 22);
     CHECK(x->layout_save_complete == 37);
     CHECK(x->property_count == 384);
@@ -780,6 +785,7 @@ static void test_aug6_values(void)
     CHECK(x->layout_play == 50);
     CHECK(x->layout_scene == 51);
     CHECK(x->layout_mc_files == 11);
+    CHECK(x->layout_load_files == 16);
     CHECK(x->layout_load == 22);
     CHECK(x->layout_save_complete == 37);
     CHECK(x->property_count == 384);
@@ -909,6 +915,7 @@ static void test_jun26_values(void)
     CHECK(x->layout_play == 50);
     CHECK(x->layout_scene == 51);
     CHECK(x->layout_mc_files == 11);
+    CHECK(x->layout_load_files == 16);
     CHECK(x->layout_load == 22);
     CHECK(x->layout_save_complete == 37);
     CHECK(x->property_count == 384);
