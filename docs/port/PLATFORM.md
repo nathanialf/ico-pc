@@ -536,7 +536,10 @@ write is collected. In the window build the next frame presented after the save 
 picture: `window_host.c` reads the DISPLAY target (`rd_read_display`) once
 `ico_state_wants_thumbnail` says so and hands it to `ico_state_thumbnail`, which box-filters it to
 320 pixels wide and writes `slot<n>.png` on a thread of its own (the pause menu is in it). No
-picture within about two seconds (a minimized window): none, logged.
+picture within about two seconds (a minimized window): none, logged. Until the picture is written
+a second save is refused as busy (`the last save's picture is still being taken`), so the first
+slot keeps its picture, and a delete of that slot drops the picture still to come first (`state:
+slot N's picture still to come dropped (the slot is deleted)`; review finding 11).
 
 **A load** first collects a write in flight, checks the conditions, reads the header and checks
 it against this run's (`ico_state_header_check`), inflates every section into new buffers and

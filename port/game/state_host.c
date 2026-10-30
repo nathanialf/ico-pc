@@ -651,8 +651,14 @@ static void perform_save(int slot)
 
     sample(&c);
     r = ico_state_conditions(&c, 1, &what);
-    if (r == ICO_STATE_OK && (s_save.slot != 0 || ico_state_file_busy() || s_thumb.th != NULL)) {
+    /* one at a time, the picture included: a second save while the
+       first's picture is still to come (the next present, or its thread)
+       is refused as busy, so the first slot keeps its picture (review
+       finding 11) */
+    if (r == ICO_STATE_OK &&
+        (s_save.slot != 0 || ico_state_file_busy() || s_thumb.th != NULL || s_thumb.slot != 0)) {
         r = ICO_STATE_BUSY;
+        what = "the last save's picture is still being taken";
     }
     if (r == ICO_STATE_OK &&
         ico_state_slot_path(s_save.path, sizeof s_save.path, ico_state_dir(), slot, ".ics") != 0) {
@@ -1250,6 +1256,19 @@ static void perform_delete(int slot)
     if (!s_on) {
         done(2, slot, ICO_STATE_OFF, s_off_why);
         return;
+    }
+    if (s_thumb.slot == slot) {
+        /* the picture still to come for this slot is dropped first, so no
+           .png is left behind the delete (review finding 11) */
+        if (s_thumb.th != NULL) {
+            ico_thread_join(s_thumb.th);
+            s_thumb.th = NULL;
+        }
+        free(s_thumb.px);
+        s_thumb.px = NULL;
+        s_thumb.slot = 0;
+        fprintf(stderr, "state: slot %d's picture still to come dropped (the slot is deleted)\n",
+                slot);
     }
     if (ico_state_slot_path(path, sizeof path, ico_state_dir(), slot, ".ics") == 0) {
         had = ico_remove(path) == 0;
