@@ -2089,7 +2089,8 @@ static void low_memory_stop_note(int level)
 /* The free-memory floor (memory_floor.h, issue 161): on Android the set
    also stops once MemAvailable is under the floor ([dev]
    pipeline_memory_floor_mb, exported as ICO_PIPELINE_MEMORY_FLOOR_MB; the
-   default the larger of 1536 MB and 15 % of MemTotal), and is recorded as
+   default the larger of 1536 MB and 17 % of MemTotal, 1915 MB on the
+   reporter's 11265 MB), and is recorded as
    the low-memory signal's stop (the next start makes no set). The v0.9.5
    Retroid Pocket 6 start stalled in the driver at 1693 MB of 11265 MB
    available with no onTrimMemory signal. floor_why: the stop's words, ""

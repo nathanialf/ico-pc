@@ -16,7 +16,7 @@
 
 /* the default floor's parts */
 #define ICO_MEMORY_FLOOR_MIN_MB 1536L
-#define ICO_MEMORY_FLOOR_PERCENT 15L
+#define ICO_MEMORY_FLOOR_PERCENT 17L
 
 /* The floor in MB for a device of total_mb: setting_mb < 0 (unset) the
    default, 0 off (0), above 0 that value */

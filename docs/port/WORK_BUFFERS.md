@@ -938,16 +938,16 @@ of the usual one, the set asks `ico_diag_low_memory_stop`, which now also reads 
 (`ico_diag_device_memory`, the "device N MB available of T MB" words): under the floor the set stops
 as at the system's low-memory signal (the rest made on first use, `set: stopped at the system's
 low-memory signal (<words>)` in the activity file, the next start lazy). The floor is the larger of
-1536 MB and 15 % of MemTotal (`port/platform/memory_floor.c`); `[dev] pipeline_memory_floor_mb` sets
+1536 MB and 17 % of MemTotal (`port/platform/memory_floor.c`); `[dev] pipeline_memory_floor_mb` sets
 it in MB, 0 turns it off (exported as `ICO_PIPELINE_MEMORY_FLOOR_MB`). The lines:
 
     ico_pc: pipelines: the start-up set stopped at N MB available of T MB (floor F MB): the rest made on first use
     ico_pc: the start-up set stopped at the free-memory floor (N MB available of T MB, floor F MB); the next start makes the pipelines as the game needs them, with no start-up set
 
-On the Retroid Pocket 6's 11265 MB the default floor is 1689 MB: the v0.9.5 start's 1693 MB at the
-stall is 4 MB above it, so the default would not have stopped that start at that reading (an
-earlier lower one is not in the log); `pipeline_memory_floor_mb = 1900` (where v0.9.4 got the
-"running critical" signal) would have. `memory_floor_test` holds those figures.
+On the Retroid Pocket 6's 11265 MB the default floor is 1915 MB: the v0.9.5 start's 1693 MB at the
+stall is under it, as is the 1900 MB where v0.9.4 got the "running critical" signal, so the
+default stops that start before either point (17 % rather than 15 %, whose 1689 MB floor would
+have let the 1693 MB reading pass). `memory_floor_test` holds those figures.
 
 **The creation limit (Android).** The watchdog's limits are not in force before the game starts,
 and the GPU hang limit counts waits for the GPU, not a driver call. On Android a note that names a
