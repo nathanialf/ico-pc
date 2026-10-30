@@ -572,6 +572,17 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("crack_fill", "true"), "1") == 0);
     CHECK(ico_dev_env_value("crack_fill", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.crack_fill"), "crack_fill") == 0);
+    /* texture_decode_threads: the texture decode pool's size, auto or 0..4
+       (port/render/rd_tex_decode.c choose) */
+    CHECK(strcmp(ico_dev_env_name("texture_decode_threads"), "ICO_RD_TEXTURE_DECODE_THREADS") == 0);
+    CHECK(strcmp(ico_dev_env_value("texture_decode_threads", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("texture_decode_threads", "0"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("texture_decode_threads", "off"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("texture_decode_threads", "2"), "2") == 0);
+    CHECK(ico_dev_env_value("texture_decode_threads", "5") == NULL);
+    CHECK(ico_dev_env_value("texture_decode_threads", "12") == NULL);
+    CHECK(ico_dev_env_value("texture_decode_threads", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.texture_decode_threads"), "texture_decode_threads") == 0);
     /* perf_passes: every replay timed pass by pass (port/render/rd_perf.c
        rd__perf_passes_init) */
     CHECK(strcmp(ico_dev_env_name("perf_passes"), "ICO_RD_PERF_PASSES") == 0);
