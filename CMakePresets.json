@@ -25,7 +25,8 @@
             "inherits": "base",
             "displayName": "Linux x86-64, host GCC",
             "cacheVariables": {
-                "CMAKE_C_COMPILER": "gcc"
+                "CMAKE_C_COMPILER": "gcc",
+                "ICO_STATE_FIXED_IMAGE": "ON"
             }
         },
         {
@@ -48,7 +49,8 @@
             "displayName": "Windows x64, mingw-w64 GCC",
             "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-w64-mingw32-gcc.cmake",
             "cacheVariables": {
-                "ICO_HEADLESS": "OFF"
+                "ICO_HEADLESS": "OFF",
+                "ICO_STATE_FIXED_IMAGE": "ON"
             }
         },
         {
@@ -74,14 +76,20 @@
             "inherits": "base",
             "displayName": "Linux x86-64, llvm-mingw clang",
             "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-linux-clang.cmake",
-            "description": "Clang family: builds the same sources as the gcc presets (docs/BUILDING.md, \"Compilers\")."
+            "description": "Clang family: builds the same sources as the gcc presets (docs/BUILDING.md, \"Compilers\").",
+            "cacheVariables": {
+                "ICO_STATE_FIXED_IMAGE": "ON"
+            }
         },
         {
             "name": "win-x64-clang",
             "inherits": "base",
             "displayName": "Windows x64, llvm-mingw clang",
             "toolchainFile": "${sourceDir}/cmake/toolchains/x86_64-w64-mingw32.cmake",
-            "description": "Clang family: builds the same sources as the gcc presets (docs/BUILDING.md, \"Compilers\")."
+            "description": "Clang family: builds the same sources as the gcc presets (docs/BUILDING.md, \"Compilers\").",
+            "cacheVariables": {
+                "ICO_STATE_FIXED_IMAGE": "ON"
+            }
         },
         {
             "name": "android-arm64",
