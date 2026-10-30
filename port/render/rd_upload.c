@@ -149,6 +149,9 @@ uint64_t rd__estimate_ring(const RdFrame *f, int keep)
 
 uint64_t rd__texture_ring_bytes(void)
 {
+    /* the decodes in flight into their textures first: their dirty
+       rectangles are what the ring holds (rd_tex_decode.h) */
+    rdtex_settle();
     const uint64_t pitchA = rhi_limits()->copyRowPitchAlign;
     uint64_t total = 0;
     const bool walk = g_rd.texDirtyCount != 0 || g_rd.texLevelsFilter != (int)g_rd.filterUpgrade;
@@ -456,6 +459,7 @@ static int uploadReplacement(RdTexRec *t)
 
 void rd__upload_dirty_textures(void)
 {
+    rdtex_settle(); /* no texture is uploaded before its decode is in it */
     const uint32_t pitchA = rhi_limits()->copyRowPitchAlign;
     const uint32_t offA = rhi_limits()->copyOffsetAlign;
     /* a full ring gives ~0, whose write would land past the map: the
