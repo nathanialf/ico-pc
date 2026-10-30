@@ -443,13 +443,17 @@ static InsertCameraWork insertCameraClear_pal = {
     /* derived name */
     0, 0, {0}, {0.0f, 0.0f, 0.0f}, {0}, {0.0f, 0.0f, 0.0f}, {0}, -1.0f, 0, 1, 0, 0, 1, {0}};
 
+/* PC port: the 2001 builds' record has no blend word (enable at 0x30, then
+   cut, cutType, zoom on the North American disc and enable, cut, zoom on the
+   2001 previews: decomp camera-root.c lines 82-94 and 458-470); the host
+   keeps the later layout for every disc, so the 2001 values are placed by
+   name.  Positional, the cleared request had enable 1 and cut 0: an insert
+   camera of 0 frames left running after every clear until its next step. */
 static InsertCameraWork insertCameraClear_ntsc = {
-    /* derived name */
-    0, 0, {0}, {0.0f, 0.0f, 0.0f}, {0}, {0.0f, 0.0f, 0.0f}, {0}, 0, 1, 0, 0, {0}};
+    .enable = 0, .cut = 1, .cutType = 0, .zoom = 0}; /* derived name */
 
 static InsertCameraWork insertCameraClear_aug6jun26 = {
-    /* derived name */
-    0, 0, {0}, {0.0f, 0.0f, 0.0f}, {0}, {0.0f, 0.0f, 0.0f}, {0}, 0, 1, 0, {0}};
+    .enable = 0, .cut = 1, .zoom = 0}; /* derived name */
 
 #define insertCameraClear                                                                          \
     (*PAL_NTSC_AUG6JUN26(&insertCameraClear_pal, &insertCameraClear_ntsc,                          \
