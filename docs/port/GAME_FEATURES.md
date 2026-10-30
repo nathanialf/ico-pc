@@ -452,6 +452,24 @@ counters are one set for the player ([SAVES.md](SAVES.md#the-seven-discs); `port
 (`run_key`, `write_file`, `read_file`)). The ctests `achievements`, `achievements_jpn` and `achievements_kor` run the
 same program with each disc selected (`port/game/test/achievements_test.c`, `test_discs`).
 
+When the file is written (issue 126, finding F2): `write_file` renders the whole text on the game
+thread, in memory, over the text the file had when it was read (`s_base`, read once on first use and
+then kept as the text last rendered, so the keys and comments the port does not know stay without
+reading the disk again), and `writer_submit` hands a copy to one writer thread
+(`port/platform/ico_thread.h`), which writes `achievements.toml.tmp`, syncs and renames it
+(`ico_toml_write_text`). At most one text waits: a newer one replaces it (the latest wins). An
+unlock, a save slot and the counters all go through the same `commit`, so the base always holds
+every key. The counters write `ICO_ACH_STATS_FLUSH_TICKS` after the last write, but while the only
+change is the hand-held time (it changes every tick Yorda is led) the period is
+`ICO_ACH_HAND_FLUSH_SECONDS` (60 s) at the Main tick rate (`ico_ach_flush_due_ticks`). A write that
+fails on the thread makes the counters pending again at the next tick; `ico_ach_flush` (the exit
+and shutdown hook) writes what is dirty, joins the thread and tries once more after a failure. A
+write over 20 ms logs `achievements: the file write took N ms (<path>)` (the first 8, then every
+100th). The game thread's cost per write is the render (a few hundred bytes to a few KiB), so the
+slow-step line's `achievements` component no longer includes the drive. `test_write_path` in
+`achievements_test.c` holds the writer (`ico_ach_writer_hold`) to check the replaced text, the two
+periods and the retry after a failed write.
+
 Achievements are suspended, no counter advancing and nothing unlocking, while developer mode or
 `[dev] start_stage` is on, the model viewer is up or the Extras credits are playing, and for the
 rest of a run in which any of them was; Yorda safe, the stick fix and mirror do not suspend them
