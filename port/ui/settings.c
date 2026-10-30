@@ -378,6 +378,9 @@ static int stepIndex(int i, int n, int dir)
 static const char *const kPitWords[ICO_PIT_COUNT] = {"half", "original", "longer", "double",
                                                      "triple"};
 
+/* [gameplay] shadow_speed's words, in ICO_SPEED_* order */
+static const char *const kSpeedWords[ICO_SPEED_COUNT] = {"slower", "original", "faster", "fastest"};
+
 static const float kMouseSens[] = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f};
 /* the Mouse camera speed row's steps; the last one is "Instant" */
 static const float kMouseCamSpeed[] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 5.0f, 10.0f};
@@ -2125,6 +2128,12 @@ static const char *rawValue(int opt, char *buf, unsigned size)
                                                   UI_STR_VAL_PIT_TRIPLE};
         return ui_str(pitStr[ico_opt_pit_time()]);
     }
+    case UI_OPT_SHADOW_SPEED: {
+        static const int speedStr[ICO_SPEED_COUNT] = {UI_STR_VAL_SPEED_SLOWER, UI_STR_VAL_ORIGINAL,
+                                                      UI_STR_VAL_SPEED_FASTER,
+                                                      UI_STR_VAL_SPEED_FASTEST};
+        return ui_str(speedStr[ico_opt_shadow_speed()]);
+    }
     case UI_OPT_DOOR_FIX:
         return onOff(ico_opt_door_fix());
     case UI_OPT_NATURAL_CHAINS:
@@ -2730,6 +2739,12 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
            next dive (options.h) */
         ico_opt_set_pit_time(stepIndex(ico_opt_pit_time(), ICO_PIT_COUNT, dir));
         ico_config_set_string("gameplay.pit_time", kPitWords[ico_opt_pit_time()]);
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_SHADOW_SPEED:
+        /* Slower, Original, Faster, Fastest around; read every game tick (options.h) */
+        ico_opt_set_shadow_speed(stepIndex(ico_opt_shadow_speed(), ICO_SPEED_COUNT, dir));
+        ico_config_set_string("gameplay.shadow_speed", kSpeedWords[ico_opt_shadow_speed()]);
         s_dirtyConfig = 1;
         break;
     case UI_OPT_DOOR_FIX:
@@ -3409,6 +3424,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_GAMEPLAY:
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
         addNote(pg, UI_OPT_PIT_TIME, UI_STR_OPT_PIT_TIME_NOTE);
+        addNote(pg, UI_OPT_SHADOW_SPEED, UI_STR_OPT_SHADOW_SPEED_NOTE);
         addNote(pg, UI_OPT_DOOR_FIX, UI_STR_OPT_DOOR_FIX_NOTE);
         addNote(pg, UI_OPT_NATURAL_CHAINS, UI_STR_OPT_NATURAL_CHAINS_NOTE);
         addNote(pg, UI_OPT_SKIP_OPENING, UI_STR_OPT_SKIP_OPENING_NOTE);
@@ -4023,13 +4039,15 @@ static void build(void)
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
     static const int touchLinks[] = {-1, -1, -1, UI_PAGE_TOUCH_LAYOUT, -1, -1, -1, -1, -1};
     /* the game's Film effect and Players, once the game is cleared */
-    static const int gameOpts[] = {UI_OPT_YORDA,       UI_OPT_PIT_TIME,       UI_OPT_STICK_FIX,
-                                   UI_OPT_DOOR_FIX,    UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING,
-                                   UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,        UI_OPT_BACK};
-    static const int gameStrs[] = {
-        UI_STR_OPT_YORDA,       UI_STR_OPT_PIT_TIME,       UI_STR_OPT_STICK_FIX,
-        UI_STR_OPT_DOOR_FIX,    UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_SKIP_OPENING,
-        UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,        UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA,        UI_OPT_PIT_TIME,    UI_OPT_SHADOW_SPEED,
+                                   UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_NATURAL_CHAINS,
+                                   UI_OPT_SKIP_OPENING, UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,
+                                   UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA,        UI_STR_OPT_PIT_TIME,
+                                   UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_DOOR_FIX,     UI_STR_OPT_NATURAL_CHAINS,
+                                   UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,      UI_STR_BACK};
     _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
                    "a string and a link for each Controls row");
