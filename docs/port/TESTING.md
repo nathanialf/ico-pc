@@ -1552,6 +1552,11 @@ its own folder with the Vulkan run's expectations byte for byte, exit 77 a skip,
   `rd_mesh_vk11.4of4` (the disc's models; 77 without the disc image);
 - `ICO_VK_FAKE_API=1.1ext` (a 1.1 driver with the extensions: the KHR timeline semaphore and
   dynamic rendering), folder `vk11ext/`: `rd_pixel_vk11ext`, `rd_present_vk11ext`.
+- `ICO_VK_FAKE_API=1.1 ICO_VK_FAKE_NO_DYNAMIC=1` (the Adreno combination: the fence ring,
+  `VkRenderPass` objects and all-static pipelines, which Android forces on a tiler; the plain
+  `vk11` runs still offer `VK_EXT_extended_dynamic_state`), folder `vk11s/`, the `VK11S` block:
+  the same tests and shards as the first list under the names `rd_pixel_vk11s` ...
+  `rd_mesh_vk11s.4of4`, expectations the Vulkan runs' byte for byte.
 
 With `port/rhi`'s `rhi_vk_vk11` and `rhi_vk_swapchain_vk11` (the RHI cells and the window path,
 swapchain recreation included, on the fence ring and the `VkRenderPass` path under validation) they
