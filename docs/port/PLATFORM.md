@@ -17,6 +17,9 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/sched.c`, `sched.h` | the EE thread and semaphore model; `ico_sched_call_on_host`; the scheduler's save state image |
 | `port/platform/vm_reserve.c`, `vm_reserve.h` | address space reserved at a chosen address, committed and decommitted (the pinned arena, the fiber pool) |
 | `port/platform/state_reloc.c`, `state_reloc.h` | a save state's address ranges and their deltas; the relocation word functions |
+| `port/platform/game_data_range.c`, `game_data_range.h` | where the game's `.data` and `.bss` lie in the running program, and the check that they hold the game's globals and none of the port's ([Game data ranges](#game-data-ranges)) |
+| `port/platform/game_data_verify.c` | the program's own check of those ranges against named game and port globals (linked into `ico_pc` only) |
+| `port/platform/game_data_sections.h` | the section names clang gives the game's writable globals (forced into every game source by `cmake/IcoStateSections.cmake`) |
 | `port/platform/kernel_host.c`, `kernel_host.h` | the EE kernel calls of `port/compat/eekernel.h`; the INTC table |
 | `port/platform/arena.c`, `arena.h` | the EE RAM arena and the heap statistics |
 | `port/platform/hwregs.c` | the EE I/O and GS privileged register pages as plain memory |
@@ -319,6 +322,46 @@ packet banks' host pad, `ico2/seki/src/DmaPacket.c`, `DPK_HOST_PAD`), the static
 Built with `ICO_HEAP_STATS`, the game's allocator reports each allocation and free, and the arena
 keeps the bytes in use and the high-water mark per partition, logging every new mark that grows
 by 64 KB (`port/platform/arena.h` (`ico_heap_stats_alloc`); `ico2/fumi/ios/memory.c`).
+
+## Game data ranges
+
+A save state holds the game's own globals: every writable object the game library `ico_game`
+defines (the `ico2/` sources and the data tables of `port/data`, the tables' loader `tables.c`
+among them), and nothing of the port's, which the registry lists one block at a time
+(`port/platform/state.h`). The build gathers the game's objects into sections of their own and
+the program reads their bounds as two ranges, the initialised data and the zero-filled data
+(`ico_game_data_ranges`, `port/platform/game_data_range.h`). How depends on the compiler and the
+object format (`cmake/IcoStateSections.cmake`):
+
+| build | how the game's sections are named | how the program finds them |
+| --- | --- | --- |
+| GCC, ELF (`linux-x64`, `asan`, `fptrap`, Linux arm64) | after `libico_game.a` is made, `objcopy` renames each member's `.data`, `.data.rel`, `.data.rel.local` to `ico_gdata` and `.bss` to `ico_gbss`; the game compiles `-fno-data-sections` so each object has just those | GNU ld's `__start_ico_gdata`, `__stop_ico_gdata`, `__start_ico_gbss`, `__stop_ico_gbss`, declared weak and hidden |
+| clang, ELF (`linux-x64-clang`, Android) | `#pragma clang section data="ico_gdata" bss="ico_gbss"`, forced into every game source (`port/platform/game_data_sections.h`) | the same symbols, from lld |
+| GCC, PE (`win-x64`) | `objcopy` renames `.data` to `.data$ico_m` and `.bss` to `.data$ico_p` with contents | one-byte brackets in `.data$ico_a`, `.data$ico_n` and `.data$ico_z` (`game_data_range.c`): GNU ld sorts `.data$*` by the suffix inside `.data`; data is `[a, n)`, the zero-filled data `[n, z)` |
+| clang, PE (`win-x64-clang`) | the pragma puts all of it in `.data$ico_m`, with `-fno-zero-initialized-in-bss` | the same brackets; lld-link sorts `$` groups the same way. The zero-filled range is the `n` bracket alone |
+| clang, Mach-O (macOS, iOS) | the pragma: `__DATA,__ico_gdata` and `__DATA,__ico_gbss` (zerofill) | ld64's `section$start$__DATA$__ico_gdata` and `section$end$` symbols |
+
+Read-only data keeps the compiler's sections: a constant table of addresses (`.data.rel.ro`,
+writable only while the loader relocates a position-independent program) stays out of both
+ranges. On PE the game's zero-filled data is stored in the `.exe` (about 5.5 MB of zeros): GNU ld's
+PE script has no `.bss$*` rule, so a renamed `.bss$` section is placed as an orphan away from the
+brackets, and lld moves any uninitialised `$` section into an output section of its own; both
+were seen in test links of a few objects with the fetched toolchains. Whether the image is fixed
+(`--disable-dynamicbase`, [BUILDING.md](../BUILDING.md#fixed-image)) does not matter: the bounds
+are symbols the program reads where it runs.
+
+`ico_game_data_ranges` gives -1 when the program has no such sections (a toolchain that left the
+names alone, a program without the game) or they are inconsistent (an empty data range, an end
+below a start, the two overlapping). `ico_game_data_ranges_verify` (`game_data_verify.c`, in the
+program only) then checks that ten of the game's globals (`systemStatus`, `stage_no`,
+`frame_count`, `stagePreLoadBuff`, `gameSysMemoryFuncList`, `gameSysMainSaveBuff`,
+`gFlagGameClear`, the tables `gameParam` and `seKind`, `ico_scratchpad`) lie wholly inside and
+five of the port's (the scheduler's tables, `ico_iop_ram`, `ico_mv_active`, and a data and a bss
+variable of the program's own) wholly outside; the text names the first offender. The save
+states' start-up runs it once and, on a failure, logs it and turns save states off. Each range's
+size goes into the save state's build id. `tools/check_game_data_ranges.py` checks the same on the
+linked program's symbol table at test time, the game's file statics (`texTable`,
+`cdvdThreadStack`) included ([TESTING.md](TESTING.md#portplatformtest)).
 
 ## Register pages
 
