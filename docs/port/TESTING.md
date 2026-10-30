@@ -406,6 +406,41 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the stand-in's globals and leaves the program's alone (not under AddressSanitizer, whose red
   zones the ranges hold); `ico_game_data_ranges_check`'s failure texts and edges on made-up
   ranges (`game_data_range`).
+- `state_fiber_test.c`: the fiber pool and a fiber's save state image ([PLATFORM.md](PLATFORM.md#save-state-images)):
+  the relocation word functions (a range's end included, one past it, a negative delta, an empty
+  range, a zero delta rewrites nothing, the typed form's bad index); the pool (the slot size a
+  multiple of 64 KB, the pinned flag agreeing with the base, 256 slots at base + i * slot size,
+  every refusal of a used, full or out-of-range slot, the stack's bottom page read back as zero after
+  a destroy); a save refused for a running, finished or free fiber; three fibers saved at three
+  depths with frames pointing at their callers and at a global, destroyed, put into a second pool at
+  another address, and resumed with every frame found through the moved pointers (on Windows
+  the restored fiber's stack bounds in the thread block are checked too); the wrong delta and the
+  wrong slot refused (`state_fiber`). `state_fiber_guard` saves a fiber, restores it into a second pool,
+  resumes it in a forked child and overflows its stack: the restored slot's guard page must stop it
+  (not on Windows).
+- `state_reloc_test.c`: the scan and the self-checks over the game's real allocator
+  (`ico2/fumi/ios/memory.c` built with the game's flags): words at each range's start, middle and end
+  move by their own delta and nothing else does (near misses, 0, all ones, floats, doubles, EE word
+  pairs, the one ambiguous pair moved only when the arena moved); a second scan moves nothing; the
+  program's image range (this code inside the text, static data and strings inside the image, a
+  heap block and the stack outside); a heap built by the allocator walks, a copy at another address
+  walks only after the scan, and three corruptions are each refused; a thread entry or handler in data
+  is refused (`state_reloc`).
+- `state_format_test.c`: the save state file ([PLATFORM.md](PLATFORM.md#the-file)): a write read
+  back field by field and byte by byte (an empty section, a 15-character name, a zero-heavy section
+  packing to under an eighth), a skipped section left alone, a second write replacing the first, BUSY
+  while one is in flight; each validity field changed alone gives its result and detail; every
+  damaged file (magic, version, a header byte, truncation, an appended byte, a flipped packed byte) is
+  `ICO_STATE_BAD_FILE`; a write into a missing folder fails on its thread and leaves no `.tmp`; the
+  build id is stable and changes with the commit and with one more block (`state_format`).
+- `state_registry_test.c`: registration order, the stored fields, every refusal with the table
+  unchanged, a full table, reset (`state_registry`).
+- `sim_keys_test.c`: the simulation keys' list (no repeats, the expected keys), the text, the hash
+  changing with a value and returning when it is cleared, and `ico_sim_keys_first_diff`'s
+  `key=saved (now cur)` text on a short buffer too (`sim_keys`).
+- `settings_states_test.c`: the Save states page and the pause menu's rows at pitch 16
+  ([UI.md](UI.md#extras--save-states)), on each disc's layout (`settings_states`, `_jpn`, `_kor`,
+  `_cn`, `_ntsc`, `_aug6`, `_jun26`).
 - `fiber_test.c`: [fibers](ARCHITECTURE.md#terms) switched round-robin with their stacks checked,
   deep stacks, the FP state inside a fiber (`fiber`, `fiber_guard`).
 - `ico_thread_test.c`: a thread runs and joins, a mutex and condition hand a value across, the clock does not run backwards (`ico_thread`).
