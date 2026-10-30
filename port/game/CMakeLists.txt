@@ -29,13 +29,18 @@ endif()
 
 # Defaults are the original behaviour, the config and run-time setters, and
 # eBrainGetTarget (ico2/omori/src/ebrain.c, compiled into the test) under the
-# yorda_safe hook, and pit_time's ratio and its four hooks in enemy_act.c (a text scan).
+# yorda_safe hook, and pit_time's ratio and its four hooks in enemy_act.c (a text scan),
+# and shadow_speed's hook in act-game.c, its three pushes in commonact.c and its record key in
+# main_host.c (text scans).
 add_executable(options_test test/options_test.c ../platform/host_config.c)
 ico_include_dirs(omori _ico_options_incs)
 target_include_directories(options_test PRIVATE ${_ico_options_incs}
     "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_definitions(options_test PRIVATE ${ICO_GAME_DEFINITIONS}
-    ICO_ENEMY_ACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/enemy_act.c")
+    ICO_ENEMY_ACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/enemy_act.c"
+    ICO_ACT_GAME_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/act-game.c"
+    ICO_COMMONACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/commonact.c"
+    ICO_MAIN_HOST_SRC="${CMAKE_SOURCE_DIR}/port/platform/main_host.c")
 target_compile_options(options_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS} -Wno-unused-parameter -Wno-unused-variable
                        -Wno-unused-function)

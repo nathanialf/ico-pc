@@ -46,9 +46,9 @@ static const Expect *expectFor(const char *slug)
 
 /* the rows every disc has, from both entries */
 static const UiSettingsOpt kEveryDisc[] = {
-    UI_OPT_MENU_LANGUAGE, UI_OPT_BRIGHTNESS, UI_OPT_VIBRATION, UI_OPT_STICK_FIX,
-    UI_OPT_YORDA,         UI_OPT_PIT_TIME,   UI_OPT_DOOR_FIX,  UI_OPT_SKIP_OPENING,
-    UI_OPT_OUTPUT,        UI_OPT_DEVELOPER,
+    UI_OPT_MENU_LANGUAGE, UI_OPT_BRIGHTNESS, UI_OPT_VIBRATION,    UI_OPT_STICK_FIX,
+    UI_OPT_YORDA,         UI_OPT_PIT_TIME,   UI_OPT_SHADOW_SPEED, UI_OPT_DOOR_FIX,
+    UI_OPT_SKIP_OPENING,  UI_OPT_OUTPUT,     UI_OPT_DEVELOPER,
 };
 
 /* the rows the title shows and the pause menu does not (on every disc) */

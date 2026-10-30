@@ -122,13 +122,15 @@ static void testBuild(void)
         UI_STR_OPT_TOUCH_MODE, UI_STR_OPT_TOUCH_SIZE,  UI_STR_OPT_TOUCH_OPACITY,
         UI_STR_OPT_TOUCH_EDIT, UI_STR_OPT_TOUCH_SNAP,  UI_STR_OPT_TOUCH_GRID,
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
-    static const int gameOpts[] = {UI_OPT_YORDA,       UI_OPT_PIT_TIME,       UI_OPT_STICK_FIX,
-                                   UI_OPT_DOOR_FIX,    UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING,
-                                   UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,        UI_OPT_BACK};
-    static const int gameStrs[] = {
-        UI_STR_OPT_YORDA,       UI_STR_OPT_PIT_TIME,       UI_STR_OPT_STICK_FIX,
-        UI_STR_OPT_DOOR_FIX,    UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_SKIP_OPENING,
-        UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,        UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA,        UI_OPT_PIT_TIME,    UI_OPT_SHADOW_SPEED,
+                                   UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_NATURAL_CHAINS,
+                                   UI_OPT_SKIP_OPENING, UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,
+                                   UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA,        UI_STR_OPT_PIT_TIME,
+                                   UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_DOOR_FIX,     UI_STR_OPT_NATURAL_CHAINS,
+                                   UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,      UI_STR_BACK};
     static const int listOpts[8] = {UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST,
                                     UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST};
     static const int listStrs[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -1894,6 +1896,30 @@ static void testValues(void)
         CHECK(ico_opt_pit_time() == ICO_PIT_HALF, "pit time steps back");
         ui_settings_step(UI_OPT_PIT_TIME, 1);
         CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL, "pit time back to Original");
+    }
+    /* Shadow speed: right after Time to rescue Yorda; Original, Faster, Fastest, Slower, Original */
+    {
+        static const char *const kWord[4] = {"slower", "original", "faster", "fastest"};
+        static const char *const kText[4] = {"Slower", "Original", "Faster", "Fastest"};
+        static const float kFactor[4] = {0.75f, 1.0f, 1.25f, 1.5f};
+        int k;
+
+        CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_SHADOW_SPEED) ==
+                  ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PIT_TIME) + 1,
+              "the Shadow speed row sits right after Time to rescue Yorda");
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_SHADOW_SPEED), "Original") == 0,
+              "shadow speed default");
+        for (k = 2; k < 7; k++) {
+            ui_settings_step(UI_OPT_SHADOW_SPEED, 1);
+            CHECK(ico_opt_shadow_speed() == k % 4 &&
+                      ico_opt_shadow_speed_factor() == kFactor[k % 4] &&
+                      strcmp(ui_settings_value_text(UI_OPT_SHADOW_SPEED), kText[k % 4]) == 0 &&
+                      strcmp(ico_config_get_string("gameplay.shadow_speed", ""), kWord[k % 4]) == 0,
+                  "shadow speed step %d", k);
+        }
+        /* five steps from Original end on Faster; back once is Original */
+        ui_settings_step(UI_OPT_SHADOW_SPEED, -1);
+        CHECK(ico_opt_shadow_speed() == ICO_SPEED_ORIGINAL, "shadow speed steps back");
     }
     ui_settings_step(UI_OPT_DEVELOPER, 1);
     CHECK(ico_opt_developer_mode() == 1, "developer mode on");

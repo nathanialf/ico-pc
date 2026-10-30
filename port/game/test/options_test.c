@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "config.h"
 #include "options.h"
 /* the region table (port/core/region.h, by its path: the game's include
@@ -109,6 +111,7 @@ static void test_defaults(void)
     CHECK(ico_opt_stick_fix() == ico_opt_stick_fix_default());
     CHECK(ico_opt_yorda_safe() == 0);
     CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL && ico_opt_pit_time_factor() == 1.0f);
+    CHECK(ico_opt_shadow_speed() == ICO_SPEED_ORIGINAL && ico_opt_shadow_speed_factor() == 1.0f);
     CHECK(ico_opt_door_fix() == 0);
     CHECK(ico_opt_mirror() == 0);
     CHECK(ico_opt_developer_mode() == 0);
@@ -225,6 +228,27 @@ static void test_config(const char *dir)
             ico_config_reset(path, "/nonexistent/options_test.ini");
             ico_opt_reload();
             CHECK(ico_opt_pit_time_factor() == want[i]);
+        }
+        remove(path);
+    }
+    /* shadow_speed: each name reads its factor; an unknown word reads original */
+    {
+        static const char *const names[] = {"slower", "original", "faster", "fastest", "bogus"};
+        static const float want[] = {0.75f, 1.0f, 1.25f, 1.5f, 1.0f};
+        int i;
+
+        for (i = 0; i < 5; i++) {
+            f = fopen(path, "wb");
+            if (f == NULL) {
+                failures++;
+                break;
+            }
+            fprintf(f, "[gameplay]\nshadow_speed = \"%s\"\n", names[i]);
+            fclose(f);
+            ico_config_reset(path, "/nonexistent/options_test.ini");
+            ico_opt_reload();
+            CHECK(ico_opt_shadow_speed_factor() == want[i]);
+            CHECK(ico_opt_shadow_speed() == (i < 4 ? i : ICO_SPEED_ORIGINAL));
         }
         remove(path);
     }
@@ -458,6 +482,121 @@ static void test_pit_time(void)
     snprintf(hook, sizeof(hook), "ctrl.motion == %d && ico_opt_pit_time_factor() != 1.0f", motion);
     CHECK(count_of(text, hook) == 1);
     free(text);
+}
+
+/* --- shadow_speed: the setter, its log line and the sources that carry it - */
+
+/* the whole text of a source file (caller frees), or NULL */
+static char *read_source(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    char *text;
+    long n;
+
+    if (f == NULL) {
+        return NULL;
+    }
+    fseek(f, 0, SEEK_END);
+    n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    text = (char *)malloc((size_t)n + 1);
+    if (text == NULL || fread(text, 1, (size_t)n, f) != (size_t)n) {
+        free(text);
+        fclose(f);
+        return NULL;
+    }
+    text[n] = 0;
+    fclose(f);
+    return text;
+}
+
+static void test_shadow_speed(void)
+{
+    static const float factor[ICO_SPEED_COUNT] = {0.75f, 1.0f, 1.25f, 1.5f};
+    static const char *const name[ICO_SPEED_COUNT] = {"slower", "original", "faster", "fastest"};
+    char *text;
+    char logpath[512];
+    char line[128];
+    char want[96];
+    FILE *lf;
+    int v, got = 0;
+
+    for (v = 0; v < ICO_SPEED_COUNT; v++) {
+        ico_opt_set_shadow_speed(v);
+        CHECK(ico_opt_shadow_speed() == v && ico_opt_shadow_speed_factor() == factor[v]);
+    }
+    ico_opt_set_shadow_speed(99); /* out of range reads original */
+    CHECK(ico_opt_shadow_speed() == ICO_SPEED_ORIGINAL && ico_opt_shadow_speed_factor() == 1.0f);
+
+    /* the log line on a change: fd 2 to a file for the three calls (one repeats: no line) */
+    {
+        const char *dir = getenv("TMPDIR");
+        int saved, fd;
+
+        snprintf(logpath, sizeof(logpath), "%s/ico_shadow_speed_%d.log", dir != NULL ? dir : "/tmp",
+                 (int)getpid());
+        fd = open(logpath, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        saved = dup(2);
+        if (fd < 0 || saved < 0) {
+            failures++;
+            return;
+        }
+        dup2(fd, 2);
+        close(fd);
+        ico_opt_set_shadow_speed(ICO_SPEED_FASTEST);
+        ico_opt_set_shadow_speed(ICO_SPEED_FASTEST); /* no change: no line */
+        ico_opt_set_shadow_speed(ICO_SPEED_SLOWER);
+        fflush(stderr);
+        dup2(saved, 2);
+        close(saved);
+    }
+    lf = fopen(logpath, "rb");
+    snprintf(want, sizeof(want), "gameplay: shadow speed %s (x%.2f)\n", name[ICO_SPEED_FASTEST],
+             (double)factor[ICO_SPEED_FASTEST]);
+    while (lf != NULL && fgets(line, sizeof(line), lf) != NULL) {
+        got++;
+        if (got == 1) {
+            CHECK(strcmp(line, want) == 0);
+        } else {
+            CHECK(strcmp(line, "gameplay: shadow speed slower (x0.75)\n") == 0);
+        }
+    }
+    CHECK(got == 2);
+    if (lf != NULL) {
+        fclose(lf);
+    }
+    remove(logpath);
+    ico_opt_set_shadow_speed(ICO_SPEED_ORIGINAL);
+
+    /* the hook: the multiplier in the one place that resolves the ratio, for enemies, not on
+       the freeze, not on this disc's dive motion */
+    text = read_source(ICO_ACT_GAME_SRC);
+    CHECK(text != NULL);
+    if (text != NULL) {
+        CHECK(count_of(text, "ratio *= ico_opt_shadow_speed_factor();") == 1);
+        CHECK(count_of(text, "ratio > 0.001f && ico_opt_shadow_speed_factor() != 1.0f") == 1);
+        CHECK(count_of(text, "kind == 4 && ratio > 0.001f") == 1);
+        CHECK(count_of(text, "ctrl.motion != diveMotion") == 1);
+        CHECK(count_of(text,
+                       "diveMotion = ICO_JUN26 ? 938 : ICO_NTSC ? 903 : ICO_AUG6 ? 905 : 952;") ==
+              1);
+        free(text);
+    }
+    /* the flight push: scaled once in each of the three flyCoreLoop copies */
+    text = read_source(ICO_COMMONACT_SRC);
+    CHECK(text != NULL);
+    if (text != NULL) {
+        CHECK(count_of(text, "v.f[2] *= ico_opt_shadow_speed_factor();") == 3);
+        free(text);
+    }
+    /* the pad recording's header names the key (it changes the simulation) */
+    text = read_source(ICO_MAIN_HOST_SRC);
+    CHECK(text != NULL);
+    if (text != NULL) {
+        CHECK(count_of(text, "\"gameplay.shadow_speed\",") == 1);
+        CHECK(strstr(text, "\"gameplay.pit_time\",") < strstr(text, "\"gameplay.shadow_speed\","));
+        free(text);
+    }
 }
 
 static void test_brain(void)
@@ -1582,6 +1721,7 @@ int main(int argc, char **argv)
     test_mirror_discs(argc > 1 ? argv[1] : ".");
     test_players_slots(argc > 1 ? argv[1] : ".");
     test_pit_time();
+    test_shadow_speed();
     test_brain();
     test_ui_language(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");

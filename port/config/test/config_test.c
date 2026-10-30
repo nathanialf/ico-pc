@@ -478,6 +478,8 @@ static void test_first_run(void)
     CHECK(text != NULL && strstr(text, "hold_type = \"disc\"") != NULL);
     CHECK_STR(ico_config_get_string("gameplay.pit_time", "?"), "original");
     CHECK(text != NULL && strstr(text, "pit_time = \"original\"") != NULL);
+    CHECK_STR(ico_config_get_string("gameplay.shadow_speed", "?"), "original");
+    CHECK(text != NULL && strstr(text, "shadow_speed = \"original\"") != NULL);
     CHECK(ico_config_get_string("gameplay.hold_type_chosen", NULL) == NULL); /* not chosen */
     /* the game variants: every line the game as shipped; the barrier's
        number is left out (the disc's own) */
