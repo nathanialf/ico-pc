@@ -212,6 +212,10 @@ ico_settings_test(settings_test test/settings_test.c)
 # settings_extras_test: the Extras and Characters pages and the pages that
 # hide the title's logo
 ico_settings_test(settings_extras_test test/settings_extras_test.c)
+# settings_states_test: the Save states page, the pause menu's row at pitch 16
+# and the Extras link over a fake host (the other discs' runs: the pause rows
+# and the link on their numbers)
+ico_settings_test(settings_states_test test/settings_states_test.c)
 # settings_extra_test: more Settings menu tests; each settings test file
 # stays well under the source size cap (tools/check_no_rom.sh), so new
 # settings tests go in settings_extra_test.c
@@ -234,6 +238,8 @@ if(ICO_RUN_TESTS)
         add_test(NAME settings_${_slug} COMMAND settings_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
         add_test(NAME settings_extras_${_slug}
                  COMMAND settings_extras_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+        add_test(NAME settings_states_${_slug}
+                 COMMAND settings_states_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
     endforeach()
     # the settings executables write the same settings_test.toml in
     # this directory: never in parallel
@@ -244,6 +250,8 @@ if(ICO_RUN_TESTS)
                          settings_discs_kor settings_discs_cn settings_discs_ntsc settings_discs_aug6
                          settings_discs_jun26 settings_ntsc settings_aug6 settings_jun26
                          settings_extras_ntsc settings_extras_aug6 settings_extras_jun26
+                         settings_states settings_states_jpn settings_states_kor settings_states_cn
+                         settings_states_ntsc settings_states_aug6 settings_states_jun26
                          PROPERTIES RESOURCE_LOCK settings_toml)
 endif()
 
