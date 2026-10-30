@@ -429,6 +429,7 @@ static const char *const record_keys[] = {
     "gameplay.stick_fix",
     "gameplay.yorda_safe",
     "gameplay.pit_time",
+    "gameplay.shadow_speed",
     "gameplay.developer_mode",
     "dev.start_stage",
     "gameplay.door_fix",
