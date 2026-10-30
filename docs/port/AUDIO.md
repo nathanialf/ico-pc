@@ -78,6 +78,7 @@ nothing installed (the headless build, the game's clock, every unit test that in
 | `audioFrame`, `voiceSounding`, `sampleBlocks`, `findEffectVoices`, `streamTick` (`port/ui/gallery_play.c`) | the music gallery's reads of the SPU2 |
 | `iop_write` and the PCM buffer's clearing in `movie_init` (`port/fmv/movie.c`) | the PCM buffer the driver's mixer reads inside the render (`pcm_mix`) |
 | `cut_line` (`port/audio/audio_host.c`) | the once-a-second look at the cut voices |
+| a save state's copy and its load (`port/game/state_host.c`) | the AUDIO blocks of the save state registry (the SPU2, the libsd layer, the gain tags and cached volumes, the driver, the streams, the EE sequencer's .bss: `ico_audio_state_register`, `ico_sound_state_register`) are copied under it at a save; a load holds it for the whole restore, IOP RAM included, so the device's thread renders either the old state or the restored one ([PLATFORM.md](PLATFORM.md#saving-and-loading)) |
 
 One movie write stays outside it: `close_all` (`port/fmv/movie.c`) frees the PCM buffer's IOP
 memory before the `SgStPcmClose` and `SgStPcmQuit` packets it queues reach the driver at the next
@@ -85,6 +86,14 @@ tick, so for that tick `pcm_mix` can still read the freed (and possibly reused) 
 device's thread. It is a race only formally: the end of a film's loop stops its channels at volume
 0 first (`audio_reset`: `SgStPcmVolume(3, 0, 0)`, `SgStPcmStop(3)`), and a film without sound never
 plays them, so nothing read there is heard.
+
+After a load, outside the lock (SDL's stream lock is taken), `ico_audio_host_flush` drops what the
+device has queued: `ico_audio_sdl_flush` pauses and resumes the stream as the Android lifecycle
+does (`ico_audio_sdl_pause`), so the queue is emptied, the pull path's accounting is level with
+the game again and the next sound ramps in from silence, logged as
+`audio: the output's queue dropped after a save state's load`; nothing without the SDL output.
+The cached voice volumes are then issued again under the gains now (`ico_audio_gain_reapply`):
+the gains are the player's settings and are not in a state.
 
 Nothing under the lock switches fibers (the host SIF runs the server synchronously,
 `port/data/sif_host.c`) or calls SDL's stream functions; the audio thread takes it inside SDL's
