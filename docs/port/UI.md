@@ -367,7 +367,7 @@ what is pending and calls the quit handler: the [window build](ARCHITECTURE.md#t
 
 The menu knows nothing of the platform; the window host installs what the pages ask: the window
 mode query, the anti-aliasing list and block, the texture and model pack counts, the touch query,
-the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the renderer names (`ui_settings_set_backend_names`, filled from `rhi_backend_name` in `ico_window_open`, so port/ui never links the RHI), the Graphics page's Apply host (`UiGraphicsHost`, below), the Steam handler, the texture export host (`UiTextureExportHost`, below), the models
+the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the renderer names (`ui_settings_set_backend_names`, filled from `rhi_backend_name` in `ico_window_open`, so port/ui never links the RHI), the Graphics page's Apply host (`UiGraphicsHost`, below), the Steam handler, the texture export host (`UiTextureExportHost`, below), the Save states host (`UiStatesHost`, below), the models
 handler, the Characters host (the model viewer's panel) (`port/ui/settings.h`
 (`ui_settings_set_*`)). A page whose host is missing hides its row.
 
@@ -1093,6 +1093,69 @@ popup test switch and the quit handler; `ui_host_vsync` runs the popup clock onc
 (`port/ui/ui_host.h`; `port/ui/ui_host.c`; `port/ui/ui_internal.h` (`ui__set_record_hook`,
 `ui__set_sync_hook`)).
 
+### Extras > Save states
+
+`UiStatesHost` (`port/ui/settings.h`; the contract is `list`, `request` and `can_save`) is set by
+`port/platform/main_host.c` (`setup_states`, window build only) before the menus are built; it is
+copied by `ui_settings_set_states_host`. Two things depend on it **when `build()` runs**
+(`s_statesAtBuild`): the Extras link and the pause menu's row exist only if the host was set by then, so a
+build without one (the headless build, the other Settings tests) has the same rows as before.
+The page itself (`UI_PAGE_STATES`, `buildStatesPage`) is always built, with no way in; its layout
+costs one layout and 30 rows of the extension's budget (`testBudget`).
+
+- **Entry**: a `UI_OPT_LINK` row `UI_STR_STATES` after Credits in the Extras table, from both entries
+  (`optShown`: the host is set); and under Photo mode a pause menu row of the same words, in the
+  port layout chained after the pause menu (`s_statesRow`, built in `buildEntries` before the
+  journey's lines), whose `right` is the page's layout.
+- **Pause rows** (`placePause`): the port rows (Photo mode while a stage runs, Save states) are
+  chained one `PAUSE_PITCH` (20) apart under Options, or `PAUSE_PITCH_STATES` (16) when the states
+  row shows: Options 50, Photo mode 66, Save states 82, Back 98, End Game 120 where the data has it.
+  A row not shown is masked and skipped by the item links. `pauseRowsOk` accepts Back at 1 or 2 pitches
+  of 20, or (with the row) 1 to 3 of 16, and still wants End Game three pitches of 20 below Options.
+  The boxes keep Options' height, so the letters stay where they are in them and overlap
+  4 lines at the narrower pitch.
+- **Cards** (`buildStatesPage`): the header, then four cards `ST_PITCH` (44) field lines apart from
+  line `ST_Y0` (40): an image row 72 x 54 at x 40 (`lt_ext_add_image`), the label "Slot N" at
+  x 124 (24 em, the only stop: the page's `rows[]` are these four, `UI_OPT_STATE_SLOT`, the action
+  row their value row), the action word centred between the Options pages' arrows (`STEP_X`,
+  `ARROW_*`: the pointer's roles are the value rows'), the area and play time 13 lines under the
+  label (`areaName`, `playTimeText`: the save screen's own, in the note size) and the date 22
+  lines under it (`%Y-%m-%d %H:%M`, local time). The last card's date ends on line 204; the status
+  line (a note row, y 205) is under it. A slot not in use reads `UI_STR_STATES_EMPTY`; one that is in use
+  but cannot load is greyed (`lt_ext_set_dim`) and, with the cursor on it, the status line gives the
+  host's `refusal_str` (a `%s` and the colon before it cut off, `statesPlain`).
+- **Actions**: Save (only where `can_save()`), Load and Delete (only on a slot in use), stepped
+  by Left and Right in that order (`statesStepAct`; the arrows show while two or more apply); the
+  choice is kept per slot while it is still possible. Cross (`statesPerform`) asks the host
+  (`request`): 0 is accepted (the result is the host's popup, and the cards are listed again at
+  the next tick), -1 shows `refusal_str` (`UI_STR_STATES_OFF` if none) as a popup. Save over a
+  slot in use and Delete first show `UI_STR_STATES_CONFIRM` (the action word lowercased on its first
+  letter, English only matters) in the status line and need a second Cross within two seconds
+  (`ST_CONFIRM_SECONDS` times `ui_popup_vsync_hz()` page ticks); moving the cursor, stepping the
+  action or waiting cancels. On the title the status line is `UI_STR_STATES_TITLE_HINT`, elsewhere
+  `UI_STR_STATES_NOTE`.
+- **Listing and pictures**: `statesOpen` lists when the page opens, then every `ST_RELIST_TICKS`
+  (30) ticks and at the tick after an accepted request (`list` is cheap and cached by the host; the
+  picture appears a few frames after a save). A slot's picture is made from its `png_path` when the
+  path or `saved_at` changes (`statesPictureSync`: `texpack_load_png` and `rd_create_texture`,
+  `ico_fopen` for the file) and released with `rd_destroy_texture` after its row is set to 0 when
+  it changes, the slot empties, the page closes (Back, or any other layout's proc: `statesRelease`)
+  or `ui_settings_reset` runs. `ui_settings_set_states_tex_funcs` swaps the two calls for fakes (the
+  tests; without `ICO_RD` the default makes none and the pictures stay empty). A picture that cannot
+  be read logs `state: the picture of slot N could not be loaded (path)` once per change.
+- **Back** goes to Extras, or, when the page was opened from the pause menu's row (the layout the
+  last settings proc ran in was the pause menu, `s_procLayout`), to the pause menu with the cursor on
+  the row.
+- **After a load** (`ui_settings_sync_after_state_load`, called by the host after the restore):
+  the pictures are released, the entry becomes the pause menu, the default cursor of the pause
+  layout is the Save states row (and the current one if the pause menu is up), and a page still
+  showing closes at its next tick without a sound or a save (`statesLeaveQuiet`).
+
+ctest `settings_states` (and `_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`, which run the pause
+rows and the link on those discs' numbers): the pause rows' places and links with and without the
+host or a stage, the link from both entries, the four cards' texts, geometry and pictures, the
+actions, the confirm rule, the title, Back, and the page after a load.
+
 ## Tests
 
 Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
@@ -1107,6 +1170,8 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 - `settings` (`test/settings_test.c`): the menu over fake PAL-shaped tables: pages and labels, the
   entry repoint, the title and pause rows' places, navigation through the real `layout_texture.c`,
   the game's settings on the pages, what is written.
+- `settings_states` (`test/settings_states_test.c`): the Save states page, the pause menu's row
+  and the Extras link over a fake host ([Extras > Save states](#extras--save-states)).
 - `settings_extras` (`test/settings_extras_test.c`): the Extras page from the title and the pause
   menu, Credits, Models, Characters with a faked viewer, the pages that hide the logo.
 - `settings_extra` (`test/settings_extra_test.c`): further Settings tests, one function per
