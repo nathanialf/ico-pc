@@ -511,7 +511,12 @@ Achievement pop-ups.
   different gameplay settings) is greyed, and the line under the cards says
   why. After a load the game is back on the pause menu, on **Save states**.
   The same page opens from the pause menu's **Save states** row, under Photo
-  mode. On a computer, F5 saves to slot 1 and F9 loads it.
+  mode. On a computer, F5 saves to slot 1 and F9 loads it. A state belongs
+  to the version of the game it was saved with, so after you update the game
+  the old states are greyed. Your achievements keep counting as before and
+  are not taken back by a load. The states are kept in the `states` folder
+  of your [user folder](PORTABLE_MODE.md#where-your-saves-are), apart from
+  your memory card saves.
 - **Character Customization:** change the colours of Ico and Yorda.
   [Details below](#character-customization).
 - **Game variants:** change how the game plays.
