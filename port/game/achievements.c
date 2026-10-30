@@ -15,6 +15,7 @@
 #include "diag_host.h"
 #include "host_config.h"
 #include "ico_gamestate.h"
+#include "ico_thread.h"
 #include "popup.h"
 #include "region.h" /* port/core: the disc's stage ids, story flags and keys */
 #include "strings.h"
@@ -89,6 +90,7 @@ static IcoAchStats s_stats;
 static int s_sofa[SOFA_MAX];
 static unsigned long long s_visited[STAGE_BITS / 64];
 static int s_stats_dirty;
+static int s_dirty_other; /* dirty by more than the hand's milliseconds */
 static unsigned int s_stats_written_tick;
 static unsigned int s_hand_rem; /* hand_ms's sub-millisecond carry, in 1/hz ms */
 
@@ -488,19 +490,172 @@ static const char *get_counter_str(const IcoToml *t, const char *name)
     return ico_toml_get(t, key);
 }
 
+/* --- the file's writer ---------------------------------------------------------
+   The game thread renders the file's text in memory, over the text the file
+   had when it was read (keys and comments the port does not know stay), and
+   hands it to one writer thread, which writes the temporary file, syncs it
+   and renames it over the file. A drive that takes 100 ms for that (a
+   network share, a slow disc) no longer stops a game step. At most one text
+   waits: a newer one replaces it (the latest wins). */
+
+static char *s_base; /* the file's text: as read, then as last rendered */
+static int s_base_read;
+static IcoMutex *s_wmx;
+static IcoCond *s_wcv;
+static IcoThread *s_wthread;
+static char *s_wtext; /* the waiting text (the writer owns it once taken) */
+static char s_wtext_path[1024];
+static int s_wbusy;   /* the writer is writing a taken text */
+static int s_wquit;   /* the writer returns when nothing waits */
+static int s_whold;   /* tests: the writer leaves the waiting text alone */
+static int s_wfailed; /* a write failed since the game thread looked */
+static unsigned int s_w_submitted, s_w_written, s_w_replaced;
+
+#define SLOW_WRITE_MS 20.0
+
+static const char *base_text(void)
+{
+    if (!s_base_read) {
+        s_base = ico_toml_read_text(s_path);
+        s_base_read = 1;
+    }
+    return s_base;
+}
+
+static IcoToml *base_parse(void)
+{
+    const char *b = base_text();
+
+    return ico_toml_parse(b != NULL ? b : "");
+}
+
+static void write_one(const char *text, const char *path)
+{
+    double t0 = ico_thread_now_ms();
+    int rc = ico_toml_write_text(text, path);
+    double ms = ico_thread_now_ms() - t0;
+
+    if (rc != 0) {
+        ico_diag_log("achievements: cannot write %s", path);
+        __atomic_store_n(&s_wfailed, 1, __ATOMIC_RELAXED);
+    }
+    if (ms > SLOW_WRITE_MS) {
+        ico_log_limited("achievements: slow write",
+                        "achievements: the file write took %.0f ms (%s)", ms, path);
+    }
+}
+
+static void writer_main(void *arg)
+{
+    (void)arg;
+    ico_mutex_lock(s_wmx);
+    for (;;) {
+        char *text;
+        char path[sizeof(s_wtext_path)];
+
+        while ((s_wtext == NULL && !s_wquit) || (s_wtext != NULL && s_whold && !s_wquit)) {
+            ico_cond_wait(s_wcv, s_wmx);
+        }
+        if (s_wtext == NULL) {
+            break; /* quit, nothing left */
+        }
+        text = s_wtext;
+        s_wtext = NULL;
+        memcpy(path, s_wtext_path, sizeof(path));
+        s_wbusy = 1;
+        ico_mutex_unlock(s_wmx);
+        write_one(text, path);
+        free(text);
+        ico_mutex_lock(s_wmx);
+        s_wbusy = 0;
+        s_w_written++;
+        ico_cond_broadcast(s_wcv);
+    }
+    ico_mutex_unlock(s_wmx);
+}
+
+/* Takes text (malloc'd); 0, or -1 when the write was made here and failed */
+static int writer_submit(char *text, const char *path)
+{
+    if (s_wmx == NULL) {
+        s_wmx = ico_mutex_create();
+        s_wcv = ico_cond_create();
+    }
+    if (s_wmx != NULL && s_wcv != NULL) {
+        ico_mutex_lock(s_wmx);
+        if (s_wthread == NULL) {
+            s_wquit = 0;
+            s_wthread = ico_thread_create(writer_main, NULL);
+        }
+        if (s_wthread != NULL) {
+            if (s_wtext != NULL) {
+                free(s_wtext);
+                s_w_replaced++;
+            }
+            s_wtext = text;
+            snprintf(s_wtext_path, sizeof(s_wtext_path), "%s", path);
+            s_w_submitted++;
+            ico_cond_broadcast(s_wcv);
+            ico_mutex_unlock(s_wmx);
+            return 0;
+        }
+        ico_mutex_unlock(s_wmx);
+    }
+    /* no thread to be had: write here, as the port did before */
+    write_one(text, path);
+    free(text);
+    return __atomic_exchange_n(&s_wfailed, 0, __ATOMIC_RELAXED) != 0 ? -1 : 0;
+}
+
+/* The writer finishes what waits and returns (joined). */
+static void writer_drain(void)
+{
+    if (s_wthread == NULL) {
+        return;
+    }
+    ico_mutex_lock(s_wmx);
+    s_wquit = 1;
+    ico_cond_broadcast(s_wcv);
+    ico_mutex_unlock(s_wmx);
+    ico_thread_join(s_wthread);
+    s_wthread = NULL;
+    s_wquit = 0;
+}
+
+/* Renders t over the base text, keeps the result as the new base and hands a
+   copy to the writer. t is freed. */
+static int commit(IcoToml *t)
+{
+    char *text = ico_toml_render(t, base_text());
+    char *copy;
+    size_t n;
+
+    ico_toml_free(t);
+    if (text == NULL) {
+        return -1;
+    }
+    n = strlen(text) + 1;
+    copy = malloc(n);
+    if (copy == NULL) {
+        free(text);
+        return -1;
+    }
+    memcpy(copy, text, n);
+    free(s_base);
+    s_base = text;
+    return writer_submit(copy, s_path);
+}
+
 static int write_file(void)
 {
-    IcoToml *t = ico_toml_load(s_path);
+    IcoToml *t = base_parse();
     char buf[SOFA_MAX * 12 + 8];
     char key[160];
     int i;
     int rc;
 
     if (t == NULL) {
-        t = ico_toml_parse("");
-    }
-    if (t == NULL) {
-        s_stats_dirty = 1; /* retried, as a failed write below */
+        s_stats_dirty = s_dirty_other = 1; /* retried, as a failed write below */
         return -1;
     }
     ico_toml_set_int(t, "version", FILE_VERSION);
@@ -526,25 +681,38 @@ static int write_file(void)
         snprintf(key, sizeof(key), "unlocked.%s.play_time", s_defs[i].id);
         ico_toml_set_int(t, key, s_rec[i].play_secs);
     }
-    rc = ico_toml_save(t, s_path);
-    ico_toml_free(t);
+    rc = commit(t);
     if (rc != 0) {
         ico_diag_log("achievements: cannot write %s", s_path);
     }
     /* a failed write stays pending: the flush retries it every
        ICO_ACH_STATS_FLUSH_TICKS and at exit, so an unlock or a counter is
-       not lost to one failure (a locked file, a full disk) */
+       not lost to one failure (a locked file, a full disk); the writer
+       thread's failure comes back through s_wfailed (take_write_failure) */
     s_stats_dirty = rc != 0;
+    s_dirty_other = rc != 0;
     s_stats_written_tick = ico_gs_ticks();
     return rc;
 }
 
+/* A failed write on the writer thread makes the counters pending again. */
+static void take_write_failure(void)
+{
+    if (__atomic_exchange_n(&s_wfailed, 0, __ATOMIC_RELAXED) != 0) {
+        s_stats_dirty = s_dirty_other = 1;
+    }
+}
+
 static void read_file(void)
 {
-    IcoToml *t = ico_toml_load(s_path);
+    IcoToml *t;
     char key[160];
     int i;
 
+    if (base_text() == NULL) {
+        return; /* no file yet */
+    }
+    t = base_parse();
     if (t == NULL) {
         return;
     }
@@ -599,13 +767,10 @@ static int run_key(int slot, const char *name, char *key, size_t size)
 
 static void run_slot_write(int slot, const IcoGsRun *run, long long sum)
 {
-    IcoToml *t = ico_toml_load(s_path);
+    IcoToml *t = base_parse();
     char key[64];
     int rc;
 
-    if (t == NULL) {
-        t = ico_toml_parse("");
-    }
     if (t == NULL) {
         return;
     }
@@ -631,8 +796,7 @@ static void run_slot_write(int slot, const IcoGsRun *run, long long sum)
         run_key(slot, "_partial", key, sizeof(key));
         ico_toml_set_bool(t, key, run->partial);
     }
-    rc = ico_toml_save(t, s_path);
-    ico_toml_free(t);
+    rc = commit(t);
     if (rc != 0) {
         ico_diag_log("achievements: cannot write %s", s_path);
     }
@@ -673,7 +837,10 @@ int ico_ach_slot_loaded(int slot, unsigned int sum)
         ico_ach_init(NULL);
     }
     s_run_slot = slot; /* a New Game from this slot's load clears its entry */
-    t = ico_toml_load(s_path);
+    if (base_text() == NULL) {
+        return 0;
+    }
+    t = base_parse();
     if (t == NULL) {
         return 0;
     }
@@ -742,6 +909,11 @@ static void run_slot_clear(void)
 
 static void clear_state(void)
 {
+    writer_drain(); /* a text for the old path is written before the new state */
+    free(s_base);
+    s_base = NULL;
+    s_base_read = 0;
+    s_dirty_other = 0;
     memset(&s_stats, 0, sizeof(s_stats));
     memset(s_rec, 0, sizeof(s_rec));
     memset(s_visited, 0, sizeof(s_visited));
@@ -766,9 +938,81 @@ void ico_ach_reset(const char *path)
 
 void ico_ach_flush(void)
 {
-    if (s_inited && s_stats_dirty) {
-        write_file();
+    int pass;
+
+    if (!s_inited) {
+        return;
     }
+    /* what waits is written and the writer joined; a write that failed gets
+       one more try here, on this thread's turn, before the program ends */
+    for (pass = 0; pass < 2; pass++) {
+        if (s_stats_dirty) {
+            write_file();
+        }
+        writer_drain();
+        take_write_failure();
+        if (!s_stats_dirty) {
+            break;
+        }
+    }
+}
+
+const char *ico_ach_written_text(void)
+{
+    return base_text();
+}
+
+void ico_ach_writer_hold(int hold)
+{
+    if (s_wmx == NULL) {
+        s_wmx = ico_mutex_create();
+        s_wcv = ico_cond_create();
+    }
+    ico_mutex_lock(s_wmx);
+    s_whold = hold != 0;
+    ico_cond_broadcast(s_wcv);
+    ico_mutex_unlock(s_wmx);
+}
+
+void ico_ach_writer_idle(void)
+{
+    if (s_wmx == NULL) {
+        return;
+    }
+    ico_mutex_lock(s_wmx);
+    while (s_wtext != NULL || s_wbusy) {
+        ico_cond_wait(s_wcv, s_wmx);
+    }
+    ico_mutex_unlock(s_wmx);
+}
+
+void ico_ach_reread_file(void)
+{
+    ico_ach_writer_idle();
+    free(s_base);
+    s_base = NULL;
+    s_base_read = 0;
+}
+
+void ico_ach_writer_counts(unsigned int *submitted, unsigned int *written, unsigned int *replaced)
+{
+    if (s_wmx != NULL) {
+        ico_mutex_lock(s_wmx);
+    }
+    *submitted = s_w_submitted;
+    *written = s_w_written;
+    *replaced = s_w_replaced;
+    if (s_wmx != NULL) {
+        ico_mutex_unlock(s_wmx);
+    }
+}
+
+int ico_ach_flush_due_ticks(void)
+{
+    int hz = ico_gs_tick_hz();
+
+    return s_dirty_other ? ICO_ACH_STATS_FLUSH_TICKS
+                         : ICO_ACH_HAND_FLUSH_SECONDS * (hz > 0 ? hz : 25);
 }
 
 void ico_ach_init(const char *path)
@@ -833,7 +1077,7 @@ static void update_stats(void)
 
     if (kills) {
         s_stats.enemies += (unsigned int)kills;
-        s_stats_dirty = 1;
+        s_dirty_other = s_stats_dirty = 1;
     }
     if (ico_gs_yorda_held() && !ico_gs_paused()) {
         /* a tick's milliseconds, the remainder carried: 30 ticks a second
@@ -853,18 +1097,18 @@ static void update_stats(void)
         if (sofa >= 0) {
             add_sofa(s_sofa, &s_stats.sofas, sofa);
         }
-        s_stats_dirty = 1;
+        s_dirty_other = s_stats_dirty = 1;
     }
     if (endings) {
         s_stats.clears += (unsigned int)endings;
-        s_stats_dirty = 1;
+        s_dirty_other = s_stats_dirty = 1;
     }
     if (ico_gs_valid()) {
         int st = ico_gs_stage();
 
         if (!visited(s_visited, st)) {
             mark_stage(s_visited, st);
-            s_stats_dirty = 1;
+            s_dirty_other = s_stats_dirty = 1;
         }
     }
 }
@@ -1024,7 +1268,9 @@ void ico_ach_tick(void)
         }
     }
     pump_popups();
-    if (s_stats_dirty && ico_gs_ticks() - s_stats_written_tick >= ICO_ACH_STATS_FLUSH_TICKS) {
+    take_write_failure();
+    if (s_stats_dirty &&
+        ico_gs_ticks() - s_stats_written_tick >= (unsigned int)ico_ach_flush_due_ticks()) {
         write_file();
     }
 }

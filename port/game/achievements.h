@@ -28,6 +28,15 @@ int ico_ach_popup_gap_ticks(void);
 /* Main ticks between two writes of changed counters (30 s); an unlock
    writes at once */
 #define ICO_ACH_STATS_FLUSH_TICKS 750
+/* Seconds between two writes while the only change is the hand-held time
+   (it changes every tick Yorda is led, and the file is written in the
+   background, so the long period spares the drive); any other change
+   writes at ICO_ACH_STATS_FLUSH_TICKS. */
+#define ICO_ACH_HAND_FLUSH_SECONDS 60
+/* The ticks the counters wait now: ICO_ACH_STATS_FLUSH_TICKS when anything
+   but the hand time changed, else ICO_ACH_HAND_FLUSH_SECONDS at the Main
+   tick rate. */
+int ico_ach_flush_due_ticks(void);
 
 /* Reads [game] achievements and the unlock file (NULL: <pref dir>/
    achievements.toml).  ico_ach_host_poll calls it on first use. */
@@ -49,8 +58,22 @@ void ico_ach_tick(void);
    that slot's entry. */
 void ico_ach_slot_saved(int slot, unsigned int sum);
 int ico_ach_slot_loaded(int slot, unsigned int sum);
-/* Writes the counters if they changed (atexit). */
+/* Writes the counters if they changed, waits for the background writer to
+   finish and joins it (atexit, shutdown). */
 void ico_ach_flush(void);
+/* For tests: the file's text as last rendered (what the writer was or will
+   be handed; the text read at start before any write), NULL with no file;
+   hold keeps the writer from taking a waiting text (1) or lets it (0);
+   the counts of texts handed over, files written and waiting texts
+   replaced by a newer one. */
+const char *ico_ach_written_text(void);
+void ico_ach_writer_hold(int hold);
+/* waits until nothing waits to be written and the writer is idle (the file
+   on disk is then the last text rendered; hold must be off); the next
+   read of the file's text goes to the disk again (a test that edited it) */
+void ico_ach_writer_idle(void);
+void ico_ach_reread_file(void);
+void ico_ach_writer_counts(unsigned int *submitted, unsigned int *written, unsigned int *replaced);
 
 int ico_ach_count(void);
 const char *ico_ach_id(int i);
