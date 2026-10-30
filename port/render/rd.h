@@ -553,9 +553,10 @@ void rd_set_vu_prepass_off(const char *reason);
  * screen-prim triangles' exact planes, rd_screen_planes.c), reason saying
  * why for the log ("the driver hung creating them on 2026-10-30, compiler
  * E031.41.03.47"); NULL or "" clears it.  Those triangles draw through the
- * plain sprite builds (the GPU's interpolation of their corners: a colour
- * a level apart on some pixels, docs/port/WORK_BUFFERS.md "Without the
- * sprite planes"), which the start-up set holds instead, and none of the
+ * plain sprite builds (the GPU's interpolation of their corners:
+ * byte-identical on the dumps measured, a level apart possible at a
+ * fractional scale; docs/port/WORK_BUFFERS.md "Without the sprite
+ * planes"), which the start-up set holds instead, and none of the
  * family is created on first use.  The host calls it from [dev]
  * pipeline_skip (issue 161, port/platform/pipeline_skip.h);
  * ICO_RD_NO_SPRITE_PLANES=1 does the same for the tests. */
