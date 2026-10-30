@@ -1717,6 +1717,18 @@ uint32_t rd__vu_prepass_entry_draws(void);
  * ("on: ...", "off ...") for the summary line */
 void rd__vu_merge_name(uint8_t vs, bool plain, char *out, size_t size);
 const char *rd__vu_merge_text(void);
+/* The draw merge's fallback (rd_replay_vu.c): rd__vu_merge_build_failed,
+ * from rd_pipeline.c keepPipeline, notes that a pipeline made with the
+ * merge build `build` failed for the driver's reason (Direct3D 11 compiles
+ * the build at its first pipeline; any backend under
+ * ICO_RD_FAKE_MERGE_FAIL=1); rd__vu_merge_fallback, at the start of the
+ * next replay, before any pipeline is asked for, turns the merge (and the
+ * fuse) off for the rest of the run: the device idle, every pipeline
+ * dropped (the keys name the vertex shader, not its module, so a key made
+ * with a merge build and its failed entries would otherwise stay), the
+ * merge builds destroyed, logged once */
+void rd__vu_merge_build_failed(const char *build);
+void rd__vu_merge_fallback(void);
 /* The fused scissor pair (g_rd.vuFuse): "on" or "off" for the summary line */
 const char *rd__vu_fuse_text(void);
 /* A cleared source read as its colour (rd_const_read.c): false under [dev]
