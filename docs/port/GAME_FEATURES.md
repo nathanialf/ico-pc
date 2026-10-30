@@ -132,7 +132,7 @@ The hooks are in `ico2/seki/src/BgAnimation.c`, under `ICO_RD` only (the
 rd_chain_find(p->group)` and `bgaHostNatural = bgaHostChain != 0 && ico_opt_natural_chains()`;
 `bga_CalcObject` reads them at the Null and at its children. The plane travels from
 `RegistPacket.c`'s `regHostMesh` to `rd_draw_vu_mesh`. Being a draw-only change, the key is not
-among the keys a pad recording's header records (`port/platform/main_host.c` (`record_keys`);
+among the keys a pad recording's header records (`port/platform/sim_keys.c` (`ICO_SIM_KEYS`);
 `port/game/options.h`, header comment). `hold_type` is recorded, as R1's meaning changes the simulation.
 
 ### Mirror

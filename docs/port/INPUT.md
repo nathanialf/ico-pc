@@ -256,7 +256,7 @@ Main reads the pad). Lines are written after the vsync step that read them
 `port/platform/main_host.c` (`record_open`, `record_header`) opens it: on by default in the window
 build as `logs/input-<time>.txt`, off headless; the ini's `input_record=` (`[dev] input_record`)
 takes `false`, `true` or a path. The header (`# ico-pc input recording`) carries the build, the
-config values the simulation depends on (`record_keys`, which includes `gameplay.hold_type` and `gameplay.hold_type_chosen`), the effective fixed clock and stick fix,
+config values the simulation depends on (`ICO_SIM_KEYS`, `port/platform/sim_keys.c`, which includes `gameplay.hold_type` and `gameplay.hold_type_chosen`), the effective fixed clock and stick fix,
 and the [native frame](ARCHITECTURE.md#terms)'s width and aspect; a width change adds
 `# tick N gs_width W`. Loading a recording as the pad script compares each header value with the
 run's and logs each difference (`record_check`), since the replay may then not follow the session.
