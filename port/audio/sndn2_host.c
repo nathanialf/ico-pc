@@ -25,6 +25,7 @@
 #include "sndn2_internal.h"
 #include "spu2.h"
 #include "spu2_sd.h"
+#include "state_registry.h"
 #include "stream_watch.h"
 #include "vfs.h"
 
@@ -64,6 +65,15 @@ static struct {
     int n;
     int page_full;
 } C;
+
+int sndn2_host_state_register(void)
+{
+    int rc = 0;
+
+    rc |= ico_state_register("sndn2.host", &H, sizeof H, ICO_STATE_AUDIO | ICO_STATE_SCAN);
+    rc |= ico_state_register("sndn2.carry", &C, sizeof C, ICO_STATE_AUDIO);
+    return rc != 0 ? -1 : 0;
+}
 
 void sndn2_log_once(int *flag, const char *fmt, ...)
 {
