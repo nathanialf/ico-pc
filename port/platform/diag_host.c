@@ -37,6 +37,7 @@
 #include <string.h>
 #include "fiber.h"
 #include "gpu_hang.h"
+#include "memory_floor.h"
 #include "host_fs.h"
 #include "rd_bisect_plan.h"
 #include "report.h"
@@ -1340,7 +1341,7 @@ static int act_prev_careful;
    ("set: stopped at the system's low-memory signal (running critical)");
    the previous run's, read by begin, makes this start lazy
    (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY) */
-static char act_low_memory[112];
+static char act_low_memory[160];
 static const char act_set_low_memory[] = "set: stopped at the system's low-memory signal";
 static int act_prev_low_memory;
 static char act_prev_low_memory_line[sizeof act_low_memory];
@@ -1439,6 +1440,14 @@ static void act_close(void)
    progress screen's frames. */
 static int act_sync_note(const char *note)
 {
+#ifdef __ANDROID__
+    /* issue 161: the key inside the driver now ("creating pipeline N of M
+       (in batch A-B): ...", rd_pipeline.c noteKey), on a phone: a freeze
+       inside it must still name it */
+    if (strncmp(note, "creating pipeline ", 18) == 0 && strstr(note, " (in batch ") != NULL) {
+        return 1;
+    }
+#endif
     return strncmp(note, "creating pipelines ", 19) == 0 || startup_retry_note_has_vu_pre(note) ||
            (act_mode == ICO_DIAG_ACTIVITY_LAZY && strncmp(note, "creating pipeline ", 18) == 0);
 }
@@ -2077,11 +2086,67 @@ static void low_memory_stop_note(int level)
     }
 }
 
+/* The free-memory floor (memory_floor.h, issue 161): on Android the set
+   also stops once MemAvailable is under the floor ([dev]
+   pipeline_memory_floor_mb, exported as ICO_PIPELINE_MEMORY_FLOOR_MB; the
+   default the larger of 1536 MB and 15 % of MemTotal), and is recorded as
+   the low-memory signal's stop (the next start makes no set). The v0.9.5
+   Retroid Pocket 6 start stalled in the driver at 1693 MB of 11265 MB
+   available with no onTrimMemory signal. floor_why: the stop's words, ""
+   until it stops (the set's thread only) */
+static char floor_why[96];
+
+static int memory_floor_stop(void)
+{
+#ifdef __ANDROID__
+    static long setting = -3; /* -3: not read yet */
+    long avail_kb, total_kb, avail, total, floor;
+    if (floor_why[0] != '\0') {
+        return 1;
+    }
+    if (setting == -3) {
+        const char *v = getenv("ICO_PIPELINE_MEMORY_FLOOR_MB");
+        setting = ico_memory_floor_setting(v);
+        if (setting == -2) {
+            ico_diag_log("ico_pc: [dev] pipeline_memory_floor_mb = \"%s\" is not a whole number of "
+                         "MB; the default floor",
+                         v);
+            setting = -1;
+        }
+    }
+    if (setting == 0 || ico_diag_device_memory(&avail_kb, &total_kb) != 0) {
+        return 0;
+    }
+    avail = avail_kb / 1024;
+    total = total_kb / 1024;
+    if (!ico_memory_floor_stops(avail, total, setting)) {
+        return 0;
+    }
+    floor = ico_memory_floor_mb(total, setting);
+    snprintf(floor_why, sizeof floor_why, "%ld MB available of %ld MB, floor %ld MB", avail, total,
+             floor);
+    ico_diag_log(
+        "ico_pc: pipelines: the start-up set stopped at %ld MB available of %ld MB (floor %ld "
+        "MB): the rest made on first use",
+        avail, total, floor);
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 int ico_diag_low_memory_stop(char *why, size_t size)
 {
     const int level = __atomic_load_n(&low_memory_stop_level, __ATOMIC_ACQUIRE);
     if (level == 0) {
-        return 0;
+        if (!memory_floor_stop()) {
+            return 0;
+        }
+        low_memory_stopped = 1;
+        if (why != NULL && size > 0) {
+            snprintf(why, size, "%s", floor_why);
+        }
+        return 1;
     }
     low_memory_stopped = 1;
     if (why != NULL && size > 0) {
@@ -2719,16 +2784,16 @@ void ico_diag_startup_activity_budget_stop(void)
            next start makes no set (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY); the
            set's batches and the system's lines stay in the file (what the
            memory did up to the stop) */
-        char lv[48];
+        char lv[96];
         if (!ico_diag_low_memory_stop(lv, sizeof lv)) {
             snprintf(lv, sizeof lv, "a level not named");
         }
         snprintf(act_low_memory, sizeof act_low_memory, "%s (%s)", act_set_low_memory, lv);
         act_once = 0;
-        ico_diag_log("ico_pc: the start-up set stopped at the system's low-memory signal (%s); "
-                     "the next start makes the pipelines as the game needs them, with no "
-                     "start-up set",
-                     lv);
+        ico_diag_log(
+            "ico_pc: the start-up set stopped at %s (%s); the next start makes the "
+            "pipelines as the game needs them, with no start-up set",
+            floor_why[0] != '\0' ? "the free-memory floor" : "the system's low-memory signal", lv);
     } else {
         act_nbatches = 0;
         act_once = 1;
