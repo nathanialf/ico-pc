@@ -62,11 +62,13 @@ A few more keys on a computer:
 - **Shift+F12**, in photo mode, saves the paused moment at five picture
   shapes, from 4:3 to the widest, into one zip file beside the F12 files,
   for problem reports about wide screens.
+- **F5** saves a state to slot 1, and **F9** loads it. The **Save states**
+  page in the pause menu has four slots.
 - **F11** makes the game write its speed numbers into the log every second
   for 30 seconds, instead of every 10 seconds. Press it again to stop
   early. It is for problem reports about slow play.
 
-Escape, Alt+Enter, F11, F12 and Shift+F12 cannot be changed. Everything else can be, in
+Escape, Alt+Enter, F5, F9, F11, F12 and Shift+F12 cannot be changed. Everything else can be, in
 **Options > Controls > Remap controls**. When you give a button or key to
 another action, the two actions swap. If the action you changed had no
 button on that device, the other action is left without one.
