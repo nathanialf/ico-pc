@@ -578,6 +578,10 @@ static const struct {
        policy (small batches on one thread), "full" the set (the default;
        the careful one on a device of the table) */
     {"dev.pipeline_set", "pipeline_set"},
+    /* the texture decode pool's worker threads: auto (the default: 2, 1 on
+       a machine with 2 hardware threads or fewer), 0 every decode on the
+       game thread as before (an A/B), 1 to 4 (port/render/rd_tex_decode.c) */
+    {"dev.texture_decode_threads", "texture_decode_threads"},
 };
 
 /* the [dev] keys exported as the environment switches the renderer and the
@@ -646,6 +650,8 @@ static const struct {
     /* port/audio/audio_host.c ico_audio_host_init: 1 renders the audio on
        the game's clock (the sync path) instead of the device's */
     {"audio_sync", "ICO_AUDIO_SYNC"},
+    /* port/render/rd_tex_decode.c choose: auto, or 0..4 worker threads */
+    {"texture_decode_threads", "ICO_RD_TEXTURE_DECODE_THREADS"},
 };
 
 /* [dev] keys a file may hold that nothing reads now: read (ini_map) and
@@ -717,6 +723,13 @@ const char *ico_dev_env_value(const char *key, const char *value)
     }
     if (strcmp(key, "pipeline_set") == 0) {
         return value_is(value, sets) ? value : NULL;
+    }
+    if (strcmp(key, "texture_decode_threads") == 0) {
+        /* auto, 0 (off: the game thread decodes) to 4 worker threads */
+        if (strcmp(value, "auto") == 0 || (value[0] >= '0' && value[0] <= '4' && !value[1])) {
+            return value;
+        }
+        return value_is(value, off) ? "0" : NULL;
     }
     if (strcmp(key, "pass_split") == 0) {
         /* a count of VU draws, 1..65536; 0 or off: none */
