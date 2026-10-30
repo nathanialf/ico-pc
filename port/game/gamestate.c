@@ -20,6 +20,7 @@
 #include "variants.h"
 
 #include "../core/region.h" /* ico_region, ico_region_cur: the disc's row of config/regions.txt */
+#include "../platform/diag_host.h" /* ico_diag_log */
 
 #ifdef ICO_GS_LIVE
 #include "typedef.h"
@@ -48,8 +49,7 @@ int CheckWeaponKind(struct GObj *self);     /* sugipon/src/weapon.c */
 unsigned char ACTGame_FLAG_TETSUNAGI(void); /* fumi/src/act-game.c */
 
 #define STAGE_COUNT (ico_region_cur()->stage_count) /* stageData[106], 104 on the Japanese disc */
-#define ENEMY_KIND 4     /* GObj.kind of an enemy (isEnemyActive, enemy_act.c) */
-#define ACT_CARRIED 0x6F /* the girl's carried action (enemy_act.c:1153) */
+#define ENEMY_KIND 4 /* GObj.kind of an enemy (isEnemyActive, enemy_act.c) */
 
 void ico_gs_sample_live(IcoGsSnapshot *s)
 {
@@ -111,8 +111,8 @@ void ico_gs_sample_live(IcoGsSnapshot *s)
 
         s->girl_present = 1;
         s->hand_held = ACTGame_FLAG_TETSUNAGI() != 0;
-        s->yorda_carried_by_enemy =
-            g->actMode == ACT_CARRIED && g->carrier != 0 && g->carrier->kind == ENEMY_KIND;
+        s->yorda_carried_by_enemy = ico_gs_girl_carried_by_enemy(
+            g->actMode, g->carrier != 0 && g->carrier->kind == ENEMY_KIND);
     }
 }
 
@@ -126,7 +126,29 @@ void ico_game_pad0(int *now, int *flags)
 
 #endif /* ICO_GS_LIVE */
 
+/* The girl's actMode while an enemy carries her, by disc: 0x6F (111) on the
+   European, Japanese, Korean and Asian discs, 107 on the North American and
+   August 2001 discs, 106 on the June 2001 demo.  Read from the game's own
+   arms: actEnemyForceSwitchToCarry (ico2/fumi/src/enemy_act.c, 0x6F, 107
+   and, in the _jun26 twin, 106) and IsEnemyBrainToBoy's
+   PAL_NTSCAUG6_JUN26(0x6F, 107, 106). */
+int ico_gs_carried_act_mode(void)
+{
+    return PAL_NTSCAUG6_JUN26(0x6F, 107, 106);
+}
+
+int ico_gs_girl_carried_by_enemy(int act_mode, int carrier_is_enemy)
+{
+    return act_mode == ico_gs_carried_act_mode() && carrier_is_enemy;
+}
+
 /* --- signals ------------------------------------------------------------ */
+
+/* the first 8 lines of a kind, then every 100th */
+static int log_this(unsigned int n)
+{
+    return n <= 8 || n % 100 == 0;
+}
 
 #define SIGNAL_QUEUE 128
 
@@ -139,6 +161,9 @@ static Signal s_pending[SIGNAL_QUEUE];
 static int s_pending_n;
 static unsigned int s_dropped;
 
+static int s_over_seen;
+static unsigned int s_over_logged;
+
 static int s_count[ICO_GS_EV_COUNT];
 static int s_arg[ICO_GS_EV_COUNT];
 
@@ -147,6 +172,9 @@ void ico_gs_signal(int event, int arg)
     if (event <= ICO_GS_EV_NONE || event >= ICO_GS_EV_COUNT) {
         return;
     }
+    if (event == ICO_GS_EV_STAGE_ENTER) {
+        s_over_seen = 0;
+    }
     if (s_pending_n >= SIGNAL_QUEUE) {
         s_dropped++;
         return;
@@ -154,6 +182,22 @@ void ico_gs_signal(int event, int arg)
     s_pending[s_pending_n].event = event;
     s_pending[s_pending_n].arg = arg;
     s_pending_n++;
+}
+
+/* ICO_GS_EV_GAME_OVER from the June 2001 demo's death paths, which switch to
+   the game-over layout without the guard flag (gameover_layout_flag) the
+   other discs' ACT_LAYOUT_GAMEOVER sets: one signal per stage entry, a path
+   that runs on more than one tick (the stone's loop) counts once */
+void ico_gs_signal_game_over_once(void)
+{
+    if (s_over_seen) {
+        if (log_this(++s_over_logged)) {
+            ico_diag_log("stats: game over not counted (already counted on this stage entry)");
+        }
+        return;
+    }
+    s_over_seen = 1;
+    ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
 }
 
 static void raise_now(IcoGsEvent ev, int arg)
@@ -186,6 +230,17 @@ static int s_stage_entered;
 
 static unsigned int s_enemies, s_game_overs, s_saves;
 
+/* Counting a capture once.  The hook (ICO_GS_EV_YORDA_GRABBED) fires the
+   moment the shadow sets `carrier`; her actMode (the snapshot's
+   yorda_carried_by_enemy) changes only when her own fiber reads the reserve
+   mail (ACTReserveTarget, act.c), a tick or so later.  The hook counts; the
+   flag's rise counts only for a capture the hook missed. */
+#define CAPTURE_MAIL_TICKS                                                                         \
+    4 /* the reserve mail's latency: a rise this soon after a counted hook is that capture */
+static unsigned int s_cap_hook_tick; /* s_ticks of the last counted hook, 0: none */
+static int s_cap_hooked;             /* a hook-counted capture, not yet dropped */
+static unsigned int s_cap_logged, s_cap_same_logged;
+
 static struct {
     int fresh;
     unsigned int captures;
@@ -215,6 +270,11 @@ void ico_gs_reset(void)
     s_ticks = 0;
     s_stage_entered = 0;
     s_enemies = s_game_overs = s_saves = 0;
+    s_cap_hook_tick = 0;
+    s_cap_hooked = 0;
+    s_cap_logged = s_cap_same_logged = 0;
+    s_over_logged = 0;
+    s_over_seen = 0;
 }
 
 static int flag_in(const IcoGsSnapshot *s, int n)
@@ -311,11 +371,35 @@ void ico_gs_tick(void)
     if (s_count[ICO_GS_EV_LOAD]) {
         s_run.fresh = 0;
     }
+    if (s_stage_entered || (s_snap.actors_valid && s_prev.actors_valid &&
+                            s_prev.yorda_carried_by_enemy && !s_snap.yorda_carried_by_enemy)) {
+        s_cap_hooked = 0; /* dropped, or another stage: the next capture is a new one */
+    }
     if (s_count[ICO_GS_EV_YORDA_GRABBED] != 0) {
         s_run.captures += (unsigned int)s_count[ICO_GS_EV_YORDA_GRABBED];
+        s_cap_hook_tick = s_ticks;
+        s_cap_hooked = 1;
+        if (log_this(++s_cap_logged)) {
+            ico_diag_log("stats: Yorda captured %u (hook) at tick %u, stage %d", s_run.captures,
+                         s_ticks, s_snap.stage_no);
+        }
     } else if (s_snap.yorda_carried_by_enemy && !s_prev.yorda_carried_by_enemy &&
                s_prev.actors_valid) {
-        s_run.captures++; /* a capture the hook did not see */
+        if (s_cap_hooked ||
+            (s_cap_hook_tick != 0 && s_ticks - s_cap_hook_tick <= CAPTURE_MAIL_TICKS)) {
+            /* the hook counted this capture; her mode followed */
+            if (log_this(++s_cap_same_logged)) {
+                ico_diag_log("stats: Yorda carried (the capture counted %u ticks ago)",
+                             s_ticks - s_cap_hook_tick);
+            }
+        } else {
+            s_run.captures++; /* a capture the hook did not see */
+            s_cap_hooked = 0;
+            if (log_this(++s_cap_logged)) {
+                ico_diag_log("stats: Yorda captured %u (flag) at tick %u, stage %d", s_run.captures,
+                             s_ticks, s_snap.stage_no);
+            }
+        }
     }
     if (demo_skipped) {
         s_run.opening_skipped = 1;
