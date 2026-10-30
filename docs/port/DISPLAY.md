@@ -607,7 +607,12 @@ with a fake clock and swapchain; `window_host.c` only supplies its I/O (`pace`, 
    (Direct3D 11 and 12, OpenGL, some surfaces), where a wait for the display shows as a late step
    and the next frame's replay is the one left out. A replayed frame draws the same picture as
    before (the gate decides only whether it is replayed: Original at 4:3 1x stays the PS2's
-   picture byte for byte); the tools and tests set no gate and replay every frame.
+   picture byte for byte); the tools and tests set no gate and replay every frame. Since the gate
+   skips the replay itself, not only the present (the timer path's skip still replays), an effect
+   that reads the previous picture (a motion blur's history, an after-image pass) advances once per
+   drawn picture, not once per game step, on a GPU too slow for every picture, and a skipped
+   frame's texture uploads and decode settles wait for the next replay (review finding 7: a known
+   change of look on a slow GPU, not a defect).
    `pace_policy_test` (`testOriginalRule`, `testOriginalLoop`) holds the rates: 9 to 17 ms a
    picture at 20 ms every frame presented, no skip; 20 to 90 ms 50 steps a second of real time,
    about `1000 / (G + 1)` presents a second, no resync; without the skip a 30 ms picture ran the game
