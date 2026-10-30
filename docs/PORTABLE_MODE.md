@@ -22,6 +22,10 @@ user folder here. It is not the folder the program is in:
 
 In the user folder:
 
+- `states` holds your save states, one folder for each disc, with each
+  slot's file and picture. They are separate from your memory card: copy this
+  folder too when you move to another computer. A state only loads in the
+  version of the game that saved it.
 - `memcard` is your memory card. It holds your saves, as normal files.
   PCSX2 can keep a memory card as a folder in the same way, so saves can
   move between the two. The European disc's saves are in the folder
