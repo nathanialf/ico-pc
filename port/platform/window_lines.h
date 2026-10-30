@@ -18,4 +18,10 @@ void window_slow_replay_line(const RdPerfRecord *r, unsigned vsync, const char *
    process's and the device's memory, the pipeline pool */
 void window_memory_line(void);
 
+/* Once a block: writes the line "video memory N MB of M MB: the driver may
+   be paging; ..." the first time the card's local memory use is at 90 % of
+   its budget or more in the block (Direct3D 11 and 12; nothing elsewhere).
+   Called from the perf drain and at the block's end */
+void window_video_memory_watch(void);
+
 #endif /* ICO_PLATFORM_WINDOW_LINES_H */

@@ -4482,6 +4482,7 @@ static void perf_drain(void)
     RdPerfRecord r;
     double refreshMs = -1.0; /* the slow-replay threshold, read at the first record */
 
+    window_video_memory_watch();
     while (rd_perf_pop(&r)) {
         auto_res_sample(&r);
         if (r.presented && r.gpuValid) {

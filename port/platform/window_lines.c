@@ -10,6 +10,41 @@
 #include "diag_host.h"
 #include "rhi.h"
 
+/* The adapter's local video memory (RhiStats videoMem*; Direct3D 11 and
+   12): usage and budget in whole MB, false when the adapter does not say */
+static bool video_memory(const RhiStats *st, unsigned long long *useMb,
+                         unsigned long long *budgetMb)
+{
+    if (st->videoMemBudget == 0) {
+        return false;
+    }
+    *useMb = st->videoMemUsage >> 20;
+    *budgetMb = st->videoMemBudget >> 20;
+    return true;
+}
+
+/* Set when this block's 90 % line was written (window_memory_line clears it) */
+static bool s_pagingWarned;
+
+void window_video_memory_watch(void)
+{
+    RhiStats st;
+    unsigned long long use, budget;
+
+    if (s_pagingWarned) {
+        return;
+    }
+    rhi_get_stats(&st);
+    if (video_memory(&st, &use, &budget) &&
+        st.videoMemUsage / 10u >= st.videoMemBudget / 10u * 9u) {
+        s_pagingWarned = true;
+        fprintf(stderr,
+                "window: video memory %llu MB of %llu MB: the driver may be paging; lower the "
+                "resolution or close other programs\n",
+                use, budget);
+    }
+}
+
 /* A replay over a refresh (it cannot fit a slot): where its time went,
    with its own counters; at most SLOW_REPLAY_LINES a block (the block's
    first line counts them all), and the block's longest at its end when the
@@ -19,21 +54,32 @@
 void window_slow_replay_line(const RdPerfRecord *r, unsigned vsync, const char *note)
 {
     char gpu[32] = "no GPU timestamps";
+    char vm[64] = "";
 
     if (r->gpuValid) {
         snprintf(gpu, sizeof(gpu), "GPU %.1f ms", r->gpuMs);
+    }
+    if (r->fenceWaitMs > 50.0) {
+        /* a long wait for the GPU: whether the card was out of memory */
+        RhiStats st;
+        unsigned long long use, budget;
+
+        rhi_get_stats(&st);
+        if (video_memory(&st, &use, &budget)) {
+            snprintf(vm, sizeof(vm), ", video memory %llu/%llu MB", use, budget);
+        }
     }
     fprintf(stderr,
             "window: slow replay %.1f ms (replay %u, frame %u, alpha %.2f, about vsync %u): interp "
             "%.1f, wait %.1f (fence %.1f), acquire %.1f, upload %.1f, walk %.1f, bind %.1f, "
             "submit %.1f, present %.1f; %u textures and %u meshes (%u KB) uploaded (%u KB in "
             "all), %u pipelines created, %u allocations, %u buffers and %u textures created, %u "
-            "DATE snapshots; %s%s\n",
+            "DATE snapshots; %s%s%s\n",
             r->totalMs, r->replay, r->frame, (double)r->alpha, vsync, r->interpMs, r->waitMs,
             r->fenceWaitMs, r->acquireMs, r->uploadMs, r->walkMs, r->bindMs, r->submitMs,
             r->presentMs, r->textureUploads, r->meshUploads, (unsigned)(r->meshUploadBytes / 1024u),
             (unsigned)(r->uploadBytes / 1024u), r->pipelineCreates, r->memoryAllocs,
-            r->buffersCreated, r->texturesCreated, r->dateSnapshots, gpu, note);
+            r->buffersCreated, r->texturesCreated, r->dateSnapshots, gpu, vm, note);
 }
 
 /* the graphics allocations against the device's limit (a phone GPU allows
@@ -77,10 +123,21 @@ void window_memory_line(void)
              (unsigned long long)st.pipelinePoolSize,
              (unsigned long long)(st.pipelineFailures + st.pipelinePoolFull),
              (unsigned long long)st.pipelinePoolFull);
+    /* Direct3D 11 and 12: the card's memory against the budget the system
+       gives this process (issue 126: a full card pages, the GPU then waits) */
+    char vmem[96] = "";
+    unsigned long long use, budget;
+
+    if (video_memory(&st, &use, &budget)) {
+        snprintf(vmem, sizeof(vmem), "; video memory %llu MB of a budget of %llu MB (local)", use,
+                 budget);
+    }
+    window_video_memory_watch();
+    s_pagingWarned = false; /* the next block says it again */
     if (rss >= 0) {
-        fprintf(stderr, "window: memory: %s; the process holds %ld MB (most %ld MB)%s%s\n", gfx,
-                rss / 1024, (peak >= 0 ? peak : rss) / 1024, dev, pipes);
+        fprintf(stderr, "window: memory: %s; the process holds %ld MB (most %ld MB)%s%s%s\n", gfx,
+                rss / 1024, (peak >= 0 ? peak : rss) / 1024, dev, pipes, vmem);
     } else {
-        fprintf(stderr, "window: memory: %s%s\n", gfx, pipes);
+        fprintf(stderr, "window: memory: %s%s%s\n", gfx, pipes, vmem);
     }
 }
