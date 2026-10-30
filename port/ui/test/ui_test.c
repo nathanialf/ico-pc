@@ -901,6 +901,65 @@ static void testAtlasUploads(void)
     ui_font_forget_textures();
 }
 
+/* An image row (lt_ext_add_image): its bounds are the box it was added with,
+   texture 0 emits no quad, a texture emits one sprite over the box's grid
+   rectangle with the texels (0, 0)..(texW, texH), and a non-image index is
+   refused. */
+static void checkImageRow(void)
+{
+    lt_ext_reset();
+    const int row = lt_ext_add_image(40, 50, 160, 90);
+    CHECK(row >= LT_GAME_PROPERTY_COUNT, "image row added (%d)", row);
+    const LtProperty *p = lt_ext_prop(row);
+    CHECK(p->dispX == 40 && p->dispY == 50 && p->dispW == 160 && p->dispH == 90,
+          "image row bounds %d,%d %dx%d", p->dispX, p->dispY, p->dispW, p->dispH);
+    const int text = lt_ext_add_property(&(LtProperty){0}, NULL);
+    CHECK(lt_ext_set_image(text, 5, 8, 8) == -1 && lt_ext_set_image(-1, 5, 8, 8) == -1,
+          "set_image refuses a row that is not an image");
+    int tw = -1, th = -1;
+    CHECK(lt_ext_row_image(row, &tw, &th) == 0 && lt_ext_row_image(text, NULL, NULL) == 0,
+          "a new image row has texture 0");
+
+    const RdOverlayCtx c = ovCtx(1920, 1080, 4.0f / 3.0f);
+    static const unsigned char full[4] = {0x80, 0x80, 0x80, 0x80};
+    /* the box display_texture hands lt_ext_draw_row: the sheet-less path's
+       dispX.. inset by half a texel (lt_ext_draw_row's rect conversion) */
+    const int box[4] = {40 * 16 + 4, 50 * 8 + 4, 160 * 16 - 16 + 0, 90 * 8 - 16 + 0};
+    ui_begin_overlay(&c);
+    memset(&s_cap, 0, sizeof(s_cap));
+    ui__set_overlay_sink(capSink);
+    lt_ext_draw_row(p, box, full, 0);
+    CHECK(s_cap.n == 0, "texture 0: no quad (%d batches)", s_cap.n);
+
+    CHECK(lt_ext_set_image(row, 77, 128, 72) == 0 && lt_ext_row_image(row, &tw, &th) == 77 &&
+              tw == 128 && th == 72,
+          "set_image stores the texture and size");
+    memset(&s_cap, 0, sizeof(s_cap));
+    lt_ext_draw_row(p, box, full, 1);
+    CHECK(s_cap.n == 0, "the glow pass draws nothing");
+    lt_ext_draw_row(p, box, full, 0);
+    float x0, y0, x1, y1;
+    ui_overlay_map((float)(box[0] - 4) / 16.0f + UI_GRID_CX,
+                   (float)(box[1] - 4) / 8.0f + UI_GRID_CY, &x0, &y0);
+    ui_overlay_map((float)(box[0] - 4) / 16.0f + UI_GRID_CX + (float)(box[2] + 16) / 16.0f,
+                   (float)(box[1] - 4) / 8.0f + UI_GRID_CY + (float)(box[3] + 16) / 8.0f, &x1, &y1);
+    CHECK(s_cap.n == 1 && s_cap.tex[0] == 77 && s_cap.count[0] == 2 &&
+              s_cap.v[0][0].x == lrintf(x0) && s_cap.v[0][0].y == lrintf(y0) &&
+              s_cap.v[0][1].x == lrintf(x1) && s_cap.v[0][1].y == lrintf(y1),
+          "the image row: one sprite over its box (%d batches)", s_cap.n);
+    CHECK(s_cap.n == 1 && s_cap.v[0][0].s == 0.0f && s_cap.v[0][0].t == 0.0f &&
+              s_cap.v[0][1].s == 128.0f * 16.0f && s_cap.v[0][1].t == 72.0f * 16.0f,
+          "the image row: texels 0,0 .. 128,72");
+
+    memset(&s_cap, 0, sizeof(s_cap));
+    CHECK(lt_ext_set_image(row, 0, 128, 72) == 0, "texture back to 0");
+    lt_ext_draw_row(p, box, full, 0);
+    CHECK(s_cap.n == 0, "texture 0 again: no quad");
+    ui__set_overlay_sink(NULL);
+    ui_end_overlay();
+    lt_ext_reset();
+}
+
 static void testOverlay(void)
 {
     if (!rd__init_record_only(512, 512)) {
@@ -912,6 +971,7 @@ static void testOverlay(void)
     checkOverlayMap(3840, 2160, 4.0f / 3.0f);
     checkOverlayMap(1920, 1080, 16.0f / 9.0f);
     checkOverlayMap(2560, 1080, 64.0f / 27.0f);
+    checkImageRow();
     rd_shutdown();
     ui_font_forget_textures();
     checkOverlayPopup();
