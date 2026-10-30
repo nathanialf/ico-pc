@@ -41,7 +41,7 @@ targets: `-O3 -WX -I port/shaders` (a shader warning fails the build; no `-Zi`, 
 blobs) (`cmake/IcoShaders.cmake` (`ICO_DXC_SPIRV_FLAGS`, `ICO_DXC_COMMON_FLAGS`)).
 
 The SPIR-V target is Vulkan 1.0 (SPIR-V 1.0) so the blobs load on Vulkan 1.0 drivers (Android 8,
-issue 158; it was Vulkan 1.1 from v0.9.1 and 1.2 before). The shaders use only Vulkan 1.0
+issue 158). The shaders use only Vulkan 1.0
 capabilities: `Shader`, `InputAttachment`, `SampleRateShading` and `ImageQuery`, the built-ins
 `Position`, `PointSize`, `VertexIndex`, `FragCoord`, `FragDepth` and `SampleId`, dual-source
 `Index`, `EarlyFragmentTests`, structured buffers as `Uniform` + `BufferBlock`, storage images
