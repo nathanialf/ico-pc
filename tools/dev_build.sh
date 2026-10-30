@@ -12,7 +12,11 @@
 # What it does, and nothing else:
 #  1. configures <worktree>/build-host/linux-x64 with the linux-x64 preset once
 #     and -DICO_LINK_EXE=ON, as CI and the main checkout do (a worktree with no baserom/ also gets -DICO_DISC_IMAGE=/nonexistent
-#     -DICO_BASE_ELF=/nonexistent and the same for their _JPN and _KOR twins, so no test can start the game);
+#     -DICO_BASE_ELF=/nonexistent and the same for their _JPN and _KOR twins, so no test can start the game:
+#     model_viewer_headless, gallery_sweep, credits_headless, state_roundtrip_headless and
+#     state_roundtrip_headless_settings skip there; a full run elsewhere leaves them out with
+#     -E "^(model_viewer_headless|gallery_sweep|credits_headless|rd_replay_tool|state_roundtrip_headless|state_roundtrip_headless_settings)$",
+#     docs/port/TESTING.md "Tests that need the disc");
 #  2. builds exactly the named targets at -j4 under flock on the shared build
 #     lock (<worktree>/build-host/tmp/build.lock; ICO_BUILD_LOCK overrides);
 #  3. runs ctest on that directory with the arguments after `--`
