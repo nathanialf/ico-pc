@@ -1962,7 +1962,7 @@ typedef struct PreCounts {
     int stop;
     /* why the policy's budget stopped the set ("" if it did not): the rest
      * is made on first use (rd_pipelines_lazy) */
-    char budget[192];
+    char budget[256];
 } PreCounts;
 
 /* the process's resident memory in KB (rd_set_memory_fn), -1 unknown */
