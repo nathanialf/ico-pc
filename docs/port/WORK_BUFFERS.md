@@ -882,9 +882,12 @@ at once when the device is already made). Then `rd__plane_pass` converts nothing
 set holds the plain keys in place of the planes ones (`rd__enumerate_reachable_screen`: the plain
 STQ keys join it), and a planes key that still reaches `rd__get_pipeline` is never created (one
 line, its draw skipped). The picture: the GPU's screen-space interpolation of the corners instead
-of the planes, the path a fractional scale already takes (`rd__planes_dropped`): a colour a level
-apart on some pixels, and the 4:3 columns of a wide frame no longer the 4:3 frame's pixels for those
-triangles. The lines:
+of the planes, the path a fractional scale already takes (`rd__planes_dropped`). It was
+byte-identical on every dump measured (`rd_noplanes_ab`, 2026-10-30, lavapipe: the title's
+rd-00200 and rd-00350 and the boot's rd-00600, 2 commands each through the plain builds, 0 of 18
+targets differ; a capture without planes keys, 0 commands, 0 differ). A colour a level apart on
+some pixels (the 4:3 columns of a wide frame no longer the 4:3 frame's) is possible in principle,
+at a fractional scale, and was not seen. The lines:
 
     rd: pipelines: the sprite planes builds are not made on this device (the driver hung creating them on 2026-10-30, compiler E031.41.03.47; [dev] pipeline_skip); their draws take the plain builds (...)
     window: sprite no-planes: N commands in these 10 s (the sprite planes builds off)
@@ -917,6 +920,35 @@ first of them and the batch's note (`creating pipelines N of M: ...`) names one 
 inside it is that family's for the next start. The line: `rd: pipelines: the careful set makes its
 N sprite planes builds last, one a batch (...)`.
 
+**The in-flight key.** A batch's note names its first and last key and its vertex shaders; a
+stall inside a batch that mixes families named none of them on its own (v0.9.5's 212-219). The
+note now also names the key inside the driver: `creating pipeline 217 of 587 (in batch 212-219):
+<key> (<vs> N words + <fs> M words)` (`rd_pipeline.c` `noteKey`), the same form as a lazy run's
+creation, so the next start's "the previous run ended while: ..." quotes it and the record above can
+take its family. On the careful set's path (Android: one `rhi_create_pipelines` call a key) it is
+written before the driver's call; elsewhere the Vulkan backend calls the batch's `begin` and `end`
+hooks around each `vkCreateGraphicsPipelines` (`rhi.h` `RhiPipelineBatch`, `vk_pipeline.c`
+`vkr_pipe_compile_hooked`), the renderer keeps which keys are inside the driver, and the calling
+thread's wait (every 50 ms) names the key when exactly one is (several at once on threads keep the
+batch's note until one is left). On Android the note goes to the disc before the call returns
+(`diag_host.c` `act_sync_note`); the other backends do not call the hooks.
+
+**The free-memory floor (Android).** Before each pipeline of the careful set, and after each batch
+of the usual one, the set asks `ico_diag_low_memory_stop`, which now also reads MemAvailable
+(`ico_diag_device_memory`, the "device N MB available of T MB" words): under the floor the set stops
+as at the system's low-memory signal (the rest made on first use, `set: stopped at the system's
+low-memory signal (<words>)` in the activity file, the next start lazy). The floor is the larger of
+1536 MB and 15 % of MemTotal (`port/platform/memory_floor.c`); `[dev] pipeline_memory_floor_mb` sets
+it in MB, 0 turns it off (exported as `ICO_PIPELINE_MEMORY_FLOOR_MB`). The lines:
+
+    ico_pc: pipelines: the start-up set stopped at N MB available of T MB (floor F MB): the rest made on first use
+    ico_pc: the start-up set stopped at the free-memory floor (N MB available of T MB, floor F MB); the next start makes the pipelines as the game needs them, with no start-up set
+
+On the Retroid Pocket 6's 11265 MB the default floor is 1689 MB: the v0.9.5 start's 1693 MB at the
+stall is 4 MB above it, so the default would not have stopped that start at that reading (an
+earlier lower one is not in the log); `pipeline_memory_floor_mb = 1900` (where v0.9.4 got the
+"running critical" signal) would have. `memory_floor_test` holds those figures.
+
 **The creation limit (Android).** The watchdog's limits are not in force before the game starts,
 and the GPU hang limit counts waits for the GPU, not a driver call. On Android a note that names a
 pipeline being created (the set's batch, a lazy run's single one) with neither the note nor the
@@ -943,5 +975,6 @@ the plain twin of each, no conversion, the counter, and the clear gives the set 
 and v0.9.4's plain build name none; a single planes build and a lazy creation name it), the value
 read back, the device and driver match, the clear. `rd_noplanes_ab` (`port/render/test/
 rd_noplanes_ab.cmake`, `tools/noplanes_dumps.txt`): the title's and the boot's dumps (one planes key
-each, program 9 vs 22 fs 28) with and without the planes, the commands through the fallback counted
-and the targets that differ listed; a capture without planes keys byte for byte.
+each, program 9 vs 22 fs 28) with and without the planes: 2 commands each through the fallback
+(`expect=fallback:2`) and every target byte for byte; a capture without planes keys byte for byte
+with none.
