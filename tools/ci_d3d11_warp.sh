@@ -226,14 +226,20 @@ run() {
             # some draws merged (the script's own gate is fewer GPU draws in all)
             log_has rd_vumerge_ab_joined "$LOGS/rd_vumerge_ab.log" \
                 "\([1-9][0-9]* draws merged into [1-9]" ""
+            # a merge build the driver refuses (faked) turns the merge off
+            # from the next replay: the later replays draw one GPU draw a VU draw
+            run_test rd_vumerge_fallback "$CMAKE_BIN" "-DTOOL=$W/rd_replay_tool.exe" \
+                "-DDUMP=$(winpath "$WORK/rd_pixel_vu.rddump")" \
+                "-DOUT=$(winpath "$WORK/vumerge_fallback")" \
+                -P "$(winpath "$SRC/port/render/test/rd_vumerge_fallback.cmake")"
             run_test rd_vufuse_ab "$CMAKE_BIN" "-DTOOL=$W/rd_replay_tool.exe" \
                 "-DLIST=$(winpath "$WORK/vu_pixel_dumps.txt")" "-DEXTRA=" \
                 "-DOUT=$(winpath "$WORK/vufuse_ab")" \
                 -P "$(winpath "$SRC/port/render/test/rd_vufuse_ab.cmake")"
         else
             echo "ci_d3d11_warp: no cmake on PATH: the merge and fuse A/Bs cannot run"
-            NAMES+=("rd_vumerge_ab" "rd_vufuse_ab")
-            RESULTS+=("FAILED (no cmake)" "FAILED (no cmake)")
+            NAMES+=("rd_vumerge_ab" "rd_vumerge_fallback" "rd_vufuse_ab")
+            RESULTS+=("FAILED (no cmake)" "FAILED (no cmake)" "FAILED (no cmake)")
             FAILED=1
         fi
     else
