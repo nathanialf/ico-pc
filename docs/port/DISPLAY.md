@@ -211,8 +211,8 @@ What a display change derives again, as a fresh start at the new options would (
 DXT-48 phone's log, below):
 
 - **The present allowance and the GPU times** ([the present allowance](#the-present-allowance)):
-  the timer path's allowance starts unbound again, a lock starts again, and the GPU time the climb
-  gate reads (the median of the last 8 replays) is emptied; the `display changed` line ends
+  the timer path's allowance starts unbound again, a lock starts again, and the GPU time the timer
+  path's climb gate reads (the median of the last 8 replays) is emptied; the `display changed` line ends
   `; the present allowance (held to N a step|not held) and GPU times start again`
   (`video_log_changes`). The phone: at Custom 2x its GPU (24-29 ms a picture) held the presents to
   0 a step; after the switch to Original the hold stayed, every replay a tick's first (the glow's
@@ -373,9 +373,13 @@ unbound and [paced by the GPU](#the-present-allowance) at under 8 a step (N.N th
 a step, `period / G`), or `presents not held (...)` while it is unbound otherwise, and
 `lowest not held` when it was unbound all block: the allowance now and its lowest in the block, the
 in-between presents it refused, its drops and climbs and the climbs its GPU gate refused in the
-block; then `GPU G ms a timed replay`, the median of the last 8 timed presented replays' GPU time
-(`perf_drain`, `pace_hist_add`) that the climb's gate and the paced budget read, not the block's
-mean (the replays line's `GPU` is the mean over the block's replays: issue 130's log had this
+block (the timer path's; under the lock every climb is a probe, none refused); then `GPU span G ms
+a timed replay`, the median of the last 8 timed presented replays' GPU time (`perf_drain`,
+`pace_hist_add`) that the timer path's climb gate and the paced budget read, not the block's
+mean. It is the replay's stamp span on every backend (`RdPerfRecord.gpuMs`, the first stamp to
+the present's end: the GPU's waits for the CPU's submissions are in it), hence `span`; a busy
+time would read `GPU busy` (`pace_budget_block_text`'s `gpuIsSpan`), and OpenGL's busy clock is
+only in the replays line's pass-timed replays (the replays line's `GPU` is the mean over the block's replays: issue 130's log had this
 field at 14.1 ms, then named `a presented replay`, beside a block mean of 1.44 ms), or `no
 GPU timestamps` where the backend has none, or `GPU not timed yet`;
 [The present allowance](#the-present-allowance)), the longest [replay](ARCHITECTURE.md#terms) and the replay count with how many
@@ -411,22 +415,27 @@ lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,
 
 - a drop: `window: presents held to A a step: the step ended L ms late after P presents, K steps
   after one Lx ms late after Px (the last present C ms, waited F ms for the GPU and D ms for the
-  display[, the fence waits included: OpenGL]; GPU G ms a replay); back to H after 120 steps on time
-  if the GPU allows` (K and Lx, Px: the late step that armed it; H `not held` on the timer path,
-  `n a step` under the lock; the OpenGL words where the display's wait is the whole wait, below);
-- a climb: `window: presents back to A a step|not held[ (where they started)] after S steps (GPU G
-  ms x K + step T ms under the period P ms)` (S steps since the drop, K the presents the gate
-  asked for);
-- a refused climb: `window: presents stay at A a step: GPU G ms x K + step T ms is not under the
-  period P ms (S steps since the drop; back to H when it is)`;
+  display[, the fence waits included: OpenGL]; GPU span G ms a replay); back to H after 120 steps
+  on time if the GPU allows` (K and Lx, Px: the late step that armed it; H `not held` on the timer
+  path; the OpenGL words where the display's wait is the whole wait, below); under the lock it ends
+  `back to n a step after W steps on time: a probe` (W the probe's wait, below);
+- a failed probe (the lock): `window: presents held to A a step: the step ended L ms late after P
+  presents, the probe failed after K steps (the last present ...; GPU span G ms a replay); next
+  probe after W steps` (K steps since the probe's climb, W the doubled wait);
+- a climb: `window: presents back to A a step|not held[ (where they started)] after S steps (GPU
+  span G ms x K + step T ms under the period P ms)` (S steps since the drop, K the presents the
+  gate asked for); under the lock `window: presents back to n a step (where they started) after S
+  steps: a probe (GPU span G ms a replay, step T ms, period P ms)`, the GPU figure reported only;
+- a refused climb (the timer path only): `window: presents stay at A a step: GPU span G ms x K +
+  step T ms is not under the period P ms (S steps since the drop; back to H when it is)`;
 - the paced budget (the timer path with vsync off or mailbox), when its value rounded to a tenth
   changes:
-  `window: presents paced by the GPU: N.N a step|not held (GPU G ms a picture, period P ms)` (`not
-  held` at 8 a step or more).
+  `window: presents paced by the GPU: N.N a step|not held (GPU span G ms a picture, period P ms)`
+  (`not held` at 8 a step or more).
 
 Paced with the GPU's time known, the drop ends `back to paced by the GPU after 60 steps on time`
 and its climb reads `window: presents back to paced by the GPU (where they started) after S steps
-(GPU G ms a picture, step T ms, period P ms)`; no refused climb is written there.
+(GPU span G ms a picture, step T ms, period P ms)`; no refused climb is written there.
 
 A late step that only armed the allowance is not logged (the 10 s line's `step late max` has it).
 A present whose present call (the replay's `present` phase: `vkQueuePresentKHR`, `Present`, the
@@ -676,17 +685,28 @@ alpha stays the grid's.
   waits for it), and then the drop is to one below the arming step's presents, when that lowers the
   allowance. One hitch (issue 130: an uncapped RTX 4090 held at one present a step, 60 a second, after a single
   late step) only arms and expires; a machine late every step drops at its second late step.
-- **Climb**: after the hold, every `PACE_ALLOW_CLIMB_STEP` (60) steps on time, straight back to
-  where it started (unbound on the timer path, n under the lock) when the GPU gate lets that many
-  presents (`K * G + step < period`: K = n under the lock; on the timer path the most presents a
-  late step of this drop made, no more than the ceiling + 1), else up by one when the gate lets
-  one more (`(allow + 1) * G + step < period`), else the climb is refused and counted. G is the
-  median of the last 8 presented replays' GPU time (`perf_drain`, `pace_hist_add`; two replays
-  late) and step the simulation step's own time; with no GPU time (no timestamps) the gate passes:
-  the climb probes, and a second late step drops it again. The ceiling is `PACE_ALLOW_MAX` (8) on
-  the timer path, where one more climb from it makes the allowance unbound again, and n under the
-  lock, which it never passes. From a drop to unbound again takes 120 steps (2 s) when the GPU has
-  the time.
+- **Climb on the timer path**: after the hold, every `PACE_ALLOW_CLIMB_STEP` (60) steps on time,
+  straight back to unbound when the GPU gate lets that many presents (`K * G + step < period`: K
+  the most presents a late step of this drop made, no more than the ceiling + 1), else up by one
+  when the gate lets one more (`(allow + 1) * G + step < period`), else the climb is refused and
+  counted. G is the median of the last 8 presented replays' GPU time (`perf_drain`,
+  `pace_hist_add`; two replays late) and step the simulation step's own time; with no GPU time
+  (no timestamps) the gate passes: the climb probes, and a second late step drops it again. The
+  ceiling is `PACE_ALLOW_MAX` (8), where one more climb makes the allowance unbound again. From a
+  drop to unbound again takes 120 steps (2 s) when the GPU has the time.
+- **Climb under the lock: a probe** (issue 126, v0.9.6). `PACE_PROBE_WAIT` (120) steps on time
+  after a drop (the 60-step hold among them) the allowance goes straight back to n whatever the GPU
+  figure says, and is armed for the next 60 steps: a late step in them drops it again at once (a
+  failed probe) and doubles the wait before the next probe (240, 480, then `PACE_PROBE_WAIT_MAX`,
+  960 steps, 16 s at 60); a probe that lasts the 60 steps sets the wait back to 120. The figure
+  decides nothing here because it overstates the cost: it is the timed replay's stamp span, which
+  holds the GPU's idle waits for the CPU's submissions. The reporter of issue 126 (GTX 750 Ti,
+  D3D11, Frame rate 60 with vsync) presented 601 pictures in a 10 s block at a 12.4 ms span with
+  598 of them waiting for the display, yet after one late step the gate (`1 x 14 + 5` over the
+  16.7 ms period) held the same rooms at 30 for 660 to 3600 steps, 32 blocks of a flat 30 in a
+  3 h playthrough. A machine that truly cannot keep up pays one late step per probe, at most one
+  every 16 s, and stays at the game's own 30 between them. The ceiling is n, which the allowance
+  never passes.
 - A resync does not reset it; a new lock, a frame rate change, leaving the lock, the pace reset
   (back from the background) and a display change (the GPU times with it:
   [run-time changes](#video-options-and-presets)) do.
@@ -728,21 +748,26 @@ step), the same presents to the one; `testBudgetUnbound`: 15 presents a step on 
 refused). At 120 Hz under the lock with the fence (a
 replay waits for the GPU's picture two before, `RHI_FRAMES_IN_FLIGHT` 2) and 12 ms of GPU a
 picture, the rule before ends steps up to 20 ms late with the skip guard dropping about one present
-in three; the allowance holds the in-betweens to one a step and no step ends late
-(`pace_loop_test` (`test120Budget`), which prints both). On the timer path at 120 a second the rule
+in three; the allowance holds the in-betweens to one a step, its probes failing back to one with
+no step a period late (`pace_loop_test` (`test120Budget`), which prints both). On the timer path at 120 a second the rule
 before keeps up to about 16 ms of GPU a picture in that model (the cost guard holds the presents to
 the GPU's pace); at 20 ms its steps end 11.6 ms late and the allowance keeps them under half a
-period. A GPU-bound phone (20 ms a picture at 60 Hz, n = 1) presents its new frames only, 30 a
-second on time, where the rule before presented 50 a second with steps up to 32 ms late; the
+period. A GPU-bound phone (20 ms a picture at 60 Hz, n = 1) presents about its new frames only, 30 a
+second and under 33 with the probes' pictures, where the rule before presented 50 a second with steps up to 32 ms late; the
 allowance may reach 0 under the n = 1 lock. The reporters' sequences are replayed in
 `pace_policy_test`: issue 130's one late step among 6 presents a step leaves it unbound, two within
 60 steps hold it to 1 and 120 steps later it is unbound again with 1.2 ms of GPU, at 1 with 9 ms
 (`testBudgetHitch130`); the item-3 case (cap 120, two presents a step 9 ms late) at 1 and issue
-139's GPU-bound lock (19 ms of GPU, 4x supersampling) at 0, the game's own 30
-(`testBudgetSustained`); issue 126's OpenGL wait excused where Vulkan's same numbers drop and
-come back, and its GPU-bound OpenGL blocks at 0 (`testBudgetGlWait126`); the drop, climb, refused
-climb and 10 s words on those sequences (`testBudgetLines`, with the lock's clock part,
-`pace_lock_timing_text`, and the paced words). The paced budget: `testBudgetPaced` (vsync off
+139's GPU-bound lock (19 ms of GPU, 4x supersampling) at 0, the game's own 30 with two failed
+probes in 600 steps (`testBudgetSustained`); issue 126's OpenGL wait excused where Vulkan's same
+numbers drop and come back, and its GPU-bound OpenGL blocks at 0 (`testBudgetGlWait126`); the
+drop, climb, refused climb and 10 s words on those sequences (`testBudgetLines`, with the lock's
+clock part, `pace_lock_timing_text`, and the paced words). The lock's probe as rates: issue 126's
+D3D11 sequence (a step 21.2 ms late, the next 20.6 ms, a 15 ms span and a 3 ms step that the old
+gate refused) back at 1 a step 120 steps after the drop and 600 presents in the next 600 steps,
+60 a second (`testBudgetProbe126`); failed probes waiting 240, 480, 960 and 960 steps with the
+new frames only between them, and a probe that holds setting the wait back to 120
+(`testBudgetProbeWait`). The paced budget: `testBudgetPaced` (vsync off
 and mailbox paced, FIFO not; the 12, 9, 17, 20, 25, 29 and 1 ms rates above over 120 steps with
 the lowest balance each ends a step with, never past a period owed; a new frame every step on a
 29 ms GPU holds the balance at a period owed, no in-between; no timestamps as before; the safety
@@ -753,8 +778,9 @@ time, at least `600 x period / G - 5` presents in 600 steps and never more GPU t
 was; 29 ms the new frames only; 1 ms the rule before's presents to the one).
 
 Limits: D3D12 has no mailbox and may lack timestamps (as may OpenGL without `ARB_timer_query` and
-Direct3D 11 where its timestamp queries cannot be made), so the climb
-probes on time alone there: two steps a little late every 2 s while the GPU stays too slow. The Steam
+Direct3D 11 where its timestamp queries cannot be made), so the timer path's climb
+probes on time alone there: two steps a little late every 2 s while the GPU stays too slow (under
+the lock the climb is a probe on every backend, the wait doubling up to 16 s). The Steam
 Deck at a cap of 90 is the FIFO timer path with `pace_fifo_hold`; its present that returns on a
 vblank up to a refresh past the deadline is the display's wait and is excused.
 
