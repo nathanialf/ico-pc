@@ -132,7 +132,12 @@ static PEPartRec blankParticle = {
 
 static PEffect emptyEffect_pal = {0, 0, 1, 0, 0, 0, 0}; /* derived name */
 
-static PEffect emptyEffect_ntscaug6jun26 = {0, 1, 0, 0, 0, 0}; /* derived name */
+/* PC port: the 2001 builds' slot has no pause word (used, geoCtrl, sensing,
+   sensPos, sensQuat, geo: decomp particleEffect.c, the North American arm, lines
+   43-49 and 137-138); the host keeps the later layout for every disc, so
+   the 2001 values are placed by name (positional, the 1 fell on pause and
+   geoCtrl stayed 0). */
+static PEffect emptyEffect_ntscaug6jun26 = {.used = 0, .geoCtrl = 1}; /* derived name */
 
 #define emptyEffect (*PAL_NTSCAUG6JUN26(&emptyEffect_pal, &emptyEffect_ntscaug6jun26))
 
