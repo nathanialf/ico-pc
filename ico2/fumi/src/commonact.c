@@ -3754,6 +3754,7 @@ static void actCommonDie_jun26(GObj *volatile self)
         }
         if (self == boyGObj || self == girlGObj) {
             if (((60 - systemStatus[0] * 10) / systemStatus[1]) * 2 < cnt) {
+                ico_gs_signal_game_over_once(); /* PC port: this death path skips ACT_LAYOUT_GAMEOVER */
                 lt_switch_layout(58);
                 _ACTWait(0);
             }
@@ -3911,6 +3912,7 @@ static inline void actCommonStoneDead_jun26(GObj *volatile self)
 {
     SetMotionDirection(self, GOBJ_ACT(self)->attackDir);
     _ACTWait(600);
+    ico_gs_signal_game_over_once(); /* PC port: this death path skips ACT_LAYOUT_GAMEOVER */
     lt_switch_layout(58);
     _ACTWait(0);
 }
@@ -4022,6 +4024,7 @@ static void actCommonStone_jun26(GObj *volatile self)
         }
         if (ICO_RAW(int, s, 0x4C, GOBJ_ACT(self)->modeFrame) >= 0x3D &&
             GOBJ_ACT(self)->enemy->stoneLevel >= 3) {
+            ico_gs_signal_game_over_once(); /* PC port: this death path skips ACT_LAYOUT_GAMEOVER */
             lt_switch_layout(58);
         }
         ACTSendMailCorrect(self, 103);
