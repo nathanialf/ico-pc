@@ -36,6 +36,9 @@ endif()
 add_library(ico_texpack_name STATIC texpack_name.c xxh3.c)
 target_include_directories(ico_texpack_name PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_texpack_name PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+# the save state's build id and the simulation keys' hash are XXH3-64 too
+# (port/platform/state_file.c, sim_keys.c)
+target_link_libraries(ico_platform PUBLIC ico_texpack_name)
 
 # texpack_name_test: XXH3 against xxHash's sanity vectors, the block
 # swizzles against PCSX2's column writes, the CLUT orders, the expanded
