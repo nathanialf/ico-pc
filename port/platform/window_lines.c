@@ -8,6 +8,8 @@
 
 #include <stdio.h>
 #include "diag_host.h"
+#include "host_loop.h"
+#include "rd_tex.h"
 #include "rhi.h"
 
 /* The adapter's local video memory (RhiStats videoMem*; Direct3D 11 and
@@ -140,4 +142,33 @@ void window_memory_line(void)
     } else {
         fprintf(stderr, "window: memory: %s%s%s\n", gfx, pipes, vmem);
     }
+}
+
+/* a step this late past its period with sound held back is named */
+#define HOLD_LATE_MS 100.0
+
+void window_hold_line(double lateMs, unsigned long long heldMs, unsigned decodes0, unsigned pipes0)
+{
+    static unsigned long long s_held; /* heldMs at the last call */
+    static unsigned s_events;
+    const unsigned long long held = heldMs > s_held ? heldMs - s_held : 0u;
+    IcoStepProfile p;
+
+    s_held = heldMs;
+    if (lateMs <= HOLD_LATE_MS || held == 0) {
+        return;
+    }
+    s_events++;
+    if (s_events > 8 && s_events % 100 != 0) {
+        return;
+    }
+    ico_host_step_profile(&p);
+    const RdTexCacheStats *tc = rdtex_stats();
+    const RdStats *rs = rd_get_stats();
+    fprintf(stderr,
+            "window: the game step was late by %.0f ms (loading: %u disc reads of %u sectors, %u "
+            "texture decodes, %u pipelines, achievements %.1f ms): the sound was held back for "
+            "%llu ms (%u such steps)\n",
+            lateMs, p.cdReads, p.cdSectors, tc != NULL ? tc->decodes - decodes0 : 0u,
+            rs != NULL ? rs->pipelineCreates - pipes0 : 0u, p.achMs, held, s_events);
 }
