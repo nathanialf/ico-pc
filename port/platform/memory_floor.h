@@ -5,7 +5,7 @@
  * the set stops, and the next start makes no set, once the device's
  * available memory (/proc/meminfo MemAvailable, the "device N MB available
  * of T MB" words) is under the floor.  The default floor is the larger of
- * 1536 MB and 15 % of MemTotal; [dev] pipeline_memory_floor_mb sets it in
+ * 1536 MB and 17 % of MemTotal; [dev] pipeline_memory_floor_mb sets it in
  * MB, 0 turns it off.  Asked by diag_host.c ico_diag_low_memory_stop, which
  * the set asks before each pipeline (the careful set) or after each batch.
  *
