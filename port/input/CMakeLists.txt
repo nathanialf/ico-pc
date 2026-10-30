@@ -18,6 +18,7 @@ add_library(ico_input STATIC
     pointer.c
     touch.c
     touch_edit.c
+    touch_gap.c
     vpad.c)
 target_include_directories(ico_input
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -72,6 +73,16 @@ target_compile_options(touch_edit_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_POR
 target_link_libraries(touch_edit_test PRIVATE ico_input)
 if(ICO_RUN_TESTS)
     add_test(NAME touch_edit COMMAND touch_edit_test)
+endif()
+
+# the Frame rate counter's place among the player's actual touch controls
+# (touch_gap.c): the default layout's old place, Start moved to the top-left
+# (drawn, Hidden, Off), every control Off, no room, the stick's ring
+add_executable(touch_gap_test test/touch_gap_test.c)
+target_compile_options(touch_gap_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(touch_gap_test PRIVATE ico_input)
+if(ICO_RUN_TESTS)
+    add_test(NAME touch_gap COMMAND touch_gap_test)
 endif()
 
 # the mouse camera's speed and range for the hand camera: the step arithmetic
