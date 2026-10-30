@@ -204,6 +204,17 @@ bool rd_vu_mesh_replaced(RdMesh m);
  * pinned frame.  Recording only, no device needed. */
 void rd_vu_mesh_retire(bool (*pred)(uint64_t hash, bool replaced, void *user), void *user);
 
+/* Save states (port/game/state_host.c).  A load brings back packets whose
+ * mesh ids (PacHeader.pad9C) were handed out by the saving run, which may
+ * name meshes of this run.  rd_vu_mesh_gen_high: the highest generation any
+ * slot has had (a save stores it).  rd_drop_vu_meshes: every live VU mesh
+ * retired (rd_vu_mesh_retire with no predicate) and every slot's next
+ * generation put above savedGenHigh and this run's highest, so no id the
+ * saving run made names a mesh made after the load (16-bit generations:
+ * 65535 of them before a wrap).  Recording only, no device needed. */
+uint32_t rd_vu_mesh_gen_high(void);
+void rd_drop_vu_meshes(uint32_t savedGenHigh);
+
 /* --------------------------------------------------------- per draw */
 
 /* VU1 data memory 0..35 as the program reads it: IcoVuCB.mem, the slot map
