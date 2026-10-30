@@ -547,6 +547,21 @@ const char *rd_vu_plain_only(void);
  * start that ended inside the pre-pass's compile and in a restart whose
  * step draws without it (window_host.c, startup_retry.h). */
 void rd_set_vu_prepass_off(const char *reason);
+/* Before rd_init, or after it and before the start-up set (the host reads
+ * the device's name and driver from the device rd_init made): the run
+ * never makes the sprite planes builds (the
+ * screen-prim triangles' exact planes, rd_screen_planes.c), reason saying
+ * why for the log ("the driver hung creating them on 2026-10-30, compiler
+ * E031.41.03.47"); NULL or "" clears it.  Those triangles draw through the
+ * plain sprite builds (the GPU's interpolation of their corners: a colour
+ * a level apart on some pixels, docs/port/WORK_BUFFERS.md "Without the
+ * sprite planes"), which the start-up set holds instead, and none of the
+ * family is created on first use.  The host calls it from [dev]
+ * pipeline_skip (issue 161, port/platform/pipeline_skip.h);
+ * ICO_RD_NO_SPRITE_PLANES=1 does the same for the tests. */
+void rd_set_sprite_planes_off(const char *reason);
+/* Whether the run draws without the sprite planes builds (after rd_init) */
+bool rd_sprite_planes_off(void);
 
 /* How the start-up pipeline set is made (rd_precreate_pipelines;
  * docs/port/RENDER.md "The start-up set"): the batch size, the worker
@@ -2123,8 +2138,12 @@ typedef struct RdPerfRecord {
      * fxAdditive and fxLocal the staticBlur sprites the frame-size plan drew
      * as a constant fold, through the fixed-function premultiplied add, and
      * reading their destination by local read (rd_fx_plan.c); vuNoPlanes
-     * the VU draw passes through vu_np_ps or vu_texa_np_ps (rd_pixel_plan.c) */
+     * the VU draw passes through vu_np_ps or vu_texa_np_ps (rd_pixel_plan.c);
+     * spriteNoPlanes the screen-prim triangle commands drawn through the
+     * plain sprite builds because the sprite planes builds are off for the
+     * run (rd_set_sprite_planes_off, issue 161; rd_replay.c doScreen) */
     uint32_t alphaOnePass, alphaOpaque, fxConstant, fxAdditive, fxLocal, vuNoPlanes;
+    uint32_t spriteNoPlanes;
     /* Motion blur: Smooth (rd_blur_smooth.c): blurSmoothPasses the
      * accumulator's passes this replay (the resolve and the accumulate, two
      * a present; one on a restart) */
