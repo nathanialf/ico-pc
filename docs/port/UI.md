@@ -77,7 +77,11 @@ A port row is one of three kinds (`port/ui/layout_ext.c` (`ExtRow`)):
   not the PAL ones it draws nothing (`lt_ext_add_glyph`, `lt_ext_glyph_source`);
 - a rectangle row: a filled box, `fill` of it from the left, in a colour times the row's colour
   (the music gallery's progress bar, the Characters page's swatches) (`lt_ext_add_rect`,
-  `lt_ext_set_fill`, `lt_ext_set_rect_color`).
+  `lt_ext_set_fill`, `lt_ext_set_rect_color`);
+- an image row: a texture the page owns (an `RdTex` from `rd_create_texture`, released by the page
+  with `rd_destroy_texture`, as the font and menu atlases are) drawn over a row's box, its texels
+  from (0, 0) to the given size, times the row's colour; texture 0 draws nothing (an empty slot,
+  the headless build) (`lt_ext_add_image`, `lt_ext_set_image`).
 
 A row with no width gets 400 x units and one with no height 40 y units, the Options screen's row
 height (`lt_ext_add_property`). `lt_ext_set_dim` greys a row: its colour at half whatever the
