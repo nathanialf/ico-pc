@@ -891,6 +891,14 @@ typedef struct RhiPipelineBatch {
     /* in, optional: at most this many worker threads (0: the backend's
      * choice); a device whose driver dies compiling in parallel takes 1 */
     uint32_t maxThreads;
+    /* in, optional: called on the compiling thread (a worker, or the
+     * calling thread) right before and right after the driver's call for
+     * descs[index] (issue 161: the renderer keeps which pipelines are inside
+     * the driver, so the start-up activity note names the one a stall is
+     * in).  They must only note it (no RHI, no file).  The Vulkan backend
+     * calls them; the others leave them uncalled. */
+    void (*begin)(void *ctx, uint32_t index);
+    void (*end)(void *ctx, uint32_t index);
 } RhiPipelineBatch;
 
 #define RHI_PIPELINE_WAIT_MS 50u
