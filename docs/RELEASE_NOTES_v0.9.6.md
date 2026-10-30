@@ -1,4 +1,4 @@
-**Please note:** Save states are new: tell us when one fails to load, with the log (the newest file in the `logs` folder that starts with `report-`, or `ico-pc.log`). Vulkan 1.0 devices have old graphics compilers: the first start builds the shaders for several minutes and some devices may fail; send the log.
+**Please note:** Save states are new: tell us when one fails to load, with the log (the newest file in the `logs` folder that starts with `report-`, or `ico-pc.log`). Android 8 phones and other Vulkan 1.0 devices have old graphics drivers: the first start prepares the graphics for several minutes and some devices may fail; send the log.
 
 ## New
 
