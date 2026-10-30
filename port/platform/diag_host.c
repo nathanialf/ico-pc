@@ -1166,6 +1166,35 @@ void ico_host_item_held(int kind, int motion, int girl)
                     girl ? "Yorda" : "Ico", kind, motion);
 }
 
+void ico_host_torch_out(int burn_time, int life, int flags)
+{
+    if (!inited) {
+        return;
+    }
+    ico_log_limited("torch: a torch went out",
+                    "ico_pc: torch: a lit torch went out after %d frames (life %d, type %d)",
+                    burn_time, life, flags);
+}
+
+void ico_host_torch_caught(int flags)
+{
+    if (!inited) {
+        return;
+    }
+    ico_log_limited("torch: a torch caught fire",
+                    "ico_pc: torch: a torch caught fire from a burning one nearby (type %d)",
+                    flags);
+}
+
+void ico_host_candle_flames(int asked, int placed)
+{
+    if (!inited) {
+        return;
+    }
+    ico_log_limited("candle: flames placed", "ico_pc: candle: %d of %d flames placed", placed,
+                    asked);
+}
+
 void ico_host_item_watch_null(int motion, float frame, float anim_frame)
 {
     if (!inited) {

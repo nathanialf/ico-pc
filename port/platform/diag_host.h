@@ -917,6 +917,23 @@ void ico_host_item_held(int kind, int motion, int girl);
    "item watch: a mode-2 motion M at frame A (item frame F) with no item
    held: the null read skipped", key "item watch: null item skipped". */
 void ico_host_item_watch_null(int motion, float frame, float anim_frame);
+/* sugipon/src/torch.c LightTorchOff: a lit torch went out after burnTime
+   frames of its life (flags: the torch type, its layout word without bit
+   0, which says lit at the start). A rate-limited line "torch: a lit torch went out after N frames
+   (life L, type T)", key "torch: a torch went out" (the first 8, then every
+   100th): a torch that goes out after 1 frame with life 0 is the record
+   issue 160 found on the 2001 discs. */
+void ico_host_torch_out(int burnTime, int life, int flags);
+/* sugipon/src/torch.c, the chain reaction: an unlit torch (a held stick)
+   caught fire from a burning torch within reach. A rate-limited line
+   "torch: a torch caught fire from a burning one nearby (type T)", key
+   "torch: a torch caught fire". */
+void ico_host_torch_caught(int flags);
+/* sugipon/src/candle.c InitCandleGeo: a candle object asked for `asked`
+   flames (particle effect 4) and the particle system placed `placed`. A
+   rate-limited line "candle: N of M flames placed", key "candle: flames
+   placed". */
+void ico_host_candle_flames(int asked, int placed);
 /* common/src/StageManager.c stgmgrForceSwitch and
    stgmgrForceSwitchWithFadeColor: a stage-switch request (cmd 0 without a
    fade, 1 with one), the message queue holding `queued` untaken requests
