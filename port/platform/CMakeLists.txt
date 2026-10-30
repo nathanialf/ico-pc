@@ -15,7 +15,9 @@ target_sources(ico_platform PRIVATE
     report.c
     sched.c
     startup_retry.c
+    state_reloc.c
     symmap.c
+    vm_reserve.c
     vsync_hooks.c
     window_lifecycle.c
     window_lines.c)
@@ -76,8 +78,10 @@ if(ICO_RUN_TESTS)
     add_test(NAME startup_retry COMMAND startup_retry_test)
 endif()
 # gpu_hang: the GPU hang limit's arithmetic and its watch (gpu_hang.c, issue 123)
+# state_fiber: save states' fiber pool, a suspended fiber saved and restored
+# into a second pool, and the relocation words (fiber.c, state_reloc.c)
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
-          gpu_hang)
+          gpu_hang state_fiber)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -155,6 +159,9 @@ if(ICO_RUN_TESTS AND NOT WIN32)
     # a stack overflow in a fiber must hit the guard page
     add_test(NAME fiber_guard COMMAND fiber_test guard)
     set_tests_properties(fiber_guard PROPERTIES SKIP_RETURN_CODE 77)
+    # and in a fiber restored from a save state into another pool
+    add_test(NAME state_fiber_guard COMMAND state_fiber_test guard)
+    set_tests_properties(state_fiber_guard PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
 # The game's allocator (fumi/ios/memory.c) over the arena, compiled as the
