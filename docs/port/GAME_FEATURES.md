@@ -508,6 +508,36 @@ host thread or the host loop between scheduler runs (`ico_gs_signal`). `ico_gs_p
 bytes at a retail PAL [EE](ARCHITECTURE.md#terms) address from the snapshot's fixed globals, with
 its table from `ico_gs_peek_table`; every other address is refused (`ico_gs_peek`).
 
+### How the pause menu's stats are counted
+
+The panel's lines (`port/ui/settings.c` `pauseStats`) read the run's counters (`ico_gs_run_*`),
+each fed by one path (issue 162):
+
+- Yorda captured: the `YORDA_GRABBED` hook counts the capture the moment the shadow sets `carrier`
+  (`actEnemyForceSwitchToCarry`, `enemy_act.c`). Her `actMode` changes only when her own fiber reads
+  the reserve mail (`ACTReserveTarget`, `act.c`), a tick or so later, so the snapshot's
+  `yorda_carried_by_enemy` rises after the hook. `ico_gs_tick` counts that rise only for a capture
+  the hook missed: not within `CAPTURE_MAIL_TICKS` (4) of a counted hook, and not while a
+  hook-counted capture is still carried (cleared when she is dropped or a stage is entered). A second
+  capture after a drop fires the hook again and counts. The carried mode is per disc
+  (`ico_gs_carried_act_mode`): `0x6F` on the European, Japanese, Korean and Asian discs, 107 on the
+  North American and August 2001 discs, 106 on the June 2001 demo (the game's
+  `PAL_NTSCAUG6_JUN26(0x6F, 107, 106)`); the rise also raises `YORDA_RESCUED` when she is freed, so
+  the rescue achievement needs it right.
+- Deaths: `GAME_OVER`, raised by `ACT_LAYOUT_GAMEOVER` (`commonact.c`), which runs once per stage
+  entry (`gameover_layout_flag`, cleared by `InitSceneObjects`). The June 2001 demo's death paths
+  switch layouts without it (`actCommonDie_jun26`, `actCommonStoneDead_jun26`, `actCommonStone_jun26`,
+  `actEnemyKidnapEnd_jun26`), so they call `ico_gs_signal_game_over_once`: one signal per stage entry.
+- Saves: `SAVE_DONE` on the rise of the save-complete layout, which `la_save_processing` returns
+  only after the last write.
+- Enemies: `ENEMY_KILLED` from the two die procs; each ends in `_ACTWait(0)`, which never returns.
+- Play time: the card preview's play-time word, read, not counted.
+
+Log lines (`stats:`): `Yorda captured N (hook|flag) at tick T, stage S` at each counted capture,
+`Yorda carried (the capture counted K ticks ago)` for a rise the hook already counted, and
+`game over not counted (already counted on this stage entry)`; the first 8 of each, then every
+100th. The ctest `achievements` (`test_capture_once`) drives the sequences and the per-disc mode.
+
 ## Photo mode
 
 The pause menu's Photo mode row opens a port layout ([UI.md](UI.md#photo-mode)); its proc calls

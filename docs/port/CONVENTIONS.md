@@ -169,7 +169,7 @@ colon; a test's own lines start with the test's name.
 | `input:` | `port/input/input_sdl.c`, `bindings.c`, `input_record.c` |
 | `config:`, `scf:` | `port/config/config.c`, `sysconf.c` |
 | `mc:` | `port/save/mc_host.c` |
-| `photo:`, `credits:`, `appearance:`, `achievements:`, `options:`, `model_viewer:` | `port/game` |
+| `photo:`, `credits:`, `appearance:`, `achievements:`, `options:`, `model_viewer:`, `stats:` | `port/game` (`stats:` from `gamestate.c`) |
 | `ui:`, `settings:`, `gallery:`, `extras:` | `port/ui` |
 
 The player guides quote some of these lines (`textures:` and `models:` in
