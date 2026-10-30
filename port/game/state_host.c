@@ -805,6 +805,43 @@ typedef struct LoadCtx {
     char why[160];
 } LoadCtx;
 
+/* Section i's size in this build (*exact 1), or for the two whose size
+   the state decides, its bound (*exact 0): the fibers' every slot of the
+   pool with its record, the model tables at most two of the arena's bytes
+   (a pointer for each 4-byte EE word of a model image that lives in it) */
+static uint64_t section_size(int i, int *exact)
+{
+    const void *sched;
+    size_t sched_n;
+
+    *exact = 1;
+    switch (i) {
+    case SEC_ARENA:
+        return ico_arena_size();
+    case SEC_GDATA:
+        return s_gdata[ICO_GAME_DATA].hi - s_gdata[ICO_GAME_DATA].lo;
+    case SEC_GBSS:
+        return s_gdata[ICO_GAME_BSS].hi - s_gdata[ICO_GAME_BSS].lo;
+    case SEC_REG:
+        return s_reg_bytes;
+    case SEC_AUDIO:
+        return s_audio_bytes;
+    case SEC_SCHED:
+        ico_sched_state_block(&sched, &sched_n);
+        (void)sched;
+        return (uint64_t)sched_n;
+    case SEC_FIBERS:
+        *exact = 0;
+        return 16 + (uint64_t)ICO_FIBER_POOL_SLOTS *
+                        (sizeof(FiberRec) + PAD16((uint64_t)ico_fiber_pool_slot_bytes()) + 16);
+    case SEC_POBJ:
+        *exact = 0;
+        return 2 * (uint64_t)ico_arena_size();
+    default:
+        return sizeof(StateRanges);
+    }
+}
+
 static void *load_section(void *user, const IcoStateSectionInfo *s)
 {
     LoadCtx *l = (LoadCtx *)user;
@@ -812,6 +849,18 @@ static void *load_section(void *user, const IcoStateSectionInfo *s)
 
     for (i = 0; i < SEC_COUNT; i++) {
         if (strcmp(s->name, sec_names[i]) == 0 && l->c->p[i] == NULL) {
+            int exact;
+            const uint64_t want = section_size(i, &exact);
+
+            /* review finding 10: the size the file claims against this
+               build's before anything is allocated for it */
+            if (exact ? s->raw_bytes != want : s->raw_bytes > want) {
+                l->bad = 1;
+                snprintf(l->why, sizeof l->why, "the %s section is %llu bytes, this build's %s%llu",
+                         s->name, (unsigned long long)s->raw_bytes, exact ? "" : "at most ",
+                         (unsigned long long)want);
+                return NULL;
+            }
             l->c->p[i] = malloc(s->raw_bytes ? (size_t)s->raw_bytes : 1);
             l->c->n[i] = s->raw_bytes;
             if (l->c->p[i] == NULL) {
