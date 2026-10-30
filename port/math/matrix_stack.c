@@ -14,6 +14,8 @@
 
 #include "ico_math.h"
 #include "../../ico2/seki/include/Matrix.h"
+#include "../platform/state_port.h"
+#include "../platform/state_registry.h"
 
 float GetTableCos(short angle);
 float GetTableSin(short angle);
@@ -358,4 +360,20 @@ void ico_vu0_registers_pop(void)
 {
     vu0SaveTop--;
     memcpy(ico_current_matrix, vu0Save[vu0SaveTop % VU0_SAVE_DEPTH], sizeof ico_current_matrix);
+}
+
+/* The save state's blocks (state_port.h): VU0's registers as the host keeps
+   them (floats and counts, no host pointers). */
+int ico_matrix_stack_state_register(void)
+{
+    int rc = 0;
+
+    rc |=
+        ico_state_register("vu0.current_matrix", ico_current_matrix, sizeof ico_current_matrix, 0);
+    rc |= ico_state_register("vu0.matrix_stack", matrixStack, sizeof matrixStack, 0);
+    rc |= ico_state_register("vu0.matrix_stack_top", &matrixStackTop, sizeof matrixStackTop, 0);
+    rc |= ico_state_register("vu0.rot_trans_prev", rotTransPrev, sizeof rotTransPrev, 0);
+    rc |= ico_state_register("vu0.save", vu0Save, sizeof vu0Save, 0);
+    rc |= ico_state_register("vu0.save_top", &vu0SaveTop, sizeof vu0SaveTop, 0);
+    return rc != 0 ? -1 : 0;
 }
