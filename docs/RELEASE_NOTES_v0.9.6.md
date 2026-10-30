@@ -20,3 +20,4 @@
 - The log says when the game data or the save folder sits on a network or removable drive, which can cause brief pauses and sound cut-outs during loads.
 - Loading textures pauses the game for much less time on slower processors (the credits' music cut out at those moments), and the log now says what a long pause was doing when the sound cut out.
 - On the June 2001 demo disc, a defect in how Ico reads his surroundings is fixed: the distance at which he notices a wall in front of him was taken from the wrong data, so wall and ledge checks could trigger too near or too far.
+- With Frame rate Original, a graphics card too slow to draw every picture in time no longer slows the game down or makes the sound come and go (on the title screen at higher resolutions, for example): pictures are dropped instead and the game keeps its pace.
