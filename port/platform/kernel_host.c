@@ -11,6 +11,7 @@
  * platform ABI, reads the same records the game writes.
  */
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <eekernel.h>
@@ -18,6 +19,8 @@
 #include "diag_host.h"
 #include "kernel_host.h"
 #include "sched.h"
+#include "state_port.h"
+#include "state_registry.h"
 
 /* The last kernel call of the calling thread, for the diagnostics (its
    caller is the game's call site). */
@@ -78,6 +81,48 @@ void ico_kernel_reset(void)
     vsync_flag = 0;
     vsync_csr = 0;
     gs_imr = GS_IMR_ALL_MASKED;
+}
+
+/* The save state's blocks (state_port.h): the handler tables hold the
+   game's function pointers and the SetVSyncFlag words point at the game's
+   globals, so both go through the relocation scan.  tty_on is the host's
+   environment and stays. */
+int ico_kernel_state_register(void)
+{
+    int rc = 0;
+
+    rc |= ico_state_register("kernel.intc_handlers", intc_handlers, sizeof intc_handlers,
+                             ICO_STATE_SCAN);
+    rc |= ico_state_register("kernel.dmac_handlers", dmac_handlers, sizeof dmac_handlers,
+                             ICO_STATE_SCAN);
+    rc |= ico_state_register("kernel.intc_mask", &intc_mask, sizeof intc_mask, 0);
+    rc |= ico_state_register("kernel.dmac_mask", &dmac_mask, sizeof dmac_mask, 0);
+    rc |= ico_state_register("kernel.next_handler_id", &next_handler_id, sizeof next_handler_id, 0);
+    rc |= ico_state_register("kernel.vsync_flag", (void *)&vsync_flag, sizeof vsync_flag,
+                             ICO_STATE_SCAN);
+    rc |= ico_state_register("kernel.vsync_csr", (void *)&vsync_csr, sizeof vsync_csr,
+                             ICO_STATE_SCAN);
+    rc |= ico_state_register("kernel.gs_imr", &gs_imr, sizeof gs_imr, 0);
+    return rc != 0 ? -1 : 0;
+}
+
+int ico_kernel_state_handlers(unsigned long long *out, int max)
+{
+    int n = 0;
+    int i, j;
+
+    for (i = 0; i < INTC_CAUSES + DMAC_CHANNELS; i++) {
+        const HandlerList *l =
+            i < INTC_CAUSES ? &intc_handlers[i] : &dmac_handlers[i - INTC_CAUSES];
+
+        for (j = 0; j < l->n && j < HANDLERS_PER_CAUSE; j++) {
+            if (n < max) {
+                out[n] = (unsigned long long)(uintptr_t)l->h[j].fn;
+            }
+            n++;
+        }
+    }
+    return n;
 }
 
 /* next == 0 puts the handler first, anything else last (the EE's -1). */
