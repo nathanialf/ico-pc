@@ -2046,7 +2046,7 @@ endif()
 #    rd_crack_tiler(_on, _fold, _fold_mali), rd_blend_selftest*, rd_date_selftest_sabotage,
 #    rd_fog_selftest_local_sabotage (ico_rd_gl_twin skips these by itself)
 #  * the tests that start the game (model_viewer_headless, gallery_sweep,
-#    credits_headless) or work on the replay tool's files (rd_replay_tool*,
+#    credits_headless, state_roundtrip_headless(_settings)) or work on the replay tool's files (rd_replay_tool*,
 #    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, rd_vubatch_ab, rd_vumerge_ab,
 #    rd_vufuse_ab, rd_store_plan_ab, rd_constant_reads_ab,
 #    the native frame gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
