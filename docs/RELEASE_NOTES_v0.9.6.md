@@ -8,6 +8,7 @@
 
 ## Fixed
 
+- With the D-pad, Cross or Circle switched off, a tap on a menu line now picks the line even when a hidden touch button lies over it (a hidden Start no longer closes the pause menu when you tap Options); a button you can see still takes the tap.
 - The game no longer pauses for a moment every half minute while you lead Yorda on a slow drive (the achievements file is now written in the background).
 - The pause menu's Yorda captured count no longer counts one capture twice.
 - On the North American disc and the 2001 preview discs, the rescue achievement and the captured count work.

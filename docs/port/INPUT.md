@@ -425,8 +425,21 @@ every change bumps.
   control blocks it is the mouse's click there (`ico_pointer_move` and `ico_pointer_button`;
   `port/input/input_sdl.c` (`touch_menu_tap`)): the click the menus already take from a mouse
   ([UI.md](UI.md#the-mouse-in-menus)), so Options > Controls > Touch screen > Reset stays reachable.
-  `ico_touch_blocks_menu_tap(l, x, y, confirmCtl)` decides what blocks: a button that is not Off
-  (Hidden too), and the stick's area only while the stick and the disc's confirm control
+  `ico_touch_menu_tap_cover(l, x, y, confirmCtl, &ctl)` tells a control that is drawn
+  (`ICO_TOUCH_COVER_SHOWN`, alpha above 0) from one that is only Hidden (`ICO_TOUCH_COVER_HIDDEN`):
+  a drawn control wins over a menu row under the finger and the finger is the control's; a Hidden
+  one gives way when a row is under the finger (`ico_pointer_row_at`, the probe `ui_mouse.c`
+  registers with `ico_pointer_set_row_probe`: the same hit test as the mouse), and then the finger
+  is the row's alone: `touch_finger` never hands it to `ico_touch_event`, down to its lift, so the
+  Hidden Start over the pause menu's Options row no longer closes the menu. A Hidden control with
+  no row under the finger keeps the finger. The gate stays `ico_touch_menu_taps` (D-pad, Cross or
+  Circle Off): with all three working there are no row taps. Logged, the first 8 then every 100th:
+  `touch: tap at X,Y on menu row R (layout L) over hidden|shown <control>: the row|control (N)`.
+  After the start-up `touch: layout edits` line the log has one line per edited control of the
+  layout in play, `touch: <control>: hidden|shown|off at x,y w x h px (size S)`, in window pixels
+  after the safe-area placement, repeated only when they change (`touch_boxes_log`).
+  `ico_touch_blocks_menu_tap(l, x, y, confirmCtl)` is the older yes/no (any working control,
+  Hidden too): a button that is not Off (Hidden too), and the stick's area only while the stick and the disc's confirm control
   (`confirmCtl`: Cross, Circle on the Japanese and Korean discs, from `port/core/region.h`
   `pad_confirm`) are not Off. The look pad's area never blocks (it does nothing in a menu), nor does
   the stick's once the confirm is Off (it only moves the cursor there), so a row under either can
