@@ -2008,14 +2008,15 @@ static __inline__ void speedRatioDebugOverride(float *ratio) /* derived name */
 #endif
 }
 
-/* PC port: port/game/options.c: [gameplay] shadow_speed, the factor 0.75 to 1.5 */
+/* PC port: port/game/options.c: [gameplay] shadow_speed, the factor 0.75 to 1.5, and
+   whether a motion is one of this disc's shadow locomotion motions */
 extern float ico_opt_shadow_speed_factor(void);
+extern int ico_opt_shadow_speed_motion(int motion);
 
 inline void ACTGame_SetMotionPlaySpeedRatio_Exec(GObj *self)
 {
     float ratio;
     int keep;
-    int diveMotion;
 
     ratio = 1.0f;
     keep = (unsigned int)(int)GOBJ_ACT(self)->enemy->speedRatioPri < 3 && self == girlGObj;
@@ -2034,12 +2035,13 @@ inline void ACTGame_SetMotionPlaySpeedRatio_Exec(GObj *self)
     }
     /* PC port: [gameplay] shadow_speed (port/game/options.c) scales a shadow's walking,
        running and flying; the ratio multiplies the motion's play speed, and the ground speed
-       is the motion's root motion, so both scale in step.  Left alone: a frozen shadow (the
-       0.0001 freeze) and the pit dive (this disc's kidnap-end motion), which [gameplay]
-       pit_time owns. */
-    diveMotion = ICO_JUN26 ? 938 : ICO_NTSC ? 903 : ICO_AUG6 ? 905 : 952;
+       is the motion's root motion, so both scale in step.  Only this disc's locomotion
+       motions (ico_opt_shadow_speed_motion): attacks, grabs, hits, the dissolve and the pit
+       dive ([gameplay] pit_time owns it) keep their play speed, in step with the AI's
+       tick-counted waits.  Left alone too: a frozen shadow (the 0.0001 freeze). */
     if (((struct GObj *)self)->kind == 4 && ratio > 0.001f &&
-        ico_opt_shadow_speed_factor() != 1.0f && GOBJ_SUB(self)->ctrl.motion != diveMotion) {
+        ico_opt_shadow_speed_factor() != 1.0f &&
+        ico_opt_shadow_speed_motion(GOBJ_SUB(self)->ctrl.motion)) {
         ratio *= ico_opt_shadow_speed_factor();
     }
     speedRatioDebugOverride(&ratio);

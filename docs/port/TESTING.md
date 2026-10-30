@@ -311,7 +311,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   key) loads it and must log `state: refused load slot 1: settings differ: gameplay.yorda_safe=...`
   and go on to its last tick. Both skip without the disc image and on a sanitizer build ([Tests
   that need the disc](#tests-that-need-the-disc)).
-- `options_test.c`: the gameplay options' defaults and setters (Hold type: the disc's own by default, `toggle`
+- `options_test.c`: `test_shadow_speed_motions` selects each of the seven discs and checks the motions Shadow speed scales (the walk, run, fly and carry loops by their motion-table names) and the ones it leaves (the stand, the fly start, the run's end, an attack, the grab, a hit, the dissolve, the pit dive; review finding 15); the gameplay options' defaults and setters (Hold type: the disc's own by default, `toggle`
   from the file, an unknown word as the disc's own; `test_hold_discs` selects each of the seven
   discs and checks the resolve: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 for no key, `"disc"`, a
   bare `"hold"` and `hold_type_chosen = false`, A for a chosen `"hold"`, B for `"toggle"`, and the

@@ -181,6 +181,28 @@ float ico_opt_shadow_speed_factor(void)
     return kSpeedFactors[ico_opt_shadow_speed()];
 }
 
+int ico_opt_shadow_speed_motion(int motion)
+{
+    /* options.h: each disc's locomotion motions, -1 ending the list */
+    static const int kPal[] = {836, 838, 841, 842, 843, 844, 845, 846, 941, 942, -1};
+    static const int kNtsc[] = {790, 792, 795, 796, 797, 798, 799, 800, 888, 889, -1};
+    static const int kAug6[] = {792, 794, 797, 798, 799, 800, 801, 802, 890, 891, -1};
+    static const int kJun26[] = {823, 825, 828, 829, 830, 831, 832,
+                                 833, 923, 924, 942, 944, 955, -1};
+    const char *slug = ico_region_cur()->slug;
+    const int *m = strcmp(slug, "ntsc") == 0    ? kNtsc
+                   : strcmp(slug, "aug6") == 0  ? kAug6
+                   : strcmp(slug, "jun26") == 0 ? kJun26
+                                                : kPal;
+
+    for (; *m >= 0; m++) {
+        if (*m == motion) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int ico_opt_door_fix(void)
 {
     return get(&s_door_fix, "gameplay.door_fix");

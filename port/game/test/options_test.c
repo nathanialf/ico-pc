@@ -510,6 +510,64 @@ static char *read_source(const char *path)
     return text;
 }
 
+/* Review finding 15: the motions shadow_speed scales on this disc (options.h
+   ico_opt_shadow_speed_motion; the ids are the decomp's motion-def.c names per disc): the
+   locomotion ones in, and the stand, the fly start, the run's end, an attack, the grab, a
+   hit, the dissolve's first sink motion and the pit dive out */
+static void test_shadow_speed_motions(void)
+{
+    static const struct {
+        const char *slug;
+        int in[13];  /* -1 ends */
+        int out[10]; /* stand, fly start, run end, attack1, hug start, hit1 front, sink A,
+                        the dive (sink E), -1 */
+    } kDiscs[] = {
+        {"pal",
+         {836, 838, 841, 842, 843, 844, 845, 846, 941, 942, -1},
+         {834, 835, 847, 911, 938, 897, 948, 952, -1}},
+        {"jpn",
+         {836, 838, 841, 842, 843, 844, 845, 846, 941, 942, -1},
+         {834, 835, 847, 911, 938, 897, 948, 952, -1}},
+        {"kor",
+         {836, 838, 841, 842, 843, 844, 845, 846, 941, 942, -1},
+         {834, 835, 847, 911, 938, 897, 948, 952, -1}},
+        {"cn",
+         {836, 838, 841, 842, 843, 844, 845, 846, 941, 942, -1},
+         {834, 835, 847, 911, 938, 897, 948, 952, -1}},
+        {"ntsc",
+         {790, 792, 795, 796, 797, 798, 799, 800, 888, 889, -1},
+         {788, 789, 801, 865, 896, 851, 899, 903, -1}},
+        {"aug6",
+         {792, 794, 797, 798, 799, 800, 801, 802, 890, 891, -1},
+         {790, 791, 803, 867, 898, 853, 901, 905, -1}},
+        {"jun26",
+         {823, 825, 828, 829, 830, 831, 832, 833, 923, 924, 942, 944, 955},
+         {821, 822, 834, 900, 931, 886, 934, 938, -1}},
+    };
+
+    const char *mine = ico_region_cur()->slug;
+    size_t d;
+    int i;
+
+    for (d = 0; d < sizeof(kDiscs) / sizeof(kDiscs[0]); d++) {
+        CHECK(ico_region_select(kDiscs[d].slug) == 0);
+        for (i = 0; i < 13 && kDiscs[d].in[i] >= 0; i++) {
+            if (!ico_opt_shadow_speed_motion(kDiscs[d].in[i])) {
+                fprintf(stderr, "%s: motion %d is not scaled\n", kDiscs[d].slug, kDiscs[d].in[i]);
+                failures++;
+            }
+        }
+        for (i = 0; kDiscs[d].out[i] >= 0; i++) {
+            if (ico_opt_shadow_speed_motion(kDiscs[d].out[i])) {
+                fprintf(stderr, "%s: motion %d is scaled\n", kDiscs[d].slug, kDiscs[d].out[i]);
+                failures++;
+            }
+        }
+        CHECK(!ico_opt_shadow_speed_motion(-1) && !ico_opt_shadow_speed_motion(0));
+    }
+    CHECK(ico_region_select(mine) == 0);
+}
+
 static void test_shadow_speed(void)
 {
     static const float factor[ICO_SPEED_COUNT] = {0.75f, 1.0f, 1.25f, 1.5f};
@@ -569,7 +627,7 @@ static void test_shadow_speed(void)
     ico_opt_set_shadow_speed(ICO_SPEED_ORIGINAL);
 
     /* the hook: the multiplier in the one place that resolves the ratio, for enemies, not on
-       the freeze, not on this disc's dive motion */
+       the freeze, only on this disc's locomotion motions */
     text = read_source(ICO_ACT_GAME_SRC);
     CHECK(text != NULL);
     if (text != NULL) {
@@ -577,10 +635,8 @@ static void test_shadow_speed(void)
         CHECK(count_of(text, "ratio > 0.001f &&") == 1);
         CHECK(count_of(text, "ico_opt_shadow_speed_factor() != 1.0f") == 1);
         CHECK(count_of(text, "kind == 4 && ratio > 0.001f") == 1);
-        CHECK(count_of(text, "ctrl.motion != diveMotion") == 1);
-        CHECK(count_of(text,
-                       "diveMotion = ICO_JUN26 ? 938 : ICO_NTSC ? 903 : ICO_AUG6 ? 905 : 952;") ==
-              1);
+        CHECK(count_of(text, "ico_opt_shadow_speed_motion(GOBJ_SUB(self)->ctrl.motion)") == 1);
+        CHECK(count_of(text, "diveMotion") == 0);
         free(text);
     }
     /* the flight push: scaled once in each of the three flyCoreLoop copies */
@@ -1724,6 +1780,7 @@ int main(int argc, char **argv)
     test_players_slots(argc > 1 ? argv[1] : ".");
     test_pit_time();
     test_shadow_speed();
+    test_shadow_speed_motions();
     test_brain();
     test_ui_language(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");

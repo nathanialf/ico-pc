@@ -98,9 +98,11 @@ float ico_opt_pit_dive_ratio(int camera);
    The names are slower, original, faster, fastest (ICO_SPEED_*); the factors 0.75, 1,
    1.25, 1.5.  Walking and running scale by the play speed of the shadow's motion
    (ico2/fumi/src/act-game.c ACTGame_SetMotionPlaySpeedRatio_Exec), flying by the forward
-   push of flyCoreLoop (ico2/fumi/src/commonact.c).  Not the pit dive (pit_time owns it),
-   not a frozen shadow, not how often they attack.  Logs
-   "gameplay: shadow speed <name> (x<factor>)" at load and on change. */
+   push of flyCoreLoop (ico2/fumi/src/commonact.c).  Only the locomotion motions take the
+   factor (ico_opt_shadow_speed_motion): attacks, grabs, hits, the dissolve, the pit dive
+   (pit_time owns it) and the turns keep the game's play speed, so the AI's tick-counted
+   waits stay in step with them (review finding 15); not a frozen shadow, not how often
+   they attack.  Logs "gameplay: shadow speed <name> (x<factor>)" at load and on change. */
 #define ICO_SPEED_SLOWER 0
 #define ICO_SPEED_ORIGINAL 1
 #define ICO_SPEED_FASTER 2
@@ -109,6 +111,16 @@ float ico_opt_pit_dive_ratio(int camera);
 int ico_opt_shadow_speed(void);
 void ico_opt_set_shadow_speed(int v);
 float ico_opt_shadow_speed_factor(void);
+/* 1 when motion (a motionKind index, a shadow's ctrl.motion) is one of this disc's
+   shadow locomotion motions, by their names in the disc's motion table (the decomp's
+   generated motion-def.c): "EN1 FLY", "EN1 CARRY_FLY", "EN1 WALKLOOP1/2",
+   "EN1 RUNLOOP1-4", "EN1 CARRY_RUN", and "EN1 CARRY_RUN_13C" (the later discs) or
+   "EN1 CARRY_WALK" (the 2001 discs and the North American one); the June 2001 demo's
+   second "EN1 FLY" and its big shadow's "EN3 WALKLOOP1", "EN3 LIFT_WALK" and
+   "EN3 CARRY_WALK".  European, Japanese, Korean and Chinese: 836, 838, 841-846, 941, 942;
+   North American: 790, 792, 795-800, 888, 889; August 2001: 792, 794, 797-802, 890, 891;
+   June 2001: 823, 825, 828-833, 923, 924, 942, 944, 955. */
+int ico_opt_shadow_speed_motion(int motion);
 /* [gameplay] door_fix (default false): the doorway fix of door_grace.h */
 int ico_opt_door_fix(void);
 void ico_opt_set_door_fix(int on);

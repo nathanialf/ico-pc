@@ -409,9 +409,11 @@ The first five are off unless you turn them on, on a phone too.
   take Yorda, stops it altogether.
 - **Shadow speed** sets how fast shadows walk, run and fly: **Slower** (three
   quarters of the original speed), **Original**, **Faster** (a quarter faster)
-  or **Fastest** (half as fast again). It does not change how often they
-  attack, how long they wait before they do, or how long a shadow takes to pull
-  Yorda into a pit (Time to rescue Yorda sets that).
+  or **Fastest** (half as fast again). Only their walking, running and flying
+  change: their attacks, grabs, flinches and fading away play at the original
+  speed. It does not change how often they attack, how long they wait before
+  they do, or how long a shadow takes to pull Yorda into a pit (Time to rescue
+  Yorda sets that).
 - **Analogue stick fix** lets Ico run in any direction you push the stick,
   not only the eight the original game knows. It is also on the Controls
   page, and it is the same switch.
