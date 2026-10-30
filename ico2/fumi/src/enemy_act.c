@@ -1830,6 +1830,7 @@ static void actEnemyKidnapEnd_jun26(GObj *volatile self)
                             }
                             _ACTWait(1);
                         }
+                        ico_gs_signal_game_over_once(); /* PC port: this death path skips ACT_LAYOUT_GAMEOVER */
                         lt_switch_layout(58);
                     } else {
                         ACTSendMailCorrect(self, 310);
