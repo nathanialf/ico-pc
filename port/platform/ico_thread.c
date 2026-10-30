@@ -121,6 +121,14 @@ double ico_thread_now_ms(void)
     return (double)n.QuadPart * 1000.0 / (double)f.QuadPart;
 }
 
+int ico_thread_cpu_count(void)
+{
+    SYSTEM_INFO si;
+
+    GetSystemInfo(&si);
+    return si.dwNumberOfProcessors > 0 ? (int)si.dwNumberOfProcessors : 1;
+}
+
 #else
 
 #define ICO_WANT_LIBC_SCHED 1 /* sched.h says why */
@@ -130,6 +138,7 @@ double ico_thread_now_ms(void)
 #undef ICO_WANT_LIBC_SCHED
 
 #include <time.h>
+#include <unistd.h>
 
 struct IcoThread {
     pthread_t t;
@@ -242,6 +251,13 @@ double ico_thread_now_ms(void)
 
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
+}
+
+int ico_thread_cpu_count(void)
+{
+    const long n = sysconf(_SC_NPROCESSORS_ONLN);
+
+    return n > 0 ? (int)n : 1;
 }
 
 #endif
