@@ -26,11 +26,14 @@ int main(void)
     /* three partition identities: two used, one never seen */
     static int parts[3];
 
-    CHECK(ico_arena_base() == NULL && ico_arena_size() == 0);
+    CHECK(ico_arena_base() == NULL && ico_arena_size() == 0 && !ico_arena_pinned());
     CHECK(ico_arena_init() == 0);
     base = ico_arena_base();
     CHECK(base != NULL);
     CHECK(((uintptr_t)base & (ICO_ARENA_ALIGN - 1)) == 0);
+    /* pinned exactly when it sits at the pinned base (a test process has
+       nothing else there, but the fallback is legal) */
+    CHECK(ico_arena_pinned() == ((uintptr_t)base == (uintptr_t)ICO_ARENA_PIN_BASE));
     CHECK(ico_arena_size() == ICO_ARENA_EE_SIZE + ICO_ARENA_HEADROOM);
     /* allocated once */
     CHECK(ico_arena_init() == 0 && ico_arena_base() == base);
