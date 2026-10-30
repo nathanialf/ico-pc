@@ -1,771 +1,505 @@
-#port / game : the port's gameplay options and
-#achievements(below).
-#One module holds stick_fix, yorda_safe and mirror; ico_input, ico_sndn2 and
-#the game's hooks (ico2/, under ICO_HOST) read it. The config reader is
-#port / config's; host_config.c is compiled by ico_pc and the tests.
-#video_options.c : the display options
-#photo_mode.c : photo mode 's state and camera; it uses rd.h' s RdCamera struct
-#only, so port / render is on the include path of the headless build too
-#(nothing of rd is linked)
-#appearance.c : the characters' colours, their
-#[characters] keys and the CLUT recolour Texture.c applies(ICO_RD); rd_tex.h
-#for its constants and CLUT order only(nothing of rd is linked)
-#door_grace.c : the doorway fix's arm and arrival grace ([gameplay] door_fix),
-#called by the exit check in ico2 / fumi / src / boyact.c
-#variants.c : the game variants' values ([variants]), their achievements rule,
-#the debug switches and debug - menu opener the game binds, the hint rule and the
-#enemy row reader(variants.h); it names no game symbol(the game library is
-#linked before this one)
-add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c door_grace
-                .c variants.c) target_include_directories(ico_options PUBLIC
-                                                          "${CMAKE_CURRENT_SOURCE_DIR}"
-                                                          "${CMAKE_SOURCE_DIR}/port/render")
-    target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-#ico_region : the per - disc[mirror] keys(port / core / region.h)
-        target_link_libraries(ico_options PUBLIC ico_config ico_region) if (
-            TARGET ico_pc) target_link_libraries(ico_pc PRIVATE ico_options) endif()
+# port/game: the port's gameplay options and
+# achievements (below).
+# One module holds stick_fix, yorda_safe and mirror; ico_input, ico_sndn2 and
+# the game's hooks (ico2/, under ICO_HOST) read it. The config reader is
+# port/config's; host_config.c is compiled by ico_pc and the tests.
+# video_options.c: the display options
+# photo_mode.c: photo mode's state and camera; it uses rd.h's RdCamera struct
+# only, so port/render is on the include path of the headless build too
+# (nothing of rd is linked)
+# appearance.c: the characters' colours, their
+# [characters] keys and the CLUT recolour Texture.c applies (ICO_RD); rd_tex.h
+# for its constants and CLUT order only (nothing of rd is linked)
+# door_grace.c: the doorway fix's arm and arrival grace ([gameplay] door_fix),
+# called by the exit check in ico2/fumi/src/boyact.c
+# variants.c: the game variants' values ([variants]), their achievements rule,
+# the debug switches and debug-menu opener the game binds, the hint rule and the
+# enemy row reader (variants.h); it names no game symbol (the game library is
+# linked before this one)
+add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c door_grace.c
+            variants.c)
+target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/render")
+target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+# ico_region: the per-disc [mirror] keys (port/core/region.h)
+target_link_libraries(ico_options PUBLIC ico_config ico_region)
+if(TARGET ico_pc)
+    target_link_libraries(ico_pc PRIVATE ico_options)
+endif()
 
-#Defaults are the original behaviour, the config and run - time setters, and
-#eBrainGetTarget(ico2 / omori / src / ebrain.c, compiled into the test) under the
-#yorda_safe hook, and pit_time's ratio and its four hooks in enemy_act.c (a text scan),
-#and shadow_speed's hook in act-game.c, its three pushes in commonact.c and its record key in
-#main_host.c(text scans).
-            add_executable(options_test test / options_test.c../ platform / host_config.c) ico_include_dirs(
-                omori _ico_options_incs) target_include_directories(options_test PRIVATE $ {
-                _ico_options_incs
-            } "${CMAKE_SOURCE_DIR}/port/platform")
-                target_compile_definitions(
-                    options_test PRIVATE ${ICO_GAME_DEFINITIONS} ICO_ENEMY_ACT_SRC =
-                        "${CMAKE_SOURCE_DIR}/ico2/fumi/src/enemy_act.c" ICO_ACT_GAME_SRC =
-                            "${CMAKE_SOURCE_DIR}/ico2/fumi/src/act-game.c" ICO_COMMONACT_SRC =
-                                "${CMAKE_SOURCE_DIR}/ico2/fumi/src/commonact.c" ICO_MAIN_HOST_SRC =
-                                    "${CMAKE_SOURCE_DIR}/port/platform/main_host.c" ICO_SIM_KEYS_SRC =
-                                        "${CMAKE_SOURCE_DIR}/port/platform/sim_keys.c")
-                    target_compile_options(
-                        options_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS} ${
-                            ICO_GAME_WARNINGS} -
-                        Wno - unused - parameter - Wno - unused - variable - Wno - unused -
-                        function) target_link_libraries(options_test PRIVATE
-                                                            ico_options) if (ICO_RUN_TESTS)
-#one run per disc : the[mirror] keys are the disc's (slot_N, jpn_slot_N,
-#kor_slot_N); each in its own folder(the test's config files sit in it)
-                        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_jpn") file(
-                            MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_kor")
-                            foreach (_slug ntsc aug6 jun26 cn) file(
-                                MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_${_slug}")
-                                endforeach() add_test(NAME options COMMAND options_test
-                                                      "${CMAKE_CURRENT_BINARY_DIR}" pal)
-                                    add_test(NAME options_jpn COMMAND options_test
-                                             "${CMAKE_CURRENT_BINARY_DIR}/options_jpn" jpn)
-                                        add_test(NAME options_kor COMMAND options_test
-                                                 "${CMAKE_CURRENT_BINARY_DIR}/options_kor" kor)
-                                            foreach (_slug ntsc aug6 jun26 cn) add_test(
-                                                NAME options_${_slug} COMMAND options_test
-                                                "${CMAKE_CURRENT_BINARY_DIR}/options_${_slug}" ${
-                                                    _slug}) endforeach() endif()
+# Defaults are the original behaviour, the config and run-time setters, and
+# eBrainGetTarget (ico2/omori/src/ebrain.c, compiled into the test) under the
+# yorda_safe hook, and pit_time's ratio and its four hooks in enemy_act.c (a text scan),
+# and shadow_speed's hook in act-game.c, its three pushes in commonact.c and its record key in
+# main_host.c (text scans).
+add_executable(options_test test/options_test.c ../platform/host_config.c)
+ico_include_dirs(omori _ico_options_incs)
+target_include_directories(options_test PRIVATE ${_ico_options_incs}
+    "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(options_test PRIVATE ${ICO_GAME_DEFINITIONS}
+    ICO_ENEMY_ACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/enemy_act.c"
+    ICO_ACT_GAME_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/act-game.c"
+    ICO_COMMONACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/commonact.c"
+    ICO_MAIN_HOST_SRC="${CMAKE_SOURCE_DIR}/port/platform/main_host.c"
+    ICO_SIM_KEYS_SRC="${CMAKE_SOURCE_DIR}/port/platform/sim_keys.c")
+target_compile_options(options_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS} -Wno-unused-parameter -Wno-unused-variable
+                       -Wno-unused-function)
+target_link_libraries(options_test PRIVATE ico_options)
+if(ICO_RUN_TESTS)
+    # one run per disc: the [mirror] keys are the disc's (slot_N, jpn_slot_N,
+    # kor_slot_N); each in its own folder (the test's config files sit in it)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_jpn")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_kor")
+    foreach(_slug ntsc aug6 jun26 cn)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/options_${_slug}")
+    endforeach()
+    add_test(NAME options COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}" pal)
+    add_test(NAME options_jpn COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}/options_jpn" jpn)
+    add_test(NAME options_kor COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}/options_kor" kor)
+    foreach(_slug ntsc aug6 jun26 cn)
+        add_test(NAME options_${_slug}
+                 COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}/options_${_slug}" ${_slug})
+    endforeach()
+endif()
 
-#The twenty words a load keeps across gflagInit on each disc
-#(ico2 / common / src / layout_action.c, compiled into the test whole, the rest of
-#the game it names stubbed by keep_flags_stubs.c) : the disc's own five
-#game - flag ids and the words after them in its.data, the fifth the disc's
-#new - game flag, all below its flag count(issue 160).CPU only.
-                                                add_executable(
-                                                    keep_flags_test test / keep_flags_test.c test /
-                                                    keep_flags_stubs.c
-                                                    "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_action.c")
-                                                    ico_include_dirs(common _ico_keep_flags_incs)
-                                                        target_include_directories(
-                                                            keep_flags_test PRIVATE $ {
-                                                                _ico_keep_flags_incs
-                                                            } "${CMAKE_SOURCE_DIR}/port/include"
-                                                              "${CMAKE_SOURCE_DIR}/port/ui")
-                                                            target_compile_definitions(
-                                                                keep_flags_test PRIVATE ${
-                                                                    ICO_GAME_DEFINITIONS})
-                                                                target_compile_options(
-                                                                    keep_flags_test PRIVATE ${
-                                                                        ICO_SEMANTIC_OPTIONS} ${
-                                                                        ICO_GAME_LAYOUT_OPTIONS} ${
-                                                                        ICO_GAME_WARNINGS})
-                                                                    target_link_libraries(
-                                                                        keep_flags_test PRIVATE
-                                                                            ico_region) if (ICO_RUN_TESTS)
-                                                                        add_test(
-                                                                            NAME keep_flags COMMAND
-                                                                                keep_flags_test pal)
-                                                                            foreach (
-                                                                                _slug jpn kor cn
-                                                                                    ntsc aug6 jun26)
-                                                                                add_test(
-                                                                                    NAME keep_flags_${
-                                                                                        _slug} COMMAND
-                                                                                        keep_flags_test
-                                                                                            ${_slug})
-                                                                                    endforeach()
-                                                                                        endif()
+# The twenty words a load keeps across gflagInit on each disc
+# (ico2/common/src/layout_action.c, compiled into the test whole, the rest of
+# the game it names stubbed by keep_flags_stubs.c): the disc's own five
+# game-flag ids and the words after them in its .data, the fifth the disc's
+# new-game flag, all below its flag count (issue 160).  CPU only.
+add_executable(keep_flags_test test/keep_flags_test.c test/keep_flags_stubs.c
+    "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_action.c")
+ico_include_dirs(common _ico_keep_flags_incs)
+target_include_directories(keep_flags_test PRIVATE ${_ico_keep_flags_incs}
+    "${CMAKE_SOURCE_DIR}/port/include" "${CMAKE_SOURCE_DIR}/port/ui")
+target_compile_definitions(keep_flags_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(keep_flags_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(keep_flags_test PRIVATE ico_region)
+if(ICO_RUN_TESTS)
+    add_test(NAME keep_flags COMMAND keep_flags_test pal)
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        add_test(NAME keep_flags_${_slug} COMMAND keep_flags_test ${_slug})
+    endforeach()
+endif()
 
-#Where ACTGetEnvironment reads the wall - reach field of a motion record : the
-#host holds it at bits 24 - 25 on every disc(config / motion_bits.*.txt), so
-#every twin shifts by 6; the June 2001 demo's once read the item mode.  CPU only.
-                                                                                            add_executable(
-                                                                                                env_bits_test
-                                                                                                    test /
-                                                                                                env_bits_test
-                                                                                                    .c)
-                                                                                                target_compile_options(
-                                                                                                    env_bits_test
-                                                                                                        PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_WARNINGS}) if (ICO_RUN_TESTS)
-                                                                                                    add_test(NAME
-                                                                                                                 env_bits COMMAND env_bits_test
-                                                                                                             "${CMAKE_SOURCE_DIR}")
-                                                                                                        endif()
+# Where each disc's ACTGetEnvironment reads the two-bit wall-reach field of a
+# motion record (ico2/fumi/src/act-env.c, a text scan + synthetic words): the
+# host holds it at bits 24-25 on every disc (config/motion_bits.*.txt), so
+# every twin shifts by 6; the June 2001 demo's once read the item mode.  CPU only.
+add_executable(env_bits_test test/env_bits_test.c)
+target_compile_options(env_bits_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME env_bits COMMAND env_bits_test "${CMAKE_SOURCE_DIR}")
+endif()
 
-#IsPointIsInScreen's x bound (ico2/omori/src/poly-flat.c, compiled into the
-#test) at gsFrame.w = 512 and wider : the PS2's 4:3 window at every width
-#(its callers are camera decisions, and the camera is the original's).  Stubs for the
-#projection and the packet writers.
-                                                                                                            add_executable(
-                                                                                                                poly_flat_test
-                                                                                                                    test /
-                                                                                                                poly_flat_test
-                                                                                                                    .c)
-                                                                                                                target_include_directories(poly_flat_test PRIVATE ${_ico_options_incs}) target_compile_definitions(poly_flat_test PRIVATE ${ICO_GAME_DEFINITIONS}) target_compile_options(poly_flat_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_GAME_WARNINGS} - Wno - unused - parameter - Wno - unused - variable - Wno - unused - function) if (ICO_RUN_TESTS) add_test(NAME poly_flat COMMAND
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         poly_flat_test) endif()
+# IsPointIsInScreen's x bound (ico2/omori/src/poly-flat.c, compiled into the
+# test) at gsFrame.w = 512 and wider: the PS2's 4:3 window at every width
+# (its callers are camera decisions, and the camera is the original's).  Stubs for the
+# projection and the packet writers.
+add_executable(poly_flat_test test/poly_flat_test.c)
+target_include_directories(poly_flat_test PRIVATE ${_ico_options_incs})
+target_compile_definitions(poly_flat_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(poly_flat_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS} -Wno-unused-parameter -Wno-unused-variable
+                       -Wno-unused-function)
+if(ICO_RUN_TESTS)
+    add_test(NAME poly_flat COMMAND poly_flat_test)
+endif()
 
-#The doorway fix : the arm and the grace with the option off and
-#on, holding hands or not, the stage it leads to, the frame count, and a copy
-#of the exit check's guard driven through an arrival frame by frame. CPU
-#only, no game sources.
-                                                                                                                    add_executable(
-                                                                                                                        door_grace_test test /
-                                                                                                                        door_grace_test
-                                                                                                                            .c
-                                                                                                                            .
-                                                                                                                            ./
-                                                                                                                        platform /
-                                                                                                                        host_config
-                                                                                                                            .c)
-                                                                                                                        target_include_directories(door_grace_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform") target_compile_options(door_grace_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}) target_link_libraries(door_grace_test
-                                                                                                                                                                                                                                                                                                                                       PRIVATE ico_options) if (ICO_RUN_TESTS) add_test(NAME
-                                                                                                                                                                                                                                                                                                                                                                                            door_grace COMMAND door_grace_test "${CMAKE_CURRENT_BINARY_DIR}") endif()
+# The doorway fix: the arm and the grace with the option off and
+# on, holding hands or not, the stage it leads to, the frame count, and a copy
+# of the exit check's guard driven through an arrival frame by frame. CPU
+# only, no game sources.
+add_executable(door_grace_test test/door_grace_test.c ../platform/host_config.c)
+target_include_directories(door_grace_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(door_grace_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(door_grace_test PRIVATE ico_options)
+if(ICO_RUN_TESTS)
+    add_test(NAME door_grace COMMAND door_grace_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
 
-#The game variants(variants.h) : the defaults, every[variants] key's round
-#trip through config.toml, the words a file may say, the achievements rule,
-#the bound debug switches and opener, the hint rule, and the enemy row reader
-#on the discs' tables (ico2/sugipon/src/enemyKind.c, data only, compiled in).
-#CPU only; one run per disc(the barrier's shipped number and the table are
-#the disc's).
-                                                                                                                            add_executable(
-                                                                                                                                variants_test
-                                                                                                                                    test /
-                                                                                                                                variants_test
-                                                                                                                                    .c
-                                                                                                                                    .
-                                                                                                                                    ./
-                                                                                                                                platform /
-                                                                                                                                host_config
-                                                                                                                                    .c
-                                                                                                                                "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/enemyKind.c") target_include_directories(variants_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform"
-                                                                                                                                                                                                                                     "${CMAKE_SOURCE_DIR}/ico2/sugipon/include") target_compile_options(variants_test
-                                                                                                                                                                                                                                                                                                            PRIVATE
-                                                                                                                                                                                                                                                                                                                ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}) target_link_libraries(variants_test PRIVATE ico_options) if (ICO_RUN_TESTS) add_test(NAME
-                                                                                                                                                                                                                                                                                                                                                                                                                                                       variants
-                                                                                                                                                                                                                                                                                                                                                                                                                                                           COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}") add_test(NAME
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             variants_jpn COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}" jpn) add_test(NAME variants_kor
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}" kor) foreach (_slug ntsc aug6 jun26 cn) add_test(NAME
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         variants_${
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             _slug} COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
-                                                                                                                                endforeach()
-                                                                                                                                    endif()
 
-#Photo mode's state and camera: the orbit, the clamps, the
-#zoom, the keys, the capture's name; the basis kept from the game camera at
-#enter, the field of view now and the step limit.CPU only.
-                                                                                                                                        add_executable(
-                                                                                                                                            photo_test
-                                                                                                                                                test /
-                                                                                                                                            photo_test
-                                                                                                                                                .c
-                                                                                                                                                .
-                                                                                                                                                ./
-                                                                                                                                            platform /
-                                                                                                                                            host_config
-                                                                                                                                                .c)
-                                                                                                                                            target_include_directories(
-                                                                                                                                                photo_test PRIVATE
-                                                                                                                                                "${CMAKE_SOURCE_DIR}/port/platform") target_compile_options(photo_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}) target_link_libraries(photo_test PRIVATE ico_options) if (NOT WIN32) target_link_libraries(photo_test PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                            m) endif() if (ICO_RUN_TESTS) add_test(NAME photo
-                                                                                                                                                                                                                                                                                                                                                                                                                       COMMAND photo_test "${CMAKE_CURRENT_BINARY_DIR}") endif()
+# The game variants (variants.h): the defaults, every [variants] key's round
+# trip through config.toml, the words a file may say, the achievements rule,
+# the bound debug switches and opener, the hint rule, and the enemy row reader
+# on the discs' tables (ico2/sugipon/src/enemyKind.c, data only, compiled in).
+# CPU only; one run per disc (the barrier's shipped number and the table are
+# the disc's).
+add_executable(variants_test test/variants_test.c ../platform/host_config.c
+               "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/enemyKind.c")
+target_include_directories(variants_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform"
+                           "${CMAKE_SOURCE_DIR}/ico2/sugipon/include")
+target_compile_options(variants_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(variants_test PRIVATE ico_options)
+if(ICO_RUN_TESTS)
+    add_test(NAME variants COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME variants_jpn COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}" jpn)
+    add_test(NAME variants_kor COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}" kor)
+    foreach(_slug ntsc aug6 jun26 cn)
+        add_test(NAME variants_${_slug} COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+    endforeach()
+endif()
 
-#The native frame(port / include / ico_frame.h) : the width for an aspect, the
-#frame, the x scaling and TW, and ico_video_frame from the options.CPU only.
-                                                                                                                                                add_executable(
-                                                                                                                                                    ico_frame_test
-                                                                                                                                                        test /
-                                                                                                                                                    ico_frame_test
-                                                                                                                                                        .c
-                                                                                                                                                        .
-                                                                                                                                                        ./
-                                                                                                                                                    platform /
-                                                                                                                                                    host_config
-                                                                                                                                                        .c)
-                                                                                                                                                    target_include_directories(ico_frame_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform") target_compile_options(ico_frame_test
-                                                                                                                                                                                                                                                                      PRIVATE
-                                                                                                                                                                                                                                                                          ${ICO_SEMANTIC_OPTIONS} ${
-                                                                                                                                                                                                                                                                              ICO_PORT_WARNINGS}) target_link_libraries(ico_frame_test PRIVATE ico_options) if (NOT WIN32) target_link_libraries(ico_frame_test
-                                                                                                                                                                                                                                                                                                                                                                                                     PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                                                         m) endif() if (ICO_RUN_TESTS) add_test(NAME
-                                                                                                                                                                                                                                                                                                                                                                                                                                                    ico_frame COMMAND ico_frame_test) endif()
+# Photo mode's state and camera: the orbit, the clamps, the
+# zoom, the keys, the capture's name; the basis kept from the game camera at
+# enter, the field of view now and the step limit. CPU only.
+add_executable(photo_test test/photo_test.c ../platform/host_config.c)
+target_include_directories(photo_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(photo_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(photo_test PRIVATE ico_options)
+if(NOT WIN32)
+    target_link_libraries(photo_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    add_test(NAME photo COMMAND photo_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
 
-#The characters' colours: the rule table over
-#synthetic CLUTs(Original is the identity, the coverage, b_mantle's masks,
-#the alpha, the formats, the anchors and the weights), the[characters]
-#keys, Randomize and Reset.CPU only.
-                                                                                                                                                        add_executable(
-                                                                                                                                                            appearance_test
-                                                                                                                                                                test /
-                                                                                                                                                            appearance_test
-                                                                                                                                                                .c
-                                                                                                                                                                .
-                                                                                                                                                                ./
-                                                                                                                                                            platform /
-                                                                                                                                                            host_config
-                                                                                                                                                                .c)
-                                                                                                                                                            target_include_directories(
-                                                                                                                                                                appearance_test PRIVATE
-                                                                                                                                                                "${CMAKE_SOURCE_DIR}/port/platform") target_compile_options(appearance_test
-                                                                                                                                                                                                                                PRIVATE
-                                                                                                                                                                                                                                    ${
-                                                                                                                                                                                                                                        ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}) target_link_libraries(appearance_test PRIVATE
-                                                                                                                                                                                                                                                                                                              ico_options) if (NOT WIN32) target_link_libraries(appearance_test PRIVATE m) endif()
-#appearance_disc_test : the same rules against the disc's own CLUTs (the
-#anchors present, b_mantle's groups about 18/26/34/22 % of its texels).
-#Skipped(77) without the disc, as texpack_disc is.
-                                                                                                                                                                add_executable(
-                                                                                                                                                                    appearance_disc_test
-                                                                                                                                                                        test /
-                                                                                                                                                                    appearance_disc_test
-                                                                                                                                                                        .c
-                                                                                                                                                                        .
-                                                                                                                                                                        ./
-                                                                                                                                                                    platform /
-                                                                                                                                                                    host_config
-                                                                                                                                                                        .c)
-                                                                                                                                                                    target_include_directories(
-                                                                                                                                                                        appearance_disc_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform") target_compile_options(appearance_disc_test
-                                                                                                                                                                                                                                                                     PRIVATE
-                                                                                                                                                                                                                                                                         ${ICO_SEMANTIC_OPTIONS} ${
-                                                                                                                                                                                                                                                                             ICO_PORT_WARNINGS})
-                                                                                                                                                                        target_link_libraries(
-                                                                                                                                                                            appearance_disc_test
-                                                                                                                                                                                PRIVATE ico_options ico_port_data) if (ICO_RUN_TESTS)
-                                                                                                                                                                            add_test(
-                                                                                                                                                                                NAME
-                                                                                                                                                                                    appearance COMMAND appearance_test
-                                                                                                                                                                                "${CMAKE_CURRENT_BINARY_DIR}")
-                                                                                                                                                                                add_test(NAME
-                                                                                                                                                                                             appearance_disc COMMAND appearance_disc_test "${ICO_DISC_IMAGE}") set_tests_properties(appearance_disc PROPERTIES
-                                                                                                                                                                                                                                                                                        SKIP_RETURN_CODE 77)
-                                                                                                                                                                                    endif()
+# The native frame (port/include/ico_frame.h): the width for an aspect, the
+# frame, the x scaling and TW, and ico_video_frame from the options. CPU only.
+add_executable(ico_frame_test test/ico_frame_test.c ../platform/host_config.c)
+target_include_directories(ico_frame_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(ico_frame_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_frame_test PRIVATE ico_options)
+if(NOT WIN32)
+    target_link_libraries(ico_frame_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    add_test(NAME ico_frame COMMAND ico_frame_test)
+endif()
 
-#The boot's card check and signs (ico2/common/src/kanbanBoot.c, compiled
-#into the test) for a first and a later boot : no reload of stage 1, no
-#gsResetFunc, no second card check, and the language and 60 Hz main.c sets
-#from the config in force throughout; over stage 1's load, keep frames from
-#the check 's start to the Sony sign' s frame, at the start - up log's ticks.
-#CPU only.
-                                                                                                                                                                                        add_executable(
-                                                                                                                                                                                            kanban_boot_test
-                                                                                                                                                                                                test /
-                                                                                                                                                                                            kanban_boot_test
-                                                                                                                                                                                                .c
-                                                                                                                                                                                                .
-                                                                                                                                                                                                ./
-                                                                                                                                                                                            platform /
-                                                                                                                                                                                            host_config
-                                                                                                                                                                                                .c)
-                                                                                                                                                                                            ico_include_dirs(common _ico_kanban_boot_incs) target_include_directories(kanban_boot_test
-                                                                                                                                                                                                                                                                          PRIVATE $ {
-                                                                                                                                                                                                                                                                              _ico_kanban_boot_incs
-                                                                                                                                                                                                                                                                          } "${CMAKE_SOURCE_DIR}/port/platform")
-                                                                                                                                                                                                target_compile_definitions(
-                                                                                                                                                                                                    kanban_boot_test
-                                                                                                                                                                                                        PRIVATE ${ICO_GAME_DEFINITIONS})
-                                                                                                                                                                                                    target_compile_options(
-                                                                                                                                                                                                        kanban_boot_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_GAME_WARNINGS}) target_link_libraries(kanban_boot_test
-                                                                                                                                                                                                                                                                                                                                    PRIVATE ico_config) if (ICO_RUN_TESTS)
-                                                                                                                                                                                                        add_test(
-                                                                                                                                                                                                            NAME
-                                                                                                                                                                                                                kanban_boot COMMAND kanban_boot_test
-                                                                                                                                                                                                            "${CMAKE_CURRENT_BINARY_DIR}")
-#the Japanese disc's check (kanbanBootMcCheck_jpn): no language or
-#video step, no card system file read, the language word 0 and 60 Hz
-#throughout
-                                                                                                                                                                                                            add_test(
-                                                                                                                                                                                                                NAME
-                                                                                                                                                                                                                    kanban_boot_jpn COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" jpn)
-#and on the Korean disc, which runs the Japanese program's check
-                                                                                                                                                                                                                add_test(
-                                                                                                                                                                                                                    NAME
-                                                                                                                                                                                                                        kanban_boot_kor COMMAND kanban_boot_test
-                                                                                                                                                                                                                    "${CMAKE_CURRENT_BINARY_DIR}" kor)
-#and the Asian disc, the same program(kanbanBootMcCheck_jpn).The North
-#American disc and the August 2001 preview run that check too, without its
-#retries and with the Korean disc's "continue" item (kanban_boot_ntsc,
-#kanban_boot_aug6).The June 2001 demo's boot has no card check at all
-#(kanbanBootMain_jun26) : kanban_boot_jun26 runs its sign, its wait and its
-#end, with any card
-                                                                                                                                                                                                                    add_test(NAME
-                                                                                                                                                                                                                                 kanban_boot_cn
-                                                                                                                                                                                                                                     COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" cn) add_test(NAME
-                                                                                                                                                                                                                                                                                                             kanban_boot_ntsc COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" ntsc) add_test(NAME kanban_boot_aug6
-                                                                                                                                                                                                                                                                                                                                                                                                        COMMAND kanban_boot_test
-                                                                                                                                                                                                                                                                                                                                                                                                    "${CMAKE_CURRENT_BINARY_DIR}" aug6) add_test(NAME kanban_boot_jun26
-                                                                                                                                                                                                                                                                                                                                                                                                                                                     COMMAND kanban_boot_test
-                                                                                                                                                                                                                                                                                                                                                                                                                                                 "${CMAKE_CURRENT_BINARY_DIR}" jun26)
-                                                                                                                                                                                                                        endif()
+# The characters' colours: the rule table over
+# synthetic CLUTs (Original is the identity, the coverage, b_mantle's masks,
+# the alpha, the formats, the anchors and the weights), the [characters]
+# keys, Randomize and Reset. CPU only.
+add_executable(appearance_test test/appearance_test.c ../platform/host_config.c)
+target_include_directories(appearance_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(appearance_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(appearance_test PRIVATE ico_options)
+if(NOT WIN32)
+    target_link_libraries(appearance_test PRIVATE m)
+endif()
+# appearance_disc_test: the same rules against the disc's own CLUTs (the
+# anchors present, b_mantle's groups about 18/26/34/22 % of its texels).
+# Skipped (77) without the disc, as texpack_disc is.
+add_executable(appearance_disc_test test/appearance_disc_test.c ../platform/host_config.c)
+target_include_directories(appearance_disc_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(appearance_disc_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(appearance_disc_test PRIVATE ico_options ico_port_data)
+if(ICO_RUN_TESTS)
+    add_test(NAME appearance COMMAND appearance_test "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME appearance_disc COMMAND appearance_disc_test "${ICO_DISC_IMAGE}")
+    set_tests_properties(appearance_disc PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 
-#The hand records Ico and Yorda hold hands with
-#(ico2 / sugipon / src / handManager.c, compiled into the test) and the arc - cosine
-#table's NaN guard (tableSin.c, quaternion.c and matrixDrive.c as the game
-#has them; ico_platform for the fault log).CPU only.
-                                                                                                                                                                                                                            add_executable(
-                                                                                                                                                                                                                                hand_ik_test test / hand_ik_test
-                                                                                                                                                                                                                                                        .c "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/tableSin.c"
-                                                                                                                                                                                                                                                           "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/quaternion.c"
-                                                                                                                                                                                                                                                           "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/matrixDrive.c")
-                                                                                                                                                                                                                                ico_include_dirs(
-                                                                                                                                                                                                                                    sugipon
-                                                                                                                                                                                                                                        _ico_hand_ik_incs)
-                                                                                                                                                                                                                                    target_include_directories(
-                                                                                                                                                                                                                                        hand_ik_test PRIVATE $ {
-                                                                                                                                                                                                                                            _ico_hand_ik_incs
-                                                                                                                                                                                                                                        } "${CMAKE_SOURCE_DIR}/port/platform") target_compile_definitions(hand_ik_test PRIVATE ${ICO_GAME_DEFINITIONS}) target_compile_options(hand_ik_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS} ${
-                                                                                                                                                                                                                                        ICO_GAME_WARNINGS}) target_link_libraries(hand_ik_test
-                                                                                                                                                                                                                                                                                      PRIVATE
-                                                                                                                                                                                                                                                                                          ico_math
-                                                                                                                                                                                                                                                                                              ico_platform) if (ICO_RUN_TESTS) add_test(NAME
-                                                                                                                                                                                                                                                                                                                                            hand_ik COMMAND hand_ik_test)
-                                                                                                                                                                                                                                        endif()
+# The boot's card check and signs (ico2/common/src/kanbanBoot.c, compiled
+# into the test) for a first and a later boot: no reload of stage 1, no
+# gsResetFunc, no second card check, and the language and 60 Hz main.c sets
+# from the config in force throughout; over stage 1's load, keep frames from
+# the check's start to the Sony sign's frame, at the start-up log's ticks.
+# CPU only.
+add_executable(kanban_boot_test test/kanban_boot_test.c ../platform/host_config.c)
+ico_include_dirs(common _ico_kanban_boot_incs)
+target_include_directories(kanban_boot_test PRIVATE ${_ico_kanban_boot_incs}
+    "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(kanban_boot_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(kanban_boot_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(kanban_boot_test PRIVATE ico_config)
+if(ICO_RUN_TESTS)
+    add_test(NAME kanban_boot COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}")
+    # the Japanese disc's check (kanbanBootMcCheck_jpn): no language or
+    # video step, no card system file read, the language word 0 and 60 Hz
+    # throughout
+    add_test(NAME kanban_boot_jpn COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" jpn)
+    # and on the Korean disc, which runs the Japanese program's check
+    add_test(NAME kanban_boot_kor COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" kor)
+    # and the Asian disc, the same program (kanbanBootMcCheck_jpn).  The North
+    # American disc and the August 2001 preview run that check too, without its
+    # retries and with the Korean disc's "continue" item (kanban_boot_ntsc,
+    # kanban_boot_aug6).  The June 2001 demo's boot has no card check at all
+    # (kanbanBootMain_jun26): kanban_boot_jun26 runs its sign, its wait and its
+    # end, with any card
+    add_test(NAME kanban_boot_cn COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" cn)
+    add_test(NAME kanban_boot_ntsc COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" ntsc)
+    add_test(NAME kanban_boot_aug6 COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" aug6)
+    add_test(NAME kanban_boot_jun26 COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" jun26)
+endif()
 
-#The shadows ' start in their pools: the generator' s enemy kind
-#read from the setting its constructor is handed(ico2 / omori / src / generator.c
-#compiled in, run through Generator_Call and GeneratorGeo), and with the disc
-#EN1 START 's rise from that start through the game' s motion decode
-#(motionFileManager.c, motionManager2.c); without the disc the rise part is
-#skipped and the generator part runs.CPU only.
-                                                                                                                                                                                                                                            add_executable(
-                                                                                                                                                                                                                                                shadow_spawn_test test / shadow_spawn_test
-                                                                                                                                                                                                                                                                             .c "${CMAKE_SOURCE_DIR}/ico2/omori/src/generator.c"
-                                                                                                                                                                                                                                                                                "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/motionManager2.c"
-                                                                                                                                                                                                                                                                                "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/motionFileManager.c"
-                                                                                                                                                                                                                                                                                "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/tableSin.c"
-                                                                                                                                                                                                                                                                                "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/quaternion.c"
-                                                                                                                                                                                                                                                                                "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/matrixDrive.c") ico_include_dirs(omori
-                                                                                                                                                                                                                                                                                                                                                           _ico_shadow_spawn_incs)
-                                                                                                                                                                                                                                                target_include_directories(
-                                                                                                                                                                                                                                                    shadow_spawn_test PRIVATE
-                                                                                                                                                                                                                                                        $ {
-                                                                                                                                                                                                                                                            _ico_shadow_spawn_incs
-                                                                                                                                                                                                                                                        } "${CMAKE_SOURCE_DIR}/port/include"
-                                                                                                                                                                                                                                                          "${CMAKE_SOURCE_DIR}/port/platform")
-                                                                                                                                                                                                                                                    target_compile_definitions(shadow_spawn_test PRIVATE
-                                                                                                                                                                                                                                                                                   ${
-                                                                                                                                                                                                                                                                                       ICO_GAME_DEFINITIONS}) target_compile_options(shadow_spawn_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_GAME_WARNINGS}) target_link_libraries(shadow_spawn_test
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                  PRIVATE ico_math ico_platform ico_port_data) if (ICO_RUN_TESTS)
-                                                                                                                                                                                                                                                        add_test(
-                                                                                                                                                                                                                                                            NAME
-                                                                                                                                                                                                                                                                shadow_spawn
-                                                                                                                                                                                                                                                                    COMMAND shadow_spawn_test
-                                                                                                                                                                                                                                                            "${ICO_DISC_IMAGE}")
-                                                                                                                                                                                                                                                            endif()
+# The hand records Ico and Yorda hold hands with
+# (ico2/sugipon/src/handManager.c, compiled into the test) and the arc-cosine
+# table's NaN guard (tableSin.c, quaternion.c and matrixDrive.c as the game
+# has them; ico_platform for the fault log). CPU only.
+add_executable(hand_ik_test test/hand_ik_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/tableSin.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/quaternion.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/matrixDrive.c")
+ico_include_dirs(sugipon _ico_hand_ik_incs)
+target_include_directories(hand_ik_test PRIVATE ${_ico_hand_ik_incs}
+    "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(hand_ik_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(hand_ik_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(hand_ik_test PRIVATE ico_math ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME hand_ik COMMAND hand_ik_test)
+endif()
 
-#-- - Achievements -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
-#ico_gamestate.h(port / include) is the read - only game - state view and the
-#signal queue; the game's one-line hooks (ICO_HOST) include it from common,
-#fumi, script and sugipon.gamestate.c is built twice : with ICO_GS_LIVE into
-#the program(it reads the game 's globals and objects, so it takes the game' s
-#include path and record layout), and without it into the test(a synthetic
-#sampler).achievements.c is port code : the table, the checks, the file and
-#the popups(port / ui's strings and queue, which ico_pc holds).
-#credits.c : the Extras
-#credits ' flag, lock and start, and the staff roll' s port credit lines, in
-#the same library(gamestate.c suspends the achievements on its flag);
-#credits_live.c, the playback 's engine, reads and writes the game' s state,
-#so it is built into the program with the game's include path, as
-#gamestate.c is.
-                                                                                                                                                                                                                                                                set(_ico_gs_include "${CMAKE_SOURCE_DIR}/port/include") foreach (_p common
-                                                                                                                                                                                                                                                                                                                                     fumi
-                                                                                                                                                                                                                                                                                                                                         script
-                                                                                                                                                                                                                                                                                                                                             sugipon) if (TARGET ico_${
-                                                                                                                                                                                                                                                                                                                                                              _p}) target_include_directories(ico_${_p} PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                                              "${_ico_gs_include}")
-                                                                                                                                                                                                                                                                    endif() endforeach()
+# The shadows' start in their pools: the generator's enemy kind
+# read from the setting its constructor is handed (ico2/omori/src/generator.c
+# compiled in, run through Generator_Call and GeneratorGeo), and with the disc
+# EN1 START's rise from that start through the game's motion decode
+# (motionFileManager.c, motionManager2.c); without the disc the rise part is
+# skipped and the generator part runs. CPU only.
+add_executable(shadow_spawn_test test/shadow_spawn_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/omori/src/generator.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/motionManager2.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/motionFileManager.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/tableSin.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/quaternion.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/matrixDrive.c")
+ico_include_dirs(omori _ico_shadow_spawn_incs)
+target_include_directories(shadow_spawn_test PRIVATE ${_ico_shadow_spawn_incs}
+    "${CMAKE_SOURCE_DIR}/port/include" "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(shadow_spawn_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(shadow_spawn_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(shadow_spawn_test PRIVATE ico_math ico_platform ico_port_data)
+if(ICO_RUN_TESTS)
+    add_test(NAME shadow_spawn COMMAND shadow_spawn_test "${ICO_DISC_IMAGE}")
+endif()
 
-                                                                                                                                                                                                                                                                        add_library(
-                                                                                                                                                                                                                                                                            ico_achievements
-                                                                                                                                                                                                                                                                                STATIC
-                                                                                                                                                                                                                                                                                    achievements
-                                                                                                                                                                                                                                                                                        .c credits
-                                                                                                                                                                                                                                                                                        .c) target_include_directories(ico_achievements PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
-                                                                                                                                                                                                                                                                                                                                               "${_ico_gs_include}" PRIVATE
-                                                                                                                                                                                                                                                                                                                                               "${CMAKE_SOURCE_DIR}/port/platform")
-#port / ui 's "strings.h" by -iquote, so <strings.h> stays the C library' s
-                                                                                                                                                                                                                                                                            target_compile_options(
-                                                                                                                                                                                                                                                                                ico_achievements PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS} -
-                                                                                                                                                                                                                                                                                iquote
-                                                                                                                                                                                                                                                                                "${CMAKE_SOURCE_DIR}/port/ui") target_link_libraries(ico_achievements
-                                                                                                                                                                                                                                                                                                                                         PUBLIC ico_options
-                                                                                                                                                                                                                                                                                                                                             ico_config
-                                                                                                                                                                                                                                                                                                                                                 ico_platform)
+# --- Achievements -----------------------------------
+# ico_gamestate.h (port/include) is the read-only game-state view and the
+# signal queue; the game's one-line hooks (ICO_HOST) include it from common,
+# fumi, script and sugipon. gamestate.c is built twice: with ICO_GS_LIVE into
+# the program (it reads the game's globals and objects, so it takes the game's
+# include path and record layout), and without it into the test (a synthetic
+# sampler). achievements.c is port code: the table, the checks, the file and
+# the popups (port/ui's strings and queue, which ico_pc holds).
+# credits.c: the Extras
+# credits' flag, lock and start, and the staff roll's port credit lines, in
+# the same library (gamestate.c suspends the achievements on its flag);
+# credits_live.c, the playback's engine, reads and writes the game's state,
+# so it is built into the program with the game's include path, as
+# gamestate.c is.
+set(_ico_gs_include "${CMAKE_SOURCE_DIR}/port/include")
+foreach(_p common fumi script sugipon)
+    if(TARGET ico_${_p})
+        target_include_directories(ico_${_p} PRIVATE "${_ico_gs_include}")
+    endif()
+endforeach()
 
-                                                                                                                                                                                                                                                                                if (TARGET ico_pc) add_library(ico_gamestate_live OBJECT
-                                                                                                                                                                                                                                                                                                                   gamestate
-                                                                                                                                                                                                                                                                                                                       .c)
-                                                                                                                                                                                                                                                                                    ico_include_dirs(common _ico_gs_game_incs) target_include_directories(ico_gamestate_live PRIVATE
-                                                                                                                                                                                                                                                                                                                                                          "${_ico_gs_include}"
-                                                                                                                                                                                                                                                                                                                                                          "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_gs_game_incs}) if (NOT ICO_HEADLESS) target_include_directories(ico_gamestate_live PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                                                                                                               "${CMAKE_SOURCE_DIR}/port/render")
-                                                                                                                                                                                                                                                                                        endif()
-                                                                                                                                                                                                                                                                                            target_compile_definitions(
-                                                                                                                                                                                                                                                                                                ico_gamestate_live
-                                                                                                                                                                                                                                                                                                    PRIVATE ${ICO_GAME_DEFINITIONS} ICO_GS_LIVE = 1)
-#typedef.h has the game's unprototyped declarations
-                                                                                                                                                                                                                                                                                                target_compile_options(ico_gamestate_live
-                                                                                                                                                                                                                                                                                                                           PRIVATE ${
-                                                                                                                                                                                                                                                                                                                               ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS} ${
-                                                                                                                                                                                                                                                                                                                               ICO_PORT_WARNINGS} -
-                                                                                                                                                                                                                                                                                                                       Wno -
-                                                                                                                                                                                                                                                                                                                       strict -
-                                                                                                                                                                                                                                                                                                                       prototypes)
-                                                                                                                                                                                                                                                                                                    target_sources(ico_pc PRIVATE $<
-                                                                                                                                                                                                                                                                                                                   TARGET_OBJECTS : ico_gamestate_live>) add_library(ico_credits_live OBJECT
-                                                                                                                                                                                                                                                                                                                                                                         credits_live
-                                                                                                                                                                                                                                                                                                                                                                             .c)
-                                                                                                                                                                                                                                                                                                        target_include_directories(
-                                                                                                                                                                                                                                                                                                            ico_credits_live PRIVATE
-                                                                                                                                                                                                                                                                                                            "${_ico_gs_include}" ${
-                                                                                                                                                                                                                                                                                                                _ico_gs_game_incs})
-                                                                                                                                                                                                                                                                                                            target_compile_definitions(
-                                                                                                                                                                                                                                                                                                                ico_credits_live
-                                                                                                                                                                                                                                                                                                                    PRIVATE
-                                                                                                                                                                                                                                                                                                                        ${ICO_GAME_DEFINITIONS})
-                                                                                                                                                                                                                                                                                                                target_compile_options(ico_credits_live PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -
-                                                                                                                                                                                                                                                                                                                                       Wno -
-                                                                                                                                                                                                                                                                                                                                       strict - prototypes) target_sources(ico_pc PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                               $<TARGET_OBJECTS : ico_credits_live>)
-                                                                                                                                                                                                                                                                                                                    target_link_libraries(
-                                                                                                                                                                                                                                                                                                                        ico_pc
-                                                                                                                                                                                                                                                                                                                            PRIVATE ico_achievements)
-                                                                                                                                                                                                                                                                                                                        endif()
+add_library(ico_achievements STATIC achievements.c credits.c)
+target_include_directories(ico_achievements
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${_ico_gs_include}"
+    PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+# port/ui's "strings.h" by -iquote, so <strings.h> stays the C library's
+target_compile_options(ico_achievements PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                       -iquote "${CMAKE_SOURCE_DIR}/port/ui")
+target_link_libraries(ico_achievements PUBLIC ico_options ico_config ico_platform)
 
-#Save states(port / platform / state.h) : state_host.c takes and puts back a
-#state at the host loop's quiescent point (main_host.c polls it), with the
-#slots' files, the picture and the [dev] keys; state_rules.c holds the
-#decisions that need no game(state_rules.h).Both in the program, either
-#build(the renderer 's part of a load under ICO_RD' s twin, !ICO_HEADLESS).
-                                                                                                                                                                                                                                                                                                                            if (TARGET
-                                                                                                                                                                                                                                                                                                                                    ico_pc)
-                                                                                                                                                                                                                                                                                                                                target_sources(
-                                                                                                                                                                                                                                                                                                                                    ico_pc
-                                                                                                                                                                                                                                                                                                                                        PRIVATE state_host
-                                                                                                                                                                                                                                                                                                                                            .c
-                                                                                                                                                                                                                                                                                                                                                state_rules
-                                                                                                                                                                                                                                                                                                                                            .c)
-                                                                                                                                                                                                                                                                                                                                    endif()
+if(TARGET ico_pc)
+    add_library(ico_gamestate_live OBJECT gamestate.c)
+    ico_include_dirs(common _ico_gs_game_incs)
+    target_include_directories(ico_gamestate_live PRIVATE "${_ico_gs_include}"
+                               "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_gs_game_incs})
+    if(NOT ICO_HEADLESS)
+        target_include_directories(ico_gamestate_live PRIVATE "${CMAKE_SOURCE_DIR}/port/render")
+    endif()
+    target_compile_definitions(ico_gamestate_live PRIVATE ${ICO_GAME_DEFINITIONS} ICO_GS_LIVE=1)
+    # typedef.h has the game's unprototyped declarations
+    target_compile_options(ico_gamestate_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_gamestate_live>)
+    add_library(ico_credits_live OBJECT credits_live.c)
+    target_include_directories(ico_credits_live PRIVATE "${_ico_gs_include}" ${_ico_gs_game_incs})
+    target_compile_definitions(ico_credits_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    target_compile_options(ico_credits_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_credits_live>)
+    target_link_libraries(ico_pc PRIVATE ico_achievements)
+endif()
 
-#state_host : the conditions(each refusal reachable), the result texts, the
-#slots ' paths, the [dev] keys' values, the slot listing over a missing, an
-#empty and a filled folder(each validity field changed, a damaged file, a
-#picture) and the thumbnail's size and box filter.  CPU only; the full
-#round trip is state_roundtrip_headless's.
-                                                                                                                                                                                                                                                                                                                                        add_executable(
-                                                                                                                                                                                                                                                                                                                                            state_host_test test /
-                                                                                                                                                                                                                                                                                                                                            state_host_test
-                                                                                                                                                                                                                                                                                                                                                .c state_rules
-                                                                                                                                                                                                                                                                                                                                                .c)
-                                                                                                                                                                                                                                                                                                                                            target_include_directories(
-                                                                                                                                                                                                                                                                                                                                                state_host_test PRIVATE
-                                                                                                                                                                                                                                                                                                                                                "${CMAKE_CURRENT_SOURCE_DIR}")
-                                                                                                                                                                                                                                                                                                                                                target_compile_options(
-                                                                                                                                                                                                                                                                                                                                                    state_host_test PRIVATE
-                                                                                                                                                                                                                                                                                                                                                        ${ICO_SEMANTIC_OPTIONS} ${
-                                                                                                                                                                                                                                                                                                                                                            ICO_PORT_WARNINGS})
-                                                                                                                                                                                                                                                                                                                                                    target_link_libraries(state_host_test
-                                                                                                                                                                                                                                                                                                                                                                              PRIVATE ico_platform) if (ICO_RUN_TESTS) add_test(NAME state_host
-                                                                                                                                                                                                                                                                                                                                                                                                                                    COMMAND state_host_test
-                                                                                                                                                                                                                                                                                                                                                                                                                                "${CMAKE_CURRENT_BINARY_DIR}")
-                                                                                                                                                                                                                                                                                                                                                        endif()
+# Save states (port/platform/state.h): state_host.c takes and puts back a
+# state at the host loop's quiescent point (main_host.c polls it), with the
+# slots' files, the picture and the [dev] keys; state_rules.c holds the
+# decisions that need no game (state_rules.h).  Both in the program, either
+# build (the renderer's part of a load under ICO_RD's twin, !ICO_HEADLESS).
+if(TARGET ico_pc)
+    target_sources(ico_pc PRIVATE state_host.c state_rules.c)
+endif()
 
-#The view over a synthetic state, the signals, every achievement's condition
-#through crafted transitions(once, suspended, yorda_safe counting, a version 1 file), the file round
-#trip and the popup rate limit.CPU only.
-                                                                                                                                                                                                                                                                                                                                                            add_executable(achievements_test
-                                                                                                                                                                                                                                                                                                                                                                               test /
-                                                                                                                                                                                                                                                                                                                                                                           achievements_test
-                                                                                                                                                                                                                                                                                                                                                                               .c gamestate
-                                                                                                                                                                                                                                                                                                                                                                               .c
-                                                                                                                                                                                                                                                                                                                                                                               .
-                                                                                                                                                                                                                                                                                                                                                                               ./
-                                                                                                                                                                                                                                                                                                                                                                           ui /
-                                                                                                                                                                                                                                                                                                                                                                           strings
-                                                                                                                                                                                                                                                                                                                                                                               .c
-                                                                                                                                                                                                                                                                                                                                                                               .
-                                                                                                                                                                                                                                                                                                                                                                               ./
-                                                                                                                                                                                                                                                                                                                                                                           ui /
-                                                                                                                                                                                                                                                                                                                                                                           strings_en
-                                                                                                                                                                                                                                                                                                                                                                               .c
-                                                                                                                                                                                                                                                                                                                                                                               .
-                                                                                                                                                                                                                                                                                                                                                                               ./
-                                                                                                                                                                                                                                                                                                                                                                           ui /
-                                                                                                                                                                                                                                                                                                                                                                           strings_fr
-                                                                                                                                                                                                                                                                                                                                                                               .c
-                                                                                                                                                                                                                                                                                                                                                                               .
-                                                                                                                                                                                                                                                                                                                                                                               ./
-                                                                                                                                                                                                                                                                                                                                                                           ui /
-                                                                                                                                                                                                                                                                                                                                                                           strings_de
-                                                                                                                                                                                                                                                                                                                                                                               .c
-                                                                                                                                                                                                                                                                                                                                                                               .
-                                                                                                                                                                                                                                                                                                                                                                               ./
-                                                                                                                                                                                                                                                                                                                                                                           ui /
-                                                                                                                                                                                                                                                                                                                                                                           strings_it
-                                                                                                                                                                                                                                                                                                                                                                               .c
-                                                                                                                                                                                                                                                                                                                                                                               .
-                                                                                                                                                                                                                                                                                                                                                                               ./
-                                                                                                                                                                                                                                                                                                                                                                           ui /
-                                                                                                                                                                                                                                                                                                                                                                           strings_es
-                                                                                                                                                                                                                                                                                                                                                                               .c
-                                                                                                                                                                                                                                                                                                                                                                               .
-                                                                                                                                                                                                                                                                                                                                                                               ./
-                                                                                                                                                                                                                                                                                                                                                                           ui /
-                                                                                                                                                                                                                                                                                                                                                                           strings_ja
-                                                                                                                                                                                                                                                                                                                                                                               .c
-                                                                                                                                                                                                                                                                                                                                                                               .
-                                                                                                                                                                                                                                                                                                                                                                               ./
-                                                                                                                                                                                                                                                                                                                                                                           ui /
-                                                                                                                                                                                                                                                                                                                                                                           strings_ko
-                                                                                                                                                                                                                                                                                                                                                                               .c
-                                                                                                                                                                                                                                                                                                                                                                               .
-                                                                                                                                                                                                                                                                                                                                                                               ./
-                                                                                                                                                                                                                                                                                                                                                                           ui /
-                                                                                                                                                                                                                                                                                                                                                                           strings_zh
-                                                                                                                                                                                                                                                                                                                                                                               .c
-                                                                                                                                                                                                                                                                                                                                                                               .
-                                                                                                                                                                                                                                                                                                                                                                               ./
-                                                                                                                                                                                                                                                                                                                                                                           platform /
-                                                                                                                                                                                                                                                                                                                                                                           host_config
-                                                                                                                                                                                                                                                                                                                                                                               .c)
-                                                                                                                                                                                                                                                                                                                                                                target_include_directories(
-                                                                                                                                                                                                                                                                                                                                                                    achievements_test PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                    "${CMAKE_SOURCE_DIR}/port/platform")
-                                                                                                                                                                                                                                                                                                                                                                    target_compile_options(achievements_test
-                                                                                                                                                                                                                                                                                                                                                                                               PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                                                   ${
-                                                                                                                                                                                                                                                                                                                                                                                                       ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS} -
-                                                                                                                                                                                                                                                                                                                                                                                           iquote
-                                                                                                                                                                                                                                                                                                                                                                                           "${CMAKE_SOURCE_DIR}/port/ui")
-#gamestate.c reads ico_region(region.h) and no ico2 / source is compiled
-#here, so ico_link_region's scan does not reach this program; the strings
-#read the selected disc's pack serial too
-                                                                                                                                                                                                                                                                                                                                                                        target_link_libraries(achievements_test
-                                                                                                                                                                                                                                                                                                                                                                                                  PRIVATE ico_achievements ico_region) if (ICO_RUN_TESTS)
-#one run per disc(stats.stages / stats.stages_jpn / stats.stages_kor,
-#run.slot_N_ * / run.jpn_slot_N_ * / run.kor_slot_N_ *), each in its own
-#folder(the test's files sit in it)
-                                                                                                                                                                                                                                                                                                                                                                            file(
-                                                                                                                                                                                                                                                                                                                                                                                MAKE_DIRECTORY
-                                                                                                                                                                                                                                                                                                                                                                                "${CMAKE_CURRENT_BINARY_DIR}/achievements_jpn")
-                                                                                                                                                                                                                                                                                                                                                                                file(MAKE_DIRECTORY
-                                                                                                                                                                                                                                                                                                                                                                                     "${CMAKE_CURRENT_BINARY_DIR}/achievements_kor") foreach (_slug ntsc
-                                                                                                                                                                                                                                                                                                                                                                                                                                                  aug6 jun26
-                                                                                                                                                                                                                                                                                                                                                                                                                                                      cn)
-                                                                                                                                                                                                                                                                                                                                                                                    file(
-                                                                                                                                                                                                                                                                                                                                                                                        MAKE_DIRECTORY
-                                                                                                                                                                                                                                                                                                                                                                                        "${CMAKE_CURRENT_BINARY_DIR}/achievements_${_slug}")
-                                                                                                                                                                                                                                                                                                                                                                                        endforeach()
-                                                                                                                                                                                                                                                                                                                                                                                            add_test(
-                                                                                                                                                                                                                                                                                                                                                                                                NAME
-                                                                                                                                                                                                                                                                                                                                                                                                    achievements
-                                                                                                                                                                                                                                                                                                                                                                                                        COMMAND achievements_test
-                                                                                                                                                                                                                                                                                                                                                                                                "${CMAKE_CURRENT_BINARY_DIR}" pal)
-                                                                                                                                                                                                                                                                                                                                                                                                add_test(
-                                                                                                                                                                                                                                                                                                                                                                                                    NAME
-                                                                                                                                                                                                                                                                                                                                                                                                        achievements_jpn
-                                                                                                                                                                                                                                                                                                                                                                                                            COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_jpn" jpn) add_test(NAME achievements_kor
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_kor" kor)
-                                                                                                                                                                                                                                                                                                                                                                                                    foreach (
-                                                                                                                                                                                                                                                                                                                                                                                                        _slug
-                                                                                                                                                                                                                                                                                                                                                                                                            ntsc
-                                                                                                                                                                                                                                                                                                                                                                                                                aug6
-                                                                                                                                                                                                                                                                                                                                                                                                                    jun26
-                                                                                                                                                                                                                                                                                                                                                                                                                        cn) add_test(NAME
-                                                                                                                                                                                                                                                                                                                                                                                                                                         achievements_${_slug} COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_${_slug}" ${_slug})
-                                                                                                                                                                                                                                                                                                                                                                                                        endforeach() endif()
+# state_host: the conditions (each refusal reachable), the result texts, the
+# slots' paths, the [dev] keys' values, the slot listing over a missing, an
+# empty and a filled folder (each validity field changed, a damaged file, a
+# picture) and the thumbnail's size and box filter.  CPU only; the full
+# round trip is state_roundtrip_headless's.
+add_executable(state_host_test test/state_host_test.c state_rules.c)
+target_include_directories(state_host_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(state_host_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(state_host_test PRIVATE ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME state_host COMMAND state_host_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
 
-#-- - The model viewer -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -
-                                                                                                                                                                                                                                                                                                                                                                                                            if (TARGET
-                                                                                                                                                                                                                                                                                                                                                                                                                    ico_pc)
-#title_logo.c : the title's logo hidden under Settings and
-#Extras, asked by seki / src / RegistPacket.c
-                                                                                                                                                                                                                                                                                                                                                                                                                add_library(ico_model_viewer_live OBJECT
-                                                                                                                                                                                                                                                                                                                                                                                                                                model_viewer
-                                                                                                                                                                                                                                                                                                                                                                                                                                    .c model_viewer_cam
-                                                                                                                                                                                                                                                                                                                                                                                                                                    .c model_viewer_motion
-                                                                                                                                                                                                                                                                                                                                                                                                                                    .c model_viewer_table
-                                                                                                                                                                                                                                                                                                                                                                                                                                    .c title_logo
-                                                                                                                                                                                                                                                                                                                                                                                                                                    .c)
-                                                                                                                                                                                                                                                                                                                                                                                                                    ico_include_dirs(
-                                                                                                                                                                                                                                                                                                                                                                                                                        sugipon
-                                                                                                                                                                                                                                                                                                                                                                                                                            _ico_mv_game_incs)
-#port / data : df_pack.h(the June 2001 demo 's DATA.DF asked for a stage' s pack)
-                                                                                                                                                                                                                                                                                                                                                                                                                        target_include_directories(
-                                                                                                                                                                                                                                                                                                                                                                                                                            ico_model_viewer_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_mv_game_incs} $<TARGET_PROPERTY : ico_port_data, INTERFACE_INCLUDE_DIRECTORIES>) if (NOT ICO_HEADLESS) target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_SOURCE_DIR}/port/render") endif() target_compile_definitions(ico_model_viewer_live
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             ${ICO_GAME_DEFINITIONS})
-#port / ui 's "strings.h" by -iquote, so <strings.h> stays the C library' s
-                                                                                                                                                                                                                                                                                                                                                                                                                            target_compile_options(
-                                                                                                                                                                                                                                                                                                                                                                                                                                ico_model_viewer_live PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} - Wno -
-                                                                                                                                                                                                                                                                                                                                                                                                                                strict -
-                                                                                                                                                                                                                                                                                                                                                                                                                                prototypes -
-                                                                                                                                                                                                                                                                                                                                                                                                                                iquote
-                                                                                                                                                                                                                                                                                                                                                                                                                                "${CMAKE_SOURCE_DIR}/port/ui") target_sources(ico_pc PRIVATE $<TARGET_OBJECTS : ico_model_viewer_live>)
-                                                                                                                                                                                                                                                                                                                                                                                                                                endif()
-#photo_view.c : photo mode 's camera in the game' s matrices, called
-#by main.c each tick; built as the model viewer is(the game's include path
-#and record layout), in the headless build too.photo_mode.h names rd.h's
-#RdCamera(the struct only), so port / render is on its include path in both
-#builds, as it is for ico_options.
-                                                                                                                                                                                                                                                                                                                                                                                                                                    if (TARGET
-                                                                                                                                                                                                                                                                                                                                                                                                                                            ico_pc) add_library(ico_photo_view_live
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                    OBJECT
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                        photo_view
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            .c) ico_include_dirs(seki
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     _ico_pv_game_incs) target_include_directories(ico_photo_view_live PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   "${CMAKE_CURRENT_SOURCE_DIR}"
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   "${CMAKE_SOURCE_DIR}/port/render" ${
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       _ico_pv_game_incs}) target_compile_definitions(ico_photo_view_live
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              ${ICO_GAME_DEFINITIONS})
-                                                                                                                                                                                                                                                                                                                                                                                                                                        target_compile_options(ico_photo_view_live PRIVATE ${
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                   ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -
-                                                                                                                                                                                                                                                                                                                                                                                                                                                               Wno -
-                                                                                                                                                                                                                                                                                                                                                                                                                                                               strict -
-                                                                                                                                                                                                                                                                                                                                                                                                                                                               prototypes)
-                                                                                                                                                                                                                                                                                                                                                                                                                                            target_sources(ico_pc
-                                                                                                                                                                                                                                                                                                                                                                                                                                                               PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                   $<TARGET_OBJECTS : ico_photo_view_live>)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                endif()
-#demo_host.c : the June 2001 demo 's sceDemoStart (the magazine menu' s settings,
-#here the port's), which common/src/main.c calls on that disc; port code, in
-#the program only(ico2 / common / src / demoDisc.c, the PS2's, is not built)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                    if (TARGET
-                                                                                                                                                                                                                                                                                                                                                                                                                                                            ico_pc)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                        add_library(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                            ico_demo_host OBJECT demo_host
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                .c) target_include_directories(ico_demo_host PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               "${ICO_COMPAT_DIR}"
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               "${CMAKE_SOURCE_DIR}/port/platform") target_compile_options(ico_demo_host
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               PRIVATE ${
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}) target_link_libraries(ico_demo_host PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         ico_options ico_config) target_sources(ico_pc PRIVATE $<TARGET_OBJECTS : ico_demo_host>)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                            endif()
-#title_logo_test : the title's logo hidden under Settings and
-#Extras from the title, never by the pause menu's, and shown again on the
-#title 's menu; the game' s globals and the menus' answers stubbed. CPU only.
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                add_executable(title_logo_test test / title_logo_test
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          .c title_logo
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          .c)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                    target_include_directories(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                        title_logo_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                        target_link_libraries(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            title_logo_test PRIVATE
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ico_region) #title_logo
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            .c
-    reads the region's title rows
-#port / ui 's "settings.h" by -iquote, so <strings.h> stays the C library' s
-    target_compile_options(
-        title_logo_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS} - iquote
-        "${CMAKE_SOURCE_DIR}/port/ui") if (ICO_RUN_TESTS) add_test(NAME title_logo COMMAND
-                                                                       title_logo_test) endif()
+# The view over a synthetic state, the signals, every achievement's condition
+# through crafted transitions (once, suspended, yorda_safe counting, a version 1 file), the file round
+# trip and the popup rate limit. CPU only.
+add_executable(achievements_test test/achievements_test.c gamestate.c
+    ../ui/strings.c ../ui/strings_en.c ../ui/strings_fr.c ../ui/strings_de.c
+    ../ui/strings_it.c ../ui/strings_es.c ../ui/strings_ja.c ../ui/strings_ko.c ../ui/strings_zh.c
+    ../platform/host_config.c)
+target_include_directories(achievements_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(achievements_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                       -iquote "${CMAKE_SOURCE_DIR}/port/ui")
+# gamestate.c reads ico_region (region.h) and no ico2/ source is compiled
+# here, so ico_link_region's scan does not reach this program; the strings
+# read the selected disc's pack serial too
+target_link_libraries(achievements_test PRIVATE ico_achievements ico_region)
+if(ICO_RUN_TESTS)
+    # one run per disc (stats.stages / stats.stages_jpn / stats.stages_kor,
+    # run.slot_N_* / run.jpn_slot_N_* / run.kor_slot_N_*), each in its own
+    # folder (the test's files sit in it)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/achievements_jpn")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/achievements_kor")
+    foreach(_slug ntsc aug6 jun26 cn)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/achievements_${_slug}")
+    endforeach()
+    add_test(NAME achievements COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}" pal)
+    add_test(NAME achievements_jpn
+             COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_jpn" jpn)
+    add_test(NAME achievements_kor
+             COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_kor" kor)
+    foreach(_slug ntsc aug6 jun26 cn)
+        add_test(NAME achievements_${_slug}
+                 COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}/achievements_${_slug}"
+                         ${_slug})
+    endforeach()
+endif()
 
-#model_viewer_headless : the headless program from the boot through
-#Settings> Extras> Models to the first model and back to the title, its
-#log checked(test / model_viewer_headless.cmake).The
-#disc image is needed(skipped without it); one game run, so alone.
-        if (TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS) add_test(
-            NAME model_viewer_headless COMMAND
-            "${CMAKE_COMMAND}"
-            "-DICO_PC=$<TARGET_FILE:ico_pc>"
-            "-DISO=${ICO_DISC_IMAGE}"
-            "-DPAD=${CMAKE_CURRENT_SOURCE_DIR}/test/model_viewer_pad.txt"
-            "-DDIR=${CMAKE_CURRENT_BINARY_DIR}/model_viewer_run" -
-            P "${CMAKE_CURRENT_SOURCE_DIR}/test/model_viewer_headless.cmake")
-            set_tests_properties(model_viewer_headless PROPERTIES RUN_SERIAL
-                                     TRUE TIMEOUT 300 SKIP_REGULAR_EXPRESSION
-                                 "model_viewer_headless: skipped") endif()
+# --- The model viewer -----------------------------------
+if(TARGET ico_pc)
+    # title_logo.c: the title's logo hidden under Settings and
+    # Extras, asked by seki/src/RegistPacket.c
+    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_cam.c model_viewer_motion.c model_viewer_table.c title_logo.c)
+    ico_include_dirs(sugipon _ico_mv_game_incs)
+    # port/data: df_pack.h (the June 2001 demo's DATA.DF asked for a stage's pack)
+    target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                               ${_ico_mv_game_incs}
+                               $<TARGET_PROPERTY:ico_port_data,INTERFACE_INCLUDE_DIRECTORIES>)
+    if(NOT ICO_HEADLESS)
+        target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_SOURCE_DIR}/port/render")
+    endif()
+    target_compile_definitions(ico_model_viewer_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    # port/ui's "strings.h" by -iquote, so <strings.h> stays the C library's
+    target_compile_options(ico_model_viewer_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes
+                           -iquote "${CMAKE_SOURCE_DIR}/port/ui")
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_model_viewer_live>)
+endif()
+# photo_view.c: photo mode's camera in the game's matrices, called
+# by main.c each tick; built as the model viewer is (the game's include path
+# and record layout), in the headless build too.  photo_mode.h names rd.h's
+# RdCamera (the struct only), so port/render is on its include path in both
+# builds, as it is for ico_options.
+if(TARGET ico_pc)
+    add_library(ico_photo_view_live OBJECT photo_view.c)
+    ico_include_dirs(seki _ico_pv_game_incs)
+    target_include_directories(ico_photo_view_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                               "${CMAKE_SOURCE_DIR}/port/render" ${_ico_pv_game_incs})
+    target_compile_definitions(ico_photo_view_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    target_compile_options(ico_photo_view_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_photo_view_live>)
+endif()
+# demo_host.c: the June 2001 demo's sceDemoStart (the magazine menu's settings,
+# here the port's), which common/src/main.c calls on that disc; port code, in
+# the program only (ico2/common/src/demoDisc.c, the PS2's, is not built)
+if(TARGET ico_pc)
+    add_library(ico_demo_host OBJECT demo_host.c)
+    target_include_directories(ico_demo_host PRIVATE "${ICO_COMPAT_DIR}"
+                               "${CMAKE_SOURCE_DIR}/port/platform")
+    target_compile_options(ico_demo_host PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(ico_demo_host PRIVATE ico_options ico_config)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_demo_host>)
+endif()
+# title_logo_test: the title's logo hidden under Settings and
+# Extras from the title, never by the pause menu's, and shown again on the
+# title's menu; the game's globals and the menus' answers stubbed. CPU only.
+add_executable(title_logo_test test/title_logo_test.c title_logo.c)
+target_include_directories(title_logo_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(title_logo_test PRIVATE ico_region) # title_logo.c reads the region's title rows
+# port/ui's "settings.h" by -iquote, so <strings.h> stays the C library's
+target_compile_options(title_logo_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                       -iquote "${CMAKE_SOURCE_DIR}/port/ui")
+if(ICO_RUN_TESTS)
+    add_test(NAME title_logo COMMAND title_logo_test)
+endif()
 
-#state_roundtrip_headless : save states in the headless program in stage
-# 22, driven by test / state_roundtrip_pad.txt(test / state_roundtrip_headless.cmake):
-#a save on the pause menu, play, a hash, the load, the same play again and
-#the hash equal.state_roundtrip_headless_settings : a state saved by one
-#run is refused by a second with a simulation key changed, which names the
-#key and goes on.The disc image is needed; save states are off on a
-#sanitizer build; both skipped then(cmake - P cannot exit 77 at CMake 3.25,
-#so the skip is the message).Game runs, so alone.
-                if (TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS)
-                    foreach (_mode roundtrip settings) set(_test state_roundtrip_headless) if (
-                        _mode STREQUAL "settings")
-                        set(_test state_roundtrip_headless_settings) endif() add_test(
-                            NAME ${_test} COMMAND
-                            "${CMAKE_COMMAND}"
-                            "-DICO_PC=$<TARGET_FILE:ico_pc>"
-                            "-DISO=${ICO_DISC_IMAGE}"
-                            "-DPAD=${CMAKE_CURRENT_SOURCE_DIR}/test/state_roundtrip_pad.txt"
-                            "-DDIR=${CMAKE_CURRENT_BINARY_DIR}/${_test}_run"
-                            "-DMODE=${_mode}"
-                            "-DSANITIZE=${ICO_SANITIZE}" -
-                            P "${CMAKE_CURRENT_SOURCE_DIR}/test/state_roundtrip_headless.cmake")
-                            set_tests_properties(${_test} PROPERTIES RUN_SERIAL TRUE
-                                                     TIMEOUT 300 SKIP_REGULAR_EXPRESSION
-                                                 "${_test}: skipped") endforeach() endif()
+# model_viewer_headless: the headless program from the boot through
+# Settings > Extras > Models to the first model and back to the title, its
+# log checked (test/model_viewer_headless.cmake). The
+# disc image is needed (skipped without it); one game run, so alone.
+if(TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS)
+    add_test(NAME model_viewer_headless
+             COMMAND "${CMAKE_COMMAND}" "-DICO_PC=$<TARGET_FILE:ico_pc>" "-DISO=${ICO_DISC_IMAGE}"
+                     "-DPAD=${CMAKE_CURRENT_SOURCE_DIR}/test/model_viewer_pad.txt"
+                     "-DDIR=${CMAKE_CURRENT_BINARY_DIR}/model_viewer_run"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/model_viewer_headless.cmake")
+    set_tests_properties(model_viewer_headless PROPERTIES RUN_SERIAL TRUE TIMEOUT 300
+                         SKIP_REGULAR_EXPRESSION "model_viewer_headless: skipped")
+endif()
 
-#credits_test : the game 's staffroll.c over a short table in the disc' s forms,
-#with the font stubbed to record the posted and printed lines : the port
-#credit 's lines come after the disc' s, the heading then the name in the
-#roll's forms, and the roll ends after them; then the lock ([dev]
-#unlock_credits through the ini) and a start with no engine; then
-#credits_live.c's failure paths over stubs of the game. CPU only.
-                                ico_include_dirs(common _ico_credits_incs) add_executable(
-                                    credits_test test /
-                                    credits_test
-                                        .c credits.c credits_live
-                                        .c "${CMAKE_SOURCE_DIR}/ico2/common/src/staffroll.c"../
-                                    platform /
-                                    host_config
-                                        .c) target_include_directories(credits_test PRIVATE $ {
-                                    _ico_credits_incs
-                                } "${_ico_gs_include}"
-                                  "${CMAKE_CURRENT_SOURCE_DIR}"
-                                  "${CMAKE_SOURCE_DIR}/port/platform")
-                                    target_compile_definitions(
-                                        credits_test PRIVATE ICO_HOST =
-                                            1) target_compile_options(credits_test PRIVATE ${
-                                        ICO_SEMANTIC_OPTIONS} ${
-                                        ICO_GAME_LAYOUT_OPTIONS} ${ICO_GAME_WARNINGS})
-                                        target_link_libraries(credits_test PRIVATE ico_config
-                                                                  ico_platform) if (ICO_RUN_TESTS)
-                                            add_test(NAME credits COMMAND credits_test
-                                                     "${CMAKE_CURRENT_BINARY_DIR}")
-#the same on the Japanese disc's region (STAFF1 58, the scene layout 52)
-                                                add_test(NAME credits_jpn COMMAND credits_test
-                                                         "${CMAKE_CURRENT_BINARY_DIR}" jpn)
-#and the Korean disc's (the Japanese values: STAFF1 58, the scene layout 52)
-                                                    add_test(NAME credits_kor COMMAND credits_test
-                                                             "${CMAKE_CURRENT_BINARY_DIR}" kor)
-#and the other four discs ' (credits_test.c test_region lists each row' s numbers)
-                                                        foreach (_slug ntsc aug6 jun26 cn)
-                                                            add_test(NAME credits_${
-                                                                _slug} COMMAND credits_test
-                                                                     "${CMAKE_CURRENT_BINARY_DIR}" ${
-                                                                         _slug}) endforeach()
-                                                                endif()
+# state_roundtrip_headless: save states in the headless program in stage
+# 22, driven by test/state_roundtrip_pad.txt (test/state_roundtrip_headless.cmake):
+# a save on the pause menu, play, a hash, the load, the same play again and
+# the hash equal. state_roundtrip_headless_settings: a state saved by one
+# run is refused by a second with a simulation key changed, which names the
+# key and goes on. The disc image is needed; save states are off on a
+# sanitizer build; both skipped then (cmake -P cannot exit 77 at CMake 3.25,
+# so the skip is the message). Game runs, so alone.
+if(TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS)
+    foreach(_mode roundtrip settings)
+        set(_test state_roundtrip_headless)
+        if(_mode STREQUAL "settings")
+            set(_test state_roundtrip_headless_settings)
+        endif()
+        add_test(NAME ${_test}
+                 COMMAND "${CMAKE_COMMAND}" "-DICO_PC=$<TARGET_FILE:ico_pc>" "-DISO=${ICO_DISC_IMAGE}"
+                         "-DPAD=${CMAKE_CURRENT_SOURCE_DIR}/test/state_roundtrip_pad.txt"
+                         "-DDIR=${CMAKE_CURRENT_BINARY_DIR}/${_test}_run" "-DMODE=${_mode}"
+                         "-DSANITIZE=${ICO_SANITIZE}"
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/state_roundtrip_headless.cmake")
+        set_tests_properties(${_test} PROPERTIES RUN_SERIAL TRUE TIMEOUT 300
+                             SKIP_REGULAR_EXPRESSION "${_test}: skipped")
+    endforeach()
+endif()
+
+# credits_test: the game's staffroll.c over a short table in the disc's forms,
+# with the font stubbed to record the posted and printed lines: the port
+# credit's lines come after the disc's, the heading then the name in the
+# roll's forms, and the roll ends after them; then the lock ([dev]
+# unlock_credits through the ini) and a start with no engine; then
+# credits_live.c's failure paths over stubs of the game. CPU only.
+ico_include_dirs(common _ico_credits_incs)
+add_executable(credits_test test/credits_test.c credits.c credits_live.c
+    "${CMAKE_SOURCE_DIR}/ico2/common/src/staffroll.c" ../platform/host_config.c)
+target_include_directories(credits_test PRIVATE ${_ico_credits_incs} "${_ico_gs_include}"
+                           "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(credits_test PRIVATE ICO_HOST=1)
+target_compile_options(credits_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(credits_test PRIVATE ico_config ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME credits COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}")
+    # the same on the Japanese disc's region (STAFF1 58, the scene layout 52)
+    add_test(NAME credits_jpn COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}" jpn)
+    # and the Korean disc's (the Japanese values: STAFF1 58, the scene layout 52)
+    add_test(NAME credits_kor COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}" kor)
+    # and the other four discs' (credits_test.c test_region lists each row's numbers)
+    foreach(_slug ntsc aug6 jun26 cn)
+        add_test(NAME credits_${_slug} COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+    endforeach()
+endif()
