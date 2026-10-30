@@ -1250,7 +1250,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`poolCell`, once, not under the fake switches) (`rhi_vk`, `rhi_vk_nodual`, `rhi_vk_d24s8`,
   `rhi_vk_mali`); the sync cell (`syncCell`) checks the fence ring under `ICO_VK_FAKE_API=1.1`
   and `1.0`, and under `1.0` the device's version (1.0), the `VkRenderPass` path and the UINT
-  views' usage structure (`VK_KHR_maintenance2`) (`rhi_vk_vk11`, `rhi_vk_vk10`).
+  views' usage structure (`VK_KHR_maintenance2`) (`rhi_vk_vk11`, `rhi_vk_vk10`); under `1.0bare` (a
+  1.0 loader without `VK_KHR_get_physical_device_properties2`, review finding 5) the same, the device
+  made with no extended queries (`rhi_vk_vk10bare`).
 - `rhi_d3d12_test.c`: the same checks on D3D12, a Windows GUI program that writes a log and shows
   a message box (`rhi_d3d12`).
 - `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP; WARP again with

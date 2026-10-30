@@ -537,6 +537,19 @@ if(_ico_have_vk)
                              "${_ico_vk_vk10_env}")
         get_test_property(rhi_vk_vk10 LABELS _ico_vk10_labels)
         set_tests_properties(rhi_vk_vk10 PROPERTIES LABELS "${_ico_vk10_labels};vk10")
+        # the same on a Vulkan 1.0 loader without
+        # VK_KHR_get_physical_device_properties2 (ICO_VK_FAKE_API=1.0bare,
+        # review finding 5): the instance goes on without it and the device
+        # is made without the extended queries, every cell as under =1.0
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vk10bare")
+        add_test(NAME rhi_vk_vk10bare COMMAND rhi_vk_test
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vk10bare")
+        set(_ico_vk_vk10bare_env ${_ico_vk_test_env} "ICO_VK_FAKE_API=1.0bare"
+            "ICO_VK_FAKE_NO_DYNAMIC=1")
+        set_tests_properties(rhi_vk_vk10bare PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_vk10bare_env}")
+        get_test_property(rhi_vk_vk10bare LABELS _ico_vk10bare_labels)
+        set_tests_properties(rhi_vk_vk10bare PROPERTIES LABELS "${_ico_vk10bare_labels};vk10")
         if(TARGET rhi_vk_swapchain_test)
             add_test(NAME rhi_vk_swapchain COMMAND rhi_vk_swapchain_test)
             set_tests_properties(rhi_vk_swapchain PROPERTIES SKIP_RETURN_CODE 77)

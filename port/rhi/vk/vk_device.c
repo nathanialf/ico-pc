@@ -700,21 +700,26 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
      * =1.1 hides, keeps VK_KHR_maintenance1 and VK_KHR_maintenance2 (the
      * device takes them below 1.1, vkr_create_device), and clears the core
      * 1.1 entry points the loader still hands out (vkr_fake_10_entry_points),
-     * so a core 1.1 call left unguarded stops the test */
+     * so a core 1.1 call left unguarded stops the test; =1.0bare is =1.0
+     * on a loader without VK_KHR_get_physical_device_properties2 (review
+     * finding 5: no extended queries, the optional features off) */
     g_vkr.fakeApi = NULL;
     g_vkr.fakeHideExts = false;
     g_vkr.fakeNoTimeline = false;
+    g_vkr.fakeNoProps2 = false;
     {
         const char *fake = getenv("ICO_VK_FAKE_API");
         if (fake && fake[0]) {
-            if (strcmp(fake, "1.0") == 0) {
+            if (strcmp(fake, "1.0") == 0 || strcmp(fake, "1.0bare") == 0) {
                 g_vkr.fakeApi = "1.0";
                 g_vkr.fakeHideExts = true;
                 g_vkr.fakeNoTimeline = true;
-                VKR_LOG("ICO_VK_FAKE_API=1.0: the device is used as a Vulkan 1.0 driver (a 1.0 "
-                        "instance with VK_KHR_get_physical_device_properties2) without timeline "
+                g_vkr.fakeNoProps2 = strcmp(fake, "1.0bare") == 0;
+                VKR_LOG("ICO_VK_FAKE_API=%s: the device is used as a Vulkan 1.0 driver (a 1.0 "
+                        "instance %s VK_KHR_get_physical_device_properties2) without timeline "
                         "semaphores, %slocal read, driver properties, image format list or store "
                         "op none",
+                        fake, g_vkr.fakeNoProps2 ? "without" : "with",
                         VKR_LEGACY_PASSES ? "dynamic rendering, " : "");
             } else if (strcmp(fake, "1.1") == 0) {
                 g_vkr.fakeApi = "1.1";
@@ -729,8 +734,8 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
                 VKR_LOG("ICO_VK_FAKE_API=1.1ext: the device is used as a Vulkan 1.1 driver with "
                         "the extensions it offers");
             } else {
-                VKR_LOG("ICO_VK_FAKE_API=%s: not a known profile (1.0, 1.1, 1.1ext); nothing is "
-                        "hidden",
+                VKR_LOG("ICO_VK_FAKE_API=%s: not a known profile (1.0, 1.0bare, 1.1, 1.1ext); "
+                        "nothing is hidden",
                         fake);
             }
         }
@@ -745,13 +750,16 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
 #endif
     /* a Vulkan 1.0 loader (issue 158: Android 8.0 and 8.1, whose loader
      * has no vkEnumerateInstanceVersion, so volk reports 1.0) is taken
-     * with VK_KHR_get_physical_device_properties2, for the extended
-     * queries the 1.1 core gives (vkr_features2, vkr_props2);
-     * ICO_VK_FAKE_API=1.0 creates the instance the same way */
+     * with VK_KHR_get_physical_device_properties2 when it offers it, for
+     * the extended queries the 1.1 core gives (vkr_features2, vkr_props2),
+     * and without it otherwise (a driver older than the extension: the
+     * device goes on without the extended queries, the optional features
+     * off, vkr_has_props2; review finding 5); ICO_VK_FAKE_API=1.0 creates
+     * the instance the same way, =1.0bare without the extension */
     const bool fake10 = g_vkr.fakeApi != NULL && strcmp(g_vkr.fakeApi, "1.0") == 0;
     const bool loader10 = loaderVersion < VK_API_VERSION_1_1 || fake10;
     bool props2Ext = false;
-    if (loader10 && loaderVersion >= VK_API_VERSION_1_0 &&
+    if (loader10 && loaderVersion >= VK_API_VERSION_1_0 && !g_vkr.fakeNoProps2 &&
         vkr_has_instance_ext(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
         bool listed = false;
         for (uint32_t i = 0; i < extCount; i++) {
@@ -765,21 +773,9 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
         VKR_LOG("Vulkan %s loader: VK_KHR_get_physical_device_properties2",
                 fake10 ? "1.0 (ICO_VK_FAKE_API=1.0)" : "1.0");
     } else if (loader10) {
-#ifdef __ANDROID__
-        /* issue 145: a driver package (Options > Graphics driver, or a zip
-           in the drivers folder) is loaded by the game itself, past the
-           system's loader (Android 9 and later: libadrenotools) */
-        VKR_LOG("the Vulkan loader is %u.%u without VK_KHR_get_physical_device_properties2; 1.0 "
-                "with it, or 1.1 or later, is required. A graphics driver package (Options > "
-                "Graphics driver, or a .zip file in the game's drivers folder, Android 9 or "
-                "later) is loaded by the game itself and does not use the system's loader",
-                VK_API_VERSION_MAJOR(loaderVersion), VK_API_VERSION_MINOR(loaderVersion));
-#else
-        VKR_LOG("the Vulkan loader is %u.%u without VK_KHR_get_physical_device_properties2; 1.0 "
-                "with it, or 1.1 or later, is required",
-                VK_API_VERSION_MAJOR(loaderVersion), VK_API_VERSION_MINOR(loaderVersion));
-#endif
-        return false;
+        VKR_LOG("Vulkan %s loader without VK_KHR_get_physical_device_properties2: the device is "
+                "used without the extended queries (the optional features off)",
+                g_vkr.fakeNoProps2 ? "1.0 (ICO_VK_FAKE_API=1.0bare)" : "1.0");
     }
     s_instanceApi = loaderVersion < VK_API_VERSION_1_3 ? loaderVersion : VK_API_VERSION_1_3;
     if (g_vkr.fakeApi && s_instanceApi > VK_API_VERSION_1_1) {
@@ -2541,6 +2537,11 @@ bool vkr_test_legacy_passes(void)
 bool vkr_test_view_usage(void)
 {
     return g_vkr.viewUsage;
+}
+
+bool vkr_test_props2(void)
+{
+    return g_vkr.phys != VK_NULL_HANDLE && vkr_has_props2(g_vkr.phys);
 }
 
 void rhi_shutdown(void)

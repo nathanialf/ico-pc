@@ -476,10 +476,14 @@ typedef struct VkrState {
      * 158); fakeHideExts: the 1.0 and 1.1 profiles, whose device also lacks
      * the extensions a stock Vulkan 1.1 driver has not
      * (vkr_device_has_ext), so it has no timeline semaphores
-     * (fakeNoTimeline, VKR_SYNC_FENCES) */
+     * (fakeNoTimeline, VKR_SYNC_FENCES); fakeNoProps2: "1.0bare", the
+     * "1.0" profile (fakeApi "1.0") on a loader without
+     * VK_KHR_get_physical_device_properties2 (review finding 5: the
+     * instance goes on without it, the device without the extended queries) */
     const char *fakeApi;
     bool fakeHideExts;
     bool fakeNoTimeline;
+    bool fakeNoProps2;
     /* the paths the device's version and extensions give (vkr_create_device;
      * driverProps vkr_driver_text): legacyPasses, render passes as VkRenderPass
      * objects (no dynamic rendering: vk_renderpass.c; cmdBeginRendering and

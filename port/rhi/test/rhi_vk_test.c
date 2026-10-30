@@ -8,7 +8,10 @@
  * (vkr_cache_drop_others), the pipeline pool (poolCell: every
  * pipeline the pool holds, RHI_PIPELINE_POOL_MAX, made and alive at once)
  * and the submission sync (syncCell: the timeline semaphore, or the fence
- * ring under ICO_VK_FAKE_API=1.1 and =1.0, ctests rhi_vk_vk11 and rhi_vk_vk10).
+ * ring under ICO_VK_FAKE_API=1.1 and =1.0, ctests rhi_vk_vk11 and rhi_vk_vk10;
+ * =1.0bare, ctest rhi_vk_vk10bare: a 1.0 loader without
+ * VK_KHR_get_physical_device_properties2 is taken, the device without the
+ * extended queries; review finding 5).
  *
  * Exit 0 on success, 1 on a mismatch or a validation error, 77 (skipped)
  * when no Vulkan device can be created.  Set VK_ICD_FILENAMES to pick a
@@ -659,7 +662,8 @@ static int poolCell(void)
 static int syncCell(void)
 {
     const char *api = getenv("ICO_VK_FAKE_API");
-    const bool fences = api && (strcmp(api, "1.1") == 0 || strcmp(api, "1.0") == 0);
+    const bool vk10 = api && (strcmp(api, "1.0") == 0 || strcmp(api, "1.0bare") == 0);
+    const bool fences = api && (strcmp(api, "1.1") == 0 || vk10);
     RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test sync"};
     if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
         rhi_test_log("FAIL sync cell: init\n");
@@ -680,11 +684,15 @@ static int syncCell(void)
      * (VK_MAKE_API_VERSION(0, 1, 0, 0) = 1 << 22) on the VkRenderPass path,
      * the UINT views with their usage structure (lavapipe offers
      * VK_KHR_maintenance2); =1.1 at 1.1 */
-    if (api && strcmp(api, "1.0") == 0) {
+    if (vk10) {
+        const bool bare = strcmp(api, "1.0bare") == 0;
         SYNC_CHECK(vkr_test_api_version() == (1u << 22), "Vulkan version 0x%x (want 1.0)\n",
                    (unsigned)vkr_test_api_version());
         SYNC_CHECK(vkr_test_legacy_passes(), "dynamic rendering on a Vulkan 1.0 device\n");
         SYNC_CHECK(vkr_test_view_usage(), "no VK_KHR_maintenance2 on lavapipe\n");
+        /* =1.0bare: no extended queries, and the device still made */
+        SYNC_CHECK(vkr_test_props2() == !bare, "extended queries %d (want %d)\n",
+                   (int)vkr_test_props2(), (int)!bare);
     } else if (api && strcmp(api, "1.1") == 0) {
         SYNC_CHECK((vkr_test_api_version() >> 12) == (1u << 10 | 1u),
                    "Vulkan version 0x%x (want 1.1)\n", (unsigned)vkr_test_api_version());

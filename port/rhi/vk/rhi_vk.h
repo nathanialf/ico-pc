@@ -87,10 +87,14 @@ uint32_t vkr_test_sync_recycle_waits(void);
 /* For the same cell (vk_device.c): the Vulkan version the device is used
  * at (VK_API_VERSION_1_0 under ICO_VK_FAKE_API=1.0, issue 158), whether
  * its render passes are VkRenderPass objects, and whether the UINT views
- * carry their usage structure (Vulkan 1.1, or VK_KHR_maintenance2 on 1.0) */
+ * carry their usage structure (Vulkan 1.1, or VK_KHR_maintenance2 on 1.0),
+ * and whether the extended queries reach the device (false under
+ * ICO_VK_FAKE_API=1.0bare: a 1.0 loader without
+ * VK_KHR_get_physical_device_properties2, review finding 5) */
 uint32_t vkr_test_api_version(void);
 bool vkr_test_legacy_passes(void);
 bool vkr_test_view_usage(void);
+bool vkr_test_props2(void);
 
 #ifdef __cplusplus
 }
