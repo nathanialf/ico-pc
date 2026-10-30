@@ -438,6 +438,7 @@ under the same name (below). Read through the store:
 | `vu_fuse` | bool | `true` (off with `vu_merge`) | |
 | `constant_reads` | bool | `true` | |
 | `crack_fill` | bool | `true` | |
+| `texture_decode_threads` | the texture decode pool's worker threads: `auto`, the default, 2 (1 on a machine with 2 hardware threads or fewer); `0` every texture decoded on the game thread, the A/B; `1` to `4` that many (exported as `ICO_RD_TEXTURE_DECODE_THREADS`; unset without a window it is 0). The start line is `rd: texture decodes: 2 worker threads (4 hardware threads)` or `rd: texture decodes: on the game thread ([dev] texture_decode_threads = 0)`; the textures are the same byte for byte either way ([TEXTURES.md](TEXTURES.md#the-pools-size)) |
 | `perf_passes` | bool | `false` | |
 | `perf_list_stamps` | bool | `true` | |
 | `still_represent` | bool | `true` | |
