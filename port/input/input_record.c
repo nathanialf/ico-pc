@@ -143,6 +143,17 @@ void ico_input_record_close(void)
     s_file = NULL;
 }
 
+void ico_input_record_state_loaded(int slot, unsigned int tick)
+{
+    if (s_file == NULL) {
+        return;
+    }
+    commit();
+    fprintf(s_file, "# state loaded slot %d (Main tick %u)\n", slot, tick);
+    s_lastTick = tick;
+    s_dirty = 1;
+}
+
 unsigned int ico_input_record_lines(void)
 {
     return s_lines;
