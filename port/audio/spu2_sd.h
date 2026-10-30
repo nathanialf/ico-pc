@@ -21,6 +21,7 @@
 #ifndef ICO_PORT_AUDIO_SPU2_SD_H
 #define ICO_PORT_AUDIO_SPU2_SD_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 /* Voice selector: core | voice << 1 (libsd SD_VOICE). */
@@ -128,5 +129,9 @@ int spu2_sd_voice_trans(int chan, uint16_t mode, void *buf, uint32_t spu, uint32
 /* sceSdVoiceTransStatus: flag 0 polls (1 idle, 0 busy); flag 1 waits,
    which here finishes the transfer at once (spu2_voice_trans_wait). */
 int spu2_sd_voice_trans_status(int chan, int flag);
+
+/* Save states (audio_host.c ico_audio_state_register): the layer's time
+   and the effect attributes, two blocks: which 0 or 1, else NULL. */
+void *spu2_sd_state_block(int which, size_t *bytes);
 
 #endif
