@@ -8,13 +8,15 @@
 
 ## What you need
 
-- **A 64-bit Android phone or tablet with Android 10 or later.** Its
-  graphics must support Vulkan 1.1 or later (the way the game talks to the
-  graphics). If you are not sure, install the game and start it: if your
-  phone cannot run it, the game tells you when it starts and offers to use
-  a graphics driver package instead, which only helps on a phone with an
+- **A 64-bit Android phone or tablet with Android 8 or later.** Its
+  graphics must support Vulkan 1.0 or later (the way the game talks to the
+  graphics); most phones and tablets from 2017 on do. If you are not sure,
+  install the game and start it: if your phone cannot run it, the game
+  tells you when it starts. On Android 9 or later it also offers to use a
+  graphics driver package instead, which only helps on a phone with an
   Adreno chip (most phones with a Qualcomm Snapdragon processor; see
   [Using a different graphics driver](#using-a-different-graphics-driver)).
+  Graphics driver packages need Android 9 or later.
 - **Android 11 phones and tablets, such as the Logitech G Cloud (Adreno 618).**
   The game has run on the older graphics driver those devices ship (Vulkan
   1.1) since version 0.9.1, but no one has confirmed it on a real device yet.
@@ -389,8 +391,8 @@ Options > Display > Aspect ratio decides how the picture fits:
 ## Using a different graphics driver
 
 This is optional, and it only works on phones with an Adreno graphics chip
-(most Qualcomm Snapdragon phones); on other phones the Graphics driver
-page is not shown at all. If the game looks wrong or runs badly on
+(most Qualcomm Snapdragon phones) and Android 9 or later; on other phones
+the Graphics driver page is not shown at all. If the game looks wrong or runs badly on
 your phone, a newer graphics driver from the community can sometimes fix
 it. If you do not have a problem, you can skip this.
 
@@ -449,6 +451,10 @@ these buttons:
   where the phone's driver does not.
 - **Quit**: closes the game.
 
+On Android 8 there is no driver package to choose (they need Android 9 or
+later): the box says the game could not start the graphics on this device
+and asks you to send the log file, and the game closes.
+
 If the file is not a driver package, the game says so and the box comes
 back, so you can try another one. If the picker cannot open, or closes
 without a file (some phones' pickers do), and there is a driver zip in the
@@ -460,10 +466,18 @@ Graphics driver**.
 
 ## Known limits
 
-- The game needs a graphics chip that supports Vulkan 1.1 or later (Vulkan is how the game talks to the
-  graphics). Older or cheaper devices may not have it, and a system update does not always add it.
-  On a phone with an Adreno chip, a graphics driver package can help; see
+- The game needs Android 8 or later and a graphics chip that supports Vulkan 1.0 or later (Vulkan
+  is how the game talks to the graphics). Older or cheaper devices may not have it, and a system
+  update does not always add it. On a phone with an Adreno chip and Android 9 or later, a graphics
+  driver package can help; see
   [When the game cannot start with the phone's driver](#when-the-game-cannot-start-with-the-phones-driver).
+  Graphics driver packages need Android 9 or later: on Android 8 the game always uses the phone's
+  own driver.
+- Phones from the Vulkan 1.0 years (most Android 8 phones) have older graphics drivers. The first
+  start can spend several minutes preparing the game's graphics, and some of these phones may not
+  manage it. If the game closes during that first start, start it again: the next start prepares
+  less at once. If it still does not start, please send the log
+  ([Send a problem report](#send-a-problem-report)).
 - The file picker cannot hide files that are not disc images. If you pick
   the wrong file, the game says so and asks again at the next start.
 - The game runs slower than on a PC, especially at a high Resolution in
