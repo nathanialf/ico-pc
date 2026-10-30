@@ -22,6 +22,10 @@ IcoHotkey ico_hotkey_for_mod(unsigned int key, int repeat, int shift)
         return shift ? ICO_HOTKEY_ASPECT_SWEEP : ICO_HOTKEY_FRAME_DUMP;
     case ICO_HOTKEY_KEY_F11:
         return ICO_HOTKEY_STATS_FAST;
+    case ICO_HOTKEY_KEY_F5:
+        return ICO_HOTKEY_STATE_SAVE;
+    case ICO_HOTKEY_KEY_F9:
+        return ICO_HOTKEY_STATE_LOAD;
     default:
         return ICO_HOTKEY_NONE;
     }
