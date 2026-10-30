@@ -230,7 +230,8 @@ original game's behaviour (`port/game/options.h`, header comment).
 
 Extras > Game variants ([UI.md](UI.md#extras--game-variants), [OPTIONS.md](../OPTIONS.md#game-variants)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
-the game as the disc ships it. All eight are in a pad recording's header (`record_keys`). A word
+the game as the disc ships it. All eight are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
+`port/platform/sim_keys.c`). A word
 or number that is no value reads as the default and is logged once.
 
 | key | type | default | meaning |
@@ -566,8 +567,10 @@ and in portable mode, and the Android build's file layout is `IcoAndroidPaths`
 3. For players to see it in a new file, add it with its default and a comment to the template
    `first_run_text` (`port/config/config.c`).
 4. For `ico-pc.ini` to override it, add it to `ini_map` (`port/platform/host_config.c`); when the
-   simulation depends on it, add it to `record_keys` (`port/platform/main_host.c`) so a pad
-   recording carries it ([INPUT.md](INPUT.md#recordings)).
+   simulation depends on it, add it to `ICO_SIM_KEYS` (`port/platform/sim_keys.c`): a pad
+   recording's header then carries it ([INPUT.md](INPUT.md#recordings)) and a save state made
+   with another value is refused with the key named
+   ([PLATFORM.md](PLATFORM.md#validity)).
 5. A key that nothing reads goes into `retired_keys` (`port/config/config.c`), so a file
    that still has it keeps the line and logs `config: <key> is not used; ignored`; a `[dev]`
    A/B switch that `ini_map` maps goes into `retired_dev` (`port/platform/host_config.c`)
