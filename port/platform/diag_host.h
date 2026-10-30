@@ -539,6 +539,17 @@ void ico_diag_set_pipelines_made(unsigned int n);
    before the batch starts (fsync), so it survives a device that froze and
    was rebooted. */
 const char *ico_diag_startup_activity_prev(void);
+/* Whether a run of this version ended at Android's pipeline creation limit
+   (10 s before the game starts, 30 s in play; review finding 2): the mark
+   "<activity file without .txt>-stall.txt" ("<version>\n<note>\n"), read
+   by ico_diag_startup_activity_begin, which logs it ("ico_pc: a run of
+   this version ended when the graphics driver did not return from creating
+   a pipeline (<note>): every start of this version takes the plain VU
+   vertex shaders ...") and deletes a mark of another version (logged too).
+   The window then takes the VU programs' plain entries on every Android
+   (rd_set_vu_plain_only), so a slow compiler cannot end the same pipeline
+   every run. */
+int ico_diag_startup_stall_end(void);
 /* This start's set is made under the careful policy (on != 0; the window,
    before ICO_DIAG_ACTIVITY_STARTUP): while the file records it holds the
    line "set: careful" after the note, so an end inside that set makes the

@@ -57,7 +57,10 @@
  *               ended while"), deletes it and is lazy; a lazy run keeps its
  *               notes and a line between them, and keeps the file at a
  *               clean exit (the next start is lazy); a normal end of the
- *               set deletes it; a restart after a driver crash logs it but
+ *               set deletes it; the creation limit's stall mark (review
+ *               finding 2) makes every start of its version take the plain
+ *               VU entries, and a start of another version deletes it;
+ *               a restart after a driver crash logs it but
  *               is not lazy; a file another version wrote is not lazy; a
  *               lazy run's clean exit is logged as such at the next start,
  *               not as an ended run; a file cut short after a write (the
@@ -879,6 +882,10 @@ static void activity_child(const char *mode, const char *log)
             ico_diag_note_device_loss(NULL);
             _exit(0);
         }
+        child_quit(0);
+    } else if (strcmp(mode, "actstall") == 0) {
+        /* review finding 2: the stall mark read at the start */
+        ico_diag_log("test: stall end %d", ico_diag_startup_stall_end());
         child_quit(0);
     } else if (strcmp(mode, "actclean") == 0) {
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
@@ -2159,6 +2166,46 @@ int main(int argc, char **argv)
             if (f != NULL) {
                 fclose(f);
             }
+        }
+        /* review finding 2: the creation limit's mark (Android writes it;
+           here by hand): every start of the version that wrote it takes
+           the plain VU entries and keeps it; a start of another version
+           deletes it and says so */
+        {
+            char stall[320];
+            FILE *f;
+            snprintf(stall, sizeof stall, "%s-stall.txt", act);
+            f = fopen(stall, "wb");
+            if (f != NULL) {
+                fputs("test 1\ncreating pipeline vu_main_vs merge 7\n", f);
+                fclose(f);
+            }
+            r = run(argv[0], "actstall", log);
+            s = read_file(log);
+            CHECK(r == 0);
+            CHECK(strstr(s, "test: stall end 1\n") != NULL);
+            CHECK(strstr(s, "ico_pc: a run of this version ended when the graphics driver did not "
+                            "return from creating a pipeline (creating pipeline vu_main_vs merge "
+                            "7): every start of this version takes the plain VU vertex shaders") !=
+                  NULL);
+            r = run(argv[0], "actstall", log);
+            CHECK(strstr(read_file(log), "test: stall end 1\n") != NULL);
+            setenv("ICO_TEST_ACT_VERSION", "test 2", 1);
+            r = run(argv[0], "actstall", log);
+            unsetenv("ICO_TEST_ACT_VERSION");
+            s = read_file(log);
+            CHECK(strstr(s, "test: stall end 0\n") != NULL);
+            CHECK(strstr(s, "ico_pc: version test 1 ended a run when the graphics driver did not "
+                            "return from creating a pipeline (creating pipeline vu_main_vs merge "
+                            "7); this version tries the extended VU vertex shaders again") != NULL);
+            f = fopen(stall, "rb");
+            CHECK(f == NULL);
+            if (f != NULL) {
+                fclose(f);
+            }
+            r = run(argv[0], "actstall", log);
+            CHECK(strstr(read_file(log), "test: stall end 0\n") != NULL);
+            remove(act);
         }
         /* a lazy run's clean exit keeps the file: the next start of the
            same version is lazy too */

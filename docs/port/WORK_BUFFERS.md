@@ -954,10 +954,21 @@ have let the 1693 MB reading pass). `memory_floor_test` holds those figures.
 **The creation limit (Android).** The watchdog's limits are not in force before the game starts,
 and the GPU hang limit counts waits for the GPU, not a driver call. On Android a note that names a
 pipeline being created (the set's batch, a lazy run's single one) with neither the note nor the
-set's count moving for 10 s (`PIPE_STALL_S`, `port/platform/diag_host.c` `pipe_stall_step`; off
-with the GPU hang limit, `[dev] watchdog = 0`) ends the run in order: `ico_pc: the graphics driver
-has not returned from creating a pipeline for N s (pipelines D of T): the run ends now, ...`, the
-report, the box, an exit; the activity file keeps the note for the next start.
+set's count moving for 10 s before the first Main tick (the start-up set, `PIPE_STALL_START_S`) or
+30 s in play (a lazy run's first-use creation, `PIPE_STALL_PLAY_S`: a Vulkan 1.0-era compiler may
+take over 10 s on a VU merge shader) (`port/platform/diag_host.c` `pipe_stall_step`; off with the
+GPU hang limit, `[dev] watchdog = 0`) ends the run in order: `ico_pc: the graphics driver has not
+returned from creating a pipeline for N s (pipelines D of T; the limit L s before the game starts|in
+play): the run ends now, ...`, the report, the box, an exit; the activity file keeps the note for the
+next start. The end also writes the stall mark `<activity file without .txt>-stall.txt` (the version,
+then the note): every start of that version, on any Android, takes the VU programs' plain entries
+(`ico_diag_startup_stall_end`, the window's `rd_set_vu_plain_only`; the lines `ico_pc: a run of this
+version ended when the graphics driver did not return from creating a pipeline (<note>): every start
+of this version takes the plain VU vertex shaders ...` and `window: a run of this version ended ...:
+this start draws with the plain 3D vertex shaders`), so a slow compiler cannot end the same pipeline
+every run; a start of another version deletes the mark (`ico_pc: version V ended a run ...; this
+version tries the extended VU vertex shaders again`). Below Android 9 any counted end in the
+pipelines also takes them, for the next start only. `diag_test`'s activity case holds the mark.
 
 **What issue 161's logs show.** The Retroid Pocket 6 (Adreno 740, compiler E031.41.03.47; the
 careful set) stopped inside batch 212-219 of 587 with 216 made: that batch mixed the planes

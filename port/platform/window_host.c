@@ -1963,10 +1963,18 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        to after a start that ended while the phone's driver compiled the
        pipelines (either count above): this start also takes the VU
        programs' plain entries, the smaller vertex shaders (rd.h
-       rd_set_vu_plain_only; the "VU shaders:" line names the reason) */
-    if (!ico_gpu_driver_android_supported() &&
-        (ico_diag_startup_end_count(ICO_DIAG_END_PIPELINES) > 0 ||
-         ico_diag_startup_end_count(ICO_DIAG_END_VU_PRE) > 0)) {
+       rd_set_vu_plain_only; the "VU shaders:" line names the reason). On
+       any Android a run of this version ended by the creation limit
+       (diag_host.h ico_diag_startup_stall_end) takes them every start */
+    if (ico_diag_startup_stall_end()) {
+        rd_set_vu_plain_only("for this version: a run ended when the driver did not return from "
+                             "creating a pipeline (the creation limit)");
+        fprintf(stderr, "window: a run of this version ended when the graphics driver did not "
+                        "return from creating a pipeline: this start draws with the plain 3D "
+                        "vertex shaders\n");
+    } else if (!ico_gpu_driver_android_supported() &&
+               (ico_diag_startup_end_count(ICO_DIAG_END_PIPELINES) > 0 ||
+                ico_diag_startup_end_count(ICO_DIAG_END_VU_PRE) > 0)) {
         rd_set_vu_plain_only("for this start: the last start ended while the driver compiled the "
                              "pipelines, and Android 8 has no driver packages");
         fprintf(stderr, "window: the last start ended while the graphics driver compiled the "

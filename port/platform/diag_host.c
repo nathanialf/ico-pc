@@ -1664,6 +1664,13 @@ static volatile unsigned int pipes_made;
    the system's signals that came there. Both read as untrusted. */
 static char act_ends_path[1024 + 16];
 static char act_bg_path[1024 + 16];
+/* "-stall.txt": the mark of a run ended by the pipeline creation limit
+   (pipe_stall_step; review finding 2): the version that ended, then the
+   note. Every start of that version takes the VU programs' plain entries
+   (ico_diag_startup_stall_end); a start of another version deletes it */
+static char act_stall_path[1024 + 16];
+static int act_prev_stall;
+static char act_prev_stall_note[sizeof activity];
 /* the previous run's mark (ico_diag_startup_activity_begin) */
 static int act_prev_background;
 static char act_prev_bg_line[200];
@@ -2240,6 +2247,48 @@ static void act_remove(void)
 /* the note the previous run's file held (ico_diag_startup_activity_prev) */
 static char act_prev[sizeof activity];
 
+/* ico_diag_startup_activity_begin: the stall mark (act_stall_path) read */
+static void stall_read(void)
+{
+    char buf[sizeof act_version + 1 + sizeof activity + 2];
+    const char *note = "";
+    char *nl;
+    size_t k;
+    FILE *f = act_stall_path[0] != '\0' ? ico_fopen(act_stall_path, "rb") : NULL;
+    if (f == NULL) {
+        return;
+    }
+    k = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[k] = '\0';
+    nl = strchr(buf, '\n');
+    if (nl != NULL) {
+        *nl = '\0';
+        note = nl + 1;
+    }
+    buf[strcspn(buf, "\r")] = '\0';
+    snprintf(act_prev_stall_note, sizeof act_prev_stall_note, "%.*s", (int)strcspn(note, "\r\n"),
+             note);
+    if (strcmp(buf, act_version) != 0) {
+        (void)ico_remove(act_stall_path);
+        ico_diag_log("ico_pc: version %s ended a run when the graphics driver did not return from "
+                     "creating a pipeline (%s); this version tries the extended VU vertex shaders "
+                     "again",
+                     buf[0] != '\0' ? buf : "unknown", act_prev_stall_note);
+        return;
+    }
+    act_prev_stall = 1;
+    ico_diag_log("ico_pc: a run of this version ended when the graphics driver did not return "
+                 "from creating a pipeline (%s): every start of this version takes the plain VU "
+                 "vertex shaders (%s holds the mark)",
+                 act_prev_stall_note, act_stall_path);
+}
+
+int ico_diag_startup_stall_end(void)
+{
+    return act_prev_stall;
+}
+
 const char *ico_diag_startup_activity_prev(void)
 {
     return act_prev;
@@ -2277,12 +2326,16 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_prev_bg_line[0] = '\0';
     act_ends_path[0] = '\0';
     act_bg_path[0] = '\0';
+    act_stall_path[0] = '\0';
+    act_prev_stall = 0;
     if (path == NULL || strlen(path) >= sizeof act_path) {
         return 0;
     }
     memcpy(act_path, path, strlen(path) + 1);
     act_sibling(act_ends_path, sizeof act_ends_path, "-ends.txt");
     act_sibling(act_bg_path, sizeof act_bg_path, "-background.txt");
+    act_sibling(act_stall_path, sizeof act_stall_path, "-stall.txt");
+    stall_read();
     /* the previous run's background mark: its line, and the system's lines
        that came there (logged below unless the activity file has them) */
     static char bgbuf[ACT_BG_TEXT];
@@ -4753,14 +4806,34 @@ static const char *os_wait_name(void)
    GPU hang limit counts waits for the GPU, not a driver call.  While a
    note names a pipeline being created (the set's batch, a lazy run's single
    one) and neither the note nor the set's count has moved for
-   PIPE_STALL_S, with the GPU hang limit on ([dev] watchdog = 0 turns both
+   the limit below, with the GPU hang limit on ([dev] watchdog = 0 turns both
    off), the run ends here in order: the log, the report, the box, a
    normal exit, and the activity file keeps the note, so the next start
    counts the end and leaves the family out when the note names only one
-   (window_host.c window_pipeline_skip).  The longest creation any log has
-   shown is 3.4 s (a VU pipeline on a PowerVR phone). */
-#define PIPE_STALL_S 10.0
+   (window_host.c window_pipeline_skip), and the stall mark makes every
+   start of this version take the VU programs' plain entries
+   (act_stall_path).  The longest creation any log has shown is 3.4 s (a VU
+   pipeline on a PowerVR phone).  The limit is PIPE_STALL_START_S before the
+   first Main tick (the start-up set) and PIPE_STALL_PLAY_S in play (a lazy
+   run's first-use creation: a Vulkan 1.0-era compiler may take longer than
+   10 s on a VU merge shader; review finding 2). */
+#define PIPE_STALL_START_S 10.0
+#define PIPE_STALL_PLAY_S 30.0
 static volatile int pipe_stall;
+
+/* the stall mark written (the watchdog's thread; the main thread is inside
+   the driver) */
+static void stall_mark_write(void)
+{
+    FILE *f;
+    if (act_stall_path[0] == '\0' || (f = ico_fopen(act_stall_path, "wb")) == NULL) {
+        return;
+    }
+    fprintf(f, "%s\n%.*s\n", act_version, (int)strcspn(activity, "\r\n"), activity);
+    if (fclose(f) != 0) {
+        ico_diag_log("ico_pc: the stall mark could not be written to %s", act_stall_path);
+    }
+}
 
 /* the creation's stall in seconds, or 0 while it moves */
 static double pipe_stall_step(double now, int counted)
@@ -5145,14 +5218,18 @@ static void watchdog_loop(void)
             /* issue 161: a pipeline creation that has not returned
                (pipe_stall_step), in force before the game starts too */
             const double stalled = pipe_stall_step(now, poll_counted);
-            if (stalled >= PIPE_STALL_S) {
+            const double stall_lim = ticks == 0 ? PIPE_STALL_START_S : PIPE_STALL_PLAY_S;
+            if (stalled >= stall_lim) {
                 ico_diag_log("ico_pc: the graphics driver has not returned from creating a "
-                             "pipeline for %.0f s (pipelines %u of %u): the run ends now, in "
-                             "order, so the next start can prepare the graphics another way",
-                             stalled, pipes_done, pipes_total);
+                             "pipeline for %.0f s (pipelines %u of %u; the limit %.0f s %s): the "
+                             "run ends now, in order, so the next start can prepare the graphics "
+                             "another way",
+                             stalled, pipes_done, pipes_total, stall_lim,
+                             ticks == 0 ? "before the game starts" : "in play");
                 snprintf(reason, sizeof reason,
                          "a pipeline creation has not returned for %.0f s (limit %.0f s)", stalled,
-                         PIPE_STALL_S);
+                         stall_lim);
+                stall_mark_write();
                 pipe_stall = 1;
                 watchdog_fire(reason);
                 continue;
