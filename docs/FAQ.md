@@ -222,6 +222,14 @@ In a folder the game makes in your user folder, not beside the program.
 If you would rather keep everything beside the program, for example on a
 USB stick, use [portable mode](PORTABLE_MODE.md#keep-everything-in-one-folder).
 
+## The sound cuts out or the game pauses briefly during loads
+
+Look at the start of `ico-pc.log`: if the lines for the game data or the user
+folder say "on a network drive" or "on a removable drive", that is the cause,
+since each load waits for the drive. Run the game from a drive inside the
+computer. In portable mode the saves sit beside the game, so they move with
+it. [More](TROUBLESHOOTING.md#the-sound-cuts-out-or-the-game-pauses-briefly-during-loads).
+
 ## Can I bring my PS2 save over?
 
 Yes, if you have it as a memory card file, the kind PS2 emulators and
