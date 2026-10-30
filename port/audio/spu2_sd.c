@@ -23,6 +23,20 @@ static uint8_t idle_block[SPU2_SD_IDLE_BLOCK_BYTES] = {
     0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
 };
 
+void *spu2_sd_state_block(int which, size_t *bytes)
+{
+    if (which == 0) {
+        *bytes = sizeof sd_time;
+        return &sd_time;
+    }
+    if (which == 1) {
+        *bytes = sizeof effect_attr;
+        return effect_attr;
+    }
+    *bytes = 0;
+    return NULL;
+}
+
 static uint64_t T(void)
 {
     uint64_t now = spu2_time();
