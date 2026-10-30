@@ -51,4 +51,24 @@ void window_hold_line(double lateMs, unsigned long long heldMs, unsigned decodes
 void window_hold_block_line(unsigned long long heldMs, double stepAvgMs, double stepMaxLateMs,
                             double periodMs, double pictureMs, const char *rateWords);
 
+/* Frame rate Original's late skip (pace_policy.h pace_original_present),
+   kept here so window_host.c stays under the repository's file size cap.
+   window_orig_gate: the replay gate's answer (rd_set_replay_gate) for a
+   frame of the step due at dueNs at the simulation's rate hz (50: 20 ms,
+   else 16.683 ms), counting the frames it leaves out.  window_orig_step:
+   after each Original pace, whether the step ran past its period and a
+   whole frame's replay time (below 0: none replayed in the step).
+   window_orig_words: the 10 s line's "; steps late N (frames not presented
+   M)" (empty unless original; a static buffer).  window_hold_block: at the
+   block's end, window_hold_block_line from the sound held back since the
+   last block (the first: since the open), the steps' time (sum, count,
+   longest, in ms), the picture's time (the Original replays' mean, else
+   replaySumMs / replays) and the frame rate's words; then the counts start
+   again. */
+bool window_orig_gate(int keep, uint64_t nowNs, uint64_t dueNs, int hz);
+void window_orig_step(bool late, double replayMs);
+const char *window_orig_words(bool original);
+void window_hold_block(double stepSumMs, unsigned steps, double stepMaxMs, int hz,
+                       double replaySumMs, unsigned replays, bool original, const char *rateName);
+
 #endif /* ICO_PLATFORM_WINDOW_LINES_H */
