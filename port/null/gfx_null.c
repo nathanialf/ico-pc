@@ -20,6 +20,8 @@
 #include <libgraph.h>
 #include <string.h>
 #include "sched.h"
+#include "state_port.h"
+#include "state_registry.h"
 
 /* --- libgraph ---------------------------------------------------------------- */
 
@@ -100,6 +102,13 @@ int sceGsSwapDBuff(void *db, int id)
    (|= 0x40) in three of them, so they are writable memory. */
 #define DMA_CHANNELS 10
 static DmaChan dmaChannels[DMA_CHANNELS];
+
+/* The save state's block (state_port.h): register words, no host
+   pointers. */
+int ico_gfx_null_state_register(void)
+{
+    return ico_state_register("dma.channels", dmaChannels, sizeof dmaChannels, 0);
+}
 
 DmaChan *sceDmaGetChan(unsigned int id)
 {
