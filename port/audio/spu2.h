@@ -37,6 +37,7 @@
 #ifndef ICO_PORT_AUDIO_SPU2_H
 #define ICO_PORT_AUDIO_SPU2_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #define SPU2_RAM_SIZE (2u * 1024u * 1024u)
@@ -293,5 +294,15 @@ int spu2_irq_pending(int core);
 void spu2_irq_clear(int core);
 typedef void (*spu2_irq_cb)(int core, void *user);
 void spu2_set_irq_callback(spu2_irq_cb cb, void *user);
+
+/* --- Save states ------------------------------------------------------------ */
+
+/* The SPU2's simulated state as one block: RAM, the cores and voices, the
+   register shadow, the time, the event queue, the DMA channels (their
+   callbacks are host pointers: the block is scanned at a load), the IRQ
+   callback and the reverb presets.  The render's scratch and the
+   statistics are not in it.  Registered by audio_host.c
+   (ico_audio_state_register) and copied under the audio lock. */
+void *spu2_state_block(size_t *bytes);
 
 #endif
