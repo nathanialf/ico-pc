@@ -325,6 +325,7 @@ and macOS).
 | `ICO_SHADERS_DXIL` | `ON` | also compiles the shaders to DXIL for the Direct3D 12 backend; the arm64 and Apple presets turn it off |
 | `ICO_SHADERS_GLSL` | `ON` with `ICO_RHI_OPENGL` when `tools/fetch_deps.sh` fetched SPIRV-Cross, else `OFF` | also translates the shaders to GLSL 4.30 with SPIRV-Cross for the OpenGL backend (`ICO_SPIRV_CROSS` names another executable; `SKIP_SPIRV_CROSS=1` skips the fetch). With `ICO_RHI_OPENGL` on and this off, the configure step warns: the OpenGL backend is built but has no shaders and cannot draw |
 | `ICO_VERSION_LABEL` | empty | with `ICO_LINK_EXE`: the package label (`vX.Y.Z` or `vX.Y.Z-rcN`). Its numbers go into the Windows version information and the Apple bundles' Info.plist; the label itself, written to `generated/ico_version.h`, is shown in the log header and on the Settings menu's Main page, and is empty (nothing shown) when it does not parse as a version (`CMakeLists.txt`, `ICO_VERSION_LABEL_C`). The package scripts and `android/app/build.gradle` pass it; a build without it has an all-zero version |
+| `ICO_STATE_FIXED_IMAGE` | `ON` in `linux-x64`, `linux-x64-clang`, `win-x64`, `win-x64-clang` (and `asan`, `fptrap`, which inherit `linux-x64`); `OFF` otherwise | links the programs at a fixed image address ([Fixed image](#fixed-image)); `ICO_STATE_FIXED_IMAGE=1` in every source |
 | `ICO_RC_TOOLS` | `OFF` | the release candidates' own tooling, for rc packages alone ([Release candidate tools](#release-candidate-tools)); `ON` defines `ICO_RC_TOOLS=1` for every source, and a non-empty `ICO_VERSION_LABEL` that does not end in `-rcN` is refused |
 | `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the data loader's reference tests read; without it they are not built |
 | `ICO_BASE_ELF_JPN` | `baserom/jpn/baseelf.elf` | the Japanese disc's base ELF (SCPS-11003), for the same tests on that disc |
@@ -332,6 +333,23 @@ and macOS).
 | `ICO_DISC_IMAGE`, `ICO_DISC_IMAGE_JPN`, `ICO_DISC_IMAGE_KOR`, `ICO_TEXPACK_DIR` | see [Tests](#tests) | the disc images and the texture pack folder the tests read |
 | `ICO_DXC`, `ICO_DEPS_DIR` | the fetched copies | the shader compiler and the dependency tree |
 | `ICO_MOLTENVK_ROOT`, `ICO_LIBCHDR_DIR` | the fetched copies | MoltenVK's extracted release and the libchdr source tree (`cmake/IcoMoltenVK.cmake`, `port/data/CMakeLists.txt`) |
+
+### Fixed image
+
+Save states put the game's memory back byte for byte, and that memory holds the program's own
+addresses: return addresses on the game threads' stacks, function pointers in the game's tables.
+With `ICO_STATE_FIXED_IMAGE` the Linux and Windows programs always load at the address they were
+linked at, so those addresses mean the same thing in the next run and a load needs no
+relocation of code pointers. On Linux the code is compiled `-fno-pie` (targets that ask for
+position-independent code keep it) and the programs link `-no-pie`; on Windows both mingw linkers
+(GNU ld and lld) take `-Wl,--disable-dynamicbase`, which clears the PE header's `DYNAMIC_BASE`
+flag (`CMakeLists.txt`, `ICO_STATE_FIXED_IMAGE`). It costs no speed. What it gives up is address
+space layout randomisation for the program image itself (the libraries, the stacks and the
+heap stay randomised), which is a hardening measure against memory-corruption exploits and
+matters little for an offline game; `-DICO_STATE_FIXED_IMAGE=OFF` turns it back on, and save
+states then move the code pointers as Android and the Apple builds always do
+([port/PLATFORM.md](port/PLATFORM.md#fibers)). The same reason pins the game's memory arena and
+the game threads' stacks at fixed addresses when the system has them free.
 
 At run time, the environment variable `ICO_TTY` (any value) turns on the
 game's `scePrintf` output on stdout, which the retail game sent to the
