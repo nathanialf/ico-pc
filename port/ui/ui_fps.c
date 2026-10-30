@@ -74,16 +74,34 @@ void ui_fps_draw_overlay(const RdOverlayCtx *ctx)
 
     margin = margin < MARGIN_MIN ? MARGIN_MIN : margin;
     emPx = emPx < MIN_PX ? MIN_PX : emPx;
-    px = margin;
-    py = margin;
-    if (!ui_touch_top_gap(ctx, &px, &x1, &py)) {
-        px = py = margin;
-        x1 = 0.0f;
-    }
     snprintf(text, sizeof(text), "%d %s", n, ui_str(UI_STR_FPS_UNIT));
     ui_begin_overlay(ctx);
     float size = emPx * 448.0f / bh, gx, gy;
+    const float floorSize = SHRINK_MIN_PX * 448.0f / bh;
+    const float natW = ui_measure_text(size, text) * W / 640.0f;
+    const float minW = ui_measure_text(floorSize < size ? floorSize : size, text) * W / 640.0f;
 
+    px = py = margin;
+    /* the player's actual touch layout decides: the corner when no drawn
+       control is in the way, else the first free place along the keys' row
+       (touch_gap.h) */
+    if (!ui_touch_top_gap(ctx, margin, emPx, natW, minW, &px, &x1, &py)) {
+        px = py = margin;
+        x1 = 0.0f;
+    }
+    {
+        /* once per change: where the counter sits (the log of a report that
+           says it covered a control) */
+        static int s_where = -1;
+        const int where = py > margin + 0.5f ? 1 : 0;
+
+        if (where != s_where) {
+            s_where = where;
+            fprintf(stderr, "window: frame rate counter at %s (x %d y %d of %ux%u)\n",
+                    where ? "the touch controls' row, clear of the drawn controls" : "the corner",
+                    (int)px, (int)py, ctx->outW, ctx->outH);
+        }
+    }
     if (x1 > px) {
         /* the touch layout's stretch: shrunk until the text fits it */
         for (int i = 0; i < 16 && size * bh / 448.0f > SHRINK_MIN_PX &&
