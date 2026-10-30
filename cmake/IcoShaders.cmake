@@ -94,11 +94,14 @@ set(ICO_SHADER_OUT_DIR "${CMAKE_BINARY_DIR}/shaders")
 
 # The flags that map HLSL registers to the Vulkan backend's bindings: b0.. at
 # 0, t at 16, s at 32, u at 48 (the register number is the RHI slot).
-# Target vulkan1.1 (SPIR-V 1.3), not 1.2: the blobs then load on Vulkan 1.1
-# devices. DXC emits identical instruction streams at both targets for every
-# shader here; only the header version and OpEntryPoint's interface list
-# (SPIR-V 1.4+ lists every global) differ.
-set(ICO_DXC_SPIRV_FLAGS -spirv -fspv-target-env=vulkan1.1
+# Target vulkan1.0 (SPIR-V 1.0): the blobs then load on Vulkan 1.0 devices
+# (Android 8, issue 158). The shaders use only Vulkan 1.0 capabilities
+# (Shader, InputAttachment, SampleRateShading, ImageQuery; the interlock ones
+# through SPV_EXT_fragment_shader_interlock), so DXC emits the same
+# instruction stream at 1.0 as at 1.1; only the header's version word differs
+# (tools/spirv_header_diff.py compares two sets with it masked; the
+# spirv_check test holds every module to version 1.0).
+set(ICO_DXC_SPIRV_FLAGS -spirv -fspv-target-env=vulkan1.0
     -fvk-b-shift 0 all -fvk-t-shift 16 all -fvk-s-shift 32 all -fvk-u-shift 48 all)
 # -WX: a shader warning fails the build. -Zi is not used: no debug info in the
 # embedded blobs.
