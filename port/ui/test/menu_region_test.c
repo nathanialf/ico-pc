@@ -9,7 +9,8 @@
  * disc, port/data/gen/<slug>/):
  *
  *   text  every layout the region names runs the procedure it is named
- *         for; the title's, pause menu's and memory card screen's rows are
+ *         for (the Continue screen's file select linking the files'
+ *         layout); the title's, pause menu's and memory card screen's rows are
  *         where the Settings menu and the mouse expect them; the glyph rows'
  *         texel rectangles and heights (IcoGlyphRow) are the table's; the
  *         tables' sizes are the region's counts; and no row of the disc's
@@ -85,6 +86,7 @@ void la_vibe_select(void);
 void la_game_loop(void);
 void la_game_demo(void);
 void la_mc_file_select(void);
+void la_mc_load_file_select(void);
 void la_load_processing(void);
 void la_save_confirm_complete(void);
 
@@ -159,6 +161,7 @@ static void testText(void)
     checkLayout(r->layout_play, la_game_loop, "la_game_loop");
     checkLayout(r->layout_scene, la_game_demo, "la_game_demo");
     checkLayout(r->layout_mc_files, la_mc_file_select, "la_mc_file_select");
+    checkLayout(r->layout_load_files, la_mc_load_file_select, "la_mc_load_file_select");
     checkLayout(r->layout_load, la_load_processing, "la_load_processing");
     checkLayout(r->layout_save_complete, la_save_confirm_complete, "la_save_confirm_complete");
 
@@ -193,6 +196,13 @@ static void testText(void)
               texProperty[r->row_title_copyright].dispY == 195 &&
               (r->row_title_copyright2 < 0 || texProperty[r->row_title_copyright2].dispY == 195),
           "the title rows' places");
+
+    /* the Continue screen's file select: no cursor of its own, the files'
+       layout linked after it (the Save states prompt goes between them) */
+    const LtProp *lf = &texLayout[r->layout_load_files];
+    CHECK(lf->link == r->layout_mc_files && lf->defaultItem == -1,
+          "la_mc_load_file_select links %d (want %d), default %d", lf->link, r->layout_mc_files,
+          lf->defaultItem);
 
     /* the memory card files: file i's picture and item rows */
     const LtProp *mc = &texLayout[r->layout_mc_files];
