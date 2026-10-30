@@ -33,6 +33,7 @@
 #include "sndn2_internal.h"
 #include "spu2.h"
 #include "spu2_sd.h"
+#include "state_registry.h"
 #include "stream_watch.h"
 
 static uint8_t staging[SNDN2_STAGING_SIZE]; /* the IRX's 0x5140 */
@@ -381,6 +382,20 @@ typedef struct StPcm {
 } StPcm;
 
 static StPcm pcm[SNDN2_PCM_CHANNELS];
+
+int sndn2_stream_state_register(void)
+{
+    int rc = 0;
+
+    rc |= ico_state_register("sndn2.staging", staging, sizeof staging, ICO_STATE_AUDIO);
+    rc |= ico_state_register("sndn2.adpcm", st, sizeof st, ICO_STATE_AUDIO);
+    rc |= ico_state_register("sndn2.queue", queue, sizeof queue, ICO_STATE_AUDIO);
+    rc |= ico_state_register("sndn2.q_write", &q_write, sizeof q_write, ICO_STATE_AUDIO);
+    rc |= ico_state_register("sndn2.q_read", &q_read, sizeof q_read, ICO_STATE_AUDIO);
+    rc |= ico_state_register("sndn2.pending", &pending, sizeof pending, ICO_STATE_AUDIO);
+    rc |= ico_state_register("sndn2.pcm", pcm, sizeof pcm, ICO_STATE_AUDIO);
+    return rc != 0 ? -1 : 0;
+}
 
 #define FOR_PCM(ch, mask)                                                                          \
     for ((ch) = 0; (ch) < SNDN2_PCM_CHANNELS; (ch)++)                                              \
