@@ -682,6 +682,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd_pixel_frame.rddump` (no VU draw). Every machine has these, so unlike the two above they do
   not skip; the 16:9 and phone settings skip for the 4:3 frames by design. CI's Direct3D 11 job
   runs the same on WARP ([below](#the-render-suite-on-direct3d-11-warp)).
+- `rd_vumerge_fallback.cmake` (ctest `rd_vumerge_fallback`, fixture `rd_dump`): `rd_replay_tool`
+  on `rd_pixel_vu.rddump` with `--time 3` under `ICO_RD_BLEND=fixed`, with the merge, with
+  `ICO_RD_VU_MERGE=0` and with `ICO_RD_FAKE_MERGE_FAIL=1` (the first pipeline made with a merge
+  build kept as failed): the faked run logs one failure line naming the merge build and once
+  `rd: VU merge: off: the driver could not compile <build> (<backend>); one GPU draw a VU draw
+  from here`, and its timed replays draw what `ICO_RD_VU_MERGE=0` draws, more than the merge
+  (`rd_replay_vu.c` `rd__vu_merge_fallback`).
 - `rd_store_plan_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` (the phone's three
   frames) three times under
   `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` (a depth or stencil load the plan leaves
@@ -1509,6 +1516,7 @@ draw:
 | `rd_pixel_test <work>` | as ctest's `rd_pixel` | the pixel cases, and the dumps `rd_pixel_frame.rddump`, `rd_pixel_vu.rddump` and `rd_pixel_vu36.rddump` (written at Original 1x by the VU seams' S4 and S3) |
 | `rd_replay_tool <dump> <png> --present 640x480 --stats --backend d3d11` | on rd_pixel's dump; its log must say `rd: VU merge: on` and never `off on Direct3D 11` (the row `rd_replay_tool_merge_on`) | the replay tool replays and presents on Direct3D 11, with the draw merge on |
 | `rd_vumerge_ab.cmake` | on rd_pixel's `rd_pixel_vu.rddump` (64 code-32 draws of one prelit mesh under one state), `rd_pixel_vu36.rddump` (a code-36 cut and kick pair) and `rd_pixel_frame.rddump`, as ctest's `rd_vumerge_ab_pixel`; some line must say `(N draws merged into G` with N above 0 (the row `rd_vumerge_ab_joined`) | the draw merge on Direct3D 11: every target byte for byte between `ICO_RD_VU_MERGE=0` and the merge, `merge on`, fewer GPU draws, no `rhi_d3d11 debug error` or `corruption` line in either run's output (both A/B scripts fail on one) (the 16:9 setting skips for these 4:3 frames) |
+| `rd_vumerge_fallback.cmake` | on `rd_pixel_vu.rddump`, as ctest's `rd_vumerge_fallback` | the fallback on Direct3D 11: under `ICO_RD_FAKE_MERGE_FAIL=1` one faked failure line naming the merge build, one `rd: VU merge: off: the driver could not compile ... (Direct3D 11)` line, and the `--time 3` replays after it drawing what `ICO_RD_VU_MERGE=0` draws (more than the merge) |
 | `rd_vufuse_ab.cmake` | on the same three dumps with `-DEXTRA=` (no phone frames), as ctest's `rd_vufuse_ab_pixel` | the fused scissor pair on Direct3D 11: every target byte for byte between `ICO_RD_VU_FUSE=0` and the fuse, the merge on in both runs (the phone and 16:9 settings skip for 4:3 frames; Enhanced 4:3 2x through the entries and the record runs) |
 | `rd_present_test <work>` | as ctest's `rd_present` | the presenter's frames |
 | `rd_msaa_test` | as ctest's `rd_msaa` | multisampling and its resolve |
@@ -1621,6 +1629,7 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_MERGE` | `rd_replay_vu.c` | 0: every VU draw a GPU draw of its own instead of the draw merge (`[dev] vu_merge = false`; `rd_vumerge_ab`, `rd_vuprepass_selftest_unmerged`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) |
 | `ICO_RD_STORE_PLAN` | `rd_profile.c`, `rd_store_plan.c` | 0: every depth store kept (`[dev] store_plan = false`); 1 the store plan (the default); `all`: every depth store dropped, a wrong plan for `rd_store_plan_ab` ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)) |
 | `ICO_RD_STORE_POISON` | `rd_store_plan.c` | 1: a depth or stencil load the store plan leaves undefined clears to 0.5 and 0x5A instead, the garbage a tile-based GPU may leave (`rd_store_plan_ab`) |
+| `ICO_RD_FAKE_MERGE_FAIL` | `rd_pipeline.c` | 1: the first pipeline made with a draw merge build is destroyed and kept as failed, as a build the driver refused; the merge goes off from the next replay (`rd_vumerge_fallback`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) |
 | `ICO_RD_VU_FUSE` | `rd_replay_vu.c` | 0: code 36's kick draws under their own pipelines instead of the fused scissor pair (`[dev] vu_fuse = false`; `rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)) |
 | `ICO_RD_CONSTANT_READS` | `rd_const_read.c` | 0: a post sprite whose source target holds only its last clear reads the target as before instead of being drawn in the clear's colour (`[dev] constant_reads = false`; `rd_constant_reads_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)) |
 | `ICO_RD_PERF_LIST_STAMPS` | `rd_perf.c` | 0: no list or effect timestamp (`[dev] perf_list_stamps = false`); `rd_perf_test` switches it with `rd__set_perf_list_stamps` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
