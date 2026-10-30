@@ -831,6 +831,19 @@ stays queued after each take, through `spu2_render` and the mirror swap
   held back behind the game; slowed for N s)`. "held back" over 0 says the game stopped or dropped
   time for longer than the bound; an "ahead" that climbs block after block with no resyncs says
   the device's clock is faster than the system's.
+- What the game was doing while the sound was held back: the held-back total since the open
+  (`ico_audio_sdl_held_ms`) is read by the window after every step, and a step that ended more
+  than 100 ms past its period while the total rose writes (the first 8 such steps, then every
+  100th; `port/platform/window_lines.c` (`window_hold_line`), from the step's profile,
+  `port/platform/host_loop.h` (`IcoStepProfile`)):
+
+      window: the game step was late by 123 ms (loading: 1 disc reads of 64 sectors, 1 texture decodes, 0 pipelines, achievements 0.1 ms): the sound was held back for 98 ms (1 such steps)
+
+  Disc reads with many sectors point at a slow drive (the summary line's `drives: data ...` says
+  what kind the game data sits on), texture decodes at the decode pool's wait (its own `rd: waited N ms for texture
+  decodes` line, [TEXTURES.md](TEXTURES.md#log-lines)), pipelines at a key the start-up set
+  missed, achievements at the stats file's write. The 120 ms bound stays: a longer lead would
+  put the sound further ahead of the picture after every stall.
 
 ### The push
 
