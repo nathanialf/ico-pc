@@ -59,6 +59,7 @@
 #include "window_pump_win.h"
 #include "window_switch.h"
 #include "window_video.h"
+#include "state.h" /* save states: F5/F9 and the picture */
 #ifdef __ANDROID__
 #include "android/gpu_driver_android.h"
 #include "android/host_android.h"
@@ -3362,6 +3363,22 @@ static void photo_pump(void)
     }
 }
 
+/* a save state's picture: the frame shown after the save (state.h) */
+static void state_thumb_pump(void)
+{
+    uint32_t w = 0, h = 0;
+    uint8_t *px;
+
+    if (!ico_state_wants_thumbnail() || !rd_read_display(NULL, &w, &h) ||
+        (px = malloc((size_t)w * h * 4)) == NULL) {
+        return;
+    }
+    if (rd_read_display(px, &w, &h)) {
+        ico_state_thumbnail(px, (int)w, (int)h);
+    }
+    free(px);
+}
+
 /* F11, the stats lines every second for 30 s */
 static void stats_fast_toggle(void)
 {
@@ -3756,6 +3773,10 @@ int ico_window_pump(void)
                 sweep_start();
             } else if (hotkey == ICO_HOTKEY_STATS_FAST) {
                 stats_fast_toggle();
+            } else if (hotkey == ICO_HOTKEY_STATE_SAVE || hotkey == ICO_HOTKEY_STATE_LOAD) {
+                /* save states' slot 1 (state.h; performed at the next poll) */
+                (hotkey == ICO_HOTKEY_STATE_SAVE ? ico_state_request_save
+                                                 : ico_state_request_load)(1);
             } else if (e.key.key == SDLK_F11 || e.key.key == SDLK_F12) {
                 /* a held key's repeats: nothing */
             } else if (escape_key(e.key.key)) {
@@ -3910,6 +3931,7 @@ int ico_window_pump(void)
         const Uint64 t1 = SDL_GetTicksNS();
 
         photo_pump();                /* photo mode's captures */
+        state_thumb_pump();          /* a save state's picture */
         sweep_pump();                /* Shift+F12's aspect sweep */
         set_capture(capture_mode()); /* play and photo mode */
         pointer_visibility();        /* the pointer in the menus */
