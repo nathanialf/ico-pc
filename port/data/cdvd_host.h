@@ -54,6 +54,10 @@ void ico_cdvd_host_vsync(void *ctx);
 
 /* Nonzero while a non-blocking command waits for the next vsync. */
 int ico_cdvd_host_busy(void);
+/* 1 when the drive is idle: no command waits for a vsync, no thread waits
+   in sceCdSync(0) and no stream is started (a save state is taken only
+   then; port/game/state_host.c). */
+int ico_cdvd_host_idle(void);
 
 /* The drive's counters, for the diagnostics heartbeat (port/platform/
    diag_host.c). */
