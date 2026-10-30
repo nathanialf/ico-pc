@@ -262,8 +262,10 @@ download for each and how well it is tested.
 
 ## Does it work on my phone?
 
-On most 64-bit Android phones and tablets from 2022 or newer, with
-Android 10 or later. [The Android guide](ANDROID.md) has the details.
+On most 64-bit Android phones and tablets from 2017 or newer, with
+Android 8 or later and graphics that support Vulkan 1.0 or later. Older
+phones can be slow, and on one with Vulkan 1.0 graphics the first start can
+take several minutes. [The Android guide](ANDROID.md) has the details.
 
 On an iPhone with iOS 15 or newer, it runs inside LiveContainer.
 [How to install it](../README.md#iphone).
