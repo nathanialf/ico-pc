@@ -32,6 +32,7 @@
 #include "modelpack.h" /* the model pack switch */
 #include "rd_mesh.h"
 #include "rd_tex.h"
+#include "rd_tex_decode.h"
 #include "texpack.h"
 
 RdContext g_rd;
@@ -1480,6 +1481,18 @@ void rd_update_texture(RdTex tex, const void *rgba8)
     g_rd.texFullUpdates++;
 }
 
+bool rd__tex_take_pixels(RdTex tex, uint8_t *px)
+{
+    RdTexRec *t = rd__tex_rec(tex.id);
+    if (!t || t->kind != RD_TEXKIND_IMAGE || t->replacement || t->format != RD_TEXEL_RGBA8 || !px) {
+        return false;
+    }
+    free(t->pixels);
+    t->pixels = px;
+    texDirtyAll(t);
+    return true;
+}
+
 size_t rd__gs_chain_bytes(uint32_t w, uint32_t h, uint32_t levels)
 {
     size_t n = 0;
@@ -1650,6 +1663,7 @@ bool rd__init_record_only(uint32_t gsW, uint32_t gsH)
     }
     rd__apply_display();
     createNamedTargets();
+    rdtex__decode_init(0); /* the decode pool's size: off unless asked */
     return true;
 }
 
@@ -1765,6 +1779,7 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     rd__crack_fill_init(); /* its line once SCENE is made */
     createNamedTargets();
     readDumpConfig();
+    rdtex__decode_init(g_rd.windowed); /* the texture decode pool (rd_tex_decode.h) */
     return true;
 }
 
@@ -1773,6 +1788,9 @@ void rd_shutdown(void)
     if (!g_rd.inited) {
         return;
     }
+    /* the decodes in flight into their textures, the pool's threads
+       stopped, before the textures go */
+    rdtex__decode_shutdown();
     if (g_rd.hasDevice) {
         rhi_wait_idle();
     }
