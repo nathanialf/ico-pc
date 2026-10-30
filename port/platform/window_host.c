@@ -4752,16 +4752,17 @@ static void perf_log(void)
         }
         fprintf(stderr,
                 "window: GPU ms per replay: lists 0-12 %s; effects: %s%s; present %.2f; VU "
-                "pre-pass %.2f\n",
-                lists, posts, partial, s_perf.gpuPresent / g, s_perf.gpuPrepass / g);
+                "pre-pass %.2f%s\n",
+                lists, posts, partial, s_perf.gpuPresent / g, s_perf.gpuPrepass / g,
+                window_tiler_words());
     }
     if (s_perf.passAgg.replays) {
         /* the timed replays' most expensive passes, each timed between
-           stamps outside the render passes (rd_perf.c, the passes) */
+           stamps outside the render passes (rd_perf.c) */
         char top[1024];
 
         rd_perf_pass_agg_text(&s_perf.passAgg, 5, top, sizeof(top));
-        fprintf(stderr, "window: GPU top passes: %s\n", top);
+        fprintf(stderr, "window: GPU top passes: %s%s\n", top, window_tiler_words());
     }
     {
         /* what a replay begins (the passes' count, for the tilers' fixed

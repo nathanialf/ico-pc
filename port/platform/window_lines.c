@@ -255,3 +255,11 @@ void window_hold_block(double stepSumMs, unsigned steps, double stepMaxMs, int h
     s_origLate = s_origSkipped = s_origReplays = 0;
     s_origReplayMs = 0.0;
 }
+
+const char *window_tiler_words(void)
+{
+    return rhi_limits()->tiler
+               ? " (tile-based GPU: the last scene pass carries the earlier passes' tile work; "
+                 "uploads carries the wait for the display before the first colour write)"
+               : "";
+}

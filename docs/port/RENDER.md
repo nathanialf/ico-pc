@@ -3052,7 +3052,7 @@ must end the pass to sample the depth too; the copy adds only the transfer), so 
 draws the same picture with the passes as they are; one that keeps the depth on the tile would read
 it in the scene's pass (a subpass input attachment, or dynamic rendering local read) and store
 neither the depth nor a copy, a change to the RHI's passes, not done. On a tiler, compare the
-sum of the lists, not one list or effect.
+sum of the lists, not one list or effect (the log's GPU top passes and GPU ms per replay lines now say so).
 
 ## Dumps and the replay tool
 

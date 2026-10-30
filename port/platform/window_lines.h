@@ -68,6 +68,9 @@ void window_hold_block_line(unsigned long long heldMs, double stepAvgMs, double 
 bool window_orig_gate(int keep, uint64_t nowNs, uint64_t dueNs, int hz);
 void window_orig_step(bool late, double replayMs);
 const char *window_orig_words(bool original);
+/* PC port: the end of the 10 s GPU lines on a tile-based GPU (where a pass's time and the
+ * display wait land; issues 95, 123), "" elsewhere */
+const char *window_tiler_words(void);
 void window_hold_block(double stepSumMs, unsigned steps, double stepMaxMs, int hz,
                        double replaySumMs, unsigned replays, bool original, const char *rateName);
 

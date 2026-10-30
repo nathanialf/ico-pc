@@ -544,7 +544,7 @@ plan's means per replay, `; stores: N depth and M colour stores dropped a replay
   is done where the pass ends, not where its commands were recorded, so a list's or an effect's time
   there is where the work ended and not its own cost ([RENDER.md](RENDER.md#the-per-pass-timing));
   the top passes line and the total are the numbers to compare, and a reporter on such a device
-  should not be asked to explain the lists' split.
+  should not be asked to explain the lists' split. The GPU ms per replay and top passes lines end with that sentence on a tile-based GPU, and say that uploads carries the wait for the display before the first colour write.
 - `window: per replay ...`: the counts (draws, passes, pipeline and bind group binds, barriers,
   copies, uploads, DATE snapshots). Its exact-blend fields (`exact blends`, `destination-read
   draws`, `storage passes`, `pass switches for the exact blend`) are 0 unless the player opted into

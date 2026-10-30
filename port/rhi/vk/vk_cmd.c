@@ -393,8 +393,11 @@ static bool vkr_submit_batch(const VkCommandBuffer *cbs, uint32_t count, bool fo
          * barrier on a swapchain image has that stage in its first scope
          * (vkr_image_barrier), which chains it to this wait in this submit
          * or a later one; the work before it, on other images, need not
-         * wait for the presentation engine.  An empty batch keeps
-         * ALL_COMMANDS. */
+         * wait for the presentation engine.  The clear passes of new targets
+         * (rd__clear_new_targets, the uploads piece) are the first colour
+         * output when they come first, so on a tile-based GPU the display
+         * wait lands in the uploads piece's time (the 10 s GPU lines say so).
+         * An empty batch keeps ALL_COMMANDS. */
         d.wait = g_vkr.acquireSem;
         d.waitStage = count ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
                             : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
