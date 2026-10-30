@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "host_fs.h"
+#include "../platform/state_port.h"
+#include "../platform/state_registry.h"
 
 typedef struct Entry {
     unsigned int tick;
@@ -24,6 +26,15 @@ static int count;
 static int loaded;
 
 static unsigned int current_tick;
+
+/* The save state's block (state_port.h): the tick the script reads at,
+   rewound by a load with the Main tick count.  The script itself (entries)
+   is the run's input, not the game's state. */
+int ico_pad_script_state_register(void)
+{
+    return ico_state_register("pad_script.tick", &current_tick, sizeof current_tick,
+                              ICO_STATE_CLOCK);
+}
 
 static const IcoPadFrame released = {0, ICO_PAD_STICK_CENTRE, ICO_PAD_STICK_CENTRE,
                                      ICO_PAD_STICK_CENTRE, ICO_PAD_STICK_CENTRE};
