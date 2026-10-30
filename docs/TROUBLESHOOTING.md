@@ -432,7 +432,7 @@ disc image once more.
 
 **"Could not open the game window."** (on a computer) or **"Could not start the
 game's graphics."** (on a phone) Your graphics driver or graphics chip does
-not support Vulkan 1.1 or later, the way the game talks to the graphics. Updating
+not support Vulkan 1.0 or later, the way the game talks to the graphics. Updating
 the graphics driver usually fixes it. On a phone, install the latest
 system update. The lines in the log that mention Vulkan say what is
 missing. If you added `backend=d3d12` to `ico-pc.ini` on Windows, delete
