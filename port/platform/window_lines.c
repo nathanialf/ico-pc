@@ -172,3 +172,25 @@ void window_hold_line(double lateMs, unsigned long long heldMs, unsigned decodes
             lateMs, p.cdReads, p.cdSectors, tc != NULL ? tc->decodes - decodes0 : 0u,
             rs != NULL ? rs->pipelineCreates - pipes0 : 0u, p.achMs, held, s_events);
 }
+
+/* a block that held this much sound back with no step past HOLD_LATE_MS */
+#define HOLD_BLOCK_MS 200ull
+
+void window_hold_block_line(unsigned long long heldMs, double stepAvgMs, double stepMaxLateMs,
+                            double periodMs, double pictureMs, const char *rateWords)
+{
+    static unsigned s_blocks;
+
+    if (heldMs <= HOLD_BLOCK_MS || stepMaxLateMs > HOLD_LATE_MS) {
+        return;
+    }
+    s_blocks++;
+    if (s_blocks > 8 && s_blocks % 30 != 0) {
+        return;
+    }
+    fprintf(stderr,
+            "window: the game step was late (steady: steps average %.1f ms against a period of "
+            "%.1f ms at %s (the picture takes %.1f ms on this GPU)): the sound was held back for "
+            "%llu ms in this block (%u such blocks)\n",
+            stepAvgMs, periodMs, rateWords, pictureMs, heldMs, s_blocks);
+}
