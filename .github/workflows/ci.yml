@@ -568,7 +568,7 @@ jobs:
 
           # manifest levels
           "$bt/aapt2" dump badging "$apk" > badging.txt
-          grep -q "minSdkVersion:'29'" badging.txt
+          grep -q "minSdkVersion:'26'" badging.txt
           grep -q "targetSdkVersion:'35'" badging.txt
 
           # full screen: resizable for folding phones, the cutout theme, and a
