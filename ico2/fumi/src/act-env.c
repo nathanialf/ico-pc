@@ -2134,7 +2134,10 @@ static void ACTGetEnvironment_jun26(void *self, void *dir, float *orient, EnvFla
             flags[2].w |= 0x80;
         }
     }
-    switch (((int)(&motionKind[GOBJ_SUB(self)->ctrl.motion])->modeBits.word << 11) >> 30) {
+    /* PC port: the host's motion records hold the demo's bits 19-20 at 24-25 (config/motion_bits.jun26.txt,
+       MotionDef modeBits pal=24 width=2 jun26=modeBits:19), where the other discs' twins read them;
+       the decomp's `<< 11 >> 30` is the raw disc layout, and on the host bits 19-20 are the item mode */
+    switch (((int)(&motionKind[GOBJ_SUB(self)->ctrl.motion])->modeBits.word << 6) >> 30) {
     default:
         kd = 60.0f;
         break;
