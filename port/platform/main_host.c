@@ -897,22 +897,55 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
                    ico_disc_archive_names_text(), ico_disc_image_names_text(""));
     return 1;
 #else
+    {
+        /* the disc the game expects (config.toml's disc, else the one played
+           last): the dialog's title says so; none known: the plain title */
+        const IcoDiscInfo *expect = disc_setting() != NULL ? disc_setting() : last_disc();
+        char title[160] = "";
+        char pref[ICO_PATH_MAX] = "";
+        char there[ICO_PATH_MAX + 16] = "";
+        const char *names;
+
+        if (expect != NULL) {
+            snprintf(title, sizeof(title),
+                     "Choose your ICO disc image (%s, or another supported disc)",
+                     expect->product_name);
+        }
+        names = expect != NULL ? expect->archive_name : ico_disc_archive_names_text();
+        ico_host_pref_dir(pref, sizeof(pref));
+        snprintf(there, sizeof(there), "%s", exe_dir);
 #if !defined(ICO_HEADLESS) && !defined(_WIN32)
-    if (pick_iso_sdl(iso, ICO_PATH_MAX) == 0) {
+        (void)title;
+        if (pick_iso_sdl(iso, ICO_PATH_MAX) == 0) {
 #else
-    if (ico_host_pick_iso(iso, ICO_PATH_MAX) == 0) {
+        if (ico_host_pick_iso(title[0] != '\0' ? title : NULL, iso, ICO_PATH_MAX) == 0) {
 #endif
-        fprintf(stderr, "ico_pc: disc image chosen in the dialog: %s\n", iso);
-        *picked = 1;
-        return 0;
+            fprintf(stderr, "ico_pc: disc image chosen in the dialog: %s\n", iso);
+            *picked = 1;
+            return 0;
+        }
+        fprintf(stderr, "ico_pc: no game data (%s) in %s or %s, and no disc image\n", names, pref,
+                there);
+        ico_host_fatal(log_file(),
+                       "No ICO disc image was found or chosen.\n"
+                       "\n"
+                       "The game looked for your game data (%s) in\n"
+                       "%s\n"
+                       "and next to the program, in\n"
+                       "%s\n"
+                       "\n"
+                       "If you played an earlier version, its game data, saves and settings "
+                       "are in that version's own userdata folder (the portable download) or "
+                       "in the first folder above. Copy that userdata folder next to this "
+                       "program, or extract the new version over the old folder, and start "
+                       "again.\n"
+                       "\n"
+                       "Otherwise put your disc image next to the program, named %s\n"
+                       "(for %s),\n"
+                       "as a .iso, .chd, .bin or .cue file, choose it in the dialog, or set "
+                       "iso=<path> in ico-pc.ini.",
+                       names, pref, there, ico_disc_image_names_text(""), ico_disc_list_text());
     }
-    ico_host_fatal(log_file(),
-                   "No ICO disc image was found or chosen.\n"
-                   "\n"
-                   "Put your disc image next to the program, named %s\n"
-                   "(for %s),\n"
-                   "as a .iso, .chd, .bin or .cue file, or set iso=<path> in ico-pc.ini.",
-                   ico_disc_image_names_text(""), ico_disc_list_text());
 #endif
     return 0;
 #endif
@@ -1568,8 +1601,8 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
                 snprintf(there + n, sizeof(there) - n, "%s%s", n > 0 ? ", " : "", ico_discs[d].id);
             }
         }
-        fprintf(stderr, "ico_pc: disc %s (%s), by %s; game data there: %s\n", want->id,
-                want->product_name, rule, there[0] != '\0' ? there : "none");
+        fprintf(stderr, "ico_pc: disc %s (%s), by %s; game data in %s and %s: %s\n", want->id,
+                want->product_name, rule, pref, exe_dir, there[0] != '\0' ? there : "none");
     }
 
     if (have & (1u << (want - ico_discs))) {

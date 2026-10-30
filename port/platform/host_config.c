@@ -1307,12 +1307,14 @@ static void flush_all(void)
 
 /* --- the dialog and the error box --------------------------------------- */
 
-int ico_host_pick_iso(char *out, size_t size)
+int ico_host_pick_iso(const char *title, char *out, size_t size)
 {
 #ifdef _WIN32
     OPENFILENAMEW ofn;
     wchar_t path[ICO_PATH_MAX] = L"";
     char utf8[ICO_PATH_MAX];
+    wchar_t *wtitle = title != NULL ? ico_widen(title) : NULL;
+    BOOL chosen;
 
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
@@ -1322,14 +1324,18 @@ int ico_host_pick_iso(char *out, size_t size)
     ofn.nMaxFile = (DWORD)(sizeof(path) / sizeof(path[0]));
     /* no disc names here: this file is built without the discs table
        (port/data/discs.c) in several test programs */
-    ofn.lpstrTitle = L"Choose your ICO disc image (one of the supported discs)";
+    ofn.lpstrTitle =
+        wtitle != NULL ? wtitle : L"Choose your ICO disc image (one of the supported discs)";
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-    if (!GetOpenFileNameW(&ofn) || ico_narrow(path, utf8, sizeof(utf8)) != 0) {
+    chosen = GetOpenFileNameW(&ofn);
+    free(wtitle);
+    if (!chosen || ico_narrow(path, utf8, sizeof(utf8)) != 0) {
         return -1;
     }
     copy(out, size, utf8);
     return 0;
 #else
+    (void)title;
     (void)out;
     (void)size;
     return -1;

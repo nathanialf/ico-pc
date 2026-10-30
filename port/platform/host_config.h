@@ -278,9 +278,10 @@ void ico_host_log_flush(void);
    goes to the file and logcat now (the app going to the background, where
    the system may end the process unasked). */
 void ico_host_log_flush_all(void);
-/* Windows: the file-open dialog for the disc image; 0 and the path, or -1
-   if cancelled. Elsewhere: -1. */
-int ico_host_pick_iso(char *out, size_t size);
+/* Windows: the file-open dialog for the disc image, with `title` (UTF-8; NULL:
+   "Choose your ICO disc image (one of the supported discs)"); 0 and the path,
+   or -1 if cancelled. Elsewhere: -1. */
+int ico_host_pick_iso(const char *title, char *out, size_t size);
 
 /* The disc a start plays (main_host.c), by the first rule that names one:
    the [game] disc pin (pin, a row of config/regions.txt, or -1 for auto),
