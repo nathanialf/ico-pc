@@ -7,6 +7,8 @@
  * buffer and the movie audio buffer).
  */
 #include "iop_ram.h"
+#include "state_port.h"
+#include "state_registry.h"
 
 #include <string.h>
 
@@ -51,6 +53,18 @@ typedef struct {
 /* allocated blocks, kept sorted by address */
 static HeapBlock heapBlocks[HEAP_MAX_BLOCKS];
 static int heapCount;
+
+/* The save state's blocks (state_port.h): IOP RAM holds IOP addresses and
+   sample data, the heap table IOP addresses; no host pointers. */
+int ico_iop_ram_state_register(void)
+{
+    int rc = 0;
+
+    rc |= ico_state_register("iop.ram", ico_iop_ram, sizeof ico_iop_ram, 0);
+    rc |= ico_state_register("iop.heap_blocks", heapBlocks, sizeof heapBlocks, 0);
+    rc |= ico_state_register("iop.heap_count", &heapCount, sizeof heapCount, 0);
+    return rc != 0 ? -1 : 0;
+}
 
 void ico_iop_heap_reset(void)
 {
