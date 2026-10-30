@@ -7,7 +7,7 @@
  * fallbacks, the label box lt_ext_draw_row draws in), and the hit test (a
  * label is Cross, a value Right on its owner, the arrows Left and Right with
  * their padding, headings, masked and hidden rows never hit, the smallest
- * box first).
+ * box first, the scroll marks and a button prompt moving no cursor).
  */
 #include <stdio.h>
 #include <string.h>
@@ -263,6 +263,16 @@ static void testHits(void)
     mk.masked = 0;
     mk.visible = 0;
     CHECK(!ui_mouse_hit_test(&mk, 1, 600.0f, 90.0f, &h), "a hidden UP mark is not hit");
+    /* a button prompt (the Continue screen's Save states line): a hit is
+       Square with no item, needs no item links or owner, masked is not hit */
+    UiMouseRow pr = row(611, 280, 183, 80, 30); /* its box: y 366..396 */
+    pr.itemLinks = 0;
+    pr.role = UI_MOUSE_ROLE_SQUARE;
+    CHECK(ui_mouse_hit_test(&pr, 1, 300.0f, 380.0f, &h) && h.row == 611 && h.item == -1 &&
+              h.action == UI_MOUSE_ACT_SQUARE && h.layout == 80,
+          "a prompt: Square, item -1 (%d %d %d)", h.row, h.item, h.action);
+    pr.masked = 1;
+    CHECK(!ui_mouse_hit_test(&pr, 1, 300.0f, 380.0f, &h), "a masked prompt is not hit");
     /* an arrow without an owner is no item */
     al.ownerItem = -1;
     CHECK(!ui_mouse_hit_test(&al, 1, 369.0f, 98.0f, &h), "an ownerless arrow is not hit");
