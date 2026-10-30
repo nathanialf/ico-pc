@@ -5285,6 +5285,87 @@ static void checkRingGrowth(void)
     rd_shutdown();
 }
 
+/* one frame on slot `slot` needing `need` bytes of ring: the frames before it
+   that bring the slot round need 1 MB (a quarter of the 4 MB start, so they
+   leave the other slots' counts alone, being not under it) */
+static bool ringFrameOn(uint32_t slot, uint64_t need)
+{
+    while (g_rd.replayCounter % RHI_FRAMES_IN_FLIGHT != slot) {
+        if (!rd__begin_own_frame(1u << 20)) {
+            return false;
+        }
+    }
+    return rd__begin_own_frame(need);
+}
+
+/* issue 126: the ring shrinks.  A slot whose need stays under a quarter of
+   its ring for RD_RING_SHRINK_REPLAYS replays in a row is remade at half;
+   a frame needing a quarter or more, or a growth, starts the count again;
+   16 MB is the floor */
+static void checkRingShrink(void)
+{
+    RdSettings s = originalSettings();
+    if (!rd_init(512, 512, &s, NULL)) {
+        CHECK(0, "shrink: rd_init");
+        return;
+    }
+    const uint64_t mb = 1ull << 20;
+    const uint32_t slot = 0;
+    const uint64_t small = 1u << 20;
+    CHECK(ringFrameOn(slot, 40 * mb), "shrink: a 40 MB frame");
+    const uint64_t big = g_rd.ringCap[slot];
+    CHECK(big >= 40 * mb && g_rd.ringSmall[slot] == 0, "shrink: grown to %llu MB, count %u",
+          (unsigned long long)(big >> 20), g_rd.ringSmall[slot]);
+    /* the count: one a small frame, the slot unchanged until the 300th */
+    for (uint32_t i = 1; i < RD_RING_SHRINK_REPLAYS; i++) {
+        CHECK(ringFrameOn(slot, small), "shrink: small frame %u", i);
+    }
+    CHECK(g_rd.ringCap[slot] == big && g_rd.ringSmall[slot] == RD_RING_SHRINK_REPLAYS - 1u,
+          "shrink: after %u small frames the ring is %llu MB (want %llu), count %u",
+          RD_RING_SHRINK_REPLAYS - 1u, (unsigned long long)(g_rd.ringCap[slot] >> 20),
+          (unsigned long long)(big >> 20), g_rd.ringSmall[slot]);
+    const RhiBuffer before = g_rd.ring[slot];
+    CHECK(ringFrameOn(slot, small), "shrink: the 300th small frame");
+    CHECK(g_rd.ringCap[slot] == big / 2 && g_rd.ring[slot].id != before.id &&
+              g_rd.ringMap[slot] != NULL && g_rd.ringSmall[slot] == 0,
+          "shrink: halved to %llu MB (want %llu), count %u",
+          (unsigned long long)(g_rd.ringCap[slot] >> 20), (unsigned long long)((big / 2) >> 20),
+          g_rd.ringSmall[slot]);
+    /* a frame needing a quarter of the ring or more starts the count again */
+    const uint64_t half = g_rd.ringCap[slot];
+    for (uint32_t i = 0; i < 100; i++) {
+        CHECK(ringFrameOn(slot, small), "shrink: small frame before the reset");
+    }
+    CHECK(g_rd.ringSmall[slot] == 100, "shrink: count %u (want 100)", g_rd.ringSmall[slot]);
+    CHECK(ringFrameOn(slot, half / 4), "shrink: a quarter-size frame");
+    CHECK(g_rd.ringSmall[slot] == 0 && g_rd.ringCap[slot] == half,
+          "shrink: a quarter-size frame left count %u, ring %llu MB", g_rd.ringSmall[slot],
+          (unsigned long long)(g_rd.ringCap[slot] >> 20));
+    /* a growth does too */
+    for (uint32_t i = 0; i < 50; i++) {
+        CHECK(ringFrameOn(slot, small), "shrink: small frame before the growth");
+    }
+    CHECK(ringFrameOn(slot, half + mb), "shrink: a growth");
+    CHECK(g_rd.ringCap[slot] > half && g_rd.ringSmall[slot] == 0,
+          "shrink: after a growth the ring is %llu MB, count %u",
+          (unsigned long long)(g_rd.ringCap[slot] >> 20), g_rd.ringSmall[slot]);
+    /* down to the floor and no further */
+    for (int round = 0; round < 6; round++) {
+        for (uint32_t i = 0; i < RD_RING_SHRINK_REPLAYS; i++) {
+            if (!ringFrameOn(slot, small)) {
+                CHECK(0, "shrink: small frame in round %d", round);
+                break;
+            }
+        }
+    }
+    CHECK(g_rd.ringCap[slot] == RD_RING_SHRINK_FLOOR,
+          "shrink: the ring settled at %llu MB (want the %llu MB floor)",
+          (unsigned long long)(g_rd.ringCap[slot] >> 20),
+          (unsigned long long)(RD_RING_SHRINK_FLOOR >> 20));
+    rhi_wait_idle();
+    rd_shutdown();
+}
+
 static void checkBlank(void)
 {
     const uint32_t w = 800, h = 600;
@@ -5418,6 +5499,7 @@ int main(int argc, char **argv)
     checkEffectsDepth();
     checkBlank();
     checkRingGrowth();
+    checkRingShrink();
     if (failures) {
         printf("rd_present_test: %d failures\n", failures);
         return 1;
