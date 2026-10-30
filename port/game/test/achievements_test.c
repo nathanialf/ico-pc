@@ -1255,6 +1255,7 @@ static void test_discs(void)
     /* the file as the other disc left it: its visited set (stage 0), a run
        in its slot 3, an unlock */
     snprintf(s_path, sizeof(s_path), "%s/discs.toml", s_dir);
+    ico_ach_writer_idle(); /* the unlocks above write in the background: let them land first */
     remove(s_path);
     t = ico_toml_parse("");
     CHECK(t != NULL);
@@ -1374,6 +1375,10 @@ static void test_write_path(void)
     start("writepath");
     new_game();
     ico_ach_flush();
+    /* the first kill unlocks first_shadow, and an unlock writes at once: get
+       it out of the way so the kills below change a counter and nothing else */
+    kills(1);
+    ico_ach_writer_idle();
     /* only the hand-held time changes: written every 60 s of Main ticks, not
        every ICO_ACH_STATS_FLUSH_TICKS */
     g.girl_present = 1;
@@ -1445,7 +1450,8 @@ static void test_write_path(void)
     ico_gs_set_sampler(sampler);
     fresh_world();
     ticks(1);
-    kills(1);
+    kills(1);              /* first_shadow unlocks: its write fails at once */
+    ico_ach_writer_idle(); /* that write is over before the counts are taken */
     ico_ach_writer_counts(&sub0, &wr0, &rep0);
     ticks(ICO_ACH_STATS_FLUSH_TICKS + 20);
     ico_ach_writer_idle();

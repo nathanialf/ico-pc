@@ -192,7 +192,7 @@ static void testBuild(void)
                   lt_ext_prop(cl[12])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
               "Touch screen opens its page");
     }
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 9), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 10), "gameplay rows");
     /* the pop-ups switch is an item of the list (first, before the achievements), not a row of its own */
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
     CHECK(labelsAre(UI_PAGE_REMAP, listOpts, listStrs, 8), "remap slots");
@@ -1904,9 +1904,23 @@ static void testValues(void)
         static const float kFactor[4] = {0.75f, 1.0f, 1.25f, 1.5f};
         int k;
 
-        CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_SHADOW_SPEED) ==
-                  ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PIT_TIME) + 1,
-              "the Shadow speed row sits right after Time to rescue Yorda");
+        {
+            /* the rows in page order (ui_settings_row_of gives a layout item, and a
+               row's note item sits between two rows' labels) */
+            int rl[16], ro[16], rn, pit = -1, speed = -1;
+
+            rn = ui_settings_page_rows(UI_PAGE_GAMEPLAY, rl, ro, NULL, 16);
+            for (k = 0; k < rn; k++) {
+                if (ro[k] == UI_OPT_PIT_TIME) {
+                    pit = k;
+                } else if (ro[k] == UI_OPT_SHADOW_SPEED) {
+                    speed = k;
+                }
+            }
+            CHECK(pit >= 0 && speed == pit + 1,
+                  "the Shadow speed row sits right after Time to rescue Yorda (%d, %d)", pit,
+                  speed);
+        }
         CHECK(strcmp(ui_settings_value_text(UI_OPT_SHADOW_SPEED), "Original") == 0,
               "shadow speed default");
         for (k = 2; k < 7; k++) {
@@ -2823,9 +2837,10 @@ static void testGameOptions(void)
     press(0x4000);
     press(0x4000);
     press(0x4000);
+    press(0x4000);
     CHECK(lt_ext_layout(gameL)->curItem == film,
-          "down six times from Yorda (past Time to rescue Yorda, Natural chains and Skip the "
-          "opening): Film effect");
+          "down seven times from Yorda (past Time to rescue Yorda, Shadow speed, Natural chains "
+          "and Skip the opening): Film effect");
     optionScreenMode = 0;
     s_filmCalls = 0;
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FILM_EFFECT), "Off") == 0, "film effect Off (%s)",

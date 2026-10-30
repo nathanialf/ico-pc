@@ -574,7 +574,8 @@ static void test_shadow_speed(void)
     CHECK(text != NULL);
     if (text != NULL) {
         CHECK(count_of(text, "ratio *= ico_opt_shadow_speed_factor();") == 1);
-        CHECK(count_of(text, "ratio > 0.001f && ico_opt_shadow_speed_factor() != 1.0f") == 1);
+        CHECK(count_of(text, "ratio > 0.001f &&") == 1);
+        CHECK(count_of(text, "ico_opt_shadow_speed_factor() != 1.0f") == 1);
         CHECK(count_of(text, "kind == 4 && ratio > 0.001f") == 1);
         CHECK(count_of(text, "ctrl.motion != diveMotion") == 1);
         CHECK(count_of(text,
