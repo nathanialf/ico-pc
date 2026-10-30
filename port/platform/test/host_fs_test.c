@@ -95,6 +95,42 @@ int main(int argc, char **argv)
     CHECK(ico_path_kind(dir, NULL, NULL) == -1);
     CHECK(ico_fopen(b, "rb") == NULL);
 
+    /* the drive word (issue 126): one of the known words for a real path, and
+       for a path that is not there, "unknown" */
+    {
+        static const char *const known[] = {"fixed",  "removable", "network", "RAM disk",
+                                            "CD-ROM", "fuse",      "unknown"};
+        char kind[16];
+        size_t i;
+        int ok = 0;
+
+        CHECK(ico_host_drive_kind(".", kind, sizeof(kind)) == 0);
+        for (i = 0; i < sizeof(known) / sizeof(known[0]); i++) {
+            ok |= strcmp(kind, known[i]) == 0;
+        }
+        CHECK(ok);
+        CHECK(ico_host_drive_kind("", kind, sizeof(kind)) == 0 && strcmp(kind, "unknown") == 0);
+        CHECK(ico_host_drive_kind(NULL, kind, sizeof(kind)) == 0 && strcmp(kind, "unknown") == 0);
+        CHECK(ico_host_drive_kind(".", kind, 3) == -1 && kind[0] == '\0'); /* too small */
+#ifdef _WIN32
+        CHECK(ico_host_drive_kind("\\\\server\\share\\ico", kind, sizeof(kind)) == 0 &&
+              strcmp(kind, "network") == 0);
+#else
+        if (ico_path_kind("/dev/shm", NULL, NULL) == 1) {
+            CHECK(ico_host_drive_kind("/dev/shm", kind, sizeof(kind)) == 0 &&
+                  strcmp(kind, "RAM disk") == 0);
+        }
+        CHECK(ico_host_drive_kind("/nonexistent-ico-drive-test", kind, sizeof(kind)) == 0 &&
+              strcmp(kind, "unknown") == 0);
+#endif
+        /* the words the start-up lines append, and the summary's */
+        CHECK(strstr(ico_host_drive_note(ICO_DRIVE_DATA, "/nonexistent-ico-drive-test"), " on ") ==
+              NULL);
+        CHECK(strstr(ico_host_drive_note(ICO_DRIVE_USER, "."), "unknown") == NULL);
+        ico_host_drive_summary(kind, sizeof(kind));
+        CHECK(strncmp(kind, "drives: data ", 13) == 0);
+    }
+
     if (fails != 0) {
         printf("%d failure(s)\n", fails);
         return 1;
