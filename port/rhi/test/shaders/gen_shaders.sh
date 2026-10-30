@@ -18,7 +18,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../../.." && pwd)"
 DXC="${DXC:-$ROOT/tools/toolchain/deps/dxc/bin/dxc}"
 SPIRV_CROSS="${SPIRV_CROSS:-$ROOT/tools/toolchain/deps/spirv-cross/bin/spirv-cross}"
-FLAGS=(-spirv -fspv-target-env=vulkan1.1 -fvk-b-shift 0 all -fvk-t-shift 16 all
+FLAGS=(-spirv -fspv-target-env=vulkan1.0 -fvk-b-shift 0 all -fvk-t-shift 16 all
        -fvk-s-shift 32 all -fvk-u-shift 48 all -O3)
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
