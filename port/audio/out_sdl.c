@@ -1063,6 +1063,11 @@ int ico_audio_sdl_summary_text(char *out, size_t size)
     return 1;
 }
 
+unsigned long long ico_audio_sdl_held_ms(void)
+{
+    return pull_render != NULL ? (unsigned long long)(P_LOAD(P.held) * 1000u / RATE) : 0u;
+}
+
 void ico_audio_sdl_log_summary(void)
 {
     char line[640];
