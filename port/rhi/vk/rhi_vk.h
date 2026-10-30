@@ -84,6 +84,14 @@ void vkr_test_pass_area_no_assert(bool on);
 const char *vkr_test_sync_kind(void);
 uint32_t vkr_test_sync_recycle_waits(void);
 
+/* For the same cell (vk_device.c): the Vulkan version the device is used
+ * at (VK_API_VERSION_1_0 under ICO_VK_FAKE_API=1.0, issue 158), whether
+ * its render passes are VkRenderPass objects, and whether the UINT views
+ * carry their usage structure (Vulkan 1.1, or VK_KHR_maintenance2 on 1.0) */
+uint32_t vkr_test_api_version(void);
+bool vkr_test_legacy_passes(void);
+bool vkr_test_view_usage(void);
+
 #ifdef __cplusplus
 }
 
