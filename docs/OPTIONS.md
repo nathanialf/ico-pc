@@ -490,9 +490,10 @@ page, and it is the same setting in both places.
 ## Extras
 
 On the title screen's Options this page has Music, Models, Credits,
-Character Customization, Game variants, Add to Steam (on Windows and Linux),
-Export textures and Achievement pop-ups. In the pause menu's Options it has only
-Character Customization, Game variants and Achievement pop-ups.
+Save states, Character Customization, Game variants, Add to Steam (on Windows
+and Linux), Export textures and Achievement pop-ups. In the pause menu's
+Options it has only Save states, Character Customization, Game variants and
+Achievement pop-ups.
 
 - **Music:** listen to the game's music and sound effects.
 - **Models:** the model viewer. Look closely at the characters and some
@@ -500,6 +501,17 @@ Character Customization, Game variants and Achievement pop-ups.
 - **Credits:** watch the ending credits again. It unlocks once you have
   finished the game. The June 2001 magazine demo has no ending credits on
   its disc, so the row is not there with that disc.
+- **Save states:** four slots for each disc, each with a small picture, the
+  area, the play time and the date. Choose a slot and press Left or Right to
+  pick **Save**, **Load** or **Delete**, then press the confirm button.
+  Saving over a slot that is in use, and deleting, ask you to press again
+  within two seconds. Saving is only possible from the pause menu, so on the
+  title screen the page only loads and deletes. A slot that cannot be loaded
+  (it was saved by another version of the game, on another disc, or with
+  different gameplay settings) is greyed, and the line under the cards says
+  why. After a load the game is back on the pause menu, on **Save states**.
+  The same page opens from the pause menu's **Save states** row, under Photo
+  mode. On a computer, F5 saves to slot 1 and F9 loads it.
 - **Character Customization:** change the colours of Ico and Yorda.
   [Details below](#character-customization).
 - **Game variants:** change how the game plays.
