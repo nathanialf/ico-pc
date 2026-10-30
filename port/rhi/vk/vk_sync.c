@@ -72,8 +72,9 @@ bool vkr_sync_init(void)
             return false;
         }
     }
-    VKR_LOG("submission sync: a ring of %u fences (no timeline semaphores%s)", VKR_SYNC_FENCE_RING,
-            g_vkr.fakeNoTimeline ? ": ICO_VK_FAKE_API=1.1" : "");
+    VKR_LOG("submission sync: a ring of %u fences (no timeline semaphores%s%s)",
+            VKR_SYNC_FENCE_RING, g_vkr.fakeNoTimeline ? ": ICO_VK_FAKE_API=" : "",
+            g_vkr.fakeNoTimeline && g_vkr.fakeApi ? g_vkr.fakeApi : "");
     return true;
 }
 
