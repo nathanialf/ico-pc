@@ -823,3 +823,33 @@ since the fill and nothing reads WORK2 after the reduction; WORK2's own bytes wo
 from the reference (the pass dump's WORK2.png). Not done: the expected saving on the
 phone is the WORK2 pass (2.9 ms in a glow replay, about 1.3 ms a replay over the phone's capture) less
 the reduction's four loads a tap.
+
+## The upload ring shrinks
+
+Not a work buffer; kept here because RENDER.md is at its size cap (issue 126, finding F3). Each
+frame slot has an upload ring (`g_rd.ring`, `ringCap`; `port/render/rd_upload.c` `rd__ensure_ring`)
+that starts at 4 MB and doubles to the frame's need. A stage change that replaces many textures
+needs tens of MB for one frame (the playthrough's lines "the upload ring of frame slot 0 grows to
+128 MB (this frame needs 68 MB)"). A ring that only grows would keep two 128 MB rings
+in video memory on a 1 GB card beside 19 work targets and the stage's textures, and the replays
+after the stage change waited 100 to 160 ms on the frame fence with 8 to 12 ms of timed GPU work
+and nothing created.
+
+The rule, per slot (`rd__ensure_ring`, called once a replay with the replay's need):
+
+- a replay whose need is under a quarter of the slot's capacity counts one in `g_rd.ringSmall[slot]`;
+  a replay that needs a quarter or more, or a growth, sets the count to 0;
+- at `RD_RING_SHRINK_REPLAYS` (300) in a row the slot's ring is remade at half its capacity
+  (`newRing`, whose `rhi_destroy_buffer` of the old ring is deferred, so the frames still in flight
+  keep reading it), and the count starts again; the log says
+  `the upload ring of frame slot N shrinks to M MB (needed under K MB for 300 replays)`;
+- never under `RD_RING_SHRINK_FLOOR` (16 MB): a ring at or near it stays. The start size (4 MB) is
+  below the floor, which stops shrinking only, not the start;
+- a shrink that cannot be made (`newRing` refused) keeps the old ring, and the count still starts
+  again.
+
+300 replays in a row is 5 seconds at 60 replays a second; a stage change's burst is followed by the
+halvings 128, 64, 32, 16 MB over 15 seconds. The grow lines (64 MB and over) are unchanged.
+`checkRingShrink` in `port/render/test/rd_present_test.c` runs the rule on a real ring: the count,
+the halving at the 300th, the reset by a quarter-size frame and by a growth, and the floor.
+Whether the card was short of memory is in the log: [RHI.md](RHI.md) (`videoMemBudget`).
