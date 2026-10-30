@@ -1,0 +1,16 @@
+# Dump list for rd_vumerge_mali (port/render/test/rd_vumerge_mali.cmake: the
+# VU draw merge under a Mali-G52 class phone's limits and without dual-source
+# blending, against the plain device, byte for byte).  MACHINE-LOCAL: these
+# are paths on the maintainer's machine; the dumps themselves are never
+# committed.  Missing files are reported and skipped (no dump at all: SKIP).
+# A line: the dump, then optionally expect=IN/GPU (the plain replay's
+# "IN merged into GPU" figure, asserted for both runs), then rd_replay_tool's
+# setting arguments (none: the tool's defaults).
+#
+# issue 164: the Mali-G52 reporter's frame (the settings over a paused room)
+/primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump expect=826/87 --aspect 21:9 --resolution 1x
+# the phone frames rd_vufuse_ab reads (code 36's fused pairs)
+/primary/dev/ico-pc/build-host/tmp/v094/evidence/android-rc2/dump/frame-20261028-151709-v2199.rddump expect=617/66
+/primary/dev/ico-pc/build-host/tmp/v094/evidence/android-dump/frame-20261028-105852-v4103.rddump expect=806/80
+# a 2026-10-07 capture
+/primary/dev/ico-dumps/frame-20261007-200706-v3112.rddump expect=12/4 --aspect 4:3

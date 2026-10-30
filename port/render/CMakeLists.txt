@@ -1703,6 +1703,26 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_vumerge_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_vumerge_mali (test/rd_vumerge_mali.cmake, issue 164): the dumps of
+    # the machine-local list tools/vumerge_mali_dumps.txt (the Mali-G52
+    # reporter's frame, /primary/dev/ico-dumps/164/, the phone frames and a
+    # capture) on the plain device and under a phone GPU's limits without
+    # dual-source blending (ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_NO_DUAL=1:
+    # every lerp draw two passes), under ICO_RD_BLEND=fixed: every named
+    # target byte for byte, the draw merge's figures and the fused pairs the
+    # plain device's (826 draws merged into 87 on the 164 frame); label
+    # mali; SKIP as rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vumerge_mali")
+    add_test(NAME rd_vumerge_mali
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vumerge_mali_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vumerge_mali"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vumerge_mali.cmake")
+    set_tests_properties(rd_vumerge_mali PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800
+                                                     LABELS mali)
+    if(_env)
+        set_tests_properties(rd_vumerge_mali PROPERTIES ENVIRONMENT "${_env}")
+    endif()
     # rd_vufuse_ab (test/rd_vufuse_ab.cmake): the same dumps and the phone's
     # frames (tools/vufuse_dumps.txt) with code 36's kicks under their own
     # pipelines (ICO_RD_VU_FUSE=0) and with the fused scissor pair
