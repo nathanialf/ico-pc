@@ -126,6 +126,8 @@ The window, the picture's size and shape, and the speed.
   your screen's refresh rate (see your system's display settings). If a
   faint trailing image stays while you move, try another limit, or on
   Windows the Direct3D 12 renderer ([Choosing the renderer](#choosing-the-renderer)).
+  Original: the disc's own rate; when the graphics card cannot draw a
+  picture in time, pictures are dropped and the game keeps its pace.
 - **Frame rate counter** is Off or On, and starts Off. On shows how many
   pictures the game is putting on the screen each second, as a small
   number such as "60 fps" in the top-left corner of the screen. It is
