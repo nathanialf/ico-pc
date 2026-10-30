@@ -297,6 +297,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   dynamic pool empty and again with every motion loaded (some offered then).
 - `model_viewer_headless.cmake` with `model_viewer_pad.txt`: the headless game driven from boot to
   the first model, an animation and back (`model_viewer_headless`).
+- `state_roundtrip_headless.cmake` with `state_roundtrip_pad.txt`: save states in the headless game,
+  started in stage 22 (`[dev] start_stage`). `state_roundtrip_headless`: Start opens the pause menu
+  at tick 400, `[dev] state_save_at=440:1` saves slot 1 there, the script closes the menu, the boy
+  calls the girl and the camera turns, `state_hash_at=700` logs the hash of the arena and the
+  game's data and bss, `state_load_at=700:1` loads slot 1 (the Main tick and the script's cursor
+  go back to 440), the same presses play again and the second hash at 700 must equal the first,
+  with no `state: refused` line. `state_roundtrip_headless_settings`: one run saves slot 1, a
+  second run over a copy of its states folder with `[gameplay] yorda_safe = true` (a simulation
+  key) loads it and must log `state: refused load slot 1: settings differ: gameplay.yorda_safe=...`
+  and go on to its last tick. Both skip without the disc image and on a sanitizer build ([Tests
+  that need the disc](#tests-that-need-the-disc)).
 - `options_test.c`: the gameplay options' defaults and setters (Hold type: the disc's own by default, `toggle`
   from the file, an unknown word as the disc's own; `test_hold_discs` selects each of the seven
   discs and checks the resolve: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 for no key, `"disc"`, a
@@ -1635,17 +1646,35 @@ has their defaults; the registrations are in `port/*/CMakeLists.txt`):
 - `ICO_BOOT_DUMP_DIR`, a start-up's frame dumps: `rd_boot_present`; `ICO_BOOT_DUMP_OLD` sets
   `ICO_BOOT_OLD=1` for dumps whose frames 118 to 120 draw stage 1 (`port/render/CMakeLists.txt`).
 
-Three tests start the headless game itself, each in a fresh folder with its own `ico-pc.ini` and a
+Five tests start the headless game itself, each in a fresh folder with its own `ico-pc.ini` and a
 pad script, `RUN_SERIAL` and with a long timeout:
 `model_viewer_headless` (`port/game/test/model_viewer_headless.cmake` with
 `model_viewer_pad.txt`), `gallery_sweep` (`port/ui/test/gallery_sweep.py`, which plays through
-`ICO_GALLERY_PLAY`) and `credits_headless` (`port/ui/test/credits_headless.py`, with
-`unlock_credits=1`); the two scripts share `headless_common.py`, whose pad walks the boot to the
-title and then Settings > Extras. A worktree configured with `-DICO_DISC_IMAGE=/nonexistent
--DICO_BASE_ELF=/nonexistent` cannot start the game in any of them (`tools/dev_build.sh`, header);
-the ctest exclusion used for such runs, `-E
-"^(model_viewer_headless|gallery_sweep|credits_headless|rd_replay_tool)$"`, also leaves out
-`rd_replay_tool`, whose dump comes from `rd_pixel`.
+`ICO_GALLERY_PLAY`), `credits_headless` (`port/ui/test/credits_headless.py`, with
+`unlock_credits=1`), and `state_roundtrip_headless` and `state_roundtrip_headless_settings`
+(`port/game/test/state_roundtrip_headless.cmake` with `state_roundtrip_pad.txt`, the `[dev]`
+`state_save_at`, `state_load_at` and `state_hash_at` keys, [CONFIG.md](CONFIG.md#dev); also
+skipped on a sanitizer build, where save states are off); the two Python scripts share
+`headless_common.py`, whose pad walks the boot to the title and then Settings > Extras. A worktree
+configured with `-DICO_DISC_IMAGE=/nonexistent -DICO_BASE_ELF=/nonexistent` cannot start the game
+in any of them (`tools/dev_build.sh`, header); the ctest exclusion used for such runs, `-E
+"^(model_viewer_headless|gallery_sweep|credits_headless|rd_replay_tool|state_roundtrip_headless|state_roundtrip_headless_settings)$"`,
+also leaves out `rd_replay_tool`, whose dump comes from `rd_pixel`.
+
+The save states' round trip is not part of any gate; run it on a build with the disc image
+(`ICO_DISC_IMAGE`) after a change to save states, the registry or anything the game's memory
+holds:
+
+    tools/dev_build.sh . ico_pc -- -R state_roundtrip_headless
+
+or, in a configured headless build folder, `ctest -R state_roundtrip_headless` (both tests; they
+take a few seconds each). On a failure the message names what is missing or different and the
+log (`<build>/port/game/state_roundtrip_headless_run/logs/ico-pc.log`; the settings test's two
+runs are under `state_roundtrip_headless_settings_run/save` and `.../load`). The pad's ticks
+assume the stage is playable by tick 400 and the pause menu up by 440 (`state_roundtrip_pad.txt`,
+header comment); a `state: refused save slot 1: not on the pause menu` or `the disc is busy`
+there means those ticks need moving, a hash that differs means something the game's memory
+holds was not put back.
 
 ## Environment switches
 
