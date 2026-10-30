@@ -165,6 +165,7 @@ add_library(ico_render STATIC
     rd_shadow_selftest.c # the shadow count's one draw: the start-up check on the device
     rd_store_plan.c # the depth stores and loads a replay drops: no later pass touches the depth
     rd_tex.c
+    rd_tex_decode.c # the texture decode pool: rdtex_store's decodes off the game thread
     rd_water.c # block targets, aliases, camera scopes
     rd_video.c # the FMV picture (port/fmv/rd_video.h)
     texpack_dds.c # texture packs: the DDS and PNG loaders (texpack.h)
@@ -176,6 +177,8 @@ target_include_directories(ico_render
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 target_compile_options(ico_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref ico_texpack_name)
+# rd_tex_decode.c: the decode pool's threads (port/platform/ico_thread.h)
+target_link_libraries(ico_render PUBLIC ico_thread)
 # texpack.c, modelpack.c: the selected disc's pack folder (port/core)
 target_link_libraries(ico_render PUBLIC ico_region)
 # texture packs: texpack_png.c inflates with miniz's tinfl
@@ -285,6 +288,15 @@ target_compile_definitions(rd_tex_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(rd_tex_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_tex_test PRIVATE ico_render ico_math ico_options)
+
+# rd_tex_pool_test: the texture decode pool (rd_tex_decode.h) against the
+# game thread's decode: 200 textures of every format and TEXA mode, their
+# levels, updates queued behind their creates, the bounded queue's fallback,
+# byte for byte; on a device (77 without one) the uploads' alpha scans
+add_executable(rd_tex_pool_test test/rd_tex_pool_test.c)
+target_include_directories(rd_tex_pool_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_options(rd_tex_pool_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(rd_tex_pool_test PRIVATE ico_render)
 
 # rd_gsbase_test: GsBase.c's host path with the 2D layer
 # (GifPacket.c, DisplayList.c, DmaPacket.c) as the window build has them,
@@ -780,7 +792,7 @@ target_link_libraries(rd_stream_audit_test PRIVATE ico_render ico_vu1_ref ico_mi
 
 # Windows: SDL3.dll beside the programs
 ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_tool rd_state_test rd_pixel_test
-                  rd_layout_test rd_tex_test rd_gsbase_test rd_mesh_test modelpack_test
+                  rd_layout_test rd_tex_test rd_tex_pool_test rd_gsbase_test rd_mesh_test modelpack_test
                   rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blend_selftest_test
                   rd_vuprepass_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
@@ -819,6 +831,8 @@ if(ICO_RUN_TESTS)
     set_tests_properties(texpack_export_disc PROPERTIES SKIP_RETURN_CODE 77
                          FIXTURES_REQUIRED texpack_names)
     set_tests_properties(rd_tex PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_tex_pool COMMAND rd_tex_pool_test)
+    set_tests_properties(rd_tex_pool PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_gsbase COMMAND rd_gsbase_test)
     set_tests_properties(rd_gsbase PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME gsb_cull COMMAND gsb_cull_test)
@@ -1011,7 +1025,7 @@ if(ICO_RUN_TESTS)
     endif()
     if(_env)
         set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
-        set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_gsbase ${rd_mesh_SHARDS} modelpack
+        set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_tex_pool rd_gsbase ${rd_mesh_SHARDS} modelpack
                              rd_shadow rd_shadow_edges rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_display_change rd_native PROPERTIES ENVIRONMENT
                                                                            "${_env}")
         set_tests_properties(${rd_blur_SHARDS} PROPERTIES ENVIRONMENT "${_env}")
