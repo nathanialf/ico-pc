@@ -29,6 +29,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | `port/game/title_logo.h`, `title_logo.c` | the title logo hidden under the port's menus, the title's full-frame models |
 | `port/platform/steam_shortcut.h` | Add to Steam |
 | `port/platform/gpu_driver.h` | the Android build's graphics driver packages |
+| `port/game/state_host.c`, `state_rules.h`, `state_rules.c` | save states: the save, the load, the slots, the picture, the [dev] keys; the conditions and the listing |
 
 ## Gameplay options
 
@@ -829,6 +830,35 @@ the Android and iOS builds do not compile it and the macOS build does not offer 
 (`CMakeLists.txt`, the window build section; `port/platform/window_host.c` (`steam_add_handler`)).
 `port/platform/test/steam_shortcut_test.c` has the checks.
 
+## Save states
+
+Four slots per disc hold a snapshot of the whole running game (`port/platform/state.h`;
+[PLATFORM.md](PLATFORM.md#saving-and-loading) has the file, the sequences and the log lines).
+What a player sees:
+
+- **Saving** is done from the pause menu (its Save states row, or F5 for slot 1 in the desktop
+  build) and only while nothing else is under way: no stage change, no memory card save or load,
+  no disc read in flight, no movie, not photo mode, the Extras credits or the music gallery. F5
+  away from the pause menu says to pause first. A popup says "State saved to slot N" once the file
+  is written; the slot shows the picture of the frame shown after the save (the pause menu in it),
+  the area and the play time.
+- **Loading** works from the pause menu and from the title (Options > Extras > Save states), or F9
+  for slot 1, under the same conditions but the pause. The game comes back exactly where it was,
+  on the pause menu. A state saved by another version of the program, from another disc, on
+  another platform, or with a gameplay setting that changes the simulation set otherwise
+  (`port/platform/sim_keys.h`: the popup names the setting) is refused, and so is a damaged file;
+  the game goes on. A state whose memory fails the checks after it is put back is undone the same
+  way.
+- **What a load keeps**: the achievements, their counters, the session's and the run's counts
+  (fresh, captures, game overs) stay as they were (DIVERGENCES.md GL-17); the options are the
+  player's, not the state's.
+- **Off**: a build where the game's data cannot be found as a whole (`state: the game's data
+  ranges are not bracketed ...`), a sanitizer build, or no folder to write to: the row and the keys
+  say "Save states are off on this build".
+
+The files are `<pref>/states/<disc>/slot<n>.ics` and `slot<n>.png` (on Android, the app's files
+folder). The page itself is [UI.md](UI.md)'s.
+
 ## Android driver packages
 
 The Android build loads a community Vulkan driver for Adreno GPUs through libadrenotools from a zip
@@ -846,7 +876,7 @@ are [PLATFORM.md](PLATFORM.md#android-graphics-driver-packages)'s.
 Each is a ctest: `settings_discs` and its six other-disc runs (the rows each disc shows,
 [Options on each disc](#options-on-each-disc)), `options` (`port/game/test/options_test.c`: the defaults, the setters,
 `eBrainGetTarget` with Yorda safe), `door_grace`, `achievements`, `photo`, `appearance` and
-`appearance_disc`, `credits`, `title_logo` and `model_viewer_headless` (`port/game/CMakeLists.txt`);
+`appearance_disc`, `credits`, `title_logo`, `state_host` and `model_viewer_headless` (`port/game/CMakeLists.txt`);
 `gallery`, `gallery_sweep`, `credits_headless`, `model_viewer`, `model_viewer_cam`,
 `model_viewer_effects` and `model_viewer_effects_elf` (`port/ui/CMakeLists.txt`); `steam_shortcut` and `gpu_driver` (`port/platform/CMakeLists.txt`).
 [TESTING.md](TESTING.md) has how to run them.
