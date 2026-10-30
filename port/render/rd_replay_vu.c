@@ -2435,9 +2435,58 @@ static void vuMergeFree(void)
     g_rd.vuFuse = false;
 }
 
+/* the fallback (rd_internal.h rd__vu_merge_build_failed): the build the
+ * driver refused, noted until the next replay begins */
+static bool s_mergeOffPending;
+static char s_mergeOffBuild[64];
+
+void rd__vu_merge_build_failed(const char *build)
+{
+    if (!g_rd.vuMerge || s_mergeOffPending) {
+        return;
+    }
+    s_mergeOffPending = true;
+    snprintf(s_mergeOffBuild, sizeof(s_mergeOffBuild), "%s", build && build[0] ? build : "?");
+}
+
+static const char *backendWords(void)
+{
+    switch (rhi_backend()) {
+    case RHI_BACKEND_D3D11:
+        return "Direct3D 11";
+    case RHI_BACKEND_D3D12:
+        return "Direct3D 12";
+    case RHI_BACKEND_OPENGL:
+        return "OpenGL";
+    default:
+        return "Vulkan";
+    }
+}
+
+void rd__vu_merge_fallback(void)
+{
+    if (!s_mergeOffPending) {
+        return;
+    }
+    s_mergeOffPending = false;
+    if (!g_rd.vuMerge) {
+        return;
+    }
+    /* no list of an earlier replay holds a pipeline or a merge build
+       destroyed here; the start-up set's keys are made again on first use */
+    rhi_wait_idle();
+    rd__pipeline_cache_clear();
+    vuMergeFree();
+    snprintf(s_mergeWhy, sizeof(s_mergeWhy),
+             "off: the driver could not compile %s (%s); one GPU draw a VU draw from here",
+             s_mergeOffBuild, backendWords());
+    rd__log("VU merge: %s", s_mergeWhy);
+}
+
 static void vuMergeInit(void)
 {
     vuMergeFree();
+    s_mergeOffPending = false;
     const char *env = getenv("ICO_RD_VU_MERGE");
     if (env && strcmp(env, "0") == 0) {
         snprintf(s_mergeWhy, sizeof(s_mergeWhy),
