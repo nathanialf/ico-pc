@@ -4,15 +4,19 @@
 # these are paths on the maintainer's machine; the dumps themselves are never
 # committed.  Missing files are reported and skipped (no dump at all: SKIP).
 # A line: the dump, then expect=same (no command through the fallback, every
-# target byte for byte) or expect=report (commands through the fallback, the
-# targets that differ listed), then rd_replay_tool's setting arguments.
+# target byte for byte), expect=fallback:N (N commands through the fallback,
+# every target byte for byte) or expect=report (commands through the
+# fallback, the targets that differ listed), then rd_replay_tool's setting
+# arguments.
 #
 # the title and the boot: one screen-prim triangle key with planes each
 # (program 9 vs 22 fs 28: sprite_plane_world_vs + sprite_ps_planes, the key
-# the Retroid Pocket 6's lazy run made in its title; rd_replay_tool --keys)
-/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00200.rddump expect=report
-/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00350.rddump expect=report
-/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00600.rddump expect=report
+# the Retroid Pocket 6's lazy run made in its title; rd_replay_tool --keys);
+# measured 2026-10-30: 2 commands through the plain builds, 0 of 18 targets
+# differ
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00200.rddump expect=fallback:2
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00350.rddump expect=fallback:2
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00600.rddump expect=fallback:2
 # a frame with no screen-prim triangle with planes (a 2026-10-07 capture):
 # the switch changes nothing
 /primary/dev/ico-dumps/frame-20261007-200706-v3112.rddump expect=same --aspect 4:3

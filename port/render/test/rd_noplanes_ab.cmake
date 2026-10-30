@@ -2,14 +2,17 @@
 # (issue 161: the fallback a device whose driver stopped creating them draws
 # with, [dev] pipeline_skip; docs/port/WORK_BUFFERS.md "Without the sprite
 # planes") against the run with them.  For every dump the list names
-# (tools/noplanes_dumps.txt: a dump, then expect=same or expect=report, then
-# rd_replay_tool's setting arguments), rd_replay_tool's --pass-dump with
+# (tools/noplanes_dumps.txt: a dump, then expect=same, expect=fallback:N or
+# expect=report, then rd_replay_tool's setting arguments), rd_replay_tool's --pass-dump with
 # --stats twice: as usual and under ICO_RD_NO_SPRITE_PLANES=1.  The second
 # run must say the builds are off; the first must count no command through
 # the fallback ("sprite no-planes 0").  expect=same: every named target's
 # PNG equal byte for byte, and no command through the fallback (a frame that
 # draws no screen-prim triangle with planes: the switch changes nothing
-# there).  expect=report: at least one command through the fallback, and the
+# there).  expect=fallback:N: N commands through the fallback (N > 0) and
+# every target byte for byte all the same (the title's and the boot's
+# dumps, measured 2026-10-30: 2 commands each, 0 of 18 targets differ).
+# expect=report: at least one command through the fallback, and the
 # targets that differ are listed (the GPU's interpolation of the corners
 # against the planes: a colour a level apart on some pixels), not failed.
 # A missing list or dump is named and skipped; no dump read, or no device:
@@ -41,11 +44,16 @@ foreach(l IN LISTS lines)
     continue()
   endif()
   set(expect "same")
+  set(wantN "")
   list(LENGTH words nw)
   if(nw GREATER 0)
     list(GET words 0 w0)
     if(w0 MATCHES "^expect=(same|report)$")
       set(expect "${CMAKE_MATCH_1}")
+      list(POP_FRONT words)
+    elseif(w0 MATCHES "^expect=fallback:([0-9]+)$")
+      set(expect "fallback")
+      set(wantN "${CMAKE_MATCH_1}")
       list(POP_FRONT words)
     endif()
   endif()
@@ -98,6 +106,11 @@ foreach(l IN LISTS lines)
                        "(the frame draws screen-prim triangles with planes: expect=report)")
     math(EXPR failures "${failures} + 1")
   endif()
+  if(expect STREQUAL "fallback" AND (wantN EQUAL 0 OR NOT nOff STREQUAL "${wantN}"))
+    message(SEND_ERROR "${dump}: expect=fallback:${wantN}, but ${nOff} commands drew through "
+                       "the fallback")
+    math(EXPR failures "${failures} + 1")
+  endif()
   if(expect STREQUAL "report" AND nOff STREQUAL "0")
     message(SEND_ERROR "${dump}: expect=report, but no command drew through the fallback")
     math(EXPR failures "${failures} + 1")
@@ -126,8 +139,8 @@ foreach(l IN LISTS lines)
   string(REPLACE ";" ", " differText "${differ}")
   message(STATUS "${dump}: ${nOff} commands through the plain builds; ${ndiff} of ${npng} "
                  "targets differ: ${differText}")
-  if(expect STREQUAL "same" AND ndiff GREATER 0)
-    message(SEND_ERROR "${dump}: expect=same, but ${differText} differ without the planes")
+  if(NOT expect STREQUAL "report" AND ndiff GREATER 0)
+    message(SEND_ERROR "${dump}: expect=${expect}, but ${differText} differ without the planes")
     math(EXPR failures "${failures} + 1")
   endif()
 endforeach()

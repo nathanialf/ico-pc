@@ -1728,8 +1728,8 @@ if(ICO_RUN_TESTS)
     # each drawing one screen-prim triangle key with planes, and a capture
     # that draws none) with the sprite planes builds and without them
     # (ICO_RD_NO_SPRITE_PLANES=1, the fallback [dev] pipeline_skip turns on):
-    # the capture byte for byte, the title's and the boot's commands through
-    # the plain builds counted and their differing targets listed; SKIP as
+    # every target byte for byte on all four, the title's and the boot's 2
+    # commands each through the plain builds (none on the capture); SKIP as
     # rd_vustage_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/noplanes_ab")
     add_test(NAME rd_noplanes_ab
