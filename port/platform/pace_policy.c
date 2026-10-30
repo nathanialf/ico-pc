@@ -98,6 +98,15 @@ bool pace_skipped_last(bool skipOpen, uint32_t skippedFrame, uint32_t frame)
     return skipOpen && skippedFrame != frame;
 }
 
+bool pace_original_present(bool keep, uint64_t nowNs, uint64_t dueNs, uint64_t periodNs)
+{
+    if (keep || dueNs == 0 || nowNs <= dueNs) {
+        return true;
+    }
+    /* a whole period behind, as pace_late_skip's late arm */
+    return nowNs - dueNs < periodNs;
+}
+
 uint64_t pace_next_present(uint64_t nextPresent, uint64_t startNs, uint64_t gap)
 {
     const uint64_t n = nextPresent + gap;
