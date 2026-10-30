@@ -144,9 +144,8 @@ The bytes a submit copies are in the window's `uploaded KB per replay` line on D
 debug layer is the gate, and `rhi_d3d11_test` checks the mark's byte counts and runs the cells on
 the mapped constant buffers (`ICO_D3D11_FAKE_NO_PARTIAL_CB=1`).
 
-**The draw merge (from v0.9.6).** Before v0.9.6 the VU draw merge and the fused scissor pairs
-were off here (`rd: VU merge: off on Direct3D 11 (the main draws do not bind t5 there)`), so a VU
-draw was a GPU draw: in issue 126's 1200 to 1800-draw rooms 1700 pipeline binds and 5400 bind
+**The draw merge.** Without the VU draw merge and the fused scissor pairs (`[dev] vu_merge =
+false`: `rd: VU merge: off`) a VU draw is a GPU draw: in issue 126's 1200 to 1800-draw rooms 1700 pipeline binds and 5400 bind
 group binds a replay. They are on now, as on the other backends
 ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)); the start line says `on: ... (Direct3D 11:
 compiled at their first pipeline, t5 bound)`. The VU groups bind t5, the structured part of the
@@ -157,7 +156,7 @@ structured part too. A list's touches of one buffer and part are one range (`d11
 at the written mark when the list is submitted, so a list with a VU draw that streamed nothing from
 the ring writes up to (written mark - `s_ringBase`) more bytes than before, and a list that already
 bound the ring as a VU stream (t0 over the whole ring) writes nothing more. With `[dev] vu_merge =
-false` t5 stays unbound and the counter is as in v0.9.5. `rhi_d3d11_test`'s section 1d binds one
+false` t5 stays unbound and the counter shows the uploads alone. `rhi_d3d11_test`'s section 1d binds one
 upload buffer at t0 and t5 in one group and checks each view's elements and that byte count.
 
 ## What the bind diet cuts (OpenGL and Direct3D 11)

@@ -467,7 +467,7 @@ fails on the thread makes the counters pending again at the next tick; `ico_ach_
 and shutdown hook) writes what is dirty, joins the thread and tries once more after a failure. A
 write over 20 ms logs `achievements: the file write took N ms (<path>)` (the first 8, then every
 100th). The game thread's cost per write is the render (a few hundred bytes to a few KiB), so the
-slow-step line's `achievements` component no longer includes the drive. `test_write_path` in
+slow-step line's `achievements` component holds the render alone, not the drive. `test_write_path` in
 `achievements_test.c` holds the writer (`ico_ach_writer_hold`) to check the replaced text, the two
 periods and the retry after a failed write.
 

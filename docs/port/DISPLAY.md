@@ -694,7 +694,7 @@ alpha stays the grid's.
   (no timestamps) the gate passes: the climb probes, and a second late step drops it again. The
   ceiling is `PACE_ALLOW_MAX` (8), where one more climb makes the allowance unbound again. From a
   drop to unbound again takes 120 steps (2 s) when the GPU has the time.
-- **Climb under the lock: a probe** (issue 126, v0.9.6). `PACE_PROBE_WAIT` (120) steps on time
+- **Climb under the lock: a probe** (issue 126). `PACE_PROBE_WAIT` (120) steps on time
   after a drop (the 60-step hold among them) the allowance goes straight back to n whatever the GPU
   figure says, and is armed for the next 60 steps: a late step in them drops it again at once (a
   failed probe) and doubles the wait before the next probe (240, 480, then `PACE_PROBE_WAIT_MAX`,

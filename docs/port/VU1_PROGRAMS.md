@@ -394,7 +394,7 @@ and mesh uploads, so a frame whose texture uploads grow the ring past the device
 range still reaches every block the VU draws put after them) to that range (`ringRange`), as a
 `StructuredBuffer<float4>` (`port/shaders/vu_common.hlsli` (`vu_ring`)); every index into it counts
 from the base. Direct3D 11 never makes a batch module (no pre-pass there) but binds t5 for the
-draw merge (from v0.9.6; issue 126). A bound storage range is written to the GPU up to the ring's
+draw merge (issue 126). A bound storage range is written to the GPU up to the ring's
 written mark at every submit there, so with the merge off (`[dev] vu_merge = false`, or a merge
 module missing) its VU groups leave t5 unbound (the layout keeps the slot) and a submit writes
 only the bytes its draws stream; with the merge on, the bytes t5 adds are the ones the merge
@@ -479,8 +479,7 @@ start-up set and the pipeline count do not change). The skinned programs and the
 merge build: their draws are one a command, as before. The merge serves both paths: the record's
 main shader and the programs' own entries (the tile-based GPUs' and Direct3D 11's, whose pre-pass
 is off). It is off by `[dev] vu_merge = false` (`ICO_RD_VU_MERGE=0`: one GPU draw a VU draw
-through the plain builds, an A/B), or when a merge module is missing. Before v0.9.6 it was also
-off on Direct3D 11 (`off on Direct3D 11 (the main draws do not bind t5 there)`); there a module is
+through the plain builds, an A/B), or when a merge module is missing. On Direct3D 11 a module is
 only its description until the first pipeline that uses it (the backend compiles the HLSL with
 FXC in its pipeline workers), so the start line adds `(Direct3D 11: compiled at their first
 pipeline, t5 bound)` and a build FXC refuses shows as that pipeline's `pipeline creation failed
