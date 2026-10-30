@@ -938,6 +938,11 @@ static RdActivityFn s_activityFn;
 static char s_batchNote
     [768]; /* a 96-byte range, 320 of modules and the compiler's 96 fit (gcc 14's -Wformat-truncation at -O2 counts them); ico_diag_set_activity keeps its own bound */
 
+/* the activity note is an in-flight key's (noteKey), not another's: a note
+ * of another kind (activityCreating, activityDone) clears it, so the next
+ * wait writes the key's again */
+static bool s_inflightNoted;
+
 void rd_set_activity_fn(RdActivityFn fn)
 {
     s_activityFn = fn;
@@ -1185,6 +1190,7 @@ static void activityCreating(const RdPipeKeyInt *k)
     keyModules(k, mods, sizeof(mods));
     snprintf(note, sizeof(note), "creating pipeline %s (%s)", words, mods);
     s_activityFn(note);
+    s_inflightNoted = false;
 }
 
 /* the note after a creation: back to the batch's, or none */
@@ -1194,6 +1200,7 @@ static void activityDone(void)
         return;
     }
     s_activityFn(s_batchNote[0] != '\0' ? s_batchNote : NULL);
+    s_inflightNoted = false;
 }
 
 void rd__pipeline_note_begin(const char *what)
@@ -1773,7 +1780,72 @@ typedef struct PreBatch {
     uint32_t total; /* the set's size */
     uint32_t last;  /* the last count the progress function was given */
     int stop;       /* the progress function asked to stop */
+    /* the in-flight key (issue 161): the keys of the rhi_create_pipelines
+     * call in progress and their places in the set, the batch's range
+     * (1-based), which of them are inside the driver now (bit i: keys[i];
+     * the RHI's begin and end hooks, any thread) and the one the note names
+     * (-1 none) */
+    const RdPipeKeyInt *keys;
+    const uint32_t *place;
+    uint32_t first, lastKey;
+    uint32_t inflight;
+    int noted;
 } PreBatch;
+
+/* "creating pipeline 217 of 587 (in batch 212-219): <key> (<vs> N words +
+ * <fs> M words)": the key inside the driver now, as a lazy run's creation
+ * is named, so the next start reads it the same way (diag_host.c,
+ * port/platform/pipeline_skip.h); written before the driver's call on the
+ * careful set's path, within RHI_PIPELINE_WAIT_MS on the others */
+static void noteKey(PreBatch *b, uint32_t i)
+{
+    char note[sizeof(s_batchNote)];
+    char w[96], mods[160];
+    if (s_activityFn == NULL || b->keys == NULL) {
+        return;
+    }
+    keyWords(&b->keys[i], w, sizeof(w));
+    keyModules(&b->keys[i], mods, sizeof(mods));
+    int n = snprintf(note, sizeof(note), "creating pipeline %u of %u (in batch %u-%u): %s (%s)",
+                     b->place[i] + 1, b->total, b->first, b->lastKey, w, mods);
+    (void)n;
+    s_activityFn(note);
+    b->noted = (int)i;
+    s_inflightNoted = true;
+}
+
+/* the RHI's hooks around one driver call (rhi.h RhiPipelineBatch.begin,
+ * end): only the bit, on the compiling thread */
+static void preBegin(void *ctx, uint32_t index)
+{
+    PreBatch *b = ctx;
+    if (index < 32u) {
+        __atomic_fetch_or(&b->inflight, 1u << index, __ATOMIC_RELEASE);
+    }
+}
+
+static void preEnd(void *ctx, uint32_t index)
+{
+    PreBatch *b = ctx;
+    if (index < 32u) {
+        __atomic_fetch_and(&b->inflight, ~(1u << index), __ATOMIC_RELEASE);
+    }
+}
+
+/* on the calling thread: one key inside the driver, not named yet, named;
+ * several (a batch on threads), or none, keep the batch's note */
+static void noteInflight(PreBatch *b)
+{
+    const uint32_t mask = __atomic_load_n(&b->inflight, __ATOMIC_ACQUIRE);
+    if (b->keys == NULL || mask == 0u || (mask & (mask - 1u)) != 0u) {
+        return;
+    }
+    const uint32_t i = (uint32_t)__builtin_ctz(mask);
+    if ((int)i == b->noted && s_inflightNoted) {
+        return;
+    }
+    noteKey(b, i);
+}
 
 static int preProgress(PreBatch *b, uint32_t done)
 {
@@ -1812,6 +1884,7 @@ static void preWait(void *ctx, uint32_t finished)
     if (!b->stop) {
         b->stop = preProgress(b, b->base + finished);
     }
+    noteInflight(b); /* issue 161: after the frame's own notes */
 }
 
 /* The start-up set's slowest compiles and its compile time by vertex
@@ -2099,7 +2172,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
     const bool planesAlone = times != NULL && carefulSet();
     /* a failed key's line: when it was asked for */
     const char *when = times != NULL ? "in the start-up set" : "in a replay's gathered keys";
-    PreBatch pb = {0, m, 0, 0};
+    PreBatch pb = {0, m, 0, 0, NULL, NULL, 0, 0, 0, -1};
     memset(c, 0, sizeof(*c));
     c->threads = 1;
     if (s_progressFn != NULL) {
@@ -2206,8 +2279,15 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             if (s_activityFn != NULL) {
                 s_activityFn(s_batchNote);
             }
-            RhiPipelineBatch batch = {preWait, &pb, bms, 1, s_setPolicy.maxThreads};
+            RhiPipelineBatch batch = {preWait,  &pb,   bms, 1, s_setPolicy.maxThreads,
+                                      preBegin, preEnd};
             pb.base = first;
+            pb.keys = bk;
+            pb.place = bIdx;
+            pb.first = first + 1;
+            pb.lastKey = i;
+            pb.inflight = 0;
+            pb.noted = -1;
             c->batches++;
             uint32_t made = nb;
             char lowMem[48];
@@ -2224,8 +2304,14 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                         lowMidBatch = true;
                         break;
                     }
-                    RhiPipelineBatch one = {preWait, &pb, bms + j, 1, s_setPolicy.maxThreads};
+                    RhiPipelineBatch one = {preWait,  &pb,   bms + j, 1, s_setPolicy.maxThreads,
+                                            preBegin, preEnd};
                     pb.base = bIdx[j];
+                    pb.keys = &bk[j];
+                    pb.place = &bIdx[j];
+                    pb.inflight = 0;
+                    /* issue 161: the key's note before the driver's call */
+                    noteKey(&pb, 0);
                     rhi_create_pipelines(&bd[j], 1, &bp[j], &one);
                     made = j + 1;
                     if (one.threads > batch.threads) {
@@ -2242,6 +2328,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             } else {
                 rhi_create_pipelines(bd, nb, bp, &batch);
             }
+            pb.keys = NULL;
             const double batchMs = rd__now_ms() - bt0;
             rhiPipeCounts(&st1);
             /* the batch's failures share one reason (failReason says when
