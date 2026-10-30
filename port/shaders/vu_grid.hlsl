@@ -21,18 +21,18 @@ VuVtx vu_grid_vertex(uint v, uint variant)
     VuVtx o = vu_vtx_init();
     uint at = vu_vertex_qw(v);
     bool lit = variant != VU_GRID;
-    float4 pos = vu_stream[at];
-    float4 st = vu_stream[at + (lit ? 2u : 1u)];
+    float4 pos = vu_stream_f(at);
+    float4 st = vu_stream_f(at + (lit ? 2u : 1u));
     // mesh.vsm:172-175 M * pos (vf00.w), :179 div, :188 mulq
     o.h = vu_matm(16u, pos, 1.0);
     float q = vu_divide(o);
     o.inside = vu_inside(o.p, o.h.w, VU_LO0, VU_HI4094);
     {
-        float4 col = vu_stream[vu_batch_qw(v) + vu_batch.x - 1u]; // the last header qword
+        float4 col = vu_stream_f(vu_batch_qw(v) + vu_batch.x - 1u); // the last header qword
         if (lit) {
             // :168-176 l = max(L1 * n, 0); :184-187 c = L2 * l with the
             // ambient column, not clamped; code 24 squares it (:284)
-            float4 n = vu_stream[at + 1u];
+            float4 n = vu_stream_f(at + 1u);
             float4 l = vu_matm(28u, n, n.w);
             l = max(l, 0.0);
             float4 c = vu_matm(32u, l, l.w);

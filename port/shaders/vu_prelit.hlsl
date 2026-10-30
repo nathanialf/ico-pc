@@ -18,9 +18,9 @@ VuVtx vu_prelit_vertex(uint v, uint mode)
 {
     VuVtx o = vu_vtx_init();
     uint at = vu_vertex_qw(v);
-    float4 pos = vu_stream[at];
-    float4 st = vu_stream[at + 1u];
-    float4 col = vu_stream[at + 2u];
+    float4 pos = vu_stream_f(at);
+    float4 st = vu_stream_f(at + 1u);
+    float4 col = vu_stream_f(at + 2u);
     // :152-155 M * pos with vf00.w; the scissor loop uses pos.w (:337)
     float w = mode == VU_CLIP_SCISSOR ? pos.w : 1.0;
     o.h = vu_matm(16u, pos, w);

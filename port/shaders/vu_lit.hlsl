@@ -67,10 +67,10 @@ VuVtx vu_lit_vertex(uint v, uint mode, uint variant)
 {
     VuVtx o = vu_vtx_init();
     uint at = vu_vertex_qw(v);
-    float4 pos = vu_stream[at];
-    float4 n = vu_stream[at + 1u];
-    float4 st = vu_stream[at + 2u];
-    float4 col = vu_stream[at + 3u];
+    float4 pos = vu_stream_f(at);
+    float4 n = vu_stream_f(at + 1u);
+    float4 st = vu_stream_f(at + 2u);
+    float4 col = vu_stream_f(at + 3u);
     bool scissor = mode == VU_CLIP_SCISSOR;
     o.h = vu_matm(16u, pos, scissor ? pos.w : 1.0);
     if (scissor) {
