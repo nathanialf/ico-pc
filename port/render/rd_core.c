@@ -38,6 +38,7 @@
 RdContext g_rd;
 
 static RdHostCall s_hostCall;
+static RdReplayGate s_replayGate; /* rd_set_replay_gate: Frame rate Original's late skip */
 
 double rd__now_ms(void)
 {
@@ -56,6 +57,11 @@ double rd__now_ms(void)
 void rd_set_host_call(RdHostCall call)
 {
     s_hostCall = call;
+}
+
+void rd_set_replay_gate(RdReplayGate gate)
+{
+    s_replayGate = gate;
 }
 
 void rd__on_host(void (*fn)(void *arg), void *arg)
@@ -2199,6 +2205,9 @@ typedef struct ReplayCall {
 static void replayOnHost(void *arg)
 {
     const ReplayCall *c = (const ReplayCall *)arg;
+    if (s_replayGate != NULL && !s_replayGate(c->keep)) {
+        return; /* the window's late skip: the last picture stays */
+    }
     rd__note_frame_present(c->f); /* rd_last_present_info, as rd_present notes its own */
     rd__blur_smooth_arm(1, 1);    /* Motion blur: Smooth at one present a tick */
     rd__replay_frame(c->f, c->keep, true);
