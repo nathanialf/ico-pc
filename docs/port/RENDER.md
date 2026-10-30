@@ -1212,11 +1212,9 @@ The table:
 | Qualcomm Adreno 740 on Qualcomm's own driver (not Turnip) | vendor 0x5143, device 0x43050A01 (what both devices report; not Mesa's other 0x4305xxxx ids: 0x43050A00 the Adreno A32, 0x43050B00 the 740v3, 0x43051401 the Adreno 750) | issue 107 (AYN Thor) and issue 93 (AYN Odin 2 Portal), driver 512.676.53, compiler E031.41.03.47: the whole device froze, needing a reboot, while the driver compiled the first pipelines with a VU vertex shader of 46,470 words and up; a set of at most 32,709 words built ([SHADERS.md](SHADERS.md#the-envelope)) |
 
 The log at `rd_init`: `rd: device compiler: Compiler Version: E031.41.03.47` (the driver's own line,
-Vulkan; `the driver names none` without one), then `rd: VU shaders: the record path's modules on
-every device (largest <module> <words> words); the fallback's program entries extended (largest
-vu_lit_vs <words> words), in the start-up set only with the vertex pre-pass off`, or `... entries
-plain on this device (Adreno 740, issue 107): no wide-screen rule and no tick cameras on those
-draws (largest vu_lit_plain_vs 23305 words) ...`. While the set is created the heartbeat line ends
+Vulkan; `the driver names none` without one), then `rd: VU shaders: <set and why>: ...`, the set
+(extended, or plain by the device table, after a lost start or by [dev]) and its reason first
+([SHADERS.md](SHADERS.md#the-variants) quotes the forms). While the set is created the heartbeat line ends
 with the batch in flight (`| creating pipelines 329-360 of 446: <first key> to <last key>; vertex
 vu_main_vs <words> words (<n> instructions); largest fragment vu_texa_ps <n> words; compiler
 E031.41.03.47`: each vertex shader's SPIR-V words and instructions, `rd__shader_instructions`, and

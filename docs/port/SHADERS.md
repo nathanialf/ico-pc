@@ -481,6 +481,25 @@ the extended ones everywhere else, once a run ([RENDER.md](RENDER.md#the-fallbac
 `vu_particle_vs` has the one build. The cut against the camera's picture stays in
 both: at 4:3 a triangle wholly beside the picture is drawn, clipped, as in the extended one.
 
+The start-up line names the set and why, first (`rd_pipeline.c` `rd__vu_policy_init`): `rd: VU
+shaders: extended set (no device-table row, no lost start, no [dev] setting asks for the plain
+one): the program entries (largest vu_lit_vs <words> words) and the mesh and grid draws' merge
+builds of the same set; the record path's modules ...`, or `plain set by the device table on this
+device (<row's reason>)`, `plain set after a lost start (<the host's reason>)`, `plain set by [dev]
+(ICO_RD_VU_PLAIN=1)`, `extended set by [dev] (ICO_RD_VU_EXTENDED=1)`. The draw merge's own line
+(`rd: VU merge: ...`) follows; with the merge on, its builds (`vu_X_merge_vs` or
+`vu_X_merge_plain_vs`) are what the mesh and grid draws run.
+
+What the plain set hides (issues 163 and 164): a triangle that fails the region test and reaches
+into the picture is dropped by the plain set, as on the PS2, and drawn clipped by the extended
+one unless it is a card. So a vertex placed far off the screen, in front of the eye, by anything
+the two sets share (the program's arithmetic, the stream, VuCB, VuBoneCB) is invisible through
+the plain set and drawn as a long sliver through the extended one; a clean picture through the
+plain set does not place a fault in the extended-only code. The card and tick steps only choose
+drop or clip; they never move a vertex. The VU vertex modules hold no Function or Private
+variable and no `OpUndef` (`tools/spirv_poison.py --list`, every `vu_*_vs` of the build: none), so
+a value read before it is written is not in the SPIR-V the drivers get.
+
 | module | plain words | instructions | blocks | extended words | instructions | blocks | the set that built on the Adreno 740 (words) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `vu_prelit_vs` | 22,286 | 4,992 | 502 | 50,219 | 10,727 | 870 | 30,988 |
