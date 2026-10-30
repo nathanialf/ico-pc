@@ -95,7 +95,7 @@ typedef struct IcoGsSnapshot {
     int girl_present;
     int weapon_kind;            /* scpGameStat_BoyWeaponkind: 0 bare hands */
     int hand_held;              /* ACTGame_FLAG_TETSUNAGI: holding hands */
-    int yorda_carried_by_enemy; /* girl actMode 0x6F, carrier an enemy */
+    int yorda_carried_by_enemy; /* girl in the disc's carried actMode, carrier an enemy */
     const char *stage_name;     /* stageData[stage_no].name, or NULL */
 } IcoGsSnapshot;
 
@@ -105,6 +105,19 @@ typedef void (*IcoGsSampler)(IcoGsSnapshot *out);
 void ico_gs_set_sampler(IcoGsSampler fn);
 /* The sampler over the game's globals (ICO_GS_LIVE builds only). */
 void ico_gs_sample_live(IcoGsSnapshot *out);
+
+/* The girl's actMode while an enemy carries her on the selected disc (0x6F;
+   107 on the North American and August 2001 discs; 106 on the June 2001
+   demo), and the snapshot's yorda_carried_by_enemy from her mode and
+   whether her carrier is an enemy (the live sampler's rule, apart so the
+   tests can drive it). */
+int ico_gs_carried_act_mode(void);
+
+/* ICO_GS_EV_GAME_OVER from the June 2001 demo's death paths (they switch to
+   the game-over layout without ACT_LAYOUT_GAMEOVER's guard flag): at most
+   one signal per stage entry */
+void ico_gs_signal_game_over_once(void);
+int ico_gs_girl_carried_by_enemy(int act_mode, int carrier_is_enemy);
 
 /* Once per Main tick, before the reads below. */
 void ico_gs_tick(void);
