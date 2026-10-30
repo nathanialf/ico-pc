@@ -24,8 +24,9 @@
  * Which family a note names (pipeline_skip_family_of_note) is read from the
  * start-up activity file's note (diag_host.h), the pipeline or the batch
  * the ended start was creating, and only when every pipeline it names is of
- * the family: a lazy run's single creation ("creating pipeline <key>
- * (<vs> N words + <fs> M words)") or a batch whose named vertex shaders
+ * the family: a single creation ("creating pipeline <key> (<vs> N words +
+ * <fs> M words)": a lazy run's, or the start-up set's key inside the driver,
+ * "creating pipeline K of M (in batch A-B): ...") or a batch whose named vertex shaders
  * are all of it, with none left unnamed ("... and N more").  The careful
  * start-up set makes the sprite planes builds last and one a batch
  * (port/render/rd_pipeline.c), so its note names exactly one pipeline.
