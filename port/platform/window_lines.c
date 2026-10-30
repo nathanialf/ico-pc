@@ -7,7 +7,9 @@
 #include "window_lines.h"
 
 #include <stdio.h>
+#include "audio_host.h"
 #include "diag_host.h"
+#include "pace_policy.h"
 #include "host_loop.h"
 #include "rd_tex.h"
 #include "rhi.h"
@@ -193,4 +195,63 @@ void window_hold_block_line(unsigned long long heldMs, double stepAvgMs, double 
             "%.1f ms at %s (the picture takes %.1f ms on this GPU)): the sound was held back for "
             "%llu ms in this block (%u such blocks)\n",
             stepAvgMs, periodMs, rateWords, pictureMs, heldMs, s_blocks);
+}
+
+/* Frame rate Original's counts for the block (window_orig_*) */
+static unsigned s_origLate, s_origSkipped, s_origReplays;
+static double s_origReplayMs;
+static unsigned long long s_heldAt; /* ico_audio_sdl_held_ms at the last block's end */
+
+/* the simulation's period at hz (host_loop.c's: PAL 20 ms, NTSC 16.683 ms) */
+static uint64_t period_ns(int hz)
+{
+    return hz == 50 ? 20000000ull : 16683333ull;
+}
+
+bool window_orig_gate(int keep, uint64_t nowNs, uint64_t dueNs, int hz)
+{
+    if (pace_original_present(keep != 0, nowNs, dueNs, period_ns(hz))) {
+        return true;
+    }
+    s_origSkipped++;
+    return false;
+}
+
+void window_orig_step(bool late, double replayMs)
+{
+    s_origLate += late ? 1u : 0u;
+    if (replayMs >= 0.0) {
+        s_origReplayMs += replayMs;
+        s_origReplays++;
+    }
+}
+
+const char *window_orig_words(bool original)
+{
+    static char words[80];
+
+    words[0] = '\0';
+    if (original) {
+        snprintf(words, sizeof(words), "; steps late %u (frames not presented %u)", s_origLate,
+                 s_origSkipped);
+    }
+    return words;
+}
+
+void window_hold_block(double stepSumMs, unsigned steps, double stepMaxMs, int hz,
+                       double replaySumMs, unsigned replays, bool original, const char *rateName)
+{
+    const unsigned long long held = ico_audio_sdl_held_ms();
+    const double periodMs = (double)period_ns(hz) / 1e6;
+    double picture = replays ? replaySumMs / replays : 0.0;
+
+    if (original && s_origReplays) {
+        picture = s_origReplayMs / s_origReplays;
+    }
+    window_hold_block_line(held > s_heldAt ? held - s_heldAt : 0u, steps ? stepSumMs / steps : 0.0,
+                           stepMaxMs - periodMs, periodMs, picture,
+                           original ? "Original" : rateName);
+    s_heldAt = held;
+    s_origLate = s_origSkipped = s_origReplays = 0;
+    s_origReplayMs = 0.0;
 }
