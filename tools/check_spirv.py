@@ -114,6 +114,23 @@ Gates:
              pipeline and not in another opens a crack of 1/16 GS pixel,
              which the fog paints at full fog colour (docs/port/RENDER.md,
              Camera blending).
+  intlane    no VU module (vu_*) reinterprets as an integer a float that a
+             buffer load produced: no OpBitcast of a float scalar or vector
+             that comes from an OpLoad of a float type through a storage
+             buffer (a StructuredBuffer) or a uniform buffer (a cbuffer),
+             directly or through OpCompositeExtract, OpVectorShuffle,
+             OpCopyObject, OpCompositeConstruct, OpCompositeInsert, OpPhi or
+             OpSelect.  The PS2 keeps integers in float registers (a skinned
+             vertex's bone addresses, the triangles' mark bytes, the card
+             bits) and the port's tables and records ride in the same
+             buffers: as floats their bits are denormals (16..252 are
+             2.2e-44..3.5e-43), and Vulkan leaves fp32 denormal handling to
+             the implementation (VK_KHR_shader_float_controls), so a driver
+             that flushes them on a float move reads zero (issues 163/164:
+             Arm Mali).  Integer lanes are loaded as integers (vu_stream,
+             vu_ring and VuBoneCB are uint4; port/shaders/vu_common.hlsli,
+             "Integer lanes"; docs/port/SHADERS.md, "Integer lanes: never
+             through a float load").
 
 The modules are the build's port/shaders output (CMAKE_BINARY_DIR/shaders);
 the ctest spirv_check runs this over it. No SPIR-V tool is needed: the
@@ -151,6 +168,22 @@ OP_PHI = 245
 OP_LOOP_MERGE = 246
 OP_LABEL = 248
 OP_COPY_LOGICAL = 400
+OP_TYPE_FLOAT = 22
+OP_VECTOR_SHUFFLE = 79
+OP_COMPOSITE_EXTRACT = 81
+OP_IN_BOUNDS_ACCESS_CHAIN = 66
+OP_BITCAST = 124
+DECORATION_BLOCK = 2
+DECORATION_BUFFER_BLOCK = 3
+STORAGE_UNIFORM = 2
+STORAGE_STORAGE_BUFFER = 12
+# the value-moving opcodes the intlane gate follows: result type, result id,
+# then the operands that are moved values (OpCompositeExtract's and
+# OpCompositeInsert's literal indices, OpVectorShuffle's components and
+# OpPhi's parent blocks never name a tainted value, OpSelect's condition is
+# a boolean)
+MOVE_OPS = {OP_COMPOSITE_EXTRACT, OP_VECTOR_SHUFFLE, OP_COPY_OBJECT, OP_COMPOSITE_CONSTRUCT,
+            OP_COMPOSITE_INSERT, OP_PHI, OP_SELECT}
 STORAGE_FUNCTION = 7
 MODEL_VERTEX = 0
 # opcodes whose first two operands are <result type> <result id>
@@ -224,6 +257,71 @@ def decode(path):
     return len(words), insts, words[1]
 
 
+def intlane_findings(insts):
+    """the intlane gate over one module's instructions: a string per OpBitcast
+    of a float that a buffer load produced (see the module's docstring)"""
+    floats = {ops[0] for op, ops in insts if op == OP_TYPE_FLOAT}
+    floats |= {ops[0] for op, ops in insts if op == OP_TYPE_VECTOR and ops[1] in floats}
+    blocks = {}  # struct id -> "storage buffer" / "uniform buffer"
+    for op, ops in insts:
+        if op == OP_DECORATE and ops[1] == DECORATION_BUFFER_BLOCK:
+            blocks[ops[0]] = "storage buffer"
+        elif op == OP_DECORATE and ops[1] == DECORATION_BLOCK:
+            blocks.setdefault(ops[0], "uniform buffer")
+    pointee = {ops[0]: (ops[1], ops[2]) for op, ops in insts if op == OP_TYPE_POINTER}
+    root = {}    # pointer id -> the buffer kind it points into
+    names = {}
+    for op, ops in insts:
+        if op == 5:  # OpName
+            raw = b"".join(struct.pack("<I", w) for w in ops[1:])
+            names[ops[0]] = raw.split(b"\0")[0].decode("ascii", "replace")
+        elif op == OP_VARIABLE and ops[2] in (STORAGE_UNIFORM, STORAGE_STORAGE_BUFFER):
+            sc, t = pointee.get(ops[0], (None, None))
+            kind = blocks.get(t)
+            if kind is None and ops[2] == STORAGE_STORAGE_BUFFER:
+                kind = "storage buffer"
+            if kind:
+                root[ops[1]] = (kind, names.get(ops[1], "%%%d" % ops[1]))
+        elif op in (OP_ACCESS_CHAIN, OP_IN_BOUNDS_ACCESS_CHAIN) and ops[2] in root:
+            root[ops[1]] = root[ops[2]]
+    vtype = {}
+    taint = {}   # value id -> (kind, buffer name)
+    for op, ops in insts:
+        if op == OP_LOAD and ops[2] in root and ops[0] in floats:
+            taint[ops[1]] = root[ops[2]]
+    moves = [(op, ops) for op, ops in insts if op in MOVE_OPS]
+    for op, ops in insts:
+        if op in MOVE_OPS or op == OP_LOAD or op == OP_BITCAST:
+            vtype[ops[1]] = ops[0]
+    changed = True
+    while changed:  # OpPhi may name a value defined after it
+        changed = False
+        for op, ops in moves:
+            if ops[1] in taint:
+                continue
+            if op in (OP_COMPOSITE_EXTRACT, OP_COPY_OBJECT):
+                srcs = ops[2:3]
+            elif op == OP_VECTOR_SHUFFLE or op == OP_COMPOSITE_INSERT:
+                srcs = ops[2:4]
+            elif op == OP_PHI:
+                srcs = ops[2::2]
+            elif op == OP_SELECT:
+                srcs = ops[3:5]
+            else:
+                srcs = ops[2:]
+            for v in srcs:
+                if v in taint:
+                    taint[ops[1]] = taint[v]
+                    changed = True
+                    break
+    out = {}
+    for op, ops in insts:
+        if op == OP_BITCAST and ops[2] in taint and vtype.get(ops[2]) in floats:
+            out[taint[ops[2]]] = out.get(taint[ops[2]], 0) + 1
+    return ["intlane: %d OpBitcast of a float loaded from the %s %s (an integer lane read "
+            "through a float load)" % (n, kind, name) for (kind, name), n in sorted(out.items())]
+
+
 def check(path, sizes=None):
     """the findings of one module, as strings; sizes, a list, receives its size line"""
     d = decode(path)
@@ -267,6 +365,8 @@ def check(path, sizes=None):
     name = os.path.basename(path)
     if vertex and name.startswith("vu_") and not deco.get(DECORATION_NO_CONTRACTION):
         out.append("precise: a VU vertex shader without NoContraction (its precise lost)")
+    if name.startswith("vu_"):
+        out += intlane_findings(insts)
     if deco.get(DECORATION_FP_FAST_MATH_MODE):
         out.append("precise: %d FPFastMathMode decorations" % deco[DECORATION_FP_FAST_MATH_MODE])
     for op, ops in insts:
