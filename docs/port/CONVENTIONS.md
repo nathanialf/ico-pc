@@ -158,6 +158,7 @@ colon; a test's own lines start with the test's name.
 | `video:` | `port/game/video_options.c` |
 | `boot:` | `port/platform/window_host.c` (the first presents) |
 | `fiber:`, `sched:`, `arena:`, `heap:`, `trace:` | `port/platform/fiber.c`, `sched.c`, `arena.c`, `trace_host.c` |
+| `state:` | save states: `port/game/state_host.c` (saved, loaded, refused, the picture, the [dev] keys), `port/platform/state_registry.c`, `state_port.c`, `state_reloc.c` ([PLATFORM.md](PLATFORM.md#saving-and-loading)) |
 | `gpu driver:` | `port/platform/android/gpu_driver_android.c` |
 | `rd:` | `port/render` through `rd__log` and `rd__log_once` (`rd_core.c`), with a topic after it (`rd: blend:`, `rd: fog:`) |
 | `textures:`, `models:` | `port/render/texpack*.c`, `rd_tex.c`, `modelpack.c` |
