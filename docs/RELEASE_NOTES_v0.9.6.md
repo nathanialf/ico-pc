@@ -2,7 +2,7 @@
 
 ## New
 
-- Save states: the pause menu's Save states page keeps four snapshots of the game per disc with a picture, area and play time; load them from the pause menu or from Options > Extras on the title. F5 saves to slot 1 and F9 loads it. A state belongs to the version of the game it was saved with.
+- Save states: the pause menu's Save states page keeps four snapshots of the game per disc with a picture, area and play time; load them from the Continue screen or the pause menu. F5 saves to slot 1 and F9 loads it. A state belongs to the version of the game it was saved with.
 - Options > Gameplay > Shadow speed: shadows walk, run and fly slower or faster than on the PlayStation 2 (Slower, Original, Faster, Fastest).
 - Android 8 and Vulkan 1.0 graphics drivers are supported (phones and handhelds from 2017 on; graphics driver packages still need Android 9).
 
