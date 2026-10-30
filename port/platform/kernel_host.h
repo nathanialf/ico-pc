@@ -24,4 +24,9 @@ int ico_kernel_raise_intc(int cause);
 /* 1 when the cause is enabled (EnableIntc). */
 int ico_kernel_intc_enabled(int cause);
 
+/* The installed INTC and DMAC handlers' function addresses, for the save
+   state's self-checks (state_reloc.h): up to max into out; returns the
+   number of handlers, which may exceed max. */
+int ico_kernel_state_handlers(unsigned long long *out, int max);
+
 #endif /* ICO_PLATFORM_KERNEL_HOST_H */
