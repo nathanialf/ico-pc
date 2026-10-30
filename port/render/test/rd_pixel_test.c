@@ -4243,6 +4243,23 @@ static void testVuPaths(const char *mode, int check34)
  * the game the fog pass paints at full fog (bright dots through the fog).
  * Model space is GS pixels from the 512 target's top-left, as in vpDraw. */
 static const char kSeamKey;
+/* PC port: the folder the dumps go to (main's argv[1]); S3's first cut
+ * strip and S4's 64 draws at Original 1x are written as rd_pixel_vu36 and
+ * rd_pixel_vu.rddump, the frames with VU draws the replay tool's draw merge
+ * and fused pair A/Bs take where no game dump is (CMakeLists.txt
+ * rd_vumerge_ab_pixel, rd_vufuse_ab_pixel; tools/ci_d3d11_warp.sh) */
+static const char *s_dumpDir;
+
+static void seamDump(const char *mode, const char *name)
+{
+    if (!s_dumpDir || strcmp(mode, "Original 1x") != 0) {
+        return;
+    }
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/%s.rddump", s_dumpDir, name);
+    CHECK(rd_dump_frame(path), "rd_dump_frame (%s)", name);
+}
+
 static const uint8_t kSeamRed[4] = {200, 30, 30, 0x80}, kSeamGreen[4] = {30, 200, 30, 0x80};
 
 /* ftoi4 as vu_ftoi4 computes it, of a float the VU holds */
@@ -4470,6 +4487,9 @@ static void testVuSeams(const char *mode)
                                  (kP[1][1] + kP[2][1]) * 0.5 + 8.0 * 0.6};
         int probeBg = 1;
         n = seamEnd(edge, 1, 0.1, 0.9, &near, probe, &probeBg);
+        if (c == 0) {
+            seamDump(mode, "rd_pixel_vu36"); /* a code-36 cut and kick pair */
+        }
         printf("  vu seams (%s): S3 code 36 cut beside kicked, v0 %s: %d cracks in %d pixels, "
                "v0's side %s\n",
                mode, c == 0 ? "GS Z < 0" : "w < 0", n, near, probeBg ? "empty" : "covered");
@@ -4513,6 +4533,7 @@ static void testVuSeams(const char *mode)
             u[3] = by + sn * e + cs * a;
         }
         n = seamEnd((const double (*)[4])lines, 14, 0.02, 0.98, &near, NULL, NULL);
+        seamDump(mode, "rd_pixel_vu"); /* 64 code-32 draws, one state */
         if (strcmp(mode, "Original 1x") == 0) {
             s_s4Ref = n;
         }
@@ -5091,6 +5112,7 @@ int main(int argc, char **argv)
     testAuraMaskAt("Enhanced 4x, full height", 4.0f, 1);
     testSheetTextAt("Enhanced 2x", 2);
     testSheetTextAt("Enhanced 3x", 3);
+    s_dumpDir = dir;
     testVuPathsAt("Original 1x", RD_PRESET_ORIGINAL, 1.0f, 1);
     testVuPathsAt("Original 4x", RD_PRESET_ORIGINAL, 4.0f, 1);
     testVuPathsAt("Enhanced 2.25x", RD_PRESET_ENHANCED, 2.25f, 1);
