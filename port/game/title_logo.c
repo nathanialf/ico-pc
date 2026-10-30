@@ -18,6 +18,9 @@ extern int current_layout_id; /* common/src/layout_texture.c */
 #define TITLE_STAGE (ico_region_cur()->stage_title)
 #define LAYOUT_TITLE_CONTINUE (ico_region_cur()->layout_title_continue)
 #define LAYOUT_TITLE_NEW (ico_region_cur()->layout_title_new)
+/* the Continue screen's file select (19), which the Save states page opened
+   from it returns to: the logo as it was there before (shown) */
+#define LAYOUT_LOAD_FILES (ico_region_cur()->layout_load_files)
 
 int ico_title_logo_model(const char *model)
 {
@@ -37,7 +40,8 @@ int ico_title_logo_step(int *hidden, int stage, int layout, int covered)
         *hidden = 0;
     } else if (covered) {
         *hidden = 1;
-    } else if (layout == LAYOUT_TITLE_CONTINUE || layout == LAYOUT_TITLE_NEW) {
+    } else if (layout == LAYOUT_TITLE_CONTINUE || layout == LAYOUT_TITLE_NEW ||
+               layout == LAYOUT_LOAD_FILES) {
         *hidden = 0;
     }
     return *hidden;

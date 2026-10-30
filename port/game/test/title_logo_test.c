@@ -6,7 +6,8 @@
  *   models    the nine logo models and nothing else
  *   title     on the title's menu nothing hides; a Settings page over the
  *             title hides the logo's models, never another stage object;
- *             back on layout 12 or 13 the logo shows on the first frame
+ *             back on layout 12 or 13 the logo shows on the first frame,
+ *             and back on the Continue screen (19) from the Save states page
  *   extras    the model list over the title hides it; Credits and a
  *             model's stage load (the title fading out on a layout of
  *             neither) keep it hidden until the stage changes, and the next
@@ -50,10 +51,11 @@ int ico_mv_title_list_layout(void)
 }
 
 #define TITLE 1
-#define PAGE 300 /* a Settings page (a port layout) */
-#define LIST 310 /* the model list */
-#define EMPTY 0  /* the game's empty layout, while a stage changes */
-#define PAUSE 58 /* the Options screen */
+#define PAGE 300          /* a Settings page (a port layout) */
+#define LIST 310          /* the model list */
+#define EMPTY 0           /* the game's empty layout, while a stage changes */
+#define PAUSE 58          /* the Options screen */
+#define CONTINUE_FILES 19 /* the Continue screen's file select */
 
 /* one frame of draws: the logo's I and a castle mesh of the stage */
 static int s_logoShown, s_castleShown;
@@ -97,6 +99,14 @@ static void testTitle(void)
         frame(TITLE, menu, 0);
         CHECK(s_logoShown, "back on layout %d: shown on the first frame", menu);
     }
+    /* Continue's file select (19), the Save states page over it, Back */
+    frame(TITLE, 12, 0);
+    frame(TITLE, CONTINUE_FILES, 0);
+    CHECK(s_logoShown, "the Continue screen: shown");
+    frame(TITLE, PAGE, 1);
+    CHECK(!s_logoShown, "the Save states page over it: hidden");
+    frame(TITLE, CONTINUE_FILES, 0);
+    CHECK(s_logoShown, "back on the Continue screen: shown on the first frame");
 }
 
 static void testExtras(void)
