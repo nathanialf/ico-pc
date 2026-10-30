@@ -27,8 +27,21 @@ static TorchGeoWork emptyTorchWork_pal = {
     0, {0}, {0.0f, 0.0f, 0.0f, 1.0f}, 0, 0, 65536, 65536, 0, {-1, -1, -1, -1, -1}, {0},
 }; /* derived name */
 
+/* PC port: the 2001 builds' record is 0x28 bytes (flags, lightOn, burnTime,
+   life, chainFlag, effect[5]: decomp torch.c, the North American arm, lines 11-25);
+   the host keeps the one later layout above for every disc, so the 2001
+   values are placed by name.  Positional, they landed one field group early
+   (life 0 and every effect slot 0), and a torch lit at its layout went out
+   on its second frame, deleting particle effect 0 as it went (issue 160).
+   pos and fadeStart are not in the 2001 record; nothing on those discs
+   reads them. */
 static TorchGeoWork emptyTorchWork_ntscaug6jun26 = {
-    0, 0, 0, 65536, 0, {-1, -1, -1, -1, -1},
+    .flags = 0,
+    .lightOn = 0,
+    .burnTime = 0,
+    .life = 65536,
+    .chainFlag = 0,
+    .effect = {-1, -1, -1, -1, -1},
 }; /* derived name */
 
 #define emptyTorchWork (*PAL_NTSCAUG6JUN26(&emptyTorchWork_pal, &emptyTorchWork_ntscaug6jun26))
@@ -41,6 +54,11 @@ static TorchGeoWork emptyTorchWork_ntscaug6jun26 = {
 #include "sceneManager.h"
 
 inline int IsTorchLightOn(GObj *torch);
+/* PC port: port/platform/diag_host.h (rate-limited log lines: a lit torch
+   going out, with the frames it burned and its life, and a torch catching
+   fire from a burning one nearby, as a held stick does) */
+void ico_host_torch_out(int burnTime, int life, int flags);
+void ico_host_torch_caught(int flags);
 
 inline void SetTorchChainReactionFlag(GObj *torch, int flag)
 {
@@ -176,6 +194,8 @@ void LightTorchOff(GObj *gobj)
     TorchGeoWork *w = GOBJ_SUB(gobj)->work;
 
     if (w->lightOn != 0) {
+        /* PC port: a line per torch going out (rate-limited) */
+        ico_host_torch_out(w->burnTime, w->life, w->flags);
         if (w->effect[3] != -1) {
             DeleteParticleEffect(w->effect[3]);
         }
@@ -444,6 +464,8 @@ static inline void procChainReaction_jun26(GObj *gobj)
     o = CheckTorchChainReaction(gobj, 20.0f);
     if (o != 0) {
         LightTorchOn(gobj);
+        /* PC port: a line per torch catching fire (rate-limited) */
+        ico_host_torch_caught(w->flags);
     }
 }
 
@@ -463,6 +485,8 @@ static void procChainReaction(GObj *gobj)
     o = CheckTorchChainReaction(gobj, 20.0f);
     if (o != 0 && chainReactionBlocked(gobj, o) == 0) {
         LightTorchOn(gobj);
+        /* PC port: a line per torch catching fire (rate-limited) */
+        ico_host_torch_caught(w->flags);
     }
 }
 
@@ -545,6 +569,8 @@ static void TorchGeo_aug6(GObj *gobj)
 
             if (other != 0 && chainReactionBlocked(gobj, other) == 0) {
                 LightTorchOn(gobj);
+                /* PC port: a line per torch catching fire (rate-limited) */
+                ico_host_torch_caught(w->flags);
             }
         }
         return;
