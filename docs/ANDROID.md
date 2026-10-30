@@ -154,9 +154,10 @@ In that folder:
   disc's in `BASCUS-97113ico` and the June 2001 magazine demo's in
   `BISCUS-97113ico`.
 - `states` holds your save states, one folder for each disc. Saving and
-  loading them is on the pause menu's **Save states** row (and under
-  **Options > Extras** on the title screen); there are no key shortcuts on a
-  phone. Copy it along with `memcard` when you back up.
+  loading them is on the pause menu's **Save states** row (and on the title
+  screen: choose **Continue** and tap **Save states** under your saves);
+  there are no key shortcuts on a phone. Copy it along with `memcard` when
+  you back up.
 - `memcard-preview` holds the August 2001 preview disc's saves (in its own
   `BASCUS-97113ico`): they are not the North American disc's kind of save,
   so they are kept apart. Copy it along with `memcard` when you back up.

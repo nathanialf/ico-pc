@@ -237,11 +237,12 @@ Yes, with a save state. Press Start, choose **Save states** (under Photo
 mode), pick one of the four slots and choose **Save**. On a computer, F5
 saves to slot 1 from the pause menu. The state keeps the game exactly as it
 is, and you can load it from the pause menu or from the title screen
-(**Options > Extras > Save states**; F9 loads slot 1). It does not replace
+(choose **Continue**, then press **Square** for **Save states**; F9 loads
+slot 1). It does not replace
 the game's own save points: those still write to the memory card. A state
 only loads in the version of the game that saved it, so keep a save point
 too before you update.
-[The details](OPTIONS.md#extras).
+[The details](OPTIONS.md#save-states).
 
 ## Can I bring my PS2 save over?
 

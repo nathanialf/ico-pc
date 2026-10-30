@@ -206,8 +206,10 @@ The pause menu has a **Save states** row under **Photo mode**. It opens four
 slots; press Up or Down to pick one, Left or Right to choose **Save**, **Load**
 or **Delete**, and the confirm button to do it. Saving over a state and deleting
 ask you to press again within two seconds. Triangle (or Circle) goes back. From
-the title screen the same page is under Options > Extras > Save states, where it
-loads and deletes. [All the details](OPTIONS.md#extras).
+the title screen, choose **Continue**: the screen with your memory card saves
+shows **Square Save states** under them. Press **Square** (or click or tap it)
+to open the same page, where it loads and deletes; Back returns to your saves.
+[All the details](OPTIONS.md#save-states).
 
 ## Take a photo
 

@@ -494,10 +494,10 @@ page, and it is the same setting in both places.
 ## Extras
 
 On the title screen's Options this page has Music, Models, Credits,
-Save states, Character Customization, Game variants, Add to Steam (on Windows
-and Linux), Export textures and Achievement pop-ups. In the pause menu's
-Options it has only Save states, Character Customization, Game variants and
-Achievement pop-ups.
+Character Customization, Game variants, Add to Steam (on Windows and Linux),
+Export textures and Achievement pop-ups. In the pause menu's Options it has
+only Character Customization, Game variants and Achievement pop-ups.
+[Save states](#save-states) are on the pause menu and the Continue screen.
 
 - **Music:** listen to the game's music and sound effects.
 - **Models:** the model viewer. Look closely at the characters and some
@@ -505,22 +505,6 @@ Achievement pop-ups.
 - **Credits:** watch the ending credits again. It unlocks once you have
   finished the game. The June 2001 magazine demo has no ending credits on
   its disc, so the row is not there with that disc.
-- **Save states:** four slots for each disc, each with a small picture, the
-  area, the play time and the date. Choose a slot and press Left or Right to
-  pick **Save**, **Load** or **Delete**, then press the confirm button.
-  Saving over a slot that is in use, and deleting, ask you to press again
-  within two seconds. Saving is only possible from the pause menu, so on the
-  title screen the page only loads and deletes. A slot that cannot be loaded
-  (it was saved by another version of the game, on another disc, or with
-  different gameplay settings) is greyed, and the line under the cards says
-  why. After a load the game is back on the pause menu, on **Save states**.
-  The same page opens from the pause menu's **Save states** row, under Photo
-  mode. On a computer, F5 saves to slot 1 and F9 loads it. A state belongs
-  to the version of the game it was saved with, so after you update the game
-  the old states are greyed. Your achievements keep counting as before and
-  are not taken back by a load. The states are kept in the `states` folder
-  of your [user folder](PORTABLE_MODE.md#where-your-saves-are), apart from
-  your memory card saves.
 - **Character Customization:** change the colours of Ico and Yorda.
   [Details below](#character-customization).
 - **Game variants:** change how the game plays.
@@ -642,6 +626,33 @@ A texture pack that has its own pictures of Ico and Yorda replaces these
 colours. While a texture pack is on, the page reminds you of this.
 
 Your choices are saved when you leave the page.
+
+## Save states
+
+A save state keeps the game exactly as it is, anywhere, in one of four slots
+for each disc. Each slot shows a small picture, the area, the play time and
+the date.
+
+- **During play:** press Start and choose **Save states**, under Photo mode.
+- **On the title screen:** choose **Continue**. Under the list of your memory
+  card saves the screen shows **Square Save states**: press Square (or click
+  it, or tap it). Continue is there once the memory card has a save of the
+  game. Back on that page returns to the list of saves.
+
+Choose a slot and press Left or Right to pick **Save**, **Load** or
+**Delete**, then press the confirm button. Saving over a slot that is in
+use, and deleting, ask you to press again within two seconds. Saving is
+only possible from the pause menu, so from the title screen the page only
+loads and deletes. A slot that cannot be loaded (it was saved by another
+version of the game, on another disc, or with different gameplay settings)
+is greyed, and the line under the cards says why. After a load the game is
+back on the pause menu, on **Save states**. On a computer, F5 saves to slot
+1 and F9 loads it. A state belongs to the version of the game it was saved
+with, so after you update the game the old states are greyed. Your
+achievements keep counting as before and are not taken back by a load. The
+states are kept in the `states` folder of your
+[user folder](PORTABLE_MODE.md#where-your-saves-are), apart from your memory
+card saves.
 
 ## Photo mode
 
