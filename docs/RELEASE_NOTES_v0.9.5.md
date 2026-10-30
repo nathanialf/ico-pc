@@ -1,5 +1,3 @@
-## New
-
 ## Fixed
 
 - On the North American disc (and the 2001 preview discs), Continue no longer closes the game.
