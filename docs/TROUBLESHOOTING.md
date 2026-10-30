@@ -120,6 +120,19 @@ and writes it into `config.toml`. If it keeps freezing, send the log from
 the start after the freeze: it lists how long each group of graphics took
 to prepare before the freeze and how much memory the game was using.
 
+On a phone or a handheld, if the graphics driver stops answering while
+the game prepares a piece of graphics, the game now closes itself after
+about 10 seconds with a message that says so, instead of waiting until
+the device closes it or freezes. Start it again. When the piece it stopped
+on is one of the shapes the game can draw another way, the next start
+shows a message that says so, and from then on the game draws those shapes
+the other way on that device and never prepares the piece again. The
+other way can make a few of those shapes' colours a shade different. It
+writes this into `config.toml` as a `pipeline_skip` line under `[dev]`,
+which names the device and its graphics driver: after an update of the
+graphics driver the game tries the usual way again. To try it yourself
+before that, set the line to `pipeline_skip = ""` or delete it.
+
 If your `config.toml` has a line `vu_plain_only = true` or
 `vu_extended = true`, the game ignores it: every device now prepares the
 same 3D graphics. You can delete the line.
@@ -128,8 +141,9 @@ If you had to restart the phone by force while an update was installing or
 while the game was on **Preparing graphics** for the first time after it,
 the game may then refuse to open and show a box titled "SDL Error" saying a
 library "has bad ELF magic". The restart cut the update's files short, so
-the installed copy of the game is damaged. Your saves and settings are not
-what is damaged. To fix it, uninstall the game and install the same
+the installed copy of the game is damaged. The game did not cause this and
+cannot repair it: the forced restart came before the phone had finished
+writing the update. Your saves and settings are not what is damaged. To fix it, uninstall the game and install the same
 download again. Uninstalling also deletes the game's folder with your
 saves, so first copy the `memcard` folder to a computer
 ([where it is](ANDROID.md#where-your-files-are)). Before you install an
