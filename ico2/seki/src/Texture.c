@@ -423,6 +423,31 @@ static struct { /* port */
     unsigned int appearanceSerial; /* ico_appearance_serial() last frame */
 } texHost = {.packOn = -1};
 
+/* PC port: a save state's load (port/game/state_host.c).  The restored
+   texHost holds the saving run's serials, which may name entries the
+   texture cache of this run made for other pictures: before the restore
+   the load reads the live counter, after it every loaded texture gets a new
+   serial above both, so each is decoded again at its next use. */
+unsigned int tex_HostNextSerial(void)
+{
+    return texHost.nextSerial;
+}
+
+void tex_HostReserialAll(unsigned int liveNext)
+{
+    int i;
+
+    if (texHost.nextSerial < liveNext) {
+        texHost.nextSerial = liveNext;
+    }
+    for (i = 0; i < 200; i++) {
+        if (texHost.serial[i] != 0) {
+            texHost.serial[i] = ++texHost.nextSerial;
+        }
+    }
+    texHost.packOn = -1;
+}
+
 /* PC port: texture packs.  The texture just decoded for (id, gen) as
    texpack_name.h's source (every level of the TIM2, the CLUT in CSM1
    order), so the pack's replacement under the first of its candidate
