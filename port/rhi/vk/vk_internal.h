@@ -471,9 +471,10 @@ typedef struct VkrState {
     uint64_t fenceFinished;
     uint32_t fenceRecycleWaits;
     /* ICO_VK_FAKE_API (vk_device.c vkr_create_instance): the profile in
-     * force ("1.1", "1.1ext"; NULL: none), both holding the instance and the
-     * device to Vulkan 1.1; fakeHideExts: the 1.1 profile, whose device
-     * also lacks the extensions a stock Vulkan 1.1 driver has not
+     * force ("1.0", "1.1", "1.1ext"; NULL: none), the 1.1 ones holding the
+     * instance and the device to Vulkan 1.1, "1.0" to Vulkan 1.0 (issue
+     * 158); fakeHideExts: the 1.0 and 1.1 profiles, whose device also lacks
+     * the extensions a stock Vulkan 1.1 driver has not
      * (vkr_device_has_ext), so it has no timeline semaphores
      * (fakeNoTimeline, VKR_SYNC_FENCES) */
     const char *fakeApi;
@@ -490,11 +491,15 @@ typedef struct VkrState {
      * VK_ATTACHMENT_STORE_OP_NONE taken (Vulkan 1.3, or below it on a
      * Vulkan 1.1 device or one without dynamic rendering
      * VK_KHR_load_store_op_none, VK_EXT_load_store_op_none or
-     * VK_QCOM_render_pass_store_ops, whose NONE_QCOM is the same value) */
+     * VK_QCOM_render_pass_store_ops, whose NONE_QCOM is the same value);
+     * viewUsage, VkImageViewUsageCreateInfo chained on the UINT views
+     * (Vulkan 1.1, or VK_KHR_maintenance2 on a Vulkan 1.0 device: issue
+     * 158; without it the view keeps the image's usages) */
     bool legacyPasses;
     bool driverProps;
     bool formatList;
     bool storeOpNone;
+    bool viewUsage;
 
     /* frames */
     VkrFrame frames[RHI_FRAMES_IN_FLIGHT];
