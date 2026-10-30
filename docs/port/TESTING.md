@@ -370,6 +370,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   420 dpi: with the disc's confirm (Cross, or Circle) Off a point in the look pad's area and one in
   the stick's area are taken by the mapper but do not block the menus' click, the stick's does
   while the confirm works (the D-pad Off), and a working or Hidden button always blocks (`touch`).
+- `touch_gap_test.c`: the Frame rate counter's place among the player's actual touch controls
+  (`touch_gap.c`, [UI.md](UI.md#the-frame-rate-counter)): the default layout's old place, Start at
+  the top-left drawn, Hidden and Off, every control Off, no room on the row, the stick's resting
+  ring (`touch_gap`).
 - `touch_edit_test.c`: the layout edits and the editor ([INPUT.md](INPUT.md#layout-edits)): an
   unedited layout equal to the default to the byte, the anchor arithmetic, the clamp (a camera
   hole's negative offsets in `test_cutout`; the region's clamp for offsets at or inside the safe

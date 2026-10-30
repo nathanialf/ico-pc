@@ -829,11 +829,23 @@ only calls `ui_fps_tick(now)` at the top of `pace_log` and `ui_fps_present()` af
 which the 10 s line zeroes: a smaller count than the last is a zeroing) and `rd_interpolation_active()`.
 With interpolation on the counter counts the window's presents, with it off the replays, as the 10 s
 line does. The counting runs whether or not the option is on. While a touch layout exists
-(`ui_touch_top_gap`) the corner is Left 2's, so the text starts 35 q in from the layout's left edge
-(just right of the D-pad's Up key at 33 q) at the keys' row (3 q down) and is shrunk by 8 % steps (to
-12 pixels at least) until it fits before Select's left less 2 q (`touch.c` header: the default
-places). A player's edited layout can put a control there; the counter does not look. The log says
-"window: frame rate counter on" or "off" when the option changes (and "on" at the start when it is
+(`ui_touch_top_gap`, which asks `ico_touch_fps_place` in `port/input/touch_gap.c`) the place comes
+from the player's actual layout, edits applied, the one the overlay snapshot carries. A control
+counts when it is drawn (a button with `alpha` > 0, the left stick's resting ring with
+`stickAlpha` > 0; Hidden and Off controls are not drawn, the look pad's area is drawn only under a
+finger) and its box is padded by 2 q. When none meets the corner's band (the margin in, the text's
+height, the text's width at full size) the counter stays in the corner. Otherwise it goes on the
+keys' row (3 q below the region's top) at the first x from the corner, going right, where no counted
+control meets the row over the text's full width: on the default layout the Left 2 and the D-pad's
+Up key hold the row up to 35 q (the old fixed place), Start moved to the top-left pushes it to
+Start's right edge plus 2 q. The text is shrunk by 8 % steps (to 12 pixels at least) until it fits
+before the next counted control's padded left edge (Select's less 2 q by default). When no gap holds
+the full width a gap that holds the shrunk floor is used, and with none the corner again, drawn
+over. With the overlay faded (`ico_input_sdl_touch_overlay` gives no snapshot) the counter is in the
+corner. `touch_gap_test` checks the default place, Start top-left drawn, Hidden and Off, every
+control Off, no room and the stick's ring. The log says "window: frame rate counter at the corner"
+or "at the touch controls' row, clear of the drawn controls" (x, y, the output's size) once per change
+of place, besides "window: frame rate counter on" or "off" when the option changes (and "on" at the start when it is
 on).
 
 ## The touch layout editor

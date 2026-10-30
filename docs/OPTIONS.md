@@ -130,9 +130,11 @@ The window, the picture's size and shape, and the speed.
   pictures the game is putting on the screen each second, as a small
   number such as "60 fps" in the top-left corner of the screen. It is
   drawn over the picture at your screen's own sharpness, so the CRT filter
-  does not touch it. With the touch controls showing, the number stands on
-  the top edge between the D-pad and Select, where no control sits, so
-  nothing covers it. It updates once a second and shows nothing until the
+  does not touch it. With the touch controls showing, the number moves to
+  the first place along the top edge that none of your visible controls
+  covers (with the normal layout, between the D-pad and Select), so
+  nothing covers it; controls you set to Hidden or Off do not count, and
+  when the controls fade away the number goes back to the corner. It updates once a second and shows nothing until the
   first second has passed.
 - **Video mode** is PAL 50 Hz or 60 Hz. The normal choice is 60 Hz. This
   row is only on the title screen's Options, and only with the European
