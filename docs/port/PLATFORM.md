@@ -16,7 +16,13 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/fiber.c`, `fiber.h` | the context switch over minicoro (`port/third_party/minicoro`), the slot pool with guarded stacks, a suspended fiber's save state image |
 | `port/platform/sched.c`, `sched.h` | the EE thread and semaphore model; `ico_sched_call_on_host`; the scheduler's save state image |
 | `port/platform/vm_reserve.c`, `vm_reserve.h` | address space reserved at a chosen address, committed and decommitted (the pinned arena, the fiber pool) |
-| `port/platform/state_reloc.c`, `state_reloc.h` | a save state's address ranges and their deltas; the relocation word functions |
+| `port/platform/state_reloc.c`, `state_reloc.h` | a save state's address ranges and their deltas; the relocation word functions and the scan ([Save states](#save-states)) |
+| `port/platform/state_check.c` | the program's image range and a load's typed self-checks (the game heap's walk, the threads, the interrupt handlers) |
+| `port/platform/state_file.c`, `state_file.h` | the save state file: the header, the build id, the validity, the writer thread, the reader |
+| `port/platform/state_registry.c`, `state_registry.h` | the registry of the port's globals a save state carries |
+| `port/platform/state_port.c`, `state_port.h` | which port globals are registered, by owner (linked into `ico_pc` only) |
+| `port/platform/sim_keys.c`, `sim_keys.h` | the config keys that change the simulation (the pad recording's header, the save state's settings hash; compiled into `ico_config`) |
+| `port/platform/state.h` | the save states' interface (`state_host.c` implements it) |
 | `port/platform/game_data_range.c`, `game_data_range.h` | where the game's `.data` and `.bss` lie in the running program, and the check that they hold the game's globals and none of the port's ([Game data ranges](#game-data-ranges)) |
 | `port/platform/game_data_verify.c` | the program's own check of those ranges against named game and port globals (linked into `ico_pc` only) |
 | `port/platform/game_data_sections.h` | the section names clang gives the game's writable globals (forced into every game source by `cmake/IcoStateSections.cmake`) |
@@ -362,6 +368,128 @@ states' start-up runs it once and, on a failure, logs it and turns save states o
 size goes into the save state's build id. `tools/check_game_data_ranges.py` checks the same on the
 linked program's symbol table at test time, the game's file statics (`texTable`,
 `cdvdThreadStack`) included ([TESTING.md](TESTING.md#portplatformtest)).
+
+## Save states
+
+A save state is a snapshot of the whole running game taken at the host loop's quiescent point,
+written to a file and put back later (`port/platform/state.h`). This section is the file, the
+registry of the port's globals and the relocation; the save and load sequences are
+`port/game/state_host.c`'s.
+
+### The file
+
+`<pref>/states/<disc slug>/slot<n>.ics` is a raw container, little-endian
+(`port/platform/state_file.h`):
+
+| part | bytes | holds |
+| --- | --- | --- |
+| header | 512, uncompressed | the magic `ICOSTATE`, the format version (`ICO_STATE_FORMAT_VERSION`), the build id (16 bytes), the commit text, the platform tag, the disc slug, the simulation keys' hash, the save's time, play time, stage, Main tick and vsync, the section count, the keys text's length, the file's length, a CRC-32 over the header, the table and the keys text |
+| section table | 64 per section | name (15 characters), offset, packed and raw sizes, the address the bytes lived at in the saving process, the CRC-32 of the raw bytes, the caller's flags |
+| keys text | as long as it is | `key=value\n` for every simulation key ([below](#validity)) |
+| sections | packed | each section's bytes, raw deflate (miniz `tdefl`, level 1) |
+
+`ico_state_file_write` copies the header and the section list and starts a writer thread
+(`ico_thread.h`; the headless build has it too). The thread deflates each section straight from
+the caller's bytes, which must stay unchanged until the write is collected, writes
+`<path>.tmp`, rewrites the header and table with the final sizes, syncs it (`ico_fsync`) and
+renames it over the slot (`ico_rename_replace`); a failure removes the `.tmp`. One write is in
+flight at a time: a second gets `ICO_STATE_BUSY` until `ico_state_file_poll` (never waits) or
+`ico_state_file_flush` (joins) collects the result, which carries each section's raw and packed
+size, the file's length and the time the thread took.
+
+`ico_state_file_read_header` reads the header, the table and the keys text and refuses a file
+that is not one (`ICO_STATE_BAD_FILE`: a wrong magic or version, a CRC that does not match, a
+table that does not fit, a file shorter or longer than its header says, which is how truncation
+shows); a missing file is `ICO_STATE_EMPTY`. `ico_state_file_read` then asks a callback for a
+buffer per section (NULL skips it) and inflates into it; a section that does not inflate to
+exactly its raw size and CRC is `ICO_STATE_BAD_FILE`.
+
+### Validity
+
+The **build id** is two XXH3-64 hashes (`port/render/xxh3.c`; the second over the same text behind
+a fixed prefix) of a text naming the commit (`ICO_BUILD_COMMIT`, passed in by the program), the
+compiler (`__VERSION__`), the platform tag, the format version, the scheduler's table size, the
+fiber stack size, the arena size, the two game data ranges' sizes ([above](#game-data-ranges))
+and every registered block's name, size and flags in order (`ico_state_build_id`; the same text
+can go to a developer's log). Any change of layout between two programs therefore changes it.
+
+The **platform tag** is `windows-x64`, `linux-x64`, `linux-arm64`, `android-arm64`,
+`android-x64`, `macos-arm64`, `macos-x64` or `ios-arm64` (`ico_state_platform_tag`).
+
+The **simulation keys** are the config keys that change what the game computes
+(`port/platform/sim_keys.h`, `ICO_SIM_KEYS`, compiled into `ico_config`): the same list the pad
+recording's header writes ([CONFIG.md](CONFIG.md#adding-a-key)). `ico_sim_keys_hash` is XXH3-64
+over `key=value\n` for each, in order, the value as `ico_config_get_string` gives it (`""` when
+unset); the text is stored in the file. `ico_sim_keys_first_diff` names the first key whose saved
+value differs from the current one.
+
+`ico_state_header_check` compares a saved header with this run's, in this order: the platform
+(`ICO_STATE_OTHER_PLATFORM`, a Windows state on Linux), the build id (`ICO_STATE_OTHER_BUILD`, the
+detail is the other build's commit), the disc slug (`ICO_STATE_OTHER_DISC`), the keys text and then
+the hash (`ICO_STATE_OTHER_SETTINGS`, the detail `key=saved (now cur)`).
+
+### The registry
+
+The port's own simulation globals are not in the game's data ranges, so each owner registers its
+blocks by name (`ico_state_register(name, p, n, flags)`, `port/platform/state_registry.h`, at most
+`ICO_STATE_MAX_ENTRIES` 64). `ico_state_register_port` (`port/platform/state_port.c`, in the
+program only) calls the owners' functions once from `ico_host_init`, before the game's first
+thread, in a fixed order, so the table is the same in every run of a build (`state_port.h` says
+what each owner registers and why):
+
+| owner | blocks | flags |
+| --- | --- | --- |
+| `kernel_host.c` | `kernel.intc_handlers`, `kernel.dmac_handlers` (the game's function pointers), `kernel.intc_mask`, `kernel.dmac_mask`, `kernel.next_handler_id`, `kernel.vsync_flag`, `kernel.vsync_csr` (`SetVSyncFlag`'s pointers), `kernel.gs_imr` | SCAN on the handlers and the two pointers |
+| `clock.c` | `clock.vsync_num`, `clock.vsync_den`, `clock.hblank_hz`, `clock.carry` | |
+| `hwregs.c` | `hw.eeio` (64 KB), `hw.gs` (8 KB) | |
+| `port/math` | `rand.next`, `vu0.r`, `vu0.current_matrix`, `vu0.matrix_stack`, `vu0.matrix_stack_top`, `vu0.rot_trans_prev`, `vu0.save`, `vu0.save_top` | |
+| `cdvd_host.c` | `cdvd.drive` (busy, the sync semaphore's id and waiters, the counters, the last sector, the error) and `cdvd.stream`: two spans of the drive's record, leaving out its host objects (the mounted disc, the identification of the disc, the clock callback) | |
+| `iop_ram.c` | `iop.ram` (2 MB), `iop.heap_blocks`, `iop.heap_count` | |
+| `sif_host.c` | `sif.last_sid`, `sif.last_rpc`, `sif.rpc_count`, `sif.module_id`, `sif.dma_id` | |
+| `trace_host.c` | `trace.main_ticks` | CLOCK |
+| `pad_script.c` | `pad_script.tick` | CLOCK |
+| `door_grace.c` | `door_grace.armed`, `.arm_from`, `.arm_to`, `.arm_holding`, `.left`, `.from` | |
+| `gfx_null.c` | `dma.channels` | |
+| `host_loop.c` | `host_loop.vsyncs`, `host_loop.field` | |
+
+43 blocks, about 2.1 MB, most of it IOP RAM. SCAN marks a block that may hold host addresses (the
+relocation scans it); AUDIO one copied under the audio lock; CLOCK a counter a load rewinds with
+the game (the Main tick count, and with it the pad script's position). Not registered: the
+scheduler's tables (`ico_sched_state_save` and `_restore` move their pointers themselves; a
+second scan would move them twice), the vsync callback list and `clock.c`'s flag that mirrors
+it, the SIF server table (host callbacks registered at start-up), files and the trace file's
+position. A block that cannot be registered (a repeated name, the table full) is logged
+(`state: ...`) and `ico_state_register_port` returns -1, so save states stay off.
+
+### Relocation
+
+A state's bytes hold host addresses; when the memory they point into sits elsewhere in the
+loading process, they are moved (`port/platform/state_reloc.h`). There are four ranges, each the
+saving process's `[lo, hi)` and a delta: the program's image (MODULE; 0 on a fixed image build,
+[BUILDING.md](../BUILDING.md#fixed-image)), the arena (0 while pinned), the fiber pool (0 while
+pinned) and `pobjImageTables`' host block (POBJ). A word matches a range when `lo <= word <= hi`
+(one-past-the-end pointers included).
+
+- `ico_state_reloc_scan(r, region, n, &count)` is the conservative scan: every 8-byte-aligned word
+  inside the region that matches a moved range is moved by its delta, and the count is added.
+  It runs over the arena, the game's data ranges, the SCAN blocks, the fibers' stacks and
+  callee-saved registers. An EE int of 60 above a small int reads as an arena address
+  (0x3C_xxxxxxxx), which is why the arena is pinned: with a zero delta nothing moves. With
+  developer mode on (`ico_state_reloc_set_log`) each moved word is logged
+  (`state: moved the word at <addr>: <old> -> <new>`).
+- `ico_state_image_range` finds the image in this process: on Windows the module's headers
+  (`SizeOfImage`, the executable sections), on Linux and Android `dl_iterate_phdr`'s loadable
+  segments of the object holding this code, on Apple its segments through `_dyld`
+  (`port/platform/state_check.c`).
+- `ico_state_reloc_check` are the typed self-checks after a load's restore and relocation, all
+  against the ranges as they are now: the game heap's walk (`ico_state_heap_walk` from
+  `ios_partition_root`: every partition record and block header inside the arena, every link 0
+  or inside it, the block chain only forward, partition marks `<PARTITION>____`, block marks
+  `<ALLOC>________`, `<FREE AREA>____` or ` free memory   `, every block on a free list marked
+  free, each child's parent its parent), every scheduler thread's entry and last kernel call's
+  caller in the image's code and that call's name in the image, every INTC and DMAC handler in
+  the image's code (`ico_kernel_state_handlers`). A failure names the first offender; the load
+  then puts its backup back (`ICO_STATE_SELF_CHECK`).
 
 ## Register pages
 
