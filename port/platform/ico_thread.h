@@ -1,8 +1,9 @@
 /* ico_thread: the port's one small OS thread, mutex and condition wrapper
    for code that must not depend on SDL (the achievements file writer, the
-   headless tests). pthreads on POSIX, the Win32 thread, critical section and
+   texture decode pool, the headless tests). pthreads on POSIX, the Win32 thread, critical section and
    condition variable on Windows. Not for the game's own threads (those are
-   fibers, sched.h). */
+   fibers, sched.h). Its own library (ico_thread): the renderer's texture
+   decode pool uses it too (port/render/rd_tex_decode.c). */
 #ifndef ICO_THREAD_H
 #define ICO_THREAD_H
 
@@ -32,6 +33,10 @@ void ico_cond_broadcast(IcoCond *c);
 
 /* A monotonic clock in milliseconds (the origin is arbitrary). */
 double ico_thread_now_ms(void);
+
+/* The hardware threads the system runs this process on (logical
+   processors), at least 1. */
+int ico_thread_cpu_count(void);
 
 #ifdef __cplusplus
 }
