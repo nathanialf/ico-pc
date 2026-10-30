@@ -2,9 +2,11 @@
  * rd_create_texture_sheet).  rd_tex.h describes the decoding and the cache. */
 #include "rd_tex.h"
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_tex_decode.h"
 #include "shader_consts.h"
 #include "texpack.h"
 
@@ -110,14 +112,15 @@ static int clutSrc(uint32_t cpsm, RdTexSrc *src)
     }
 }
 
-int rdtex_decode(const RdTexImage *im, uint8_t *out, RdTexSrc *src)
+/* What rdtex_decode checks before it writes anything: 0 with *src and
+   *indexed set, or -1 */
+static int decodeCheck(const RdTexImage *im, RdTexSrc *src, int *indexed)
 {
-    const uint8_t *p = im->pixels;
     uint32_t pw = im->padW ? im->padW : im->w;
     uint32_t ph = im->padH ? im->padH : im->h;
-    int indexed = 0;
 
-    if (p == NULL || im->w == 0 || im->h == 0 || pw < im->w || ph < im->h) {
+    *indexed = 0;
+    if (im->pixels == NULL || im->w == 0 || im->h == 0 || pw < im->w || ph < im->h) {
         return -1;
     }
     switch (im->psm) {
@@ -143,9 +146,22 @@ int rdtex_decode(const RdTexImage *im, uint8_t *out, RdTexSrc *src)
         if (im->clut == NULL || clutSrc(im->cpsm, src) != 0) {
             return -1;
         }
-        indexed = 1;
+        *indexed = 1;
         break;
     default:
+        return -1;
+    }
+    return 0;
+}
+
+int rdtex_decode(const RdTexImage *im, uint8_t *out, RdTexSrc *src)
+{
+    const uint8_t *p = im->pixels;
+    uint32_t pw = im->padW ? im->padW : im->w;
+    uint32_t ph = im->padH ? im->padH : im->h;
+    int indexed = 0;
+
+    if (decodeCheck(im, src, &indexed) != 0) {
         return -1;
     }
     memset(out, 0, (size_t)pw * ph * 4);
@@ -503,91 +519,6 @@ RdTex rdtex_find(uint32_t id, uint32_t gen, int texa)
     return (RdTex){0};
 }
 
-RdTex rdtex_store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
-                  const RdTexSampler *smp, const char *debugName)
-{
-    uint32_t pw = im->padW ? im->padW : im->w;
-    uint32_t ph = im->padH ? im->padH : im->h;
-    RdTexEntry *e = entryOf(id, texa);
-    uint8_t *px;
-    RdTexSrc src;
-
-    if (pw == 0 || ph == 0 || pw > 4096 || ph > 4096) {
-        s_tc.stats.failures++;
-        return (RdTex){0};
-    }
-    px = malloc((size_t)pw * ph * 4);
-    if (px == NULL || rdtex_decode(im, px, &src) != 0) {
-        free(px);
-        s_tc.stats.failures++;
-        return (RdTex){0};
-    }
-    if (texa != RDTEX_TEXA_REPLAY) {
-        rdtex_apply_texa(px, (size_t)pw * ph, src, (RdTexA)texa);
-        src = RD_TEXSRC_RGBA32;
-    }
-    s_tc.stats.decodes++;
-    if (e == NULL) {
-        for (uint32_t i = 0; i < RDTEX_MAX_ENTRIES; i++) {
-            if (!s_tc.e[i].used) {
-                e = &s_tc.e[i];
-                break;
-            }
-        }
-        if (e == NULL) {
-            rd__log("the texture cache is full (%d entries)", RDTEX_MAX_ENTRIES);
-            free(px);
-            s_tc.stats.failures++;
-            return (RdTex){0};
-        }
-        memset(e, 0, sizeof(*e));
-        e->used = 1;
-        e->id = id;
-        e->texa = (uint16_t)texa;
-        s_tc.stats.entries++;
-    }
-    if (e->tex.id != 0 && !e->replaced && rd__tex_rec(e->tex.id) != NULL && e->w == pw &&
-        e->h == ph && e->src == (uint8_t)src) {
-        /* same shape: re-expand in place */
-        rd_update_texture(e->tex, px);
-        s_tc.stats.updates++;
-    } else {
-        RdTex t;
-
-        if (texa != RDTEX_TEXA_REPLAY) {
-            t = rd_create_texture(pw, ph, px, (RdTexA)texa, debugName);
-        } else {
-            t = rd_create_texture_src(pw, ph, px, src, debugName);
-        }
-        if (t.id == 0) {
-            free(px);
-            freeEntry(e);
-            s_tc.stats.failures++;
-            return (RdTex){0};
-        }
-        /* a replaced entry's new generation gets a texture of the game's
-           own: the replacement was for the old one */
-        releaseReplaced(e);
-        if (rd__tex_rec(e->tex.id) != NULL) {
-            retire(e->tex);
-        }
-        e->tex = t;
-        e->w = pw;
-        e->h = ph;
-        e->src = (uint8_t)src;
-        s_tc.stats.creates++;
-    }
-    e->gen = gen;
-    if (smp) {
-        e->smp = *smp;
-    }
-    free(px);
-    /* stored as one level: GS levels an earlier store gave the same
-       texture go (rdtex_store_levels adds them back after this) */
-    rd__tex_set_levels(e->tex, NULL, 0);
-    return e->tex;
-}
-
 /* Authored levels: a TIM2's further levels are drawn at the GS's level only
  * when they are pictures of their own, not reductions of the base.  The
  * test is the brightness: each level's mean (R + G + B) / 3 over its texels
@@ -665,56 +596,321 @@ static void logAuthored(const char *name, int authored, double worst, uint32_t l
                      : "reductions of the base, the base alone kept");
 }
 
+/* ------------------------------------------------------ the stores
+ *
+ * A store makes or finds the entry and its rd texture at once and leaves
+ * the decode to a job (rd_tex_decode.h): queued to the pool's workers with
+ * a copy of the images' bytes, or run at once on this thread.  The job's
+ * result goes into the texture at rdtex_settle, in the stores' order, by
+ * the same calls the store made when it decoded before it returned. */
+
+/* The bytes of one CLUT entry of an indexed image's CLUT format */
+static uint32_t clutEntryBytes(uint32_t cpsm)
+{
+    switch (cpsm) {
+    case RDTEX_PSMCT16:
+    case RDTEX_PSMCT16S:
+        return 2;
+    case RDTEX_PSMCT24:
+        return 3;
+    default:
+        return 4;
+    }
+}
+
+/* The images a job decodes at most: the base, then the further levels
+   rdtex__job_run decodes before it stops at the first that does not fit
+   its padded size or does not decode */
+static uint32_t jobImages(const RdTexJob *j)
+{
+    uint32_t w = j->pw, h = j->ph;
+    uint32_t n = 1;
+    for (; n < j->n; n++) {
+        RdTexImage im = j->im[n];
+        RdTexSrc src;
+        int indexed;
+        w = w > 1 ? w / 2 : 1;
+        h = h > 1 ? h / 2 : 1;
+        im.padW = w;
+        im.padH = h;
+        if (im.w > w || im.h > h || im.w == 0 || im.h == 0 || decodeCheck(&im, &src, &indexed)) {
+            break;
+        }
+    }
+    return n;
+}
+
+/* The job's images re-pointed into one copy of their texels and CLUTs, so
+   the caller's may change before the job runs (a CLUT the levels share is
+   copied once).  The decode reads at most rdtex_image_bytes of the texels
+   and, for an indexed format, the CLUT entries below max(clutColors, 1)
+   (rdtex_decode: an index past them is masked) and below the format's 16
+   or 256 indices (a 256-entry CLUT's CSM1 order stays inside 256).  0, or -1 (no memory:
+   the job unchanged) */
+static int copySource(RdTexJob *j)
+{
+    const uint32_t n = jobImages(j);
+    size_t pix[RDTEX_JOB_LEVELS], clut[RDTEX_JOB_LEVELS];
+    int share[RDTEX_JOB_LEVELS]; /* the level whose CLUT copy it shares, or -1 */
+    size_t total = 0;
+    for (uint32_t l = 0; l < n; l++) {
+        const RdTexImage *im = &j->im[l];
+        RdTexSrc src;
+        int indexed = 0;
+        (void)decodeCheck(im, &src, &indexed); /* every level up to n decodes */
+        pix[l] = rdtex_image_bytes(im->psm, im->w, im->h);
+        clut[l] = 0;
+        share[l] = -1;
+        if (indexed) {
+            for (uint32_t k = 0; k < l; k++) {
+                if (clut[k] && j->im[k].clut == im->clut) {
+                    share[l] = (int)k;
+                    break;
+                }
+            }
+            if (share[l] < 0) {
+                /* the entries an index can reach: below max(clutColors, 1),
+                   and below the format's 16 or 256 */
+                const uint32_t most =
+                    im->psm == RDTEX_PSMT8 || im->psm == RDTEX_PSMT8H ? 256u : 16u;
+                uint32_t colors = im->clutColors ? im->clutColors : 1u;
+                colors = colors < most ? colors : most;
+                clut[l] = (size_t)colors * clutEntryBytes(im->cpsm);
+            }
+        }
+        total += pix[l] + clut[l];
+    }
+    uint8_t *copy = malloc(total ? total : 1);
+    if (!copy) {
+        return -1;
+    }
+    const void *clutAt[RDTEX_JOB_LEVELS];
+    uint8_t *at = copy;
+    for (uint32_t l = 0; l < n; l++) {
+        RdTexImage *im = &j->im[l];
+        memcpy(at, im->pixels, pix[l]);
+        im->pixels = at;
+        at += pix[l];
+        clutAt[l] = NULL; /* a format without a CLUT reads none */
+        if (clut[l]) {
+            memcpy(at, im->clut, clut[l]);
+            clutAt[l] = at;
+            at += clut[l];
+        } else if (share[l] >= 0) {
+            clutAt[l] = clutAt[share[l]];
+        }
+    }
+    for (uint32_t l = 0; l < n; l++) {
+        j->im[l].clut = clutAt[l];
+    }
+    j->n = n;
+    j->src = copy;
+    return 0;
+}
+
+void rdtex__job_run(RdTexJob *j)
+{
+    RdTexSrc src;
+    /* the store checked the base: it decodes */
+    if (rdtex_decode(&j->im[0], j->px, &src) != 0) {
+        memset(j->px, 0, (size_t)j->pw * j->ph * 4);
+        return;
+    }
+    if (j->texa != RDTEX_TEXA_REPLAY) {
+        rdtex_apply_texa(j->px, (size_t)j->pw * j->ph, src, (RdTexA)j->texa);
+    }
+    j->levels = 1;
+    j->worst = 1.0;
+    j->authored = 0;
+    if (j->n < 2 || !j->chain) {
+        return;
+    }
+    /* each level padded as the base is: the GS addresses level l at
+       2^(TW - l) x 2^(TH - l), the base's padded size halved */
+    uint32_t w = j->pw, h = j->ph, levels = 1;
+    uint8_t *at = j->chain;
+    for (uint32_t l = 1; l < j->n; l++) {
+        w = w > 1 ? w / 2 : 1;
+        h = h > 1 ? h / 2 : 1;
+        RdTexImage im = j->im[l];
+        RdTexSrc ls;
+        im.padW = w;
+        im.padH = h;
+        if (im.w > w || im.h > h || im.w == 0 || im.h == 0 || rdtex_decode(&im, at, &ls) != 0) {
+            break;
+        }
+        if (j->texa != RDTEX_TEXA_REPLAY) {
+            rdtex_apply_texa(at, (size_t)w * h, ls, (RdTexA)j->texa);
+        }
+        at += (size_t)w * h * 4;
+        levels++;
+    }
+    j->levels = levels;
+    /* only authored levels take the GS's level; reductions of the base keep
+       the texture as the base alone (one level; the Enhanced filter's box
+       mips) */
+    j->authored = (uint8_t)(levels > 1 && levelsAuthored(j->px, j->pw, j->ph, j->chain, levels,
+                                                         j->im, &j->worst));
+}
+
+void rdtex__job_finish(RdTexJob *j)
+{
+    const RdTex t = {j->texId};
+    if (rd__tex_rec(t.id) != NULL) {
+        if (j->update) {
+            rd_update_texture(t, j->px); /* same shape: re-expanded in place */
+        } else if (rd__tex_take_pixels(t, j->px)) {
+            j->px = NULL; /* the new texture's texels now */
+        } else {
+            rd_update_texture(t, j->px);
+        }
+        /* stored as one level: GS levels an earlier store gave the same
+           texture go (the levels below add them back) */
+        rd__tex_set_levels(t, NULL, 0);
+    }
+    if (j->n >= 2 && j->chain) {
+        if (j->levels > 1) {
+            logAuthored(j->name, j->authored, j->worst, j->levels);
+        }
+        rd__tex_set_levels(t, j->authored ? j->chain : NULL, j->authored ? j->levels : 0);
+    }
+    free(j->px);
+    free(j->chain);
+    free(j->src);
+    free(j);
+}
+
+/* rdtex_store and rdtex_store_levels: n images, the base first */
+static RdTex store(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, uint32_t n,
+                   const RdTexSampler *smp, const char *debugName)
+{
+    const RdTexImage *im = &ims[0];
+    uint32_t pw = im->padW ? im->padW : im->w;
+    uint32_t ph = im->padH ? im->padH : im->h;
+    RdTexEntry *e = entryOf(id, texa);
+    RdTexJob *j;
+    RdTexSrc src;
+    int indexed;
+
+    if (pw == 0 || ph == 0 || pw > 4096 || ph > 4096) {
+        s_tc.stats.failures++;
+        return (RdTex){0};
+    }
+    j = calloc(1, sizeof(*j));
+    if (j == NULL || (j->px = malloc((size_t)pw * ph * 4)) == NULL ||
+        decodeCheck(im, &src, &indexed) != 0) {
+        if (j) {
+            free(j->px);
+        }
+        free(j);
+        s_tc.stats.failures++;
+        return (RdTex){0};
+    }
+    if (texa != RDTEX_TEXA_REPLAY) {
+        src = RD_TEXSRC_RGBA32; /* the TEXA baked into the alpha */
+    }
+    s_tc.stats.decodes++;
+    if (e == NULL) {
+        for (uint32_t i = 0; i < RDTEX_MAX_ENTRIES; i++) {
+            if (!s_tc.e[i].used) {
+                e = &s_tc.e[i];
+                break;
+            }
+        }
+        if (e == NULL) {
+            rd__log("the texture cache is full (%d entries)", RDTEX_MAX_ENTRIES);
+            free(j->px);
+            free(j);
+            s_tc.stats.failures++;
+            return (RdTex){0};
+        }
+        memset(e, 0, sizeof(*e));
+        e->used = 1;
+        e->id = id;
+        e->texa = (uint16_t)texa;
+        s_tc.stats.entries++;
+    }
+    if (e->tex.id != 0 && !e->replaced && rd__tex_rec(e->tex.id) != NULL && e->w == pw &&
+        e->h == ph && e->src == (uint8_t)src) {
+        /* same shape: re-expanded in place (rdtex__job_finish) */
+        j->update = 1;
+        s_tc.stats.updates++;
+    } else {
+        RdTex t;
+
+        /* made with zero texels: the job's pixels replace them before
+           anything reads them (rdtex_settle) */
+        if (texa != RDTEX_TEXA_REPLAY) {
+            t = rd_create_texture(pw, ph, NULL, (RdTexA)texa, debugName);
+        } else {
+            t = rd_create_texture_src(pw, ph, NULL, src, debugName);
+        }
+        if (t.id == 0) {
+            free(j->px);
+            free(j);
+            freeEntry(e);
+            s_tc.stats.failures++;
+            return (RdTex){0};
+        }
+        /* a replaced entry's new generation gets a texture of the game's
+           own: the replacement was for the old one */
+        releaseReplaced(e);
+        if (rd__tex_rec(e->tex.id) != NULL) {
+            retire(e->tex);
+        }
+        e->tex = t;
+        e->w = pw;
+        e->h = ph;
+        e->src = (uint8_t)src;
+        s_tc.stats.creates++;
+    }
+    e->gen = gen;
+    if (smp) {
+        e->smp = *smp;
+    }
+    /* the job */
+    j->texId = e->tex.id;
+    j->texa = texa;
+    j->pw = pw;
+    j->ph = ph;
+    j->n = n < RDTEX_JOB_LEVELS ? n : RDTEX_JOB_LEVELS;
+    memcpy(j->im, ims, j->n * sizeof(ims[0]));
+    snprintf(j->name, sizeof(j->name), "%s", debugName ? debugName : "?");
+    if (j->n >= 2) {
+        /* the further levels' room, as the base's padded size halves */
+        const size_t bytes = rd__gs_chain_bytes(pw, ph, j->n);
+        j->chain = malloc(bytes ? bytes : 1);
+    }
+    const int pool = rdtex__decode_threads() > 0;
+    const int queued =
+        pool && rdtex__decode_pending() < RDTEX_DECODE_QUEUE_MAX && copySource(j) == 0;
+    if (queued) {
+        s_tc.stats.pooled++;
+    } else {
+        s_tc.stats.fallbacks += (uint32_t)pool;
+        rdtex__job_run(j); /* from the caller's bytes, now */
+    }
+    if (queued || rdtex__decode_pending() > 0) {
+        rdtex__decode_add(j, queued); /* after the jobs before it */
+    } else {
+        rdtex__job_finish(j);
+    }
+    return e->tex;
+}
+
+RdTex rdtex_store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
+                  const RdTexSampler *smp, const char *debugName)
+{
+    return store(id, gen, texa, im, 1, smp, debugName);
+}
+
 RdTex rdtex_store_levels(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, uint32_t n,
                          const RdTexSampler *smp, const char *debugName)
 {
     if (!ims || n == 0) {
         return (RdTex){0};
     }
-    RdTex t = rdtex_store(id, gen, texa, &ims[0], smp, debugName);
-    const RdTexRec *r = rd__tex_rec(t.id);
-    if (!r || n < 2 || r->format != RD_TEXEL_RGBA8 || r->replacement || !r->pixels) {
-        rd__tex_set_levels(t, NULL, 0);
-        return t;
-    }
-    /* each level padded as the base is: the GS addresses level l at
-       2^(TW - l) x 2^(TH - l), the base's padded size halved */
-    const size_t bytes = rd__gs_chain_bytes(r->w, r->h, n);
-    uint8_t *chain = malloc(bytes ? bytes : 1);
-    if (!chain) {
-        rd__tex_set_levels(t, NULL, 0);
-        return t;
-    }
-    uint32_t w = r->w, h = r->h, levels = 1;
-    uint8_t *at = chain;
-    for (uint32_t l = 1; l < n; l++) {
-        w = w > 1 ? w / 2 : 1;
-        h = h > 1 ? h / 2 : 1;
-        RdTexImage im = ims[l];
-        RdTexSrc src;
-        im.padW = w;
-        im.padH = h;
-        if (im.w > w || im.h > h || im.w == 0 || im.h == 0 || rdtex_decode(&im, at, &src) != 0) {
-            break;
-        }
-        if (texa != RDTEX_TEXA_REPLAY) {
-            rdtex_apply_texa(at, (size_t)w * h, src, (RdTexA)texa);
-        }
-        at += (size_t)w * h * 4;
-        levels++;
-    }
-    /* only authored levels take the GS's level; reductions of the base keep
-       the texture as rdtex_store left it (one level; the Enhanced filter's
-       box mips) */
-    double worst = 1.0;
-    const int authored =
-        levels > 1 && levelsAuthored(r->pixels, r->w, r->h, chain, levels, ims, &worst);
-    if (levels > 1) {
-        logAuthored(debugName, authored, worst, levels);
-    }
-    rd__tex_set_levels(t, authored ? chain : NULL, authored ? levels : 0);
-    free(chain);
-    return t;
+    return store(id, gen, texa, ims, n, smp, debugName);
 }
 
 const RdTexSampler *rdtex_sampler(uint32_t id, int texa)
@@ -750,6 +946,7 @@ void rdtex_frame_tick(void)
 
 void rdtex_reset(void)
 {
+    rdtex_settle(); /* no job outlives the entries (their textures are gone) */
     for (uint32_t i = 0; i < RDTEX_MAX_ENTRIES; i++) {
         if (s_tc.e[i].used) {
             releaseReplaced(&s_tc.e[i]);
