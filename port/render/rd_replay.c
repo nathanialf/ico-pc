@@ -5789,7 +5789,8 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
          * ends at the last replay submitted (rd_passring.h) */
         return false;
     }
-    rd__perf_collect_gpu(); /* the timestamps of the slot just recycled */
+    rd__perf_collect_gpu();  /* the timestamps of the slot just recycled */
+    rd__vu_merge_fallback(); /* PC port: a refused merge build (rd_replay_vu.c) */
     g_rdPerf.waitMs = (t1 = rd__now_ms()) - t;
     t = t1;
     s_slot = g_rd.replayCounter % RHI_FRAMES_IN_FLIGHT;
