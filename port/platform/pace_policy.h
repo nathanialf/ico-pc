@@ -76,19 +76,34 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
  * the GPU-bound lock at 30) drops at its second late step, one step after
  * v0.8.6's rule did.
  *
- * The climb: after the hold, every PACE_ALLOW_CLIMB_STEP steps on time,
- * straight back to where the allowance started (unbound on the timer path,
- * max = n under the lock) when the GPU has the time for that many presents
- * (K * gpuNs + stepNs < periodNs: K = n under the lock; on the timer path
- * the most presents a late step of this drop made, no more than max + 1),
- * else up by one when it has the time for one more ((allow + 1) * gpuNs +
- * stepNs < periodNs; past max unbound again where it started so), else
- * refused (climbRefusals: the 10 s line's "climbs refused", the caller's
- * line).  No GPU time known (0: no timestamps) passes the gate: the climb
- * probes, and a second late step drops it again.  A resync does not reset
- * it; a new lock, a frame rate change and the window's pace reset do.
- * Cheap presents never end a step late, and then nothing binds: the
- * presents are what they were without it.
+ * The climb on the timer path: after the hold, every PACE_ALLOW_CLIMB_STEP
+ * steps on time, straight back to where the allowance started (unbound)
+ * when the GPU has the time for that many presents (K * gpuNs + stepNs <
+ * periodNs: K the most presents a late step of this drop made, no more than
+ * max + 1), else up by one when it has the time for one more ((allow + 1) *
+ * gpuNs + stepNs < periodNs; past max unbound again), else refused
+ * (climbRefusals: the 10 s line's "climbs refused", the caller's line).  No
+ * GPU time known (0: no timestamps) passes the gate: the climb probes, and
+ * a second late step drops it again.
+ *
+ * The climb under the lock (issue 126, v0.9.6: not unbound, not paced) is a
+ * probe, whatever the GPU's time: probeWait steps on time after a drop (the
+ * hold's PACE_ALLOW_HOLD among them; PACE_PROBE_WAIT at first) the
+ * allowance goes straight back to max = n, armed for PACE_ALLOW_CLIMB_STEP
+ * steps (probeLeft): a late step in them drops it again (a failed probe:
+ * probeFailed the steps since the climb) and doubles probeWait, to
+ * PACE_PROBE_WAIT_MAX at most; a probe that lasts them sets probeWait back
+ * to PACE_PROBE_WAIT.  The GPU figure on D3D11 and Vulkan is the timed
+ * replay's stamp span, the GPU's waits for the CPU's submissions in it: a
+ * 750 Ti reading 12 to 15 ms presented 60 a second with 598 of 601
+ * presents waiting for the display, yet the gate (1 * 14 + 5 > 16.7) held
+ * the lock at 30 for up to 3600 steps.  So under the lock the figure is
+ * reported and decides nothing; the probe asks the machine itself, a
+ * failed one costs one late step, and a machine that cannot keep up
+ * probes every 16 s at most.  A resync does not reset the allowance; a
+ * new lock, a frame rate change and the window's pace reset do.  Cheap
+ * presents never end a step late, and then nothing binds: the presents
+ * are what they were without it.
  *
  * Paced by the GPU (issue 130, v0.9.4: the timer path where a present
  * never waits for the display, vsync off or mailbox: pace_budget_paced_mode,
@@ -127,6 +142,9 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
 #define PACE_ALLOW_NONE UINT_MAX /* allow: no limit (the timer path before a drop) */
 #define PACE_ALLOW_HOLD 60
 #define PACE_ALLOW_CLIMB_STEP 60
+/* the lock: the steps on time from a drop to its probe, at first and at most */
+#define PACE_PROBE_WAIT (PACE_ALLOW_HOLD + PACE_ALLOW_CLIMB_STEP)
+#define PACE_PROBE_WAIT_MAX 960
 #define PACE_PACED_HIGH (10u * PACE_ALLOW_MAX) /* pacedTenths: the budget binds nothing */
 #define PACE_PACED_UNKNOWN UINT_MAX            /* pacedTenths: no GPU time judged yet */
 
@@ -153,7 +171,13 @@ typedef struct PaceBudget {
     unsigned dropMost;     /* the most presents a late step of this drop made (0: not held) */
     unsigned sinceDrop;    /* steps since the last drop */
     unsigned gateK;        /* the last climb or refused climb: the presents its gate asked for
-                           (0: a paced climb, the budget its gate) */
+                           (0: a paced climb, the budget its gate; under the lock max) */
+    unsigned probeWait;    /* the lock: steps on time from a drop to its probe (PACE_PROBE_WAIT,
+                              doubled by a failed probe up to PACE_PROBE_WAIT_MAX) */
+    unsigned probeLeft;    /* the lock: steps left in which a late step fails the probe (0: none
+                              running) */
+    unsigned probeFailed;  /* the last drop: a failed probe's steps since its climb (0: not a
+                              failed probe) */
     bool paced;            /* the in-betweens paced by the GPU's time when known (the timer
                              path, vsync off or mailbox: pace_budget_paced_mode) */
     int64_t balanceNs;     /* paced: the GPU time in hand (< 0 owed), within a period */
@@ -214,29 +238,40 @@ void pace_budget_block(PaceBudget *b);
  * changed it and the window's last present: its whole time, its waits for
  * the GPU (the fence waits) and for the display, whether the fence waits
  * hold the display's (OpenGL), the GPU time a timed replay, the
- * simulation step's time and the period the gate judged against.
+ * simulation step's time and the period the gate judged against.  "GPU
+ * span" names the GPU time where it is a timed replay's stamp span
+ * (gpuIsSpan: the first stamp to the present's end, the GPU's waits for
+ * the CPU in it), "GPU busy" where it is the GPU's busy time.
  *   PACE_BUDGET_TEXT_DROP: "presents held to A a step: the step ended L ms
  *     late after P presents, K steps after one L2 ms late after P2 (the
  *     last present C ms, waited F ms for the GPU and D ms for the display[,
- *     the fence waits included: OpenGL]; GPU G ms a replay); back to H
+ *     the fence waits included: OpenGL]; GPU span G ms a replay); back to H
  *     after 120 steps on time if the GPU allows"
  *   PACE_BUDGET_TEXT_CLIMB: "presents back to A a step|not held[ (where
- *     they started)] after S steps (GPU G ms x K + step T ms under the
+ *     they started)] after S steps (GPU span G ms x K + step T ms under the
  *     period P ms)"
- *   PACE_BUDGET_TEXT_STAY: "presents stay at A a step: GPU G ms x K + step
- *     T ms is not under the period P ms (S steps since the drop; back to H
- *     when it is)"
+ *   PACE_BUDGET_TEXT_STAY: "presents stay at A a step: GPU span G ms x K +
+ *     step T ms is not under the period P ms (S steps since the drop; back
+ *     to H when it is)" (the timer path: the lock never refuses a climb)
  *   PACE_BUDGET_TEXT_PACED: "presents paced by the GPU: N.N a step|not held
- *     (GPU G ms a picture, period P ms)" (pacedTenths; not held at
+ *     (GPU span G ms a picture, period P ms)" (pacedTenths; not held at
  *     PACE_PACED_HIGH)
- * H "not held" on the timer path, "n a step" under the lock.  Paced with
- * the GPU's time known (gpuNs > 0) the drop's ending is "back to paced by
- * the GPU after 60 steps on time" (no "if the GPU allows") and the climb (gateK 0) "presents back to
- * paced by the GPU (where they started) after S steps (GPU G ms a picture,
- * step T ms, period P ms)".  The length written, as snprintf. */
+ * H "not held" on the timer path, "n a step" under the lock.  Under the
+ * lock (the probe) the drop's ending is "back to H after W steps on time: a
+ * probe" (W probeWait), a failed probe's drop "presents held to A a step:
+ * the step ended L ms late after P presents, the probe failed after K steps
+ * (the last present ...; GPU span G ms a replay); next probe after W
+ * steps", and the climb "presents back to n a step (where they started)
+ * after S steps: a probe (GPU span G ms a replay, step T ms, period P ms)".
+ * Paced with the GPU's time known (gpuNs > 0) the drop's ending is "back to
+ * paced by the GPU after 60 steps on time" (no "if the GPU allows") and the
+ * climb (gateK 0) "presents back to paced by the GPU (where they started)
+ * after S steps (GPU span G ms a picture, step T ms, period P ms)".  The
+ * length written, as snprintf. */
 typedef struct PaceBudgetWaits {
     uint64_t costNs, fenceNs, displayNs, gpuNs, stepNs, periodNs;
     bool fenceHoldsDisplay;
+    bool gpuIsSpan; /* gpuNs is a timed replay's stamp span ("GPU span"), else busy time */
 } PaceBudgetWaits;
 
 enum {
@@ -251,15 +286,16 @@ int pace_budget_event_text(const PaceBudget *b, int kind, const PaceBudgetWaits 
 
 /* The 10 s line's allowance part: "; presents held to A a step|presents
  * paced to N.N a step|presents not held (lowest L|not held, R refused, D
- * drops, C climbs, climbs refused X); GPU G ms a timed replay|noGpu" with
- * the block's counts (the totals less the given ones at its start) and the
- * GPU gate's time (0: not known, noGpu said instead): the median of the
- * last 8 timed presented replays (window_host.c perf_drain), not the
- * block's mean.  "paced to" while unbound, paced, the GPU's time known and
- * pacedTenths under PACE_PACED_HIGH.  The length written, as snprintf. */
+ * drops, C climbs, climbs refused X); GPU span|busy G ms a timed
+ * replay|noGpu" with the block's counts (the totals less the given ones at
+ * its start) and the GPU time (0: not known, noGpu said instead): the
+ * median of the last 8 timed presented replays (window_host.c perf_drain),
+ * not the block's mean; gpuIsSpan as PaceBudgetWaits.  "paced to" while
+ * unbound, paced, the GPU's time known and pacedTenths under
+ * PACE_PACED_HIGH.  The length written, as snprintf. */
 int pace_budget_block_text(const PaceBudget *b, unsigned refusedAt, unsigned dropsAt,
                            unsigned climbsAt, unsigned climbRefusalsAt, uint64_t gpuNs,
-                           const char *noGpu, char *out, unsigned size);
+                           bool gpuIsSpan, const char *noGpu, char *out, unsigned size);
 
 /* One present's wait for the display, the allowance's excuse: the acquire
  * and the present (dispNs) on a backend that keeps the display's wait
@@ -441,7 +477,7 @@ typedef struct PaceIntervals {
  * show a frame already shown is refused (budget.refused) once the step has
  * made as many presents as the allowance; at 120 Hz with a GPU that needs
  * 12 ms a picture the second slot's present is dropped before the steps run
- * late.  Judged only when the window says how long a present waited for the
+ * late (and a probe tries it again, 2 to 16 s apart: PaceBudget).  Judged only when the window says how long a present waited for the
  * display (PaceLockIo.displayWaited).
  *
  * Off the screen (PaceLockIo.visible false: minimised, hidden, occluded):
