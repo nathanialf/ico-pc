@@ -84,6 +84,27 @@ if(ICO_RUN_TESTS)
     endforeach()
 endif()
 
+# The record every torch starts from on each disc (ico2/sugipon/src/torch.c,
+# compiled into the test whole, what it names from the rest of the game stubbed
+# in the test): a torch lit at its layout stays lit (life 65536) and puts out
+# only its own flame effects; the 2001 discs' record once landed with life 0
+# and every effect slot 0 (issue 160, the candles that never burned).  CPU only.
+add_executable(torch_work_test test/torch_work_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/torch.c")
+ico_include_dirs(sugipon _ico_torch_work_incs)
+target_include_directories(torch_work_test PRIVATE ${_ico_torch_work_incs}
+    "${CMAKE_SOURCE_DIR}/port/include")
+target_compile_definitions(torch_work_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(torch_work_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(torch_work_test PRIVATE ico_region)
+if(ICO_RUN_TESTS)
+    add_test(NAME torch_work COMMAND torch_work_test pal)
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        add_test(NAME torch_work_${_slug} COMMAND torch_work_test ${_slug})
+    endforeach()
+endif()
+
 # Where each disc's ACTGetEnvironment reads the two-bit wall-reach field of a
 # motion record (ico2/fumi/src/act-env.c, a text scan + synthetic words): the
 # host holds it at bits 24-25 on every disc (config/motion_bits.*.txt), so
