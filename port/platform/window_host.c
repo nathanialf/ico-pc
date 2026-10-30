@@ -1946,6 +1946,22 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     const char *pipeSetting = getenv("ICO_PIPELINE_SET");
     const int pipePolicy =
         ico_diag_startup_pipeline_set(retry != STARTUP_RETRY_NONE, lazyStart, pipeSetting, cfgName);
+#ifdef __ANDROID__
+    /* issue 158: below Android 9 there is no driver package to fall back
+       to after a start that ended while the phone's driver compiled the
+       pipelines (either count above): this start also takes the VU
+       programs' plain entries, the smaller vertex shaders (rd.h
+       rd_set_vu_plain_only; the "VU shaders:" line names the reason) */
+    if (!ico_gpu_driver_android_supported() &&
+        (ico_diag_startup_end_count(ICO_DIAG_END_PIPELINES) > 0 ||
+         ico_diag_startup_end_count(ICO_DIAG_END_VU_PRE) > 0)) {
+        rd_set_vu_plain_only("for this start: the last start ended while the driver compiled the "
+                             "pipelines, and Android 8 has no driver packages");
+        fprintf(stderr, "window: the last start ended while the graphics driver compiled the "
+                        "pipelines and driver packages need Android 9: this start draws with "
+                        "the plain 3D vertex shaders\n");
+    }
+#endif
     if (!rhi_create_backend(backend)) {
         fprintf(stderr, "window: renderer backend \"%s\" is not in this build; using vulkan\n",
                 backend);
@@ -2147,7 +2163,12 @@ open_window:
                 backend);
 #ifdef __ANDROID__
         ico_gpu_driver_android_no_device_note();
-        choose_driver();
+        if (ico_gpu_driver_android_supported()) {
+            choose_driver();
+        } else {
+            /* Android 8 (issue 158): no package to choose, the box says so */
+            ico_android_message_box(ico_gpu_driver_android_box_text(), 1);
+        }
 #endif
     }
     if (!up && (retry == STARTUP_RETRY_D3D12 || retry == STARTUP_RETRY_LOSS_BACKEND) &&
