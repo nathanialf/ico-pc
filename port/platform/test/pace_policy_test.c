@@ -19,6 +19,15 @@
  * is pace_loop_test's testLateSkipLock; testLateSkipLoop: the window's loop under a fake clock, a 30
  * frames a second game on 39 ms presents keeps real time with no resync and
  * every other frame at least, the one-step rule fell behind).
+ * Frame rate Original's late skip (testOriginalRule: pace_original_present,
+ * a whole period late at the replay's start leaves the frame out, a keep
+ * frame never; testOriginalLoop: the window's Original loop under a fake
+ * clock, rates per picture time: 9 to 17 ms a picture every frame presented
+ * and no skip, 20 to 90 ms the game at 50 steps a second of real time,
+ * about 1000 / (picture + step ms) pictures a second, no resync, and up to
+ * 60 ms the audio's lead under its 120 ms bound; without the skip 30 ms ran
+ * the game under its rate; a 30 frames a second game and a GPU-bound
+ * replay waiting on its fence).
  * The present allowance (testBudgetRule: the arm, the drop, hold, climb
  * (under the lock a probe), excuse and limits; testBudgetUnbound: the timer
  * path's start unbound, 15 presents a step never refused, a drop to max at
@@ -946,6 +955,178 @@ static void testLateSkipLoop(void)
 
     r = skipLoop(600, 2, step, 5 * MS, SKIP_RULE_NOW);
     CHECK(r.late == 0 && r.slow == 0 && r.resyncs == 0 && r.unshownRun == 0);
+}
+
+/* Frame rate Original's late skip (pace_original_present): the frame is
+   left out when, at the point its replay starts, the step is a whole period
+   or more past its due time; a keep frame is always drawn; the pacer not
+   started (due 0) presents */
+static void testOriginalRule(void)
+{
+    const uint64_t p = 20 * MS, due = 1000 * MS;
+
+    CHECK(pace_original_present(false, due - MS, due, p));      /* early */
+    CHECK(pace_original_present(false, due, due, p));           /* on time */
+    CHECK(pace_original_present(false, due + 10 * MS, due, p)); /* half a period */
+    CHECK(pace_original_present(false, due + p - 1, due, p));
+    CHECK(!pace_original_present(false, due + p, due, p)); /* a whole period */
+    CHECK(!pace_original_present(false, due + 90 * MS, due, p));
+    CHECK(pace_original_present(true, due + 90 * MS, due, p)); /* a keep frame */
+    CHECK(pace_original_present(false, 5000 * MS, 0, p));      /* not started */
+    CHECK(pace_original_present(false, due + PERIOD - 1, due, PERIOD));
+    CHECK(!pace_original_present(false, due + PERIOD, due, PERIOD));
+}
+
+/* The window's Original loop (window_host.c pace and original_replay_gate)
+   under a fake clock: `steps` steps of period periodNs, each with stepNs of
+   game time; a frame closes every `every` steps and is replayed and
+   presented inside the step (the replay's time replayNs on the CPU, or with
+   gpuNs the GPU's time a picture: the replay then waits for the picture two
+   before, RHI_FRAMES_IN_FLIGHT 2, and takes replayNs of CPU besides), unless
+   the late skip leaves it out (gate false: every frame replayed, the rule
+   before).  The pacer sleeps to the next due time or, more than 100 ms
+   behind (RESYNC_NS), drops the lag.  The audio's lead over the game's
+   frames is the steady lead (two 20 ms device periods) plus how far the
+   step ends past the next step's due time (out_sdl.c holds sound back at
+   120 ms). */
+typedef struct OrigRun {
+    unsigned frames, presents, skipped, late, resyncs;
+    uint64_t endNs;    /* the clock at the end */
+    uint64_t lagMaxNs; /* the most a step ended past the next due time */
+} OrigRun;
+
+#define ORIG_AUDIO_STEADY (40 * MS)
+#define ORIG_AUDIO_BOUND (120 * MS)
+
+static OrigRun origLoop(unsigned steps, unsigned every, uint64_t periodNs, uint64_t stepNs,
+                        uint64_t replayNs, uint64_t gpuNs, bool gate)
+{
+    const uint64_t resyncNs = 100 * MS;
+    OrigRun r = {0};
+    uint64_t t = 1000 * MS, deadline = 1000 * MS, gpuFree = 0;
+    uint64_t done[2] = {0, 0}; /* the last two pictures' GPU ends */
+
+    for (unsigned k = 0; k < steps; k++) {
+        t += stepNs;
+        if (k % every == 0) {
+            r.frames++;
+            if (!gate || pace_original_present(false, t, deadline, periodNs)) {
+                if (gpuNs != 0) {
+                    if (done[0] > t) {
+                        t = done[0]; /* the fence of the picture two before */
+                    }
+                    t += replayNs;
+                    gpuFree = (gpuFree > t ? gpuFree : t) + gpuNs;
+                    done[0] = done[1];
+                    done[1] = gpuFree;
+                } else {
+                    t += replayNs;
+                }
+                r.presents++;
+            } else {
+                r.skipped++;
+            }
+        }
+        deadline += periodNs;
+        if (t > deadline && t - deadline > r.lagMaxNs) {
+            r.lagMaxNs = t - deadline;
+        }
+        if (t < deadline) {
+            t = deadline;
+        } else {
+            r.late++;
+            if (t - deadline > resyncNs) {
+                r.resyncs++;
+                deadline = t;
+            }
+        }
+    }
+    r.endNs = t - 1000 * MS;
+    return r;
+}
+
+/* the rates per picture time (memory: a pacing rule is a throughput
+   requirement): the game keeps 50 steps a second of real time whatever the
+   picture costs, presents about 1000 / picture ms a second (all 50 while a
+   step and its picture fit the period), and its audio never reaches the
+   bound */
+static void testOriginalLoop(void)
+{
+    static const unsigned pics[] = {9, 12, 17, 20, 25, 30, 45, 60, 70, 90};
+    const uint64_t p = 20 * MS, step = 1 * MS;
+    const unsigned steps = 3000; /* 60 s */
+
+    for (unsigned i = 0; i < sizeof pics / sizeof pics[0]; i++) {
+        const uint64_t g = pics[i] * MS;
+        const OrigRun r = origLoop(steps, 1, p, step, g, 0, true);
+        const double sec = (double)r.endNs / 1e9;
+        const double stepsPerSec = steps / sec, presentsPerSec = r.presents / sec;
+        /* a picture and its step's game time: no more often than that,
+           nor (the skips' own steps aside) much less */
+        const double want = 1000.0 / (pics[i] + 1) < 50.0 ? 1000.0 / (pics[i] + 1) : 50.0;
+
+        CHECK(r.resyncs == 0);
+        CHECK(stepsPerSec > 49.5 && stepsPerSec <= 50.01);
+        CHECK(presentsPerSec >= 0.93 * want && presentsPerSec <= want * 1.01);
+        CHECK(r.presents + r.skipped == r.frames);
+        if (pics[i] <= 70) {
+            CHECK(ORIG_AUDIO_STEADY + r.lagMaxNs < ORIG_AUDIO_BOUND);
+        }
+        if (g + step <= p) {
+            CHECK(r.skipped == 0 && r.late == 0 && r.presents == steps);
+        } else {
+            CHECK(r.skipped > 0);
+        }
+        printf("pace_policy_test: Original, %u ms a picture at 20 ms: %.2f steps and %.1f "
+               "presents a second, %u of %u frames not presented, %u steps late, %u resyncs, "
+               "lag at most %.1f ms\n",
+               pics[i], stepsPerSec, presentsPerSec, r.skipped, r.frames, r.late, r.resyncs,
+               (double)r.lagMaxNs / 1e6);
+    }
+    /* the brief's pair: 30 ms at 20 keeps 50 steps a second with frames not
+       presented counted; 10 ms presents every frame; without the skip 30
+       ms ran the game at about 1000 / 31 steps a second, the pacer
+       dropping the lag again and again (the reporter's sound and gaps) */
+    {
+        const OrigRun r = origLoop(500, 1, p, step, 30 * MS, 0, true);
+        const OrigRun fast = origLoop(500, 1, p, step, 10 * MS, 0, true);
+        const OrigRun old = origLoop(500, 1, p, step, 30 * MS, 0, false);
+
+        CHECK(r.resyncs == 0 && r.skipped > 0 && r.endNs <= 500 * p + 30 * MS);
+        CHECK(fast.skipped == 0 && fast.presents == 500 && fast.late == 0);
+        CHECK(old.skipped == 0 && old.resyncs > 0);
+        CHECK(500 / ((double)old.endNs / 1e9) < 40.0 || old.resyncs > 10);
+    }
+    /* NTSC, a 30 frames a second game (a frame every second step) on 39 ms
+       pictures: the steps at 59.94 a second, no resync; a skip frees two
+       periods where one would do, so the pictures come at 90 % of 1000 /
+       (picture + the two steps' game time) or more */
+    {
+        const OrigRun r = origLoop(3600, 2, PERIOD, step, 39 * MS, 0, true);
+        const double sec = (double)r.endNs / 1e9;
+
+        CHECK(r.resyncs == 0 && 3600 / sec > 59.8);
+        CHECK(r.presents / sec >= 0.9 * (1000.0 / 41.0) && r.presents / sec <= 1000.0 / 39.0);
+        CHECK(ORIG_AUDIO_STEADY + r.lagMaxNs < ORIG_AUDIO_BOUND);
+        printf("pace_policy_test: Original, NTSC, 30 frames a second on 39 ms pictures: %.2f "
+               "steps and %.1f presents a second, %u of %u frames not presented, lag at most "
+               "%.1f ms\n",
+               3600 / sec, r.presents / sec, r.skipped, r.frames, (double)r.lagMaxNs / 1e6);
+    }
+    /* a GPU-bound replay (the phone: 3 ms of CPU and 30 ms of GPU a picture,
+       the replay waiting on the fence of the picture two before): the game
+       at 50 steps a second, about 33 pictures a second */
+    {
+        const OrigRun r = origLoop(3000, 1, p, step, 3 * MS, 30 * MS, true);
+        const double sec = (double)r.endNs / 1e9;
+
+        CHECK(r.resyncs == 0 && 3000 / sec > 49.5);
+        CHECK(r.presents / sec >= 0.9 * (1000.0 / 34.0) && r.presents / sec <= 1000.0 / 30.0 + 0.5);
+        CHECK(ORIG_AUDIO_STEADY + r.lagMaxNs < ORIG_AUDIO_BOUND);
+        printf("pace_policy_test: Original, 30 ms of GPU a picture behind a fence: %.2f steps and "
+               "%.1f presents a second, lag at most %.1f ms\n",
+               3000 / sec, r.presents / sec, (double)r.lagMaxNs / 1e6);
+    }
 }
 
 /* the present allowance's steps: each makes `presents` presents (the first
@@ -2053,6 +2234,8 @@ int main(void)
     testLateSkipPresentedFrame();
     testLateSkipBeforeDeadline();
     testLateSkipLoop();
+    testOriginalRule();
+    testOriginalLoop();
     testLockPause();
     testIntervals();
     testFirstPresentPause();
