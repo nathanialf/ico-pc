@@ -24,6 +24,19 @@ static struct {
 static int tags_ready;
 static int logged_sweep;
 
+void *ico_audio_gain_state_block(int which, size_t *bytes)
+{
+    void *const p[3] = {tag, cache, &tags_ready};
+    const size_t n[3] = {sizeof tag, sizeof cache, sizeof tags_ready};
+
+    if (which < 0 || which > 2) {
+        *bytes = 0;
+        return NULL;
+    }
+    *bytes = n[which];
+    return p[which];
+}
+
 static void ensure_tags(void)
 {
     int i;
