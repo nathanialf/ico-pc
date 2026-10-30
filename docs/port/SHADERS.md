@@ -137,7 +137,12 @@ take from either ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)).
   other sprite entry is the plain build: the position, the colour and uv or stq, two input
   locations, the layout `font.hlsl`, `fog_lut.hlsl` (`FogPSIn`) and `raw_wrap.hlsl` (`WrapAccIn`)
   declare, since D3D12 refuses a pixel input the vertex shader does not write. A pass takes both
-  halves of the planes build together (`port/render/rd_screen_planes.c` (`rd__plane_pass`)).
+  halves of the planes build together (`port/render/rd_screen_planes.c` (`rd__plane_pass`)). A
+  device whose driver stopped creating them runs without the planes build (`[dev] pipeline_skip`,
+  issue 161): those passes take the plain build, which was byte-identical on every dump measured
+  (the title's and the boot's, 2 commands each, 0 of 18 targets differ); a level's difference is
+  possible in principle at a fractional scale, not seen
+  ([WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)).
 - the no-planes build (`ICO_VU_NO_PLANES=1`): `vu_ps` and `vu_texa_ps` built again as `vu_np_ps`
   and `vu_texa_np_ps`, each with its `_nodual` twin, for a target at a fractional scale
   (`port/render/rd_pixel_plan.c` (`rd__vu_pixel_fs`), [RENDER.md](RENDER.md#screen-planes)). Their
