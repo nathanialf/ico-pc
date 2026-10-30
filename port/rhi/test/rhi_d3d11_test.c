@@ -12,6 +12,9 @@
  *      without partial constant buffer updates
  *  1c. the written mark (rhi_buffer_note_written) on WARP: a submit writes
  *      the bytes its lists read under the mark and no more
+ *  1d. one upload buffer at two storage slots of one group on WARP (t0 from
+ *      its start, t5 from an offset: the draw merge's binding), more views
+ *      of it than the backend keeps
  *   2. the cells on the default hardware adapter (skipped when there is
  *      none: the default is then WARP again)
  *   3. the swapchain on a hidden SDL window: six frames of clear, readback
@@ -282,6 +285,211 @@ static int runWrittenMark(void)
     return failures ? 1 : 0;
 }
 
+/* ------------------------------------------------- two views of one buffer */
+/* The draw merge's binding on this backend (port/render/rd_replay_vu.c
+ * vuGroupMake): one upload buffer bound at two storage slots of one group,
+ * t0 (the VU stream) from the buffer's start and t5 (the ring the merge
+ * builds read their VuCB and VuBoneCB from) from a non-zero offset, so t5's
+ * view takes FirstElement = offset / 16 (d3d11_resource.c d11_buffer_srv).
+ * NV groups, group i's t5 from 256 * (i + 1) bytes: more views of the
+ * buffer than d11_buffer_srv keeps (D11_SRV_CACHE, 8), so the first groups'
+ * views are evicted (deferred) before their draws.  Draw i fills columns 2i
+ * and 2i + 1 of a 2 NV x 1 RGBA8 target: the even one t0's element 1 + i,
+ * the odd one t5's element 2 (the buffer's element 16 (i + 1) + 2).  Element
+ * k holds (k, 3k + 7, 5k + 11, 255) / 255, so every texel is exact.  The
+ * submit writes the storage part's [0, 256 NV + 4096) once (the list's
+ * touches of one buffer and part are one range). */
+static const char s_twoViewsHlsl[] =
+    "StructuredBuffer<float4> g_stream : register(t0);\n"
+    "StructuredBuffer<float4> g_ring : register(t5);\n"
+    "float4 vs_tri(uint id : SV_VertexID) : SV_Position {\n"
+    "    float2 p = float2((id << 1) & 2, id & 2);\n"
+    "    return float4(p * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);\n"
+    "}\n"
+    "float4 ps_two(float4 pos : SV_Position) : SV_Target0 {\n"
+    "    uint col = (uint)pos.x;\n"
+    "    return (col & 1u) == 0u ? g_stream[1u + col / 2u] : g_ring[2];\n"
+    "}\n";
+static const RhiShaderSource s_twoViewsSources[1] = {
+    {"two_views.hlsl", s_twoViewsHlsl, sizeof(s_twoViewsHlsl) - 1u}};
+
+static RhiShader twoViewsShader(RhiShaderStage stage, const char *entry)
+{
+    RhiShaderDesc d;
+    memset(&d, 0, sizeof(d));
+    d.stage = stage;
+    d.entryPoint = entry;
+    d.debugName = entry;
+    d.hlslFile = "two_views.hlsl";
+    d.defines = "";
+    d.sources = s_twoViewsSources;
+    d.sourceCount = 1;
+    return rhi_create_shader(&d);
+}
+
+static uint8_t twoViewsByte(uint32_t k, uint32_t ch)
+{
+    return ch == 0   ? (uint8_t)k
+           : ch == 1 ? (uint8_t)(3u * k + 7u)
+           : ch == 2 ? (uint8_t)(5u * k + 11u)
+                     : 255u;
+}
+
+static int runTwoViews(void)
+{
+    enum { NV = 10, SPAN = 8192 };
+
+    if (!rhi_create_backend("d3d11")) {
+        rhi_test_log("SKIP two views: no Direct3D 11 backend in this build\n");
+        return 77;
+    }
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test two views"};
+    if (!rhi_init(&dd)) {
+        rhi_test_log("SKIP two views: no usable device (see messages above)\n");
+        return 77;
+    }
+    if (!acceptWarp()) {
+        rhi_shutdown();
+        return 77;
+    }
+    int failures = 0;
+    const RhiFormat CF = RHI_FMT_RGBA8_UNORM;
+    static const RhiBindSlot slots[2] = {{0, RHI_BIND_STORAGE_BUFFER, 1u << RHI_STAGE_FRAGMENT},
+                                         {5, RHI_BIND_STORAGE_BUFFER, 1u << RHI_STAGE_FRAGMENT}};
+    const RhiBindGroupLayout layout =
+        rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){slots, 2, "two views group"});
+    const RhiShader vs = twoViewsShader(RHI_STAGE_VERTEX, "vs_tri");
+    const RhiShader ps = twoViewsShader(RHI_STAGE_FRAGMENT, "ps_two");
+    RhiPipelineDesc pd;
+    memset(&pd, 0, sizeof(pd));
+    pd.vertex = vs;
+    pd.fragment = ps;
+    pd.layouts = &layout;
+    pd.layoutCount = 1;
+    pd.topology = RHI_TOPO_TRIANGLE_LIST;
+    pd.cullNone = true;
+    pd.blend[0].writeMask = 0xF;
+    pd.colorFormats[0] = CF;
+    pd.colorCount = 1;
+    pd.depthFormat = RHI_FMT_UNKNOWN;
+    pd.debugName = "two views";
+    const RhiPipeline pipe =
+        layout.id && vs.id && ps.id ? rhi_create_pipeline(&pd) : (RhiPipeline){0};
+    const RhiTexture tgt = rhi_create_texture(&(RhiTextureDesc){
+        2 * NV, 1, 1, CF, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "two views colour", 0});
+    /* the renderer's ring's usage (port/render/rd_upload.c) */
+    const RhiBuffer up = rhi_create_buffer(&(RhiBufferDesc){
+        65536,
+        RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM | RHI_BUF_STORAGE_READ | RHI_BUF_COPY_SRC,
+        RHI_MEM_UPLOAD, "two views ring"});
+    rhi_wait_frame();
+    uint8_t *m = up.id ? rhi_map_buffer(up) : NULL;
+    RhiBindGroup g[NV];
+    memset(g, 0, sizeof(g));
+    bool groups = m != NULL;
+    for (int i = 0; i < NV && groups; i++) {
+        RhiBinding b[2];
+        memset(b, 0, sizeof(b));
+        b[0].slot = 0;
+        b[0].type = RHI_BIND_STORAGE_BUFFER;
+        b[0].buffer = up;
+        b[0].offset = 0;
+        b[0].size = 4096;
+        b[1].slot = 5;
+        b[1].type = RHI_BIND_STORAGE_BUFFER;
+        b[1].buffer = up;
+        b[1].offset = 256u * (uint64_t)(i + 1);
+        b[1].size = 4096;
+        g[i] = rhi_create_bind_group(&(RhiBindGroupDesc){layout, b, 2});
+        groups = g[i].id != 0;
+    }
+    if (!pipe.id || !tgt.id || !m || !groups) {
+        rhi_test_log("FAIL two views: resources (layout %u, shaders %u/%u, pipeline %u, target "
+                     "%u, buffer %u mapped %d, groups %d)\n",
+                     layout.id, vs.id, ps.id, pipe.id, tgt.id, up.id, m != NULL, (int)groups);
+        failures++;
+    } else {
+        for (uint32_t k = 0; k < SPAN / 16u; k++) {
+            float e[4];
+            for (uint32_t ch = 0; ch < 4; ch++) {
+                e[ch] = (float)twoViewsByte(k, ch) / 255.0f;
+            }
+            memcpy(m + (size_t)k * 16u, e, sizeof(e));
+        }
+        rhi_unmap_buffer(up);
+        rhi_buffer_note_written(up, SPAN);
+        RhiStats s0, s1;
+        rhi_get_stats(&s0);
+        RhiCommandList cl = rhi_begin_commands();
+        RhiTextureBarrier bt = {tgt, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+        rhi_cmd_barrier(cl, &bt, 1);
+        RhiRenderPassDesc rp;
+        memset(&rp, 0, sizeof(rp));
+        rp.color[0].texture = tgt;
+        rp.color[0].load = RHI_LOAD_CLEAR;
+        rp.colorCount = 1;
+        rp.width = 2 * NV;
+        rp.height = 1;
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_set_pipeline(cl, pipe);
+        for (int i = 0; i < NV; i++) {
+            const RhiViewport vp = {(float)(2 * i), 0.0f, 2.0f, 1.0f, 0.0f, 1.0f};
+            const RhiRect sc = {2 * i, 0, 2, 1};
+            rhi_cmd_set_viewport(cl, &vp);
+            rhi_cmd_set_scissor(cl, &sc);
+            rhi_cmd_set_bind_group(cl, 0, g[i]);
+            rhi_cmd_draw(cl, 3, 0, 1);
+        }
+        rhi_cmd_end_render_pass(cl);
+        RhiTextureBarrier b1 = {tgt, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+        rhi_cmd_barrier(cl, &b1, 1);
+        rhi_end_commands(cl);
+        rhi_submit(cl);
+        rhi_get_stats(&s1);
+        uint8_t img[2 * NV * 4 * 4];
+        uint32_t pitch = 0;
+        if (!rhi_readback_texture(tgt, RHI_ASPECT_COLOR, img, sizeof(img), &pitch)) {
+            rhi_test_log("FAIL two views: readback\n");
+            failures++;
+        } else {
+            for (int x = 0; x < 2 * NV; x++) {
+                const int i = x / 2;
+                const uint32_t k = (x & 1) ? 16u * (uint32_t)(i + 1) + 2u : 1u + (uint32_t)i;
+                const uint8_t *p = img + (size_t)x * 4u;
+                if (p[0] != twoViewsByte(k, 0) || p[1] != twoViewsByte(k, 1) ||
+                    p[2] != twoViewsByte(k, 2) || p[3] != 255u) {
+                    rhi_test_log("FAIL two views: column %d (group %d, %s) read %u %u %u %u, "
+                                 "expected element %u: %u %u %u 255\n",
+                                 x, i, (x & 1) ? "t5" : "t0", p[0], p[1], p[2], p[3], k,
+                                 twoViewsByte(k, 0), twoViewsByte(k, 1), twoViewsByte(k, 2));
+                    failures++;
+                }
+            }
+        }
+        const uint64_t wrote = s1.uploadWriteBytes - s0.uploadWriteBytes;
+        const uint64_t want = 256u * NV + 4096u;
+        rhi_test_log("two views: %d groups, t0 from 0 and t5 from 256..%d bytes: the submit "
+                     "wrote %llu bytes (want %llu)\n",
+                     NV, 256 * NV, (unsigned long long)wrote, (unsigned long long)want);
+        if (wrote != want) {
+            rhi_test_log("FAIL two views: the submit wrote %llu bytes, expected %llu\n",
+                         (unsigned long long)wrote, (unsigned long long)want);
+            failures++;
+        }
+    }
+    rhi_wait_idle();
+    rhi_destroy_pipeline(pipe);
+    rhi_destroy_texture(tgt);
+    rhi_destroy_buffer(up);
+    rhi_shutdown();
+    if (rhi_d3d11_debug_error_count()) {
+        rhi_test_log("FAIL %u debug layer error(s)\n", rhi_d3d11_debug_error_count());
+        failures++;
+    }
+    rhi_test_log("two views: %s\n", failures ? "FAIL" : "all checks passed");
+    return failures ? 1 : 0;
+}
+
 /* ------------------------------------------------------------------- main */
 static void logPath(char *out, size_t size)
 {
@@ -349,6 +557,10 @@ int main(int argc, char **argv)
     rhi_test_log("\n== 1c. Direct3D 11 on WARP: the upload ring's written mark\n");
     int rcMark = runWrittenMark();
 
+    /* 1d: one upload buffer at two storage slots (the draw merge's t0 and t5) */
+    rhi_test_log("\n== 1d. Direct3D 11 on WARP: one upload buffer at t0 and t5\n");
+    int rcViews = runTwoViews();
+
     /* 2: the hardware adapter */
     rhi_test_log("\n== 2. Direct3D 11 on the default hardware adapter\n");
     _putenv("ICO_D3D11_ADAPTER=");
@@ -374,8 +586,8 @@ int main(int argc, char **argv)
     const RhiTestConfig vk = {"vulkan", "rhi_d3d11_test (Vulkan)", false, NULL, NULL};
     int rcVk = rhi_test_run_cells(&vk);
 
-    bool failed =
-        rcWarp == 1 || rcMapped == 1 || rcMark == 1 || rcHw == 1 || rcSwap == 1 || rcVk == 1;
+    bool failed = rcWarp == 1 || rcMapped == 1 || rcMark == 1 || rcViews == 1 || rcHw == 1 ||
+                  rcSwap == 1 || rcVk == 1;
     bool ran = rcWarp == 0 || rcHw == 0 || rcSwap == 0;
     char summary[1024];
     snprintf(summary, sizeof(summary),
@@ -383,6 +595,7 @@ int main(int argc, char **argv)
              "1. Direct3D 11 on WARP (%s): %s\n"
              "1b. the same, constant buffers mapped: %s\n"
              "1c. the upload ring's written mark: %s\n"
+             "1d. one upload buffer at t0 and t5: %s\n"
              "2. Direct3D 11 on hardware (%s): %s\n"
              "3. Direct3D 11 swapchain: %s\n"
              "4. Vulkan (comparison): %s\n"
@@ -392,7 +605,8 @@ int main(int argc, char **argv)
              : ran  ? "rhi_d3d11_test: PASSED"
                     : "rhi_d3d11_test: nothing could run",
              warpAdapter[0] ? warpAdapter : "-", verdict(rcWarp), verdict(rcMapped),
-             verdict(rcMark), hwAdapter, verdict(rcHw), verdict(rcSwap), verdict(rcVk),
+             verdict(rcMark), verdict(rcViews), hwAdapter, verdict(rcHw), verdict(rcSwap),
+             verdict(rcVk),
              s_debugActive ? "on (errors fail the test)"
                            : "not installed (Settings > Optional features > Graphics Tools "
                              "adds it)",
