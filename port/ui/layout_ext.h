@@ -264,7 +264,10 @@ int lt_ext_rect_color(int index, unsigned char rgba[4]);
    the small arrows are easy to hit).  STEP: a stepped value, a click is
    Right on the owner item (Cross does nothing on a stepped row).  UP / DOWN: a scroll
    mark, a click is Up / Down on the page's cursor, which does not move (the
-   hit's item is -1).  Cleared by lt_ext_reset; -1 for an index that is not a port row. */
+   hit's item is -1).  SQUARE: a button prompt (the Continue screen's Save
+   states line), a click is Square and the cursor does not move (item -1); hit
+   in a layout with no cursor of its own whatever the current layout has.
+   Cleared by lt_ext_reset; -1 for an index that is not a port row. */
 enum {
     LT_POINTER_AUTO = 0,
     LT_POINTER_NONE,
@@ -272,7 +275,8 @@ enum {
     LT_POINTER_RIGHT,
     LT_POINTER_STEP,
     LT_POINTER_UP,
-    LT_POINTER_DOWN
+    LT_POINTER_DOWN,
+    LT_POINTER_SQUARE
 };
 
 int lt_ext_set_pointer_role(int index, int role);

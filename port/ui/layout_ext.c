@@ -184,7 +184,7 @@ int lt_ext_set_title_sheet(int index, int on)
 int lt_ext_set_pointer_role(int index, int role)
 {
     ExtRow *r = rowOf(index);
-    if (!r || role < LT_POINTER_AUTO || role > LT_POINTER_DOWN) {
+    if (!r || role < LT_POINTER_AUTO || role > LT_POINTER_SQUARE) {
         return -1;
     }
     r->role = role;
