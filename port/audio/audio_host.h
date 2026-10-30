@@ -130,6 +130,22 @@ double ico_audio_play_ratio(double rateRatio, int queuedBytes, int targetBytes);
 /* Close the WAV and the device (also an atexit handler). */
 void ico_audio_host_shutdown(void);
 
+/* --- Save states ------------------------------------------------------------- */
+/* Registers the audio side's simulated state in the save state registry
+   (state_registry.h, every block ICO_STATE_AUDIO: copied and restored
+   under the audio lock): the SPU2 (spu2_state_block, scanned), the libsd
+   layer's time and effect attributes, the music/effects gain tags and
+   cached volumes, the driver's host state and carried packets, the stream
+   driver's voices, queue, staging and PCM channels, and the sync path's
+   vsync count.  0, or -1 when a block was refused.  Called once by
+   port/platform/state_port.c. */
+int ico_audio_state_register(void);
+/* After a load (port/game/state_host.c), outside the audio lock: what the
+   device has queued is the old game's sound, so it is dropped and the
+   output starts from silence (ico_audio_sdl_flush); nothing without the
+   SDL output. */
+void ico_audio_host_flush(void);
+
 /* --- WAV writer (wav.c) --------------------------------------------------- */
 
 typedef struct IcoWav IcoWav;
@@ -222,6 +238,12 @@ void ico_audio_sdl_device_removed(uint32_t which);
    cushion; the pull path primes nothing and ramps in). Nothing without an
    open stream; a stub without the SDL output. */
 void ico_audio_sdl_pause(int paused);
+/* A save state's load (ico_audio_host_flush): the stream's queue emptied
+   and the output started from silence as after a resume (the pull path
+   ramps in and is level with the game again; the sync path primes its
+   cushion), the device left playing.  Never under the audio lock (SDL's
+   stream lock is taken).  A stub without the SDL output. */
+void ico_audio_sdl_flush(void);
 /* The rate the output plays the samples at, over 48 kHz: the window's
    vsync lock runs the simulation at the display's rate (0.1 % fast on a
    60.00 Hz screen under the 59.94 Hz game), so the output plays that much
