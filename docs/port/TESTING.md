@@ -740,6 +740,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   every phone frame some fused at both phone settings; each pair's counts printed
   (`rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). SKIP
   as `rd_vustage_ab`.
+- `rd_vumerge_mali.cmake` (label `mali`): the dumps of `tools/vumerge_mali_dumps.txt` (the Mali-G52
+  reporter's frame of issue 164 in `/primary/dev/ico-dumps/164/`, the two phone frames
+  `rd_vufuse_ab` reads and a 2026-10-07 capture; a line is the dump, `expect=IN/GPU` and the
+  tool's setting arguments) on the plain device and under `ICO_VK_FAKE_LIMITS=mali
+  ICO_VK_FAKE_NO_DUAL=1` (a phone's limits, every lerp draw two passes), under
+  `ICO_RD_BLEND=fixed`: every named target's PNG byte for byte, both fakes' lines in the faked run,
+  the `VU merge` figures (draws, GPU draws, merged, into, alone) and the fused pairs the plain
+  device's, and `expect=` the plain run's merged figure (826 into 87 on the 164 frame)
+  (`rd_vumerge_mali`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge-without-dual-source-blending)).
+  SKIP as `rd_vustage_ab`.
 - `rd_vumerge_ab_pixel` and `rd_vufuse_ab_pixel`: the two scripts above on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):
   `rd_pixel_vu.rddump` (the VU seams' S4 at Original 1x: 64 code-32 draws of one prelit mesh

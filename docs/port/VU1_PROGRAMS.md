@@ -437,7 +437,8 @@ runs` counts them: about half of the VU draws of a gameplay frame could join the
 
 With the merge (`g_rd.vuMerge`, the default; `port/render/rd_replay_vu.c` (`vuDraw`, `vuRunTake`,
 `rd__replay_vu_flush`)) such a draw is held in an open run instead of drawn. A draw joins the run
-when it has one planned pass, an index list, a merge build (below), no DATE through the stencil bit,
+when it has one planned pass (or, without dual-source blending, a colour pass and its alpha pass:
+[below](#the-draw-merge-without-dual-source-blending)), an index list, a merge build (below), no DATE through the stencil bit,
 no destination read, is outside the loss bisect's window and the pass split, and has the same pipeline key, group 1 (the stream buffer, the record, the ring),
 group 2 (the textures and the sampler), DrawCB bytes, FrameCB, scissor, render pass and GPU timing
 effect as the run, up to 16 draws whose raised index values (below) stay within the device's
@@ -500,7 +501,10 @@ textures, DrawCB, FrameCB and scissor drawn as one indexed draw of up to 16, ...
 off ...`, and the summary line has `VU merge on` or `VU merge off` after the pre-pass. `rd_replay_tool
 --stats` prints `VU merge: N draws in M GPU draws (K merged into G, A alone; merge on)` beside the
 count of what could join, and the window's 10 s line `VU merge: N draws a replay in G GPU draws, A
-alone` (`RdPerfRecord.vuMergeIn`, `vuMergeGpu`, `vuMergeAlone`). The merge builds are 6,770 to
+alone (kept apart by pipeline P, texture group T, DrawCB D, split/DATE/dst S, scissor/FrameCB F)`
+(`RdPerfRecord.vuMergeIn`, `vuMergeGpu`, `vuMergeAlone`, and `vuMergeBlocked` per replay: the
+first key on which a draw differed from the one before it in the same pass, the reasons `--stats`
+prints after `blocked by`), so a phone's log says why its draws stay alone. The merge builds are 6,770 to
 51,903 words (`vu_lit_merge_vs`), within their budgets, about 500 words above the plain builds.
 
 ## The fused scissor pair
@@ -542,7 +546,8 @@ pixel with a negative distance is discarded before its output in any case. The t
 builds take the mark as one more argument of `vu_dual_out_f` (`fused` not 0 joins the PABE rule's
 unblended case: the same c0 and c1 as `vu_dual_out_fused`); every unfused pixel's arithmetic is
 unchanged, and every other build keeps the function as it was (`VU_FUSED_ARG`, `VU_FUSED_OR`). The
-`_nodual` twins are unchanged: without dual-source blending a cut is two passes and never fuses. On
+`_nodual` twins take the mark the same way ([The draw merge without dual-source
+blending](#the-draw-merge-without-dual-source-blending)). On
 the phone's three frames the existing tool counted every pair kept apart for the twins at Resolution
 Auto (257, 355 and 398 pairs) where 2x fused them all.
 
@@ -554,7 +559,7 @@ that fails:
 |---|---|
 | fuse off | `[dev] vu_fuse = false` (`ICO_RD_VU_FUSE=0`), or the draw merge off (`vu_merge = false`, a merge module missing) |
 | no merge build | the draw's vertex shader or the fallback's has no merge build (only those mark the kicks) |
-| passes | either state's plan is not one pass: the alpha test's split, or no dual-source blending (a lerp is two passes there) |
+| passes | either state's plan is not one pass (the alpha test's split), the cut's two passes without dual-source blending excepted (a colour pass and its alpha pass, joined back for these rules; kept apart where the alpha pass's Z test is not the colour pass's: GREATER with Z write) |
 | dst/DATE | a destination read (the exact blend) or DATE through the stencil bit |
 | blend form | the cut's blend is not a lerp or Cd*FIX + Cs: the premultiplied adds and subtracts (ONE, ONE) and the Ad forms cannot drop Cd per pixel (`rd_pipeline.c` `keyBlendPath`, `blendState`) |
 | no planes | the cut's pixel shader reads no mark: neither `vu_ps` / `vu_texa_ps` (`r.w`) nor a no-planes twin without `ICO_DF_PLANE` (the plane's sign). None expected: a twin never draws a clip plane's draw |
@@ -573,9 +578,59 @@ one pipeline already, M kept apart (...)` with the same reasons (`RdPerfRecord.v
 `vuFuseSame`, `vuFuseKept`). The marks cost the five merge builds of those entries 93 to 108 words
 (46 to 51 for `r.w`, 47 to 57 for the plane's sign: `vu_lit_merge_vs` 51,950, `vu_lit_merge_plain_vs`
 23,904, `vu_merge_main_vs` 6,827), `vu_ps` and `vu_texa_ps` 142 each and `vu_np_ps` and
-`vu_texa_np_ps` 44 each (4,927 and 11,063); the other builds (the `_nodual` and destination-read
-twins, every build without `ICO_VU_MERGE`) are the same word for word. `rd_vufuse_ab` is its byte gate
+`vu_texa_np_ps` 44 each (4,927 and 11,063); the other builds (the destination-read twins, every
+build without `ICO_VU_MERGE`) are the same word for word, and the `_nodual` twins 34 to 44 words
+more ([below](#the-draw-merge-without-dual-source-blending)). `rd_vufuse_ab` is its byte gate
 ([TESTING.md](TESTING.md)).
+
+## The draw merge without dual-source blending
+
+Issue 164: a Mali-G52 phone (Vulkan 1.1, no `dualSrcBlend`) logged `VU merge: 34 draws a replay in
+10 GPU draws, 1047 alone`, 1,979 draws and 1,928 pipeline binds a replay. Its dump replays the same
+way on lavapipe under `ICO_VK_FAKE_NO_DUAL=1` alone (`1097 draws in 1073 GPU draws (34 merged into
+10, 1063 alone)`; `blocked by ... DrawCB 358`; `VU fuse: 0 pairs fused, 471 kept apart (... passes
+471)`), and the same under `ICO_VK_FAKE_LIMITS=mali` with it; the Mali limits alone (256-byte
+offsets, four descriptor sets, 16 images a stage, index values to 2^24 - 1) merge as the desktop does
+(`826 merged into 87`). So the limit was the missing dual-source blending, not a device limit:
+without it every lerp and Cd*FIX + Cs draw is two passes (`port/render/rd_pipeline.c`
+`rd__expand_no_dual`: a colour pass whose c0.a is the factor, mask RGB, then an alpha pass writing
+As with blending off, no Z write, under a Z test that admits the Z the colour pass left), and the
+merge took a draw of one planned pass only, the fuse a cut of one pass only. Code 36's cuts
+(PRIM.ABE forced on, so lerps) stayed two passes apart from their one-pass kicks, and the draws
+alternated: nothing joined.
+
+So the merge and the fuse take the two passes (`port/render/rd_replay_vu.c` `vuMergePasses`,
+`vuNoDualJoin`):
+
+- A draw of two passes, the colour pass and its alpha pass (`rd__no_dual_second`), is held in the
+  run as a one-pass draw is; the run keeps both passes' keys, pipelines and DrawCBs (a draw joins
+  when all of them are the run's) and draws the colour pass over every draw's raised index list,
+  then the alpha pass over the same list, one draw counted as `vuDraw` counts the pair. The pixels
+  are the same: no colour pass reads the stored alpha (these blends never read Ad), and the alpha
+  passes write no Z. With Z write off the depth does not move inside the run, so each draw's alpha
+  pass admits the fragments its colour pass did. With Z write on, under GEQUAL (and GREATER, whose
+  alpha pass takes GEQUAL) the depth only grows, the fragments that pass carry it, and the alpha left
+  is the last fragment's at the final depth, whether the alpha passes follow each draw or the run;
+  under ALWAYS the last fragment's either way. That is the argument the two passes already rest on
+  for one draw's triangles; the run is a longer list of them under the same state.
+- The fuse joins a cut's two passes back into the pass the planner made before the split (the mask
+  RGB plus A, `ICO_DF_NODUAL_FACTOR` off) for its rules, and fuses as with dual-source blending. The
+  kick then draws through the cut's two passes, and `vu_ps`, `vu_texa_ps` and their no-planes twins'
+  `_nodual` builds take the mark (`r.w`, or the plane's sign) as `vu_dual_out_f`'s `fused` argument:
+  the colour pass's factor 1.0 for the lerps and 0 for Cd*FIX + Cs, so the blender stores Cs, and
+  the alpha pass's As with FBA's MSB, what the kick's own pass (blending off) stores. A cut whose
+  alpha pass's Z test differs (GREATER with Z write) stays apart: there a fragment at the stored Z
+  would write its alpha, which the kick's one pass does not. The dual-source builds are the same
+  word for word; the four `_nodual` builds grow 34 to 44 words (`vu_ps_nodual` 5,606,
+  `vu_texa_ps_nodual` 11,749, `vu_np_ps_nodual` 4,992, `vu_texa_np_ps_nodual` 11,128).
+
+Expected on the 164 dump under the fakes: `1097 draws in 358 GPU draws (826 merged into 87, 271
+alone)` and `397 pairs fused`, the desktop's figures. `rd_vumerge_mali` (`port/render/test/rd_vumerge_mali.cmake`,
+label `mali`) is its gate: the dumps of the machine-local list `tools/vumerge_mali_dumps.txt` (the
+164 frame in `/primary/dev/ico-dumps/164/`, the two phone frames `rd_vufuse_ab` reads and a capture)
+on the plain device and under `ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_NO_DUAL=1`, under
+`ICO_RD_BLEND=fixed`: every named target byte for byte, the merge's figures and the fused pairs the
+plain device's, and the 164 frame's `826 merged into 87`.
 
 ## Tests
 
