@@ -6,6 +6,7 @@
 #include "gpu_driver_android.h"
 #include <SDL3/SDL.h>
 #include <adrenotools/driver.h>
+#include <android/api-level.h>
 #include <dlfcn.h>
 #include <jni.h>
 #include <stdint.h>
@@ -218,15 +219,44 @@ static void driver_failed(const char *folder, const char *why)
     ico_android_message_box(k_failed_box, 1);
 }
 
+/* the device's Android API level, read once (android_get_device_api_level:
+   an inline over the system property below the build's API 29 headers) */
+static int device_api_level(void)
+{
+    static int s_api = -1;
+
+    if (s_api < 0) {
+        s_api = android_get_device_api_level();
+    }
+    return s_api;
+}
+
+int ico_gpu_driver_android_supported(void)
+{
+    /* libadrenotools' namespace bypass (liblinkernsbypass) needs API 28:
+       below it adrenotools_open_libvulkan returns NULL at once */
+    return device_api_level() >= 28;
+}
+
 int ico_gpu_driver_android_start(void)
 {
-    char hookDir[1024], driverDir[1200];
+    char hookDir[1024], driverDir[1200], tmpDir[1024];
     const char *want = ico_config_get_string(KEY_DRIVER, "");
     const char *root = driver_root();
 
     rhi_set_vulkan_loader(NULL);
     s_trial = 0;
     s_presents = 0;
+    if (!ico_gpu_driver_android_supported()) {
+        /* issue 158: Android 8 (API 26 and 27); the choice is kept for a
+           newer system, nothing is written */
+        fprintf(stderr,
+                "gpu driver: graphics driver packages need Android 9 or later (this device is "
+                "API %d); the phone's own driver is used%s%s\n",
+                device_api_level(), want != NULL && want[0] != '\0' ? ", not " : "",
+                want != NULL ? want : "");
+        return 0;
+    }
     if (want == NULL || want[0] == '\0') {
         if (root != NULL) {
             ico_gpu_driver_trial_ok(root); /* a marker left from an older choice */
@@ -267,9 +297,18 @@ int ico_gpu_driver_android_start(void)
                 root);
         return 0;
     }
-    fprintf(stderr, "gpu driver: opening %s (%s, %s) from %s, hooks in %s\n", s_active,
-            s_list[i].meta.name, s_list[i].meta.libraryName, driverDir, hookDir);
-    void *lib = adrenotools_open_libvulkan(RTLD_NOW, ADRENOTOOLS_DRIVER_CUSTOM, NULL, hookDir,
+    /* Android 9 (API 28) has no memfd for the patched system loader:
+       libadrenotools writes it into tmpLibDir there (NULL fails), the
+       app's cache folder; it ignores the folder on API 29 and later */
+    const char *tmpLibDir = NULL;
+    if (device_api_level() < 29 && ico_android_cache_dir(tmpDir, sizeof(tmpDir)) == 0 &&
+        tmpDir[0] != '\0') {
+        tmpLibDir = tmpDir;
+    }
+    fprintf(stderr, "gpu driver: opening %s (%s, %s) from %s, hooks in %s%s%s\n", s_active,
+            s_list[i].meta.name, s_list[i].meta.libraryName, driverDir, hookDir,
+            tmpLibDir != NULL ? ", patched loader in " : "", tmpLibDir != NULL ? tmpLibDir : "");
+    void *lib = adrenotools_open_libvulkan(RTLD_NOW, ADRENOTOOLS_DRIVER_CUSTOM, tmpLibDir, hookDir,
                                            driverDir, s_list[i].meta.libraryName, NULL, NULL);
     if (lib == NULL) {
         const char *e = dlerror();
@@ -550,6 +589,9 @@ static int s_onStock;
 
 void ico_gpu_driver_android_note_loss_on_stock(void)
 {
+    if (!ico_gpu_driver_android_supported()) {
+        return; /* no package route below Android 9 (issue 158) */
+    }
     if (!s_lostOnStock) {
         s_lostOnStock = 1;
         fprintf(stderr,
@@ -580,7 +622,9 @@ const char *ico_gpu_driver_android_hang_note(void)
 {
     /* English, as the boxes it ends are (one language in a box); the
        Options rows keep the menu's language */
-    return s_onStock ? ui_str_in(UI_LANG_EN, UI_STR_GPU_HANG_TURNIP) : NULL;
+    return s_onStock && ico_gpu_driver_android_supported()
+               ? ui_str_in(UI_LANG_EN, UI_STR_GPU_HANG_TURNIP)
+               : NULL;
 }
 
 static int host_lost_on_stock(void)
@@ -787,7 +831,9 @@ static const UiGpuDriverHost k_host = {
 
 const UiGpuDriverHost *ico_gpu_driver_android_host(void)
 {
-    return &k_host;
+    /* no Graphics driver page below Android 9 (issue 158: a package cannot
+       be loaded there); settings.c treats NULL as no host */
+    return ico_gpu_driver_android_supported() ? &k_host : NULL;
 }
 
 /* --- the start-up choice, before there is a device ------------------------------ */
@@ -800,6 +846,15 @@ const char *ico_gpu_driver_android_box_text(void)
     static char box[768];
     const char *where = ico_gpu_driver_android_folder_text();
 
+    if (!ico_gpu_driver_android_supported()) {
+        /* Android 8 (issue 158): no package route, the log is the way on */
+        snprintf(box, sizeof(box),
+                 "ICO could not start the game's graphics with this device's driver.\n\n"
+                 "Graphics driver packages need Android 9 or later, so there is no other "
+                 "driver to try on this device. Please send the log file (ico-pc.log in the "
+                 "game's logs folder) with a report at github.com/nathanialf/ico-pc/issues.");
+        return box;
+    }
     snprintf(box, sizeof(box),
              "ICO could not start the game's graphics with this phone's driver.\n\n"
              "On a phone with an Adreno (Qualcomm) chip you can choose a graphics driver "
@@ -816,6 +871,13 @@ const char *ico_gpu_driver_android_box_text(void)
    which way past the system's loader there is */
 void ico_gpu_driver_android_no_device_note(void)
 {
+    if (!ico_gpu_driver_android_supported()) {
+        fprintf(stderr,
+                "window: graphics driver packages need Android 9 or later (this device is "
+                "API %d): no other driver to offer\n",
+                device_api_level());
+        return;
+    }
     fprintf(stderr,
             "window: a graphics driver package (chosen in the box, in Options > Graphics driver, "
             "or a .zip file in %s) is loaded by the game itself, without the system's Vulkan "
