@@ -2066,6 +2066,12 @@ void gsb_ResetGSSystem(void)
    (rd_reset_scene, before rd_begin_frame takes the size), so the frame that
    just closed is presented into the new targets once.  At 4:3 the frame is
    512 x ScreenHeight, the size rd was always given. */
+#ifdef ICO_RD
+
+static int gsbHostRdW, gsbHostRdH; /* port: the size rd's scene targets were made at */
+
+#endif
+
 static void gsbHostFrameLatch(void)
 {
     ico_video_frame(&gsFrame, ScreenHeight);
@@ -2083,18 +2089,26 @@ static void gsbHostFrameLatch(void)
         gif_HostSetExtended(!ico_video_original());
     }
 #ifdef ICO_RD
-    {
-        static int rdW, rdH; /* port */
-
-        if (rdW != gsFrame.w || rdH != gsFrame.h) {
-            rdW = gsFrame.w;
-            rdH = gsFrame.h;
-            rd_reset_scene((unsigned int)gsFrame.w, (unsigned int)gsFrame.h);
-        }
+    if (gsbHostRdW != gsFrame.w || gsbHostRdH != gsFrame.h) {
+        gsbHostRdW = gsFrame.w;
+        gsbHostRdH = gsFrame.h;
+        rd_reset_scene((unsigned int)gsFrame.w, (unsigned int)gsFrame.h);
     }
 #endif
 }
 
+#ifdef ICO_RD
+
+/* PC port: a save state's load (port/game/state_host.c) restores the latch
+   with the game's data: cleared, the next latch remakes rd's scene-sized
+   targets (rd_reset_scene) as a new size does. */
+void gsb_HostSceneRelatch(void)
+{
+    gsbHostRdW = 0;
+    gsbHostRdH = 0;
+}
+
+#endif
 /* PC port: the zoom vs[0] is 0 before the first stage sets the view scale
    (vsync 6); the EE's div.s gives +-Fmax there, IEEE gives Inf and then NaN
    in 0 * Inf. */
