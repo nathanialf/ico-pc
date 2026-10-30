@@ -430,6 +430,129 @@ static void test_signals(void)
         CHECK(file_count("[unlocked." id "]") == 1);                                               \
     } while (0)
 
+/* a capture counts once (issue 162): the hook fires when the shadow takes
+   Yorda, her carried mode follows a tick or so later; the pause menu's
+   count is ico_gs_run_captures */
+static void capture_start(void)
+{
+    start("capture_once");
+    new_game();
+    g.stage_no = ST_GATE;
+    g.girl_present = 1;
+    ticks(1);
+}
+
+static void test_capture_once(void)
+{
+    int r;
+    const int saved_region = ico_region;
+
+    /* the hook on tick N, the flag on tick N+1 (no hook): one */
+    capture_start();
+    ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, 3757);
+    ticks(1);
+    CHECK(ico_gs_run_captures() == 1);
+    g.yorda_carried_by_enemy = 1;
+    ticks(1);
+    CHECK(ico_gs_run_captures() == 1);
+    ticks(6); /* still carried: nothing more */
+    CHECK(ico_gs_run_captures() == 1);
+
+    /* the flag alone: one */
+    capture_start();
+    g.yorda_carried_by_enemy = 1;
+    ticks(1);
+    CHECK(ico_gs_run_captures() == 1);
+    ticks(3);
+    CHECK(ico_gs_run_captures() == 1);
+
+    /* the hook alone (her mode never changes): one */
+    capture_start();
+    ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, 3757);
+    ticks(10);
+    CHECK(ico_gs_run_captures() == 1);
+
+    /* the hook, the flag, a drop, a second hook and its flag: two */
+    capture_start();
+    ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, 3757);
+    ticks(1);
+    g.yorda_carried_by_enemy = 1;
+    ticks(1);
+    g.yorda_carried_by_enemy = 0;
+    ticks(1);
+    CHECK(ico_gs_run_captures() == 1);
+    ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, 3757);
+    ticks(1);
+    g.yorda_carried_by_enemy = 1;
+    ticks(1);
+    CHECK(ico_gs_run_captures() == 2);
+
+    /* the flag with a hook 3 ticks back and 5 ticks back, no drop between:
+       the same capture; after a drop, 5 ticks on: a new one the hook missed */
+    capture_start();
+    ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, 3757);
+    ticks(5);
+    g.yorda_carried_by_enemy = 1; /* the mail was slow: still the same capture */
+    ticks(1);
+    CHECK(ico_gs_run_captures() == 1);
+    g.yorda_carried_by_enemy = 0;
+    ticks(5);
+    g.yorda_carried_by_enemy = 1;
+    ticks(1);
+    CHECK(ico_gs_run_captures() == 2);
+
+    /* another stage clears the hooked capture: a flag-only capture counts */
+    capture_start();
+    ico_gs_signal(ICO_GS_EV_YORDA_GRABBED, 3757);
+    ticks(1);
+    g.stage_no = ST_GRAVE;
+    ticks(6);
+    g.yorda_carried_by_enemy = 1;
+    ticks(1);
+    CHECK(ico_gs_run_captures() == 2);
+
+    /* the June 2001 demo's game-over hook counts once per stage entry (its
+       death paths have no guard flag of their own) */
+    capture_start();
+    ico_gs_signal_game_over_once();
+    ico_gs_signal_game_over_once();
+    ticks(1);
+    ico_gs_signal_game_over_once();
+    ticks(1);
+    CHECK(ico_gs_run_game_overs() == 1 && ico_gs_game_overs() == 1);
+    ico_gs_signal(ICO_GS_EV_STAGE_ENTER, ST_GATE); /* the retry reloads the stage */
+    ico_gs_signal_game_over_once();
+    ticks(1);
+    CHECK(ico_gs_run_game_overs() == 2 && ico_gs_game_overs() == 2);
+
+    /* the carried mode, by disc: the disc's own mode (and only that) is
+       Yorda carried by an enemy; an enemy must be the carrier */
+    {
+        static const int kCarried[ICO_REGION_COUNT] = {
+            0x6F, /* pal */
+            0x6F, /* jpn */
+            0x6F, /* kor */
+            107,  /* ntsc */
+            107,  /* aug6 */
+            106,  /* jun26 */
+            0x6F, /* cn */
+        };
+        static const int kModes[] = {0x6F, 107, 106, 0, 105, 108, 110, 112};
+
+        for (r = 0; r < ICO_REGION_COUNT; r++) {
+            size_t m;
+
+            ico_region = r;
+            CHECK(ico_gs_carried_act_mode() == kCarried[r]);
+            for (m = 0; m < sizeof(kModes) / sizeof(kModes[0]); m++) {
+                CHECK(ico_gs_girl_carried_by_enemy(kModes[m], 1) == (kModes[m] == kCarried[r]));
+                CHECK(!ico_gs_girl_carried_by_enemy(kModes[m], 0));
+            }
+        }
+        ico_region = saved_region;
+    }
+}
+
 static void stage(int n)
 {
     g.stage_no = n;
@@ -1431,6 +1554,7 @@ int main(int argc, char **argv)
     ico_config_reset(s_no_config, s_no_config);
     test_view();
     test_signals();
+    test_capture_once();
     test_each();
     test_opening();
     test_run_slots();
