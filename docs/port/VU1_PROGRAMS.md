@@ -485,8 +485,18 @@ only its description until the first pipeline that uses it (the backend compiles
 FXC in its pipeline workers), so the start line adds `(Direct3D 11: compiled at their first
 pipeline, t5 bound)` and a build FXC refuses shows as that pipeline's `pipeline creation failed
 ...` line, which then ends `; vertex shader vu_X_merge_vs, the draw merge's build ([dev] vu_merge
-= false avoids it)`: its draws are skipped as any failed key's, not drawn one a command. The
-start line says which: `rd: VU merge: on: consecutive mesh and grid draws with the same pipeline,
+= false avoids it)`. Its draws are skipped in that replay only: the failure (on Direct3D 11, or on
+any backend under `ICO_RD_FAKE_MERGE_FAIL=1`, which keeps the first pipeline made with a merge
+build as failed; not a full pipeline pool) turns the merge and the fuse off at the start of the
+next replay, before it asks for a pipeline (`rd__vu_merge_fallback`): the device idle, every
+pipeline dropped (a key names its vertex shader, not the module, so a key made with a merge build
+or its failed entry would otherwise stay), the merge builds destroyed, and once `rd: VU merge: off:
+the driver could not compile vu_X_merge_vs (Direct3D 11); one GPU draw a VU draw from here`. From
+there every VU draw is drawn one a command through the plain builds, and the start-up set's keys
+are made again on first use. A failure of the key's pixel shader also takes this path (the
+renderer cannot tell which module the driver refused); the plain key then fails too and its own
+line says so. `rd_vumerge_fallback` (ctest and the WARP job) fakes the failure. The start line
+says which: `rd: VU merge: on: consecutive mesh and grid draws with the same pipeline,
 textures, DrawCB, FrameCB and scissor drawn as one indexed draw of up to 16, ...` or `rd: VU merge:
 off ...`, and the summary line has `VU merge on` or `VU merge off` after the pre-pass. `rd_replay_tool
 --stats` prints `VU merge: N draws in M GPU draws (K merged into G, A alone; merge on)` beside the
