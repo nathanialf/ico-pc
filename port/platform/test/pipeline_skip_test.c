@@ -8,7 +8,9 @@
  *            one name the family; the v0.9.5 Retroid Pocket 6 batch (planes
  *            and plain builds mixed), v0.9.4's plain sprite pipeline, a VU
  *            batch, a batch with unnamed vertex shaders (" and N more"), a
- *            cut note and the notes outside a creation name none;
+ *            cut note and the notes outside a creation name none; the
+ *            in-flight key's note inside a mixed batch names the family when
+ *            that key is a planes build, none when it is a plain one;
  *   record   the value written at the start after such an end reads back
  *            the same (family, device, driver, date); separators and quotes
  *            in a device name become spaces; the driver word from the
@@ -71,6 +73,13 @@ static const char k_more[] =
     "(450 instructions), sprite_plane_world_vs 2040 words (450 instructions), "
     "sprite_stq_plane_ui_vs 2028 words (448 instructions), sprite_stq_plane_world_vs 2028 words "
     "(448 instructions) and 2 more; largest fragment sprite_stq_ps_planes 14954 words";
+/* v0.9.6's in-flight key inside a mixed batch (rd_pipeline.c noteKey) */
+static const char k_inflight_planes[] =
+    "creating pipeline 217 of 587 (in batch 212-219): program 9 blend 5 vs 24 fs 30 fmt 1/8 msaa 0 "
+    "dst 0 (sprite_stq_plane_world_vs 2028 words + sprite_stq_ps_planes 14954 words)";
+static const char k_inflight_plain[] =
+    "creating pipeline 217 of 587 (in batch 212-219): program 9 blend 6 vs 1 fs 0 fmt 1/8 msaa 0 "
+    "dst 0 (sprite_world_vs 1231 words + sprite_ps 8268 words)";
 static const char k_cut[] = "creating pipelines 540 of 587: program 9 blend 5 vs 24 fs 30 fmt 1/8 "
                             "msaa 0 dst 0; vertex sprite_stq_plane_world_vs 2028 words (448 ins";
 
@@ -79,6 +88,9 @@ static void testNote(void)
     CHECK(pipeline_skip_family_of_note(k_alone) == PIPELINE_SKIP_SPRITE_PLANES);
     CHECK(pipeline_skip_family_of_note(k_planes_batch) == PIPELINE_SKIP_SPRITE_PLANES);
     CHECK(pipeline_skip_family_of_note(k_lazy_planes) == PIPELINE_SKIP_SPRITE_PLANES);
+    /* the in-flight key of a mixed batch names it, either way */
+    CHECK(pipeline_skip_family_of_note(k_inflight_planes) == PIPELINE_SKIP_SPRITE_PLANES);
+    CHECK(pipeline_skip_family_of_note(k_inflight_plain) == PIPELINE_SKIP_NONE);
     /* the hung pipeline of the v0.9.5 batch is not known: no family */
     CHECK(pipeline_skip_family_of_note(k_v095_batch) == PIPELINE_SKIP_NONE);
     CHECK(pipeline_skip_family_of_note(k_v094_plain) == PIPELINE_SKIP_NONE);
