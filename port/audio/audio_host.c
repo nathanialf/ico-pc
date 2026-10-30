@@ -492,6 +492,11 @@ int ico_audio_sdl_summary_text(char *out, size_t size)
 }
 
 void ico_audio_sdl_log_summary(void) {}
+
+unsigned long long ico_audio_sdl_held_ms(void)
+{
+    return 0;
+}
 #endif
 
 /* Left and right swapped in place (mirror mode, audio_host.h). */
