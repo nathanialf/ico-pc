@@ -12,6 +12,8 @@
 static UiStateSlotInfo s_slots[UI_STATES_SLOTS];
 static int s_canSave;
 static int s_listCalls, s_requests, s_reqAct, s_reqSlot, s_reqRet, s_reqRefusal;
+/* the frame of the last listing and of the last request */
+static int s_listFrame, s_reqFrame;
 /* the textures: load numbers them from 100, destroy counts */
 static int s_loads, s_destroys, s_lastDestroyed;
 static char s_lastLoaded[260];
@@ -19,12 +21,14 @@ static char s_lastLoaded[260];
 static void fakeList(UiStateSlotInfo out[UI_STATES_SLOTS])
 {
     s_listCalls++;
+    s_listFrame = frame_count;
     memcpy(out, s_slots, sizeof(s_slots));
 }
 
 static int fakeRequest(int action, int slot, int *refusal_str)
 {
     s_requests++;
+    s_reqFrame = frame_count;
     s_reqAct = action;
     s_reqSlot = slot;
     *refusal_str = s_reqRet != 0 ? s_reqRefusal : 0;
@@ -91,6 +95,7 @@ static void resetFakes(void)
     }
     s_canSave = 1;
     s_listCalls = s_requests = s_reqAct = s_reqSlot = s_reqRet = s_reqRefusal = 0;
+    s_listFrame = s_reqFrame = 0;
     s_loads = s_destroys = s_lastDestroyed = 0;
     s_lastLoaded[0] = '\0';
 }
@@ -239,7 +244,7 @@ static void testPauseRows(void)
     const int mainL = ui_settings_page_layout(UI_PAGE_MAIN);
     CHECK(st >= LT_GAME_PROPERTY_COUNT && ph >= LT_GAME_PROPERTY_COUNT && st > ph,
           "the Save states row (%d) comes after Photo mode (%d)", st, ph);
-    CHECK(strcmp(txt(st), "Save states") == 0, "its words \"%s\"", txt(st));
+    CHECK(strcmp(txt(st), ui_str(UI_STR_STATES)) == 0, "its words \"%s\"", txt(st));
     CHECK(texProperty[o].right == mainL, "Options opens the menu: the rows were accepted");
     toPause();
     const LtProperty *po = &texProperty[o], *pb = &texProperty[b];
@@ -315,7 +320,7 @@ static void testExtrasLink(void)
             CHECK(n == (host ? 10 : 9), "title %d, host %d: %d Extras rows", title, host, n);
             int link = -1;
             for (int i = 0; i < n; i++) {
-                if (strcmp(txt(labels[i]), "Save states") == 0) {
+                if (strcmp(txt(labels[i]), ui_str(UI_STR_STATES)) == 0) {
                     link = i;
                 }
             }
@@ -324,10 +329,13 @@ static void testExtrasLink(void)
                 continue;
             }
             CHECK(link == 3 && opts[link] == UI_OPT_LINK && opts[2] == UI_OPT_EXTRAS_CREDITS &&
-                      strcmp(txt(labels[4]), "Characters") == 0,
-                  "title %d: Save states after Credits, before Characters (row %d)", title, link);
-            CHECK(link >= 0 &&
-                      lt_ext_prop(labels[link])->right == ui_settings_page_layout(UI_PAGE_STATES),
+                      strcmp(txt(labels[4]), ui_str(UI_STR_SECTION_CHARACTERS)) == 0,
+                  "title %d: Save states after Credits, before Characters (row %d, then \"%s\")",
+                  title, link, link >= 0 && link + 1 < n ? txt(labels[link + 1]) : "");
+            if (link < 0) {
+                continue; /* no row to open: labels[-1] would steer the cursor anywhere */
+            }
+            CHECK(lt_ext_prop(labels[link])->right == ui_settings_page_layout(UI_PAGE_STATES),
                   "the row opens the page");
             CHECK(ui_settings_row_shown(labels[link]) == 1, "title %d: the row is shown", title);
             lt_ext_layout(exL)->curItem = labels[link];
@@ -574,10 +582,11 @@ static void testConfirm(void)
     CHECK(s_requests == 1 && s_reqAct == UI_STATES_ACT_SAVE && s_reqSlot == 2,
           "Save on an empty slot: asked at once (%d: %d, slot %d)", s_requests, s_reqAct,
           s_reqSlot);
-    /* accepted: the listing is read again at the next tick */
-    const int calls = s_listCalls;
-    idle(2);
-    CHECK(s_listCalls > calls, "an accepted request lists again at once");
+    /* accepted: the listing is read again at the next tick (inside press,
+       which runs two more frames after the one that asked) */
+    CHECK(s_listFrame == s_reqFrame + 1,
+          "an accepted request lists again at once (asked at frame %d, listed at %d)", s_reqFrame,
+          s_listFrame);
     /* refused at once: the host's reason in a popup */
     s_reqRet = -1;
     s_reqRefusal = UI_STR_STATES_PAUSE_FIRST;
