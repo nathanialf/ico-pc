@@ -75,6 +75,7 @@ int sceGsSyncV(int mode);
 int movie_init(char *name, int imageW, int imageH, int dbx, int dby, int mono, int clearCol);
 void movie_end(void);
 int movie_proc(int (*poll)(void));
+int ico_movie_open(void);
 /* port/game/gamestate.c: pad[0].now and .flags */
 void ico_game_pad0(int *now, int *flags);
 /* port/input/pad_host.c */
@@ -998,6 +999,13 @@ void movie_end(void)
 {
     show_clear(0x80000000u); /* dispClear(&display, 0x80000000) */
     close_all();
+}
+
+/* A save state is refused while a movie is open (port/game/state_host.c):
+   its decoder and buffers are host objects the game's memory cannot carry. */
+int ico_movie_open(void)
+{
+    return mv.open;
 }
 
 int movie_proc(int (*poll)(void))
