@@ -1545,6 +1545,16 @@ const struct IcoSpritePlaneVertex *rd__screen_planes(const void *vb, uint32_t st
  * planned as dp, its planes: not where the planes are dropped
  * (rd__planes_dropped; its STQ passes keep them) */
 int rd__screen_planes_want(const RdStateBlock *s, const RdTargetRec *tc, const RdDrawPass *dp);
+/* The sprite planes builds off for the run (g_rd.spritePlanesOff, issue
+ * 161): rd_set_sprite_planes_off's reason or ICO_RD_NO_SPRITE_PLANES=1,
+ * read and logged once by rd_init (rd_screen_planes.c); the screen-prim
+ * triangles then draw through the plain sprite builds, their STQ ones too,
+ * and the start-up set holds those keys instead (rd_pipeline.c
+ * rd__enumerate_reachable_screen) */
+void rd__sprite_planes_init(void);
+/* Whether a key is one of the sprite planes builds (its vertex shader:
+ * sprite_plane_*_vs, sprite_stq_plane_*_vs) */
+bool rd__key_is_sprite_planes(const RdPipeKeyInt *k);
 /* Whether a draw under this state samples a PSMCT24 or
  * PSMCT16 texture (or one with a 24- or 16-bit CLUT: RdTexRec.src not
  * RGBA32) under a TEXA with AEM through a linear MAG or MIN filter, the
@@ -2548,6 +2558,12 @@ typedef struct RdContext {
      * and why not */
     bool vuPrepass;
     char vuPrepassWhy[160];
+    /* the screen-prim triangles without the sprite planes builds (issue 161;
+     * rd_screen_planes.c rd__sprite_planes_init): the host's record that the
+     * device's driver stopped creating them ([dev] pipeline_skip) or
+     * ICO_RD_NO_SPRITE_PLANES=1; spritePlanesWhy says which */
+    bool spritePlanesOff;
+    char spritePlanesWhy[224];
     /* the pre-pass's batches (rd_replay_vu.c vuPrepassRun; docs/port/
      * VU1_PROGRAMS.md "The pre-pass's batches"): vuPreBatch one point draw
      * a run of entries with the same stage key, FrameCB and group 1, through
