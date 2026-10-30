@@ -29,11 +29,13 @@ VuSprite vu_particle(uint i)
 {
     VuSprite o = (VuSprite)0;
     uint base = vu_draw.x;
-    float4 clipMin = vu_stream[base + 3u];
-    float4 clipMax = vu_stream[base + 4u];
-    float4 k = vu_stream[base + 5u];
-    float4 a = vu_stream[base + 6u + 2u * i];
-    float4 b = vu_stream[base + 7u + 2u * i];
+    float4 clipMin = vu_stream_f(base + 3u);
+    float4 clipMax = vu_stream_f(base + 4u);
+    float4 k = vu_stream_f(base + 5u);
+    float4 a = vu_stream_f(base + 6u + 2u * i);
+    // (u, v, grey, alpha): alpha's exponent tested on its bits as loaded
+    uint4 bb = vu_stream_u(base + 7u + 2u * i);
+    float4 b = asfloat(bb);
     // :97-104 h = M * (x, y, z, 1)
     float4 h = vu_matm(16u, float4(a.xyz, 1.0), 1.0);
     // :99-112 e = S * (size * k.x, size * k.x, 0, 1): the half extent
@@ -48,7 +50,7 @@ VuSprite vu_particle(uint i)
     precise float pz = h.z * q;
     // :125-133 both corners strictly inside the window on x, y and w;
     // :100-105 a zero alpha skips the particle
-    bool alphaZero = (asuint(b.w) & 0x7F800000u) == 0u;
+    bool alphaZero = (bb.w & 0x7F800000u) == 0u;
     o.drawn = !alphaZero && vu_inside(p0, h.w, clipMin, clipMax) != 0u &&
               vu_inside(p1, h.w, clipMin, clipMax) != 0u;
     // Out of the box the PS2's test; beside the picture and outside the
@@ -143,10 +145,10 @@ bool vu_particle_tick(float4 h, float4 e, uint t, float4 clipMin, float4 clipMax
 bool vu_particle_tick_shown(uint i)
 {
     uint base = vu_draw.x;
-    float4 clipMin = vu_stream[base + 3u];
-    float4 clipMax = vu_stream[base + 4u];
-    float4 k = vu_stream[base + 5u];
-    float4 a = vu_stream[base + 6u + 2u * i];
+    float4 clipMin = vu_stream_f(base + 3u);
+    float4 clipMax = vu_stream_f(base + 4u);
+    float4 k = vu_stream_f(base + 5u);
+    float4 a = vu_stream_f(base + 6u + 2u * i);
     float4 h = vu_matm(16u, float4(a.xyz, 1.0), 1.0);
     precise float sz = (0.0 + a.w) * k.x;
     float4 e = vu_matm(20u, float4(sz, sz, 0.0, 1.0), 1.0);
