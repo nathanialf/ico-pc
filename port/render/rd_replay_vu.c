@@ -230,13 +230,14 @@ static RhiBindGroup vuGroupMake(RhiBuffer streamBuf, uint64_t streamOff, uint64_
     b[4].slot = 4;
     b[4].type = RHI_BIND_STORAGE_BUFFER;
     b[4].buffer = recBinding(&b[4].size);
-    /* t5, the ring the pre-pass's batch modules stream from: the layout
-     * keeps the slot everywhere, but Direct3D 11 never makes a batch
-     * module (no pre-pass there) nor a merge module (vuMergeInit: the
-     * merge is off there), and a bound storage range is rewritten
-     * up to the written mark at every submit (d3d11_cmd.c, the SRV part's
-     * touch): there the bind is skipped, so a submit writes only the bytes
-     * its draws stream (the slot reads zeros, which no module reads) */
+    /* t5, the ring the pre-pass's batch modules and the draw merge's
+     * builds read: the layout keeps the slot everywhere.  On Direct3D 11 a
+     * bound storage range is rewritten up to the written mark at every
+     * submit (d3d11_cmd.c, the SRV part's touch), so with neither reader
+     * (no pre-pass there; the merge off by [dev] vu_merge = false or a
+     * merge module missing) the bind is skipped and a submit writes only
+     * the bytes its draws stream (the slot reads zeros, which no module
+     * then reads); with the merge on, those bytes are what its builds read */
     if (!g_rd.vuPreBatch && !g_rd.vuMerge && rhi_backend() == RHI_BACKEND_D3D11) {
         return rd__replay_bind_group(g_rd.layoutVu, b, 5);
     }
@@ -2384,11 +2385,14 @@ static void preBatchInit(void)
  * VuCB and VuBoneCB through t5 by a table (vu_common.hlsli vu_merge_entry),
  * so consecutive draws with the same state are one indexed draw (vuDraw,
  * vuRunTake, rd__replay_vu_flush).  Off: [dev] vu_merge = false
- * (ICO_RD_VU_MERGE=0), Direct3D 11 (its run-time compile and its views of
- * the ring are not set up for t5 in the main draws), or a merge module
- * missing.  Before any pipeline (the keys are the same either way,
- * rd_pipeline.c) */
-static char s_mergeWhy[224];
+ * (ICO_RD_VU_MERGE=0) or a merge module missing.  On Direct3D 11 a module
+ * is only its description here (rhi_create_shader: FXC compiles it in the
+ * pipeline workers at the first pipeline that uses it), so a build FXC
+ * refuses shows as that pipeline's failure line, its draws skipped as any
+ * failed key's (rd_pipeline.c keepPipeline names the merge build and the
+ * setting that avoids it).  Before any pipeline (the keys are the same
+ * either way, rd_pipeline.c) */
+static char s_mergeWhy[288];
 
 /* the mesh and grid programs' entries and the main shader with a merge
  * build (the skinned programs and the particles have none: their draws are
@@ -2438,10 +2442,6 @@ static void vuMergeInit(void)
     if (env && strcmp(env, "0") == 0) {
         snprintf(s_mergeWhy, sizeof(s_mergeWhy),
                  "off ([dev] vu_merge = false, ICO_RD_VU_MERGE=0): one GPU draw a VU draw");
-    } else if (rhi_backend() == RHI_BACKEND_D3D11) {
-        snprintf(s_mergeWhy, sizeof(s_mergeWhy),
-                 "off on Direct3D 11 (the main draws do not bind t5 there): one GPU draw a VU "
-                 "draw");
     } else {
         bool ok = true;
         for (size_t i = 0; i < sizeof(kMergeVs) && ok; i++) {
@@ -2460,8 +2460,11 @@ static void vuMergeInit(void)
             snprintf(s_mergeWhy, sizeof(s_mergeWhy),
                      "on: consecutive mesh and grid draws with the same pipeline, textures, "
                      "DrawCB, FrameCB and scissor drawn as one indexed draw of up to %u, through "
-                     "the programs' merge builds ([dev] vu_merge = false draws one a command)",
-                     RD_VU_MERGE_MAX);
+                     "the programs' merge builds%s ([dev] vu_merge = false draws one a command)",
+                     RD_VU_MERGE_MAX,
+                     rhi_backend() == RHI_BACKEND_D3D11
+                         ? " (Direct3D 11: compiled at their first pipeline, t5 bound)"
+                         : "");
         } else {
             vuMergeFree();
         }
