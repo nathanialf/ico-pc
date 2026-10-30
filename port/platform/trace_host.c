@@ -14,6 +14,8 @@
 #include "host_loop.h"
 #include "pad_script.h"
 #include "sif_host.h"
+#include "state_port.h"
+#include "state_registry.h"
 #include "stream_watch.h"
 
 /* The game's state the trace reads (each defined in the file named). */
@@ -49,6 +51,15 @@ static FILE *trace;
 static int logged_stage = -1;
 
 static int logged_layout = -1;
+
+/* The save state's block (state_port.h): a load rewinds the Main tick
+   count with the game, so the pad script and the recording go on from the
+   saved tick.  The trace file's own position (traced_ticks) is not part of
+   the game: after a rewind it waits until the count passes it again. */
+int ico_trace_state_register(void)
+{
+    return ico_state_register("trace.main_ticks", &main_ticks, sizeof main_ticks, ICO_STATE_CLOCK);
+}
 
 void ico_host_main_tick(void)
 {
