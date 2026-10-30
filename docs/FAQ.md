@@ -139,7 +139,9 @@ screen refresh in time. When a picture takes longer than one refresh of the
 screen, the game shows only its own pictures (30 a second) until the card
 has the time again, so the game keeps its normal speed. It goes back to 60
 within a couple of seconds once the card keeps up. A card that is always
-too slow stays at 30.
+too slow stays at 30, and tries 60 again from time to time (every few
+seconds at first, then at most every 16 seconds); each try can show as one
+small stutter.
 
 What to lower, in this order (Options):
 
