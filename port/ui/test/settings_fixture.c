@@ -160,6 +160,15 @@ int la_host_mc_slot_pickable(int slot)
     return s_mcSaveSlots && slot >= 0 && slot < 10;
 }
 
+/* layout_action.c: whether the Continue screen shows the card's files (its
+   card check done), set by the tests */
+int s_mcFilesShown;
+
+int la_host_mc_files_shown(void)
+{
+    return s_mcFilesShown;
+}
+
 /* the game's Options screen's settings, now on the port's pages (common/src/main.c,
    fumi/ios/pad.c), and layout_action.c's film effect (la_game_option's
    stage animations), which records the mode it was given */
@@ -405,7 +414,8 @@ void setLayout(int i, int first, int last, int def, int link)
    key config layouts; the Japanese title's extra layout and the two after
    key config sit at the same distance from them as on the Japanese disc,
    where layout 8 precedes la_title_continue_or_new and 60, 61 follow
-   la_key_config), and the rows of the title, the vibration screen (the
+   la_key_config; the memory card files and the Continue screen's file
+   select, 14 and 19, are the disc's own), and the rows of the title, the vibration screen (the
    copyright's row less 4 .. 2, as on the Japanese disc: 14 .. 16 against
    18) and the pause, Options and button configuration screens (the rows
    from 292 on move with the pause menu's Options row). */
@@ -421,6 +431,10 @@ int fxLayout(int pal)
         return r->layout_title_continue;
     case 13:
         return r->layout_title_new;
+    case 14:
+        return r->layout_mc_files;
+    case 19:
+        return r->layout_load_files;
     case 54:
         return r->layout_play;
     case 55:

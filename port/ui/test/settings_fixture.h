@@ -89,6 +89,7 @@ extern int s_resumes;
 extern int s_newGames;
 extern int s_lastStartFlag; /* ico_region_new_game_flag() at the last New Game start */
 extern int s_mcSaveSlots;   /* 1: the Save screen (empty slots pickable), 0: Load */
+extern int s_mcFilesShown;  /* la_host_mc_files_shown: the Continue screen's files are up */
 extern int s_outputMode, s_outputSets;
 extern int s_devCount;
 extern const char *s_devNames[3];
