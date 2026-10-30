@@ -1834,7 +1834,9 @@ void rd_loss_bisect_step(const char *path, uint32_t pass, uint32_t drawFirst, ui
 bool rd_dump_frame_size(const char *path, uint32_t *gsW, uint32_t *gsH, float *aspect);
 /* Readback of the DISPLAY target (the reduced frame the presenter scales;
  * the output itself is rd_read_presented), tightly packed RGBA8, for
- * screenshots and image comparison. */
+ * screenshots and image comparison.  dst NULL: *w and *h get the size a
+ * dst must have room for (w * h * 4 bytes; the read may return a narrower
+ * picture), nothing read. */
 bool rd_read_display(void *dst, uint32_t *w, uint32_t *h);
 
 /* --------------------------------------------------------- statistics */
