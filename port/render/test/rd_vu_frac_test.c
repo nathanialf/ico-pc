@@ -28,8 +28,18 @@
  *           entries and their plain builds): the twins read a prefix of
  *           VuVSOut, 8 located input components against vu_ps's 36 (with
  *           the position, 12 against 40; skipped when the table was built
- *           without shaders) */
+ *           without shaders)
+ *   skip    the sprite planes builds off for the run (issue 161:
+ *           rd_set_sprite_planes_off, the host's [dev] pipeline_skip, read by
+ *           rd__sprite_planes_init): the start-up set holds no planes key
+ *           and the plain twin of every planes key it held (the plain STQ
+ *           keys included), rd__plane_pass converts nothing,
+ *           rd__screen_planes_want keeps the plain build for every pass,
+ *           STQ ones too, and counts the commands that would have taken
+ *           the planes (RdPerfRecord.spriteNoPlanes); the clear ("") gives
+ *           the set with the planes back, key for key */
 #include <stdlib.h>
+#include <string.h>
 
 #include "rd_replay.h"
 #include "shaders_gen.h"
@@ -481,6 +491,108 @@ static void testPrefix(void)
     }
 }
 
+/* ------------------------------------------------------------ the skip */
+
+/* the plain build of a sprite planes key (rd__plane_pass backwards) */
+static RdPipeKeyInt plainOf(RdPipeKeyInt k)
+{
+    k.vs = k.vs == RD_VS_SPRITE_PLANE_UI          ? RD_VS_SPRITE_UI
+           : k.vs == RD_VS_SPRITE_PLANE_WORLD     ? RD_VS_SPRITE_WORLD
+           : k.vs == RD_VS_SPRITE_STQ_PLANE_UI    ? RD_VS_SPRITE_STQ_UI
+           : k.vs == RD_VS_SPRITE_STQ_PLANE_WORLD ? RD_VS_SPRITE_STQ_WORLD
+                                                  : k.vs;
+    k.fs = k.fs == RD_FS_SPRITE_PLANES        ? RD_FS_SPRITE
+           : k.fs == RD_FS_SPRITE_TEXA_PLANES ? RD_FS_SPRITE_TEXA
+           : k.fs == RD_FS_SPRITE_STQ_PLANES  ? RD_FS_SPRITE_STQ
+                                              : k.fs;
+    return k;
+}
+
+static bool inSet(const RdPipeKeyInt *k, const RdPipeKeyInt *set, uint32_t n)
+{
+    for (uint32_t i = 0; i < n; i++) {
+        if (rd__pipe_key_equal(k, &set[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void testSkip(void)
+{
+    const char *env = getenv("ICO_RD_NO_SPRITE_PLANES");
+    const bool envOff = env != NULL && env[0] != '\0' && env[0] != '0';
+    g_rd.profile.vuPlanesFrac = true;
+    g_rd.settings.preset = RD_PRESET_ORIGINAL;
+    g_rd.dstMode = RD_BLEND_EXACT_OFF;
+    g_rd.sceneSx = g_rd.sceneSy = 2.0f;
+    if (envOff) {
+        printf("skip: ICO_RD_NO_SPRITE_PLANES is set; the set with the planes is not checked\n");
+        return;
+    }
+    rd_set_sprite_planes_off(NULL);
+    rd__sprite_planes_init();
+    CHECK(!g_rd.spritePlanesOff && !rd_sprite_planes_off(), "planes off without a reason");
+    const uint32_t n0 = rd__enumerate_reachable(s_keys[0], RD_PIPELINE_REACHABLE_MAX);
+    uint32_t planes0 = 0;
+    for (uint32_t i = 0; i < n0 && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        planes0 += rd__key_is_sprite_planes(&s_keys[0][i]);
+    }
+    CHECK(planes0 > 0, "the set holds no sprite planes key");
+
+    /* the record of the hang (window_host.c window_pipeline_skip) */
+    rd_set_sprite_planes_off(
+        "the driver hung creating them on 2026-10-30, compiler E031.41.03.47; [dev] pipeline_skip");
+    rd__sprite_planes_init();
+    CHECK(g_rd.spritePlanesOff && rd_sprite_planes_off(), "the record did not turn them off");
+    CHECK(strstr(g_rd.spritePlanesWhy, "E031.41.03.47") != NULL, "the reason: %s",
+          g_rd.spritePlanesWhy);
+    const uint32_t n1 = rd__enumerate_reachable(s_keys[1], RD_PIPELINE_REACHABLE_MAX);
+    CHECK(n1 < RD_PIPELINE_REACHABLE_MAX, "set size %u", n1);
+    uint32_t planes1 = 0, missing = 0;
+    for (uint32_t i = 0; i < n1 && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        planes1 += rd__key_is_sprite_planes(&s_keys[1][i]);
+    }
+    for (uint32_t i = 0; i < n0 && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        if (rd__key_is_sprite_planes(&s_keys[0][i])) {
+            const RdPipeKeyInt p = plainOf(s_keys[0][i]);
+            missing += !inSet(&p, s_keys[1], n1);
+        }
+    }
+    CHECK(planes1 == 0, "%u sprite planes keys in the set with them off", planes1);
+    CHECK(missing == 0, "%u planes keys of %u without their plain build in the set", missing,
+          planes0);
+    printf("skip: the set %u keys with the planes (%u planes keys), %u without them\n", n0, planes0,
+           n1);
+
+    /* the draws: no conversion, the plain build, counted */
+    RdDrawPass dp;
+    memset(&dp, 0, sizeof(dp));
+    dp.key.vs = RD_VS_SPRITE_WORLD;
+    dp.key.fs = RD_FS_SPRITE;
+    CHECK(rd__plane_pass(&dp) == 0 && dp.key.vs == RD_VS_SPRITE_WORLD && dp.key.fs == RD_FS_SPRITE,
+          "a sprite pass converted with the planes off");
+    const uint32_t c0 = g_rdPerf.spriteNoPlanes;
+    CHECK(rd__screen_planes_want(NULL, NULL, &dp) == 0, "a sprite pass kept its planes");
+    dp.key.vs = RD_VS_SPRITE_STQ_WORLD;
+    dp.key.fs = RD_FS_SPRITE_STQ;
+    CHECK(rd__screen_planes_want(NULL, NULL, &dp) == 0, "an STQ pass kept its planes");
+    dp.key.fs = RD_FS_FOG;
+    CHECK(rd__screen_planes_want(NULL, NULL, &dp) == 0, "a fog pass");
+    CHECK(g_rdPerf.spriteNoPlanes == c0 + 2, "counted %u of 2", g_rdPerf.spriteNoPlanes - c0);
+
+    /* the clear ([dev] pipeline_skip = "") */
+    rd_set_sprite_planes_off("");
+    rd__sprite_planes_init();
+    CHECK(!g_rd.spritePlanesOff, "the clear left them off");
+    const uint32_t n2 = rd__enumerate_reachable(s_keys[1], RD_PIPELINE_REACHABLE_MAX);
+    uint32_t same = n2 == n0;
+    for (uint32_t i = 0; same && i < n0 && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        same = rd__pipe_key_equal(&s_keys[0][i], &s_keys[1][i]);
+    }
+    CHECK(same, "the set after the clear (%u keys) is not the set with the planes (%u)", n2, n0);
+}
+
 int main(void)
 {
     if (!rd__init_record_only(512, 512)) {
@@ -491,6 +603,7 @@ int main(void)
     testEnum();
     testDrawCb();
     testPrefix();
+    testSkip();
     rd_shutdown();
     return ico_check_summary("rd_vu_frac_test");
 }
