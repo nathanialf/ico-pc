@@ -8,7 +8,6 @@ target_sources(ico_platform PRIVATE
     fps_counter.c
     gpu_hang.c
     hotkeys.c
-    ico_thread.c
     kernel_host.c
     pace_policy.c
     perf_block.c
