@@ -2616,6 +2616,9 @@ typedef struct RdContext {
     RhiBuffer ring[RHI_FRAMES_IN_FLIGHT];
     uint8_t *ringMap[RHI_FRAMES_IN_FLIGHT];
     uint64_t ringCap[RHI_FRAMES_IN_FLIGHT];
+    /* the replays in a row whose need was under a quarter of the slot's ring
+     * (rd__ensure_ring: RD_RING_SHRINK_REPLAYS of them halve it) */
+    uint32_t ringSmall[RHI_FRAMES_IN_FLIGHT];
     uint32_t replayCounter;
     RdScratch scratch[RD_SCRATCH_COUNT];
     /* rd_present.c */
@@ -3475,6 +3478,11 @@ bool rd__stencil_ops_packed(RdStencilWindow *w, uint32_t depth, bool whole, RhiL
  * and the first clear of the targets with a new texture. */
 uint64_t rd__estimate_ring(const RdFrame *f, int keep);
 bool rd__ensure_ring(uint64_t need);
+/* the shrink rule: a slot whose need stayed under a quarter of its ring for
+ * this many replays in a row is remade at half, never under the floor (the
+ * start size, 4 MB, is below it: the floor stops shrinking only) */
+#define RD_RING_SHRINK_REPLAYS 300u
+#define RD_RING_SHRINK_FLOOR (16ull << 20)
 void rd__upload_dirty_textures(void);
 void rd__upload_meshes(const RdFrame *f, int keep);
 void rd__clear_new_targets(void);

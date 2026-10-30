@@ -206,16 +206,38 @@ static bool newRing(uint64_t cap)
    window) the old ring stays and the next frame that fits draws */
 bool rd__ensure_ring(uint64_t need)
 {
-    if (g_rd.ringCap[rd__ring_slot()] >= need) {
+    const uint32_t slot = rd__ring_slot();
+    const uint64_t have = g_rd.ringCap[slot];
+
+    if (have >= need) {
+        /* a ring that grew for a stage change's burst (68 MB needed, 128 MB
+           held) stays in video memory for good, which a 1 GB card pays for
+           in fence waits (issue 126): after RD_RING_SHRINK_REPLAYS replays
+           in a row of this slot needing under a quarter of it, it is
+           remade at half (newRing's deferred destroy covers the old one's
+           frames in flight) */
+        if (need >= have / 4u) {
+            g_rd.ringSmall[slot] = 0;
+        } else if (++g_rd.ringSmall[slot] >= RD_RING_SHRINK_REPLAYS) {
+            g_rd.ringSmall[slot] = 0;
+            if (have / 2u >= RD_RING_SHRINK_FLOOR && newRing(have / 2u)) {
+                rd__log("the upload ring of frame slot %d shrinks to %llu MB (needed under %llu "
+                        "MB for %u replays)",
+                        (int)slot, (unsigned long long)(g_rd.ringCap[slot] >> 20),
+                        (unsigned long long)((have / 4u) >> 20), RD_RING_SHRINK_REPLAYS);
+            }
+        }
         return true;
     }
+    g_rd.ringSmall[slot] = 0;
     uint64_t cap = g_rd.ringCap[rd__ring_slot()] ? g_rd.ringCap[rd__ring_slot()] : 4u << 20;
     while (cap < need) {
         cap *= 2;
     }
     /* a frame that uploads many pack replacements at once (a
-       stage change) can need a ring of hundreds of MB; the ring never
-       shrinks, so its large sizes are named in the log */
+       stage change) can need a ring of hundreds of MB; the large sizes are
+       named in the log, and the ring shrinks again when the need stays low
+       (above) */
     const uint64_t exact = (need + (1u << 20) - 1) & ~(uint64_t)((1u << 20) - 1);
     if (!newRing(cap) && !(exact < cap && newRing(exact))) {
         rd__log("the upload ring of frame slot %d could not grow to %llu MB (this frame needs "
