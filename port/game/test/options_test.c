@@ -590,8 +590,9 @@ static void test_shadow_speed(void)
         CHECK(count_of(text, "v.f[2] *= ico_opt_shadow_speed_factor();") == 3);
         free(text);
     }
-    /* the pad recording's header names the key (it changes the simulation) */
-    text = read_source(ICO_MAIN_HOST_SRC);
+    /* the simulation keys name it (the pad recording's header and a save
+       state's validity: port/platform/sim_keys.c ICO_SIM_KEYS) */
+    text = read_source(ICO_SIM_KEYS_SRC);
     CHECK(text != NULL);
     if (text != NULL) {
         CHECK(count_of(text, "\"gameplay.shadow_speed\",") == 1);
