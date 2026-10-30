@@ -104,6 +104,20 @@ static unsigned int pac_hostCollect(const PacHeader *pk, unsigned int *nb, unsig
     return pac_hostStream(pk, pacHostQw, pacHostQwCap, pacHostBatch, nb, qpv);
 }
 
+/* PC port: a save state's load (port/game/state_host.c).  The scratch
+   stream is a host block the restored game data cannot name: freeLive 1
+   frees this run's before the load takes its backup, freeLive 0 forgets
+   the pointer a restore brought back (another run's, or a freed one); the
+   next packet allocates the block again. */
+void pac_HostStateFixup(int freeLive)
+{
+    if (freeLive) {
+        free(pacHostQw);
+    }
+    pacHostQw = 0;
+    pacHostQwCap = 0;
+}
+
 /* The packet's mesh desc (its stream in pacHostQw); 0 when the packet has
    no batches. */
 static int pac_hostDesc(const PacHeader *pk, RdVuMeshDesc *d, const char *name)
