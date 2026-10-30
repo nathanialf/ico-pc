@@ -86,6 +86,8 @@
 _Static_assert(SDLK_F11 == ICO_HOTKEY_KEY_F11, "hotkeys.h: SDL3's SDLK_F11");
 
 _Static_assert(SDLK_F12 == ICO_HOTKEY_KEY_F12, "hotkeys.h: SDL3's SDLK_F12");
+_Static_assert(SDLK_F5 == ICO_HOTKEY_KEY_F5, "hotkeys.h: SDL3's SDLK_F5");
+_Static_assert(SDLK_F9 == ICO_HOTKEY_KEY_F9, "hotkeys.h: SDL3's SDLK_F9");
 
 _Static_assert(SDL_EVENT_TERMINATING == ICO_SDL_EVENT_TERMINATING &&
                    SDL_EVENT_LOW_MEMORY == ICO_SDL_EVENT_LOW_MEMORY &&
