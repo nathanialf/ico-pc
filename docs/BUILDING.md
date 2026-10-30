@@ -351,6 +351,23 @@ states then move the code pointers as Android and the Apple builds always do
 ([port/PLATFORM.md](port/PLATFORM.md#fibers)). The same reason pins the game's memory arena and
 the game threads' stacks at fixed addresses when the system has them free.
 
+### Game data sections
+
+Save states also copy the game's own globals, so every build puts the game library's writable
+data in sections of its own ([port/PLATFORM.md](port/PLATFORM.md#game-data-ranges);
+`cmake/IcoStateSections.cmake`). With GCC (`linux-x64`, `linux-arm64`, `win-x64` and the presets
+inheriting them) the archive `libico_game.a` is rewritten by the toolchain's `objcopy` as the last
+step of making it: the system's binutils on Linux (installed with gcc), and
+`x86_64-w64-mingw32-objcopy` from `tools/toolchain/mingw-gcc` for Windows (CMake finds both as
+`CMAKE_OBJCOPY`; configuring stops when there is none). The clang presets (`linux-x64-clang`,
+`win-x64-clang`, Android, macOS, iOS) need no tool: a pragma in a header forced into every game
+source names the sections (`port/platform/game_data_sections.h`), since llvm-objcopy cannot rename
+PE sections and Apple's toolchain has no objcopy. The Windows programs carry the game's
+zero-filled data in the `.exe` (about 5.5 MB more), because neither Windows linker keeps a
+renamed zero-filled section between the markers that bound the range. A build where the sections
+did not come out right turns save states off at start-up with a line in the log, and the
+`game_data_range` and `game_data_ranges_binary` tests fail.
+
 At run time, the environment variable `ICO_TTY` (any value) turns on the
 game's `scePrintf` output on stdout, which the retail game sent to the
 development kit's TTY; it is off otherwise (`port/platform/kernel_host.c`,
