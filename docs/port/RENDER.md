@@ -974,7 +974,8 @@ start-up activity file then says `set: careful`, so an end inside the careful se
 start lazy rather than careful again. When the budget stops the set (`rd_pipelines_lazy_on`), the
 rest of the run is recorded as a lazy run's for that start only
 (`ico_diag_startup_activity_budget_stop`); when the system's low-memory signal stopped it, as a lazy
-run whose next start makes no set ([PLATFORM.md](PLATFORM.md#diagnostics)).
+run whose next start makes no set ([PLATFORM.md](PLATFORM.md#diagnostics)). Sprite planes last and
+`[dev] pipeline_skip`: [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes).
 
 With the set made, a pipeline a draw needs later is a key the set did not hold, made on the thread
 that draws while the replay waits; on a driver that takes seconds a pipeline (up to 3.4 s for a VU
