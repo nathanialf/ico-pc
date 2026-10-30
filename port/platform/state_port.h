@@ -29,6 +29,16 @@
  *   door_grace.c    the doorway fix's arm and grace
  *   gfx_null.c      the DMA channel register blocks
  *   host_loop.c     the vsync count and the next field
+ *   audio_host.c    the audio side (ICO_STATE_AUDIO, copied under the
+ *                   audio lock): the SPU2's state (scanned: its DMA and IRQ
+ *                   callbacks), the libsd layer's time and effect
+ *                   attributes, the gain tags and cached volumes, the
+ *                   SNDN2DRV host's pages and carried packets (scanned),
+ *                   the stream driver's voices, queue, staging and PCM
+ *                   channels, the sync path's vsync count
+ *   sound.c         the EE sequencer's .bss (sce/libsndn2, compiled into the
+ *                   sound library, outside the game data ranges; AUDIO, the
+ *                   pointer blocks scanned)
  *
  * Not registered: the scheduler's tables (ico_sched_state_save/restore
  * move their pointers themselves: a scan of them here would move them
@@ -60,5 +70,9 @@ int ico_pad_script_state_register(void);   /* port/input/pad_script.c */
 int ico_door_grace_state_register(void);   /* port/game/door_grace.c */
 int ico_gfx_null_state_register(void);     /* port/null/gfx_null.c */
 int ico_host_loop_state_register(void);    /* host_loop.c */
+/* port/audio/audio_host.c (audio_host.h): the SPU2, the libsd layer, the
+   gain tags, the SNDN2DRV host and its streams, the sync path's count */
+int ico_audio_state_register(void);
+int ico_sound_state_register(void); /* sce/libsndn2/sound.c: the EE sequencer's .bss */
 
 #endif /* ICO_PLATFORM_STATE_PORT_H */
