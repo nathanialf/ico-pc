@@ -101,7 +101,8 @@ memory the game was using.
 
 On a phone or a handheld the system tells the game when the device itself
 runs low on memory, and the game also checks how much memory the device has
-free (it stops below about 17 % of the device's memory, at least 1.5 GB;
+free (it stops below about 17 % of the device's memory, and at least 1.5 GB
+on a device with more than 8 GB;
 `pipeline_memory_floor_mb` under `[dev]` in `config.toml` sets that in MB,
 0 turns the check off). If either happens while the game prepares its graphics,
 the game stops preparing, goes on to the title and prepares the rest the

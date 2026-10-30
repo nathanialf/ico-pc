@@ -18,7 +18,10 @@ long ico_memory_floor_mb(long total_mb, long setting_mb)
         return setting_mb;
     }
     pct = total_mb > 0 ? total_mb * ICO_MEMORY_FLOOR_PERCENT / 100L : 0;
-    return pct > ICO_MEMORY_FLOOR_MIN_MB ? pct : ICO_MEMORY_FLOOR_MIN_MB;
+    if (total_mb > ICO_MEMORY_FLOOR_MIN_ABOVE_MB && pct < ICO_MEMORY_FLOOR_MIN_MB) {
+        return ICO_MEMORY_FLOOR_MIN_MB;
+    }
+    return pct;
 }
 
 int ico_memory_floor_stops(long avail_mb, long total_mb, long setting_mb)

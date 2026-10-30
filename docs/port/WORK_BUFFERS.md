@@ -937,8 +937,10 @@ batch's note until one is left). On Android the note goes to the disc before the
 of the usual one, the set asks `ico_diag_low_memory_stop`, which now also reads MemAvailable
 (`ico_diag_device_memory`, the "device N MB available of T MB" words): under the floor the set stops
 as at the system's low-memory signal (the rest made on first use, `set: stopped at the system's
-low-memory signal (<words>)` in the activity file, the next start lazy). The floor is the larger of
-1536 MB and 17 % of MemTotal (`port/platform/memory_floor.c`); `[dev] pipeline_memory_floor_mb` sets
+low-memory signal (<words>)` in the activity file, the next start lazy). The floor is 17 % of
+MemTotal, at least 1536 MB on a device of more than 8 GB (8192 MB) only (`port/platform/memory_floor.c`;
+a 4 GB phone's floor is 696 MB, a 3 GB one's 522 MB: with the game running such a phone has 0.8 to
+1.5 GB available, so an absolute 1536 MB stopped every start-up set there); `[dev] pipeline_memory_floor_mb` sets
 it in MB, 0 turns it off (exported as `ICO_PIPELINE_MEMORY_FLOOR_MB`). The lines:
 
     ico_pc: pipelines: the start-up set stopped at N MB available of T MB (floor F MB): the rest made on first use
