@@ -1059,7 +1059,7 @@ static void dynamicCell(const Ctx *c)
         dss[i].depthCompare = cases[i].cmp;
         pipelineDesc(c, c->psColor, CF, DF, &cases[i].b, &dss[i], "dyn static", 0u, &sd[i]);
     }
-    RhiPipelineBatch one = {NULL, NULL, NULL, 0, 1};
+    RhiPipelineBatch one = {NULL, NULL, NULL, 0, 1, NULL, NULL};
     const uint32_t made = rhi_create_pipelines(sd, NCASE, ps, &one);
     rhi_test_log("%s: dynamic state: the static cells' %u of %u pipelines on %u thread%s "
                  "(maxThreads 1)\n",
@@ -1391,7 +1391,7 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     RhiPipeline batchPipe[8];
     float batchMs[8];
     BatchWait bw = {0, 0, 0};
-    RhiPipelineBatch batch = {batchWait, &bw, batchMs, 0, 0};
+    RhiPipelineBatch batch = {batchWait, &bw, batchMs, 0, 0, NULL, NULL};
     pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsDecr, "stencilDecr", 0u, &batchDesc[0]);
     pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsReplace, "stencilRep", 0u, &batchDesc[1]);
     pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsIncr, "stencilIncr", 0u, &batchDesc[2]);
