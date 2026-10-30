@@ -1674,6 +1674,20 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
     if (!g_rd.hasDevice || s_createStopped || cacheFull(k)) {
         return (RhiPipeline){0};
     }
+    if (g_rd.spritePlanesOff && rd__key_is_sprite_planes(k)) {
+        /* issue 161: never created on this device (rd__plane_pass hands
+           out none; a key that still comes is drawn as nothing, said once) */
+        static bool said;
+        if (!said) {
+            char w[96];
+            said = true;
+            keyWords(k, w, sizeof(w));
+            rd__log("pipelines: %s asked for with the sprite planes builds off (%s): not created, "
+                    "its draw skipped",
+                    w, g_rd.spritePlanesWhy);
+        }
+        return (RhiPipeline){0};
+    }
     activityCreating(k);
     RhiStats st0, st1;
     rhiPipeCounts(&st0);
@@ -1882,6 +1896,31 @@ static bool policySet(void)
            s_setPolicy.cacheEachBatch;
 }
 
+/* the careful policy in force: one thread, the cache written after each
+ * batch (rd_pipeline_policy_careful, or a policy like it) */
+static bool carefulSet(void)
+{
+    return s_setPolicy.cacheEachBatch && s_setPolicy.maxThreads == 1u;
+}
+
+/* The careful set's order (issue 161): the sprite planes builds after
+ * every other key, in their own order, so a driver that stops in one has
+ * made and cached the rest of the set first; the count moved */
+static uint32_t planesLast(RdPipeKeyInt *keys, uint32_t m)
+{
+    static RdPipeKeyInt tail[RD_PIPELINE_CACHE_MAX];
+    uint32_t w = 0, t = 0;
+    for (uint32_t i = 0; i < m; i++) {
+        if (rd__key_is_sprite_planes(&keys[i])) {
+            tail[t++] = keys[i];
+        } else {
+            keys[w++] = keys[i];
+        }
+    }
+    memcpy(keys + w, tail, (size_t)t * sizeof(keys[0]));
+    return t;
+}
+
 /* "batch 8, threads 1, budget 128 MB, cache each batch": the policy's
  * values (0 threads: the backend's; 0 MB: no budget) */
 static void policyText(char *out, size_t size)
@@ -2052,6 +2091,12 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
      * after the batch: their batches run on threads at once. */
     const bool perPipe = times != NULL && s_lowMemoryFn != NULL && s_setPolicy.cacheEachBatch &&
                          s_setPolicy.maxThreads == 1u;
+    /* the careful start-up set makes each sprite planes build a batch of
+     * its own (issue 161, rd_precreate_pipelines puts them last): its note
+     * names that one pipeline, so an end inside it is the family's for the
+     * next start (port/platform/pipeline_skip.h), and the cache is written
+     * before it */
+    const bool planesAlone = times != NULL && carefulSet();
     /* a failed key's line: when it was asked for */
     const char *when = times != NULL ? "in the start-up set" : "in a replay's gathered keys";
     PreBatch pb = {0, m, 0, 0};
@@ -2078,6 +2123,14 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             const int kind = k->dst != RHI_DST_READ_NONE;
             if (dstKind >= 0 && kind != dstKind) {
                 break;
+            }
+            const bool planes = rd__key_is_sprite_planes(k);
+            if (planes && g_rd.spritePlanesOff) {
+                continue; /* issue 161: off for the run, never created */
+            }
+            const bool alone = planesAlone && planes;
+            if (alone && nb > 0) {
+                break; /* the next batch is this key alone */
             }
             const uint32_t at = probeKey(k, &found);
             if (found) {
@@ -2109,6 +2162,10 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             bIdx[nb] = i;
             dstKind = kind;
             nb++;
+            if (alone) {
+                i++;
+                break;
+            }
         }
         if (nb > 0) {
             char note[sizeof(s_batchNote)];
@@ -2363,6 +2420,17 @@ uint32_t rd_precreate_pipelines(void)
     if (s_lowMemoryFn != NULL) {
         rd__log("pipelines: the start-up set stops at the system's low-memory signal (asked after "
                 "each batch), the rest made on first use");
+    }
+    if (carefulSet()) {
+        /* issue 161: the sprite planes builds last, each a batch of its
+           own (createKeys), the cache written before each */
+        const uint32_t moved = planesLast(keys, m);
+        if (moved) {
+            rd__log("pipelines: the careful set makes its %u sprite planes builds last, one a "
+                    "batch (the cache written before each; a start that ends inside one leaves "
+                    "the family out from then on)",
+                    moved);
+        }
     }
     createKeys(keys, m, false, &times, &c);
     if (c.stop) {
