@@ -507,7 +507,8 @@ set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps" CACHE PATH
 # booleans, no any()/all(), no boolean select) and opcode envelope (no loop,
 # no dot, no logical-not-equal, no undef), every module within its size
 # budget (the sizes and the shape census printed), no array-typed values, no
-# local arrays in a vertex shader
+# local arrays in a vertex shader, every header at SPIR-V 1.0 (the Vulkan 1.0
+# target)
 if(Python3_FOUND AND EXISTS "${ICO_DEPS_DIR}/dxc/bin/dxc")
     add_test(NAME spirv_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_spirv.py" --sizes "${CMAKE_BINARY_DIR}/shaders")
 endif()
