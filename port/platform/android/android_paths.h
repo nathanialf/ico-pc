@@ -14,6 +14,7 @@
  *   <files>/ico-jpn.o2r                the same of the Japanese disc
  *   <files>/memcard/                   the memory cards
  *   <files>/memcard-preview/           the August 2001 preview disc's own card
+ *   <files>/states/<slug>/            save states (slotN.ics and slotN.png, per disc)
  *   <files>/logs/ico-pc.log            the log (+ perf csv, pad recordings)
  *   <files>/dumps/
  *   <files>/drivers/                   driver zips dropped by hand (Add from the
