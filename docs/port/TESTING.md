@@ -365,7 +365,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `mouse_camera_test.c`: the mouse camera's speed and range for the hand camera (`mouse_camera`).
 - `pad_script_test.c`: the `--pad-script` reader and what the null pad then shows the game's pad
   code (`pad_script`).
-- `touch_test.c`: the touch overlay's layouts over a table of screens (`test/touch_shapes.h`), the
+- `touch_test.c`: the menu row tap's finger mark (`touch_eaten.h`: let go at its lift, when the touch editor opens or closes, and at a new DOWN of its id, so the next finger 0 reaches the controls); the touch overlay's layouts over a table of screens (`test/touch_shapes.h`), the
   sticks and buttons, every default layout's alpha 1 and `editGen` 0, an Off L2 pressing nothing,
   and `test_hidden_off`: a Hidden Start pressing Start and an Off one nothing, a Hidden stick and
   look pad starting and Off ones not, `ico_touch_takes`, `ico_touch_ctl_state`, and the menus taking

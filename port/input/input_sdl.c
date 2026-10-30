@@ -24,6 +24,7 @@
 #include "mouse_look.h"
 #include "pointer.h"
 #include "touch.h"
+#include "touch_eaten.h"
 #include "touch_edit.h"
 #ifdef __ANDROID__
 #include "android/host_android.h" /* port/platform/android: the phone vibrator */
@@ -545,9 +546,9 @@ int ico_input_sdl_touch_overlay(IcoTouchOverlay *out)
 static uint64_t s_tapFinger;
 static int s_tapDown;
 /* the finger a row tap took from a Hidden control: the controls never see
-   it, down to its lift */
-static uint64_t s_eatenFinger;
-static int s_eaten;
+   it, down to its lift (touch_eaten.h; dropped with the click, review
+   finding 4) */
+static IcoTouchEaten s_eat;
 
 static void touch_tap_drop(void)
 {
@@ -555,6 +556,7 @@ static void touch_tap_drop(void)
         s_tapDown = 0;
         ico_pointer_button(0);
     }
+    ico_touch_eaten_drop(&s_eat);
 }
 
 /* the disc's confirm control: Cross, Circle on the Japanese and Korean
@@ -576,6 +578,9 @@ static int touch_menu_tap(const SDL_Event *e, int kind)
     static int s_tapLogged;
     const uint64_t id = (uint64_t)e->tfinger.fingerID;
     const int mode = ico_touch_effective_mode(s_bind.touch_mode, s_raw.gamepads, phone);
+    /* the row's finger (its lift or cancel lets it go); a DOWN of its id
+       is a new finger */
+    const int eaten = ico_touch_eaten_event(&s_eat, id, kind);
 
     if (kind == ICO_TOUCH_DOWN) {
         if (s_tapDown) {
@@ -618,8 +623,7 @@ static int touch_menu_tap(const SDL_Event *e, int kind)
                 if (cover == ICO_TOUCH_COVER_SHOWN || !onRow) {
                     return 0;
                 }
-                s_eaten = 1;
-                s_eatenFinger = id;
+                ico_touch_eaten_take(&s_eat, id);
             }
         }
         if (!s_tapLogged) {
@@ -638,7 +642,7 @@ static int touch_menu_tap(const SDL_Event *e, int kind)
         s_tapDown = 0;
         ico_pointer_button(0);
     }
-    return s_eaten && id == s_eatenFinger;
+    return kind == ICO_TOUCH_DOWN ? s_eat.on && s_eat.finger == id : eaten;
 }
 
 static void touch_finger(const SDL_Event *e, int kind)
@@ -653,9 +657,6 @@ static void touch_finger(const SDL_Event *e, int kind)
         return;
     }
     if (touch_menu_tap(e, kind)) {
-        if (kind == ICO_TOUCH_UP || kind == ICO_TOUCH_CANCEL) {
-            s_eaten = 0;
-        }
         return;
     }
     ico_touch_event(&s_touch, (uint64_t)e->tfinger.fingerID, e->tfinger.x, e->tfinger.y, kind,
@@ -664,8 +665,7 @@ static void touch_finger(const SDL_Event *e, int kind)
 
 static void touch_cancel(void)
 {
-    touch_tap_drop();
-    s_eaten = 0;
+    touch_tap_drop(); /* and the row's finger */
     if (s_touchEdit.active) {
         /* focus lost: the editor drops a drag and keeps its edits */
         ico_touch_edit_event(&s_touchEdit, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
@@ -1061,8 +1061,10 @@ IcoTouchEditor *ico_input_sdl_touch_editor(void)
 void ico_input_sdl_touch_edit_begin(void)
 {
     /* the mapper lets go of every finger first: none stays pressed under
-       the editor, nor the menus' tap click (its lift goes to the editor) */
+       the editor, nor the menus' tap click (its lift goes to the editor),
+       nor the row's mark on that finger (review finding 4) */
     touch_tap_drop();
+    ico_touch_eaten_drop(&s_eat);
     ico_touch_event(&s_touch, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
     ico_touch_edit_begin(&s_touchEdit, ico_input_live_touch_edits(), s_touchLayout.rule);
     touch_rebuild();
@@ -1072,8 +1074,9 @@ void ico_input_sdl_touch_edit_end(int keep)
 {
     ico_touch_edit_end(&s_touchEdit, keep);
     /* a finger still down (the one that tapped Done) is not the mapper's,
-       nor a menu tap's */
+       nor a menu tap's, nor the row's mark */
     touch_tap_drop();
+    ico_touch_eaten_drop(&s_eat);
     ico_touch_event(&s_touch, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, SDL_GetTicksNS());
     touch_rebuild();
 }

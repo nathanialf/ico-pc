@@ -7,13 +7,16 @@
  * deflection, dead zone, the run ring), the D-pad, face buttons under two
  * fingers, a finger sliding off a button, cancel, the look pad's decay,
  * hiding after 5 s and with a gamepad, the fades, and the merged pad
- * through ico_input_vpad_to_frame with the stick fix off and on.
+ * through ico_input_vpad_to_frame with the stick fix off and on; the menu
+ * row tap's finger mark (touch_eaten.h) let go when the touch editor opens
+ * or closes, so a reused finger id reaches the controls (review finding 4).
  */
 #include <stdio.h>
 #include <string.h>
 #include "input.h"
 #include "pointer.h"
 #include "touch.h"
+#include "touch_eaten.h"
 #include "touch_edit.h"
 #include "touch_shapes.h"
 
@@ -1589,8 +1592,50 @@ static void test_menu_tap_cover(void)
     ico_pointer_set_row_probe(NULL);
 }
 
+/* Review finding 4: the row tap's finger mark (touch_eaten.h, as
+   input_sdl.c drives it).  The row eats finger 0: its MOVE and UP stay from
+   the controls, and the UP lets it go.  A row tap that opens the touch
+   editor: its lift goes to the editor, the editor's opening (and closing)
+   drops the mark, so the next finger 0 reaches the controls for its DOWN,
+   MOVE and UP.  A DOWN of the marked id is a new finger.  Another finger's
+   events and cancel are never the row's. */
+static void test_menu_tap_eaten(void)
+{
+    IcoTouchEaten e;
+
+    memset(&e, 0, sizeof(e));
+    /* the row eats finger 0 down to its lift */
+    CHECK(!ico_touch_eaten_event(&e, 0, ICO_TOUCH_DOWN));
+    ico_touch_eaten_take(&e, 0);
+    CHECK(ico_touch_eaten_event(&e, 0, ICO_TOUCH_MOVE));
+    CHECK(!ico_touch_eaten_event(&e, 1, ICO_TOUCH_MOVE));
+    CHECK(!ico_touch_eaten_event(&e, 1, ICO_TOUCH_CANCEL));
+    CHECK(ico_touch_eaten_event(&e, 0, ICO_TOUCH_UP));
+    CHECK(!e.on);
+    CHECK(!ico_touch_eaten_event(&e, 0, ICO_TOUCH_DOWN));
+    CHECK(!ico_touch_eaten_event(&e, 0, ICO_TOUCH_UP));
+    /* the tap opens the editor: its lift goes there, the mark is dropped
+       (ico_input_sdl_touch_edit_begin, touch_tap_drop) */
+    ico_touch_eaten_take(&e, 0);
+    ico_touch_eaten_drop(&e); /* the editor opens */
+    ico_touch_eaten_drop(&e); /* ... and closes */
+    CHECK(!ico_touch_eaten_event(&e, 0, ICO_TOUCH_DOWN));
+    CHECK(!ico_touch_eaten_event(&e, 0, ICO_TOUCH_MOVE));
+    CHECK(!ico_touch_eaten_event(&e, 0, ICO_TOUCH_UP));
+    /* the mark kept by a lost lift: a DOWN of its id is a new finger */
+    ico_touch_eaten_take(&e, 0);
+    CHECK(!ico_touch_eaten_event(&e, 0, ICO_TOUCH_DOWN));
+    CHECK(!ico_touch_eaten_event(&e, 0, ICO_TOUCH_MOVE));
+    CHECK(!ico_touch_eaten_event(&e, 0, ICO_TOUCH_UP));
+    /* its cancel lets it go too */
+    ico_touch_eaten_take(&e, 2);
+    CHECK(ico_touch_eaten_event(&e, 2, ICO_TOUCH_CANCEL));
+    CHECK(!e.on);
+}
+
 int main(void)
 {
+    test_menu_tap_eaten();
     test_layouts();
     test_fold_rules();
     test_stick();
