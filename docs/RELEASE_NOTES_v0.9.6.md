@@ -14,7 +14,7 @@
 - The pause menu's Yorda captured count no longer counts one capture twice.
 - On the North American disc and the 2001 preview discs, the rescue achievement and the captured count work.
 - On the June 2001 demo, the pause menu's deaths count now counts a game over.
-- After a brief hitch the game no longer stays at 30 frames per second for a minute or more with Frame rate 60 and vsync on; it tries 60 again within two seconds.
+- After a brief hitch the game no longer stays at 30 frames per second for a minute or more with Frame rate 60 and vsync on; it tries 60 again after about two seconds, and if that try fails, again after longer waits (up to about 16 seconds, 20 on the European disc).
 - Direct3D 11 draws the world with far fewer draw calls, as the other graphics APIs have since v0.9.4; rooms with many objects run faster on slower processors.
 - On phones with Mali graphics, rooms with many objects run faster.
 - On Windows the log now reports how much video memory the game uses against the card's budget, and the upload memory is given back after large loads (helps cards with 1 GB).
