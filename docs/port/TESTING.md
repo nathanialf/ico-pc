@@ -1968,8 +1968,13 @@ phi, select or copy), no vertex shader keeps a local array
 ([SHADERS.md](SHADERS.md#the-envelope)) and every module's header is SPIR-V 1.0 (the Vulkan 1.0
 target, [SHADERS.md](SHADERS.md)); the log lists each module's words, instructions, blocks,
 phis, loops, dot products, vector comparisons, boolean selects and `any()`. The vertex pre-pass's
-entries (`vu_*_pre_vs`) need no plain variant and take the plain budget. `python3 -I tools/check_spirv.py --sizes <build>/shaders` runs it by
-hand.
+entries (`vu_*_pre_vs`) need no plain variant and take the plain budget. Its `intlane` gate fails
+a `vu_*` module with an `OpBitcast` of a float that a buffer load produced (an integer lane read
+through a float load: a bone address, mark byte, card bit, table index or VuCB `uint4` vector whose
+bits are a denormal float a driver may flush; issues 163/164,
+[SHADERS.md](SHADERS.md#integer-lanes-never-through-a-float-load)): the shaders with those lanes
+read through `float4` loads give 84 findings, the current ones none. `python3 -I tools/check_spirv.py --sizes <build>/shaders` runs it by
+hand; on single files (`check_spirv.py a.spv b.spv`) it skips the variants gate.
 
 ## Which tests a change needs
 

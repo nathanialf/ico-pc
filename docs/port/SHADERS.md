@@ -191,8 +191,8 @@ number the RHI slot (`port/shaders/common.hlsli`, header comment; `port/rhi/rhi.
 | --- | --- | --- |
 | 0 | `b0` | FrameCB, once per frame |
 | 1 | `b1` | DrawCB, per draw or post pass (crt.hlsl's CrtCB takes the same slot) |
-| 1 | `b2`, `b3`, `t0`, `t4` | the VU programs' VuCB and VuBoneCB (bones, card bits), the VU vertex stream, and the pre-passes' record (`vu_rec_buf`, `StructuredBuffer<uint4>`, three planes); VuCB and the record are visible to the pixel stage too (`vu_ps` reads the planes) |
-| 1 | `t5` | the upload ring from the replay's VU base on (`vu_ring`, `StructuredBuffer<float4>`, vertex stage; `rd_replay_vu.c` `s_ringBase`, 256-aligned, after the uploads): the pre-pass's batch builds (`vu_X_batch_pre_vs`, `ICO_VU_PRE_BATCH`) read each entry's VuCB and VuBoneCB and the batch's table there, the table found through DrawCB's `aux0` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)); the draw merge's builds (`vu_X_merge_vs`, `vu_X_merge_plain_vs`, `vu_merge_main_vs`, `ICO_VU_MERGE`) read each draw's VuCB and VuBoneCB and the run's table there, the table found through b2's `mark.w` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)); every VU group binds it (Direct3D 11's leave it unbound only with the merge off: no batch module there), the other builds do not read it |
+| 1 | `b2`, `b3`, `t0`, `t4` | the VU programs' VuCB and VuBoneCB (bones, card bits; `uint4 vu_bone[240]`), the VU vertex stream (`vu_stream`, `StructuredBuffer<uint4>`), and the pre-passes' record (`vu_rec_buf`, `StructuredBuffer<uint4>`, three planes), every one declared `uint4` so integer lanes are read as integers ([Integer lanes](#integer-lanes-never-through-a-float-load)); VuCB and the record are visible to the pixel stage too (`vu_ps` reads the planes) |
+| 1 | `t5` | the upload ring from the replay's VU base on (`vu_ring`, `StructuredBuffer<uint4>`, vertex stage; `rd_replay_vu.c` `s_ringBase`, 256-aligned, after the uploads): the pre-pass's batch builds (`vu_X_batch_pre_vs`, `ICO_VU_PRE_BATCH`) read each entry's VuCB and VuBoneCB and the batch's table there, the table found through DrawCB's `aux0` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)); the draw merge's builds (`vu_X_merge_vs`, `vu_X_merge_plain_vs`, `vu_merge_main_vs`, `ICO_VU_MERGE`) read each draw's VuCB and VuBoneCB and the run's table there, the table found through b2's `mark.w` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)); every VU group binds it (Direct3D 11's leave it unbound only with the merge off: no batch module there), the other builds do not read it |
 | 2 | `t1`..`t4`, `s1`..`s4` | textures and samplers |
 | 3 | `u0` | the destination read's target (`_dstrov`); `_dstatt` reads binding 16 of set 3 as an input attachment |
 
@@ -368,6 +368,57 @@ the code and a CPU sweep against the plain operator in `gs_math_test`:
 - **A divide by a per-draw float that is often 1** is skipped in a branch when it is 1
   (`fx_sprite_ps`'s coverage, `fp / ts` at scale 1): the reciprocal of 1.0 is 1.0 and `x * 1.0`
   is `x`.
+
+## Integer lanes: never through a float load
+
+The VU kept integers in its float registers, and the port's buffers mix the two the same way: the
+cluster's weight qword carries two bone addresses (`bone * 4 + 16`, 16..252) beside two weights
+(`port/shaders/vu_skin.hlsl`), the mark bytes follow a mesh's vertices in the stream
+(`vu_kick_marks`), the card bits follow the bones in VuBoneCB (`vu_strip_card`), and the pre-pass
+batches' and the draw merge's tables and each entry's VuCB `uint4` vectors (`vu_draw`, `vu_batch`,
+`vu_strip`, `vu_mark`, `vu_rec`, `vu_tri`) lie in the upload ring (`vu_ring`). Read through a
+`float4` load, those words are floats whose bits are denormals (16 is 2.2e-44, 252 is 3.5e-43; a
+table index or a flags word is one too) until `asuint` turns them back. Vulkan leaves fp32 denormal
+handling to the implementation (`VK_KHR_shader_float_controls`: `shaderDenormFlushToZeroFloat32`,
+`shaderDenormPreserveFloat32`), and a driver's compiler may move a loaded float through a path that
+flushes it before the bitcast: then the address, mark, table index or flags word reads 0. A driver
+may flush them (the Mali-G52 of issue 164 is the suspected case; its float-controls properties are
+not in the reporter's log); lavapipe (LLVM) keeps them, which is why every replay on the build host
+was clean while a Mali-G52 drew merged runs as giant polygons and stripes (issue 164: the merge
+builds were the only path reading the ring's tables and records through float loads, the draws alone
+through VuCB's typed `uint4` fields drew right). A skinned vertex whose bone address reads 0 takes
+the last bone slot's matrix (`vu_bone_mat` clamps `0 - 16` to 236), a vertex thrown across the
+picture: the shape of issue 163's sliver, which reads its addresses through `asuint(wt.x)` (not
+proven on the device: one vertex a frame is odd for a flush that does not depend on the data).
+
+So every buffer a VU shader reads words from is declared `uint4`: `vu_stream` (t0) and `vu_ring`
+(t5) as `StructuredBuffer<uint4>`, VuBoneCB's `vu_bone` as `uint4[240]`
+(`port/shaders/vu_common.hlsli`, "Integer lanes"). An integer lane is read as loaded
+(`vu_stream_u`, `VU_BONE_BITS`, the tables and VuCB vectors straight from `vu_ring`); a float lane
+through `asfloat` (`vu_stream_f`, `VU_MEM`, `VU_TICK`, `VU_BONE`, `vu_lo`, `vu_hi`). An `OpBitcast`
+from an integer to a float is free and keeps the bits; no integer lane passes through a float value.
+The particle's alpha test (`(bits & 0x7F800000) == 0`, a zero or denormal alpha skips the sprite)
+reads the bits as loaded too. The buffers' bytes are unchanged (the CPU writes the same words:
+`port/render/rd_replay_vu.c`, `port/render/rd_mesh.c`), and on a device that keeps denormals every
+word computed is the same, so the pictures are byte-identical there. The `asfloat` of the float
+lanes costs up to 316 words a module (`vu_lit_merge_vs` 52,266), the record stages and main
+shaders are smaller for it (a bitcast less per table read), and the pixel modules are the same word
+for word.
+
+The values passed from the vertex to the pixel stage are floats with float meaning: `VuVSOut.r.w`,
+the fused scissor pair's mark, is 1.0 or 0.0 on a `nointerpolation` varying, and the no-planes
+twins' mark is the plane distance -1.0 (`vu_fused_out`); the record's words go between stages as
+`nointerpolation uint4` (`VuPreOut`). The 2D vertex shaders read their integer inputs through
+integer vertex formats (`port/render/rd_pipeline.c` `pipelineDesc`: `RHI_VTX_U16x2_UINT`,
+`RHI_VTX_U32x1`, `RHI_VTX_U8x4_UINT` into `uint` inputs of `sprite.hlsl`).
+
+`tools/check_spirv.py`'s `intlane` gate holds every `vu_*` module to it: no `OpBitcast` of a float
+scalar or vector that an `OpLoad` of a float type produced from a storage or uniform buffer,
+directly or through `OpCompositeExtract`, `OpVectorShuffle`, `OpCopyObject`,
+`OpCompositeConstruct`, `OpCompositeInsert`, `OpPhi` or `OpSelect`. Over the same shaders with
+those lanes read through `float4` loads it reports 84 findings in 56 modules (the ring's tables
+and VuCB vectors, the stream's bone addresses, marks and particle alpha, VuBoneCB's card bits);
+over the current shaders, none.
 
 ## The envelope
 
@@ -550,8 +601,8 @@ record stages in place of the program entries, none over 16,515 words.
 The draw merge's builds (`ICO_VU_MERGE`: `vu_X_merge_vs` and `vu_X_merge_plain_vs` of the seven
 mesh and grid programs but the skinned ones, `vu_merge_main_vs`;
 [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) are the same entries reading VuCB and VuBoneCB
-from t5 through a four-step search, about 500 words above each: `vu_lit_merge_vs` 51,950 of
-`VS_BUDGET`, `vu_lit_merge_plain_vs` 23,904 and `vu_merge_main_vs` 6,827 of the plain budget (a
+from t5 through a four-step search, about 500 words above each: `vu_lit_merge_vs` 52,266 of
+`VS_BUDGET`, `vu_lit_merge_plain_vs` 24,124 and `vu_merge_main_vs` 6,755 of the plain budget (a
 `_merge_plain_vs` and a `_main_vs` are held to it), none with a finding. With the merge on (every
 device but Direct3D 11) a device compiles them in place of the plain builds of the same entries,
 whose modules the merge leaves unchanged word for word (`VU_MERGE_ENTRY(vid)` is `vid` there).

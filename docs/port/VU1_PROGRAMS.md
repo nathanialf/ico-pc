@@ -386,13 +386,15 @@ vertex base are unchanged), and the items of a pass are ordered by stage key, Fr
 up to 64 items with the same three is one point draw through the stage's batch build,
 `vu_X_batch_pre_vs` (the ten `vu_X_pre_vs` entries and the four record stages compiled with
 `ICO_VU_PRE_BATCH`). The batch's table, one `uint4` an item (x the item's first `SV_VertexID` in the
-draw, y its VuCB's float4 index in the ring, z its VuBoneCB's, w 0), is copied into the ring, and
-the batch's DrawCB (slot b1, which no record stage reads otherwise) carries the table's float4 index
+draw, y its VuCB's qword index in the ring, z its VuBoneCB's, w 0), is copied into the ring, and
+the batch's DrawCB (slot b1, which no record stage reads otherwise) carries the table's qword index
 in `aux0.x` and its length in `aux0.y`. Group 1 binds the ring once more at t5, from the replay's VU
 base (`s_ringBase`: the ring's offset, 256-aligned, when `rd__vu_prepass` begins, after the texture
 and mesh uploads, so a frame whose texture uploads grow the ring past the device's largest storage
 range still reaches every block the VU draws put after them) to that range (`ringRange`), as a
-`StructuredBuffer<float4>` (`port/shaders/vu_common.hlsli` (`vu_ring`)); every index into it counts
+`StructuredBuffer<uint4>` (`port/shaders/vu_common.hlsli` (`vu_ring`): the tables and VuCB's
+`uint4` vectors read as integers, the float vectors through `asfloat`;
+[SHADERS.md](SHADERS.md#integer-lanes-never-through-a-float-load)); every index into it counts
 from the base. Direct3D 11 never makes a batch module (no pre-pass there) but binds t5 for the
 draw merge (issue 126). A bound storage range is written to the GPU up to the ring's
 written mark at every submit there, so with the merge off (`[dev] vu_merge = false`, or a merge
@@ -409,7 +411,7 @@ modules unchanged word for word). The vertex is then the item's own (`SV_VertexI
 x), and every function runs as in the item's own draw on the same bytes, so each item writes the
 words it wrote alone, at the same texels. The items of a pass write disjoint texels, so their new
 order does not change the record. Skinned (cluster) items batch like the others: their bones are
-read from their VuBoneCB in the ring. The batch builds are 2,350 to 17,244 words, within the
+read from their VuBoneCB in the ring. The batch builds are 2,338 to 17,220 words, within the
 pre-pass entries' plain budget.
 
 An item whose VuCB or VuBoneCB lies past the range t5 binds, or a batch whose table or DrawCB does
@@ -453,7 +455,7 @@ The run is one indexed draw. A run of one draws its own index list. A longer run
 index lists into the ring one after the other: the first draw's values as they are, each later
 draw's raised by `next - lo` (its lowest value `lo` moved to one past the highest value before it),
 so the draws' values are disjoint and in order. A table of one `uint4` a draw goes into the ring
-too: x the draw's first raised value (draw 0: the table's length), y its VuCB's float4 index in t5,
+too: x the draw's first raised value (draw 0: the table's length), y its VuCB's qword index in t5,
 z its VuBoneCB's, w its raise. The VuCB of every draw is copied into the ring as before, and its
 `mark[3]` lane, which nothing else reads, holds the table's index; b2 is bound at the first draw's.
 A draw alone through a merge build gets a table of one (its VuCB, raise 0). The span check of issue
@@ -504,8 +506,12 @@ count of what could join, and the window's 10 s line `VU merge: N draws a replay
 alone (kept apart by pipeline P, texture group T, DrawCB D, split/DATE/dst S, scissor/FrameCB F)`
 (`RdPerfRecord.vuMergeIn`, `vuMergeGpu`, `vuMergeAlone`, and `vuMergeBlocked` per replay: the
 first key on which a draw differed from the one before it in the same pass, the reasons `--stats`
-prints after `blocked by`), so a phone's log says why its draws stay alone. The merge builds are 6,770 to
-51,903 words (`vu_lit_merge_vs`), within their budgets, about 500 words above the plain builds.
+prints after `blocked by`), so a phone's log says why its draws stay alone. The merge builds are 6,755 to
+52,266 words (`vu_lit_merge_vs`), within their budgets, about 550 to 920 words above the plain builds.
+Every table, raise, flags word and VuCB `uint4` vector they read from t5 is loaded as an integer
+(`vu_ring` is `StructuredBuffer<uint4>`): read through a float load, those words are denormal
+floats, which a driver may flush to zero (issue 164 on a Mali-G52;
+[SHADERS.md](SHADERS.md#integer-lanes-never-through-a-float-load)).
 
 ## The fused scissor pair
 
