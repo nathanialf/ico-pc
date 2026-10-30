@@ -244,6 +244,16 @@ records each change you make to them. If it is slow only at one place or
 after one change, say where or which, and send one run that is slow and, if
 you can, one at Resolution 1x for comparison.
 
+## The game stutters on Windows and the log says the video memory is near its budget
+
+On Windows, the lines that start with `window: memory:` in the log end with the video memory the
+game uses and the budget Windows gives it, for example "video memory 870 MB of a budget of 920
+MB". If the log also has a line that says the driver may be paging, the graphics card has run out
+of memory and is swapping to the computer's own memory, which makes the game stop for a moment.
+Lower **Resolution** in Options, and close other programs that use the graphics card (a browser
+with many tabs, other games). Cards with 1 GB of memory are the ones that run into this at 2x or
+higher.
+
 ## White lines along walls while the camera moves
 
 While the camera turns or moves, white or light wedges and lines can show
