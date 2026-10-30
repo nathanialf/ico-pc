@@ -1,0 +1,32 @@
+# port/game/test/state_roundtrip_pad.txt: the state_roundtrip_headless
+# tests' pad (test/state_roundtrip_headless.cmake), with [dev]
+# start_stage=22 on the European disc (st02a WATERFALL: the boy and the girl
+# stand on a ledge, no scene playing). Format: docs/port/INPUT.md "Pad
+# scripts" (port/input/pad_script.h). Buttons: START 0800, R1 0008; the
+# sticks lx ly rx ry, 128 the centre.
+#
+# The stage is loaded by about Main tick 135 (the headless corpus trace's
+# story flags settle there); the game is played from tick 150 on. Every
+# press is 3 ticks long; the pad is released and centred at the save's
+# tick (440) and at the load's (700), so the pad the game reads across the
+# load is the same as at the save.
+#   400  START    the pause menu (systemStatus[5], the pause layout)
+#   440           [dev] state_save_at=440:1: the save, on the pause menu
+#   480  START    the pause menu closed (its fade-in long done)
+#   520  R1       the boy calls the girl: she walks to him
+#   560..619      the right stick to the left: the camera turns
+#   640  R1       the call again
+#   700           [dev] state_hash_at=700 and state_load_at=700:1: the
+#                 hash, then the load back to tick 440 (the pause menu);
+#                 the lines from 480 on play again and the hash at 700
+#                 is taken a second time
+400 0800
+403 0000
+480 0800
+483 0000
+520 0008
+523 0000
+560 0000 128 128 0 128
+620 0000
+640 0008
+643 0000
