@@ -1697,6 +1697,26 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
             ico_host_fatal(log_file(), ICO_WRONG_DISC_TEXT, iso, ico_disc_list_text());
         }
         if (res.unreadable) {
+            /* a program file chosen in the dialog (issue 165: the game's own
+               .exe): say what a disc image is before the usual words */
+            const size_t n = strlen(iso);
+            const int program =
+                (n > 4 && (strcmp(iso + n - 4, ".exe") == 0 || strcmp(iso + n - 4, ".dll") == 0 ||
+                           strcmp(iso + n - 4, ".EXE") == 0)) ||
+                (n > 9 && strcmp(iso + n - 9, ".AppImage") == 0);
+
+            if (program) {
+                ico_host_fatal(log_file(),
+                               "%s is a program, not a disc image.\n"
+                               "\n"
+                               "The disc image is your own copy of the PlayStation 2 disc as a "
+                               "file: a .iso, .chd, or .bin with .cue, of\n"
+                               "%s.\n"
+                               "Choose that file in the dialog, put it next to the program, or "
+                               "copy the earlier version's userdata folder next to this program "
+                               "if you played before.",
+                               iso, ico_disc_list_text());
+            }
             ico_host_fatal(log_file(), ICO_UNREADABLE_DISC_TEXT, iso, ico_disc_list_text());
         }
         ico_host_fatal(log_file(),
