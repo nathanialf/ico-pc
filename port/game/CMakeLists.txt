@@ -311,6 +311,28 @@ if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_achievements)
 endif()
 
+# Save states (port/platform/state.h): state_host.c takes and puts back a
+# state at the host loop's quiescent point (main_host.c polls it), with the
+# slots' files, the picture and the [dev] keys; state_rules.c holds the
+# decisions that need no game (state_rules.h).  Both in the program, either
+# build (the renderer's part of a load under ICO_RD's twin, !ICO_HEADLESS).
+if(TARGET ico_pc)
+    target_sources(ico_pc PRIVATE state_host.c state_rules.c)
+endif()
+
+# state_host: the conditions (each refusal reachable), the result texts, the
+# slots' paths, the [dev] keys' values, the slot listing over a missing, an
+# empty and a filled folder (each validity field changed, a damaged file, a
+# picture) and the thumbnail's size and box filter.  CPU only; the full
+# round trip is state_roundtrip_headless's.
+add_executable(state_host_test test/state_host_test.c state_rules.c)
+target_include_directories(state_host_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(state_host_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(state_host_test PRIVATE ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME state_host COMMAND state_host_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 # The view over a synthetic state, the signals, every achievement's condition
 # through crafted transitions (once, suspended, yorda_safe counting, a version 1 file), the file round
 # trip and the popup rate limit. CPU only.
