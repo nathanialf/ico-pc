@@ -4505,8 +4505,8 @@ static void perf_drain(void)
         auto_res_sample(&r);
         if (r.presented && r.gpuValid) {
             /* the present allowance's GPU gate and budget: a timed
-               replay's GPU time (two replays late), the median of the
-               last 8 (not the replays line's block mean) */
+               replay's GPU span (two replays late; gpuIsSpan true), the
+               median of the last 8 (not the replays line's block mean) */
             s_pres.gpuNs = pace_hist_add(&s_pres.gpuHist, (Uint64)(r.gpuMs * 1e6));
         }
         if (r.presented && r.presentMs > 50.0) {
@@ -5109,11 +5109,11 @@ static void pace_log(Uint64 now)
             s_pres.budgetRefusedAt = s_pres.budgetDropsAt = s_pres.budgetClimbsAt = 0;
             s_pres.budgetClimbRefusalsAt = 0;
         }
-        pace_budget_block_text(b, s_pres.budgetRefusedAt, s_pres.budgetDropsAt,
-                               s_pres.budgetClimbsAt, s_pres.budgetClimbRefusalsAt, s_pres.gpuNs,
-                               rhi_timestamps_supported() ? "GPU not timed yet"
-                                                          : "no GPU timestamps",
-                               budget, sizeof(budget));
+        pace_budget_block_text(
+            b, s_pres.budgetRefusedAt, s_pres.budgetDropsAt, s_pres.budgetClimbsAt,
+            s_pres.budgetClimbRefusalsAt, s_pres.gpuNs, true,
+            rhi_timestamps_supported() ? "GPU not timed yet" : "no GPU timestamps", budget,
+            sizeof(budget));
         s_pres.budgetRefusedAt = b->refused;
         s_pres.budgetDropsAt = b->drops;
         s_pres.budgetClimbsAt = b->climbs;
@@ -5490,9 +5490,14 @@ static uint64_t lock_io_display_waited(void *u, uint64_t costNs)
 static void budget_lines(const PaceBudget *b, unsigned drops, unsigned climbs, unsigned refusals,
                          unsigned paced, Uint64 period)
 {
-    const PaceBudgetWaits w = {
-        s_pres.cost, s_pres.fenceWaitNs,      s_pres.displayWaitNs, s_pres.gpuNs, s_pres.stepNs,
-        period,      s_pres.fenceHoldsDisplay};
+    const PaceBudgetWaits w = {s_pres.cost,
+                               s_pres.fenceWaitNs,
+                               s_pres.displayWaitNs,
+                               s_pres.gpuNs,
+                               s_pres.stepNs,
+                               period,
+                               s_pres.fenceHoldsDisplay,
+                               true};
     char t[400];
 
     if (b->drops != drops) {
