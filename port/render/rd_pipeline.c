@@ -1426,10 +1426,23 @@ static void keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at, cons
     if (!p.id) {
         s_failLines++;
         if (s_failLines <= 8u || s_failLines % 100u == 0u) {
+            /* PC port: a key through the draw merge's build names it (on
+               Direct3D 11 the build compiles here, at its first pipeline,
+               so a module FXC refuses surfaces as this line) */
+            char merge[160] = "";
+            if (g_rd.vuMerge && g_rd.vsMerge[k->vs].id) {
+                char vsName[64];
+                keyVsName(k, vsName, sizeof(vsName));
+                snprintf(merge, sizeof(merge),
+                         "; vertex shader %s, the draw merge's build ([dev] vu_merge = false "
+                         "avoids it)",
+                         vsName);
+            }
             rd__log("pipeline creation failed %s (program %u blend %u vs %u fs %u fmt %u/%u): %s; "
-                    "draws with this key are skipped (%u failed so far%s)",
+                    "draws with this key are skipped (%u failed so far%s)%s",
                     when, k->gs.program, k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt, why,
-                    s_failLines, s_failLines == 8u ? "; from here every 100th is written" : "");
+                    s_failLines, s_failLines == 8u ? "; from here every 100th is written" : "",
+                    merge);
         }
         /* a failed entry where there is room (its own probe: a caller's
            slot may be stale, or the key made meanwhile) */
