@@ -1119,6 +1119,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never
   (`textUploadLogChecks`) (`rd_tex`).
+- `rd_tex_pool_test.c`: the texture decode pool against the game thread's decode, 200 textures of
+  every format and TEXA mode with levels and queued updates, the bounded queue's fallback, and on a
+  device the uploads' alpha scans, byte for byte (`rd_tex_pool`; 77 without a device;
+  [TEXTURES.md](TEXTURES.md#tests)).
 - `rd_vu_frac_test.c`: the pixel side at a fractional scale, CPU only (`rd_vu_frac`): the truth
   table of `rd__vu_pixel_fs`, `rd__planes_dropped` and `rd__screen_planes_want` over the profile
   flag, the preset, the exact blend, nine scales (whole and fractional on either axis), the two
