@@ -485,7 +485,20 @@ static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t 
  * vu_merge_entry) giving each draw's first raised value, VuCB, VuBoneCB
  * and raise, the merge builds reading each draw's VuCB through t5 by it.
  * The same triangles in the same order through the same words: the
- * picture is the same byte for byte. */
+ * picture is the same byte for byte.
+ * Without dual-source blending (g_rd.noDual: Mali-G52 class phones) a lerp
+ * or Cd*FIX + Cs draw is two passes (rd__expand_no_dual: a colour pass,
+ * then an alpha pass writing As with blending off and no Z write); such a
+ * draw is held too, its two passes' keys, pipelines and DrawCBs the run's
+ * (vuMergePasses), and the run draws its colour pass over every draw's
+ * triangles and then its alpha pass over the same list.  The same pixels:
+ * no colour pass reads the stored alpha (those blends never read Ad), the
+ * alpha passes write no Z, so with Z write off each alpha pass admits what
+ * its colour pass did, and with Z write on (GEQUAL, GREATER's alpha pass
+ * GEQUAL, ALWAYS) the alpha left is the last fragment's at the final depth
+ * either way: what the two passes already give for one draw's triangles,
+ * now for the run's (docs/port/VU1_PROGRAMS.md, "The draw merge without
+ * dual-source blending"). */
 #define RD_VU_MERGE_MAX 16u /* vu_common.hlsli VU_MERGE_MAX */
 
 /* A VU draw's index list: the bound list (buf at off; id 0: not indexed),
@@ -512,13 +525,14 @@ static struct {
     uint32_t n; /* the draws held; 0: no run */
     uint32_t replay, pass;
     int post;
-    RdPipeKeyInt key;
-    RhiPipeline p;
+    uint32_t np; /* its passes: 1, or 2 (a colour pass and its alpha pass) */
+    RdPipeKeyInt key[2];
+    RhiPipeline p[2];
     RhiBindGroup g1, g2;
     RdUniform frame;
     RhiRect sc;
-    IcoDrawCB cb;
-    uint64_t dOff;
+    IcoDrawCB cb[2];
+    uint64_t dOff[2];
     uint64_t top; /* the next draw's first raised value (two draws or more) */
     VuRunDraw d[RD_VU_MERGE_MAX];
 } s_run;
@@ -690,28 +704,34 @@ void rd__replay_vu_flush(Replay *r)
         rhi_cmd_set_scissor(cl, &s_run.sc);
     }
     rhi_cmd_set_index_buffer(cl, ib, ibOff, true);
-    /* b2 the first draw's VuCB (its mark[3] the table), b3 its VuBoneCB
-       (the merge builds read neither else) */
-    const uint32_t offs[3] = {(uint32_t)s_run.dOff, (uint32_t)vOff0, (uint32_t)d0->bonesOff};
-    rd__set_pipeline(cl, s_run.p, &s_run.key);
-    rd__bind_uniform(cl, 0, s_run.frame);
-    rhi_cmd_set_bind_group_offsets(cl, 1, s_run.g1, offs, 3);
-    rhi_cmd_set_bind_group(cl, 2, s_run.g2);
-    rd__replay_dst_bind(r, &s_run.key); /* nothing for these keys */
-    rd__span_draw(first, count);
-    rd__replay_draw_indexed(cl, count, first, 0, 1);
+    /* each pass over the whole list (two: the colour pass, then the alpha
+       pass, without dual-source blending), counted as one draw as vuDraw
+       counts the pair */
+    for (uint32_t i = 0; i < s_run.np; i++) {
+        /* b2 the first draw's VuCB (its mark[3] the table), b3 its VuBoneCB
+           (the merge builds read neither else) */
+        const uint32_t offs[3] = {(uint32_t)s_run.dOff[i], (uint32_t)vOff0, (uint32_t)d0->bonesOff};
+        rd__set_pipeline(cl, s_run.p[i], &s_run.key[i]);
+        rd__bind_uniform(cl, 0, s_run.frame);
+        rhi_cmd_set_bind_group_offsets(cl, 1, s_run.g1, offs, 3);
+        rhi_cmd_set_bind_group(cl, 2, s_run.g2);
+        rd__replay_dst_bind(r, &s_run.key[i]); /* nothing for these keys */
+        rd__span_draw(first, i ? 0 : count);
+        rd__replay_draw_indexed(cl, count, first, 0, 1);
+    }
     ownDraw();
     if (scMoved) {
         rhi_cmd_set_scissor(cl, &now);
     }
 }
 
-/* Holds a draw in the open run, or (it does not join) draws the run and
- * opens one with it; false when it cannot be held (its DrawCB not in the
- * ring): the caller draws it alone */
-static bool vuRunTake(Replay *r, const RdPipeKeyInt *key, RhiPipeline p, RhiBindGroup g1,
-                      RhiBindGroup g2, const IcoDrawCB *cb, const IcoVuCB *vcb, uint64_t bonesOff,
-                      const VuIdx *ix, uint32_t first, uint32_t count)
+/* Holds a draw of np passes (1, or the no-dual pair: vuMergePasses) in the
+ * open run, or (it does not join) draws the run and opens one with it;
+ * false when it cannot be held (a DrawCB not in the ring): the caller draws
+ * it alone */
+static bool vuRunTake(Replay *r, uint32_t np, const RdPipeKeyInt *key, const RhiPipeline *p,
+                      RhiBindGroup g1, RhiBindGroup g2, const IcoDrawCB *cb, const IcoVuCB *vcb,
+                      uint64_t bonesOff, const VuIdx *ix, uint32_t first, uint32_t count)
 {
     VuRunDraw nd;
     nd.vcb = *vcb;
@@ -721,12 +741,17 @@ static bool vuRunTake(Replay *r, const RdPipeKeyInt *key, RhiPipeline p, RhiBind
     nd.count = count;
     nd.lo = nd.hi = 0;
     nd.ranged = false;
-    if (s_run.n && s_run.n < RD_VU_MERGE_MAX && s_run.replay == g_rd.replayCounter && r->passOpen &&
-        s_run.pass == r->passSerial && s_run.post == r->perfPost && s_run.p.id == p.id &&
-        memcmp(&s_run.key, key, sizeof(*key)) == 0 && s_run.g1.id == g1.id &&
-        s_run.g2.id == g2.id && s_run.frame.group.id == r->frameBG.group.id &&
-        s_run.frame.offset == r->frameBG.offset && memcmp(&s_run.sc, &r->sc, sizeof(r->sc)) == 0 &&
-        memcmp(&s_run.cb, cb, sizeof(*cb)) == 0) {
+    bool same = s_run.n && s_run.n < RD_VU_MERGE_MAX && s_run.replay == g_rd.replayCounter &&
+                r->passOpen && s_run.pass == r->passSerial && s_run.post == r->perfPost &&
+                s_run.np == np && s_run.g1.id == g1.id && s_run.g2.id == g2.id &&
+                s_run.frame.group.id == r->frameBG.group.id &&
+                s_run.frame.offset == r->frameBG.offset &&
+                memcmp(&s_run.sc, &r->sc, sizeof(r->sc)) == 0;
+    for (uint32_t i = 0; same && i < np; i++) {
+        same = s_run.p[i].id == p[i].id && memcmp(&s_run.key[i], &key[i], sizeof(key[i])) == 0 &&
+               memcmp(&s_run.cb[i], &cb[i], sizeof(cb[i])) == 0;
+    }
+    if (same) {
         /* raised past the run's values, within the device's */
         if (s_run.n == 1) {
             vuRunRange(&s_run.d[0]);
@@ -741,21 +766,27 @@ static bool vuRunTake(Replay *r, const RdPipeKeyInt *key, RhiPipeline p, RhiBind
         }
     }
     rd__replay_vu_flush(r);
-    const uint64_t dOff = rd__draw_cb_offset(cb);
-    if (dOff == ~0ull) {
-        return false;
+    uint64_t dOff[2];
+    for (uint32_t i = 0; i < np; i++) {
+        dOff[i] = rd__draw_cb_offset(&cb[i]);
+        if (dOff[i] == ~0ull) {
+            return false;
+        }
     }
     s_run.replay = g_rd.replayCounter;
     s_run.pass = r->passSerial;
     s_run.post = r->perfPost;
-    s_run.key = *key;
-    s_run.p = p;
+    s_run.np = np;
+    for (uint32_t i = 0; i < np; i++) {
+        s_run.key[i] = key[i];
+        s_run.p[i] = p[i];
+        s_run.cb[i] = cb[i];
+        s_run.dOff[i] = dOff[i];
+    }
     s_run.g1 = g1;
     s_run.g2 = g2;
     s_run.frame = r->frameBG;
     s_run.sc = r->sc;
-    s_run.cb = *cb;
-    s_run.dOff = dOff;
     s_run.top = 0;
     s_run.d[0] = nd;
     s_run.n = 1;
@@ -767,6 +798,42 @@ void rd__replay_vu_flush_post(Replay *r, int post)
     if (s_run.n && s_run.post != post) {
         rd__replay_vu_flush(r); /* the run's draw belongs to the effect before */
     }
+}
+
+/* The passes a merged draw may have (vuDraw, vuRunTake): one, or without
+ * dual-source blending a lerp or Cd*FIX + Cs pass's two, its colour pass
+ * and the alpha pass after it (rd__expand_no_dual, rd__no_dual_second);
+ * else 0 (an alpha-test split, an exact blend's passes: drawn alone) */
+static uint32_t vuMergePasses(const RdDrawPass *dp, int np)
+{
+    if (np == 1) {
+        return 1u;
+    }
+    return np == 2 && rd__no_dual_second(dp, 1) ? 2u : 0u;
+}
+
+/* Without dual-source blending (g_rd.noDual) a cut's lerp or Cd*FIX + Cs
+ * pass is planned as a colour pass (ICO_DF_NODUAL_FACTOR, the mask's RGB)
+ * and, the mask with A, an alpha pass (rd__expand_no_dual): *one receives
+ * the pass as planned before that split, for vuFuseVerdict's rules; false
+ * when cut is not such a split, or its alpha pass's Z test is not the
+ * colour pass's (GREATER with Z write, whose alpha pass takes GEQUAL: a
+ * fragment at the stored Z writes its alpha there, which the kick's own
+ * one pass does not, so that pair stays apart) */
+static bool vuNoDualJoin(const RdDrawPass *cut, int nc, RdDrawPass *one)
+{
+    if (nc < 1 || nc > 2 || !(cut[0].flags & ICO_DF_NODUAL_FACTOR)) {
+        return false;
+    }
+    if (nc == 2 && (!rd__no_dual_second(cut, 1) || cut[1].key.gs.ztst != cut[0].key.gs.ztst)) {
+        return false;
+    }
+    *one = cut[0];
+    one->flags &= ~(uint32_t)ICO_DF_NODUAL_FACTOR;
+    if (nc == 2) {
+        one->key.gs.colorMask |= cut[1].key.gs.colorMask;
+    }
+    return true;
 }
 
 /* The passes of a VU draw under state s (vuDraw): the screen planner's,
@@ -871,29 +938,33 @@ static int vuFuseVerdict(const Replay *r, const RdStateBlock *fan, const DrawSet
     if (same) {
         return VU_FUSE_SAME;
     }
-    if (nc != 1 || nk != 1) {
+    /* without dual-source blending: the cut's two passes as one
+       (vuNoDualJoin); the kick then draws them too, its pixels' colour
+       pass at factor 1.0 (or 0 for Cd*FIX + Cs) and its alpha pass's As:
+       vu_common.hlsli vu_dual_out_f's fused argument */
+    RdDrawPass joined;
+    const bool split = vuNoDualJoin(cut, nc, &joined);
+    if ((!split && nc != 1) || nk != 1) {
         return RD_VU_FUSE_PASSES;
     }
-    if (r->dateStNow || cut[0].key.dst != RHI_DST_READ_NONE ||
-        kick[0].key.dst != RHI_DST_READ_NONE) {
+    const RdDrawPass *c0 = split ? &joined : &cut[0];
+    if (r->dateStNow || c0->key.dst != RHI_DST_READ_NONE || kick[0].key.dst != RHI_DST_READ_NONE) {
         return RD_VU_FUSE_DST;
     }
-    const RdBlendPath bp = cut[0].key.colorFmt == RHI_FMT_RGBA8_UINT
-                               ? RD_BP_NONE
-                               : rd__blend_path(cut[0].key.gs.blend);
+    const RdBlendPath bp =
+        c0->key.colorFmt == RHI_FMT_RGBA8_UINT ? RD_BP_NONE : rd__blend_path(c0->key.gs.blend);
     if (bp != RD_BP_LERP && bp != RD_BP_DST_FIX) {
         return RD_VU_FUSE_BLEND;
     }
-    const uint8_t fs = cut[0].key.fs;
+    const uint8_t fs = c0->key.fs;
     const bool planes = fs == RD_FS_VU || fs == RD_FS_VU_TEXA;
-    const bool twin =
-        (fs == RD_FS_VU_NP || fs == RD_FS_VU_TEXA_NP) && !(cut[0].flags & ICO_DF_PLANE);
+    const bool twin = (fs == RD_FS_VU_NP || fs == RD_FS_VU_TEXA_NP) && !(c0->flags & ICO_DF_PLANE);
     if (!planes && !twin) {
         return RD_VU_FUSE_PLANES;
     }
     /* the cut's pass as the planner makes it with ABE off (rd_alpha_plan.c
      * rd__plan_screen_draw_alpha's normalisation) */
-    RdDrawPass off = cut[0];
+    RdDrawPass off = *c0;
     off.key.gs.blend = RD_BLEND_COUNT;
     off.flags &= ~(uint32_t)(ICO_DF_FIX_FACTOR | ICO_DF_PREMUL | ICO_DF_C1_DST);
     off.fix = r->st.ds.blendFix;
@@ -965,23 +1036,33 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             own = true;
         }
     }
+    /* the passes a merged draw takes: one, or the no-dual pair */
+    const uint32_t mp = vuMergePasses(dp, np);
+    bool mergeable = mp != 0u;
+    for (uint32_t i = 0; mergeable && i < mp; i++) {
+        mergeable = pipes[i].id && g_rd.vsMerge[keys[i].vs].id && keys[i].dst == RHI_DST_READ_NONE;
+    }
     /* M0's predicates for the count (vuMergeNote) */
-    const bool noteable = np == 1 && !r->dateStNow && dp[0].key.dst == RHI_DST_READ_NONE &&
+    const bool noteable = mp != 0u && !r->dateStNow && dp[0].key.dst == RHI_DST_READ_NONE &&
+                          (mp == 1u || dp[1].key.dst == RHI_DST_READ_NONE) &&
                           s_zeroBonesFor == g_rd.replayCounter && bonesOff == s_zeroBones;
     const RdStateBlock saved = r->st;
     r->st = *s; /* fillDrawCB reads the state the passes were planned from */
-    if (g_rd.vuMerge && np == 1 && indexed && pipes[0].id && !own && g_rd.vsMerge[keys[0].vs].id &&
-        !r->dateStNow && keys[0].dst == RHI_DST_READ_NONE && !g_rdWin.first && !g_rd.passSplit &&
-        r->passOpen) {
+    if (g_rd.vuMerge && mergeable && indexed && !own && !r->dateStNow && !g_rdWin.first &&
+        !g_rd.passSplit && r->passOpen) {
         /* the draw merge: held in the run (drawn when it ends) */
-        IcoDrawCB cb;
-        rd__replay_fill_draw_cb(r, &dp[0], ds, &cb);
-        rd__replay_dst_pass_mode(r, &keys[0]); /* a storage pass ends first (its run drawn) */
-        if (vuRunTake(r, &keys[0], pipes[0], g1, g2, &cb, vcb, bonesOff, ix, first, count)) {
-            if (dp[0].key.gs.colorMask & 8) {
-                r->writeSerial++;
+        IcoDrawCB cb[2];
+        for (uint32_t i = 0; i < mp; i++) {
+            rd__replay_fill_draw_cb(r, &dp[i], ds, &cb[i]);
+            rd__replay_dst_pass_mode(r, &keys[i]); /* a storage pass ends first (its run drawn) */
+        }
+        if (vuRunTake(r, mp, keys, pipes, g1, g2, cb, vcb, bonesOff, ix, first, count)) {
+            for (uint32_t i = 0; i < mp; i++) {
+                if (dp[i].key.gs.colorMask & 8) {
+                    r->writeSerial++;
+                }
             }
-            vuMergeNote(r, noteable, pipes[0].id, g1.id, g2.id, &cb);
+            vuMergeNote(r, noteable, pipes[0].id, g1.id, g2.id, &cb[0]);
             r->st = saved;
             return;
         }
