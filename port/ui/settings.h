@@ -371,6 +371,10 @@ void ui_settings_set_states_tex_funcs(const UiStatesTexFuncs *funcs);
 int ui_settings_states_card(int slot, int out[8]);
 /* The pause menu's Save states row, -1 when not built (tests) */
 int ui_settings_states_row(void);
+/* The Continue screen's Save states prompt: its layout (no cursor; rows
+   first .. last, the Square glyph and the words), chained after the file
+   select by the install, -1 when not built (tests) */
+int ui_settings_states_prompt_layout(void);
 /* After a load: the menu closes its page and puts the cursor on the pause
    menu's Save states row (the restored game is on the pause layout). */
 void ui_settings_sync_after_state_load(void);
@@ -485,8 +489,9 @@ typedef enum UiSettingsPage {
     /* Developer (main page, before Back): Developer mode, Dump textures,
        Dump models, Back */
     UI_PAGE_DEVELOPER,
-    /* Extras > Save states, and the pause menu's Save states row (only
-       built while a UiStatesHost is set before ui_settings_install): four
+    /* Save states: the pause menu's Save states row and the Continue
+       screen's Square prompt open it (both only built while a UiStatesHost
+       is set before ui_settings_install): four
        cards, each a picture, "Slot N" with its action, the area and play
        time, and the date */
     UI_PAGE_STATES,

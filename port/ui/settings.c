@@ -65,6 +65,7 @@ extern void CUR_SE(void);        /* layout_action.c: the menus' sounds */
 extern void POSITIVE_SE(void);
 extern void NEGATIVE_SE(void);
 extern void la_host_leave(void); /* layout_action.c (ICO_HOST) */
+extern int la_host_mc_files_shown(void);
 /* layout_action.c: what the pause menu's Back does before la_game_loop */
 extern void la_host_resume_play(void);
 /* fumi/sound/s_init.c: the PS2's stereo (0) or mono (1) output */
@@ -108,6 +109,10 @@ extern unsigned int ico_host_main_ticks(void);
 #define LAYOUT_PAUSE (ico_region_cur()->layout_pause)
 #define LAYOUT_TITLE_CONTINUE (ico_region_cur()->layout_title_continue)
 #define LAYOUT_TITLE_NEW (ico_region_cur()->layout_title_new)
+/* the Continue screen's file select (19, la_mc_load_file_select) and its
+   files' layout linked after it (14, la_mc_file_select) */
+#define LAYOUT_LOAD_FILES (ico_region_cur()->layout_load_files)
+#define LAYOUT_MC_FILES (ico_region_cur()->layout_mc_files)
 /* the game's Options screen (58: not reached, but la_key_config's way
    back when the pause menu was left as the game's) and its button
    configuration screen (59: Settings > Controls opens it) */
@@ -1115,17 +1120,26 @@ static UiTextureExportHost s_texExportHost;
 static int s_texExportHostSet, s_texExportPending;
 
 /* The Save states host (settings.h).  The pause menu's Save states row and
-   Extras' link are built only when it was set before the menus were built
-   (ui_settings_install: main_host.c sets it first), so a build without one
-   has neither; the page itself is always built and unreachable then. */
+   the Continue screen's prompt are built only when it was set before the
+   menus were built (ui_settings_install: main_host.c sets it first), so a
+   build without one has neither; the page itself is always built and
+   unreachable then. */
 static UiStatesHost s_statesHost;
 static int s_statesHostSet;
-static int s_statesAtBuild;  /* the host was set when build() ran */
-static int s_statesRow = -1; /* the pause menu's Save states row, -1 none */
+static int s_statesAtBuild;   /* the host was set when build() ran */
+static int s_statesRow = -1;  /* the pause menu's Save states row, -1 none */
+static int s_contLayout = -1; /* the Continue screen's prompt layout (contProc), -1 none */
+static int s_contWarned;
+/* the prompt's line: under the frame of the file picture (field lines 60 to
+   180 on the European disc, to 169 on the others) and above the bar of OK
+   and Back (from 200) on every disc */
+#define CONT_HINT_Y 183
+static UiHint s_contHint;
 static void statesCloseAfterLoad(void);
 static void statesRelease(void);
 static void gameCursorOn(int to, int row);
 static void buildStatesPage(void);
+static int contProc(int first, int item);
 
 /* the Save states page's geometry and state (the page: after parentLayout) */
 #define ST_Y0 40
@@ -1161,6 +1175,7 @@ static int s_stListAge;
 static int s_stConfirmSlot = -1, s_stConfirmAct, s_stConfirmAge;
 static int s_stCanSave;       /* the host's can_save at the last refresh or listing */
 static int s_stFromPause;     /* opened from the pause menu's row: Back returns there */
+static int s_stFromContinue;  /* opened from the Continue screen: Back returns there */
 static int s_stLeave;         /* a state was loaded: the page closes at the next tick */
 static int s_procLayout = -1; /* the layout the last settings proc ran in */
 static char s_stShown[320];   /* the status line's text as set */
@@ -1188,6 +1203,11 @@ void ui_settings_sync_after_state_load(void)
 int ui_settings_states_row(void)
 {
     return s_statesRow;
+}
+
+int ui_settings_states_prompt_layout(void)
+{
+    return s_contLayout;
 }
 
 void ui_settings_set_texture_export_host(const UiTextureExportHost *host)
@@ -2290,9 +2310,6 @@ static int optShown(int opt, int link)
     }
     if (opt == UI_OPT_LINK && link == UI_PAGE_TOUCH) {
         return touchPresent(); /* Controls > Touch screen */
-    }
-    if (opt == UI_OPT_LINK && link == UI_PAGE_STATES) {
-        return s_statesHostSet; /* Extras > Save states, from both entries */
     }
     if (opt == UI_OPT_GPU_ADD) {
         return s_gpuHostSet && s_gpuHost.adreno() != 0;
@@ -3903,6 +3920,20 @@ static void buildEntries(void)
             P(s_statesRow)->right = s_pages[UI_PAGE_STATES].layout;
         }
     }
+    /* the Continue screen's prompt: Square and "Save states" on a line of
+       its own under the file picture's frame (contProc shows it), in a
+       layout with no cursor that repoint chains after the file select */
+    s_contLayout = -1;
+    if (s_statesAtBuild) {
+        static const UiHintItem kCont[1] = {{LT_GLYPH_SQUARE, -1, UI_STR_STATES}};
+        const int first = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT;
+        ui_hint_build(&s_contHint, CONT_HINT_Y, NOTE_SIZE, kCont, 1);
+        const int end = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT;
+        for (int r = first; r < end; r++) {
+            lt_ext_set_pointer_role(r, LT_POINTER_SQUARE);
+        }
+        s_contLayout = addLayout(first, end, 0.0f, contProc, -1);
+    }
     int last = buildStats();
     addEntryLayout(ENTRY_PAUSE, s_photoRow,
                    last >= 0 ? last : (s_statesRow >= 0 ? s_statesRow : s_photoRow));
@@ -4042,32 +4073,20 @@ static void build(void)
                                   UI_STR_OPT_DUMP_MODELS, UI_STR_BACK};
     /* Characters after Credits (from both entries; the other three
        from the title only) */
-    static const int extrasOptsAll[] = {UI_OPT_EXTRAS_MUSIC,   UI_OPT_EXTRAS_MODELS,
-                                        UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK,
-                                        UI_OPT_LINK,           UI_OPT_LINK,
-                                        UI_OPT_EXTRAS_STEAM,   UI_OPT_EXTRAS_EXPORT_TEXTURES,
-                                        UI_OPT_ACH_POPUPS,     UI_OPT_BACK};
-    static const int extrasStrsAll[] = {UI_STR_EXTRAS_MUSIC,       UI_STR_EXTRAS_MODELS,
-                                        UI_STR_EXTRAS_CREDITS,     UI_STR_STATES,
-                                        UI_STR_SECTION_CHARACTERS, UI_STR_SECTION_VARIANTS,
-                                        UI_STR_EXTRAS_STEAM,       UI_STR_EXTRAS_EXPORT_TEXTURES,
-                                        UI_STR_OPT_ACH_POPUPS,     UI_STR_BACK};
-    static const int extrasLinksAll[] = {
-        -1, -1, -1, UI_PAGE_STATES, UI_PAGE_CHARACTERS, UI_PAGE_VARIANTS, -1, -1, -1, -1};
-    /* Save states after Credits, only in a build whose host was set before
-       the menus were built (the rest of the rows keep their places) */
-    int extrasOpts[N_OF(extrasOptsAll)], extrasStrs[N_OF(extrasOptsAll)],
-        extrasLinks[N_OF(extrasOptsAll)];
-    int extrasN = 0;
+    static const int extrasOpts[] = {
+        UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS, UI_OPT_EXTRAS_CREDITS,         UI_OPT_LINK,
+        UI_OPT_LINK,         UI_OPT_EXTRAS_STEAM,  UI_OPT_EXTRAS_EXPORT_TEXTURES, UI_OPT_ACH_POPUPS,
+        UI_OPT_BACK};
+    static const int extrasStrs[] = {
+        UI_STR_EXTRAS_MUSIC,           UI_STR_EXTRAS_MODELS,    UI_STR_EXTRAS_CREDITS,
+        UI_STR_SECTION_CHARACTERS,     UI_STR_SECTION_VARIANTS, UI_STR_EXTRAS_STEAM,
+        UI_STR_EXTRAS_EXPORT_TEXTURES, UI_STR_OPT_ACH_POPUPS,   UI_STR_BACK};
+    static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, UI_PAGE_VARIANTS, -1,
+                                      -1, -1, -1};
+    /* the Save states page's ways in (the pause menu's row, the Continue
+       screen's prompt) exist when its host was set before the menus were
+       built */
     s_statesAtBuild = s_statesHostSet;
-    for (int i = 0; i < N_OF(extrasOptsAll); i++) {
-        if (extrasLinksAll[i] == UI_PAGE_STATES && !s_statesAtBuild) {
-            continue;
-        }
-        extrasOpts[extrasN] = extrasOptsAll[i];
-        extrasStrs[extrasN] = extrasStrsAll[i];
-        extrasLinks[extrasN++] = extrasLinksAll[i];
-    }
     /* Extras > Game variants (from both entries, with the Characters link
        before it): the eight [variants] rows, the Debug menu (Developer mode
        only) and Back */
@@ -4174,8 +4193,8 @@ static void build(void)
     _Static_assert(N_OF(devOpts) <= MAX_ROWS, "the devOpts rows fit the page's row budget");
     _Static_assert(sizeof(gpuOpts) == sizeof(gpuStrs), "a string for each Graphics driver row");
     _Static_assert(sizeof(gameOpts) == sizeof(gameStrs), "a string for each Gameplay row");
-    _Static_assert(sizeof(extrasOptsAll) == sizeof(extrasStrsAll) &&
-                       sizeof(extrasOptsAll) == sizeof(extrasLinksAll),
+    _Static_assert(sizeof(extrasOpts) == sizeof(extrasStrs) &&
+                       sizeof(extrasOpts) == sizeof(extrasLinks),
                    "a string and a link for each Extras row");
     _Static_assert(sizeof(charOpts) == sizeof(charStrs), "a string for each Characters row");
     _Static_assert(N_OF(charOpts) <= MAX_ROWS, "the Characters rows fit");
@@ -4186,8 +4205,7 @@ static void build(void)
     _Static_assert(N_OF(gpuOpts) <= MAX_ROWS, "the gpuOpts rows fit the page's row budget");
     _Static_assert(N_OF(ctlOpts) <= MAX_ROWS, "the ctlOpts rows fit the page's row budget");
     _Static_assert(N_OF(gameOpts) <= MAX_ROWS, "the gameOpts rows fit the page's row budget");
-    _Static_assert(N_OF(extrasOptsAll) <= MAX_ROWS,
-                   "the extrasOpts rows fit the page's row budget");
+    _Static_assert(N_OF(extrasOpts) <= MAX_ROWS, "the extrasOpts rows fit the page's row budget");
     _Static_assert(sizeof(varOpts) == sizeof(varStrs), "a string for each Game variants row");
     _Static_assert(N_OF(varOpts) <= MAX_ROWS, "the Game variants rows fit");
 
@@ -4220,8 +4238,8 @@ static void build(void)
                     N_OF(apiOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_GPU_DRIVER, UI_STR_SECTION_GPU_DRIVER, gpuOpts, gpuStrs, NULL,
                     N_OF(gpuOpts), UI_PAGE_MAIN);
-    buildOptionPage(UI_PAGE_EXTRAS, UI_STR_EXTRAS, extrasOpts, extrasStrs, extrasLinks, extrasN,
-                    UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_EXTRAS, UI_STR_EXTRAS, extrasOpts, extrasStrs, extrasLinks,
+                    N_OF(extrasOpts), UI_PAGE_MAIN);
     /* the layout extension's budget (layout_ext.h): the Characters page
        is 50 rows (its heading, nine colour rows of four: label, value and
        the two arrows, Randomize, Reset, Back, nine swatches, the note) and
@@ -4708,6 +4726,17 @@ static void repoint(void)
             texLayout[g].link = s_entryLayout[e];
         }
     }
+    /* the Continue screen's prompt between its file select and the files'
+       layout (the files' procs run first and hand their item on through it) */
+    LtProp *files = &texLayout[LAYOUT_LOAD_FILES];
+    if (s_contLayout >= 0 && files->link == LAYOUT_MC_FILES) {
+        lt_ext_layout(s_contLayout)->link = files->link;
+        files->link = s_contLayout;
+    } else if (s_contLayout >= 0 && files->link != s_contLayout && !s_contWarned) {
+        fprintf(stderr, "settings: layout %d links %d, not the files' %d: no Save states prompt\n",
+                LAYOUT_LOAD_FILES, files->link, LAYOUT_MC_FILES);
+        s_contWarned = 1;
+    }
 }
 
 #ifdef ICO_RD
@@ -4760,9 +4789,11 @@ void ui_settings_reset(void)
     statesRelease();
     s_statesRow = -1;
     s_statesAtBuild = 0;
+    s_contLayout = -1;
+    s_contWarned = 0;
     memset(s_stCard, 0xFF, sizeof(s_stCard)); /* every row -1 */
     s_stStatus = -1;
-    s_stLeave = s_stFromPause = s_stRelist = s_stCanSave = 0;
+    s_stLeave = s_stFromPause = s_stFromContinue = s_stRelist = s_stCanSave = 0;
     s_procLayout = -1;
     s_statsBuilt = 0;
     s_statBack = -1;
@@ -5127,11 +5158,12 @@ static int parentLayout(const Page *pg)
 }
 
 /* ------------------------------------------------- the Save states page
- * Extras > Save states, and the pause menu's Save states row (placePause)
- * when a UiStatesHost was set before the menus were built.  Four cards on
- * a ST_PITCH field-line pitch from ST_Y0 (the 226-line window: the last
- * card's date ends at 204, the status line below it): the slot's picture
- * (an image row, 72 x 54), "Slot N" (selectable) with the action at the
+ * The pause menu's Save states row (placePause) and the Continue screen's
+ * prompt (contProc), when a UiStatesHost was set before the menus were
+ * built.  Four cards on a ST_PITCH field-line pitch from ST_Y0 (the
+ * 226-line window: the last card's date ends at 204, the status line below
+ * it): the slot's picture (an image row, 72 x 54), "Slot N" (selectable)
+ * with the action at the
  * right (Save | Load | Delete, stepped by Left and Right; Save only where
  * the host says saves are allowed, Load and Delete only on a slot in use),
  * the area and the play time, and the date.  Up and Down move between the
@@ -5531,6 +5563,10 @@ static void statesOpen(int fromLayout)
 {
     statesRelease();
     s_stFromPause = fromLayout == LAYOUT_PAUSE;
+    s_stFromContinue = fromLayout == LAYOUT_LOAD_FILES;
+    if (s_stFromContinue) {
+        la_host_leave(); /* the file select's cursor filter, which it set again after contProc */
+    }
     s_stLeave = 0;
     for (int i = 0; i < UI_STATES_SLOTS; i++) {
         s_stAct[i] = -1;
@@ -5546,6 +5582,12 @@ static int statesLeave(Page *pg, int id)
     const int pause = s_stFromPause;
     statesRelease();
     s_stLeave = 0;
+    if (s_stFromContinue) {
+        /* the screen reads the card again (its first tick) */
+        s_stFromContinue = 0;
+        fprintf(stderr, "settings: Save states closed, back to the Continue screen\n");
+        return leaveTo(id, LAYOUT_LOAD_FILES);
+    }
     if (pause) {
         const int r = leaveTo(id, LAYOUT_PAUSE);
         if (s_statesRow >= 0) {
@@ -5586,9 +5628,36 @@ static void statesCloseAfterLoad(void)
         }
     }
     s_stFromPause = 1;
+    s_stFromContinue = 0;
     if (pageOfLayout(current_layout_id, NULL) == &s_pages[UI_PAGE_STATES]) {
         s_stLeave = 1;
     }
+}
+
+/* The Continue screen's prompt (its layout chained after the file select,
+   whose proc runs after this one with the item this one returns: the file
+   la_mc_file_select picked, handed on as it came).  Shown while the screen
+   shows the card's files; Square there (a button no proc of the screen
+   reads on any disc) opens the page as the title's (s_origin the title: its
+   hint line; the host allows no Save there), what the file select does
+   when it leaves done first.  Back on the page returns here (statesLeave). */
+static int contProc(int first, int item)
+{
+    (void)first;
+    const int shown = s_statesHostSet && current_layout_id == LAYOUT_LOAD_FILES &&
+                      s_pages[UI_PAGE_STATES].layout >= 0 && la_host_mc_files_shown();
+    s_procLayout = current_layout_id;
+    ui_hint_show(&s_contHint, 0, shown);
+    ui_hint_layout(&s_contHint);
+    if (shown && lt_fade_status() == 2 && (pad[0].flags & LT_PAD_SQUARE) &&
+        !(pad[0].flags & (PAD_OK | PAD_BACK))) { /* not with a file's confirm or Back */
+        POSITIVE_SE();
+        la_host_leave();
+        s_origin = LAYOUT_TITLE_CONTINUE;
+        lt_switch_layout(s_pages[UI_PAGE_STATES].layout);
+        fprintf(stderr, "settings: Save states opened from the Continue screen\n");
+    }
+    return item;
 }
 
 /* Cross on a slot: the action shown, after a second Cross within
