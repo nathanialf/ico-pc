@@ -14,6 +14,8 @@
  *   [gameplay] yorda_safe  false  the shadows never take Yorda
  *   [gameplay] pit_time    "original"  the time a shadow takes to pull Yorda
  *                                 into a pit (half..triple)
+ *   [gameplay] shadow_speed "original"  how fast shadows walk, run and fly
+ *                                 (slower..fastest)
  *   [gameplay] door_fix    false  holding hands, an arrival does not send
  *                                 Ico and Yorda straight back through the
  *                                 door they came in by (door_grace.h)
@@ -92,6 +94,21 @@ float ico_opt_pit_time_factor(void);
 /* the dive's play-speed ratio actEnemyKidnapEnd reserves: 1/factor, or 2/factor
    under a stage camera effect (the game's own 2x) */
 float ico_opt_pit_dive_ratio(int camera);
+/* [gameplay] shadow_speed (default "original"): how fast shadows walk, run and fly.
+   The names are slower, original, faster, fastest (ICO_SPEED_*); the factors 0.75, 1,
+   1.25, 1.5.  Walking and running scale by the play speed of the shadow's motion
+   (ico2/fumi/src/act-game.c ACTGame_SetMotionPlaySpeedRatio_Exec), flying by the forward
+   push of flyCoreLoop (ico2/fumi/src/commonact.c).  Not the pit dive (pit_time owns it),
+   not a frozen shadow, not how often they attack.  Logs
+   "gameplay: shadow speed <name> (x<factor>)" at load and on change. */
+#define ICO_SPEED_SLOWER 0
+#define ICO_SPEED_ORIGINAL 1
+#define ICO_SPEED_FASTER 2
+#define ICO_SPEED_FASTEST 3
+#define ICO_SPEED_COUNT 4
+int ico_opt_shadow_speed(void);
+void ico_opt_set_shadow_speed(int v);
+float ico_opt_shadow_speed_factor(void);
 /* [gameplay] door_fix (default false): the doorway fix of door_grace.h */
 int ico_opt_door_fix(void);
 void ico_opt_set_door_fix(int on);

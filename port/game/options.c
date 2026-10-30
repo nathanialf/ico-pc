@@ -132,6 +132,55 @@ float ico_opt_pit_dive_ratio(int camera)
     return (camera != 0 ? 2.0f : 1.0f) / ico_opt_pit_time_factor();
 }
 
+/* [gameplay] shadow_speed (options.h): -1 not read yet, else ICO_SPEED_* */
+static int s_shadow_speed = -1;
+static const char *const kSpeedNames[ICO_SPEED_COUNT] = {"slower", "original", "faster", "fastest"};
+static const float kSpeedFactors[ICO_SPEED_COUNT] = {0.75f, 1.0f, 1.25f, 1.5f};
+
+static void log_shadow_speed(int v)
+{
+    fprintf(stderr, "gameplay: shadow speed %s (x%.2f)\n", kSpeedNames[v],
+            (double)kSpeedFactors[v]);
+}
+
+int ico_opt_shadow_speed(void)
+{
+    if (s_shadow_speed < 0) {
+        const char *v = ico_config_get_string("gameplay.shadow_speed", "original");
+        int i;
+
+        s_shadow_speed = ICO_SPEED_ORIGINAL;
+        for (i = 0; v != NULL && i < ICO_SPEED_COUNT; i++) {
+            if (strcmp(v, kSpeedNames[i]) == 0) {
+                s_shadow_speed = i;
+                break;
+            }
+        }
+        if (v != NULL && i == ICO_SPEED_COUNT) {
+            fprintf(stderr,
+                    "options: [gameplay] shadow_speed = \"%s\" is not one of slower, original, "
+                    "faster, fastest\n",
+                    v);
+        }
+        log_shadow_speed(s_shadow_speed);
+    }
+    return s_shadow_speed;
+}
+
+void ico_opt_set_shadow_speed(int v)
+{
+    v = v >= 0 && v < ICO_SPEED_COUNT ? v : ICO_SPEED_ORIGINAL;
+    if (v != s_shadow_speed) {
+        log_shadow_speed(v);
+    }
+    s_shadow_speed = v;
+}
+
+float ico_opt_shadow_speed_factor(void)
+{
+    return kSpeedFactors[ico_opt_shadow_speed()];
+}
+
 int ico_opt_door_fix(void)
 {
     return get(&s_door_fix, "gameplay.door_fix");
@@ -540,7 +589,7 @@ void ico_opt_hold_type_toggled(int type)
 void ico_opt_reload(void)
 {
     s_stick_fix = s_yorda_safe = s_door_fix = s_mirror = s_developer_mode = s_circle_back = -1;
-    s_pit_time = -1;
+    s_pit_time = s_shadow_speed = -1;
     s_natural_chains = s_skip_opening = -1;
     s_output = -2;
     s_ui_language = -2;
