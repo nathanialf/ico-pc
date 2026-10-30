@@ -19,8 +19,7 @@ target_sources(ico_platform PRIVATE
     symmap.c
     vm_reserve.c
     vsync_hooks.c
-    window_lifecycle.c
-    window_lines.c)
+    window_lifecycle.c)
 # diag_host.c's heartbeat and watchdog thread (pthreads on POSIX).
 find_package(Threads REQUIRED)
 target_link_libraries(ico_platform PUBLIC Threads::Threads)
