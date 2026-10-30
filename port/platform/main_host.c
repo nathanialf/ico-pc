@@ -126,7 +126,9 @@
 #include "ico_version.h" /* ICO_VERSION_LABEL, generated (CMakeLists.txt; "" in a development build) */
 #include "input_record.h"
 #include "pad_script.h"
-#include "sim_keys.h" /* the recording's config keys */
+#include "sim_keys.h"    /* the recording's config keys */
+#include "state.h"       /* save states: the poll, the [dev] keys */
+#include "state_rules.h" /* port/game: ico_state_parse_at, ico_state_can_save_here */
 #include "tables.h"
 #include "trace_host.h"
 #include "options.h"       /* the recording's effective stick_fix */
@@ -149,6 +151,8 @@ extern int systemStatus[]; /* common/src/main.c: [0] the video mode word */
 #include "texpack_export.h" /* Options > Extras > Export textures */
 #include "window_host.h"
 #include "window_switch.h" /* ico_window_switch_end_text */
+#include "popup.h"         /* port/ui: the save states' results */
+#include "strings.h"
 
 #endif
 /* Android's window build: the window opens before the game
@@ -1844,6 +1848,135 @@ static void remove_old_lettering(void)
 }
 #endif
 
+/* Save states' [dev] keys (state.h ico_state_dev_set): state_save_at and
+   state_load_at "<tick>:<slot>", state_hash_at "<tick>"; a value that does
+   not parse is logged and left off. */
+static void setup_state_dev(const IcoIni *ini)
+{
+    static const char *const keys[3] = {"state_save_at", "state_load_at", "state_hash_at"};
+    unsigned int tick[3] = {0, 0, 0};
+    int slot[3] = {0, 0, 0};
+    int i;
+
+    for (i = 0; i < 3; i++) {
+        const char *v = ico_ini_get(ini, keys[i]);
+
+        if (v == NULL || v[0] == '\0') {
+            continue;
+        }
+        if (ico_state_parse_at(v, &tick[i], i < 2 ? &slot[i] : NULL) != 0) {
+            fprintf(stderr, "state: [dev] %s = \"%s\" is not %s; ignored\n", keys[i], v,
+                    i < 2 ? "<Main tick>:<slot 1-4>" : "a Main tick");
+        }
+    }
+    ico_state_dev_set(tick[0], slot[0], tick[1], slot[1], tick[2]);
+}
+
+#ifndef ICO_HEADLESS
+/* The Save states page's host (port/ui/settings.h UiStatesHost) and the
+   results' popups: the page and the pause row know nothing of files. */
+static int state_refusal_str(IcoStateResult r)
+{
+    switch (r) {
+    case ICO_STATE_OK:
+        return 0;
+    case ICO_STATE_OFF:
+        return UI_STR_STATES_OFF;
+    case ICO_STATE_NOT_PAUSED:
+        return UI_STR_STATES_PAUSE_FIRST;
+    case ICO_STATE_EMPTY:
+        return UI_STR_STATES_EMPTY;
+    case ICO_STATE_OTHER_BUILD:
+    case ICO_STATE_OTHER_PLATFORM:
+        return UI_STR_STATES_REFUSED_BUILD;
+    case ICO_STATE_OTHER_DISC:
+        return UI_STR_STATES_REFUSED_DISC;
+    case ICO_STATE_OTHER_SETTINGS:
+        return UI_STR_STATES_REFUSED_SETTINGS;
+    case ICO_STATE_BAD_FILE:
+    case ICO_STATE_SELF_CHECK:
+        return UI_STR_STATES_REFUSED_CHECK;
+    case ICO_STATE_IO:
+        return UI_STR_STATES_SAVE_FAILED;
+    case ICO_STATE_STAGE_SWITCH:
+    case ICO_STATE_CARD_BUSY:
+    case ICO_STATE_DISC_BUSY:
+    case ICO_STATE_MOVIE:
+    case ICO_STATE_PHOTO:
+    case ICO_STATE_BUSY:
+        return UI_STR_STATES_REFUSED_BUSY;
+    }
+    return UI_STR_STATES_REFUSED_BUSY;
+}
+
+static void states_list(UiStateSlotInfo out[UI_STATES_SLOTS])
+{
+    IcoStateSlotInfo in[ICO_STATE_SLOTS];
+    int i;
+
+    ico_state_list(in);
+    for (i = 0; i < UI_STATES_SLOTS && i < ICO_STATE_SLOTS; i++) {
+        out[i].present = in[i].present;
+        out[i].loadable = in[i].loadable;
+        out[i].refusal_str =
+            in[i].present && !in[i].loadable ? state_refusal_str(in[i].why_not) : 0;
+        out[i].play_frames = in[i].play_frames;
+        out[i].stage_no = in[i].stage_no;
+        out[i].saved_at = in[i].saved_at;
+        snprintf(out[i].png_path, sizeof out[i].png_path, "%s", in[i].png_path);
+    }
+}
+
+static int states_request(int action, int slot, int *refusal_str)
+{
+    if (!ico_state_available()) {
+        *refusal_str = UI_STR_STATES_OFF;
+        return -1;
+    }
+    if (action == UI_STATES_ACT_SAVE && !ico_state_can_save_here()) {
+        *refusal_str = UI_STR_STATES_PAUSE_FIRST;
+        return -1;
+    }
+    if (action == UI_STATES_ACT_SAVE) {
+        ico_state_request_save(slot);
+    } else if (action == UI_STATES_ACT_LOAD) {
+        ico_state_request_load(slot);
+    } else {
+        ico_state_request_delete(slot);
+    }
+    *refusal_str = 0;
+    return 0;
+}
+
+static void states_done(int action, int slot, IcoStateResult r, const char *detail, void *user)
+{
+    static const int ok_str[3] = {UI_STR_STATES_SAVED, UI_STR_STATES_LOADED, UI_STR_STATES_DELETED};
+    char body[UI_POPUP_TEXT];
+
+    (void)user;
+    if (r == ICO_STATE_OK) {
+        snprintf(body, sizeof body, ui_str((UiStrId)ok_str[action]), slot);
+    } else if (r == ICO_STATE_OTHER_SETTINGS) {
+        /* the key that differs, as the log has it */
+        snprintf(body, sizeof body, ui_str(UI_STR_STATES_REFUSED_SETTINGS), detail);
+    } else {
+        snprintf(body, sizeof body, "%s", ui_str((UiStrId)state_refusal_str(r)));
+    }
+    (void)ui_popup_push(ui_str(UI_STR_STATES), body);
+}
+#endif
+
+static void setup_states(const IcoIni *ini)
+{
+#ifndef ICO_HEADLESS
+    static const UiStatesHost host = {states_list, states_request, ico_state_can_save_here};
+
+    ico_state_set_done_callback(states_done, NULL);
+    ui_settings_set_states_host(&host);
+#endif
+    setup_state_dev(ini);
+}
+
 /* the pad: a script from --pad-script or [dev] pad_script */
 static void setup_pad(const Args *a, const IcoIni *ini, const char *exe_dir)
 {
@@ -2367,11 +2500,17 @@ static int host_main(int argc, char **argv)
     if (ico_opt_skip_opening()) {
         fprintf(stderr, "boot: the opening is skipped (Options > Gameplay > Skip the opening)\n");
     }
+    /* save states: the page's host and the popups before the menus are
+       built in the boot, the [dev] keys (state.h) */
+    setup_states(&ini);
     ico_diag_milestone("boot starts (ico_host_init)");
     ico_host_init();
     ico_diag_milestone("boot ran until every thread waits");
     for (;;) {
         ico_host_step();
+        /* the quiescent point: every game thread waits, the frame closed;
+           a latched save, load or delete runs here (state.h) */
+        ico_state_host_poll();
         if (ico_host_vsync_count() == 1) {
             ico_diag_milestone("first vsync done");
         }
