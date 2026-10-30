@@ -1542,6 +1542,29 @@ static int archive_path(char *out, size_t size, const char *dir, const IcoDiscIn
     return ico_path_join(out, size, dir, disc->archive_name);
 }
 
+/* Whether s ends with suffix, ASCII case ignored (issue 165's program check:
+   ".Exe", ".DLL", ".appimage" too; review finding 13) */
+static int ends_with_nocase(const char *s, const char *suffix)
+{
+    const size_t n = strlen(s), k = strlen(suffix);
+    size_t i;
+
+    if (n <= k) {
+        return 0;
+    }
+    for (i = 0; i < k; i++) {
+        char c = s[n - k + i];
+        char d = suffix[i];
+
+        c = (char)(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c);
+        d = (char)(d >= 'A' && d <= 'Z' ? d - 'A' + 'a' : d);
+        if (c != d) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 /* The archive mode: mount the disc's archive (ico.o2r for the European
    disc, ico-jpn.o2r for the Japanese one), extracting it on the first run;
    the discs' archives can be there side by side. Which disc
@@ -1699,11 +1722,8 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
         if (res.unreadable) {
             /* a program file chosen in the dialog (issue 165: the game's own
                .exe): say what a disc image is before the usual words */
-            const size_t n = strlen(iso);
-            const int program =
-                (n > 4 && (strcmp(iso + n - 4, ".exe") == 0 || strcmp(iso + n - 4, ".dll") == 0 ||
-                           strcmp(iso + n - 4, ".EXE") == 0)) ||
-                (n > 9 && strcmp(iso + n - 9, ".AppImage") == 0);
+            const int program = ends_with_nocase(iso, ".exe") || ends_with_nocase(iso, ".dll") ||
+                                ends_with_nocase(iso, ".appimage");
 
             if (program) {
                 ico_host_fatal(log_file(),
