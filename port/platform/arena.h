@@ -13,6 +13,11 @@
  * The base is ICO_ARENA_ALIGN (1 MB) aligned, which keeps every address's
  * residue modulo any alignment up to 1 MB equal to the EE's (the allocator
  * aligns to 16 bytes; iosMallocAlignDebug's callers use larger values).
+ *
+ * The arena is pinned at ICO_ARENA_PIN_BASE when that address is free, so
+ * a save state's pointers into it need no relocation in the next process
+ * (state_reloc.h ARENA); when the address is taken it goes anywhere, with
+ * one log line, and a load moves the saved pointers by the difference.
  */
 #ifndef ICO_PLATFORM_ARENA_H
 #define ICO_PLATFORM_ARENA_H
@@ -26,6 +31,10 @@
    0x1FEFFF0); the rest is spare */
 #define ICO_ARENA_HEADROOM (8u * 1024u * 1024u)
 #define ICO_ARENA_ALIGN (1u * 1024u * 1024u)
+/* 240 GB up: inside the 39-bit address space of the smallest arm64 Android
+   kernels, far from where the systems put programs, libraries and heaps;
+   the fiber pool follows 256 MB above (fiber.h ICO_FIBER_POOL_BASE) */
+#define ICO_ARENA_PIN_BASE 0x3C00000000ull
 
 /* Allocates the arena on the first call; later calls do nothing. Returns
    0, or -1 when the memory is not available. */
@@ -38,6 +47,8 @@ size_t ico_arena_size(void);
 uintptr_t ico_arena_ee_addr(unsigned int ee);
 /* 1 when [p, p+n) lies inside the arena. */
 int ico_arena_contains(const void *p, size_t n);
+/* 1 when the arena sits at ICO_ARENA_PIN_BASE. */
+int ico_arena_pinned(void);
 
 /* --- Heap statistics (ICO_HEAP_STATS) ----------------------------------------
  * memory.c reports each allocation and free when built with ICO_HEAP_STATS;
