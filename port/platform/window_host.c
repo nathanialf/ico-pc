@@ -1557,6 +1557,7 @@ static const char *summary_joystick_scan(void)
 
 static void log_summary(const IcoVideoOptions *o, const char *res, const char *fr)
 {
+    char drives[64];
     char rd[2048], pads[160]; /* rd: the blend, then the device profile's words, ... */
     int n = 0;
     SDL_JoystickID *ids = SDL_GetGamepads(&n);
@@ -1581,9 +1582,11 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
     rd_summary_text(rd, sizeof(rd));
     /* the audio's clock (audio_host.h ico_audio_mode_text): this runs
        before the audio starts, so the one the configuration asks for */
+    ico_host_drive_summary(drives, sizeof drives); /* issue 126: where the data and saves sit */
     ico_diag_set_summary(
         "version %s; %s; GPU %s (%s); %s; %s preset, resolution %s, aspect %s, framerate %s; "
-        "window mode %s; %s; index values up to %u; robust access %s; controller %s%s; disc %s; %s; %s",
+        "window mode %s; %s; index values up to %u; robust access %s; controller %s%s; disc %s; %s; "
+        "%s; %s",
         ico_diag_version(), summary_platform(), rhi_adapter_name(),
         l->driverText != NULL ? l->driverText : "driver unknown",
         rhi_backend_kind_name(rhi_backend()), video_preset_label(o), res,
@@ -1595,7 +1598,7 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
                                              : "off",
         pads[0] != '\0' ? pads : "none yet", summary_joystick_scan(),
         disc != NULL ? disc : ICO_DIAG_DISC_UNKNOWN,
-        ico_host_pref_is_portable() ? "portable" : "user profile", ico_audio_mode_text());
+        ico_host_pref_is_portable() ? "portable" : "user profile", ico_audio_mode_text(), drives);
 }
 
 /* SDL's log output (SDL_SetLogOutputFunction, any thread): every line
