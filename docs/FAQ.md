@@ -230,6 +230,18 @@ since each load waits for the drive. Run the game from a drive inside the
 computer. In portable mode the saves sit beside the game, so they move with
 it. [More](TROUBLESHOOTING.md#the-sound-cuts-out-or-the-game-pauses-briefly-during-loads).
 
+## Can I save anywhere?
+
+Yes, with a save state. Press Start, choose **Save states** (under Photo
+mode), pick one of the four slots and choose **Save**. On a computer, F5
+saves to slot 1 from the pause menu. The state keeps the game exactly as it
+is, and you can load it from the pause menu or from the title screen
+(**Options > Extras > Save states**; F9 loads slot 1). It does not replace
+the game's own save points: those still write to the memory card. A state
+only loads in the version of the game that saved it, so keep a save point
+too before you update.
+[The details](OPTIONS.md#extras).
+
 ## Can I bring my PS2 save over?
 
 Yes, if you have it as a memory card file, the kind PS2 emulators and
