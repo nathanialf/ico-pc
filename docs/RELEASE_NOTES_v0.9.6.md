@@ -1,6 +1,8 @@
+**Please note:** Save states are new: tell us when one fails to load, with the log (the newest file in the `logs` folder that starts with `report-`, or `ico-pc.log`).
+
 ## New
 
-- Save states: four slots for each disc that hold the game exactly as it is. Save from the pause menu, load from the pause menu or the title (Options > Extras > Save states); on a computer F5 saves to slot 1 and F9 loads it. A state belongs to this version of the game, this disc and these gameplay settings.
+- Save states: the pause menu's Save states page keeps four snapshots of the game per disc with a picture, area and play time; load them from the pause menu or from Options > Extras on the title. F5 saves to slot 1 and F9 loads it. A state belongs to the version of the game it was saved with.
 - Options > Gameplay > Shadow speed: shadows walk, run and fly slower or faster than on the PlayStation 2 (Slower, Original, Faster, Fastest).
 
 ## Fixed
