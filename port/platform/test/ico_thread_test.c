@@ -2,7 +2,8 @@
  * port/platform/test/ico_thread_test.c
  *
  * ico_thread.h: a thread runs and joins, a mutex and condition hand a
- * value from one thread to another, and the clock does not run backwards.
+ * value from one thread to another, the clock does not run backwards, and
+ * the hardware thread count is at least 1.
  */
 #include <stdio.h>
 
@@ -61,6 +62,7 @@ int main(void)
     t0 = ico_thread_now_ms();
     t1 = ico_thread_now_ms();
     CHECK(t1 >= t0);
+    CHECK(ico_thread_cpu_count() >= 1); /* the texture decode pool's size */
 
     if (fails == 0) {
         printf("ico_thread_test: ok\n");
