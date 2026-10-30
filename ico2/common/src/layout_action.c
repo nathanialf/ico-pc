@@ -433,6 +433,7 @@ void ico_opt_output_toggled(int mode);
 void ico_opt_hold_type_toggled(int type);
 void la_host_new_game_go(void);
 int la_host_mc_slot_pickable(int slot);
+int la_host_mc_files_shown(void);
 
 /* la_vibe_select's confirm: the New Game screen in place of the start, which
    its confirm runs (la_host_new_game_go, after la_vibe_select) */
@@ -5805,6 +5806,15 @@ void la_host_leave(void)
 {
     lt_set_item_select_func(0);
     actionStarted = 0;
+}
+
+/* PC port: whether the Continue screen (la_mc_load_file_select) shows the
+   card's files and takes the pad: its card check has read the file mask
+   and started the action, as a confirm on a file needs.  The port's Save
+   states prompt on that screen (port/ui/settings.c) answers Square then. */
+int la_host_mc_files_shown(void)
+{
+    return fileMask != 0 && actionStarted != 0;
 }
 
 /* PC port: what the pause menu's Back does before it returns la_game_loop
