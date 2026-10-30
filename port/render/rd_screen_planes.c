@@ -23,12 +23,64 @@
  * sprite build there, the GPU's screen-space interpolation of its corners
  * (rd__screen_planes_want), but for the STQ triangles (the lightning's
  * strips), whose plain keys the start-up set does not hold beside the
- * planes ones (rd_pipeline.c rd__enumerate_reachable_screen). */
+ * planes ones (rd_pipeline.c rd__enumerate_reachable_screen).
+ *
+ * Without the sprite planes (issue 161: the Adreno 740's driver with the
+ * compiler E031.41.03.47 stopped while creating a batch of them): the host's
+ * record of that end ([dev] pipeline_skip, port/platform/pipeline_skip.h,
+ * rd_set_sprite_planes_off) or ICO_RD_NO_SPRITE_PLANES=1 turns the family
+ * off for the run (g_rd.spritePlanesOff): every screen-prim triangle command,
+ * its STQ ones too, draws through the plain sprite build, the start-up set
+ * holds the plain keys in their place, and no planes key is created on first
+ * use.  The picture: the GPU's interpolation of the corners instead of the
+ * planes (docs/port/WORK_BUFFERS.md "Without the sprite planes"). */
 #include <stdlib.h>
 #include <string.h>
 
 #include "rd_internal.h"
 #include "shader_consts.h"
+
+/* rd_set_sprite_planes_off's reason ("" none) */
+static char s_hostWhy[200];
+
+void rd_set_sprite_planes_off(const char *reason)
+{
+    snprintf(s_hostWhy, sizeof(s_hostWhy), "%s", reason != NULL ? reason : "");
+    if (g_rd.hasDevice) {
+        /* after rd_init (the host knows the device's name and driver only
+           then): in force from here, before the start-up set */
+        rd__sprite_planes_init();
+    }
+}
+
+bool rd_sprite_planes_off(void)
+{
+    return g_rd.spritePlanesOff;
+}
+
+void rd__sprite_planes_init(void)
+{
+    const char *env = getenv("ICO_RD_NO_SPRITE_PLANES");
+    const bool byEnv = env != NULL && env[0] != '\0' && env[0] != '0';
+    g_rd.spritePlanesOff = byEnv || s_hostWhy[0] != '\0';
+    g_rd.spritePlanesWhy[0] = '\0';
+    if (!g_rd.spritePlanesOff) {
+        return;
+    }
+    snprintf(g_rd.spritePlanesWhy, sizeof(g_rd.spritePlanesWhy), "%s",
+             s_hostWhy[0] != '\0' ? s_hostWhy : "by ICO_RD_NO_SPRITE_PLANES=1");
+    rd__log("pipelines: the sprite planes builds are not made on this device (%s); their draws "
+            "take the plain builds (the screen-prim triangles' colours and texture coordinates by "
+            "the GPU's interpolation of their corners; the window's 10 s line counts them as "
+            "sprite no-planes)",
+            g_rd.spritePlanesWhy);
+}
+
+bool rd__key_is_sprite_planes(const RdPipeKeyInt *k)
+{
+    return k->vs == RD_VS_SPRITE_PLANE_UI || k->vs == RD_VS_SPRITE_PLANE_WORLD ||
+           k->vs == RD_VS_SPRITE_STQ_PLANE_UI || k->vs == RD_VS_SPRITE_STQ_PLANE_WORLD;
+}
 
 static IcoSpritePlaneVertex *s_pl;
 
@@ -41,6 +93,9 @@ static uint32_t s_plCap;
 int rd__plane_pass(RdDrawPass *dp)
 {
     RdPipeKeyInt *k = &dp->key;
+    if (g_rd.spritePlanesOff) {
+        return 0; /* the family is off for the run (issue 161) */
+    }
     if ((k->fs == RD_FS_SPRITE || k->fs == RD_FS_SPRITE_TEXA) &&
         (k->vs == RD_VS_SPRITE_UI || k->vs == RD_VS_SPRITE_WORLD)) {
         k->vs = k->vs == RD_VS_SPRITE_WORLD ? RD_VS_SPRITE_PLANE_WORLD : RD_VS_SPRITE_PLANE_UI;
@@ -59,6 +114,16 @@ int rd__plane_pass(RdDrawPass *dp)
 
 int rd__screen_planes_want(const RdStateBlock *s, const RdTargetRec *tc, const RdDrawPass *dp)
 {
+    if (g_rd.spritePlanesOff) {
+        /* issue 161: the plain build; a command whose pass would have
+           taken the planes (rd__plane_pass's entries) counted for the 10 s
+           line */
+        if (dp && (dp->key.fs == RD_FS_SPRITE || dp->key.fs == RD_FS_SPRITE_TEXA ||
+                   dp->key.fs == RD_FS_SPRITE_STQ)) {
+            g_rdPerf.spriteNoPlanes++;
+        }
+        return 0;
+    }
     if (dp && (dp->key.fs == RD_FS_SPRITE_STQ || dp->key.fs == RD_FS_SPRITE_STQ_PLANES)) {
         return 1;
     }
