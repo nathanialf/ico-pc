@@ -1707,6 +1707,35 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_vufuse_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # the same two A/Bs on the frames rd_pixel leaves behind (every machine
+    # has them; CI's Direct3D 11 job runs them on WARP, tools/ci_d3d11_warp.sh):
+    # rd_pixel_vu.rddump (64 code-32 draws of one prelit mesh under one state,
+    # a matrix each: the merge joins them), rd_pixel_vu36.rddump (a code-36
+    # strip, its first triangle cut, its second kicked: a fused pair's
+    # candidate) and rd_pixel_frame.rddump (no VU draw: both runs the same).
+    # The 16:9 and phone settings skip for these 4:3 frames by design
+    set(_vu_pixel_list "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_vu_dumps.txt")
+    file(WRITE "${_vu_pixel_list}" "rd_pixel_vu.rddump\nrd_pixel_vu36.rddump\nrd_pixel_frame.rddump\n")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab_pixel"
+         "${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab_pixel")
+    add_test(NAME rd_vumerge_ab_pixel
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${_vu_pixel_list}"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab_pixel"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vumerge_ab.cmake")
+    set_tests_properties(rd_vumerge_ab_pixel PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                         FIXTURES_REQUIRED rd_dump TIMEOUT 600)
+    add_test(NAME rd_vufuse_ab_pixel
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${_vu_pixel_list}" "-DEXTRA="
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab_pixel"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vufuse_ab.cmake")
+    set_tests_properties(rd_vufuse_ab_pixel PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                        FIXTURES_REQUIRED rd_dump TIMEOUT 600)
+    if(_env)
+        set_tests_properties(rd_vumerge_ab_pixel rd_vufuse_ab_pixel PROPERTIES
+                             ENVIRONMENT "${_env}")
+    endif()
     # rd_store_plan_ab (test/rd_store_plan_ab.cmake): the same dumps and the
     # phone's frame with every depth store kept (ICO_RD_STORE_PLAN=0), with the
     # store plan (rd_store_plan.c) and with every depth store dropped
