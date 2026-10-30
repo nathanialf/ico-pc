@@ -56,7 +56,7 @@ static int find(mz_zip_archive *z, const char *name)
 static int entry_is(mz_zip_archive *z, const char *name, const void *data, size_t n)
 {
     mz_zip_archive_file_stat st;
-    char back[4096];
+    char back[8192]; /* the add test's picture is 5000 bytes */
     const int i = find(z, name);
 
     if (i < 0 || !mz_zip_reader_file_stat(z, (mz_uint)i, &st) || st.m_uncomp_size != n ||
