@@ -1,5 +1,6 @@
 ## New
 
+- Save states: four slots for each disc that hold the game exactly as it is. Save from the pause menu, load from the pause menu or the title (Options > Extras > Save states); on a computer F5 saves to slot 1 and F9 loads it. A state belongs to this version of the game, this disc and these gameplay settings.
 - Options > Gameplay > Shadow speed: shadows walk, run and fly slower or faster than on the PlayStation 2 (Slower, Original, Faster, Fastest).
 
 ## Fixed
