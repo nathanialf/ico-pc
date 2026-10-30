@@ -318,6 +318,43 @@ typedef struct UiTextureExportHost {
 } UiTextureExportHost;
 
 void ui_settings_set_texture_export_host(const UiTextureExportHost *host);
+
+/* The Save states page's host (v0.9.6 contract, ui_states_host.h; the UI
+ * knows nothing of files or memory: port/game/state_host.c behind
+ * main_host.c).  NULL (or never set) hides the pause row and the Extras
+ * link (the headless build, tests).  The struct is copied. */
+
+#define UI_STATES_SLOTS 4
+
+typedef struct UiStateSlotInfo {
+    int present;              /* a state exists */
+    int loadable;             /* it would load now */
+    int refusal_str;          /* UI_STR_* naming why not (when !loadable); 0 none */
+    unsigned int play_frames; /* for playTimeText */
+    int stage_no;             /* for areaName */
+    long long saved_at;       /* time(NULL) */
+    char png_path[260];       /* "" when none */
+} UiStateSlotInfo;
+
+#define UI_STATES_ACT_SAVE 0
+#define UI_STATES_ACT_LOAD 1
+#define UI_STATES_ACT_DELETE 2
+
+typedef struct UiStatesHost {
+    /* fills out[0..UI_STATES_SLOTS-1] */
+    void (*list)(UiStateSlotInfo out[UI_STATES_SLOTS]);
+    /* asks for the action on slot 1..4; 0 accepted (the result comes later
+       as a popup from the host side), -1 refused at once (the menu shows
+       the refusal popup with refusal_str) */
+    int (*request)(int action, int slot, int *refusal_str);
+    /* 1 when saves are allowed from here (the pause menu; 0 on the title) */
+    int (*can_save)(void);
+} UiStatesHost;
+
+void ui_settings_set_states_host(const UiStatesHost *host);
+/* After a load: the menu closes its page and puts the cursor on the pause
+   menu's Save states row (the restored game is on the pause layout). */
+void ui_settings_sync_after_state_load(void);
 /* Main > Save a picture for a bug report (always shown, directly above
    Developer mode: a player's row, no developer mode needed): fn arms the host's frame dump (window_host.c frame_dump: the
    picture, the frame's rd dump and the log in a zip in the dumps folder,
