@@ -299,8 +299,9 @@ WORK2 -> WORK0, a box of 4 x 8 texels at 2x (`blurAbove1xSteps`).
 
 ## Textures
 
-The texture cache decodes the TIM2 bytes Texture.c keeps in memory into an rd texture the first
-time it is needed and keeps it until the content changes (`port/render/rd_tex.h`):
+The texture cache decodes the TIM2 bytes Texture.c keeps in memory into an rd texture when first
+needed and keeps it until the content changes (`port/render/rd_tex.h`; decoded on worker threads:
+[TEXTURES.md](TEXTURES.md)):
 
 - **key**: (texture id, content generation, TEXA mode); the mode is one of `RdTexA` (alpha baked)
   or `RDTEX_TEXA_REPLAY` (the source format's alpha kept and TEXA applied by the shader at replay,
@@ -308,7 +309,7 @@ time it is needed and keeps it until the content changes (`port/render/rd_tex.h`
 - **decode**: PSMCT32, 24, 16, 16S, PSMT8, PSMT4, PSMT8H, PSMT4HL, PSMT4HH and the PSMZ formats;
   CLUTs in CSM1 or index order. Output RGBA8 with the raw GS alpha (0x80 = 1.0) for 32-bit texels,
   the A bit for 16-bit ones and 0 for 24-bit ones (`rdtex_decode`).
-- **size**: padded with zero texels to 2^TW x 2^TH, so STQ and REPEAT wrap where the GS wraps.
+- **size**: padded with zero texels to 2^TW x 2^TH, so STQ and REPEAT wrap as on the GS.
 - **update**: a new generation of the same size and format re-expands into the same rd texture;
   otherwise the old one is retired and destroyed two `rdtex_frame_tick` calls later.
 - **levels**: a mipmapped TEX1 stores the TIM2's own levels when they are authored pictures
