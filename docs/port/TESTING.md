@@ -1160,7 +1160,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   without partial constant buffer updates; the upload ring's written mark on WARP, where a submit
   must write exactly the bytes under the mark that its copy reads, 4096 of 8192, then 1024 in the
   next frame, 2064 for marks 512, 2050 and 1000 in one frame, and all 8192 of a buffer never noted,
-  each read back byte for byte; the hardware adapter, the swapchain on
+  each read back byte for byte; the video memory fields of `RhiStats` on WARP: a budget, no more
+  to reserve than the budget, two reads inside 250 ms equal; the hardware adapter, the swapchain on
   a hidden window, Vulkan for comparison), the cells' shaders compiled at run time from
   `rhi_test_hlsl.h`; a Windows GUI program that writes `rhi_d3d11_test.log` and shows a message box
   (`rhi_d3d11`, registered on a native Windows build only). The `win-x64` and `win-x64-clang`
