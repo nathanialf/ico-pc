@@ -18,6 +18,9 @@ target_compile_options(ico_math PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNI
 if(NOT WIN32)
     target_link_libraries(ico_math PUBLIC m)
 endif()
+# rand.c, matrix.c and matrix_stack.c register their state with the save
+# state registry (port/platform/state_registry.c)
+target_link_libraries(ico_math PUBLIC ico_platform)
 if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_math)
 endif()
