@@ -3,7 +3,9 @@
 # [game] language or the host's locale). The parsing, writing and ini layering
 # are port/platform/host_config.c, which ico_pc and the tests compile
 # themselves; the clocks (platform/clock.c) are ico_platform's.
-add_library(ico_config STATIC config.c sysconf.c)
+# sim_keys.c (port/platform/sim_keys.h): the config keys that change the
+# simulation, read through config.c
+add_library(ico_config STATIC config.c sysconf.c "${CMAKE_SOURCE_DIR}/port/platform/sim_keys.c")
 target_include_directories(ico_config
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
     PRIVATE "${ICO_COMPAT_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
@@ -32,4 +34,14 @@ target_compile_options(config_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WA
 target_link_libraries(config_test PRIVATE ico_config ico_platform)
 if(ICO_RUN_TESTS)
     add_test(NAME config COMMAND config_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# the simulation keys (sim_keys.c): the hash follows every key's value, the
+# text lists them in order, the first differing key is named
+add_executable(sim_keys_test test/sim_keys_test.c ../platform/host_config.c)
+target_include_directories(sim_keys_test PRIVATE "${ICO_COMPAT_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(sim_keys_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(sim_keys_test PRIVATE ico_config ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME sim_keys COMMAND sim_keys_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
