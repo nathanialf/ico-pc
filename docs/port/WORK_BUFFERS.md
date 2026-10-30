@@ -8,8 +8,8 @@ reflection block between ticks, and where the crack filler is drawn on the fog's
 (not work buffers, kept here because RENDER.md is at its size cap) how a screen sprite redrawn under
 a new key between ticks is paired, how desktop Vulkan decides on the local reads at start, how
 the shadow count is read from the stencil in one draw, how the shadow levels are composited above
-1x, which passes leave a depth neither loaded nor stored (the store plan), a source that holds only its clear read as its colour, and which full-frame reads stay at a large
-scale. The sprites themselves are drawn by the GS
+1x, which passes leave a depth neither loaded nor stored (the store plan), a source that holds only its clear read as its colour, which full-frame reads stay at a large
+scale, and how the screen-prim triangles draw without the sprite planes (issue 161). The sprites themselves are drawn by the GS
 sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 
 ## Files
@@ -865,3 +865,83 @@ halvings 128, 64, 32, 16 MB over 15 seconds. The grow lines (64 MB and over) are
 `checkRingShrink` in `port/render/test/rd_present_test.c` runs the rule on a real ring: the count,
 the halving at the 300th, the reset by a quarter-size frame and by a growth, and the floor.
 Whether the card was short of memory is in the log: [RHI.md](RHI.md) (`videoMemBudget`).
+
+## Without the sprite planes
+
+Not a work buffer; kept here because RENDER.md is at its size cap (issue 161). A screen-prim triangle
+command (a GIF triangle list: the title's and the boot's shapes, the lightning's STQ strips) draws
+through the sprite planes builds (`sprite_plane_*_vs`, `sprite_stq_plane_*_vs` with
+`sprite_ps_planes`, `sprite_texa_ps_planes`, `sprite_stq_ps_planes` and their twins;
+`port/render/rd_screen_planes.c`, RENDER.md "Screen planes"): each triangle's colour and STQ
+planes per GS pixel, the same values at every frame width. A device can run without them.
+
+**The fallback.** `rd_set_sprite_planes_off(why)` (the window, from `[dev] pipeline_skip`) or
+`ICO_RD_NO_SPRITE_PLANES=1` sets `g_rd.spritePlanesOff` (`rd__sprite_planes_init`, in `rd_init`, or
+at once when the device is already made). Then `rd__plane_pass` converts nothing,
+`rd__screen_planes_want` keeps the plain sprite build for every pass, its STQ ones too, the start-up
+set holds the plain keys in place of the planes ones (`rd__enumerate_reachable_screen`: the plain
+STQ keys join it), and a planes key that still reaches `rd__get_pipeline` is never created (one
+line, its draw skipped). The picture: the GPU's screen-space interpolation of the corners instead
+of the planes, the path a fractional scale already takes (`rd__planes_dropped`): a colour a level
+apart on some pixels, and the 4:3 columns of a wide frame no longer the 4:3 frame's pixels for those
+triangles. The lines:
+
+    rd: pipelines: the sprite planes builds are not made on this device (the driver hung creating them on 2026-10-30, compiler E031.41.03.47; [dev] pipeline_skip); their draws take the plain builds (...)
+    window: sprite no-planes: N commands in these 10 s (the sprite planes builds off)
+
+(the second, in the 10 s block after the pixel diet line, counts the commands of those 10 s that took
+the fallback, `port/platform/window_pipeline_skip.c`;
+`RdPerfRecord.spriteNoPlanes`, rd_replay_tool `--stats` "sprite no-planes N").
+
+**The record.** `[dev] pipeline_skip = "sprite_planes; <device>; <driver>; <date>"`
+(`port/platform/pipeline_skip.h`): written by the window (`port/platform/window_pipeline_skip.c`,
+after `rd_init`)
+at the start that follows an end while preparing the graphics whose activity note names only that
+family (a lazy run's single creation, or a batch whose named vertex shaders are all planes builds,
+none unnamed); used on every start whose device name (`rhi_adapter_name`) and driver (the
+compiler build of `RhiLimits.compilerVersion`, else the version of the driver text) match it, case
+ignored, an empty field matching any; kept and not used on another device or driver (a driver
+update tries the family again). `""` or a deleted line makes the family again. The lines:
+
+    window: pipelines: the previous start ended while the graphics driver created the sprite planes builds (<note>); [dev] pipeline_skip = "<value>" written to <config>: this start and every start after it on this device and driver draw without them (pipeline_skip = "" makes them again)
+    window: pipelines: the previous start's end names no one family the game can draw another way (<note>); [dev] pipeline_skip is not written
+    window: [dev] pipeline_skip names <device> with driver <d>; this device is <device> with driver <d>: the sprite planes builds are made (the record is kept)
+
+and the box on the start that writes it ("The last start closed because the graphics driver stopped
+while preparing some of the shapes on the screen. ...").
+
+**The careful order.** Under the careful policy (one thread, the cache written after each batch)
+`rd_precreate_pipelines` moves the sprite planes builds after every other key (`planesLast`) and
+`createKeys` makes each one a batch of its own, so the cache holds the rest of the set before the
+first of them and the batch's note (`creating pipelines N of M: ...`) names one pipeline: an end
+inside it is that family's for the next start. The line: `rd: pipelines: the careful set makes its
+N sprite planes builds last, one a batch (...)`.
+
+**The creation limit (Android).** The watchdog's limits are not in force before the game starts,
+and the GPU hang limit counts waits for the GPU, not a driver call. On Android a note that names a
+pipeline being created (the set's batch, a lazy run's single one) with neither the note nor the
+set's count moving for 10 s (`PIPE_STALL_S`, `port/platform/diag_host.c` `pipe_stall_step`; off
+with the GPU hang limit, `[dev] watchdog = 0`) ends the run in order: `ico_pc: the graphics driver
+has not returned from creating a pipeline for N s (pipelines D of T): the run ends now, ...`, the
+report, the box, an exit; the activity file keeps the note for the next start.
+
+**What issue 161's logs show.** The Retroid Pocket 6 (Adreno 740, compiler E031.41.03.47; v0.9.5,
+the careful set) stopped inside batch 212-219 of 587 with 216 made: that batch mixed the planes
+builds (`sprite_stq_plane_world_vs`, `sprite_plane_world_vs`) and a plain one (`sprite_world_vs`),
+so which pipeline did not return is not known. The same `sprite_stq_ps_planes` family compiled in
+0.08 to 0.10 s in batch 148-155 of that start. The device's available memory fell from 3340 MB (2 s,
+147 made) to 1693 MB (23 s, 211 made) while the process stayed at 205 to 214 MB; v0.9.4's start
+on the same console drew Android's "running critical" signal at 1900 MB available at pipeline 211,
+and its freeze record names a plain build (`program 11 ... sprite_world_vs + sprite_ps`). No
+watchdog line ends the v0.9.5 log: the system ended the app 18 to 20 s into the stall. The record
+above protects the starts after an end that names the family alone; the careful order makes such a
+note certain; the creation limit makes the end the game's own.
+
+**Tests.** `rd_vu_frac_test` (`testSkip`, CPU): the set with the planes off holds no planes key and
+the plain twin of each, no conversion, the counter, and the clear gives the set back key for key.
+`pipeline_skip_test` (`port/platform/test`): the family of the issue's notes (v0.9.5's mixed batch
+and v0.9.4's plain build name none; a single planes build and a lazy creation name it), the value
+read back, the device and driver match, the clear. `rd_noplanes_ab` (`port/render/test/
+rd_noplanes_ab.cmake`, `tools/noplanes_dumps.txt`): the title's and the boot's dumps (one planes key
+each, program 9 vs 22 fs 28) with and without the planes, the commands through the fallback counted
+and the targets that differ listed; a capture without planes keys byte for byte.
