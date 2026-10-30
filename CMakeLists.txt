@@ -186,6 +186,15 @@ add_library(ico_host_fs STATIC port/platform/host_fs.c)
 target_include_directories(ico_host_fs PUBLIC port/platform)
 target_compile_options(ico_host_fs PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_platform PUBLIC ico_host_fs)
+# ico_thread.c: the port's OS thread, mutex, condition and clock. Its own
+# library because the renderer's texture decode pool (port/render
+# rd_tex_decode.c) uses it and ico_render does not link ico_platform.
+find_package(Threads REQUIRED)
+add_library(ico_thread STATIC port/platform/ico_thread.c)
+target_include_directories(ico_thread PUBLIC port/platform PRIVATE "${ICO_COMPAT_DIR}")
+target_compile_options(ico_thread PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_thread PUBLIC Threads::Threads)
+target_link_libraries(ico_platform PUBLIC ico_thread)
 target_compile_definitions(ico_platform PRIVATE ${ICO_FPTRAP_DEFINITION})
 target_compile_options(ico_platform PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 
