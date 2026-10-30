@@ -181,7 +181,10 @@ static void new_game(void)
 
 static int file_count(const char *needle)
 {
-    FILE *f = fopen(s_path, "rb");
+    FILE *f;
+
+    ico_ach_writer_idle(); /* the file is written in the background */
+    f = fopen(s_path, "rb");
     char buf[16384];
     size_t n;
     int c = 0;
@@ -1025,7 +1028,10 @@ static void test_run_counts(void)
        partial, the flag kept across a save and its load, cleared by a New
        Game */
     {
-        IcoToml *t = ico_toml_load(s_path);
+        IcoToml *t;
+
+        ico_ach_reread_file(); /* the edit below is to the file on disk */
+        t = ico_toml_load(s_path);
         CHECK(t != NULL);
         if (t != NULL) {
             char key[64];
@@ -1212,6 +1218,122 @@ static void test_discs(void)
     remove(s_path);
 }
 
+/* --- the file's write path (the writer thread) ---------------------------------- */
+
+static char *read_whole(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    char *buf = malloc(65536);
+    size_t n;
+
+    if (f == NULL || buf == NULL) {
+        if (f != NULL) {
+            fclose(f);
+        }
+        free(buf);
+        return NULL;
+    }
+    n = fread(buf, 1, 65535, f);
+    fclose(f);
+    buf[n] = '\0';
+    return buf;
+}
+
+static void test_write_path(void)
+{
+    unsigned int sub0, wr0, rep0, sub, wr, rep;
+    unsigned int hand_due;
+    char want[64];
+    char *text;
+    char *disk;
+    char bad[700];
+
+    start("writepath");
+    new_game();
+    ico_ach_flush();
+    /* only the hand-held time changes: written every 60 s of Main ticks, not
+       every ICO_ACH_STATS_FLUSH_TICKS */
+    g.girl_present = 1;
+    g.hand_held = 1;
+    ticks(1);
+    hand_due = 60u * (unsigned int)ico_gs_tick_hz();
+    CHECK(ico_ach_flush_due_ticks() == (int)hand_due);
+    CHECK(hand_due > ICO_ACH_STATS_FLUSH_TICKS);
+    ico_ach_writer_counts(&sub0, &wr0, &rep0);
+    ticks((int)hand_due - 10);
+    ico_ach_writer_counts(&sub, &wr, &rep);
+    CHECK(sub == sub0); /* the short period has long passed: nothing was written */
+    ticks(20);
+    ico_ach_writer_counts(&sub, &wr, &rep);
+    CHECK(sub == sub0 + 1);
+    ico_ach_writer_idle();
+    CHECK(ico_ach_flush_due_ticks() == (int)hand_due); /* the write cleared the dirty mark */
+
+    /* any other change writes at the short period */
+    g.hand_held = 0;
+    kills(1);
+    CHECK(ico_ach_flush_due_ticks() == ICO_ACH_STATS_FLUSH_TICKS);
+    ico_ach_writer_counts(&sub0, &wr0, &rep0);
+    ticks(ICO_ACH_STATS_FLUSH_TICKS - 20);
+    ico_ach_writer_counts(&sub, &wr, &rep);
+    CHECK(sub == sub0);
+    ticks(40);
+    ico_ach_writer_counts(&sub, &wr, &rep);
+    CHECK(sub == sub0 + 1);
+
+    /* the text handed to the writer is the file's: held back, a newer text
+       replaces the waiting one, and the newer one is what lands on disk */
+    ico_ach_writer_idle();
+    ico_ach_writer_hold(1);
+    ico_ach_writer_counts(&sub0, &wr0, &rep0);
+    kills(1);
+    ticks(ICO_ACH_STATS_FLUSH_TICKS + 20);
+    kills(1);
+    ticks(ICO_ACH_STATS_FLUSH_TICKS + 20);
+    ico_ach_writer_counts(&sub, &wr, &rep);
+    CHECK(sub == sub0 + 2);
+    CHECK(rep == rep0 + 1); /* the first waiting text was replaced */
+    CHECK(wr == wr0);       /* held: nothing was written */
+    CHECK(ico_ach_written_text() != NULL);
+    text = ico_ach_written_text() != NULL ? strdup(ico_ach_written_text()) : NULL;
+    snprintf(want, sizeof(want), "enemies = %u", stats().enemies);
+    CHECK(text != NULL && strstr(text, want) != NULL);
+    ico_ach_writer_hold(0);
+    ico_ach_flush();
+    ico_ach_writer_counts(&sub, &wr, &rep);
+    CHECK(wr == wr0 + 1); /* one file write for the two texts */
+    disk = read_whole(s_path);
+    CHECK(disk != NULL && text != NULL && strcmp(disk, text) == 0);
+    free(disk);
+    free(text);
+
+    /* a flush writes a pending change and waits for it */
+    kills(1);
+    ico_ach_flush();
+    snprintf(want, sizeof(want), "enemies = %u", stats().enemies);
+    disk = read_whole(s_path);
+    CHECK(disk != NULL && strstr(disk, want) != NULL);
+    free(disk);
+
+    /* a write that fails stays pending: the next period hands the text over again */
+    snprintf(bad, sizeof(bad), "%s/no_such_folder_for_ach/x.toml", s_dir);
+    ico_ach_reset(bad);
+    ico_ach_set_clock(fixed_clock);
+    ico_gs_set_sampler(sampler);
+    fresh_world();
+    ticks(1);
+    kills(1);
+    ico_ach_writer_counts(&sub0, &wr0, &rep0);
+    ticks(ICO_ACH_STATS_FLUSH_TICKS + 20);
+    ico_ach_writer_idle();
+    ico_ach_writer_counts(&sub, &wr, &rep);
+    CHECK(sub == sub0 + 1 && wr == wr0 + 1);
+    ticks(ICO_ACH_STATS_FLUSH_TICKS + 20); /* the failure was seen: pending again */
+    ico_ach_writer_counts(&sub, &wr, &rep);
+    CHECK(sub == sub0 + 2);
+    ico_ach_flush();
+}
+
 /* --- popups ---------------------------------------------------------------------- */
 
 static void test_popups(void)
@@ -1316,6 +1438,7 @@ int main(int argc, char **argv)
     test_suspended();
     test_yorda_safe_counts();
     test_persistence();
+    test_write_path();
     test_popups();
     test_discs();
     if (failures) {
