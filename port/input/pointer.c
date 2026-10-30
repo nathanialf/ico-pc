@@ -83,6 +83,29 @@ void ico_pointer_set_menu(int on)
     s_p.menu = on != 0;
 }
 
+static IcoPointerRowProbe s_rowProbe;
+
+void ico_pointer_set_row_probe(IcoPointerRowProbe probe)
+{
+    s_rowProbe = probe;
+}
+
+int ico_pointer_row_at(float nx, float ny, int *layout, int *row)
+{
+    int l = -1, r = -1;
+
+    if (s_rowProbe == NULL || !s_rowProbe(nx, ny, &l, &r)) {
+        return 0;
+    }
+    if (layout != NULL) {
+        *layout = l;
+    }
+    if (row != NULL) {
+        *row = r;
+    }
+    return 1;
+}
+
 int ico_pointer_menu(void)
 {
     return s_p.menu;

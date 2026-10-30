@@ -49,6 +49,13 @@ int ico_pointer_take(IcoPointerTick *t);
 /* whether a menu the pointer can use is up (ui_mouse.c, once a Main tick) */
 void ico_pointer_set_menu(int on);
 int ico_pointer_menu(void);
+/* Which menu row lies under (nx, ny), 0..1 across and down the window: the
+   menu layer (ui_mouse.c) registers the probe, which gives the row's layout
+   and index and returns 1, or returns 0 for no row there. Used by the touch
+   layer to let a tap on a row win over a Hidden control. No probe: no row. */
+typedef int (*IcoPointerRowProbe)(float nx, float ny, int *layout, int *row);
+void ico_pointer_set_row_probe(IcoPointerRowProbe probe);
+int ico_pointer_row_at(float nx, float ny, int *layout, int *row);
 /* whether the mouse's Cross and Circle buttons trade places: set (once a
    Main tick, ui_mouse.c) on the Japanese disc while a menu or photo mode
    is up, where Circle confirms and Cross goes back, so the mouse works as

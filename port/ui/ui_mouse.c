@@ -189,8 +189,22 @@ static int hitAt(float x, float y, UiMouseHit *hit)
     return ui_mouse_hit_test(s_rows, gatherRows(), gx, gy, hit);
 }
 
+/* the touch layer's question (pointer.h): which row is under the finger */
+static int rowProbe(float nx, float ny, int *layout, int *row)
+{
+    UiMouseHit h;
+
+    if (!hitAt(nx, ny, &h)) {
+        return 0;
+    }
+    *layout = h.layout;
+    *row = h.row;
+    return 1;
+}
+
 void ui_mouse_tick(void)
 {
+    ico_pointer_set_row_probe(rowProbe);
     IcoPointerTick t;
     const int used = ico_pointer_take(&t);
 
