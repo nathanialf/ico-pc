@@ -1580,12 +1580,17 @@ static const char *act_current(void)
                                               : "creating the start-up pipelines";
 }
 
+/* every note set or cleared (the watchdog's pipeline limit, below: a
+   creation that has not returned keeps the same note and count) */
+static volatile unsigned int activity_seq;
+
 void ico_diag_set_activity(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(activity, sizeof activity, fmt, ap);
     va_end(ap);
+    activity_seq++;
     /* the start-up set's own "(i of m)" notes between two pipelines are
        left out: the pipeline's note names its place in the set, and this
        halves the writes */
@@ -1602,6 +1607,7 @@ void ico_diag_set_activity(const char *fmt, ...)
 void ico_diag_clear_activity(void)
 {
     activity[0] = '\0';
+    activity_seq++;
     /* the start-up set's mode keeps the last note: a frame the progress
        screen presents between two of its pipelines clears it, and the
        next one follows at once */
@@ -4671,6 +4677,42 @@ static const char *os_wait_name(void)
     return w != NULL ? w : "a call into the system";
 }
 
+#ifdef __ANDROID__
+/* Issue 161: the graphics driver's pipeline creation that does not return.
+   On the Retroid Pocket 6 (Adreno 740, compiler E031.41.03.47) a creation of
+   the careful start-up set stayed inside the driver for 18 s while the
+   device's free memory fell, then the system ended the app without a word
+   (v0.9.5), or the whole console froze and a hard reset followed (v0.9.4);
+   the watchdog's limits are not in force before the game starts, and the
+   GPU hang limit counts waits for the GPU, not a driver call.  While a
+   note names a pipeline being created (the set's batch, a lazy run's single
+   one) and neither the note nor the set's count has moved for
+   PIPE_STALL_S, with the GPU hang limit on ([dev] watchdog = 0 turns both
+   off), the run ends here in order: the log, the report, the box, a
+   normal exit, and the activity file keeps the note, so the next start
+   counts the end and leaves the family out when the note names only one
+   (window_host.c window_pipeline_skip).  The longest creation any log has
+   shown is 3.4 s (a VU pipeline on a PowerVR phone). */
+#define PIPE_STALL_S 10.0
+static volatile int pipe_stall;
+
+/* the creation's stall in seconds, or 0 while it moves */
+static double pipe_stall_step(double now, int counted)
+{
+    static unsigned int last_seq, last_done;
+    static double since;
+    const unsigned int seq = activity_seq, done = pipes_done;
+    const int creating = act_mode != 0 && strncmp(activity, "creating pipeline", 17) == 0;
+    if (!creating || !counted || gpu_hang_limit_ms == 0 || seq != last_seq || done != last_done) {
+        last_seq = seq;
+        last_done = done;
+        since = now;
+        return 0.0;
+    }
+    return now - since;
+}
+#endif
+
 static void watchdog_fire(const char *reason)
 {
     char where[96];
@@ -4792,11 +4834,14 @@ static void watchdog_fire(const char *reason)
         const char *note = hang && notefn != NULL ? notefn() : NULL;
 
         snprintf(box, sizeof box, "%s%s%s",
-                 hang ? "The graphics driver stopped responding while the game was drawing, so "
-                        "the game has to close.\n\nStart the game again. If this happens every "
-                        "time at the same place, please report it at "
-                        "github.com/nathanialf/ico-pc/issues."
-                      : "ICO stopped responding, so it has to close.",
+                 pipe_stall ? "The graphics driver stopped while preparing the graphics, so the "
+                              "game has to close.\n\nStart the game again: it prepares them "
+                              "another way."
+                 : hang     ? "The graphics driver stopped responding while the game was drawing, "
+                              "so the game has to close.\n\nStart the game again. If this "
+                              "happens every time at the same place, please report it at "
+                              "github.com/nathanialf/ico-pc/issues."
+                            : "ICO stopped responding, so it has to close.",
                  note != NULL && note[0] != '\0' ? "\n\n" : "", note != NULL ? note : "");
         if (note != NULL && note[0] != '\0') {
             flog("ico_pc: the box names the graphics driver route (the device's own Qualcomm "
@@ -5029,6 +5074,25 @@ static void watchdog_loop(void)
                 continue;
             }
         }
+#ifdef __ANDROID__
+        {
+            /* issue 161: a pipeline creation that has not returned
+               (pipe_stall_step), in force before the game starts too */
+            const double stalled = pipe_stall_step(now, poll_counted);
+            if (stalled >= PIPE_STALL_S) {
+                ico_diag_log("ico_pc: the graphics driver has not returned from creating a "
+                             "pipeline for %.0f s (pipelines %u of %u): the run ends now, in "
+                             "order, so the next start can prepare the graphics another way",
+                             stalled, pipes_done, pipes_total);
+                snprintf(reason, sizeof reason,
+                         "a pipeline creation has not returned for %.0f s (limit %.0f s)", stalled,
+                         PIPE_STALL_S);
+                pipe_stall = 1;
+                watchdog_fire(reason);
+                continue;
+            }
+        }
+#endif
         /* the bound only while a limit is in force: with the watchdog off
            ([dev] watchdog = 0), and on Android before the game starts
            (ico_diag_start_reporter, the start-up set's progress pump), a
