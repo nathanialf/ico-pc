@@ -38,6 +38,7 @@
 #include "sched.h"
 #include "mix_gain.h"
 #include "sndn2_host.h"
+#include "state_registry.h"
 
 #ifndef ICO_UNCACHED
 #define ICO_UNCACHED(p) (p) /* as ico2/common/include/typedef.h on the host */
@@ -87,6 +88,33 @@ static struct {
     const void *hd;
     unsigned char *slot[5]; /* header + the words at 0x10, 0x18, 0x1C, 0x20, 0x24 */
 } sgHdRel[128];
+
+/* PC port: the member's .bss in the save state registry (state_registry.h;
+   port/platform/state_port.c calls this once).  This file is compiled into
+   the sound library, not the game's, so the game data ranges miss it.  The
+   pointer blocks (the IOP page pointer, the head context, the RPC client,
+   the header and body addresses) are scanned at a load; everything is
+   copied under the audio lock with the driver it talks to. */
+int ico_sound_state_register(void)
+{
+    const unsigned a = ICO_STATE_AUDIO, s = ICO_STATE_AUDIO | ICO_STATE_SCAN;
+    int rc = 0;
+
+    rc |= ico_state_register("sound.vab", sgVabContext, sizeof sgVabContext, a);
+    rc |= ico_state_register("sound.slot", sgSlotContext, sizeof sgSlotContext, a);
+    rc |= ico_state_register("sound.seq", sgSeqContext, sizeof sgSeqContext, a);
+    rc |= ico_state_register("sound.com", sgComContext, sizeof sgComContext, a);
+    rc |= ico_state_register("sound.packet", sgPacketContext, sizeof sgPacketContext, a);
+    rc |= ico_state_register("sound.iop2ee", sgIop2EeBuf, sizeof sgIop2EeBuf, a);
+    rc |= ico_state_register("sound.iop2ee_p", &sgIop2EeContext, sizeof sgIop2EeContext, s);
+    rc |= ico_state_register("sound.se", sgSeContext, sizeof sgSeContext, a);
+    rc |= ico_state_register("sound.head", sgHeadContext, sizeof sgHeadContext, s);
+    rc |= ico_state_register("sound.client", &sgClient, sizeof sgClient, s);
+    rc |= ico_state_register("sound.vab_hd", sgVabHd, sizeof sgVabHd, s);
+    rc |= ico_state_register("sound.seq_body", sgSeqBody, sizeof sgSeqBody, s);
+    rc |= ico_state_register("sound.hd_rel", sgHdRel, sizeof sgHdRel, s);
+    return rc != 0 ? -1 : 0;
+}
 
 static unsigned char *sg_seq_body(const void *seq)
 {
