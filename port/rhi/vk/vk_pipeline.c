@@ -1224,6 +1224,7 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
 typedef struct VkrPipeWork {
     VkrPipeJob *jobs;
     uint32_t n;
+    RhiPipelineBatch *batch; /* its begin and end hooks (rhi.h), or NULL */
 #ifdef ICO_RHI_HAVE_SDL
     SDL_AtomicInt next, finished;
     SDL_Semaphore *wake;
@@ -1235,6 +1236,19 @@ typedef struct VkrPipeWork {
  * Windows and Android) */
 #define VKR_PIPE_STACK_BYTES (8u * 1024u * 1024u)
 
+/* job i's compile between the batch's begin and end hooks (rhi.h) */
+static void vkr_pipe_compile_hooked(VkrPipeWork *w, uint32_t i)
+{
+    RhiPipelineBatch *b = w->batch;
+    if (b && b->begin) {
+        b->begin(b->ctx, i);
+    }
+    vkr_pipe_compile(&w->jobs[i]);
+    if (b && b->end) {
+        b->end(b->ctx, i);
+    }
+}
+
 #ifdef ICO_RHI_HAVE_SDL
 static int SDLCALL vkr_pipe_worker(void *arg)
 {
@@ -1244,7 +1258,7 @@ static int SDLCALL vkr_pipe_worker(void *arg)
         if (i < 0 || (uint32_t)i >= w->n) {
             break;
         }
-        vkr_pipe_compile(&w->jobs[i]);
+        vkr_pipe_compile_hooked(w, (uint32_t)i);
         SDL_AddAtomicInt(&w->finished, 1);
         SDL_SignalSemaphore(w->wake);
     }
@@ -1276,6 +1290,7 @@ uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipel
     memset(&w, 0, sizeof(w));
     w.jobs = calloc(n, sizeof(VkrPipeJob));
     w.n = n;
+    w.batch = batch;
     if (!w.jobs) {
         /* no room for the jobs: one at a time */
         for (uint32_t i = 0; i < n; i++) {
@@ -1347,7 +1362,7 @@ uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipel
     if (!done) {
         /* the calling thread compiles them, the wait function between two */
         for (uint32_t i = 0; i < n; i++) {
-            vkr_pipe_compile(&w.jobs[i]);
+            vkr_pipe_compile_hooked(&w, i);
             if (batch && batch->wait && i + 1 < n) {
                 batch->wait(batch->ctx, i + 1);
             }
