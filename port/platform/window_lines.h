@@ -36,4 +36,19 @@ void window_video_memory_watch(void);
      sound was held back for 98 ms (1 such steps) */
 void window_hold_line(double lateMs, unsigned long long heldMs, unsigned decodes0, unsigned pipes0);
 
+/* At a 10 s block's end (window_host.c pace_log): the audio held sound back
+   for over HOLD_BLOCK_MS in the block (heldMs, the block's own) while no
+   step was over HOLD_LATE_MS late (stepMaxLateMs: the longest step against
+   the period), so window_hold_line named none: a steady shortfall, the
+   steps longer than their period on average (a picture slower than the
+   step at Frame rate Original before its late skip).  Names the steps'
+   average, the period, the frame rate (rateWords: "Original", or the
+   option's name) and the replay's average; the first 8 such blocks, then
+   every 30th:
+     window: the game step was late (steady: steps average 31.2 ms against a
+     period of 20.0 ms at Original (the picture takes 29.8 ms on this GPU)):
+     the sound was held back for 640 ms in this block (1 such blocks) */
+void window_hold_block_line(unsigned long long heldMs, double stepAvgMs, double stepMaxLateMs,
+                            double periodMs, double pictureMs, const char *rateWords);
+
 #endif /* ICO_PLATFORM_WINDOW_LINES_H */
