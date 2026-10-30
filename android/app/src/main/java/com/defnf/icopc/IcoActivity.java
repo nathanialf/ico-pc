@@ -17,6 +17,7 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.view.WindowManager;
 
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.core.util.Consumer;
 import androidx.window.java.layout.WindowInfoTrackerCallbackAdapter;
@@ -41,16 +42,20 @@ public class IcoActivity extends SDLActivity {
     }
 
     // The picture reaches into the display cutout (the notch). The theme says
-    // so too (res/values*/styles.xml); this sets it on the window before
-    // SDL's onCreate (the window exists by then). SDL itself only sets it on
-    // Android 11 and later, and by editing the same attributes.
+    // so too (res/values-v28 and values-v30/styles.xml); this sets it on the
+    // window before SDL's onCreate (the window exists by then). SDL itself
+    // only sets it on Android 11 and later, and by editing the same
+    // attributes. Android 8 (API 26 and 27, issue 158) has no cutout mode:
+    // the field is API 28, and reading it there would end onCreate.
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        WindowManager.LayoutParams lp = getWindow().getAttributes();
-        lp.layoutInDisplayCutoutMode = Build.VERSION.SDK_INT >= 30
-                ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-                : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-        getWindow().setAttributes(lp);
+        if (Build.VERSION.SDK_INT >= 28) {
+            WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.layoutInDisplayCutoutMode = Build.VERSION.SDK_INT >= 30
+                    ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                    : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(lp);
+        }
         sInstance = this;
         super.onCreate(savedInstanceState);
     }
@@ -85,9 +90,13 @@ public class IcoActivity extends SDLActivity {
                 mLayoutTracker = new WindowInfoTrackerCallbackAdapter(
                         WindowInfoTracker.getOrCreate(this));
             }
-            mLayoutTracker.addWindowLayoutInfoListener(this, getMainExecutor(), mLayoutListener);
-        } catch (RuntimeException e) {
-            // no fold reports: the layout treats the screen as flat
+            // ContextCompat's executor: Context.getMainExecutor is API 28
+            // (issue 158, Android 8)
+            mLayoutTracker.addWindowLayoutInfoListener(this,
+                    ContextCompat.getMainExecutor(this), mLayoutListener);
+        } catch (RuntimeException | LinkageError e) {
+            // no fold reports: the layout treats the screen as flat (a
+            // missing method or class is a LinkageError, not an exception)
             mLayoutTracker = null;
         }
         sendScreen();
