@@ -86,7 +86,7 @@ static bool d11_make_part(D11Buffer *b, uint32_t part, UINT bind, const char *na
     d.CPUAccessFlags = dynamic ? D3D11_CPU_ACCESS_WRITE : 0u;
     d.BindFlags = bind;
     if (part == D11_PART_SRV) {
-        /* StructuredBuffer<float4> (vu_common.hlsli): 16-byte elements */
+        /* StructuredBuffer<uint4> (vu_common.hlsli): 16-byte elements */
         d.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
         d.StructureByteStride = 16;
     }

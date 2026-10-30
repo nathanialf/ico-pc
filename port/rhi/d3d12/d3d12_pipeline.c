@@ -252,7 +252,7 @@ static bool dx_write_resource(const RhiBindSlot *s, const RhiBinding *b,
         return true;
     }
     case RHI_BIND_STORAGE_BUFFER: {
-        /* StructuredBuffer<float4> (vu_common.hlsli): 16-byte elements */
+        /* StructuredBuffer<uint4> (vu_common.hlsli): 16-byte elements */
         DxBuffer *buf = dx_get_buffer(b->buffer);
         /* the offset is checked first: past the end, buf->size - b->offset
            wraps and a huge offset + size would pass the bound */

@@ -92,7 +92,7 @@ static const D11FormatMap d11_formatMap[RHI_FMT_COUNT] = {
 /* ---------------------------------------------------------------- buffers
  * D3D11 binds a buffer by the flags it was made with, and a constant
  * buffer's bind flag excludes every other; a structured buffer (the
- * StructuredBuffer<float4> the VU vertex shaders read, stride 16) cannot
+ * StructuredBuffer<uint4> the VU vertex shaders read, stride 16) cannot
  * carry the vertex or index flag.  So one RHI buffer is up to three D3D11
  * buffers, one per bind class its usage asks for, each the whole size:
  *   D11_PART_VI   VERTEX | INDEX (and the plain copy buffer of a usage
