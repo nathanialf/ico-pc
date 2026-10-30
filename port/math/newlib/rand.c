@@ -31,8 +31,16 @@
 #include <stdint.h>
 
 #include "ico_newlib.h"
+#include "../../platform/state_port.h"
+#include "../../platform/state_registry.h"
 
 static uint32_t ico_rand_next = 1;
+
+/* The save state's block (state_port.h). */
+int ico_rand_state_register(void)
+{
+    return ico_state_register("rand.next", &ico_rand_next, sizeof ico_rand_next, 0);
+}
 
 void ico_srand(unsigned int seed)
 {
