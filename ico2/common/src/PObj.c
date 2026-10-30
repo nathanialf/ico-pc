@@ -253,10 +253,30 @@ static __inline__ void SetPObjVector(Vec v, float x, float y, float z) /* derive
  * same point (PObj_FreeImageTables). */
 static void **pobjImageTables; /* port: the decoded tables of the last model loaded */
 
+static unsigned int pobjImageTablesCount; /* port: its pointers */
+
 void PObj_FreeImageTables(void)
 {
     free(pobjImageTables);
     pobjImageTables = 0;
+    pobjImageTablesCount = 0;
+}
+
+/* PC port: a save state (port/game/state_host.c) saves the block with the
+   game's memory, and a load puts a copy in its place: the part records in
+   the heap point into it (their strip and morph tables), moved by the
+   relocation.  Get: the block and its bytes (0 when none).  Set: installs
+   p (count pointers) without freeing the block it replaces. */
+void **PObj_GetImageTables(size_t *bytes)
+{
+    *bytes = pobjImageTables != 0 ? (size_t)pobjImageTablesCount * sizeof(void *) : 0;
+    return pobjImageTables;
+}
+
+void PObj_SetImageTables(void **p, unsigned int count)
+{
+    pobjImageTables = p;
+    pobjImageTablesCount = p != 0 ? count : 0;
 }
 
 /* a table of n EE words as n pointers, at *out; advances *out */
@@ -326,6 +346,7 @@ static void AllocPObjSubs(PObj *p, int *list)
     }
     PObj_FreeImageTables();
     pobjImageTables = tables = (void **)malloc((total ? total : 1) * sizeof(void *));
+    pobjImageTablesCount = total ? total : 1;
     if (tables == 0) {
         __builtin_trap();
     }
