@@ -836,6 +836,29 @@ typedef enum UiStrId {
        package (port/platform/android/gpu_driver_android.c
        ico_gpu_driver_android_hang_note, issue 123) */
     UI_STR_GPU_HANG_TURNIP,
+    /* PC port: save states (port/game/state_host.c, the Save states page,
+       the pause menu's row and the popups); the English text in every
+       table until the translations come */
+    UI_STR_STATES,
+    UI_STR_STATES_SLOT,
+    UI_STR_STATES_EMPTY,
+    UI_STR_STATES_ACT_SAVE,
+    UI_STR_STATES_ACT_LOAD,
+    UI_STR_STATES_ACT_DELETE,
+    UI_STR_STATES_CONFIRM,
+    UI_STR_STATES_SAVED,
+    UI_STR_STATES_LOADED,
+    UI_STR_STATES_DELETED,
+    UI_STR_STATES_NOTE,
+    UI_STR_STATES_PAUSE_FIRST,
+    UI_STR_STATES_REFUSED_BUILD,
+    UI_STR_STATES_REFUSED_DISC,
+    UI_STR_STATES_REFUSED_SETTINGS,
+    UI_STR_STATES_REFUSED_BUSY,
+    UI_STR_STATES_REFUSED_CHECK,
+    UI_STR_STATES_OFF,
+    UI_STR_STATES_TITLE_HINT,
+    UI_STR_STATES_SAVE_FAILED,
     UI_STR_COUNT
 } UiStrId;
 
