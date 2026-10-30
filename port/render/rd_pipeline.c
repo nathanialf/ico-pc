@@ -1420,19 +1420,45 @@ static void useWhere(char *out, size_t size)
  * or into the failed keys: the line names the key, when it was asked for
  * (when: "in the start-up set", "on first use in list 3") and why it
  * failed (failReason), the first 8 then every 100th */
-static void keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at, const char *when,
-                         const char *why)
+/* ICO_RD_FAKE_MERGE_FAIL=1: the first pipeline made with a draw merge's
+ * build is destroyed and kept as failed, as a build the driver refused
+ * (the fallback's test: rd_vumerge_fallback, tools/ci_d3d11_warp.sh) */
+static bool fakeMergeFail(void)
 {
+    static int s_fake = -1;
+    if (s_fake < 0) {
+        const char *e = getenv("ICO_RD_FAKE_MERGE_FAIL");
+        s_fake = e && strcmp(e, "1") == 0;
+    }
+    return s_fake == 1;
+}
+
+/* the result to use: p, or none where the fake failure took it */
+static RhiPipeline keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at, const char *when,
+                                const char *why)
+{
+    const bool viaMerge = g_rd.vuMerge && g_rd.vsMerge[k->vs].id;
+    if (p.id && viaMerge && fakeMergeFail()) {
+        static bool s_faked; /* once a run */
+        if (!s_faked) {
+            s_faked = true;
+            rhi_destroy_pipeline(p);
+            p = (RhiPipeline){0};
+            why = "faked (ICO_RD_FAKE_MERGE_FAIL=1)";
+        }
+    }
     if (!p.id) {
         s_failLines++;
+        /* PC port: a key through the draw merge's build names it (on
+           Direct3D 11 the build compiles here, at its first pipeline, so a
+           module FXC refuses surfaces as this line) */
+        char vsName[64] = "";
+        if (viaMerge) {
+            keyVsName(k, vsName, sizeof(vsName));
+        }
         if (s_failLines <= 8u || s_failLines % 100u == 0u) {
-            /* PC port: a key through the draw merge's build names it (on
-               Direct3D 11 the build compiles here, at its first pipeline,
-               so a module FXC refuses surfaces as this line) */
             char merge[160] = "";
-            if (g_rd.vuMerge && g_rd.vsMerge[k->vs].id) {
-                char vsName[64];
-                keyVsName(k, vsName, sizeof(vsName));
+            if (viaMerge) {
                 snprintf(merge, sizeof(merge),
                          "; vertex shader %s, the draw merge's build ([dev] vu_merge = false "
                          "avoids it)",
@@ -1443,6 +1469,15 @@ static void keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at, cons
                     when, k->gs.program, k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt, why,
                     s_failLines, s_failLines == 8u ? "; from here every 100th is written" : "",
                     merge);
+        }
+        /* PC port: a merge build the driver refused (Direct3D 11 compiles
+           it here; any backend under the fake) turns the merge off from the
+           next replay, so the plain builds draw what this key would have
+           (rd_replay_vu.c rd__vu_merge_fallback); a full pool is not the
+           build's fault */
+        if (viaMerge && strstr(why, "pipeline pool") == NULL &&
+            (rhi_backend() == RHI_BACKEND_D3D11 || fakeMergeFail())) {
+            rd__vu_merge_build_failed(vsName);
         }
         /* a failed entry where there is room (its own probe: a caller's
            slot may be stale, or the key made meanwhile) */
@@ -1462,7 +1497,7 @@ static void keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at, cons
                     "created until the cache is cleared (new keys are not drawn)",
                     s_failLines, RD_PIPELINE_FAIL_MAX);
         }
-        return;
+        return p;
     }
     s_cache[s_used].key = *k;
     s_cache[s_used].pipe = p;
@@ -1471,6 +1506,7 @@ static void keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at, cons
     s_hash[at] = (uint16_t)s_used;
     g_rd.stats.pipelineCreates++;
     rd__passring_pipeline(p.id, k->vs, k->fs, k->dst);
+    return p;
 }
 
 /* rd__pipeline_gather: the keys a replay asked for and found no pipeline
@@ -1659,7 +1695,7 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
         rhiPipeCounts(&st1);
         failReason(&st0, &st1, why, sizeof(why));
     }
-    keepPipeline(k, p, at, when, why);
+    p = keepPipeline(k, p, at, when, why);
     return p;
 }
 
