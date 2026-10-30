@@ -848,6 +848,14 @@ stays queued after each take, through `spu2_render` and the mirror swap
 
       window: the game step was late by 123 ms (loading: 1 disc reads of 64 sectors, 1 texture decodes, 0 pipelines, achievements 0.1 ms): the sound was held back for 98 ms (1 such steps)
 
+  A block of 10 s that held more than 200 ms of sound back while no step was over 100 ms late (a
+  steady shortfall: the steps longer than their period on average, as at Frame rate Original
+  before its late skip, [DISPLAY.md](DISPLAY.md#pacing)) writes once at the block's end (the
+  first 8 such blocks, then every 30th; `window_hold_block_line`), with the steps' average, the
+  period, the frame rate and the replay's average (a whole frame's at Original):
+
+      window: the game step was late (steady: steps average 31.2 ms against a period of 20.0 ms at Original (the picture takes 29.8 ms on this GPU)): the sound was held back for 640 ms in this block (1 such blocks)
+
   Disc reads with many sectors point at a slow drive (the summary line's `drives: data ...` says
   what kind the game data sits on), texture decodes at the decode pool's wait (its own `rd: waited N ms for texture
   decodes` line, [TEXTURES.md](TEXTURES.md#log-lines)), pipelines at a key the start-up set
