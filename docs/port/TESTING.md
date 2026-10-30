@@ -392,6 +392,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`dump_zip`).
 - `fiber_test.c`: [fibers](ARCHITECTURE.md#terms) switched round-robin with their stacks checked,
   deep stacks, the FP state inside a fiber (`fiber`, `fiber_guard`).
+- `ico_thread_test.c`: a thread runs and joins, a mutex and condition hand a value across, the clock does not run backwards (`ico_thread`).
 - `gpu_hang_test.c`: the GPU hang limit (`gpu_hang.h`, issue 123): half the watchdog (30 s gives
   15 s, 0 off, at least 2 s), the watch over four polls a second (issue 123's wait fires once at
   15 s, not before; a finished wait or none clears it; another submission's wait starts again

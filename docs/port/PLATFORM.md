@@ -31,6 +31,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/window_video.c`, `window_video.h` | window mode requests and their readback |
 | `port/platform/window_switch.c`, `window_switch.h` | Options > Graphics > Apply: the renderer switched to another backend in the process, the Graphics page's host |
 | `port/platform/window_lifecycle.c`, `window_lifecycle.h` | the steps run when a mobile system moves the app |
+| `port/platform/ico_thread.c`, `ico_thread.h` | one OS thread, mutex and condition wrapper (pthreads, Win32) for code that must not need SDL; the achievements file writer uses it (`ico_thread_test.c`) |
 | `port/platform/pump_watch.c`, `pump_watch.h` | the event pump's recent window messages and SDL events, the controllers that came and went (name, GUID, SDL driver), SDL's own log ring, and the names of the messages (pure C, tested everywhere) |
 | `port/platform/window_pump_win.c`, `window_pump_win.h` | Windows: the window's messages recorded for the slow-pump lines, the display and the computer kept awake |
 | `port/platform/pace_policy.c`, `pace_policy.h` | the pacing decisions, free of SDL: the vsync lock, slow presents, the gap between presents |
