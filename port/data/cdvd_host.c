@@ -330,6 +330,11 @@ int ico_cdvd_host_busy(void)
     return cd.busy;
 }
 
+int ico_cdvd_host_idle(void)
+{
+    return !cd.busy && cd.syncWaiters == 0 && !cd.stActive;
+}
+
 int ico_cdvd_host_vsync_hooked(void)
 {
     return cd.vsyncHooked;
