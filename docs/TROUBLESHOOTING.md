@@ -671,6 +671,36 @@ flight sticks and plain USB pads are found only that way and stop working.
 Play as before and send the log either way: it says whether the long waits
 stopped. If a controller of yours stops working, delete the line.
 
+## A save state will not load or save
+
+The game says why on the screen. In the Save states list, a slot that cannot
+be loaded is greyed and the line under the cards gives the reason:
+
+- **Saved by another version of the game.** A state only works in the exact
+  version that saved it. Go back to that version to use it, or save a new
+  one.
+- **Saved from another disc.** Each disc has its own four slots. Start the
+  game from the disc the state was saved on.
+- **A gameplay setting differs.** The message names the setting and the value
+  it had when you saved. Put the setting back (a few, such as Analogue stick
+  fix, Skip the opening and the Game variants, change how the game plays),
+  and the state loads.
+- **The state could not be restored; the game goes on.** The file is damaged,
+  or the game found something wrong in it. Your game carries on as it was.
+  Try another slot.
+- **Pause the game to save a state.** Saving only works from the pause menu.
+- **Not now: the game is loading or saving.** Wait a moment and try again
+  (for example while a room changes, the memory card is working or a movie
+  plays).
+- **The state could not be saved.** The folder is full or cannot be written.
+  Free some space and try again.
+- **Save states are off on this build.** The game cannot use them on
+  your device.
+
+If a state fails to load for any other reason, send a
+[problem report](#send-a-problem-report): the log has lines that start with
+`state:` that say what happened.
+
 ## Texture packs and model packs
 
 If a texture or model from a pack does not show up, look in the log for
