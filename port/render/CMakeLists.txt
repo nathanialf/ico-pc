@@ -1732,8 +1732,19 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vufuse_ab.cmake")
     set_tests_properties(rd_vufuse_ab_pixel PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                         FIXTURES_REQUIRED rd_dump TIMEOUT 600)
+    # rd_vumerge_fallback (test/rd_vumerge_fallback.cmake): a merge build the
+    # driver refuses (faked: ICO_RD_FAKE_MERGE_FAIL=1) turns the merge off from
+    # the next replay, logged once, and the later replays draw what
+    # ICO_RD_VU_MERGE=0 draws (rd_replay_vu.c rd__vu_merge_fallback)
+    add_test(NAME rd_vumerge_fallback
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_vu.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vumerge_fallback"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vumerge_fallback.cmake")
+    set_tests_properties(rd_vumerge_fallback PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                         FIXTURES_REQUIRED rd_dump TIMEOUT 300)
     if(_env)
-        set_tests_properties(rd_vumerge_ab_pixel rd_vufuse_ab_pixel PROPERTIES
+        set_tests_properties(rd_vumerge_ab_pixel rd_vufuse_ab_pixel rd_vumerge_fallback PROPERTIES
                              ENVIRONMENT "${_env}")
     endif()
     # rd_store_plan_ab (test/rd_store_plan_ab.cmake): the same dumps and the
