@@ -482,7 +482,12 @@ pinned) and `pobjImageTables`' host block (POBJ). A word matches a range when `l
   callee-saved registers. An EE int of 60 above a small int reads as an arena address
   (0x3C_xxxxxxxx), which is why the arena is pinned: with a zero delta nothing moves. With
   developer mode on (`ico_state_reloc_set_log`) each moved word is logged
-  (`state: moved the word at <addr>: <old> -> <new>`).
+  (`state: moved the word at <addr>: <old> -> <new>`). Where the image moves (Android, macOS:
+  a non-zero MODULE delta) any aligned 64-bit value that falls in the old image's range is
+  rewritten, so a pair of adjacent ints whose high word is 0x7f and low word lands in that window
+  would be changed too, and the typed self-checks cannot see a corrupted integer: that developer
+  mode line, which lists every rewritten word, is the one diagnosis (review finding 8; the plan's
+  accepted risk).
 - `ico_state_image_range` finds the image in this process: on Windows the module's headers
   (`SizeOfImage`, the executable sections), on Linux and Android `dl_iterate_phdr`'s loadable
   segments of the object holding this code, on Apple its segments through `_dyld`
