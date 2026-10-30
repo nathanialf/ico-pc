@@ -39,6 +39,12 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_VAL_PIT_LONGER] = "やや長い",
     [UI_STR_VAL_PIT_DOUBLE] = "2倍",
     [UI_STR_VAL_PIT_TRIPLE] = "3倍",
+    [UI_STR_OPT_SHADOW_SPEED] = "影の速さ",
+    [UI_STR_OPT_SHADOW_SPEED_NOTE] =
+        "影が歩く、走る、飛ぶ速さです。攻撃してくる頻度は変わりません。",
+    [UI_STR_VAL_SPEED_SLOWER] = "遅め",
+    [UI_STR_VAL_SPEED_FASTER] = "速め",
+    [UI_STR_VAL_SPEED_FASTEST] = "最速",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",

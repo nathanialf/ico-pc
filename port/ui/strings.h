@@ -108,6 +108,11 @@ typedef enum UiStrId {
     UI_STR_VAL_PIT_LONGER,
     UI_STR_VAL_PIT_DOUBLE,
     UI_STR_VAL_PIT_TRIPLE,
+    UI_STR_OPT_SHADOW_SPEED,      /* [gameplay] shadow_speed: the Shadow speed row */
+    UI_STR_OPT_SHADOW_SPEED_NOTE, /* its explanation */
+    UI_STR_VAL_SPEED_SLOWER,      /* its values (Original is UI_STR_VAL_ORIGINAL) */
+    UI_STR_VAL_SPEED_FASTER,
+    UI_STR_VAL_SPEED_FASTEST,
     /* Language: each language's own name, the same in every table */
     UI_STR_LANG_EN,
     UI_STR_LANG_FR,

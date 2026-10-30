@@ -39,6 +39,12 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_VAL_PIT_LONGER] = "Plus long",
     [UI_STR_VAL_PIT_DOUBLE] = "Double",
     [UI_STR_VAL_PIT_TRIPLE] = "Triple",
+    [UI_STR_OPT_SHADOW_SPEED] = "Vitesse des ombres",
+    [UI_STR_OPT_SHADOW_SPEED_NOTE] =
+        "La vitesse à laquelle les ombres marchent, courent et volent. Cela ne change pas la fréquence de leurs attaques.",
+    [UI_STR_VAL_SPEED_SLOWER] = "Plus lent",
+    [UI_STR_VAL_SPEED_FASTER] = "Plus rapide",
+    [UI_STR_VAL_SPEED_FASTEST] = "Le plus rapide",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",

@@ -43,6 +43,12 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_VAL_PIT_LONGER] = "더 오래",
     [UI_STR_VAL_PIT_DOUBLE] = "2배",
     [UI_STR_VAL_PIT_TRIPLE] = "3배",
+    [UI_STR_OPT_SHADOW_SPEED] = "그림자 속도",
+    [UI_STR_OPT_SHADOW_SPEED_NOTE] =
+        "그림자가 걷고, 달리고, 나는 속도입니다. 공격하는 빈도는 바뀌지 않습니다.",
+    [UI_STR_VAL_SPEED_SLOWER] = "느리게",
+    [UI_STR_VAL_SPEED_FASTER] = "빠르게",
+    [UI_STR_VAL_SPEED_FASTEST] = "가장 빠르게",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",

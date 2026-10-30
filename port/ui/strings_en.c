@@ -39,6 +39,12 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_VAL_PIT_LONGER] = "Longer",
     [UI_STR_VAL_PIT_DOUBLE] = "Double",
     [UI_STR_VAL_PIT_TRIPLE] = "Triple",
+    [UI_STR_OPT_SHADOW_SPEED] = "Shadow speed",
+    [UI_STR_OPT_SHADOW_SPEED_NOTE] =
+        "How fast shadows walk, run and fly. It does not change how often they attack.",
+    [UI_STR_VAL_SPEED_SLOWER] = "Slower",
+    [UI_STR_VAL_SPEED_FASTER] = "Faster",
+    [UI_STR_VAL_SPEED_FASTEST] = "Fastest",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",

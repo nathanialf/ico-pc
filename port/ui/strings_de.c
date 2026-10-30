@@ -39,6 +39,12 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_VAL_PIT_LONGER] = "Länger",
     [UI_STR_VAL_PIT_DOUBLE] = "Doppelt",
     [UI_STR_VAL_PIT_TRIPLE] = "Dreifach",
+    [UI_STR_OPT_SHADOW_SPEED] = "Tempo der Schatten",
+    [UI_STR_OPT_SHADOW_SPEED_NOTE] =
+        "Wie schnell Schatten gehen, rennen und fliegen. Wie oft sie angreifen, ändert sich nicht.",
+    [UI_STR_VAL_SPEED_SLOWER] = "Langsamer",
+    [UI_STR_VAL_SPEED_FASTER] = "Schneller",
+    [UI_STR_VAL_SPEED_FASTEST] = "Am schnellsten",
     [UI_STR_LANG_EN] = "English",
     [UI_STR_LANG_FR] = "Français",
     [UI_STR_LANG_DE] = "Deutsch",
