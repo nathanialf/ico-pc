@@ -723,6 +723,11 @@ enum {
 };
 
 RdTexRec *rd__tex_rec(uint32_t id);
+/* An RGBA8 image texture's CPU texels replaced by px (w * h * 4 bytes,
+ * malloc'd; the texture owns it from here), the whole texture dirty: the
+ * decode pool's result for a texture rdtex_store made (rd_tex.c
+ * rdtex__job_finish).  false (px still the caller's) for another kind */
+bool rd__tex_take_pixels(RdTex tex, uint8_t *px);
 /* Gives an image texture its GS levels (RdTexRec.gsLevels, gsChain): levels
  * counts the base, chain holds levels 1.. as RGBA8, level l
  * max(w >> l, 1) x max(h >> l, 1) texels (copied).  levels 0 or 1 (or a
