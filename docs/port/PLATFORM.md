@@ -374,7 +374,11 @@ linked program's symbol table at test time, the game's file statics (`texTable`,
 A save state is a snapshot of the whole running game taken at the host loop's quiescent point,
 written to a file and put back later (`port/platform/state.h`). This section is the file, the
 registry of the port's globals and the relocation, then the save and load sequences
-(`port/game/state_host.c`, [Saving and loading](#saving-and-loading)).
+(`port/game/state_host.c`, [Saving and loading](#saving-and-loading)). The pieces it relies on are
+described where they live: the fibers' images ([Save state images](#save-state-images)), the
+scheduler's tables ([Scheduler](#scheduler)), the pinned arena ([Arena](#arena-partitions-and-host-extras)), the game's
+globals ([Game data ranges](#game-data-ranges)) and the fixed image
+([BUILDING.md](../BUILDING.md#fixed-image)); the page is [UI.md](UI.md#extras--save-states).
 
 ### The file
 
@@ -644,7 +648,7 @@ Three places matter (`port/platform/host_config.h`):
 - the executable's folder (`ico_host_exe_dir`): `ico-pc.ini` and `logs/` beside the program on
   Windows and Linux;
 - the [user folder](ARCHITECTURE.md#terms) (`ico_host_pref_dir`): `config.toml`, the memory cards
-  (`memcard/`), the extracted `ico.o2r`, `ico-jpn.o2r` and `ico-kor.o2r`, `dumps/`, the developer `dev/` folder. In the window build
+  (`memcard/`), the save states (`states/<disc slug>/`, [above](#the-file)), the extracted `ico.o2r`, `ico-jpn.o2r` and `ico-kor.o2r`, `dumps/`, the developer `dev/` folder. In the window build
   it is SDL's `SDL_GetPrefPath("ico-pc", "ico-pc")`; in the headless build and the tests, which have
   no SDL, the executable's folder (`port/platform/host_config.c` (`ico_host_pref_dir`);
   `port/config/CMakeLists.txt` (`ICO_HOST_SDL_PREFPATH`));
@@ -1605,6 +1609,7 @@ The window build's diagnostic keys are free of SDL so a unit test checks them
   before: ...)`).
 - **Shift+F12** in photo mode: the aspect sweep, the paused frame rendered at 4:3, 16:9, 32:9,
   48:9 and 60:9 into `sweep-<time>.zip` (`ico_sweep_zip`).
+- **F5** and **F9**: save slot 1 and load slot 1 of the save states (`ICO_HOTKEY_STATE_SAVE`, `ICO_HOTKEY_STATE_LOAD`; no Shift variant, repeats do nothing); the request is latched and done at the next quiescent point ([Saving and loading](#saving-and-loading)).
 - **F11**: stats lines every second for 30 s instead of every 10 s; again turns it off
   (`ico_stats_fast_toggle`).
 - **Settings > Save a picture for a bug report** (Main, directly above Developer mode, always shown): F12's
