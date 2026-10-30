@@ -378,7 +378,7 @@ registry of the port's globals and the relocation, then the save and load sequen
 described where they live: the fibers' images ([Save state images](#save-state-images)), the
 scheduler's tables ([Scheduler](#scheduler)), the pinned arena ([Arena](#arena-partitions-and-host-extras)), the game's
 globals ([Game data ranges](#game-data-ranges)) and the fixed image
-([BUILDING.md](../BUILDING.md#fixed-image)); the page is [UI.md](UI.md#extras--save-states).
+([BUILDING.md](../BUILDING.md#fixed-image)); the page is [UI.md](UI.md#save-states).
 
 ### The file
 

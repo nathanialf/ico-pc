@@ -456,8 +456,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `sim_keys_test.c`: the simulation keys' list (no repeats, the expected keys), the text, the hash
   changing with a value and returning when it is cleared, and `ico_sim_keys_first_diff`'s
   `key=saved (now cur)` text on a short buffer too (`sim_keys`).
-- `settings_states_test.c`: the Save states page and the pause menu's rows at pitch 16
-  ([UI.md](UI.md#extras--save-states)), on each disc's layout (`settings_states`, `_jpn`, `_kor`,
+- `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 and the
+  Continue screen's Square prompt ([UI.md](UI.md#save-states)), on each disc's layout (`settings_states`, `_jpn`, `_kor`,
   `_cn`, `_ntsc`, `_aug6`, `_jun26`).
 - `fiber_test.c`: [fibers](ARCHITECTURE.md#terms) switched round-robin with their stacks checked,
   deep stacks, the FP state inside a fiber (`fiber`, `fiber_guard`).

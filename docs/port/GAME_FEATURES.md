@@ -327,7 +327,7 @@ hold the rest.
 | The New Game screen (Mirror mode, New Game+) | W | W | W | W | W | W | W | the start flag `gflag_new_game` (issue 147); `settings` `testNewGameStartFlags`, `settings_discs` |
 | The title's Settings and Quit rows, the quit screen | W | W | W | W | W | W | W | `row_title_*` (placeTitle); `settings_<slug>`, `settings_render_<slug>` |
 | The pause menu's Options (and its Extras) | W | W | W | W | W | W | W | `row_pause_options`, `layout_pause`; `settings_<slug>`, `settings_extra_<slug>` |
-| Continue and the save slots | W | W | W | W | W | W | W | `layout_mc_files`, `row_mc_*`, `la_host_mc_slot_pickable`; `settings_extra` (pointer), `save` runs per disc |
+| Continue and the save slots | W | W | W | W | W | W | W | `layout_mc_files`, `row_mc_*`, `la_host_mc_slot_pickable`; `settings_extra` (pointer), `save` runs per disc; the Save states prompt (`layout_load_files`, `la_host_mc_files_shown`) is unit-tested per disc (`settings_states_*`), not played |
 
 A port site that writes one of these numbers itself, instead of reading the region table, is what
 `region_literals_check` (`tools/check_region_literals.py`, [TESTING.md](TESTING.md)) fails on.

@@ -151,7 +151,7 @@ Circle (`port/ui/layout_ext.h` (`lt_ext_port_back_buttons`, `lt_ext_confirm_butt
 
 Each port row has a pointer role for the mouse: `LT_POINTER_AUTO` (an item is pointed at and a
 click is the disc's confirm on it, Cross, or Circle on the Japanese disc), `NONE` (never hit: a list heading, an empty slot), `LEFT` and `RIGHT` (a
-value's arrows, padded), `STEP` (a stepped value: a click is Right), `UP` and `DOWN` (a scroll mark: a click or a tap is Up or Down on the page's cursor, which does not move) (`port/ui/layout_ext.h`
+value's arrows, padded), `STEP` (a stepped value: a click is Right), `UP` and `DOWN` (a scroll mark: a click or a tap is Up or Down on the page's cursor, which does not move), `SQUARE` (a button prompt, the Continue screen's Save states line: a click or a tap is Square and moves no cursor; taken in a layout with no cursor of its own whatever the current layout has, [Save states](#save-states)) (`port/ui/layout_ext.h`
 (`lt_ext_set_pointer_role`)).
 
 ## The Settings menu
@@ -1105,20 +1105,47 @@ popup test switch and the quit handler; `ui_host_vsync` runs the popup clock onc
 (`port/ui/ui_host.h`; `port/ui/ui_host.c`; `port/ui/ui_internal.h` (`ui__set_record_hook`,
 `ui__set_sync_hook`)).
 
-### Extras > Save states
+### Save states
 
 `UiStatesHost` (`port/ui/settings.h`; the contract is `list`, `request` and `can_save`) is set by
 `port/platform/main_host.c` (`setup_states`, window build only) before the menus are built; it is
 copied by `ui_settings_set_states_host`. Two things depend on it **when `build()` runs**
-(`s_statesAtBuild`): the Extras link and the pause menu's row exist only if the host was set by then, so a
-build without one (the headless build, the other Settings tests) has the same rows as before.
+(`s_statesAtBuild`): the pause menu's row and the Continue screen's prompt exist only if the host
+was set by then, so a build without one (the headless build, the other Settings tests) has the same
+rows and layouts as before. Extras has no Save states row: the title's way in is the Continue
+screen.
 The page itself (`UI_PAGE_STATES`, `buildStatesPage`) is always built, with no way in; its layout
-costs one layout and 30 rows of the extension's budget (`testBudget`).
+costs one layout and 30 rows of the extension's budget (`testBudget`); with the host, the pause row
+and the prompt add three rows and one layout.
 
-- **Entry**: a `UI_OPT_LINK` row `UI_STR_STATES` after Credits in the Extras table, from both entries
-  (`optShown`: the host is set); and under Photo mode a pause menu row of the same words, in the
-  port layout chained after the pause menu (`s_statesRow`, built in `buildEntries` before the
-  journey's lines), whose `right` is the page's layout.
+- **Entry from the pause menu**: under Photo mode a pause menu row `UI_STR_STATES`, in the port
+  layout chained after the pause menu (`s_statesRow`, built in `buildEntries` before the journey's
+  lines), whose `right` is the page's layout.
+- **Entry from the title** (the Continue screen's prompt, `contProc`): the Continue screen's file
+  select is `la_mc_load_file_select` (region `layout_load_files`: 19 on the European disc, 16 on the
+  six others), a layout with no cursor whose `link` is the files' layout (`layout_mc_files`, 14 or
+  11, `la_mc_file_select`, shared with the Save screen; `menu_region_test` checks both on the
+  Japanese, Korean and Asian ELFs). `buildEntries` builds a one-item `UiHint` (the Square glyph
+  and `UI_STR_STATES`, `NOTE_SIZE`) in a port layout of its own with no cursor (`s_contLayout`),
+  and `repoint` chains it between the two: `19 -> prompt -> 14` (logged once, and left out, when
+  19 does not link 14). `exec_layout_texture` runs the chain's procs from the far end, each
+  handing its return to the next as `item`, and the file select's own proc last: the prompt's proc
+  returns the `item` it is given unchanged (the file `la_mc_file_select` picked on a confirm, which
+  `la_mc_load_file_select` indexes as `file[item]`). The line is shown while
+  `la_host_mc_files_shown()` (`layout_action.c`: `fileMask` and `actionStarted` set, the card check
+  done and the tiles up) and sits at field line 183 (`CONT_HINT_Y`), under the frame of the file
+  picture (lines 60 to 180 on the European disc, to 169 on the others), clear of the memory card
+  slot words (112 / 110), the area name (135 / 124) and the play time (160 / 150), above the OK and
+  Back bar (200), centred. Square (0x80: no proc of the screen reads it on any disc; not taken with
+  the confirm or Back in the same press) after the fade opens the page: `la_host_leave()` (as the
+  game's own exits: the item filter off, `actionStarted` 0), `s_origin` the title (the title's hint
+  line; the host allows no Save there), `lt_switch_layout` to the page, and the log line
+  `settings: Save states opened from the Continue screen`. The file select's proc runs after the
+  prompt in the same tick and installs its item filter again; the page's first tick (`statesOpen`
+  from 19) calls `la_host_leave()` once more before any cursor move. The two-card slot screen (17)
+  and the Save screen have no prompt. Its rows' pointer role is `LT_POINTER_SQUARE`: a click (a
+  tap) is Square and moves no cursor, and `ui_mouse.c` takes these rows in a layout with no cursor
+  whatever the current layout has (the file select has none).
 - **Pause rows** (`placePause`): the port rows (Photo mode while a stage runs, Save states) are
   chained one `PAUSE_PITCH` (20) apart under Options, or `PAUSE_PITCH_STATES` (16) when the states
   row shows: Options 50, Photo mode 66, Save states 82, Back 98, End Game 120 where the data has it.
@@ -1155,18 +1182,25 @@ costs one layout and 30 rows of the extension's budget (`testBudget`).
   or `ui_settings_reset` runs. `ui_settings_set_states_tex_funcs` swaps the two calls for fakes (the
   tests; without `ICO_RD` the default makes none and the pictures stay empty). A picture that cannot
   be read logs `state: the picture of slot N could not be loaded (path)` once per change.
-- **Back** goes to Extras, or, when the page was opened from the pause menu's row (the layout the
-  last settings proc ran in was the pause menu, `s_procLayout`), to the pause menu with the cursor on
-  the row.
+- **Back** goes to the layout it was opened from (the layout the last settings proc ran in,
+  `s_procLayout`): the pause menu with the cursor on the row, or the Continue screen's file select
+  (`s_stFromContinue`, logged `settings: Save states closed, back to the Continue screen`), whose
+  first tick reads the card again as on any entry (`fileMask` 0, the files' cursor on its
+  default). The title's logo stays down while the page covers the title and shows again on the
+  Continue screen (`port/game/title_logo.c`).
 - **After a load** (`ui_settings_sync_after_state_load`, called by the host after the restore):
   the pictures are released, the entry becomes the pause menu, the default cursor of the pause
   layout is the Save states row (and the current one if the pause menu is up), and a page still
   showing closes at its next tick without a sound or a save (`statesLeaveQuiet`).
 
 ctest `settings_states` (and `_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`, which run the pause
-rows and the link on those discs' numbers): the pause rows' places and links with and without the
-host or a stage, the link from both entries, the four cards' texts, geometry and pictures, the
-actions, the confirm rule, the title, Back, and the page after a load.
+rows, Extras and the Continue prompt on those discs' numbers): the pause rows' places and links with
+and without the host or a stage, Extras' nine rows from both entries with and without the host, the
+Continue prompt (no layout and the item handed on without the host; with it the chain, the glyph
+and words, hidden until the files show, its lines, a confirm on a file reaching the file select
+unchanged, Square and a click opening the page with Load and Delete only, Back to the file select
+from its first tick, a load closing to the pause menu), the four cards' texts, geometry and
+pictures, the actions, the confirm rule, the title, Back, and the page after a load.
 
 ## Tests
 
@@ -1183,7 +1217,7 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   entry repoint, the title and pause rows' places, navigation through the real `layout_texture.c`,
   the game's settings on the pages, what is written.
 - `settings_states` (`test/settings_states_test.c`): the Save states page, the pause menu's row
-  and the Extras link over a fake host ([Extras > Save states](#extras--save-states)).
+  and the Continue screen's prompt over a fake host ([Save states](#save-states)).
 - `settings_extras` (`test/settings_extras_test.c`): the Extras page from the title and the pause
   menu, Credits, Models, Characters with a faked viewer, the pages that hide the logo.
 - `settings_extra` (`test/settings_extra_test.c`): further Settings tests, one function per
