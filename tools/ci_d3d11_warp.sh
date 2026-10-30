@@ -137,6 +137,28 @@ run_test() {
     fi
 }
 
+# log_has <name> <log> <pattern> <absent text or "">: a check on a test's
+# log, noted as a row of its own: the extended regex present, the fixed
+# text (when given) absent
+log_has() {
+    local name="$1" log="$2" want="$3" absent="$4"
+    local verdict="passed"
+    if [ ! -f "$log" ]; then
+        verdict="FAILED (no log $log)"
+    elif ! grep -a -q -E "$want" "$log"; then
+        verdict="FAILED (no line matching: $want)"
+    elif [ -n "$absent" ] && grep -a -q -F "$absent" "$log"; then
+        verdict="FAILED (a line says: $absent)"
+    fi
+    echo "== $name: $verdict"
+    NAMES+=("$name")
+    RESULTS+=("$verdict")
+    if [ "$verdict" != "passed" ]; then
+        FAILED=1
+        grep -a -E "VU merge|VU fuse|rd_vumerge_ab|rd_vufuse_ab" "$log" 2> /dev/null | head -n 20 || true
+    fi
+}
+
 run() {
     DIR="$(cd "$1" && pwd)"
     LOGS="${2:-$DIR/logs}"
@@ -184,6 +206,36 @@ run() {
     if [ -f "$WORK/rd_pixel_frame.rddump" ]; then
         run_test rd_replay_tool "$DIR/rd_replay_tool.exe" "$(winpath "$WORK/rd_pixel_frame.rddump")" \
             "$(winpath "$WORK/rd_replay_tool.png")" --present 640x480 --stats --backend d3d11
+        # the draw merge is on here too (issue 126: v0.9.5 and before said
+        # "off on Direct3D 11" and drew one GPU draw a VU draw)
+        log_has rd_replay_tool_merge_on "$LOGS/rd_replay_tool.log" "rd: VU merge: on" \
+            "off on Direct3D 11"
+        # the draw merge and the fused scissor pair against one GPU draw a
+        # VU draw and the kicks under their own pipelines, byte for byte, on
+        # the frames rd_pixel leaves (port/render/CMakeLists.txt
+        # rd_vumerge_ab_pixel and rd_vufuse_ab_pixel run the same on Vulkan):
+        # rd_pixel_vu (64 code-32 draws of one state: the merge joins them),
+        # rd_pixel_vu36 (a code-36 cut and kick pair) and rd_pixel_frame (no
+        # VU draw). The 16:9 and phone settings skip for these 4:3 frames.
+        if [ -n "$CMAKE_BIN" ]; then
+            printf '%s\n' rd_pixel_vu.rddump rd_pixel_vu36.rddump rd_pixel_frame.rddump \
+                > "$WORK/vu_pixel_dumps.txt"
+            run_test rd_vumerge_ab "$CMAKE_BIN" "-DTOOL=$W/rd_replay_tool.exe" \
+                "-DLIST=$(winpath "$WORK/vu_pixel_dumps.txt")" "-DOUT=$(winpath "$WORK/vumerge_ab")" \
+                -P "$(winpath "$SRC/port/render/test/rd_vumerge_ab.cmake")"
+            # some draws merged (the script's own gate is fewer GPU draws in all)
+            log_has rd_vumerge_ab_joined "$LOGS/rd_vumerge_ab.log" \
+                "\([1-9][0-9]* draws merged into [1-9]" ""
+            run_test rd_vufuse_ab "$CMAKE_BIN" "-DTOOL=$W/rd_replay_tool.exe" \
+                "-DLIST=$(winpath "$WORK/vu_pixel_dumps.txt")" "-DEXTRA=" \
+                "-DOUT=$(winpath "$WORK/vufuse_ab")" \
+                -P "$(winpath "$SRC/port/render/test/rd_vufuse_ab.cmake")"
+        else
+            echo "ci_d3d11_warp: no cmake on PATH: the merge and fuse A/Bs cannot run"
+            NAMES+=("rd_vumerge_ab" "rd_vufuse_ab")
+            RESULTS+=("FAILED (no cmake)" "FAILED (no cmake)")
+            FAILED=1
+        fi
     else
         echo "ci_d3d11_warp: rd_pixel left no rd_pixel_frame.rddump: rd_replay_tool not run"
         NAMES+=("rd_replay_tool")
