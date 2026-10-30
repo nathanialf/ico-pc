@@ -277,6 +277,30 @@ void ico_gs_reset(void)
     s_over_seen = 0;
 }
 
+void ico_gs_rebaseline(void)
+{
+    memset(&s_snap, 0, sizeof(s_snap));
+    if (s_sampler != NULL) {
+        s_sampler(&s_snap);
+    }
+#ifdef ICO_GS_LIVE
+    else {
+        ico_gs_sample_live(&s_snap);
+    }
+#endif
+    s_prev = s_snap;
+    s_pending_n = 0;
+    memset(s_count, 0, sizeof(s_count));
+    memset(s_arg, 0, sizeof(s_arg));
+    s_stage_entered = 0;
+    s_over_seen = 0;
+    s_cap_hook_tick = 0;
+    s_cap_hooked = 0;
+    ico_diag_log("stats: the baseline taken again after a save state's load (stage %d); the "
+                 "run's counters kept",
+                 s_snap.stage_no);
+}
+
 static int flag_in(const IcoGsSnapshot *s, int n)
 {
     if (n < 0 || n >= ICO_GS_GFLAG_BYTES * 8) {
