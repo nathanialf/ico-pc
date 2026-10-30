@@ -1177,6 +1177,21 @@ void ico_host_torch_out(int burn_time, int life, int flags)
                     burn_time, life, flags);
 }
 
+void ico_host_env_wall_reach(int field_case, int motion)
+{
+    static int seen[3];
+    const int i = field_case < 0 ? 0 : field_case > 0 ? 2 : 1;
+    if (!inited || __atomic_exchange_n(&seen[i], 1, __ATOMIC_RELAXED)) {
+        return;
+    }
+    ico_diag_log("ico_pc: env: the June 2001 demo's wall-reach field (host bits 24-25) took case "
+                 "%s first at motion %d",
+                 i == 0   ? "-1 (the wall's reach)"
+                 : i == 2 ? "1 (a reach of 150)"
+                          : "0 (a reach of 60)",
+                 motion);
+}
+
 void ico_host_torch_caught(int flags)
 {
     if (!inited) {

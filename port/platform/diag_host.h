@@ -935,6 +935,14 @@ void ico_host_item_watch_null(int motion, float frame, float anim_frame);
    100th): a torch that goes out after 1 frame with life 0 is the record
    issue 160 found on the 2001 discs. */
 void ico_host_torch_out(int burnTime, int life, int flags);
+/* fumi/src/act-env.c ACTGetEnvironment_jun26: the June 2001 demo's
+   wall-reach field (the motion's host bits 24-25, where the other discs'
+   twins read it; v0.9.6 moved the read from bits 19-20) took case
+   field_case (0 the default reach of 60, -1 the wall's, 1 the reach of
+   150) at motion `motion`. A line the first time each case is taken in a
+   run, "env: the June 2001 demo's wall-reach field (host bits 24-25) took
+   case C first at motion M" (at most three a run; review finding 12). */
+void ico_host_env_wall_reach(int field_case, int motion);
 /* sugipon/src/torch.c, the chain reaction: an unlit torch (a held stick)
    caught fire from a burning torch within reach. A rate-limited line
    "torch: a torch caught fire from a burning one nearby (type T)", key

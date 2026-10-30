@@ -1817,6 +1817,11 @@ static void ACTGetEnvironment_ntsc(void *self, void *dir, float *orient, EnvFlag
     }
 }
 
+/* PC port: port/platform/diag_host.h (a line the first time each case of the
+   June 2001 demo's wall-reach field is taken in a run: the field read at the
+   host's bits 24-25, review finding 12) */
+void ico_host_env_wall_reach(int field_case, int motion);
+
 static void ACTGetEnvironment_jun26(void *self, void *dir, float *orient, EnvFlag *flags, ActEnv *env)
 {
     float prj[4];
@@ -2140,8 +2145,10 @@ static void ACTGetEnvironment_jun26(void *self, void *dir, float *orient, EnvFla
     switch (((int)(&motionKind[GOBJ_SUB(self)->ctrl.motion])->modeBits.word << 6) >> 30) {
     default:
         kd = 60.0f;
+        ico_host_env_wall_reach(0, GOBJ_SUB(self)->ctrl.motion); /* PC port: once per case */
         break;
     case -1:
+        ico_host_env_wall_reach(-1, GOBJ_SUB(self)->ctrl.motion); /* PC port: once per case */
         if (CheckWallAttributeNotYorda(self, 0x1000, 1)) {
             kd = 30.0f;
         } else {
@@ -2151,6 +2158,7 @@ static void ACTGetEnvironment_jun26(void *self, void *dir, float *orient, EnvFla
         break;
     case 1:
         kd = 150.0f;
+        ico_host_env_wall_reach(1, GOBJ_SUB(self)->ctrl.motion); /* PC port: once per case */
         break;
     }
     if (dist < kd) {
