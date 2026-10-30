@@ -198,6 +198,15 @@ From the title screen, going back returns you to the title screen with
 Options open on Extras. In the pause menu, the game behind the menu
 changes colour as you choose. [All the rows](OPTIONS.md#character-customization).
 
+## Save states
+
+The pause menu has a **Save states** row under **Photo mode**. It opens four
+slots; press Up or Down to pick one, Left or Right to choose **Save**, **Load**
+or **Delete**, and the confirm button to do it. Saving over a state and deleting
+ask you to press again within two seconds. Triangle (or Circle) goes back. From
+the title screen the same page is under Options > Extras > Save states, where it
+loads and deletes. [All the details](OPTIONS.md#extras).
+
 ## Take a photo
 
 Photo mode pauses the game and shows it from a camera you move around,
