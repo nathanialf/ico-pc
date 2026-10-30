@@ -34,19 +34,26 @@ compiles the same entry with macros (DXC `-D`) under the key `<name><s>`.
 library holding `shaders_gen.c` with `shaders_gen.h` on its public include path
 (`cmake/IcoShaders.cmake`, header comment).
 
-**Flags.** SPIR-V: `-spirv -fspv-target-env=vulkan1.1` with `-fvk-b-shift 0`, `-fvk-t-shift 16`,
+**Flags.** SPIR-V: `-spirv -fspv-target-env=vulkan1.0` with `-fvk-b-shift 0`, `-fvk-t-shift 16`,
 `-fvk-s-shift 32`, `-fvk-u-shift 48` (all spaces), so a register number is the
 [RHI](ARCHITECTURE.md#terms) slot and the Vulkan binding is the slot plus 0, 16, 32 or 48. Both
 targets: `-O3 -WX -I port/shaders` (a shader warning fails the build; no `-Zi`, no debug info in the
 blobs) (`cmake/IcoShaders.cmake` (`ICO_DXC_SPIRV_FLAGS`, `ICO_DXC_COMMON_FLAGS`)).
 
-The SPIR-V target is Vulkan 1.1 (SPIR-V 1.3) so the blobs load on Vulkan 1.1 drivers. DXC 1.9.2609.5
-emits identical instruction streams at 1.1 and 1.2 for every shader class here (no 8/16-bit storage,
-wave operations, demote or memory model); only the module header version and each OpEntryPoint's
-interface list differ (SPIR-V 1.4 and later list every global, 1.3 only Input/Output). Nothing reads
-the header version: the table test checks the magic number only. Contingency: if a future shader
-needs SPIR-V 1.4 or later, add a second blob column (`spv11`, the 1.1-targeted blob) to the manifest
-and an `RhiLimits.spirvMax`, and pick the column at pipeline creation; do not raise the single target.
+The SPIR-V target is Vulkan 1.0 (SPIR-V 1.0) so the blobs load on Vulkan 1.0 drivers (Android 8,
+issue 158; it was Vulkan 1.1 from v0.9.1 and 1.2 before). The shaders use only Vulkan 1.0
+capabilities: `Shader`, `InputAttachment`, `SampleRateShading` and `ImageQuery`, the built-ins
+`Position`, `PointSize`, `VertexIndex`, `FragCoord`, `FragDepth` and `SampleId`, dual-source
+`Index`, `EarlyFragmentTests`, structured buffers as `Uniform` + `BufferBlock`, storage images
+with an explicit format, and the interlock pair through `SPV_EXT_fragment_shader_interlock` (no
+draw parameters, wave operations, 8/16-bit types, push or specialization constants, variable
+pointers, demote or memory model). DXC 1.9.2609.5 emits the same instruction stream at 1.0 as at
+1.1, so only the module header's version word differs: one set serves every Vulkan version.
+`tools/spirv_header_diff.py OLD NEW` compares two blob sets with that word masked (the check run
+when the target moved), and the `spirv_check` test (`tools/check_spirv.py`, gate `version`) holds
+every module's header to 1.0. Contingency: if a future shader needs a later SPIR-V, add a second
+blob column (the 1.0-targeted blob beside it) to the manifest and an `RhiLimits.spirvMax`, and
+pick the column at pipeline creation; do not raise the single target.
 
 **Outputs.** Each entry writes `<build>/shaders/<name>.spv` and, with `ICO_SHADERS_DXIL` on (the
 default), `<name>.dxil`. With Ninja or Makefiles a second DXC command writes a `-MF` dependency
