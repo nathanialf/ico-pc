@@ -6,9 +6,10 @@
 //
 // Bindings (group 1, next to DrawCB at b1):
 //   t0  vu_stream  the vertex quadwords as Packet.c / Primitive.c built them
-//                  for the VIF UNPACK (float4 each; the cluster weight qword
-//                  keeps its two int VU addresses as raw bits); static meshes
-//                  without the batches' GIF tags (rd_mesh.h)
+//                  for the VIF UNPACK (the cluster weight qword keeps its two
+//                  int VU addresses as raw bits; the mark bytes after the
+//                  vertices); static meshes without the batches' GIF tags
+//                  (rd_mesh.h).  Read as uint4 (Integer lanes, below)
 //   b2  VuCB       the VU1 data memory 0..35 the program reads (see below)
 //   b3  VuBoneCB   cluster: VU memory 16..255, the bones; every mesh
 //                  program: the card bits after them (vu_strip_card)
@@ -71,6 +72,20 @@
 // such a draw, and for every draw on a device that refuses the extended
 // one (rd_pipeline.c rd__vu_plain_only); the plain modules are about half
 // the extended ones' size (tools/check_spirv.py VS_PLAIN_BUDGET).
+//
+// Integer lanes (issues 163, 164; docs/port/SHADERS.md, "Integer lanes:
+// never through a float load"): the VU kept integers in float registers
+// (the cluster's bone addresses 16..252 in the weight qword) and the port's
+// tables, records, mark bytes and card bits share the buffers with the
+// floats.  As floats those bits are denormals (16 is 2.2e-44), and Vulkan
+// leaves fp32 denormals to the implementation (shaderDenormFlushToZero /
+// shaderDenormPreserve): a driver that moves a loaded float through a
+// flushing path reads 0 (the suspected cause of issue 164 on a Mali-G52).  So every
+// buffer the VU shaders read words from is declared uint4 (vu_stream,
+// vu_ring, VuBoneCB's vu_bone) and only the float lanes are asfloat()ed
+// (vu_stream_f, VU_MEM, VU_TICK, VU_BONE): an integer lane never passes
+// through a float value.  tools/check_spirv.py's intlane gate fails a VU
+// module with an OpBitcast of a float a buffer load produced.
 #ifndef ICO_VU_COMMON_HLSLI
 #define ICO_VU_COMMON_HLSLI
 
@@ -139,17 +154,21 @@ cbuffer VuCB : ICO_REG(b2, 1)
 
 // VU memory 16..255: the cluster program's bones (vu_skin.hlsl), and for
 // every mesh program the card bits from qword vu_strip.w (vu_strip_card;
-// rd_replay_vu.c doVuDraw puts them after the bones a skinned mesh reads)
+// rd_replay_vu.c doVuDraw puts them after the bones a skinned mesh reads).
+// uint4: the card bits are integers (Integer lanes, above); the bones are
+// read through VU_BONE's asfloat
 cbuffer VuBoneCB : ICO_REG(b3, 1)
 {
-    float4 vu_bone[240];
+    uint4 vu_bone[240];
 };
 
 // The arrays' elements, read one at a time (the batch build below reads
-// them from vu_ring)
+// them from vu_ring); VU_BONE_BITS a qword of VuBoneCB as integers (the
+// card bits)
 #define VU_MEM(i) vu_mem[i]
 #define VU_TICK(i) vu_ticks[i]
-#define VU_BONE(i) vu_bone[i]
+#define VU_BONE(i) asfloat(vu_bone[i])
+#define VU_BONE_BITS(i) vu_bone[i]
 // a pre-pass entry's vertex: SV_VertexID itself (the batch build's
 // vu_pre_batch_entry finds its entry first)
 #define VU_PRE_ENTRY(vid) (vid)
@@ -163,20 +182,23 @@ cbuffer VuBoneCB : ICO_REG(b3, 1)
 // for a run of entries with the same pipeline, FrameCB and group 1.  Each
 // entry's VuCB and VuBoneCB lie in the upload ring where the cbuffer build
 // binds them (cbCopy), read here through vu_ring, the ring from the
-// replay's VU work on (t5), at the float4 indices the batch's table gives.  The table is a run
-// of uint4 in the ring too, from float4 g_aux0.x of the batch's DrawCB,
+// replay's VU work on (t5), at the qword indices the batch's table gives.  The table is a run
+// of uint4 in the ring too, from qword g_aux0.x of the batch's DrawCB,
 // g_aux0.y entries (at most VU_PRE_BATCH_MAX), one an entry in the order of
 // the draw's vertices:
 //   x the entry's first SV_VertexID in the draw (entry 0: 0)
-//   y its VuCB's first float4 in vu_ring
-//   z its VuBoneCB's first float4
+//   y its VuCB's first qword in vu_ring
+//   z its VuBoneCB's first qword
 //   w 0
 // vu_pre_batch_entry finds a vertex's entry (a fixed binary search over x:
 // six steps, no loop) and loads its VuCB's vectors into the statics below,
 // which the functions read under the cbuffer's names; vu_mem, vu_ticks and
 // vu_bone are read an element at a time (VU_MEM, VU_TICK, VU_BONE).  The
 // same bytes the cbuffers would hold: every word computed is the same.
-StructuredBuffer<float4> vu_ring : ICO_REG(t5, 1);
+// uint4 (Integer lanes, above): the tables and VuCB's uint4 vectors are
+// read as integers, the float vectors (vu_mem, vu_ticks, vu_lo, vu_hi, the
+// bones) through asfloat.
+StructuredBuffer<uint4> vu_ring : ICO_REG(t5, 1);
 static uint4 vu_draw;
 static uint4 vu_batch;
 static uint4 vu_strip;
@@ -185,14 +207,15 @@ static uint4 vu_rec;
 static float4 vu_lo;
 static float4 vu_hi;
 static uint4 vu_tri;
-// the entry's VuCB and VuBoneCB: their first float4 in vu_ring
+// the entry's VuCB and VuBoneCB: their first qword in vu_ring
 static uint vu_pre_v;
 static uint vu_pre_b;
-// IcoVuCB's float4 indices (shader_consts.h): mem 0..35, draw 36, batch
+// IcoVuCB's qword indices (shader_consts.h): mem 0..35, draw 36, batch
 // 37, strip 38, ticks 39..46, mark 47, rec 48, lo 49, hi 50, tri 51
-#define VU_MEM(i) vu_ring[vu_pre_v + (i)]
-#define VU_TICK(i) vu_ring[vu_pre_v + 39u + (i)]
-#define VU_BONE(i) vu_ring[vu_pre_b + (i)]
+#define VU_MEM(i) asfloat(vu_ring[vu_pre_v + (i)])
+#define VU_TICK(i) asfloat(vu_ring[vu_pre_v + 39u + (i)])
+#define VU_BONE(i) asfloat(vu_ring[vu_pre_b + (i)])
+#define VU_BONE_BITS(i) vu_ring[vu_pre_b + (i)]
 #ifdef ICO_VU_PRE_BATCH
 #define VU_PRE_BATCH_MAX 64u
 #define VU_PRE_ENTRY(vid) vu_pre_batch_entry(vid)
@@ -204,7 +227,7 @@ uint vu_pre_batch_step(uint e, uint s, uint vid)
 {
     uint m = e + s;
     uint r = e;
-    if (m < g_aux0.y && vid >= asuint(vu_ring[g_aux0.x + m].x)) {
+    if (m < g_aux0.y && vid >= vu_ring[g_aux0.x + m].x) {
         r = m;
     }
     return r;
@@ -220,17 +243,17 @@ uint vu_pre_batch_entry(uint vid)
     e = vu_pre_batch_step(e, 4u, vid);
     e = vu_pre_batch_step(e, 2u, vid);
     e = vu_pre_batch_step(e, 1u, vid);
-    uint4 t = asuint(vu_ring[g_aux0.x + e]);
+    uint4 t = vu_ring[g_aux0.x + e];
     vu_pre_v = t.y;
     vu_pre_b = t.z;
-    vu_draw = asuint(vu_ring[t.y + 36u]);
-    vu_batch = asuint(vu_ring[t.y + 37u]);
-    vu_strip = asuint(vu_ring[t.y + 38u]);
-    vu_mark = asuint(vu_ring[t.y + 47u]);
-    vu_rec = asuint(vu_ring[t.y + 48u]);
-    vu_lo = vu_ring[t.y + 49u];
-    vu_hi = vu_ring[t.y + 50u];
-    vu_tri = asuint(vu_ring[t.y + 51u]);
+    vu_draw = vu_ring[t.y + 36u];
+    vu_batch = vu_ring[t.y + 37u];
+    vu_strip = vu_ring[t.y + 38u];
+    vu_mark = vu_ring[t.y + 47u];
+    vu_rec = vu_ring[t.y + 48u];
+    vu_lo = asfloat(vu_ring[t.y + 49u]);
+    vu_hi = asfloat(vu_ring[t.y + 50u]);
+    vu_tri = vu_ring[t.y + 51u];
     return vid - t.x;
 }
 #else
@@ -240,14 +263,14 @@ uint vu_pre_batch_entry(uint vid)
 // vuDraw, vuRunFlush): consecutive draws with the same pipeline, groups,
 // DrawCB, FrameCB and scissor are one indexed draw.  Each draw's VuCB and
 // VuBoneCB lie in the upload ring as the cbuffer build binds them, read
-// through vu_ring (t5) at the float4 indices of the run's table, a run of
-// uint4 in vu_ring from float4 vu_merge_head.w (the lane IcoVuCB.mark[3],
+// through vu_ring (t5) at the qword indices of the run's table, a run of
+// uint4 in vu_ring from qword vu_merge_head.w (the lane IcoVuCB.mark[3],
 // which nothing else reads, of the VuCB bound at b2: the run's first
 // draw's), one a draw in the order of the index list, at most
 // VU_MERGE_MAX:
 //   x the draw's first rebased index value (draw 0: the table's draws)
-//   y its VuCB's first float4 in vu_ring
-//   z its VuBoneCB's first float4
+//   y its VuCB's first qword in vu_ring
+//   z its VuBoneCB's first qword
 //   w what its values were raised by (draw 0: 0; the index value less w is
 //     the draw's own, kick * 4 + corner, mod 2^32)
 // A draw alone is a table of one.  vu_merge_entry finds an index value's
@@ -269,7 +292,7 @@ uint vu_merge_step(uint e, uint s, uint vid, uint tab, uint n)
 {
     uint m = e + s;
     uint r = e;
-    if (m < n && vid >= asuint(vu_ring[tab + m].x)) {
+    if (m < n && vid >= vu_ring[tab + m].x) {
         r = m;
     }
     return r;
@@ -280,28 +303,41 @@ uint vu_merge_step(uint e, uint s, uint vid, uint tab, uint n)
 uint vu_merge_entry(uint vid)
 {
     uint tab = vu_merge_head.w;
-    uint n = asuint(vu_ring[tab].x);
+    uint n = vu_ring[tab].x;
     uint e = vu_merge_step(0u, 8u, vid, tab, n);
     e = vu_merge_step(e, 4u, vid, tab, n);
     e = vu_merge_step(e, 2u, vid, tab, n);
     e = vu_merge_step(e, 1u, vid, tab, n);
-    uint4 t = asuint(vu_ring[tab + e]);
+    uint4 t = vu_ring[tab + e];
     vu_pre_v = t.y;
     vu_pre_b = t.z;
-    vu_draw = asuint(vu_ring[t.y + 36u]);
-    vu_batch = asuint(vu_ring[t.y + 37u]);
-    vu_strip = asuint(vu_ring[t.y + 38u]);
-    vu_mark = asuint(vu_ring[t.y + 47u]);
-    vu_rec = asuint(vu_ring[t.y + 48u]);
-    vu_lo = vu_ring[t.y + 49u];
-    vu_hi = vu_ring[t.y + 50u];
-    vu_tri = asuint(vu_ring[t.y + 51u]);
+    vu_draw = vu_ring[t.y + 36u];
+    vu_batch = vu_ring[t.y + 37u];
+    vu_strip = vu_ring[t.y + 38u];
+    vu_mark = vu_ring[t.y + 47u];
+    vu_rec = vu_ring[t.y + 48u];
+    vu_lo = asfloat(vu_ring[t.y + 49u]);
+    vu_hi = asfloat(vu_ring[t.y + 50u]);
+    vu_tri = vu_ring[t.y + 51u];
     return vid - t.w;
 }
 #endif
 #endif
 
-StructuredBuffer<float4> vu_stream : ICO_REG(t0, 1);
+// uint4 (Integer lanes, above): vu_stream_f a qword of float lanes,
+// vu_stream_u one with an integer lane (the weight qword's addresses, the
+// mark bytes)
+StructuredBuffer<uint4> vu_stream : ICO_REG(t0, 1);
+
+float4 vu_stream_f(uint qw)
+{
+    return asfloat(vu_stream[qw]);
+}
+
+uint4 vu_stream_u(uint qw)
+{
+    return vu_stream[qw];
+}
 
 // vu_draw.z
 #define VU_CLIP_MASK 3u
@@ -383,7 +419,7 @@ uint vu_kick_marks(uint kick)
 {
     uint m = vu_mark.y;
     if (vu_mark.z != 0u) {
-        uint4 q = asuint(vu_stream[vu_draw.x + vu_mark.x + min(kick >> 4, vu_mark.z - 1u)]);
+        uint4 q = vu_stream_u(vu_draw.x + vu_mark.x + min(kick >> 4, vu_mark.z - 1u));
         uint s = (kick >> 2) & 3u;
         uint word = q.x;
         word = s == 1u ? q.y : word;
@@ -1289,7 +1325,7 @@ VuVSOut vu_pixel_attrs(VuVSOut i)
 // and STs do; a link's triangles are a few pixels long.
 float vu_plane_distance(uint v)
 {
-    float4 p = vu_stream[vu_vertex_qw(v)];
+    float4 p = vu_stream_f(vu_vertex_qw(v));
     uint axis = (vu_batch.z & 3u) - 1u;
     float c = axis == 0u ? p.x : (axis == 1u ? p.y : p.z);
     precise float d = ((vu_batch.z & 4u) != 0u ? -c : c) + asfloat(vu_batch.w);
@@ -1542,7 +1578,7 @@ bool vu_strip_card(uint kick)
     if (i >= vu_strip.z) {
         return false;
     }
-    uint4 q = asuint(VU_BONE(min(vu_strip.w + (i >> 6), 239u)));
+    uint4 q = VU_BONE_BITS(min(vu_strip.w + (i >> 6), 239u));
     uint s = (i >> 4) & 3u;
     uint word = q.x;
     word = s == 1u ? q.y : word;
