@@ -60,7 +60,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#if !defined(_WIN32)
+/* glob(3): not on Windows, nor in bionic below API 28 (the Android build
+   targets API 26, issue 158) */
+#if !defined(_WIN32) && !(defined(__ANDROID__) && __ANDROID_API__ < 28)
+#define RD_AUDIT_GLOB 1
 #include <glob.h>
 #endif
 #include "dump_zip.h"
@@ -935,7 +938,7 @@ static void auditList(const char *list, Totals *t)
         char path[2200];
         snprintf(path, sizeof(path), "%s%s", *s == '/' ? "" : dir, s);
         if (strchr(path, '*')) {
-#if !defined(_WIN32)
+#ifdef RD_AUDIT_GLOB
             glob_t g;
             if (glob(path, 0, NULL, &g) == 0) {
                 for (size_t k = 0; k < g.gl_pathc; k++) {
