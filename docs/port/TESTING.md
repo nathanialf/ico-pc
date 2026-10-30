@@ -238,6 +238,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   program), the roll start's log line, which names the disc (`credits_jpn`, `credits_kor`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
+- `state_host_test.c`: save states' decisions without the game (`port/game/state_rules.h`,
+  [PLATFORM.md](PLATFORM.md#saving-and-loading)): every refusal of the conditions reachable and
+  their order, a load without the pause, the pause menu and a port page over it; the log texts;
+  the slots' paths; the `[dev]` keys' values; the listing of a missing, an empty and a filled
+  folder (each validity field changed, a damaged file, a picture); the thumbnail's size and box
+  filter (`state_host`).
 - `variants_test.c`: the game variants (`port/game/variants.h`) on the CPU: every default is the game as
   shipped (the barrier's number the disc's: 5, 7 on `jun26`), every `[variants]` key steps through
   all its values, saves and reads back, a word or number that is no value reads as the default, the
