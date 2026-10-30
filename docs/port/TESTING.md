@@ -1915,8 +1915,9 @@ FXC's X4000 "potentially uninitialized variable" error class; that shows in a Wi
 boolean select, and uses only the opcodes of the envelope's set (a loop, `dot()`, a
 logical-not-equal or an undefined value named), every module stays within its stage's size budget
 in words, no module carries an array as a value (a whole-array load, store, construct, insert,
-phi, select or copy) and no vertex shader keeps a local array
-([SHADERS.md](SHADERS.md#the-envelope)); the log lists each module's words, instructions, blocks,
+phi, select or copy), no vertex shader keeps a local array
+([SHADERS.md](SHADERS.md#the-envelope)) and every module's header is SPIR-V 1.0 (the Vulkan 1.0
+target, [SHADERS.md](SHADERS.md)); the log lists each module's words, instructions, blocks,
 phis, loops, dot products, vector comparisons, boolean selects and `any()`. The vertex pre-pass's
 entries (`vu_*_pre_vs`) need no plain variant and take the plain budget. `python3 -I tools/check_spirv.py --sizes <build>/shaders` runs it by
 hand.
@@ -1950,7 +1951,7 @@ hand.
   (`shaders_pixel` and its variants, `vu1` for a VU shader, `gs_math`, `rhi_d3d12_plan`); on
   Windows `rhi_d3d12` and `compare_backends.cmd` for the DXIL side. Any shader change:
   `spirv_check` (the vertex shaders' shape and envelope, the size budget, no array-typed values,
-  no local array in a vertex shader) and `hlsl_fxc_check` (`python3 tools/check_hlsl_fxc.py`: no word
+  no local array in a vertex shader, the SPIR-V 1.0 header) and `hlsl_fxc_check` (`python3 tools/check_hlsl_fxc.py`: no word
   FXC reserves used as an identifier; FXC's "potentially uninitialized variable" errors it cannot
   see). A change to a VU vertex shader or to the card test
   ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)): `vu1`, `vu1_mali`, `rd_native` and the frame
