@@ -61,8 +61,9 @@
  *   the present allowance (test120Budget): with the fence (a replay waits
  *   for the GPU's picture two before) and a GPU of 12 ms a picture at 120
  *   Hz, the second slot's present dropped before the steps run late, one
- *   present a step and the alphas on the grid; a GPU-bound phone (20 ms a
- *   picture at 60 Hz) presents its new frames only and keeps real time.
+ *   present a step and the alphas on the grid, the probes failing back to
+ *   1 with no step a period late; a GPU-bound phone (20 ms a picture at 60
+ *   Hz) presents about its new frames only and keeps real time.
  */
 #include <stdio.h>
 #include <string.h>
@@ -813,12 +814,16 @@ static void test120(void)
    GPU a picture: two presents a step need 24 ms of GPU in 16.7.  The rule
    before: the second slot's present waits for the GPU, the steps end up to
    20 ms late and the skip guard drops a present now and then (1.4 a step).
-   With the allowance: after the first second one present a step, no step
-   late, no resync, the alphas on the grid, the allowance at 1 (the GPU gate:
-   2 * 12 + 3 > 16.67 keeps it there).  A GPU-bound phone (20 ms a picture
-   at 60 Hz, n = 1): the rule before presents 50 a second with steps 32 ms
-   late; the allowance its new frames only, 30 a second, on time.  The
-   numbers printed are the trade. */
+   With the allowance: after the first second one present a step, no
+   resync, the alphas on the grid, the allowance at 1.  The lock's climb is
+   a probe (v0.9.6, issue 126): 2, 4, 8 then 16 s apart it tries two a step
+   again, the GPU's backlog makes a step late within the probe's 60 steps
+   and it drops back to 1, so a step is late by less than a period, a few
+   times a minute, and the presents stay about one a step.  A GPU-bound
+   phone (20 ms a picture at 60 Hz, n = 1): the rule before presents 50 a
+   second with steps 32 ms late; the allowance about its new frames only,
+   30 a second and under 33 with the probes' pictures, no step a period
+   late.  The numbers printed are the trade. */
 static void test120Budget(void)
 {
     for (int on = 0; on < 2; on++) {
@@ -833,7 +838,8 @@ static void test120Budget(void)
         o.gpuNs = 12 * MS;
         r = run(&f, &o);
         printf("120 Hz, GPU 12 ms a picture%s: %.2f presents a step after 1 s, latest step %.3f "
-               "ms, %u skipped, %u refused, allowance %u (%u drops, %u climbs), %u resyncs\n",
+               "ms, %u skipped, %u refused, allowance %u (%u drops, %u climbs: probes), %u "
+               "resyncs\n",
                on ? " with the allowance" : "", (double)r.presentsFrom / (double)r.stepsFrom,
                (double)r.lateMaxFrom / 1e6, r.skippedFrom, r.L.budget.refused, r.L.budget.allow,
                r.L.budget.drops, r.L.budget.climbs, r.resyncs);
@@ -841,10 +847,12 @@ static void test120Budget(void)
         CHECK(r.alphaOffGrid == 0);
         CHECK(r.L.skippedLate == 0); /* every new frame presented */
         if (on) {
-            CHECK(r.lateMaxFrom < 8333333ull);
+            /* a failed probe's late step: under a period */
+            CHECK(r.lateMaxFrom < NTSC);
             CHECK(r.presentsFrom * 10 >= r.stepsFrom * 9 &&
                   r.presentsFrom * 10 <= r.stepsFrom * 11);
-            CHECK(r.L.budget.allow == 1 && r.L.budget.drops >= 1 && r.L.budget.refused > 0);
+            CHECK(r.L.budget.allow == 1 && r.L.budget.drops >= 2 && r.L.budget.refused > 0);
+            CHECK(r.L.budget.climbs >= 1 && r.L.budget.climbRefusals == 0);
             CHECK(r.skippedFrom == 0);
         } else {
             CHECK(r.lateMaxFrom >= 8333333ull / 2);
@@ -869,9 +877,11 @@ static void test120Budget(void)
         CHECK(r.resyncs == 0);
         CHECK(r.alphaOffGrid == 0 && r.L.skippedLate == 0);
         if (on) {
-            CHECK(r.lateMaxFrom < NTSC / 2 + 1 * MS);
-            CHECK(r.L.budget.allow == 0);
-            CHECK(r.presentsFrom * 2 >= r.stepsFrom - 2 && r.presentsFrom * 2 <= r.stepsFrom + 2);
+            /* the new frames at least and under 33 a second with the probes */
+            CHECK(r.lateMaxFrom < NTSC);
+            CHECK(r.L.budget.allow == 0 && r.L.budget.climbs >= 1);
+            CHECK(r.L.budget.climbRefusals == 0);
+            CHECK(r.presentsFrom * 2 >= r.stepsFrom - 2 && r.presentsFrom * 29 <= r.stepsFrom * 16);
         } else {
             CHECK(r.lateMaxFrom >= NTSC / 2);
         }
