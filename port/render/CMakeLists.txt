@@ -2028,6 +2028,44 @@ if(ICO_RUN_TESTS)
 endif()
 # VK11 end
 
+# VK11S (issue 145): the Adreno combination.  A phone's Vulkan 1.1 driver
+# (Android 11, an Adreno 618) has the fence ring and VkRenderPass objects of the
+# VK11 block AND all-static pipelines (tilerDevice forces them on Android,
+# vk_device.c); the VK11 twins above still offer VK_EXT_extended_dynamic_state
+# on lavapipe, so that stack was never run.  ICO_VK_FAKE_API=1.1 with
+# ICO_VK_FAKE_NO_DYNAMIC=1 is it.  The same shards as VK11, own folder vk11s/,
+# the Vulkan runs' expectations byte for byte (neither switch changes a pixel);
+# rd_perf_vk11s's counts are rd_perf's.  Label vk11: ctest -j1 -L vk11.
+if(ICO_RUN_TESTS)
+    set(_env_vk11s ${_env} "ICO_VK_FAKE_API=1.1" "ICO_VK_FAKE_NO_DYNAMIC=1")
+    set(_v11s "${CMAKE_CURRENT_BINARY_DIR}/vk11s")
+    file(MAKE_DIRECTORY "${_v11s}")
+    add_test(NAME rd_pixel_vk11s COMMAND rd_pixel_test "${_v11s}")
+    add_test(NAME rd_present_vk11s COMMAND rd_present_test "${_v11s}")
+    add_test(NAME rd_crt_vk11s COMMAND rd_crt_test "${_v11s}")
+    add_test(NAME rd_debug_vk11s COMMAND rd_debug_test "${_v11s}")
+    add_test(NAME rd_raw_vk11s COMMAND rd_raw_test)
+    add_test(NAME rd_fog_vk11s COMMAND rd_fog_test)
+    add_test(NAME rd_shadow_vk11s COMMAND rd_shadow_test)
+    add_test(NAME rd_interp_vk11s COMMAND rd_interp_test)
+    add_test(NAME rd_msaa_vk11s COMMAND rd_msaa_test)
+    add_test(NAME rd_perf_vk11s COMMAND rd_perf_test)
+    set(_vk11s_tests rd_pixel_vk11s rd_present_vk11s rd_crt_vk11s rd_debug_vk11s rd_raw_vk11s
+                     rd_fog_vk11s rd_shadow_vk11s rd_interp_vk11s rd_msaa_vk11s rd_perf_vk11s)
+    foreach(_k RANGE 1 4)
+        add_test(NAME rd_mesh_vk11s.${_k}of4 COMMAND rd_mesh_test "${ICO_DISC_IMAGE}" --shard ${_k}/4)
+        list(APPEND _vk11s_tests rd_mesh_vk11s.${_k}of4)
+    endforeach()
+    set_tests_properties(${_vk11s_tests}
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_v11s}"
+                                    ENVIRONMENT "${_env_vk11s}")
+    foreach(_t ${_vk11s_tests})
+        get_test_property(${_t} LABELS _labels)
+        set_tests_properties(${_t} PROPERTIES LABELS "${_labels};vk11")
+    endforeach()
+endif()
+# VK11S end
+
 # ---- The render suite a second time, on the OpenGL backend (issue 126) ----
 # ico_rhi_vk links every backend and rhi_backend.c takes ICO_RHI_BACKEND from the
 # environment as the default one, so the same test programs run on OpenGL with no
