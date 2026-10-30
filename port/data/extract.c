@@ -70,7 +70,9 @@ static double now_s(void)
 #else
     struct timespec ts;
 
-    timespec_get(&ts, TIME_UTC);
+    /* clock_gettime, not timespec_get (bionic API 29): Android 8 (API 26,
+       issue 158) has it; the same clock as TIME_UTC */
+    clock_gettime(CLOCK_REALTIME, &ts);
     return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
 #endif
 }
