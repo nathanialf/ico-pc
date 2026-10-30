@@ -523,6 +523,20 @@ if(_ico_have_vk)
                              "${_ico_vk_vk11_env}")
         get_test_property(rhi_vk_vk11 LABELS _ico_vk11_labels)
         set_tests_properties(rhi_vk_vk11 PROPERTIES LABELS "${_ico_vk11_labels};vk11")
+        # the cells on a Vulkan 1.0 driver (ICO_VK_FAKE_API=1.0, issue 158):
+        # a 1.0 instance with VK_KHR_get_physical_device_properties2, the
+        # device at 1.0 with VK_KHR_maintenance1/2, the core 1.1 entry points
+        # cleared, the fence ring and VkRenderPass objects as under =1.1, every
+        # pipeline state static (as on Android).  Label vk10 (ctest -L vk10),
+        # with port/render's _vk10 twins
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vk10")
+        add_test(NAME rhi_vk_vk10 COMMAND rhi_vk_test
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vk10")
+        set(_ico_vk_vk10_env ${_ico_vk_test_env} "ICO_VK_FAKE_API=1.0" "ICO_VK_FAKE_NO_DYNAMIC=1")
+        set_tests_properties(rhi_vk_vk10 PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_vk10_env}")
+        get_test_property(rhi_vk_vk10 LABELS _ico_vk10_labels)
+        set_tests_properties(rhi_vk_vk10 PROPERTIES LABELS "${_ico_vk10_labels};vk10")
         if(TARGET rhi_vk_swapchain_test)
             add_test(NAME rhi_vk_swapchain COMMAND rhi_vk_swapchain_test)
             set_tests_properties(rhi_vk_swapchain PROPERTIES SKIP_RETURN_CODE 77)
@@ -539,6 +553,14 @@ if(_ico_have_vk)
             get_test_property(rhi_vk_swapchain_vk11 LABELS _ico_vk11_labels)
             set_tests_properties(rhi_vk_swapchain_vk11 PROPERTIES LABELS
                                  "${_ico_vk11_labels};vk11")
+            # and on the Vulkan 1.0 profile
+            add_test(NAME rhi_vk_swapchain_vk10 COMMAND rhi_vk_swapchain_test
+                     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vk10")
+            set_tests_properties(rhi_vk_swapchain_vk10 PROPERTIES SKIP_RETURN_CODE 77
+                                 ENVIRONMENT "${_ico_vk_vk10_env}")
+            get_test_property(rhi_vk_swapchain_vk10 LABELS _ico_vk10_labels)
+            set_tests_properties(rhi_vk_swapchain_vk10 PROPERTIES LABELS
+                                 "${_ico_vk10_labels};vk10")
         endif()
     endif()
 endif()
