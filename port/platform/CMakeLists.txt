@@ -6,6 +6,7 @@ target_sources(ico_platform PRIVATE
     diag_host.c
     fiber.c
     fps_counter.c
+    game_data_range.c
     gpu_hang.c
     hotkeys.c
     kernel_host.c
@@ -40,6 +41,11 @@ endif()
 # link line, rather than into ico_platform, which the game itself needs.
 if(TARGET ico_pc)
     target_sources(ico_pc PRIVATE host_loop.c)
+endif()
+# game_data_verify.c names the game's globals (the save states' start-up
+# check of the game data ranges, game_data_range.h): the program only
+if(TARGET ico_pc)
+    target_sources(ico_pc PRIVATE game_data_verify.c)
 endif()
 # The commit the program was built from (ICO_BUILD_COMMIT in the
 # generated ico_build_commit.h, "git describe --always --dirty"), for the pad
@@ -145,6 +151,24 @@ target_compile_options(share_report_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_P
 target_link_libraries(share_report_test PRIVATE ico_host_fs)
 if(ICO_RUN_TESTS)
     add_test(NAME share_report COMMAND share_report_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# game_data_range: the game data ranges (game_data_range.c) over a stand-in
+# game library that gets ico_game's section treatment
+# (cmake/IcoStateSections.cmake) and the game's semantics options: the
+# ranges hold its writable globals and nothing of the program's, the renamed
+# sections keep their contents and relocations, and a copy of the ranges
+# written back restores them
+add_library(game_data_range_fixture STATIC EXCLUDE_FROM_ALL test/game_data_fixture.c)
+target_compile_options(game_data_range_fixture PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_GAME_LAYOUT_OPTIONS})
+ico_state_sections(game_data_range_fixture)
+add_executable(game_data_range_test test/game_data_range_test.c game_data_range.c)
+target_include_directories(game_data_range_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(game_data_range_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(game_data_range_test PRIVATE game_data_range_fixture)
+if(ICO_RUN_TESTS)
+    add_test(NAME game_data_range COMMAND game_data_range_test)
 endif()
 
 # host_fs.h on a non-ASCII (UTF-8) path in the build tree
