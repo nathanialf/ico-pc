@@ -402,6 +402,27 @@ they were, and say in the report which one changed the water: set
 writes when you press F12 says what the water was drawn with, so press F12
 once for each try.
 
+## The game asks for the disc image again
+
+The game only needs your disc image the first time. If it asks again, and the
+box lists two folders it looked in for your game data, the new program is not
+seeing the folder the old one used. That happens when you moved to a new
+version and the old one kept its data in a folder named `userdata` beside the
+program (the portable download), or in your user folder
+([where that is](PORTABLE_MODE.md#where-your-saves-are)) while the new one
+looks elsewhere.
+
+- Copy the old `userdata` folder next to the new program (on Windows, into
+  the `x64` folder, beside `ico_pc_x64.exe`), or extract the new version over
+  the old folder, and start again. Your saves, save states and settings are
+  in it.
+- If you do not have the old folder any more, choose your disc image in the
+  window that opens: the game sets itself up again from it. Saves you had
+  are gone with the old folder unless you kept a copy of its `memcard`
+  folder.
+
+More in [moving to a new version](FAQ.md#moving-to-a-new-version).
+
 ## Error messages
 
 When the game finds a problem it cannot get past, it shows a message box
@@ -409,7 +430,10 @@ and closes, and the same text is in the log. Here is what the common ones
 mean.
 
 **"No ICO disc image was found or chosen."** The game needs your disc
-image the first time. Start it again and choose the file, or put the image
+image the first time. If you played an earlier version, the box says which
+two folders it looked in for your game data: see
+[the game asks for the disc image again](#the-game-asks-for-the-disc-image-again).
+Otherwise start it again and choose the file, or put the image
 beside the program named `Ico_PAL.iso` for the European disc,
 `Ico_JPN.iso` for the Japanese disc, `Ico_KOR.iso` for the Korean disc,
 `Ico_USA.iso` for the North American disc, `Ico_CN.iso` for the Asian disc,

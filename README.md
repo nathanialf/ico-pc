@@ -75,6 +75,11 @@ The easy way: the [download page](https://nathanialf.github.io/ico-pc/)
 picks the right file for your device. Or download the file for your device
 from the [releases page](https://github.com/nathanialf/ico-pc/releases).
 
+Moving up from an earlier version: the plain download finds your saves by
+itself; the portable download keeps them in its own `userdata` folder, so copy
+that folder next to the new program
+([how](docs/FAQ.md#moving-to-a-new-version)).
+
 ### Windows
 
 1. Download the file whose name ends in `-win.zip`.

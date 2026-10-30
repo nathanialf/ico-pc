@@ -276,11 +276,41 @@ On an iPhone with iOS 15 or newer, it runs inside LiveContainer.
 Yes, on Windows. On Linux, vkBasalt does a similar job.
 [How to set it up](RESHADE.md).
 
+## Moving to a new version
+
+Your saves, settings and the game's files (copied from your disc image at the
+first start) live in one place, and a new download does not know about the
+old one's place unless it is the same.
+
+- **The plain download** (`-win.zip`, `-linux.tar.gz`, the AppImage) keeps
+  everything in your user folder, not beside the program. A newer version
+  finds it by itself: just extract the new one anywhere and start it.
+  [Where that is](PORTABLE_MODE.md#where-your-saves-are).
+- **The portable download** (`-win-portable.zip` and the like) keeps
+  everything in a folder named `userdata` beside the program (on Windows,
+  inside the `x64` folder). A newer version in a new folder starts empty and
+  asks for your disc image again. To bring everything over, copy the old
+  `userdata` folder into the new program's folder (next to
+  `ico_pc_x64.exe` on Windows), or extract the new version over the old
+  folder.
+- If you switched from one kind of download to the other, copy the `userdata`
+  folder to your user folder, or the user folder's files into a `userdata`
+  folder beside the program, whichever way you are going.
+
+Your saves and your save states are in that folder (`memcard` and
+`states`), so they come with it. If the game asks for your disc image again,
+see [the game asks for the disc image
+again](TROUBLESHOOTING.md#the-game-asks-for-the-disc-image-again).
+
 ## Do I need the disc image every time?
 
 No. The first start copies the game's files out of the disc image. After
 that the game never opens the image again, so you can move it or delete
 it.
+
+If it asks for the image again after you moved to a new version, the new
+folder cannot see the old one's game data:
+[moving to a new version](#moving-to-a-new-version).
 
 ## Which disc image works?
 
