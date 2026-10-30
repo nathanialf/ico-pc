@@ -8,17 +8,11 @@
 #include <string.h>
 
 #include "arena.h"
-
-#if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#else
-#include <sys/mman.h>
-#endif
+#include "vm_reserve.h"
 
 static unsigned char *arena;
+
+static int arena_pinned;
 
 /* eeword.h reads the base through this, without a call. It is set where the
    arena is created and must never change afterwards (ico_arena_init checks). */
@@ -34,21 +28,20 @@ int ico_arena_init(void)
     if (arena != NULL) {
         return 0;
     }
-#if defined(_WIN32)
-    /* VirtualAlloc memory is zero filled. */
-    m = VirtualAlloc(NULL, total, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    if (m == NULL) {
-        fprintf(stderr, "arena: cannot allocate %u bytes\n", (unsigned int)total);
-        return -1;
+    /* zero filled either way; the pinned base is already aligned */
+    m = ico_vm_reserve((uintptr_t)ICO_ARENA_PIN_BASE, want, 1);
+    if (m != NULL) {
+        p = (uintptr_t)m;
+        arena_pinned = 1;
+    } else {
+        m = ico_vm_reserve(0, total, 1);
+        if (m == NULL) {
+            fprintf(stderr, "arena: cannot map %lu bytes\n", (unsigned long)total);
+            return -1;
+        }
+        fprintf(stderr, "arena: pinned base unavailable, save states will relocate\n");
+        p = ((uintptr_t)m + ICO_ARENA_ALIGN - 1) & ~(uintptr_t)(ICO_ARENA_ALIGN - 1);
     }
-#else
-    m = mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (m == MAP_FAILED) {
-        fprintf(stderr, "arena: cannot map %lu bytes\n", (unsigned long)total);
-        return -1;
-    }
-#endif
-    p = ((uintptr_t)m + ICO_ARENA_ALIGN - 1) & ~(uintptr_t)(ICO_ARENA_ALIGN - 1);
     arena = (unsigned char *)p;
     if (ico_arena_cached_base != NULL && ico_arena_cached_base != arena) {
         fprintf(stderr, "arena: the base changed\n");
@@ -81,6 +74,11 @@ int ico_arena_contains(const void *p, size_t n)
     uintptr_t a = (uintptr_t)p;
     uintptr_t b = (uintptr_t)arena;
     return arena != NULL && a >= b && n <= ico_arena_size() && a - b <= ico_arena_size() - n;
+}
+
+int ico_arena_pinned(void)
+{
+    return arena != NULL && arena_pinned;
 }
 
 /* --- Heap statistics ------------------------------------------------------- */
