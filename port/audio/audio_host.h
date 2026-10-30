@@ -193,6 +193,11 @@ int ico_audio_sdl_fall_back(void);
    (zeroed); 1 when written into out, 0 (nothing) on the sync path. */
 int ico_audio_sdl_summary_text(char *out, size_t size);
 void ico_audio_sdl_log_summary(void);
+/* The pull path's silence held back behind the game since the open, in
+   ms (the 10 s line's "held back" total; 0 on the sync path and without
+   the SDL output): the window's late-step line compares it step to step
+   (window_lines.c window_hold_line) to say what the game was doing. */
+unsigned long long ico_audio_sdl_held_ms(void);
 
 /* The output device ([audio] device).
    Without the SDL output (headless) these are stubs: no devices, reopen
