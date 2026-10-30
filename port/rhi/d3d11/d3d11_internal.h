@@ -385,7 +385,10 @@ typedef struct D11State {
     PFN_D3D11_CREATE_DEVICE createDevice;
 
     IDXGIFactory2 *factory;
-    IDXGIAdapter1 *adapter; /* NULL on WARP (D3D_DRIVER_TYPE_WARP) */
+    IDXGIAdapter1 *adapter;  /* NULL on WARP (D3D_DRIVER_TYPE_WARP) */
+    IDXGIAdapter3 *adapter3; /* the device's adapter, for the video memory budget; NULL if absent */
+    ULONGLONG memTick;       /* GetTickCount64 of the last query (RhiStats' video memory) */
+    uint64_t memBudget, memUsage, memAvail;
     bool warp;
     uint32_t vendorId, deviceId;
     ID3D11Device *device;

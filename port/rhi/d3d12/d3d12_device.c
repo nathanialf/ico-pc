@@ -401,6 +401,8 @@ static bool dx_load_runtime(bool debug)
     return DX_CHECK(hr);
 }
 
+static void dx_video_memory(void);
+
 /* ------------------------------------------------------- adapter selection */
 static void dx_adapter_name(IDXGIAdapter1 *a, char *out, size_t size)
 {
@@ -504,6 +506,10 @@ static bool dx_pick_adapter(void)
         g_dx.warp = true;
     }
     g_dx.adapter = pick;
+    if (pick &&
+        FAILED(IDXGIAdapter1_QueryInterface(pick, &IID_IDXGIAdapter3, (void **)&g_dx.adapter3))) {
+        g_dx.adapter3 = NULL;
+    }
     dx_adapter_name(pick, g_dx.adapterName, sizeof(g_dx.adapterName));
     dx_driver_text(pick);
     return true;
@@ -786,6 +792,10 @@ bool rhi_init(const RhiDeviceDesc *desc)
            "offered)",
            g_dx.adapterName, g_dx.warp ? ", WARP" : "", s_driverText,
            g_dx.swapchain ? "" : ", headless", g_dx.limits.maxDrawIndexedIndexValue);
+    dx_video_memory();
+    if (g_dx.memBudget == 0) {
+        DX_LOG("video memory budget: not reported by this adapter");
+    }
     dx_drain_messages();
     return true;
 }
@@ -816,6 +826,7 @@ void rhi_shutdown(void)
     dx_drain_messages();
     DX_RELEASE(g_dx.info);
     DX_RELEASE(g_dx.device);
+    DX_RELEASE(g_dx.adapter3);
     DX_RELEASE(g_dx.adapter);
     DX_RELEASE(g_dx.factory);
     if (g_dx.fenceEvent) {
@@ -859,10 +870,34 @@ bool rhi_device_lost(void)
  * and presents as before; the memory gauges read zero.  Timestamps are
  * d3d12_cmd.c's.  There is no mailbox mode (DXGI's flip model with sync
  * interval 1 is FIFO; docs/port/RHI.md, "Direct3D 12"). */
+/* The adapter's local video memory segment (RhiStats videoMem*), asked of
+ * DXGI at most every 250 ms; 0 without an IDXGIAdapter3 */
+static void dx_video_memory(void)
+{
+    const ULONGLONG now = GetTickCount64();
+    DXGI_QUERY_VIDEO_MEMORY_INFO m;
+
+    if (!g_dx.adapter3 || (g_dx.memTick && now - g_dx.memTick < 250u)) {
+        return;
+    }
+    g_dx.memTick = now ? now : 1u;
+    memset(&m, 0, sizeof(m));
+    if (SUCCEEDED(IDXGIAdapter3_QueryVideoMemoryInfo(g_dx.adapter3, 0,
+                                                     DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &m))) {
+        g_dx.memBudget = m.Budget;
+        g_dx.memUsage = m.CurrentUsage;
+        g_dx.memAvail = m.AvailableForReservation;
+    }
+}
+
 void rhi_get_stats(RhiStats *out)
 {
     if (out) {
+        dx_video_memory();
         *out = g_dx.counts;
+        out->videoMemBudget = g_dx.memBudget;
+        out->videoMemUsage = g_dx.memUsage;
+        out->videoMemAvailable = g_dx.memAvail;
         out->swapchains = g_dx.swapchains;
         out->presents = g_dx.presents;
         out->presentNs = g_dx.presentNs;

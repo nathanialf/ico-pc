@@ -348,6 +348,8 @@ static void d11_pick_adapter(void)
  * D3D12 backend reads it); "" when the adapter does not say */
 static char s_driverText[64];
 
+static void d11_video_memory(void);
+
 /* The device's own adapter (WARP's too): its name, ids and driver
  * version. */
 static void d11_describe_adapter(void)
@@ -362,6 +364,10 @@ static void d11_describe_adapter(void)
     }
     if (SUCCEEDED(IDXGIDevice_GetAdapter(dxgiDev, &a))) {
         DXGI_ADAPTER_DESC d;
+        /* the video memory budget (RhiStats): Windows 10's IDXGIAdapter3 */
+        if (FAILED(IDXGIAdapter_QueryInterface(a, &IID_IDXGIAdapter3, (void **)&g_d11.adapter3))) {
+            g_d11.adapter3 = NULL;
+        }
         memset(&d, 0, sizeof(d));
         if (SUCCEEDED(IDXGIAdapter_GetDesc(a, &d))) {
             if (!WideCharToMultiByte(CP_UTF8, 0, d.Description, -1, g_d11.adapterName,
@@ -1330,6 +1336,10 @@ bool rhi_init(const RhiDeviceDesc *desc)
             g_d11.swapchain ? (g_d11.tearing ? "yes" : "no") : "n/a",
             g_d11.info ? "on" : (debug ? "asked for, not installed" : "off"),
             g_d11.cacheDir[0] ? g_d11.cacheDir : "none", g_d11.swapchain ? "" : "; headless");
+    d11_video_memory();
+    if (g_d11.memBudget == 0) {
+        D11_LOG("video memory budget: not reported by this adapter");
+    }
     d11_drain_messages();
     return true;
 }
@@ -1365,6 +1375,7 @@ void rhi_shutdown(void)
     D11_RELEASE(g_d11.info);
     D11_RELEASE(g_d11.device1);
     D11_RELEASE(g_d11.device);
+    D11_RELEASE(g_d11.adapter3);
     D11_RELEASE(g_d11.adapter);
     D11_RELEASE(g_d11.factory);
     const uint32_t errors = g_d11.debugErrors;
@@ -1399,12 +1410,37 @@ bool rhi_device_lost(void)
     return g_d11.deviceLost;
 }
 
+/* The adapter's local video memory segment (RhiStats videoMem*), asked of
+ * DXGI at most every 250 ms (a kernel call); 0 when the adapter has no
+ * IDXGIAdapter3 or does not answer. */
+static void d11_video_memory(void)
+{
+    const ULONGLONG now = GetTickCount64();
+    DXGI_QUERY_VIDEO_MEMORY_INFO m;
+
+    if (!g_d11.adapter3 || (g_d11.memTick && now - g_d11.memTick < 250u)) {
+        return;
+    }
+    g_d11.memTick = now ? now : 1u;
+    memset(&m, 0, sizeof(m));
+    if (SUCCEEDED(IDXGIAdapter3_QueryVideoMemoryInfo(g_d11.adapter3, 0,
+                                                     DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &m))) {
+        g_d11.memBudget = m.Budget;
+        g_d11.memUsage = m.CurrentUsage;
+        g_d11.memAvail = m.AvailableForReservation;
+    }
+}
+
 /* The counts are kept at the D3D12 backend's points (RhiStats); the memory
- * gauges read zero. */
+ * gauges read zero, the video memory figures are DXGI's. */
 void rhi_get_stats(RhiStats *out)
 {
     if (out) {
+        d11_video_memory();
         *out = g_d11.counts;
+        out->videoMemBudget = g_d11.memBudget;
+        out->videoMemUsage = g_d11.memUsage;
+        out->videoMemAvailable = g_d11.memAvail;
         out->swapchains = g_d11.swapchains;
         out->presents = g_d11.presents;
         out->presentNs = g_d11.presentNs;

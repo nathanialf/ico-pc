@@ -178,6 +178,9 @@ typedef struct DxState {
 
     IDXGIFactory4 *factory;
     IDXGIAdapter1 *adapter;
+    IDXGIAdapter3 *adapter3; /* for the video memory budget; NULL if absent */
+    ULONGLONG memTick;       /* GetTickCount64 of the last query (RhiStats' video memory) */
+    uint64_t memBudget, memUsage, memAvail;
     bool warp;
     ID3D12Device *device;
     ID3D12CommandQueue *queue;

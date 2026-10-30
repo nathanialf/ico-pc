@@ -1158,6 +1158,12 @@ typedef struct RhiStats {
      * constant buffers; d3d11_resource.c d11_buffer_flush), a count; 0 on
      * the other backends, whose GPU reads the mapped memory itself */
     uint64_t uploadWriteBytes;
+    /* Direct3D 11 and 12: the adapter's local video memory segment
+     * (IDXGIAdapter3::QueryVideoMemoryInfo): the budget the system gives
+     * this process, what it uses now, and what it can still reserve, bytes.
+     * Read at most four times a second.  0 where the adapter does not say
+     * (a Windows without IDXGIAdapter3) and on the other backends */
+    uint64_t videoMemBudget, videoMemUsage, videoMemAvailable;
 } RhiStats;
 
 void rhi_get_stats(RhiStats *out);
