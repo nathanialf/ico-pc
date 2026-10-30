@@ -397,7 +397,7 @@ present and the camera probe keep the plain mapping.
 **Uploads.** Before the first pass the replay uploads pending textures and their levels through
 the frame's upload ring, and the static meshes the frame draws into the device arena (once, and
 again only after a morph rewrote them); the interpolation's scratch meshes stay on the ring
-(`port/render/rd_upload.c` (`rd__upload_dirty_textures`, `rd__upload_meshes`)). Every
+(`port/render/rd_upload.c` (`rd__upload_dirty_textures`, `rd__upload_meshes`)); the ring shrinks again ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-upload-ring-shrinks)). Every
 `rd__ring_alloc` caller checks for `~0` (the ring is full) and skips its write and its draw or
 copy, the untextured draws' white texel included, which the next replay uploads
 (`port/render/rd_replay.c` (`rd__ring_alloc`); `port/render/rd_upload.c`
