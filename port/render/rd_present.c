@@ -1727,6 +1727,7 @@ static struct {
     RhiTexture tex;
     RhiState state;
     uint32_t w, h;
+    uint32_t maxW; /* rd_capture_presented_max's width limit, 0: none */
     RhiFormat fmt;
     int result; /* 1 written, -1 failed, 0 none since the last rd_capture_result */
     char done[1024];
@@ -1739,8 +1740,61 @@ bool rd_capture_presented(const char *png)
     }
     strcpy(s_cap.path, png);
     s_cap.armed = 1;
+    s_cap.maxW = 0;
     s_cap.result = 0;
     return true;
+}
+
+bool rd_capture_presented_max(const char *png, uint32_t maxW)
+{
+    if (!rd_capture_presented(png)) {
+        return false;
+    }
+    s_cap.maxW = maxW;
+    return true;
+}
+
+/* src (w x h RGBA8) averaged down to dw x dh by area: each destination
+ * pixel is the mean of the source pixels its footprint covers (whole
+ * pixels, the footprint's edges rounded), in a malloc block; NULL when
+ * memory is short */
+static uint8_t *boxDownscale(const uint8_t *src, uint32_t w, uint32_t h, uint32_t dw, uint32_t dh)
+{
+    uint8_t *dst = malloc((size_t)dw * dh * 4);
+
+    if (!dst) {
+        return NULL;
+    }
+    for (uint32_t y = 0; y < dh; y++) {
+        const uint32_t y0 = (uint32_t)((uint64_t)y * h / dh);
+        uint32_t y1 = (uint32_t)((uint64_t)(y + 1) * h / dh);
+
+        y1 = y1 > y0 ? y1 : y0 + 1;
+        for (uint32_t x = 0; x < dw; x++) {
+            const uint32_t x0 = (uint32_t)((uint64_t)x * w / dw);
+            uint32_t x1 = (uint32_t)((uint64_t)(x + 1) * w / dw);
+            uint64_t sum[4] = {0, 0, 0, 0};
+
+            x1 = x1 > x0 ? x1 : x0 + 1;
+            for (uint32_t sy = y0; sy < y1; sy++) {
+                const uint8_t *p = src + ((size_t)sy * w + x0) * 4;
+
+                for (uint32_t sx = x0; sx < x1; sx++, p += 4) {
+                    sum[0] += p[0];
+                    sum[1] += p[1];
+                    sum[2] += p[2];
+                    sum[3] += p[3];
+                }
+            }
+            const uint64_t n = (uint64_t)(x1 - x0) * (y1 - y0);
+            uint8_t *d = dst + ((size_t)y * dw + x) * 4;
+
+            for (int c = 0; c < 4; c++) {
+                d[c] = (uint8_t)((sum[c] + n / 2) / n);
+            }
+        }
+    }
+    return dst;
 }
 
 bool rd__capture_armed(void)
@@ -1824,10 +1878,30 @@ void rd__capture_finish(void)
             px[i + 2] = b;
         }
     }
-    ok = ok && rd_write_png(s_cap.path, px, s_cap.w, s_cap.h, s_cap.w * 4, 0);
+    uint32_t ow = s_cap.w, oh = s_cap.h;
+    if (ok && s_cap.maxW != 0 && s_cap.w > s_cap.maxW) {
+        /* wider than the limit: the same picture at maxW wide */
+        const uint32_t dw = s_cap.maxW;
+        const uint32_t dh = (uint32_t)(((uint64_t)s_cap.h * dw + s_cap.w / 2) / s_cap.w);
+        uint8_t *small = boxDownscale(px, s_cap.w, s_cap.h, dw, dh > 0 ? dh : 1);
+
+        if (small) {
+            free(px);
+            px = small;
+            ow = dw;
+            oh = dh > 0 ? dh : 1;
+        }
+    }
+    ok = ok && rd_write_png(s_cap.path, px, ow, oh, ow * 4, 0);
     free(px);
-    rd__log("photo: capture %ux%u %s %s", s_cap.w, s_cap.h,
-            ok ? "written to" : "failed:", s_cap.path);
+    if (ow != s_cap.w || oh != s_cap.h) {
+        rd__log("photo: capture %ux%u written at %ux%u (the bug-report picture's width limit %u) "
+                "%s %s",
+                s_cap.w, s_cap.h, ow, oh, s_cap.maxW, ok ? "to" : "failed:", s_cap.path);
+    } else {
+        rd__log("photo: capture %ux%u %s %s", s_cap.w, s_cap.h,
+                ok ? "written to" : "failed:", s_cap.path);
+    }
     snprintf(s_cap.done, sizeof(s_cap.done), "%s", s_cap.path);
     s_cap.result = ok ? 1 : -1;
 }

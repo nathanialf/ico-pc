@@ -1117,6 +1117,10 @@ bool rd_read_presented(void *dst, uint32_t *w, uint32_t *h);
  *                       capture, with its path in path; 0 while it is
  *                       pending or when there is none */
 bool rd_capture_presented(const char *png);
+/* The same, the picture box-downscaled (area average, same aspect) to at
+ * most maxW pixels wide first when the output is wider (0: as it is).  The
+ * bug-report picture, which goes in a zip a phone shares. */
+bool rd_capture_presented_max(const char *png, uint32_t maxW);
 int rd_capture_result(char *path, uint32_t pathSize);
 
 /* --------------------------------------------------------- deferred text
