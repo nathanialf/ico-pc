@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The app's theme: full screen, and the picture reaches into the display
-     cutout (shortEdges). -->
+<!-- The app's theme: full screen. The display cutout mode is an Android 9
+     attribute: values-v28 (shortEdges) and values-v30 (always) add it, so
+     Android 8 (issue 158) takes this theme without it. -->
 <resources>
-    <style name="IcoTheme" parent="@android:style/Theme.NoTitleBar.Fullscreen">
-        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
-    </style>
+    <style name="IcoTheme" parent="@android:style/Theme.NoTitleBar.Fullscreen" />
 </resources>
