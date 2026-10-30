@@ -431,7 +431,7 @@ every change bumps.
   one gives way when a row is under the finger (`ico_pointer_row_at`, the probe `ui_mouse.c`
   registers with `ico_pointer_set_row_probe`: the same hit test as the mouse), and then the finger
   is the row's alone: `touch_finger` never hands it to `ico_touch_event`, down to its lift, so the
-  Hidden Start over the pause menu's Options row no longer closes the menu. A Hidden control with
+  A Hidden Start over the pause menu's Options row cannot close the menu. A Hidden control with
   no row under the finger keeps the finger. The gate stays `ico_touch_menu_taps` (D-pad, Cross or
   Circle Off): with all three working there are no row taps. Logged, the first 8 then every 100th:
   `touch: tap at X,Y on menu row R (layout L) over hidden|shown <control>: the row|control (N)`.

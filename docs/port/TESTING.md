@@ -238,6 +238,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   program), the roll start's log line, which names the disc (`credits_jpn`, `credits_kor`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
+- `env_bits_test.c`: where each disc's wall-reach read in `act-env.c` takes its two bits of a motion record (a shift of 6 on every disc, the host layout), every `config/motion_bits.*.txt` row naming the field at bit 24 for two bits, and a synthetic word read through the shift (the June 2001 demo once read the item-mode bits) (`env_bits`).
+- `keep_flags_test.c`: the twenty words a load's keep and restore walk reads on each disc, exactly as that disc's objects have them (issue 160's new-game flag), with the key-config slots as at start and after a Button configuration visit; one argument selects the disc (`keep_flags`, `keep_flags_<disc>`).
+- `torch_work_test.c`: the torch record every torch starts from on each disc, played through the game's own torch code: a torch lit at its layout stays lit for 600 frames and runs the four flame effects of the default type, putting it out deletes exactly those and no other effect, an unlit torch stays out; one argument selects the disc (`torch_work`, `torch_work_<disc>`).
 - `state_host_test.c`: save states' decisions without the game (`port/game/state_rules.h`,
   [PLATFORM.md](PLATFORM.md#saving-and-loading)): every refusal of the conditions reachable and
   their order, a load without the pause, the pause menu and a port page over it; the log texts;
@@ -497,6 +500,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   cleanly: the Asian disc's `STGST13C.DF` (stage 4) and `STGST02A.DF`, the Korean disc's
   `STGSTAFF1.DF`, the August 2001 preview's `STGST13C.DF` (`inflate_disc_cn`,
   `inflate_disc_cn_st02a`, `inflate_disc_kor`, `inflate_disc_aug6`; skipped without the image).
+- `memory_floor_test.c`: the start-up set's free-memory floor (`memory_floor.h`): the default is the larger of 1536 MB and 17 % of the device's memory (1915 MB on the Retroid Pocket 6's 11265 MB, 1536 MB on a 5 GB device or smaller); the figures of the issue 161 start on that device (3340 MB available continues; 1693 MB, where it stalled, and 1900 MB, where the earlier start got Android's critical signal, stop; 1915 MB continues); an unknown figure never stops; the `[dev] pipeline_memory_floor_mb` text ("" and "auto" unset, "0" off, "2048" a floor, "-1" and "x" not read) (`memory_floor`).
 - `lifecycle_test.c`: the mobile lifecycle's step tables on fake operations (`lifecycle`).
 - `memory_test.c`: the game's allocator over the arena, [partitions](ARCHITECTURE.md#terms) at the
   EE's offsets (`memory`).
@@ -559,6 +563,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   mailbox mode (`testPresentGap`, `testCapEqualsRefresh`) (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
+- `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
   (`sched`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the

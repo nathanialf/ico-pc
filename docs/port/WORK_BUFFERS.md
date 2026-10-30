@@ -886,7 +886,7 @@ of the planes, the path a fractional scale already takes (`rd__planes_dropped`).
 byte-identical on every dump measured (`rd_noplanes_ab`, 2026-10-30, lavapipe: the title's
 rd-00200 and rd-00350 and the boot's rd-00600, 2 commands each through the plain builds, 0 of 18
 targets differ; a capture without planes keys, 0 commands, 0 differ). A colour a level apart on
-some pixels (the 4:3 columns of a wide frame no longer the 4:3 frame's) is possible in principle,
+some pixels (the 4:3 columns of a wide frame not the 4:3 frame's) is possible in principle,
 at a fractional scale, and was not seen. The lines:
 
     rd: pipelines: the sprite planes builds are not made on this device (the driver hung creating them on 2026-10-30, compiler E031.41.03.47; [dev] pipeline_skip); their draws take the plain builds (...)
@@ -921,7 +921,7 @@ inside it is that family's for the next start. The line: `rd: pipelines: the car
 N sprite planes builds last, one a batch (...)`.
 
 **The in-flight key.** A batch's note names its first and last key and its vertex shaders; a
-stall inside a batch that mixes families named none of them on its own (v0.9.5's 212-219). The
+stall inside a batch that mixes families named none of them on its own (issue 161's 212-219). The
 note now also names the key inside the driver: `creating pipeline 217 of 587 (in batch 212-219):
 <key> (<vs> N words + <fs> M words)` (`rd_pipeline.c` `noteKey`), the same form as a lazy run's
 creation, so the next start's "the previous run ended while: ..." quotes it and the record above can
@@ -944,8 +944,8 @@ it in MB, 0 turns it off (exported as `ICO_PIPELINE_MEMORY_FLOOR_MB`). The lines
     ico_pc: pipelines: the start-up set stopped at N MB available of T MB (floor F MB): the rest made on first use
     ico_pc: the start-up set stopped at the free-memory floor (N MB available of T MB, floor F MB); the next start makes the pipelines as the game needs them, with no start-up set
 
-On the Retroid Pocket 6's 11265 MB the default floor is 1915 MB: the v0.9.5 start's 1693 MB at the
-stall is under it, as is the 1900 MB where v0.9.4 got the "running critical" signal, so the
+On the Retroid Pocket 6's 11265 MB the default floor is 1915 MB: the 1693 MB reading at the
+stall in issue 161 is under it, as is the 1900 MB where the earlier start got the "running critical" signal, so the
 default stops that start before either point (17 % rather than 15 %, whose 1689 MB floor would
 have let the 1693 MB reading pass). `memory_floor_test` holds those figures.
 
@@ -957,22 +957,22 @@ with the GPU hang limit, `[dev] watchdog = 0`) ends the run in order: `ico_pc: t
 has not returned from creating a pipeline for N s (pipelines D of T): the run ends now, ...`, the
 report, the box, an exit; the activity file keeps the note for the next start.
 
-**What issue 161's logs show.** The Retroid Pocket 6 (Adreno 740, compiler E031.41.03.47; v0.9.5,
-the careful set) stopped inside batch 212-219 of 587 with 216 made: that batch mixed the planes
+**What issue 161's logs show.** The Retroid Pocket 6 (Adreno 740, compiler E031.41.03.47; the
+careful set) stopped inside batch 212-219 of 587 with 216 made: that batch mixed the planes
 builds (`sprite_stq_plane_world_vs`, `sprite_plane_world_vs`) and a plain one (`sprite_world_vs`),
 so which pipeline did not return is not known. The same `sprite_stq_ps_planes` family compiled in
 0.08 to 0.10 s in batch 148-155 of that start. The device's available memory fell from 3340 MB (2 s,
-147 made) to 1693 MB (23 s, 211 made) while the process stayed at 205 to 214 MB; v0.9.4's start
+147 made) to 1693 MB (23 s, 211 made) while the process stayed at 205 to 214 MB; an earlier start
 on the same console drew Android's "running critical" signal at 1900 MB available at pipeline 211,
 and its freeze record names a plain build (`program 11 ... sprite_world_vs + sprite_ps`). No
-watchdog line ends the v0.9.5 log: the system ended the app 18 to 20 s into the stall. The record
+watchdog line ends that log: the system ended the app 18 to 20 s into the stall. The record
 above protects the starts after an end that names the family alone; the careful order makes such a
 note certain; the creation limit makes the end the game's own.
 
 **Tests.** `rd_vu_frac_test` (`testSkip`, CPU): the set with the planes off holds no planes key and
 the plain twin of each, no conversion, the counter, and the clear gives the set back key for key.
-`pipeline_skip_test` (`port/platform/test`): the family of the issue's notes (v0.9.5's mixed batch
-and v0.9.4's plain build name none; a single planes build and a lazy creation name it), the value
+`pipeline_skip_test` (`port/platform/test`): the family of the issue's notes (the mixed batch
+and the earlier plain build name none; a single planes build and a lazy creation name it), the value
 read back, the device and driver match, the clear. `rd_noplanes_ab` (`port/render/test/
 rd_noplanes_ab.cmake`, `tools/noplanes_dumps.txt`): the title's and the boot's dumps (one planes key
 each, program 9 vs 22 fs 28) with and without the planes: 2 commands each through the fallback

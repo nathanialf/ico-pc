@@ -433,7 +433,7 @@ and closes, and the same text is in the log. Here is what the common ones
 mean.
 
 **"No ICO disc image was found or chosen."** The game needs your disc
-image the first time. If you played an earlier version, the box says which
+image the first time. If you played a previous version, the box says which
 two folders it looked in for your game data: see
 [the game asks for the disc image again](#the-game-asks-for-the-disc-image-again).
 Otherwise start it again and choose the file, or put the image
