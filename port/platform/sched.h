@@ -45,6 +45,11 @@
 #ifndef ICO_PLATFORM_SCHED_H
 #define ICO_PLATFORM_SCHED_H
 
+#include <stddef.h>
+
+#include "fiber.h"
+#include "state_reloc.h"
+
 #define ICO_SCHED_MAX_THREADS 256 /* ids 1..255 */
 #define ICO_SCHED_MAX_SEMAS 256   /* ids 1..255 */
 #define ICO_SCHED_PRIORITIES 128
@@ -156,6 +161,45 @@ int ico_sched_signal_sema(int id, int from_interrupt);
 int ico_sched_wait_sema(int id);
 int ico_sched_poll_sema(int id);
 int ico_sched_refer_sema(int id, IcoSemaInfo *info);
+
+/* --- Save states ------------------------------------------------------------
+ * The scheduler's simulation state is one block (the thread and semaphore
+ * tables, the ready queues, the current and last thread, the vsync and
+ * switch counts) plus every started thread's fiber, which lives in pool
+ * slot <thread id> (fiber.h).
+ *
+ * Host context only, at the host loop's quiescent point (ico_host_step
+ * returned: no thread on the CPU, ico_sched_run not dispatching, no
+ * interrupt open, no ico_sched_call_on_host pending, every exited thread
+ * reaped). Both calls refuse (-1) anywhere else. */
+typedef struct IcoSchedImage {
+    const void *tables; /* the block; a save points at the live one (no copy) */
+    size_t tables_bytes;
+    int n_fibers;
+    /* by thread id, ascending; fibers[i].slot is the thread's id */
+    IcoFiberImage fibers[ICO_SCHED_MAX_THREADS];
+} IcoSchedImage;
+
+/* Describes the scheduler for a save: out->tables is the live block and
+   each fiber image points into its live slot, so the caller copies the
+   bytes before the game runs on (state_host.c deflates them at once).
+   Returns 0, or -1 off the quiescent point. */
+int ico_sched_state_save(IcoSchedImage *out);
+/* Puts a saved scheduler back: checks the image against itself (every
+   thread with a fiber has exactly one image, no image without a thread),
+   discards every live fiber slot, copies the tables, moves their host
+   pointers (Thread.entry, note and note_caller by the MODULE delta, typed;
+   arg, stack and gp by the scan; ico_state_reloc_word) and restores every
+   saved fiber into its slot (ico_fiber_slot_restore). `in` must not point
+   at the live tables or slots (a copy). Returns 0; or -1 before anything
+   changed (off the quiescent point, an inconsistent image), or -1 after
+   the live fibers were discarded, with the scheduler left empty (as
+   ico_sched_reset leaves it) for the caller to restore its own backup. */
+int ico_sched_state_restore(const IcoSchedImage *in, const IcoStateReloc *r);
+/* The live block's address and size (the self-checks and the developer
+   log; ico_sched_state_restore already fixes its pointers, so the block is
+   not registered for the scan a second time). */
+void ico_sched_state_block(const void **p, size_t *n);
 
 /* --- Diagnostics (diag_host.c) -------------------------------------------- */
 
