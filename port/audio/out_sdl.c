@@ -773,6 +773,20 @@ void ico_audio_sdl_device_removed(uint32_t which)
     }
 }
 
+void ico_audio_sdl_flush(void)
+{
+    if (stream == NULL) {
+        return;
+    }
+    /* the queued sound is the game's before the load: dropped by the
+       pause and resume the Android lifecycle uses (the resume empties the
+       queue and starts the pull path's accounting again while no callback
+       runs) */
+    ico_audio_sdl_pause(1);
+    ico_audio_sdl_pause(0);
+    fprintf(stderr, "audio: the output's queue dropped after a save state's load\n");
+}
+
 void ico_audio_sdl_pause(int paused)
 {
     if (stream == NULL) {
