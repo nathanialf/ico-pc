@@ -31,6 +31,7 @@
 #ifndef ICO_PORT_AUDIO_MIX_GAIN_H
 #define ICO_PORT_AUDIO_MIX_GAIN_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 enum {
@@ -78,5 +79,12 @@ uint32_t ico_audio_gain_pcm(uint32_t vol);
 
 /* Power-on state: no tags, every gain 100 %, nothing cached (tests). */
 void ico_audio_gain_reset(void);
+
+/* Save states (audio_host.c ico_audio_state_register): what the game set,
+   three blocks (which 0 the slots' tags, 1 the cached volumes, 2 whether
+   the tags are set up), else NULL.  The gains are the player's settings,
+   not saved: a load re-issues the cached volumes under the gains now
+   (ico_audio_gain_reapply). */
+void *ico_audio_gain_state_block(int which, size_t *bytes);
 
 #endif
