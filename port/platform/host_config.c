@@ -489,6 +489,12 @@ static const struct {
     {"dev.unlock_credits", "unlock_credits"},
     /* test popups from Main tick 100 (port/ui/popup.h) */
     {"dev.popup_test", "popup_test"},
+    /* save states at a Main tick, for the headless round trip
+       (port/platform/state.h ico_state_dev_set; main_host.c): "<tick>:<slot>",
+       "<tick>:<slot>" and "<tick>" */
+    {"dev.state_save_at", "state_save_at"},
+    {"dev.state_load_at", "state_load_at"},
+    {"dev.state_hash_at", "state_hash_at"},
     /* the renderer backend of the window build: "" (Automatic: Vulkan,
        then Direct3D 12 where linked, then OpenGL), "vulkan" (also "vk"), "d3d12", "opengl" (also "gl") or
        "d3d11", where the build links it (window_host.c, port/rhi/rhi.h
