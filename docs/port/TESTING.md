@@ -1218,7 +1218,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   pipeline cache file, and the pipeline pool filled: `RHI_PIPELINE_POOL_MAX` pipelines alive at
   once, none refused, the 1025th and the last drawn with, one more refused and counted
   (`poolCell`, once, not under the fake switches) (`rhi_vk`, `rhi_vk_nodual`, `rhi_vk_d24s8`,
-  `rhi_vk_mali`).
+  `rhi_vk_mali`); the sync cell (`syncCell`) checks the fence ring under `ICO_VK_FAKE_API=1.1`
+  and `1.0`, and under `1.0` the device's version (1.0), the `VkRenderPass` path and the UINT
+  views' usage structure (`VK_KHR_maintenance2`) (`rhi_vk_vk11`, `rhi_vk_vk10`).
 - `rhi_d3d12_test.c`: the same checks on D3D12, a Windows GUI program that writes a log and shows
   a message box (`rhi_d3d12`).
 - `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP; WARP again with
@@ -1562,6 +1564,24 @@ With `port/rhi`'s `rhi_vk_vk11` and `rhi_vk_swapchain_vk11` (the RHI cells and t
 swapchain recreation included, on the fence ring and the `VkRenderPass` path under validation) they
 are `ctest -j1 -L vk11`. The OpenGL twins leave them out (a Vulkan fake). The real 1.1 loader and
 driver are not covered here: lavapipe is a 1.3 driver held to 1.1 by the switch.
+
+## The render suite on a Vulkan 1.0 driver
+
+`port/render/CMakeLists.txt` (the `VK10` block) registers the same render tests as `VK11`'s first
+profile under `ICO_VK_FAKE_API=1.0 ICO_VK_FAKE_NO_DYNAMIC=1` (issue 158, Android 8: the instance
+created at Vulkan 1.0 with `VK_KHR_get_physical_device_properties2`, the device at 1.0 with
+`VK_KHR_maintenance1` and `VK_KHR_maintenance2`, the core 1.1 entry points cleared so a core 1.1
+call left unguarded stops the run, the fence ring, `VkRenderPass` objects and every pipeline state
+static, as on an Android 8 phone; [RHI.md](RHI.md#vulkan), variable table), folder
+`<build>/port/render/vk10/`, the Vulkan run's expectations byte for byte, exit 77 a skip, label
+`vk10` besides `render`: `rd_pixel_vk10`, `rd_present_vk10`, `rd_crt_vk10`, `rd_debug_vk10`,
+`rd_raw_vk10`, `rd_fog_vk10`, `rd_shadow_vk10`, `rd_interp_vk10`, `rd_msaa_vk10`, `rd_perf_vk10`
+(its pass and barrier counts are `rd_perf`'s) and `rd_mesh_vk10.1of4` to `rd_mesh_vk10.4of4`.
+With `port/rhi`'s `rhi_vk_vk10` and `rhi_vk_swapchain_vk10` they are `ctest -j1 -L vk10`; CI's
+full `ctest` runs them. The shaders are SPIR-V 1.0 for every device (`spirv_check`'s version gate,
+[SHADERS.md](SHADERS.md)), so the validation layer sees no module newer than the device. A real
+1.0 loader (no `vkEnumerateInstanceVersion`) and a real 1.0 driver are not covered: lavapipe is a
+1.3 driver behind a 1.4 loader, held to 1.0 by the switch.
 
 ## The render suite on Direct3D 11 (WARP)
 
