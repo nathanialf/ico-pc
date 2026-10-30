@@ -44,6 +44,31 @@ option(ICO_RC_TOOLS "Compile the release candidates' tooling (rc packages only)"
 if(ICO_RC_TOOLS)
     add_compile_definitions(ICO_RC_TOOLS=1)
 endif()
+# ICO_STATE_FIXED_IMAGE: the program loads at the address it was linked at
+# (no address randomisation for the image itself), so a save state's code
+# and data pointers are the same in the next process and a load restores
+# the saved bytes as they are (docs/BUILDING.md, "Fixed image"). ON in the
+# linux-x64, linux-x64-clang, win-x64 and win-x64-clang presets (and those
+# inheriting them); Android, Apple and arm64 Linux keep their randomised
+# image and relocate (port/platform/state_reloc.h). Linux: the code is
+# compiled -fno-pie (targets that ask for position-independent code keep
+# it) and the programs link -no-pie; Windows (GNU ld and lld through the
+# mingw drivers): -Wl,--disable-dynamicbase. ICO_STATE_FIXED_IMAGE=1 in
+# every source, for the save state log.
+option(ICO_STATE_FIXED_IMAGE "Link the program at a fixed image address (save states restore without moving code pointers)" OFF)
+if(ICO_STATE_FIXED_IMAGE)
+    set(_ico_exe "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,EXECUTABLE>")
+    if(WIN32)
+        add_link_options("$<${_ico_exe}:-Wl,--disable-dynamicbase>")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
+        add_compile_options(
+            "$<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<NOT:$<BOOL:$<TARGET_PROPERTY:POSITION_INDEPENDENT_CODE>>>,$<NOT:$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>>>:-fno-pie>")
+        add_link_options("$<${_ico_exe}:-no-pie>")
+    else()
+        message(FATAL_ERROR "ICO_STATE_FIXED_IMAGE is for the Linux and Windows PC builds")
+    endif()
+    add_compile_definitions(ICO_STATE_FIXED_IMAGE=1)
+endif()
 
 # The retail game ran with its asserts live (the reconstruction calls
 # __assert where the macro expanded), so no configuration defines NDEBUG:
