@@ -37,6 +37,9 @@
 #include <eekernel.h>
 #include <libcdvd.h>
 #include "sched.h"
+#include "state_port.h"
+#include "state_registry.h"
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -96,7 +99,7 @@ enum {
     ST_CMD_RESUME = 8,
 };
 
-static struct {
+static struct CdHost {
     int busy;             /* a non-blocking command waits for the next vsync */
     int syncSema;         /* sceCdSync(0)'s waiters (ids > 0; 0 = not made) */
     int syncWaiters;      /* threads blocked on it */
@@ -121,6 +124,25 @@ static struct {
 
     IcoCdClockFn clock;
 } cd;
+
+/* The save state's blocks (state_port.h): the drive's command state (the
+   sync semaphore's id is the scheduler's, saved with it) and the stream.
+   The record's host objects stay: the disc this layer mounted, the
+   identification of the disc in the drive (the same disc, refused
+   otherwise) and the clock callback. */
+#define CD_SPAN(first, last)                                                                       \
+    offsetof(struct CdHost, last) + sizeof cd.last - offsetof(struct CdHost, first)
+
+int ico_cdvd_host_state_register(void)
+{
+    int rc = 0;
+
+    rc |= ico_state_register("cdvd.drive", &cd.busy, CD_SPAN(busy, error), 0);
+    rc |= ico_state_register("cdvd.stream", &cd.stInit, CD_SPAN(stInit, stLsn), 0);
+    return rc != 0 ? -1 : 0;
+}
+
+#undef CD_SPAN
 
 /* --- the drive ------------------------------------------------------------- */
 
