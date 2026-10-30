@@ -554,6 +554,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
     endif()
     target_sources(ico_pc PRIVATE port/platform/window_host.c port/platform/window_switch.c
                                   port/platform/window_video.c port/platform/window_lines.c
+                                  port/platform/window_pipeline_skip.c
                                   port/platform/dump_zip.c)
     if(ICO_RC_TOOLS AND ANDROID)
         # an rc build's Share a bug report: the files it offers (share_report.h)
