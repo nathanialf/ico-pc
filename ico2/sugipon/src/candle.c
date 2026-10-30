@@ -16,6 +16,10 @@ typedef struct CandleFlame { /* field names derived */
 #include "candle.h"
 #include "ios.h"
 
+/* PC port: port/platform/diag_host.h (a rate-limited line per candle set
+   up: the flames it asked for and the ones the particle system placed) */
+void ico_host_candle_flames(int asked, int placed);
+
 ICO_WORD InitCandleGeo(void *self, void *mtx)
 {
     Sub15C *w = GOBJ_SUB(self);
@@ -31,11 +35,22 @@ ICO_WORD InitCandleGeo(void *self, void *mtx)
             flame[i].effect = SetParticleEffect(4, MatrixDrive_GetMatrix()[3], IdentityQuaternion);
             flame[i].off = 0;
         }
+        {
+            /* PC port: a line per candle set up (rate-limited) */
+            int placed = 0;
+
+            for (i = 0; i < w->nodeNum; i++) {
+                placed += flame[i].effect != -1;
+            }
+            ico_host_candle_flames(w->nodeNum, placed);
+        }
     } else {
         flame = (CandleFlame *)iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(CandleFlame, 8),
                                               "src/candle.c", 35);
         flame->effect = SetParticleEffect(4, mtx, IdentityQuaternion);
         flame->off = 0;
+        /* PC port: a line per candle set up (rate-limited) */
+        ico_host_candle_flames(1, flame->effect != -1);
     }
     debug_StdPrintfDummy("\x1b[33mInitialize candle geometries.\x1b[m\n");
     return (ICO_WORD)flame;
