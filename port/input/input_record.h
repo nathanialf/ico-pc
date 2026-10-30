@@ -69,5 +69,11 @@ int ico_input_record_frame_diff(const char *line, int gs_width, float aspect, ch
 void ico_input_record_note_width(unsigned int tick, int gs_width);
 /* Lines written so far, not counting comments (tests). */
 unsigned int ico_input_record_lines(void);
+/* A save state's load (port/game/state_host.c) put the Main tick back to
+   `tick`: the read held is written, then the comment "# state loaded slot
+   N (Main tick T)"; the ticks after it count from T again, so a recording
+   with a load in it replays only up to that line.  Nothing without a
+   recording. */
+void ico_input_record_state_loaded(int slot, unsigned int tick);
 
 #endif /* ICO_PORT_INPUT_INPUT_RECORD_H */
