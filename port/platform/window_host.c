@@ -55,6 +55,7 @@
 #include "video_options.h"
 #include "window_host.h"
 #include "window_lines.h"
+#include "window_pipeline_skip.h"
 #include "window_lifecycle.h"
 #include "window_pump_win.h"
 #include "window_switch.h"
@@ -2271,12 +2272,12 @@ open_window:
        settings or after a full set's end (pipePolicy) the set is made under
        the careful policy (rd_pipeline_policy_careful: small batches on one
        thread, the cache written after each, stopped at its memory budget,
-       the rest then made on first use). Not after a driver crash in it
-       (the lazy step), not by the settings or after a careful set's end or
-       a second end in a row (pipePolicy): each pipeline is then built when
-       a frame first needs it, the title comes at once, and the pipeline
-       cache is written after each batch of them (rd_pipelines_lazy) */
+       the rest then made on first use). Else (a driver crash in it, the
+       settings, a careful set's end, a second end: pipePolicy) each is
+       built when a frame first needs it, the cache written after each
+       batch (rd_pipelines_lazy) */
     const char *devCareful = rhi_limits() != NULL ? rhi_limits()->carefulPipelines : NULL;
+    window_pipeline_skip(s_window, cfgName);
     /* an end while preparing the graphics, by kind: the first's line, the
        second's setting for good (diag_host.h ico_diag_startup_end_persist;
        no table rule holds for either kind: the device table's careful set
@@ -4634,6 +4635,7 @@ static void perf_drain(void)
         s_perf.fxAdditive += r.fxAdditive;
         s_perf.fxLocal += r.fxLocal;
         s_perf.vuNoPlanes += r.vuNoPlanes;
+        window_pipeline_skip_count(r.spriteNoPlanes);
         s_perf.constReads += r.constReads;
         s_perf.constKept += r.constKept;
         s_perf.pipeCreates += r.pipelineCreates;
@@ -4818,6 +4820,7 @@ static void perf_log(void)
             s_perf.alphaOnePass / n, s_perf.alphaOpaque / n, s_perf.fxConstant / n,
             s_perf.fxAdditive / n, s_perf.fxLocal / n, s_perf.vuNoPlanes / n, s_perf.constReads / n,
             s_perf.constKept / n);
+    window_pipeline_skip_line();
     if (s_perf.msaaSamples) {
         /* the anti-aliasing's cost: its resolves' GPU time is the effects'
            "MSAA resolve" above (one a replay at most); where the last
