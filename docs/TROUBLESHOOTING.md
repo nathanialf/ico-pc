@@ -100,7 +100,10 @@ log of the start after it: they say what was being prepared and how much
 memory the game was using.
 
 On a phone or a handheld the system tells the game when the device itself
-runs low on memory. If it says so while the game prepares its graphics,
+runs low on memory, and the game also checks how much memory the device has
+free (it stops below about 15 % of the device's memory, at least 1.5 GB;
+`pipeline_memory_floor_mb` under `[dev]` in `config.toml` sets that in MB,
+0 turns the check off). If either happens while the game prepares its graphics,
 the game stops preparing, goes on to the title and prepares the rest the
 first time the game needs it. The next start then skips **Preparing
 graphics** and goes straight to the title; the first minutes of play can
