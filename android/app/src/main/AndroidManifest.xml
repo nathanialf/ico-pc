@@ -6,13 +6,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:installLocation="auto">
 
-    <!-- Vulkan 1.1 (0x401000) or later: the renderer refuses a loader or a
-         GPU below 1.1 (port/rhi/vk/vk_device.c); below 1.3 it uses dynamic
-         rendering when the driver has it and classic render passes when not,
-         and timeline semaphores or fences -->
+    <!-- Vulkan 1.0.3 (0x400003) or later, the first Vulkan version Android
+         shipped (issue 158, Android 8): a 1.0 loader is taken with
+         VK_KHR_get_physical_device_properties2 and a 1.0 GPU with
+         VK_KHR_maintenance1 (port/rhi/vk/vk_device.c); below 1.3 the
+         renderer uses dynamic rendering when the driver has it (1.1 and
+         later) and classic render passes when not, and timeline semaphores
+         or fences. The feature only filters the store's listing. -->
     <uses-feature
         android:name="android.hardware.vulkan.version"
-        android:version="0x401000"
+        android:version="0x400003"
         android:required="true" />
     <uses-feature
         android:name="android.hardware.touchscreen"
