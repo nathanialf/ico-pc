@@ -239,6 +239,14 @@ char *ico_toml_render(const IcoToml *t, const char *existing);
 /* Renders t over the file at path and writes it atomically (path.tmp, then
    rename over path). 0, or -1; the old file is intact on failure. */
 int ico_toml_save(const IcoToml *t, const char *path);
+/* The whole file at path as malloc'd text (NULL: missing, unreadable or out
+   of memory). With ico_toml_write_text, the achievements file's off-thread
+   path: the base text is read once and rendered in memory. */
+char *ico_toml_read_text(const char *path);
+/* Writes text atomically to path (path.tmp, fsync, rename over path): the
+   second half of ico_toml_save, for text rendered earlier. 0, or -1; the old
+   file is intact on failure. Any thread. */
+int ico_toml_write_text(const char *text, const char *path);
 
 /* SHA-1. */
 typedef struct IcoSha1 {

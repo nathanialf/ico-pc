@@ -2100,30 +2100,27 @@ char *ico_toml_render(const IcoToml *t, const char *existing)
     return result.p;
 }
 
-int ico_toml_save(const IcoToml *t, const char *path)
+char *ico_toml_read_text(const char *path)
 {
-    char *existing = read_text(path);
-    char *text = ico_toml_render(t, existing);
+    return read_text(path);
+}
+
+int ico_toml_write_text(const char *text, const char *path)
+{
     char tmp[ICO_PATH_MAX + 8];
     FILE *f;
     size_t n;
     int ok;
 
-    free(existing);
-    if (text == NULL) {
-        return -1;
-    }
     snprintf(tmp, sizeof(tmp), "%s.tmp", path);
     f = ico_fopen(tmp, "wb");
     if (f == NULL) {
-        free(text);
         return -1;
     }
     n = strlen(text);
     ok = fwrite(text, 1, n, f) == n;
     ok = ico_fsync(f) == 0 && ok; /* on the disk before the move */
     ok = fclose(f) == 0 && ok;
-    free(text);
     if (ok) {
         ok = ico_rename_replace(tmp, path) == 0;
     }
@@ -2132,6 +2129,21 @@ int ico_toml_save(const IcoToml *t, const char *path)
         return -1;
     }
     return 0;
+}
+
+int ico_toml_save(const IcoToml *t, const char *path)
+{
+    char *existing = read_text(path);
+    char *text = ico_toml_render(t, existing);
+    int rc;
+
+    free(existing);
+    if (text == NULL) {
+        return -1;
+    }
+    rc = ico_toml_write_text(text, path);
+    free(text);
+    return rc;
 }
 
 /* portable mode: -1 the folder decides, 0 off (portable=0), 1 on */
