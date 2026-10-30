@@ -17,6 +17,9 @@
 #include "mix_gain.h"
 #include "sndn2_host.h"
 #include "spu2.h"
+#include "spu2_sd.h"
+#include "sndn2_internal.h"
+#include "state_registry.h"
 #include "stream_watch.h"
 #if defined(__ANDROID__) || defined(ICO_IOS)
 #include "host_loop.h"
@@ -53,6 +56,43 @@ static long long first_sound_vsync = -1;
    last named (ico_audio_host_set_stage) and the vsync of the last look */
 static int stage_now;
 static unsigned int cuts_seen_at;
+
+int ico_audio_state_register(void)
+{
+    static const char *const sd_names[2] = {"spu2_sd.time", "spu2_sd.effect_attr"};
+    static const char *const gain_names[3] = {"mix_gain.tag", "mix_gain.cache", "mix_gain.ready"};
+    size_t n;
+    void *p;
+    int rc = 0;
+    int i;
+
+    p = spu2_state_block(&n);
+    rc |= ico_state_register("spu2.state", p, n, ICO_STATE_AUDIO | ICO_STATE_SCAN);
+    for (i = 0; i < 2; i++) {
+        p = spu2_sd_state_block(i, &n);
+        rc |= ico_state_register(sd_names[i], p, n, ICO_STATE_AUDIO);
+    }
+    for (i = 0; i < 3; i++) {
+        p = ico_audio_gain_state_block(i, &n);
+        rc |= ico_state_register(gain_names[i], p, n, ICO_STATE_AUDIO);
+    }
+    rc |= sndn2_host_state_register();
+    rc |= sndn2_stream_state_register();
+    /* the sync path's frame count: which vsyncs render 800 and which 801
+       frames at 59.94 Hz */
+    rc |=
+        ico_state_register("audio.vsync_index", &vsync_index, sizeof vsync_index, ICO_STATE_AUDIO);
+    return rc != 0 ? -1 : 0;
+}
+
+void ico_audio_host_flush(void)
+{
+#ifdef ICO_AUDIO_SDL
+    if (sdl_open) {
+        ico_audio_sdl_flush();
+    }
+#endif
+}
 
 int ico_audio_host_frames(int hz, unsigned int i)
 {
@@ -465,6 +505,8 @@ void ico_audio_sdl_pause(int paused)
 {
     (void)paused;
 }
+
+void ico_audio_sdl_flush(void) {}
 
 void ico_audio_set_rate_ratio(double ratio)
 {
