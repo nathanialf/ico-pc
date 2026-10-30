@@ -61,6 +61,11 @@ static int target(const UiMouseRow *r, UiMouseHit *out)
         out->item = -1;
         out->action = r->role == UI_MOUSE_ROLE_UP ? UI_MOUSE_ACT_UP : UI_MOUSE_ACT_DOWN;
         break;
+    case UI_MOUSE_ROLE_SQUARE:
+        /* a button prompt: no cursor move, a click is the button */
+        out->item = -1;
+        out->action = UI_MOUSE_ACT_SQUARE;
+        break;
     default:
         if (!r->itemLinks && !r->reachable && r->ownerItem < 0) {
             return 0; /* a heading, a note, a picture: no item */

@@ -22,7 +22,8 @@ _Static_assert((int)UI_MOUSE_ROLE_AUTO == (int)LT_POINTER_AUTO &&
                    (int)UI_MOUSE_ROLE_RIGHT == (int)LT_POINTER_RIGHT &&
                    (int)UI_MOUSE_ROLE_STEP == (int)LT_POINTER_STEP &&
                    (int)UI_MOUSE_ROLE_UP == (int)LT_POINTER_UP &&
-                   (int)UI_MOUSE_ROLE_DOWN == (int)LT_POINTER_DOWN,
+                   (int)UI_MOUSE_ROLE_DOWN == (int)LT_POINTER_DOWN &&
+                   (int)UI_MOUSE_ROLE_SQUARE == (int)LT_POINTER_SQUARE,
                "ui_mouse_geom.h's roles are layout_ext.h's");
 
 /* the game's side (common/; layout_texture.h declares the lt_* calls) */
@@ -129,10 +130,13 @@ static int gatherRows(void)
             const LtProperty *e = lt_ext_prop(j);
             int owner = list[c];
             if (lay->curItem < 0) {
-                if (!lt_ext_is_port_prop(e) || !curHas) {
+                /* a button prompt moves no cursor: taken whatever the
+                   current layout has (the Continue screen's has none) */
+                const int prompt = lt_ext_pointer_role(j) == LT_POINTER_SQUARE;
+                if (!lt_ext_is_port_prop(e) || (!curHas && !prompt)) {
                     continue;
                 }
-                owner = current_layout_id;
+                owner = prompt ? list[c] : current_layout_id;
             }
             UiMouseRow *r = &s_rows[n++];
             r->index = j;
@@ -247,11 +251,12 @@ void ui_mouse_tick(void)
             if (t.clicks > 0) {
                 /* a click on an item is the disc's confirm (Cross, Circle
                    on the Japanese disc) */
-                pad[0].flags |= hit.action == UI_MOUSE_ACT_LEFT    ? LT_PAD_LEFT
-                                : hit.action == UI_MOUSE_ACT_RIGHT ? LT_PAD_RIGHT
-                                : hit.action == UI_MOUSE_ACT_UP    ? LT_PAD_UP
-                                : hit.action == UI_MOUSE_ACT_DOWN  ? LT_PAD_DOWN
-                                                                   : lt_ext_confirm_button();
+                pad[0].flags |= hit.action == UI_MOUSE_ACT_LEFT     ? LT_PAD_LEFT
+                                : hit.action == UI_MOUSE_ACT_RIGHT  ? LT_PAD_RIGHT
+                                : hit.action == UI_MOUSE_ACT_UP     ? LT_PAD_UP
+                                : hit.action == UI_MOUSE_ACT_DOWN   ? LT_PAD_DOWN
+                                : hit.action == UI_MOUSE_ACT_SQUARE ? LT_PAD_SQUARE
+                                                                    : lt_ext_confirm_button();
             }
         }
     }
