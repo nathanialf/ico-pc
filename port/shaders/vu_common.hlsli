@@ -2067,12 +2067,15 @@ float4 vu_texture_function_f(float4 tex, float4 col, uint flags)
 #if ICO_DST_MODE == 0
 // gs_dual_out on the integers above: the same c0 and c1, float for float
 // (c0 = the byte / 255, c1 = the factor / 128).  The alpha's MSB tests (PABE,
-// FBA) on the integer itself.  The no-planes twins with dual-source
-// blending (vu_np_ps, vu_texa_np_ps) take one more argument, fused: not 0
-// on a fused pair's kick pixel (VU_RETURN), which is written as the PABE
-// pixel whose As has its MSB clear is (vu_dual_out_fused's rule); every
-// other build has the function as it was.
-#if defined(ICO_VU_NO_PLANES) && !defined(ICO_NO_DUAL)
+// FBA) on the integer itself.  The no-planes twins (vu_np_ps,
+// vu_texa_np_ps) and the two-pass builds without dual-source blending
+// (ICO_NO_DUAL) take one more argument, fused: not 0 on a fused pair's kick
+// pixel (VU_RETURN), which is written as the PABE pixel whose As has its
+// MSB clear is (vu_dual_out_fused's rule): in the two-pass builds the colour
+// pass's factor 1.0 for the lerps and 0 for Cd*FIX + Cs, so the blender
+// stores Cs, and the alpha pass's As (FBA's MSB on it) as for every pixel;
+// the planes build with dual-source blending has the function as it was.
+#if defined(ICO_VU_NO_PLANES) || defined(ICO_NO_DUAL)
 #define VU_FUSED_ARG , float fused
 #define VU_FUSED_OR fused != 0.0 ||
 #else
@@ -2134,14 +2137,17 @@ DualOut vu_dual_out_f(float4 col, uint flags, uint fix VU_FUSED_ARG)
 }
 
 // the entry's output (i its input): the fixed-function blend's c0 and c1;
-// a fused pair's kick pixel unblended (vu_dual_out_fused) in the builds
-// with dual-source blending, the only ones a fused pair draws with (without
-// it a cut is two passes, which rd_replay_vu.c never fuses): marked by
-// VuVSOut.r.w with the planes, by a negative plane in the no-planes twins
-// (vu_fused_out; a twin never draws a clip plane's draw, and under one a
-// negative plane's pixel is discarded before this)
-#ifdef ICO_NO_DUAL
-#define VU_RETURN(col, i) return vu_dual_out_f(col, g_mode.x, g_blend.y)
+// a fused pair's kick pixel unblended (vu_dual_out_fused, or vu_dual_out_f's
+// fused argument), with dual-source blending and without it (a cut is then
+// a colour pass and an alpha pass, which rd_replay_vu.c fuses as a pair:
+// vuFuseVerdict, vuNoDualJoin): marked by VuVSOut.r.w with the planes, by a
+// negative plane in the no-planes twins (vu_fused_out; a twin never draws a
+// clip plane's draw, and under one a negative plane's pixel is discarded
+// before this)
+#if defined(ICO_NO_DUAL) && defined(ICO_VU_NO_PLANES)
+#define VU_RETURN(col, i) return vu_dual_out_f(col, g_mode.x, g_blend.y, i.plane < 0.0 ? 1.0 : 0.0)
+#elif defined(ICO_NO_DUAL)
+#define VU_RETURN(col, i) return vu_dual_out_f(col, g_mode.x, g_blend.y, i.r.w)
 #elif defined(ICO_VU_NO_PLANES)
 #define VU_RETURN(col, i) return vu_dual_out_f(col, g_mode.x, g_blend.y, i.plane < 0.0 ? 1.0 : 0.0)
 #else
