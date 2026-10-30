@@ -303,6 +303,12 @@ getting its graphics ready, the next start's log says where it stopped,
 and that start gets its graphics ready as you play. If it stops there
 two starts in a row, the game does that from then on and writes it into
 `config.toml` ([how to undo that](TROUBLESHOOTING.md#the-first-start-takes-a-long-time)).
+If the graphics driver stops answering while the game prepares a piece of
+graphics, the game closes itself after about 10 seconds with a message,
+so the phone neither freezes nor needs a restart. When that piece is one
+of the shapes the game can draw another way, the next start says so in a
+message and the game draws those shapes that way on this phone from then
+on ([how to undo that](TROUBLESHOOTING.md#the-first-start-takes-a-long-time)).
 A stop while the game was in the background does not count. Send `logs/ico-pc.log` from the start where it
 happened. The same goes for a message that the graphics driver stopped
 responding while the game was drawing: the log says what was being drawn.
