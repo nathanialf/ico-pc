@@ -26,6 +26,17 @@
  *           image: accepted with this program's functions, refused with a
  *           data address as a thread's entry or as a handler, refused with
  *           no image
+ *   hash    the masked hash (state_hash.h): with nothing named it is the
+ *           plain XXH3-64 of the regions' XXH3-64s; two copies of the
+ *           game's memory that differ only in a typed host pointer, a typed
+ *           host id and words pointing into two different noted host
+ *           blocks hash alike, and are counted (pointer words, host ids);
+ *           a word one past a block's end plus one, an unaligned word and
+ *           a difference anywhere else still count; a field reaching
+ *           past the region's end is clipped to it; the mask callback lists
+ *           each range with its kind in order; the block table widens an
+ *           overlapping or touching block, ignores a null one and, full,
+ *           widens the nearest
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -39,7 +50,9 @@
 #include "../arena.h"
 #include "../kernel_host.h"
 #include "../sched.h"
+#include "../state_hash.h"
 #include "../state_reloc.h"
+#include "xxh3.h"
 
 static int fails;
 
@@ -433,12 +446,173 @@ static void test_check(void)
     ico_kernel_reset();
 }
 
+/* --- the masked hash --------------------------------------------------------- */
+
+typedef struct MaskLog {
+    int n;
+    int region[16], kind[16];
+    size_t off[16], bytes[16];
+} MaskLog;
+
+static void mask_log(int region, size_t off, size_t n, int kind, void *user)
+{
+    MaskLog *m = (MaskLog *)user;
+    if (m->n < 16) {
+        m->region[m->n] = region;
+        m->off[m->n] = off;
+        m->bytes[m->n] = n;
+        m->kind[m->n] = kind;
+    }
+    m->n++;
+}
+
+static void put64(unsigned char *p, uint64_t w)
+{
+    memcpy(p, &w, sizeof w);
+}
+
+static void test_hash(void)
+{
+    /* two copies of a "game memory" of 256 bytes (8-aligned) and a small
+       second region; host blocks at made-up addresses */
+    static uint64_t a_words[32], b_words[32];
+    static uint64_t a2_words[4], b2_words[4];
+    unsigned char *a = (unsigned char *)a_words;
+    unsigned char *b = (unsigned char *)b_words;
+    IcoStateHashRegion ra[2], rb[2];
+    IcoStateHashField fa[2], fb[2];
+    IcoStateHashBlocks blocks;
+    IcoStateHashResult x, y;
+    MaskLog log;
+    uint64_t want[2];
+    size_t i;
+
+    for (i = 0; i < 256; i++) {
+        a[i] = b[i] = (unsigned char)(i * 13 + 1);
+    }
+    for (i = 0; i < 4; i++) {
+        a2_words[i] = b2_words[i] = 0x1111111111111111ull * (i + 1);
+    }
+    ra[0].name = rb[0].name = "arena";
+    ra[0].p = a;
+    rb[0].p = b;
+    ra[0].n = rb[0].n = 256;
+    ra[1].name = rb[1].name = "gbss";
+    ra[1].p = a2_words;
+    rb[1].p = b2_words;
+    ra[1].n = rb[1].n = sizeof a2_words;
+
+    /* nothing named: the plain hash, the same for equal copies */
+    CHECK(ico_state_hash_regions(ra, 2, NULL, 0, NULL, NULL, NULL, &x) == 0);
+    want[0] = xxh3_64(a, 256);
+    want[1] = xxh3_64(a2_words, sizeof a2_words);
+    CHECK(x.region_hash[0] == want[0] && x.region_hash[1] == want[1]);
+    CHECK(x.hash == xxh3_64(want, sizeof want));
+    CHECK(x.ptr_words == 0 && x.host_ids == 0);
+    CHECK(ico_state_hash_regions(rb, 2, NULL, 0, NULL, NULL, NULL, &y) == 0 && y.hash == x.hash);
+
+    /* a typed pointer at 16 and a typed id (4 bytes) at 40 differ */
+    put64(a + 16, 0x00005555deadbe00ull);
+    put64(b + 16, 0x00005555feedf000ull);
+    a[40] = 1;
+    b[40] = 2;
+    /* words pointing into each run's own host block, at 64 and in gbss */
+    put64(a + 64, 0x0000600000001010ull);
+    put64(b + 64, 0x0000700000002020ull);
+    a2_words[2] = 0x0000600000001000ull; /* the block's first byte */
+    b2_words[2] = 0x0000700000002100ull; /* its end address itself */
+    memset(&blocks, 0, sizeof blocks);
+    ico_state_hash_note_block(&blocks, 0x0000600000001000ull, 0x100);
+    ico_state_hash_note_block(&blocks, 0x0000700000002000ull, 0x100);
+    ico_state_hash_note_block(&blocks, 0, 0x100); /* null: ignored */
+    CHECK(blocks.n == 2);
+    fa[0].p = a + 16;
+    fa[0].n = 8;
+    fa[0].kind = ICO_STATE_MASK_PTR;
+    fa[1].p = a + 40;
+    fa[1].n = 4;
+    fa[1].kind = ICO_STATE_MASK_ID;
+    fb[0] = fa[0];
+    fb[0].p = b + 16;
+    fb[1] = fa[1];
+    fb[1].p = b + 40;
+
+    /* without the masks they differ */
+    CHECK(ico_state_hash_regions(ra, 2, NULL, 0, NULL, NULL, NULL, &x) == 0);
+    CHECK(ico_state_hash_regions(rb, 2, NULL, 0, NULL, NULL, NULL, &y) == 0);
+    CHECK(x.hash != y.hash);
+    /* with them, alike, and counted */
+    memset(&log, 0, sizeof log);
+    CHECK(ico_state_hash_regions(ra, 2, fa, 2, &blocks, mask_log, &log, &x) == 0);
+    CHECK(ico_state_hash_regions(rb, 2, fb, 2, &blocks, NULL, NULL, &y) == 0);
+    CHECK(x.hash == y.hash);
+    CHECK(x.ptr_words == 3 && x.host_ids == 1); /* the typed pointer, two block words */
+    CHECK(y.ptr_words == 3 && y.host_ids == 1);
+    /* the callback: the typed fields in order, then the block words */
+    CHECK(log.n == 4);
+    CHECK(log.region[0] == 0 && log.off[0] == 16 && log.bytes[0] == 8 &&
+          log.kind[0] == ICO_STATE_MASK_PTR);
+    CHECK(log.region[1] == 0 && log.off[1] == 40 && log.bytes[1] == 4 &&
+          log.kind[1] == ICO_STATE_MASK_ID);
+    CHECK(log.region[2] == 0 && log.off[2] == 64 && log.bytes[2] == 8 &&
+          log.kind[2] == ICO_STATE_MASK_BLOCK);
+    CHECK(log.region[3] == 1 && log.off[3] == 16 && log.kind[3] == ICO_STATE_MASK_BLOCK);
+    /* the live memory is untouched */
+    CHECK(a[40] == 1 && a2_words[2] == 0x0000600000001000ull);
+
+    /* one past the end address: a difference that counts */
+    put64(b + 64, 0x0000700000002101ull);
+    CHECK(ico_state_hash_regions(rb, 2, fb, 2, &blocks, NULL, NULL, &y) == 0);
+    CHECK(y.hash != x.hash && y.ptr_words == 2);
+    put64(b + 64, 0x0000700000002020ull);
+    /* a block address in an unaligned word is not a pointer */
+    put64(b + 68, 0x0000700000002020ull);
+    CHECK(ico_state_hash_regions(rb, 2, fb, 2, &blocks, NULL, NULL, &y) == 0);
+    CHECK(y.hash != x.hash);
+    memcpy(b + 64, a + 64, 16);
+    put64(b + 64, 0x0000700000002020ull);
+    /* any other byte still counts */
+    b[200] ^= 0x40;
+    CHECK(ico_state_hash_regions(rb, 2, fb, 2, &blocks, NULL, NULL, &y) == 0);
+    CHECK(y.hash != x.hash);
+    b[200] ^= 0x40;
+    CHECK(ico_state_hash_regions(rb, 2, fb, 2, &blocks, NULL, NULL, &y) == 0);
+    CHECK(y.hash == x.hash);
+
+    /* a field reaching past the region's end: only its part inside is
+       masked */
+    fb[0].p = b + 248;
+    fb[0].n = 16;
+    memset(&log, 0, sizeof log);
+    CHECK(ico_state_hash_regions(rb, 1, fb, 1, NULL, mask_log, &log, &y) == 0);
+    CHECK(log.n == 1 && log.off[0] == 248 && log.bytes[0] == 8);
+    /* too many regions: refused */
+    CHECK(ico_state_hash_regions(ra, ICO_STATE_HASH_MAX_REGIONS + 1, NULL, 0, NULL, NULL, NULL,
+                                 &x) == -1);
+
+    /* the block table: overlap and touch widen, full widens the nearest */
+    memset(&blocks, 0, sizeof blocks);
+    ico_state_hash_note_block(&blocks, 0x1000, 0x100);
+    ico_state_hash_note_block(&blocks, 0x1080, 0x100); /* overlaps */
+    CHECK(blocks.n == 1 && blocks.lo[0] == 0x1000 && blocks.hi[0] == 0x1180);
+    ico_state_hash_note_block(&blocks, 0x1180, 0x80); /* touches the end address */
+    CHECK(blocks.n == 1 && blocks.hi[0] == 0x1200);
+    for (i = 1; i < ICO_STATE_HASH_MAX_BLOCKS; i++) {
+        ico_state_hash_note_block(&blocks, 0x100000 * (uint64_t)(i + 1), 0x10);
+    }
+    CHECK(blocks.n == ICO_STATE_HASH_MAX_BLOCKS);
+    ico_state_hash_note_block(&blocks, 0x1400, 0x10); /* nearest: the first */
+    CHECK(blocks.n == ICO_STATE_HASH_MAX_BLOCKS && blocks.lo[0] == 0x1000 &&
+          blocks.hi[0] == 0x1410);
+}
+
 int main(void)
 {
     test_scan();
     test_image();
     test_heap();
     test_check();
+    test_hash();
     if (fails != 0) {
         printf("state_reloc_test: %d failure(s)\n", fails);
         return 1;
