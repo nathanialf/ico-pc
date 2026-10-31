@@ -19,6 +19,11 @@
  *           bounds lie in their new stack. Refusals: a running fiber's
  *           save, a restore into a used slot, a restore with the wrong
  *           delta (the slot stays free).
+ *   dead    a fiber that wrote a pattern in a deep frame, returned and was
+ *           saved at a shallower depth: the image starts at or below the
+ *           pattern (the dead frames under the stack pointer are saved)
+ *           and, restored into a fresh slot, the stack's bytes from the
+ *           image's start to its top are the saved ones byte for byte.
  *
  * `state_fiber_test guard` (not on Windows): a fiber saved before it
  * overflows its stack, restored into a second pool and resumed in a child
@@ -416,6 +421,103 @@ static void test_states(void)
     }
 }
 
+/* --- dead frames ---------------------------------------------------------------- */
+
+#define DEAD_BYTES 8192
+#define DEAD_KEPT 1024 /* its deepest bytes, below anything the yield's frames reach */
+
+static uintptr_t dead_at; /* the pattern's address in the fiber's stack */
+static int dead_done;
+
+/* a deep frame's local array filled with a pattern, then returned from */
+static NO_ASAN __attribute__((noinline)) void dead_scribble(void)
+{
+    volatile unsigned char buf[DEAD_BYTES];
+    size_t i;
+    for (i = 0; i < DEAD_BYTES; i++) {
+        buf[i] = 0xA5;
+    }
+    dead_at = (uintptr_t)&buf[0];
+}
+
+static void dead_main(void *arg)
+{
+    (void)arg;
+    dead_scribble();
+    ico_fiber_yield(); /* saved here, the pattern below the stack pointer */
+    dead_done = 1;
+}
+
+static NO_ASAN size_t count_pattern(const void *p, size_t n)
+{
+    volatile const unsigned char *b = (volatile const unsigned char *)p;
+    size_t i;
+    size_t k = 0;
+    for (i = 0; i < n; i++) {
+        k += b[i] == 0xA5;
+    }
+    return k;
+}
+
+static NO_ASAN int same_bytes(const void *a, const void *b, size_t n)
+{
+    volatile const unsigned char *x = (volatile const unsigned char *)a;
+    volatile const unsigned char *y = (volatile const unsigned char *)b;
+    size_t i;
+    for (i = 0; i < n; i++) {
+        if (x[i] != y[i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static void test_dead_frames(void)
+{
+    IcoFiberImage img;
+    IcoStateReloc r;
+    void *ctrl = NULL;
+    void *stack = NULL;
+    uintptr_t base;
+    IcoFiber *g = ico_fiber_create_in_slot(5, dead_main, NULL);
+
+    CHECK(g != NULL);
+    if (g == NULL) {
+        return;
+    }
+    dead_done = 0;
+    CHECK(ico_fiber_resume(g) == 0);
+    CHECK(ico_fiber_slot_save(5, &img) == 0);
+    base = (uintptr_t)img.slot_base;
+    if (dead_at < base || dead_at >= base + ico_fiber_pool_slot_bytes()) {
+        /* the address sanitizer's fake stack holds the frame elsewhere */
+        printf("dead frames: the frame is off the fiber's stack (a fake stack); skipped\n");
+        CHECK(ico_fiber_resume(g) == 0);
+        ico_fiber_destroy(g);
+        return;
+    }
+    /* the image reaches down to the dead frame's pattern */
+    CHECK(base + img.stack_off <= dead_at);
+    CHECK(count_pattern((const void *)dead_at, DEAD_KEPT) == DEAD_KEPT);
+    copy_image(&img, &ctrl, &stack);
+    ico_fiber_destroy(g);
+    pool_reloc(&r, (uintptr_t)ico_fiber_pool_base()); /* the same pool: delta 0 */
+    CHECK(ico_fiber_slot_restore(5, &img, &r) == 0);
+    g = ico_fiber_in_slot(5);
+    CHECK(g != NULL);
+    if (g != NULL) {
+        /* the stack as saved, the dead frames included (nothing moved:
+           delta 0) */
+        CHECK(same_bytes((const void *)(base + img.stack_off), stack, img.stack_bytes));
+        CHECK(count_pattern((const void *)dead_at, DEAD_KEPT) == DEAD_KEPT);
+        CHECK(ico_fiber_resume(g) == 0);
+        CHECK(ico_fiber_finished(g) && dead_done == 1);
+        ico_fiber_destroy(g);
+    }
+    free(ctrl);
+    free(stack);
+}
+
 /* --- guard (a child process) ----------------------------------------------------- */
 
 #if !defined(_WIN32)
@@ -502,6 +604,7 @@ int main(int argc, char **argv)
         printf("no save states on this backend (%s)\n", ico_fiber_backend());
     } else {
         test_states();
+        test_dead_frames();
     }
     if (fails != 0) {
         printf("%d failure(s)\n", fails);
