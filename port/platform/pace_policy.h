@@ -138,7 +138,16 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
  * pacedTenths is the budget's presents a step in tenths, rounded
  * (periodNs * 10 / gpuNs, PACE_PACED_HIGH at 10 * PACE_ALLOW_MAX or more,
  * "not held"), pacedChanges counts its changes for the window's event
- * line. */
+ * line.
+ *
+ * The disc's excuse (issue 126: the game thread waiting for a disc read, a
+ * reporter's z: drive at 16 to 123 ms a read): a step that waited
+ * discWaitNs for the disc (pace_budget_step; the window's step profile,
+ * port/platform/host_loop.h cdWaitMs) and ended no later than that wait
+ * and half a refresh is not late, whatever the path (the lock among them);
+ * discExcused counts the late steps it excused.  The step's lateness
+ * without the disc is still judged: a step later than its disc wait and
+ * half a refresh is late as before. */
 #define PACE_ALLOW_MAX 8
 #define PACE_ALLOW_NONE UINT_MAX /* allow: no limit (the timer path before a drop) */
 #define PACE_ALLOW_HOLD 60
@@ -185,6 +194,7 @@ typedef struct PaceBudget {
     unsigned pacedTenths;  /* paced: the budget's presents a step in tenths at the last step
                              with a GPU time (PACE_PACED_HIGH: not held; PACE_PACED_UNKNOWN) */
     unsigned pacedChanges; /* the changes of pacedTenths (the caller's event line) */
+    unsigned discExcused;  /* late steps excused by the step's disc wait (the rule above) */
 } PaceBudget;
 
 /* allow = max, the counts cleared (the lock: max n). */
@@ -225,11 +235,11 @@ void pace_budget_present(PaceBudget *b, bool newFrame);
 /* The step's end: lateNs how late the next step starts against its due time
  * (0: on time), periodNs the step's period, refreshNs a display refresh,
  * displayWaitNs the last present's wait for the display, gpuNs a presented
- * replay's GPU time (0: not known), stepNs the simulation step's own time.
- * The rule above; the step's presents cleared for the next.  True when the
- * allowance changed. */
+ * replay's GPU time (0: not known), stepNs the simulation step's own time,
+ * discWaitNs the step's wait for the disc (0: none).  The rule above; the
+ * step's presents cleared for the next.  True when the allowance changed. */
 bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_t refreshNs,
-                      uint64_t displayWaitNs, uint64_t gpuNs, uint64_t stepNs);
+                      uint64_t displayWaitNs, uint64_t gpuNs, uint64_t stepNs, uint64_t discWaitNs);
 
 /* A new 10 s block: lowest = allow, lateMaxNs = 0. */
 void pace_budget_block(PaceBudget *b);
@@ -246,8 +256,9 @@ void pace_budget_block(PaceBudget *b);
  *   PACE_BUDGET_TEXT_DROP: "presents held to A a step: the step ended L ms
  *     late after P presents, K steps after one L2 ms late after P2 (the
  *     last present C ms, waited F ms for the GPU and D ms for the display[,
- *     the fence waits included: OpenGL]; GPU span G ms a replay); back to H
- *     after 120 steps on time if the GPU allows"
+ *     the fence waits included: OpenGL]; GPU span G ms a replay[, disc wait
+ *     W ms]); back to H after 120 steps on time if the GPU allows" (the
+ *     step's disc wait, discNs, when it had one)
  *   PACE_BUDGET_TEXT_CLIMB: "presents back to A a step|not held[ (where
  *     they started)] after S steps (GPU span G ms x K + step T ms under the
  *     period P ms)"
@@ -272,7 +283,8 @@ void pace_budget_block(PaceBudget *b);
 typedef struct PaceBudgetWaits {
     uint64_t costNs, fenceNs, displayNs, gpuNs, stepNs, periodNs;
     bool fenceHoldsDisplay;
-    bool gpuIsSpan; /* gpuNs is a timed replay's stamp span ("GPU span"), else busy time */
+    bool gpuIsSpan;  /* gpuNs is a timed replay's stamp span ("GPU span"), else busy time */
+    uint64_t discNs; /* the step's wait for the disc (0: none; the drop's ", disc wait") */
 } PaceBudgetWaits;
 
 enum {
@@ -600,10 +612,11 @@ typedef struct PaceLock {
     bool traceLogged; /* the caller logged them */
     /* the present allowance: max n from the reset.  gpuNs (a presented
        replay's GPU time, 0: not known) and stepNs (the simulation step's
-       own time) the caller sets before each pace_lock_vsync; the last
-       present's wait for the display (PaceLockIo.displayWaited) */
+       own time) the caller sets before each pace_lock_vsync, and
+       discWaitNs (the step's wait for the disc, the budget's excuse); the
+       last present's wait for the display (PaceLockIo.displayWaited) */
     PaceBudget budget;
-    uint64_t gpuNs, stepNs, lastDisplayWaitNs;
+    uint64_t gpuNs, stepNs, lastDisplayWaitNs, discWaitNs;
 } PaceLock;
 
 /* n for a cap equal to the refresh: round(cap * periodNs / 1e9) when the cap

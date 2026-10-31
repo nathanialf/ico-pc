@@ -63,7 +63,11 @@
  *   Hz, the second slot's present dropped before the steps run late, one
  *   present a step and the alphas on the grid, the probes failing back to
  *   1 with no step a period late; a GPU-bound phone (20 ms a picture at 60
- *   Hz) presents about its new frames only and keeps real time.
+ *   Hz) presents about its new frames only and keeps real time;
+ *   the disc's excuse (testDiscWait126): every 150th step 100 ms long, the
+ *   game thread waiting for a disc read the whole of it (issue 126), drops
+ *   nothing and counts each in discExcused; the same steps without a disc
+ *   wait count none.
  */
 #include <stdio.h>
 #include <string.h>
@@ -489,12 +493,14 @@ typedef struct Opt {
     double seconds;
     unsigned bigAt; /* the step after vsync bigAt takes bigStep */
     uint64_t bigStep;
-    bool fifo;        /* a FIFO-only swapchain */
-    int clockKind;    /* the display clock offered (PACE_CLOCK_KIND_*) */
-    bool noGuard;     /* the skip rule before the guard (f_waited_none) */
-    double phaseFrom; /* the step's offset after a vblank measured from (s; 0: not) */
-    bool budget;      /* the present allowance judged (PaceLockIo.displayWaited) */
-    uint64_t gpuNs;   /* the GPU time it is told (PaceLock.gpuNs; 0: not known) */
+    bool fifo;         /* a FIFO-only swapchain */
+    int clockKind;     /* the display clock offered (PACE_CLOCK_KIND_*) */
+    bool noGuard;      /* the skip rule before the guard (f_waited_none) */
+    double phaseFrom;  /* the step's offset after a vblank measured from (s; 0: not) */
+    bool budget;       /* the present allowance judged (PaceLockIo.displayWaited) */
+    uint64_t gpuNs;    /* the GPU time it is told (PaceLock.gpuNs; 0: not known) */
+    unsigned bigEvery; /* also every bigEvery-th step takes bigStep (0: not) */
+    bool bigDisc;      /* a bigStep is the disc's: PaceLock.discWaitNs bigStep after it */
 } Opt;
 
 typedef struct Run {
@@ -540,7 +546,7 @@ static Run run(Fake *f, const Opt *o)
     const uint64_t phaseAt = start + (uint64_t)(o->phaseFrom * 1e9);
     unsigned vsync = 0, gapsAtFrame = 0, skippedAt = 0, waitedAt = 0, resyncsAt = 0;
     unsigned presentsAt = 0, stepsAt = 0;
-    bool newFrame = true, ratioStarted = false, counting = false;
+    bool newFrame = true, ratioStarted = false, counting = false, lastBig = false;
 
     memset(&r, 0, sizeof r);
     r.phaseMin = 1e18;
@@ -604,6 +610,9 @@ static Run run(Fake *f, const Opt *o)
         if (o->budget) {
             L->gpuNs = o->gpuNs;
             L->stepNs = o->step;
+            /* the window's step profile: the step just run waited this long
+               for the disc (window_disc.c window_disc_wait_ns) */
+            L->discWaitNs = lastBig && o->bigDisc ? o->bigStep : 0;
         }
         const uint64_t due = pace_lock_vsync(L, &io, newFrame);
         const double dev = (double)due - (double)before - periodBefore;
@@ -634,8 +643,8 @@ static Run run(Fake *f, const Opt *o)
         if (late >= MS / 2) {
             r.lateSteps++;
         }
-        f->now += vsync == o->bigAt ? o->bigStep
-                                    : o->step + (o->stepJitter ? f_rand(f) % o->stepJitter : 0);
+        lastBig = vsync == o->bigAt || (o->bigEvery != 0 && vsync % o->bigEvery == 0);
+        f->now += lastBig ? o->bigStep : o->step + (o->stepJitter ? f_rand(f) % o->stepJitter : 0);
         newFrame = vsync % 2 == 0; /* a frame every two steps */
     }
     f_display_to(f, f->now);
@@ -1898,6 +1907,37 @@ static void testTrace(void)
     CHECK(k >= 1 && strlen(buf) < 20 && buf[strlen(buf) - 1] != ' ');
 }
 
+/* Issue 126: every 150th step 100 ms long (a disc read the game thread
+   waited for, 16 sectors on the reporter's z: drive took up to 123 ms) at
+   60 Hz, one present a step, the allowance judged.  With the step's disc
+   wait told to the lock (PaceLock.discWaitNs) nothing is dropped and each
+   such step is counted as excused; told nothing, none is. */
+static void testDiscWait126(void)
+{
+    for (int disc = 0; disc < 2; disc++) {
+        Fake f = fake(D60);
+        Opt o = opt(1, R60, 30.0);
+        Run r;
+
+        o.budget = true;
+        o.gpuNs = 5 * MS;
+        o.bigEvery = 150;
+        o.bigStep = 100 * MS;
+        o.bigDisc = disc != 0;
+        r = run(&f, &o);
+        printf("every 150th step 100 ms%s: %u drops, %u arms, %u excused by the disc, allowance "
+               "%u, %u resyncs\n",
+               disc ? " waiting for the disc" : "", r.L.budget.drops, r.L.budget.arms,
+               r.L.budget.discExcused, r.L.budget.allow, r.resyncs);
+        if (disc) {
+            CHECK(r.L.budget.drops == 0 && r.L.budget.allow == 1);
+            CHECK(r.L.budget.discExcused >= 10);
+        } else {
+            CHECK(r.L.budget.discExcused == 0);
+        }
+    }
+}
+
 int main(void)
 {
     test60();
@@ -1925,6 +1965,7 @@ int main(void)
     testSkipGuard();
     testLateSkipLock();
     test120Budget();
+    testDiscWait126();
     testVblankClockLeft();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);

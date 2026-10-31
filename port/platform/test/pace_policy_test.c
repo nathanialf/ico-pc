@@ -50,7 +50,11 @@
  * clock, no step a quarter of a period late, the GPU's queue never past a
  * period, the presents the GPU's budget; testBudgetFifo120: the FIFO
  * fallback at 120 Hz with vsync off and a GPU of 28 ms, 30 presents a
- * second, nothing armed or dropped.
+ * second, nothing armed or dropped; testBudgetDiscWait126: the disc's
+ * excuse (a step late by no more than its wait for the disc and half a
+ * refresh is not late: 100 ms late with 100 ms of disc wait drops nothing,
+ * with none or 20 ms it drops; the edge; the timer path paced by the GPU;
+ * the drop line's ", disc wait" only when the step waited).
  */
 #include <stdio.h>
 #include <string.h>
@@ -1143,7 +1147,7 @@ static unsigned budgetSteps(PaceBudget *b, unsigned steps, unsigned presents, bo
         for (unsigned i = 0; i < presents; i++) {
             pace_budget_present(b, newFirst && i == 0);
         }
-        changes += pace_budget_step(b, lateNs, PERIOD, REFRESH, waitNs, gpuNs, 3 * MS);
+        changes += pace_budget_step(b, lateNs, PERIOD, REFRESH, waitNs, gpuNs, 3 * MS, 0);
     }
     return changes;
 }
@@ -1178,7 +1182,7 @@ static unsigned pacedSteps(PaceBudget *b, unsigned steps, unsigned want, unsigne
             pace_budget_present(b, fresh);
             made++;
         }
-        (void)pace_budget_step(b, lateNs, PERIOD, REFRESH, 0, gpuNs, stepNs);
+        (void)pace_budget_step(b, lateNs, PERIOD, REFRESH, 0, gpuNs, stepNs, 0);
         if (b->balanceNs < pacedLowNs) {
             pacedLowNs = b->balanceNs;
         }
@@ -1211,13 +1215,13 @@ static void testBudgetRule(void)
     /* one late step (a new frame and an in-between, 10 ms late): armed only */
     pace_budget_present(&b, true);
     pace_budget_present(&b, false);
-    CHECK(!pace_budget_step(&b, 10 * MS, PERIOD, REFRESH, 0, 0, 3 * MS));
+    CHECK(!pace_budget_step(&b, 10 * MS, PERIOD, REFRESH, 0, 0, 3 * MS, 0));
     CHECK(b.allow == PACE_ALLOW_MAX && b.arm == PACE_ALLOW_HOLD && b.arms == 1 && b.drops == 0);
     CHECK(b.lateMaxNs == 10 * MS && b.presents == 0 && b.optional == 0);
     /* the second while armed (the next step, 11 ms late): 1, held */
     pace_budget_present(&b, true);
     pace_budget_present(&b, false);
-    CHECK(pace_budget_step(&b, 11 * MS, PERIOD, REFRESH, 0, 0, 3 * MS));
+    CHECK(pace_budget_step(&b, 11 * MS, PERIOD, REFRESH, 0, 0, 3 * MS, 0));
     CHECK(b.allow == 1 && b.hold == PACE_ALLOW_HOLD && b.drops == 1 && b.lowest == 1);
     CHECK(b.dropPresents == 2 && b.dropLateNs == 11 * MS && b.lateMaxNs == 11 * MS);
     CHECK(b.dropAgo == 1 && b.dropPrevLateNs == 10 * MS && b.dropPrevPresents == 2);
@@ -1227,7 +1231,7 @@ static void testBudgetRule(void)
     CHECK(pace_budget_allows(&b, false));
     pace_budget_present(&b, true);
     CHECK(!pace_budget_allows(&b, false) && pace_budget_allows(&b, true));
-    CHECK(!pace_budget_step(&b, 0, PERIOD, REFRESH, 0, 0, 3 * MS));
+    CHECK(!pace_budget_step(&b, 0, PERIOD, REFRESH, 0, 0, 3 * MS, 0));
     /* held: 59 more on time, then PACE_ALLOW_CLIMB_STEP - 1 on time, still
        1; the next goes straight back to max (no GPU time: the climb probes) */
     CHECK(budgetSteps(&b, 59, 1, true, 0, 0, 0) == 0 && b.allow == 1 && b.hold == 0);
@@ -1327,7 +1331,7 @@ static void testBudgetUnbound(void)
             }
             pace_budget_present(&b, i == 0);
         }
-        changes += pace_budget_step(&b, 0, PERIOD, REFRESH, 0, 0, 3 * MS) ? 1u : 0u;
+        changes += pace_budget_step(&b, 0, PERIOD, REFRESH, 0, 0, 3 * MS, 0) ? 1u : 0u;
     }
     CHECK(refused == 0 && changes == 0 && b.allow == PACE_ALLOW_NONE && b.drops == 0);
     CHECK(b.climbs == 0 && b.lowest == PACE_ALLOW_NONE);
@@ -1380,6 +1384,7 @@ typedef struct BudgetSeq {
     PaceBudget b;
     unsigned k, refused, changes, presents; /* presents: made, all steps */
     uint64_t periodNs, refreshNs, gpuNs, stepNs;
+    uint64_t discNs; /* every step's wait for the disc (0: none) */
 } BudgetSeq;
 
 static void seqSteps(BudgetSeq *q, unsigned steps, unsigned want, unsigned newEvery,
@@ -1399,10 +1404,11 @@ static void seqSteps(BudgetSeq *q, unsigned steps, unsigned want, unsigned newEv
             made++;
         }
         q->presents += made;
-        q->changes += pace_budget_step(&q->b, made > 0 && made >= lateFrom ? lateNs : 0,
-                                       q->periodNs, q->refreshNs, waitNs, q->gpuNs, q->stepNs)
-                          ? 1u
-                          : 0u;
+        q->changes +=
+            pace_budget_step(&q->b, made > 0 && made >= lateFrom ? lateNs : 0, q->periodNs,
+                             q->refreshNs, waitNs, q->gpuNs, q->stepNs, q->discNs)
+                ? 1u
+                : 0u;
     }
 }
 
@@ -1599,7 +1605,7 @@ static void testBudgetLines(void)
                        .refreshNs = 2777778ull,
                        .gpuNs = g ? 9 * MS : 1200000ull,
                        .stepNs = MS / 2};
-        PaceBudgetWaits w = {22 * MS, 21500000ull, wait, 1 * MS, MS / 2, PERIOD, false, true};
+        PaceBudgetWaits w = {22 * MS, 21500000ull, wait, 1 * MS, MS / 2, PERIOD, false, true, 0};
 
         pace_budget_reset_unbound(&q.b, PACE_ALLOW_MAX);
         seqSteps(&q, 600, 6, 2, 0, 0, wait);
@@ -1627,8 +1633,8 @@ static void testBudgetLines(void)
     {
         BudgetSeq q = {
             .periodNs = lockPeriod, .refreshNs = lockPeriod, .gpuNs = 22 * MS, .stepNs = 2 * MS};
-        const PaceBudgetWaits w = {22700000ull, 14600000ull, 16200000ull, 22 * MS,
-                                   2 * MS,      lockPeriod,  true,        true};
+        const PaceBudgetWaits w = {22700000ull, 14600000ull, 16200000ull, 22 * MS, 2 * MS,
+                                   lockPeriod,  true,        true,        0};
 
         pace_budget_reset(&q.b, 1);
         seqSteps(&q, 3, 1, 2, 22 * MS, 1, w.displayNs);
@@ -1671,7 +1677,7 @@ static void testBudgetLines(void)
            line, the 10 s part, the drop's ending and the straight climb;
            1 ms: not held */
         PaceBudget b;
-        PaceBudgetWaits w = {22 * MS, 21500000ull, wait, 12 * MS, MS / 2, PERIOD, false, true};
+        PaceBudgetWaits w = {22 * MS, 21500000ull, wait, 12 * MS, MS / 2, PERIOD, false, true, 0};
 
         pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
         (void)pacedSteps(&b, 120, 8, 1, 12 * MS, MS / 2, 0, NULL);
@@ -1683,10 +1689,10 @@ static void testBudgetLines(void)
                         "climbs, climbs refused 0); GPU span 12.0 ms a timed replay"));
         pace_budget_present(&b, true);
         pace_budget_present(&b, false);
-        (void)pace_budget_step(&b, 10 * MS, PERIOD, REFRESH, 0, 12 * MS, MS / 2);
+        (void)pace_budget_step(&b, 10 * MS, PERIOD, REFRESH, 0, 12 * MS, MS / 2, 0);
         pace_budget_present(&b, true);
         pace_budget_present(&b, false);
-        (void)pace_budget_step(&b, 11 * MS, PERIOD, REFRESH, 0, 12 * MS, MS / 2);
+        (void)pace_budget_step(&b, 11 * MS, PERIOD, REFRESH, 0, 12 * MS, MS / 2, 0);
         pace_budget_event_text(&b, PACE_BUDGET_TEXT_DROP, &w, t, sizeof(t));
         CHECK(textIs(t, "presents held to 1 a step: the step ended 11.0 ms late after 2 presents, "
                         "1 steps after one 10.0 ms late after 2 (the last present 22.0 ms, waited "
@@ -1742,7 +1748,7 @@ static void testBudgetProbe126(void)
     const uint64_t lockPeriod = 16667ull * 1000, wait = 3800000ull;
     BudgetSeq q = {
         .periodNs = lockPeriod, .refreshNs = lockPeriod, .gpuNs = 15 * MS, .stepNs = 3 * MS};
-    const PaceBudgetWaits w = {13 * MS, 0, wait, 15 * MS, 3 * MS, lockPeriod, false, true};
+    const PaceBudgetWaits w = {13 * MS, 0, wait, 15 * MS, 3 * MS, lockPeriod, false, true, 0};
     char t[400];
     unsigned presents;
     double perSecond;
@@ -1796,7 +1802,7 @@ static void testBudgetProbeWait(void)
     const uint64_t lockPeriod = 16667ull * 1000;
     BudgetSeq q = {
         .periodNs = lockPeriod, .refreshNs = lockPeriod, .gpuNs = 15 * MS, .stepNs = 3 * MS};
-    const PaceBudgetWaits w = {13 * MS, 0, 0, 15 * MS, 3 * MS, lockPeriod, false, true};
+    const PaceBudgetWaits w = {13 * MS, 0, 0, 15 * MS, 3 * MS, lockPeriod, false, true, 0};
     char t[400];
 
     CHECK(PACE_PROBE_WAIT_MAX == 8 * PACE_PROBE_WAIT);
@@ -1966,7 +1972,7 @@ static BudgetRun budgetLoopAt(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bo
             }
             if (budget) {
                 (void)pace_budget_step(&b, late, PERIOD, refreshNs, waitAsGpu ? 0 : waitNs, gpuNs,
-                                       stepNs);
+                                       stepNs, 0);
             }
         }
         if (t > deadline && t - deadline > resyncNs) {
@@ -2155,11 +2161,11 @@ static void testBudgetPaced(void)
     (void)pacedSteps(&b, 30, 8, 1, 12 * MS, step, 0, NULL);
     pace_budget_present(&b, true);
     pace_budget_present(&b, false);
-    CHECK(!pace_budget_step(&b, 10 * MS, PERIOD, REFRESH, 0, 12 * MS, step));
+    CHECK(!pace_budget_step(&b, 10 * MS, PERIOD, REFRESH, 0, 12 * MS, step, 0));
     CHECK(b.arms == 1 && b.drops == 0 && b.balanceNs == 0 && b.allow == PACE_ALLOW_NONE);
     pace_budget_present(&b, true);
     pace_budget_present(&b, false);
-    CHECK(pace_budget_step(&b, 11 * MS, PERIOD, REFRESH, 0, 12 * MS, step));
+    CHECK(pace_budget_step(&b, 11 * MS, PERIOD, REFRESH, 0, 12 * MS, step, 0));
     CHECK(b.allow == 1 && b.drops == 1 && b.hold == PACE_ALLOW_HOLD && b.balanceNs == 0);
     CHECK(pacedSteps(&b, PACE_ALLOW_HOLD - 1, 8, 1, 12 * MS, step, 0, NULL) == PACE_ALLOW_HOLD - 1);
     CHECK(b.allow == 1 && b.hold == 1 && b.balanceNs == (int64_t)PERIOD && b.climbs == 0);
@@ -2254,9 +2260,102 @@ static void testBudgetPacedLoop(void)
     }
 }
 
+/* Issue 126's disc waits (the reporter's D3D11 log: steps of 16 to 123 ms
+   waiting for 16-sector reads on a z: drive, each late step under the
+   lock's one present a step dropping it to 0): the lock (n 1, 60 Hz, a new
+   frame every two steps) with three steps 100 ms late, each with the step's
+   wait for the disc.  100 ms of disc wait excuses them (nothing armed or
+   dropped, three counted in discExcused); none, or 20 ms (100 > 20 + half
+   a refresh), drops to 0 as before.  The edge: late by the wait and half a
+   refresh is excused, a nanosecond more is not.  The timer path paced by
+   the GPU: the same steps with the wait drop nothing and keep the balance.
+   The drop line names the step's disc wait when it had one, and is the
+   line without it when it had none. */
+static void testBudgetDiscWait126(void)
+{
+    const uint64_t lockPeriod = 16667ull * 1000;
+    const PaceBudgetWaits w0 = {22700000ull, 14600000ull, 16200000ull, 22 * MS, 2 * MS,
+                                lockPeriod,  false,       true,        0};
+    char t[400];
+
+    for (int c = 0; c < 3; c++) {
+        static const uint64_t disc[3] = {100 * MS, 0, 20 * MS};
+        BudgetSeq q = {.periodNs = lockPeriod,
+                       .refreshNs = lockPeriod,
+                       .gpuNs = 22 * MS,
+                       .stepNs = 2 * MS,
+                       .discNs = disc[c]};
+
+        pace_budget_reset(&q.b, 1);
+        seqSteps(&q, 3, 1, 2, 100 * MS, 1, 0);
+        if (c == 0) {
+            CHECK(q.b.drops == 0 && q.b.arms == 0 && q.b.allow == 1);
+            CHECK(q.b.discExcused == 3 && q.b.lateMaxNs == 100 * MS);
+        } else {
+            CHECK(q.b.drops == 1 && q.b.allow == 0 && q.b.discExcused == 0);
+        }
+        if (c == 2) {
+            PaceBudgetWaits w = w0;
+
+            w.discNs = q.discNs;
+            pace_budget_event_text(&q.b, PACE_BUDGET_TEXT_DROP, &w, t, sizeof(t));
+            CHECK(textIs(t, "presents held to 0 a step: the step ended 100.0 ms late after 1 "
+                            "presents, 1 steps after one 100.0 ms late after 1 (the last present "
+                            "22.7 ms, waited 14.6 ms for the GPU and 16.2 ms for the display; GPU "
+                            "span 22.0 ms a replay, disc wait 20.0 ms); back to 1 a step after "
+                            "120 steps on time: a probe"));
+        }
+        if (c == 1) {
+            pace_budget_event_text(&q.b, PACE_BUDGET_TEXT_DROP, &w0, t, sizeof(t));
+            CHECK(textIs(t, "presents held to 0 a step: the step ended 100.0 ms late after 1 "
+                            "presents, 1 steps after one 100.0 ms late after 1 (the last present "
+                            "22.7 ms, waited 14.6 ms for the GPU and 16.2 ms for the display; GPU "
+                            "span 22.0 ms a replay); back to 1 a step after 120 steps on time: a "
+                            "probe"));
+        }
+    }
+    for (int over = 0; over < 2; over++) {
+        /* late by exactly the wait and half a refresh, then a nanosecond more */
+        BudgetSeq q = {.periodNs = lockPeriod,
+                       .refreshNs = lockPeriod,
+                       .gpuNs = 22 * MS,
+                       .stepNs = 2 * MS,
+                       .discNs = 30 * MS};
+
+        pace_budget_reset(&q.b, 1);
+        seqSteps(&q, 3, 1, 2, 30 * MS + lockPeriod / 2 + (uint64_t)over, 1, 0);
+        CHECK(q.b.drops == (unsigned)over && q.b.discExcused == (over ? 0u : 3u));
+    }
+    {
+        /* the timer path paced by the GPU (vsync off): the excused steps
+           are not late, so the balance is kept */
+        PaceBudget b;
+
+        pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
+        for (int k = 0; k < 10; k++) {
+            pace_budget_present(&b, k % 2 == 0);
+            pace_budget_present(&b, false);
+            (void)pace_budget_step(&b, k % 3 == 2 ? 100 * MS : 0, PERIOD, REFRESH, 0, 5 * MS,
+                                   MS / 2, k % 3 == 2 ? 100 * MS : 0);
+        }
+        CHECK(b.drops == 0 && b.arms == 0 && b.allow == PACE_ALLOW_NONE);
+        CHECK(b.discExcused == 3 && b.balanceNs > 0);
+        /* the same steps without the wait: armed, then dropped */
+        pace_budget_reset_paced(&b, PACE_ALLOW_MAX);
+        for (int k = 0; k < 10; k++) {
+            pace_budget_present(&b, k % 2 == 0);
+            pace_budget_present(&b, false);
+            (void)pace_budget_step(&b, k % 3 == 2 ? 100 * MS : 0, PERIOD, REFRESH, 0, 5 * MS,
+                                   MS / 2, 0);
+        }
+        CHECK(b.drops >= 1 && b.discExcused == 0);
+    }
+}
+
 int main(void)
 {
     PaceHist h = {0};
+    testBudgetDiscWait126();
     testBudgetRule();
     testBudgetUnbound();
     testBudgetHitch130();

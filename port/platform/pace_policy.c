@@ -325,7 +325,7 @@ static void budget_paced_home(PaceBudget *b)
 }
 
 bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_t refreshNs,
-                      uint64_t displayWaitNs, uint64_t gpuNs, uint64_t stepNs)
+                      uint64_t displayWaitNs, uint64_t gpuNs, uint64_t stepNs, uint64_t discWaitNs)
 {
     const unsigned before = b->allow;
     /* the display's own wait, less than a refresh late: not the renderer
@@ -337,8 +337,13 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
        display's and the wait cannot tell a slow card apart */
     const bool excused = displayWaitNs * 4 >= refreshNs &&
                          (lateNs < refreshNs || (b->paced && lateNs <= displayWaitNs + refreshNs));
+    /* the game thread waited for the disc in the step, and the step ended
+       no later than that wait and half a refresh: the disc's, not the
+       renderer's (pace_policy.h, the disc's excuse) */
+    const bool excusedDisc = discWaitNs > 0 && lateNs <= discWaitNs + refreshNs / 2;
     /* late at all, and late with an optional present (only that arms) */
-    const bool late = periodNs > 0 && lateNs >= periodNs / 2 && !excused;
+    const bool lateBare = periodNs > 0 && lateNs >= periodNs / 2 && !excused;
+    const bool late = lateBare && !excusedDisc;
     const bool lateOptional = late && b->optional > 0;
     /* a late step of new frames only confirms an armed drop when one below
        the arming step's presents lowers the allowance */
@@ -350,6 +355,9 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
 
     if (lateNs > b->lateMaxNs) {
         b->lateMaxNs = lateNs;
+    }
+    if (lateBare && excusedDisc) {
+        b->discExcused++;
     }
     if (b->sinceDrop < UINT_MAX) {
         b->sinceDrop++;
@@ -446,7 +454,7 @@ bool pace_budget_step(PaceBudget *b, uint64_t lateNs, uint64_t periodNs, uint64_
         bal = bal > p ? p : bal < -p ? -p : bal;
         if (late) {
             bal = 0;
-        } else if (lateNs > 0 && !excused && bal > 0) {
+        } else if (lateNs > 0 && !excused && !excusedDisc && bal > 0) {
             bal /= 2;
         }
         b->balanceNs = bal;
@@ -496,14 +504,17 @@ int pace_budget_event_text(const PaceBudget *b, int kind, const PaceBudgetWaits 
                         gpu, ms_of(w->gpuNs), ms_of(w->periodNs));
     }
     if (kind == PACE_BUDGET_TEXT_DROP) {
-        char waits[224], after[96];
+        char waits[256], after[96], disc[40] = "";
 
+        if (w->discNs > 0) {
+            snprintf(disc, sizeof(disc), ", disc wait %.1f ms", ms_of(w->discNs));
+        }
         snprintf(waits, sizeof(waits),
                  "(the last present %.1f ms, waited %.1f ms for the GPU and %.1f ms for the "
-                 "display%s; %s %.1f ms a replay)",
+                 "display%s; %s %.1f ms a replay%s)",
                  ms_of(w->costNs), ms_of(w->fenceNs), ms_of(w->displayNs),
                  w->fenceHoldsDisplay ? ", the fence waits included: OpenGL" : "", gpu,
-                 ms_of(w->gpuNs));
+                 ms_of(w->gpuNs), disc);
         if (budget_probes(b) && b->probeFailed > 0) {
             return snprintf(out, size,
                             "presents held to %u a step: the step ended %.1f ms late after %u "
@@ -1234,7 +1245,8 @@ uint64_t pace_lock_vsync(PaceLock *L, const PaceLockIo *io, bool newFrame)
         /* the step ends now: how late the next one starts */
         now = io->now(io->user);
         (void)pace_budget_step(&L->budget, now > next ? now - next : 0, (uint64_t)period,
-                               (uint64_t)L->slotNs, L->lastDisplayWaitNs, L->gpuNs, L->stepNs);
+                               (uint64_t)L->slotNs, L->lastDisplayWaitNs, L->gpuNs, L->stepNs,
+                               L->discWaitNs);
     }
     io->sleepUntil(io->user, next);
     L->due = next;
