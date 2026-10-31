@@ -375,10 +375,9 @@ void ui__gfx_apply(void)
     snprintf(s_gfx.want, sizeof(s_gfx.want), "%s",
              s_gfx.backendChanged && c != NULL ? c : s_gfxHost.running());
     snprintf(s_gfx.prev, sizeof(s_gfx.prev), "%s", s_gfxHost.running());
-    /* the card asked for: the row's value ("" Automatic), the running one
-       when only the renderer changes */
-    snprintf(s_gfx.wantAdapter, sizeof(s_gfx.wantAdapter), "%s",
-             s_gfx.adapterChanged ? ui__gfx_adapter_value() : runningAdapter());
+    /* the card asked for: the row's value ("" Automatic; a renderer's
+       switch takes it too) */
+    snprintf(s_gfx.wantAdapter, sizeof(s_gfx.wantAdapter), "%s", ui__gfx_adapter_value());
     snprintf(s_gfx.prevAdapter, sizeof(s_gfx.prevAdapter), "%s", runningAdapter());
     /* the choice on trial outside the config, which holds the values the
        page found until Keep */

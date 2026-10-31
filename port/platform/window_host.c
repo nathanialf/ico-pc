@@ -1874,6 +1874,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     const char *chosen = ico_config_get_string("video.backend", NULL);
     const bool backendExplicit = chosen != NULL && chosen[0] != '\0';
     const char *backend = backendExplicit ? chosen : "vulkan";
+    rhi_set_adapter_wanted(ico_config_get_string("video.adapter", "")); /* [video] adapter */
     /* the blending the player chose: [dev] blend / blend=, or ICO_RD_BLEND
        from the environment the game was started with (a loss step's or
        the fixedblend step's run has its own ICO_RD_BLEND=fixed,

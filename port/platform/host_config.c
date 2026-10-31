@@ -503,6 +503,10 @@ static const struct {
        "d3d11", where the build links it (window_host.c, port/rhi/rhi.h
        rhi_create_backend; the Options > Graphics row writes it) */
     {"video.backend", "backend"},
+    /* the graphics card by its name, "" automatic (window_host.c
+       ico_window_open, port/rhi/rhi.h rhi_set_adapter_wanted; the Options >
+       Graphics > Graphics card row writes it) */
+    {"video.adapter", "adapter"},
     /* the A/B switches a bug report may ask for (ico_dev_env_value):
        fixed-function blending, the fog's depth path, the GPU loss
        diagnostics */
