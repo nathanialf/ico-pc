@@ -448,6 +448,16 @@ void tex_HostReserialAll(unsigned int liveNext)
     texHost.packOn = -1;
 }
 
+/* PC port: the whole record above is the host's (serials, the cache's
+   bindings, the CLUT snapshot, the pack state), which two runs of the same
+   play hold differently after a load (a save state's hash leaves it out,
+   port/game/state_host.c dev_hash); its bytes in *bytes */
+void *tex_HostStateBlock(size_t *bytes)
+{
+    *bytes = sizeof texHost;
+    return &texHost;
+}
+
 /* PC port: texture packs.  The texture just decoded for (id, gen) as
    texpack_name.h's source (every level of the TIM2, the CLUT in CSM1
    order), so the pack's replacement under the first of its candidate
