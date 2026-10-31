@@ -240,6 +240,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`door_grace`).
 - `env_bits_test.c`: where each disc's wall-reach read in `act-env.c` takes its two bits of a motion record (a shift of 6 on every disc, the host layout), every `config/motion_bits.*.txt` row naming the field at bit 24 for two bits, and a synthetic word read through the shift (the June 2001 demo once read the item-mode bits) (`env_bits`).
 - `keep_flags_test.c`: the twenty words a load's keep and restore walk reads on each disc, exactly as that disc's objects have them (issue 160's new-game flag), with the key-config slots as at start and after a Button configuration visit; one argument selects the disc (`keep_flags`, `keep_flags_<disc>`).
+- `eye_trail_test.c`: the shadows' eye trails rebuilt from their world points
+  (`port/game/eye_trail.c`) against the game's own point blur (`enemyParts.c` compiled in) on each
+  disc: after 12 ticks of a moving point the rebuild through the same matrices is the game's
+  strip byte for byte and the strip drawn with the camera not moved is the game's; under a moved
+  and zoomed camera each pair (the oldest's included) is the direct recomputation, frame-projected
+  in the window build, with the game's strip and the current matrix untouched; the reset path and
+  the disc's every-tick reset rule; the first update, a forgotten table and the session's end
+  (`eye_trail`, `eye_trail_<disc>`).
 - `torch_work_test.c`: the torch record every torch starts from on each disc, played through the game's own torch code: a torch lit at its layout stays lit for 600 frames and runs the four flame effects of the default type, putting it out deletes exactly those and no other effect, an unlit torch stays out; one argument selects the disc (`torch_work`, `torch_work_<disc>`).
 - `state_host_test.c`: save states' decisions without the game (`port/game/state_rules.h`,
   [PLATFORM.md](PLATFORM.md#saving-and-loading)): every refusal of the conditions reachable and

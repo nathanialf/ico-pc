@@ -18,6 +18,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | `port/include/ico_gamestate.h`, `port/game/gamestate.c` | the read-only game-state view: the snapshot, the signals, the run, the retail address table |
 | `port/game/photo_mode.h`, `photo_mode.c` | photo mode's state: the free and orbit cameras, the controls, the `[photo]` keys |
 | `port/game/photo_view.h`, `photo_view.c` | photo mode's camera put into the game's own matrices |
+| `port/game/eye_trail.h`, `eye_trail.c` | the shadows' eye trails in the world, redrawn from photo mode's camera |
 | `port/game/model_viewer.h`, `model_viewer.c` | Extras > Models and the game side of Extras > Characters |
 | `port/game/model_viewer_table.c` | the viewer's models and the motion-kind blocks |
 | `port/game/model_viewer_motion.c` | which motions of a block the loaded stage can play (`ico_mv_motion_playable`) |
@@ -595,6 +596,28 @@ zoomed is marked as a free camera (`rd_free_camera`, `RdCamera.freeCamera`): the
 keeps the triangles with a vertex behind it, which the game's own cameras rely on being dropped;
 the game's rule stays while the aspect sweep runs and while the photo camera is still the game's
 (`port/game/photo_view.c` (`ico_photo_view_tick`, `photoIsGameCamera`)).
+
+The shadows' eye trails are the one draw that keeps screen positions from tick to tick: each eye
+trails a strip of ten point pairs, the newest built once a tick by projecting the eye's point
+through `+0x80` and `+0xC0` and joining it to the point before, the older ones the earlier ticks'
+pairs shifted along (`ico2/sugipon/src/enemyParts.c` (`UpdatePointBlur`, `moveDataElements`)). The
+paused game does not update them, so under a moved camera the eye's model follows the camera and
+its strip would stay where the game camera put it. `UpdatePointBlur` also hands each point to a
+side table of 64 trails keyed by the blur: the point's world position, the world position it is
+joined to, its width and the pair the game wrote; a reset (the blur's dirty flag) fills the trail
+with the newest point as the game copies the newest pair (`port/game/eye_trail.c`
+(`ico_eye_trail_push`)). While `ico_photo_view_moved` is 1 (this tick's photo camera is not the
+game camera at enter: moved or zoomed; 0 after leave), `DispEnemyEye` draws a strip rebuilt
+from those points with the same arithmetic through the matrices now in `+0x80` and `+0xC0`,
+frame-projected in the window build (`gif_HostFrameProjected`), and leaves the game's strip and colours as they
+are, so play resumes from them (`ico_eye_trail_rebuild`). Through the game's own matrices the
+rebuild is the game's strip byte for byte. A trail the table cannot rebuild is drawn as the game
+drew it: one just started (its newest point joined to no point the trail saw), one the table does
+not hold (after a save state load), or one whose strip is not the one its points recorded. The
+first rebuild of a session writes `photo: eye trails drawn from the photo camera (10 points
+each)`, and leave writes the session's counts (`photo: eye trails: N drawn from the photo camera,
+M as the game drew them (...)`, `ico_eye_trail_photo_end`). Photo mode only: in play the strip is
+the game's, not frame-projected.
 
 ### The Deja vu filter
 

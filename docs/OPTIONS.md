@@ -672,7 +672,8 @@ card saves.
 
 Photo mode is a row in the pause menu during play. The game stays paused
 while you move a camera around and save pictures, and the picture is
-drawn from the camera with every effect the game has.
+drawn from the camera with every effect the game has. The glowing trails
+behind the shadow creatures' eyes stay with the eyes as the camera moves.
 [The photo mode controls](CONTROLS.md#take-a-photo).
 
 ## Save a picture for a bug report
