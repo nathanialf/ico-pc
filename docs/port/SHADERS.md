@@ -572,9 +572,15 @@ a clean picture through the plain set does not place a fault in the extended-onl
 Turnip rule rests on this: issue 163's tablet (Turnip on an Adreno 740) drew such a sliver from
 Ico's leg in a picture between two ticks that lavapipe draws clean from the same two dumps, so
 under Turnip the fallback takes the plain set, which hides the vertex as the stock driver's row
-does; it does not remove whatever placed it. What Turnip gives up is the card test and the tick
-cameras' re-test on the fallback's draws (the record path's modules, which a tile-based GPU runs
-only with `[dev] vu_prepass = true`, keep both). The card and tick steps only choose
+does; it does not remove whatever placed it. What Turnip gives up is the card test (a wide picture's edge at
+the old 4:3 border may open) and the tick cameras' re-test (the pictures between two ticks take the
+blended camera's rule alone) on the fallback's draws; the record path's modules, which a tile-based
+GPU runs only with `[dev] vu_prepass = true`, keep both. Turnip is no row of the device table, which
+matches Qualcomm's own driver alone: the rule is the renderer's (`rd__driver_is_turnip`, the test
+the device profile's Turnip class makes, `port/render/rd_profile.c`), and the summary line's VU
+shaders read `one set, fallback plain (Turnip driver, issue 163)` (the table's row `(Adreno 740,
+issue 107)`; `port/render/rd_core.c` (`rd_summary_text`)). `ICO_RD_VU_EXTENDED=1` gives the
+extended set back, for a comparison. The card and tick steps only choose
 drop or clip; they never move a vertex. The VU vertex modules hold no Function or Private
 variable and no `OpUndef` (`tools/spirv_poison.py --list`, every `vu_*_vs` of the build: none), so
 a value read before it is written is not in the SPIR-V the drivers get.
