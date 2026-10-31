@@ -149,6 +149,8 @@ void ico_host_step(void)
     ico_cdvd_host_stats(&cd1);
     profile.cdReads = cd1.reads - cd0.reads;
     profile.cdSectors = cd1.sectors - cd0.sectors;
+    profile.cdWaitMs = (double)(cd1.wait_ns - cd0.wait_ns) / 1e6;
+    profile.cdHits = cd1.hits - cd0.hits;
     profile.mcPending = ico_mc_host_pending();
     profile.stage = stage_no;
     profile.loading = data_loading;

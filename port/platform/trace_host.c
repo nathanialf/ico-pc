@@ -99,14 +99,14 @@ void ico_host_status(char *out, size_t size)
     ico_sif_host_last_rpc(&sid, &rpc, &rpcs);
     snprintf(out, size,
              "vsync %u, tick %u, stage %d (sys5 %d sys6 %d sys7 %d sys8 %d), fade %d, mpeg %d/%d, "
-             "stgmgr free %d wake %d, pause %d, kanbanEnd %d | cd: %u reads, %u sectors, last lsn "
-             "%u, busy %d, %d waiting, stream %d@%u, cdvd thread %s%s | sif: %u calls, last "
-             "0x%08x/0x%x",
+             "stgmgr free %d wake %d, pause %d, kanbanEnd %d | cd: %u reads, %u sectors, waited "
+             "%.0f ms, last lsn %u, busy %d, %d waiting, stream %d@%u, cdvd thread %s%s | sif: %u "
+             "calls, last 0x%08x/0x%x",
              ico_host_vsync_count(), main_ticks, stage_no, systemStatus[5], systemStatus[6],
              systemStatus[7], systemStatus[8], fadeStatus, mpegPlay, mpegInitDone,
              stageManagerFreeResourceFlag, stgMgrWakeupRequest, game_pause, kanbanBootEnd, cd.reads,
-             cd.sectors, cd.last_lsn, cd.busy, cd.waiters, cd.stream_active, cd.stream_lsn,
-             IosCdvdMgrSleep ? "asleep" : "awake",
+             cd.sectors, (double)cd.wait_ns / 1e6, cd.last_lsn, cd.busy, cd.waiters,
+             cd.stream_active, cd.stream_lsn, IosCdvdMgrSleep ? "asleep" : "awake",
              iosCdvdBackGroundMgrRunning ? " (background reads)" : "", rpcs, sid, rpc);
     {
         /* the two stream slots as the driver plays them (stream_watch.h) */

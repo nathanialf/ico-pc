@@ -42,13 +42,18 @@ int ico_host_vsync_hz(void);
    disc's reads complete there), the audio block (the SPU2 mix and the SDL
    push), the game's threads, the achievements' poll (and its stats file
    write every 750 ticks while its stats change); with the fiber switches,
-   the disc reads and sectors started in the step, whether a memory card
-   command is pending (a save or load in progress), the stage and the
-   game's data_loading flag. */
+   the disc reads and sectors started in the step, the game thread's wait
+   for the disc in it (a read on it, or one on the disc reader thread
+   waited for at the vsync; port/data/cdvd_host.h IcoCdvdStats.wait_ns, the
+   present allowance's excuse, pace_policy.h) and the reads copied from the
+   read-ahead, whether a memory card command is pending (a save or load in
+   progress), the stage and the game's data_loading flag. */
 typedef struct IcoStepProfile {
     double totalMs, hooksMs, audioMs, threadsMs, achMs;
     unsigned long switches;
     unsigned int cdReads, cdSectors;
+    double cdWaitMs;
+    unsigned int cdHits;
     int mcPending;
     int stage, loading;
 } IcoStepProfile;

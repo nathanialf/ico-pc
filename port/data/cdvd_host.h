@@ -5,7 +5,8 @@
  * FileManager.c call (port/compat/libcdvd.h declares the sceCd* entry
  * points; port/data/cdvd_host.c defines them over the VFS).  This header is
  * the port's own control surface: which disc image is in the drive, the
- * simulated-vsync completion of non-blocking reads, and the clock.
+ * simulated-vsync completion of non-blocking reads, the disc reader thread
+ * and its read-ahead, and the clock.
  */
 #ifndef ICO_PORT_CDVD_HOST_H
 #define ICO_PORT_CDVD_HOST_H
@@ -47,17 +48,40 @@ const char *ico_cdvd_host_default_iso(void);
    its ico_discs row (archive.h; a CD for SCPS_110.03), else a DVD. */
 const char *ico_cdvd_host_boot_name(void);
 
-/* Complete the non-blocking command in flight.  Registered as a simulated
+/* Complete the non-blocking command in flight (a read on the disc reader
+   thread waited for first, its error set).  Registered as a simulated
    vsync callback when the host loop provides one (port/platform/
    host_loop.c); tests call it directly. */
 void ico_cdvd_host_vsync(void *ctx);
 
 /* Nonzero while a non-blocking command waits for the next vsync. */
 int ico_cdvd_host_busy(void);
-/* 1 when the drive is idle: no command waits for a vsync, no thread waits
-   in sceCdSync(0) and no stream is started (a save state is taken only
-   then; port/game/state_host.c). */
+/* 1 when the drive is idle: no command waits for a vsync or is read on the
+   disc reader thread, no thread waits in sceCdSync(0) and no stream is
+   started (a save state is taken only then; port/game/state_host.c). */
 int ico_cdvd_host_idle(void);
+
+/* The disc reader (cdvd_host.c's file comment): read commands on a thread
+   of their own, completed at the vsync as before, with a read-ahead of the
+   disc's next sectors; or on the calling thread.  [dev] disc_reader
+   (ICO_DISC_READER: thread or sync) and [dev] disc_read_ahead_kb
+   (ICO_DISC_READ_AHEAD_KB: 0, off, to 4096) choose; without them the thread
+   with 256 KB in the window build and the calling thread without
+   read-ahead elsewhere (the tests, the tools).  Chosen at the first
+   sceCdInit, with the line `cdvd: disc reads on a worker thread,
+   read-ahead 256 KB; the game data on a fixed drive (NTFS)` (or `on the
+   game thread ([dev] disc_reader=sync)`, `(no window)`, `(no thread: the
+   OS refused one)`).
+   ico_cdvd_host_set_windowed(1): the window build's defaults (before
+   sceCdInit; after it the reader is chosen again).
+   ico_cdvd_host_set_reader(thread, aheadKb): a test's choice over the
+   [dev] keys, thread 1 or 0 and aheadKb in KB; -1 for either leaves it
+   to them; the reader chosen again now (the command in flight completed
+   first).  ico_cdvd_host_reset forgets both.
+   ico_cdvd_host_reader_thread: 1 while the reads are on the thread. */
+void ico_cdvd_host_set_windowed(int windowed);
+void ico_cdvd_host_set_reader(int thread, int aheadKb);
+int ico_cdvd_host_reader_thread(void);
 
 /* The drive's counters, for the diagnostics heartbeat (port/platform/
    diag_host.c). */
@@ -69,6 +93,18 @@ typedef struct IcoCdvdStats {
     unsigned int last_lsn; /* the last command's first sector */
     int stream_active;     /* sceCdStStart'ed */
     unsigned int stream_lsn;
+    /* the disc reader's: the commands and stream reads copied from the
+       read-ahead, the reads the game thread waited for (a read on it, or
+       one on the thread it waited for at the completion), the backend's
+       time reading for commands and stream reads, the game thread's time
+       waiting, its longest wait, the bytes read from the image or archive
+       (the read-ahead's among them) */
+    unsigned int hits;
+    unsigned int waits;
+    unsigned long long read_ns;
+    unsigned long long wait_ns;
+    unsigned long long wait_max_ns;
+    unsigned long long bytes;
 } IcoCdvdStats;
 
 void ico_cdvd_host_stats(IcoCdvdStats *out);
