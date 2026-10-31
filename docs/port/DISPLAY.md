@@ -1071,7 +1071,12 @@ the later ones skip the chain's 17 passes (the mask, the reduction, the blur, th
 WORK3_HELD back before the paste. On a still tick the picture is the same bytes; during a pan the
 glow's halo is the tick's first present's, half a tick behind the scene. The edit is made after the
 still re-present's hash: two presents of a tick whose frames hash alike paste the same glow, so the
-re-present stays exact. `[dev] glow_redraw = true` (`ICO_RD_GLOW_REDRAW=1`) draws the chain at every
+re-present stays exact. Options > Effects > Glow between frames (Original or Smooth, `[video]
+effect_glow_mode`, `RdSettings.glowSmooth`; greyed at Frame rate Original or with Glow off; the
+Enhanced preset sets Smooth) draws the chain at every present as well, from the next present, with
+`rd: glow between ticks: drawn at every present (Glow between frames: Smooth), from the next
+present` or `held (the tick's first present's)`; an explicit `ICO_RD_GLOW_REDRAW` wins over the
+row. `[dev] glow_redraw = true` (`ICO_RD_GLOW_REDRAW=1`) draws the chain at every
 present; the 10 s `interp:` line says `glow between ticks: held: N later presents pasted the tick's
 glow without its chain; ...` (or `redrawn ([dev] glow_redraw = true)`) with the presents that drew it
 and why, the window's uploaded-KB line ends `; N between-tick pictures pasted the tick's glow without

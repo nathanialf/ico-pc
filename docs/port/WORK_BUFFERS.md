@@ -244,8 +244,11 @@ a function of the frame), and during a pan the halo half a tick's pan behind the
 glow's bright regions only, as the motion blur's old frame and the aura's feedback already are. The
 chain is drawn after all at a later present when another draw reads one of its buffers before
 drawing into it (the sun's glare onto SCENE from WORK1, `eyeBlur` mode 1), without this tick's copy
-(a target made again since), and under `[dev] glow_redraw = true` (`ICO_RD_GLOW_REDRAW=1`), the A/B,
-whose first presents make no copy. The depth of field's copies leave column 0 of WORK0 and WORK1
+(a target made again since), under Options > Effects > Glow between frames: Smooth (`RdSettings.glowSmooth`, outcome
+`RD_GLOW_SMOOTH`, text `glow redrawn (Glow between frames: Smooth)`), and under `[dev] glow_redraw
+= true` (`ICO_RD_GLOW_REDRAW=1`), the A/B, whose first presents make no copy. The environment switch
+decides when it is set to `1` or `0` (`0` holds the glow under a Smooth row); otherwise the row
+decides, read at every present. The depth of field's copies leave column 0 of WORK0 and WORK1
 undrawn ([The glow chain at a wide frame](#the-glow-chain-at-a-wide-frame)): at a held present it
 reads the chain's column 0 of the tick's first present there, part of the held glow. That is the
 general rule's one known case: any write into one of the chain's buffers counts as covering it,
@@ -259,7 +262,7 @@ two presents of a tick whose frames hash alike paste the same glow, held or draw
 Event lines: the 10 s summary's
 
 ```
-rd: interp: glow between ticks: held: N later presents pasted the tick's glow without its chain; the chain drawn at A first presents, B later ones with [dev] glow_redraw, C without this tick's copy, D whose other draws read its buffers; E presents without a glow
+rd: interp: glow between ticks: held: N later presents pasted the tick's glow without its chain; the chain drawn at A first presents, B later ones with [dev] glow_redraw, F later ones with Glow between frames: Smooth, C without this tick's copy, D whose other draws read its buffers; E presents without a glow
 ```
 
 and the `window:` uploaded-KB line's `; N between-tick pictures pasted the tick's glow without its

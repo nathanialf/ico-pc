@@ -57,7 +57,10 @@ The window, the picture's size and shape, and the speed.
   the full-height picture. Once you change one of those four rows yourself,
   it says **Custom**. Two of those four rows, Full-height picture and
   Texture filtering, are on the Picture page. The shortcut also sets Full
-  pixel (Picture page): Enhanced turns it on, Original turns it off.
+  pixel (Picture page): Enhanced turns it on, Original turns it off. It
+  also sets Glow between frames (Effects page): Enhanced makes it Smooth,
+  Original makes it Original, and changing that row yourself makes the
+  Preset say **Custom**.
 - **Resolution** is how sharp the picture is: 1x is the PS2's, up to 16x,
   or the size of your window. Very high values need a lot of graphics
   memory; when your graphics card cannot hold the picture, the game lowers
@@ -227,14 +230,23 @@ This page is in the Options menu, right under Picture.
 The game's own picture effects.
 
 The game's own effects are each On or Off (Motion blur is Off, Original
-or Smooth, and Water reflections is Original or Sharp). All On, with Motion
-blur and Water reflections at Original, is the picture the PS2 gives you,
-and that is how the game starts.
+or Smooth, Water reflections is Original or Sharp, and Glow between frames
+is Original or Smooth). All On, with Motion blur, Water reflections and
+Glow between frames at Original, is the picture the PS2 gives you, and that
+is how the game starts. The Preset does not change these rows, except Glow
+between frames.
 
 - **Glow:** the soft glow around bright light, and the flare of the sun.
   It is drawn at the PlayStation 2's size at every Resolution and spread
   over the picture the way the console spreads it: as soft as on the PS2,
   and light on the graphics card.
+- **Glow between frames:** matters when Frame rate is above Original, with
+  Glow on; otherwise the row is greyed out. The game makes its glow once
+  for each of its own frames. **Original** keeps that glow for the frames
+  shown between them, which costs the graphics card nothing. **Smooth**
+  makes the glow again for every frame shown, so it follows a fast camera
+  turn; it costs more of the graphics card's time. The Enhanced Preset
+  sets it to Smooth.
 - **Depth of field:** the blur on things far away.
 - **Screen softening:** a slight blur over the whole picture that smooths
   jagged edges.
@@ -759,6 +771,7 @@ Under `[video]`:
 | --- | --- |
 | `window_mode = "windowed"` | The Window mode row: `"windowed"`, `"borderless"` or `"fullscreen"`. If the file has no `window_mode` line, the game reads its `fullscreen =` line instead: `true` is Fullscreen, `false` is Windowed. |
 | `effect_glow = true` and the five other `effect_` lines | The six switches of the Effects page. |
+| `effect_glow_mode = "original"` | How the glow is made for the frames shown between the game's own: `"original"` or `"smooth"`. It only matters above Frame rate Original, with `effect_glow = true`. The Enhanced Preset writes `"smooth"`. A file without this line gets `"smooth"` when its Display rows are the Enhanced Preset's, and `"original"` otherwise. |
 | `effect_motion_blur_mode = "original"` | How Motion blur moves while it is on: `"original"` or `"smooth"`. `effect_motion_blur = false` is Off whatever this says. |
 | `effect_water_sharp = false` | Water reflections on the Effects page: `false` is Original, `true` is Sharp. |
 | `crt = false`, `crt_mode = "consumer"`, `crt_strength = 1.0` | The CRT filter and CRT strength rows. `crt_mode` is `"scanlines"`, `"consumer"`, `"trinitron"`, `"pvm"` or `"shadow"`. `crt_strength` goes from `0.0` to `1.0`. |
