@@ -17,6 +17,8 @@ are [RHI.md](RHI.md).
 | `port/platform/window_host.h`, `window_host.c` | the SDL window, the device on it, the pacing loop, the 10 s stats lines, F11 and F12 |
 | `port/platform/window_video.h`, `window_video.c` | window mode requests (windowed, borderless over the display, fullscreen at the desktop's mode) and their readback |
 | `port/platform/pace_policy.h`, `pace_policy.c` | the pacing decisions, free of SDL: slow presents, the gap, the vsync lock, the display's intervals, Auto resolution |
+| `port/platform/present_fallback.h`, `present_fallback.c` | the FIFO fallback's decision and lines, free of SDL ([The FIFO fallback](#the-fifo-fallback)) |
+| `port/platform/window_present_fallback.h`, `window_present_fallback.c` | the window's side of the FIFO fallback: the gate, the switch, the lines |
 | `port/platform/display_clock.h` | the vblank clock's interface |
 | `port/platform/display_clock_win.c` | the vblank clock on Windows: a thread on the window's DXGI output |
 | `port/platform/display_clock_none.c` | no vblank clock (every other platform) |
@@ -26,7 +28,7 @@ are [RHI.md](RHI.md).
 | `port/render/rd_interp.c` | presenting between ticks; the present clock |
 | `port/render/rd_crt.c`, `port/shaders/crt.hlsl` | the CRT filter |
 | `port/platform/fps_counter.h`, `fps_counter.c` | the Frame rate counter's presents per second, free of SDL and rd ([UI.md](UI.md#the-frame-rate-counter)) |
-| `port/platform/test/` | `fps_counter_test.c`, `pace_loop_test.c`, `pace_policy_test.c`, `perf_block_test.c`, `window_video_test.c`, `hotkeys_test.c` |
+| `port/platform/test/` | `fps_counter_test.c`, `pace_loop_test.c`, `pace_policy_test.c`, `present_fallback_test.c`, `perf_block_test.c`, `window_video_test.c`, `hotkeys_test.c` |
 
 ## The native frame
 
@@ -447,7 +449,9 @@ then every 100th; `present_blocked`), and the replays line is followed, in a blo
 call over 50 ms, by `window: present blocked N times over 50 ms, longest M ms (mode MODE, framerate
 X)` (`perf_log`; issue 123: the Adreno 740 on Qualcomm's driver spent 363-583 ms inside
 `vkQueuePresentKHR`). Both read the replay records' present time (`perf_drain`); nothing new is
-timed. A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
+timed. Under mailbox with vsync off the 10 s line ends with the [FIFO fallback](#the-fifo-fallback)'s
+count, `; k of 3 over 200 ms in 30 s toward FIFO`, and after its switch with `; K since presents went
+FIFO N s ago` (K: the presents over 50 ms since). A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
 is above the display's X Hz: presenting once a refresh (mailbox)` once after each settings change
 (`port/platform/window_host.c` (`pace`)).
 
@@ -993,6 +997,43 @@ default 2, puts the wait for the display in the replay's "acquire" phase). `ICO_
 gives the lock its SHOWN clock. A vsync change idles the device and rebuilds the swapchain
 (`port/render/rd_present.c` (`rd__apply_display`)).
 
+### The FIFO fallback
+
+With vsync off a surface without immediate mode (Android) presents in mailbox mode with one image
+over the surface's minimum. Qualcomm's own Adreno driver can then spend 376-453 ms in
+`vkQueuePresentKHR`, one to eight times every 10 s, at the same length whatever the scene and with
+the GPU at a steady 28 ms a picture: the queue's wait in the driver or the compositor, each one a
+stutter. The window counts them and presents FIFO for the rest of the run once they repeat
+(`port/platform/present_fallback.h`, the decision, pure; `port/platform/window_present_fallback.c`,
+the window's side, called from `port/platform/window_host.c` (`video_settings`, `present_blocked`,
+`ico_window_pace`, `perf_log`)):
+
+- A block is a present that spent 200 ms or more in the driver's present call (the replay record's
+  present time, `present_blocked`). Three within 30 s switch, once a run, when the vsync option is
+  Off, the swapchain is in mailbox mode, the backend is Vulkan and the driver is not Mesa's (its text
+  names neither `Mesa` nor `turnip`: Turnip on the same tablet showed a few blocks of 230-238 ms in a whole
+  run) (`ico_present_fallback_note`, `ico_present_fallback_driver_eligible`).
+- The switch line is `window: present blocked 3 times (376-382 ms) in 14 s on ADAPTER (DRIVER) under
+  mailbox (vsync off, 6 images): presents now FIFO for this run ([dev] present_fallback=off keeps
+  mailbox)`. At the step's end the backend's flag is set (`rhi_present_fifo_fallback`), the
+  swapchain is made again at its own size as on any present mode change, its time taken out of the
+  pacing (`pausePendingNs`), and `window: present mode fifo, FIFO fallback taken after N blocks`
+  follows the backend's `rhi_vk: swapchain ... present mode fifo (vsync off, fifo fallback) ...`
+  line. Every later swapchain is FIFO with exactly the surface's minimum image count.
+- The vsync option and `config.toml` are not touched: Options still says Off, and the next run
+  starts in mailbox again.
+- At 120 Hz a FIFO present waits a refresh (8.3 ms) at most; a 28 ms GPU never fills the queue, so
+  the game's own 30 pictures a second stay, and vsync off keeps the paced allowance whatever the
+  present mode (`pace_budget_paced_mode`; `pace_policy_test` (`testBudgetFifo120`)).
+- The start's `window: present mode ...` line and the summary end `, FIFO fallback armed` where the
+  switch can be taken, `, FIFO fallback taken after N blocks` once taken, `, FIFO fallback set by
+  [dev] present_fallback=fifo` under that value.
+- `[dev] present_fallback` ([CONFIG.md](CONFIG.md#dev)): `auto` (the default) as above; `off` keeps
+  mailbox and writes `window: present blocked 3 times over 200 ms in N s under mailbox: mailbox kept
+  ([dev] present_fallback=off)` once; `fifo` presents FIFO from the start.
+
+The first two or three stutters (20 to 30 s) still happen before the switch.
+
 ### Downsampling
 
 `RdSettings.downsample` (Options > Picture > Downsampling: To original size; `[video] downsample =
@@ -1226,7 +1267,8 @@ one's pixels: for a measurement, not for play.
 | test | checks |
 | --- | --- |
 | `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), the present allowance with the fence (`test120Budget`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`) |
-| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`), the timer path's unbound start (`testBudgetUnbound`), the reporters' sequences (`testBudgetHitch130`, `testBudgetSustained`, `testBudgetGlWait126`), the window's allowance and clock words (`testBudgetLines`), the timer path with a GPU queue (`testBudgetTimerLoop`) and paced by the GPU (`testBudgetPaced`, `testBudgetPacedLoop`) |
+| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`), the timer path's unbound start (`testBudgetUnbound`), the reporters' sequences (`testBudgetHitch130`, `testBudgetSustained`, `testBudgetGlWait126`), the window's allowance and clock words (`testBudgetLines`), the timer path with a GPU queue (`testBudgetTimerLoop`) and paced by the GPU (`testBudgetPaced`, `testBudgetPacedLoop`), vsync off under the FIFO fallback at 120 Hz (`testBudgetFifo120`) |
+| `port/platform/test/present_fallback_test.c` | the FIFO fallback's decision over the stock driver's blocks (the third within 30 s switches, never a second time), blocks too far apart or too short, Turnip's driver text, `[dev] present_fallback=off`, the lines word for word |
 | `port/platform/test/perf_block_test.c` | a block's sums and maxima, the replays over the threshold, the longest-phase text, a reset |
 | `port/platform/test/window_video_test.c` | the window mode requests and their readback on SDL's offscreen driver (77 without one): fullscreen at the desktop's size, Borderless, Windowed back at 960 x 720; Fullscreen through `ico_window_video_mode` holds the desktop's mode (its size and refresh rate) or, where the driver takes none, no mode, and `ico_window_video_desktop_mode` returns which. Whether the display goes exclusive and the swapchain's `VK_EXT_full_screen_exclusive` request are the window system's and a Windows driver's: no test here sees them (lavapipe has no such extension) |
 | `port/platform/test/hotkeys_test.c` | F11, F12, the stats period, F12's file names |
@@ -1234,7 +1276,7 @@ one's pixels: for a measurement, not for play.
 | `port/render/test/rd_interp_test.c` | blending two synthetic frames: the ends, half way, the snaps, ordinals, grids, meshes, particles, shadows, the present clock |
 | `port/render/test/rd_crt_test.c` | the CRT keys, the modes' table and overrides, and each mode's hash at two sizes on a Vulkan device |
 | `port/render/test/rd_boot_present_test.c` | a saved start-up through the presenter, present by present, with DISPLAY's probe points |
-| `port/rhi/test/rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` (mailbox, FIFO latest ready, FIFO, immediate) and `vkr_present_wait_wanted` |
+| `port/rhi/test/rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` (mailbox, FIFO latest ready, FIFO, immediate, and FIFO under the FIFO fallback over every set) and `vkr_present_wait_wanted` |
 
 The ctest names are the file names without `_test`: `pace_loop`, `pace_policy`, `perf_block`,
 `window_video`, `hotkeys` (`port/platform/CMakeLists.txt`), `rd_present`, `rd_interp`, `rd_crt`,

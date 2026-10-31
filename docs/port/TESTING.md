@@ -484,7 +484,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `/sdcard/Android/data/com.defnf.icopc/files/drivers/` shows Add from the drivers folder.
 - `host_config_test.c`: `ico-pc.ini` parsing and rewriting, SHA-1 vectors, path joining, the
   card folders read from the ini the game reads (`ico_host_ini_path`), portable mode, the `[dev]`
-  keys exported as environment switches (`ico_dev_env_value`, `test_dev_env`), a restart's
+  keys exported as environment switches (`ico_dev_env_value`, `test_dev_env`; `present_fallback`
+  auto, off or fifo), a restart's
   `ICO_RD_BLEND` and `ICO_RD_VU_PREPASS` over the ini's (`test_retry_blend`,
   `test_retry_prepass`), the disc choice's rules in order (`ico_host_choose_disc`,
   `test_choose_disc`), the logs folder set by `ico_host_set_logs_dir` (`test_logs_override`), and
@@ -565,10 +566,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   holds setting the wait back to 120), and the timer path with a GPU queue
   (`testBudgetTimerLoop`: nothing binds at 4 or 12 ms of GPU a picture nor on back-to-back 1 ms
   presents, the in-betweens held at 20 ms so no step ends half a period late, FIFO's return past
-  the deadline excused); the clamp of a cap above the refresh in
-  mailbox mode (`testPresentGap`, `testCapEqualsRefresh`) (`pace_policy`).
+  the deadline excused), the FIFO fallback at 120 Hz (`testBudgetFifo120`: vsync off, a 28 ms GPU,
+  every present waiting for the next vblank: 30 presents a second, nothing armed or dropped); the
+  clamp of a cap above the refresh in mailbox mode (`testPresentGap`, `testCapEqualsRefresh`)
+  (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
+- `present_fallback_test.c`: the FIFO fallback's decision (`present_fallback.h`): the stock
+  Adreno driver's blocks of 376-382 ms at 0, 9 and 14 s switch at the third and never again, the
+  switch line word for word, the 10 s line's `toward FIFO` and `since presents went FIFO` words;
+  two blocks 40 s apart, blocks 31 s apart and blocks under 200 ms (52 ms, 21 of 143 ms) switch
+  nothing; Turnip's driver text is not eligible while the count still rises; `[dev]
+  present_fallback=off` keeps mailbox with its line once; a count reached with vsync on switches at
+  the next block once eligible; the driver texts and the `[dev]` values (`present_fallback`).
 - `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
   (`sched`).
@@ -1316,8 +1326,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rhi_driver_version`).
 - `rhi_vk_enum_test.c`: every `rhi.h` enumeration has a Vulkan mapping, `RGBA32_UINT` among them
   (`rhi_vk_enum`).
-- `rhi_vk_present_mode_test.c`: the present-mode choice over the sets drivers offer
-  (`rhi_vk_present_mode`).
+- `rhi_vk_present_mode_test.c`: the present-mode choice over the sets drivers offer, and FIFO
+  over every set and preference under the FIFO fallback (Android's mailbox and FIFO with vsync off,
+  Mesa's four modes, vsync on with mailbox preferred, FIFO latest ready asked) (`rhi_vk_present_mode`).
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver
   (`rhi_vk_swapchain`).
 - Helpers: `rhi_test_common.c`/`.h` (the shared cells, seven of whose pipelines come from one

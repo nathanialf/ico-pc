@@ -273,7 +273,12 @@ them off for a test of the fallback.
 
 **Present mode and timing.** `rhi_prefer_mailbox` asks for mailbox with vsync from the next
 swapchain (D3D12: not offered); `rhi_present_mailbox` and `rhi_present_mode_name` say what the
-swapchain has. `rhi_present_timing`, `rhi_present_timing_use`, `rhi_present_last_id` and
+swapchain has. `rhi_present_fifo_fallback(true)` makes every later swapchain FIFO whatever vsync
+and the mailbox preference ask, with the surface's minimum image count; the flag is kept across
+`rhi_init` like the preference and `rhi_present_fifo_fallback_on` returns it (Vulkan only; D3D12,
+D3D11 and OpenGL ignore it). The window sets it when presents keep blocking under mailbox
+([DISPLAY.md](DISPLAY.md#the-fifo-fallback)). `RhiStats.swapImages` is the current swapchain's
+image count (Vulkan; 0 elsewhere). `rhi_present_timing`, `rhi_present_timing_use`, `rhi_present_last_id` and
 `rhi_present_timing_next` are the display's timing of presents (Vulkan's present wait, below; D3D12:
 false, nothing, 0, -1).
 `rhi_present_statistics(&presentCount, &presentRefresh, &syncRefresh, &syncNs)` is the swapchain's
@@ -546,7 +551,8 @@ transfer features (`vkr_choose_depth_stencil`).
 (`port/rhi/vk/vk_device.c` (`vkr_fake_limits`, `vkr_choose_depth_stencil`, `vkr_pick_device`);
 `port/rhi/vk/vk_cmd.c`; `port/rhi/vk/vk_swapchain.c` (`vkr_poll_surface_on`)).
 
-**Present mode** (`port/rhi/vk/vk_present_mode.c`, pure so its test compiles it alone). With vsync:
+**Present mode** (`port/rhi/vk/vk_present_mode.c`, pure so its test compiles it alone). Under the
+FIFO fallback (`forceFifo`, `s_fifoFallback` in `port/rhi/vk/vk_swapchain.c`, which also asks for exactly `minImageCount` images and adds `, fifo fallback` to the `rhi_vk: swapchain` line): FIFO. With vsync:
 mailbox when preferred and offered; FIFO latest ready when asked for and offered; else FIFO. Without
 vsync: immediate wherever offered (the picture tears where the compositor lets it), then mailbox,
 then FIFO (`vkr_choose_present_mode`). `vkr_present_wait_wanted` is true only when
