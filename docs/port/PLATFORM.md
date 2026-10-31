@@ -1595,8 +1595,9 @@ with local read the probe's verdict last ([RENDER.md](RENDER.md#the-device-profi
 [WORK_BUFFERS.md](WORK_BUFFERS.md#the-desktops-local-read-and-its-probe)). The controller
 is what SDL has connected then ("none yet" when the pad arrives later; its own `input: gamepad`
 line follows), on Windows with whether SDL's DirectInput scan is on (`[dev] joystick_directinput`);
-the VU shaders are `one set, fallback plain (issue 107)` on a device whose fallback takes the
-plain program entries (`RhiLimits.vuFallbackPlain`), and the pipelines `the careful start-up set`
+the VU shaders are `one set, fallback plain (<reason>)` on a device whose fallback takes the
+plain program entries (`(Adreno 740, issue 107)` for the device table's row,
+`RhiLimits.vuFallbackPlain`; `(Turnip driver, issue 163)` under Turnip; [RENDER.md](RENDER.md#the-fallback-entries)), and the pipelines `the careful start-up set`
 under the careful policy, `the careful start-up set, stopped at its budget (the rest on first use)`
 when its budget stopped it, and `on first use (no start-up set)` where the set is skipped
 (`port/render/rd_core.c` (`rd_summary_text`); [RENDER.md](RENDER.md#the-start-up-set)); the disc is the one `select_disc` named (`ico_diag_set_disc`); on
@@ -1648,9 +1649,12 @@ The window build's diagnostic keys are free of SDL so a unit test checks them
   [replay tool](ARCHITECTURE.md#terms) takes the zip directly (`ico_dump_zip_extract`), and as
   `--interp`'s PREV it takes the zip's second `.rddump` (`ico_dump_zip_extract_nth`), so
   `rd_replay_tool frame.zip out.png --interp 0.5 frame.zip` rebuilds a picture between the two
-  ticks, where the presenter blends. The presented PNG stays a loose file beside the zip; the log
-  line says whether the tick before is in (`window: F12 at vsync ...: wrote ... (with the tick
-  before: ...)`).
+  ticks, where the presenter blends. With the tick before in, the next present's own frame, when it
+  is drawn between the ticks, goes in as the third `.rddump` (`-blended.rddump`,
+  `port/render/rd.h` (`rd_dump_blended_arm`), `ico_zip_move_file`), which the tool replays as drawn
+  ([DISPLAY.md](DISPLAY.md#hotkeys-for-pictures)). The presented PNG stays a loose file beside the
+  zip; the log line says whether the tick before is in (`window: F12 at vsync ...: wrote ... (with
+  the tick before: ...)`).
 - **Shift+F12** in photo mode: the aspect sweep, the paused frame rendered at 4:3, 16:9, 32:9,
   48:9 and 60:9 into `sweep-<time>.zip` (`ico_sweep_zip`).
 - **F5** and **F9**: save slot 1 and load slot 1 of the save states (`ICO_HOTKEY_STATE_SAVE`, `ICO_HOTKEY_STATE_LOAD`; no Shift variant, repeats do nothing); the request is latched and done at the next quiescent point ([Saving and loading](#saving-and-loading)).

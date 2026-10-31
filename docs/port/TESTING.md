@@ -418,7 +418,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   zip included, an `.rddump` left out), the newest `-present.png`, the newest `report-*.zip` (not
   another `report-` file), a tie in time to the greater name, missing folders skipped, the names
   line and a short buffer (`share_report`).
-- `dump_zip_test.c`: F12's zip (with the tick before as its second `.rddump`), the aspect sweep's zip and the device-loss zip (the lost frame first, the second `.rddump` the frame before, the pruning to the newest three), written and read back with miniz
+- `dump_zip_test.c`: F12's zip (with the tick before as its second `.rddump`, and the blended present's frame moved in third by `ico_zip_move_file`, the loose file gone), the aspect sweep's zip and the device-loss zip (the lost frame first, the second `.rddump` the frame before, the pruning to the newest three), written and read back with miniz
   (`dump_zip`).
 - `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
   on this toolchain's compiler and linker, over a stand-in game library (`game_data_fixture.c`)
@@ -955,6 +955,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   texels of the glow's mask (WORK2 not at its fill level, either run's) (with Python and Pillow).
   `build-host/tmp/v094/after/v2-ab.sh` is the A/B over more pairs (statistics, crops, the region
   at 32, 64 and 128 texels, lavapipe timings).
+- `rd_replay_tool_save_blended.cmake`: the blended present's frame F12 saves
+  (`rd_dump_blended_arm`) replays alone as drawn: `rd_replay_tool CUR --interp T PREV
+  --save-blended B` writes the frame built between the two after its replay, `rd_replay_tool B`
+  replays it without `--interp`, and SCENE and the presented picture (1280x960) are the same bytes
+  as the `--interp` run's. `rd_replay_tool_save_blended`: rd-01076 then rd-01077 (the godrays pair
+  above) at alpha 0.5, Enhanced 4:3 2x; `rd_replay_tool_save_blended_163`: issue 163's pair
+  (`build-host/tmp/v097/evidence/163/frame/`) at its present's alpha 0.999000013, 2x, full height,
+  Full pixel (Not Run without the dumps).
 - `rd_interp_test.c`: presentation between [ticks](ARCHITECTURE.md#terms) on two synthetic frames
   (`rd_interp`); the feedback head copies (`testFeedback`: `DISPLAY_HELD` and `FEED_HELD` at a
   tick's first present and the later ones, none for DISPLAY under Motion blur: Smooth, FEED128's
@@ -1199,7 +1207,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   composited level not constant over level texels i0 - 2 to i0 + 3, the kernels' joint support and
   a tie: N = 3 level texels), some texels differing; the |d| histogram printed (`checkEdges2x`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-edges-above-1x)).
-- `rd_state_test.c`: the recording half of rd without a GPU: list order, defaults, state leakage,
+- `rd_state_test.c`: the recording half of rd without a GPU: the VU fallback's set
+  (`rd__vu_set_choose`, `testVuSetPolicy`: the stock Adreno 740's table row and two Turnip driver
+  texts take the plain set with the start line's words, Qualcomm's driver without a row, lavapipe,
+  RADV and NVIDIA the extended one, `ICO_RD_VU_PLAIN=1` and the host's reason the plain one,
+  `ICO_RD_VU_EXTENDED=1` the extended one over each), dump version 14's ticks' cameras (none in a
+  tick's frame, a blended frame's round-trip), list order, defaults, state leakage,
   the alpha test's plan for every Z write, AFAIL, ATE and alpha mask (one draw where the test decides
   nothing, `testAlphaMerge`), the start-up set's VU keys by variant and with the VU vertex
   pre-pass (`testEnumerationVu`, `testEnumerationPrepass`: every program entry's key without the
@@ -1501,7 +1514,7 @@ reports it. `seed` overwrites every baseline after a build that is accepted
 The script tests under `port/render/test/` run the tool or a test program and check its output:
 `rd_replay_tool_list.cmake`, `rd_replay_tool_pass_dump.cmake`,
 `rd_replay_tool_loss_bisect.cmake`, `rd_replay_tool_pass_split.cmake`,
-`rd_replay_tool_pass_merge.cmake` and `rd_replay_tool_snap_swap.cmake` on the dump `rd_pixel` leaves behind, `rd_replay_tool_glow_hold.cmake` on two godrays dumps, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
+`rd_replay_tool_pass_merge.cmake` and `rd_replay_tool_snap_swap.cmake` on the dump `rd_pixel` leaves behind, `rd_replay_tool_glow_hold.cmake` and `rd_replay_tool_save_blended.cmake` on two godrays dumps, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
 `rd_fog_selftest.cmake`, which matches the `fog: depth path` line of the self-test, and
 `rd_blend_selftest.cmake`, which matches the `blend: ... (self-test: ...)` line of the blend's,
 and `rd_vuprepass_selftest.cmake`, which matches the `VU pre-pass: on|off (self-test ...)` line
@@ -1828,7 +1841,11 @@ of the whole DISPLAY frame and a PNG of the picture as [presented](ARCHITECTURE.
 [user folder](ARCHITECTURE.md#terms)'s `dumps/`, then puts the dump, the tick before's dump
 (`-prev.rddump`, `rd_dump_prev_frame`) and a copy of the log into `frame-<time>-v<vsync>.zip` and
 deletes the loose dumps (`rd_replay_tool frame.zip out.png --interp T frame.zip` replays a picture
-between them); the zip exists because issue trackers refuse
+between them). When the next present is drawn between the two ticks, the frame it drew follows as
+the zip's third `.rddump`, `frame-<time>-v<vsync>-blended.rddump` (`rd_dump_blended_arm`): unzipped,
+`rd_replay_tool frame-<time>-v<vsync>-blended.rddump out.png` replays that present as drawn, with
+no `--interp`, so a picture only the device drew can be told from the tool's own rebuild; the zip
+exists because issue trackers refuse
 `.rddump` attachments (`port/platform/hotkeys.h`, `ico_frame_dump_paths`, `ico_frame_present_path`;
 `port/platform/dump_zip.h`, `ico_frame_dump_zip`). F11 makes the stats lines come every second for
 30 s (`port/platform/hotkeys.h`, header comment).
@@ -1840,10 +1857,28 @@ and 60:9 into `sweep-<time>.zip`, holding `<aspect>.rddump` and `<aspect>.png` f
 ones `native_frame_check.py gate-b` reads.
 `[dev] dump_every = N` writes every Nth frame ([PLATFORM.md](PLATFORM.md#hotkeys-and-dump-zips)).
 
+**The blended present's frame.** `--interp` is the tool's own blend of the two ticks, so a fault
+only the device's present shows (issue 163's sliver, absent from lavapipe's rebuild of the same
+pair) needs the frame the device drew. F12 arms `rd_dump_blended_arm` (`port/render/rd.h`) with
+`<name>-blended.rddump` when its zip holds the tick before; the next `rd_present` takes the arm. A
+present drawn between two ticks (alpha below 1, not a keep frame) writes the frame it drew,
+`rd__interp_frame`'s copy of the tick with the blended blocks, bones and streams (its scratch
+meshes) and the ticks' cameras (dump version 14), through `rd__dump_frame` after the present, so
+the write is not in the picture's time; a present at alpha 1 or of a keep frame is the tick's own
+picture and writes nothing (`port/render/rd_interp.c` (`rd_present`, `blendedDumpTake`)). `rd:
+dump: the blended present of frame F at alpha A written to <path>` follows, and the window's pump
+moves the file into the zip ([DISPLAY.md](DISPLAY.md#hotkeys-for-pictures)). It is an ordinary dump.
+What the presenter holds outside a dump (FEED_HELD, DISPLAY_HELD and WORK3_HELD, the glow a
+tick's later presents paste) starts empty in the tool, as for every dump, so a later present's
+pasted glow is missing from the replay; the geometry is the device's. `--save-blended DUMP` (with
+`--interp T PREV`) writes the tool's frame between two dumps with the same writer after its
+replay, which `rd_replay_tool_save_blended` checks against the `--interp` run byte for byte.
+
 The dump format is `port/render/rd_dump.c`'s header comment, and the replay tool's options are
 listed in [RENDER.md](RENDER.md#dumps-and-the-replay-tool). For tests the useful ones are
 `--pass-dump DIR` (every named target from one run), `--list --no-device` (the commands without a
-GPU), `--present WxH`, `--aspect`, `--enhanced`, `--aa` and `--interp T PREV`
+GPU), `--present WxH`, `--aspect`, `--enhanced`, `--aa`, `--interp T PREV` and with it
+`--save-blended DUMP` (the frame between the two written as F12's blended present's frame)
 (`port/render/tools/rd_replay_tool.c`, usage).
 
 ### Replaying a phone's loss dump as the phone drew it

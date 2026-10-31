@@ -1165,7 +1165,22 @@ line says `keep 0; the zip has no tick before to rebuild it from`. A keep frame'
 again`;
 with interpolation off the present is `rd_end_frame`'s, alpha 1 (`port/platform/window_host.c`
 (`frame_dump`, `present_once`, `photo_pump`); `port/render/rd_interp.c` (`rd_present`,
-`rd__note_frame_present`)).
+`rd__note_frame_present`)). The alpha says which kind of present it was: 1 the tick's own picture,
+below 1 one drawn between the tick before and the tick.
+
+With the tick before in the zip, F12 also arms the same present's own frame
+(`rd_dump_blended_arm`; the F12 line ends `; the next present's frame if between the ticks`). When
+that present is drawn between the ticks the renderer writes it, and the pump moves it into the zip
+(`ico_zip_move_file`) and says which present it was:
+
+```
+window: F12: the present of frame F at alpha A was drawn between the ticks: the zip holds the blended present's frame (rd_replay_tool replays it as drawn), <dumps>/frame-<time>-v<vsync>-blended.rddump
+window: F12: the present of frame F at alpha 1 was the tick's own picture (the zip's frame)
+```
+
+The first replays without `--interp`, as the device drew it, beside the zip's two ticks
+([TESTING.md](TESTING.md#f12-dumps-and-the-replay-tool)); a zip it could not be added to keeps the loose
+file (`; the .rddump is kept`).
 
 The sweep forces the native frame's aspect (`ico_video_frame_force_aspect`); the next flip latches
 the new width and remakes the scene-sized targets, and the paused photo camera rebuilds the game's
