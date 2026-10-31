@@ -48,7 +48,9 @@
  * frames only, 1 ms not held, no timestamps as before, the late-step safety
  * net and the straight climb); testBudgetPacedLoop: the same under the fake
  * clock, no step a quarter of a period late, the GPU's queue never past a
- * period, the presents the GPU's budget.
+ * period, the presents the GPU's budget; testBudgetFifo120: the FIFO
+ * fallback at 120 Hz with vsync off and a GPU of 28 ms, 30 presents a
+ * second, nothing armed or dropped.
  */
 #include <stdio.h>
 #include <string.h>
@@ -1861,15 +1863,19 @@ static void testBudgetProbeWait(void)
    for the GPU with waitAsGpu.  budget false: the rule before.  paced: the
    timer path with vsync off or mailbox (pace_budget_reset_paced, the GPU's
    time gpuNs known); else the whole-number allowance (FIFO).  queueMax:
-   the GPU time a present's picture waited behind (ready[k-1] - submit). */
+   the GPU time a present's picture waited behind (ready[k-1] - submit).
+   budgetLoopAt also takes the display's refresh (refreshNs, REFRESH in
+   budgetLoop) and vblankNs: FIFO with a free image, every present returns
+   at the next vblank of that grid (the display's wait, excused as it is). */
 typedef struct BudgetRun {
-    unsigned frames, presents, shown, refused, resyncs, drops, climbs, allow, lowest;
+    unsigned frames, presents, shown, refused, resyncs, drops, climbs, allow, lowest, arms;
     uint64_t lateMax;  /* the latest step after the first second */
     uint64_t queueMax; /* the most GPU time a present waited behind, after it */
 } BudgetRun;
 
-static BudgetRun budgetLoop(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bool budget,
-                            uint64_t fifoPastNs, bool waitAsGpu, bool paced)
+static BudgetRun budgetLoopAt(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bool budget,
+                              uint64_t fifoPastNs, bool waitAsGpu, bool paced, uint64_t refreshNs,
+                              uint64_t vblankNs)
 {
     const uint64_t own = 1 * MS, stepNs = 3 * MS, resyncNs = 100 * MS;
     PaceHist h = {0};
@@ -1933,6 +1939,9 @@ static BudgetRun budgetLoop(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bool
                 waitNs = fifoPastNs != 0 && !newFrame && submit < deadline + fifoPastNs
                              ? deadline + fifoPastNs - submit
                              : 0;
+                if (vblankNs != 0) {
+                    waitNs += (submit / vblankNs + 1) * vblankNs - submit;
+                }
                 cost = fence + own + waitNs;
                 t += cost;
                 if (k >= 60 && prev > submit && prev - submit > r.queueMax) {
@@ -1940,7 +1949,7 @@ static BudgetRun budgetLoop(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bool
                 }
                 ready[made % 4] = (prev > submit ? prev : submit) + gpuNs;
                 made++;
-                slow = pace_slow_present(&h, cost, REFRESH, PERIOD, false);
+                slow = pace_slow_present(&h, cost, refreshNs, PERIOD, false);
                 r.shown += newFrame ? 1u : 0u;
                 presented = frame;
                 skipOpen = false;
@@ -1956,7 +1965,7 @@ static BudgetRun budgetLoop(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bool
                 r.lateMax = late;
             }
             if (budget) {
-                (void)pace_budget_step(&b, late, PERIOD, REFRESH, waitAsGpu ? 0 : waitNs, gpuNs,
+                (void)pace_budget_step(&b, late, PERIOD, refreshNs, waitAsGpu ? 0 : waitNs, gpuNs,
                                        stepNs);
             }
         }
@@ -1969,8 +1978,15 @@ static BudgetRun budgetLoop(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bool
     r.climbs = b.climbs;
     r.allow = b.allow;
     r.lowest = b.lowest;
+    r.arms = b.arms;
     r.refused += b.refused;
     return r;
+}
+
+static BudgetRun budgetLoop(unsigned steps, uint64_t gpuNs, uint64_t gapNs, bool budget,
+                            uint64_t fifoPastNs, bool waitAsGpu, bool paced)
+{
+    return budgetLoopAt(steps, gpuNs, gapNs, budget, fifoPastNs, waitAsGpu, paced, REFRESH, 0);
 }
 
 /* The timer path with the allowance, 10 s each.  A GPU of 4 ms or 12 ms a
@@ -2165,6 +2181,30 @@ static void testBudgetPaced(void)
     }
 }
 
+/* The FIFO fallback's pacing (window_host.c, present_fallback.h): vsync
+   off on a 120 Hz display (refresh 8.33 ms) whose presents went FIFO, the
+   game's period 16.68 ms, a GPU of 28 ms a picture (the stock Adreno 740 at
+   3x), framerate 60: vsync off is still the paced mode whatever the
+   present mode (pace_budget_paced_mode), every present waits for the next
+   vblank at most a refresh, back to back: the game's own 30 presents a
+   second, every frame shown, no in-between, no step late, nothing armed or
+   dropped, no resync. */
+static void testBudgetFifo120(void)
+{
+    const uint64_t refresh = 8333333ull;
+    const BudgetRun r = budgetLoopAt(600, 28 * MS, 0, true, 0, false,
+                                     pace_budget_paced_mode(false, false), refresh, refresh);
+    const double sec = 600.0 * (double)PERIOD / 1e9;
+
+    printf("pace_policy_test: FIFO at 120 Hz, vsync off, GPU 28 ms a picture: %u presents (%.1f a "
+           "second), latest step %.1f ms, %u arms, %u drops\n",
+           r.presents, (double)r.presents / sec, (double)r.lateMax / 1e6, r.arms, r.drops);
+    CHECK(pace_budget_paced_mode(false, false));
+    CHECK(r.frames == 300 && r.presents == 300 && r.shown == r.frames);
+    CHECK(r.drops == 0 && r.arms == 0 && r.resyncs == 0);
+    CHECK(r.lateMax < PERIOD / 4 && r.allow == PACE_ALLOW_NONE);
+}
+
 /* The timer path paced by the GPU under the same fake clock (Uncapped
    without vsync: back to back, gap 0; a game frame every two steps, a 3 ms
    step).  12, 9, 17, 20 and 25 ms a picture: no step ends a quarter of a
@@ -2228,6 +2268,7 @@ int main(void)
     testBudgetTimerLoop();
     testBudgetPaced();
     testBudgetPacedLoop();
+    testBudgetFifo120();
     testLateSkipLate();
     testLateSkipSlow();
     testLateSkipNeverTwice();
