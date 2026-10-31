@@ -5159,6 +5159,14 @@ static void checkEffectsDepth(void)
               off.scene == on.scene,
           "effects depth: the picture is the same with the pass on");
     CHECK(off.depthOk, "effects depth: none without the option");
+    /* ICO_VK_FAKE_NO_D32F_ATTACHMENT: the pass is forced and still not drawn
+     * (depthWanted is false), the picture the same; the keys are
+     * checkNoD32Keys's */
+    const char *noD32 = getenv("ICO_VK_FAKE_NO_D32F_ATTACHMENT");
+    if (noD32 && noD32[0] && noD32[0] != '0') {
+        CHECK(!on.depthOk, "effects depth: drawn although the device has no D32F attachment");
+        return;
+    }
     CHECK(on.depthOk, "effects depth: the output-size depth readback");
     CHECK(on.sw == 512 && on.sh == 512, "effects depth: SCENE's depth is %ux%u", on.sw, on.sh);
     if (!on.depthOk || on.sw != 512 || on.sh != 512) {
@@ -5226,6 +5234,33 @@ static void checkEffectsDepth(void)
                   f ? "BGRA8" : "RGBA8", m ? " (two-pass blend)" : "");
         }
     }
+}
+
+/* The effects depth's two start-up keys exist exactly where the device can
+ * draw to a D32F depth buffer (RhiLimits.depth32Attachment; false under
+ * ICO_VK_FAKE_NO_D32F_ATTACHMENT, which also gives the limit false). */
+static void checkNoD32Keys(void)
+{
+    const char *e = getenv("ICO_VK_FAKE_NO_D32F_ATTACHMENT");
+    const bool fake = e && e[0] && e[0] != '0';
+    RdSettings s = originalSettings();
+    if (!rd_init(512, 512, &s, NULL)) {
+        CHECK(0, "no D32F keys: rd_init");
+        return;
+    }
+    const bool can = rhi_limits()->depth32Attachment != 0;
+    CHECK(can == !fake, "no D32F keys: depth32Attachment %d under the fake %d", (int)can,
+          (int)fake);
+    for (int m = 0; m < 2; m++) {
+        for (int f = 0; f < 2; f++) {
+            const RdPipeKeyInt k =
+                rd__present_depth_key(f ? RHI_FMT_BGRA8_UNORM : RHI_FMT_RGBA8_UNORM);
+            CHECK(reachable(&k, m != 0) == can,
+                  "no D32F keys: the %s key is %sin the start-up set (depth32Attachment %d)",
+                  f ? "BGRA8" : "RGBA8", can ? "not " : "", (int)can);
+        }
+    }
+    rd_shutdown();
 }
 
 /* ------------------------------------------------------------------ main */
@@ -5497,6 +5532,7 @@ int main(int argc, char **argv)
     checkCapture(dir);
     checkPresentPasses(dir);
     checkEffectsDepth();
+    checkNoD32Keys();
     checkBlank();
     checkRingGrowth();
     checkRingShrink();

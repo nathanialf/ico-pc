@@ -761,6 +761,29 @@ static int syncCell(void)
     return failures + (int)rhi_vk_validation_error_count();
 }
 
+/* ICO_VK_FAKE_NO_D32F_ATTACHMENT (ctest rhi_vk_vk10_nod32f): the device is
+ * still picked and RhiLimits.depth32Attachment is false; without the
+ * variable lavapipe (D32F is an attachment there) reports true. */
+static int d32fCell(void)
+{
+    const char *e = getenv("ICO_VK_FAKE_NO_D32F_ATTACHMENT");
+    const bool fake = e && e[0] && e[0] != '0';
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test d32f"};
+    if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
+        rhi_test_log("FAIL d32f cell: init\n");
+        return 1;
+    }
+    int failures = 0;
+    if ((rhi_limits()->depth32Attachment != 0) == fake) {
+        rhi_test_log("FAIL d32f cell: depth32Attachment %d under the fake %d\n",
+                     (int)rhi_limits()->depth32Attachment, (int)fake);
+        failures++;
+    }
+    rhi_wait_idle();
+    rhi_shutdown();
+    return failures + (int)rhi_vk_validation_error_count();
+}
+
 int main(void)
 {
     const RhiTestConfig cfg = {"vulkan", "rhi_vk_test", true, NULL, rhi_vk_validation_error_count};
@@ -769,7 +792,7 @@ int main(void)
         return rc;
     }
     return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell() ||
-            poolCell() || syncCell())
+            poolCell() || syncCell() || d32fCell())
                ? 1
                : 0;
 }

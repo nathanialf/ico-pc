@@ -2183,6 +2183,23 @@ if(ICO_RUN_TESTS)
         get_test_property(${_t} LABELS _labels)
         set_tests_properties(${_t} PROPERTIES LABELS "${_labels};vk10")
     endforeach()
+    # the same with the D32F attachment bit hidden (ICO_VK_FAKE_NO_D32F_ATTACHMENT,
+    # an Adreno 505 on a 1.0.61 driver): the start-up set without the effects
+    # depth's two keys, the effects depth not drawn; the picture tests' own
+    # expectations
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vk10nod32f")
+    set(_vk10n "${CMAKE_CURRENT_BINARY_DIR}/vk10nod32f")
+    add_test(NAME rd_pixel_vk10_nod32f COMMAND rd_pixel_test "${_vk10n}")
+    add_test(NAME rd_present_vk10_nod32f COMMAND rd_present_test "${_vk10n}")
+    add_test(NAME rd_interp_vk10_nod32f COMMAND rd_interp_test)
+    set(_vk10n_tests rd_pixel_vk10_nod32f rd_present_vk10_nod32f rd_interp_vk10_nod32f)
+    set_tests_properties(${_vk10n_tests}
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_vk10n}"
+                                    ENVIRONMENT "${_env_vk10};ICO_VK_FAKE_NO_D32F_ATTACHMENT=1")
+    foreach(_t ${_vk10n_tests})
+        get_test_property(${_t} LABELS _labels)
+        set_tests_properties(${_t} PROPERTIES LABELS "${_labels};vk10")
+    endforeach()
 endif()
 # VK10 end
 

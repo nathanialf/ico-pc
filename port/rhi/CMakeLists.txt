@@ -537,6 +537,16 @@ if(_ico_have_vk)
                              "${_ico_vk_vk10_env}")
         get_test_property(rhi_vk_vk10 LABELS _ico_vk10_labels)
         set_tests_properties(rhi_vk_vk10 PROPERTIES LABELS "${_ico_vk10_labels};vk10")
+        # the 1.0 cells with the D32F attachment bit hidden
+        # (ICO_VK_FAKE_NO_D32F_ATTACHMENT, an Adreno 505 on a 1.0.61
+        # driver): the device is picked, RhiLimits.depth32Attachment is false
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vk10nod32f")
+        add_test(NAME rhi_vk_vk10_nod32f COMMAND rhi_vk_test
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vk10nod32f")
+        set_tests_properties(rhi_vk_vk10_nod32f PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_vk10_env};ICO_VK_FAKE_NO_D32F_ATTACHMENT=1")
+        get_test_property(rhi_vk_vk10_nod32f LABELS _ico_vk10_labels)
+        set_tests_properties(rhi_vk_vk10_nod32f PROPERTIES LABELS "${_ico_vk10_labels};vk10")
         # the same on a Vulkan 1.0 loader without
         # VK_KHR_get_physical_device_properties2 (ICO_VK_FAKE_API=1.0bare,
         # review finding 5): the instance goes on without it and the device
