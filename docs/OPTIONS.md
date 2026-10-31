@@ -275,16 +275,24 @@ Changes you make here show in photo mode at once.
 ## Graphics
 
 This page is in the Options menu, under Effects. It only shows when your copy of the game can
-draw in more than one way; if yours can only draw one way, there is nothing to pick and the page
-is not shown.
+draw in more than one way, or your computer has more than one graphics card the game can use; if
+there is nothing to pick, the page is not shown.
 
 - **Graphics API** picks what the game draws with: Automatic, Vulkan, OpenGL, Direct3D 12 or
   Direct3D 11, the ones your download has. Without Apply the choice is used from the next
   start. What each one is, what Automatic does and how to undo a choice that does not start:
-  [Choosing the renderer](#choosing-the-renderer).
-- **Apply** shows under it when the choice is not what the game draws with now. Automatic
-  counts as what it picked this time: Vulkan, or the one the game moved on to when Vulkan did
-  not start, so Apply is not offered for Automatic then. It switches at once, without leaving
+  [Choosing the renderer](#choosing-the-renderer). The row only shows when your download can
+  draw in more than one way.
+- **Graphics card** picks which graphics card draws the game: Automatic, or the name of one of
+  your cards. It only shows when the computer has two or more cards the game can use, as many
+  laptops do (a fast card and a power-saving one built into the processor). Automatic always
+  picks the same card: the fast one when there is one. Without Apply the choice is used from the
+  next start. More, and why the Windows graphics setting for each app does not change it:
+  [Choosing the graphics card](#choosing-the-graphics-card).
+- **Apply** shows under them when a choice is not what the game draws with now. Automatic
+  counts as what it picked this time: for Graphics API, Vulkan, or the one the game moved on to
+  when Vulkan did not start, and for Graphics card, the card Automatic picks; Apply is not
+  offered for Automatic then. It switches at once, without leaving
   the game or losing your place, and the window stays on the same screen. The picture stops for
   a moment, and longer the first time a choice is used while the graphics are prepared. The glow
   and the motion blur trail start again, as after the game comes back from the background.
@@ -295,8 +303,8 @@ is not shown.
   Keep the choice is not saved by anything else either: closing the game during the count keeps
   the old one for the next start, and if the graphics stop working during the count, the game
   does not start itself again on the new choice; your next start uses the old one.
-- If the choice does not start, the game goes back at once to what it drew with and a message
-  says so. The row goes back as it was, as with Revert, so the next start uses one that works;
+- If the choice does not start, the game goes back at once to what it drew with (the same
+  renderer on the same graphics card) and a message says so. The row goes back as it was, as with Revert, so the next start uses one that works;
   you can pick another one and try again.
 - In the rare case that neither the choice nor the one before it starts again, a message says
   so and the game closes without saving; the next start uses the one before.
@@ -779,6 +787,7 @@ Under `[video]`:
 | `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom` | Fine tuning of the CRT filter, each from `0.0` to `1.0`: how strong the dark lines are, how strong the fine pattern of dots or stripes is, how much glow surrounds bright spots and how much bright areas spread softly. A line that is missing, or a negative number, keeps the chosen style's own value. |
 | `crt_curvature` | How much the screen bulges, from `0.0` to `0.25`. Missing keeps the style's own value. |
 | `backend = ""` | The Graphics API row of the Graphics page: empty is Automatic, or `"vulkan"`, `"opengl"`, `"d3d12"` or `"d3d11"` where your download has it. Used from the next start. [Choosing the renderer](#choosing-the-renderer). |
+| `adapter = ""` | The Graphics card row of the Graphics page: empty is Automatic, or a graphics card's name exactly as the row shows it. Used from the next start. [Choosing the graphics card](#choosing-the-graphics-card). |
 | `gpu_driver = ""` | Android only. The Driver row of the Graphics driver page: empty is the phone's own driver. The game also writes a `gpu_driver_failed` line when a driver did not start. [About Android](ANDROID.md#using-a-different-graphics-driver). |
 | `show_fps = false` | The Frame rate counter row on the Display page. `true` shows the frames per second in the top-left corner of the screen. |
 | `downsample = "off"` | The Downsampling row on the Picture page: `"off"` or `"box"` (To original size). |
@@ -858,3 +867,28 @@ says whether you chose it or the game did. A switch with Apply adds a line
 choice does not start, pick Automatic in the row, or delete the `backend` line, to go back to
 Vulkan. If the name you wrote is not in your
 download, the game says so in the same file and uses Vulkan.
+
+## Choosing the graphics card
+
+Many laptops, and some desktop computers, have two graphics cards: a fast one, and a slower one
+built into the processor that saves power. The game picks one by itself and always the same one:
+the fast card when there is one. The first lines of `logs/ico-pc.log` name every card the game
+found and the one it uses (a line with `devices:`).
+
+To pick another card, use the **Graphics card** row on the [Graphics page](#graphics) of the
+Options menu. It shows Automatic or the name of the card you picked; Apply switches at once, or
+the choice is used from the next start. The row only shows when there are two or more cards the
+game can use.
+
+On Windows, the graphics setting for each app (Settings > System > Display > Graphics, or the
+NVIDIA and AMD control panels) does not change the card the game uses: the game chooses for
+itself, so the Graphics card row is the way to choose. A card that draws in software only (such
+as the Microsoft Basic Render Driver) is never offered; the game only uses it when nothing else
+works.
+
+In the file, the same choice is `adapter = "..."` under `[video]` in `config.toml`
+([where that file is](#settings-you-can-only-change-in-a-file)), with the card's name exactly as
+the row shows it, or `adapter=...` in `ico-pc.ini`. An empty name is Automatic. If the name is
+not one of your cards (after a new graphics card, or when the name belongs to another Graphics
+API), the game says so in the log and uses Automatic. With OpenGL the system picks the card, so
+the row is not shown while the game draws with OpenGL.

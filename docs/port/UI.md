@@ -11,6 +11,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | --- | --- |
 | `port/ui/layout_ext.h`, `layout_ext.c` | the layout extension: port layouts and rows past the game's tables, text, glyph and rectangle rows, the text hook, the back buttons, pointer roles |
 | `port/ui/settings.h`, `settings.c` | the Settings menu: the pages, the entry rows, the New Game and Quit screens, the values and their setters, the saves |
+| `port/ui/settings_graphics.h`, `settings_graphics.c` | Settings > Graphics: the Graphics API and Graphics card rows' values and steps, Apply and its countdown |
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
 | `port/ui/ui_hint.h`, `ui_hint.c` | a line of button prompts (glyphs and words) |
 | `port/ui/strings.h`, `strings.c`, `strings_{en,fr,de,it,es,ja,ko,zh}.c` | the UI strings, one table per language; the serial notes; the Japanese, Chinese and Korean line-break rules |
@@ -187,7 +188,7 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Display | Preset, Resolution, Aspect, Window mode, Vsync, Frame rate, Frame rate counter (`UI_OPT_SHOW_FPS`, `[video] show_fps`, Off or On), Video mode, Back |
 | Picture | Anti-aliasing, Downsampling (`UI_OPT_DOWNSAMPLE`, `[video] downsample`, Off or To original size), Full height, Filtering, Full pixel, Brightness (pause menu only), CRT filter, CRT strength, Texture pack, Model pack (title only), Back |
 | Effects | the six game effects (Glow between frames, `UI_OPT_EFFECT_GLOW_SMOOTH`, Original or Smooth right after Glow, `[video] effect_glow_mode`, greyed by `glowSmoothLocked` at Frame rate Original or with Glow off, its note `UI_STR_EFFECT_GLOW_SMOOTH_NOTE` swapped for `UI_STR_EFFECT_GLOW_SMOOTH_LOCKED` while greyed; Motion blur Off, Original or Smooth, `UI_OPT_EFFECT_MOTION_BLUR`, stepped round with `stepIndex` and its note `UI_STR_EFFECT_MOTION_BLUR_NOTE`) with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Cinematic bars last, Back |
-| Graphics | Graphics API (`UI_OPT_GRAPHICS_API`: Automatic, then each name `ui_settings_set_backend_names` was given as Vulkan, OpenGL, Direct3D 12 or Direct3D 11; the shown value and the step base are the config's `video.backend`, an unlinked value shows as written and steps from Automatic; a step writes `video.backend` ("" for Automatic) and sets `s_dirtyConfig`, so the file is written on leaving; the note `UI_STR_GRAPHICS_API_NOTE` says Apply switches now and the choice is otherwise used from the next start), Apply (`UI_OPT_GRAPHICS_APPLY`, shown while a `UiGraphicsHost` is set, two or more names, no switch under way and the row's value, Automatic counting as the host's `automatic()` (the backend Automatic started this run) or else `vulkan`, a linked name that is not the host's `running()`; note `UI_STR_GRAPHICS_APPLY_NOTE`), Keep and Revert (`UI_OPT_GRAPHICS_KEEP`, `UI_OPT_GRAPHICS_REVERT`, shown only in the countdown, which hides Graphics API and Back), Back (the link and the page only with two or more names) |
+| Graphics | Graphics API (`UI_OPT_GRAPHICS_API`, shown with two or more renderer names: Automatic, then each name `ui_settings_set_backend_names` was given as Vulkan, OpenGL, Direct3D 12 or Direct3D 11; the shown value and the step base are the config's `video.backend`, an unlinked value shows as written and steps from Automatic; a step writes `video.backend` ("" for Automatic) and sets `s_dirtyConfig`, so the file is written on leaving; the note `UI_STR_GRAPHICS_API_NOTE` says Apply switches now and the choice is otherwise used from the next start), Graphics card (`UI_OPT_GRAPHICS_ADAPTER`, shown with two or more card names: Automatic (`UI_STR_VAL_GRAPHICS_AUTOMATIC`), then each name `ui_settings_set_adapter_names` was given, untranslated and cut to the value box by `gpuFit`; the config's `video.adapter`, a name the list lacks shows as written and steps from Automatic; a step writes it ("" for Automatic) with the line `settings: Graphics card set to <name|automatic> (used from the next start)`; note `UI_STR_GRAPHICS_ADAPTER_NOTE`), Apply (`UI_OPT_GRAPHICS_APPLY`, shown while a `UiGraphicsHost` is set, no switch under way and either the Graphics API value, Automatic counting as the host's `automatic()` (the backend Automatic started this run) or else `vulkan`, is a linked name that is not the host's `running()`, or the Graphics card value, Automatic counting as the card the names marked automatic, is a listed card that is not the host's `runningAdapter()`; note `UI_STR_GRAPHICS_APPLY_NOTE`), Keep and Revert (`UI_OPT_GRAPHICS_KEEP`, `UI_OPT_GRAPHICS_REVERT`, shown only in the countdown, which hides Graphics API, Graphics card and Back), Back (the link and the page with two or more renderer names or two or more card names) |
 | Graphics driver | Driver, Add a driver, Add from the drivers folder (`UI_OPT_GPU_ADD_FILE`, stepped over `fileName(i)`, shown while `fileCount()` is above 0, Cross calls `installFileBegin`), Remove this driver, Back (Android) |
 | Developer | Developer mode, Dump textures, Dump models (the two dump rows only with Developer mode on), Back |
 | Audio | Volume, Music, Effects, Output, Device, Back |
@@ -367,7 +368,7 @@ what is pending and calls the quit handler: the [window build](ARCHITECTURE.md#t
 
 The menu knows nothing of the platform; the window host installs what the pages ask: the window
 mode query, the anti-aliasing list and block, the texture and model pack counts, the touch query,
-the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the renderer names (`ui_settings_set_backend_names`, filled from `rhi_backend_name` in `ico_window_open`, so port/ui never links the RHI), the Graphics page's Apply host (`UiGraphicsHost`, below), the Steam handler, the texture export host (`UiTextureExportHost`, below), the Save states host (`UiStatesHost`, below), the models
+the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the renderer names (`ui_settings_set_backend_names`, filled from `rhi_backend_name` in `ico_window_open`, so port/ui never links the RHI), the graphics card names (`ui_settings_set_adapter_names(names, n, current, automatic)`: the suitable entries of `rhi_adapter_list`, the card running and the one Automatic picks, copied; `port/platform/window_switch.c` (`installAdapters`) at the start and after every switch), the Graphics page's Apply host (`UiGraphicsHost`, below), the Steam handler, the texture export host (`UiTextureExportHost`, below), the Save states host (`UiStatesHost`, below), the models
 handler, the Characters host (the model viewer's panel) (`port/ui/settings.h`
 (`ui_settings_set_*`)). A page whose host is missing hides its row.
 
@@ -375,34 +376,42 @@ handler, the Characters host (the model viewer's panel) (`port/ui/settings.h`
 
 `UiGraphicsHost` (`port/ui/settings.h`) is set by `port/platform/window_switch.c`
 (`ico_window_switch_install`): `running()` names the backend running as the config names it,
-`switchBegin(name, why)` asks for a switch (`UI_GFX_WHY_APPLY`, `_REVERT`, `_TIMEOUT`) and answers
+`runningAdapter()` (may be NULL) the card it runs on, `switchBegin(name, adapter, why)` asks for a
+switch to name on the card adapter (`""` automatic; `UI_GFX_WHY_APPLY`, `_REVERT`, `_TIMEOUT`) and answers
 `UI_GFX_SWITCH_PENDING` (then `switchPoll()` is asked every frame and every vsync until it is not),
 `_DONE`, `_FAILED` (the name did not start, the backend that ran is back) or `_REFUSED`; `kept()` is
 Keep, which the window logs; `automatic()` (may be NULL) names the backend Automatic started this
-run (its fallback or a restart's), NULL for Vulkan or a start the player chose. The page's state is
-`s_gfx` (`port/ui/settings.c`): idle, applying, countdown, reverting.
+run (its fallback or a restart's), NULL for Vulkan or a start the player chose. The rows' values
+and the switch are `port/ui/settings_graphics.c` (`settings_graphics.h`, the `ui__gfx_*` calls
+`port/ui/settings.c` makes); the page's state is its `s_gfx`: idle, applying, countdown,
+reverting.
 
-- Cross on Apply records the backend running and asks for the row's (`gfxApply`); the row's value
-  moves to `s_gfx.trial` and `video.backend` holds the value the page found until Keep, so every
-  save in between (`ui_settings_save`, the close button's `ui_settings_save_on_quit`, any
-  `ico_config_save`) writes that; the row shows the trial while applying and in the countdown
-  (`backendValue`). While a switch is under way the page takes no input (`gfxProc`).
+- Cross on Apply records the backend and card running and asks for the rows' (`ui__gfx_apply`:
+  the Graphics API value's backend, or the one running when only the card differs, and the
+  Graphics card value as written, `""` for Automatic); the rows' values move to `s_gfx.trial` and
+  `s_gfx.trialAdapter` and `video.backend` and `video.adapter` hold the values the page found
+  until Keep, so every save in between (`ui_settings_save`, the close button's
+  `ui_settings_save_on_quit`, any `ico_config_save`) writes those; the rows show the trials while
+  applying and in the countdown (`backendValue`, `ui__gfx_adapter_value`). While a switch is
+  under way the page takes no input (`gfxProc`).
 - Done: the countdown, `UI_GFX_KEEP_SECONDS` (10) times the popups' vsync rate
   (`ui_popup_vsync_hz`), counted by `ui_settings_vsync` (`ui_host_vsync` calls it after
   `ui_popup_vsync`); the cursor goes to Revert (`gfxRefresh`), so a second Cross meant for Apply
   goes back. Keep and Revert share one note, `UI_STR_GRAPHICS_KEEP_ASK` with one `%d`, the
   seconds left rounded up, written each refresh (`gfxNote`, outside `setNote`'s cache).
-- Keep: the trial into `video.backend` and `s_dirtyConfig` (written on leaving), the host's
-  `kept()`.
-- Revert, Circle (`PAD_BACK`) or 0: `video.backend` back to the value the page found (`gfxEntry`:
-  taken at the first step or Apply after the page is entered), `switchBegin` with the backend that
-  ran.
+- Keep: the trials into `video.backend` and `video.adapter` and `s_dirtyConfig` (written on
+  leaving), the host's `kept()`.
+- Revert, Circle (`PAD_BACK`) or 0: `video.backend` and `video.adapter` back to the values the
+  page found (`gfxEntry`: taken at the first step or Apply after the page is entered),
+  `switchBegin` with the backend and the card that ran (the card by its name).
 - Failed: a popup, `UI_STR_GRAPHICS_FAILED` with two `%s` (the backend that did not start, the
-  one kept, by their proper names); after Apply `video.backend` keeps the value the page found, as
-  Revert puts it back, so the file names a backend that starts. Refused: nothing, the trial back
-  in `video.backend`.
+  one kept, by their proper names), or `UI_STR_GRAPHICS_ADAPTER_FAILED` (the card that did not
+  start, the one kept) when only the card changed; after Apply the two keys keep the values the
+  page found, as Revert puts them back, so the file names a renderer and card that start.
+  Refused: nothing, the trials back in the keys.
 
-ctest `settings_extra` (`testGraphicsApply`).
+ctest `settings_extra` (`testGraphicsApply`); `settings_adapter` (`settings_adapter_test.c`: the
+Graphics card row, its link, Apply, Keep, Revert and a card that did not start).
 
 ### Extras > Export textures
 
@@ -1227,7 +1236,10 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   menu, Credits, Models, Characters with a faked viewer, the pages that hide the logo.
 - `settings_extra` (`test/settings_extra_test.c`): further Settings tests, one function per
   feature, kept in their own file under the source size cap of `tools/check_no_rom.sh`; new
-  Settings tests go here (`port/ui/CMakeLists.txt`).
+  Settings tests go here (`port/ui/CMakeLists.txt`), or into a program of their own once it is
+  near the cap.
+- `settings_adapter` (`test/settings_adapter_test.c`): the Graphics card row and Apply on another
+  card over a fake host ([Graphics > Apply](#graphics--apply)).
 - `settings_render` (`test/settings_photo_test.c` with `SETTINGS_RENDER`): every screen through rd
   on a Vulkan device, written as PNGs, the words as sheet strips in the scene list, photo mode's
   panel in every language.

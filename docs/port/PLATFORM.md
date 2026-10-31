@@ -41,7 +41,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/assert_host.c` | newlib's `__assert` as the game calls it |
 | `port/platform/window_host.c`, `window_host.h` | the SDL3 window, the renderer device, the real-time pacing, the stats lines (window build) |
 | `port/platform/window_video.c`, `window_video.h` | window mode requests and their readback |
-| `port/platform/window_switch.c`, `window_switch.h` | Options > Graphics > Apply: the renderer switched to another backend in the process, the Graphics page's host |
+| `port/platform/window_switch.c`, `window_switch.h` | Options > Graphics > Apply: the renderer switched to another backend or graphics card in the process, the Graphics page's host and its card names |
 | `port/platform/window_lifecycle.c`, `window_lifecycle.h` | the steps run when a mobile system moves the app |
 | `port/platform/ico_thread.c`, `ico_thread.h` | one OS thread, mutex and condition wrapper (pthreads, Win32) for code that must not need SDL; the achievements file writer, the texture decode pool, the VFS's per-mount mutex and the disc reader thread ([DATA.md](DATA.md#the-disc-reader-thread)) use it (`ico_thread_test.c`) |
 | `port/platform/pump_watch.c`, `pump_watch.h` | the event pump's recent window messages and SDL events, the controllers that came and went (name, GUID, SDL driver), SDL's own log ring, and the names of the messages (pure C, tested everywhere) |
@@ -1729,9 +1729,10 @@ shows in the log as a size that changed with it.
 
 ## The renderer switched from the menu
 
-Options > Graphics > Apply switches the backend without ending the run ([UI.md](UI.md) has the
-page; the player's side is [OPTIONS.md](../OPTIONS.md#graphics)). The page asks through
-`UiGraphicsHost` (`port/platform/window_switch.c` (`hostBegin`)), which queues the name; the
+Options > Graphics > Apply switches the backend, or the graphics card it runs on, without ending
+the run ([UI.md](UI.md) has the page; the player's side is [OPTIONS.md](../OPTIONS.md#graphics)).
+The page asks through `UiGraphicsHost` (`port/platform/window_switch.c` (`hostBegin`)), which
+queues the name and the card (`""` automatic); the
 event pump runs it on the next pump, after `video_apply`, between two steps of the game and never
 inside a present (`ico_window_switch_pump`). A frame is always open at pump time: `dl_Swap` closes
 the tick's frame and its `dl_Clear` opens the next one at once (`ico2/seki/src/DisplayList.c`), and
@@ -1743,10 +1744,14 @@ discards it, `RdContext.discardOpen`), since its start went with the old rendere
 of the switch has no picture: the new window shows nothing until the tick after it presents. The
 watchdog is paused around the switch (`ico_diag_watchdog_pause`, as the device-lost box does): the
 device's start and a cold pipeline set can take longer than its later limit. The switch
-(`ico_window_switch_backend(name, trial)`; `trial` is Apply's, a switch back is not):
+(`ico_window_switch_backend(name, adapter, trial)`; `trial` is Apply's, a switch back is not):
 
-1. Refused, `-2`, nothing touched: a build with one renderer, a name it does not link, a movie
-   playing (`mpegPlay`), photo mode, the model viewer, the touch layout editor.
+1. Refused, `-2`, nothing touched: a build with one renderer (unless name is the backend running:
+   a switch of the card alone), a name it does not link, a movie playing (`mpegPlay`), photo mode,
+   the model viewer, the touch layout editor. Nothing either, `0`, when name runs already on the
+   card asked for (`adapterRunning`: `""` counts as the card `rhi_adapter_list` marks
+   `automatic`). Otherwise the card goes to the backend first, `rhi_set_adapter_wanted(adapter)`,
+   the value the start set from `[video] adapter` kept for step 4.
 2. The texture ids kept outside the renderer forgotten: the font pages (re-uploaded from their CPU
    atlases, `ui_font_forget_textures`) and the GS shim's placeholders (`gif_HostForgetTextures`).
 3. `ico_window_reopen` (window_host.c): the window's mode, size, place and display noted
@@ -1775,11 +1780,14 @@ device's start and a cold pipeline set can take longer than its later limit. The
    `window_size_recheck`. The time goes into `pausePendingNs`, a pause of the host as a
    swapchain rebuild's is.
 4. The new backend did not start (no window, or `rd_resume` failed): `ico_window_reopen` on the
-   backend that ran, `-1`. That failing too ends the run, `-3`: the pump returns 0 and
+   backend that ran with the card asked for before (`rhi_set_adapter_wanted` back to it), `-1`. That failing too ends the run, `-3`: the pump returns 0 and
    `main_host.c` shows a box naming both renderers (`ico_window_switch_end_text`), writes a
    report, logs the exit reason "no renderer started after Options > Graphics > Apply" and saves
    nothing (`ui_settings_save_on_quit` is not called).
-5. On success (or after the `-1` restore) `rd_resume_frame`.
+5. On success (or after the `-1` restore) `rd_resume_frame`, and the page's card names installed
+   again from the renderer now running (`installAdapters`: `rhi_adapter_list`'s suitable entries,
+   `rhi_adapter_name`, the `automatic` entry, into `ui_settings_set_adapter_names`;
+   `ico_window_switch_install` does the same at the start).
 
 The crash and loss steps (startup_retry.h) after a switch: `ico_window_open` hands its choice to
 `ico_window_switch_started` once the renderer is up (the player's, or Automatic's with its
@@ -1795,8 +1803,8 @@ the Apply renderer running again, on trial.
 The audio is not touched. The game's state is the CPU's: its textures are decoded again from its
 memory on the next cache miss, its meshes built again from the packets, and the glow and the
 motion blur trail start again as after a resume. Nothing is written by the window. The page keeps
-the choice outside the config from Apply until Keep (`s_gfx.trial`; the config holds the value
-the page found), so every save in between (the close button's `ui_settings_save_on_quit`, any
+the choice outside the config from Apply until Keep (`s_gfx.trial` and `s_gfx.trialAdapter`,
+`port/ui/settings_graphics.c`; the config holds the values the page found), so every save in between (the close button's `ui_settings_save_on_quit`, any
 `ico_config_save`) writes the value the page found; Keep puts the choice into the config, and a
 FAILED Apply leaves the value the page found there, as Revert does. Automatic on the row counts as
 the host's `automatic()` (the backend Automatic started this run), so a run that fell back from
@@ -1808,6 +1816,11 @@ Log lines (stderr, one per event):
 - `window: Graphics API <new> did not start (the lines above say why); back on <old>`
 - `window: Graphics API <old> restored (reverted|not kept in 10 s), <s> s`
 - `window: Graphics API <name> kept`
+- a switch of the card (the same lines, one per thing that changed: the Graphics API line alone
+  when only the backend changed): `window: Graphics card <new> applied from the menu (was <old>),
+  <s> s`, `window: Graphics card <name> restored (reverted|not kept in 10 s), <s> s`,
+  `window: Graphics card <name> kept`, and `window: Graphics card <name|automatic> did not start
+  (the lines above say why); back on <name|automatic>`
 - `window: Graphics API <name> not switched to: <reason>`
 - `window: Graphics API <old> did not start again either; the game ends`, then the exit reason
   `no renderer started after Options > Graphics > Apply`
@@ -1822,9 +1835,11 @@ Log lines (stderr, one per event):
   `window: <w>x<h> pixels, <backend> on <adapter>, present mode <mode>`
 - the page's own: `settings: Graphics API back to <value|automatic> (reverted|not kept in 10 s)`
   and, after a FAILED Apply, `settings: Graphics API back to <value|automatic> (<name> did not
-  start)`
+  start)`; for the card `settings: Graphics card back to <name|automatic> (...)` in the same two
+  forms
 
-Not verified: no switch has run anywhere (the game is not run in the container); the swap was
+Not verified: no switch has run anywhere (the game is not run in the container; a switch of the
+card alone has not run on a computer with two cards either); the swap was
 syntax-checked only, and `rd_suspend`/`rd_resume`/`rd_resume_frame` are tested on lavapipe
 (`rd_msaa_test`). Open points for the first runs: the window's place on a desktop that
 places new windows itself (Wayland ignores window positions), the exclusive fullscreen

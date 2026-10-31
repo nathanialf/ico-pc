@@ -278,6 +278,16 @@ records each change you make to them. If it is slow only at one place or
 after one change, say where or which, and send one run that is slow and, if
 you can, one at Resolution 1x for comparison.
 
+## The game runs on the slower graphics card of a laptop
+
+Many laptops have two graphics cards: a fast one and a power-saving one built into the processor.
+The game picks the fast one by itself. If it uses the slower one anyway, or you want the other
+one, open Options > Graphics and pick it in the **Graphics card** row, then Apply and Keep. The
+graphics setting for each app in Windows (Settings > System > Display > Graphics) and the NVIDIA
+or AMD control panel do not change the card the game uses; the row does. The line with
+`devices:` near the top of `logs/ico-pc.log` names every card the game found and the one it
+picked ([Choosing the graphics card](OPTIONS.md#choosing-the-graphics-card)).
+
 ## The game stutters on Windows and the log says the video memory is near its budget
 
 On Windows, the lines that start with `window: memory:` in the log end with the video memory the

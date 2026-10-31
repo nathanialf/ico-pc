@@ -21,7 +21,7 @@ files are written, and how libscf's system configuration is answered from them.
 | `port/game/achievements.h` | `[game] achievements` and `achievements.toml` |
 | `port/render/texpack.h` | what the texture pack keys of `[video]` control |
 | `port/platform/main_host.c` | the start-up keys of `ico-pc.ini` and the command line |
-| `port/platform/window_host.c` | `[video] backend`, `[dev] perf_log` and `slow_step_ms` |
+| `port/platform/window_host.c` | `[video] backend`, `[video] adapter`, `[dev] perf_log` and `slow_step_ms` |
 | `port/game/credits.c` | `[dev] unlock_credits` |
 | `port/platform/android/android_paths.h` | the Android build's file layout |
 | `tools/package_docs_lib.sh` | `pkg_write_ini`: the `ico-pc.ini` the packages ship |
@@ -45,6 +45,7 @@ the ini has it non-empty, else `config.toml`'s, else the caller's default (`port
 | `[paths] iso`, `saves`, `saves2`, `keep_image` | `iso`, `saves`, `saves2`, `keep_image` |
 | `[audio] enabled` | `audio` |
 | `[video] backend` | `backend` |
+| `[video] adapter` | `adapter` |
 | `[dev] ticks`, `watchdog`, `watchdog_pump`, `trace`, `dump_every`, `dump_dir`, `dump_interp`, `dump_from`, `audio_dump`, `audio_sync`, `pad_script`, `input_record`, `verify`, `headless`, `fixed_clock`, `use_iso`, `write_config`, `start_stage`, `switch_to`, `switch_at`, `unlock_credits`, `popup_test`, `state_save_at`, `state_load_at`, `state_hash_at`, `state_dump_at` | the same names |
 
 The start-up code reads the ini the other way round: `ico_ini_load` loads the ini and fills its
@@ -167,6 +168,7 @@ display option, the [preset](ARCHITECTURE.md#terms) rule and the pacing belong t
 | `effects_depth` | bool | `true` | file only; the scene's depth for an effects program such as ReShade |
 | `video_mode` | string | absent: 60 Hz | `pal50` or `60hz`, the boot screen's choice (`port/config/sysconf.c`); ignored on every disc but the European one, which have no 50 Hz mode (`ico_boot_video_mode` returns 60 Hz and logs it once) |
 | `backend` | string | `"vulkan"` | `vulkan` or `d3d12`, the window build's renderer; when the key is empty, a run restarted after a graphics driver crash takes the backend its retry step names (`port/platform/window_host.c` (`ico_window_open`); `port/platform/startup_retry.h`) |
+| `adapter` | string | `""` | the graphics card by its name exactly as the backend lists it, `""` automatic; read at the start before `rd_init` (`port/platform/window_host.c` (`ico_window_open`), `rhi_set_adapter_wanted`) and written by Options > Graphics > Graphics card; the backend's own variable (`ICO_VK_DEVICE`, `ICO_D3D12_ADAPTER`, `ICO_D3D11_ADAPTER`) wins over it, a name no runnable device has is the automatic pick with a `rhi_vk:` (`rhi_d3d12:`, `rhi_d3d11:`) line, OpenGL does not read it ([RHI.md](RHI.md#choosing-the-device)); the ini's `adapter=` too |
 | `gpu_driver` | string | `""` | Android: the folder of an added graphics driver, used from the next start |
 | `gpu_driver_failed` | string | `""` | Android: the driver that did not start last time, written by the game |
 

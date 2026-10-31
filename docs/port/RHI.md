@@ -17,6 +17,7 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/rhi_backend_names.h` | the renaming of every entry point to `rhi_<prefix>_*` inside a backend |
 | `port/rhi/rhi_backend.c` | the real `rhi_*` functions, forwarding to the selected table; the layer classifiers |
 | `port/rhi/rhi_driver_version.h`, `rhi_driver_version.c` | a Vulkan `driverVersion` decoded the way its vendor writes it, for the adapter log line |
+| `port/rhi/rhi_adapter.h`, `rhi_adapter.c` | the `[video] adapter` name match and the device-list line's text, linked by the Vulkan and Direct3D backends |
 | `port/rhi/CMakeLists.txt` | the libraries, SDL3's prefix per target, the tests |
 | `port/rhi/vk/rhi_vk.h` | Vulkan extras for tests and tools only |
 | `port/rhi/vk/vk_device.c` | instance, device pick, features, limits, validation, the `ICO_VK_*` switches, handle pools |
@@ -465,6 +466,37 @@ rather than a blob, and `d3d11_shader_compile` (`port/rhi/d3d11/d3d11_shader.c`)
 DXBC with `d3dcompiler_47.dll`, cached on disk per shader. The route, the cache file, its key and
 its log lines are in [SHADERS.md](SHADERS.md#direct3d-11-run-time-compile).
 
+### Choosing the device
+
+`rhi_adapter_list(out, max)` (a table entry) copies the devices the backend's last `rhi_init`
+looked at, at most `RHI_MAX_ADAPTERS` (8), each a `RhiAdapterInfo`: the name, `suitable`
+(hardware that can run the renderer; a software renderer, lavapipe's CPU device or WARP, is
+listed unsuitable), `current`, `automatic` (the one the automatic rule picks), Vulkan's score (0 on
+Direct3D, -1 for a device that cannot run) and the reason it is unsuitable. The device taken is,
+in order (`port/rhi/rhi.h` (`rhi_set_adapter_wanted`)):
+
+1. the backend's variable when set: `ICO_VK_DEVICE`, `ICO_D3D12_ADAPTER`, `ICO_D3D11_ADAPTER`
+   (an index or a part of the name, or `warp` on Direct3D);
+2. `[video] adapter`, the name the player picked, matched byte for byte among the runnable
+   devices, the first of equal names (`rhi_adapter_match`); the dispatcher keeps it across
+   `rhi_create_backend` (`rhi_set_adapter_wanted`, `rhi_adapter_wanted`, `port/rhi/rhi_backend.c`)
+   and hands it to the selected backend at each `rhi_init` (the table's `set_adapter_wanted`);
+   the window sets it from the config before `rd_init` and before each in-process switch
+   (`ico_window_open`; `port/platform/window_switch.c` (`ico_window_switch_backend`)); a name no
+   runnable device has logs `rhi_vk: [video] adapter "<name>" is not among the devices; automatic
+   pick` (`rhi_d3d12:`, `rhi_d3d11:` the same) and takes step 3;
+3. automatic: Vulkan's highest score ([Vulkan](#vulkan)), Direct3D's first suitable adapter in the
+   high-performance order, else WARP.
+
+One line lists them all and says which was taken and why (`rhi_adapter_list_text`):
+`rhi_vk: devices: 0 <name> (suitable, score 1065) 1 <name> (unsuitable: a software renderer; score
+165); picked 0 (automatic|[video] adapter "<name>"|ICO_VK_DEVICE=<v>)`; on Direct3D the same
+without scores, `picked WARP (...)` for the software device. OpenGL lists the one `GL_RENDERER`
+names and ignores the name (the system's driver picks the device). Windows' per-app graphics
+preference does not reach the pick: Vulkan's score reads the device type and Direct3D asks for
+`DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE`, so Automatic is the same on every start and the Options
+row ([OPTIONS.md](../OPTIONS.md#choosing-the-graphics-card)) is how a player picks another card.
+
 ## Vulkan
 
 **Device** (`port/rhi/vk/vk_device.c`). The loader may be Vulkan 1.0 (issue 158: Android 8's loader
@@ -529,7 +561,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | variable | effect |
 | --- | --- |
 | `ICO_VK_VALIDATION` | 1 adds `VK_LAYER_KHRONOS_validation` and debug utils; 0 keeps them off |
-| `ICO_VK_DEVICE` | an index or a substring of the device name forces the pick |
+| `ICO_VK_DEVICE` | an index or a substring of the device name forces the pick (it wins over `[video] adapter`, [Choosing the device](#choosing-the-device)) |
 | `ICO_VK_FAKE_LIMITS` | `mali` clamps the limits to a Mali-G68's (4 descriptor sets, 128 bytes of push constants, 16 sampled images a stage, 4096 allocations, ...); `min` holds the alignment, texture, render target, dynamic uniform, storage range and anisotropy limits to 256, 4096, 4096, 8, 2^27 and 16 |
 | `ICO_VK_FAKE_LIMITS=moltenvk` | no limit clamped: the device is reported as MoltenVK (`RhiLimits.moltenvk`) without the attachment read (`rd_blend_selftest_moltenvk_storage`) |
 | `ICO_VK_FAKE_D24S8` | 1 takes D24S8 where the device has it |
@@ -684,14 +716,15 @@ system directory (ReShade's `dxgi.dll` beside the program) makes `rhi_injector_n
 Adapters are enumerated discrete first (`EnumAdapterByGpuPreference`); a software adapter or one
 without feature level 11_0 is skipped; with none the device runs on WARP (`dx_pick_adapter`). Each
 enumerated adapter logs `rhi_d3d12: adapter N: <name>`, followed by
-`(unsuitable: a software adapter, or no feature level 11_0)` for one it skips, and the device line
+`(unsuitable: a software adapter, or no feature level 11_0)` for one it skips, then the devices
+line ([Choosing the device](#choosing-the-device)), and the device line
 is `rhi_d3d12: <adapter> (D3D12, feature level 11_0[, WARP][; driver version a.b.c.d])[, headless]`,
 the user-mode driver's version in four 16-bit parts (`dx_driver_text`, `rhi_init`).
 
 | variable | effect |
 | --- | --- |
 | `ICO_D3D12_DEBUG` | 1 the debug layer and the DXGI debug factory; 0 off |
-| `ICO_D3D12_ADAPTER` | `warp`, an adapter index or a substring of its name |
+| `ICO_D3D12_ADAPTER` | `warp`, an adapter index or a substring of its name (it wins over `[video] adapter`) |
 | `ICO_DX_FAKE_NO_DST` | 1 reports no destination read (no ROVs) |
 | `ICO_DX_FAKE_NO_TIMESTAMPS` | 1 turns GPU timestamps off (`rhi_timestamps_supported` false) |
 | `ICO_D3D12_FRAME_LATENCY` | the swapchain's frame latency (below) |
@@ -793,7 +826,7 @@ buffers** below)
 | variable | effect |
 | --- | --- |
 | `ICO_D3D11_DEBUG` | 1 the debug layer (`D3D11_CREATE_DEVICE_DEBUG`, its info queue drained into the log as `rhi_d3d11 debug <severity> (id N): <text>`) and the DXGI debug factory; 0 off |
-| `ICO_D3D11_ADAPTER` | `warp`, an adapter index or a substring of its name |
+| `ICO_D3D11_ADAPTER` | `warp`, an adapter index or a substring of its name (it wins over `[video] adapter`) |
 | `ICO_DX_FAKE_NO_TIMESTAMPS` | 1 turns GPU timestamps off, as on D3D12 |
 | `ICO_D3D11_FAKE_NO_PARTIAL_CB` | 1 takes the path of a device without partial constant buffer updates (the upload buffers' constant buffers mapped) on any device; logs `rhi_d3d11: partial constant buffer updates: off (ICO_D3D11_FAKE_NO_PARTIAL_CB)` (`rhi_d3d11_test`'s section 1b) |
 | `ICO_D3D11_FRAME_LATENCY` | the swapchain's frame latency, as `ICO_D3D12_FRAME_LATENCY` |
@@ -1462,6 +1495,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |
 | `rhi_vk_enum_test.c` | every `rhi.h` enumeration has a Vulkan mapping; the layer classifiers and `rhi_layer_switched_on`; ctest `rhi_vk_enum` |
 | `rhi_driver_version_test.c` | the driver version text of each vendor's encoding; ctest `rhi_driver_version` |
+| `rhi_adapter_match_test.c` | the `[video] adapter` name match and the device-list text; ctest `rhi_adapter_match` |
 | `rhi_d3d12_plan_test.c` | `d3d12_plan.c` on every host; with the shader table, every vertex shader's DXIL inputs against its SPIR-V locations and every DXIL blob signed; ctest `rhi_d3d12_plan` |
 | `rhi_d3d11_shader_plan_test.c` | `d3d11_shader.c`'s portable part on every host: the macros text, the include lookup, the flat-register rule over the game's sources and `rhi_test_hlsl.h` (checked against `rhi_test.hlsl`), the cache key over every table entry, the cache file's round trip and the corrupt files it refuses, the failure log's limit; ctest `rhi_d3d11_shader_plan` |
 | `rhi_gl_test.c` | the common cells on OpenGL with the driver's debug output failing the run, the copies the cells do not make (a colour region into a vertex-read device buffer and on into a readback buffer, a D32F_S8 depth as floats, RGBA32_UINT words, each at a wider row pitch; a target made after one whose framebuffer was dropped), and six swapchain frames on SDL's offscreen driver with a resize; ctest `rhi_gl`, and `rhi_gl_nodual` under `ICO_GL_FAKE_NO_DUAL=1`, both on llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `SDL_VIDEO_DRIVER=offscreen`), skipped without a context |
