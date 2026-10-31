@@ -232,6 +232,19 @@ target_compile_options(rd_state_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 target_include_directories(rd_state_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 target_link_libraries(rd_state_test PRIVATE ico_render)
 
+# rd_sheet_bake_test: the 1x sheet texels baked on the CPU (rd_tex.c
+# rd__sheet_bake_rect) against font_sheet_ps's CPU reference (ico_sheet_ref)
+# at every texel of the page and its apron: every glyph of the fonts' Latin,
+# punctuation and symbol ranges and the font corpus's lines rasterised at 1x
+# (font.c ui__sheet_raster_line; port/ui adds ico_ui_font_rd's objects and
+# port/ui's headers) on pages packed with menu_font.c's gaps, the light inks'
+# levels, the faint rim and the plain style with the dither on and off, the
+# grown rectangle of a change, ink on the page's edges (CPU only)
+add_executable(rd_sheet_bake_test test/rd_sheet_bake_test.c)
+target_include_directories(rd_sheet_bake_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
+target_compile_options(rd_sheet_bake_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(rd_sheet_bake_test PRIVATE ico_render ico_sheet_ref)
+
 # rd_pixel_test: GS sprite rasterisation, reduction against a CPU reference,
 # blend_int feedback over 100 frames, dump -> load -> replay, pipeline count
 # (Vulkan; exit 77 without a device). rd_replay_tool renders its dump to a PNG
@@ -796,7 +809,8 @@ target_include_directories(rd_stream_audit_test PRIVATE ../platform
 target_link_libraries(rd_stream_audit_test PRIVATE ico_render ico_vu1_ref ico_miniz ico_host_fs)
 
 # Windows: SDL3.dll beside the programs
-ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_tool rd_state_test rd_pixel_test
+ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_tool rd_state_test
+                  rd_sheet_bake_test rd_pixel_test
                   rd_layout_test rd_tex_test rd_tex_pool_test rd_gsbase_test rd_mesh_test modelpack_test
                   rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blend_selftest_test
                   rd_vuprepass_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
@@ -808,6 +822,9 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
 
 if(ICO_RUN_TESTS)
     add_test(NAME rd_state COMMAND rd_state_test "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME rd_sheet_bake
+             COMMAND rd_sheet_bake_test "${CMAKE_SOURCE_DIR}/port/ui/test/font_corpus")
+    set_tests_properties(rd_sheet_bake PROPERTIES TIMEOUT 900)
     add_test(NAME rd_pixel COMMAND rd_pixel_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME rd_native COMMAND rd_native_test)
     set_tests_properties(rd_native PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1500)

@@ -457,14 +457,15 @@ endif()
 # font.c and the embedded font alone, with ICO_RD: rd_present_test's overlay
 # check (port/render/CMakeLists.txt) draws a glyph through its
 # overlay mode; rd_replay_tool's overlay test draws text through it;
-# font_edge_test (below) draws both
+# rd_sheet_bake_test rasterises its strips with it; font_edge_test (below)
+# draws both
 add_library(ico_ui_font_rd OBJECT font.c ${_ui_font_srcs})
 target_include_directories(ico_ui_font_rd PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            PRIVATE "${CMAKE_SOURCE_DIR}/port/third_party/stb")
 target_compile_definitions(ico_ui_font_rd PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(ico_ui_font_rd PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_ui_font_rd PUBLIC ico_render)
-foreach(_t rd_present_test rd_replay_tool)
+foreach(_t rd_present_test rd_replay_tool rd_sheet_bake_test)
     if(TARGET ${_t})
         target_sources(${_t} PRIVATE $<TARGET_OBJECTS:ico_ui_font_rd>)
         target_include_directories(${_t} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
