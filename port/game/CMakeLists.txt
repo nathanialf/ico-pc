@@ -105,6 +105,33 @@ if(ICO_RUN_TESTS)
     endforeach()
 endif()
 
+# The shadows' eye trails rebuilt from their world points
+# (port/game/eye_trail.c) against the strip the game's own UpdatePointBlur
+# writes (ico2/sugipon/src/enemyParts.c, compiled into the test whole, what
+# it names from the rest of the game stubbed in the test), on each disc
+# (the trail's reset rule differs by disc): the same matrices give the
+# game's strip byte for byte, a moved camera a direct recomputation, and
+# DispEnemyEye draws the rebuilt strip only while photo mode's camera has
+# moved.  CPU only.
+add_executable(eye_trail_test test/eye_trail_test.c eye_trail.c
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/enemyParts.c")
+ico_include_dirs(sugipon _ico_eye_trail_incs)
+target_include_directories(eye_trail_test PRIVATE ${_ico_eye_trail_incs}
+    "${CMAKE_SOURCE_DIR}/port/include" "${CMAKE_CURRENT_SOURCE_DIR}")
+if(NOT ICO_HEADLESS)
+    target_include_directories(eye_trail_test PRIVATE "${CMAKE_SOURCE_DIR}/port/render")
+endif()
+target_compile_definitions(eye_trail_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(eye_trail_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(eye_trail_test PRIVATE ico_region ico_math)
+if(ICO_RUN_TESTS)
+    add_test(NAME eye_trail COMMAND eye_trail_test pal)
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        add_test(NAME eye_trail_${_slug} COMMAND eye_trail_test ${_slug})
+    endforeach()
+endif()
+
 # Where each disc's ACTGetEnvironment reads the two-bit wall-reach field of a
 # motion record (ico2/fumi/src/act-env.c, a text scan + synthetic words): the
 # host holds it at bits 24-25 on every disc (config/motion_bits.*.txt), so

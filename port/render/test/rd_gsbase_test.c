@@ -36,7 +36,8 @@
  *            frame 688 wide, latched at a flip) the photo camera's +0x240 is
  *            the native one, the frame's camera carries the aspect 16:9, and
  *            leave puts the 16:9 matrices back; a stage change or the game
- *            running again drops the save
+ *            running again drops the save; ico_photo_view_moved 0 at enter,
+ *            1 once zoomed, 0 after leave
  *   veil     photo mode's Deja vu (photo_view.c ico_photo_view_veil, from
  *            gsb_PostEffect): with photo mode open on Deja vu in a stage
  *            other than 40, one reg_DispObj a frame of the stage's
@@ -1131,6 +1132,7 @@ static void checkPhotoView(void)
     ico_photo_view_tick();
     snap(&p);
     CHECK(ico_photo_view_saved(), "photo: entered");
+    CHECK(!ico_photo_view_moved(), "photo: enter, the camera not moved");
     CHECK(slotDiff(&p, &g) == -1, "photo: enter leaves matrixptr+0x%X as it was", slotDiff(&p, &g));
     CHECK(camSame(&p, &g), "photo: enter, the frame's camera is the game's");
     /* the photo camera not moved yet: the game's camera rule (no
@@ -1154,6 +1156,7 @@ static void checkPhotoView(void)
     /* e^0.7 at [photo] stick_speed 1; whatever the config, zoomed in */
     CHECK(k > 1.5f && k < 5.4f, "photo: zoom %.4f", (double)k);
     CHECK(ico_photo_view_saved(), "photo: still saved while zooming");
+    CHECK(ico_photo_view_moved(), "photo: zoomed, the camera moved");
     CHECK(fabsf(ico_photo_fov_now() - ico_photo_fov_deg(&z.cam)) < 1e-3f,
           "photo: ico_photo_fov_now %.4f, the frame's %.4f", (double)ico_photo_fov_now(),
           (double)ico_photo_fov_deg(&z.cam));
@@ -1204,6 +1207,7 @@ static void checkPhotoView(void)
     ico_photo_view_tick();
     snap(&x);
     CHECK(!ico_photo_view_saved(), "photo: left");
+    CHECK(!ico_photo_view_moved(), "photo: left, the camera not moved");
     CHECK(slotDiff(&x, &g) == -1, "photo: leave puts matrixptr+0x%X back", slotDiff(&x, &g));
     CHECK(camSame(&x, &g), "photo: leave, the frame's camera the game's again");
     CHECK(x.focus == g.focus, "photo: leave, currentFocusDistance");
