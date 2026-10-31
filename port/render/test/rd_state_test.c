@@ -2711,7 +2711,7 @@ static void testVuSetPolicy(void)
 {
     static const char kTurnipWhy[] =
         "(Turnip driver: the extended set's clipped triangles showed a stray vertex there, issue "
-        "163; [dev] ICO_RD_VU_EXTENDED=1 asks for the extended one)";
+        "163; ICO_RD_VU_EXTENDED=1 asks for the extended one)";
     RdVuSetChoice c;
     /* the stock Adreno 740: vk_device.c kVuPlainOnly's row */
     RhiLimits lim = vuSetLimits(0x5143u,

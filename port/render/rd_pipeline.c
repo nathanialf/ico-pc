@@ -2864,7 +2864,7 @@ void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, co
          * test and the tick cameras' re-test on the fallback's draws. */
         snprintf(out->why, sizeof(out->why),
                  "(Turnip driver: the extended set's clipped triangles showed a stray vertex "
-                 "there, issue 163; [dev] ICO_RD_VU_EXTENDED=1 asks for the extended one)");
+                 "there, issue 163; ICO_RD_VU_EXTENDED=1 asks for the extended one)");
         out->kind = "plain set";
         out->brief = "Turnip driver, issue 163";
     } else if (envPlain) {
