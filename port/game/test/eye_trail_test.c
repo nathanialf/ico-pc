@@ -196,7 +196,7 @@ static void tickAt(EnemyEye *eye, int k)
 
 /* UpdatePointBlur's pair for the point at tick k joined to the point at
    tick j, written out from its source with the matrices in +0x80/+0xC0 */
-static void expectPair(int k, int j, float rate, int out[8])
+static void expectPair(int k, int j, float rate, int *out)
 {
     float a[4] __attribute__((aligned(16)));
     float b[4] __attribute__((aligned(16)));
@@ -305,7 +305,7 @@ int main(int argc, char **argv)
     _GetCurrentMatrix(cur1);
     for (int i = 0; i < POINTS; i++) {
         const int k = TICKS - i;
-        expectPair(k, k - 1, rateAt(k), want[i * 2]);
+        expectPair(k, k - 1, rateAt(k), &want[i * 2][0]);
     }
     bad = -1;
     for (int i = POINTS - 1; i >= 0; i--) {
@@ -344,7 +344,7 @@ int main(int argc, char **argv)
           "%s: reset, the rebuild with the game's matrices is not the game's strip", slug);
     setCamera(1);
     draw(eye, 1);
-    expectPair(TICKS + 1, TICKS - 1, rateAt(TICKS + 1), want[0]);
+    expectPair(TICKS + 1, TICKS - 1, rateAt(TICKS + 1), &want[0][0]);
     bad = -1;
     for (int i = 0; i < POINTS; i++) {
         if (memcmp(s_drawn[i * 2], want[0], 32) != 0) {
@@ -364,7 +364,7 @@ int main(int argc, char **argv)
           "%s: every tick reset, the rebuild is not the game's strip", slug);
     setCamera(1);
     draw(eye, 1);
-    expectPair(TICKS + 4, TICKS + 3, rateAt(TICKS + 4), want[0]);
+    expectPair(TICKS + 4, TICKS + 3, rateAt(TICKS + 4), &want[0][0]);
     CHECK(memcmp(s_drawn[0], want[0], 32) == 0 &&
               memcmp(s_drawn[(POINTS - 1) * 2], want[0], 32) == 0,
           "%s: every tick reset, moved camera, not the recomputation", slug);
