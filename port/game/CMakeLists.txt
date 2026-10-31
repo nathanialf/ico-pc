@@ -114,7 +114,8 @@ endif()
 # DispEnemyEye draws the rebuilt strip only while photo mode's camera has
 # moved.  CPU only.
 add_executable(eye_trail_test test/eye_trail_test.c eye_trail.c
-    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/enemyParts.c")
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/enemyParts.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/tableSin.c")
 ico_include_dirs(sugipon _ico_eye_trail_incs)
 target_include_directories(eye_trail_test PRIVATE ${_ico_eye_trail_incs}
     "${CMAKE_SOURCE_DIR}/port/include" "${CMAKE_CURRENT_SOURCE_DIR}")
