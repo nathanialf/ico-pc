@@ -411,9 +411,11 @@ static void test_two_threads(IcoVfs *vfs)
             bad++;
         }
     }
-    ico_thread_join(t);
+    if (t != NULL) {
+        ico_thread_join(t);
+        CHECK(r.bad == 0);
+    }
     CHECK(bad == 0);
-    CHECK(r.bad == 0);
 }
 
 /* ico_vfs_reopen: a second mount of the same image answers every look-up
