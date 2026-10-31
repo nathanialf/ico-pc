@@ -3,6 +3,10 @@
  *
  * The backend-independent half of the VFS (vfs.h): path normalization,
  * byte reads over sector reads, and the disc slot the libcdvd layer uses.
+ * A mount's backend calls (its lookups and its sector reads, which share
+ * the one FILE* of the image or archive) run under the mount's mutex, so
+ * the disc reader thread (cdvd_host.c) and the game thread may read the
+ * same mount at once.
  */
 #include "vfs.h"
 
@@ -11,10 +15,12 @@
 #include <string.h>
 
 #include "archive.h" /* the disc rows: game_dir, df_path */
+#include "ico_thread.h"
 
 struct IcoVfs {
     const IcoVfsBackend *backend;
     void *state;
+    IcoMutex *lock;   /* around every backend lookup and read_sectors */
     char *location;   /* what it was mounted from, for ico_vfs_reopen */
     char gameDir[32]; /* ico_vfs_game_dir */
     char dfPath[64];  /* ico_vfs_df_path */
@@ -83,10 +89,16 @@ IcoVfs *ico_vfs_mount(const IcoVfsBackend *backend, const char *location)
     vfs = calloc(1, sizeof(*vfs));
     if (vfs != NULL) {
         vfs->location = malloc(strlen(location) + 1);
+        vfs->lock = ico_mutex_create();
     }
-    if (vfs == NULL || vfs->location == NULL) {
+    if (vfs == NULL || vfs->location == NULL || vfs->lock == NULL) {
+        if (vfs != NULL) {
+            free(vfs->location);
+            ico_mutex_destroy(vfs->lock);
+        }
         free(vfs);
         backend->unmount(state);
+        fprintf(stderr, "vfs: %s: cannot mount %s (out of memory)\n", backend->name, location);
         return NULL;
     }
     memcpy(vfs->location, location, strlen(location) + 1);
@@ -136,6 +148,7 @@ void ico_vfs_unmount(IcoVfs *vfs)
         discVfs = NULL;
     }
     vfs->backend->unmount(vfs->state);
+    ico_mutex_destroy(vfs->lock);
     free(vfs->location);
     free(vfs);
 }
@@ -230,10 +243,16 @@ int ico_vfs_stat(IcoVfs *vfs, const char *path, IcoVfsEntry *out)
     char norm[ICO_VFS_PATH_MAX];
     IcoVfsEntry e;
 
+    int rc;
+
     if (vfs == NULL || ico_vfs_normalize(path, norm, sizeof(norm)) != 0) {
         return -1;
     }
-    if (vfs->backend->lookup(vfs->state, norm, &e) != 0) {
+    /* the ISO backend reads directory sectors through the shared FILE* */
+    ico_mutex_lock(vfs->lock);
+    rc = vfs->backend->lookup(vfs->state, norm, &e);
+    ico_mutex_unlock(vfs->lock);
+    if (rc != 0) {
         return -1;
     }
     if (out != NULL) {
@@ -309,10 +328,15 @@ int ico_vfs_read_sectors(IcoVfs *vfs, uint32_t lsn, uint32_t count, void *dst)
     if (vfs == NULL) {
         return -1;
     }
+    int rc;
+
     if (count == 0) {
         return 0;
     }
-    return vfs->backend->read_sectors(vfs->state, lsn, count, dst);
+    ico_mutex_lock(vfs->lock);
+    rc = vfs->backend->read_sectors(vfs->state, lsn, count, dst);
+    ico_mutex_unlock(vfs->lock);
+    return rc;
 }
 
 uint32_t ico_vfs_volume_sectors(IcoVfs *vfs)

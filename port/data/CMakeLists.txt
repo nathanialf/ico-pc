@@ -98,6 +98,10 @@ target_compile_options(ico_port_data PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 # vsync themselves define ico_host_on_vsync_register and pull nothing from it.
 target_link_libraries(ico_port_data INTERFACE ico_platform)
 target_link_libraries(ico_port_data INTERFACE ico_miniz)
+# vfs.c's per-mount mutex and cdvd_host.c's disc reader thread
+# (port/platform/ico_thread.h); cdvd_host.c's start line names the game
+# data's drive (port/platform/host_fs.h ico_host_drive_kind)
+target_link_libraries(ico_port_data PRIVATE ico_thread ico_host_fs)
 target_link_libraries(ico_port_data PRIVATE ico_libchdr)
 target_link_libraries(ico_port_data PUBLIC ico_json)
 target_include_directories(ico_port_data PRIVATE "${CMAKE_SOURCE_DIR}/port/third_party/miniz")

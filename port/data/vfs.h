@@ -117,10 +117,13 @@ void ico_vfs_unmount(IcoVfs *vfs);
 /* A second, independent mount of vfs's volume: the same backend on the same
    location (ico_vfs_mount again, so the Korean DATA.DF shift is found
    again), with state of its own (the image backend its own file handle
-   and, for a .chd, its own hunk buffers; the archive its own FILE*).  An
-   IcoVfs is not thread-safe, but two mounts share nothing: one thread may
-   read one while another reads the other (the texture export,
-   port/render/texpack_export.c, reads its reopen of ico_vfs_disc()).  NULL
+   and, for a .chd, its own hunk buffers; the archive its own FILE*).  A
+   mount's lookups and sector reads take its mutex (vfs.c), so threads may
+   share one (the disc reader thread, port/data/cdvd_host.c), each waiting
+   for the other's read; two mounts share nothing, so one thread reads one
+   while another reads the other without waiting (the texture export,
+   port/render/texpack_export.c, reads its reopen of ico_vfs_disc()).
+   Mounting and unmounting are not thread-safe.  NULL
    when the volume cannot be mounted again (the reason on stderr); the new
    mount is unmounted on its own and may outlive vfs. */
 IcoVfs *ico_vfs_reopen(const IcoVfs *vfs);
@@ -172,7 +175,8 @@ uint32_t ico_vfs_size(const IcoVfsFile *f);
    read (short at the end of the file), or -1 on a read error. */
 int64_t ico_vfs_read(const IcoVfsFile *f, uint64_t offset, void *dst, size_t len);
 
-/* Read whole sectors by LSN anywhere on the volume. */
+/* Read whole sectors by LSN anywhere on the volume (under the mount's
+   mutex: any thread). */
 int ico_vfs_read_sectors(IcoVfs *vfs, uint32_t lsn, uint32_t count, void *dst);
 uint32_t ico_vfs_volume_sectors(IcoVfs *vfs);
 

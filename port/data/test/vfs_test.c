@@ -7,7 +7,9 @@
  *   vfs_test synth <dir>    builds a small ISO9660 image in <dir> and runs
  *                           everything against it (no disc needed), then
  *                           the same image wrapped in .chd files it writes
- *                           (a DVD CHD and a CD CHD, plus refused ones)
+ *                           (a DVD CHD and a CD CHD, plus refused ones),
+ *                           and two threads reading one mount at once
+ *                           (test_two_threads: the mount's mutex, vfs.c)
  *   vfs_test disc <iso> [slug]
  *                           checks the user's image of the disc `slug`
  *                           (a slug of config/regions.txt, pal by default:
@@ -35,6 +37,7 @@
 #include "vfs.h"
 
 #include "sha1.h"
+#include "ico_thread.h"
 
 #include <libcdvd.h>
 #include <sifrpc.h>
@@ -359,6 +362,58 @@ static void test_vfs_synthetic(IcoVfs *vfs)
     CHECK(ico_vfs_read_sectors(vfs, SYN_SECTORS - 1, 2, buf) != 0);
     CHECK(ico_vfs_read_sectors(vfs, SYN_SECTORS, 1, buf) != 0);
     CHECK(ico_vfs_read_sectors(vfs, 0xFFFFFFFFu, 2, buf) != 0);
+}
+
+/* Two threads on one mount (vfs.c's per-mount mutex around the backend's
+   calls, which share the image's FILE*): a second thread reads the boot
+   file's two sectors 1000 times while this one reads DATA.DF's first
+   three 1000 times and looks SYSTEM.CNF up between them (the ISO backend
+   reads the root's sector for it); every read equals the same read made
+   by one thread alone, and none fails. */
+typedef struct TwoReader {
+    IcoVfs *vfs;
+    const unsigned char *want; /* SYN_BOOT's two sectors read alone */
+    int bad;                   /* reads that failed or differed */
+} TwoReader;
+
+static void two_reader_main(void *arg)
+{
+    TwoReader *r = arg;
+    static unsigned char got[2 * 2048];
+
+    for (int i = 0; i < 1000; i++) {
+        if (ico_vfs_read_sectors(r->vfs, SYN_BOOT, 2, got) != 0 ||
+            memcmp(got, r->want, sizeof(got)) != 0) {
+            r->bad++;
+        }
+    }
+}
+
+static void test_two_threads(IcoVfs *vfs)
+{
+    static unsigned char boot[2 * 2048], df[3 * 2048], got[3 * 2048];
+    TwoReader r = {vfs, boot, 0};
+    IcoThread *t;
+    int bad = 0;
+
+    CHECK(ico_vfs_read_sectors(vfs, SYN_BOOT, 2, boot) == 0);
+    CHECK(ico_vfs_read_sectors(vfs, SYN_DATADF, 3, df) == 0);
+    t = ico_thread_create(two_reader_main, &r);
+    CHECK(t != NULL);
+    for (int i = 0; i < 1000; i++) {
+        IcoVfsEntry e;
+
+        if (ico_vfs_read_sectors(vfs, SYN_DATADF, 3, got) != 0 ||
+            memcmp(got, df, sizeof(df)) != 0) {
+            bad++;
+        }
+        if (i % 10 == 0 && (ico_vfs_stat(vfs, "SYSTEM.CNF", &e) != 0 || e.lsn != SYN_CNF)) {
+            bad++;
+        }
+    }
+    ico_thread_join(t);
+    CHECK(bad == 0);
+    CHECK(r.bad == 0);
 }
 
 /* ico_vfs_reopen: a second mount of the same image answers every look-up
@@ -1167,6 +1222,7 @@ static int run_synthetic(const char *dir)
         return 1;
     }
     test_vfs_synthetic(vfs);
+    test_two_threads(vfs);
     test_reopen(vfs);
     CHECK(check_unifile(vfs, 3) == 3);
     test_cdvd_host(vfs);
