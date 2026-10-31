@@ -1,9 +1,9 @@
+**Please note:** On phones and tablets with the Turnip graphics driver the game now uses its simpler set of shaders, which stops the streak some players saw; if you still see one, use **Save a picture for a bug report** in Options and send the zip, which now also holds the exact frame that was on screen.
+
 ## New
 
 - Options > Effects > Glow between frames: above Frame rate Original, **Original** keeps the glow of the game's own frame for the frames shown between them; **Smooth** makes it again for every frame shown, so it follows a fast camera turn (it costs more of the graphics card's time). The Enhanced preset turns it on; Enhanced settings saved earlier get it at the next start. The row is greyed at Frame rate Original or with Glow off.
-
 - The bug-report picture (F12 on a computer, Save a picture for a bug report in Options) also saves the exact in-between frame that was on screen, so problems that only show between frames can be studied.
-
 - Options > Graphics has a Graphics card row on computers with two or more graphics cards, such as many laptops. Pick the card that draws the game; Apply switches at once, or the choice is used from the next start. Automatic always picks the fast card when there is one. The Windows graphics setting for each app does not change the card the game uses; this row does.
 
 ## Fixed
