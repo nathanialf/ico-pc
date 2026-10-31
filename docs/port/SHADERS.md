@@ -328,6 +328,20 @@ constant that valid inputs never reach, so every picture is unchanged:
 No shader waits on memory, spins on an atomic or uses recursion; the one ordered section is
 `gs_dst_out`'s (above).
 
+## Float to integer
+
+`vu_ftoi` (`port/shaders/vu_common.hlsli`; `vu_ftoi4` is it of `x * 16`, the VU's `ftoi0` and
+`ftoi4`) truncates and saturates: a value at or above 2^31 gives `0x7FFFFFFF`, one below -2^31 and a
+NaN `0x80000000`, the conversion `OpConvertFToS` only for a value in range. Its last select is
+`x >= -2^31 ? r : 0x80000000`, an ordered compare, so a NaN fails it and takes the saturated value
+instead of the conversion's: SPIR-V leaves the conversion of a NaN undefined, and the compilers
+differ (LLVM's, lavapipe on x86-64, gives `0x80000000`; Mesa's ir3 on Turnip most likely 0, a GS
+position on the frame; issue 163). A saturated X, Y or Z fails `vu_gs_ok`, so such a corner has no
+GS position. Every number converts as it did, -2^31 itself exactly to `0x80000000`. The CPU mirror
+(`port/math/ps2float.h` (`ps2_ftoi`), through `vu1_ref`) saturates a NaN by its sign bit, also a
+saturated value. The probe layout's position (`vu_probe_out`) is `precise` like the drawing
+positions.
+
 ## Integer forms
 
 Integer division and remainder by a value that is not a compile-time constant (`OpSDiv`, `OpSRem`,
@@ -533,25 +547,34 @@ as it reads, and the plain one, `vu_X_plain_vs`, the same entry compiled with `I
 (`port/shaders/CMakeLists.txt`, the ten mesh entries only), which leaves out the card test's step
 of the region rule (`vu_region_rule_cut`'s `VU_F_EXTENDED` branch) and the two tick cameras
 (`vu_tick_shown`). The renderer takes the plain ones for the fallback on a device of the table and
-the extended ones everywhere else, once a run ([RENDER.md](RENDER.md#the-fallback-entries));
+under Mesa's Turnip driver, and the extended ones everywhere else, once a run
+([RENDER.md](RENDER.md#the-fallback-entries));
 `vu_particle_vs` has the one build. The cut against the camera's picture stays in
 both: at 4:3 a triangle wholly beside the picture is drawn, clipped, as in the extended one.
 
-The start-up line names the set and why, first (`rd_pipeline.c` `rd__vu_policy_init`): `rd: VU
-shaders: extended set (no device-table row, no lost start, no [dev] setting asks for the plain
-one): the program entries (largest vu_lit_vs <words> words) and the mesh and grid draws' merge
-builds of the same set; the record path's modules ...`, or `plain set by the device table on this
-device (<row's reason>)`, `plain set after a lost start (<the host's reason>)`, `plain set by [dev]
-(ICO_RD_VU_PLAIN=1)`, `extended set by [dev] (ICO_RD_VU_EXTENDED=1)`. The draw merge's own line
+The start-up line names the set and why, first (`rd_pipeline.c` `rd__vu_policy_init`, the choice
+`rd__vu_set_choose`): `rd: VU shaders: extended set (no device-table row, no Turnip driver, no lost
+start, no [dev] setting asks for the plain one): the program entries (largest vu_lit_vs <words>
+words) and the mesh and grid draws' merge builds of the same set; the record path's modules ...`,
+or `plain set by the device table on this device (<row's reason>)`, `plain set (Turnip driver: the
+extended set's clipped triangles showed a stray vertex there, issue 163; [dev]
+ICO_RD_VU_EXTENDED=1 asks for the extended one)`, `plain set after a lost start (<the host's
+reason>)`, `plain set by [dev] (ICO_RD_VU_PLAIN=1)`, `extended set by [dev] (ICO_RD_VU_EXTENDED=1)`. The draw merge's own line
 (`rd: VU merge: ...`) follows; with the merge on, its builds (`vu_X_merge_vs` or
 `vu_X_merge_plain_vs`) are what the mesh and grid draws run.
 
 What the plain set hides (issues 163 and 164): a triangle that fails the region test and reaches
-into the picture is dropped by the plain set, as on the PS2, and drawn clipped by the extended
-one unless it is a card. So a vertex placed far off the screen, in front of the eye, by anything
-the two sets share (the program's arithmetic, the stream, VuCB, VuBoneCB) is invisible through
-the plain set and drawn as a long sliver through the extended one; a clean picture through the
-plain set does not place a fault in the extended-only code. The card and tick steps only choose
+into the picture is dropped by the plain set (`VU_RULE_DROP`), as on the PS2, and drawn clipped by
+the extended one (`VU_RULE_STRIP`) unless it is a card. So a vertex placed far off the screen, in
+front of the eye, by anything the two sets share (the program's arithmetic, the stream, VuCB,
+VuBoneCB) is invisible through the plain set and drawn as a long sliver through the extended one;
+a clean picture through the plain set does not place a fault in the extended-only code. The
+Turnip rule rests on this: issue 163's tablet (Turnip on an Adreno 740) drew such a sliver from
+Ico's leg in a picture between two ticks that lavapipe draws clean from the same two dumps, so
+under Turnip the fallback takes the plain set, which hides the vertex as the stock driver's row
+does; it does not remove whatever placed it. What Turnip gives up is the card test and the tick
+cameras' re-test on the fallback's draws (the record path's modules, which a tile-based GPU runs
+only with `[dev] vu_prepass = true`, keep both). The card and tick steps only choose
 drop or clip; they never move a vertex. The VU vertex modules hold no Function or Private
 variable and no `OpUndef` (`tools/spirv_poison.py --list`, every `vu_*_vs` of the build: none), so
 a value read before it is written is not in the SPIR-V the drivers get.
