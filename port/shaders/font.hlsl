@@ -156,7 +156,7 @@ GS_PS_ATTR GS_PS_OUT font_sheet_ps(SpriteVSOut i)
         const uint dither = style.w & 1u, scale = (style.w >> 1) + 1u;
         // the four sheet texels around the sample (a bilinear read with the
         // texel centres at +0.5), each rebuilt from the coverage grid
-        const float2 pos = i.uv * float2(size) - 0.5;
+        precise float2 pos = i.uv * float2(size) - 0.5;
         const float2 base = floor(pos);
         const float2 f = pos - base;
         const int2 p0 = int2(base);
@@ -204,7 +204,7 @@ GS_PS_ATTR GS_PS_OUT font_sheet_ps(SpriteVSOut i)
                 }
             }
         }
-        const float2 m = lerp(lerp(v[0][0], v[0][1], f.x), lerp(v[1][0], v[1][1], f.x), f.y);
+        precise float2 m = lerp(lerp(v[0][0], v[0][1], f.x), lerp(v[1][0], v[1][1], f.x), f.y);
         const uint2 gm = uint2(floor(m + 0.5));
         col = gs_texture_function(uint4(gm.x, gm.x, gm.x, gm.y), col, g_mode.x);
     }
@@ -240,7 +240,9 @@ GS_PS_ATTR GS_PS_OUT font_sheet_baked_ps(SpriteVSOut i)
         // size)
         const int2 size = dim - 2 * int2(SHEET_BAKE_AX, SHEET_BAKE_AY);
         // font_sheet_ps's bilinear read: the same position, weights and blend
-        const float2 pos = i.uv * float2(size) - 0.5;
+        // (pos and m precise in both, so no driver contracts one shader's
+        // mul/sub or lerp into an FMA and not the other's)
+        precise float2 pos = i.uv * float2(size) - 0.5;
         const float2 base = floor(pos);
         const float2 f = pos - base;
         const int2 p0 = int2(base);
@@ -248,7 +250,7 @@ GS_PS_ATTR GS_PS_OUT font_sheet_baked_ps(SpriteVSOut i)
         const float2 v01 = sheet_baked_texel(p0 + int2(1, 0), dim);
         const float2 v10 = sheet_baked_texel(p0 + int2(0, 1), dim);
         const float2 v11 = sheet_baked_texel(p0 + int2(1, 1), dim);
-        const float2 m = lerp(lerp(v00, v01, f.x), lerp(v10, v11, f.x), f.y);
+        precise float2 m = lerp(lerp(v00, v01, f.x), lerp(v10, v11, f.x), f.y);
         const uint2 gm = uint2(floor(m + 0.5));
         col = gs_texture_function(uint4(gm.x, gm.x, gm.x, gm.y), col, g_mode.x);
     }
