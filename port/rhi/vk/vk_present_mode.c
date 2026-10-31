@@ -15,8 +15,14 @@ static bool vkr_offered(const VkPresentModeKHR *modes, uint32_t n, VkPresentMode
 }
 
 VkPresentModeKHR vkr_choose_present_mode(const VkPresentModeKHR *modes, uint32_t n, bool vsync,
-                                         bool preferMailbox, bool preferLatestReady)
+                                         bool preferMailbox, bool preferLatestReady, bool forceFifo)
 {
+    /* the FIFO fallback (rhi_present_fifo_fallback): presents blocked for
+     * hundreds of milliseconds under mailbox on a driver, so FIFO whatever
+     * vsync and the preferences say; FIFO is always offered */
+    if (forceFifo) {
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
     if (vsync) {
         /* FIFO is always available; mailbox when asked for (rhi_prefer_mailbox)
          * and offered: still no tearing, but a present never waits for the

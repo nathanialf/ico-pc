@@ -746,12 +746,14 @@ void vkr_frames_shutdown(void);
 VkrCmdList *vkr_get_cmd(RhiCommandList cl);
 void vkr_image_barrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState after);
 /* vk_present_mode.c: the present mode for a swapchain from the surface's
- * modes[n]: with vsync, MAILBOX when preferMailbox and offered, else FIFO;
+ * modes[n]: FIFO when forceFifo (the FIFO fallback, rhi_present_fifo_fallback);
+ * with vsync, MAILBOX when preferMailbox and offered, else FIFO;
  * without, IMMEDIATE when offered, else MAILBOX when offered, else FIFO.
  * vkr_present_mode_name: "immediate", "mailbox", "fifo", "fifo_relaxed", or
  * NULL for any other mode. */
 VkPresentModeKHR vkr_choose_present_mode(const VkPresentModeKHR *modes, uint32_t n, bool vsync,
-                                         bool preferMailbox, bool preferLatestReady);
+                                         bool preferMailbox, bool preferLatestReady,
+                                         bool forceFifo);
 const char *vkr_present_mode_name(VkPresentModeKHR m);
 /* vk_present_mode.c: whether the display's timing of presents
  * (VK_KHR_present_id + VK_KHR_present_wait, rhi_present_timing) is used:

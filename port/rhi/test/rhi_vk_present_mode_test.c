@@ -6,7 +6,12 @@
  * MAILBOX when preferred and offered, else FIFO; without, IMMEDIATE when
  * offered, else MAILBOX, else FIFO.  Mesa's X11 WSI (the Deck's RADV, also
  * under XWayland) offers all four of the common modes, where vsync off
- * must pick IMMEDIATE: MAILBOX would look the same as vsync on. */
+ * must pick IMMEDIATE: MAILBOX would look the same as vsync on.
+ *
+ * The FIFO fallback (forceFifo): FIFO over Android's {mailbox, fifo} with
+ * vsync off, over Mesa's four modes, and with vsync on and mailbox
+ * preferred; with forceFifo off every case above keeps its answer (expect
+ * asks both ways: off for the case's answer, on for FIFO). */
 #include "vk/vk_internal.h"
 #include <stdio.h>
 #include <string.h>
@@ -18,13 +23,64 @@ static int s_failures;
 static void expect(const char *what, const VkPresentModeKHR *modes, uint32_t n, bool vsync,
                    bool preferMailbox, VkPresentModeKHR want)
 {
-    const VkPresentModeKHR got = vkr_choose_present_mode(modes, n, vsync, preferMailbox, false);
+    const VkPresentModeKHR got =
+        vkr_choose_present_mode(modes, n, vsync, preferMailbox, false, false);
     const char *g = vkr_present_mode_name(got), *w = vkr_present_mode_name(want);
 
     if (got != want) {
         printf("FAIL %s, vsync %s, mailbox %s: %s, want %s\n", what, vsync ? "on" : "off",
                preferMailbox ? "preferred" : "not preferred", g ? g : "?", w ? w : "?");
         s_failures++;
+    }
+    /* the same set under the FIFO fallback: FIFO whatever the case wanted */
+    const VkPresentModeKHR forced =
+        vkr_choose_present_mode(modes, n, vsync, preferMailbox, false, true);
+    if (forced != VK_PRESENT_MODE_FIFO_KHR) {
+        const char *f = vkr_present_mode_name(forced);
+        printf("FAIL %s, vsync %s, mailbox %s, fifo fallback: %s, want fifo\n", what,
+               vsync ? "on" : "off", preferMailbox ? "preferred" : "not preferred", f ? f : "?");
+        s_failures++;
+    }
+}
+
+/* the FIFO fallback over the sets the plan names: Android's stock Adreno
+   driver offers {mailbox, fifo}, vsync off takes mailbox, forced takes FIFO;
+   Mesa's four modes forced take FIFO; vsync on with mailbox preferred
+   forced takes FIFO; FIFO latest ready asked and offered still gives way */
+static void fifoFallback(void)
+{
+    static const VkPresentModeKHR android[] = {VK_PRESENT_MODE_MAILBOX_KHR,
+                                               VK_PRESENT_MODE_FIFO_KHR};
+    static const VkPresentModeKHR mesa[] = {VK_PRESENT_MODE_IMMEDIATE_KHR,
+                                            VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_KHR,
+                                            VK_PRESENT_MODE_FIFO_RELAXED_KHR};
+    static const VkPresentModeKHR nv[] = {VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR,
+                                          VK_PRESENT_MODE_IMMEDIATE_KHR,
+                                          VK_PRESENT_MODE_FIFO_LATEST_READY_EXT};
+
+    const struct {
+        const VkPresentModeKHR *m;
+        uint32_t n;
+        bool vsync, mailbox, latest, force;
+        VkPresentModeKHR want;
+    } c[] = {
+        {android, 2, false, false, false, false, VK_PRESENT_MODE_MAILBOX_KHR},
+        {android, 2, false, false, false, true, VK_PRESENT_MODE_FIFO_KHR},
+        {android, 2, false, true, false, true, VK_PRESENT_MODE_FIFO_KHR},
+        {mesa, 4, false, false, false, true, VK_PRESENT_MODE_FIFO_KHR},
+        {mesa, 4, true, true, false, false, VK_PRESENT_MODE_MAILBOX_KHR},
+        {mesa, 4, true, true, false, true, VK_PRESENT_MODE_FIFO_KHR},
+        {nv, 4, true, false, true, false, VK_PRESENT_MODE_FIFO_LATEST_READY_EXT},
+        {nv, 4, true, false, true, true, VK_PRESENT_MODE_FIFO_KHR},
+    };
+
+    for (unsigned i = 0; i < sizeof c / sizeof c[0]; i++) {
+        const VkPresentModeKHR got = vkr_choose_present_mode(c[i].m, c[i].n, c[i].vsync,
+                                                             c[i].mailbox, c[i].latest, c[i].force);
+        if (got != c[i].want) {
+            printf("FAIL fifo fallback case %u: got %d, want %d\n", i, (int)got, (int)c[i].want);
+            s_failures++;
+        }
     }
 }
 
@@ -53,7 +109,7 @@ static void latestReady(void)
 
     for (unsigned i = 0; i < sizeof c / sizeof c[0]; i++) {
         const VkPresentModeKHR got =
-            vkr_choose_present_mode(c[i].m, c[i].n, c[i].vsync, c[i].mailbox, c[i].latest);
+            vkr_choose_present_mode(c[i].m, c[i].n, c[i].vsync, c[i].mailbox, c[i].latest, false);
         if (got != c[i].want) {
             printf("FAIL latest ready case %u: got %d, want %d\n", i, (int)got, (int)c[i].want);
             s_failures++;
@@ -68,6 +124,7 @@ static void latestReady(void)
 int main(void)
 {
     latestReady();
+    fifoFallback();
     /* Mesa (RADV, lavapipe on X11): every common mode */
     static const VkPresentModeKHR mesa[] = {VK_PRESENT_MODE_IMMEDIATE_KHR,
                                             VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_KHR,
