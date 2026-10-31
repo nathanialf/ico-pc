@@ -19,7 +19,8 @@ In reading order.
 | [MATH.md](MATH.md) | The FP environment, the PS2 float models, the soft `double`, the libm copies and VU0 in C. |
 | [GS.md](GS.md) | What the port adds under the game's GS layer: the register decoder and the hand-offs to rd. |
 | [VU1_PROGRAMS.md](VU1_PROGRAMS.md) | The five VU1 microprograms, their shaders, their CPU oracles and the region rule. |
-| [RENDER.md](RENDER.md) | rd: recording, state, the replay, pipelines, post passes, dumps and the replay tool. |
+| [RENDER.md](RENDER.md) | rd: recording, state, the replay, post passes, dumps and the replay tool. |
+| [PIPELINES.md](PIPELINES.md) | the pipeline key and blend paths, the start-up set, the fallback entries, the vertex and triangle pre-passes. |
 | [MSAA.md](MSAA.md) | The MSAA resolve: where the multisampled part of a frame ends, the covered-majority rule, one resolve a picture, its lines and tests. |
 | [WORK_BUFFERS.md](WORK_BUFFERS.md) | The post effects' work buffers: sizes per frame width, the glow chain's rects, its left edge on a wide frame, what stays across frames and the work clear. |
 | [TEXTURES.md](TEXTURES.md) | Texture decodes off the game thread: the decode pool, the job a store makes, the settle, its bound, key, lines and tests. |

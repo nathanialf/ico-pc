@@ -599,7 +599,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   scale with the width; with the disc, a stage (`gsb_cull`, `gsb_cull_stage`).
 - `modelpack_test.c`: model packs end to end on synthetic models under the build tree
   (`modelpack`).
-- `rd_alpha_plan_test.c`: the alpha/blend planner on the CPU ([RENDER.md](RENDER.md#pipelines),
+- `rd_alpha_plan_test.c`: the alpha/blend planner on the CPU ([RENDER.md](PIPELINES.md),
   the alpha plan): every ATST x AREF x As range under AFAIL KEEP and the FB_ONLY split against
   `gs_alpha_pass` over every As of the range, the other AFAIL shapes pixel by pixel, the blend
   identities over every Cs and Cd (`gs_blend_reg_ch`, `gs_dst_channel`), a model of the
@@ -1804,9 +1804,9 @@ switches the tests and their registrations use:
 | `ICO_RD_DATE_SABOTAGE` | `rd_replay_tiler.c`, `rd_date_selftest.c` | 1: DATE's setup writes 0 into the stencil bit where the alpha's MSB is 1, so the self-test fails (`rd_date_selftest_sabotage`) |
 | `ICO_RD_BLEND_SABOTAGE` | `rd_blend_selftest.c` | makes named blend modes read white in the blend's self-test (`rd_blend_selftest_sabotage*`) |
 | `ICO_RD_VU_PREPASS_SABOTAGE` | `rd_vuprepass_selftest.c`, `rd_replay_vu.c` | 1: the pre-passes' self-test draws its first command's vertex records a texel off; `tri`: its triangles' slot A a slot off; `ticks`: the tick stage's tick 1 at tick 0's camera; each fails it and the pre-pass is turned off (`rd_vuprepass_selftest_sabotage`, `_sabotage_tri`, `_ticks`) |
-| `ICO_RD_VU_PLAIN` | `rd_pipeline.c` | 1: every VU draw with the VU vertex shaders' plain variants, as on a device of the table (`kVuPlainOnly`); the replay tool's pictures at a wide aspect then show the plain-only picture ([RENDER.md](RENDER.md#the-fallback-entries)) |
+| `ICO_RD_VU_PLAIN` | `rd_pipeline.c` | 1: every VU draw with the VU vertex shaders' plain variants, as on a device of the table (`kVuPlainOnly`); the replay tool's pictures at a wide aspect then show the plain-only picture ([RENDER.md](PIPELINES.md#the-fallback-entries)) |
 | `ICO_RD_VU_EXTENDED` | `rd_pipeline.c` | 1: the extended variants whatever the device table or `ICO_RD_VU_PLAIN` says |
-| `ICO_RD_VU_PREPASS` | `rd_replay_vu.c` | 0: no VU vertex pre-pass, every VU draw the old way (`[dev] vu_prepass = false`); the tests switch it with `rd__set_vu_prepass` ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)) |
+| `ICO_RD_VU_PREPASS` | `rd_replay_vu.c` | 0: no VU vertex pre-pass, every VU draw the old way (`[dev] vu_prepass = false`); the tests switch it with `rd__set_vu_prepass` ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) |
 | `ICO_RD_VU_PREPASS_BATCH` | `rd_replay_vu.c` | 0: the VU pre-pass's draws one an entry and stage instead of batched (`[dev] vu_prepass_batch = false`; `rd_vubatch_ab`, `rd_vuprepass_selftest_unbatched`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)) |
 | `ICO_RD_VU_MERGE` | `rd_replay_vu.c` | 0: every VU draw a GPU draw of its own instead of the draw merge (`[dev] vu_merge = false`; `rd_vumerge_ab`, `rd_vuprepass_selftest_unmerged`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) |
 | `ICO_RD_STORE_PLAN` | `rd_profile.c`, `rd_store_plan.c` | 0: every depth store kept (`[dev] store_plan = false`); 1 the store plan (the default); `all`: every depth store dropped, a wrong plan for `rd_store_plan_ab` ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)) |

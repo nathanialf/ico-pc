@@ -148,7 +148,7 @@ vertices of its triangle, so the per-triangle decisions (region test, scissor) a
 three (`port/render/rd_mesh.h` (`rd_create_vu_mesh`); `port/shaders/vu_common.hlsli`, header
 comment): the vertex pre-pass evaluates each vertex once into a record the triangle stage reads
 its three corners from, or without it the program's entry evaluates all three
-([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)). The morph path rewrites a mesh's stream each [tick](ARCHITECTURE.md#terms)
+([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). The morph path rewrites a mesh's stream each [tick](ARCHITECTURE.md#terms)
 (`rd_update_vu_mesh`), and a mesh no frame drew for a while may be evicted, which tells the seki
 side to build it again (`rd_vu_mesh_valid`) (`port/render/rd_mesh.h`).
 
@@ -279,7 +279,7 @@ clips a triangle the blended camera drops, a tick that sent it to the card test 
 card verdict decides `VU_RULE_STRIP`). A sprite's drop is evaluated once by `vu_particle_pre_vs`
 and read by `vu_particle_main_vs`. A command drawn the old way evaluates the rule in every corner's
 invocation of the program's entry (`vu_mesh_out`, `vu_particle_vs`). Both give the same verdict
-from the same functions on the same values ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes);
+from the same functions on the same values ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes);
 `port/shaders/vu_tri.hlsl`, `port/shaders/vu_particle.hlsl`).
 
 **Particles.** A sprite the VU skips for its x/y window is, out of the box, not drawn when its quad
@@ -309,7 +309,7 @@ extended ones; Mesa's Turnip driver, where the extended ones drew a stray vertex
 `ICO_RD_VU_PLAIN=1`) draws every state with the plain variant: there a triangle that reaches into
 the picture and fails the region test is not drawn in any state (no card test: the wide picture's
 edge at the old 4:3 border may open), and the pictures between two ticks take the blended camera's
-rule alone ([RENDER.md](RENDER.md#the-fallback-entries)).
+rule alone ([RENDER.md](PIPELINES.md#the-fallback-entries)).
 
 ## The card test
 
@@ -328,7 +328,7 @@ grid's batch is one strip, and only a grid of one strip can be a card (`port/ren
 
 **The verdicts.** `rd_draw_vu_mesh` and `rd_draw_vu_grid`, in any state but out of the box
 (`rd__vu_extended`, the state `VU_F_EXTENDED` stands for) and not where every VU draw takes the plain
-shaders, which have no card test (`g_rd.vuPlainOnly`, [RENDER.md](RENDER.md#the-fallback-entries)),
+shaders, which have no card test (`g_rd.vuPlainOnly`, [RENDER.md](PIPELINES.md#the-fallback-entries)),
 test each free-standing strip of the
 draw's batches at the draw's camera (its `RdVuBlock`, and a skinned draw's bones) with the vertex
 shaders' region test (`vu1ref_region_inside`: single precision rounded to nearest as on the GPU, the
@@ -374,7 +374,7 @@ triangles, T ms a step`), and a slow step's line the step's own, inside the game
 
 ## The pre-pass's batches
 
-The vertex and triangle pre-passes ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)) make
+The vertex and triangle pre-passes ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) make
 one point draw for each command and stage they record: a mesh or grid command's vertex draw, a
 particle command's two sprite draws (slots A and B), and in the triangle pass the rule, the two tick
 and the planes draws of each mesh or grid command, about a thousand point draws a frame. Each draw
@@ -434,7 +434,7 @@ batch); the start-up self-test checks the draws one an entry and stage would mak
 ## The draw merge
 
 Every VU command is at least one GPU draw, whatever the game's culling said of it
-([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)), and its cost on the GPU is per draw,
+([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)), and its cost on the GPU is per draw,
 not per triangle: a PowerVR phone spent about 11 us a draw, 9.4 to 11.9 ms a picture on list 0's
 ~900 draws at 2x (a reporter's log). Consecutive draws very often share every state but their
 VuCB: the same pipeline, the same stream buffer (one mesh arena chunk holds many meshes), the same

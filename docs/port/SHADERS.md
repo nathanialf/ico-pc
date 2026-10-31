@@ -99,7 +99,7 @@ each file's header comment):
 | `vu_lit.hlsl` | `vu_lit_vs`, `vu_lit_spec_vs`, `vu_reflect_vs` and their `_pre_vs` | `normal_l` (codes 32/36, 34, 38) |
 | `vu_skin.hlsl` | `vu_skin_vs`, `vu_skin_spec_vs`, `vu_skin_debug_vs` and their `_pre_vs` | `cluster`, skinned (codes 20, 22, 24) |
 | `vu_grid.hlsl` | `vu_grid_vs`, `vu_grid_lit_vs`, `vu_grid_spec_vs` and their `_pre_vs` | `mesh`, the procedural grids (codes 20, 22, 24) |
-| `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_pre_ps` | the main vertex shader of every mesh program, the triangle pre-pass's record stages and the record targets' pixel shader ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)) |
+| `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_pre_ps` | the main vertex shader of every mesh program, the triangle pre-pass's record stages and the record targets' pixel shader ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) |
 | `vu_particle.hlsl` | `vu_particle_vs`, `vu_particle_pre_vs`, `vu_particle_main_vs` | `particle`, six vertices a particle, non-indexed; the sprite's record stage and main shader |
 | `common.hlsli`, `gs_math.hlsli`, `sheet_text.hlsli`, `vu_common.hlsli` | none | included headers, below |
 
@@ -115,7 +115,7 @@ triangle's or sprite's verdict and attribute planes as records the same way; `vu
 region bounds from VuCB, and output `VuVSOut` as the programs' own entries do (position, colour,
 STQ, plane distance and the planes as 28 flat floats: the main shaders read the planes' words from
 the record once a vertex, `vu_rec_planes`, where the planes hold), which `vu_ps` and `vu_texa_ps`
-take from either ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)).
+take from either ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
 
 **Variants.** The same entries are built again under defines (`port/shaders/CMakeLists.txt`):
 
@@ -498,7 +498,7 @@ plain variant ([The variants](#the-variants)) and `PS_BUDGET` (78,560, the large
 each module's words, instructions, basic blocks, phis, loops, dot products, vector comparisons,
 boolean selects and `any()`. A phone's driver compiles the start-up set in a time about
 proportional to the modules' size (the renderer logs the largest at start and the compile time per
-vertex shader after the set, [RENDER.md](RENDER.md#pipelines)).
+vertex shader after the set, [RENDER.md](PIPELINES.md)).
 
 | module | words | instructions | blocks | phis |
 | --- | --- | --- | --- | --- |
@@ -548,7 +548,7 @@ as it reads, and the plain one, `vu_X_plain_vs`, the same entry compiled with `I
 of the region rule (`vu_region_rule_cut`'s `VU_F_EXTENDED` branch) and the two tick cameras
 (`vu_tick_shown`). The renderer takes the plain ones for the fallback on a device of the table and
 under Mesa's Turnip driver, and the extended ones everywhere else, once a run
-([RENDER.md](RENDER.md#the-fallback-entries));
+([RENDER.md](PIPELINES.md#the-fallback-entries));
 `vu_particle_vs` has the one build. The cut against the camera's picture stays in
 both: at 4:3 a triangle wholly beside the picture is drawn, clipped, as in the extended one.
 

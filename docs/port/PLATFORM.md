@@ -849,7 +849,7 @@ path that draws from it: a ` pre` key, a `_pre_vs` module (the pre-pass's entrie
 stages' `vu_tri_*_pre_vs` and `vu_particle_pre_vs`), a `_main_vs` module (`vu_main_vs`,
 `vu_particle_main_vs`, made only with the pre-pass) or the old triangle stage's `vu_tri_vs` or
 `vu_tri_plain_vs`, `startup_retry_note_has_vu_pre`; the same backend without the pre-pass, `ICO_RD_VU_PREPASS=0`
-from `ico_ini_export`, which makes none of them, [RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)),
+from `ico_ini_export`, which makes none of them, [RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)),
 `fixedblend` (the note names a pipeline whose `dst` field is nonzero, an exact-blend
 pass with a fragment shader interlock or rasterizer-ordered view entry: the same backend with the
 fixed-function blend, `ICO_RD_BLEND=fixed` from `ico_ini_export` as for the loss steps, which builds
@@ -950,7 +950,7 @@ kept, as a clean end deletes it (`port/platform/diag_host.c` (`ico_diag_startup_
 [RHI.md](RHI.md#vulkan)). An end without a crash report (the system or the driver ends the
 process) is caught by the start-up activity file, `logs/startup-activity.txt`: the version's line, then the activity note. While the
 start-up pipeline set is created (`ICO_DIAG_ACTIVITY_STARTUP`) each batch's note (its range of the
-set and its first and last key, [RENDER.md](RENDER.md#pipelines)) replaces the text (a careful
+set and its first and last key, [RENDER.md](PIPELINES.md)) replaces the text (a careful
 set's file adds `set: careful` after it), and the file is deleted when the set is done; a lazy run (`ICO_DIAG_ACTIVITY_LAZY`) records
 every first-use pipeline and a line between them for the whole run. The file is opened once when
 the recording starts and closed when it ends; each note is one write at the file's start, padded
@@ -1033,7 +1033,7 @@ further end is due again. With `[dev] pipeline_set = "lazy"` already set the pip
 cleared and no line about it follows. It is the crash order's `lazy` step made to last, for the
 ends a crash handler never sees (the system ending the app, a device that freezes); a crash with a
 report keeps its own order above. The setting outlives the version; deleting the line makes the
-next start try the set again ([RENDER.md](RENDER.md#the-start-up-set)).
+next start try the set again ([RENDER.md](PIPELINES.md#the-start-up-set)).
 
 A careful set that its memory budget stopped (`rd_precreate_pipelines` called `rd_pipelines_lazy`,
 `rd_pipelines_lazy_on`) is a set that ended as it should: the window calls
@@ -1052,7 +1052,7 @@ the system making room for it); 5 and a signal without a level never stop it. Th
 before `rd_init` on Android only; desktops never get the signal), so the batch in flight finishes
 (the careful policy's batches are 8 pipelines on one thread, so nothing cuts a batch short), the
 pipeline cache is written, and the rest of the set is made on first use
-([RENDER.md](RENDER.md#the-start-up-set)). The window's `ico_diag_startup_activity_budget_stop` then
+([RENDER.md](PIPELINES.md#the-start-up-set)). The window's `ico_diag_startup_activity_budget_stop` then
 logs `ico_pc: the start-up set stopped at the system's low-memory signal (running critical); the
 next start makes the pipelines as the game needs them, with no start-up set` and records the rest of
 the run as a lazy run that is not for this start only, with the line `set: stopped at the system's
@@ -1149,7 +1149,7 @@ times' minimum, maximum and mean, the batch's wall time and threads, the process
 pipeline cache's size after it, the policy under a careful set (`; policy batch 8, threads 1,
 budget 128 MB, cache each batch`), then a VU batch's times by vertex shader with its words and
 instructions or a 2D batch's slowest pipeline with its modules; a run without the set adds its lazy
-batches' lines the same way ([RENDER.md](RENDER.md#the-start-up-set); `rd.h` `rd_set_batch_fn`,
+batches' lines the same way ([RENDER.md](PIPELINES.md#the-start-up-set); `rd.h` `rd_set_batch_fn`,
 `diag_host.h` `ico_diag_startup_activity_batch`). The next start logs each as `ico_pc: the previous
 run (version V) compiled: VU batch 297-328 of 702 (plain, compiler ...): 32 pipelines 0.20-0.90 s,
 mean 0.41 s, ...` before the note it ended in, then the last one again as `ico_pc: the previous
@@ -1597,10 +1597,10 @@ is what SDL has connected then ("none yet" when the pad arrives later; its own `
 line follows), on Windows with whether SDL's DirectInput scan is on (`[dev] joystick_directinput`);
 the VU shaders are `one set, fallback plain (<reason>)` on a device whose fallback takes the
 plain program entries (`(Adreno 740, issue 107)` for the device table's row,
-`RhiLimits.vuFallbackPlain`; `(Turnip driver, issue 163)` under Turnip; [RENDER.md](RENDER.md#the-fallback-entries)), and the pipelines `the careful start-up set`
+`RhiLimits.vuFallbackPlain`; `(Turnip driver, issue 163)` under Turnip; [RENDER.md](PIPELINES.md#the-fallback-entries)), and the pipelines `the careful start-up set`
 under the careful policy, `the careful start-up set, stopped at its budget (the rest on first use)`
 when its budget stopped it, and `on first use (no start-up set)` where the set is skipped
-(`port/render/rd_core.c` (`rd_summary_text`); [RENDER.md](RENDER.md#the-start-up-set)); the disc is the one `select_disc` named (`ico_diag_set_disc`); on
+(`port/render/rd_core.c` (`rd_summary_text`); [RENDER.md](PIPELINES.md#the-start-up-set)); the disc is the one `select_disc` named (`ico_diag_set_disc`); on
 Android the disc is identified after the window opens, so the line first says `disc not mounted
 yet` and is logged again with the disc in its place once it is known, which the report file's copy
 keeps.

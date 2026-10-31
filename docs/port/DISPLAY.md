@@ -573,7 +573,7 @@ at the block's end, before the first stats line, ending `; the block's longest, 
 (`slow_replay_longest`), so a stall never goes unexplained behind five earlier lines. The records
 arrive two replays late, so the vsync is the one the record was drained at
 (`port/platform/window_host.c` (`slow_replay`, `perf_drain`)). A walk over 500 ms also gets the
-renderer's `rd: slow walk` line ([RENDER.md](RENDER.md#the-start-up-set)). `[dev] slow_step_ms`
+renderer's `rd: slow walk` line ([RENDER.md](PIPELINES.md#the-start-up-set)). `[dev] slow_step_ms`
 (default 8, 0 off) logs up to 5 `slow step` lines a block for simulation steps over it, split into
 the step's parts and the pump's, with the step's own card verdicts next to the game threads' time
 (`slow_step`).
@@ -1200,7 +1200,7 @@ phase in ms, the backend's fence wait, the creation, bind, draw, barrier, copy a
 the upload bytes, `gpu_valid`, the GPU total, uploads, each list `gpu_list<N>_ms`, the present, the
 replay's start, alpha, `first_of_tick`, each picture effect `gpu_<effect>_ms`,
 `gpu_effects_partial`, the VU vertex pre-pass's `gpu_prepass_ms`, `vu_pre_vertices`,
-`vu_pre_draws` and `vu_pre_fallbacks` ([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)), the walk's
+`vu_pre_draws` and `vu_pre_fallbacks` ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)), the walk's
 CPU time by list `walk_list<N>_ms`, the upload bytes by what they carry `upload_texture_bytes`,
 `upload_uniform_bytes`, `upload_interp_bytes` (of the mesh bytes) and `upload_stream_bytes`, and
 the per-pass timing's `passes` (the pieces begun), `pass_timed` and `pass_count`

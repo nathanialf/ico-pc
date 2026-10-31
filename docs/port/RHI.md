@@ -81,7 +81,7 @@ D32F_S8 (the scene's depth-stencil; the Vulkan backend may back it with D24S8,
 fog), RGBA32 UINT (the VU vertex pre-pass's record planes, a colour target and copy source: a
 colour attachment and sampled on every Vulkan device by the specification's required format
 support, a render target at Direct3D 12 feature level 11_0; D3D12 makes it typeless, viewed UINT,
-[RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes)). Vertex formats are F32x1..4, U8x4 UNORM and UINT, U16x2 UINT, U32x1 (`port/rhi/rhi.h`,
+[RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). Vertex formats are F32x1..4, U8x4 UNORM and UINT, U16x2 UINT, U32x1 (`port/rhi/rhi.h`,
 formats).
 
 **Resources.** Buffers have a usage mask and a memory kind: DEVICE (static meshes), UPLOAD (the
@@ -168,7 +168,7 @@ as `rhi_create_pipeline` logs it, and the call returns the count made. The optio
 start-up screen presents frames from it), since the workers touch nothing but the driver. It hands
 back each pipeline's compile time as the worker measured it around the driver call, and the threads
 used; its `maxThreads` (0: the count above) caps the workers on both backends, the renderer's
-careful start-up set taking 1 ([RENDER.md](RENDER.md#the-start-up-set)). `rhi_create_pipeline` stays the single creation, the same three steps on the calling thread
+careful start-up set taking 1 ([RENDER.md](PIPELINES.md#the-start-up-set)). `rhi_create_pipeline` stays the single creation, the same three steps on the calling thread
 (`port/rhi/rhi.h` (`rhi_create_pipelines`); `port/rhi/vk/vk_pipeline.c`,
 `port/rhi/d3d12/d3d12_pipeline.c`).
 
@@ -194,7 +194,7 @@ bound) on D3D12 and Vulkan, under MoltenVK the Apple GPU's Metal implicit image 
 reasons (Vulkan, `kVuPlainOnly` in `port/rhi/vk/vk_device.c`; NULL elsewhere and on D3D12):
 `vuFallbackPlain`, why the renderer's VU fallback takes the plain program entries on this device,
 and `carefulPipelines`, why its start-up set is made under the careful policy
-([RENDER.md](RENDER.md#the-fallback-entries), [RENDER.md](RENDER.md#the-start-up-set))
+([RENDER.md](PIPELINES.md#the-fallback-entries), [RENDER.md](PIPELINES.md#the-start-up-set))
 (`port/rhi/rhi.h` (`RhiLimits`)).
 
 **Device and swapchain.** Each Vulkan swapchain creation that changes the mode, image count or size logs one `rhi_vk: swapchain` line (extent, images asked and got, present mode, surface format and colour space, composite alpha, pre-transform, the window's pixel size, SDL's video driver) and the first also a `rhi_vk: surface formats` line, so a driver-side mismatch reads from a log alone; the device report keeps the latest of the swapchain line. `rhi_init` takes an `SDL_Window` (NULL: headless, no swapchain),
@@ -248,7 +248,7 @@ the device's limit), `memoryAllocs`, `memoryFrees`, `memoryFallbacks`, `orderBar
 (`dx_wait_fence`, the draw, pass, bind and copy calls)). `createNs` is the CPU time in
 `rhi_create_buffer` and `rhi_create_texture`, the memory allocation and the object's creation, on
 both backends (`port/rhi/vk/vk_resource.c`, `port/rhi/d3d12/d3d12_resource.c`); the renderer's
-slow-walk line reads it ([RENDER.md](RENDER.md#the-start-up-set)). `window: per replay N draws, ...` therefore
+slow-walk line reads it ([RENDER.md](PIPELINES.md#the-start-up-set)). `window: per replay N draws, ...` therefore
 reads real numbers on both backends.
 
 **Timestamps.** `RHI_MAX_TIMESTAMPS` (256) a [frame slot](ARCHITECTURE.md#terms): the
@@ -316,7 +316,7 @@ count), `pipelineFailures` (creations that failed otherwise: the driver's error,
 the backend refused with its own line) and `pipelineLastError` (the driver's error of the last such
 failure that had one, a `VkResult` or an `HRESULT`; 0 when the last was the description's). The
 renderer reads them around a creation to name the failure's reason in its line
-([RENDER.md](RENDER.md#the-start-up-set), "The set against the pool"). A full pool's line is written the first 8 times
+([RENDER.md](PIPELINES.md#the-start-up-set), "The set against the pool"). A full pool's line is written the first 8 times
 and then every 100th, with the running count (Vulkan `vkr_pool_alloc`, any pool; D3D12 at the
 pipeline's allocation, `dx_pipe_finish`):
 
@@ -1442,7 +1442,7 @@ size, per pixel, per sample, when using multiple color render targets" (Metal Fe
 for the Apple GPU the device name gives (`rhi_metal_color_bytes`: `Apple A9 GPU` and `Apple A10 GPU`
 32 bytes, A11 to A13 64, A14 and later and the M-series 128; an Intel or AMD GPU of a Mac 0, no
 bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on an A9 or A10
-([RENDER.md](RENDER.md#the-vertex-and-triangle-pre-passes); `port/rhi/rhi_driver_version.c`;
+([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes); `port/rhi/rhi_driver_version.c`;
 `port/rhi/vk/vk_device.c` (`vkr_fill_limits`)).
 
 ## Tests
