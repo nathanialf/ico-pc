@@ -616,6 +616,27 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("present_fallback", "true") == NULL);
     CHECK(ico_dev_env_value("present_fallback", "mailbox") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.present_fallback"), "present_fallback") == 0);
+    /* disc_reader: the disc's reads on a thread or the game thread, and the
+       thread's read-ahead in KB (port/data/cdvd_host.c reader_choose) */
+    CHECK(strcmp(ico_dev_env_name("disc_reader"), "ICO_DISC_READER") == 0);
+    CHECK(strcmp(ico_dev_env_value("disc_reader", "thread"), "thread") == 0);
+    CHECK(strcmp(ico_dev_env_value("disc_reader", "sync"), "sync") == 0);
+    CHECK(strcmp(ico_dev_env_value("disc_reader", "off"), "sync") == 0);
+    CHECK(strcmp(ico_dev_env_value("disc_reader", "false"), "sync") == 0);
+    CHECK(ico_dev_env_value("disc_reader", "true") == NULL);
+    CHECK(ico_dev_env_value("disc_reader", "worker") == NULL);
+    CHECK(ico_dev_env_value("disc_reader", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.disc_reader"), "disc_reader") == 0);
+    CHECK(strcmp(ico_dev_env_name("disc_read_ahead_kb"), "ICO_DISC_READ_AHEAD_KB") == 0);
+    CHECK(strcmp(ico_dev_env_value("disc_read_ahead_kb", "256"), "256") == 0);
+    CHECK(strcmp(ico_dev_env_value("disc_read_ahead_kb", "0"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("disc_read_ahead_kb", "4096"), "4096") == 0);
+    CHECK(strcmp(ico_dev_env_value("disc_read_ahead_kb", "off"), "0") == 0);
+    CHECK(ico_dev_env_value("disc_read_ahead_kb", "4097") == NULL);
+    CHECK(ico_dev_env_value("disc_read_ahead_kb", "-1") == NULL);
+    CHECK(ico_dev_env_value("disc_read_ahead_kb", "256k") == NULL);
+    CHECK(ico_dev_env_value("disc_read_ahead_kb", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.disc_read_ahead_kb"), "disc_read_ahead_kb") == 0);
     /* the device profile's flags (port/render/rd_profile.c rd__profile_init):
        date_path stencil or snapshot as they are, store_plan and blur_fold
        on/off, uint_view on/off or work */

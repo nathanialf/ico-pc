@@ -600,6 +600,13 @@ static const struct {
        a machine with 2 hardware threads or fewer), 0 every decode on the
        game thread as before (an A/B), 1 to 4 (port/render/rd_tex_decode.c) */
     {"dev.texture_decode_threads", "texture_decode_threads"},
+    /* the disc's reads: thread (the window build's default) on a thread of
+       their own, completed at the next vsync as before; sync on the game
+       thread (issue 126; port/data/cdvd_host.c reader_choose) */
+    {"dev.disc_reader", "disc_reader"},
+    /* the disc reader thread's read-ahead in KB: 256 by default, 0 off, at
+       most 4096 (port/data/cdvd_host.c reader_choose) */
+    {"dev.disc_read_ahead_kb", "disc_read_ahead_kb"},
 };
 
 /* the [dev] keys exported as the environment switches the renderer and the
@@ -675,6 +682,10 @@ static const struct {
     {"audio_sync", "ICO_AUDIO_SYNC"},
     /* port/render/rd_tex_decode.c choose: auto, or 0..4 worker threads */
     {"texture_decode_threads", "ICO_RD_TEXTURE_DECODE_THREADS"},
+    /* port/data/cdvd_host.c reader_choose: thread or sync */
+    {"disc_reader", "ICO_DISC_READER"},
+    /* port/data/cdvd_host.c reader_choose: KB, 0 off */
+    {"disc_read_ahead_kb", "ICO_DISC_READ_AHEAD_KB"},
 };
 
 /* [dev] keys a file may hold that nothing reads now: read (ini_map) and
@@ -717,6 +728,7 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const datePaths[] = {"stencil", "snapshot", NULL};
     static const char *const sets[] = {"full", "careful", "lazy", NULL};
     static const char *const fallbacks[] = {"auto", "off", "fifo", NULL};
+    static const char *const readers[] = {"thread", "sync", NULL};
 
     if (key == NULL || value == NULL || ico_dev_env_name(key) == NULL) {
         return NULL;
@@ -754,6 +766,22 @@ const char *ico_dev_env_value(const char *key, const char *value)
             return value;
         }
         return value_is(value, off) ? "off" : NULL;
+    }
+    if (strcmp(key, "disc_reader") == 0) {
+        /* thread or sync as they are; false/0/no/off is sync */
+        if (value_is(value, readers)) {
+            return value;
+        }
+        return value_is(value, off) ? "sync" : NULL;
+    }
+    if (strcmp(key, "disc_read_ahead_kb") == 0) {
+        /* whole KB 0 (off) to 4096; false/off/no is 0 */
+        char *end = NULL;
+        const long n = strtol(value, &end, 10);
+        if (end != value && *end == '\0' && n >= 0 && n <= 4096) {
+            return value;
+        }
+        return value_is(value, off) ? "0" : NULL;
     }
     if (strcmp(key, "pipeline_memory_floor_mb") == 0) {
         /* auto, or whole MB 0 (off) to 1048576 (memory_floor.h

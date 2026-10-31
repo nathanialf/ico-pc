@@ -146,7 +146,8 @@ const char *ico_config_ini_key(const char *toml_path);
    ICO_RD_UINT_VIEW, ICO_RD_ALPHA_PLAN, ICO_RD_FX_PLAN, ICO_RD_FX_DST_LOCAL,
    ICO_RD_VU_PLANES, ICO_RD_SHADOW_ONE, ICO_RD_SHADOW_BSPLINE, ICO_VK_FAKE_NO_DYNAMIC, ICO_GPU_CHECKPOINTS, ICO_GPU_ROBUST, ICO_RD_PASS_SPLIT,
    ICO_VK_ATTACHMENT_READ, ICO_RD_PASS_MERGE, ICO_RD_VU_PREPASS, ICO_RD_CRACK_FILL,
-   ICO_JOYSTICK_DIRECTINPUT, ICO_PIPELINE_SET), NULL for any other key (the
+   ICO_JOYSTICK_DIRECTINPUT, ICO_PIPELINE_SET, ICO_DISC_READER,
+   ICO_DISC_READ_AHEAD_KB), NULL for any other key (the
    retired vu_plain_only= and vu_extended= among them: read, logged by
    ico_ini_export as "ico_pc: [dev] <key> = <value> is not used (every
    device compiles one set of 3D shaders); ignored", not exported);
@@ -158,7 +159,9 @@ const char *ico_config_ini_key(const char *toml_path);
    they are; date_path stencil or snapshot as they are; uint_view "work" as
    it is; dynamic_state true/on -> "0", false/off -> "1", depth -> "blend"
    (the variable names what is static); pipeline_set full, careful or lazy as they are;
-   present_fallback auto, off or fifo as they are (0/false/no -> "off"); pass_split a
+   present_fallback auto, off or fifo as they are (0/false/no -> "off");
+   disc_reader thread or sync as they are (0/false/off/no -> "sync");
+   disc_read_ahead_kb 0 to 4096 as it is (false/off/no -> "0"); pass_split a
    count; gpu_*, attachment_read, storage_pass_merge, store_plan,
    blur_fold, uint_view, alpha_plan, fx_plan, fx_dst_local, vu_planes,
    shadow_one, shadow_bspline, vu_prepass, vu_prepass_batch, still_represent, glow_redraw,
