@@ -40,12 +40,12 @@
 #include "sim_keys.h"
 #include "state.h"
 #include "state_file.h"
+#include "state_hash.h"
 #include "state_port.h"
 #include "state_registry.h"
 #include "state_reloc.h"
 #include "state_rules.h"
 #include "trace_host.h"
-#include "xxh3.h"
 #include "../audio/audio_host.h"
 #include "../audio/audio_lock.h"
 #include "../audio/mix_gain.h"
@@ -61,7 +61,7 @@
 #include "video_options.h"
 
 #ifndef ICO_HEADLESS
-#include "rd_mesh.h" /* rd_drop_vu_meshes */
+#include "rd_mesh.h" /* rd_drop_vu_meshes, rd_vu_mesh_each_field */
 #include "rd_png.h"  /* rd_write_png */
 #endif
 
@@ -74,12 +74,16 @@ extern struct IosMemPart *ios_partition_root;
 /* ico2/common/src/PObj.c: the decoded tables of the model being loaded */
 void **PObj_GetImageTables(size_t *bytes);
 void PObj_SetImageTables(void **p, unsigned int count);
+void *PObj_HostStateWord(size_t *bytes);
 #ifndef ICO_HEADLESS
-/* ico2/seki: the scratch stream, the textures' serials, the scene latch */
+/* ico2/seki: the scratch stream, the textures' serials, the scene latch,
+   and the host's words in the game's data the hash leaves out */
 void pac_HostStateFixup(int freeLive);
 unsigned int tex_HostNextSerial(void);
 void tex_HostReserialAll(unsigned int liveNext);
 void gsb_HostSceneRelatch(void);
+void pac_HostStateWords(void (*fn)(const void *p, size_t n, int ptr, void *user), void *user);
+void *tex_HostStateBlock(size_t *bytes);
 #endif
 /* port/game/photo_mode.c, port/ui/gallery.c, port/fmv/movie.c */
 int ico_photo_active(void);
@@ -151,6 +155,24 @@ static void copy_free(Copy *c)
         free(c->p[i]);
     }
     memset(c, 0, sizeof *c);
+}
+
+/* --- the host blocks the hash leaves out ---------------------------------------- */
+
+/* Every model tables block (PObj.c) this process has seen: the game's
+   memory points into them (a model's part records), so those words are
+   host addresses a second run of the same play holds differently
+   (state_hash.h, the catch-all).  Noted at each poll and at a load; a block
+   that comes and goes between two polls is not seen (a [dev] state_dump_at
+   dump names its words then). */
+static IcoStateHashBlocks s_host_blocks;
+
+static void note_host_blocks(void)
+{
+    size_t bytes = 0;
+    void **p = PObj_GetImageTables(&bytes);
+
+    ico_state_hash_note_block(&s_host_blocks, (uint64_t)(uintptr_t)p, p != NULL ? bytes : 0);
 }
 
 /* --- start-up ----------------------------------------------------------------- */
@@ -1125,6 +1147,11 @@ static void perform_load(int slot)
     }
     build_reloc(&rel, rg, pobj_new);
     moved = any_moved(&rel);
+    /* the hash's host blocks: the live tables, the saved ones, the copy */
+    note_host_blocks();
+    ico_state_hash_note_block(&s_host_blocks, rg->pobj_lo, rg->pobj_bytes);
+    ico_state_hash_note_block(&s_host_blocks, (uint64_t)(uintptr_t)pobj_new,
+                              pobj_new != NULL ? rg->pobj_bytes : 0);
     ico_state_reloc_set_log(ico_opt_developer_mode());
     s_thumb.slot = s_thumb.th == NULL ? 0 : s_thumb.slot; /* no picture of the loaded game */
 
@@ -1337,9 +1364,10 @@ void ico_state_request_delete(int slot)
 }
 
 static struct {
-    unsigned int save_tick, load_tick, hash_tick;
+    unsigned int save_tick, load_tick, hash_tick, dump_tick;
     int save_slot, load_slot;
     int save_done, load_done;
+    int dumps; /* dumps written this run */
     unsigned int last_tick;
 } s_dev;
 
@@ -1361,30 +1389,264 @@ void ico_state_dev_set(unsigned int save_tick, int save_slot, unsigned int load_
     }
 }
 
-static void dev_hash(unsigned int tick)
+void ico_state_dev_set_dump(unsigned int dump_tick)
 {
-    uint64_t h[3];
-
-    h[0] = xxh3_64(ico_arena_base(), ico_arena_size());
-    h[1] = xxh3_64((const void *)s_gdata[ICO_GAME_DATA].lo,
-                   s_gdata[ICO_GAME_DATA].hi - s_gdata[ICO_GAME_DATA].lo);
-    h[2] = xxh3_64((const void *)s_gdata[ICO_GAME_BSS].lo,
-                   s_gdata[ICO_GAME_BSS].hi - s_gdata[ICO_GAME_BSS].lo);
-    fprintf(stderr, "state: hash %016llx of arena+gdata+gbss at tick %u\n",
-            (unsigned long long)xxh3_64(h, sizeof h), tick);
+    s_dev.dump_tick = dump_tick;
+    s_dev.dumps = 0;
+    if (dump_tick != 0) {
+        fprintf(stderr, "state: [dev] dump of arena+gdata+gbss at Main tick %u\n", dump_tick);
+    }
 }
 
-/* the [dev] keys: the hash each time the tick reaches its value (a load
-   brings the tick back below it), the save and the load once */
+/* --- the [dev] hash and dump --------------------------------------------------- */
+
+/* the three regions the hash covers, in its order */
+static void dev_regions(IcoStateHashRegion rg[3])
+{
+    rg[0].name = "arena";
+    rg[0].p = ico_arena_base();
+    rg[0].n = ico_arena_size();
+    rg[1].name = "gdata";
+    rg[1].p = (const void *)s_gdata[ICO_GAME_DATA].lo;
+    rg[1].n = (size_t)(s_gdata[ICO_GAME_DATA].hi - s_gdata[ICO_GAME_DATA].lo);
+    rg[2].name = "gbss";
+    rg[2].p = (const void *)s_gdata[ICO_GAME_BSS].lo;
+    rg[2].n = (size_t)(s_gdata[ICO_GAME_BSS].hi - s_gdata[ICO_GAME_BSS].lo);
+}
+
+/* the typed fields (state_hash.h), grown as they come */
+typedef struct FieldList {
+    IcoStateHashField *f;
+    int n, cap;
+    int failed;
+} FieldList;
+
+static void field_add(FieldList *l, const void *p, size_t n, int kind)
+{
+    if (p == NULL || n == 0 || l->failed) {
+        return;
+    }
+    if (l->n == l->cap) {
+        const int cap = l->cap ? l->cap * 2 : 64;
+        IcoStateHashField *g =
+            (IcoStateHashField *)realloc(l->f, (size_t)cap * sizeof(IcoStateHashField));
+
+        if (g == NULL) {
+            l->failed = 1;
+            return;
+        }
+        l->f = g;
+        l->cap = cap;
+    }
+    l->f[l->n].p = p;
+    l->f[l->n].n = n;
+    l->f[l->n].kind = kind;
+    l->n++;
+}
+
+#ifndef ICO_HEADLESS
+static void pac_field(const void *p, size_t n, int ptr, void *user)
+{
+    field_add((FieldList *)user, p, n, ptr ? ICO_STATE_MASK_PTR : ICO_STATE_MASK_ID);
+}
+
+static void mesh_field(const void *field, void *user)
+{
+    field_add((FieldList *)user, field, 4, ICO_STATE_MASK_ID);
+}
+#endif
+
+/* The host's words in the game's memory, by their typed locations: the
+   model tables block's pointer (PObj.c); in the window build the packet
+   scratch stream's words (Packet.c), the textures' host record (Texture.c)
+   and every mesh id field a packet holds (rd_mesh.h). */
+static void dev_fields(FieldList *l, const IcoStateHashRegion *rg, int nrg)
+{
+    size_t n = 0;
+    void *w = PObj_HostStateWord(&n);
+
+    field_add(l, w, n, ICO_STATE_MASK_PTR);
+#ifndef ICO_HEADLESS
+    pac_HostStateWords(pac_field, l);
+    w = tex_HostStateBlock(&n);
+    field_add(l, w, n, ICO_STATE_MASK_ID);
+    {
+        int i;
+
+        for (i = 0; i < nrg; i++) {
+            (void)rd_vu_mesh_each_field(rg[i].p, (const char *)rg[i].p + rg[i].n, mesh_field, l);
+        }
+    }
+#else
+    (void)rg;
+    (void)nrg;
+#endif
+}
+
+static const char *const s_mask_kinds[3] = {"pointer", "host-id", "block-pointer"};
+
+typedef struct MaskOut {
+    FILE *f;
+    const IcoStateHashRegion *rg;
+} MaskOut;
+
+static void mask_line(int region, size_t off, size_t n, int kind, void *user)
+{
+    MaskOut *m = (MaskOut *)user;
+
+    fprintf(m->f, "%s 0x%llx %llu %s\n", m->rg[region].name, (unsigned long long)off,
+            (unsigned long long)n, s_mask_kinds[kind >= 0 && kind < 3 ? kind : 0]);
+}
+
+/* The masked hash of the three regions (state_hash.h); masked lines into
+   `masked` when not NULL.  0, or -1 when memory ran out. */
+static int dev_measure(IcoStateHashResult *res, FILE *masked)
+{
+    IcoStateHashRegion rg[3];
+    FieldList l;
+    MaskOut m;
+    int r;
+
+    memset(&l, 0, sizeof l);
+    dev_regions(rg);
+    note_host_blocks();
+    dev_fields(&l, rg, 3);
+    m.f = masked;
+    m.rg = rg;
+    r = l.failed ? -1
+                 : ico_state_hash_regions(rg, 3, l.f, l.n, &s_host_blocks,
+                                          masked != NULL ? mask_line : NULL, &m, res);
+    free(l.f);
+    return r;
+}
+
+/* The hash the round trip compares: of the game's state, the host's words
+   left out (state_hash.h; docs/port/PLATFORM.md "Save states", the hash
+   rule).  With nothing to leave out it is the plain hash of the three
+   regions. */
+static void dev_hash(unsigned int tick)
+{
+    IcoStateHashResult res;
+
+    if (dev_measure(&res, NULL) != 0) {
+        fprintf(stderr, "state: hash at tick %u: no memory for the regions' copy\n", tick);
+        return;
+    }
+    fprintf(stderr, "state: hash %016llx of arena+gdata+gbss at tick %u\n",
+            (unsigned long long)res.hash, tick);
+    fprintf(stderr,
+            "state: hash masked %llu pointer words, %llu host ids at tick %u (%d host blocks, "
+            "region hashes arena %016llx gdata %016llx gbss %016llx)\n",
+            (unsigned long long)res.ptr_words, (unsigned long long)res.host_ids, tick,
+            s_host_blocks.n, (unsigned long long)res.region_hash[0],
+            (unsigned long long)res.region_hash[1], (unsigned long long)res.region_hash[2]);
+}
+
+static int write_file(const char *path, const void *p, size_t n)
+{
+    FILE *f = ico_fopen(path, "wb");
+    int ok;
+
+    if (f == NULL) {
+        return -1;
+    }
+    ok = fwrite(p, 1, n, f) == n;
+    ok = fclose(f) == 0 && ok;
+    return ok ? 0 : -1;
+}
+
+/* [dev] state_dump_at: the three regions raw into
+   <states>/dump-<tick>-<k>/ (k counts this run's dumps from 1) with
+   regions.txt (each region's address, size and masked hash, the hash, the
+   addresses of two of the game's globals for the link map) and masked.txt
+   (each range the hash left out); tools/state_region_diff.py compares two
+   such folders. */
+static void dev_dump(unsigned int tick)
+{
+    static const struct {
+        const char *name;
+        const void *p;
+    } syms[2] = {{"systemStatus", systemStatus}, {"stage_no", &stage_no}};
+
+    IcoStateHashRegion rg[3];
+    IcoStateHashResult res;
+    char dir[ICO_PATH_MAX];
+    char path[ICO_PATH_MAX + 32];
+    FILE *f;
+    int bad = 0;
+    int i;
+
+    s_dev.dumps++;
+    if (snprintf(dir, sizeof dir, "%s/dump-%u-%d", ico_state_dir(), tick, s_dev.dumps) >=
+            (int)sizeof dir ||
+        ico_make_dir(dir) != 0) {
+        fprintf(stderr, "state: dump at tick %u: no folder %s\n", tick, dir);
+        return;
+    }
+    dev_regions(rg);
+    for (i = 0; i < 3; i++) {
+        snprintf(path, sizeof path, "%s/%s.bin", dir, rg[i].name);
+        bad |= write_file(path, rg[i].p, rg[i].n) != 0;
+    }
+    snprintf(path, sizeof path, "%s/masked.txt", dir);
+    f = ico_fopen(path, "w");
+    if (f == NULL || dev_measure(&res, f) != 0) {
+        bad = 1;
+        memset(&res, 0, sizeof res);
+    }
+    if (f != NULL) {
+        bad |= fclose(f) != 0;
+    }
+    snprintf(path, sizeof path, "%s/regions.txt", dir);
+    f = ico_fopen(path, "w");
+    if (f != NULL) {
+        fprintf(
+            f,
+            "# a [dev] state_dump_at dump (port/game/state_host.c); tools/state_region_diff.py\n");
+        fprintf(f, "tick %u\nmain_tick %u\nhash %016llx\nmasked %llu %llu\n", tick,
+                ico_host_main_ticks(), (unsigned long long)res.hash,
+                (unsigned long long)res.ptr_words, (unsigned long long)res.host_ids);
+        for (i = 0; i < 3; i++) {
+            fprintf(f, "region %s 0x%llx %llu %016llx\n", rg[i].name,
+                    (unsigned long long)(uintptr_t)rg[i].p, (unsigned long long)rg[i].n,
+                    (unsigned long long)res.region_hash[i]);
+        }
+        for (i = 0; i < 2; i++) {
+            fprintf(f, "symbol %s 0x%llx\n", syms[i].name,
+                    (unsigned long long)(uintptr_t)syms[i].p);
+        }
+        bad |= fclose(f) != 0;
+    } else {
+        bad = 1;
+    }
+    fprintf(stderr,
+            "state: dumped arena+gdata+gbss at tick %u to %s (hash %016llx, masked %llu pointer "
+            "words, %llu host ids)%s\n",
+            tick, dir, (unsigned long long)res.hash, (unsigned long long)res.ptr_words,
+            (unsigned long long)res.host_ids, bad ? ": a file could not be written" : "");
+}
+
+/* the value a [dev] tick key waits for is reached at this poll: the first
+   poll at or past it, again after a load brought the tick back below it */
+static int dev_reached(unsigned int at, unsigned int tick, unsigned int last)
+{
+    return at != 0 && tick >= at && (last < at || last > tick);
+}
+
+/* the [dev] keys: the hash and the dump each time the tick reaches its
+   value (a load brings the tick back below it), the save and the load
+   once */
 static void dev_poll(void)
 {
     const unsigned int tick = ico_host_main_ticks();
     const unsigned int last = s_dev.last_tick;
 
     s_dev.last_tick = tick;
-    if (s_dev.hash_tick != 0 && tick >= s_dev.hash_tick &&
-        (last < s_dev.hash_tick || last > tick) && s_on) {
+    if (s_on && dev_reached(s_dev.hash_tick, tick, last)) {
         dev_hash(tick);
+    }
+    if (s_on && dev_reached(s_dev.dump_tick, tick, last)) {
+        dev_dump(tick);
     }
     if (s_dev.save_tick != 0 && !s_dev.save_done && tick >= s_dev.save_tick) {
         s_dev.save_done = 1;
@@ -1409,7 +1671,11 @@ void ico_state_host_poll(void)
     }
     collect_save(0);
     thumb_poll();
-    if (s_dev.save_tick != 0 || s_dev.load_tick != 0 || s_dev.hash_tick != 0) {
+    if (s_on) {
+        note_host_blocks();
+    }
+    if (s_dev.save_tick != 0 || s_dev.load_tick != 0 || s_dev.hash_tick != 0 ||
+        s_dev.dump_tick != 0) {
         dev_poll();
     }
     req = __atomic_exchange_n(&s_req, 0, __ATOMIC_ACQ_REL);
