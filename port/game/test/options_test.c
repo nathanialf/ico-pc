@@ -1139,6 +1139,101 @@ static void test_video_effects(const char *dir)
         text = read_text(path);
         CHECK(text != NULL && strstr(text, "effect_motion_blur_mode = \"original\"") != NULL);
     }
+    /* Glow between frames ([video] effect_glow_mode): Original with no key
+       under the Original rows, "original" and "smooth" read in any case,
+       anything else Original (with a stderr line); Smooth beside the
+       Original rows is Custom; the getter is 1 only while Glow is on; saved
+       with every save and read back; the Enhanced preset sets Smooth, the
+       Original preset Original; no key under the Enhanced rows is Smooth
+       and an explicit key wins */
+    {
+        static const struct {
+            const char *text;
+            int smooth;
+        } kGlow[] = {{NULL, 0}, {"original", 0}, {"Smooth", 1}, {"fast", 0}};
+
+        static const char kEnhancedRows[] =
+            "preset = \"enhanced\"\nresolution = \"window\"\naspect = \"auto\"\n"
+            "texture_filter = \"anisotropic\"\nfull_height = true\n";
+
+        ico_video_defaults(&d);
+        CHECK(d.effectGlowSmooth == 0 && strcmp(ico_video_glow_name(&d), "original") == 0);
+        for (int i = 0; i < 4; i++) {
+            f = fopen(path, "wb");
+            if (f != NULL) {
+                fputs("[video]\n", f);
+                if (kGlow[i].text != NULL) {
+                    fprintf(f, "effect_glow_mode = \"%s\"\n", kGlow[i].text);
+                }
+                fclose(f);
+            }
+            ico_config_reset(path, "/nonexistent/options_test.ini");
+            ico_video_reload();
+            ico_video_get(&o);
+            CHECK(o.effectGlow == 1 && o.effectGlowSmooth == kGlow[i].smooth &&
+                  ico_video_effect_glow_smooth() == kGlow[i].smooth &&
+                  ico_video_preset(&o) ==
+                      (kGlow[i].smooth ? ICO_VIDEO_CUSTOM : ICO_VIDEO_ORIGINAL) &&
+                  ico_video_preset_rows(&o) == ICO_VIDEO_ORIGINAL);
+        }
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fputs("[video]\neffect_glow = false\neffect_glow_mode = \"smooth\"\n", f);
+            fclose(f);
+        }
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        ico_video_get(&o);
+        CHECK(o.effectGlow == 0 && o.effectGlowSmooth == 1 && ico_video_effect_glow_smooth() == 0 &&
+              strcmp(ico_video_glow_name(&o), "off") == 0);
+        o.effectGlow = 1;
+        o.effectGlowSmooth = 4;
+        ico_video_set(&o);
+        ico_video_get(&o);
+        CHECK(o.effectGlowSmooth == 1 && ico_video_effect_glow_smooth() == 1 &&
+              strcmp(ico_video_glow_name(&o), "smooth") == 0);
+        CHECK(ico_video_save() == 0);
+        text = read_text(path);
+        CHECK(text != NULL && strstr(text, "effect_glow_mode = \"smooth\"") != NULL);
+        ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
+        CHECK(o.effectGlowSmooth == 0 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+        ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+        CHECK(o.effectGlowSmooth == 1 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+        /* no key under the Enhanced rows: Smooth, as Enhanced */
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fputs("[video]\n", f);
+            fputs(kEnhancedRows, f);
+            fclose(f);
+        }
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        ico_video_get(&o);
+        CHECK(o.effectGlowSmooth == 1 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED &&
+              ico_video_effect_glow_smooth() == 1);
+        /* an explicit key wins over the rows */
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fputs("[video]\n", f);
+            fputs(kEnhancedRows, f);
+            fputs("effect_glow_mode = \"original\"\n", f);
+            fclose(f);
+        }
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        ico_video_get(&o);
+        CHECK(o.effectGlowSmooth == 0 && ico_video_preset(&o) == ICO_VIDEO_CUSTOM);
+        /* a file with other rows and no key: Original */
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fputs("[video]\npreset = \"custom\"\nresolution = \"3x\"\n", f);
+            fclose(f);
+        }
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        ico_video_get(&o);
+        CHECK(o.effectGlowSmooth == 0);
+    }
     /* the Glow size key an older version wrote (effect_glow_size) is read
        by nothing: a file holding it loads as one without it (every effect
        on, the preset Original), and a save of a file without it does not

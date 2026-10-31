@@ -451,6 +451,9 @@ static void test_first_run(void)
     /* the motion blur's way: Original, written with the file */
     CHECK_STR(ico_config_get_string("video.effect_motion_blur_mode", "?"), "original");
     CHECK(text != NULL && strstr(text, "effect_motion_blur_mode = \"original\"") != NULL);
+    /* the glow's way between frames: Original, written with the file */
+    CHECK_STR(ico_config_get_string("video.effect_glow_mode", "?"), "original");
+    CHECK(text != NULL && strstr(text, "effect_glow_mode = \"original\"") != NULL);
     CHECK(ico_config_get_bool("video.effect_fog", 0) == 1);
     /* the Frame rate counter: Off, written with the file */
     CHECK(ico_config_get_bool("video.show_fps", 1) == 0);
