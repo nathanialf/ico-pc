@@ -962,12 +962,12 @@ returned from creating a pipeline for N s (pipelines D of T; the limit L s befor
 play): the run ends now, ...`, the report, the box, an exit; the activity file keeps the note for the
 next start. The end also writes the stall mark `<activity file without .txt>-stall.txt` (the version,
 then the note): every start of that version, on any Android, takes the VU programs' plain entries
-(`ico_diag_startup_stall_end`, the window's `rd_set_vu_plain_only`; the lines `ico_pc: a run of this
-version ended when the graphics driver did not return from creating a pipeline (<note>): every start
-of this version takes the plain VU vertex shaders ...` and `window: a run of this version ended ...:
-this start draws with the plain 3D vertex shaders`), so a slow compiler cannot end the same pipeline
-every run; a start of another version deletes the mark (`ico_pc: version V ended a run ...; this
-version tries the extended VU vertex shaders again`). Below Android 9 any counted end in the
+(`ico_diag_startup_stall_end`, the window's `rd_set_vu_plain_only`; the `ico_pc: a run of ... ended
+when the graphics driver did not return from creating a pipeline (<note>)` line says every start of
+the version takes the plain VU vertex shaders, and the `window: a run of ... ended ...` line says the
+start draws with the plain 3D vertex shaders), so a slow compiler cannot end the same pipeline every
+run; a start of another version deletes the mark (`ico_pc: version V ended a run ...`: the running
+version tries the extended VU vertex shaders again). Below Android 9 any counted end in the
 pipelines also takes them, for the next start only. `diag_test`'s activity case holds the mark.
 
 **What issue 161's logs show.** The Retroid Pocket 6 (Adreno 740, compiler E031.41.03.47; the

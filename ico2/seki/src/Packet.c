@@ -183,6 +183,7 @@ static void pac_hostBuild(PacHeader *pk, const char *name, const PacHostIdent *i
     RdMesh m = {0};
     char part[64];
     uint64_t h;
+    void *field;
     int e;
 
     memset(pk->pad9C, 0, sizeof(pk->pad9C));
@@ -206,8 +207,10 @@ static void pac_hostBuild(PacHeader *pk, const char *name, const PacHostIdent *i
     if (m.id == 0) {
         m = rd_create_vu_mesh(&d);
     }
-    memcpy(pk->pad9C, &m.id, sizeof(m.id));
-    rd_vu_mesh_note_field(pk->pad9C, m.id); /* PC port: a host id in the game's memory */
+    /* PC port: a host id in the game's memory; the field noted is the copy's
+     * destination (memcpy returns it) */
+    field = memcpy(pk->pad9C, &m.id, sizeof(m.id));
+    rd_vu_mesh_note_field(field, m.id);
 }
 
 unsigned int pac_HostMeshFor(PacHeader *pk, const PacHostIdent *id)
