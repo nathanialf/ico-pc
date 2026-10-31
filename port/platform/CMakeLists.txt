@@ -14,6 +14,7 @@ target_sources(ico_platform PRIVATE
     memory_floor.c
     perf_block.c
     pipeline_skip.c
+    present_fallback.c
     pump_watch.c
     report.c
     sched.c
@@ -103,8 +104,11 @@ endif()
 # into a second pool, the dead frames under its stack pointer kept, and the
 # relocation words (fiber.c, state_reloc.c)
 # state_registry: the save state registry's table (state_registry.c)
+# present_fallback: the FIFO fallback's decision over a log's present blocks
+# under mailbox, the driver's eligibility, the [dev] value and the lines
+# (present_fallback.c)
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
-          gpu_hang state_fiber state_registry pipeline_skip memory_floor)
+          gpu_hang state_fiber state_registry pipeline_skip memory_floor present_fallback)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

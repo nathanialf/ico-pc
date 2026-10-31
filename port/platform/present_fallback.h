@@ -1,0 +1,111 @@
+/*
+ * port/platform/present_fallback.h
+ *
+ * The FIFO fallback's decision: when presents keep blocking in the driver's
+ * present call under mailbox, every later swapchain presents FIFO for the
+ * rest of the run (rhi.h rhi_present_fifo_fallback).  Free of SDL and the
+ * backend so a unit test replays a log's blocks (present_fallback_test).
+ *
+ * A present that took ICO_PRESENT_FALLBACK_BLOCK_MS or longer in the
+ * driver's present call is a block.  ICO_PRESENT_FALLBACK_COUNT blocks
+ * within ICO_PRESENT_FALLBACK_WINDOW_NS switch, once a run, where the
+ * window says the switch may be taken (IcoPresentFallbackGate: vsync off,
+ * the swapchain in mailbox mode, Vulkan, a driver that is not Mesa's, and
+ * [dev] present_fallback not off).  The window (window_host.c) feeds every
+ * present over ICO_PRESENT_FALLBACK_SLOW_MS, applies the switch at the
+ * step's end and writes the lines this file words.
+ */
+#ifndef ICO_PLATFORM_PRESENT_FALLBACK_H
+#define ICO_PLATFORM_PRESENT_FALLBACK_H
+
+#include <stddef.h>
+
+#define ICO_PRESENT_FALLBACK_BLOCK_MS 200.0
+#define ICO_PRESENT_FALLBACK_COUNT 3
+#define ICO_PRESENT_FALLBACK_WINDOW_NS 30000000000ull
+/* a present over this counts after the switch (the window's own threshold
+   for a blocked present) */
+#define ICO_PRESENT_FALLBACK_SLOW_MS 50.0
+
+/* [dev] present_fallback (ICO_PRESENT_FALLBACK, host_config.c) */
+typedef enum IcoPresentFallbackMode {
+    ICO_PRESENT_FALLBACK_AUTO = 0, /* the default: FIFO after the blocks */
+    ICO_PRESENT_FALLBACK_OFF,      /* mailbox kept whatever the blocks */
+    ICO_PRESENT_FALLBACK_FIFO      /* FIFO from the start */
+} IcoPresentFallbackMode;
+
+/* What the window says about the present it notes */
+typedef enum IcoPresentFallbackGate {
+    ICO_PRESENT_FALLBACK_GATE_NO = 0, /* no switch: vsync on, not mailbox, not Vulkan, Mesa */
+    ICO_PRESENT_FALLBACK_GATE_YES,    /* the switch may be taken */
+    ICO_PRESENT_FALLBACK_GATE_KEPT    /* it could, but [dev] present_fallback = off */
+} IcoPresentFallbackGate;
+
+/* ico_present_fallback_note's answers */
+#define ICO_PRESENT_FALLBACK_SWITCH 1 /* switch to FIFO now (once a run) */
+#define ICO_PRESENT_FALLBACK_KEPT 2 /* the count was reached and the dev key kept mailbox (once) */
+
+/* Zero-initialise before the first note. */
+typedef struct IcoPresentFallback {
+    unsigned long long atNs[ICO_PRESENT_FALLBACK_COUNT]; /* the latest blocks, oldest first */
+    double ms[ICO_PRESENT_FALLBACK_COUNT];
+    int n;                                     /* how many of them are held */
+    unsigned blocks;                           /* blocks the run had */
+    int lastGate;                              /* the gate of the latest note */
+    int taken;                                 /* the switch was answered (once a run) */
+    int kept;                                  /* the kept answer was given (once a run) */
+    unsigned long long takenNs;                /* when (the switch, or the kept answer) */
+    unsigned takenBlocks;                      /* blocks the run had at that note */
+    double takenMinMs, takenMaxMs, takenSpanS; /* the counted blocks then */
+    unsigned slowSince; /* presents over ICO_PRESENT_FALLBACK_SLOW_MS since the switch */
+} IcoPresentFallback;
+
+/* [dev] present_fallback's value (the environment's, NULL when unset):
+   "off", "0", "false", "no" off; "fifo" FIFO from the start; anything else
+   (unset, "auto") auto */
+IcoPresentFallbackMode ico_present_fallback_mode(const char *value);
+
+/* Whether the driver may take the switch: a device (vendorId not 0) whose
+   driver text names neither "Mesa" nor "turnip" (any case).  Mesa's drivers
+   (Turnip on the same Adreno) block far less under mailbox; a few blocks of
+   230 ms there are not the stock driver's queue wait. */
+int ico_present_fallback_driver_eligible(unsigned vendorId, const char *driverText);
+
+/* One present's time in the driver's present call (presentMs) at nowNs
+   with the window's gate: a block (>= ICO_PRESENT_FALLBACK_BLOCK_MS) joins
+   the count, the ones older than ICO_PRESENT_FALLBACK_WINDOW_NS before it
+   leave.  ICO_PRESENT_FALLBACK_SWITCH exactly once a run, when the count
+   reaches ICO_PRESENT_FALLBACK_COUNT under GATE_YES; ICO_PRESENT_FALLBACK_KEPT
+   once, when it reaches it under GATE_KEPT before any switch; else 0. */
+int ico_present_fallback_note(IcoPresentFallback *f, unsigned long long nowNs, double presentMs,
+                              int gate);
+
+/* The switch's line, after ICO_PRESENT_FALLBACK_SWITCH:
+   "window: present blocked 3 times (376-382 ms) in 14 s on <adapter>
+   (<driver text's first line>) under mailbox (vsync off, 6 images):
+   presents now FIFO for this run ([dev] present_fallback=off keeps
+   mailbox)", no newline.  images: the swapchain's count before the switch. */
+void ico_present_fallback_switch_line(const IcoPresentFallback *f, const char *adapter,
+                                      const char *driverText, unsigned images, char *out,
+                                      size_t size);
+
+/* The kept line, after ICO_PRESENT_FALLBACK_KEPT: "window: present blocked
+   3 times over 200 ms in 21 s under mailbox: mailbox kept ([dev]
+   present_fallback=off)", no newline. */
+void ico_present_fallback_kept_line(const IcoPresentFallback *f, char *out, size_t size);
+
+/* The 10 s block line's suffix at nowNs: "; K since presents went FIFO N s
+   ago" after the switch (K: presents over ICO_PRESENT_FALLBACK_SLOW_MS
+   since), "; k of 3 over 200 ms in 30 s toward FIFO" before it while the
+   latest gate was GATE_YES and k blocks are within the window, else "". */
+void ico_present_fallback_block_suffix(const IcoPresentFallback *f, unsigned long long nowNs,
+                                       char *out, size_t size);
+
+/* The present mode line's and the summary's suffix: ", FIFO fallback taken
+   after N blocks" after the switch, ", FIFO fallback set by [dev]
+   present_fallback=fifo" under mode FIFO, ", FIFO fallback armed" when
+   armed (the gate would be GATE_YES), else "". */
+void ico_present_fallback_mode_suffix(const IcoPresentFallback *f, IcoPresentFallbackMode mode,
+                                      int armed, char *out, size_t size);
+
+#endif /* ICO_PLATFORM_PRESENT_FALLBACK_H */
