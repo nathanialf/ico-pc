@@ -30,7 +30,8 @@
  *          x 64..160: a cell, then two LERP draws, A over 64..128 and B over
  *          96..160: where they overlap B must blend over A's result;
  *          x 160..256: a cell, then one glyph quad through the text sheet's
- *          shader (font_sheet_ps, the largest destination-read shader);
+ *          shader (a 1x sheet: font_sheet_baked_ps, the menus' 1x text, or
+ *          font_sheet_ps under ICO_RD_SHEET_SHADER=1);
  *   row 2  x 0..64: the after cell, opaque (ABE 0), drawn after every
  *          blended draw: it must be its own colour on an even and an odd
  *          texel column (a driver that keeps the LERP's dual-source

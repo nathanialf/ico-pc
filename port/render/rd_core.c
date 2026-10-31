@@ -110,7 +110,7 @@ void rd_summary_text(char *out, size_t size)
     snprintf(out, size,
              "blend %s; profile %s; index values dense (marks in the stream); fog %s; VU shaders "
              "%s%s%s%s; VU pre-pass %s%s; VU merge %s; VU fuse %s; constant reads %s; pipelines %s "
-             "(pool %d, cache %d)",
+             "(pool %d, cache %d); menu text 1x %s",
              g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
              rd__profile_text()[0] ? rd__profile_text() : "(not decided)",
              g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
@@ -130,7 +130,9 @@ void rd_summary_text(char *out, size_t size)
              : rd__pipelines_lazy_on() ? "on first use (no start-up set)"
              : careful                 ? "the careful start-up set"
                                        : "the start-up set",
-             RHI_PIPELINE_POOL_MAX, RD_PIPELINE_CACHE_MAX);
+             RHI_PIPELINE_POOL_MAX, RD_PIPELINE_CACHE_MAX,
+             /* the 1x sheets (rd_tex.c rd__sheet_baked) */
+             g_rd.sheetShader ? "shader" : "baked");
 }
 
 /* ------------------------------------------------ the VU index spans
@@ -1757,6 +1759,19 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     g_rd.noDual = !rhi_limits()->dualSourceBlend || (noDual && noDual[0] && noDual[0] != '0');
     if (g_rd.noDual) {
         rd__log("blend: two-pass fallback (no dualSrcBlend)");
+    }
+    /* the 1x menu text's texels baked on the CPU (rd_tex.c
+     * rd__sheet_baked; issue 173); ICO_RD_SHEET_SHADER=1 draws them
+     * through font_sheet_ps, as every scale above 1x is drawn (the A/B) */
+    {
+        const char *sheet = getenv("ICO_RD_SHEET_SHADER");
+        g_rd.sheetShader = sheet != NULL && strcmp(sheet, "1") == 0;
+        if (g_rd.sheetShader) {
+            rd__log("text: 1x menu text through the sheet shader (ICO_RD_SHEET_SHADER=1)");
+        } else {
+            rd__log("text: 1x menu text baked on the CPU (RGBA8 pages; the sheet shader above "
+                    "1x)");
+        }
     }
     /* the VU draws' index values carry nothing but the kick and corner, the
      * triangles' marks are bytes in the stream (shader_consts.h
