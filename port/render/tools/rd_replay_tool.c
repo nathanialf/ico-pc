@@ -262,6 +262,12 @@
  *                         frame hashes as the last rendered one's is shown
  *                         again (rd_reshow.c; ICO_RD_STILL_REPRESENT=0
  *                         renders every one, the pictures the same)
+ *   --save-blended DUMP   (with --interp T PREV, not --presents) writes the
+ *                         frame built between the two, after its replay, as
+ *                         the dump F12 saves of a present drawn between the
+ *                         ticks (rd.h rd_dump_blended_arm, the same writer):
+ *                         replayed on its own, without --interp, it gives
+ *                         the same picture
  *   --interp-any          (with --interp) PREV is taken for the tick right
  *                         before <dump> whatever their frame numbers (dumps
  *                         saved some ticks apart, as the F12 sets are): no
@@ -960,7 +966,7 @@ static struct {
 
 static int nopCount;
 static bool noAa1, interpAny;
-static const char *interpPrev;
+static const char *interpPrev, *saveBlended;
 static float interpT = 1.0f;
 /* --prev DUMP (repeatable, oldest first): frames replayed in this context
  * before <dump>, so the retained targets (the motion blur's previous
@@ -1474,7 +1480,7 @@ int main(int argc, char **argv)
                 "[--time N] [--keys] "
                 "[--pass-dump DIR] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject] "
-                "[--interp-nop-prev L:A[-B]] [--presents N]]\n"
+                "[--interp-nop-prev L:A[-B]] [--presents N] [--save-blended DUMP]]\n"
                 "       [--loss-bisect] [--passes A[-B]] [--draws A[-B]] [--mask-marks]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
@@ -1635,6 +1641,8 @@ int main(int argc, char **argv)
             noHalf = true;
         } else if (strcmp(argv[i], "--prev") == 0 && i + 1 < argc && prevCount < 16) {
             prevDumps[prevCount++] = argv[++i];
+        } else if (strcmp(argv[i], "--save-blended") == 0 && i + 1 < argc) {
+            saveBlended = argv[++i];
         } else if (strcmp(argv[i], "--interp") == 0 && i + 2 < argc) {
             char *end = NULL;
             interpT = strtof(argv[++i], &end);
@@ -1750,6 +1758,10 @@ int main(int argc, char **argv)
     }
     if (presentsN && (!interpPrev || passDir || timeN)) {
         fprintf(stderr, "--presents needs --interp T PREV (and not --pass-dump or --time)\n");
+        return 1;
+    }
+    if (saveBlended && (!interpPrev || presentsN)) {
+        fprintf(stderr, "--save-blended needs --interp T PREV (and not --presents)\n");
         return 1;
     }
     uint32_t gw = 0, gh = 0;
@@ -1949,6 +1961,19 @@ int main(int argc, char **argv)
         }
     }
     const bool replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
+    if (replayed && saveBlended) {
+        /* after the replay, as rd_present writes F12's (rd_interp.c
+           blendedDumpTake) */
+        const bool saved = rd__dump_frame(rf, saveBlended);
+        printf("%s: the blended frame (frame %u at alpha %g) %s %s\n", dump, rf->number,
+               (double)interpT, saved ? "saved to" : "could not be saved to", saveBlended);
+        if (!saved) {
+            rd__frame_free(&f);
+            rd__frame_free(&pf);
+            rd_shutdown();
+            return 1;
+        }
+    }
     if (replayed && tempsDir) {
         /* the frame's temp targets (the water blocks among them), read back
            before anything frees them, as DIR/temp-<n>-<w>x<h>.png */
