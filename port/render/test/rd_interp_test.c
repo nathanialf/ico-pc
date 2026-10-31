@@ -950,6 +950,55 @@ static void testFade(void)
     CHECK(found, "the fade sprite is keyed");
 }
 
+/* Glow between frames (RdSettings.glowSmooth, rd_glow_hold.c): a frame whose
+ * list 7 holds the glow chain's last sprite (the eye blur into WORK3).  A
+ * tick's first present draws it; a later present pastes the tick's glow, or,
+ * with the row Smooth, draws the chain again and says so with the row's
+ * words (the environment switch's words stay "glow redrawn ([dev]
+ * glow_redraw)").  ICO_RD_GLOW_REDRAW is not set in this test */
+static void testGlowRow(void)
+{
+    const uint8_t keep = g_rd.settings.glowSmooth;
+
+    for (int smooth = 0; smooth <= 1; smooth++) {
+        g_rd.settings.glowSmooth = (uint8_t)smooth;
+        for (int n = 0; n < 2; n++) {
+            rd_begin_frame();
+            frameHead();
+            RdPostParams pp;
+            memset(&pp, 0, sizeof(pp));
+            pp.fix = 0x20;
+            pp.blend = RD_BLEND_LERP_FIX;
+            pp.scalar[2] = 1.0f;
+            rd_select_list(7);
+            rd_set_target(rd_target(RD_TARGET_WORK3_HELD), (RdTarget){0}, 128, 128, 0);
+            rd_set_target(rd_target(RD_TARGET_WORK3), (RdTarget){0}, 128, 128, 0);
+            rd_post(RD_POST_EYE_BLUR, &pp);
+            rd_end_frame(0);
+        }
+        const RdFrame *cur = rd__last_frame();
+        const RdFrame *f = rd__interp_frame(rd__prev_frame(), cur, 0.5f, 1, NULL);
+        CHECK(f != NULL && rd__glow_hold_last() == RD_GLOW_FIRST,
+              "glow row %d: a tick's first present draws the chain (%d)", smooth,
+              rd__glow_hold_last());
+        f = rd__interp_frame(rd__prev_frame(), cur, 0.5f, 0, NULL);
+        CHECK(f != NULL, "glow row %d: the later present built", smooth);
+        if (smooth) {
+            CHECK(rd__glow_hold_last() == RD_GLOW_SMOOTH &&
+                      strcmp(rd__glow_hold_text(rd__glow_hold_last()),
+                             "glow redrawn (Glow between frames: Smooth)") == 0,
+                  "glow row Smooth: a later present redraws the chain (%d)", rd__glow_hold_last());
+        } else {
+            CHECK(rd__glow_hold_last() != RD_GLOW_SMOOTH && rd__glow_hold_last() != RD_GLOW_DEV,
+                  "glow row Original: a later present does not redraw by the row (%d)",
+                  rd__glow_hold_last());
+        }
+    }
+    CHECK(strcmp(rd__glow_hold_text(RD_GLOW_DEV), "glow redrawn ([dev] glow_redraw)") == 0,
+          "the environment switch's words are kept");
+    g_rd.settings.glowSmooth = keep;
+}
+
 /* the frame of testFeedback: with display, a motion blur sprite reading
  * DISPLAY's RGB24 view (staticBlur.c MotionBlur's TEX0); with feed, an aura
  * sprite into FEED128; always one into AURA_WORK */
@@ -5821,6 +5870,7 @@ static void runCpu(void)
     testPrisms();
     testFade();
     testFeedback();
+    testGlowRow();
     testText();
     testDeferredText();
     testMorph();
