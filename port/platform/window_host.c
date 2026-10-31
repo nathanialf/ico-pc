@@ -416,7 +416,7 @@ static void video_settings(RdSettings *rs, int w, int h)
     memset(rs, 0, sizeof(*rs));
     /* the renderer's flag: Original only when the four rows are the PS2's */
     rs->preset =
-        ico_video_preset(&o) == ICO_VIDEO_ORIGINAL ? RD_PRESET_ORIGINAL : RD_PRESET_ENHANCED;
+        ico_video_preset_rows(&o) == ICO_VIDEO_ORIGINAL ? RD_PRESET_ORIGINAL : RD_PRESET_ENHANCED;
     rs->outputWidth = (uint32_t)(w > 0 ? w : WINDOW_W);
     rs->outputHeight = (uint32_t)(h > 0 ? h : WINDOW_H);
     rs->aspect = ico_video_aspect();
@@ -431,6 +431,9 @@ static void video_settings(RdSettings *rs, int w, int h)
     /* Motion blur: Smooth, in either preset; Off and Original are the
        game's (staticBlur.c reads the switch) */
     rs->motionBlurSmooth = (uint8_t)(o.effectMotionBlur != 0 && o.effectMotionBlurSmooth != 0);
+    /* Glow between frames: Smooth, in either preset; Original and Off hold
+       the tick's first present's glow (rd_glow_hold.c) */
+    rs->glowSmooth = (uint8_t)(o.effectGlow != 0 && o.effectGlowSmooth != 0);
     /* off under the Original preset (ico_video_anti_alias); the renderer
        draws an MSAA count the device lacks as off (rd_aa_supported_mask) */
     rs->antiAlias = (uint8_t)ico_video_anti_alias();
