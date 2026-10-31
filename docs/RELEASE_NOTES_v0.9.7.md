@@ -4,6 +4,8 @@
 
 - The bug-report picture (F12 on a computer, Save a picture for a bug report in Options) also saves the exact in-between frame that was on screen, so problems that only show between frames can be studied.
 
+- Options > Graphics has a Graphics card row on computers with two or more graphics cards, such as many laptops. Pick the card that draws the game; Apply switches at once, or the choice is used from the next start. Automatic always picks the fast card when there is one. The Windows graphics setting for each app does not change the card the game uses; this row does.
+
 ## Fixed
 
 - On phones and handhelds using the Turnip graphics driver, a thin streak that could flash from Ico's leg across the screen between frames is no longer drawn.
