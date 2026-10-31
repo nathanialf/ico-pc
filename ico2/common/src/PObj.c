@@ -279,6 +279,15 @@ void PObj_SetImageTables(void **p, unsigned int count)
     pobjImageTablesCount = p != 0 ? count : 0;
 }
 
+/* PC port: the pointer to the block itself, a host address in the game's
+   data that two runs of the same play hold differently (a save state's
+   hash leaves it out, port/game/state_host.c dev_hash); its bytes in *bytes */
+void *PObj_HostStateWord(size_t *bytes)
+{
+    *bytes = sizeof pobjImageTables;
+    return &pobjImageTables;
+}
+
 /* a table of n EE words as n pointers, at *out; advances *out */
 static void **DecodeWordTable(ICO_EEWORD(char *) tbl, unsigned int n, void ***out)
 {
