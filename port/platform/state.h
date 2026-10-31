@@ -107,9 +107,17 @@ int ico_state_wants_thumbnail(void);
 /* --- [dev] keys for the headless round trip (state_roundtrip_headless) ---
  * state_save_at = "<tick>:<slot>", state_load_at = "<tick>:<slot>",
  * state_hash_at = "<tick>": at that Main tick the poll saves / loads / logs
- * "state: hash <xxh3-64> of arena+gdata+gbss at tick N".  Parsed by
+ * "state: hash <xxh3-64> of arena+gdata+gbss at tick N" (the game's state:
+ * the host's pointers and handles in it left out, port/platform/state_hash.h)
+ * and "state: hash masked N pointer words, M host ids ...".  Parsed by
  * state_host.c from the config at init; 0 = off. */
 void ico_state_dev_set(unsigned int save_tick, int save_slot, unsigned int load_tick, int load_slot,
                        unsigned int hash_tick);
+/* state_dump_at = "<tick>": at that Main tick (again after a load brought
+ * the tick back) the poll writes the arena, the game's data and bss raw to
+ * <states folder>/dump-<tick>-<k>/ with regions.txt and masked.txt, k
+ * counting the run's dumps from 1 (tools/state_region_diff.py compares two:
+ * the differing bytes by symbol).  0 = off. */
+void ico_state_dev_set_dump(unsigned int dump_tick);
 
 #endif /* ICO_PLATFORM_STATE_H */
