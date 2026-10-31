@@ -85,6 +85,8 @@
 /* marks a function the OS or the C runtime calls (a handler, a thread's entry) */
 #define ICO_ENTRY
 #define LINE_MAX_BYTES 1024
+/* the start's summary line (ico_diag_set_summary): longer than a log line */
+#define SUMMARY_MAX_BYTES 2048
 #define HEARTBEAT_S 2.0
 #define NO_PROGRESS_BEATS 3
 /* the watchdog polls every 0.25 s; a longer gap between two polls means
@@ -365,13 +367,21 @@ static void raw_write(const char *s, size_t n)
     int fd = log_fd >= 0 ? log_fd : 2;
 #ifdef __ANDROID__
     /* logcat too: written to the file, these lines bypass stderr and its
-       mirror (one line, its newline dropped) */
-    if (log_fd >= 0 && n > 0 && n < LINE_MAX_BYTES) {
+       mirror (one line, its newline dropped; a line longer than the buffer,
+       the summary, in pieces of LINE_MAX_BYTES - 1 bytes) */
+    if (log_fd >= 0 && n > 0) {
         char line[LINE_MAX_BYTES];
+        const size_t len = s[n - 1] == '\n' ? n - 1 : n;
+        size_t at = 0;
 
-        memcpy(line, s, n);
-        line[s[n - 1] == '\n' ? n - 1 : n] = '\0';
-        __android_log_write(ANDROID_LOG_INFO, "ico-pc", line);
+        do {
+            const size_t k = len - at < sizeof line - 1 ? len - at : sizeof line - 1;
+
+            memcpy(line, s + at, k);
+            line[k] = '\0';
+            __android_log_write(ANDROID_LOG_INFO, "ico-pc", line);
+            at += k;
+        } while (at < len);
     }
 #endif
     while (n > 0) {
@@ -4079,7 +4089,25 @@ static void report_symbols(void)
 }
 
 /* The first screenful's summary line (ico_diag_set_summary) */
-static char summary_text[LINE_MAX_BYTES - 32];
+static char summary_text[SUMMARY_MAX_BYTES];
+
+/* "ico_pc: summary: <summary_text>", written whole: ico_diag_log's buffer
+   is a log line's */
+static void summary_log(void)
+{
+    static char buf[SUMMARY_MAX_BYTES + 32];
+
+    if (inited) {
+        lock_take();
+    }
+    const int n = snprintf(buf, sizeof buf, "ico_pc: summary: %s\n", summary_text);
+    if (n > 0) {
+        raw_write(buf, (size_t)n < sizeof buf ? (size_t)n : sizeof buf - 1);
+    }
+    if (inited) {
+        lock_give();
+    }
+}
 
 void ico_diag_set_summary(const char *fmt, ...)
 {
@@ -4091,7 +4119,7 @@ void ico_diag_set_summary(const char *fmt, ...)
     /* after the lines the C library still holds (Windows buffers stderr):
        the summary follows the device and window lines in the file */
     flush_stdio_if_main();
-    ico_diag_log("ico_pc: summary: %s", summary_text);
+    summary_log();
 }
 
 static char disc_text[96];
@@ -4109,7 +4137,7 @@ void ico_diag_set_disc(const char *text)
         snprintf(rest, sizeof rest, "%s", at + sizeof unknown - 1);
         snprintf(at, sizeof summary_text - (size_t)(at - summary_text), "disc %s%s", disc_text,
                  rest);
-        ico_diag_log("ico_pc: summary: %s", summary_text);
+        summary_log();
     }
 }
 

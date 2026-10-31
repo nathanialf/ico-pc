@@ -1607,7 +1607,11 @@ keeps.
 
 
 `ico_diag_set_summary` flushes the C library's held lines first, so on Windows the line follows the
-device and window lines in the file, and keeps the text for the report file. The 10 s block's
+device and window lines in the file, and keeps the text for the report file. The line is longer
+than a log line: up to 2048 bytes (`SUMMARY_MAX_BYTES`), written whole to the file and the report
+file (whose log reader takes lines of 2080 bytes, `port/platform/report.c` (`LINE_BYTES`)) and on
+Android to logcat in pieces of 1023 bytes (`port/platform/diag_host.c` (`summary_log`,
+`raw_write`)). The 10 s block's
 `window: memory:` line has the graphics memory in use and its peak where the backend counts it
 (Vulkan), the process's, and at its end the RHI's pipeline pool on both backends: `; pipelines
 <live> alive (most <peak> of the pool's <size>), <f> creations failed (<p> for a full pool)`

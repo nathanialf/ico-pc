@@ -153,7 +153,9 @@
  *               static functions as its object's;
  *   - report:   the segv and watchdog cases write logs/report-<stamp>.zip
  *               (report.h), read back with miniz: report.txt names the end,
- *               the summary line, the report block with its symbol lines,
+ *               the summary line (longer than a log line, whole in the
+ *               summary and in the log's lines), the report block with its
+ *               symbol lines,
  *               and ico-pc.log is the log; the crash's report.txt is
  *               written to diag_test_report.txt (an example); the prune
  *               keeps the newest 5;
@@ -1061,7 +1063,14 @@ static void run_child(const char *mode, const char *log)
 
         ico_report_set_paths(dir, NULL, dir, NULL);
         ico_diag_set_version("test (commit 0)");
-        ico_diag_set_summary("version test; platform the test; GPU none");
+        /* longer than a log line (1024 bytes): the summary is written
+           whole (diag_host.c SUMMARY_MAX_BYTES) */
+        char pad[1201];
+
+        memset(pad, 'x', sizeof pad - 1);
+        pad[sizeof pad - 1] = '\0';
+        ico_diag_set_summary("version test; platform the test; GPU none; %s; the summary's end",
+                             pad);
     }
     if (strcmp(mode, "limited") == 0) {
         for (unsigned int i = 1; i <= 250; i++) {
@@ -1556,6 +1565,8 @@ int main(int argc, char **argv)
     unsetenv("ICO_TEST_REPORT_DIR");
     s = read_file(log);
     CHECK(r == 3);
+    CHECK(strstr(s, "ico_pc: summary: version test; platform the test; GPU none; xxx") != NULL &&
+          strstr(s, "xxx; the summary's end\n") != NULL);
     /* the symbol lines from diag_test.map, after the raw ones */
     CHECK(strstr(s, "ico_pc: symbols from diag_test.map (each offset above in diag_test, in "
                     "order):\n") != NULL);
@@ -1583,11 +1594,17 @@ int main(int argc, char **argv)
             FILE *ex = fopen("diag_test_report.txt", "wb");
 
             CHECK(strstr(txt, "what ended the run: SIGSEGV") != NULL);
-            CHECK(strstr(txt, "summary: version test; platform the test; GPU none\n") != NULL);
+            CHECK(strstr(txt, "summary: version test; platform the test; GPU none; xxx") != NULL);
+            CHECK(strstr(txt, "xxx; the summary's end\n") != NULL);
             /* issue 128: the process's and the device's memory */
             CHECK(strstr(txt, "\nmemory: memory ") != NULL);
             CHECK(strstr(txt, "the last ico_pc:/window:/rd: lines before the report:\n") != NULL);
             CHECK(strstr(txt, "ico_pc: summary: version test") != NULL);
+            /* the log's summary line whole, past 1024 bytes, in the ring too */
+            CHECK(strstr(txt, "ico_pc: summary: version test; platform the test; GPU none; xxx") !=
+                      NULL &&
+                  strstr(strstr(txt, "ico_pc: summary: version test"), "; the summary's end\n") !=
+                      NULL);
             CHECK(strstr(txt, "ico_pc: CRASH: SIGSEGV") != NULL);
             CHECK(strstr(txt, "ico_pc: symbols from diag_test.map") != NULL);
             CHECK(strstr(txt, "achievements.toml: (no stages line)") != NULL);

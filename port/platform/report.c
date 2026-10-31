@@ -584,8 +584,9 @@ static void text_kv(const char *label, const char *s)
     text_line(s);
 }
 
-/* A file's lines: fn(line) for each (cut at LINE_BYTES - 1 bytes). */
-#define LINE_BYTES 1024
+/* A file's lines: fn(line) for each (cut at LINE_BYTES - 1 bytes: the
+   summary line is up to diag_host.c's SUMMARY_MAX_BYTES and a prefix) */
+#define LINE_BYTES 2080
 static char s_line[LINE_BYTES];
 
 static int each_line(const char *path, void (*fn)(const char *line, void *user), void *user)
