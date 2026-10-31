@@ -175,9 +175,8 @@ static struct CdReader {
     int thread;     /* reads on the thread (else on the calling thread) */
     uint32_t ahead; /* the read-ahead's sectors (0: off; the thread only) */
     char line[256]; /* the start line written last */
-    IcoMutex *lock; /* everything below, the thread's state and the counters */
-    IcoCond *work;  /* a command or a read-ahead fill was asked for, or stop */
-    IcoCond *done;  /* the thread finished a command or a fill chunk */
+    /* s_rdLock (below) guards everything from here: the thread's state and
+       the counters */
     IcoThread *worker;
     int stop;
     int halt;     /* reader_drain: a fill under way ends after its chunk */
@@ -199,17 +198,31 @@ static struct CdReader {
     unsigned long long readNs, waitNs, waitMaxNs, bytes;
 } rdr = {.askThread = -1, .askAheadKb = -1};
 
+/* The reader's lock and conditions, made once by the first reader_start
+   and kept for the process (ico_cdvd_host_reset leaves them): the
+   heartbeat's ico_cdvd_host_stats takes the lock from another thread, so
+   the pointer is published with a release store and read with an acquire
+   load there, and is never destroyed under it.  s_rdWork: a command or a
+   read-ahead fill was asked for, or stop; s_rdDone: the thread finished a
+   command or a fill chunk. */
+static IcoMutex *s_rdLock;
+static IcoCond *s_rdWork, *s_rdDone;
+
 static void rd_lock(void)
 {
-    if (rdr.lock != NULL) {
-        ico_mutex_lock(rdr.lock);
+    IcoMutex *const m = __atomic_load_n(&s_rdLock, __ATOMIC_ACQUIRE);
+
+    if (m != NULL) {
+        ico_mutex_lock(m);
     }
 }
 
 static void rd_unlock(void)
 {
-    if (rdr.lock != NULL) {
-        ico_mutex_unlock(rdr.lock);
+    IcoMutex *const m = __atomic_load_n(&s_rdLock, __ATOMIC_ACQUIRE);
+
+    if (m != NULL) {
+        ico_mutex_unlock(m);
     }
 }
 
@@ -246,7 +259,7 @@ static void ra_ask(IcoVfs *v, uint32_t next, uint32_t n)
     rdr.fill = 1;
     rdr.fillVfs = v;
     rdr.fillLsn = next;
-    ico_cond_broadcast(rdr.work);
+    ico_cond_broadcast(s_rdWork);
 }
 
 /* The thread: the read-ahead filled from fillLsn, rdr.ahead sectors at
@@ -273,9 +286,9 @@ static void ra_fill(void)
         unsigned char *at = rdr.ra + (size_t)rdr.raCount * ICO_VFS_SECTOR;
         int r;
 
-        ico_mutex_unlock(rdr.lock);
+        ico_mutex_unlock(s_rdLock);
         r = ico_vfs_read_sectors(v, lsn + rdr.raCount, c, at);
-        ico_mutex_lock(rdr.lock);
+        ico_mutex_lock(s_rdLock);
         if (r != 0) {
             break; /* what it holds so far stays */
         }
@@ -283,7 +296,7 @@ static void ra_fill(void)
         rdr.bytes += (unsigned long long)c * ICO_VFS_SECTOR;
     }
     rdr.reading = 0;
-    ico_cond_broadcast(rdr.done);
+    ico_cond_broadcast(s_rdDone);
 }
 
 /* The thread: the queued command, from the read-ahead or the disc (the
@@ -301,9 +314,9 @@ static void serve(void)
         const double t = ico_thread_now_ms();
         int r;
 
-        ico_mutex_unlock(rdr.lock);
+        ico_mutex_unlock(s_rdLock);
         r = ico_vfs_read_sectors(q->vfs, q->lsn, q->n, q->dst);
-        ico_mutex_lock(rdr.lock);
+        ico_mutex_lock(s_rdLock);
         q->result = r;
         rdr.readNs += ns_of(ico_thread_now_ms() - t);
         if (r == 0) {
@@ -313,7 +326,7 @@ static void serve(void)
     q->t1 = ico_thread_now_ms();
     q->done = 1;
     rdr.reading = 0;
-    ico_cond_broadcast(rdr.done);
+    ico_cond_broadcast(s_rdDone);
     if (q->result == 0) {
         ra_ask(q->vfs, q->lsn + q->n, q->n);
     }
@@ -322,10 +335,10 @@ static void serve(void)
 static void reader_main(void *arg)
 {
     (void)arg;
-    ico_mutex_lock(rdr.lock);
+    ico_mutex_lock(s_rdLock);
     for (;;) {
         while (!rdr.stop && !rdr.queued && !rdr.fill) {
-            ico_cond_wait(rdr.work, rdr.lock);
+            ico_cond_wait(s_rdWork, s_rdLock);
         }
         if (rdr.stop) {
             break;
@@ -336,7 +349,7 @@ static void reader_main(void *arg)
             ra_fill();
         }
     }
-    ico_mutex_unlock(rdr.lock);
+    ico_mutex_unlock(s_rdLock);
 }
 
 /* sceCdGetError's code for a failed read of [lsn, lsn + n) */
@@ -404,12 +417,12 @@ static void cd_complete(void)
     if (!rdr.inFlight) {
         return;
     }
-    ico_mutex_lock(rdr.lock);
+    ico_mutex_lock(s_rdLock);
     if (!q->done) {
         const double t = ico_thread_now_ms();
 
         while (!q->done) {
-            ico_cond_wait(rdr.done, rdr.lock);
+            ico_cond_wait(s_rdDone, s_rdLock);
         }
         waited = ico_thread_now_ms() - t;
         rdr.waits++;
@@ -419,7 +432,7 @@ static void cd_complete(void)
     if (q->hit) {
         rdr.hits++;
     }
-    ico_mutex_unlock(rdr.lock);
+    ico_mutex_unlock(s_rdLock);
     rdr.inFlight = 0;
     cd.error = q->result != 0 ? read_error(q->vfs, q->lsn, q->n) : ICO_CD_ERR_NONE;
     if (q->t1 - q->t0 >= CD_SLOW_READ_MS) {
@@ -437,29 +450,29 @@ static void cd_complete(void)
 static void reader_drain(void)
 {
     cd_complete();
-    if (rdr.lock == NULL) {
+    if (s_rdLock == NULL) {
         return;
     }
-    ico_mutex_lock(rdr.lock);
+    ico_mutex_lock(s_rdLock);
     rdr.fill = 0;
     rdr.halt = 1;
     while (rdr.queued || rdr.reading) {
-        ico_cond_wait(rdr.done, rdr.lock);
+        ico_cond_wait(s_rdDone, s_rdLock);
     }
     rdr.halt = 0;
     rdr.raVfs = NULL;
     rdr.raCount = 0;
-    ico_mutex_unlock(rdr.lock);
+    ico_mutex_unlock(s_rdLock);
 }
 
 static void reader_stop(void)
 {
     reader_drain();
     if (rdr.worker != NULL) {
-        ico_mutex_lock(rdr.lock);
+        ico_mutex_lock(s_rdLock);
         rdr.stop = 1;
-        ico_cond_broadcast(rdr.work);
-        ico_mutex_unlock(rdr.lock);
+        ico_cond_broadcast(s_rdWork);
+        ico_mutex_unlock(s_rdLock);
         ico_thread_join(rdr.worker);
         rdr.worker = NULL;
         rdr.stop = 0;
@@ -470,22 +483,36 @@ static void reader_stop(void)
     rdr.thread = 0;
 }
 
+void ico_cdvd_host_shutdown(void)
+{
+    reader_stop();
+}
+
 /* The lock, the conditions, the read-ahead's buffer and the thread: 1, or
    0 when any could not be made (the reads stay on the calling thread) */
 static int reader_start(uint32_t ahead)
 {
-    if (rdr.lock == NULL) {
-        rdr.lock = ico_mutex_create();
-        rdr.work = ico_cond_create();
-        rdr.done = ico_cond_create();
-        if (rdr.lock == NULL || rdr.work == NULL || rdr.done == NULL) {
-            ico_cond_destroy(rdr.work);
-            ico_cond_destroy(rdr.done);
-            ico_mutex_destroy(rdr.lock);
-            rdr.lock = NULL;
-            rdr.work = rdr.done = NULL;
+    static int exitHooked;
+
+    if (s_rdLock == NULL) {
+        IcoMutex *const m = ico_mutex_create();
+
+        s_rdWork = ico_cond_create();
+        s_rdDone = ico_cond_create();
+        if (m == NULL || s_rdWork == NULL || s_rdDone == NULL) {
+            ico_cond_destroy(s_rdWork);
+            ico_cond_destroy(s_rdDone);
+            ico_mutex_destroy(m);
+            s_rdWork = s_rdDone = NULL;
             return 0;
         }
+        __atomic_store_n(&s_rdLock, m, __ATOMIC_RELEASE);
+    }
+    if (!exitHooked) {
+        /* the thread stopped and joined at exit(), before the C library
+           closes the image's FILE (a read-ahead fill may be inside fread) */
+        exitHooked = 1;
+        atexit(ico_cdvd_host_shutdown);
     }
     if (ahead > 0) {
         rdr.ra = malloc((size_t)ahead * ICO_VFS_SECTOR);
@@ -845,10 +872,11 @@ void ico_cdvd_host_reset(void)
     /* the thread stopped (the command in flight completed first) and the
        reader forgotten with the rest */
     reader_stop();
-    ico_mutex_destroy(rdr.lock);
-    ico_cond_destroy(rdr.work);
-    ico_cond_destroy(rdr.done);
+    /* the lock and the conditions stay (s_rdLock): the counters cleared
+       under it, as the heartbeat reads them */
+    rd_lock();
     memset(&rdr, 0, sizeof(rdr));
+    rd_unlock();
     rdr.askThread = rdr.askAheadKb = -1;
     ico_cdvd_host_eject();
 #ifdef ICO_CDVD_HAVE_HOST_LOOP
@@ -877,11 +905,11 @@ static void queue_read(IcoVfs *vfs, uint32_t lsn, uint32_t sectors, void *dst)
 {
     CdReq *q = &rdr.req;
 
-    ico_mutex_lock(rdr.lock);
+    ico_mutex_lock(s_rdLock);
     if (ra_take(vfs, lsn, sectors, dst)) {
         rdr.hits++;
         ra_ask(vfs, lsn + sectors, sectors);
-        ico_mutex_unlock(rdr.lock);
+        ico_mutex_unlock(s_rdLock);
         return;
     }
     memset(q, 0, sizeof(*q));
@@ -892,8 +920,8 @@ static void queue_read(IcoVfs *vfs, uint32_t lsn, uint32_t sectors, void *dst)
     q->t0 = ico_thread_now_ms();
     rdr.queued = 1;
     rdr.inFlight = 1;
-    ico_cond_broadcast(rdr.work);
-    ico_mutex_unlock(rdr.lock);
+    ico_cond_broadcast(s_rdWork);
+    ico_mutex_unlock(s_rdLock);
 }
 
 /* One read command: the transfer starts now (on the thread, or here), the
@@ -1159,19 +1187,19 @@ int sceCdStRead(int sectors, void *buf, int mode, int *err)
            reads on from the stream's next sector */
         int hit;
 
-        ico_mutex_lock(rdr.lock);
+        ico_mutex_lock(s_rdLock);
         hit = ra_take(vfs, cd.stLsn, n, buf);
         rdr.hits += hit ? 1u : 0u;
-        ico_mutex_unlock(rdr.lock);
+        ico_mutex_unlock(s_rdLock);
         if (!hit && direct_read(vfs, cd.stLsn, n, buf, "a stream read on the game thread") != 0) {
             if (err != NULL) {
                 *err = ICO_CD_ERR_READ;
             }
             return 0;
         }
-        ico_mutex_lock(rdr.lock);
+        ico_mutex_lock(s_rdLock);
         ra_ask(vfs, cd.stLsn + n, n);
-        ico_mutex_unlock(rdr.lock);
+        ico_mutex_unlock(s_rdLock);
         cd.stLsn += n;
         return (int)n;
     }

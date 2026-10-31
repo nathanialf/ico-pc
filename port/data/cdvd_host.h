@@ -146,5 +146,10 @@ void ico_cdvd_host_set_clock_source(IcoCdClockFn fn);
 
 /* Forget all drive state (tests). */
 void ico_cdvd_host_reset(void);
+/* The disc reader's thread stopped and joined (the command in flight
+   completed first), the reads on the calling thread from then on until the
+   reader is chosen again; registered with atexit when the thread first
+   starts, so exit() never closes the image's file under a read. */
+void ico_cdvd_host_shutdown(void);
 
 #endif /* ICO_PORT_CDVD_HOST_H */

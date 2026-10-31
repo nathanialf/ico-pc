@@ -386,7 +386,11 @@ started when the reader is chosen, the calling thread's read when it cannot be):
   the code is final when `busy` clears. The host context's `sceCdSync(0)`, `sceCdBreak` (the read
   finished, then `ICO_CD_ERR_ABORT`: nothing is written into the buffer after the break), the
   eject, the reset and a new reader choice complete it the same way first (`reader_drain`,
-  `reader_stop`).
+  `reader_stop`), and so does the process's exit: the first thread start registers
+  `ico_cdvd_host_shutdown` with `atexit`, which stops and joins the thread before the C library
+  closes the image's file. The lock and the conditions are made once and kept for the process
+  (`s_rdLock`, published with a release store), since the heartbeat's `ico_cdvd_host_stats` takes
+  the lock from the watchdog's thread.
 - The read-ahead: after each command (and each stream read) the thread reads on from where it
   ended into a buffer of the disc's next sectors (`[dev] disc_read_ahead_kb`, 256 KB by default),
   never past the volume's end, in chunks of `CD_RA_CHUNK` (32 sectors) that a new command stops
