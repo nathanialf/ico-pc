@@ -1846,7 +1846,7 @@ VuVSOut vu_mesh_out(VuVtx a, VuVtx b, VuVtx c, uint kick, uint corner, uint mark
 }
 
 // ------------------------------------------------- the vertex pre-pass
-// A vertex's record (docs/port/RENDER.md, "The vertex pre-pass"): twelve
+// A vertex's record (docs/port/PIPELINES.md, "The vertex pre-pass"): twelve
 // words in three planes of RGBA32_UINT texels, its VuVtx as computed, the
 // floats as their bits: plane 0 h; plane 1 p.x, p.y, GS Z, RGBA (a byte a
 // channel, R lowest); plane 2 S, T, Q and the flags (bit 0 inside, bit 1

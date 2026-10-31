@@ -1377,7 +1377,7 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
 }
 
 /* --------------------------------------- the vertex and triangle pre-passes
- * docs/port/RENDER.md, "The vertex and triangle pre-passes".  Before list 0
+ * docs/port/PIPELINES.md, "The vertex and triangle pre-passes".  Before list 0
  * (replayFrame, after the uploads and the first clears) every mesh, grid
  * and particle command of the replayed lists gets its VuSource (kept for
  * its draws); a mesh or grid command the vertices its index range reads,

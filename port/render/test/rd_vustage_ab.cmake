@@ -1,5 +1,5 @@
 # rd_vustage_ab: the per-triangle record against the old way, byte for byte
-# (docs/port/RENDER.md, "The vertex and triangle pre-passes").  For every
+# (docs/port/PIPELINES.md, "The vertex and triangle pre-passes").  For every
 # dump the list names (tools/vustage_dumps.txt: one path a line, relative to
 # the list's folder unless absolute, '*' globs, '#' comments), at the Original preset at 4:3 and 1x and at the Enhanced
 # preset at 4:3 and 2x, rd_replay_tool's --pass-dump with --stats twice

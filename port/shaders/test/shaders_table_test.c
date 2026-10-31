@@ -75,7 +75,7 @@ static const char *const expectedPlain[] = {
 };
 
 /* the vertex and triangle pre-passes (vu_tri.hlsl, vu_particle.hlsl;
- * docs/port/RENDER.md "The vertex and triangle pre-passes"): each mesh
+ * docs/port/PIPELINES.md "The vertex and triangle pre-passes"): each mesh
  * program's pre-pass entry, the pixel shader of the record, the triangles'
  * and sprites' record stages and the main shaders drawing from the record */
 static const char *const expectedPrepass[] = {

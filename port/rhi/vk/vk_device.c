@@ -2246,7 +2246,7 @@ static bool vkr_is_tiler(uint32_t vendor)
  *
  * The careful column: the devices whose start-up set is made under the
  * careful policy (its reason for RhiLimits.carefulPipelines;
- * docs/port/RENDER.md, "The start-up set"): the window passes
+ * docs/port/PIPELINES.md, "The start-up set"): the window passes
  * rd_pipeline_policy_careful() to rd_set_pipeline_policy (batches of 8 on
  * one thread, the pipeline cache written after each, the set stopped and
  * the rest made on first use once the process grew past the budget or a

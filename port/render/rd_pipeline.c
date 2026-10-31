@@ -2744,7 +2744,7 @@ const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i)
 }
 
 /* ------------------------------------------------ the VU modules
- * docs/port/RENDER.md, "The fallback entries": every device draws the VU
+ * docs/port/PIPELINES.md, "The fallback entries": every device draws the VU
  * programs through one module set, the record path's (vu_main_vs,
  * vu_particle_main_vs, the pre-pass's and the stages' point entries), with
  * the region rule's every step.  A draw the record path cannot take (past
