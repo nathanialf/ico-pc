@@ -271,14 +271,18 @@ int rd__plan_screen_draw_ex(const RdStateBlock *s, uint8_t prim, int aa1, uint8_
     k->depthFmt = (uint8_t)depthFmt;
     /* an R8 coverage texture (rd_create_texture_r8) is drawn by font_ps and a
      * sheet texture (rd_create_texture_sheet) by font_sheet_ps, a 1x one by
-     * font_sheet_baked_ps from its baked texels (rd__sheet_baked); the
-     * fragment shader is part of the key */
+     * font_sheet_baked_ps from its baked texels (rd__sheet_baked): the layout
+     * of the RHI texture that exists (sheetBaked, so an upload that failed
+     * to remake it after a layout change still draws it with its own
+     * shader), the wanted one before the first upload; the fragment shader
+     * is part of the key */
     if (d->texEnabled) {
         const RdTexRec *tr = rd__tex_rec(s->tex);
         if (tr && tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_R8) {
             k->fs = RD_FS_FONT;
         } else if (tr && tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_SHEET) {
-            k->fs = rd__sheet_baked(tr) ? RD_FS_FONT_SHEET_BAKED : RD_FS_FONT_SHEET;
+            const int baked = tr->rhi.id ? tr->sheetBaked : rd__sheet_baked(tr);
+            k->fs = baked ? RD_FS_FONT_SHEET_BAKED : RD_FS_FONT_SHEET;
         }
     }
     /* PRIM.AA1 (not for an R8 texture: no AA1 draw samples one) */
