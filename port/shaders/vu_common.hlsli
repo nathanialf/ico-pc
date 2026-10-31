@@ -460,11 +460,19 @@ float4 vu_matm(uint at, float4 v, float w)
 
 // ftoi0 / ftoi4: truncation, saturating at +-2^31 like the VU (?: between
 // numbers: the conversion of a value out of range is never the one taken).
+// A NaN takes 0x80000000, which vu_gs_ok rejects: OpConvertFToS of a NaN is
+// undefined, and the compilers differ (LLVM's, lavapipe on x86-64, gives
+// 0x80000000; Mesa's ir3 on Turnip most likely 0, a GS position on the
+// frame: issue 163), so the last select's ordered compare, which a NaN
+// fails, picks the value instead of the conversion. Every number takes what
+// it took before: -2^31 itself converts to 0x80000000 exactly. The CPU
+// mirror (vu1_ref, ps2_ftoi) saturates a NaN by its sign bit; both are
+// saturated values, so both drop the corner.
 int vu_ftoi(float x)
 {
     int r = (int)x;
     r = x >= 2147483648.0 ? 0x7FFFFFFF : r;
-    r = x <= -2147483648.0 ? (int)0x80000000u : r;
+    r = x >= -2147483648.0 ? r : (int)0x80000000u;
     return r;
 }
 
@@ -1739,17 +1747,21 @@ VuVSOut vu_probe_out(uint vid, uint value)
     VuVSOut o = vu_out_init();
     uint cell = vid / 3u;
     uint corner = vid % 3u;
-    float2 px = float2(float(cell % VU_PROBE_FIELDS), float(cell / VU_PROBE_FIELDS));
+    // precise as the drawing positions are: no driver fuses the scale and
+    // the offset into a different rounding, so the probe's pixel is the
+    // same on every device
+    precise float2 px = float2(float(cell % VU_PROBE_FIELDS), float(cell / VU_PROBE_FIELDS));
     px.x += corner == 1u ? 1.5 : 0.0;
     px.y += corner == 2u ? 1.5 : 0.0;
     // texel px of the target (under the exact viewport the target is the
     // share g_misc.zw of it about its centre: common.hlsli fullscreen_triangle)
+    precise float4 pos =
+        float4(px.x * g_target.z * 2.0 - 1.0, 1.0 - px.y * g_target.w * 2.0, 0.5, 1.0);
     if (g_vp.x != 0.0) {
-        o.pos = float4((px.x + g_vpo.x) * g_vp.x - g_misc.z, g_misc.w - (px.y + g_vpo.y) * g_vp.y,
-                       0.5, 1.0);
-    } else {
-        o.pos = float4(px.x * g_target.z * 2.0 - 1.0, 1.0 - px.y * g_target.w * 2.0, 0.5, 1.0);
+        pos = float4((px.x + g_vpo.x) * g_vp.x - g_misc.z, g_misc.w - (px.y + g_vpo.y) * g_vp.y,
+                     0.5, 1.0);
     }
+    o.pos = pos;
     o.col = float4(float(value & 0xFFFFu), float(value >> 16), 0.0, 0.0);
     return o;
 }
