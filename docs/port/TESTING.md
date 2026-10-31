@@ -306,7 +306,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   calls the girl and the camera turns, `state_hash_at=700` logs the hash of the arena and the
   game's data and bss, `state_load_at=700:1` loads slot 1 (the Main tick and the script's cursor
   go back to 440), the same presses play again and the second hash at 700 must equal the first,
-  with no `state: refused` line. `state_roundtrip_headless_settings`: one run saves slot 1, a
+  with no `state: refused` line. The hash is of the game's state, the host's pointers and handles
+  left out ([PLATFORM.md](PLATFORM.md#saving-and-loading), the hash rule); `state_dump_at=700`
+  writes the three regions at each hash, and when the hashes differ the failure message carries
+  `tools/state_region_diff.py`'s report on the two dumps: the first ten differing symbols of the
+  game's data and bss and the arena's first ten differing ranges (the dumps are deleted on a
+  pass). On a pass the output ends with the `state: hash masked ...` line.
+  `state_roundtrip_headless_settings`: one run saves slot 1, a
   second run over a copy of its states folder with `[gameplay] yorda_safe = true` (a simulation
   key) loads it and must log `state: refused load slot 1: settings differ: gameplay.yorda_safe=...`
   and go on to its last tick. Both skip without the disc image and on a sanitizer build ([Tests
@@ -1710,7 +1716,7 @@ pad script, `RUN_SERIAL` and with a long timeout:
 `ICO_GALLERY_PLAY`), `credits_headless` (`port/ui/test/credits_headless.py`, with
 `unlock_credits=1`), and `state_roundtrip_headless` and `state_roundtrip_headless_settings`
 (`port/game/test/state_roundtrip_headless.cmake` with `state_roundtrip_pad.txt`, the `[dev]`
-`state_save_at`, `state_load_at` and `state_hash_at` keys, [CONFIG.md](CONFIG.md#dev); also
+`state_save_at`, `state_load_at`, `state_hash_at` and `state_dump_at` keys, [CONFIG.md](CONFIG.md#dev); also
 skipped on a sanitizer build, where save states are off); the two Python scripts share
 `headless_common.py`, whose pad walks the boot to the title and then Settings > Extras. A worktree
 configured with `-DICO_DISC_IMAGE=/nonexistent -DICO_BASE_ELF=/nonexistent` cannot start the game
@@ -1731,7 +1737,28 @@ runs are under `state_roundtrip_headless_settings_run/save` and `.../load`). The
 assume the stage is playable by tick 400 and the pause menu up by 440 (`state_roundtrip_pad.txt`,
 header comment); a `state: refused save slot 1: not on the pause menu` or `the disc is busy`
 there means those ticks need moving, a hash that differs means something the game's memory
-holds was not put back.
+holds was not put back, or holds a host value the hash rule does not leave out yet. The message
+then names it:
+
+    state_roundtrip_headless:
+      the hashes differ: "state: hash <h1> of arena+gdata+gbss at tick 700" before the load, "..." after
+      state: hash masked N pointer words, M host ids at tick 700 (...)
+      state: hash masked ... (the second hash's)
+      state_region_diff: <dump-700-1> (tick 700, hash <h1>) against <dump-700-2> (...)
+        arena: 41943040 bytes, masked hash .. / ..: R differing range(s), B byte(s)
+        gdata: ...
+        gbss: ...
+        the first 10 differing symbols of the game's data and bss (S in all):
+          gbss <symbol> (<object file>): n byte(s) differ, the first at +0x.. (gbss+0x...): <a bytes> / <b bytes>
+          ...
+        the arena's first 10 differing ranges:
+          arena+0x... (EE 0x...): n byte(s): <a bytes> / <b bytes>
+
+The two dumps stay in `state_roundtrip_headless_run/states/<disc>/` for a closer look
+(`tools/state_region_diff.py <a> <b> <build>/ico_pc.map --elf <build>/ico_pc --max 100`); a
+symbol of the game's data names the global or, with `--elf`, the static; an arena range is an
+EE address, which a heap block or a model's records hold. `tools/state_region_diff.py
+--selftest` checks the tool on two made-up dumps.
 
 ## Environment switches
 
