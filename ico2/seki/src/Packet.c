@@ -118,6 +118,20 @@ void pac_HostStateFixup(int freeLive)
     pacHostQwCap = 0;
 }
 
+/* PC port: the host's words in this file's data, which two runs of the same
+   play hold differently (a save state's hash leaves them out,
+   port/game/state_host.c dev_hash): the scratch stream's pointer (ptr 1),
+   its capacity, the batches it last held and the declined pack hash. */
+static uint64_t pacHostDeclined;
+
+void pac_HostStateWords(void (*fn)(const void *p, size_t n, int ptr, void *user), void *user)
+{
+    fn(&pacHostQw, sizeof pacHostQw, 1, user);
+    fn(&pacHostQwCap, sizeof pacHostQwCap, 0, user);
+    fn(pacHostBatch, sizeof pacHostBatch, 0, user);
+    fn(&pacHostDeclined, sizeof pacHostDeclined, 0, user);
+}
+
 /* The packet's mesh desc (its stream in pacHostQw); 0 when the packet has
    no batches. */
 static int pac_hostDesc(const PacHeader *pk, RdVuMeshDesc *d, const char *name)
@@ -193,6 +207,7 @@ static void pac_hostBuild(PacHeader *pk, const char *name, const PacHostIdent *i
         m = rd_create_vu_mesh(&d);
     }
     memcpy(pk->pad9C, &m.id, sizeof(m.id));
+    rd_vu_mesh_note_field(pk->pad9C, m.id); /* PC port: a host id in the game's memory */
 }
 
 unsigned int pac_HostMeshFor(PacHeader *pk, const PacHostIdent *id)
@@ -211,8 +226,6 @@ unsigned int pac_HostMesh(PacHeader *pk)
 {
     return pac_HostMeshFor(pk, 0);
 }
-
-static uint64_t pacHostDeclined;
 
 static bool pac_hostRetireDeclined(uint64_t hash, bool replaced, void *user)
 {
