@@ -498,6 +498,27 @@ static void fix_ctxbuf(_mco_ctxbuf *c, uintptr_t lo, uintptr_t hi, const IcoStat
     }
 }
 
+/* The lowest address in [lo, from) from which the stack holds a nonzero
+   word, or from.  A slot's stack is committed zeroed and a restore commits
+   it zeroed again, so the bytes below that address need no saving: what a
+   save holds from there up is the stack exactly, the dead frames under the
+   stack pointer included (the game reads them when it reads a local it
+   never set: a save that dropped them made a load's later frames differ
+   from the saved run's).  Read word by word, not through the sanitizer's
+   checks: dead frames may keep a redzone's poison. */
+#ifdef ICO_FIBER_ASAN
+__attribute__((no_sanitize_address))
+#endif
+static uintptr_t lowest_used(uintptr_t lo, uintptr_t from)
+{
+    const volatile uint64_t *w = (const volatile uint64_t *)((lo + 7u) & ~(uintptr_t)7u);
+
+    while ((uintptr_t)(w + 1) <= from && *w == 0) {
+        w++;
+    }
+    return (uintptr_t)w < from ? (uintptr_t)w : from;
+}
+
 int ico_fiber_slot_save(int slot, IcoFiberImage *out)
 {
     uintptr_t s;
@@ -527,7 +548,10 @@ int ico_fiber_slot_save(int slot, IcoFiberImage *out)
     if (sp < lo || sp > hi) {
         return -1;
     }
+    /* from the stack pointer less the System V red zone, and below it down
+       to the deepest word the stack ever held (lowest_used) */
     from = sp - lo >= 128 ? sp - 128 : lo;
+    from = lowest_used(lo, from);
     from &= ~(uintptr_t)15;
     out->slot_base = (uint64_t)s;
     out->slot = (uint32_t)slot;
