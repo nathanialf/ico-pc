@@ -57,6 +57,7 @@
 #include "window_lines.h"
 #include "window_pipeline_skip.h"
 #include "window_present_fallback.h"
+#include "window_disc.h"
 #include "window_sweep.h"
 #include "window_lifecycle.h"
 #include "window_pump_win.h"
@@ -1861,6 +1862,8 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
 {
     RdSettings rs;
     int w = 0, h = 0;
+
+    ico_cdvd_host_set_windowed(1);
 
     /* [video] backend (config.toml) or backend= (ico-pc.ini), also the
        Options > Graphics > Graphics API row: "", the default, is Vulkan first,
@@ -5059,6 +5062,7 @@ static void pace_log(Uint64 now)
         s_pres.budgetClimbsAt = b->climbs;
         s_pres.budgetClimbRefusalsAt = b->climbRefusals;
         pace_budget_block(b); /* a new block: its lowest from now */
+        window_disc_block(b);
     }
     const char *ow = window_orig_words(!rd_interpolation_active());
 
@@ -5177,21 +5181,21 @@ static void slow_step(double ms)
     uint64_t cardStrips, cardTris;
     double cardMs;
     rd_vu_card_counts(&cardStrips, &cardTris, &cardMs);
-    fprintf(stderr,
-            "window: slow step %.1f ms at vsync %u (Main tick %u, stage %d%s): step %.1f "
-            "(vsync callbacks %.1f, audio %.1f, game threads %.1f in %lu switches, strip verdicts "
-            "%llu strips, %llu triangles, %.2f ms, achievements "
-            "%.1f), pump %.1f (events %.1f in %u, settings %.1f, input %.1f), other %.1f; %u "
-            "disc reads (%u sectors), %u texture decodes, %u pipelines created, memory card %s\n",
-            ms, ico_host_vsync_count(), ico_host_main_ticks(), p.stage,
-            p.loading ? ", loading" : "", p.totalMs, p.hooksMs, p.audioMs, p.threadsMs, p.switches,
-            (unsigned long long)(cardStrips - s_pres.stepCardStrips),
-            (unsigned long long)(cardTris - s_pres.stepCardTris), cardMs - s_pres.stepCardMs,
-            p.achMs, s_pres.pumpMs, s_pres.pumpEventsMs, s_pres.pumpEvents, s_pres.pumpSettingsMs,
-            s_pres.pumpInputMs, other > 0.0 ? other : 0.0, p.cdReads, p.cdSectors,
-            tc != NULL ? tc->decodes - s_pres.decodes : 0u,
-            rs != NULL ? rs->pipelineCreates - s_pres.pipeCreates : 0u,
-            p.mcPending ? "busy" : "idle");
+    fprintf(
+        stderr,
+        "window: slow step %.1f ms at vsync %u (Main tick %u, stage %d%s): step %.1f "
+        "(vsync callbacks %.1f, audio %.1f, game threads %.1f in %lu switches, strip verdicts "
+        "%llu strips, %llu triangles, %.2f ms, achievements "
+        "%.1f), pump %.1f (events %.1f in %u, settings %.1f, input %.1f), other %.1f; %u "
+        "disc reads (%u sectors), disc wait %.1f ms, %u texture decodes, %u pipelines created, memory card %s\n",
+        ms, ico_host_vsync_count(), ico_host_main_ticks(), p.stage, p.loading ? ", loading" : "",
+        p.totalMs, p.hooksMs, p.audioMs, p.threadsMs, p.switches,
+        (unsigned long long)(cardStrips - s_pres.stepCardStrips),
+        (unsigned long long)(cardTris - s_pres.stepCardTris), cardMs - s_pres.stepCardMs, p.achMs,
+        s_pres.pumpMs, s_pres.pumpEventsMs, s_pres.pumpEvents, s_pres.pumpSettingsMs,
+        s_pres.pumpInputMs, other > 0.0 ? other : 0.0, p.cdReads, p.cdSectors, p.cdWaitMs,
+        tc != NULL ? tc->decodes - s_pres.decodes : 0u,
+        rs != NULL ? rs->pipelineCreates - s_pres.pipeCreates : 0u, p.mcPending ? "busy" : "idle");
 }
 
 /* Every 2 s of samples, resolution "auto"'s step (one down at
@@ -5236,6 +5240,7 @@ void ico_window_pace(int hz)
         window_hold_line(ms - 1000.0 / (hz > 0 ? hz : 60), ico_audio_sdl_held_ms(), s_pres.decodes,
                          s_pres.pipeCreates);
     }
+    window_disc_step();
     rd_vu_card_counts(&s_pres.stepCardStrips, &s_pres.stepCardTris, &s_pres.stepCardMs);
     if (s_pres.pausePendingNs) {
         /* a swapchain rebuilt in the pump (video_apply): paused out */
@@ -5445,7 +5450,8 @@ static void budget_lines(const PaceBudget *b, unsigned drops, unsigned climbs, u
                                s_pres.stepNs,
                                period,
                                s_pres.fenceHoldsDisplay,
-                               true};
+                               true,
+                               window_disc_wait_ns()};
     char t[400];
 
     if (b->drops != drops) {
@@ -5650,6 +5656,7 @@ static void pace_locked(unsigned n, Uint64 period)
     /* the present allowance's GPU gate (pace_policy.h PaceBudget) */
     s_pres.lock.gpuNs = s_pres.gpuNs;
     s_pres.lock.stepNs = s_pres.stepNs;
+    s_pres.lock.discWaitNs = window_disc_wait_ns();
     const unsigned drops = s_pres.lock.budget.drops, climbs = s_pres.lock.budget.climbs;
     const unsigned refusals = s_pres.lock.budget.climbRefusals;
 
@@ -5991,7 +5998,8 @@ static void pace(int hz)
         const unsigned paced = s_pres.budget.pacedChanges;
 
         (void)pace_budget_step(&s_pres.budget, now > s_deadline ? now - s_deadline : 0, period,
-                               refresh, s_pres.displayWaitNs, s_pres.gpuNs, s_pres.stepNs);
+                               refresh, s_pres.displayWaitNs, s_pres.gpuNs, s_pres.stepNs,
+                               window_disc_wait_ns());
         budget_lines(&s_pres.budget, drops, climbs, refusals, paced, period);
     }
     pace_log(now);
