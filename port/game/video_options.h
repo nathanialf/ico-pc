@@ -63,6 +63,13 @@
  *                           true        the game's own picture effects: the
  *                                       light bloom and sun flare, the distance blur, the
  *                                       edge softening, the motion trail, the distance fog
+ *   [video] effect_glow_mode
+ *                           "original"  "original" | "smooth": above Frame rate Original, the
+ *                                       glow of the game's own frame held for the frames
+ *                                       shown between (Original) or made again for every
+ *                                       frame shown (Smooth).  No key: Smooth under the
+ *                                       Enhanced rows, Original otherwise; Enhanced sets
+ *                                       Smooth, Original sets Original
  *   [video] effect_motion_blur_mode
  *                           "original"  "original" | "smooth": with effect_motion_blur on,
  *                                       the trail moved on with the game's own frames
@@ -194,6 +201,11 @@ typedef struct IcoVideoOptions {
        tick), 1 Smooth (rd.h RdSettings.motionBlurSmooth: moved on at every
        present); [video] effect_motion_blur_mode */
     int effectMotionBlurSmooth;
+    /* the glow's way above Frame rate Original: 0 Original (the glow of the
+       game's own frame is held for the frames shown between), 1 Smooth
+       (rd.h RdSettings.glowSmooth: made again at every present); [video]
+       effect_glow_mode.  Part of the preset: Enhanced sets 1, Original 0 */
+    int effectGlowSmooth;
     int effectFog;           /* the depth fog (ZFog.c fog_DrawFog) */
     int effectCinematicBars; /* the cutscene bars (GsBase.c); 1 = on */
     /* the water's reflections (puddle.c, pool.c) and the queen barrier's
@@ -308,6 +320,13 @@ int ico_video_effect_water_sharp(void);
    renderer (window_host.c video_settings, RdSettings.motionBlurSmooth);
    0 for Off and Original */
 int ico_video_effect_motion_blur_smooth(void);
+/* 1 when the glow is on and Smooth ([video] effect_glow = true,
+   effect_glow_mode = "smooth"): the host hands it to the renderer
+   (window_host.c video_settings, RdSettings.glowSmooth); 0 for Off and
+   Original */
+int ico_video_effect_glow_smooth(void);
+/* The Glow row's value in the log's words: "off", "original" or "smooth" */
+const char *ico_video_glow_name(const IcoVideoOptions *o);
 /* The Motion blur row's value in the log's words: "off", "original" or
    "smooth" */
 const char *ico_video_motion_blur_name(const IcoVideoOptions *o);
@@ -379,8 +398,15 @@ const char *ico_video_filter_name(int filter);
    aspect, texture filter and height are 1x, 4:3, original, half;
    ICO_VIDEO_ENHANCED when window (or auto on Android), auto, anisotropic,
    full; else
-   ICO_VIDEO_CUSTOM. */
+   ICO_VIDEO_CUSTOM.  The rows and Glow between frames together: Original
+   needs the glow Original, Enhanced needs it Smooth; any other mix is
+   Custom.  The label (Preset row, log lines); what the game and the
+   renderer switch on is ico_video_preset_rows. */
 int ico_video_preset(const IcoVideoOptions *o);
+/* The same from the four Display rows alone (Glow between frames left out):
+   what makes the picture the PS2's (anti-aliasing locked off, Full pixel
+   derived, the renderer's preset) */
+int ico_video_preset_rows(const IcoVideoOptions *o);
 /* The shortcut: writes the four rows of ORIGINAL or ENHANCED into o, the
    other options untouched (except ORIGINAL also sets antiAlias off).
    CUSTOM (or anything else) changes nothing. */
