@@ -209,7 +209,7 @@ run() {
         # the draw merge is on here too (issue 126: v0.9.5 and before said
         # "off on Direct3D 11" and drew one GPU draw a VU draw)
         log_has rd_replay_tool_merge_on "$LOGS/rd_replay_tool.log" "rd: VU merge: on" \
-            "off on Direct3D 11"
+            "VU merge: off on Direct3D 11"
         # the draw merge and the fused scissor pair against one GPU draw a
         # VU draw and the kicks under their own pipelines, byte for byte, on
         # the frames rd_pixel leaves (port/render/CMakeLists.txt
