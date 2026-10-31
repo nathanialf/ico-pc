@@ -32,6 +32,26 @@ static DWORD WINAPI thread_main(LPVOID p)
     return 0;
 }
 
+/* kernel32's CreateThread shares its name with the EE kernel call
+   kernel_host.c defines; linking it by name pulls kernel32's import stub in
+   beside that (a duplicate definition on x86-64, the v0.9.6-rc1 Windows
+   link), so it is looked up at run time as diag_host.c does */
+typedef HANDLE(WINAPI *Win32CreateThreadFn)(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_ROUTINE,
+                                            LPVOID, DWORD, LPDWORD);
+
+static Win32CreateThreadFn win32_create_thread(void)
+{
+    static Win32CreateThreadFn fn;
+
+    if (fn == NULL) {
+        HMODULE k = GetModuleHandleA("kernel32.dll");
+
+        fn = k != NULL ? (Win32CreateThreadFn)(void (*)(void))GetProcAddress(k, "CreateThread")
+                       : NULL;
+    }
+    return fn;
+}
+
 IcoThread *ico_thread_create(void (*fn)(void *arg), void *arg)
 {
     IcoThread *t = calloc(1, sizeof(*t));
@@ -41,7 +61,11 @@ IcoThread *ico_thread_create(void (*fn)(void *arg), void *arg)
     }
     t->fn = fn;
     t->arg = arg;
-    t->h = CreateThread(NULL, 0, thread_main, t, 0, NULL);
+    {
+        Win32CreateThreadFn create = win32_create_thread();
+
+        t->h = create != NULL ? create(NULL, 0, thread_main, t, 0, NULL) : NULL;
+    }
     if (t->h == NULL) {
         free(t);
         return NULL;
