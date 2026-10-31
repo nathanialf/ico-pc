@@ -523,6 +523,9 @@ typedef enum UiSettingsOpt {
     UI_OPT_VIDEO_MODE,
     /* Effects ([video] effect_*; On/Off, outside the preset) */
     UI_OPT_EFFECT_GLOW,
+    /* [video] effect_glow_mode: Original/Smooth, default Original; greyed under Frame
+       rate Original and with Glow off; part of the Preset (Enhanced sets Smooth) */
+    UI_OPT_EFFECT_GLOW_SMOOTH,
     UI_OPT_EFFECT_DEPTH_OF_FIELD,
     UI_OPT_EFFECT_SOFTENING,
     /* [video] effect_motion_blur and effect_motion_blur_mode: Off/Original/Smooth,

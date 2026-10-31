@@ -442,7 +442,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR] = "모션 블러",
     [UI_STR_OPT_EFFECT_FOG] = "안개",
     [UI_STR_EFFECTS_NOTE] =
-        "게임 본래의 화면 효과입니다. 모두 켜면 PS2의 화면이 됩니다. 프리셋은 이 설정을 바꾸지 않습니다.",
+        "게임 본래의 화면 효과입니다. 모두 켜면 PS2의 화면이 됩니다. 프리셋은 프레임 사이의 빛 번짐 외에는 이 설정을 바꾸지 않습니다.",
     [UI_STR_STATS_PLAY_TIME] = "플레이 시간",
     [UI_STR_STATS_DEATHS] = "게임 오버 횟수",
     [UI_STR_STATS_CAPTURES] = "요르다가 잡혀간 횟수",
@@ -722,4 +722,9 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "이 빌드에서는 저장 상태가 꺼져 있습니다",
     [UI_STR_STATES_TITLE_HINT] = "저장은 일시정지 메뉴에서 합니다",
     [UI_STR_STATES_SAVE_FAILED] = "상태를 저장하지 못했습니다",
+    [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "프레임 사이의 빛 번짐",
+    [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
+        "‘오리지널’은 게임 본래 프레임의 빛 번짐을 그 사이에 표시되는 프레임에도 그대로 씁니다. ‘부드럽게’는 표시되는 프레임마다 다시 만들기 때문에 빠른 카메라 회전도 따라가지만, 그래픽 카드의 부담이 늘어납니다.",
+    [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
+        "프레임 레이트가 ‘오리지널’보다 높고 빛 번짐이 켜져 있을 때만 적용됩니다.",
 };

@@ -437,7 +437,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR] = "Motion blur",
     [UI_STR_OPT_EFFECT_FOG] = "Fog",
     [UI_STR_EFFECTS_NOTE] =
-        "The game’s own picture effects. All On is the PS2 picture; the Preset does not change these.",
+        "The game’s own picture effects. All On is the PS2 picture; the Preset does not change these, except Glow between frames.",
     [UI_STR_STATS_PLAY_TIME] = "Play time",
     [UI_STR_STATS_DEATHS] = "Deaths",
     [UI_STR_STATS_CAPTURES] = "Yorda captured",
@@ -720,4 +720,8 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "Save states are off on this build",
     [UI_STR_STATES_TITLE_HINT] = "Saving is done from the pause menu",
     [UI_STR_STATES_SAVE_FAILED] = "The state could not be saved",
+    [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Glow between frames",
+    [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
+        "Original keeps the glow of the game’s own frame for the frames shown between them. Smooth makes it again for every frame shown, so it follows a fast camera turn; it costs more of the graphics card’s time.",
+    [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] = "Only matters above Frame rate Original, with Glow on.",
 };

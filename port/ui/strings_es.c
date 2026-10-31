@@ -440,7 +440,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR] = "Desenfoque de movimiento",
     [UI_STR_OPT_EFFECT_FOG] = "Niebla",
     [UI_STR_EFFECTS_NOTE] =
-        "Los efectos de imagen del propio juego. Todo activado es la imagen de PS2; el preajuste no los cambia.",
+        "Los efectos de imagen del propio juego. Todo activado es la imagen de PS2; el preajuste no los cambia, salvo Resplandor entre fotogramas.",
     [UI_STR_STATS_PLAY_TIME] = "Tiempo de juego",
     [UI_STR_STATS_DEATHS] = "Muertes",
     [UI_STR_STATS_CAPTURES] = "Yorda raptada",
@@ -724,4 +724,9 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "Los estados guardados están desactivados en esta versión",
     [UI_STR_STATES_TITLE_HINT] = "Se guarda desde el menú de pausa",
     [UI_STR_STATES_SAVE_FAILED] = "No se pudo guardar el estado",
+    [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Resplandor entre fotogramas",
+    [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
+        "Original conserva el resplandor del fotograma del propio juego para los fotogramas mostrados entre ellos. Fluido lo calcula de nuevo para cada fotograma mostrado, así sigue un giro rápido de la cámara; cuesta más tiempo de la tarjeta gráfica.",
+    [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
+        "Solo importa por encima de la velocidad de fotogramas Original y con Resplandor activado.",
 };

@@ -440,7 +440,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR] = "Sfocatura di movimento",
     [UI_STR_OPT_EFFECT_FOG] = "Nebbia",
     [UI_STR_EFFECTS_NOTE] =
-        "Gli effetti grafici del gioco. Tutto attivo è l’immagine PS2; la preimpostazione non li modifica.",
+        "Gli effetti grafici del gioco. Tutto attivo è l’immagine PS2; la preimpostazione non li modifica, tranne Bagliore tra i fotogrammi.",
     [UI_STR_STATS_PLAY_TIME] = "Tempo di gioco",
     [UI_STR_STATS_DEATHS] = "Morti",
     [UI_STR_STATS_CAPTURES] = "Yorda rapita",
@@ -724,4 +724,9 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "Gli stati salvati sono disattivati in questa versione",
     [UI_STR_STATES_TITLE_HINT] = "Si salva dal menu di pausa",
     [UI_STR_STATES_SAVE_FAILED] = "Impossibile salvare lo stato",
+    [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Bagliore tra i fotogrammi",
+    [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
+        "Originale mantiene il bagliore del fotogramma del gioco per i fotogrammi mostrati tra uno e l’altro. Fluido lo rifà per ogni fotogramma mostrato, così segue una rotazione rapida della camera; richiede più tempo alla scheda grafica.",
+    [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
+        "Conta solo sopra la frequenza fotogrammi Originale, con il bagliore attivo.",
 };

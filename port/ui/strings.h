@@ -859,6 +859,11 @@ typedef enum UiStrId {
     UI_STR_STATES_OFF,
     UI_STR_STATES_TITLE_HINT,
     UI_STR_STATES_SAVE_FAILED,
+    /* Effects > Glow between frames (Original or Smooth): the label, the note, and the
+       note while the row is greyed */
+    UI_STR_OPT_EFFECT_GLOW_SMOOTH,
+    UI_STR_EFFECT_GLOW_SMOOTH_NOTE,
+    UI_STR_EFFECT_GLOW_SMOOTH_LOCKED,
     UI_STR_COUNT
 } UiStrId;
 

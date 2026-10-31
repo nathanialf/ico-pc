@@ -435,7 +435,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR] = "動態模糊",
     [UI_STR_OPT_EFFECT_FOG] = "霧",
     [UI_STR_EFFECTS_NOTE] =
-        "遊戲本身的畫面效果。全部開啟即為 PS2 的畫面；「預設」不會改變這些項目。",
+        "遊戲本身的畫面效果。全部開啟即為 PS2 的畫面；除「影格間的光暈」外，「預設」不會改變這些項目。",
     [UI_STR_STATS_PLAY_TIME] = "遊玩時間",
     [UI_STR_STATS_DEATHS] = "失敗次數",
     [UI_STR_STATS_CAPTURES] = "Yorda 被抓走的次數",
@@ -702,4 +702,8 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "這個版本已關閉存檔狀態",
     [UI_STR_STATES_TITLE_HINT] = "請在暫停選單中儲存",
     [UI_STR_STATES_SAVE_FAILED] = "無法儲存狀態",
+    [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "影格間的光暈",
+    [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
+        "「原版」讓遊戲本身影格的光暈沿用到其間顯示的影格；「平滑」則為顯示的每一格重新計算，能跟上快速的鏡頭轉動，但會多佔用顯示卡的時間。",
+    [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] = "僅在影格率高於「原版」且光暈開啟時有作用。",
 };

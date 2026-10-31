@@ -439,7 +439,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR] = "モーションブラー",
     [UI_STR_OPT_EFFECT_FOG] = "フォグ",
     [UI_STR_EFFECTS_NOTE] =
-        "ゲーム本来の画面効果です。すべてオンでPS2の画面になります。プリセットではこれらは変わりません。",
+        "ゲーム本来の画面効果です。すべてオンでPS2の画面になります。プリセットでは、フレーム間の光のにじみ以外は変わりません。",
     [UI_STR_STATS_PLAY_TIME] = "プレイ時間",
     [UI_STR_STATS_DEATHS] = "ゲームオーバー回数",
     [UI_STR_STATS_CAPTURES] = "ヨルダがさらわれた回数",
@@ -723,4 +723,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "このビルドではセーブステートは無効です",
     [UI_STR_STATES_TITLE_HINT] = "保存は一時停止メニューから行います",
     [UI_STR_STATES_SAVE_FAILED] = "ステートを保存できませんでした",
+    [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "フレーム間の光のにじみ",
+    [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
+        "「オリジナル」は、ゲーム本来のフレームの光のにじみを、その間に表示するフレームでも使います。「なめらか」は表示するフレームごとに作り直すので、カメラの素早い動きにも追従します。グラフィックカードの負荷は増えます。",
+    [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
+        "フレームレートが「オリジナル」より高く、光のにじみがオンのときだけ働きます。",
 };

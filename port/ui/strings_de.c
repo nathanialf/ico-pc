@@ -443,7 +443,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR] = "Bewegungsunschärfe",
     [UI_STR_OPT_EFFECT_FOG] = "Nebel",
     [UI_STR_EFFECTS_NOTE] =
-        "Die Bildeffekte des Spiels. Alles An ist das PS2-Bild; die Voreinstellung ändert sie nicht.",
+        "Die Bildeffekte des Spiels. Alles An ist das PS2-Bild; die Voreinstellung ändert sie nicht, außer Leuchten zwischen Bildern.",
     [UI_STR_STATS_PLAY_TIME] = "Spielzeit",
     [UI_STR_STATS_DEATHS] = "Tode",
     [UI_STR_STATS_CAPTURES] = "Yorda entführt",
@@ -730,4 +730,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "Spielzustände sind in dieser Version aus",
     [UI_STR_STATES_TITLE_HINT] = "Gespeichert wird im Pausenmenü",
     [UI_STR_STATES_SAVE_FAILED] = "Der Zustand konnte nicht gespeichert werden",
+    [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Leuchten zwischen Bildern",
+    [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
+        "Original behält das Leuchten des Spielbildes für die Bilder dazwischen. Flüssig berechnet es für jedes gezeigte Bild neu und folgt so einer schnellen Kameradrehung; es kostet mehr Zeit der Grafikkarte.",
+    [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
+        "Wirkt nur oberhalb der Bildrate Original und bei eingeschaltetem Leuchten.",
 };

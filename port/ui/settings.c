@@ -1714,7 +1714,7 @@ static int aaLocked(void)
 {
     IcoVideoOptions o;
     ico_video_get(&o);
-    return ico_video_preset(&o) == ICO_VIDEO_ORIGINAL;
+    return ico_video_preset_rows(&o) == ICO_VIDEO_ORIGINAL;
 }
 
 /* the order the row steps through (the numbers are the enum's, shared with
@@ -2073,6 +2073,9 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(o.dumpModels);
     case UI_OPT_EFFECT_GLOW:
         return onOff(o.effectGlow);
+    case UI_OPT_EFFECT_GLOW_SMOOTH:
+        /* Original (the game's own frame's glow held) or Smooth */
+        return ui_str(o.effectGlowSmooth ? UI_STR_VAL_SMOOTH : UI_STR_VAL_ORIGINAL);
     case UI_OPT_EFFECT_DEPTH_OF_FIELD:
         return onOff(o.effectDepthOfField);
     case UI_OPT_EFFECT_SOFTENING:
@@ -2442,6 +2445,15 @@ static int resolutionLocked(void)
     return crtForcesNative(&o);
 }
 
+/* Glow between frames does nothing at Frame rate Original (every picture is
+   the game's own) or with Glow off: greyed, with the note that says so */
+static int glowSmoothLocked(void)
+{
+    IcoVideoOptions o;
+    ico_video_get(&o);
+    return o.framerate == ICO_FRAMERATE_ORIGINAL || !o.effectGlow;
+}
+
 /* a press changes the option now: the video mode only from the title, the
    resolution not under the CRT filter */
 static int canStep(int opt)
@@ -2449,6 +2461,7 @@ static int canStep(int opt)
     return steppable(opt) && (opt != UI_OPT_VIDEO_MODE || onTitle()) && optShown(opt, -1) &&
            (opt != UI_OPT_RESOLUTION || !resolutionLocked()) &&
            (opt != UI_OPT_ANTI_ALIAS || !aaLocked()) &&
+           (opt != UI_OPT_EFFECT_GLOW_SMOOTH || !glowSmoothLocked()) &&
            (opt != UI_OPT_TEXTURE_PACK || texturePackInstalled()) &&
            (opt != UI_OPT_MODEL_PACK || modelPackInstalled());
 }
@@ -2631,6 +2644,10 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         video = 1;
         break;
     }
+    case UI_OPT_EFFECT_GLOW_SMOOTH:
+        o.effectGlowSmooth = !o.effectGlowSmooth;
+        video = 1;
+        break;
     case UI_OPT_EFFECT_MOTION_BLUR: {
         /* Off, Original, Smooth, around (Right from Original is Smooth);
            Off keeps the way chosen last in the file's mode key */
@@ -3486,6 +3503,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_EFFECTS:
         addNote(pg, UI_OPT_EFFECT_GLOW, UI_STR_EFFECTS_NOTE);
+        addNote(pg, UI_OPT_EFFECT_GLOW_SMOOTH, UI_STR_EFFECT_GLOW_SMOOTH_NOTE);
         addNote(pg, UI_OPT_EFFECT_MOTION_BLUR, UI_STR_EFFECT_MOTION_BLUR_NOTE);
         addNote(pg, UI_OPT_EFFECT_WATER, UI_STR_EFFECT_WATER_NOTE);
         break;
@@ -4032,15 +4050,12 @@ static void build(void)
     static const int gpuStrs[] = {UI_STR_OPT_GPU_DRIVER, UI_STR_GPU_DRIVER_ADD,
                                   UI_STR_GPU_DRIVER_ADD_FILE, UI_STR_GPU_DRIVER_REMOVE,
                                   UI_STR_BACK};
-    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,
-                                 UI_OPT_EFFECT_DEPTH_OF_FIELD,
-                                 UI_OPT_EFFECT_SOFTENING,
-                                 UI_OPT_EFFECT_MOTION_BLUR,
-                                 UI_OPT_EFFECT_FOG,
-                                 UI_OPT_EFFECT_WATER,
-                                 UI_OPT_EFFECT_CINEMATIC_BARS,
-                                 UI_OPT_BACK};
+    static const int fxOpts[] = {
+        UI_OPT_EFFECT_GLOW,      UI_OPT_EFFECT_GLOW_SMOOTH,    UI_OPT_EFFECT_DEPTH_OF_FIELD,
+        UI_OPT_EFFECT_SOFTENING, UI_OPT_EFFECT_MOTION_BLUR,    UI_OPT_EFFECT_FOG,
+        UI_OPT_EFFECT_WATER,     UI_OPT_EFFECT_CINEMATIC_BARS, UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,
+                                 UI_STR_OPT_EFFECT_GLOW_SMOOTH,
                                  UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
@@ -6054,6 +6069,9 @@ static int rowLocked(const Row *r)
     if (r->opt == UI_OPT_ANTI_ALIAS) {
         return aaLocked(); /* Off under Original */
     }
+    if (r->opt == UI_OPT_EFFECT_GLOW_SMOOTH) {
+        return glowSmoothLocked(); /* Frame rate Original, or Glow off */
+    }
     if (r->opt == UI_OPT_TEXTURE_PACK) {
         return !texturePackInstalled(); /* "None installed" */
     }
@@ -6589,6 +6607,10 @@ static void refreshPage(Page *pg, int id, int cur)
         } else if (r->opt == UI_OPT_VAR_NO_LOOK) {
             r->noteStr = variantNote(r->opt, UI_STR_OPT_VAR_NO_LOOK_NOTE);
         }
+        if (r->opt == UI_OPT_EFFECT_GLOW_SMOOTH) {
+            /* locked: the note says when the row matters (it shows always) */
+            r->noteStr = locked ? UI_STR_EFFECT_GLOW_SMOOTH_LOCKED : UI_STR_EFFECT_GLOW_SMOOTH_NOTE;
+        }
         if (r->opt == UI_OPT_TOUCH_EDIT) {
             /* locked: Cross does nothing, the note says why */
             P(r->label)->right = locked ? -1 : s_pages[UI_PAGE_TOUCH_LAYOUT].layout;
@@ -6596,7 +6618,7 @@ static void refreshPage(Page *pg, int id, int cur)
         }
         if (isExtrasOpt(r->opt) || r->opt == UI_OPT_RESOLUTION || r->opt == UI_OPT_ANTI_ALIAS ||
             r->opt == UI_OPT_TEXTURE_PACK || r->opt == UI_OPT_MODEL_PACK ||
-            r->opt == UI_OPT_TOUCH_EDIT) {
+            r->opt == UI_OPT_TOUCH_EDIT || r->opt == UI_OPT_EFFECT_GLOW_SMOOTH) {
             /* the locked style: the label and its value greyed */
             lt_ext_set_dim(r->label, locked);
             if (r->value >= 0) {
