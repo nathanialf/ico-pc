@@ -1325,6 +1325,27 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_glow_hold.cmake")
     set_tests_properties(rd_replay_tool_glow_hold PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                              TIMEOUT 900)
+    # the blended present's frame F12 saves (rd.h rd_dump_blended_arm),
+    # written by --save-blended from --interp T PREV, replayed on its own:
+    # SCENE and the presented picture byte for byte the --interp run's.
+    # rd-01076 then rd-01077 at alpha 0.5, Enhanced 4:3 2x; the issue 163
+    # pair (the tablet's tick and the tick before) at its present's alpha
+    # 0.999000013 (the lavapipe A/B; Not Run without the dumps)
+    add_test(NAME rd_replay_tool_save_blended
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DPREV=${_gh}/rd-01076.rddump" "-DCUR=${_gh}/rd-01077.rddump" -DT=0.5
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_save_blended"
+                     "-DARGS=--enhanced|--aspect|4:3|--resolution|2x"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_save_blended.cmake")
+    set(_sb163 "${CMAKE_SOURCE_DIR}/build-host/tmp/v097/evidence/163/frame/frame-20261031-211530-v10103")
+    add_test(NAME rd_replay_tool_save_blended_163
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DPREV=${_sb163}-prev.rddump" "-DCUR=${_sb163}.rddump" -DT=0.999000013
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_save_blended_163"
+                     "-DARGS=--resolution|2x|--full-height|--full-pixel"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_save_blended.cmake")
+    set_tests_properties(rd_replay_tool_save_blended rd_replay_tool_save_blended_163
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 900)
     # the fog on the depth's words copied out through a buffer
     # (ICO_RD_FOG_PATH=buffer, rd_fog_path.c: the fallback of a device whose
     # depth reads fail), on D32S8 and on D24S8 (the top byte masked off):
