@@ -431,6 +431,13 @@ typedef struct RdSettings {
      * game's own (Original), as before this option; the replay tool's
      * --motion-blur smooth sets it */
     uint8_t motionBlurSmooth;
+    /* Glow between frames: Smooth ([video] effect_glow_mode = "smooth" with
+     * effect_glow on).  Above Frame rate Original the glow's chain
+     * (rd_glow_hold.c) is drawn again at every present instead of the
+     * tick's first present's glow pasted.  0 in a zeroed RdSettings: the
+     * glow held, as before this option.  An explicit ICO_RD_GLOW_REDRAW
+     * ([dev] glow_redraw) wins over it. */
+    uint8_t glowSmooth;
     /* The internal scene resolution, in texels: the scene's
      * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
      * with sceneScale 0 = the presentation box in the window under the

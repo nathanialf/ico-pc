@@ -1718,6 +1718,17 @@ static void logMotionBlur(const char *when)
             when);
 }
 
+/* the line for the glow between ticks' way (rd_init, a change); the
+ * environment switch ([dev] glow_redraw) over the row is named in the 10 s
+ * line (rd_glow_hold.c) */
+static void logGlowBetween(const char *when)
+{
+    rd__log("glow between ticks: %s%s",
+            g_rd.settings.glowSmooth ? "drawn at every present (Glow between frames: Smooth)"
+                                     : "held (the tick's first present's)",
+            when);
+}
+
 bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, void *sdlWindow)
 {
     if (g_rd.inited) {
@@ -1782,6 +1793,9 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     }
     if (g_rd.settings.motionBlurSmooth) {
         logMotionBlur(""); /* made at its first sprite (rd_blur_smooth.c) */
+    }
+    if (g_rd.settings.glowSmooth) {
+        logGlowBetween("");
     }
     rd__crack_fill_init(); /* its line once SCENE is made */
     createNamedTargets();
@@ -2239,6 +2253,7 @@ void rd_begin_frame(void)
         const bool waterChanged = g_rd.settings.waterSharp != g_rd.pendingSettings.waterSharp;
         const bool blurChanged =
             g_rd.settings.motionBlurSmooth != g_rd.pendingSettings.motionBlurSmooth;
+        const bool glowChanged = g_rd.settings.glowSmooth != g_rd.pendingSettings.glowSmooth;
         const bool presetChanged = g_rd.settings.preset != g_rd.pendingSettings.preset;
         g_rd.settings = g_rd.pendingSettings;
         g_rd.settingsPending = false;
@@ -2255,6 +2270,9 @@ void rd_begin_frame(void)
             /* the blocks made from this frame on (rd__target_scale_of) */
             rd__log("water reflections: %s", g_rd.settings.waterSharp ? "sharp (the scene's scale)"
                                                                       : "original (their GS size)");
+        }
+        if (glowChanged) {
+            logGlowBetween(", from the next present");
         }
         if (blurChanged) {
             logMotionBlur(", from the next present");

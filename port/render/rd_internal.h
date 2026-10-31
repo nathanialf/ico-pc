@@ -2385,13 +2385,15 @@ void rd__perf_reshown(void); /* rd_perf.c: the next replay is a re-shown present
  * presents skip the chain (the mask into WORK2, the reduction into WORK0,
  * the blur and the eye blur) and paste the copy.  rd__glow_hold edits f
  * (rd__interp_frame's frame, after the hash) and says what it did, one of
- * RD_GLOW_*; [dev] glow_redraw = true (ICO_RD_GLOW_REDRAW=1) draws the chain
- * at every present. */
+ * RD_GLOW_*; [dev] glow_redraw = true (ICO_RD_GLOW_REDRAW=1) and Glow between
+ * frames: Smooth (RdSettings.glowSmooth) draw the chain at every present; an
+ * explicit ICO_RD_GLOW_REDRAW wins over the row. */
 enum {
     RD_GLOW_HELD = 0, /* a later present: the chain skipped, the tick's glow pasted */
     RD_GLOW_FIRST,    /* a tick's first present: drawn, and kept */
     RD_GLOW_NONE,     /* the frame draws no glow */
     RD_GLOW_DEV,      /* a later present, the switch on: drawn */
+    RD_GLOW_SMOOTH,   /* a later present, Glow between frames: Smooth: drawn */
     RD_GLOW_NO_COPY,  /* a later present without this tick's copy: drawn */
     RD_GLOW_READ,     /* a later present whose other draws read the chain's buffers: drawn */
     RD_GLOW_COUNT

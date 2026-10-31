@@ -27,9 +27,12 @@
  * other draws read one of the chain's buffers before drawing into it
  * (RD_GLOW_READ: the sun's glare onto SCENE from WORK1, eyeBlur mode 1),
  * when this tick's copy is missing or its targets were made again
- * (RD_GLOW_NO_COPY), and under [dev] glow_redraw = true
- * (ICO_RD_GLOW_REDRAW=1, RD_GLOW_DEV), the A/B, which also leaves the
- * first present without its copy, so that run draws as before.  The
+ * (RD_GLOW_NO_COPY), under Options > Effects > Glow between frames: Smooth
+ * (RdSettings.glowSmooth, RD_GLOW_SMOOTH) and under [dev] glow_redraw = true
+ * (ICO_RD_GLOW_REDRAW=1, RD_GLOW_DEV), the A/B, which an explicit
+ * ICO_RD_GLOW_REDRAW wins over the row with, either way (=0 holds under a
+ * Smooth row).  Either leaves the first present without its copy, so that
+ * run draws as before.  The
  * depth of field's copies leave column 0 of WORK0 and WORK1 undrawn
  * (WORK_BUFFERS.md); a held present's depth of field reads the chain's
  * column 0 of the tick's first present there, part of the held glow.
@@ -45,14 +48,29 @@
 #include <string.h>
 #include "rd_internal.h"
 
+/* who asks for the chain drawn at every present: nobody (the held glow),
+ * the environment switch ([dev] glow_redraw), or Options > Effects > Glow
+ * between frames: Smooth (RdSettings.glowSmooth).  An explicit
+ * ICO_RD_GLOW_REDRAW ("1" or "0") wins over the row, both ways; the row
+ * is read at every present (it changes while the game runs) */
+enum { SRC_NONE, SRC_ENV, SRC_ROW };
+
+static int redrawSource(void)
+{
+    static int env = -1;
+    if (env < 0) {
+        const char *e = getenv("ICO_RD_GLOW_REDRAW");
+        env = e && e[0] == '1' ? 1 : e && e[0] == '0' ? 0 : 2; /* 2: not set */
+    }
+    if (env != 2) {
+        return env ? SRC_ENV : SRC_NONE;
+    }
+    return g_rd.settings.glowSmooth ? SRC_ROW : SRC_NONE;
+}
+
 static bool redrawOn(void)
 {
-    static int on = -1;
-    if (on < 0) {
-        const char *e = getenv("ICO_RD_GLOW_REDRAW");
-        on = e && e[0] == '1';
-    }
-    return on != 0;
+    return redrawSource() != SRC_NONE;
 }
 
 /* the chain's buffers */
@@ -160,7 +178,7 @@ int rd__glow_hold(RdFrame *f, int firstOfTick)
         return outcome(RD_GLOW_NONE);
     }
     if (redrawOn()) {
-        return outcome(RD_GLOW_DEV);
+        return outcome(redrawSource() == SRC_ENV ? RD_GLOW_DEV : RD_GLOW_SMOOTH);
     }
     if (!s_copy.valid || s_copy.number != f->number || !targets ||
         memcmp(s_copy.held, heldTex, sizeof(heldTex)) != 0 ||
@@ -234,6 +252,8 @@ const char *rd__glow_hold_text(int why)
         return "glow drawn (the tick's first present)";
     case RD_GLOW_DEV:
         return "glow redrawn ([dev] glow_redraw)";
+    case RD_GLOW_SMOOTH:
+        return "glow redrawn (Glow between frames: Smooth)";
     case RD_GLOW_NO_COPY:
         return "glow redrawn (no copy of this tick's)";
     case RD_GLOW_READ:
@@ -256,19 +276,22 @@ uint64_t rd__glow_hold_count(int why)
 void rd__glow_hold_block(void)
 {
     const uint64_t *w = s_why;
-    if (w[RD_GLOW_HELD] + w[RD_GLOW_FIRST] + w[RD_GLOW_DEV] + w[RD_GLOW_NO_COPY] +
-            w[RD_GLOW_READ] ==
+    if (w[RD_GLOW_HELD] + w[RD_GLOW_FIRST] + w[RD_GLOW_DEV] + w[RD_GLOW_SMOOTH] +
+            w[RD_GLOW_NO_COPY] + w[RD_GLOW_READ] ==
         0) {
         memset(s_why, 0, sizeof(s_why));
         return; /* no glow drawn in the block */
     }
     rd__log("interp: glow between ticks: %s: %llu later presents pasted the tick's glow without "
             "its chain; the chain drawn at %llu first presents, %llu later ones with [dev] "
-            "glow_redraw, %llu without this tick's copy, %llu whose other draws read its "
-            "buffers; %llu presents without a glow",
-            redrawOn() ? "redrawn ([dev] glow_redraw = true)" : "held",
+            "glow_redraw, %llu later ones with Glow between frames: Smooth, %llu without this "
+            "tick's copy, %llu whose other draws read its buffers; %llu presents without a glow",
+            redrawSource() == SRC_ENV   ? "redrawn ([dev] glow_redraw = true)"
+            : redrawSource() == SRC_ROW ? "redrawn (Glow between frames: Smooth)"
+                                        : "held",
             (unsigned long long)w[RD_GLOW_HELD], (unsigned long long)w[RD_GLOW_FIRST],
-            (unsigned long long)w[RD_GLOW_DEV], (unsigned long long)w[RD_GLOW_NO_COPY],
-            (unsigned long long)w[RD_GLOW_READ], (unsigned long long)w[RD_GLOW_NONE]);
+            (unsigned long long)w[RD_GLOW_DEV], (unsigned long long)w[RD_GLOW_SMOOTH],
+            (unsigned long long)w[RD_GLOW_NO_COPY], (unsigned long long)w[RD_GLOW_READ],
+            (unsigned long long)w[RD_GLOW_NONE]);
     memset(s_why, 0, sizeof(s_why));
 }
