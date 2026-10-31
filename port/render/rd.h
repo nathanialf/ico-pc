@@ -1774,6 +1774,21 @@ bool rd_dump_frame(const char *path);
  * written) otherwise.  F12 zips it beside the frame, so `rd_replay_tool
  * --interp T` rebuilds the pictures between the two. */
 bool rd_dump_prev_frame(const char *path);
+/* The blended present's frame (F12, port/platform/window_host.c): the next
+ * rd_present that draws a picture between two ticks (alpha below 1, not a
+ * keep frame) writes the frame it drew (rd_interp.c's blended copy of the
+ * tick, its commands, payload, scratch meshes and the ticks' cameras) to
+ * path as an ordinary dump, after the present, so rd_replay_tool replays
+ * it as drawn without --interp; a present at alpha 1 or of a keep frame,
+ * the tick's own picture, writes nothing.  The next rd_present takes the
+ * arm either way; NULL or "" disarms.  false: interpolation is off (no
+ * rd_present draws), nothing armed.
+ * rd_dump_blended_result  once the arm is taken: 1 written, 0 the present
+ *                         was the tick's own picture, -1 the write failed,
+ *                         with the present's frame and alpha; -2 while armed
+ *                         or with nothing armed (nothing reported) */
+bool rd_dump_blended_arm(const char *path);
+int rd_dump_blended_result(uint32_t *frame, float *alpha);
 /* The device-loss dump (port/platform/window_host.c device_lost_quit;
  * docs/port/RENDER.md, "The loss dump"): the frames the renderer still holds
  * as two ordinary dumps, the last closed frame (the one the lost replay

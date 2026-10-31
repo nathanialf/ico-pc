@@ -6371,6 +6371,64 @@ static void mixedNote(const RdInterpStats *st, uint32_t frame, float alpha, doub
             frame, (double)alpha, clamped, st->worldPrevRaw, st->worldCurRaw);
 }
 
+/* rd_dump_blended_arm's request and its result (rd.h) */
+static struct {
+    char path[1100];
+    int armed, result; /* result: -2 nothing to report */
+    uint32_t frame;
+    float alpha;
+} s_blendedDump = {.result = -2};
+
+bool rd_dump_blended_arm(const char *path)
+{
+    s_blendedDump.armed = 0;
+    s_blendedDump.result = -2;
+    if (!path || !path[0] || !rd_interpolation_active() ||
+        strlen(path) >= sizeof(s_blendedDump.path)) {
+        return false;
+    }
+    snprintf(s_blendedDump.path, sizeof(s_blendedDump.path), "%s", path);
+    s_blendedDump.armed = 1;
+    return true;
+}
+
+int rd_dump_blended_result(uint32_t *frame, float *alpha)
+{
+    if (s_blendedDump.armed || s_blendedDump.result == -2) {
+        return -2;
+    }
+    const int r = s_blendedDump.result;
+    s_blendedDump.result = -2;
+    if (frame) {
+        *frame = s_blendedDump.frame;
+    }
+    if (alpha) {
+        *alpha = s_blendedDump.alpha;
+    }
+    return r;
+}
+
+/* the armed dump taken by this present: f the frame it drew (NULL: none
+ * was built, a failure), tick a keep frame's present (the tick's own
+ * picture, as one at alpha 1: nothing written) */
+static void blendedDumpTake(const RdFrame *f, bool tick, uint32_t number, float alpha)
+{
+    if (!s_blendedDump.armed) {
+        return;
+    }
+    s_blendedDump.armed = 0;
+    s_blendedDump.frame = number;
+    s_blendedDump.alpha = alpha;
+    if (tick || !(alpha < 1.0f)) {
+        s_blendedDump.result = 0;
+        return;
+    }
+    s_blendedDump.result = f && rd__dump_frame(f, s_blendedDump.path) ? 1 : -1;
+    rd__log("dump: the blended present of frame %u at alpha %.9g %s %s", number, (double)alpha,
+            s_blendedDump.result > 0 ? "written to" : "could not be written to",
+            s_blendedDump.path);
+}
+
 bool rd_present(float alpha)
 {
     if (!rd_interpolation_active() || !g_rd.hasDevice || g_rd.videoShown) {
@@ -6422,7 +6480,8 @@ bool rd_present(float alpha)
     if (cur->keep) {
         /* a keep frame draws lists 11..12 over DISPLAY: once; the other
          * presents show DISPLAY again (an empty keep frame) */
-        rd__blur_smooth_arm(first, k); /* a keep frame draws no motion blur */
+        rd__blur_smooth_arm(first, k);                   /* a keep frame draws no motion blur */
+        blendedDumpTake(NULL, true, cur->number, alpha); /* the tick's own picture */
         if (first) {
             return rd__replay_frame(cur, 1, true);
         }
@@ -6440,10 +6499,16 @@ bool rd_present(float alpha)
         presentLog();
     }
     if (f == NULL) {
+        blendedDumpTake(NULL, false, cur->number, alpha);
         return false;
     }
     rd__blur_smooth_arm(first, k); /* Motion blur: Smooth's present */
-    return rd__present_blended(f, first, true);
+    const bool ok = rd__present_blended(f, first, true);
+    /* F12's blended frame: after the present, so the dump's write is not
+     * in the picture's time; s_out stays the frame drawn until the next
+     * rd__interp_frame */
+    blendedDumpTake(f, false, cur->number, alpha);
+    return ok;
 }
 
 /* ---------------------------------------------------------- present clock */
