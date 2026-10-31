@@ -99,6 +99,7 @@ bool rd__fs_has_dst(uint8_t fs)
     case RD_FS_SPRITE_STQ:
     case RD_FS_FONT:
     case RD_FS_FONT_SHEET:
+    case RD_FS_FONT_SHEET_BAKED:
     case RD_FS_FOG:
     case RD_FS_FOG_BUFFER:
     case RD_FS_VU:

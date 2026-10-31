@@ -574,7 +574,11 @@ enum { RD_TEXKIND_IMAGE = 1, RD_TEXKIND_TARGET = 2 };
  * SHEET: rd_create_texture_sheet, 1 byte (coverage
  * 0..255) and RdTexRec.sheet, drawn with font_sheet_ps (RD_FS_FONT_SHEET),
  * never given mips; appended, so the values before it keep their meaning
- * in dumps. */
+ * in dumps.  pixels holds the coverage at every scale; a 1x sheet's RHI
+ * texture holds its finished texels instead (rd__sheet_baked: RGBA8 with
+ * an apron, rd_tex.c rd__sheet_bake_rect, drawn with font_sheet_baked_ps),
+ * so rd__texel_bytes and rd__texel_rhi_format are the CPU copy's and
+ * rd__tex_device_bytes and rd__tex_rhi_format the device's. */
 enum {
     RD_TEXEL_RGBA8 = 0,
     RD_TEXEL_R8 = 1,
@@ -701,6 +705,10 @@ typedef struct RdTexRec {
     /* Its RdSheetStyle.scale, 1..ICO_SHEET_SCALE_MAX
      * (0 in a texture that is no sheet) */
     uint8_t sheetScale;
+    /* A SHEET texture's RHI texture holds the baked texels
+     * (rd__sheet_baked when it was made; rd_upload.c makes it again when
+     * the two differ) */
+    uint8_t sheetBaked;
     /* The GS mipmap levels of a game texture whose TEX1 asks for mipmapping
      * and whose levels are authored (rdtex_store_levels): gsLevels counts
      * them with the base (0 or 1: none), gsChain holds levels 1.. as RGBA8
@@ -750,6 +758,33 @@ RdTex rd__create_texture_replacement(struct TexpackImage *img, uint32_t uvW, uin
 /* Frees a replacement's pending levels (texpack_free_image) and the
  * TexpackImage holding them; t->pending is null afterwards. */
 void rd__free_pending(RdTexRec *t);
+
+/* Sheet text at 1x, baked (rd_tex.c; issue 173).  rd__sheet_baked: t is a
+ * sheet texture of scale 1 (or 0, not yet styled) and the bake is on
+ * (g_rd.sheetShader off): its RHI texture is RGBA8, (w + 2 ICO_SHEET_BAKE_AX)
+ * x (h + 2 ICO_SHEET_BAKE_AY), the page's texel (x, y) at (x + AX, y + AY),
+ * and rd__plan_screen_draw draws it with font_sheet_baked_ps.
+ * rd__tex_device_w/h and rd__tex_device_bytes: the RHI texture's size and
+ * bytes a texel; rd__tex_rhi_format its format (rd__texel_rhi_format of
+ * the CPU copy's for every other texture).
+ * rd__sheet_bake_rect: the texels font_sheet_ps makes at scale 1 (rim,
+ * sheet_texel, the Bayer threshold at the page texel) for the page texels
+ * [x, x + rw) x [y, y + rh) (any integers: outside the page the coverage is
+ * 0) of a w x h coverage page cov under style (RdTexRec.sheet: the rim's
+ * weight 0..64, rimLevel, fillLevel, dither 0/1), each as RGBA8 (grey,
+ * grey, grey, alpha in GS units) into out, rows pitch bytes apart.  The rim
+ * is the separable weighted dilation rd_sheet_rim makes at scale 1.  0
+ * without the memory for its row window (nothing written), else 1. */
+int rd__sheet_baked(const RdTexRec *t);
+uint32_t rd__tex_device_w(const RdTexRec *t);
+uint32_t rd__tex_device_h(const RdTexRec *t);
+uint32_t rd__tex_device_bytes(const RdTexRec *t);
+RhiFormat rd__tex_rhi_format(const RdTexRec *t);
+int rd__sheet_bake_rect(const uint8_t *cov, uint32_t w, uint32_t h, const uint8_t style[4],
+                        int32_t x, int32_t y, int32_t rw, int32_t rh, uint8_t *out, size_t pitch);
+/* g_rd.sheetShader set to on, every 1x sheet texture marked for upload
+ * again (its RHI texture is made in the other layout at the next replay) */
+void rd__set_sheet_shader(bool on);
 
 /* --------------------------------------------------------------- meshes
  * rd_mesh.c.  A VU mesh keeps its vertex stream (the
@@ -1247,6 +1282,10 @@ typedef enum RdFsId {
     /* font_sheet_ps, screen and overlay prims sampling a sheet texture
      * (RD_TEXEL_SHEET); DrawCB.param holds its style */
     RD_FS_FONT_SHEET,
+    /* font_sheet_baked_ps, the same draws from a 1x sheet whose texels the
+     * renderer baked on the CPU (rd__sheet_baked; rd_tex.c
+     * rd__sheet_bake_rect): four reads, font_sheet_ps's bytes */
+    RD_FS_FONT_SHEET_BAKED,
     RD_FS_SPRITE_AA1, /* sprite_aa1_ps, sprite_ps with the coverage as As */
     RD_FS_BOX_REDUCE, /* box_reduce_ps, the shadow count at the GS size */
     RD_FS_SPRITE_STQ, /* sprite_stq_ps, sprite_ps dividing S and T by Q per pixel */
@@ -2634,6 +2673,10 @@ typedef struct RdContext {
      * ICO_RD_NO_DUAL or rd_set_no_dual) */
     RhiShader fsNoDual[RD_FS_COUNT];
     bool noDual;
+    /* 1x sheet text through font_sheet_ps instead of the CPU bake
+     * (ICO_RD_SHEET_SHADER=1, rd_core.c rd_init; rd__set_sheet_shader for
+     * tests): the A/B of the bake (rd__sheet_baked) */
+    bool sheetShader;
     /* the exact blend (rd_dst_read.c): the mode in force (RdBlendExact),
      * the modes the device has (bit 1 << mode), the _dstrov and _dstatt
      * twins of the gs_dual_out entries, and group 3's layout per mode (the

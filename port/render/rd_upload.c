@@ -164,9 +164,11 @@ uint64_t rd__texture_ring_bytes(void)
             continue;
         }
         if (t->live && t->kind == RD_TEXKIND_IMAGE && (t->dirty || t->mipLevels != texLevels(t))) {
+            /* the device's texels: a baked 1x sheet's RGBA8 page and apron */
             uint64_t pitch =
-                ((uint64_t)t->w * rd__texel_bytes(t->format) + pitchA - 1) / pitchA * pitchA;
-            uint64_t one = pitch * t->h + rhi_limits()->copyOffsetAlign;
+                ((uint64_t)rd__tex_device_w(t) * rd__tex_device_bytes(t) + pitchA - 1) / pitchA *
+                pitchA;
+            uint64_t one = pitch * rd__tex_device_h(t) + rhi_limits()->copyOffsetAlign;
             /* a mip chain adds at most the base again (with the
              * padding of every level) */
             total +=
@@ -499,9 +501,13 @@ void rd__upload_dirty_textures(void)
             continue;
         }
         const uint8_t levels = texLevels(t);
-        if (t->rhi.id && t->mipLevels != levels) {
-            /* the filter option changed: a new texture with the new
-             * level count (the old one is destroyed after the frames in
+        /* a sheet's texels baked at 1x (rd__sheet_baked), its coverage
+         * above */
+        const uint8_t baked = (uint8_t)rd__sheet_baked(t);
+        if (t->rhi.id && (t->mipLevels != levels || t->sheetBaked != baked)) {
+            /* the filter option changed, or a sheet's layout (its scale,
+             * ICO_RD_SHEET_SHADER): a new texture with the new level count
+             * or layout (the old one is destroyed after the frames in
              * flight, rhi_destroy_texture) */
             rhi_destroy_texture(t->rhi);
             t->rhi = (RhiTexture){0};
@@ -513,14 +519,16 @@ void rd__upload_dirty_textures(void)
         }
         /* the format's bytes per texel; the changed rectangle only, unless
          * the RHI texture is new or has a mip chain to rebuild */
-        const uint32_t bpp = rd__texel_bytes(t->format);
+        const uint32_t bpp = rd__tex_device_bytes(t);
+        const uint32_t dw = rd__tex_device_w(t), dh = rd__tex_device_h(t);
         int whole = levels > 1;
         if (!t->rhi.id) {
-            t->rhi = rhi_create_texture(
-                &(RhiTextureDesc){t->w, t->h, levels, rd__texel_rhi_format(t->format),
-                                  RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd texture", 0});
+            t->rhi = rhi_create_texture(&(RhiTextureDesc){dw, dh, levels, rd__tex_rhi_format(t),
+                                                          RHI_TEX_SAMPLED | RHI_TEX_COPY_DST,
+                                                          "rd texture", 0});
             t->state = RHI_STATE_UNDEFINED;
             t->mipLevels = levels;
+            t->sheetBaked = baked;
             if (!t->rhi.id) {
                 rdtex_text_upload_failed(t->name, t->w, t->h, t->format,
                                          "the graphics card refused the texture");
@@ -528,13 +536,24 @@ void rd__upload_dirty_textures(void)
             }
             whole = 1;
         }
-        uint32_t rx = 0, ry = 0, rw = t->w, rh = t->h;
+        /* the rectangle in the device texture's texels */
+        uint32_t rx = 0, ry = 0, rw = dw, rh = dh;
         if (!whole && t->dirtyX1 > t->dirtyX0 && t->dirtyY1 > t->dirtyY0 && t->dirtyX1 <= t->w &&
             t->dirtyY1 <= t->h) {
             rx = t->dirtyX0;
             ry = t->dirtyY0;
             rw = t->dirtyX1 - t->dirtyX0;
             rh = t->dirtyY1 - t->dirtyY0;
+            if (baked) {
+                /* every texel whose rim reads a changed one: the rectangle
+                 * grown by the apron (the rim's reach and one), in the
+                 * page and its apron; the page's (x, y) is the device's
+                 * (x + AX, y + AY) */
+                const uint32_t x1 = rx + rw + 2u * ICO_SHEET_BAKE_AX;
+                const uint32_t y1 = ry + rh + 2u * ICO_SHEET_BAKE_AY;
+                rw = (x1 < dw ? x1 : dw) - rx;
+                rh = (y1 < dh ? y1 : dh) - ry;
+            }
         }
         const uint32_t pitch = (rw * bpp + pitchA - 1) / pitchA * pitchA;
         uint64_t off = rd__ring_alloc((uint64_t)pitch * rh, offA);
@@ -542,9 +561,22 @@ void rd__upload_dirty_textures(void)
             rdtex_text_upload_failed(t->name, t->w, t->h, t->format, "no room in the upload ring");
             continue;
         }
-        for (uint32_t y = 0; y < rh; y++) {
-            memcpy(g_rd.ringMap[rd__ring_slot()] + off + (uint64_t)y * pitch,
-                   t->pixels + ((size_t)(ry + y) * t->w + rx) * bpp, (size_t)rw * bpp);
+        if (baked) {
+            /* the finished texels (rd_tex.c rd__sheet_bake_rect), in the
+             * page's coordinates */
+            if (!rd__sheet_bake_rect(t->pixels, t->w, t->h, t->sheet,
+                                     (int32_t)rx - ICO_SHEET_BAKE_AX,
+                                     (int32_t)ry - ICO_SHEET_BAKE_AY, (int32_t)rw, (int32_t)rh,
+                                     g_rd.ringMap[rd__ring_slot()] + off, pitch)) {
+                rdtex_text_upload_failed(t->name, t->w, t->h, t->format,
+                                         "no memory to bake the 1x text");
+                continue;
+            }
+        } else {
+            for (uint32_t y = 0; y < rh; y++) {
+                memcpy(g_rd.ringMap[rd__ring_slot()] + off + (uint64_t)y * pitch,
+                       t->pixels + ((size_t)(ry + y) * t->w + rx) * bpp, (size_t)rw * bpp);
+            }
         }
         rd__transition(rd__replay_cl(), t->rhi, &t->state, RHI_STATE_COPY_DST);
         rhi_cmd_copy_buffer_to_texture(rd__replay_cl(), g_rd.ring[rd__ring_slot()], off, pitch,

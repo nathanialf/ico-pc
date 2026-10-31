@@ -270,14 +270,15 @@ int rd__plan_screen_draw_ex(const RdStateBlock *s, uint8_t prim, int aa1, uint8_
     k->colorFmt = (uint8_t)colorFmt;
     k->depthFmt = (uint8_t)depthFmt;
     /* an R8 coverage texture (rd_create_texture_r8) is drawn by font_ps and a
-     * sheet texture (rd_create_texture_sheet) by font_sheet_ps; the fragment
-     * shader is part of the key */
+     * sheet texture (rd_create_texture_sheet) by font_sheet_ps, a 1x one by
+     * font_sheet_baked_ps from its baked texels (rd__sheet_baked); the
+     * fragment shader is part of the key */
     if (d->texEnabled) {
         const RdTexRec *tr = rd__tex_rec(s->tex);
         if (tr && tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_R8) {
             k->fs = RD_FS_FONT;
         } else if (tr && tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_SHEET) {
-            k->fs = RD_FS_FONT_SHEET;
+            k->fs = rd__sheet_baked(tr) ? RD_FS_FONT_SHEET_BAKED : RD_FS_FONT_SHEET;
         }
     }
     /* PRIM.AA1 (not for an R8 texture: no AA1 draw samples one) */
@@ -521,6 +522,7 @@ bool rd__fs_has_no_dual(uint8_t fs)
     case RD_FS_SPRITE_STQ:
     case RD_FS_FONT:
     case RD_FS_FONT_SHEET:
+    case RD_FS_FONT_SHEET_BAKED:
     case RD_FS_FOG:
     case RD_FS_FOG_BUFFER:
     case RD_FS_FOG_MS:
@@ -3711,8 +3713,10 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
                 dp[i].key.fs = RD_FS_FONT;
                 n = rd__add_pipe_key(out, max, n, &dp[i].key);
                 /* the popups' and the photo panel's sheet text
-                 * (font_sheet_ps) */
+                 * (font_sheet_ps; font_sheet_baked_ps at 1x) */
                 dp[i].key.fs = RD_FS_FONT_SHEET;
+                n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                dp[i].key.fs = RD_FS_FONT_SHEET_BAKED;
                 n = rd__add_pipe_key(out, max, n, &dp[i].key);
             }
         }
@@ -3733,10 +3737,12 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
             const int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI,
                                                 RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
             for (int i = 0; i < np; i++) {
-                /* the menus' sheet text (font_sheet_ps) in the same
-                 * states */
-                for (int sh = 0; sh < 2; sh++) {
-                    dp[i].key.fs = sh ? RD_FS_FONT_SHEET : RD_FS_FONT;
+                /* the menus' sheet text (font_sheet_ps, and
+                 * font_sheet_baked_ps at 1x) in the same states */
+                for (int sh = 0; sh < 3; sh++) {
+                    dp[i].key.fs = sh == 2   ? RD_FS_FONT_SHEET_BAKED
+                                   : sh == 1 ? RD_FS_FONT_SHEET
+                                             : RD_FS_FONT;
                     dp[i].key.gs.colorMask = 0xF;
                     n = rd__add_pipe_key(out, max, n, &dp[i].key);
                     dp[i].key.gs.colorMask = 0x7; /* under the dark volume's FBMSK, as above */

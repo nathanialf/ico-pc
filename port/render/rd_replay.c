@@ -94,10 +94,10 @@ const char *rd__vs_name(uint8_t vs)
 static const char *const s_fsNames[RD_FS_COUNT] = {
     "sprite_ps" /* indexed by RD_FS_* */, "blit_ps", "blend_int_ps", "date_snap_ps",
     "camera_probe_ps", "vu_ps", "fog_lut_ps", "fx_sprite_ps", "wrap_acc_ps", "wrap_resolve_ps",
-    "font_ps", "font_sheet_ps", "sprite_aa1_ps", "box_reduce_ps", "sprite_stq_ps", "crt_bloom_ps",
-    "crt_blur_ps", "crt_ps", "sprite_texa_ps", "vu_texa_ps", "blit_depth_ps", "fog_lut_buffer_ps",
-    "aa_reduce_ps", "fog_lut_ms_ps", "depth_resolve_ps", "depth_upsample_ps", "msaa_resolve_ps",
-    "vu_pre_ps",
+    "font_ps", "font_sheet_ps", "font_sheet_baked_ps", "sprite_aa1_ps", "box_reduce_ps",
+    "sprite_stq_ps", "crt_bloom_ps", "crt_blur_ps", "crt_ps", "sprite_texa_ps", "vu_texa_ps",
+    "blit_depth_ps", "fog_lut_buffer_ps", "aa_reduce_ps", "fog_lut_ms_ps", "depth_resolve_ps",
+    "depth_upsample_ps", "msaa_resolve_ps", "vu_pre_ps",
     /* RD_FS_OPTIONAL_FIRST on */
     "sprite_ps_planes", "sprite_texa_ps_planes", "sprite_stq_ps_planes", "fog_lut_local_ps",
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
@@ -6053,8 +6053,8 @@ bool rd__read_texture(RdTex tex, void *dst, size_t dstSize, uint32_t *w, uint32_
 {
     RdTexRec *t = rd__tex_rec(tex.id);
     if (!g_rd.hasDevice || !t || t->kind != RD_TEXKIND_IMAGE || !t->rhi.id ||
-        t->state == RHI_STATE_UNDEFINED || rd__texel_is_block(t->format)) {
-        return false; /* a pack's BC replacement has no texels to read back */
+        t->state == RHI_STATE_UNDEFINED || rd__texel_is_block(t->format) || t->sheetBaked) {
+        return false; /* no texels to read back: a BC replacement, a baked sheet */
     }
     if (w) {
         *w = t->w;
