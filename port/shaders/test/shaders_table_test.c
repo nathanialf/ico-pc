@@ -129,6 +129,10 @@ static const char *const expectedMerge[] = {
  * programs' entries draw with vu_ps and vu_texa_ps, as the main shaders) */
 static const char *const retired[] = {"vu_tri_vs", "vu_legacy_ps", "vu_legacy_texa_ps"};
 
+/* the 1x sheet text from the texels the renderer baked on the CPU
+ * (font.hlsl font_sheet_baked_ps; rd_tex.c rd__sheet_bake_rect) */
+static const char *const expectedBaked[] = {"font_sheet_baked_ps"};
+
 /* the anti-aliasing's (rd_present.c, rd_replay.c's MSAA epoch) */
 static const char *const expectedAa[] = {"aa_reduce_ps", "depth_resolve_ps", "depth_upsample_ps",
                                          "msaa_resolve_ps"};
@@ -141,9 +145,11 @@ static const char *const expectedVariants[] = {"fog_lut_buffer_ps", "fog_lut_buf
 
 /* the gs_dual_out entries without the second output (ICO_NO_DUAL) */
 static const char *const expectedNoDual[] = {
-    "sprite_ps_nodual",     "sprite_texa_ps_nodual", "sprite_aa1_ps_nodual",
-    "sprite_stq_ps_nodual", "fog_lut_ps_nodual",     "font_ps_nodual",
-    "vu_ps_nodual",         "vu_texa_ps_nodual",     "font_sheet_ps_nodual",
+    "sprite_ps_nodual",     "sprite_texa_ps_nodual",
+    "sprite_aa1_ps_nodual", "sprite_stq_ps_nodual",
+    "fog_lut_ps_nodual",    "font_ps_nodual",
+    "vu_ps_nodual",         "vu_texa_ps_nodual",
+    "font_sheet_ps_nodual", "font_sheet_baked_ps_nodual",
 };
 
 /* the gs_dual_out entries computing the GS blend from the destination
@@ -165,6 +171,8 @@ static const char *const expectedDst[] = {
     "font_ps_dstatt",
     "font_sheet_ps_dstrov",
     "font_sheet_ps_dstatt",
+    "font_sheet_baked_ps_dstrov",
+    "font_sheet_baked_ps_dstatt",
     "vu_ps_dstrov",
     "vu_ps_dstatt",
     "vu_texa_ps_dstrov",
@@ -181,6 +189,7 @@ static const char *const expectedNoGlsl[] = {
     "fog_lut_local_ps_nodual",
     "fog_lut_ps_dstatt",
     "font_ps_dstatt",
+    "font_sheet_baked_ps_dstatt",
     "font_sheet_ps_dstatt",
     "fx_local_ps",
     "sprite_aa1_ps_dstatt",
@@ -327,6 +336,13 @@ int main(void)
             failures++;
         }
     }
+    const size_t nBaked = sizeof(expectedBaked) / sizeof(expectedBaked[0]);
+    for (size_t i = 0; i < nBaked; i++) {
+        if (!ico_find_shader(expectedBaked[i])) {
+            printf("FAIL %s: not in the table\n", expectedBaked[i]);
+            failures++;
+        }
+    }
     const size_t nAa = sizeof(expectedAa) / sizeof(expectedAa[0]);
     for (size_t i = 0; i < nAa; i++) {
         if (!ico_find_shader(expectedAa[i])) {
@@ -433,7 +449,7 @@ int main(void)
     }
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
                         nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nMerge +
-                        nSmooth + nCrack;
+                        nSmooth + nCrack + nBaked;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;

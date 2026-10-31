@@ -43,6 +43,9 @@ ico_add_shader(fog_lut_ms_ps fog_lut.hlsl fog_lut_ps fragment DEFINES FOG_MS=1)
 ico_add_shader(font_ps font.hlsl font_ps fragment)
 # sheet text, coverage strips drawn in the menu sheets' style
 ico_add_shader(font_sheet_ps font.hlsl font_sheet_ps fragment)
+# the same from a 1x sheet the renderer baked on the CPU (rd_tex.c
+# rd__sheet_bake_rect): four reads of the finished texels
+ico_add_shader(font_sheet_baked_ps font.hlsl font_sheet_baked_ps fragment)
 # the VU1 microprograms
 ico_add_shader(vu_prelit_vs vu_prelit.hlsl vu_prelit_vs vertex)
 ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment)
@@ -112,6 +115,8 @@ ico_add_shader(fog_lut_ms_ps fog_lut.hlsl fog_lut_ps fragment
                DEFINES FOG_MS=1 ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(font_ps font.hlsl font_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(font_sheet_ps font.hlsl font_sheet_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
+ico_add_shader(font_sheet_baked_ps font.hlsl font_sheet_baked_ps fragment DEFINES ICO_NO_DUAL=1
+               SUFFIX _nodual)
 ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(vu_texa_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 
@@ -134,6 +139,8 @@ foreach(_v rov:1 att:2)
     ico_add_shader(font_ps font.hlsl font_ps fragment DEFINES ICO_DST_READ=${_d} SUFFIX _dst${_s})
     ico_add_shader(font_sheet_ps font.hlsl font_sheet_ps fragment DEFINES ICO_DST_READ=${_d}
                    SUFFIX _dst${_s})
+    ico_add_shader(font_sheet_baked_ps font.hlsl font_sheet_baked_ps fragment
+                   DEFINES ICO_DST_READ=${_d} SUFFIX _dst${_s})
     ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_DST_READ=${_d} SUFFIX _dst${_s})
     ico_add_shader(vu_texa_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_DST_READ=${_d}
                    SUFFIX _dst${_s})

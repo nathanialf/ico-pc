@@ -17,6 +17,14 @@
 // rimLevel, fillLevel, dither | (scale - 1) << 1, as rd_replay.c writes
 // them).  rd.h says what it draws;
 // sheet_text.hlsli holds the texel arithmetic.
+//
+// font_sheet_baked_ps: the same draws from a 1x sheet
+// (RD_FS_FONT_SHEET_BAKED): the renderer computed every sheet texel on the
+// CPU with font_sheet_ps's arithmetic (rd_tex.c rd__sheet_bake_rect) into an
+// RGBA8 texture, (grey, grey, grey, alpha) a texel, the page's texels inside
+// an apron of SHEET_BAKE_AX x SHEET_BAKE_AY texels (sheet_text.hlsli).  The
+// shader reads the four texels font_sheet_ps rebuilds and blends them the same
+// way, so its output is font_sheet_ps's at scale 1, byte for byte.
 #include "common.hlsli"
 #include "sheet_text.hlsli"
 
@@ -197,6 +205,50 @@ GS_PS_ATTR GS_PS_OUT font_sheet_ps(SpriteVSOut i)
             }
         }
         const float2 m = lerp(lerp(v[0][0], v[0][1], f.x), lerp(v[1][0], v[1][1], f.x), f.y);
+        const uint2 gm = uint2(floor(m + 0.5));
+        col = gs_texture_function(uint4(gm.x, gm.x, gm.x, gm.y), col, g_mode.x);
+    }
+    if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
+        GS_DISCARD;
+    }
+    GS_RETURN(col, i.pos);
+}
+
+// The baked texel (grey, alpha) at page texel p of a texture dim texels in
+// all (the page and its apron), the read clamped to the texture: outside the
+// apron every texel is the outermost one's (no coverage, no rim).
+float2 sheet_baked_texel(int2 p, int2 dim)
+{
+    const int2 q = clamp(p + int2(SHEET_BAKE_AX, SHEET_BAKE_AY), int2(0, 0), dim - 1);
+    const float4 t = g_atlas.Load(int3(q, 0));
+    return float2(floor(t.x * 255.0 + 0.5), floor(t.w * 255.0 + 0.5));
+}
+
+GS_PS_ATTR GS_PS_OUT font_sheet_baked_ps(SpriteVSOut i)
+{
+    if ((g_mode.x & DF_DATE) != 0u) {
+        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
+            GS_DISCARD;
+        }
+    }
+    uint4 col = uint4(floor(i.col + 0.5));
+    if ((g_mode.x & DF_TEXTURED) != 0u) {
+        uint tw, th;
+        g_atlas.GetDimensions(tw, th);
+        const int2 dim = int2((int)tw, (int)th);
+        // the page's size, which the UVs are normalised by (font_sheet_ps's
+        // size)
+        const int2 size = dim - 2 * int2(SHEET_BAKE_AX, SHEET_BAKE_AY);
+        // font_sheet_ps's bilinear read: the same position, weights and blend
+        const float2 pos = i.uv * float2(size) - 0.5;
+        const float2 base = floor(pos);
+        const float2 f = pos - base;
+        const int2 p0 = int2(base);
+        const float2 v00 = sheet_baked_texel(p0, dim);
+        const float2 v01 = sheet_baked_texel(p0 + int2(1, 0), dim);
+        const float2 v10 = sheet_baked_texel(p0 + int2(0, 1), dim);
+        const float2 v11 = sheet_baked_texel(p0 + int2(1, 1), dim);
+        const float2 m = lerp(lerp(v00, v01, f.x), lerp(v10, v11, f.x), f.y);
         const uint2 gm = uint2(floor(m + 0.5));
         col = gs_texture_function(uint4(gm.x, gm.x, gm.x, gm.y), col, g_mode.x);
     }
