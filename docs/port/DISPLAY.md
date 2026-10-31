@@ -19,6 +19,7 @@ are [RHI.md](RHI.md).
 | `port/platform/pace_policy.h`, `pace_policy.c` | the pacing decisions, free of SDL: slow presents, the gap, the vsync lock, the display's intervals, Auto resolution |
 | `port/platform/present_fallback.h`, `present_fallback.c` | the FIFO fallback's decision and lines, free of SDL ([The FIFO fallback](#the-fifo-fallback)) |
 | `port/platform/window_present_fallback.h`, `window_present_fallback.c` | the window's side of the FIFO fallback: the gate, the switch, the lines |
+| `port/platform/window_disc.h`, `window_disc.c` | the window's side of the disc reader: the step's disc wait for the present allowance, the 10 s disc line |
 | `port/platform/display_clock.h` | the vblank clock's interface |
 | `port/platform/display_clock_win.c` | the vblank clock on Windows: a thread on the window's DXGI output |
 | `port/platform/display_clock_none.c` | no vblank clock (every other platform) |
@@ -711,6 +712,21 @@ alpha stays the grid's.
   with it off the fence waits are the GPU's alone. Vulkan, D3D12 and D3D11 keep the
   display's wait in the acquire (D3D11 and D3D12: the frame latency wait) and the present, and
   their fence waits are the GPU's.
+- **Excused by the disc**: the game thread waited for a disc read in the step (the step profile's
+  `cdWaitMs`: a read on the game thread, or one on the disc reader thread not finished by the
+  vsync that completes it; [DATA.md](DATA.md#the-disc-reader-thread)) and the step ended no later
+  than that wait and half a refresh (`pace_budget_step`'s `discWaitNs`; `PaceLock.discWaitNs` under
+  the lock, both from `port/platform/window_disc.c` (`window_disc_wait_ns`)). A step later than
+  that is late as any other. `PaceBudget.discExcused` counts the late steps it excused, for the
+  10 s disc line (`window: disc: ... 3 late steps excused by disc waits`). Issue 126's D3D11
+  playthrough (the lock, n = 1) had 477 steps over 16 ms, nearly all with one disc read of 16 to
+  896 sectors on a slow drive, mean 27 ms and at most 123 ms; each pair of them within 60 steps
+  held the presents to 0 a step for at least 120 steps, so the streaming rooms never climbed back
+  (36-42 fps with 9 ms of GPU). The drop line names the dropping step's disc wait when it had one
+  (`; GPU span G ms a replay, disc wait D ms)`). `pace_policy_test` (`testBudgetDiscWait126`: 100
+  ms late with 100 ms of disc wait drops nothing, with none or 20 ms it drops to 0, the edge, the
+  timer path paced by the GPU, the drop line) and `pace_loop_test` (`testDiscWait126`: every 150th
+  step 100 ms long waiting for the disc drops nothing).
 - **Armed, then dropped**: the first late step (with an in-between) only arms the allowance for
   `PACE_ALLOW_HOLD` (60) steps; a second late step while armed drops it to one below that step's
   presents, at most its ceiling (below), held 60 steps and armed again. The second may be a step of

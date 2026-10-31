@@ -72,7 +72,7 @@ So every backend serves one flat LSN space with the disc's own numbering (`port/
 | `ico_vfs_normalize` | any accepted spelling to `DIR/FILE` |
 | `ico_vfs_stat`, `ico_vfs_open`, `ico_vfs_size` | a look-up: LSN, size, ISO date, directory flag, name as the volume spells it |
 | `ico_vfs_read(file, offset, dst, len)` | bytes of a file, short at its end |
-| `ico_vfs_read_sectors(vfs, lsn, count, dst)` | whole sectors anywhere on the volume |
+| `ico_vfs_read_sectors(vfs, lsn, count, dst)` | whole sectors anywhere on the volume, from any thread (the mount's mutex) |
 | `ico_vfs_lsn_to_offset`, `ico_vfs_offset_to_lsn`, `ico_vfs_size_to_sectors` | sector arithmetic (`ICO_VFS_SECTOR`, 2048) |
 
 A backend (`IcoVfsBackend`) has `mount`, `unmount`, `lookup` (a normalized path), `read_sectors`
@@ -81,6 +81,14 @@ A backend (`IcoVfsBackend`) has `mount`, `unmount`, `lookup` (a normalized path)
 `cdrom0:\SYSTEM.CNF;1` and `/SCES_507.60`: it strips a `cdrom0:` or `cdrom:` prefix, leading
 separators and the `;<version>` suffix, maps `\` to `/` and upper-cases (`port/data/vfs.h`
 (`IcoVfsBackend`, `ico_vfs_normalize`)).
+
+A mount's backend calls share its one file handle (the image's `FILE*` and CHD hunk buffers, the
+archive's `FILE*`), so each mount has a mutex, and every `lookup` (the ISO backend reads directory
+sectors for one) and every `read_sectors` runs under it: the disc reader thread and the game
+thread read the same mount, each waiting for the other's read. Mounting and unmounting are not
+thread-safe (`port/data/vfs.c` (`struct IcoVfs`, `ico_vfs_stat`, `ico_vfs_read_sectors`)). A
+second mount (`ico_vfs_reopen`) has its own handle and mutex, so a thread reading it never waits
+for the game's reads.
 
 ## The seven discs
 
@@ -336,19 +344,22 @@ image is identified by its boot file and its SHA-1 checked against that disc's u
   names (`ico_cdvd_host_boot_name`): its row's `cd_type`, a DVD (`0x14`) for the European and Korean discs and
   a CD (`0x12`) for the Japanese one, which its `cdvd.c` waits for. The drive never reports a tray-open or not-ready state while a
   disc is mounted.
-- `sceCdRead` copies the sectors at once; `sceCdReadIOPm` copies them into `ico_iop_ram` at the IOP
-  address it is given, and logs `cdvd: sceCdReadIOPm to 0x... (N sectors) is outside IOP RAM` for
-  an address outside it.
-- Completion follows the drive's timing at [vsync](ARCHITECTURE.md#terms) grain: the buffer is
-  full when the call returns (no caller can see it before syncing), but a non-blocking
-  `sceCdSync` (odd mode) reports the command busy until the next simulated vsync, and a blocking
-  one (even mode) from a game thread blocks that thread until that vsync, as libcdvd's
-  `sceCdDelayThread` loop does, so the other threads, the same-priority Main among them, run
-  while the drive works. `ico_cdvd_host_vsync` completes the command; `sceCdInit` registers it with
-  the host loop (`port/platform/host_loop.h`) when that exists, and tests call it themselves. From
-  the [host context](ARCHITECTURE.md#terms) the wait completes at once.
-- The stream calls read the requested sectors straight from the disc, so the ring is always full
-  and `sceCdStStat` reports its size; pause and resume change nothing.
+- `sceCdRead` starts the read of the sectors and returns; `sceCdReadIOPm` reads them into
+  `ico_iop_ram` at the IOP address it is given, and logs `cdvd: sceCdReadIOPm to 0x... (N
+  sectors) is outside IOP RAM` for an address outside it. The read runs on the disc reader thread
+  or on the calling thread (below).
+- Completion follows the drive's timing at [vsync](ARCHITECTURE.md#terms) grain: no caller can
+  see the buffer before syncing, and a non-blocking `sceCdSync` (odd mode) reports the command
+  busy until the next simulated vsync, and a blocking one (even mode) from a game thread blocks
+  that thread until that vsync, as libcdvd's `sceCdDelayThread` loop does, so the other threads,
+  the same-priority Main among them, run while the drive works. `ico_cdvd_host_vsync` completes
+  the command; `sceCdInit` registers it with the host loop (`port/platform/host_loop.h`) when that
+  exists, and tests call it themselves. From the [host context](ARCHITECTURE.md#terms) the wait
+  completes at once. A command completes at the next simulated vsync and never earlier; a read
+  that has not ended by then makes the vsync later by what is left of it, never the command
+  earlier.
+- The stream calls read the requested sectors from the disc (or the read-ahead, below), so the
+  ring is always full and `sceCdStStat` reports its size; pause and resume change nothing.
 - `sceCdReadClock` reports the port clock in BCD: 2002-01-01 00:00:00 unless `ICO_FIXED_CLOCK`
   is `0`, and the host's local time then (`port/platform/clock.c` (`ico_clock_now`)).
   `ico_ini_export`, run by `ico_ini_load`, sets the variable from `[dev] fixed_clock`, whose
@@ -358,6 +369,52 @@ image is identified by its boot file and its SHA-1 checked against that disc's u
 - With no disc in the slot, `sceCdInit` mounts `ico_cdvd_host_default_iso()`: `ICO_ISO`, else
   `baserom/Ico_PAL.iso` (tests and developer runs). `ico_cdvd_host_stats` feeds the diagnostics
   heartbeat.
+
+### The disc reader thread
+
+A read on the game's thread costs the step its whole time: a player's game data on a slow drive
+read 16-sector commands in 16 to 123 ms, each one a late step (issue 126). So in the window build
+the reads run on a thread of their own (`port/data/cdvd_host.c` (header comment, `reader_main`),
+in the shape of `port/render/rd_tex_decode.c`: one lock, a work and a done condition, the thread
+started when the reader is chosen, the calling thread's read when it cannot be):
+
+- `sceCdRead` and `sceCdReadIOPm` queue the command (`queue_read`) and return; the thread reads
+  it into the buffer (`serve`). The command is busy until the next vsync as above.
+  `ico_cdvd_host_vsync` first completes it (`cd_complete`): it waits there for a read the thread
+  has not finished, which is the step's disc wait, and sets `sceCdGetError`'s code as the calling
+  thread's read sets it (`ICO_CD_ERR_END` past the volume's end, `ICO_CD_ERR_READ` otherwise), so
+  the code is final when `busy` clears. The host context's `sceCdSync(0)`, `sceCdBreak` (the read
+  finished, then `ICO_CD_ERR_ABORT`: nothing is written into the buffer after the break), the
+  eject, the reset and a new reader choice complete it the same way first (`reader_drain`,
+  `reader_stop`).
+- The read-ahead: after each command (and each stream read) the thread reads on from where it
+  ended into a buffer of the disc's next sectors (`[dev] disc_read_ahead_kb`, 256 KB by default),
+  never past the volume's end, in chunks of `CD_RA_CHUNK` (32 sectors) that a new command stops
+  (`ra_fill`). A command or a stream read the buffer holds whole is copied from it on the calling
+  thread at once (`ra_take`), with nothing in flight; any other is read from the disc.
+- `ico_cdvd_host_idle` is 0 while a command is on the thread, so save states, which are taken and
+  loaded only while the drive is idle, never meet a read in flight; nothing of the reader is in a
+  save state.
+- `[dev] disc_reader = sync` (or no thread from the system) reads on the calling thread as the
+  tests, the tools and the headless build do; there the whole read is the game thread's wait.
+  The window build asks for the thread with `ico_cdvd_host_set_windowed`
+  (`port/platform/window_host.c` (`ico_window_open`)); a test asks for either with
+  `ico_cdvd_host_set_reader` (`port/data/cdvd_host.c` (`reader_choose`)).
+
+The counters (`IcoCdvdStats`: `hits` from the read-ahead, `waits`, `read_ns`, `wait_ns`,
+`wait_max_ns`, `bytes`) feed the step profile (`port/platform/host_loop.h` (`IcoStepProfile`:
+`cdWaitMs`, `cdHits`)), whose disc wait excuses the step's lateness in the present allowance
+([DISPLAY.md](DISPLAY.md#pacing)), and the window's lines. The lines:
+
+| line | when |
+| --- | --- |
+| `cdvd: disc reads on a worker thread, read-ahead 256 KB; the game data on a fixed drive (NTFS)` | the reader chosen at the first `sceCdInit`: the drive's kind (`ico_host_drive_kind`) and file system (`ico_host_drive_fs_name`, `port/platform/host_fs.h`) of the game data's location; `on the game thread ([dev] disc_reader=sync)`, `(no window)` or `(no thread: the OS refused one)` for the calling thread, `read-ahead off` at 0 |
+| `cdvd: read of 16 sectors at lsn L took 107 ms on <path> (read-ahead miss; the game thread waited 91 ms of it)` | a read of 50 ms or more, from its queueing to its end (`from the read-ahead`, `no read-ahead`; `(on the game thread)` or `(a stream read on the game thread)` for the calling thread's), the first 8 and then every 100th (`slow_read`) |
+| `window: disc: 23 reads (736 KB), 19 from read-ahead; the game thread waited 118 ms in 4 steps (longest 91 ms); 3 late steps excused by disc waits` | every 10 s beside the window's 10 s line, not in a block without disc reads (`port/platform/window_disc.c` (`window_disc_block`)) |
+| the slow-step line's `, disc wait X ms`, the drop line's `, disc wait D ms`, the heartbeat's `cd:` part's `waited N ms` | the step's wait, the dropping step's (only when it had one), the run's |
+
+`cdvd_host_test` checks the reader over a fake backend whose reads sleep (the [Tests](#tests)
+table); `vfs_synthetic` reads one mount from two threads.
 
 The game's side keeps its own code with a few host lines in `ico2/fumi/ios/cdvd.c`: the stream
 thread's record is sized for the host's wider `IOSThread`, the stream ring pointer and the request
@@ -868,7 +925,8 @@ mark, no comments, trailing commas, leading zeros, `NaN` or control characters, 
 
 | test | checks |
 | --- | --- |
-| `vfs_synthetic`, `vfs_disc`, `vfs_disc_jpn`, `vfs_disc_kor` | the VFS and ISO9660 backend on an image the test builds, and on each disc (`ICO_DISC_IMAGE`, `ICO_DISC_IMAGE_JPN`, `ICO_DISC_IMAGE_KOR`; skipped, 77, without it): the boot ELF's SHA-1, DATA.DF's directory, the disk type |
+| `vfs_synthetic`, `vfs_disc`, `vfs_disc_jpn`, `vfs_disc_kor` | the VFS and ISO9660 backend on an image the test builds (with two threads reading one mount 1000 times each, every read equal to one thread's alone), and on each disc (`ICO_DISC_IMAGE`, `ICO_DISC_IMAGE_JPN`, `ICO_DISC_IMAGE_KOR`; skipped, 77, without it): the boot ELF's SHA-1, DATA.DF's directory, the disk type |
+| `cdvd_host` | the disc reader over a fake backend whose reads sleep and note their thread: `sceCdRead` returns before a 30 ms read ends, the command busy until the vsync and complete there (the buffer, the error, the wait), a second read refused while busy, `sceCdSync(0)` from the host context, the errors, `sceCdBreak` (ABORT, the buffer whole, nothing written after), the read-ahead's hits, misses and end clamp, the stream's hits, the idle gate, a reset with a read on the thread, the sync reader (`port/data/test/cdvd_host_test.c`) |
 | `vfs_disc_jpn_bin`, `vfs_disc_jpn_cue`, `vfs_disc_jpn_chd` | the Japanese `.iso` against a MODE2/2352 `.bin`, its `.cue` (both made from the `.iso` at test time by `port/data/test/make_raw_cd.py` into the build folder, zero EDC/ECC) and a `chdman createcd` `.chd` of the `.cue` (skipped without `chdman` on `PATH`): the same directory records, boot ELF and DATA.DF SHA-1s, and image SHA-1 (`vfs_test same`, run by `port/data/test/disc_raw_test.cmake`) |
 | `archive_synthetic`, `archive_disc`, `archive_disc_jpn`, `archive_disc_kor` | extraction into a temporary archive and its mount, compared with the ISO backend; the disc tests identify the image by its boot file, check both rules hold and `meta.json`'s disc id (skipped, 77, without the image) |
 | `archive_manifest_jpn`, `archive_manifest_kor` | the Japanese and Korean DATA.DF manifests in `discs.c` against the images |

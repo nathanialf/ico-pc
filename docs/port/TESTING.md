@@ -201,9 +201,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   argument), its stage rows and every value of `region_cn.c`.
 - `vfs_test.c`: the [VFS](ARCHITECTURE.md#terms) and its ISO9660 backend, the
   [libcdvd](ARCHITECTURE.md#terms), [SIF](ARCHITECTURE.md#terms) and [IOP](ARCHITECTURE.md#terms)
-  RAM layers, and `ico_vfs_reopen`'s second mount read interleaved with the first
-  (`vfs_synthetic`, `vfs_disc`, `vfs_disc_jpn`, `vfs_disc_kor`); `same <iso> <image>`: the same
-  directory records, boot ELF and DATA.DF SHA-1s and image SHA-1 in both.
+  RAM layers, and `ico_vfs_reopen`'s second mount read interleaved with the first, and two
+  threads reading one mount 1000 times each under its mutex, every read equal to one thread's
+  alone (`test_two_threads`) (`vfs_synthetic`, `vfs_disc`, `vfs_disc_jpn`, `vfs_disc_kor`);
+  `same <iso> <image>`: the same directory records, boot ELF and DATA.DF SHA-1s and image SHA-1
+  in both.
+- `cdvd_host_test.c`: the disc reader thread ([DATA.md](DATA.md#the-disc-reader-thread)) over a
+  fake backend whose reads sleep and note their thread: `sceCdRead` returning before a 30 ms
+  read ends, the command busy until the vsync and complete there (the buffer, the error, the
+  wait), a second read refused while busy, `sceCdSync(0)` from the host context, the errors final
+  when busy clears, `sceCdBreak` (ABORT, the buffer whole, nothing written after), the
+  read-ahead's hits, misses and end clamp, the stream's hits, the idle gate, a reset with a read
+  on the thread, the sync reader (`cdvd_host`; under the TSAN preset where it is built).
 - `sha1.h` is the tests' SHA-1.
 
 ### port/fmv/test
@@ -502,7 +511,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `APPDIR` not holding the program, missing, the root folder or a mere name prefix, or `APPIMAGE`
   relative, a folder or empty, change nothing (`test_appimage`); built again
   as `host_config_portable_test` (`host_config`, `host_config_portable`).
-- `host_fs_test.c`: the file helpers on a UTF-8 path outside ASCII (`host_fs`).
+- `host_fs_test.c`: the file helpers on a UTF-8 path outside ASCII, the drive's kind and its file
+  system's name (`ico_host_drive_fs_name`: tmpfs for `/dev/shm` on Linux) (`host_fs`).
 - `hotkeys_test.c`: F12, Shift+F12 and F11, repeats ignored, no other key taken (`hotkeys`).
 - `ios_chain_test.c`: the game's thread, message and memory layer on the fiber scheduler under
   simulated vsyncs (`ios_chain`).
@@ -538,7 +548,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   one present a step after the first second, the lock's probes failing back to one with no step a
   period late, no climb refused, the alphas on the grid; a GPU-bound phone at 60 Hz presents its
   new frames and under 33 a second with the probes and keeps real time; both print the rule
-  before's numbers beside) (`pace_loop`).
+  before's numbers beside), and the disc's excuse (`testDiscWait126`: every 150th step 100 ms
+  long waiting for the disc drops nothing, each counted in `discExcused`) (`pace_loop`).
 - `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
   the first second, 50 presents a second give 50 at every whole second, a second that ran 1.5 s long
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays
@@ -565,7 +576,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   item-3 case held to 1, issue 139's GPU-bound lock held to 0 with two failed probes (302
   presents in 600 steps); `testBudgetGlWait126`: issue 126's OpenGL display wait excused, the
   same numbers on Vulkan dropping to 0 and back to 1 after 120 steps, the GPU-bound OpenGL blocks
-  at 0; `testBudgetLines`: the drop, climb, refused-climb and 10 s words of those sequences (the
+  at 0; `testBudgetDiscWait126`: the disc's excuse, 100 ms late with 100 ms of disc wait drops
+  nothing, with none or 20 ms it drops to 0, late by the wait and half a refresh is excused and a
+  nanosecond more is not, the timer path paced by the GPU keeps its balance, the drop line's
+  `disc wait`; `testBudgetLines`: the drop, climb, refused-climb and 10 s words of those sequences (the
   GPU figure named `GPU span`, `GPU busy` for a busy time) and the lock's clock part, compared
   word for word), the lock's probe as rates (`testBudgetProbe126`: issue 126's D3D11 drop with a
   15 ms span the old gate refused, back at 1 a step 120 steps later and 600 presents in the next
