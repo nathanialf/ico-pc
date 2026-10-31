@@ -744,8 +744,11 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
 
     /* one image over the surface's minimum, so a present has a free image
      * without waiting on the display; the FIFO fallback asks for exactly the
-     * minimum (the queue the driver blocked on under mailbox stays short) */
-    uint32_t count = s_fifoFallback ? caps.minImageCount : caps.minImageCount + 1u;
+     * minimum (the queue the driver blocked on under mailbox stays short),
+     * and two at least (with one, every acquire waits for the image to
+     * leave the display) */
+    uint32_t count = s_fifoFallback ? (caps.minImageCount > 2u ? caps.minImageCount : 2u)
+                                    : caps.minImageCount + 1u;
     if (caps.maxImageCount && count > caps.maxImageCount) {
         count = caps.maxImageCount;
     }

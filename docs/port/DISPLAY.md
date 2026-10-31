@@ -1042,7 +1042,8 @@ the window's side, called from `port/platform/window_host.c` (`video_settings`, 
   swapchain is made again at its own size as on any present mode change, its time taken out of the
   pacing (`pausePendingNs`), and `window: present mode fifo, FIFO fallback taken after N blocks`
   follows the backend's `rhi_vk: swapchain ... present mode fifo (vsync off, fifo fallback) ...`
-  line. Every later swapchain is FIFO with exactly the surface's minimum image count.
+  line. Every later swapchain is FIFO with exactly the surface's minimum image count (two when the
+  minimum is one).
 - The vsync option and `config.toml` are not touched: Options still says Off, and the next run
   starts in mailbox again.
 - At 120 Hz a FIFO present waits a refresh (8.3 ms) at most; a 28 ms GPU never fills the queue, so

@@ -585,7 +585,7 @@ transfer features (`vkr_choose_depth_stencil`).
 `port/rhi/vk/vk_cmd.c`; `port/rhi/vk/vk_swapchain.c` (`vkr_poll_surface_on`)).
 
 **Present mode** (`port/rhi/vk/vk_present_mode.c`, pure so its test compiles it alone). Under the
-FIFO fallback (`forceFifo`, `s_fifoFallback` in `port/rhi/vk/vk_swapchain.c`, which also asks for exactly `minImageCount` images and adds `, fifo fallback` to the `rhi_vk: swapchain` line): FIFO. With vsync:
+FIFO fallback (`forceFifo`, `s_fifoFallback` in `port/rhi/vk/vk_swapchain.c`, which also asks for exactly `minImageCount` images, two at least, and adds `, fifo fallback` to the `rhi_vk: swapchain` line): FIFO. With vsync:
 mailbox when preferred and offered; FIFO latest ready when asked for and offered; else FIFO. Without
 vsync: immediate wherever offered (the picture tears where the compositor lets it), then mailbox,
 then FIFO (`vkr_choose_present_mode`). `vkr_present_wait_wanted` is true only when
