@@ -12,3 +12,4 @@
 - In photo mode, the glowing trails behind the shadow creatures' eyes now stay with the eyes when you move or zoom the camera.
 - The frame rate no longer dips to 30-40 while the game streams its data from the drive (most often with the game files on a slow, external or network drive): the game now reads its data in the background, and those waits no longer hold the picture rate down afterwards.
 - The menus are much faster at Original resolution on phones and tablets with weaker graphics (the Options pages ran at 6-7 frames a second on a Mali-G52).
+- The game now starts on phones whose graphics driver cannot draw depth with a 32-bit depth buffer alone (for example the Asus ZenFone Live L1 with an Adreno 505, on Android 8).
