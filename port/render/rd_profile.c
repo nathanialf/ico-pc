@@ -199,6 +199,11 @@ static bool hasWord(const char *s, const char *word)
     return false;
 }
 
+bool rd__driver_is_turnip(const RhiLimits *lim)
+{
+    return lim != NULL && hasWord(lim->driverText, "turnip");
+}
+
 static ProfileClass classOf(const RhiLimits *lim)
 {
     switch (rhi_backend()) {
@@ -220,7 +225,7 @@ static ProfileClass classOf(const RhiLimits *lim)
          * the driver text (VkPhysicalDeviceDriverProperties.driverName
          * "turnip Mesa driver", RhiLimits.driverText); Qualcomm's own
          * driver does not */
-        return hasWord(lim->driverText, "turnip") ? PC_ADRENO_TURNIP : PC_ADRENO_QUALCOMM;
+        return rd__driver_is_turnip(lim) ? PC_ADRENO_TURNIP : PC_ADRENO_QUALCOMM;
     case VENDOR_ARM:
         return PC_MALI;
     case VENDOR_IMAGINATION:

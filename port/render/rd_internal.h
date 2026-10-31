@@ -977,6 +977,10 @@ uint32_t rd__vu_sheet_end(const RdMeshRec *m, uint32_t end, bool extended);
  * region rule, vu_common.hlsli vu_region_rule): the Enhanced preset, a frame
  * wider than 4:3 or a scene scale above 1 (rd_replay.c) */
 bool rd__vu_extended(void);
+/* Whether the device's driver is Mesa's Turnip: its text (RhiLimits.driverText,
+ * "turnip Mesa driver" or "Turnip Mesa 26.3.0") has the word in any case;
+ * Qualcomm's own driver does not (rd_profile.c) */
+bool rd__driver_is_turnip(const RhiLimits *lim);
 /* A vertex shader's embedded name (RD_VS_*; rd_replay.c s_vsNames) */
 const char *rd__vs_name(uint8_t vs);
 /* A fragment shader's embedded name (RD_FS_*; rd_replay.c s_fsNames) */
@@ -1694,7 +1698,8 @@ uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
  * rd__vu_policy_init  at rd_init, after the shaders: which program entries
  *                     the fallback draws through (g_rd.vsFallback: the
  *                     plain ones on a device of the table,
- *                     RhiLimits.vuFallbackPlain, with ICO_RD_VU_PLAIN=1 or
+ *                     RhiLimits.vuFallbackPlain, under the Turnip driver,
+ *                     with ICO_RD_VU_PLAIN=1 or
  *                     after rd_set_vu_plain_only; the extended ones
  *                     elsewhere or with ICO_RD_VU_EXTENDED=1; their modules
  *                     made then), the dynamic state in force (g_rd.dynDepth,
@@ -1706,6 +1711,27 @@ uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
  * rd__shader_instructions  its SPIR-V instruction count (the header's five
  *                     words left out), 0 when there is none */
 bool rd__vu_policy_init(const RhiLimits *lim);
+
+/* The fallback's set and why, without a device (rd__vu_policy_init's
+ * choice; rd_state_test "vu set"), in this order: a device-table row
+ * (lim->vuFallbackPlain), a driver whose text names Turnip
+ * (rd__driver_is_turnip: the extended set's clipped triangles showed a stray
+ * vertex there, issue 163), ICO_RD_VU_PLAIN=1 (envPlain), the host's reason
+ * (hostWhy, rd_set_vu_plain_only); ICO_RD_VU_EXTENDED=1 (envExtended) turns
+ * any of them back to the extended set (overridden, the reason it overrode
+ * kept in why).  kind and why are the start line's words ("plain set" and
+ * "(Turnip driver: ...)"), brief the summary's reason ("Turnip driver, issue
+ * 163"); both empty for the extended set without a reason. */
+typedef struct RdVuSetChoice {
+    bool plain;
+    bool overridden;
+    const char *kind;
+    const char *brief;
+    char why[160];
+} RdVuSetChoice;
+
+void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, const char *hostWhy,
+                       RdVuSetChoice *out);
 /* The vertex pre-pass (docs/port/RENDER.md, "The vertex pre-pass").
  * rd__vu_prepass_init  at rd_init, after the shaders (rd_replay_vu.c): whether
  *                     it draws (g_rd.vuPrepass: ICO_RD_VU_PREPASS=0, [dev]
@@ -2549,6 +2575,7 @@ typedef struct RdContext {
     RhiShader vsFallback[RD_VS_COUNT];
     bool vuFallbackPlain;
     char vuPlainWhy[160];
+    const char *vuPlainBrief; /* the summary's reason (RdVuSetChoice.brief) */
     /* the dynamic state in force (rd__vu_policy_init from
      * RhiLimits.dynamicDepth / dynamicBlend; rd__key_dynamic_normalise,
      * rd__set_pipeline) */

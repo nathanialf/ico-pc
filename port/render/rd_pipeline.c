@@ -2752,8 +2752,10 @@ const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i)
  * the pre-pass off) draws the old way, through its program's own entry
  * with vu_ps: vu_X_vs (the extended build), or on a
  * device of the table (RhiLimits.vuFallbackPlain, vk_device.c kVuPlainOnly)
+ * and under Mesa's Turnip driver (rd__driver_is_turnip, issue 163)
  * vu_X_plain_vs (ICO_VU_PLAIN: no card test, no tick cameras), as
- * ICO_RD_VU_PLAIN=1 or the host (rd_set_vu_plain_only) ask anywhere;
+ * ICO_RD_VU_PLAIN=1 or the host (rd_set_vu_plain_only) ask anywhere
+ * (rd__vu_set_choose);
  * ICO_RD_VU_EXTENDED=1 gives the extended ones whatever the others say.
  * One choice a run (g_rd.vsFallback), no key field: the program entries'
  * keys are in the start-up set only when the pre-pass is off. */
@@ -2840,6 +2842,49 @@ uint32_t rd__shader_instructions(const char *name)
     return n;
 }
 
+void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, const char *hostWhy,
+                       RdVuSetChoice *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->kind = "extended set (no device-table row, no Turnip driver, no lost start, no [dev] "
+                "setting asks for the plain one)";
+    out->brief = "";
+    if (lim && lim->vuFallbackPlain) {
+        snprintf(out->why, sizeof(out->why), "on this device (%s)", lim->vuFallbackPlain);
+        out->kind = "plain set by the device table";
+        out->brief = lim->vuFallbackPlain;
+    } else if (rd__driver_is_turnip(lim)) {
+        /* Mesa's Turnip on an Adreno: a skinned draw's vertex thrown far off
+         * Ico showed as a sliver through the extended set's clipped
+         * triangles between ticks (issue 163).  The plain set drops a
+         * triangle that fails the region test and reaches into the picture
+         * (VU_RULE_DROP) where the extended one draws it clipped
+         * (VU_RULE_STRIP), so it hides such a vertex as the stock driver's
+         * row does; it does not remove its cause.  Turnip loses the card
+         * test and the tick cameras' re-test on the fallback's draws. */
+        snprintf(out->why, sizeof(out->why),
+                 "(Turnip driver: the extended set's clipped triangles showed a stray vertex "
+                 "there, issue 163; [dev] ICO_RD_VU_EXTENDED=1 asks for the extended one)");
+        out->kind = "plain set";
+        out->brief = "Turnip driver, issue 163";
+    } else if (envPlain) {
+        snprintf(out->why, sizeof(out->why), "by ICO_RD_VU_PLAIN=1");
+        out->kind = "plain set by [dev] (ICO_RD_VU_PLAIN=1)";
+        out->brief = "[dev] ICO_RD_VU_PLAIN=1";
+    } else if (hostWhy && hostWhy[0]) {
+        snprintf(out->why, sizeof(out->why), "(%s)", hostWhy);
+        out->kind = "plain set after a lost start";
+        out->brief = "after a lost start";
+    }
+    out->plain = out->why[0] != '\0';
+    if (out->plain && envExtended) {
+        out->plain = false;
+        out->overridden = true;
+        out->kind = "extended set by [dev] (ICO_RD_VU_EXTENDED=1)";
+        out->brief = "";
+    }
+}
+
 bool rd__vu_policy_init(const RhiLimits *lim)
 {
     /* the device's compiler, as its driver names it (Qualcomm's Adreno
@@ -2871,29 +2916,20 @@ bool rd__vu_policy_init(const RhiLimits *lim)
     /* the fallback's program entries */
     g_rd.vuFallbackPlain = false;
     g_rd.vuPlainWhy[0] = '\0';
+    g_rd.vuPlainBrief = NULL;
     /* PC port: the reason's kind, for the start-up line (issues 163/164: a
      * report shows which set drew and why on its first VU line) */
-    const char *kind = "extended set (no device-table row, no lost start, no [dev] setting asks "
-                       "for the plain one)";
-    if (lim && lim->vuFallbackPlain) {
-        snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "on this device (%s)",
-                 lim->vuFallbackPlain);
-        kind = "plain set by the device table";
-    } else if (envOn("ICO_RD_VU_PLAIN")) {
-        snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "by ICO_RD_VU_PLAIN=1");
-        kind = "plain set by [dev] (ICO_RD_VU_PLAIN=1)";
-    } else if (s_vuHostWhy[0]) {
-        snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "(%s)", s_vuHostWhy);
-        kind = "plain set after a lost start";
-    }
-    bool plain = g_rd.vuPlainWhy[0] != '\0';
-    if (plain && envOn("ICO_RD_VU_EXTENDED")) {
+    RdVuSetChoice choice;
+    rd__vu_set_choose(lim, envOn("ICO_RD_VU_PLAIN"), envOn("ICO_RD_VU_EXTENDED"), s_vuHostWhy,
+                      &choice);
+    const char *kind = choice.kind;
+    snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "%s", choice.why);
+    bool plain = choice.plain;
+    if (choice.overridden) {
         rd__log("VU shaders: the fallback's plain program entries %s, but ICO_RD_VU_EXTENDED=1: "
                 "the extended ones are used",
                 g_rd.vuPlainWhy);
-        plain = false;
         g_rd.vuPlainWhy[0] = '\0';
-        kind = "extended set by [dev] (ICO_RD_VU_EXTENDED=1)";
     }
     /* the ten mesh entries' plain modules (vu_X_vs's is vu_X_plain_vs;
      * rd_replay.c rd__gpu_shutdown destroys them), made only when the
@@ -2918,6 +2954,7 @@ bool rd__vu_policy_init(const RhiLimits *lim)
         }
     }
     g_rd.vuFallbackPlain = plain;
+    g_rd.vuPlainBrief = plain ? choice.brief : NULL;
     for (uint8_t v = RD_VS_VU_PRELIT; v <= RD_VS_VU_PARTICLE; v++) {
         g_rd.vsFallback[v] = plain && g_rd.vsPlain[v].id ? g_rd.vsPlain[v] : g_rd.vs[v];
     }

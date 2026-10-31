@@ -109,12 +109,14 @@ void rd_summary_text(char *out, size_t size)
     }
     snprintf(out, size,
              "blend %s; profile %s; index values dense (marks in the stream); fog %s; VU shaders "
-             "%s%s; VU pre-pass %s%s; VU merge %s; VU fuse %s; constant reads %s; pipelines %s "
+             "%s%s%s%s; VU pre-pass %s%s; VU merge %s; VU fuse %s; constant reads %s; pipelines %s "
              "(pool %d, cache %d)",
              g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
              rd__profile_text()[0] ? rd__profile_text() : "(not decided)",
              g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
-             g_rd.vuFallbackPlain ? "one set, fallback plain (issue 107)" : "one set", split,
+             g_rd.vuFallbackPlain ? "one set, fallback plain (" : "one set",
+             g_rd.vuFallbackPlain && g_rd.vuPlainBrief ? g_rd.vuPlainBrief : "",
+             g_rd.vuFallbackPlain ? ")" : "", split,
              g_rdSumPrepass[0] ? g_rdSumPrepass : "(self-test not reached)",
              /* the pre-pass's batches (rd_replay_vu.c vuPrepassRun) */
              !g_rd.vuPrepass   ? ""
