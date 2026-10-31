@@ -35,6 +35,8 @@ _Static_assert(SHEET_BAYER_ROW2 == ICO_SHEET_BAYER_ROW2, "sheet_text.hlsli SHEET
 _Static_assert(SHEET_BAYER_ROW3 == ICO_SHEET_BAYER_ROW3, "sheet_text.hlsli SHEET_BAYER_ROW3");
 _Static_assert(SHEET_T_OFF == ICO_SHEET_T_OFF, "sheet_text.hlsli SHEET_T_OFF");
 _Static_assert(SHEET_SCALE_MAX == ICO_SHEET_SCALE_MAX, "sheet_text.hlsli SHEET_SCALE_MAX");
+_Static_assert(SHEET_BAKE_AX == ICO_SHEET_BAKE_AX, "sheet_text.hlsli SHEET_BAKE_AX");
+_Static_assert(SHEET_BAKE_AY == ICO_SHEET_BAKE_AY, "sheet_text.hlsli SHEET_BAKE_AY");
 _Static_assert(ICO_SHEET_LEVELS >= 2 && ICO_SHEET_LEVELS <= 256, "sheet levels");
 
 /* the rim's falloff across (|dx|) and down (|dy|), per mille */

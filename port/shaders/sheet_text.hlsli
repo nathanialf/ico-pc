@@ -48,6 +48,15 @@
 // ICO_SHEET_SCALE_MAX).  Above 1 the rim comes precomputed in the texture's
 // bottom half (rd.h rd_sheet_rim), one value a sheet texel.
 #define SHEET_SCALE_MAX 4
+// A 1x sheet baked on the CPU (rd_tex.c rd__sheet_bake_rect;
+// font_sheet_baked_ps): the page's texels (grey, grey, grey, alpha) in an
+// RGBA8 texture with an apron of SHEET_BAKE_AX texels across and
+// SHEET_BAKE_AY down round it (shader_consts.h ICO_SHEET_BAKE_AX/AY): the
+// texels outside the page as font_sheet_ps rebuilds them, the outermost one
+// past the rim's reach, so a read clamped to the texture is the shader's
+// texel anywhere.
+#define SHEET_BAKE_AX (SHEET_RX + 1)
+#define SHEET_BAKE_AY (SHEET_RY + 1)
 // The grid of coverage texels the four sheet texels of a bilinear sample
 // are rebuilt from.
 #define SHEET_GW (2 + 2 * SHEET_RX)

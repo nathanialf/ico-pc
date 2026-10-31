@@ -176,7 +176,10 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
  * sheet_text.hlsli (the same values; port/render/test/sheet_ref.c
  * static-asserts each pair).  rd.h rd_create_texture_sheet says what they do.
  * The style reaches the shader in DrawCB.param: the rim's weight (0 off,
- * 64 full), rimLevel, fillLevel, dither (rd_replay.c, from RdTexRec.sheet). */
+ * 64 full), rimLevel, fillLevel, dither (rd_replay.c, from RdTexRec.sheet).
+ * At 1x the renderer computes the same texels on the CPU instead
+ * (rd_tex.c rd__sheet_bake_rect, into an RGBA8 texture font_sheet_baked_ps
+ * reads), with the same constants. */
 /* The values are the sheets' survey (the comment above kSheetInk in
  * port/ui/menu_font.c; ctest menu_look testSurvey).  The rim is
  * a weighted dilation: the largest coverage within ICO_SHEET_RX texels across
@@ -219,6 +222,16 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
  * shader in DrawCB.param.w above the dither bit: dither | (s - 1) << 1
  * (rd_replay.c sheetParam), so s = 1 leaves the dither word as it is. */
 #define ICO_SHEET_SCALE_MAX 4
+/* A 1x sheet's baked texture (rd_tex.c rd__sheet_bake_rect,
+ * font_sheet_baked_ps): the page's texels with an apron of ICO_SHEET_BAKE_AX
+ * texels left and right and ICO_SHEET_BAKE_AY above and below, so it is
+ * (w + 2 AX) x (h + 2 AY).  The apron holds the texels font_sheet_ps
+ * rebuilds outside the page (no coverage, the rim of the ink near the
+ * edge); one texel past the rim's reach every texel outside is the same
+ * (no coverage, no rim), so a read clamped to the apron is the shader's
+ * texel at any position. */
+#define ICO_SHEET_BAKE_AX (ICO_SHEET_RX + 1)
+#define ICO_SHEET_BAKE_AY (ICO_SHEET_RY + 1)
 
 /* Vertex of sprite.hlsl and font.hlsl: 20 bytes.
  *   loc 0 RHI_VTX_U16x2_UINT, loc 1 RHI_VTX_U32x1, loc 2 RHI_VTX_U8x4_UINT,
