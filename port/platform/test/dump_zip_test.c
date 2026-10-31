@@ -15,7 +15,8 @@
  * (ico_loss_dump_path); the pruning
  * (ico_loss_dump_prune) keeps the newest loss zips by name and leaves
  * every other file alone.  ico_zip_add_file: the bug-report picture added to
- * a finished zip, its entries kept.
+ * a finished zip, its entries kept; ico_zip_move_file: F12's blended
+ * present's frame added third, the loose file gone.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -206,6 +207,33 @@ static void test_add(const char *base)
     remove(zip);
     CHECK(ico_zip_add_file(zip, log, "x.txt", why, sizeof(why), NULL) == -1);
     remove(log);
+    /* ico_zip_move_file: F12's blended present's frame after the frame and
+       the tick before, under its own name, the loose file gone; the first
+       two .rddump entries stay the frame and the tick before */
+    {
+        char prev[1200], blended[1200];
+
+        snprintf(prev, sizeof(prev), "%s/add-v1-prev.rddump", base);
+        snprintf(blended, sizeof(blended), "%s/add-v1-blended.rddump", base);
+        CHECK(put(dump, rd, sizeof(rd)) == 0);
+        CHECK(put(prev, rd, 100) == 0);
+        CHECK(put(blended, rd, 200) == 0);
+        CHECK(ico_frame_dump_zip(zip, dump, prev, NULL, why, sizeof(why)) == 1);
+        CHECK(ico_zip_move_file(zip, blended, why, sizeof(why), &added) == 0);
+        CHECK(added == 200 && ico_path_kind(blended, NULL, NULL) == -1);
+        memset(&z, 0, sizeof(z));
+        CHECK(mz_zip_reader_init_file(&z, zip, 0));
+        CHECK(mz_zip_reader_get_num_files(&z) == 3);
+        CHECK(entry_is(&z, "add-v1-blended.rddump", rd, 200));
+        mz_zip_reader_end(&z);
+        void *second = ico_dump_zip_extract_nth(zip, 1, &added, NULL, 0);
+
+        CHECK(second != NULL && added == 100);
+        free(second);
+        /* a missing file: refused, the zip as it was */
+        CHECK(ico_zip_move_file(zip, blended, why, sizeof(why), NULL) == -1);
+        remove(zip);
+    }
 }
 
 int main(int argc, char **argv)
