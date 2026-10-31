@@ -1125,7 +1125,7 @@ _Static_assert(ICO_SHEET_BAKE_AX == ICO_SHEET_RX + 1 && ICO_SHEET_BAKE_AY == ICO
 int rd__sheet_baked(const RdTexRec *t)
 {
     return t && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET && t->sheetScale <= 1 &&
-           !g_rd.sheetShader;
+           !g_rd.sheetShader && !t->sheetShader;
 }
 
 uint32_t rd__tex_device_w(const RdTexRec *t)

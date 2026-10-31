@@ -30,8 +30,9 @@
  *          x 64..160: a cell, then two LERP draws, A over 64..128 and B over
  *          96..160: where they overlap B must blend over A's result;
  *          x 160..256: a cell, then one glyph quad through the text sheet's
- *          shader (a 1x sheet: font_sheet_baked_ps, the menus' 1x text, or
- *          font_sheet_ps under ICO_RD_SHEET_SHADER=1);
+ *          shader, font_sheet_ps, the largest destination-read shader (a
+ *          1x sheet kept off the bake, RdTexRec.sheetShader: the pixels
+ *          the baked 1x path draws);
  *   row 2  x 0..64: the after cell, opaque (ABE 0), drawn after every
  *          blended draw: it must be its own colour on an even and an odd
  *          texel column (a driver that keeps the LERP's dual-source
@@ -541,6 +542,13 @@ static bool runSelftest(void)
     const RdTex leaf = rd_create_texture(2, 1, kLeafTex, RD_TEXA_80_80, "rd blend self-test leaf");
     const RdTex sheet =
         rd_create_texture_sheet(SHEET_W, SHEET_H, cov, NULL, "rd blend self-test glyph");
+    {
+        /* through font_sheet_ps, not the 1x bake (before its first upload) */
+        RdTexRec *gr = rd__tex_rec(sheet.id);
+        if (gr) {
+            gr->sheetShader = 1;
+        }
+    }
     static RdFrame f;
     if (!leaf.id || !sheet.id ||
         !buildFrame(&f, rd_target(RD_TARGET_SCENE).id, t->w, t->h, leaf, sheet)) {

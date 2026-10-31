@@ -709,6 +709,10 @@ typedef struct RdTexRec {
      * (rd__sheet_baked when it was made; rd_upload.c makes it again when
      * the two differ) */
     uint8_t sheetBaked;
+    /* A SHEET texture never baked: drawn through font_sheet_ps at 1x too
+     * (the blend self-test's glyph, rd_blend_selftest.c, so its exact-blend
+     * run puts the largest destination-read shader through the device) */
+    uint8_t sheetShader;
     /* The GS mipmap levels of a game texture whose TEX1 asks for mipmapping
      * and whose levels are authored (rdtex_store_levels): gsLevels counts
      * them with the base (0 or 1: none), gsChain holds levels 1.. as RGBA8
@@ -761,7 +765,7 @@ void rd__free_pending(RdTexRec *t);
 
 /* Sheet text at 1x, baked (rd_tex.c; issue 173).  rd__sheet_baked: t is a
  * sheet texture of scale 1 (or 0, not yet styled) and the bake is on
- * (g_rd.sheetShader off): its RHI texture is RGBA8, (w + 2 ICO_SHEET_BAKE_AX)
+ * (g_rd.sheetShader and the texture's own sheetShader off): its RHI texture is RGBA8, (w + 2 ICO_SHEET_BAKE_AX)
  * x (h + 2 ICO_SHEET_BAKE_AY), the page's texel (x, y) at (x + AX, y + AY),
  * and rd__plan_screen_draw draws it with font_sheet_baked_ps.
  * rd__tex_device_w/h and rd__tex_device_bytes: the RHI texture's size and
