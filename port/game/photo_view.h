@@ -24,7 +24,7 @@
  *          eleven matrices are the game's byte for byte) and a camera cut
  *          for the presenter; when the stage changed or the game runs again
  *          the save is dropped instead (the game has set its own camera by
- *          then)
+ *          then); the session's eye trail line (eye_trail.h)
  * With photo mode off it does nothing.  The headless build runs it too.
  */
 #ifndef ICO_PORT_GAME_PHOTO_VIEW_H
@@ -45,6 +45,10 @@ void ico_photo_view_tick(void);
 void ico_photo_view_veil(void);
 /* 1 while the game camera is saved (between enter and leave) */
 int ico_photo_view_saved(void);
+/* 1 when this tick's photo camera is not the game camera at enter (moved
+   or zoomed); 0 outside photo mode and after leave.  The shadows' eye
+   trails (port/game/eye_trail.h) are then drawn from it */
+int ico_photo_view_moved(void);
 
 #ifdef __cplusplus
 }

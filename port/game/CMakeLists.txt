@@ -421,12 +421,14 @@ if(TARGET ico_pc)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_model_viewer_live>)
 endif()
 # photo_view.c: photo mode's camera in the game's matrices, called
-# by main.c each tick; built as the model viewer is (the game's include path
-# and record layout), in the headless build too.  photo_mode.h names rd.h's
+# by main.c each tick; eye_trail.c: the shadows' eye trails in the world,
+# which enemyParts.c pushes to and draws from photo mode's camera; built as
+# the model viewer is (the game's include path and record layout), in the
+# headless build too.  photo_mode.h names rd.h's
 # RdCamera (the struct only), so port/render is on its include path in both
 # builds, as it is for ico_options.
 if(TARGET ico_pc)
-    add_library(ico_photo_view_live OBJECT photo_view.c)
+    add_library(ico_photo_view_live OBJECT photo_view.c eye_trail.c)
     ico_include_dirs(seki _ico_pv_game_incs)
     target_include_directories(ico_photo_view_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                "${CMAKE_SOURCE_DIR}/port/render" ${_ico_pv_game_incs})

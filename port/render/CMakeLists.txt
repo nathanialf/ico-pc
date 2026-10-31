@@ -306,10 +306,12 @@ target_link_libraries(rd_tex_pool_test PRIVATE ico_render)
 # the rest of the game stubbed: frame lifecycle, field parity, camera
 # packing, Z scale and the post passes against CPU references; with
 # port/game/photo_view.c, photo mode's camera in the game's
-# matrices (photo_mode.c from ico_options).
+# matrices (photo_mode.c from ico_options), and port/game/eye_trail.c, whose
+# session line its leave writes.
 add_executable(rd_gsbase_test test/rd_gsbase_test.c
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GsBase.c"
     "${CMAKE_SOURCE_DIR}/port/game/photo_view.c"
+    "${CMAKE_SOURCE_DIR}/port/game/eye_trail.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"

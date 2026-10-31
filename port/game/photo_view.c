@@ -21,6 +21,7 @@
 #include "quaternion.h"
 #endif
 
+#include "eye_trail.h"
 #include "photo_mode.h"
 #include "photo_view.h"
 #include "../core/region.h" /* ico_region_cur */
@@ -36,11 +37,17 @@ static struct {
        screen projection, for ico_photo_view_veil; set while pair is */
     float screen500[2][16] __attribute__((aligned(16)));
     int pair;
+    int moved; /* this tick's photo camera is not the game camera at enter */
 } v;
 
 int ico_photo_view_saved(void)
 {
     return v.saved;
+}
+
+int ico_photo_view_moved(void)
+{
+    return v.moved;
 }
 
 #ifdef ICO_RD
@@ -78,6 +85,8 @@ static void leave(void)
     }
     v.saved = 0;
     v.pair = 0;
+    v.moved = 0;
+    ico_eye_trail_photo_end();
 #ifdef ICO_RD
     reelStop();
 #endif
@@ -90,14 +99,12 @@ static void leave(void)
     }
 }
 
-#ifdef ICO_RD
 /* 1 when the photo camera ov at zoom k is the game camera at enter: the
    same view matrix, no zoom */
 static int photoIsGameCamera(const RdCamera *ov, float k)
 {
     return k == 1.0f && memcmp(ov->view, v.game0.view, sizeof(ov->view)) == 0;
 }
-#endif
 
 void ico_photo_view_tick(void)
 {
@@ -120,6 +127,9 @@ void ico_photo_view_tick(void)
     IcoPhotoState st;
     ico_photo_get(&st);
     const float k = st.zoom > 0.0f ? st.zoom : 1.0f;
+    /* the draws that keep screen positions from the game camera (the eye
+       trails, enemyParts.c DispEnemyEye) redraw them from this one */
+    v.moved = !photoIsGameCamera(&ov, k);
     memcpy(matrixptr + 0x80, ov.view, sizeof(ov.view));
     gsb_SetVSMatrix(ScreenWidth, ScreenHeight, v.d * k);
     /* the full screen's 500 unit pair, which a reflection pass drawn later
