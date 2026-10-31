@@ -14,6 +14,23 @@
 #include "Matrix.h"
 #include "ios.h"
 
+#ifdef ICO_RD
+
+#include "GifHost.h" /* PC port: gif_HostFrameProjected */
+
+#endif
+
+/* PC port: port/game/photo_view.h: 1 while photo mode's camera is not the
+   game camera (moved or zoomed) */
+int ico_photo_view_moved(void);
+/* PC port: port/game/eye_trail.h: the trails' points in the world, for
+   photo mode's camera */
+void ico_eye_trail_init(const void *key, int num);
+void ico_eye_trail_push(const void *key, const float *world, float f, int reset, const int *pair);
+
+int ico_eye_trail_rebuild(const void *key, int num, const int *strip, const void *view,
+                          const void *screen, int *out, int cap);
+
 typedef struct PointBlur { /* field names derived */
     /* 0x00 */ int pri;
     /* 0x04 */ int num;
@@ -99,6 +116,10 @@ int UpdatePointBlur(PointBlur *p, void *mtx, void *tint, float f)
     t = p->stripCol;
     t[1] = p->col;
     t[0] = t[1];
+    /* PC port: the point in the world beside the strip's newest pair
+       (port/game/eye_trail.c), which DispEnemyEye draws from photo mode's
+       camera; the strip is untouched */
+    ico_eye_trail_push(p, mtx, f, p->dirty, p->strip);
     if (p->dirty != 0) {
         resetPointBlurTrail(p);
         p->dirty = 0;
@@ -148,6 +169,7 @@ static inline PointBlur *initPointBlurAt(int num, int pri, int *col, float *rate
     p->col.b = col[2];
     p->col.a = col[3];
     _CopyVector(p->rate, rate);
+    ico_eye_trail_init(p, num); /* PC port: the trail's world points (UpdatePointBlur) */
     return p;
 }
 
@@ -465,9 +487,40 @@ int DispEnemyEye(EnemyEye *self)
     }
     if (self->blurOn != 0) {
         PointBlur *fobj = self->blur;
+        /* PC port: the strip holds the pixels the game camera gave the
+           trail, which the paused game does not update; while photo
+           mode's camera is not the game camera the trail is drawn from
+           the points it was built from (port/game/eye_trail.c: the same
+           arithmetic through the matrices now in +0x80 and +0xC0), so it
+           stays on the eye the camera now shows.  The game's strip and
+           colours stay as they are, so play goes on from them; with the
+           game camera, or a trail the side table cannot rebuild, the
+           game's strip is drawn */
+        IVec own[20] __attribute__((aligned(16)));
+        void *strip = fobj->strip;
+        const int rebuilt = fobj->num * 2 <= 20 && ico_photo_view_moved() &&
+                            ico_eye_trail_rebuild(fobj, fobj->num, fobj->strip, matrixptr + 0x80,
+                                                  matrixptr + 0xC0, (int *)own, 20);
+
+        if (rebuilt) {
+            strip = own;
+        }
         gif_StartPacketPri(fobj->pri);
         gif_SetAlpha(1, fobj->alpha, 128);
-        gif_Draw2DStripG(fobj->strip, fobj->stripCol, fobj->num << 1, 1);
+#ifdef ICO_RD
+        /* PC port: projected on the CPU through the frame camera, with its
+           real projected Z, as UpdatePointBlur's points are: the presenter
+           may move it with its blended camera (GifHost.h) */
+        if (rebuilt) {
+            gif_HostFrameProjected(1);
+        }
+#endif
+        gif_Draw2DStripG(strip, fobj->stripCol, fobj->num << 1, 1);
+#ifdef ICO_RD
+        if (rebuilt) {
+            gif_HostFrameProjected(0);
+        }
+#endif
         gif_EndPacket();
     }
     return 1;
