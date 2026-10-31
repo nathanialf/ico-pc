@@ -352,7 +352,7 @@ typedef struct RdFrame {
      * the first RD_CULL_DROPS_MAX of cullDropCount */
     uint32_t cullDropCount;
     RdCullDrop cullDrops[RD_CULL_DROPS_MAX];
-    /* rd_interp.c's blended frame; not dumped: hasTickCams 1 when its
+    /* rd_interp.c's blended frame (dump version 14): hasTickCams 1 when its
      * camera is blended between two ticks' that differ, tickCams the two
      * ticks' cameras as R = S_tick St^-1 (column-major; [0] the tick
      * before's, [1] this tick's; S = proj view, St the blended camera's),
@@ -3648,12 +3648,14 @@ bool rd__read_texture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t 
  * coverage of its top half, rd_dump.c sheetFromHalo); 12 the disc's region
  * slug after cullW (char[RD_DUMP_REGION_BYTES], NUL-padded: "pal", "jpn";
  * an older dump is "pal", RdDumpInfo.region); 13 RD_TARGET_WORK3_HELD, a
- * 19th fixed target (the glow held between ticks).
+ * 19th fixed target (the glow held between ticks); 14 RdFrame.hasTickCams
+ * and tickCams after the meshes (a blended present's frame, rd.h
+ * rd_dump_blended_arm).
  * rd__dump_frame writes this version; rd__load_frame reads 3 to it, and a
  * dump before 10 loads as the 4:3 frame (aspect 4/3, wExact 512, cullW 512).
  * A dump holds the picture as drawn at its width: a replay can crop it to a
  * narrower aspect, never widen it (rd_replay_tool). */
-#define RD_DUMP_VERSION 13u
+#define RD_DUMP_VERSION 14u
 #define RD_DUMP_REGION_BYTES 8
 bool rd__dump_frame(const RdFrame *f, const char *path);
 bool rd__load_frame(const char *path, RdFrame *out);
