@@ -79,6 +79,13 @@
  *              fractional Enhanced scale (every vu_ps key's vu_np_ps twin),
  *              each under RD_PIPELINE_REACHABLE_MAX and inside the RHI's
  *              pipeline pool less its headroom (rhi_pipeline_pool.h)
+ *   vu set     rd__vu_set_choose: the stock Adreno 740's table row and a
+ *              Turnip driver's text ("turnip Mesa driver", "Turnip Mesa
+ *              26.3.0") take the plain set, with the start line's words;
+ *              Qualcomm's own driver without a row, lavapipe, RADV and
+ *              NVIDIA the extended one; ICO_RD_VU_PLAIN=1 and the host's
+ *              reason the plain one; ICO_RD_VU_EXTENDED=1 the extended one
+ *              over each of them
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
 #include <stdio.h>
@@ -2667,6 +2674,104 @@ static void testDateArea(void)
           (int32_t)tc->w - 1 - 142);
 }
 
+/* ---- the fallback's VU set (rd_pipeline.c rd__vu_set_choose) ---- */
+static RhiLimits vuSetLimits(uint32_t vendor, const char *driverText, const char *row)
+{
+    RhiLimits lim;
+    memset(&lim, 0, sizeof(lim));
+    lim.vendorId = vendor;
+    lim.driverText = driverText;
+    lim.vuFallbackPlain = row;
+    return lim;
+}
+
+static void testVuSetPolicy(void)
+{
+    static const char kTurnipWhy[] =
+        "(Turnip driver: the extended set's clipped triangles showed a stray vertex there, issue "
+        "163; [dev] ICO_RD_VU_EXTENDED=1 asks for the extended one)";
+    RdVuSetChoice c;
+    /* the stock Adreno 740: vk_device.c kVuPlainOnly's row */
+    RhiLimits lim = vuSetLimits(0x5143u,
+                                "device 5143:43050a01; driver Qualcomm Technologies Inc. Adreno "
+                                "Vulkan Driver, version 512.676.53",
+                                "Adreno 740, issue 107");
+    rd__vu_set_choose(&lim, false, false, "", &c);
+    CHECK(c.plain && !c.overridden && strcmp(c.kind, "plain set by the device table") == 0 &&
+              strcmp(c.why, "on this device (Adreno 740, issue 107)") == 0,
+          "vu set: the stock Adreno 740: plain %d, \"%s\" \"%s\"", c.plain, c.kind, c.why);
+    rd__vu_set_choose(&lim, false, true, "", &c);
+    CHECK(!c.plain && c.overridden && strstr(c.kind, "ICO_RD_VU_EXTENDED=1") != NULL &&
+              strcmp(c.why, "on this device (Adreno 740, issue 107)") == 0,
+          "vu set: the stock Adreno 740 with ICO_RD_VU_EXTENDED=1: plain %d, overridden %d",
+          c.plain, c.overridden);
+    /* Qualcomm's own driver on a GPU without a row */
+    lim = vuSetLimits(0x5143u,
+                      "device 5143:43050b00; driver Qualcomm Technologies Inc. Adreno Vulkan "
+                      "Driver, version 512.744.0",
+                      NULL);
+    rd__vu_set_choose(&lim, false, false, "", &c);
+    CHECK(!c.plain && !c.overridden && c.why[0] == '\0',
+          "vu set: Qualcomm's driver without a row: plain %d \"%s\"", c.plain, c.why);
+    /* Turnip: the driver name as Mesa writes it, and as the issue 163
+     * tablet's line has it (the same Adreno 740 chip id, no table row: the
+     * row is Qualcomm's own driver only) */
+    static const char *const turnip[] = {
+        "turnip Mesa driver",
+        "device 5143:43050a01; driver Turnip Mesa 26.3.0-devel (git-a995eaeda4), version 26.2.99",
+    };
+    for (size_t i = 0; i < sizeof(turnip) / sizeof(turnip[0]); i++) {
+        lim = vuSetLimits(0x5143u, turnip[i], NULL);
+        CHECK(rd__driver_is_turnip(&lim), "vu set: \"%s\" is not Turnip", turnip[i]);
+        rd__vu_set_choose(&lim, false, false, "", &c);
+        CHECK(c.plain && !c.overridden && strcmp(c.kind, "plain set") == 0 &&
+                  strcmp(c.why, kTurnipWhy) == 0 &&
+                  strcmp(c.brief, "Turnip driver, issue 163") == 0,
+              "vu set: \"%s\": plain %d, \"%s\" \"%s\"", turnip[i], c.plain, c.kind, c.why);
+        /* the dev override still wins */
+        rd__vu_set_choose(&lim, false, true, "", &c);
+        CHECK(!c.plain && c.overridden &&
+                  strcmp(c.kind, "extended set by [dev] (ICO_RD_VU_EXTENDED=1)") == 0 &&
+                  strcmp(c.why, kTurnipWhy) == 0,
+              "vu set: \"%s\" with ICO_RD_VU_EXTENDED=1: plain %d, overridden %d, \"%s\"",
+              turnip[i], c.plain, c.overridden, c.kind);
+    }
+
+    /* the desktop drivers */
+    static const struct {
+        uint32_t vendor;
+        const char *text;
+    } desk[] = {
+        {0x10005u, "device 10005:0000; driver llvmpipe Mesa 25.0.7-2 (LLVM 19.1.7), version 0.0.1"},
+        {0x1002u, "device 1002:744c; driver radv Mesa 25.0.7-2 (LLVM 19.1.7), version 25.0.7"},
+        {0x10DEu, "device 10de:2684; driver NVIDIA 570.153.02, version 570.153.2.0"},
+    };
+
+    for (size_t i = 0; i < sizeof(desk) / sizeof(desk[0]); i++) {
+        lim = vuSetLimits(desk[i].vendor, desk[i].text, NULL);
+        CHECK(!rd__driver_is_turnip(&lim), "vu set: \"%s\" taken for Turnip", desk[i].text);
+        rd__vu_set_choose(&lim, false, false, "", &c);
+        CHECK(!c.plain && !c.overridden && c.why[0] == '\0' &&
+                  strncmp(c.kind, "extended set (no device-table row", 33) == 0,
+              "vu set: \"%s\": plain %d, \"%s\"", desk[i].text, c.plain, c.kind);
+        rd__vu_set_choose(&lim, true, false, "", &c);
+        CHECK(c.plain && strcmp(c.why, "by ICO_RD_VU_PLAIN=1") == 0,
+              "vu set: \"%s\" with ICO_RD_VU_PLAIN=1: plain %d, \"%s\"", desk[i].text, c.plain,
+              c.why);
+        rd__vu_set_choose(&lim, false, false, "a lost start", &c);
+        CHECK(c.plain && strcmp(c.why, "(a lost start)") == 0 &&
+                  strcmp(c.kind, "plain set after a lost start") == 0,
+              "vu set: \"%s\" after the host's reason: plain %d, \"%s\"", desk[i].text, c.plain,
+              c.why);
+        rd__vu_set_choose(&lim, true, true, "a lost start", &c);
+        CHECK(!c.plain && c.overridden, "vu set: \"%s\" both settings: plain %d", desk[i].text,
+              c.plain);
+    }
+    /* no device's limits: the extended set */
+    rd__vu_set_choose(NULL, false, false, NULL, &c);
+    CHECK(!c.plain && !rd__driver_is_turnip(NULL), "vu set: no limits: plain %d", c.plain);
+}
+
 int main(int argc, char **argv)
 {
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
@@ -2692,6 +2797,7 @@ int main(int argc, char **argv)
     testPassOps();
     testStencilOps();
     testDateArea();
+    testVuSetPolicy();
     rd_shutdown();
     if (failures) {
         printf("rd_state_test: %d failures\n", failures);
