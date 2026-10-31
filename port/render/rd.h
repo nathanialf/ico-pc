@@ -539,7 +539,7 @@ void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight);
 /* Settings menu: applies at the next rd_begin_frame. */
 void rd_set_settings(const RdSettings *settings);
 /* Before rd_init: the fallback's program entries take the plain variants
- * (issue 107; docs/port/RENDER.md, "The fallback entries"), reason saying
+ * (issue 107; docs/port/PIPELINES.md, "The fallback entries"), reason saying
  * why for the log; NULL clears it; ICO_RD_VU_EXTENDED=1 overrides it.  No
  * caller in the tree: the window's went with [dev] vu_plain_only, which is
  * read and ignored (port/platform/host_config.c retired_dev). */
@@ -548,7 +548,7 @@ void rd_set_vu_plain_only(const char *reason);
  * rd_init), and why (NULL when it does not) */
 const char *rd_vu_plain_only(void);
 /* Before rd_init: the run draws without the VU vertex pre-pass
- * (docs/port/RENDER.md, "The vertex pre-pass"), reason saying why for the
+ * (docs/port/PIPELINES.md, "The vertex pre-pass"), reason saying why for the
  * log ("for this start: the last start ended while the graphics driver
  * compiled its pipelines"); NULL clears it.  The host calls it after a
  * start that ended inside the pre-pass's compile and in a restart whose
@@ -572,7 +572,7 @@ void rd_set_sprite_planes_off(const char *reason);
 bool rd_sprite_planes_off(void);
 
 /* How the start-up pipeline set is made (rd_precreate_pipelines;
- * docs/port/RENDER.md "The start-up set"): the batch size, the worker
+ * docs/port/PIPELINES.md "The start-up set"): the batch size, the worker
  * threads (0: the backend's choice), the process-memory growth in MB past
  * which the set stops and the rest is made on first use (0: no bound), and
  * whether the pipeline cache is written after every batch.  Zero fields
@@ -702,7 +702,7 @@ void rd_set_memory_fn(RdMemoryFn fn);
  * pipelines on one thread).  NULL (the default): never asked. */
 typedef int (*RdLowMemoryFn)(char *why, size_t size);
 void rd_set_low_memory_fn(RdLowMemoryFn fn);
-/* No start-up set (issues 93 and 107; docs/port/RENDER.md, "The start-up
+/* No start-up set (issues 93 and 107; docs/port/PIPELINES.md, "The start-up
  * set"): the window calls it instead of rd_precreate_pipelines, why saying
  * why ("on this device (Adreno 740, issues 93 and 107)", "by the settings
  * ([dev] pipeline_set = \"lazy\")", ...), logged as "rd: pipelines: no
@@ -2193,7 +2193,7 @@ typedef struct RdPerfRecord {
      * replay) */
     uint32_t constReads, constKept;
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
-     * docs/port/RENDER.md, "The vertex and triangle pre-passes"):
+     * docs/port/PIPELINES.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:
      * and the triangles), vuPreVertices the vertices recorded, vuPreSprites
      * the sprites, vuTriSlots the triangles' record slots (two a kick, three

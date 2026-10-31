@@ -8,3 +8,4 @@
 
 - On phones and handhelds using the Turnip graphics driver, a thin streak that could flash from Ico's leg across the screen between frames is no longer drawn.
 - A rare case where a corner of a 3D model could be placed at the wrong spot on some graphics drivers is fixed.
+- On some Android tablets and phones with Qualcomm's own graphics driver, the game stuttered every few seconds with vsync Off. After a few of these stutters the game now switches to a smoother way of showing pictures for the rest of the session; your vsync setting is not changed.
