@@ -1693,7 +1693,7 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max);
  * the ten pre-pass and five stage keys; without it the eleven program
  * entries with the legacy pixel shaders.  Appends to out[0..n). */
 uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n);
-/* The VU modules (docs/port/RENDER.md, "The fallback entries"),
+/* The VU modules (docs/port/PIPELINES.md, "The fallback entries"),
  * rd_pipeline.c.
  * rd__vu_policy_init  at rd_init, after the shaders: which program entries
  *                     the fallback draws through (g_rd.vsFallback: the
@@ -1732,7 +1732,7 @@ typedef struct RdVuSetChoice {
 
 void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, const char *hostWhy,
                        RdVuSetChoice *out);
-/* The vertex pre-pass (docs/port/RENDER.md, "The vertex pre-pass").
+/* The vertex pre-pass (docs/port/PIPELINES.md, "The vertex pre-pass").
  * rd__vu_prepass_init  at rd_init, after the shaders (rd_replay_vu.c): whether
  *                     it draws (g_rd.vuPrepass: ICO_RD_VU_PREPASS=0, [dev]
  *                     vu_prepass = false, keeps it off, as does a device
@@ -2581,7 +2581,7 @@ typedef struct RdContext {
      * rd__set_pipeline) */
     bool dynDepth, dynBlend;
     /* the VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass, rd__vu_prepass_init;
-     * docs/port/RENDER.md, "The vertex pre-pass"): on unless the settings
+     * docs/port/PIPELINES.md, "The vertex pre-pass"): on unless the settings
      * ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0) or the device
      * (RhiLimits.colorBytesPerPixel under the record's bytes) keep it off,
      * and why not */

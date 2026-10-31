@@ -979,7 +979,7 @@ void rd_set_low_memory_fn(RdLowMemoryFn fn)
  * threads, no memory bound, the cache written as cacheKeptPerBatch says).
  * The careful values (rd_pipeline_policy_careful) are what the window
  * passes on a device of the table's careful column
- * (RhiLimits.carefulPipelines; docs/port/RENDER.md "The start-up set"):
+ * (RhiLimits.carefulPipelines; docs/port/PIPELINES.md "The start-up set"):
  * batches of 8 on one worker thread, the cache written after each, the
  * set stopped once the process grew 128 MB past its size at the set's
  * start or a batch took over RD_SET_SLOW_BATCH_MS. */

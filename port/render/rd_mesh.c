@@ -2619,7 +2619,7 @@ void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key)
  * targets have depth too).  The scissor batches' cut pass forces ABE on:
  * the same set.
  * With the vertex pre-pass (g_rd.vuPrepass, the record path; docs/port/
- * RENDER.md "The vertex and triangle pre-passes") the meshes and grids
+ * PIPELINES.md "The vertex and triangle pre-passes") the meshes and grids
  * draw through vu_main_vs, whose keys carry RD_PROG_PRELIT whatever the
  * program, and the particles through vu_particle_main_vs (RD_PROG_PARTICLE,
  * the particles' program), each also under TEST Z ALWAYS (0x30000), Z
