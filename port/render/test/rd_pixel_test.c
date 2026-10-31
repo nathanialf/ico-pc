@@ -44,7 +44,12 @@
  *            moved by whole pixels gives the same pixels (the grain is the
  *            texel's); on the presentation overlay magnified 4x within 2;
  *            the frame dumped and loaded keeps the format and the style and
- *            replays to the same bytes; a strip rasterised at 2 and 4
+ *            replays to the same bytes; a 1x sheet's texels are baked on
+ *            the CPU (font_sheet_baked_ps): the same frame through
+ *            font_sheet_ps (rd__set_sheet_shader) is the same SCENE byte for
+ *            byte at every scene scale, the device texture read back is
+ *            sheetref_texel's on the page and its apron, and after
+ *            rd_update_texture_rect too; a strip rasterised at 2 and 4
  *            texels a sheet texel (style.scale) drawn 1:1 is
  *            sheetref_texel's at that scale within 1, its rim reaches 6.5 S
  *            pixels across and 4.5 S down, its fill's grain is constant
@@ -2125,6 +2130,120 @@ static void testOverlayReplacement(void)
 }
 
 /* scale: the scene's (1 in Original); dir: the dump's directory (scale 1) */
+/* testSheetText's first frame: the sheet and its RGBA8 reference
+ * magnified MX x MY side by side (TCC RGB on top, TCC RGBA below), the sheet
+ * 1:1 at the texel centres, and magnified 2x twice, the second moved by
+ * whole pixels (96, 45) */
+static void sheetTextFrame(RdTex sheet, RdTex ref, int mx, int my)
+{
+    sheetFrameBegin();
+    sheetDraw(sheet, RD_TCC_RGB, 8, 8, SHEET_W * mx, SHEET_H * my, 0);
+    sheetDraw(ref, RD_TCC_RGB, 136, 8, SHEET_W * mx, SHEET_H * my, 0);
+    sheetDraw(sheet, RD_TCC_RGBA, 8, 96, SHEET_W * mx, SHEET_H * my, 0);
+    sheetDraw(ref, RD_TCC_RGBA, 136, 96, SHEET_W * mx, SHEET_H * my, 0);
+    sheetDraw(sheet, RD_TCC_RGB, 264, 8, SHEET_W, SHEET_H, 1);
+    sheetDraw(sheet, RD_TCC_RGBA, 264, 40, SHEET_W, SHEET_H, 1);
+    sheetDraw(sheet, RD_TCC_RGBA, 264, 184, SHEET_W * 2, SHEET_H * 2, 0);
+    sheetDraw(sheet, RD_TCC_RGBA, 264 + 96, 184 + 45, SHEET_W * 2, SHEET_H * 2, 0);
+    rd_end_frame(0);
+}
+
+/* The baked 1x sheet (issue 173): the device texture read back is
+ * sheetref_texel's at every page texel and every apron texel
+ * (ICO_SHEET_BAKE_AX/AY round the page, (w + 2 AX) x (h + 2 AY) RGBA8,
+ * grey grey grey alpha); a rectangle of new coverage
+ * (rd_update_texture_rect: a solid block with a soft edge over the noisy
+ * patch, which changes the rim round it) is uploaded with the rim's reach
+ * round it, so the texels again are sheetref_texel's everywhere and the 1:1
+ * draw is too, with font_sheet_ps's bytes; the coverage is put back. */
+static int sheetDeviceBad(RdTexRec *sr, const RdSheetStyle *st)
+{
+    const uint32_t dw = SHEET_W + 2 * ICO_SHEET_BAKE_AX, dh = SHEET_H + 2 * ICO_SHEET_BAKE_AY;
+    static uint8_t dev[(SHEET_W + 2 * ICO_SHEET_BAKE_AX) * (SHEET_H + 2 * ICO_SHEET_BAKE_AY) * 4];
+    if (!sr->rhi.id || !rd__read_rhi_texture(sr->rhi, &sr->state, dw, dh, dev, sizeof(dev))) {
+        CHECK(0, "the baked sheet's device texture read back");
+        return -1;
+    }
+    /* draws sample image textures in SHADER_READ only */
+    if (sr->state != RHI_STATE_SHADER_READ) {
+        RhiCommandList cl = rhi_begin_commands();
+        if (cl.id) {
+            rd__transition(cl, sr->rhi, &sr->state, RHI_STATE_SHADER_READ);
+            rhi_end_commands(cl);
+            rhi_submit(cl);
+        }
+    }
+    int bad = 0;
+    for (uint32_t y = 0; y < dh; y++) {
+        for (uint32_t x = 0; x < dw; x++) {
+            uint8_t g, a;
+            const int px = (int)x - ICO_SHEET_BAKE_AX, py = (int)y - ICO_SHEET_BAKE_AY;
+            sheetref_texel(s_sheetCov, SHEET_W, SHEET_H, px, py, st, &g, &a);
+            const uint8_t *d = &dev[((size_t)y * dw + x) * 4];
+            if (d[0] != g || d[1] != g || d[2] != g || d[3] != a) {
+                const int want[4] = {g, g, g, a};
+                bad += pixFail("baked sheet texel against sheetref_texel", px, py, d, want);
+            }
+        }
+    }
+    return bad;
+}
+
+static void testSheetBakedTexels(RdTex sheet, const char *mode)
+{
+    RdTexRec *sr = rd__tex_rec(sheet.id);
+    if (!sr) {
+        return;
+    }
+    sheetFrameBegin();
+    rd_end_frame(0); /* the replay uploads it (baked again after the switch) */
+    CHECK(sr->sheetBaked, "%s: the sheet baked again after the switch", mode);
+    int bad = sheetDeviceBad(sr, &kSheetEn);
+    CHECK(bad == 0, "%s: %d baked texels (page and apron) off sheetref_texel", mode, bad);
+
+    /* new coverage over x 26..33, y 6..13 */
+    enum { UX = 26, UY = 6, UW = 8, UH = 8 };
+
+    static uint8_t keep[SHEET_W * SHEET_H];
+    memcpy(keep, s_sheetCov, sizeof(keep));
+    uint8_t blk[UW * UH];
+    for (int y = 0; y < UH; y++) {
+        for (int x = 0; x < UW; x++) {
+            blk[y * UW + x] = (uint8_t)(x < 5 ? 0xFF : 0xFF - (x - 4) * 60);
+            s_sheetCov[(UY + y) * SHEET_W + UX + x] = blk[y * UW + x];
+        }
+    }
+    rd_update_texture_rect(sheet, UX, UY, UW, UH, blk);
+    sheetFrameBegin();
+    sheetDraw(sheet, RD_TCC_RGB, 264, 8, SHEET_W, SHEET_H, 1);
+    sheetDraw(sheet, RD_TCC_RGBA, 264, 40, SHEET_W, SHEET_H, 1);
+    rd_end_frame(0);
+    uint32_t w = 0, h = 0;
+    float fsx = 1.0f, fsy = 1.0f;
+    uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
+    bad = sheetDeviceBad(sr, &kSheetEn);
+    CHECK(bad == 0, "%s: after a rectangle, %d baked texels off sheetref_texel", mode, bad);
+    if (img) {
+        int rim = 0;
+        bad = sheetExact(img, w, 264, 8, 40, &kSheetEn, &rim);
+        CHECK(bad == 0 && rim > 0, "%s: after a rectangle, 1:1 %d texels off sheetref_texel", mode,
+              bad);
+    }
+    free(img);
+    /* back as it was */
+    memcpy(s_sheetCov, keep, sizeof(keep));
+    for (int y = 0; y < UH; y++) {
+        memcpy(&blk[y * UW], &keep[(UY + y) * SHEET_W + UX], UW);
+    }
+    rd_update_texture_rect(sheet, UX, UY, UW, UH, blk);
+    sheetFrameBegin();
+    rd_end_frame(0); /* the replay uploads it */
+    bad = sheetDeviceBad(sr, &kSheetEn);
+    CHECK(bad == 0, "%s: the coverage put back, %d baked texels off sheetref_texel", mode, bad);
+    printf("  sheet text (%s): the baked texels and a rectangle's upload match sheetref_texel\n",
+           mode);
+}
+
 static void testSheetText(const char *mode, int scale, const char *dir)
 {
     for (int y = 0; y < SHEET_H; y++) {
@@ -2144,19 +2263,36 @@ static void testSheetText(const char *mode, int scale, const char *dir)
      * magnified 2x twice, the second moved by whole pixels (96, 45) */
     enum { MX = 3, MY = 4 };
 
-    sheetFrameBegin();
-    sheetDraw(sheet, RD_TCC_RGB, 8, 8, SHEET_W * MX, SHEET_H * MY, 0);
-    sheetDraw(ref, RD_TCC_RGB, 136, 8, SHEET_W * MX, SHEET_H * MY, 0);
-    sheetDraw(sheet, RD_TCC_RGBA, 8, 96, SHEET_W * MX, SHEET_H * MY, 0);
-    sheetDraw(ref, RD_TCC_RGBA, 136, 96, SHEET_W * MX, SHEET_H * MY, 0);
-    sheetDraw(sheet, RD_TCC_RGB, 264, 8, SHEET_W, SHEET_H, 1);
-    sheetDraw(sheet, RD_TCC_RGBA, 264, 40, SHEET_W, SHEET_H, 1);
-    sheetDraw(sheet, RD_TCC_RGBA, 264, 184, SHEET_W * 2, SHEET_H * 2, 0);
-    sheetDraw(sheet, RD_TCC_RGBA, 264 + 96, 184 + 45, SHEET_W * 2, SHEET_H * 2, 0);
-    rd_end_frame(0);
+    sheetTextFrame(sheet, ref, MX, MY);
     uint32_t w = 0, h = 0;
     float fsx = 1.0f, fsy = 1.0f;
     uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
+    /* a 1x sheet's texels are baked on the CPU (issue 173) and drawn by
+     * font_sheet_baked_ps; the same frame through font_sheet_ps
+     * (ICO_RD_SHEET_SHADER's switch) is the same SCENE, byte for byte:
+     * magnified at fractional positions, 1:1, moved */
+    CHECK(sr && rd__sheet_baked(sr) && sr->sheetBaked,
+          "%s: the 1x sheet's device texture holds the baked texels", mode);
+    if (img) {
+        rd__set_sheet_shader(true);
+        sheetTextFrame(sheet, ref, MX, MY);
+        uint32_t w2 = 0, h2 = 0;
+        uint8_t *viaShader = readScaled(RD_TARGET_SCENE, &w2, &h2, &fsx, &fsy);
+        CHECK(sr && !rd__sheet_baked(sr) && !sr->sheetBaked,
+              "%s: under the switch the sheet's device texture holds its coverage", mode);
+        long differ = -1;
+        if (viaShader && w2 == w && h2 == h) {
+            differ = 0;
+            for (size_t i = 0; i < (size_t)w * h * 4; i++) {
+                differ += viaShader[i] != img[i];
+            }
+        }
+        printf("  sheet text (%s): baked against font_sheet_ps, %ld bytes differ\n", mode, differ);
+        CHECK(differ == 0, "%s: the baked 1x sheet differs from font_sheet_ps in %ld bytes", mode,
+              differ);
+        free(viaShader);
+        rd__set_sheet_shader(false);
+    }
     const int s = (int)lroundf(fsx);
     CHECK(s == scale && (int)lroundf(fsy) == scale, "%s: SCENE at %gx%g, %d expected", mode,
           (double)fsx, (double)fsy, scale);
@@ -2201,6 +2337,7 @@ static void testSheetText(const char *mode, int scale, const char *dir)
     free(img);
 
     if (scale == 1) {
+        testSheetBakedTexels(sheet, mode);
         /* the style follows rd_set_texture_sheet_style: the French rim level,
          * a faint rim (fewer rim texels), then no rim (the rim texels go
          * transparent) */
@@ -3587,6 +3724,15 @@ static void testPipelines(void)
                     }
                     CHECK(prim || found,
                           "sheet text draw under colour mask 7 (depth %d) is not enumerated", dz);
+                    /* and a 1x sheet's (font_sheet_baked_ps) */
+                    dp[i].key.fs = RD_FS_FONT_SHEET_BAKED;
+                    found = 0;
+                    for (uint32_t j = 0; j < ns; j++) {
+                        found |= rd__pipe_key_equal(&dp[i].key, &keys[j]);
+                    }
+                    CHECK(prim || found,
+                          "baked sheet text draw under colour mask 7 (depth %d) is not enumerated",
+                          dz);
                 }
             }
             s.ds.colorMask = 0xF;

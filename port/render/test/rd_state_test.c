@@ -67,8 +67,8 @@
  *              one snapshot each (rd__date_retake)
  *   pipelines  the reachable screen and post set is under 400 keys (the
  *              sprite_texa_ps twins and the triangle planes included), with the VU program families
- *              under RD_PIPELINE_REACHABLE_MAX; font_sheet_ps has font_ps's
- *              10 keys; the VU keys: 176 program-entry keys without the
+ *              under RD_PIPELINE_REACHABLE_MAX; font_sheet_ps and
+ *              font_sheet_baked_ps have font_ps's 10 keys each; the VU keys: 176 program-entry keys without the
  *              pre-pass, 32 + 32 + 10 + 5 with it (printed with the 2D
  *              part: 446 in all when the 2D part is 367)
  *   dynamic    rd__key_dynamic_normalise: keys differing only in Z write or
@@ -2070,14 +2070,17 @@ static void testEnumeration(void)
      * blends on the two outputs and the frame's text, two blends, with and
      * without depth, colour mask F and 7 (the overlay's RGBA8 keys are the
      * frame's depthless mask F ones: 10 in all) */
-    uint32_t font = 0, sheet = 0;
+    uint32_t font = 0, sheet = 0, baked = 0;
     for (uint32_t i = 0; i < n && i < 512; i++) {
         font += keys[i].fs == RD_FS_FONT;
         sheet += keys[i].fs == RD_FS_FONT_SHEET;
+        baked += keys[i].fs == RD_FS_FONT_SHEET_BAKED;
     }
-    printf("  font_ps keys %u, font_sheet_ps keys %u\n", font, sheet);
-    CHECK(font == 10 && sheet == 10, "font_ps keys %u, font_sheet_ps keys %u (10 each)", font,
-          sheet);
+    printf("  font_ps keys %u, font_sheet_ps keys %u, font_sheet_baked_ps keys %u\n", font, sheet,
+           baked);
+    CHECK(font == 10 && sheet == 10 && baked == 10,
+          "font_ps keys %u, font_sheet_ps keys %u, font_sheet_baked_ps keys %u (10 each)", font,
+          sheet, baked);
     testEnumerationVu(keys);
     testDynamicNormalise(keys);
     testTilerSet(keys);
