@@ -40,15 +40,12 @@ static void testBuild(void)
                                   UI_OPT_GRAPHICS_REVERT, UI_OPT_BACK};
     static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_GRAPHICS_APPLY,
                                   UI_STR_GRAPHICS_KEEP, UI_STR_GRAPHICS_REVERT, UI_STR_BACK};
-    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,
-                                 UI_OPT_EFFECT_DEPTH_OF_FIELD,
-                                 UI_OPT_EFFECT_SOFTENING,
-                                 UI_OPT_EFFECT_MOTION_BLUR,
-                                 UI_OPT_EFFECT_FOG,
-                                 UI_OPT_EFFECT_WATER,
-                                 UI_OPT_EFFECT_CINEMATIC_BARS,
-                                 UI_OPT_BACK};
+    static const int fxOpts[] = {
+        UI_OPT_EFFECT_GLOW,      UI_OPT_EFFECT_GLOW_SMOOTH,    UI_OPT_EFFECT_DEPTH_OF_FIELD,
+        UI_OPT_EFFECT_SOFTENING, UI_OPT_EFFECT_MOTION_BLUR,    UI_OPT_EFFECT_FOG,
+        UI_OPT_EFFECT_WATER,     UI_OPT_EFFECT_CINEMATIC_BARS, UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,
+                                 UI_STR_OPT_EFFECT_GLOW_SMOOTH,
                                  UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
@@ -3420,6 +3417,81 @@ static void testModelPack(void)
     useConfig("version = 1\n");
 }
 
+/* Options > Effects > Glow between frames: Original by default, a step makes
+   it Smooth and ui_settings_save writes [video] effect_glow_mode; greyed (no
+   step) with Glow off and at Frame rate Original; the Enhanced preset sets
+   Smooth and Original sets Original, and the rows read back as Enhanced; a
+   file without the key under the Enhanced rows reads Smooth */
+static void testGlowSmooth(void)
+{
+    IcoVideoOptions o;
+    char p[1100];
+    IcoToml *t;
+    const char *got;
+
+    useConfig("version = 1\n[video]\nframerate = \"uncapped\"\n");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_GLOW_SMOOTH), "Original") == 0,
+          "glow between frames: Original by default");
+    CHECK(ico_video_effect_glow_smooth() == 0, "glow between frames: the getter 0");
+    ui_settings_step(UI_OPT_EFFECT_GLOW_SMOOTH, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_GLOW_SMOOTH), "Smooth") == 0,
+          "glow between frames: a step makes it Smooth");
+    CHECK(ico_video_effect_glow_smooth() == 1, "glow between frames: the getter 1");
+    CHECK(ui_settings_save() == 0, "glow between frames: save");
+    path(p, sizeof(p), "settings_test.toml");
+    t = ico_toml_load(p);
+    got = t ? ico_toml_get(t, "video.effect_glow_mode") : NULL;
+    CHECK(got != NULL && strcmp(got, "smooth") == 0, "glow between frames: the file says smooth");
+    ico_toml_free(t);
+    ico_video_get(&o);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_CUSTOM,
+          "glow between frames: Smooth beside the Original rows is Custom");
+    CHECK(ico_video_preset_rows(&o) == ICO_VIDEO_ORIGINAL,
+          "glow between frames: the Display rows alone are still Original");
+    /* Glow off: the row does not step and the getter is 0 */
+    ui_settings_step(UI_OPT_EFFECT_GLOW, 1);
+    ui_settings_step(UI_OPT_EFFECT_GLOW_SMOOTH, 1);
+    ico_video_get(&o);
+    CHECK(o.effectGlowSmooth == 1 && ico_video_effect_glow_smooth() == 0,
+          "glow between frames: locked with Glow off (kept, not in force)");
+    ui_settings_step(UI_OPT_EFFECT_GLOW, 1);
+    /* Frame rate Original: no step */
+    ico_video_get(&o);
+    o.framerate = ICO_FRAMERATE_ORIGINAL;
+    ico_video_set(&o);
+    ui_settings_step(UI_OPT_EFFECT_GLOW_SMOOTH, 1);
+    ico_video_get(&o);
+    CHECK(o.effectGlowSmooth == 1, "glow between frames: locked at Frame rate Original");
+    o.framerate = ICO_FRAMERATE_UNCAPPED;
+    ico_video_set(&o);
+    /* the preset */
+    ui_settings_step(UI_OPT_EFFECT_GLOW_SMOOTH, 1);
+    ico_video_get(&o);
+    CHECK(o.effectGlowSmooth == 0, "glow between frames: Original again");
+    ui_settings_step(UI_OPT_PRESET, 1);
+    ico_video_get(&o);
+    CHECK(o.effectGlowSmooth == 1 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED,
+          "glow between frames: the Enhanced preset sets Smooth and reads back as Enhanced");
+    ui_settings_step(UI_OPT_PRESET, 1);
+    ico_video_get(&o);
+    CHECK(o.effectGlowSmooth == 0 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL,
+          "glow between frames: the Original preset sets Original");
+    /* a file without the key under the Enhanced rows */
+    useConfig("version = 1\n[video]\npreset = \"enhanced\"\nresolution = \"window\"\n"
+              "aspect = \"auto\"\ntexture_filter = \"anisotropic\"\nfull_height = true\n");
+    ico_video_get(&o);
+    CHECK(o.effectGlowSmooth == 1 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED &&
+              strcmp(ui_settings_value_text(UI_OPT_EFFECT_GLOW_SMOOTH), "Smooth") == 0,
+          "glow between frames: no key under the Enhanced rows reads Smooth");
+    useConfig("version = 1\n[video]\npreset = \"enhanced\"\nresolution = \"window\"\n"
+              "aspect = \"auto\"\ntexture_filter = \"anisotropic\"\nfull_height = true\n"
+              "effect_glow_mode = \"original\"\n");
+    ico_video_get(&o);
+    CHECK(o.effectGlowSmooth == 0 && ico_video_preset(&o) == ICO_VIDEO_CUSTOM,
+          "glow between frames: an explicit key wins");
+    useConfig("version = 1\n");
+}
+
 /* Options > Effects.  The link sits under Display on the main page,
    the six rows read On by default, a step flips one and ui_settings_save
    writes [video] effect_*; the Main page fits in all four entries */
@@ -3814,6 +3886,7 @@ int main(int argc, char **argv)
     testTexturePackNoteLines();
     testModelPack();
     testEffects();
+    testGlowSmooth();
     testTouch();
     if (failures) {
         printf("settings_test: %d failure(s)\n", failures);
