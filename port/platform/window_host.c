@@ -535,7 +535,7 @@ static void video_settings(RdSettings *rs, int w, int h)
         s_pres.mailbox = (s_pres.vsync && !fifo) || (rs->vsync && !rs->interpolate);
     }
     rhi_prefer_mailbox(s_pres.mailbox != 0);
-    rhi_present_fifo_fallback(window_present_fallback_on()); /* on every backend made */
+    window_fifo_set();
 }
 
 /* The window is fullscreen now (SDL's flag, which follows the window
@@ -1599,8 +1599,6 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
     /* the audio's clock (audio_host.h ico_audio_mode_text): this runs
        before the audio starts, so the one the configuration asks for */
     ico_host_drive_summary(drives, sizeof drives); /* issue 126: where the data and saves sit */
-    char fb[96];
-    window_present_fallback_suffix(fb, sizeof fb);
     ico_diag_set_summary(
         "version %s; %s; GPU %s (%s); %s; %s preset, resolution %s, aspect %s, framerate %s%s; "
         "window mode %s; %s; index values up to %u; robust access %s; controller %s%s; disc %s; %s; "
@@ -1608,8 +1606,8 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
         ico_diag_version(), summary_platform(), rhi_adapter_name(),
         l->driverText != NULL ? l->driverText : "driver unknown",
         rhi_backend_kind_name(rhi_backend()), video_preset_label(o), res,
-        ico_video_aspect_name(o->aspect), fr, fb, ico_video_window_mode_name(o->windowMode), rd,
-        (unsigned)l->maxDrawIndexedIndexValue,
+        ico_video_aspect_name(o->aspect), fr, window_fifo_words(),
+        ico_video_window_mode_name(o->windowMode), rd, (unsigned)l->maxDrawIndexedIndexValue,
         l->robustText != NULL                ? l->robustText
         : rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12's own"
         : rhi_backend() == RHI_BACKEND_D3D11 ? "D3D11's own"
@@ -1992,7 +1990,6 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                         "the plain 3D vertex shaders\n");
     }
 #endif
-    window_present_fallback_open(); /* [dev] present_fallback */
     if (!rhi_create_backend(backend)) {
         fprintf(stderr, "window: renderer backend \"%s\" is not in this build; using vulkan\n",
                 backend);
@@ -2457,14 +2454,12 @@ open_window:
                 o.dumpTextures && ico_opt_developer_mode() ? "on" : "off",
                 o.modelPack ? "on" : "off", o.dumpModels && ico_opt_developer_mode() ? "on" : "off",
                 rhi_limits()->depthStencilFormatName, ico_video_motion_blur_name(&o));
-        char fb[96];
-        window_present_fallback_suffix(fb, sizeof fb);
         fprintf(stderr, "window: present mode %s%s%s\n", rhi_present_mode_name(),
                 s_pres.gridLock         ? " (the cap equals the refresh: the vsync lock)"
                 : s_pres.fifoLock       ? " (the cap equals the refresh)"
                 : rhi_present_mailbox() ? " (vsync without waiting on the display)"
                                         : "",
-                fb);
+                window_fifo_words());
         /* everything a report needs on the first screenful, once */
         log_summary(&o, res, fr);
         /* a program hooking the graphics API, once */
@@ -4486,7 +4481,7 @@ static void present_blocked(const RdPerfRecord *r)
                         rhi_present_mode_name(),
                         ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)));
     }
-    window_present_fallback_note(r->presentMs, SDL_GetTicksNS()); /* the FIFO fallback */
+    window_fifo_note(r->presentMs);
 }
 
 /* The finished records into the block's sums and the CSV */
@@ -4681,14 +4676,13 @@ static void perf_log(void)
             (double)(cardStrips - s_pres.cardStrips) / steps,
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
     if (s_perf.presentBlocked != 0) {
-        char fr[16], fb[96];
+        char fr[16];
 
-        window_present_fallback_block_suffix(SDL_GetTicksNS(), fb, sizeof fb);
         fprintf(stderr,
                 "window: present blocked %u times over 50 ms, longest %.0f ms (mode %s, "
                 "framerate %s)%s\n",
                 s_perf.presentBlocked, s_perf.presentBlockedMaxMs, rhi_present_mode_name(),
-                ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), fb);
+                ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), window_fifo_block());
     }
     if (s_perf.gpuN) {
         /* the GPU time per replay by list and by picture effect (each
@@ -5271,7 +5265,7 @@ void ico_window_pace(int hz)
         s_pres.presentModeApply = 0;
         video_apply(1);
     }
-    s_pres.pausePendingNs += window_present_fallback_apply(); /* the FIFO fallback's switch */
+    s_pres.pausePendingNs += window_fifo_apply();
     perf_drain(); /* every vsync, so the record queue never overflows */
     if (s_autoRes.tickBudget) {
         /* two fields a tick: 40 ms PAL, 33.4 ms NTSC (pace's periods) */

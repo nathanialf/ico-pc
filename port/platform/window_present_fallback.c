@@ -13,25 +13,25 @@
 
 static IcoPresentFallback s_fallback;
 static IcoPresentFallbackMode s_mode;
+static int s_modeRead;
 static int s_pending; /* the switch asked for, applied at the step's end */
 
-void window_present_fallback_open(void)
+void window_fifo_set(void)
 {
-    /* auto, the default, FIFO after the blocks; off keeps mailbox; fifo
-       presents FIFO from the start (video_settings sets the backend's
-       flag before the first swapchain) */
-    s_mode = ico_present_fallback_mode(getenv("ICO_PRESENT_FALLBACK"));
-    if (s_mode == ICO_PRESENT_FALLBACK_FIFO) {
-        fprintf(stderr, "window: presents FIFO from the start ([dev] present_fallback=fifo)\n");
-    } else if (s_mode == ICO_PRESENT_FALLBACK_OFF) {
-        fprintf(stderr, "window: the FIFO fallback is off ([dev] present_fallback=off): presents "
-                        "that block under mailbox keep mailbox\n");
+    if (!s_modeRead) {
+        /* auto, the default, FIFO after the blocks; off keeps mailbox;
+           fifo presents FIFO from the start (this runs before the first
+           swapchain) */
+        s_modeRead = 1;
+        s_mode = ico_present_fallback_mode(getenv("ICO_PRESENT_FALLBACK"));
+        if (s_mode == ICO_PRESENT_FALLBACK_FIFO) {
+            fprintf(stderr, "window: presents FIFO from the start ([dev] present_fallback=fifo)\n");
+        } else if (s_mode == ICO_PRESENT_FALLBACK_OFF) {
+            fprintf(stderr, "window: the FIFO fallback is off ([dev] present_fallback=off): "
+                            "presents that block under mailbox keep mailbox\n");
+        }
     }
-}
-
-bool window_present_fallback_on(void)
-{
-    return s_fallback.taken || s_mode == ICO_PRESENT_FALLBACK_FIFO;
+    rhi_present_fifo_fallback(s_fallback.taken || s_mode == ICO_PRESENT_FALLBACK_FIFO);
 }
 
 /* What the window says about a present it notes (present_fallback.h):
@@ -53,15 +53,18 @@ static int gate(void)
                                               : ICO_PRESENT_FALLBACK_GATE_YES;
 }
 
-void window_present_fallback_suffix(char *out, size_t size)
+const char *window_fifo_words(void)
 {
+    static char words[96];
+
     ico_present_fallback_mode_suffix(&s_fallback, s_mode, gate() == ICO_PRESENT_FALLBACK_GATE_YES,
-                                     out, size);
+                                     words, sizeof words);
+    return words;
 }
 
-void window_present_fallback_note(double presentMs, Uint64 nowNs)
+void window_fifo_note(double presentMs)
 {
-    const int got = ico_present_fallback_note(&s_fallback, nowNs, presentMs, gate());
+    const int got = ico_present_fallback_note(&s_fallback, SDL_GetTicksNS(), presentMs, gate());
     char line[512];
 
     if (got == ICO_PRESENT_FALLBACK_SWITCH) {
@@ -80,11 +83,10 @@ void window_present_fallback_note(double presentMs, Uint64 nowNs)
     }
 }
 
-Uint64 window_present_fallback_apply(void)
+Uint64 window_fifo_apply(void)
 {
     uint32_t sw = 0, sh = 0;
     Uint64 ns = 0;
-    char suffix[96];
 
     if (!s_pending) {
         return 0;
@@ -97,12 +99,14 @@ Uint64 window_present_fallback_apply(void)
         rd_resize_output(sw, sh);
         ns = SDL_GetTicksNS() - t0;
     }
-    window_present_fallback_suffix(suffix, sizeof suffix);
-    fprintf(stderr, "window: present mode %s%s\n", rhi_present_mode_name(), suffix);
+    fprintf(stderr, "window: present mode %s%s\n", rhi_present_mode_name(), window_fifo_words());
     return ns;
 }
 
-void window_present_fallback_block_suffix(Uint64 nowNs, char *out, size_t size)
+const char *window_fifo_block(void)
 {
-    ico_present_fallback_block_suffix(&s_fallback, nowNs, out, size);
+    static char words[96];
+
+    ico_present_fallback_block_suffix(&s_fallback, SDL_GetTicksNS(), words, sizeof words);
+    return words;
 }
