@@ -645,7 +645,12 @@ that grid, its lettering 0.8 as wide as the typeface (`UI_SHEET_WIDTH`, the shee
 lettered for the GS's 512-wide frame) and a little heavier (`UI_MENU_BOLD_X`, `UI_MENU_BOLD_Y`),
 then drawn with rd's sheet [shader](SHADERS.md): a rim around the letters and the antialiasing
 quantised against a fixed dither, as the sheets read (`port/ui/menu_font.h`;
-`port/ui/ui_internal.h` (`UI_SHEET_WIDTH`, `UI_MENU_BOLD_X`)).
+`port/ui/ui_internal.h` (`UI_SHEET_WIDTH`, `UI_MENU_BOLD_X`)). At 1x rd computes a page's finished
+texels on the CPU when it uploads the strips placed on it, and the shader reads four of them a pixel
+([SHADERS.md](SHADERS.md#sheet_texthlsli), **The 1x bake**): a 1x page is 1038 x 1034 RGBA8 on the
+graphics card (4.3 MB, the page and its apron) where its coverage is 1 MB, and a placed strip costs
+its rectangle and the rim's reach round it once; a language change bakes the light and faint pages
+again whole.
 
 The strips are rasterised at the [scene scale](ARCHITECTURE.md#terms), the scene's texels per GS
 line rounded to whole strip texels per sheet texel, from 1 up to `ICO_SHEET_SCALE_MAX` (on the

@@ -543,7 +543,13 @@ plan's means per replay, `; stores: N depth and M colour stores dropped a replay
   counts the graphics card waiting for the CPU, and B is what it ran once the work was handed over
   (a lower bound of its own time, [RHI.md](RHI.md#opengl), the busy clock). X well above B with a
   long walk in the replays line is the CPU feeding the card too slowly, not the card; M is the
-  binds the backend skipped as already made.
+  binds the backend skipped as already made. A timed pass carries the list it began in, also in
+  the passes CSV's `list` column (`port/render/rd_perf.c` (`rd__perf_pass`)): a render pass the
+  replay keeps open across lists is labelled by its first one, so on the title and in the menus the
+  last `list 3` `SCENE` entry, which begins after the shadow composite's three DATE snapshots, holds
+  lists 4 to 11 and the port's menu text with them. A large `list 3` entry with the menus up is
+  the menu as much as the scene; the bisect is a replay with list 11's draws turned off
+  (`rd_replay_tool --nop 11:A-B`, [RENDER.md](RENDER.md#dumps-and-the-replay-tool)).
 - `window: GPU ms per replay: lists 0-12 ...; effects: ...; present ...; VU pre-pass ...` and the
   replays line's GPU part: the per-list and per-effect times. On a tile-based GPU the work of a pass
   is done where the pass ends, not where its commands were recorded, so a list's or an effect's time

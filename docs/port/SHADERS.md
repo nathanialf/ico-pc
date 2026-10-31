@@ -17,7 +17,7 @@ interface that loads the blobs is [RHI.md](RHI.md).
 | `port/shaders/embed_shaders.py` | the manifest to `shaders_gen.c`/`.h`, with the blob checks |
 | `port/shaders/common.hlsli` | what every shader shares: FrameCB, DrawCB, the `DF_*` flags, sampling, outputs, the destination read, vertex helpers |
 | `port/shaders/gs_math.hlsli` | the GS integer arithmetic, scalar, valid HLSL and C |
-| `port/shaders/sheet_text.hlsli` | the sheet texel arithmetic of `font_sheet_ps`, mirrored on the CPU |
+| `port/shaders/sheet_text.hlsli` | the sheet texel arithmetic of `font_sheet_ps`, mirrored on the CPU (the tests' oracle and the renderer's 1x bake) |
 | `port/shaders/vu_common.hlsli` | what the VU program shaders share ([VU1_PROGRAMS.md](VU1_PROGRAMS.md)) |
 | `port/shaders/shader_consts.h` | the C side of the byte layouts and constants |
 | `port/shaders/*.hlsl` | the families, below |
@@ -92,7 +92,7 @@ each file's header comment):
 | `fx_sprite.hlsl` | `fx_rect_vs`, `fx_sprite_ps` and its `ICO_UINT_SRC` (`fx_sprite_u_ps`), `ICO_FX_FRAME` (`fx_frame_ps`) and `ICO_FX_DST_LOCAL` (`fx_local_ps`) builds, `fx_blur2_ps` | one GS sprite of `staticBlur.c`'s passes in the GS integer arithmetic (`port/render/rd_blur.c`): through the RGBA8_UINT views; the frame-size forms the open pass draws (the alpha alone, `FXF_ALPHA_ONLY`; the premultiplied term for the fixed-function add or subtract, `FXF_OUT_PREMUL`); the destination by local read (`port/render/rd_fx_plan.c`); two blur passes folded |
 | `fog_lut.hlsl` | `fog_lut_ps` and its `FOG_BUFFER` (`fog_lut_buffer_ps`) and `FOG_MS` (`fog_lut_ms_ps`) builds | the depth fog: bits 16..23 of the 32-bit Z through the fog CLUT, from the depth, an R32 UINT copy of it, or per sample |
 | `raw_wrap.hlsl` | `wrap_acc_ps`, `wrap_resolve_ps` | COLCLAMP 0 prims (`darkVolume.c`): an RGBA16F accumulation, then the sum modulo 256 |
-| `font.hlsl` | `font_ps`, `font_sheet_ps` | R8 coverage textures (the port's font atlas) read as sprite_ps reads a texel; sheet text in the menu sheets' style |
+| `font.hlsl` | `font_ps`, `font_sheet_ps`, `font_sheet_baked_ps` | R8 coverage textures (the port's font atlas) read as sprite_ps reads a texel; sheet text in the menu sheets' style, rebuilt from the coverage (above 1x) or read from the texels the renderer baked (1x) |
 | `yuv.hlsl` | `yuv_vs`, `yuv_ps`, `yuv_field_ps` | the FMV picture, 4:2:0 planes to RGB with the [IPU](ARCHITECTURE.md#terms)'s conversion; a field deinterlaced at the picture's size (`port/render/rd_video.c`) |
 | `crt.hlsl` | `crt_vs`, `crt_bloom_ps`, `crt_blur_ps`, `crt_ps` | the CRT filter ([DISPLAY.md](DISPLAY.md)) |
 | `vu_prelit.hlsl` | `vu_prelit_vs`, `vu_prelit_pre_vs`, `vu_ps`, `vu_texa_ps`, `vu_probe_ps` | `normal_c` (codes 32, 34, 36); the pixel shader of every VU draw, through the main shaders and the programs' own entries alike (the planes as flat varyings); the tests' probe output |
@@ -121,7 +121,8 @@ take from either ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
 
 - `_nodual` (`ICO_NO_DUAL=1`): the entries that call `gs_dual_out` without the second output, for a
   device without dual-source blending: `sprite_ps`, `sprite_texa_ps`, `sprite_aa1_ps`,
-  `sprite_stq_ps`, the three fog builds, `font_ps`, `font_sheet_ps`, `vu_ps`, `vu_texa_ps`.
+  `sprite_stq_ps`, the three fog builds, `font_ps`, `font_sheet_ps`, `font_sheet_baked_ps`, `vu_ps`,
+  `vu_texa_ps`.
   [rd](ARCHITECTURE.md#terms) draws a lerp as two passes with them (`port/render/rd_pipeline.c`
   (`rd__expand_no_dual`)).
 - `_dstrov` (`ICO_DST_READ=1`) and `_dstatt` (`ICO_DST_READ=2`): the exact blend computed from the
@@ -305,6 +306,24 @@ strip drawn at a scale of 1..`ICO_SHEET_SCALE_MAX` (4) keeps the 1x rim magnifie
 `sheet_rim_level`, `sheet_texel_scaled` (`port/shaders/sheet_text.hlsli`;
 `port/shaders/shader_consts.h`, the sheet constants). What a sheet texture is: `port/render/rd.h`
 (`rd_create_texture_sheet`).
+
+**The 1x bake.** At scale 1 the rim and `sheet_texel` are the same for every pixel that reads a
+texel, so the renderer computes them once on the CPU when it uploads a sheet: `rd__sheet_bake_rect`
+(`port/render/rd_tex.c`) runs this file's arithmetic (the separable rim as `rd_sheet_rim` makes it,
+the Bayer threshold at the page texel, the same clamps and rounding) into an RGBA8 texture, `(grey,
+grey, grey, alpha)` a texel, with an apron of `SHEET_BAKE_AX` (7) texels across and `SHEET_BAKE_AY`
+(5) down round the page for the texels `font_sheet_ps` rebuilds outside it; the outermost apron
+texel is past the rim's reach, so it is every texel beyond. `font_sheet_baked_ps` reads the four
+texels around the sample, its read clamped to the texture, and blends them with `font_sheet_ps`'s
+float lerp and `floor(m + 0.5)`, so its output is `font_sheet_ps`'s at scale 1 byte for byte, for
+four loads where `font_sheet_ps` gathers a 14 x 10 coverage grid and runs the dilation per pixel
+(about 40 ms a picture of menu text on a Mali-G52 at 1x, issue 173; `font_sheet_ps_nodual` is the
+largest pixel shader). A change uploads the changed rectangle grown by the apron, a style change
+the whole page (`port/render/rd_upload.c` (`rd__upload_dirty_textures`)); `ICO_RD_SHEET_SHADER=1`
+draws 1x through `font_sheet_ps` instead, the A/B (`port/render/rd_core.c` (`rd_init`)).
+`ctest rd_sheet_bake` checks the bake against `sheet_ref.c` at every texel of pages of glyphs and
+words, and `rd_pixel` the two shaders' pictures byte for byte
+([UI.md](UI.md#the-menus-look) for the pages).
 
 ## Bounded loops
 
@@ -756,9 +775,10 @@ same binding: one unit, bound once. The vertex inputs keep their SPIR-V `locatio
 
 **What GLSL cannot express.** An input attachment (SPIR-V `OpTypeImage` with Dim SubpassData) has
 no GLSL, so the script writes an empty file for such a module and `embed_shaders.py` reads an empty
-file as none (glsl NULL, glsl_len 0). That is 17 entries: the `_dstatt` builds of the sprite, texa,
-aa1, stq, font, font_sheet, fog_lut, fog_lut_buffer, vu and vu_texa pixel shaders (and the planes
-variants), `fog_lut_local_ps`, `fog_lut_local_ps_nodual`, `date_stencil_ps` and `fx_local_ps`. The
+file as none (glsl NULL, glsl_len 0). That is 18 entries: the `_dstatt` builds of the sprite, texa,
+aa1, stq, font, font_sheet, font_sheet_baked, fog_lut, fog_lut_buffer, vu and vu_texa pixel shaders
+(and the planes variants), `fog_lut_local_ps`, `fog_lut_local_ps_nodual`, `date_stencil_ps` and
+`fx_local_ps`. The
 `_dstrov` builds (a storage image under fragment-shader interlock) translate.
 A backend without fragment-shader interlock has no blend path from these modules (see the
 extensions below).
