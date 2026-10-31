@@ -220,8 +220,12 @@ ico_settings_test(settings_extras_test test/settings_extras_test.c)
 ico_settings_test(settings_states_test test/settings_states_test.c)
 # settings_extra_test: more Settings menu tests; each settings test file
 # stays well under the source size cap (tools/check_no_rom.sh), so new
-# settings tests go in settings_extra_test.c
+# settings tests go in settings_extra_test.c or, once it is near the cap, in
+# a program of their own (settings_adapter_test.c)
 ico_settings_test(settings_extra_test test/settings_extra_test.c)
+# settings_adapter_test: Options > Graphics > Graphics card (the row, its
+# names, Apply on another card with Keep and Revert, a fake host)
+ico_settings_test(settings_adapter_test test/settings_adapter_test.c)
 # settings_discs_test: the rows each disc's Options has, from the title and
 # the pause menu (docs/port/GAME_FEATURES.md, Options on each disc): the
 # European run and the six others (the three above and the 2001 discs below)
