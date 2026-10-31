@@ -79,6 +79,36 @@ static const char *value(void)
     return ui_settings_value_text(UI_OPT_GRAPHICS_ADAPTER);
 }
 
+/* the row's value is name, or name cut to fit the row with an ellipsis
+   (U+2026, three bytes) at its end */
+static int valueIs(const char *name)
+{
+    const char *v = value();
+    size_t n = strlen(v);
+    if (strcmp(v, name) == 0) {
+        return 1;
+    }
+    if (n >= 3 && (unsigned char)v[n - 3] == 0xE2 && (unsigned char)v[n - 2] == 0x80 &&
+        (unsigned char)v[n - 1] == 0xA6) {
+        return strncmp(v, name, n - 3) == 0;
+    }
+    return 0;
+}
+
+/* the first 15 bytes of a translated string (whole UTF-8 sequences) for
+   noteStarting */
+static const char *head15(const char *s)
+{
+    static char buf[16];
+    size_t n = strlen(s) < 15 ? strlen(s) : 15;
+    while (n > 0 && ((unsigned char)s[n] & 0xC0) == 0x80) {
+        n--;
+    }
+    memcpy(buf, s, n);
+    buf[n] = '\0';
+    return buf;
+}
+
 static const char *key(void)
 {
     return ico_config_get_string("video.adapter", "?");
@@ -121,22 +151,24 @@ static void testRow(void)
     const int pageL = openPage(mainL, -1, UI_PAGE_GRAPHICS);
     const int row = ui_settings_row_of(UI_PAGE_GRAPHICS, UI_OPT_GRAPHICS_ADAPTER);
     CHECK(row >= 0 && rowOn(UI_OPT_GRAPHICS_ADAPTER) &&
-              strcmp(lt_ext_row_text(row), "Graphics card") == 0,
+              strcmp(lt_ext_row_text(row), ui_str(UI_STR_OPT_GRAPHICS_ADAPTER)) == 0,
           "the Graphics card row");
     CHECK(!ui_settings_opt_shown(UI_OPT_GRAPHICS_API) && !rowOn(UI_OPT_GRAPHICS_API),
           "one renderer: no Graphics API row");
-    CHECK(noteStarting(UI_PAGE_GRAPHICS, "Which graphics card draws the game.") >= 0, "the note");
+    CHECK(noteStarting(UI_PAGE_GRAPHICS, head15(ui_str(UI_STR_GRAPHICS_ADAPTER_NOTE))) >= 0,
+          "the note");
     checkPageFits(UI_PAGE_GRAPHICS, "Graphics (one renderer, two cards)");
-    CHECK(strcmp(value(), "Automatic") == 0, "no key: Automatic (%s)", value());
+    CHECK(strcmp(value(), ui_str(UI_STR_VAL_GRAPHICS_AUTOMATIC)) == 0, "no key: Automatic (%s)",
+          value());
 
     /* Right: each card, then Automatic again */
     for (int i = 0; i < 2; i++) {
         ui_settings_step(UI_OPT_GRAPHICS_ADAPTER, 1);
-        CHECK(strcmp(value(), kCards[i]) == 0, "Right %d shows %s (%s)", i, kCards[i], value());
+        CHECK(valueIs(kCards[i]), "Right %d shows %s (%s)", i, kCards[i], value());
         CHECK(strcmp(key(), kCards[i]) == 0, "Right %d writes %s (%s)", i, kCards[i], key());
     }
     ui_settings_step(UI_OPT_GRAPHICS_ADAPTER, 1);
-    CHECK(strcmp(value(), "Automatic") == 0 && strcmp(key(), "") == 0,
+    CHECK(strcmp(value(), ui_str(UI_STR_VAL_GRAPHICS_AUTOMATIC)) == 0 && strcmp(key(), "") == 0,
           "Right wraps to Automatic, an empty name (%s)", key());
     ui_settings_step(UI_OPT_GRAPHICS_ADAPTER, -1);
     CHECK(strcmp(key(), kCards[1]) == 0, "Left wraps to the last (%s)", key());
