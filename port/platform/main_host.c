@@ -1922,8 +1922,8 @@ static void remove_old_lettering(void)
 #endif
 
 /* Save states' [dev] keys (state.h ico_state_dev_set): state_save_at and
-   state_load_at "<tick>:<slot>", state_hash_at "<tick>"; a value that does
-   not parse is logged and left off. */
+   state_load_at "<tick>:<slot>", state_hash_at and state_dump_at "<tick>";
+   a value that does not parse is logged and left off. */
 static void setup_state_dev(const IcoIni *ini)
 {
     static const char *const keys[3] = {"state_save_at", "state_load_at", "state_hash_at"};
@@ -1943,6 +1943,16 @@ static void setup_state_dev(const IcoIni *ini)
         }
     }
     ico_state_dev_set(tick[0], slot[0], tick[1], slot[1], tick[2]);
+    {
+        const char *v = ico_ini_get(ini, "state_dump_at");
+        unsigned int dump = 0;
+
+        if (v != NULL && v[0] != '\0' && ico_state_parse_at(v, &dump, NULL) != 0) {
+            fprintf(stderr, "state: [dev] state_dump_at = \"%s\" is not a Main tick; ignored\n", v);
+            dump = 0;
+        }
+        ico_state_dev_set_dump(dump);
+    }
 }
 
 #ifndef ICO_HEADLESS
