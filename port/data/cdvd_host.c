@@ -180,6 +180,7 @@ static struct CdReader {
     IcoCond *done;  /* the thread finished a command or a fill chunk */
     IcoThread *worker;
     int stop;
+    int halt;     /* reader_drain: a fill under way ends after its chunk */
     int queued;   /* req waits for the thread */
     int reading;  /* the thread is reading (a command or the read-ahead) */
     int inFlight; /* req queued and not completed yet (cd_complete; the game thread's) */
@@ -260,11 +261,14 @@ static void ra_fill(void)
     const uint32_t total = lsn < vol ? (vol - lsn < rdr.ahead ? vol - lsn : rdr.ahead) : 0;
 
     rdr.fill = 0;
+    if (total == 0) {
+        return; /* at the volume's end: what it holds stays */
+    }
     rdr.raVfs = v;
     rdr.raLsn = lsn;
     rdr.raCount = 0;
     rdr.reading = 1;
-    while (rdr.raCount < total && !rdr.queued && !rdr.stop) {
+    while (rdr.raCount < total && !rdr.queued && !rdr.stop && !rdr.halt) {
         const uint32_t c = total - rdr.raCount < CD_RA_CHUNK ? total - rdr.raCount : CD_RA_CHUNK;
         unsigned char *at = rdr.ra + (size_t)rdr.raCount * ICO_VFS_SECTOR;
         int r;
@@ -438,9 +442,11 @@ static void reader_drain(void)
     }
     ico_mutex_lock(rdr.lock);
     rdr.fill = 0;
+    rdr.halt = 1;
     while (rdr.queued || rdr.reading) {
         ico_cond_wait(rdr.done, rdr.lock);
     }
+    rdr.halt = 0;
     rdr.raVfs = NULL;
     rdr.raCount = 0;
     ico_mutex_unlock(rdr.lock);

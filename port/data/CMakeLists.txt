@@ -159,6 +159,22 @@ if(ICO_RUN_TESTS)
     endif()
 endif()
 
+# cdvd_host_test: the disc reader (cdvd_host.c) over a fake backend whose
+# reads sleep and note their thread: a read on the thread completes at the
+# next vsync and never before it, sceCdSync from the host context, the
+# errors final when busy clears, sceCdBreak (the read finished, ABORT,
+# nothing written after), the read-ahead's hits, misses and end clamp, the
+# stream's hits, the idle gate, a reset with a read on the thread, the sync
+# reader; no disc needed (host_config.c as vfs_test links it)
+add_executable(cdvd_host_test test/cdvd_host_test.c ../platform/host_config.c)
+target_include_directories(cdvd_host_test PRIVATE "${ICO_COMPAT_DIR}"
+                                                  "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(cdvd_host_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(cdvd_host_test PRIVATE ico_port_data ico_thread)
+if(ICO_RUN_TESTS)
+    add_test(NAME cdvd_host COMMAND cdvd_host_test)
+endif()
+
 # df_index_test: df_pack.h's index of its own (IcoDfIndex, what the texture
 # export reads the disc with off the game thread) against the global one
 # over a second mount of the user's disc: the directory, the members, a
