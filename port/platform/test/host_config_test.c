@@ -606,6 +606,16 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("glow_redraw", "true"), "1") == 0);
     CHECK(strcmp(ico_dev_env_value("glow_redraw", "false"), "0") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.glow_redraw"), "glow_redraw") == 0);
+    /* present_fallback: the FIFO fallback auto, off or fifo (window_host.c
+       ico_window_open, present_fallback.c) */
+    CHECK(strcmp(ico_dev_env_name("present_fallback"), "ICO_PRESENT_FALLBACK") == 0);
+    CHECK(strcmp(ico_dev_env_value("present_fallback", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("present_fallback", "off"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("present_fallback", "false"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("present_fallback", "fifo"), "fifo") == 0);
+    CHECK(ico_dev_env_value("present_fallback", "true") == NULL);
+    CHECK(ico_dev_env_value("present_fallback", "mailbox") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.present_fallback"), "present_fallback") == 0);
     /* the device profile's flags (port/render/rd_profile.c rd__profile_init):
        date_path stencil or snapshot as they are, store_plan and blur_fold
        on/off, uint_view on/off or work */

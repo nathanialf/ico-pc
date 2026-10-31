@@ -581,6 +581,11 @@ static const struct {
     /* false: SDL's DirectInput controller scan off (issue 105; window_host.c
        joystick_scan_hints) */
     {"dev.joystick_directinput", "joystick_directinput"},
+    /* the FIFO fallback: auto (the default) presents FIFO for the rest of a
+       run after 3 presents blocked 200 ms or more in 30 s under mailbox
+       with vsync off, off keeps mailbox, fifo presents FIFO from the start
+       (port/platform/present_fallback.h, window_host.c present_blocked) */
+    {"dev.present_fallback", "present_fallback"},
     /* "lazy": no start-up set, the pipelines made as the game needs them
        (issues 93 and 107; written by window_host.c after a start that
        ended while preparing them), "careful" the set under the careful
@@ -657,6 +662,9 @@ static const struct {
     /* port/platform/window_host.c joystick_scan_hints: 0 sets
        SDL_HINT_JOYSTICK_DIRECTINPUT to 0 before SDL_Init */
     {"joystick_directinput", "ICO_JOYSTICK_DIRECTINPUT"},
+    /* port/platform/window_host.c ico_window_open: auto, off or fifo
+       (present_fallback.c ico_present_fallback_mode) */
+    {"present_fallback", "ICO_PRESENT_FALLBACK"},
     /* port/platform/window_host.c: "lazy" skips the start-up set,
        "careful" makes it under the careful policy */
     {"pipeline_set", "ICO_PIPELINE_SET"},
@@ -708,6 +716,7 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const blends[] = {"fixed", "attachment", "storage", "exact", NULL};
     static const char *const datePaths[] = {"stencil", "snapshot", NULL};
     static const char *const sets[] = {"full", "careful", "lazy", NULL};
+    static const char *const fallbacks[] = {"auto", "off", "fifo", NULL};
 
     if (key == NULL || value == NULL || ico_dev_env_name(key) == NULL) {
         return NULL;
@@ -738,6 +747,13 @@ const char *ico_dev_env_value(const char *key, const char *value)
     }
     if (strcmp(key, "pipeline_set") == 0) {
         return value_is(value, sets) ? value : NULL;
+    }
+    if (strcmp(key, "present_fallback") == 0) {
+        /* auto, off or fifo as they are; false/0/no is off */
+        if (value_is(value, fallbacks)) {
+            return value;
+        }
+        return value_is(value, off) ? "off" : NULL;
     }
     if (strcmp(key, "pipeline_memory_floor_mb") == 0) {
         /* auto, or whole MB 0 (off) to 1048576 (memory_floor.h

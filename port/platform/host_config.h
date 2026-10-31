@@ -157,7 +157,8 @@ const char *ico_config_ini_key(const char *toml_path);
    device's best exact mode); fog_path local, inplace, copy or buffer as
    they are; date_path stencil or snapshot as they are; uint_view "work" as
    it is; dynamic_state true/on -> "0", false/off -> "1", depth -> "blend"
-   (the variable names what is static); pipeline_set full, careful or lazy as they are; pass_split a
+   (the variable names what is static); pipeline_set full, careful or lazy as they are;
+   present_fallback auto, off or fifo as they are (0/false/no -> "off"); pass_split a
    count; gpu_*, attachment_read, storage_pass_merge, store_plan,
    blur_fold, uint_view, alpha_plan, fx_plan, fx_dst_local, vu_planes,
    shadow_one, shadow_bspline, vu_prepass, vu_prepass_batch, still_represent, glow_redraw,
