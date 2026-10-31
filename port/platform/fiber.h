@@ -101,9 +101,13 @@ IcoFiber *ico_fiber_in_slot(int slot);
 int ico_fiber_slot(const IcoFiber *f);
 
 /* --- Save states --------------------------------------------------------------
- * A suspended fiber is its slot's header page (the control block) and the
- * part of its stack in use: from the saved stack pointer minus 128 bytes
- * (the System V red zone) to the stack's top. Restored into the same slot
+ * A suspended fiber is its slot's header page (the control block) and its
+ * stack from the deepest word it ever held (a slot's stack starts zeroed;
+ * the dead frames under the stack pointer are kept, since the game's code
+ * reads them when it reads a local it never set), and at least from the
+ * saved stack pointer minus 128 bytes (the System V red zone), to the
+ * stack's top. Restored into the zeroed slot, so the stack is the saved one
+ * byte for byte, into the same slot
  * of this process's pool, at the same offsets, with the addresses in it
  * moved: the saved return address (rip; lr and x30 on arm64) by the
  * MODULE delta, the stack pointer (rsp; sp) and the Windows TEB stack words
