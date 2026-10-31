@@ -459,6 +459,7 @@ static void d11_fill_limits(void)
     o->maxRenderTargetSize = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION; /* 16384 */
     o->dualSourceBlend = true; /* every feature level 10_0 and above */
     o->stencilWrap = true;
+    o->depth32Attachment = true;
     o->depthReadback = true;
     o->depthStencilFormatName = "D32S8";
     o->depthSampled = true;

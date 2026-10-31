@@ -576,6 +576,9 @@ typedef struct RhiLimits {
     uint32_t maxRenderTargetSize;
     bool dualSourceBlend; /* optional; without it rd blends in two passes */
     bool stencilWrap;     /* must be true */
+    /* D32F (RHI_FMT_D32F, depth alone) can be a depth attachment: false on a
+     * Vulkan driver without the attachment bit; the effects depth is then off */
+    bool depth32Attachment;
     /* true when rhi_readback_texture(RHI_ASPECT_DEPTH) of a D32F_S8 texture
      * returns float depth (frame dumps and tests that compare depth); false
      * on D24S8, where that readback fails (returns false) */

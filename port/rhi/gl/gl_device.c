@@ -336,6 +336,7 @@ static void gl_fill_limits(void)
     o->maxRenderTargetSize = rt > 0 ? (uint32_t)rt : 0u;
     o->dualSourceBlend = gl_int(GL_MAX_DUAL_SOURCE_DRAW_BUFFERS) >= 1 && !s_fakeNoDual &&
                          !gl_env_on("ICO_GL_FAKE_NO_DUAL");
+    o->depth32Attachment = true;
     o->stencilWrap = true; /* GL_INCR_WRAP / GL_DECR_WRAP: core since 1.4 */
     o->depthReadback = true;
     o->depthStencilFormatName = "D32S8"; /* GL_DEPTH32F_STENCIL8, required of every 3.0 driver */

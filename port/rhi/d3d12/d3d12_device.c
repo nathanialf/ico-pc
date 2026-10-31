@@ -623,6 +623,7 @@ static void dx_fill_limits(void)
     o->maxRenderTargetSize = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;    /* 16384 */
     o->dualSourceBlend = true; /* every D3D12 device (feature level 11_0) */
     o->stencilWrap = true;
+    o->depth32Attachment = true;
     o->depthReadback = true;
     o->depthStencilFormatName = "D32S8";
     o->depthSampled = true;
