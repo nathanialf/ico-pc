@@ -180,7 +180,7 @@ submit tag of the [device-loss report](#device-loss). `rhi_readback_texture` rea
 whole texture synchronously for dumps and tests (`port/rhi/rhi.h`, commands, verification helpers).
 
 **Limits** (`RhiLimits`): the uniform alignment (256 on D3D12), the largest texture and render
-target, dual-source blending (optional: without it rd blends in two passes), depth readback and
+target, dual-source blending (optional: without it rd blends in two passes), `depth32Attachment` (D32F can be a depth attachment; false on a Vulkan driver without the bit), depth readback and
 sampling of the depth-stencil format, copy pitch and offset alignment (D3D12 256 and 512, Vulkan 1
 and 4), mips and anisotropy, dynamic uniforms and the storage range, BC textures, `tiler` (a
 tile-based phone GPU: Qualcomm, ARM, Imagination, Samsung, Apple, Broadcom or any Android device;
@@ -487,7 +487,7 @@ takes the `VkRenderPass` path (dynamic rendering needs 1.1's multiview and rende
 `Vulkan 1.0 device: VK_KHR_maintenance1; VK_KHR_maintenance2 yes|no; extended queries yes|no`, and
 without the extended queries (a 1.0 device on a 1.1 loader) every optional feature is off and the
 device is made without `VkPhysicalDeviceFeatures2`. Every device needs the swapchain extension on a window, a graphics queue
-that can present, and RGBA8, RGBA8 UINT, R8, D32F and D32F_S8 or D24S8 formats; dynamic rendering
+that can present, and RGBA8, RGBA8 UINT, R8 and D32F_S8 or D24S8 formats (D32F alone as a depth attachment is optional: some 1.0 drivers lack it, `RhiLimits.depth32Attachment` is then false and the effects depth is off, the device line saying `depth D32F attachment: yes|no (the effects depth is off)`); dynamic rendering
 (core 1.3 or `VK_KHR_dynamic_rendering`) and timeline semaphores are not required (without them
 `VkRenderPass` objects, [Render passes](#vulkan), and the fence ring,
 [Bindings and synchronisation](#vulkan); `VKR_LEGACY_PASSES` 0 in `vk_internal.h` makes dynamic
@@ -534,6 +534,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_FAKE_LIMITS=moltenvk` | no limit clamped: the device is reported as MoltenVK (`RhiLimits.moltenvk`) without the attachment read (`rd_blend_selftest_moltenvk_storage`) |
 | `ICO_VK_FAKE_D24S8` | 1 takes D24S8 where the device has it |
 | `ICO_VK_FAKE_NO_DUAL` | 1 leaves dual-source blending off |
+| `ICO_VK_FAKE_NO_D32F_ATTACHMENT` | 1 hides the D32F depth-attachment bit: the device is still picked, `RhiLimits.depth32Attachment` is false (`rhi_vk_vk10_nod32f`) |
 | `ICO_VK_FAKE_NO_DYNAMIC` | 1 leaves the dynamic depth and blend state off, `blend` the blend alone ([Dynamic state](#dynamic-state)) |
 | `ICO_VK_FAKE_NO_MSAA` | 1 reports single sampling only |
 | `ICO_VK_FAKE_NO_DST` | 1 reports no destination read and no local read |

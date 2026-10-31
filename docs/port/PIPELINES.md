@@ -173,6 +173,8 @@ on a device that has it, for an A/B of the same frames.
 
 ### The start-up set
 
+The box blit with the effects depth (two keys, one per output format, `rd__present_depth_key`) is in the set only where `RhiLimits.depth32Attachment` is true; a device that cannot draw to a D32F depth buffer has neither the keys nor the effects depth (`rd: present: no effects depth (the device cannot draw to a D32F depth buffer)`, once).
+
 The window builds the reachable set with `rd_precreate_pipelines` before the first frame, behind the
 start-up screen, unless one of the rules below skips it (`port/platform/window_host.c`
 (`ico_window_open`)). Without the set the window calls `rd_pipelines_lazy(why)` instead, which logs

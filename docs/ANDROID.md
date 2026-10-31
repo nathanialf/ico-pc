@@ -10,7 +10,8 @@
 
 - **A 64-bit Android phone or tablet with Android 8 or later.** Its
   graphics must support Vulkan 1.0 or later (the way the game talks to the
-  graphics); most phones and tablets from 2017 on do. If you are not sure,
+  graphics); most phones and tablets from 2017 on do. Graphics drivers that
+  cannot draw depth with a 32-bit depth buffer alone can still start the game. If you are not sure,
   install the game and start it: if your phone cannot run it, the game
   tells you when it starts. On Android 9 or later it also offers to use a
   graphics driver package instead, which only helps on a phone with an
