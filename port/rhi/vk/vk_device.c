@@ -1118,10 +1118,9 @@ static int vkr_rate_device(VkPhysicalDevice pd, uint32_t *outQueue, const char *
                        rt | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) ||
         !vkr_format_ok(pd, VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) ||
         !vkr_format_ok(pd, VK_FORMAT_R8_UNORM, rt) ||
-        !vkr_format_ok(pd, VK_FORMAT_D32_SFLOAT, ds) ||
         (!vkr_format_ok(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, ds) &&
          !vkr_format_ok(pd, VK_FORMAT_D24_UNORM_S8_UINT, ds))) {
-        *why = "a required format (RGBA8, RGBA8_UINT, R8, D32F, D32F_S8 or D24S8) is missing";
+        *why = "a required format (RGBA8, RGBA8_UINT, R8, and D32F_S8 or D24S8) is missing";
         return -1;
     }
 
@@ -1287,6 +1286,20 @@ static bool vkr_pick_device(void)
     g_vkr.dsFormat = vkr_choose_depth_stencil(g_vkr.phys, &fake);
     g_vkr.dsSampled =
         vkr_format_ok(g_vkr.phys, g_vkr.dsFormat, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
+    /* D32_SFLOAT as an attachment alone is optional: the effects depth (the
+     * depth-only D32F buffer of rd_present.c) is the one user.  Some Vulkan
+     * 1.0 drivers (Adreno 505 on a 1.0.61 driver) have it sampled and
+     * copyable only.  ICO_VK_FAKE_NO_D32F_ATTACHMENT=1 hides the bit. */
+    {
+        const char *noD32 = getenv("ICO_VK_FAKE_NO_D32F_ATTACHMENT");
+        const bool fakeNoD32 = noD32 && noD32[0] && noD32[0] != '0';
+        g_vkr.d32fAttachment =
+            !fakeNoD32 && vkr_format_ok(g_vkr.phys, VK_FORMAT_D32_SFLOAT,
+                                        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        VKR_LOG("depth D32F attachment: %s%s",
+                g_vkr.d32fAttachment ? "yes" : "no (the effects depth is off)",
+                fakeNoD32 ? " (ICO_VK_FAKE_NO_D32F_ATTACHMENT)" : "");
+    }
     if (g_vkr.dsFormat == VK_FORMAT_D24_UNORM_S8_UINT) {
         VKR_LOG("depth-stencil: D24S8 in use%s, 24-bit depth (the scene depth has less precision "
                 "than the 32-bit float of D32S8)",
@@ -2316,6 +2329,7 @@ static void vkr_fill_limits(void)
     }
     o->dualSourceBlend = g_vkr.dualSrcBlend; /* optional */
     o->stencilWrap = true;                   /* core Vulkan */
+    o->depth32Attachment = g_vkr.d32fAttachment;
     /* a D24 depth copies out as packed 24-bit words, not floats */
     o->depthReadback = g_vkr.dsFormat == VK_FORMAT_D32_SFLOAT_S8_UINT;
     o->depthStencilFormatName = g_vkr.dsFormat == VK_FORMAT_D24_UNORM_S8_UINT ? "D24S8" : "D32S8";
