@@ -1465,6 +1465,17 @@ bool rhi_present_mailbox(void)
     return false;
 }
 
+/* rhi.h: no mailbox here, so no FIFO fallback either */
+void rhi_present_fifo_fallback(bool on)
+{
+    (void)on;
+}
+
+bool rhi_present_fifo_fallback_on(void)
+{
+    return false;
+}
+
 /* rhi.h: ignored, as on D3D12 (a flip-model swapchain in a window; the
  * window's fullscreen is SDL's and DXGI's to decide) */
 void rhi_set_exclusive_fullscreen(bool allowed)

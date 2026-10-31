@@ -1027,6 +1027,17 @@ bool rhi_present_mailbox(void)
     return false;
 }
 
+/* rhi.h: no mailbox here, so no FIFO fallback either */
+void rhi_present_fifo_fallback(bool on)
+{
+    (void)on;
+}
+
+bool rhi_present_fifo_fallback_on(void)
+{
+    return false;
+}
+
 void rhi_set_exclusive_fullscreen(bool allowed)
 {
     g_gl.exclusiveFullscreen = allowed; /* stored: the driver decides */

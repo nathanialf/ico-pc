@@ -484,6 +484,9 @@ void vkr_swapchain_destroy(void)
 
 /* rhi_prefer_mailbox: kept across rhi_init, which clears g_vkr */
 static bool s_preferMailbox;
+/* rhi_present_fifo_fallback: every later swapchain presents FIFO with the
+ * surface's fewest images; kept across rhi_init like s_preferMailbox */
+static bool s_fifoFallback;
 
 /* The surface's present modes (calloc'd, *n of them; NULL with *n 0 when
  * the query fails): every one, no cap */
@@ -739,7 +742,10 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
     g_vkr.swapRhiFormat =
         pick.format == VK_FORMAT_R8G8B8A8_UNORM ? RHI_FMT_RGBA8_UNORM : RHI_FMT_BGRA8_UNORM;
 
-    uint32_t count = caps.minImageCount + 1u;
+    /* one image over the surface's minimum, so a present has a free image
+     * without waiting on the display; the FIFO fallback asks for exactly the
+     * minimum (the queue the driver blocked on under mailbox stays short) */
+    uint32_t count = s_fifoFallback ? caps.minImageCount : caps.minImageCount + 1u;
     if (caps.maxImageCount && count > caps.maxImageCount) {
         count = caps.maxImageCount;
     }
@@ -790,8 +796,8 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .preTransform = pre,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode =
-            vkr_choose_present_mode(modes, nModes, vsync, s_preferMailbox, g_vkr.fifoLatestReady),
+        .presentMode = vkr_choose_present_mode(modes, nModes, vsync, s_preferMailbox,
+                                               g_vkr.fifoLatestReady, s_fifoFallback),
         .clipped = VK_TRUE,
         .oldSwapchain = old,
     };
@@ -911,11 +917,12 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
             drv = SDL_GetCurrentVideoDriver();
         }
 #endif
-        VKR_LOG("swapchain %ux%u, %u images, present mode %s (vsync %s%s); offered: %s; "
+        VKR_LOG("swapchain %ux%u, %u images, present mode %s (vsync %s%s%s); offered: %s; "
                 "format %d colour space %d (%s offered, %s), composite alpha 0x%x, "
                 "pre-transform 0x%x, images asked %u got %u, window %dx%d pixels, video driver %s",
                 w, h, n, vkr_present_mode_name(ci.presentMode), vsync ? "on" : "off",
-                vsync && s_preferMailbox ? ", mailbox preferred" : "", offered, (int)pick.format,
+                vsync && s_preferMailbox && !s_fifoFallback ? ", mailbox preferred" : "",
+                s_fifoFallback ? ", fifo fallback" : "", offered, (int)pick.format,
                 (int)pick.colorSpace, pickedFirst ? "first" : "not first",
                 found ? "wanted" : "fallback", (unsigned)ci.compositeAlpha,
                 (unsigned)ci.preTransform, count, n, winW, winH, drv);
@@ -1086,6 +1093,16 @@ bool rhi_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
 void rhi_prefer_mailbox(bool on)
 {
     s_preferMailbox = on;
+}
+
+void rhi_present_fifo_fallback(bool on)
+{
+    s_fifoFallback = on;
+}
+
+bool rhi_present_fifo_fallback_on(void)
+{
+    return s_fifoFallback;
 }
 
 bool rhi_present_mailbox(void)

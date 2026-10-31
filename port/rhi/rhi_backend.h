@@ -93,6 +93,8 @@
     X(read_timestamps_busy)                                                                        \
     X(prefer_mailbox)                                                                              \
     X(present_mailbox)                                                                             \
+    X(present_fifo_fallback)                                                                       \
+    X(present_fifo_fallback_on)                                                                    \
     X(set_exclusive_fullscreen)                                                                    \
     X(present_mode_name)                                                                           \
     X(present_timing)                                                                              \

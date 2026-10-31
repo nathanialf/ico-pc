@@ -89,6 +89,8 @@
 #define rhi_read_timestamps_busy RHI__NAME(read_timestamps_busy)
 #define rhi_prefer_mailbox       RHI__NAME(prefer_mailbox)
 #define rhi_present_mailbox      RHI__NAME(present_mailbox)
+#define rhi_present_fifo_fallback RHI__NAME(present_fifo_fallback)
+#define rhi_present_fifo_fallback_on RHI__NAME(present_fifo_fallback_on)
 #define rhi_set_exclusive_fullscreen RHI__NAME(set_exclusive_fullscreen)
 #define rhi_present_shown        RHI__NAME(present_shown)
 #define rhi_present_mode_name     RHI__NAME(present_mode_name)

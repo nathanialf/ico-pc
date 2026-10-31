@@ -40,6 +40,7 @@
  *                   read_timestamps_busy, the pipeline
  *                   cache entries, set_vulkan_loader, injector_name,
  *                   overlay_name, prefer_mailbox, present_mailbox,
+ *                   present_fifo_fallback, present_fifo_fallback_on,
  *                   set_exclusive_fullscreen, the present timing entries,
  *                   the backend table (RHI_BACKEND_DEFINE)
  *   gl_resource.c   buffers, textures, samplers, shaders, bind group

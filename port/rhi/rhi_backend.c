@@ -521,6 +521,16 @@ bool rhi_present_mailbox(void)
     return be()->present_mailbox();
 }
 
+void rhi_present_fifo_fallback(bool on)
+{
+    be()->present_fifo_fallback(on);
+}
+
+bool rhi_present_fifo_fallback_on(void)
+{
+    return be()->present_fifo_fallback_on();
+}
+
 void rhi_set_exclusive_fullscreen(bool allowed)
 {
     be()->set_exclusive_fullscreen(allowed);

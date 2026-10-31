@@ -1132,6 +1132,9 @@ typedef struct RhiStats {
     /* allocations a memory type of their kind refused that another took
      * (Vulkan: a full PCIe BAR window, uploads then in system memory) */
     uint64_t memoryFallbacks;
+    /* a gauge: the current swapchain's images (Vulkan; 0 elsewhere), for
+     * the FIFO fallback's line (window_host.c present_fallback_switch) */
+    uint64_t swapImages;
     /* The pipeline pool (both backends): its size (RHI_PIPELINE_POOL_MAX),
      * the pipelines alive now and the most alive at once (gauges); the
      * creations refused because the pool was full (pipelinePoolFull) and
@@ -1253,6 +1256,14 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max);
  * not offered (false). */
 void rhi_prefer_mailbox(bool on);
 bool rhi_present_mailbox(void);
+/* The FIFO fallback: every later swapchain (re)creation presents FIFO with
+ * the surface's fewest images, whatever vsync and rhi_prefer_mailbox ask
+ * for; set by the window when presents keep blocking in the driver under
+ * mailbox (port/platform/present_fallback.c).  Kept across rhi_init like the
+ * mailbox preference; rhi_present_fifo_fallback_on returns the flag.
+ * Vulkan only: D3D12, D3D11 and OpenGL ignore it (false). */
+void rhi_present_fifo_fallback(bool on);
+bool rhi_present_fifo_fallback_on(void);
 /* Whether the driver may take exclusive fullscreen presentation of the
  * window (true, the default: the driver decides) or must keep it a
  * composed window that other programs can draw over or capture (false:
