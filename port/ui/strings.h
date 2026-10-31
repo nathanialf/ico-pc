@@ -641,6 +641,12 @@ typedef enum UiStrId {
     UI_STR_OPT_GRAPHICS_API,
     UI_STR_VAL_GRAPHICS_AUTOMATIC,
     UI_STR_GRAPHICS_API_NOTE,
+    /* Settings > Graphics > Graphics card: the row and its note, and the
+       popup when the card chosen did not start (two %s: that card, the one
+       kept; the cards' names are not translated) */
+    UI_STR_OPT_GRAPHICS_ADAPTER,
+    UI_STR_GRAPHICS_ADAPTER_NOTE,
+    UI_STR_GRAPHICS_ADAPTER_FAILED,
     /* Settings > Graphics > Apply: the row and its note, the countdown's
        note (one %d, the seconds left), Keep, Revert, and the popup when the
        renderer chosen did not start (two %s: that renderer, the one kept) */

@@ -525,6 +525,10 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_GRAPHICS_API] = "圖形 API",
     [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "自動",
     [UI_STR_GRAPHICS_API_NOTE] = "按「套用」會立即切換；不按則從下次啟動起使用您的選擇。",
+    [UI_STR_OPT_GRAPHICS_ADAPTER] = "顯示卡",
+    [UI_STR_GRAPHICS_ADAPTER_NOTE] =
+        "繪製遊戲畫面的顯示卡。按「套用」會立即切換；不按則從下次啟動起使用您的選擇。",
+    [UI_STR_GRAPHICS_ADAPTER_FAILED] = "顯示卡 %s 無法啟動，仍使用 %s",
     [UI_STR_GRAPHICS_APPLY] = "套用",
     [UI_STR_GRAPHICS_APPLY_NOTE] = "立即切換，不必離開遊戲。稍等片刻屬正常現象。",
     [UI_STR_GRAPHICS_KEEP_ASK] = "要保留這些設定嗎？%d 秒後還原",

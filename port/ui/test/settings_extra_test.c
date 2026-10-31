@@ -808,7 +808,7 @@ static const char *fakeGfxRunning(void)
     return s_gfxRunning;
 }
 
-static int fakeGfxBegin(const char *name, int why)
+static int fakeGfxBegin(const char *name, const char *adapter, int why)
 {
     const int i = s_gfxBegins < 16 ? s_gfxBegins : 15;
     snprintf(s_gfxAsked[i], sizeof(s_gfxAsked[i]), "%s", name);
@@ -878,7 +878,8 @@ static void testGraphicsApply(void)
     {
         int labels[8];
         const int n = ui_settings_page_rows(UI_PAGE_GRAPHICS, labels, NULL, NULL, 8);
-        CHECK(n == 5, "the page holds Graphics API, Apply, Keep, Revert, Back (%d)", n);
+        CHECK(n == 6, "the page holds Graphics API, Graphics card, Apply, Keep, Revert, Back (%d)",
+              n);
     }
 
     /* no host: no Apply, whatever the value */

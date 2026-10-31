@@ -36,10 +36,12 @@ static void testBuild(void)
         UI_OPT_LINK,     UI_OPT_LINK,           UI_OPT_LINK, UI_OPT_LINK,
         UI_OPT_LANGUAGE, UI_OPT_MENU_LANGUAGE,  UI_OPT_DISC, UI_OPT_LINK,
         UI_OPT_LINK,     UI_OPT_REPORT_PICTURE, UI_OPT_LINK, UI_OPT_BACK};
-    static const int apiOpts[] = {UI_OPT_GRAPHICS_API, UI_OPT_GRAPHICS_APPLY, UI_OPT_GRAPHICS_KEEP,
+    static const int apiOpts[] = {UI_OPT_GRAPHICS_API,    UI_OPT_GRAPHICS_ADAPTER,
+                                  UI_OPT_GRAPHICS_APPLY,  UI_OPT_GRAPHICS_KEEP,
                                   UI_OPT_GRAPHICS_REVERT, UI_OPT_BACK};
-    static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_GRAPHICS_APPLY,
-                                  UI_STR_GRAPHICS_KEEP, UI_STR_GRAPHICS_REVERT, UI_STR_BACK};
+    static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_OPT_GRAPHICS_ADAPTER,
+                                  UI_STR_GRAPHICS_APPLY,   UI_STR_GRAPHICS_KEEP,
+                                  UI_STR_GRAPHICS_REVERT,  UI_STR_BACK};
     static const int fxOpts[] = {
         UI_OPT_EFFECT_GLOW,      UI_OPT_EFFECT_GLOW_SMOOTH,    UI_OPT_EFFECT_DEPTH_OF_FIELD,
         UI_OPT_EFFECT_SOFTENING, UI_OPT_EFFECT_MOTION_BLUR,    UI_OPT_EFFECT_FOG,
@@ -139,7 +141,7 @@ static void testBuild(void)
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
-    CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 5), "Graphics page rows");
+    CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 6), "Graphics page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 9), "effects rows");
     CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 11), "picture rows");
     CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 4), "developer rows");

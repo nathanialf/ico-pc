@@ -35,9 +35,10 @@
 #include "popup.h"
 #include "strings.h"
 #include "sysconf.h"
-#include "touch_edit.h"    /* the touch layout edits (port/input) */
-#include "touch_edit_ui.h" /* the Edit layout page */
-#include "variants.h"      /* Extras > Game variants */
+#include "touch_edit.h"        /* the touch layout edits (port/input) */
+#include "settings_graphics.h" /* the Graphics page's rows and Apply */
+#include "touch_edit_ui.h"     /* the Edit layout page */
+#include "variants.h"          /* Extras > Game variants */
 #include "ui_hint.h"
 #include "ui_internal.h" /* ui__font_prefer_chinese */
 #include "ui_list.h"
@@ -599,284 +600,13 @@ static int s_gpuPending; /* an install is running: installPoll every frame */
 static int
     s_gpuFileCur; /* the zip of the drivers folder the Add from the drivers folder row shows */
 
-/* the renderers the build links (ui_settings_set_backend_names): the config
-   values the Graphics API row writes after "" (Automatic) */
-#define MAX_BACKENDS 8
-static const char *s_backendNames[MAX_BACKENDS];
-static int s_backendCount;
-
-/* Graphics > Apply (settings.h UiGraphicsHost): the host, and the switch
-   under way or the countdown that follows it */
-static UiGraphicsHost s_gfxHost;
-static int s_gfxHostSet;
-
-enum { GFX_IDLE, GFX_APPLYING, GFX_COUNTDOWN, GFX_REVERTING };
-
-static struct {
-    int state;     /* GFX_* */
-    int left;      /* the countdown's vsyncs left */
-    int focus;     /* the countdown began: the cursor goes to Revert */
-    int haveEntry; /* entry holds the value the page found */
-    char want[16]; /* the renderer Apply asked for */
-    char prev[16]; /* the renderer running before Apply */
-    char entry[32];
-    /* the row's value from Apply until Keep, outside the config (which
-       holds entry: every save path writes that, the close button's too) */
-    char trial[32];
-} s_gfx;
-
-/* [video] backend as the row shows it: the trial while Apply's switch or
-   the countdown is under way, else the config's */
-static const char *backendValue(void)
-{
-    return s_gfx.state == GFX_APPLYING || s_gfx.state == GFX_COUNTDOWN
-               ? s_gfx.trial
-               : ico_config_get_string("video.backend", "");
-}
-
-/* [video] backend as the page found it (its first step, or Apply), which
-   Revert puts back; forgotten when the page is entered again */
-static void gfxEntry(void)
-{
-    if (!s_gfx.haveEntry) {
-        snprintf(s_gfx.entry, sizeof(s_gfx.entry), "%s",
-                 ico_config_get_string("video.backend", ""));
-        s_gfx.haveEntry = 1;
-    }
-}
-
-void ui_settings_set_backend_names(const char *const *names, int count)
-{
-    s_backendCount = 0;
-    for (int i = 0; names != NULL && i < count && i < MAX_BACKENDS; i++) {
-        if (names[i] != NULL && names[i][0] != '\0') {
-            s_backendNames[s_backendCount++] = names[i];
-        }
-    }
-}
-
-/* the config's value as rhi_create_backend reads it: any case, "vk" for
-   "vulkan" and "gl" for "opengl" (port/rhi/rhi_backend.c), into buf */
-static const char *backendCanon(const char *v, char *buf, unsigned size)
-{
-    unsigned n = 0;
-    for (; v != NULL && v[n] != '\0' && n + 1 < size; n++) {
-        const char ch = v[n];
-        buf[n] = ch >= 'A' && ch <= 'Z' ? (char)(ch - 'A' + 'a') : ch;
-    }
-    buf[n] = '\0';
-    if (strcmp(buf, "vk") == 0) {
-        return "vulkan";
-    }
-    if (strcmp(buf, "gl") == 0) {
-        return "opengl";
-    }
-    return buf;
-}
-
-/* the Graphics API row: Automatic is index 0, then each name; the config's
-   value decides (a value the build does not link reads as Automatic when
-   stepped and shows as written) */
-static int backendCurrent(void)
-{
-    char buf[32];
-    const char *v = backendCanon(backendValue(), buf, sizeof(buf));
-    for (int i = 0; i < s_backendCount; i++) {
-        if (strcmp(v, s_backendNames[i]) == 0) {
-            return i + 1;
-        }
-    }
-    return 0;
-}
-
-/* a renderer's name as the player knows it (proper names, not translated) */
-static const char *backendLabel(const char *name)
-{
-    char buf[32];
-    const char *raw = name;
-    name = backendCanon(name, buf, sizeof(buf));
-    if (strcmp(name, "vulkan") == 0) {
-        return "Vulkan";
-    }
-    if (strcmp(name, "opengl") == 0) {
-        return "OpenGL";
-    }
-    if (strcmp(name, "d3d12") == 0) {
-        return "Direct3D 12";
-    }
-    if (strcmp(name, "d3d11") == 0) {
-        return "Direct3D 11";
-    }
-    return raw;
-}
-
-static const char *backendText(char *buf, unsigned size)
-{
-    const char *v = backendValue();
-    if (v == NULL || v[0] == '\0') {
-        return ui_str(UI_STR_VAL_GRAPHICS_AUTOMATIC);
-    }
-    snprintf(buf, size, "%s", backendLabel(v));
-    return buf;
-}
-
-static void stepBackend(int dir)
-{
-    if (s_backendCount < 2) {
-        return;
-    }
-    const int to = stepIndex(backendCurrent(), s_backendCount + 1, dir);
-    const char *v = to == 0 ? "" : s_backendNames[to - 1];
-    gfxEntry();
-    ico_config_set_string("video.backend", v);
-    s_dirtyConfig = 1;
-    fprintf(stderr, "settings: Graphics API set to %s (used from the next start)\n",
-            v[0] ? v : "automatic");
-}
-
-/* the renderer the row's value starts: its name; for Automatic the one it
-   started this run (the host's automatic(): a fallback or a restart's), else
-   "vulkan" (the start's first try); NULL for a value the build does not
-   link */
-static const char *gfxChosen(void)
-{
-    const int i = backendCurrent();
-    const char *v = backendValue();
-    const char *a = s_gfxHostSet && s_gfxHost.automatic != NULL ? s_gfxHost.automatic() : NULL;
-    if (i > 0) {
-        return s_backendNames[i - 1];
-    }
-    for (int k = 0; (v == NULL || v[0] == '\0') && k < s_backendCount; k++) {
-        if (strcmp(s_backendNames[k], a != NULL ? a : "vulkan") == 0) {
-            return s_backendNames[k];
-        }
-    }
-    return NULL;
-}
-
-/* Apply's row: shown while the value is a renderer the build has and not
-   the one running, and nothing is under way */
-static int gfxApplyShown(void)
-{
-    const char *c = gfxChosen();
-    return s_gfxHostSet && s_backendCount >= 2 && s_gfx.state == GFX_IDLE && c != NULL &&
-           strcmp(c, s_gfxHost.running()) != 0;
-}
-
-/* what came of a switch the page asked for */
-static void gfxResult(int r)
-{
-    char body[UI_POPUP_TEXT];
-    const int applying = s_gfx.state == GFX_APPLYING;
-    s_gfx.state = GFX_IDLE;
-    if (r == UI_GFX_SWITCH_DONE && applying) {
-        /* the countdown, the cursor on Revert (gfxRefresh) */
-        s_gfx.state = GFX_COUNTDOWN;
-        s_gfx.left = UI_GFX_KEEP_SECONDS * ui_popup_vsync_hz();
-        s_gfx.focus = 1;
-    } else if (r == UI_GFX_SWITCH_REFUSED && applying) {
-        /* nothing tried: the row keeps the player's value */
-        ico_config_set_string("video.backend", s_gfx.trial);
-    } else if (r == UI_GFX_SWITCH_FAILED) {
-        /* the host is back on the renderer that ran; after Apply the value
-           the page found stays (the config held it since Apply), so the
-           file names a renderer that starts, as after Revert */
-        if (applying) {
-            fprintf(stderr, "settings: Graphics API back to %s (%s did not start)\n",
-                    s_gfx.entry[0] ? s_gfx.entry : "automatic", s_gfx.want);
-        }
-        const char *fmt = ui_str(UI_STR_GRAPHICS_FAILED);
-        const char *bad = applying ? s_gfx.want : s_gfx.prev;
-        const char *kept = applying ? s_gfx.prev : s_gfx.want;
-        snprintf(body, sizeof(body), fmt, backendLabel(bad), backendLabel(kept));
-        ui_popup_push(body, "");
-    }
-}
-
-/* a switch to name; the host answers now or later (gfxPoll) */
-static void gfxBegin(const char *name, int why, int state)
-{
-    s_gfx.state = state;
-    const int r = s_gfxHost.switchBegin(name, why);
-    if (r != UI_GFX_SWITCH_PENDING) {
-        gfxResult(r);
-    }
-}
-
-static void gfxPoll(void)
-{
-    if (s_gfxHostSet && (s_gfx.state == GFX_APPLYING || s_gfx.state == GFX_REVERTING)) {
-        const int r = s_gfxHost.switchPoll();
-        if (r != UI_GFX_SWITCH_PENDING) {
-            gfxResult(r);
-        }
-    }
-}
-
-static void gfxApply(void)
-{
-    const char *c = gfxChosen();
-    if (!gfxApplyShown() || c == NULL) {
-        return;
-    }
-    gfxEntry();
-    snprintf(s_gfx.want, sizeof(s_gfx.want), "%s", c);
-    snprintf(s_gfx.prev, sizeof(s_gfx.prev), "%s", s_gfxHost.running());
-    /* the choice on trial outside the config, which holds the value the
-       page found until Keep */
-    snprintf(s_gfx.trial, sizeof(s_gfx.trial), "%s", ico_config_get_string("video.backend", ""));
-    ico_config_set_string("video.backend", s_gfx.entry);
-    gfxBegin(s_gfx.want, UI_GFX_WHY_APPLY, GFX_APPLYING);
-}
-
-/* Revert, Circle or the countdown's end: the renderer that ran before, the
-   row's value as the page found it, nothing written */
-static void gfxRevert(int why)
-{
-    if (s_gfx.state != GFX_COUNTDOWN) {
-        return;
-    }
-    ico_config_set_string("video.backend", s_gfx.entry);
-    fprintf(stderr, "settings: Graphics API back to %s (%s)\n",
-            s_gfx.entry[0] ? s_gfx.entry : "automatic",
-            why == UI_GFX_WHY_TIMEOUT ? "not kept in 10 s" : "reverted");
-    gfxBegin(s_gfx.prev, why, GFX_REVERTING);
-}
-
-/* Keep: the choice into the config, written on leaving */
-static void gfxKeep(void)
-{
-    if (s_gfx.state != GFX_COUNTDOWN) {
-        return;
-    }
-    s_gfx.state = GFX_IDLE;
-    ico_config_set_string("video.backend", s_gfx.trial);
-    s_dirtyConfig = 1;
-    snprintf(s_gfx.entry, sizeof(s_gfx.entry), "%s", s_gfx.trial);
-    if (s_gfxHost.kept != NULL) {
-        s_gfxHost.kept();
-    }
-}
-
-void ui_settings_set_graphics_host(const UiGraphicsHost *host)
-{
-    s_gfxHostSet = host != NULL && host->running != NULL && host->switchBegin != NULL &&
-                   host->switchPoll != NULL;
-    if (s_gfxHostSet) {
-        s_gfxHost = *host;
-    }
-    memset(&s_gfx, 0, sizeof(s_gfx));
-}
-
 static void texExportEnd(void);
 
 void ui_settings_vsync(void)
 {
-    gfxPoll();
+    ui__gfx_poll();
     texExportEnd();
-    if (s_gfx.state == GFX_COUNTDOWN && --s_gfx.left <= 0) {
-        gfxRevert(UI_GFX_WHY_TIMEOUT);
-    }
+    ui__gfx_vsync();
 }
 
 /* the zips waiting in the drivers folder, 0 without a host */
@@ -2158,7 +1888,12 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_GPU_ADD_FILE:
         return gpuFileCount() > 0 ? gpuFileText(buf, size) : "";
     case UI_OPT_GRAPHICS_API:
-        return backendText(buf, size);
+        return ui__gfx_backend_text(buf, size);
+    case UI_OPT_GRAPHICS_ADAPTER: {
+        /* Automatic, or the card's name (not translated), cut to its box */
+        const char *v = ui__gfx_adapter_value();
+        return v[0] != '\0' ? gpuFit(buf, size, v) : ui_str(UI_STR_VAL_GRAPHICS_AUTOMATIC);
+    }
     case UI_OPT_STICK_FIX:
         return onOff(ico_opt_stick_fix());
     case UI_OPT_ACH_POPUPS:
@@ -2303,13 +2038,20 @@ static int optShown(int opt, int link)
         return s_gpuHostSet && s_gpuHost.adreno() != 0;
     }
     if (opt == UI_OPT_LINK && link == UI_PAGE_GRAPHICS) {
-        return s_backendCount >= 2; /* one renderer: nothing to choose */
+        /* one renderer and one card: nothing to choose */
+        return ui__gfx_backend_count() >= 2 || ui__gfx_adapter_count() >= 2;
+    }
+    if (opt == UI_OPT_GRAPHICS_API) {
+        return ui__gfx_backend_count() >= 2;
+    }
+    if (opt == UI_OPT_GRAPHICS_ADAPTER) {
+        return ui__gfx_adapter_count() >= 2;
     }
     if (opt == UI_OPT_GRAPHICS_APPLY) {
-        return gfxApplyShown();
+        return ui__gfx_apply_shown();
     }
     if (opt == UI_OPT_GRAPHICS_KEEP || opt == UI_OPT_GRAPHICS_REVERT) {
-        return s_gfx.state == GFX_COUNTDOWN;
+        return ui__gfx_state() == UI__GFX_COUNTDOWN;
     }
     if (opt == UI_OPT_LINK && link == UI_PAGE_TOUCH) {
         return touchPresent(); /* Controls > Touch screen */
@@ -2435,7 +2177,8 @@ int ui_settings_opt_shown(UiSettingsOpt opt)
 static int steppable(int opt)
 {
     return (opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER) /* includes the Effects rows */ ||
-           opt == UI_OPT_GPU_DRIVER || opt == UI_OPT_GPU_ADD_FILE || opt == UI_OPT_GRAPHICS_API;
+           opt == UI_OPT_GPU_DRIVER || opt == UI_OPT_GPU_ADD_FILE || opt == UI_OPT_GRAPHICS_API ||
+           opt == UI_OPT_GRAPHICS_ADAPTER;
 }
 
 static int resolutionLocked(void)
@@ -2730,7 +2473,10 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         stepGpuFile(dir);
         break;
     case UI_OPT_GRAPHICS_API:
-        stepBackend(dir);
+        s_dirtyConfig |= ui__gfx_step_backend(dir);
+        break;
+    case UI_OPT_GRAPHICS_ADAPTER:
+        s_dirtyConfig |= ui__gfx_step_adapter(dir);
         break;
     case UI_OPT_STICK_FIX:
         ico_opt_set_stick_fix(!ico_opt_stick_fix());
@@ -3522,6 +3268,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_GRAPHICS:
         addNote(pg, UI_OPT_GRAPHICS_API, UI_STR_GRAPHICS_API_NOTE);
+        addNote(pg, UI_OPT_GRAPHICS_ADAPTER, UI_STR_GRAPHICS_ADAPTER_NOTE);
         addNote(pg, UI_OPT_GRAPHICS_APPLY, UI_STR_GRAPHICS_APPLY_NOTE);
         /* the countdown's question under Keep and Revert both (gfxNote) */
         addNote(pg, UI_OPT_GRAPHICS_KEEP, UI_STR_GRAPHICS_KEEP_ASK);
@@ -4042,11 +3789,13 @@ static void build(void)
 #endif
                                     UI_PAGE_DEVELOPER,
                                     -1};
-    /* the Graphics API page (its link needs two or more renderers) */
-    static const int apiOpts[] = {UI_OPT_GRAPHICS_API, UI_OPT_GRAPHICS_APPLY, UI_OPT_GRAPHICS_KEEP,
+    /* the Graphics page (its link needs two or more renderers or cards) */
+    static const int apiOpts[] = {UI_OPT_GRAPHICS_API,    UI_OPT_GRAPHICS_ADAPTER,
+                                  UI_OPT_GRAPHICS_APPLY,  UI_OPT_GRAPHICS_KEEP,
                                   UI_OPT_GRAPHICS_REVERT, UI_OPT_BACK};
-    static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_GRAPHICS_APPLY,
-                                  UI_STR_GRAPHICS_KEEP, UI_STR_GRAPHICS_REVERT, UI_STR_BACK};
+    static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_OPT_GRAPHICS_ADAPTER,
+                                  UI_STR_GRAPHICS_APPLY,   UI_STR_GRAPHICS_KEEP,
+                                  UI_STR_GRAPHICS_REVERT,  UI_STR_BACK};
     /* Android's Graphics driver page (its link needs a host) */
     static const int gpuOpts[] = {UI_OPT_GPU_DRIVER, UI_OPT_GPU_ADD, UI_OPT_GPU_ADD_FILE,
                                   UI_OPT_GPU_REMOVE, UI_OPT_BACK};
@@ -6091,8 +5840,9 @@ static int rowLocked(const Row *r)
    countdown alone while it runs */
 static int rowShown(int id, const Row *r)
 {
-    const int countdown = id == UI_PAGE_GRAPHICS && s_gfx.state == GFX_COUNTDOWN &&
-                          (r->opt == UI_OPT_GRAPHICS_API || r->opt == UI_OPT_BACK);
+    const int countdown = id == UI_PAGE_GRAPHICS && ui__gfx_state() == UI__GFX_COUNTDOWN &&
+                          (r->opt == UI_OPT_GRAPHICS_API || r->opt == UI_OPT_GRAPHICS_ADAPTER ||
+                           r->opt == UI_OPT_BACK);
     return optShown(r->opt, r->link) && !countdown;
 }
 
@@ -6462,7 +6212,7 @@ static void gfxNote(int row)
     char text[160], buf[256];
     const int hz = ui_popup_vsync_hz();
     const int secs =
-        s_gfx.state == GFX_COUNTDOWN ? (s_gfx.left + hz - 1) / hz : UI_GFX_KEEP_SECONDS;
+        ui__gfx_state() == UI__GFX_COUNTDOWN ? (ui__gfx_left() + hz - 1) / hz : UI_GFX_KEEP_SECONDS;
     wrapText(intText(UI_STR_GRAPHICS_KEEP_ASK, secs, text, sizeof(text)), NOTE_SIZE, 580.0f, buf,
              sizeof(buf));
     lt_ext_set_text(row, buf);
@@ -6491,10 +6241,9 @@ static void texExportNote(int row, const UiTextureExportStatus *st)
    meant for Apply goes back */
 static void gfxRefresh(Page *pg)
 {
-    if (!s_gfx.focus || s_gfx.state != GFX_COUNTDOWN || pg->layout < 0) {
+    if (pg->layout < 0 || !ui__gfx_take_focus()) {
         return;
     }
-    s_gfx.focus = 0;
     for (int i = 0; i < pg->count; i++) {
         if (pg->rows[i].opt == UI_OPT_GRAPHICS_REVERT) {
             lt_ext_layout(pg->layout)->curItem = pg->rows[i].label;
@@ -6506,12 +6255,13 @@ static void gfxRefresh(Page *pg)
    and Circle; nothing while a switch is under way.  1 when taken */
 static int gfxProc(const Row *r, int flags)
 {
-    if (s_gfx.state == GFX_APPLYING || s_gfx.state == GFX_REVERTING) {
+    const int st = ui__gfx_state();
+    if (st == UI__GFX_APPLYING || st == UI__GFX_REVERTING) {
         return 1;
     }
-    if (s_gfx.state == GFX_COUNTDOWN && (flags & PAD_BACK)) {
+    if (st == UI__GFX_COUNTDOWN && (flags & PAD_BACK)) {
         NEGATIVE_SE();
-        gfxRevert(UI_GFX_WHY_REVERT);
+        ui__gfx_revert(UI_GFX_WHY_REVERT);
         return 1;
     }
     if (r == NULL || !(flags & PAD_OK)) {
@@ -6519,17 +6269,17 @@ static int gfxProc(const Row *r, int flags)
     }
     if (r->opt == UI_OPT_GRAPHICS_APPLY) {
         POSITIVE_SE();
-        gfxApply();
+        ui__gfx_apply();
         return 1;
     }
     if (r->opt == UI_OPT_GRAPHICS_KEEP) {
         POSITIVE_SE();
-        gfxKeep();
+        s_dirtyConfig |= ui__gfx_keep();
         return 1;
     }
     if (r->opt == UI_OPT_GRAPHICS_REVERT) {
         POSITIVE_SE();
-        gfxRevert(UI_GFX_WHY_REVERT);
+        ui__gfx_revert(UI_GFX_WHY_REVERT);
         return 1;
     }
     return 0;
@@ -6659,8 +6409,8 @@ static int settingsProc(int first, int item)
     }
     /* the port's strings follow the game's language (ui_host.c does too) */
     ui_settings_apply_language();
-    gpuPoll(); /* an install the page started, on any page */
-    gfxPoll(); /* a renderer switch Apply asked for */
+    gpuPoll();      /* an install the page started, on any page */
+    ui__gfx_poll(); /* a renderer switch Apply asked for */
     if (id == UI_PAGE_TOUCH_LAYOUT) {
         /* the touch layout editor has the page: begun on the first call,
            stepped every call (the pad word once the page has faded in), and
@@ -6691,8 +6441,8 @@ static int settingsProc(int first, int item)
             ui_list_reset(&pg->list);
         }
         memset(&s_capture, 0, sizeof(s_capture));
-        if (id == UI_PAGE_GRAPHICS && s_gfx.state == GFX_IDLE) {
-            s_gfx.haveEntry = 0; /* Revert's value: as the page is found now */
+        if (id == UI_PAGE_GRAPHICS) {
+            ui__gfx_page_entered(); /* Revert's values: as the page is found now */
         }
     }
     refreshPage(pg, id, lay->curItem);

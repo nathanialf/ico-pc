@@ -532,6 +532,10 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "Automático",
     [UI_STR_GRAPHICS_API_NOTE] =
         "Aplicar cambia ahora; sin Aplicar, la elección se usa en el próximo inicio.",
+    [UI_STR_OPT_GRAPHICS_ADAPTER] = "Tarjeta gráfica",
+    [UI_STR_GRAPHICS_ADAPTER_NOTE] =
+        "Qué tarjeta gráfica dibuja el juego. Aplicar cambia ahora; sin Aplicar, la elección se usa en el próximo inicio.",
+    [UI_STR_GRAPHICS_ADAPTER_FAILED] = "La tarjeta gráfica %s no pudo iniciarse; se mantiene %s",
     [UI_STR_GRAPHICS_APPLY] = "Aplicar",
     [UI_STR_GRAPHICS_APPLY_NOTE] = "Cambia ahora, sin salir del juego. Una pausa breve es normal.",
     [UI_STR_GRAPHICS_KEEP_ASK] = "¿Mantener estos ajustes? Se revierte en %d s",

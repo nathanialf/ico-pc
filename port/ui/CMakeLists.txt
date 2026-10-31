@@ -124,8 +124,9 @@ function(ico_ui_settings name)
     # in ui_mouse_geom.c; the pointer's state is port/input's pointer.c);
     # the port text's language from [ui] language and the disc (ui_lang.c);
     # the Edit layout page's side of the touch layout editor (touch_edit_ui.c)
-    target_sources(${name} PRIVATE settings.c ui_list.c ui_hint.c gallery.c photo_ui.c ui_mouse.c
-                                   ui_mouse_geom.c ui_lang.c touch_edit_ui.c)
+    # the Graphics page's rows and Apply (settings_graphics.c)
+    target_sources(${name} PRIVATE settings.c settings_graphics.c ui_list.c ui_hint.c gallery.c
+                                   photo_ui.c ui_mouse.c ui_mouse_geom.c ui_lang.c touch_edit_ui.c)
     foreach(_lib ${_ui_settings_deps})
         target_include_directories(${name} PRIVATE
                                    $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)

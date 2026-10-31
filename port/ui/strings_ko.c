@@ -532,6 +532,11 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "자동",
     [UI_STR_GRAPHICS_API_NOTE] =
         "적용하면 바로 바뀝니다. 적용하지 않으면 다음 실행부터 적용됩니다.",
+    [UI_STR_OPT_GRAPHICS_ADAPTER] = "그래픽 카드",
+    [UI_STR_GRAPHICS_ADAPTER_NOTE] =
+        "게임을 그리는 그래픽 카드입니다. 적용하면 바로 바뀝니다. 적용하지 않으면 다음 실행부터 적용됩니다.",
+    [UI_STR_GRAPHICS_ADAPTER_FAILED] =
+        "그래픽 카드 %s을(를) 시작하지 못했습니다. %s을(를) 계속 사용합니다",
     [UI_STR_GRAPHICS_APPLY] = "적용",
     [UI_STR_GRAPHICS_APPLY_NOTE] =
         "게임을 끝내지 않고 바로 바뀝니다. 잠시 기다려야 할 수 있습니다.",

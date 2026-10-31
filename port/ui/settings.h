@@ -234,10 +234,23 @@ void ui_settings_set_gpu_driver_host(const UiGpuDriverHost *host);
    The row stores the choice in the config (written on leaving the page) and
    the window reads it at the next start. */
 void ui_settings_set_backend_names(const char *const *names, int count);
+/* Settings > Graphics > Graphics card: the suitable graphics cards of the
+   renderer running (port/rhi/rhi.h rhi_adapter_list), by the names the
+   config key [video] adapter takes, in the order the row steps them after
+   Automatic; current is the card running, automatic the card Automatic
+   picks (NULL when not known: Apply then shows only for a listed name
+   other than current).  At most 8 are kept, copied; the window installs
+   them after the renderer starts and after every switch
+   (window_switch.c).  The row shows only with two or more; the Graphics
+   link shows with two or more renderers or two or more cards. */
+void ui_settings_set_adapter_names(const char *const *names, int count, const char *current,
+                                   const char *automatic);
 /* Settings > Graphics > Apply: the renderer switched now, in the game, by
    the window (port/platform/window_switch.c), which installs this host.
-   running() names the renderer running, as the backend names above;
-   switchBegin(name, why) asks for a switch to name (why: UI_GFX_WHY_*) and
+   running() names the renderer running, as the backend names above, and
+   runningAdapter() (may be NULL) the card it runs on, as the card names;
+   switchBegin(name, adapter, why) asks for a switch to name on the card
+   adapter ("" Automatic; why: UI_GFX_WHY_*) and
    answers with a UI_GFX_SWITCH_*: PENDING when it runs later (switchPoll
    then answers, every frame, until it is no longer PENDING), else what
    came of it at once; kept() is the player's Keep (the window logs it);
@@ -247,7 +260,9 @@ void ui_settings_set_backend_names(const char *const *names, int count);
    FAILED means name did not start and the renderer that ran before is
    back; REFUSED that nothing was tried.  The Apply row shows while the
    Graphics API row's value is not the renderer running (Automatic counts
-   as automatic()'s, else "vulkan"); Apply then turns the page into a 10 s
+   as automatic()'s, else "vulkan") or the Graphics card row's value is a
+   listed card other than the one running (Automatic counts as the card
+   Automatic picks); Apply then turns the page into a 10 s
    countdown with Keep and Revert: Keep writes the choice, Revert, Circle
    or the end of the countdown switch back.  From Apply until Keep the
    config holds the value the page found (every save writes that one, the
@@ -265,10 +280,11 @@ void ui_settings_set_backend_names(const char *const *names, int count);
 
 typedef struct UiGraphicsHost {
     const char *(*running)(void);
-    int (*switchBegin)(const char *name, int why);
+    int (*switchBegin)(const char *name, const char *adapter, int why);
     int (*switchPoll)(void);
     void (*kept)(void);
     const char *(*automatic)(void);
+    const char *(*runningAdapter)(void);
 } UiGraphicsHost;
 
 void ui_settings_set_graphics_host(const UiGraphicsHost *host);
@@ -629,6 +645,9 @@ typedef enum UiSettingsOpt {
     UI_OPT_GPU_REMOVE,
     /* Graphics page: the stepped Graphics API row (config key video.backend) */
     UI_OPT_GRAPHICS_API,
+    /* Graphics page: the stepped Graphics card row (config key
+       video.adapter; shown with two or more cards) */
+    UI_OPT_GRAPHICS_ADAPTER,
     /* Graphics page: Apply (shown while the row's value is not the renderer
        running and the host is set), then the countdown's Keep and Revert
        (shown only in it) */

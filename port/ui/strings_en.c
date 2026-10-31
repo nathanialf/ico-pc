@@ -529,6 +529,10 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "Automatic",
     [UI_STR_GRAPHICS_API_NOTE] =
         "Apply switches now; without Apply the choice is used from the next start.",
+    [UI_STR_OPT_GRAPHICS_ADAPTER] = "Graphics card",
+    [UI_STR_GRAPHICS_ADAPTER_NOTE] =
+        "Which graphics card draws the game. Apply switches now; without Apply the choice is used from the next start.",
+    [UI_STR_GRAPHICS_ADAPTER_FAILED] = "The graphics card %s could not start; %s is kept",
     [UI_STR_GRAPHICS_APPLY] = "Apply",
     [UI_STR_GRAPHICS_APPLY_NOTE] =
         "Switches now, without leaving the game. A short pause is normal.",

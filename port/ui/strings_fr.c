@@ -534,6 +534,11 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "Automatique",
     [UI_STR_GRAPHICS_API_NOTE] =
         "Appliquer change maintenant ; sinon, le choix sert au prochain démarrage.",
+    [UI_STR_OPT_GRAPHICS_ADAPTER] = "Carte graphique",
+    [UI_STR_GRAPHICS_ADAPTER_NOTE] =
+        "La carte graphique qui dessine le jeu. Appliquer change maintenant ; sinon, le choix sert au prochain démarrage.",
+    [UI_STR_GRAPHICS_ADAPTER_FAILED] =
+        "La carte graphique %s n’a pas pu démarrer ; %s est conservée",
     [UI_STR_GRAPHICS_APPLY] = "Appliquer",
     [UI_STR_GRAPHICS_APPLY_NOTE] =
         "Change maintenant, sans quitter le jeu. Une courte pause est normale.",

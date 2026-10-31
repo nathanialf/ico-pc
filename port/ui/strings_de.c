@@ -535,6 +535,10 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "Automatisch",
     [UI_STR_GRAPHICS_API_NOTE] =
         "Übernehmen wechselt sofort; ohne Übernehmen gilt die Wahl ab dem nächsten Start.",
+    [UI_STR_OPT_GRAPHICS_ADAPTER] = "Grafikkarte",
+    [UI_STR_GRAPHICS_ADAPTER_NOTE] =
+        "Welche Grafikkarte das Spiel zeichnet. Übernehmen wechselt sofort; ohne Übernehmen gilt die Wahl ab dem nächsten Start.",
+    [UI_STR_GRAPHICS_ADAPTER_FAILED] = "Die Grafikkarte %s konnte nicht starten; %s bleibt",
     [UI_STR_GRAPHICS_APPLY] = "Übernehmen",
     [UI_STR_GRAPHICS_APPLY_NOTE] =
         "Wechselt sofort, ohne das Spiel zu verlassen. Eine kurze Pause ist normal.",
