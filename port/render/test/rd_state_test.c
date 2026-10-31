@@ -30,6 +30,8 @@
  *              5, a version 7 and a version 12 dump's temps at the handles
  *              FEED_HELD, DISPLAY_HELD and WORK3_HELD (appended after them)
  *              are recreated
+ *   dump v14   a tick's frame loads without the ticks' cameras; a blended
+ *              frame's (hasTickCams, tickCams) round-trip
  *   dump v10   the native frame (aspect, wExact, cullW) after gsH round-trips
  *              and peeks (rd__dump_peek); a version 9 dump loads as the 4:3
  *              frame; a header the renderer cannot size is refused; the
@@ -971,7 +973,27 @@ static void testDumpBlock(const char *dir)
         seen++;
     }
     CHECK(seen == 2, "block: two targets bound in the loaded list (%d)", seen);
+    CHECK(!g.hasTickCams, "block: a tick's frame loads without the ticks' cameras");
     rd__frame_free(&g);
+    /* version 14: a blended frame's ticks' cameras round-trip (rd_interp.c
+       sets them on its copy; F12's blended present's frame) */
+    static RdFrame b; /* a shallow copy: its lists and payload stay the frame's */
+    b = *rd__last_frame();
+    b.hasTickCams = 1;
+    for (int k = 0; k < 2; k++) {
+        for (int j = 0; j < 16; j++) {
+            b.tickCams[k][j] = (float)(k * 16 + j) * 0.25f - 3.0f;
+        }
+    }
+    CHECK(rd__dump_frame(&b, path), "tick cameras: dump written");
+    if (rd__load_frame(path, &g)) {
+        CHECK(g.hasTickCams == 1 && memcmp(g.tickCams, b.tickCams, sizeof(b.tickCams)) == 0,
+              "tick cameras: hasTickCams %u, the matrices %s", g.hasTickCams,
+              memcmp(g.tickCams, b.tickCams, sizeof(b.tickCams)) == 0 ? "the same" : "differ");
+        rd__frame_free(&g);
+    } else {
+        CHECK(0, "tick cameras: dump loaded");
+    }
     remove(path);
 }
 
