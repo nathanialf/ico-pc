@@ -215,6 +215,20 @@ void rd_vu_mesh_retire(bool (*pred)(uint64_t hash, bool replaced, void *user), v
 uint32_t rd_vu_mesh_gen_high(void);
 void rd_drop_vu_meshes(uint32_t savedGenHigh);
 
+/* The fields of the game's memory a mesh id was written into (Packet.c
+ * writes each packet's into PacHeader.pad9C): rd_vu_mesh_note_field records
+ * the 4-byte field at `field` and the id written, the latest per field, for
+ * the life of the process (a load keeps the list: the restored packets
+ * hold ids this list knows).  rd_vu_mesh_each_field calls fn for every
+ * field inside [lo, hi) (only those are read: a field elsewhere may be
+ * freed memory) that still holds the id last noted for it: a save state's hash of
+ * the game's memory leaves those out (port/game/state_host.c dev_hash), a
+ * host handle two runs of the same play hold differently.  Returns the
+ * fields reported.  A full table stops noting (one log line). */
+void rd_vu_mesh_note_field(void *field, uint32_t id);
+size_t rd_vu_mesh_each_field(const void *lo, const void *hi,
+                             void (*fn)(const void *field, void *user), void *user);
+
 /* --------------------------------------------------------- per draw */
 
 /* VU1 data memory 0..35 as the program reads it: IcoVuCB.mem, the slot map

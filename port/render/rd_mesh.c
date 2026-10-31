@@ -1992,6 +1992,91 @@ void rd_vu_mesh_retire(bool (*pred)(uint64_t hash, bool replaced, void *user), v
     }
 }
 
+/* The mesh id fields (rd_mesh.h rd_vu_mesh_note_field): an open-addressed
+   table keyed by the field's address, the latest id per field.  Packets
+   number in the thousands in a stage; the table doubles from 4096 up to
+   1M fields. */
+typedef struct MeshField {
+    uintptr_t at; /* 0: empty */
+    uint32_t id;
+} MeshField;
+
+static MeshField *s_fields;
+static size_t s_fieldCap, s_fieldCount;
+static int s_fieldsFull;
+
+#define FIELD_CAP_MIN 4096u
+#define FIELD_CAP_MAX (1u << 20)
+
+static size_t fieldSlot(const MeshField *t, size_t cap, uintptr_t at)
+{
+    size_t i = (size_t)((at >> 2) * 0x9E3779B97F4A7C15ull) & (cap - 1);
+    while (t[i].at != 0 && t[i].at != at) {
+        i = (i + 1) & (cap - 1);
+    }
+    return i;
+}
+
+static int fieldsGrow(void)
+{
+    const size_t cap = s_fieldCap ? s_fieldCap * 2 : FIELD_CAP_MIN;
+    MeshField *t;
+    if (cap > FIELD_CAP_MAX || (t = (MeshField *)calloc(cap, sizeof *t)) == NULL) {
+        return 0;
+    }
+    for (size_t i = 0; i < s_fieldCap; i++) {
+        if (s_fields[i].at != 0) {
+            t[fieldSlot(t, cap, s_fields[i].at)] = s_fields[i];
+        }
+    }
+    free(s_fields);
+    s_fields = t;
+    s_fieldCap = cap;
+    return 1;
+}
+
+void rd_vu_mesh_note_field(void *field, uint32_t id)
+{
+    const uintptr_t at = (uintptr_t)field;
+    if (field == NULL || s_fieldsFull) {
+        return;
+    }
+    /* at most half full */
+    if ((s_fieldCount + 1) * 2 > s_fieldCap && !fieldsGrow()) {
+        s_fieldsFull = 1;
+        fprintf(stderr,
+                "rd: the mesh id fields' table is full (%zu fields); a save state's hash "
+                "counts the ones after it\n",
+                s_fieldCount);
+        return;
+    }
+    size_t i = fieldSlot(s_fields, s_fieldCap, at);
+    if (s_fields[i].at == 0) {
+        s_fields[i].at = at;
+        s_fieldCount++;
+    }
+    s_fields[i].id = id;
+}
+
+size_t rd_vu_mesh_each_field(const void *lo, const void *hi,
+                             void (*fn)(const void *field, void *user), void *user)
+{
+    size_t n = 0;
+    for (size_t i = 0; i < s_fieldCap; i++) {
+        uint32_t now;
+        if (s_fields[i].at == 0 || s_fields[i].at < (uintptr_t)lo ||
+            s_fields[i].at + sizeof now > (uintptr_t)hi) {
+            continue;
+        }
+        memcpy(&now, (const void *)s_fields[i].at, sizeof now);
+        if (now == s_fields[i].id) {
+            fn((const void *)s_fields[i].at, user);
+            n++;
+        }
+    }
+    return n;
+}
+
 uint32_t rd_vu_mesh_gen_high(void)
 {
     uint32_t high = s_genFloor;
