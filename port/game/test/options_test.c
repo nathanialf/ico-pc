@@ -1233,6 +1233,65 @@ static void test_video_effects(const char *dir)
         ico_video_reload();
         ico_video_get(&o);
         CHECK(o.effectGlowSmooth == 0);
+        /* Glow off keeps the mode: the save writes "smooth", not the log's
+           "off", so the next start reads it back without a "not understood"
+           line and the Preset row still reads Enhanced */
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fputs("[video]\n", f);
+            fputs(kEnhancedRows, f);
+            fputs("effect_glow_mode = \"smooth\"\n", f);
+            fclose(f);
+        }
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        ico_video_get(&o);
+        o.effectGlow = 0;
+        ico_video_set(&o);
+        CHECK(ico_video_save() == 0);
+        text = read_text(path);
+        CHECK(text != NULL && strstr(text, "effect_glow = false") != NULL &&
+              strstr(text, "effect_glow_mode = \"smooth\"") != NULL &&
+              strstr(text, "effect_glow_mode = \"off\"") == NULL);
+        {
+            const char *dir = getenv("TMPDIR");
+            char glowLog[512], line[256];
+            int saved, fd, notUnderstood = 0;
+            FILE *lf;
+
+            snprintf(glowLog, sizeof(glowLog), "%s/ico_glow_off_%d.log", dir != NULL ? dir : "/tmp",
+                     (int)getpid());
+            fd = open(glowLog, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+            saved = dup(2);
+            CHECK(fd >= 0 && saved >= 0);
+            if (fd >= 0 && saved >= 0) {
+                fflush(stderr);
+                dup2(fd, 2);
+                close(fd);
+                ico_config_reset(path, "/nonexistent/options_test.ini");
+                ico_video_reload();
+                ico_video_get(&o);
+                fflush(stderr);
+                dup2(saved, 2);
+                close(saved);
+            }
+            lf = fopen(glowLog, "rb");
+            while (lf != NULL && fgets(line, sizeof(line), lf) != NULL) {
+                notUnderstood += strstr(line, "effect_glow_mode not understood") != NULL;
+            }
+            if (lf != NULL) {
+                fclose(lf);
+            }
+            remove(glowLog);
+            CHECK(notUnderstood == 0);
+        }
+        CHECK(o.effectGlow == 0 && o.effectGlowSmooth == 1 &&
+              ico_video_preset_rows(&o) == ICO_VIDEO_ENHANCED &&
+              ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+        o.effectGlow = 1;
+        ico_video_set(&o);
+        ico_video_get(&o);
+        CHECK(ico_video_effect_glow_smooth() == 1);
     }
     /* the Glow size key an older version wrote (effect_glow_size) is read
        by nothing: a file holding it loads as one without it (every effect

@@ -727,7 +727,8 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.effect_motion_blur", o.effectMotionBlur);
     r |= ico_config_set_string("video.effect_motion_blur_mode",
                                o.effectMotionBlurSmooth ? "smooth" : "original");
-    r |= ico_config_set_string("video.effect_glow_mode", ico_video_glow_name(&o));
+    r |=
+        ico_config_set_string("video.effect_glow_mode", o.effectGlowSmooth ? "smooth" : "original");
     r |= ico_config_set_bool("video.effect_fog", o.effectFog);
     r |= ico_config_set_bool("video.effect_cinematic_bars", o.effectCinematicBars);
     r |= ico_config_set_bool("video.effect_water_sharp", o.effectWaterSharp);
