@@ -3758,11 +3758,15 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
     n = rd__add_pipe_key(out, max, n, &dateSnap);
     n = rd__add_pipe_key(out, max, n, &blitA);
     n = rd__add_pipe_key(out, max, n, &blitB);
-    /* the box blit with the effects depth, on both outputs */
-    const RdPipeKeyInt depthA = rd__present_depth_key(RHI_FMT_RGBA8_UNORM);
-    const RdPipeKeyInt depthB = rd__present_depth_key(RHI_FMT_BGRA8_UNORM);
-    n = rd__add_pipe_key(out, max, n, &depthA);
-    n = rd__add_pipe_key(out, max, n, &depthB);
+    /* the box blit with the effects depth, on both outputs (not where the
+     * device cannot draw to a D32F depth buffer: a render pass with that
+     * attachment is invalid there) */
+    if (!g_rd.hasDevice || rhi_limits()->depth32Attachment) {
+        const RdPipeKeyInt depthA = rd__present_depth_key(RHI_FMT_RGBA8_UNORM);
+        const RdPipeKeyInt depthB = rd__present_depth_key(RHI_FMT_BGRA8_UNORM);
+        n = rd__add_pipe_key(out, max, n, &depthA);
+        n = rd__add_pipe_key(out, max, n, &depthB);
+    }
     n = rd__add_pipe_key(out, max, n, &exact);
     return n;
 }

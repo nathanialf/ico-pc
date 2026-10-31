@@ -893,14 +893,21 @@ static bool depthWanted(void)
     if (!g_rd.settings.effectsDepth) {
         return false;
     }
-    if (s_forceDepth) {
-        return true;
-    }
-#ifdef __ANDROID__
-    return false;
-#else
-    return rhi_injector_name() != NULL;
+    bool want = s_forceDepth;
+#ifndef __ANDROID__
+    want = want || rhi_injector_name() != NULL;
 #endif
+    /* a device that cannot draw into a 32-bit depth buffer alone (a Vulkan
+     * 1.0 driver without the attachment bit): off, said once */
+    if (want && !rhi_limits()->depth32Attachment) {
+        static bool said;
+        if (!said) {
+            said = true;
+            rd__log("present: no effects depth (the device cannot draw to a D32F depth buffer)");
+        }
+        return false;
+    }
+    return want;
 }
 
 static struct {
