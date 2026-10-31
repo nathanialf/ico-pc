@@ -724,7 +724,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STATES_SAVE_FAILED] = "상태를 저장하지 못했습니다",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "프레임 사이의 빛 번짐",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
-        "‘오리지널’은 게임 본래 프레임의 빛 번짐을 그 사이에 표시되는 프레임에도 그대로 씁니다. ‘부드럽게’는 표시되는 프레임마다 다시 만들기 때문에 빠른 카메라 회전도 따라가지만, 그래픽 카드의 부담이 늘어납니다.",
+        "‘오리지널’은 게임 본래 프레임의 빛 번짐을 그 사이에도 그대로 씁니다. ‘부드럽게’는 표시되는 프레임마다 다시 만들어 부담이 늘어납니다.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "프레임 레이트가 ‘오리지널’보다 높고 빛 번짐이 켜져 있을 때만 적용됩니다.",
 };

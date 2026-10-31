@@ -730,7 +730,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_STATES_SAVE_FAILED] = "L'état n'a pas pu être enregistré",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Lueur entre les images",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
-        "Original garde la lueur de l’image du jeu pour les images affichées entre les siennes. Fluide la refait pour chaque image affichée, et suit ainsi un mouvement rapide de la caméra ; cela prend plus de temps à la carte graphique.",
+        "Original garde la lueur de l’image du jeu entre les images. Fluide la refait pour chaque image affichée ; cela coûte plus de temps graphique.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Ne compte qu’au-dessus de la fréquence d’images Original, avec la lueur activée.",
 };

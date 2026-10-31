@@ -2645,6 +2645,9 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         break;
     }
     case UI_OPT_EFFECT_GLOW_SMOOTH:
+        if (glowSmoothLocked()) {
+            return; /* nothing to change at Frame rate Original or with Glow off */
+        }
         o.effectGlowSmooth = !o.effectGlowSmooth;
         video = 1;
         break;

@@ -726,7 +726,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_STATES_SAVE_FAILED] = "Impossibile salvare lo stato",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Bagliore tra i fotogrammi",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
-        "Originale mantiene il bagliore del fotogramma del gioco per i fotogrammi mostrati tra uno e l’altro. Fluido lo rifà per ogni fotogramma mostrato, così segue una rotazione rapida della camera; richiede più tempo alla scheda grafica.",
+        "Originale mantiene il bagliore del fotogramma del gioco tra i fotogrammi. Fluido lo rifà per ogni fotogramma mostrato; costa più tempo grafico.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Conta solo sopra la frequenza fotogrammi Originale, con il bagliore attivo.",
 };

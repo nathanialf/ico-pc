@@ -732,7 +732,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_STATES_SAVE_FAILED] = "Der Zustand konnte nicht gespeichert werden",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Leuchten zwischen Bildern",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
-        "Original behält das Leuchten des Spielbildes für die Bilder dazwischen. Flüssig berechnet es für jedes gezeigte Bild neu und folgt so einer schnellen Kameradrehung; es kostet mehr Zeit der Grafikkarte.",
+        "Original behält das Leuchten des Spielbildes zwischen den Bildern. Flüssig berechnet es für jedes gezeigte Bild neu; das kostet mehr Grafikzeit.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Wirkt nur oberhalb der Bildrate Original und bei eingeschaltetem Leuchten.",
 };

@@ -722,6 +722,6 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STATES_SAVE_FAILED] = "The state could not be saved",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Glow between frames",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
-        "Original keeps the glow of the game’s own frame for the frames shown between them. Smooth makes it again for every frame shown, so it follows a fast camera turn; it costs more of the graphics card’s time.",
+        "Original keeps the game’s own frame’s glow between frames. Smooth makes it again for every frame shown; it costs more graphics time.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] = "Only matters above Frame rate Original, with Glow on.",
 };

@@ -726,7 +726,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_STATES_SAVE_FAILED] = "No se pudo guardar el estado",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Resplandor entre fotogramas",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
-        "Original conserva el resplandor del fotograma del propio juego para los fotogramas mostrados entre ellos. Fluido lo calcula de nuevo para cada fotograma mostrado, así sigue un giro rápido de la cámara; cuesta más tiempo de la tarjeta gráfica.",
+        "Original conserva el resplandor del fotograma del juego entre fotogramas. Suave lo rehace en cada fotograma mostrado; cuesta más tiempo gráfico.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Solo importa por encima de la velocidad de fotogramas Original y con Resplandor activado.",
 };
