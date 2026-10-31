@@ -19,6 +19,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/state_reloc.c`, `state_reloc.h` | a save state's address ranges and their deltas; the relocation word functions and the scan ([Save states](#save-states)) |
 | `port/platform/state_check.c` | the program's image range and a load's typed self-checks (the game heap's walk, the threads, the interrupt handlers) |
 | `port/platform/state_file.c`, `state_file.h` | the save state file: the header, the build id, the validity, the writer thread, the reader |
+| `port/platform/state_hash.c`, `state_hash.h` | the hash of the game's state a round trip compares, the host's words left out ([Save states](#saving-and-loading), the hash rule) |
 | `port/platform/state_registry.c`, `state_registry.h` | the registry of the port's globals a save state carries |
 | `port/platform/state_port.c`, `state_port.h` | which port globals are registered, by owner (linked into `ico_pc` only) |
 | `port/platform/sim_keys.c`, `sim_keys.h` | the config keys that change the simulation (the pad recording's header, the save state's settings hash; compiled into `ico_config`) |
@@ -126,9 +127,13 @@ tests' second pool at another address).
 ### Save state images
 
 A save state (`port/platform/state.h`) holds each game thread's fiber as its slot's header
-page and the used part of its stack: from the saved stack pointer minus 128 bytes (the System V
-red zone) to the stack's top (`ico_fiber_slot_save`, which points into the live slot and copies
-nothing). `ico_fiber_slot_restore` commits the same slot of the current pool and copies both back
+page and its stack from the deepest word the stack ever held to its top, and at least from the
+saved stack pointer minus 128 bytes (the System V red zone) (`ico_fiber_slot_save`, which points
+into the live slot and copies nothing). A slot's stack is committed zeroed and a restore commits
+it zeroed again, so the bytes below the first nonzero word need no saving and the restored stack
+is the saved one byte for byte, the dead frames under the stack pointer included: the game's code
+reads them when it reads a local it never set, and a save that dropped them would give the
+loaded run other values there than the saved run had. `ico_fiber_slot_restore` commits the same slot of the current pool and copies both back
 at the same offsets, then moves the addresses they hold (`port/platform/state_reloc.h`):
 
 - typed: the saved return address (`rip`; `lr` and `x30` on arm64) by the module delta; the stack
@@ -582,7 +587,36 @@ load, a delete or a change of the simulation keys.
 and `state_load_at = "<tick>:<slot>"` save and load once when the Main tick reaches the value
 (the save under the same conditions as any other, so the game must be paused);
 `state_hash_at = "<tick>"` logs `state: hash <xxh3-64> of arena+gdata+gbss at tick N` each time the
-tick reaches it (again after a load brought the tick back). The headless round trip uses them.
+tick reaches it (again after a load brought the tick back), and `state_dump_at = "<tick>"` writes
+the three regions raw at the same moments to `<states folder>/dump-<tick>-<k>/` (`arena.bin`,
+`gdata.bin`, `gbss.bin`; `regions.txt` with each region's address, size and hash and the
+addresses of `systemStatus` and `stage_no` for the link map; `masked.txt` with every range the
+hash left out). `tools/state_region_diff.py <a> <b> <ico_pc.map> [--elf <program>]` compares two
+dumps outside the masked ranges and names the differing bytes of the game's data and bss by
+symbol (the link map's globals; with `--elf`, `nm`'s statics and sizes too) and the arena's by
+offset (the EE address). The headless round trip uses them.
+
+**The hash rule.** The round trip compares the game's state, not the host's: the hash
+(`port/platform/state_hash.c`) is XXH3-64 over a copy of each region in which the words that hold
+the host's values are zero, so two runs of the same play hash alike although the host gave them
+other addresses and handles. Typed first: the model tables block's pointer (`PObj.c`
+`PObj_HostStateWord`) and, in the window build, the packet scratch stream's words (`Packet.c`
+`pac_HostStateWords`: its pointer, capacity, last batches and declined pack hash), the textures'
+host record (`Texture.c` `tex_HostStateBlock`: serials, cache bindings, the CLUT snapshot, the
+pack state) and every packet's mesh id field (`rd_mesh.h` `rd_vu_mesh_note_field`, the latest id
+written per field, reported while the field still holds it). Then the catch-all: every aligned
+8-byte word whose value lies in a host block noted this run (each model tables block seen at a
+poll or a load: the part records in the arena point into it). The image, arena and pool pointers
+stay in the hash: they are the game's own, the same in both runs of one process (and across
+processes on a fixed image with a pinned arena and pool). `state: hash masked N pointer words, M host ids at tick T (...)` follows each
+hash with the counts and the three regions' hashes. With nothing to leave out the hash is the
+plain XXH3-64 of the regions' XXH3-64s. What it cannot mask is the game storing garbage, a
+local it never set copied into its memory: the restored fiber stacks hold the saved run's dead
+frames byte for byte ([Save state images](#save-state-images)), but host code that runs on a
+game thread's stack (a log line's formatting) leaves other bytes there in another run. A dump's
+diff names such a symbol; the cure is in the game's code. `gcc -O2 -Wmaybe-uninitialized` over
+the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s monitor camera,
+`matrixDrive.c`, `way_sys.c`, `BgAnimation.c`, `cdvd.c`, `fieldCollision.c`).
 
 **Log lines** (prefix `state:`):
 
@@ -597,6 +631,8 @@ tick reaches it (again after a load brought the tick back). The headless round t
 | `state: deleted slot N` | a delete |
 | `state: slot N's picture written (<path>, WxH)`, `... could not be written`, `state: slot N has no picture (no frame was presented)` | the picture |
 | `state: [dev] save at Main tick ..., load at ..., hash at ...` and `state: hash ...` | the [dev] keys |
+| `state: hash masked N pointer words, M host ids at tick T (H host blocks, region hashes arena .. gdata .. gbss ..)` | after each `state: hash` line: what the hash left out (the hash rule) |
+| `state: [dev] dump of arena+gdata+gbss at Main tick T`, `state: dumped arena+gdata+gbss at tick T to <dir> (hash .., masked N pointer words, M host ids)[: a file could not be written]` | `[dev] state_dump_at` |
 | `audio: the output's queue dropped after a save state's load` | a load in the window build |
 | `stats: the baseline taken again after a save state's load (stage S); the run's counters kept` | a load |
 
