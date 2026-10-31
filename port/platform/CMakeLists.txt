@@ -20,6 +20,7 @@ target_sources(ico_platform PRIVATE
     startup_retry.c
     state_check.c
     state_file.c
+    state_hash.c
     state_registry.c
     state_reloc.c
     symmap.c
@@ -99,7 +100,8 @@ endif()
 # back, the device and driver match, the [dev] clear
 # gpu_hang: the GPU hang limit's arithmetic and its watch (gpu_hang.c, issue 123)
 # state_fiber: save states' fiber pool, a suspended fiber saved and restored
-# into a second pool, and the relocation words (fiber.c, state_reloc.c)
+# into a second pool, the dead frames under its stack pointer kept, and the
+# relocation words (fiber.c, state_reloc.c)
 # state_registry: the save state registry's table (state_registry.c)
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
           gpu_hang state_fiber state_registry pipeline_skip memory_floor)
@@ -274,7 +276,8 @@ endif()
 # floats and EE word pairs; the program's image range; the game heap's
 # typed walk over a real partition (fumi/ios/memory.c, compiled as the game
 # compiles it) copied to another address and relocated; the thread and
-# handler checks.
+# handler checks; the masked hash of the game's state (state_hash.c): typed
+# fields and words into noted host blocks left out, everything else counted.
 add_executable(state_reloc_test test/state_reloc_test.c
     "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/memory.c")
 target_include_directories(state_reloc_test PRIVATE ${_ico_fumi_incs})
