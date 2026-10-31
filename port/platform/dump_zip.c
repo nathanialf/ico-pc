@@ -221,6 +221,16 @@ int ico_zip_add_file(const char *zip_path, const char *file_path, const char *en
     return r;
 }
 
+int ico_zip_move_file(const char *zip_path, const char *path, char *why, size_t why_size,
+                      size_t *added_size)
+{
+    if (ico_zip_add_file(zip_path, path, base_name(path), why, why_size, added_size) != 0) {
+        return -1;
+    }
+    ico_remove(path);
+    return 0;
+}
+
 int ico_loss_dump_zip(const char *zip_path, const char *lost_path, const char *before_path,
                       const char *log_path, char *why, size_t why_size)
 {
