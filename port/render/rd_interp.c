@@ -6375,9 +6375,26 @@ static void mixedNote(const RdInterpStats *st, uint32_t frame, float alpha, doub
 static struct {
     char path[1100];
     int armed, result; /* result: -2 nothing to report */
-    uint32_t frame;
+    uint32_t frame, armFrame;
     float alpha;
 } s_blendedDump = {.result = -2};
+
+/* an arm no present between the ticks took (rd.h, -3): taken by a present
+ * that draws nothing (interpolation off, a movie, no closed frame), when
+ * interpolation is off at the result's poll, or once two more frames
+ * closed without a present */
+static void blendedDumpExpire(const char *why)
+{
+    if (!s_blendedDump.armed) {
+        return;
+    }
+    s_blendedDump.armed = 0;
+    s_blendedDump.result = -3;
+    s_blendedDump.frame = rd_frame_number();
+    s_blendedDump.alpha = 1.0f;
+    rd__log("dump: no blended present followed F12 at frame %u (%s); nothing written",
+            s_blendedDump.armFrame, why);
+}
 
 bool rd_dump_blended_arm(const char *path)
 {
@@ -6389,11 +6406,18 @@ bool rd_dump_blended_arm(const char *path)
     }
     snprintf(s_blendedDump.path, sizeof(s_blendedDump.path), "%s", path);
     s_blendedDump.armed = 1;
+    s_blendedDump.armFrame = rd_frame_number();
     return true;
 }
 
 int rd_dump_blended_result(uint32_t *frame, float *alpha)
 {
+    if (s_blendedDump.armed && !rd_interpolation_active()) {
+        blendedDumpExpire("interpolation off");
+    } else if (s_blendedDump.armed && rd_frame_number() - s_blendedDump.armFrame >= 2u &&
+               rd_frame_number() != 0) {
+        blendedDumpExpire("two frames closed without a present");
+    }
     if (s_blendedDump.armed || s_blendedDump.result == -2) {
         return -2;
     }
@@ -6432,10 +6456,14 @@ static void blendedDumpTake(const RdFrame *f, bool tick, uint32_t number, float 
 bool rd_present(float alpha)
 {
     if (!rd_interpolation_active() || !g_rd.hasDevice || g_rd.videoShown) {
+        blendedDumpExpire(!rd_interpolation_active() ? "interpolation off"
+                          : g_rd.videoShown          ? "a movie shown"
+                                                     : "no device");
         return false;
     }
     const RdFrame *cur = rd__last_frame();
     if (!cur || !cur->closed) {
+        blendedDumpExpire("no closed frame");
         return false;
     }
     if (!(alpha >= 0.0f)) {

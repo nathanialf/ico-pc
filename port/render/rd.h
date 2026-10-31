@@ -1795,11 +1795,15 @@ bool rd_dump_prev_frame(const char *path);
  * it as drawn without --interp; a present at alpha 1 or of a keep frame,
  * the tick's own picture, writes nothing.  The next rd_present takes the
  * arm either way; NULL or "" disarms.  false: interpolation is off (no
- * rd_present draws), nothing armed.
+ * rd_present draws), nothing armed.  An rd_present that draws nothing (a
+ * movie, interpolation off, no closed frame) expires the arm, as does a
+ * result poll with interpolation off or two frames closed since the arm.
  * rd_dump_blended_result  once the arm is taken: 1 written, 0 the present
  *                         was the tick's own picture, -1 the write failed,
- *                         with the present's frame and alpha; -2 while armed
- *                         or with nothing armed (nothing reported) */
+ *                         with the present's frame and alpha; -3 the arm
+ *                         expired, nothing written (the last closed frame,
+ *                         alpha 1); -2 while armed or with nothing armed
+ *                         (nothing reported) */
 bool rd_dump_blended_arm(const char *path);
 int rd_dump_blended_result(uint32_t *frame, float *alpha);
 /* The device-loss dump (port/platform/window_host.c device_lost_quit;

@@ -1910,7 +1910,8 @@ present drawn between two ticks (alpha below 1, not a keep frame) writes the fra
 `rd__interp_frame`'s copy of the tick with the blended blocks, bones and streams (its scratch
 meshes) and the ticks' cameras (dump version 14), through `rd__dump_frame` after the present, so
 the write is not in the picture's time; a present at alpha 1 or of a keep frame is the tick's own
-picture and writes nothing (`port/render/rd_interp.c` (`rd_present`, `blendedDumpTake`)). `rd:
+picture and writes nothing (`port/render/rd_interp.c` (`rd_present`, `blendedDumpTake`)); an arm no
+present takes expires with nothing written (`blendedDumpExpire`). `rd:
 dump: the blended present of frame F at alpha A written to <path>` follows, and the window's pump
 moves the file into the zip ([DISPLAY.md](DISPLAY.md#hotkeys-for-pictures)). It is an ordinary dump.
 What the presenter holds outside a dump (FEED_HELD, DISPLAY_HELD and WORK3_HELD, the glow a

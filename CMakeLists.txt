@@ -557,7 +557,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
                                   port/platform/window_video.c port/platform/window_lines.c
                                   port/platform/window_pipeline_skip.c
                                   port/platform/window_present_fallback.c
-                                  port/platform/window_disc.c
+                                  port/platform/window_disc.c port/platform/window_blended.c
                                   port/platform/window_sweep.c port/platform/dump_zip.c)
     if(ICO_RC_TOOLS AND ANDROID)
         # an rc build's Share a bug report: the files it offers (share_report.h)

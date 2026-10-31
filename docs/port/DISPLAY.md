@@ -20,6 +20,7 @@ are [RHI.md](RHI.md).
 | `port/platform/present_fallback.h`, `present_fallback.c` | the FIFO fallback's decision and lines, free of SDL ([The FIFO fallback](#the-fifo-fallback)) |
 | `port/platform/window_present_fallback.h`, `window_present_fallback.c` | the window's side of the FIFO fallback: the gate, the switch, the lines |
 | `port/platform/window_disc.h`, `window_disc.c` | the window's side of the disc reader: the step's disc wait for the present allowance, the 10 s disc line |
+| `port/platform/window_blended.h`, `window_blended.c` | F12's blended present's frame: the arm after F12's zip (a result still to collect collected first) and the move into it |
 | `port/platform/display_clock.h` | the vblank clock's interface |
 | `port/platform/display_clock_win.c` | the vblank clock on Windows: a thread on the window's DXGI output |
 | `port/platform/display_clock_none.c` | no vblank clock (every other platform) |
@@ -1239,11 +1240,18 @@ that present is drawn between the ticks the renderer writes it, and the pump mov
 ```
 window: F12: the present of frame F at alpha A was drawn between the ticks: the zip holds the blended present's frame (rd_replay_tool replays it as drawn), <dumps>/frame-<time>-v<vsync>-blended.rddump
 window: F12: the present of frame F at alpha 1 was the tick's own picture (the zip's frame)
+window: F12: no present between the ticks followed (frame F): the zip holds the frame and the tick before, no blended present's frame
 ```
 
 The first replays without `--interp`, as the device drew it, beside the zip's two ticks
 ([TESTING.md](TESTING.md#f12-dumps-and-the-replay-tool)); a zip it could not be added to keeps the loose
-file (`; the .rddump is kept`).
+file (`; the .rddump is kept`). The third follows an arm that no present took: a present that drew
+nothing (a movie, interpolation off), Frame rate set to Original before the next present, or two
+frames closed without a present, after `rd: dump: no blended present followed F12 at frame F
+(<why>); nothing written` (`port/render/rd_interp.c` (`blendedDumpExpire`)), so a later scene's
+present never lands in an old zip. A second F12 collects the first one's result before it arms
+again (`port/platform/window_blended.c` (`window_blended_arm`)), so the first zip still gets its
+frame.
 
 The sweep forces the native frame's aspect (`ico_video_frame_force_aspect`); the next flip latches
 the new width and remakes the scene-sized targets, and the paused photo camera rebuilds the game's

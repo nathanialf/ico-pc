@@ -58,6 +58,7 @@
 #include "window_pipeline_skip.h"
 #include "window_present_fallback.h"
 #include "window_disc.h"
+#include "window_blended.h"
 #include "window_sweep.h"
 #include "window_lifecycle.h"
 #include "window_pump_win.h"
@@ -266,9 +267,6 @@ static struct {
     RdPresentInfo presentInfo;
     uint32_t presentDumpFrame;
     int presentDumpPrev;
-    /* F12's blended present's frame (rd_dump_blended_arm, photo_pump) */
-    char blendedDump[ICO_PATH_MAX + 16], blendedZip[ICO_PATH_MAX];
-    int blendedPending, blendedAdded;
     /* the present allowance on the timer path (pace_policy.h PaceBudget;
        under the lock lock.budget): the GPU time a timed replay (the
        median of the last 8, perf_drain; 0: no timestamps yet), the last
@@ -3096,22 +3094,14 @@ static void frame_dump(int forReport)
     }
     /* the next present's own frame when drawn between the ticks (issue
        163), the zip's third .rddump (rd_replay_tool takes the first two) */
-    s_pres.blendedPending = s_pres.blendedAdded = 0;
-    if (zr >= 0 && s_pres.presentDumpPrev) {
-        snprintf(s_pres.blendedDump, sizeof(s_pres.blendedDump), "%.*s-blended.rddump", (int)stem,
-                 dump);
-        snprintf(s_pres.blendedZip, sizeof(s_pres.blendedZip), "%s", zip);
-        s_pres.blendedPending = rd_dump_blended_arm(s_pres.blendedDump);
-    } else {
-        (void)rd_dump_blended_arm(NULL);
-    }
+    const int blended = window_blended_arm(dump, zr >= 0 && s_pres.presentDumpPrev ? zip : NULL);
     fprintf(stderr, "window: F12 at vsync %u, Main tick %u, frame %u: %s %s%s%s (%s%s)\n",
             ico_host_vsync_count(), ico_host_main_ticks(), (unsigned)rd_frame_number(),
             ok ? "wrote" : "could not write all of", png, zr >= 0 ? " and " : "",
             zr >= 0 ? zip : "",
             havePrev ? "with the tick before: rd_replay_tool --interp rebuilds the pictures between"
                      : "without the tick before",
-            s_pres.blendedPending ? "; the next present's frame if between the ticks" : "");
+            blended ? "; the next present's frame if between the ticks" : "");
     if (forReport) {
         fprintf(stderr, "window: bug report: %s\n",
                 s_pres.reportZip[0] != '\0'
@@ -3244,33 +3234,7 @@ static void photo_pump(void)
             photo_capture();
         }
     }
-    if (s_pres.blendedPending) {
-        /* F12's blended present's frame (rd_dump_blended_arm) into its zip */
-        uint32_t fr = 0;
-        float a = 1.0f;
-        const int r = rd_dump_blended_result(&fr, &a);
-        char why[160] = "";
-
-        s_pres.blendedAdded = r == 1 && ico_zip_move_file(s_pres.blendedZip, s_pres.blendedDump,
-                                                          why, sizeof(why), NULL) == 0;
-        if (r >= 0) {
-            fprintf(stderr, "window: F12: the present of frame %u at alpha %.9g %s%s%s\n", fr,
-                    (double)a,
-                    r == 0                ? "was the tick's own picture (the zip's frame)"
-                    : s_pres.blendedAdded ? "was drawn between the ticks: the zip holds the "
-                                            "blended present's frame (rd_replay_tool replays it "
-                                            "as drawn), "
-                                          : "was drawn between the ticks; its frame is not in "
-                                            "the zip: ",
-                    r == 0 ? "" : (s_pres.blendedAdded ? s_pres.blendedDump : why),
-                    r == 0 || s_pres.blendedAdded ? "" : "; the .rddump is kept");
-        } else if (r == -1) {
-            ico_remove(s_pres.blendedDump);
-            fprintf(stderr, "window: F12: the blended present of frame %u could not be written\n",
-                    fr);
-        }
-        s_pres.blendedPending = r == -2;
-    }
+    window_blended_pump(); /* F12's blended present's frame into its zip */
     {
         char path[ICO_PATH_MAX];
         const int r = rd_capture_result(path, sizeof(path));
