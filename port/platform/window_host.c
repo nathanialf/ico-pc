@@ -4460,28 +4460,18 @@ static void slow_replay_longest(void)
     }
 }
 
-/* A replay whose present phase (RdPerfRecord.presentMs: the driver's
-   present call) took over 50 ms: the 10 s count, and over 250 ms a line
-   naming the driver (issue 123: 363-583 ms in Qualcomm's
-   vkQueuePresentKHR) */
+/* A present over 50 ms in the driver's present call (RdPerfRecord.presentMs):
+   the 10 s count; the line and the FIFO fallback's count in
+   window_present_fallback.c */
 static void present_blocked(const RdPerfRecord *r)
 {
-    const RhiLimits *l = rhi_limits();
     char fr[16];
 
     s_perf.presentBlocked++;
     s_perf.presentBlockedMaxMs =
         r->presentMs > s_perf.presentBlockedMaxMs ? r->presentMs : s_perf.presentBlockedMaxMs;
-    if (r->presentMs > 250.0) {
-        ico_log_limited("window: present blocked",
-                        "window: a present blocked %.0f ms in the driver's present call (replay "
-                        "%u; %s on %s, %s; present %s, framerate %s)",
-                        r->presentMs, r->replay, rhi_backend_kind_name(rhi_backend()),
-                        rhi_adapter_name(), l && l->driverText ? l->driverText : "driver unknown",
-                        rhi_present_mode_name(),
-                        ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)));
-    }
-    window_fifo_note(r->presentMs);
+    window_fifo_note(r->presentMs, r->replay,
+                     ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)));
 }
 
 /* The finished records into the block's sums and the CSV */
