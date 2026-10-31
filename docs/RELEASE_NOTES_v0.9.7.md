@@ -11,3 +11,4 @@
 - On some Android tablets and phones with Qualcomm's own graphics driver, the game stuttered every few seconds with vsync Off. After a few of these stutters the game now switches to a smoother way of showing pictures for the rest of the session; your vsync setting is not changed.
 - In photo mode, the glowing trails behind the shadow creatures' eyes now stay with the eyes when you move or zoom the camera.
 - The frame rate no longer dips to 30-40 while the game streams its data from the drive (most often with the game files on a slow, external or network drive): the game now reads its data in the background, and those waits no longer hold the picture rate down afterwards.
+- The menus are much faster at Original resolution on phones and tablets with weaker graphics (the Options pages ran at 6-7 frames a second on a Mali-G52).
