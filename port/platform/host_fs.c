@@ -595,6 +595,118 @@ int ico_host_drive_kind(const char *path, char *out, size_t n)
 #endif
 }
 
+int ico_host_drive_fs_name(const char *path, char *out, size_t n)
+{
+    if (out == NULL || n == 0) {
+        return -1;
+    }
+    out[0] = '\0';
+    if (path == NULL || path[0] == '\0') {
+        return -1;
+    }
+#ifdef _WIN32
+    {
+        wchar_t *wp = ico_widen(path);
+        wchar_t full[MAX_PATH * 2];
+        wchar_t root[MAX_PATH * 2];
+        wchar_t fs[MAX_PATH + 1];
+        DWORD got;
+        char name[64];
+
+        if (wp == NULL) {
+            return -1;
+        }
+        got = GetFullPathNameW(wp, (DWORD)(sizeof(full) / sizeof(full[0])), full, NULL);
+        free(wp);
+        if (got == 0 || got >= sizeof(full) / sizeof(full[0]) ||
+            !GetVolumePathNameW(full, root, (DWORD)(sizeof(root) / sizeof(root[0]))) ||
+            !GetVolumeInformationW(root, NULL, 0, NULL, NULL, NULL, fs,
+                                   (DWORD)(sizeof(fs) / sizeof(fs[0]))) ||
+            fs[0] == L'\0' || ico_narrow(fs, name, sizeof(name)) != 0) {
+            return -1;
+        }
+        return drive_word(out, n, name);
+    }
+#else
+    {
+        struct statfs sf;
+        const char *w = NULL;
+
+        if (statfs(path, &sf) != 0) {
+            return -1;
+        }
+#ifdef __APPLE__
+        w = sf.f_fstypename;
+#else
+        switch ((unsigned long)sf.f_type) {
+        case 0xEF53UL: /* ext2, ext3 and ext4 share the magic */
+            w = "ext4";
+            break;
+        case 0x9123683EUL:
+            w = "btrfs";
+            break;
+        case 0x58465342UL:
+            w = "xfs";
+            break;
+        case 0xF2F52010UL:
+            w = "f2fs";
+            break;
+        case 0x5346544EUL: /* ntfs-3g reports FUSE; this is the kernel's ntfs and ntfs3 */
+            w = "NTFS";
+            break;
+        case 0x4D44UL:
+            w = "FAT";
+            break;
+        case 0x2011BAB0UL:
+            w = "exFAT";
+            break;
+        case 0x2FC12FC1UL:
+            w = "zfs";
+            break;
+        case 0x794C7630UL:
+            w = "overlay";
+            break;
+        case 0x01021994UL:
+            w = "tmpfs";
+            break;
+        case 0x858458F6UL:
+            w = "ramfs";
+            break;
+        case 0x65735546UL:
+            w = "FUSE";
+            break;
+        case 0x6969UL:
+            w = "NFS";
+            break;
+        case 0x517BUL:
+        case 0xFF534D42UL:
+        case 0xFE534D42UL:
+            w = "SMB";
+            break;
+        case 0x01021997UL:
+            w = "9p";
+            break;
+        case 0x9660UL:
+            w = "ISO 9660";
+            break;
+        case 0x15013346UL:
+            w = "UDF";
+            break;
+        case 0x73717368UL:
+            w = "squashfs";
+            break;
+        default:
+            break;
+        }
+#endif
+        if (w == NULL || w[0] == '\0') {
+            return -1;
+        }
+        return drive_word(out, n, w);
+    }
+#endif
+}
+
 static char drive_kinds[2][16] = {"unknown", "unknown"};
 
 static const char *drive_suffix(const char *kind)

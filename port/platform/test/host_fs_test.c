@@ -5,6 +5,10 @@
  * a folder made, a file written, read back, moved over another, its kind
  * and size, removed, the folder removed. On Linux the bytes go to the file
  * system as they are; on Windows the same test goes through the wide calls.
+ * The drive word, and the file system's name (ico_host_drive_fs_name: a
+ * name or not known for the working folder, not known for nothing (or,
+ * off Windows, a path that is not there), empty when out is too small;
+ * /dev/shm's tmpfs on Linux).
  * Exit status 0 on success.
  */
 #include <errno.h>
@@ -129,6 +133,27 @@ int main(int argc, char **argv)
         CHECK(strstr(ico_host_drive_note(ICO_DRIVE_USER, "."), "unknown") == NULL);
         ico_host_drive_summary(kind, sizeof(kind));
         CHECK(strncmp(kind, "drives: data ", 13) == 0);
+    }
+    /* the file system's name for the cdvd start line (issue 126) */
+    {
+        char fs[32];
+        const int r = ico_host_drive_fs_name(".", fs, sizeof(fs));
+
+        CHECK((r == 0 && fs[0] != '\0') || (r == -1 && fs[0] == '\0'));
+        CHECK(ico_host_drive_fs_name("", fs, sizeof(fs)) == -1 && fs[0] == '\0');
+        CHECK(ico_host_drive_fs_name(NULL, fs, sizeof(fs)) == -1 && fs[0] == '\0');
+        CHECK(ico_host_drive_fs_name(".", fs, 1) == -1 && fs[0] == '\0'); /* too small */
+#ifndef _WIN32
+        /* (Windows names the volume of a path that is not there) */
+        CHECK(ico_host_drive_fs_name("/nonexistent-ico-drive-test/x", fs, sizeof(fs)) == -1 &&
+              fs[0] == '\0');
+#endif
+#if !defined(_WIN32) && !defined(__APPLE__)
+        if (ico_path_kind("/dev/shm", NULL, NULL) == 1) {
+            CHECK(ico_host_drive_fs_name("/dev/shm", fs, sizeof(fs)) == 0 &&
+                  strcmp(fs, "tmpfs") == 0);
+        }
+#endif
     }
 
     if (fails != 0) {

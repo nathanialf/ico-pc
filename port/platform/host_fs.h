@@ -88,6 +88,14 @@ int ico_narrow(const wchar_t *s, char *out, size_t size);
    macOS and iOS: f_fstypename (nfs, smbfs, afpfs, webdav are network).
    Returns 0, or -1 when out is too small (out is then empty). */
 int ico_host_drive_kind(const char *path, char *out, size_t n);
+/* The file system the path sits on, as its name in out ("NTFS", "exFAT",
+   "ext4", "apfs"). Windows: GetVolumeInformationW's file-system name of
+   the path's volume (GetVolumePathNameW). macOS and iOS: f_fstypename.
+   Linux and Android: the name of statfs's f_type for the common ones (ext4
+   for ext2 to ext4, btrfs, xfs, f2fs, NTFS, FAT, exFAT, tmpfs, overlay,
+   FUSE, NFS, SMB, ...). Returns 0, or -1 when it is not known or out is too
+   small (out is then empty). */
+int ico_host_drive_fs_name(const char *path, char *out, size_t n);
 
 /* Notes a place the port reads or writes (which: ICO_DRIVE_DATA or
    ICO_DRIVE_USER) for the start-up lines: returns the words to append to the
