@@ -1186,11 +1186,10 @@ own entry with the same pixel shaders (`vu_ps`, `vu_texa_ps`). Which module a
 program entry's key is made from is decided once a run, at `rd_init` (`port/render/rd_pipeline.c`
 (`rd__vu_policy_init`), `g_rd.vsFallback`):
 
-- the extended build `vu_X_vs` on every device but those of the table;
+- the extended build `vu_X_vs` elsewhere;
 - the plain build `vu_X_plain_vs` (`port/shaders/vu_common.hlsli`, `ICO_VU_PLAIN`: no card test, no
   tick cameras) on a device of the table (`RhiLimits.vuFallbackPlain`, `kVuPlainOnly` in
-  `port/rhi/vk/vk_device.c`) or with `ICO_RD_VU_PLAIN=1` (`rd_set_vu_plain_only` is still
-  exported and no host code calls it); only the
+  `port/rhi/vk/vk_device.c`), under Turnip (issue 163, [SHADERS.md](SHADERS.md#the-variants)), with `ICO_RD_VU_PLAIN=1` or `rd_set_vu_plain_only`; only the
   ten mesh entries have it (the particles' `vu_particle_vs` is one build), and its modules are made
   only then. `ICO_RD_VU_EXTENDED=1` gives the extended build whatever the others say.
 
@@ -3058,9 +3057,10 @@ sum of the lists, not one list or effect (the log's GPU top passes and GPU ms pe
 ## Dumps and the replay tool
 
 A [.rddump](ARCHITECTURE.md#terms) is the in-memory frame, little-endian, versioned by
-`RD_DUMP_VERSION` (12): the frame's native size and aspect, the disc it was drawn on (its region
+`RD_DUMP_VERSION` (14): the frame's native size and aspect, the disc it was drawn on (its region
 slug (`pal`, `jpn` or `kor`), version 12; an older dump is the European disc's), its camera, start and end states, the
-13 lists, the payload, the textures and temporary targets it references, and its VU meshes. Target
+13 lists, the payload, the textures and temporary targets it references, its VU meshes and tick
+cameras. Target
 contents are not written: a frame that reads a retained target replays from what the loading
 context holds. Loading creates the textures and targets anew and rewrites every id, and gives the VU
 draws recorded without card verdicts theirs ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)), so
