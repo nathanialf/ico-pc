@@ -11,7 +11,9 @@
  * ring under ICO_VK_FAKE_API=1.1 and =1.0, ctests rhi_vk_vk11 and rhi_vk_vk10;
  * =1.0bare, ctest rhi_vk_vk10bare: a 1.0 loader without
  * VK_KHR_get_physical_device_properties2 is taken, the device without the
- * extended queries; review finding 5).
+ * extended queries; review finding 5), and the [video] adapter rule
+ * (adapterCell: a wanted name no device has still starts the device, the
+ * same one a plain start picks, with one device marked current).
  *
  * Exit 0 on success, 1 on a mismatch or a validation error, 77 (skipped)
  * when no Vulkan device can be created.  Set VK_ICD_FILENAMES to pick a
@@ -784,6 +786,76 @@ static int d32fCell(void)
     return failures + (int)rhi_vk_validation_error_count();
 }
 
+/* rhi_set_adapter_wanted (vk_device.c vkr_pick_device): a plain start's
+ * device and list; then a name no device has: the start still succeeds
+ * (the automatic pick, a log line), on the same device, the list the same
+ * length with exactly one entry current, the automatic one; then the
+ * plain start's own name: that device again; "" back to automatic.  Under
+ * ICO_VK_DEVICE the variable wins and the cell checks only the start. */
+static int adapterCell(void)
+{
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test adapter"};
+    char plain[256];
+    RhiAdapterInfo list[RHI_MAX_ADAPTERS];
+    int failures = 0;
+#define ADAPTER_CHECK(cond, ...)                                                                   \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            rhi_test_log("FAIL adapter cell: " __VA_ARGS__);                                       \
+            failures++;                                                                            \
+        }                                                                                          \
+    } while (0)
+    const char *env = getenv("ICO_VK_DEVICE");
+    const bool forced = env != NULL && env[0] != '\0';
+    rhi_set_adapter_wanted("");
+    if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
+        rhi_test_log("FAIL adapter cell: init\n");
+        return 1;
+    }
+    snprintf(plain, sizeof(plain), "%s", rhi_adapter_name());
+    const uint32_t n = rhi_adapter_list(list, RHI_MAX_ADAPTERS);
+    ADAPTER_CHECK(n >= 1, "no device listed\n");
+    rhi_shutdown();
+
+    rhi_set_adapter_wanted("No Such Graphics Card 9000");
+    ADAPTER_CHECK(strcmp(rhi_adapter_wanted(), "No Such Graphics Card 9000") == 0,
+                  "the wanted name kept (%s)\n", rhi_adapter_wanted());
+    if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
+        rhi_test_log("FAIL adapter cell: an unknown name did not start\n");
+        rhi_set_adapter_wanted("");
+        return 1;
+    }
+    ADAPTER_CHECK(strcmp(rhi_adapter_name(), plain) == 0, "an unknown name: %s, a plain start %s\n",
+                  rhi_adapter_name(), plain);
+    const uint32_t m = rhi_adapter_list(list, RHI_MAX_ADAPTERS);
+    ADAPTER_CHECK(m == n, "%u devices listed, %u before\n", m, n);
+    int current = 0, at = -1;
+    for (uint32_t i = 0; i < m && i < RHI_MAX_ADAPTERS; i++) {
+        if (list[i].current) {
+            current++;
+            at = (int)i;
+        }
+    }
+    ADAPTER_CHECK(current == 1, "%d devices current\n", current);
+    ADAPTER_CHECK(at >= 0 && strcmp(list[at].name, plain) == 0 && (forced || list[at].automatic),
+                  "the current entry is not the plain start's automatic one\n");
+    rhi_shutdown();
+
+    rhi_set_adapter_wanted(plain);
+    if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
+        rhi_test_log("FAIL adapter cell: the plain start's own name did not start\n");
+        rhi_set_adapter_wanted("");
+        return 1;
+    }
+    ADAPTER_CHECK(strcmp(rhi_adapter_name(), plain) == 0, "by name: %s, want %s\n",
+                  rhi_adapter_name(), plain);
+    rhi_shutdown();
+    rhi_set_adapter_wanted(NULL);
+    ADAPTER_CHECK(rhi_adapter_wanted()[0] == '\0', "NULL is automatic\n");
+#undef ADAPTER_CHECK
+    return failures != 0;
+}
+
 int main(void)
 {
     const RhiTestConfig cfg = {"vulkan", "rhi_vk_test", true, NULL, rhi_vk_validation_error_count};
@@ -792,7 +864,7 @@ int main(void)
         return rc;
     }
     return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell() ||
-            poolCell() || syncCell() || d32fCell())
+            poolCell() || syncCell() || d32fCell() || adapterCell())
                ? 1
                : 0;
 }

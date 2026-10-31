@@ -3,6 +3,7 @@
 #include "vk_internal.h"
 #include "rhi_vk.h"
 #include "../rhi_backend.h"
+#include "../rhi_adapter.h"
 #include "../rhi_driver_version.h"
 #include <stdlib.h>
 #include <string.h>
@@ -1190,48 +1191,114 @@ static int vkr_rate_device(VkPhysicalDevice pd, uint32_t *outQueue, const char *
     return score;
 }
 
+/* the devices the last pick looked at (rhi_adapter_list) and [video]
+   adapter (rhi_set_adapter_wanted, from the dispatcher before each
+   rhi_init) */
+static RhiAdapterInfo s_adapters[RHI_MAX_ADAPTERS];
+static uint32_t s_adapterCount;
+static char s_adapterWanted[256];
+
+/* The device: ICO_VK_DEVICE=<index> or a substring of the device name
+ * when set (it wins), else [video] adapter's exact name among the devices
+ * that can run the renderer, else the highest score (the first of equals).
+ * One line lists every device and says which was picked and why. */
 static bool vkr_pick_device(void)
 {
     uint32_t n = 0;
     vkEnumeratePhysicalDevices(g_vkr.instance, &n, NULL);
+    s_adapterCount = 0;
     if (n == 0) {
         VKR_LOG("no Vulkan devices");
         return false;
     }
     VkPhysicalDevice *pds = calloc(n, sizeof(*pds));
-    if (!pds) {
+    uint32_t *queues = calloc(n, sizeof(*queues));
+    if (!pds || !queues) {
+        free(pds);
+        free(queues);
         return false;
     }
     vkEnumeratePhysicalDevices(g_vkr.instance, &n, pds);
-    /* ICO_VK_DEVICE=<index> or a substring of the device name forces a pick */
     const char *force = getenv("ICO_VK_DEVICE");
-    int best = -1;
-    uint32_t bestQueue = 0;
+    const bool forcing = force && *force;
+    const char *names[RHI_MAX_ADAPTERS];
+    int autoPick = -1, forcePick = -1, autoBest = -1, forceBest = -1;
     for (uint32_t i = 0; i < n; i++) {
         VkPhysicalDeviceProperties p;
         vkGetPhysicalDeviceProperties(pds[i], &p);
-        uint32_t q = 0;
         const char *why = "";
-        int score = vkr_rate_device(pds[i], &q, &why);
+        const int score = vkr_rate_device(pds[i], &queues[i], &why);
+        if (i < RHI_MAX_ADAPTERS) {
+            RhiAdapterInfo *a = &s_adapters[i];
+            memset(a, 0, sizeof(*a));
+            snprintf(a->name, sizeof(a->name), "%s", p.deviceName);
+            a->score = score;
+            a->suitable = score >= 0 && p.deviceType != VK_PHYSICAL_DEVICE_TYPE_CPU;
+            a->why = score < 0 ? why : a->suitable ? NULL : "a software renderer";
+            names[i] = score >= 0 ? a->name : NULL;
+            s_adapterCount = i + 1;
+        }
         if (score < 0) {
             VKR_LOG("device %u (%s) unsuitable: %s", i, p.deviceName, why);
             continue;
         }
-        if (force && *force) {
+        if (score > autoBest) {
+            autoBest = score;
+            autoPick = (int)i;
+        }
+        if (forcing) {
             char idx[16];
             snprintf(idx, sizeof(idx), "%u", i);
-            if (strcmp(force, idx) == 0 || strstr(p.deviceName, force)) {
-                score += 100000;
+            if ((strcmp(force, idx) == 0 || strstr(p.deviceName, force)) && score > forceBest) {
+                forceBest = score;
+                forcePick = (int)i;
             }
         }
-        if (score > best) {
-            best = score;
-            g_vkr.phys = pds[i];
-            bestQueue = q;
+    }
+    int pick = autoPick;
+    char source[320];
+    snprintf(source, sizeof(source), "automatic");
+    if (forcing) {
+        if (forcePick >= 0) {
+            pick = forcePick;
+            snprintf(source, sizeof(source), "ICO_VK_DEVICE=%s", force);
+        } else {
+            snprintf(source, sizeof(source), "automatic; ICO_VK_DEVICE=%s matched no device",
+                     force);
+        }
+    } else if (s_adapterWanted[0] != '\0' && autoPick >= 0) {
+        const int want = rhi_adapter_match(s_adapterWanted, names, (int)s_adapterCount);
+        if (want >= 0) {
+            pick = want;
+            snprintf(source, sizeof(source), "[video] adapter \"%s\"", s_adapterWanted);
+        } else {
+            VKR_LOG("[video] adapter \"%s\" is not among the devices; automatic pick",
+                    s_adapterWanted);
         }
     }
+    if (autoPick >= 0 && autoPick < RHI_MAX_ADAPTERS) {
+        s_adapters[autoPick].automatic = true;
+    }
+    if (pick >= 0 && pick < RHI_MAX_ADAPTERS) {
+        s_adapters[pick].current = true;
+    }
+    {
+        char text[RHI_MAX_ADAPTERS * 320];
+        rhi_adapter_list_text(s_adapters, (int)s_adapterCount, text, sizeof(text));
+        if (pick >= 0) {
+            VKR_LOG("devices: %s; picked %d (%s)", text, pick, source);
+        } else {
+            VKR_LOG("devices: %s; none picked", text);
+        }
+    }
+    uint32_t bestQueue = 0;
+    if (pick >= 0) {
+        g_vkr.phys = pds[pick];
+        bestQueue = queues[pick];
+    }
     free(pds);
-    if (best < 0) {
+    free(queues);
+    if (pick < 0) {
         VKR_LOG("no suitable Vulkan device");
         return false;
     }
@@ -2610,6 +2677,19 @@ const RhiLimits *rhi_limits(void)
 const char *rhi_adapter_name(void)
 {
     return g_vkr.adapterName;
+}
+
+uint32_t rhi_adapter_list(RhiAdapterInfo *out, uint32_t max)
+{
+    for (uint32_t i = 0; out != NULL && i < max && i < s_adapterCount; i++) {
+        out[i] = s_adapters[i];
+    }
+    return s_adapterCount;
+}
+
+void rhi_set_adapter_wanted(const char *name)
+{
+    snprintf(s_adapterWanted, sizeof(s_adapterWanted), "%s", name != NULL ? name : "");
 }
 
 bool rhi_device_lost(void)

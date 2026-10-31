@@ -24,6 +24,8 @@
     X(backend)                                                                                     \
     X(limits)                                                                                      \
     X(adapter_name)                                                                                \
+    X(adapter_list)                                                                                \
+    X(set_adapter_wanted)                                                                          \
     X(device_lost)                                                                                 \
     X(resize_swapchain)                                                                            \
     X(swapchain_format)                                                                            \

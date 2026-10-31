@@ -776,6 +776,42 @@ RhiBackendKind rhi_backend(void);
 const char *rhi_backend_kind_name(RhiBackendKind kind);
 const RhiLimits *rhi_limits(void);
 const char *rhi_adapter_name(void);
+
+/* The graphics cards the backend's last rhi_init looked at, in its own
+ * order (Vulkan's vkEnumeratePhysicalDevices, DXGI's high-performance
+ * order on Direct3D; OpenGL lists the one GL_RENDERER names), at most
+ * RHI_MAX_ADAPTERS.  suitable: hardware that can run the renderer (the
+ * Options > Graphics > Graphics card row lists these; a software renderer
+ * such as WARP or lavapipe is listed unsuitable, though the automatic
+ * pick still takes one when nothing else runs); current: the device in
+ * use; automatic: the one the automatic rule picks (Vulkan: the highest
+ * score; Direct3D: the first suitable); score: Vulkan's rating
+ * (vk_device.c vkr_rate_device), 0 where the backend has none, -1 for a
+ * device that cannot run the renderer; why: what makes it unsuitable, NULL
+ * when suitable. */
+#define RHI_MAX_ADAPTERS 8
+
+typedef struct RhiAdapterInfo {
+    char name[256];
+    bool suitable;
+    bool current;
+    bool automatic;
+    int score;
+    const char *why;
+} RhiAdapterInfo;
+
+/* Copies up to max entries into out; returns how many the list holds
+ * (0 before the first rhi_init). */
+uint32_t rhi_adapter_list(RhiAdapterInfo *out, uint32_t max);
+/* [video] adapter: the card the next rhi_init takes, by its exact name as
+ * rhi_adapter_list gives it; NULL or "" is automatic.  The backend's own
+ * environment variable (ICO_VK_DEVICE, ICO_D3D12_ADAPTER, ICO_D3D11_ADAPTER)
+ * wins over it; a name no runnable device has is logged and the pick is
+ * automatic; OpenGL takes the device the system gives it.  Kept by the
+ * dispatcher (rhi_backend.c) across rhi_create_backend; rhi_adapter_wanted
+ * returns it ("" automatic). */
+void rhi_set_adapter_wanted(const char *name);
+const char *rhi_adapter_wanted(void);
 /* True once the device is gone (Vulkan VK_ERROR_DEVICE_LOST; D3D12
  * DXGI_ERROR_DEVICE_REMOVED, _RESET or _HUNG).  The backend logged the
  * reason once; every later call is a no-op or fails, and the caller ends

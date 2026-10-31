@@ -27,6 +27,9 @@ static const RhiBackendTable *const s_backends[] = {
 
 static const RhiBackendTable *s_sel;
 static bool s_up; /* rhi_init succeeded and rhi_shutdown has not run */
+/* [video] adapter (rhi_set_adapter_wanted): handed to the backend at each
+   rhi_init, whichever backend is selected then */
+static char s_adapterWanted[256];
 
 static bool nameEq(const char *a, const char *b)
 {
@@ -133,6 +136,7 @@ bool rhi_init(const RhiDeviceDesc *desc)
     if (s_up) {
         return true;
     }
+    be()->set_adapter_wanted(s_adapterWanted);
     s_up = be()->init(desc);
     return s_up;
 }
@@ -156,6 +160,21 @@ const RhiLimits *rhi_limits(void)
 const char *rhi_adapter_name(void)
 {
     return be()->adapter_name();
+}
+
+uint32_t rhi_adapter_list(RhiAdapterInfo *out, uint32_t max)
+{
+    return be()->adapter_list(out, max);
+}
+
+void rhi_set_adapter_wanted(const char *name)
+{
+    snprintf(s_adapterWanted, sizeof(s_adapterWanted), "%s", name != NULL ? name : "");
+}
+
+const char *rhi_adapter_wanted(void)
+{
+    return s_adapterWanted;
 }
 
 bool rhi_device_lost(void)

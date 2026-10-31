@@ -139,6 +139,18 @@ if(ICO_RUN_TESTS)
     add_test(NAME rhi_driver_version COMMAND rhi_driver_version_test)
 endif()
 
+# --- The [video] adapter rules (CPU only, every target) ---------------------
+# rhi_adapter.c: the exact-name match the Vulkan and Direct3D backends force
+# a pick with, and the device-list line's text. Each of those backends links
+# its own copy (a static library member, taken once).
+add_executable(rhi_adapter_match_test test/rhi_adapter_match_test.c rhi_adapter.c)
+target_include_directories(rhi_adapter_match_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(rhi_adapter_match_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME rhi_adapter_match COMMAND rhi_adapter_match_test)
+endif()
+
 # --- SDL3 ---------------------------------------------------------------------
 # One prefix per target: the source builds for Linux x86-64 and arm64, SDL's
 # mingw development release for the two Windows targets, the NDK build for
@@ -262,7 +274,7 @@ endif()
 
 # --- ico_rhi_vulkan -------------------------------------------------------------
 if(_ico_have_vk)
-    set(_ico_vk_sources rhi_driver_version.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c
+    set(_ico_vk_sources rhi_adapter.c rhi_driver_version.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c
                         vk/vk_pipeline.c vk/vk_present_mode.c vk/vk_renderpass.c vk/vk_resource.c
                         vk/vk_swapchain.c vk/vk_sync.c)
     if(ANDROID)
@@ -298,6 +310,7 @@ endif()
 # --- ico_rhi_d3d12 --------------------------------------------------------------
 if(_ico_have_d3d12)
     add_library(ico_rhi_d3d12 STATIC
+        rhi_adapter.c
         d3d12/d3d12_cmd.c
         d3d12/d3d12_device.c
         d3d12/d3d12_pipeline.c
@@ -324,6 +337,7 @@ endif()
 # the bind group layouts and the DXBC input signature reader.
 if(_ico_have_d3d11)
     add_library(ico_rhi_d3d11 STATIC
+        rhi_adapter.c
         d3d11/d3d11_cmd.c
         d3d11/d3d11_device.c
         d3d11/d3d11_pipeline.c

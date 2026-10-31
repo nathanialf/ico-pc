@@ -21,6 +21,8 @@
 #define rhi_backend             RHI__NAME(backend)
 #define rhi_limits              RHI__NAME(limits)
 #define rhi_adapter_name         RHI__NAME(adapter_name)
+#define rhi_adapter_list         RHI__NAME(adapter_list)
+#define rhi_set_adapter_wanted   RHI__NAME(set_adapter_wanted)
 #define rhi_device_lost          RHI__NAME(device_lost)
 #define rhi_resize_swapchain     RHI__NAME(resize_swapchain)
 #define rhi_swapchain_format     RHI__NAME(swapchain_format)

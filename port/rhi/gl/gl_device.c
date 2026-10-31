@@ -979,6 +979,26 @@ const char *rhi_adapter_name(void)
     return g_gl.adapterName;
 }
 
+/* the one device the context runs on (GL_RENDERER, empty before the first
+   rhi_init); OpenGL cannot choose another, so [video] adapter is not read */
+uint32_t rhi_adapter_list(RhiAdapterInfo *out, uint32_t max)
+{
+    if (g_gl.adapterName[0] == '\0') {
+        return 0;
+    }
+    if (out != NULL && max > 0) {
+        memset(&out[0], 0, sizeof(out[0]));
+        snprintf(out[0].name, sizeof(out[0].name), "%s", g_gl.adapterName);
+        out[0].suitable = out[0].current = out[0].automatic = true;
+    }
+    return 1;
+}
+
+void rhi_set_adapter_wanted(const char *name)
+{
+    (void)name;
+}
+
 /* A context reset (ARB_robustness) is not asked for: no loss to report */
 bool rhi_device_lost(void)
 {

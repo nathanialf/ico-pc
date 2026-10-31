@@ -3,6 +3,7 @@
  * of the D3D12 backend. */
 #include "d3d12_internal.h"
 #include "rhi_d3d12.h"
+#include "../rhi_adapter.h"
 #include "../rhi_backend.h"
 #include <stdlib.h>
 #include <string.h>
@@ -460,13 +461,33 @@ static bool dx_is_software(IDXGIAdapter1 *a)
     return (d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
 }
 
+/* the adapters the last pick looked at (rhi_adapter_list) and [video]
+   adapter (rhi_set_adapter_wanted, from the dispatcher before each
+   rhi_init) */
+static RhiAdapterInfo s_adapters[RHI_MAX_ADAPTERS];
+static uint32_t s_adapterCount;
+static char s_adapterWanted[256];
+
+/* ICO_D3D12_ADAPTER=warp, an index into the list below, or a substring of
+ * the adapter's name forces a pick (it wins); else [video] adapter's exact
+ * name among the suitable adapters; else the first suitable one; without
+ * one, WARP.  One line lists every adapter and says which was picked and
+ * why. */
 static bool dx_pick_adapter(void)
 {
-    /* ICO_D3D12_ADAPTER=warp, an index into the list below, or a substring
-     * of the adapter's name forces a pick */
     const char *force = getenv("ICO_D3D12_ADAPTER");
+    const bool forcing = force && *force;
     bool forceWarp = force && (_stricmp(force, "warp") == 0);
+    const char *names[RHI_MAX_ADAPTERS];
     IDXGIAdapter1 *pick = NULL;
+    int pickIdx = -1, autoIdx = -1;
+    char source[320];
+    if (forcing) {
+        snprintf(source, sizeof(source), "ICO_D3D12_ADAPTER=%s", force);
+    } else {
+        snprintf(source, sizeof(source), "automatic");
+    }
+    s_adapterCount = 0;
     if (!forceWarp) {
         for (UINT i = 0;; i++) {
             IDXGIAdapter1 *a = dx_enum_hardware(i);
@@ -475,26 +496,71 @@ static bool dx_pick_adapter(void)
             }
             char name[128];
             dx_adapter_name(a, name, sizeof(name));
-            bool ok = !dx_is_software(a) && dx_adapter_ok(a);
+            const bool soft = dx_is_software(a);
+            bool ok = !soft && dx_adapter_ok(a);
             DX_LOG("adapter %u: %s%s", i, name,
                    ok ? "" : " (unsuitable: a software adapter, or no feature level 11_0)");
+            if (i < RHI_MAX_ADAPTERS) {
+                RhiAdapterInfo *e = &s_adapters[i];
+                memset(e, 0, sizeof(*e));
+                snprintf(e->name, sizeof(e->name), "%s", name);
+                e->suitable = ok;
+                e->score = ok ? 0 : -1;
+                e->why = ok ? NULL : soft ? "a software adapter" : "no feature level 11_0";
+                names[i] = ok ? e->name : NULL;
+                s_adapterCount = i + 1;
+            }
+            if (ok && autoIdx < 0) {
+                autoIdx = (int)i;
+            }
             bool forced = false;
-            if (force && *force && ok) {
+            if (forcing && ok) {
                 char idx[16];
                 snprintf(idx, sizeof(idx), "%u", i);
                 forced = strcmp(force, idx) == 0 || strstr(name, force) != NULL;
             }
-            if (ok && (forced || (!pick && !(force && *force)))) {
+            if (ok && (forced || (!pick && !forcing))) {
                 if (pick) {
                     IDXGIAdapter1_Release(pick);
                 }
                 IDXGIAdapter1_AddRef(a);
                 pick = a;
+                pickIdx = (int)i;
             }
             IDXGIAdapter1_Release(a);
         }
-        if (!pick && force && *force) {
+        if (!pick && forcing) {
             DX_LOG("ICO_D3D12_ADAPTER=%s matched no adapter", force);
+        }
+    }
+    if (!forcing && s_adapterWanted[0] != '\0') {
+        const int want = rhi_adapter_match(s_adapterWanted, names, (int)s_adapterCount);
+        IDXGIAdapter1 *a = want >= 0 ? dx_enum_hardware((UINT)want) : NULL;
+        if (a != NULL) {
+            if (pick) {
+                IDXGIAdapter1_Release(pick);
+            }
+            pick = a;
+            pickIdx = want;
+            snprintf(source, sizeof(source), "[video] adapter \"%s\"", s_adapterWanted);
+        } else {
+            DX_LOG("[video] adapter \"%s\" is not among the devices; automatic pick",
+                   s_adapterWanted);
+        }
+    }
+    if (autoIdx >= 0 && autoIdx < RHI_MAX_ADAPTERS) {
+        s_adapters[autoIdx].automatic = true;
+    }
+    if (pick && pickIdx >= 0 && pickIdx < RHI_MAX_ADAPTERS) {
+        s_adapters[pickIdx].current = true;
+    }
+    {
+        char text[RHI_MAX_ADAPTERS * 320];
+        rhi_adapter_list_text(s_adapters, (int)s_adapterCount, text, sizeof(text));
+        if (pick) {
+            DX_LOG("devices: %s; picked %d (%s)", text, pickIdx, source);
+        } else {
+            DX_LOG("devices: %s; picked WARP (%s)", text, source);
         }
     }
     if (!pick) {
@@ -856,6 +922,19 @@ const RhiLimits *rhi_limits(void)
 const char *rhi_adapter_name(void)
 {
     return g_dx.adapterName;
+}
+
+uint32_t rhi_adapter_list(RhiAdapterInfo *out, uint32_t max)
+{
+    for (uint32_t i = 0; out != NULL && i < max && i < s_adapterCount; i++) {
+        out[i] = s_adapters[i];
+    }
+    return s_adapterCount;
+}
+
+void rhi_set_adapter_wanted(const char *name)
+{
+    snprintf(s_adapterWanted, sizeof(s_adapterWanted), "%s", name != NULL ? name : "");
 }
 
 bool rhi_device_lost(void)
