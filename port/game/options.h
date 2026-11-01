@@ -19,6 +19,10 @@
  *   [gameplay] door_fix    false  holding hands, an arrival does not send
  *                                 Ico and Yorda straight back through the
  *                                 door they came in by (door_grace.h)
+ *   [gameplay] yorda_trips false  while Ico runs pulling her by the hand,
+ *                                 Yorda trips and falls now and then, the
+ *                                 fall of the main gate's second stage
+ *                                 (yorda_trip.h)
  *   [gameplay] mirror      false  mirrored play (negated stick X, swapped pan)
  *   [gameplay] natural_chains
  *                          false  a chain let down for the player keeps its
@@ -124,6 +128,11 @@ int ico_opt_shadow_speed_motion(int motion);
 /* [gameplay] door_fix (default false): the doorway fix of door_grace.h */
 int ico_opt_door_fix(void);
 void ico_opt_set_door_fix(int on);
+/* [gameplay] yorda_trips (default false): Yorda trips (yorda_trip.h).  Logs
+   "gameplay: yorda trips on|off" at its first read and on a change; the stage
+   load adds her motions from the next stage on. */
+int ico_opt_yorda_trips(void);
+void ico_opt_set_yorda_trips(int on);
 /* [gameplay] natural_chains (default false): Natural chains (rd_chain.h) */
 int ico_opt_natural_chains(void);
 void ico_opt_set_natural_chains(int on);

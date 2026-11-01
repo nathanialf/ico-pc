@@ -26,6 +26,7 @@ const char *const ICO_SIM_KEYS[] = {
     "gameplay.developer_mode",
     "dev.start_stage",
     "gameplay.door_fix",
+    "gameplay.yorda_trips",
     "video.anti_aliasing",
     "gameplay.hold_type",
     "gameplay.hold_type_chosen", /* an earlier "hold" without it is the disc's own */

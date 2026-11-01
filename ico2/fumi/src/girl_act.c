@@ -46,6 +46,10 @@
 /* PC port: port/game/options.h, the Players log (a change of girlControlMode
    is logged once, from the girl's control thread) */
 extern void ico_players_note(int mode);
+/* PC port: port/game/yorda_trip_live.c ([gameplay] yorda_trips): each
+   actGirlHand copy's run-pulled tick, with the mail the disc's gate script
+   sends her to sit down (st04a.c actSt04aGirlSitChk) */
+extern void ico_opt_yorda_trip_tick(GObj *girl, int mail);
 static void _girlBrainHide_MakeHidePoint(float *p, float dist);
 static int isEnterHideadv(void);
 
@@ -8481,6 +8485,8 @@ static void actGirlHand_ntsc(GObj *volatile self)
                 float speed = (dist - 90.0f) * 4.0f / 90.0f + 1.0f;
                 sub->motReq = SetMotionRequest((void *)self, 15, sub->env.motOriReq);
                 ICO_RAW(long long, sub, 0x20, sub->flags20.ll) |= 0x200;
+                /* PC port ([gameplay] yorda_trips): she may trip on this run-pulled tick */
+                ico_opt_yorda_trip_tick((GObj *)self, 102);
                 HandMgr_Speed(self, speed);
                 if (mode == 1) {
                     st = 3;
@@ -8761,6 +8767,8 @@ static void actGirlHand_jun26(GObj *volatile self)
                 float speed = (dist - 90.0f) * 4.0f / 90.0f + 1.0f;
                 sub->motReq = SetMotionRequest((void *)self, 15, sub->env.motOriReq);
                 ICO_RAW(long long, sub, 0x20, sub->flags20.ll) |= 0x10;
+                /* PC port ([gameplay] yorda_trips): she may trip on this run-pulled tick */
+                ico_opt_yorda_trip_tick((GObj *)self, 100);
                 HandMgr_Speed(self, speed);
                 if (mode == 1) {
                     st = 3;
@@ -9044,6 +9052,8 @@ static void actGirlHand_aug6(GObj *volatile self)
                 float speed = (dist - 90.0f) * 4.0f / 90.0f + 1.0f;
                 sub->motReq = SetMotionRequest((void *)self, 15, sub->env.motOriReq);
                 ICO_RAW(long long, sub, 0x20, sub->flags20.ll) |= 0x40;
+                /* PC port ([gameplay] yorda_trips): she may trip on this run-pulled tick */
+                ico_opt_yorda_trip_tick((GObj *)self, 101);
                 HandMgr_Speed(self, speed);
                 if (mode == 1) {
                     if (v >= 51) {
@@ -9356,6 +9366,8 @@ void actGirlHand(GObj *volatile self)
                 float speed = (dist - 90.0f) * 4.0f / 90.0f + 1.0f;
                 sub->motReq = SetMotionRequest((void *)self, 0x10, sub->env.motOriReq);
                 ICO_RAW(long long, sub, 0x20, sub->flags20.ll) |= 0x100000;
+                /* PC port ([gameplay] yorda_trips): she may trip on this run-pulled tick */
+                ico_opt_yorda_trip_tick((GObj *)self, 109);
                 HandMgr_Speed(self, speed);
                 if (mode == 1) {
                     st = 3;

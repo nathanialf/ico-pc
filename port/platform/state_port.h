@@ -27,6 +27,8 @@
  *   trace_host.c    the Main tick count (CLOCK)
  *   pad_script.c    the pad script's tick (CLOCK)
  *   door_grace.c    the doorway fix's arm and grace
+ *   yorda_trip.c    Yorda trips' random numbers, run count and refractory
+ *                   time
  *   gfx_null.c      the DMA channel register blocks
  *   host_loop.c     the vsync count and the next field
  *   audio_host.c    the audio side (ICO_STATE_AUDIO, copied under the
@@ -68,6 +70,7 @@ int ico_sif_host_state_register(void);     /* port/data/sif_host.c */
 int ico_trace_state_register(void);        /* trace_host.c */
 int ico_pad_script_state_register(void);   /* port/input/pad_script.c */
 int ico_door_grace_state_register(void);   /* port/game/door_grace.c */
+int ico_yorda_trip_state_register(void);   /* port/game/yorda_trip.c */
 int ico_gfx_null_state_register(void);     /* port/null/gfx_null.c */
 int ico_host_loop_state_register(void);    /* host_loop.c */
 /* port/audio/audio_host.c (audio_host.h): the SPU2, the libsd layer, the

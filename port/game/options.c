@@ -20,6 +20,7 @@ int ico_mv_active;
 static int s_stick_fix = -1;
 static int s_yorda_safe = -1;
 static int s_door_fix = -1;
+static int s_yorda_trips = -1;
 static int s_natural_chains = -1;
 static int s_skip_opening = -1;
 static int s_mirror = -1;
@@ -211,6 +212,23 @@ int ico_opt_door_fix(void)
 void ico_opt_set_door_fix(int on)
 {
     s_door_fix = on != 0;
+}
+
+int ico_opt_yorda_trips(void)
+{
+    if (s_yorda_trips < 0) {
+        s_yorda_trips = ico_config_get_bool("gameplay.yorda_trips", 0) != 0;
+        fprintf(stderr, "gameplay: yorda trips %s\n", s_yorda_trips ? "on" : "off");
+    }
+    return s_yorda_trips;
+}
+
+void ico_opt_set_yorda_trips(int on)
+{
+    if ((on != 0) != s_yorda_trips) {
+        fprintf(stderr, "gameplay: yorda trips %s\n", on ? "on" : "off");
+    }
+    s_yorda_trips = on != 0;
 }
 
 int ico_opt_natural_chains(void)
@@ -612,7 +630,7 @@ void ico_opt_reload(void)
 {
     s_stick_fix = s_yorda_safe = s_door_fix = s_mirror = s_developer_mode = s_circle_back = -1;
     s_pit_time = s_shadow_speed = -1;
-    s_natural_chains = s_skip_opening = -1;
+    s_natural_chains = s_skip_opening = s_yorda_trips = -1;
     s_output = -2;
     s_ui_language = -2;
     s_hold_choice = -1;

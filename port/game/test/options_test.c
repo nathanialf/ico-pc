@@ -122,6 +122,12 @@ static void test_defaults(void)
     CHECK(ico_opt_door_fix() == 1);
     ico_opt_reload();
     CHECK(ico_opt_door_fix() == 0);
+    /* Yorda trips: the same (off, the setter's 0 or 1, back on reload) */
+    CHECK(ico_opt_yorda_trips() == 0);
+    ico_opt_set_yorda_trips(6);
+    CHECK(ico_opt_yorda_trips() == 1);
+    ico_opt_reload();
+    CHECK(ico_opt_yorda_trips() == 0);
     /* Natural chains: the same (off, the setter's 0 or 1, back on reload) */
     CHECK(ico_opt_natural_chains() == 0);
     ico_opt_set_natural_chains(9);
@@ -185,7 +191,8 @@ static void test_config(const char *dir)
         return;
     }
     fputs("[gameplay]\nstick_fix = true\nyorda_safe = true\ndoor_fix = true\nmirror = true\n"
-          "developer_mode = true\nnatural_chains = true\nskip_opening = true\n[dev]\n"
+          "developer_mode = true\nnatural_chains = true\nskip_opening = true\n"
+          "yorda_trips = true\n[dev]\n"
           "debug_option = 1\n",
           f);
     fclose(f);
@@ -196,6 +203,7 @@ static void test_config(const char *dir)
     CHECK(ico_opt_door_fix() == 1);
     CHECK(ico_opt_natural_chains() == 1);
     CHECK(ico_opt_skip_opening() == 1);
+    CHECK(ico_opt_yorda_trips() == 1);
     CHECK(ico_opt_mirror() == 1);
     /* developer mode and the debug option file switch */
     CHECK(ico_opt_developer_mode() == 1);
@@ -653,6 +661,62 @@ static void test_shadow_speed(void)
     if (text != NULL) {
         CHECK(count_of(text, "\"gameplay.shadow_speed\",") == 1);
         CHECK(strstr(text, "\"gameplay.pit_time\",") < strstr(text, "\"gameplay.shadow_speed\","));
+        free(text);
+    }
+}
+
+/* --- yorda_trips: the hooks in the game's sources -------------------------
+   Each actGirlHand copy calls the tick where it sets her run-pulled bit,
+   with its disc's sit-down mail (the gate script's, st04a.c
+   actSt04aGirlSitChk): 109 on the European, Japanese, Korean and Asian
+   discs, 102 on the North American, 101 on the August 2001 preview, 100 on
+   the June 2001 demo; each InitIcoMisc copy calls the stage load after the
+   stage's pack; the key changes the simulation. */
+static void test_yorda_trips(void)
+{
+    const char *slug = ico_region_cur()->slug;
+    const int mail = strcmp(slug, "jun26") == 0  ? 100
+                     : strcmp(slug, "aug6") == 0 ? 101
+                     : strcmp(slug, "ntsc") == 0 ? 102
+                                                 : 109;
+    char hook[96];
+    char *text = read_source(ICO_GIRL_ACT_SRC);
+
+    CHECK(text != NULL);
+    if (text != NULL) {
+        CHECK(count_of(text, "ico_opt_yorda_trip_tick(") == 4 + 1 /* the declaration */);
+        snprintf(hook, sizeof(hook), "ico_opt_yorda_trip_tick((GObj *)self, %d);", mail);
+        CHECK(count_of(text, hook) == 1);
+        /* each right after its copy's run-pulled bit */
+        static const char *const kSet[4] = {"|= 0x100000;\n", "|= 0x200;\n", "|= 0x40;\n",
+                                            "|= 0x10;\n"};
+        static const int kMail[4] = {109, 102, 101, 100};
+        for (int i = 0; i < 4; i++) {
+            char want[320];
+            snprintf(want, sizeof(want),
+                     "ICO_RAW(long long, sub, 0x20, sub->flags20.ll) %s"
+                     "                /* PC port ([gameplay] yorda_trips): she may trip on this "
+                     "run-pulled tick */\n"
+                     "                ico_opt_yorda_trip_tick((GObj *)self, %d);",
+                     kSet[i], kMail[i]);
+            CHECK(count_of(text, want) == 1);
+        }
+        free(text);
+    }
+    text = read_source(ICO_ICOMISC_SRC);
+    CHECK(text != NULL);
+    if (text != NULL) {
+        CHECK(count_of(text, "ico_yorda_trip_stage_loaded(") == 2 + 1 /* the declaration */);
+        CHECK(count_of(text, "    iosCdvdLoadPackFile(pack, GetDataFileName(stage, pack), 1);\n"
+                             "    /* PC port ([gameplay] yorda_trips): her fall's motions, where "
+                             "the pack has none */\n"
+                             "    ico_yorda_trip_stage_loaded(stage);") == 2);
+        free(text);
+    }
+    text = read_source(ICO_SIM_KEYS_SRC);
+    CHECK(text != NULL);
+    if (text != NULL) {
+        CHECK(count_of(text, "\"gameplay.yorda_trips\",") == 1);
         free(text);
     }
 }
@@ -1935,6 +1999,7 @@ int main(int argc, char **argv)
     test_pit_time();
     test_shadow_speed();
     test_shadow_speed_motions();
+    test_yorda_trips();
     test_brain();
     test_ui_language(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");

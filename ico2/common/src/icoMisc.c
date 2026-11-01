@@ -54,6 +54,9 @@
 static void disp_memory_partition_bar(void);
 /* debug.h leaves it out (see there) */
 extern int debug_bar_flag;
+/* PC port ([gameplay] yorda_trips): port/game/yorda_trip_live.c adds Yorda's
+   fall motions to the stage's motion memory after its pack is loaded */
+extern void ico_yorda_trip_stage_loaded(int stage);
 
 /* .sdata: the partition bar's backdrop tint; ExecIcoMisc's three state
    words; InitIcoMisc's four; the six debug words dbgC0..dbgC5 (declared in
@@ -739,6 +742,8 @@ static void InitIcoMisc_jun26(int *arg)
     debug_StdPrintfDummy("iosCdvdLoadPackFile\n");
     debugCdvdLoadInfoSegInit(1);
     iosCdvdLoadPackFile(pack, GetDataFileName(stage, pack), 1);
+    /* PC port ([gameplay] yorda_trips): her fall's motions, where the pack has none */
+    ico_yorda_trip_stage_loaded(stage);
     if (stage_no == 92) {
         kanbanBootStart();
     }
@@ -888,6 +893,8 @@ void InitIcoMisc(int *arg)
     debug_StdPrintfDummy("iosCdvdLoadPackFile\n");
     debugCdvdLoadInfoSegInit(1);
     iosCdvdLoadPackFile(pack, GetDataFileName(stage, pack), 1);
+    /* PC port ([gameplay] yorda_trips): her fall's motions, where the pack has none */
+    ico_yorda_trip_stage_loaded(stage);
     load_time = frame_count - load_time;
     debug_StdPrintfDummy("InitWayPointSystem\n");
     InitWayPointSystem();

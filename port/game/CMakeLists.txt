@@ -16,8 +16,11 @@
 # the debug switches and debug-menu opener the game binds, the hint rule and the
 # enemy row reader (variants.h); it names no game symbol (the game library is
 # linked before this one)
+# yorda_trip.c: Yorda trips' rule, its random numbers and their save state
+# blocks ([gameplay] yorda_trips, yorda_trip.h); the game's side is
+# yorda_trip_live.c below
 add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c door_grace.c
-            variants.c)
+            variants.c yorda_trip.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -31,7 +34,8 @@ endif()
 # eBrainGetTarget (ico2/omori/src/ebrain.c, compiled into the test) under the
 # yorda_safe hook, and pit_time's ratio and its four hooks in enemy_act.c (a text scan),
 # and shadow_speed's hook in act-game.c, its three pushes in commonact.c and its record key in
-# main_host.c (text scans).
+# main_host.c (text scans), and yorda_trips' four hooks in girl_act.c (this disc's mail
+# among them), its two in icoMisc.c and its simulation key (text scans).
 add_executable(options_test test/options_test.c ../platform/host_config.c)
 ico_include_dirs(omori _ico_options_incs)
 target_include_directories(options_test PRIVATE ${_ico_options_incs}
@@ -41,7 +45,9 @@ target_compile_definitions(options_test PRIVATE ${ICO_GAME_DEFINITIONS}
     ICO_ACT_GAME_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/act-game.c"
     ICO_COMMONACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/commonact.c"
     ICO_MAIN_HOST_SRC="${CMAKE_SOURCE_DIR}/port/platform/main_host.c"
-    ICO_SIM_KEYS_SRC="${CMAKE_SOURCE_DIR}/port/platform/sim_keys.c")
+    ICO_SIM_KEYS_SRC="${CMAKE_SOURCE_DIR}/port/platform/sim_keys.c"
+    ICO_GIRL_ACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/girl_act.c"
+    ICO_ICOMISC_SRC="${CMAKE_SOURCE_DIR}/ico2/common/src/icoMisc.c")
 target_compile_options(options_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS} -Wno-unused-parameter -Wno-unused-variable
                        -Wno-unused-function)
@@ -200,6 +206,34 @@ if(ICO_RUN_TESTS)
     add_test(NAME camera_wall_stage COMMAND camera_wall_stage_test)
 endif()
 
+# Yorda trips (port/game/yorda_trip.h): the rule (yorda_trip.c, through
+# ico_options), the game's side (yorda_trip_live.c) and the motion reader
+# (yorda_trip_source.c) compiled in, the game, the disc and its pack index
+# stubbed in the test: the disc's motions by name, the run count and its gap
+# reset, the rate over 10^6 ticks at 25 and 30 ticks a second, the
+# refractory time, every guard (this disc's HETARI bit), the mail, the
+# registered blocks put back, and the stage load's motion copies.  CPU only;
+# one run per disc (the motion numbers, the bit and the mail are the disc's).
+add_executable(yorda_trip_test test/yorda_trip_test.c yorda_trip_live.c yorda_trip_source.c)
+ico_include_dirs(fumi _ico_yorda_trip_incs)
+target_include_directories(yorda_trip_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/port/platform" "${CMAKE_SOURCE_DIR}/port/data"
+    "${CMAKE_SOURCE_DIR}/port/include" "${CMAKE_SOURCE_DIR}/port/render" ${_ico_yorda_trip_incs})
+target_compile_definitions(yorda_trip_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(yorda_trip_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+# ico_math: the VU0 random register the seed is read from (matrix.c) and the
+# maths typedef.h's headers name
+target_link_libraries(yorda_trip_test PRIVATE ico_options ico_region ico_math)
+if(NOT WIN32)
+    target_link_libraries(yorda_trip_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    add_test(NAME yorda_trip COMMAND yorda_trip_test pal)
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        add_test(NAME yorda_trip_${_slug} COMMAND yorda_trip_test ${_slug})
+    endforeach()
+endif()
 # yorda_trip_disc: the same motions on the disc image (ICO_DISC_IMAGE): the
 # disc's tables loaded from its ELF (port/data/tables.c), the run loop and the
 # fall named, the main gate stages' packs and their HETARI members with their
@@ -550,6 +584,23 @@ if(TARGET ico_pc)
     target_compile_options(ico_camera_wall_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
                            ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_camera_wall_live>)
+endif()
+# yorda_trip_live.c, yorda_trip_source.c: Yorda trips' game side (the stage
+# load's motion copies, InitIcoMisc's hook; the run-pulled tick, actGirlHand's)
+# and the pack reader; built as photo_view.c is (the game's include path and
+# record layout), in the headless build too; port/data for df_pack.h and
+# vfs.h, port/platform for diag_host.h
+if(TARGET ico_pc)
+    add_library(ico_yorda_trip_live OBJECT yorda_trip_live.c yorda_trip_source.c)
+    ico_include_dirs(fumi _ico_yt_game_incs)
+    target_include_directories(ico_yorda_trip_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                               "${CMAKE_SOURCE_DIR}/port/render" "${CMAKE_SOURCE_DIR}/port/platform"
+                               $<TARGET_PROPERTY:ico_port_data,INTERFACE_INCLUDE_DIRECTORIES>
+                               ${_ico_yt_game_incs})
+    target_compile_definitions(ico_yorda_trip_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    target_compile_options(ico_yorda_trip_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_yorda_trip_live>)
 endif()
 # demo_host.c: the June 2001 demo's sceDemoStart (the magazine menu's settings,
 # here the port's), which common/src/main.c calls on that disc; port code, in
