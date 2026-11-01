@@ -120,6 +120,15 @@ bool d3d11_shader_log_failure(uint32_t n);
  * Windows only; elsewhere it fails with a message. */
 bool d3d11_shader_compile(const RhiShaderDesc *d, const char *cacheDir, const char *icoVersion,
                           void **dxbc, size_t *len, char *err, size_t errn);
+/* One of the backend's own shaders (no table entry, no macros, no includes,
+ * no cache: the texture-to-buffer copy's compute shader, d3d11_cmd.c): the
+ * DXBC of `text`'s `entry` compiled as `target` ("cs_5_0").  *dxbc is
+ * malloc'd; the caller frees.  On failure, false and the compiler's message
+ * (or the reason) in err; nothing is logged or counted here.  Windows only;
+ * elsewhere it fails with a message. */
+bool d3d11_shader_compile_text(const char *name, const char *text, size_t textLen,
+                               const char *entry, const char *target, void **dxbc, size_t *len,
+                               char *err, size_t errn);
 /* "10.0.22621.3233" once the compiler is loaded ("version unknown" when its
  * file says none); NULL before the first compile or when it is missing */
 const char *d3d11_shader_compiler_version(void);

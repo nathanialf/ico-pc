@@ -540,10 +540,21 @@ static void d11_fill_limits(void)
     o->maxStorageRange = (uint64_t)16u << D3D11_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP;
     o->maxDrawIndexedIndexValue = 0xFFFFFFFFu;
     o->fullDrawIndexUint32 = true;
-    /* the VU vertex pre-pass stays off: its record is read back through a
-     * texture-to-buffer copy D3D11 does not have (rd_replay_vu.c takes the
-     * 32-byte answer as the Apple A9/A10 path's) */
-    o->colorBytesPerPixel = 32;
+    /* no bound on a pass's colour bytes a pixel (eight RGBA32 targets at
+     * feature level 11_0): the VU vertex pre-pass's three RGBA32_UINT
+     * planes are drawn, and copied into its storage buffer by the compute
+     * shader (d3d11_cmd.c rhi_cmd_copy_texture_to_buffer; cs_5_0, which
+     * feature level 11_0, the lowest rhi_init takes, always has); the
+     * renderer's start-up self-test checks the record on the device */
+    o->colorBytesPerPixel = 0;
+    if (g_d11.featureLevel < D3D_FEATURE_LEVEL_11_0) {
+        /* not reached (s_levels asks for 11_1 or 11_0): no compute shader,
+         * so no record copy, so no pre-pass (rd_replay_vu.c takes 32 as a
+         * bound below the record's 48 bytes) */
+        o->colorBytesPerPixel = 32;
+        D11_LOG("feature level below 11_0: no compute shader for the texture-to-buffer copy: "
+                "the VU vertex pre-pass stays off");
+    }
     if (g_d11.warp) {
         snprintf(s_driverLimitText, sizeof(s_driverLimitText), "WARP (software)%s", s_driverText);
     } else {
@@ -1451,6 +1462,7 @@ void rhi_shutdown(void)
     }
     d11_frames_shutdown();
     d11_pipelines_release();
+    d11_copy_cs_release();
     d11_release_all_objects();
     d3dp_pool_free(&g_d11.buffers);
     d3dp_pool_free(&g_d11.textures);

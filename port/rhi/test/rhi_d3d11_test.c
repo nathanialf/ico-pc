@@ -17,6 +17,10 @@
  *      of it than the backend keeps
  *  1e. the video memory figures of RhiStats on WARP (DXGI reports a budget
  *      for it too): a budget, a usage, and two reads inside 250 ms equal
+ *  1f. the texture-to-buffer copy into a storage buffer on WARP (the
+ *      backend's compute shader, the VU pre-pass's record copies): every
+ *      word where it belongs, nothing else written, a pixel shader reading
+ *      the buffer before and after a copy in one list, the refusals
  *   2. the cells on the default hardware adapter (skipped when there is
  *      none: the default is then WARP again)
  *   3. the swapchain on a hidden SDL window: six frames of clear, readback
@@ -535,6 +539,328 @@ static int runTwoViews(void)
     return failures ? 1 : 0;
 }
 
+/* ------------------------------------------ the copy into a storage buffer */
+/* The VU vertex pre-pass's record copies (port/render/rd_replay_vu.c
+ * vuRecPassCopy; d3d11_cmd.c d11_copy_texture_to_storage, a compute shader
+ * on this backend).  One list on WARP:
+ *   - the storage-only buffer (STORAGE_READ | COPY_DST | COPY_SRC, device
+ *     memory, as the record's) filled with 0xEE from an upload buffer;
+ *   - a RC_W x RC_H RGBA32_UINT target drawn with word (x, y, 7x + 131y +
+ *     0xA000, 1) a texel (ps_fill_a), copied whole to element 0 (copy 1);
+ *   - a pass whose pixel shader reads the buffer at t4 (ps_read0: element
+ *     x), leaving its SRV bound, then copy 2 at once: the region (5, 2,
+ *     40, 3) to element RC_E2 (an odd element), rows 48 elements apart (the
+ *     buffer must leave the pixel side before it is the copy's target);
+ *   - a second reading pass (ps_read1: element RC_E2 + x: copy 2's first
+ *     row, a gap, its second row, a gap);
+ *   - the target drawn again (ps_fill_b: w 2; a target after it was the
+ *     copy's source) and its row 0 copied to element RC_E3 (copy 3);
+ *   - three copies the backend refuses (an RGBA8 source, an offset of half
+ *     an element, an upload buffer as the destination): nothing written;
+ *   - the buffer copied into a readback buffer.
+ * Every element is checked (the copies' words, 0xEE everywhere else), the
+ * two reading passes' pixels, the copies counted (5: the fill, three
+ * compute copies, the readback; none refused), no debug-layer error. */
+enum {
+    RC_W = 96,
+    RC_H = 6,
+    RC_E2 = RC_W * RC_H + 3,
+    RC_PITCH2 = 48,
+    RC_E3 = 2 * RC_W * RC_H,
+    RC_ELEMS = 1408
+};
+
+static const char s_recCopyHlsl[] =
+    "StructuredBuffer<uint4> g_rec : register(t4);\n"
+    "float4 vs_tri(uint id : SV_VertexID) : SV_Position {\n"
+    "    float2 p = float2((id << 1) & 2, id & 2);\n"
+    "    return float4(p * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);\n"
+    "}\n"
+    "uint4 fill(float4 pos, uint seed) {\n"
+    "    uint2 p = uint2(pos.xy);\n"
+    "    return uint4(p.x, p.y, p.x * 7u + p.y * 131u + 0xA000u, seed);\n"
+    "}\n"
+    "uint4 ps_fill_a(float4 pos : SV_Position) : SV_Target0 { return fill(pos, 1u); }\n"
+    "uint4 ps_fill_b(float4 pos : SV_Position) : SV_Target0 { return fill(pos, 2u); }\n"
+    "uint4 ps_read0(float4 pos : SV_Position) : SV_Target0 { return g_rec[uint(pos.x)]; }\n"
+    "uint4 ps_read1(float4 pos : SV_Position) : SV_Target0 {\n"
+    "    return g_rec[RC_E2 + uint(pos.x)];\n"
+    "}\n";
+static const RhiShaderSource s_recCopySources[1] = {
+    {"rec_copy.hlsl", s_recCopyHlsl, sizeof(s_recCopyHlsl) - 1u}};
+
+static RhiShader recCopyShader(RhiShaderStage stage, const char *entry)
+{
+    static char defines[32];
+    snprintf(defines, sizeof(defines), "RC_E2=%u", (unsigned)RC_E2);
+    RhiShaderDesc d;
+    memset(&d, 0, sizeof(d));
+    d.stage = stage;
+    d.entryPoint = entry;
+    d.debugName = entry;
+    d.hlslFile = "rec_copy.hlsl";
+    d.defines = defines;
+    d.sources = s_recCopySources;
+    d.sourceCount = 1;
+    return rhi_create_shader(&d);
+}
+
+static RhiPipeline recCopyPipeline(RhiShader vs, RhiShader ps, const RhiBindGroupLayout *layout)
+{
+    RhiPipelineDesc pd;
+    memset(&pd, 0, sizeof(pd));
+    pd.vertex = vs;
+    pd.fragment = ps;
+    pd.layouts = layout;
+    pd.layoutCount = layout ? 1u : 0u;
+    pd.topology = RHI_TOPO_TRIANGLE_LIST;
+    pd.cullNone = true;
+    pd.blend[0].writeMask = 0xF;
+    pd.colorFormats[0] = RHI_FMT_RGBA32_UINT;
+    pd.colorCount = 1;
+    pd.depthFormat = RHI_FMT_UNKNOWN;
+    pd.debugName = "rec copy";
+    return vs.id && ps.id ? rhi_create_pipeline(&pd) : (RhiPipeline){0};
+}
+
+/* one full-target draw of pipe into tgt (w x h) */
+static void recCopyPass(RhiCommandList cl, RhiTexture tgt, uint32_t w, uint32_t h, RhiPipeline pipe,
+                        RhiBindGroup g)
+{
+    RhiRenderPassDesc rp;
+    memset(&rp, 0, sizeof(rp));
+    rp.color[0].texture = tgt;
+    rp.color[0].load = RHI_LOAD_CLEAR;
+    rp.color[0].store = RHI_STORE_STORE;
+    rp.colorCount = 1;
+    rp.width = w;
+    rp.height = h;
+    rhi_cmd_begin_render_pass(cl, &rp);
+    rhi_cmd_set_pipeline(cl, pipe);
+    const RhiViewport vp = {0.0f, 0.0f, (float)w, (float)h, 0.0f, 1.0f};
+    const RhiRect sc = {0, 0, w, h};
+    rhi_cmd_set_viewport(cl, &vp);
+    rhi_cmd_set_scissor(cl, &sc);
+    if (g.id) {
+        rhi_cmd_set_bind_group(cl, 0, g);
+    }
+    rhi_cmd_draw(cl, 3, 0, 1);
+    rhi_cmd_end_render_pass(cl);
+}
+
+/* the words ps_fill_a (seed 1) or ps_fill_b (2) draws at (x, y) */
+static void recCopyWord(uint32_t x, uint32_t y, uint32_t seed, uint32_t w[4])
+{
+    w[0] = x;
+    w[1] = y;
+    w[2] = x * 7u + y * 131u + 0xA000u;
+    w[3] = seed;
+}
+
+/* element e of the buffer after the list: the copies' words, else 0xEE */
+static void recCopyWant(uint32_t e, uint32_t w[4])
+{
+    if (e < RC_W * RC_H) {
+        recCopyWord(e % RC_W, e / RC_W, 1u, w);
+        return;
+    }
+    if (e >= RC_E2 && e < RC_E2 + 2u * RC_PITCH2 + 40u && (e - RC_E2) % RC_PITCH2 < 40u) {
+        recCopyWord(5u + (e - RC_E2) % RC_PITCH2, 2u + (e - RC_E2) / RC_PITCH2, 1u, w);
+        return;
+    }
+    if (e >= RC_E3 && e < RC_E3 + RC_W) {
+        recCopyWord(e - RC_E3, 0u, 2u, w);
+        return;
+    }
+    w[0] = w[1] = w[2] = w[3] = 0xEEEEEEEEu;
+}
+
+static int runRecordCopy(void)
+{
+    if (!rhi_create_backend("d3d11")) {
+        rhi_test_log("SKIP record copy: no Direct3D 11 backend in this build\n");
+        return 77;
+    }
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test record copy"};
+    if (!rhi_init(&dd)) {
+        rhi_test_log("SKIP record copy: no usable device (see messages above)\n");
+        return 77;
+    }
+    if (!acceptWarp()) {
+        rhi_shutdown();
+        return 77;
+    }
+    int failures = 0;
+    const uint64_t bytes = (uint64_t)RC_ELEMS * 16u;
+    if (rhi_limits()->colorBytesPerPixel != 0u) {
+        rhi_test_log("FAIL record copy: colorBytesPerPixel %u (0 expected: the VU pre-pass on)\n",
+                     rhi_limits()->colorBytesPerPixel);
+        failures++;
+    }
+    static const RhiBindSlot slot = {4, RHI_BIND_STORAGE_BUFFER, 1u << RHI_STAGE_FRAGMENT};
+    const RhiBindGroupLayout layout =
+        rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){&slot, 1, "record copy group"});
+    const RhiShader vs = recCopyShader(RHI_STAGE_VERTEX, "vs_tri");
+    const RhiPipeline fillA =
+        recCopyPipeline(vs, recCopyShader(RHI_STAGE_FRAGMENT, "ps_fill_a"), NULL);
+    const RhiPipeline fillB =
+        recCopyPipeline(vs, recCopyShader(RHI_STAGE_FRAGMENT, "ps_fill_b"), NULL);
+    const RhiPipeline read0 =
+        recCopyPipeline(vs, recCopyShader(RHI_STAGE_FRAGMENT, "ps_read0"), &layout);
+    const RhiPipeline read1 =
+        recCopyPipeline(vs, recCopyShader(RHI_STAGE_FRAGMENT, "ps_read1"), &layout);
+    const RhiTexture src = rhi_create_texture(
+        &(RhiTextureDesc){RC_W, RC_H, 1, RHI_FMT_RGBA32_UINT,
+                          RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "record copy planes", 0});
+    const RhiTexture rgba8 = rhi_create_texture(
+        &(RhiTextureDesc){RC_W, 1, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC,
+                          "record copy rgba8", 0});
+    RhiTexture out[2];
+    for (int i = 0; i < 2; i++) {
+        out[i] = rhi_create_texture(&(RhiTextureDesc){
+            RC_W, 1, 1, RHI_FMT_RGBA32_UINT, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC,
+            i ? "record copy read 1" : "record copy read 0", 0});
+    }
+    const RhiBuffer rec = rhi_create_buffer(
+        &(RhiBufferDesc){bytes, RHI_BUF_STORAGE_READ | RHI_BUF_COPY_DST | RHI_BUF_COPY_SRC,
+                         RHI_MEM_DEVICE, "record copy buffer"});
+    const RhiBuffer up = rhi_create_buffer(
+        &(RhiBufferDesc){bytes, RHI_BUF_VERTEX | RHI_BUF_COPY_SRC, RHI_MEM_UPLOAD, "record fill"});
+    const RhiBuffer rb = rhi_create_buffer(
+        &(RhiBufferDesc){bytes, RHI_BUF_COPY_DST, RHI_MEM_READBACK, "record readback"});
+    RhiBinding b;
+    memset(&b, 0, sizeof(b));
+    b.slot = 4;
+    b.type = RHI_BIND_STORAGE_BUFFER;
+    b.buffer = rec;
+    b.offset = 0;
+    b.size = bytes;
+    rhi_wait_frame();
+    const RhiBindGroup g = layout.id && rec.id
+                               ? rhi_create_bind_group(&(RhiBindGroupDesc){layout, &b, 1})
+                               : (RhiBindGroup){0};
+    uint8_t *m = up.id ? rhi_map_buffer(up) : NULL;
+    if (!fillA.id || !fillB.id || !read0.id || !read1.id || !src.id || !rgba8.id || !out[0].id ||
+        !out[1].id || !rec.id || !rb.id || !m || !g.id) {
+        rhi_test_log("FAIL record copy: resources (pipelines %u %u %u %u, textures %u %u %u %u, "
+                     "buffers %u %u %u, group %u)\n",
+                     fillA.id, fillB.id, read0.id, read1.id, src.id, rgba8.id, out[0].id, out[1].id,
+                     rec.id, up.id, rb.id, g.id);
+        failures++;
+    } else {
+        memset(m, 0xEE, (size_t)bytes);
+        rhi_unmap_buffer(up);
+        RhiStats s0, s1;
+        rhi_get_stats(&s0);
+        RhiCommandList cl = rhi_begin_commands();
+        rhi_cmd_copy_buffer(cl, up, 0, rec, 0, bytes);
+        recCopyPass(cl, src, RC_W, RC_H, fillA, (RhiBindGroup){0});
+        RhiTextureBarrier bs = {src, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+        rhi_cmd_barrier(cl, &bs, 1);
+        /* copy 1: the whole target to element 0 */
+        rhi_cmd_copy_texture_to_buffer(cl, src, RHI_ASPECT_COLOR, (RhiRect){0, 0, RC_W, RC_H}, rec,
+                                       0, RC_W * 16u);
+        /* read at t4, then copy 2 with the buffer still bound there */
+        recCopyPass(cl, out[0], RC_W, 1, read0, g);
+        rhi_cmd_copy_texture_to_buffer(cl, src, RHI_ASPECT_COLOR, (RhiRect){5, 2, 40, 3}, rec,
+                                       (uint64_t)RC_E2 * 16u, RC_PITCH2 * 16u);
+        recCopyPass(cl, out[1], RC_W, 1, read1, g);
+        /* the source a target again, then copy 3 */
+        RhiTextureBarrier bt = {src, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET};
+        rhi_cmd_barrier(cl, &bt, 1);
+        recCopyPass(cl, src, RC_W, RC_H, fillB, (RhiBindGroup){0});
+        rhi_cmd_barrier(cl, &bs, 1);
+        rhi_cmd_copy_texture_to_buffer(cl, src, RHI_ASPECT_COLOR, (RhiRect){0, 0, RC_W, 1}, rec,
+                                       (uint64_t)RC_E3 * 16u, RC_W * 16u);
+        /* refused: an RGBA8 source (never drawn: refused before it is
+           read), half an element, an upload destination */
+        rhi_cmd_copy_texture_to_buffer(cl, rgba8, RHI_ASPECT_COLOR, (RhiRect){0, 0, RC_W, 1}, rec,
+                                       (uint64_t)(RC_E3 + RC_W + 8u) * 16u, RC_W * 4u);
+        rhi_cmd_copy_texture_to_buffer(cl, src, RHI_ASPECT_COLOR, (RhiRect){0, 0, 4, 1}, rec,
+                                       (uint64_t)(RC_E3 + RC_W + 40u) * 16u + 8u, 64u);
+        rhi_cmd_copy_texture_to_buffer(cl, src, RHI_ASPECT_COLOR, (RhiRect){0, 0, 4, 1}, up, 0,
+                                       64u);
+        rhi_cmd_copy_buffer(cl, rec, 0, rb, 0, bytes);
+        for (int i = 0; i < 2; i++) {
+            RhiTextureBarrier bo = {out[i], RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+            rhi_cmd_barrier(cl, &bo, 1);
+        }
+        rhi_end_commands(cl);
+        rhi_submit(cl);
+        rhi_wait_idle();
+        rhi_get_stats(&s1);
+        const uint8_t *r = rhi_map_buffer(rb);
+        uint32_t bad = 0;
+        for (uint32_t e = 0; r && e < RC_ELEMS; e++) {
+            uint32_t want[4], got[4];
+            recCopyWant(e, want);
+            memcpy(got, r + (size_t)e * 16u, 16);
+            if (memcmp(want, got, 16) != 0 && bad++ < 8) {
+                rhi_test_log("FAIL record copy: element %u read %08x %08x %08x %08x, expected "
+                             "%08x %08x %08x %08x\n",
+                             e, got[0], got[1], got[2], got[3], want[0], want[1], want[2], want[3]);
+            }
+        }
+        if (!r) {
+            rhi_test_log("FAIL record copy: the readback buffer did not map\n");
+            failures++;
+        } else if (bad) {
+            rhi_test_log("FAIL record copy: %u of %u elements wrong\n", bad, (unsigned)RC_ELEMS);
+            failures++;
+        }
+        static uint8_t img[RC_W * 16];
+        for (int i = 0; i < 2; i++) {
+            uint32_t pitch = 0;
+            if (!rhi_readback_texture(out[i], RHI_ASPECT_COLOR, img, sizeof(img), &pitch)) {
+                rhi_test_log("FAIL record copy: read pass %d: no readback\n", i);
+                failures++;
+                continue;
+            }
+            uint32_t wrong = 0;
+            for (uint32_t x = 0; x < RC_W; x++) {
+                uint32_t want[4], got[4];
+                recCopyWant(i ? RC_E2 + x : x, want);
+                memcpy(got, img + (size_t)x * 16u, 16);
+                if (memcmp(want, got, 16) != 0 && wrong++ < 4) {
+                    rhi_test_log("FAIL record copy: read pass %d column %u: %08x %08x %08x %08x, "
+                                 "expected %08x %08x %08x %08x\n",
+                                 i, x, got[0], got[1], got[2], got[3], want[0], want[1], want[2],
+                                 want[3]);
+                }
+            }
+            failures += wrong != 0;
+        }
+        const uint64_t copies = s1.copies - s0.copies;
+        rhi_test_log("record copy: %llu copies counted (want 5: the fill, three by the compute "
+                     "shader, the readback; three refused)\n",
+                     (unsigned long long)copies);
+        if (copies != 5) {
+            rhi_test_log("FAIL record copy: %llu copies counted, expected 5\n",
+                         (unsigned long long)copies);
+            failures++;
+        }
+    }
+    rhi_wait_idle();
+    rhi_destroy_pipeline(fillA);
+    rhi_destroy_pipeline(fillB);
+    rhi_destroy_pipeline(read0);
+    rhi_destroy_pipeline(read1);
+    rhi_destroy_texture(src);
+    rhi_destroy_texture(rgba8);
+    rhi_destroy_texture(out[0]);
+    rhi_destroy_texture(out[1]);
+    rhi_destroy_buffer(rec);
+    rhi_destroy_buffer(up);
+    rhi_destroy_buffer(rb);
+    rhi_shutdown();
+    if (rhi_d3d11_debug_error_count()) {
+        rhi_test_log("FAIL %u debug layer error(s)\n", rhi_d3d11_debug_error_count());
+        failures++;
+    }
+    rhi_test_log("record copy: %s\n", failures ? "FAIL" : "all checks passed");
+    return failures ? 1 : 0;
+}
+
 /* ------------------------------------------------------------------- main */
 static void logPath(char *out, size_t size)
 {
@@ -610,6 +936,10 @@ int main(int argc, char **argv)
     rhi_test_log("\n== 1e. Direct3D 11 on WARP: the video memory budget\n");
     int rcMem = runVideoMemory();
 
+    /* 1f: the copy into a storage buffer (the VU pre-pass's record) */
+    rhi_test_log("\n== 1f. Direct3D 11 on WARP: a texture copied into a storage buffer\n");
+    int rcRec = runRecordCopy();
+
     /* 2: the hardware adapter */
     rhi_test_log("\n== 2. Direct3D 11 on the default hardware adapter\n");
     _putenv("ICO_D3D11_ADAPTER=");
@@ -636,7 +966,7 @@ int main(int argc, char **argv)
     int rcVk = rhi_test_run_cells(&vk);
 
     bool failed = rcWarp == 1 || rcMapped == 1 || rcMark == 1 || rcViews == 1 || rcMem == 1 ||
-                  rcHw == 1 || rcSwap == 1 || rcVk == 1;
+                  rcRec == 1 || rcHw == 1 || rcSwap == 1 || rcVk == 1;
     bool ran = rcWarp == 0 || rcHw == 0 || rcSwap == 0;
     char summary[1024];
     snprintf(summary, sizeof(summary),
@@ -646,6 +976,7 @@ int main(int argc, char **argv)
              "1c. the upload ring's written mark: %s\n"
              "1d. one upload buffer at t0 and t5: %s\n"
              "1e. the video memory budget: %s\n"
+             "1f. a texture copied into a storage buffer: %s\n"
              "2. Direct3D 11 on hardware (%s): %s\n"
              "3. Direct3D 11 swapchain: %s\n"
              "4. Vulkan (comparison): %s\n"
@@ -655,8 +986,8 @@ int main(int argc, char **argv)
              : ran  ? "rhi_d3d11_test: PASSED"
                     : "rhi_d3d11_test: nothing could run",
              warpAdapter[0] ? warpAdapter : "-", verdict(rcWarp), verdict(rcMapped),
-             verdict(rcMark), verdict(rcViews), verdict(rcMem), hwAdapter, verdict(rcHw),
-             verdict(rcSwap), verdict(rcVk),
+             verdict(rcMark), verdict(rcViews), verdict(rcMem), verdict(rcRec), hwAdapter,
+             verdict(rcHw), verdict(rcSwap), verdict(rcVk),
              s_debugActive ? "on (errors fail the test)"
                            : "not installed (Settings > Optional features > Graphics Tools "
                              "adds it)",

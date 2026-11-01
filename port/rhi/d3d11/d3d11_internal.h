@@ -107,7 +107,12 @@ static const D11FormatMap d11_formatMap[RHI_FMT_COUNT] = {
  * rhi_submit writes those ranges from the shadow into every part with
  * UpdateSubresource1 on the immediate context before the list executes
  * (d11_buffer_flush), so a list sees what the CPU wrote before its submit.
- * RHI_MEM_DEVICE: DEFAULT parts, filled by copies.  RHI_MEM_READBACK: a
+ * RHI_MEM_DEVICE: DEFAULT parts, filled by copies.  A storage-only device
+ * buffer (STORAGE_READ | COPY_DST, no other bind class: the VU pre-pass's
+ * record) has its SRV part made with D3D11_BIND_UNORDERED_ACCESS too and a
+ * UAV over the whole part (`uav`): the target of the compute shader that
+ * copies a texture into it (d3d11_cmd.c rhi_cmd_copy_texture_to_buffer,
+ * Direct3D 11 having no texture-to-buffer copy).  RHI_MEM_READBACK: a
  * STAGING buffer (`staging`) a copy writes and the shadow rhi_map_buffer
  * returns, refreshed from the staging buffer or texture at the map. */
 enum { D11_PART_VI = 0, D11_PART_CB = 1, D11_PART_SRV = 2, D11_PART_COUNT = 3 };
@@ -139,6 +144,9 @@ typedef struct D11Buffer {
     uint64_t texDstOffset;
     D11SrvCacheEntry srvs[D11_SRV_CACHE];
     uint32_t srvNext;
+    /* storage-only device buffers: a structured UAV (16-byte elements) over
+     * the SRV part, NULL otherwise */
+    ID3D11UnorderedAccessView *uav;
     /* UPLOAD: the written mark (rhi_buffer_note_written): the CPU wrote
      * nothing at or past `written` in the frame whose g_d11.frameIndex + 1
      * is writtenFrame (0: never noted, a submit writes every range read).
@@ -471,6 +479,18 @@ typedef struct D11State {
 
     /* RhiStats counters kept where the Vulkan backend counts them */
     RhiStats counts;
+
+    /* the texture-to-buffer copy's compute shader (d3d11_cmd.c
+     * d11_copy_cs_ready): made at the first copy into a storage buffer
+     * (copyCsState 1, or 2 when it could not be: copyCsWhy says why), with
+     * its 32-byte constant buffer; copyCsLock serialises the making (zero
+     * is SRWLOCK_INIT); copyCsCount the copies it recorded */
+    SRWLOCK copyCsLock;
+    int copyCsState;
+    char copyCsWhy[320];
+    ID3D11ComputeShader *copyCs;
+    ID3D11Buffer *copyCb;
+    uint64_t copyCsCount;
 } D11State;
 
 extern D11State g_d11;
@@ -579,6 +599,10 @@ void d11_set_name(ID3D11DeviceChild *o, const char *name);
  * set, and a vertex shader's dxbc and sig.  false with the reason in err
  * (the same on every later call). */
 bool d11_shader_compiled(D11Shader *s, char *err, size_t errn);
+
+/* d3d11_cmd.c: the texture-to-buffer copy's compute shader and constant
+ * buffer released (shutdown, before the device) */
+void d11_copy_cs_release(void);
 
 /* d3d11_cmd.c: the last draw recorded, as text (RhiStats.lastDrawText:
  * the renderer's self-test failure lines); NULL before the first draw */

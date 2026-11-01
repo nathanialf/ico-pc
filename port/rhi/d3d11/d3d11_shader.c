@@ -734,7 +734,76 @@ bool d3d11_shader_compile(const RhiShaderDesc *d, const char *cacheDir, const ch
     return true;
 }
 
+bool d3d11_shader_compile_text(const char *name, const char *text, size_t textLen,
+                               const char *entry, const char *target, void **dxbc, size_t *len,
+                               char *err, size_t errn)
+{
+    *dxbc = NULL;
+    *len = 0;
+    if (err && errn) {
+        err[0] = '\0';
+    }
+    if (!d3d11s_compiler()) {
+        if (err && errn) {
+            snprintf(err, errn, "d3dcompiler_47.dll is not available");
+        }
+        return false;
+    }
+    ID3DBlob *code = NULL, *msgs = NULL;
+    const HRESULT hr = s_d3dCompile(text, (SIZE_T)textLen, name, NULL, NULL, entry, target,
+                                    D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code, &msgs);
+    if (FAILED(hr) || !code) {
+        char msg[512];
+        d3d11s_blob_text(msgs, msg, sizeof(msg));
+        if (err && errn) {
+            snprintf(err, errn, "%s %s (%s) failed to compile (HRESULT 0x%08lx): %s", name, entry,
+                     target, (unsigned long)hr, msg[0] ? msg : "no message");
+        }
+        if (msgs) {
+            ID3D10Blob_Release(msgs);
+        }
+        if (code) {
+            ID3D10Blob_Release(code);
+        }
+        return false;
+    }
+    if (msgs) {
+        ID3D10Blob_Release(msgs);
+    }
+    const size_t n = (size_t)ID3D10Blob_GetBufferSize(code);
+    void *out = n ? malloc(n) : NULL;
+    if (!out) {
+        ID3D10Blob_Release(code);
+        if (err && errn) {
+            snprintf(err, errn, "out of memory for the DXBC");
+        }
+        return false;
+    }
+    memcpy(out, ID3D10Blob_GetBufferPointer(code), n);
+    ID3D10Blob_Release(code);
+    *dxbc = out;
+    *len = n;
+    return true;
+}
+
 #else /* !_WIN32 */
+
+bool d3d11_shader_compile_text(const char *name, const char *text, size_t textLen,
+                               const char *entry, const char *target, void **dxbc, size_t *len,
+                               char *err, size_t errn)
+{
+    (void)name;
+    (void)text;
+    (void)textLen;
+    (void)entry;
+    (void)target;
+    *dxbc = NULL;
+    *len = 0;
+    if (err && errn) {
+        snprintf(err, errn, "Direct3D 11 shaders compile on Windows only");
+    }
+    return false;
+}
 
 bool d3d11_shader_compile(const RhiShaderDesc *d, const char *cacheDir, const char *icoVersion,
                           void **dxbc, size_t *len, char *err, size_t errn)

@@ -19,6 +19,7 @@
  * be written before the copy is recorded, as every caller does. */
 #include "d3d11_internal.h"
 #include <assert.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1029,17 +1030,209 @@ void rhi_cmd_resolve_color(RhiCommandList cl, RhiTexture src, RhiTexture dst)
     g_d11.counts.copies++;
 }
 
+/* ------------------------------------------- the copy into a storage buffer
+ * Direct3D 11 copies a texture into a buffer only through a staging
+ * texture the CPU maps (the readback branch below).  The VU vertex
+ * pre-pass's record (port/render/rd_replay_vu.c vuRecPassCopy: three
+ * RGBA32_UINT planes, 1024 texels a row, into the frame slot's storage
+ * buffer, which the next pass's vertex shaders and the main ones read as
+ * StructuredBuffer<uint4> vu_rec_buf) needs the copy on the GPU, ordered
+ * between two passes of one list.  So a copy into a storage-only device
+ * buffer is this compute shader (cs_5_0, feature level 11_0, which
+ * rhi_init requires): a texel of the region a thread, Load from the
+ * texture's SRV into the buffer's UAV (d3d11_resource.c: an RGBA32_UINT
+ * copy source has an SRV, a storage-only device buffer a structured UAV of
+ * 16-byte elements), element first + row * pitch + column.  Its limits,
+ * each refused with its line: an RGBA32_UINT single-sampled source, a
+ * storage-only device destination, dstOffset and rowPitch whole 16-byte
+ * elements (the structured part's rule, d11_copy_into_structured), outside
+ * a render pass.  The runtime orders the dispatch after every earlier draw
+ * that read the buffer and before every later read; a resource bound as a
+ * UAV and as an SRV at once is not allowed, so every SRV the list bound is
+ * unbound first (the groups are bound again at the next draw, as at a
+ * pass's start) and the copy's SRV and UAV are unbound after it. */
+static const char s_copyCsHlsl[] =
+    "// d3d11_cmd.c: a texture region into a structured buffer\n"
+    "Texture2D<uint4> g_src : register(t0);\n"
+    "RWStructuredBuffer<uint4> g_dst : register(u0);\n"
+    "cbuffer CopyCB : register(b0) {\n"
+    "    uint4 g_rect; // the region: x, y, w, h\n"
+    "    uint4 g_to;   // the first element, the row pitch in elements\n"
+    "};\n"
+    "[numthreads(64, 1, 1)]\n"
+    "void cs_copy(uint3 id : SV_DispatchThreadID) {\n"
+    "    if (id.x >= g_rect.z || id.y >= g_rect.w) {\n"
+    "        return;\n"
+    "    }\n"
+    "    g_dst[g_to.x + id.y * g_to.y + id.x] =\n"
+    "        g_src.Load(int3(int(g_rect.x + id.x), int(g_rect.y + id.y), 0));\n"
+    "}\n";
+
+#define D11_COPY_CS_GROUP 64u
+
+/* The shader and its constant buffer, made once (any thread: the first
+ * copy's); false when they could not be (g_d11.copyCsWhy, logged once) */
+static bool d11_copy_cs_ready(void)
+{
+    const int st = __atomic_load_n(&g_d11.copyCsState, __ATOMIC_ACQUIRE);
+    if (st != 0) {
+        return st == 1;
+    }
+    AcquireSRWLockExclusive(&g_d11.copyCsLock);
+    if (g_d11.copyCsState != 0) {
+        const bool ok = g_d11.copyCsState == 1;
+        ReleaseSRWLockExclusive(&g_d11.copyCsLock);
+        return ok;
+    }
+    const uint64_t t0 = d11_now_ns();
+    char err[256];
+    void *dxbc = NULL;
+    size_t len = 0;
+    bool ok =
+        d3d11_shader_compile_text("d3d11_copy_cs.hlsl", s_copyCsHlsl, sizeof(s_copyCsHlsl) - 1u,
+                                  "cs_copy", "cs_5_0", &dxbc, &len, err, sizeof(err));
+    if (!ok) {
+        snprintf(g_d11.copyCsWhy, sizeof(g_d11.copyCsWhy), "%s", err);
+    } else if (!D11_CHECK(ID3D11Device_CreateComputeShader(g_d11.device, dxbc, len, NULL,
+                                                           &g_d11.copyCs)) ||
+               !g_d11.copyCs) {
+        g_d11.copyCs = NULL;
+        snprintf(g_d11.copyCsWhy, sizeof(g_d11.copyCsWhy),
+                 "CreateComputeShader refused its %zu bytes of DXBC", len);
+        ok = false;
+    } else {
+        D3D11_BUFFER_DESC bd;
+        memset(&bd, 0, sizeof(bd));
+        bd.ByteWidth = 32;
+        bd.Usage = D3D11_USAGE_DEFAULT;
+        bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        if (!D11_CHECK(ID3D11Device_CreateBuffer(g_d11.device, &bd, NULL, &g_d11.copyCb)) ||
+            !g_d11.copyCb) {
+            g_d11.copyCb = NULL;
+            D11_RELEASE(g_d11.copyCs);
+            snprintf(g_d11.copyCsWhy, sizeof(g_d11.copyCsWhy),
+                     "its 32-byte constant buffer could not be made");
+            ok = false;
+        }
+    }
+    free(dxbc);
+    if (ok) {
+        d11_set_name((ID3D11DeviceChild *)g_d11.copyCs, "rhi_d3d11 texture-to-buffer copy");
+        D11_LOG("texture-to-buffer copies into storage buffers: a compute shader (cs_5_0, %u "
+                "texels a group, made in %.1f ms; the VU vertex pre-pass's record)",
+                D11_COPY_CS_GROUP, (double)(d11_now_ns() - t0) / 1e6);
+    } else {
+        D11_LOG("texture-to-buffer copies into storage buffers: the compute shader could not be "
+                "made (%s): every such copy is skipped, and the VU vertex pre-pass's start-up "
+                "self-test turns the pre-pass off",
+                g_d11.copyCsWhy);
+    }
+    __atomic_store_n(&g_d11.copyCsState, ok ? 1 : 2, __ATOMIC_RELEASE);
+    ReleaseSRWLockExclusive(&g_d11.copyCsLock);
+    return ok;
+}
+
+void d11_copy_cs_release(void)
+{
+    D11_RELEASE(g_d11.copyCb);
+    D11_RELEASE(g_d11.copyCs);
+    g_d11.copyCsState = 0;
+}
+
+/* A copy into a buffer the backend cannot make: the first 8 lines, then
+ * every 100th (a refused record copy repeats every replay) */
+static void d11_copy_refused(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+
+static void d11_copy_refused(const char *fmt, ...)
+{
+    static uint32_t s_n;
+    const uint32_t n = __atomic_add_fetch(&s_n, 1u, __ATOMIC_RELAXED);
+    if (n > 8u && n % 100u != 0u) {
+        return;
+    }
+    char text[384];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(text, sizeof(text), fmt, ap);
+    va_end(ap);
+    D11_LOG("rhi_cmd_copy_texture_to_buffer: %s; skipped (%u so far%s)", text, (unsigned)n,
+            n == 8u ? "; from here every 100th is written" : "");
+}
+
+static void d11_copy_texture_to_storage(D11CommandList *c, D11Texture *t, RhiRect region,
+                                        D11Buffer *d, uint64_t dstOffset, uint32_t rowPitch)
+{
+    static bool s_firstLogged;
+    if (c->st.inPass) {
+        d11_copy_refused("inside a render pass");
+        return;
+    }
+    if (t->rhiFormat != RHI_FMT_RGBA32_UINT || t->samples > 1u || !t->srv) {
+        d11_copy_refused("into a device buffer only from a single-sampled RGBA32_UINT texture "
+                         "made with RHI_TEX_COPY_SRC on Direct3D 11 (format %d, %u samples)",
+                         (int)t->rhiFormat, t->samples);
+        return;
+    }
+    if (!d->uav) {
+        d11_copy_refused("into a device buffer only when it is storage-only "
+                         "(RHI_BUF_STORAGE_READ | RHI_BUF_COPY_DST) on Direct3D 11");
+        return;
+    }
+    if (((dstOffset | rowPitch) & 15u) != 0u) {
+        d11_copy_refused("offset %llu and row pitch %u are not whole 16-byte elements of the "
+                         "storage buffer",
+                         (unsigned long long)dstOffset, rowPitch);
+        return;
+    }
+    const uint64_t rowBytes = (uint64_t)region.w * 16u;
+    if ((uint64_t)region.x + region.w > t->width || (uint64_t)region.y + region.h > t->height ||
+        rowPitch < rowBytes || dstOffset > d->size ||
+        (uint64_t)(region.h - 1u) * rowPitch + rowBytes > d->size - dstOffset ||
+        region.h > D3D11_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION) {
+        d11_copy_refused("%ux%u texels at (%d,%d) of a %ux%u texture into %llu of a %llu-byte "
+                         "buffer, rows %u bytes apart, do not fit",
+                         region.w, region.h, region.x, region.y, t->width, t->height,
+                         (unsigned long long)dstOffset, (unsigned long long)d->size, rowPitch);
+        return;
+    }
+    if (!d11_copy_cs_ready()) {
+        d11_copy_refused("the compute shader is missing (%s)", g_d11.copyCsWhy);
+        return;
+    }
+    d11_unbind_srvs(c);
+    const uint32_t words[8] = {(uint32_t)region.x,          (uint32_t)region.y, region.w, region.h,
+                               (uint32_t)(dstOffset / 16u), rowPitch / 16u,     0u,       0u};
+    ID3D11DeviceContext_UpdateSubresource(c->ctx, (ID3D11Resource *)g_d11.copyCb, 0, NULL, words, 0,
+                                          0);
+    ID3D11DeviceContext_CSSetShader(c->ctx, g_d11.copyCs, NULL, 0);
+    ID3D11DeviceContext_CSSetConstantBuffers(c->ctx, 0, 1, &g_d11.copyCb);
+    ID3D11DeviceContext_CSSetShaderResources(c->ctx, 0, 1, &t->srv);
+    ID3D11DeviceContext_CSSetUnorderedAccessViews(c->ctx, 0, 1, &d->uav, NULL);
+    ID3D11DeviceContext_Dispatch(c->ctx, (region.w + D11_COPY_CS_GROUP - 1u) / D11_COPY_CS_GROUP,
+                                 region.h, 1);
+    ID3D11ShaderResourceView *noSrv = NULL;
+    ID3D11UnorderedAccessView *noUav = NULL;
+    ID3D11DeviceContext_CSSetShaderResources(c->ctx, 0, 1, &noSrv);
+    ID3D11DeviceContext_CSSetUnorderedAccessViews(c->ctx, 0, 1, &noUav, NULL);
+    g_d11.counts.copies++;
+    __atomic_add_fetch(&g_d11.copyCsCount, 1u, __ATOMIC_RELAXED);
+    if (d11_once(&s_firstLogged)) {
+        D11_LOG("texture-to-buffer copy by the compute shader: the first, %ux%u texels at (%d,%d) "
+                "into byte %llu, rows %u bytes apart (logged once)",
+                region.w, region.h, region.x, region.y, (unsigned long long)dstOffset, rowPitch);
+    }
+}
+
 /* Direct3D 11 has no copy from a texture into a buffer.  Into a readback
  * buffer (the crack filler's readback, rd_crack_fill.c) the region goes to
  * a staging texture, whose rows land in the buffer's shadow at the next
- * rhi_map_buffer (d11_readback_texture_target); into any other buffer (the
- * vertex pre-pass, off on this backend: colorBytesPerPixel 32) the copy is
- * skipped and logged once. */
+ * rhi_map_buffer (d11_readback_texture_target); into a storage-only device
+ * buffer (the VU vertex pre-pass's record) it is the compute shader above;
+ * into any other buffer the copy is skipped with a line. */
 void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
                                     RhiRect region, RhiBuffer dst, uint64_t dstOffset,
                                     uint32_t rowPitch)
 {
-    static bool s_otherLogged;
     D11CommandList *c = d11_rec(cl);
     D11Texture *t = d11_get_texture(src);
     D11Buffer *d = d11_get_buffer(dst);
@@ -1048,10 +1241,7 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
         return;
     }
     if (d->kind != RHI_MEM_READBACK) {
-        if (d11_once(&s_otherLogged)) {
-            D11_LOG("rhi_cmd_copy_texture_to_buffer: only into a readback buffer on Direct3D 11; "
-                    "skipped (logged once)");
-        }
+        d11_copy_texture_to_storage(c, t, region, d, dstOffset, rowPitch);
         return;
     }
     if (t->samples > 1u) {

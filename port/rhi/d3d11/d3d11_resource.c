@@ -98,10 +98,62 @@ static bool d11_make_part(D11Buffer *b, uint32_t part, UINT bind, const char *na
     return true;
 }
 
+/* A storage-only device buffer (STORAGE_READ | COPY_DST and no vertex,
+ * index or uniform use: the VU pre-pass's record, rd_replay_vu.c
+ * recEnsure): its SRV part is also an unordered-access target, the compute
+ * copy's (d3d11_cmd.c rhi_cmd_copy_texture_to_buffer) */
+static bool d11_storage_only(const RhiBufferDesc *desc)
+{
+    const uint32_t u = desc->usage;
+    return desc->memory == RHI_MEM_DEVICE && (u & RHI_BUF_STORAGE_READ) && (u & RHI_BUF_COPY_DST) &&
+           !(u & (RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM));
+}
+
+/* The SRV part of a storage-only device buffer with its UAV over the whole
+ * part (16-byte elements).  A device that refuses the unordered-access bind
+ * or the view gets the plain part (logged once): a copy into the buffer
+ * is then refused at the copy, with its line. */
+static bool d11_make_storage_part(D11Buffer *b, const char *name)
+{
+    static bool s_logged;
+    const char *why = NULL;
+    if (b->size / 16u > (1ull << D3D11_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP)) {
+        why = "past the elements one view holds";
+    } else if (!d11_make_part(b, D11_PART_SRV,
+                              D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS, name,
+                              false)) {
+        why = "the device refused the unordered-access bind";
+    } else {
+        D3D11_UNORDERED_ACCESS_VIEW_DESC v;
+        memset(&v, 0, sizeof(v));
+        v.Format = DXGI_FORMAT_UNKNOWN;
+        v.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+        v.Buffer.FirstElement = 0;
+        v.Buffer.NumElements = (UINT)(b->size / 16u);
+        if (D11_CHECK(ID3D11Device_CreateUnorderedAccessView(
+                g_d11.device, (ID3D11Resource *)b->part[D11_PART_SRV], &v, &b->uav))) {
+            return true;
+        }
+        b->uav = NULL;
+        D11_RELEASE(b->part[D11_PART_SRV]);
+        why = "the device refused its unordered-access view";
+    }
+    if (!s_logged) {
+        s_logged = true;
+        D11_LOG("buffer %s: %llu bytes made without an unordered-access view (%s): a texture "
+                "copy into it is refused (logged once)",
+                name ? name : "?", (unsigned long long)b->size, why);
+    }
+    return b->part[D11_PART_SRV] != NULL ||
+           d11_make_part(b, D11_PART_SRV, D3D11_BIND_SHADER_RESOURCE, name, false);
+}
+
 static void d11_buffer_release(D11Buffer *b, bool now)
 {
-    IUnknown *objs[D11_PART_COUNT + 2 + D11_SRV_CACHE];
+    IUnknown *objs[D11_PART_COUNT + 3 + D11_SRV_CACHE];
     uint32_t n = 0;
+    objs[n++] = (IUnknown *)b->uav; /* before the part it views */
+    b->uav = NULL;
     for (uint32_t i = 0; i < D11_PART_COUNT; i++) {
         objs[n++] = (IUnknown *)b->part[i];
         b->part[i] = NULL;
@@ -202,7 +254,9 @@ static RhiBuffer createBuffer(const RhiBufferDesc *desc)
             }
         }
         if (ok && (u & RHI_BUF_STORAGE_READ)) {
-            ok = d11_make_part(b, D11_PART_SRV, D3D11_BIND_SHADER_RESOURCE, desc->debugName, false);
+            ok = d11_storage_only(desc) ? d11_make_storage_part(b, desc->debugName)
+                                        : d11_make_part(b, D11_PART_SRV, D3D11_BIND_SHADER_RESOURCE,
+                                                        desc->debugName, false);
         }
         if (ok && !d11_buffer_any_part(b)) {
             /* copies only (COPY_SRC/COPY_DST): a buffer without a bind flag */
@@ -651,6 +705,12 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
     }
     if (desc->usage & RHI_TEX_RENDER_TARGET) {
         bind |= D3D11_BIND_RENDER_TARGET;
+    }
+    if (desc->format == RHI_FMT_RGBA32_UINT && (desc->usage & RHI_TEX_COPY_SRC) && samples == 1u) {
+        /* the source of a copy into a storage buffer: the compute copy
+         * reads it through its SRV (d3d11_cmd.c rhi_cmd_copy_texture_to_buffer;
+         * the VU pre-pass's record planes, rd_replay_vu.c recEnsure) */
+        bind |= D3D11_BIND_SHADER_RESOURCE;
     }
     if ((desc->usage & RHI_TEX_DEPTH_STENCIL) || fm->depth) {
         /* depth formats are always depth-stencil resources, as on D3D12 */
