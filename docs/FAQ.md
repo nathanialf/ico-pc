@@ -303,6 +303,34 @@ Your saves and your save states are in that folder (`memcard` and
 see [the game asks for the disc image
 again](TROUBLESHOOTING.md#the-game-asks-for-the-disc-image-again).
 
+## Moving to another computer or phone
+
+On the title screen, choose Options > Extras > **Back up your data** and save
+the file somewhere you can reach from the other device (a USB stick, a cloud
+folder, or on a phone the Downloads folder). It holds your memory card, your
+save states, your settings and your achievements. On the other device, set the
+game up with your disc image as usual, then choose Options > Extras >
+**Restore from a backup** and pick that file. The game restarts (on a phone it
+closes: start it again) with your data in place. This also works between a
+computer and a phone, and on Android 13 and later, where the game's own folder
+cannot be opened from a file manager.
+[The details](OPTIONS.md#extras).
+
+Your save states come with the backup, but a state only loads in a version of
+the game that can resume it, the same as on the device that made it.
+
+## Going back to the version you had before
+
+If a new version does not suit you, you can go back to the older one. Before
+you update, make a backup (Options > Extras > **Back up your data**). After
+you go back, restore it (**Restore from a backup**): your memory card,
+settings and achievements are as they were when you made the backup. A
+backup made by a newer version also restores in an older one: the memory card
+and the settings work, but its save states only load in a version that can
+resume them, so a state the newer version made may be greyed in the older one.
+Save at one of the game's own save points before you switch, so your progress
+is on the memory card.
+
 ## Do I need the disc image every time?
 
 No. The first start copies the game's files out of the disc image. After

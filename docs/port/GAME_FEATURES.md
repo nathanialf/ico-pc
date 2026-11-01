@@ -390,6 +390,7 @@ hold the rest.
 | Extras > Characters | W | W | W | W | W | W | W | the characters' textures by name (`appearance.c`); `appearance`, `settings_extras` (from the title it runs in the model viewer) |
 | Extras > Credits (title, once unlocked) | W | W | W | W | W | H | W | `credits_staff_packs` (the demo's DATA.DF has no `STGSTAFF*.DF`); `settings_discs`, `settings_extras_<slug>`, `credits_<slug>` |
 | Extras > Export textures, Add to Steam | W | W | W | W | W | W | W | the running disc's `DATA.DF`; disc-independent |
+| Extras > Back up your data, Restore from a backup (title) | W | W | W | W | W | W | W | the user folder's files, every disc's at once (the card folders hold each disc's directory; `states/<slug>/`); the manifest names the disc played; `backup`, `settings_backup`, `settings_backup_<slug>` (jpn, kor, cn) |
 | Photo mode (Film effect 1 to 4, Deja vu) | W | W | W | W | W | W | W | the grain is `gsb_filmNoise` on every disc (the 2001 arm's call is the port's); no reel scratches where `reel_row` is -1 (logged) |
 | Achievements | W | W | W | W | W | W | W | `ach_stages`, `key_suffix`; `achievements_<slug>` |
 | The New Game screen (Mirror mode, New Game+) | W | W | W | W | W | W | W | the start flag `gflag_new_game` (issue 147); `settings` `testNewGameStartFlags`, `settings_discs` |

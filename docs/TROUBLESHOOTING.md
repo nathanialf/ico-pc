@@ -753,6 +753,34 @@ If a state fails to load for any other reason, send a
 [problem report](#send-a-problem-report): the log has lines that start with
 `state:` that say what happened.
 
+## A backup will not save or restore
+
+Options > Extras > Back up your data and Restore from a backup say why in a
+message:
+
+- **Not now: the game is saving.** The memory card or a save state was being
+  written. Wait a moment and try again.
+- **There is nothing to back up yet.** The game has no memory card save, save
+  state or settings file yet.
+- **The data could not be written.** The place you chose is full, read-only or
+  gone (a USB stick taken out). Free some space or choose another place. When
+  restoring, the device itself is short of space.
+- **This file is not a backup made by this game.** Choose the `.zip` that
+  Back up your data saved. A zip you made yourself, or one that was unpacked
+  and packed again, is not taken.
+- **This backup was made by a newer version.** Update the game, then restore
+  it.
+- **This backup is damaged** or **holds files outside the game's own
+  folders.** The file changed after it was saved (a download that did not
+  finish, or a program that edited it). Use another copy.
+- **The backup could not be put in place** (a box when the game starts after a
+  restore). Something kept a file or folder busy, for example a file manager
+  or a cloud program that was syncing the game's folder. Your data is exactly
+  as it was. Close that program and restore again.
+
+The log has lines that start with `backup:` that say what happened, and a
+[problem report](#send-a-problem-report) carries them.
+
 ## Texture packs and model packs
 
 If a texture or model from a pack does not show up, look in the log for

@@ -12,6 +12,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/layout_ext.h`, `layout_ext.c` | the layout extension: port layouts and rows past the game's tables, text, glyph and rectangle rows, the text hook, the back buttons, pointer roles |
 | `port/ui/settings.h`, `settings.c` | the Settings menu: the pages, the entry rows, the New Game and Quit screens, the values and their setters, the saves |
 | `port/ui/settings_graphics.h`, `settings_graphics.c` | Settings > Graphics: the Graphics API and Graphics card rows' values and steps, Apply and its countdown |
+| `port/ui/settings_backup.h`, `settings_backup.c` | Settings > Extras > Back up your data and Restore from a backup: the rows' words and notes, Cross, the confirmations, the popups |
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
 | `port/ui/ui_hint.h`, `ui_hint.c` | a line of button prompts (glyphs and words) |
 | `port/ui/strings.h`, `strings.c`, `strings_{en,fr,de,it,es,ja,ko,zh}.c` | the UI strings, one table per language; the serial notes; the Japanese, Chinese and Korean line-break rules |
@@ -197,7 +198,7 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
 | Gameplay | Yorda safe, Time to rescue Yorda, Shadow speed, Stick fix, Door fix, Yorda trips (`UI_OPT_YORDA_TRIPS`, `[gameplay] yorda_trips`, its note `UI_STR_OPT_YORDA_TRIPS_NOTE`), Natural chains, Skip the opening (`UI_OPT_SKIP_OPENING`), Film effect, Players, Back; eleven rows once the game is cleared, so the page scrolls |
 | Achievements | a list, the popups switch |
-| Extras | Music, Models, Credits, Characters, Game variants (`UI_PAGE_VARIANTS`), Add to Steam, Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Achievement popups, Back |
+| Extras | Music, Models, Credits, Characters, Game variants (`UI_PAGE_VARIANTS`), Add to Steam, Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Back up your data (`UI_OPT_EXTRAS_BACKUP`), Restore from a backup (`UI_OPT_EXTRAS_RESTORE`), Achievement popups, Back |
 | Game variants (`UI_PAGE_VARIANTS`) | Shadow toughness, One hit per swing, Shadows never dodge, Shadow aggression, No hints, Queen barrier, No cutscene look-around, Ignore cutscene cameras (`UI_OPT_VAR_*`, one per `IcoVariantId`), Debug menu (`UI_OPT_VAR_DEBUG_MENU`, a press row, shown with Developer mode on), Back |
 | Music | the music gallery, a list |
 | Characters | nine colour rows, Switch, Randomize, Reset, Back |
@@ -234,7 +235,8 @@ Which rows show depends on where the menu was entered and what the machine has: 
 settings (Brightness, Vibration, Button configuration, Film effect, Players) only from
 the pause menu (Hold type shows from the title too: `[gameplay] hold_type`), Film effect and Players once the game is cleared; Video mode, Model pack and Extras'
 Music, Models and Credits only from the title (Add to Steam also only where the window host installs
-its handler, Export textures only while a `UiTextureExportHost` is set, the window build's; neither is in
+its handler, Export textures only while a `UiTextureExportHost` is set, the backup rows only while a
+`UiBackupHost` is set, the window build's but iOS's; none of them is in
 `isExtrasOpt`, which is the three rows that leave the stage); the dump rows only in developer mode; the Touch screen link only with a touch screen; the
 window and mouse camera rows not on Android; the Graphics link only with two or more renderer names (`ui_settings_set_backend_names`), the Graphics driver link only with a driver host on an
 Adreno GPU (`port/ui/settings.c` (`optShown`, `isGameOpt`, `isExtrasOpt`)). `layoutPage` masks the
@@ -368,7 +370,7 @@ what is pending and calls the quit handler: the [window build](ARCHITECTURE.md#t
 
 The menu knows nothing of the platform; the window host installs what the pages ask: the window
 mode query, the anti-aliasing list and block, the texture and model pack counts, the touch query,
-the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the renderer names (`ui_settings_set_backend_names`, filled from `rhi_backend_name` in `ico_window_open`, so port/ui never links the RHI), the graphics card names (`ui_settings_set_adapter_names(names, n, current, automatic)`: the suitable entries of `rhi_adapter_list`, the card running and the one Automatic picks, copied; `port/platform/window_switch.c` (`installAdapters`) at the start and after every switch), the Graphics page's Apply host (`UiGraphicsHost`, below), the Steam handler, the texture export host (`UiTextureExportHost`, below), the Save states host (`UiStatesHost`, below), the models
+the touch editor's host (`UiTouchEditHost`), the Quit word, the Graphics driver host (`UiGpuDriverHost`), the renderer names (`ui_settings_set_backend_names`, filled from `rhi_backend_name` in `ico_window_open`, so port/ui never links the RHI), the graphics card names (`ui_settings_set_adapter_names(names, n, current, automatic)`: the suitable entries of `rhi_adapter_list`, the card running and the one Automatic picks, copied; `port/platform/window_switch.c` (`installAdapters`) at the start and after every switch), the Graphics page's Apply host (`UiGraphicsHost`, below), the Steam handler, the texture export host (`UiTextureExportHost`, below), the backup host (`UiBackupHost`, below), the Save states host (`UiStatesHost`, below), the models
 handler, the Characters host (the model viewer's panel) (`port/ui/settings.h`
 (`ui_settings_set_*`)). A page whose host is missing hides its row.
 
@@ -448,6 +450,50 @@ build installs no host, so the row stays hidden there and in the UI tests withou
 
 ctest `settings_extra` (`testExportTextures`, a fake host), `settings_extras` (the rows hidden
 without a host and on the pause menu).
+
+### Extras > Back up your data and Restore from a backup
+
+`UiBackupHost` (`port/ui/settings.h`) is set by `port/platform/backup_host.c`
+(`ico_backup_host_install`, from `main_host.c` `setup_states` with the Save states host; not on
+iOS) and drives [the backup](PLATFORM.md#backups) behind the two rows. The rows show from the
+title only, after Export textures (`optShown`: `onTitle() && ui__backup_hosted()`). Their words,
+Cross and the popups are `port/ui/settings_backup.c` (`settings_backup.h`, the `ui__backup_*`
+calls `settings.c` makes in `refreshPage`, the Cross case and `ui_settings_vsync`). The host's
+`begin`, `proceed` and `cancel` only set its state; `pump()`, called once a vsync from
+`ui_settings_vsync` (the window's per-vsync step, outside the game's fibers, as SDL's dialogs
+require), opens the dialog, starts the work and ends the run; `poll()` fills a `UiBackupStatus`
+(`job`, `state`: `UI_BACKUP_IDLE`, `_CHOOSING`, `_WORKING`, `_ASK`, `_DONE`, `_FAILED`,
+`_CANCELLED`; `done`, `total`, `why`: `UI_BACKUP_WHY_*`; `restarts`; and for `_ASK` the backup's
+`version`, `date`, `discs` and `otherDisc`).
+
+- Back up your data (`UI_STR_EXTRAS_BACKUP`, note `UI_STR_BACKUP_NOTE`): Cross calls
+  `begin(UI_BACKUP_JOB_SAVE)` (log `extras: back up your data: started`); the note is
+  `UI_STR_BACKUP_CHOOSING` while the dialog is open and `UI_STR_BACKUP_PROGRESS` (two `%d`, done
+  and total) while the zip is written, written outside `setNote`'s cache (`liveNoteText`).
+- Restore from a backup (`UI_STR_EXTRAS_RESTORE`, note `UI_STR_RESTORE_NOTE`): the first Cross
+  asks nothing of the host: the popup `UI_STR_RESTORE_CONFIRM_TITLE` with `_CONFIRM_BODY` (what is
+  replaced, the restart) and the label `UI_STR_RESTORE_AGAIN`; a second Cross within
+  `RESTORE_CONFIRM_SECONDS` (8) calls `begin(UI_BACKUP_JOB_RESTORE)`; the first press ends when
+  the cursor leaves the row (the row's refresh with the cursor elsewhere) or the time runs out.
+  The note is `UI_STR_RESTORE_CHOOSING`, then `UI_STR_RESTORE_READING`. When the host has read
+  the backup (`_ASK`), `ui__backup_vsync` shows `UI_STR_RESTORE_ASK_TITLE` once with the lines
+  `UI_STR_RESTORE_VERSION`, `_SAVED`, `_DISCS` (one `%s` each), `_OTHER_DISC` when another disc
+  made it, `_PRESS`; the label is `UI_STR_RESTORE_THIS` and the note `UI_STR_RESTORE_ASK_NOTE`
+  (the version). Cross calls `proceed()` (the progress `UI_STR_RESTORE_PROGRESS`); the cursor
+  leaving the row, or `RESTORE_ASK_SECONDS` (60), calls `cancel()` (log `extras: restore from a
+  backup: not restored (<why>)`).
+- The end (from `ui_settings_vsync`, on any screen, once): `_DONE` pushes `UI_STR_BACKUP_DONE`
+  with `_DONE_BODY` (`%d` files, `%s` the file's name), or for a restore `UI_STR_RESTORE_DONE`
+  with `_DONE_RESTART` or `_DONE_CLOSE` (the host's `restarts`); `_FAILED` pushes
+  `UI_STR_BACKUP_FAILED` or `UI_STR_RESTORE_FAILED` with the reason `UI_STR_BACKUP_WHY_*`; a
+  closed dialog (`_CANCELLED`) pushes nothing. Log `extras: <row> ended: state S, D of T files,
+  reason R`. While a job is under way (and after a restore is done, until the run ends) Cross on
+  either row asks nothing (`NEGATIVE_SE`).
+- The bodies go through `fmtText` (`ui__settings_fmt`).
+
+ctest `settings_backup` (`settings_backup_test.c`, a fake host; `_jpn`, `_kor`, `_cn`: the rows on
+those discs' numbers and confirm button), `settings_extras` and `settings_extra` (the page's
+eleven rows, the backup rows hidden without a host).
 
 ## Strings and languages
 
@@ -782,8 +828,8 @@ right edge of the 4:3 picture for 0.3 s, held for 4 s, sliding out for 0.3 s, co
 call, `ico_host_vsync_hz()` (15, 200 and 15 at 50 Hz; 18, 240 and 18 at 60 Hz, the Japanese disc's
 and the European disc's 60 Hz mode; `port/ui/popup.h` (`UI_POPUP_QUEUE`, `ui_popup_set_vsync_hz`,
 `ui_popup_slide_vsyncs`, `ui_popup_hold_vsyncs`), 50 Hz by default in the tests). Achievements, photo mode, the model viewer, the Graphics driver page and
-Extras > Add to Steam and Export textures push them (`port/ui/settings.c` (`steamAdd`,
-`texExportEnd`)); `ui_popup_title` and `ui_popup_body` give the one showing (tests). They are drawn on the
+Extras > Add to Steam, Export textures and the backup rows push them (`port/ui/settings.c` (`steamAdd`,
+`texExportEnd`); `port/ui/settings_backup.c` (`ui__backup_press`, `ui__backup_vsync`)); `ui_popup_title` and `ui_popup_body` give the one showing (tests). They are drawn on the
 presentation overlay (`rd_set_present_overlay`) at every [present](ARCHITECTURE.md#terms), after the
 box blit and at the output's resolution: outside the game's frame, so a frame the GS keeps never
 shows one twice, and never mirrored (`port/ui/popup.h`, header comment; `port/ui/ui_host.c`
@@ -1275,6 +1321,8 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   near the cap.
 - `settings_adapter` (`test/settings_adapter_test.c`): the Graphics card row and Apply on another
   card over a fake host ([Graphics > Apply](#graphics--apply)).
+- `settings_backup` (`test/settings_backup_test.c`): Extras' backup rows over a fake host
+  ([Extras > Back up your data and Restore from a backup](#extras--back-up-your-data-and-restore-from-a-backup)).
 - `settings_render` (`test/settings_photo_test.c` with `SETTINGS_RENDER`): every screen through rd
   on a Vulkan device, written as PNGs, the words as sheet strips in the scene list, photo mode's
   panel in every language.

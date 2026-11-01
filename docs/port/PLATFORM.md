@@ -33,7 +33,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/fpenv.c`, `fpenv.h` | the simulation's FP mode and the host's |
 | `port/platform/clock.c`, `clock.h` | the wall clock behind `sceCdReadClock`; the EE timers T0 to T3 |
 | `port/platform/host_config.c`, `host_config.h` | the executable's folder, the user folder, portable mode, `ico-pc.ini`, the TOML reader and writer, SHA-1, message boxes, the log redirect |
-| `port/platform/host_fs.c`, `host_fs.h` | file calls on UTF-8 paths (wide calls on Windows) |
+| `port/platform/host_fs.c`, `host_fs.h` | file calls on UTF-8 paths (wide calls on Windows), the folder walk and listing, a folder's removal with everything below it |
 | `port/platform/diag_host.c`, `diag_host.h` | crash handlers, heartbeat, watchdog, milestones, float faults, the summary line, `ico_log_limited` |
 | `port/platform/symmap.c`, `symmap.h` | the crash and watchdog reports' symbolizer: a GNU ld link map or an nm table (plain or gzip), no allocation |
 | `port/platform/report.c`, `report.h` | the report file of an abnormal end, `logs/report-<date>-<time>.zip`, no allocation |
@@ -51,6 +51,8 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/startup_retry.c`, `startup_retry.h` | the steps the relaunch takes after a graphics driver crash or a lost graphics device |
 | `port/platform/hotkeys.c`, `hotkeys.h` | F11 and F12 |
 | `port/platform/dump_zip.c`, `dump_zip.h` | F12's zip and the aspect sweep's zip |
+| `port/platform/backup.c`, `backup.h` | Options > Extras > Back up your data and Restore from a backup: the zip of the user folder's data, its manifest and checks, the unpacking and the start's swap ([Backups](#backups); pure C, tested everywhere) |
+| `port/platform/backup_host.c`, `backup_host.h` | the two rows' host in the window build: the file dialogs, the work on its own thread, the end of the run after a restore (not on iOS) |
 | `port/platform/steam_shortcut.c`, `steam_shortcut.h` | Settings > Extras > Add to Steam (Windows and Linux; not offered on macOS) |
 | `port/platform/gpu_driver.c`, `gpu_driver.h` | Android graphics driver packages (pure C, tested everywhere) |
 | `port/platform/android/` | `main_android.c`, `host_android.c`, `android_paths.c`, `iso_import.c`, `gpu_driver_android.c` |
@@ -879,8 +881,8 @@ Three places matter (`port/platform/host_config.h`):
 
 - the executable's folder (`ico_host_exe_dir`): `ico-pc.ini` and `logs/` beside the program on
   Windows and Linux;
-- the [user folder](ARCHITECTURE.md#terms) (`ico_host_pref_dir`): `config.toml`, the memory cards
-  (`memcard/`), the save states (`states/<disc slug>/`, [above](#the-file)), the extracted `ico.o2r`, `ico-jpn.o2r` and `ico-kor.o2r`, `dumps/`, the developer `dev/` folder. In the window build
+- the [user folder](ARCHITECTURE.md#terms) (`ico_host_pref_dir`): `config.toml`, `achievements.toml`, the memory cards
+  (`memcard/`, `memcard-preview/`), the save states (`states/<disc slug>/`, [above](#the-file)), the extracted `ico.o2r`, `ico-jpn.o2r` and `ico-kor.o2r`, `dumps/`, the developer `dev/` folder; a restore waiting for the next start (`backup-restore/`, [Backups](#backups)). In the window build
   it is SDL's `SDL_GetPrefPath("ico-pc", "ico-pc")`; in the headless build and the tests, which have
   no SDL, the executable's folder (`port/platform/host_config.c` (`ico_host_pref_dir`);
   `port/config/CMakeLists.txt` (`ICO_HOST_SDL_PREFPATH`));
@@ -936,6 +938,117 @@ write to), the logs go to `<user folder>/logs` with the line `ico_pc: the logs f
 be made (<error>); the logs are in <dir>`, and every later `ico_host_logs_dir` names that folder
 (`port/platform/host_config.h` (`ico_host_set_logs_dir`); `port/platform/main_host.c` (`host_main`)).
 Only when that fails too does the log go to the console.
+
+### Backups
+
+Options > Extras > Back up your data and Restore from a backup move the player's own data in one
+zip (`port/platform/backup.h`, header comment). A backup holds, from the user folder: every
+folder named `memcard` or `memcard` followed by letters, digits, `-` or `_` (`memcard`,
+`memcard-preview`), `states/` without a slot's developer dumps (`states/<slug>/dump-*`),
+`config.toml` and `achievements.toml`; never a file still being written (`*.tmp`, `*.part`), the
+logs, `ico-pc.ini` (this device's disc image and folders), the pipeline caches, `dumps/`, the
+texture and model packs or the extracted game data (`backup.c` (`top_visit`, `collect_add`)). A
+card folder that `saves=` or `[paths] saves` puts outside the user folder is not in it; the start
+of the window build logs `backup: the memory card folder <dir> is outside the user folder <dir>:
+a backup does not hold it` (`backup_host.c` (`ico_backup_host_install`)).
+
+**The zip.** miniz through `host_fs.h`'s streams: save states and pictures stored (already
+packed), the rest deflated at the fastest level, each entry with its file's time; then
+`backup.txt`, the manifest, last, with the figures of what went in:
+
+```
+ICO PC backup 1
+version <label>         (the version label; "development" for a development build)
+commit <commit>
+platform windows-x64    (state_file.h ico_state_platform_tag)
+disc pal                (the disc played when it was made)
+discs pal jpn           (that disc and each states/<slug> folder)
+time <seconds since 1970>
+files <entries but the manifest>
+bytes <their size, uncompressed>
+```
+
+The zip is written as `<name>.part`, synced and renamed over `<name>` (`ico_backup_write`). The size
+of each file is the open file's, so a file replaced while the backup runs (the achievements'
+writer renames a new one in) goes in whole. A busy memory card (`ico_mc_host_pending`) or a save
+state write in flight (`ico_state_file_busy`) refuses it before anything is read.
+
+**The checks** (`ico_backup_inspect`, and again when a restore unpacks): the file is a zip with a
+`backup.txt` whose first line is `ICO PC backup <n>` (else `NOT_BACKUP`), `n` at most
+`ICO_BACKUP_FORMAT` (else `NEWER`); every entry's name is one a backup may hold
+(`ico_backup_name_ok`: relative, `/` between parts, no empty part, no `.` or `..`, no `\`, `:`,
+control character or Windows-reserved character, at most 8 parts and 240 bytes, under one of the
+places above; else `UNSAFE`); at most `ICO_BACKUP_MAX_FILES` (8192) entries, none over
+`ICO_BACKUP_MAX_FILE_BYTES` (512 MB) and `ICO_BACKUP_MAX_BYTES` (3 GB) in all (else `TOO_BIG`); the
+count and the total size agree with the manifest, and no entry is encrypted or packed with a method
+miniz cannot read (else `DAMAGED`). A backup made while another disc was played is accepted and
+said (`other_disc`): every disc shares the card folder, and `states/` keeps a folder per disc.
+
+**A restore is two steps.** `ico_backup_restore`, on the backup's worker after the player's third
+press: the gates (the card, a save state write, the disc: `ico_cdvd_host_idle`), the checks, then
+every entry unpacked under `<user folder>/backup-restore.part/` (each entry's data held to its size
+and checked against its CRC, each file synced), the manifest kept there with a `from <file name>`
+line, and the folder renamed to `backup-restore/`; nothing the game uses changes, and a failure
+deletes what was unpacked. The next start puts it in place (`main_host.c` (`apply_restore`), right
+after the user folder's line, before `config.toml`, the memory card or `achievements.toml` is read;
+`ico_backup_apply_pending`): for each thing in `backup-restore/`, the one in the user folder is
+renamed to `<name>.old-<seconds>` and the backup's is moved in (`ico_rename_replace`, a rename on
+one volume); once every move worked the old copies are deleted (`ico_remove_tree`, hidden files
+too, a link deleted, never followed) and then the staging folder. A move that fails undoes every
+earlier one, newest first, and deletes the staging folder (so the next start does not try again):
+the data is as it was, logged, and a box says so. What the backup does not hold stays as it is. A
+`backup-restore.part/` found at the start (a run that ended while unpacking) is deleted. The moves
+wait for the start because the run that unpacks still writes on its way out: the settings on quit
+(`ui_settings_save_on_quit`), the achievements' writer, the iOS background save; done at once,
+those would land over the restored files.
+
+**The run's end** (`backup_host.c` (`host_pump`)): 5 s after the restore's popup the host posts
+`SDL_EVENT_QUIT`, as the title's Quit does. On Windows, Linux and macOS it first asks for a restart
+at exit (`diag_host.h` (`ico_diag_restart_at_exit`)): the device loss's relaunch at exit with an
+empty `ICO_STARTUP_RETRY`, so the new run takes no restart step and writes its log on after this
+run's lines; on Android (and wherever the relaunch was not prepared) the app closes and the
+player's next start puts the backup in place. The popup says which (`UiBackupStatus.restarts`,
+`ico_diag_can_restart`).
+
+**The dialogs.** On the desktop, SDL's `SDL_ShowSaveFileDialog` (the suggested file
+`ico-pc-backup-<date>.zip` in the documents folder, `ico_backup_default_name`) and
+`SDL_ShowOpenFileDialog`, both with a `*.zip` filter and the game's window as parent, opened from the
+pump (the main thread, outside the game's fibers); the answer may come on another thread and
+carries the dialog's number, so a late one is dropped. On Android the app's own document screens
+([The file picker](#the-file-picker)): a backup asks `IcoActivity.createFile`
+(`ACTION_CREATE_DOCUMENT`, type `application/zip`, the name suggested, request code `0x1C0E`;
+`host_android.h` (`ico_android_create_file`), answered through the same pending pick and
+`nativePickDone`); the zip is written in the cache folder (`backup-out.zip`) and copied, start to
+end, through the descriptor `IcoActivity.openFd` gives for the URI (`ico_android_open_fd`, mode
+`wt`, else `w`; a provider may hand a pipe, which takes no seek and no `fsync`). A restore picks with
+`ico_android_pick_file` and copies the file into the cache folder (`backup-in.zip`, through
+`SDL_IOFromFile` and `iso_import.h` `ico_iso_copy`, after a free-space check), since the zip reader
+seeks; the unpacking needs the backup's size free in the files folder. The file's name shown and
+logged is the provider's (`IcoActivity.displayName`, `ico_android_display_name`). A screen that
+closed without an answer ends as closed once the app is back in front for 2 s, or after 300 s
+(`pick_watch`, as the graphics driver page's).
+
+**Across versions.** A backup restores into any version that reads its format: the card folders
+and the settings are the game's and the program's own files. Save states keep their own rule
+([Across versions](#across-versions)): a state the newer version made may be refused by the older
+one.
+
+Log lines (`backup:`): `backup: <row>: opening the save dialog|file dialog (dialog N)`, `backup:
+the dialog answered (dialog N): a file|closed without a file, T ms after it opened`, `backup: the
+file dialog failed (dialog N): <error>`, `backup: the file screen (dialog N) gave no answer: <why>
+(T ms)`, `backup: a late answer for dialog N (now M) ignored`, `backup: wrote <name> (N files, M
+KB) in T ms`, `backup: read <name>: version V (commit C), <platform>, disc D, discs ..., made at T,
+N files, M KB, holding <items>[; made while another disc was played]`, `backup: restored from
+<name> (version V, discs ...): N files ready; the game restarts to put them in place|the game
+closes, and its next start puts them in place`, `backup: ending the run so that the next start puts
+the backup in place[; the game starts again by itself]`, `backup: the restore of <name> was not
+confirmed; nothing changed`, `backup: refused: <row>: <what> (<detail>)`, `backup: <row>: could
+not read|write <name>: <detail>`; at the start `backup: restored from <name> (version V, discs
+...): N files replaced (<items>)`, `backup: the backup from <name> could not be put in place:
+<what> (<detail>); the data is as it was`, `backup: a restore the last run did not finish
+unpacking was deleted; nothing changed`; the menu's `extras: back up your data|restore from a
+backup: started|ended: state S, D of T files, reason R`. The relaunch logs `ico_pc: starting the
+game again, as asked`.
 
 ### The disc a start plays
 
@@ -2153,6 +2266,19 @@ pick N (now M) ignored`, and for the disc picker `ico_pc: the file picker could 
 and `ico_pc: the file picker failed: <why>`. One limit: Android gives every answer the same
 request code, so if an earlier picker that the game gave up on answers after a new pick started,
 that answer is taken as the new pick's (the game only gives up on a picker that did not appear).
+
+Options > Extras > Back up your data uses the same pending pick for the system's "save as" screen:
+`ico_android_create_file(gen, name, mime, fn, user, &noApp, why, n)` calls the static
+`IcoActivity.createFile(int gen, String name, String mime)`, which starts `ACTION_CREATE_DOCUMENT`
+(`CATEGORY_OPENABLE`, the type, `EXTRA_TITLE` the name) with request code `0x1C0E`;
+`onActivityResult` takes both codes and answers through `nativePickDone` (its log line says
+`create N:` for this one). `IcoActivity.openFd(String uri, String mode)` opens a URI either screen
+answered through the content resolver and hands the detached descriptor to the native side
+(`ico_android_open_fd`; a failure logs `ico_pc: file picker: open <mode> failed: <exception
+kind>`, never the exception's text, which can name the player's file), and
+`IcoActivity.displayName(String uri)` gives the name the system shows for it
+(`ico_android_display_name`). The manifest's `<queries>` names `CREATE_DOCUMENT` too
+([Backups](#backups)).
 
 ## Steam shortcut
 

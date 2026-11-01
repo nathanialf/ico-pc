@@ -524,8 +524,9 @@ page, and it is the same setting in both places.
 
 On the title screen's Options this page has Music, Models, Credits,
 Character Customization, Game variants, Add to Steam (on Windows and Linux),
-Export textures and Achievement pop-ups. In the pause menu's Options it has
-only Character Customization, Game variants and Achievement pop-ups.
+Export textures, Back up your data, Restore from a backup and Achievement
+pop-ups. In the pause menu's Options it has only Character Customization,
+Game variants and Achievement pop-ups.
 [Save states](#save-states) are on the pause menu and the Continue screen.
 
 - **Music:** listen to the game's music and sound effects.
@@ -568,6 +569,33 @@ only Character Customization, Game variants and Achievement pop-ups.
   game draws while it runs, such as fog and glow; those need **Dump
   textures**). A [spreadsheet per disc](https://github.com/nathanialf/ico-pc/blob/main/docs/textures/README.md)
   lists every file a pack can hold and which pictures share one name.
+- **Back up your data** (on the title screen's Extras page only; Windows,
+  Linux, the Steam Deck, Mac and Android): saves your memory card, your save
+  states, your settings and your achievements in one `.zip` file. The system's
+  "save as" window opens so you can choose where it goes (on Android, the
+  phone's file screen, so the file can go to Downloads, a memory card or a
+  cloud folder, even though the game's own folder is hidden on Android 13 and
+  later). The suggested name is `ico-pc-backup-` and the date. The line under
+  the row counts the files as they are saved, and a message says how many were
+  saved and where. The game's files copied from your disc, the logs, the
+  texture and model packs and `ico-pc.ini` are not in it: a backup holds your
+  progress and your choices, not the game. Use it to keep a copy, to move to
+  another computer or phone, or to go back to an earlier point.
+- **Restore from a backup** (on the title screen's Extras page only): puts a
+  backup back. The first press says what it replaces (the memory card, the
+  save states, the settings and the achievements here) and that the game
+  restarts; press again to choose the file. The game reads it and says which
+  version made it, when, and for which discs (and whether it was made while
+  another disc was played: it is restored all the same, since every disc
+  shares the memory card). Press a third time to restore it; moving off the
+  row, or waiting a minute, keeps your data as it is. The game then restarts
+  by itself on a computer, or closes on a phone (start it again), and puts the
+  backup in place as it starts. What the backup does not hold stays as it is.
+  If anything goes wrong while it is put in place, your data stays exactly as
+  it was and a message says so. A backup from another computer or phone works
+  the same; a backup made by a newer version works in an older one for the
+  memory card and the settings, but its save states only load in the version
+  that can resume them ([save states and versions](#save-states)).
 
 ### Game variants
 

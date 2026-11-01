@@ -468,6 +468,21 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   zip included, an `.rddump` left out), the newest `-present.png`, the newest `report-*.zip` (not
   another `report-` file), a tie in time to the greater name, missing folders skipped, the names
   line and a short buffer (`share_report`).
+- `backup_test.c`: Options > Extras' backup and restore (`backup.h`) on a user folder of its own
+  under the build folder: the names a backup may hold (no `..`, no absolute or drive path, no `\`,
+  no empty part, the places only); a backup holding the card folders, `states/`, `config.toml` and
+  `achievements.toml` and none of `ico-pc.ini`, `logs/`, `dumps/`, the textures, a slot's
+  developer dump or a `.tmp` file, save states and pictures stored and text deflated, the manifest
+  last with the version, platform, discs, time and count; inspect reading it back and saying when
+  another disc made it; the restore unpacking into `backup-restore/` and changing nothing else, the
+  start's step putting it in place byte for byte, files added since gone, nothing outside its
+  places touched, no old copy or staging left, a second call finding nothing; the refusals (not a
+  zip, a zip without the manifest, another program's manifest, a newer format, more entries than
+  the manifest says, `states/../../x`, a file outside the places, an entry past a lowered size
+  bound, a busy card or save state write with nothing unpacked, nothing to back up, past a lowered
+  count bound); each of the first eight moves failing in turn (`ico_backup_test_fail_move`) leaving
+  every file as it was, no old copy, the staging deleted; an unfinished unpacking deleted at the
+  start; `ico_remove_tree` taking hidden files; the suggested file name (`backup`).
 - `dump_zip_test.c`: F12's zip (with the tick before as its second `.rddump`, and the blended present's frame moved in third by `ico_zip_move_file`, the loose file gone), the aspect sweep's zip and the device-loss zip (the lost frame first, the second `.rddump` the frame before, the pruning to the newest three), written and read back with miniz
   (`dump_zip`).
 - `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
@@ -1542,6 +1557,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   texture); `testStaleRowReturns`: four upper rows at another size leave for 100 frames, their
   shelf is emptied meanwhile (the first row's old cell then holds other texels) and they come
   back with the same letters, no word in the plain font (`menu_text`).
+- `settings_backup_test.c`: Options > Extras > Back up your data and Restore from a backup over
+  a fake `UiBackupHost` (`settings_backup`, and on the other discs `_jpn`, `_kor`, `_cn`: the rows
+  and the disc's confirm button): the rows hidden without a host and on the pause menu, shown on
+  the title after Export textures with their words and notes, Down and Up between them, the page
+  fitting; Back up: Cross asks once, the dialog's note, the progress, the host's pump on every
+  `ui_settings_vsync`, the done popup once with the files and the name, the failed popup's
+  reason, nothing for a closed dialog or a begin the host refused; Restore: the first press asks
+  nothing of the host and shows what is replaced, the label asks again, the press runs out after
+  8 s and when the cursor moves off, the second opens the dialog; the backup read: its popup
+  (version, date, discs, another disc) once, the label and the note, the press that restores it,
+  the progress, the done popup for a restart and for a close, nothing asked while the run ends,
+  the backup dropped when the cursor moves off and after a minute, a refused one's reason; the
+  strings translated and the row names fitting in every language.
 - `settings_test.c`, `settings_extra_test.c`, `settings_extras_test.c`: the Settings menu over
   fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c`'s
   `testShowFps` steps Display > Frame rate counter (Off by default, Right then Left both switch it, the preset kept, `[video] show_fps` saved as `true`, a file's `true` read; the Display row list is nine rows with the new row after Frame rate, and the pause menu's Display page is eight with Video mode hidden, both in the Options window's slots ([UI.md](UI.md#the-window))); `ui_fps.c` itself is in the window build only and has no test (the number is `fps_counter_test`'s; a hand check: the corner, legible, off by default; on a phone with the touch controls on the top edge between the D-pad and Select);

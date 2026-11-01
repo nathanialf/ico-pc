@@ -147,6 +147,15 @@ Android/data/com.defnf.icopc/files
 You can reach it with a USB cable from a computer: open the phone's
 storage, then `Android`, `data`, `com.defnf.icopc`, `files`.
 
+On Android 13 and later the phone's own file apps cannot open that folder.
+To keep a copy of your saves, or to move them to another phone or a computer,
+use **Options > Extras > Back up your data** on the title screen: it saves
+your memory card, save states, settings and achievements in one `.zip` file
+wherever you choose (Downloads, a memory card, a cloud folder).
+**Restore from a backup** puts such a file back; the game then closes, and
+puts the backup in place when you start it again
+([the details](OPTIONS.md#extras)).
+
 In that folder:
 
 - `memcard` holds your saves: the European disc's in `BESCES-50760ico`,
@@ -202,8 +211,9 @@ it uses a private folder instead, which a computer or the Files app cannot
 open.
 
 > [!WARNING]
-> Uninstalling the game deletes this whole folder, saves included. Copy
-> the `memcard` folder to a computer or another safe place first.
+> Uninstalling the game deletes this whole folder, saves included. Make a
+> backup first (Options > Extras > Back up your data), or copy the
+> `memcard` folder to a computer or another safe place.
 
 If your phone backs up its apps, the backup keeps your saves, your
 settings and your achievements. It leaves out the game data, the disc
