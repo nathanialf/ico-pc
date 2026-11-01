@@ -1854,6 +1854,10 @@ const char *rd__vu_fuse_text(void);
 /* A cleared source read as its colour (rd_const_read.c): false under [dev]
  * constant_reads = false (ICO_RD_CONSTANT_READS=0, the A/B) */
 bool rd__const_reads_on(void);
+/* The fades fold (rd_fades_fold.c, rd_replay.h): false under [dev]
+ * fades_fold = false (ICO_RD_FADES_FOLD=0, the A/B) or after a reduction
+ * did not take a planned fold */
+bool rd__fades_fold_on(void);
 
 /* rd_vuprepass_selftest's sabotage (ICO_RD_VU_PREPASS_SABOTAGE), while the
  * mode is not RD_VU_SABOTAGE_OFF: VERTEX the first mesh or grid command's
@@ -2577,7 +2581,10 @@ enum {
      * construction (the glow's mask); the result premultiplied for the
      * fixed-function ONE, ONE blender (RD_BP_PREMUL_ADD) */
     RD_FXF_ALPHA_ONLY = 16384,
-    RD_FXF_OUT_PREMUL = 32768
+    RD_FXF_OUT_PREMUL = 32768,
+    /* the reduction at scale 1: the fades fold's steps on its taps
+     * (rd_fades_fold.c, fx_sprite.hlsl fx_fold4) */
+    RD_FXF_FOLD = 65536
 };
 
 /* The steps at which fx_sprite_ps leaves the GS's own filter above 1x, in

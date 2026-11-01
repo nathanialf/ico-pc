@@ -55,7 +55,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "rd_internal.h"
+#include "rd_replay.h"
 
 /* the command the walk replays (rd_replay.c replayFrame), counted as the
  * scan counts */
@@ -186,6 +186,7 @@ static void planDraw(const RdStateBlock *st, uint32_t ord, int l)
 
 void rd__store_plan_scan(const RdFrame *f, int keep)
 {
+    rd__fades_fold_scan(f, keep); /* the sprites the reduction draws (rd_fades_fold.c) */
     s_plan.n = s_plan.nUndef = 0;
     s_plan.full = false;
     s_plan.anyTouch = 0;
@@ -241,6 +242,10 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
                 planDraw(&st, ord, l); /* a post sprite: a draw */
                 break;
             case RDC_SCREEN:
+                if (!rd__fades_fold_skip(ord)) {
+                    planDraw(&st, ord, l); /* a folded sprite is not drawn */
+                }
+                break;
             case RDC_MESH:
             case RDC_SKINNED:
             case RDC_GRID:
@@ -337,6 +342,7 @@ void rd__store_plan_pass(const RdTargetRec *d, uint32_t did, RhiLoadOp *depthLoa
 
 void rd__store_plan_end(void)
 {
+    rd__fades_fold_end(); /* a fold no reduction took (rd_fades_fold.c) */
     s_plan.nPrevDropped = 0;
     for (uint32_t i = 0; i < s_plan.n; i++) {
         if (s_plan.d[i].dropped) {

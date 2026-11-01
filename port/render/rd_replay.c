@@ -3539,9 +3539,9 @@ static RdUniform msaaFrame(const Replay *r, const DrawSetup *ds)
 static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     DrawSetup ds;
-    if (g_rd.deferText && c->b[3] == RD_SCREEN_TEXT_QUADS) {
-        flushScreenRun(r); /* a skipped text item ends the run */
-        return;            /* the item is drawn on the output instead */
+    if ((g_rd.deferText && c->b[3] == RD_SCREEN_TEXT_QUADS) || rd__fades_fold_skip(g_rdStoreOrd)) {
+        flushScreenRun(r); /* a skipped text item (a folded fade) ends the run */
+        return;            /* the item is drawn on the output (the reduction) instead */
     }
     if (rd__wrap_applies(&r->st)) {
         flushScreenRun(r);
@@ -5667,6 +5667,7 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     cb.scale[3] = (float)steps; /* below 2^24: exact */
     memcpy(cb.param, p.rect, sizeof(cb.param));
     blurAux1(&cb);
+    rd__fades_fold_fx(&cb, c->b[0], src); /* rd_fades_fold.c */
     if (useUint) {
         g_rdPerf.uintDraws++;
     }

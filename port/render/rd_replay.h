@@ -352,6 +352,62 @@ void rd__replay_fold_list(const RdCmd *cmds, uint32_t count, int list, uint32_t 
 void rd__replay_fold_at(uint32_t index);
 uint32_t rd__replay_fold_skip(void);
 int rd__replay_glow_edge_columns(const Replay *r, const RdFrame *f, const RdCmd *c);
+/* rd_fades_fold.c (docs/port/RENDER.md, "The fades fold"): list 11's last
+ * full-frame lerp sprites (the brightness, the fade, the letterbox bars)
+ * applied by the reduction to the SCENE texels it reads instead of drawn
+ * into SCENE.
+ * RdFadesFold           a frame's plan: steps[i] R | G << 8 | B << 16 |
+ *                       k << 24 (gs_math.hlsli gs_fold_ch), meta the count
+ *                       | 8 for the nearest level (the fixed-function
+ *                       blend) | 1 << (4 + i) for a bar step, alphas byte i
+ *                       step i's alpha (As, FBA's MSB), bars the bars' texel
+ *                       rows of SCENE (the top bar's end | the bottom bar's
+ *                       first row << 16; 0 and 0xFFFF for none), sides[i]
+ *                       0 every row, 1 the top bar, 2 the bottom bar, 3
+ *                       both; ords the sprites' commands (the store plan's
+ *                       ordinals, g_rdStoreOrd), reductionOrd the
+ *                       reduction's textured sprite, scaled its hardware
+ *                       sprite (above 1x); depthRead: a draw read SCENE's
+ *                       depth before the frame cleared it (in list
+ *                       depthReadList)
+ * RdFadesFoldEnv        what the plan reads beside the frame
+ * rd__fades_fold_plan   the plan of frame f: NULL (out->on) or why not
+ *                       ("" when list 11 ends with no such sprite)
+ * rd__fades_fold_scan   rd_store_plan.c rd__store_plan_scan: this replay's
+ *                       plan, counted (RdPerfRecord.fadesFolded) and logged
+ * rd__fades_fold_skip   rd_replay.c doScreen: command ord is not drawn
+ * rd__fades_fold_fx     rd_replay.c doBlurSpriteDraw: the reduction's GS
+ *                       sprite at scale 1 takes the plan (FXF_FOLD)
+ * rd__fades_fold_screen rd_pixel_plan.c rd__fill_draw_cb_extra: its hardware
+ *                       sprite above 1x (ICO_DF_FOLD)
+ * rd__fades_fold_end    rd_store_plan.c rd__store_plan_end: a plan no
+ *                       reduction took is logged and turns the fold off
+ *                       (rd__fades_fold_on, rd_internal.h) */
+#define RD_FADES_FOLD_STEPS 4
+#define RD_FADES_FOLD_SPRITES 8
+
+typedef struct RdFadesFold {
+    bool on;
+    uint32_t replay;
+    uint32_t n, steps[RD_FADES_FOLD_STEPS], meta, alphas, bars;
+    uint8_t sides[RD_FADES_FOLD_STEPS];
+    uint32_t sprites, ords[RD_FADES_FOLD_SPRITES], reductionOrd;
+    int scaled;
+    int depthRead, depthReadList;
+} RdFadesFold;
+
+typedef struct RdFadesFoldEnv {
+    bool effectsDepth, depthCarried, deferText, exact, msaa;
+} RdFadesFoldEnv;
+
+const char *rd__fades_fold_plan(const RdFrame *f, int keep, const RdFadesFoldEnv *env,
+                                RdFadesFold *out);
+void rd__fades_fold_scan(const RdFrame *f, int keep);
+bool rd__fades_fold_skip(uint32_t ord);
+void rd__fades_fold_fx(IcoDrawCB *cb, uint8_t kind, const RdTargetRec *src);
+void rd__fades_fold_screen(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds,
+                           IcoDrawCB *cb);
+void rd__fades_fold_end(void);
 /* rd_replay_vu.c.
  * rd__replay_vu       a VU draw under its camera's picture
  * rd__vu_prepass      before list 0 (replayFrame, after the uploads and

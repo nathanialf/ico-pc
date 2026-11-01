@@ -134,6 +134,7 @@ add_library(ico_render STATIC
     rd_date_selftest.c # DATE through the stencil bit: the start-up check on the device
     rd_dst_read.c # the exact GS blend: the destination read
     rd_dump.c
+    rd_fades_fold.c # list 11's last full-frame lerp sprites applied by the reduction
     rd_fog_path.c # how the fog reads the depth: the paths, the probe, the self-test
     rd_frame.c
     rd_fx_plan.c # the frame-size post sprites' plan: fixed-function forms, local read
@@ -456,12 +457,15 @@ target_compile_options(rd_perf_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_W
 target_include_directories(rd_perf_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_perf_test PRIVATE ico_render)
 
-# rd_alpha_plan_test, rd_fx_frame_test, rd_vu_frac_test: the pixel diet's
-# planners (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c), CPU only: the
-# alpha range's truth table and the blend identities, the frame-size fold and
-# the premultiplied identity, the planes rule's truth table and the VS->PS
-# prefix match, and the sprite planes' skip (issue 161).
-foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac)
+# rd_alpha_plan_test, rd_fx_frame_test, rd_vu_frac_test, rd_fades_fold_test:
+# the pixel diet's planners (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c,
+# rd_fades_fold.c), CPU only: the alpha range's truth table and the blend
+# identities, the frame-size fold and the premultiplied identity, the planes
+# rule's truth table and the VS->PS prefix match, and the sprite planes' skip
+# (issue 161); the fades fold's step against the GS blend, its bar rows and
+# its plan on recorded frames (the fade, the letterbox, the brightness, and
+# the frames it leaves alone).
+foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold)
     add_executable(${_t}_test test/${_t}_test.c)
     target_compile_options(${_t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_include_directories(${_t}_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi"
@@ -1025,7 +1029,7 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_display_change COMMAND rd_display_change_test)
     set_tests_properties(rd_display_change PROPERTIES SKIP_RETURN_CODE 77)
-    foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac)
+    foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold)
         add_test(NAME ${_t} COMMAND ${_t}_test)
         set_tests_properties(${_t} PROPERTIES SKIP_RETURN_CODE 77)
     endforeach()
@@ -1908,6 +1912,29 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_constant_reads_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_fades_fold_ab (test/rd_fades_fold_ab.cmake): the fade dumps
+    # (tools/fades_fold_dumps.txt) and, with ICO_BOOT_DUMP_DIR, the start-up's
+    # frames 115 to 123, with list 11's last full-frame lerp sprites drawn
+    # into SCENE (ICO_RD_FADES_FOLD=0) and applied by the reduction
+    # (rd_fades_fold.c), under ICO_RD_BLEND=attachment and fixed, at Original,
+    # Enhanced 2x and the phone's Resolution Auto: every target but SCENE byte
+    # for byte under the exact blend at Original, within a level elsewhere
+    # (counted, port/render/test/png_level_diff.py); SKIP as rd_vustage_ab
+    if(Python3_FOUND)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fades_fold_ab")
+        add_test(NAME rd_fades_fold_ab
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/fades_fold_dumps.txt"
+                         "-DBOOT=${ICO_BOOT_DUMP_DIR}" "-DPY=${Python3_EXECUTABLE}"
+                         "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/fades_fold_ab"
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fades_fold_ab.cmake")
+        set_tests_properties(rd_fades_fold_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                             TIMEOUT 3600)
+        if(_env)
+            set_tests_properties(rd_fades_fold_ab PROPERTIES ENVIRONMENT "${_env}")
+        endif()
+    endif()
 endif()
 # The blend policy (rd_dst_read.c)
 # rd_dst_usage_test: the fixed-function blend by default makes no
@@ -2249,10 +2276,11 @@ endif()
 #  * the tests that start the game (model_viewer_headless, gallery_sweep,
 #    credits_headless, state_roundtrip_headless(_settings)) or work on the replay tool's files (rd_replay_tool*,
 #    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, rd_vubatch_ab, rd_vumerge_ab,
-#    rd_vufuse_ab, rd_store_plan_ab, rd_constant_reads_ab,
+#    rd_vufuse_ab, rd_store_plan_ab, rd_constant_reads_ab, rd_fades_fold_ab,
 #    the native frame gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
 #    on both backends)
-#  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_mip, rd_passring,
+#  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_fades_fold, rd_mip,
+#    rd_passring,
 #    rd_filter, rd_bisect_plan, rd_stream_audit, fog_lut*, gsb_cull*, texpack*, gltf)
 #
 # ICO_RD_GL_TOLERANCE: "<test>_gl|<VARIABLE>=<value>" entries add a variable to one

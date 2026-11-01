@@ -2422,6 +2422,9 @@ int main(int argc, char **argv)
                "target reads kept (the source drawn since its clear, or not cleared this "
                "replay)\n",
                dump, rd__const_reads_on() ? "on" : "off", pr->constReads, pr->constKept);
+        /* the fades fold (rd_fades_fold.c) */
+        printf("%s: stats: fades fold %s: %u sprites folded into the reduction\n", dump,
+               rd__fades_fold_on() ? "on" : "off", pr->fadesFolded);
         /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
         printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
                "additive, %u local; vu no-planes %u; sprite no-planes %u\n",

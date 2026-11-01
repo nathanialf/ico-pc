@@ -2252,6 +2252,9 @@ typedef struct RdPerfRecord {
      * were not (the source drawn since its clear, or not cleared in this
      * replay) */
     uint32_t constReads, constKept;
+    /* The fades fold (rd_fades_fold.c): list 11's last full-frame lerp
+     * sprites the reduction applied instead of drawing them into SCENE */
+    uint32_t fadesFolded;
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
      * docs/port/PIPELINES.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:

@@ -1,0 +1,15 @@
+# Dump list for rd_fades_fold_ab (port/render/test/rd_fades_fold_ab.cmake: the
+# fades fold on against off).  MACHINE-LOCAL: these are paths on the
+# maintainer's machine; the dumps themselves are never committed.  Missing
+# files are reported and skipped (no dump at all: SKIP).  Relative paths are
+# relative to this file; '*' globs are allowed.  The test prints each dump's
+# last list 11 commands (rd_replay_tool --list), so its log shows which of
+# them end with the fade, the letterbox or the brightness.
+#
+# the forest's keep frames whose list 11 ends with full-frame sprites
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port/keep/rd-00720.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01076.rddump
+# the queen's room
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/queen/rd-00100.rddump
+# the rc3 phone's F12 frame (PowerVR, Resolution Auto)
+/primary/dev/ico-pc/dist/frame-20261028-173610-v4657.zip

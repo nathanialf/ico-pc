@@ -565,6 +565,13 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("constant_reads", "true"), "1") == 0);
     CHECK(ico_dev_env_value("constant_reads", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.constant_reads"), "constant_reads") == 0);
+    /* fades_fold: the fades fold's A/B switch (port/render/rd_fades_fold.c
+       rd__fades_fold_on) */
+    CHECK(strcmp(ico_dev_env_name("fades_fold"), "ICO_RD_FADES_FOLD") == 0);
+    CHECK(strcmp(ico_dev_env_value("fades_fold", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("fades_fold", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("fades_fold", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.fades_fold"), "fades_fold") == 0);
     /* crack_fill: the crack filler above 1x's A/B switch
        (port/render/rd_crack_fill.c rd__crack_fill_init) */
     CHECK(strcmp(ico_dev_env_name("crack_fill"), "ICO_RD_CRACK_FILL") == 0);

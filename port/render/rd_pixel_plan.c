@@ -124,11 +124,10 @@ uint32_t rd__vu_pixel_fs_enum(RdPipeKeyInt *out, uint32_t max, uint32_t n, const
 void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds,
                             IcoDrawCB *cb)
 {
-    (void)r;
-    (void)ds;
-    (void)cb;
     /* vu_np_ps reads the DrawCB vu_ps reads: nothing added; the pass counted */
     if (dp && dp->key.fs == RD_FS_VU_NP) {
         g_rdPerf.vuNoPlanes++;
     }
+    /* the reduction's hardware sprite above 1x with the fades fold */
+    rd__fades_fold_screen(r, dp, ds, cb);
 }
