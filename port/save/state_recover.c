@@ -551,6 +551,9 @@ static int wait_request(void)
     while (iosMcSync(&s_req) == 0) {
         ico_sched_spin_vsync();
         if (++guard > 4000) {
+            fprintf(stderr,
+                    "state_recover: the card request (command %d) did not finish in %d vsyncs\n",
+                    (int)s_req.flags.w.command, guard);
             s_failed_wait = 1;
             return -1;
         }
@@ -588,7 +591,9 @@ static void boot(void *arg)
     iosThreadSleep();
 }
 
-static void vsync(int field)
+/* one simulated vsync: ICO_SCHED_SPINNING while a thread waits for the
+   next one, ICO_SCHED_EMPTY when none is left to run */
+static int vsync(int field)
 {
     ico_sched_vsync_advance();
     if (field) {
@@ -598,16 +603,23 @@ static void vsync(int field)
     }
     ico_kernel_raise_intc(2);
     ico_host_run_vsync_hooks();
-    ico_sched_run();
+    return ico_sched_run();
 }
 
+#define RUN_JOB_VSYNCS 200000
+
 /* runs job on the driver thread over the card folder: 0, or -1 when the
-   scheduler could not start or the job did not finish */
+   scheduler could not start or the job did not finish (each named on
+   stderr; a request that never finished is named by wait_request).
+   ico_sched_boot returns the boot thread's id (1 on a fresh table) and
+   stops the program itself when it cannot make the thread. */
 static int run_job(const char *card, void (*job)(void))
 {
     int vsyncs = 0;
+    int run;
 
     if (ico_arena_init() != 0) {
+        fprintf(stderr, "state_recover: the card code's memory could not be set up\n");
         return -1;
     }
     ico_mc_host_set_root(card);
@@ -617,15 +629,20 @@ static int run_job(const char *card, void (*job)(void))
     memset(&s_req, 0, sizeof s_req);
     ico_sched_reset();
     ico_kernel_reset();
-    if (ico_sched_boot(boot, NULL, 1) != 0) {
+    if (ico_sched_boot(boot, NULL, 1) < 0) {
+        fprintf(stderr, "state_recover: the card code's threads could not start\n");
         return -1;
     }
-    ico_sched_run();
-    while (!s_done && vsyncs < 200000) {
-        vsync(vsyncs & 1);
+    run = ico_sched_run();
+    while (!s_done && run != ICO_SCHED_EMPTY && vsyncs < RUN_JOB_VSYNCS) {
+        run = vsync(vsyncs & 1);
         vsyncs++;
     }
     ico_sched_reset();
+    if (!s_done) {
+        fprintf(stderr, "state_recover: the card code did not finish (%d vsyncs, %s)\n", vsyncs,
+                run == ICO_SCHED_EMPTY ? "no thread left to run" : "the vsync limit");
+    }
     return s_done && !s_failed_wait ? 0 : -1;
 }
 
