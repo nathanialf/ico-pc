@@ -1012,6 +1012,18 @@ and `effects_depth` `blit_depth_ps` writes the scene's depth beside it (`port/re
 The UI box is the 4:3 part of the presentation box (`port/render/rd_present.c` (`rd_ui_box_of`)).
 Movies draw their own box ([FMV.md](FMV.md#the-picture-on-screen)).
 
+**Captures.** Two requests copy a present's output before the overlay (so never the port's popups,
+hints or HUD; the deferred text and the CRT filter are in it), in one texture copy when both are
+armed at one present, read back after the submit (`port/render/rd_present.c` (`captureRecord`,
+`rd__capture_finish`)). `rd_capture_presented` writes the whole output to a PNG (photo mode, F12's
+`-present.png`; `rd_capture_presented_max` box-downscales it first). `rd_capture_shot` is the save
+state's pause picture ([PLATFORM.md](PLATFORM.md#saving-and-loading)): it takes only a present of a
+frame begun by the time it was asked (`g_rd.frameCounter` then; the present's frame from
+`rd_last_present_info`), so a later frame's present drops it, crops to the presentation box (the
+CRT filter's box under the filter) and hands the RGBA to the caller, which frees it; a second
+request, a failed copy or the shutdown tell the caller none. `rd_present_box_size` is the last
+present's box size, the picture's shape on screen.
+
 **Present modes.** The window asks for mailbox through `rhi_prefer_mailbox`; what each backend then
 takes is [RHI.md](RHI.md#vulkan)'s (Vulkan: mailbox when preferred, FIFO latest ready with
 `ICO_VK_FIFO_LATEST_READY=1`, else FIFO; immediate without vsync) and [RHI.md](RHI.md#direct3d-12)'s

@@ -688,14 +688,41 @@ pointer and stack guard). The header gets the identity, the disc,
 the simulation keys, the time, the play time, the stage, the Main tick and the vsync count.
 `ico_state_file_write` packs and writes on its thread; the next polls collect the result (the
 popup and the `saved` line come then). The copy is about 55 MB at most and is freed when the
-write is collected. In the window build the next frame presented after the save is the slot's
-picture: `window_host.c` reads the DISPLAY target (`rd_read_display`) once
-`ico_state_wants_thumbnail` says so and hands it to `ico_state_thumbnail`, which box-filters it to
-320 pixels wide and writes `slot<n>.png` on a thread of its own (the pause menu is in it). No
-picture within about two seconds (a minimized window): none, logged. Until the picture is written
-a second save is refused as busy (`the last save's picture is still being taken`), so the first
-slot keeps its picture, and a delete of that slot drops the picture still to come first (`state:
-slot N's picture still to come dropped (the slot is deleted)`; review finding 11).
+write is collected. In the window build the slot's picture is the pause picture, copied to
+`slot<n>.png` on a thread (`ico_state_copy_file`, through `slot<n>.png.tmp` and a rename), or, when
+there is none, the next frame presented after the save.
+
+**The pause picture** (`port/game/state_host.c` `shot_poll`, the decisions in `state_rules.h`
+`ico_state_shot_step`): the game as it was the moment before the pause menu came up, without the
+menu. The pause layout (PAL 57) draws its backdrop, a full-frame black sprite at its `colA` 0.6
+(alpha 76 of 128), from its first frame on and unfaded (`ico2/common/src/layout_texture.c`
+`display_primary_texture_layout` draws it before `texture_fading`); its procs, the port's
+`entryProc` among them, first run in its second tick (`fadeState` 1), when the rows are at 1/L of
+their alpha. So no frame of the menu itself is clean, and the picture is taken one tick earlier:
+the poll after the tick in which `la_game_loop` switched play to the pause menu (the layout was
+`layout_play` at the poll before and is `layout_pause` now) asks the renderer for the next present
+of a frame begun by then (`rd_capture_shot`, [DISPLAY.md](DISPLAY.md#presentation)), which is that tick's frame
+(Frame rate Original: its own present at the next flip) or the one before it blended (the presents
+between ticks run one tick behind). A present of the next frame, the first with the backdrop,
+drops the request instead (a minimized window, a late skip). The renderer hands the presentation
+box's pixels (the picture without the bars, at its own shape and the output's size, the CRT
+filter's picture under the filter, never the port's popups); a thread box-filters them to at most
+960 x 960 (`ico_state_thumb_size`, `ICO_STATE_THUMB_W`/`_H`; 960 x 540 at 16:9, at most 2.8 MB as
+a stored PNG, inside the page's 8 MB read) and writes `<states>/<disc>/pause.png`. The picture is
+the game's until the game is back on the play layout or a state is loaded (`shot_forget`), so a
+save from the pause menu, Options or Extras over it, or the Save states page, by F5 or the page,
+gets it; every save in that pause gets the same one.
+
+Without a pause picture (none taken yet, the request dropped, a load since, the write failed or
+still running) the slot's picture is the frame presented after the save, as before:
+`window_host.c` reads the DISPLAY target (`rd_read_display`) once `ico_state_wants_thumbnail` says
+so and hands it to `ico_state_thumbnail`, which box-filters it to the presentation box's shape
+(`rd_present_box_size`: DISPLAY has half the lines it is shown with) at most 960 wide and writes
+`slot<n>.png` on a thread of its own (the pause menu is in it). No picture within about two
+seconds (a minimized window): none, logged. Until the picture is written (or copied) a second save
+is refused as busy (`the last save's picture is still being taken`), so the first slot keeps its
+picture, and a delete of that slot drops the picture still to come first (`state: slot N's picture
+still to come dropped (the slot is deleted)`; review finding 11).
 
 **A load** first collects a write in flight, checks the conditions, reads the header and checks
 it against this run's (`ico_state_header_check`), inflates every section into new buffers and
@@ -787,7 +814,10 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: loaded slot N (saved at Main tick T, stage S): deltas module +0x0 (fixed image), arena +0x0 (pinned), pool +0x0 (pinned), pobj ... ; words rewritten [(nothing moved)] arena .., gdata .., gbss .., registry .., pobj ..; thread pointer 0x<old>->0x<new>[ unchanged\| not recorded\| not needed] (K words), stack guard[ unchanged\| not recorded\| not needed] (M words); checks P partitions, B blocks, T threads, H handlers; K fibers; apply <ms> ms` | a load done |
 | `state: refused <save\|load\|delete> slot N: <reason>[: <detail>]` | every refusal: save states off, not on the pause menu, a stage switch, the card, the disc, a movie, another mode (photo mode, the credits, the music gallery), the slot empty, a damaged file, another build (its commit; `no thread-pointer record` for a state without the saving process's thread pointer or stack guard where the platform needs them; for a state this build cannot translate `<saved commit> -> <commit here>: <blocker>`, the blocker as [Across versions](#across-versions) words it, or `made before save states could carry over to later versions (format 1)`), another disc, another platform, settings differ (`key=saved (now cur)`), the self-checks (the failing check; the backup restored), the file not written (why), busy |
 | `state: deleted slot N` | a delete |
-| `state: slot N's picture written (<path>, WxH)`, `... could not be written`, `state: slot N has no picture (no frame was presented)` | the picture |
+| `state: slot N's picture written (<path>, WxH, the pause picture\|the frame after the save)`, `... could not be written`, `state: slot N has no picture (no frame was presented)` | the picture |
+| `state: slot N's picture: the frame after the save (no pause picture: <why>)` | a save without a pause picture: none taken since the program started, the frame before the pause menu still to come or not presented, still being written, could not be written, the game went back to play, a state was loaded, no renderer |
+| `state: the pause picture: the game before the pause menu, WxH from the WxH picture, written in <ms> ms (<path>; picture N)` (the first 8, then every 100th), `state: the pause picture could not be written (<path>)` | the pause menu opened from play |
+| `rd: state picture: WxH from the WxH output (the box at X,Y), read back in <ms> ms`, `rd: state picture: not taken: the first present after the request showed frame F, later than frame G it asked for` or `...: no copy of the WxH output` (the first 8, then every 100th) | the renderer's side of the pause picture |
 | `state: [dev] save at Main tick ..., load at ..., hash at ...` and `state: hash ...` | the [dev] keys |
 | `state: hash masked N pointer words, M host ids at tick T (H host blocks, region hashes arena .. gdata .. gbss ..)` | after each `state: hash` line: what the hash left out (the hash rule) |
 | `state: [dev] dump of arena+gdata+gbss at Main tick T`, `state: dumped arena+gdata+gbss at tick T to <dir> (hash .., masked N pointer words, M host ids)[: a file could not be written]` | `[dev] state_dump_at` |
@@ -1820,6 +1850,25 @@ The window build's diagnostic keys are free of SDL so a unit test checks them
 - **Shift+F12** in photo mode: the aspect sweep, the paused frame rendered at 4:3, 16:9, 32:9,
   48:9 and 60:9 into `sweep-<time>.zip` (`ico_sweep_zip`).
 - **F5** and **F9**: save slot 1 and load slot 1 of the save states (`ICO_HOTKEY_STATE_SAVE`, `ICO_HOTKEY_STATE_LOAD`; no Shift variant, repeats do nothing); the request is latched and done at the next quiescent point ([Saving and loading](#saving-and-loading)).
+- **F6**: the Save states page, from the keyboard only (`ICO_HOTKEY_STATES_PAGE`; no Shift
+  variant, repeats do nothing, not bindable: `keys.def` has F1 to F4). `window_host.c` asks
+  `ico_start_opens_pause` (`port/input/mouse_look.h`: play on the play layout itself, not a scene's,
+  where Start skips the scene) and hands the answer to `ui_settings_states_key`
+  (`port/ui/settings.c`), which latches the press as the flip it came at (`frame_count`) and, in
+  play, has the window tap Start through the Escape latch (`ico_input_escape` down and up: Start for
+  `ICO_ESCAPE_TAP_STEPS` steps), so the pause menu opens as from the pad. The pause menu's
+  `entryProc` takes the latch once its fade-in is done and opens the page as its row does (the
+  confirm sound, `lt_switch_layout`; Back there returns to the row); on the page `statesProc` takes
+  it and closes the page into the game as the pause menu's Back does (`la_host_resume_play`, the
+  region's play layout). A latch not taken within 60 frames is dropped. Ignored without the page's
+  host, in photo mode, on the title (Square on the Continue screen is the way there), where the game
+  cannot pause (`enable_game_pause` 0), on any other screen, and on Android. The lines (`hotkeys:`;
+  the ignored ones and the others each the first 8, then every 100th): `hotkeys: F6 in play: Start
+  pressed, the pause menu first`, `hotkeys: F6 opened the Save states page`, `hotkeys: F6 closed the
+  Save states page (back to the game)`, `hotkeys: F6 ignored: <save states are off|photo mode is
+  open|on the title (...)|the game cannot be paused here|only in play, on the pause menu or on the
+  Save states page|the keyboard's F6 is not used on Android>` and `hotkeys: F6 ignored: the pause
+  menu did not come up within 60 frames`.
 - **F11**: stats lines every second for 30 s instead of every 10 s; again turns it off
   (`ico_stats_fast_toggle`).
 - **Settings > Save a picture for a bug report** (Main, directly above Developer mode, always shown): F12's

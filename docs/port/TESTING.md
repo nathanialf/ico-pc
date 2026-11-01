@@ -292,8 +292,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   [PLATFORM.md](PLATFORM.md#saving-and-loading)): every refusal of the conditions reachable and
   their order, a load without the pause, the pause menu and a port page over it; the log texts;
   the slots' paths; the `[dev]` keys' values; the listing of a missing, an empty and a filled
-  folder (each validity field changed, a damaged file, a picture); the thumbnail's size and box
-  filter (`state_host`).
+  folder (each validity field changed, a damaged file, a picture); the thumbnail's size (the pause
+  picture's square pixels to 960 wide, a tall one to 960 lines, the fallback DISPLAY frame at the
+  box's shape) and box filter; the pause picture's path, its copy to a slot's picture and its steps
+  (taken once from play to the pause menu, kept over the pages, dropped on play) (`state_host`).
 - `variants_test.c`: the game variants (`port/game/variants.h`) on the CPU: every default is the game as
   shipped (the barrier's number the disc's: 5, 7 on `jun26`), every `[variants]` key steps through
   all its values, saves and reads back, a word or number that is no value reads as the default, the
@@ -414,7 +416,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `input_record_test.c`: the pad recording's format, round trip through the script reader, the
   change-only rule and the sample point (`input_record`).
 - `input_test.c`: the `[touch]` tables onto the layout edits and back (the `format` key, a file without the key reading `hidden` and `o0` as Off, rewritten as `off`), bindings from config text, dead zone, quantisation, the stick fix, merging, the
-  [libpad](ARCHITECTURE.md#terms) buffer, rumble, Escape (`input`).
+  [libpad](ARCHITECTURE.md#terms) buffer, rumble, Escape, whether Start opens the pause menu (F6's
+  tap: the play layout only, not a scene) (`input`).
 - `mouse_camera_test.c`: the mouse camera's speed and range for the hand camera (`mouse_camera`).
 - `pad_script_test.c`: the `--pad-script` reader and what the null pad then shows the game's pad
   code (`pad_script`).
@@ -543,8 +546,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   changing with a value and returning when it is cleared, and `ico_sim_keys_first_diff`'s
   `key=saved (now cur)` text on a short buffer too (`sim_keys`).
 - `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 and the
-  Continue screen's Square prompt ([UI.md](UI.md#save-states)), on each disc's layout (`settings_states`, `_jpn`, `_kor`,
-  `_cn`, `_ntsc`, `_aug6`, `_jun26`).
+  Continue screen's Square prompt ([UI.md](UI.md#save-states)), the pictures' box at their own
+  shape, and F6 (the page from play and from the pause menu, back to the game, a late press, each
+  ignore), on each disc's layout (`settings_states`, `_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`,
+  `_jun26`).
 - `fiber_test.c`: [fibers](ARCHITECTURE.md#terms) switched round-robin with their stacks checked,
   deep stacks, the FP state inside a fiber (`fiber`, `fiber_guard`).
 - `ico_thread_test.c`: a thread runs and joins, a mutex and condition hand a value across, the clock does not run backwards (`ico_thread`).
@@ -576,7 +581,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   as `host_config_portable_test` (`host_config`, `host_config_portable`).
 - `host_fs_test.c`: the file helpers on a UTF-8 path outside ASCII, the drive's kind and its file
   system's name (`ico_host_drive_fs_name`: tmpfs for `/dev/shm` on Linux) (`host_fs`).
-- `hotkeys_test.c`: F12, Shift+F12 and F11, repeats ignored, no other key taken (`hotkeys`).
+- `hotkeys_test.c`: F12, Shift+F12, F11, F5, F9 and F6 (SDL3's codes), repeats ignored, no other
+  key taken (`hotkeys`).
 - `ios_chain_test.c`: the game's thread, message and memory layer on the fiber scheduler under
   simulated vsyncs (`ios_chain`).
 - `inflate_test.c`: the game's inflate (`fumi/ios/inflate.c`) over its allocator and code-table
@@ -1225,6 +1231,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   replay clears it (lavapipe hands the freed DISPLAY's memory back, llvmpipe's OpenGL gives
   zeros), so DISPLAY read after that is not the frame the presenter showed.
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`;
+  the save state's picture, `checkShot`: the box of the open frame's present, CRT off and on, a
+  later frame's present dropping it, one copy with the photo capture, replaced, cancelled and
+  dropped at the shutdown;
   the scene limit's fallback checks drive the Vulkan backend's `vkr_test_fail_texels_above` and
   are skipped on Direct3D 12, OpenGL and Direct3D 11, which have no such hook);
   the open border's outer columns (`rd_present_border_test.inc`, `checkOpenBorderEdges`): at

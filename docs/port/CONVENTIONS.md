@@ -172,6 +172,7 @@ colon; a test's own lines start with the test's name.
 | `mc:` | `port/save/mc_host.c` |
 | `photo:`, `credits:`, `appearance:`, `achievements:`, `options:`, `model_viewer:`, `stats:`, `camera:` | `port/game` (`stats:` from `gamestate.c`, `camera:` from `camera_wall_stage.c`) |
 | `ui:`, `settings:`, `gallery:`, `extras:` | `port/ui` |
+| `hotkeys:` | the F6 key's lines (`port/ui/settings.c` `ui_settings_states_key`) |
 
 The player guides quote some of these lines (`textures:` and `models:` in
 [TEXTURE_PACKS.md](../TEXTURE_PACKS.md) and [MODEL_PACKS.md](../MODEL_PACKS.md)); change a quoted

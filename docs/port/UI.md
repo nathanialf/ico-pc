@@ -1167,8 +1167,23 @@ and the prompt add three rows and one layout.
   of 20, or (with the row) 1 to 3 of 16, and still wants End Game three pitches of 20 below Options.
   The boxes keep Options' height, so the letters stay where they are in them and overlap
   4 lines at the narrower pitch.
+- **Entry by F6** (`ui_settings_states_key`, the keyboard only: [PLATFORM.md](PLATFORM.md#hotkeys-and-dump-zips)):
+  the press is latched (`s_stKeyAt`, the flip it came at); in play the window taps Start first. The
+  pause menu's `entryProc` takes the latch once the menu's fade-in is done (`lt_fade_status()`
+  2, after its own default restore so nothing it sets is undone) and opens the page as the row does:
+  the confirm sound, `lt_switch_layout`, the page's first tick then `statesOpen` from the pause menu
+  (`s_procLayout`), so Back returns to the row. On the page `statesProc` takes it before Back and
+  closes the page into the game (`statesKeyClose`: the pictures released, what changed saved, the
+  cancel sound, `la_host_resume_play` and the region's play layout, `closeForDebugMenu`'s way). The
+  cursor of the pause menu is not moved to the row when F6 opens the page (`gameCursorOn` would
+  leave the next pause on the row after an F6 close); Back puts it there as for the row. A latch
+  older than 60 frames (`ST_KEY_TICKS`) is dropped with a line. Ignored on the title (stage up to
+  the region's `stage_title`), without the host, in photo mode, where Start cannot pause
+  (`enable_game_pause`), on any other screen and on Android.
 - **Cards** (`buildStatesPage`): the header, then four cards `ST_PITCH` (44) field lines apart from
-  line `ST_Y0` (40): an image row 72 x 54 at x 40 (`lt_ext_add_image`), the label "Slot N" at
+  line `ST_Y0` (40): an image row 72 x 54 at x 40 (`lt_ext_add_image`; the picture drawn at its own
+  shape inside it, centred: `lt_ext_image_fit`, a 16:9 picture as wide as the tile with bands above
+  and below, nothing stretched), the label "Slot N" at
   x 124 (24 em, the only stop: the page's `rows[]` are these four, `UI_OPT_STATE_SLOT`, the action
   row their value row), the action word centred between the Options pages' arrows (`STEP_X`,
   `ARROW_*`: the pointer's roles are the value rows'), the area and play time 13 lines under the
@@ -1204,7 +1219,9 @@ and the prompt add three rows and one layout.
   written); the log line names the function, the variable or the block.
 - **Listing and pictures**: `statesOpen` lists when the page opens, then every `ST_RELIST_TICKS`
   (30) ticks and at the tick after an accepted request (`list` is cheap and cached by the host; the
-  picture appears a few frames after a save). A slot's picture is made from its `png_path` when the
+  picture appears a few frames after a save). The host's picture is the game before the pause
+  menu, at most 960 x 960 (a stored PNG under 2.8 MB, inside `statesDefaultLoad`'s 8 MB read), or
+  the frame after the save when there is none ([PLATFORM.md](PLATFORM.md#saving-and-loading)). A slot's picture is made from its `png_path` when the
   path or `saved_at` changes (`statesPictureSync`: `texpack_load_png` and `rd_create_texture`,
   `ico_fopen` for the file) and released with `rd_destroy_texture` after its row is set to 0 when
   it changes, the slot empties, the page closes (Back, or any other layout's proc: `statesRelease`)
@@ -1229,7 +1246,10 @@ Continue prompt (no layout and the item handed on without the host; with it the 
 and words, hidden until the files show, its lines, a confirm on a file reaching the file select
 unchanged, Square and a click opening the page with Load and Delete only, Back to the file select
 from its first tick, a load closing to the pause menu), the four cards' texts, geometry and
-pictures, the actions, the confirm rule, the title, Back, and the page after a load.
+pictures, the actions, the confirm rule, the title, Back, the page after a load, the pictures' box at
+their own shape (16:9, 4:3 and a tall one in the tile), and F6 on every disc (in play: Start asked
+for and the page once the pause menu is up, Back to the row; on the pause menu the page; on the
+page back to the game; a late press dropped; each ignore with its line).
 
 ## Tests
 

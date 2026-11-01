@@ -21,7 +21,7 @@ others.
 | `port/input/pad_script.h`, `pad_script.c` | the pad script reader and its timeline |
 | `port/input/pad-boot.txt` | a pad script from power-on through the boot signs and the title to New Game |
 | `port/input/input_record.h`, `input_record.c` | the pad recording |
-| `port/input/mouse_look.h`, `mouse_look.c` | the mouse capture rule, Escape's button, photo mode's look accumulator |
+| `port/input/mouse_look.h`, `mouse_look.c` | the mouse capture rule, Escape's button, whether Start opens the pause menu (F6), photo mode's look accumulator |
 | `port/input/mouse_camera.h`, `mouse_camera.c` | the mouse camera's speed and range for the game's hand camera |
 | `port/input/pointer.h`, `pointer.c` | the mouse pointer in the menus |
 | `port/input/touch.h`, `touch.c` | the touch overlay's input mapper |
@@ -307,6 +307,11 @@ with Cross, except in the touch layout editor, where Cross is Opacity + and Back
 press and held until the release, and a press lasts at least two steps
 (`ICO_ESCAPE_TAP_STEPS`), since the game reads the pad every second vsync (`ico_escape_latch`,
 `ico_escape_take`).
+
+F6 (the Save states page, [PLATFORM.md](PLATFORM.md#hotkeys-and-dump-zips)) uses the same latch
+for its Start in play: a press and a release at once, so Start stays on the pad for those two
+steps. It asks first `ico_start_opens_pause`: play as for Escape's Start and the play layout itself,
+not a scene's layout, where Start would skip the scene (`port/input/mouse_look.c`).
 
 ### The pointer
 

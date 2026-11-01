@@ -659,10 +659,16 @@ Your choices are saved when you leave the page.
 ## Save states
 
 A save state keeps the game exactly as it is, anywhere, in one of four slots
-for each disc. Each slot shows a small picture, the area, the play time and
-the date.
+for each disc. Each slot shows a picture, the area, the play time and the
+date. The picture is the game as it was the moment you paused, without the
+menu, in its own shape (a wide picture keeps its width). A state saved after
+loading another one, or one that could not get that picture, shows the
+screen as it was when you saved.
 
 - **During play:** press Start and choose **Save states**, under Photo mode.
+  On a keyboard, **F6** does both: it pauses the game and opens the page.
+  In the pause menu F6 opens the page, and on the page F6 takes you back to
+  the game. F6 does nothing on the title screen or in photo mode.
 - **On the title screen:** choose **Continue**. Under the list of your memory
   card saves the screen shows **Square Save states**: press Square (or click
   it, or tap it). Continue is there once the memory card has a save of the
