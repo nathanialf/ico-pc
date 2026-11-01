@@ -14,19 +14,28 @@
  *               HETARI); the fall's exits from its motion-orient rows
  *               (SIT3END, the hand walk and run loops), KEEP left out
  *   count       consecutive run-pulled ticks counted; a second call on one
- *               tick counts nothing; a missed tick starts again at 1
- *   rate        10^6 continuous run-pulled ticks at 25 and at 30 ticks a
- *               second: trips within 20 % of one per ICO_YT_MEAN_S seconds,
- *               none in the first 3 s, none two closer than 30 s
- *   guards      no trip over 20 mean waits while one guard fails (paused,
- *               no control, the script holds Ico, game over, a gate stage,
- *               another motion, the fall or one of its exits not loaded
- *               (SIT3END, a motion set without it), her HETARI bit of this
- *               disc set, the option off); trips with every guard holding
- *               and the other discs' HETARI bits set; each trip mails her
- *               the caller's mail id with her as its argument
- *   state       the five blocks registered by name and size; their bytes
- *               taken and put back give the same trips again
+ *               tick counts nothing; a missed tick, or a stamp behind the
+ *               last, starts again at 1
+ *   the 3 s     the main gate scene's rule at 25 and at 30 ticks a second
+ *               (st04a.c actSt04aGirlSitChk, ((60 - systemStatus[0] * 10) /
+ *               systemStatus[1]) * 3 < n): no trip in the first 3 s of
+ *               ticks, a trip on the tick after (76th at 25, 91st at 30) and
+ *               the count back to 0, the next exactly 3 s of ticks later, a
+ *               missed tick starting the 3 s again, a guard failing on the
+ *               boundary tick sending nothing and starting the 3 s again;
+ *               each trip mails her the caller's mail id with her as its
+ *               argument
+ *   guards      no trip over 20 such boundaries while one guard fails
+ *               (paused, no control, the script holds Ico, game over, a
+ *               gate stage, another motion, the fall or one of its exits
+ *               not loaded (SIT3END, a motion set without it), her HETARI
+ *               bit of this disc set, the option off); one trip a boundary
+ *               with every guard holding and the other discs' HETARI bits
+ *               set
+ *   state       the two blocks registered by name and size, none of the
+ *               old random ones; their bytes taken mid-count and put back
+ *               resume the count (the same trips again, the first the rest
+ *               of the 3 s later)
  *   stage load  option off, a gate stage, the stage's own motions: nothing
  *               added; otherwise each missing motion in a block of the
  *               dynamic motion partition, its bytes the pack's, relocated
@@ -394,27 +403,21 @@ static void worldReady(int tps)
     ico_opt_set_yorda_trips(1);
 }
 
-/* ticks [from, from + n) all run-pulled: the trips, the first trip's tick
-   and the shortest gap between two */
-static int runTicks(int from, int n, int *first, int *closest)
+/* ticks [from, from + n) all run-pulled: the trips, their ticks in at[]
+   (up to max of them; at may be NULL) */
+static int runTicks(int from, int n, int *at, int max)
 {
-    int trips = 0, last = -1;
+    int trips = 0;
 
-    *first = -1;
-    *closest = 0x7FFFFFFF;
     for (int t = from; t < from + n; t++) {
         const int before = s_mails;
         frame_count = t;
         ico_opt_yorda_trip_tick(&s_girl, s_disc->mail);
         if (s_mails != before) {
+            if (at != NULL && trips < max) {
+                at[trips] = t;
+            }
             trips++;
-            if (*first < 0) {
-                *first = t;
-            }
-            if (last >= 0 && t - last < *closest) {
-                *closest = t - last;
-            }
-            last = t;
         }
     }
     return trips;
@@ -455,45 +458,90 @@ static void testCount(void)
 
     ico_yorda_trip_reset();
     for (uint32_t t = 100; t < 100u + 3u * (uint32_t)tps; t++) {
-        CHECK(ico_yorda_trip_step(t, tps, 1, 1) == 0, "a trip within the first 3 s at %u", t);
+        CHECK(ico_yorda_trip_step(t, tps, 1) == 0, "a trip within the first 3 s at %u", t);
     }
     CHECK(ico_yorda_trip_run_ticks() == 3 * tps, "counted %d", ico_yorda_trip_run_ticks());
-    ico_yorda_trip_step(100 + 3 * tps - 1, tps, 1, 1); /* the same tick again */
+    ico_yorda_trip_step(100 + 3 * tps - 1, tps, 1); /* the same tick again */
     CHECK(ico_yorda_trip_run_ticks() == 3 * tps, "a repeated tick counted: %d",
           ico_yorda_trip_run_ticks());
-    ico_yorda_trip_step(100 + 3 * tps + 1, tps, 1, 1); /* one tick missed */
+    ico_yorda_trip_step(100 + 3 * tps + 1, tps, 1); /* one tick missed */
     CHECK(ico_yorda_trip_run_ticks() == 1, "after a gap %d", ico_yorda_trip_run_ticks());
-    CHECK(ico_yorda_trip_rng() == 0, "the generator was seeded before a roll");
-    CHECK(ico_yorda_trip_step(500, 0, 1, 1) == 0 && ico_yorda_trip_run_ticks() == 1,
+    ico_yorda_trip_step(100 + 3 * tps + 2, tps, 1);
+    ico_yorda_trip_step(50, tps, 1); /* a stamp behind the last (another run's) */
+    CHECK(ico_yorda_trip_run_ticks() == 1, "after a stamp behind %d", ico_yorda_trip_run_ticks());
+    CHECK(ico_yorda_trip_step(500, 0, 1) == 0 && ico_yorda_trip_run_ticks() == 1,
           "no ticks a second counts");
+
+    /* the boundary tick called twice: one trip, the second call counts nothing */
+    ico_yorda_trip_reset();
+    for (uint32_t t = 1; t <= 3u * (uint32_t)tps; t++) {
+        ico_yorda_trip_step(t, tps, 1);
+    }
+    CHECK(ico_yorda_trip_step(3 * tps + 1, tps, 1) == 1, "no trip after 3 s");
+    CHECK(ico_yorda_trip_run_ticks() == 0 && ico_yorda_trip_last_run() == 3 * tps + 1,
+          "after the trip: count %d, last run %d", ico_yorda_trip_run_ticks(),
+          ico_yorda_trip_last_run());
+    CHECK(ico_yorda_trip_step(3 * tps + 1, tps, 1) == 0 && ico_yorda_trip_run_ticks() == 0,
+          "the trip's tick again counted %d", ico_yorda_trip_run_ticks());
+    CHECK(ico_yorda_trip_step(3 * tps + 2, tps, 1) == 0 && ico_yorda_trip_run_ticks() == 1,
+          "the tick after a trip counted %d", ico_yorda_trip_run_ticks());
 }
 
-static void testRate(int tps)
+/* The main gate scene's rule at tps ticks a second: its count n is the
+   run-pulled ticks in a row, and ((60 - systemStatus[0] * 10) /
+   systemStatus[1]) * 3 < n mails her and sets n to 0. */
+static void testThreeSeconds(int tps)
 {
-    const int n = 1000000;
-    int first, closest;
+    const int b = 3 * tps + 1; /* the trip's tick in a run: the 76th at 25, the 91st at 30 */
+    int at[8] = {0};
 
     ico_yorda_trip_reset();
     worldReady(tps);
-    s_mails = 0;
-    const int trips = runTicks(1, n, &first, &closest);
-    const double want = (double)n / ((double)ICO_YT_MEAN_S * tps);
+    CHECK((60 - systemStatus[0] * 10) / systemStatus[1] == tps, "the world's %d ticks a second",
+          (60 - systemStatus[0] * 10) / systemStatus[1]);
 
-    printf("yorda_trip_test: %s at %d ticks a second: %d trips in %d ticks (want about %.0f), "
-           "first at %.1f s, closest %.1f s apart\n",
-           s_disc->slug, tps, trips, n, want, first / (double)tps, closest / (double)tps);
-    CHECK(trips > want * 0.8 && trips < want * 1.2, "%d trips, want %.0f +- 20 %%", trips, want);
-    CHECK(first > ICO_YT_ELIGIBLE_S * tps, "a trip %d ticks in", first);
-    CHECK(closest >= ICO_YT_REFRACTORY_S * tps, "two trips %d ticks apart", closest);
+    /* one run: nothing before the boundary, a trip on it, the next 3 s on */
+    s_mails = 0;
+    CHECK(runTicks(1, b - 1, NULL, 0) == 0, "%s at %d: a trip in the first 3 s", s_disc->slug, tps);
+    CHECK(ico_yorda_trip_run_ticks() == b - 1, "counted %d", ico_yorda_trip_run_ticks());
+    CHECK(runTicks(b, 1, NULL, 0) == 1, "%s at %d: no trip on tick %d", s_disc->slug, tps, b);
+    CHECK(ico_yorda_trip_run_ticks() == 0, "the count %d after the trip",
+          ico_yorda_trip_run_ticks());
     CHECK(s_lastMail == s_disc->mail && s_mailTo == &s_girl && s_mailArg == &s_girl,
           "the mail %d to %p (%p)", s_lastMail, (void *)s_mailTo, s_mailArg);
+    const int more = runTicks(b + 1, 3 * b, at, 8);
+    CHECK(more == 3 && at[0] == 2 * b && at[1] == 3 * b && at[2] == 4 * b,
+          "%s at %d: after the first, %d trips (%d %d %d), want %d %d %d", s_disc->slug, tps, more,
+          at[0], at[1], at[2], 2 * b, 3 * b, 4 * b);
+
+    /* a missed tick: the 3 s start again from the tick after it */
+    ico_yorda_trip_reset();
+    s_mails = 0;
+    CHECK(runTicks(1, b - 10, NULL, 0) == 0);
+    /* tick b - 9 is not run-pulled */
+    const int resumed = runTicks(b - 8, b, at, 8);
+    CHECK(resumed == 1 && at[0] == b - 8 + b - 1,
+          "%s at %d: after a gap %d trips, the first at %d, want %d", s_disc->slug, tps, resumed,
+          at[0], b - 8 + b - 1);
+
+    /* a guard failing on the boundary tick: nothing sent, the 3 s start again */
+    ico_yorda_trip_reset();
+    s_mails = 0;
+    CHECK(runTicks(1, b - 1, NULL, 0) == 0);
+    s_sub->ctrl.motion = s_disc->run_loop + 1;
+    CHECK(runTicks(b, 1, NULL, 0) == 0, "a trip out of her run loop");
+    CHECK(ico_yorda_trip_run_ticks() == 0, "the count %d after a boundary with no mail",
+          ico_yorda_trip_run_ticks());
+    s_sub->ctrl.motion = s_disc->run_loop;
+    CHECK(runTicks(b + 1, b, at, 8) == 1 && at[0] == 2 * b,
+          "after a boundary with no mail, the trip at %d, want %d", at[0], 2 * b);
 }
 
 static void testGuards(void)
 {
     const int tps = 30;
-    const int span = 20 * ICO_YT_MEAN_S * tps;
-    int first, closest;
+    const int b = 3 * tps + 1;
+    const int span = 20 * b;
 
     for (int g = 0; g < 11; g++) {
         ico_yorda_trip_reset();
@@ -536,38 +584,41 @@ static void testGuards(void)
             break;
         }
         s_mails = 0;
-        const int trips = runTicks(1, span, &first, &closest);
+        const int trips = runTicks(1, span, NULL, 0);
         if (g < 10) {
             CHECK(trips == 0, "%s: guard %d failing, %d trips", s_disc->slug, g, trips);
         } else {
-            CHECK(trips > 5, "%s: every guard holding, %d trips", s_disc->slug, trips);
+            CHECK(trips == 20, "%s: every guard holding, %d trips in 20 boundaries", s_disc->slug,
+                  trips);
         }
     }
-    CHECK(ico_yorda_trip_run_ticks() > 0);
 }
 
 static void testState(void)
 {
-    static const char *const names[5] = {"yorda_trip.rng", "yorda_trip.seeded",
-                                         "yorda_trip.run_ticks", "yorda_trip.refractory",
-                                         "yorda_trip.last_tick"};
-    const IcoStateEntry *e[5] = {0};
-    unsigned char saved[5][8];
+    static const char *const names[2] = {"yorda_trip.run_ticks", "yorda_trip.last_tick"};
+    const IcoStateEntry *e[2] = {0};
+    unsigned char saved[2][8];
     int a[64], b[64], na = 0, nb = 0;
     const int tps = 25;
+    const int mid = 2 * (3 * tps + 1) + 40; /* two trips, then 40 ticks into the third count */
 
     ico_state_registry_reset();
     CHECK(ico_yorda_trip_state_register() == 0);
     CHECK(ico_yorda_trip_state_register() == -1, "a second registration repeats the names");
+    CHECK(ico_state_registry_count() == 2, "%d blocks registered", ico_state_registry_count());
     for (int i = 0; i < ico_state_registry_count(); i++) {
         const IcoStateEntry *x = ico_state_registry_entry(i);
-        for (int k = 0; k < 5; k++) {
+        CHECK(strcmp(x->name, "yorda_trip.rng") != 0 && strcmp(x->name, "yorda_trip.seeded") != 0 &&
+                  strcmp(x->name, "yorda_trip.refractory") != 0,
+              "an old block %s", x->name);
+        for (int k = 0; k < 2; k++) {
             if (strcmp(x->name, names[k]) == 0) {
                 e[k] = x;
             }
         }
     }
-    for (int k = 0; k < 5; k++) {
+    for (int k = 0; k < 2; k++) {
         CHECK(e[k] != NULL && e[k]->n == 4 && e[k]->flags == 0, "block %s", names[k]);
         if (e[k] == NULL) {
             return;
@@ -575,12 +626,14 @@ static void testState(void)
     }
     ico_yorda_trip_reset();
     worldReady(tps);
-    int first, closest;
-    runTicks(1, 200 * tps, &first, &closest); /* seeded, a trip or two, a refractory running */
-    for (int k = 0; k < 5; k++) {
+    s_mails = 0;
+    CHECK(runTicks(1, mid, NULL, 0) == 2, "%d trips before the state", s_mails);
+    CHECK(ico_yorda_trip_run_ticks() == 40, "the count %d at the state",
+          ico_yorda_trip_run_ticks());
+    for (int k = 0; k < 2; k++) {
         memcpy(saved[k], e[k]->p, e[k]->n);
     }
-    for (int t = 200 * tps; t < 1200 * tps && na < 64; t++) {
+    for (int t = mid + 1; t <= mid + 20 * tps && na < 64; t++) {
         const int before = s_mails;
         frame_count = t;
         ico_opt_yorda_trip_tick(&s_girl, s_disc->mail);
@@ -588,10 +641,10 @@ static void testState(void)
             a[na++] = t;
         }
     }
-    for (int k = 0; k < 5; k++) {
+    for (int k = 0; k < 2; k++) {
         memcpy(e[k]->p, saved[k], e[k]->n);
     }
-    for (int t = 200 * tps; t < 1200 * tps && nb < 64; t++) {
+    for (int t = mid + 1; t <= mid + 20 * tps && nb < 64; t++) {
         const int before = s_mails;
         frame_count = t;
         ico_opt_yorda_trip_tick(&s_girl, s_disc->mail);
@@ -600,6 +653,10 @@ static void testState(void)
         }
     }
     CHECK(na > 0 && na == nb, "%d trips, then %d after the blocks were put back", na, nb);
+    /* the count resumed: the first trip the rest of the 3 s on */
+    CHECK(na > 0 && a[0] == mid + (3 * tps + 1 - 40),
+          "the first trip after the state at %d, want %d", na > 0 ? a[0] : -1,
+          mid + (3 * tps + 1 - 40));
     for (int i = 0; i < na && i < nb; i++) {
         CHECK(a[i] == b[i], "trip %d at %d, then at %d", i, a[i], b[i]);
     }
@@ -674,12 +731,10 @@ static void testStageLoad(void)
     const int before = s_nblocks;
     ico_yorda_trip_stage_loaded(15);
     CHECK(loadedCount() == 0 && s_nblocks == before, "a full partition took %d", loadedCount());
-    int first, closest;
     worldReady(30);
     clearMotions();
     s_mails = 0;
-    CHECK(runTicks(1, 20 * ICO_YT_MEAN_S * 30, &first, &closest) == 0,
-          "a trip without the fall loaded");
+    CHECK(runTicks(1, 20 * (3 * 30 + 1), NULL, 0) == 0, "a trip without the fall loaded");
 }
 
 int main(int argc, char **argv)
@@ -705,8 +760,8 @@ int main(int argc, char **argv)
 
     testNames();
     testCount();
-    testRate(25);
-    testRate(30);
+    testThreeSeconds(25);
+    testThreeSeconds(30);
     testGuards();
     testState();
     testStageLoad();

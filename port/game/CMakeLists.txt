@@ -210,9 +210,11 @@ endif()
 # ico_options), the game's side (yorda_trip_live.c) and the motion reader
 # (yorda_trip_source.c) compiled in, the game, the disc and its pack index
 # stubbed in the test: the disc's motions by name, the run count and its gap
-# reset, the rate over 10^6 ticks at 25 and 30 ticks a second, the
-# refractory time, every guard (this disc's HETARI bit), the mail, the
-# registered blocks put back, and the stage load's motion copies.  CPU only;
+# reset, the main gate scene's 3 s rule at 25 and 30 ticks a second (the trip
+# on the tick after 3 s, the count again from 0, a gap or a boundary with a
+# guard failing starting the 3 s again), every guard (this disc's HETARI
+# bit), the mail, the two registered blocks put back mid-count, and the
+# stage load's motion copies.  CPU only;
 # one run per disc (the motion numbers, the bit and the mail are the disc's).
 add_executable(yorda_trip_test test/yorda_trip_test.c yorda_trip_live.c yorda_trip_source.c
     ../platform/host_config.c "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/tableSin.c")
@@ -223,8 +225,7 @@ target_include_directories(yorda_trip_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
 target_compile_definitions(yorda_trip_test PRIVATE ${ICO_GAME_DEFINITIONS})
 target_compile_options(yorda_trip_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-# ico_math: the VU0 random register the seed is read from (matrix.c) and the
-# maths typedef.h's headers name
+# ico_math: the maths typedef.h's headers name
 target_link_libraries(yorda_trip_test PRIVATE ico_options ico_region ico_math)
 if(NOT WIN32)
     target_link_libraries(yorda_trip_test PRIVATE m)

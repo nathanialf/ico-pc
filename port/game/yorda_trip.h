@@ -21,17 +21,14 @@
  * the pack that holds them (yorda_trip_source.c), and actGirlHand's
  * run-pulled tick asks the rule below whether she trips now.
  *
- * The rule (this file's part, pure: no game headers, game ticks only):
- * consecutive run-pulled ticks are counted by their tick stamp, a missed
- * tick starting the count again; once the count passes 3 seconds (the
- * original's own wait), each tick on which every guard holds trips her with
- * the chance 1 / ((ICO_YT_MEAN_S - ICO_YT_REFRACTORY_S) x ticks a second),
- * and after a trip none comes for ICO_YT_REFRACTORY_S seconds of game time:
- * one trip in about ICO_YT_MEAN_S seconds of run-pulling.  The random
- * numbers are the port's own (xorshift32), seeded once from the game's VU0
- * random register without advancing it, so the game's own random sequence
- * is the original's.  The generator, the count and the refractory time are
- * save state blocks (state_port.h).
+ * The rule (this file's part, pure: no game headers, game ticks only) is
+ * the main gate scene's (actSt04aGirlSitChk): consecutive run-pulled ticks
+ * are counted by their tick stamp, a missed tick starting the count again;
+ * once the count passes 3 seconds of ticks ((60 - systemStatus[0] * 10) /
+ * systemStatus[1] a second, times 3) she trips (the scene's mail) and the
+ * count starts again, so 3 more seconds of running hand in hand trip her
+ * again.  No random numbers, no wait between trips.  The count and its tick
+ * stamp are save state blocks (state_port.h).
  */
 #ifndef ICO_PORT_GAME_YORDA_TRIP_H
 #define ICO_PORT_GAME_YORDA_TRIP_H
@@ -39,32 +36,27 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* the rule's times, in seconds */
-#define ICO_YT_ELIGIBLE_S 3    /* run-pulled before a trip can come (st04a.c's 3 s) */
-#define ICO_YT_MEAN_S 120      /* one trip in this much run-pulling, on average */
-#define ICO_YT_REFRACTORY_S 30 /* no trip this soon after the last */
+/* run-pulled this long before she trips (st04a.c's 3 s), in seconds */
+#define ICO_YT_RUN_S 3
 
-/* The save state's blocks (state_port.h): yorda_trip.rng, .seeded,
-   .run_ticks, .refractory, .last_tick. */
+/* The save state's blocks (state_port.h): yorda_trip.run_ticks,
+   yorda_trip.last_tick. */
 int ico_yorda_trip_state_register(void);
-/* The count, the refractory time and the generator back to unseeded */
+/* The count and its stamp back to none */
 void ico_yorda_trip_reset(void);
 
 /* One run-pulled tick: `tick` the game's tick stamp (frame_count), `tps` the
    game's ticks a second ((60 - systemStatus[0] * 10) / systemStatus[1]),
-   `ready` non-zero when every guard holds (yorda_trip_live.c), `seed` the
-   generator's seed when it is not seeded yet.  A second call with the same
-   stamp counts nothing and rolls nothing.  1 when she trips on this tick
-   (the refractory time then runs; the fall ends the run, so the next run
-   counts from 1), else 0. */
-int ico_yorda_trip_step(uint32_t tick, int tps, int ready, uint32_t seed);
-/* The run-pulled ticks counted now, and the count at the last trip (for the log) */
+   `ready` non-zero when every guard holds (yorda_trip_live.c).  A second
+   call with the same stamp counts nothing.  When the count passes
+   ICO_YT_RUN_S * tps (the tick after 3 s of them) the count starts again
+   from 0, as the scene's does after its mail, and the call returns 1 when
+   `ready` (she trips on this tick: send the mail), else 0 (a guard fails:
+   no mail, and the scene's count starts again all the same). */
+int ico_yorda_trip_step(uint32_t tick, int tps, int ready);
+/* The run-pulled ticks counted now, and the count at the last mail (for the log) */
 int ico_yorda_trip_run_ticks(void);
 int ico_yorda_trip_last_run(void);
-/* Game ticks before a trip can come again (0 when none is pending) */
-int ico_yorda_trip_refractory(void);
-/* The generator's state, 0 before the first roll seeds it */
-uint32_t ico_yorda_trip_rng(void);
 
 /* --- the motions ------------------------------------------------------------
  * Found by name in the disc's motion table (motionKind, the decomp's

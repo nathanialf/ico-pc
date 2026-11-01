@@ -19,9 +19,9 @@
  *   [gameplay] door_fix    false  holding hands, an arrival does not send
  *                                 Ico and Yorda straight back through the
  *                                 door they came in by (door_grace.h)
- *   [gameplay] yorda_trips false  while Ico runs pulling her by the hand,
- *                                 Yorda trips and falls now and then, the
- *                                 fall of the main gate's second stage
+ *   [gameplay] yorda_trips false  after 3 s of Ico running pulling her by
+ *                                 the hand Yorda trips and falls, the main
+ *                                 gate's second stage's fall and rule
  *                                 (yorda_trip.h)
  *   [gameplay] mirror      false  mirrored play (negated stick X, swapped pan)
  *   [gameplay] natural_chains

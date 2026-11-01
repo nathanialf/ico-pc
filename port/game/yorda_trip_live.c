@@ -30,14 +30,14 @@
  *
  * The tick (ico_opt_yorda_trip_tick, from each disc's actGirlHand where it
  * sets her run-pulled bit) checks the guards and asks the rule
- * (yorda_trip.c); a trip is the watcher's own mail (st04a.c
- * actSt04aGirlSitChk: iosOmSendMail(girl, mail, girl)), the disc's mail id
- * passed by the caller.
+ * (yorda_trip.c, the gate scene's 3 s count); a trip is the watcher's own
+ * mail (st04a.c actSt04aGirlSitChk: iosOmSendMail(girl, mail, girl)), the
+ * disc's mail id passed by the caller.
  */
 #include <stdio.h>
 #include <string.h>
 
-#include "typedef.h" /* ico_math.h too: ico_vu0_random_get */
+#include "typedef.h"
 #include "main.h"
 #include "boyact.h"
 #include "script.h"
@@ -258,16 +258,14 @@ void ico_opt_yorda_trip_tick(GObj *girl, int mail)
     const int tps = (60 - systemStatus[0] * 10) / systemStatus[1];
     const uint32_t tick = (uint32_t)frame_count;
 
-    if (!ico_yorda_trip_step(tick, tps, guards(girl), ico_vu0_random_get() ^ tick)) {
+    if (!ico_yorda_trip_step(tick, tps, guards(girl))) {
         return;
     }
     iosOmSendMail(girl, mail, girl);
     s_trips++;
     if (s_trips <= 8 || s_trips % 100 == 0) {
         fprintf(stderr,
-                "yorda trips: tripped at stage %d after %.1f s of running (next chance in %d s; "
-                "trip %u this run)\n",
-                stage_no, tps > 0 ? (double)ico_yorda_trip_last_run() / tps : 0.0,
-                ICO_YT_REFRACTORY_S, s_trips);
+                "yorda trips: tripped at stage %d after %.0f s of running (trip %u this run)\n",
+                stage_no, tps > 0 ? (double)(ico_yorda_trip_last_run() - 1) / tps : 0.0, s_trips);
     }
 }

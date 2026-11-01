@@ -27,8 +27,7 @@
  *   trace_host.c    the Main tick count (CLOCK)
  *   pad_script.c    the pad script's tick (CLOCK)
  *   door_grace.c    the doorway fix's arm and grace
- *   yorda_trip.c    Yorda trips' random numbers, run count and refractory
- *                   time
+ *   yorda_trip.c    Yorda trips' run count and its tick stamp
  *   gfx_null.c      the DMA channel register blocks
  *   host_loop.c     the vsync count and the next field
  *   audio_host.c    the audio side (ICO_STATE_AUDIO, copied under the
