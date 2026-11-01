@@ -337,8 +337,9 @@ typedef struct RdFrame {
      * RDC_TARGET; headValid 0 = no head recorded */
     uint32_t headValid;
     uint32_t headStart[2], headEnd[2], headClear[2], headTarget[2];
-    /* rd_interp.c; not dumped: rd_camera_cut while the frame
-     * was open (rd_end_frame copies it into camera.cut), and the strongest
+    /* rd_interp.c; not dumped: rd_camera_cut (1) or rd_camera_cut_wall
+     * (RD_CAMERA_CUT_WALL) while the frame was open (rd_end_frame copies it
+     * into camera.cut), and the strongest
      * fade rd_post(RD_POST_FADE) recorded, 1 + its alpha (0: none) */
     uint32_t cut;
     uint32_t fade;
@@ -2205,6 +2206,8 @@ enum {
     RD_SNAP_FADE,     /* either frame fully faded (the fade edge) */
     RD_SNAP_HISTORY,  /* targets recreated after prev (display options changed) */
     RD_SNAP_SIZE,     /* the scene size differs */
+    RD_SNAP_WALL,     /* the eye's path from prev to cur crossed the stage
+                       * (rd_camera_cut_wall, RdCamera.cut RD_CAMERA_CUT_WALL) */
     RD_SNAP_COUNT
 };
 

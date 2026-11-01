@@ -10,7 +10,10 @@
  *   snaps     a key missing from the previous frame, a vertex count change,
  *             a jump past the screen threshold, a camera cut (rd_camera_cut),
  *             a fully faded frame (the fade edge), a discarded frame between
- *             (gap), a camera turn past the threshold: the current data
+ *             (gap), a camera turn past the threshold, the eye's path
+ *             through the stage (rd_camera_cut_wall: RD_SNAP_WALL and
+ *             RdCamera.cut 2; with rd_camera_cut too, before or after it,
+ *             a plain cut, RdCamera.cut 1): the current data
  *   ordinal   the same key twice matches in order
  *   photo     two paused photo ticks whose cameras differ:
  *             the camera blends half way, and list 11's full-screen prims
@@ -433,6 +436,15 @@ static void framePair(int what)
         if (what == 1 && k) {
             rd_camera_cut();
         }
+        if ((what == 6 || what == 7 || what == 8) && k) {
+            if (what == 8) {
+                rd_camera_cut();
+            }
+            rd_camera_cut_wall();
+            if (what == 7) {
+                rd_camera_cut();
+            }
+        }
         if (what == 2 && !k) {
             RdPostParams pp;
             memset(&pp, 0, sizeof(pp));
@@ -460,7 +472,9 @@ static void testFrameSnaps(void)
         const char *name;
     } cases[] = {{0, RD_SNAP_NONE, "none"},          {1, RD_SNAP_CUT, "cut"},
                  {2, RD_SNAP_FADE, "fade edge"},     {3, RD_SNAP_GAP, "gap"},
-                 {4, RD_SNAP_CAMERA, "camera turn"}, {5, RD_SNAP_KEEP, "keep"}};
+                 {4, RD_SNAP_CAMERA, "camera turn"}, {5, RD_SNAP_KEEP, "keep"},
+                 {6, RD_SNAP_WALL, "wall"},          {7, RD_SNAP_CUT, "wall, then cut"},
+                 {8, RD_SNAP_CUT, "cut, then wall"}};
 
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         framePair(cases[i].what);
@@ -478,8 +492,14 @@ static void testFrameSnaps(void)
         } else if (cases[i].what != 5) {
             CHECK(x == 8 * 16, "%s: the current sprite (x %d)", cases[i].name, x);
         }
-        if (cases[i].what == 1) {
-            CHECK(rd__last_frame()->camera.cut == 1, "rd_camera_cut sets RdCamera.cut");
+        if (cases[i].what == 1 || cases[i].what == 7 || cases[i].what == 8) {
+            CHECK(rd__last_frame()->camera.cut == 1, "%s: RdCamera.cut 1 (got %u)", cases[i].name,
+                  rd__last_frame()->camera.cut);
+        }
+        if (cases[i].what == 6) {
+            CHECK(rd__last_frame()->camera.cut == RD_CAMERA_CUT_WALL,
+                  "rd_camera_cut_wall sets RdCamera.cut %u (got %u)", RD_CAMERA_CUT_WALL,
+                  rd__last_frame()->camera.cut);
         }
     }
 }

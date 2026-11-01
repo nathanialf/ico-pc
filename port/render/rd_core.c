@@ -2381,7 +2381,8 @@ void rd_end_frame(int keep)
     }
     f->keep = keep ? 1 : 0;
     if (f->cut) {
-        f->camera.cut = 1;
+        /* a plain cut, the camera's or the frame's, wins over a wall's */
+        f->camera.cut = f->cut == RD_CAMERA_CUT_WALL && f->camera.cut != 1 ? RD_CAMERA_CUT_WALL : 1;
     }
     f->camera.freeCamera = f->freeCamera ? 1 : 0;
     rd__frame_head_resolve(f, f->keep); /* the flip's head in the first replayed list */
@@ -2463,6 +2464,14 @@ void rd_camera_cut(void)
         f->cut = 1;
     } else {
         g_rd.cutPending = 1;
+    }
+}
+
+void rd_camera_cut_wall(void)
+{
+    RdFrame *f = rd__rec_frame();
+    if (f && f->cut == 0) {
+        f->cut = RD_CAMERA_CUT_WALL;
     }
 }
 

@@ -314,6 +314,9 @@ typedef struct RdPostParams {
     uint32_t lines;     /* RD_POST_LETTERBOX bar height, GS lines */
 } RdPostParams;
 
+/* RdCamera.cut's value for rd_camera_cut_wall's cut */
+#define RD_CAMERA_CUT_WALL 2
+
 typedef struct RdCamera {
     float view[16];
     float proj[16];     /* the game's screen matrix +0xC0 (gsb_SetVSMatrix): the native
@@ -321,7 +324,11 @@ typedef struct RdCamera {
     float zoom, aspect; /* vsParam[0]; the display aspect the frame was built for (GsBase.c
                          * gsFrame.aspect; 4/3 in version 9 and older dumps) */
     float nearZ, farZ;
-    uint8_t cut; /* 1 on a camera cut this tick; disables interpolation for the frame */
+    /* 1 on a camera cut this tick (rd_camera_cut), RD_CAMERA_CUT_WALL when the
+     * eye's path from the tick before crossed the stage (rd_camera_cut_wall;
+     * dumps from before it hold 0 or 1); either disables interpolation for
+     * the frame */
+    uint8_t cut;
     /* 1: the port's own free camera drew this tick (photo mode, rd_free_camera):
      * the VU draws keep the triangles with a vertex behind the eye, GPU-clipped
      * (vu_common.hlsli VU_F_BEHIND_EYE); 0 in the game's cameras and in older
@@ -895,6 +902,13 @@ uint32_t rd_frame_number(void);
  * (window_host.c) waits on it for a frame at the aspect it asked for. */
 bool rd_last_frame_native(uint32_t *number, float *aspect, uint32_t *gsW);
 void rd_camera_cut(void);
+/* rd_camera_cut_wall: the frame being recorded is not blended from the one
+ * before because the eye's path between them crossed the stage's collision
+ * (port/game/camera_wall.h; GsBase.c gsbHostCullFlip calls it at the flip
+ * that closes the frame): RdCamera.cut RD_CAMERA_CUT_WALL, the snap
+ * RD_SNAP_WALL.  A frame rd_camera_cut marks too stays a plain cut (1).
+ * Outside an open frame it does nothing (the step belongs to no frame). */
+void rd_camera_cut_wall(void);
 /* rd_free_camera: the frame being recorded is drawn from the port's own free
  * camera (photo mode, port/game/photo_view.c), not a camera the game's
  * artists placed: RdCamera.freeCamera.  Outside an open frame it applies to

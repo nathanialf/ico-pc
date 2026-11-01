@@ -106,8 +106,11 @@
  * the camera turned more than RD_INTERP_CAMERA_TURN or moved more than
  * RD_INTERP_CAMERA_MOVE in the tick (a cut the hooks missed), at a fade
  * edge (either frame fully faded: what is behind a black screen may change
- * all at once), after the display options recreated the targets, and when
- * the scene size changed.
+ * all at once), after the display options recreated the targets, when
+ * the scene size changed, and when the eye's path from the tick before
+ * crossed a wall or a floor of the stage (rd_camera_cut_wall from GsBase.c
+ * gsbHostCullFlip, port/game/camera_wall.h: the game's cameras have no wall
+ * test, and the blended eye would be behind the wall; RD_SNAP_WALL).
  *
  * Held at the tick (cur's, unkeyed or state): CLUT animation (textures are
  * updated in place), the rand-driven draws (the menu sparkle, lightning:
@@ -5530,8 +5533,11 @@ int rd__interp_snap(const RdFrame *prev, const RdFrame *cur)
     if (prev->keep || cur->keep) {
         return RD_SNAP_KEEP;
     }
-    if (cur->cut || cur->camera.cut) {
+    if (cur->cut == 1 || cur->camera.cut == 1) {
         return RD_SNAP_CUT;
+    }
+    if (cur->cut || cur->camera.cut) {
+        return RD_SNAP_WALL; /* RD_CAMERA_CUT_WALL: the eye went through the stage */
     }
     if (g_rd.interpFloor && prev->number < g_rd.interpFloor) {
         return RD_SNAP_HISTORY;
@@ -6142,14 +6148,16 @@ static void presentLog(void)
     }
     const uint32_t *n = s_pres.snaps;
     rd__log("interp: %u frames, %u presents: %u blended; snapped: %u no previous, %u gap, "
-            "%u keep, %u cut, %u camera, %u fade, %u history, %u size; keyed draws %llu: "
+            "%u keep, %u cut, %u camera, %u fade, %u history, %u size, %u where the camera's path "
+            "crossed the stage; keyed draws %llu: "
             "%llu blended, %llu unmatched, %llu mismatched, %llu jumped; %llu mesh streams kept or "
             "blended",
             s_pres.frames, s_pres.presents, n[RD_SNAP_NONE], n[RD_SNAP_NO_PREV], n[RD_SNAP_GAP],
             n[RD_SNAP_KEEP], n[RD_SNAP_CUT], n[RD_SNAP_CAMERA], n[RD_SNAP_FADE], n[RD_SNAP_HISTORY],
-            n[RD_SNAP_SIZE], (unsigned long long)s_pres.keyed, (unsigned long long)s_pres.lerped,
-            (unsigned long long)s_pres.missing, (unsigned long long)s_pres.mismatch,
-            (unsigned long long)s_pres.jump, (unsigned long long)s_pres.morph);
+            n[RD_SNAP_SIZE], n[RD_SNAP_WALL], (unsigned long long)s_pres.keyed,
+            (unsigned long long)s_pres.lerped, (unsigned long long)s_pres.missing,
+            (unsigned long long)s_pres.mismatch, (unsigned long long)s_pres.jump,
+            (unsigned long long)s_pres.morph);
     /* a separate line, so the line above keeps its form */
     const uint32_t flapping = flapReport();
     rd__log(
