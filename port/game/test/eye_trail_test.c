@@ -73,25 +73,56 @@ struct IosMemPart *ios_partition_seki;
 struct IosMemPart *ios_partition_sugipon;
 SObjSimpleSetting InitialSObjSimpleSetting;
 
+/* every block the stubs hand the game, freed at exit (the game never frees
+   an eye's record; LeakSanitizer in the asan job counts what is left) */
+static void *s_blocks[1024];
+static int s_blockCount;
+
+static void freeBlocks(void)
+{
+    for (int i = 0; i < s_blockCount; i++) {
+        free(s_blocks[i]);
+    }
+    s_blockCount = 0;
+}
+
+static void *trackedCalloc(size_t n)
+{
+    void *p = calloc(1, n);
+    if (s_blockCount == 0) {
+        atexit(freeBlocks);
+    }
+    if (p != NULL && s_blockCount < (int)(sizeof(s_blocks) / sizeof(s_blocks[0]))) {
+        s_blocks[s_blockCount++] = p;
+    }
+    return p;
+}
+
 void *iosMallocDebug(IosMemPart *part, int size, const char *file, int line)
 {
     (void)part, (void)file, (void)line;
-    return calloc(1, (size_t)size);
+    return trackedCalloc((size_t)size);
 }
 
 void *iosFree(void *ptr)
 {
+    for (int i = 0; i < s_blockCount; i++) {
+        if (s_blocks[i] == ptr) {
+            s_blocks[i] = s_blocks[--s_blockCount];
+            break;
+        }
+    }
     free(ptr);
     return NULL;
 }
 
 struct Sub15C *CSVSYSTEM_InitDObj(int id, SObjSimpleSetting *lay)
 {
-    Sub15C *d = calloc(1, sizeof(Sub15C));
+    Sub15C *d = trackedCalloc(sizeof(Sub15C));
 
     (void)id, (void)lay;
-    d->nodes = calloc(1, sizeof(struct DObjNode));
-    d->nodeMtx = (ICO_WORD)calloc(1, 64);
+    d->nodes = trackedCalloc(sizeof(struct DObjNode));
+    d->nodeMtx = (ICO_WORD)trackedCalloc(64);
     return d;
 }
 
