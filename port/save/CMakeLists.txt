@@ -69,3 +69,88 @@ if(ICO_RUN_TESTS)
                  WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_name}")
     endforeach()
 endif()
+
+# The rescue of an old save state's progress as a memory-card save
+# (state_recover.h): the side file tools/state_recover.py writes, this
+# program's copies of the globals the card code and the save image need, and
+# the game's own card code (fumi/ios/mcard.c and mcdata.c, compiled with the
+# game's options as save_test compiles them) on the scheduler over a card
+# folder.  state_recover_tool is its command line; it stays in every build
+# (cmake/IcoTests.cmake ICO_KEEP_IN_ALL), since tools/state_recover.py runs it.
+add_library(ico_state_recover STATIC
+    state_recover.c
+    ../platform/host_config.c
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/mcard.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/mcdata.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/thread.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/message.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/memory.c")
+ico_include_dirs(fumi _ico_recover_incs)
+target_include_directories(ico_state_recover PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
+                           PRIVATE ${_ico_recover_incs} "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(ico_state_recover PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(ico_state_recover PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(ico_state_recover PUBLIC ico_save ico_platform ico_options)
+add_executable(state_recover_tool tools/state_recover_tool.c)
+target_compile_options(state_recover_tool PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(state_recover_tool PRIVATE ico_state_recover)
+
+# state_recover_test (its header lists the cases): unit SLUG on each disc
+# (the side file, the globals and their refusals, the card writes through
+# mcard.c laid out byte by byte and read back through the game's loader),
+# each in its own folder; then, for the European disc, the chain the user
+# runs: `files` writes three builds' state files and symbol tables (an ELF
+# library inside a package, GNU ld's ELF and PE maps, a functions-only nm
+# table), tools/state_recover.py reads each (the package's run also writes
+# the card through state_recover_tool; the nm table is refused), and
+# `check` compares the side files and the card save with the fixture.
+add_executable(state_recover_test test/state_recover_test.c)
+target_include_directories(state_recover_test PRIVATE ${_ico_recover_incs}
+                           "${CMAKE_SOURCE_DIR}/port/platform" "${CMAKE_SOURCE_DIR}/port/test")
+target_compile_definitions(state_recover_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(state_recover_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(state_recover_test PRIVATE ico_state_recover)
+if(ICO_RUN_TESTS)
+    foreach(_slug pal jpn kor ntsc aug6 jun26 cn)
+        if(_slug STREQUAL "pal")
+            set(_name state_recover)
+        else()
+            set(_name state_recover_${_slug})
+        endif()
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_name}")
+        add_test(NAME ${_name} COMMAND state_recover_test unit ${_slug}
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_name}")
+    endforeach()
+    set(_chain "${CMAKE_CURRENT_BINARY_DIR}/state_recover_chain")
+    file(MAKE_DIRECTORY "${_chain}")
+    add_test(NAME state_recover_files COMMAND state_recover_test files WORKING_DIRECTORY "${_chain}")
+    set_tests_properties(state_recover_files PROPERTIES FIXTURES_SETUP state_recover_files)
+    if(Python3_EXECUTABLE)
+        set(_recover_py "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/state_recover.py")
+        add_test(NAME state_recover_py_apk
+                 COMMAND ${_recover_py} state_v1.ics fake.apk --disc pal --side side_apk.rescue
+                         --card card --tool $<TARGET_FILE:state_recover_tool>
+                 WORKING_DIRECTORY "${_chain}")
+        add_test(NAME state_recover_py_map
+                 COMMAND ${_recover_py} state_v2.ics ico_pc.map --side side_map.rescue
+                 WORKING_DIRECTORY "${_chain}")
+        add_test(NAME state_recover_py_win
+                 COMMAND ${_recover_py} state_win.ics x64.map --side side_win.rescue
+                 WORKING_DIRECTORY "${_chain}")
+        set_tests_properties(state_recover_py_apk state_recover_py_map state_recover_py_win
+                             PROPERTIES FIXTURES_REQUIRED state_recover_files
+                                        FIXTURES_SETUP state_recover_sides)
+        add_test(NAME state_recover_py_refuse
+                 COMMAND ${_recover_py} state_v1.ics code_only.syms --side side_refused.rescue
+                 WORKING_DIRECTORY "${_chain}")
+        set_tests_properties(state_recover_py_refuse PROPERTIES
+                             FIXTURES_REQUIRED state_recover_files
+                             PASS_REGULAR_EXPRESSION "refused: .*names no data symbols")
+        add_test(NAME state_recover_check COMMAND state_recover_test check
+                 WORKING_DIRECTORY "${_chain}")
+        set_tests_properties(state_recover_check PROPERTIES
+                             FIXTURES_REQUIRED "state_recover_files;state_recover_sides")
+    endif()
+endif()

@@ -27,10 +27,11 @@
 #    test command names) EXCLUDE_FROM_ALL and makes the aggregate target `tests`
 #    depend on all of them. ICO_KEEP_IN_ALL lists the programs that are not tests
 #    and stay in `all` (the save importer is shipped by the Windows packages, ico_pc
-#    is the game, the replay tool is a developer tool the packages do not ship);
+#    is the game, the replay tool is a developer tool the packages do not ship,
+#    state_recover_tool is the card side of tools/state_recover.py);
 #    `tests` still depends on them because tests run them.
 
-set(ICO_KEEP_IN_ALL rd_replay_tool mc_import ico_pc)
+set(ICO_KEEP_IN_ALL rd_replay_tool mc_import state_recover_tool ico_pc)
 set_property(GLOBAL PROPERTY ICO_TEST_PROGRAMS "")
 
 # The area of the directory <dir>.
