@@ -20,8 +20,18 @@
  *                as present and not loadable with the reason, a good one
  *                loadable with its play time, stage, time, commit and
  *                picture, a damaged file present and BAD_FILE
- *   thumbnail    the size for 640 x 448, a narrow picture, a box average
- *                and opaque alpha
+ *   thumbnail    the size: the pause picture's square pixels (1920 x 1080
+ *                to 960 x 540, a narrow one kept, a tall one held to 960
+ *                lines), the fallback DISPLAY frame at the box's shape (640 x
+ *                224 shown at 4:3 is 640 x 480, not squashed; a wide frame at
+ *                16:9); a box average, opaque alpha, rows repeated upward
+ *   pause picture  pause.png's path (none without a folder or when it does
+ *                not fit); the copy to a slot's picture (the bytes, a second
+ *                copy replacing the first, a missing or empty source refused
+ *                with nothing left behind); the steps: play to the pause
+ *                menu takes it once, the pause menu, a port page and the way
+ *                back keep it, the play layout drops it, a pause menu not
+ *                reached from play (after a load, from a page) takes none
  *
  * The full save and load is the headless round trip's (A5,
  * state_roundtrip_headless).
@@ -314,17 +324,33 @@ static void test_listing(void)
 
 static void test_thumbnail(void)
 {
-    static uint8_t src[4 * 4 * 4], dst[2 * 2 * 4];
+    static uint8_t src[4 * 4 * 4], dst[2 * 2 * 4], tall[2 * 4 * 4];
     int w, hh, i;
 
-    ico_state_thumb_size(640, 448, &w, &hh);
-    CHECK(w == 320 && hh == 224, "%dx%d", w, hh);
-    ico_state_thumb_size(1920, 1080, &w, &hh);
-    CHECK(w == 320 && hh == 180, "%dx%d", w, hh);
-    ico_state_thumb_size(100, 50, &w, &hh);
-    CHECK(w == 100 && hh == 50, "a narrow picture keeps its size: %dx%d", w, hh);
-    ico_state_thumb_size(4000, 1, &w, &hh);
-    CHECK(w == 320 && hh == 1, "%dx%d", w, hh);
+    /* the pause picture: square pixels, 960 wide at most */
+    ico_state_thumb_size(1920, 1080, 0.0, &w, &hh);
+    CHECK(w == 960 && hh == 540, "%dx%d", w, hh);
+    ico_state_thumb_size(1440, 1080, 0.0, &w, &hh);
+    CHECK(w == 960 && hh == 720, "%dx%d", w, hh);
+    ico_state_thumb_size(640, 480, 0.0, &w, &hh);
+    CHECK(w == 640 && hh == 480, "a narrow picture keeps its size: %dx%d", w, hh);
+    ico_state_thumb_size(4000, 1, 0.0, &w, &hh);
+    CHECK(w == 960 && hh == 1, "%dx%d", w, hh);
+    ico_state_thumb_size(1080, 2400, 0.0, &w, &hh);
+    CHECK(hh == 960 && w == 432, "a tall one held to 960 lines: %dx%d", w, hh);
+    /* the fallback: DISPLAY has half the lines it is shown with */
+    ico_state_thumb_size(640, 224, 4.0 / 3.0, &w, &hh);
+    CHECK(w == 640 && hh == 480, "DISPLAY at 4:3, not squashed: %dx%d", w, hh);
+    ico_state_thumb_size(2560, 896, 16.0 / 9.0, &w, &hh);
+    CHECK(w == 960 && hh == 540, "a 4x DISPLAY at 16:9: %dx%d", w, hh);
+    /* 2x2 -> 2x4: each row twice */
+    for (i = 0; i < 16; i++) {
+        src[i * 4 + 0] = (uint8_t)(i * 10);
+    }
+    ico_state_thumb_scale(src, 2, 2, tall, 2, 4);
+    CHECK(tall[0] == src[0] && tall[8] == src[0] && tall[16] == src[8] && tall[24] == src[8] &&
+              tall[4] == src[4],
+          "rows repeated: %d %d %d %d", tall[0], tall[8], tall[16], tall[24]);
     /* 4x4 -> 2x2: each output the average of its 2x2 block */
     for (i = 0; i < 16; i++) {
         src[i * 4 + 0] = (uint8_t)(i * 10);
@@ -340,6 +366,102 @@ static void test_thumbnail(void)
     CHECK(dst[12] == 125 && dst[15] == 255, "%d", dst[12]);
 }
 
+static int file_bytes(const char *path, unsigned char *buf, size_t n)
+{
+    FILE *f = fopen(path, "rb");
+    size_t got;
+
+    if (f == NULL) {
+        return -1;
+    }
+    got = fread(buf, 1, n, f);
+    fclose(f);
+    return (int)got;
+}
+
+static void put_file(const char *path, const void *p, size_t n)
+{
+    FILE *f = fopen(path, "wb");
+
+    CHECK(f != NULL, "%s", path);
+    if (f != NULL) {
+        CHECK(fwrite(p, 1, n, f) == n);
+        fclose(f);
+    }
+}
+
+static void test_pause_picture(void)
+{
+    char dir[600], pause[700], slot[700], tmp[720], longdir[1200];
+    unsigned char want[3000], got[4000];
+    int last = -1, i;
+    const int play = 54, pause_l = 57, page = 85, options = 58;
+
+    /* the path */
+    snprintf(dir, sizeof dir, "%s/state_host_pause", base);
+    (void)ico_mkdir(dir);
+    CHECK(ico_state_pause_path(pause, sizeof pause, dir) == 0 && strstr(pause, "/pause.png"), "%s",
+          pause);
+    CHECK(ico_state_pause_path(pause, 8, dir) == -1 && pause[0] == '\0', "too long: none");
+    CHECK(ico_state_pause_path(pause, sizeof pause, "") == -1 && pause[0] == '\0', "no folder");
+    memset(longdir, 'a', sizeof longdir - 1);
+    longdir[sizeof longdir - 1] = '\0';
+    CHECK(ico_state_pause_path(pause, sizeof pause, longdir) == -1, "a folder that does not fit");
+    CHECK(ico_state_pause_path(pause, sizeof pause, dir) == 0);
+
+    /* the copy */
+    CHECK(ico_state_slot_path(slot, sizeof slot, dir, 2, ".png") == 0);
+    snprintf(tmp, sizeof tmp, "%s.tmp", slot);
+    (void)ico_remove(slot);
+    (void)ico_remove(pause);
+    CHECK(ico_state_copy_file(pause, slot) == -1 && file_bytes(slot, got, sizeof got) < 0 &&
+              file_bytes(tmp, got, sizeof got) < 0,
+          "no pause picture: nothing copied, nothing left");
+    put_file(pause, "", 0);
+    CHECK(ico_state_copy_file(pause, slot) == -1 && file_bytes(slot, got, sizeof got) < 0,
+          "an empty one: refused");
+    for (i = 0; i < (int)sizeof want; i++) {
+        want[i] = (unsigned char)(i * 7 + 3);
+    }
+    put_file(pause, want, sizeof want);
+    CHECK(ico_state_copy_file(pause, slot) == 0 &&
+              file_bytes(slot, got, sizeof got) == (int)sizeof want &&
+              memcmp(got, want, sizeof want) == 0 && file_bytes(tmp, got, sizeof got) < 0,
+          "copied byte for byte, no .tmp left");
+    want[0] ^= 0xFF;
+    put_file(pause, want, 100);
+    CHECK(ico_state_copy_file(pause, slot) == 0 && file_bytes(slot, got, sizeof got) == 100 &&
+              memcmp(got, want, 100) == 0,
+          "a second copy replaces the first");
+    CHECK(file_bytes(pause, got, sizeof got) == 100, "the pause picture stays (another save)");
+    (void)ico_remove(slot);
+    (void)ico_remove(pause);
+
+    /* the steps */
+    CHECK(ico_state_shot_step(&last, play, play, pause_l) == ICO_STATE_SHOT_DROP && last == play,
+          "the first poll in play: drop (nothing there)");
+    CHECK(ico_state_shot_step(&last, play, play, pause_l) == ICO_STATE_SHOT_DROP, "still play");
+    CHECK(ico_state_shot_step(&last, pause_l, play, pause_l) == ICO_STATE_SHOT_TAKE &&
+              last == pause_l,
+          "play to the pause menu: take");
+    CHECK(ico_state_shot_step(&last, pause_l, play, pause_l) == ICO_STATE_SHOT_KEEP,
+          "the pause menu: once only");
+    CHECK(ico_state_shot_step(&last, page, play, pause_l) == ICO_STATE_SHOT_KEEP &&
+              ico_state_shot_step(&last, options, play, pause_l) == ICO_STATE_SHOT_KEEP &&
+              ico_state_shot_step(&last, pause_l, play, pause_l) == ICO_STATE_SHOT_KEEP,
+          "a page over it and back: kept, not taken again");
+    CHECK(ico_state_shot_step(&last, play, play, pause_l) == ICO_STATE_SHOT_DROP,
+          "back to play: dropped");
+    CHECK(ico_state_shot_step(&last, pause_l, play, pause_l) == ICO_STATE_SHOT_TAKE,
+          "the next pause: taken again");
+    last = page;
+    CHECK(ico_state_shot_step(&last, pause_l, play, pause_l) == ICO_STATE_SHOT_KEEP,
+          "the pause menu reached from a page (a load): none taken");
+    last = -1;
+    CHECK(ico_state_shot_step(&last, pause_l, play, pause_l) == ICO_STATE_SHOT_KEEP,
+          "the first poll on the pause menu: none taken");
+}
+
 int main(int argc, char **argv)
 {
     snprintf(base, sizeof base, "%s", argc > 1 ? argv[1] : ".");
@@ -349,5 +471,6 @@ int main(int argc, char **argv)
     test_dev_keys();
     test_listing();
     test_thumbnail();
+    test_pause_picture();
     return ico_check_summary("state_host");
 }

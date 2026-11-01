@@ -4,8 +4,8 @@
  * The save states' decisions that need neither the game nor the window
  * (port/platform/state.h is the interface; state_host.c does the work):
  * whether a save or a load may run now, the text of a result for the log,
- * a slot's files, the slot listing over a folder, the [dev] keys' values
- * and the thumbnail's downscale.  Unit-tested by
+ * a slot's files, the slot listing over a folder, the [dev] keys' values,
+ * the thumbnail's downscale and the pause picture's steps.  Unit-tested by
  * port/game/test/state_host_test.c.
  */
 #ifndef ICO_GAME_STATE_RULES_H
@@ -75,11 +75,45 @@ void ico_state_list_dir(const char *dir, const IcoStateHeader *now,
 int ico_state_parse_at(const char *s, unsigned int *tick, int *slot);
 
 /* The thumbnail: w x h RGBA (pitch w * 4) box-filtered to dw x dh RGBA
-   (dw, dh at least 1, at most w, h), alpha set opaque. */
+   (dw, dh at least 1, dw at most w; a dh above h repeats rows), alpha set
+   opaque. */
 void ico_state_thumb_scale(const uint8_t *src, int w, int h, uint8_t *dst, int dw, int dh);
-/* The thumbnail's size for a w x h picture: ICO_STATE_THUMB_W wide (the
-   picture's width when narrower), the height in proportion (at least 1). */
-#define ICO_STATE_THUMB_W 320
-void ico_state_thumb_size(int w, int h, int *dw, int *dh);
+/* The size of the picture kept with a state, for a w x h picture shown at
+   aspect (its width over its height on screen; 0 or less: w / h, square
+   pixels): at most ICO_STATE_THUMB_W wide (the picture's width when
+   narrower) and ICO_STATE_THUMB_H tall, the other side in proportion, at
+   least 1 x 1.  The pause picture is the presentation box's pixels
+   (square); the fallback, the DISPLAY frame, has half the lines it is
+   shown with, so its aspect is the presentation box's.  At most 960 x 960
+   RGB, the PNG (stored, rd_png.h) stays under 2.8 MB, inside the Save
+   states page's 8 MB read (port/ui/settings.c statesDefaultLoad). */
+#define ICO_STATE_THUMB_W 960
+#define ICO_STATE_THUMB_H 960
+void ico_state_thumb_size(int w, int h, double aspect, int *dw, int *dh);
+
+/* <dir>/pause.png, the picture of the last pause (state_host.c): 0, or -1
+   when dir is empty or the path does not fit (out then ""). */
+int ico_state_pause_path(char *out, size_t size, const char *dir);
+
+/* from copied to to through <to>.tmp and a rename (the slot's picture
+   from the pause picture): 0, or -1 when from cannot be read, is empty or
+   larger than 8 MB, or the copy cannot be written (no <to>.tmp left). */
+int ico_state_copy_file(const char *from, const char *to);
+
+/* The pause picture's step at a poll (state_host.c, once a host step):
+   TAKE when the game went from play (layout_play at the last poll) to the
+   pause menu (layout_pause now), so the tick that opened the menu has just
+   run and its frame, the last one without the menu's dark backdrop, is
+   still to be presented; DROP on the play layout (a picture taken before
+   is no longer the game as it is); KEEP otherwise (the pause menu, the
+   port's pages over it, a load).  *last is the layout at the last poll, -1
+   before the first; it is updated. */
+typedef enum IcoStateShotStep {
+    ICO_STATE_SHOT_KEEP,
+    ICO_STATE_SHOT_TAKE,
+    ICO_STATE_SHOT_DROP
+} IcoStateShotStep;
+
+IcoStateShotStep ico_state_shot_step(int *last, int layout, int layout_play, int layout_pause);
 
 #endif /* ICO_GAME_STATE_RULES_H */

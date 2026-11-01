@@ -193,17 +193,100 @@ int ico_state_parse_at(const char *s, unsigned int *tick, int *slot)
     return 0;
 }
 
-void ico_state_thumb_size(int w, int h, int *dw, int *dh)
+void ico_state_thumb_size(int w, int h, double aspect, int *dw, int *dh)
 {
     int ow = w < ICO_STATE_THUMB_W ? w : ICO_STATE_THUMB_W;
-    long long oh;
+    double a = aspect;
+    double oh;
 
+    if (!(a > 0.0)) {
+        a = w > 0 && h > 0 ? (double)w / (double)h : 1.0;
+    }
     if (ow < 1) {
         ow = 1;
     }
-    oh = w > 0 ? ((long long)h * ow + w / 2) / w : 1;
+    oh = (double)ow / a + 0.5;
+    if (oh > (double)ICO_STATE_THUMB_H) {
+        /* taller than the limit: the limit's height, the width in
+           proportion (narrower than the picture) */
+        const double nw = (double)ICO_STATE_THUMB_H * a + 0.5;
+
+        oh = ICO_STATE_THUMB_H;
+        ow = nw < 1.0 ? 1 : (int)nw;
+    }
     *dw = ow;
-    *dh = oh < 1 ? 1 : (int)oh;
+    *dh = oh < 1.0 ? 1 : (int)oh;
+}
+
+int ico_state_pause_path(char *out, size_t size, const char *dir)
+{
+    int n;
+
+    if (size > 0) {
+        out[0] = '\0';
+    }
+    if (dir == NULL || dir[0] == '\0') {
+        return -1;
+    }
+    n = snprintf(out, size, "%s/pause.png", dir);
+    if (n < 0 || (size_t)n >= size) {
+        if (size > 0) {
+            out[0] = '\0';
+        }
+        return -1;
+    }
+    return 0;
+}
+
+int ico_state_copy_file(const char *from, const char *to)
+{
+    enum { MAX_COPY = 8 << 20 };
+
+    char tmp[1100];
+    FILE *in, *out;
+    unsigned char *buf;
+    size_t n;
+    int ok;
+
+    if (snprintf(tmp, sizeof tmp, "%s.tmp", to) >= (int)sizeof tmp) {
+        return -1;
+    }
+    in = ico_fopen(from, "rb");
+    if (in == NULL) {
+        return -1;
+    }
+    buf = (unsigned char *)malloc((size_t)MAX_COPY + 1);
+    n = buf != NULL ? fread(buf, 1, (size_t)MAX_COPY + 1, in) : 0;
+    fclose(in);
+    if (n == 0 || n > (size_t)MAX_COPY) {
+        free(buf);
+        return -1;
+    }
+    out = ico_fopen(tmp, "wb");
+    ok = out != NULL && fwrite(buf, 1, n, out) == n;
+    if (out != NULL) {
+        ok = fclose(out) == 0 && ok;
+    }
+    free(buf);
+    if (ok && ico_rename_replace(tmp, to) == 0) {
+        return 0;
+    }
+    (void)ico_remove(tmp);
+    return -1;
+}
+
+IcoStateShotStep ico_state_shot_step(int *last, int layout, int layout_play, int layout_pause)
+{
+    const int was = *last;
+
+    *last = layout;
+    if (layout == layout_play) {
+        return ICO_STATE_SHOT_DROP;
+    }
+    if (was == layout_play && layout == layout_pause) {
+        return ICO_STATE_SHOT_TAKE;
+    }
+    return ICO_STATE_SHOT_KEEP;
 }
 
 void ico_state_thumb_scale(const uint8_t *src, int w, int h, uint8_t *dst, int dw, int dh)

@@ -2,8 +2,8 @@
  * port/game/state_host.c
  *
  * Save states (port/platform/state.h): the save and the load at the host
- * loop's quiescent point, the slots' files, the thumbnail and the [dev]
- * keys.  Compiled into the program (ico_pc), both builds; the renderer's
+ * loop's quiescent point, the slots' files, the thumbnail (the pause
+ * picture, else the frame after the save) and the [dev] keys.  Compiled into the program (ico_pc), both builds; the renderer's
  * part (the textures, the meshes, the scene targets, the picture) only in
  * the window build.  docs/port/PLATFORM.md "Save states" has the sequences.
  *
@@ -69,6 +69,7 @@
 #include "video_options.h"
 
 #ifndef ICO_HEADLESS
+#include "rd.h"      /* rd_capture_shot, rd_present_box_size */
 #include "rd_mesh.h" /* rd_drop_vu_meshes, rd_vu_mesh_each_field */
 #include "rd_png.h"  /* rd_write_png */
 #endif
@@ -902,13 +903,44 @@ static struct {
 static struct {
     int slot;      /* waiting for a picture (0: none) */
     int polls;     /* polls since the save */
-    IcoThread *th; /* the PNG's writer */
+    IcoThread *th; /* the PNG's writer, or the pause picture's copy */
     int done;      /* set by the writer (__atomic) */
     int ok;
+    int copy; /* the picture is the pause picture's copy (no frame waited for) */
     int w, h;
     unsigned char *px;
     char path[ICO_PATH_MAX];
+    char from[ICO_PATH_MAX]; /* the copy's source (the pause picture) */
 } s_thumb;
+
+/* The pause picture (state_rules.h ico_state_shot_step): the frame before
+   the pause menu's dark backdrop, taken from the present by rd_capture_shot
+   when the menu opens from play, written to <dir>/pause.png on its own
+   thread and copied to slot<n>.png by a save made before the game goes
+   back to play.  Without one a save takes the frame after it (the DISPLAY
+   frame, menu and all: ico_state_thumbnail). */
+#ifndef ICO_HEADLESS
+enum { SHOT_NONE, SHOT_ARMED, SHOT_WRITING, SHOT_READY };
+
+static struct {
+    int state;
+    int last;      /* the layout at the last poll (ico_state_shot_step) */
+    int stale;     /* dropped while being written: none once written */
+    IcoThread *th; /* the writer */
+    int done;      /* set by the writer (__atomic) */
+    int ok;
+    unsigned char *px; /* the box as taken (w x h), freed after the write */
+    int w, h, dw, dh;
+    double ms; /* the writer's time */
+    unsigned taken;
+    char path[ICO_PATH_MAX];
+    char why[96]; /* why there is none, for the save's line */
+} s_shot = {.last = -1};
+
+static void shot_to_slot(int slot);
+static void shot_join(void);
+#endif
+static void shot_forget(const char *why);
 
 static unsigned s_list_gen; /* a save, a load or a delete since the listing */
 
@@ -980,6 +1012,9 @@ static void flush_at_exit(void)
         ico_thread_join(s_thumb.th);
         s_thumb.th = NULL;
     }
+#ifndef ICO_HEADLESS
+    shot_join();
+#endif
 }
 
 static void perform_save(int slot)
@@ -1050,10 +1085,11 @@ static void perform_save(int slot)
     }
     s_save.slot = slot;
 #ifndef ICO_HEADLESS
-    /* the picture: the next presented frame (the window asks
-       ico_state_wants_thumbnail after this poll's step) */
+    /* the picture: the pause picture's copy, else the next presented frame
+       (the window asks ico_state_wants_thumbnail after this poll's step) */
     s_thumb.slot = slot;
     s_thumb.polls = 0;
+    shot_to_slot(slot);
 #endif
 }
 
@@ -1061,7 +1097,7 @@ static void perform_save(int slot)
 
 int ico_state_wants_thumbnail(void)
 {
-    return s_thumb.slot > 0 && s_thumb.polls >= 1 && s_thumb.th == NULL;
+    return s_thumb.slot > 0 && s_thumb.polls >= 1 && s_thumb.th == NULL && !s_thumb.copy;
 }
 
 #ifndef ICO_HEADLESS
@@ -1086,6 +1122,7 @@ static void thumb_write(void *arg)
 void ico_state_thumbnail(const unsigned char *rgba, int w, int h)
 {
 #ifndef ICO_HEADLESS
+    uint32_t bw = 0, bh = 0;
     int dw, dh;
 
     if (!ico_state_wants_thumbnail() || rgba == NULL || w < 1 || h < 1) {
@@ -1096,7 +1133,10 @@ void ico_state_thumbnail(const unsigned char *rgba, int w, int h)
         s_thumb.slot = 0;
         return;
     }
-    ico_state_thumb_size(w, h, &dw, &dh);
+    /* DISPLAY has half the lines it is shown with (and a wide frame's
+       columns): the picture's shape is the presentation box's */
+    ico_state_thumb_size(w, h, rd_present_box_size(&bw, &bh) ? (double)bw / (double)bh : 0.0, &dw,
+                         &dh);
     s_thumb.px = (unsigned char *)malloc((size_t)dw * (size_t)dh * 4);
     if (s_thumb.px == NULL) {
         s_thumb.slot = 0;
@@ -1124,7 +1164,7 @@ static void thumb_poll(void)
     if (s_thumb.slot == 0) {
         return;
     }
-    if (s_thumb.th == NULL && s_thumb.px == NULL) {
+    if (s_thumb.th == NULL && s_thumb.px == NULL && !s_thumb.copy) {
         /* about two seconds without a present (a minimized window): none */
         if (++s_thumb.polls > 120) {
             fprintf(stderr, "state: slot %d has no picture (no frame was presented)\n",
@@ -1141,8 +1181,9 @@ static void thumb_poll(void)
         s_thumb.th = NULL;
     }
     if (s_thumb.ok) {
-        fprintf(stderr, "state: slot %d's picture written (%s, %dx%d)\n", s_thumb.slot,
-                s_thumb.path, s_thumb.w, s_thumb.h);
+        fprintf(stderr, "state: slot %d's picture written (%s, %dx%d%s)\n", s_thumb.slot,
+                s_thumb.path, s_thumb.w, s_thumb.h,
+                s_thumb.copy ? ", the pause picture" : ", the frame after the save");
     } else {
         fprintf(stderr, "state: slot %d's picture could not be written (%s)\n", s_thumb.slot,
                 s_thumb.path);
@@ -1150,8 +1191,199 @@ static void thumb_poll(void)
     free(s_thumb.px);
     s_thumb.px = NULL;
     s_thumb.slot = 0;
+    s_thumb.copy = 0;
     s_list_gen++;
 }
+
+/* --- the pause picture ---------------------------------------------------------- */
+
+#ifndef ICO_HEADLESS
+/* the pause picture's line: the first 8, then every 100th */
+static int shot_log_now(void)
+{
+    s_shot.taken++;
+    return s_shot.taken <= 8 || s_shot.taken % 100 == 0;
+}
+
+static void shot_write(void *arg)
+{
+    char tmp[ICO_PATH_MAX + 8];
+    unsigned char *small;
+    const double t0 = ico_thread_now_ms();
+    int ok = 0;
+
+    (void)arg;
+    small = (unsigned char *)malloc((size_t)s_shot.dw * (size_t)s_shot.dh * 4);
+    if (small != NULL) {
+        ico_state_thumb_scale(s_shot.px, s_shot.w, s_shot.h, small, s_shot.dw, s_shot.dh);
+        snprintf(tmp, sizeof tmp, "%s.tmp", s_shot.path);
+        ok = rd_write_png(tmp, small, (uint32_t)s_shot.dw, (uint32_t)s_shot.dh,
+                          (uint32_t)s_shot.dw * 4u, 0) &&
+             ico_rename_replace(tmp, s_shot.path) == 0;
+        if (!ok) {
+            (void)ico_remove(tmp);
+        }
+        free(small);
+    }
+    s_shot.ms = ico_thread_now_ms() - t0;
+    s_shot.ok = ok;
+    __atomic_store_n(&s_shot.done, 1, __ATOMIC_RELEASE);
+}
+
+/* rd_capture_shot's answer, after the present that took it (or dropped it) */
+static void shot_taken(uint8_t *rgba, uint32_t w, uint32_t h, void *user)
+{
+    (void)user;
+    if (s_shot.state != SHOT_ARMED || rgba == NULL) {
+        free(rgba);
+        if (s_shot.state == SHOT_ARMED) {
+            s_shot.state = SHOT_NONE;
+            snprintf(s_shot.why, sizeof s_shot.why,
+                     "the frame before the pause menu was not presented");
+        }
+        return;
+    }
+    s_shot.px = rgba;
+    s_shot.w = (int)w;
+    s_shot.h = (int)h;
+    ico_state_thumb_size(s_shot.w, s_shot.h, 0.0, &s_shot.dw, &s_shot.dh);
+    s_shot.done = 0;
+    s_shot.ok = 0;
+    s_shot.stale = 0;
+    s_shot.state = SHOT_WRITING;
+    rd_png_prepare();
+    s_shot.th = ico_thread_create(shot_write, NULL);
+    if (s_shot.th == NULL) {
+        shot_write(NULL);
+    }
+}
+
+static void shot_join(void)
+{
+    if (s_shot.th != NULL) {
+        ico_thread_join(s_shot.th);
+        s_shot.th = NULL;
+    }
+}
+
+/* once a host step: the writer collected, then the game's layout */
+static void shot_poll(void)
+{
+    const IcoRegionInfo *rg = ico_region_cur();
+
+    if (s_shot.state == SHOT_WRITING && __atomic_load_n(&s_shot.done, __ATOMIC_ACQUIRE)) {
+        shot_join();
+        free(s_shot.px);
+        s_shot.px = NULL;
+        if (!s_shot.ok) {
+            s_shot.state = SHOT_NONE;
+            snprintf(s_shot.why, sizeof s_shot.why, "the pause picture could not be written");
+            fprintf(stderr, "state: the pause picture could not be written (%s)\n", s_shot.path);
+        } else if (s_shot.stale) {
+            s_shot.state = SHOT_NONE;
+        } else {
+            s_shot.state = SHOT_READY;
+            if (shot_log_now()) {
+                fprintf(stderr,
+                        "state: the pause picture: the game before the pause menu, %dx%d "
+                        "from the %dx%d picture, written in %.1f ms (%s; picture %u)\n",
+                        s_shot.dw, s_shot.dh, s_shot.w, s_shot.h, s_shot.ms, s_shot.path,
+                        s_shot.taken);
+            }
+        }
+    }
+    switch (
+        ico_state_shot_step(&s_shot.last, current_layout_id, rg->layout_play, rg->layout_pause)) {
+    case ICO_STATE_SHOT_TAKE:
+        if (!s_on) {
+            break;
+        }
+        if (s_shot.state == SHOT_WRITING) {
+            /* the last one still being written (a pause, play, a pause
+               within its write): this pause has none */
+            s_shot.stale = 1;
+            snprintf(s_shot.why, sizeof s_shot.why,
+                     "the last pause picture was still being written");
+            break;
+        }
+        rd_capture_shot_cancel();
+        if (ico_state_pause_path(s_shot.path, sizeof s_shot.path, ico_state_dir()) != 0) {
+            s_shot.state = SHOT_NONE;
+            snprintf(s_shot.why, sizeof s_shot.why, "the pause picture's path does not fit");
+        } else if (rd_capture_shot(shot_taken, NULL)) {
+            s_shot.state = SHOT_ARMED;
+        } else {
+            s_shot.state = SHOT_NONE;
+            snprintf(s_shot.why, sizeof s_shot.why, "no renderer for the pause picture");
+        }
+        break;
+    case ICO_STATE_SHOT_DROP:
+        if (s_shot.state != SHOT_NONE) {
+            shot_forget("the game went back to play since the pause menu opened");
+        }
+        break;
+    case ICO_STATE_SHOT_KEEP:
+        break;
+    }
+}
+
+static void thumb_copy(void *arg)
+{
+    (void)arg;
+    s_thumb.ok = ico_state_copy_file(s_thumb.from, s_thumb.path) == 0;
+    __atomic_store_n(&s_thumb.done, 1, __ATOMIC_RELEASE);
+}
+
+/* a save's picture: the pause picture copied to slot<n>.png, or (none)
+   the frame after the save, as the line says */
+static void shot_to_slot(int slot)
+{
+    if (s_shot.state != SHOT_READY || ico_state_slot_path(s_thumb.path, sizeof s_thumb.path,
+                                                          ico_state_dir(), slot, ".png") != 0) {
+        fprintf(stderr,
+                "state: slot %d's picture: the frame after the save (no pause picture: %s)\n", slot,
+                s_shot.state == SHOT_ARMED     ? "the frame before the pause menu is still to come"
+                : s_shot.state == SHOT_WRITING ? "the pause picture is still being written"
+                : s_shot.why[0] != '\0'        ? s_shot.why
+                                               : "none was taken since the program started");
+        return;
+    }
+    snprintf(s_thumb.from, sizeof s_thumb.from, "%s", s_shot.path);
+    s_thumb.copy = 1;
+    s_thumb.w = s_shot.dw;
+    s_thumb.h = s_shot.dh;
+    s_thumb.done = 0;
+    s_thumb.ok = 0;
+    s_thumb.th = ico_thread_create(thumb_copy, NULL);
+    if (s_thumb.th == NULL) {
+        thumb_copy(NULL);
+        s_thumb.th = NULL;
+        thumb_poll(); /* collected now: no thread to wait for */
+    }
+}
+
+/* no pause picture any more (the game played on, a state was loaded): why
+   for the next save's line */
+static void shot_forget(const char *why)
+{
+    if (s_shot.state == SHOT_ARMED) {
+        rd_capture_shot_cancel();
+    }
+    if (s_shot.state == SHOT_WRITING) {
+        s_shot.stale = 1;
+    } else {
+        s_shot.state = SHOT_NONE;
+    }
+    snprintf(s_shot.why, sizeof s_shot.why, "%s", why);
+}
+#else
+static void shot_poll(void) {}
+
+static void shot_forget(const char *why)
+{
+    (void)why;
+}
+#endif
 
 /* --- loading ------------------------------------------------------------------ */
 
@@ -1796,6 +2028,8 @@ static void perform_load(int slot)
     copy_free(&backup);
     s_list_gen++;
     ui_settings_sync_after_state_load();
+    /* the pause picture showed the game before the load */
+    shot_forget("a state was loaded since the pause menu opened");
     done(1, slot, ICO_STATE_OK, "");
 }
 
@@ -2234,6 +2468,7 @@ void ico_state_host_poll(void)
     }
     collect_save(0);
     thumb_poll();
+    shot_poll();
     if (s_on) {
         note_host_blocks();
     }

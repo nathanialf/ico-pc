@@ -233,7 +233,8 @@ int lt_ext_circle_back(void);
 
 /* An image row (the save-state slots' pictures): the box (x, y, w, h) as
    lt_ext_add_rect takes it, drawn with the texture `tex` (an RdTex id) over
-   its texels (0, 0)..(texW, texH), modulated by the row's colour (its fade),
+   its texels (0, 0)..(texW, texH) at the texture's own shape inside the box
+   (lt_ext_image_fit), modulated by the row's colour (its fade),
    where a label would be (no glow); -1 when full.  lt_ext_set_image changes
    the texture (0, or a zero size: nothing is drawn, an empty slot or the
    headless build); -1 for an index that is not an image row.  The texture is
@@ -246,6 +247,14 @@ int lt_ext_circle_back(void);
 int lt_ext_add_image(int x, int y, int w, int h);
 int lt_ext_set_image(int index, uint32_t tex, int texW, int texH);
 uint32_t lt_ext_row_image(int index, int *texW, int *texH);
+/* Where an image row draws its texture inside the row's box: in = the box
+   (x0, y0, x1, y1 in the text grid, font.h: x in 640ths of the 4:3
+   picture, y in half field lines, a y unit UI_X_PER_Y of an x unit on
+   screen), out = the largest rectangle with the texture's own shape (texW
+   over texH, square texels) centred in it, so a 16:9 picture keeps its
+   shape in a 4:3 box (bands above and below stay empty) and nothing is
+   stretched.  out = in for a zero size. */
+void lt_ext_image_fit(const float in[4], int texW, int texH, float out[4]);
 
 /* A rect row's colour changed after it was added (Settings >
    Extras > Characters' swatches): rgba as lt_ext_add_rect takes it (GS,

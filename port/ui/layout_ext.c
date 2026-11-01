@@ -446,9 +446,31 @@ uint32_t lt_ext_row_image(int index, int *texW, int *texH)
     return r->tex;
 }
 
-/* an image row: the whole box (the rect row's conversion), the texture's
-   texels (0, 0)..(texW, texH), the row's colour as the modulate; no texture,
-   an empty slot or the headless build: nothing */
+void lt_ext_image_fit(const float in[4], int texW, int texH, float out[4])
+{
+    const float w = in[2] - in[0], h = in[3] - in[1];
+    memcpy(out, in, 4 * sizeof(float));
+    if (texW <= 0 || texH <= 0 || !(w > 0.0f) || !(h > 0.0f)) {
+        return;
+    }
+    const float a = (float)texW / (float)texH, shown = h * UI_X_PER_Y; /* the height in x units */
+    if (w > shown * a) {
+        /* a box wider than the picture: as tall as the box, centred across */
+        const float fw = shown * a;
+        out[0] = in[0] + (w - fw) * 0.5f;
+        out[2] = out[0] + fw;
+    } else {
+        /* narrower: as wide as the box, centred down */
+        const float fh = w / a / UI_X_PER_Y;
+        out[1] = in[1] + (h - fh) * 0.5f;
+        out[3] = out[1] + fh;
+    }
+}
+
+/* an image row: the box (the rect row's conversion), the texture's
+   texels (0, 0)..(texW, texH) at their own shape inside it
+   (lt_ext_image_fit), the row's colour as the modulate; no texture, an
+   empty slot or the headless build: nothing */
 static void drawImage(const ExtRow *r, const int box[4], const unsigned char rgba[4])
 {
 #ifdef ICO_RD
@@ -456,10 +478,16 @@ static void drawImage(const ExtRow *r, const int box[4], const unsigned char rgb
         return;
     }
     UiTexQuad q;
-    q.x0 = (float)(box[0] - 4) / 16.0f + UI_GRID_CX;
-    q.y0 = (float)(box[1] - 4) / 8.0f + UI_GRID_CY;
-    q.x1 = q.x0 + (float)(box[2] + 16) / 16.0f;
-    q.y1 = q.y0 + (float)(box[3] + 16) / 8.0f;
+    float in[4], fit[4];
+    in[0] = (float)(box[0] - 4) / 16.0f + UI_GRID_CX;
+    in[1] = (float)(box[1] - 4) / 8.0f + UI_GRID_CY;
+    in[2] = in[0] + (float)(box[2] + 16) / 16.0f;
+    in[3] = in[1] + (float)(box[3] + 16) / 8.0f;
+    lt_ext_image_fit(in, r->texW, r->texH, fit);
+    q.x0 = fit[0];
+    q.y0 = fit[1];
+    q.x1 = fit[2];
+    q.y1 = fit[3];
     q.u0 = q.v0 = 0.0f;
     q.u1 = (float)r->texW;
     q.v1 = (float)r->texH;
