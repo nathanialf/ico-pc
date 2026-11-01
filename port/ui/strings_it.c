@@ -580,6 +580,9 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_DOOR_FIX] = "Porta del riflettore est",
     [UI_STR_OPT_DOOR_FIX_NOTE] =
         "Mano nella mano, Ico e Yorda non tornano più subito fuori da una porta.",
+    [UI_STR_OPT_YORDA_TRIPS] = "Yorda inciampa",
+    [UI_STR_OPT_YORDA_TRIPS_NOTE] =
+        "Disattivato: come l’originale. Attivato: correndo per mano a volte cade, come alla porta principale.",
     [UI_STR_OPT_NATURAL_CHAINS] = "Catene naturali",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "Una catena che scende per Ico mantiene gli anelli della giusta misura per tutta la discesa.",

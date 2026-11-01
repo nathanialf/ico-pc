@@ -580,6 +580,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_DOOR_FIX] = "東の反射板の扉の修正",
     [UI_STR_OPT_DOOR_FIX_NOTE] =
         "手をつないだイコとヨルダが、出入り口からすぐに引き返さなくなります。",
+    [UI_STR_OPT_YORDA_TRIPS] = "ヨルダがつまずく",
+    [UI_STR_OPT_YORDA_TRIPS_NOTE] =
+        "オフ：オリジナルどおり。オン：手をつないで走ると、正門が開いた後のように、ときどき転びます。",
     [UI_STR_OPT_NATURAL_CHAINS] = "自然な鎖",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "イコのところへ降りてくる鎖の輪が、最後まで正しい大きさのままになります。",

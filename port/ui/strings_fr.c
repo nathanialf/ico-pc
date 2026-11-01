@@ -584,6 +584,9 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_OPT_DOOR_FIX] = "Porte du réflecteur est",
     [UI_STR_OPT_DOOR_FIX_NOTE] =
         "Main dans la main, Ico et Yorda ne ressortent plus aussitôt d’une porte.",
+    [UI_STR_OPT_YORDA_TRIPS] = "Yorda trébuche",
+    [UI_STR_OPT_YORDA_TRIPS_NOTE] =
+        "Désactivé : l’original. Activé : main dans la main, elle tombe parfois en courant, comme à la grande porte.",
     [UI_STR_OPT_NATURAL_CHAINS] = "Chaînes naturelles",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "Une chaîne qui descend pour Ico garde des maillons à la bonne taille tout du long.",

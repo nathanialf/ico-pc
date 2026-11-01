@@ -690,6 +690,9 @@ typedef enum UiStrId {
     /* Gameplay > Doorway fix ([gameplay] door_fix) and its explanation */
     UI_STR_OPT_DOOR_FIX,
     UI_STR_OPT_DOOR_FIX_NOTE,
+    /* Gameplay > Yorda trips ([gameplay] yorda_trips) and its explanation */
+    UI_STR_OPT_YORDA_TRIPS,
+    UI_STR_OPT_YORDA_TRIPS_NOTE,
     /* Gameplay > Natural chains ([gameplay] natural_chains) and its explanation */
     UI_STR_OPT_NATURAL_CHAINS,
     UI_STR_OPT_NATURAL_CHAINS_NOTE,

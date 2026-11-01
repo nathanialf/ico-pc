@@ -1975,6 +1975,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     }
     case UI_OPT_DOOR_FIX:
         return onOff(ico_opt_door_fix());
+    case UI_OPT_YORDA_TRIPS:
+        return onOff(ico_opt_yorda_trips());
     case UI_OPT_NATURAL_CHAINS:
         return onOff(ico_opt_natural_chains());
     case UI_OPT_SKIP_OPENING:
@@ -2617,6 +2619,13 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_DOOR_FIX:
         ico_opt_set_door_fix(!ico_opt_door_fix());
         ico_config_set_bool("gameplay.door_fix", ico_opt_door_fix());
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_YORDA_TRIPS:
+        /* the motions are added at a stage load, so the next room has them
+           (port/game/yorda_trip.h) */
+        ico_opt_set_yorda_trips(!ico_opt_yorda_trips());
+        ico_config_set_bool("gameplay.yorda_trips", ico_opt_yorda_trips());
         s_dirtyConfig = 1;
         break;
     case UI_OPT_NATURAL_CHAINS:
@@ -3295,6 +3304,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_PIT_TIME, UI_STR_OPT_PIT_TIME_NOTE);
         addNote(pg, UI_OPT_SHADOW_SPEED, UI_STR_OPT_SHADOW_SPEED_NOTE);
         addNote(pg, UI_OPT_DOOR_FIX, UI_STR_OPT_DOOR_FIX_NOTE);
+        addNote(pg, UI_OPT_YORDA_TRIPS, UI_STR_OPT_YORDA_TRIPS_NOTE);
         addNote(pg, UI_OPT_NATURAL_CHAINS, UI_STR_OPT_NATURAL_CHAINS_NOTE);
         addNote(pg, UI_OPT_SKIP_OPENING, UI_STR_OPT_SKIP_OPENING_NOTE);
         addNote(pg, UI_OPT_PLAYERS, UI_STR_PLAYERS_NOTE);
@@ -3937,15 +3947,21 @@ static void build(void)
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
     static const int touchLinks[] = {-1, -1, -1, UI_PAGE_TOUCH_LAYOUT, -1, -1, -1, -1, -1};
     /* the game's Film effect and Players, once the game is cleared */
-    static const int gameOpts[] = {UI_OPT_YORDA,        UI_OPT_PIT_TIME,    UI_OPT_SHADOW_SPEED,
-                                   UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_NATURAL_CHAINS,
-                                   UI_OPT_SKIP_OPENING, UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,
-                                   UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA,        UI_STR_OPT_PIT_TIME,
-                                   UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_STICK_FIX,
-                                   UI_STR_OPT_DOOR_FIX,     UI_STR_OPT_NATURAL_CHAINS,
-                                   UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS,      UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA,          UI_OPT_PIT_TIME,     UI_OPT_SHADOW_SPEED,
+                                   UI_OPT_STICK_FIX,      UI_OPT_DOOR_FIX,     UI_OPT_YORDA_TRIPS,
+                                   UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING, UI_OPT_FILM_EFFECT,
+                                   UI_OPT_PLAYERS,        UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA,
+                                   UI_STR_OPT_PIT_TIME,
+                                   UI_STR_OPT_SHADOW_SPEED,
+                                   UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_DOOR_FIX,
+                                   UI_STR_OPT_YORDA_TRIPS,
+                                   UI_STR_OPT_NATURAL_CHAINS,
+                                   UI_STR_OPT_SKIP_OPENING,
+                                   UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,
+                                   UI_STR_BACK};
     _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
                    "a string and a link for each Controls row");

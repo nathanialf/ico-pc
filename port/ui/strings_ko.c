@@ -579,6 +579,9 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_DOOR_FIX] = "동쪽 반사경 문 수정",
     [UI_STR_OPT_DOOR_FIX_NOTE] =
         "손을 잡은 이코와 요르다가 출입구에서 곧바로 되돌아 나오지 않게 됩니다.",
+    [UI_STR_OPT_YORDA_TRIPS] = "요르다가 넘어짐",
+    [UI_STR_OPT_YORDA_TRIPS_NOTE] =
+        "끔: 원작 그대로. 켬: 손을 잡고 달리면 정문이 열린 뒤처럼 가끔 넘어집니다.",
     [UI_STR_OPT_NATURAL_CHAINS] = "자연스러운 사슬",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "이코에게 내려오는 사슬의 고리가 끝까지 올바른 크기를 유지합니다.",

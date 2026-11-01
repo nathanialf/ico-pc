@@ -569,6 +569,9 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_VAL_INSTANT] = "立即",
     [UI_STR_OPT_DOOR_FIX] = "東方反射鏡的門修正",
     [UI_STR_OPT_DOOR_FIX_NOTE] = "牽著手時，Ico 與 Yorda 不會再從門口直接退回來。",
+    [UI_STR_OPT_YORDA_TRIPS] = "Yorda 會倒下",
+    [UI_STR_OPT_YORDA_TRIPS_NOTE] =
+        "關：與原作相同。開：牽手奔跑時，她有時會倒下，就像正門打開之後那樣。",
     [UI_STR_OPT_NATURAL_CHAINS] = "自然的鎖鏈",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] = "為 Ico 垂下的鎖鏈，從頭到尾都保持正確的環節大小。",
     [UI_STR_OPT_SKIP_OPENING] = "略過開場",

@@ -579,6 +579,9 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_OPT_DOOR_FIX] = "Puerta del reflector este",
     [UI_STR_OPT_DOOR_FIX_NOTE] =
         "De la mano, Ico y Yorda ya no vuelven a salir enseguida por una puerta.",
+    [UI_STR_OPT_YORDA_TRIPS] = "Yorda tropieza",
+    [UI_STR_OPT_YORDA_TRIPS_NOTE] =
+        "Desactivado: como el original. Activado: corriendo de la mano a veces se cae, como en la puerta principal.",
     [UI_STR_OPT_NATURAL_CHAINS] = "Cadenas naturales",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "Una cadena que baja para Ico conserva sus eslabones del tamaño correcto durante todo el descenso.",
