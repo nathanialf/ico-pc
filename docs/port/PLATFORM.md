@@ -145,7 +145,9 @@ at the same offsets, then moves the addresses they hold (`port/platform/state_re
 - the conservative scan (`ico_state_reloc_word`): the other callee-saved registers (`rbx`, `rbp`,
   `r12` to `r15`, and `rdi`, `rsi` on Windows; `x19` to `x29` on arm64; `rbp` and `x29` are
   scanned, not typed, since code built without frame pointers keeps anything in them), the
-  record's `arg`, and every 8-byte word of the restored stack;
+  record's `arg`, and every 8-byte word of the restored stack; the same step rewrites the saving
+  process's thread pointer and stack guard to this process's ([Relocation](#relocation)), which a
+  protected frame keeps in a callee-saved register and in its stack slot;
 - never: the vector registers (`xmm6` to `xmm15`, `d8` to `d15`); `back_ctx` is cleared (the next
   resume writes it).
 
@@ -493,6 +495,28 @@ pinned) and `pobjImageTables`' host block (POBJ). A word matches a range when `l
   would be changed too, and the typed self-checks cannot see a corrupted integer: that developer
   mode line, which lists every rewritten word, is the one diagnosis (review finding 8; the plan's
   accepted risk).
+- The saving process's own values. Two words a suspended fiber holds are no address in any
+  range: the game thread's thread pointer and the stack guard. The Android build compiles with
+  the stack protector (the NDK's flags; [GAME_CODE.md](GAME_CODE.md)), and clang keeps the thread
+  pointer (`TPIDR_EL0`) in a callee-saved register across the switch to read the guard through
+  it when the frame returns (`ico_fiber_yield`: `mrs x20, TPIDR_EL0`, `ldr x8, [x20, #0x28]`
+  before `_mco_switch` and again after it); every protected frame also holds the guard's value
+  (bionic's thread slot at `TPIDR_EL0 + 0x28`; on Apple the global `__stack_chk_guard`, random
+  per process). Within one process both are the same at the save and the load; in a later
+  process they differ, and the first resumed fiber reads through the old thread pointer (a
+  fault) or finds a guard that is not this process's (`stack corruption detected`). The ranges
+  section records both from the game thread at the save (`ico_state_proc_read`: arm64 Linux
+  and Android the thread pointer, Android the guard word beside it, Apple the guard, 0
+  otherwise), and the load sets them as two exact-match rewrites, old word to new word
+  (`ico_state_reloc_set_values`): `ico_state_reloc_word` checks them before the ranges, so they
+  apply to the fibers' callee-saved registers and stack words, the scheduler's table and every
+  scanned region, each rewrite counted per value. A value is off when its old or new word is 0
+  or the two are equal. Exact 64-bit matches only: a thread pointer or a random guard is not a
+  game word by accident. `ico_state_proc_check` refuses a state whose record lacks a value its
+  platform needs (`android-arm64` both, `linux-arm64` the thread pointer, `macos-*` and `ios-*`
+  the guard) before anything changes (`ICO_STATE_OTHER_BUILD`, detail `no thread-pointer
+  record`). x86-64 reads the guard from `%fs:0x28` at each use and the desktop builds have no
+  protector, so both values are 0 there.
 - `ico_state_image_range` finds the image in this process: on Windows the module's headers
   (`SizeOfImage`, the executable sections), on Linux and Android `dl_iterate_phdr`'s loadable
   segments of the object holding this code, on Apple its segments through `_dyld`
@@ -530,10 +554,12 @@ page too.
 
 **A save** copies, at the poll: the audio blocks under `ico_audio_lock`, then the arena, the two
 game data ranges, the other registered blocks, the scheduler's tables and each live fiber
-(`ico_sched_state_save`: its control block page and its stack from the saved stack pointer minus
-128 bytes to the top), `pobjImageTables`' block when a model is being loaded, and the ranges
-(the image, the arena, the pool and its slot size, the game data, the pobj block, whether each was
-pinned or fixed, the renderer's highest mesh generation). The header gets the identity, the disc,
+(`ico_sched_state_save`: its control block page and its stack from the deepest word the stack
+ever held, and at least from the saved stack pointer minus 128 bytes, to the top: [Save state
+images](#save-state-images)), `pobjImageTables`' block when a model is being loaded, and the
+ranges (the image, the arena, the pool and its slot size, the game data, the pobj block, whether
+each was pinned or fixed, the renderer's highest mesh generation, the game thread's thread
+pointer and stack guard). The header gets the identity, the disc,
 the simulation keys, the time, the play time, the stage, the Main tick and the vsync count.
 `ico_state_file_write` packs and writes on its thread; the next polls collect the result (the
 popup and the `saved` line come then). The copy is about 55 MB at most and is freed when the
@@ -548,7 +574,8 @@ slot N's picture still to come dropped (the slot is deleted)`; review finding 11
 
 **A load** first collects a write in flight, checks the conditions, reads the header and checks
 it against this run's (`ico_state_header_check`), inflates every section into new buffers and
-checks their sizes against this build's, then, under `ico_audio_lock`:
+checks their sizes against this build's and the ranges' thread pointer and stack guard against
+what the platform needs (`ico_state_proc_check`), then, under `ico_audio_lock`:
 
 1. the textures' live serial counter read (`tex_HostNextSerial`, the window build), the packet
    scratch block freed (`pac_HostStateFixup(1)`), the live `pobjImageTables` block kept aside;
@@ -556,7 +583,8 @@ checks their sizes against this build's, then, under `ico_audio_lock`:
    its fibers;
 3. the game data, the arena and the registered blocks copied in; the scheduler and its fibers
    put back with the relocation (`ico_sched_state_restore`, which discards the live fibers);
-4. when any range moved, the conservative scan over the arena, the game data, every SCAN block
+4. when any range moved or the thread pointer or the stack guard differs, the conservative scan
+   over the arena, the game data, every SCAN block
    and the copy of the pobj block; then the scratch pointer the game data brought back forgotten
    (`pac_HostStateFixup(0)`) and the pobj copy installed (`PObj_SetImageTables`);
 5. the self-checks (`ico_state_reloc_check`, heap root `ios_partition_root`); a failure, or a
@@ -622,12 +650,12 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 
 | line | when |
 | --- | --- |
-| `state: save states on: <n> blocks (<bytes> bytes, <bytes> of them audio), build id <16 hex>, <fixed image\|relocatable image>, arena <pinned\|not pinned>, fiber pool <pinned\|not pinned>, folder <dir>` | once, the first poll |
+| `state: save states on: <n> blocks (<bytes> bytes, <bytes> of them audio), build id <16 hex>, <fixed image\|relocatable image>, arena <pinned\|not pinned>, fiber pool <pinned\|not pinned>, <thread pointer recorded[, stack guard recorded]\|stack guard recorded\|no thread pointer needed>, folder <dir>` | once, the first poll |
 | `state: save states are off: <reason>` | once, instead of the line above |
 | `state: the game's data ranges are not bracketed on this build (<why>): save states are off` | once, the verify failed |
 | `state: saved slot N (<path>): arena <raw> -> <packed>, gdata ..., gbss ..., reg ..., audio ..., sched ..., fibers ..., pobj ..., ranges ...; <k> fibers; copy <ms> ms, write <ms> ms, file <bytes> bytes` | a save written |
-| `state: loaded slot N (saved at Main tick T, stage S): deltas module +0x0 (fixed image), arena +0x0 (pinned), pool +0x0 (pinned), pobj ... ; words rewritten [(nothing moved)] arena .., gdata .., gbss .., registry .., pobj ..; checks P partitions, B blocks, T threads, H handlers; K fibers; apply <ms> ms` | a load done |
-| `state: refused <save\|load\|delete> slot N: <reason>[: <detail>]` | every refusal: save states off, not on the pause menu, a stage switch, the card, the disc, a movie, another mode (photo mode, the credits, the music gallery), the slot empty, a damaged file, another build (its commit), another disc, another platform, settings differ (`key=saved (now cur)`), the self-checks (the failing check; the backup restored), the file not written (why), busy |
+| `state: loaded slot N (saved at Main tick T, stage S): deltas module +0x0 (fixed image), arena +0x0 (pinned), pool +0x0 (pinned), pobj ... ; words rewritten [(nothing moved)] arena .., gdata .., gbss .., registry .., pobj ..; thread pointer 0x<old>->0x<new>[ unchanged\| not recorded\| not needed] (K words), stack guard[ unchanged\| not recorded\| not needed] (M words); checks P partitions, B blocks, T threads, H handlers; K fibers; apply <ms> ms` | a load done |
+| `state: refused <save\|load\|delete> slot N: <reason>[: <detail>]` | every refusal: save states off, not on the pause menu, a stage switch, the card, the disc, a movie, another mode (photo mode, the credits, the music gallery), the slot empty, a damaged file, another build (its commit; `no thread-pointer record` for a state without the saving process's thread pointer or stack guard where the platform needs them), another disc, another platform, settings differ (`key=saved (now cur)`), the self-checks (the failing check; the backup restored), the file not written (why), busy |
 | `state: deleted slot N` | a delete |
 | `state: slot N's picture written (<path>, WxH)`, `... could not be written`, `state: slot N has no picture (no frame was presented)` | the picture |
 | `state: [dev] save at Main tick ..., load at ..., hash at ...` and `state: hash ...` | the [dev] keys |
