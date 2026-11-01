@@ -375,6 +375,16 @@ the folded pass is labelled `fog`. Tests: `rd_crack_tiler`, `rd_crack_tiler_on`,
 `rd_crack_tiler_fold`, `rd_crack_tiler_fold_mali` ([TESTING.md](TESTING.md)); the fold's SCENE
 equals the unfolded replay's byte for byte.
 
+The fold saves the fill's own pass, not the break. The scene's pass still ends for the copies and
+is begun again: SCENE's colour and depth are stored at list 3's end, copied, and loaded again
+(about 123 MB a replay at 2366 x 1080, 8 bytes a depth texel). On the PowerVR phone (its
+`[dev] perf_passes` CSV, 2079 replays with the fill) that is the `snapshot` entry at 1.10 ms and the pass labelled
+`fog` at 4.10 ms (the fill, the fog and lists 4-6). Moving the fill to the scene pass's end, or
+replacing it by conservative rasterisation, does not draw the same bytes: the fog above 1x dithers
+by each pixel's own position, and lists 4-6 test against the filled depth. Both were checked and
+left undone ([RENDER.md](RENDER.md#performance-notes), "The crack fill's pass break on
+a tile-based GPU").
+
 Nothing in `rd_crack_fill.c` asks for a tile-based GPU: the fold is taken whenever `doFog` draws by
 the local read (`fogLocalFor`, which reads the profile's `fogLocal` and the fog's path, not the
 class) and SCENE's depth was made for it (`RD_DST_USAGE_LOCAL_DEPTH`), so on desktop Vulkan it
