@@ -1232,7 +1232,21 @@ reading SCENE's colour (no blend, no DATE, bilinear, its tint not black), and no
 the reduction is SCENE's only reader after the sprites (the border's column repeat copies whole
 columns before it, which the steps, the same on every column, commute with). No fold under a pass
 window, in a frame with MSAA (the epoch's resolve is not the lerp's), past four steps, or above 1x
-for a bar while the reduction resamples SCENE through the above-1x kernels.
+for a bar while the reduction resamples SCENE through the above-1x kernels (foreseen as
+`doBlurSpriteDraw` picks them, `rd__set_a1x_gs_keep` included).
+
+The rounding (`roundingRefusal`): a step whose factor is 0 (Cd kept) or 0x80 (Cs) stores the same
+level under every blend and every filter, one value over the rows it covers; a step between them
+rounds. Counting, on each kind of row (between the bars, in a bar), the steps between levels after
+the last 0x80 one, the plan takes any number at scale 1 under an exact blend, one at scale 1 under
+the fixed-function blend (each such step a level from the blender's at most; two would add their
+levels), and none above 1x (the filter rounds its sum and the step its product: in either order
+some channels end two levels apart even for one step of a small factor, by a CPU model of a
+rounding and of a truncating bilinear in `rd_fades_fold_test.c`). So above 1x the steady letterbox
+bars and a fade at full black fold, a fade or the bars on their way in or out and a stage's
+brightness step are drawn. Whether the sprites blend exactly is the asked exact mode's own usage
+bit on SCENE (`rd__fades_fold_exact`: `RD_DST_USAGE_STORAGE` under storage,
+`RD_DST_USAGE_ATTACHMENT` under attachment).
 
 In the reduction:
 
@@ -1247,11 +1261,12 @@ In the reduction:
   ([DIVERGENCES.md](DIVERGENCES.md) VD-27);
 - above 1x (the hardware sprite, `rd__blur_screen_fallback`; `sprite_ps` with `ICO_DF_FOLD`,
   `port/render/rd_pixel_plan.c` (`rd__fill_draw_cb_extra`), `rd__fades_fold_screen`) the steps
-  follow the filter on the sampled texel (`port/shaders/sprite.hlsl` (`sprite_fold`)): a step is
-  affine in the texel and the weights sum to 1, so this is the filter of the stepped texels but
-  for their rounding to 8 bits, a level at most. Where the filter's two rows straddle a bar's edge
-  each row is sampled alone, stepped by its own steps, and the two weighed as the filter weighs
-  them. The bars' rows are SCENE's texel rows the bars covered, their corners snapped to whole GS
+  follow the filter on the sampled texel (`port/shaders/sprite.hlsl` (`sprite_fold`)): with
+  factors 0 and 0x80 alone (above) the rows a step covers hold one value, which the filter keeps,
+  so this is the filter of the stepped texels byte for byte. Where the filter's two rows straddle
+  a bar's edge each row is sampled alone, stepped by its own steps, and the two weighed as the
+  filter weighs them (the shader's weighing against the hardware's: a level at most, on those rows
+  alone). The bars' rows are SCENE's texel rows the bars covered, their corners snapped to whole GS
   pixels as `snapAxis` draws them (`rd_fx_plan.c` `fxAxisCovers`'s mapping);
 - DISPLAY's alpha is the last step's, what SCENE's alpha would have been.
 
@@ -1262,7 +1277,8 @@ frame without the sprites; it is logged and the fold is off from then on. With t
 pause menu's layout drawn after the fade) or film noise, the keep sprite or text drawn into SCENE
 after the sprites, nothing folds. The saving on a tiler is the list 11 pass's load and store of
 SCENE's colour and depth only when list 11 then has no other draw; elsewhere one full-frame draw.
-`[dev] fades_fold = false` (`ICO_RD_FADES_FOLD=0`) draws the sprites as before. Each replay's
+The fold is off by default (`[dev] fades_fold = true`, `ICO_RD_FADES_FOLD=1`, turns it on) until
+`rd_fades_fold_ab` passes on every corpus frame; off, the sprites are drawn as before. Each replay's
 record counts the sprites folded (`RdPerfRecord.fadesFolded`; `rd_replay_tool --stats`: `fades fold
 on: N sprites folded into the reduction`; the window's 10 s `pixel diet` line: `fades fold N`), the
 summary line says `fades fold on` or `off`, and the log says:
@@ -1270,11 +1286,14 @@ summary line says `fades fold on` or `off`, and the log says:
 ```
 rd: fades fold: 3 of list 11's last sprites applied by the reduction instead of drawn into SCENE (frame 720; the whole frame (0, 0, 0) at 127/128, bars (0, 0, 0) at 64/128; the steps on SCENE's texels before the GS filter; SCENE 512x448 texels, rounding the nearest level (the fixed-function blend)); [dev] fades_fold = false draws them (reported once)
 rd: fades fold: list 11's last sprites are drawn into SCENE: a sprite writes SCENE's depth, which the effects depth reads (frame 720; the first 8, then every 100th: 1 so far)
+rd: fades fold: list 11's last sprites are drawn into SCENE: two steps between levels on one row under the fixed-function blend (frame 720; the first 8, then every 100th: 2 so far)
+rd: fades fold: list 11's last sprites are drawn into SCENE: a step between two levels after the hardware filter (above 1x), whose rounding is not the sprite's (frame 720; the first 8, then every 100th: 3 so far)
 rd: fades fold: SCENE's depth is read in list 11 before this replay clears it (frame 1234): the letterbox bars, which write it, are drawn into SCENE from now on (reported once)
 rd: fades fold: the reduction took another way (the hardware sprite, not as planned): frame 1234's picture lacks list 11's last 3 sprites; the fold is off from now on
 ```
 
-ctest `rd_fades_fold` (the step against the GS blend, the plan on recorded frames) and
+ctest `rd_fades_fold` (the step against the GS blend, rd_gsbase's fade, brightness and letterbox
+cases stepped texel by texel against the sprites' bytes, the plan on recorded frames) and
 `rd_fades_fold_ab` (the fade dumps with and without the fold, [TESTING.md](TESTING.md)). Not built:
 a frame differing from the last only in a fade's level could rerun the reduction and the present
 alone (the still re-present shows a picture again only on an unchanged frame hash,

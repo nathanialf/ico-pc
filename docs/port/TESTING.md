@@ -778,14 +778,25 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   without a device: `gs_fold_ch` (`gs_math.hlsli`) with no rounding term against `gs_blend_reg_ch`
   of ALPHA 0x44 and 0x64 for every Cs, Cd and factor 0 to 0x80 (a texel stepped at scale 1 is the
   texel the sprite stored under the exact blend), with the term 64 against the nearest level;
-  `gs_fold_applies`'s rows (the count, a bar step on the bars' rows only, no bar); above 1x, the
-  stepped filter against the filtered steps of two taps at every weight, at most a level apart
-  (the count a level apart printed); and `rd__fades_fold_plan` on frames recorded as the game's
+  `gs_fold_applies`'s rows (the count, a bar step on the bars' rows only, no bar); above 1x, a
+  bilinear of four taps modelled as two lerps of 8-bit weights (rounded, then truncated): a step
+  of factor 0 or 0x80 the same bytes before or after it (the count of channels two levels apart
+  for a step between levels printed, why the plan takes none above 1x); `rd__fades_fold_exact`'s
+  table (the attachment read's usage bit under attachment, the storage read's under storage); the
+  cases of `rd_gsbase` (the fade (200, 100, 7) at 50, the brightness at 12, the letterbox at 25 over
+  rows 0 to 57 and from 455 on, and their chains) recorded through `rd_post`, planned, and every
+  texel of rd_gsbase's gradient stepped as `fx_fold4` steps a tap against the sprites drawn in
+  turn: byte for byte under the exact blend (the plan's rounding from `rd__fades_fold_exact` of
+  the attachment mode), the nearest level under the fixed-function one, the chains of two steps
+  between levels drawn there; and `rd__fades_fold_plan` on frames recorded as the game's
   post passes record them: the fade alone (its step, alpha, the nearest level under the
   fixed-function blend, the floor under an exact one, its command's ordinal), the fade and the
-  letterbox (the bars one step, SCENE's rows 0 to 57 and from H - 57 on; at scale 2 the rows the
-  replay's corner snap gives, 116 and 2H - 114, and the hardware sprite's way), the brightness,
-  the fade and the letterbox (three steps in order), and the frames it leaves alone: the keep
+  letterbox (the bars one step, SCENE's rows 0 to 57 and from H - 57 on, under an exact blend;
+  drawn under the fixed-function blend unless the bars are black; at scale 2 black bars and a
+  black fade fold with the rows the replay's corner snap gives, 116 and 2H - 114, a fade between
+  levels does not; at full height 1x black bars fold unless `rd__set_a1x_gs_keep` is off), the
+  brightness, the fade and the letterbox (three steps in order, under an exact blend; the
+  brightness and the fade drawn under the fixed-function one), and the frames it leaves alone: the keep
   sprite or a menu after the fade, text quads drawn into SCENE after it (the deferred text's
   quads leave it), a Z-testing sprite after the letterbox (one before it leaves the letterbox
   folding), the effects depth or a depth read by a later frame (the bars drawn, a fade after them
@@ -968,7 +979,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   with `ICO_BOOT_DUMP_DIR`, the start-up's frames 115 to 123, each first listed (`--list
   --no-device`: list 11's last twelve commands in the log, so it shows which dumps end with the
   fade, the letterbox or the brightness), then replayed with `--pass-dump --stats` with list 11's
-  last full-frame lerp sprites drawn into SCENE (`ICO_RD_FADES_FOLD=0`) and with the fold, under
+  last full-frame lerp sprites drawn into SCENE (`ICO_RD_FADES_FOLD=0`) and with the fold
+  (`ICO_RD_FADES_FOLD=1`; its log line must name the GS's floor under the exact blend and the
+  nearest level under the fixed-function one, and a reduction that did not take a planned fold
+  fails), under
   `ICO_RD_BLEND=attachment` and `fixed`, at Original (`--present 640x480`), Enhanced 2x
   (`--present 1280x960`) and the phone's Resolution Auto (`--resolution 2364x1080 --full-height
   --full-pixel --aspect 2.189`, `ICO_RD_VU_PREPASS=0`; a narrower dump skips it): `fades fold off`
@@ -1090,7 +1104,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   frame's edges, gives 32 rows in each of the 16 columns and the left's run (`checkEdgeProbe`; on
   Vulkan and OpenGL, which copy a region of a depth to a buffer, else only on the buffer path), and
   with it off a line, if one was logged, says the border is closed.
-- `rd_gsbase_test.c`: `GsBase.c`'s host path driving a synthetic scene (`rd_gsbase`); photo mode's
+- `rd_gsbase_test.c`: `GsBase.c`'s host path driving a synthetic scene (`rd_gsbase`; its post
+  checks read SCENE back, so it draws list 11's last sprites whatever `ICO_RD_FADES_FOLD` says:
+  the fold's DISPLAY is `rd_fades_fold`'s and `rd_fades_fold_ab`'s); photo mode's
   Deja vu draws the stage's sandstorm object once a frame with the vision's two nodes, gives back
   what it borrowed, adds no film grain, and draws nothing in stage 40, with the effect off or with
   photo mode closed (`checkDejaVeil`); its film reel on a row of `film_noise_l4.bga`'s shape: the
