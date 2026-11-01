@@ -121,6 +121,7 @@
 #include "../core/region.h" /* the disc's region (select_disc) */
 #include "startup_retry.h"
 #include "host_loop.h"
+#include "backup.h" /* Options > Extras > Restore from a backup, put in place at the start */
 #include "report.h"
 #include "ico_build_commit.h" /* ICO_BUILD_COMMIT, generated (port/platform/CMakeLists.txt) */
 #include "ico_version.h" /* ICO_VERSION_LABEL, generated (CMakeLists.txt; "" in a development build) */
@@ -149,6 +150,7 @@ extern int systemStatus[]; /* common/src/main.c: [0] the video mode word */
 #include "settings.h"       /* port/ui: Display > Model pack's "None installed" */
 #include "texpack.h"        /* PCSX2 texture packs */
 #include "texpack_export.h" /* Options > Extras > Export textures */
+#include "backup_host.h"    /* Options > Extras > Back up your data */
 #include "window_host.h"
 #include "window_switch.h" /* ico_window_switch_end_text */
 #include "popup.h"         /* port/ui: the save states' results */
@@ -2078,6 +2080,41 @@ static void states_done(int action, int slot, IcoStateResult r, const char *deta
 }
 #endif
 
+/* Options > Extras > Restore from a backup's second step (backup.h): the
+   backup the last run unpacked put in place before anything reads the
+   settings, the memory card or the achievements; a failure leaves the data
+   as it was and says so in a box */
+static void apply_restore(void)
+{
+    char user[ICO_PATH_MAX];
+    IcoBackupManifest m;
+    IcoBackupReport rep;
+
+    if (ico_host_pref_dir(user, sizeof(user)) != 0) {
+        return;
+    }
+    const IcoBackupResult r = ico_backup_apply_pending(user, (long long)time(NULL), &m, &rep);
+    if (rep.leftover) {
+        fprintf(stderr, "backup: a restore the last run did not finish unpacking was deleted; "
+                        "nothing changed\n");
+    }
+    if (r == ICO_BACKUP_NONE) {
+        return;
+    }
+    if (r == ICO_BACKUP_OK) {
+        fprintf(stderr, "backup: restored from %s (version %s, discs %s): %d files replaced (%s)\n",
+                m.from, m.version, m.discs, rep.files, m.items);
+        return;
+    }
+    fprintf(stderr,
+            "backup: the backup from %s could not be put in place: %s (%s); the data is "
+            "as it was\n",
+            m.from[0] != '\0' ? m.from : "the last run", ico_backup_result_text(r), rep.why);
+    ico_host_message_box("The backup could not be put in place, so your data is as it was before. "
+                         "Try Restore from a backup again; the log says what stopped it.",
+                         1);
+}
+
 static void setup_states(const IcoIni *ini)
 {
 #ifndef ICO_HEADLESS
@@ -2085,6 +2122,8 @@ static void setup_states(const IcoIni *ini)
 
     ico_state_set_done_callback(states_done, NULL);
     ui_settings_set_states_host(&host);
+    /* Options > Extras > Back up your data / Restore from a backup */
+    ico_backup_host_install();
 #endif
     setup_state_dev(ini);
 }
@@ -2468,6 +2507,8 @@ static int host_main(int argc, char **argv)
             }
         }
     }
+
+    apply_restore();
 
     /* config.toml on the first run, so there is a file to edit; the window
        build by default, the headless one (whose per-user folder is the

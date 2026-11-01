@@ -117,6 +117,28 @@ typedef void (*IcoAndroidPickFn)(void *user, int gen, const char *uri, const cha
 int ico_android_pick_file(int gen, IcoAndroidPickFn fn, void *user, int *noApp, char *why,
                           size_t n);
 
+/* The system's "save as" screen (IcoActivity.createFile:
+   ACTION_CREATE_DOCUMENT, CATEGORY_OPENABLE, type mime, name suggested)
+   for pick number gen, from the game's thread: the answer is
+   ico_android_pick_file's, through the same pending pick (fn with the new
+   document's content URI, or NULL), and the result the same: 0 started,
+   else -1 with why and *noApp 1 when no app takes the intent. */
+int ico_android_create_file(int gen, const char *name, const char *mime, IcoAndroidPickFn fn,
+                            void *user, int *noApp, char *why, size_t n);
+/* A file descriptor for a content URI a picker answered, opened through
+   the content resolver (IcoActivity.openFd: ParcelFileDescriptor's
+   detached descriptor) in mode "r", "w" or "wt" (written from the start,
+   cut to its new length); the caller closes it. -1 when it cannot be
+   opened, the reason's kind logged ("ico_pc: file picker: open <mode>
+   failed: <exception>"). On any thread SDL made (the JNI environment is
+   SDL's for it). The descriptor may be a pipe: read or write it from the
+   start to the end, without seeking. */
+int ico_android_open_fd(const char *uri, const char *mode);
+/* The name the system shows for a content URI (IcoActivity.displayName,
+   OpenableColumns.DISPLAY_NAME) into out: 0, or -1 with out "" when there
+   is none. Any thread SDL made. */
+int ico_android_display_name(const char *uri, char *out, size_t n);
+
 /* How many times the activity has come back to the front since the process
    started (IcoActivity.onResume). A picker closed without any answer still
    ends in one more resume. */

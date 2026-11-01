@@ -608,6 +608,181 @@ out:
     return rc;
 }
 
+/* Calls the static Java method IcoActivity.createFile(int gen, String name,
+   String mime), the "save as" screen, with the pick's slot as
+   ico_android_pick_file sets it; the same answer path */
+int ico_android_create_file(int gen, const char *name, const char *mime, IcoAndroidPickFn fn,
+                            void *user, int *noApp, char *why, size_t n)
+{
+    JNIEnv *env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    jobject act = env != NULL ? (jobject)SDL_GetAndroidActivity() : NULL;
+    jclass cls = NULL;
+    jstring jname = NULL, jmime = NULL, answer = NULL;
+    int rc = -1;
+
+    *noApp = 0;
+    snprintf(why, n, "no JNI environment or activity");
+    if (env == NULL || act == NULL) {
+        if (act != NULL) {
+            (*env)->DeleteLocalRef(env, act);
+        }
+        return -1;
+    }
+    SDL_LockSpinlock(&s_pickLock);
+    s_pickFn = fn;
+    s_pickUser = user;
+    s_pickGen = gen;
+    s_pickPending = 1;
+    s_pickLatest = gen;
+    SDL_UnlockSpinlock(&s_pickLock);
+    cls = (*env)->GetObjectClass(env, act);
+    jmethodID mid =
+        cls != NULL
+            ? (*env)->GetStaticMethodID(env, cls, "createFile",
+                                        "(ILjava/lang/String;Ljava/lang/String;)Ljava/lang/String;")
+            : NULL;
+    if (mid == NULL) {
+        snprintf(why, n, "no IcoActivity.createFile(int, String, String)");
+        goto out;
+    }
+    jname = (*env)->NewStringUTF(env, name);
+    jmime = (*env)->NewStringUTF(env, mime);
+    if (jname == NULL || jmime == NULL) {
+        snprintf(why, n, "no memory for the file's name");
+        goto out;
+    }
+    answer = (jstring)(*env)->CallStaticObjectMethod(env, cls, mid, (jint)gen, jname, jmime);
+    if ((*env)->ExceptionCheck(env)) {
+        snprintf(why, n, "a Java exception in createFile");
+        goto out;
+    }
+    if (answer != NULL) {
+        const char *s = (*env)->GetStringUTFChars(env, answer, NULL);
+        snprintf(why, n, "%s", s != NULL ? s : "createFile failed");
+        if (s != NULL) {
+            (*env)->ReleaseStringUTFChars(env, answer, s);
+        }
+        *noApp = strncmp(why, "no app", 6) == 0;
+        goto out;
+    }
+    why[0] = '\0';
+    rc = 0;
+out:
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+    }
+    if (rc != 0) {
+        pick_slot_drop(gen);
+    }
+    if (answer != NULL) {
+        (*env)->DeleteLocalRef(env, answer);
+    }
+    if (jname != NULL) {
+        (*env)->DeleteLocalRef(env, jname);
+    }
+    if (jmime != NULL) {
+        (*env)->DeleteLocalRef(env, jmime);
+    }
+    if (cls != NULL) {
+        (*env)->DeleteLocalRef(env, cls);
+    }
+    (*env)->DeleteLocalRef(env, act);
+    return rc;
+}
+
+/* IcoActivity's static String-taking methods for a picked URI: openFd
+   (String uri, String mode) -> int and displayName(String uri) -> String */
+static jclass uri_call_begin(JNIEnv **envOut, jobject *actOut)
+{
+    JNIEnv *env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    jobject act = env != NULL ? (jobject)SDL_GetAndroidActivity() : NULL;
+    jclass cls = act != NULL ? (*env)->GetObjectClass(env, act) : NULL;
+    *envOut = env;
+    *actOut = act;
+    return cls;
+}
+
+static void uri_call_end(JNIEnv *env, jobject act, jclass cls)
+{
+    if (env == NULL) {
+        return;
+    }
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+    }
+    if (cls != NULL) {
+        (*env)->DeleteLocalRef(env, cls);
+    }
+    if (act != NULL) {
+        (*env)->DeleteLocalRef(env, act);
+    }
+}
+
+int ico_android_open_fd(const char *uri, const char *mode)
+{
+    JNIEnv *env;
+    jobject act;
+    jclass cls = uri_call_begin(&env, &act);
+    int fd = -1;
+    jmethodID mid = cls != NULL ? (*env)->GetStaticMethodID(
+                                      env, cls, "openFd", "(Ljava/lang/String;Ljava/lang/String;)I")
+                                : NULL;
+    if (mid != NULL) {
+        jstring ju = (*env)->NewStringUTF(env, uri);
+        jstring jm = (*env)->NewStringUTF(env, mode);
+        if (ju != NULL && jm != NULL) {
+            fd = (int)(*env)->CallStaticIntMethod(env, cls, mid, ju, jm);
+            if ((*env)->ExceptionCheck(env)) {
+                fd = -1;
+            }
+        }
+        if (ju != NULL) {
+            (*env)->DeleteLocalRef(env, ju);
+        }
+        if (jm != NULL) {
+            (*env)->DeleteLocalRef(env, jm);
+        }
+    } else {
+        fprintf(stderr, "ico_pc: file picker: no IcoActivity.openFd(String, String)\n");
+    }
+    uri_call_end(env, act, cls);
+    return fd;
+}
+
+int ico_android_display_name(const char *uri, char *out, size_t n)
+{
+    JNIEnv *env;
+    jobject act;
+    jclass cls = uri_call_begin(&env, &act);
+    int rc = -1;
+    jmethodID mid = cls != NULL
+                        ? (*env)->GetStaticMethodID(env, cls, "displayName",
+                                                    "(Ljava/lang/String;)Ljava/lang/String;")
+                        : NULL;
+    out[0] = '\0';
+    if (mid != NULL) {
+        jstring ju = (*env)->NewStringUTF(env, uri);
+        jstring answer =
+            ju != NULL ? (jstring)(*env)->CallStaticObjectMethod(env, cls, mid, ju) : NULL;
+        if (!(*env)->ExceptionCheck(env) && answer != NULL) {
+            const char *s = (*env)->GetStringUTFChars(env, answer, NULL);
+            if (s != NULL) {
+                snprintf(out, n, "%s", s);
+                (*env)->ReleaseStringUTFChars(env, answer, s);
+                rc = out[0] != '\0' ? 0 : -1;
+            }
+        }
+        if (answer != NULL) {
+            (*env)->DeleteLocalRef(env, answer);
+        }
+        if (ju != NULL) {
+            (*env)->DeleteLocalRef(env, ju);
+        }
+    }
+    uri_call_end(env, act, cls);
+    return rc;
+}
+
 /* how many times the activity came back to the front (IcoActivity.onResume
    -> nativeResumed), counted from the process start; the picker watch in
    gpu_driver_android.c compares it with the count at the pick's start: a

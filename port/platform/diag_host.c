@@ -3755,6 +3755,22 @@ static char loss_value[48];
 #if defined(__ANDROID__) || defined(ICO_IOS)
 static const int loss_at_exit = 0; /* no relaunch */
 #endif
+/* ico_diag_restart_at_exit: the next run starts with no step */
+static int plain_restart;
+
+int ico_diag_can_restart(void)
+{
+    return relaunch_ready != 0 && loss_at_exit != 0;
+}
+
+int ico_diag_restart_at_exit(void)
+{
+    if (!ico_diag_can_restart()) {
+        return 0;
+    }
+    plain_restart = 1;
+    return 1;
+}
 
 int ico_diag_device_lost_restart(int blend_was_fixed)
 {
@@ -3811,10 +3827,12 @@ static const char loss_box_text[] =
    heap are fine here. */
 static void loss_relaunch_at_exit(void)
 {
-    if (loss_value[0] == '\0') {
+    if (loss_value[0] == '\0' && !plain_restart) {
         return;
     }
-    ico_diag_log("ico_pc: starting the game again after the graphics card stopped responding");
+    ico_diag_log(loss_value[0] != '\0'
+                     ? "ico_pc: starting the game again after the graphics card stopped responding"
+                     : "ico_pc: starting the game again, as asked");
     fflush(NULL);
 #ifdef _WIN32
     if (log_h != INVALID_HANDLE_VALUE) {
@@ -3826,6 +3844,9 @@ static void loss_relaunch_at_exit(void)
     }
     ico_diag_log("ico_pc: could not start the game again (error %lu)",
                  (unsigned long)GetLastError());
+    if (loss_value[0] == '\0') {
+        return; /* a plain restart's player starts it again: no loss box */
+    }
     {
         char box[2048]; /* the text (up to 1023) and a path (up to 1023) */
         snprintf(box, sizeof box, "%s\n\nThe log is:\n%s", loss_box_text, ico_diag_log_path());
@@ -3838,7 +3859,7 @@ static void loss_relaunch_at_exit(void)
         return;
     }
     ico_diag_log("ico_pc: could not start the game again");
-    if (fatal_box != NULL) {
+    if (fatal_box != NULL && loss_value[0] != '\0') {
         char box[2048]; /* the text (up to 1023) and a path (up to 1023) */
         snprintf(box, sizeof box, "%s\n\nThe log is:\n%s", loss_box_text, ico_diag_log_path());
         fatal_box(box);

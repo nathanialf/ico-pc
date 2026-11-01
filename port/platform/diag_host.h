@@ -727,6 +727,17 @@ void ico_diag_set_backend_trial(const char *backend);
    relaunch was not prepared: the window shows its box. blend_was_fixed:
    the run drew with the fixed-function blend (rd_blend_exact). */
 int ico_diag_device_lost_restart(int blend_was_fixed);
+/* Whether this run can start the program again when it ends (Windows,
+   Linux and macOS once ico_diag_prepare_relaunch prepared it; never
+   Android or iOS). */
+int ico_diag_can_restart(void);
+/* The program starts again when this run has ended, after the end-of-run
+   steps, with no restart step (ICO_STARTUP_RETRY empty; the new run's log
+   goes on after this one's lines), as after a device loss: Options >
+   Extras > Restore from a backup (backup_host.c), whose next start puts
+   the backup in place. 1 when it will, 0 when this run cannot
+   (ico_diag_can_restart). */
+int ico_diag_restart_at_exit(void);
 /* Removes ICO_STARTUP_RETRY from this process's environment once the
    window has read it, so nothing started from here inherits the step (the
    relaunch's own environment was captured without it at start-up). */

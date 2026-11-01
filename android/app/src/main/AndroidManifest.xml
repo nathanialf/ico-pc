@@ -29,9 +29,10 @@
          granted at install, never asked for. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- the file picker (IcoActivity.pickFile): on Android 11 and later an
-         app sees only the apps it names here, so the log can say which app
-         takes the document picker's intents (the start works without it) -->
+    <!-- the file picker (IcoActivity.pickFile) and the backup's "save as"
+         screen (IcoActivity.createFile): on Android 11 and later an app sees
+         only the apps it names here, so the log can say which app takes the
+         document picker's intents (the start works without it) -->
     <queries>
         <intent>
             <action android:name="android.intent.action.OPEN_DOCUMENT" />
@@ -42,6 +43,11 @@
             <action android:name="android.intent.action.GET_CONTENT" />
             <category android:name="android.intent.category.OPENABLE" />
             <data android:mimeType="*/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.CREATE_DOCUMENT" />
+            <category android:name="android.intent.category.OPENABLE" />
+            <data android:mimeType="application/zip" />
         </intent>
     </queries>
 
