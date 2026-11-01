@@ -1,0 +1,39 @@
+# Dump list for tools/occlusion_corpus.py and the rd_occlusion_tool ctest
+# (port/render/test/rd_occlusion_tool.cmake, its first dump here): the
+# gameplay frames the hidden-draw measurement of list 0 runs over
+# (docs/port/RENDER.md, "Culling").  MACHINE-LOCAL: these are paths on the
+# maintainer's machine; the dumps themselves are never committed.  Missing
+# files are reported and skipped.  Relative paths are relative to this file;
+# '*' globs are allowed; an F12 .zip is read as the tool reads it.
+#
+# the 2026-10-07 captures (the 11 of the native frame set still on this
+# machine; its other 26 dumps are gone, their reference pictures remain)
+/primary/dev/ico-dumps/*.rddump
+# the Mali-G52 reporter's frame (issue 164)
+/primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump
+# the phone frames
+/primary/dev/ico-pc/dist/frame-20261028-105852-v4103.zip
+/primary/dev/ico-pc/dist/frame-20261028-151709-v2199.zip
+/primary/dev/ico-pc/dist/frame-20261028-173610-v4657.zip
+# the issue 163 and 173 frames (v0.9.7)
+/primary/dev/ico-pc/build-host/tmp/v097/evidence/163/frame/frame-20261031-211530-v10103.rddump
+/primary/dev/ico-pc/build-host/tmp/v097/evidence/173/frame/frame-20261031-092256-v1700.rddump
+# reporters' frames: a Mac 16:9 frame, the deja vu 48:9 frame, issue 91's
+# two, issue 146's
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-drafts/deja/frame-20261013-125037-v2227.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181358-v1279.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181400-v1358.rddump
+/primary/dev/ico-pc/build-host/tmp/v091/evidence/146/frame-20261025-221358-v2567/frame-20261025-221358-v2567.rddump
+# the forest walk (godrays port2 keep: the middle frame of each of its 11 runs of 5)
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00430.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00574.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00718.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00910.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01006.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01078.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01222.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01450.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01762.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-02098.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-02254.rddump

@@ -37,6 +37,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_screen_planes.c` | the attribute planes of screen-prim triangles |
 | `port/render/rd_camera_blend.h` | the blended camera, shared with the game's cull |
 | `port/render/rd_perf.c` | the per-replay performance records |
+| `port/render/rd_occlusion.c` | every GPU draw of a replay (`rd__replay_draw`, `rd__replay_draw_indexed`: the pass window's take) and the hidden-draw measurement around them ([Culling](#culling)) |
 | `port/render/rd_passring.h`, `rd_passring.c` | the pass ring: the last passes recorded, for the device-loss report |
 | `port/render/rd_dump.c`, `rd_png.c` | frame dumps; a minimal PNG writer |
 | `port/render/tools/rd_replay_tool.c` | [the replay tool](ARCHITECTURE.md#terms) |
@@ -2332,6 +2333,49 @@ it in the scene's pass (a subpass input attachment, or dynamic rendering local r
 neither the depth nor a copy, a change to the RHI's passes, not done. On a tiler, compare the
 sum of the lists, not one list or effect (the log's GPU top passes and GPU ms per replay lines now say so).
 
+### Culling
+
+**What the game culls.** Each object's box, then each part's box, goes through `gsb_ClipBox` against
+the camera's frustum (`ico2/seki/src/RegistPacket.c` (the object at :606, every part at :1165),
+`ico2/seki/src/GsBase.c` (`gsb_ClipBox`, :3107-3156)): the eight corners through the current matrix,
+and a box is dropped only when every corner is outside one plane by the drop margin
+(`gsbHostDropFlags`, :2892). The planes tested are +x, -x, +y, -y and the near side (`all & 0x2F`,
+:3143: bit 4, the far side, is not in the mask), so nothing is dropped for its distance. A packet's
+own box picks its clip program but never drops it: a packet wholly outside the view is drawn through
+the clipping program and the GPU clips it away (`reg_clipPacketBoundingBox`, `RegistPacket.c`
+:422-477). There is no occlusion test, no room, portal or visibility set, and one stage is resident.
+
+**What the measurement finds.** `rd_replay_tool --occlusion` (below; `port/render/rd_occlusion.c`)
+puts every GPU draw of list 0 inside an occlusion query of its own ([RHI.md](RHI.md#the-interface),
+"Occlusion queries") during the picture's replay and maps each query to the command that drew it:
+`g_rdStoreOrd`, the command the walk replays (its index in list 0, which the walk takes first), or
+for a screen-prim run's draw, which `flushScreenRun` records after its command, the command that
+opened the run (`ScreenRun.ord`, `g_rdDrawOwner`). The measurement runs under `ICO_RD_VU_MERGE=0`,
+`ICO_RD_BLEND=fixed` and the screen-prim runs off (`rd__set_screen_merge`), so each draw command
+makes its own GPU draws. A draw command (screen prims, mesh, skinned, grid, particles) whose draws
+all passed 0 samples was hidden when it drew: left out of the replay (`--nop`) it changes no pixel,
+the saving a culler that tests against the depth drawn so far could make. Hidden includes what draws
+nothing for another reason: a packet outside the view (above), off the scissor, or with every
+fragment discarded. The same measurement under `ICO_VK_DEPTH_ALWAYS=1` (every depth test passes,
+[RHI.md](RHI.md#vulkan)) hides only those, so the commands hidden as drawn and not under the switch
+are the ones the depth hid, the share an occlusion culler can take; `tools/occlusion_corpus.py`
+separates the two from the tool's `--occlusion-csv` tables. Draws of other commands in list 0 (a
+clear drawn as a quad, a fill) are counted apart and are not candidates. Only list 0 is measured:
+the passes after it (the fog, glow, aura, fades, shadows and the present) draw the whole frame and
+no test against the scene's depth leaves them out.
+
+**The gate and the numbers.** `tools/occlusion_corpus.py` runs the dumps of
+`tools/occlusion_corpus.txt` at Original 4:3 1x and Enhanced 4:3 2x: the measurement as drawn and
+without the depth, then the plain replay and the replays with the hidden commands left out (`--nop`
+`@FILE`) under `--pass-dump` (every target byte for byte) and `--stats --gpu-repeat K` (list 0's GPU
+median of K warm replays on lavapipe). A culler of list 0 is built only when the median share the
+depth hid is at least 15 % of the list-0 draws and 10 % of the list-0 triangles over the gameplay
+dumps and leaving those commands out takes at least 10 % off list 0's GPU time, with every compared
+pass dump identical. The report, a row a dump and setting with the medians and the verdict, is
+written beside the run's logs (`--out`, by default under
+`build-host/tmp/<release>/evidence/perf/occlusion.md` on the maintainer's machine); its findings go
+here once measured.
+
 ## Dumps and the replay tool
 
 A [.rddump](ARCHITECTURE.md#terms) is the in-memory frame, little-endian, versioned by
@@ -2386,7 +2430,10 @@ The options:
 | `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--water-sharp` (Water reflections: Sharp), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
 | `--list` | every command of the replayed lists, with textures, prims, boxes and state, then the water summary (`water: ...`, [above](#water-and-render-to-texture-blocks)) |
 | `--no-device` | loads into a record-only renderer for `--list`, `--mesh`, `--dump-textures` |
-| `--nop L:A[-B]` | turns commands into NOPs, to find the draw behind a pixel |
+| `--nop SPEC` | turns commands into NOPs, to find the draw behind a pixel; SPEC is `L:A[-B]`, several separated by commas (`0:12-14,0:40`), or `@FILE` for a spec in a file; the state commands in a range stay |
+| `--occlusion` | the hidden-draw measurement of list 0 ([Culling](#culling)): `<dump>: occlusion: hidden N of M list-0 draws, T of U triangles (index count / 3); hidden commands: SPEC` (SPEC a `--nop` spec, `none` when empty), then `<dump>: occlusion: H of K draw commands hidden; P % of the draws, Q % of the triangles; Q queries, X without a count, Y draws past the 8192 queries; Z draws of other commands not counted; measured under ...`; it sets `ICO_RD_VU_MERGE=0` and `ICO_RD_BLEND=fixed` and turns the screen-prim runs off (the `note:` line says so); Vulkan only (exit 77 elsewhere); not with `--presents`, `--loss-bisect`, `--keys` or `--no-device` |
+| `--occlusion-out FILE`, `--occlusion-csv FILE` | with `--occlusion`: the spec written to FILE (for `--nop @FILE`); a line a command of list 0 that made a GPU draw, `cmd,type,draws,counted,triangles,samples` |
+| `--gpu-repeat K` | with `--stats`: RHI_FRAMES_IN_FLIGHT + 1 + K replays after the picture and, after the `gpu:` line, `<dump>: gpu median of R replays: total X ms, list 0 Y ms, VU pre-pass Z ms` over the warm records that came back (the first replay after the picture left out) |
 | `--mesh NAME` | a VU mesh vertex by vertex, with the kick, overlap and joined marks |
 | `--dump-textures DIR` | every image texture as decoded |
 | `--stats` | the replay's performance record, with GPU times |

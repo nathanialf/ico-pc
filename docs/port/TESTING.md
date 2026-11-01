@@ -865,6 +865,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   commands through it (the title's and the boot's dumps: 2), `expect=report` at least one command
   through it and the targets that differ listed (`rd_noplanes_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)). SKIP as `rd_vustage_ab`.
+- `rd_occlusion_tool.cmake`: `rd_replay_tool --occlusion` ([RENDER.md](RENDER.md#culling)) on the
+  first dump of the machine-local list `tools/occlusion_corpus.txt` that is here, at Original 4:3
+  1x: the line `occlusion: hidden N of M list-0 draws, T of U triangles (index count / 3); hidden
+  commands: S` with M above 0, N at most M, T at most U and S `none` or a `--nop` spec of list 0,
+  the second line, the settings note, `--occlusion-out` holding S and `--occlusion-csv` its header
+  and a line a command; then the plain replay and the replay with `--nop @SPEC`, each `--pass-dump`
+  with `--present 640x480` under `ICO_RD_BLEND=fixed`: DISPLAY.png and PRESENT.png byte for byte
+  (`rd_occlusion_tool`). SKIP without the list, a dump of it or a device.
 - `rd_vumerge_ab_pixel` and `rd_vufuse_ab_pixel`: the two scripts above on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):
   `rd_pixel_vu.rddump` (the VU seams' S4 at Original 1x: 64 code-32 draws of one prelit mesh
@@ -1366,7 +1374,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   pipeline cache file, and the pipeline pool filled: `RHI_PIPELINE_POOL_MAX` pipelines alive at
   once, none refused, the 1025th and the last drawn with, one more refused and counted
   (`poolCell`, once, not under the fake switches) (`rhi_vk`, `rhi_vk_nodual`, `rhi_vk_d24s8`,
-  `rhi_vk_mali`); the adapter cell (`adapterCell`: `rhi_set_adapter_wanted` with a name no device
+  `rhi_vk_mali`); the occlusion queries (`occlusionCell`, under every switch: on an 8x8 target with
+  the depth cleared to 0 and GEQUAL with writes, a quad at 0.5, the same quad behind it at 0.25 and
+  in front at 0.75 count 64, 0 and 64 samples, read once the slot is recycled; a begin outside a
+  pass dropped, the read saying 3 indices; two frames, the first making and resetting the pool at
+  its first begin, the second resetting it in the slot's first list; a frame without queries reads
+  none; then again under `ICO_VK_DEPTH_ALWAYS=1`: 64, 64, 64); the adapter cell (`adapterCell`: `rhi_set_adapter_wanted` with a name no device
   has still starts, on the device a plain start picks, one `rhi_adapter_list` entry current and
   automatic; the plain start's own name picks it again; NULL is automatic); the sync cell (`syncCell`) checks the fence ring under `ICO_VK_FAKE_API=1.1`
   and `1.0`, and under `1.0` the device's version (1.0), the `VkRenderPass` path and the UINT
@@ -1903,6 +1916,7 @@ switches the tests and their registrations use:
 | `ICO_VK_ATTACHMENT_READ` | `vk_device.c` | 1 offers the attachment read under `ICO_VK_FAKE_ADRENO` too (`rd_blend_selftest_adreno_forced`) |
 | `ICO_VK_VALIDATION` | `vk_device.c` | the validation layer; the render and RHI tests set it with `VK_ADD_LAYER_PATH` when the layer is in the toolchain |
 | `ICO_VK_GLOBAL_BARRIERS` | `vk_cmd.c` | a global barrier before every pass instead of hazard tracking, for A/B runs |
+| `ICO_VK_DEPTH_ALWAYS` | `vk_cmd.c`, `vk_pipeline.c` | 1: every depth test passes; the occlusion measurement's run without the depth (`tools/occlusion_corpus.py`, `rhi_vk`'s occlusion cell; [RENDER.md](RENDER.md#culling)) |
 | `ICO_RD_FOG_PATH` | `rd_fog_path.c`, `rd_profile.c` | `local` (the profile's `fogLocal` on where the device has local read), `inplace`, `copy` or `buffer` forces the fog's depth path; `test` makes the self-test try every path (`rd_fog_local`, `rd_fog_selftest_local`) |
 | `ICO_RD_DATE_PATH` | `rd_profile.c`, `rd_date_selftest.c` | `stencil` DATE through the stencil bit wherever the device has local read, kept whatever the self-test finds; `snapshot` the R8 snapshot (`rd_date_selftest`) |
 | `ICO_RD_BLUR_FOLD` | `rd_profile.c` | 1 folds the staticBlur pairs (`fx_blur2_ps`) on any device, 0 never (the A/B of the replay tool's `--pass-dump`) |
@@ -1989,7 +2003,10 @@ replay, which `rd_replay_tool_save_blended` checks against the `--interp` run by
 
 The dump format is `port/render/rd_dump.c`'s header comment, and the replay tool's options are
 listed in [RENDER.md](RENDER.md#dumps-and-the-replay-tool). For tests the useful ones are
-`--pass-dump DIR` (every named target from one run), `--list --no-device` (the commands without a
+`--pass-dump DIR` (every named target from one run), `--occlusion` with `--nop @FILE` (the
+hidden-draw measurement and the replay without the hidden draws; `tools/occlusion_corpus.py` runs
+them over `tools/occlusion_corpus.txt` with `--stats --gpu-repeat K`, under the replay lock it takes
+for each run, and writes the report and the culling gate's verdict, [RENDER.md](RENDER.md#culling)), `--list --no-device` (the commands without a
 GPU), `--present WxH`, `--aspect`, `--enhanced`, `--aa`, `--interp T PREV` and with it
 `--save-blended DUMP` (the frame between the two written as F12's blended present's frame)
 (`port/render/tools/rd_replay_tool.c`, usage).
