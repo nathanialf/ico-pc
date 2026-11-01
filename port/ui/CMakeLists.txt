@@ -258,6 +258,7 @@ if(ICO_RUN_TESTS)
                          settings_extras_ntsc settings_extras_aug6 settings_extras_jun26
                          settings_states settings_states_jpn settings_states_kor settings_states_cn
                          settings_states_ntsc settings_states_aug6 settings_states_jun26
+                         settings_adapter settings_adapter_jpn settings_adapter_kor settings_adapter_cn
                          PROPERTIES RESOURCE_LOCK settings_toml)
 endif()
 
