@@ -192,6 +192,7 @@ target_include_directories(camera_wall_stage_test PRIVATE "${CMAKE_CURRENT_SOURC
 target_compile_definitions(camera_wall_stage_test PRIVATE ${ICO_GAME_DEFINITIONS})
 target_compile_options(camera_wall_stage_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
                        ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+target_link_libraries(camera_wall_stage_test PRIVATE ico_math)
 if(NOT WIN32)
     target_link_libraries(camera_wall_stage_test PRIVATE m)
 endif()
