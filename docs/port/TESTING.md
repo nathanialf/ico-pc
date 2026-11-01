@@ -41,7 +41,7 @@ directories), `game` (`port/game`, `port/math`, `port/null`, `port/test`), `data
 A test registered from a deferred call takes the area of its program's first source.
 `ico_finalize_tests`, run deferred at the end of the top directory, marks every executable that is
 a test program (a name ending in `_test`, or one a test command names) `EXCLUDE_FROM_ALL` and makes
-the `tests` target depend on all of them; `rd_replay_tool`, `mc_import` and `ico_pc` stay in `all`
+the `tests` target depend on all of them; `rd_replay_tool`, `mc_import`, `state_recover_tool` and `ico_pc` stay in `all`
 (`ICO_KEEP_IN_ALL`). A new test therefore needs only its `add_test` line. Tests run only where the
 build can run them: a native build, a cross build with an emulator, or a cross build for the host's
 own system (`CMakeLists.txt`, `ICO_RUN_TESTS`).
@@ -146,6 +146,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   on the 2001 discs; `toggle` 1 and a chosen `hold` 0 on every disc); on the three 2001 discs the
   load does not touch `optionScreenMode`, `girlControlMode` or the record's `fileNo` and `serial`,
   which the card does not hold.
+- `state_recover_test.c`: the rescue of an old save state's progress as a memory-card save, with
+  the disc its `unit` argument selects (`state_recover`, `state_recover_jpn`, `_kor`, `_cn`,
+  `_ntsc`, `_aug6`, `_jun26`): the side file, the globals and their refusals, the card writes
+  through `mcard.c` laid out byte by byte and read back through the game's loader; and for the
+  European disc the script's chain: `files` writes three builds' state files with the state writer
+  and their symbol tables (an ELF library in a package, GNU ld's ELF and PE maps, a functions-only
+  nm table), `tools/state_recover.py` reads each (`state_recover_py_apk`, which also writes the
+  card through `state_recover_tool`, `_py_map`, `_py_win`; `_py_refuse` the nm table), and `check`
+  compares the side files and the card save (`state_recover_files`, `state_recover_check`)
+  ([SAVES.md](SAVES.md#recovering-progress-from-an-old-save-state)).
 
 ### port/core/test
 
