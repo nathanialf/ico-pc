@@ -582,7 +582,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "手をつないだイコとヨルダが、出入り口からすぐに引き返さなくなります。",
     [UI_STR_OPT_YORDA_TRIPS] = "ヨルダがつまずく",
     [UI_STR_OPT_YORDA_TRIPS_NOTE] =
-        "オフ：オリジナルどおり。オン：正門が開いた後のように、手をつないで少し走り続けると転びます。",
+        "オフ：オリジナルどおり。オン：正門が開いた後のように、手をつないで3秒走り続けると転びます。",
     [UI_STR_OPT_NATURAL_CHAINS] = "自然な鎖",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "イコのところへ降りてくる鎖の輪が、最後まで正しい大きさのままになります。",
