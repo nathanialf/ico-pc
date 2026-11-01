@@ -609,6 +609,18 @@ bool rd_vuprepass_selftest(void)
     if (!v.on) {
         g_rd.vuPrepass = false;
         snprintf(g_rd.vuPrepassWhy, sizeof g_rd.vuPrepassWhy, "by its self-test");
+        /* on Direct3D 11 (the record copied by the backend's compute
+           shader since v0.9.8, d3d11_cmd.c): the state of the test's last
+           draw (RhiStats.lastDrawText, NULL on the other backends), as the
+           blend's and the fog's self-tests log it; the backend's own
+           "rhi_d3d11: texture-to-buffer copies ..." lines come before */
+        RhiStats st;
+        memset(&st, 0, sizeof(st));
+        rhi_get_stats(&st);
+        const char *draw = st.lastDrawText ? st.lastDrawText() : NULL;
+        if (draw) {
+            rd__log("VU pre-pass: self-test failed on Direct3D 11; its last draw: %s", draw);
+        }
     }
     const char *head = v.on ? "on (" : "off (self-test: ";
     snprintf(g_rdSumPrepass, sizeof g_rdSumPrepass, "%s%s)", head,

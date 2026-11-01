@@ -71,8 +71,9 @@
  * vendor (neither backend reports a tiler: gl_device.c, d3d11_device.c);
  * what differs from desktop Vulkan comes from their limits, not the class:
  * no UINT view on D3D11 (uintView false: both uint views off), the VU
- * vertex pre-pass off on D3D11 (colorBytesPerPixel 32, rd_replay_vu.c
- * rd__vu_prepass_init) and on on OpenGL (0), no local read on either
+ * vertex pre-pass on on both (colorBytesPerPixel 0, rd_replay_vu.c
+ * rd__vu_prepass_init; on D3D11 its record copies are a compute shader,
+ * d3d11_cmd.c, since v0.9.8), no local read on either
  * (docs/port/BACKENDS.md), so none of the local reads.
  *
  * The Mali row keeps the blur fold off: the G52 is bound by its ALU, which

@@ -9,7 +9,7 @@ execute_process(COMMAND "${TOOL}" "${MODE}" ${VARIANT} RESULT_VARIABLE rc OUTPUT
                 ERROR_VARIABLE err)
 message(STATUS "${out}")
 if(rc EQUAL 77)
-  message(STATUS "SKIP: no usable Vulkan device")
+  message(STATUS "SKIP: no usable device")
   return()
 endif()
 if(NOT rc EQUAL 0)

@@ -7,7 +7,12 @@
 # its program's entry and vu_ps) and with the pre-passes (vu_main_vs,
 # vu_particle_main_vs and vu_ps over the record); every named target's PNG
 # must be equal byte for byte, the run with the pre-passes must report two
-# passes (one where a dump draws no triangle) and no VU draw the old way.
+# passes (one where a dump draws no triangle) and no VU draw the old way,
+# and neither run may print a Direct3D 11 debug-layer error (the runtime
+# drops the call it names; tools/ci_d3d11_warp.sh runs this script on WARP,
+# where the record is copied by the backend's compute shader), nor a copy
+# into the record the backend refused (`rhi_cmd_copy_texture_to_buffer: ...
+# skipped`).
 # Each run's stats lines are printed as the release's structural record.  A
 # missing list or dump is named and skipped; no dump read, or no device:
 # SKIP (77).
@@ -75,6 +80,14 @@ foreach(dump IN LISTS dumps)
                          "${errOld}\n${errNew}")
       math(EXPR failures "${failures} + 1")
       continue()
+    endif()
+    if("${errOld}${errNew}" MATCHES "rhi_d3d11 debug (error|corruption)[^\n]*")
+      message(SEND_ERROR "${dump} ${s}: ${CMAKE_MATCH_0}")
+      math(EXPR failures "${failures} + 1")
+    endif()
+    if(errNew MATCHES "rhi_cmd_copy_texture_to_buffer: [^\n]*skipped[^\n]*")
+      message(SEND_ERROR "${dump} ${s}: ${CMAKE_MATCH_0}")
+      math(EXPR failures "${failures} + 1")
     endif()
     # a frame without a VU command records nothing (0 passes): still "0 ... the old way"
     # counted as list items: a ";" in a line would split one

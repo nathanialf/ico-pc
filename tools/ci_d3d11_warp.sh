@@ -39,6 +39,7 @@ PROGRAMS=(
     port/rhi/rhi_d3d11_shader_plan_test.exe
     port/rhi/rhi_d3d11_test.exe
     port/render/rd_blend_selftest_test.exe
+    port/render/rd_vuprepass_selftest_test.exe
     port/render/rd_fog_selftest_test.exe
     port/render/rd_pixel_test.exe
     port/render/rd_replay_tool.exe
@@ -93,7 +94,7 @@ report_failure() {
     echo "-- debug layer messages (first 40):"
     grep -a -E "rhi_d3d11 debug (error|corruption|warning)" "$log" | head -n 40 || true
     echo "-- self-test lines:"
-    grep -a -E "(blend|fog): (self-test|depth path|fixed-function|WARNING)|self-test failed on Direct3D 11" "$log" | head -n 20 || true
+    grep -a -E "(blend|fog): (self-test|depth path|fixed-function|WARNING)|self-test failed on Direct3D 11|VU pre-pass: |texture-to-buffer cop" "$log" | head -n 20 || true
     echo "-- the log's last 150 lines:"
     tail -n 150 "$log"
     echo "::endgroup::"
@@ -155,7 +156,7 @@ log_has() {
     RESULTS+=("$verdict")
     if [ "$verdict" != "passed" ]; then
         FAILED=1
-        grep -a -E "VU merge|VU fuse|rd_vumerge_ab|rd_vufuse_ab" "$log" 2> /dev/null | head -n 20 || true
+        grep -a -E "VU merge|VU fuse|VU pre-pass|texture-to-buffer cop|rd_vumerge_ab|rd_vufuse_ab|rd_vustage_ab" "$log" 2> /dev/null | head -n 20 || true
     fi
 }
 
@@ -195,10 +196,30 @@ run() {
         run_test rd_fog_selftest "$CMAKE_BIN" "-DTOOL=$W/rd_fog_selftest_test.exe" -DFOG_PATH=inplace \
             "-DRESULTS=inplace ok [0-2], copy not tried, buffer not tried" \
             -P "$(winpath "$SRC/port/render/test/rd_fog_selftest.cmake")"
+        # the VU vertex pre-pass's self-test (issue 126, v0.9.8: on on
+        # Direct3D 11, its record copied by the backend's compute shader,
+        # d3d11_cmd.c), through ctest's script (port/render/CMakeLists.txt
+        # rd_vuprepass_selftest*): on and byte for byte in the pre-pass's
+        # batches (vu_X_batch_pre_vs, FXC's first compile of them) and one
+        # an entry (vu_X_pre_vs), and off when its first command's records
+        # are drawn a texel off (the failure path a player's driver takes)
+        local vst_on='on \(self-test: prelit, lit, skin(, the tick cameras)? and particles byte for byte, [0-9]+ vertices and 4 sprites in [0-9]+ pre-pass draws \(2 passes, [0-9]+ triangle slots\), [0-9]+ of [0-9]+ pixels drawn\) on SCENE [0-9]+x[0-9]+ at [0-9]+x[0-9]+ texels in [0-9.]+ ms'
+        local vst_off='off \(self-test: the pictures differ: [0-9]+ of [0-9]+ bytes, the first at texel [0-9]+,[0-9]+: [0-9,]+ want [0-9,]+\) on SCENE'
+        local vst_script
+        vst_script="$(winpath "$SRC/port/render/test/rd_vuprepass_selftest.cmake")"
+        run_test rd_vuprepass_selftest "$CMAKE_BIN" "-DTOOL=$W/rd_vuprepass_selftest_test.exe" \
+            -DMODE=on "-DLINE=$vst_on" -P "$vst_script"
+        run_test rd_vuprepass_selftest_unbatched env ICO_RD_VU_PREPASS_BATCH=0 "$CMAKE_BIN" \
+            "-DTOOL=$W/rd_vuprepass_selftest_test.exe" -DMODE=on "-DLINE=$vst_on" -P "$vst_script"
+        run_test rd_vuprepass_selftest_sabotage env ICO_RD_VU_PREPASS_SABOTAGE=1 "$CMAKE_BIN" \
+            "-DTOOL=$W/rd_vuprepass_selftest_test.exe" -DMODE=off "-DLINE=$vst_off" \
+            "-DEXTRA=rd: VU pre-pass: ICO_RD_VU_PREPASS_SABOTAGE: " -P "$vst_script"
     else
-        echo "ci_d3d11_warp: no cmake on PATH: the two self-test scripts cannot run"
-        NAMES+=("rd_blend_selftest" "rd_fog_selftest")
-        RESULTS+=("FAILED (no cmake)" "FAILED (no cmake)")
+        echo "ci_d3d11_warp: no cmake on PATH: the self-test scripts cannot run"
+        NAMES+=("rd_blend_selftest" "rd_fog_selftest" "rd_vuprepass_selftest"
+            "rd_vuprepass_selftest_unbatched" "rd_vuprepass_selftest_sabotage")
+        RESULTS+=("FAILED (no cmake)" "FAILED (no cmake)" "FAILED (no cmake)" "FAILED (no cmake)"
+            "FAILED (no cmake)")
         FAILED=1
     fi
     # rd_pixel writes the dump rd_replay_tool replays (ctest's fixture rd_dump)
@@ -210,6 +231,23 @@ run() {
         # "off on Direct3D 11" and drew one GPU draw a VU draw)
         log_has rd_replay_tool_merge_on "$LOGS/rd_replay_tool.log" "rd: VU merge: on" \
             "VU merge: off on Direct3D 11"
+        # and the VU vertex pre-pass (v0.9.8; v0.9.7 and before said "off on
+        # Direct3D 11 (the backend holds the colour targets to 32 bytes ...")
+        log_has rd_replay_tool_prepass_on "$LOGS/rd_replay_tool.log" "rd: VU pre-pass: on: " \
+            "VU pre-pass: off on Direct3D 11"
+        # a frame of VU draws through the record: its copies by the
+        # backend's compute shader, no VU draw the old way
+        if [ -f "$WORK/rd_pixel_vu.rddump" ]; then
+            run_test rd_replay_tool_vu "$DIR/rd_replay_tool.exe" \
+                "$(winpath "$WORK/rd_pixel_vu.rddump")" "$(winpath "$WORK/rd_replay_tool_vu.png")" \
+                --stats --backend d3d11
+            log_has rd_replay_tool_vu_record "$LOGS/rd_replay_tool_vu.log" \
+                "stats: VU pre-pass on: [12] passes, [1-9][0-9]* vertices in [0-9]+ draws; 0 mesh and grid draws the old way" \
+                "rhi_cmd_copy_texture_to_buffer: "
+            log_has rd_replay_tool_vu_compute_copy "$LOGS/rd_replay_tool_vu.log" \
+                "rhi_d3d11: texture-to-buffer copies into storage buffers: a compute shader \(cs_5_0" \
+                "the compute shader could not be made"
+        fi
         # the draw merge and the fused scissor pair against one GPU draw a
         # VU draw and the kicks under their own pipelines, byte for byte, on
         # the frames rd_pixel leaves (port/render/CMakeLists.txt
@@ -236,10 +274,20 @@ run() {
                 "-DLIST=$(winpath "$WORK/vu_pixel_dumps.txt")" "-DEXTRA=" \
                 "-DOUT=$(winpath "$WORK/vufuse_ab")" \
                 -P "$(winpath "$SRC/port/render/test/rd_vufuse_ab.cmake")"
+            # the VU vertex pre-pass against the programs' own entries
+            # (ICO_RD_VU_PREPASS=0), byte for byte, every VU draw through
+            # the record (port/render/CMakeLists.txt rd_vustage_ab runs the
+            # same on Vulkan), on the same frames
+            run_test rd_vustage_ab "$CMAKE_BIN" "-DTOOL=$W/rd_replay_tool.exe" \
+                "-DLIST=$(winpath "$WORK/vu_pixel_dumps.txt")" "-DOUT=$(winpath "$WORK/vustage_ab")" \
+                -P "$(winpath "$SRC/port/render/test/rd_vustage_ab.cmake")"
+            log_has rd_vustage_ab_compared "$LOGS/rd_vustage_ab.log" \
+                "rd_vustage_ab: [1-9][0-9]* targets equal over 3 dumps at 2 settings" ""
         else
-            echo "ci_d3d11_warp: no cmake on PATH: the merge and fuse A/Bs cannot run"
-            NAMES+=("rd_vumerge_ab" "rd_vumerge_fallback" "rd_vufuse_ab")
-            RESULTS+=("FAILED (no cmake)" "FAILED (no cmake)" "FAILED (no cmake)")
+            echo "ci_d3d11_warp: no cmake on PATH: the merge, fuse and pre-pass A/Bs cannot run"
+            NAMES+=("rd_vumerge_ab" "rd_vumerge_fallback" "rd_vufuse_ab" "rd_vustage_ab")
+            RESULTS+=("FAILED (no cmake)" "FAILED (no cmake)" "FAILED (no cmake)"
+                "FAILED (no cmake)")
             FAILED=1
         fi
     else

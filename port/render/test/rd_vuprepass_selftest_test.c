@@ -5,7 +5,9 @@
  *
  * <mode> what the self-test must leave: on (it passed), off (it failed:
  * ICO_RD_VU_PREPASS_SABOTAGE=1, tri or ticks) or notrun (the pre-pass
- * already off: ICO_RD_VU_PREPASS=0).  On a Vulkan device (77 without one),
+ * already off: ICO_RD_VU_PREPASS=0).  On the backend ICO_RHI_BACKEND names
+ * (Vulkan by default; Direct3D 11 on WARP in CI, tools/ci_d3d11_warp.sh;
+ * 77 without a device),
  * at a wide scaled scene (the Enhanced preset, 16:9, Full pixel, scale 2)
  * or, with plain, at the Original preset's 4:3 and 1x:
  *   1. rd_vuprepass_selftest leaves the pre-pass on or off as <mode> says
@@ -14,8 +16,8 @@
  *      (self-test: ok)", "VU pre-pass off (self-test: the pictures differ"
  *      or "VU pre-pass off by the settings"; with it on, its draws batched
  *      (g_rd.vuPreBatch) unless ICO_RD_VU_PREPASS_BATCH=0; the draw merge
- *      on (g_rd.vuMerge, "VU merge on") unless ICO_RD_VU_MERGE=0 or on
- *      Direct3D 11, the self-test's pictures drawn through it, and the
+ *      on (g_rd.vuMerge, "VU merge on") unless ICO_RD_VU_MERGE=0 (on
+ *      Direct3D 11 too), the self-test's pictures drawn through it, and the
  *      fused scissor pair with it (g_rd.vuFuse, "VU fuse on") unless
  *      ICO_RD_VU_FUSE=0; and the device profile's
  *      class (rd_profile.c) names the backend, OpenGL and D3D11 in the
@@ -133,7 +135,7 @@ int main(int argc, char **argv)
     st.outputWidth = plain ? 640 : 1280;
     st.outputHeight = plain ? 480 : 720;
     if (!rd_init(640, 448, &st, NULL)) {
-        printf("rd_vuprepass_selftest_test: SKIP: no usable Vulkan device\n");
+        printf("rd_vuprepass_selftest_test: SKIP: no usable device\n");
         return 77;
     }
     rd__set_not_implemented_fatal(true);
@@ -167,10 +169,11 @@ int main(int argc, char **argv)
               g_rd.vuPreBatch ? "batched" : "one an entry", wantBatch ? "batched" : "one an entry");
     }
     {
-        /* the draw merge on unless ICO_RD_VU_MERGE=0 or on Direct3D 11
-           (rd_replay_vu.c vuMergeInit): the self-test's draws went through it */
+        /* the draw merge on unless ICO_RD_VU_MERGE=0 (rd_replay_vu.c
+           vuMergeInit; on Direct3D 11 too since v0.9.6): the self-test's
+           draws went through it */
         const char *m = getenv("ICO_RD_VU_MERGE");
-        const bool wantMerge = !(m && strcmp(m, "0") == 0) && rhi_backend() != RHI_BACKEND_D3D11;
+        const bool wantMerge = !(m && strcmp(m, "0") == 0);
         printf("  the draw merge %s\n", g_rd.vuMerge ? "on" : "off");
         CHECK(g_rd.vuMerge == wantMerge, "the draw merge %s, %s expected",
               g_rd.vuMerge ? "on" : "off", wantMerge ? "on" : "off");

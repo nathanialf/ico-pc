@@ -234,10 +234,12 @@ static RhiBindGroup vuGroupMake(RhiBuffer streamBuf, uint64_t streamOff, uint64_
      * builds read: the layout keeps the slot everywhere.  On Direct3D 11 a
      * bound storage range is rewritten up to the written mark at every
      * submit (d3d11_cmd.c, the SRV part's touch), so with neither reader
-     * (no pre-pass there; the merge off by [dev] vu_merge = false or a
-     * merge module missing) the bind is skipped and a submit writes only
-     * the bytes its draws stream (the slot reads zeros, which no module
-     * then reads); with the merge on, those bytes are what its builds read */
+     * (the pre-pass or its batches off: [dev] vu_prepass = false,
+     * vu_prepass_batch = false, its self-test; the merge off by [dev]
+     * vu_merge = false or a merge module missing) the bind is skipped and a
+     * submit writes only the bytes its draws stream (the slot reads zeros,
+     * which no module then reads); with either on, those bytes are what
+     * their builds read */
     if (!g_rd.vuPreBatch && !g_rd.vuMerge && rhi_backend() == RHI_BACKEND_D3D11) {
         return rd__replay_bind_group(g_rd.layoutVu, b, 5);
     }
@@ -2633,18 +2635,15 @@ void rd__vu_prepass_init(const RhiLimits *lim)
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "on a tile-based GPU (the pictures between two ticks shook through it on a "
                  "PowerVR phone; [dev] vu_prepass = true turns it on)");
-    } else if (bytes != 0u && bytes < ICO_VU_REC_BYTES && rhi_backend() == RHI_BACKEND_D3D11) {
-        /* d3d11_device.c reports 32 bytes: the record's read-back copies
-         * are not in that backend (a texture only into a readback buffer) */
-        snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
-                 "on Direct3D 11 (the backend holds the colour targets to %u bytes a pixel, the "
-                 "record %u: its copies are not in that backend)",
-                 bytes, ICO_VU_REC_BYTES);
     } else if (bytes != 0u && bytes < ICO_VU_REC_BYTES) {
+        /* an Apple A9 or A10 GPU under MoltenVK (rhi_metal_color_bytes);
+         * Direct3D 11 reports 0 since v0.9.8 (its record copies are a
+         * compute shader, d3d11_cmd.c), 32 only below feature level 11_0,
+         * which its rhi_init never takes */
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "on this device (its colour targets hold %u bytes a pixel together, the record "
-                 "%u: an Apple A9 or A10 GPU)",
-                 bytes, ICO_VU_REC_BYTES);
+                 "%u%s)",
+                 bytes, ICO_VU_REC_BYTES, lim->moltenvk ? ": an Apple A9 or A10 GPU" : "");
     }
     g_rd.vuPrepass = g_rd.vuPrepassWhy[0] == '\0';
     if (!s_recNull.id) {
