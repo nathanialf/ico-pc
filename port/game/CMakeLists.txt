@@ -214,7 +214,8 @@ endif()
 # refractory time, every guard (this disc's HETARI bit), the mail, the
 # registered blocks put back, and the stage load's motion copies.  CPU only;
 # one run per disc (the motion numbers, the bit and the mail are the disc's).
-add_executable(yorda_trip_test test/yorda_trip_test.c yorda_trip_live.c yorda_trip_source.c)
+add_executable(yorda_trip_test test/yorda_trip_test.c yorda_trip_live.c yorda_trip_source.c
+    ../platform/host_config.c "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/tableSin.c")
 ico_include_dirs(fumi _ico_yorda_trip_incs)
 target_include_directories(yorda_trip_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/port/platform" "${CMAKE_SOURCE_DIR}/port/data"

@@ -93,12 +93,6 @@ unsigned char IsAbleBoyControl(void)
     return s_able;
 }
 
-/* diag_host.c's clock (the read's time in the log) */
-unsigned long long ico_diag_now_ns(void)
-{
-    return 0;
-}
-
 static int s_mails, s_lastMail;
 static GObj *s_mailTo;
 static void *s_mailArg;
