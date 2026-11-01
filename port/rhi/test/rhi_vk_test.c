@@ -7,6 +7,8 @@
  * garbage ignored and replaced), the drop of other builds' cache files
  * (vkr_cache_drop_others), the pipeline pool (poolCell: every
  * pipeline the pool holds, RHI_PIPELINE_POOL_MAX, made and alive at once)
+ * the occlusion queries (occlusionCell: a quad, a quad behind it, one in
+ * front: W*H, 0, W*H samples, read after the slot is recycled)
  * and the submission sync (syncCell: the timeline semaphore, or the fence
  * ring under ICO_VK_FAKE_API=1.1 and =1.0, ctests rhi_vk_vk11 and rhi_vk_vk10;
  * =1.0bare, ctest rhi_vk_vk10bare: a 1.0 loader without
@@ -652,6 +654,192 @@ static int poolCell(void)
     return failures + (int)rhi_vk_validation_error_count();
 }
 
+/* The occlusion queries (rhi.h rhi_cmd_begin_occlusion, vk_cmd.c): on an
+ * 8x8 target with a depth cleared to 0 and a GEQUAL test with writes, a
+ * full quad at depth 0.5 (query 0), the same quad at 0.25 behind it (query
+ * 1) and at 0.75 in front (query 2): 64, 0 and 64 samples; an index not
+ * begun reads RHI_OCCLUSION_NONE, a begin outside a pass is dropped, and
+ * the read says 3 indices.  Twice: the first frame's pool is made and reset
+ * at the first begin (inside the pass, a one-time submit), the second
+ * frame's reset in the slot's first list.  Then again under
+ * ICO_VK_DEPTH_ALWAYS=1 (vk_cmd.c: every depth test passes, the
+ * measurement's run without the depth): 64, 64 and 64.  No validation
+ * message. */
+static void testSetEnv(const char *name, const char *value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value ? value : "");
+#else
+    if (value) {
+        setenv(name, value, 1);
+    } else {
+        unsetenv(name);
+    }
+#endif
+}
+
+static int occlusionRun(bool always)
+{
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test occlusion"};
+    if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
+        rhi_test_log("FAIL occlusion cell: init\n");
+        return 1;
+    }
+    int failures = 0;
+#define OCC_CHECK(cond, ...)                                                                       \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            rhi_test_log("FAIL occlusion cell: " __VA_ARGS__);                                     \
+            failures++;                                                                            \
+        }                                                                                          \
+    } while (0)
+    OCC_CHECK(rhi_occlusion_supported(), "not supported on Vulkan\n");
+    const RhiShader vs = rhi_create_shader(&(RhiShaderDesc){.stage = RHI_STAGE_VERTEX,
+                                                            .bytecode = spv_vs_main,
+                                                            .bytecodeSize = sizeof(spv_vs_main),
+                                                            .entryPoint = "vs_main",
+                                                            .debugName = "occ vs_main"});
+    const RhiShader ps = rhi_create_shader(&(RhiShaderDesc){.stage = RHI_STAGE_FRAGMENT,
+                                                            .bytecode = spv_ps_color,
+                                                            .bytecodeSize = sizeof(spv_ps_color),
+                                                            .entryPoint = "ps_color",
+                                                            .debugName = "occ ps_color"});
+    static const RhiVertexBinding vb = {0, sizeof(PoolVtx), false};
+    static const RhiVertexAttr va[3] = {
+        {0, 0, RHI_VTX_F32x3, offsetof(PoolVtx, x)},
+        {1, 0, RHI_VTX_U8x4_UNORM, offsetof(PoolVtx, rgba)},
+        {2, 0, RHI_VTX_F32x2, offsetof(PoolVtx, u)},
+    };
+    RhiPipelineDesc d;
+    memset(&d, 0, sizeof(d));
+    d.vertex = vs;
+    d.fragment = ps;
+    d.vertexBindings = &vb;
+    d.vertexBindingCount = 1;
+    d.vertexAttrs = va;
+    d.vertexAttrCount = 3;
+    d.topology = RHI_TOPO_TRIANGLE_LIST;
+    d.cullNone = true;
+    d.blend[0].writeMask = 0xF;
+    d.colorFormats[0] = RHI_FMT_RGBA8_UNORM;
+    d.colorCount = 1;
+    d.depthFormat = RHI_FMT_D32F_S8;
+    d.depthStencil.depthTest = true;
+    d.depthStencil.depthWrite = true;
+    d.depthStencil.depthCompare = RHI_CMP_GEQUAL;
+    d.debugName = "occlusion";
+    const RhiPipeline pipe = vs.id && ps.id ? rhi_create_pipeline(&d) : (RhiPipeline){0};
+    const RhiTexture col = rhi_create_texture(
+        &(RhiTextureDesc){8, 8, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_RENDER_TARGET, "occ colour", 0});
+    const RhiTexture dep = rhi_create_texture(
+        &(RhiTextureDesc){8, 8, 1, RHI_FMT_D32F_S8, RHI_TEX_DEPTH_STENCIL, "occ depth", 0});
+    const RhiBuffer vbuf = rhi_create_buffer(
+        &(RhiBufferDesc){18 * sizeof(PoolVtx), RHI_BUF_VERTEX, RHI_MEM_UPLOAD, "occ verts"});
+    PoolVtx *v = vbuf.id ? rhi_map_buffer(vbuf) : NULL;
+    OCC_CHECK(pipe.id && col.id && dep.id && v, "setup\n");
+    if (pipe.id && col.id && dep.id && v) {
+        /* three full quads at depth 0.5, 0.25 and 0.75 */
+        static const float qx[6] = {-1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f};
+        static const float qy[6] = {1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f};
+        static const float qz[3] = {0.5f, 0.25f, 0.75f};
+        for (int q = 0; q < 3; q++) {
+            for (int i = 0; i < 6; i++) {
+                v[q * 6 + i] = (PoolVtx){qx[i], qy[i], qz[q], {255, 255, 255, 255}, 0.0f, 0.0f};
+            }
+        }
+        RhiState colState = RHI_STATE_UNDEFINED, depState = RHI_STATE_UNDEFINED;
+        for (int round = 0; round < 2; round++) {
+            rhi_wait_frame();
+            const uint32_t slot = rhi_frame_slot();
+            RhiCommandList cl = rhi_begin_commands();
+            const RhiTextureBarrier pre[2] = {{col, colState, RHI_STATE_RENDER_TARGET},
+                                              {dep, depState, RHI_STATE_DEPTH_WRITE}};
+            rhi_cmd_barrier(cl, pre, 2);
+            colState = RHI_STATE_RENDER_TARGET;
+            depState = RHI_STATE_DEPTH_WRITE;
+            rhi_cmd_begin_occlusion(cl, 7); /* outside a pass: dropped */
+            rhi_cmd_end_occlusion(cl, 7);
+            RhiRenderPassDesc rp = {0};
+            rp.color[0].texture = col;
+            rp.color[0].load = RHI_LOAD_CLEAR;
+            rp.colorCount = 1;
+            rp.depth.texture = dep;
+            rp.depth.depthLoad = RHI_LOAD_CLEAR;
+            rp.depth.stencilLoad = RHI_LOAD_CLEAR;
+            rp.depth.clearDepth = 0.0f;
+            rp.width = rp.height = 8;
+            rhi_cmd_begin_render_pass(cl, &rp);
+            rhi_cmd_set_vertex_buffer(cl, 0, vbuf, 0);
+            rhi_cmd_set_pipeline(cl, pipe);
+            for (uint32_t q = 0; q < 3; q++) {
+                rhi_cmd_begin_occlusion(cl, q);
+                rhi_cmd_draw(cl, 6, q * 6u, 1);
+                rhi_cmd_end_occlusion(cl, q);
+            }
+            rhi_cmd_end_render_pass(cl);
+            rhi_end_commands(cl);
+            rhi_submit(cl);
+            /* the slot's counts once rhi_wait_frame recycles it */
+            for (uint32_t k = 0; k < RHI_FRAMES_IN_FLIGHT; k++) {
+                rhi_wait_frame();
+                if (rhi_frame_slot() == slot) {
+                    break;
+                }
+            }
+            uint64_t got[8];
+            for (int i = 0; i < 8; i++) {
+                got[i] = 12345u;
+            }
+            const uint32_t n = rhi_read_occlusion(got, 8);
+            const uint64_t behind = always ? 64u : 0u;
+            rhi_test_log("occlusion cell%s, frame %d: %u read: in front of nothing %llu, behind "
+                         "%llu, in front %llu\n",
+                         always ? " (ICO_VK_DEPTH_ALWAYS)" : "", round, n,
+                         (unsigned long long)got[0], (unsigned long long)got[1],
+                         (unsigned long long)got[2]);
+            OCC_CHECK(n == 3u && got[0] == 64u && got[1] == behind && got[2] == 64u,
+                      "frame %d%s: %u read, %llu %llu %llu (want 3 read, 64 %llu 64)\n", round,
+                      always ? " (ICO_VK_DEPTH_ALWAYS)" : "", n, (unsigned long long)got[0],
+                      (unsigned long long)got[1], (unsigned long long)got[2],
+                      (unsigned long long)behind);
+            OCC_CHECK(got[7] == 12345u, "frame %d: index 7 written past the count read\n", round);
+        }
+        /* a frame without queries reads none */
+        rhi_wait_frame();
+        RhiCommandList cl = rhi_begin_commands();
+        rhi_end_commands(cl);
+        rhi_submit(cl);
+        const uint32_t slot = rhi_frame_slot();
+        for (uint32_t k = 0; k < RHI_FRAMES_IN_FLIGHT; k++) {
+            rhi_wait_frame();
+            if (rhi_frame_slot() == slot) {
+                break;
+            }
+        }
+        uint64_t none[4];
+        OCC_CHECK(rhi_read_occlusion(none, 4) == 0u, "a frame without queries read some\n");
+    }
+    rhi_wait_idle();
+    rhi_destroy_buffer(vbuf);
+    rhi_destroy_texture(col);
+    rhi_destroy_texture(dep);
+    rhi_destroy_pipeline(pipe);
+    rhi_destroy_shader(vs);
+    rhi_destroy_shader(ps);
+#undef OCC_CHECK
+    rhi_shutdown();
+    return failures + (int)rhi_vk_validation_error_count();
+}
+
+static int occlusionCell(void)
+{
+    int failures = occlusionRun(false);
+    testSetEnv("ICO_VK_DEPTH_ALWAYS", "1");
+    failures += occlusionRun(true);
+    testSetEnv("ICO_VK_DEPTH_ALWAYS", NULL);
+    return failures;
+}
+
 /* The submission sync (vk_sync.c): the kind in use is the timeline
  * semaphore, or the fence ring under ICO_VK_FAKE_API=1.1 and =1.0 (ctests
  * rhi_vk_vk11, rhi_vk_vk10); then three frames of 8 command lists each (24 submissions,
@@ -864,7 +1052,7 @@ int main(void)
         return rc;
     }
     return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell() ||
-            poolCell() || syncCell() || d32fCell() || adapterCell())
+            poolCell() || occlusionCell() || syncCell() || d32fCell() || adapterCell())
                ? 1
                : 0;
 }

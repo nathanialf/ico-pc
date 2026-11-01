@@ -26,6 +26,7 @@ everything else follows `RhiLimits`.
 | VU pre-pass off line (`rd__vu_prepass_init`, `port/render/rd_replay_vu.c`) | the tiler and Apple A9/A10 rules | on | on | off: `on Direct3D 11 (the backend holds the colour targets to 32 bytes a pixel, the record 48: its copies are not in that backend)` |
 | window flags (`window_flags`, `port/platform/window_host.c`) | `SDL_WINDOW_VULKAN` | none (the HWND) | `SDL_WINDOW_OPENGL` after `window_gl_attributes` | none (the HWND) |
 | robust access in the summary and the profile line | `RhiLimits.robustText` (`off (the default; ...)`) | `D3D12's own` | `off (OpenGL)` (`robustText`) | `D3D11's own` |
+| occlusion queries (`rhi_occlusion_supported`; `rd_replay_tool --occlusion`, [RENDER.md](RENDER.md#culling)) | a pool a frame slot, made at the first begin, precise where offered | no (an occlusion query heap would be the form) | no (`GL_SAMPLES_PASSED`) | no (`D3D11_QUERY_OCCLUSION`); the tool exits 77 |
 
 The swapchain format is read from `rhi_swapchain_format` wherever it matters (`rd_present.c`,
 `rd_video.c`): Direct3D 12 and Direct3D 11 report BGRA8, OpenGL RGBA8, Vulkan the surface's

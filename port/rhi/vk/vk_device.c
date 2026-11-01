@@ -1531,6 +1531,9 @@ static bool vkr_create_device(void)
     VkPhysicalDeviceFeatures avail;
     vkGetPhysicalDeviceFeatures(g_vkr.phys, &avail);
     g_vkr.anisotropy = avail.samplerAnisotropy == VK_TRUE;
+    /* occlusion queries count samples exactly with it (rhi.h
+     * rhi_cmd_begin_occlusion; the replay tool's measurement) */
+    g_vkr.occPrecise = avail.occlusionQueryPrecise == VK_TRUE;
     /* ICO_VK_FAKE_NO_DUAL=1 leaves the feature off, as on a device without
      * it (tests: rhi_vk_nodual) */
     const char *fakeNoDual = getenv("ICO_VK_FAKE_NO_DUAL");
@@ -2115,6 +2118,7 @@ static bool vkr_create_device(void)
             {
                 .dualSrcBlend = g_vkr.dualSrcBlend ? VK_TRUE : VK_FALSE,
                 .samplerAnisotropy = g_vkr.anisotropy ? VK_TRUE : VK_FALSE,
+                .occlusionQueryPrecise = g_vkr.occPrecise ? VK_TRUE : VK_FALSE,
                 .textureCompressionBC = g_vkr.bc ? VK_TRUE : VK_FALSE,
                 .sampleRateShading = g_vkr.sampleRate ? VK_TRUE : VK_FALSE,
                 /* a fragment shader storing to an image (the interlock's
@@ -2739,6 +2743,12 @@ void rhi_get_stats(RhiStats *out)
 bool rhi_timestamps_supported(void)
 {
     return g_vkr.timestamps;
+}
+
+/* every Vulkan device has occlusion queries (precise or not: rhi.h) */
+bool rhi_occlusion_supported(void)
+{
+    return g_vkr.initialised && !g_vkr.deviceLost;
 }
 
 /* The rhi_create_backend entry (port/rhi/rhi_backend.h). */

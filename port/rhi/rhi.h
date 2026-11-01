@@ -1287,6 +1287,34 @@ uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max);
  * D3D12 and D3D11 return 0 (their lists are submitted whole). */
 uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max);
 
+/* Occlusion queries (the replay tool's hidden-draw measurement,
+ * port/render/rd_occlusion.c).  Each frame slot has RHI_MAX_OCCLUSION of
+ * them, apart from the timestamps; rhi_cmd_begin_occlusion(cl, i) and
+ * rhi_cmd_end_occlusion(cl, i) around draws inside ONE render pass count the
+ * samples that passed the depth and stencil tests between them (query i
+ * once a slot; one query open at a time; a begin outside a pass, a second
+ * begin of i or an index past the count is dropped, and its end with it).
+ * rhi_read_occlusion hands back the slot rhi_wait_frame last recycled, as
+ * rhi_read_timestamps does: samples[i] the count, RHI_OCCLUSION_NONE for an
+ * index that frame did not write (or whose result was not available);
+ * returns 1 + the highest index written (0 = none, or not supported).
+ * Vulkan: a VK_QUERY_TYPE_OCCLUSION pool per slot, made at the first begin
+ * (the game never asks for one), reset in the slot's first command list from
+ * then on (the first slot by a one-time submit at that begin), precise where
+ * the device offers occlusionQueryPrecise; without it a count is exact only
+ * as zero or not zero.  Direct3D 12, Direct3D 11 and OpenGL: not supported
+ * (false, the calls do nothing, reads 0); their forms would be an occlusion
+ * query heap resolved like the timestamps, D3D11_QUERY_OCCLUSION and
+ * GL_SAMPLES_PASSED. */
+#define RHI_MAX_OCCLUSION 8192
+#define RHI_OCCLUSION_WORDS (RHI_MAX_OCCLUSION / 32)
+#define RHI_OCCLUSION_NONE UINT64_MAX
+
+bool rhi_occlusion_supported(void);
+void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index);
+void rhi_cmd_end_occlusion(RhiCommandList cl, uint32_t index);
+uint32_t rhi_read_occlusion(uint64_t *samples, uint32_t max);
+
 /* Swapchain present mode with vsync on: mailbox (the newest
  * finished image is shown at each refresh, older ones are dropped; a present
  * never waits for the display) instead of FIFO.  Applies from the next

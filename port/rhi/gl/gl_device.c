@@ -685,6 +685,33 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
     return n;
 }
 
+/* ------------------------------------------------------- occlusion queries
+ * Not supported here (rhi.h rhi_cmd_begin_occlusion: the replay tool's
+ * measurement is Vulkan's); GL_SAMPLES_PASSED queries (glBeginQuery/glEndQuery per index and slot, read once the slot's fence has passed, as the timestamps) would be the form. */
+bool rhi_occlusion_supported(void)
+{
+    return false;
+}
+
+void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index)
+{
+    (void)cl;
+    (void)index;
+}
+
+void rhi_cmd_end_occlusion(RhiCommandList cl, uint32_t index)
+{
+    (void)cl;
+    (void)index;
+}
+
+uint32_t rhi_read_occlusion(uint64_t *samples, uint32_t max)
+{
+    (void)samples;
+    (void)max;
+    return 0;
+}
+
 /* ------------------------------------------------- labels, diagnostics */
 void rhi_cmd_begin_label(RhiCommandList cl, const char *name)
 {

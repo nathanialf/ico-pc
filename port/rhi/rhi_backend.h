@@ -93,6 +93,10 @@
     X(cmd_write_timestamp)                                                                         \
     X(read_timestamps)                                                                             \
     X(read_timestamps_busy)                                                                        \
+    X(occlusion_supported)                                                                         \
+    X(cmd_begin_occlusion)                                                                         \
+    X(cmd_end_occlusion)                                                                           \
+    X(read_occlusion)                                                                              \
     X(prefer_mailbox)                                                                              \
     X(present_mailbox)                                                                             \
     X(present_fifo_fallback)                                                                       \

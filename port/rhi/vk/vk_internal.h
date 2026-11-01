@@ -264,6 +264,9 @@ typedef struct VkrCmdList {
      * (VK_NULL_HANDLE: none): its submit signals the present semaphore
      * (rhi_submit) */
     VkImage presentImage;
+    /* the occlusion query open in the list (rhi_cmd_begin_occlusion),
+     * its index + 1; 0 for none */
+    uint32_t occOpen;
 } VkrCmdList;
 
 typedef struct VkrFrame {
@@ -284,6 +287,12 @@ typedef struct VkrFrame {
     VkQueryPool queryPool;
     uint32_t tsWritten[RHI_TIMESTAMP_WORDS]; /* the indices written since the slot was recycled */
     bool tsReset; /* the pool's reset is recorded in this slot's first list */
+    /* the slot's occlusion queries (rhi_cmd_begin_occlusion): the pool made
+     * at the first begin of the run, the indices begun since the slot was
+     * recycled, and whether the pool is reset for this use of the slot */
+    VkQueryPool occPool;
+    uint32_t occWritten[RHI_OCCLUSION_WORDS];
+    bool occReset;
 } VkrFrame;
 
 /* A render pass as both paths take it (vk_cmd.c rhi_cmd_begin_render_pass
@@ -552,7 +561,17 @@ typedef struct VkrState {
     uint64_t timestampMask; /* the valid bits */
     uint64_t tsResult[RHI_MAX_TIMESTAMPS];
     uint32_t tsCount; /* of the slot rhi_wait_frame recycled last */
-    bool mailbox;     /* the swapchain presents in mailbox mode (rhi_prefer_mailbox) */
+    /* occlusion queries (rhi_cmd_begin_occlusion): the pools exist (made at
+     * the first begin), the device counts precisely (occlusionQueryPrecise,
+     * enabled), and the counts of the slot rhi_wait_frame recycled last
+     * (RHI_MAX_OCCLUSION, allocated with the pools; RHI_OCCLUSION_NONE for
+     * an index not written) with 1 + the highest index written */
+    bool occUsed;
+    bool occBroken; /* the pools or the array could not be made: no more tries this run */
+    bool occPrecise;
+    uint64_t *occResult;
+    uint32_t occCount;
+    bool mailbox; /* the swapchain presents in mailbox mode (rhi_prefer_mailbox) */
 
     /* the swapchain's present mode (rhi_present_mode_name) */
     VkPresentModeKHR presentMode;
@@ -581,7 +600,11 @@ typedef struct VkrState {
 
     /* hazard tracking (vk_cmd.c, "Hazards") */
     bool globalBarriers; /* ICO_VK_GLOBAL_BARRIERS=1: a global barrier before every pass and copy */
-    uint64_t hzEpoch;    /* the last command list's epoch (one per rhi_begin_commands) */
+    /* ICO_VK_DEPTH_ALWAYS=1: every depth test compares ALWAYS (the
+     * occlusion measurement's run without the depth: what draws nothing
+     * whatever the depth says; the picture is not the game's) */
+    bool depthAlways;
+    uint64_t hzEpoch; /* the last command list's epoch (one per rhi_begin_commands) */
 
     VkrGarbage overflow[VKR_GARBAGE_OVERFLOW]; /* see VKR_GARBAGE_OVERFLOW */
     uint32_t overflowCount;

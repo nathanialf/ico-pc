@@ -27,6 +27,12 @@ bool vkr_frames_init(void)
     if (g_vkr.globalBarriers) {
         VKR_LOG("ICO_VK_GLOBAL_BARRIERS: a global barrier before every render pass and copy");
     }
+    const char *da = getenv("ICO_VK_DEPTH_ALWAYS");
+    g_vkr.depthAlways = da && da[0] && da[0] != '0';
+    if (g_vkr.depthAlways) {
+        VKR_LOG("ICO_VK_DEPTH_ALWAYS: every depth test passes (the occlusion measurement's run "
+                "without the depth; not the game's picture)");
+    }
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
         VkrFrame *f = &g_vkr.frames[i];
         VkCommandPoolCreateInfo pci = {
@@ -90,8 +96,15 @@ void vkr_frames_shutdown(void)
         if (f->queryPool) {
             vkDestroyQueryPool(g_vkr.device, f->queryPool, NULL);
         }
+        if (f->occPool) {
+            vkDestroyQueryPool(g_vkr.device, f->occPool, NULL);
+        }
         memset(f, 0, sizeof(*f));
     }
+    free(g_vkr.occResult);
+    g_vkr.occResult = NULL;
+    g_vkr.occUsed = false;
+    g_vkr.occCount = 0;
 }
 
 /* rhi_gpu_progress (rhi.h): the values a watchdog reads from another
@@ -221,12 +234,56 @@ static void vkr_collect_timestamps(VkrFrame *f)
     memset(f->tsWritten, 0, sizeof(f->tsWritten));
 }
 
+/* the finished slot's occlusion counts into g_vkr.occResult, as the
+ * timestamps above (rhi_read_occlusion) */
+static void vkr_collect_occlusion(VkrFrame *f)
+{
+    if (!g_vkr.occResult) {
+        return;
+    }
+    const uint32_t clear = g_vkr.occCount;
+    for (uint32_t i = 0; i < clear; i++) {
+        g_vkr.occResult[i] = RHI_OCCLUSION_NONE;
+    }
+    g_vkr.occCount = 0;
+    uint32_t hi = 0;
+    for (uint32_t w = 0; w < RHI_OCCLUSION_WORDS; w++) {
+        if (f->occWritten[w]) {
+            hi = w * 32u + 32u - (uint32_t)__builtin_clz(f->occWritten[w]);
+        }
+    }
+    if (!f->occPool || hi == 0) {
+        memset(f->occWritten, 0, sizeof(f->occWritten));
+        return;
+    }
+    /* the (count, availability) pairs up to the highest index written */
+    uint64_t *data = malloc(sizeof(uint64_t) * 2u * hi);
+    if (data) {
+        memset(data, 0, sizeof(uint64_t) * 2u * hi);
+        const VkResult r = vkGetQueryPoolResults(
+            g_vkr.device, f->occPool, 0, hi, sizeof(uint64_t) * 2u * hi, data,
+            sizeof(uint64_t) * 2u, VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+        if (r == VK_SUCCESS || r == VK_NOT_READY) {
+            for (uint32_t i = 0; i < hi; i++) {
+                if (((f->occWritten[i >> 5] >> (i & 31u)) & 1u) && data[2u * i + 1u]) {
+                    g_vkr.occResult[i] = data[2u * i];
+                }
+            }
+            g_vkr.occCount = hi;
+        }
+        free(data);
+    }
+    memset(f->occWritten, 0, sizeof(f->occWritten));
+}
+
 /* Recycles a frame slot once the GPU is done with it. */
 static void vkr_recycle_frame(VkrFrame *f)
 {
     vkr_wait_value(f->waitValue);
     vkr_collect_timestamps(f);
+    vkr_collect_occlusion(f);
     f->tsReset = false;
+    f->occReset = false;
     vkr_destroy_garbage(f);
     vkResetCommandPool(g_vkr.device, f->cmdPool, 0);
     for (uint32_t j = 0; j < VKR_MAX_CMD_LISTS; j++) {
@@ -289,6 +346,7 @@ void rhi_collect_garbage_now(void)
 
 static void vkr_open_barrier(VkCommandBuffer cb);
 static void vkr_flush_barriers(VkrCmdList *c);
+static void vkr_occ_close(VkrCmdList *c);
 
 /* ---------------------------------------------------------- command lists
  * Handle id: (frame tag << 20) | (list index + 1). */
@@ -345,6 +403,11 @@ RhiCommandList rhi_begin_commands(void)
         vkCmdResetQueryPool(c->cb, f->queryPool, 0, RHI_MAX_TIMESTAMPS);
         f->tsReset = true;
     }
+    if (f->occPool && !f->occReset) {
+        /* likewise the occlusion queries, once a run has used them */
+        vkCmdResetQueryPool(c->cb, f->occPool, 0, RHI_MAX_OCCLUSION);
+        f->occReset = true;
+    }
     out.id = ((uint32_t)(g_vkr.frameIndex & VKR_GEN_MASK) << VKR_GEN_SHIFT) | f->listCount;
     return out;
 }
@@ -358,6 +421,7 @@ void rhi_end_commands(RhiCommandList cl)
     vkr_flush_barriers(c);
     if (c->inPass) {
         VKR_LOG("rhi_end_commands inside a render pass");
+        vkr_occ_close(c);
         vkr_pass_end(c);
         c->inPass = false;
     }
@@ -1136,6 +1200,7 @@ void rhi_cmd_end_render_pass(RhiCommandList cl)
     if (!c || !c->inPass) {
         return;
     }
+    vkr_occ_close(c); /* a query does not outlive its pass */
     vkr_flush_barriers(c);
     vkr_pass_end(c);
     c->inPass = false;
@@ -1310,7 +1375,7 @@ void rhi_cmd_set_depth_state(RhiCommandList cl, bool test, bool write, RhiCompar
     memset(&c->depthWant, 0, sizeof(c->depthWant));
     c->depthWant.test = test ? VK_TRUE : VK_FALSE;
     c->depthWant.write = test && write ? VK_TRUE : VK_FALSE;
-    c->depthWant.compare = vkr_compareMap[cmp].vk;
+    c->depthWant.compare = g_vkr.depthAlways ? VK_COMPARE_OP_ALWAYS : vkr_compareMap[cmp].vk;
     c->dynSet |= RHI_DYN_DEPTH;
 }
 
@@ -1875,4 +1940,126 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
     (void)ns;
     (void)max;
     return 0;
+}
+
+/* ------------------------------------------------------- occlusion queries */
+/* The pools at the first begin (rhi.h rhi_cmd_begin_occlusion): one per
+ * slot and the result array; the current slot's pool is reset by a
+ * one-time submit (its first list began before the pool existed), the
+ * others in their first list (rhi_begin_commands).  False when a pool or
+ * the array could not be made (occlusion then stays off for the run). */
+static bool vkr_occ_make(void)
+{
+    if (g_vkr.occUsed || g_vkr.occBroken) {
+        return g_vkr.occUsed;
+    }
+    g_vkr.occBroken = true; /* until every part is made */
+    g_vkr.occResult = malloc(sizeof(uint64_t) * RHI_MAX_OCCLUSION);
+    if (!g_vkr.occResult) {
+        VKR_LOG("occlusion queries: off (no memory for the counts)");
+        return false;
+    }
+    for (uint32_t i = 0; i < RHI_MAX_OCCLUSION; i++) {
+        g_vkr.occResult[i] = RHI_OCCLUSION_NONE;
+    }
+    g_vkr.occCount = 0;
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        VkrFrame *f = &g_vkr.frames[i];
+        VkQueryPoolCreateInfo qci = {
+            .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+            .queryType = VK_QUERY_TYPE_OCCLUSION,
+            .queryCount = RHI_MAX_OCCLUSION,
+        };
+        if (!VKR_CHECK(vkCreateQueryPool(g_vkr.device, &qci, NULL, &f->occPool))) {
+            f->occPool = VK_NULL_HANDLE;
+            for (uint32_t j = 0; j < RHI_FRAMES_IN_FLIGHT; j++) {
+                if (g_vkr.frames[j].occPool) {
+                    vkDestroyQueryPool(g_vkr.device, g_vkr.frames[j].occPool, NULL);
+                    g_vkr.frames[j].occPool = VK_NULL_HANDLE;
+                }
+            }
+            free(g_vkr.occResult);
+            g_vkr.occResult = NULL;
+            VKR_LOG("occlusion queries: off (a query pool could not be made)");
+            return false;
+        }
+        f->occReset = false;
+        memset(f->occWritten, 0, sizeof(f->occWritten));
+    }
+    VkrFrame *f = vkr_cur_frame();
+    VkCommandBufferAllocateInfo ai = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = g_vkr.oneShotPool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer cb;
+    if (VKR_CHECK(vkAllocateCommandBuffers(g_vkr.device, &ai, &cb))) {
+        VkCommandBufferBeginInfo bi = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        };
+        vkBeginCommandBuffer(cb, &bi);
+        vkCmdResetQueryPool(cb, f->occPool, 0, RHI_MAX_OCCLUSION);
+        vkEndCommandBuffer(cb);
+        /* submitted before the lists of this frame, so the reset comes
+           first in the queue's order */
+        uint64_t value = 0;
+        if (vkr_sync_submit(&(VkrSubmitDesc){.cbs = &cb, .cbCount = 1}, &value)) {
+            f->waitValue = value;
+            vkr_note_submit(value, 1, false);
+            vkr_wait_value(value);
+            f->occReset = true;
+        }
+        vkFreeCommandBuffers(g_vkr.device, g_vkr.oneShotPool, 1, &cb);
+    }
+    g_vkr.occUsed = true;
+    g_vkr.occBroken = false;
+    VKR_LOG("occlusion queries: on (%u a frame slot, %s)", (unsigned)RHI_MAX_OCCLUSION,
+            g_vkr.occPrecise ? "precise sample counts"
+                             : "not precise: a count is exact only as zero or not zero");
+    return true;
+}
+
+void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index)
+{
+    VkrCmdList *c = vkr_get_cmd(cl);
+    if (!c || !c->inPass || c->occOpen || index >= RHI_MAX_OCCLUSION || g_vkr.deviceLost ||
+        !vkr_occ_make()) {
+        return;
+    }
+    VkrFrame *f = vkr_cur_frame();
+    if (!f->occPool || !f->occReset || ((f->occWritten[index >> 5] >> (index & 31u)) & 1u)) {
+        return;
+    }
+    vkCmdBeginQuery(c->cb, f->occPool, index, g_vkr.occPrecise ? VK_QUERY_CONTROL_PRECISE_BIT : 0);
+    f->occWritten[index >> 5] |= 1u << (index & 31u);
+    c->occOpen = index + 1u;
+}
+
+/* the open query's end (rhi_cmd_end_occlusion, a pass end) */
+static void vkr_occ_close(VkrCmdList *c)
+{
+    if (c->occOpen) {
+        vkCmdEndQuery(c->cb, vkr_cur_frame()->occPool, c->occOpen - 1u);
+        c->occOpen = 0;
+    }
+}
+
+void rhi_cmd_end_occlusion(RhiCommandList cl, uint32_t index)
+{
+    VkrCmdList *c = vkr_get_cmd(cl);
+    if (c && c->occOpen == index + 1u) {
+        vkr_occ_close(c);
+    }
+}
+
+uint32_t rhi_read_occlusion(uint64_t *samples, uint32_t max)
+{
+    if (!samples || !g_vkr.occResult) {
+        return 0;
+    }
+    const uint32_t n = g_vkr.occCount < max ? g_vkr.occCount : max;
+    memcpy(samples, g_vkr.occResult, (size_t)n * sizeof(uint64_t));
+    return n;
 }

@@ -525,6 +525,26 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
     return be()->read_timestamps_busy(ns, max);
 }
 
+bool rhi_occlusion_supported(void)
+{
+    return be()->occlusion_supported();
+}
+
+void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index)
+{
+    be()->cmd_begin_occlusion(cl, index);
+}
+
+void rhi_cmd_end_occlusion(RhiCommandList cl, uint32_t index)
+{
+    be()->cmd_end_occlusion(cl, index);
+}
+
+uint32_t rhi_read_occlusion(uint64_t *samples, uint32_t max)
+{
+    return be()->read_occlusion(samples, max);
+}
+
 void rhi_prefer_mailbox(bool on)
 {
     be()->prefer_mailbox(on);

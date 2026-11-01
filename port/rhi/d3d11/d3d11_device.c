@@ -921,6 +921,33 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
     return 0;
 }
 
+/* ------------------------------------------------------- occlusion queries
+ * Not supported here (rhi.h rhi_cmd_begin_occlusion: the replay tool's
+ * measurement is Vulkan's); a D3D11_QUERY_OCCLUSION query per index and slot, read with GetData when the slot comes round would be the form. */
+bool rhi_occlusion_supported(void)
+{
+    return false;
+}
+
+void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index)
+{
+    (void)cl;
+    (void)index;
+}
+
+void rhi_cmd_end_occlusion(RhiCommandList cl, uint32_t index)
+{
+    (void)cl;
+    (void)index;
+}
+
+uint32_t rhi_read_occlusion(uint64_t *samples, uint32_t max)
+{
+    (void)samples;
+    (void)max;
+    return 0;
+}
+
 /* ------------------------------------------------------------------ frames */
 static bool d11_frames_init(void)
 {

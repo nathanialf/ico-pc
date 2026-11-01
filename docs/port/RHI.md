@@ -272,6 +272,25 @@ frequency and every slot got its heap and buffer; otherwise the device log says 
 `rhi_d3d12: GPU timestamps: on (<Hz> Hz, 256 per frame slot)`. `ICO_DX_FAKE_NO_TIMESTAMPS=1` turns
 them off for a test of the fallback.
 
+**Occlusion queries.** `RHI_MAX_OCCLUSION` (8192) a frame slot, a count of their own beside the
+timestamps', for the replay tool's hidden-draw measurement ([RENDER.md](RENDER.md#culling);
+`port/render/rd_occlusion.c`). `rhi_cmd_begin_occlusion(cl, i)` and `rhi_cmd_end_occlusion(cl, i)`
+around draws inside one render pass count the samples that passed the depth and stencil tests;
+one query is open at a time, each index once a slot; a begin outside a pass, a second begin of an
+index or one past the count is dropped with its end, and a pass that ends with a query open ends
+it first. `rhi_read_occlusion` hands back the slot `rhi_wait_frame` last recycled, as
+`rhi_read_timestamps` does: the count, or `RHI_OCCLUSION_NONE` for an index the frame did not
+write; it returns 1 + the highest index written. Vulkan only (`port/rhi/vk/vk_cmd.c`
+(`vkr_occ_make`, `vkr_collect_occlusion`)): a `VK_QUERY_TYPE_OCCLUSION` pool a slot made at the
+first begin of the run (the game never asks for one, so it pays nothing), the current slot's pool
+reset by a one-time submit at that begin and every slot's in its first command list from then on,
+`VK_QUERY_CONTROL_PRECISE_BIT` where the device has `occlusionQueryPrecise` (enabled at device
+creation; without it a count is exact only as zero or not zero, which is all the measurement
+reads). The first begin logs `rhi_vk: occlusion queries: on (8192 a frame slot, precise sample
+counts|not precise: ...)`. Direct3D 12, Direct3D 11 and OpenGL report `rhi_occlusion_supported`
+false, the calls do nothing and the read is 0 (their forms would be an occlusion query heap
+resolved like the timestamps, `D3D11_QUERY_OCCLUSION`, `GL_SAMPLES_PASSED`).
+
 **Present mode and timing.** `rhi_prefer_mailbox` asks for mailbox with vsync from the next
 swapchain (D3D12: not offered); `rhi_present_mailbox` and `rhi_present_mode_name` say what the
 swapchain has. `rhi_present_fifo_fallback(true)` makes every later swapchain FIFO whatever vsync
@@ -575,6 +594,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_ATTACHMENT_READ` | 1 offers the attachment read on Qualcomm's driver too; ico-pc.ini `attachment_read` |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
 | `ICO_VK_GLOBAL_BARRIERS` | 1 records a global barrier before every render pass and copy (`vk_cmd.c`) |
+| `ICO_VK_DEPTH_ALWAYS` | 1 makes every depth test compare `ALWAYS`, static and dynamic (`vk_pipeline.c`, `rhi_cmd_set_depth_state`), with the line `ICO_VK_DEPTH_ALWAYS: every depth test passes (...)`: the occlusion measurement's run without the depth ([RENDER.md](RENDER.md#culling)); the picture is not the game's |
 | `ICO_VK_PRESENT_WAIT` | 1 uses `VK_KHR_present_id` and `VK_KHR_present_wait` where offered (off otherwise) |
 | `ICO_VK_FIFO_LATEST_READY` | 1 uses `VK_PRESENT_MODE_FIFO_LATEST_READY_EXT` where FIFO would be taken, when offered |
 | `ICO_VK_POLL_SURFACE` | 1 polls the surface size after presents, as Android always does (`vk_swapchain.c`) |

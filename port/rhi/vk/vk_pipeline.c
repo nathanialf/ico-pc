@@ -1075,7 +1075,8 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .depthTestEnable = dss->depthTest ? VK_TRUE : VK_FALSE,
         .depthWriteEnable = (dss->depthTest && dss->depthWrite) ? VK_TRUE : VK_FALSE,
-        .depthCompareOp = vkr_compareMap[dss->depthCompare].vk,
+        .depthCompareOp =
+            g_vkr.depthAlways ? VK_COMPARE_OP_ALWAYS : vkr_compareMap[dss->depthCompare].vk,
         .stencilTestEnable = dss->stencilTest ? VK_TRUE : VK_FALSE,
         .front = vkr_stencil(&dss->front, dss),
         .back = vkr_stencil(&dss->back, dss),
