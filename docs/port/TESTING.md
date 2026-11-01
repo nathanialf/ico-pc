@@ -774,6 +774,22 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   reverse subtract against `gs_blend_reg_ch` for every Cs, C and Cd of the four forms, and the keys
   `rd__fx_enumerate` adds (none with the plan off, the constant fold's six without the frame and
   local modules), with no draw made without a device (`rd_fx_frame`).
+- `rd_fades_fold_test.c`: the fades fold ([RENDER.md](RENDER.md#the-fades-fold)) on the CPU,
+  without a device: `gs_fold_ch` (`gs_math.hlsli`) with no rounding term against `gs_blend_reg_ch`
+  of ALPHA 0x44 and 0x64 for every Cs, Cd and factor 0 to 0x80 (a texel stepped at scale 1 is the
+  texel the sprite stored under the exact blend), with the term 64 against the nearest level;
+  `gs_fold_applies`'s rows (the count, a bar step on the bars' rows only, no bar); above 1x, the
+  stepped filter against the filtered steps of two taps at every weight, at most a level apart
+  (the count a level apart printed); and `rd__fades_fold_plan` on frames recorded as the game's
+  post passes record them: the fade alone (its step, alpha, the nearest level under the
+  fixed-function blend, the floor under an exact one, its command's ordinal), the fade and the
+  letterbox (the bars one step, SCENE's rows 0 to 57 and from H - 57 on; at scale 2 the rows the
+  replay's corner snap gives, 116 and 2H - 114, and the hardware sprite's way), the brightness,
+  the fade and the letterbox (three steps in order), and the frames it leaves alone: the keep
+  sprite or a menu after the fade, text quads drawn into SCENE after it (the deferred text's
+  quads leave it), a Z-testing sprite after the letterbox (one before it leaves the letterbox
+  folding), the effects depth or a depth read by a later frame (the bars drawn, a fade after them
+  folds), a draw into SCENE in list 12, MSAA, a factor above 0x80 (`rd_fades_fold`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
@@ -947,6 +963,21 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   reads counted by both (served plus kept against the other's kept), and every phone frame served at
   both phone settings; each pair's counts printed (`rd_constant_reads_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)). SKIP as `rd_vustage_ab`.
+- `rd_fades_fold_ab.cmake`: the dumps of `tools/fades_fold_dumps.txt` (the forest's
+  `rd-00720` and `rd-01076`, the queen's `rd-00100`, the PowerVR phone's F12 zip `frame-20261028-173610-v4657`; machine-local) and,
+  with `ICO_BOOT_DUMP_DIR`, the start-up's frames 115 to 123, each first listed (`--list
+  --no-device`: list 11's last twelve commands in the log, so it shows which dumps end with the
+  fade, the letterbox or the brightness), then replayed with `--pass-dump --stats` with list 11's
+  last full-frame lerp sprites drawn into SCENE (`ICO_RD_FADES_FOLD=0`) and with the fold, under
+  `ICO_RD_BLEND=attachment` and `fixed`, at Original (`--present 640x480`), Enhanced 2x
+  (`--present 1280x960`) and the phone's Resolution Auto (`--resolution 2364x1080 --full-height
+  --full-pixel --aspect 2.189`, `ICO_RD_VU_PREPASS=0`; a narrower dump skips it): `fades fold off`
+  with none folded against `on`; every target's PNG but SCENE's (which holds the picture without
+  the sprites by design) byte for byte where nothing folded and under the exact blend where the log
+  says the steps met SCENE's texels before the GS filter, elsewhere within one level on every
+  channel, the channels a level apart printed per target by `port/render/test/png_level_diff.py`;
+  some dump must fold (`rd_fades_fold_ab`; [RENDER.md](RENDER.md#the-fades-fold),
+  [DIVERGENCES.md](DIVERGENCES.md) VD-27). SKIP as `rd_vustage_ab`.
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's
@@ -1723,8 +1754,8 @@ Not twinned: any test whose environment holds `ICO_VK_FAKE_*` or `ICO_VK_ATTACHM
 `rd_crack_tiler`, `rd_crack_tiler_on`, `rd_blend_selftest*`, `rd_date_selftest_sabotage`,
 `rd_fog_selftest_local_sabotage`; `ico_rd_gl_twin` skips these itself), the tests that start the
 game or work on the replay tool's files (`rd_replay_tool*`, `rd_fog_depth_copy_dump*`,
-`rd_vustage_ab`, `rd_vubatch_ab`, the frame gates, `coverage_corpus`; the compare below covers the dumps), and the
-tests with no device (`rd_alpha_plan`, `rd_fx_frame`, `rd_vu_frac`, `rd_mip`, `rd_passring`,
+`rd_vustage_ab`, `rd_vubatch_ab`, `rd_fades_fold_ab`, the frame gates, `coverage_corpus`; the compare below covers the dumps), and the
+tests with no device (`rd_alpha_plan`, `rd_fx_frame`, `rd_vu_frac`, `rd_fades_fold`, `rd_mip`, `rd_passring`,
 `rd_filter`, `rd_bisect_plan`, `rd_stream_audit`, `rd_local_probe_rule`, `fog_lut*`, `gsb_cull*`, `texpack*`, `gltf`).
 The two-pass blend copies (`*_nodual`, `ICO_RD_NO_DUAL=1`, the renderer's own switch) are
 twinned. The sources decide what else skips: `ctest -L gl` output lists the skipped ones.

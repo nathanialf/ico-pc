@@ -690,6 +690,18 @@ bound by list 11's screen sprites (a screen draw binds the state's depth whateve
 sprite without a Z test or Z write binds none, `rd__blur_key`), so those are the passes the plan
 drops on that frame. The fog's own pass and list 5's keep their stores.
 
+The fades fold ([RENDER.md](RENDER.md#the-fades-fold), `port/render/rd_fades_fold.c`) plans before
+the scan from it (`rd__fades_fold_scan` at the head of `rd__store_plan_scan`): list 11's last
+full-frame lerp sprites (the brightness, the fade, the letterbox bars) are applied by the reduction
+and not drawn, and the scan does not count them (`rd__fades_fold_skip` on their numbers). Where
+list 11 then has no other draw, no pass on SCENE begins in it at all: SCENE's colour is neither
+loaded nor stored for it (the store plan only ever drops depth), and the letterbox, which writes
+Z, does not make list 11 the depth's last touch. A bar folds only where nothing reads that Z: not
+under the effects depth, and not once a replay found SCENE's depth read before its clear (the
+fold's own once-a-run line, beside the plan's one below). The folded frame's SCENE (its pass dump's
+`SCENE.png`) holds the picture without the sprites, by design, as WORK2 does under the glow's
+mask; DISPLAY is the frame's picture.
+
 **After the replay.** The plan treats a depth as touched after the replay (every pass keeps it) when:
 
 - the present reads SCENE's depth (Options' effects depth, `RdSettings.effectsDepth`: `depthBlit`

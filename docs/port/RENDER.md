@@ -30,6 +30,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_shadow.c` | the shadow count on the stencil |
 | `port/render/rd_water.c` | render-to-texture blocks, target aliases, camera scopes, pool STs |
 | `port/render/rd_fog_path.c` | how the fog reads the scene depth; the fog probe and self-test |
+| `port/render/rd_fades_fold.c` | the fades fold: list 11's last full-frame lerp sprites applied by the reduction ([The fades fold](#the-fades-fold)) |
 | `port/render/rd_content_hide.c` | the content table: stage faces the native frame must not show |
 | `port/render/rd_content_extend.c` | the content table's sheets: stage overlays continued to the frame's edges |
 | `port/render/rd_content_chain.c`, `rd_chain.h` | the chains drawn at their links' size |
@@ -68,7 +69,7 @@ one persistent state block. Within a list submission order is draw order; rd nev
 | 8, 9 | shine levels 2 and 3 |
 | 10 | the softening chain |
 | 11 | UI, subtitles, film noise, brightness, keep, fade, letterbox |
-| 12 | debug font; the reduction at its end |
+| 12 | debug font; the reduction at its end (it applies list 11's last full-frame lerp sprites: [The fades fold](#the-fades-fold)) |
 
 (`port/render/rd.h`, "Lists").
 
@@ -1199,6 +1200,85 @@ rd: fx plan: a staticBlur sprite drawn by the constant fold (a masked draw in th
 rd: fx plan: the reduction's black sprite on a scaled DISPLAY drawn as its clear (reported once)
 rd: fx local read: on (self-test: local ok 4, snapshot ok 4) on SCENE 512x512 at 1024x1024 texels
 ```
+
+### The fades fold
+
+List 11 ends with the game's full-frame post sprites (`ico2/seki/src/GsBase.c`'s post pass order:
+the brightness, the keep sprite, the fade, the letterbox): the brightness a white sprite, ALPHA 0x44
+at alpha = the step; the fade the fade colour, ALPHA 0x44 at its level; the letterbox two black
+bars, ALPHA 0x64 at FIX = the bars' level, Z write on. Each is a GS lerp `((Cs - Cd) C >> 7) + Cd`
+of one colour over SCENE, and the reduction at the end of list 12 then reads the whole of SCENE
+into DISPLAY. On a tile-based GPU those sprites cost a pass on SCENE of their own when nothing else
+draws in list 11: SCENE's colour and depth loaded and stored, about 2.65 ms at Auto on the PowerVR
+phone. The fold draws them in the reduction instead: up to four steps (the lerp's colour, its
+factor C, the alpha it writes, the rows it covers) applied in the sprites' order to every SCENE
+texel the reduction reads, and the sprites are not drawn (`port/render/rd_fades_fold.c`, file
+comment; `port/render/rd_replay.c` (`doScreen`) asks `rd__fades_fold_skip`).
+
+The plan (`rd__fades_fold_plan`, the frame read once before the walk from the store plan's scan,
+`rd__store_plan_scan`; the store plan does not count a folded sprite as a touch of the depth) takes
+the run of such sprites at the end of list 11, after the last action that is not one: each one
+sprite into SCENE, untextured, ABE with a lerp (ALPHA 0x44 or 0x64; PABE with As's MSB clear writes
+Cs: factor 0x80), the factor at most 0x80 (the result stays in 0 to 255), the colour mask whole, no
+alpha test that can fail, no DATE, no AA1, no Z test, the scissor the whole target, every column
+covered and every row or the rows from the top or to the bottom (a bar); two bars of one colour,
+factor and alpha are one step. The deferred text's quads (drawn on the output), the overlay text
+and NOPs between are passed over. A sprite that writes Z (the bars) folds only while the present
+does not read SCENE's depth (the effects depth) and no replay found SCENE's depth read before the
+frame clears it (a keep frame on the depth the frame before left; logged once, the bars drawn from
+then on); such a sprite is otherwise drawn and ends the run. List 12 must hold nothing but state,
+the overlay and deferred text, the reduction's black sprite into DISPLAY and its textured sprite
+reading SCENE's colour (no blend, no DATE, bilinear, its tint not black), and nothing after it, so
+the reduction is SCENE's only reader after the sprites (the border's column repeat copies whole
+columns before it, which the steps, the same on every column, commute with). No fold under a pass
+window, in a frame with MSAA (the epoch's resolve is not the lerp's), past four steps, or above 1x
+for a bar while the reduction resamples SCENE through the above-1x kernels.
+
+In the reduction:
+
+- at scale 1 (Original; `fx_sprite_ps` with `FXF_FOLD`, `port/render/rd_replay.c`
+  (`doBlurSpriteDraw`), `rd__fades_fold_fx`) the steps are applied to each of the bilinear's four
+  taps before the GS filter (`port/shaders/fx_sprite.hlsl` (`fx_fold4`),
+  `port/shaders/gs_math.hlsli` (`gs_fold_ch`)): every tap is the texel SCENE would have held.
+  Under an exact blend (`[dev] blend = attachment|storage`) the sprites store the GS's floor and
+  so does the step: DISPLAY and the present byte for byte. Under the fixed-function blend (the
+  default) the sprites store the nearest level (VD-7); the step adds 64 before its shift, the
+  nearest level too, but for the blender's own ties and precision: at most a level
+  ([DIVERGENCES.md](DIVERGENCES.md) VD-27);
+- above 1x (the hardware sprite, `rd__blur_screen_fallback`; `sprite_ps` with `ICO_DF_FOLD`,
+  `port/render/rd_pixel_plan.c` (`rd__fill_draw_cb_extra`), `rd__fades_fold_screen`) the steps
+  follow the filter on the sampled texel (`port/shaders/sprite.hlsl` (`sprite_fold`)): a step is
+  affine in the texel and the weights sum to 1, so this is the filter of the stepped texels but
+  for their rounding to 8 bits, a level at most. Where the filter's two rows straddle a bar's edge
+  each row is sampled alone, stepped by its own steps, and the two weighed as the filter weighs
+  them. The bars' rows are SCENE's texel rows the bars covered, their corners snapped to whole GS
+  pixels as `snapAxis` draws them (`rd_fx_plan.c` `fxAxisCovers`'s mapping);
+- DISPLAY's alpha is the last step's, what SCENE's alpha would have been.
+
+SCENE then holds the picture without the sprites (its pass dump differs by design,
+[WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)); DISPLAY, the present and the next frames read
+DISPLAY. A reduction that does not take a planned fold (a way the plan does not foresee) leaves the
+frame without the sprites; it is logged and the fold is off from then on. With the menus up (the
+pause menu's layout drawn after the fade) or film noise, the keep sprite or text drawn into SCENE
+after the sprites, nothing folds. The saving on a tiler is the list 11 pass's load and store of
+SCENE's colour and depth only when list 11 then has no other draw; elsewhere one full-frame draw.
+`[dev] fades_fold = false` (`ICO_RD_FADES_FOLD=0`) draws the sprites as before. Each replay's
+record counts the sprites folded (`RdPerfRecord.fadesFolded`; `rd_replay_tool --stats`: `fades fold
+on: N sprites folded into the reduction`; the window's 10 s `pixel diet` line: `fades fold N`), the
+summary line says `fades fold on` or `off`, and the log says:
+
+```
+rd: fades fold: 3 of list 11's last sprites applied by the reduction instead of drawn into SCENE (frame 720; the whole frame (0, 0, 0) at 127/128, bars (0, 0, 0) at 64/128; the steps on SCENE's texels before the GS filter; SCENE 512x448 texels, rounding the nearest level (the fixed-function blend)); [dev] fades_fold = false draws them (reported once)
+rd: fades fold: list 11's last sprites are drawn into SCENE: a sprite writes SCENE's depth, which the effects depth reads (frame 720; the first 8, then every 100th: 1 so far)
+rd: fades fold: SCENE's depth is read in list 11 before this replay clears it (frame 1234): the letterbox bars, which write it, are drawn into SCENE from now on (reported once)
+rd: fades fold: the reduction took another way (the hardware sprite, not as planned): frame 1234's picture lacks list 11's last 3 sprites; the fold is off from now on
+```
+
+ctest `rd_fades_fold` (the step against the GS blend, the plan on recorded frames) and
+`rd_fades_fold_ab` (the fade dumps with and without the fold, [TESTING.md](TESTING.md)). Not built:
+a frame differing from the last only in a fade's level could rerun the reduction and the present
+alone (the still re-present shows a picture again only on an unchanged frame hash,
+`port/render/rd_reshow.c`).
 
 ### The motion blur under Smooth
 
