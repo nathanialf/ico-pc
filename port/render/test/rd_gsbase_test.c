@@ -81,6 +81,12 @@
  *            a window scaled by W / 512 drawn on the wide frames (XYZ2_HI) and
  *            dropped at 512 as the PS2; one with a vertex behind the eye
  *            dropped
+ *   wall     the blended camera's wall test at the flip (GsBase.c
+ *            gsbHostCullFlip, port/game/camera_wall.h, the check scripted
+ *            here) on every disc: +0x380's translation, the stage and the
+ *            pending cut passed; a crossing marks the frame its flip closes
+ *            (RdCamera.cut 2, RD_SNAP_WALL), not the next; gsb_ResetGSSystem
+ *            forgets the eye
  * On a Vulkan device (exit 77 without one, after the recording checks):
  *   camera   rd__camera_probe (FrameCB through camera_probe_ps) against the
  *            C products and sceVu0RotTransPers through matrixptr+0x100
@@ -120,6 +126,7 @@
 #include "video_options.h"
 #include "photo_mode.h"
 #include "photo_view.h"
+#include "camera_wall.h"
 #include "../../core/region.h" /* the scene layout (la_game_demo) */
 
 static int failures;
@@ -556,6 +563,27 @@ void UpdateHandCameraLimitP(void) {}
 void UpdateHandCameraLimitV(void) {}
 
 void UpdateZoomMaxVallInDemo(void) {}
+
+/* port/game/camera_wall_stage.c's check, scripted (camera_wall_stage_test
+   tests the check itself): what each flip passed, and the answer to give */
+static struct {
+    int calls, forgets, cutPending, stage, answer;
+    float eye[3];
+} s_wall;
+
+int ico_camera_wall_check(const float *eyeNow, int cutPending, int stage)
+{
+    s_wall.calls++;
+    memcpy(s_wall.eye, eyeNow, sizeof(s_wall.eye));
+    s_wall.cutPending = cutPending;
+    s_wall.stage = stage;
+    return s_wall.answer;
+}
+
+void ico_camera_wall_forget(void)
+{
+    s_wall.forgets++;
+}
 
 /* the EE word arena (eeword.h): the reel's stage animation lives in it */
 static unsigned char s_arena[1 << 16] __attribute__((aligned(16)));
@@ -3080,6 +3108,73 @@ static void boot(void)
     gsb_InitGSSystem();
 }
 
+/* the eye of the camera the game made (+0x380, the inverse view) */
+static void setEye(float x, float y, float z)
+{
+    float *m = (float *)(matrixptr + 0x380);
+    m[12] = x;
+    m[13] = y;
+    m[14] = z;
+}
+
+static void checkCameraWall(void)
+{
+    /* on every disc (its own gsb_UpdateGSSystem copy): each flip passes the
+       wall test +0x380's translation, whether a cut is pending since the
+       flip before and the stage; a crossing marks the frame that flip
+       closes (RdCamera.cut 2, RD_SNAP_WALL against the frame before), not
+       the next; a game cut during the tick is passed as pending at the next
+       flip only; gsb_ResetGSSystem forgets the eye */
+    const int stage = stage_no;
+    for (int i = 0; i < ico_region_count(); i++) {
+        const char *slug = ico_region_at(i)->slug;
+        ico_region_select(slug);
+        stage_no = 7;
+        s_wall.answer = 0;
+        tick();
+        tick();
+        const int forgets = s_wall.forgets;
+        gsb_ResetGSSystem();
+        CHECK(s_wall.forgets == forgets + 1, "wall %s: gsb_ResetGSSystem forgets the eye", slug);
+        tick();
+        const int calls = s_wall.calls;
+        setEye(10.0f, 20.0f, 30.0f);
+        tick();
+        CHECK(s_wall.calls == calls + 1, "wall %s: one check a flip (%d)", slug,
+              s_wall.calls - calls);
+        CHECK(s_wall.eye[0] == 10.0f && s_wall.eye[1] == 20.0f && s_wall.eye[2] == 30.0f,
+              "wall %s: the flip passes +0x380's translation (%g %g %g)", slug,
+              (double)s_wall.eye[0], (double)s_wall.eye[1], (double)s_wall.eye[2]);
+        CHECK(s_wall.stage == 7 && s_wall.cutPending == 0, "wall %s: stage %d, pending %d", slug,
+              s_wall.stage, s_wall.cutPending);
+        const RdFrame *f = rd__last_frame();
+        CHECK(f && f->camera.cut == 0, "wall %s: no crossing, no cut", slug);
+        s_wall.answer = ICO_CAMERA_WALL_WALL;
+        setEye(40.0f, 20.0f, 30.0f);
+        tick();
+        s_wall.answer = 0;
+        f = rd__last_frame();
+        const RdFrame *before = rd__prev_frame();
+        CHECK(f && f->camera.cut == RD_CAMERA_CUT_WALL,
+              "wall %s: the frame the crossing's flip closed is a wall cut (%u)", slug,
+              f ? f->camera.cut : 99u);
+        CHECK(f && before && rd__interp_snap(before, f) == RD_SNAP_WALL,
+              "wall %s: it snaps as RD_SNAP_WALL (%d)", slug,
+              f && before ? rd__interp_snap(before, f) : -1);
+        tick();
+        f = rd__last_frame();
+        CHECK(f && f->camera.cut == 0, "wall %s: the next frame is not cut (%u)", slug,
+              f ? f->camera.cut : 99u);
+        ico_video_camera_cut(); /* as camera-root.c does in a tick */
+        tick();
+        CHECK(s_wall.cutPending == 1, "wall %s: a game cut is pending at the next flip", slug);
+        tick();
+        CHECK(s_wall.cutPending == 0, "wall %s: and not at the one after", slug);
+    }
+    ico_region_select("pal");
+    stage_no = stage;
+}
+
 static void recordingChecks(void)
 {
     checkBgTiming();
@@ -3098,6 +3193,7 @@ static void recordingChecks(void)
     checkDecoder();
     checkStripWindow();
     checkStripCards();
+    checkCameraWall();
 }
 
 int main(void)

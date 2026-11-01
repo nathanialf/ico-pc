@@ -505,6 +505,18 @@ void staffRollMain(void) {}
    frames never open photo mode) */
 void ico_photo_view_veil(void) {}
 
+/* port/game/camera_wall_stage.c: the eye's path through the stage at each
+   flip (not linked here; these frames have no stage collision) */
+int ico_camera_wall_check(const float *eyeNow, int cutPending, int stage)
+{
+    (void)eyeNow;
+    (void)cutPending;
+    (void)stage;
+    return 0;
+}
+
+void ico_camera_wall_forget(void) {}
+
 void stage_SetLoopFlag(int g, int f)
 {
     (void)g;

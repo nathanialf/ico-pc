@@ -151,6 +151,11 @@ extern int ico_video_interpolate(void);
 /* port/game/video_options.c: the count of the game's hard camera cuts and
    stage changes (ico_video_camera_cut) */
 extern unsigned ico_video_cut_serial(void);
+/* PC port: port/game/camera_wall_stage.c (camera_wall.h): the eye's path since the
+   flip before through the stage's collision, at each flip; nonzero when it
+   crossed a wall or a floor.  And forgetting the eye at a stage's start */
+extern int ico_camera_wall_check(const float *eyeNow, int cutPending, int stage);
+extern void ico_camera_wall_forget(void);
 /* port/game/video_options.c: the Screen softening switch, 1 = on */
 extern int ico_video_effect_softening(void);
 /* port/game/video_options.c: the Cinematic bars switch, 1 = on */
@@ -2634,9 +2639,27 @@ static void gsbHostCullBuilt(void)
 
 static void gsbHostCullFlip(void)
 {
+    int wall;
+
     if (matrixptr == 0) {
         return;
     }
+    /* PC port: the eye (+0x380, the inverse view: its translation) from the flip
+       before to this one through a wall or a floor: the frame this flip
+       closes (dl_Swap's rd_end_frame, below in gsb_UpdateGSSystem) is not
+       blended from the one before.  Marked here, not through
+       ico_video_camera_cut, whose serial the window passes on after the
+       step, to the frame the next tick records.  Asked at every flip, the
+       headless build too: it writes nothing of the game's */
+    wall = ico_camera_wall_check((const float *)(matrixptr + 0x380) + 12,
+                                 ico_video_cut_serial() != gsbCullCutSerial, stage_no);
+#ifdef ICO_RD
+    if (wall != 0) {
+        rd_camera_cut_wall();
+    }
+#else
+    (void)wall;
+#endif
     memcpy(gsbCullPrev.c, matrixptr + 0x280, sizeof(gsbCullPrev.c));
     gsbCullPrev.hasVP =
         gsbCullBuilt.valid && memcmp(gsbCullBuilt.c, gsbCullPrev.c, sizeof(gsbCullPrev.c)) == 0;
@@ -2655,6 +2678,7 @@ static int gsbCullKeepLogged; /* port */
 
 static void gsbHostCullForget(void)
 {
+    ico_camera_wall_forget(); /* PC port: nor an eye for the wall test */
     gsbCullPrev.valid = 0;
     gsbCullGen++;
     gsbCullKeepLogged = 0;
