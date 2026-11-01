@@ -749,4 +749,49 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "Original garde la lueur de l’image du jeu entre les images. Fluide la refait pour chaque image affichée ; cela coûte plus de temps graphique.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Ne compte qu’au-dessus de la fréquence d’images Original, avec la lueur activée.",
+    [UI_STR_EXTRAS_BACKUP] = "Sauvegarder vos données",
+    [UI_STR_EXTRAS_RESTORE] = "Restaurer une sauvegarde",
+    [UI_STR_BACKUP_NOTE] =
+        "Enregistre memory card, états sauvegardés, réglages et succès dans un fichier .zip, à garder ou à emporter ailleurs.",
+    [UI_STR_RESTORE_NOTE] =
+        "Remet la memory card, les états sauvegardés, les réglages et les succès d’une sauvegarde .zip. Le jeu redémarre ensuite.",
+    [UI_STR_BACKUP_CHOOSING] = "Choisissez où enregistrer la sauvegarde.",
+    [UI_STR_BACKUP_PROGRESS] = "Sauvegarde : %d fichiers sur %d",
+    [UI_STR_RESTORE_AGAIN] = "Appuyez encore pour choisir",
+    [UI_STR_RESTORE_CONFIRM_TITLE] = "Restaurer une sauvegarde ?",
+    [UI_STR_RESTORE_CONFIRM_BODY] =
+        "La memory card, les états sauvegardés, les réglages et les succès d’ici seront remplacés par ceux de la sauvegarde, puis le jeu redémarrera.\nAppuyez encore pour choisir la sauvegarde.",
+    [UI_STR_RESTORE_CHOOSING] = "Choisissez la sauvegarde à restaurer.",
+    [UI_STR_RESTORE_READING] = "Lecture de la sauvegarde…",
+    [UI_STR_RESTORE_PROGRESS] = "Restauration : %d fichiers sur %d",
+    [UI_STR_RESTORE_THIS] = "Restaurer cette sauvegarde",
+    [UI_STR_RESTORE_ASK_NOTE] = "Créée par la version %s. Appuyez encore pour la restaurer.",
+    [UI_STR_RESTORE_ASK_TITLE] = "Restaurer cette sauvegarde ?",
+    [UI_STR_RESTORE_VERSION] = "Version : %s",
+    [UI_STR_RESTORE_SAVED] = "Créée le : %s",
+    [UI_STR_RESTORE_DISCS] = "Disques : %s",
+    [UI_STR_RESTORE_OTHER_DISC] = "Créée pendant qu’un autre disque était joué",
+    [UI_STR_RESTORE_PRESS] = "Appuyez encore pour la restaurer",
+    [UI_STR_BACKUP_DONE] = "Vos données sont sauvegardées",
+    [UI_STR_BACKUP_DONE_BODY] = "%d fichiers enregistrés dans\n%s",
+    [UI_STR_BACKUP_FAILED] = "Impossible de sauvegarder vos données",
+    [UI_STR_RESTORE_DONE] = "Restauration de vos données",
+    [UI_STR_RESTORE_DONE_RESTART] = "Le jeu redémarre maintenant et met la sauvegarde en place.",
+    [UI_STR_RESTORE_DONE_CLOSE] =
+        "Le jeu se ferme maintenant. Relancez-le : il mettra la sauvegarde en place au démarrage.",
+    [UI_STR_RESTORE_FAILED] = "Impossible de restaurer la sauvegarde",
+    [UI_STR_BACKUP_WHY_BUSY] = "Pas maintenant : le jeu enregistre. Réessayez dans un instant.",
+    [UI_STR_BACKUP_WHY_NOTHING] = "Il n’y a encore rien à sauvegarder.",
+    [UI_STR_BACKUP_WHY_WRITE] =
+        "Les données n’ont pas pu être écrites. Vérifiez l’espace libre et réessayez.",
+    [UI_STR_BACKUP_WHY_READ] = "Le fichier n’a pas pu être lu.",
+    [UI_STR_BACKUP_WHY_NOT_BACKUP] = "Ce fichier n’est pas une sauvegarde créée par ce jeu.",
+    [UI_STR_BACKUP_WHY_NEWER] =
+        "Cette sauvegarde a été créée par une version plus récente. Mettez le jeu à jour pour la restaurer.",
+    [UI_STR_BACKUP_WHY_DAMAGED] = "Cette sauvegarde est endommagée.",
+    [UI_STR_BACKUP_WHY_UNSAFE] =
+        "Cette sauvegarde contient des fichiers hors des dossiers du jeu ; elle n’est pas utilisée.",
+    [UI_STR_BACKUP_WHY_TOO_BIG] = "Cette sauvegarde est plus grande que ce que le jeu accepte.",
+    [UI_STR_BACKUP_WHY_NO_DIALOG] = "Aucun sélecteur de fichiers n’a pu s’ouvrir.",
+    [UI_STR_BACKUP_WHY_NO_SPACE] = "Il n’y a pas assez d’espace libre sur l’appareil.",
 };

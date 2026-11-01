@@ -37,6 +37,7 @@
 #include "sysconf.h"
 #include "touch_edit.h"        /* the touch layout edits (port/input) */
 #include "settings_graphics.h" /* the Graphics page's rows and Apply */
+#include "settings_backup.h"   /* Extras' Back up your data and Restore from a backup */
 #include "touch_edit_ui.h"     /* the Edit layout page */
 #include "variants.h"          /* Extras > Game variants */
 #include "ui_hint.h"
@@ -609,6 +610,7 @@ void ui_settings_vsync(void)
     ui__gfx_poll();
     texExportEnd();
     ui__gfx_vsync();
+    ui__backup_vsync();
 }
 
 /* the zips waiting in the drivers folder, 0 without a host */
@@ -1172,6 +1174,12 @@ static const char *fmtText(UiStrId id, const char *want, const int *v, const cha
     }
     buf[n] = '\0';
     return buf;
+}
+
+const char *ui__settings_fmt(int id, const char *want, const int *v, const char *str, char *buf,
+                             unsigned size)
+{
+    return fmtText((UiStrId)id, want, v, str, buf, size);
 }
 
 /* Extras > Export textures: the job's state now (IDLE without a host) */
@@ -2090,6 +2098,9 @@ static int optShown(int opt, int link)
     }
     if (opt == UI_OPT_EXTRAS_EXPORT_TEXTURES) {
         return onTitle() && s_texExportHostSet;
+    }
+    if (opt == UI_OPT_EXTRAS_BACKUP || opt == UI_OPT_EXTRAS_RESTORE) {
+        return onTitle() && ui__backup_hosted();
     }
     if (opt == UI_OPT_CHAR_SWITCH) {
         return ui_settings_characters_in_viewer();
@@ -3324,6 +3335,8 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         }
         addNote(pg, UI_OPT_EXTRAS_CREDITS, UI_STR_EXTRAS_LOCKED_NOTE);
         addNote(pg, UI_OPT_EXTRAS_EXPORT_TEXTURES, UI_STR_EXPORT_TEXTURES_NOTE);
+        addNote(pg, UI_OPT_EXTRAS_BACKUP, UI_STR_BACKUP_NOTE);
+        addNote(pg, UI_OPT_EXTRAS_RESTORE, UI_STR_RESTORE_NOTE);
         addNote(pg, UI_OPT_ACH_POPUPS, UI_STR_ACH_POPUPS_ALSO_NOTE);
         break;
     case UI_PAGE_VARIANTS:
@@ -3854,15 +3867,29 @@ static void build(void)
                                   UI_STR_OPT_DUMP_MODELS, UI_STR_BACK};
     /* Characters after Credits (from both entries; the other three
        from the title only) */
-    static const int extrasOpts[] = {
-        UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS, UI_OPT_EXTRAS_CREDITS,         UI_OPT_LINK,
-        UI_OPT_LINK,         UI_OPT_EXTRAS_STEAM,  UI_OPT_EXTRAS_EXPORT_TEXTURES, UI_OPT_ACH_POPUPS,
-        UI_OPT_BACK};
-    static const int extrasStrs[] = {
-        UI_STR_EXTRAS_MUSIC,           UI_STR_EXTRAS_MODELS,    UI_STR_EXTRAS_CREDITS,
-        UI_STR_SECTION_CHARACTERS,     UI_STR_SECTION_VARIANTS, UI_STR_EXTRAS_STEAM,
-        UI_STR_EXTRAS_EXPORT_TEXTURES, UI_STR_OPT_ACH_POPUPS,   UI_STR_BACK};
-    static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, UI_PAGE_VARIANTS, -1,
+    static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,
+                                     UI_OPT_EXTRAS_MODELS,
+                                     UI_OPT_EXTRAS_CREDITS,
+                                     UI_OPT_LINK,
+                                     UI_OPT_LINK,
+                                     UI_OPT_EXTRAS_STEAM,
+                                     UI_OPT_EXTRAS_EXPORT_TEXTURES,
+                                     UI_OPT_EXTRAS_BACKUP,
+                                     UI_OPT_EXTRAS_RESTORE,
+                                     UI_OPT_ACH_POPUPS,
+                                     UI_OPT_BACK};
+    static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,
+                                     UI_STR_EXTRAS_MODELS,
+                                     UI_STR_EXTRAS_CREDITS,
+                                     UI_STR_SECTION_CHARACTERS,
+                                     UI_STR_SECTION_VARIANTS,
+                                     UI_STR_EXTRAS_STEAM,
+                                     UI_STR_EXTRAS_EXPORT_TEXTURES,
+                                     UI_STR_EXTRAS_BACKUP,
+                                     UI_STR_EXTRAS_RESTORE,
+                                     UI_STR_OPT_ACH_POPUPS,
+                                     UI_STR_BACK};
+    static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, UI_PAGE_VARIANTS, -1, -1, -1,
                                       -1, -1, -1};
     /* the Save states page's ways in (the pause menu's row, the Continue
        screen's prompt) exist when its host was set before the menus were
@@ -6355,6 +6382,19 @@ static void texExportNote(int row, const UiTextureExportStatus *st)
     }
 }
 
+/* a note's own words (the backup rows'), wrapped; the note cache is
+   cleared as gfxNote's */
+static void liveNoteText(int row, const char *text)
+{
+    char buf[256];
+    wrapText(text, NOTE_SIZE, 580.0f, buf, sizeof(buf));
+    lt_ext_set_text(row, buf);
+    const int i = row - LT_GAME_PROPERTY_COUNT;
+    if (i >= 0 && i < LT_EXT_MAX_PROPERTIES) {
+        s_noteStr[i] = -1;
+    }
+}
+
 /* the countdown began: the cursor on Revert, so a second press of Cross
    meant for Apply goes back */
 static void gfxRefresh(Page *pg)
@@ -6471,6 +6511,16 @@ static void refreshPage(Page *pg, int id, int cur)
                 texExportNote(r->note, &st);
             }
         }
+        int liveNote = 0; /* the backup rows' words written below, not setNote's */
+        if (r->opt == UI_OPT_EXTRAS_BACKUP || r->opt == UI_OPT_EXTRAS_RESTORE) {
+            char text[256];
+            lt_ext_set_str(r->label, (UiStrId)ui__backup_label(r->opt, cur == r->label));
+            r->noteStr = ui__backup_note(r->opt, text, sizeof(text));
+            liveNote = text[0] != '\0';
+            if (liveNote && r->note >= 0) {
+                liveNoteText(r->note, text);
+            }
+        }
         if (r->opt == UI_OPT_VAR_TOUGHNESS) {
             r->noteStr = variantNote(r->opt, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
         } else if (r->opt == UI_OPT_VAR_NO_HINTS) {
@@ -6499,7 +6549,7 @@ static void refreshPage(Page *pg, int id, int cur)
         if (r->note >= 0) {
             if (r->noteStr == UI_STR_GRAPHICS_KEEP_ASK) {
                 gfxNote(r->note);
-            } else if (r->noteStr != UI_STR_EXPORT_TEXTURES_PROGRESS) {
+            } else if (r->noteStr != UI_STR_EXPORT_TEXTURES_PROGRESS && !liveNote) {
                 setNote(r->note, r->noteStr); /* the progress was written above */
             }
             if (cur == r->label && (!lockedNote(r) || locked) && !charsNoteHidden(id, r)) {
@@ -6694,6 +6744,18 @@ static int settingsProc(int first, int item)
         if ((flags & PAD_OK) && r->opt == UI_OPT_EXTRAS_EXPORT_TEXTURES) {
             POSITIVE_SE();
             texExportPress();
+            refreshPage(pg, id, lay->curItem);
+        }
+        if ((flags & PAD_OK) &&
+            (r->opt == UI_OPT_EXTRAS_BACKUP || r->opt == UI_OPT_EXTRAS_RESTORE)) {
+            const int took = ui__backup_press(r->opt);
+            if (took > 0) {
+                POSITIVE_SE();
+            } else if (took == 0) {
+                CUR_SE();
+            } else {
+                NEGATIVE_SE();
+            }
             refreshPage(pg, id, lay->curItem);
         }
         if ((flags & PAD_OK) && r->opt == UI_OPT_VAR_DEBUG_MENU) {

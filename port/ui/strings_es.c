@@ -627,6 +627,52 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_EXPORT_TEXTURES_STOPPED_BODY] = "Detenida tras %d imágenes",
     [UI_STR_EXPORT_TEXTURES_FAILED] = "No se pudieron exportar las texturas",
     [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "No se pudo escribir en la carpeta\n%s",
+    [UI_STR_EXTRAS_BACKUP] = "Hacer una copia de tus datos",
+    [UI_STR_EXTRAS_RESTORE] = "Restaurar una copia",
+    [UI_STR_BACKUP_NOTE] =
+        "Guarda la memory card, los estados guardados, los ajustes y los logros en un archivo .zip, para conservarlo o llevarlo.",
+    [UI_STR_RESTORE_NOTE] =
+        "Recupera la memory card, los estados guardados, los ajustes y los logros de una copia .zip. Después el juego se reinicia.",
+    [UI_STR_BACKUP_CHOOSING] = "Elige dónde guardar la copia.",
+    [UI_STR_BACKUP_PROGRESS] = "Copiando: %d de %d archivos",
+    [UI_STR_RESTORE_AGAIN] = "Pulsa otra vez para elegir",
+    [UI_STR_RESTORE_CONFIRM_TITLE] = "¿Restaurar una copia?",
+    [UI_STR_RESTORE_CONFIRM_BODY] =
+        "La memory card, los estados guardados, los ajustes y los logros de aquí se sustituirán por los de la copia, y el juego se reiniciará.\nPulsa otra vez para elegir la copia.",
+    [UI_STR_RESTORE_CHOOSING] = "Elige la copia que quieres restaurar.",
+    [UI_STR_RESTORE_READING] = "Leyendo la copia…",
+    [UI_STR_RESTORE_PROGRESS] = "Restaurando: %d de %d archivos",
+    [UI_STR_RESTORE_THIS] = "Restaurar esta copia",
+    [UI_STR_RESTORE_ASK_NOTE] = "Creada con la versión %s. Pulsa otra vez para restaurarla.",
+    [UI_STR_RESTORE_ASK_TITLE] = "¿Restaurar esta copia?",
+    [UI_STR_RESTORE_VERSION] = "Versión: %s",
+    [UI_STR_RESTORE_SAVED] = "Guardada: %s",
+    [UI_STR_RESTORE_DISCS] = "Discos: %s",
+    [UI_STR_RESTORE_OTHER_DISC] = "Creada mientras se jugaba otro disco",
+    [UI_STR_RESTORE_PRESS] = "Pulsa otra vez para restaurarla",
+    [UI_STR_BACKUP_DONE] = "Tus datos están copiados",
+    [UI_STR_BACKUP_DONE_BODY] = "%d archivos guardados en\n%s",
+    [UI_STR_BACKUP_FAILED] = "No se pudo hacer la copia de tus datos",
+    [UI_STR_RESTORE_DONE] = "Restaurando tus datos",
+    [UI_STR_RESTORE_DONE_RESTART] = "El juego se reinicia ahora y pone la copia en su sitio.",
+    [UI_STR_RESTORE_DONE_CLOSE] =
+        "El juego se cierra ahora. Ábrelo otra vez: al iniciarse pondrá la copia en su sitio.",
+    [UI_STR_RESTORE_FAILED] = "No se pudo restaurar la copia",
+    [UI_STR_BACKUP_WHY_BUSY] =
+        "Ahora no: el juego está guardando. Inténtalo de nuevo en un momento.",
+    [UI_STR_BACKUP_WHY_NOTHING] = "Todavía no hay nada que copiar.",
+    [UI_STR_BACKUP_WHY_WRITE] =
+        "No se pudieron escribir los datos. Comprueba el espacio libre e inténtalo de nuevo.",
+    [UI_STR_BACKUP_WHY_READ] = "No se pudo leer el archivo.",
+    [UI_STR_BACKUP_WHY_NOT_BACKUP] = "Este archivo no es una copia hecha por este juego.",
+    [UI_STR_BACKUP_WHY_NEWER] =
+        "Esta copia se hizo con una versión más nueva. Actualiza el juego para restaurarla.",
+    [UI_STR_BACKUP_WHY_DAMAGED] = "Esta copia está dañada.",
+    [UI_STR_BACKUP_WHY_UNSAFE] =
+        "Esta copia contiene archivos fuera de las carpetas del juego, así que no se usa.",
+    [UI_STR_BACKUP_WHY_TOO_BIG] = "Esta copia es más grande de lo que el juego admite.",
+    [UI_STR_BACKUP_WHY_NO_DIALOG] = "No se pudo abrir ningún selector de archivos.",
+    [UI_STR_BACKUP_WHY_NO_SPACE] = "No hay suficiente espacio libre en el dispositivo.",
     [UI_STR_LANG_KO] = "한국어",
     [UI_STR_LANG_ZH] = "繁體中文",
     /* Controls > Touch screen and the touch layout editor */

@@ -631,6 +631,57 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_EXPORT_TEXTURES_STOPPED_BODY] = "Angehalten nach %d Bildern",
     [UI_STR_EXPORT_TEXTURES_FAILED] = "Export der Texturen fehlgeschlagen",
     [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "Der Ordner %s\nkonnte nicht beschrieben werden",
+    [UI_STR_EXTRAS_BACKUP] = "Daten sichern",
+    [UI_STR_EXTRAS_RESTORE] = "Aus Sicherung wiederherstellen",
+    [UI_STR_BACKUP_NOTE] =
+        "Speichert Memory Card, Spielzustände, Einstellungen und Erfolge in einer .zip-Datei, "
+        "zum Aufheben oder Umziehen.",
+    [UI_STR_RESTORE_NOTE] =
+        "Holt Memory Card, Spielzustände, Einstellungen und Erfolge aus einer .zip-Sicherung "
+        "zurück. Danach startet das Spiel neu.",
+    [UI_STR_BACKUP_CHOOSING] = "Wähle, wo die Sicherung gespeichert wird.",
+    [UI_STR_BACKUP_PROGRESS] = "Sichern: %d von %d Dateien",
+    [UI_STR_RESTORE_AGAIN] = "Erneut drücken zum Auswählen",
+    [UI_STR_RESTORE_CONFIRM_TITLE] = "Aus Sicherung wiederherstellen?",
+    [UI_STR_RESTORE_CONFIRM_BODY] =
+        "Memory Card, Spielzustände, Einstellungen und Erfolge hier werden durch die der "
+        "Sicherung ersetzt, und das Spiel startet neu.\nErneut drücken, um die Sicherung zu "
+        "wählen.",
+    [UI_STR_RESTORE_CHOOSING] = "Wähle die Sicherung zum Wiederherstellen.",
+    [UI_STR_RESTORE_READING] = "Sicherung wird gelesen…",
+    [UI_STR_RESTORE_PROGRESS] = "Wiederherstellen: %d von %d Dateien",
+    [UI_STR_RESTORE_THIS] = "Diese Sicherung wiederherstellen",
+    [UI_STR_RESTORE_ASK_NOTE] = "Erstellt mit Version %s. Erneut drücken zum Wiederherstellen.",
+    [UI_STR_RESTORE_ASK_TITLE] = "Diese Sicherung wiederherstellen?",
+    [UI_STR_RESTORE_VERSION] = "Version: %s",
+    [UI_STR_RESTORE_SAVED] = "Gesichert: %s",
+    [UI_STR_RESTORE_DISCS] = "Discs: %s",
+    [UI_STR_RESTORE_OTHER_DISC] = "Erstellt, während eine andere Disc gespielt wurde",
+    [UI_STR_RESTORE_PRESS] = "Erneut drücken zum Wiederherstellen",
+    [UI_STR_BACKUP_DONE] = "Deine Daten sind gesichert",
+    [UI_STR_BACKUP_DONE_BODY] = "%d Dateien gespeichert in\n%s",
+    [UI_STR_BACKUP_FAILED] = "Daten konnten nicht gesichert werden",
+    [UI_STR_RESTORE_DONE] = "Daten werden wiederhergestellt",
+    [UI_STR_RESTORE_DONE_RESTART] = "Das Spiel startet jetzt neu und setzt die Sicherung ein.",
+    [UI_STR_RESTORE_DONE_CLOSE] =
+        "Das Spiel wird jetzt beendet. Starte es erneut: Beim Start setzt es die Sicherung ein.",
+    [UI_STR_RESTORE_FAILED] = "Sicherung konnte nicht wiederhergestellt werden",
+    [UI_STR_BACKUP_WHY_BUSY] = "Jetzt nicht: Das Spiel speichert. Versuche es gleich noch einmal.",
+    [UI_STR_BACKUP_WHY_NOTHING] = "Es gibt noch nichts zu sichern.",
+    [UI_STR_BACKUP_WHY_WRITE] =
+        "Die Daten konnten nicht geschrieben werden. Prüfe den freien Speicher und versuche es "
+        "erneut.",
+    [UI_STR_BACKUP_WHY_READ] = "Die Datei konnte nicht gelesen werden.",
+    [UI_STR_BACKUP_WHY_NOT_BACKUP] = "Diese Datei ist keine Sicherung dieses Spiels.",
+    [UI_STR_BACKUP_WHY_NEWER] =
+        "Diese Sicherung stammt aus einer neueren Version. Aktualisiere das Spiel, um sie "
+        "wiederherzustellen.",
+    [UI_STR_BACKUP_WHY_DAMAGED] = "Diese Sicherung ist beschädigt.",
+    [UI_STR_BACKUP_WHY_UNSAFE] =
+        "Diese Sicherung enthält Dateien außerhalb der Ordner des Spiels und wird nicht verwendet.",
+    [UI_STR_BACKUP_WHY_TOO_BIG] = "Diese Sicherung ist größer, als das Spiel annimmt.",
+    [UI_STR_BACKUP_WHY_NO_DIALOG] = "Es konnte keine Dateiauswahl geöffnet werden.",
+    [UI_STR_BACKUP_WHY_NO_SPACE] = "Auf dem Gerät ist nicht genug Speicher frei.",
     [UI_STR_LANG_KO] = "한국어",
     [UI_STR_LANG_ZH] = "繁體中文",
     /* Controls > Touch screen and the touch layout editor */

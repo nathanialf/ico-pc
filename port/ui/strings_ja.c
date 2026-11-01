@@ -628,6 +628,53 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_EXPORT_TEXTURES_STOPPED_BODY] = "%d個の画像を保存して中止しました",
     [UI_STR_EXPORT_TEXTURES_FAILED] = "テクスチャを書き出せませんでした",
     [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "フォルダー%sに\n書き込めませんでした",
+    [UI_STR_EXTRAS_BACKUP] = "データをバックアップ",
+    [UI_STR_EXTRAS_RESTORE] = "バックアップから復元",
+    [UI_STR_BACKUP_NOTE] =
+        "メモリーカード、セーブステート、設定、実績を一つの.zipファイルに保存します。保管や別の機器への移動に使えます。",
+    [UI_STR_RESTORE_NOTE] =
+        "バックアップの.zipからメモリーカード、セーブステート、設定、実績を戻し、今のものと置き換えます。その後ゲームが再起動します。",
+    [UI_STR_BACKUP_CHOOSING] = "バックアップの保存先を選んでください。",
+    [UI_STR_BACKUP_PROGRESS] = "バックアップ中：%d / %dファイル",
+    [UI_STR_RESTORE_AGAIN] = "もう一度押して選ぶ",
+    [UI_STR_RESTORE_CONFIRM_TITLE] = "バックアップから復元しますか？",
+    [UI_STR_RESTORE_CONFIRM_BODY] =
+        "ここにあるメモリーカード、セーブステート、設定、実績がバックアップのものに置き換わり、ゲームが再起動します。\nもう一度押すとバックアップを選べます。",
+    [UI_STR_RESTORE_CHOOSING] = "復元するバックアップを選んでください。",
+    [UI_STR_RESTORE_READING] = "バックアップを読み込み中…",
+    [UI_STR_RESTORE_PROGRESS] = "復元中：%d / %dファイル",
+    [UI_STR_RESTORE_THIS] = "このバックアップを復元",
+    [UI_STR_RESTORE_ASK_NOTE] = "バージョン%sで作られました。もう一度押すと復元します。",
+    [UI_STR_RESTORE_ASK_TITLE] = "このバックアップを復元しますか？",
+    [UI_STR_RESTORE_VERSION] = "バージョン：%s",
+    [UI_STR_RESTORE_SAVED] = "保存日時：%s",
+    [UI_STR_RESTORE_DISCS] = "ディスク：%s",
+    [UI_STR_RESTORE_OTHER_DISC] = "別のディスクで遊んでいたときに作られました",
+    [UI_STR_RESTORE_PRESS] = "もう一度押すと復元します",
+    [UI_STR_BACKUP_DONE] = "データをバックアップしました",
+    [UI_STR_BACKUP_DONE_BODY] = "%d個のファイルを\n%sに保存しました",
+    [UI_STR_BACKUP_FAILED] = "データをバックアップできませんでした",
+    [UI_STR_RESTORE_DONE] = "データを復元しています",
+    [UI_STR_RESTORE_DONE_RESTART] = "ゲームが再起動し、バックアップを元に戻します。",
+    [UI_STR_RESTORE_DONE_CLOSE] =
+        "ゲームを終了します。もう一度起動すると、起動時にバックアップを元に戻します。",
+    [UI_STR_RESTORE_FAILED] = "バックアップを復元できませんでした",
+    [UI_STR_BACKUP_WHY_BUSY] =
+        "今はできません：ゲームが保存中です。少し待ってからもう一度お試しください。",
+    [UI_STR_BACKUP_WHY_NOTHING] = "まだバックアップするものがありません。",
+    [UI_STR_BACKUP_WHY_WRITE] =
+        "データを書き込めませんでした。空き容量を確認して、もう一度お試しください。",
+    [UI_STR_BACKUP_WHY_READ] = "ファイルを読み込めませんでした。",
+    [UI_STR_BACKUP_WHY_NOT_BACKUP] =
+        "このファイルはこのゲームで作られたバックアップではありません。",
+    [UI_STR_BACKUP_WHY_NEWER] =
+        "このバックアップは新しいバージョンで作られました。ゲームを更新してから復元してください。",
+    [UI_STR_BACKUP_WHY_DAMAGED] = "このバックアップは壊れています。",
+    [UI_STR_BACKUP_WHY_UNSAFE] =
+        "このバックアップにはゲームのフォルダー以外のファイルが含まれているため、使えません。",
+    [UI_STR_BACKUP_WHY_TOO_BIG] = "このバックアップはゲームが受け付ける大きさを超えています。",
+    [UI_STR_BACKUP_WHY_NO_DIALOG] = "ファイルを選ぶ画面を開けませんでした。",
+    [UI_STR_BACKUP_WHY_NO_SPACE] = "機器の空き容量が足りません。",
     [UI_STR_LANG_KO] = "한국어",
     [UI_STR_LANG_ZH] = "繁體中文",
     /* Controls > Touch screen and the touch layout editor */

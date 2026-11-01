@@ -150,24 +150,29 @@ static void testExtras(void)
         press(0x40);
         int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
         CHECK(settle(exL, 60), "the Extras page");
-        int el[9], eo[9], ev[9];
-        int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, eo, ev, 9);
-        /* the page keeps every row; Add to Steam (el[5]) and Export
-           textures (el[6]) are hidden without a host (testAddToSteam and
-           testExportTextures in settings_extra_test.c show them) */
-        CHECK(en == 9 && lt_ext_layout(exL)->curItem == el[0] && lt_ext_prop(el[5])->defaultMask &&
-                  lt_ext_prop(el[6])->defaultMask,
-              "nine rows, Add to Steam and Export textures hidden, the cursor on Music");
+        int el[11], eo[11], ev[11];
+        int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, eo, ev, 11);
+        /* the page keeps every row; Add to Steam (el[5]), Export textures
+           (el[6]) and the two backup rows (el[7], el[8]) are hidden without
+           a host (testAddToSteam and testExportTextures in
+           settings_extra_test.c, settings_backup_test.c show them) */
+        CHECK(en == 11 && lt_ext_layout(exL)->curItem == el[0] && lt_ext_prop(el[5])->defaultMask &&
+                  lt_ext_prop(el[6])->defaultMask && lt_ext_prop(el[7])->defaultMask &&
+                  lt_ext_prop(el[8])->defaultMask,
+              "eleven rows, Add to Steam, Export textures and the backup rows hidden, the cursor "
+              "on Music");
         CHECK(strcmp(lt_ext_row_text(el[0]), "Music") == 0 &&
                   strcmp(lt_ext_row_text(el[1]), "Models") == 0 &&
                   strcmp(lt_ext_row_text(el[2]), "Credits") == 0 &&
                   strcmp(lt_ext_row_text(el[3]), "Character Customization") == 0 &&
                   strcmp(lt_ext_row_text(el[4]), "Game variants") == 0 &&
                   strcmp(lt_ext_row_text(el[6]), "Export textures") == 0 &&
-                  strcmp(lt_ext_row_text(el[7]), "Achievement pop-ups") == 0 &&
-                  strcmp(lt_ext_row_text(el[8]), "Back") == 0,
+                  strcmp(lt_ext_row_text(el[7]), "Back up your data") == 0 &&
+                  strcmp(lt_ext_row_text(el[8]), "Restore from a backup") == 0 &&
+                  strcmp(lt_ext_row_text(el[9]), "Achievement pop-ups") == 0 &&
+                  strcmp(lt_ext_row_text(el[10]), "Back") == 0,
               "Music, Models, Credits, Character Customization, Game variants, Export textures, "
-              "pop-ups, Back");
+              "the backup rows, pop-ups, Back");
         CHECK(lt_ext_prop(el[4])->right == ui_settings_page_layout(UI_PAGE_VARIANTS),
               "Game variants opens its page");
         /* the row's name fits its box of 300 at 60 % or more */
@@ -1131,18 +1136,20 @@ static void testCharacters(void)
     {
         const int mainL = enterMain(0);
         const int exL = openPage(mainL, 8, UI_PAGE_EXTRAS);
-        int el[9];
-        const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 9);
+        int el[11];
+        const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 11);
         for (int k = 0; k < 4; k++) {
             frame(0);
         }
-        CHECK(en == 9, "pause: Extras has its nine rows (%d)", en);
+        CHECK(en == 11, "pause: Extras has its eleven rows (%d)", en);
         CHECK(lt_ext_prop(el[0])->defaultMask && lt_ext_prop(el[1])->defaultMask &&
                   lt_ext_prop(el[2])->defaultMask && lt_ext_prop(el[5])->defaultMask &&
-                  lt_ext_prop(el[6])->defaultMask,
-              "pause: Music, Models, Credits, Add to Steam and Export textures are hidden");
+                  lt_ext_prop(el[6])->defaultMask && lt_ext_prop(el[7])->defaultMask &&
+                  lt_ext_prop(el[8])->defaultMask,
+              "pause: Music, Models, Credits, Add to Steam, Export textures and the backup rows "
+              "are hidden");
         CHECK(!lt_ext_prop(el[3])->defaultMask && !lt_ext_prop(el[4])->defaultMask &&
-                  !lt_ext_prop(el[7])->defaultMask && !lt_ext_prop(el[8])->defaultMask,
+                  !lt_ext_prop(el[9])->defaultMask && !lt_ext_prop(el[10])->defaultMask,
               "pause: Characters, Game variants, the pop-ups and Back are shown");
         lt_ext_layout(exL)->curItem = el[3];
         frame(0);
@@ -1150,10 +1157,10 @@ static void testCharacters(void)
         CHECK(lt_ext_layout(exL)->curItem == el[4],
               "pause: Down from Characters lands on Game variants");
         press(0x4000);
-        CHECK(lt_ext_layout(exL)->curItem == el[7],
+        CHECK(lt_ext_layout(exL)->curItem == el[9],
               "pause: Down from Game variants lands on the pop-ups");
         press(0x4000);
-        CHECK(lt_ext_layout(exL)->curItem == el[8], "pause: Down from the pop-ups lands on Back");
+        CHECK(lt_ext_layout(exL)->curItem == el[10], "pause: Down from the pop-ups lands on Back");
         /* the budget keeps its spare (testBudget has the count) */
         printf("settings_extras_test: Characters: %d of %d properties used\n", lt_ext_prop_count(),
                LT_EXT_MAX_PROPERTIES);

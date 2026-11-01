@@ -125,8 +125,10 @@ function(ico_ui_settings name)
     # the port text's language from [ui] language and the disc (ui_lang.c);
     # the Edit layout page's side of the touch layout editor (touch_edit_ui.c)
     # the Graphics page's rows and Apply (settings_graphics.c)
-    target_sources(${name} PRIVATE settings.c settings_graphics.c ui_list.c ui_hint.c gallery.c
-                                   photo_ui.c ui_mouse.c ui_mouse_geom.c ui_lang.c touch_edit_ui.c)
+    # Extras' Back up your data and Restore from a backup (settings_backup.c)
+    target_sources(${name} PRIVATE settings.c settings_graphics.c settings_backup.c ui_list.c
+                                   ui_hint.c gallery.c photo_ui.c ui_mouse.c ui_mouse_geom.c
+                                   ui_lang.c touch_edit_ui.c)
     foreach(_lib ${_ui_settings_deps})
         target_include_directories(${name} PRIVATE
                                    $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)
@@ -226,6 +228,10 @@ ico_settings_test(settings_extra_test test/settings_extra_test.c)
 # settings_adapter_test: Options > Graphics > Graphics card (the row, its
 # names, Apply on another card with Keep and Revert, a fake host)
 ico_settings_test(settings_adapter_test test/settings_adapter_test.c)
+# settings_backup_test: Extras > Back up your data and Restore from a backup
+# (settings_backup.c) over a fake host: the rows, the confirmations, the
+# backup read and the end popups
+ico_settings_test(settings_backup_test test/settings_backup_test.c)
 # settings_discs_test: the rows each disc's Options has, from the title and
 # the pause menu (docs/port/GAME_FEATURES.md, Options on each disc): the
 # European run and the six others (the three above and the 2001 discs below)
@@ -259,6 +265,7 @@ if(ICO_RUN_TESTS)
                          settings_states settings_states_jpn settings_states_kor settings_states_cn
                          settings_states_ntsc settings_states_aug6 settings_states_jun26
                          settings_adapter settings_adapter_jpn settings_adapter_kor settings_adapter_cn
+                         settings_backup settings_backup_jpn settings_backup_kor settings_backup_cn
                          PROPERTIES RESOURCE_LOCK settings_toml)
 endif()
 

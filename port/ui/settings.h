@@ -335,6 +335,73 @@ typedef struct UiTextureExportHost {
 
 void ui_settings_set_texture_export_host(const UiTextureExportHost *host);
 
+/* Settings > Extras > Back up your data and Restore from a backup (the
+   title only): the player's memory card, save states, settings and
+   achievements in one zip the player picks a place for, and such a zip put
+   back, a job the host runs (port/platform/backup_host.c over backup.h; the
+   UI knows nothing of files).  begin(job) asks for the system's file
+   dialog: 0 asked (every end, the dialog closed too, comes through poll),
+   -1 not (one is under way).  poll() fills *out and returns its state,
+   called by the rows every frame and by ui_settings_vsync, so the end
+   popup comes on any screen.  proceed() restores the backup shown (state
+   ASK); cancel() drops it.  pump() is called once a vsync by
+   ui_settings_vsync, outside the game's threads (the window's per-vsync
+   step): the host opens the dialog there, starts its work and ends the
+   run.  A restore that is DONE has unpacked the backup
+   beside the data: the host ends the run a few seconds later and the next
+   start puts it in place (restarts 1: the program starts itself again;
+   0: the player starts it again).  NULL (or never set) hides both rows (the
+   headless build, iOS, tests); every pointer must be set; the struct is
+   copied. */
+#define UI_BACKUP_JOB_SAVE 0
+#define UI_BACKUP_JOB_RESTORE 1
+
+#define UI_BACKUP_IDLE 0      /* none since the start */
+#define UI_BACKUP_CHOOSING 1  /* the file dialog is open */
+#define UI_BACKUP_WORKING 2   /* writing the zip, reading it, or unpacking it */
+#define UI_BACKUP_ASK 3       /* restore: the backup was read; restore it? (proceed/cancel) */
+#define UI_BACKUP_DONE 4      /* written; or restore: unpacked, the run ends */
+#define UI_BACKUP_FAILED 5    /* why says why */
+#define UI_BACKUP_CANCELLED 6 /* the dialog was closed without a file, or cancel() */
+
+/* why a job FAILED: the popup's reason */
+#define UI_BACKUP_WHY_NONE 0
+#define UI_BACKUP_WHY_BUSY 1       /* the memory card or a save state is being written */
+#define UI_BACKUP_WHY_NOTHING 2    /* nothing to back up yet */
+#define UI_BACKUP_WHY_WRITE 3      /* the file or the unpacked data could not be written */
+#define UI_BACKUP_WHY_READ 4       /* the file could not be read */
+#define UI_BACKUP_WHY_NOT_BACKUP 5 /* not a backup this game made */
+#define UI_BACKUP_WHY_NEWER 6      /* made by a newer version in a form this one cannot read */
+#define UI_BACKUP_WHY_DAMAGED 7    /* the file is damaged */
+#define UI_BACKUP_WHY_UNSAFE 8     /* it holds files outside the game's own folders */
+#define UI_BACKUP_WHY_TOO_BIG 9    /* past the size a backup keeps */
+#define UI_BACKUP_WHY_NO_DIALOG 10 /* no file dialog could open */
+#define UI_BACKUP_WHY_NO_SPACE 11  /* the device has too little free space */
+
+typedef struct UiBackupStatus {
+    int job;          /* UI_BACKUP_JOB_* */
+    int state;        /* UI_BACKUP_* */
+    int done;         /* files handled */
+    int total;        /* files to handle (0 until known) */
+    int why;          /* UI_BACKUP_WHY_* when FAILED */
+    int restarts;     /* a restore DONE: the program starts itself again (else it closes) */
+    int otherDisc;    /* ASK: made while another disc was played */
+    char name[96];    /* the file's name */
+    char version[32]; /* ASK: the version that made it */
+    char date[32];    /* ASK: when, in local time */
+    char discs[96];   /* ASK: its discs' serials, ", " between */
+} UiBackupStatus;
+
+typedef struct UiBackupHost {
+    int (*begin)(int job);
+    int (*poll)(UiBackupStatus *out);
+    void (*proceed)(void);
+    void (*cancel)(void);
+    void (*pump)(void);
+} UiBackupHost;
+
+void ui_settings_set_backup_host(const UiBackupHost *host);
+
 /* The Save states page's host (v0.9.6 contract, ui_states_host.h; the UI
  * knows nothing of files or memory: port/game/state_host.c behind
  * main_host.c).  NULL (or never set) hides the pause row and the Extras
@@ -672,6 +739,10 @@ typedef enum UiSettingsOpt {
     /* Extras > Export textures (shown from the title while a host is set,
        ui_settings_set_texture_export_host); Stop exporting while it runs */
     UI_OPT_EXTRAS_EXPORT_TEXTURES,
+    /* Extras > Back up your data and Restore from a backup (shown from the
+       title while a host is set, ui_settings_set_backup_host) */
+    UI_OPT_EXTRAS_BACKUP,
+    UI_OPT_EXTRAS_RESTORE,
     /* Controls > Touch screen's actions: Edit layout (opens
        UI_PAGE_TOUCH_LAYOUT; locked while Touch controls is Off or without
        an editor host), Reset layout (the posture the phone is in now) and
