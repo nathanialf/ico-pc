@@ -825,7 +825,7 @@ static void testTitle(void)
     pauseToStates();
     int c2[8];
     cardRows(0, c2);
-    CHECK(strstr(txt(c2[7]), "A state belongs to this version") != NULL,
+    CHECK(strstr(txt(c2[7]), "A state belongs to this disc") != NULL,
           "the pause menu: the line says \"%s\"", txt(c2[7]));
 }
 
