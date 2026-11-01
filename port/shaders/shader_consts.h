@@ -76,7 +76,11 @@ typedef struct IcoDrawCB {
      * 12.4 rect and UVs as 16-bit pairs: x x0 | y0 << 16, y x1 | y1 << 16,
      * z u0 | v0 << 16, w u1 | v1 << 16 (its colour in scale.zw, R + 256 G
      * and B + 256 A); aux1: the GS divide's reciprocals and the per-draw
-     * texel sizes (fx_sprite.hlsl).  Zero in every other draw. */
+     * texel sizes (fx_sprite.hlsl).  The reduction's sprite with the fades
+     * fold (port/render/rd_fades_fold.c): aux0 the fold's four steps, in
+     * fx_sprite_ps (FXF_FOLD) with the fold's other words in blend.xyz
+     * (no blend there), in sprite_ps (ICO_DF_FOLD) in aux1.xyz.  Zero in
+     * every other draw. */
     uint32_t aux0[4];
     uint32_t aux1[4];
 } IcoDrawCB;
@@ -168,6 +172,13 @@ enum { ICO_DF_GS_BILINEAR_GRID = 67108864 };
  * clear: the two draws of a PRIM.AA1 primitive under DATE
  * (port/render/rd_replay_aa1.inc aa1DateDraw).  Neither: every fragment. */
 enum { ICO_DF_AA1_MSB_SET = 134217728, ICO_DF_AA1_MSB_CLEAR = 268435456 };
+
+/* DrawCB.mode[0] bit 29 (common.hlsli DF_FOLD): the reduction's hardware
+ * sprite above 1x applies the fades fold (port/render/rd_fades_fold.c) to
+ * the texel it samples: DrawCB.aux0 the steps, aux1.x the count and the bar
+ * steps, aux1.y their alphas, aux1.z the bars' texel rows (sprite.hlsl
+ * sprite_fold). */
+enum { ICO_DF_FOLD = 536870912 };
 
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */
 enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };

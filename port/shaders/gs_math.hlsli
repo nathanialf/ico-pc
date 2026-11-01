@@ -306,4 +306,31 @@ GS_FN float gs_z_to_depth(uint z, float scale)
     return (float)min(z, zmax) * scale;
 }
 
+// The fades fold (port/render/rd_fades_fold.c): list 11's full-frame
+// constant lerp sprites (the fade, the letterbox bars, the brightness)
+// applied to SCENE's texels by the reduction that reads them, in their
+// order, instead of drawn into SCENE.  A step is s = R | G << 8 | B << 16 |
+// k << 24, the sprite's colour and its lerp factor k (As or FIX, at most
+// 0x80); on one colour channel cd it is ((Cs - Cd) k + r >> 7) + Cd, the
+// GS's ((A - B) C >> 7) + D for A Cs, B Cd, C k, D Cd with r 0 (the exact
+// blend's result, gs_blend_reg_ch), or with r 64 the nearest level (what
+// the fixed-function blender stores).  k <= 0x80 keeps it inside 0..255.
+GS_FN uint gs_fold_ch(uint s, uint ch, uint cd, int r)
+{
+    const int cs = (int)((s >> (8u * ch)) & 255u);
+    const int k = (int)(s >> 24);
+    return (uint)(((((cs - (int)cd) * k) + r) >> 7) + (int)cd);
+}
+
+// Whether step i of a fold applies to texel row y: meta holds the steps'
+// count in bits 0..2 and, in bit 4 + i, that step i covers the bars only:
+// the rows below bars & 0xFFFF and from bars >> 16 on (texel rows of the
+// texture read; 0 and 0xFFFF where a bar is missing).
+GS_FN bool gs_fold_applies(uint i, uint meta, uint bars, int y)
+{
+    const bool band = ((meta >> (4u + i)) & 1u) != 0u;
+    const bool bar = y < (int)(bars & 0xFFFFu) || y >= (int)(bars >> 16);
+    return i < (meta & 7u) && (!band || bar);
+}
+
 #endif

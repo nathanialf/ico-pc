@@ -328,6 +328,12 @@ cbuffer DrawCB : ICO_REG(b1, 1)
 // ICO_DF_AA1_MSB_CLEAR.
 #define DF_AA1_MSB_SET 134217728u
 #define DF_AA1_MSB_CLEAR 268435456u
+// The fades fold on the reduction's hardware sprite above 1x (sprite.hlsl
+// sprite_fold; port/render/rd_fades_fold.c): g_aux0 the steps, g_aux1.x
+// the count and the bar steps, .y the steps' alphas, .z the bars' texel
+// rows (gs_math.hlsli gs_fold_ch, gs_fold_applies).  shader_consts.h
+// ICO_DF_FOLD.
+#define DF_FOLD 536870912u
 
 // TEST.DATE. snap is the R8 DATE snapshot (1.0 where the destination alpha
 // had its MSB set when the snapshot was taken). Returns true when the

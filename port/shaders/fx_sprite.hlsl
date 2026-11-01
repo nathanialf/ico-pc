@@ -56,6 +56,9 @@
 //            w with FXF_ABOVE1X the steps (t1 texels per bound texel, in
 //            1/32) step32x * 4096 + step32y (rd_replay.c doBlurSpriteDraw),
 //            else 0
+//   g_aux0   with FXF_FOLD (fx_sprite_ps, fx_sprite_u_ps; LINEAR at scale 1)
+//            the fades fold's steps (fx_fold4), g_blend.xyz its other
+//            words; else unused
 //   g_aux1   x, y the UV divides' 1 / (x1 - x0), 1 / (y1 - y0), floats
 //            correctly rounded on the CPU (asfloat; gs_div_trunc_rcp), z, w
 //            fx_texel's REPEAT and CLAMP size: max(1, round(g_tex.xy *
@@ -97,6 +100,7 @@
 #define FXF_ABOVE1X 8192u
 #define FXF_ALPHA_ONLY 16384u
 #define FXF_OUT_PREMUL 32768u
+#define FXF_FOLD 65536u
 
 #define AFAIL_KEEP 0u
 #define AFAIL_FB_ONLY 1u
@@ -207,6 +211,39 @@ uint4 fx_texel_at(int x, int y)
     return gs_texa_expand(fx_load(g_texture, int2(x, y)), g_mode.y & 0xFFu, g_mode.y >> 8);
 }
 
+#if !defined(ICO_FX_FRAME) && !defined(ICO_FX_DST_LOCAL)
+// FXF_FOLD (the reduction at scale 1, LINEAR, port/render/rd_fades_fold.c;
+// never in fx_frame_ps or fx_local_ps): the fades fold's steps applied to
+// the bilinear's four taps a, b (row y0) and c, d (row y1) before the
+// filter, as the sprites drawn into SCENE would have left them (gs_fold:
+// the steps in g_aux0, the count and bar steps in g_blend.x, the alphas in
+// g_blend.y, the bars' rows in g_blend.z; the reduction does not blend), so
+// every tap the filter weighs is the texel the two passes read.  TEXA
+// leaves SCENE's RGBA32 texels as they are.
+void fx_fold4(inout uint4 a, inout uint4 b, inout uint4 c, inout uint4 d, int y0, int y1)
+{
+    const uint meta = g_blend.x, alphas = g_blend.y, bars = g_blend.z;
+    const int r = (meta & 8u) != 0u ? 64 : 0;
+    [loop] for (uint i = 0u; i < (meta & 7u); i++) {
+        // step i without a dynamic index into the constant block (FXC)
+        const uint s = i == 0u ? g_aux0.x : (i == 1u ? g_aux0.y : (i == 2u ? g_aux0.z : g_aux0.w));
+        const uint al = (alphas >> (8u * i)) & 255u;
+        if (gs_fold_applies(i, meta, bars, y0)) {
+            a = uint4(gs_fold_ch(s, 0u, a.r, r), gs_fold_ch(s, 1u, a.g, r),
+                      gs_fold_ch(s, 2u, a.b, r), al);
+            b = uint4(gs_fold_ch(s, 0u, b.r, r), gs_fold_ch(s, 1u, b.g, r),
+                      gs_fold_ch(s, 2u, b.b, r), al);
+        }
+        if (gs_fold_applies(i, meta, bars, y1)) {
+            c = uint4(gs_fold_ch(s, 0u, c.r, r), gs_fold_ch(s, 1u, c.g, r),
+                      gs_fold_ch(s, 2u, c.b, r), al);
+            d = uint4(gs_fold_ch(s, 0u, d.r, r), gs_fold_ch(s, 1u, d.g, r),
+                      gs_fold_ch(s, 2u, d.b, r), al);
+        }
+    }
+}
+#endif
+
 // One texel at integer texel coordinates: addressed (fx_axis_x,
 // fx_axis_y), then TEXA.
 uint4 fx_texel(int2 c, uint flags)
@@ -282,10 +319,15 @@ uint4 fx_sprite_texel(int su, int sv, uint flags)
         const int x0 = fx_axis_x(uu >> 4, flags), x1 = fx_axis_x((uu >> 4) + 1, flags);
         const int y0 = fx_axis_y(vv >> 4, flags), y1 = fx_axis_y((vv >> 4) + 1, flags);
         const uint fu = uint(uu & 15), fv = uint(vv & 15);
-        const uint4 a = fx_texel_at(x0, y0);
-        const uint4 b = fx_texel_at(x1, y0);
-        const uint4 c = fx_texel_at(x0, y1);
-        const uint4 d = fx_texel_at(x1, y1);
+        uint4 a = fx_texel_at(x0, y0);
+        uint4 b = fx_texel_at(x1, y0);
+        uint4 c = fx_texel_at(x0, y1);
+        uint4 d = fx_texel_at(x1, y1);
+#if !defined(ICO_FX_FRAME) && !defined(ICO_FX_DST_LOCAL)
+        [branch] if ((flags & FXF_FOLD) != 0u) {
+            fx_fold4(a, b, c, d, y0, y1);
+        }
+#endif
         t = gs_bilerp(a, b, c, d, fu, fv);
     } else {
         t = fx_texel(int2(su >> 4, sv >> 4), flags);
