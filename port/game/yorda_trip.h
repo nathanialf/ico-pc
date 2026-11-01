@@ -77,11 +77,17 @@ typedef struct IcoYtIds {
     int id[ICO_YT_MAX_MOTIONS]; /* their numbers, in table order */
     int run_loop;               /* "GIRL HAND_RUNLOOP", -1 when the table has none */
     int sit, sit_loop, sit_end; /* "GIRL SIT(HETARI)", "SITLOOP(HETARI)", "SITEND(HETARI)" */
+    /* the motions the fall's rows of the motion-orient table lead on to
+       (SIT3END, the hand walk and run loops) */
+    int n_exit;
+    int exit[ICO_YT_MAX_MOTIONS];
 } IcoYtIds;
 
 /* The selected disc's numbers from its motion table (rows: the table's
-   count, region.h mv_motion_kinds).  0, or -1 when the fall's three motions
-   or the run loop are not all named in it. */
+   count, region.h mv_motion_kinds), and the fall's exits from its
+   motion-orient table (motionOrient, as loaded: every row of the three
+   fall motions; the fall's own motions and KEEP left out).  0, or -1 when
+   the fall's three motions or the run loop are not all named in it. */
 int ico_yorda_trip_find_ids(IcoYtIds *out, int rows);
 
 /* One motion file as its pack holds it (before InitMotionFile relocates it) */

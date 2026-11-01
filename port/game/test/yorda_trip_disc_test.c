@@ -7,7 +7,8 @@
  *
  *   names    the run loop, the fall's three motions and her per-stage
  *            HETARI motions are found by name (yorda_trip_source.c
- *            ico_yorda_trip_find_ids), each printed with its number
+ *            ico_yorda_trip_find_ids), each printed with its number, and
+ *            the motions the fall leads on to (its motion-orient rows)
  *   gates    each stage named "st04a ..." (the main gate's): its pack
  *            (stageData[].dataFile + ".DF") and the members of it whose ids
  *            are those motions, with their sizes
@@ -120,6 +121,12 @@ int main(int argc, char **argv)
     for (int k = 0; k < ids.n; k++) {
         printf("yorda_trip_disc_test:   %4d %s\n", ids.id[k], motionKind[ids.id[k]].name);
     }
+    printf("yorda_trip_disc_test: the fall leads on to %d motions:\n", ids.n_exit);
+    for (int k = 0; k < ids.n_exit; k++) {
+        printf("yorda_trip_disc_test:   %4d %s (area %d)\n", ids.exit[k],
+               motionKind[ids.exit[k]].name, motionKind[ids.exit[k]].area);
+    }
+    CHECK(ids.n_exit > 0, "the fall's motion-orient rows lead nowhere");
 
     IcoDfIndex *idx = ico_df_index_open(vfs);
     CHECK(idx != NULL, "DATA.DF could not be read");

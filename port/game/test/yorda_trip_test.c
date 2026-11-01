@@ -11,7 +11,8 @@
  *   names       the disc's run loop, the fall's three motions and her
  *               per-stage HETARI motions found by name, decoys left out (a
  *               blend motion of area 1, a boy's motion, a name without
- *               HETARI)
+ *               HETARI); the fall's exits from its motion-orient rows
+ *               (SIT3END, the hand walk and run loops), KEEP left out
  *   count       consecutive run-pulled ticks counted; a second call on one
  *               tick counts nothing; a missed tick starts again at 1
  *   rate        10^6 continuous run-pulled ticks at 25 and at 30 ticks a
@@ -19,7 +20,8 @@
  *               none in the first 3 s, none two closer than 30 s
  *   guards      no trip over 20 mean waits while one guard fails (paused,
  *               no control, the script holds Ico, game over, a gate stage,
- *               another motion, the fall not loaded, her HETARI bit of this
+ *               another motion, the fall or one of its exits not loaded
+ *               (SIT3END, a motion set without it), her HETARI bit of this
  *               disc set, the option off); trips with every guard holding
  *               and the other discs' HETARI bits set; each trip mails her
  *               the caller's mail id with her as its argument
@@ -59,6 +61,7 @@
 #include "df_pack.h"
 #include "diag_host.h"
 #include "options.h"
+#include "tables.h"
 #include "vfs.h"
 #include "yorda_trip.h"
 #include "../../platform/state_registry.h"
@@ -69,6 +72,14 @@ void ico_opt_yorda_trip_tick(GObj *girl, int mail);
 /* --- the game, stubbed ---------------------------------------------------- */
 StgPre stageData[128];
 MotionDef motionKind[1200];
+MotionOrientEntry motionOrient[16];
+static int s_orientRows;
+
+uint32_t ico_tables_count(IcoTableId id)
+{
+    return id == ICO_TID_motionOrient ? (uint32_t)s_orientRows : 0u;
+}
+
 int *motionTable[1170];
 int systemStatus[12];
 int frame_count;
@@ -262,6 +273,7 @@ typedef struct Disc {
     const char *names[6];   /* their names */
     int mail;               /* the sit-down mail of the disc's gate script */
     unsigned long long bit; /* her HETARI bit in flags20 on the disc */
+    int sit3end, walk;      /* the fall's exits: GIRL SIT3END, GIRL HAND_WALKLOOP */
 } Disc;
 
 #define LATER(slug, mail)                                                                          \
@@ -272,8 +284,10 @@ typedef struct Disc {
      {"GIRL SIT3LOOP\xA1\xCAHETARI)", "GIRL STAND(HETARI)", "GIRL HAND_RUNLOOP(HETARI)",           \
       "GIRL SIT(HETARI)", "GIRL SITLOOP(HETARI)", "GIRL SITEND(HETARI)"},                          \
      mail,                                                                                         \
-     1ULL << 16}
-#define EARLY(slug, loop, first, mail, bit)                                                        \
+     1ULL << 16,                                                                                   \
+     598,                                                                                          \
+     576}
+#define EARLY(slug, loop, first, mail, bit, sit3end, walk)                                         \
     {slug,                                                                                         \
      loop,                                                                                         \
      5,                                                                                            \
@@ -281,16 +295,18 @@ typedef struct Disc {
      {"GIRL STAND(HETARI)", "GIRL HAND_RUNLOOP(HETARI)", "GIRL SIT(HETARI)",                       \
       "GIRL SITLOOP(HETARI)", "GIRL SITEND(HETARI)"},                                              \
      mail,                                                                                         \
-     bit}
+     bit,                                                                                          \
+     sit3end,                                                                                      \
+     walk}
 
 static const Disc kDiscs[] = {
     LATER("pal", 109),
     LATER("jpn", 109),
     LATER("kor", 109),
     LATER("cn", 109),
-    EARLY("ntsc", 578, 584, 102, 1ULL << 6),
-    EARLY("aug6", 579, 585, 101, 1ULL << 3),
-    EARLY("jun26", 591, 599, 100, 1ULL << 1),
+    EARLY("ntsc", 578, 584, 102, 1ULL << 6, 629, 574),
+    EARLY("aug6", 579, 585, 101, 1ULL << 3, 631, 575),
+    EARLY("jun26", 591, 599, 100, 1ULL << 1, 652, 586),
 };
 
 static const Disc *s_disc;
@@ -326,6 +342,21 @@ static void fillTables(void)
     setName(last + 1, "GIRL YORO_F(HETARI)", 1);
     setName(last + 2, "BOY STAND(HETARI)", 4);
     setName(last + 3, "GIRL SIT3LOOP", 4);
+    setName(s_disc->sit3end, "GIRL SIT3END", 1);
+    setName(s_disc->walk, "GIRL HAND_WALKLOOP", 1);
+
+    /* the fall's rows (the European disc's: SIT on to SITLOOP, SITEND and
+       SIT3END; SITLOOP on to KEEP, SITEND and SIT3END; SITEND on to the
+       hand walk and run loops), and two rows of another motion */
+    const MotionOrientEntry rows[] = {
+        {s_sit, 164, s_sitLoop, -1, 5, 0},       {s_sit, 16, s_sitEnd, -1, 5, 0},
+        {s_sit, 1, s_disc->sit3end, -1, 5, 0},   {s_sitLoop, 164, s_rows, -1, -1, 0},
+        {s_sitLoop, 16, s_sitEnd, 0, 10, 0},     {s_sitLoop, 1, s_disc->sit3end, 0, 10, 0},
+        {s_sitEnd, 14, s_disc->walk, -1, 10, 0}, {s_sitEnd, 16, s_disc->run_loop, -1, 5, 0},
+        {s_disc->run_loop, 21, s_sit, 0, 10, 0}, {s_disc->run_loop, 117, last + 3, 0, 10, 0},
+    };
+    memcpy(motionOrient, rows, sizeof rows);
+    s_orientRows = (int)(sizeof rows / sizeof rows[0]);
 
     memset(stageData, 0, sizeof stageData);
     snprintf(stageData[11].name, sizeof stageData[11].name, "st04a (GATE_1ST)");
@@ -363,6 +394,9 @@ static void worldReady(int tps)
     motionTable[s_sit] = &s_dummy;
     motionTable[s_sitLoop] = &s_dummy;
     motionTable[s_sitEnd] = &s_dummy;
+    motionTable[s_disc->sit3end] = &s_dummy;
+    motionTable[s_disc->walk] = &s_dummy;
+    motionTable[s_disc->run_loop] = &s_dummy;
     ico_opt_set_yorda_trips(1);
 }
 
@@ -407,6 +441,12 @@ static void testNames(void)
         CHECK(ids.id[k] == s_disc->ids[k], "%s: motion %d is %d, want %d", s_disc->slug, k,
               ids.id[k], s_disc->ids[k]);
     }
+    /* the exits: SIT3END, the walk and the run loops, once each, in row
+       order; not KEEP, not the fall's own, not another motion's rows */
+    CHECK(ids.n_exit == 3 && ids.exit[0] == s_disc->sit3end && ids.exit[1] == s_disc->walk &&
+              ids.exit[2] == s_disc->run_loop,
+          "%s: %d exits (%d %d %d)", s_disc->slug, ids.n_exit, ids.exit[0], ids.exit[1],
+          ids.exit[2]);
     /* without the fall's names the disc is not taken */
     char keep[48];
     memcpy(keep, motionKind[s_sitEnd].name, sizeof keep);
@@ -461,7 +501,7 @@ static void testGuards(void)
     const int span = 20 * ICO_YT_MEAN_S * tps;
     int first, closest;
 
-    for (int g = 0; g < 10; g++) {
+    for (int g = 0; g < 11; g++) {
         ico_yorda_trip_reset();
         worldReady(tps);
         switch (g) {
@@ -492,6 +532,9 @@ static void testGuards(void)
         case 8:
             ico_opt_set_yorda_trips(0);
             break;
+        case 9:
+            motionTable[s_disc->sit3end] = NULL; /* a motion set without SIT3END */
+            break;
         default:
             /* every guard holds; the other discs' HETARI bits are not hers */
             s_act->flags20.ll |=
@@ -500,7 +543,7 @@ static void testGuards(void)
         }
         s_mails = 0;
         const int trips = runTicks(1, span, &first, &closest);
-        if (g < 9) {
+        if (g < 10) {
             CHECK(trips == 0, "%s: guard %d failing, %d trips", s_disc->slug, g, trips);
         } else {
             CHECK(trips > 5, "%s: every guard holding, %d trips", s_disc->slug, trips);

@@ -20,11 +20,13 @@
 #include "motionOrientManager.h"
 
 #include "df_pack.h"
+#include "tables.h"
 #include "yorda_trip.h"
 
-/* port/data/gen/table_defs.c's writable definition (the table loader fills
-   it from the disc's ELF); motionOrientManager.h declares none */
+/* port/data/gen/table_defs.c's writable definitions (the table loader fills
+   them from the disc's ELF); motionOrientManager.h declares neither */
 extern MotionDef motionKind[];
+extern MotionOrientEntry motionOrient[];
 
 /* a motion's memory area: per-stage data, cleared on every stage change
    (motionFileManager.c ResetDynamicMotionManager) */
@@ -56,7 +58,29 @@ int ico_yorda_trip_find_ids(IcoYtIds *out, int rows)
     out->sit = findName("GIRL SIT(HETARI)", rows);
     out->sit_loop = findName("GIRL SITLOOP(HETARI)", rows);
     out->sit_end = findName("GIRL SITEND(HETARI)", rows);
-    return out->run_loop >= 0 && out->sit >= 0 && out->sit_loop >= 0 && out->sit_end >= 0 ? 0 : -1;
+    if (out->run_loop < 0 || out->sit < 0 || out->sit_loop < 0 || out->sit_end < 0) {
+        return -1;
+    }
+    /* where the fall goes on to (motionOrientManager.c GetMotionOrient
+       reads these rows: the current motion, the request, the next) */
+    const int orient = (int)ico_tables_count(ICO_TID_motionOrient);
+    for (int r = 0; r < orient; r++) {
+        const MotionOrientEntry *e = &motionOrient[r];
+        const int next = e->nextId;
+        int known = next < 0 || next >= rows || next == out->sit || next == out->sit_loop ||
+                    next == out->sit_end;
+
+        if (e->id != out->sit && e->id != out->sit_loop && e->id != out->sit_end) {
+            continue;
+        }
+        for (int k = 0; k < out->n_exit && !known; k++) {
+            known = out->exit[k] == next;
+        }
+        if (!known && out->n_exit < ICO_YT_MAX_MOTIONS) {
+            out->exit[out->n_exit++] = next;
+        }
+    }
+    return 0;
 }
 
 /* 1 when member name is a motion file (the pack loader's .mob, which it

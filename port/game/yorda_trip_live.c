@@ -54,6 +54,10 @@
 #include "vfs.h"
 #include "yorda_trip.h"
 
+/* port/data/gen/table_defs.c's writable definition (the table loader fills
+   it); motionOrientManager.h declares none */
+extern MotionDef motionKind[];
+
 /* the actGirlHand copies' hook (ico2/fumi/src/girl_act.c declares it) */
 void ico_opt_yorda_trip_tick(GObj *girl, int mail);
 
@@ -94,6 +98,19 @@ static int gateStage(int stage)
 static int loaded(int id)
 {
     return id >= 0 && motionTable[id] != 0;
+}
+
+/* every motion the fall leads on to is the stage's own or loaded: the
+   motion set of the stages without her hand walk (MOTION2.DF on the
+   European disc) lacks SIT3END and the hand loops */
+static int exitsLoaded(void)
+{
+    for (int k = 0; k < s_ids.n_exit; k++) {
+        if (motionKind[s_ids.exit[k]].area != 0 && !loaded(s_ids.exit[k])) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 static int sourceReady(void)
@@ -229,7 +246,7 @@ static int guards(GObj *girl)
     return systemStatus[5] == 0 && IsAbleBoyControl() && scpBoyControlReadDisable == 0 &&
            gameover_flag == 0 && !gateStage(stage_no) && idsReady() &&
            GOBJ_SUB(girl)->ctrl.motion == s_ids.run_loop && loaded(s_ids.sit) &&
-           loaded(s_ids.sit_loop) && loaded(s_ids.sit_end) &&
+           loaded(s_ids.sit_loop) && loaded(s_ids.sit_end) && exitsLoaded() &&
            (GOBJ_ACT(girl)->flags20.ll & hetariBit()) == 0;
 }
 
