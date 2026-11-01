@@ -459,6 +459,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   wrong slot refused (`state_fiber`). `state_fiber_guard` saves a fiber, restores it into a second pool,
   resumes it in a forked child and overflows its stack: the restored slot's guard page must stop it
   (not on Windows).
+- `state_guard_test.c`: the saving process's thread pointer and stack guard
+  ([PLATFORM.md](PLATFORM.md#relocation)), with both processes' values made up so it runs on
+  x86-64: an exact match is rewritten and counted per value, near misses (one off, one bit off,
+  the guard slot's address), this process's words and range words are not, a value is matched
+  before a range that did not move; a value is off for an old or new word 0 and for equal words;
+  a scan over a synthetic region rewrites every old word with exact counts and leaves the rest
+  alone; a real fiber holding both values in live locals and in its frame is saved, destroyed and
+  restored with the values on and resumes with the new ones (its other words as they were), and
+  with old equal to new or no record nothing changes; `ico_state_proc_check` per platform tag
+  (Android refuses a record without either value, Linux arm64 without the thread pointer, macOS
+  and iOS without the guard, the rest need none); `ico_state_proc_read` on the host
+  (`state_guard`).
 - `state_reloc_test.c`: the scan and the self-checks over the game's real allocator
   (`ico2/fumi/ios/memory.c` built with the game's flags): words at each range's start, middle and end
   move by their own delta and nothing else does (near misses, 0, all ones, floats, doubles, EE word

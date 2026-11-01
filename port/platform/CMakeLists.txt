@@ -103,12 +103,16 @@ endif()
 # state_fiber: save states' fiber pool, a suspended fiber saved and restored
 # into a second pool, the dead frames under its stack pointer kept, and the
 # relocation words (fiber.c, state_reloc.c)
+# state_guard: save states' two process values (the thread pointer and the
+# stack guard) rewritten old -> new by exact match in words, a scan and a
+# real fiber's registers and frame, and the per-platform refusal of a state
+# without them (state_reloc.c, fiber.c)
 # state_registry: the save state registry's table (state_registry.c)
 # present_fallback: the FIFO fallback's decision over a log's present blocks
 # under mailbox, the driver's eligibility, the [dev] value and the lines
 # (present_fallback.c)
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
-          gpu_hang state_fiber state_registry pipeline_skip memory_floor present_fallback)
+          gpu_hang state_fiber state_guard state_registry pipeline_skip memory_floor present_fallback)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
