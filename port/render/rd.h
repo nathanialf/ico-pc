@@ -1145,6 +1145,35 @@ bool rd_capture_presented(const char *png);
 bool rd_capture_presented_max(const char *png, uint32_t maxW);
 int rd_capture_result(char *path, uint32_t pathSize);
 
+/* ------------------------------------------------- a save state's picture
+ * The picture a save state keeps (port/game/state_host.c): the game as it
+ * was the moment before the pause menu came up, taken without the menu.
+ *
+ * rd_capture_shot        the next present of a frame begun by the time of
+ *                       the call (the frame open now, or an earlier one)
+ *                       copies the output as rd_capture_presented does
+ *                       (before the overlay: no popup, no HUD), cropped
+ *                       to the presentation box (the picture without the
+ *                       bars around it), and after the submit hands fn
+ *                       that box as RGBA8 (pitch w * 4, alpha 255) in a
+ *                       malloc block fn owns and frees.  A present of a
+ *                       later frame drops it instead, and so do a failed
+ *                       copy and the renderer's shutdown: fn(NULL, 0, 0,
+ *                       user).  fn runs once per accepted call, on the
+ *                       thread that presents, after the present.  A second
+ *                       call before the present replaces the first
+ *                       (whose fn is then told NULL).  Its own slot beside
+ *                       rd_capture_presented's: one copy serves both when
+ *                       both are armed.  false: no device or fn NULL
+ * rd_capture_shot_cancel  forgets an armed one (fn is not called)
+ * rd_present_box_size    the size of the last present's presentation box in
+ *                       output pixels (the picture's own aspect); false
+ *                       before the first present */
+typedef void (*RdShotFn)(uint8_t *rgba, uint32_t w, uint32_t h, void *user);
+bool rd_capture_shot(RdShotFn fn, void *user);
+void rd_capture_shot_cancel(void);
+bool rd_present_box_size(uint32_t *w, uint32_t *h);
+
 /* --------------------------------------------------------- deferred text
  * Text the game shows in lists 11 and 12 (the layout's menu rows, through
  * port/ui) recorded twice:

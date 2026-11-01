@@ -1738,7 +1738,81 @@ static struct {
     RhiFormat fmt;
     int result; /* 1 written, -1 failed, 0 none since the last rd_capture_result */
     char done[1024];
+    int photo; /* this present's copy serves rd_capture_presented (not only the shot) */
 } s_cap;
+
+/* rd.h rd_capture_shot: its own request beside the capture's, the copy
+ * (s_cap.tex) shared when both are armed at one present */
+static struct {
+    int armed;          /* waiting for a present */
+    int copied;         /* this present's copy holds it: cropped and handed on at the finish */
+    int dropped;        /* fn(NULL) at the finish */
+    uint32_t maxFrame;  /* the last frame begun when it was armed */
+    uint32_t dropFrame; /* the frame of the present that came too late, 0 for a failed copy */
+    RhiRect box;        /* the presentation box, inside the output */
+    RdShotFn fn;
+    void *user;
+} s_shot;
+
+/* the shot's lines (one a pause): the first 8, then every 100th */
+static bool shotLogNow(void)
+{
+    static unsigned n;
+    n++;
+    return n <= 8 || n % 100 == 0;
+}
+
+/* the shot's fn, told once (the request forgotten first, so fn may arm
+ * the next one) */
+static void shotHand(uint8_t *rgba, uint32_t w, uint32_t h)
+{
+    const RdShotFn fn = s_shot.fn;
+    void *user = s_shot.user;
+    s_shot.fn = NULL;
+    s_shot.user = NULL;
+    if (fn) {
+        fn(rgba, w, h, user);
+    } else {
+        free(rgba);
+    }
+}
+
+bool rd_capture_shot(RdShotFn fn, void *user)
+{
+    if (!g_rd.hasDevice || !fn) {
+        return false;
+    }
+    if (s_shot.armed) {
+        s_shot.armed = 0;
+        shotHand(NULL, 0, 0); /* replaced before a present took it */
+    }
+    s_shot.fn = fn;
+    s_shot.user = user;
+    s_shot.maxFrame = g_rd.frameCounter;
+    s_shot.armed = 1;
+    return true;
+}
+
+void rd_capture_shot_cancel(void)
+{
+    if (s_shot.armed) {
+        s_shot.armed = 0;
+        s_shot.fn = NULL;
+        s_shot.user = NULL;
+    }
+}
+
+bool rd_present_box_size(uint32_t *w, uint32_t *h)
+{
+    uint32_t ow, oh;
+    RhiRect box;
+    if (!rd__last_present_box(&ow, &oh, &box) || box.w == 0 || box.h == 0) {
+        return false;
+    }
+    *w = box.w;
+    *h = box.h;
+    return true;
+}
 
 bool rd_capture_presented(const char *png)
 {
@@ -1806,7 +1880,7 @@ static uint8_t *boxDownscale(const uint8_t *src, uint32_t w, uint32_t h, uint32_
 
 bool rd__capture_armed(void)
 {
-    return s_cap.armed != 0;
+    return s_cap.armed != 0 || s_shot.armed != 0;
 }
 
 int rd_capture_result(char *path, uint32_t pathSize)
@@ -1820,16 +1894,43 @@ int rd_capture_result(char *path, uint32_t pathSize)
     return r;
 }
 
+/* the shot armed: this present takes it (its frame was begun by the time
+ * it was armed, the box inside the output) or drops it */
+static void shotTake(const RhiRect *box)
+{
+    if (!s_shot.armed) {
+        return;
+    }
+    s_shot.armed = 0;
+    RdPresentInfo pi;
+    const uint32_t frame = rd_last_present_info(&pi) ? pi.frame : 0;
+    const int64_t x0 = box->x > 0 ? box->x : 0, y0 = box->y > 0 ? box->y : 0;
+    int64_t x1 = (int64_t)box->x + box->w, y1 = (int64_t)box->y + box->h;
+    x1 = x1 < (int64_t)s_outW ? x1 : (int64_t)s_outW;
+    y1 = y1 < (int64_t)s_outH ? y1 : (int64_t)s_outH;
+    if (frame > s_shot.maxFrame || x1 <= x0 || y1 <= y0) {
+        s_shot.dropped = 1;
+        s_shot.dropFrame = frame > s_shot.maxFrame ? frame : 0;
+        return;
+    }
+    s_shot.box = (RhiRect){(int32_t)x0, (int32_t)y0, (uint32_t)(x1 - x0), (uint32_t)(y1 - y0)};
+    s_shot.copied = 1;
+}
+
 /* the output, out (RENDER_TARGET), into the capture texture; out goes back
  * to RENDER_TARGET for the overlay.  inPass: the output's pass is open
  * (rd__present_record); a copy cannot be recorded inside a pass, so it is
  * ended before the copy and a pass that loads the output is opened after
- * it, for the overlay to draw in */
-static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState, bool inPass)
+ * it, for the overlay to draw in.  box: the presentation box (the shot's
+ * crop) */
+static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState, bool inPass,
+                          const RhiRect *box)
 {
-    if (!s_cap.armed) {
+    shotTake(box);
+    if (!s_cap.armed && !s_shot.copied) {
         return;
     }
+    s_cap.photo = s_cap.armed;
     s_cap.armed = 0;
     if (!s_cap.tex.id || s_cap.w != s_outW || s_cap.h != s_outH || s_cap.fmt != s_outFormat) {
         if (s_cap.tex.id) {
@@ -1844,9 +1945,16 @@ static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState,
         s_cap.fmt = s_outFormat;
     }
     if (!s_cap.tex.id) {
-        rd__log("photo: capture %s: no texture for %ux%u", s_cap.path, s_outW, s_outH);
-        snprintf(s_cap.done, sizeof(s_cap.done), "%s", s_cap.path);
-        s_cap.result = -1;
+        if (s_cap.photo) {
+            rd__log("photo: capture %s: no texture for %ux%u", s_cap.path, s_outW, s_outH);
+            snprintf(s_cap.done, sizeof(s_cap.done), "%s", s_cap.path);
+            s_cap.result = -1;
+        }
+        if (s_shot.copied) {
+            s_shot.copied = 0;
+            s_shot.dropped = 1;
+            s_shot.dropFrame = 0;
+        }
         return;
     }
     if (inPass) {
@@ -1871,10 +1979,24 @@ static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState,
 
 void rd__capture_finish(void)
 {
+    if (s_shot.dropped) {
+        s_shot.dropped = 0;
+        if (shotLogNow()) {
+            if (s_shot.dropFrame != 0) {
+                rd__log("state picture: not taken: the first present after the request showed "
+                        "frame %u, later than frame %u it asked for",
+                        s_shot.dropFrame, s_shot.maxFrame);
+            } else {
+                rd__log("state picture: not taken: no copy of the %ux%u output", s_outW, s_outH);
+            }
+        }
+        shotHand(NULL, 0, 0);
+    }
     if (!s_cap.copied) {
         return;
     }
     s_cap.copied = 0;
+    const double t0 = rd__now_ms();
     const size_t n = (size_t)s_cap.w * s_cap.h * 4;
     uint8_t *px = malloc(n);
     bool ok = px && rd__read_rhi_texture(s_cap.tex, &s_cap.state, s_cap.w, s_cap.h, px, n);
@@ -1885,6 +2007,36 @@ void rd__capture_finish(void)
             px[i + 2] = b;
         }
     }
+    if (s_shot.copied) {
+        /* the box's rows, opaque */
+        s_shot.copied = 0;
+        const RhiRect b = s_shot.box;
+        const bool fits = (uint64_t)b.x + b.w <= s_cap.w && (uint64_t)b.y + b.h <= s_cap.h;
+        uint8_t *crop = ok && fits ? malloc((size_t)b.w * b.h * 4) : NULL;
+        if (crop) {
+            for (uint32_t y = 0; y < b.h; y++) {
+                memcpy(crop + (size_t)y * b.w * 4, px + ((size_t)(b.y + y) * s_cap.w + b.x) * 4,
+                       (size_t)b.w * 4);
+            }
+            for (size_t i = 3; i < (size_t)b.w * b.h * 4; i += 4) {
+                crop[i] = 255;
+            }
+            if (shotLogNow()) {
+                rd__log("state picture: %ux%u from the %ux%u output (the box at %d,%d), read "
+                        "back in %.1f ms",
+                        b.w, b.h, s_cap.w, s_cap.h, b.x, b.y, rd__now_ms() - t0);
+            }
+        } else {
+            rd__log("state picture: not taken: the %ux%u output could not be read back", s_cap.w,
+                    s_cap.h);
+        }
+        shotHand(crop, crop ? b.w : 0, crop ? b.h : 0);
+    }
+    if (!s_cap.photo) {
+        free(px);
+        return;
+    }
+    s_cap.photo = 0;
     uint32_t ow = s_cap.w, oh = s_cap.h;
     if (ok && s_cap.maxW != 0 && s_cap.w > s_cap.maxW) {
         /* wider than the limit: the same picture at maxW wide */
@@ -1967,11 +2119,13 @@ void rd__present_record(RhiCommandList cl)
      * or when it cannot draw, nothing below changes */
     const int mirror = pr->mirror && rd__mirror_on();
     bool filtered = false, uiInPicture = false;
+    RhiRect crtBox = box; /* the picture's box under the filter (the shot's crop) */
     if (rd__crt_on()) {
         /* the filter's box: its grid's shape (the exact width in whole
          * columns, rd__crt_grid), box at 4:3 */
         RhiRect cbox;
         rd__crt_box(s_outW, s_outH, &cbox);
+        crtBox = cbox;
         if (depthWanted()) {
             /* the filter replaces the box blit that carries the effects depth */
             rd__log_once(RD_ONCE_EFFECTS_DEPTH_CRT,
@@ -1989,7 +2143,7 @@ void rd__present_record(RhiCommandList cl)
             capOk =
                 rd__crt_record(cl, disp, out, s_outFormat, s_outW, s_outH, &cbox, mirror, false);
             if (capOk) {
-                captureRecord(cl, out, outState, false);
+                captureRecord(cl, out, outState, false, &cbox);
             }
         }
         /* a failed capture pass: the box blit below, the capture before the
@@ -2085,7 +2239,7 @@ void rd__present_record(RhiCommandList cl)
      * port's own UI on the overlay (the popups, the photo HUD); under the
      * CRT filter with UI in the grid it was taken above, from a pass
      * without that UI (a no-op here then) */
-    captureRecord(cl, out, outState, open);
+    captureRecord(cl, out, outState, open, filtered ? &crtBox : &box);
     overlayRecord(cl, out, &box, uiInPicture, open);
     if (open) {
         rhi_cmd_end_render_pass(cl);
@@ -2115,6 +2269,10 @@ void rd__present_shutdown(void)
         rhi_destroy_texture(s_cap.tex); /* the capture's texture */
     }
     memset(&s_cap, 0, sizeof(s_cap));
+    if (s_shot.armed || s_shot.fn) {
+        shotHand(NULL, 0, 0); /* a shot no present took: dropped */
+    }
+    memset(&s_shot, 0, sizeof(s_shot));
     if (s_probe.tex.id) {
         rhi_destroy_texture(s_probe.tex); /* rd_display_probe's */
     }

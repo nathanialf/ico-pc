@@ -105,6 +105,15 @@
  *             shown picture has the overlay inside it; the
  *             capture takes a filter pass without it); rd_capture_result
  *             reports it once
+ *   shot      rd_capture_shot at 800 x 450 (the 4:3 picture with bars),
+ *             CRT off and Consumer TV: armed in the open frame, that
+ *             frame's present hands fn the presentation box (the filter's
+ *             box under it) as RGBA, its pixels the present's in that box,
+ *             alpha 255; rd_present_box_size its size; armed before the
+ *             frame began, the present of the later frame drops it (fn
+ *             NULL); armed with rd_capture_presented, both from one copy; a
+ *             second arm tells the first NULL, cancel forgets it, the
+ *             shutdown drops an armed one
  *   aa off    without anti-aliasing, 4x into 640 x 480 (3.2 texels a pixel)
  *             is DISPLAY box-reduced byte for byte (cpuReduce), one pass
  *             more than at 1.28 a pixel; 1x into 320 x 240 keeps the plain
@@ -662,9 +671,16 @@ static void drawScene(RdTex t)
 }
 
 /* rd_pixel_test.c recordRichFrame, the frame of its dump */
+/* recordRichFrame's hook between rd_begin_frame and the draws (the shot
+ * armed in the open frame), NULL for none */
+static void (*s_afterBegin)(void);
+
 static void recordRichFrame(RdTex t, int reduce)
 {
     rd_begin_frame();
+    if (s_afterBegin) {
+        s_afterBegin();
+    }
     drawScene(t);
     rd_select_list(2);
     static const uint8_t add[4] = {60, 30, 90, 0xFF};
@@ -4914,6 +4930,136 @@ static void checkCapture(const char *dir)
     checkCaptureAt(dir, 1);
 }
 
+/* ------------------------------------------------------ the state picture */
+
+typedef struct ShotSeen {
+    int calls;
+    uint8_t *px;
+    uint32_t w, h;
+} ShotSeen;
+
+static ShotSeen s_shotA, s_shotB;
+
+static void shotFn(uint8_t *rgba, uint32_t w, uint32_t h, void *user)
+{
+    ShotSeen *seen = (ShotSeen *)user;
+    seen->calls++;
+    free(seen->px);
+    seen->px = rgba;
+    seen->w = w;
+    seen->h = h;
+}
+
+static void shotForget(ShotSeen *seen)
+{
+    free(seen->px);
+    memset(seen, 0, sizeof(*seen));
+}
+
+static void armShotA(void)
+{
+    CHECK(rd_capture_shot(shotFn, &s_shotA), "shot: armed in the open frame");
+}
+
+static void checkShotAt(const char *dir, int crt)
+{
+    const uint32_t w = 800, h = 450;
+    const size_t n = (size_t)w * h * 4;
+    uint8_t *shown = malloc(n);
+    char png[1100], done[1100];
+    snprintf(png, sizeof(png), "%s/rd_present_shot_%d.png", dir, crt);
+    makeNoiseScene();
+    RdSettings s = originalSettings();
+    s.outputWidth = w;
+    s.outputHeight = h;
+    if (crt) {
+        rd_crt_settings(&s, RD_CRT_CONSUMER, 1.0f);
+    }
+    if (!shown || !rd_init(512, 512, &s, NULL)) {
+        CHECK(false, "shot (crt %d): a device", crt);
+        free(shown);
+        return;
+    }
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    shotForget(&s_shotA);
+    shotForget(&s_shotB);
+
+    /* armed in the open frame: its present hands the box */
+    s_afterBegin = armShotA;
+    recordRichFrame(t, 1);
+    s_afterBegin = NULL;
+    uint32_t ow = 0, oh = 0, bw = 0, bh = 0;
+    RhiRect box;
+    memset(&box, 0, sizeof(box));
+    const bool read = rd_read_presented(shown, &ow, &oh) && ow == w && oh == h;
+    if (crt) {
+        rd__crt_box(w, h, &box);
+    } else {
+        uint32_t pw, ph;
+        CHECK(rd__last_present_box(&pw, &ph, &box), "shot: the present's box");
+    }
+    CHECK(rd_present_box_size(&bw, &bh) && bh == h && bw < w,
+          "shot (crt %d): the box size %ux%u (the picture's own shape, no bars)", crt, bw, bh);
+    CHECK(read && s_shotA.calls == 1 && s_shotA.px && s_shotA.w == box.w && s_shotA.h == box.h,
+          "shot (crt %d): %d calls, %ux%u (the box %ux%u at %d,%d)", crt, s_shotA.calls, s_shotA.w,
+          s_shotA.h, box.w, box.h, box.x, box.y);
+    if (read && s_shotA.px && s_shotA.w == box.w && s_shotA.h == box.h) {
+        size_t diff = 0, alpha = 0;
+        for (uint32_t y = 0; y < box.h; y++) {
+            for (uint32_t x = 0; x < box.w; x++) {
+                const uint8_t *a = s_shotA.px + ((size_t)y * box.w + x) * 4;
+                const uint8_t *b = shown + ((size_t)(box.y + y) * w + (box.x + x)) * 4;
+                diff += memcmp(a, b, 3) != 0;
+                alpha += a[3] != 255;
+            }
+        }
+        CHECK(diff == 0 && alpha == 0,
+              "shot (crt %d): the present's pixels in the box (%zu differ, %zu not opaque)", crt,
+              diff, alpha);
+    }
+
+    /* armed before the frame began: the later frame's present drops it */
+    shotForget(&s_shotA);
+    CHECK(rd_capture_shot(shotFn, &s_shotA), "shot: armed between frames");
+    recordRichFrame(t, 1);
+    CHECK(s_shotA.calls == 1 && s_shotA.px == NULL,
+          "shot (crt %d): a later frame's present drops it (%d calls)", crt, s_shotA.calls);
+
+    /* with the photo capture at one present: both */
+    shotForget(&s_shotA);
+    remove(png);
+    CHECK(rd_capture_presented(png), "shot: the capture armed too");
+    s_afterBegin = armShotA;
+    recordRichFrame(t, 1);
+    s_afterBegin = NULL;
+    CHECK(rd_capture_result(done, sizeof(done)) == 1 && s_shotA.calls == 1 && s_shotA.px,
+          "shot (crt %d): the capture and the shot from one present", crt);
+
+    /* a second arm tells the first NULL; cancel forgets; shutdown drops */
+    shotForget(&s_shotA);
+    CHECK(rd_capture_shot(shotFn, &s_shotA) && rd_capture_shot(shotFn, &s_shotB) &&
+              s_shotA.calls == 1 && s_shotA.px == NULL && s_shotB.calls == 0,
+          "shot: replaced before a present");
+    rd_capture_shot_cancel();
+    recordRichFrame(t, 1);
+    CHECK(s_shotB.calls == 0, "shot: cancelled, never told");
+    CHECK(rd_capture_shot(shotFn, &s_shotB), "shot: armed at the end");
+    CHECK(rhi_vk_validation_error_count() == 0, "shot: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_destroy_texture(t);
+    rd_shutdown();
+    CHECK(s_shotB.calls == 1 && s_shotB.px == NULL, "shot: the shutdown drops an armed one");
+    shotForget(&s_shotA);
+    shotForget(&s_shotB);
+    free(shown);
+}
+
+static void checkShot(const char *dir)
+{
+    checkShotAt(dir, 0);
+    checkShotAt(dir, 1);
+}
+
 /* ------------------------------------------- the present's render passes */
 
 /* the deferred text's renderer: one green rectangle a call, in output
@@ -5542,6 +5688,7 @@ int main(int argc, char **argv)
     checkOverlayCrt();
     checkOverlayTop();
     checkCapture(dir);
+    checkShot(dir);
     checkPresentPasses(dir);
     checkEffectsDepth();
     checkNoD32Keys();
