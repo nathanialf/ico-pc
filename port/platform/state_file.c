@@ -325,15 +325,16 @@ static void say(char *detail, size_t n, const char *fmt, const char *s)
     }
 }
 
-IcoStateResult ico_state_header_check(const IcoStateHeader *saved, const IcoStateHeader *now,
-                                      char *detail, size_t n)
+static IcoStateResult header_check(const IcoStateHeader *saved, const IcoStateHeader *now,
+                                   char *detail, size_t n, int build)
 {
     say(detail, n, "%s", "");
     if (strncmp(saved->platform, now->platform, sizeof saved->platform) != 0) {
         say(detail, n, "%s", saved->platform);
         return ICO_STATE_OTHER_PLATFORM;
     }
-    if (memcmp(saved->build_id, now->build_id, sizeof saved->build_id) != 0) {
+    if (saved->version != now->version ||
+        (build && memcmp(saved->build_id, now->build_id, sizeof saved->build_id) != 0)) {
         say(detail, n, "%s", saved->commit);
         return ICO_STATE_OTHER_BUILD;
     }
@@ -354,6 +355,18 @@ IcoStateResult ico_state_header_check(const IcoStateHeader *saved, const IcoStat
         return ICO_STATE_OTHER_SETTINGS;
     }
     return ICO_STATE_OK;
+}
+
+IcoStateResult ico_state_header_check(const IcoStateHeader *saved, const IcoStateHeader *now,
+                                      char *detail, size_t n)
+{
+    return header_check(saved, now, detail, n, 1);
+}
+
+IcoStateResult ico_state_header_check_other_build(const IcoStateHeader *saved,
+                                                  const IcoStateHeader *now, char *detail, size_t n)
+{
+    return header_check(saved, now, detail, n, 0);
 }
 
 /* --- serialising the prefix ------------------------------------------------ */
@@ -669,7 +682,8 @@ static IcoStateResult read_header_f(FILE *f, IcoStateHeader *out)
         return ICO_STATE_BAD_FILE;
     }
     if (memcmp(hb + H_MAGIC, ICO_STATE_MAGIC, 8) != 0 ||
-        get32(hb + H_VERSION) != ICO_STATE_FORMAT_VERSION ||
+        get32(hb + H_VERSION) < ICO_STATE_FORMAT_OLDEST ||
+        get32(hb + H_VERSION) > ICO_STATE_FORMAT_VERSION ||
         get32(hb + H_HEADER_BYTES) != ICO_STATE_HEADER_BYTES ||
         get32(hb + H_ENTRY_BYTES) != ICO_STATE_TABLE_ENTRY_BYTES) {
         return ICO_STATE_BAD_FILE;

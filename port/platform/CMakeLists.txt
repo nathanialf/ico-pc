@@ -3,6 +3,7 @@
 
 target_sources(ico_platform PRIVATE
     arena.c
+    code_hash.c
     diag_host.c
     fiber.c
     fps_counter.c
@@ -24,6 +25,8 @@ target_sources(ico_platform PRIVATE
     state_hash.c
     state_registry.c
     state_reloc.c
+    state_syms.c
+    state_xbuild.c
     symmap.c
     vm_reserve.c
     vsync_hooks.c
@@ -107,12 +110,19 @@ endif()
 # stack guard) rewritten old -> new by exact match in words, a scan and a
 # real fiber's registers and frame, and the per-platform refusal of a state
 # without them (state_reloc.c, fiber.c)
+# state_port: save states across versions (state_syms.c, code_hash.c,
+# state_xbuild.c, state_reloc.c, state_file.c): two synthetic builds' symbol
+# files and code, the masked code hashes, the translation of every word and
+# the refusal naming the first blocker (a changed function, the data
+# layout, a block), the bounds' fallback, the format 1 refusal; nothing of
+# the game starts
 # state_registry: the save state registry's table (state_registry.c)
 # present_fallback: the FIFO fallback's decision over a log's present blocks
 # under mailbox, the driver's eligibility, the [dev] value and the lines
 # (present_fallback.c)
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
-          gpu_hang state_fiber state_guard state_registry pipeline_skip memory_floor present_fallback)
+          gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
+          present_fallback)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

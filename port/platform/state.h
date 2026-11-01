@@ -15,7 +15,9 @@
  * lock), the scheduler tables and every live fiber's control block and used
  * stack (fiber.h slots), pobjImageTables, and the address ranges those bytes
  * lived at.  Validity: the build id, the disc slug, the platform tag and
- * the hash of the simulation keys (sim_keys.h) must match.
+ * the hash of the simulation keys (sim_keys.h) must match; a state of
+ * another build of the same format loads when its "syms" section
+ * (state_xbuild.h) finds everything it points into unchanged.
  *
  * Threading: every function here runs on the host loop's thread except
  * ico_state_request_* (any thread; latched) and the writer thread inside
@@ -28,7 +30,10 @@
 #include <stdint.h>
 
 #define ICO_STATE_SLOTS 4 /* slots 1..4 */
-#define ICO_STATE_FORMAT_VERSION 1
+/* 2: the "syms" section (state_xbuild.h), so a later build can load a
+   state whose code and data it still has; 1 had none */
+#define ICO_STATE_FORMAT_VERSION 2
+#define ICO_STATE_FORMAT_OLDEST 1
 
 /* Why a save or a load was refused, or ICO_STATE_OK. */
 typedef enum IcoStateResult {
@@ -79,6 +84,26 @@ void ico_state_request_delete(int slot);
    quiescent point).  Performs the latched request; the result goes to the
    completion callback below. */
 void ico_state_host_poll(void);
+
+/* Why a state of another version cannot be resumed (a load refused with
+   ICO_STATE_OTHER_BUILD), for the refusal box's words. */
+typedef enum IcoStateBlocker {
+    ICO_STATE_BLOCK_NONE = 0,
+    ICO_STATE_BLOCK_OLD,   /* made before states carried over to later versions (format 1) */
+    ICO_STATE_BLOCK_CODE,  /* the code it was saved in (a function a thread sits in) changed */
+    ICO_STATE_BLOCK_DATA,  /* how the game holds its state in memory changed */
+    ICO_STATE_BLOCK_PINNED /* nothing to carry it over with: only its own version resumes it */
+} IcoStateBlocker;
+
+typedef struct IcoStateRefusal {
+    IcoStateBlocker blocker;
+    char saved_version[48]; /* the saving build's ("vX.Y.Z", "vX.Y.Z-3-g0123456789") */
+    char this_version[48];
+} IcoStateRefusal;
+
+/* The last load refused as ICO_STATE_OTHER_BUILD: what blocked it and the
+   two versions (blocker NONE when the last load was not refused so). */
+void ico_state_last_refusal(IcoStateRefusal *out);
 
 /* The result of the last performed request (the UI's popup, the log line
    is written by state_host.c itself).  `detail` is a short UTF-8 text with

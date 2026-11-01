@@ -55,6 +55,14 @@ int ico_state_image_range(IcoStateImage *out)
     out->hi = out->lo + nt->OptionalHeader.SizeOfImage;
     sec = IMAGE_FIRST_SECTION(nt);
     for (i = 0; i < nt->FileHeader.NumberOfSections; i++) {
+        const DWORD rw = IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_EXECUTE;
+
+        if ((sec[i].Characteristics & rw) == IMAGE_SCN_MEM_READ && out->n_ro < ICO_STATE_IMAGE_RO &&
+            sec[i].Misc.VirtualSize != 0) {
+            out->ro_lo[out->n_ro] = out->lo + sec[i].VirtualAddress;
+            out->ro_hi[out->n_ro] = out->ro_lo[out->n_ro] + sec[i].Misc.VirtualSize;
+            out->n_ro++;
+        }
         if ((sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) != 0) {
             const uint64_t lo = out->lo + sec[i].VirtualAddress;
             const uint64_t hi = lo + sec[i].Misc.VirtualSize;
@@ -112,6 +120,10 @@ int ico_state_image_range(IcoStateImage *out)
                     if (strcmp(seg->segname, SEG_TEXT) == 0) {
                         out->text_lo = lo;
                         out->text_hi = hi;
+                    } else if (seg->initprot == VM_PROT_READ && out->n_ro < ICO_STATE_IMAGE_RO) {
+                        out->ro_lo[out->n_ro] = lo;
+                        out->ro_hi[out->n_ro] = hi;
+                        out->n_ro++;
                     }
                 }
             }
@@ -157,6 +169,11 @@ static int image_phdr(struct dl_phdr_info *info, size_t size, void *user)
         }
         if (hi > im.hi) {
             im.hi = hi;
+        }
+        if ((ph->p_flags & (PF_W | PF_X)) == 0 && im.n_ro < ICO_STATE_IMAGE_RO) {
+            im.ro_lo[im.n_ro] = lo;
+            im.ro_hi[im.n_ro] = hi;
+            im.n_ro++;
         }
         if ((ph->p_flags & PF_X) != 0) {
             if (im.text_hi == 0 || lo < im.text_lo) {

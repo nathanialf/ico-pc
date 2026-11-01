@@ -795,6 +795,15 @@ void ico_diag_set_symbols_fd(int fd, long long offset, long long length, int gzi
                              const char *name);
 #endif
 
+/* The symbol file for another reader (the save states' table,
+   state_syms.h), read whole outside any report: 1 with its name, whether it
+   is gzip and its length in bytes (-1 unknown), or 0 when none is open.
+   _read reads up to size bytes from `at` without moving the report's own
+   read position (pread; Windows: ReadFile at an offset, and a report
+   rewinds before it reads): the bytes read, or -1. */
+int ico_diag_symbols_info(char *name, size_t n, int *gzip, long long *length);
+long long ico_diag_symbols_read(void *buf, size_t size, long long at);
+
 /* The first screenful's one line of what a report needs (the window,
    after the renderer's start and its self-tests): "ico_pc: summary:
    <text>", kept for the report file's report.txt. */

@@ -60,8 +60,35 @@ typedef struct IcoStateValue {
     uint64_t now; /* in this one */
 } IcoStateValue;
 
+/* A state from another build (state_xbuild.h): the MODULE range's words do
+   not move by one delta but by where each one's function, variable or block
+   lies in this build.  A span takes an old [lo, hi] (hi included) to now +
+   (word - lo); a point takes exactly one old word (lo == hi) to now. */
+typedef struct IcoStateSpan {
+    uint64_t lo, hi;
+    uint64_t now;
+} IcoStateSpan;
+
+typedef struct IcoStateXlate {
+    const IcoStateSpan *span; /* sorted by lo, disjoint */
+    size_t n_span;
+    const IcoStateSpan *point; /* sorted by lo, each lo == hi */
+    size_t n_point;
+    /* NULL, or counters: the MODULE words that had no translation (left
+       as they were) and the first of them */
+    uint64_t *missed;
+    uint64_t *first_missed;
+} IcoStateXlate;
+
+/* 1 and *now when `old` has a translation (a point first, then a span),
+   else 0. */
+int ico_state_xlate(const IcoStateXlate *x, uint64_t old, uint64_t *now);
+
 typedef struct IcoStateReloc {
     IcoStateRange range[ICO_RELOC_RANGES]; /* indexed by ICO_RELOC_* */
+    /* NULL (one build: the MODULE range moves by its delta), or the
+       translation of every word in the MODULE range (another build) */
+    const IcoStateXlate *xlate;
     IcoStateValue value[ICO_RELOC_VALUES]; /* indexed by ICO_RELOC_TLS/GUARD */
     /* NULL, or ICO_RELOC_VALUES counters each value's rewrites are added
        to (the words are counted wherever they are found: the fibers'
@@ -72,8 +99,10 @@ typedef struct IcoStateReloc {
 /* The conservative scan's step: when *w equals an enabled value's old word
    (above), *w becomes its new word, the value's counter goes up and the
    result is 1; else when *w lies in a range and that range moved,
-   *w += delta and the result is 1; otherwise *w is left alone and the
-   result is 0. */
+   *w += delta and the result is 1 (with xlate set, a word in the MODULE
+   range becomes its translation instead, the result 1 when it changed; a
+   word without one is left and counted); otherwise *w is left alone and
+   the result is 0. */
 int ico_state_reloc_word(const IcoStateReloc *r, uint64_t *w);
 
 /* Sets the two values (old -> now) and their counters (`words`: NULL, or
@@ -110,9 +139,11 @@ int ico_state_proc_check(const char *tag, uint64_t tls_base, uint64_t stack_guar
 
 /* A typed fix-up: *w is known to be an address in range `which` (a saved
    return address, stack pointer, function pointer) or 0.  A nonzero *w is
-   moved by that range's delta.  Returns 0, or -1 (and *w unchanged) when
-   the range is not empty and a nonzero *w lies outside it: the word is not
-   what its type says, and the caller refuses the state. */
+   moved by that range's delta (with xlate set and `which` the MODULE
+   range: becomes its translation).  Returns 0, or -1 (and *w unchanged)
+   when the range is not empty and a nonzero *w lies outside it, or has no
+   translation: the word is not what its type says, and the caller refuses
+   the state. */
 int ico_state_reloc_typed(const IcoStateReloc *r, int which, uint64_t *w);
 
 /* --- The scan over a state's regions (state_reloc.c) and the image range
@@ -136,9 +167,16 @@ void ico_state_reloc_set_log(int on);
    headers (SizeOfImage, the executable sections); Linux and Android:
    dl_iterate_phdr's PT_LOAD segments of the object holding this code;
    Apple: the image's LC_SEGMENT_64 commands through _dyld. */
+#define ICO_STATE_IMAGE_RO 8
+
 typedef struct IcoStateImage {
     uint64_t lo, hi;           /* the whole image */
     uint64_t text_lo, text_hi; /* its code */
+    /* its read-only data (mapped, neither writable nor executable: ELF
+       PT_LOAD segments without PF_W and PF_X, PE sections readable only,
+       Mach-O segments mapped read-only), at most ICO_STATE_IMAGE_RO */
+    int n_ro;
+    uint64_t ro_lo[ICO_STATE_IMAGE_RO], ro_hi[ICO_STATE_IMAGE_RO];
 } IcoStateImage;
 
 /* 0, or -1 (out zeroed) when the image cannot be found. */

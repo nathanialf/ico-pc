@@ -2,8 +2,9 @@
  * port/platform/state_reloc.c
  *
  * Moving saved host addresses (state_reloc.h): the word functions, the
- * saving process's two values (thread pointer, stack guard) and the
- * conservative scan over a state's regions.  The image range and the
+ * translation of another build's MODULE words, the saving process's two
+ * values (thread pointer, stack guard) and the conservative scan over a
+ * state's regions.  The image range and the
  * self-checks are state_check.c's (they name the scheduler and the kernel,
  * which this file, linked by every fiber user, must not pull in).
  */
@@ -17,6 +18,62 @@
 static int in_range(const IcoStateRange *g, uint64_t w)
 {
     return g->lo < g->hi && w >= g->lo && w <= g->hi;
+}
+
+int ico_state_xlate(const IcoStateXlate *x, uint64_t old, uint64_t *now)
+{
+    size_t lo = 0, hi = x->n_point;
+
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (x->point[mid].lo < old) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo < x->n_point && x->point[lo].lo == old) {
+        *now = x->point[lo].now;
+        return 1;
+    }
+    lo = 0;
+    hi = x->n_span;
+    while (lo < hi) {
+        const size_t mid = lo + (hi - lo) / 2;
+
+        if (x->span[mid].lo <= old) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo > 0 && old <= x->span[lo - 1].hi) {
+        *now = x->span[lo - 1].now + (old - x->span[lo - 1].lo);
+        return 1;
+    }
+    return 0;
+}
+
+/* a MODULE word through the translation: 1 when it changed */
+static int xlate_word(const IcoStateXlate *x, uint64_t *w)
+{
+    uint64_t v;
+
+    if (ico_state_xlate(x, *w, &v)) {
+        if (v == *w) {
+            return 0;
+        }
+        *w = v;
+        return 1;
+    }
+    if (x->missed != NULL) {
+        if (*x->missed == 0 && x->first_missed != NULL) {
+            *x->first_missed = *w;
+        }
+        (*x->missed)++;
+    }
+    return 0;
 }
 
 int ico_state_reloc_word(const IcoStateReloc *r, uint64_t *w)
@@ -35,6 +92,9 @@ int ico_state_reloc_word(const IcoStateReloc *r, uint64_t *w)
     for (i = 0; i < ICO_RELOC_RANGES; i++) {
         const IcoStateRange *g = &r->range[i];
         if (in_range(g, *w)) {
+            if (i == ICO_RELOC_MODULE && r->xlate != NULL) {
+                return xlate_word(r->xlate, w);
+            }
             if (g->delta == 0) {
                 return 0;
             }
@@ -57,6 +117,15 @@ int ico_state_reloc_typed(const IcoStateReloc *r, int which, uint64_t *w)
     }
     if (g->lo < g->hi && !in_range(g, *w)) {
         return -1;
+    }
+    if (which == ICO_RELOC_MODULE && r->xlate != NULL) {
+        uint64_t v;
+
+        if (!ico_state_xlate(r->xlate, *w, &v)) {
+            return -1;
+        }
+        *w = v;
+        return 0;
     }
     *w += (uint64_t)g->delta;
     return 0;

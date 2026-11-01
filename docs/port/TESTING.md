@@ -484,6 +484,27 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (Android refuses a record without either value, Linux arm64 without the thread pointer, macOS
   and iOS without the guard, the rest need none); `ico_state_proc_read` on the host
   (`state_guard`).
+- `state_port_test.c`: save states across versions ([PLATFORM.md](PLATFORM.md#across-versions)),
+  with two synthetic builds of one program (each an image in memory with its own code, texts, data,
+  game data ranges and blocks at other places, and its own nm table); nothing of the game starts.
+  The x86-64 length decoder's fields on hand-checked encodings (a call, RIP-relative loads, absolute
+  immediates and displacements, VEX, EVEX, the 0F 38/3A maps, nops; an unknown opcode and a cut
+  instruction not decoded); the masked code hash on x86-64 and arm64 (one function at two addresses
+  with other call, RIP, ADRP and low-12 offsets alike; another frame size, stack slot, internal
+  branch, register or constant not; padding left out); the symbol table from a GNU ld map (a
+  static function's piece, sections bounding the pieces, `*fill*` and the discarded list skipped),
+  lld's map and nm (names, ordinals, uniqueness, lookups), the layout hash equal for one layout at
+  two addresses and other when a game global moves, another build's file and a missing anchor
+  refused; build A's record of a state's words (a return address, a function pointer, the game's
+  data and its bss's end, a block, a variable, a text, a start-up value, a dead frame's word into a
+  function B lacks) checked by build B and every word translated (scanned and typed), the dead
+  frame's word left and counted, the blocks mapped by name in B's order; the refusals, each naming
+  its blocker (a changed function a frame sits in; a changed function only pointed at loads; the
+  data layout; a block missing, new or resized; a missing text; a changed start-up value; a word
+  into a repeated name or into the code outside every unit; no symbol table; the bounds' overflow;
+  an image below 4 GB; a damaged record); a format 1 header read and refused as another build, a
+  format 2 header of another build passing the other-build check, another disc still refused
+  (`state_port`).
 - `state_reloc_test.c`: the scan and the self-checks over the game's real allocator
   (`ico2/fumi/ios/memory.c` built with the game's flags): words at each range's start, middle and end
   move by their own delta and nothing else does (near misses, 0, all ones, floats, doubles, EE word

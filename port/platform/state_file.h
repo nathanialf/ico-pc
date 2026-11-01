@@ -107,12 +107,18 @@ void ico_state_header_init(IcoStateHeader *h, const char *commit);
 /* The validity of a saved header against this run's (both from
    header_init plus disc, settings_hash and keys): ICO_STATE_OK, or in this
    order of precedence ICO_STATE_OTHER_PLATFORM (detail: the saved
-   platform), ICO_STATE_OTHER_BUILD (the saved commit), ICO_STATE_OTHER_DISC
-   (the saved slug) or ICO_STATE_OTHER_SETTINGS (the first key whose value
-   differs, as "key=saved (now cur)"; the keys text decides it, the hash
-   only when the texts agree). */
+   platform), ICO_STATE_OTHER_BUILD (another format version or build id;
+   detail: the saved commit), ICO_STATE_OTHER_DISC (the saved slug) or
+   ICO_STATE_OTHER_SETTINGS (the first key whose value differs, as
+   "key=saved (now cur)"; the keys text decides it, the hash only when the
+   texts agree). */
 IcoStateResult ico_state_header_check(const IcoStateHeader *saved, const IcoStateHeader *now,
                                       char *detail, size_t n);
+/* The same without the build id: what a state of another build of this
+   format must pass before its "syms" section is asked (state_xbuild.h). */
+IcoStateResult ico_state_header_check_other_build(const IcoStateHeader *saved,
+                                                  const IcoStateHeader *now, char *detail,
+                                                  size_t n);
 
 /* --- writing (the writer thread) --- */
 
@@ -146,8 +152,11 @@ int ico_state_file_flush(IcoStateWriteResult *out);
 
 /* Reads and checks the header, the section table and the keys text:
    ICO_STATE_OK; ICO_STATE_EMPTY when there is no file; ICO_STATE_BAD_FILE
-   when it is shorter than it says (truncated), the magic, the version or
-   the header's CRC is wrong, or the table does not fit the file. */
+   when it is shorter than it says (truncated), the magic or the header's
+   CRC is wrong, the version is not one of ICO_STATE_FORMAT_OLDEST ..
+   ICO_STATE_FORMAT_VERSION (an older version's header reads the same; the
+   header check then refuses it as another build), or the table does not
+   fit the file. */
 IcoStateResult ico_state_file_read_header(const char *path, IcoStateHeader *out);
 
 /* Asked once per section in file order: the buffer to inflate it into

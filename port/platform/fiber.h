@@ -138,6 +138,10 @@ typedef struct IcoFiberImage {
    Returns 0, or -1 for a free slot, a running or finished fiber, or a
    stack pointer outside the slot's stack. */
 int ico_fiber_slot_save(int slot, IcoFiberImage *out);
+/* The stack pointer an image's switch context holds (the saving process's
+   address; the stack words below it are dead frames), or 0 when the image
+   is not of this pool's layout. */
+uint64_t ico_fiber_image_sp(const IcoFiberImage *img);
 /* Commits the free slot `slot` and puts `in` back into it, moved by `r`
    (above): in->slot must be `slot`, the layout this build's, r's POOL
    range the saving process's pool (in->slot_base inside it, even when the

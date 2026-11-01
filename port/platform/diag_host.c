@@ -56,6 +56,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 
 #define ICO_WANT_LIBC_SCHED 1 /* sched.h says why */
 
@@ -4000,6 +4001,78 @@ void ico_diag_set_symbols_fd(int fd, long long offset, long long length, int gzi
     snprintf(sym_name, sizeof sym_name, "%s", name != NULL ? name : "the symbol table");
 }
 #endif
+
+int ico_diag_symbols_info(char *name, size_t n, int *gzip, long long *length)
+{
+    long long len = sym_len;
+
+    if (!SYM_OPEN) {
+        return 0;
+    }
+    if (len < 0) {
+#ifdef _WIN32
+        LARGE_INTEGER sz;
+
+        len = GetFileSizeEx(sym_h, &sz) ? (long long)sz.QuadPart - sym_base : -1;
+#else
+        struct stat st;
+
+        len = fstat(sym_fd, &st) == 0 ? (long long)st.st_size - sym_base : -1;
+#endif
+    }
+    if (name != NULL && n > 0) {
+        snprintf(name, n, "%s", sym_name[0] != '\0' ? sym_name : "the symbol file");
+    }
+    *gzip = sym_gz;
+    *length = len;
+    return 1;
+}
+
+long long ico_diag_symbols_read(void *buf, size_t size, long long at)
+{
+    if (!SYM_OPEN || at < 0) {
+        return -1;
+    }
+#ifdef _WIN32
+    {
+        OVERLAPPED ov;
+        DWORD got = 0;
+        const unsigned long long off = (unsigned long long)(sym_base + at);
+
+        memset(&ov, 0, sizeof ov);
+        ov.Offset = (DWORD)off;
+        ov.OffsetHigh = (DWORD)(off >> 32);
+        if (size > 0x40000000u) {
+            size = 0x40000000u;
+        }
+        if (!ReadFile(sym_h, buf, (DWORD)size, &got, &ov)) {
+            return -1;
+        }
+        return (long long)got;
+    }
+#else
+    {
+        size_t done = 0;
+
+        while (done < size) {
+            const ssize_t r = pread(sym_fd, (char *)buf + done, size - done,
+                                    (off_t)(sym_base + at + (long long)done));
+
+            if (r < 0 && errno == EINTR) {
+                continue;
+            }
+            if (r < 0) {
+                return -1;
+            }
+            if (r == 0) {
+                break;
+            }
+            done += (size_t)r;
+        }
+        return (long long)done;
+    }
+#endif
+}
 
 /* The map beside the program: its name with ".exe" (when there is one)
    replaced by ".map" (ico_pc_x64.exe: ico_pc_x64.map; ico_pc: ico_pc.map).

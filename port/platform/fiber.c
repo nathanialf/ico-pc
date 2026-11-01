@@ -445,10 +445,14 @@ static void expect_pool(void **p, uintptr_t now, int64_t pool_delta, int *bad)
     *p = (void *)now;
 }
 
-/* The same for a function of this file, by the MODULE delta. */
+/* The same for a function of this file: moved by the MODULE delta (or,
+   for another build's state, translated), the old value must be the
+   function now. */
 static void expect_module(uintptr_t old, uintptr_t now, const IcoStateReloc *r, int *bad)
 {
-    if (old + (uintptr_t)r->range[ICO_RELOC_MODULE].delta != now) {
+    uint64_t w = (uint64_t)old;
+
+    if (ico_state_reloc_typed(r, ICO_RELOC_MODULE, &w) != 0 || w != (uint64_t)now) {
         *bad = 1;
     }
 }
@@ -566,6 +570,18 @@ int ico_fiber_slot_save(int slot, IcoFiberImage *out)
     return 0;
 }
 
+uint64_t ico_fiber_image_sp(const IcoFiberImage *img)
+{
+    const _mco_context *cx;
+
+    if (pool.base == 0 || img->ctrl == NULL || img->ctrl_bytes != pool.page ||
+        pool.ctx_off + sizeof *cx > img->ctrl_bytes) {
+        return 0;
+    }
+    cx = (const _mco_context *)((const unsigned char *)img->ctrl + pool.ctx_off);
+    return (uint64_t)ctx_sp(&cx->ctx);
+}
+
 int ico_fiber_slot_restore(int slot, const IcoFiberImage *in, const IcoStateReloc *r)
 {
     const IcoStateRange *pr = &r->range[ICO_RELOC_POOL];
@@ -666,6 +682,12 @@ int ico_fiber_slot_restore(int slot, const IcoFiberImage *in, const IcoStateRelo
 }
 
 #else
+
+uint64_t ico_fiber_image_sp(const IcoFiberImage *img)
+{
+    (void)img;
+    return 0;
+}
 
 int ico_fiber_slot_save(int slot, IcoFiberImage *out)
 {
