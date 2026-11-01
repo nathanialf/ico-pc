@@ -585,7 +585,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Hand in Hand kommen Ico und Yorda nicht mehr sofort wieder aus einer Tür heraus.",
     [UI_STR_OPT_YORDA_TRIPS] = "Yorda stolpert",
     [UI_STR_OPT_YORDA_TRIPS_NOTE] =
-        "Aus: wie im Original. Ein: an der Hand rennend fällt sie manchmal hin, wie nach dem Öffnen des Haupttors.",
+        "Aus: wie im Original. Ein: wie nach dem Haupttor: rennt sie drei Sekunden an der Hand, fällt sie hin.",
     [UI_STR_OPT_NATURAL_CHAINS] = "Natürliche Ketten",
     [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
         "Eine Kette, die für Ico herabgelassen wird, behält auf dem ganzen Weg die richtige Gliedergröße.",

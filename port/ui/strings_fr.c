@@ -592,7 +592,7 @@ const char *const
                 "Main dans la main, Ico et Yorda ne ressortent plus aussitôt d’une porte.",
             [UI_STR_OPT_YORDA_TRIPS] = "Yorda trébuche",
             [UI_STR_OPT_YORDA_TRIPS_NOTE] =
-                "Désactivé : l’original. Activé : main dans la main, elle tombe parfois en courant, comme à la grande porte.",
+                "Désactivé : l’original. Activé : comme à la grande porte, elle tombe après trois secondes de course main dans la main.",
             [UI_STR_OPT_NATURAL_CHAINS] = "Chaînes naturelles",
             [UI_STR_OPT_NATURAL_CHAINS_NOTE] =
                 "Une chaîne qui descend pour Ico garde des maillons à la bonne taille tout du long.",
@@ -748,7 +748,8 @@ const char *const
                 "Cet état a été créé par la version %s,\navant que les états sauvegardés puissent\npasser aux versions plus récentes.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_STATES_XB_CODE] =
                 "Cet état a été créé par la version %s.\nLa version %s a modifié la partie du jeu\noù il a été sauvegardé, il ne peut donc pas\nêtre repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
-            [UI_STR_STATES_XB_DATA] = "Cet état a été créé par la version %s.\nLa version %s a modifié la façon dont le jeu\ngarde sa progression en mémoire, il ne peut\ndonc pas être repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
+            [UI_STR_STATES_XB_DATA] =
+                "Cet état a été créé par la version %s.\nLa version %s a modifié la façon dont le jeu\ngarde sa progression en mémoire, il ne peut\ndonc pas être repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_STATES_XB_PINNED] =
                 "Cet état a été créé par la version %s\net seule cette version peut le reprendre.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Lueur entre les images",
