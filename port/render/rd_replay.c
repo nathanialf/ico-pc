@@ -511,23 +511,10 @@ static const void *passPush(RdPassKind kind, uint32_t color, uint32_t cw, uint32
     return m;
 }
 
-static void drawCmd(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
-                    uint32_t instanceCount)
-{
-    if (g_rdWin.first && !rd__win_take()) {
-        return;
-    }
-    rhi_cmd_draw(cl, vertexCount, firstVertex, instanceCount);
-}
-
-static void drawIndexedCmd(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
-                           int32_t vertexOffset, uint32_t instanceCount)
-{
-    if (g_rdWin.first && !rd__win_take()) {
-        return;
-    }
-    rhi_cmd_draw_indexed(cl, indexCount, firstIndex, vertexOffset, instanceCount);
-}
+/* every GPU draw through rd_occlusion.c: the pass window's take and the
+ * occlusion measurement */
+#define drawCmd rd__replay_draw
+#define drawIndexedCmd rd__replay_draw_indexed
 
 static void copyCmd(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
                     int32_t dstX, int32_t dstY)
@@ -3333,6 +3320,7 @@ static void flushScreenRun(Replay *r)
     if (!q->count) {
         return;
     }
+    g_rdDrawOwner = q->ord + 1u; /* the command that opened the run draws it */
     const uint64_t bytes = (uint64_t)q->count * q->stride;
     const uint64_t off = rd__ring_alloc(bytes, 16);
     if (off != ~0ull) {
@@ -3359,7 +3347,7 @@ static void flushScreenRun(Replay *r)
         }
         g_rdPerf.screenDraws++; /* one draw of the run, however many passes */
     }
-    q->count = 0;
+    q->count = g_rdDrawOwner = 0;
     if (r->perfPending) {
         r->perfPending = 0;
         rd__perf_post(s_cl, r->perfPendingPost);
@@ -3742,6 +3730,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
             nr.passSerial = r->passSerial;
             nr.dateSerial = r->dateSerial;
             nr.dateFor = r->dateFor;
+            nr.ord = g_rdStoreOrd;
             memcpy(&nr.st, &r->st, sizeof(nr.st));
             r->run = nr;
         }
@@ -6246,22 +6235,10 @@ uint32_t rd__replay_bind_epoch(void)
     return s_bindEpoch;
 }
 
-void rd__replay_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
-                     uint32_t instanceCount)
-{
-    drawCmd(cl, vertexCount, firstVertex, instanceCount);
-}
-
 const void *rd__replay_pass_push(RdPassKind kind, uint32_t color, uint32_t cw, uint32_t ch,
                                  uint32_t depth, uint32_t dw, uint32_t dh, int storage, int post)
 {
     return passPush(kind, color, cw, ch, depth, dw, dh, storage, post);
-}
-
-void rd__replay_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
-                             int32_t vertexOffset, uint32_t instanceCount)
-{
-    drawIndexedCmd(cl, indexCount, firstIndex, vertexOffset, instanceCount);
 }
 
 void rd__replay_dst_bind(Replay *r, const RdPipeKeyInt *k)

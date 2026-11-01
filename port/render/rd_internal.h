@@ -1714,6 +1714,41 @@ double rd__pipeline_create_ms(void);
  * the lists (the vertex pre-pass, the present, outside a replay) (rd_perf.c,
  * from the lists' timestamps and rd__passring_list). */
 int rd__replay_list(void);
+
+/* The hidden-draw measurement (rd_occlusion.c; the replay tool's
+ * --occlusion, docs/port/RENDER.md "Culling").  rd__occlusion_arm(list):
+ * the next replay's GPU draws while rd__replay_list() is list go inside
+ * occlusion queries (rhi_cmd_begin_occlusion), one query a draw, each
+ * noted with the command that drew it (g_rdStoreOrd, the index in the
+ * list when list 0 is the first walked; a screen-prim run's draw the
+ * command that opened it, g_rdDrawOwner); -1 disarms.  rd__occlusion_take
+ * after that replay: the slot it recorded in waited for (rd__wait_frame
+ * until rhi_wait_frame recycles it, at most RHI_FRAMES_IN_FLIGHT), the
+ * counts read (rhi_read_occlusion) and summed by command into out (its
+ * cmds array the caller frees); false when nothing was measured (no device
+ * with the queries, or no draw of the list).  The measurement disarms
+ * itself there. */
+typedef struct RdOccCmd {
+    uint32_t draws;   /* GPU draws the command made in the list */
+    uint32_t counted; /* of them, with a count read back */
+    uint64_t tris;    /* their vertex or index counts / 3, times the instances */
+    uint64_t samples; /* the samples their counts add up to */
+} RdOccCmd;
+
+typedef struct RdOccResult {
+    int list;
+    uint32_t cmdCount; /* cmds[0 .. cmdCount - 1]: by command index */
+    RdOccCmd *cmds;
+    uint32_t queries;  /* queries begun */
+    uint32_t overflow; /* draws past RHI_MAX_OCCLUSION, without a query */
+    uint32_t unread;   /* queries begun whose count did not come back */
+} RdOccResult;
+
+void rd__occlusion_arm(int list);
+bool rd__occlusion_take(RdOccResult *out);
+/* the command a screen-prim run's draw belongs to, + 1 (rd_replay.c
+ * flushScreenRun; 0 outside it: the draw is g_rdStoreOrd's) */
+extern uint32_t g_rdDrawOwner;
 /* the VU vertex pre-pass is being recorded (rd_replay_vu.c rd__vu_prepass;
  * the first-use line names it) */
 bool rd__vu_prepass_running(void);

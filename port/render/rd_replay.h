@@ -35,6 +35,7 @@ typedef struct ScreenRun {
     uint32_t tex, sampler, dateTex;
     RhiRect sc;
     RdStateBlock st;
+    uint32_t ord; /* g_rdStoreOrd of the command that opened the run (g_rdDrawOwner) */
 } ScreenRun;
 
 typedef struct Replay {
@@ -120,17 +121,19 @@ typedef struct DrawSetup {
     uint32_t a1xSteps;
 } DrawSetup;
 
-/* rd_replay.c: beginPass, bindDrawKeep, bindGroup, s_bindEpoch, drawCmd,
- * drawIndexedCmd, dstBind, dstPassMode, expandPasses, fillDrawCB,
- * prepareDraw, the MSAA epoch's sample count this replay (s_ms.want),
- * passPush (a pass begun outside beginPass: its pass ring entry and its
- * number in the pass window) */
+/* rd_replay.c: beginPass, bindDrawKeep, bindGroup, s_bindEpoch, dstBind,
+ * dstPassMode, expandPasses, fillDrawCB, prepareDraw, the MSAA epoch's
+ * sample count this replay (s_ms.want), passPush (a pass begun outside
+ * beginPass: its pass ring entry and its number in the pass window) */
 void rd__replay_begin_pass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, uint32_t did,
                            RhiLoadOp colorLoad, const float clear[4], RhiLoadOp depthLoad,
                            float clearDepth, bool storage);
 RhiBindGroup rd__replay_bind_draw_keep(Replay *r, const DrawSetup *ds);
 RhiBindGroup rd__replay_bind_group(RhiBindGroupLayout layout, const RhiBinding *b, uint32_t n);
 uint32_t rd__replay_bind_epoch(void);
+/* rd_occlusion.c: every GPU draw of the replay (rd_replay.c's drawCmd and
+ * drawIndexedCmd): nothing outside the pass window's take, and the draw
+ * inside an occlusion query while the measurement runs */
 void rd__replay_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
                      uint32_t instanceCount);
 void rd__replay_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,

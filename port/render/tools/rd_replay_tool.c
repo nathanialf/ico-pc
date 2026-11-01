@@ -120,8 +120,12 @@
  *                         texture, dumped blank), the state's FBA, PABE,
  *                         TEXA, DATE and targets, and a post record's kind,
  *                         rectangle, UVs, scalar, RGBA and blend
- *   --nop L:A[-B]         turns commands A..B of list L into NOPs before the
- *                         replay (repeatable), to find the draw behind a pixel
+ *   --nop SPEC            turns commands A..B of list L into NOPs before the
+ *                         replay (repeatable), to find the draw behind a pixel;
+ *                         SPEC is L:A[-B], several of them separated by commas
+ *                         (0:12-14,0:40, the --occlusion line's form), or
+ *                         @FILE for the spec in FILE (--occlusion-out's);
+ *                         the state commands in a range stay as they are
  *   --mesh NAME           prints the VU meshes of that name vertex by vertex
  *                         (stream quadwords; '*' where the static index list
  *                         draws the triangle ending at the vertex, '^' where
@@ -175,6 +179,41 @@
  *                         missing"; exit 1 on a miss.  <out.png> is unused
  *                         (give -).  The profile the set was made for is
  *                         printed first ("<dump>: keys: profile ...")
+ *   --gpu-repeat K        (with --stats) the GPU times of K warm replays:
+ *                         RHI_FRAMES_IN_FLIGHT + 1 + K replays after the
+ *                         picture, and after the gpu line one more, "<dump>:
+ *                         gpu median of R replays: total X ms, list 0 Y ms,
+ *                         VU pre-pass Z ms" over the records that came back
+ *                         (R, the first replay after the picture left out)
+ *   --occlusion           the hidden-draw measurement (docs/port/RENDER.md,
+ *                         "Culling"; rd_occlusion.c): the picture's replay
+ *                         draws each list-0 GPU draw inside an occlusion
+ *                         query of its own, under ICO_RD_VU_MERGE=0,
+ *                         ICO_RD_BLEND=fixed and the screen-prim runs off
+ *                         (one GPU draw a command; the tool sets them and
+ *                         says so), and prints "<dump>: occlusion: hidden N
+ *                         of M list-0 draws, T of U triangles (index count /
+ *                         3); hidden commands: SPEC": a draw command (screen
+ *                         prims, mesh, skinned, grid, particles) whose draws
+ *                         all passed 0 samples is hidden, SPEC its --nop spec
+ *                         ("none" when there is none); then a line of the
+ *                         commands, the shares, the queries and the draws not
+ *                         counted.  Vulkan only (another backend: exit 77).
+ *                         The same --nop SPEC replayed under --pass-dump
+ *                         draws the same pictures (nothing hidden drew a
+ *                         pixel), and under --stats --gpu-repeat K says what
+ *                         leaving the hidden draws out takes off list 0's
+ *                         GPU time (tools/occlusion_corpus.py)
+ *   --occlusion-out FILE  (with --occlusion) writes SPEC to FILE, for
+ *                         --nop @FILE
+ *   --occlusion-csv FILE  (with --occlusion) writes a line a command of the
+ *                         list that made a GPU draw: "cmd,type,draws,counted,
+ *                         triangles,samples".  Under ICO_VK_DEPTH_ALWAYS=1
+ *                         (every depth test passes) the hidden ones are those
+ *                         that draw nothing whatever the depth says (outside
+ *                         the view or the scissor, every fragment
+ *                         discarded); the corpus script takes them from the
+ *                         hidden set to leave what the depth hid
  *   --pass-times          (implies --stats) every replay timed pass by pass
  *                         ([dev] perf_passes, rd_perf.c): after the gpu line
  *                         the warm replay's passes, one line each ("pass N:
@@ -959,12 +998,14 @@ static void overlayTest(const RdOverlayCtx *ctx, void *user)
 }
 
 /* the replay's frame edits and the interpolation (prepareFrame) */
-static struct {
+typedef struct NopRange {
     unsigned l, a, b;
     bool prev; /* --interp-nop-prev: applied to the --interp PREV */
-} nops[64];
+} NopRange;
 
-static int nopCount;
+static NopRange *nops;
+
+static int nopCount, nopCap;
 static bool noAa1, interpAny;
 static const char *interpPrev, *saveBlended;
 static float interpT = 1.0f;
@@ -990,6 +1031,243 @@ static void dropHalf(RdFrame *f)
             }
         }
     }
+}
+
+/* one L:A[-B] item of a --nop spec; false when it is not one */
+static bool addNop(const char *item, bool prev)
+{
+    unsigned l = 0, a = 0, b = 0;
+    char tail = 0;
+    const int n = sscanf(item, "%u:%u-%u%c", &l, &a, &b, &tail);
+    if ((n != 2 && n != 3) || l >= RD_LIST_COUNT || (n == 3 && b < a)) {
+        return false;
+    }
+    if (n == 2 && strchr(item, '-') != NULL) {
+        return false;
+    }
+    if (nopCount == nopCap) {
+        const int cap = nopCap ? nopCap * 2 : 64;
+        NopRange *nr = realloc(nops, sizeof(*nr) * (size_t)cap);
+        if (!nr) {
+            return false;
+        }
+        nops = nr;
+        nopCap = cap;
+    }
+    nops[nopCount].l = l;
+    nops[nopCount].a = a;
+    nops[nopCount].b = n == 3 ? b : a;
+    nops[nopCount++].prev = prev;
+    return true;
+}
+
+/* a --nop spec: items separated by commas (and, from a file, white space),
+ * or @FILE; "none" (the --occlusion line's empty spec) adds nothing; false
+ * on a bad item or an unreadable file */
+static bool addNopSpec(const char *spec, bool prev)
+{
+    char *text = NULL;
+    if (spec[0] == '@') {
+        FILE *fp = fopen(spec + 1, "rb");
+        if (!fp) {
+            fprintf(stderr, "%s: cannot be read\n", spec + 1);
+            return false;
+        }
+        size_t cap = 4096, len = 0;
+        text = malloc(cap);
+        size_t got;
+        while (text && (got = fread(text + len, 1, cap - len - 1, fp)) > 0) {
+            len += got;
+            if (len + 1 == cap) {
+                char *t = realloc(text, cap * 2);
+                if (!t) {
+                    free(text);
+                    text = NULL;
+                    break;
+                }
+                text = t;
+                cap *= 2;
+            }
+        }
+        fclose(fp);
+        if (!text) {
+            return false;
+        }
+        text[len] = '\0';
+    } else {
+        text = malloc(strlen(spec) + 1);
+        if (!text) {
+            return false;
+        }
+        strcpy(text, spec);
+    }
+    bool ok = true;
+    for (char *tok = strtok(text, ", \t\r\n"); tok && ok; tok = strtok(NULL, ", \t\r\n")) {
+        if (strcmp(tok, "none") != 0) {
+            ok = addNop(tok, prev);
+            if (!ok) {
+                fprintf(stderr, "bad --nop item '%s' (L:A or L:A-B)\n", tok);
+            }
+        }
+    }
+    free(text);
+    return ok;
+}
+
+/* the median of v[0 .. n - 1] (sorted in place), 0 for none */
+static int cmpDouble(const void *a, const void *b)
+{
+    const double x = *(const double *)a, y = *(const double *)b;
+    return x < y ? -1 : x > y ? 1 : 0;
+}
+
+static double medianOf(double *v, int n)
+{
+    if (!v || n <= 0) {
+        return 0.0;
+    }
+    qsort(v, (size_t)n, sizeof(double), cmpDouble);
+    return n % 2 ? v[n / 2] : 0.5 * (v[n / 2 - 1] + v[n / 2]);
+}
+
+/* setenv for --occlusion's settings: the mingw C runtime has _putenv_s */
+static void setEnv(const char *name, const char *value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value);
+#else
+    setenv(name, value, 1);
+#endif
+}
+
+/* a draw command of the lists (rd_occlusion.c's measurement counts these) */
+static bool isDrawCmd(uint8_t type)
+{
+    return type == RDC_SCREEN || type == RDC_MESH || type == RDC_SKINNED || type == RDC_GRID ||
+           type == RDC_PARTICLES;
+}
+
+/* --occlusion's lines from the measurement (rd__occlusion_take) of frame
+ * f's list; the --nop spec written to outFile when given.  Ranges join
+ * hidden commands across state commands and NOPs only, so a range NOPs
+ * nothing but hidden draws (prepareFrame keeps the state commands) */
+static bool printOcclusion(const char *dump, const RdFrame *f, const RdOccResult *o,
+                           const char *outFile, const char *csvFile)
+{
+    const RdCmdList *cl = &f->lists[o->list];
+    uint64_t draws = 0, hidden = 0, tris = 0, hiddenTris = 0, other = 0;
+    uint32_t cmds = 0, hiddenCmds = 0;
+    bool *hid = calloc(cl->count ? cl->count : 1, sizeof(bool));
+    if (!hid) {
+        return false;
+    }
+    for (uint32_t c = 0; c < o->cmdCount; c++) {
+        const RdOccCmd *e = &o->cmds[c];
+        if (!e->draws) {
+            continue;
+        }
+        if (c >= cl->count || !isDrawCmd(cl->cmds[c].type)) {
+            other += e->draws; /* a clear or a fill drawn in the list: not a candidate */
+            continue;
+        }
+        cmds++;
+        draws += e->draws;
+        tris += e->tris;
+        if (e->counted == e->draws && e->samples == 0) {
+            hid[c] = true;
+            hiddenCmds++;
+            hidden += e->draws;
+            hiddenTris += e->tris;
+        }
+    }
+    size_t cap = 256, len = 0;
+    char *spec = malloc(cap);
+    if (!spec) {
+        free(hid);
+        return false;
+    }
+    spec[0] = '\0';
+    for (uint32_t c = 0; c < cl->count; c++) {
+        if (!hid[c]) {
+            continue;
+        }
+        uint32_t b = c;
+        for (uint32_t k = c + 1; k < cl->count; k++) {
+            const uint8_t t = cl->cmds[k].type;
+            if (hid[k]) {
+                b = k;
+            } else if (!rd__cmd_is_state(t) && t != RDC_NOP) {
+                break;
+            }
+        }
+        char item[48];
+        const int n =
+            b == c ? snprintf(item, sizeof(item), "%s%d:%u", len ? "," : "", o->list, c)
+                   : snprintf(item, sizeof(item), "%s%d:%u-%u", len ? "," : "", o->list, c, b);
+        if (len + (size_t)n + 1 > cap) {
+            while (len + (size_t)n + 1 > cap) {
+                cap *= 2;
+            }
+            char *t = realloc(spec, cap);
+            if (!t) {
+                free(spec);
+                free(hid);
+                return false;
+            }
+            spec = t;
+        }
+        memcpy(spec + len, item, (size_t)n + 1);
+        len += (size_t)n;
+        c = b;
+    }
+    free(hid);
+    printf("%s: occlusion: hidden %llu of %llu list-%d draws, %llu of %llu triangles (index count "
+           "/ 3); hidden commands: %s\n",
+           dump, (unsigned long long)hidden, (unsigned long long)draws, o->list,
+           (unsigned long long)hiddenTris, (unsigned long long)tris, len ? spec : "none");
+    printf("%s: occlusion: %u of %u draw commands hidden; %.1f %% of the draws, %.1f %% of the "
+           "triangles; %u queries, %u without a count, %u draws past the %u queries; %llu draws "
+           "of other commands not counted; measured under ICO_RD_VU_MERGE=0, ICO_RD_BLEND=fixed "
+           "and the screen-prim runs off\n",
+           dump, hiddenCmds, cmds, draws ? 100.0 * (double)hidden / (double)draws : 0.0,
+           tris ? 100.0 * (double)hiddenTris / (double)tris : 0.0, o->queries, o->unread,
+           o->overflow, (unsigned)RHI_MAX_OCCLUSION, (unsigned long long)other);
+    bool ok = true;
+    if (outFile) {
+        FILE *fp = fopen(outFile, "wb");
+        ok = fp && fprintf(fp, "%s\n", len ? spec : "none") >= 0;
+        if (fp && fclose(fp) != 0) {
+            ok = false;
+        }
+        if (!ok) {
+            fprintf(stderr, "%s: the --nop spec could not be written\n", outFile);
+        }
+    }
+    free(spec);
+    if (csvFile) {
+        /* every command of the list that made a GPU draw, for the corpus
+           script's joins (tools/occlusion_corpus.py) */
+        FILE *fp = fopen(csvFile, "wb");
+        bool csvOk = fp && fprintf(fp, "cmd,type,draws,counted,triangles,samples\n") >= 0;
+        for (uint32_t c = 0; csvOk && c < o->cmdCount; c++) {
+            const RdOccCmd *e = &o->cmds[c];
+            if (e->draws) {
+                const uint8_t t = c < cl->count ? cl->cmds[c].type : RDC_NOP;
+                csvOk = fprintf(fp, "%u,%s,%u,%u,%llu,%llu\n", c,
+                                c < cl->count && t < RDC_COUNT ? kCmdNames[t] : "-", e->draws,
+                                e->counted, (unsigned long long)e->tris,
+                                (unsigned long long)e->samples) >= 0;
+            }
+        }
+        if (fp && fclose(fp) != 0) {
+            csvOk = false;
+        }
+        if (!csvOk) {
+            fprintf(stderr, "%s: the per-command table could not be written\n", csvFile);
+            ok = false;
+        }
+    }
+    return ok;
 }
 
 /* replays the --prev dumps in order; false on a load failure */
@@ -1475,7 +1753,9 @@ int main(int argc, char **argv)
                 "[--work-clear RRGGBB] [--no-glow-edge] "
                 "[--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12|opengl|d3d11] [--list] "
-                "[--nop L:A[-B]] "
+                "[--nop L:A[-B][,...]|@FILE] [--occlusion [--occlusion-out FILE] "
+                "[--occlusion-csv FILE]] "
+                "[--gpu-repeat K] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
                 "[--time N] [--keys] "
                 "[--pass-dump DIR] "
@@ -1495,7 +1775,12 @@ int main(int argc, char **argv)
     /* the display options */
     RdSettings s;
     bool list = false, overlay = false, stats = false, passTimes = false;
-    int timeN = 0; /* --time N */
+    int timeN = 0;                   /* --time N */
+    int gpuRepeat = 1;               /* --gpu-repeat K */
+    bool occlusion = false;          /* --occlusion */
+    const char *occlusionOut = NULL; /* --occlusion-out FILE */
+    const char *occlusionCsv = NULL; /* --occlusion-csv FILE */
+    bool occFailed = false;          /* the spec could not be written */
     bool noDevice = false, aspectGiven = false;
     bool keysCheck = false;
     int vuRefL[8], vuRefCount = 0;
@@ -1723,17 +2008,26 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "--dump-textures") == 0 && i + 1 < argc) {
             texDir = argv[++i];
         } else if ((strcmp(argv[i], "--nop") == 0 || strcmp(argv[i], "--interp-nop-prev") == 0) &&
-                   i + 1 < argc && nopCount < 64) {
-            unsigned l = 0, a = 0, b = 0;
-            int n = sscanf(argv[++i], "%u:%u-%u", &l, &a, &b);
-            if (n < 2 || l >= RD_LIST_COUNT) {
+                   i + 1 < argc) {
+            const bool prev = strcmp(argv[i], "--interp-nop-prev") == 0;
+            if (!addNopSpec(argv[++i], prev)) {
                 fprintf(stderr, "bad %s\n", argv[i - 1]);
                 return 1;
             }
-            nops[nopCount].l = l;
-            nops[nopCount].a = a;
-            nops[nopCount].prev = strcmp(argv[i - 1], "--interp-nop-prev") == 0;
-            nops[nopCount++].b = n == 3 ? b : a;
+        } else if (strcmp(argv[i], "--occlusion") == 0) {
+            occlusion = true;
+        } else if (strcmp(argv[i], "--occlusion-out") == 0 && i + 1 < argc) {
+            occlusionOut = argv[++i];
+        } else if (strcmp(argv[i], "--occlusion-csv") == 0 && i + 1 < argc) {
+            occlusionCsv = argv[++i];
+        } else if (strcmp(argv[i], "--gpu-repeat") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            const long n = strtol(argv[++i], &end, 10);
+            if (!end || *end != '\0' || n < 1 || n > 1000) {
+                fprintf(stderr, "bad --gpu-repeat (a count of replays, 1..1000)\n");
+                return 1;
+            }
+            gpuRepeat = (int)n;
         } else if (strcmp(argv[i], "--present") == 0 && i + 1 < argc) {
             if (sscanf(argv[++i], "%ux%u", &pw, &ph) != 2 || !pw || !ph) {
                 fprintf(stderr, "bad --present size\n");
@@ -1763,6 +2057,24 @@ int main(int argc, char **argv)
     if (saveBlended && (!interpPrev || presentsN)) {
         fprintf(stderr, "--save-blended needs --interp T PREV (and not --presents)\n");
         return 1;
+    }
+    if ((occlusionOut || occlusionCsv) && !occlusion) {
+        fprintf(stderr, "--occlusion-out and --occlusion-csv need --occlusion\n");
+        return 1;
+    }
+    if (occlusion && (presentsN || lossBisect || keysCheck || noDevice)) {
+        fprintf(stderr, "--occlusion measures one replay of the frame: not with --presents, "
+                        "--loss-bisect, --keys or --no-device\n");
+        return 1;
+    }
+    if (occlusion) {
+        /* one GPU draw a command (rd_occlusion.c): the VU draw merge off
+           (read at rd_init) and the fixed-function blend, the measurement's
+           settings whatever the environment says */
+        setEnv("ICO_RD_VU_MERGE", "0");
+        setEnv("ICO_RD_BLEND", "fixed");
+        printf("note: --occlusion: the replays run under ICO_RD_VU_MERGE=0, ICO_RD_BLEND=fixed and "
+               "the screen-prim runs off (one GPU draw a command)\n");
     }
     uint32_t gw = 0, gh = 0;
     if (!unzipDump(&dump, 0) || (interpPrev && !unzipDump(&interpPrev, 1))) {
@@ -1960,7 +2272,32 @@ int main(int argc, char **argv)
                    "--interp T PREV --presents N)\n");
         }
     }
+    if (occlusion) {
+        if (!rhi_occlusion_supported()) {
+            fprintf(stderr, "%s: occlusion: not measured: no occlusion queries on %s\n", dump,
+                    rhi_backend_kind_name(rhi_backend()));
+            rd__frame_free(&f);
+            rd__frame_free(&pf);
+            rd_shutdown();
+            return 77;
+        }
+        rd__set_screen_merge(false);
+        rd__occlusion_arm(0);
+    }
     const bool replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
+    if (occlusion) {
+        /* the counts before anything else recycles a frame slot */
+        RdOccResult occ;
+        const bool measured = rd__occlusion_take(&occ);
+        if (!replayed) {
+            fprintf(stderr, "%s: occlusion: the replay failed\n", dump);
+        } else if (!printOcclusion(dump, rf, &occ, occlusionOut, occlusionCsv)) {
+            occFailed = true; /* the picture still written; the exit says the spec is not */
+        } else if (!measured) {
+            printf("%s: occlusion: no list-0 draw was measured\n", dump);
+        }
+        free(occ.cmds);
+    }
     if (replayed && saveBlended) {
         /* after the replay, as rd_present writes F12's (rd_interp.c
            blendedDumpTake) */
@@ -2252,10 +2589,23 @@ int main(int argc, char **argv)
         uint32_t passCount = 0;
         memset(&last, 0, sizeof(last));
         rd__set_perf_passes(passTimes);
-        for (int k = 0; k < RHI_FRAMES_IN_FLIGHT + 2; k++) {
+        /* --gpu-repeat K: the warm records past the first replay after the
+           picture's (whose replay id is g_rdPerf's now) */
+        const uint32_t pictureReplay = g_rdPerf.replay;
+        double *repTotal = gpuRepeat > 1 ? calloc((size_t)gpuRepeat + 4, sizeof(double)) : NULL;
+        double *repList0 = gpuRepeat > 1 ? calloc((size_t)gpuRepeat + 4, sizeof(double)) : NULL;
+        double *repPre = gpuRepeat > 1 ? calloc((size_t)gpuRepeat + 4, sizeof(double)) : NULL;
+        int repN = 0;
+        for (int k = 0; k < RHI_FRAMES_IN_FLIGHT + 1 + gpuRepeat; k++) {
             rd__replay_frame(rf, (int)rf->keep, pw != 0);
             while (rd_perf_pop(&pr)) {
                 if (pr.gpuValid) {
+                    if (repTotal && repList0 && repPre && pr.replay > pictureReplay + 1u &&
+                        repN < gpuRepeat + 4) {
+                        repTotal[repN] = pr.gpuMs;
+                        repList0[repN] = pr.gpuListMs[0];
+                        repPre[repN++] = pr.gpuPrepassMs;
+                    }
                     last = pr;
                     have = true;
                     const RdPerfPass *pp;
@@ -2279,6 +2629,12 @@ int main(int argc, char **argv)
             printf("%s; present %.3f; VU pre-pass %.3f\n",
                    last.gpuPostPartial ? " (not all timed apart)" : "", last.gpuPresentMs,
                    last.gpuPrepassMs);
+            if (gpuRepeat > 1) {
+                printf("%s: gpu median of %d replays: total %.3f ms, list 0 %.3f ms, VU pre-pass "
+                       "%.3f ms\n",
+                       dump, repN, medianOf(repTotal, repN), medianOf(repList0, repN),
+                       medianOf(repPre, repN));
+            }
             if (passTimes) {
                 /* the warm replay pass by pass, then the window's texts */
                 static RdPerfPassAgg agg;
@@ -2311,8 +2667,14 @@ int main(int argc, char **argv)
         } else {
             printf("%s: gpu: no timestamps came back\n", dump);
         }
+        free(repTotal);
+        free(repList0);
+        free(repPre);
     }
     if (rc == 0 && timeN > 0 && !timeReplays(dump, &pf, &f, rf, timeN, pw != 0)) {
+        rc = 1;
+    }
+    if (occFailed) {
         rc = 1;
     }
     rd__frame_free(&f);

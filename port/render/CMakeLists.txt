@@ -143,6 +143,7 @@ add_library(ico_render STATIC
     rd_join.c
     rd_local_probe.c # the desktop's local reads: the start-up cost probe
     rd_mesh.c
+    rd_occlusion.c # the replay's GPU draw issue and the hidden-draw measurement around it
     rd_msaa.c # the MSAA epoch's resolve pass (the covered-majority rule) and its close line
     rd_passring.c # the last passes recorded, for the device-loss report
     rd_profile.c # the device profile: what this device class gets 
@@ -1762,6 +1763,22 @@ if(ICO_RUN_TESTS)
                                                      LABELS mali)
     if(_env)
         set_tests_properties(rd_vumerge_mali PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    # rd_occlusion_tool (test/rd_occlusion_tool.cmake, docs/port/RENDER.md
+    # "Culling"): rd_replay_tool --occlusion on the first dump of the
+    # machine-local list tools/occlusion_corpus.txt here, at Original 4:3 1x:
+    # the hidden-draw line's shape and its --nop spec, then the plain replay
+    # and the replay with the hidden commands NOPs, DISPLAY and PRESENT byte
+    # for byte under ICO_RD_BLEND=fixed; SKIP without the list, a dump or a
+    # device
+    add_test(NAME rd_occlusion_tool
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/occlusion_tool"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_occlusion_tool.cmake")
+    set_tests_properties(rd_occlusion_tool PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
+    if(_env)
+        set_tests_properties(rd_occlusion_tool PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_noplanes_ab (test/rd_noplanes_ab.cmake, issue 161): the dumps of the
     # machine-local list tools/noplanes_dumps.txt (the title and the boot,
