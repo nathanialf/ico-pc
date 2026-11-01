@@ -56,6 +56,21 @@ int ico_path_kind(const char *path, unsigned long long *size, long long *mtime);
 typedef int (*IcoDirWalkFn)(const char *path, const char *name, void *user);
 int ico_dir_walk(const char *dir, int depth, IcoDirWalkFn fn, void *user);
 
+/* The entries of the folder dir itself (no deeper), in byte order of
+   their names, "." and ".." left out and the hidden ones (a leading '.')
+   too unless hidden is 1: fn(name, kind, user) for each, kind 0 a file, 1
+   a folder, 2 a link to a folder or a link to nothing (a link to a file is
+   0), until fn returns non-zero.  The number visited, or -1 when dir
+   cannot be read. */
+typedef int (*IcoDirEntryFn)(const char *name, int kind, void *user);
+int ico_dir_entries(const char *dir, int hidden, IcoDirEntryFn fn, void *user);
+/* Deletes path: a file, or a folder with everything below it, the hidden
+   entries too; a link (to a file or a folder, a symbolic link or a Windows
+   junction) is deleted itself, never followed.  0 when nothing is left at
+   path (nothing there is 0 too), -1 when something could not be deleted
+   (what could be is gone). */
+int ico_remove_tree(const char *path);
+
 /* The AppImage this program runs from (Linux). The AppImage runtime mounts
    the file's contents read-only at $APPDIR (or extracts them there, with
    --appimage-extract-and-run) and starts the program inside with $APPIMAGE

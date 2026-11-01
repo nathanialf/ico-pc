@@ -3,6 +3,7 @@
 
 target_sources(ico_platform PRIVATE
     arena.c
+    backup.c
     code_hash.c
     diag_host.c
     fiber.c
@@ -177,6 +178,18 @@ target_compile_options(dump_zip_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 target_link_libraries(dump_zip_test PRIVATE ico_host_fs ico_miniz)
 if(ICO_RUN_TESTS)
     add_test(NAME dump_zip COMMAND dump_zip_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# Options > Extras > Back up your data and Restore from a backup (backup.c):
+# a user folder under the build folder backed up, inspected, unpacked and
+# put in place, byte for byte, and the refusals (not a backup, a path that
+# climbs out, past the bounds, a busy card or save state) and a failed move
+# undone
+add_executable(backup_test test/backup_test.c backup.c)
+target_compile_options(backup_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(backup_test PRIVATE ico_host_fs ico_miniz)
+if(ICO_RUN_TESTS)
+    add_test(NAME backup COMMAND backup_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # An rc build's Share a bug report's files (share_report.c, compiled into

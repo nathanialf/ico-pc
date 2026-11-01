@@ -328,10 +328,10 @@ static int walk_name_cmp(const void *a, const void *b)
     return strcmp(*(char *const *)a, *(char *const *)b);
 }
 
-/* The entries of dir except the hidden ones (a leading '.'), as
-   malloc'd UTF-8 names in *out, sorted: the count, or -1 when dir cannot
-   be read. */
-static int walk_list(const char *dir, char ***out)
+/* The entries of dir except "." and ".." and, unless hidden, the hidden
+   ones (a leading '.'), as malloc'd UTF-8 names in *out, sorted: the
+   count, or -1 when dir cannot be read. */
+static int walk_list(const char *dir, char ***out, int hidden)
 {
 #ifdef _WIN32
     wchar_t *wp = ico_widen(dir);
@@ -371,7 +371,7 @@ static int walk_list(const char *dir, char ***out)
         }
         name = e->d_name;
 #endif
-        if (name[0] == '.') {
+        if (name[0] == '.' && (!hidden || name[1] == '\0' || (name[1] == '.' && name[2] == '\0'))) {
             continue;
         }
         if (n == cap) {
@@ -432,7 +432,7 @@ static int walk_is_link(const char *path)
 static int walk_dir(const char *dir, int depth, IcoDirWalkFn fn, void *user, int *files)
 {
     char **names;
-    int n = walk_list(dir, &names);
+    int n = walk_list(dir, &names, 0);
     int stop = 0;
 
     if (n < 0) {
@@ -472,6 +472,79 @@ int ico_dir_walk(const char *dir, int depth, IcoDirWalkFn fn, void *user)
         return -1;
     }
     return files;
+}
+
+int ico_dir_entries(const char *dir, int hidden, IcoDirEntryFn fn, void *user)
+{
+    char **names;
+    const int n = dir != NULL && dir[0] != '\0' && fn != NULL ? walk_list(dir, &names, hidden) : -1;
+    int visited = 0, stop = 0;
+
+    if (n < 0) {
+        return -1;
+    }
+    for (int i = 0; i < n; i++) {
+        const size_t len = strlen(dir) + 1 + strlen(names[i]) + 1;
+        char *path = stop ? NULL : malloc(len);
+
+        if (path != NULL) {
+            snprintf(path, len, "%s/%s", dir, names[i]);
+            int kind = ico_path_kind(path, NULL, NULL);
+            if (kind < 0 || (kind == 1 && walk_is_link(path))) {
+                kind = 2;
+            }
+            visited++;
+            stop = fn(names[i], kind, user) != 0;
+            free(path);
+        }
+        free(names[i]);
+    }
+    free(names);
+    return visited;
+}
+
+int ico_remove_tree(const char *path)
+{
+    const int kind = path != NULL && path[0] != '\0' ? ico_path_kind(path, NULL, NULL) : -1;
+    char **names;
+    int n, bad = 0;
+
+    if (path == NULL || path[0] == '\0') {
+        return -1;
+    }
+    if (walk_is_link(path)) {
+        /* the link itself, never what it points to */
+#ifdef _WIN32
+        return (kind == 1 ? ico_rmdir(path) : ico_remove(path)) == 0 ? 0 : -1;
+#else
+        return ico_remove(path) == 0 ? 0 : -1;
+#endif
+    }
+    if (kind < 0) {
+        return 0; /* nothing there */
+    }
+    if (kind == 0) {
+        return ico_remove(path) == 0 ? 0 : -1;
+    }
+    n = walk_list(path, &names, 1);
+    if (n < 0) {
+        return -1;
+    }
+    for (int i = 0; i < n; i++) {
+        const size_t len = strlen(path) + 1 + strlen(names[i]) + 1;
+        char *sub = malloc(len);
+
+        if (sub == NULL) {
+            bad = 1;
+        } else {
+            snprintf(sub, len, "%s/%s", path, names[i]);
+            bad |= ico_remove_tree(sub) != 0;
+            free(sub);
+        }
+        free(names[i]);
+    }
+    free(names);
+    return ico_rmdir(path) == 0 && !bad ? 0 : -1;
 }
 
 /* ---- the drive a path sits on ---- */
