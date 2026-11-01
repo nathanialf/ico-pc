@@ -6,13 +6,16 @@
 # rd-00115 .. rd-00123 of a dump_every=1 run, first the dump's last list 11
 # commands (rd_replay_tool --list --no-device: which ones end with the
 # fade, the letterbox or the brightness), then rd_replay_tool's --pass-dump
-# with --stats twice, with ICO_RD_FADES_FOLD=0 (the sprites drawn) and with
-# the default (the fold), under two blends and three settings:
+# with --stats twice, with ICO_RD_FADES_FOLD=0 (the sprites drawn, the
+# default) and with ICO_RD_FADES_FOLD=1 (the fold), under two blends and
+# three settings:
 #   blends    ICO_RD_BLEND=attachment (the exact GS blend through the
 #             destination read: the sprites store the GS's floor, and so
-#             does the fold) and ICO_RD_BLEND=fixed (the default
+#             does the fold: its log line must say "the GS's floor") and
+#             ICO_RD_BLEND=fixed (the default
 #             fixed-function blend: the sprites store the nearest level, the
-#             fold too but for the blender's own ties and precision);
+#             fold too but for the blender's own ties and precision; the
+#             log line "the nearest level");
 #   orig      Original at the dump's aspect, presented at 640x480: the
 #             reduction's GS sprite model, the steps on SCENE's texels;
 #   enh2x     Enhanced 2x, presented at 1280x960: the hardware sprite, the
@@ -24,12 +27,13 @@
 #             the aspect cannot show it and is skipped there.
 # Every target's PNG but SCENE's (it holds the picture without the sprites
 # by design: the WORK2 caveat of docs/port/WORK_BUFFERS.md) is compared:
-# byte for byte where the fold did not happen (the default run says
+# byte for byte where the fold did not happen (the folded run says
 # "fades fold on: 0") and under the exact blend where the log says the steps
 # were applied before the GS filter; elsewhere within one level on every
 # channel (png_level_diff.py), the channels a level apart counted and
 # printed per target, dump, blend and setting (docs/port/DIVERGENCES.md
-# VD-27).  The A/B run must say "fades fold off" with none folded.  Some
+# VD-27).  The A/B run must say "fades fold off" with none folded; a run
+# whose reduction did not take a planned fold ("took another way") fails.  Some
 # dump must fold at some setting (else the gate saw nothing).  A missing
 # list or dump is named and skipped; no dump read, or no device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DBOOT=<start-up folder or "">
@@ -137,8 +141,9 @@ foreach(dump IN LISTS dumps)
         message(STATUS "${dump} ${s}: skipped (drawn narrower than the setting's aspect)")
         continue()
       endif()
-      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=${blend} ${env_${s}}
-                              "${TOOL}" "${dump}" - --pass-dump "${dirOn}" --stats ${args_${s}}
+      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=${blend} ICO_RD_FADES_FOLD=1
+                              ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dirOn}" --stats
+                              ${args_${s}}
                       RESULT_VARIABLE rcOn OUTPUT_VARIABLE outOn ERROR_VARIABLE errOn)
       if(NOT rcOff EQUAL 0 OR NOT rcOn EQUAL 0)
         message(SEND_ERROR "${dump} ${s} ${blend}: exit ${rcOff} (drawn) and ${rcOn} (folded):\n"
@@ -164,9 +169,26 @@ foreach(dump IN LISTS dumps)
       set(nOn "${CMAKE_MATCH_2}")
       if(NOT stateOff STREQUAL "off" OR NOT nOff EQUAL 0 OR NOT stateOn STREQUAL "on")
         message(SEND_ERROR "${dump} ${s} ${blend}: ICO_RD_FADES_FOLD=0 says ${stateOff} with "
-                           "${nOff} folded, the default ${stateOn}")
+                           "${nOff} folded, ICO_RD_FADES_FOLD=1 ${stateOn}")
         math(EXPR failures "${failures} + 1")
         continue()
+      endif()
+      if("${errOn}${outOn}" MATCHES "fades fold: the reduction took another way \\(([^)]*)\\)")
+        message(SEND_ERROR "${dump} ${s} ${blend}: the reduction did not take the planned fold "
+                           "(${CMAKE_MATCH_1}): the picture lacks the sprites")
+        math(EXPR failures "${failures} + 1")
+        continue()
+      endif()
+      if(nOn GREATER 0)
+        # the rounding the plan chose: the GS's floor under the exact blend
+        set(wantRound "the nearest level")
+        if(blend STREQUAL "attachment")
+          set(wantRound "the GS's floor")
+        endif()
+        if(NOT "${errOn}${outOn}" MATCHES "rounding ${wantRound}")
+          message(SEND_ERROR "${dump} ${s} ${blend}: the fold does not round to ${wantRound}")
+          math(EXPR failures "${failures} + 1")
+        endif()
       endif()
       math(EXPR folds "${folds} + ${nOn}")
       # exact where the steps met SCENE's texels before the GS filter under

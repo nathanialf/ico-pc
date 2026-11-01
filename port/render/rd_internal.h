@@ -3068,6 +3068,8 @@ uint64_t rd__blur_snapshot_count(void);
  * off flags it as any other scaled pair (tests: the same frame both ways,
  * byte for byte). */
 void rd__set_a1x_gs_keep(bool on);
+/* its state (rd_fades_fold.c: the plan foresees the flag) */
+bool rd__a1x_gs_keep(void);
 
 /* rd_perf.c (rd.h RdPerfRecord): the record of the replay
  * being made.  rd__perf_begin starts it (the CPU phases are added to it by

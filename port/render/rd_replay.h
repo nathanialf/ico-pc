@@ -382,7 +382,10 @@ int rd__replay_glow_edge_columns(const Replay *r, const RdFrame *f, const RdCmd 
  *                       sprite above 1x (ICO_DF_FOLD)
  * rd__fades_fold_end    rd_store_plan.c rd__store_plan_end: a plan no
  *                       reduction took is logged and turns the fold off
- *                       (rd__fades_fold_on, rd_internal.h) */
+ *                       (rd__fades_fold_on, rd_internal.h)
+ * rd__fades_fold_exact  whether the sprites blend exactly (the GS's floor)
+ *                       under exact mode mode (RdBlendExact) on a target of
+ *                       dstUsage usage: RdFadesFoldEnv.exact */
 #define RD_FADES_FOLD_STEPS 4
 #define RD_FADES_FOLD_SPRITES 8
 
@@ -408,6 +411,7 @@ void rd__fades_fold_fx(IcoDrawCB *cb, uint8_t kind, const RdTargetRec *src);
 void rd__fades_fold_screen(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds,
                            IcoDrawCB *cb);
 void rd__fades_fold_end(void);
+bool rd__fades_fold_exact(int mode, uint32_t usage, bool rgba8);
 /* rd_replay_vu.c.
  * rd__replay_vu       a VU draw under its camera's picture
  * rd__vu_prepass      before list 0 (replayFrame, after the uploads and

@@ -1,5 +1,5 @@
 /* rd_fades_fold.c: the fades fold (docs/port/RENDER.md, "The fades fold";
- * [dev] fades_fold, ICO_RD_FADES_FOLD).
+ * [dev] fades_fold, ICO_RD_FADES_FOLD; off unless it is true / 1).
  *
  * List 11 ends with the game's full-frame post sprites (rd_post.c): the
  * brightness (a white sprite, ALPHA 0x44 at alpha = the step), the fade
@@ -46,7 +46,14 @@
  *     MSAA (the epoch resolves SCENE, a per-sample lerp is not the lerp of
  *     the resolve), at most four steps, and above 1x no bar while the
  *     reduction resamples SCENE through the above-1x kernels (their taps
- *     span several rows; the bilinear's two rows are handled, below).
+ *     span several rows; the bilinear's two rows are handled, below; the
+ *     kernels are foreseen as rd_replay.c doBlurSpriteDraw picks them,
+ *     rd__a1x_gs_keep included);
+ *   - the rounding (roundingRefusal): a step whose k is 0 or 0x80 stores
+ *     the same level under any blend and filter; of the steps between, on
+ *     each kind of row (between the bars, in a bar) after the last k 0x80
+ *     one, any number at scale 1 under an exact blend, one at scale 1 under
+ *     the fixed-function blend, none above 1x.
  *
  * The reduction (rd_replay.c doBlurSpriteDraw, rd__fades_fold_fx; or its
  * hardware sprite above 1x, rd_pixel_plan.c rd__fill_draw_cb_extra,
@@ -61,14 +68,20 @@
  *     blend (the default) the sprites store the nearest level (VD-7), and
  *     the step adds 64 before its shift: the nearest level too, but for the
  *     blender's own ties and precision (a level, counted by ctest
- *     rd_fades_fold_ab; docs/port/DIVERGENCES.md VD-27);
+ *     rd_fades_fold_ab; docs/port/DIVERGENCES.md VD-27), so one such step a
+ *     row (two would add their levels);
  *   - above 1x (sprite_ps, ICO_DF_FOLD) the hardware filters SCENE first
- *     and the steps follow on the sampled texel (sprite.hlsl sprite_fold):
- *     a step is affine in the texel and the weights sum to 1, so this is
- *     the filter of the stepped texels but for their rounding to 8 bits (a
- *     level at most).  Where the filter's two rows straddle a bar's edge,
- *     each row is sampled alone, stepped by its own steps and weighed as
- *     the filter weighs them;
+ *     and the steps follow on the sampled texel (sprite.hlsl sprite_fold).
+ *     Only steps of k 0 or 0x80 are taken there: the rows such a step
+ *     covers hold one value, which any filter keeps, so the filter of the
+ *     stepped texels is the stepped filter byte for byte.  A step between
+ *     levels is not: the filter rounds its sum and the step its own
+ *     product, and the two orders end two levels apart on some channels
+ *     (a CPU model of a rounding and of a truncating bilinear, even for
+ *     one step of a small k).  Where the filter's two rows straddle a
+ *     bar's edge, each row is sampled alone, stepped by its own steps and
+ *     weighed as the filter weighs them (the shader's weighing against the
+ *     hardware's: a level at most, on those rows alone);
  *   - DISPLAY's alpha is the last step's (what SCENE's alpha would have
  *     been), the bars' rows SCENE's texel rows the bars covered (their
  *     corners snapped to whole GS pixels on a scaled target, as rd_replay.c
@@ -275,7 +288,10 @@ static const char *foldReduction(const RdFrame *f, const RdCmd *c, const RdState
         return "the reduction's tint is black";
     }
     *scaled = rd__blur_screen_fallback(RD_POST_REDUCTION, &p, st) != ~0u;
-    *above1x = *scaled && reductionAbove1x(rd__target_rec(st->color), rd__target_rec(sceneId), &p);
+    /* rd_replay.c doBlurSpriteDraw: the GS's filter kept (no DF_ABOVE1X)
+     * only while rd__set_a1x_gs_keep is on and the steps stay inside it */
+    *above1x = *scaled && (!rd__a1x_gs_keep() || reductionAbove1x(rd__target_rec(st->color),
+                                                                  rd__target_rec(sceneId), &p));
     return NULL;
 }
 
@@ -301,6 +317,48 @@ static bool readsSceneDepth(const RdCmd *c, const RdStateBlock *st, uint32_t sce
     }
     const RdTexRec *t = d->texEnabled ? rd__tex_rec(st->tex) : NULL;
     return t && t->kind == RD_TEXKIND_TARGET && t->view == RD_VIEW_DEPTH && t->target == sceneId;
+}
+
+/* The rounding (the file comment's "the rounding"): why the steps p (n,
+ * steps, sides filled) cannot give the bytes the sprites would, or NULL.
+ * A step whose k is 0 (Cd kept) or 0x80 (Cs) stores the same level under
+ * every blend and filter, a constant over its rows; one between them
+ * rounds.  Per kind of row (between the bars, in a bar) the steps between
+ * levels since the last k 0x80 one are counted: on the GS sprite model
+ * under an exact blend any number (each tap is the texel SCENE would have
+ * held, byte for byte); under the fixed-function blend one (each rounds to
+ * the nearest level where the blender rounds by its own precision: a level
+ * apart at most for one step, two after two); after the hardware filter
+ * (scaled) none (the filter's rounding and the step's do not commute: two
+ * levels apart on some channels for a single step whatever the filter's
+ * own rounding). */
+static const char *roundingRefusal(const RdFadesFold *p, bool exact, int scaled)
+{
+    if (exact && !scaled) {
+        return NULL;
+    }
+    for (int bar = 0; bar < 2; bar++) {
+        uint32_t between = 0;
+        for (uint32_t m = 0; m < p->n; m++) {
+            if (p->sides[m] != 0 && !bar) {
+                continue; /* a bar step: not on the rows between the bars */
+            }
+            const uint32_t k = p->steps[m] >> 24;
+            if (k == 0x80u) {
+                between = 0;
+            } else if (k != 0u) {
+                between++;
+            }
+        }
+        if (scaled && between > 0) {
+            return "a step between two levels after the hardware filter (above 1x), whose "
+                   "rounding is not the sprite's";
+        }
+        if (between > 1) {
+            return "two steps between levels on one row under the fixed-function blend";
+        }
+    }
+    return NULL;
 }
 
 const char *rd__fades_fold_plan(const RdFrame *f, int keep, const RdFadesFoldEnv *env,
@@ -446,6 +504,10 @@ const char *rd__fades_fold_plan(const RdFrame *f, int keep, const RdFadesFoldEnv
     if (sides && scaled && above1x) {
         return "the reduction resamples SCENE over several rows (above 1x) under the bars";
     }
+    const char *rounding = roundingRefusal(out, env->exact, scaled);
+    if (rounding) {
+        return rounding;
+    }
     out->meta |= out->n | (env->exact ? 0u : 8u);
     out->bars = (uint32_t)(sides & 1 ? top : 0) | ((uint32_t)(sides & 2 ? bottom : 0xFFFF) << 16);
     out->scaled = scaled;
@@ -476,14 +538,26 @@ static void logRefusal(const char *why)
 }
 
 /* whether the replay's sprites blend exactly (rd_dst_read.c: the GS's
- * floor) or through the fixed-function blender (the nearest level) */
-static bool sceneBlendExact(const RdTargetRec *sc)
+ * floor) or through the fixed-function blender (the nearest level): the
+ * asked exact mode's own usage bit on an RGBA8 SCENE, RD_DST_USAGE_STORAGE
+ * under storage, RD_DST_USAGE_ATTACHMENT under attachment (rd_core.c gives
+ * a target the asked mode's bit alone) */
+bool rd__fades_fold_exact(int mode, uint32_t usage, bool rgba8)
 {
-    if (g_rd.dstMode == RD_BLEND_EXACT_OFF || !sc || sc->format != RHI_FMT_RGBA8_UNORM ||
-        !(sc->dstUsage & 1u)) {
+    if (!rgba8) {
         return false;
     }
-    return g_rd.dstMode != RD_BLEND_EXACT_ATTACHMENT || rd__pass_wants_readable(sc);
+    if (mode == RD_BLEND_EXACT_STORAGE) {
+        return (usage & RD_DST_USAGE_STORAGE) != 0u;
+    }
+    /* rd_replay.c exactReadable: every pass on such a target begun readable */
+    return mode == RD_BLEND_EXACT_ATTACHMENT && (usage & RD_DST_USAGE_ATTACHMENT) != 0u;
+}
+
+static bool sceneBlendExact(const RdTargetRec *sc)
+{
+    return sc &&
+           rd__fades_fold_exact(g_rd.dstMode, sc->dstUsage, sc->format == RHI_FMT_RGBA8_UNORM);
 }
 
 void rd__fades_fold_scan(const RdFrame *f, int keep)

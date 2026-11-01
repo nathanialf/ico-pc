@@ -3199,6 +3199,15 @@ static void recordingChecks(void)
 int main(void)
 {
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
+    /* the post checks read SCENE back, which the fades fold leaves without
+       list 11's last sprites by design (rd_fades_fold.c): drawn here
+       whatever the environment says; the folded DISPLAY is ctest
+       rd_fades_fold_ab's and rd_fades_fold's */
+#ifdef _WIN32
+    _putenv_s("ICO_RD_FADES_FOLD", "0");
+#else
+    setenv("ICO_RD_FADES_FOLD", "0", 1);
+#endif
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;

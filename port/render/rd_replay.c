@@ -5357,6 +5357,11 @@ void rd__set_a1x_gs_keep(bool on)
     s_a1xGsKeep = on;
 }
 
+bool rd__a1x_gs_keep(void)
+{
+    return s_a1xGsKeep;
+}
+
 /* Above 1x (fx_sprite.hlsl FXF_ABOVE1X): a sprite sampling target src into
  * tc when a scaled target is involved (either target's scale not 1, the
  * predicate rd__blur_screen_fallback takes): the steps, src texels per tc
