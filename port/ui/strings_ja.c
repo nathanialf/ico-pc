@@ -718,7 +718,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_STATES_LOADED] = "スロット%dから読み込みました",
     [UI_STR_STATES_DELETED] = "スロット%dを空にしました",
     [UI_STR_STATES_NOTE] =
-        "ステートはこのバージョンのゲームとこのディスクのものです。左右でアクションを選びます。",
+        "ステートはこのディスクのものです。後のバージョンでも読み込める場合があります。左右でアクションを選びます。",
     [UI_STR_STATES_PAUSE_FIRST] = "ステートを保存するにはゲームを一時停止してください",
     [UI_STR_STATES_REFUSED_BUILD] = "別のバージョンのゲームで保存されています",
     [UI_STR_STATES_REFUSED_DISC] = "別のディスクで保存されています",
@@ -728,6 +728,14 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "このビルドではセーブステートは無効です",
     [UI_STR_STATES_TITLE_HINT] = "保存は一時停止メニューから行います",
     [UI_STR_STATES_SAVE_FAILED] = "ステートを保存できませんでした",
+    [UI_STR_STATES_XB_OLD] =
+        "このセーブステートはバージョン%sで作られました。セーブステートを新しいバージョンに引き継げるようになる前のものです。メモリーカードのセーブデータはそのまま使えます。",
+    [UI_STR_STATES_XB_CODE] =
+        "このセーブステートはバージョン%sで作られました。バージョン%sでは保存した場面のゲームが変更されたため、再開できません。メモリーカードのセーブデータはそのまま使えます。",
+    [UI_STR_STATES_XB_DATA] =
+        "このセーブステートはバージョン%sで作られました。バージョン%sではゲームが進行状況をメモリーに保持する方法が変更されたため、再開できません。メモリーカードのセーブデータはそのまま使えます。",
+    [UI_STR_STATES_XB_PINNED] =
+        "このセーブステートはバージョン%sで作られ、そのバージョンでしか再開できません。メモリーカードのセーブデータはそのまま使えます。",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "フレーム間の光のにじみ",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "「オリジナル」はゲーム本来のフレームの光のにじみをその間も使います。「なめらか」は表示するフレームごとに作り直し、負荷が増えます。",

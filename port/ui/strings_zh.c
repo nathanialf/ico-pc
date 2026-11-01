@@ -696,7 +696,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_STATES_SAVED] = "已將狀態儲存至欄位 %d",
     [UI_STR_STATES_LOADED] = "已從欄位 %d 讀取狀態",
     [UI_STR_STATES_DELETED] = "已清除欄位 %d",
-    [UI_STR_STATES_NOTE] = "狀態屬於這個版本的遊戲和這張光碟。用左右鍵選擇動作。",
+    [UI_STR_STATES_NOTE] = "狀態屬於這張光碟。之後的版本也可能讀取它。用左右鍵選擇動作。",
     [UI_STR_STATES_PAUSE_FIRST] = "請先暫停遊戲再儲存狀態",
     [UI_STR_STATES_REFUSED_BUILD] = "由其他版本的遊戲儲存",
     [UI_STR_STATES_REFUSED_DISC] = "從其他光碟儲存",
@@ -706,6 +706,14 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "這個版本已關閉存檔狀態",
     [UI_STR_STATES_TITLE_HINT] = "請在暫停選單中儲存",
     [UI_STR_STATES_SAVE_FAILED] = "無法儲存狀態",
+    [UI_STR_STATES_XB_OLD] =
+        "這個存檔狀態是由版本 %s 建立的，當時存檔狀態還不能延續到新版本。記憶卡的存檔仍然可以使用。",
+    [UI_STR_STATES_XB_CODE] =
+        "這個存檔狀態是由版本 %s 建立的。版本 %s 更改了它儲存時所在的遊戲部分，因此無法繼續。記憶卡的存檔仍然可以使用。",
+    [UI_STR_STATES_XB_DATA] =
+        "這個存檔狀態是由版本 %s 建立的。版本 %s 更改了遊戲在記憶體中保存進度的方式，因此無法繼續。記憶卡的存檔仍然可以使用。",
+    [UI_STR_STATES_XB_PINNED] =
+        "這個存檔狀態是由版本 %s 建立的，只有該版本才能繼續。記憶卡的存檔仍然可以使用。",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "影格間的光暈",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "「原版」讓遊戲本身影格的光暈沿用到其間顯示的影格；「平滑」則為顯示的每一格重新計算，能跟上快速的鏡頭轉動，但會多佔用顯示卡的時間。",

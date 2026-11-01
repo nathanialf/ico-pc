@@ -717,7 +717,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STATES_LOADED] = "슬롯 %d에서 상태를 불러왔습니다",
     [UI_STR_STATES_DELETED] = "슬롯 %d을(를) 비웠습니다",
     [UI_STR_STATES_NOTE] =
-        "상태는 이 버전의 게임과 이 디스크에 속합니다. 왼쪽과 오른쪽으로 동작을 고릅니다.",
+        "상태는 이 디스크에 속합니다. 이후 버전에서도 불러올 수도 있습니다. 왼쪽과 오른쪽으로 동작을 고릅니다.",
     [UI_STR_STATES_PAUSE_FIRST] = "상태를 저장하려면 게임을 일시정지하세요",
     [UI_STR_STATES_REFUSED_BUILD] = "다른 버전의 게임에서 저장됨",
     [UI_STR_STATES_REFUSED_DISC] = "다른 디스크에서 저장됨",
@@ -727,6 +727,14 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "이 빌드에서는 저장 상태가 꺼져 있습니다",
     [UI_STR_STATES_TITLE_HINT] = "저장은 일시정지 메뉴에서 합니다",
     [UI_STR_STATES_SAVE_FAILED] = "상태를 저장하지 못했습니다",
+    [UI_STR_STATES_XB_OLD] =
+        "이 저장 상태는 버전 %s에서 만들어졌습니다. 저장 상태를 새 버전으로 옮길 수 있게 되기 전의 것입니다. 메모리 카드의 저장 데이터는 그대로 쓸 수 있습니다.",
+    [UI_STR_STATES_XB_CODE] =
+        "이 저장 상태는 버전 %s에서 만들어졌습니다. 버전 %s에서 저장한 부분의 게임이 바뀌어 이어서 할 수 없습니다. 메모리 카드의 저장 데이터는 그대로 쓸 수 있습니다.",
+    [UI_STR_STATES_XB_DATA] =
+        "이 저장 상태는 버전 %s에서 만들어졌습니다. 버전 %s에서 게임이 진행 상황을 메모리에 담는 방식이 바뀌어 이어서 할 수 없습니다. 메모리 카드의 저장 데이터는 그대로 쓸 수 있습니다.",
+    [UI_STR_STATES_XB_PINNED] =
+        "이 저장 상태는 버전 %s에서 만들어졌으며 그 버전에서만 이어서 할 수 있습니다. 메모리 카드의 저장 데이터는 그대로 쓸 수 있습니다.",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "프레임 사이의 빛 번짐",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "‘오리지널’은 게임 본래 프레임의 빛 번짐을 그 사이에도 그대로 씁니다. ‘부드럽게’는 표시되는 프레임마다 다시 만들어 부담이 늘어납니다.",

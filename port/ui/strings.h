@@ -865,6 +865,15 @@ typedef enum UiStrId {
     UI_STR_STATES_OFF,
     UI_STR_STATES_TITLE_HINT,
     UI_STR_STATES_SAVE_FAILED,
+    /* the box of a state another version made that this one cannot resume
+       (main_host.c states_done, state.h IcoStateBlocker): made before
+       states carried over (the saved version), the part of the game it
+       was in changed, how the game holds its state changed (the saved
+       version, then this one), only its own version resumes it */
+    UI_STR_STATES_XB_OLD,
+    UI_STR_STATES_XB_CODE,
+    UI_STR_STATES_XB_DATA,
+    UI_STR_STATES_XB_PINNED,
     /* Effects > Glow between frames (Original or Smooth): the label, the note, and the
        note while the row is greyed */
     UI_STR_OPT_EFFECT_GLOW_SMOOTH,

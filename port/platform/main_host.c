@@ -2031,6 +2031,32 @@ static int states_request(int action, int slot, int *refusal_str)
     return 0;
 }
 
+/* the box's words for a load another version's state refused
+   (state.h IcoStateBlocker): 1 with body filled, 0 for none known */
+static int states_other_version(char *body, size_t n)
+{
+    IcoStateRefusal f;
+
+    ico_state_last_refusal(&f);
+    switch (f.blocker) {
+    case ICO_STATE_BLOCK_OLD:
+        snprintf(body, n, ui_str(UI_STR_STATES_XB_OLD), f.saved_version);
+        return 1;
+    case ICO_STATE_BLOCK_CODE:
+        snprintf(body, n, ui_str(UI_STR_STATES_XB_CODE), f.saved_version, f.this_version);
+        return 1;
+    case ICO_STATE_BLOCK_DATA:
+        snprintf(body, n, ui_str(UI_STR_STATES_XB_DATA), f.saved_version, f.this_version);
+        return 1;
+    case ICO_STATE_BLOCK_PINNED:
+        snprintf(body, n, ui_str(UI_STR_STATES_XB_PINNED), f.saved_version);
+        return 1;
+    case ICO_STATE_BLOCK_NONE:
+        break;
+    }
+    return 0;
+}
+
 static void states_done(int action, int slot, IcoStateResult r, const char *detail, void *user)
 {
     static const int ok_str[3] = {UI_STR_STATES_SAVED, UI_STR_STATES_LOADED, UI_STR_STATES_DELETED};
@@ -2042,6 +2068,9 @@ static void states_done(int action, int slot, IcoStateResult r, const char *deta
     } else if (r == ICO_STATE_OTHER_SETTINGS) {
         /* the key that differs, as the log has it */
         snprintf(body, sizeof body, ui_str(UI_STR_STATES_REFUSED_SETTINGS), detail);
+    } else if (r == ICO_STATE_OTHER_BUILD && action == 1 &&
+               states_other_version(body, sizeof body)) {
+        /* another version's state: which one, and what in this one blocks it */
     } else {
         snprintf(body, sizeof body, "%s", ui_str((UiStrId)state_refusal_str(r)));
     }

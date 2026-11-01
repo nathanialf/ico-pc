@@ -22,6 +22,9 @@
  *   ranges  where the saving process had its image, arena, pool, game data
  *           and pobj block, its mesh generations, and the game thread's
  *           thread pointer and stack guard (StateRanges below)
+ *   syms    what every word that points into the program points into, and
+ *           the registry's blocks by name (state_xbuild.h), so a later build
+ *           whose code and data those words need are unchanged can load it
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +32,8 @@
 #include <time.h>
 
 #include "arena.h"
+#include "code_hash.h"
+#include "diag_host.h"
 #include "fiber.h"
 #include "fpenv.h"
 #include "game_data_range.h"
@@ -46,6 +51,8 @@
 #include "state_registry.h"
 #include "state_reloc.h"
 #include "state_rules.h"
+#include "state_syms.h"
+#include "state_xbuild.h"
 #include "trace_host.h"
 #include "../audio/audio_host.h"
 #include "../audio/audio_lock.h"
@@ -139,11 +146,12 @@ enum {
     SEC_FIBERS,
     SEC_POBJ,
     SEC_RANGES,
+    SEC_SYMS,
     SEC_COUNT
 };
 
-static const char *const sec_names[SEC_COUNT] = {"arena", "gdata",  "gbss", "reg",   "audio",
-                                                 "sched", "fibers", "pobj", "ranges"};
+static const char *const sec_names[SEC_COUNT] = {"arena", "gdata",  "gbss", "reg",    "audio",
+                                                 "sched", "fibers", "pobj", "ranges", "syms"};
 
 /* A copy of the memory a state holds: the save's (written by the writer
    thread), the load's staging (inflated from the file) and its backup (the
@@ -424,7 +432,9 @@ static void *pack_reg(int audio, uint64_t *bytes)
     return out;
 }
 
-static void unpack_reg(int audio, const unsigned char *in)
+/* off NULL: back to back in this build's order; else each block from its
+   offset in the saved section (another build's order, state_xbuild.h) */
+static void unpack_reg(int audio, const unsigned char *in, const uint64_t *off)
 {
     size_t at = 0;
     int i;
@@ -433,7 +443,7 @@ static void unpack_reg(int audio, const unsigned char *in)
         const IcoStateEntry *e = ico_state_registry_entry(i);
 
         if (((e->flags & ICO_STATE_AUDIO) != 0) == (audio != 0)) {
-            memcpy(e->p, in + at, e->n);
+            memcpy(e->p, in + (off != NULL ? (size_t)off[i] : at), e->n);
             at += e->n;
         }
     }
@@ -608,7 +618,7 @@ static int copy_live(Copy *c)
         return -1;
     }
     for (i = 0; i < SEC_COUNT; i++) {
-        if (c->p[i] == NULL) {
+        if (c->p[i] == NULL && i != SEC_SYMS) {
             copy_free(c);
             return -1;
         }
@@ -616,13 +626,276 @@ static int copy_live(Copy *c)
     return 0;
 }
 
+/* --- states of other versions (state_xbuild.h) ------------------------------------ */
+
+/* The game data range's words before the game runs: a later build takes a
+   saved word that equals one of them to its own word at the same offset
+   (state_xbuild.h, points).  A constructor takes them, after the loader
+   relocated the initialised pointers and before main runs any game code. */
+static uint64_t *s_snap;
+static size_t s_snap_words;
+
+#if defined(__GNUC__)
+__attribute__((constructor)) static void snap_game_data(void)
+{
+    IcoMemRange r[2];
+
+    if (ico_game_data_ranges(r) != 0 || r[ICO_GAME_DATA].hi <= r[ICO_GAME_DATA].lo) {
+        return;
+    }
+    s_snap_words = (size_t)(r[ICO_GAME_DATA].hi - r[ICO_GAME_DATA].lo) / 8;
+    s_snap = (uint64_t *)malloc(s_snap_words ? s_snap_words * 8 : 1);
+    if (s_snap == NULL) {
+        s_snap_words = 0;
+        return;
+    }
+    memcpy(s_snap, (const void *)r[ICO_GAME_DATA].lo, s_snap_words * 8);
+}
+#endif
+
+/* the symbol file read whole: at most this much (a link map is 2-4 MB) */
+#define SYMS_FILE_MAX (64ll << 20)
+
+static IcoSymTab *s_tab;
+static int s_tab_tried;
+
+/* The program's symbol table (state_syms.h), read at the first save, load
+   or listing that needs it and kept; NULL when there is none (logged once:
+   this build's states then load only into this build, and no other
+   version's state loads here). */
+static IcoSymTab *sym_table(void)
+{
+    char name[160], why[160];
+    IcoSymTabEnv env;
+    IcoStateImage img;
+    long long len = -1;
+    int gz = 0;
+    char *raw = NULL, *text = NULL;
+    size_t n = 0;
+    double t0;
+    int i;
+
+    if (s_tab_tried) {
+        return s_tab;
+    }
+    s_tab_tried = 1;
+    t0 = ico_thread_now_ms();
+    snprintf(name, sizeof name, "the symbol file");
+    why[0] = '\0';
+    if (!ico_diag_symbols_info(name, sizeof name, &gz, &len)) {
+        snprintf(why, sizeof why, "no symbol file beside the program (a build without one)");
+    } else if (len <= 0 || len > SYMS_FILE_MAX) {
+        snprintf(why, sizeof why, "its size is %lld bytes", len);
+    } else if ((raw = (char *)malloc((size_t)len)) == NULL ||
+               ico_diag_symbols_read(raw, (size_t)len, 0) != len) {
+        snprintf(why, sizeof why, "it could not be read");
+    } else if (gz) {
+        text = ico_symtab_gunzip(raw, (size_t)len, &n);
+        if (text == NULL) {
+            snprintf(why, sizeof why, "it does not inflate");
+        }
+    } else {
+        text = raw;
+        raw = NULL;
+        n = (size_t)len;
+    }
+    if (text != NULL && ico_state_image_range(&img) != 0) {
+        snprintf(why, sizeof why, "the program's image is unknown");
+    } else if (text != NULL) {
+        memset(&env, 0, sizeof env);
+        env.anchor = "ico_diag_init";
+        env.anchor_addr = (uint64_t)(uintptr_t)ico_diag_init;
+        env.check = "ico_diag_log";
+        env.check_addr = (uint64_t)(uintptr_t)ico_diag_log;
+        env.image_lo = img.lo;
+        env.image_hi = img.hi;
+        env.text_lo = img.text_lo;
+        env.text_hi = img.text_hi;
+        for (i = 0; i < 2; i++) {
+            env.game_lo[i] = s_gdata[i].lo;
+            env.game_hi[i] = s_gdata[i].hi;
+        }
+        env.arch = ico_code_arch_native();
+        s_tab = ico_symtab_parse(text, n, &env, why, sizeof why);
+    }
+    free(raw);
+    free(text);
+    if (s_tab != NULL) {
+        const size_t bytes = s_tab->n_unit * (sizeof(IcoSymUnit) + 4) +
+                             s_tab->n_data * (sizeof(IcoSymData) + 4) + s_tab->str_n;
+
+        fprintf(stderr,
+                "state: symbols: %zu functions, %zu data symbols, %zu game data items (layout "
+                "%016llx) from %s in %.1f ms, %zu KB\n",
+                s_tab->n_unit, s_tab->n_data, s_tab->n_layout,
+                (unsigned long long)s_tab->layout_hash, name, ico_thread_now_ms() - t0,
+                bytes / 1024);
+    } else {
+        fprintf(stderr,
+                "state: symbols: none (%s: %s); a state saved here loads only into this build, and "
+                "no other build's state loads here\n",
+                name, why);
+    }
+    return s_tab;
+}
+
+/* the version a commit text names ("vX.Y.Z", "vX.Y.Z-3-g0123456789"), a
+   trailing "-dirty" left out */
+static void version_text(const char *commit, char *out, size_t n)
+{
+    size_t k = strlen(commit);
+
+    if (k >= 6 && strcmp(commit + k - 6, "-dirty") == 0) {
+        k -= 6;
+    }
+    if (k == 0) {
+        snprintf(out, n, "unknown");
+        return;
+    }
+    snprintf(out, n, "%.*s", (int)k, commit);
+}
+
+static IcoStateRefusal s_refusal;
+
+void ico_state_last_refusal(IcoStateRefusal *out)
+{
+    *out = s_refusal;
+}
+
+static void set_refusal(IcoStateBlocker b, const char *saved_commit)
+{
+    s_refusal.blocker = b;
+    version_text(saved_commit, s_refusal.saved_version, sizeof s_refusal.saved_version);
+    version_text(ICO_BUILD_COMMIT, s_refusal.this_version, sizeof s_refusal.this_version);
+}
+
+static IcoStateBlocker blocker_of(int kind)
+{
+    switch (kind) {
+    case ICO_XB_CODE:
+        return ICO_STATE_BLOCK_CODE;
+    case ICO_XB_DATA:
+    case ICO_XB_BLOCKS:
+        return ICO_STATE_BLOCK_DATA;
+    }
+    return ICO_STATE_BLOCK_PINNED;
+}
+
+/* the words of n copied bytes that lay at `addr`, split at the stack
+   pointer's red zone: below it (dead frames) soft, from it up strict */
+static void xb_scan_stack(IcoXbRefs *r, const IcoFiberImage *f)
+{
+    const uint64_t base = f->slot_base + f->stack_off;
+    const uint64_t sp = ico_fiber_image_sp(f);
+    const uint64_t live = sp >= 128 ? sp - 128 : 0;
+    const unsigned char *p = (const unsigned char *)f->stack;
+
+    if (sp == 0 || live <= base) {
+        ico_xb_scan(r, p, f->stack_bytes, base, 1);
+    } else if (live >= base + f->stack_bytes) {
+        ico_xb_scan(r, p, f->stack_bytes, base, 0);
+    } else {
+        const size_t dead = (size_t)(live - base) & ~(size_t)7;
+
+        ico_xb_scan(r, p, dead, base, 0);
+        ico_xb_scan(r, p + dead, f->stack_bytes - dead, base + dead, 1);
+    }
+}
+
+/* The "syms" section of a save from its copy (state_xbuild.h): every word
+   of the copied regions that points into the program (the regions a load
+   relocates: the arena, the game's data, the scanned blocks, the model
+   tables, the scheduler's tables, the fibers' control blocks and stacks)
+   and the registry's blocks.  0, or -1 when memory ran out. */
+static int build_syms(Copy *c, IcoXbStats *st)
+{
+    static IcoSchedImage img;
+    IcoXbProc p;
+    IcoXbRefs *r;
+    const void *sched;
+    size_t sched_n, n = 0;
+    size_t at[2] = {0, 0};
+    void *sec = NULL;
+    int i;
+
+    memset(&p, 0, sizeof p);
+    p.tab = sym_table();
+    (void)ico_state_image_range(&p.image);
+    for (i = 0; i < 2; i++) {
+        p.game_lo[i] = s_gdata[i].lo;
+        p.game_hi[i] = s_gdata[i].hi;
+    }
+    p.snap = s_snap;
+    p.snap_words = s_snap_words;
+    r = ico_xb_begin(&p);
+    if (r == NULL) {
+        return -1;
+    }
+    for (i = 0; i < ico_state_registry_count(); i++) {
+        const IcoStateEntry *e = ico_state_registry_entry(i);
+        const int audio = (e->flags & ICO_STATE_AUDIO) != 0;
+        const unsigned char *copy = (const unsigned char *)c->p[audio ? SEC_AUDIO : SEC_REG];
+
+        ico_xb_block(r, e->name, e->n, e->flags, (uint64_t)(uintptr_t)e->p, at[audio]);
+        if ((e->flags & ICO_STATE_SCAN) != 0) {
+            ico_xb_scan(r, copy + at[audio], e->n, (uint64_t)(uintptr_t)e->p, 1);
+        }
+        at[audio] += e->n;
+    }
+    ico_xb_scan(r, c->p[SEC_ARENA], (size_t)c->n[SEC_ARENA], (uint64_t)(uintptr_t)ico_arena_base(),
+                1);
+    ico_xb_scan(r, c->p[SEC_GDATA], (size_t)c->n[SEC_GDATA], s_gdata[ICO_GAME_DATA].lo, 1);
+    ico_xb_scan(r, c->p[SEC_GBSS], (size_t)c->n[SEC_GBSS], s_gdata[ICO_GAME_BSS].lo, 1);
+    if (c->n[SEC_POBJ] != 0) {
+        size_t pobj_bytes = 0;
+        void **pobj = PObj_GetImageTables(&pobj_bytes);
+
+        ico_xb_scan(r, c->p[SEC_POBJ], (size_t)c->n[SEC_POBJ], (uint64_t)(uintptr_t)pobj, 1);
+    }
+    ico_sched_state_block(&sched, &sched_n);
+    ico_xb_scan(r, c->p[SEC_SCHED], (size_t)c->n[SEC_SCHED], (uint64_t)(uintptr_t)sched, 1);
+    if (parse_fibers(c, &img) == 0) {
+        for (i = 0; i < img.n_fibers; i++) {
+            const IcoFiberImage *f = &img.fibers[i];
+
+            ico_xb_scan(r, f->ctrl, f->ctrl_bytes, f->slot_base, 1);
+            xb_scan_stack(r, f);
+        }
+    }
+    if (ico_xb_finish(r, &sec, &n, st) != 0) {
+        return -1;
+    }
+    c->p[SEC_SYMS] = sec;
+    c->n[SEC_SYMS] = n;
+    return 0;
+}
+
+/* why a state saved here loads only into this build, for the save's line */
+static const char *pinned_why(unsigned flags)
+{
+    if ((flags & ICO_XB_TABLE) == 0) {
+        return "this build has no symbol file";
+    }
+    if ((flags & ICO_XB_LOW_IMAGE) != 0) {
+        return "the program lies below 4 GB, where a program address cannot be told from a number";
+    }
+    if ((flags & ICO_XB_OVERFLOW) != 0) {
+        return "it points into the program in more places than the record holds";
+    }
+    if ((flags & ICO_XB_UNNAMED) != 0) {
+        return "it holds a program address no symbol names";
+    }
+    return "";
+}
+
 /* --- saving ------------------------------------------------------------------- */
 
 static struct {
     int slot; /* 0: none in flight */
     Copy copy;
-    double copy_ms;
+    double copy_ms, syms_ms;
     int fibers;
+    IcoXbStats syms;
     char path[ICO_PATH_MAX];
 } s_save;
 
@@ -656,11 +929,28 @@ static void save_finished(const IcoStateWriteResult *w)
         at += (size_t)n;
     }
     if (w->result == ICO_STATE_OK) {
+        const IcoXbStats *x = &s_save.syms;
+        const char *pin = pinned_why(x->flags);
+
         fprintf(stderr,
                 "state: saved slot %d (%s): %s; %d fibers; copy %.1f ms, write %.1f ms, file %llu "
                 "bytes\n",
                 s_save.slot, s_save.path, sizes, s_save.fibers, s_save.copy_ms, w->write_ms,
                 (unsigned long long)w->file_bytes);
+        if (pin[0] != '\0') {
+            fprintf(stderr,
+                    "state: slot %d loads only into this build: %s (%u program words, %u "
+                    "blocks; first unnamed 0x%llx)\n",
+                    s_save.slot, pin, x->values, x->blocks, (unsigned long long)x->first_unnamed);
+        } else {
+            fprintf(stderr,
+                    "state: slot %d can carry over to a later version that keeps %u functions "
+                    "(%u with a thread inside), %u data symbols, %u start-up values and texts, "
+                    "%u blocks and the game's data layout (%u program words; record %zu bytes "
+                    "in %.1f ms)\n",
+                    s_save.slot, x->units, x->positions, x->data, x->points, x->blocks, x->values,
+                    x->bytes, s_save.syms_ms);
+        }
         done(0, s_save.slot, ICO_STATE_OK, "");
     } else {
         done(0, s_save.slot, w->result, w->why);
@@ -728,6 +1018,13 @@ static void perform_save(int slot)
         return;
     }
     s_save.copy_ms = ico_thread_now_ms() - t0;
+    t0 = ico_thread_now_ms();
+    if (build_syms(&s_save.copy, &s_save.syms) != 0) {
+        copy_free(&s_save.copy);
+        done(0, slot, ICO_STATE_IO, "memory ran out for the symbols record");
+        return;
+    }
+    s_save.syms_ms = ico_thread_now_ms() - t0;
     memcpy(&s_save.fibers, s_save.copy.p[SEC_FIBERS], sizeof s_save.fibers);
     now_header();
     h->saved_at = (int64_t)time(NULL);
@@ -860,6 +1157,7 @@ static void thumb_poll(void)
 
 typedef struct LoadCtx {
     Copy *c;
+    unsigned want; /* the sections to read (1 << SEC_*), 0 every one */
     int bad;
     char why[160];
 } LoadCtx;
@@ -896,6 +1194,9 @@ static uint64_t section_size(int i, int *exact)
     case SEC_POBJ:
         *exact = 0;
         return 2 * (uint64_t)ico_arena_size();
+    case SEC_SYMS:
+        *exact = 0;
+        return ICO_XB_MAX_BYTES;
     default:
         return sizeof(StateRanges);
     }
@@ -907,7 +1208,8 @@ static void *load_section(void *user, const IcoStateSectionInfo *s)
     int i;
 
     for (i = 0; i < SEC_COUNT; i++) {
-        if (strcmp(s->name, sec_names[i]) == 0 && l->c->p[i] == NULL) {
+        if (strcmp(s->name, sec_names[i]) == 0 && l->c->p[i] == NULL &&
+            (l->want == 0 || (l->want & (1u << i)) != 0)) {
             int exact;
             const uint64_t want = section_size(i, &exact);
 
@@ -944,7 +1246,8 @@ static int check_sizes(const Copy *c, const StateRanges *rg, char *why, size_t n
                                       0,
                                       0,
                                       rg != NULL ? rg->pobj_bytes : 0,
-                                      sizeof(StateRanges)};
+                                      sizeof(StateRanges),
+                                      0};
     const void *sched;
     size_t sched_n;
     int i;
@@ -958,7 +1261,7 @@ static int check_sizes(const Copy *c, const StateRanges *rg, char *why, size_t n
             snprintf(why, n, "the %s section is missing", sec_names[i]);
             return -1;
         }
-        if (i != SEC_FIBERS && c->n[i] != w) {
+        if (i != SEC_FIBERS && i != SEC_SYMS && c->n[i] != w) {
             snprintf(why, n, "the %s section is %llu bytes, this build's %llu", sec_names[i],
                      (unsigned long long)c->n[i], (unsigned long long)w);
             return -1;
@@ -999,6 +1302,108 @@ static void build_reloc(IcoStateReloc *r, const StateRanges *rg, const void *pob
     }
 }
 
+/* A state of another build of this format: its "syms" and "ranges"
+   sections against this build (state_xbuild.h ico_xb_check).  Returns the
+   verdict's kind, *v filled (the caller frees it with
+   ico_xb_verdict_free). */
+static int xb_probe(const char *path, IcoXbVerdict *v)
+{
+    static const char *names[ICO_STATE_MAX_ENTRIES];
+    static uint64_t sizes[ICO_STATE_MAX_ENTRIES], addrs[ICO_STATE_MAX_ENTRIES];
+    static unsigned flags[ICO_STATE_MAX_ENTRIES];
+    const StateRanges *rg;
+    IcoXbNow now;
+    Copy c;
+    LoadCtx lc;
+    IcoStateResult r;
+    int i, k;
+
+    memset(&c, 0, sizeof c);
+    memset(&lc, 0, sizeof lc);
+    lc.c = &c;
+    lc.want = 1u << SEC_SYMS | 1u << SEC_RANGES;
+    r = ico_state_file_read(path, NULL, load_section, &lc);
+    rg = c.n[SEC_RANGES] == sizeof(StateRanges) ? (const StateRanges *)c.p[SEC_RANGES] : NULL;
+    if (r != ICO_STATE_OK || lc.bad || rg == NULL || rg->magic != RANGES_MAGIC ||
+        c.p[SEC_SYMS] == NULL) {
+        memset(v, 0, sizeof *v);
+        v->kind = ICO_XB_BAD;
+        snprintf(v->why, sizeof v->why, "its records could not be read%s%s",
+                 lc.why[0] != '\0' ? ": " : "", lc.why);
+        copy_free(&c);
+        return v->kind;
+    }
+    memset(&now, 0, sizeof now);
+    now.tab = sym_table();
+    (void)ico_state_image_range(&now.image);
+    for (i = 0; i < 2; i++) {
+        now.game_lo[i] = s_gdata[i].lo;
+        now.game_hi[i] = s_gdata[i].hi;
+    }
+    now.snap = s_snap;
+    now.snap_words = s_snap_words;
+    now.n_blocks = ico_state_registry_count();
+    for (i = 0; i < now.n_blocks; i++) {
+        const IcoStateEntry *e = ico_state_registry_entry(i);
+
+        names[i] = e->name;
+        sizes[i] = e->n;
+        flags[i] = e->flags;
+        addrs[i] = (uint64_t)(uintptr_t)e->p;
+    }
+    now.block_name = names;
+    now.block_size = sizes;
+    now.block_flags = flags;
+    now.block_addr = addrs;
+    now.old_game_lo[ICO_GAME_DATA] = rg->gdata_lo;
+    now.old_game_hi[ICO_GAME_DATA] = rg->gdata_hi;
+    now.old_game_lo[ICO_GAME_BSS] = rg->gbss_lo;
+    now.old_game_hi[ICO_GAME_BSS] = rg->gbss_hi;
+    k = ico_xb_check(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], &now, v);
+    copy_free(&c);
+    return k;
+}
+
+/* A state that header_check called another build's: OK when it can be
+   translated into this one (*xb 1, v the translation), else the refusal
+   with detail and the box's blocker (set_refusal). */
+static IcoStateResult other_build(const char *path, const IcoStateHeader *saved, IcoXbVerdict *v,
+                                  int *xb, char *detail, size_t n)
+{
+    char sv[48], tv[48];
+    IcoStateResult r;
+    int k;
+
+    *xb = 0;
+    memset(v, 0, sizeof *v);
+    version_text(saved->commit, sv, sizeof sv);
+    version_text(ICO_BUILD_COMMIT, tv, sizeof tv);
+    if (saved->version < ICO_STATE_FORMAT_VERSION) {
+        set_refusal(ICO_STATE_BLOCK_OLD, saved->commit);
+        snprintf(detail, n,
+                 "%s -> %s: made before save states could carry over to later versions (format "
+                 "%u)",
+                 sv, tv, saved->version);
+        return ICO_STATE_OTHER_BUILD;
+    }
+    r = ico_state_header_check_other_build(saved, now_header(), detail, n);
+    if (r != ICO_STATE_OK) {
+        return r;
+    }
+    k = xb_probe(path, v);
+    if (k == ICO_XB_OK) {
+        *xb = 1;
+        return ICO_STATE_OK;
+    }
+    snprintf(detail, n, "%s -> %s: %s", sv, tv, v->why);
+    ico_xb_verdict_free(v);
+    if (k == ICO_XB_BAD) {
+        return ICO_STATE_BAD_FILE;
+    }
+    set_refusal(blocker_of(k), saved->commit);
+    return ICO_STATE_OTHER_BUILD;
+}
+
 /* this process's own ranges, nothing moved (the rollback) */
 static void identity_reloc(IcoStateReloc *r)
 {
@@ -1013,14 +1418,15 @@ static void identity_reloc(IcoStateReloc *r)
 }
 
 /* the memory from a copy (staging or backup): the game data, the arena and
-   the registered blocks; the scheduler is put back by the caller */
-static void put_memory(const Copy *c)
+   the registered blocks (block_off: unpack_reg's); the scheduler is put
+   back by the caller */
+static void put_memory(const Copy *c, const uint64_t *block_off)
 {
     memcpy((void *)s_gdata[ICO_GAME_DATA].lo, c->p[SEC_GDATA], (size_t)c->n[SEC_GDATA]);
     memcpy((void *)s_gdata[ICO_GAME_BSS].lo, c->p[SEC_GBSS], (size_t)c->n[SEC_GBSS]);
     memcpy(ico_arena_base(), c->p[SEC_ARENA], (size_t)c->n[SEC_ARENA]);
-    unpack_reg(0, (const unsigned char *)c->p[SEC_REG]);
-    unpack_reg(1, (const unsigned char *)c->p[SEC_AUDIO]);
+    unpack_reg(0, (const unsigned char *)c->p[SEC_REG], block_off);
+    unpack_reg(1, (const unsigned char *)c->p[SEC_AUDIO], block_off);
 }
 
 /* the conservative scan over every restored region but the scheduler's
@@ -1100,7 +1506,7 @@ static void roll_back(const Copy *backup, void *pobj_new)
     static IcoSchedImage img;
     IcoStateReloc id;
 
-    put_memory(backup);
+    put_memory(backup, NULL);
     free(pobj_new);
 #ifndef ICO_HEADLESS
     pac_HostStateFixup(0);
@@ -1124,8 +1530,12 @@ static void perform_load(int slot)
     uint64_t value_words[ICO_RELOC_VALUES];
     IcoStateCheck chk;
     ScanCounts k;
+    static IcoXbVerdict xv;
+    IcoStateXlate xl;
+    uint64_t missed = 0, first_missed = 0;
+    int xb = 0;
     char path[ICO_PATH_MAX];
-    char detail[256];
+    char detail[384];
     const char *what = "";
     const StateRanges *rg;
     size_t live_pobj_bytes = 0;
@@ -1139,6 +1549,8 @@ static void perform_load(int slot)
 
     (void)live_tex;
     detail[0] = '\0';
+    memset(&s_refusal, 0, sizeof s_refusal);
+    ico_xb_verdict_free(&xv);
     /* a save in flight first (it may be this slot's) */
     collect_save(1);
     sample(&c);
@@ -1155,9 +1567,25 @@ static void perform_load(int slot)
     if (r == ICO_STATE_OK) {
         r = ico_state_header_check(&saved, now_header(), detail, sizeof detail);
     }
+    if (r == ICO_STATE_OTHER_BUILD) {
+        /* another build's state (the platform is this one's): translated
+           when everything it points into is unchanged here */
+        r = other_build(path, &saved, &xv, &xb, detail, sizeof detail);
+    }
     if (r != ICO_STATE_OK) {
         done(1, slot, r, detail);
         return;
+    }
+    if (xb) {
+        char sv[48], tv[48];
+
+        version_text(saved.commit, sv, sizeof sv);
+        version_text(ICO_BUILD_COMMIT, tv, sizeof tv);
+        fprintf(stderr,
+                "state: slot %d was saved by version %s, this is %s: everything it points into is "
+                "unchanged here, so it is translated (%u functions, %u data symbols, %u start-up "
+                "values and texts, %zu spans, %zu points; %u dead-frame words without one)\n",
+                slot, sv, tv, xv.units, xv.data, xv.points, xv.n_span, xv.n_point, xv.soft_left);
     }
     t0 = ico_thread_now_ms();
     memset(&stage, 0, sizeof stage);
@@ -1177,6 +1605,18 @@ static void perform_load(int slot)
         if (detail[0] == '\0') {
             snprintf(detail, sizeof detail, "the fibers section does not hold what it says");
         }
+    }
+    if (xb && r == ICO_STATE_BAD_FILE && rg != NULL && rg->magic == RANGES_MAGIC) {
+        /* another build whose scheduler, fiber slot or a section's size is
+           other than this one's: what it holds changed, it is not damaged */
+        char sv[48], tv[48], why[384];
+
+        version_text(saved.commit, sv, sizeof sv);
+        version_text(ICO_BUILD_COMMIT, tv, sizeof tv);
+        snprintf(why, sizeof why, "%s", detail);
+        snprintf(detail, sizeof detail, "%s -> %s: %.250s", sv, tv, why);
+        set_refusal(ICO_STATE_BLOCK_DATA, saved.commit);
+        r = ICO_STATE_OTHER_BUILD;
     }
     /* a state without the saving process's thread pointer or stack guard
        where this platform's frames hold them: its fibers would resume with
@@ -1200,13 +1640,25 @@ static void perform_load(int slot)
         return;
     }
     build_reloc(&rel, rg, pobj_new);
+    if (xb) {
+        /* another build: the program's words by what each points into */
+        memset(&xl, 0, sizeof xl);
+        xl.span = xv.span;
+        xl.n_span = xv.n_span;
+        xl.point = xv.point;
+        xl.n_point = xv.n_point;
+        xl.missed = &missed;
+        xl.first_missed = &first_missed;
+        rel.xlate = &xl;
+    }
     /* the saving process's thread pointer and stack guard -> this one's
        (this is the game thread, which resumes every fiber) */
     ico_state_proc_read(&proc);
     ico_state_reloc_set_values(&rel, rg->tls_base, proc.tls_base, rg->stack_guard, proc.stack_guard,
                                value_words);
-    /* the regions are scanned when a range moved or a value differs */
-    moved = any_moved(&rel) || ico_state_reloc_values_on(&rel);
+    /* the regions are scanned when a range moved, a value differs or the
+       state is another build's */
+    moved = any_moved(&rel) || ico_state_reloc_values_on(&rel) || xb;
     /* the hash's host blocks: the live tables, the saved ones, the copy */
     note_host_blocks();
     ico_state_hash_note_block(&s_host_blocks, rg->pobj_lo, rg->pobj_bytes);
@@ -1244,7 +1696,7 @@ static void perform_load(int slot)
     }
 
     /* the restore */
-    put_memory(&stage);
+    put_memory(&stage, xb ? xv.block_off : NULL);
     if (ico_sched_state_restore(&img, &rel) != 0) {
         roll_back(&backup, pobj_new);
         ico_audio_unlock();
@@ -1331,7 +1783,15 @@ static void perform_load(int slot)
                 value_note(rg->stack_guard, proc.stack_guard),
                 (unsigned long long)value_words[ICO_RELOC_GUARD], chk.partitions, chk.nodes,
                 chk.threads, chk.handlers, img.n_fibers, ico_thread_now_ms() - t0);
+        if (xb) {
+            fprintf(stderr,
+                    "state: slot %d from version %s: %llu program words had no translation and "
+                    "were left as they were (first 0x%llx)\n",
+                    slot, saved.commit, (unsigned long long)missed,
+                    (unsigned long long)first_missed);
+        }
     }
+    ico_xb_verdict_free(&xv);
     copy_free(&stage);
     copy_free(&backup);
     s_list_gen++;
@@ -1379,6 +1839,36 @@ static void perform_delete(int slot)
 
 /* --- the listing --------------------------------------------------------------- */
 
+/* A listed slot of another build: loadable when a load would translate it
+   (the same check as the load's, other_build), its refusal otherwise; one
+   line per slot each time the listing is made. */
+static void list_other_build(int slot, IcoStateSlotInfo *info)
+{
+    static IcoStateHeader h;
+    IcoStateRefusal keep = s_refusal;
+    IcoXbVerdict v;
+    char path[ICO_PATH_MAX];
+    char detail[384];
+    IcoStateResult r;
+    int xb = 0;
+
+    if (ico_state_slot_path(path, sizeof path, ico_state_dir(), slot, ".ics") != 0 ||
+        ico_state_file_read_header(path, &h) != ICO_STATE_OK) {
+        return;
+    }
+    detail[0] = '\0';
+    r = other_build(path, &h, &v, &xb, detail, sizeof detail);
+    if (xb) {
+        ico_xb_verdict_free(&v);
+    }
+    s_refusal = keep; /* the listing is no refusal of a load */
+    info->loadable = r == ICO_STATE_OK;
+    info->why_not = r;
+    fprintf(stderr, "state: slot %d (saved by %s) %s%s%s\n", slot, h.commit,
+            r == ICO_STATE_OK ? "loads here" : "cannot be loaded here",
+            detail[0] != '\0' ? ": " : "", detail);
+}
+
 void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
 {
     static IcoStateSlotInfo cache[ICO_STATE_SLOTS];
@@ -1393,7 +1883,15 @@ void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
     }
     now = now_header();
     if (cache_gen != s_list_gen || cache_keys != now->settings_hash) {
+        int i;
+
         ico_state_list_dir(ico_state_dir(), now, cache);
+        for (i = 0; i < ICO_STATE_SLOTS; i++) {
+            if (cache[i].present && !cache[i].loadable &&
+                cache[i].why_not == ICO_STATE_OTHER_BUILD) {
+                list_other_build(i + 1, &cache[i]);
+            }
+        }
         cache_gen = s_list_gen;
         cache_keys = now->settings_hash;
     }

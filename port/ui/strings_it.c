@@ -718,7 +718,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_STATES_LOADED] = "Stato caricato dallo slot %d",
     [UI_STR_STATES_DELETED] = "Slot %d svuotato",
     [UI_STR_STATES_NOTE] =
-        "Uno stato appartiene a questa versione del gioco e a questo disco. Sinistra e destra scelgono l'azione.",
+        "Uno stato appartiene a questo disco. Anche le versioni successive possono caricarlo. Sinistra e destra scelgono l'azione.",
     [UI_STR_STATES_PAUSE_FIRST] = "Metti il gioco in pausa per salvare uno stato",
     [UI_STR_STATES_REFUSED_BUILD] = "Salvato da un'altra versione del gioco",
     [UI_STR_STATES_REFUSED_DISC] = "Salvato da un altro disco",
@@ -728,6 +728,14 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "Gli stati salvati sono disattivati in questa versione",
     [UI_STR_STATES_TITLE_HINT] = "Si salva dal menu di pausa",
     [UI_STR_STATES_SAVE_FAILED] = "Impossibile salvare lo stato",
+    [UI_STR_STATES_XB_OLD] =
+        "Questo stato è stato creato dalla versione %s,\nprima che gli stati salvati potessero passare\nalle versioni più recenti.\nI salvataggi sulla memory card funzionano ancora.",
+    [UI_STR_STATES_XB_CODE] =
+        "Questo stato è stato creato dalla versione %s.\nLa versione %s ha cambiato la parte del gioco\nin cui è stato salvato, quindi non può essere\nripreso.\nI salvataggi sulla memory card funzionano ancora.",
+    [UI_STR_STATES_XB_DATA] =
+        "Questo stato è stato creato dalla versione %s.\nLa versione %s ha cambiato il modo in cui il gioco\ntiene i suoi progressi in memoria, quindi non può\nessere ripreso.\nI salvataggi sulla memory card funzionano ancora.",
+    [UI_STR_STATES_XB_PINNED] =
+        "Questo stato è stato creato dalla versione %s\ne solo quella versione può riprenderlo.\nI salvataggi sulla memory card funzionano ancora.",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Bagliore tra i fotogrammi",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "Originale mantiene il bagliore del fotogramma del gioco tra i fotogrammi. Fluido lo rifà per ogni fotogramma mostrato; costa più tempo grafico.",

@@ -723,7 +723,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_STATES_LOADED] = "État chargé depuis l'emplacement %d",
     [UI_STR_STATES_DELETED] = "Emplacement %d vidé",
     [UI_STR_STATES_NOTE] =
-        "Un état appartient à cette version du jeu et à ce disque. Gauche et droite choisissent l'action.",
+        "Un état appartient à ce disque. Les versions suivantes peuvent aussi le charger. Gauche et droite choisissent l'action.",
     [UI_STR_STATES_PAUSE_FIRST] = "Mettez le jeu en pause pour enregistrer un état",
     [UI_STR_STATES_REFUSED_BUILD] = "Enregistré par une autre version du jeu",
     [UI_STR_STATES_REFUSED_DISC] = "Enregistré depuis un autre disque",
@@ -733,6 +733,14 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "Les états sauvegardés sont désactivés dans cette version",
     [UI_STR_STATES_TITLE_HINT] = "L'enregistrement se fait depuis le menu pause",
     [UI_STR_STATES_SAVE_FAILED] = "L'état n'a pas pu être enregistré",
+    [UI_STR_STATES_XB_OLD] =
+        "Cet état a été créé par la version %s,\navant que les états sauvegardés puissent\npasser aux versions plus récentes.\nVos sauvegardes sur memory card fonctionnent toujours.",
+    [UI_STR_STATES_XB_CODE] =
+        "Cet état a été créé par la version %s.\nLa version %s a modifié la partie du jeu\noù il a été sauvegardé, il ne peut donc pas\nêtre repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
+    [UI_STR_STATES_XB_DATA] =
+        "Cet état a été créé par la version %s.\nLa version %s a modifié la façon dont le jeu\ngarde sa progression en mémoire, il ne peut\ndonc pas être repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
+    [UI_STR_STATES_XB_PINNED] =
+        "Cet état a été créé par la version %s\net seule cette version peut le reprendre.\nVos sauvegardes sur memory card fonctionnent toujours.",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Lueur entre les images",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "Original garde la lueur de l’image du jeu entre les images. Fluide la refait pour chaque image affichée ; cela coûte plus de temps graphique.",

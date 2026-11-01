@@ -718,7 +718,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_STATES_LOADED] = "Estado cargado desde la ranura %d",
     [UI_STR_STATES_DELETED] = "Ranura %d vaciada",
     [UI_STR_STATES_NOTE] =
-        "Un estado pertenece a esta versión del juego y a este disco. Izquierda y derecha eligen la acción.",
+        "Un estado pertenece a este disco. Las versiones posteriores también pueden cargarlo. Izquierda y derecha eligen la acción.",
     [UI_STR_STATES_PAUSE_FIRST] = "Pausa el juego para guardar un estado",
     [UI_STR_STATES_REFUSED_BUILD] = "Guardado por otra versión del juego",
     [UI_STR_STATES_REFUSED_DISC] = "Guardado desde otro disco",
@@ -728,6 +728,14 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "Los estados guardados están desactivados en esta versión",
     [UI_STR_STATES_TITLE_HINT] = "Se guarda desde el menú de pausa",
     [UI_STR_STATES_SAVE_FAILED] = "No se pudo guardar el estado",
+    [UI_STR_STATES_XB_OLD] =
+        "Este estado guardado se creó con la versión %s,\nantes de que los estados guardados pudieran\npasar a versiones nuevas.\nTus partidas de la memory card siguen funcionando.",
+    [UI_STR_STATES_XB_CODE] =
+        "Este estado guardado se creó con la versión %s.\nLa versión %s cambió la parte del juego\nen la que se guardó, así que no se puede reanudar.\nTus partidas de la memory card siguen funcionando.",
+    [UI_STR_STATES_XB_DATA] =
+        "Este estado guardado se creó con la versión %s.\nLa versión %s cambió cómo el juego guarda\nsu progreso en memoria, así que no se puede\nreanudar.\nTus partidas de la memory card siguen funcionando.",
+    [UI_STR_STATES_XB_PINNED] =
+        "Este estado guardado se creó con la versión %s\ny solo esa versión puede reanudarlo.\nTus partidas de la memory card siguen funcionando.",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Resplandor entre fotogramas",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "Original conserva el resplandor del fotograma del juego entre fotogramas. Suave lo rehace en cada fotograma mostrado; cuesta más tiempo gráfico.",

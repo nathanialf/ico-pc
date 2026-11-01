@@ -723,7 +723,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_STATES_LOADED] = "Zustand aus Platz %d geladen",
     [UI_STR_STATES_DELETED] = "Platz %d geleert",
     [UI_STR_STATES_NOTE] =
-        "Ein Zustand gehört zu dieser Version des Spiels und dieser Disc. Links und Rechts wählen die Aktion.",
+        "Ein Zustand gehört zu dieser Disc. Spätere Versionen können ihn auch laden. Links und Rechts wählen die Aktion.",
     [UI_STR_STATES_PAUSE_FIRST] = "Pausiere das Spiel, um einen Zustand zu speichern",
     [UI_STR_STATES_REFUSED_BUILD] = "Von einer anderen Version des Spiels gespeichert",
     [UI_STR_STATES_REFUSED_DISC] = "Von einer anderen Disc gespeichert",
@@ -734,6 +734,14 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "Spielzustände sind in dieser Version aus",
     [UI_STR_STATES_TITLE_HINT] = "Gespeichert wird im Pausenmenü",
     [UI_STR_STATES_SAVE_FAILED] = "Der Zustand konnte nicht gespeichert werden",
+    [UI_STR_STATES_XB_OLD] =
+        "Dieser Spielzustand stammt aus Version %s,\nbevor Spielzustände in neuere Versionen\nübernommen werden konnten.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
+    [UI_STR_STATES_XB_CODE] =
+        "Dieser Spielzustand stammt aus Version %s.\nVersion %s hat den Teil des Spiels geändert,\nin dem er gespeichert wurde, deshalb kann er\nnicht fortgesetzt werden.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
+    [UI_STR_STATES_XB_DATA] =
+        "Dieser Spielzustand stammt aus Version %s.\nVersion %s hat geändert, wie das Spiel seinen\nFortschritt im Speicher hält, deshalb kann er\nnicht fortgesetzt werden.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
+    [UI_STR_STATES_XB_PINNED] =
+        "Dieser Spielzustand stammt aus Version %s\nund kann nur mit dieser Version\nfortgesetzt werden.\nDeine Speicherstände auf der Memory Card\nfunktionieren weiterhin.",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Leuchten zwischen Bildern",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "Original behält das Leuchten des Spielbildes zwischen den Bildern. Flüssig berechnet es für jedes gezeigte Bild neu; das kostet mehr Grafikzeit.",

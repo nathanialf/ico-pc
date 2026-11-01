@@ -6,8 +6,10 @@
 # release build (android/, arm64-v8a), zip-aligned for 16 KB pages and signed
 # with the upload keystore, as dist/ico-pc-<label>-android.apk. The APK
 # carries assets/libmain.syms.gz (nm -n of the unstripped libmain.so, its
-# code symbols, gzip-compressed and stored as it is), from which a crash or
-# watchdog report names its functions on the phone (port/platform/symmap.h).
+# code symbols and its data symbols with their sizes, gzip-compressed and
+# stored as it is), from which a crash or watchdog report names its
+# functions on the phone (port/platform/symmap.h) and save states carry over
+# to a later version (port/platform/state_syms.h).
 # The unstripped libmain.so, the link map (ico_pc.map) and libmain.syms.gz
 # are staged under dist/stage/android/ with VERSION.txt, for turning crash
 # offsets into function names (llvm-symbolizer). Quiet; the log is
@@ -112,18 +114,26 @@ map="$(ls "$wt"/android/app/build/intermediates/cxx/*/*/obj/arm64-v8a/ico_pc.map
 cd "$root"
 
 # the crash report's symbol table (port/platform/symmap.h): nm -n of the
-# unstripped libmain.so, its code symbols only ("<address> T|t|W|w <name>",
-# the addresses from the library's start), gzip-compressed and added to the
-# APK stored (not deflated again), so the program reads it straight out of
-# the APK file with a descriptor when a report is written
-# (host_android.c ico_android_open_symbols); never read at start
+# unstripped libmain.so, its code symbols ("<address> T|t|W|w <name>", the
+# addresses from the library's start), then its data symbols with their
+# sizes ("<address> <size> D|d|B|b|R|r|V|v <name>": four columns, which the
+# crash report's reader passes over; the save states' table,
+# port/platform/state_syms.h, reads them for the game's data layout and the
+# port's variables), gzip-compressed and added to the APK stored (not
+# deflated again), so the program reads it straight out of the APK file with
+# a descriptor (host_android.c ico_android_open_symbols): a report reads it
+# when it is written, save states at the first save, load or listing
 llvm_nm="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
 [[ -x "$llvm_nm" ]] || fail "no llvm-nm in the NDK ($llvm_nm)"
 symdir="$root/build-host/tmp/android-$label-syms"
 rm -rf "$symdir"
 mkdir -p "$symdir"
 "$llvm_nm" -n --defined-only "$so" > "$symdir/nm.txt" 2>>"$log" || fail "llvm-nm $so"
+"$llvm_nm" -n -S --defined-only "$so" > "$symdir/nm-sized.txt" 2>>"$log" || fail "llvm-nm -S $so"
 awk 'NF == 3 && $2 ~ /^[TtWw]$/' "$symdir/nm.txt" > "$symdir/libmain.syms"
+awk 'NF == 4 && $3 ~ /^[DdBbRrVv]$/' "$symdir/nm-sized.txt" >> "$symdir/libmain.syms"
+grep -q ' [DdBb] systemStatus$' "$symdir/libmain.syms" ||
+    fail "libmain.syms lacks the game's data symbols (systemStatus)"
 grep -q ' T ico_diag_init$' "$symdir/libmain.syms" ||
     fail "libmain.syms lacks ico_diag_init (the symbol lines' anchor)"
 gzip -9 -n -c "$symdir/libmain.syms" > "$symdir/libmain.syms.gz"

@@ -714,7 +714,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STATES_LOADED] = "State loaded from slot %d",
     [UI_STR_STATES_DELETED] = "Slot %d cleared",
     [UI_STR_STATES_NOTE] =
-        "A state belongs to this version of the game and this disc. Left and Right pick the action.",
+        "A state belongs to this disc. Later versions may load it too. Left and Right pick the action.",
     [UI_STR_STATES_PAUSE_FIRST] = "Pause the game to save a state",
     [UI_STR_STATES_REFUSED_BUILD] = "Saved by another version of the game",
     [UI_STR_STATES_REFUSED_DISC] = "Saved from another disc",
@@ -724,6 +724,14 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STATES_OFF] = "Save states are off on this build",
     [UI_STR_STATES_TITLE_HINT] = "Saving is done from the pause menu",
     [UI_STR_STATES_SAVE_FAILED] = "The state could not be saved",
+    [UI_STR_STATES_XB_OLD] =
+        "This save state was made by version %s,\nbefore save states could carry over\nto newer versions.\nYour memory-card saves still work.",
+    [UI_STR_STATES_XB_CODE] =
+        "This save state was made by version %s.\nVersion %s changed the part of the game\nit was saved in, so it cannot be resumed.\nYour memory-card saves still work.",
+    [UI_STR_STATES_XB_DATA] =
+        "This save state was made by version %s.\nVersion %s changed how the game keeps\nits progress in memory, so it cannot be resumed.\nYour memory-card saves still work.",
+    [UI_STR_STATES_XB_PINNED] =
+        "This save state was made by version %s,\nand only that version can resume it.\nYour memory-card saves still work.",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Glow between frames",
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "Original keeps the game’s own frame’s glow between frames. Smooth makes it again for every frame shown; it costs more graphics time.",
