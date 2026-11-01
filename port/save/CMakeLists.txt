@@ -79,7 +79,6 @@ endif()
 # (cmake/IcoTests.cmake ICO_KEEP_IN_ALL), since tools/state_recover.py runs it.
 add_library(ico_state_recover STATIC
     state_recover.c
-    ../platform/host_config.c
     "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/mcard.c"
     "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/mcdata.c"
     "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/thread.c"
@@ -92,7 +91,7 @@ target_compile_definitions(ico_state_recover PRIVATE ${ICO_GAME_DEFINITIONS})
 target_compile_options(ico_state_recover PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(ico_state_recover PUBLIC ico_save ico_platform ico_options)
-add_executable(state_recover_tool tools/state_recover_tool.c)
+add_executable(state_recover_tool tools/state_recover_tool.c ../platform/host_config.c)
 target_compile_options(state_recover_tool PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(state_recover_tool PRIVATE ico_state_recover)
 
@@ -105,7 +104,7 @@ target_link_libraries(state_recover_tool PRIVATE ico_state_recover)
 # table), tools/state_recover.py reads each (the package's run also writes
 # the card through state_recover_tool; the nm table is refused), and
 # `check` compares the side files and the card save with the fixture.
-add_executable(state_recover_test test/state_recover_test.c)
+add_executable(state_recover_test test/state_recover_test.c ../platform/host_config.c)
 target_include_directories(state_recover_test PRIVATE ${_ico_recover_incs}
                            "${CMAKE_SOURCE_DIR}/port/platform" "${CMAKE_SOURCE_DIR}/port/test")
 target_compile_definitions(state_recover_test PRIVATE ${ICO_GAME_DEFINITIONS})
