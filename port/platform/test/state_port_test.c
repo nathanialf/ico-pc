@@ -950,6 +950,20 @@ static void test_cross(void)
         for (i = 0; r != NULL && i < 0x3F000u; i++) {
             ico_xb_word(r, a.hi - 0x3F000u + i, 1);
         }
+        /* the blocks as a save records them: the check compares them before
+           it reads the record's flags */
+        if (r != NULL) {
+            uint64_t at[2] = {0, 0};
+            int bi;
+
+            for (bi = 0; bi < a.n_blocks; bi++) {
+                const int audio = (a.blk_flags[bi] & ICO_STATE_AUDIO) != 0;
+
+                ico_xb_block(r, a.blk_name[bi], a.blk_size[bi], a.blk_flags[bi], a.lo + a.o_blk[bi],
+                             at[audio]);
+                at[audio] += a.blk_size[bi];
+            }
+        }
         sec = NULL;
         CHECK(r != NULL && ico_xb_finish(r, &sec, &n, &st) == 0 &&
                   (st.flags & ICO_XB_OVERFLOW) != 0,
