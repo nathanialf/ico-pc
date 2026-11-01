@@ -98,8 +98,12 @@ bool rd__fades_fold_on(void)
 {
     static int on = -1;
     if (on < 0) {
+        /* off until its A/B is byte-identical on every corpus frame (the
+           first wave build found DISPLAY a level or two apart under the
+           exact blend and a fade drawn black in rd_gsbase); ICO_RD_FADES_FOLD=1
+           ([dev] fades_fold = true) turns it on */
         const char *e = getenv("ICO_RD_FADES_FOLD");
-        on = !(e && e[0] == '0');
+        on = e && e[0] == '1';
     }
     return on != 0 && !s_off;
 }
