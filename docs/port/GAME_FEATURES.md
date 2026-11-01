@@ -12,6 +12,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | --- | --- |
 | `port/game/options.h`, `options.c` | the gameplay options, their config keys and defaults, the mirror flag per save slot, the stereo/mono choice |
 | `port/game/door_grace.h`, `door_grace.c` | the doorway fix's arm and arrival grace |
+| `port/game/yorda_trip.h`, `yorda_trip.c`, `yorda_trip_live.c`, `yorda_trip_source.c` | Yorda trips: the rule and its random numbers, the game's side (the stage load's motions, the run-pulled tick), her fall's motions read from the disc |
 | `port/game/variants.h`, `variants.c` | the game variants ([variants]): values, config keys, the achievements rule, the debug switches and debug-menu opener the game binds, the hint rule, the enemy row reader |
 | `port/render/rd_chain.h`, `rd_content_chain.c` | Natural chains: the two chains, the Null's transform, the links' clip planes |
 | `port/game/achievements.h`, `achievements.c` | the achievement table, its conditions, the counters, `achievements.toml`, the popups |
@@ -51,6 +52,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] stick_fix` | `port/input/pad_host.c` |
 | `[gameplay] yorda_safe` | `ebrain.c`, `enemy_act.c`, `backStage.c` |
 | `[gameplay] door_fix` | `door_grace.c`, from `boyact.c` |
+| `[gameplay] yorda_trips` | `yorda_trip_live.c`, from `icoMisc.c` and `girl_act.c` |
 | `[gameplay] natural_chains` | `BgAnimation.c` (window build) |
 | `[gameplay] skip_opening` | `kanbanBoot.c`, `op.c`, `main_host.c` (its log line) |
 | `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
@@ -117,6 +119,70 @@ The hooks are all in `ico2/fumi/src/boyact.c`:
 
 `port/game/test/door_grace_test.c` runs the arm and grace with the option off and on, holding
 hands or not, and a copy of the exit check's guard.
+
+### Yorda trips
+
+In the original game Yorda trips and falls in one place, the main gate's second stage
+(`st04a (GATE_2ND)`): its script counts the ticks her run-pulled bit is set and, once more than
+3 seconds' worth have passed, mails her the sit-down interrupt (`ico2/script/src/st04a.c`
+(`actSt04aGirlSitChk`): mail 109 on the European, Japanese, Korean and Asian discs, 102 on the
+North American disc, 101 on the August 2001 preview, 100 on the June 2001 demo). `actGirlHand` sets
+the bit in its pull state 2, where Ico runs pulling her (`ico2/fumi/src/girl_act.c`, one copy per
+disc). The interrupt's motion-orient row from her run loop, `GIRL HAND_RUNLOOP`, plays
+`GIRL SIT(HETARI)`, then `SITLOOP(HETARI)` until Ico moves on, then `SITEND(HETARI)` back into the
+hand walk or run loop (`SIT3END` when he stops); she stays in the hand mode, and Ico's reaction is
+the game's own. The watcher also sets her exhausted motion set's bit (paraStatus 42 on the European
+program, `ico2/fumi/src/act-game.c` (`ACTParaStatus_Exec` and its 2001 copies)); the port never
+sets it.
+
+The three fall motions are per-stage data (motion area 4), which every stage change clears
+(`ico2/sugipon/src/motionFileManager.c` (`ResetDynamicMotionManager`)), and only the pack of the
+main gate's second stage carries them (`STG4A2ND.DF` on the European, Japanese, North American and
+August 2001 discs, measured from the discs; the June 2001 demo's `DATA.DF` has no pack with them).
+With the option on, each `InitIcoMisc` copy calls `ico_yorda_trip_stage_loaded` right after the
+stage's pack (`ico2/common/src/icoMisc.c`), and every per-stage motion of hers named `HETARI`
+that the stage did not load goes into the stage's motion memory as `ReadMotionFile` puts one
+there (`ico2/common/src/charFileManager.c`): a block of `ios_partition_dmotion`, the file copied in,
+`InitMotionFile` (which relocates it in place, so it lies in the arena) and `AddMotionMemorySize`
+on the stage segment; the next stage change clears them with the rest
+(`port/game/yorda_trip_live.c` (`ico_yorda_trip_stage_loaded`)). Nothing is added in the two main
+gate stages, or while less than 1 MB of the partition would stay free. The motions (six, about
+116 KB, on the European disc; five, about 120 KB, on the 2001 discs) are found by name in the disc's
+motion table and read once a run from the first pack whose motion files hold `SIT(HETARI)`, on a
+second mount of the disc with an index of its own (`port/game/yorda_trip_source.c`
+(`ico_yorda_trip_find_ids`, `ico_yorda_trip_source_read`)); the read is the port's disc I/O on the
+game thread during the stage load, and the only lock it takes is that mount's own. A save state
+carries the motions with the arena and `motionTable`; nothing in it points at the host copies.
+
+The hook is `ico_opt_yorda_trip_tick` right after each `actGirlHand` copy sets the run-pulled bit,
+with that disc's mail. The rule (`port/game/yorda_trip.c` (`ico_yorda_trip_step`)) counts
+consecutive run-pulled ticks by `frame_count` (a missed tick starts the count again); once the
+count passes 3 seconds of ticks (the game's own `(60 - systemStatus[0] * 10) / systemStatus[1]`
+ticks a second: 25 at 50 Hz, 30 at 60 Hz), each tick on which every guard holds trips her with the
+chance 1 / (90 s of ticks), and no trip comes in the 30 s of game time after one, so a trip comes
+about once in 120 s of run-pulling. A trip is the watcher's own `iosOmSendMail(girl, mail, girl)`.
+The guards (`yorda_trip_live.c` (`guards`)): she is in `GIRL HAND_RUNLOOP`; the three fall motions
+are loaded, and every motion their motion-orient rows lead on to is the stage's own or loaded (the
+European disc's second motion set, six stages, has no `SIT3END` and no hand loops); her exhausted
+bit is clear; the game is not paused (`systemStatus[5]`) and Ico is under control
+(`IsAbleBoyControl`, `scpBoyControlReadDisable`); no game over; the stage is not one of the main
+gate's two (its name starts `st04a `). The random numbers are the port's (xorshift32), seeded at the
+first roll from the VU0 random register without advancing it (`ico_vu0_random_get`), so the game's
+own sequence is untouched; the generator, the count, its tick stamp and the refractory time are
+save state blocks (`yorda_trip.*`, `port/platform/state_port.c`), and `gameplay.yorda_trips` is a
+simulation key (`port/platform/sim_keys.c`).
+
+Log lines: `gameplay: yorda trips on|off` at the first read and on a change; at the first read of
+the motions `yorda trips: N of her M motions read from STG4A2ND.DF (B bytes) in T ms`, or why
+not and `she does not trip on this disc`; at each stage load with the option on `yorda trips: N
+motions (K KB) added to the stage's motion memory (stage S, F KB left)`, `stage S loads her N
+motions itself`, `stage S (name) plays her own fall: nothing added`, or `the stage's motion memory
+is full (...): Yorda does not trip here`; on a trip (the first 8, then every 100th) `yorda trips:
+tripped at stage S after R s of running (next chance in 30 s; trip N this run)`.
+
+`port/game/test/yorda_trip_test.c` runs the rule, the guards and the stage load on each disc;
+`yorda_trip_disc_test.c` lists the motions and their pack on the configured disc image
+([TESTING.md](TESTING.md)).
 
 ### Natural chains
 
@@ -309,6 +375,7 @@ hold the rest.
 | Gameplay: stick fix, Yorda, door fix, natural chains | W | W | W | W | W | W | W | the hooks sit in every disc's arm (`backStage.c`, `ebrain.c`, `enemy_act.c`, `boyact.c` `CheckCollisionAttr_ntscaug6jun26`, `BgAnimation.c` `bga_CalcAnimation_<disc>`); `options_<slug>` |
 | Gameplay: Time to rescue Yorda | W | W | W | W | W | W | W | one hook in each `actEnemyKidnapEnd` copy (`enemy_act.c`: motion 952 on pal/jpn/kor/cn, 903 ntsc, 905 aug6, 938 jun26): the dive's play speed is reserved at priority 0 as `1/factor` (`2/factor` under a stage camera effect, which the demo has none of) and the camera's 5 s timeout is scaled by the factor; the frame-50 test, the dissolve and the freeze (priority 9) are the game's; `options_<slug>` (the hook scan), `settings_discs` |
 | Gameplay: Shadow speed | W | W | W | W | W | W | W | `ACTGame_SetMotionPlaySpeedRatio_Exec` (`act-game.c`, one copy for every disc) multiplies the resolved play-speed ratio of a `kind == 4` actor by the factor (0.75, 1, 1.25, 1.5), except the freeze (ratio <= 0.001) and this disc's kidnap-end motion (the pit dive, `pit_time`'s); walking and running are root motion, so the ground speed scales in step; the forward push of `flyCoreLoop` and its two per-disc copies (`commonact.c`) is multiplied for `kind == 4`; brain and wait timers, turn smoothing and path finding are untouched; log `gameplay: shadow speed <name> (x<factor>)`; `options_<slug>` (the source scan), `settings` |
+| Gameplay: Yorda trips | W | W | W | W | W | K | W | each `actGirlHand` copy's run-pulled tick with the disc's mail (109 on pal/jpn/kor/cn, 102 ntsc, 101 aug6, 100 jun26) and both `InitIcoMisc` copies; the motions found by name; the June 2001 demo's `DATA.DF` holds no pack with her fall, so nothing is added and she never trips there (logged); `options_<slug>` (the hook scan), `yorda_trip_<slug>`, `settings_discs` |
 | Gameplay: Skip the opening | W | W | W | W | W | W | W | `kanbanBootMain`/`_jun26`, `actOpDemo01`/`_ntsc`/`_aug6jun26`; `kanban_boot_<slug>`, `settings_extra_<slug>` |
 | Gameplay: Film effect (pause, once cleared) | W | W | W | H | H | H | W | `has_film_effect` (no `film_noise` in the 2001 stage tables, `reel_row` -1); `settings_discs` |
 | Gameplay: Players (pause, once cleared) | W | W | W | W | W | W | W | the 2001 arms carry the European second-pad branches ([Players on the 2001 discs](#players-on-the-2001-discs)); the count kept per save beside the card there (`[players]`); `settings_discs`, `options_<slug>` |
@@ -898,7 +965,7 @@ are [PLATFORM.md](PLATFORM.md#android-graphics-driver-packages)'s.
 
 Each is a ctest: `settings_discs` and its six other-disc runs (the rows each disc shows,
 [Options on each disc](#options-on-each-disc)), `options` (`port/game/test/options_test.c`: the defaults, the setters,
-`eBrainGetTarget` with Yorda safe), `door_grace`, `achievements`, `photo`, `appearance` and
+`eBrainGetTarget` with Yorda safe), `door_grace`, `yorda_trip` and its six other-disc runs, `yorda_trip_disc`, `achievements`, `photo`, `appearance` and
 `appearance_disc`, `credits`, `title_logo`, `state_host` and `model_viewer_headless` (`port/game/CMakeLists.txt`);
 `gallery`, `gallery_sweep`, `credits_headless`, `model_viewer`, `model_viewer_cam`,
 `model_viewer_effects` and `model_viewer_effects_elf` (`port/ui/CMakeLists.txt`); `steam_shortcut` and `gpu_driver` (`port/platform/CMakeLists.txt`).

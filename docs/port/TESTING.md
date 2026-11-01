@@ -260,6 +260,23 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`camera_wall_stage`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
+- `yorda_trip_test.c`: Yorda trips ([GAME_FEATURES.md](GAME_FEATURES.md#yorda-trips)) on the CPU,
+  the rule (`yorda_trip.c`), the game's side (`yorda_trip_live.c`) and the motion reader
+  (`yorda_trip_source.c`) compiled in over a stubbed game, disc and pack index: the disc's run
+  loop, fall and per-stage HETARI motions found by name (decoys left out) and the fall's exits from
+  its motion-orient rows; the run count, a repeated tick and a gap; 10^6 run-pulled ticks at 25
+  and at 30 ticks a second within 20 % of one trip per 120 s, none in the first 3 s, none closer
+  than 30 s; no trip while any one guard fails (paused, no control, a script hold, game over, a gate
+  stage, another motion, the fall or an exit not loaded, this disc's HETARI bit, the option off),
+  trips with the other discs' bits set, the caller's mail; the five save state blocks by name and
+  their bytes put back giving the same trips; the stage load's copies (nothing with the option off,
+  in a gate stage or where the stage has them; the pack's bytes relocated and counted on the stage
+  segment; the pack read once and picked by its members; nothing in a partition too full); one
+  argument selects the disc (`yorda_trip`, `yorda_trip_<disc>`).
+- `yorda_trip_disc_test.c`: the same motions on the disc image the build names: the disc's tables
+  from its ELF, the names and exits, the main gate stages' packs and their HETARI members with their
+  sizes, the copies the game's side reads; nothing starts the game; 77 without the disc
+  (`yorda_trip_disc`).
 - `env_bits_test.c`: where each disc's wall-reach read in `act-env.c` takes its two bits of a motion record (a shift of 6 on every disc, the host layout), every `config/motion_bits.*.txt` row naming the field at bit 24 for two bits, and a synthetic word read through the shift (the June 2001 demo once read the item-mode bits) (`env_bits`).
 - `keep_flags_test.c`: the twenty words a load's keep and restore walk reads on each disc, exactly as that disc's objects have them (issue 160's new-game flag), with the key-config slots as at start and after a Button configuration visit; one argument selects the disc (`keep_flags`, `keep_flags_<disc>`).
 - `eye_trail_test.c`: the shadows' eye trails rebuilt from their world points
@@ -2020,7 +2037,7 @@ A pad recording ([INPUT.md](INPUT.md#recordings)) is a pad script of what the ga
 headless build replays a player's session with `pad_script=<the file>`; it is on by default in the
 window build, in `logs/input-<time>.txt`, and off headless (`input_record=`). Its header records
 the values of `video.video_mode`, `game.language`, `gameplay.mirror`, `gameplay.stick_fix`,
-`gameplay.yorda_safe`, `gameplay.developer_mode`, `dev.start_stage`, `gameplay.door_fix`,
+`gameplay.yorda_safe`, `gameplay.developer_mode`, `dev.start_stage`, `gameplay.door_fix`, `gameplay.yorda_trips`,
 `video.anti_aliasing`, `gameplay.hold_type`, `gameplay.hold_type_chosen` and `gameplay.skip_opening` (the boot's ticks), the eight `variants.*` keys (the barrier's is `(unset)` until chosen), and the native frame's width and aspect (`port/platform/sim_keys.c`
 `ICO_SIM_KEYS`; `port/platform/main_host.c` `record_header`; `ico_input_record_frame_lines`).
 
