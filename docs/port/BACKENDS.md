@@ -23,7 +23,7 @@ everything else follows `RhiLimits`.
 | fog buffer path, probe and edge probe depth (`depthRegionCopies`, `port/render/rd_fog_path.c`) | yes | no (a depth only whole) | yes (`glReadPixels` of the depth aspect) | no (a texture only into a readback buffer) |
 | fog local path (`rd__fog_local_offered`) | where local read is offered | no | no | no |
 | pipeline failure text (`failReason`, `port/render/rd_pipeline.c`) | `VkResult <n> (<name>)` | `HRESULT 0x<8 digits>` | `GL error 0x<4 digits>` | `HRESULT 0x<8 digits>` |
-| VU pre-pass off line (`rd__vu_prepass_init`, `port/render/rd_replay_vu.c`) | the tiler and Apple A9/A10 rules | on | on | off: `on Direct3D 11 (the backend holds the colour targets to 32 bytes a pixel, the record 48: its copies are not in that backend)` |
+| VU pre-pass off line (`rd__vu_prepass_init`, `port/render/rd_replay_vu.c`) | the tiler and Apple A9/A10 rules | on | on | on: the record copied by the backend's compute shader (`d3d11_cmd.c`, [RHI.md](RHI.md#direct3d-11)); off only by its start-up self-test (`off (self-test: ...)`, then `rd: VU pre-pass: self-test failed on Direct3D 11; its last draw: ...`) |
 | window flags (`window_flags`, `port/platform/window_host.c`) | `SDL_WINDOW_VULKAN` | none (the HWND) | `SDL_WINDOW_OPENGL` after `window_gl_attributes` | none (the HWND) |
 | robust access in the summary and the profile line | `RhiLimits.robustText` (`off (the default; ...)`) | `D3D12's own` | `off (OpenGL)` (`robustText`) | `D3D11's own` |
 | occlusion queries (`rhi_occlusion_supported`; `rd_replay_tool --occlusion`, [RENDER.md](RENDER.md#culling)) | a pool a frame slot, made at the first begin, precise where offered | no (an occlusion query heap would be the form) | no (`GL_SAMPLES_PASSED`) | no (`D3D11_QUERY_OCCLUSION`); the tool exits 77 |
@@ -46,7 +46,7 @@ in the renderer assumes BGRA.
 | `uintView` | true | false | true (`glTextureView`) | false | `uintViewWork`, `uintViewScene` |
 | `stencilView` (`stencilViewChannel`) | where the depth-stencil is sampled: a `VK_IMAGE_ASPECT_STENCIL_BIT` view (red) | true: an SRV of plane 1, `X32_TYPELESS_G8X24_UINT` (green) | true: a `glTextureView` in `GL_STENCIL_INDEX` mode (red) | true: an SRV of `X32_TYPELESS_G8X24_UINT` (green) | `shadowOne`: the shadow count in one draw |
 | `dynamicDepth`, `dynamicBlend` | where offered | false | true | false | dynamic state (`[dev] dynamic_state`) |
-| `colorBytesPerPixel` | 0 (MoltenVK: the GPU's) | 0 | 0 | 32 | the VU vertex pre-pass needs 48 or 0 (no bound) |
+| `colorBytesPerPixel` | 0 (MoltenVK: the GPU's) | 0 | 0 | 0 (32 below feature level 11_0, which `rhi_init` never takes) | the VU vertex pre-pass needs 48 or 0 (no bound) |
 | `msaaCounts` | the device's | the device's | `glGetInternalformativ` of RGBA8, RGBA8UI, D32F_S8 | `CheckMultisampleQualityLevels` | the MSAA values offered, with `depth_resolve_ps` made |
 | `sampleRateShading` | where offered | true | true | true | the per-sample fog (`fog_lut_ms_ps`) |
 | `robustDefaultOff` | where robust access is off by default | false | false | false | the loss order's `robust` step |
@@ -87,7 +87,7 @@ from the limits above. [RENDER.md](RENDER.md#the-device-profile) has the other c
 | `localRead` | `no` | `n/a` |
 | `uintViewWork`, `uintViewScene` | on | off (`uintView` false) |
 | `carefulSet` | off | off |
-| the record path (VU pre-pass) | on | off (`colorBytesPerPixel` 32) |
+| the record path (VU pre-pass) | on | on (the record's copies a compute shader; `colorBytesPerPixel` 0) |
 | dynamic state | on | none |
 | `alphaPlan`, `fxPlan`, `vuPlanesFrac` | on | on |
 | `crackFill` | on | on |
@@ -250,6 +250,13 @@ The OpenGL runs of the renderer's suite are the `_gl` tests ([TESTING.md](TESTIN
   the colours at an even and an odd column are checked here.
 - Direct3D 11: nothing has run on Windows; the profile text, the pre-pass line and the robust
   words are from the limits `d3d11_device.c` reports.
+- The VU vertex pre-pass on Direct3D 11 on hardware: CI's WARP job runs its self-test (batched,
+  one an entry, and sabotaged), `rd_vustage_ab` on `rd_pixel`'s three frames and the compute copy
+  in `rhi_d3d11_test` (section 1f); that is FXC's first compile of the pre-pass modules
+  (`vu_X_pre_vs`, `vu_X_batch_pre_vs`, the record stages, `vu_main_vs`, `vu_particle_main_vs`,
+  `vu_pre_ps`) and of the copy's compute shader. A card's driver that draws the record wrong turns
+  the pre-pass off at start with the self-test's line; the 750 Ti reporter of issue 126 is the
+  first hardware measurement.
 - The draw merge on Direct3D 11 on hardware: CI's WARP job compiles (FXC) and draws the prelit
   program's merge build only (`rd_pixel_vu.rddump`); the other six merge builds pass the DXC
   check under `ICO_D3D11=1` (`shaders_d3d11_check`), not FXC. A build FXC refuses on a player's

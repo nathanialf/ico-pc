@@ -781,8 +781,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
   old way (`ICO_RD_VU_PREPASS=0`: the programs' entries) and through the record
   (the pre-passes, the main shaders, `vu_ps`), at Original 4:3 1x and Enhanced 4:3 2x: every named
-  target's PNG byte for byte, no VU draw the old way with the record, the stats lines printed;
-  A dump with no VU command (the four 2D dumps of the corpus) records no pre-pass and passes with 0
+  target's PNG byte for byte, no VU draw the old way with the record, no Direct3D 11
+  debug-layer error and no refused record copy (`rhi_cmd_copy_texture_to_buffer: ... skipped`) in
+  either run, the stats lines printed; a dump with no VU command (the four 2D dumps of the corpus) records no pre-pass and passes with 0
   passes; the records' camera is the one each command's draw uses (the walk follows the field's half
   pixel as `replayFrame` does). SKIP without the list, its dumps or a device (`rd_vustage_ab`).
 - `rd_replay_tool --stats` also prints two counting lines (no draw or record changes): `VU merge:
@@ -873,7 +874,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   and a line a command; then the plain replay and the replay with `--nop @SPEC`, each `--pass-dump`
   with `--present 640x480` under `ICO_RD_BLEND=fixed`: DISPLAY.png and PRESENT.png byte for byte
   (`rd_occlusion_tool`). SKIP without the list, a dump of it or a device.
-- `rd_vumerge_ab_pixel` and `rd_vufuse_ab_pixel`: the two scripts above on the frames `rd_pixel`
+- `rd_vumerge_ab_pixel`, `rd_vufuse_ab_pixel` and `rd_vustage_ab_pixel`: the two scripts above and
+  `rd_vustage_ab.cmake` on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):
   `rd_pixel_vu.rddump` (the VU seams' S4 at Original 1x: 64 code-32 draws of one prelit mesh
   under one state, a matrix each, which the merge joins), `rd_pixel_vu36.rddump` (S3's first
@@ -1778,13 +1780,16 @@ draw:
 | program | how it runs | what a pass shows |
 | --- | --- | --- |
 | `rhi_d3d11_shader_plan_test` | as ctest's `rhi_d3d11_shader_plan` | the shader route's CPU half on Windows |
-| `rhi_d3d11_test --console` | the RHI cells on WARP, again with the constant buffers mapped, the written mark's byte counts, and one upload buffer bound at t0 (from 0) and t5 (from 256 to 2560 bytes) in ten groups (more views than the backend keeps), each column exact and the submit's bytes 6656; the hardware section skips (no GPU on the runner), so does Vulkan; the swapchain section on a hidden SDL window | the RHI's exact-texel cells on Direct3D 11 on both constant buffer paths, a submit's upload writes cut at the written mark, every debug-layer error a failure |
+| `rhi_d3d11_test --console` | the RHI cells on WARP, again with the constant buffers mapped, the written mark's byte counts, and one upload buffer bound at t0 (from 0) and t5 (from 256 to 2560 bytes) in ten groups (more views than the backend keeps), each column exact and the submit's bytes 6656; a texture copied into a storage buffer by the backend's compute shader (section 1f: three copies, one with the buffer still bound to a pixel shader, every element where it belongs and 0xEE elsewhere, two passes reading it at t4 before and after a copy, three refusals writing nothing, 5 copies counted); the hardware section skips (no GPU on the runner), so does Vulkan; the swapchain section on a hidden SDL window | the RHI's exact-texel cells on Direct3D 11 on both constant buffer paths, a submit's upload writes cut at the written mark, every debug-layer error a failure |
 | `rd_blend_selftest_test fixed` | through `rd_blend_selftest.cmake` as ctest's `rd_blend_selftest`, without its Vulkan profile line | the blend self-test passes (`fixed-function ok`) at start and after a new size |
+| `rd_vuprepass_selftest_test on`, `off` | through `rd_vuprepass_selftest.cmake` as ctest's `rd_vuprepass_selftest`, `rd_vuprepass_selftest_unbatched` (`ICO_RD_VU_PREPASS_BATCH=0`) and `rd_vuprepass_selftest_sabotage` (`ICO_RD_VU_PREPASS_SABOTAGE=1`, mode `off`) | the VU vertex pre-pass on Direct3D 11: its record copied by the backend's compute shader, its pictures byte for byte as the programs' entries draw them in the batches (`vu_X_batch_pre_vs`) and one an entry (`vu_X_pre_vs`), the draw merge on beside it; a record drawn a texel off turns it off with the self-test's line (FXC's first compile of every pre-pass module) |
 | `rd_fog_selftest_test inplace` | through `rd_fog_selftest.cmake`, results `inplace ok [0-2], copy not tried, buffer not tried` | the fog depth self-test passes and the probe lines are there |
 | `rd_pixel_test <work>` | as ctest's `rd_pixel` | the pixel cases, and the dumps `rd_pixel_frame.rddump`, `rd_pixel_vu.rddump` and `rd_pixel_vu36.rddump` (written at Original 1x by the VU seams' S4 and S3) |
 | `rd_replay_tool <dump> <png> --present 640x480 --stats --backend d3d11` | on rd_pixel's dump; its log must say `rd: VU merge: on` and never `off on Direct3D 11` (the row `rd_replay_tool_merge_on`) | the replay tool replays and presents on Direct3D 11, with the draw merge on |
 | `rd_vumerge_ab.cmake` | on rd_pixel's `rd_pixel_vu.rddump` (64 code-32 draws of one prelit mesh under one state), `rd_pixel_vu36.rddump` (a code-36 cut and kick pair) and `rd_pixel_frame.rddump`, as ctest's `rd_vumerge_ab_pixel`; some line must say `(N draws merged into G` with N above 0 (the row `rd_vumerge_ab_joined`) | the draw merge on Direct3D 11: every target byte for byte between `ICO_RD_VU_MERGE=0` and the merge, `merge on`, fewer GPU draws, no `rhi_d3d11 debug error` or `corruption` line in either run's output (both A/B scripts fail on one) (the 16:9 setting skips for these 4:3 frames) |
 | `rd_vumerge_fallback.cmake` | on `rd_pixel_vu.rddump`, as ctest's `rd_vumerge_fallback` | the fallback on Direct3D 11: under `ICO_RD_FAKE_MERGE_FAIL=1` one faked failure line naming the merge build, one `rd: VU merge: off: the driver could not compile ... (Direct3D 11)` line, and the `--time 3` replays after it drawing what `ICO_RD_VU_MERGE=0` draws (more than the merge) |
+| `rd_replay_tool <rd_pixel_vu.rddump> <png> --stats --backend d3d11` | the frame of 64 code-32 draws; its log must have the stats line `VU pre-pass on: 1 or 2 passes, ... 0 mesh and grid draws the old way` and no refused copy (the row `rd_replay_tool_vu_record`), and the backend's line `texture-to-buffer copies into storage buffers: a compute shader (cs_5_0` (the row `rd_replay_tool_vu_compute_copy`); the first replay's log `rd: VU pre-pass: on: ` (the row `rd_replay_tool_prepass_on`) | the record path in the replay tool on Direct3D 11 |
+| `rd_vustage_ab.cmake` | on the same three dumps, as ctest's `rd_vustage_ab_pixel`; some line `N targets equal over 3 dumps at 2 settings` (the row `rd_vustage_ab_compared`) | the pre-pass on Direct3D 11 against the programs' own entries (`ICO_RD_VU_PREPASS=0`): every target byte for byte at Original 4:3 1x and Enhanced 4:3 2x, every VU command through the record, no debug-layer error and no refused record copy in either run |
 | `rd_vufuse_ab.cmake` | on the same three dumps with `-DEXTRA=` (no phone frames), as ctest's `rd_vufuse_ab_pixel` | the fused scissor pair on Direct3D 11: every target byte for byte between `ICO_RD_VU_FUSE=0` and the fuse, the merge on in both runs (the phone and 16:9 settings skip for 4:3 frames; Enhanced 4:3 2x through the entries and the record runs) |
 | `rd_present_test <work>` | as ctest's `rd_present` | the presenter's frames |
 | `rd_msaa_test` | as ctest's `rd_msaa` | multisampling and its resolve |
@@ -1806,7 +1811,8 @@ Not run there: the variants whose environment holds a Vulkan fake (`ICO_VK_FAKE_
 path Direct3D 11 has not (`rd_fog_selftest_all` and `_fallback` expect the buffer path, which the
 backend reports `unsupported`; `rd_fog_selftest_local` the local read; `rd_date_selftest` the
 stencil DATE; the blend's exact modes: no destination read, `rov` false), the vertex pre-pass
-self-tests (the pre-pass is off on Direct3D 11), the tests that need the disc or the machine-local
+self-tests' plain, unmerged, tick and triangle sabotage variants (the default, unbatched and
+sabotaged ones run), the tests that need the disc or the machine-local
 dumps, and the rest of the render suite (a longer list is a matter of adding lines to the script;
 these are the ones issue 126 needs). WARP's filtering may round a filtered path an LSB away from
 lavapipe's where a test compares hashes (`rd_present`, `rd_crt`); such a failure names the check,

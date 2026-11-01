@@ -857,9 +857,11 @@ logged once with its removed reason and the last eight submissions (`d11_check`)
 **Limits** (`d11_fill_limits`). As D3D12's except: `copyRowPitchAlign` 1 and `copyOffsetAlign` 4
 (uploads to textures are `UpdateSubresource` from the CPU copy), `maxDynamicUniforms` 4, `rov`
 false (Direct3D 11.3 has rasterizer-ordered views; they stay off, untested), and
-`colorBytesPerPixel` 32, which keeps the VU vertex pre-pass off as on the Apple A9 and A10
-(`port/render/rd_replay_vu.c`): its record goes back through a texture-to-buffer copy Direct3D 11
-does not have. The sample counts come from `CheckMultisampleQualityLevels` over RGBA8 UNORM and UINT
+`colorBytesPerPixel` 0 (no bound: eight RGBA32 targets at feature level 11_0), so the VU vertex
+pre-pass is on as on the other backends (`port/render/rd_replay_vu.c`), its record copied into its
+storage buffer by the compute shader below; below feature level 11_0 (which `rhi_init` never
+takes) it would be 32 with the line `rhi_d3d11: feature level below 11_0: no compute shader for
+the texture-to-buffer copy: the VU vertex pre-pass stays off`. The sample counts come from `CheckMultisampleQualityLevels` over RGBA8 UNORM and UINT
 and D32S8, logged as `rhi_d3d11: multisampling: sample counts 0x..`.
 
 **Frames** (`d3d11_device.c`). Each frame slot has eight command lists, each a deferred context made
@@ -1011,12 +1013,44 @@ line), whose deferred `UpdateSubresource` applies a box's offset to the source t
 become a texture of their own (created with them as its contents) copied in on the GPU;
 `rhi_cmd_copy_texture` is `CopySubresourceRegion` (depth formats whole only);
 `rhi_cmd_resolve_color` is `ResolveSubresource`; `rhi_cmd_copy_texture_to_buffer` goes into a
-readback buffer through its staging texture and is skipped otherwise
-(`rhi_d3d11: rhi_cmd_copy_texture_to_buffer: only into a readback buffer on Direct3D 11; skipped
-(logged once)`: its other callers are the vertex pre-pass (`rd_replay_vu.c`), off on Direct3D 11,
-the fog paths (`rd_fog_path.c`: the buffer path's depth copy, the fog probe and the edge probe),
-all gated off on Direct3D 11, and `rd_crack_fill.c`'s count copy, which goes into a readback
-buffer and so is served).
+readback buffer through its staging texture (`rd_crack_fill.c`'s count copy), and into a
+storage-only device buffer through the compute copy below (the VU vertex pre-pass's record,
+`rd_replay_vu.c` `vuRecPassCopy`); anything else is refused (the fog paths, `rd_fog_path.c`: the
+buffer path's depth copy, the fog probe and the edge probe, are gated off on Direct3D 11).
+
+**The compute copy** (`d3d11_cmd.c` `d11_copy_texture_to_storage`). Direct3D 11 has no copy from a
+texture into a buffer on the GPU, and the pre-pass needs one between two passes of one list: its
+three RGBA32_UINT planes into the frame slot's record buffer, read by the next pass's vertex
+shaders and the main ones as `StructuredBuffer<uint4> vu_rec_buf`. The backend's own compute
+shader (`cs_5_0`, HLSL embedded in `d3d11_cmd.c`, compiled at the first such copy through the
+same `d3dcompiler_47.dll` as the game's shaders, `d3d11_shader_compile_text`, no cache) runs a
+thread a texel, 64 a group: `Texture2D<uint4>.Load` of texel (x + i, y + j) into element
+`dstOffset / 16 + j * rowPitch / 16 + i` of a `RWStructuredBuffer<uint4>`; its 32-byte constant
+buffer (the region, the first element, the pitch) is written with `UpdateSubresource` on the list's
+deferred context before each dispatch. The resources: an RGBA32_UINT texture made with
+`RHI_TEX_COPY_SRC` (single-sampled) gets `D3D11_BIND_SHADER_RESOURCE` and its SRV; a storage-only
+device buffer (`RHI_BUF_STORAGE_READ | RHI_BUF_COPY_DST`, no vertex, index or uniform use) gets
+`D3D11_BIND_UNORDERED_ACCESS` on its structured part and a UAV over the whole part (a device that
+refuses them gets the plain part, logged once, and its copies are refused). Before the dispatch
+every SRV the list bound is unbound (a buffer cannot be a UAV and an SRV at once; the bind groups
+are bound again at the next draw, as at a pass's start); after it the copy's SRV and UAV are
+unbound (the texture becomes a target again in the next pass). The runtime orders the dispatch
+after the draws that read the buffer before it and before every later read. Its limits, each
+refused with `rhi_d3d11: rhi_cmd_copy_texture_to_buffer: <why>; skipped (N so far)` (the first 8,
+then every 100th): an RGBA32_UINT single-sampled source, a storage-only device destination,
+`dstOffset` and `rowPitch` in whole 16-byte elements (the structured part's rule), the region inside
+the texture and the rows inside the buffer, outside a render pass. Its lines:
+
+```
+rhi_d3d11: texture-to-buffer copies into storage buffers: a compute shader (cs_5_0, 64 texels a group, made in <t> ms; the VU vertex pre-pass's record)
+rhi_d3d11: texture-to-buffer copy by the compute shader: the first, <w>x<h> texels at (<x>,<y>) into byte <offset>, rows <pitch> bytes apart (logged once)
+rhi_d3d11: texture-to-buffer copies into storage buffers: the compute shader could not be made (<the compiler's message>): every such copy is skipped, and the VU vertex pre-pass's start-up self-test turns the pre-pass off
+```
+
+A copy the shader could not serve leaves the record's words zero, so the renderer's start-up
+self-test (`rd_vuprepass_selftest.c`) finds the pictures different and turns the pre-pass off for
+the run, followed on Direct3D 11 by `rd: VU pre-pass: self-test failed on Direct3D 11; its last
+draw: ...`.
 
 A pass whose colour target and depth target differ in size logs `rhi_d3d11: render pass: colour
 target WxH with a depth target WxH: Direct3D 11 binds a depth-stencil view only with targets of its
@@ -1098,7 +1132,7 @@ draws less than it should and nothing else says so.
    query a slot ended are read when it comes round, with `D3D11_ASYNC_GETDATA_DONOTFLUSH` for the
    stamps (the slot's event has passed, so nothing waits).
 
-**Not implemented on Direct3D 11**: the destination read, the VU vertex pre-pass, the
+**Not implemented on Direct3D 11**: the destination read, the
 `gpu_checkpoints` breadcrumbs, mailbox with vsync, the display's timing of presents, and the
 memory gauges.
 
@@ -1110,8 +1144,9 @@ recorded on deferred contexts; WARP has partial updates, so only `ICO_D3D11_FAKE
 reaches it), the single window bind on a driver that records command lists, the constant buffer windows' offsets, the order of the deferred lists against
 the uploads at submit, `UpdateSubresource1` with a box on a deferred context of a driver that
 records command lists itself and the texture-and-copy route where it does not,
-`CopySubresourceRegion` into a constant buffer part of a device buffer, FXC's acceptance of every
-game entry under `vs_5_0`/`ps_5_0`, the input layouts against FXC's input signatures, the
+`CopySubresourceRegion` into a constant buffer part of a device buffer, the compute copy on a
+real card (WARP runs it in `rhi_d3d11_test`'s section 1f and the pre-pass checks of the render
+suite), FXC's acceptance of every game entry under `vs_5_0`/`ps_5_0`, the input layouts against FXC's input signatures, the
 flip-model resize, the first `rhi_init` on a real card. CI's `windows` job (WARP, the debug layer
 where the runner can add it) is the first evidence on any of these; its logs are the artifact
 `d3d11-warp-logs`. On a Windows machine, `rhi_d3d11_test.exe` (below, [Tests](#tests)) is the first
@@ -1520,7 +1555,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 | `rhi_d3d11_shader_plan_test.c` | `d3d11_shader.c`'s portable part on every host: the macros text, the include lookup, the flat-register rule over the game's sources and `rhi_test_hlsl.h` (checked against `rhi_test.hlsl`), the cache key over every table entry, the cache file's round trip and the corrupt files it refuses, the failure log's limit; ctest `rhi_d3d11_shader_plan` |
 | `rhi_gl_test.c` | the common cells on OpenGL with the driver's debug output failing the run, the copies the cells do not make (a colour region into a vertex-read device buffer and on into a readback buffer, a D32F_S8 depth as floats, RGBA32_UINT words, each at a wider row pitch; a target made after one whose framebuffer was dropped), and six swapchain frames on SDL's offscreen driver with a resize; ctest `rhi_gl`, and `rhi_gl_nodual` under `ICO_GL_FAKE_NO_DUAL=1`, both on llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `SDL_VIDEO_DRIVER=offscreen`), skipped without a context |
 | `rhi_d3d12_test.c` | Windows, double-clickable: the cells on WARP, on the hardware adapter, the swapchain on a hidden window, then Vulkan for comparison; writes `rhi_d3d12_test.log` and shows a message box (`--console` for ctest); ctest `rhi_d3d12` |
-| `rhi_d3d11_test.c` | Windows, double-clickable, as `rhi_d3d12_test.c` on Direct3D 11 (the cells' shaders compiled at run time from `rhi_test_hlsl.h` through a one-source table; the destination-read cell skipped by the limits); writes `rhi_d3d11_test.log`; ctest `rhi_d3d11` on a native Windows build only; CI's `windows` job runs it with `--console` (WARP; the hardware and Vulkan sections skip on the runner) |
+| `rhi_d3d11_test.c` | Windows, double-clickable, as `rhi_d3d12_test.c` on Direct3D 11 (the cells' shaders compiled at run time from `rhi_test_hlsl.h` through a one-source table; the destination-read cell skipped by the limits; section 1f the compute copy into a storage buffer: every element of three copies where it belongs and 0xEE elsewhere, a pixel shader reading the buffer before and after a copy in one list, three refusals that write nothing, the copies counted); writes `rhi_d3d11_test.log`; ctest `rhi_d3d11` on a native Windows build only; CI's `windows` job runs it with `--console` (WARP; the hardware and Vulkan sections skip on the runner) |
 | `compare_backends.cmd`, `compare_png.ps1` | Windows: every dump in `dumps\` rendered by `rd_replay_tool` on both backends, DISPLAY and the presented picture, each pair compared texel by texel and passing within 1 LSB (DISPLAY is expected identical) |
 | `shaders/rhi_test.hlsl`, `gen_shaders.sh` | the tests' shaders, committed as `rhi_test_spv.h` and `rhi_test_dxil.h` so the tests build without DXC, and as `rhi_test_hlsl.h` (the text as a C string, its registers flat under `ICO_D3D11`) for a run-time compile |
 

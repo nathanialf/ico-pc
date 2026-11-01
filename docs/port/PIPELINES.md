@@ -642,12 +642,14 @@ VU command the old way, for an A/B on a device.
 
 **The devices.** Only what every device the port runs on has: render passes into colour targets,
 point lists, a colour write mask of one channel, vertex and pixel shaders reading a read-only
-storage buffer (as the stream already is), and buffer copies. No compute (the RHI has none), no
+storage buffer (as the stream already is), and buffer copies (a texture into a buffer: on
+Direct3D 11, which has no such copy, the backend's own compute shader, [RHI.md](RHI.md#direct3d-11)).
+No compute in the renderer (the RHI has none), no
 storage writes from a vertex shader (`vertexPipelineStoresAndAtomics`, which the port never
 enables and phones' drivers do not all offer), no vertex texture fetch (`tools/check_spirv.py`'s
 vertex-shader opcode set holds no image instruction). `RGBA32_UINT` is a colour attachment and a
 sampled format on every Vulkan device (the specification's required format support) and a render
-target on Direct3D 12 at feature level 11_0; three targets are inside every device's colour
+target on Direct3D 12 and Direct3D 11 at feature level 11_0; three targets are inside every device's colour
 attachments (at least 4 in Vulkan, 8 on Direct3D 12). The one bound the record meets is Metal's:
 a pixel's colour targets may take 32 bytes together on Apple A9 and A10 GPUs, 64 on A11 to A13 and
 128 from A14 and M1 (Metal Feature Set Tables, "Maximum implicit image block size, per pixel, per

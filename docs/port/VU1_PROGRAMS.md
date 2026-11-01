@@ -399,12 +399,12 @@ range still reaches every block the VU draws put after them) to that range (`rin
 `StructuredBuffer<uint4>` (`port/shaders/vu_common.hlsli` (`vu_ring`): the tables and VuCB's
 `uint4` vectors read as integers, the float vectors through `asfloat`;
 [SHADERS.md](SHADERS.md#integer-lanes-never-through-a-float-load)); every index into it counts
-from the base. Direct3D 11 never makes a batch module (no pre-pass there) but binds t5 for the
-draw merge (issue 126). A bound storage range is written to the GPU up to the ring's
-written mark at every submit there, so with the merge off (`[dev] vu_merge = false`, or a merge
-module missing) its VU groups leave t5 unbound (the layout keeps the slot) and a submit writes
-only the bytes its draws stream; with the merge on, the bytes t5 adds are the ones the merge
-builds read ([BACKENDS.md](BACKENDS.md#what-direct3d-11-costs-the-cpu-a-picture)).
+from the base. On Direct3D 11 (issue 126) a bound storage range is written to the GPU up to the
+ring's written mark at every submit, so with neither reader of t5 (the pre-pass or its batches
+off: `[dev] vu_prepass = false`, `vu_prepass_batch = false`, a failed self-test; and the merge off:
+`[dev] vu_merge = false`, or a merge module missing) its VU groups leave t5 unbound (the layout
+keeps the slot) and a submit writes only the bytes its draws stream; with either on, the bytes t5
+adds are the ones the batch and merge builds read ([BACKENDS.md](BACKENDS.md#what-direct3d-11-costs-the-cpu-a-picture)).
 
 A batch build begins with `vu_pre_batch_entry`: a binary search over the table's x of six fixed
 steps (no loop: [SHADERS.md](SHADERS.md#the-envelope)) finds the vertex's item, its VuCB's vectors
@@ -484,8 +484,8 @@ Every pipeline of those vertex shaders takes its merge build while the merge is 
 same: `port/render/rd_pipeline.c` takes the module by `g_rd.vuMerge`, set once at start, so the
 start-up set and the pipeline count do not change). The skinned programs and the particles have no
 merge build: their draws are one a command, as before. The merge serves both paths: the record's
-main shader and the programs' own entries (the tile-based GPUs' and Direct3D 11's, whose pre-pass
-is off). It is off by `[dev] vu_merge = false` (`ICO_RD_VU_MERGE=0`: one GPU draw a VU draw
+main shader and the programs' own entries (the tile-based GPUs', whose pre-pass is off, and any
+device whose start-up self-test turned it off). It is off by `[dev] vu_merge = false` (`ICO_RD_VU_MERGE=0`: one GPU draw a VU draw
 through the plain builds, an A/B), or when a merge module is missing. On Direct3D 11 a module is
 only its description until the first pipeline that uses it (the backend compiles the HLSL with
 FXC in its pipeline workers), so the start line adds `(Direct3D 11: compiled at their first
