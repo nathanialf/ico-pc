@@ -1,5 +1,7 @@
 ## New
 
+- On Windows and Android, save states now carry over to later versions when the part of the game they were saved in has not changed. When it has, loading the state tells you which version made it and why it cannot be resumed, instead of only saying it is from another version. Save states made by v0.9.7 or earlier cannot carry over.
+
 ## Fixed
 
 - On Android, a save state made in an earlier session could not be loaded (the game closed). Save states made before you closed the app now load after you open it again.

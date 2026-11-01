@@ -399,6 +399,10 @@ globals ([Game data ranges](#game-data-ranges)) and the fixed image
 | keys text | as long as it is | `key=value\n` for every simulation key ([below](#validity)) |
 | sections | packed | each section's bytes, raw deflate (miniz `tdefl`, level 1) |
 
+The format version is 2: a state carries the `syms` section ([Across versions](#across-versions)).
+Format 1 had none; its header still reads (`ICO_STATE_FORMAT_OLDEST` 1), and the header check
+refuses it as another build.
+
 `ico_state_file_write` copies the header and the section list and starts a writer thread
 (`ico_thread.h`; the headless build has it too). The thread deflates each section straight from
 the caller's bytes, which must stay unchanged until the write is collected, writes
@@ -409,7 +413,7 @@ flight at a time: a second gets `ICO_STATE_BUSY` until `ico_state_file_poll` (ne
 size, the file's length and the time the thread took.
 
 `ico_state_file_read_header` reads the header, the table and the keys text and refuses a file
-that is not one (`ICO_STATE_BAD_FILE`: a wrong magic or version, a CRC that does not match, a
+that is not one (`ICO_STATE_BAD_FILE`: a wrong magic, a version outside 1..2, a CRC that does not match, a
 table that does not fit, a file shorter or longer than its header says, which is how truncation
 shows); a missing file is `ICO_STATE_EMPTY`. `ico_state_file_read` then asks a callback for a
 buffer per section (NULL skips it) and inflates into it; a section that does not inflate to
@@ -435,9 +439,18 @@ unset); the text is stored in the file. `ico_sim_keys_first_diff` names the firs
 value differs from the current one.
 
 `ico_state_header_check` compares a saved header with this run's, in this order: the platform
-(`ICO_STATE_OTHER_PLATFORM`, a Windows state on Linux), the build id (`ICO_STATE_OTHER_BUILD`, the
-detail is the other build's commit), the disc slug (`ICO_STATE_OTHER_DISC`), the keys text and then
-the hash (`ICO_STATE_OTHER_SETTINGS`, the detail `key=saved (now cur)`).
+(`ICO_STATE_OTHER_PLATFORM`, a Windows state on Linux), the format version and the build id
+(`ICO_STATE_OTHER_BUILD`, the detail is the other build's commit), the disc slug
+(`ICO_STATE_OTHER_DISC`), the keys text and then the hash (`ICO_STATE_OTHER_SETTINGS`, the detail
+`key=saved (now cur)`).
+
+The rule has two levels. The same build (build id equal) loads a state as it always did: one delta
+per range, nothing else consulted. Another build of the same platform and format goes on to
+`ico_state_header_check_other_build` (the same checks without the build id: the disc and the
+simulation keys must still match) and then to its `syms` section, which loads it only when
+everything the state points into is unchanged in this build ([Across versions](#across-versions)).
+A format 1 state is refused there with the words of [UI.md](UI.md#save-states): nothing in it can
+be translated.
 
 ### The registry
 
@@ -531,6 +544,118 @@ pinned) and `pobjImageTables`' host block (POBJ). A word matches a range when `l
   the image's code (`ico_kernel_state_handlers`). A failure names the first offender; the load
   then puts its backup back (`ICO_STATE_SELF_CHECK`).
 
+### Across versions
+
+A later build has its functions and variables elsewhere, so the one MODULE delta does not apply. A
+save therefore records, in its `syms` section (`port/platform/state_xbuild.h`), what every word
+that points into the program points into, and a later build loads the state when each of those
+things is unchanged here, translating word by word (`IcoStateXlate` in `state_reloc.h`:
+`ico_state_reloc_word` and `ico_state_reloc_typed` take a MODULE word to its translation instead of
+moving it by the delta, so the fibers' registers and stacks, the scheduler's table and every
+scanned region need no other change).
+
+**The symbol table** (`port/platform/state_syms.h`): the symbol file the program ships for its
+crash reports (`ico_pc.map` beside the Linux program, `ico_pc_x64.map` beside the Windows one,
+Android's `assets/libmain.syms.gz`, which `tools/package_android.sh` now writes with the data
+symbols and their sizes in four columns the crash reader passes over; macOS and iOS ship none),
+read whole once, at the first save, load or listing that needs it, through `diag_host.c`
+(`ico_diag_symbols_info`, `ico_diag_symbols_read`, a positional read that leaves the crash
+report's position alone), placed by `ico_diag_init` and checked by `ico_diag_log` (a file of
+another build is not used). It sorts the code into units (a function symbol up to the next
+symbol, its input section's end or its own size; an input section's start without a symbol starts
+a unit named `<object>:<section>`, so a static function a GNU ld map does not name is part of the
+unit before it), the named data outside the game's ranges, and the game's data layout: the
+symbols and input sections inside the two game data ranges as (range, offset, size, kind, name),
+whose XXH3-64 is the layout hash. Logged once: `state: symbols: N functions, M data symbols, K
+game data items (layout <hash>) from <file> in T ms, S KB`, or `state: symbols: none (<file>:
+<why>); ...`.
+
+**The code hash** (`port/platform/code_hash.h`): XXH3-64 of a unit's code with every field that
+depends on where the code and its data were linked set to zero: on x86-64 a branch displacement
+leaving the unit, every RIP-relative displacement, and a 32-bit displacement or immediate whose
+value lies in the image (the instruction lengths from a decoder of the legacy, REX, VEX and EVEX
+forms); on arm64 the offsets of B/BL, B.cond, CBZ, TBZ, LDR literal and ADR that leave the unit,
+every ADRP's page, and the low 12 bits of an ADD or a load/store whose base register an ADRP set
+(never x29 or sp, so frame offsets stay in). Trailing padding is left out. A suspended frame
+needs the same instructions at the same offsets with the same frame; a changed address constant
+changes none of that, every other byte does. A prototype of these rules run over the shipped
+binaries of two consecutive releases (with real changes between them) found, of the 10,709
+functions both Android libraries name, 1,640 with the same raw bytes and 9,896 with the same masked
+hash; of the Linux program's 10,239, 1,904 and 9,884 (the game's own functions: 4,967 of 4,971).
+
+**The record.** At a save `build_syms` (`state_host.c`) walks the copy it is about to write: every
+8-byte-aligned word of the arena, the game's data and bss, the SCAN blocks, the pobj block, the
+scheduler's tables and each fiber's control block and stack whose value lies in the image. A word
+below a fiber's saved stack pointer less 128 bytes (a dead frame) is soft: translated when it can
+be, left otherwise. Each distinct word is classed:
+
+| the word points | recorded as | a later build needs |
+| --- | --- | --- |
+| inside a code unit, past its start (a return address) | the unit: name, ordinal, old start and size, code hash; POSITION | the unit by name and ordinal, with the same code hash |
+| at a unit's start (a function pointer) | the unit; START | the unit; the same hash too when its name is not unique |
+| into the game's data or bss range (the end included) | nothing: the range moves whole | the same layout hash |
+| into a registered block | the block (every block is recorded: name, size, flags, old address, offset in its packed section) | the block by name, with the same size and flags; every block of either build in the other |
+| into a named variable of a unique name | the variable: name, ordinal, old start, size (exact when the file gave one) | the variable, still unique, of the same exact size |
+| at a value the game's data held at start-up (an initialised table's pointer, or one the game copied from it) | a point: the value's offset in the data range | its own start-up value at that offset, in its image |
+| at a C string in read-only data (printable, ending within 24 bytes) | a point: the bytes | the same bytes in its read-only data (the first place) |
+
+The start-up values are a copy of the game data range taken by a constructor in `state_host.c`,
+after the loader relocated the initialised pointers and before any game code. The section holds a
+64-byte header (magic `SYMS`, flags, the hash rules' version, the architecture, the counts, the
+layout hash, the first word nothing names), then the units (48 bytes each), variables (40), points
+(48) and blocks (40) and the names; the save's line gives its size.
+
+**Pinned states.** A state loads only into its own build when its record says so, and the save's
+line names why: no symbol table where it was made (`ICO_XB_TABLE` unset: macOS, iOS, a build
+without a map); its image below 4 GB (`ICO_XB_LOW_IMAGE`: the Linux program is linked at
+0x400000 with `ICO_STATE_FIXED_IMAGE`, and there a PS2 address or a size the game keeps, such as
+0x2000000, falls inside the program's range, so translating every word that looks like an address
+would change numbers; the Windows program sits at 0x140000000 and Android's library at a 64-bit
+address, where that cannot happen); more than the bounds (`ICO_XB_OVERFLOW`: 16,384 units, 4,096
+variables, 4,096 points, 128 blocks, 196,608 distinct words); or a strict word nothing names
+(`ICO_XB_UNNAMED`: a code address outside every unit, a pointer into writable data that is no
+block and no unique variable).
+
+**A load of another build** (`other_build`, `xb_probe` in `state_host.c`): the header passes
+`ico_state_header_check_other_build`; the `syms` and `ranges` sections are read alone and
+`ico_xb_check` compares them with this build in this order, the first failure naming the blocker:
+the blocks both ways (`the block <name> is missing here`, `exists only here`, `changed size`), the
+record's flags (pinned, above), this build's table (`this build has no symbol file`), the hash
+rules, the layout hash (`the game's data layout changed`), each unit (`the function <name> is
+missing here`, `the function <name> changed`), each variable, each point (`the game's start-up
+data changed`, `the text "<text>" is missing here`). Passed, it builds
+the spans (old `[lo, hi]` to new start: a unit `[start, start + size - 1]`, a variable, a block and
+the two game ranges with their end included, an overlap cut so the later start wins) and the
+points (exact words), and the load runs as for the same build with `rel.xlate` set: the reg and
+audio sections unpacked by the blocks' saved offsets, the conservative scan always on. A MODULE
+word without a translation is left as it was and counted (a dead frame's word into a unit this
+build lacks). A size the sections check then refuses (the scheduler's table, a fiber slot) is
+another build's change, not damage: refused as `ICO_STATE_OTHER_BUILD`. The self-checks still run
+and the backup still comes back on a failure. The listing makes the same check for every slot of
+another build, so a slot that would translate shows as loadable.
+
+**What this cannot see.** The check is of the code a frame sits in and the layout of the game's
+globals; it is not a proof that the later build means the same by the state:
+
+- A version that changes a function a suspended thread sits in (an actor's loop, a loader, the
+  scheduler's own wait, `ico_fiber_yield`) refuses that state. A callee is checked only when a
+  frame sits in it: a return address into it is what makes it referenced. A function only
+  pointed at is checked for presence, so the later build calls its own version of it.
+- A data layout is compared by the symbols and sections the file names: a GNU ld map names global
+  variables only, so two static variables of one object that swap places with equal sizes are
+  not seen, nor is a variable whose type changes at the same size. The registered blocks are
+  compared by name, size and flags: a block whose fields are reordered at the same size is not
+  seen. The scheduler's table and the fiber slots are compared by size. Structures in the arena
+  are the game's, whose layout the PS2's fixes (`tools/offset_audit.py`).
+- A pointer into unnamed writable data is no block, no variable and no point: such a state is
+  pinned. A C string found again by its bytes may be another literal with the same text (the same
+  bytes, so the game sees the same text).
+- A simulation key the later build adds refuses the state as `ICO_STATE_OTHER_SETTINGS` (the key is
+  absent from the saved text), as within one build.
+- Host addresses that are rebuilt rather than saved are untouched by any of this: the vsync hook
+  list, the SIF server table and the other host callbacks set up at start-up, files, the
+  renderer's handles (the [registry](#the-registry) lists them).
+
 ### Saving and loading
 
 `port/game/state_host.c` (the program, both builds; `port/game/state_rules.c` holds the
@@ -608,8 +733,9 @@ pad script's position are CLOCK blocks: a load rewinds them with the game. The m
 load is the staging and the backup, about 110 MB.
 
 **Delete** removes `slot<n>.ics` and `slot<n>.png`. **The listing** (`ico_state_list`) reads the
-four headers and checks each against this run (`loadable`, `why_not`), cached until a save, a
-load, a delete or a change of the simulation keys.
+four headers and checks each against this run (`loadable`, `why_not`; a slot of another build of
+this format is checked through its `syms` section, [Across versions](#across-versions)), cached
+until a save, a load, a delete or a change of the simulation keys.
 
 **The [dev] keys** (`main_host.c` reads them, `ico_state_dev_set`): `state_save_at = "<tick>:<slot>"`
 and `state_load_at = "<tick>:<slot>"` save and load once when the Main tick reaches the value
@@ -653,9 +779,13 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: save states on: <n> blocks (<bytes> bytes, <bytes> of them audio), build id <16 hex>, <fixed image\|relocatable image>, arena <pinned\|not pinned>, fiber pool <pinned\|not pinned>, <thread pointer recorded[, stack guard recorded]\|stack guard recorded\|no thread pointer needed>, folder <dir>` | once, the first poll |
 | `state: save states are off: <reason>` | once, instead of the line above |
 | `state: the game's data ranges are not bracketed on this build (<why>): save states are off` | once, the verify failed |
-| `state: saved slot N (<path>): arena <raw> -> <packed>, gdata ..., gbss ..., reg ..., audio ..., sched ..., fibers ..., pobj ..., ranges ...; <k> fibers; copy <ms> ms, write <ms> ms, file <bytes> bytes` | a save written |
+| `state: saved slot N (<path>): arena <raw> -> <packed>, gdata ..., gbss ..., reg ..., audio ..., sched ..., fibers ..., pobj ..., ranges ..., syms ...; <k> fibers; copy <ms> ms, write <ms> ms, file <bytes> bytes` | a save written |
+| `state: slot N can carry over to a later version that keeps U functions (P with a thread inside), D data symbols, K start-up values and texts, B blocks and the game's data layout (W program words; record <bytes> bytes in <ms> ms)`, or `state: slot N loads only into this build: <why> (W program words, B blocks; first unnamed 0x..)` | after each `saved` line: the `syms` record ([Across versions](#across-versions)) |
+| `state: symbols: N functions, M data symbols, K game data items (layout <hash>) from <file> in T ms, S KB`, or `state: symbols: none (<file>: <why>); a state saved here loads only into this build, and no other build's state loads here` | once, at the first save, load or listing that needs the table |
+| `state: slot N was saved by version <v>, this is <v>: everything it points into is unchanged here, so it is translated (U functions, D data symbols, K start-up values and texts, S spans, P points; L dead-frame words without one)` and, after the `loaded` line, `state: slot N from version <commit>: M program words had no translation and were left as they were (first 0x..)` | a load of another build's state |
+| `state: slot N (saved by <commit>) loads here`, or `... cannot be loaded here: <v> -> <v>: <blocker>` | each listing, per slot of another build |
 | `state: loaded slot N (saved at Main tick T, stage S): deltas module +0x0 (fixed image), arena +0x0 (pinned), pool +0x0 (pinned), pobj ... ; words rewritten [(nothing moved)] arena .., gdata .., gbss .., registry .., pobj ..; thread pointer 0x<old>->0x<new>[ unchanged\| not recorded\| not needed] (K words), stack guard[ unchanged\| not recorded\| not needed] (M words); checks P partitions, B blocks, T threads, H handlers; K fibers; apply <ms> ms` | a load done |
-| `state: refused <save\|load\|delete> slot N: <reason>[: <detail>]` | every refusal: save states off, not on the pause menu, a stage switch, the card, the disc, a movie, another mode (photo mode, the credits, the music gallery), the slot empty, a damaged file, another build (its commit; `no thread-pointer record` for a state without the saving process's thread pointer or stack guard where the platform needs them), another disc, another platform, settings differ (`key=saved (now cur)`), the self-checks (the failing check; the backup restored), the file not written (why), busy |
+| `state: refused <save\|load\|delete> slot N: <reason>[: <detail>]` | every refusal: save states off, not on the pause menu, a stage switch, the card, the disc, a movie, another mode (photo mode, the credits, the music gallery), the slot empty, a damaged file, another build (its commit; `no thread-pointer record` for a state without the saving process's thread pointer or stack guard where the platform needs them; for a state this build cannot translate `<saved commit> -> <commit here>: <blocker>`, the blocker as [Across versions](#across-versions) words it, or `made before save states could carry over to later versions (format 1)`), another disc, another platform, settings differ (`key=saved (now cur)`), the self-checks (the failing check; the backup restored), the file not written (why), busy |
 | `state: deleted slot N` | a delete |
 | `state: slot N's picture written (<path>, WxH)`, `... could not be written`, `state: slot N has no picture (no frame was presented)` | the picture |
 | `state: [dev] save at Main tick ..., load at ..., hash at ...` and `state: hash ...` | the [dev] keys |

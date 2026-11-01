@@ -1186,7 +1186,22 @@ and the prompt add three rows and one layout.
   letter, English only matters) in the status line and need a second Cross within two seconds
   (`ST_CONFIRM_SECONDS` times `ui_popup_vsync_hz()` page ticks); moving the cursor, stepping the
   action or waiting cancels. On the title the status line is `UI_STR_STATES_TITLE_HINT`, elsewhere
-  `UI_STR_STATES_NOTE`.
+  `UI_STR_STATES_NOTE` ("A state belongs to this disc. Later versions may load it too. ...").
+- **A state of another version** (`main_host.c` `states_done` and `states_other_version`, the
+  host's popup after a refused load): a slot another build made is listed loadable when this build
+  can translate it ([PLATFORM.md](PLATFORM.md#across-versions)); when it cannot, the card is greyed
+  with `UI_STR_STATES_REFUSED_BUILD` in the status line, and Load's popup says why in the player's
+  words, from `ico_state_last_refusal` (`state.h` `IcoStateBlocker`, the two versions from the
+  commit texts without `-dirty`): `UI_STR_STATES_XB_OLD` for a format 1 state ("This save state was
+  made by version X, before save states could carry over to newer versions. Your memory-card saves
+  still work."), `UI_STR_STATES_XB_CODE` for a changed function a thread sits in ("This save state
+  was made by version X. Version Y changed the part of the game it was saved in, so it cannot be
+  resumed. Your memory-card saves still work."), `UI_STR_STATES_XB_DATA` for the game data layout, a
+  variable, a start-up value, a block or a section size ("... Version Y changed how the game keeps
+  its progress in memory, so it cannot be resumed. ..."), and `UI_STR_STATES_XB_PINNED` for a state
+  nothing translates ("This save state was made by version X, and only that version can resume
+  it. ..."). The Latin languages' texts carry their own line breaks (the popup keeps Latin lines as
+  written); the log line names the function, the variable or the block.
 - **Listing and pictures**: `statesOpen` lists when the page opens, then every `ST_RELIST_TICKS`
   (30) ticks and at the tick after an accepted request (`list` is cheap and cached by the host; the
   picture appears a few frames after a save). A slot's picture is made from its `png_path` when the
