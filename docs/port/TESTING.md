@@ -274,12 +274,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the rule (`yorda_trip.c`), the game's side (`yorda_trip_live.c`) and the motion reader
   (`yorda_trip_source.c`) compiled in over a stubbed game, disc and pack index: the disc's run
   loop, fall and per-stage HETARI motions found by name (decoys left out) and the fall's exits from
-  its motion-orient rows; the run count, a repeated tick and a gap; 10^6 run-pulled ticks at 25
-  and at 30 ticks a second within 20 % of one trip per 120 s, none in the first 3 s, none closer
-  than 30 s; no trip while any one guard fails (paused, no control, a script hold, game over, a gate
+  its motion-orient rows; the run count, a repeated tick, a gap and a stamp behind the last; the
+  main gate scene's rule at 25 and at 30 ticks a second (no trip in the first 3 s of ticks, the trip
+  on the tick after, the 76th or the 91st, the count back to 0 and the next exactly 3 s later, a
+  gap or a boundary with a guard failing starting the 3 s again, the caller's mail); no trip over
+  20 boundaries while any one guard fails (paused, no control, a script hold, game over, a gate
   stage, another motion, the fall or an exit not loaded, this disc's HETARI bit, the option off),
-  trips with the other discs' bits set, the caller's mail; the five save state blocks by name and
-  their bytes put back giving the same trips; the stage load's copies (nothing with the option off,
+  one trip a boundary with the other discs' bits set; the two save state blocks by name (none of
+  the old random ones) and their bytes put back mid-count resuming the count; the stage load's copies (nothing with the option off,
   in a gate stage or where the stage has them; the pack's bytes relocated and counted on the stage
   segment; the pack read once and picked by its members; nothing in a partition too full); one
   argument selects the disc (`yorda_trip`, `yorda_trip_<disc>`).

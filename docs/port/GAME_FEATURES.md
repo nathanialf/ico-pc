@@ -12,7 +12,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | --- | --- |
 | `port/game/options.h`, `options.c` | the gameplay options, their config keys and defaults, the mirror flag per save slot, the stereo/mono choice |
 | `port/game/door_grace.h`, `door_grace.c` | the doorway fix's arm and arrival grace |
-| `port/game/yorda_trip.h`, `yorda_trip.c`, `yorda_trip_live.c`, `yorda_trip_source.c` | Yorda trips: the rule and its random numbers, the game's side (the stage load's motions, the run-pulled tick), her fall's motions read from the disc |
+| `port/game/yorda_trip.h`, `yorda_trip.c`, `yorda_trip_live.c`, `yorda_trip_source.c` | Yorda trips: the rule (the main gate scene's 3 s count), the game's side (the stage load's motions, the run-pulled tick), her fall's motions read from the disc |
 | `port/game/variants.h`, `variants.c` | the game variants ([variants]): values, config keys, the achievements rule, the debug switches and debug-menu opener the game binds, the hint rule, the enemy row reader |
 | `port/render/rd_chain.h`, `rd_content_chain.c` | Natural chains: the two chains, the Null's transform, the links' clip planes |
 | `port/game/achievements.h`, `achievements.c` | the achievement table, its conditions, the counters, `achievements.toml`, the popups |
@@ -155,22 +155,24 @@ game thread during the stage load, and the only lock it takes is that mount's ow
 carries the motions with the arena and `motionTable`; nothing in it points at the host copies.
 
 The hook is `ico_opt_yorda_trip_tick` right after each `actGirlHand` copy sets the run-pulled bit,
-with that disc's mail. The rule (`port/game/yorda_trip.c` (`ico_yorda_trip_step`)) counts
-consecutive run-pulled ticks by `frame_count` (a missed tick starts the count again); once the
-count passes 3 seconds of ticks (the game's own `(60 - systemStatus[0] * 10) / systemStatus[1]`
-ticks a second: 25 at 50 Hz, 30 at 60 Hz), each tick on which every guard holds trips her with the
-chance 1 / (90 s of ticks), and no trip comes in the 30 s of game time after one, so a trip comes
-about once in 120 s of run-pulling. A trip is the watcher's own `iosOmSendMail(girl, mail, girl)`.
+with that disc's mail. The rule (`port/game/yorda_trip.c` (`ico_yorda_trip_step`)) is the main
+gate scene's own (`ico2/script/src/st04a.c` (`actSt04aGirlSitChk`, and the June 2001 demo's
+`actSt04aGirlSitChk_jun26`)): consecutive run-pulled ticks are counted by `frame_count` (a missed
+tick, the scene's tick without the bit, starts the count again); once the count passes
+`((60 - systemStatus[0] * 10) / systemStatus[1]) * 3` ticks (3 seconds: 25 ticks a second at
+50 Hz, 30 at 60 Hz, so the trip comes on the 76th or the 91st tick of a run), the count starts
+again from 0 and the mail goes, the watcher's own `iosOmSendMail(girl, mail, girl)`, so every
+further 3 seconds of running hand in hand trip her again. There is no random roll and no wait
+between trips. Where a guard fails on that tick no mail goes and the count starts again all the
+same, as the scene's count does after a mail that does not take effect.
 The guards (`yorda_trip_live.c` (`guards`)): she is in `GIRL HAND_RUNLOOP`; the three fall motions
 are loaded, and every motion their motion-orient rows lead on to is the stage's own or loaded (the
 European disc's second motion set, six stages, has no `SIT3END` and no hand loops); her exhausted
 bit is clear; the game is not paused (`systemStatus[5]`) and Ico is under control
 (`IsAbleBoyControl`, `scpBoyControlReadDisable`); no game over; the stage is not one of the main
-gate's two (its name starts `st04a `). The random numbers are the port's (xorshift32), seeded at the
-first roll from the VU0 random register without advancing it (`ico_vu0_random_get`), so the game's
-own sequence is untouched; the generator, the count, its tick stamp and the refractory time are
-save state blocks (`yorda_trip.*`, `port/platform/state_port.c`), and `gameplay.yorda_trips` is a
-simulation key (`port/platform/sim_keys.c`).
+gate's two (its name starts `st04a `). The count and its tick stamp are save state blocks
+(`yorda_trip.run_ticks`, `yorda_trip.last_tick`; `port/platform/state_port.c`), so a state resumes
+the count, and `gameplay.yorda_trips` is a simulation key (`port/platform/sim_keys.c`).
 
 Log lines: `gameplay: yorda trips on|off` at the first read and on a change; at the first read of
 the motions `yorda trips: N of her M motions read from STG4A2ND.DF (B bytes) in T ms`, or why
@@ -178,7 +180,7 @@ not and `she does not trip on this disc`; at each stage load with the option on 
 motions (K KB) added to the stage's motion memory (stage S, F KB left)`, `stage S loads her N
 motions itself`, `stage S (name) plays her own fall: nothing added`, or `the stage's motion memory
 is full (...): Yorda does not trip here`; on a trip (the first 8, then every 100th) `yorda trips:
-tripped at stage S after R s of running (next chance in 30 s; trip N this run)`.
+tripped at stage S after 3 s of running (trip N this run)`.
 
 `port/game/test/yorda_trip_test.c` runs the rule, the guards and the stage load on each disc;
 `yorda_trip_disc_test.c` lists the motions and their pack on the configured disc image

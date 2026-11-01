@@ -443,11 +443,10 @@ The first five are off unless you turn them on, on a phone too.
   of the ladder in the East Reflector. For a few seconds after you come
   through a door holding her hand, that door does not take you back.
   [Why this is needed](FAQ.md#ico-and-yorda-come-straight-back-out-of-a-doorway).
-- **Yorda trips** lets Yorda trip and fall now and then while Ico runs
-  pulling her by the hand, the way she does once in the original game after
-  the main gate opens. It happens about once in two minutes of running hand
-  in hand, never in the first three seconds of a run and never twice within
-  half a minute. She gets up again when Ico moves on. It takes effect from
+- **Yorda trips** makes Yorda trip and fall the way she does in the original
+  game after the main gate opens: when Ico has run pulling her by the hand
+  for three seconds, she falls, and again after every three more seconds of
+  it. She gets up again when Ico moves on. It takes effect from
   the next room you go into, or the next time you continue from a save. The
   June 2001 demo does not have her fall, so on that disc it does nothing.
 - **Natural chains** changes how two chains look as they come down for Ico:
