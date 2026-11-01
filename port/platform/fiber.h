@@ -115,7 +115,10 @@ int ico_fiber_slot(const IcoFiber *f);
  * own pointers recomputed for the slot (and checked against the old value
  * plus its delta), then the conservative scan (ico_state_reloc_word) over
  * the other callee-saved registers (rbx, rbp, r12-r15, and rdi, rsi on
- * Windows; x19-x29 on arm64) and every 8-byte word of the restored stack.
+ * Windows; x19-x29 on arm64) and every 8-byte word of the restored stack,
+ * which also rewrites the saving process's thread pointer and stack guard
+ * to this process's (state_reloc.h, "The saving process's own values": the
+ * protector's frames hold both).
  * The vector registers (xmm6-15, d8-15) are never touched. Host context
  * only (no fiber running). The asm backend on x86-64 and arm64 only: the
  * calls return -1 elsewhere. */

@@ -412,7 +412,10 @@ static uintptr_t ctx_sp(const _mco_ctxbuf *c)
 #endif
 }
 
-/* The conservative scan's step on one pointer-sized word. */
+/* The conservative scan's step on one pointer-sized word (the saving
+   process's thread pointer and stack guard included: a protected frame
+   keeps the thread pointer in a callee-saved register across the switch,
+   x20 in ico_fiber_yield on Android, and the guard in its stack slot). */
 static void scan_word(void **p, const IcoStateReloc *r)
 {
     uint64_t w = (uint64_t)(uintptr_t)*p;

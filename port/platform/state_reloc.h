@@ -20,6 +20,24 @@
  * buffer's end).  The ranges never overlap; when a word equals one range's
  * hi and another's lo, the first range in enum order takes it.  An empty
  * range (lo == hi) matches nothing in the scan.
+ *
+ * The saving process's own values.  Two words a suspended fiber holds are
+ * no address in any range and still belong to the process that saved it:
+ *
+ *   TLS     the game thread's thread pointer (arm64 TPIDR_EL0).  With the
+ *           stack protector on, clang keeps it in a callee-saved register
+ *           (x20 in ico_fiber_yield) across the switch, to read the guard
+ *           through it when the frame returns.
+ *   GUARD   the stack guard: the word every protected frame holds and
+ *           compares on return (Android: bionic's thread slot at the thread
+ *           pointer + 0x28; Apple: __stack_chk_guard).
+ *
+ * A later process has other values, so a frame resumed with the old ones
+ * reads through an old thread pointer (a fault) or finds a guard that is
+ * not this process's (__stack_chk_fail).  ico_state_reloc_word rewrites a
+ * word EQUAL to a value's old word to its new word, before it looks at the
+ * ranges.  Exact 64-bit matches only: a thread pointer or a random guard is
+ * never a legitimate game word by accident, as a range's span can be.
  */
 #ifndef ICO_PLATFORM_STATE_RELOC_H
 #define ICO_PLATFORM_STATE_RELOC_H
@@ -35,14 +53,60 @@ typedef struct IcoStateRange {
     int64_t delta; /* the address now minus the address then */
 } IcoStateRange;
 
+enum { ICO_RELOC_TLS = 0, ICO_RELOC_GUARD, ICO_RELOC_VALUES };
+
+typedef struct IcoStateValue {
+    uint64_t old; /* in the saving process; 0: off */
+    uint64_t now; /* in this one */
+} IcoStateValue;
+
 typedef struct IcoStateReloc {
     IcoStateRange range[ICO_RELOC_RANGES]; /* indexed by ICO_RELOC_* */
+    IcoStateValue value[ICO_RELOC_VALUES]; /* indexed by ICO_RELOC_TLS/GUARD */
+    /* NULL, or ICO_RELOC_VALUES counters each value's rewrites are added
+       to (the words are counted wherever they are found: the fibers'
+       registers and stacks, the scheduler's table, the scanned regions) */
+    uint64_t *value_words;
 } IcoStateReloc;
 
-/* The conservative scan's step: when *w lies in a range (see above) and
-   that range moved, *w += delta and the result is 1; otherwise *w is left
-   alone and the result is 0. */
+/* The conservative scan's step: when *w equals an enabled value's old word
+   (above), *w becomes its new word, the value's counter goes up and the
+   result is 1; else when *w lies in a range and that range moved,
+   *w += delta and the result is 1; otherwise *w is left alone and the
+   result is 0. */
 int ico_state_reloc_word(const IcoStateReloc *r, uint64_t *w);
+
+/* Sets the two values (old -> now) and their counters (`words`: NULL, or
+   ICO_RELOC_VALUES counters, zeroed here).  A value whose old or new word
+   is 0, or whose two words are equal, is left off: nothing to rewrite. */
+void ico_state_reloc_set_values(IcoStateReloc *r, uint64_t tls_old, uint64_t tls_now,
+                                uint64_t guard_old, uint64_t guard_now, uint64_t *words);
+
+/* 1 when a value is on (a load must scan even when no range moved). */
+int ico_state_reloc_values_on(const IcoStateReloc *r);
+
+/* --- The process's values (state_reloc.c) ---------------------------------- */
+
+typedef struct IcoStateProc {
+    uint64_t tls_base;    /* arm64 Linux and Android: TPIDR_EL0; else 0 */
+    uint64_t stack_guard; /* Android arm64: the word at TPIDR_EL0 + 0x28;
+                             Apple: __stack_chk_guard; else 0 */
+} IcoStateProc;
+
+/* The calling thread's values (a save records the game thread's: the one
+   that runs every fiber). */
+void ico_state_proc_read(IcoStateProc *out);
+
+/* Which values a state made on platform `tag` (state_file.h's platform
+   tags) must carry: android-arm64 both, linux-arm64 the thread pointer,
+   macos-* and ios-* the guard, every other tag none. */
+#define ICO_STATE_PROC_TLS 1u
+#define ICO_STATE_PROC_GUARD 2u
+unsigned ico_state_proc_needs(const char *tag);
+
+/* 0, or -1 when a value `tag` needs is 0 (a state without the record,
+   which a load refuses before it changes anything). */
+int ico_state_proc_check(const char *tag, uint64_t tls_base, uint64_t stack_guard);
 
 /* A typed fix-up: *w is known to be an address in range `which` (a saved
    return address, stack pointer, function pointer) or 0.  A nonzero *w is

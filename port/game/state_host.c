@@ -20,7 +20,8 @@
  *   pobj    the decoded tables of the model being loaded
  *           (ico2/common/src/PObj.c), when there is one
  *   ranges  where the saving process had its image, arena, pool, game data
- *           and pobj block, and its mesh generations (StateRanges below)
+ *           and pobj block, its mesh generations, and the game thread's
+ *           thread pointer and stack guard (StateRanges below)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -100,7 +101,9 @@ int ico_movie_open(void);
 
 /* --- what a state holds besides the memory --------------------------------- */
 
-#define RANGES_MAGIC 0x52414E47u /* "RANG" */
+/* "RAN2": the layout with the thread pointer and the stack guard ("RANG"
+   had neither) */
+#define RANGES_MAGIC 0x52414E32u
 
 #define RANGE_ARENA_PINNED 1u
 #define RANGE_POOL_PINNED 2u
@@ -114,6 +117,9 @@ typedef struct StateRanges {
     uint64_t gdata_lo, gdata_hi, gbss_lo, gbss_hi;
     uint64_t pobj_lo, pobj_bytes;
     uint32_t mesh_gen_high, reserved;
+    /* the game thread's (state_reloc.h "The saving process's own values"):
+       the fibers' frames hold them, and a later process has others */
+    uint64_t tls_base, stack_guard;
 } StateRanges;
 
 /* one fiber in the fibers section, followed by its control block and its
@@ -191,6 +197,21 @@ static int s_cut_next; /* a load's second camera cut, at the next poll */
 
 static void flush_at_exit(void);
 
+/* what a state of this platform records of the saving process besides its
+   ranges (state_reloc.h "The saving process's own values"), for the log */
+static const char *proc_words(unsigned need)
+{
+    switch (need & (ICO_STATE_PROC_TLS | ICO_STATE_PROC_GUARD)) {
+    case ICO_STATE_PROC_TLS | ICO_STATE_PROC_GUARD:
+        return "thread pointer recorded, stack guard recorded";
+    case ICO_STATE_PROC_TLS:
+        return "thread pointer recorded";
+    case ICO_STATE_PROC_GUARD:
+        return "stack guard recorded";
+    }
+    return "no thread pointer needed";
+}
+
 static void turn_off(const char *why)
 {
     snprintf(s_off_why, sizeof s_off_why, "%s", why);
@@ -265,7 +286,7 @@ static void init(void)
     ico_host_at_shutdown(flush_at_exit);
     fprintf(stderr,
             "state: save states on: %d blocks (%llu bytes, %llu of them audio), build id "
-            "%02x%02x%02x%02x%02x%02x%02x%02x, %s, arena %s, fiber pool %s, folder %s\n",
+            "%02x%02x%02x%02x%02x%02x%02x%02x, %s, arena %s, fiber pool %s, %s, folder %s\n",
             ico_state_registry_count(), (unsigned long long)(s_reg_bytes + s_audio_bytes),
             (unsigned long long)s_audio_bytes, s_now.build_id[0], s_now.build_id[1],
             s_now.build_id[2], s_now.build_id[3], s_now.build_id[4], s_now.build_id[5],
@@ -276,7 +297,8 @@ static void init(void)
             "relocatable image",
 #endif
             ico_arena_pinned() ? "pinned" : "not pinned",
-            ico_fiber_pool_pinned() ? "pinned" : "not pinned", s_dir);
+            ico_fiber_pool_pinned() ? "pinned" : "not pinned",
+            proc_words(ico_state_proc_needs(ico_state_platform_tag())), s_dir);
 }
 
 int ico_state_available(void)
@@ -541,6 +563,15 @@ static void fill_ranges(StateRanges *r, const void *pobj, size_t pobj_bytes)
 #ifndef ICO_HEADLESS
     r->mesh_gen_high = rd_vu_mesh_gen_high();
 #endif
+    {
+        /* on the game thread (copy_live runs at the poll, the thread that
+           resumes every fiber) */
+        IcoStateProc pv;
+
+        ico_state_proc_read(&pv);
+        r->tls_base = pv.tls_base;
+        r->stack_guard = pv.stack_guard;
+    }
 }
 
 /* Every section of a state from the live memory (the audio blocks under
@@ -1032,6 +1063,19 @@ static int any_moved(const IcoStateReloc *r)
     return 0;
 }
 
+/* the load line's word on one of the saving process's values (the guard's
+   value itself is not logged) */
+static const char *value_note(uint64_t old, uint64_t now)
+{
+    if (old == 0 && now == 0) {
+        return " not needed";
+    }
+    if (old == 0) {
+        return " not recorded";
+    }
+    return old == now ? " unchanged" : "";
+}
+
 static const char *delta_word(int which, const StateRanges *rg)
 {
     switch (which) {
@@ -1076,6 +1120,8 @@ static void perform_load(int slot)
     Copy stage, backup;
     LoadCtx lc;
     IcoStateReloc rel;
+    IcoStateProc proc;
+    uint64_t value_words[ICO_RELOC_VALUES];
     IcoStateCheck chk;
     ScanCounts k;
     char path[ICO_PATH_MAX];
@@ -1132,6 +1178,14 @@ static void perform_load(int slot)
             snprintf(detail, sizeof detail, "the fibers section does not hold what it says");
         }
     }
+    /* a state without the saving process's thread pointer or stack guard
+       where this platform's frames hold them: its fibers would resume with
+       another process's values, so it is refused before anything changes */
+    if (r == ICO_STATE_OK &&
+        ico_state_proc_check(saved.platform, rg->tls_base, rg->stack_guard) != 0) {
+        r = ICO_STATE_OTHER_BUILD;
+        snprintf(detail, sizeof detail, "no thread-pointer record");
+    }
     if (r == ICO_STATE_OK && rg->pobj_bytes != 0) {
         pobj_new = dup_bytes(stage.p[SEC_POBJ], (size_t)rg->pobj_bytes);
         if (pobj_new == NULL) {
@@ -1146,7 +1200,13 @@ static void perform_load(int slot)
         return;
     }
     build_reloc(&rel, rg, pobj_new);
-    moved = any_moved(&rel);
+    /* the saving process's thread pointer and stack guard -> this one's
+       (this is the game thread, which resumes every fiber) */
+    ico_state_proc_read(&proc);
+    ico_state_reloc_set_values(&rel, rg->tls_base, proc.tls_base, rg->stack_guard, proc.stack_guard,
+                               value_words);
+    /* the regions are scanned when a range moved or a value differs */
+    moved = any_moved(&rel) || ico_state_reloc_values_on(&rel);
     /* the hash's host blocks: the live tables, the saved ones, the copy */
     note_host_blocks();
     ico_state_hash_note_block(&s_host_blocks, rg->pobj_lo, rg->pobj_bytes);
@@ -1259,13 +1319,18 @@ static void perform_load(int slot)
         fprintf(stderr,
                 "state: loaded slot %d (saved at Main tick %u, stage %d): deltas %s; words "
                 "rewritten %s arena %llu, gdata %llu, gbss %llu, registry %llu, pobj %llu; "
+                "thread pointer 0x%llx->0x%llx%s (%llu words), stack guard%s (%llu words); "
                 "checks %u partitions, %u blocks, %u threads, %u handlers; %d fibers; apply "
                 "%.1f ms\n",
                 slot, saved.main_tick, saved.stage_no, deltas, moved ? "" : "(nothing moved)",
                 (unsigned long long)k.arena, (unsigned long long)k.gdata,
                 (unsigned long long)k.gbss, (unsigned long long)k.reg, (unsigned long long)k.pobj,
-                chk.partitions, chk.nodes, chk.threads, chk.handlers, img.n_fibers,
-                ico_thread_now_ms() - t0);
+                (unsigned long long)rg->tls_base, (unsigned long long)proc.tls_base,
+                value_note(rg->tls_base, proc.tls_base),
+                (unsigned long long)value_words[ICO_RELOC_TLS],
+                value_note(rg->stack_guard, proc.stack_guard),
+                (unsigned long long)value_words[ICO_RELOC_GUARD], chk.partitions, chk.nodes,
+                chk.threads, chk.handlers, img.n_fibers, ico_thread_now_ms() - t0);
     }
     copy_free(&stage);
     copy_free(&backup);
