@@ -221,8 +221,8 @@ static void checkRule(void)
               s_calls == 0 && moved == 0.0f,
           "a still eye: not asked");
     {
-        const float far[3] = {80.0f, 25.0f, 20.0f - (RD_INTERP_CAMERA_MOVE + 10.0f)};
-        CHECK(ico_camera_wall_step(&s, far, 0, 0, stubStage, &w, NULL) == ICO_CAMERA_WALL_NONE &&
+        const float away[3] = {80.0f, 25.0f, 20.0f - (RD_INTERP_CAMERA_MOVE + 10.0f)};
+        CHECK(ico_camera_wall_step(&s, away, 0, 0, stubStage, &w, NULL) == ICO_CAMERA_WALL_NONE &&
                   s_calls == 0,
               "a step past RD_INTERP_CAMERA_MOVE: not asked (the presenter snaps on its own)");
     }
