@@ -200,6 +200,34 @@ if(ICO_RUN_TESTS)
     add_test(NAME camera_wall_stage COMMAND camera_wall_stage_test)
 endif()
 
+# yorda_trip_disc: the same motions on the disc image (ICO_DISC_IMAGE): the
+# disc's tables loaded from its ELF (port/data/tables.c), the run loop and the
+# fall named, the main gate stages' packs and their HETARI members with their
+# sizes, and the copies the game's side reads.  No game start; skipped (77)
+# without the disc, as in a worktree.
+set(_yt_data "${CMAKE_SOURCE_DIR}/port/data")
+ico_include_dirs(fumi _ico_yorda_trip_disc_incs)
+add_executable(yorda_trip_disc_test test/yorda_trip_disc_test.c yorda_trip_source.c
+               "${_yt_data}/tables.c" ${ICO_TABLE_SOURCES})
+target_include_directories(yorda_trip_disc_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${_yt_data}"
+    "${CMAKE_SOURCE_DIR}" ${_ico_yorda_trip_disc_incs})
+set(_yt_defs ${ICO_GAME_DEFINITIONS})
+list(REMOVE_ITEM _yt_defs ICO_RD=1)
+target_compile_definitions(yorda_trip_disc_test PRIVATE ${_yt_defs} ICO_HOST=1)
+set_source_files_properties(${ICO_TABLE_EE_SYMBOLS} TARGET_DIRECTORY yorda_trip_disc_test
+                            PROPERTIES COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
+target_compile_options(yorda_trip_disc_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_GAME_WARNINGS})
+# ico_math: the maths typedef.h's headers name (as model_viewer_effects links it)
+target_link_libraries(yorda_trip_disc_test PRIVATE ico_port_data ico_region ico_math)
+if(NOT WIN32)
+    target_link_libraries(yorda_trip_disc_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    add_test(NAME yorda_trip_disc COMMAND yorda_trip_disc_test "${ICO_DISC_IMAGE}")
+    set_tests_properties(yorda_trip_disc PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 # The doorway fix: the arm and the grace with the option off and
 # on, holding hands or not, the stage it leads to, the frame count, and a copy
 # of the exit check's guard driven through an arrival frame by frame. CPU
