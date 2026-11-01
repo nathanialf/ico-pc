@@ -157,6 +157,48 @@ if(ICO_RUN_TESTS)
     add_test(NAME poly_flat COMMAND poly_flat_test)
 endif()
 
+# The blended camera's wall rule (port/game/camera_wall.c): a segment
+# against one wall (through it either way, past its ends and over its top
+# within the radius, a sloped bottom) and one floor (down and up through it,
+# its rim, a triangle), and the rule at each flip (no eye before, a crossing,
+# a free path, the reverse crossing, a pending cut and photo mode not asked,
+# a still eye and a step past the presenter's limit not asked, forgetting).
+# CPU only, no game sources.
+add_executable(camera_wall_test test/camera_wall_test.c camera_wall.c)
+target_include_directories(camera_wall_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/render")
+target_compile_options(camera_wall_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(NOT WIN32)
+    target_link_libraries(camera_wall_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    add_test(NAME camera_wall COMMAND camera_wall_test)
+endif()
+
+# The live wall check (port/game/camera_wall_stage.c) over a synthetic stage
+# in a stand-in arena, with the game's records (GObj, Sub15C, the collision
+# set's head, walls, floors, block grids as EE words) and the object table's
+# walk stubbed in the test: a wall placed by its node's translation, a floor
+# under a turned node, the second node of a per-node set, the collision list's
+# filter and the skipped wall attributes, records outside the arena not read,
+# the arena and the object table unchanged after every check, the log line
+# and its Frame rate gate, a pending cut, photo mode, forgetting. CPU only.
+add_executable(camera_wall_stage_test test/camera_wall_stage_test.c camera_wall.c
+               camera_wall_stage.c)
+ico_include_dirs(fumi _ico_cw_test_incs)
+target_include_directories(camera_wall_stage_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/render" "${CMAKE_SOURCE_DIR}/port/platform"
+                           ${_ico_cw_test_incs})
+target_compile_definitions(camera_wall_stage_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(camera_wall_stage_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+if(NOT WIN32)
+    target_link_libraries(camera_wall_stage_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    add_test(NAME camera_wall_stage COMMAND camera_wall_stage_test)
+endif()
+
 # The doorway fix: the arm and the grace with the option off and
 # on, holding hands or not, the stage it leads to, the frame count, and a copy
 # of the exit check's guard driven through an arrival frame by frame. CPU
@@ -464,6 +506,21 @@ if(TARGET ico_pc)
     target_compile_options(ico_photo_view_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
                            ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_photo_view_live>)
+endif()
+# camera_wall.c, camera_wall_stage.c: the blended camera's path through the
+# stage's collision, which GsBase.c's flip asks at every tick
+# (camera_wall.h); built as photo_view.c is (the game's include path and record
+# layout), in the headless build too; port/platform for the log helper
+if(TARGET ico_pc)
+    add_library(ico_camera_wall_live OBJECT camera_wall.c camera_wall_stage.c)
+    ico_include_dirs(fumi _ico_cw_game_incs)
+    target_include_directories(ico_camera_wall_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                               "${CMAKE_SOURCE_DIR}/port/render" "${CMAKE_SOURCE_DIR}/port/platform"
+                               ${_ico_cw_game_incs})
+    target_compile_definitions(ico_camera_wall_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    target_compile_options(ico_camera_wall_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_camera_wall_live>)
 endif()
 # demo_host.c: the June 2001 demo's sceDemoStart (the magazine menu's settings,
 # here the port's), which common/src/main.c calls on that disc; port code, in
