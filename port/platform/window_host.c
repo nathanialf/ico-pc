@@ -92,6 +92,7 @@ _Static_assert(SDLK_F11 == ICO_HOTKEY_KEY_F11, "hotkeys.h: SDL3's SDLK_F11");
 
 _Static_assert(SDLK_F12 == ICO_HOTKEY_KEY_F12, "hotkeys.h: SDL3's SDLK_F12");
 _Static_assert(SDLK_F5 == ICO_HOTKEY_KEY_F5, "hotkeys.h: SDL3's SDLK_F5");
+_Static_assert(SDLK_F6 == ICO_HOTKEY_KEY_F6, "hotkeys.h: SDL3's SDLK_F6");
 _Static_assert(SDLK_F9 == ICO_HOTKEY_KEY_F9, "hotkeys.h: SDL3's SDLK_F9");
 
 _Static_assert(SDL_EVENT_TERMINATING == ICO_SDL_EVENT_TERMINATING &&
@@ -3727,6 +3728,15 @@ int ico_window_pump(void)
                 /* save states' slot 1 (state.h; performed at the next poll) */
                 (hotkey == ICO_HOTKEY_STATE_SAVE ? ico_state_request_save
                                                  : ico_state_request_load)(1);
+            } else if (hotkey == ICO_HOTKEY_STATES_PAGE) {
+                /* the Save states page (settings.h); in play Start first */
+                IcoCaptureState c;
+
+                capture_state(&c);
+                if (ui_settings_states_key(ico_start_opens_pause(&c))) {
+                    ico_input_escape(1, &c);
+                    ico_input_escape(0, NULL);
+                }
             } else if (e.key.key == SDLK_F11 || e.key.key == SDLK_F12) {
                 /* a held key's repeats: nothing */
             } else if (escape_key(e.key.key)) {

@@ -26,6 +26,8 @@ IcoHotkey ico_hotkey_for_mod(unsigned int key, int repeat, int shift)
         return ICO_HOTKEY_STATE_SAVE;
     case ICO_HOTKEY_KEY_F9:
         return ICO_HOTKEY_STATE_LOAD;
+    case ICO_HOTKEY_KEY_F6:
+        return ICO_HOTKEY_STATES_PAGE;
     default:
         return ICO_HOTKEY_NONE;
     }

@@ -6,8 +6,9 @@
  * nothing, no other key is taken (Escape, Alt+Enter and the bindable keys
  * stay with window_host.c and the binding layer), the stats period and
  * F11's toggle, and F12's file names; F5 and F9 are the save states' slot 1
- * save and load (once per press, no Shift variant). window_host.c checks the key codes
- * against SDL3's SDLK_F11 and SDLK_F12 at compile time and dispatches on
+ * save and load and F6 the Save states page (once per press, no Shift
+ * variant), F6's code SDL3's. window_host.c checks the key codes against
+ * SDL3's SDLK_F5, F6, F9, F11 and F12 at compile time and dispatches on
  * ico_hotkey_for.
  */
 #include <stdio.h>
@@ -73,7 +74,13 @@ int main(void)
     CHECK(ico_hotkey_for_mod(ICO_HOTKEY_KEY_F5, 0, 1) == ICO_HOTKEY_STATE_SAVE);
     CHECK(ico_hotkey_for_mod(ICO_HOTKEY_KEY_F9, 0, 1) == ICO_HOTKEY_STATE_LOAD);
     CHECK(ico_hotkey_for_mod(ICO_HOTKEY_KEY_F9, 1, 1) == ICO_HOTKEY_NONE);
-    CHECK(ico_hotkey_for(K_F6, 0) == ICO_HOTKEY_NONE);
+    /* the Save states page: F6, once per press, Shift changes nothing */
+    CHECK(ICO_HOTKEY_KEY_F6 == K_F6);
+    CHECK(ICO_HOTKEY_KEY_F6 == (63u | (1u << 30)));
+    CHECK(ico_hotkey_for(K_F6, 0) == ICO_HOTKEY_STATES_PAGE);
+    CHECK(ico_hotkey_for(K_F6, 1) == ICO_HOTKEY_NONE);
+    CHECK(ico_hotkey_for_mod(K_F6, 0, 1) == ICO_HOTKEY_STATES_PAGE);
+    CHECK(ico_hotkey_for_mod(K_F6, 1, 1) == ICO_HOTKEY_NONE);
     CHECK(ico_hotkey_for(K_F8, 0) == ICO_HOTKEY_NONE);
     /* SDL3: SDLK_F5/F9 = scancode 62/66 | SDLK_SCANCODE_MASK */
     CHECK(ICO_HOTKEY_KEY_F5 == (62u | (1u << 30)));

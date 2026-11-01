@@ -1,8 +1,8 @@
 /*
  * port/input/mouse_look.c
  *
- * The mouse camera's capture rule, Escape's button and photo mode's look
- * accumulator (mouse_look.h).
+ * The mouse camera's capture rule, Escape's button, whether Start opens the
+ * pause menu and photo mode's look accumulator (mouse_look.h).
  */
 #include "mouse_look.h"
 #include "input.h"
@@ -43,6 +43,11 @@ int ico_escape_target(const IcoCaptureState *s)
         return ico_region_cur()->pad_back == 0x40 ? ICO_T_CROSS : ICO_T_TRIANGLE;
     }
     return ICO_T_START;
+}
+
+int ico_start_opens_pause(const IcoCaptureState *s)
+{
+    return s != 0 && !s->photo && in_play(s) && s->layout == ICO_CAPTURE_LAYOUT_PLAY;
 }
 
 void ico_escape_latch(IcoEscapeLatch *l, int down, const IcoCaptureState *s)

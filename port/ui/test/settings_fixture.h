@@ -77,6 +77,7 @@ extern float center_X, center_Y;
 extern int gFlagGameClear;
 extern int stage_no;
 extern int frame_count;
+extern int enable_game_pause;
 extern int layout_boot_flag;
 extern int title_demo_mode;
 extern unsigned int stage_after_skipping_demo;

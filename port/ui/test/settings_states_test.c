@@ -1,9 +1,18 @@
 /* settings_states_test.c: the Save states page, the pause menu's row and the
  * Continue screen's prompt (settings.c, "the Save states page"), over the
  * shared fixture (settings_fixture.h) with a fake UiStatesHost, fake picture
- * textures and a fake Continue screen.  CPU only; the host's own work
- * (files, memory) is state_host_test's. */
+ * textures and a fake Continue screen; the slot picture's box at its own
+ * shape (lt_ext_image_fit: 16:9, 4:3 and a tall picture in the 72 x 54
+ * tile, centred, none stretched); F6 (ui_settings_states_key): in play it
+ * asks for Start and the page opens once the pause menu is up (Back then
+ * returns to the menu's row), on the pause menu it opens the page, a second
+ * press on the page closes it into the game, a press the pause menu does not
+ * take within 60 frames is dropped, and each ignore (no host, the title,
+ * photo mode, no pause allowed, another screen) with its line.  CPU only;
+ * the host's own work (files, memory, the pause picture) is
+ * state_host_test's. */
 #include "settings_fixture.h"
+#include "photo_mode.h"
 #include "pointer.h"
 #include "popup.h"
 #include "ui_mouse.h"
@@ -80,6 +89,9 @@ static void fillSlots(void)
 }
 
 extern int systemStatus[12];
+
+/* frames past ui_settings_states_key's 60 a press waits for the pause menu */
+#define ST_KEY_WAIT 70
 
 /* the play time as the card shows it for 1 h 2 min 5 s */
 static unsigned playFrames(void)
@@ -862,6 +874,144 @@ static void testBackAndLoad(void)
           "sync on the pause menu: the cursor on the row (%d)", texLayout[fxLayout(57)].curItem);
 }
 
+/* the slot's picture keeps its shape in the tile (x 40..112, y units
+   80..134 for a card at field line 40): a 16:9 picture as wide as the box
+   and centred down, a 4:3 one too (the tile is a little narrower than
+   4:3 on screen), a tall one as tall as the box and centred across; the
+   page's tiles are that box */
+static void testPictureBox(void)
+{
+    const float in[4] = {40.0f, 80.0f, 112.0f, 134.0f};
+    float out[4];
+    const float yx = 15.0f / 14.0f; /* font.h UI_X_PER_Y */
+
+    lt_ext_image_fit(in, 960, 540, out);
+    const float h169 = 72.0f / (16.0f / 9.0f) / yx;
+    CHECK(out[0] == 40.0f && out[2] == 112.0f && fabsf((out[3] - out[1]) - h169) < 0.01f &&
+              fabsf((out[1] - 80.0f) - (134.0f - out[3])) < 0.01f,
+          "16:9: %g,%g..%g,%g (height %g)", out[0], out[1], out[2], out[3], h169);
+    CHECK(fabsf((out[2] - out[0]) / ((out[3] - out[1]) * yx) - 16.0f / 9.0f) < 0.001f,
+          "16:9: the shape kept on screen");
+    lt_ext_image_fit(in, 960, 720, out);
+    CHECK(out[0] == 40.0f && out[2] == 112.0f && out[3] - out[1] < 54.0f &&
+              fabsf((out[2] - out[0]) / ((out[3] - out[1]) * yx) - 4.0f / 3.0f) < 0.001f,
+          "4:3: %g,%g..%g,%g", out[0], out[1], out[2], out[3]);
+    lt_ext_image_fit(in, 540, 720, out);
+    CHECK(out[1] == 80.0f && out[3] == 134.0f && out[2] - out[0] < 72.0f &&
+              fabsf((out[0] - 40.0f) - (112.0f - out[2])) < 0.01f &&
+              fabsf((out[2] - out[0]) / (54.0f * yx) - 0.75f) < 0.001f,
+          "3:4: %g,%g..%g,%g", out[0], out[1], out[2], out[3]);
+    lt_ext_image_fit(in, 0, 540, out);
+    CHECK(memcmp(in, out, sizeof(in)) == 0, "no size: the box");
+
+    startMenus(1, 11);
+    pauseToStates();
+    int c[8];
+    if (cardRows(0, c)) {
+        const LtProperty *im = lt_ext_prop(c[0]);
+        CHECK(im->dispX == (int)in[0] && im->dispW == (int)(in[2] - in[0]) && im->dispH == 54,
+              "the tile is that box (%d, %dx%d)", im->dispX, im->dispW, im->dispH);
+    }
+}
+
+/* the F6 line of the last call, captured */
+static int keyPress(int startOpensPause, char *log, size_t n)
+{
+    errCapture();
+    const int r = ui_settings_states_key(startOpensPause);
+    errRelease(log, n);
+    return r;
+}
+
+static void testStatesKey(void)
+{
+    char log[1024];
+    const int pause = fxLayout(57), play = fxLayout(54);
+
+    /* no host: nothing */
+    startMenus(0, 11);
+    CHECK(keyPress(1, log, sizeof(log)) == 0 &&
+              strstr(log, "hotkeys: F6 ignored: save states are off") != NULL,
+          "no host: ignored (\"%s\")", log);
+    /* the title: nothing (Square on the Continue screen opens the page) */
+    startMenus(1, 1);
+    toPause();
+    CHECK(keyPress(0, log, sizeof(log)) == 0 && strstr(log, "ignored: on the title") != NULL,
+          "the title: ignored (\"%s\")", log);
+    idle(5);
+    CHECK(current_layout_id == pause, "the title: nothing opened (%d)", current_layout_id);
+
+    /* in play: Start asked for; the page once the pause menu is up */
+    startMenus(1, 11);
+    const int sl = ui_settings_page_layout(UI_PAGE_STATES);
+    CHECK(current_layout_id == play, "in play (%d)", current_layout_id);
+    CHECK(keyPress(1, log, sizeof(log)) == 1 && strstr(log, "Start pressed") != NULL,
+          "in play: Start asked for (\"%s\")", log);
+    const int sounds = s_sounds[1];
+    lt_switch_layout(pause); /* what the window's Start does through la_game_loop */
+    errCapture();
+    const int opened = settle(sl, 80);
+    errRelease(log, sizeof(log));
+    CHECK(opened && strstr(log, "hotkeys: F6 opened the Save states page") != NULL,
+          "in play: the page after the pause menu (%d; \"%s\")", current_layout_id, log);
+    CHECK(s_sounds[1] > sounds, "the page opens with the confirm sound");
+    /* Back as from the row: the pause menu, the cursor on the row */
+    press(lt_ext_back_buttons());
+    CHECK(settle(pause, 60) && texLayout[pause].curItem == ui_settings_states_row(),
+          "Back: the pause menu on the Save states row (%d, %d)", current_layout_id,
+          texLayout[pause].curItem);
+
+    /* on the pause menu: the page; again on the page: the game */
+    CHECK(keyPress(0, log, sizeof(log)) == 0 && strstr(log, "ignored") == NULL,
+          "the pause menu: no Start, nothing ignored (\"%s\")", log);
+    CHECK(settle(sl, 60), "the pause menu: the page (%d)", current_layout_id);
+    const int resumes = s_resumes;
+    CHECK(keyPress(0, log, sizeof(log)) == 0, "the page: no Start");
+    errCapture();
+    const int closed = settle(play, 60);
+    errRelease(log, sizeof(log));
+    CHECK(closed && s_resumes == resumes + 1 &&
+              strstr(log, "hotkeys: F6 closed the Save states page") != NULL,
+          "the page: back to the game (%d, %d resumes; \"%s\")", current_layout_id,
+          s_resumes - resumes, log);
+    idle(3);
+    CHECK(current_layout_id == play, "and it stays in the game (%d)", current_layout_id);
+
+    /* a press the pause menu does not take in time: dropped */
+    CHECK(keyPress(1, log, sizeof(log)) == 1, "in play again: Start asked for");
+    idle(ST_KEY_WAIT);
+    toPause();
+    errCapture();
+    idle(10);
+    errRelease(log, sizeof(log));
+    CHECK(current_layout_id == pause && strstr(log, "F6 ignored: the pause menu did not") != NULL,
+          "too late: the pause menu stays (%d; \"%s\")", current_layout_id, log);
+
+    /* where the game cannot pause, in photo mode, on another screen */
+    lt_switch_layout(play);
+    settle(play, 40);
+    enable_game_pause = 0;
+    CHECK(keyPress(1, log, sizeof(log)) == 0 &&
+              strstr(log, "ignored: the game cannot be paused here") != NULL,
+          "no pause allowed: ignored (\"%s\")", log);
+    enable_game_pause = 1;
+    CHECK(keyPress(0, log, sizeof(log)) == 0 &&
+              strstr(log, "ignored: only in play, on the pause menu") != NULL,
+          "a scene (Start would skip it): ignored (\"%s\")", log);
+    toPause();
+    ico_photo_enter();
+    CHECK(keyPress(0, log, sizeof(log)) == 0 && strstr(log, "ignored: photo mode is open") != NULL,
+          "photo mode: ignored (\"%s\")", log);
+    ico_photo_exit();
+    pauseToMain();
+    CHECK(settle(ui_settings_page_layout(UI_PAGE_MAIN), 60), "Options");
+    CHECK(keyPress(0, log, sizeof(log)) == 0 && strstr(log, "ignored: only in play") != NULL,
+          "Options: ignored (\"%s\")", log);
+    idle(5);
+    CHECK(current_layout_id == ui_settings_page_layout(UI_PAGE_MAIN),
+          "Options: nothing opened (%d)", current_layout_id);
+}
+
 /* the page without a host: reachable by nothing, but built and harmless */
 static void testNoHost(void)
 {
@@ -893,6 +1043,7 @@ int main(int argc, char **argv)
         testPauseRows();
         testExtrasRows();
         testContinue();
+        testStatesKey();
         CHECK(ico_region_select("pal") == 0, "the European region again");
         printf("settings_states_test %s: %s\n", argv[2], failures ? "failed" : "ok");
         return failures ? 1 : 0;
@@ -906,6 +1057,8 @@ int main(int argc, char **argv)
     testTitle();
     testBackAndLoad();
     testNoHost();
+    testPictureBox();
+    testStatesKey();
     if (failures) {
         printf("settings_states_test: %d failure(s)\n", failures);
         return 1;

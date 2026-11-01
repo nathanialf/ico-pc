@@ -20,6 +20,13 @@
  *         10 s; again turns it off
  *   F5    save states: save to slot 1 (window_host.c dispatches)
  *   F9    save states: load slot 1
+ *   F6    the Save states page: in play the pause menu opens first (the
+ *         window taps Start, as Escape does there), then the page; on the
+ *         pause menu the page; on the page, back to the game.  Nothing on
+ *         the title (Square on the Continue screen opens the page there),
+ *         in photo mode, where the game cannot pause, without save states
+ *         or on Android (port/ui/settings.c ui_settings_states_key; the
+ *         keyboard only: no touch button, no pad button)
  *
  * None of these keys is bindable (port/input/keys.def has F1 to F4 only), and
  * a held key's repeats do nothing.
@@ -29,10 +36,11 @@
 
 #include <stddef.h>
 
-/* SDL3's SDLK_F5, SDLK_F9, SDLK_F11 and SDLK_F12 (SDL_SCANCODE_TO_KEYCODE of
-   scancodes 62, 66, 68 and 69); window_host.c checks them against SDL's at
-   compile time. */
+/* SDL3's SDLK_F5, SDLK_F6, SDLK_F9, SDLK_F11 and SDLK_F12
+   (SDL_SCANCODE_TO_KEYCODE of scancodes 62, 63, 66, 68 and 69); window_host.c
+   checks them against SDL's at compile time. */
 #define ICO_HOTKEY_KEY_F5 0x4000003Eu
+#define ICO_HOTKEY_KEY_F6 0x4000003Fu
 #define ICO_HOTKEY_KEY_F9 0x40000042u
 #define ICO_HOTKEY_KEY_F11 0x40000044u
 #define ICO_HOTKEY_KEY_F12 0x40000045u
@@ -43,14 +51,15 @@ typedef enum IcoHotkey {
     ICO_HOTKEY_STATS_FAST,   /* F11 */
     ICO_HOTKEY_ASPECT_SWEEP, /* Shift+F12 */
     ICO_HOTKEY_STATE_SAVE,   /* F5: save states, slot 1 (window_host.c dispatches) */
-    ICO_HOTKEY_STATE_LOAD    /* F9: slot 1 */
+    ICO_HOTKEY_STATE_LOAD,   /* F9: slot 1 */
+    ICO_HOTKEY_STATES_PAGE   /* F6: the Save states page (settings.h ui_settings_states_key) */
 } IcoHotkey;
 
 /* The action of a key-down event (SDL keycode, whether it is a repeat), no
    modifier held. */
 IcoHotkey ico_hotkey_for(unsigned int key, int repeat);
 /* The same with Shift held or not: Shift+F12 is the aspect sweep, Shift
-   changes nothing for the other keys. */
+   changes nothing for the other keys (F6 included). */
 IcoHotkey ico_hotkey_for_mod(unsigned int key, int repeat, int shift);
 
 /* The aspect sweep's files in dir: sweep-<stamp>.zip, and the prefix of the

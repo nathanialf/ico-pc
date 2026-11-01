@@ -91,6 +91,8 @@ extern void la_host_film_effect(int mode);
 /* port/platform/trace_host.h (ico_pc): the Main ticks so far, with the
    clock the seed of Extras > Characters' Randomize */
 extern unsigned int ico_host_main_ticks(void);
+extern int frame_count;       /* common/src/main.c: one a flip, a Main tick */
+extern int enable_game_pause; /* layout_action.c: 0 where Start does not pause */
 
 /* on the port's screens the face button that does not confirm goes back
    as Triangle does (Circle on the European disc, Cross on the Japanese and Korean ones:
@@ -870,6 +872,8 @@ static void statesRelease(void);
 static void gameCursorOn(int to, int row);
 static void buildStatesPage(void);
 static int contProc(int first, int item);
+static int statesKeyTake(void);
+static int statesKeyLine(int ignored);
 
 /* the Save states page's geometry and state (the page: after parentLayout) */
 #define ST_Y0 40
@@ -4879,6 +4883,15 @@ static int entryProc(int first, int item)
         texLayout[s_restoreTitle].defaultItem = s_restoreDefault;
         s_restoreTitle = -1;
     }
+    if (cur == LAYOUT_PAUSE && lt_fade_status() == 2 && s_statesRow >= 0 && statesKeyTake()) {
+        /* F6 (ui_settings_states_key): the page as the row opens it; Back
+           there returns to the row (statesLeave) */
+        POSITIVE_SE();
+        lt_switch_layout(s_pages[UI_PAGE_STATES].layout);
+        if (statesKeyLine(0)) {
+            fprintf(stderr, "hotkeys: F6 opened the Save states page\n");
+        }
+    }
     return -1;
 }
 
@@ -5443,6 +5456,92 @@ static int contProc(int first, int item)
     return item;
 }
 
+/* F6 (port/platform/hotkeys.h ICO_HOTKEY_STATES_PAGE): a press latched as
+   the flip it came at (frame_count + 1; 0 none) and taken within
+   ST_KEY_TICKS of it by the pause menu once its fade-in is done (entryProc:
+   the page opens) or by the page (back to the game), so the pause menu a
+   press in play opens through Start has time to come up.  Its lines, the
+   ignored ones and the others each: the first 8, then every 100th */
+#define ST_KEY_TICKS 60
+static int s_stKeyAt;
+static unsigned s_stKeyLines[2];
+
+static int statesKeyLine(int ignored)
+{
+    const unsigned n = ++s_stKeyLines[ignored != 0];
+    return n <= 8 || n % 100 == 0;
+}
+
+/* the latch taken: 1 when a press is waiting and recent; a late one is
+   dropped with its line */
+static int statesKeyTake(void)
+{
+    const int at = __atomic_exchange_n(&s_stKeyAt, 0, __ATOMIC_ACQ_REL);
+    if (at == 0) {
+        return 0;
+    }
+    const int age = frame_count - (at - 1);
+    if (age >= 0 && age <= ST_KEY_TICKS) {
+        return 1;
+    }
+    if (statesKeyLine(1)) {
+        fprintf(stderr, "hotkeys: F6 ignored: the pause menu did not come up within %d frames\n",
+                ST_KEY_TICKS);
+    }
+    return 0;
+}
+
+int ui_settings_states_key(int startOpensPause)
+{
+    const char *why = NULL;
+#if defined(__ANDROID__)
+    why = "the keyboard's F6 is not used on Android";
+#else
+    const int onPage = s_built && current_layout_id == s_pages[UI_PAGE_STATES].layout &&
+                       s_pages[UI_PAGE_STATES].layout >= 0;
+    if (!s_built || !s_statesHostSet || s_statesRow < 0 || s_pages[UI_PAGE_STATES].layout < 0) {
+        why = "save states are off";
+    } else if (ico_photo_active()) {
+        why = "photo mode is open";
+    } else if (stage_no <= ico_region_cur()->stage_title) {
+        why = "on the title (Square on the Continue screen opens the page there)";
+    } else if (startOpensPause && !enable_game_pause) {
+        why = "the game cannot be paused here";
+    } else if (!startOpensPause && !onPage && current_layout_id != LAYOUT_PAUSE) {
+        why = "only in play, on the pause menu or on the Save states page";
+    }
+#endif
+    if (why != NULL) {
+        if (statesKeyLine(1)) {
+            fprintf(stderr, "hotkeys: F6 ignored: %s\n", why);
+        }
+        return 0;
+    }
+    (void)statesKeyTake(); /* an earlier press never taken: its line */
+    __atomic_store_n(&s_stKeyAt, frame_count + 1, __ATOMIC_RELEASE);
+    if (startOpensPause && statesKeyLine(0)) {
+        fprintf(stderr, "hotkeys: F6 in play: Start pressed, the pause menu first\n");
+    }
+    return startOpensPause;
+}
+
+/* the page closed by F6: what changed saved, the pictures released, back
+   into the game as the pause menu's Back does (la_host_resume_play, then
+   the region's play layout; closeForDebugMenu's way) */
+static int statesKeyClose(void)
+{
+    statesRelease();
+    s_stLeave = 0;
+    s_stFromPause = s_stFromContinue = 0;
+    NEGATIVE_SE();
+    ui_settings_save();
+    la_host_resume_play();
+    if (statesKeyLine(0)) {
+        fprintf(stderr, "hotkeys: F6 closed the Save states page (back to the game)\n");
+    }
+    return ico_region_cur()->layout_play;
+}
+
 /* Cross on a slot: the action shown, after a second Cross within
    ST_CONFIRM_SECONDS when it overwrites or deletes a state */
 static void statesPerform(int slot)
@@ -5486,6 +5585,9 @@ static int statesProc(Page *pg, int id, LtProp *lay, int flags)
     }
     if (s_stRelist || ++s_stListAge >= ST_RELIST_TICKS) {
         statesList();
+    }
+    if (statesKeyTake()) {
+        return statesKeyClose(); /* F6 again: back to the game */
     }
     if (flags & PAD_BACK) {
         return statesLeave(pg, id);

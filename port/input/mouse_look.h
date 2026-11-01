@@ -85,6 +85,12 @@ int ico_mouse_capture_rule(const IcoCaptureState *s);
    window's close button, never Escape. */
 int ico_escape_target(const IcoCaptureState *s);
 
+/* 1 when Start opens the pause menu: play (as ico_escape_target's Start)
+   on the play layout itself, not a scene's, where Start skips the scene
+   (layout_action.c la_game_demo).  F6 taps Start through the Escape latch
+   only then (port/ui/settings.c ui_settings_states_key). */
+int ico_start_opens_pause(const IcoCaptureState *s);
+
 /* The key held: the target is chosen at the press and kept until the
    release, so a held Escape that opens the pause menu does not turn into
    Triangle on the next vsync (now paused) and close it again. A press

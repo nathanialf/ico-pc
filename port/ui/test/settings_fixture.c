@@ -58,6 +58,9 @@ int systemStatus[12] = {1, 2};
 
 int frame_count = 100;
 
+/* layout_action.c: 0 where Start does not pause (F6 ignored in play) */
+int enable_game_pause = 1;
+
 int layout_boot_flag;
 
 int title_demo_mode;

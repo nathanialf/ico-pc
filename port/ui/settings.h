@@ -394,6 +394,17 @@ int ui_settings_states_prompt_layout(void);
 /* After a load: the menu closes its page and puts the cursor on the pause
    menu's Save states row (the restored game is on the pause layout). */
 void ui_settings_sync_after_state_load(void);
+/* F6 (port/platform/hotkeys.h ICO_HOTKEY_STATES_PAGE, the window's key
+   down): startOpensPause is mouse_look.h ico_start_opens_pause's answer.
+   In play the press is latched and 1 returned: the window then taps Start
+   (the pause menu opens) and the menu opens the page once its fade-in is
+   done; on the pause menu the page opens the same way; on the Save states
+   page (from the pause menu or Extras) the page closes into the game, as
+   the pause menu's Back does.  A latch not taken within 60 frames is
+   dropped.  Ignored (0, a "hotkeys: F6 ignored: <why>" line): without the
+   page's host, in photo mode, on the title, where the game cannot pause,
+   anywhere else, and on Android. */
+int ui_settings_states_key(int startOpensPause);
 /* Main > Save a picture for a bug report (always shown, directly above
    Developer mode: a player's row, no developer mode needed): fn arms the host's frame dump (window_host.c frame_dump: the
    picture, the frame's rd dump and the log in a zip in the dumps folder,

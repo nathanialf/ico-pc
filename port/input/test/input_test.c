@@ -3,8 +3,8 @@
  *
  * The input layers on the CPU (no SDL): binding resolution from config
  * text, the dead zone and quantisation, the stick fix, merging, the libpad
- * read buffer against a hand-written DualShock 2 frame, rumble, and
- * Escape's button.
+ * read buffer against a hand-written DualShock 2 frame, rumble,
+ * Escape's button, and whether Start opens the pause menu (F6's tap).
  */
 #include <libpad.h>
 #include <stdio.h>
@@ -320,6 +320,29 @@ static void test_escape(void)
     c.credits = 1;
     CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
     CHECK(ico_escape_target(NULL) == ICO_T_TRIANGLE);
+    /* Start opens the pause menu (F6's tap) on the play layout only: not
+       in a scene (Start skips it), paused, in photo mode or on the title */
+    CHECK(ico_start_opens_pause(&play));
+    c = play;
+    c.focus = 1;
+    c.look = 1;
+    CHECK(ico_start_opens_pause(&c));
+    c = play;
+    c.layout = ICO_CAPTURE_LAYOUT_SCENE;
+    CHECK(!ico_start_opens_pause(&c));
+    c = play;
+    c.paused = 1;
+    CHECK(!ico_start_opens_pause(&c));
+    c = play;
+    c.photo = 1;
+    CHECK(!ico_start_opens_pause(&c));
+    c = play;
+    c.stage = 1;
+    CHECK(!ico_start_opens_pause(&c));
+    c = play;
+    c.movie = 1;
+    CHECK(!ico_start_opens_pause(&c));
+    CHECK(!ico_start_opens_pause(NULL));
     /* the game's Button configuration screen: no button, in or out of the
        pause menu (Triangle would be assigned to the highlighted action) */
     c = play;
