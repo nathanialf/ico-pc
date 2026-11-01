@@ -245,6 +245,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   credits row's lock (`credits`); with `jpn` or `kor`, the same on that disc's region: STAFF1 58,
   the song 47, the scene layout 52, the roll offset 151,050 ms (the Korean build is the Japanese
   program), the roll start's log line, which names the disc (`credits_jpn`, `credits_kor`).
+- `camera_wall_test.c`: the blended camera's wall rule (`port/game/camera_wall.c`) without game
+  sources: a segment against one wall (through it either way, past its ends and over its top
+  within `ICO_CAMERA_WALL_RADIUS`, a sloped bottom, an end on the plane) and one floor (down and up
+  through it, its rim, a triangle); the rule at each flip: no eye before, a crossing, a free path,
+  the reverse crossing, a pending cut and photo mode answered without asking, a still eye and a step
+  past `RD_INTERP_CAMERA_MOVE` not asked, a forgotten or non-finite eye (`camera_wall`).
+- `camera_wall_stage_test.c`: the live wall check (`port/game/camera_wall_stage.c`) over a
+  synthetic stage of the game's records in a stand-in arena: a wall placed by its node's
+  translation, a floor under a turned node (the same coordinates read without the turn miss it),
+  a per-node set's second node, the collision list's filter, the wall attributes `ClipWall`'s mode
+  skips, records outside the arena not read, the arena and the object table byte-identical after
+  every check, the `camera:` line and its Frame rate gate, a pending cut, photo mode and forgetting
+  (`camera_wall_stage`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
 - `env_bits_test.c`: where each disc's wall-reach read in `act-env.c` takes its two bits of a motion record (a shift of 6 on every disc, the host layout), every `config/motion_bits.*.txt` row naming the field at bit 24 for two bits, and a synthetic word read through the shift (the June 2001 demo once read the item-mode bits) (`env_bits`).
@@ -976,7 +989,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   drawn in model order before the veil with the evaluated nodes, their fade following the
   envelope's own frame tick by tick and wrapping at its length, nothing with the effect off, in
   stage 40 or with photo mode closed, the veil alone without the row (`checkDejaReel`; the
-  evaluator there stands in for the game's).
+  evaluator there stands in for the game's). The wall test's flip hook on every disc's
+  `gsb_UpdateGSSystem` copy, the check scripted: each flip passes `+0x380`'s translation, the stage
+  and whether a game cut is pending since the flip before; a crossing marks the frame that flip
+  closes (`RdCamera.cut` 2, `RD_SNAP_WALL` against the frame before), not the next;
+  `gsb_ResetGSSystem` forgets the eye (`checkCameraWall`).
 - `rd_still_test.c`: the still re-present's hash and decision (`rd_still`, no device): two ticks with
   the same sprites and a still camera hash the same at alpha 0.25, 0.5, 0.75 and 0.999 (the presenter's top), as a first and as
   a later present (the head copies are not in it); one colour word of the second tick, a sprite that

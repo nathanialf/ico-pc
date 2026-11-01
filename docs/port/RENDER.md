@@ -1886,6 +1886,32 @@ one implementation, included by `rd_interp.c` and `GsBase.c` in every build
 step past `RD_INTERP_CAMERA_TURN` (30 degrees) or `RD_INTERP_CAMERA_MOVE` (300 units) a tick is a
 cut, and `RD_CULL_MARGIN` is the cull's frustum margin (`port/render/rd_camera_blend.h`).
 
+**The eye never passes through the stage.** The game's cameras have no wall test of their own (their
+sets and paths are designed), so a camera that moves less than those limits in a tick but past a
+wall would put the blended eye behind the wall for the pictures in between, showing what is on the
+other side for an instant. At every flip, on the game thread before `dl_Swap` closes the frame,
+`gsbHostCullFlip` passes the eye (`+0x380`, the inverse view's translation) to
+`ico_camera_wall_check`, which tests the step from the eye at the flip before against the stage's
+collision: the walls and floors of the objects `MakeCollisionDependGObjList` gives the actors
+(active, a stage layout object, displayed, with collision data), read from the live object table in
+each node's frame through the block grids around the path, the walls `ClipWall`'s mode skips
+skipped. A crossing either way (the game's own `ClipPlane` counts front to behind only) at a point
+inside the element widened by `ICO_CAMERA_WALL_RADIUS` (4 units: the near plane's 2 and as much
+again) makes `rd_camera_cut_wall` mark the frame that flip closes: `RdCamera.cut` 2, the snap
+`RD_SNAP_WALL`, its pictures the tick's own as at the Original frame rate. The cut does not go
+through `ico_video_camera_cut`, whose serial the window passes on after the step, to the frame the
+next tick records. Not asked: a stage's first tick, a game cut pending since the flip before, photo
+mode, a still eye and a step past `RD_INTERP_CAMERA_MOVE` (`RD_SNAP_CAMERA` already). The check runs
+at every flip whatever the Frame rate and in the headless build, and only reads the game's memory
+(`port/game/camera_wall.h`; `port/game/camera_wall.c` (`ico_camera_wall_step`,
+`ico_camera_wall_cross_wall`, `ico_camera_wall_cross_floor`); `port/game/camera_wall_stage.c`
+(`ico_camera_wall_check`, `stageQuery`); `ico2/seki/src/GsBase.c` (`gsbHostCullFlip`,
+`gsbHostCullForget`); `port/render/rd_core.c` (`rd_camera_cut_wall`); `port/render/rd_interp.c`
+(`rd__interp_snap`)). The log: `camera: between-tick blend skipped at stage N: the eye moved M cm
+through a wall` (or `a floor`; rate-limited, with pictures blended) and `N where the camera's path
+crossed the stage` in the 10 s `interp:` line's snaps; a dump keeps the 2 in its camera, so
+`rd_replay_tool --interp` reports the snap as 9 (`RD_SNAP_WALL`).
+
 **What the fog paints in a gap.** A pixel no draw covers keeps the clear's Z of 0, and the fog
 sprite indexes its table by Z bits 16..23 (`port/shaders/fog_lut.hlsl`), so such a pixel takes
 entry 0, the stage's full fog colour: near white in the light rooms. Neighbouring parts of the world
