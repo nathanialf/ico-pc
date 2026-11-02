@@ -1123,6 +1123,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   own texture, never written) byte for byte, `aura box off: 0` against `on`, the two-pass run's
   passes and draws the other's plus one each a read in two passes; some dump must read in two
   passes (`rd_aura_box_ab`). SKIP as `rd_vustage_ab`.
+- `rd_pass_area_ab.cmake`: the dumps of `tools/pass_area_dumps.txt` (`tools/vustage_dumps.txt`'s,
+  the PowerVR phone's three F12 zips and its F12 frame of 2026-11-02
+  `frame-20261102-091017-v15677.rddump` in the effort's evidence folder; machine-local, a
+  missing one skipped) replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed` with the
+  passes' render areas off (`ICO_RD_PASS_AREA=0`) and on (`=1`, `rd_pass_area.c`, on whatever the
+  device: lavapipe clips every draw to the area, so an area that misses a texel shows), at the
+  phone's Resolution Auto (as `rd_aura_box_ab`) and at Enhanced 2x 4:3: every PNG byte for byte,
+  `pass area off: 0 passes` against `on`, the same draws, the on run's passes the off run's plus
+  at most its passes ended early; the phone's frames (`frame-20261028-*`, `frame-20261102-*`) must
+  give some pass an area at the phone's setting (`rd_pass_area_ab`). SKIP as `rd_vustage_ab`.
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's
@@ -1577,6 +1587,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rd__store_plan_count_color`, `testShadowCountColor`: under the plan the temporary count
   target's loaded colour goes DONT_CARE at its load and store, counted; a CLEAR, SCENE as the
   count, the plan off and no replay keep their ops; the pass list's `shadow count`), dump version 14's ticks' cameras (none in a
+  the set without a device, the pass list's name `ROWBOX`), the pass area (`testPassArea`,
+  `rd_state_pass_area_test.inc`: `rd__pass_area_cmd`'s boxes for a screen sprite and the aura's
+  sprite on SCENE at 1x, at the phone's 848 x 448 GS frame in 2364 x 1080 texels and under Full
+  pixel's crop hold every texel they cover and reach at most the pad past them; a VU grid, a draw
+  on FEED128 and the sprite under DATE the whole target, a clear the end of a pass's commands; the
+  pass begun at the sprite holds its box and the aura's, ends before the FEED128 draw, and its area
+  is their union out to whole 32 x 32 tiles; none for a pass begun at a sprite the grid follows;
+  the switch's words), dump version 14's ticks' cameras (none in a
   tick's frame, a blended frame's round-trip), list order, defaults, state leakage,
   the alpha test's plan for every Z write, AFAIL, ATE and alpha mask (one draw where the test decides
   nothing, `testAlphaMerge`), the start-up set's VU keys by variant and with the VU vertex
@@ -1649,7 +1667,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   thread through the call guard (`rhi_set_call_guard`); skipped where the backend takes every call
   on one thread (OpenGL, Direct3D 11).
 - `rhi_vk_test.c`: the exact-texel RHI checks on Vulkan, a hazard cell, the render-area check (a
-  pass larger than its attachments clamped with no validation error, `passAreaCell`), the
+  pass larger than its attachments clamped with no validation error, `passAreaCell`), a pass with
+  a render area inside its target (`renderAreaCell`, under every switch: on a 16x16 target cleared
+  blue, a pass loaded with the area (4, 6) 5x3 draws a quad over the whole target in red after a
+  scissor set to the whole target, and a third with the area (10, 0) cut to 6x2 clears to green:
+  15 red and 12 green texels, every other one still blue, no validation message; the specification
+  applies the load and store operations inside the render area only), the
   pipeline cache file, and the pipeline pool filled: `RHI_PIPELINE_POOL_MAX` pipelines alive at
   once, none refused, the 1025th and the last drawn with, one more refused and counted
   (`poolCell`, once, not under the fake switches) (`rhi_vk`, `rhi_vk_nodual`, `rhi_vk_d24s8`,
@@ -2274,6 +2297,7 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_EXTENDED` | `rd_pipeline.c` | 1: the extended variants whatever the device table or `ICO_RD_VU_PLAIN` says |
 | `ICO_RD_VU_SET` | `rd_pipeline.c` | `plain` or `extended`: as `ICO_RD_VU_PLAIN=1` or `ICO_RD_VU_EXTENDED=1` (`[dev] vu_set`); `auto` or unset: the device table's |
 | `ICO_RD_SHEET_SHADER` | `rd_core.c` | 1: the menus' sheet text through `font_sheet_ps` at every scale, no bake (`[dev] sheet_shader = true`; the bake's A/B) |
+| `ICO_RD_PASS_AREA` | `rd_pass_area.c` | 1: a render pass on SCENE whose draws are all 2D with a known place takes the render area of the tiles they touch, 0: every pass its whole target, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] pass_area`; `rd_pass_area_ab`, `rd_state` `testPassArea`) |
 | `ICO_RD_AURA_BOX` | `rd_aura_box.c` | 1: the aura's read of SCENE into FEED128 above 1x in two passes (ROWBOX, then FEED128's sum), 0: in one, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] aura_box`; `rd_aura_box_ab`, `rd_blur` case `aura_box`) |
 | `ICO_RD_AURA_KERNEL` | `rd_aura_kernel.c` | `gs`: the aura's read of SCENE into FEED128 with the GS's own taps instead of the box above 1x, a measurement (`[dev] aura_kernel = gs`; the picture differs) |
 | `ICO_RD_VU_PREPASS` | `rd_replay_vu.c` | 0: no VU vertex pre-pass, every VU draw the old way (`[dev] vu_prepass = false`); the tests switch it with `rd__set_vu_prepass` ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) |

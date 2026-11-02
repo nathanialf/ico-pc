@@ -110,12 +110,22 @@
  *   aura kernel rd__aura_kernel_pick: [dev] aura_kernel = gs drops the box
  *              of the aura's read of SCENE into FEED128 only; unset, empty
  *              or box keeps it
+ *   pass area  rd__pass_area_cmd's boxes for a screen sprite and the aura's
+ *              sprite on SCENE at 1x, at the phone's 848 x 448 GS frame in
+ *              2364 x 1080 texels and under Full pixel's crop hold every
+ *              texel they cover, within the pad; VU, DATE and another
+ *              target's draws the whole target, a clear the pass's end; the
+ *              pass begun at the sprite holds the two boxes' union out to
+ *              whole tiles and ends before the other target's draw
+ *              (rd_state_pass_area_test.inc)
  *   aura box   rd__aura_box_pick: [dev] aura_box auto (unset, empty, auto,
  *              another word) is the profile's, on/off words over it; never
  *              on without a device, no key of it in the set then; the pass
  *              list's name ROWBOX (the pixels: rd_blur_test aura_box)
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
+#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2906,6 +2916,9 @@ static void testDateArea(void)
           (int32_t)tc->w - 1 - 142);
 }
 
+/* ---- the pass area (rd_pass_area.c) ---- */
+#include "rd_state_pass_area_test.inc"
+
 /* ---- the fallback's VU set (rd_pipeline.c rd__vu_set_choose) ---- */
 static RhiLimits vuSetLimits(uint32_t vendor, const char *driverText, const char *row)
 {
@@ -3192,6 +3205,7 @@ int main(int argc, char **argv)
     testStencilOps();
     testShadowCountColor();
     testDateArea();
+    testPassArea();
     testVuSetPolicy();
     testPayloadPad();
     testAuraKernelPick();

@@ -645,6 +645,15 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("aura_box", "false"), "0") == 0);
     CHECK(ico_dev_env_value("aura_box", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.aura_box"), "aura_box") == 0);
+    /* pass_area: the passes' render areas (port/render/rd_pass_area.c reads
+       ICO_RD_PASS_AREA) */
+    CHECK(strcmp(ico_dev_env_name("pass_area"), "ICO_RD_PASS_AREA") == 0);
+    CHECK(strcmp(ico_dev_env_value("pass_area", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("pass_area", "on"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("pass_area", "off"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("pass_area", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("pass_area", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.pass_area"), "pass_area") == 0);
     CHECK(ico_dev_env_value("pipeline_set", "true") == NULL);
     CHECK(ico_dev_env_value("pipeline_set", "") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.pipeline_set"), "pipeline_set") == 0);

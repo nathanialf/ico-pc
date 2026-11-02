@@ -1,0 +1,25 @@
+# Dump list for rd_pass_area_ab (port/render/test/rd_pass_area_ab.cmake: the
+# passes' render areas on against off, byte for byte).  MACHINE-LOCAL: these
+# are paths on the maintainer's machine; the dumps themselves are never
+# committed.  Missing files are reported and skipped (no dump at all: SKIP).
+# Relative paths are relative to this file; '*' globs are allowed.  A dump
+# whose frame has no pass with an area is compared all the same; the
+# PowerVR phone's frames (names frame-20261028-* and frame-20261102-*) must
+# give some pass an area at the phone's setting.
+#
+# the dumps of tools/vustage_dumps.txt
+/primary/dev/ico-dumps/*.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/lightning/rd-00100.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/plain/rd-00100.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/puddle/rd-00100.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/queen/rd-00100.rddump
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/95/loss-20261015-100428-lost.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-drafts/deja/frame-20261013-125037-v2227.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port/keep/rd-00720.rddump
+# the PowerVR phone's F12 frames (rc10 era, gameplay after the pause menu)
+/primary/dev/ico-pc/dist/frame-20261028-105852-v4103.zip
+/primary/dev/ico-pc/dist/frame-20261028-151709-v2199.zip
+/primary/dev/ico-pc/dist/frame-20261028-173610-v4657.zip
+# the phone's v0.9.8 rc3 F12 frame (stage 6 in play: the aura's paste, list 11)
+/primary/dev/ico-pc/build-host/tmp/v098/evidence/rc3/f12/frame-20261102-091017-v15677.rddump

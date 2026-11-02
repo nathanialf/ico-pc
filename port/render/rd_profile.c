@@ -44,6 +44,12 @@
  *                 above 1x in two passes, the same bytes (rd_aura_box.c;
  *                 [dev] aura_box = auto|on|off, read there; the start line
  *                 ends "; aura box: two passes" or "; aura box: one pass")
+ *   passArea      on on the tile-based classes, off on desktop Vulkan,
+ *                 D3D12, D3D11 and OpenGL: a pass on a target with a depth
+ *                 whose draws are all 2D and known before it begins gets a
+ *                 render area of the tiles they touch (rd_pass_area.c;
+ *                 [dev] pass_area = auto|on|off, read there; the start
+ *                 line ends "; pass area: on" or "; pass area: off")
  *   crackFill     on on every class (the crack filler above 1x,
  *                 rd_crack_fill.c: on the local read's path it draws in
  *                 the pass the fog then keeps, so a tile-based GPU pays
@@ -358,6 +364,10 @@ void rd__profile_init(void)
      * one long loop a texel was measured (rd_aura_box.c reads
      * ICO_RD_AURA_BOX over it) */
     p->auraBox = tile;
+    /* the pass area on the tile-based classes, where a pass loads and
+     * stores its target's tiles (rd_pass_area.c reads ICO_RD_PASS_AREA
+     * over it) */
+    p->passArea = tile;
 
     /* the [dev] keys, through the host's environment */
     const char *notHere = NULL; /* a [dev] key asked for what the device lacks */
@@ -483,7 +493,7 @@ void rd__profile_init(void)
     rd__log("profile: %s: blend %s%s; fog local %s%s; DATE %s%s; depth stores %s%s; blur fold "
             "%s%s; robust access %s; local read %s; uint views %s%s; alpha plan %s%s; fx plan "
             "%s%s; fx local read %s%s; VU planes %s%s; shadow count %s%s; shadow edges: %s%s; "
-            "pipelines the start-up set%s%s%s; %s; %s",
+            "pipelines the start-up set%s%s%s; %s; %s; %s",
             p->cls, exact ? rd__blend_exact_name(asked) : "fixed-function", exact ? exactMark : "",
             p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
             p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
@@ -502,7 +512,7 @@ void rd__profile_init(void)
             mark(p, RD_PROFILE_VU_PLANES), shadowWords(p), mark(p, RD_PROFILE_SHADOW_ONE),
             edgeWords(p), mark(p, RD_PROFILE_SHADOW_BSPLINE), p->carefulSet ? " (careful)" : "",
             p->localWords[0] ? "; desktop local read " : "", p->localWords,
-            rd__uber_profile_words(), rd__aura_box_profile_words());
+            rd__uber_profile_words(), rd__aura_box_profile_words(), rd__pass_area_profile_words());
     if (notHere) {
         rd__log("profile: %s: not on this device, the flag stays off", notHere);
     }

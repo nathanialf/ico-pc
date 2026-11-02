@@ -276,6 +276,7 @@ static void planKeep(uint32_t tex, uint32_t target, uint32_t frame)
 void rd__store_plan_scan(const RdFrame *f, int keep)
 {
     rd__fades_fold_scan(f, keep); /* the sprites the reduction draws (rd_fades_fold.c) */
+    rd__pass_area_scan(f, keep);  /* the passes' areas, after the fold (rd_pass_area.c) */
     s_plan.n = s_plan.nUndef = 0;
     s_plan.full = false;
     s_plan.anyTouch = 0;

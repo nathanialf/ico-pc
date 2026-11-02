@@ -568,6 +568,18 @@ void rd__perf_pass(RhiCommandList cl, int kind, uint32_t target, uint32_t w, uin
     s_passCpu0 = now;
 }
 
+void rd__perf_pass_area(const RhiRect *area)
+{
+    if (!s_passOn || s_passRec.count == 0 || s_passRec.closed || !area || g_rdPerf.passPartial) {
+        return; /* (a full record opened no piece: the last is another's) */
+    }
+    RdPerfPass *p = &s_passRec.pass[s_passRec.count - 1u];
+    p->ax = clamp16(area->x > 0 ? (uint32_t)area->x : 0u);
+    p->ay = clamp16(area->y > 0 ? (uint32_t)area->y : 0u);
+    p->aw = clamp16(area->w);
+    p->ah = clamp16(area->h);
+}
+
 void rd__perf_pass_end(RhiCommandList cl)
 {
     if (!s_passOn || s_passRec.count == 0 || s_passRec.closed) {

@@ -422,6 +422,15 @@ own (D3D12 keeps a record only to fill in a transition from UNDEFINED,
 [RHI.md](RHI.md#direct3d-12)). A draw that samples its own render target samples a copy taken just
 before it, as the GS reads the live buffer (`port/render/rd_replay.c`, header comment).
 
+**The pass area.** On a tile-based GPU a render pass on SCENE whose draws are all 2D sprites and
+shapes with a known place (screen prims, the aura's paste) takes a render area of the 32 x 32 tiles
+they touch (`RhiRenderPassDesc.area`, [RHI.md](RHI.md#vulkan)), so only those tiles are loaded and
+stored; the pixels outside are untouched, which no draw of the pass reaches, so the picture is the
+same bytes. The scan before the walk (`rd__pass_area_scan`, beside the store plan's) gives every
+command its box, `beginPass` asks for the union from its command on, and the walk ends such a pass
+before the first command past it (`rd__pass_area_due`) ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-pass-area);
+`port/render/rd_pass_area.c`, header comment; `[dev] pass_area`).
+
 **The exact viewport.** While a frame's lists replay, every pass has one viewport size, the
 largest power of two the GPU takes, centred on the target, and FrameCB maps positions to it; the
 scissor, always inside the target, bounds the drawing. Every step is exact for a GS position at an

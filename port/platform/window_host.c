@@ -229,6 +229,9 @@ static struct {
     /* the sprites drawn in a cleared source's colour and the target reads
        kept (rd.h RdPerfRecord.constReads, constKept) */
     uint64_t constReads, constKept, fadesFolded;
+    /* the passes with a render area, their tiles, their targets' tiles and
+       those ended early (rd.h RdPerfRecord.passAreas ..., rd_pass_area.c) */
+    uint64_t passAreas, passAreaTiles, passAreaTargetTiles, passAreaEnds;
     /* draws that read a water block at a scale other than the scene's
        (rd.h RdPerfRecord.blockOtherScaleReads, issue 106) */
     uint64_t blockOtherScale;
@@ -4440,6 +4443,10 @@ static void perf_drain(void)
         s_perf.constReads += r.constReads;
         s_perf.constKept += r.constKept;
         s_perf.fadesFolded += r.fadesFolded;
+        s_perf.passAreas += r.passAreas;
+        s_perf.passAreaTiles += r.passAreaTiles;
+        s_perf.passAreaTargetTiles += r.passAreaTargetTiles;
+        s_perf.passAreaEnds += r.passAreaEnds;
         s_perf.pipeCreates += r.pipelineCreates;
         s_perf.msaaResolves += r.msaaResolves;
         if (r.msaaSamples > s_perf.msaaSamples) {
@@ -4602,7 +4609,8 @@ static void perf_log(void)
         "resampled above 1x, VU pre-pass %.0f vertices in %.0f draws (%.1f draws the old "
         "way); in the block %llu buffers and %llu textures created, %llu and %llu "
         "destroyed, %llu memory allocations, %llu pipelines created, %llu fence waits, "
-        "%llu wait-idles, %llu readbacks\n",
+        "%llu wait-idles, %llu readbacks; %.1f passes with an area (%.0f %% of the picture's "
+        "tiles loaded, %.1f ended early)\n",
         s_perf.draws / n, s_perf.passes / n, s_perf.pipeBinds / n, s_perf.groupBinds / n,
         s_perf.pipeSkips / n, s_perf.groupSkips / n, s_perf.stateSkips / n, s_perf.groups / n,
         s_perf.barriers / n, s_perf.copies / n, s_perf.bytes / n / 1024.0,
@@ -4614,7 +4622,12 @@ static void perf_log(void)
         (unsigned long long)s_perf.texCreated, (unsigned long long)s_perf.bufDestroyed,
         (unsigned long long)s_perf.texDestroyed, (unsigned long long)s_perf.allocs,
         (unsigned long long)s_perf.pipeCreates, (unsigned long long)s_perf.fenceWaits,
-        (unsigned long long)s_perf.waitIdles, (unsigned long long)s_perf.readbacks);
+        (unsigned long long)s_perf.waitIdles, (unsigned long long)s_perf.readbacks,
+        s_perf.passAreas / n,
+        s_perf.passAreaTargetTiles
+            ? 100.0 * (double)s_perf.passAreaTiles / (double)s_perf.passAreaTargetTiles
+            : 100.0,
+        s_perf.passAreaEnds / n);
     /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c; the
        flags are the rd: profile line's) */
     fprintf(stderr,

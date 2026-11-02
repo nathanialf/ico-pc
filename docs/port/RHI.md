@@ -173,7 +173,13 @@ rasterizer-ordered storage texture, no colour target) or ATTACHMENT (colour atta
 input attachment in rasterization order, Vulkan only). Culling is always off: the GS has none. A
 render pass names its colour and depth attachments with load ops (LOAD, CLEAR, DONT_CARE) and store
 ops (STORE, or DONT_CARE so a tile-based GPU can skip the write-back) (`port/rhi/rhi.h`, pipelines,
-passes).
+passes), its size, and optionally an area inside it (`RhiRenderPassDesc.area`, x, y, w, h; w or h 0,
+a zeroed desc, is the whole size): the part the pass loads, draws and stores. On Vulkan it is the
+render area (below); every draw of the pass must lie inside it, the default scissor is the area,
+every scissor set in the pass is cut to it, and the default viewport stays the whole size. D3D11,
+D3D12 and OpenGL ignore it (no tiles to spare; the caller's draws lie inside it anyway), so a
+CLEAR load with an area clears the area on Vulkan and the whole target elsewhere: the renderer
+gives no area to a pass that clears ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-pass-area)).
 
 **Several pipelines at once.** `rhi_create_pipelines(descs, n, out, batch)` creates a set of
 pipelines with the driver's compiles on worker threads: the logical cores less one, at least one, at
@@ -855,7 +861,15 @@ of SDL's; the surface is NULL while the app is in the background and the caller 
 counts it and clamps the area, viewport and scissor to the smallest attachment, and every scissor set
 while the pass is open is cut to that area, so the renderer's own full-target scissor cannot reach
 past it; a pass that fits is untouched (`port/rhi/vk/vk_cmd.c` (`vkr_pass_area_fits`,
-`rhi_cmd_set_scissor`)). The D3D12 backend clamps its default
+`rhi_cmd_set_scissor`)). Inside that size the pass's own area (`RhiRenderPassDesc.area`, cut to
+it; one that leaves nothing is the whole size, Vulkan wanting an extent above zero) is the
+`renderArea` offset and extent of `VkRenderingInfo` and of `VkRenderPassBeginInfo` (the legacy
+path's framebuffer stays the attachments' size, `vk_renderpass.c`); the default scissor is the
+area, the default viewport the whole size, and every scissor set while the pass is open is the
+intersection of the asked one and the area (an empty one keeps its offset, extent 0): the
+specification asks that all rendering stay inside the render area and restricts the load, store
+and resolve operations to the pixels inside it (`VkRenderPassBeginInfo`), so the pixels
+outside keep their contents on every device (`rhi_vk`'s `renderAreaCell`). The D3D12 backend clamps its default
 viewport and scissor the same way (`port/rhi/d3d12/d3d12_cmd.c` (`dx_pass_area_check`)).
 
 **Test hooks** (`port/rhi/vk/rhi_vk.h`): the validation error count, a forced present result

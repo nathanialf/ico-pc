@@ -2112,6 +2112,9 @@ typedef struct RdPerfPass {
     /* OpenGL: the bound groups' entries in it and those skipped as already
      * bound (RhiStats.entryBinds, entryBindsSkipped; 0 elsewhere) */
     uint32_t entryBinds, entrySkipped;
+    /* a render pass's area (rd_pass_area.c, RhiRenderPassDesc.area): its
+     * offset and size in texels; aw 0 the whole target */
+    uint16_t ax, ay, aw, ah;
 } RdPerfPass;
 
 /* A piece's label as the window's summary writes it: the effect for a
@@ -2332,6 +2335,14 @@ typedef struct RdPerfRecord {
      * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
      * a replay; none while the game is paused) */
     uint32_t auraBoxDraws;
+    /* The pass area (rd_pass_area.c): the render passes begun this replay
+     * with an area smaller than their target (only the tiles the draws
+     * touch loaded and stored), the 32 x 32 tiles their areas hold and the
+     * tiles their whole targets hold (passAreaTiles / passAreaTargetTiles:
+     * the share of those passes' tiles a tile-based GPU loads and stores),
+     * and the passes ended early at the end of their area's commands (the
+     * walk would have gone on in the same pass: 0 in a usual replay) */
+    uint32_t passAreas, passAreaTiles, passAreaTargetTiles, passAreaEnds;
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
      * docs/port/PIPELINES.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:

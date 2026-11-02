@@ -1348,6 +1348,7 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     p.width = c->tw;
     p.height = c->th;
     rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, cid, c->tw, c->th, r->perfPost);
+    rd__pass_area_begin(&p, c, cid, r->passSerial + 1u, ms, storage); /* rd_pass_area.c */
     rhi_cmd_begin_render_pass(s_cl, &p);
     if (uber && readable && colorLoad == RHI_LOAD_CLEAR) {
         rhi_cmd_local_read_barrier(s_cl, RHI_LOCAL_READ_COLOR); /* the clear, then reads */
@@ -2444,67 +2445,10 @@ float rd__region_scale(const RdTargetRec *tc)
     return (float)ICO_FRAME_BASE_W / (float)g_rd.gsW;
 }
 
-/* GS pixels x0..x1, y0..y1 (inclusive, after XYOFFSET) of target tc in its
- * texels: the UI flip when mirror (GS pixel p is target pixel w - 1 - p),
- * clipped to the target, then the texel scale: GS pixels x0..x1 cover texels
- * floor(x0 * sx) .. ceil((x1 + 1) * sx) - 1.  A draw's box may start
- * outside (its vertices off the target's edge).  False when nothing is
- * left. */
-static bool gsRectToTexels(const RdTargetRec *tc, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
-                           int mirror, RhiRect *out)
-{
-    if (mirror) {
-        const int32_t a = (int32_t)tc->w - 1 - x1, b = (int32_t)tc->w - 1 - x0;
-        x0 = a;
-        x1 = b;
-    }
-    x0 = x0 < 0 ? 0 : x0;
-    y0 = y0 < 0 ? 0 : y0;
-    x1 = x1 >= (int32_t)tc->w ? (int32_t)tc->w - 1 : x1;
-    y1 = y1 >= (int32_t)tc->h ? (int32_t)tc->h - 1 : y1;
-    if (x1 < x0 || y1 < y0) {
-        return false;
-    }
-    if (tc->sx != 1.0f || tc->sy != 1.0f) {
-        int32_t a = (int32_t)((float)x0 * tc->sx), b = (int32_t)((float)y0 * tc->sy);
-        int32_t c = (int32_t)((float)(x1 + 1) * tc->sx + 0.999f) - 1;
-        int32_t d = (int32_t)((float)(y1 + 1) * tc->sy + 0.999f) - 1;
-        if (tc->ox > 0.0f) {
-            /* Full pixel: the frame's columns from ox texels in
-             * (rd__gs_texel_x); the GS pixels outside the window clip */
-            a = (int32_t)floorf(rd__gs_texel_x(tc, (float)x0));
-            c = (int32_t)ceilf(rd__gs_texel_x(tc, (float)(x1 + 1)) - 0.001f) - 1;
-            a = a < 0 ? 0 : a;
-            if (c < a) {
-                return false;
-            }
-        }
-        x0 = a;
-        y0 = b;
-        x1 = c >= (int32_t)tc->tw ? (int32_t)tc->tw - 1 : c;
-        y1 = d >= (int32_t)tc->th ? (int32_t)tc->th - 1 : d;
-        if (x1 < x0) {
-            return false;
-        }
-    }
-    *out = (RhiRect){x0, y0, (uint32_t)(x1 - x0 + 1), (uint32_t)(y1 - y0 + 1)};
-    return true;
-}
-
-/* the scissor (SCISSOR_1, inclusive GS pixels) in texels, clipped to the
- * target first; a flipped UI draw clips where its scissor lands after the
- * flip. */
-static bool scissorTexels(const RdTargetRec *tc, const RdStateBlock *st, int mirror, RhiRect *sc)
-{
-    int32_t x0 = st->scissor[0] < 0 ? 0 : st->scissor[0];
-    int32_t y0 = st->scissor[1] < 0 ? 0 : st->scissor[1];
-    int32_t x1 = st->scissor[2] >= (int32_t)tc->w ? (int32_t)tc->w - 1 : st->scissor[2];
-    int32_t y1 = st->scissor[3] >= (int32_t)tc->h ? (int32_t)tc->h - 1 : st->scissor[3];
-    if (x1 < x0 || y1 < y0) {
-        return false;
-    }
-    return gsRectToTexels(tc, x0, y0, x1, y1, mirror, sc);
-}
+/* GS pixels to texels, and the scissor in texels: rd_pass_area.c
+ * (rd__gs_rect_texels, rd__scissor_texels; rd__screen_area is there too) */
+#define gsRectToTexels rd__gs_rect_texels
+#define scissorTexels rd__scissor_texels
 
 /* the scissor of the draw being bound, in texels */
 static bool scissorRect(const Replay *r, const RdTargetRec *tc, RhiRect *sc)
@@ -2530,41 +2474,6 @@ static bool rectHolds(RhiRect outer, RhiRect inner)
     return inner.x >= outer.x && inner.y >= outer.y &&
            (int64_t)inner.x + inner.w <= (int64_t)outer.x + outer.w &&
            (int64_t)inner.y + inner.h <= (int64_t)outer.y + outer.h;
-}
-
-/* Every fragment of a screen-prim command lies in its vertices' bounding
- * box give or take a pixel: sprite corners snapped up to whole pixels
- * (snapAxis), points drawn as one-pixel quads, lines reaching the pixels
- * next to them, the mirror's sixteenth of a texel and the half-line offset
- * of a field target; AA1 adds a one-pixel fringe outside every edge
- * (aa1Fringe).  The pad covers all of them, and convVtx's clamp to the
- * 12.4 range is applied to the box as to the vertices. */
-bool rd__screen_area(const RdTargetRec *tc, const RdStateBlock *st, const RdScreenVtx *v,
-                     uint32_t n, int mirror, int aa1, RhiRect *area)
-{
-    if (!tc || n == 0) {
-        return false;
-    }
-    int32_t lx = v[0].x, hx = v[0].x, ly = v[0].y, hy = v[0].y;
-    for (uint32_t i = 1; i < n; i++) {
-        lx = v[i].x < lx ? v[i].x : lx;
-        hx = v[i].x > hx ? v[i].x : hx;
-        ly = v[i].y < ly ? v[i].y : ly;
-        hy = v[i].y > hy ? v[i].y : hy;
-    }
-    lx = lx < 0 ? 0 : (lx > 0xFFFF ? 0xFFFF : lx);
-    hx = hx < 0 ? 0 : (hx > 0xFFFF ? 0xFFFF : hx);
-    ly = ly < 0 ? 0 : (ly > 0xFFFF ? 0xFFFF : ly);
-    hy = hy < 0 ? 0 : (hy > 0xFFFF ? 0xFFFF : hy);
-    const int32_t pad = aa1 ? 3 : 2;
-    const int32_t ox = 2048 - (int32_t)(st->gsW >> 1), oy = 2048 - (int32_t)(st->gsH >> 1);
-    RhiRect box, sc;
-    if (!gsRectToTexels(tc, floorDiv16(lx) - ox - pad, floorDiv16(ly) - oy - pad,
-                        -floorDiv16(-hx) - ox + pad, -floorDiv16(-hy) - oy + pad, mirror, &box) ||
-        !scissorTexels(tc, st, mirror, &sc)) {
-        return false;
-    }
-    return rectMeet(box, sc, area);
 }
 
 bool rd__date_retake(uint32_t heldFor, uint32_t heldSerial, const RhiRect *held, uint32_t tcId,
@@ -5863,6 +5772,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
         for (uint32_t i = 0; i < list->count; i++) {
             const RdCmd *c = &list->cmds[i];
             g_rdStoreOrd = planBase + i;
+            if (r.passOpen && rd__pass_area_due(g_rdStoreOrd, r.passSerial)) {
+                endPass(&r); /* past the open pass's area commands (rd_pass_area.c) */
+            }
             rd__replay_fold_at(i);
             if (g_rdWin.first) {
                 /* the draw note's place (rd__replay_set_window_draws) */

@@ -461,6 +461,15 @@ typedef struct RdTargetRec {
  * snapshot copies only this area (rd_replay.c dateSnapshot). */
 bool rd__screen_area(const RdTargetRec *tc, const RdStateBlock *st, const RdScreenVtx *v,
                      uint32_t n, int mirror, int aa1, RhiRect *area);
+/* rd_pass_area.c, for rd_replay.c (its gsRectToTexels and scissorTexels)
+ * and rd__screen_area: GS pixels x0..x1, y0..y1 (inclusive, after
+ * XYOFFSET) of target tc in its texels, through the UI flip when mirror
+ * and the texel scale (Full pixel's crop too), clipped to the target; and
+ * the scissor (SCISSOR_1) of the state st in texels the same way.  False
+ * when nothing is left. */
+bool rd__gs_rect_texels(const RdTargetRec *tc, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
+                        int mirror, RhiRect *out);
+bool rd__scissor_texels(const RdTargetRec *tc, const RdStateBlock *st, int mirror, RhiRect *sc);
 /* Whether the DATE snapshot must be (re)taken for a draw on target tcId at
  * write serial serial that reads area want (texels; NULL = the whole tw x
  * th target), given the snapshot held (for target heldFor at serial
@@ -1124,6 +1133,12 @@ typedef struct RdProfile {
      * (Adreno, Mali, PowerVR, Apple, another tiler), off on the
      * immediate-mode ones; [dev] aura_box over it, read there */
     bool auraBox;
+    /* the pass area (rd_pass_area.c): a render pass on a target with a
+     * depth, whose draws are all 2D with bounds known before it begins,
+     * loads and stores only the tiles they touch; on by default on the
+     * tile-based classes, off on the immediate-mode ones (which ignore the
+     * area anyway); [dev] pass_area over it, read there */
+    bool passArea;
     /* rd_profile.c: the device class's name for the lines; per flag
      * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
      * turned it off (rd__profile_self_test_off) */
@@ -1980,6 +1995,48 @@ uint32_t rd__aura_box_keys(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 void rd__aura_box_block(void);
 void rd__aura_box_counts(uint64_t *two, uint64_t *one);
 void rd__aura_box_shutdown(void);
+/* The pass area (rd_pass_area.c; [dev] pass_area = auto|on|off,
+ * ICO_RD_PASS_AREA; docs/port/WORK_BUFFERS.md "The pass area"): a render pass on
+ * a target with a depth whose draws are all 2D with boxes known before it
+ * begins gets a render area (RhiRenderPassDesc.area) of the 32 x 32 tiles
+ * (RD_PASS_AREA_TILE) they touch.
+ *   rd__pass_area_pick: the switch from the environment's word env (NULL,
+ *     "", "auto": the profile's def; 1/true/on/yes on; 0/false/off/no off;
+ *     another word: auto) (tests)
+ *   rd__pass_area_init: decided once after rd__profile_init, its line
+ *   rd__pass_area_on: in force; rd__pass_area_force: tests (-1, 0, 1)
+ *   rd__pass_area_profile_words: "pass area: on" or "pass area: off"
+ *   rd__pass_area_scan: the lists' commands' kinds and boxes before the walk
+ *     (rd_store_plan.c rd__store_plan_scan calls it)
+ *   rd__pass_area_cmd: one command's kind under the state st (0 none, 1 a
+ *     box: *box the texels it can touch, w 0 none; 2 the whole target; 3
+ *     the end of any pass's commands) (tests)
+ *   rd__pass_area_of: the union of the boxes of a pass on target cid (rec
+ *     c) begun at command k, *end the command it ends before; false: no
+ *     area (the whole target); rd__pass_area_rect the same aligned to
+ *     tiles, false also when it spares no tile column or row
+ *   rd__pass_area_begin (rd_replay.c beginPass): p->area set or zeroed for
+ *     the pass about to begin (serial: its Replay.passSerial)
+ *   rd__pass_area_due (rd_replay.c's command loop): the open pass (serial)
+ *     has an area whose commands end before command ord: end it
+ *   rd__pass_area_counts: since start (passes, their tiles, their targets'
+ *     tiles, passes ended early) */
+#define RD_PASS_AREA_TILE 32u
+int rd__pass_area_pick(const char *env, int def);
+void rd__pass_area_init(void);
+bool rd__pass_area_on(void);
+void rd__pass_area_force(int mode);
+const char *rd__pass_area_profile_words(void);
+void rd__pass_area_scan(const RdFrame *f, int keep);
+int rd__pass_area_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, uint32_t ord,
+                      RhiRect *box);
+bool rd__pass_area_of(uint32_t cid, const RdTargetRec *c, uint32_t k, RhiRect *area, uint32_t *end);
+bool rd__pass_area_rect(uint32_t cid, const RdTargetRec *c, uint32_t k, RhiRect *area,
+                        uint32_t *end);
+void rd__pass_area_begin(RhiRenderPassDesc *p, const RdTargetRec *c, uint32_t cid, uint32_t serial,
+                         bool ms, bool storage);
+bool rd__pass_area_due(uint32_t ord, uint32_t serial);
+void rd__pass_area_counts(uint64_t *passes, uint64_t *tiles, uint64_t *targetTiles, uint64_t *ends);
 /* The fades fold (rd_fades_fold.c, rd_replay.h): false under [dev]
  * fades_fold = false (ICO_RD_FADES_FOLD=0, the A/B) or after a reduction
  * did not take a planned fold */
@@ -3303,6 +3360,9 @@ void rd__perf_readback_ms(double ms);
  * "Performance records". */
 void rd__perf_pass(RhiCommandList cl, int kind, uint32_t target, uint32_t w, uint32_t h, int post);
 void rd__perf_pass_end(RhiCommandList cl);
+/* the render area of the piece rd__perf_pass just opened (a timed replay:
+ * RdPerfPass.ax .. ah; rd_pass_area.c) */
+void rd__perf_pass_area(const RhiRect *area);
 /* [dev] perf_passes from ICO_RD_PERF_PASSES, logged once (rd_replay.c's
  * device start); rd__set_perf_passes sets it (tests, the replay tool) */
 void rd__perf_passes_init(void);

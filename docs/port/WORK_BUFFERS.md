@@ -9,7 +9,7 @@ reflection block between ticks, and where the crack filler is drawn on the fog's
 a new key between ticks is paired, how desktop Vulkan decides on the local reads at start, how
 the shadow count is read from the stencil in one draw (and its colour left unstored while it is
 made), how the shadow levels are composited above
-1x, which passes leave a depth neither loaded nor stored (the store plan), a source that holds only its clear read as its colour, which full-frame reads stay at a large
+1x, which passes leave a depth neither loaded nor stored (the store plan), which passes load and store only the tiles their draws touch (the pass area), a source that holds only its clear read as its colour, which full-frame reads stay at a large
 scale, and how the screen-prim triangles draw without the sprite planes (issue 161). The sprites themselves are drawn by the GS
 sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 
@@ -29,6 +29,7 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `port/render/rd_replay.c`, `port/render/rd_shadow_one.c`, `port/render/rd_shadow_selftest.c`, `port/shaders/blit.hlsl` | the shadow count in one draw (`shadowCountOne` picks the destination, `rd__shadow_one_draw` draws `shadow_count_ps`) and its start-up self-test (`rd__shadow_selftest`) |
 | `port/render/rd_fx_plan.c`, `port/render/rd_profile.c` | the shadow composites above 1x: one bilinear tap unless `RdProfile.shadowBspline` (`rd__sprite_above1x`) |
 | `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
+| `port/render/rd_pass_area.c`, `port/render/rd_replay.c`, `port/rhi/vk/vk_cmd.c` | the pass area: the commands' boxes before the walk (`rd__pass_area_scan`, from `rd__store_plan_scan`), each pass's area (`rd__pass_area_begin` from `beginPass`), the end of its commands (`rd__pass_area_due`), the render area and the cut scissors (`rhi_cmd_begin_render_pass`, `rhi_cmd_set_scissor`) |
 | `port/render/rd_store_plan.c`, `port/render/rd_replay.c`, `port/render/rd_profile.c` | the store plan: the scan before the walk (`rd__store_plan_scan`), each pass's depth ops (`rd__store_plan_pass` from `beginPass`), the walk's command count (`g_rdStoreOrd`), the profile's `storePlan` |
 
 ## Sizes per frame width
@@ -907,6 +908,93 @@ with every store kept, with the plan and with every depth store dropped, under
 store it dropped) clears the depth to 0.5 and the stencil to 0x5A instead, the garbage a tile-based
 GPU may leave, since lavapipe itself keeps the contents. The plan must give every target byte for
 byte; dropping every depth store must change some target.
+
+## The pass area
+
+A tile-based GPU loads a pass's attachments into its tiles when the pass begins and writes them
+back when it ends, over the pass's render area. On the PowerVR phone at Resolution Auto (SCENE
+2364 x 1080) the aura's paste of FEED128 into SCENE is a pass of its own with one sprite of
+212 x 128 GS pixels, about 979 x 270 texels, 11 % of the picture, yet it loaded and stored all of
+SCENE's colour (10.2 MB each way) and depth (10.2 to 20.4 MB each way): `aura SCENE 2366x1080 1
+draws 2.89 ms` in a play block of the phone's log of 2026-11-02, a stage 6 room. List 11's pass on SCENE is often a
+small sprite or two the same way. The render area (`RhiRenderPassDesc.area`; Vulkan
+`VkRenderingInfo` and `VkRenderPassBeginInfo` `renderArea`, offset and extent) bounds the tiles a
+pass loads and stores.
+
+**Why the picture is the same.** The Vulkan specification (`VkRenderPassBeginInfo`, and
+`VkRenderingInfo` the same) restricts "the effects of attachment load, store, and multisample
+resolve operations" to the pixels inside the render area, and asks that "the application must
+ensure (using scissor if necessary) that all rendering is contained within the render area"; the pixels outside
+keep what memory holds. A pass whose draws touch no pixel outside its area therefore leaves every
+pixel outside as the whole pass would: a loaded and stored pixel no draw touches is written back
+unchanged, and a DONT_CARE load or store (the store plan's dropped depth) is undefined in the whole
+pass and untouched in the area pass, a depth nothing reads. A CLEAR load clears the whole
+attachment, so a pass that takes a clear (a pending clear, a shadow reset as the stencil's load op,
+the store plan's poison) keeps its whole target. The RHI cuts every scissor of the pass to the
+area (`port/rhi/vk/vk_cmd.c` (`rhi_cmd_set_scissor`)), the default scissor is the area and the
+default viewport the whole target (the draws' coordinates do not move); D3D11, D3D12 and OpenGL
+ignore the area ([RHI.md](RHI.md#vulkan)).
+
+**The draws a pass holds, before it begins.** As the store plan has it, a pass begun while
+command k replays (`g_rdStoreOrd`) holds the work of command k and later ones only. The scan
+before the walk (`rd__pass_area_scan`, called from `rd__store_plan_scan` after the fades fold's)
+reads the lists with their state once and gives every command a kind (`rd__pass_area_cmd`):
+
+| kind | commands | why |
+| --- | --- | --- |
+| none | state, NOP, the overlay's text, text the present draws (`g_rd.deferText`), a sprite the fades fold leaves to the reduction | nothing drawn in the walk |
+| box | a screen-prim command on a target with its own depth: `rd__screen_area` (the vertices' box padded by two GS pixels, three with PRIM.AA1, through the texel scale and Full pixel's crop, in the scissor; a UI command with and without the mirror's flip; a full-frame sprite widened to the frame's width, as `extendFullFrame` may widen it); the aura's sprite (`RD_POST_AURA`): `fx_rect_vs` covers the target and `fx_sprite_ps` keeps the GS pixels inside its rect, so the rect padded by two GS pixels in the scissor, the box `blurSnapArea` takes for its snapshot | the fragments lie inside the box before the GPU runs |
+| whole | the VU commands (meshes, skinned meshes, grids, particles), the shadow commands, the fog with the crack filler in its pass, every other post sprite, a screen command under DATE or COLCLAMP 0's wrap, a command on a target without a depth, or whose payload cannot be read | the vertex work decides the coverage; DATE's stencil setup draws over the scissor (`rd__replay_date_take`); a crack fill reaches past every uncovered run of texels anywhere; the reduction's open border, the glow's edge strips, the blur fold and Motion blur: Smooth draw past their rect |
+| end | a clear, a copy, an exact blend, a command the walk does not replay | it records outside the pass |
+
+A pass beginning on target c at command k (`rd__pass_area_begin`, from `beginPass`) takes the
+union of the box commands on c from k on, up to the first command after k that ends or draws on
+another target (E); a whole command on c in between, or command k not a box on c (a pass begun
+for a fold, a VU flush, a DATE pass), and the pass keeps its whole target. The walk ends a pass
+with an area that is still open at command E (`rd__pass_area_due`, at the top of the command
+loop), so whatever E and the commands after it draw goes to a pass with its own area: the area
+holds the pass's draws whatever the walk then does. E normally ends the pass anyway (it draws on
+another target, or records outside a pass); when it drew nothing and the next pass is on the same
+targets, that is one pass more, counted (`RdPerfRecord.passAreaEnds`, "ended early").
+
+**Where.** A pass `beginPass` begins on a target with its own depth (SCENE; FEED128 and the work
+buffers are small targets already), single-sampled (not in the MSAA epoch), not a storage pass,
+without a CLEAR load, and never under the replay tool's pass window. The union is aligned out to
+whole 32 x 32 tiles (`RD_PASS_AREA_TILE`) and clamped to the target, and taken when it is at least
+one tile column or row narrower than the target. On by default on the tile-based classes
+(`RdProfile.passArea`: Adreno, Mali, PowerVR, Apple, another tiler), off on desktop Vulkan, D3D12,
+D3D11 and OpenGL; `[dev] pass_area = auto|on|off` (`ICO_RD_PASS_AREA`, [CONFIG.md](CONFIG.md)) over
+it.
+
+**The cost and the saving.** The scan is one walk of the lists' state with a box for each screen
+command and aura sprite on SCENE (none where the area is off); the passes hold the same draws. The
+paste's sprite at about 979 x 270 texels from 693, 405 (that frame's estimate) comes out to
+about 1024 x 320 from 672, 384 in whole tiles, 320 of SCENE's 2516 tiles (13 %), so about 87 % of
+the 23 to 30 MB that pass moves each way is not moved: 40 to 52 MB a picture both ways, 0.7
+to 0.9 ms at the device's 56 MB a millisecond, and more than the pass's measured 2.89 ms at the 10
+MB a millisecond the earlier passes on that phone came to, so most of those 2.89 ms (UNVERIFIED:
+the phone's 10 s lines and pass list measure it).
+
+**The lines.**
+
+      rd: pass area: on (a tile-based GPU's default; [dev] pass_area = off keeps every pass whole): a pass on the picture whose draws are all flat sprites and shapes with a known place loads and stores only the 32 x 32 tiles they touch (the same picture)
+      rd: profile: ...; pass area: on
+      rd: pass area: SCENE in list 8 (the aura's sprite): WxH at X,Y of 2364x1080 (N of 2516 tiles loaded and stored; the first 8 such passes a run are named)
+      window: per replay ...; P passes with an area (M % of the picture's tiles loaded, K ended early)
+
+The replay tool's `--stats` prints `pass area on|off: N passes with an area (T of their A tiles
+loaded), E ended early`, and `--pass-times` adds ` area WxH at X,Y` after a pass's size
+(`RdPerfPass.ax`, `ay`, `aw`, `ah`).
+
+**The tests.** `rhi_vk` (`renderAreaCell`): a pass with an area over a cleared target leaves the
+texels outside it as they were after a draw over the whole target, its scissor set to the whole
+target and cut, and a CLEAR load with an area clears the area alone, on both pass paths.
+`rd_state` (`rd_state_pass_area_test.inc`): the boxes of a screen sprite and the aura's sprite at 1x,
+at the phone's 848 x 448 GS frame in 2364 x 1080 texels and under Full pixel's crop hold every texel
+they cover within the pad, and the run of a pass at the sprite. `rd_pass_area_ab` replays the
+corpus and the phone's frames with the areas off and on (`ICO_RD_PASS_AREA=0`, `1`; lavapipe clips
+to the area): every target byte for byte, some pass with an area on the phone's frames
+([TESTING.md](TESTING.md)).
 
 ## A cleared source read as its colour
 

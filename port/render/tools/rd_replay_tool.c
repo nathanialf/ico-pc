@@ -230,7 +230,9 @@
  *                         ([dev] perf_passes, rd_perf.c): after the gpu line
  *                         the warm replay's passes, one line each ("pass N:
  *                         <label> <target> WxH, list L, D draws, B
- *                         pipeline binds, GPU <us> us, CPU <us> us"), then
+ *                         pipeline binds, GPU <us> us, CPU <us> us"; a
+ *                         pass with a render area says " area WxH at X,Y"
+ *                         after its size, rd_pass_area.c), then
  *                         the window's top-passes text over that replay and
  *                         its passes by kind
  *   --time N              after the picture is written, the frame replayed
@@ -2504,6 +2506,11 @@ int main(int argc, char **argv)
         /* the aura's read in two passes (rd_aura_box.c) */
         printf("%s: stats: aura box %s: %u feedback reads in two passes\n", dump,
                rd__aura_box_on() ? "on" : "off", pr->auraBoxDraws);
+        /* the passes' render areas (rd_pass_area.c) */
+        printf("%s: stats: pass area %s: %u passes with an area (%u of their %u tiles loaded), "
+               "%u ended early\n",
+               dump, rd__pass_area_on() ? "on" : "off", pr->passAreas, pr->passAreaTiles,
+               pr->passAreaTargetTiles, pr->passAreaEnds);
         /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
         printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
                "additive, %u local; vu no-planes %u; sprite no-planes %u\n",
@@ -2725,10 +2732,15 @@ int main(int argc, char **argv)
                 for (uint32_t k = 0; k < passCount; k++) {
                     const RdPerfPass *q = &passes[k];
                     rd_perf_pass_label(q, label, sizeof(label));
-                    printf("%s: pass %u: %s %s %ux%u, list %d, %u draws, %u pipeline binds, GPU "
-                           "%.1f us, CPU %.1f us\n",
+                    char area[48] = ""; /* the pass's render area (rd_pass_area.c) */
+                    if (q->aw) {
+                        snprintf(area, sizeof(area), " area %ux%u at %u,%u", (unsigned)q->aw,
+                                 (unsigned)q->ah, (unsigned)q->ax, (unsigned)q->ay);
+                    }
+                    printf("%s: pass %u: %s %s %ux%u%s, list %d, %u draws, %u pipeline binds, "
+                           "GPU %.1f us, CPU %.1f us\n",
                            dump, k, label, rd_perf_target_name(q->target), (unsigned)q->w,
-                           (unsigned)q->h, (int)q->list, q->draws, q->pipelineBinds,
+                           (unsigned)q->h, area, (int)q->list, q->draws, q->pipelineBinds,
                            (double)q->gpuUs, (double)q->cpuUs);
                 }
                 rd_perf_pass_agg_reset(&agg);
