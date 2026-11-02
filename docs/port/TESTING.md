@@ -1994,14 +1994,21 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   Auto, the menu words, back to English) and the five sheets' strips unchanged (`subtitles_ru`);
   on the Japanese, Korean and Asian discs no entry and nothing in force (`subtitles_ru_jpn`,
   `subtitles_ru_kor`, `subtitles_ru_cn`). The Language row's step after it is now Russian
-  (cobra838), then English.
+  (cobra838), then Brazilian Portuguese, then English.
 - `subtitles_ru_cobra838_test.c`: the same for the Russian (cobra838) translation, a copy of
   `subtitles_ru_test.c`: its own 42 subtitles (his pull request's records, his words and not
   bob-ttz's, the same eight second-play only), `[game] text_language = "ru-cobra838"`, the
   Language row's seven entries (his the seventh, the key, Auto in his Russian from the file's key,
-  an untranslated row in English, seven steps back to English) and the strips with his words
-  (`subtitles_ru_cobra838`, `subtitles_ru_cobra838_jpn`, `_kor`, `_cn`, in the `settings_toml`
-  lock).
+  an untranslated row in English, eight steps back to English, Brazilian Portuguese after it) and
+  the strips with his words (`subtitles_ru_cobra838`, `subtitles_ru_cobra838_jpn`, `_kor`, `_cn`,
+  in the `settings_toml` lock).
+- `subtitles_pt_br_test.c`: the same for the Brazilian Portuguese translation (Igor Chagas,
+  ichagas7, issue 157), a copy of `subtitles_ru_cobra838_test.c`: its 42 subtitles (his CSV's
+  records, the same eight second-play only, two lines of 50 characters at most, a glyph each),
+  `[game] text_language = "pt-br"`, the Language row's eight entries (his the eighth, the key,
+  Auto in his Portuguese from the file's key, two untranslated rows in English, eight steps back
+  to English) and the strips with his words (`subtitles_pt_br`, `subtitles_pt_br_jpn`, `_kor`,
+  `_cn`, in the `settings_toml` lock).
 - `ui_mouse_test.c`: the pointer's arithmetic in the menus (`ui_mouse`).
 - `ui_test.c`: the embedded fonts, UTF-8, the runtime text; each language's own Deja vu string
   (`UI_STR_PHOTO_FILM_DEJA`); a Japanese popup body wider than the panel takes a second line, an

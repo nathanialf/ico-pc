@@ -29,9 +29,9 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | `port/data/df_pack.h` | reading one member of a `DATA.DF` stage pack outside the game's disc thread |
 | `port/include/ico_credits.h`, `port/game/credits.c`, `credits_live.c` | the staff roll's port credit and the Extras credits playback |
 | `port/game/title_logo.h`, `title_logo.c` | the title logo hidden under the port's menus, the title's full-frame models |
-| `port/game/subtitles.h`, `subtitles_ru_bobttz.c`, `subtitles_ru_cobra838.c` | the community translations' subtitle tables: the words of each record each translates |
+| `port/game/subtitles.h`, `subtitles_ru_bobttz.c`, `subtitles_ru_cobra838.c`, `subtitles_pt_br.c` | the community translations' subtitle tables: the words of each record each translates |
 | `port/ui/subtitle_text.h`, `subtitle_text.c` | the subtitles of the community translation in force, drawn as text in `jimakuDisp`'s place of the strips |
-| `port/ui/strings_ru_bobttz.c`, `strings_ru_cobra838.c` | the Russian (bob-ttz) and Russian (cobra838) tables of the port's strings and the European disc's menu words |
+| `port/ui/strings_ru_bobttz.c`, `strings_ru_cobra838.c`, `strings_pt_br.c` | the Russian (bob-ttz), Russian (cobra838) and Brazilian Portuguese (Igor Chagas, ichagas7) tables of the port's strings and the European disc's menu words |
 | `port/platform/steam_shortcut.h` | Add to Steam |
 | `port/platform/gpu_driver.h` | the Android build's graphics driver packages |
 | `port/game/state_host.c`, `state_rules.h`, `state_rules.c` | save states: the save, the load, the slots, the picture, the [dev] keys; the conditions and the listing |
@@ -375,7 +375,7 @@ hold the rest.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Display: 50 Hz (title only) | W | H | H | H | H | H | H | `has_50hz_row`; `settings_discs`, `settings_<slug>` |
 | Main: Game language | W | H | H | H | H | H | H | `has_game_language`; `settings_discs`, `settings_<slug>` |
-| Main: Game language's community entries (Русский (bob-ttz), Русский (cobra838)) | W | H | H | H | H | H | H | the row's own rule (`has_game_language`); in force only there with the game in English (`ui_settings_text_language`), so `[game] text_language` changes nothing on the other discs ([Community translations](#community-translations)); `subtitles_ru`, `subtitles_ru_<slug>` (jpn, kor, cn), `subtitles_ru_cobra838`, `subtitles_ru_cobra838_<slug>`, `jimaku_text` |
+| Main: Game language's community entries (Русский (bob-ttz), Русский (cobra838), Português (Brasil) (ichagas7)) | W | H | H | H | H | H | H | the row's own rule (`has_game_language`); in force only there with the game in English (`ui_settings_text_language`), so `[game] text_language` changes nothing on the other discs ([Community translations](#community-translations)); `subtitles_ru`, `subtitles_ru_<slug>` (jpn, kor, cn), `subtitles_ru_cobra838`, `subtitles_ru_cobra838_<slug>`, `subtitles_pt_br`, `subtitles_pt_br_<slug>`, `jimaku_text` |
 | Main: Menu language | W | W | W | W | W | W | W | Auto is `ui_lang_default`, the sheets `menu_sheet`; `settings_<slug>`, `settings_render_<slug>` |
 | Controls: Hold type | W | W | W | W | W | W | W | `hold_type_own`, the default `"disc"`: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 (the 2001 arms `_ACTCommonMailTest_<disc>` read `optionControlType` in the port); `settings_discs`, `options_<slug>`, `save` (per disc) |
 | Controls: Circle goes back | W | H | H | W | W | W | H | `pad_back` is Triangle (`lt_ext_has_circle_back`); the 2001 arms cancel through `LA_BACK` too; `settings_discs`, `settings_<slug>` |
@@ -873,14 +873,14 @@ every roll, the real ending's and the Extras playback's; the disc's table is not
 (`port/include/ico_credits.h`, header comment). The port lines are four blocks, each twelve blank
 lines, a heading, four blank lines and its names with two blank lines between them, as the disc's
 own `< Special Thanks >` spaces its names: `{R}< Decompilation and PC Port > ` and
-`{R}Nathanial Fine `; `{R}< Translation > `, `{R}bob-ttz ` and `{R}cobra838 `;
+`{R}Nathanial Fine `; `{R}< Translation > `, `{R}bob-ttz `, `{R}cobra838 ` and `{R}ichagas7 `;
 `{R}< Contributors > `, `{R}katsifolis `, `{R}braito4 `, `{R}neetgon ` and `{R}KClough `;
-`{R}< Special Thanks > ` (the disc's own heading text) and `{R}Sad Origami `, 84 lines in all
-(`ICO_ROLL_PORT_LAST` 83). They are in the roll's own forms and ASCII without the backtick only,
+`{R}< Special Thanks > ` (the disc's own heading text) and `{R}Sad Origami `, 87 lines in all
+(`ICO_ROLL_PORT_LAST` 86). They are in the roll's own forms and ASCII without the backtick only,
 because the roll draws with `font_Print`'s bitmap font (`port/game/credits.c` (`s_lines`, a table
 of the non-blank lines at their indices, the others blank)). The roll logs
 `credits: the port credit is posted` at the port's first heading and
-`credits: the port's last line is posted` at Sad Origami. The 84 lines take about 15 s of the roll
+`credits: the port's last line is posted` at Sad Origami. The 87 lines take about 16 s of the roll
 at its 60 units a second (11 units a line), so the ending's later scenes come that much later
 ([DIVERGENCES.md](DIVERGENCES.md) GL-7). The game's side is three host lines in
 `ico2/common/src/staffroll.c`: `staffRollStart` logs the roll's length through `ico_roll_started`,
@@ -934,8 +934,9 @@ A community translation is a player's translation of the game into a language th
 have, built into the port as text ([TRANSLATING.md](../TRANSLATING.md) for the contributor and the
 maintainer). Russian, by bob-ttz, is the first (`UI_LANG_RU_BOBTTZ`), Russian by cobra838 the
 second (`UI_LANG_RU_COBRA838`, `[game] text_language = "ru-cobra838"`, the same path with its own
-two tables); the Language row offers them after the European disc's five (entries 5 and 6 of
-seven), and choosing one sets the game's language to English
+two tables), Brazilian Portuguese by Igor Chagas (ichagas7) the third (`UI_LANG_PT_BR`,
+`[game] text_language = "pt-br"`, likewise); the Language row offers them after the European disc's
+five (entries 5, 6 and 7 of eight), and choosing one sets the game's language to English
 (`NonLinearCameraMove` 2: the English subtitle files, menu sheets and stage animations, and the
 English language byte in the save's product file, so the saves are the English game's) and writes
 `[game] text_language = "ru-bobttz"` (`port/ui/settings.c` (`setLanguageEntry`, `languageEntry`)).
@@ -982,6 +983,13 @@ Russian (cobra838) came as C tables in pull request 180 (`port/ui/strings_ru.c`,
 `port/ui/subtitles_rus.c` there) rather than the two CSV files; they were converted once into
 `strings_ru_cobra838.c` and `subtitles_ru_cobra838.c` by the steps and checks of
 [TRANSLATING.md](../TRANSLATING.md#adding-a-translation), its log lines name `ru-cobra838`.
+
+Brazilian Portuguese came as the two CSV files of issue 157, saved from a spreadsheet that holds
+each template row in its first column (split in two where the English has a `;`) and the
+translation from its third; they were converted once into `strings_pt_br.c` and
+`subtitles_pt_br.c` by the same steps and checks, its log lines name `pt-br`. The language's
+letters (á â ã à ç é ê í ó ô õ ú and their capitals, …) were already in Arimo's subset (Latin-1),
+so the font did not change.
 
 ## Add to Steam
 

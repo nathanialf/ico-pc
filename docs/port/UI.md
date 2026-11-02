@@ -17,7 +17,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
 | `port/ui/ui_hint.h`, `ui_hint.c` | a line of button prompts (glyphs and words) |
 | `port/ui/strings.h`, `strings.c`, `strings_{en,fr,de,it,es,ja,ko,zh}.c` | the UI strings, one table per language; the serial notes; the Japanese, Chinese and Korean line-break rules |
-| `port/ui/strings_ru_bobttz.c`, `strings_ru_cobra838.c` | the community translations' tables: Russian, by bob-ttz, and Russian, by cobra838 ([Community translations](#community-translations)) |
+| `port/ui/strings_ru_bobttz.c`, `strings_ru_cobra838.c`, `strings_pt_br.c` | the community translations' tables: Russian, by bob-ttz, Russian, by cobra838, and Brazilian Portuguese, by Igor Chagas (ichagas7) ([Community translations](#community-translations)) |
 | `port/ui/subtitle_text.h`, `subtitle_text.c` | a community translation's subtitles drawn as text in the subtitle band (`jimakuDisp`'s hook) |
 | `port/ui/ui_lang.h`, `ui_lang.c` | the port text's language from `[ui] language` and the running disc |
 | `port/ui/font.h`, `font.c` | Arimo, then Noto Sans JP, then Noto Sans KR, then Noto Sans TC (first of the three while the language is Chinese), through stb_truetype: atlases, measuring, plain text, the presentation overlay mode, the sheet rasteriser |
@@ -510,7 +510,7 @@ falls back to English for a missing entry (`port/ui/strings.c` (`ui_str_in`)); c
 not the English one's, so the fallback never shows (`port/ui/test/strings_complete_test.c`); a
 community translation's table is the exception ([Community translations](#community-translations)).
 Every table names the languages in their own words (English, Français, Deutsch, Italiano, Español,
-日本語, 한국어, 繁體中文, Русский (bob-ttz), Русский (cobra838)), so a player finds theirs whatever the menus are in.
+日本語, 한국어, 繁體中文, Русский (bob-ttz), Русский (cobra838), Português (Brasil) (ichagas7)), so a player finds theirs whatever the menus are in.
 
 The first five languages, `UI_LANG_PAL_COUNT`, are the European disc's, in the order of the game's
 language numbers; Japanese (`UI_LANG_JA`), Korean (`UI_LANG_KO`) and Traditional Chinese (`UI_LANG_ZH`) are the
@@ -530,7 +530,7 @@ the row is not shown there and the port never writes the word (`gameLanguage` is
 from `ico_boot_language`, which gives 0 on that disc (`port/config/sysconf.c`), so it stays 0.
 
 The menu language, `[ui] language` (`auto`, `en`, `fr`, `de`, `it`, `es`, `ja`, `ko`, `zh`,
-`ru-bobttz` or `ru-cobra838`;
+`ru-bobttz`, `ru-cobra838` or `pt-br`;
 `port/game/options.h` (`ico_opt_ui_language`)), is resolved by `ui_settings_resolve_language`: a
 chosen language wins on every disc; `auto`, the default, follows the disc: the language its region
 row names (`IcoRegionInfo.ui_lang_default`: `UI_LANG_JA` on the Japanese disc, `UI_LANG_KO` on the
@@ -626,7 +626,12 @@ A community translation ([TRANSLATING.md](../TRANSLATING.md)) is a table past th
 `strings_ru.c` of cobra838's pull request 180: his rows left in English, the ids newer than his
 table, the one whose English changed since, the two notes over 255 bytes, a note that says
 something else than the English and his Korean and Chinese names, which every table gives in their
-own script, are NULL; his "Longer" pit-time value, "x1", is the 1.5x step's "x1,5"). Its table names every
+own script, are NULL; his "Longer" pit-time value, "x1", is the 1.5x step's "x1,5") and
+`UI_LANG_PT_BR` (`port/ui/strings_pt_br.c`, converted once from Igor Chagas's CSV, issue 157: his
+empty rows, the rows the same as the English, the ids newer than his CSV, the one whose English
+changed since, three notes whose second half his spreadsheet lost, three rows without the
+English's `%s`, and six notes over two lines are NULL; where his sheet split a note at the
+English's `;` the two halves are joined). Its table names every
 `UiStrId` but leaves NULL the ids it has not translated: the CSV's empty rows (the language,
 disc and button names, the units, the test popup, the digit and letter tiles), the ids newer than
 the CSV, a row whose English changed after the translation and the notes longer than a note's two
@@ -638,13 +643,13 @@ every table. The tests that hold every table to a word of its own (the notes' fi
 walk every table and its subtitles.
 
 The Menu language row offers the community translations after the eight (`[ui] language`
-`ru-bobttz`, `ru-cobra838`), and its Auto resolves to the one in force (`port/ui/ui_lang.h`
+`ru-bobttz`, `ru-cobra838`, `pt-br`), and its Auto resolves to the one in force (`port/ui/ui_lang.h`
 (`ui_settings_text_language`): the Language row's community entry, `[game] text_language`, on the
 European disc with the game in English). `ui_settings_apply_language` also sets the menu words'
 language to it (`ui_set_menu_words_language`), so the game's menu words over the English sheets
 are its `UI_STR_MT_*` strings with the English sheet's geometry, an item's strip hashed with that
 language so the five sheets' own strips stay byte for byte (`port/ui/menu_font.c` (`itemStrip`,
-`itemWords`); ctests `subtitles_ru`, `subtitles_ru_cobra838`). Its subtitles are drawn by `port/ui/subtitle_text.c`
+`itemWords`); ctests `subtitles_ru`, `subtitles_ru_cobra838`, `subtitles_pt_br`). Its subtitles are drawn by `port/ui/subtitle_text.c`
 ([GAME_FEATURES.md](GAME_FEATURES.md#community-translations)).
 
 ## Text: the font and the sheet look

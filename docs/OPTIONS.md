@@ -518,15 +518,24 @@ other discs.
   cobra838, another player of the game. It works the same way, with his own
   words for the menus and the subtitles; the rows he has not translated yet
   (the newest ones, such as the backups and the second memory card) are in
-  English. More languages translated by players can join this list;
-  [Translating the game](TRANSLATING.md) says how.
+  English.
+
+  After that comes **Português (Brasil) (ichagas7)**: Brazilian Portuguese,
+  translated by Igor Chagas (ichagas7), another player of the game. It works
+  the same way as the Russian ones. The rows he has not translated (the
+  newest ones, such as the backups, and a few he left empty, such as the
+  colour names on the Characters page) and a few notes that are too long
+  for their space are in English. More languages translated by players can
+  join this list; [Translating the game](TRANSLATING.md) says how.
 - **Menu language** is the language of the menus this port adds (Options,
   the extras, photo mode's help, the messages): English, French, German,
   Italian, Spanish, Japanese (日本語), Korean (한국어), Chinese (繁體中文,
-  Traditional Chinese) or Russian (Русский (bob-ttz) or Русский (cobra838)).
+  Traditional Chinese), Russian (Русский (bob-ttz) or Русский (cobra838)) or
+  Brazilian Portuguese (Português (Brasil) (ichagas7)).
   It starts on Auto: Japanese with the Japanese disc, Korean with the Korean
   disc, Chinese with the Asian disc, and with the European disc the game's
-  language (Russian when Language is one of the two Russian translations).
+  language (Russian or Brazilian Portuguese when Language is one of the
+  translations by players).
   The North American disc, the August 2001 preview and the June 2001
   magazine demo start on English. It does not
   change the game's own text, which is always the disc's or the Language
