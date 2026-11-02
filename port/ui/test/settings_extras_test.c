@@ -242,7 +242,7 @@ static void testExtras(void)
         press(0x40);
         CHECK(settle(exL, 60), "Extras after the handler's layout");
         /* Back and Triangle return to the main page, the cursor on Extras */
-        lt_ext_layout(exL)->curItem = el[8];
+        lt_ext_layout(exL)->curItem = el[10];
         press(0x40);
         CHECK(settle(mainL, 60) && lt_ext_layout(mainL)->curItem == ex,
               "Back: the cursor on Extras");

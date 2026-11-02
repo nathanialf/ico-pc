@@ -152,9 +152,9 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 11), "picture rows");
     CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 4), "developer rows");
     {
-        /* Characters and Game variants (links), then Add to Steam and
-           Export textures (hidden without a host) before the pop-ups and
-           Back */
+        /* Characters and Game variants (links), then Add to Steam,
+           Export textures, Back up your data and Restore from a backup
+           (hidden without a host) before the pop-ups and Back */
         static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,
                                          UI_OPT_EXTRAS_MODELS,
                                          UI_OPT_EXTRAS_CREDITS,
@@ -162,13 +162,22 @@ static void testBuild(void)
                                          UI_OPT_LINK,
                                          UI_OPT_EXTRAS_STEAM,
                                          UI_OPT_EXTRAS_EXPORT_TEXTURES,
+                                         UI_OPT_EXTRAS_BACKUP,
+                                         UI_OPT_EXTRAS_RESTORE,
                                          UI_OPT_ACH_POPUPS,
                                          UI_OPT_BACK};
-        static const int extrasStrs[] = {
-            UI_STR_EXTRAS_MUSIC,           UI_STR_EXTRAS_MODELS,    UI_STR_EXTRAS_CREDITS,
-            UI_STR_SECTION_CHARACTERS,     UI_STR_SECTION_VARIANTS, UI_STR_EXTRAS_STEAM,
-            UI_STR_EXTRAS_EXPORT_TEXTURES, UI_STR_OPT_ACH_POPUPS,   UI_STR_BACK};
-        CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 9), "Extras page rows");
+        static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,
+                                         UI_STR_EXTRAS_MODELS,
+                                         UI_STR_EXTRAS_CREDITS,
+                                         UI_STR_SECTION_CHARACTERS,
+                                         UI_STR_SECTION_VARIANTS,
+                                         UI_STR_EXTRAS_STEAM,
+                                         UI_STR_EXTRAS_EXPORT_TEXTURES,
+                                         UI_STR_EXTRAS_BACKUP,
+                                         UI_STR_EXTRAS_RESTORE,
+                                         UI_STR_OPT_ACH_POPUPS,
+                                         UI_STR_BACK};
+        CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 11), "Extras page rows");
         /* Game variants: the eight variants, the Debug menu, Back */
         static const int varOpts[] = {UI_OPT_VAR_TOUGHNESS,   UI_OPT_VAR_ONE_HIT,
                                       UI_OPT_VAR_NEVER_DODGE, UI_OPT_VAR_AGGRESSION,

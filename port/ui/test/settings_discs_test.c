@@ -116,16 +116,24 @@ static void checkPauseRows(const Expect *e)
           ui_settings_opt_shown(UI_OPT_PLAYERS));
     /* a row that is not shown is not reached: on the page as it opens, its
        row is masked (layoutPage) */
-    openPage(mainL, -1, UI_PAGE_GAMEPLAY);
+    const int gpL = openPage(mainL, -1, UI_PAGE_GAMEPLAY);
     const int film = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT);
     CHECK(film >= 0 && lt_ext_prop(film)->defaultMask == !e->film,
           "%s pause: the Film effect row masked %d, want %d", e->slug,
           film >= 0 ? lt_ext_prop(film)->defaultMask : -1, !e->film);
     /* Players is reached on every disc once cleared (the 2001 discs too:
-       the port carries the second-pad Yorda into their arms) */
+       the port carries the second-pad Yorda into their arms).  With Yorda
+       trips and Film effect the cleared page has ten rows before Back, one
+       more than the window's slots: Players may open below the window
+       (masked as the window masks a row out of view), so it is shown by its
+       rule and in view, unmasked, with the cursor on it */
     const int players = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS);
+    CHECK(players >= 0 && ui_settings_row_shown(players), "%s pause: the Players row shown",
+          e->slug);
+    lt_ext_layout(gpL)->curItem = players;
+    frame(0);
     CHECK(players >= 0 && lt_ext_prop(players)->defaultMask == 0,
-          "%s pause: the Players row masked %d, want 0", e->slug,
+          "%s pause: the Players row masked %d with the cursor on it, want 0", e->slug,
           players >= 0 ? lt_ext_prop(players)->defaultMask : -1);
     gFlagGameClear = 0;
     CHECK(!ui_settings_opt_shown(UI_OPT_FILM_EFFECT) && !ui_settings_opt_shown(UI_OPT_PLAYERS),

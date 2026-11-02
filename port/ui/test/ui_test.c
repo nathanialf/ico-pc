@@ -902,9 +902,10 @@ static void testAtlasUploads(void)
 }
 
 /* An image row (lt_ext_add_image): its bounds are the box it was added with,
-   texture 0 emits no quad, a texture emits one sprite over the box's grid
-   rectangle with the texels (0, 0)..(texW, texH), and a non-image index is
-   refused. */
+   texture 0 emits no quad, a texture emits one sprite with the texels
+   (0, 0)..(texW, texH) at the picture's own shape inside the box's grid
+   rectangle (lt_ext_image_fit: centred, not stretched), and a non-image
+   index is refused. */
 static void checkImageRow(void)
 {
     lt_ext_reset();
@@ -938,15 +939,29 @@ static void checkImageRow(void)
     lt_ext_draw_row(p, box, full, 1);
     CHECK(s_cap.n == 0, "the glow pass draws nothing");
     lt_ext_draw_row(p, box, full, 0);
+    /* the box's grid rectangle, 160 x 90; the 128 x 72 picture (16:9) is
+       wider than the box (a y unit is UI_X_PER_Y of an x unit): as wide as
+       the box, 160 / (128 / 72) / UI_X_PER_Y = 84 tall, centred down (3 from
+       the box's top and bottom) */
+    const float bx0 = (float)(box[0] - 4) / 16.0f + UI_GRID_CX;
+    const float by0 = (float)(box[1] - 4) / 8.0f + UI_GRID_CY;
+    const float bw = (float)(box[2] + 16) / 16.0f, bh = (float)(box[3] + 16) / 8.0f;
+    const float fh = bw / (128.0f / 72.0f) / UI_X_PER_Y;
+    const float fy0 = by0 + (bh - fh) * 0.5f;
+    CHECK(bw == 160.0f && bh == 90.0f && fabsf(fh - 84.0f) < 1e-3f,
+          "the image row's box %.2f x %.2f, the picture %.3f tall", (double)bw, (double)bh,
+          (double)fh);
     float x0, y0, x1, y1;
-    ui_overlay_map((float)(box[0] - 4) / 16.0f + UI_GRID_CX,
-                   (float)(box[1] - 4) / 8.0f + UI_GRID_CY, &x0, &y0);
-    ui_overlay_map((float)(box[0] - 4) / 16.0f + UI_GRID_CX + (float)(box[2] + 16) / 16.0f,
-                   (float)(box[1] - 4) / 8.0f + UI_GRID_CY + (float)(box[3] + 16) / 8.0f, &x1, &y1);
+    ui_overlay_map(bx0, fy0, &x0, &y0);
+    ui_overlay_map(bx0 + bw, fy0 + fh, &x1, &y1);
     CHECK(s_cap.n == 1 && s_cap.tex[0] == 77 && s_cap.count[0] == 2 &&
               s_cap.v[0][0].x == lrintf(x0) && s_cap.v[0][0].y == lrintf(y0) &&
               s_cap.v[0][1].x == lrintf(x1) && s_cap.v[0][1].y == lrintf(y1),
-          "the image row: one sprite over its box (%d batches)", s_cap.n);
+          "the image row: one sprite at the picture's shape inside its box (%d batches; "
+          "%d,%d..%d,%d, want %ld,%ld..%ld,%ld)",
+          s_cap.n, s_cap.n ? s_cap.v[0][0].x : 0, s_cap.n ? s_cap.v[0][0].y : 0,
+          s_cap.n ? s_cap.v[0][1].x : 0, s_cap.n ? s_cap.v[0][1].y : 0, lrintf(x0), lrintf(y0),
+          lrintf(x1), lrintf(y1));
     CHECK(s_cap.n == 1 && s_cap.v[0][0].s == 0.0f && s_cap.v[0][0].t == 0.0f &&
               s_cap.v[0][1].s == 128.0f * 16.0f && s_cap.v[0][1].t == 72.0f * 16.0f,
           "the image row: texels 0,0 .. 128,72");
