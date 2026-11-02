@@ -976,6 +976,27 @@ typedef struct RhiPipelineBatch {
 #define RHI_PIPELINE_WAIT_MS 50u
 uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipeline *out,
                               RhiPipelineBatch *batch);
+/* Several pipelines compiled while the caller goes on (the renderer's
+ * background finisher, port/render/rd.h rd_pipelines_background_start):
+ * begin makes on the calling thread what rhi_create_pipelines makes there
+ * before its workers start (pool slots, pipeline layouts), starts the
+ * workers (at most maxThreads, 0 the backend's choice; lowPriority: each
+ * at SDL_THREAD_PRIORITY_LOW) and returns at once; the workers touch only
+ * the driver (vkCreateGraphicsPipelines through the internally
+ * synchronised pipeline cache).  NULL when the backend has no such call
+ * (Direct3D 12, Direct3D 11 and OpenGL: nothing done) or n is 0.  end, on
+ * the thread that began (the one that owns the RHI): with wait false it
+ * returns false at once while any compile goes on; else (or once all have
+ * finished) it waits for the workers, makes the pipelines as
+ * rhi_create_pipelines does after its workers (out[i] descs[i]'s pipeline,
+ * {0} where it failed; ms[i] its compile time, optional; *threads the
+ * workers, optional), frees jobs and returns true.  A begun set is always
+ * ended before rhi_shutdown. */
+typedef struct RhiPipelineJobs RhiPipelineJobs;
+RhiPipelineJobs *rhi_create_pipelines_begin(const RhiPipelineDesc *descs, uint32_t n,
+                                            uint32_t maxThreads, bool lowPriority);
+bool rhi_create_pipelines_end(RhiPipelineJobs *jobs, bool wait, RhiPipeline *out, float *ms,
+                              uint32_t *threads);
 void rhi_destroy_pipeline(RhiPipeline p);
 
 /* ------------------------------------------------------------ commands

@@ -396,3 +396,27 @@ void rhi_destroy_pipeline(RhiPipeline h)
     gl_defer(GL_GARBAGE_VAO, p->vao);
     d3dp_pool_release(&g_gl.pipelines, h.id);
 }
+
+/* Compiled while the caller goes on (rhi.h rhi_create_pipelines_begin):
+ * not offered here (the background finisher is for the Vulkan phones whose
+ * start-up set stopped at the free-memory floor) */
+RhiPipelineJobs *rhi_create_pipelines_begin(const RhiPipelineDesc *descs, uint32_t n,
+                                            uint32_t maxThreads, bool lowPriority)
+{
+    (void)descs;
+    (void)n;
+    (void)maxThreads;
+    (void)lowPriority;
+    return NULL;
+}
+
+bool rhi_create_pipelines_end(RhiPipelineJobs *jobs, bool wait, RhiPipeline *out, float *ms,
+                              uint32_t *threads)
+{
+    (void)jobs;
+    (void)wait;
+    (void)out;
+    (void)ms;
+    (void)threads;
+    return false;
+}

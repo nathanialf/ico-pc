@@ -363,6 +363,20 @@ uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipel
     return be()->create_pipelines(descs, n, out, batch);
 }
 
+RhiPipelineJobs *rhi_create_pipelines_begin(const RhiPipelineDesc *descs, uint32_t n,
+                                            uint32_t maxThreads, bool lowPriority)
+{
+    RHI_GUARD();
+    return be()->create_pipelines_begin(descs, n, maxThreads, lowPriority);
+}
+
+bool rhi_create_pipelines_end(RhiPipelineJobs *jobs, bool wait, RhiPipeline *out, float *ms,
+                              uint32_t *threads)
+{
+    RHI_GUARD();
+    return be()->create_pipelines_end(jobs, wait, out, ms, threads);
+}
+
 void rhi_destroy_pipeline(RhiPipeline p)
 {
     RHI_GUARD();

@@ -1256,6 +1256,7 @@ typedef struct VkrPipeWork {
     VkrPipeJob *jobs;
     uint32_t n;
     RhiPipelineBatch *batch; /* its begin and end hooks (rhi.h), or NULL */
+    bool lowPriority;        /* each worker at SDL_THREAD_PRIORITY_LOW (the background set) */
 #ifdef ICO_RHI_HAVE_SDL
     SDL_AtomicInt next, finished;
     SDL_Semaphore *wake;
@@ -1284,6 +1285,9 @@ static void vkr_pipe_compile_hooked(VkrPipeWork *w, uint32_t i)
 static int SDLCALL vkr_pipe_worker(void *arg)
 {
     VkrPipeWork *w = arg;
+    if (w->lowPriority) {
+        (void)SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_LOW);
+    }
     for (;;) {
         const int i = SDL_AddAtomicInt(&w->next, 1);
         if (i < 0 || (uint32_t)i >= w->n) {
@@ -1304,6 +1308,33 @@ static uint32_t vkr_pipe_threads_for(uint32_t jobs)
         t = RHI_PIPELINE_THREADS_MAX;
     }
     return t < jobs ? t : (jobs > 0 ? jobs : 1u);
+}
+
+/* up to want workers on w (its counters set, its semaphore made here):
+ * how many started; 0 with w->wake NULL when the semaphore could not be
+ * made, 0 with it when no thread could (the caller compiles) */
+static uint32_t vkr_pipe_start_workers(VkrPipeWork *w, SDL_Thread **th, uint32_t want)
+{
+    uint32_t started = 0;
+    SDL_SetAtomicInt(&w->next, 0);
+    SDL_SetAtomicInt(&w->finished, 0);
+    w->wake = SDL_CreateSemaphore(0);
+    SDL_PropertiesID props = w->wake ? SDL_CreateProperties() : 0;
+    if (props) {
+        SDL_SetPointerProperty(props, SDL_PROP_THREAD_CREATE_ENTRY_FUNCTION_POINTER,
+                               (void *)vkr_pipe_worker);
+        SDL_SetStringProperty(props, SDL_PROP_THREAD_CREATE_NAME_STRING, "rhi-pipelines");
+        SDL_SetNumberProperty(props, SDL_PROP_THREAD_CREATE_STACKSIZE_NUMBER, VKR_PIPE_STACK_BYTES);
+        SDL_SetPointerProperty(props, SDL_PROP_THREAD_CREATE_USERDATA_POINTER, w);
+        for (; started < want; started++) {
+            th[started] = SDL_CreateThreadWithProperties(props);
+            if (!th[started]) {
+                break;
+            }
+        }
+        SDL_DestroyProperties(props);
+    }
+    return started;
 }
 #endif
 
@@ -1346,25 +1377,7 @@ uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipel
         if (batch && batch->maxThreads > 0 && want > batch->maxThreads) {
             want = batch->maxThreads; /* the careful set: one compile at a time */
         }
-        SDL_SetAtomicInt(&w.next, 0);
-        SDL_SetAtomicInt(&w.finished, 0);
-        w.wake = SDL_CreateSemaphore(0);
-        SDL_PropertiesID props = w.wake ? SDL_CreateProperties() : 0;
-        if (props) {
-            SDL_SetPointerProperty(props, SDL_PROP_THREAD_CREATE_ENTRY_FUNCTION_POINTER,
-                                   (void *)vkr_pipe_worker);
-            SDL_SetStringProperty(props, SDL_PROP_THREAD_CREATE_NAME_STRING, "rhi-pipelines");
-            SDL_SetNumberProperty(props, SDL_PROP_THREAD_CREATE_STACKSIZE_NUMBER,
-                                  VKR_PIPE_STACK_BYTES);
-            SDL_SetPointerProperty(props, SDL_PROP_THREAD_CREATE_USERDATA_POINTER, &w);
-            for (; started < want; started++) {
-                th[started] = SDL_CreateThreadWithProperties(props);
-                if (!th[started]) {
-                    break;
-                }
-            }
-            SDL_DestroyProperties(props);
-        }
+        started = vkr_pipe_start_workers(&w, th, want);
         if (started > 0) {
             uint64_t last = vkr_now_ns();
             while ((uint32_t)SDL_GetAtomicInt(&w.finished) < n) {
@@ -1411,6 +1424,117 @@ uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipel
     }
     free(w.jobs);
     return made;
+}
+
+/* ------------------------------------- compiled while the caller goes on
+ * (rhi.h rhi_create_pipelines_begin): the same jobs and workers as
+ * rhi_create_pipelines, the wait and the finish moved to
+ * rhi_create_pipelines_end on the thread that began */
+struct RhiPipelineJobs {
+    VkrPipeWork w;
+    RhiPipelineDesc *descs; /* copies (the finish names each by its debugName) */
+    uint32_t started;       /* the workers (0: compiled on the calling thread at begin) */
+    bool done;              /* compiled at begin (no worker) */
+#ifdef ICO_RHI_HAVE_SDL
+    SDL_Thread *th[RHI_PIPELINE_THREADS_MAX];
+#endif
+};
+
+RhiPipelineJobs *rhi_create_pipelines_begin(const RhiPipelineDesc *descs, uint32_t n,
+                                            uint32_t maxThreads, bool lowPriority)
+{
+    if (!descs || n == 0) {
+        return NULL;
+    }
+    RhiPipelineJobs *j = calloc(1, sizeof(*j));
+    if (!j) {
+        return NULL;
+    }
+    j->w.jobs = calloc(n, sizeof(VkrPipeJob));
+    j->descs = calloc(n, sizeof(RhiPipelineDesc));
+    if (!j->w.jobs || !j->descs) {
+        free(j->w.jobs);
+        free(j->descs);
+        free(j);
+        return NULL;
+    }
+    j->w.n = n;
+    j->w.lowPriority = lowPriority;
+    memcpy(j->descs, descs, (size_t)n * sizeof(RhiPipelineDesc));
+    for (uint32_t i = 0; i < n; i++) {
+        vkr_pipe_prepare(&descs[i], &j->w.jobs[i]);
+    }
+#ifdef ICO_RHI_HAVE_SDL
+    uint32_t want = vkr_pipe_threads_for(n);
+    if (maxThreads > 0 && want > maxThreads) {
+        want = maxThreads;
+    }
+    j->started = vkr_pipe_start_workers(&j->w, j->th, want);
+    if (j->started == 0 && j->w.wake) {
+        SDL_DestroySemaphore(j->w.wake);
+        j->w.wake = NULL;
+    }
+    if (j->started == 0) {
+        VKR_LOG("pipelines: no worker thread for the background set (%s); creating them on this "
+                "thread",
+                SDL_GetError());
+    }
+#else
+    (void)maxThreads;
+#endif
+    if (j->started == 0) {
+        /* no worker: compiled here, now (the caller's end finds them done) */
+        for (uint32_t i = 0; i < n; i++) {
+            vkr_pipe_compile_hooked(&j->w, i);
+        }
+        j->done = true;
+    }
+    return j;
+}
+
+bool rhi_create_pipelines_end(RhiPipelineJobs *j, bool wait, RhiPipeline *out, float *ms,
+                              uint32_t *threads)
+{
+    if (!j) {
+        return false;
+    }
+    const uint32_t n = j->w.n;
+#ifdef ICO_RHI_HAVE_SDL
+    if (!j->done) {
+        if (!wait && (uint32_t)SDL_GetAtomicInt(&j->w.finished) < n) {
+            return false;
+        }
+        while ((uint32_t)SDL_GetAtomicInt(&j->w.finished) < n) {
+            SDL_WaitSemaphoreTimeout(j->w.wake, (Sint32)RHI_PIPELINE_WAIT_MS);
+        }
+        for (uint32_t i = 0; i < j->started; i++) {
+            SDL_WaitThread(j->th[i], NULL);
+        }
+        if (j->w.wake) {
+            SDL_DestroySemaphore(j->w.wake);
+        }
+    }
+#else
+    (void)wait;
+#endif
+    for (uint32_t i = 0; i < n; i++) {
+        const RhiPipeline p = vkr_pipe_finish(&j->descs[i], &j->w.jobs[i]);
+        if (out) {
+            out[i] = p;
+        } else if (p.id) {
+            rhi_destroy_pipeline(p);
+        }
+        if (ms) {
+            ms[i] = j->w.jobs[i].ms;
+        }
+    }
+    if (threads) {
+        *threads = j->started > 0 ? j->started : 1u;
+    }
+    free(j->w.jobs);
+    free(j->descs);
+    free(j);
+    return true;
 }
 
 void rhi_destroy_pipeline(RhiPipeline h)

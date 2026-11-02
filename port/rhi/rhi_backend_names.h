@@ -48,6 +48,8 @@
 #define rhi_create_bind_group     RHI__NAME(create_bind_group)
 #define rhi_create_pipeline      RHI__NAME(create_pipeline)
 #define rhi_create_pipelines     RHI__NAME(create_pipelines)
+#define rhi_create_pipelines_begin RHI__NAME(create_pipelines_begin)
+#define rhi_create_pipelines_end RHI__NAME(create_pipelines_end)
 #define rhi_destroy_pipeline     RHI__NAME(destroy_pipeline)
 #define rhi_begin_commands       RHI__NAME(begin_commands)
 #define rhi_end_commands         RHI__NAME(end_commands)

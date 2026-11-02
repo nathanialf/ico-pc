@@ -52,6 +52,8 @@
     X(create_bind_group)                                                                           \
     X(create_pipeline)                                                                             \
     X(create_pipelines)                                                                            \
+    X(create_pipelines_begin)                                                                      \
+    X(create_pipelines_end)                                                                        \
     X(destroy_pipeline)                                                                            \
     X(begin_commands)                                                                              \
     X(end_commands)                                                                                \

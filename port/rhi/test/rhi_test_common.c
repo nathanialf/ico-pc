@@ -1937,6 +1937,60 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
             failures++;
         }
     }
+    /* the same eight compiled while the caller goes on
+     * (rhi_create_pipelines_begin, the renderer's background set): on
+     * Vulkan the seven made and the failed one failed alone, on at most the
+     * two threads asked for, ids of their own, destroyed again; the other
+     * backends offer none (NULL, and an end of NULL is false) */
+    {
+        RhiPipeline bgPipe[8];
+        float bgMs[8];
+        uint32_t bgThreads = 0, bgMade = 0, polls = 0;
+        RhiPipelineJobs *jobs = rhi_create_pipelines_begin(batchDesc, 8, 2, true);
+        if (rhi_backend() != RHI_BACKEND_VULKAN) {
+            if (jobs != NULL || rhi_create_pipelines_end(NULL, true, bgPipe, bgMs, &bgThreads)) {
+                rhi_test_log("FAIL rhi_create_pipelines_begin: offered on %s\n", s_label);
+                failures++;
+            }
+        } else if (jobs == NULL) {
+            rhi_test_log("FAIL rhi_create_pipelines_begin: not offered on Vulkan\n");
+            failures++;
+        } else {
+            /* not waited: false while a compile goes on, then the end */
+            while (!rhi_create_pipelines_end(jobs, false, bgPipe, bgMs, &bgThreads) &&
+                   polls < 1000000u) {
+                polls++;
+            }
+            if (polls >= 1000000u) {
+                (void)rhi_create_pipelines_end(jobs, true, bgPipe, bgMs, &bgThreads);
+            }
+            for (uint32_t i = 0; i < 8; i++) {
+                bgMade += bgPipe[i].id != 0;
+                for (uint32_t k = 0; k < 8; k++) {
+                    if (bgPipe[i].id && batchPipe[k].id == bgPipe[i].id) {
+                        rhi_test_log("FAIL rhi_create_pipelines_end: pipeline %u has batch "
+                                     "pipeline %u's id %u\n",
+                                     i, k, bgPipe[i].id);
+                        failures++;
+                    }
+                }
+            }
+            rhi_test_log("%s: rhi_create_pipelines_begin/end: %u of 8 on %u threads, %u polls\n",
+                         s_label, bgMade, bgThreads, polls);
+            if (bgMade != 7 || bgPipe[4].id != 0 || bgThreads < 1 || bgThreads > 2 ||
+                bgMs[4] != 0.0f) {
+                rhi_test_log("FAIL rhi_create_pipelines_end: %u made, the failed one %u, %u "
+                             "threads\n",
+                             bgMade, bgPipe[4].id, bgThreads);
+                failures++;
+            }
+            for (uint32_t i = 0; i < 8; i++) {
+                if (bgPipe[i].id) {
+                    rhi_destroy_pipeline(bgPipe[i]);
+                }
+            }
+        }
+    }
     RhiPipeline pDecr = batchPipe[0];
     RhiPipeline pReplace = batchPipe[1];
     RhiPipeline pIncr = batchPipe[2];
