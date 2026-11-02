@@ -3629,22 +3629,28 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
         }
     }
     uint32_t nDraw = nv, nFirst = nv, nPrim = 0;
-    int split = 0, aa1Date = 0; /* aa1Date: under DATE, primitive by primitive (aa1DatePlan) */
+    /* aa1Date: under DATE, primitive by primitive (aa1DatePlan); aa1Order:
+     * DATE through the colour read, a split draw triangle by triangle
+     * (aa1OrderPlan) */
+    int split = 0, aa1Date = 0, aa1Order = 0;
     IcoSpriteAa1Vertex *ax = NULL;
     uint32_t *ends = NULL;
     if (aa1) {
         for (int i = 0; i < np; i++) {
             split |= topo == RD_PRIM_TRIANGLES && dp[i].key.gs.zwrite == RD_ZWRITE_ON;
-            aa1Date |=
-                r->st.ds.test.date != RD_DATE_OFF && (dp[i].key.gs.colorMask & 8) && !r->dateDstNow;
+            const int date = r->st.ds.test.date != RD_DATE_OFF && (dp[i].key.gs.colorMask & 8);
+            aa1Date |= date && !r->dateDstNow;
+            aa1Order |= date && r->dateDstNow;
         }
+        aa1Order &= split; /* one draw in the command's order is the GS's already */
         ax = axScratch((uint64_t)nv * 7);
-        ends = aa1Date ? aa1Ends(nv) : NULL;
-        aa1Date = ends != NULL;
+        ends = aa1Date || aa1Order ? aa1Ends(nv) : NULL;
+        aa1Date = aa1Date && ends != NULL;
+        aa1Order = aa1Order && ends != NULL;
         if (!ax) {
             return;
         }
-        nDraw = aa1Expand(out, nv, topo, split && !aa1Date, ax, &nFirst, ends, &nPrim);
+        nDraw = aa1Expand(out, nv, topo, split && !aa1Date && !aa1Order, ax, &nFirst, ends, &nPrim);
         if (nDraw == 0) {
             return;
         }
@@ -3665,7 +3671,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
      * interior and fringes are two draws, which do not join a run: merged,
      * the second pass of one command would follow the first pass of the
      * next) */
-    if (np == 1 && !aa1Date && (!aa1 || nFirst == nDraw || nFirst == 0)) {
+    if (np == 1 && !aa1Date && !aa1Order && (!aa1 || nFirst == nDraw || nFirst == 0)) {
         RdDrawPass one = dp[0];
         if (aa1 && nFirst == 0) {
             /* AA1 lines: all fringe, drawn with Z write off */
@@ -3744,8 +3750,9 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 
 immediate:
     flushScreenRun(r);
-    if (aa1Date && !aa1DatePlan(r, dp, np, &ds, dateAt, topo == RD_PRIM_LINES)) {
-        aa1Date = 0; /* drawn as before: the triangles, then their fringes */
+    if ((aa1Date && !aa1DatePlan(r, dp, np, &ds, dateAt, topo == RD_PRIM_LINES)) ||
+        (aa1Order && !aa1OrderPlan(r, dp, np, &ds))) {
+        aa1Date = aa1Order = 0; /* drawn as before: the triangles, then their fringes */
         nDraw = aa1Expand(out, nv, topo, split, ax, &nFirst, NULL, NULL);
     }
     const uint64_t drawOff = rd__ring_alloc((uint64_t)nDraw * stride, 16);
@@ -3756,9 +3763,10 @@ immediate:
     r->sc = nr.sc; /* a pass begun again for the exact blend takes it back */
     rhi_cmd_set_scissor(s_cl, &nr.sc);
     rhi_cmd_set_vertex_buffer(s_cl, 0, g_rd.ring[s_slot], drawOff);
-    if (aa1Date) {
+    if (aa1Date || aa1Order) {
         g_rdPerf.screenCmds++;
-        g_rdPerf.screenDraws += aa1DateDraw(r, nr.g2, ends, nPrim);
+        g_rdPerf.screenDraws +=
+            aa1Date ? aa1DateDraw(r, nr.g2, ends, nPrim) : aa1OrderDraw(r, nr.g2, ends, nPrim);
         for (int i = 0; i < np; i++) {
             r->writeSerial += (dp[i].key.gs.colorMask & 8) != 0;
         }

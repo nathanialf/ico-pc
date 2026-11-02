@@ -540,3 +540,93 @@ static uint32_t aa1DateDraw(Replay *r, RhiBindGroup g2, const uint32_t *ends, ui
     }
     return draws;
 }
+
+/* ------------------------------------- PRIM.AA1 and DATE through the colour read
+ * Where DATE reads the alpha from the attachment (rd_uber.c rd__uber_date;
+ * Replay.dateDstNow) one draw in the command's order is the GS's DATE
+ * primitive by primitive: the read is in rasterization order, so a
+ * triangle's pixel finds the alpha an earlier triangle's fringe wrote
+ * there, and no stencil bit, snapshot or selection by the written alpha
+ * (aa1DatePlan) is needed.  A triangle draw that writes Z is two draws
+ * though (the triangles' own pixels with the pass's Z write, their fringes
+ * without: edge pixels write no Z), and drawn whole, every triangle's own
+ * pixels before every fringe, a later triangle's pixel no longer meets the
+ * earlier fringe's alpha (ctest rd_pixel_uber's aa1 wedge: 381 pixels off,
+ * both fragments kept).  Such a draw is drawn triangle by triangle, each in
+ * its two draws, in the command's order. */
+static Aa1DateImg s_aa1Order[2][2][8]; /* per planned pass and part (0 own pixels, 1 fringes) */
+
+static uint8_t s_aa1OrderN[2][2];
+
+static uint32_t s_aa1OrderDrawn;
+
+/* the images of each pass's two parts (after bindDrawEx); false (nothing
+ * made): the command is drawn as before */
+static bool aa1OrderPlan(Replay *r, const RdDrawPass *dp, int np, const DrawSetup *ds)
+{
+    const Aa1DateImg *first = NULL;
+    memset(s_aa1OrderN, 0, sizeof(s_aa1OrderN));
+    for (int i = 0; i < np && i < 2; i++) {
+        for (int part = 0; part < 2; part++) {
+            RdDrawPass p = dp[i];
+            if (part == 1) {
+                p.key.gs.zwrite = RD_ZWRITE_OFF;
+            }
+            RdDrawPass ex[8];
+            const int ne = expandPasses(r, &p, 1, ex);
+            for (int j = 0; j < ne; j++) {
+                Aa1DateImg *im = &s_aa1Order[i][part][s_aa1OrderN[i][part]++];
+                IcoDrawCB cb;
+                fillDrawCB(r, &ex[j], ds, &cb);
+                im->key = ex[j].key;
+                im->pipe = rd__get_pipeline(&im->key);
+                im->cb = rd__draw_group(&cb);
+                if (!im->pipe.id) {
+                    return false;
+                }
+                first = first ? first : im;
+            }
+        }
+    }
+    if (!first) {
+        return false;
+    }
+    dstPassMode(r, &first->key);
+    frameRefresh(r, ds);
+    return true;
+}
+
+/* aa1OrderPlan's draws, triangle by triangle (ends, nPrim: aa1Expand's,
+ * unsplit) from the bound vertex buffer, the scissor set; the draws made */
+static uint32_t aa1OrderDraw(Replay *r, RhiBindGroup g2, const uint32_t *ends, uint32_t nPrim)
+{
+    uint32_t draws = 0;
+    for (uint32_t t = 0, s = 0; t < nPrim; s = ends[t++]) {
+        const uint32_t e = ends[t];
+        for (int i = 0; i < 2; i++) {
+            for (int part = 0; part < 2; part++) {
+                /* a triangle's own three vertices, then its fringes */
+                const uint32_t first = part ? s + 3 : s;
+                const uint32_t count = part ? (e > s + 3 ? e - s - 3 : 0) : 3;
+                for (int j = 0; j < s_aa1OrderN[i][part] && count; j++) {
+                    const Aa1DateImg *im = &s_aa1Order[i][part][j];
+                    rd__set_pipeline(s_cl, im->pipe, &im->key);
+                    rd__bind_uniform(s_cl, 0, r->frameBG);
+                    rd__bind_uniform(s_cl, 1, im->cb);
+                    rhi_cmd_set_bind_group(s_cl, 2, g2);
+                    dstBind(r, &im->key);
+                    drawCmd(s_cl, count, first, 1);
+                    draws++;
+                }
+            }
+        }
+    }
+    if (s_aa1OrderDrawn++ == 0) {
+        rd__log("aa1: a DATE draw's triangles drawn one at a time through the colour read (each "
+                "its own pixels with Z write, then its fringes without), so a triangle's pixel "
+                "reads the alpha an earlier triangle's fringe wrote (the first command: %u "
+                "triangles in %u draws)",
+                nPrim, draws);
+    }
+    return draws;
+}

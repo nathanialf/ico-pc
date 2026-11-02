@@ -473,7 +473,12 @@ uint32_t rd__enumerate_uber(const RdPipeKeyInt *in, uint32_t n, RdPipeKeyInt *ou
             RdDrawPass c = uberPass(&p);
             rd__uber_normalise(&c.key);
             count = rd__add_pipe_key(out, max, count, &c.key);
-            continue;
+            if (g_rd.uberPremul || !premulForm(&in[i])) {
+                continue;
+            }
+            /* ICO_RD_UBER_PREMUL=0: a premultiplied form without the
+             * exact blend's want stays on the blender (rd__expand_dst):
+             * its plain key too */
         }
         /* a key the read never draws (no twin, another format, a stencil
          * of the shadow volumes, the post and blit keys): as the two-pass

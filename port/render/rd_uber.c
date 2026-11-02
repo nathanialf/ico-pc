@@ -32,8 +32,12 @@
  *           primitive by primitive, where the snapshot and the stencil bit
  *           hold the alpha from before the draw's first primitive (a DATE
  *           draw whose primitives overlap and change the alpha's MSB:
- *           rd_date_selftest.c's fifth sample); PRIM.AA1's per-primitive
- *           DATE draws (rd_replay_aa1.inc aa1DatePlan) are not needed then;
+ *           rd_date_selftest.c's fifth sample); PRIM.AA1's stencil pairs
+ *           (rd_replay_aa1.inc aa1DatePlan) are not needed then, and a
+ *           Z-writing AA1 triangle draw, two draws (its triangles' own
+ *           pixels, then their fringes without Z write), is drawn
+ *           triangle by triangle so the order stays the command's
+ *           (aa1OrderPlan);
  *   nodual  no two-pass blend for these passes (no blending to split).
  * What stays in the key: the Z test and write, the formats, the topology
  * and AA1, the vertex shader, the pixel shader's family, the shadow

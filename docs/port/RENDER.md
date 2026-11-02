@@ -479,8 +479,13 @@ against the alpha it reads from the attachment (`port/shaders/common.hlsli` (`GS
 (`prepareDrawEx`: `Replay.dateDstNow`, `RdPerfRecord.dateDstDraws`)). The read is in
 rasterization order, so each fragment sees what the draw's earlier primitives wrote: the GS's
 DATE, primitive by primitive, where the snapshot and the stencil bit hold the alpha from before the
-draw's first primitive (DIVERGENCES.md VD-17). A PRIM.AA1 draw under DATE needs no primitive by
-primitive draws then (`doScreen`: `aa1Date` off). DATE's self-test checks it first ("colour read",
+draw's first primitive (DIVERGENCES.md VD-17). A PRIM.AA1 draw under DATE needs no stencil pairs
+then (`doScreen`: `aa1Date` off); one that writes Z, two draws otherwise (its triangles' own
+pixels, then every fringe without Z write), is drawn triangle by triangle, each in its two draws,
+so a triangle's pixel still meets the alpha an earlier triangle's fringe wrote (`aa1Order`,
+`port/render/rd_replay_aa1.inc` (`aa1OrderPlan`, `aa1OrderDraw`); the first command logs
+`aa1: a DATE draw's triangles drawn one at a time through the colour read ...`; ctest
+`rd_pixel_uber` aa1 wedge). DATE's self-test checks it first ("colour read",
 its fifth sample a DATM 1 command whose second sprite fails over its first), then the stencil bit
 and the snapshot with it held off; a failure turns it off (`g_rd.uberDate`) and DATE draws as
 above. ctest `rd_pixel_uber` (`testDateStencil`: the overlap of two sprites of one DATE command

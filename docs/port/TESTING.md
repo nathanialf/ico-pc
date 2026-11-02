@@ -865,8 +865,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   default (`port/render/CMakeLists.txt`). `rd_pixel_uber` runs `rd_pixel_test` under
   `ICO_RD_UBER=on` (GS state as shader data, [PIPELINES.md](PIPELINES.md#gs-state-as-data)): the
   attachment read's expectations, its exact-mode matrix leaving out and counting the cells the
-  read draws its own way (the premultiplied subtracts' floor, DATE per primitive), and
-  `testDateStencil` checking the per-primitive DATE first. The pass-dump compare of the corpus
+  read draws its own way (the premultiplied subtracts' floor, DATE per primitive),
+  `testDateStencil` checking the per-primitive DATE first, `testScreenRuns`' boundary case
+  expecting its two DATE sprites in one draw (no snapshot to retake) and `testPipelines` looking
+  each run-time key up as the read's normalised image. The pass-dump compare of the corpus
   under `ICO_RD_UBER=on` is made against baselines made with `ICO_RD_BLEND=attachment
   ICO_RD_UBER=off`: with `ICO_RD_UBER_PREMUL=0 ICO_RD_UBER_DATE=0` every target byte for byte at
   the whole scales, as shipped only the premultiplied subtracts and the overlapping DATE draws
@@ -1356,7 +1358,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   device's own DATE path and, where the device has local read and the blend is not the storage
   read, again through the stencil bit (SCENE made with DATE's local read, setups counted, no
   snapshot), the DATE stencil draws counted both times; it prints the pixels with 1, 2 and 3 or
-  more fragments and the fragments the model's DATE rejects and keeps.
+  more fragments and the fragments the model's DATE rejects and keeps. Under GS state as shader
+  data (`rd_pixel_uber`) the device's own path is the colour read: no stencil pair and no
+  snapshot, the DATE draws counted as reading the alpha and the Z-writing strips drawn triangle by
+  triangle, two draws each (at least 72 screen draws for the 36 triangles;
+  `port/render/rd_replay_aa1.inc` (`aa1OrderDraw`)), the same bytes; the stencil cell then holds
+  the colour read's DATE off (`g_rd.uberDate`), as `testDateStencil` does.
   `rd_state`'s `aa1 DATE pairs` case checks the ripple state's pairs are enumerated: TEST0 and
   TEST0_SET (Z write on and off) in the screen set, TEST1 and TEST1_CLR in DATE's set with
   `dateStencil` and not without; its tiler set allows DATE's screen twins 224 + 12 and counts one

@@ -2077,6 +2077,7 @@ static void testUberSet(RdPipeKeyInt *keys)
     const RdProfile keepProfile = g_rd.profile;
     const bool keepD = g_rd.dynDepth, keepB = g_rd.dynBlend, keepPrepass = g_rd.vuPrepass;
     const bool keepUber = g_rd.uber, keepUberDate = g_rd.uberDate;
+    const bool keepUberPremul = g_rd.uberPremul;
     const uint8_t keepDst = g_rd.dstMode;
     const RdPreset keepPreset = g_rd.settings.preset;
     const float keepSx = g_rd.sceneSx, keepSy = g_rd.sceneSy;
@@ -2107,8 +2108,12 @@ static void testUberSet(RdPipeKeyInt *keys)
     g_rd.sceneSx = 2.8125f; /* the phone's Resolution Auto */
     g_rd.sceneSy = 2.41071f;
 
-    /* the planner: four passes of one vs/fs/Z state, every blend form */
-    g_rd.uber = g_rd.uberDate = true;
+    /* the planner: four passes of one vs/fs/Z state, every blend form.
+     * The flags as rd__uber_init sets them with no A/B switch (no device
+     * here, so it never ran): uberPremul too, or rd__expand_dst leaves a
+     * premultiplied form the exact blend does not want (the subtract, c
+     * = 1) on the blender (ICO_RD_UBER_PREMUL=0's A/B) */
+    g_rd.uber = g_rd.uberDate = g_rd.uberPremul = true;
     g_rd.dstMode = RD_BLEND_EXACT_ATTACHMENT;
     CHECK(rd__uber_on(), "uber: not in force with the attachment read");
     {
@@ -2228,6 +2233,7 @@ static void testUberSet(RdPipeKeyInt *keys)
     rd__set_vu_prepass(keepPrepass);
     g_rd.uber = keepUber;
     g_rd.uberDate = keepUberDate;
+    g_rd.uberPremul = keepUberPremul;
     g_rd.dstMode = keepDst;
     g_rd.settings.preset = keepPreset;
     g_rd.sceneSx = keepSx;

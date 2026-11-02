@@ -955,7 +955,12 @@ static void testScreenRuns(void)
     runSprite(0, 0, 256, 128, 2, 0x30);
     runSprite(50, 30, 220, 110, 3, 0x58);
     rd_end_frame(0);
-    checkRun("run boundaries", 2 + 2 + 2 + 4, 1 + 2 + 1 + 2);
+    /* under GS state as shader data DATE reads the alpha in the shader
+     * (rd_uber.c rd__uber_date): no snapshot to retake, so the two DATE
+     * sprites are one draw, the same bytes (the read in rasterization
+     * order) */
+    const bool dateRead = rd__uber_on() && g_rd.uberDate;
+    checkRun("run boundaries", 2 + 2 + 2 + 4, dateRead ? 1 + 1 + 1 + 2 : 1 + 2 + 1 + 2);
 }
 
 /* -------------------------------------------------------------------- AA1 */
@@ -3675,6 +3680,34 @@ static void testExactModes(void)
 
 /* -------------------------------------------------------------- pipelines */
 
+/* a planned pass's key as the cache would hold it, in the set: the screen
+ * set as enumerated (keys[0..ns)), or under GS state as shader data the
+ * read's image, normalised (rd__expand_dst, rd__uber_normalise, as
+ * rd_pipeline.c drawKey makes it), in the set in force */
+static bool passEnumerated(const RdDrawPass *p, const RdPipeKeyInt *keys, uint32_t ns,
+                           const RdPipeKeyInt *mine, uint32_t nMine)
+{
+    if (rd__uber_on()) {
+        RdDrawPass ex[4];
+        const int ne = rd__expand_dst(p, 1, g_rd.dstMode, ex);
+        for (int j = 0; j < ne; j++) {
+            rd__uber_normalise(&ex[j].key);
+            for (uint32_t i = 0; i < nMine && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+                if (rd__pipe_key_equal(&ex[j].key, &mine[i])) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    for (uint32_t j = 0; j < ns; j++) {
+        if (rd__pipe_key_equal(&p->key, &keys[j])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void testPipelines(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX], keysNd[RD_PIPELINE_REACHABLE_MAX];
@@ -3796,42 +3829,32 @@ static void testPipelines(void)
                         CHECK(rd__plane_pass(&kt) && kt.key.fs == RD_FS_SPRITE_TEXA_PLANES,
                               "a TEXA triangle pass with the planes draws sprite_texa_ps_planes");
                         found = 0;
-                        for (uint32_t j = 0; j < ns; j++) {
-                            found |= rd__pipe_key_equal(&kt.key, &keys[j]);
-                        }
+                        found |= passEnumerated(&kt, keys, ns, mine, nMine);
                         CHECK(found,
                               "TEXA UI triangle pass with the planes (depth %d) is not "
                               "enumerated",
                               dz);
                         found = 0;
                     }
-                    for (uint32_t j = 0; j < ns; j++) {
-                        found |= rd__pipe_key_equal(&pl.key, &keys[j]);
-                    }
+                    found |= passEnumerated(&pl, keys, ns, mine, nMine);
                     CHECK(dp[i].key.gs.colorMask == 0x7 && found,
                           "UI draw under colour mask 7 (lines %d, depth %d) is not enumerated",
                           prim, dz);
                     dp[i].key.fs = RD_FS_FONT;
                     found = 0;
-                    for (uint32_t j = 0; j < ns; j++) {
-                        found |= rd__pipe_key_equal(&dp[i].key, &keys[j]);
-                    }
+                    found |= passEnumerated(&dp[i], keys, ns, mine, nMine);
                     CHECK(prim || found,
                           "font draw under colour mask 7 (depth %d) is not enumerated", dz);
                     /* the menus' sheet text in the same state */
                     dp[i].key.fs = RD_FS_FONT_SHEET;
                     found = 0;
-                    for (uint32_t j = 0; j < ns; j++) {
-                        found |= rd__pipe_key_equal(&dp[i].key, &keys[j]);
-                    }
+                    found |= passEnumerated(&dp[i], keys, ns, mine, nMine);
                     CHECK(prim || found,
                           "sheet text draw under colour mask 7 (depth %d) is not enumerated", dz);
                     /* and a 1x sheet's (font_sheet_baked_ps) */
                     dp[i].key.fs = RD_FS_FONT_SHEET_BAKED;
                     found = 0;
-                    for (uint32_t j = 0; j < ns; j++) {
-                        found |= rd__pipe_key_equal(&dp[i].key, &keys[j]);
-                    }
+                    found |= passEnumerated(&dp[i], keys, ns, mine, nMine);
                     CHECK(prim || found,
                           "baked sheet text draw under colour mask 7 (depth %d) is not enumerated",
                           dz);
@@ -3859,9 +3882,7 @@ static void testPipelines(void)
                           rd__fs_has_dst(RD_FS_SPRITE_PLANES) &&
                           rd__fs_has_dst(RD_FS_SPRITE_TEXA_PLANES),
                       "the planes build's pixel shaders without their _nodual or _dst twins");
-                for (uint32_t j = 0; j < ns; j++) {
-                    found |= rd__pipe_key_equal(&dp[i].key, &keys[j]);
-                }
+                found |= passEnumerated(&dp[i], keys, ns, mine, nMine);
                 CHECK(found, "STQ world triangle pass (depth %d) is not enumerated", dz);
             }
             s.ds.colorMask = 0x7;

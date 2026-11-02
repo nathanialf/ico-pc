@@ -354,11 +354,15 @@ static void awCheck(const char *path)
 }
 
 /* The strips on the device's own DATE path (the snapshot on a desktop
- * profile, the stencil bit where the profile has dateStencil), then, where
- * the device has local read and the blend is not the storage read
- * (dateStencilFor), through the stencil bit: both draw the strips primitive
- * by primitive (rd_replay_aa1.inc aa1DatePlan), counted among the DATE
- * stencil draws, and give the oracle's bytes */
+ * profile, the stencil bit where the profile has dateStencil, the colour
+ * read under GS state as shader data), then, where the device has local
+ * read and the blend is not the storage read (dateStencilFor), through the
+ * stencil bit (the colour read's DATE held off for it, as testDateStencil
+ * does): the snapshot and the bit draw the strips primitive by primitive
+ * (rd_replay_aa1.inc aa1DatePlan), counted among the DATE stencil draws;
+ * the colour read draws the Z-writing strips triangle by triangle, two
+ * draws each, no snapshot, no stencil (aa1OrderDraw); all give the
+ * oracle's bytes */
 static void testAa1Wedge(void)
 {
     memset(s_awN, 0, sizeof(s_awN));
@@ -368,10 +372,23 @@ static void testAa1Wedge(void)
     s_awFeed = 1;
     bool ok = awRecord();
     s_awFeed = 0;
-    const char *own = g_rd.profile.dateStencil ? "stencil" : "snapshot";
-    CHECK(ok && g_rdPerf.dateStencilDraws > 0,
-          "aa1 wedge (%s): replayed, %u DATE stencil draws (the primitives' pairs), %u snapshots",
-          own, g_rdPerf.dateStencilDraws, g_rdPerf.dateSnapshots);
+    const bool read = rd__uber_on() && g_rd.uberDate; /* DATE through the colour read */
+    const char *own = read ? "colour read" : (g_rd.profile.dateStencil ? "stencil" : "snapshot");
+    if (read) {
+        /* the four strips' 36 triangles, each its own pixels then its
+         * fringes: 72 draws at least; no pairs, no snapshot */
+        CHECK(ok && g_rdPerf.dateDstDraws > 0 && g_rdPerf.dateStencilDraws == 0 &&
+                  g_rdPerf.dateSnapshots == 0 && g_rdPerf.screenDraws >= 72,
+              "aa1 wedge (colour read): replayed, %u DATE draws read the alpha, %u DATE stencil "
+              "draws, %u snapshots, %u screen draws (36 triangles, two each)",
+              g_rdPerf.dateDstDraws, g_rdPerf.dateStencilDraws, g_rdPerf.dateSnapshots,
+              g_rdPerf.screenDraws);
+    } else {
+        CHECK(ok && g_rdPerf.dateStencilDraws > 0,
+              "aa1 wedge (%s): replayed, %u DATE stencil draws (the primitives' pairs), %u "
+              "snapshots",
+              own, g_rdPerf.dateStencilDraws, g_rdPerf.dateSnapshots);
+    }
     awCheck(own);
     if (g_rd.profile.dateStencil || !rhi_limits()->localRead || !g_rd.fs[RD_FS_DATE_STENCIL].id ||
         !g_rd.fs[RD_FS_DATE_CLEAR].id || !g_rd.layoutLocal.id ||
@@ -382,6 +399,8 @@ static void testAa1Wedge(void)
         printf("  aa1 wedge: the stencil path %s\n", why);
         return;
     }
+    const bool keepUberDate = g_rd.uberDate;
+    g_rd.uberDate = false; /* the bit, as without the colour read */
     g_rd.profile.dateStencil = true;
     rd_reset_scene(512, 512); /* SCENE made with DATE's local read */
     ok = awRecord();
@@ -391,6 +410,7 @@ static void testAa1Wedge(void)
           "aa1 wedge (stencil): replayed, %u setups, %u snapshots, %u DATE stencil draws", takes,
           snaps, draws);
     awCheck("stencil");
+    g_rd.uberDate = keepUberDate;
     g_rd.profile.dateStencil = false;
     rd_reset_scene(512, 512);
     rhi_wait_idle();
