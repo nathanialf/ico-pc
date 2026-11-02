@@ -584,10 +584,12 @@ and in portable mode, and the Android build's file layout is `IcoAndroidPaths`
 3. For players to see it in a new file, add it with its default and a comment to the template
    `first_run_text` (`port/config/config.c`).
 4. For `ico-pc.ini` to override it, add it to `ini_map` (`port/platform/host_config.c`); when the
-   simulation depends on it, add it to `ICO_SIM_KEYS` (`port/platform/sim_keys.c`): a pad
-   recording's header then carries it ([INPUT.md](INPUT.md#recordings)) and a save state made
-   with another value is refused with the key named
-   ([PLATFORM.md](PLATFORM.md#validity)).
+   simulation depends on it, add it to `ICO_SIM_KEYS` (`port/platform/sim_keys.c`) with its
+   default in `kDefaults` at the same place (the config text the game takes when the key is
+   unset; `NULL` when unset is the disc's or the device's own choice): a pad recording's header
+   then carries it ([INPUT.md](INPUT.md#recordings)), a save state made with another value is
+   refused with the key named, and a state saved before the key existed loads while
+   the key is unset or at that default ([PLATFORM.md](PLATFORM.md#validity)).
 5. A key that nothing reads goes into `retired_keys` (`port/config/config.c`), so a file
    that still has it keeps the line and logs `config: <key> is not used; ignored`; a `[dev]`
    A/B switch that `ini_map` maps goes into `retired_dev` (`port/platform/host_config.c`)

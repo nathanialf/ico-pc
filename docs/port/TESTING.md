@@ -281,7 +281,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   20 boundaries while any one guard fails (paused, no control, a script hold, game over, a gate
   stage, another motion, the fall or an exit not loaded, this disc's HETARI bit, the option off),
   one trip a boundary with the other discs' bits set; the two save state blocks by name (none of
-  the old random ones) and their bytes put back mid-count resuming the count; the stage load's copies (nothing with the option off,
+  the old random ones, both FRESH) and their bytes put back mid-count resuming the count; the stage load's copies (nothing with the option off,
   in a gate stage or where the stage has them; the pack's bytes relocated and counted on the stage
   segment; the pack read once and picked by its members; nothing in a partition too full); one
   argument selects the disc (`yorda_trip`, `yorda_trip_<disc>`).
@@ -307,7 +307,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   folder (each validity field changed, a damaged file, a picture); the thumbnail's size (the pause
   picture's square pixels to 960 wide, a tall one to 960 lines, the fallback DISPLAY frame at the
   box's shape) and box filter; the pause picture's path, its copy to a slot's picture and its steps
-  (taken once from play to the pause menu, kept over the pages, dropped on play) (`state_host`).
+  (taken once from play to the pause menu, kept over the pages, dropped on play); after a load the
+  loaded slot's picture copied to `pause.png` with its size from the PNG header (none without a
+  picture, no size for a header that is not a PNG's) and on to a later save's slot (`state_host`).
 - `variants_test.c`: the game variants (`port/game/variants.h`) on the CPU: every default is the game as
   shipped (the barrier's number the disc's: 5, 7 on `jun26`), every `[variants]` key steps through
   all its values, saves and reads back, a word or number that is no value reads as the default, the
@@ -549,9 +551,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   its blocker (a changed function a frame sits in; a changed function only pointed at loads; the
   data layout; a block missing, new or resized; a missing text; a changed start-up value; a word
   into a repeated name or into the code outside every unit; no symbol table; the bounds' overflow;
-  an image below 4 GB; a damaged record); a format 1 header read and refused as another build, a
-  format 2 header of another build passing the other-build check, another disc still refused
-  (`state_port`).
+  an image below 4 GB; a damaged record); a block B adds that A's state lacks refused, loaded and
+  left as it is (`ICO_XB_BLOCK_ABSENT`) when registered FRESH, still refused when FRESH with SCAN,
+  FRESH on a block the state has loaded from it; a format 1 header read and refused as another
+  build, a format 2 header of another build passing the other-build check, another disc still
+  refused; a simulation key this build lists that the state lacks: refused without the key-default
+  function, equal at its default or unset, refused when changed or when the saved text is not what
+  its hash covered, a differing key named first, a key only the state lists refused, the absent
+  keys named for the log (`state_port`).
 - `state_reloc_test.c`: the scan and the self-checks over the game's real allocator
   (`ico2/fumi/ios/memory.c` built with the game's flags): words at each range's start, middle and end
   move by their own delta and nothing else does (near misses, 0, all ones, floats, doubles, EE word
@@ -571,7 +578,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   unchanged, a full table, reset (`state_registry`).
 - `sim_keys_test.c`: the simulation keys' list (no repeats, the expected keys), the text, the hash
   changing with a value and returning when it is cleared, and `ico_sim_keys_first_diff`'s
-  `key=saved (now cur)` text on a short buffer too (`sim_keys`).
+  `key=saved (now cur)` text on a short buffer too; a key the saved text lacks read as its default
+  (equal unset or at the default, `key=(absent) (now cur)` otherwise; only unset for a key without
+  one fixed default); every key's default (`ico_sim_key_default`, `ico_sim_key_is_default`), and
+  the first-run `config.toml` writing every listed key it holds at that default (`sim_keys`).
 - `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 and the
   Continue screen's Square prompt ([UI.md](UI.md#save-states)), the pictures' box at their own
   shape, and F6 (the page from play and from the pause menu, back to the game, a late press, each

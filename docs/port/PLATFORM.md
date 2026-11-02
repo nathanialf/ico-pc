@@ -438,13 +438,24 @@ The **simulation keys** are the config keys that change what the game computes
 recording's header writes ([CONFIG.md](CONFIG.md#adding-a-key)). `ico_sim_keys_hash` is XXH3-64
 over `key=value\n` for each, in order, the value as `ico_config_get_string` gives it (`""` when
 unset); the text is stored in the file. `ico_sim_keys_first_diff` names the first key whose saved
-value differs from the current one.
+value differs from the current one. Each key has its default beside it (`kDefaults` in
+`sim_keys.c`: the config text the game takes when the key is unset, such as `false` or
+`original`; none where unset is the disc's or the device's own choice, `video.video_mode`,
+`dev.start_stage`, `variants.barrier_hits`). A key absent from the saved text is one a later
+version added: the state was made at its default, so it is equal while the key is unset or at
+that default now (`ico_sim_key_is_default`).
 
 `ico_state_header_check` compares a saved header with this run's, in this order: the platform
 (`ICO_STATE_OTHER_PLATFORM`, a Windows state on Linux), the format version and the build id
 (`ICO_STATE_OTHER_BUILD`, the detail is the other build's commit), the disc slug
 (`ICO_STATE_OTHER_DISC`), the keys text and then the hash (`ICO_STATE_OTHER_SETTINGS`, the detail
-`key=saved (now cur)`).
+`key=saved (now cur)`). A key this run lists that the saved text lacks is equal when the
+key-default function says this run's value is the default (`ico_state_set_key_default`, set by
+`state_host.c` to `ico_sim_key_is_default`, since the platform layer does not see the config);
+the two hashes then differ by those lines, so the saved text must instead be the whole of what
+its own hash covered (`xxh3_64` of the saved text equal to the saved hash), else `the settings
+differ`. Without the function (the tests, the tools) such a key differs, as `key=(absent) (now
+cur)`.
 
 The rule has two levels. The same build (build id equal) loads a state as it always did: one delta
 per range, nothing else consulted. Another build of the same platform and format goes on to
@@ -475,6 +486,7 @@ what each owner registers and why):
 | `trace_host.c` | `trace.main_ticks` | CLOCK |
 | `pad_script.c` | `pad_script.tick` | CLOCK |
 | `door_grace.c` | `door_grace.armed`, `.arm_from`, `.arm_to`, `.arm_holding`, `.left`, `.from` | |
+| `yorda_trip.c` | `yorda_trip.run_ticks`, `yorda_trip.last_tick` (the run count and its tick stamp) | FRESH |
 | `gfx_null.c` | `dma.channels` | |
 | `host_loop.c` | `host_loop.vsyncs`, `host_loop.field` | |
 | `port/audio/audio_host.c` (`ico_audio_state_register`) | `spu2.state` (the SPU2: RAM, cores, register shadow, time, event queue, DMA channels and their callbacks, the IRQ callback, the reverb presets; not the render's scratch or the statistics), `spu2_sd.time`, `spu2_sd.effect_attr`, `mix_gain.tag`, `mix_gain.cache`, `mix_gain.ready` (the gains themselves are the player's settings), `sndn2.host` (the driver's pages, counters, reply and pitch table), `sndn2.carry`, `sndn2.staging`, `sndn2.adpcm`, `sndn2.queue`, `sndn2.q_write`, `sndn2.q_read`, `sndn2.pending`, `sndn2.pcm`, `audio.vsync_index` (which vsyncs render 801 frames at 59.94 Hz) | AUDIO; SCAN on `spu2.state` and `sndn2.host` |
@@ -482,7 +494,12 @@ what each owner registers and why):
 
 72 blocks, over 4 MB, most of it IOP RAM and the SPU2's RAM (2 MB each). SCAN marks a block that may hold host addresses (the
 relocation scans it); AUDIO one copied under the audio lock; CLOCK a counter a load rewinds with
-the game (the Main tick count, and with it the pad script's position). Not registered: the
+the game (the Main tick count, and with it the pad script's position); FRESH
+(`ICO_STATE_FRESH`) one that starts from its initial value: a state saved before the block existed
+still loads ([Across versions](#across-versions)) and the block keeps this run's bytes.
+FRESH is for a block without host pointers (a FRESH block with SCAN is still refused when
+absent) whose value the game can start over from, such as a count and its stamp. A version that
+adds a block gives it FRESH when that holds, else every older state is refused naming it. Not registered: the
 scheduler's tables (`ico_sched_state_save` and `_restore` move their pointers themselves; a
 second scan would move them twice), the vsync callback list and `clock.c`'s flag that mirrors
 it, the SIF server table (host callbacks registered at start-up), files and the trace file's
@@ -621,7 +638,9 @@ block and no unique variable).
 **A load of another build** (`other_build`, `xb_probe` in `state_host.c`): the header passes
 `ico_state_header_check_other_build`; the `syms` and `ranges` sections are read alone and
 `ico_xb_check` compares them with this build in this order, the first failure naming the blocker:
-the blocks both ways (`the block <name> is missing here`, `exists only here`, `changed size`), the
+the blocks both ways (`the block <name> is missing here`, `exists only here`, `changed size`; a
+FRESH block the state lacks is not refused: its offset is `ICO_XB_BLOCK_ABSENT`, the unpack leaves
+it as it is and the sections check counts the saved reg and audio sections without it), the
 record's flags (pinned, above), this build's table (`this build has no symbol file`), the hash
 rules, the layout hash (`the game's data layout changed`), each unit (`the function <name> is
 missing here`, `the function <name> changed`), each variable, each point (`the game's start-up
@@ -652,8 +671,11 @@ globals; it is not a proof that the later build means the same by the state:
 - A pointer into unnamed writable data is no block, no variable and no point: such a state is
   pinned. A C string found again by its bytes may be another literal with the same text (the same
   bytes, so the game sees the same text).
-- A simulation key the later build adds refuses the state as `ICO_STATE_OTHER_SETTINGS` (the key is
-  absent from the saved text), as within one build.
+- A simulation key the later build adds is read as its default in an older state: the state loads
+  while the key is at its default and is refused as `ICO_STATE_OTHER_SETTINGS` (`key=(absent)
+  (now cur)`) once the player changed it. A block the later build adds loads only when its owner
+  registered it FRESH ([The registry](#the-registry)); the block then keeps this run's value,
+  which is right only for a value the game can start over from.
 - Host addresses that are rebuilt rather than saved are untouched by any of this: the vsync hook
   list, the SIF server table and the other host callbacks set up at start-up, files, the
   renderer's handles (the [registry](#the-registry) lists them).
@@ -711,12 +733,17 @@ box's pixels (the picture without the bars, at its own shape and the output's si
 filter's picture under the filter, never the port's popups); a thread box-filters them to at most
 960 x 960 (`ico_state_thumb_size`, `ICO_STATE_THUMB_W`/`_H`; 960 x 540 at 16:9, at most 2.8 MB as
 a stored PNG, inside the page's 8 MB read) and writes `<states>/<disc>/pause.png`. The picture is
-the game's until the game is back on the play layout or a state is loaded (`shot_forget`), so a
+the game's until the game is back on the play layout (`shot_forget`) or a state is loaded, so a
 save from the pause menu, Options or Extras over it, or the Save states page, by F5 or the page,
-gets it; every save in that pause gets the same one.
+gets it; every save in that pause gets the same one. A load (`shot_from_slot`) drops the picture
+of the game before it (one still being written is waited for and dropped) and copies the loaded
+slot's own picture to `pause.png` on the same writer thread (`ico_state_picture_to_pause`, its
+size read from the PNG header for the log), so a save made after the load in the same pause gets
+the game as loaded.
 
-Without a pause picture (none taken yet, the request dropped, a load since, the write failed or
-still running) the slot's picture is the frame presented after the save, as before:
+Without a pause picture (none taken yet, the request dropped, the loaded slot without one, the
+write or the copy failed or still running) the slot's picture is the frame presented after the
+save, as before:
 `window_host.c` reads the DISPLAY target (`rd_read_display`) once `ico_state_wants_thumbnail` says
 so and hands it to `ico_state_thumbnail`, which box-filters it to the presentation box's shape
 (`rd_present_box_size`: DISPLAY has half the lines it is shown with) at most 960 wide and writes
@@ -819,6 +846,9 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: slot N's picture written (<path>, WxH, the pause picture\|the frame after the save)`, `... could not be written`, `state: slot N has no picture (no frame was presented)` | the picture |
 | `state: slot N's picture: the frame after the save (no pause picture: <why>)` | a save without a pause picture: none taken since the program started, the frame before the pause menu still to come or not presented, still being written, could not be written, the game went back to play, a state was loaded, no renderer |
 | `state: the pause picture: the game before the pause menu, WxH from the WxH picture, written in <ms> ms (<path>; picture N)` (the first 8, then every 100th), `state: the pause picture could not be written (<path>)` | the pause menu opened from play |
+| `state: the pause picture: slot N's own, the game as loaded, WxH, copied in <ms> ms (<path>)`, `state: the pause picture: slot N's picture could not be copied (none, or unreadable): a save before going back to play takes the frame after it` | a load (the loaded slot's picture becomes the pause picture) |
+| `state: slot N was saved before the setting(s) <keys> existed: read as its (their) default, which it has (they have) now` | a load of a state saved before a simulation key existed ([Validity](#validity)) |
+| `state: slot N was saved before K of the blocks registered here existed (<names>): they start from this run's values` | a load of another build's state without FRESH blocks this build registers ([The registry](#the-registry)) |
 | `rd: state picture: WxH from the WxH output (the box at X,Y), read back in <ms> ms`, `rd: state picture: not taken: the first present after the request showed frame F, later than frame G it asked for` or `...: no copy of the WxH output` (the first 8, then every 100th) | the renderer's side of the pause picture |
 | `state: [dev] save at Main tick ..., load at ..., hash at ...` and `state: hash ...` | the [dev] keys |
 | `state: hash masked N pointer words, M host ids at tick T (H host blocks, region hashes arena .. gdata .. gbss ..)` | after each `state: hash` line: what the hash left out (the hash rule) |

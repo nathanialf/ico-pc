@@ -689,8 +689,9 @@ A save state keeps the game exactly as it is, anywhere, in one of four slots
 for each disc. Each slot shows a picture, the area, the play time and the
 date. The picture is the game as it was the moment you paused, without the
 menu, in its own shape (a wide picture keeps its width). A state saved after
-loading another one, or one that could not get that picture, shows the
-screen as it was when you saved.
+loading another one, before you go back to the game, gets the loaded state's
+picture. One that could not get a picture shows the screen as it was when
+you saved.
 
 - **During play:** press Start and choose **Save states**, under Photo mode.
   On a keyboard, **F6** does both: it pauses the game and opens the page.
@@ -705,12 +706,18 @@ Choose a slot and press Left or Right to pick **Save**, **Load** or
 **Delete**, then press the confirm button. Saving over a slot that is in
 use, and deleting, ask you to press again within two seconds. Saving is
 only possible from the pause menu, so from the title screen the page only
-loads and deletes. A slot that cannot be loaded (it was saved by another
-version of the game, on another disc, or with different gameplay settings)
-is greyed, and the line under the cards says why. After a load the game is
-back on the pause menu, on **Save states**. On a computer, F5 saves to slot
-1 and F9 loads it. A state belongs to the version of the game it was saved
-with, so after you update the game the old states are greyed. Your
+loads and deletes. A slot that cannot be loaded (it was saved on another
+disc, with different gameplay settings, or by another version of the game
+that it cannot carry over to) is greyed, and the line under the cards says
+why. After a load the game is back on the pause menu, on **Save states**. On
+a computer, F5 saves to slot 1 and F9 loads it. On Windows and Android a
+state carries over to a later version of the game when the part of the game
+it was saved in has not changed; states made before the game could carry
+them over do not.
+On Linux, the Steam Deck and Mac a state loads only in the version that
+saved it, so after you update the game those states are greyed. A gameplay
+setting that a later version adds does not stop an older state from loading
+while you leave that setting as it starts. Your
 achievements keep counting as before and are not taken back by a load. The
 states are kept in the `states` folder of your
 [user folder](PORTABLE_MODE.md#where-your-saves-are), apart from your memory

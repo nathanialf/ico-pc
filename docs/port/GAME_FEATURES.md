@@ -172,7 +172,10 @@ bit is clear; the game is not paused (`systemStatus[5]`) and Ico is under contro
 (`IsAbleBoyControl`, `scpBoyControlReadDisable`); no game over; the stage is not one of the main
 gate's two (its name starts `st04a `). The count and its tick stamp are save state blocks
 (`yorda_trip.run_ticks`, `yorda_trip.last_tick`; `port/platform/state_port.c`), so a state resumes
-the count, and `gameplay.yorda_trips` is a simulation key (`port/platform/sim_keys.c`).
+the count; both are FRESH ([PLATFORM.md](PLATFORM.md#the-registry)), so a state another build made
+without them still loads and the count goes on from the running game's. `gameplay.yorda_trips` is
+a simulation key (`port/platform/sim_keys.c`, default `false`): a state saved before the key
+existed loads while the option is off.
 
 Log lines: `gameplay: yorda trips on|off` at the first read and on a change; at the first read of
 the motions `yorda trips: N of her M motions read from STG4A2ND.DF (B bytes) in T ms`, or why
