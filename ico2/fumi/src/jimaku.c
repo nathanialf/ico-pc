@@ -203,7 +203,7 @@ static void draw_subtitle(struct jWayGroup *g, LtProperty *first, LtProperty *se
                 if (size > 0.0f) {
                     static const unsigned char color[4] = {128, 128, 128, 128};
                     const float x = 320.0f + (float)(left + right) / 32.0f;
-                    const float y = (float)(top + bottom) / 32.0f;
+                    const float y = UI_GRID_CY + (float)(top + bottom) / 16.0f;
                     JIM_HOST_KEY(g, 0);
                     ui_draw_menu_text(x, y, size, color, text,
                                       UI_ALIGN_CENTER | UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
