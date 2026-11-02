@@ -1062,11 +1062,19 @@ bool rd__read_present_depth(float *dst, size_t dstSize, uint32_t *w, uint32_t *h
 /* ------------------------------------------------------------ the overlay */
 
 typedef struct OverlayBatch {
-    uint32_t first, count; /* in s_ov.v */
+    uint32_t first, count; /* in its OverlayBuf's v */
     uint32_t tex;          /* RdTex id, 0 untextured */
     uint8_t prim, blend;
     RhiRect sc; /* the deferred text's region (the whole output for the overlay's) */
 } OverlayBatch;
+
+/* a collect's prims: the vertices and the batches over them */
+typedef struct OverlayBuf {
+    RdScreenVtx *v;
+    uint32_t vCount, vCap;
+    OverlayBatch *b;
+    uint32_t bCount, bCap;
+} OverlayBuf;
 
 /* outside g_rd: the registration outlives rd_shutdown / rd_init (port/ui
  * registers once at start-up; the tests restart rd between checks) */
@@ -1077,24 +1085,43 @@ static struct {
     void *topUser;
     RdDeferredTextFn textFn; /* the deferred text's renderer */
     void *textUser;
-    int inside;          /* in fn or textFn: rd_overlay_prims keeps prims */
-    RhiRect sc;          /* the region rd_overlay_prims gives its batch */
-    RdOverlayCtx ctx;    /* the main layer's (the deferred text's too) */
-    RdOverlayCtx topCtx; /* the top layer's, always the output */
-    RdScreenVtx *v;
-    uint32_t vCount, vCap;
-    OverlayBatch *b;
-    uint32_t bCount, bCap;
+    RdOverlayCtx ctx;     /* the main layer's (the deferred text's too) */
+    RdOverlayCtx topCtx;  /* the top layer's, always the output */
+    OverlayBuf buf;       /* the present's, drawn by the thread that replays it */
     uint32_t textBatches; /* b[0, textBatches) are the deferred text's */
     uint32_t topFirst;    /* b[topFirst, bCount) are the top layer's,
                            * b[textBatches, topFirst) the main layer's */
     int grid;             /* the main layer is on the CRT filter's source grid */
 } s_ov;
 
+/* The UI's two layers collected on the game thread for a picture it hands
+ * to the render thread (rd__overlay_hand_over; rd_thread.h): the
+ * callbacks are UI code that shares port/ui's font state and caches with
+ * the game thread's own text, so they run there, between the drain and
+ * the post, never while the game thread records.  The picture's replay
+ * copies the batches after its deferred text (overlayCollect) instead of
+ * calling them; the render thread writes only `have` (taken, or dropped
+ * at the job's end), and the game thread collects again only after the
+ * next drain. */
+static struct {
+    bool have; /* collected for the picture posted, not drawn yet */
+    bool ok;   /* overlayLayout's answer: something to collect */
+    RdOverlayCtx ctx, topCtx;
+    int grid;
+    OverlayBuf buf;
+    uint32_t topFirst; /* b[0, topFirst) the main layer's, the rest the top layer's */
+} s_pre;
+
+/* where rd_overlay_prims puts the calling thread's prims: the buffer of
+ * the collect it is inside (s_ov's or s_pre's) and the batch's region;
+ * NULL outside one (the prims are dropped) */
+static _Thread_local OverlayBuf *t_into;
+static _Thread_local RhiRect t_sc;
+
 /* the batches collected for a present, forgotten together */
 static void overlayForget(void)
 {
-    s_ov.vCount = s_ov.bCount = s_ov.textBatches = s_ov.topFirst = 0;
+    s_ov.buf.vCount = s_ov.buf.bCount = s_ov.textBatches = s_ov.topFirst = 0;
 }
 
 /* a present's prims at most (a popup is a few hundred) */
@@ -1102,6 +1129,7 @@ static void overlayForget(void)
 
 void rd_set_present_overlay(RdOverlayFn fn, void *user)
 {
+    (void)rd_thread_drain(); /* no picture on the render thread draws the batches */
     s_ov.fn = fn;
     s_ov.user = fn ? user : NULL;
     overlayForget();
@@ -1109,6 +1137,7 @@ void rd_set_present_overlay(RdOverlayFn fn, void *user)
 
 void rd_set_present_overlay_top(RdOverlayFn fn, void *user)
 {
+    (void)rd_thread_drain();
     s_ov.topFn = fn;
     s_ov.topUser = fn ? user : NULL;
     overlayForget();
@@ -1140,6 +1169,7 @@ bool rd_present_blank(void)
     }
     /* lists 11 and 12 of a frame with none: no draw, no target touched */
     static RdFrame empty;
+    (void)rd_thread_drain(); /* no picture on the render thread reads s_blank */
     s_blank = 1;
     const bool ok = rd__replay_frame(&empty, 1, true);
     s_blank = 0;
@@ -1148,6 +1178,7 @@ bool rd_present_blank(void)
 
 void rd_set_deferred_text_fn(RdDeferredTextFn fn, void *user)
 {
+    (void)rd_thread_drain();
     s_ov.textFn = fn;
     s_ov.textUser = fn ? user : NULL;
     overlayForget();
@@ -1158,42 +1189,83 @@ bool rd_deferred_text_active(void)
     return g_rd.deferText;
 }
 
-void rd_overlay_prims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
+/* one batch of n prims into o, in region sc */
+static void bufAppend(OverlayBuf *o, RhiRect sc, uint32_t type, const RdScreenVtx *v, uint32_t n,
+                      uint32_t tex, uint32_t blend)
 {
-    if (!s_ov.inside || !v || n == 0 || (uint32_t)type > RD_PRIM_SPRITES ||
-        n > RD_OVERLAY_MAX_VERTICES - s_ov.vCount) {
+    if (!v || n == 0 || type > RD_PRIM_SPRITES || n > RD_OVERLAY_MAX_VERTICES - o->vCount) {
         return;
     }
-    if (s_ov.vCount + n > s_ov.vCap) {
-        uint32_t cap = s_ov.vCap ? s_ov.vCap : 1024;
-        while (cap < s_ov.vCount + n) {
+    if (o->vCount + n > o->vCap) {
+        uint32_t cap = o->vCap ? o->vCap : 1024;
+        while (cap < o->vCount + n) {
             cap *= 2;
         }
-        RdScreenVtx *p = realloc(s_ov.v, (size_t)cap * sizeof(*p));
+        RdScreenVtx *p = realloc(o->v, (size_t)cap * sizeof(*p));
         if (!p) {
             return;
         }
-        s_ov.v = p;
-        s_ov.vCap = cap;
+        o->v = p;
+        o->vCap = cap;
     }
-    if (s_ov.bCount == s_ov.bCap) {
-        const uint32_t cap = s_ov.bCap ? s_ov.bCap * 2 : 64;
-        OverlayBatch *p = realloc(s_ov.b, (size_t)cap * sizeof(*p));
+    if (o->bCount == o->bCap) {
+        const uint32_t cap = o->bCap ? o->bCap * 2 : 64;
+        OverlayBatch *p = realloc(o->b, (size_t)cap * sizeof(*p));
         if (!p) {
             return;
         }
-        s_ov.b = p;
-        s_ov.bCap = cap;
+        o->b = p;
+        o->bCap = cap;
     }
-    memcpy(s_ov.v + s_ov.vCount, v, (size_t)n * sizeof(*v));
-    OverlayBatch *b = &s_ov.b[s_ov.bCount++];
-    b->first = s_ov.vCount;
+    memcpy(o->v + o->vCount, v, (size_t)n * sizeof(*v));
+    OverlayBatch *b = &o->b[o->bCount++];
+    b->first = o->vCount;
     b->count = n;
-    b->tex = tex.id;
+    b->tex = tex;
     b->prim = (uint8_t)type;
     b->blend = (uint8_t)blend;
-    b->sc = s_ov.sc;
-    s_ov.vCount += n;
+    b->sc = sc;
+    o->vCount += n;
+}
+
+void rd_overlay_prims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
+{
+    if (t_into) {
+        bufAppend(t_into, t_sc, (uint32_t)type, v, n, tex.id, (uint32_t)blend);
+        return;
+    }
+    /* UI code drawing for the overlay outside a collect on its thread
+     * (the font's overlay mode left on, or entered off the callbacks) */
+    static unsigned dropped;
+    const unsigned k = __atomic_add_fetch(&dropped, 1u, __ATOMIC_RELAXED);
+    if (k <= 8 || k % 100 == 0) {
+        rd__log("overlay: %u prims given outside a present's overlay collect on %s thread were "
+                "dropped (%u times)",
+                n, rd_thread_on_render() ? "the render" : "this", k);
+    }
+}
+
+/* a layer's callback on this thread, its prims into o in region sc */
+static void layerCollect(OverlayBuf *o, RhiRect sc, RdOverlayFn fn, const RdOverlayCtx *c,
+                         void *user)
+{
+    OverlayBuf *const into = t_into;
+    const RhiRect was = t_sc;
+    t_into = o;
+    t_sc = sc;
+    fn(c, user);
+    t_into = into;
+    t_sc = was;
+}
+
+/* s_pre's batches [from, to) after the present's own (the regions and
+ * the bounds as rd_overlay_prims gives them) */
+static void preCopy(uint32_t from, uint32_t to)
+{
+    for (uint32_t i = from; i < to; i++) {
+        const OverlayBatch *b = &s_pre.buf.b[i];
+        bufAppend(&s_ov.buf, b->sc, b->prim, s_pre.buf.v + b->first, b->count, b->tex, b->blend);
+    }
 }
 
 /* ---------------------------------------------------------- deferred text
@@ -1465,28 +1537,33 @@ static void textCollect(const RdFrame *f, int keep)
             if (it.additive && !(it.rgba[0] | it.rgba[1] | it.rgba[2])) {
                 continue; /* adds nothing */
             }
-            s_ov.sc = r;
-            s_ov.inside = 1;
+            OverlayBuf *const into = t_into;
+            const RhiRect was = t_sc;
+            t_into = &s_ov.buf;
+            t_sc = r;
             s_ov.textFn(&s_ov.ctx, &it, s_ov.textUser);
-            s_ov.inside = 0;
+            t_into = into;
+            t_sc = was;
         }
     }
     s_text.n = 0;
     s_text.f = NULL;
 }
 
-/* rd__overlay_collect for a game frame (filmBox NULL) or for a film's
- * present (rd__overlay_collect_film: the film's 4:3 box on the output, no
- * CRT grid, no deferred text) */
-static void overlayCollect(const RdFrame *f, int keep, const RhiRect *filmBox)
+/* The overlay's layout for a game frame (filmBox NULL) or for a film's
+ * present (the film's 4:3 box on the output, no CRT grid): the main
+ * layer's context c, the top layer's t and whether the main layer is on
+ * the CRT filter's grid; false when nothing is collected (no layer or
+ * text registered, no output).  It reads g_rd.settings, the CRT grid,
+ * the frame's exact width and s_blank: the game thread's between
+ * pictures, and as it posted them during one (texLock) */
+static bool overlayLayout(const RhiRect *filmBox, RdOverlayCtx *c, RdOverlayCtx *t, int *grid)
 {
-    overlayForget();
-    s_ov.grid = 0;
-    g_rd.deferText = false;
     uint32_t w = g_rd.settings.outputWidth, h = g_rd.settings.outputHeight;
     const uint32_t outW = w, outH = h;
+    *grid = 0;
     if ((!s_ov.fn && !s_ov.textFn && !s_ov.topFn) || !w || !h) {
-        return;
+        return false;
     }
     /* the output and box rd__present_record will use: both come from
      * g_rd.settings.  One case changes them after this: on the present
@@ -1505,51 +1582,100 @@ static void overlayCollect(const RdFrame *f, int keep, const RhiRect *filmBox)
      * picture: its context is the filter's source grid at the frame's
      * lines (the 1x frame the game's own UI is drawn in), the box all of
      * it, and rd__crt_record draws the prims into that grid */
-    const bool crt = rd__crt_on() && !s_blank && !filmBox;
-    if (crt) {
+    if (rd__crt_on() && !s_blank && !filmBox) {
         uint32_t vw, vh;
         rd__crt_grid(&vw, &vh);
         w = vw;
         h = g_rd.gsH ? g_rd.gsH : 2 * vh;
         box = (RhiRect){0, 0, w, h};
-        s_ov.grid = 1;
+        *grid = 1;
     }
-    RdOverlayCtx *c = &s_ov.ctx;
     c->outW = w;
     c->outH = h;
     c->box = (RdRect){box.x, box.y, box.w, box.h};
     c->boxScale = (float)box.h / 448.0f;
     c->mirror = pr->mirror && rd__mirror_on();
+    /* the top layer (the touch controls) is laid out on the output in
+     * every mode, never on the grid: overlayRecord draws it on the output
+     * after the CRT filter, so it stays sharp */
+    t->outW = outW;
+    t->outH = outH;
+    t->box = (RdRect){outBox.x, outBox.y, outBox.w, outBox.h};
+    t->boxScale = (float)outBox.h / 448.0f;
+    t->mirror = c->mirror;
+    return true;
+}
+
+/* the two layers' callbacks into o with the contexts c and t: the main
+ * layer's batches, then the top layer's from *topFirst */
+static void layersCollect(OverlayBuf *o, const RdOverlayCtx *c, const RdOverlayCtx *t,
+                          uint32_t *topFirst)
+{
+    if (s_ov.fn) {
+        layerCollect(o, (RhiRect){0, 0, c->outW, c->outH}, s_ov.fn, c, s_ov.user);
+    }
+    *topFirst = o->bCount;
+    if (s_ov.topFn) {
+        layerCollect(o, (RhiRect){0, 0, t->outW, t->outH}, s_ov.topFn, t, s_ov.topUser);
+    }
+}
+
+void rd__overlay_hand_over(void)
+{
+    if (s_pre.have) {
+        return; /* this picture's already: a refused post run here */
+    }
+    s_pre.have = true;
+    s_pre.buf.vCount = s_pre.buf.bCount = s_pre.topFirst = 0;
+    s_pre.ok = overlayLayout(NULL, &s_pre.ctx, &s_pre.topCtx, &s_pre.grid);
+    if (s_pre.ok) {
+        layersCollect(&s_pre.buf, &s_pre.ctx, &s_pre.topCtx, &s_pre.topFirst);
+    }
+}
+
+void rd__overlay_hand_over_drop(void)
+{
+    s_pre.have = false;
+}
+
+/* rd__overlay_collect for a game frame (filmBox NULL) or for a film's
+ * present (rd__overlay_collect_film: no CRT grid, no deferred text); a
+ * game frame the game thread handed over takes the layers it collected
+ * (s_pre) */
+static void overlayCollect(const RdFrame *f, int keep, const RhiRect *filmBox)
+{
+    overlayForget();
+    s_ov.grid = 0;
+    g_rd.deferText = false;
+    const bool pre = !filmBox && s_pre.have;
+    if (pre) {
+        s_pre.have = false;
+        if (!s_pre.ok) {
+            return;
+        }
+        s_ov.ctx = s_pre.ctx;
+        s_ov.topCtx = s_pre.topCtx;
+        s_ov.grid = s_pre.grid;
+    } else if (!overlayLayout(filmBox, &s_ov.ctx, &s_ov.topCtx, &s_ov.grid)) {
+        return;
+    }
     /* the deferred text first, so the overlay draws above it; none under
      * the CRT filter (the rows draw as quads into the scene, as in the
      * Original preset, and go through the filter) */
-    if (s_ov.textFn && f && !filmBox && g_rd.settings.preset == RD_PRESET_ENHANCED && !crt &&
+    if (s_ov.textFn && f && !filmBox && g_rd.settings.preset == RD_PRESET_ENHANCED && !s_ov.grid &&
         !s_blank) {
         g_rd.deferText = true;
         textCollect(s_reshowText ? s_reshowText : f, s_reshowText ? 0 : keep);
     }
-    s_ov.textBatches = s_ov.bCount;
-    if (s_ov.fn) {
-        s_ov.sc = (RhiRect){0, 0, w, h};
-        s_ov.inside = 1;
-        s_ov.fn(c, s_ov.user);
-        s_ov.inside = 0;
-    }
-    /* the top layer (the touch controls) last, laid out on
-     * the output in every mode, never on the grid: overlayRecord draws it
-     * on the output after the CRT filter, so it stays sharp */
-    s_ov.topFirst = s_ov.bCount;
-    if (s_ov.topFn) {
-        RdOverlayCtx *t = &s_ov.topCtx;
-        t->outW = outW;
-        t->outH = outH;
-        t->box = (RdRect){outBox.x, outBox.y, outBox.w, outBox.h};
-        t->boxScale = (float)outBox.h / 448.0f;
-        t->mirror = c->mirror;
-        s_ov.sc = (RhiRect){0, 0, outW, outH};
-        s_ov.inside = 1;
-        s_ov.topFn(t, s_ov.topUser);
-        s_ov.inside = 0;
+    s_ov.textBatches = s_ov.buf.bCount;
+    if (pre) {
+        preCopy(0, s_pre.topFirst);
+        s_ov.topFirst = s_ov.buf.bCount;
+        preCopy(s_pre.topFirst, s_pre.buf.bCount);
+    } else {
+        uint32_t top = 0;
+        layersCollect(&s_ov.buf, &s_ov.ctx, &s_ov.topCtx, &top);
+        s_ov.topFirst = top;
     }
 }
 
@@ -1565,7 +1691,7 @@ void rd__overlay_collect_film(const RhiRect *box)
 
 uint64_t rd__overlay_ring_bytes(void)
 {
-    if (!s_ov.bCount) {
+    if (!s_ov.buf.bCount) {
         return 0;
     }
     const uint64_t align = rhi_limits()->uniformAlign;
@@ -1574,8 +1700,8 @@ uint64_t rd__overlay_ring_bytes(void)
      * DrawCB and the expanded vertices (sprites and points give 6 a prim's
      * 2 or 1) a batch */
     uint64_t total = 3 * ((uint64_t)sizeof(IcoFrameCB) + 2 * align);
-    total += (uint64_t)s_ov.bCount * (sizeof(IcoDrawCB) + 2 * align + 16);
-    total += (uint64_t)s_ov.vCount * 6 * sizeof(IcoSpriteVertex);
+    total += (uint64_t)s_ov.buf.bCount * (sizeof(IcoDrawCB) + 2 * align + 16);
+    total += (uint64_t)s_ov.buf.vCount * 6 * sizeof(IcoSpriteVertex);
     return total;
 }
 
@@ -1638,7 +1764,7 @@ static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint
      * pixels land 1:1 with integers on pixel edges (rd.h rd_overlay_prims) */
     const RdUniform frame = rd__frame_group(ow, oh, 0.5f, 0.5f);
     for (uint32_t i = from; i < to; i++) {
-        const OverlayBatch *b = &s_ov.b[i];
+        const OverlayBatch *b = &s_ov.buf.b[i];
         /* the deferred text's batches carry their regions */
         if (memcmp(&b->sc, &cur, sizeof(cur)) != 0) {
             cur = b->sc;
@@ -1649,7 +1775,8 @@ static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint
                 rhi_cmd_set_scissor(cl, &cur);
             }
         }
-        rd__overlay_draw(cl, fmt, frame, b->prim, s_ov.v + b->first, b->count, b->tex, b->blend);
+        rd__overlay_draw(cl, fmt, frame, b->prim, s_ov.buf.v + b->first, b->count, b->tex,
+                         b->blend);
     }
     if (!inPass) {
         rhi_cmd_end_render_pass(cl);
@@ -1684,8 +1811,8 @@ static void overlayRecord(RhiCommandList cl, RhiTexture out, const RhiRect *box,
                           bool inPass)
 {
     if (!s_ov.grid) {
-        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.topCtx, s_ov.topFirst, s_ov.bCount,
-                    inPass);
+        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.topCtx, s_ov.topFirst,
+                    s_ov.buf.bCount, inPass);
         drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.ctx, s_ov.textBatches,
                     s_ov.topFirst, inPass);
     } else {
@@ -1693,8 +1820,8 @@ static void overlayRecord(RhiCommandList cl, RhiTexture out, const RhiRect *box,
             drawBatchesAt(cl, out, s_outFormat, s_outW, s_outH, &s_ov.ctx, box, s_ov.textBatches,
                           s_ov.topFirst, inPass);
         }
-        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.topCtx, s_ov.topFirst, s_ov.bCount,
-                    inPass);
+        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.topCtx, s_ov.topFirst,
+                    s_ov.buf.bCount, inPass);
     }
     overlayForget();
     s_ov.grid = 0;
@@ -1706,7 +1833,7 @@ static void overlayRecord(RhiCommandList cl, RhiTexture out, const RhiRect *box,
 void rd__overlay_film_record(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32_t w,
                              uint32_t h)
 {
-    drawBatches(cl, out, fmt, w, h, &s_ov.topCtx, s_ov.topFirst, s_ov.bCount, false);
+    drawBatches(cl, out, fmt, w, h, &s_ov.topCtx, s_ov.topFirst, s_ov.buf.bCount, false);
     drawBatches(cl, out, fmt, w, h, &s_ov.ctx, s_ov.textBatches, s_ov.topFirst, false);
     overlayForget();
     s_ov.grid = 0;
@@ -2349,14 +2476,17 @@ void rd__present_shutdown(void)
      * tests that read them after rd_shutdown */
     rd__crt_shutdown(); /* the CRT filter */
     /* the overlay's prims (the registration stays), the deferred text's list */
-    free(s_ov.v);
-    free(s_ov.b);
+    free(s_ov.buf.v);
+    free(s_ov.buf.b);
+    free(s_pre.buf.v);
+    free(s_pre.buf.b);
+    memset(&s_pre, 0, sizeof(s_pre));
     free(s_text.p);
     s_text.p = NULL;
     s_text.n = s_text.cap = 0;
-    s_ov.v = NULL;
-    s_ov.b = NULL;
-    s_ov.vCap = s_ov.bCap = 0;
+    s_ov.buf.v = NULL;
+    s_ov.buf.b = NULL;
+    s_ov.buf.vCap = s_ov.buf.bCap = 0;
     overlayForget();
 }
 

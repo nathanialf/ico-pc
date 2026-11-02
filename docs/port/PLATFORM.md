@@ -339,6 +339,14 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   present's display wait, `rd_submit_waited_ns`). A picture whose capture or blended dump is armed
   (F12, a save state's picture) and every picture while the vsync lock uses the display's timing
   (`rd_submit_hold`) wait for their end.
+- The overlay. The UI's layers of a picture the game thread posts (the popups, photo mode's HUD,
+  the touch controls, the frame rate counter: `port/ui/ui_host.c` (`hostOverlay`,
+  `hostOverlayTop`)) are collected on the game thread before the post (`port/render/rd_present.c`
+  (`rd__overlay_hand_over`)), because their callbacks share port/ui's font state and its glyph
+  and strip caches with the game's own text (`port/ui/font.c` (`ui_begin_overlay`)); the
+  picture's present draws the batches collected after its deferred text. The callbacks run on
+  the render thread only inside a call the game thread waits for (the replay with the
+  interpolation off, a movie's present).
 - Calls between pictures. `rd__on_host`'s calls (the targets made again, the display's pipelines,
   the fog's probe, a movie's present, the replay with the interpolation off) run on the render
   thread with the game thread waiting (`rd__render_call`), as do `rd_read_display` (a save's

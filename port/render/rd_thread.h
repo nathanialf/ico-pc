@@ -25,6 +25,14 @@
  *                   armed, every picture while rd_submit_hold is on, and
  *                   every replay through rd__replay_frame wait for their
  *                   end.
+ *   the overlay     the UI's layers of a picture posted from the game
+ *                   thread (the popups, the photo mode's HUD, the touch
+ *                   controls, the frame rate counter) are collected there
+ *                   before the post (rd_present.c rd__overlay_hand_over):
+ *                   their callbacks share port/ui's font state and caches
+ *                   with the game thread's own text, so they never run
+ *                   while the game thread records; the picture's present
+ *                   draws the batches collected.
  *   calls           rd__on_host's calls (the targets made again, the
  *                   display's pipelines, the movie's present, the fog's
  *                   probe) run there too, waited for: every GPU call moves

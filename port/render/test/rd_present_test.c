@@ -98,6 +98,15 @@
  *             draw, the top layer under the main one where they overlap;
  *             rd__overlay_ring_bytes counts both layers' batches, and a
  *             registration and the present forget them
+ *   overlay thread  both layers at 960 x 720 with interpolation, the
+ *             main one drawing "H" through the font in overlay mode,
+ *             presented by rd_present_post with and without the renderer's
+ *             own thread: the callbacks run on the test's thread (the
+ *             game's) before the post returns, never in a render-thread
+ *             job, once a layer a present; the test's own text in overlay
+ *             mode while the picture runs gives all its quads; the output
+ *             is the same byte for byte; rd_present_blank's layers are
+ *             collected on the test's thread too (skipped on OpenGL)
  *   capture   rd_capture_presented: the rich frame at 800 x
  *             600 with the overlay's rectangles registered, CRT off and
  *             Consumer TV: the PNG is 800 x 600 RGB and holds exactly the
@@ -4795,6 +4804,139 @@ static void checkOverlayTop(void)
     free(px);
 }
 
+/* the overlay with the renderer's own thread (rd_thread.h "the
+ * overlay"): the UI's layers of a picture handed over are collected on
+ * this thread, the game's, before rd_present_post returns, never inside a
+ * render-thread job; one call a layer a present; this thread's own text
+ * in the font's overlay mode while the picture runs loses no glyph; the
+ * output is the one without the thread byte for byte; rd_present_blank's
+ * layers too */
+typedef struct ThreadLayer {
+    LayerTest l;
+    int onRender; /* calls made inside a render-thread job */
+    int text;     /* "H" through port/ui's font in overlay mode */
+} ThreadLayer;
+
+static void threadLayer(const RdOverlayCtx *ctx, void *user)
+{
+    static const uint8_t white[4] = {0x80, 0x80, 0x80, 0x80};
+    ThreadLayer *t = user;
+    t->onRender += rd_thread_on_render();
+    layerRect(ctx, &t->l);
+    if (t->text) {
+        ui_begin_overlay(ctx);
+        ui_draw_text(320.0f, 300.0f, 40.0f, white, "H", UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+        ui_end_overlay();
+    }
+}
+
+static int s_threadQuads;
+
+static void threadSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
+{
+    (void)type;
+    (void)v;
+    (void)tex;
+    (void)blend;
+    s_threadQuads += n == 2;
+}
+
+/* one run: the rich frame twice, rd_present_post(1) and the output into
+ * px (w x h); th: with the renderer's own thread */
+static bool threadOverlayRun(int th, uint32_t w, uint32_t h, uint8_t *px, ThreadLayer *m,
+                             ThreadLayer *t)
+{
+    makeNoiseScene();
+    RdSettings s = originalSettings();
+    s.outputWidth = w;
+    s.outputHeight = h;
+    s.interpolate = 1; /* rd_end_frame leaves the replays to the presents */
+    if (!rd_init(512, 512, &s, NULL)) {
+        return false;
+    }
+    if (th && !rd_thread_local_start(RD_THREAD_ON)) {
+        CHECK(false, "overlay thread: the renderer's own thread");
+        rd_shutdown();
+        return false;
+    }
+    m->l.calls = t->l.calls = m->onRender = t->onRender = 0;
+    rd_set_present_overlay(threadLayer, m);
+    rd_set_present_overlay_top(threadLayer, t);
+    RdTex tex = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    recordRichFrame(tex, 1);
+    recordRichFrame(tex, 1);
+    const bool posted = rd_present_post(1.0f);
+    /* the layers were collected before the post returned, here */
+    const int mainAt = m->l.calls, topAt = t->l.calls;
+    CHECK(posted && mainAt == 1 && topAt == 1 && m->onRender == 0 && t->onRender == 0,
+          "overlay thread %d: the layers collected on this thread before the hand-over (%d, %d "
+          "calls; %d, %d on the render thread)",
+          th, mainAt, topAt, m->onRender, t->onRender);
+    /* the game's own text while the picture may still run */
+    {
+        static const uint8_t grey[4] = {0x60, 0x60, 0x60, 0x80};
+        s_threadQuads = 0;
+        ui__set_overlay_sink(threadSink);
+        ui_begin_overlay(&m->l.ctx);
+        ui_draw_text(100.0f, 200.0f, 40.0f, grey, "HHHH", UI_ALIGN_LEFT | UI_VALIGN_BASELINE);
+        ui_end_overlay();
+        ui__set_overlay_sink(NULL);
+        CHECK(s_threadQuads == 4, "overlay thread %d: the game's own text gave %d quads, not 4", th,
+              s_threadQuads);
+    }
+    (void)rd_thread_drain();
+    uint32_t ow = 0, oh = 0;
+    const bool ok = rd_read_presented(px, &ow, &oh) && ow == w && oh == h;
+    CHECK(ok && m->l.calls == 1 && t->l.calls == 1,
+          "overlay thread %d: the presented output, one call a layer (%d, %d)", th, m->l.calls,
+          t->l.calls);
+    /* the blank present: its layers here as well */
+    CHECK(rd_present_blank() && m->l.calls == 2 && t->l.calls == 2 && m->onRender == 0 &&
+              t->onRender == 0,
+          "overlay thread %d: rd_present_blank's layers on this thread (%d, %d; %d, %d on the "
+          "render thread)",
+          th, m->l.calls, t->l.calls, m->onRender, t->onRender);
+    rd_set_present_overlay(NULL, NULL);
+    rd_set_present_overlay_top(NULL, NULL);
+    ui_font_shutdown();
+    rd_destroy_texture(tex);
+    if (th) {
+        rd_thread_local_stop();
+    }
+    CHECK(rhi_vk_validation_error_count() == 0, "overlay thread %d: %u validation errors", th,
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    return ok;
+}
+
+static void checkOverlayThread(void)
+{
+    const uint32_t w = 960, h = 720;
+    const size_t n = (size_t)w * h * 4;
+    uint8_t *off = malloc(n), *on = malloc(n);
+    ThreadLayer m = {.l = {.x0 = 100, .y0 = 50, .x1 = 140, .y1 = 71, .c = {255, 0, 0, 0x80}},
+                     .text = 1};
+    ThreadLayer t = {.l = {.x0 = 120, .y0 = 60, .x1 = 180, .y1 = 90, .c = {0, 0, 255, 0x80}}};
+    if (!off || !on) {
+        free(off);
+        free(on);
+        return;
+    }
+    const bool a = threadOverlayRun(0, w, h, off, &m, &t);
+    if (rhi_backend() == RHI_BACKEND_OPENGL) {
+        printf("  overlay thread: not with OpenGL (rd_thread.h): the thread's run skipped\n");
+    } else if (a && threadOverlayRun(1, w, h, on, &m, &t)) {
+        size_t diff = 0;
+        for (size_t i = 0; i < n; i++) {
+            diff += off[i] != on[i];
+        }
+        CHECK(diff == 0, "overlay thread: %zu bytes of the output differ from the one without it",
+              diff);
+    }
+    free(off);
+    free(on);
+}
+
 /* --------------------------------------------------------------- capture */
 
 static uint32_t be32At(const uint8_t *p)
@@ -5743,6 +5885,7 @@ int main(int argc, char **argv)
     checkOverlay(s_presentOriginal);
     checkOverlayCrt();
     checkOverlayTop();
+    checkOverlayThread();
     checkCapture(dir);
     checkShot(dir);
     checkPresentPasses(dir);

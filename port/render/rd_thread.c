@@ -131,6 +131,7 @@ static void runTramp(Tramp *t, bool picture)
     t->fn(t->arg);
     rd__reads_done();
     if (outer) {
+        rd__overlay_hand_over_drop(); /* a picture whose present drew nothing */
         lk();
         publishLocked();
         if (picture) {
@@ -338,11 +339,17 @@ bool rd__replay_frame(const RdFrame *f, int keep, bool present)
     }
     ReplayArgs r = {f, keep, present, false};
     Tramp t = {replayJob, &r, false};
+    if (present) {
+        (void)rd_thread_drain();
+        rd__overlay_hand_over(); /* the UI's layers on this thread (rd_present.c) */
+    }
     if (s_host.post(s_host.user, pictureTramp, &t, present, true)) {
         return r.ok;
     }
     retireDrain();
-    return rd__replay_frame_here(f, keep, present);
+    r.ok = rd__replay_frame_here(f, keep, present);
+    rd__overlay_hand_over_drop();
+    return r.ok;
 }
 
 /* a picture waits for its end when its result is read right after it */
@@ -365,6 +372,9 @@ bool rd__replay_frame_async(const RdFrame *f, int keep, bool present)
     }
     rd__thread_picture_begin();
     const bool wait = pictureWaits();
+    if (present) {
+        rd__overlay_hand_over(); /* the UI's layers on this thread (rd_present.c) */
+    }
     s_picReplay = (ReplayArgs){f, keep, present, false};
     s_picTramp = (Tramp){replayJob, &s_picReplay, !wait};
     if (!wait) {
@@ -384,6 +394,7 @@ bool rd__replay_frame_async(const RdFrame *f, int keep, bool present)
     }
     retireDrain();
     s_lastOk = rd__replay_frame_here(f, keep, present);
+    rd__overlay_hand_over_drop(); /* nothing posted holds it */
     return s_lastOk;
 }
 
@@ -429,6 +440,10 @@ bool rd_present_post(float alpha)
         return rd_present(alpha);
     }
     const bool wait = pictureWaits();
+    /* the UI's layers on this thread, before the hand-over: their
+     * callbacks share port/ui's font state with the step's own text
+     * (rd_present.c s_pre) */
+    rd__overlay_hand_over();
     s_picPresent = (PresentArgs){alpha, rd__present_clock_raw_take(), false};
     s_picTramp = (Tramp){presentJob, &s_picPresent, !wait};
     if (!wait) {
@@ -448,6 +463,9 @@ bool rd_present_post(float alpha)
     }
     retireDrain();
     presentJob(&s_picPresent);
+    if (!s_async) {
+        rd__overlay_hand_over_drop(); /* no picture handed over holds it */
+    }
     s_lastOk = s_picPresent.ok;
     return s_lastOk;
 }

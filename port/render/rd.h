@@ -1045,8 +1045,14 @@ RdBlendExact rd_blend_exact(void);
  *                       font atlases) are uploaded with the frame.  Also at
  *                       the movie picture's presents (rd_video.c), laid out
  *                       in the picture's 4:3 box.  The registration
- *                       survives rd_shutdown / rd_init
- * rd_overlay_prims       valid only inside fn (ignored elsewhere): prims in
+ *                       survives rd_shutdown / rd_init.  fn runs on the
+ *                       thread that records (with the window's render
+ *                       thread, before the picture is handed to it;
+ *                       rd_thread.h), or on the render thread only inside a
+ *                       call the recording thread waits for (rd_end_frame's
+ *                       present with interpolation off, the movie's)
+ * rd_overlay_prims       valid only inside fn, on fn's thread (ignored
+ *                       elsewhere): prims in
  *                       12.4 fixed-point OUTPUT pixels, origin at the
  *                       output's top-left corner, an integer coordinate on
  *                       a pixel's top-left edge (pixel (x, y) is the square

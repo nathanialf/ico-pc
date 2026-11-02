@@ -3379,8 +3379,17 @@ typedef struct RdUniform {
  * deferred text (rd.h rd_deferred_text) when the present draws it deferred
  * (the Enhanced preset, a renderer registered, an output), which sets
  * g_rd.deferText for the replay (doScreen then skips the items' quads); the
- * items' prims are drawn before the overlay's, each batch in its region. */
+ * items' prims are drawn before the overlay's, each batch in its region.
+ * A picture the game thread hands to the render thread (rd_thread.c) has
+ * its two layers collected on the game thread first,
+ * rd__overlay_hand_over (the callbacks are UI code sharing the font's
+ * state with the game thread's own text); its replay's
+ * rd__overlay_collect copies them after the deferred text instead of
+ * calling the callbacks, and rd__overlay_hand_over_drop (the job's end,
+ * a refused post's own run) forgets a record no replay took. */
 void rd__overlay_collect(const RdFrame *f, int keep);
+void rd__overlay_hand_over(void);
+void rd__overlay_hand_over_drop(void);
 /* The same for a film's present (rd_video.c): the film's box on the output
  * (box43) is the picture's box, no CRT grid, no deferred text.
  * rd__overlay_film_record draws what it collected in a pass of its own on out
