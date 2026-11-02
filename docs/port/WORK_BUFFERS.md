@@ -909,26 +909,67 @@ What an exact cut can and cannot be:
   precision. A copy also saves nothing for this read: it reads SCENE once either way, and there is
   no second reader of SCENE at a reduced size in a frame (the glow's mask reads it 1:1, the fog
   in place).
-- **The same box in two passes, exact** (designed, not built): a row pass into an R16G16B16A16
-  UINT target of FEED128's 212 columns by SCENE's 1080 rows, each texel the shader's `R'` for that
-  column and row (the column's taps, addressing, TEXA and weights as `fx_sprite_texel` computes
-  them from the sprite's uniforms and the texel's x), then FEED128's own draw with the column sum
-  `t = (sum(wy R') + 8 Dy) / (16 Dy)` over its rows' `R'` (the row addressing per tap as before)
-  and the rest of `fx_sprite_ps` unchanged. The integers are the same operations in the same order,
-  so the bytes are the same by construction. The taps are about the same (4.6 M in the row pass,
-  0.27 M in the column pass), the traffic 1.8 MB more each way; what changes is 229 k short loops
-  (20 taps) and 27 k shorter ones (10) for 27 k long ones (190). It needs a new target format, a
-  pipeline key and two shader entries; worth it only if the phone's 4.9 ms is the loop's length,
-  which the measurement below says.
+- **The same box in two passes, exact** (shipped: `port/render/rd_aura_box.c`, `[dev] aura_box`,
+  on by default on the tile-based GPUs). The box is split at its own seam, the rounding between
+  the axes:
+  - **pass A**, ROWBOX: an RGBA16_UINT texture of FEED128's width by SCENE's texture height (212 x
+    1080, 1.8 MB, on the phone; the renderer's own texture, made again when the size changes,
+    never in the pass dump), one triangle through `fx_aura_rows_ps`: at texel (c, y) the row's
+    `R' = (16 R + Dx / 2) / Dx` (`fx_kernel_row`) of FEED128 column c's own x taps on SCENE row y.
+    The column's taps come from its own GS X, U and su, computed as `fx_sprite_ps` computes them
+    for that column (the same DrawCB; a FrameCB with FEED128's origin, scale 1 and no crop), so the
+    box edges that move by a 32nd from column to column are each column's own: ROWBOX's x is the
+    FEED128 column, never a fixed partition of SCENE (why the reduced copy cannot work). Every row
+    0 .. H - 1 is written, the range of `fx_axis_y`, so every addressed row a box can touch is
+    there. `R'` is at most 4080 (R <= 255 Dx), which the 16-bit words hold.
+  - **pass B**, FEED128's own draw through `fx_aura_sum_ps` (the UINT build, t1 ROWBOX): the
+    coverage and V of `fx_sprite_ps`, then for j = 0, 1, ... `sum += ROWBOX(c, fx_axis_y(ay.first +
+    j)) wy(j)`, `t = (sum + 8 Dy) / (16 Dy)`, and the texture function, alpha test, blend and FBA
+    of `fx_sprite_ps` (`fx_sprite_out`).
+
+  Why the bytes are the same, against `fx_sprite_texel`'s FXF_ABOVE1X branch: (1) both passes bind
+  the one-pass draw's DrawCB; (2) at FEED128's scale 1 the X of column c is `ox + 16 c` in both,
+  every float step of it exact (so no contraction or rounding mode can move it); (3) U is the exact
+  truncated quotient whatever its float steps round to (`gs_div_trunc_rcp`), su one correctly
+  rounded multiply and a round, so the axis's first tap, count, weights and Dx are the same
+  integers; (4) a row's `R'` is the inner loop's taps (`fx_texel(int2(ax.first + i, ay.first + j))`
+  is `fx_texel_at(fx_axis_x(ax.first + i), fx_axis_y(ay.first + j))`, pass A's y that
+  `fx_axis_y`), weights, order and rounding; (5) pass B adds the same `R'` with the same `wy` in the
+  same order j, and the sum stays under 2^32 (`sum(wy R') <= 24576 x 4080`), so the integer
+  additions are exact in any order; (6) everything after the sum is the same function of the same
+  t. `fx_sprite_ps` itself is unchanged (its SPIR-V the same instructions, only the ids renumbered).
+  Where it applies: only that sprite (FEED128 drawn from SCENE), above 1x (at 1x the sprite takes
+  the GS's own bilinear, four taps, no box and no loop to shorten), with the box (not under
+  `[dev] aura_kernel = gs`), without a destination read, a self-sample or a depth target, the
+  colour mask whole and FEED128 at its GS size; anything else draws the one pass, named once
+  (`rd: aura box: the feedback read drawn in one pass: <reason> (reported once)`) and counted in
+  the 10 s line. Its two keys (`fx_aura_rows_ps` into RGBA16_UINT, `fx_aura_sum_ps` as the
+  sprite's own key) join the start-up set while it is on. The switch: `[dev] aura_box = auto`
+  (the profile's, `RdProfile.auraBox`: on on the tile-based classes, Adreno, Mali, PowerVR, Apple
+  and another tiler, which share the cost model here: few texels with a long loop each; off on
+  desktop Vulkan, D3D12, D3D11 and OpenGL, not measured there), `on`, `off`
+  (`ICO_RD_AURA_BOX=1|0`). The lines: `rd: aura box: the feedback read of the picture above 1x in
+  two passes (...) (<why>)` or `... in one pass (<why>)` at the start, `; aura box: two passes` or
+  `; aura box: one pass` at the end of the profile line, `rd: aura box: ROWBOX WxH made (RGBA16
+  UINT, N MB)`, `rd: aura box: N feedback reads in two passes (ROWBOX WxH), M in one pass (...)`
+  in the 10 s block, and the pass list's `aura ROWBOX 212x1080 1 draws` before the FEED128 pass
+  (`[dev] perf_passes`, the replay tool's `--pass-times`). The cost: the same taps (4.6 M in pass
+  A, 0.27 M reads in pass B against 5.4 M), one render pass more, ROWBOX stored and loaded once
+  (1.8 MB each way, about 0.4 ms at the phone's ~1 ms per 10 MB); the saving is the share of the
+  4.9 ms that is the long loop's serial length (229 k loops of about 20 taps and 27 k of about 10
+  for 27 k of about 200), unmeasured until the phone's rc. Tests: `rd_aura_box_ab` (every target
+  byte for byte on the dump corpus and the phone frames, one pass and one draw more a read) and
+  `rd_blur` case `aura_box` (FEED128 byte for byte at 2x, 2364 x 1080 and 1.5x)
+  ([TESTING.md](TESTING.md)).
 - **The measurement**: `[dev] aura_kernel = gs` (`ICO_RD_AURA_KERNEL=gs`,
   `port/render/rd_aura_kernel.c`) draws that one sprite with the GS's own bilinear at its sample
   point (no box: the PS2's taps, the picture not the default's, the feedback shimmering above 1x;
   logged once as `rd: aura: the feedback read of SCENE into FEED128 drawn with the GS's own taps
   ...`). One session on the phone with `[dev] perf_passes = true` with and without it, in the same
   room, gives the FEED128 pass's time without the box: near the reduction's per-texel rate means
-  the loop is the cost and the two-pass box is the next cut (expected saving up to ~4 ms a
-  picture); near 4.9 ms means the pass's cost is elsewhere (the tiler's handling of SCENE between
-  the paste and the read) and no restructuring of the kernel helps.
+  the loop is the cost (what the two-pass box above cuts); near 4.9 ms means the pass's cost is
+  elsewhere (the tiler's handling of SCENE between the paste and the read). With
+  `aura_box = off` it measures the one-pass box alone.
 - **The paste** (2.65 ms) is SCENE's load and store around one full-frame draw: on a tiler a pass
   of its own because the read after it samples SCENE. Drawing the paste in the pass before it
   (list 7's last SCENE pass, or the fog's) would save the pair (~2 ms) only where nothing between

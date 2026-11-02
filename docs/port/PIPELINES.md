@@ -369,7 +369,12 @@ cache and so the RHI's pool: `rd_state_test` `testTilerSet` counts the tile prof
 and layout stand-ins where the test has no device), the pre-pass off, at 2x (977 keys) and at
 2.8125 x 2.41071 (1153), each under `RD_PIPELINE_REACHABLE_MAX` and inside `RHI_PIPELINE_POOL_MAX`
 less `RHI_PIPELINE_POOL_HEADROOM`; `rd_pixel_test` `testPipelines` counts the same configuration on
-a device with both blends (1153, and 1260 with the two-pass fallback). The set's first line names it against the pool (`rd_precreate_pipelines`):
+a device with both blends (1153, and 1260 with the two-pass fallback). On a tile-based GPU the
+aura's read in two passes (`port/render/rd_aura_box.c` (`rd__aura_box_keys`), `[dev] aura_box`)
+adds two fx keys while it is on, `fx_aura_rows_ps` into the RGBA16_UINT ROWBOX and
+`fx_aura_sum_ps` (the aura sprite's own key, Z ALWAYS, no depth, mask whole): 1155 on that
+Adreno 710; the tests' counts keep it off (no device, or a desktop device whose profile leaves it
+off). The set's first line names it against the pool (`rd_precreate_pipelines`):
 
     rd: pipelines: the start-up set's 1153 keys (pool 4160: the cache's 4096 and 64 for the pipelines made outside it; 0 already made)
 

@@ -14,6 +14,7 @@
 - The game no longer repeats graphics commands that change nothing, so each picture takes less processor work with every Graphics API choice; `bind_cache = false` in the `[dev]` part of the settings file turns this off if a device shows problems with it.
 - With Graphics API set to Direct3D 11, the game's 3D models are now prepared once per frame, as with the other Graphics API choices, so older graphics cards spend less time on each picture.
 - At high resolutions (on phones at Resolution Auto or 2x), the pause menu's and the Options pages' words are drawn from letters prepared once instead of being worked out again for every pixel of every picture, so the menus take less of the graphics chip's time. They look exactly as before.
+- On phones, the glowing outline around Yorda and the shadows (the aura) is worked out in two shorter steps instead of one long one per pixel, which takes less of the graphics chip's time; the picture is the same.
 - On graphics chips that can read the picture while drawing it (such as Adreno chips with the open Turnip driver, and many Mali chips), the game prepares several times fewer graphics pipelines at its first start and blends colours exactly as the PlayStation 2 did. Other chips, including PowerVR and Adreno with Qualcomm's own driver, draw as before.
 
 ## Fixed

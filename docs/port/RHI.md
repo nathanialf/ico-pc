@@ -100,7 +100,10 @@ D32F_S8 (the scene's depth-stencil; the Vulkan backend may back it with D24S8,
 fog), RGBA32 UINT (the VU vertex pre-pass's record planes, a colour target and copy source: a
 colour attachment and sampled on every Vulkan device by the specification's required format
 support, a render target at Direct3D 12 feature level 11_0; D3D12 makes it typeless, viewed UINT,
-[RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). Vertex formats are F32x1..4, U8x4 UNORM and UINT, U16x2 UINT, U32x1 (`port/rhi/rhi.h`,
+[RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)), RGBA16 UINT (the aura's row sums,
+ROWBOX, `port/render/rd_aura_box.c`: a colour target and sampled with Load, never blended; Vulkan's
+required format support, Direct3D 11 and 12 typeless viewed UINT, OpenGL `GL_RGBA16UI`, which
+OpenGL 3.0 and OpenGL ES 3.0 render to; [WORK_BUFFERS.md](WORK_BUFFERS.md#the-auras-feedback-read)). Vertex formats are F32x1..4, U8x4 UNORM and UINT, U16x2 UINT, U32x1 (`port/rhi/rhi.h`,
 formats).
 
 **Resources.** Buffers have a usage mask and a memory kind: DEVICE (static meshes), UPLOAD (the
