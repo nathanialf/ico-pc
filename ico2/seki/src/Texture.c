@@ -777,6 +777,52 @@ static void texHostClutCheck(int id, TexData *t)
     }
 }
 
+/* A load into slot no (tex_initTextureSub).  tex_Init hands the next
+   stage the slots of the stage before, which nothing frees
+   (tex_FreeTexture is the subtitles' alone), so the slot may still hold
+   the old stage's picture in the cache.  A new generation of the same
+   size and format would be re-expanded into the same rd texture
+   (rd_tex.h "update", right for a CLUT scroll), and every frame recorded
+   before the load that is replayed after it (a later present of the
+   tick, a picture for a bug report) would draw the old stage with the
+   next stage's texels (issue 174: the walls of the room changing before
+   the fade).  The old picture leaves the cache as tex_FreeTexture's does
+   instead: its rd texture lives on for the frames that drew it
+   (rdtex_drop: destroyed two frame ticks later) and the new picture gets
+   a texture of its own.  Counted for the log line in tex_ResetVram.
+   Kept out of texHost, whose bytes a save state holds. */
+static unsigned int texHostReloads; /* port: slots reloaded since the last line */
+
+static unsigned int texHostReloadLines; /* port: the lines written */
+
+static void texHostSlotReload(int no)
+{
+    if (texHost.serial[no] != 0 && rdtex_sampler((unsigned int)no, RDTEX_TEXA_REPLAY) != NULL) {
+        rdtex_drop((unsigned int)no);
+        texHostReloads++;
+    }
+}
+
+/* once a frame: the slots reloaded since the last frame, first 8 then
+   every 100th */
+static void texHostReloadLog(void)
+{
+    if (texHostReloads == 0) {
+        return;
+    }
+    texHostReloadLines++;
+    if (texHostReloadLines <= 8 || texHostReloadLines % 100 == 0) {
+        fprintf(stderr,
+                "tex: %u textures loaded into slots that held another picture (a stage "
+                "change): each got a new texture, the old ones kept for the pictures already "
+                "drawn with them until two frames later%s\n",
+                texHostReloads,
+                texHostReloadLines == 8 ? " (8 of these so far; from here every 100th is written)"
+                                        : "");
+    }
+    texHostReloads = 0;
+}
+
 #endif /* ICO_RD */
 /* The GS A+D writer, a macro: the packet cursor is bumped before the
  * register value is computed. */
@@ -1923,7 +1969,10 @@ static int tex_initTextureSub_jun26(char *name, void *pkt)
     texTable[texCount].rec.ext.partition = malloc_GetPartition();
     texCount++;
 #ifdef ICO_RD
-    /* a new content generation for the slot, decoded now */
+    /* a new picture in the slot: the picture it held leaves the cache
+       first (texHostSlotReload), then a new content generation, decoded
+       now */
+    texHostSlotReload(no);
     texHost.serial[no] = ++texHost.nextSerial;
     texHostTexture(no);
 #endif
@@ -2001,7 +2050,10 @@ static int tex_initTextureSub(char *name, void *pkt)
     texTable[texCount].rec.ext.partition = malloc_GetPartition();
     texCount++;
 #ifdef ICO_RD
-    /* a new content generation for the slot, decoded now */
+    /* a new picture in the slot: the picture it held leaves the cache
+       first (texHostSlotReload), then a new content generation, decoded
+       now */
+    texHostSlotReload(no);
     texHost.serial[no] = ++texHost.nextSerial;
     texHostTexture(no);
 #endif
@@ -2678,6 +2730,7 @@ void tex_ResetVram(void)
     /* once per frame; destroys the rd textures retired two frames
        ago */
     rdtex_frame_tick();
+    texHostReloadLog();
     /* the texture pack's finished loads go in; the pack (or the
        dump) switched on gives every loaded texture a new generation, so
        each is decoded again and looked up (switched off, rd_set_settings

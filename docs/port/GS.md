@@ -298,6 +298,19 @@ mipmapping decodes the TIM2's further levels too (`rdtex_store_levels`), and the
 colours decode from a recoloured CLUT copy (`ico_appearance_recolour`)
 (`ico2/seki/src/Texture.c` (`texHostTexture`)).
 
+`tex_Init` hands the next stage the slots of the stage before: nothing frees a stage's textures
+(`tex_FreeTexture` is the subtitles' alone), so a load writes its picture into a slot whose old
+picture may still be in the cache. A new generation of the same size and format would be
+re-expanded into the same rd texture, and a frame recorded before the load and replayed after it
+(a later present of the tick, a picture for a bug report) would draw the old stage with the next
+stage's texels (issue 174: the zip's dump of the tick of the stage change bound the next stage's
+texels on the old room's arch and balcony, where the picture the reporter saw had the old ones).
+So a load drops the slot's entry first (`rdtex_drop`): the old texture lives on for two frame
+ticks, as after `tex_FreeTexture`, and the new picture gets a texture of its own; a CLUT scroll
+still re-expands in place. Each frame with such loads logs `tex: N textures loaded into slots that
+held another picture (a stage change): ...` (the first 8 frames, then every 100th)
+(`ico2/seki/src/Texture.c` (`texHostSlotReload`, `texHostReloadLog`); ctest `rd_tex`).
+
 `tex_Init` registers `texHostResolve` with `gif_HostSetTex0Resolver`. `tex_setTexReg` notes
 (list, TEX0) → table index; the resolver looks the TEX0 up in its own list's notes first, then in
 the other lists', and logs a TBP that names neither a texture nor a named target once

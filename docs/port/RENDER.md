@@ -329,7 +329,8 @@ needed and keeps it until the content changes (`port/render/rd_tex.h`; decoded o
   the A bit for 16-bit ones and 0 for 24-bit ones (`rdtex_decode`).
 - **size**: padded with zero texels to 2^TW x 2^TH, so STQ and REPEAT wrap as on the GS.
 - **update**: a new generation of the same size and format re-expands into the same rd texture;
-  otherwise the old one is retired and destroyed two `rdtex_frame_tick` calls later.
+  otherwise the old one is retired and destroyed two `rdtex_frame_tick` calls later. A slot loaded
+  with another picture is dropped first ([GS.md](GS.md#textures)).
 - **levels**: a mipmapped TEX1 stores the TIM2's own levels when they are authored pictures
   (`rdtex_store_levels`, `RDTEX_AUTHORED_RATIO`), sampled at the GS's level; otherwise the
   replay builds the further levels by a 2x2 box, colour weighted by alpha, with alpha coverage

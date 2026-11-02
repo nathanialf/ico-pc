@@ -29,7 +29,12 @@
  *             which is also what the PS2 shows, since its DMA chain reads the
  *             CLUT at kick time); otherwise the old RdTex is retired and
  *             destroyed two rdtex_frame_tick calls later, after any frame
- *             that may reference it has been replayed.
+ *             that may reference it has been replayed.  An id that gets a
+ *             different picture (Texture.c's slot loaded with the next
+ *             stage's texture) is dropped first by the caller
+ *             (rdtex_drop), so a frame recorded before keeps the old
+ *             texels: the in-place update is for the same picture's new
+ *             content (a CLUT scroll, a recolour) alone.
  *
  * Mips: an entry holds the one level the caller decodes (TexExt.level).
  * The replay builds and uploads the further levels the texture filter

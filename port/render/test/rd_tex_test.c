@@ -20,6 +20,12 @@
  *   cache    rd_tex keys: hit, generation miss, a baked TEXA variant as a
  *            separate entry, in-place update, a new size retired and
  *            destroyed two frame ticks later, drop;
+ *   reload   (issue 174) tex_Init hands the next stage the old stage's
+ *            slots: a load into a slot whose picture is cached gives the
+ *            new picture an rd texture of its own, even at the same size
+ *            and format, and the old texture keeps its texels for the
+ *            frames that drew it until two frame ticks later; a CLUT
+ *            scroll still re-expands in place (scroll above);
  *   resolve  tex_TransTexture's packet decodes to TEX1/TEST/TEX0 with the
  *            cached texture bound, and no register is left undecoded;
  *   pixels   (Vulkan, lavapipe in the container) one PSMT8 sprite and one
@@ -136,9 +142,14 @@ void malloc_MemCpy(void *dst, void *src, int size)
     memcpy(dst, src, (size_t)size);
 }
 
+/* the partition a load records (TexExt.partition): 0 resident, which
+   tex_Init keeps; a stage's textures are in another, whose slots tex_Init
+   hands the next stage (slotReloadChecks) */
+static int s_partition;
+
 int malloc_GetPartition(void)
 {
-    return 0;
+    return s_partition;
 }
 
 int file_LoadFile(void **adr, char *name, int area)
@@ -424,8 +435,10 @@ static Made makeIndexed(const char *name, int bits, int clut16, int linear, int 
     return m;
 }
 
-/* a direct texture: 16, 24 or 32 bits a texel */
-static Made makeDirect(const char *name, int bpp, int w, int h, const Tim2Ext *ico)
+/* a direct texture: 16, 24 or 32 bits a texel; salt 0 the pattern the
+   checks above know, another salt other texels of the same size */
+static Made makeDirectSalt(const char *name, int bpp, int w, int h, const Tim2Ext *ico,
+                           uint32_t salt)
 {
     Made m;
     int bytes = bpp / 8;
@@ -446,7 +459,7 @@ static Made makeDirect(const char *name, int bpp, int w, int h, const Tim2Ext *i
     m.ref = malloc((size_t)w * h * 4);
     m.src = bpp == 16 ? RD_TEXSRC_RGBA16 : bpp == 24 ? RD_TEXSRC_RGB24 : RD_TEXSRC_RGBA32;
     for (int n = 0; n < w * h; n++) {
-        uint32_t v = hash((uint32_t)n * 13 + (uint32_t)bpp);
+        uint32_t v = hash((uint32_t)n * 13 + (uint32_t)bpp + salt * 7919u);
         uint8_t *o = &m.ref[n * 4];
 
         if ((n % 7) == 3) {
@@ -480,6 +493,11 @@ static Made makeDirect(const char *name, int bpp, int w, int h, const Tim2Ext *i
     m.id = tex_InitTexture((char *)name, makeTim2(&s));
     free(img);
     return m;
+}
+
+static Made makeDirect(const char *name, int bpp, int w, int h, const Tim2Ext *ico)
+{
+    return makeDirectSalt(name, bpp, w, h, ico, 0);
 }
 
 static Tim2Ext icoBlock(int smpMag, int smpMin)
@@ -1405,6 +1423,65 @@ static void photoGrainChecks(void)
           o->frame);
 }
 
+/* Issue 174.  tex_Init gives the next stage the slots of the stage before
+ * (TexExt.partition not 0; nothing frees them), and a load into such a slot
+ * whose picture is in the cache used to re-expand the old rd texture in place
+ * when the size and format matched: a frame recorded before the load and
+ * replayed after it (a later present of the tick, a picture for a bug report)
+ * drew the old stage with the new stage's texels.  Now the new picture gets a
+ * texture of its own and the old one keeps its texels until two frame ticks
+ * later, as after tex_FreeTexture. */
+static int texelsAre(uint32_t texId, const uint8_t *ref, int w, int h)
+{
+    const RdTexRec *t = rd__tex_rec(texId);
+
+    return t != NULL && t->pixels != NULL && (int)t->w == w && (int)t->h == h &&
+           memcmp(t->pixels, ref, (size_t)w * h * 4) == 0;
+}
+
+static void slotReloadChecks(void)
+{
+    const RdTexCacheStats *st = rdtex_stats();
+
+    s_partition = 1; /* the stage's textures */
+    Made a = makeDirectSalt("reload_stage_a", 32, 16, 16, NULL, 1);
+    s_partition = 0;
+    CHECK(a.id >= 0, "reload: the first stage's texture loaded");
+    rdtex_settle();
+    const uint32_t ta = tex_HostTextureId(a.id);
+    CHECK(ta != 0 && texelsAre(ta, a.ref, 16, 16), "reload: the first picture decoded");
+
+    /* the next stage: the slot again, a picture of the same size and format */
+    tex_Init();
+    const uint32_t creates = st->creates, updates = st->updates;
+    s_partition = 1;
+    Made b = makeDirectSalt("reload_stage_b", 32, 16, 16, NULL, 2);
+    s_partition = 0;
+    CHECK(b.id == a.id, "reload: the next stage's texture takes the same slot (%d, %d)", b.id,
+          a.id);
+    CHECK(memcmp(a.ref, b.ref, (size_t)16 * 16 * 4) != 0, "reload: the two pictures differ");
+    rdtex_settle();
+    const uint32_t tb = tex_HostTextureId(b.id);
+    CHECK(tb != 0 && tb != ta, "reload: the new picture has a texture of its own (%u, old %u)", tb,
+          ta);
+    CHECK(st->creates == creates + 1 && st->updates == updates,
+          "reload: one texture made, none re-expanded in place (creates +%u, updates +%u)",
+          st->creates - creates, st->updates - updates);
+    CHECK(texelsAre(tb, b.ref, 16, 16), "reload: the new texture holds the new picture");
+    CHECK(texelsAre(ta, a.ref, 16, 16),
+          "reload: the old texture keeps the old picture for the frames that drew it");
+    CHECK(tex_HostTextureId(b.id) == tb, "reload: the slot's entry is the new picture's");
+    rdtex_frame_tick();
+    CHECK(texelsAre(ta, a.ref, 16, 16), "reload: the old texture still lives after one frame tick");
+    rdtex_frame_tick();
+    CHECK(rd__tex_rec(ta) == NULL, "reload: the old texture destroyed after two frame ticks");
+    CHECK(texelsAre(tb, b.ref, 16, 16), "reload: the new texture lives on");
+    /* a frame's tex_ResetVram writes the reload's log line once and counts afresh */
+    tex_ResetVram();
+    free(a.ref);
+    free(b.ref);
+}
+
 int main(void)
 {
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
@@ -1425,6 +1502,7 @@ int main(void)
     textUploadLogChecks();
     replacementChecks();
     photoGrainChecks();
+    slotReloadChecks();
     dl_Clear();
     recordFrame();
     {

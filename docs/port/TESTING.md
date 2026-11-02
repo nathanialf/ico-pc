@@ -1475,7 +1475,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never
-  (`textUploadLogChecks`) (`rd_tex`). `threadPixels`: thirty replays handed to the renderer's own
+  (`textUploadLogChecks`) (`rd_tex`). `slotReloadChecks` (issue 174): a slot `tex_Init` hands the
+  next stage, loaded with a picture of the same size and format, gets a new texture (one create,
+  no in-place update) and the old texture keeps its texels for one frame tick and is destroyed
+  after two. `threadPixels`: thirty replays handed to the renderer's own
   thread without waiting (`rd__replay_frame_async`) while the test's thread, the game's side,
   records the next frame through the texture cache and updates a texture of its own (each change
   waiting for the replay's reads, `rd__texlock_wait`): every replay run there and SCENE as drawn on
