@@ -566,6 +566,10 @@ static const struct {
        instead of the box above 1x, a measurement of the box's cost (the
        picture differs; port/render/rd_aura_kernel.c) */
     {"dev.aura_kernel", "aura_kernel"},
+    /* auto (the default: on on a tile-based GPU), on or off: the aura's
+       feedback read of the frame above 1x in two passes, the same bytes
+       (port/render/rd_aura_box.c) */
+    {"dev.aura_box", "aura_box"},
     /* false: the VU vertex pre-pass off, every VU draw the old way (an
        A/B; port/render/rd_replay_vu.c rd__vu_prepass_init) */
     {"dev.vu_prepass", "vu_prepass"},
@@ -682,6 +686,8 @@ static const struct {
     {"sheet_shader", "ICO_RD_SHEET_SHADER"},
     /* port/render/rd_aura_kernel.c rd__aura_kernel_steps: gs or box */
     {"aura_kernel", "ICO_RD_AURA_KERNEL"},
+    /* port/render/rd_aura_box.c rd__aura_box_init: auto, 1 or 0 */
+    {"aura_box", "ICO_RD_AURA_BOX"},
     /* port/render/rd_replay_vu.c preBatchInit: 0 draws the pre-pass one
        draw an entry and stage */
     {"vu_prepass_batch", "ICO_RD_VU_PREPASS_BATCH"},
@@ -793,6 +799,9 @@ const char *ico_dev_env_value(const char *key, const char *value)
     }
     if (strcmp(key, "uber") == 0 && strcmp(value, "auto") == 0) {
         return "auto"; /* else on/off as 1/0 below (rd_uber.c rd__uber_asked_env) */
+    }
+    if (strcmp(key, "aura_box") == 0 && strcmp(value, "auto") == 0) {
+        return "auto"; /* else on/off as 1/0 below (rd_aura_box.c rd__aura_box_pick) */
     }
     if (strcmp(key, "date_path") == 0) {
         return value_is(value, datePaths) ? value : NULL;

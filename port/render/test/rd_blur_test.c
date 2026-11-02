@@ -134,6 +134,10 @@
  *      its ghost after a tick within 2 of Original's, the restart after a
  *      tick without the motion blur holding no ghost; then (s2) at Enhanced
  *      2x with the full-height scene the accumulator at SCENE's size.
+ *   z  the aura's read of SCENE into FEED128 in two passes (rd_aura_box.c;
+ *      rd_blur_aura_box_test.inc says what): x's frames at Enhanced 2x, the
+ *      phone's 2364 x 1080 and 1.5x, with the two-pass form off and on:
+ *      FEED128 the same bytes every frame, SCENE and DISPLAY too.
  * Tolerance 0 everywhere (but q's scaled runs and s).  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
@@ -3989,6 +3993,8 @@ static void checkPipelines(void)
     printf("  pipelines: %u created (%d fx), %u reachable\n", rd__pipeline_count(), fx, n);
 }
 
+#include "rd_blur_aura_box_test.inc"
+
 /* the weights are each case's seconds in a whole run (255 s at -j2 on 4 cores); the
    aura case (600 frames, each fed by the one before) is the shortest a shard can be */
 static const IcoShardCase k_cases[] = {
@@ -4015,6 +4021,7 @@ static const IcoShardCase k_cases[] = {
     {"above1x", 38},
     {"effects_scaled", 4},
     {"motion_blur_smooth_scaled", 2},
+    {"aura_box", 30},
 };
 
 int main(int argc, char **argv)
@@ -4176,6 +4183,9 @@ int main(int argc, char **argv)
     }
     if (ico_shard_take("motion_blur_smooth_scaled")) {
         checkMotionBlurSmoothScaled(); /* re-initialises rd (Enhanced 2x, full height) */
+    }
+    if (ico_shard_take("aura_box")) {
+        checkAuraBox(); /* re-initialises rd (Enhanced 2x, 2364x1080, 1.5x; rd_blur_aura_box_test.inc) */
     }
     if (ico_shard_finish() != 0) {
         return 1;

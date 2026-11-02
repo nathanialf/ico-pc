@@ -103,7 +103,8 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "sprite_ps_planes", "sprite_texa_ps_planes", "sprite_stq_ps_planes", "fog_lut_local_ps",
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
     "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
-    "crack_fill_ps", "crack_count_ps", "shadow_count_ps", "crack_fill1_ps"};
+    "crack_fill_ps", "crack_count_ps", "shadow_count_ps", "crack_fill1_ps", "fx_aura_rows_ps",
+    "fx_aura_sum_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -5611,39 +5612,11 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
             ? rd__blur_key(&r->st, tc->format, td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN, &useDepth, 1)
             : key;
 
-    DrawSetup ds;
-    memset(&ds, 0, sizeof(ds));
-    ds.tc = tc;
-    ds.tdId = useDepth ? r->st.depth : 0;
-    ds.depthFmt = useDepth ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
-    ds.tex = srcTex;
-    ds.dateTex = dstRead ? tc->snap : g_rd.dummy;
-    ds.tw = tw;
-    ds.th = th;
-    ds.textured = textured;
-    ds.screenCopy = 1; /* a post sprite: target texels onto screen pixels */
-    if (useUint) {
-        ds.tex = ds.dateTex = g_rd.dummy; /* bindDraw's group unused: the UINT one */
-    }
-    RhiBindGroup g2 = bindDraw(r, &ds);
-    if (g2.id && useUint) {
-        const RhiTexture t1 = textured ? srcTex : tc->snap;
-        g2 = blurUintGroup(t1, dstRead ? tc->snap : t1);
-    }
-    if (!g2.id) {
-        return;
-    }
-    RhiPipeline pipe = rd__get_pipeline(&pkey);
-    if (!pipe.id) {
-        return;
-    }
-
     IcoDrawCB cb;
     memset(&cb, 0, sizeof(cb));
     uint32_t fl = blurFlags(d, p.lines, textured, dstRead);
     if (steps) {
         fl |= RD_FXF_ABOVE1X;
-        g_rd.above1xDraws++;
     }
     memcpy(cb.col, (const uint32_t[4]){p.rgba[0], p.rgba[1], p.rgba[2], p.rgba[3]}, sizeof(cb.col));
     cb.mode[0] = fl;
@@ -5668,10 +5641,39 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     cb.scale[3] = (float)steps; /* below 2^24: exact */
     memcpy(cb.param, p.rect, sizeof(cb.param));
     blurAux1(&cb);
-    rd__fades_fold_fx(&cb, c->b[0], src); /* rd_fades_fold.c */
+    DrawSetup ds;
+    memset(&ds, 0, sizeof(ds));
+    ds.tc = tc;
+    ds.tdId = useDepth ? r->st.depth : 0;
+    ds.depthFmt = useDepth ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
+    ds.tex = srcTex;
+    ds.dateTex = dstRead ? tc->snap : g_rd.dummy;
+    ds.tw = tw;
+    ds.th = th;
+    ds.textured = textured;
+    ds.screenCopy = 1; /* a post sprite: target texels onto screen pixels */
     if (useUint) {
-        g_rdPerf.uintDraws++;
+        ds.tex = ds.dateTex = g_rd.dummy; /* bindDraw's group unused: the UINT one */
     }
+    /* the aura's read of SCENE in two passes (rd_aura_box.c) */
+    if (steps && rd__aura_box_draw(r, &ds, &key, &cb, src, srcTex, steps, dstRead || selfSample)) {
+        return;
+    }
+    RhiBindGroup g2 = bindDraw(r, &ds);
+    if (g2.id && useUint) {
+        const RhiTexture t1 = textured ? srcTex : tc->snap;
+        g2 = blurUintGroup(t1, dstRead ? tc->snap : t1);
+    }
+    if (!g2.id) {
+        return;
+    }
+    RhiPipeline pipe = rd__get_pipeline(&pkey);
+    if (!pipe.id) {
+        return;
+    }
+    g_rd.above1xDraws += steps != 0;
+    rd__fades_fold_fx(&cb, c->b[0], src); /* rd_fades_fold.c (never the aura's) */
+    g_rdPerf.uintDraws += useUint != 0;
     rd__set_pipeline(s_cl, pipe, &pkey);
     rd__bind_uniform(s_cl, 0, r->frameBG);
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));

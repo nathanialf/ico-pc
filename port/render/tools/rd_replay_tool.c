@@ -2484,6 +2484,9 @@ int main(int argc, char **argv)
         /* the fades fold (rd_fades_fold.c) */
         printf("%s: stats: fades fold %s: %u sprites folded into the reduction\n", dump,
                rd__fades_fold_on() ? "on" : "off", pr->fadesFolded);
+        /* the aura's read in two passes (rd_aura_box.c) */
+        printf("%s: stats: aura box %s: %u feedback reads in two passes\n", dump,
+               rd__aura_box_on() ? "on" : "off", pr->auraBoxDraws);
         /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
         printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
                "additive, %u local; vu no-planes %u; sprite no-planes %u\n",

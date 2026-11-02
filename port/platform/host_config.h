@@ -143,7 +143,8 @@ const char *ico_config_ini_key(const char *toml_path);
    blur_fold=, uint_view=, alpha_plan=, fx_plan=, fx_dst_local=,
    vu_planes=, shadow_one=, shadow_bspline=, dynamic_state=, gpu_checkpoints=,
    gpu_robust=, pass_split=, attachment_read=, storage_pass_merge=,
-   vu_prepass=, crack_fill=, joystick_directinput=, pipeline_set=, bind_cache=):
+   vu_prepass=, crack_fill=, joystick_directinput=, pipeline_set=, bind_cache=,
+   aura_box=):
    ico_dev_env_name
    gives the environment variable a key is exported as (ICO_RD_BLEND,
    ICO_RD_UBER, ICO_RD_FOG_PATH, ICO_RD_DATE_PATH, ICO_RD_STORE_PLAN, ICO_RD_BLUR_FOLD,
@@ -151,12 +152,13 @@ const char *ico_config_ini_key(const char *toml_path);
    ICO_RD_VU_PLANES, ICO_RD_SHADOW_ONE, ICO_RD_SHADOW_BSPLINE, ICO_VK_FAKE_NO_DYNAMIC, ICO_GPU_CHECKPOINTS, ICO_GPU_ROBUST, ICO_RD_PASS_SPLIT,
    ICO_VK_ATTACHMENT_READ, ICO_RD_PASS_MERGE, ICO_RD_VU_PREPASS, ICO_RD_CRACK_FILL,
    ICO_JOYSTICK_DIRECTINPUT, ICO_PIPELINE_SET, ICO_DISC_READER,
-   ICO_DISC_READ_AHEAD_KB, ICO_RHI_BIND_CACHE), NULL for any other key (the
+   ICO_DISC_READ_AHEAD_KB, ICO_RHI_BIND_CACHE, ICO_RD_AURA_BOX), NULL for any other key (the
    retired vu_plain_only= and vu_extended= among them: read, logged by
    ico_ini_export as "ico_pc: [dev] <key> = <value> is not used (every
    device compiles one set of 3D shaders); ignored", not exported);
    ico_dev_env_value the
-   value exported for an ini value, NULL when nothing is set: blend
+   value exported for an ini value, NULL when nothing is set: aura_box
+   "auto" as it is (else the default branch's 1 / 0); blend
    "fixed", "attachment", "storage" or "exact" as they are (the
    fixed-function blend is the default: nothing set; exact opts into the
    device's best exact mode); uber "auto" as it is (else the default

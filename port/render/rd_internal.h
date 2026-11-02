@@ -1118,6 +1118,12 @@ typedef struct RdProfile {
      * default on every class); [dev] shadow_bspline = true sets it, an A/B
      * (rd_fx_plan.c rd__sprite_above1x) */
     bool shadowBspline;
+    /* the aura's feedback read of SCENE into FEED128 above 1x in two passes
+     * (a row pass into ROWBOX, then FEED128's draw summing the rows; the
+     * same bytes: rd_aura_box.c), on by default on the tile-based classes
+     * (Adreno, Mali, PowerVR, Apple, another tiler), off on the
+     * immediate-mode ones; [dev] aura_box over it, read there */
+    bool auraBox;
     /* rd_profile.c: the device class's name for the lines; per flag
      * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
      * turned it off (rd__profile_self_test_off) */
@@ -1394,6 +1400,12 @@ typedef enum RdFsId {
     /* crack_fill1_ps: crack_fill_ps for a reach of at most 1 texel on each
      * axis (CRACK_REACH_1; key rd__crack_fill_key(2)) */
     RD_FS_CRACK_FILL1,
+    /* the aura's feedback read in two passes (rd_aura_box.c; fx_sprite.hlsl,
+     * behind fx_rect_vs): fx_aura_rows_ps the box's row sums into ROWBOX
+     * (RGBA16_UINT), fx_aura_sum_ps FEED128's draw from them (the UINT
+     * build); keys rd__aura_box_keys, in the fx family */
+    RD_FS_FX_AURA_ROWS,
+    RD_FS_FX_AURA_SUM,
     RD_FS_COUNT
 } RdFsId;
 
@@ -1942,6 +1954,32 @@ bool rd__const_reads_on(void);
  * once. */
 uint32_t rd__aura_kernel_pick(uint32_t steps, int feedFromScene, const char *env);
 uint32_t rd__aura_kernel_steps(const RdTargetRec *tc, const RdTargetRec *src, uint32_t steps);
+/* The aura's feedback read in two passes (rd_aura_box.c; [dev] aura_box =
+ * auto|on|off, ICO_RD_AURA_BOX; docs/port/WORK_BUFFERS.md "The aura's
+ * feedback read").
+ *   rd__aura_box_pick: the switch from the environment's word env (NULL,
+ *     "", "auto": the profile's def; 1/true/on/yes on; 0/false/off/no off;
+ *     another word: auto) (tests)
+ *   rd__aura_box_init: decided once after rd__profile_init, its line
+ *   rd__aura_box_on: in force (the device has the format and the modules)
+ *   rd__aura_box_force: tests: -1 the decision, 0 off, 1 on
+ *   rd__aura_box_profile_words: "aura box: two passes" or "...: one pass"
+ *   rd__aura_box_keys: the two keys (rows, sum) into out[n..], the count
+ *     after them; none while off or without the modules
+ *   rd__aura_box_draw (rd_replay.h): the draw itself
+ *   rd__aura_box_block: the 10 s line, when it drew or fell back
+ *   rd__aura_box_counts: since start: drawn in two passes, in one pass
+ *     while on (any reason)
+ *   rd__aura_box_shutdown: ROWBOX freed (rd_shutdown) */
+int rd__aura_box_pick(const char *env, int def);
+void rd__aura_box_init(void);
+bool rd__aura_box_on(void);
+void rd__aura_box_force(int mode);
+const char *rd__aura_box_profile_words(void);
+uint32_t rd__aura_box_keys(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+void rd__aura_box_block(void);
+void rd__aura_box_counts(uint64_t *two, uint64_t *one);
+void rd__aura_box_shutdown(void);
 /* The fades fold (rd_fades_fold.c, rd_replay.h): false under [dev]
  * fades_fold = false (ICO_RD_FADES_FOLD=0, the A/B) or after a reduction
  * did not take a planned fold */
@@ -3228,6 +3266,8 @@ enum {
  * pre-pass's record, the window */
 #define RD_PERF_ID_RECORD 0xFFFFFFF0u
 #define RD_PERF_ID_WINDOW 0xFFFFFFF1u
+/* ... and the aura's ROWBOX (rd_aura_box.c), a texture of its own */
+#define RD_PERF_ID_ROWBOX 0xFFFFFFF2u
 
 extern RdPerfRecord g_rdPerf;
 /* rd_perf.c's queues' lock, made before the render thread starts

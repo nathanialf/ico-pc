@@ -38,6 +38,12 @@
  *                 (fx_local_ps, rd_fx_plan.c)
  *   vuPlanesFrac  on on every class: the VU pixel side without the planes
  *                 at a fractional scale (rd_pixel_plan.c)
+ *   auraBox       on on the tile-based classes (Adreno, Mali, PowerVR,
+ *                 Apple, another tiler), off on desktop Vulkan, D3D12,
+ *                 D3D11 and OpenGL: the aura's read of SCENE into FEED128
+ *                 above 1x in two passes, the same bytes (rd_aura_box.c;
+ *                 [dev] aura_box = auto|on|off, read there; the start line
+ *                 ends "; aura box: two passes" or "; aura box: one pass")
  *   crackFill     on on every class (the crack filler above 1x,
  *                 rd_crack_fill.c: on the local read's path it draws in
  *                 the pass the fog then keeps, so a tile-based GPU pays
@@ -348,6 +354,10 @@ void rd__profile_init(void)
     const bool stencilView = lim->stencilView && lim->depthSampled;
     p->shadowOne = stencilView;
     p->shadowBspline = false; /* one bilinear tap above 1x (rd__sprite_above1x) */
+    /* the aura's read in two passes on the tile-based classes, where its
+     * one long loop a texel was measured (rd_aura_box.c reads
+     * ICO_RD_AURA_BOX over it) */
+    p->auraBox = tile;
 
     /* the [dev] keys, through the host's environment */
     const char *notHere = NULL; /* a [dev] key asked for what the device lacks */
@@ -470,28 +480,29 @@ void rd__profile_init(void)
     /* the ask is [dev] blend's, or GS state as shader data's (rd_uber.c) */
     const char *blendAsk = getenv("ICO_RD_BLEND");
     const char *exactMark = blendAsk && blendAsk[0] ? " ([dev])" : " (GS state as shader data)";
-    rd__log(
-        "profile: %s: blend %s%s; fog local %s%s; DATE %s%s; depth stores %s%s; blur fold "
-        "%s%s; robust access %s; local read %s; uint views %s%s; alpha plan %s%s; fx plan "
-        "%s%s; fx local read %s%s; VU planes %s%s; shadow count %s%s; shadow edges: %s%s; "
-        "pipelines the start-up set%s%s%s; %s",
-        p->cls, exact ? rd__blend_exact_name(asked) : "fixed-function", exact ? exactMark : "",
-        p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
-        p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL), storeWords(p),
-        mark(p, RD_PROFILE_STORE_PLAN), p->blurFold ? "on" : "off", mark(p, RD_PROFILE_BLUR_FOLD),
-        lim->robustText ? lim->robustText
-        : c == PC_D3D11 ? "D3D11's own"
-        : d3d           ? "D3D12's own"
-                        : "off",
-        d3d            ? "n/a"
-        : p->localRead ? "yes"
-                       : "no",
-        uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",
-        mark(p, RD_PROFILE_ALPHA_PLAN), p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN),
-        p->fxDstLocal ? "on" : "off", mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p),
-        mark(p, RD_PROFILE_VU_PLANES), shadowWords(p), mark(p, RD_PROFILE_SHADOW_ONE), edgeWords(p),
-        mark(p, RD_PROFILE_SHADOW_BSPLINE), p->carefulSet ? " (careful)" : "",
-        p->localWords[0] ? "; desktop local read " : "", p->localWords, rd__uber_profile_words());
+    rd__log("profile: %s: blend %s%s; fog local %s%s; DATE %s%s; depth stores %s%s; blur fold "
+            "%s%s; robust access %s; local read %s; uint views %s%s; alpha plan %s%s; fx plan "
+            "%s%s; fx local read %s%s; VU planes %s%s; shadow count %s%s; shadow edges: %s%s; "
+            "pipelines the start-up set%s%s%s; %s; %s",
+            p->cls, exact ? rd__blend_exact_name(asked) : "fixed-function", exact ? exactMark : "",
+            p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
+            p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
+            storeWords(p), mark(p, RD_PROFILE_STORE_PLAN), p->blurFold ? "on" : "off",
+            mark(p, RD_PROFILE_BLUR_FOLD),
+            lim->robustText ? lim->robustText
+            : c == PC_D3D11 ? "D3D11's own"
+            : d3d           ? "D3D12's own"
+                            : "off",
+            d3d            ? "n/a"
+            : p->localRead ? "yes"
+                           : "no",
+            uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",
+            mark(p, RD_PROFILE_ALPHA_PLAN), p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN),
+            p->fxDstLocal ? "on" : "off", mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p),
+            mark(p, RD_PROFILE_VU_PLANES), shadowWords(p), mark(p, RD_PROFILE_SHADOW_ONE),
+            edgeWords(p), mark(p, RD_PROFILE_SHADOW_BSPLINE), p->carefulSet ? " (careful)" : "",
+            p->localWords[0] ? "; desktop local read " : "", p->localWords,
+            rd__uber_profile_words(), rd__aura_box_profile_words());
     if (notHere) {
         rd__log("profile: %s: not on this device, the flag stays off", notHere);
     }

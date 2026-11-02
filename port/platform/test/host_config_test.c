@@ -636,6 +636,15 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("aura_kernel", "box"), "box") == 0);
     CHECK(ico_dev_env_value("aura_kernel", "true") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.aura_kernel"), "aura_kernel") == 0);
+    /* aura_box: the aura's feedback read in two passes
+       (port/render/rd_aura_box.c reads ICO_RD_AURA_BOX) */
+    CHECK(strcmp(ico_dev_env_name("aura_box"), "ICO_RD_AURA_BOX") == 0);
+    CHECK(strcmp(ico_dev_env_value("aura_box", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("aura_box", "on"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("aura_box", "off"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("aura_box", "false"), "0") == 0);
+    CHECK(ico_dev_env_value("aura_box", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.aura_box"), "aura_box") == 0);
     CHECK(ico_dev_env_value("pipeline_set", "true") == NULL);
     CHECK(ico_dev_env_value("pipeline_set", "") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.pipeline_set"), "pipeline_set") == 0);

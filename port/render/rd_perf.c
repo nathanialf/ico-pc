@@ -495,6 +495,9 @@ static uint8_t passTarget(uint32_t id)
     if (id == RD_PERF_ID_WINDOW) {
         return RD_PERF_TARGET_WINDOW;
     }
+    if (id == RD_PERF_ID_ROWBOX) {
+        return RD_PERF_TARGET_ROWBOX;
+    }
     return rd__target_code(id);
 }
 

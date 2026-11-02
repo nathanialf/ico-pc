@@ -11,8 +11,8 @@
  * passes CSV's median over 1086 replays) where the reduction's 1:1 read of
  * the same SCENE, 2.5 M texels of 4 taps, is 0.72 ms: the kernel, not the
  * 10 MB, looks like the cost.  The exact way to cheapen it (the box split
- * into a row pass and a column pass in integers, WORK_BUFFERS.md) is worth
- * building only if it is.  Under aura_kernel = gs that one sprite is drawn
+ * into a row pass and a column pass in integers, rd_aura_box.c, [dev]
+ * aura_box) pays only if it is.  Under aura_kernel = gs that one sprite is drawn
  * with the GS's bilinear at its own sample point instead (the PS2's taps:
  * one GS texel's area of SCENE where the box weighs sixteen), so one session
  * on the device with [dev] perf_passes says how much of the pass the kernel

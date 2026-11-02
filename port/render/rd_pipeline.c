@@ -3107,6 +3107,8 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     case RD_FS_FX_BLUR2:
     case RD_FS_FX_FRAME:
     case RD_FS_FX_LOCAL:
+    case RD_FS_FX_AURA_ROWS:
+    case RD_FS_FX_AURA_SUM:
         return RD_KF_FX;
     default:
         break;
@@ -3887,6 +3889,7 @@ uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t 
         const RdPipeKeyInt k = rd__blur_fold_key(&s, RHI_FMT_RGBA8_UNORM);
         n = rd__add_pipe_key(out, max, n, &k);
     }
+    n = rd__aura_box_keys(out, max, n);   /* the aura's read in two passes (rd_aura_box.c) */
     return rd__fx_enumerate(out, max, n); /* the frame-size post sprites (rd_fx_plan.c) */
 }
 

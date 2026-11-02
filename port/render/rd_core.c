@@ -855,6 +855,8 @@ const char *rd_perf_target_name(int code)
         return "window";
     case RD_PERF_TARGET_RECORD:
         return "record";
+    case RD_PERF_TARGET_ROWBOX:
+        return "ROWBOX";
     default:
         return code >= 0 && code < RD_TARGET_COUNT ? s_targetNames[code] : "none";
     }
@@ -1784,6 +1786,7 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     g_rd.hasDevice = true;
     g_rd.windowed = sdlWindow != NULL; /* the game: the desktop's local reads (rd_profile.c) */
     rd__profile_init();                /* the device profile (rd_profile.c) */
+    rd__aura_box_init();               /* the aura's read in two passes (rd_aura_box.c) */
     rd__sprite_planes_init();          /* issue 161: the planes builds off (rd_screen_planes.c) */
     /* the two-pass blend without dual-source blending (a
      * device without dualSrcBlend; ICO_RD_NO_DUAL=1 forces it for tests) */
@@ -1896,6 +1899,7 @@ void rd_shutdown(void)
         rd_video_shutdown(); /* the FMV path's objects (rd_video.c), before the device */
         rd__present_shutdown();
         rd__crack_fill_shutdown(); /* the crack filler's count target and buffer */
+        rd__aura_box_shutdown();   /* the aura's ROWBOX (rd_aura_box.c) */
         rd__gpu_shutdown();
     }
     rd__pipeline_cache_clear();

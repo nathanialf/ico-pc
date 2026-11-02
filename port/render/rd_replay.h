@@ -413,6 +413,17 @@ const char *rd__fades_fold_plan(const RdFrame *f, int keep, const RdFadesFoldEnv
 void rd__fades_fold_scan(const RdFrame *f, int keep);
 bool rd__fades_fold_skip(uint32_t ord);
 void rd__fades_fold_fx(IcoDrawCB *cb, uint8_t kind, const RdTargetRec *src);
+/* rd_aura_box.c (rd_internal.h has the rest), from rd_replay.c
+ * doBlurSpriteDraw: its sprite drawn in two passes when it is the aura's
+ * read of SCENE (src, its colour srcTex in SHADER_READ) into FEED128
+ * (ds->tc) above 1x (steps) without a destination read or a self-sample
+ * (other) and without a depth target (key, the one-pass key), with DrawCB
+ * cb as fx_sprite_ps would have read it, before bindDraw.  True when drawn
+ * (the pass before ended, ROWBOX's pass, FEED128's begun through
+ * bindDraw and drawn: nothing left to do), false to draw it in one pass
+ * (nothing recorded) */
+bool rd__aura_box_draw(Replay *r, DrawSetup *ds, const RdPipeKeyInt *key, const IcoDrawCB *cb,
+                       const RdTargetRec *src, RhiTexture srcTex, uint32_t steps, int other);
 void rd__fades_fold_screen(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds,
                            IcoDrawCB *cb);
 void rd__fades_fold_end(void);

@@ -2081,10 +2081,11 @@ enum {
     RD_PERF_TARGET_TEMP,                    /* another temporary target */
     RD_PERF_TARGET_NONE,                    /* none (the uploads), or gone */
     RD_PERF_TARGET_WINDOW,                  /* the window (the present) */
-    RD_PERF_TARGET_RECORD                   /* the VU pre-pass's record */
+    RD_PERF_TARGET_RECORD,                  /* the VU pre-pass's record */
+    RD_PERF_TARGET_ROWBOX                   /* the aura's row sums (rd_aura_box.c) */
 };
 
-/* RdPerfPass.target as text: "SCENE", "block", "window", ... */
+/* RdPerfPass.target as text: "SCENE", "block", "window", "ROWBOX", ... */
 const char *rd_perf_target_name(int code);
 
 /* One piece of a timed replay's GPU work (rd_perf_passes_of): what it is,
@@ -2295,6 +2296,10 @@ typedef struct RdPerfRecord {
     /* The fades fold (rd_fades_fold.c): list 11's last full-frame lerp
      * sprites the reduction applied instead of drawing them into SCENE */
     uint32_t fadesFolded;
+    /* The aura's read of SCENE into FEED128 in two passes (rd_aura_box.c):
+     * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
+     * a replay; none while the game is paused) */
+    uint32_t auraBoxDraws;
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
      * docs/port/PIPELINES.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:

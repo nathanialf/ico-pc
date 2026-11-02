@@ -6313,6 +6313,7 @@ static void presentLog(void)
     s_snapTopN = 0;
     rd__blur_smooth_block(); /* Motion blur: Smooth's line, when it drew */
     rd__crack_fill_block();  /* the crack filler's, when it filled or was kept off */
+    rd__aura_box_block();    /* the aura's read in two passes, when it drew or fell back */
     rd__reshow_block();      /* the still re-present's */
     rd__glow_hold_block();   /* the glow held between ticks */
     const uint32_t number = s_pres.number;

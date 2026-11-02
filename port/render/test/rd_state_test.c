@@ -104,6 +104,10 @@
  *   aura kernel rd__aura_kernel_pick: [dev] aura_kernel = gs drops the box
  *              of the aura's read of SCENE into FEED128 only; unset, empty
  *              or box keeps it
+ *   aura box   rd__aura_box_pick: [dev] aura_box auto (unset, empty, auto,
+ *              another word) is the profile's, on/off words over it; never
+ *              on without a device, no key of it in the set then; the pass
+ *              list's name ROWBOX (the pixels: rd_blur_test aura_box)
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
 #include <stdio.h>
@@ -1916,6 +1920,8 @@ static void testTilerFracSet(RdPipeKeyInt *keys)
     g_rd.layoutLocal = keepLayout;
 }
 
+static void testAuraBox(RdPipeKeyInt *keys);
+
 static void testTilerSet(RdPipeKeyInt *keys)
 {
     static RdPipeKeyInt desk[RD_PIPELINE_REACHABLE_MAX];
@@ -2278,6 +2284,7 @@ static void testEnumeration(void)
     testDynamicNormalise(keys);
     testTilerSet(keys);
     testUberSet(keys);
+    testAuraBox(keys);
 }
 
 /* The native frame's region scale (rd__region_scale, FrameCB g_frame.x):
@@ -3033,6 +3040,32 @@ static void testAuraKernelPick(void)
     CHECK(rd__aura_kernel_pick(steps, 0, "gs") == steps,
           "aura kernel: gs leaves every other sprite its kernel");
     CHECK(rd__aura_kernel_pick(0u, 1, "gs") == 0u, "aura kernel: no kernel at 1x either way");
+}
+
+/* ---- the aura's read in two passes (rd_aura_box.c) ---- */
+static void testAuraBox(RdPipeKeyInt *keys)
+{
+    CHECK(rd__aura_box_pick(NULL, 1) == 1 && rd__aura_box_pick("", 0) == 0 &&
+              rd__aura_box_pick("auto", 1) == 1 && rd__aura_box_pick("auto", 0) == 0,
+          "aura box: unset, empty or auto is the profile's");
+    CHECK(rd__aura_box_pick("1", 0) == 1 && rd__aura_box_pick("on", 0) == 1 &&
+              rd__aura_box_pick("true", 0) == 1 && rd__aura_box_pick("yes", 0) == 1,
+          "aura box: on over an immediate-mode GPU's default");
+    CHECK(rd__aura_box_pick("0", 1) == 0 && rd__aura_box_pick("off", 1) == 0 &&
+              rd__aura_box_pick("false", 1) == 0 && rd__aura_box_pick("no", 1) == 0,
+          "aura box: off over a tile-based GPU's default");
+    CHECK(rd__aura_box_pick("maybe", 1) == 1 && rd__aura_box_pick("maybe", 0) == 0,
+          "aura box: another word is auto");
+    /* no device: never on, and the start-up set has no key of it */
+    CHECK(!rd__aura_box_on(), "aura box: on without a device");
+    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    uint32_t box = 0;
+    for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        box += keys[i].fs == RD_FS_FX_AURA_ROWS || keys[i].fs == RD_FS_FX_AURA_SUM;
+    }
+    CHECK(box == 0, "aura box: %u keys of it in the set without a device", box);
+    CHECK(strcmp(rd_perf_target_name(RD_PERF_TARGET_ROWBOX), "ROWBOX") == 0,
+          "aura box: the pass list names ROWBOX");
 }
 
 int main(int argc, char **argv)

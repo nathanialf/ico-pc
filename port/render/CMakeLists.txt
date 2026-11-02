@@ -141,6 +141,7 @@ endif()
 add_library(ico_render STATIC
     rd_alpha_plan.c # the alpha/blend planner: the passes a draw's alpha range can need
     rd_aura_kernel.c # [dev] aura_kernel = gs: the aura's feedback read with the GS's taps (a measurement)
+    rd_aura_box.c # the aura's feedback read in two passes, the same bytes ([dev] aura_box)
     rd_blend_selftest.c # the exact blend's start-up check on the device (issue 89)
     rd_blur.c # staticBlur.c's sprites
     rd_blur_border.c # the post sprites' replay: the reduction's open border, its outer columns
@@ -2059,6 +2060,23 @@ if(ICO_RUN_TESTS)
         if(_env)
             set_tests_properties(rd_fades_fold_ab PROPERTIES ENVIRONMENT "${_env}")
         endif()
+    endif()
+    # rd_aura_box_ab (test/rd_aura_box_ab.cmake): the dumps of
+    # tools/aura_box_dumps.txt (vustage_dumps.txt's and the PowerVR phone's
+    # three F12 frames) with the aura's read of the picture into FEED128 in
+    # one pass (ICO_RD_AURA_BOX=0) and in two (=1, rd_aura_box.c), under
+    # ICO_RD_BLEND=fixed at the phone's Resolution Auto and Enhanced 2x 4:3:
+    # every target byte for byte, one pass and one draw more a read in two
+    # passes; SKIP as rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/aura_box_ab")
+    add_test(NAME rd_aura_box_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/aura_box_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/aura_box_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_aura_box_ab.cmake")
+    set_tests_properties(rd_aura_box_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_aura_box_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
 endif()
 # The blend policy (rd_dst_read.c)
