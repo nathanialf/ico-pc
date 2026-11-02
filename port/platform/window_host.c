@@ -227,6 +227,7 @@ static struct {
        opaque draws, the frame-size plan's constant, additive and local-read
        sprites, the VU passes without the planes (rd.h RdPerfRecord) */
     uint64_t alphaOnePass, alphaOpaque, fxConstant, fxAdditive, fxLocal, vuNoPlanes;
+    uint64_t fxLocalDate; /* those of fxLocal under DATE */
     /* the sprites drawn in a cleared source's colour and the target reads
        kept (rd.h RdPerfRecord.constReads, constKept) */
     uint64_t constReads, constKept, fadesFolded;
@@ -4444,6 +4445,7 @@ static void perf_drain(void)
         s_perf.fxConstant += r.fxConstant;
         s_perf.fxAdditive += r.fxAdditive;
         s_perf.fxLocal += r.fxLocal;
+        s_perf.fxLocalDate += r.fxLocalDate;
         s_perf.vuNoPlanes += r.vuNoPlanes;
         window_pipeline_skip_count(r.spriteNoPlanes);
         s_perf.constReads += r.constReads;
@@ -4645,11 +4647,12 @@ static void perf_log(void)
        flags are the rd: profile line's) */
     fprintf(stderr,
             "window: pixel diet per replay: alpha plan %.1f one-pass, %.1f opaque; fx plan %.1f "
-            "constant, %.1f additive, %.1f local; vu no-planes %.1f; constant reads %.1f "
-            "(%.1f target reads kept); fades fold %.1f\n",
+            "constant, %.1f additive, %.1f local (%.1f post sprites' DATE by local read); vu "
+            "no-planes %.1f; constant reads %.1f (%.1f target reads kept); fades fold %.1f\n",
             s_perf.alphaOnePass / n, s_perf.alphaOpaque / n, s_perf.fxConstant / n,
-            s_perf.fxAdditive / n, s_perf.fxLocal / n, s_perf.vuNoPlanes / n, s_perf.constReads / n,
-            s_perf.constKept / n, s_perf.fadesFolded / n);
+            s_perf.fxAdditive / n, s_perf.fxLocal / n, s_perf.fxLocalDate / n,
+            s_perf.vuNoPlanes / n, s_perf.constReads / n, s_perf.constKept / n,
+            s_perf.fadesFolded / n);
     window_pipeline_skip_line();
     if (s_perf.msaaSamples) {
         /* the anti-aliasing's cost: its resolves' GPU time is the effects'

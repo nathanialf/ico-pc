@@ -56,7 +56,19 @@
  * (rd__fx_local_selftest) are here too: the frame-size draws' CPU side.
  *
  * Counters (rd.h RdPerfRecord.fxConstant, fxAdditive, fxLocal): the sprites
- * drawn each way (the black sprite's clear counts as a constant). */
+ * drawn each way (the black sprite's clear counts as a constant);
+ * fxLocalDate those of fxLocal under DATE.
+ *
+ * DATE on a post sprite: fx_sprite_ps and its local twin test the
+ * destination alpha's MSB against DATM in the shader (FXF_DATE), from the
+ * snapshot or, by local read, from the attachment at the fragment's own
+ * texel before the sprite writes it (one triangle: no other fragment of
+ * the draw wrote it), the same value at the same point in the order.  So
+ * a post sprite never takes DATE's stencil bit (rd_replay.c prepareDrawEx
+ * with dateStencil is doScreen's and the VU draws' only), and with
+ * fxDstLocal a DATE sprite needs no snapshot and no depth or stencil
+ * bound for it: the pass binds the depth only for the sprite's Z test or
+ * Z write (rd__blur_key). */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -290,6 +302,8 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
         g_rdPerf.fxAdditive++;
     } else if (kind == FX_LOCAL) {
         g_rdPerf.fxLocal++;
+        /* DATE tested in fx_local_ps against the alpha it reads (FXF_DATE) */
+        g_rdPerf.fxLocalDate += d->test.date != RD_DATE_OFF;
     }
     fxNote(kind);
     return true;

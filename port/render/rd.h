@@ -2382,9 +2382,11 @@ typedef struct RdPerfRecord {
      * the VU draw passes through vu_np_ps or vu_texa_np_ps (rd_pixel_plan.c);
      * spriteNoPlanes the screen-prim triangle commands drawn through the
      * plain sprite builds because the sprite planes builds are off for the
-     * run (rd_set_sprite_planes_off, issue 161; rd_replay.c doScreen) */
+     * run (rd_set_sprite_planes_off, issue 161; rd_replay.c doScreen);
+     * fxLocalDate those of fxLocal under DATE (the shader's test against
+     * the alpha it read, no snapshot, no stencil bit) */
     uint32_t alphaOnePass, alphaOpaque, fxConstant, fxAdditive, fxLocal, vuNoPlanes;
-    uint32_t spriteNoPlanes;
+    uint32_t spriteNoPlanes, fxLocalDate;
     /* Motion blur: Smooth (rd_blur_smooth.c): blurSmoothPasses the
      * accumulator's passes this replay (the resolve and the accumulate, two
      * a present; one on a restart) */

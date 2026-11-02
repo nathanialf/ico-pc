@@ -3898,8 +3898,9 @@ static void checkBlurFold(void)
 
 /* ============================================== (l) the fx plan */
 
-/* post modes 1..7 and 40 motion blur frames, the plan's counters summed */
-static void fxPlanFrames(const char *what, uint32_t sum[3], int *worst)
+/* post modes 1..7 and 40 motion blur frames, the plan's counters summed
+ * (sum[3]: the local reads under DATE) */
+static void fxPlanFrames(const char *what, uint32_t sum[4], int *worst)
 {
     InitStaticBlur(0, (float[4]){0.3f, -0.2f, -1.0f, 0.0f});
     for (int post = 1; post <= 7; post++) {
@@ -3908,6 +3909,7 @@ static void fxPlanFrames(const char *what, uint32_t sum[3], int *worst)
         sum[0] += g_rdPerf.fxConstant; /* the frame's replay (runFrame) */
         sum[1] += g_rdPerf.fxAdditive;
         sum[2] += g_rdPerf.fxLocal;
+        sum[3] += g_rdPerf.fxLocalDate;
     }
     InitializeStaticBlur(); /* sun off */
     setStage(0, 0, 0);
@@ -3930,6 +3932,7 @@ static void fxPlanFrames(const char *what, uint32_t sum[3], int *worst)
         sum[0] += g_rdPerf.fxConstant;
         sum[1] += g_rdPerf.fxAdditive;
         sum[2] += g_rdPerf.fxLocal;
+        sum[3] += g_rdPerf.fxLocalDate;
     }
 }
 
@@ -3938,11 +3941,12 @@ static void checkFxPlan(void)
     const RdProfile was = g_rd.profile;
     g_rd.profile.fxPlan = true;
     g_rd.profile.fxDstLocal = false;
-    uint32_t sum[3] = {0, 0, 0};
+    uint32_t sum[4] = {0, 0, 0, 0};
     int worst = 0;
     fxPlanFrames("(l)", sum, &worst);
-    CHECK(sum[0] > 0 && sum[1] > 0 && sum[2] == 0,
-          "(l) the plan drew %u constant, %u additive, %u local", sum[0], sum[1], sum[2]);
+    CHECK(sum[0] > 0 && sum[1] > 0 && sum[2] == 0 && sum[3] == 0,
+          "(l) the plan drew %u constant, %u additive, %u local (%u under DATE)", sum[0], sum[1],
+          sum[2], sum[3]);
     printf("  (l) the fx plan: %u constant, %u additive sprites, max difference %d\n", sum[0],
            sum[1], worst);
     checkPipelines();
@@ -3955,13 +3959,19 @@ static void checkFxPlan(void)
         g_rd.profile.dateStencil = true;
         g_rd.profile.fxDstLocal = true;
         rd_reset_scene(W, H);
-        uint32_t sl[3] = {0, 0, 0};
+        uint32_t sl[4] = {0, 0, 0, 0};
         int wl = 0;
         fxPlanFrames("(l) local", sl, &wl);
         CHECK(sl[2] > 0, "(l) no sprite took the local read");
-        printf("  (l) the local read: %u sprites by local read (%u constant, %u additive), max "
-               "difference %d\n",
-               sl[2], sl[0], sl[1], wl);
+        /* post mode 7's backlight subtract into SCENE under DATE (DATM 0,
+           the recording check above): DATE tested in fx_local_ps against
+           the alpha it read, the model's bytes (fxPlanFrames' frames are
+           checked exactly), no snapshot and no stencil bit */
+        CHECK(sl[3] >= 1 && sl[3] <= sl[2], "(l) %u of %u local reads under DATE (1 or more)",
+              sl[3], sl[2]);
+        printf("  (l) the local read: %u sprites by local read (%u under DATE; %u constant, %u "
+               "additive), max difference %d\n",
+               sl[2], sl[3], sl[0], sl[1], wl);
         checkPipelines(); /* fx_local_ps's keys enumerated while the profile has them */
         CHECK(rd__fx_local_selftest() && g_rd.profile.fxDstLocal, "(l) the local read's self-test");
     }

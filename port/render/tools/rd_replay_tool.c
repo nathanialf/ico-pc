@@ -2533,9 +2533,10 @@ int main(int argc, char **argv)
                whyText[0] ? "; " : "", whyText);
         /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
         printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
-               "additive, %u local; vu no-planes %u; sprite no-planes %u\n",
+               "additive, %u local (%u post sprites' DATE by local read); vu no-planes %u; "
+               "sprite no-planes %u\n",
                dump, pr->alphaOnePass, pr->alphaOpaque, pr->fxConstant, pr->fxAdditive, pr->fxLocal,
-               pr->vuNoPlanes, pr->spriteNoPlanes);
+               pr->fxLocalDate, pr->vuNoPlanes, pr->spriteNoPlanes);
         /* the VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass):
          * each mesh and grid vertex and triangle and each sprite once, before
          * the lists */

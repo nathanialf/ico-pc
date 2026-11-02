@@ -814,7 +814,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   shard runs the seven post modes and 40 motion blur frames with the frame-size sprites' plan
   (`rd_fx_plan.c`), every target against the CPU model exactly, the constant fold and the
   premultiplied paste counted, then with the scene passes readable and the destination by local
-  read (`fx_local_ps`) where the device has local read, its self-test passing (`checkFxPlan`); the
+  read (`fx_local_ps`) where the device has local read, post mode 7's DATE subtract into SCENE among
+  the local reads (`fxLocalDate` 1 or more, none without the local read), its self-test passing
+  (`checkFxPlan`); the
   `fix128_skip` shard holds the plan off (it counts the skip's snapshots); the
   `motion_blur_smooth` shard (`rd_blur_smooth_test.inc`) runs Motion blur: Smooth against
   Original: a still picture within 1 at 1, 4 and 10 presents a tick, a moving bar's four presents

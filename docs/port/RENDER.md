@@ -1289,6 +1289,19 @@ which draws it inside the open pass, without the snapshot, where the same bytes 
 | the motion blur DISPLAY into SCENE, any other destination read | `RdProfile.fxDstLocal` and the target's passes readable (the scene class under `dateStencil`), not sampling its own target | `fx_local_ps`, the destination as the input attachment (`SubpassLoad`) inside the open pass after a by-region barrier (`RHI_LOCAL_READ_COLOR`; `RHI_LOCAL_READ_BACK` after it); `fx_rect_vs` draws one triangle, so the texel read is the one before the sprite |
 | the glow's mask SCENE into WORK2 | MODULATE with RGBAQ's RGB 0, no blend, no destination read | `fx_frame_ps` computing the alpha alone (`FXF_ALPHA_ONLY`): RGB is `(t * 0) >> 7`, 0 |
 
+DATE and AFAIL RGB_ONLY read the destination's alpha: the constant fold and the premultiplied
+blend do not take a sprite under them, the local read does, and `fx_local_ps` tests DATE
+(`FXF_DATE`, `fx_sprite_out`) against the alpha `SubpassLoad` returns at the fragment's own texel,
+the value the snapshot holds (one triangle: no other fragment of the sprite wrote that texel). No
+post sprite takes DATE's stencil bit on any path (**DATE through the stencil bit** is `doScreen`'s
+and the VU draws'; the fx pipelines have no stencil test), so with `fxDstLocal` a post sprite under
+DATE takes no snapshot and binds the depth only for its own Z test or Z write (`rd__blur_key`); the
+store plan does not count its DATE as a touch of the depth ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)).
+The 10 s pixel diet line's `local (N post sprites' DATE by local read)` and the replay tool's
+`--stats` count them (`RdPerfRecord.fxLocalDate`); ctest `rd_blur` (l) checks post mode 7's DATE
+subtract into SCENE by local read against the GS model. The aura's paste
+(`pasteFeedBackAreaToFB`, aura mode 2, the phone's stage 6 frames) is not a DATE sprite: Z ALWAYS,
+no Z write, LERP As, so its pass on SCENE binds no depth or stencil at all.
 A sprite that samples its own target keeps the snapshot; so does every sprite that reads its
 destination under an exact blend the player opted into or in a frame with the MSAA epoch, and one
 whose key the pipeline cache cannot give (looked up before anything is recorded). The four forms
