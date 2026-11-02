@@ -1969,7 +1969,7 @@ static void fogSceneRemade(void *arg)
 
 void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight)
 {
-    rd__texlock_wait();
+    (void)rd_thread_drain(); /* the render thread idle while the scene's size changes */
     if (!g_rd.inited) {
         return;
     }
@@ -2277,6 +2277,8 @@ void rd_begin_frame(void)
     }
     bool recreated = false;
     if (g_rd.settingsPending) {
+        /* the render thread idle: its present's end reads the settings too */
+        (void)rd_thread_drain();
         /* the texture pack switched off: the originals back (once
          * per edge; rd_tex.h rdtex_revert_replacements) */
         const bool packOff = g_rd.settings.texturePack && !g_rd.pendingSettings.texturePack;
@@ -2385,6 +2387,39 @@ void rd_begin_frame(void)
     recordDefaults();
 }
 
+/* ICO_RD_DUMP_EVERY's dumps of frame f (rd_end_frame): with the
+ * interpolation's half-way frame, built where rd_present builds its own (on
+ * the window's render thread, rd__render_call; its state is that thread's) */
+static void dumpEvery(void *arg)
+{
+    const RdFrame *f = arg;
+    char path[600];
+    snprintf(path, sizeof(path), "%s/rd-%05u.rddump", s_dumpDir, f->number);
+    if (rd__dump_frame(f, path)) {
+        rd__log("frame %u dumped to %s", f->number, path);
+    }
+    if (s_dumpInterp) {
+        RdInterpStats st;
+        /* the previous frame too (rd-NNNNN-prev.rddump), so a
+         * half-way dump can be checked against both its ticks */
+        const RdFrame *pv = rd__prev_frame();
+        snprintf(path, sizeof(path), "%s/rd-%05u-prev.rddump", s_dumpDir, f->number);
+        if (pv && pv->closed && pv->number + 1 == f->number) {
+            (void)rd__dump_frame(pv, path);
+        }
+        const RdFrame *i = rd__interp_frame(pv, f, 0.5f, 1, &st);
+        snprintf(path, sizeof(path), "%s/rd-%05u-i50.rddump", s_dumpDir, f->number);
+        if (i && rd__dump_frame(i, path)) {
+            rd__log("frame %u interpolated half way (snap %u, %u keyed draws: %u blended, "
+                    "%u unmatched, %u mismatched, %u jumped; %u mesh streams kept or "
+                    "blended; %u blended as rotations; %u VU draws through the blended "
+                    "camera, %u of them the tick's) dumped to %s",
+                    f->number, st.snap, st.keyed, st.lerped, st.missing, st.mismatch, st.jump,
+                    st.morph, st.rotated, st.rebased, st.rebasedCur, path);
+        }
+    }
+}
+
 void rd_end_frame(int keep)
 {
     rd__texlock_wait();
@@ -2419,30 +2454,8 @@ void rd_end_frame(int keep)
         rd__on_host(replayOnHost, &c);
     }
     if (s_dumpEvery && f->number % s_dumpEvery == 0 && f->number >= s_dumpFrom) {
-        char path[600];
-        snprintf(path, sizeof(path), "%s/rd-%05u.rddump", s_dumpDir, f->number);
-        if (rd__dump_frame(f, path)) {
-            rd__log("frame %u dumped to %s", f->number, path);
-        }
-        if (s_dumpInterp) {
-            RdInterpStats st;
-            /* the previous frame too (rd-NNNNN-prev.rddump), so a
-             * half-way dump can be checked against both its ticks */
-            const RdFrame *pv = rd__prev_frame();
-            snprintf(path, sizeof(path), "%s/rd-%05u-prev.rddump", s_dumpDir, f->number);
-            if (pv && pv->closed && pv->number + 1 == f->number) {
-                (void)rd__dump_frame(pv, path);
-            }
-            const RdFrame *i = rd__interp_frame(pv, f, 0.5f, 1, &st);
-            snprintf(path, sizeof(path), "%s/rd-%05u-i50.rddump", s_dumpDir, f->number);
-            if (i && rd__dump_frame(i, path)) {
-                rd__log("frame %u interpolated half way (snap %u, %u keyed draws: %u blended, "
-                        "%u unmatched, %u mismatched, %u jumped; %u mesh streams kept or "
-                        "blended; %u blended as rotations; %u VU draws through the blended "
-                        "camera, %u of them the tick's) dumped to %s",
-                        f->number, st.snap, st.keyed, st.lerped, st.missing, st.mismatch, st.jump,
-                        st.morph, st.rotated, st.rebased, st.rebasedCur, path);
-            }
+        if (!rd__render_call(dumpEvery, f)) {
+            dumpEvery(f);
         }
     }
 }

@@ -18,6 +18,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_mesh.h`, `rd_mesh.c` | the VU mesh path (VU1_PROGRAMS.md) |
 | `port/render/rd_replay.c` | a frame onto the RHI: every command's replay |
 | `port/render/rd_submit.c`, `rd_submit.h` | a replay's end: the present's pass recorded, the list ended and submitted, the picture presented and the capture it copied written out |
+| `port/render/rd_thread.c`, `rd_thread.h` | the renderer on the window's render thread: the picture and the calls posted there, the hand-over of the renderer's state (texLock), the retire list, the stats split, the renderer's own thread for the tools |
 | `port/render/rd_replay_vu.c`, `rd_replay.h` | the replay's VU draws and the vertex and triangle pre-passes; what they share with `rd_replay.c` (the replay's state, a draw's setup, its helpers) |
 | `port/render/rd_vuprepass_selftest.c` | the vertex and triangle pre-passes' start-up self-test |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
@@ -94,12 +95,16 @@ point. GPU work the game's calls cause (replay, pipeline creation, [present](ARC
 runs through `rd_set_host_call`, which the window sets to `ico_sched_call_on_host` so the driver
 runs on the host stack in the host FP mode (`port/render/rd.h` (`RdHostCall`);
 `port/render/rd_core.c` (`rd__on_host`)). With the window's render thread on
-([PLATFORM.md](PLATFORM.md#the-render-thread)) a replay's end moves there: the game thread still
-interpolates, uploads and walks the lists into the command list, then hands it over, and the
-render thread ends it, submits it, presents and finishes a capture (`port/render/rd_submit.c`
-(`rd__submit_frame`, `rd_set_submit_host`)). The next replay waits for that hand-over before its
-fence (`rd__wait_frame`), a capture's picture waits for its present, and every other RHI call of
-the game thread waits for the render thread through the call guard ([RHI.md](RHI.md#the-interface)).
+([PLATFORM.md](PLATFORM.md#the-render-thread)) every picture is made there
+(`port/render/rd_thread.c`): the window's present posts `rd_present` whole (`rd_present_post`),
+the interpolation included, and `rd__on_host`'s calls, `rd__replay_frame`, `rd_read_display` and
+`rd_resize_output` run there with the game thread waiting (`rd__render_call`). A picture handed
+over owns the renderer's state until its walk and present's pass end (`rd__reads_done` in
+`rd__submit_frame`); every game-thread call that changes the frames, textures, meshes, targets or
+settings waits for that first (`rd__texlock_wait`), so the render thread reads the state as it
+was when the picture was posted. The submit and the present then overlap the game's step.
+A GPU texture the game thread destroys goes to the retire list the render thread empties at its
+next job (`rd__retire_texture`).
 No game code and no frame data change threads; the pictures are the same bytes.
 
 ## Recording
@@ -365,7 +370,7 @@ GS-level draws on the GS's grid` (`RdPerfRecord` `texaDraws`, `gridDraws`, per p
 (11 and 12 for a keep frame) from the frame's start state; state commands update the state block
 and actions draw (`port/render/rd_replay.c`). The replay's end, the present's pass, the end of the
 list, the submit, the present and the capture's finish, is `rd__submit_frame`
-(`port/render/rd_submit.c`), which the render thread can run (above):
+(`port/render/rd_submit.c`), where a picture's reads of the renderer's state end (above):
 
 | command | replay |
 | --- | --- |

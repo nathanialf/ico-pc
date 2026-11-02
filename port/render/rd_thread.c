@@ -44,8 +44,16 @@ typedef struct ReplayArgs {
 } ReplayArgs;
 
 static ReplayArgs s_picReplay;
+
+typedef struct PresentArgs {
+    float alpha;
+    double raw;
+    bool ok;
+} PresentArgs;
+
+static PresentArgs s_picPresent;
 static Tramp s_picTramp;
-static bool s_async, s_lastOk = true, s_hold;
+static bool s_async, s_asyncPresent, s_lastOk = true, s_hold;
 static uint64_t s_waitedNs;
 
 static void lk(void)
@@ -200,8 +208,9 @@ uint64_t rd_thread_drain(void)
     }
     const uint64_t ns = s_host.drain(s_host.user);
     if (s_async) {
-        s_lastOk = s_picReplay.ok;
+        s_lastOk = s_asyncPresent ? s_picPresent.ok : s_picReplay.ok;
         s_async = false;
+        s_asyncPresent = false;
     }
     return ns;
 }
@@ -363,6 +372,7 @@ bool rd__replay_frame_async(const RdFrame *f, int keep, bool present)
     }
     if (s_host.post(s_host.user, pictureTramp, &s_picTramp, present, wait)) {
         s_async = !wait;
+        s_asyncPresent = false;
         if (wait) {
             s_lastOk = s_picReplay.ok;
             return s_picReplay.ok;
@@ -374,6 +384,71 @@ bool rd__replay_frame_async(const RdFrame *f, int keep, bool present)
     }
     retireDrain();
     s_lastOk = rd__replay_frame_here(f, keep, present);
+    return s_lastOk;
+}
+
+/* ------------------------------------------------------- the presents */
+
+/* the present clock's value the poster took, for rd_present on the
+ * render thread (rd__thread_clock_raw) */
+static _Thread_local bool t_rawSet;
+static _Thread_local double t_raw;
+
+static void presentJob(void *arg)
+{
+    PresentArgs *p = arg;
+    const bool set = t_rawSet;
+    const double raw = t_raw;
+    t_rawSet = true;
+    t_raw = p->raw;
+    p->ok = rd_present(p->alpha);
+    t_rawSet = set;
+    t_raw = raw;
+}
+
+double rd__thread_clock_raw(void)
+{
+    if (t_rawSet) {
+        const double r = t_raw;
+        t_rawSet = false; /* taken: a second present in the job finds none */
+        return r;
+    }
+    return rd__present_clock_raw_take();
+}
+
+bool rd_present_post(float alpha)
+{
+    if (!s_on || t_onR) {
+        return rd_present(alpha);
+    }
+    rd__thread_picture_begin();
+    const RdFrame *cur = rd__last_frame();
+    if (!rd_interpolation_active() || !g_rd.hasDevice || g_rd.videoShown || cur == NULL ||
+        !cur->closed) {
+        /* nothing to hand over: its answer here, the render thread idle */
+        return rd_present(alpha);
+    }
+    const bool wait = pictureWaits();
+    s_picPresent = (PresentArgs){alpha, rd__present_clock_raw_take(), false};
+    s_picTramp = (Tramp){presentJob, &s_picPresent, !wait};
+    if (!wait) {
+        handOver();
+    }
+    if (s_host.post(s_host.user, pictureTramp, &s_picTramp, true, wait)) {
+        s_async = !wait;
+        s_asyncPresent = !wait;
+        if (wait) {
+            s_lastOk = s_picPresent.ok;
+            return s_picPresent.ok;
+        }
+        return true;
+    }
+    if (!wait) {
+        giveBack();
+    }
+    retireDrain();
+    presentJob(&s_picPresent);
+    s_lastOk = s_picPresent.ok;
     return s_lastOk;
 }
 

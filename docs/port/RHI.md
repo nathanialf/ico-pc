@@ -77,7 +77,9 @@ carries out every deferred destroy (`port/rhi/rhi.h`, commands).
 **Threads.** A list may be recorded on one thread and ended, submitted and presented on another
 (the window's render thread, [PLATFORM.md](PLATFORM.md#the-render-thread)) on Vulkan and Direct3D 12;
 OpenGL and Direct3D 11 run each call at once on one context and set
-`RhiLimits.singleThreadCommands`. Two threads never run in the backend at once: with a call guard
+`RhiLimits.singleThreadCommands`: there the render thread makes every call, the OpenGL context
+moved to a game-thread call's thread through the call guard and back at the render thread's next
+job. Two threads never run in the backend at once: with a call guard
 set (`rhi_set_call_guard`) every entry point that changes the device's state waits while the other
 thread works, the queries listed in `rhi.h` do not, and `rhi_get_stats` then answers with the
 counters the hand-over left (`rhi_call_guard_snapshot`) (`port/rhi/rhi_backend.c` (`RHI_GUARD`)).

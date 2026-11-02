@@ -452,7 +452,7 @@ under the same name (below). Read through the store:
 | `glow_redraw` | bool | `false` | |
 | `joystick_directinput` | bool | `true` | |
 | `present_fallback` | `auto`, `off` or `fifo` | `auto` | |
-| `render_thread` | `auto`, `on`, `off` or `sync` | `auto` | the window's render thread: `auto` and `on` submit and present on it with Vulkan and Direct3D 12 (never with OpenGL or Direct3D 11), `off` on the game thread as before, `sync` on it with the game thread waiting for each picture (the A/B); also `render_thread` in `ico-pc.ini` (`port/platform/render_thread.c` (`ico_render_thread_start`), `port/platform/frame_mailbox.c` (`fm_mode_choose`); [PLATFORM.md](PLATFORM.md#the-render-thread)) |
+| `render_thread` | `auto`, `on`, `off` or `sync` | `auto` | the window's render thread: `auto` and `on` make every picture on it (the interpolation, the walk, the submit and the present) with every graphics API, `off` on the game thread as before, `sync` on it with the game thread waiting for each picture (the A/B); also `render_thread` in `ico-pc.ini` (`port/platform/render_thread.c` (`ico_render_thread_start`), `port/platform/frame_mailbox.c` (`fm_mode_choose`); [PLATFORM.md](PLATFORM.md#the-render-thread)) |
 | `disc_reader` | `thread` or `sync` | `thread` (the window build; `sync` without a window) | |
 | `disc_read_ahead_kb` | int | `256` (with the thread; `0` without one) | |
 | `pipeline_set` | string | `full` | |

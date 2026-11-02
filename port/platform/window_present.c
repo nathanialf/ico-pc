@@ -14,6 +14,7 @@
 #include "display_clock.h"
 #include "host_loop.h"
 #include "rd_submit.h"
+#include "rd_thread.h"
 #include "rhi.h"
 #include "ui_fps.h"
 #include "video_options.h"
@@ -79,7 +80,10 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
     rhi_get_stats(&before);
     Uint64 t0 = SDL_GetTicksNS();
     ico_diag_present_enter();
-    const int ok = rd_present(a);
+    /* the present whole on the render thread, the interpolation included
+       (rd_thread.h): returns once it is handed over, after the one before
+       it finished */
+    const int ok = rd_present_post(a);
     ico_diag_present_leave();
     const Uint64 now = SDL_GetTicksNS();
 

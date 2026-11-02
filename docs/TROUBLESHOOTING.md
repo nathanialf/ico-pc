@@ -280,6 +280,27 @@ records each change you make to them. If it is slow only at one place or
 after one change, say where or which, and send one run that is slow and, if
 you can, one at Resolution 1x for comparison.
 
+## The picture freezes, flickers or the game closes during play
+
+The pictures are drawn and shown by a thread of their own, beside the
+game. If the picture stops moving, flickers or shows something out of
+place, or the game closes during play, and turning the game's own options
+back does not help, try it with everything on one thread: close the game,
+open `config.toml` from the folder with your saves
+([where that is](PORTABLE_MODE.md#where-your-saves-are)) in a text editor
+and add these two lines at the end (if the file already has a `[dev]`
+line, add only the second line under it):
+
+```toml
+[dev]
+render_thread = "off"
+```
+
+If that helps, send the log of a start with the problem and of one
+without it ([the log file](#the-log-file)): its line starting with
+`window: render thread:` says which way the game ran. To go back, delete
+the line.
+
 ## The game runs on the slower graphics card of a laptop
 
 Many laptops have two graphics cards: a fast one and a power-saving one built into the processor.

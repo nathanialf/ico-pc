@@ -991,6 +991,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   whole list, and the wrong plan changing at least one target over the whole list (the poison shows
   a dropped store that a later pass reads); each run's counts printed (`rd_store_plan_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)). SKIP as `rd_vustage_ab`.
+- `rd_thread_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` through
+  `rd_replay_tool --render-thread off`, `sync` and `on` (every replay, the interpolation and the
+  renderer's calls on a thread of the renderer's own, `port/render/rd_thread.h`), with
+  `--pass-dump` at Original (640x480) and Enhanced 4:3 2x (1280x960), and for every F12 zip the
+  blended present at 0.5 between its two frames: every target's PNG of `sync` and `on` byte for
+  byte `off`'s, and the threaded runs saying `render thread: sync` / `on` (`rd_thread_ab`;
+  [PLATFORM.md](PLATFORM.md#the-render-thread)). SKIP as `rd_vustage_ab`.
 - `rd_constant_reads_ab.cmake`: the same dumps and those of `tools/constant_reads_dumps.txt` (the
   PowerVR phone's two frames, the aura with no aura object) twice, every post sprite reading
   its source (`ICO_RD_CONSTANT_READS=0`) and a source holding only its clear drawn as its colour, at
@@ -1177,7 +1184,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   as the `--interp` run's. `rd_replay_tool_save_blended`: rd-01076 then rd-01077 (the godrays pair
   above) at alpha 0.5, Enhanced 4:3 2x; `rd_replay_tool_save_blended_163`: issue 163's pair
   (`build-host/tmp/v097/evidence/163/frame/`) at its present's alpha 0.999000013, 2x, full height,
-  Full pixel (Not Run without the dumps).
+  Full pixel (Not Run without the dumps). Both run the `--interp` again with `--render-thread
+  sync` and `on` (`-DRT`): the interpolation and the replays on the render thread give the same
+  picture and the same saved blended frame, byte for byte.
 - `rd_interp_test.c`: presentation between [ticks](ARCHITECTURE.md#terms) on two synthetic frames
   (`rd_interp`); the feedback head copies (`testFeedback`: `DISPLAY_HELD` and `FEED_HELD` at a
   tick's first present and the later ones, none for DISPLAY under Motion blur: Smooth, FEED128's
@@ -1333,7 +1342,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`;
   the save state's picture, `checkShot`: the box of the open frame's present, CRT off and on, a
   later frame's present dropping it, one copy with the photo capture, replaced, cancelled and
-  dropped at the shutdown;
+  dropped at the shutdown; `checkShotDeferred`: the state host's deferred answer
+  (`rd_capture_shot_arm`, `rd_capture_shot_take`) taken once with the box, no answer for a
+  replaced or a cancelled request, a later frame's present dropping it as NULL, here and with the
+  renderer's own thread presenting (not on OpenGL);
   the scene limit's fallback checks drive the Vulkan backend's `vkr_test_fail_texels_above` and
   are skipped on Direct3D 12, OpenGL and Direct3D 11, which have no such hook);
   the open border's outer columns (`rd_present_border_test.inc`, `checkOpenBorderEdges`): at
@@ -1448,7 +1460,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never
-  (`textUploadLogChecks`) (`rd_tex`).
+  (`textUploadLogChecks`) (`rd_tex`). `threadPixels`: thirty replays handed to the renderer's own
+  thread without waiting (`rd__replay_frame_async`) while the test's thread, the game's side,
+  records the next frame through the texture cache and updates a texture of its own (each change
+  waiting for the replay's reads, `rd__texlock_wait`): every replay run there and SCENE as drawn on
+  one thread; the counts printed (not on OpenGL). It is the render thread's program to run under
+  ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
+  build folder of its own (`build-host/linux-x64-tsan`), `--target rd_tex_test`, run with
+  `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`; a report is a failure.
 - `rd_tex_pool_test.c`: the texture decode pool against the game thread's decode, 200 textures of
   every format and TEXA mode with levels and queued updates, the bounded queue's fallback, and on a
   device the uploads' alpha scans, byte for byte (`rd_tex_pool`; 77 without a device;
@@ -2326,7 +2345,9 @@ hand; on single files (`check_spirv.py a.spv b.spv`) it skips the variants gate.
   `texpack_pack_files`; `package_textures` when the shipped README changes
   ([PACKS.md](PACKS.md#tests)).
 - The render thread: `frame_mailbox`, `pace_loop`, `lifecycle`, `host_config` and `rhi_vk` (the
-  thread submit cell; `rhi_d3d12` on Windows); the device runs are the window's, with `[dev]
+  thread submit cell; `rhi_d3d12` on Windows), `rd_thread_ab`, `rd_tex` (and `rd_tex_test` under
+  the tsan build), `rd_present` (the deferred state picture), `rd_replay_tool_save_blended` (the
+  interpolation on the render thread); the device runs are the window's, with `[dev]
   render_thread = sync` against `off` for the same pictures ([PLATFORM.md](PLATFORM.md#the-render-thread)).
 - A pacing change: `pace_policy`, `pace_loop` and `perf_block`
   (`ctest -L platform -R '^(pace_|perf_block)'`), and `rhi_vk_present_mode` for the present-mode choice. The Windows

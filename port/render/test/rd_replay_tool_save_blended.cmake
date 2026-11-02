@@ -4,8 +4,12 @@
 # rd_replay_tool CUR --interp T PREV --save-blended B writes that frame with
 # the same writer; B replayed alone (no --interp) gives SCENE and the
 # presented picture byte for byte as the --interp run drew them.
+# With -DRT=<mode|...> (rd_replay_tool --render-thread: sync, on) the same
+# --interp run again with the interpolation and the replays on the render
+# thread (port/render/rd_thread.h): its picture and its saved blended frame
+# byte for byte the ones made on the main thread.
 # -DTOOL=<rd_replay_tool> -DPREV=<dump> -DCUR=<dump> -DT=<alpha>
-# -DOUT=<dir> -DARGS=<a|b|...>
+# -DOUT=<dir> -DARGS=<a|b|...> [-DRT=<mode|...>]
 foreach(_d PREV CUR)
   if(NOT EXISTS "${${_d}}")
     # ctest's SKIP_REGULAR_EXPRESSION maps this to Not Run
@@ -50,6 +54,28 @@ foreach(_what SCENE PRESENT)
     message(FATAL_ERROR "${_what}: the blended dump's replay differs from --interp ${T}: "
                         "${OUT}/interp-${_what}.png and ${OUT}/blended-${_what}.png")
   endif()
+  # the interpolation and the replays on the render thread: the same bytes
+  string(REPLACE "|" ";" _modes "${RT}")
+  foreach(_m IN LISTS _modes)
+    set(_bm "${OUT}/blended-${_what}-${_m}.rddump")
+    file(REMOVE "${_bm}")
+    execute_process(COMMAND "${TOOL}" "${CUR}" "${OUT}/interp-${_what}-${_m}.png" --interp ${T}
+                            "${PREV}" --save-blended "${_bm}" --render-thread ${_m} ${ARGS} ${_t}
+                    RESULT_VARIABLE rc OUTPUT_VARIABLE out3 ERROR_VARIABLE err3)
+    if(NOT rc EQUAL 0 OR NOT "${out3}${err3}" MATCHES "render thread: ${_m} ")
+      message(FATAL_ERROR "${TOOL} --interp ${T} --render-thread ${_m} (${_what}) exited ${rc} "
+                          "or ran no render thread:\n${out3}\n${err3}")
+    endif()
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${OUT}/interp-${_what}.png"
+                            "${OUT}/interp-${_what}-${_m}.png" RESULT_VARIABLE d1)
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${_b}" "${_bm}"
+                    RESULT_VARIABLE d2)
+    if(NOT d1 EQUAL 0 OR NOT d2 EQUAL 0)
+      message(FATAL_ERROR "${_what}: --render-thread ${_m} differs from the main thread's "
+                          "(picture ${d1}, blended frame ${d2}): ${OUT}/interp-${_what}-${_m}.png, "
+                          "${_bm}")
+    endif()
+  endforeach()
 endforeach()
 message(STATUS "--interp ${T}: SCENE and the presented picture byte-identical replayed from the "
-               "saved blended frame")
+               "saved blended frame (render thread modes: '${RT}')")

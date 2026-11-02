@@ -1016,6 +1016,34 @@ static NopRange *nops;
 static int nopCount, nopCap;
 static bool noAa1, interpAny;
 static const char *interpPrev, *saveBlended;
+
+/* rd__interp_frame where rd_present builds its frame: on the render thread
+ * with --render-thread (rd_thread.h; the interpolation's state is that
+ * thread's), else here */
+typedef struct InterpCall {
+    const RdFrame *prev, *cur;
+    float t;
+    int first;
+    RdInterpStats *st;
+    const RdFrame *out;
+} InterpCall;
+
+static void interpJob(void *arg)
+{
+    InterpCall *c = arg;
+    c->out = rd__interp_frame(c->prev, c->cur, c->t, c->first, c->st);
+}
+
+static const RdFrame *interpAt(const RdFrame *prev, const RdFrame *cur, float t, int first,
+                               RdInterpStats *st)
+{
+    InterpCall c = {prev, cur, t, first, st, NULL};
+    if (!rd__render_call(interpJob, &c)) {
+        interpJob(&c);
+    }
+    return c.out;
+}
+
 static float interpT = 1.0f;
 /* --prev DUMP (repeatable, oldest first): frames replayed in this context
  * before <dump>, so the retained targets (the motion blur's previous
@@ -1349,7 +1377,7 @@ static const RdFrame *prepareFrame(const char *dump, RdFrame *pf, RdFrame *f)
         if (interpAny) {
             pf->number = f->number - 1; /* the tick before, whatever was saved between */
         }
-        rf = rd__interp_frame(pf, f, interpT, 1, &ist);
+        rf = interpAt(pf, f, interpT, 1, &ist);
         if (!rf) {
             fprintf(stderr, "rd__interp_frame failed\n");
             rd__frame_free(pf);
@@ -1545,7 +1573,7 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
         if (interpPrev) {
             RdInterpStats ist;
             const double t0 = rd__now_ms();
-            rf = rd__interp_frame(pf, f, interpT, k == 0, &ist);
+            rf = interpAt(pf, f, interpT, k == 0, &ist);
             const double ms = rd__now_ms() - t0;
             rd__perf_interp_ms(ms); /* charged to the replay below, as rd_present does */
             if (!rf) {
@@ -1714,7 +1742,7 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
     for (int k = 0; k < presentsN && rc == 0; k++) {
         const float a = interpT * (float)(k + 1) / (float)presentsN;
         RdInterpStats ist;
-        const RdFrame *rf = rd__interp_frame(pf, f, a, k == 0, &ist);
+        const RdFrame *rf = interpAt(pf, f, a, k == 0, &ist);
         const int glow = rd__glow_hold_last(); /* rd_glow_hold.c: held or drawn */
         if (!rf) {
             fprintf(stderr, "%s: --presents: rd__interp_frame failed at present %d\n", dump, k);

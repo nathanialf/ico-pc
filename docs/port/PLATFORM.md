@@ -313,30 +313,53 @@ fast as it can. [DISPLAY.md](DISPLAY.md#pacing) describes the paths and the vsyn
 ## The render thread
 
 The window build has two threads that draw. The game thread runs the host loop (the step, the
-event pump, `ico_window_pace`), records each replay's command list and keeps the pacing; the
-render thread (`port/platform/render_thread.c`) then ends that list, submits it, presents the
-picture and writes out a capture the present copied. The submit's and the present's time (on the
-DXT-48 phone 2.5 ms and more a picture) is then off the game thread, behind its next step. It runs
-with Vulkan and Direct3D 12; OpenGL and Direct3D 11 take every call on one thread
-(`RhiLimits.singleThreadCommands`) and keep both on the game thread. The texture decode workers,
-the disc reader, the present-wait thread and the watchdog stay as they are.
+event pump, `ico_window_pace`), records the frames and keeps the pacing; the render thread
+(`port/platform/render_thread.c`) makes every picture: the present whole, the interpolation
+between the two retained frames included, the fence wait, the acquire, the uploads, the walk with
+its binds and lazy pipelines, the submit, the present and the capture's finish
+(`port/render/rd_thread.h` (`rd_present_post`); `port/platform/window_present.c`
+(`present_once`)). It runs with every backend: with OpenGL the context is the render thread's for
+its jobs, and with Direct3D 11 its immediate context is used by one thread at a time. The texture
+decode workers, the disc reader, the present-wait thread and the watchdog stay as they are.
 
-The rules (`port/platform/render_thread.h`, header comment):
+The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header comments):
 
-- One thread in the backend at a time. While the render thread works on a picture, every RHI call
-  another thread makes that changes the device's state first waits for it (`port/rhi/rhi.h`
-  (`rhi_set_call_guard`); `port/rhi/rhi_backend.c` (`RHI_GUARD`)). The queries that do not wait
-  are listed there; `rhi_get_stats` then gives the counters as they were at the hand-over
-  (`rhi_call_guard_snapshot`). The recording calls (`rhi_cmd_*`) do not wait: only the game
-  thread records, and only between hand-overs.
-- The handshake. A replay's list is job s of the queue (`port/platform/frame_mailbox.h`); the next
-  replay waits for job s to finish (submit and present) before it waits its own frame slot's fence
-  (`port/render/rd_replay.c` (`rd__wait_frame`); `port/render/rd_submit.c` (`rd__submit_drain`)),
-  so the backend's frame and the upload ring's slot it reuses are free. `rd__present_acquire`
-  waits the same way.
-- A picture whose capture is armed (F12, a save state's picture) and every picture while the
-  vsync lock uses the display's timing (it reads a present's id right after it) wait for their
-  present before the replay returns (`rd_submit_hold`, `rd__capture_pending`).
+- The hand-over (texLock). A picture handed over without waiting owns the renderer's state (the
+  retained frames, the textures, the meshes, the targets, the settings) until its reads end with
+  the walk and the present's pass (`rd__reads_done`, from `port/render/rd_submit.c`
+  (`rd__submit_frame`)). Until then every game-thread call that changes that state waits first
+  (`rd__texlock_wait`: the texture, mesh and temporary-target calls, `rd_begin_frame`,
+  `rd_end_frame`, the texture cache's stores, ticks and `rdtex_settle`). So the render thread reads
+  exactly the state the game thread had when it posted, and the pictures are the bytes they were
+  with the thread off; what overlaps the game's step is the submit, the present and the GPU's and
+  the display's time after the walk. The game records its next frame across the steps between its
+  ticks, so a step that changes a texture or a mesh while a picture is being walked waits for that
+  walk (the 10 s line's read waits).
+- One picture at a time. A picture waits for the one before it to finish (its wait counted as the
+  present's display wait, `rd_submit_waited_ns`). A picture whose capture or blended dump is armed
+  (F12, a save state's picture) and every picture while the vsync lock uses the display's timing
+  (`rd_submit_hold`) wait for their end.
+- Calls between pictures. `rd__on_host`'s calls (the targets made again, the display's pipelines,
+  the fog's probe, a movie's present, the replay with the interpolation off) run on the render
+  thread with the game thread waiting (`rd__render_call`), as do `rd_read_display` (a save's
+  picture, F11's PNG), `rd_resize_output` and every replay through `rd__replay_frame`. Every GPU
+  call the game's fiber causes therefore moves with no change where it is made.
+- The retire list. A GPU texture destroyed on the game thread (`rd_destroy_texture`, a temporary
+  target's textures, a depth copy) is destroyed by the render thread at its next job, after the
+  submit of the list that may still use it (`rd__retire_texture`).
+- One thread in the backend at a time. Any RHI call another thread makes that changes the device's
+  state first waits for the render thread (`port/rhi/rhi.h` (`rhi_set_call_guard`);
+  `port/rhi/rhi_backend.c` (`RHI_GUARD`)); `rhi_get_stats` then gives the counters as they were
+  at the hand-over (`rhi_call_guard_snapshot`). With OpenGL such a call also takes the context
+  over (`gl_take`: the render thread lets it go, the calling thread makes it current) and the
+  render thread's next job takes it back; the render thread lets it go while parked.
+- The counts. `rd_get_stats` gives the record's counts live and the replays' as the render thread
+  left them at its last reads' end (`rd__stats_here`, `rd__thread_stats`); `rd_perf`'s records
+  and pass tables are taken under a lock; `rd_last_present_info` is behind a sequence lock
+  (`port/render/rd_present_info.c`).
+- Save states. The pause picture is a deferred answer the state host takes on the game thread
+  (`rd_capture_shot_arm`, `rd_capture_shot_take`; `port/game/state_host.c` (`shot_poll`)); a
+  load waits for the render thread before the renderer's textures and meshes go.
 - Device loss: `rhi_device_lost` is atomic; `device_lost_quit` waits for the render thread before
   it reads the pass ring and the frames (`port/platform/window_host.c` (`device_lost_quit`)).
 - The swapchain's acquire, present and rebuilds hold a lock of their own in each backend
@@ -344,43 +367,50 @@ The rules (`port/platform/render_thread.h`, header comment):
   (`dx_swap_lock`); recursive: a present that rebuilds resizes inside it).
 - Start and stop. `ico_window_open` starts the thread after the start-up set, the self-tests and
   their screens; Options > Graphics > Apply stops it before `rd_suspend` and starts it again after
-  `rd_resume` (`ico_window_reopen`); `ico_window_close` stops it first. The thread runs at SDL's
-  high priority (`SDL_SetCurrentThreadPriority`), against a phone's scheduler moving it to a
-  little core.
+  `rd_resume` (`ico_window_reopen`); `ico_window_close` stops it first. The thread has an 8 MB
+  stack (the walk's) and runs at SDL's high priority (`SDL_SetCurrentThreadPriority`), against a
+  phone's scheduler moving it to a little core.
 - Park. The lifecycle table parks the thread before the GPU idles and the surface goes, and lets it
   go on after the surface is made again on the game thread ([Window lifecycle](#window-lifecycle));
-  while parked the pictures are submitted and presented on the game thread as without it.
+  while parked the pictures are made on the game thread as without it.
 - The heartbeat. The watchdog's thread reads the picture in progress without a lock
   (`ico_diag_set_render_heartbeat`) and counts one picture that does not finish as it counts a
   wait for the GPU: at the GPU hang limit the run ends through the GPU hang's path
   ([Diagnostics](#diagnostics)); not while an effects program is loaded.
 
 `[dev] render_thread` (config.toml, or `render_thread` in `ico-pc.ini`) picks it: `auto` (the
-default) and `on` run it with Vulkan and Direct3D 12, `off` keeps the submit and the present on
-the game thread as before, `sync` runs it with the game thread waiting for each picture (the A/B:
-the same pictures in the same order as `off`) (`port/platform/frame_mailbox.c`
-(`fm_mode_choose`)). The start says which:
+default) and `on` run it, `off` makes every picture on the game thread as before, `sync` runs it
+with the game thread waiting for each picture (the A/B: the same pictures in the same order as
+`off`) (`port/platform/frame_mailbox.c` (`fm_mode_choose`)). The start says which:
 
 ```
-window: render thread: on (submit and present off the game thread; Vulkan, [dev] render_thread = auto)
-window: render thread: off (the graphics API takes every call on one thread (OpenGL, Direct3D 11))
-window: render thread: sync (submit and present on the render thread, [dev] render_thread = sync: the game thread waits for each picture)
+window: render thread: on (interpolation, walk, submit and present off the game thread; [dev] render_thread = off keeps them on it; Vulkan, [dev] render_thread = auto)
+window: render thread: on (...; OpenGL, [dev] render_thread = auto; every graphics call on the render thread)
+window: render thread: sync (interpolation, walk, submit and present on the render thread, [dev] render_thread = sync: the game thread waits for each picture)
+window: render thread: off ([dev] render_thread = off)
 ```
 
-Every 10 s block adds the two threads' line: the game thread's mean step, replay (the record) and
-pump in ms and its waits for the render thread (the slot waits, with their time), and the render
-thread's share of the block with no picture to do, its longest wait for one and its longest
-picture (the heartbeat's longest gap):
+Every 10 s block adds the two threads' line: the game thread's mean step, replay and pump in ms,
+its waits for the render thread (the slot waits: whole pictures, with their time; the read waits:
+a change of the renderer's state that waited for a picture's walk, with their time and the
+longest), then the render thread's share of the block with no picture to do, its longest wait for
+one, its longest picture (the heartbeat's longest gap), and per picture its interpolation, its
+uploads and walk, its submit and present and the GPU's and the display's waits inside them, and
+the textures it destroyed for the game thread:
 
 ```
-window: game thread: step 3.1 ms, record 7.9 ms, pump 0.4 ms, slot waits 12 (8.2 ms); render thread: idle 71 %, waited for a frame 14.2 ms, heartbeat max 4.9 ms (590 pictures)
+window: game thread: step 3.1 ms, record 0.0 ms, pump 0.4 ms, slot waits 12 (8.2 ms), read waits 290 (610.4 ms, longest 6.9 ms); render thread: idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread
 ```
 
 `window: render thread: parked (...)` and `window: render thread: goes on` mark a park (the first
 16 of each); `window: render thread: the high priority was refused (...)` says the system kept its
-priority. Handed over, a replay's perf record carries the last finished picture's submit and
-present times (one replay late; their means are the same), and its wait time holds the wait for
-the render thread (`port/render/rd_submit.c` (`rd__submit_frame`)).
+priority; `window: render thread: the game thread took the OpenGL context for its own calls (N
+times; ...)` (the first 8, then every 100th) counts OpenGL's take-overs, and `... could not be
+made current on the render|game thread (...)` a failed one.
+
+The replay tool runs the same jobs on a thread of the renderer's own, without SDL
+(`rd_replay_tool --render-thread off|sync|on`; `rd_thread_local_start`), for the `rd_thread_ab`
+test.
 
 ## Arena, partitions and host extras
 

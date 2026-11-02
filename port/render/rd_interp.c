@@ -6380,6 +6380,7 @@ static void blendedDumpExpire(const char *why)
 
 bool rd_dump_blended_arm(const char *path)
 {
+    (void)rd_thread_drain(); /* no present on the render thread reads it now */
     s_blendedDump.armed = 0;
     s_blendedDump.result = -2;
     if (!path || !path[0] || !rd_interpolation_active() ||
@@ -6465,8 +6466,7 @@ bool rd_present(float alpha)
      * ICO_RD_S2_LEGACY=1 the window replaces the clock's alpha by the
      * measured one after the clock ran, and the bin still follows the
      * clock's value */
-    const double raw = s_clockRaw;
-    s_clockRaw = NAN;
+    const double raw = rd__thread_clock_raw(); /* the poster's, on the render thread */
     /* the tick's first present keeps the feedback passes' inputs (FEED128,
      * and DISPLAY for the motion blur), the later ones start from them
      * again (feedback) */
@@ -6541,6 +6541,13 @@ int rd__alpha_bin(float alpha, double raw)
 double rd__present_clock_raw(void)
 {
     return s_clockRaw;
+}
+
+double rd__present_clock_raw_take(void)
+{
+    const double r = s_clockRaw;
+    s_clockRaw = NAN;
+    return r;
 }
 
 float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, double tickMs,
