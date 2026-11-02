@@ -3753,7 +3753,7 @@ static void testMenuLanguage(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE), "Automatisch") == 0 ||
               ui_settings_value_text(UI_OPT_MENU_LANGUAGE)[0] != '\0',
           "the row's value: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
-    /* Auto, en, fr, de, it, es, ja, ko, zh, ru-bobttz, ru-cobra838, Auto */
+    /* Auto, en, fr, de, it, es, ja, ko, zh, ru-bobttz, ru-cobra838, pt-br, Auto */
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
     CHECK(ico_opt_ui_language() == UI_LANG_EN && ui_get_language() == UI_LANG_EN &&
               ui_sheet_language() == UI_LANG_DE,
@@ -3802,6 +3802,14 @@ static void testMenuLanguage(void)
               strcmp(ico_config_get_string("ui.language", ""), "ru-cobra838") == 0 &&
               strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE), "Русский (cobra838)") == 0,
           "Russian (cobra838) menus over the Italian game (%d, %s)", ui_get_language(),
+          ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
+    ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
+    CHECK(ico_opt_ui_language() == UI_LANG_PT_BR && ui_get_language() == UI_LANG_PT_BR &&
+              ui_sheet_language() == UI_LANG_IT &&
+              strcmp(ico_config_get_string("ui.language", ""), "pt-br") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE),
+                     "Português (Brasil) (ichagas7)") == 0,
+          "Brazilian Portuguese menus over the Italian game (%d, %s)", ui_get_language(),
           ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
     CHECK(!ui__font_chinese_first(), "Auto: the Japanese face is first again");

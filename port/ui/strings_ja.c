@@ -796,4 +796,5 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "フレームレートが「オリジナル」より高く、光のにじみがオンのときだけ働きます。",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
+    [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
 };

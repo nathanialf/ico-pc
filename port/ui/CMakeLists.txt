@@ -75,11 +75,11 @@ add_custom_command(
     COMMENT "Embedding the UI font for Chinese"
     VERBATIM)
 set(_ui_font_srcs "${_ui_font_c}" "${_ui_font_ja_c}" "${_ui_font_ko_c}" "${_ui_font_zh_c}")
-# strings_ru_bobttz.c, strings_ru_cobra838.c: the community translations
-# (docs/TRANSLATING.md)
+# strings_ru_bobttz.c, strings_ru_cobra838.c, strings_pt_br.c: the community
+# translations (docs/TRANSLATING.md)
 set(_ui_string_srcs strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c
                     strings_ja.c strings_ko.c strings_zh.c strings_ru_bobttz.c
-                    strings_ru_cobra838.c)
+                    strings_ru_cobra838.c strings_pt_br.c)
 
 set(_ui_sources
     font.c
@@ -132,13 +132,15 @@ function(ico_ui_settings name)
     # Extras' Back up your data and Restore from a backup (settings_backup.c)
     # the Save states page's cards, actions and F6 latch (settings_states.c)
     # a community translation's subtitles as text (subtitle_text.c, jimaku.c's
-    # hook, over port/game's tables: subtitles_ru_bobttz.c, subtitles_ru_cobra838.c)
+    # hook, over port/game's tables: subtitles_ru_bobttz.c, subtitles_ru_cobra838.c,
+    # subtitles_pt_br.c)
     target_sources(${name} PRIVATE settings.c settings_graphics.c settings_backup.c
                                    settings_states.c ui_list.c
                                    ui_hint.c gallery.c photo_ui.c ui_mouse.c ui_mouse_geom.c
                                    ui_lang.c touch_edit_ui.c subtitle_text.c
                                    "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_bobttz.c"
-                                   "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_cobra838.c")
+                                   "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_cobra838.c"
+                                   "${CMAKE_SOURCE_DIR}/port/game/subtitles_pt_br.c")
     foreach(_lib ${_ui_settings_deps})
         target_include_directories(${name} PRIVATE
                                    $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)
@@ -255,6 +257,9 @@ ico_settings_test(subtitles_ru_test test/subtitles_ru_test.c)
 # subtitles_ru_cobra838_test: the same for the Russian (cobra838) translation,
 # the Language row's seventh entry
 ico_settings_test(subtitles_ru_cobra838_test test/subtitles_ru_cobra838_test.c)
+# subtitles_pt_br_test: the same for the Brazilian Portuguese translation (Igor
+# Chagas, ichagas7), the Language row's eighth entry
+ico_settings_test(subtitles_pt_br_test test/subtitles_pt_br_test.c)
 if(ICO_RUN_TESTS)
     # the three 2001 discs (the North American disc, the August 2001 preview,
     # the June 2001 demo): Extras > Game variants on each (settings_extra_test
@@ -287,7 +292,8 @@ if(ICO_RUN_TESTS)
                          settings_backup settings_backup_jpn settings_backup_kor settings_backup_cn
                          subtitles_ru subtitles_ru_jpn subtitles_ru_kor subtitles_ru_cn
                          subtitles_ru_cobra838 subtitles_ru_cobra838_jpn subtitles_ru_cobra838_kor
-                         subtitles_ru_cobra838_cn
+                         subtitles_ru_cobra838_cn subtitles_pt_br subtitles_pt_br_jpn
+                         subtitles_pt_br_kor subtitles_pt_br_cn
                          PROPERTIES RESOURCE_LOCK settings_toml)
 endif()
 
@@ -585,6 +591,7 @@ ico_include_dirs(sugipon _ico_cov_data_incs)
 add_executable(font_coverage_test test/font_coverage_test.c $<TARGET_OBJECTS:ico_ui_font_rd>
     ${_ui_string_srcs} "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_bobttz.c"
     "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_cobra838.c"
+    "${CMAKE_SOURCE_DIR}/port/game/subtitles_pt_br.c"
     "${CMAKE_SOURCE_DIR}/port/game/credits.c" "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
 target_include_directories(font_coverage_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_CURRENT_SOURCE_DIR}/test" ${_ico_cov_incs} "${CMAKE_SOURCE_DIR}/port/include"

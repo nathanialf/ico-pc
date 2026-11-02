@@ -33,6 +33,7 @@ static char s_name[] = "{R}Nathanial Fine ";
 static char s_translation[] = "{R}< Translation > ";
 static char s_bobttz[] = "{R}bob-ttz ";
 static char s_cobra838[] = "{R}cobra838 ";
+static char s_ichagas7[] = "{R}ichagas7 ";
 static char s_contributors[] = "{R}< Contributors > ";
 static char s_katsifolis[] = "{R}katsifolis ";
 static char s_braito4[] = "{R}braito4 ";
@@ -49,12 +50,13 @@ static char *s_lines[ICO_ROLL_PORT_LAST + 1] = {
     [30] = s_translation,                /* after 12 */
     [35] = s_bobttz,                     /* after 4 */
     [38] = s_cobra838,                   /* after 2 */
-    [51] = s_contributors,               /* after 12 */
-    [56] = s_katsifolis,                 /* after 4 */
-    [59] = s_braito4,                    /* after 2 */
-    [62] = s_neetgon,                    /* after 2 */
-    [65] = s_kclough,                    /* after 2 */
-    [78] = s_thanks,                     /* after 12 */
+    [41] = s_ichagas7,                   /* after 2 */
+    [54] = s_contributors,               /* after 12 */
+    [59] = s_katsifolis,                 /* after 4 */
+    [62] = s_braito4,                    /* after 2 */
+    [65] = s_neetgon,                    /* after 2 */
+    [68] = s_kclough,                    /* after 2 */
+    [81] = s_thanks,                     /* after 12 */
     [ICO_ROLL_PORT_LAST] = s_sadorigami, /* after 4: the roll's last line */
 };
 

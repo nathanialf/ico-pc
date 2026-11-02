@@ -266,6 +266,7 @@ static const struct {
     {12, "{R}< Translation > ", 1},
     {4, "{R}bob-ttz ", 0},
     {2, "{R}cobra838 ", 0},
+    {2, "{R}ichagas7 ", 0},
     {12, "{R}< Contributors > ", 1},
     {4, "{R}katsifolis ", 0},
     {2, "{R}braito4 ", 0},
@@ -289,7 +290,7 @@ static void test_roll(void)
         expect += kPortRoll[j].blanks + 1;
     }
     printf("roll: %d port lines, %d expected\n", port, expect);
-    CHECK(port == expect && port == 84);
+    CHECK(port == expect && port == 87);
     CHECK(port == ICO_ROLL_PORT_LAST + 1);
     CHECK(ICO_ROLL_PORT_HEADING == kPortRoll[0].blanks);
     CHECK(ICO_ROLL_PORT_NAME == ICO_ROLL_PORT_HEADING + kPortRoll[1].blanks + 1);

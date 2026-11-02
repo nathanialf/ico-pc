@@ -74,8 +74,8 @@ static int s_lang; /* the language the walk is in */
         }                                                                                          \
     } while (0)
 
-static const char *const kLangs[UI_LANG_TABLES] = {"en", "fr", "de", "it",        "es",
-                                                   "ja", "ko", "zh", "ru-bobttz", "ru-cobra838"};
+static const char *const kLangs[UI_LANG_TABLES] = {
+    "en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru-bobttz", "ru-cobra838", "pt-br"};
 
 #define BMP_SEEN 0x10000
 static unsigned char s_seen[UI_LANG_TABLES][BMP_SEEN]; /* distinct code points a language draws */
@@ -307,6 +307,12 @@ int main(int argc, char **argv)
     }
     CHECK(ico_subtitles_ru_cobra838_count == 42, "Russian (cobra838): %d subtitles",
           ico_subtitles_ru_cobra838_count);
+    for (int k = 0; k < ico_subtitles_pt_br_count; k++) {
+        checkText(UI_LANG_PT_BR, ico_subtitles_pt_br[k].words, "subtitle");
+        s_visits[UI_LANG_PT_BR]++;
+    }
+    CHECK(ico_subtitles_pt_br_count == 42, "Brazilian Portuguese: %d subtitles",
+          ico_subtitles_pt_br_count);
     /* every table entry of every language is present (ui_strings_for_each skips
        an empty one, so a hole would pass the walk; a community table's
        untranslated id is English) */

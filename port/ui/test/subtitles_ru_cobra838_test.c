@@ -21,12 +21,13 @@
  *   - ui_subtitle_layout of every entry: one or two lines about the band's
  *     middle, the em UI_SUBTITLE_EM or smaller so the widest line fits
  *     UI_SUBTITLE_ROOM, never under 60 % of it, every line inside the band;
- *   - the Language row (the European disc): seven entries, the five disc
+ *   - the Language row (the European disc): eight entries, the five disc
  *     languages, Russian (bob-ttz), then Russian (cobra838): the English
  *     game data, [game] text_language = "ru-cobra838", the Menu language's
  *     Auto in his Russian, the game's menu words his over the English sheets
- *     and his subtitles as text; the step after it is English again, the key
- *     cleared, and seven steps come back to where they started.  On the
+ *     and his subtitles as text; the step after it is Português (Brasil)
+ *     (ichagas7), then English again, the key cleared, and eight steps come
+ *     back to where they started.  On the
  *     other discs the row is not shown and the key does nothing;
  *   - the menu words' strips (menu_font.c, ui__menu_strip_raster): the five
  *     sheets' own words byte for byte with or without the translation in
@@ -239,6 +240,10 @@ static void testLanguageRow(int pal)
           "German menus, the game's words still his Russian");
     ico_opt_set_ui_language(-1);
     ui_settings_apply_language();
+    /* entry 7, Brazilian Portuguese (subtitles_pt_br_test), then English */
+    ui_settings_step(UI_OPT_LANGUAGE, 1);
+    CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == UI_LANG_PT_BR,
+          "entry 7: Brazilian Portuguese");
     ui_settings_step(UI_OPT_LANGUAGE, 1);
     CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == -1 &&
               strcmp(ico_config_get_string("game.text_language", "?"), "") == 0 &&
@@ -246,21 +251,24 @@ static void testLanguageRow(int pal)
               ui_subtitle_words(1, 0) == NULL,
           "wraps to English, the key cleared");
     ui_settings_step(UI_OPT_LANGUAGE, -1);
+    CHECK(ico_opt_text_language() == UI_LANG_PT_BR, "left: Brazilian Portuguese");
+    ui_settings_step(UI_OPT_LANGUAGE, -1);
     CHECK(ico_opt_text_language() == UI_LANG_RU_COBRA838, "left: Russian (cobra838) again");
     ui_settings_step(UI_OPT_LANGUAGE, -1);
     CHECK(ico_opt_text_language() == UI_LANG_RU_BOBTTZ, "left: Russian (bob-ttz)");
     ui_settings_step(UI_OPT_LANGUAGE, 1);
     ui_settings_step(UI_OPT_LANGUAGE, 1);
+    ui_settings_step(UI_OPT_LANGUAGE, 1);
     CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == -1, "English");
-    /* seven entries: seven steps come back to English */
-    for (int k = 0; k < 7; k++) {
+    /* eight entries: eight steps come back to English */
+    for (int k = 0; k < 8; k++) {
         ui_settings_step(UI_OPT_LANGUAGE, 1);
-        CHECK(k == 6 || NonLinearCameraMove != 2 || ico_opt_text_language() != -1,
+        CHECK(k == 7 || NonLinearCameraMove != 2 || ico_opt_text_language() != -1,
               "step %d: not English yet", k + 1);
     }
     CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == -1 &&
               strcmp(ui_settings_value_text(UI_OPT_LANGUAGE), "English") == 0,
-          "seven steps: English again (%s)", ui_settings_value_text(UI_OPT_LANGUAGE));
+          "eight steps: English again (%s)", ui_settings_value_text(UI_OPT_LANGUAGE));
     /* the key from the file with the game in English: Auto resolves to it */
     useConfig("version = 1\n[ui]\nlanguage = \"auto\"\n[game]\ntext_language = \"ru-cobra838\"\n");
     NonLinearCameraMove = 2;

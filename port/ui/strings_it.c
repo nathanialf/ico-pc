@@ -794,4 +794,5 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
         "Conta solo sopra la frequenza fotogrammi Originale, con il bagliore attivo.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
+    [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
 };

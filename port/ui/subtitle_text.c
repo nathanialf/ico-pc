@@ -17,7 +17,7 @@
 #include "ui_internal.h" /* ui__sync */
 #include "ui_lang.h"     /* ui_settings_text_language */
 
-_Static_assert(UI_LANG_COMMUNITY_COUNT == 2,
+_Static_assert(UI_LANG_COMMUNITY_COUNT == 3,
                "a subtitle table for each community translation (ui_subtitle_table)");
 
 const IcoSubtitle *ui_subtitle_table(int lang, int *count)
@@ -32,6 +32,10 @@ const IcoSubtitle *ui_subtitle_table(int lang, int *count)
     case UI_LANG_RU_COBRA838:
         t = ico_subtitles_ru_cobra838;
         n = ico_subtitles_ru_cobra838_count;
+        break;
+    case UI_LANG_PT_BR:
+        t = ico_subtitles_pt_br;
+        n = ico_subtitles_pt_br_count;
         break;
     default:
         break;

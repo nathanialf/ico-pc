@@ -811,4 +811,5 @@ const char *const
             [UI_STR_BACKUP_WHY_NO_SPACE] = "Il n’y a pas assez d’espace libre sur l’appareil.",
             [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
             [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
+            [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
 };

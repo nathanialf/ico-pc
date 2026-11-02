@@ -45,9 +45,9 @@ VIDEO_MODE = "60hz"
 TPS = {"pal50": 25, "60hz": 30}[VIDEO_MODE]
 # the roll is paced in seconds: the title was back about 240 s after the
 # Cross (Main tick 815), at Main tick 7,972 at 60 Hz (6,840 at 50 Hz), with
-# 18 port lines; the 84 port lines (the translators, the
-# contributors, the special thanks) add 66 lines of 11 units at the roll's
-# 60 units a second, about 12 s.  The run allows 255 s at TPS, then 1,500
+# 18 port lines; the 87 port lines (the translators, the
+# contributors, the special thanks) add 69 lines of 11 units at the roll's
+# 60 units a second, about 13 s.  The run allows 255 s at TPS, then 1,500
 # ticks of title and 600 of margin
 CROSS_TICK = 815
 ROLL_S = 255
@@ -128,7 +128,7 @@ def main():
             fails.append(ln)
     want = ["credits: enter",
             "credits: stage 60 up",
-            "credits: roll start, 962 lines from the disc and 84 of the port's (Extras > Credits)",
+            "credits: roll start, 962 lines from the disc and 87 of the port's (Extras > Credits)",
             "credits: the ending's song is playing",
             "credits: the port credit is posted (Extras > Credits)",
             "credits: the port's last line is posted (Extras > Credits)",

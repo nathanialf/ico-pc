@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 /* The language the port's text is in now: the [ui] language the player
-   chose ("en" .. "zh", "ru-bobttz", "ru-cobra838"), else ("auto", the default) the disc's:
+   chose ("en" .. "zh", "ru-bobttz", "ru-cobra838", "pt-br"), else ("auto", the default) the disc's:
    its region row's ui_lang_default (port/core/region.h: Japanese on the
    Japanese disc), else the community translation in force
    (ui_settings_text_language), else the game's language

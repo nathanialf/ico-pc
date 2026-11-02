@@ -795,4 +795,5 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "Solo importa por encima de la velocidad de fotogramas Original y con Resplandor activado.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
+    [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
 };

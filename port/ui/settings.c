@@ -1305,9 +1305,9 @@ static void setGameLanguage(int game)
 static const char *menuLanguageName(int lang)
 {
     static const int ids[UI_LANG_TABLES] = {
-        UI_STR_LANG_EN,        UI_STR_LANG_FR,         UI_STR_LANG_DE, UI_STR_LANG_IT,
-        UI_STR_LANG_ES,        UI_STR_LANG_JA,         UI_STR_LANG_KO, UI_STR_LANG_ZH,
-        UI_STR_LANG_RU_BOBTTZ, UI_STR_LANG_RU_COBRA838};
+        UI_STR_LANG_EN,        UI_STR_LANG_FR,          UI_STR_LANG_DE,   UI_STR_LANG_IT,
+        UI_STR_LANG_ES,        UI_STR_LANG_JA,          UI_STR_LANG_KO,   UI_STR_LANG_ZH,
+        UI_STR_LANG_RU_BOBTTZ, UI_STR_LANG_RU_COBRA838, UI_STR_LANG_PT_BR};
     return ui_str((UiStrId)ids[lang >= 0 && lang < UI_LANG_TABLES ? lang : 0]);
 }
 

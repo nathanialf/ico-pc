@@ -40,6 +40,9 @@ extern const int ico_subtitles_ru_bobttz_count;
 /* Russian, by cobra838: port/game/subtitles_ru_cobra838.c */
 extern const IcoSubtitle ico_subtitles_ru_cobra838[];
 extern const int ico_subtitles_ru_cobra838_count;
+/* Brazilian Portuguese, by Igor Chagas (ichagas7): port/game/subtitles_pt_br.c */
+extern const IcoSubtitle ico_subtitles_pt_br[];
+extern const int ico_subtitles_pt_br_count;
 
 #ifdef __cplusplus
 }

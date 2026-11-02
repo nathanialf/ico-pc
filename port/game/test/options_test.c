@@ -414,8 +414,8 @@ static void test_ui_language(const char *dir)
 {
     enum { N = ICO_OPT_UI_LANGUAGE_COUNT };
 
-    static const char *const names[N] = {"en", "fr", "de", "it",        "es",
-                                         "ja", "ko", "zh", "ru-bobttz", "ru-cobra838"};
+    static const char *const names[N] = {"en", "fr", "de",        "it",          "es",   "ja",
+                                         "ko", "zh", "ru-bobttz", "ru-cobra838", "pt-br"};
     char path[512];
     char text[64];
     FILE *f;
@@ -452,6 +452,8 @@ static void test_ui_language(const char *dir)
     CHECK(ico_opt_ui_language() == 8 && strcmp(ico_opt_ui_language_name(8), "ru-bobttz") == 0);
     ico_opt_set_ui_language(9);
     CHECK(ico_opt_ui_language() == 9 && strcmp(ico_opt_ui_language_name(9), "ru-cobra838") == 0);
+    ico_opt_set_ui_language(10);
+    CHECK(ico_opt_ui_language() == 10 && strcmp(ico_opt_ui_language_name(10), "pt-br") == 0);
     ico_opt_set_ui_language(-5);
     CHECK(ico_opt_ui_language() == -1);
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
@@ -461,14 +463,15 @@ static void test_ui_language(const char *dir)
 
 /* [game] text_language: "" (-1, none) by default and for a word that is not
    a community translation (a disc language among them: those are [game]
-   language's); "ru-bobttz" and "ru-cobra838" their UiLang numbers (8 and 9,
-   the community translations); the setter takes only a community translation; the names
+   language's); "ru-bobttz", "ru-cobra838" and "pt-br" their UiLang numbers
+   (8, 9 and 10, the community translations); the setter takes only a community translation; the names
    the Language row writes; a reload reads the file again */
 static void test_text_language(const char *dir)
 {
-    static const char *const words[] = {"",     "ru-bobttz", "ru-cobra838", "en",       "ja",
-                                        "auto", "ru",        "RU-BOBTTZ",   "cobra838", "ru-cobra"};
-    static const int want[] = {-1, 8, 9, -1, -1, -1, -1, -1, -1, -1};
+    static const char *const words[] = {
+        "",         "ru-bobttz", "ru-cobra838", "en", "ja",    "auto",  "ru",      "RU-BOBTTZ",
+        "cobra838", "ru-cobra",  "pt-br",       "pt", "PT-BR", "pt_br", "ichagas7"};
+    static const int want[] = {-1, 8, 9, -1, -1, -1, -1, -1, -1, -1, 10, -1, -1, -1, -1};
     char path[512];
     char text[96];
     FILE *f;
@@ -477,7 +480,7 @@ static void test_text_language(const char *dir)
     ico_opt_reload();
     CHECK(ico_opt_text_language() == -1);
     CHECK(strcmp(ico_opt_text_language_name(-1), "") == 0);
-    CHECK(ICO_OPT_TEXT_LANGUAGE_FIRST == 8 && ICO_OPT_UI_LANGUAGE_COUNT == 10);
+    CHECK(ICO_OPT_TEXT_LANGUAGE_FIRST == 8 && ICO_OPT_UI_LANGUAGE_COUNT == 11);
     snprintf(path, sizeof(path), "%s/options_test.toml", dir);
     for (unsigned i = 0; i < sizeof(words) / sizeof(words[0]); i++) {
         f = fopen(path, "wb");
@@ -503,11 +506,13 @@ static void test_text_language(const char *dir)
     ico_opt_set_text_language(9);
     CHECK(ico_opt_text_language() == 9 &&
           strcmp(ico_opt_text_language_name(9), "ru-cobra838") == 0);
+    ico_opt_set_text_language(10);
+    CHECK(ico_opt_text_language() == 10 && strcmp(ico_opt_text_language_name(10), "pt-br") == 0);
     for (int l = -2; l < 8; l++) {
         ico_opt_set_text_language(l);
         CHECK(ico_opt_text_language() == -1 && strcmp(ico_opt_text_language_name(l), "") == 0);
     }
-    ico_opt_set_text_language(10);
+    ico_opt_set_text_language(11);
     CHECK(ico_opt_text_language() == -1);
     ico_opt_set_text_language(8);
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
