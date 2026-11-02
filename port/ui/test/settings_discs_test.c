@@ -118,18 +118,30 @@ static void checkPauseRows(const Expect *e)
           ui_settings_opt_shown(UI_OPT_FILM_EFFECT), e->film,
           ui_settings_opt_shown(UI_OPT_PLAYERS));
     /* a row that is not shown is not reached: on the page as it opens, its
-       row is masked (layoutPage) */
+       row is masked (layoutPage).  With Yorda trips and Second memory card
+       the cleared page has up to eleven rows before Back, more than the
+       window's slots: Film effect (the tenth) and Players (the eleventh)
+       may open below the window, masked as the window masks a row out of
+       view, so a disc with the row has it shown by its rule and in view,
+       unmasked, with the cursor on it */
     const int gpL = openPage(mainL, -1, UI_PAGE_GAMEPLAY);
     const int film = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT);
-    CHECK(film >= 0 && lt_ext_prop(film)->defaultMask == !e->film,
-          "%s pause: the Film effect row masked %d, want %d", e->slug,
-          film >= 0 ? lt_ext_prop(film)->defaultMask : -1, !e->film);
+    if (e->film) {
+        CHECK(film >= 0 && ui_settings_row_shown(film), "%s pause: the Film effect row shown",
+              e->slug);
+        lt_ext_layout(gpL)->curItem = film;
+        frame(0);
+        CHECK(film >= 0 && lt_ext_prop(film)->defaultMask == 0,
+              "%s pause: the Film effect row masked %d with the cursor on it, want 0", e->slug,
+              film >= 0 ? lt_ext_prop(film)->defaultMask : -1);
+    } else {
+        CHECK(film >= 0 && !ui_settings_row_shown(film) && lt_ext_prop(film)->defaultMask == 1,
+              "%s pause: the Film effect row shown %d, masked %d, want 0 and 1", e->slug,
+              film >= 0 ? ui_settings_row_shown(film) : -1,
+              film >= 0 ? lt_ext_prop(film)->defaultMask : -1);
+    }
     /* Players is reached on every disc once cleared (the 2001 discs too:
-       the port carries the second-pad Yorda into their arms).  With Yorda
-       trips, Second memory card and Film effect the cleared page has up to
-       eleven rows before Back, more than the window's slots: Players may open below the window
-       (masked as the window masks a row out of view), so it is shown by its
-       rule and in view, unmasked, with the cursor on it */
+       the port carries the second-pad Yorda into their arms) */
     const int players = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS);
     CHECK(players >= 0 && ui_settings_row_shown(players), "%s pause: the Players row shown",
           e->slug);
