@@ -788,4 +788,5 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "Original keeps the game’s own frame’s glow between frames. Smooth makes it again for every frame shown; it costs more graphics time.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] = "Only matters above Frame rate Original, with Glow on.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
+    [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
 };

@@ -805,4 +805,5 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Wirkt nur oberhalb der Bildrate Original und bei eingeschaltetem Leuchten.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
+    [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
 };

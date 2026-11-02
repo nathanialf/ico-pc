@@ -512,16 +512,23 @@ other discs.
   that come with the title and ending logos, and the staff roll. Yorda's words are shown
   in Russian on a second playthrough only, as the game shows her own script
   the first time. A few long notes on the Options pages are in English
-  until they are translated again. More languages translated by players can
-  join this list; [Translating the game](TRANSLATING.md) says how.
+  until they are translated again.
+
+  After it comes **Русский (cobra838)**: a second Russian translation, by
+  cobra838, another player of the game. It works the same way, with his own
+  words for the menus and the subtitles; the rows he has not translated yet
+  (the newest ones, such as the backups and the second memory card) are in
+  English. More languages translated by players can join this list;
+  [Translating the game](TRANSLATING.md) says how.
 - **Menu language** is the language of the menus this port adds (Options,
   the extras, photo mode's help, the messages): English, French, German,
   Italian, Spanish, Japanese (日本語), Korean (한국어), Chinese (繁體中文,
-  Traditional Chinese) or Russian (Русский (bob-ttz)). It starts on Auto:
-  Japanese with the Japanese disc, Korean with the Korean disc, Chinese with
-  the Asian disc, and with the European disc the game's language (Russian
-  when Language is Русский (bob-ttz)). The North American disc, the August
-  2001 preview and the June 2001 magazine demo start on English. It does not
+  Traditional Chinese) or Russian (Русский (bob-ttz) or Русский (cobra838)).
+  It starts on Auto: Japanese with the Japanese disc, Korean with the Korean
+  disc, Chinese with the Asian disc, and with the European disc the game's
+  language (Russian when Language is one of the two Russian translations).
+  The North American disc, the August 2001 preview and the June 2001
+  magazine demo start on English. It does not
   change the game's own text, which is always the disc's or the Language
   row's translation.
 - **Disc** shows only when more than one disc is set up. It is the disc the

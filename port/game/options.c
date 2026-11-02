@@ -455,7 +455,7 @@ void ico_opt_set_circle_back(int on)
 static const char *const kUiLanguages[] = {
     "en", "fr", "de", "it", "es", "ja", "ko", "zh",
     /* the community translations, from ICO_OPT_TEXT_LANGUAGE_FIRST */
-    "ru-bobttz"};
+    "ru-bobttz", "ru-cobra838"};
 #define UI_LANGUAGES ((int)(sizeof(kUiLanguages) / sizeof(kUiLanguages[0])))
 _Static_assert(UI_LANGUAGES == ICO_OPT_UI_LANGUAGE_COUNT, "a name for each UiLang");
 
@@ -474,7 +474,7 @@ int ico_opt_ui_language(void)
         if (s_ui_language < 0 && v != NULL && strcmp(v, "auto") != 0) {
             fprintf(stderr,
                     "options: [ui] language = \"%s\" is not one of auto, en, fr, de, it, es, ja, "
-                    "ko, zh, ru-bobttz\n",
+                    "ko, zh, ru-bobttz, ru-cobra838\n",
                     v);
         }
     }
@@ -509,8 +509,8 @@ int ico_opt_text_language(void)
         }
         if (s_text_language < 0 && v != NULL && v[0] != '\0') {
             fprintf(stderr,
-                    "options: [game] text_language = \"%s\" is not one of \"\", ru-bobttz; "
-                    "the game's own text\n",
+                    "options: [game] text_language = \"%s\" is not one of \"\", ru-bobttz, "
+                    "ru-cobra838; the game's own text\n",
                     v);
         } else if (s_text_language >= 0) {
             fprintf(stderr, "options: [game] text_language = \"%s\": a community translation\n",

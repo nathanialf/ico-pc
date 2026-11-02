@@ -795,4 +795,5 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "フレームレートが「オリジナル」より高く、光のにじみがオンのときだけ働きます。",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
+    [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
 };

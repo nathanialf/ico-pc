@@ -17,7 +17,7 @@ static int s_wordsLang = -1; /* a community translation's menu words; -1 none */
 
 static const char *const *const s_tables[UI_LANG_TABLES] = {
     ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it,        ui_strings_es,
-    ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru_bobttz,
+    ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru_bobttz, ui_strings_ru_cobra838,
 };
 
 void ui_set_language(UiLang lang)

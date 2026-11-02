@@ -10,8 +10,10 @@ Translations so far:
 | Language in Options | Language | Translated by |
 | --- | --- | --- |
 | Русский (bob-ttz) | Russian | bob-ttz |
+| Русский (cobra838) | Russian | cobra838 |
 
-A second Russian translation, by cobra838, is waiting for its two files (below).
+cobra838's came as C tables in a pull request rather than the two CSV files; it was brought into
+the same two files below by hand, with the same checks.
 
 ## What a translation covers
 

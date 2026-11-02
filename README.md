@@ -355,7 +355,8 @@ contributors: [`docs/port/ARCHITECTURE.md`](https://github.com/nathanialf/ico-pc
 - bob-ttz and cobra838, for the Russian translation.
 
 Options > Language > Русский (bob-ttz) plays the game with bob-ttz's
-Russian menus and subtitles. To translate the game into your language, see
+Russian menus and subtitles, and Options > Language > Русский (cobra838) with
+cobra838's own Russian translation of them. To translate the game into your language, see
 [Translating the game](docs/TRANSLATING.md).
 
 ### Contributors

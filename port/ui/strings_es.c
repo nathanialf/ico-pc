@@ -794,4 +794,5 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Solo importa por encima de la velocidad de fotogramas Original y con Resplandor activado.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
+    [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
 };

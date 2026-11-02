@@ -21,7 +21,7 @@
  *     Russian (bob-ttz): the English game data, [game] text_language, the
  *     Menu language's Auto in Russian, the game's menu words Russian over
  *     the English sheets and the subtitles as text; the step after it is
- *     English again, the key cleared.  On the other discs the row is not
+ *     Russian (cobra838), then English again, the key cleared.  On the other discs the row is not
  *     shown and the key does nothing;
  *   - the menu words' strips (menu_font.c, ui__menu_strip_raster): the five
  *     sheets' own words byte for byte with or without the translation in
@@ -216,6 +216,10 @@ static void testLanguageRow(int pal)
           "German menus, the game's words still Russian");
     ico_opt_set_ui_language(-1);
     ui_settings_apply_language();
+    /* entry 6, Russian (cobra838) (subtitles_ru_cobra838_test), then English */
+    ui_settings_step(UI_OPT_LANGUAGE, 1);
+    CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == UI_LANG_RU_COBRA838,
+          "entry 6: Russian (cobra838)");
     ui_settings_step(UI_OPT_LANGUAGE, 1);
     CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == -1 &&
               strcmp(ico_config_get_string("game.text_language", "?"), "") == 0 &&
@@ -223,9 +227,12 @@ static void testLanguageRow(int pal)
               ui_subtitle_words(1, 0) == NULL,
           "wraps to English, the key cleared");
     ui_settings_step(UI_OPT_LANGUAGE, -1);
+    CHECK(ico_opt_text_language() == UI_LANG_RU_COBRA838, "left: Russian (cobra838)");
+    ui_settings_step(UI_OPT_LANGUAGE, -1);
     CHECK(ico_opt_text_language() == UI_LANG_RU_BOBTTZ, "left: Russian (bob-ttz) again");
     ui_settings_step(UI_OPT_LANGUAGE, -1);
     CHECK(NonLinearCameraMove == 6 && ico_opt_text_language() == -1, "left: Spanish");
+    ui_settings_step(UI_OPT_LANGUAGE, 1);
     ui_settings_step(UI_OPT_LANGUAGE, 1);
     ui_settings_step(UI_OPT_LANGUAGE, 1);
     CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == -1, "English");

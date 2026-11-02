@@ -53,11 +53,11 @@ int ico_opt_text_language(void)
     return s_text;
 }
 
-static const char *const kNames[UI_LANG_TABLES] = {"en", "fr", "de", "it",       "es",
-                                                   "ja", "ko", "zh", "ru-bobttz"};
+static const char *const kNames[UI_LANG_TABLES] = {"en", "fr", "de", "it",        "es",
+                                                   "ja", "ko", "zh", "ru-bobttz", "ru-cobra838"};
 static const char *const *const kTables[UI_LANG_TABLES] = {
-    ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it,       ui_strings_es,
-    ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru_bobttz};
+    ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it,        ui_strings_es,
+    ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru_bobttz, ui_strings_ru_cobra838};
 
 /* s's printf conversions, their letters in order ("%%" is none) */
 static void conversions(const char *s, char *out, size_t n)
@@ -129,7 +129,23 @@ static void testTables(void)
         CHECK(kTables[l][UI_STR_LANG_RU_BOBTTZ] != NULL &&
                   strcmp(kTables[l][UI_STR_LANG_RU_BOBTTZ], "Русский (bob-ttz)") == 0,
               "%s names Russian (bob-ttz) in Russian", kNames[l]);
+        CHECK(kTables[l][UI_STR_LANG_RU_COBRA838] != NULL &&
+                  strcmp(kTables[l][UI_STR_LANG_RU_COBRA838], "Русский (cobra838)") == 0,
+              "%s names Russian (cobra838) in Russian", kNames[l]);
     }
+    /* cobra838's table (PR 180): his rows, not bob-ttz's; the Yorda pit
+       time's 1.5x step (his "x1" was the 1x one) */
+    CHECK(strcmp(ui_strings_ru_cobra838[UI_STR_VAL_PIT_LONGER], "x1,5") == 0 &&
+              strcmp(ui_strings_ru_cobra838[UI_STR_VAL_PIT_DOUBLE], "x2") == 0,
+          "cobra838: Longer is x1,5 (%s)", ui_strings_ru_cobra838[UI_STR_VAL_PIT_LONGER]);
+    /* English: the rows his table left in English, a note over its space,
+       an id newer than his table, one whose English changed since */
+    CHECK(ui_strings_ru_cobra838[UI_STR_OPT_GRAPHICS_ADAPTER] == NULL &&
+              ui_strings_ru_cobra838[UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] == NULL &&
+              ui_strings_ru_cobra838[UI_STR_GPU_DRIVER_NOTE_LOST] == NULL &&
+              ui_strings_ru_cobra838[UI_STR_EXTRAS_BACKUP] == NULL &&
+              ui_strings_ru_cobra838[UI_STR_STATES_NOTE] == NULL,
+          "cobra838: the rows kept in English");
 }
 
 static void testSerial(void)
@@ -266,6 +282,10 @@ static void testCommunity(void)
           "Russian (bob-ttz) over the English European disc");
     CHECK(ui_lang_text_resolve(UI_LANG_RU_BOBTTZ, 1, 3) == -1, "not over the French game");
     CHECK(ui_lang_text_resolve(UI_LANG_RU_BOBTTZ, 0, 2) == -1, "not on a disc without one");
+    CHECK(ui_lang_text_resolve(UI_LANG_RU_COBRA838, 1, 2) == UI_LANG_RU_COBRA838 &&
+              ui_lang_text_resolve(UI_LANG_RU_COBRA838, 1, 4) == -1 &&
+              ui_lang_text_resolve(UI_LANG_RU_COBRA838, 0, 2) == -1,
+          "Russian (cobra838): over the English European disc only");
     CHECK(ui_lang_text_resolve(-1, 1, 2) == -1, "none chosen");
     for (int l = 0; l < UI_LANG_COMMUNITY_FIRST; l++) {
         CHECK(ui_lang_text_resolve(l, 1, 2) == -1, "%s is not a community translation", kNames[l]);
@@ -280,6 +300,12 @@ static void testCommunity(void)
     CHECK(ui_settings_resolve_language() == UI_LANG_RU_BOBTTZ, "Auto: the translation");
     s_choice = UI_LANG_DE;
     CHECK(ui_settings_resolve_language() == UI_LANG_DE, "a chosen Menu language wins");
+    s_choice = -1;
+    s_text = UI_LANG_RU_COBRA838;
+    CHECK(ui_settings_text_language() == UI_LANG_RU_COBRA838 &&
+              ui_settings_resolve_language() == UI_LANG_RU_COBRA838,
+          "Auto: Russian (cobra838) when it is the one chosen");
+    s_text = UI_LANG_RU_BOBTTZ;
     s_choice = -1;
     NonLinearCameraMove = 5;
     CHECK(ui_settings_text_language() == -1 && ui_settings_resolve_language() == UI_LANG_IT,
@@ -309,6 +335,12 @@ static void testCommunity(void)
     CHECK(strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_NEW_GAME),
                  ui_strings_ru_bobttz[UI_STR_MT_NEW_GAME]) == 0,
           "the title's New Game in Russian");
+    ui_set_menu_words_language(UI_LANG_RU_COBRA838);
+    CHECK(ui_menu_words_language(UI_LANG_EN) == UI_LANG_RU_COBRA838 &&
+              ui_menu_words_language(UI_LANG_FR) == UI_LANG_FR &&
+              strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_NEW_GAME),
+                     ui_strings_ru_cobra838[UI_STR_MT_NEW_GAME]) == 0,
+          "Russian (cobra838): his words over the English sheets only");
     ui_set_menu_words_language(UI_LANG_DE);
     CHECK(ui_menu_words_language(UI_LANG_EN) == UI_LANG_EN, "a disc language is not one");
     ui_set_menu_words_language(-1);

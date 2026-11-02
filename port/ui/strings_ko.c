@@ -790,4 +790,5 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "프레임 레이트가 ‘오리지널’보다 높고 빛 번짐이 켜져 있을 때만 적용됩니다.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
+    [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
 };

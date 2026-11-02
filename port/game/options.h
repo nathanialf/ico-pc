@@ -59,11 +59,11 @@
  *                                 auto (Japanese on the Japanese disc,
  *                                 the game's language on the European
  *                                 one) or en, fr, de, it, es, ja, ko,
- *                                 zh, ru-bobttz
+ *                                 zh, ru-bobttz, ru-cobra838
  *   [game] text_language   ""     a community translation of the game's
  *                                 menu words and subtitles, drawn as text
  *                                 over the English disc data: "" none or
- *                                 ru-bobttz
+ *                                 ru-bobttz or ru-cobra838
  *   [dev] debug_option     0      with developer mode: non-zero loads the
  *                                 debug option table the Debug Mode page saves
  *
@@ -252,12 +252,13 @@ const char *ico_opt_ui_language_name(int lang);
 /* The names [ui] language and [game] text_language take, UiLang order
    (port/ui/strings.h: the eight tables, then the community translations
    from ICO_OPT_TEXT_LANGUAGE_FIRST, port/ui/ui_lang.c asserts both). */
-#define ICO_OPT_UI_LANGUAGE_COUNT 9
+#define ICO_OPT_UI_LANGUAGE_COUNT 10
 #define ICO_OPT_TEXT_LANGUAGE_FIRST 8
 /* [game] text_language: a community translation of the game's text
    (docs/TRANSLATING.md), the Language row's entries after the game's five:
    "" (-1, the default: none, the game's own language and pictures) or
-   "ru-bobttz" (UI_LANG_RU_BOBTTZ, 8); any other word is "", logged once.
+   "ru-bobttz" (UI_LANG_RU_BOBTTZ, 8) or "ru-cobra838" (UI_LANG_RU_COBRA838,
+   9); any other word is "", logged once.
    It applies on a disc whose game has a language of its own (the European
    disc) while that language is English (port/ui/ui_lang.h
    ui_settings_text_language): the menu words and the subtitles in the

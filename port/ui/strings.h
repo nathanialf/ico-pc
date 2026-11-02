@@ -53,6 +53,8 @@ typedef enum UiLang {
     UI_LANG_COUNT,
     /* Russian, by bob-ttz (GitHub issue 132's CSVs) */
     UI_LANG_RU_BOBTTZ = UI_LANG_COUNT,
+    /* Russian, by cobra838 (GitHub PR 180's tables) */
+    UI_LANG_RU_COBRA838,
     UI_LANG_TABLES
 } UiLang;
 
@@ -947,6 +949,7 @@ typedef enum UiStrId {
     /* the community translations' names (the Language and Menu language
        rows, after UI_STR_LANG_ZH), in their own language in every table */
     UI_STR_LANG_RU_BOBTTZ,
+    UI_STR_LANG_RU_COBRA838,
     UI_STR_COUNT
 } UiStrId;
 
@@ -1029,6 +1032,7 @@ extern const char *const ui_strings_ja[UI_STR_COUNT];
 extern const char *const ui_strings_ko[UI_STR_COUNT];
 extern const char *const ui_strings_zh[UI_STR_COUNT];
 extern const char *const ui_strings_ru_bobttz[UI_STR_COUNT];
+extern const char *const ui_strings_ru_cobra838[UI_STR_COUNT];
 
 #ifdef __cplusplus
 }

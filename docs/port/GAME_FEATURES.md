@@ -29,9 +29,9 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | `port/data/df_pack.h` | reading one member of a `DATA.DF` stage pack outside the game's disc thread |
 | `port/include/ico_credits.h`, `port/game/credits.c`, `credits_live.c` | the staff roll's port credit and the Extras credits playback |
 | `port/game/title_logo.h`, `title_logo.c` | the title logo hidden under the port's menus, the title's full-frame models |
-| `port/game/subtitles.h`, `subtitles_ru_bobttz.c` | a community translation's subtitle table: the words of each record it translates |
+| `port/game/subtitles.h`, `subtitles_ru_bobttz.c`, `subtitles_ru_cobra838.c` | the community translations' subtitle tables: the words of each record each translates |
 | `port/ui/subtitle_text.h`, `subtitle_text.c` | the subtitles of the community translation in force, drawn as text in `jimakuDisp`'s place of the strips |
-| `port/ui/strings_ru_bobttz.c` | the Russian (bob-ttz) table of the port's strings and the European disc's menu words |
+| `port/ui/strings_ru_bobttz.c`, `strings_ru_cobra838.c` | the Russian (bob-ttz) and Russian (cobra838) tables of the port's strings and the European disc's menu words |
 | `port/platform/steam_shortcut.h` | Add to Steam |
 | `port/platform/gpu_driver.h` | the Android build's graphics driver packages |
 | `port/game/state_host.c`, `state_rules.h`, `state_rules.c` | save states: the save, the load, the slots, the picture, the [dev] keys; the conditions and the listing |
@@ -375,7 +375,7 @@ hold the rest.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Display: 50 Hz (title only) | W | H | H | H | H | H | H | `has_50hz_row`; `settings_discs`, `settings_<slug>` |
 | Main: Game language | W | H | H | H | H | H | H | `has_game_language`; `settings_discs`, `settings_<slug>` |
-| Main: Game language's community entries (Русский (bob-ttz)) | W | H | H | H | H | H | H | the row's own rule (`has_game_language`); in force only there with the game in English (`ui_settings_text_language`), so `[game] text_language` changes nothing on the other discs ([Community translations](#community-translations)); `subtitles_ru`, `subtitles_ru_<slug>` (jpn, kor, cn), `jimaku_text` |
+| Main: Game language's community entries (Русский (bob-ttz), Русский (cobra838)) | W | H | H | H | H | H | H | the row's own rule (`has_game_language`); in force only there with the game in English (`ui_settings_text_language`), so `[game] text_language` changes nothing on the other discs ([Community translations](#community-translations)); `subtitles_ru`, `subtitles_ru_<slug>` (jpn, kor, cn), `subtitles_ru_cobra838`, `subtitles_ru_cobra838_<slug>`, `jimaku_text` |
 | Main: Menu language | W | W | W | W | W | W | W | Auto is `ui_lang_default`, the sheets `menu_sheet`; `settings_<slug>`, `settings_render_<slug>` |
 | Controls: Hold type | W | W | W | W | W | W | W | `hold_type_own`, the default `"disc"`: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 (the 2001 arms `_ACTCommonMailTest_<disc>` read `optionControlType` in the port); `settings_discs`, `options_<slug>`, `save` (per disc) |
 | Controls: Circle goes back | W | H | H | W | W | W | H | `pad_back` is Triangle (`lt_ext_has_circle_back`); the 2001 arms cancel through `LA_BACK` too; `settings_discs`, `settings_<slug>` |
@@ -932,8 +932,10 @@ screen, to the [native frame](ARCHITECTURE.md#terms) by scaling its node matrice
 
 A community translation is a player's translation of the game into a language the disc does not
 have, built into the port as text ([TRANSLATING.md](../TRANSLATING.md) for the contributor and the
-maintainer). Russian, by bob-ttz, is the first (`UI_LANG_RU_BOBTTZ`); the Language row offers it
-after the European disc's five, and choosing it sets the game's language to English
+maintainer). Russian, by bob-ttz, is the first (`UI_LANG_RU_BOBTTZ`), Russian by cobra838 the
+second (`UI_LANG_RU_COBRA838`, `[game] text_language = "ru-cobra838"`, the same path with its own
+two tables); the Language row offers them after the European disc's five (entries 5 and 6 of
+seven), and choosing one sets the game's language to English
 (`NonLinearCameraMove` 2: the English subtitle files, menu sheets and stage animations, and the
 English language byte in the save's product file, so the saves are the English game's) and writes
 `[game] text_language = "ru-bobttz"` (`port/ui/settings.c` (`setLanguageEntry`, `languageEntry`)).
@@ -976,8 +978,10 @@ picture (ru-bobttz, 42 entries)`), the Language row's step (`settings: Language 
 language 2, [game] text_language "ru-bobttz")`) and the key as read (`options: [game]
 text_language = "ru-bobttz": a community translation`, or the word it does not know).
 
-Russian (cobra838), the second translation offered on the issue, is not built: it is added the
-same way once its two files arrive ([TRANSLATING.md](../TRANSLATING.md#adding-a-translation)).
+Russian (cobra838) came as C tables in pull request 180 (`port/ui/strings_ru.c`,
+`port/ui/subtitles_rus.c` there) rather than the two CSV files; they were converted once into
+`strings_ru_cobra838.c` and `subtitles_ru_cobra838.c` by the steps and checks of
+[TRANSLATING.md](../TRANSLATING.md#adding-a-translation), its log lines name `ru-cobra838`.
 
 ## Add to Steam
 

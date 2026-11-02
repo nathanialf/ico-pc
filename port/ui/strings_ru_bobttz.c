@@ -774,4 +774,5 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Имеет значение только при частоте кадров выше оригинальной, при включенном эффекте свечения.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
+    [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
 };

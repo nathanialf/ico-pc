@@ -537,8 +537,8 @@ static void testNotesFit(void)
 {
     /* the eight tables and the community translations (an id one leaves
        untranslated is the English note) */
-    static const char *const kLang[UI_LANG_TABLES] = {"en", "fr", "de", "it",       "es",
-                                                      "ja", "ko", "zh", "ru-bobttz"};
+    static const char *const kLang[UI_LANG_TABLES] = {"en", "fr", "de", "it",        "es",
+                                                      "ja", "ko", "zh", "ru-bobttz", "ru-cobra838"};
     int checked = 0;
     for (int lang = 0; lang < UI_LANG_TABLES; lang++) {
         ui_set_language((UiLang)lang);
@@ -1963,8 +1963,9 @@ static void testValues(void)
           "circle_back: off (Triangle alone)");
     ui_settings_step(UI_OPT_CIRCLE_BACK, -1);
     CHECK(ico_opt_circle_back() == 1 && lt_ext_back_buttons() == 0x30, "circle_back: on again");
-    /* Spanish, then the community translation (the English game under
-       Russian (bob-ttz): [game] text_language), then English again */
+    /* Spanish, then the community translations (the English game under
+       Russian (bob-ttz), then Russian (cobra838): [game] text_language),
+       then English again: seven entries */
     NonLinearCameraMove = 6;
     ui_settings_step(UI_OPT_LANGUAGE, 1);
     CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == UI_LANG_RU_BOBTTZ &&
@@ -1975,13 +1976,25 @@ static void testValues(void)
           "language ES -> Russian (bob-ttz) over the English game (%d, %s)", NonLinearCameraMove,
           ui_settings_value_text(UI_OPT_LANGUAGE));
     ui_settings_step(UI_OPT_LANGUAGE, 1);
+    CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == UI_LANG_RU_COBRA838 &&
+              ui_settings_text_language() == UI_LANG_RU_COBRA838 &&
+              strcmp(ico_config_get_string("game.text_language", ""), "ru-cobra838") == 0 &&
+              strcmp(ico_config_get_string("game.language", ""), "en") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_LANGUAGE), "Русский (cobra838)") == 0 &&
+              ui_settings_resolve_language() == UI_LANG_RU_COBRA838,
+          "language Russian (bob-ttz) -> Russian (cobra838) over the English game (%d, %s)",
+          NonLinearCameraMove, ui_settings_value_text(UI_OPT_LANGUAGE));
+    ui_settings_step(UI_OPT_LANGUAGE, 1);
     CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == -1 &&
               strcmp(ico_config_get_string("game.text_language", "?"), "") == 0,
-          "language wraps Russian (bob-ttz) -> EN");
+          "language wraps Russian (cobra838) -> EN");
+    ui_settings_step(UI_OPT_LANGUAGE, -1);
+    CHECK(ico_opt_text_language() == UI_LANG_RU_COBRA838, "left: Russian (cobra838)");
     ui_settings_step(UI_OPT_LANGUAGE, -1);
     ui_settings_step(UI_OPT_LANGUAGE, -1);
     CHECK(NonLinearCameraMove == 6 && ico_opt_text_language() == -1,
-          "left twice: back to Spanish (%d)", NonLinearCameraMove);
+          "left three times: back to Spanish (%d)", NonLinearCameraMove);
+    ui_settings_step(UI_OPT_LANGUAGE, 1);
     ui_settings_step(UI_OPT_LANGUAGE, 1);
     ui_settings_step(UI_OPT_LANGUAGE, 1);
     CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == -1, "and on to English");
