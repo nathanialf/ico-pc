@@ -55,6 +55,7 @@
 #include "window_host.h"
 #include "window_lines.h"
 #include "window_pipeline_skip.h"
+#include "window_pipe_finish.h"
 #include "window_present.h"
 #include "render_thread.h"
 #include "window_present_fallback.h"
@@ -2124,6 +2125,7 @@ open_window:
        is off by the device's default, not by gpu_robust (startup_retry.h
        StartupRetryRun.robustOffDefault; Direct3D 12: NULL, its own rules) */
     ico_diag_set_robust_off_default(rhi_limits() != NULL && rhi_limits()->robustDefaultOff);
+    window_pipe_floor_driver(); /* the free-memory floor's rule (memory_floor.h) */
     {
         /* the watchdog's GPU hang counts as a device loss where the
            backend tracks its submissions (rhi_gpu_progress), said once */
@@ -2290,6 +2292,8 @@ open_window:
         } else {
             ico_diag_startup_activity_record(0);
         }
+        /* a stop at the free-memory floor: the rest in the background */
+        window_pipe_finish_start();
         /* the set in the pipeline cache file now, not only at a clean exit:
            a phone's system ends the app without one, and a lost device
            skips it, so the next start would compile the set cold again
@@ -2489,6 +2493,7 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
     }
     ico_diag_set_pipeline_cache(rhi_pipeline_cache_loaded(), NULL);
     ico_diag_set_robust_off_default(rhi_limits() != NULL && rhi_limits()->robustDefaultOff);
+    window_pipe_floor_driver(); /* the free-memory floor's rule (memory_floor.h) */
     ico_diag_set_startup_retry((int)s_retry, window_have_d3d12(), backendExplicit, s_blendExplicit,
                                backend);
     rd_blend_selftest();

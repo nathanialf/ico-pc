@@ -5682,7 +5682,7 @@ static uint32_t s_replayCount;
 
 bool rd__replay_frame_here(const RdFrame *f, int keep, bool present)
 {
-    const double t0 = rd__now_ms();
+    const double t0 = rd__now_ms(), made0 = rd__pipeline_create_ms();
     rd__perf_begin(f, keep, present);
     const bool ok = replayFrame(f, keep, present);
     rd__blur_smooth_replay_end(keep); /* the trail ends where no sprite drew */
@@ -5693,6 +5693,11 @@ bool rd__replay_frame_here(const RdFrame *f, int keep, bool present)
         s_replayMaxMs = ms;
     }
     s_replayCount++;
+    if (present) {
+        /* the stopped set's background batch (rd_pipeline.c), after the
+           picture: its time less the pipelines made in it */
+        rd__pipe_finish_tick(ms - (rd__pipeline_create_ms() - made0));
+    }
     return ok;
 }
 

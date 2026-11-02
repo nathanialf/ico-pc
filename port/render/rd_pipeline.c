@@ -78,6 +78,7 @@
 #include "rd_cache_name.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
+#include "rd_pipe_finish.h"
 #include "shader_consts.h"
 #include "shaders_gen.h"
 
@@ -1730,8 +1731,11 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
     return p;
 }
 
+static void finClear(void);
+
 void rd__pipeline_cache_clear(void)
 {
+    finClear(); /* the background set's batch in flight, and the set itself */
     if (g_rd.hasDevice) {
         for (uint32_t i = 0; i < s_used; i++) {
             if (s_cache[i].pipe.id) {
@@ -2041,7 +2045,8 @@ static void policyText(char *out, size_t size)
  * 93 and 107's v0.7.7 logs for the 2D ones, both ending inside the 2D
  * half of the set) */
 static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, uint32_t first,
-                       uint32_t last, uint32_t total, double wallMs, uint32_t threads)
+                       uint32_t last, uint32_t total, double wallMs, uint32_t threads,
+                       const char *what)
 {
     char line[600], mem[96];
     size_t at = 0;
@@ -2067,10 +2072,10 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
         at = k_ > 0 ? (at + (size_t)k_ < sizeof(line) ? at + (size_t)k_ : sizeof(line) - 1) : at;  \
     } while (0)
     if (vu) {
-        BT_PUT("VU batch %u-%u of %u (compiler %s)", first, last, total,
+        BT_PUT("%sVU batch %u-%u of %u (compiler %s)", what, first, last, total,
                s_compiler[0] ? s_compiler : "unnamed by the driver");
     } else {
-        BT_PUT("2D batch %u-%u of %u (compiler %s)", first, last, total,
+        BT_PUT("%s2D batch %u-%u of %u (compiler %s)", what, first, last, total,
                s_compiler[0] ? s_compiler : "unnamed by the driver");
     }
     BT_PUT(": %u pipelines %.2f-%.2f s, mean %.2f s, %.1f s on %u threads; %s", n, lo / 1000.0,
@@ -2156,9 +2161,15 @@ static long residentKb(void)
  * progress function running while a batch compiles and between two.
  * resolved: the keys are as rd__get_pipeline's drawKey made them (a
  * replay's, rd__pipeline_gather), not adjusted again. */
+static void finJoin(void);
+
 static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreTimes *times,
                        PreCounts *c)
 {
+    /* a background batch in flight (rd_pipelines_background_start) taken
+       first: its pipeline ids are out of the pool's headroom this batch
+       needs */
+    finJoin();
     /* the policy (rd_set_pipeline_policy): the batch's size, its threads,
      * the memory bound of the start-up set (times: not a replay's keys) */
     const uint32_t batchMax = s_setPolicy.batch > 0u && s_setPolicy.batch < RD_PIPE_BATCH
@@ -2351,7 +2362,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             char why[224];
             failReason(&st0, &st1, why, sizeof(why));
             if (made > 0) {
-                batchTimes(bk, bms, made, first + 1, i, m, batchMs, batch.threads);
+                batchTimes(bk, bms, made, first + 1, i, m, batchMs, batch.threads, "");
             }
             if (times != NULL && i < m && made > 0 &&
                 (s_setPolicy.cacheEachBatch || rd__now_ms() - s_setSavedMs >= RD_SET_SAVE_MS) &&
@@ -2457,6 +2468,381 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
     }
 }
 
+/* ------------------------------------------------- the background finisher
+ * (rd.h rd_pipelines_background_start, rd_pipe_finish.h).  The start-up set
+ * stopped at its policy's bound (finOffer: the keys and where it stopped);
+ * the window starts the finisher when the bound was the free-memory floor
+ * on a driver whose floor is the set's own need.  Each batch is begun and
+ * taken after a picture (rd__pipe_finish_tick: the end of a presenting
+ * replay, on the thread that draws), its compiles on low-priority workers
+ * meanwhile (rhi_create_pipelines_begin); the game thread touches the
+ * finisher only with the render thread idle (the display change, the
+ * shutdown) or through the hold (an atomic) and the cache write
+ * (finSaveTake). */
+static struct {
+    bool offered;       /* the set stopped at its policy's bound */
+    bool on;            /* started, not ended */
+    uint32_t m, cursor; /* the keys (s_finKeys) and the next one */
+    RdBackgroundMemoryFn memory;
+    RhiPipelineJobs *jobs;    /* the batch in flight */
+    uint32_t nb, first, last; /* its keys and their places in the set (1-based) */
+    RdPipeKeyInt bk[RD_FINISH_BATCH];
+    RhiPipelineDesc bd[RD_FINISH_BATCH];
+    RhiBindGroupLayout bl[RD_FINISH_BATCH][4];
+    RhiStats st0; /* the RHI's counts at its begin (failReason) */
+    double t0, floorMs, savedMs, startMs;
+    uint32_t batches, made, failed, waitsFloor;
+    uint32_t holds0; /* s_finHolds at the start */
+    double busyMs;   /* the batches' wall time */
+} s_fin;
+
+static RdPipeKeyInt s_finKeys[RD_PIPELINE_CACHE_MAX];
+/* the hold's end in microseconds of rd__now_ms, and the holds begun (a
+ * hold asked while one is in force extends it, not counted) (any thread) */
+static uint64_t s_finHoldUs;
+static uint32_t s_finHolds;
+/* a cache write is due (the game thread's rd_pipelines_lazy_tick) */
+static bool s_finSave;
+
+/* rd__finish_pick's key: -1 made (on first use meanwhile, or by an earlier
+ * batch), failed or never made; else its destination-read kind */
+static int finKeyKind(void *user, uint32_t i)
+{
+    RdPipeKeyInt tmp;
+    bool found;
+    (void)user;
+    const RdPipeKeyInt *k = drawKey(&s_finKeys[i], &tmp);
+    if (g_rd.spritePlanesOff && rd__key_is_sprite_planes(k)) {
+        return -1; /* issue 161: off for the run, never created */
+    }
+    (void)probeKey(k, &found);
+    return found ? -1 : k->dst != RHI_DST_READ_NONE;
+}
+
+static uint32_t finLeft(void)
+{
+    uint32_t left = 0;
+    for (uint32_t i = s_fin.cursor; i < s_fin.m; i++) {
+        left += finKeyKind(NULL, i) >= 0;
+    }
+    return left;
+}
+
+static void finOffer(const RdPipeKeyInt *keys, uint32_t m, uint32_t stoppedAt)
+{
+    memcpy(s_finKeys, keys, (size_t)m * sizeof(keys[0]));
+    s_fin.m = m;
+    s_fin.cursor = stoppedAt < m ? stoppedAt : m;
+    s_fin.offered = true;
+}
+
+/* the batch in flight taken (wait: until its compiles end; else only when
+ * they have): its pipelines kept as the start-up set keeps a batch's,
+ * its line logged with "background" in it.  False when it goes on. */
+static bool finEnd(bool wait)
+{
+    RhiPipeline bp[RD_FINISH_BATCH];
+    float bms[RD_FINISH_BATCH];
+    uint32_t threads = 1;
+    if (s_fin.jobs == NULL) {
+        return true;
+    }
+    if (!rhi_create_pipelines_end(s_fin.jobs, wait, bp, bms, &threads)) {
+        return false;
+    }
+    s_fin.jobs = NULL;
+    const double wallMs = rd__now_ms() - s_fin.t0;
+    s_fin.busyMs += wallMs;
+    s_fin.batches++;
+    RhiStats st1;
+    char why[224];
+    rhiPipeCounts(&st1);
+    failReason(&s_fin.st0, &st1, why, sizeof(why));
+    batchTimes(s_fin.bk, bms, s_fin.nb, s_fin.first, s_fin.last, s_fin.m, wallMs, threads,
+               "background ");
+    for (uint32_t j = 0; j < s_fin.nb; j++) {
+        bool found;
+        const uint32_t at = probeKey(&s_fin.bk[j], &found);
+        if (!bp[j].id) {
+            if (!found) {
+                keepPipeline(&s_fin.bk[j], bp[j], at, "in the background set", why);
+            }
+            s_fin.failed++;
+            continue;
+        }
+        /* made on first use meanwhile (a draw that could not wait), or the
+           cache filled */
+        if (found || s_used >= RD_PIPELINE_CACHE_MAX) {
+            rhi_destroy_pipeline(bp[j]);
+            continue;
+        }
+        keepPipeline(&s_fin.bk[j], bp[j], at, "in the background set", "");
+        s_fin.made++;
+    }
+    s_fin.nb = 0;
+    s_batchNote[0] = '\0';
+    activityDone();
+    if (rd__now_ms() - s_fin.savedMs >= RD_FINISH_SAVE_MS) {
+        s_fin.savedMs = rd__now_ms();
+        __atomic_store_n(&s_finSave, true, __ATOMIC_RELEASE);
+    }
+    return true;
+}
+
+static void finJoin(void)
+{
+    if (s_fin.jobs != NULL) {
+        (void)finEnd(true);
+    }
+}
+
+/* the finisher ends: its line (made, failed, the batches' time, the
+ * waits) and the cache's write */
+static void finStop(const char *why)
+{
+    finJoin();
+    s_fin.on = false;
+    s_fin.offered = false;
+    __atomic_store_n(&s_finSave, true, __ATOMIC_RELEASE);
+    rd__log("pipelines: the background set %s: %u pipelines made in %u batches, %u failed, %.1f s "
+            "compiling over %.1f s since it resumed (%u waits for a late step or a slow picture, "
+            "%u for the free memory); %u keys left to first use",
+            why, s_fin.made, s_fin.batches, s_fin.failed, s_fin.busyMs / 1000.0,
+            (rd__now_ms() - s_fin.startMs) / 1000.0,
+            __atomic_load_n(&s_finHolds, __ATOMIC_RELAXED) - s_fin.holds0, s_fin.waitsFloor,
+            finLeft());
+}
+
+static void finClear(void)
+{
+    if (s_fin.jobs != NULL && g_rd.hasDevice) {
+        /* the pipelines of the batch in flight destroyed with the cache */
+        (void)rhi_create_pipelines_end(s_fin.jobs, true, NULL, NULL, NULL);
+        s_fin.jobs = NULL;
+        s_fin.nb = 0;
+        s_batchNote[0] = '\0';
+    }
+    if (s_fin.on) {
+        s_fin.on = false;
+        rd__log("pipelines: the background set ends: the pipeline cache was cleared (%u made in "
+                "%u batches)",
+                s_fin.made, s_fin.batches);
+    }
+    s_fin.offered = false;
+    s_fin.m = s_fin.cursor = 0;
+}
+
+/* a display change on a lazy run (rd__display_pipelines; the game thread,
+ * the render thread idle): the finisher goes on with the new state's
+ * reachable keys from their start (the old state's left are not made: a
+ * draw of the new state does not ask for them).  False when it is not
+ * running. */
+static bool finRestart(void)
+{
+    if (!s_fin.on) {
+        return false;
+    }
+    finJoin();
+    const uint32_t n = rd__enumerate_reachable(s_finKeys, RD_PIPELINE_CACHE_MAX);
+    s_fin.m = n < RD_PIPELINE_CACHE_MAX ? n : RD_PIPELINE_CACHE_MAX;
+    s_fin.cursor = 0;
+    rd__log("display change: the background set goes on with the new state's keys (%u of its %u "
+            "not made yet)",
+            finLeft(), n);
+    return true;
+}
+
+static bool finSaveTake(void)
+{
+    return __atomic_exchange_n(&s_finSave, false, __ATOMIC_ACQ_REL);
+}
+
+/* the next batch begun: the set's next keys not made yet (rd__finish_pick),
+ * their descriptions made here, their compiles handed to the workers */
+static void finBegin(void)
+{
+    uint32_t idx[RD_FINISH_BATCH];
+    const uint32_t n =
+        rd__finish_pick(s_fin.m, &s_fin.cursor, RD_FINISH_BATCH, finKeyKind, NULL, idx);
+    uint32_t nb = 0;
+    for (uint32_t j = 0; j < n; j++) {
+        RdPipeKeyInt tmp;
+        bool dup = false;
+        const RdPipeKeyInt *k = drawKey(&s_finKeys[idx[j]], &tmp);
+        for (uint32_t q = 0; q < nb && !dup; q++) {
+            dup = keyEqual(&s_fin.bk[q], k);
+        }
+        if (dup) {
+            continue;
+        }
+        /* room for the batch and for one of the start-up set's own
+           (createKeys: the pool's headroom holds one batch outside the
+           cache) */
+        if (s_createStopped || cacheFull(k) ||
+            s_used + nb + RD_PIPE_BATCH >= RD_PIPELINE_CACHE_MAX) {
+            s_fin.failed++;
+            continue;
+        }
+        if (!pipelineDesc(k, &s_fin.bd[nb], s_fin.bl[nb])) {
+            bool found;
+            const uint32_t at = probeKey(k, &found);
+            keepPipeline(k, (RhiPipeline){0}, at, "in the background set",
+                         "its description was not made (a shader module not loaded)");
+            s_fin.failed++;
+            continue;
+        }
+        if (nb == 0) {
+            s_fin.first = idx[j] + 1;
+        }
+        s_fin.last = idx[j] + 1;
+        s_fin.bk[nb++] = *k;
+    }
+    if (nb == 0) {
+        return; /* the next picture takes the next keys, or ends it */
+    }
+    {
+        char a[96], z[96], mods[320];
+        keyWords(&s_fin.bk[0], a, sizeof(a));
+        keyWords(&s_fin.bk[nb - 1], z, sizeof(z));
+        batchModules(s_fin.bk, nb, mods, sizeof(mods));
+        /* the crash report's note while the batch compiles (a lazy run's
+           creation puts it back after its own, activityDone); the result
+           is read so gcc 14's -Wformat-truncation at -O2 sees the cut is
+           meant */
+        int w = snprintf(s_batchNote, sizeof(s_batchNote),
+                         "creating pipelines %u-%u of %u in the background: %s to %s; %s",
+                         s_fin.first, s_fin.last, s_fin.m, a, z, mods);
+        (void)w;
+        if (s_activityFn != NULL) {
+            s_activityFn(s_batchNote);
+        }
+    }
+    rhiPipeCounts(&s_fin.st0);
+    s_fin.nb = nb;
+    s_fin.t0 = rd__now_ms();
+    s_fin.jobs = rhi_create_pipelines_begin(s_fin.bd, nb, RD_FINISH_THREADS, true);
+    if (s_fin.jobs == NULL) {
+        s_fin.nb = 0;
+        s_batchNote[0] = '\0';
+        activityDone();
+        finStop("ends: the graphics backend has no background creation");
+    }
+}
+
+uint32_t rd_pipelines_background_start(RdBackgroundMemoryFn memory)
+{
+    if (!g_rd.hasDevice || !s_fin.offered || s_fin.on) {
+        return 0;
+    }
+    if (rhi_backend() != RHI_BACKEND_VULKAN) {
+        rd__log("pipelines: the stopped set is not resumed in the background (the graphics API "
+                "has no background creation): the rest made on first use");
+        s_fin.offered = false;
+        return 0;
+    }
+    const uint32_t left = finLeft();
+    if (left == 0) {
+        s_fin.offered = false;
+        return 0;
+    }
+    s_fin.on = true;
+    s_fin.memory = memory;
+    s_fin.startMs = s_fin.savedMs = rd__now_ms();
+    s_fin.floorMs = 0.0;
+    s_fin.batches = s_fin.made = s_fin.failed = s_fin.waitsFloor = 0;
+    s_fin.holds0 = __atomic_load_n(&s_finHolds, __ATOMIC_RELAXED);
+    s_fin.busyMs = 0.0;
+    rd__log("pipelines: the stopped set resumes in the background (%u left, keys %u-%u of %u): "
+            "batches of up to %u on %u threads at low priority, one at a time between pictures; "
+            "the free memory and the system's low-memory signal asked before each, none begun "
+            "for %.1f s after a late game step or a picture over %.0f ms; a draw that needs a key "
+            "not made yet still makes it at once",
+            left, s_fin.cursor + 1, s_fin.m, RD_FINISH_BATCH, RD_FINISH_THREADS,
+            RD_FINISH_HOLD_MS / 1000.0, RD_FINISH_SLOW_MS);
+    return left;
+}
+
+void rd_pipelines_background_hold(void)
+{
+    const double now = rd__now_ms();
+    const uint64_t until = (uint64_t)((now + RD_FINISH_HOLD_MS) * 1000.0);
+    const uint64_t was = __atomic_exchange_n(&s_finHoldUs, until, __ATOMIC_ACQ_REL);
+    if ((double)was / 1000.0 < now) {
+        __atomic_add_fetch(&s_finHolds, 1u, __ATOMIC_RELAXED);
+    }
+}
+
+bool rd_pipelines_background_on(void)
+{
+    return s_fin.on;
+}
+
+/* rate-limited: the first 8 waits of a kind, then every 100th */
+static bool finWaitLine(uint32_t n)
+{
+    return n <= 8u || n % 100u == 0u;
+}
+
+void rd__pipe_finish_tick(double pictureMs)
+{
+    if (!s_fin.on || !g_rd.hasDevice || s_gatherOn) {
+        return;
+    }
+    const double now = rd__now_ms();
+    if (pictureMs > RD_FINISH_SLOW_MS) {
+        rd_pipelines_background_hold(); /* the render thread's own slow picture */
+    }
+    RdFinishIn in;
+    memset(&in, 0, sizeof(in));
+    in.on = true;
+    in.inflight = s_fin.jobs != NULL;
+    in.finished = false;
+    in.left = s_fin.cursor < s_fin.m ? s_fin.m - s_fin.cursor : 0;
+    in.nowMs = now;
+    in.holdMs = (double)__atomic_load_n(&s_finHoldUs, __ATOMIC_ACQUIRE) / 1000.0;
+    in.floorMs = s_fin.floorMs;
+    in.memory = -1;
+    if (in.inflight) {
+        /* taken now when its compiles have ended (end without waiting);
+           one action a picture */
+        (void)finEnd(false);
+        return;
+    }
+    RdFinishStep step = rd__finish_step(&in);
+    char why[128] = "";
+    if (step == RD_FINISH_CHECK) {
+        in.memory = s_fin.memory != NULL ? s_fin.memory(why, sizeof(why)) : 0;
+        step = rd__finish_step(&in);
+    }
+    switch (step) {
+    case RD_FINISH_STOP_SIGNAL: {
+        char words[192];
+        snprintf(words, sizeof(words), "ends at %s", why);
+        finStop(words);
+        break;
+    }
+    case RD_FINISH_DONE:
+        finStop("is done");
+        break;
+    case RD_FINISH_WAIT_FLOOR:
+        if (in.memory == 1) {
+            s_fin.floorMs = now + RD_FINISH_FLOOR_MS;
+            s_fin.waitsFloor++;
+            if (finWaitLine(s_fin.waitsFloor)) {
+                rd__log("pipelines: the background set waits (%s): asked again in %.0f s (%u "
+                        "such waits)",
+                        why, RD_FINISH_FLOOR_MS / 1000.0, s_fin.waitsFloor);
+            }
+        }
+        break;
+    case RD_FINISH_BEGIN:
+        finBegin();
+        break;
+    default:
+        break;
+    }
+}
+
 /* the pipelines line's words for the dynamic state in force
  * (rd__key_dynamic_normalise) */
 static const char *dynamicWords(void)
@@ -2550,6 +2936,9 @@ uint32_t rd_precreate_pipelines(void)
         /* the careful policy's bound: the rest as the frames first need
            them, each batch of them written to the cache */
         rd_pipelines_lazy(c.budget);
+        /* the window may finish the rest in the background (a stop at the
+           free-memory floor: rd_pipelines_background_start) */
+        finOffer(keys, m, c.stoppedAt);
     }
     if (c.compiled) {
         preTimesLog(&times);
@@ -2626,6 +3015,9 @@ void rd__display_pipelines(bool logAlways)
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
     static RdPipeKeyInt miss[RD_PIPELINE_CACHE_MAX];
     if (!g_rd.hasDevice || !s_startupSet || s_lazy.on) {
+        if (g_rd.hasDevice && s_lazy.on && finRestart()) {
+            return; /* the background set goes on with the new state's keys */
+        }
         if (logAlways && g_rd.hasDevice && s_lazy.on) {
             rd__log("display change: pipelines made on first use (no start-up set on this run)");
         }
@@ -2729,8 +3121,16 @@ static void lazyBatchEnd(double now)
     rd__log("pipelines: compiled %s", line);
 }
 
+static bool finSaveTake(void);
+
 void rd_pipelines_lazy_tick(void)
 {
+    if (g_rd.hasDevice && finSaveTake()) {
+        /* the background set's pipelines in the file (every
+           RD_FINISH_SAVE_MS and at its end), on this thread as a lazy
+           batch's */
+        (void)rhi_pipeline_cache_save();
+    }
     if (!s_lazy.on || s_lazy.n == 0 || !g_rd.hasDevice) {
         return;
     }

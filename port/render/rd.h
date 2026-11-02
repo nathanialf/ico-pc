@@ -735,6 +735,31 @@ bool rd_pipelines_lazy_on(void);
  * open lazy batch once no pipeline was made for 0.5 s or 2 s after its
  * first.  Nothing outside rd_pipelines_lazy's runs. */
 void rd_pipelines_lazy_tick(void);
+/* The background finisher (port/render/rd_pipe_finish.h; docs/port/
+ * PIPELINES.md "The background finisher"): after rd_precreate_pipelines
+ * stopped the set at the free-memory floor (the low-memory function said
+ * yes for the floor, not for the system's signal), the window calls it so
+ * the set's keys not made yet are compiled in the background instead of
+ * on first use: one batch of RD_FINISH_BATCH at a time, on
+ * RD_FINISH_THREADS pipeline threads at low priority
+ * (rhi_create_pipelines_begin), begun and taken after a picture on the
+ * thread that draws (the render thread), the memory function asked before
+ * each batch (2: the system's signal, the finisher ends; 1: under the
+ * floor, asked again RD_FINISH_FLOOR_MS later), no batch begun while a
+ * late step or a slow picture holds it (rd_pipelines_background_hold).
+ * A draw that needs a key the finisher has not made yet still makes it on
+ * the spot.  Logs "pipelines: the stopped set resumes in the background (N
+ * left: ...)", each batch as the set's ("compiled background VU batch
+ * 290-321 of 1196 ..."), and its end.  Returns the keys left (0: nothing
+ * to finish, or the backend has no background creation: then not started,
+ * logged).  The game thread, before the render thread starts. */
+typedef int (*RdBackgroundMemoryFn)(char *why, size_t size);
+uint32_t rd_pipelines_background_start(RdBackgroundMemoryFn memory);
+/* A late game step or a slow picture: no background batch begins for
+ * RD_FINISH_HOLD_MS (a batch in flight goes on).  Any thread. */
+void rd_pipelines_background_hold(void);
+/* Whether the finisher has keys left or a batch in flight */
+bool rd_pipelines_background_on(void);
 /* The pipelines made so far this run (the start-up set's and the frames'),
  * for the window's low-memory line. */
 uint32_t rd_pipeline_count(void);

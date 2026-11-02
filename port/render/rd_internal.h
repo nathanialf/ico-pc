@@ -1807,6 +1807,13 @@ uint32_t rd__pipeline_create_gathered(bool *stopped);
  * clears them) */
 uint32_t rd__pipeline_gathered(RdPipeKeyInt *out, uint32_t max);
 uint32_t rd__pipeline_count(void);
+/* After a presenting replay (rd_replay.c rd__replay_frame_here), on the
+ * thread that draws: the background finisher's step (rd.h
+ * rd_pipelines_background_start): a batch whose compiles ended taken, or
+ * the next one begun when nothing holds it; pictureMs (the replay's time
+ * less the pipelines made in it) over RD_FINISH_SLOW_MS holds the next
+ * batch.  Nothing when the finisher is not running. */
+void rd__pipe_finish_tick(double pictureMs);
 /* A display change (rd_begin_frame, after the settings applied and the
  * targets made again): the new state's reachable keys the cache lacks made
  * in batches as the start-up set's are, with the display change's progress

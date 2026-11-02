@@ -94,6 +94,21 @@ add_executable(rd_cache_name_test test/rd_cache_name_test.c)
 target_compile_options(rd_cache_name_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(rd_cache_name_test PRIVATE ico_cache_name)
 
+# ico_pipe_finish: the background finisher's choices (rd_pipe_finish.h: the
+# next batch of the stopped start-up set, what the finisher does after a
+# picture).  Pure C, built in every configuration; ico_render keeps the keys
+# and the pipelines (rd_pipeline.c rd_pipelines_background_start).
+add_library(ico_pipe_finish STATIC rd_pipe_finish.c)
+target_include_directories(ico_pipe_finish PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ico_pipe_finish PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+
+# rd_pipe_finish_test: the stopped set's remaining keys in its order, a
+# batch of one destination-read kind, each key once; the steps after a
+# picture (a batch in flight, the signal, the holds, the floor, the end)
+add_executable(rd_pipe_finish_test test/rd_pipe_finish_test.c)
+target_compile_options(rd_pipe_finish_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(rd_pipe_finish_test PRIVATE ico_pipe_finish)
+
 # ico_gltf: glTF 2.0 for model packs (gltf.h), the dump's
 # .gltf + .bin writer and the .gltf/.glb reader.  CPU only, built in every
 # configuration: JSON through ico_json, files through host_fs (UTF-8 paths).
@@ -126,6 +141,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME texpack_name COMMAND texpack_name_test)
     add_test(NAME rd_bisect_plan COMMAND rd_bisect_plan_test)
     add_test(NAME rd_cache_name COMMAND rd_cache_name_test)
+    add_test(NAME rd_pipe_finish COMMAND rd_pipe_finish_test)
     add_test(NAME gltf COMMAND gltf_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME texpack_disc COMMAND texpack_disc_test "${ICO_DISC_IMAGE}" "${ICO_TEXPACK_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
@@ -207,7 +223,7 @@ target_include_directories(ico_render
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 target_compile_options(ico_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref ico_texpack_name
-                      ico_cache_name)
+                      ico_cache_name ico_pipe_finish)
 # rd_tex_decode.c: the decode pool's threads (port/platform/ico_thread.h)
 target_link_libraries(ico_render PUBLIC ico_thread)
 # texpack.c, modelpack.c: the selected disc's pack folder (port/core)

@@ -157,6 +157,10 @@ void window_hold_line(double lateMs, unsigned long long heldMs, unsigned decodes
     IcoStepProfile p;
 
     s_held = heldMs;
+    if (lateMs > HOLD_LATE_MS) {
+        /* the stopped set's background batches wait (rd.h) */
+        rd_pipelines_background_hold();
+    }
     if (lateMs <= HOLD_LATE_MS || held == 0) {
         return;
     }
