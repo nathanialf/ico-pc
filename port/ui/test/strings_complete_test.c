@@ -10,7 +10,13 @@
  * language's default and setter; the port text's language from [ui]
  * language and the disc (ui_lang.c, the region rows' ui_lang_default and
  * menu_sheet); the Japanese and Korean line-break rules (ui_wide_char,
- * ui_break_before, ui_hangul_char). CPU only, no game data.
+ * ui_break_before, ui_hangul_char).  A community translation's table
+ * (UI_LANG_COMMUNITY_FIRST on) may leave an id NULL (English at run time:
+ * its CSV's empty rows and the ids newer than it), but translates at least
+ * half and names itself in every table; the community translation in force
+ * (ui_lang_text_resolve: the European disc in English only) and the Menu
+ * language's Auto following it; the game's menu words over the English
+ * sheets (ui_menu_words_language). CPU only, no game data.
  */
 #include <stdio.h>
 #include <string.h>
@@ -31,8 +37,10 @@ static int failures;
         }                                                                                          \
     } while (0)
 
-/* ui_lang.c's inputs, stubbed: [ui] language and the game's language word */
+/* ui_lang.c's inputs, stubbed: [ui] language, [game] text_language and the
+   game's language word */
 static int s_choice = -1;
+static int s_text = -1;
 int NonLinearCameraMove = 2;
 
 int ico_opt_ui_language(void)
@@ -40,10 +48,16 @@ int ico_opt_ui_language(void)
     return s_choice;
 }
 
-static const char *const kNames[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh"};
-static const char *const *const kTables[UI_LANG_COUNT] = {
-    ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it,
-    ui_strings_es, ui_strings_ja, ui_strings_ko, ui_strings_zh};
+int ico_opt_text_language(void)
+{
+    return s_text;
+}
+
+static const char *const kNames[UI_LANG_TABLES] = {"en", "fr", "de", "it",       "es",
+                                                   "ja", "ko", "zh", "ru-bobttz"};
+static const char *const *const kTables[UI_LANG_TABLES] = {
+    ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it,       ui_strings_es,
+    ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru_bobttz};
 
 /* s's printf conversions, their letters in order ("%%" is none) */
 static void conversions(const char *s, char *out, size_t n)
@@ -72,10 +86,17 @@ static void conversions(const char *s, char *out, size_t n)
 
 static void testTables(void)
 {
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
-        int missing = 0;
+    for (int l = 0; l < UI_LANG_TABLES; l++) {
+        const int community = l >= UI_LANG_COMMUNITY_FIRST;
+        int missing = 0, english = 0;
         for (int id = 0; id < UI_STR_COUNT; id++) {
             const char *s = kTables[l][id];
+            if (s == NULL && community && id != UI_STR_NONE) {
+                english++; /* not translated: English at run time */
+                CHECK(strcmp(ui_str_in((UiLang)l, (UiStrId)id), ui_strings_en[id]) == 0,
+                      "%s: id %d falls back to English", kNames[l], id);
+                continue;
+            }
             if (s == NULL) {
                 if (missing++ < 10) {
                     CHECK(0, "%s: id %d has no entry", kNames[l], id);
@@ -96,6 +117,18 @@ static void testTables(void)
             }
         }
         CHECK(missing == 0, "%s: %d ids without an entry", kNames[l], missing);
+        if (community) {
+            CHECK(english * 2 < UI_STR_COUNT, "%s: %d of %d ids in English", kNames[l], english,
+                  (int)UI_STR_COUNT);
+            printf("strings_complete: %s, a community translation: %d of %d ids in English\n",
+                   kNames[l], english, (int)UI_STR_COUNT);
+        }
+    }
+    /* every table names the community translations in their own words */
+    for (int l = 0; l < UI_LANG_TABLES; l++) {
+        CHECK(kTables[l][UI_STR_LANG_RU_BOBTTZ] != NULL &&
+                  strcmp(kTables[l][UI_STR_LANG_RU_BOBTTZ], "Русский (bob-ttz)") == 0,
+              "%s names Russian (bob-ttz) in Russian", kNames[l]);
     }
 }
 
@@ -110,7 +143,7 @@ static void testSerial(void)
         const char *slug = ico_region_at(r)->slug;
         const char *serial = ico_region_at(r)->pack_serial;
         CHECK(ico_region_select(slug) == 0, "select %s", slug);
-        for (int l = 0; l < UI_LANG_COUNT; l++) {
+        for (int l = 0; l < UI_LANG_TABLES; l++) {
             ui_set_language((UiLang)l);
             for (int i = 0; i < 4; i++) {
                 CHECK(ui_str_takes_serial(ids[i]), "id %d takes the serial", ids[i]);
@@ -164,16 +197,16 @@ static void testResolve(void)
     CHECK(ui_lang_resolve(-1, -1, 1, 3) == UI_LANG_FR, "auto, the European disc: the game's");
     CHECK(ui_lang_resolve(-1, -1, 1, 6) == UI_LANG_ES, "auto, the European disc: Spanish");
     CHECK(ui_lang_resolve(-1, -1, 0, 3) == UI_LANG_EN, "auto, no game language: English");
-    CHECK(ui_lang_resolve(-1, UI_LANG_COUNT, 0, 3) == UI_LANG_EN,
+    CHECK(ui_lang_resolve(-1, UI_LANG_TABLES, 0, 3) == UI_LANG_EN,
           "auto, a disc language out of range: English");
-    for (int c = 0; c < UI_LANG_COUNT; c++) {
+    for (int c = 0; c < UI_LANG_TABLES; c++) {
         CHECK(ui_lang_resolve(c, UI_LANG_JA, 0, 3) == (UiLang)c &&
                   ui_lang_resolve(c, UI_LANG_KO, 0, 3) == (UiLang)c &&
                   ui_lang_resolve(c, UI_LANG_ZH, 0, 3) == (UiLang)c &&
                   ui_lang_resolve(c, -1, 1, 4) == (UiLang)c,
               "a chosen language %s wins on every disc", kNames[c]);
     }
-    CHECK(ui_lang_resolve(UI_LANG_COUNT, -1, 1, 5) == UI_LANG_IT, "out of range is auto");
+    CHECK(ui_lang_resolve(UI_LANG_TABLES, -1, 1, 5) == UI_LANG_IT, "out of range is auto");
     /* the region rows' port-text fields (port/core/region.h: plain numbers
        there) are UiLang and sheet-language ids; a disc whose game picks
        its language names neither, one that does not names both (the
@@ -223,6 +256,63 @@ static void testResolve(void)
     CHECK(ui_settings_resolve_language() == UI_LANG_JA, "the European disc, Japanese chosen");
     s_choice = -1;
     NonLinearCameraMove = 2;
+}
+
+static void testCommunity(void)
+{
+    /* the rule over its inputs: a community translation, on a disc with a
+       game language, while the game is in English */
+    CHECK(ui_lang_text_resolve(UI_LANG_RU_BOBTTZ, 1, 2) == UI_LANG_RU_BOBTTZ,
+          "Russian (bob-ttz) over the English European disc");
+    CHECK(ui_lang_text_resolve(UI_LANG_RU_BOBTTZ, 1, 3) == -1, "not over the French game");
+    CHECK(ui_lang_text_resolve(UI_LANG_RU_BOBTTZ, 0, 2) == -1, "not on a disc without one");
+    CHECK(ui_lang_text_resolve(-1, 1, 2) == -1, "none chosen");
+    for (int l = 0; l < UI_LANG_COMMUNITY_FIRST; l++) {
+        CHECK(ui_lang_text_resolve(l, 1, 2) == -1, "%s is not a community translation", kNames[l]);
+    }
+    CHECK(ui_lang_text_resolve(UI_LANG_TABLES, 1, 2) == -1, "out of range");
+    /* through the running disc: Auto follows it on the European disc only */
+    ico_region_select("pal");
+    s_choice = -1;
+    s_text = UI_LANG_RU_BOBTTZ;
+    NonLinearCameraMove = 2;
+    CHECK(ui_settings_text_language() == UI_LANG_RU_BOBTTZ, "in force on the European disc");
+    CHECK(ui_settings_resolve_language() == UI_LANG_RU_BOBTTZ, "Auto: the translation");
+    s_choice = UI_LANG_DE;
+    CHECK(ui_settings_resolve_language() == UI_LANG_DE, "a chosen Menu language wins");
+    s_choice = -1;
+    NonLinearCameraMove = 5;
+    CHECK(ui_settings_text_language() == -1 && ui_settings_resolve_language() == UI_LANG_IT,
+          "the game in Italian: the disc's language, no translation");
+    NonLinearCameraMove = 2;
+    static const char *const kOther[] = {"jpn", "kor", "cn", "ntsc", "aug6", "jun26"};
+    for (unsigned i = 0; i < sizeof(kOther) / sizeof(kOther[0]); i++) {
+        CHECK(ico_region_select(kOther[i]) == 0 && ui_settings_text_language() == -1 &&
+                  ui_settings_resolve_language() != UI_LANG_RU_BOBTTZ,
+              "%s: no translation in force", kOther[i]);
+    }
+    ico_region_select("pal");
+    s_text = -1;
+    CHECK(ui_settings_text_language() == -1 && ui_settings_resolve_language() == UI_LANG_EN,
+          "none: the game's English");
+    /* the menu words: a community table over the English sheets, the five
+       sheets' own words otherwise */
+    for (int l = 0; l < UI_LANG_SHEET_COUNT; l++) {
+        CHECK(ui_menu_words_language(l) == (UiLang)l, "sheet %d: its own words", l);
+    }
+    ui_set_menu_words_language(UI_LANG_RU_BOBTTZ);
+    CHECK(ui_menu_words_language(UI_LANG_EN) == UI_LANG_RU_BOBTTZ,
+          "the English sheets: the translation's words");
+    for (int l = 1; l < UI_LANG_SHEET_COUNT; l++) {
+        CHECK(ui_menu_words_language(l) == (UiLang)l, "sheet %d keeps its words", l);
+    }
+    CHECK(strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_NEW_GAME),
+                 ui_strings_ru_bobttz[UI_STR_MT_NEW_GAME]) == 0,
+          "the title's New Game in Russian");
+    ui_set_menu_words_language(UI_LANG_DE);
+    CHECK(ui_menu_words_language(UI_LANG_EN) == UI_LANG_EN, "a disc language is not one");
+    ui_set_menu_words_language(-1);
+    CHECK(ui_menu_words_language(UI_LANG_EN) == UI_LANG_EN, "none: English");
 }
 
 static void testBreaks(void)
@@ -279,12 +369,14 @@ int main(void)
     testSerial();
     testSheetLanguage();
     testResolve();
+    testCommunity();
     testBreaks();
     if (failures) {
         fprintf(stderr, "strings_complete: %d failure(s)\n", failures);
         return 1;
     }
-    printf("strings_complete: %d languages, %d ids each, every entry defined\n", UI_LANG_COUNT,
-           (int)UI_STR_COUNT);
+    printf("strings_complete: %d languages (%d community translations), %d ids each, every "
+           "entry defined\n",
+           UI_LANG_TABLES, UI_LANG_COMMUNITY_COUNT, (int)UI_STR_COUNT);
     return 0;
 }

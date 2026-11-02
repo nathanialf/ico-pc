@@ -792,4 +792,5 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
         "Originale mantiene il bagliore del fotogramma del gioco tra i fotogrammi. Fluido lo rifà per ogni fotogramma mostrato; costa più tempo grafico.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Conta solo sopra la frequenza fotogrammi Originale, con il bagliore attivo.",
+    [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
 };

@@ -474,6 +474,9 @@ static void test_first_run(void)
     CHECK_STR(ico_config_get_string("audio.output", "?"), "auto");
     CHECK_STR(ico_config_get_string("audio.device", "?"), "");
     CHECK_STR(ico_config_get_string("game.language", "?"), "auto");
+    /* no community translation: the game's own text */
+    CHECK_STR(ico_config_get_string("game.text_language", "?"), "");
+    CHECK(text != NULL && strstr(text, "text_language = \"\"") != NULL);
     CHECK(ico_config_get_bool("gameplay.natural_chains", 1) == 0); /* Natural chains, off */
     CHECK(ico_config_get_bool("gameplay.skip_opening", 1) == 0);   /* Skip the opening, off */
     CHECK(text != NULL && strstr(text, "skip_opening = false") != NULL);

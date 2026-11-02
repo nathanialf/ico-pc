@@ -804,4 +804,5 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Original behält das Leuchten des Spielbildes zwischen den Bildern. Flüssig berechnet es für jedes gezeigte Bild neu; das kostet mehr Grafikzeit.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Wirkt nur oberhalb der Bildrate Original und bei eingeschaltetem Leuchten.",
+    [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
 };

@@ -28,6 +28,7 @@
  */
 #include "settings_fixture.h"
 #include "popup.h"
+#include "ui_lang.h" /* ui_settings_text_language */
 
 static void testBuild(void)
 {
@@ -534,10 +535,12 @@ static void stripBlanks(const char *in, char *out)
 
 static void testNotesFit(void)
 {
-    static const char *const kLang[UI_LANG_COUNT] = {"en", "fr", "de", "it",
-                                                     "es", "ja", "ko", "zh"};
+    /* the eight tables and the community translations (an id one leaves
+       untranslated is the English note) */
+    static const char *const kLang[UI_LANG_TABLES] = {"en", "fr", "de", "it",       "es",
+                                                      "ja", "ko", "zh", "ru-bobttz"};
     int checked = 0;
-    for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
+    for (int lang = 0; lang < UI_LANG_TABLES; lang++) {
         ui_set_language((UiLang)lang);
         for (int pg = 0; pg < UI_PAGE_COUNT; pg++) {
             for (int i = 0; i < 40; i++) {
@@ -1960,9 +1963,28 @@ static void testValues(void)
           "circle_back: off (Triangle alone)");
     ui_settings_step(UI_OPT_CIRCLE_BACK, -1);
     CHECK(ico_opt_circle_back() == 1 && lt_ext_back_buttons() == 0x30, "circle_back: on again");
+    /* Spanish, then the community translation (the English game under
+       Russian (bob-ttz): [game] text_language), then English again */
     NonLinearCameraMove = 6;
     ui_settings_step(UI_OPT_LANGUAGE, 1);
-    CHECK(NonLinearCameraMove == 2, "language wraps ES -> EN");
+    CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == UI_LANG_RU_BOBTTZ &&
+              ui_settings_text_language() == UI_LANG_RU_BOBTTZ &&
+              strcmp(ico_config_get_string("game.text_language", ""), "ru-bobttz") == 0 &&
+              strcmp(ico_config_get_string("game.language", ""), "en") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_LANGUAGE), "Русский (bob-ttz)") == 0,
+          "language ES -> Russian (bob-ttz) over the English game (%d, %s)", NonLinearCameraMove,
+          ui_settings_value_text(UI_OPT_LANGUAGE));
+    ui_settings_step(UI_OPT_LANGUAGE, 1);
+    CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == -1 &&
+              strcmp(ico_config_get_string("game.text_language", "?"), "") == 0,
+          "language wraps Russian (bob-ttz) -> EN");
+    ui_settings_step(UI_OPT_LANGUAGE, -1);
+    ui_settings_step(UI_OPT_LANGUAGE, -1);
+    CHECK(NonLinearCameraMove == 6 && ico_opt_text_language() == -1,
+          "left twice: back to Spanish (%d)", NonLinearCameraMove);
+    ui_settings_step(UI_OPT_LANGUAGE, 1);
+    ui_settings_step(UI_OPT_LANGUAGE, 1);
+    CHECK(NonLinearCameraMove == 2 && ico_opt_text_language() == -1, "and on to English");
 
     CHECK(ui_settings_save() == 0, "save");
     path(p, sizeof(p), "settings_test.toml");

@@ -15,11 +15,12 @@ extern "C" {
 #endif
 
 /* The language the port's text is in now: the [ui] language the player
-   chose ("en" .. "zh"), else ("auto", the default) the disc's: its region
-   row's ui_lang_default (port/core/region.h: Japanese on the Japanese
-   disc), else the game's language (NonLinearCameraMove) on a disc
-   whose game picks one (IcoRegionInfo.has_game_language: the European
-   disc), else English.  The host's system language is not consulted: the
+   chose ("en" .. "zh", "ru-bobttz"), else ("auto", the default) the disc's:
+   its region row's ui_lang_default (port/core/region.h: Japanese on the
+   Japanese disc), else the community translation in force
+   (ui_settings_text_language), else the game's language
+   (NonLinearCameraMove) on a disc whose game picks one
+   (IcoRegionInfo.has_game_language: the European disc), else English.  The host's system language is not consulted: the
    disc decides.  Reads the game's language word each call, so a change of
    the game's Language row is followed. */
 UiLang ui_settings_resolve_language(void);
@@ -30,6 +31,18 @@ UiLang ui_settings_resolve_language(void);
    hasGameLanguage the region's has_game_language, gameLanguage the game's
    language number (2..6). */
 UiLang ui_lang_resolve(int choice, int discLang, int hasGameLanguage, int gameLanguage);
+
+/* The community translation in force (strings.h UI_LANG_COMMUNITY_FIRST ..),
+   or -1: [game] text_language (port/game/options.h ico_opt_text_language)
+   on a disc whose game has a language of its own (the European disc) while
+   that language is English (NonLinearCameraMove 2: the translation is
+   drawn over the English disc data, its subtitle files, menu sheets and
+   saves).  -1 on every other disc and with a disc language: those keep the
+   disc's pictures. */
+int ui_settings_text_language(void);
+/* The same rule over its inputs: textLang ico_opt_text_language's value,
+   hasGameLanguage and gameLanguage as above. */
+int ui_lang_text_resolve(int textLang, int hasGameLanguage, int gameLanguage);
 
 #ifdef __cplusplus
 }

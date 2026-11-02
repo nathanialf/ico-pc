@@ -145,6 +145,44 @@ static void display_texture(LtProperty *t)
     gif_EndPacket();
 }
 
+/* PC port (a community translation, port/ui/subtitle_text.h): the shown
+   record's words in the translation in force, NULL to draw its picture; and
+   the words drawn as text in the band, in the open packet's state */
+extern const char *ui_subtitle_words(int block, int gameClear);
+extern void ui_subtitle_draw(const char *words, int block, const unsigned char rgba[4]);
+
+/* PC port (a community translation): group g's record as text where its two
+   strips go, in display_texture's packet, state and colour; 0 when the
+   record keeps its strips (no translation in force, a record the
+   translation leaves out, Yorda's script on a first play), which then draw
+   as the game draws them */
+static int display_words(struct jWayGroup *g)
+{
+    JimCol col = {128, 128, 128, 128};
+    const char *words = ui_subtitle_words(g->block, gFlagGameClear);
+
+    if (words == 0) {
+        return 0;
+    }
+    /* photo mode: no subtitle over the picture, as display_texture */
+    if (ico_photo_active()) {
+        return 1;
+    }
+    gif_StartPacketPri(11);
+    gif_SetAlpha(1, 7, 0);
+    gif_SetGsReg(74, 0);
+    gif_SetZWrite(0);
+    gif_SetZTest(0);
+    col.r = ~GlobalStageSetting.reductionCol[0];
+    col.g = ~GlobalStageSetting.reductionCol[1];
+    col.b = ~GlobalStageSetting.reductionCol[2];
+    ui_subtitle_draw(words, g->block, &col.r);
+    gif_SetZWrite(1);
+    gif_SetZTest(1);
+    gif_EndPacket();
+    return 1;
+}
+
 void iosCdvdBackGroundReadJimaku(CdvdBgReq *self, void *buf, int size)
 {
     int large = size + 0x7FE;
@@ -620,6 +658,11 @@ void jimakuDisp(JimakuArg *msg)
             return;
         }
         if (jimakuOn != 0) {
+            /* PC port (a community translation): the words as text, the
+               strips not drawn */
+            if (display_words(g)) {
+                return;
+            }
             JIM_HOST_KEY(g, 0);
             display_texture(&texProperty[PAL_JPN_KORCN(434, 410, 404)]);
             JIM_HOST_KEY(g, 1);

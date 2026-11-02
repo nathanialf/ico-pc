@@ -2,8 +2,9 @@
  * port/ui/strings.h
  *
  * The port's UI strings in the European disc's five languages, in
- * Japanese and in Korean: one table per language (port/ui/strings_<lang>.c), indexed by
- * UiStrId, UTF-8. Every word the port draws (the Settings menu, the popups, the achievements, the
+ * Japanese, Korean and Traditional Chinese, and the community translations
+ * (docs/TRANSLATING.md): one table per language (port/ui/strings_<lang>.c,
+ * strings_<lang>_<translator>.c), indexed by UiStrId, UTF-8. Every word the port draws (the Settings menu, the popups, the achievements, the
  * galleries, photo mode, the model viewer, Characters, the Graphics driver
  * page), and the menus' words transcribed from the PAL sheets
  * (UI_STR_MT_*).
@@ -32,8 +33,14 @@ extern "C" {
    boot screen (kanbanBoot.c 101-102) and texFile names them (2 EG, 3 FR,
    4 GR, 5 IT, 6 SP), then Japanese, Korean and Traditional Chinese (the
    port's own text: the Japanese, Korean and Asian discs' own words are
-   their sheets); UI_LANG_COUNT
-   tables, each defining every UiStrId (ctest strings_complete). */
+   their sheets): UI_LANG_COUNT tables, each defining every UiStrId (ctest
+   strings_complete).  Then the community translations, from
+   UI_LANG_COMMUNITY_FIRST (= UI_LANG_COUNT) to UI_LANG_TABLES: a player's
+   translation of the port's text, the European disc's menu words and its
+   subtitles, drawn as text over the English disc data (docs/TRANSLATING.md);
+   their tables leave an id they have not translated NULL (English at run
+   time), so the tests that hold every table to its own word for every id
+   walk the first UI_LANG_COUNT. */
 typedef enum UiLang {
     UI_LANG_EN = 0,
     UI_LANG_FR,
@@ -43,8 +50,19 @@ typedef enum UiLang {
     UI_LANG_JA,
     UI_LANG_KO,
     UI_LANG_ZH,
-    UI_LANG_COUNT
+    UI_LANG_COUNT,
+    /* Russian, by bob-ttz (GitHub issue 132's CSVs) */
+    UI_LANG_RU_BOBTTZ = UI_LANG_COUNT,
+    UI_LANG_TABLES
 } UiLang;
+
+/* The community translations, UI_LANG_COMMUNITY_FIRST .. UI_LANG_TABLES - 1:
+   the Language row's entries after the European disc's five, [game]
+   text_language (port/game/options.h ico_opt_text_language), the Menu
+   language row's after the eight, each with a subtitle table
+   (port/ui/subtitle_text.h). */
+#define UI_LANG_COMMUNITY_FIRST UI_LANG_COUNT
+#define UI_LANG_COMMUNITY_COUNT (UI_LANG_TABLES - UI_LANG_COMMUNITY_FIRST)
 
 /* The European disc's languages (UI_LANG_EN .. UI_LANG_ES): its sheets
    letter the menus in each, and the menu text table's geometry
@@ -926,6 +944,9 @@ typedef enum UiStrId {
     UI_STR_OPT_EFFECT_GLOW_SMOOTH,
     UI_STR_EFFECT_GLOW_SMOOTH_NOTE,
     UI_STR_EFFECT_GLOW_SMOOTH_LOCKED,
+    /* the community translations' names (the Language and Menu language
+       rows, after UI_STR_LANG_ZH), in their own language in every table */
+    UI_STR_LANG_RU_BOBTTZ,
     UI_STR_COUNT
 } UiStrId;
 
@@ -940,6 +961,14 @@ UiLang ui_get_language(void);
    languages is ignored. */
 void ui_set_sheet_language(int sheetLang);
 int ui_sheet_language(void);
+/* The language of the game's menu words (UI_STR_MT_*, menu_text.h) over
+   sheet language sheetLang: a community translation's table over the
+   English sheets while one is chosen (ui_set_menu_words_language: a UiLang
+   from UI_LANG_COMMUNITY_FIRST, the Language row's community entry; -1, the
+   default, none), else sheetLang itself (any value, unchecked).  The words then keep the English
+   sheet's geometry (menu_text.h UiMenuTextItem: the five European sheets'). */
+void ui_set_menu_words_language(int lang);
+UiLang ui_menu_words_language(int sheetLang);
 /* the game's language number (2..6) to a UiLang; English otherwise */
 UiLang ui_lang_from_game(int nonLinearCameraMove);
 /* the string of id in the current language; "" for an unknown id; a
@@ -984,8 +1013,9 @@ const char *ui_str_serial(UiStrId id, char *buf, size_t n);
    table (the Settings menu, notes, Extras, achievements, popups, the menu
    words UI_STR_MT_*).  A missing translation is not visited (ui_str_in
    would give the English one, which is visited under UI_LANG_EN).  The
-   subtitles and the staff roll's lines are the game's pictures and data,
-   not port tables. */
+   staff roll's lines are the game's data, the disc languages' subtitles its
+   pictures, not port tables; a community translation's subtitles are
+   (port/ui/subtitle_text.h). */
 typedef void (*UiStringFn)(UiLang lang, const char *utf8, void *user);
 void ui_strings_for_each(UiStringFn fn, void *user);
 
@@ -998,6 +1028,7 @@ extern const char *const ui_strings_es[UI_STR_COUNT];
 extern const char *const ui_strings_ja[UI_STR_COUNT];
 extern const char *const ui_strings_ko[UI_STR_COUNT];
 extern const char *const ui_strings_zh[UI_STR_COUNT];
+extern const char *const ui_strings_ru_bobttz[UI_STR_COUNT];
 
 #ifdef __cplusplus
 }

@@ -383,6 +383,23 @@ if(ICO_RUN_TESTS)
     add_test(NAME kanban_boot_jun26 COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}" jun26)
 endif()
 
+# jimakuDisp's community-translation hook (ico2/fumi/src/jimaku.c, compiled
+# into the test whole, the rest of the game and the hook's two port calls
+# stubbed): a disc language draws the record's two strips as before, a
+# community translation the words in display_texture's packet and colour with
+# no strip, the timing and the semaphores alike, nothing in photo mode or with
+# subtitles off; the discs with their own arms never ask.  CPU only.
+add_executable(jimaku_text_test test/jimaku_text_test.c)
+ico_include_dirs(fumi _ico_jimaku_text_incs)
+target_include_directories(jimaku_text_test PRIVATE ${_ico_jimaku_text_incs})
+target_compile_definitions(jimaku_text_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(jimaku_text_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(jimaku_text_test PRIVATE ico_region)
+if(ICO_RUN_TESTS)
+    add_test(NAME jimaku_text COMMAND jimaku_text_test)
+endif()
+
 # The hand records Ico and Yorda hold hands with
 # (ico2/sugipon/src/handManager.c, compiled into the test) and the arc-cosine
 # table's NaN guard (tableSin.c, quaternion.c and matrixDrive.c as the game
@@ -506,6 +523,7 @@ endif()
 add_executable(achievements_test test/achievements_test.c gamestate.c
     ../ui/strings.c ../ui/strings_en.c ../ui/strings_fr.c ../ui/strings_de.c
     ../ui/strings_it.c ../ui/strings_es.c ../ui/strings_ja.c ../ui/strings_ko.c ../ui/strings_zh.c
+    ../ui/strings_ru_bobttz.c
     ../platform/host_config.c)
 target_include_directories(achievements_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_options(achievements_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}

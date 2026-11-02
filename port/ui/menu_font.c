@@ -184,6 +184,7 @@ typedef struct MfStrip {
     uint64_t hash;
     char *text;          /* a port text's string; NULL for an item's */
     int item, lang;      /* an item's index and language; -1 for a port text */
+    int words;           /* an item's words' language (ui_menu_words_language) */
     float em;            /* texel rows */
     MfGeo geo;           /* a port text's geometry */
     unsigned layout;     /* a port text's alignment flags */
@@ -478,10 +479,18 @@ static void embolden(uint8_t *cov, int w, int h, int scale, float bx, float by)
 /* An item's words rasterised into cov (it->w x it->h bytes, zeroed by the
    caller): the strip itemStrip caches, also the comparison test's
    reference (ui__menu_strip_raster). */
+/* the words of item it over sheet language lang: the game's language's, or a
+   community translation's over the English sheet (strings.h
+   ui_menu_words_language) */
+static const char *itemWords(const UiMenuTextItem *it, int lang)
+{
+    return ui_str_in(ui_menu_words_language(lang), (UiStrId)it->str);
+}
+
 static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov, int scale)
 {
     const int w = it->w * scale, hgt = it->h * scale;
-    const char *str = ui_str_in((UiLang)lang, (UiStrId)it->str);
+    const char *str = itemWords(it, lang);
     const char *start[MF_LINES];
     size_t len[MF_LINES];
     const int n = splitLines(str, start, len);
@@ -1285,10 +1294,16 @@ static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls,
     if (sc > 1) {
         h = hashBytes(h, &sc, sizeof(sc));
     }
+    /* a community translation's words over the sheet: another strip (the
+       sheet's own words hash as they always have) */
+    const int words = (int)ui_menu_words_language(lang);
+    if (words != lang) {
+        h = hashBytes(h, &words, sizeof(words));
+    }
     for (int i = 0; i < MF_STRIPS; i++) {
         MfStrip *s = &s_mf.strips[i];
         if (s->used && s->hash == h && !s->text && s->item == item && s->lang == lang &&
-            s->cls == cls && s->scale == sc) {
+            s->words == words && s->cls == cls && s->scale == sc) {
             touchStrip(s);
             return s;
         }
@@ -1309,6 +1324,7 @@ static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls,
     s->hash = h;
     s->item = item;
     s->lang = lang;
+    s->words = words;
     s->em = it->em[lang];
     s->scale = sc;
     s->cls = cls;
@@ -1380,6 +1396,7 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
     s->text = copy;
     s->item = -1;
     s->lang = -1;
+    s->words = -1;
     s->em = em;
     s->geo = g;
     s->layout = layout;
@@ -1480,7 +1497,7 @@ void ui_draw_menu_text(float x, float y, float size, const uint8_t rgba[4], cons
 static void itemFallback(const UiMenuTextItem *it, int lang, const int box[4], const int uv[4],
                          const uint8_t col[4], int glow)
 {
-    const char *text = ui_str_in((UiLang)lang, (UiStrId)it->str);
+    const char *text = itemWords(it, lang);
     if (glow || !text || !*text) {
         return;
     }
@@ -1560,7 +1577,7 @@ void ui_menu_word_draw(const UiMenuTextItem *it, int lang, const int box[4], con
     const unsigned flags = UI_KEEP_STATE | (glow ? UI_ADDITIVE : 0u);
     noteLast(s, tex, q.x0, q.y0);
     ui__draw_tex_quads(tex, &q, 1, col, flags, NULL,
-                       ui__text_key(ui_str_in((UiLang)lang, (UiStrId)it->str), flags, s->page));
+                       ui__text_key(itemWords(it, lang), flags, s->page));
 #else
     (void)it;
     (void)lang;

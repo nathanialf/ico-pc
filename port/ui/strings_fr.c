@@ -809,4 +809,5 @@ const char *const
                 "Cette sauvegarde est plus grande que ce que le jeu accepte.",
             [UI_STR_BACKUP_WHY_NO_DIALOG] = "Aucun sélecteur de fichiers n’a pu s’ouvrir.",
             [UI_STR_BACKUP_WHY_NO_SPACE] = "Il n’y a pas assez d’espace libre sur l’appareil.",
+            [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
 };

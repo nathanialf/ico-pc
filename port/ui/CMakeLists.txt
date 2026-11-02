@@ -75,8 +75,9 @@ add_custom_command(
     COMMENT "Embedding the UI font for Chinese"
     VERBATIM)
 set(_ui_font_srcs "${_ui_font_c}" "${_ui_font_ja_c}" "${_ui_font_ko_c}" "${_ui_font_zh_c}")
+# strings_ru_bobttz.c: a community translation (docs/TRANSLATING.md)
 set(_ui_string_srcs strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c
-                    strings_ja.c strings_ko.c strings_zh.c)
+                    strings_ja.c strings_ko.c strings_zh.c strings_ru_bobttz.c)
 
 set(_ui_sources
     font.c
@@ -92,7 +93,7 @@ set(_ui_sources
 ico_include_dirs(common _ico_ui_game_incs)
 set_source_files_properties(layout_ext.c menu_font.c menu_text.c popup.c settings.c ui_list.c
                             ui_hint.c gallery.c photo_ui.c ui_mouse.c touch_ui.c ui_fps.c
-                            touch_edit_ui.c PROPERTIES
+                            touch_edit_ui.c subtitle_text.c PROPERTIES
                             COMPILE_OPTIONS "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
@@ -126,9 +127,12 @@ function(ico_ui_settings name)
     # the Edit layout page's side of the touch layout editor (touch_edit_ui.c)
     # the Graphics page's rows and Apply (settings_graphics.c)
     # Extras' Back up your data and Restore from a backup (settings_backup.c)
+    # a community translation's subtitles as text (subtitle_text.c, jimaku.c's
+    # hook, over port/game's tables: subtitles_ru_bobttz.c)
     target_sources(${name} PRIVATE settings.c settings_graphics.c settings_backup.c ui_list.c
                                    ui_hint.c gallery.c photo_ui.c ui_mouse.c ui_mouse_geom.c
-                                   ui_lang.c touch_edit_ui.c)
+                                   ui_lang.c touch_edit_ui.c subtitle_text.c
+                                   "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_bobttz.c")
     foreach(_lib ${_ui_settings_deps})
         target_include_directories(${name} PRIVATE
                                    $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)
@@ -236,6 +240,12 @@ ico_settings_test(settings_backup_test test/settings_backup_test.c)
 # the pause menu (docs/port/GAME_FEATURES.md, Options on each disc): the
 # European run and the six others (the three above and the 2001 discs below)
 ico_settings_test(settings_discs_test test/settings_discs_test.c)
+# subtitles_ru_test: the Russian (bob-ttz) community translation: its
+# subtitle table, the words jimaku.c's hook gets (subtitle_text.c) and their
+# layout in the band, the Language row's entry and [game] text_language, the
+# menu words over the English sheet (the other runs: no entry, nothing in
+# force)
+ico_settings_test(subtitles_ru_test test/subtitles_ru_test.c)
 if(ICO_RUN_TESTS)
     # the three 2001 discs (the North American disc, the August 2001 preview,
     # the June 2001 demo): Extras > Game variants on each (settings_extra_test
@@ -266,6 +276,7 @@ if(ICO_RUN_TESTS)
                          settings_states_ntsc settings_states_aug6 settings_states_jun26
                          settings_adapter settings_adapter_jpn settings_adapter_kor settings_adapter_cn
                          settings_backup settings_backup_jpn settings_backup_kor settings_backup_cn
+                         subtitles_ru subtitles_ru_jpn subtitles_ru_kor subtitles_ru_cn
                          PROPERTIES RESOURCE_LOCK settings_toml)
 endif()
 
@@ -552,8 +563,8 @@ target_compile_options(menu_text_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(menu_text_test PRIVATE ico_render ico_math ico_region)
 # font_coverage_test: every character of the
-# text the port draws (the six languages' tables, the port's roll lines and
-# the corpus, test/font_corpus) has a glyph in one of the embedded subsets
+# text the port draws (the languages' tables, the community translations'
+# subtitles, the port's roll lines and the corpus, test/font_corpus) has a glyph in one of the embedded subsets
 # (Arimo, Noto Sans JP), a Japanese character the second's own; with the
 # base ELF, the sound names too. CPU only. The strings and
 # the font are compiled again here (font.c from ico_ui_font_rd) so the test
@@ -561,7 +572,7 @@ target_link_libraries(menu_text_test PRIVATE ico_render ico_math ico_region)
 ico_include_dirs(common _ico_cov_incs)
 ico_include_dirs(sugipon _ico_cov_data_incs)
 add_executable(font_coverage_test test/font_coverage_test.c $<TARGET_OBJECTS:ico_ui_font_rd>
-    ${_ui_string_srcs}
+    ${_ui_string_srcs} "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_bobttz.c"
     "${CMAKE_SOURCE_DIR}/port/game/credits.c" "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
 target_include_directories(font_coverage_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_CURRENT_SOURCE_DIR}/test" ${_ico_cov_incs} "${CMAKE_SOURCE_DIR}/port/include"

@@ -27,7 +27,8 @@ static int s_second_card = -1;
 static int s_mirror = -1;
 static int s_developer_mode = -1;
 static int s_circle_back = -1;
-static int s_ui_language = -2; /* -2: not read yet */
+static int s_ui_language = -2;   /* -2: not read yet */
+static int s_text_language = -2; /* -2: not read yet */
 
 static int get_or(int *v, const char *path, int def)
 {
@@ -449,9 +450,14 @@ void ico_opt_set_circle_back(int on)
     s_circle_back = on != 0;
 }
 
-/* [ui] language's names, UiLang order (port/ui/strings.h) */
-static const char *const kUiLanguages[] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh"};
+/* [ui] language's and [game] text_language's names, UiLang order
+   (port/ui/strings.h) */
+static const char *const kUiLanguages[] = {
+    "en", "fr", "de", "it", "es", "ja", "ko", "zh",
+    /* the community translations, from ICO_OPT_TEXT_LANGUAGE_FIRST */
+    "ru-bobttz"};
 #define UI_LANGUAGES ((int)(sizeof(kUiLanguages) / sizeof(kUiLanguages[0])))
+_Static_assert(UI_LANGUAGES == ICO_OPT_UI_LANGUAGE_COUNT, "a name for each UiLang");
 
 int ico_opt_ui_language(void)
 {
@@ -466,10 +472,10 @@ int ico_opt_ui_language(void)
             }
         }
         if (s_ui_language < 0 && v != NULL && strcmp(v, "auto") != 0) {
-            fprintf(
-                stderr,
-                "options: [ui] language = \"%s\" is not one of auto, en, fr, de, it, es, ja, ko, zh\n",
-                v);
+            fprintf(stderr,
+                    "options: [ui] language = \"%s\" is not one of auto, en, fr, de, it, es, ja, "
+                    "ko, zh, ru-bobttz\n",
+                    v);
         }
     }
     return s_ui_language;
@@ -483,6 +489,45 @@ void ico_opt_set_ui_language(int lang)
 const char *ico_opt_ui_language_name(int lang)
 {
     return lang >= 0 && lang < UI_LANGUAGES ? kUiLanguages[lang] : "auto";
+}
+
+static int textLanguageOk(int lang)
+{
+    return lang >= ICO_OPT_TEXT_LANGUAGE_FIRST && lang < UI_LANGUAGES;
+}
+
+int ico_opt_text_language(void)
+{
+    if (s_text_language < -1) {
+        const char *v = ico_config_get_string("game.text_language", "");
+
+        s_text_language = -1;
+        for (int i = ICO_OPT_TEXT_LANGUAGE_FIRST; v != NULL && i < UI_LANGUAGES; i++) {
+            if (strcmp(v, kUiLanguages[i]) == 0) {
+                s_text_language = i;
+            }
+        }
+        if (s_text_language < 0 && v != NULL && v[0] != '\0') {
+            fprintf(stderr,
+                    "options: [game] text_language = \"%s\" is not one of \"\", ru-bobttz; "
+                    "the game's own text\n",
+                    v);
+        } else if (s_text_language >= 0) {
+            fprintf(stderr, "options: [game] text_language = \"%s\": a community translation\n",
+                    kUiLanguages[s_text_language]);
+        }
+    }
+    return s_text_language;
+}
+
+void ico_opt_set_text_language(int lang)
+{
+    s_text_language = textLanguageOk(lang) ? lang : -1;
+}
+
+const char *ico_opt_text_language_name(int lang)
+{
+    return textLanguageOk(lang) ? kUiLanguages[lang] : "";
 }
 
 int ico_opt_debug_option(void)
@@ -664,6 +709,7 @@ void ico_opt_reload(void)
     s_natural_chains = s_skip_opening = s_yorda_trips = s_second_card = -1;
     s_output = -2;
     s_ui_language = -2;
+    s_text_language = -2;
     s_hold_choice = -1;
     /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();

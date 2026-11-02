@@ -1,16 +1,19 @@
-/* font_coverage_test.c: every character of the eight languages has a glyph
- * in the port's faces.
+/* font_coverage_test.c: every character of the eight languages and the
+ * community translations has a glyph in the port's faces.
  *
  * CPU only: font.c's cmap, no device.  Walks
- *   - ui_strings_for_each: every entry of every language's table;
+ *   - ui_strings_for_each: every entry of every language's table, the
+ *     community translations' too (strings.h UI_LANG_TABLES);
+ *   - the community translations' subtitles (port/game/subtitles.h, drawn
+ *     as text: port/ui/subtitle_text.h), in their language;
  *   - the staff roll's port lines (ico_roll_port_line, the lines the roll
  *     draws after the disc's, with its bitmap font: ASCII only);
  *   - font_corpus/<lang>.txt: the in-game text that is not a string (save
  *     screen values, the gallery's asset names, the roll's '@' and '\' signs);
  *   - with a base ELF: the seDef and adpcmFile names the gallery shows.
- * Only the text the port draws with its font: the game's own text (its
- * subtitles, the disc's roll lines) keeps its texels; its menu words are
- * the UI_STR_MT_* strings above.
+ * Only the text the port draws with its font: the game's own text (the disc
+ * languages' subtitles, the disc's roll lines) keeps its texels; its menu
+ * words are the UI_STR_MT_* strings above.
  * It fails on a code point with no glyph, U+FFFD or malformed UTF-8, a C0 or
  * C1 control other than '\n', an empty entry, a corpus file that is missing.
  * The fallback ('?' for a missing glyph, logged once) is checked last.
@@ -37,6 +40,7 @@
 #include "achievements.h"
 #include "ico_credits.h"
 #include "strings.h"
+#include "subtitles.h"   /* port/game: the community translations' subtitles */
 #include "ui_internal.h" /* ui__font_prefer_chinese */
 
 /* credits.c's reads of the achievements (the roll lines need none) */
@@ -70,11 +74,12 @@ static int s_lang; /* the language the walk is in */
         }                                                                                          \
     } while (0)
 
-static const char *const kLangs[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh"};
+static const char *const kLangs[UI_LANG_TABLES] = {"en", "fr", "de", "it",       "es",
+                                                   "ja", "ko", "zh", "ru-bobttz"};
 
 #define BMP_SEEN 0x10000
-static unsigned char s_seen[UI_LANG_COUNT][BMP_SEEN]; /* distinct code points a language draws */
-static int s_visits[UI_LANG_COUNT];
+static unsigned char s_seen[UI_LANG_TABLES][BMP_SEEN]; /* distinct code points a language draws */
+static int s_visits[UI_LANG_TABLES];
 static int s_codepoints; /* code points checked, all */
 
 /* one entry: valid UTF-8, no control but '\n', a glyph for each code point */
@@ -152,7 +157,7 @@ static void checkRollLine(const char *str, const char *what, int idx)
 
 static void checkCorpus(const char *dir)
 {
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
+    for (int l = 0; l < UI_LANG_TABLES; l++) {
         char path[1024];
         snprintf(path, sizeof(path), "%s/%s.txt", dir, kLangs[l]);
         FILE *f = fopen(path, "rb");
@@ -259,7 +264,7 @@ static void reportFaces(void)
     line[0] = '\0';
     for (uint32_t cp = 0x21; cp < BMP_SEEN; cp++) {
         int any = 0;
-        for (int l = 0; l < UI_LANG_COUNT; l++) {
+        for (int l = 0; l < UI_LANG_TABLES; l++) {
             any |= s_seen[l][cp];
         }
         if (any && ui_font_has_glyph(cp)) {
@@ -285,12 +290,21 @@ int main(int argc, char **argv)
 #endif
 
     ui_strings_for_each(visit, NULL);
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
+    for (int l = 0; l < UI_LANG_TABLES; l++) {
         CHECK(s_visits[l] > 100, "%s: only %d strings visited", kLangs[l], s_visits[l]);
     }
+    /* the community translations' subtitles, in their language (ctest
+       subtitles_ru holds the table's shape) */
+    for (int k = 0; k < ico_subtitles_ru_bobttz_count; k++) {
+        checkText(UI_LANG_RU_BOBTTZ, ico_subtitles_ru_bobttz[k].words, "subtitle");
+        s_visits[UI_LANG_RU_BOBTTZ]++;
+    }
+    CHECK(ico_subtitles_ru_bobttz_count == 42, "Russian (bob-ttz): %d subtitles",
+          ico_subtitles_ru_bobttz_count);
     /* every table entry of every language is present (ui_strings_for_each skips
-       an empty one, so a hole would pass the walk) */
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
+       an empty one, so a hole would pass the walk; a community table's
+       untranslated id is English) */
+    for (int l = 0; l < UI_LANG_TABLES; l++) {
         for (int id = 1; id < UI_STR_COUNT; id++) {
             checkText(l, ui_str_in((UiLang)l, (UiStrId)id), "table entry");
         }
@@ -373,7 +387,7 @@ int main(int argc, char **argv)
     }
 
     int total = 0;
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
+    for (int l = 0; l < UI_LANG_TABLES; l++) {
         int n = 0;
         for (int c = 0; c < BMP_SEEN; c++) {
             n += s_seen[l][c];

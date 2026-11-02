@@ -13,15 +13,16 @@
 
 static UiLang s_lang = UI_LANG_EN;
 static int s_sheetLang = -1; /* -1: follows s_lang (ui_sheet_language) */
+static int s_wordsLang = -1; /* a community translation's menu words; -1 none */
 
-static const char *const *const s_tables[UI_LANG_COUNT] = {
-    ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it,
-    ui_strings_es, ui_strings_ja, ui_strings_ko, ui_strings_zh,
+static const char *const *const s_tables[UI_LANG_TABLES] = {
+    ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it,        ui_strings_es,
+    ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru_bobttz,
 };
 
 void ui_set_language(UiLang lang)
 {
-    if ((int)lang >= 0 && lang < UI_LANG_COUNT) {
+    if ((int)lang >= 0 && lang < UI_LANG_TABLES) {
         s_lang = lang;
     }
 }
@@ -46,6 +47,21 @@ int ui_sheet_language(void)
     return (int)s_lang < UI_LANG_PAL_COUNT ? (int)s_lang : UI_LANG_EN;
 }
 
+void ui_set_menu_words_language(int lang)
+{
+    s_wordsLang = lang >= UI_LANG_COMMUNITY_FIRST && lang < UI_LANG_TABLES ? lang : -1;
+}
+
+UiLang ui_menu_words_language(int sheetLang)
+{
+    /* a community translation is drawn over the English disc data, so over
+       the English sheets' geometry */
+    if (s_wordsLang >= 0 && sheetLang == UI_LANG_EN) {
+        return (UiLang)s_wordsLang;
+    }
+    return (UiLang)sheetLang;
+}
+
 UiLang ui_lang_from_game(int nonLinearCameraMove)
 {
     switch (nonLinearCameraMove) {
@@ -67,7 +83,7 @@ const char *ui_str_in(UiLang lang, UiStrId id)
     if ((int)id < 0 || id >= UI_STR_COUNT) {
         return "";
     }
-    if ((int)lang < 0 || lang >= UI_LANG_COUNT) {
+    if ((int)lang < 0 || lang >= UI_LANG_TABLES) {
         lang = UI_LANG_EN;
     }
     const char *s = s_tables[lang][id];
@@ -87,7 +103,7 @@ void ui_strings_for_each(UiStringFn fn, void *user)
     if (!fn) {
         return;
     }
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
+    for (int l = 0; l < UI_LANG_TABLES; l++) {
         for (int id = 0; id < UI_STR_COUNT; id++) {
             const char *s = s_tables[l][id];
             if (s && *s) {

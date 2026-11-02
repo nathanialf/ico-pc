@@ -3753,7 +3753,7 @@ static void testMenuLanguage(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE), "Automatisch") == 0 ||
               ui_settings_value_text(UI_OPT_MENU_LANGUAGE)[0] != '\0',
           "the row's value: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
-    /* Auto, en, fr, de, it, es, ja, ko, zh, Auto */
+    /* Auto, en, fr, de, it, es, ja, ko, zh, ru-bobttz, Auto */
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
     CHECK(ico_opt_ui_language() == UI_LANG_EN && ui_get_language() == UI_LANG_EN &&
               ui_sheet_language() == UI_LANG_DE,
@@ -3786,6 +3786,16 @@ static void testMenuLanguage(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE),
                  "\xE7\xB9\x81\xE9\xAB\x94\xE4\xB8\xAD\xE6\x96\x87") == 0,
           "the row names Chinese in Chinese: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
+    /* the community translation as a Menu language of its own: the port's
+       text in it, the game's words still the game's (Italian here) */
+    ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
+    CHECK(ico_opt_ui_language() == UI_LANG_RU_BOBTTZ && ui_get_language() == UI_LANG_RU_BOBTTZ &&
+              ui_sheet_language() == UI_LANG_IT && !ui__font_chinese_first() &&
+              strcmp(ico_config_get_string("ui.language", ""), "ru-bobttz") == 0,
+          "Russian (bob-ttz) menus over the Italian game (%d, %d)", ui_get_language(),
+          ui_sheet_language());
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE), "Русский (bob-ttz)") == 0,
+          "the row names Russian in Russian: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
     CHECK(!ui__font_chinese_first(), "Auto: the Japanese face is first again");
     CHECK(ico_opt_ui_language() == -1 && ui_get_language() == UI_LANG_IT, "Auto again: Italian");

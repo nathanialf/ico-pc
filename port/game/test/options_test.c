@@ -407,11 +407,15 @@ static void test_hold_discs(const char *dir)
 }
 
 /* [ui] language: auto (-1) by default and for a value that is not one of
-   the eight; each name its UiLang number (port/ui/strings.h order); the
-   setter and the names the Settings menu writes */
+   the eight and the community translations; each name its UiLang number
+   (port/ui/strings.h order); the setter and the names the Settings menu
+   writes */
 static void test_ui_language(const char *dir)
 {
-    static const char *const names[8] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh"};
+    enum { N = ICO_OPT_UI_LANGUAGE_COUNT };
+
+    static const char *const names[N] = {"en", "fr", "de", "it",       "es",
+                                         "ja", "ko", "zh", "ru-bobttz"};
     char path[512];
     char text[64];
     FILE *f;
@@ -421,8 +425,8 @@ static void test_ui_language(const char *dir)
     CHECK(ico_opt_ui_language() == -1);
     CHECK(strcmp(ico_opt_ui_language_name(-1), "auto") == 0);
     snprintf(path, sizeof(path), "%s/options_test.toml", dir);
-    for (int i = 0; i < 8 + 2; i++) {
-        const char *v = i < 8 ? names[i] : i == 8 ? "auto" : "klingon";
+    for (int i = 0; i < N + 2; i++) {
+        const char *v = i < N ? names[i] : i == N ? "auto" : "klingon";
         f = fopen(path, "wb");
         if (f == NULL) {
             fprintf(stderr, "cannot write %s\n", path);
@@ -434,21 +438,75 @@ static void test_ui_language(const char *dir)
         fclose(f);
         ico_config_reset(path, "/nonexistent/options_test.ini");
         ico_opt_reload();
-        CHECK(ico_opt_ui_language() == (i < 8 ? i : -1));
-        CHECK(strcmp(ico_opt_ui_language_name(ico_opt_ui_language()), i < 8 ? v : "auto") == 0);
+        CHECK(ico_opt_ui_language() == (i < N ? i : -1));
+        CHECK(strcmp(ico_opt_ui_language_name(ico_opt_ui_language()), i < N ? v : "auto") == 0);
     }
     remove(path);
     ico_opt_set_ui_language(5);
     CHECK(ico_opt_ui_language() == 5);
-    ico_opt_set_ui_language(8);
+    ico_opt_set_ui_language(N);
     CHECK(ico_opt_ui_language() == -1);
     ico_opt_set_ui_language(7);
     CHECK(ico_opt_ui_language() == 7);
-    ico_opt_set_ui_language(9);
+    ico_opt_set_ui_language(8);
+    CHECK(ico_opt_ui_language() == 8 && strcmp(ico_opt_ui_language_name(8), "ru-bobttz") == 0);
+    ico_opt_set_ui_language(-5);
     CHECK(ico_opt_ui_language() == -1);
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_opt_reload();
     CHECK(ico_opt_ui_language() == -1);
+}
+
+/* [game] text_language: "" (-1, none) by default and for a word that is not
+   a community translation (a disc language among them: those are [game]
+   language's); "ru-bobttz" its UiLang number (8, the first community
+   translation); the setter takes only a community translation; the names
+   the Language row writes; a reload reads the file again */
+static void test_text_language(const char *dir)
+{
+    static const char *const words[] = {"", "ru-bobttz", "en", "ja", "auto", "ru", "RU-BOBTTZ"};
+    static const int want[] = {-1, 8, -1, -1, -1, -1, -1};
+    char path[512];
+    char text[96];
+    FILE *f;
+
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_text_language() == -1);
+    CHECK(strcmp(ico_opt_text_language_name(-1), "") == 0);
+    CHECK(ICO_OPT_TEXT_LANGUAGE_FIRST == 8 && ICO_OPT_UI_LANGUAGE_COUNT == 9);
+    snprintf(path, sizeof(path), "%s/options_test.toml", dir);
+    for (unsigned i = 0; i < sizeof(words) / sizeof(words[0]); i++) {
+        f = fopen(path, "wb");
+        if (f == NULL) {
+            fprintf(stderr, "cannot write %s\n", path);
+            failures++;
+            return;
+        }
+        snprintf(text, sizeof(text), "[game]\ntext_language = \"%s\"\n", words[i]);
+        fputs(text, f);
+        fclose(f);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_opt_reload();
+        CHECK(ico_opt_text_language() == want[i]);
+        CHECK(strcmp(ico_opt_text_language_name(ico_opt_text_language()),
+                     want[i] < 0 ? "" : words[i]) == 0);
+        /* not the menu language's key: [ui] language stays auto */
+        CHECK(ico_opt_ui_language() == -1);
+    }
+    remove(path);
+    ico_opt_set_text_language(8);
+    CHECK(ico_opt_text_language() == 8 && strcmp(ico_opt_text_language_name(8), "ru-bobttz") == 0);
+    for (int l = -2; l < 8; l++) {
+        ico_opt_set_text_language(l);
+        CHECK(ico_opt_text_language() == -1 && strcmp(ico_opt_text_language_name(l), "") == 0);
+    }
+    ico_opt_set_text_language(9);
+    CHECK(ico_opt_text_language() == -1);
+    ico_opt_set_text_language(8);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_text_language() == -1);
 }
 
 /* --- pit_time: the dive ratio and the hook in actEnemyKidnapEnd ---------- */
@@ -2029,6 +2087,7 @@ int main(int argc, char **argv)
     test_yorda_trips();
     test_brain();
     test_ui_language(argc > 1 ? argv[1] : ".");
+    test_text_language(argc > 1 ? argv[1] : ".");
     test_video_effects(argc > 1 ? argv[1] : ".");
     test_video_effects_depth(argc > 1 ? argv[1] : ".");
     test_video_full_pixel(argc > 1 ? argv[1] : ".");

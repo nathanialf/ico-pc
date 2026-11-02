@@ -1336,13 +1336,14 @@ static void setGameLanguage(int game)
     }
 }
 
-/* a UiLang's own name (the Menu language row) */
+/* a UiLang's own name (the Menu language row, the Language row's community
+   entries) */
 static const char *menuLanguageName(int lang)
 {
-    static const int ids[UI_LANG_COUNT] = {UI_STR_LANG_EN, UI_STR_LANG_FR, UI_STR_LANG_DE,
-                                           UI_STR_LANG_IT, UI_STR_LANG_ES, UI_STR_LANG_JA,
-                                           UI_STR_LANG_KO, UI_STR_LANG_ZH};
-    return ui_str((UiStrId)ids[lang >= 0 && lang < UI_LANG_COUNT ? lang : 0]);
+    static const int ids[UI_LANG_TABLES] = {UI_STR_LANG_EN, UI_STR_LANG_FR, UI_STR_LANG_DE,
+                                            UI_STR_LANG_IT, UI_STR_LANG_ES, UI_STR_LANG_JA,
+                                            UI_STR_LANG_KO, UI_STR_LANG_ZH, UI_STR_LANG_RU_BOBTTZ};
+    return ui_str((UiStrId)ids[lang >= 0 && lang < UI_LANG_TABLES ? lang : 0]);
 }
 
 void ui_settings_apply_language(void)
@@ -1359,6 +1360,9 @@ void ui_settings_apply_language(void)
     ui_set_sheet_language(sheet >= 0            ? sheet
                           : gameLanguage() >= 0 ? (int)ui_lang_from_game(gameLanguage())
                                                 : (int)UI_LANG_EN);
+    /* the game's menu words in a community translation over the English
+       sheets while one is in force (ui_lang.h ui_settings_text_language) */
+    ui_set_menu_words_language(ui_settings_text_language());
 }
 
 static const char *languageName(int game)
@@ -1367,6 +1371,41 @@ static const char *languageName(int game)
                                UI_STR_LANG_ES};
     int i = game - ICO_GAME_LANGUAGE_ENGLISH;
     return ui_str((UiStrId)ids[i >= 0 && i < 5 ? i : 0]);
+}
+
+/* The Language row's entries: the game's five (0..4, NonLinearCameraMove 2..6
+   as the boot's step 102 stores it), then the community translations (5..,
+   UI_LANG_COMMUNITY_FIRST on: English disc data, [game] text_language) */
+#define LANGUAGE_ENTRIES (5 + UI_LANG_COMMUNITY_COUNT)
+
+static int languageEntry(void)
+{
+    const int text = ui_settings_text_language();
+    if (text >= 0) {
+        return 5 + text - UI_LANG_COMMUNITY_FIRST;
+    }
+    const int i = gameLanguage() - ICO_GAME_LANGUAGE_ENGLISH;
+    return i < 0 || i > 4 ? 0 : i;
+}
+
+static const char *languageEntryName(int entry)
+{
+    return entry >= 5 ? menuLanguageName(UI_LANG_COMMUNITY_FIRST + entry - 5)
+                      : languageName(ICO_GAME_LANGUAGE_ENGLISH + entry);
+}
+
+/* the game's language and [game] text_language for entry (a community
+   entry keeps the English disc data: the subtitle files, the menu sheets,
+   the saves' language byte) */
+static void setLanguageEntry(int entry)
+{
+    const int text = entry >= 5 ? UI_LANG_COMMUNITY_FIRST + entry - 5 : -1;
+    setGameLanguage(ICO_GAME_LANGUAGE_ENGLISH + (entry >= 5 ? 0 : entry));
+    ico_opt_set_text_language(text);
+    ico_config_set_string("game.text_language", ico_opt_text_language_name(text));
+    fprintf(stderr, "settings: Language %s (game language %d, [game] text_language \"%s\")\n",
+            entry >= 5 ? ico_opt_ui_language_name(text) : ico_opt_ui_language_name(entry),
+            gameLanguage(), ico_opt_text_language_name(text));
 }
 
 /* the game's brightness step as gsb_controlBrightness clamps it */
@@ -1996,7 +2035,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_SECOND_CARD:
         return onOff(ico_opt_second_memory_card());
     case UI_OPT_LANGUAGE:
-        return languageName(gameLanguage());
+        return languageEntryName(languageEntry());
     case UI_OPT_MENU_LANGUAGE: {
         const int pref = ico_opt_ui_language();
         return pref < 0 ? ui_str(UI_STR_VAL_AUTO) : menuLanguageName(pref);
@@ -2666,13 +2705,15 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_LANGUAGE: {
         /* as kanbanBoot.c step 102 stores it; the game's text and subtitles
            follow at their next load, the port's strings at once while the
-           menu language is Auto */
-        int i = gameLanguage() - ICO_GAME_LANGUAGE_ENGLISH;
+           menu language is Auto; a community entry's menu words and
+           subtitles at once (it draws them over the English data) */
         if (gameLanguage() < 0) {
             break; /* no language of the game's own (the row is hidden) */
         }
-        i = i < 0 || i > 4 ? 0 : stepIndex(i, 5, dir);
-        setGameLanguage(ICO_GAME_LANGUAGE_ENGLISH + i);
+        const int i = gameLanguage() - ICO_GAME_LANGUAGE_ENGLISH;
+        setLanguageEntry(ui_settings_text_language() < 0 && (i < 0 || i > 4)
+                             ? 0
+                             : stepIndex(languageEntry(), LANGUAGE_ENTRIES, dir));
         ui_settings_apply_language();
         ico_sysconf_set_language(ico_game_to_scf_language(gameLanguage()));
         s_dirtyConfig = 1;
@@ -2694,8 +2735,9 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         break;
     }
     case UI_OPT_MENU_LANGUAGE: {
-        /* Auto, then the eight tables (UiLang order): [ui] language */
-        const int i = stepIndex(ico_opt_ui_language() + 1, UI_LANG_COUNT + 1, dir) - 1;
+        /* Auto, then the eight tables and the community translations
+           (UiLang order): [ui] language */
+        const int i = stepIndex(ico_opt_ui_language() + 1, UI_LANG_TABLES + 1, dir) - 1;
         ico_opt_set_ui_language(i);
         ico_config_set_string("ui.language", ico_opt_ui_language_name(i));
         ui_settings_apply_language();

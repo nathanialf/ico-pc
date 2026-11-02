@@ -793,4 +793,5 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "Original conserva el resplandor del fotograma del juego entre fotogramas. Suave lo rehace en cada fotograma mostrado; cuesta más tiempo gráfico.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Solo importa por encima de la velocidad de fotogramas Original y con Resplandor activado.",
+    [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
 };
