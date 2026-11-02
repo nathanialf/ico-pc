@@ -971,11 +971,14 @@ UiLang ui_get_language(void);
 void ui_set_sheet_language(int sheetLang);
 int ui_sheet_language(void);
 /* The language of the game's menu words (UI_STR_MT_*, menu_text.h) over
-   sheet language sheetLang: a community translation's table over the
-   English sheets while one is chosen (ui_set_menu_words_language: a UiLang
-   from UI_LANG_COMMUNITY_FIRST, the Language row's community entry; -1, the
-   default, none), else sheetLang itself (any value, unchecked).  The words then keep the English
-   sheet's geometry (menu_text.h UiMenuTextItem: the five European sheets'). */
+   sheet language sheetLang: over the English sheets, the language
+   ui_set_menu_words_language set (any UiLang; -1, the default or a value
+   out of range, none: settings.c ui_settings_apply_language sets the Menu
+   language while a community translation is in force, so New Game,
+   Continue and the save tiles' words follow the Menu language as the
+   port's own rows do), else sheetLang itself (any value, unchecked).  The
+   words then keep the English sheet's geometry (menu_text.h
+   UiMenuTextItem: the five European sheets'). */
 void ui_set_menu_words_language(int lang);
 UiLang ui_menu_words_language(int sheetLang);
 /* the game's language number (2..6) to a UiLang; English otherwise */
