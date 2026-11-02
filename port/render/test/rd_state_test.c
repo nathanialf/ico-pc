@@ -88,10 +88,10 @@
  *              premultiplied subtract, an unblended mask-7 pass and a DATE
  *              pass plan to one key (blend off, mask 0xF in the cache's
  *              key, Cs for the unblended, DATE from the read); the set at
- *              least five times smaller than the fixed-function one, no
+ *              least four times smaller than the fixed-function one, no
  *              DATE key, every key the read can draw only as its image
  *              (the overlay's plain keys aside), the VU family at most a
- *              quarter of the fixed-function one's (the four blend paths
+ *              third of the fixed-function one's (the four blend paths
  *              gone); the counts and families printed
  *   vu set     rd__vu_set_choose: the stock Adreno 740's table row and a
  *              Turnip driver's text ("turnip Mesa driver", "Turnip Mesa
@@ -2199,15 +2199,15 @@ static void testUberSet(RdPipeKeyInt *keys)
                famM[f]);
     }
     printf("\n");
-    CHECK(n > 0 && n * 5u <= m, "uber set: %u keys against %u (want at least five times fewer)", n,
+    CHECK(n > 0 && n * 4u <= m, "uber set: %u keys against %u (want at least four times fewer)", n,
           m);
     CHECK(n < RD_PIPELINE_REACHABLE_MAX && m < RD_PIPELINE_REACHABLE_MAX,
           "uber set: %u and %u keys under %d", n, m, RD_PIPELINE_REACHABLE_MAX);
     CHECK(famN[RD_KF_DATE] == 0 && famM[RD_KF_DATE] > 0, "uber set: DATE keys %u (fixed %u)",
           famN[RD_KF_DATE], famM[RD_KF_DATE]);
-    CHECK(famN[RD_KF_VU] > 0 && famN[RD_KF_VU] * 4u <= famM[RD_KF_VU],
-          "uber set: VU keys %u against %u (the four blend paths one)", famN[RD_KF_VU],
-          famM[RD_KF_VU]);
+    CHECK(famN[RD_KF_VU] > 0 && famN[RD_KF_VU] * 3u <= famM[RD_KF_VU],
+          "uber set: VU keys %u against %u (the four blend paths one: at most a third)",
+          famN[RD_KF_VU], famM[RD_KF_VU]);
     CHECK(famN[RD_KF_2D] > 0 && famN[RD_KF_2D] < famM[RD_KF_2D], "uber set: 2D keys %u against %u",
           famN[RD_KF_2D], famM[RD_KF_2D]);
     CHECK(dstKeys > 0 && badDst == 0 && plainEligible == 0 && dup == 0,

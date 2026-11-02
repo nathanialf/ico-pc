@@ -1497,8 +1497,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   and the `vu_np_ps` keys (the DATE pass's twins of them too), each with its `vu_ps` key in the
   set, under the same two bounds (`testTilerFracSet`), GS state as shader data's planner and set
   (`testUberSet`: a LERP, a premultiplied subtract, an unblended mask-7 pass and a DATE pass one
-  key through the read; the tiler set at the phone's fractional scale at least five times smaller
-  than the fixed-function one, no DATE key, the VU family at most a quarter, no plain twin of a key
+  key through the read; the tiler set at the phone's fractional scale at least four times smaller
+  than the fixed-function one, no DATE key, the VU family at most a third, no plain twin of a key
   the read draws, the counts and families printed), and a dump's menu text sheets loading as the renderer makes them, a sheet with
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture

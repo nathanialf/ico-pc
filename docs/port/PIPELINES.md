@@ -206,8 +206,8 @@ image through the read alone, normalised, the DATE stencil keys left out, the ke
 draws as the two-pass fallback makes them, and the overlay's plain keys
 (`port/render/rd_dst_read.c` (`rd__enumerate_uber`); `rd__enumerate_reachable_overlay`). ctest
 `rd_state` `testUberSet` holds the tiler profile's set at the phone's fractional scale (the
-pre-pass off) to at least five times fewer keys than the fixed-function one, with no DATE key, a
-VU family a quarter or less of the fixed-function one's, and no plain twin of a key the read draws;
+pre-pass off) to at least four times fewer keys than the fixed-function one, with no DATE key, a
+VU family a third or less of the fixed-function one's, and no plain twin of a key the read draws;
 it prints the counts and the families (the plan's estimate: about 150 to 165 of 1193, the VU
 vertex shaders compiled 6 times each instead of 48, their 24 keys and the 24 DATE twins). The start-up set's log line is followed by
 `rd: pipelines: GS state as shader data (the colour read in order: N keys in the start-up set
