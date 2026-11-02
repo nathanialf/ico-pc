@@ -29,10 +29,11 @@
 # by design: the WORK2 caveat of docs/port/WORK_BUFFERS.md) is compared:
 # byte for byte where the fold did not happen (the folded run says
 # "fades fold on: 0") and under the exact blend where the log says the steps
-# were applied before the GS filter; elsewhere within one level on every
-# channel (png_level_diff.py), the channels a level apart counted and
-# printed per target, dump, blend and setting (docs/port/DIVERGENCES.md
-# VD-27).  The A/B run must say "fades fold off" with none folded; a run
+# were applied before the GS filter; elsewhere within two levels on every
+# channel (png_level_diff.py: under the fixed-function blend two lerps
+# between levels on one row add their roundings), the channels a level
+# apart and the largest difference counted and printed per target, dump,
+# blend and setting (docs/port/DIVERGENCES.md VD-27).  The A/B run must say "fades fold off" with none folded; a run
 # whose reduction did not take a planned fold ("took another way") fails.  Some
 # dump must fold at some setting (else the gate saw nothing).  A missing
 # list or dump is named and skipped; no dump read, or no device: SKIP (77).
@@ -95,7 +96,7 @@ set(args_phoneauto --enhanced --resolution 2364x1080 --full-height --full-pixel 
                    --present 2364x1080)
 set(env_phoneauto "ICO_RD_VU_PREPASS=0")
 set(foldRe "stats: fades fold (on|off): ([0-9]+) sprites folded into the reduction")
-set(diffRe "png_level_diff: [0-9]+ x [0-9]+, ([0-9]+) channels: [0-9]+ equal, ([0-9]+) one level apart, ([0-9]+) more")
+set(diffRe "png_level_diff: [0-9]+ x [0-9]+, ([0-9]+) channels: [0-9]+ equal, ([0-9]+) one level apart, ([0-9]+) more \\(largest ([0-9]+)\\)")
 set(failures 0)
 set(folds 0)
 set(compared 0)
@@ -241,14 +242,17 @@ foreach(dump IN LISTS dumps)
           continue()
         endif()
         set(more "${CMAKE_MATCH_3}")
+        set(largest "${CMAKE_MATCH_4}")
         message(STATUS "  ${png}: ${outDiff}")
         if(exact)
           message(SEND_ERROR "${dump} ${s} ${blend}: ${png} differs (${way}): it must be the "
                              "same bytes")
           math(EXPR failures "${failures} + 1")
-        elseif(more GREATER 0)
+        elseif(largest GREATER 2)
+          # under the fixed-function blend two lerps between levels on one
+          # row add their roundings: two levels at most (VD-27)
           message(SEND_ERROR "${dump} ${s} ${blend}: ${png} has ${more} channels more than a "
-                             "level apart")
+                             "level apart, the largest ${largest} (two is the bound)")
           math(EXPR failures "${failures} + 1")
         endif()
       endforeach()
