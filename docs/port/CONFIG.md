@@ -126,7 +126,7 @@ It is written at these moments only:
 | --- | --- | --- | --- |
 | `iso` | string | `""` | the disc image (any of the seven discs: the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo); empty asks on the first start (`port/platform/main_host.c` (`find_iso`)) |
 | `saves` | string | `<user folder>/memcard` | the card in port 0 ([SAVES.md](SAVES.md); `host_config.c`, `ico_host_saves_dir`); on the August 2001 preview the folder beside it with `-preview` appended |
-| `saves2` | string | absent: no card | the card in port 1 (`host_config.c` (`ico_host_saves2_dir`)) |
+| `saves2` | string | absent: no card, or `memcard2/` in the user folder while `[gameplay] second_memory_card` is on | the card in port 1 (`host_config.c` (`ico_host_saves2_dir`)); it wins over the option |
 | `keep_image` | bool | `false` | Android: keep the first start's copy of the disc image (`main_host.c` (`android_keep_image`)) |
 
 ### [video]
@@ -227,6 +227,7 @@ original game's behaviour (`port/game/options.h`, header comment).
 | `mirror` | bool | `false` | mirrored play, the value a run starts from until New Game or a load |
 | `natural_chains` | bool | `false` | a chain let down keeps its links' size |
 | `skip_opening` | bool | `false` | the boot starts at the title screen, without the Sony presents sign and the opening scene (from the next start); a pad recording's header records it |
+| `second_memory_card` | bool | `false` | a second memory card in port 1, the folder `memcard2/` in the user folder when `[paths] saves2` is absent ([SAVES.md](SAVES.md#the-card)); a change puts the card in or takes it out at once (`port/save/mc_host.c` (`ico_mc_host_second_card_changed`)). Not a simulation key: the card is the host's, read by the game when a save or load screen opens, so a pad recording and a save state do not record it |
 | `hold_type` | string | `"disc"` | `"disc"`: the disc's own way (A on the European, Japanese, Korean and Asian discs; B on the North American disc, the August 2001 preview and the June 2001 demo); `"hold"`: keep R1 held to hold Yorda's hand (the game's Hold type A); `"toggle"`: press R1 once to take it and again to let go (B). `"hold"` is read as a choice only beside `hold_type_chosen = true`, else as `"disc"`: a bare `"hold"` is the old first-run text, which every file written before `"disc"` existed holds. Wins over the memory card's `controlType`; another word reads as `"disc"` and is logged once. A pad recording's header records it |
 | `hold_type_chosen` | bool | absent | written `true` with every Hold type choice from Options; it makes a `"hold"` the player's A rather than the old first-run text. A pad recording's header records it |
 | `developer_mode` | bool | `false` | the development build's debug menu and options |

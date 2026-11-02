@@ -171,10 +171,19 @@ After importing, check that the game lists the save.
 
 ## A second memory card
 
-The PS2 had two memory card slots. To add a second card, close the game,
-open `config.toml` in the user folder, and add a line under `[paths]`
-naming a folder for it. For example, this line makes a second card in a
-folder named `memcard2` beside the program:
+The PS2 had two memory card slots. To add a second card, turn on
+**Options > Gameplay > Second memory card**. It goes in at once: the
+game's save and load screens then offer both cards, as the original does
+with two cards. Its saves are in a folder named `memcard2` beside
+`memcard` in the user folder, and Back up your data includes it. Turning
+it off takes the card out; its saves stay in the folder for when you turn
+it on again.
+
+To keep the second card somewhere else, close the game, open `config.toml`
+in the user folder, and add a line under `[paths]` naming a folder for it.
+A folder named this way is used whether the option is on or off. For
+example, this line makes a second card in a folder named `memcard2` beside
+the program:
 
 ```
 saves2 = "memcard2"

@@ -460,6 +460,14 @@ The first five are off unless you turn them on, on a phone too.
   The memory card check still runs, and its warning still shows if the card
   is missing or full. It takes effect the next time you start the game.
   Without it, Start still skips the opening scene once the sign has gone.
+- **Second memory card** puts a second memory card in the second slot, as
+  on a PS2 with two cards: ten more saves. The game's own save and load
+  screens then ask which card to use. It takes effect at once, the next
+  time a save or load screen opens. Off, the game has one card, as the
+  original. Turning it off does not delete the second card's saves: they
+  come back when you turn it on again. The second card is the folder
+  `memcard2` beside `memcard` in your user folder
+  ([where that is](PORTABLE_MODE.md#a-second-memory-card)).
 
 Two more rows are the game's own, and only show up in the pause menu's
 Options once you have finished the game:

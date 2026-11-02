@@ -29,8 +29,8 @@ progress as a card save. The game's own card code
 ## The card
 
 Port 0 always holds a formatted 8 MB card whose root is the card folder; port 1 holds a second card
-only when a folder is configured for it, and is empty otherwise, as on a PS2 with one card
-(`port/save/mc_host.c`, header comment, `slot_ok`). Slot 0 is the only slot. `sceMcGetInfo`
+only when a folder is configured for it or Options > Gameplay > Second memory card is on, and is
+empty otherwise, as on a PS2 with one card (`port/save/mc_host.c`, header comment, `slot_ok`). Slot 0 is the only slot. `sceMcGetInfo`
 reports a PS2 card (type 2), formatted, with its free space in 1 KB clusters: 8000 less the
 clusters the folder's tree takes, each file rounded up to whole clusters and each directory one
 cluster (`port/save/mc_host.c` (`sceMcGetInfo`, `used_clusters`); `port/save/mc_host.h`
@@ -245,9 +245,34 @@ The first `sceMcInit` reads the folders unless a caller set them first with
   [user folder](ARCHITECTURE.md#terms) (`port/platform/host_config.c` (`ico_host_saves_dir`,
   `card_dir_key`)). A path too long for the buffer falls back to `memcard` in the working folder,
   with a log line (`port/save/mc_host.c` (`sceMcInit`)).
-- Port 1: `saves2=` in `ico-pc.ini`, else `[paths] saves2`, relative paths likewise; absent or
-  empty, port 1 has no card. With two cards the log says `mc: two cards: port 0 ..., port 1 ...`
-  (`port/platform/host_config.c` (`ico_host_saves2_dir`); `port/save/mc_host.c` (`sceMcInit`)).
+- Port 1: `saves2=` in `ico-pc.ini`, else `[paths] saves2`, relative paths likewise; with
+  neither, `memcard2/` in the user folder (beside `memcard/`) while `[gameplay]
+  second_memory_card` is on (Options > Gameplay > Second memory card), else no card. An explicit
+  `saves2` wins over the option. The option's value comes from the options module
+  (`ico_host_set_second_card`, set by `main_host.c`'s listener of
+  `ico_opt_set_second_memory_card`), or from `config.toml` before it is set (tools and tests;
+  `ico_host_second_card`). The log says `mc: two cards: port 0 ..., port 1 ... (Second memory
+  card on|off, saves2)` or `mc: one card: port 0 ..., port 1 empty (Second memory card off)`
+  (`port/platform/host_config.c` (`ico_host_saves2_dir`, `ico_host_second_card`);
+  `port/save/mc_host.c` (`sceMcInit`)).
+- The option changes port 1 at once: the listener calls `ico_mc_host_second_card_changed`, which
+  asks `ico_host_saves2_dir` again (the preview's `-preview` folder as `sceMcInit` does), and a
+  folder that differs goes in (or out, when empty) with `mc.changed[1]` set, so the next
+  `sceMcGetInfo` on port 1 answers `sceMcResChangedCard` once, a card freshly inserted. Its files
+  stay when it goes out. Log: `mc: Second memory card on: port 1 holds the card ...; the next save
+  or load screen offers both cards`, `mc: Second memory card off: port 1 is empty (its saves stay
+  in their folder)`, or `mc: Second memory card on|off: port 1 unchanged (...)` (an explicit
+  `saves2`) (`port/save/mc_host.c` (`ico_mc_host_second_card_changed`)). This is enough because
+  the game reads both ports each time a save or load screen opens: the load screen's check
+  `_la_set_current_port_2` and the save screen's `_la_set_current_port_new` (two
+  `_la_set_current_port_lock_2` passes) start from step 0 of `_la_memory_card_check` on port 0 and
+  then on port 1 when the screen opens (`first`), and step 0 clears that port's `mcPortInfo`
+  record and calls `iosMcGetInfo` (`ico2/common/src/layout_action.c`). Step 0's
+  `sceMcResChangedCard` is not checked there (steps 1 to 3 read only the type and format), and
+  `iosMcMgrChdirProduct` takes it as a card (`ico2/fumi/ios/mcard.c`). With both cards found the
+  game's own two-card screens show (the load screen's slot choice, layout 17 on the European disc,
+  and the save screen's, layout 18; `menu_text` rows 176/177/185, "MEMORY CARD slot 1/2"), as on a
+  PS2 with two cards.
 - On the August 2001 preview both folders get `-preview` appended (`memcard-preview`; see the
   North American disc and the preview above; `port/save/mc_host.c` (`sceMcInit`)).
 

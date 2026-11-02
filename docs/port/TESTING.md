@@ -141,7 +141,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`save_jun26`); each imports a card holding its directory and one other disc's side by side and
   the other disc's `.psu` beside their own ([SAVES.md](SAVES.md#tests)). Part B lays each disc's record out byte by byte
   and pins every row's `mc_save_dir` to the game's own `iOSMcSaveSeg_*` name
-  ([SAVES.md](SAVES.md#the-seven-discs)). A load reads `optionControlType` from `[gameplay]
+  ([SAVES.md](SAVES.md#the-seven-discs)). Part B's `second_card_by_option` drives port 1 through
+  Options > Gameplay > Second memory card's listener as `main_host.c` registers it: On puts
+  `<user folder>/memcard2` (`memcard2-preview` on `save_aug6`) in port 1 at once, the game's card
+  check finds it formatted with no save, a save lands there and nowhere else; Off empties port 1
+  (the game's "no card", the file kept); On again lists and loads the save. Each run removes only
+  its own disc's directory there (the seven runs share the folder). A load reads `optionControlType` from `[gameplay]
   hold_type`, not from the card's `controlType` (no key: the disc's own, 0 on the four A discs, 1
   on the 2001 discs; `toggle` 1 and a chosen `hold` 0 on every disc); on the three 2001 discs the
   load does not touch `optionScreenMode`, `girlControlMode` or the record's `fileNo` and `serial`,
@@ -605,7 +610,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   other picker app, the no picker app popup; a zip pushed to
   `/sdcard/Android/data/com.defnf.icopc/files/drivers/` shows Add from the drivers folder.
 - `host_config_test.c`: `ico-pc.ini` parsing and rewriting, SHA-1 vectors, path joining, the
-  card folders read from the ini the game reads (`ico_host_ini_path`), portable mode, the `[dev]`
+  card folders read from the ini the game reads (`ico_host_ini_path`), the second card's folder
+  (`test_saves2_second_card`: `memcard2` in the user folder while `[gameplay] second_memory_card`
+  is on, from `config.toml` and then from `ico_host_set_second_card`, an explicit `saves2`
+  winning, no folder made), portable mode, the `[dev]`
   keys exported as environment switches (`ico_dev_env_value`, `test_dev_env`; `present_fallback`
   auto, off or fifo), a restart's
   `ICO_RD_BLEND` and `ICO_RD_VU_PREPASS` over the ini's (`test_retry_blend`,
@@ -1729,6 +1737,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`settings_extra_ntsc`, `settings_extra_aug6`, `settings_extra_jun26`: Cross
   confirms, the 2001 notes, the demo's 7-hit barrier, its toughness row without American and no
   Debug menu row; the window's edge moves through that disc's own cursor move).
+- `settings_extra_test.c`'s `testSecondCard`: Options > Gameplay > Second memory card from the
+  title and the pause menu, after Skip the opening and before the Film effect, Off by default; a
+  registered listener hears the current value, Right turns it on with one call and sets
+  `gameplay.second_memory_card`, the saved file has it, its note shows on the cursor, Left turns
+  it off with one more call; the cleared page still fits. `settings_test.c`'s `testBuild` reads
+  the Gameplay page's twelve rows, `testGameOptions` nine Downs from Yorda to Film effect, and
+  `settings_discs` (every disc) shows the row from both entries.
 - `settings_extra_test.c`'s `testScroll` (the Options window, [UI.md](UI.md#the-window)): Controls
   from the pause menu, with a touch screen, opens at the top with the down mark only (Effects and Display fit in the window and do not scroll); Down on the window's last row scrolls one
   row, Up on its first scrolls back; Up on the first row wraps to Back and Up on Back shows the end
