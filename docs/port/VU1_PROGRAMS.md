@@ -306,7 +306,7 @@ tick cameras (`vu_X_plain_vs`, `ICO_VU_PLAIN`). A draw with neither `VU_F_EXTEND
 `VU_F_TICKS` takes the plain one and gets the same picture. A device the renderer keeps to the
 plain ones (the Adreno 740 on Qualcomm's driver, whose driver froze the whole device compiling the
 extended ones; Mesa's Turnip driver, where the extended ones drew a stray vertex as a sliver; or
-`ICO_RD_VU_PLAIN=1`) draws every state with the plain variant: there a triangle that reaches into
+`[dev] vu_set = plain`) draws every state with the plain variant: there a triangle that reaches into
 the picture and fails the region test is not drawn in any state (no card test: the wide picture's
 edge at the old 4:3 border may open), and the pictures between two ticks take the blended camera's
 rule alone ([RENDER.md](PIPELINES.md#the-fallback-entries)).

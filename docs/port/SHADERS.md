@@ -17,7 +17,7 @@ interface that loads the blobs is [RHI.md](RHI.md).
 | `port/shaders/embed_shaders.py` | the manifest to `shaders_gen.c`/`.h`, with the blob checks |
 | `port/shaders/common.hlsli` | what every shader shares: FrameCB, DrawCB, the `DF_*` flags, sampling, outputs, the destination read, vertex helpers |
 | `port/shaders/gs_math.hlsli` | the GS integer arithmetic, scalar, valid HLSL and C |
-| `port/shaders/sheet_text.hlsli` | the sheet texel arithmetic of `font_sheet_ps`, mirrored on the CPU (the tests' oracle and the renderer's 1x bake) |
+| `port/shaders/sheet_text.hlsli` | the sheet texel arithmetic of `font_sheet_ps`, mirrored on the CPU (the tests' oracle and the renderer's bake at 1x and 2x) |
 | `port/shaders/vu_common.hlsli` | what the VU program shaders share ([VU1_PROGRAMS.md](VU1_PROGRAMS.md)) |
 | `port/shaders/shader_consts.h` | the C side of the byte layouts and constants |
 | `port/shaders/*.hlsl` | the families, below |
@@ -320,10 +320,37 @@ four loads where `font_sheet_ps` gathers a 14 x 10 coverage grid and runs the di
 (about 40 ms a picture of menu text on a Mali-G52 at 1x, issue 173; `font_sheet_ps_nodual` is the
 largest pixel shader). A change uploads the changed rectangle grown by the apron, a style change
 the whole page (`port/render/rd_upload.c` (`rd__upload_dirty_textures`)); `ICO_RD_SHEET_SHADER=1`
-draws 1x through `font_sheet_ps` instead, the A/B (`port/render/rd_core.c` (`rd_init`)).
+(`[dev] sheet_shader = true`) draws every scale through `font_sheet_ps` instead, the A/B
+(`port/render/rd_core.c` (`rd_init`)).
 `ctest rd_sheet_bake` checks the bake against `sheet_ref.c` at every texel of pages of glyphs and
 words, and `rd_pixel` the two shaders' pictures byte for byte
 ([UI.md](UI.md#the-menus-look) for the pages).
+
+**The 2x bake.** Above 1x the pixel's four strip texels come from font.hlsl `sheet_scaled`: the
+texel's own coverage, the rim levels of the sheet texels q0 and q0 + 1 around its centre (read at
+texel q s of the bottom half) blended bilinearly by g = (n - 2 s q0) / (2 s), then
+`sheet_texel_scaled`. Each texel's value again depends on the texel alone, so the renderer bakes
+pages of strip scale 2 the same way (`rd__sheet_bake_scaled_rect`, `port/render/rd_tex.c`, in
+integers): at s = 2 the weights are odd 4ths, the first lerp of two integer levels a multiple of
+1/4 and the second of 1/16, all within a float's 24 bits, so the shader's floats are those
+integers on any device and in any order of its operations (x (1 - a) + y a, x + a (y - x), a fused
+multiply-add), and `floor(v + 0.5)` of an exact value is the integer `(2 N + DD) / (2 DD)`.
+The baked texture covers both halves' rows ((w + 2 AX) x (h + 2 AY) for the w x h texture, coverage
+and rim), so `font_sheet_baked_ps`'s page size is `font_sheet_ps`'s texture size and the shader is
+the 1x one unchanged; past the apron every texel is the blank one (no coverage, the four rims 0:
+the rim level's grey, alpha 0). A changed rectangle bakes again with the texels that read it
+(`rd__sheet_bake_grow`: 2 s round the coverage rows, and the top-half rows 2 s round a changed rim
+row). s = 4 is exact the same way (odd 8ths) but not baked: its pages are 4096 x 2048, 34 MB baked,
+a 4K desktop's; s = 3 blends by 6ths, which round, and stays the shader's. The phone at Resolution
+Auto or 2x has a scene 2.1 times the PS2's height, so its menus' strips are at s = 2
+(`port/ui/menu_font.c` (`mfScale`)): the pause menu's and the Options pages' words, which the
+PowerVR phone's 10 s lines show as list 11 at 5.4 to 9.6 ms a picture there (its pass timing: list
+11 with the menus' 7 or 8 draws 9.3 to 10.0 ms, with the fades' 2 to 4 draws 1.0 to 3.0 ms;
+[WORK_BUFFERS.md](WORK_BUFFERS.md#the-menus-on-the-phone)), drop from a gather, nine loads and
+about sixteen integer divisions a pixel to four loads. `ctest rd_sheet_bake` checks the 2x and 4x
+bake at every texel (both halves and the apron) against a float transcription of `sheet_scaled` in
+both lerp forms and against `sheet_ref.c`, and `rd_pixel` the 2x frame through both shaders byte for
+byte.
 
 ## Bounded loops
 
@@ -576,9 +603,12 @@ The start-up line names the set and why, first (`rd_pipeline.c` `rd__vu_policy_i
 start, no [dev] setting asks for the plain one): the program entries (largest vu_lit_vs <words>
 words) and the mesh and grid draws' merge builds of the same set; the record path's modules ...`,
 or `plain set by the device table on this device (<row's reason>)`, `plain set (Turnip driver: the
-extended set's clipped triangles showed a stray vertex there, issue 163; [dev]
-ICO_RD_VU_EXTENDED=1 asks for the extended one)`, `plain set after a lost start (<the host's
-reason>)`, `plain set by [dev] (ICO_RD_VU_PLAIN=1)`, `extended set by [dev] (ICO_RD_VU_EXTENDED=1)`. The draw merge's own line
+extended set's clipped triangles showed a stray vertex there, issue 163; [dev] vu_set = extended
+asks for the extended one)`, `plain set after a lost start (<the host's reason>)`, `plain set by
+[dev] (vu_set = plain: ICO_RD_VU_SET=plain or ICO_RD_VU_PLAIN=1)`, `extended set by [dev] (vu_set
+= extended, ICO_RD_VU_SET=extended or ICO_RD_VU_EXTENDED=1)`. `[dev] vu_set = auto|plain|extended`
+(CONFIG.md) is the switch a player's device takes, as the table's row would: the A/B of the two
+sets' vertex cost on a device without a row (the PowerVR phone draws the extended set). The draw merge's own line
 (`rd: VU merge: ...`) follows; with the merge on, its builds (`vu_X_merge_vs` or
 `vu_X_merge_plain_vs`) are what the mesh and grid draws run.
 
@@ -598,8 +628,8 @@ GPU runs only with `[dev] vu_prepass = true`, keep both. Turnip is no row of the
 matches Qualcomm's own driver alone: the rule is the renderer's (`rd__driver_is_turnip`, the test
 the device profile's Turnip class makes, `port/render/rd_profile.c`), and the summary line's VU
 shaders read `one set, fallback plain (Turnip driver, issue 163)` (the table's row `(Adreno 740,
-issue 107)`; `port/render/rd_core.c` (`rd_summary_text`)). `ICO_RD_VU_EXTENDED=1` gives the
-extended set back, for a comparison. The card and tick steps only choose
+issue 107)`; `port/render/rd_core.c` (`rd_summary_text`)). `[dev] vu_set = extended`
+(`ICO_RD_VU_EXTENDED=1`) gives the extended set back, for a comparison. The card and tick steps only choose
 drop or clip; they never move a vertex. The VU vertex modules hold no Function or Private
 variable and no `OpUndef` (`tools/spirv_poison.py --list`, every `vu_*_vs` of the build: none), so
 a value read before it is written is not in the SPIR-V the drivers get.

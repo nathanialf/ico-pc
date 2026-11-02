@@ -747,7 +747,10 @@ texels on the CPU when it uploads the strips placed on it, and the shader reads 
 ([SHADERS.md](SHADERS.md#sheet_texthlsli), **The 1x bake**): a 1x page is 1038 x 1034 RGBA8 on the
 graphics card (4.3 MB, the page and its apron) where its coverage is 1 MB, and a placed strip costs
 its rectangle and the rim's reach round it once; a language change bakes the light and faint pages
-again whole.
+again whole. At 2x (the strips of a scene twice the PS2's height or a little more: the phone at
+Resolution Auto or 2x) rd bakes the pages the same way ([SHADERS.md](SHADERS.md#sheet_texthlsli),
+**The 2x bake**): a 2x page is 2062 x 1034 RGBA8 (8.5 MB, the 2048 x 1024 texture and its apron)
+where its coverage and rim are 2 MB; at 3x and 4x the shader rebuilds each pixel.
 
 The strips are rasterised at the [scene scale](ARCHITECTURE.md#terms), the scene's texels per GS
 line rounded to whole strip texels per sheet texel, from 1 up to `ICO_SHEET_SCALE_MAX` (on the

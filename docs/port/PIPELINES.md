@@ -428,9 +428,9 @@ program entry's key is made from is decided once a run, at `rd_init` (`port/rend
 - the extended build `vu_X_vs` elsewhere;
 - the plain build `vu_X_plain_vs` (`port/shaders/vu_common.hlsli`, `ICO_VU_PLAIN`: no card test, no
   tick cameras) on a device of the table (`RhiLimits.vuFallbackPlain`, `kVuPlainOnly` in
-  `port/rhi/vk/vk_device.c`), under Turnip (issue 163, [SHADERS.md](SHADERS.md#the-variants)), with `ICO_RD_VU_PLAIN=1` or `rd_set_vu_plain_only`; only the
+  `port/rhi/vk/vk_device.c`), under Turnip (issue 163, [SHADERS.md](SHADERS.md#the-variants)), with `[dev] vu_set = plain` (`ICO_RD_VU_SET=plain`, `ICO_RD_VU_PLAIN=1`) or `rd_set_vu_plain_only`; only the
   ten mesh entries have it (the particles' `vu_particle_vs` is one build), and its modules are made
-  only then. `ICO_RD_VU_EXTENDED=1` gives the extended build whatever the others say.
+  only then. `[dev] vu_set = extended` (`ICO_RD_VU_EXTENDED=1`) gives the extended build whatever the others say.
 
 The program entries' keys are in the start-up set only with the pre-pass off (then every VU draw is
 the old way: the eleven entries with the legacy pixel shaders, 16 keys each, 176); with it they are

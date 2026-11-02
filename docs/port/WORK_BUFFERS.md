@@ -829,7 +829,7 @@ costs about 1 ms a 10 MB read or written. The effects' full-frame reads and what
 | read | pass (the phone's timing, mean) | kept or not |
 | --- | --- | --- |
 | aura: AURA_WORK into WORK0 (`reduceCopyAlphaChannelOfWork1ToWork0`, box 2 x 4 GS texels a texel) | WORK0 424 x 128, 1.65 ms | served by the clear's colour when no aura object is drawn ([above](#a-cleared-source-read-as-its-colour)) |
-| aura: SCENE into FEED128 (`copyCurrentFBToFeedBackArea`, the feedback, box 4 x 4 GS texels a texel) | FEED128 212 x 128, 1.6 ms | kept: SCENE is the picture |
+| aura: SCENE into FEED128 (`copyCurrentFBToFeedBackArea`, the feedback, box 4 x 4 GS texels a texel) | FEED128 212 x 128, 4.9 ms (the pass after the paste; 1.6 ms was the mean of it and the alpha copy's pass before the paste) | kept: SCENE is the picture ([below](#the-auras-feedback-read)) |
 | shadows: the count at its GS size | temporary 848 x 448, 2.4 ms | kept: it reads SCENE's stencil, not a colour ([the shadow count in one draw](#the-shadow-count-in-one-draw)) |
 | glow: SCENE's alpha into WORK2 (`makeMaskPatternToWork2`) | WORK2 2366 x 1080, 2.9 ms | kept (below) |
 
@@ -845,6 +845,93 @@ purpose). At a whole scale the box's taps would line up with the copy's blocks o
 of SCENE into a target at scale 1 of the GS size, which no frame has; and even there the copy's
 float average rounds a half one way or the other by the driver, where the box rounds it up. So no
 draw reads such a copy and none is made.
+
+### The aura's feedback read
+
+What the aura draws a picture while the game runs (`staticBlur.c` `auraInspireAfter` mode 2; the
+PowerVR phone's pass timing at Resolution Auto, `[dev] perf_passes`, 1086 replays of this sequence,
+median GPU time; its 10 s lines say the same, `aura FEED128 212x128 3.0 passes 3 draws 5.0-6.0 ms`,
+`aura SCENE 1 draws 2.8 ms`):
+
+| pass | what | median |
+| --- | --- | --- |
+| AURA_WORK (the frame's size), 0 draws | the clear | 0.11 ms |
+| WORK0 424 x 128 | `reduceCopyAlphaChannelOfWork1ToWork0` (now served by the clear's colour: [constant reads](#a-cleared-source-read-as-its-colour)) | 2.65 ms read, under 0.05 ms served |
+| FEED128, 1 draw | `copyAlphaChannelOfWork0ToFeedBackArea`, WORK0 into FEED128 | 0.09 ms |
+| SCENE, 1 draw | `pasteFeedBackAreaToFB`, FEED128 over the frame: SCENE loaded and stored, 20.4 MB | 2.65 ms |
+| FEED128, 1 draw | the bottom strip's clear (`systemStatus[0] == 0`) | 0.02 ms |
+| FEED128, 1 draw | `copyCurrentFBToFeedBackArea`, SCENE read through the box: 10.2 MB, 27 136 texels of about 20 x 10 taps (5.4 M) | 4.9 ms |
+
+The last one is skipped while the game is paused (`systemStatus[5]`): the pause menu's pictures
+have the aura at 3.0 ms. 4.9 ms is not its 10.2 MB: the reduction reads the same SCENE 1:1 with
+four taps a texel (2.5 M texels, 10 M taps, and DISPLAY's 10.2 MB written) in 0.72 ms, and the
+aura's own WORK0 box read (54 k texels of about 90 taps, 4.9 M) took 2.65 ms before it was
+dropped. So on the PowerVR phone the box's per-tap loop over few texels is the cost (fx_sprite.hlsl
+`fx_sprite_texel`: per tap the two axes' addressing, a load, its UNORM conversion, TEXA, four
+multiply-adds; per row an integer division).
+
+What an exact cut can and cannot be:
+
+- **A reduced copy of SCENE made once** (the candidate the post sprites' half-texel finding already
+  ruled out above for the other reads): not exact,
+  for three reasons. The box is separable with a rounding between its axes (each SCENE row's sum of
+  `wx t` rounded to `R' = (16 R + Dx / 2) / Dx` before the column sum), so any copy that sums rows
+  together first, as a GS-size (one texel a GS texel) or any 2D-reduced copy does, has lost the
+  rounding the shader takes per row; the box's edges are at `2 c16 - step32 / 2` in 1/32 texel,
+  half a GS texel off the GS texel grid and alternating by a 32nd between FEED128 texels (c16 =
+  round(U s) with U = 64 k + 8 and s = 591/128), so no fixed partition of SCENE lines up with every
+  FEED128 texel's box; and an RGBA8 copy rounds its average where the box keeps 16 times the
+  precision. A copy also saves nothing for this read: it reads SCENE once either way, and there is
+  no second reader of SCENE at a reduced size in a frame (the glow's mask reads it 1:1, the fog
+  in place).
+- **The same box in two passes, exact** (designed, not built): a row pass into an R16G16B16A16
+  UINT target of FEED128's 212 columns by SCENE's 1080 rows, each texel the shader's `R'` for that
+  column and row (the column's taps, addressing, TEXA and weights as `fx_sprite_texel` computes
+  them from the sprite's uniforms and the texel's x), then FEED128's own draw with the column sum
+  `t = (sum(wy R') + 8 Dy) / (16 Dy)` over its rows' `R'` (the row addressing per tap as before)
+  and the rest of `fx_sprite_ps` unchanged. The integers are the same operations in the same order,
+  so the bytes are the same by construction. The taps are about the same (4.6 M in the row pass,
+  0.27 M in the column pass), the traffic 1.8 MB more each way; what changes is 229 k short loops
+  (20 taps) and 27 k shorter ones (10) for 27 k long ones (190). It needs a new target format, a
+  pipeline key and two shader entries; worth it only if the phone's 4.9 ms is the loop's length,
+  which the measurement below says.
+- **The measurement**: `[dev] aura_kernel = gs` (`ICO_RD_AURA_KERNEL=gs`,
+  `port/render/rd_aura_kernel.c`) draws that one sprite with the GS's own bilinear at its sample
+  point (no box: the PS2's taps, the picture not the default's, the feedback shimmering above 1x;
+  logged once as `rd: aura: the feedback read of SCENE into FEED128 drawn with the GS's own taps
+  ...`). One session on the phone with `[dev] perf_passes = true` with and without it, in the same
+  room, gives the FEED128 pass's time without the box: near the reduction's per-texel rate means
+  the loop is the cost and the two-pass box is the next cut (expected saving up to ~4 ms a
+  picture); near 4.9 ms means the pass's cost is elsewhere (the tiler's handling of SCENE between
+  the paste and the read) and no restructuring of the kernel helps.
+- **The paste** (2.65 ms) is SCENE's load and store around one full-frame draw: on a tiler a pass
+  of its own because the read after it samples SCENE. Drawing the paste in the pass before it
+  (list 7's last SCENE pass, or the fog's) would save the pair (~2 ms) only where nothing between
+  reads SCENE, and the aura's own passes between are on other targets; it is a pass-merge question
+  of the store plan's kind, not this package's (not done).
+- **AURA_WORK's clear** (0.11 ms) has no reader in mode 2 without an aura object (the constant read
+  serves WORK0): skipping it would save its store, a tenth of a millisecond: not done.
+
+The measurement script `build-host/tmp/v098/evidence/perf/phonegpu.sh` (orchestrator, lavapipe
+under the phone's profile) prints these passes per dump with the reduction's beside them.
+
+## The menus on the phone
+
+The PowerVR phone's 10 s lines with `list 11 SCENE 5 draws 9.55 ms` and `list 11 SCENE 9 draws
+7.44 ms` (the block after it, which ends in the game) cover the pause menu and the
+port's Settings pages: the `menu screen` lines of those blocks are 57 -> 80 -> 92 -> 80 -> 88 and
+88 -> 80 -> 57 -> 54 (57 the pause menu, 80 to 92 the Settings layouts opened from it, 54 the game).
+In the game list 11 is 1.15 ms (the fades: brightness, fade, letterbox). The pass timing says the
+same per pass: list 11 with the fades' 2 to 4 draws 1.0 to 3.0 ms, with the menus' 7 or 8 draws 9.3 to
+10.0 ms. With the menus up list 11 holds the fade sprites, the layout's own sprites and the menus'
+words as sheet text (`ui_draw_menu_text`): the fades fold does not take that list (the pause menu's
+layout is drawn after the fade, [RENDER.md](RENDER.md#the-fades-fold)), and the 1x bake did not
+cover it, because the phone's scene is 2.109 times the PS2's height and its strips are at scale 2
+(`mfScale`: `ceil(2.109 - 0.25)`), which `font_sheet_ps` rebuilt per pixel (a gather, nine loads,
+about sixteen integer divisions). 2x pages are now baked too, byte for byte
+([SHADERS.md](SHADERS.md#sheet_texthlsli), **The 2x bake**); the phone's menu pictures should lose
+most of the difference to the game's 1.15 ms, unmeasured until the phone shows it (the same 10 s
+lines with the pause menu up; `[dev] sheet_shader = true` draws them as before, the A/B).
 
 **The glow's WORK2 is the game's mask, not a copy.** `makeFullScreenFlareBefore` fills WORK2
 (`fillWork2`, recorded as WORK2's clear), draws the sun's fans into it when the sun is up
