@@ -74,12 +74,13 @@
  *   pipelines  the reachable screen and post set is under 400 keys (the
  *              sprite_texa_ps twins and the triangle planes included), with the VU program families
  *              under RD_PIPELINE_REACHABLE_MAX; font_sheet_ps and
- *              font_sheet_baked_ps have font_ps's 10 keys each; the VU keys: 176 program-entry keys without the
- *              pre-pass, 32 + 32 + 10 + 5 with it (printed with the 2D
- *              part: 446 in all when the 2D part is 367)
+ *              font_sheet_baked_ps have font_ps's 10 keys each; the VU keys: 242 program-entry keys without the
+ *              pre-pass (16 a shader and the 6 of a material TEST's
+ *              RGB_ONLY half), 38 + 38 + 10 + 5 with it (printed with the
+ *              2D part)
  *   dynamic    rd__key_dynamic_normalise: keys differing only in Z write or
  *              Z test (dynamic depth), blend or mask (dynamic blend) map to
- *              one; the collapsed sets' VU parts 8 + 8 + 10 + 5 and
+ *              one; the collapsed sets' VU parts 14 + 14 + 10 + 5 and
  *              2 + 2 + 10 + 5, every static key's normalised form in them
  *   tiler      the tile-based profile's sets (static, dynamic depth,
  *              dynamic depth and blend; with and without local read), and
@@ -1549,7 +1550,8 @@ static uint32_t checkStageKeys(const RdPipeKeyInt *keys, uint32_t n, const char 
 /* The VU keys of the start-up set with the vertex pre-pass
  * (rd__set_vu_prepass; docs/port/RENDER.md, "The vertex and triangle
  * pre-passes"): vu_main_vs's (RD_PROG_PRELIT) and vu_particle_main_vs's
- * (RD_PROG_PARTICLE) keys under the VU states and TEST Z ALWAYS, 32 each,
+ * (RD_PROG_PARTICLE) keys under the VU states and TEST Z ALWAYS, 38 each
+ * (32 and the 6 of a material TEST's RGB_ONLY half),
  * the ten pre-pass keys (rd__vu_pre_key) and the five stage keys
  * (rd__vu_stage_key), each once; no program entry's key (the fallback's
  * are made on first use); every program entry's key enumerated without the
@@ -1558,7 +1560,7 @@ static uint32_t checkStageKeys(const RdPipeKeyInt *keys, uint32_t n, const char 
  * keys (rc2, PowerVR: program 0 blend 4 and 12 through the triangle stage
  * fs vu_ps fmt 1/8, under Z ALWAYS) and the 2D one (program 9 blend 4,
  * sprite_ui_vs + sprite_ps, fmt 1/8, under the list head's Z GEQUAL) are
- * in it; the whole set is the 2D keys and 79 VU keys, under
+ * in it; the whole set is the 2D keys and 91 VU keys, under
  * RD_PIPELINE_REACHABLE_MAX.  The pre-pass is off again after. */
 static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t entriesOff)
 {
@@ -1595,11 +1597,12 @@ static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t entriesOff)
            "+ pre-pass %u + stages %u (%u without the pre-pass: 2D %u + program entries %u)\n",
            n, n2d, c.main, c.particleMain, c.pre, c.stages, nOff, nOff - entriesOff, entriesOff);
     CHECK(c.entries == 0, "pre-pass: %u program entries' keys", c.entries);
-    CHECK(c.main == 32 && c.particleMain == 32,
+    CHECK(c.main == 38 && c.particleMain == 38,
           "pre-pass: vu_main_vs %u, vu_particle_main_vs %u "
-          "keys (32 each)",
+          "keys (38 each)",
           c.main, c.particleMain);
-    CHECK(c.main * 11u == entriesOff * 2u,
+    /* a program entry's keys are vu_main_vs's but its 16 under Z ALWAYS */
+    CHECK(c.main * 11u == entriesOff + 11u * 16u,
           "pre-pass: vu_main_vs's %u keys against the eleven program entries' %u without", c.main,
           entriesOff);
     /* every VU key without the pre-pass has its twin with it */
@@ -1664,15 +1667,95 @@ static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t entriesOff)
     }
     CHECK(pre == RD_VS_VU_PRE_LAST - RD_VS_VU_PRE_FIRST + 1 && stages == 5,
           "pre-pass: %u pre-pass keys, %u stage keys", pre, stages);
-    CHECK(vuTotal(&c) == 79u && n == nOff - entriesOff + 79u && n < RD_PIPELINE_REACHABLE_MAX,
+    CHECK(vuTotal(&c) == 91u && n == nOff - entriesOff + 91u && n < RD_PIPELINE_REACHABLE_MAX,
           "pre-pass: %u keys (%u VU), %u without the pre-pass", n, vuTotal(&c), nOff);
     rd__set_vu_prepass(keepPrepass);
 }
 
+/* A material's own TEST with AFAIL RGB_ONLY (the disc's model data, ATE
+ * GREATER with its AREF, Z GEQUAL: the commands before a skinned mesh or a
+ * grid in the corpus dumps and a phone's dump): the failing
+ * pixels' pass is colour mask 7, Z write off (rd_pipeline.c
+ * rd__plan_screen_draw_ex), its key in the set for every program entry
+ * under ABE off, the LERP and mode 0 (blend 12, 4 and 5), with vu_ps and
+ * vu_texa_ps, whatever the AREF and the Z write; the passing pixels' pass
+ * is a key the list defaults give.  Not under the premultiplied subtract
+ * (no dump has it), and no DATE twin (testTilerSet: the material's TEST
+ * has no DATE).  keys[0..n) is the set without the pre-pass. */
+static void testRgbOnlyHalf(const RdPipeKeyInt *keys, uint32_t n)
+{
+    static const uint64_t kTests[] = {0x5340Dull, 0x5330Dull, 0x5346Dull, 0x535ADull, 0x5301Dull};
+    static const int kBlends[] = {-1, RD_BLEND_LERP_AS, RD_BLEND_CS_FIX_ADD_CD};
+    uint32_t checked = 0, missing = 0;
+    for (size_t t = 0; t < sizeof(kTests) / sizeof(kTests[0]); t++) {
+        for (int zw = 0; zw < 2; zw++) {
+            for (size_t b = 0; b < sizeof(kBlends) / sizeof(kBlends[0]); b++) {
+                RdStateBlock st;
+                rd__reset_state_block(&st);
+                st.ds.test = rd_test_from_gs(kTests[t]);
+                st.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+                st.ds.abe = kBlends[b] >= 0;
+                st.ds.blend = (uint8_t)(kBlends[b] >= 0 ? kBlends[b] : 0);
+                RdDrawPass dp[2];
+                const int np = rd__plan_screen_draw(&st, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
+                                                    RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
+                CHECK(np == 2 && dp[1].key.gs.colorMask == 0x7 &&
+                          dp[1].key.gs.zwrite == RD_ZWRITE_OFF &&
+                          dp[1].key.gs.ztst == RD_ZTST_GEQUAL && dp[0].key.gs.colorMask == 0xF,
+                      "RGB_ONLY TEST %llx: %d passes, the second mask %X zwrite %u",
+                      (unsigned long long)kTests[t], np, dp[1].key.gs.colorMask,
+                      dp[1].key.gs.zwrite);
+                for (uint8_t vs = RD_VS_VU_PRELIT; vs <= RD_VS_VU_PARTICLE; vs++) {
+                    for (int f = 0; f < 2 * np; f++) {
+                        RdPipeKeyInt k = dp[f / 2].key;
+                        k.gs.program = 0xFF;
+                        for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+                            if (keys[i].vs == vs) {
+                                k.gs.program = keys[i].gs.program; /* the entry's own */
+                                break;
+                            }
+                        }
+                        k.vs = vs;
+                        k.fs = (f & 1) ? RD_FS_VU_TEXA : RD_FS_VU;
+                        checked++;
+                        if (!keyIn(keys, n, &k) && missing++ < 4) {
+                            char w[160];
+                            rd__pipe_key_text(&k, w, sizeof(w));
+                            CHECK(0, "RGB_ONLY TEST %llx: %s not in the set",
+                                  (unsigned long long)kTests[t], w);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /* the PowerVR phone's first-use keys (at Original: vu_ps for vu_np_ps,
+       testTilerFracSet checks the twins) */
+    RdPipeKeyInt k = vuKey(RD_VS_VU_PRELIT, RD_TEST_Z_GEQUAL, 0, -1);
+    k.gs.colorMask = 0x7;
+    const bool none = keyIn(keys, n, &k);
+    k.gs.blend = RD_BLEND_LERP_AS;
+    const bool lerp = keyIn(keys, n, &k);
+    k.vs = RD_VS_VU_GRID_SPEC;
+    k.gs.program = RD_PROG_GRID_LIT;
+    const bool grid = keyIn(keys, n, &k);
+    uint32_t mask7 = 0;
+    for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        mask7 += keys[i].vs >= RD_VS_VU_PRELIT && keys[i].vs <= RD_VS_VU_PARTICLE &&
+                 keys[i].gs.colorMask == 0x7;
+    }
+    printf("  RGB_ONLY halves: %u keys checked, %u missing; %u program-entry keys with mask 7\n",
+           checked, missing, mask7);
+    CHECK(missing == 0 && none && lerp && grid && mask7 == 11u * 3u * 2u,
+          "RGB_ONLY halves: %u missing, the phone's keys %d %d %d, %u mask 7 keys (66 wanted)",
+          missing, none, lerp, grid, mask7);
+}
+
 /* The VU keys of the start-up set (rd__enumerate_reachable_vu) without the
  * vertex pre-pass: the eleven program entries with vu_ps and vu_texa_ps,
- * 16 keys each, whatever the preset (one module set: no variant);
- * then with it (testEnumerationPrepass). */
+ * 22 keys each (16, and the 6 of a material TEST's RGB_ONLY half), whatever
+ * the preset (one module set: no variant); the RGB_ONLY halves' keys
+ * (testRgbOnlyHalf); then with the pre-pass (testEnumerationPrepass). */
 static void testEnumerationVu(RdPipeKeyInt *keys)
 {
     const RdPreset keepPreset = g_rd.settings.preset;
@@ -1690,10 +1773,11 @@ static void testEnumerationVu(RdPipeKeyInt *keys)
     printf("  VU keys without the pre-pass: Original %u (vu_ps or vu_texa_ps %u), Enhanced with "
            "interpolation %u\n",
            o.entries, o.vuPs, e.entries);
-    CHECK(o.entries == 11u * 16u && o.vuPs == o.entries && vuTotal(&o) == o.entries,
-          "without the pre-pass: %u program entries' keys (%u with vu_ps or vu_texa_ps; 176 "
+    CHECK(o.entries == 11u * 22u && o.vuPs == o.entries && vuTotal(&o) == o.entries,
+          "without the pre-pass: %u program entries' keys (%u with vu_ps or vu_texa_ps; 242 "
           "wanted)",
           o.entries, o.vuPs);
+    testRgbOnlyHalf(keys, n);
     CHECK(e.entries == o.entries && vuTotal(&e) == vuTotal(&o),
           "the VU keys do not depend on the state (%u, %u)", o.entries, e.entries);
     g_rd.settings.preset = RD_PRESET_ORIGINAL;
@@ -1714,8 +1798,9 @@ static void testEnumerationVu(RdPipeKeyInt *keys)
  * its blend, the point keys everything.  The collapsed sets (with the
  * pre-pass, the fixed-function blend): every key normalised and once, every
  * key of the static set's normalised form in it and nothing else, the VU
- * part 8 + 8 + 10 + 5 with dynamic depth and 2 + 2 + 10 + 5 with both (the
- * point keys stay static), each printed with its 2D part. */
+ * part 14 + 14 + 10 + 5 with dynamic depth and 2 + 2 + 10 + 5 with both (the
+ * point keys stay static), each printed with its 2D part; 8 + 6 with
+ * dynamic depth: the RGB_ONLY halves keep their mask 7. */
 static void testDynamicNormalise(RdPipeKeyInt *keys)
 {
     static RdPipeKeyInt stat[RD_PIPELINE_REACHABLE_MAX];
@@ -1785,7 +1870,7 @@ static void testDynamicNormalise(RdPipeKeyInt *keys)
             rd__key_dynamic_normalise(&k);
             absent += keyCount(keys, n, &k) != 1;
         }
-        const uint32_t want = pass ? 2u : 8u;
+        const uint32_t want = pass ? 2u : 14u;
         printf("  dynamic %s: %u keys = 2D %u + vu_main_vs %u + vu_particle_main_vs %u + pre-pass "
                "%u + stages %u (static %u = 2D %u + %u VU)\n",
                pass ? "depth and blend" : "depth", n, n - vuTotal(&c), c.main, c.particleMain,
@@ -1862,7 +1947,11 @@ static void testTilerFracSet(RdPipeKeyInt *keys)
     /* the fx plan's modules and the local read's layout: stand-ins, as
        testTilerSet's (never made) */
     const RhiShader keepFrame = g_rd.fs[RD_FS_FX_FRAME], keepLocal = g_rd.fs[RD_FS_FX_LOCAL];
+    const RhiShader keepCount = g_rd.fs[RD_FS_SHADOW_COUNT];
     const RhiBindGroupLayout keepLayout = g_rd.layoutLocal;
+    if (g_rd.fs[RD_FS_SHADOW_COUNT].id == 0) {
+        g_rd.fs[RD_FS_SHADOW_COUNT].id = 0x7F000013u;
+    }
     if (g_rd.fs[RD_FS_FX_FRAME].id == 0) {
         g_rd.fs[RD_FS_FX_FRAME].id = 0x7F000010u;
     }
@@ -1886,6 +1975,7 @@ static void testTilerFracSet(RdPipeKeyInt *keys)
     g_rd.profile.fxPlan = true;
     g_rd.profile.fxDstLocal = true;
     g_rd.profile.vuPlanesFrac = true;
+    g_rd.profile.shadowOne = true;
     g_rd.settings.preset = RD_PRESET_ENHANCED;
     g_rd.dstMode = RD_BLEND_EXACT_OFF;
     g_rd.sceneSx = g_rd.sceneSy = 2.0f;
@@ -1927,12 +2017,49 @@ static void testTilerFracSet(RdPipeKeyInt *keys)
     CHECK(n <= RHI_PIPELINE_POOL_MAX - RHI_PIPELINE_POOL_HEADROOM,
           "tiler, fractional scale: %u keys past the pool's %d less its headroom %d", n,
           RHI_PIPELINE_POOL_MAX, RHI_PIPELINE_POOL_HEADROOM);
+    /* the PowerVR phone's five first-use keys, in the set: the RGB_ONLY halves of a material TEST through vu_np_ps
+       (list 0: program 0 blend 4 and 12 vs 4; list 2: program 7 blend 4 vs
+       13; ztst 2 zwrite 1 mask 7), without a DATE twin, and the shadow
+       count self-test's volumes under Z ALWAYS (list 3: program 11 blend 12
+       vs 1 fs 0, ztst 1 zwrite 1 mask 0, stencil 1 and 2) */
+    {
+        RdPipeKeyInt v[3];
+        for (int i = 0; i < 3; i++) {
+            v[i] = vuKey(i == 2 ? RD_VS_VU_GRID_SPEC : RD_VS_VU_PRELIT, RD_TEST_Z_GEQUAL, 0,
+                         i == 1 ? -1 : RD_BLEND_LERP_AS);
+            v[i].gs.program = i == 2 ? RD_PROG_GRID_LIT : RD_PROG_PRELIT;
+            v[i].gs.colorMask = 0x7;
+            v[i].fs = RD_FS_VU_NP;
+            char w[160];
+            rd__pipe_key_text(&v[i], w, sizeof(w));
+            CHECK(keyIn(keys, n, &v[i]), "tiler, fractional scale: the phone's key %s", w);
+            RdPipeKeyInt d = v[i];
+            d.gs.stencil = RD_STENCIL_DATE_TEST1;
+            CHECK(!keyIn(keys, n, &d), "tiler, fractional scale: a DATE twin of %s", w);
+        }
+        CHECK(v[0].gs.blend == 4 && v[1].gs.blend == 12 && v[2].vs == 13 &&
+                  v[0].gs.ztst == RD_ZTST_GEQUAL && v[0].gs.zwrite == RD_ZWRITE_OFF,
+              "the phone's VU keys' fields");
+        RdStateBlock sa;
+        rd__reset_state_block(&sa);
+        sa.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
+        for (int decr = 0; decr < 2; decr++) {
+            const RdPipeKeyInt k = rd__shadow_volume_key(&sa, RHI_FMT_RGBA8_UNORM, decr);
+            CHECK(k.gs.program == RD_PROG_SHADOW_VOLUME && k.gs.ztst == RD_ZTST_ALWAYS &&
+                      k.gs.zwrite == RD_ZWRITE_OFF && k.gs.stencil == 1 + decr &&
+                      k.vs == RD_VS_SPRITE_WORLD && k.fs == RD_FS_SPRITE,
+                  "the self-test's volume key %d", decr);
+            CHECK(keyIn(keys, n, &k), "tiler, fractional scale: the self-test's volume key %d",
+                  decr);
+        }
+    }
     g_rd.settings.preset = keepPreset;
     g_rd.sceneSx = keepSx;
     g_rd.sceneSy = keepSy;
     g_rd.dstMode = keepDst;
     g_rd.fs[RD_FS_FX_FRAME] = keepFrame;
     g_rd.fs[RD_FS_FX_LOCAL] = keepLocal;
+    g_rd.fs[RD_FS_SHADOW_COUNT] = keepCount;
     g_rd.layoutLocal = keepLayout;
 }
 

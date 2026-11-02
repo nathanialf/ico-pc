@@ -175,10 +175,35 @@ on a device that has it, for an A/B of the same frames.
 ### GS state as data
 
 The fields above multiply out over the families into the start-up set: on a PowerVR DXT-48 phone
-1193 keys, of which the VU family's 264 are 11 vertex shaders x 2 Z writes x 4 blend paths x 3
-pixel shaders, DATE's 514 its stencil twins (the VU keys' 264, the screen's 224: 7 states x 2
-spaces x 2 topologies x 4 blends x 2 pixel shaders, and 26 more), the 2D family's 361 (blend x 4
-and mask x 2 the largest factors). The attachment read ([RENDER.md](RENDER.md#destination-reads-and-blend-paths))
+1297 keys, of which the VU family's 363 are 11 vertex
+shaders x 3 pixel shaders x 11 states: 2 Z writes x 4 blend paths, and the 3 blends of a
+material TEST's RGB_ONLY half (colour mask 7, below); DATE's 514 its stencil twins (the VU keys'
+264 with colour mask F, the screen's 224: 7 states x 2 spaces x 2 topologies x 4 blends x 2 pixel
+shaders, and 26 more), the 2D family's 361 (blend x 4 and mask x 2 the largest factors).
+
+**A material's own TEST.** The disc's model data writes a TEST before a skinned mesh or a grid
+(the dumps' commands: TEST, ALPHA, CLAMP, FBA, the texture, ABE, then the draw); no game source
+holds it as a literal, so the VU states were listed from the list defaults and the source's
+TEST words alone. Most are ATE GREATER with AFAIL FB_ONLY (the list 1/2 default's split); some
+are AFAIL RGB_ONLY under Z GEQUAL, AREF 0x01, 0x30, 0x40, 0x46 or 0x5A (the corpus dumps
+`rd-00200` and `rd-00300`, the deja veil's dump and a phone's dump; ALPHA 0x44 and mode 0,
+ABE on, and the code 36 kicks with ABE off). Their failing pixels' pass is a key of its own:
+colour mask 7 (R, G, B), Z write off (`rd__plan_screen_draw_ex`, the AFAIL split). The VU family
+lists it for every vertex shader under ABE off, the LERP and the premultiplied add (blend 12, 4
+and 5), the three the dumps show, with `vu_ps`, `vu_texa_ps` and at a fractional scale `vu_np_ps`
+(`port/render/rd_mesh.c` (`enumerateVuDraws`, `VU_TEST_AT_GT64_RGBONLY`)): 6 keys a vertex shader
+at a whole scale, 9 at a fractional one. The passing pixels' pass is the FB_ONLY state's key. No
+DATE twin: the material's TEST takes the list 4 default's place, DATE with it
+(`rd__enumerate_reachable_date` twins the VU keys with colour mask F only). A PowerVR phone made
+three of them on first use, 0.6 to 0.8 s each, the first time the game drew that way on entering
+a room (its log: `program 0 blend 4 vs 4 fs 37 ... ztst 2 zwrite 1 mask 7` and its blend 12 and
+grid twins, a 2.2 s walk).
+
+**The shadow count's self-test.** Its volumes draw under TEST 0x30000 (`rd_shadow_selftest.c`
+(`SB_TEST`): every face counts whatever SCENE's depth holds) into SCENE's RGBA8 colour; the game's
+are under 0x50000 (`Shadow.c`). Where the profile has the one-draw count the shadow family also
+lists those two volume keys (Z ALWAYS, the increment and the decrement;
+`rd__enumerate_reachable_shadow`), which the phone made on first use in list 3 at start. The attachment read ([RENDER.md](RENDER.md#destination-reads-and-blend-paths))
 computes the GS's blend in the fragment shader from the pixel it reads in rasterization order, so
 where the device has that read the blend, the write mask and DATE can be shader data instead of
 key fields (`port/render/rd_uber.c`, its header comment; `g_rd.uber`, `rd__uber_on`):
@@ -326,7 +351,8 @@ TEST Z ALWAYS (the one Z test a VU draw is seen to get that the set lacked, belo
 as those keys' state) and UI-space sprites under the TEST Z GEQUAL every list's head writes, with
 the depth target (`ico2/seki/src/GsBase.c` (`gsb_setNormalReg`): a 2D draw of list 11 before
 the list's own TEST write takes it); the whole key in the line names the state if one is still
-missing. The program entries' keys before the pre-pass lacked the same states: every one of them
+missing. It later named colour mask 7 on program-entry keys of the same blends: a material TEST's
+RGB_ONLY half ("A material's own TEST", above), now in the set. The program entries' keys before the pre-pass lacked the same states: every one of them
 has its `vu_main_vs` or `vu_particle_main_vs` twin in the set (`rd_state_test`
 `testEnumerationPrepass`). A pipeline made in
 the vertex pre-pass is `in the vertex pre-pass (before list 0)` (`rd__vu_prepass_running`). A

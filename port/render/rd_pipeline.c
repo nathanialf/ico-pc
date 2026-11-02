@@ -3813,7 +3813,8 @@ bool rd__date_stencil_pass(RdDrawPass *p)
  * lines, Z write on and off, every blend the families list, the scene
  * depth, sprite_ps and its TEXA twin); the VU draws' twins of the
  * enumerated VU keys under Z GEQUAL with the scene depth (the list 4
- * default: DATM 1); the PRIM.AA1 strips' DATM 1 pairs (TEST1 and
+ * default: DATM 1; not the keys of a material TEST's RGB_ONLY half, whose
+ * TEST has no DATE); the PRIM.AA1 strips' DATM 1 pairs (TEST1 and
  * TEST1_CLR); and the two setup keys (RGBA8: the scene class).
  * Keys missing here are made on first use. */
 uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t n)
@@ -3867,8 +3868,10 @@ uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t 
         const RdPipeKeyInt *k = &out[i];
         const int vu =
             (k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST) || rd__vs_is_vu_main(k->vs);
+        /* not the RGB_ONLY halves (mask 7: rd_mesh.c enumerateVuDraws): a
+         * material's own TEST takes the list 4 default's place, DATE with it */
         if (vu && k->depthFmt != RHI_FMT_UNKNOWN && k->gs.stencil == RD_STENCIL_OFF &&
-            k->gs.ztst == RD_ZTST_GEQUAL && k->dst == RHI_DST_READ_NONE) {
+            k->gs.ztst == RD_ZTST_GEQUAL && k->dst == RHI_DST_READ_NONE && k->gs.colorMask == 0xF) {
             RdPipeKeyInt t = *k;
             t.gs.stencil = RD_STENCIL_DATE_TEST1;
             n = rd__add_pipe_key(out, max, n, &t);
@@ -3989,6 +3992,17 @@ uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_
     if (g_rd.profile.shadowOne && g_rd.fs[RD_FS_SHADOW_COUNT].id) {
         const RdPipeKeyInt k1 = rd__shadow_count_key();
         n = rd__add_pipe_key(out, max, n, &k1);
+        /* the self-test's volumes (rd_shadow_selftest.c SB_TEST: TEST
+         * 0x30000, every face counts), into SCENE's RGBA8 colour: the
+         * phone's two first-use lines in list 3 at start (ztst 1, stencil 1
+         * and 2) */
+        RdStateBlock sa;
+        rd__reset_state_block(&sa);
+        sa.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
+        for (int decr = 0; decr < 2; decr++) {
+            const RdPipeKeyInt kt = rd__shadow_volume_key(&sa, RHI_FMT_RGBA8_UNORM, decr);
+            n = rd__add_pipe_key(out, max, n, &kt);
+        }
     }
     return n;
 }

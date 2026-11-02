@@ -2638,7 +2638,47 @@ void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key)
  * module, g_rd.vsFallback), made on first use.  Without the pre-pass every
  * VU draw is the old way: the eleven program entries under the three tests
  * above, 16 keys each.  Both ways draw with vu_ps and vu_texa_ps (VuVSOut:
- * the planes as flat varyings). */
+ * the planes as flat varyings).
+ * Then the AFAIL RGB_ONLY half of a material's own TEST (VU_TEST_AT_GT64_RGBONLY: the
+ * TEST the disc's model data writes before a mesh or grid, ATE GREATER with
+ * its own AREF, AFAIL RGB_ONLY, Z GEQUAL; no game-code literal, so the list
+ * defaults above never had it): the failing pixels' pass writes R, G and B
+ * without Z (colour mask 7, Z write off; rd_pipeline.c
+ * rd__plan_screen_draw_ex), under ABE off, the LERP (0x44) and Cs*FIX + Cd
+ * (mode 0, the premultiplied add's path), the blends the dumps show it
+ * with; the passing pixels' pass is a key above.  6 more keys a shader, 9
+ * at a fractional scale with the vu_np_ps twins (a
+ * PowerVR phone's first-use lines: blend 4 and 12, mask 7,
+ * vu_prelit_merge_vs and vu_grid_spec_merge_vs with vu_np_ps, 0.6-0.8 s
+ * each). */
+static uint32_t addVuPlan(RdPipeKeyInt *out, uint32_t max, uint32_t n, uint64_t test, int zw,
+                          int blend, uint8_t prog, uint8_t vs)
+{
+    RdStateBlock s;
+    rd__reset_state_block(&s);
+    s.ds.test = rd_test_from_gs(test);
+    s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+    s.ds.abe = blend >= 0;
+    s.ds.blend = (uint8_t)(blend >= 0 ? blend : 0);
+    RdDrawPass dp[2];
+    const int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                                        RHI_FMT_D32F_S8, dp);
+    /* vu_ps and, for a 24- or 16-bit texture under AEM, vu_texa_ps */
+    for (int i = 0; i < np * 2; i++) {
+        RdPipeKeyInt k = dp[i / 2].key;
+        k.gs.program = prog;
+        k.vs = vs;
+        k.fs = (i & 1) ? RD_FS_VU_TEXA : RD_FS_VU;
+        n = rd__add_pipe_key(out, max, n, &k);
+        n = rd__vu_pixel_fs_enum(out, max, n, &k); /* rd_pixel_plan.c */
+    }
+    return n;
+}
+
+/* ATE GREATER AREF 0x40 AFAIL RGB_ONLY, ZTE, Z GEQUAL: the AREF is no key
+ * field (the dumps' materials take 0x01, 0x30, 0x40, 0x46 and 0x5A) */
+#define VU_TEST_AT_GT64_RGBONLY 0x5340Dull
+
 static uint32_t enumerateVuDraws(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
     static const uint64_t kTests[] = {RD_TEST_Z_GEQUAL, RD_TEST_AT_GT64_FBONLY,
@@ -2670,27 +2710,16 @@ static uint32_t enumerateVuDraws(RdPipeKeyInt *out, uint32_t max, uint32_t n)
         for (size_t t = 0; t < nt; t++) {
             for (int zw = 0; zw < 2; zw++) {
                 for (size_t b = 0; b < sizeof(kBlends) / sizeof(kBlends[0]); b++) {
-                    RdStateBlock s;
-                    rd__reset_state_block(&s);
-                    s.ds.test = rd_test_from_gs(kTests[t]);
-                    s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
-                    s.ds.abe = kBlends[b] >= 0;
-                    s.ds.blend = (uint8_t)(kBlends[b] >= 0 ? kBlends[b] : 0);
-                    RdDrawPass dp[2];
-                    int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
-                                                  RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
-                    /* vu_ps and, for a 24- or 16-bit texture
-                     * under AEM, vu_texa_ps */
-                    for (int i = 0; i < np * 2; i++) {
-                        RdPipeKeyInt k = dp[i / 2].key;
-                        k.gs.program = progList[v];
-                        k.vs = vsList[v];
-                        k.fs = (i & 1) ? RD_FS_VU_TEXA : RD_FS_VU;
-                        n = rd__add_pipe_key(out, max, n, &k);
-                        n = rd__vu_pixel_fs_enum(out, max, n, &k); /* rd_pixel_plan.c */
-                    }
+                    n = addVuPlan(out, max, n, kTests[t], zw, kBlends[b], progList[v], vsList[v]);
                 }
             }
+        }
+        /* the material TEST's RGB_ONLY half (its Z write on: the failing
+         * pass's key is the same with it off) */
+        static const int kRgbOnlyBlends[] = {-1, RD_BLEND_LERP_AS, RD_BLEND_CS_FIX_ADD_CD};
+        for (size_t b = 0; b < sizeof(kRgbOnlyBlends) / sizeof(kRgbOnlyBlends[0]); b++) {
+            n = addVuPlan(out, max, n, VU_TEST_AT_GT64_RGBONLY, 1, kRgbOnlyBlends[b], progList[v],
+                          vsList[v]);
         }
     }
     return n;
