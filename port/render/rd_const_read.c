@@ -175,5 +175,6 @@ bool rd__const_read(const RdTargetRec *tc, uint32_t tcId, const RdTargetRec *src
     }
     memcpy(p->rgba, col, sizeof(col));
     g_rdPerf.constReads++;
+    rd__clear_skip_served(srcId); /* the source not read: its clear may go (rd_pass_cut.c) */
     return true;
 }

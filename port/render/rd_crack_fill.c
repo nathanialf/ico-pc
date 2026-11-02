@@ -542,8 +542,10 @@ static bool fillWork(Replay *r, RdTargetRec *tc, RdDepthCopy *copy, RhiPipeline 
          * readable (the stencil as beginPass has it), begun and counted as
          * the fog's (the fill's draw is timed apart by the effect) */
         r->perfPost = fogPost;
+        rd__last_store_arm(scene, scene); /* the fog's own pass (rd_pass_cut.c) */
         rd__replay_begin_pass(r, tc, tc, scene, scene, RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f,
                               false);
+        rd__last_store_arm(0, 0);
         r->perfPost = RD_PERF_POST_CRACK;
         if (!r->passOpen) {
             skip(SKIP_PASS, tc);

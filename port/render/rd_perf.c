@@ -196,6 +196,9 @@ static uint64_t s_fusePairs, s_fuseSame, s_fuseKept[RD_VU_FUSE_WHY_COUNT];
 /* the store plan's (RdPerfRecord storePasses, storeDepthDropped,
  * storeColorDropped) and the replays it planned */
 static uint64_t s_storePasses, s_storeDepth, s_storeColor;
+/* the passes cut (rd_pass_cut.c; RdPerfRecord clearsCarried, clearsSkipped,
+ * storeLastDropped) */
+static uint64_t s_cutCarried, s_cutSkipped, s_cutLast;
 static uint32_t s_storePlanned;
 /* the store plan's keep as the last planned record had it (RdPerfRecord
  * storeKept, storeKeptTarget, storeKeptFrame) */
@@ -231,6 +234,9 @@ bool rd_perf_pop(RdPerfRecord *out)
     for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
         s_fuseKept[k] += s_queue[s_head].vuFuseKept[k];
     }
+    s_cutCarried += s_queue[s_head].clearsCarried;
+    s_cutSkipped += s_queue[s_head].clearsSkipped;
+    s_cutLast += s_queue[s_head].storeLastDropped;
     s_storePasses += s_queue[s_head].storePasses;
     s_storeDepth += s_queue[s_head].storeDepthDropped;
     s_storeColor += s_queue[s_head].storeColorDropped;
@@ -372,6 +378,21 @@ const char *rd_perf_backend_text(void)
                      s_storePlanned ? "planned" : "every store kept", kept, none);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
+    if (s_backendReplays &&
+        (s_cutCarried || s_cutSkipped || s_cutLast || rd__pass_cut_on(RD_CUT_CARRY) ||
+         rd__pass_cut_on(RD_CUT_SKIP) || rd__pass_cut_on(RD_CUT_LAST))) {
+        /* the passes cut (rd_pass_cut.c): per replay, the clears the next
+           pass took as its load (a pass fewer each), the clears not drawn,
+           the depth stores dropped at the last touch (in "stores" too) */
+        const double n = (double)s_backendReplays;
+        const int k =
+            snprintf(s_text + at, sizeof(s_text) - at,
+                     "; passes cut: %.1f clears taken by the next pass, %.1f clears "
+                     "skipped, %.1f depth stores dropped at the last touch a replay "
+                     "([dev] clear_carry, clear_skip, last_store)",
+                     (double)s_cutCarried / n, (double)s_cutSkipped / n, (double)s_cutLast / n);
+        at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
+    }
     if (s_backendReplays) {
         /* the pipelines made so far by family (rd_uber.c rd__uber_perf_note:
            where GS state as shader data shrinks the set, which part) */
@@ -398,6 +419,7 @@ const char *rd_perf_backend_text(void)
     memset(s_mergeBlocked, 0, sizeof(s_mergeBlocked));
     s_fusePairs = s_fuseSame = 0;
     memset(s_fuseKept, 0, sizeof(s_fuseKept));
+    s_cutCarried = s_cutSkipped = s_cutLast = 0;
     s_storePasses = s_storeDepth = s_storeColor = 0;
     s_storePlanned = 0;
     memset(s_storeWhy, 0, sizeof(s_storeWhy));

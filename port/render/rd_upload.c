@@ -682,6 +682,7 @@ static void workClear(void);
 
 void rd__clear_new_targets(void)
 {
+    rd__clear_skip_begin(); /* a clear an earlier replay left undrawn (rd_pass_cut.c) */
     int named = 0;
     for (int i = 0; i < RD_MAX_TARGETS; i++) {
         RdTargetRec *t = &g_rd.targets[i];

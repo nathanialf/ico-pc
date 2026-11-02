@@ -575,6 +575,13 @@ static const struct {
        and stores only the tiles they touch, the same picture
        (port/render/rd_pass_area.c) */
     {"dev.pass_area", "pass_area"},
+    /* auto (the default: on on a tile-based GPU), on or off each: a
+       pending clear carried into the next pass on its target, a clear
+       nothing reads not drawn, the depth store of the pass holding its
+       last touch dropped, the same picture (port/render/rd_pass_cut.c) */
+    {"dev.clear_carry", "clear_carry"},
+    {"dev.clear_skip", "clear_skip"},
+    {"dev.last_store", "last_store"},
     /* false: the VU vertex pre-pass off, every VU draw the old way (an
        A/B; port/render/rd_replay_vu.c rd__vu_prepass_init) */
     {"dev.vu_prepass", "vu_prepass"},
@@ -695,6 +702,10 @@ static const struct {
     {"aura_box", "ICO_RD_AURA_BOX"},
     /* port/render/rd_pass_area.c rd__pass_area_init: auto, 1 or 0 */
     {"pass_area", "ICO_RD_PASS_AREA"},
+    /* port/render/rd_pass_cut.c rd__pass_cut_init: auto, 1 or 0 each */
+    {"clear_carry", "ICO_RD_CLEAR_CARRY"},
+    {"clear_skip", "ICO_RD_CLEAR_SKIP"},
+    {"last_store", "ICO_RD_LAST_STORE"},
     /* port/render/rd_replay_vu.c preBatchInit: 0 draws the pre-pass one
        draw an entry and stage */
     {"vu_prepass_batch", "ICO_RD_VU_PREPASS_BATCH"},
@@ -812,6 +823,11 @@ const char *ico_dev_env_value(const char *key, const char *value)
     }
     if (strcmp(key, "pass_area") == 0 && strcmp(value, "auto") == 0) {
         return "auto"; /* else on/off as 1/0 below (rd_pass_area.c rd__pass_area_pick) */
+    }
+    if ((strcmp(key, "clear_carry") == 0 || strcmp(key, "clear_skip") == 0 ||
+         strcmp(key, "last_store") == 0) &&
+        strcmp(value, "auto") == 0) {
+        return "auto"; /* else on/off as 1/0 below (rd_pass_cut.c, pass_area's words) */
     }
     if (strcmp(key, "date_path") == 0) {
         return value_is(value, datePaths) ? value : NULL;

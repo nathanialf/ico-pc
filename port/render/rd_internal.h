@@ -1139,6 +1139,12 @@ typedef struct RdProfile {
      * tile-based classes, off on the immediate-mode ones (which ignore the
      * area anyway); [dev] pass_area over it, read there */
     bool passArea;
+    /* passes cut (rd_pass_cut.c): a pending clear carried into the next
+     * pass, a clear nothing reads skipped, the depth store of the pass
+     * holding the depth's last touch dropped; on by default on the
+     * tile-based classes; [dev] clear_carry, clear_skip, last_store over
+     * it, read there */
+    bool passCut;
     /* rd_profile.c: the device class's name for the lines; per flag
      * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
      * turned it off (rd__profile_self_test_off) */
@@ -2037,6 +2043,54 @@ void rd__pass_area_begin(RhiRenderPassDesc *p, const RdTargetRec *c, uint32_t ci
                          bool ms, bool storage);
 bool rd__pass_area_due(uint32_t ord, uint32_t serial);
 void rd__pass_area_counts(uint64_t *passes, uint64_t *tiles, uint64_t *targetTiles, uint64_t *ends);
+
+/* Passes cut (rd_pass_cut.c; docs/port/WORK_BUFFERS.md "Passes cut"),
+ * three switches, each [dev] <key> = auto|on|off (auto: RdProfile.passCut):
+ * RD_CUT_CARRY clear_carry (ICO_RD_CLEAR_CARRY), RD_CUT_SKIP clear_skip
+ * (ICO_RD_CLEAR_SKIP), RD_CUT_LAST last_store (ICO_RD_LAST_STORE).
+ *   rd__pass_cut_init: decided once after rd__profile_init, their lines;
+ *     every lazy clear forgotten (a new context)
+ *   rd__pass_cut_on / rd__pass_cut_force (tests: -1 the switch's own, 0, 1)
+ *   rd__pass_cut_scan: the lists read once before the walk (from
+ *     rd__store_plan_scan)
+ * The clear carry (rd_replay.c endPassFor): rd__clear_carry_note when a
+ * pending clear of target id stays pending past a pass's end,
+ * rd__clear_taken when a pass took target id's pending clear as its load.
+ * The clear skip: rd__clear_skip_served (rd_const_read.c: the action now
+ * walked read source id as its clear's colour), rd__clear_skip (rd_replay.c
+ * flushClear: true when the pending clear of target id, colour col, is not
+ * recorded), rd__clear_skip_begin (rd_upload.c rd__clear_new_targets: the
+ * clears left unrecorded by an earlier replay recorded now where this one
+ * reads the target before clearing it), rd__clear_skip_readback (a read of
+ * target id: its clear recorded first, on its own list).
+ * The last store: rd__last_store_arm (rd_replay.c bindDrawEx, rd_crack_fill.c
+ * fillWork: the pass begun next is a draw's own on cid and did; 0, 0 after),
+ * rd__last_store_fog (rd_replay.c doFog: the fog in force now keeps the pass
+ * it begins to its end: the local read, no probe, no edge read due),
+ * rd__last_store_drop (rd_store_plan.c rd__store_plan_pass: the depth store
+ * of the pass begun now may be dropped), rd__last_store_end (rd_replay.c
+ * endPass, the walk's pass ending: the guard that it held its promise) */
+enum { RD_CUT_CARRY, RD_CUT_SKIP, RD_CUT_LAST, RD_CUT_COUNT };
+
+void rd__pass_cut_init(void);
+bool rd__pass_cut_on(int which);
+void rd__pass_cut_force(int which, int mode);
+void rd__pass_cut_scan(const RdFrame *f, int keep);
+void rd__clear_carry_note(uint32_t id);
+void rd__clear_taken(uint32_t id);
+void rd__clear_skip_served(uint32_t id);
+bool rd__clear_skip(uint32_t id, const RdTargetRec *t, const float col[4], bool depth);
+void rd__clear_skip_begin(void);
+void rd__clear_skip_readback(uint32_t id);
+void rd__last_store_arm(uint32_t cid, uint32_t did);
+void rd__last_store_fog(bool holds);
+bool rd__last_store_drop(uint32_t did, uint32_t last, RhiLoadOp depthLoad, bool live,
+                         uint32_t anyTouch);
+void rd__last_store_end(void);
+/* rd_fog_path.c: false when the fog's edge read (rd__fog_edge_due) is
+ * surely not due at the next fog: its count is not at a multiple of
+ * RD_FOG_EDGE_EVERY (rd_pass_cut.c's promise for the fog's pass) */
+bool rd__fog_edge_may_be_due(void);
 /* The fades fold (rd_fades_fold.c, rd_replay.h): false under [dev]
  * fades_fold = false (ICO_RD_FADES_FOLD=0, the A/B) or after a reduction
  * did not take a planned fold */

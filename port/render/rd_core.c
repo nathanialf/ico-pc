@@ -1790,6 +1790,7 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     rd__profile_init();                /* the device profile (rd_profile.c) */
     rd__aura_box_init();               /* the aura's read in two passes (rd_aura_box.c) */
     rd__pass_area_init();              /* the passes' render areas (rd_pass_area.c) */
+    rd__pass_cut_init();               /* the passes cut (rd_pass_cut.c) */
     rd__sprite_planes_init();          /* issue 161: the planes builds off (rd_screen_planes.c) */
     /* the two-pass blend without dual-source blending (a
      * device without dualSrcBlend; ICO_RD_NO_DUAL=1 forces it for tests) */

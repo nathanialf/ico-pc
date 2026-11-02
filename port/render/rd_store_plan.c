@@ -277,6 +277,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
 {
     rd__fades_fold_scan(f, keep); /* the sprites the reduction draws (rd_fades_fold.c) */
     rd__pass_area_scan(f, keep);  /* the passes' areas, after the fold (rd_pass_area.c) */
+    rd__pass_cut_scan(f, keep);   /* the passes cut (rd_pass_cut.c) */
     s_plan.n = s_plan.nUndef = 0;
     s_plan.full = false;
     s_plan.anyTouch = 0;
@@ -460,6 +461,13 @@ void rd__store_plan_pass(const RdTargetRec *d, uint32_t did, RhiLoadOp *depthLoa
             *depthLoad = dl == RHI_LOAD_LOAD ? RHI_LOAD_DONT_CARE : dl;
             *stencilLoad = sl == RHI_LOAD_LOAD ? RHI_LOAD_DONT_CARE : sl;
         }
+    } else if (s_plan.mode == 1 && rd__last_store_drop(did, p->last, dl, live, s_plan.anyTouch)) {
+        /* the pass holding the last touch, kept open to its end by the walk
+         * (rd_pass_cut.c): loaded, not stored */
+        p->dropped = true;
+        *depthStore = RHI_STORE_DONT_CARE;
+        *stencilStore = RHI_STORE_DONT_CARE;
+        g_rdPerf.storeDepthDropped++;
     }
     if (!s_plan.poison) {
         return;

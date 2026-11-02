@@ -2511,6 +2511,12 @@ int main(int argc, char **argv)
                "%u ended early\n",
                dump, rd__pass_area_on() ? "on" : "off", pr->passAreas, pr->passAreaTiles,
                pr->passAreaTargetTiles, pr->passAreaEnds);
+        /* the passes cut (rd_pass_cut.c) */
+        printf("%s: stats: pass cut: clear carry %s: %u clears taken by the next pass; clear skip "
+               "%s: %u clears skipped; last store %s: %u depth stores dropped at the last touch\n",
+               dump, rd__pass_cut_on(RD_CUT_CARRY) ? "on" : "off", pr->clearsCarried,
+               rd__pass_cut_on(RD_CUT_SKIP) ? "on" : "off", pr->clearsSkipped,
+               rd__pass_cut_on(RD_CUT_LAST) ? "on" : "off", pr->storeLastDropped);
         /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
         printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
                "additive, %u local; vu no-planes %u; sprite no-planes %u\n",

@@ -2343,6 +2343,15 @@ typedef struct RdPerfRecord {
      * and the passes ended early at the end of their area's commands (the
      * walk would have gone on in the same pass: 0 in a usual replay) */
     uint32_t passAreas, passAreaTiles, passAreaTargetTiles, passAreaEnds;
+    /* Passes cut (rd_pass_cut.c; docs/port/WORK_BUFFERS.md "Passes cut"):
+     * clearsCarried the pending clears carried past a source's barrier
+     * that the next pass on their target took as its load op (a pass
+     * fewer each; the reduction's DISPLAY clear in a play replay),
+     * clearsSkipped the clears not recorded because nothing read their
+     * target before it was cleared again (AURA_WORK's under the constant
+     * read), storeLastDropped the depth stores dropped at the pass that
+     * holds the depth's last touch (counted in storeDepthDropped too) */
+    uint32_t clearsCarried, clearsSkipped, storeLastDropped;
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
      * docs/port/PIPELINES.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:

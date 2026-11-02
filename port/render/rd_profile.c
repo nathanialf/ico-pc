@@ -50,6 +50,12 @@
  *                 render area of the tiles they touch (rd_pass_area.c;
  *                 [dev] pass_area = auto|on|off, read there; the start
  *                 line ends "; pass area: on" or "; pass area: off")
+ *   passCut       on on the tile-based classes, off on the others: a
+ *                 pending clear carried into the next pass, a clear
+ *                 nothing reads not drawn, the depth store of the pass
+ *                 holding its last touch dropped (rd_pass_cut.c; [dev]
+ *                 clear_carry, clear_skip, last_store = auto|on|off, read
+ *                 there, each with its start line)
  *   crackFill     on on every class (the crack filler above 1x,
  *                 rd_crack_fill.c: on the local read's path it draws in
  *                 the pass the fog then keeps, so a tile-based GPU pays
@@ -368,6 +374,10 @@ void rd__profile_init(void)
      * stores its target's tiles (rd_pass_area.c reads ICO_RD_PASS_AREA
      * over it) */
     p->passArea = tile;
+    /* the passes cut on the tile-based classes, where a pass's loads and
+     * stores cost most (rd_pass_cut.c reads ICO_RD_CLEAR_CARRY,
+     * ICO_RD_CLEAR_SKIP and ICO_RD_LAST_STORE over it) */
+    p->passCut = tile;
 
     /* the [dev] keys, through the host's environment */
     const char *notHere = NULL; /* a [dev] key asked for what the device lacks */

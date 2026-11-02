@@ -803,6 +803,13 @@ bool rd__fog_edge_due(bool want, const RdFogSource *src, const RdTargetRec *tz)
     return s_edge.fogged++ % RD_FOG_EDGE_EVERY == 0;
 }
 
+bool rd__fog_edge_may_be_due(void)
+{
+    /* rd__fog_edge_due returns true only when its count stood at a
+     * multiple of RD_FOG_EDGE_EVERY, and only it moves the count */
+    return s_edge.fogged % RD_FOG_EDGE_EVERY == 0;
+}
+
 void rd__fog_edge_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid,
                          const RdFogSource *src, const uint8_t *lut)
 {

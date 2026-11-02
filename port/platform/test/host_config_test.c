@@ -654,6 +654,22 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("pass_area", "true"), "1") == 0);
     CHECK(ico_dev_env_value("pass_area", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.pass_area"), "pass_area") == 0);
+    /* clear_carry, clear_skip, last_store: the passes cut
+       (port/render/rd_pass_cut.c reads ICO_RD_CLEAR_CARRY, ICO_RD_CLEAR_SKIP,
+       ICO_RD_LAST_STORE) */
+    CHECK(strcmp(ico_dev_env_name("clear_carry"), "ICO_RD_CLEAR_CARRY") == 0);
+    CHECK(strcmp(ico_dev_env_name("clear_skip"), "ICO_RD_CLEAR_SKIP") == 0);
+    CHECK(strcmp(ico_dev_env_name("last_store"), "ICO_RD_LAST_STORE") == 0);
+    CHECK(strcmp(ico_dev_env_value("clear_carry", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("clear_skip", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("last_store", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("clear_carry", "on"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("clear_skip", "off"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("last_store", "false"), "0") == 0);
+    CHECK(ico_dev_env_value("last_store", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.clear_carry"), "clear_carry") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.clear_skip"), "clear_skip") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.last_store"), "last_store") == 0);
     CHECK(ico_dev_env_value("pipeline_set", "true") == NULL);
     CHECK(ico_dev_env_value("pipeline_set", "") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.pipeline_set"), "pipeline_set") == 0);

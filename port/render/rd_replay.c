@@ -1135,6 +1135,7 @@ static void endPass(Replay *r)
     flushScreenRun(r);      /* the run's draw goes before anything after it */
     rd__replay_vu_flush(r); /* and the VU draw merge's (never both open) */
     if (r->passOpen) {
+        rd__last_store_end(); /* a dropped store's promise kept (rd_pass_cut.c) */
         rhi_cmd_end_render_pass(s_cl);
         r->passOpen = 0;
         /* a storage pass's target goes back to its attachment state, so a
@@ -1150,6 +1151,26 @@ static void endPass(Replay *r)
      * another pass): a pending clear goes first, unless beginPass took it */
     flushClear();
     flushStencilClear(); /* and a pending shadow reset (never both pending) */
+}
+
+/* endPass before texture tex is made readable outside a pass: a pending
+ * clear of another target stays pending for the next pass on its target
+ * to take as its load op (rd_pass_cut.c, the clear carry) */
+static void endPassFor(Replay *r, uint32_t tex)
+{
+    if (!s_pend.p.target || tex == s_pend.colorTex || tex == s_pend.depthTex ||
+        s_stencil.depthTex || s_ms.want > 1u || !rd__pass_cut_on(RD_CUT_CARRY)) {
+        endPass(r);
+        return;
+    }
+    const RdPendingClear p = s_pend.p;
+    const uint32_t colorTex = s_pend.colorTex, depthTex = s_pend.depthTex;
+    s_pend.p.target = 0;
+    endPass(r);
+    s_pend.p = p;
+    s_pend.colorTex = colorTex;
+    s_pend.depthTex = depthTex;
+    rd__clear_carry_note(p.target);
 }
 
 bool rd__take_pending_clear(const RdPendingClear *p, uint32_t cid, uint32_t did,
@@ -1224,8 +1245,8 @@ static void flushClear(void)
     s_pend.p.target = 0;
     s_pend.colorTex = s_pend.depthTex = 0;
     RdTargetRec *t = rd__target_rec(p.target);
-    if (!t || !r) {
-        return;
+    if (!t || !r || rd__clear_skip(p.target, t, p.color, p.depth != 0)) {
+        return; /* rd_pass_cut.c: a clear nothing reads, drawn later if read */
     }
     beginPass(r, t, p.depth ? t : NULL, p.target, p.depth ? p.target : 0, RHI_LOAD_CLEAR, p.color,
               RHI_LOAD_CLEAR, p.clearDepth, false);
@@ -1274,6 +1295,7 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
         if (s_pend.p.depth) {
             clearDepth = s_pend.p.clearDepth;
         }
+        rd__clear_taken(cid); /* rd_pass_cut.c */
         s_pend.p.target = 0;
         s_pend.colorTex = s_pend.depthTex = 0;
     }
@@ -2308,7 +2330,7 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
         return src->snap;
     }
     if (src->colorState != RHI_STATE_SHADER_READ) {
-        endPass(r);
+        endPassFor(r, src->color.id);
         rd__transition(s_cl, src->color, &src->colorState, RHI_STATE_SHADER_READ);
     }
     return src->color;
@@ -2835,8 +2857,10 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
      * the fog); every other draw needs the colour attachment */
     if (!r->passOpen || r->passColor != r->st.color || r->passDepth != ds->tdId ||
         (r->passStorage && !keepStorage) || (ds->dateStencil && !r->passReadable)) {
+        rd__last_store_arm(r->st.color, ds->tdId); /* a draw's own pass (rd_pass_cut.c) */
         beginPass(r, tc, ds->tdId ? rd__target_rec(ds->tdId) : NULL, r->st.color, ds->tdId,
                   RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f, false);
+        rd__last_store_arm(0, 0);
     }
     if (ds->dateStencil && !rd__replay_date_take(r, ds)) {
         return (RhiBindGroup){0}; /* the bit could not be written: nothing drawn */
@@ -4712,6 +4736,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     RdDrawPass pl[2], dp[8];
     const int buffer = g_rd.fogPath == RD_FOG_BUFFER;
     const bool local = fogLocalFor(r, zid, tz, tc);
+    /* its pass kept to the end of the fog: no probe, no edge read (rd_pass_cut.c) */
+    rd__last_store_fog(local && !rd__fog_probe_wanted() && !rd__fog_edge_may_be_due());
     const int npl = rd__fog_plan(
         &r->st, tc->format, local ? RD_FOG_LOCAL : (buffer ? RD_FOG_BUFFER : RD_FOG_INPLACE), pl);
     if (npl == 0) {
@@ -5507,7 +5533,7 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
             srcTex = tc->snap;
         } else {
             if (src->colorState != RHI_STATE_SHADER_READ) {
-                endPass(r);
+                endPassFor(r, src->color.id);
                 rd__transition(s_cl, src->color, &src->colorState, RHI_STATE_SHADER_READ);
             }
             srcTex = src->color;
@@ -5973,6 +5999,7 @@ bool rd__read_target(RdTarget target, void *dst, size_t dstSize, uint32_t *w, ui
     if (h) {
         *h = t->th;
     }
+    rd__clear_skip_readback(target.id); /* a clear not drawn, drawn first (rd_pass_cut.c) */
     return readTexture(t->color, &t->colorState, t->tw, t->th, dst, dstSize);
 }
 

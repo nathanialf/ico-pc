@@ -143,6 +143,7 @@ add_library(ico_render STATIC
     rd_aura_kernel.c # [dev] aura_kernel = gs: the aura's feedback read with the GS's taps (a measurement)
     rd_aura_box.c # the aura's feedback read in two passes, the same bytes ([dev] aura_box)
     rd_pass_area.c # the passes' render areas: the tiles their 2D draws touch ([dev] pass_area)
+    rd_pass_cut.c # passes cut: a clear carried, a clear nothing reads, the last touch's store ([dev] clear_carry, clear_skip, last_store)
     rd_blend_selftest.c # the exact blend's start-up check on the device (issue 89)
     rd_blur.c # staticBlur.c's sprites
     rd_blur_border.c # the post sprites' replay: the reduction's open border, its outer columns
@@ -624,6 +625,18 @@ add_executable(rd_store_plan_test test/rd_store_plan_test.c)
 target_compile_options(rd_store_plan_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_store_plan_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_store_plan_test PRIVATE ico_render)
+
+# rd_pass_cut_test: the passes cut (rd_pass_cut.c), each on against off on
+# frames built here: a clear carried into the next pass (one pass fewer, the
+# same bytes), the clear skip's decision and its lazy clear (drawn on a read
+# and at a later replay that draws on the target first, forgotten after one
+# that clears it), the depth store of the pass holding the last touch
+# dropped (the same bytes under the poison) and kept where a command the cut
+# does not take lies between.
+add_executable(rd_pass_cut_test test/rd_pass_cut_test.c)
+target_compile_options(rd_pass_cut_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_pass_cut_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_pass_cut_test PRIVATE ico_render)
 
 # rd_local_probe_test: the desktop's local-read probe's verdict
 # (rd_local_probe.c rd__local_probe_keep) on synthetic times, no device.
@@ -2098,6 +2111,25 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_pass_area_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_pass_cut_ab (test/rd_pass_cut_ab.cmake): the dumps of
+    # tools/pass_cut_dumps.txt with every pass cut off and each on alone and
+    # all on (rd_pass_cut.c: ICO_RD_CLEAR_CARRY, ICO_RD_CLEAR_SKIP,
+    # ICO_RD_LAST_STORE), under ICO_RD_BLEND=fixed, the store plan and its
+    # poison, at the phone's Resolution Auto with its paths and Enhanced 2x
+    # 4:3: every target and the present byte for byte, the passes fewer by
+    # the clears carried and skipped, the depth stores dropped more by those
+    # at the last touch, and each cut cutting something on the phone's
+    # frames; SKIP as rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/pass_cut_ab")
+    add_test(NAME rd_pass_cut_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/pass_cut_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/pass_cut_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_pass_cut_ab.cmake")
+    set_tests_properties(rd_pass_cut_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_pass_cut_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
 endif()
 # The blend policy (rd_dst_read.c)
 # rd_dst_usage_test: the fixed-function blend by default makes no
@@ -2219,6 +2251,10 @@ if(ICO_RUN_TESTS)
     # holds the drops byte for byte over the corpus)
     add_test(NAME rd_store_plan COMMAND rd_store_plan_test)
     set_tests_properties(rd_store_plan PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_env}")
+    # the passes cut (rd_pass_cut_test.c; rd_pass_cut_ab holds them byte for
+    # byte over the corpus)
+    add_test(NAME rd_pass_cut COMMAND rd_pass_cut_test)
+    set_tests_properties(rd_pass_cut PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_env}")
 endif()
 
 # The desktop's local reads and their start-up cost probe (rd_local_probe.c):
