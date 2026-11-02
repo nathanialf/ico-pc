@@ -20,6 +20,9 @@ static _Thread_local bool t_handed;
  * both the render thread's own) */
 static _Thread_local double t_jobStartMs;
 static _Thread_local uint64_t t_readsNs;
+/* the longest present call of the job's replays (rd_thread_take_present_ns;
+ * the render thread's own) */
+static _Thread_local uint64_t t_presentNs;
 
 /* the hand-over's lock: the count of pictures whose reads have not ended,
  * the game thread's waits for them, the textures to retire, the block's
@@ -130,6 +133,7 @@ static void runTramp(Tramp *t, bool picture)
     t_handed = t->handed;
     if (outer) {
         t_jobStartMs = rd__now_ms();
+        t_presentNs = 0; /* this job's presents only */
         retireDrain();
         if (picture) {
             s_rStats.draws = 0; /* the picture's draws, as rd_begin_frame's count was */
@@ -251,6 +255,22 @@ uint64_t rd_thread_take_reads_ns(void)
     const uint64_t ns = t_readsNs;
     t_readsNs = 0;
     return ns;
+}
+
+uint64_t rd_thread_take_present_ns(void)
+{
+    const uint64_t ns = t_presentNs;
+    t_presentNs = 0;
+    return ns;
+}
+
+void rd__thread_note_present(double ms)
+{
+    if (!s_on || !t_onR) {
+        return;
+    }
+    const uint64_t ns = ms > 0.0 ? (uint64_t)(ms * 1e6) : 1u; /* 0 is "none" */
+    t_presentNs = ns > t_presentNs ? ns : t_presentNs;
 }
 
 void rd_thread_block_take(RdThreadBlock *out)

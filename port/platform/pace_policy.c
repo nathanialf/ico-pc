@@ -143,6 +143,24 @@ bool pace_rt_further_late(uint64_t nowNs, uint64_t deadlineNs, uint64_t stepNs, 
     return post + readsNs > deadlineNs || post + pictureNs > deadlineNs + stepNs;
 }
 
+PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t stepNs,
+                                uint64_t sinceNs, uint64_t readsNs, uint64_t pictureNs,
+                                uint64_t presentNs, uint64_t refreshNs, bool paced)
+{
+    if (paced) {
+        if (sinceNs != 0 && nowNs >= sinceNs && nowNs - sinceNs >= pictureNs) {
+            return PACE_RT_OVERRUN;
+        }
+        if (refreshNs != 0 && presentNs * PACE_RT_BEHIND_DIV >= refreshNs) {
+            return PACE_RT_BEHIND;
+        }
+    }
+    return pace_rt_further_late(nowNs, deadlineNs, stepNs,
+                                pace_rt_busy_left(nowNs, sinceNs, pictureNs), readsNs, pictureNs)
+               ? PACE_RT_LATE
+               : PACE_RT_GO;
+}
+
 /* the median of n costs (n <= PACE_AUTO_SAMPLES; 0 with none) */
 static uint64_t median_of(const uint64_t *cost, unsigned n)
 {

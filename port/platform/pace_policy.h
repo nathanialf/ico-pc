@@ -837,6 +837,43 @@ uint64_t pace_rt_busy_left(uint64_t nowNs, uint64_t sinceNs, uint64_t estNs);
 bool pace_rt_further_late(uint64_t nowNs, uint64_t deadlineNs, uint64_t stepNs, uint64_t busyLeftNs,
                           uint64_t readsNs, uint64_t pictureNs);
 
+/* Why a further present of a frame already shown is held back by the
+ * render thread's state (pace_rt_further_hold). */
+typedef enum PaceRtHold {
+    PACE_RT_GO = 0,  /* handed over */
+    PACE_RT_LATE,    /* it would run into the next step (pace_rt_further_late) */
+    PACE_RT_OVERRUN, /* the picture in progress ran past its estimate: when it ends is not known */
+    PACE_RT_BEHIND   /* the presents wait for the display or the GPU */
+} PaceRtHold;
+
+/* A present that waits a refresh over this (half a refresh) or more is one
+ * the display or the GPU is behind for: never the 0.1-0.7 ms a mailbox
+ * present takes on a phone in play, always the 7-34 ms of a PowerVR
+ * driver's present blocked behind the GPU's earlier pictures (the rc5 log
+ * of the phone, a stage change) */
+#define PACE_RT_BEHIND_DIV 2u
+
+/* The render thread's hold on a further present handed over at nowNs.
+ * paced (pace_budget_paced_mode: vsync off or mailbox, where a present
+ * never waits for the display by design), first:
+ *   PACE_RT_OVERRUN  a picture in progress (sinceNs, 0: none) has run
+ *                    pictureNs or longer, past its estimate: its end, and
+ *                    so the drain of the present posted now, is not known
+ *                    (a present blocked, a pipeline compiled in its walk);
+ *   PACE_RT_BEHIND   the presents' wait as estimated (presentNs: the
+ *                    present call of the pictures handed over, by
+ *                    pace_rt_estimate) is PACE_RT_BEHIND_DIV-th of a
+ *                    refresh (refreshNs) or more: one more picture only
+ *                    deepens the GPU's backlog, its present waits as long,
+ *                    and the next new frame's present waits for it (the
+ *                    slot waits).
+ * then, in every mode, PACE_RT_LATE when pace_rt_further_late holds it
+ * (busy left from sinceNs by pictureNs).  Under FIFO a present waits for
+ * the display by design: only the last rule. */
+PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t stepNs,
+                                uint64_t sinceNs, uint64_t readsNs, uint64_t pictureNs,
+                                uint64_t presentNs, uint64_t refreshNs, bool paced);
+
 /* The counts cleared; last kept, so the interval across two blocks counts
  * in the second (zero the struct to forget it too). */
 void pace_intervals_reset(PaceIntervals *s);

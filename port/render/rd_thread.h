@@ -120,6 +120,13 @@ void rd_thread_block_take(RdThreadBlock *out);
  * hands its state back.  The window plans further presents by it
  * (render_thread.c, pace_policy.h pace_rt_further_late). */
 uint64_t rd_thread_take_reads_ns(void);
+/* The render thread, after a picture's job: how long its present call took
+ * (rd_submit.c's present time: the backend's present, Vulkan's
+ * vkQueuePresentKHR, and a capture's finish), in ns, the longest when the
+ * job presented more than once; 0 when it presented nothing.  Taken as
+ * above.  The window holds further presents back while the presents wait
+ * (render_thread.c, pace_policy.h pace_rt_further_hold). */
+uint64_t rd_thread_take_present_ns(void);
 
 /* A render thread of the renderer's own, without SDL, for the replay tool
  * and the tests (rd_thread_ab, rd_tex_test): sync posts every job waited
@@ -170,6 +177,9 @@ struct RdStats *rd__stats_here(void);
 /* the walk's time and the submit's of a replay (rd_submit.c), for the
  * block */
 void rd__thread_note_replay(double walkMs, double submitMs, double waitMs);
+/* a replay's present took ms (rd_submit.c), for rd_thread_take_present_ns;
+ * nothing outside the render thread's jobs */
+void rd__thread_note_present(double ms);
 void rd__thread_note_interp(double ms);
 /* rd_init's end and rd_shutdown's start: rd_thread_local_want's thread
  * started (a headless renderer with a device) and ended */

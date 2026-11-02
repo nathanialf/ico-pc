@@ -65,21 +65,27 @@ static int frame_seen(Uint64 closeAt)
 }
 
 /* A further present of a frame already shown, handed to the render thread
-   now, would run into the next step (pace_policy.h pace_rt_further_late):
-   the step's calls would wait for its reads (the 10 s line's read waits)
-   or the next new frame's present for its end (the slot waits).  Its cost
-   on this thread (s_pres.cost) is only the hand-over; the render thread's
-   own times are its estimates (render_thread.h ico_render_thread_plan).
-   Never with the thread off or in sync mode, where the cost is the whole
-   picture */
-static int rt_further_late(Uint64 now)
+   now, would run into the next step (pace_policy.h pace_rt_further_hold:
+   PACE_RT_LATE): the step's calls would wait for its reads (the 10 s line's
+   read waits) or the next new frame's present for its end (the slot
+   waits).  Its cost on this thread (s_pres.cost) is only the hand-over; the
+   render thread's own times are its estimates (render_thread.h
+   ico_render_thread_plan).  Paced (vsync off or mailbox), also held while
+   the picture in progress runs past its estimate (PACE_RT_OVERRUN) or while
+   the presents wait for the display or the GPU (PACE_RT_BEHIND): a
+   picture more would deepen the GPU's backlog and the next new frame's
+   present would wait for it.  Never with the thread off or in sync mode,
+   where the cost is the whole picture.  The hold's why, PACE_RT_GO for
+   none */
+static PaceRtHold rt_further_late(Uint64 now, Uint64 refresh)
 {
-    uint64_t left = 0, reads = 0, whole = 0;
+    IcoRtPlan p;
 
-    if (!ico_render_thread_plan(now, &left, &reads, &whole)) {
-        return 0;
+    if (!ico_render_thread_plan(&p)) {
+        return PACE_RT_GO;
     }
-    return pace_rt_further_late(now, s_deadline, s_pres.stepNs, left, reads, whole) ? 1 : 0;
+    return pace_rt_further_hold(now, s_deadline, s_pres.stepNs, p.sinceNs, p.readsNs, p.pictureNs,
+                                p.presentNs, refresh, s_pres.budget.paced);
 }
 
 /* One rd_present at alpha a, timed (s_pres.cost) and counted; false when
@@ -761,10 +767,11 @@ void window_present_pace(int hz)
         if (s_pres.presentedFrame == s_pres.frame) {
             const int guard = now >= s_deadline || s_pres.paceSlow || s_pres.offScreen ||
                               (!s_pres.fifoLock && now + s_pres.cost > s_deadline);
-            const int rtLate = !guard && rt_further_late(now);
+            const PaceRtHold rtWhy = guard ? PACE_RT_GO : rt_further_late(now, refresh);
+            const int rtLate = rtWhy != PACE_RT_GO;
 
             if (rtLate) {
-                ico_render_thread_note_held();
+                ico_render_thread_note_held((int)rtWhy);
             }
             if (guard || rtLate ||
                 !pace_budget_allows_paced(&s_pres.budget, false, s_pres.gpuNs, period)) {

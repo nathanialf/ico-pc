@@ -2173,21 +2173,35 @@ static void testAsyncRates(void)
    gate is test120Budget's): only the plan and the window's own rules hold
    a present.  From step burstFrom for burstLen steps every
    picture holds the state burstReads and takes burstRest more (a stage
-   change's textures uploaded) */
+   change's textures uploaded) and the GPU draws it in burstGpu (0: gpuNs).
+   depth (0: none) is the driver's back-pressure: a picture's present
+   returns only once the GPU has finished the picture depth before it (the
+   PowerVR phone's rc5 log: fence waits 0.0 ms, the present blocked up to
+   34 ms behind 21-35 ms GPU pictures), its present call's time presentBase
+   plus that wait.  mode: RT_NONE no plan, RT_PLAN the plan's
+   pace_rt_further_late alone (pace_rt_further_hold unpaced), RT_HOLDS the
+   paced holds too (PACE_RT_OVERRUN, PACE_RT_BEHIND by the present call's
+   estimate, as render_thread.c keeps it) */
 typedef struct RtLoad {
     uint64_t stepNs, postNs, readsNs, restNs, gpuNs;
     uint64_t burstReads, burstRest;
     unsigned burstFrom, burstLen;
+    uint64_t burstGpu;
+    unsigned depth;
+    uint64_t presentBase;
 } RtLoad;
+
+enum { RT_NONE = 0, RT_PLAN, RT_HOLDS };
 
 typedef struct RtRun {
     unsigned frames, presents, shown, resyncs, held;
     unsigned readWaits, slotWaits; /* after the first second, as lateMax */
     uint64_t readWaitNs, slotWaitNs;
     uint64_t lateMax; /* a step's start past its due time, after the first second */
+    unsigned overrun, behind, blocked; /* holds by why; presents that waited for the GPU */
 } RtRun;
 
-static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, bool guard)
+static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, int mode)
 {
     PaceHist h;
     RtRun r;
@@ -2195,6 +2209,7 @@ static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, bool guard)
     const uint64_t gap = pace_present_gap(0, true, true, refresh);
     uint64_t t = 0, deadline = 0, cost = 0, nextPresent = 0;
     uint64_t rStart = 0, rReadsEnd = 0, rFree = 0, readsEst = 0, wholeEst = 0;
+    uint64_t rPresent = 0, presentEst = 0;
     uint64_t ready[4] = {0, 0, 0, 0};
     bool folded = true;
     unsigned made = 0;
@@ -2207,6 +2222,7 @@ static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, bool guard)
         const bool burst = k >= L->burstFrom && k < L->burstFrom + L->burstLen;
         const uint64_t readsNs = burst ? L->burstReads : L->readsNs;
         const uint64_t restNs = burst ? L->burstRest : L->restNs;
+        const uint64_t gpuNs = burst && L->burstGpu ? L->burstGpu : L->gpuNs;
         const uint64_t due = deadline;
 
         if (rReadsEnd > t) {
@@ -2233,6 +2249,7 @@ static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, bool guard)
                 /* render_thread.c after the picture's job */
                 readsEst = pace_rt_estimate(readsEst, rReadsEnd - rStart);
                 wholeEst = pace_rt_estimate(wholeEst, rFree - rStart);
+                presentEst = pace_rt_estimate(presentEst, rPresent);
                 folded = true;
             }
             if (pace_late_skip(newFrame, pace_skipped_last(skipOpen, skipFrame, frame), slow, t,
@@ -2243,12 +2260,17 @@ static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, bool guard)
             }
             if (!newFrame) {
                 const bool old = t >= deadline || slow || t + cost > deadline;
-                const uint64_t left = rFree > t ? pace_rt_busy_left(t, rStart, wholeEst) : 0;
-                const bool late =
-                    !old && guard && wholeEst != 0 &&
-                    pace_rt_further_late(t, deadline, L->stepNs, left, readsEst, wholeEst);
+                const PaceRtHold why =
+                    !old && mode != RT_NONE && wholeEst != 0
+                        ? pace_rt_further_hold(t, deadline, L->stepNs, rFree > t ? rStart : 0,
+                                               readsEst, wholeEst, presentEst, refresh,
+                                               mode == RT_HOLDS)
+                        : PACE_RT_GO;
+                const bool late = why != PACE_RT_GO;
 
                 r.held += late ? 1u : 0u;
+                r.overrun += why == PACE_RT_OVERRUN ? 1u : 0u;
+                r.behind += why == PACE_RT_BEHIND ? 1u : 0u;
                 if (old || late) {
                     t = t < deadline ? deadline : t;
                     break;
@@ -2274,6 +2296,7 @@ static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, bool guard)
                 if (!folded) {
                     readsEst = pace_rt_estimate(readsEst, rReadsEnd - rStart);
                     wholeEst = pace_rt_estimate(wholeEst, rFree - rStart);
+                    presentEst = pace_rt_estimate(presentEst, rPresent);
                     folded = true;
                 }
             }
@@ -2285,8 +2308,19 @@ static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, bool guard)
                 const uint64_t prev = made >= 1 ? ready[(made - 1) % 4] : 0;
 
                 rReadsEnd = rStart + fence + readsNs;
-                rFree = rReadsEnd + restNs;
-                ready[made % 4] = (prev > rReadsEnd ? prev : rReadsEnd) + L->gpuNs;
+                /* the present returns once the GPU finished the picture
+                   depth before (the driver's back-pressure) */
+                const uint64_t back =
+                    L->depth != 0 && made >= L->depth ? ready[(made - L->depth) % 4] : 0;
+                const uint64_t end = rReadsEnd + restNs;
+                const uint64_t block = back > end ? back - end : 0;
+
+                rFree = end + block;
+                rPresent = L->presentBase + block;
+                if (block > 0 && k >= 60) {
+                    r.blocked++;
+                }
+                ready[made % 4] = (prev > rReadsEnd ? prev : rReadsEnd) + gpuNs;
             }
             folded = false;
             made++;
@@ -2308,11 +2342,12 @@ static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, bool guard)
 
 static void rtPrint(const char *what, const RtRun *r)
 {
-    printf("%s: %u presents in 10 s for %u frames (%u shown), %u held back; read waits %u (%.1f "
-           "ms), slot waits %u (%.1f ms); latest step %.1f ms, %u resyncs\n",
-           what, r->presents, r->frames, r->shown, r->held, r->readWaits,
+    printf("%s: %u presents in 10 s for %u frames (%u shown), %u held back (%u past the "
+           "estimate, %u behind); read waits %u (%.1f ms), slot waits %u (%.1f ms); latest step "
+           "%.1f ms, %u resyncs; %u presents waited for the GPU\n",
+           what, r->presents, r->frames, r->shown, r->held, r->overrun, r->behind, r->readWaits,
            (double)r->readWaitNs / 1e6, r->slotWaits, (double)r->slotWaitNs / 1e6,
-           (double)r->lateMax / 1e6, r->resyncs);
+           (double)r->lateMax / 1e6, r->resyncs, r->blocked);
 }
 
 /* The further presents planned by the render thread's times
@@ -2345,9 +2380,9 @@ static void testRenderThreadPlan(void)
     CHECK(pace_rt_further_late(10 * MS, NTSC, 6 * MS, 2 * MS, 4 * MS, 11 * MS));
     {
         /* light pictures: two presents a step either way, nothing waits */
-        const RtLoad L = {3 * MS, MS / 10, 3 * MS / 2, 3 * MS / 2, 3 * MS, 0, 0, 0, 0};
-        const RtRun on = rtTimerLoop(600, &L, true);
-        const RtRun off = rtTimerLoop(600, &L, false);
+        const RtLoad L = {3 * MS, MS / 10, 3 * MS / 2, 3 * MS / 2, 3 * MS, 0, 0, 0, 0, 0, 0, 0};
+        const RtRun on = rtTimerLoop(600, &L, RT_PLAN);
+        const RtRun off = rtTimerLoop(600, &L, RT_NONE);
 
         rtPrint("render thread, 3 ms pictures, planned", &on);
         rtPrint("render thread, 3 ms pictures, not planned", &off);
@@ -2358,9 +2393,9 @@ static void testRenderThreadPlan(void)
     {
         /* 9 ms pictures (the phone's mean: 4 ms reads, 5 ms submit and
            present), a 6 ms step: one present a step, 60 a second */
-        const RtLoad L = {6 * MS, MS / 10, 4 * MS, 5 * MS, 8 * MS, 0, 0, 0, 0};
-        const RtRun on = rtTimerLoop(600, &L, true);
-        const RtRun off = rtTimerLoop(600, &L, false);
+        const RtLoad L = {6 * MS, MS / 10, 4 * MS, 5 * MS, 8 * MS, 0, 0, 0, 0, 0, 0, 0};
+        const RtRun on = rtTimerLoop(600, &L, RT_PLAN);
+        const RtRun off = rtTimerLoop(600, &L, RT_NONE);
 
         rtPrint("render thread, 9 ms pictures, planned", &on);
         rtPrint("render thread, 9 ms pictures, not planned", &off);
@@ -2372,9 +2407,9 @@ static void testRenderThreadPlan(void)
         /* 22 ms pictures (8 ms reads): more than a step; the new frames
            are shown, the steps on time; without the plan the further
            presents run into the steps */
-        const RtLoad L = {6 * MS, MS / 10, 8 * MS, 14 * MS, 8 * MS, 0, 0, 0, 0};
-        const RtRun on = rtTimerLoop(600, &L, true);
-        const RtRun off = rtTimerLoop(600, &L, false);
+        const RtLoad L = {6 * MS, MS / 10, 8 * MS, 14 * MS, 8 * MS, 0, 0, 0, 0, 0, 0, 0};
+        const RtRun on = rtTimerLoop(600, &L, RT_PLAN);
+        const RtRun off = rtTimerLoop(600, &L, RT_NONE);
 
         rtPrint("render thread, 22 ms pictures, planned", &on);
         rtPrint("render thread, 22 ms pictures, not planned", &off);
@@ -2389,9 +2424,10 @@ static void testRenderThreadPlan(void)
            uploaded), then 9 ms again: planned, the new frames' own
            pictures still run into the step after them (one a frame), the
            further presents no more; the waits a sixth of the unplanned */
-        const RtLoad L = {6 * MS, MS / 10, 4 * MS, 5 * MS, 8 * MS, 14 * MS, 16 * MS, 240, 120};
-        const RtRun on = rtTimerLoop(600, &L, true);
-        const RtRun off = rtTimerLoop(600, &L, false);
+        const RtLoad L = {6 * MS,  MS / 10, 4 * MS, 5 * MS, 8 * MS, 14 * MS,
+                          16 * MS, 240,     120,    0,      0,      0};
+        const RtRun on = rtTimerLoop(600, &L, RT_PLAN);
+        const RtRun off = rtTimerLoop(600, &L, RT_NONE);
 
         rtPrint("render thread, a burst of 30 ms pictures, planned", &on);
         rtPrint("render thread, a burst of 30 ms pictures, not planned", &off);
@@ -2399,6 +2435,106 @@ static void testRenderThreadPlan(void)
         CHECK(on.readWaits <= L.burstLen / 2u + 4u && off.readWaits > 4u * on.readWaits);
         CHECK(on.readWaitNs * 4 < off.readWaitNs && on.slotWaitNs < off.slotWaitNs);
         CHECK(on.presents >= on.frames);
+    }
+}
+
+/* The presents that wait for the GPU (pace_rt_further_hold's paced holds;
+   the phone's rc5 log at a stage change: 88 slot waits for 1003.2 ms and 51
+   read waits for 533.3 ms in 10 s, presents blocked up to 34.4 ms behind
+   21-35 ms GPU pictures while 411 further presents were already held by
+   the plan).  The model: a 9 ms picture on the render thread (4 ms reads,
+   5 ms submit and present), a 5 ms step, light 3 ms GPU pictures, then for
+   4 s (steps 120-359) the new stage's 26 or 20 ms ones, each present
+   returning only once the GPU finished the picture before it.  The plan
+   alone posts further presents whose present then waits for the GPU (its
+   estimate of the picture is folded only once a slow one ended), and the
+   next new frame's present waits for it; with the holds a further present
+   waits for a picture in progress past its estimate and for the presents'
+   wait to fall: no step waits, every frame is shown, and the in-betweens
+   of the light seconds stay.  With nothing waiting for the GPU (TEXLOCK's
+   loads, a light stage with the back-pressure) the holds change nothing */
+static void testRenderThreadBehind(void)
+{
+    const uint64_t refresh = 8333333ull; /* 120 Hz */
+
+    /* the holds' own cases: a picture in progress past its estimate */
+    CHECK(pace_rt_further_hold(5 * MS, NTSC, 6 * MS, MS, MS, 3 * MS, 0, refresh, true) ==
+          PACE_RT_OVERRUN);
+    CHECK(pace_rt_further_hold(5 * MS, NTSC, 6 * MS, MS, MS, 3 * MS, 0, refresh, false) ==
+          PACE_RT_GO);
+    CHECK(pace_rt_further_hold(3 * MS, NTSC, 6 * MS, MS, MS, 3 * MS, 0, refresh, true) ==
+          PACE_RT_GO);
+    /* the presents' wait: half a refresh or more */
+    CHECK(pace_rt_further_hold(5 * MS, NTSC, 6 * MS, 0, MS, 3 * MS, refresh / 2, refresh, true) ==
+          PACE_RT_GO);
+    CHECK(pace_rt_further_hold(5 * MS, NTSC, 6 * MS, 0, MS, 3 * MS, refresh / 2 + 1, refresh,
+                               true) == PACE_RT_BEHIND);
+    CHECK(pace_rt_further_hold(5 * MS, NTSC, 6 * MS, 0, MS, 3 * MS, 34 * MS, refresh, false) ==
+          PACE_RT_GO);
+    CHECK(pace_rt_further_hold(5 * MS, NTSC, 6 * MS, 0, MS, 3 * MS, 34 * MS, 0, true) ==
+          PACE_RT_GO);
+    /* the plan's rule after the holds, paced or not */
+    CHECK(pace_rt_further_hold(10 * MS, NTSC, 6 * MS, 0, 7 * MS, 9 * MS, 0, refresh, true) ==
+          PACE_RT_LATE);
+    CHECK(pace_rt_further_hold(10 * MS, NTSC, 6 * MS, 0, 7 * MS, 9 * MS, 0, refresh, false) ==
+          PACE_RT_LATE);
+    {
+        /* TEXLOCK's loads, no back-pressure: the holds take nothing more */
+        static const RtLoad loads[] = {
+            {3 * MS, MS / 10, 3 * MS / 2, 3 * MS / 2, 3 * MS, 0, 0, 0, 0, 0, 0, MS / 2},
+            {6 * MS, MS / 10, 4 * MS, 5 * MS, 8 * MS, 0, 0, 0, 0, 0, 0, MS / 2},
+            {6 * MS, MS / 10, 8 * MS, 14 * MS, 8 * MS, 0, 0, 0, 0, 0, 0, MS / 2},
+        };
+
+        for (unsigned i = 0; i < sizeof(loads) / sizeof(loads[0]); i++) {
+            const RtRun plan = rtTimerLoop(600, &loads[i], RT_PLAN);
+            const RtRun holds = rtTimerLoop(600, &loads[i], RT_HOLDS);
+
+            CHECK(holds.presents == plan.presents && holds.shown == plan.shown);
+            CHECK(holds.readWaits == plan.readWaits && holds.slotWaits == plan.slotWaits);
+            CHECK(holds.overrun == 0 && holds.behind == 0);
+        }
+    }
+    {
+        /* a light stage with the back-pressure: no present waits, nothing held more */
+        const RtLoad L = {5 * MS, MS / 10, 4 * MS, 5 * MS, 3 * MS, 0, 0, 0, 0, 0, 1, MS / 2};
+        const RtRun plan = rtTimerLoop(600, &L, RT_PLAN);
+        const RtRun holds = rtTimerLoop(600, &L, RT_HOLDS);
+
+        rtPrint("render thread, light pictures, the present waiting for the GPU, holds", &holds);
+        CHECK(holds.presents == plan.presents && holds.blocked == 0);
+        CHECK(holds.slotWaits == 0 && holds.readWaits == 0 && holds.shown == holds.frames);
+    }
+    {
+        static const uint64_t gpu[] = {26 * MS, 20 * MS};
+
+        for (unsigned i = 0; i < sizeof(gpu) / sizeof(gpu[0]); i++) {
+            const RtLoad L = {5 * MS, MS / 10, 4 * MS, 5 * MS, 3 * MS, 4 * MS,
+                              5 * MS, 120,     240,    gpu[i], 1,      MS / 2};
+            const RtRun none = rtTimerLoop(600, &L, RT_NONE);
+            const RtRun plan = rtTimerLoop(600, &L, RT_PLAN);
+            const RtRun holds = rtTimerLoop(600, &L, RT_HOLDS);
+            char what[96];
+
+            snprintf(what, sizeof what, "render thread, a stage of %u ms GPU pictures, no plan",
+                     (unsigned)(gpu[i] / MS));
+            rtPrint(what, &none);
+            snprintf(what, sizeof what, "render thread, a stage of %u ms GPU pictures, planned",
+                     (unsigned)(gpu[i] / MS));
+            rtPrint(what, &plan);
+            snprintf(what, sizeof what, "render thread, a stage of %u ms GPU pictures, holds",
+                     (unsigned)(gpu[i] / MS));
+            rtPrint(what, &holds);
+            /* the plan alone: the presents wait for the GPU, the steps for them */
+            CHECK(plan.blocked > 0 && plan.slotWaits >= 20u);
+            CHECK(none.slotWaits > plan.slotWaits);
+            /* the holds: nothing waits, every frame shown, the light
+               seconds' in-betweens kept */
+            CHECK(holds.slotWaits == 0 && holds.readWaits == 0 && holds.lateMax < MS);
+            CHECK(holds.resyncs == 0 && holds.shown == holds.frames);
+            CHECK(holds.behind > 0 && holds.blocked < plan.blocked);
+            CHECK(holds.presents >= holds.frames + 150u);
+        }
     }
 }
 
@@ -2434,6 +2570,7 @@ int main(void)
     testAsyncLock();
     testAsyncRates();
     testRenderThreadPlan();
+    testRenderThreadBehind();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;

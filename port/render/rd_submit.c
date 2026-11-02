@@ -43,6 +43,10 @@ void rd__submit_frame(RhiCommandList cl, bool present, double walkStart, double 
         rd__capture_finish(); /* a capture this present copied */
     }
     g_rdPerf.presentMs = rd__now_ms() - t;
+    if (present) {
+        /* the window's hold on further presents while they wait (rd_thread.h) */
+        rd__thread_note_present(g_rdPerf.presentMs);
+    }
     rd__thread_note_replay(g_rdPerf.uploadMs + g_rdPerf.walkMs,
                            g_rdPerf.submitMs + g_rdPerf.presentMs,
                            g_rdPerf.waitMs + g_rdPerf.acquireMs);

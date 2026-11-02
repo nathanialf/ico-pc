@@ -53,25 +53,31 @@ bool ico_render_thread_post(void (*fn)(void *arg), void *arg, FmJobKind kind, bo
 bool ico_render_thread_last_present(FmPresent *out);
 
 /* The game thread's plan for a further present of a frame already shown
-   (window_present.c; pace_policy.h pace_rt_further_late): how long the
-   render thread's picture in progress still takes at nowNs (0: none), and
-   the estimates of how long a picture handed over holds the renderer's
-   state (its reads: the step's calls wait for them) and takes in all (the
-   next present waits for it).  False with the thread off or in sync mode
-   (every picture waited for: the present's own cost holds it) and before
-   the first picture handed over. */
-bool ico_render_thread_plan(uint64_t nowNs, uint64_t *busyLeftNs, uint64_t *readsNs,
-                            uint64_t *pictureNs);
-/* A further present held back by that plan, counted for the 10 s line */
-void ico_render_thread_note_held(void);
+   (window_present.c; pace_policy.h pace_rt_further_hold): when the render
+   thread's picture in progress started (sinceNs, SDL_GetTicksNS's clock; 0:
+   none), and the estimates of how long a picture handed over holds the
+   renderer's state (readsNs: the step's calls wait for its reads), takes in
+   all (pictureNs: the next present waits for it) and waits in its present
+   call (presentNs: the display's or the GPU's backlog).  False with the
+   thread off or in sync mode (every picture waited for: the present's own
+   cost holds it) and before the first picture handed over. */
+typedef struct IcoRtPlan {
+    uint64_t sinceNs, readsNs, pictureNs, presentNs;
+} IcoRtPlan;
+
+bool ico_render_thread_plan(IcoRtPlan *out);
+/* A further present held back by that plan (why: pace_policy.h
+   PaceRtHold, not PACE_RT_GO), counted for the 10 s line */
+void ico_render_thread_note_held(int why);
 
 /* The 10 s line (window_host.c window_pace_log): the game thread's mean
    step, record and pump per call in ms and the slot waits it made (waits
    for the render thread), and the render thread's block:
      window: game thread: step 3.1 ms, record 7.9 ms, pump 0.4 ms, slot waits 12 (8.2 ms);
      render thread: idle 71 %, waited for a frame 14.2 ms, heartbeat max 4.9 ms (590 pictures);
-     ...; 0 further presents held back (each would have run into the next step: a picture
-     holds the renderer for 4.1 ms, takes 9.3 ms)
+     ...; 0 further presents held back (0 would have run into the next step, 0 while a
+     picture ran past its estimate, 0 while the presents waited for the display or the GPU;
+     a picture holds the renderer for 4.1 ms, takes 9.3 ms, its present waits 0.3 ms)
    or "...; render thread: off" with no thread */
 void ico_render_thread_block_line(double stepMs, double recordMs, double pumpMs);
 
