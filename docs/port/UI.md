@@ -55,7 +55,7 @@ rectangle, its box on screen, its item links); on the Japanese disc `texLayout[7
 rows 66..79 sit inside every stage's layout range, whose textures the game initialises at each
 stage load, so a port row there would be looked up as a texture file. The port therefore extends
 both tables past their ends: layouts `80 ..` and properties `436 ..`, up to
-`LT_EXT_MAX_LAYOUTS` (32) and `LT_EXT_MAX_PROPERTIES` (768) (`port/ui/layout_ext.h`, header
+`LT_EXT_MAX_LAYOUTS` (32) and `LT_EXT_MAX_PROPERTIES` (1024) (`port/ui/layout_ext.h`, header
 comment). `layout_texture.c` reads both tables through `LT_LAYOUT(i)` and `LT_PROP(i)`, which are
 `lt_ext_layout(i)` and `lt_ext_prop(i)`: the game's row below its count, the port's above it, and
 a zeroed scratch row for an index in neither, never memory outside the tables
