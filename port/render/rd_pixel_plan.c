@@ -30,7 +30,10 @@
  * distance 0), vu_texa_ps's draws (its twin vu_texa_np_ps is built, but
  * fillDrawCB's per-texel TEXA bits are vu_texa_ps's alone and the start-up
  * set would need a twin of every vu_texa_ps key), and every draw under an
- * exact blend (the twins have no destination-read builds: g_rd.dstMode).
+ * exact blend (the twins have no destination-read builds: g_rd.dstMode),
+ * but under GS state as shader data (rd_uber.c), for which vu_np_ps has
+ * its attachment read twin, vu_np_ps_dstatt (rd__uber_np: the twin
+ * loaded).
  *
  * The start-up set: at a fractional scene scale (g_rd.sceneSx, sceneSy: the
  * scale the scene-class targets take, rd_core.c rd__target_scale_of) each
@@ -98,7 +101,7 @@ static bool twinLoaded(void)
 RdFsId rd__vu_pixel_fs(RdFsId today, const RdStateBlock *s, const RdTargetRec *tc,
                        const RdDrawPass *p)
 {
-    if (today != RD_FS_VU || g_rd.dstMode != RD_BLEND_EXACT_OFF ||
+    if (today != RD_FS_VU || (g_rd.dstMode != RD_BLEND_EXACT_OFF && !rd__uber_np()) ||
         (p && (p->flags & ICO_DF_PLANE)) || !rd__planes_dropped(s, tc) || !twinLoaded()) {
         return today;
     }
@@ -108,7 +111,8 @@ RdFsId rd__vu_pixel_fs(RdFsId today, const RdStateBlock *s, const RdTargetRec *t
 uint32_t rd__vu_pixel_fs_enum(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipeKeyInt *k)
 {
     if (k->fs != RD_FS_VU || !g_rd.profile.vuPlanesFrac ||
-        g_rd.settings.preset != RD_PRESET_ENHANCED || g_rd.dstMode != RD_BLEND_EXACT_OFF) {
+        g_rd.settings.preset != RD_PRESET_ENHANCED ||
+        (g_rd.dstMode != RD_BLEND_EXACT_OFF && !rd__uber_np())) {
         return n;
     }
     const float sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;

@@ -2237,8 +2237,8 @@ static void logDerived(void)
     const float sx = g_rd.sceneSx, sy = g_rd.sceneSy;
     const bool whole = sx == (float)(int)sx && sy == (float)(int)sy;
     const bool enhanced = g_rd.settings.preset == RD_PRESET_ENHANCED;
-    const bool dropped =
-        g_rd.profile.vuPlanesFrac && enhanced && !whole && g_rd.dstMode == RD_BLEND_EXACT_OFF;
+    const bool dropped = g_rd.profile.vuPlanesFrac && enhanced && !whole &&
+                         (g_rd.dstMode == RD_BLEND_EXACT_OFF || rd__uber_np());
     rd__log("display change: derived: preset %s, frame %u GS wide, scene %gx%g (%s), VU planes "
             "%s, VU region rule %s, texture filter %u, VU pre-pass %s, fog path %u (the crack "
             "fill's own line says its state); profile %s",

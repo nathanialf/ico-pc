@@ -191,6 +191,7 @@ add_library(ico_render STATIC
     rd_submit.c # a replay's end: the present's pass, the submit and the present
     rd_thread.c # the renderer on the window's render thread: the hand-over, the retire list
     rd_tex.c
+    rd_uber.c # GS state as shader data where the device orders the colour read
     rd_tex_decode.c # the texture decode pool: rdtex_store's decodes off the game thread
     rd_water.c # block targets, aliases, camera scopes
     rd_video.c # the FMV picture (port/fmv/rd_video.h)
@@ -991,7 +992,8 @@ if(ICO_RUN_TESTS)
                                                              FIXTURES_REQUIRED rd_dump TIMEOUT 600)
     # every pipeline a replay asks for is in the start-up set (rd_replay_tool --keys): each
     # dump of ICO_DUMPS at 1x, --enhanced 2x and --enhanced 2340x1080, on the fake phone
-    # limits and with the tile-based GPU's paths forced; skips without ICO_DUMPS or a device.
+    # limits, with the tile-based GPU's paths forced and under GS state as shader data
+    # (ICO_RD_UBER=on, the same paths); skips without ICO_DUMPS or a device.
     # The union of the asked keys is left in rd_replay_tool_keys/keys-<config>-<size>.txt
     add_test(NAME rd_replay_tool_keys
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
@@ -1501,11 +1503,34 @@ if(ICO_RUN_TESTS)
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=storage
                      "-DNAME=exact \\(interlock\\)"
                      "-DRESULTS=storage (ok|fail) [0-9]+, ${_bst_kept}" -P "${_bst}")
+    # GS state as shader data (rd_uber.c, ICO_RD_UBER=on: lavapipe orders the
+    # attachment read): the attachment read taken for it and checked (the
+    # intra-draw overlap cell among the samples), kept; read white
+    # (ICO_RD_BLEND_SABOTAGE=attachment) it stays, [dev] uber = on keeping
+    # it, the failure logged; ICO_RD_BLEND=fixed (the start-up retry's)
+    # turns it off: the fixed-function blend
+    set(_bst_uber "fixed-function ok [0-2], GS state as shader data")
+    add_test(NAME rd_blend_selftest_uber
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
+                     "-DNAME=${_bst_att}" "-DRESULTS=attachment ok [01], ${_bst_uber}"
+                     "-DEXTRA=rd: pipelines: GS state as shader data: on \\(raster-order read, \\[dev\\] uber = on\\)"
+                     "-DEXTRA2=rd: profile: [^\n]*. GS state as shader data \\(raster-order read\\)"
+                     -P "${_bst}")
+    add_test(NAME rd_blend_selftest_uber_sabotage
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
+                     "-DNAME=${_bst_att}" "-DRESULTS=attachment fail [0-9]+, ${_bst_uber}"
+                     "-DFAIL=attachment fail [0-9]+" -P "${_bst}")
+    add_test(NAME rd_blend_selftest_uber_blend_fixed
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
+                     "-DNAME=${_bst_fix}" "-DRESULTS=${_bst_ok}"
+                     "-DEXTRA=rd: pipelines: GS state as shader data: off \\(\\[dev\\] blend = fixed\\)"
+                     -P "${_bst}")
     set(_bst_tests rd_blend_selftest rd_blend_selftest_sabotage rd_blend_selftest_adreno
                    rd_blend_selftest_adreno_forced rd_blend_selftest_no_dst
                    rd_blend_selftest_blend_attachment rd_blend_selftest_blend_exact
                    rd_blend_selftest_blend_storage rd_blend_selftest_blend_fixed
-                   rd_blend_selftest_moltenvk_storage)
+                   rd_blend_selftest_moltenvk_storage rd_blend_selftest_uber
+                   rd_blend_selftest_uber_sabotage rd_blend_selftest_uber_blend_fixed)
     set_tests_properties(${_bst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     set_tests_properties(rd_blend_selftest PROPERTIES ENVIRONMENT "${_bst_env}")
     set_tests_properties(rd_blend_selftest_sabotage
@@ -1524,6 +1549,12 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_blend_selftest_blend_fixed PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND=fixed")
     set_tests_properties(rd_blend_selftest_moltenvk_storage
                          PROPERTIES ENVIRONMENT "${_bst_env_mvk};ICO_RD_BLEND=storage")
+    set_tests_properties(rd_blend_selftest_uber PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_UBER=on")
+    set_tests_properties(rd_blend_selftest_uber_sabotage
+                         PROPERTIES ENVIRONMENT
+                                    "${_bst_env};ICO_RD_UBER=on;ICO_RD_BLEND_SABOTAGE=attachment")
+    set_tests_properties(rd_blend_selftest_uber_blend_fixed
+                         PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_UBER=on;ICO_RD_BLEND=fixed")
     # the VU vertex pre-pass's self-test (rd_vuprepass_selftest.c): on
     # lavapipe the pre-pass draws the self-test's meshes byte for byte as
     # the programs' entries do and stays on, in the extended variant (a wide
@@ -1882,6 +1913,48 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vufuse_ab.cmake")
     set_tests_properties(rd_vufuse_ab_pixel PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                         FIXTURES_REQUIRED rd_dump TIMEOUT 600)
+    # the merge and the fuse under GS state as shader data (rd_uber.c,
+    # ICO_RD_UBER=on: lavapipe orders the attachment read): the VU draws
+    # through the colour read, merged and fused, byte for byte as one GPU
+    # draw a draw and as the kicks apart; on rd_pixel's frames and on the
+    # corpus lists (SKIP without them)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab_pixel_uber"
+         "${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab_pixel_uber"
+         "${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab_uber" "${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab_uber")
+    add_test(NAME rd_vumerge_ab_pixel_uber
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${_vu_pixel_list}" "-DBLEND_ENV=ICO_RD_UBER=on"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab_pixel_uber"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vumerge_ab.cmake")
+    add_test(NAME rd_vufuse_ab_pixel_uber
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${_vu_pixel_list}" "-DEXTRA=" "-DBLEND_ENV=ICO_RD_UBER=on"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab_pixel_uber"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vufuse_ab.cmake")
+    set_tests_properties(rd_vumerge_ab_pixel_uber rd_vufuse_ab_pixel_uber
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" FIXTURES_REQUIRED rd_dump
+                                    TIMEOUT 600)
+    add_test(NAME rd_vumerge_ab_uber
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DBLEND_ENV=ICO_RD_UBER=on"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vumerge_ab_uber"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vumerge_ab.cmake")
+    add_test(NAME rd_vufuse_ab_uber
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/vufuse_dumps.txt"
+                     "-DBLEND_ENV=ICO_RD_UBER=on"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vufuse_ab_uber"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vufuse_ab.cmake")
+    set_tests_properties(rd_vumerge_ab_uber PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                       TIMEOUT 3600)
+    set_tests_properties(rd_vufuse_ab_uber PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                      TIMEOUT 5400)
+    if(_env)
+        set_tests_properties(rd_vumerge_ab_pixel_uber rd_vufuse_ab_pixel_uber rd_vumerge_ab_uber
+                             rd_vufuse_ab_uber PROPERTIES ENVIRONMENT "${_env}")
+    endif()
     # rd_vumerge_fallback (test/rd_vumerge_fallback.cmake): a merge build the
     # driver refuses (faked: ICO_RD_FAKE_MERGE_FAIL=1) turns the merge off from
     # the next replay, logged once, and the later replays draw what
@@ -2008,6 +2081,18 @@ if(ICO_RUN_TESTS)
                          rd_crt_attachment rd_perf_attachment
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_bat}"
                                     ENVIRONMENT "${_env_blend_attachment}")
+    # GS state as shader data (rd_uber.c) on lavapipe, which orders the
+    # attachment read (ICO_RD_UBER=on: auto takes it on tile-based GPUs
+    # only): rd_pixel's cases and expectations as under the attachment read
+    # (its exact-mode matrix leaves out and counts the cells the colour read
+    # draws its own way: the premultiplied subtracts' floor and DATE per
+    # primitive; testDateStencil checks the per-primitive DATE)
+    set(_env_uber ${_env} "ICO_RD_UBER=on")
+    set(_bub "${CMAKE_CURRENT_BINARY_DIR}/uber")
+    file(MAKE_DIRECTORY "${_bub}")
+    add_test(NAME rd_pixel_uber COMMAND rd_pixel_test "${_bub}")
+    set_tests_properties(rd_pixel_uber PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_bub}"
+                                                  ENVIRONMENT "${_env_uber}")
 endif()
 
 # The tiler passes (rd_replay.c: the fog's local read, DATE through
@@ -2037,10 +2122,24 @@ if(ICO_RUN_TESTS)
     set(_env_date_stencil ${_env} "ICO_RD_DATE_PATH=stencil")
     add_test(NAME rd_date_selftest
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test> -DPATH=stencil
-                     "-DRESULTS=stencil ok 4, snapshot ok 4"
+                     "-DRESULTS=stencil ok 5, snapshot ok 5"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_date_selftest.cmake")
     set_tests_properties(rd_date_selftest PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                      ENVIRONMENT "${_env_date_stencil}")
+    # DATE under GS state as shader data (rd_uber.c, ICO_RD_UBER=on): the
+    # colour read's per-primitive DATE first (its fifth sample the GS's:
+    # the second sprite fails over the first), then the stencil bit and the
+    # snapshot with it held off (their fifth sample the alpha before the
+    # draw); the path stays the colour read
+    add_test(NAME rd_date_selftest_uber
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     "-DPATH=colour read"
+                     "-DRESULTS=colour read ok 5, stencil ok 5, snapshot ok 5"
+                     "-DEXTRA=pipelines: GS state as shader data: on \\(raster-order read, \\[dev\\] uber = on\\)"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_date_selftest.cmake")
+    set_tests_properties(rd_date_selftest_uber
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                    ENVIRONMENT "${_env_date_stencil};ICO_RD_UBER=on")
     # the shadow count's self-test (rd_shadow_selftest.c): the one draw
     # equal to the seven draws byte for byte at both scene sizes of the
     # tool (a wide scene at scale 2 with Full pixel's left-out texels, then
@@ -2114,7 +2213,7 @@ endif()
 if(ICO_RUN_TESTS)
     add_test(NAME rd_date_selftest_sabotage
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test> -DPATH=snapshot
-                     "-DRESULTS=stencil fail [1-4] at sample [0-3]: [0-9A-F]+ for [0-9A-F]+, snapshot ok 4"
+                     "-DRESULTS=stencil fail [1-5] at sample [0-4]: [0-9A-F]+ for [0-9A-F]+, snapshot ok 5"
                      "-DEXTRA=profile: DATE stencil off \\(self-test\\)"
                      "-DEXTRA2=DATE: ICO_RD_DATE_SABOTAGE: "
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_date_selftest.cmake")

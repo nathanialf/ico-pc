@@ -568,6 +568,19 @@ void rd__fades_fold_scan(const RdFrame *f, int keep)
     if (!f || !rd__fades_fold_on() || g_rdWin.first) {
         return;
     }
+    if (rd__uber_on()) {
+        /* GS state as shader data (rd_uber.c) draws the reduction's
+           hardware sprite through the attachment read's twin, which has no
+           fold (sprite.hlsl sprite_fold is the plain build's) */
+        static bool said; /* once a run */
+        if (!said) {
+            said = true;
+            rd__log("fades fold: off under GS state as shader data (the reduction's sprite "
+                    "draws through the colour read, which has no fold); list 11's sprites are "
+                    "drawn into SCENE");
+        }
+        return;
+    }
     s_frame = f->number;
     const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     RdFadesFoldEnv env;

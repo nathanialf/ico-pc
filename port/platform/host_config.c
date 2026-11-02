@@ -512,6 +512,10 @@ static const struct {
        diagnostics */
     {"dev.blend", "blend"},
     {"dev.fog_path", "fog_path"},
+    /* GS state as shader data: auto (the default: on where a tile-based
+       GPU reads the colour attachment in rasterization order), on, off
+       (port/render/rd_uber.c rd__uber_wanted) */
+    {"dev.uber", "uber"},
     /* the device profile's flags, one at a time (port/render/rd_profile.c):
        DATE's path, the depth store plan, the folded blur, the UINT views,
        the alpha/blend planner, the frame-size post sprites' plan and their
@@ -641,6 +645,7 @@ static const struct {
     const char *env;
 } dev_env[] = {
     {"blend", "ICO_RD_BLEND"},       /* port/render/rd_dst_read.c rd__dst_init */
+    {"uber", "ICO_RD_UBER"},         /* port/render/rd_uber.c rd__uber_wanted: auto, 1, 0 */
     {"fog_path", "ICO_RD_FOG_PATH"}, /* port/render/rd_fog_path.c rd__fog_path_init */
     /* port/render/rd_profile.c rd__profile_init: the profile's flags */
     {"date_path", "ICO_RD_DATE_PATH"},
@@ -781,6 +786,9 @@ const char *ico_dev_env_value(const char *key, const char *value)
     }
     if (strcmp(key, "fog_path") == 0) {
         return value_is(value, paths) ? value : NULL;
+    }
+    if (strcmp(key, "uber") == 0 && strcmp(value, "auto") == 0) {
+        return "auto"; /* else on/off as 1/0 below (rd_uber.c rd__uber_asked_env) */
     }
     if (strcmp(key, "date_path") == 0) {
         return value_is(value, datePaths) ? value : NULL;

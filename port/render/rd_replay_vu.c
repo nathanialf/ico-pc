@@ -717,7 +717,7 @@ void rd__replay_vu_flush(Replay *r)
         rd__bind_uniform(cl, 0, s_run.frame);
         rhi_cmd_set_bind_group_offsets(cl, 1, s_run.g1, offs, 3);
         rhi_cmd_set_bind_group(cl, 2, s_run.g2);
-        rd__replay_dst_bind(r, &s_run.key[i]); /* nothing for these keys */
+        rd__replay_dst_bind(r, &s_run.key[i]); /* the attachment read's group 3 (rd_uber.c) */
         rd__span_draw(first, i ? 0 : count);
         rd__replay_draw_indexed(cl, count, first, 0, 1);
     }
@@ -800,6 +800,13 @@ void rd__replay_vu_flush_post(Replay *r, int post)
     if (s_run.n && s_run.post != post) {
         rd__replay_vu_flush(r); /* the run's draw belongs to the effect before */
     }
+}
+
+/* a pass the draw merge may hold: no destination read, or the attachment
+ * read under GS state as shader data (vuDraw) */
+static bool vuMergeDst(const RdPipeKeyInt *k)
+{
+    return k->dst == RHI_DST_READ_NONE || (k->dst == RHI_DST_READ_ATTACHMENT && rd__uber_on());
 }
 
 /* The passes a merged draw may have (vuDraw, vuRunTake): one, or without
@@ -898,7 +905,18 @@ static int vuPlan(const Replay *r, const RdStateBlock *s, const DrawSetup *ds, u
  * on a twin's pass would keep the pair apart); the kick's plan the
  * cut's but for the blend (PLANS: the key's blend, the flags FIX_FACTOR,
  * PREMUL and C1_DST, the clamped FIX and dstWant, as the alpha plan's
- * blending off normalises them, rd_alpha_plan.c) */
+ * blending off normalises them, rd_alpha_plan.c).
+ * Under GS state as shader data (rd_uber.c) both draws go through the
+ * attachment read's twin, blending off, with one key: the cut's DrawCB
+ * holds its ALPHA register, the kick's own the register 0x00 (Cs,
+ * RdDrawPass.csOnly), and nothing else of the two plans differs (the
+ * blend's flags and the clamped FIX are dropped by the read's image,
+ * rd_dst_read.c dstPass); the kick drawn under the cut's DrawCB has its
+ * pixels' register 0x00 in the shader (vu_common.hlsli VU_RETURN under
+ * ICO_DST_MODE 2: the mark as above), so its colour is Cs and its alpha,
+ * mask, PABE and FBA the pixel's own, what the kick's own pass stores, for
+ * every blend form: DST and BLEND do not apply, PLANS compares the kick's
+ * plan with the cut's under csOnly */
 enum { VU_FUSE_YES = -1, VU_FUSE_SAME = -2 }; /* else RD_VU_FUSE_*, the reason kept apart */
 
 static bool vuPassEqual(const RdDrawPass *a, const RdDrawPass *b)
@@ -950,12 +968,15 @@ static int vuFuseVerdict(const Replay *r, const RdStateBlock *fan, const DrawSet
         return RD_VU_FUSE_PASSES;
     }
     const RdDrawPass *c0 = split ? &joined : &cut[0];
-    if (r->dateStNow || c0->key.dst != RHI_DST_READ_NONE || kick[0].key.dst != RHI_DST_READ_NONE) {
+    const bool uber = !split && rd__uber_on() && c0->key.dst == RHI_DST_READ_ATTACHMENT &&
+                      kick[0].key.dst == RHI_DST_READ_ATTACHMENT;
+    if (r->dateStNow ||
+        (!uber && (c0->key.dst != RHI_DST_READ_NONE || kick[0].key.dst != RHI_DST_READ_NONE))) {
         return RD_VU_FUSE_DST;
     }
     const RdBlendPath bp =
         c0->key.colorFmt == RHI_FMT_RGBA8_UINT ? RD_BP_NONE : rd__blend_path(c0->key.gs.blend);
-    if (bp != RD_BP_LERP && bp != RD_BP_DST_FIX) {
+    if (!uber && bp != RD_BP_LERP && bp != RD_BP_DST_FIX) {
         return RD_VU_FUSE_BLEND;
     }
     const uint8_t fs = c0->key.fs;
@@ -967,10 +988,14 @@ static int vuFuseVerdict(const Replay *r, const RdStateBlock *fan, const DrawSet
     /* the cut's pass as the planner makes it with ABE off (rd_alpha_plan.c
      * rd__plan_screen_draw_alpha's normalisation) */
     RdDrawPass off = *c0;
-    off.key.gs.blend = RD_BLEND_COUNT;
-    off.flags &= ~(uint32_t)(ICO_DF_FIX_FACTOR | ICO_DF_PREMUL | ICO_DF_C1_DST);
-    off.fix = r->st.ds.blendFix;
-    off.dstWant = 0;
+    if (uber) {
+        off.csOnly = 1; /* the kick's own pass: the register 0x00 */
+    } else {
+        off.key.gs.blend = RD_BLEND_COUNT;
+        off.flags &= ~(uint32_t)(ICO_DF_FIX_FACTOR | ICO_DF_PREMUL | ICO_DF_C1_DST);
+        off.fix = r->st.ds.blendFix;
+        off.dstWant = 0;
+    }
     return vuPassEqual(&off, &kick[0]) ? VU_FUSE_YES : RD_VU_FUSE_PLANS;
 }
 
@@ -1038,15 +1063,18 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             own = true;
         }
     }
-    /* the passes a merged draw takes: one, or the no-dual pair */
+    /* the passes a merged draw takes: one, or the no-dual pair; a
+     * destination read only under GS state as shader data (rd_uber.c: the
+     * attachment read in rasterization order, so a merged draw's triangles
+     * read what the earlier ones wrote, as the draws one by one would) */
     const uint32_t mp = vuMergePasses(dp, np);
     bool mergeable = mp != 0u;
     for (uint32_t i = 0; mergeable && i < mp; i++) {
-        mergeable = pipes[i].id && g_rd.vsMerge[keys[i].vs].id && keys[i].dst == RHI_DST_READ_NONE;
+        mergeable = pipes[i].id && g_rd.vsMerge[keys[i].vs].id && vuMergeDst(&keys[i]);
     }
     /* M0's predicates for the count (vuMergeNote) */
-    const bool noteable = mp != 0u && !r->dateStNow && dp[0].key.dst == RHI_DST_READ_NONE &&
-                          (mp == 1u || dp[1].key.dst == RHI_DST_READ_NONE) &&
+    const bool noteable = mp != 0u && !r->dateStNow && vuMergeDst(&dp[0].key) &&
+                          (mp == 1u || vuMergeDst(&dp[1].key)) &&
                           s_zeroBonesFor == g_rd.replayCounter && bonesOff == s_zeroBones;
     const RdStateBlock saved = r->st;
     r->st = *s; /* fillDrawCB reads the state the passes were planned from */

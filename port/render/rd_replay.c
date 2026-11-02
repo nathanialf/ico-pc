@@ -340,17 +340,7 @@ bool rd__gpu_init(void *sdlWindow)
          * twins always are (rd_set_no_dual) */
         /* the exact blend's twins (rd_dst_read.c), for the opted-in
          * destination read alone; their absence only leaves the mode out */
-        if (rd__fs_has_dst((uint8_t)i)) {
-            char name[64];
-            if (dstStorage) {
-                snprintf(name, sizeof(name), "%s_dstrov", s_fsNames[i]);
-                g_rd.fsDstRov[i] = rd__make_shader(name);
-            }
-            if (dstAttach) {
-                snprintf(name, sizeof(name), "%s_dstatt", s_fsNames[i]);
-                g_rd.fsDstAtt[i] = rd__make_shader(name);
-            }
-        }
+        rd__make_dst_twins((uint8_t)i, s_fsNames[i], dstStorage, dstAttach);
         if (rd__fs_has_no_dual((uint8_t)i)) {
             char name[64];
             snprintf(name, sizeof(name), "%s_nodual", s_fsNames[i]);
@@ -1240,23 +1230,8 @@ static void flushClear(void)
     endPass(r);
 }
 
-/* the exact blend's attachment read: every pass on an RGBA8 target made
- * for it is begun readable (outside the MSAA epoch) */
-static bool exactReadable(const RdTargetRec *c)
-{
-    return g_rd.dstMode == RD_BLEND_EXACT_ATTACHMENT && (c->dstUsage & RD_DST_USAGE_ATTACHMENT) &&
-           c->format == RHI_FMT_RGBA8_UNORM;
-}
-
-/* readable: the exact blend's attachment read, or DATE through the stencil
- * bit (RdProfile.dateStencil: its setup reads the alpha, rd__replay_date_take),
- * on an RGBA8 target made for it (rd_core.c: the scene class) */
-bool rd__pass_wants_readable(const RdTargetRec *c)
-{
-    return exactReadable(c) ||
-           (g_rd.profile.dateStencil && (c->dstUsage & RD_DST_USAGE_LOCAL_DATE) &&
-            c->format == RHI_FMT_RGBA8_UNORM);
-}
+/* the passes begun readable: rd_uber.c rd__exact_readable, rd__pass_wants_readable */
+#define exactReadable rd__exact_readable
 
 /* The depth begun readable (RhiDepthAttachment.readable, the texture in
  * RHI_STATE_RENDER_TARGET_READ): every pass on a target with its own depth,
@@ -1284,11 +1259,13 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
      * storage pass has no colour attachment and the exact blend's readable
      * one does not read the attachment a load op cleared (rd_dst_read.c):
      * their clear is a pass of its own (endPass below records it).  DATE's
-     * stencil setup reads the attachment after a barrier that holds the
-     * load op's write (vk_cmd.c rhi_cmd_local_read_barrier), so its
+     * stencil setup and GS state as shader data (rd_uber.c: a COLOR
+     * barrier after the pass begins) read it after a barrier that holds
+     * the load op's write (vk_cmd.c rhi_cmd_local_read_barrier), so their
      * readable passes take the clear */
     float pendColor[4];
-    if (s_pend.p.target && !storage && !(wantReadable && exactReadable(c)) &&
+    const bool uber = rd__uber_on();
+    if (s_pend.p.target && !storage && !(wantReadable && exactReadable(c) && !uber) &&
         rd__take_pending_clear(&s_pend.p, cid, d ? did : 0, &colorLoad, &depthLoad)) {
         memcpy(pendColor, s_pend.p.color, sizeof(pendColor));
         clear = pendColor;
@@ -1367,6 +1344,9 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     p.height = c->th;
     rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, cid, c->tw, c->th, r->perfPost);
     rhi_cmd_begin_render_pass(s_cl, &p);
+    if (uber && readable && colorLoad == RHI_LOAD_CLEAR) {
+        rhi_cmd_local_read_barrier(s_cl, RHI_LOCAL_READ_COLOR); /* the clear, then reads */
+    }
     rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_PASS, cid, c->tw, c->th, d ? did : 0, d ? d->tw : 0,
                                       d ? d->th : 0, storage, r->perfPost));
     setViewport(c->tw, c->th);
@@ -2810,8 +2790,12 @@ static bool prepareDrawEx(Replay *r, DrawSetup *ds, const RhiRect *dateArea, boo
         td = NULL;
     }
     ds->dateTex = g_rd.dummy;
+    r->dateDstNow = 0;
     if (r->st.ds.test.date != RD_DATE_OFF) {
-        if (dateStencil && dateStencilFor(ds->tc, td)) {
+        if (dateStencil && rd__uber_date(ds->tc, s_ms.active || (s_ms.want > 1u && !s_ms.ended))) {
+            r->dateDstNow = 1; /* rd_uber.c: the shader reads the alpha */
+            g_rdPerf.dateDstDraws++;
+        } else if (dateStencil && dateStencilFor(ds->tc, td)) {
             ds->dateStencil = 1;
             ds->dateWantAll = dateArea == NULL;
             ds->dateWant = dateArea ? *dateArea : (RhiRect){0, 0, ds->tc->tw, ds->tc->th};
@@ -3651,7 +3635,8 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     if (aa1) {
         for (int i = 0; i < np; i++) {
             split |= topo == RD_PRIM_TRIANGLES && dp[i].key.gs.zwrite == RD_ZWRITE_ON;
-            aa1Date |= r->st.ds.test.date != RD_DATE_OFF && (dp[i].key.gs.colorMask & 8);
+            aa1Date |=
+                r->st.ds.test.date != RD_DATE_OFF && (dp[i].key.gs.colorMask & 8) && !r->dateDstNow;
         }
         ax = axScratch((uint64_t)nv * 7);
         ends = aa1Date ? aa1Ends(nv) : NULL;

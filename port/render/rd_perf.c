@@ -194,6 +194,10 @@ static uint64_t s_fusePairs, s_fuseSame, s_fuseKept[RD_VU_FUSE_WHY_COUNT];
  * storeColorDropped) and the replays it planned */
 static uint64_t s_storePasses, s_storeDepth, s_storeColor;
 static uint32_t s_storePlanned;
+/* the pipeline cache by family as the last record popped had it
+ * (RdPerfRecord.pipeFamily, uber) */
+static uint16_t s_pipeFamily[RD_PERF_PIPE_FAMILIES];
+static uint8_t s_pipeUber;
 
 bool rd_perf_pop(RdPerfRecord *out)
 {
@@ -221,6 +225,8 @@ bool rd_perf_pop(RdPerfRecord *out)
     s_storeDepth += s_queue[s_head].storeDepthDropped;
     s_storeColor += s_queue[s_head].storeColorDropped;
     s_storePlanned += s_queue[s_head].storePlanMode != 0;
+    memcpy(s_pipeFamily, s_queue[s_head].pipeFamily, sizeof(s_pipeFamily));
+    s_pipeUber = s_queue[s_head].uber;
     if (out) {
         *out = s_queue[s_head];
     }
@@ -315,11 +321,31 @@ const char *rd_perf_backend_text(void)
            loads) dropped and the colour stores dropped, of the walk's
            passes; "planned" when a replay of them planned */
         const double n = (double)s_backendReplays;
-        snprintf(s_text + at, sizeof(s_text) - at,
-                 "; stores: %.0f depth and %.0f colour stores dropped a replay of %.0f passes "
-                 "(%s; [dev] store_plan)",
-                 (double)s_storeDepth / n, (double)s_storeColor / n, (double)s_storePasses / n,
-                 s_storePlanned ? "planned" : "every store kept");
+        const int k =
+            snprintf(s_text + at, sizeof(s_text) - at,
+                     "; stores: %.0f depth and %.0f colour stores dropped a replay of "
+                     "%.0f passes (%s; [dev] store_plan)",
+                     (double)s_storeDepth / n, (double)s_storeColor / n, (double)s_storePasses / n,
+                     s_storePlanned ? "planned" : "every store kept");
+        at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
+    }
+    if (s_backendReplays) {
+        /* the pipelines made so far by family (rd_uber.c rd__uber_perf_note:
+           where GS state as shader data shrinks the set, which part) */
+        uint32_t total = 0;
+        for (int f = 0; f < RD_PERF_PIPE_FAMILIES; f++) {
+            total += s_pipeFamily[f];
+        }
+        for (int f = 0; f < RD_PERF_PIPE_FAMILIES && total; f++) {
+            const int k = snprintf(s_text + at, sizeof(s_text) - at, "%s%s %u",
+                                   f ? ", " : "; pipelines made by family: ",
+                                   rd__pipe_family_name((RdKeyFamily)f), s_pipeFamily[f]);
+            at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
+        }
+        if (total) {
+            snprintf(s_text + at, sizeof(s_text) - at, " (%u%s)", total,
+                     s_pipeUber ? ", GS state as shader data" : "");
+        }
     }
     s_backendBytes = 0;
     s_backendReplays = 0;
@@ -778,6 +804,7 @@ void rd__perf_end(void)
     r->totalMs = rd__now_ms() - s_t0 + r->interpMs;
     r->pipelineCreates = rd__stats_here()->pipelineCreates - s_pipelineCreates;
     r->a1xDraws = g_rd.above1xDraws - s_a1xDraws;
+    rd__uber_perf_note(r); /* the pipeline cache by family (the 10 s summary) */
     if (g_rd.hasDevice) {
         RhiStats s;
         rhi_get_stats(&s);

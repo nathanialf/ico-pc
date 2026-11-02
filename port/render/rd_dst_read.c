@@ -67,6 +67,14 @@
  * read too, the same bytes, so the pass need not end for them.  The staticBlur sprites and
  * blend_int keep their own exact paths; DATE reads its snapshot.  See
  * docs/port/RENDER.md "Destination reads and blend paths".
+ *
+ * GS state as shader data (rd_uber.c, g_rd.uber) is the attachment read
+ * asked for by [dev] uber where the device orders it (rd__dst_asked_env)
+ * and drawn for every pass it can draw, not only the dstWant ones: the
+ * premultiplied forms and the unblended passes too (csOnly), any mask
+ * (WMASK; the cache's key takes 0xF), DATE against the alpha the shader
+ * reads (ICO_DF_DATE_DST); rd__expand_dst's uberPass, and the start-up
+ * set its images alone (rd__enumerate_uber).
  */
 #include <stdlib.h>
 #include <string.h>
@@ -143,7 +151,9 @@ int rd__dst_asked_env(void)
 {
     const char *e = getenv("ICO_RD_BLEND");
     if (!e || !e[0]) {
-        return -1;
+        /* GS state as shader data asks for the attachment read where the
+         * device orders it ([dev] uber: rd_uber.c rd__uber_wanted) */
+        return rd__uber_wanted(NULL) ? RD_BLEND_EXACT_ATTACHMENT : -1;
     }
     if (strcmp(e, "fixed") == 0 || strcmp(e, "off") == 0 || strcmp(e, "0") == 0) {
         return RD_BLEND_EXACT_OFF;
@@ -153,6 +163,9 @@ int rd__dst_asked_env(void)
     }
     if (strcmp(e, "attachment") == 0) {
         return RD_BLEND_EXACT_ATTACHMENT;
+    }
+    if (askedBest(e) && rd__uber_wanted(NULL)) {
+        return RD_BLEND_EXACT_ATTACHMENT; /* the read GS state as shader data draws with */
     }
     if (askedBest(e)) {
         /* the attachment read where the device has it, else the storage
@@ -200,9 +213,20 @@ void rd__dst_init(void)
             s_asked = asked;
             why = " ([dev] blend)";
         }
+    } else if (asked == RD_BLEND_EXACT_ATTACHMENT) {
+        /* asked by GS state as shader data ([dev] uber, rd_uber.c) */
+        if (g_rd.dstModes & (1u << asked)) {
+            s_asked = asked;
+            why = " (GS state as shader data)";
+        } else {
+            rd__log("blend: GS state as shader data: the attachment read's shaders or layout "
+                    "were not made; %s",
+                    rd__blend_exact_name(RD_BLEND_EXACT_OFF));
+        }
     }
     g_rd.dstMode = (uint8_t)(s_asked > 0 ? s_asked : RD_BLEND_EXACT_OFF);
     rd__log("blend: %s%s", rd__blend_exact_name(g_rd.dstMode), why);
+    rd__uber_init(); /* g_rd.uber with the mode in force */
 }
 
 bool rd_set_blend_exact(RdBlendExact mode)
@@ -294,6 +318,30 @@ static RdDrawPass depthOnly(const RdDrawPass *p)
     return z;
 }
 
+/* GS state as shader data (rd_uber.c): a pass the attachment read can draw
+ * (rd__uber_key_ok), through it whatever its blend: the GS's ALPHA register
+ * in the shader, Cs (the register 0x00, csOnly) where the pass has no GS
+ * blending, the mask in WMASK, and DATE against the alpha the fragment
+ * reads (ICO_DF_DATE_DST: no snapshot, no stencil bit) while DATE's
+ * self-test has not turned that off (g_rd.uberDate) */
+static RdDrawPass uberPass(const RdDrawPass *p)
+{
+    RdDrawPass c = dstPass(p, RD_BLEND_EXACT_ATTACHMENT);
+    c.csOnly = (uint8_t)(p->key.gs.blend >= RD_BLEND_COUNT || p->csOnly);
+    if ((p->flags & ICO_DF_DATE) && g_rd.uberDate) {
+        c.flags |= (uint32_t)ICO_DF_DATE_DST;
+    }
+    return c;
+}
+
+/* the premultiplied add and subtract (ICO_RD_UBER_PREMUL=0 leaves them on
+ * the blender) */
+static bool premulForm(const RdPipeKeyInt *k)
+{
+    const RdBlendPath bp = rd__blend_path(k->gs.blend);
+    return bp == RD_BP_PREMUL_ADD || bp == RD_BP_PREMUL_REVSUB;
+}
+
 static bool eligible(const RdPipeKeyInt *k)
 {
     return k->dst == RHI_DST_READ_NONE && k->colorFmt == RHI_FMT_RGBA8_UNORM &&
@@ -306,6 +354,11 @@ int rd__expand_dst(const RdDrawPass *in, int n, int mode, RdDrawPass out[4])
     int m = 0;
     for (int i = 0; i < n; i++) {
         const RdDrawPass *p = &in[i];
+        if (mode == RD_BLEND_EXACT_ATTACHMENT && g_rd.uber && rd__uber_key_ok(&p->key) &&
+            (g_rd.uberPremul || p->dstWant || !premulForm(&p->key))) {
+            out[m++] = uberPass(p);
+            continue;
+        }
         if (mode == RD_BLEND_EXACT_OFF || !p->dstWant || !eligible(&p->key)) {
             out[m++] = *p;
             continue;
@@ -400,6 +453,48 @@ uint32_t rd__enumerate_dst(const RdPipeKeyInt *in, uint32_t n, RdPipeKeyInt *out
             for (int k = 0; k < nn; k++) {
                 count = rd__add_pipe_key(out, max, count, &nd[k].key);
             }
+        }
+    }
+    return count;
+}
+
+uint32_t rd__enumerate_uber(const RdPipeKeyInt *in, uint32_t n, RdPipeKeyInt *out, uint32_t max,
+                            uint32_t count)
+{
+    for (uint32_t i = 0; i < n; i++) {
+        if (rd__pipe_key_family(&in[i]) == RD_KF_DATE) {
+            continue; /* DATE's stencil keys: DATE reads the alpha in the shader */
+        }
+        RdDrawPass p, ex[4];
+        memset(&p, 0, sizeof(p));
+        p.key = in[i];
+        if (rd__uber_key_ok(&in[i])) {
+            /* the key every blend, mask and DATE of it draws with */
+            RdDrawPass c = uberPass(&p);
+            rd__uber_normalise(&c.key);
+            count = rd__add_pipe_key(out, max, count, &c.key);
+            continue;
+        }
+        /* a key the read never draws (no twin, another format, a stencil
+         * of the shadow volumes, the post and blit keys): as the two-pass
+         * fallback makes it */
+        const int m = rd__expand_no_dual(&p, 1, ex);
+        for (int j = 0; j < m; j++) {
+            count = rd__add_pipe_key(out, max, count, &ex[j].key);
+        }
+    }
+    /* the presentation overlay's own keys (rd_replay.c draws it on the
+     * output with its own plan, never through the read; its RGBA8 keys are
+     * the frame's depthless ones, which the read took above) */
+    static RdPipeKeyInt ov[64];
+    const uint32_t no = rd__enumerate_reachable_overlay(ov, 64, 0);
+    for (uint32_t i = 0; i < no && i < 64; i++) {
+        RdDrawPass p, ex[4];
+        memset(&p, 0, sizeof(p));
+        p.key = ov[i];
+        const int m = rd__expand_no_dual(&p, 1, ex);
+        for (int j = 0; j < m; j++) {
+            count = rd__add_pipe_key(out, max, count, &ex[j].key);
         }
     }
     return count;

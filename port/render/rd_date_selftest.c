@@ -20,12 +20,30 @@
  * (rd_replay.c dateStencilFor), so it is checked as it draws, whatever
  * the anti-aliasing asked for; and the stencil replay must have taken the
  * bit (g_rdPerf.dateStencilTakes), else its samples say nothing of it:
- *   DATE: stencil path (self-test: stencil ok 4, snapshot ok 4) on SCENE ...
+ *   DATE: stencil path (self-test: stencil ok 5, snapshot ok 5) on SCENE ...
  *   DATE: snapshot path (self-test: stencil fail 2 at sample 1: 28C850FF
- *         for 28C85000, snapshot ok 4) on SCENE ...
+ *         for 28C85000, snapshot ok 5) on SCENE ...
  *   DATE: snapshot path (self-test: stencil not run (no draw took the
- *         stencil bit), snapshot ok 4) on SCENE ...
- * The stencil path stays only with its four right; otherwise the profile's
+ *         stencil bit), snapshot ok 5) on SCENE ...
+ * A fifth sample is a DATE draw's own overlap: the DATM 1 command is two
+ * sprites, the top half and then a smaller one inside the top left
+ * quadrant (its centre the sample), so that the first, whose alpha 0x40
+ * clears the MSB, changes what DATE sees under the second.  The GS tests
+ * DATE per primitive: the second fails there and the first's colour stays.
+ * The stencil bit and the R8 snapshot hold the alpha from before the
+ * draw's first primitive, so on those paths the second passes and its
+ * colour shows: each path is checked against its own rule (the snapshot's
+ * divergence from the GS, documented in docs/port/RENDER.md).
+ * Under GS state as shader data (rd_uber.c; g_rd.uberDate) DATE reads the
+ * alpha in the shader from the colour attachment in rasterization order,
+ * the GS's rule; its replay comes first ("colour read", the draws that
+ * read it counted, g_rdPerf.dateDstDraws) and the stencil and snapshot
+ * replays follow with it held off:
+ *   DATE: colour read path (self-test: colour read ok 5, stencil ok 5,
+ *         snapshot ok 5) on SCENE ...
+ * A failing colour read leaves DATE to the stencil bit or the snapshot
+ * (g_rd.uberDate off, its passes still the read's for the blend).
+ * The stencil path stays only with its five right; otherwise the profile's
  * flag goes off (rd__profile_self_test_off: "(self-test)" in the profile's
  * words) and the snapshot draws DATE.  ICO_RD_DATE_SABOTAGE=1 makes the
  * setup write 0 into the bit where the alpha's MSB is 1 (rd_replay_tiler.c
@@ -39,7 +57,7 @@
 
 #include "rd_internal.h"
 
-#define DT_SAMPLES 4
+#define DT_SAMPLES 5
 
 /* the cells (alpha MSB 1 left, 0 right), the sprites (DATM 1 top, DATM 0
  * bottom) and the clear, RGBA */
@@ -48,6 +66,8 @@ static const uint8_t kCellMsb[4] = {200, 40, 40, 0x80};
 static const uint8_t kCellZero[4] = {40, 200, 80, 0x00};
 static const uint8_t kSpriteDatm1[4] = {250, 250, 10, 0x40};
 static const uint8_t kSpriteDatm0[4] = {10, 250, 250, 0x60};
+/* the DATM 1 command's second sprite (the fifth sample) */
+static const uint8_t kSpriteDatm1b[4] = {90, 10, 200, 0x40};
 
 /* GS TEST words: ZTE, ZTST ALWAYS, DATE, DATM 1 (0x3C000) or DATM 0 */
 #define DT_TEST_DATM1 0x3C000u
@@ -100,30 +120,40 @@ static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h)
     ok = ok && c && rd__st_push(f, 0, RDC_TEXTURE_OFF) && rd__st_push1(f, 0, RDC_ABE, 0) &&
          rd__st_test(f, 0, RD_TEST_Z_ALWAYS) && rd__st_push1(f, 0, RDC_ZWRITE, RD_ZWRITE_OFF) &&
          rd__st_push1(f, 0, RDC_FBA, 0) && rd__st_push1(f, 0, RDC_SHADE, 0);
-    RdScreenVtx cells[4], s1[2], s0[2];
+    RdScreenVtx cells[4], s1[4], s0[2];
     sprite(&cells[0], w, h, 0, 0, w / 2, h, kCellMsb);
     sprite(&cells[2], w, h, w / 2, 0, w, h, kCellZero);
-    sprite(s1, w, h, 0, 0, w, h / 2, kSpriteDatm1);
+    sprite(&s1[0], w, h, 0, 0, w, h / 2, kSpriteDatm1);
+    sprite(&s1[2], w, h, w / 16, h / 16, 3 * w / 16, 3 * h / 16, kSpriteDatm1b);
     sprite(s0, w, h, 0, h / 2, w, h, kSpriteDatm0);
     ok = ok && pushSprites(f, 0, cells, 4);
-    ok = ok && rd__st_test(f, 0, DT_TEST_DATM1) && pushSprites(f, 0, s1, 2);
+    ok = ok && rd__st_test(f, 0, DT_TEST_DATM1) && pushSprites(f, 0, s1, 4);
     ok = ok && rd__st_test(f, 0, DT_TEST_DATM0) && pushSprites(f, 0, s0, 2);
     return ok;
 }
 
 /* the quadrants' centres in SCENE's texels: top left, top right, bottom
- * left, bottom right, and what the GS leaves there */
-static void samples(const RdTargetRec *t, uint32_t xs[DT_SAMPLES], uint32_t ys[DT_SAMPLES],
-                    const uint8_t *want[DT_SAMPLES])
+ * left, bottom right, then the DATM 1 command's own overlap in the top
+ * left quadrant, and what the path leaves there: perPrim the GS's DATE
+ * primitive by primitive (the colour read), else the alpha from before
+ * the draw (the stencil bit, the snapshot) */
+static void samples(const RdTargetRec *t, bool perPrim, uint32_t xs[DT_SAMPLES],
+                    uint32_t ys[DT_SAMPLES], const uint8_t *want[DT_SAMPLES])
 {
     xs[0] = xs[2] = t->tw / 4;
     xs[1] = xs[3] = t->tw - 1 - t->tw / 4;
     ys[0] = ys[1] = t->th / 4;
     ys[2] = ys[3] = t->th - 1 - t->th / 4;
+    xs[4] = t->tw / 8;
+    ys[4] = t->th / 8;
     want[0] = kSpriteDatm1; /* MSB 1, DATM 1: drawn */
     want[1] = kCellZero;    /* MSB 0, DATM 1: kept */
     want[2] = kCellMsb;     /* MSB 1, DATM 0: kept */
     want[3] = kSpriteDatm0; /* MSB 0, DATM 0: drawn */
+    /* MSB 1 before the draw, 0 after its first sprite: the second sprite
+     * fails per primitive (the first's colour stays), passes on the
+     * alpha from before the draw */
+    want[4] = perPrim ? kSpriteDatm1 : kSpriteDatm1b;
 }
 
 static struct {
@@ -134,13 +164,15 @@ static struct {
 /* One replay of f; *ok the samples equal to the GS's, *bad the first that
  * is not (-1 none) and got its RGBA.  False when the replay or the readback
  * could not be done. */
-static bool run(const RdFrame *f, RdTargetRec *t, int *ok, int *bad, uint8_t got[4],
+static bool run(const RdFrame *f, RdTargetRec *t, bool perPrim, int *ok, int *bad, uint8_t got[4],
                 uint32_t *takes)
 {
     if (!rd__replay_frame(f, 0, false)) {
         return false;
     }
-    *takes = g_rdPerf.dateStencilTakes; /* the replay's own record (rd__perf_begin) */
+    /* the replay's own record (rd__perf_begin): the stencil bit's setups,
+     * or the draws that read the alpha in the shader */
+    *takes = perPrim ? g_rdPerf.dateDstDraws : g_rdPerf.dateStencilTakes;
     if (!s_read.tex.id) {
         s_read.tex = rhi_create_texture(&(RhiTextureDesc){DT_SAMPLES, 1, 1, t->format,
                                                           RHI_TEX_COPY_DST | RHI_TEX_COPY_SRC,
@@ -152,7 +184,7 @@ static bool run(const RdFrame *f, RdTargetRec *t, int *ok, int *bad, uint8_t got
     }
     uint32_t xs[DT_SAMPLES], ys[DT_SAMPLES];
     const uint8_t *want[DT_SAMPLES];
-    samples(t, xs, ys, want);
+    samples(t, perPrim, xs, ys, want);
     RhiCommandList cl = rhi_begin_commands();
     if (!cl.id) {
         return false;
@@ -182,9 +214,10 @@ static bool run(const RdFrame *f, RdTargetRec *t, int *ok, int *bad, uint8_t got
     return true;
 }
 
-/* "ok 4", "fail 2 at sample 1: 28C850FF for 28C85000", "error" or, for
- * the stencil replay that took no bit, "not run (...)" */
-static void result(char *out, size_t size, bool done, bool ran, int ok, int bad,
+/* "ok 5", "fail 2 at sample 1: 28C850FF for 28C85000", "error" or, for
+ * the stencil replay that took no bit (the colour read's that read no
+ * alpha), "not run (...)" */
+static void result(char *out, size_t size, bool done, bool ran, bool perPrim, int ok, int bad,
                    const uint8_t got[4], const RdTargetRec *t)
 {
     if (!done) {
@@ -192,7 +225,9 @@ static void result(char *out, size_t size, bool done, bool ran, int ok, int bad,
         return;
     }
     if (!ran) {
-        snprintf(out, size, "not run (no draw took the stencil bit)");
+        snprintf(out, size,
+                 perPrim ? "not run (no draw read the alpha in its shader)"
+                         : "not run (no draw took the stencil bit)");
         return;
     }
     if (bad < 0) {
@@ -201,7 +236,7 @@ static void result(char *out, size_t size, bool done, bool ran, int ok, int bad,
     }
     uint32_t xs[DT_SAMPLES], ys[DT_SAMPLES];
     const uint8_t *want[DT_SAMPLES];
-    samples(t, xs, ys, want);
+    samples(t, perPrim, xs, ys, want);
     snprintf(out, size, "fail %d at sample %d: %02X%02X%02X%02X for %02X%02X%02X%02X",
              DT_SAMPLES - ok, bad, got[0], got[1], got[2], got[3], want[bad][0], want[bad][1],
              want[bad][2], want[bad][3]);
@@ -209,7 +244,8 @@ static void result(char *out, size_t size, bool done, bool ran, int ok, int bad,
 
 bool rd_date_selftest(void)
 {
-    if (!g_rd.inited || !g_rd.hasDevice || !g_rd.profile.dateStencil) {
+    const bool uber = g_rd.uberDate && rd__uber_on(); /* DATE in the shader (rd_uber.c) */
+    if (!g_rd.inited || !g_rd.hasDevice || (!g_rd.profile.dateStencil && !uber)) {
         return true; /* the snapshot draws DATE: nothing to check */
     }
     RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
@@ -227,15 +263,19 @@ bool rd_date_selftest(void)
         rd__log("DATE: ICO_RD_DATE_SABOTAGE: the setup writes 0 into the stencil bit where the "
                 "alpha's MSB is 1");
     }
-    int okS = 0, badS = -1, okN = 0, badN = -1;
-    uint8_t gotS[4] = {0}, gotN[4] = {0};
-    uint32_t takesS = 0, takesN = 0;
+    int okS = 0, badS = -1, okN = 0, badN = -1, okU = 0, badU = -1;
+    uint8_t gotS[4] = {0}, gotN[4] = {0}, gotU[4] = {0};
+    uint32_t takesS = 0, takesN = 0, takesU = 0;
+    const bool stencil = g_rd.profile.dateStencil;
     const bool wasBlocked = g_rd.msaaBlocked;
     g_rd.msaaBlocked = true; /* no MSAA epoch: the stencil bit's own draws */
-    const bool doneS = run(&f, t, &okS, &badS, gotS, &takesS);
+    const bool doneU = uber && run(&f, t, true, &okU, &badU, gotU, &takesU);
+    g_rd.uberDate = false; /* the stencil bit's and the snapshot's replays */
+    const bool doneS = stencil && run(&f, t, false, &okS, &badS, gotS, &takesS);
     g_rd.profile.dateStencil = false; /* the snapshot's replay */
-    const bool doneN = run(&f, t, &okN, &badN, gotN, &takesN);
-    g_rd.profile.dateStencil = true;
+    const bool doneN = run(&f, t, false, &okN, &badN, gotN, &takesN);
+    g_rd.profile.dateStencil = stencil;
+    g_rd.uberDate = uber;
     g_rd.msaaBlocked = wasBlocked;
     rd__frame_free(&f);
     if (s_read.tex.id) {
@@ -243,17 +283,41 @@ bool rd_date_selftest(void)
     }
     s_read.tex = (RhiTexture){0};
     t->clearPending = 1; /* the next replay starts SCENE from its clear */
-    const bool ranS = takesS > 0;
+    const bool ranS = takesS > 0, ranU = takesU > 0;
     const bool passed = doneS && ranS && badS < 0;
+    const bool passedU = doneU && ranU && badU < 0;
     const bool kept = (g_rd.profile.devSet & RD_PROFILE_DATE_STENCIL) != 0;
-    char rs[96], rn[96];
-    result(rs, sizeof rs, doneS, ranS, okS, badS, gotS, t);
-    result(rn, sizeof rn, doneN, true, okN, badN, gotN, t);
-    if (!passed && !kept) {
+    char rs[96], rn[96], ru[112];
+    if (stencil) {
+        result(rs, sizeof rs, doneS, ranS, false, okS, badS, gotS, t);
+    } else {
+        snprintf(rs, sizeof rs, "not tried");
+    }
+    result(rn, sizeof rn, doneN, true, false, okN, badN, gotN, t);
+    if (stencil && !passed && !kept) {
         rd__profile_self_test_off(RD_PROFILE_DATE_STENCIL);
     }
-    rd__log("DATE: %s path (self-test: stencil %s, snapshot %s)%s on SCENE %ux%u at %ux%u texels",
-            g_rd.profile.dateStencil ? "stencil" : "snapshot", rs, rn,
-            !passed && kept ? "; kept by [dev] date_path" : "", t->w, t->h, t->tw, t->th);
-    return passed;
+    if (!uber) {
+        rd__log("DATE: %s path (self-test: stencil %s, snapshot %s)%s on SCENE %ux%u at %ux%u "
+                "texels",
+                g_rd.profile.dateStencil ? "stencil" : "snapshot", rs, rn,
+                !passed && kept ? "; kept by [dev] date_path" : "", t->w, t->h, t->tw, t->th);
+        return passed;
+    }
+    result(ru, sizeof ru, doneU, ranU, true, okU, badU, gotU, t);
+    if (!passedU) {
+        g_rd.uberDate = false; /* DATE takes the stencil bit or the snapshot */
+    }
+    rd__log("DATE: %s path (self-test: colour read %s, stencil %s, snapshot %s)%s on SCENE %ux%u "
+            "at %ux%u texels",
+            g_rd.uberDate              ? "colour read"
+            : g_rd.profile.dateStencil ? "stencil"
+                                       : "snapshot",
+            ru, rs, rn,
+            !passedU ? "; the colour read failed: DATE as before (GS state as shader data keeps "
+                       "the blend)"
+            : stencil && !passed && kept ? "; kept by [dev] date_path"
+                                         : "",
+            t->w, t->h, t->tw, t->th);
+    return passedU;
 }

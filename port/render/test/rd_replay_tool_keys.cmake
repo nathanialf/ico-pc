@@ -14,6 +14,11 @@
 #     limits drop the local read): the tool's profile line says whether the
 #     device took them; a device without local read keeps the desktop set and
 #     that half reports "no local read" and passes
+#   - then as GS state as shader data's set is made (ICO_RD_UBER=on with the
+#     tile-based GPU's paths: port/render/rd_uber.c): every key a replay asks
+#     for through the colour read is in its collapsed set; a device without
+#     the rasterization-order attachment read draws without it (the profile
+#     line says why) and that half compares the set it has
 #   - the union of the asked keys goes to ${OUT}/keys-<config>.txt, a line a key,
 #     sorted
 # -DTOOL=<rd_replay_tool> -DOUT=<a folder the test may write>
@@ -54,9 +59,10 @@ set(res_2x --enhanced --resolution 2x)
 set(res_2340x1080 --enhanced --resolution 2340x1080)
 
 # a configuration: its name and the environment it sets (name=value pairs)
-set(configs mali tiler)
+set(configs mali tiler uber)
 set(env_mali "ICO_VK_FAKE_LIMITS=mali")
 set(env_tiler "ICO_RD_DATE_PATH=stencil;ICO_RD_FOG_PATH=local;ICO_RD_BLUR_FOLD=1")
+set(env_uber "ICO_RD_UBER=on;ICO_RD_DATE_PATH=stencil;ICO_RD_FOG_PATH=local;ICO_RD_BLUR_FOLD=1")
 
 set(failed 0)
 foreach(cfg ${configs})

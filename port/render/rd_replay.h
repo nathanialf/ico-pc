@@ -83,6 +83,11 @@ typedef struct Replay {
      * the pass of serial dateStPass (rd__replay_date_take) */
     int passDepthReadable;
     int dateStNow;
+    /* GS state as shader data (rd_uber.c rd__uber_date): the draw being
+     * planned tests DATE in its shader against the alpha it reads, no
+     * snapshot and no stencil bit taken (prepareDraw); PRIM.AA1's
+     * per-primitive DATE draws are not needed then (doScreen) */
+    int dateDstNow;
     uint32_t dateStFor, dateStSerial, dateStPass;
     RhiRect dateStArea;
 } Replay;

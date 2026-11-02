@@ -1602,6 +1602,53 @@ RdDrawPass rd__dst_merge(const RdDrawPass *p);
 uint32_t rd__enumerate_dst(const RdPipeKeyInt *in, uint32_t n, RdPipeKeyInt *out, uint32_t max,
                            uint32_t count);
 const char *rd__blend_exact_name(int mode);
+
+/* ------------------------------------------------ GS state as shader data
+ * rd_uber.c (the design is at its top; rd_dst_read.c plans the passes).
+ * rd__uber_asked_env: ICO_RD_UBER ([dev] uber): -1 auto (unset, "auto"), 1
+ * on, 0 off, -2 another word (auto).  rd__uber_wanted: whether the device
+ * and the asks give it (Vulkan, the rasterization-order attachment read,
+ * local read, a tile-based GPU under auto, no [dev] blend other than
+ * attachment), *why its words ("on (raster-order read)", "off (...)"):
+ * rd__dst_asked_env asks for the attachment read when it holds.
+ * rd__uber_init (rd__dst_init, after the mode is set): g_rd.uber and
+ * uberDate, logged.  rd__uber_on: in force (uber with the attachment read
+ * the mode).  rd__uber_off: turned off (a self-test), logged; the
+ * fixed-function blend when the attachment read was its alone.
+ * rd__uber_profile_words: the profile line's words.  rd__fs_has_dstatt:
+ * entry fs has an attachment read twin (rd__fs_has_dst's, and vu_np_ps's
+ * own).  rd__uber_np: vu_np_ps draws through its twin under it.
+ * rd__make_dst_twins: rd__gpu_init's twins of entry fs (name) for the
+ * storage and attachment reads asked for.  rd__uber_key_ok: a key the
+ * read draws (no read yet, RGBA8, a twin, one pass, no stencil,
+ * single-sampled).  rd__uber_normal / rd__uber_normalise: an attachment
+ * read key under it whose mask the cache's key drops (0xF: the shader
+ * writes the mask, DrawCB WMASK).  rd__uber_date: a DATE draw into tc
+ * reads the alpha in its shader (no snapshot, no stencil bit); msaa: the
+ * MSAA epoch is open or may open.  rd__exact_readable: tc's passes begin
+ * readable for the attachment read.  rd__enumerate_uber: the start-up
+ * set's keys under it (rd_dst_read.c).  rd__uber_set_line: the start-up
+ * set's line with the set it replaces (rd_precreate_pipelines).
+ * rd__uber_perf_note: the pipeline cache by family into the replay's
+ * record (rd_perf.c rd__perf_end). */
+int rd__uber_asked_env(void);
+bool rd__uber_wanted(const char **why);
+void rd__uber_init(void);
+bool rd__uber_on(void);
+void rd__uber_off(const char *why);
+const char *rd__uber_profile_words(void);
+bool rd__fs_has_dstatt(uint8_t fs);
+bool rd__uber_np(void);
+void rd__make_dst_twins(uint8_t fs, const char *name, bool storage, bool attach);
+bool rd__uber_key_ok(const RdPipeKeyInt *k);
+bool rd__uber_normal(const RdPipeKeyInt *k);
+void rd__uber_normalise(RdPipeKeyInt *k);
+bool rd__uber_date(const RdTargetRec *tc, bool msaa);
+bool rd__exact_readable(const RdTargetRec *c);
+uint32_t rd__enumerate_uber(const RdPipeKeyInt *in, uint32_t n, RdPipeKeyInt *out, uint32_t max,
+                            uint32_t count);
+void rd__uber_set_line(uint32_t n);
+void rd__uber_perf_note(RdPerfRecord *r);
 /* Turns a planned pass of a command whose prims carry Q != 1
  * into the STQ shaders (IcoSpriteStqVertex); 0 when the pass keeps its own. */
 int rd__stq_pass(RdDrawPass *dp);
@@ -1794,6 +1841,11 @@ uint32_t rd__add_pipe_key(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdP
 /* The screen and post families alone (rd_state_test holds them under 400,
  * and the whole set under RD_PIPELINE_REACHABLE_MAX). */
 uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max);
+/* The presentation overlay's keys (rd__overlay_state on the headless
+ * output and the swapchain, with font_ps and the sheet text's), added to
+ * out[0..n): rd__enumerate_reachable_screen's, and GS state as shader
+ * data's plain keys (rd_dst_read.c rd__enumerate_uber) */
+uint32_t rd__enumerate_reachable_overlay(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 /* The VU program families (rd_mesh.c): with the vertex pre-pass the record
  * path's two drawing shaders under the states the mesh lists draw with and
  * the ten pre-pass and five stage keys; without it the eleven program
@@ -2785,6 +2837,18 @@ typedef struct RdContext {
     uint8_t dstModes;
     RhiShader fsDstRov[RD_FS_COUNT], fsDstAtt[RD_FS_COUNT];
     RhiBindGroupLayout layoutDstStorage, layoutDstAttach;
+    /* GS state as shader data (rd_uber.c): in force with the attachment
+     * read (rd__uber_on: dstMode RD_BLEND_EXACT_ATTACHMENT), set by
+     * rd__dst_init ([dev] uber; rd__uber_init), cleared by the blend's
+     * self-test under auto (rd__uber_off); uberDate: DATE reads the
+     * attachment's alpha (ICO_DF_DATE_DST), cleared by DATE's self-test
+     * when that fails (the snapshot then) or ICO_RD_UBER_DATE=0;
+     * uberPremul: the premultiplied adds and subtracts through the read
+     * too (ICO_RD_UBER_PREMUL=0 leaves them to the blender: the A/B
+     * against the attachment read's pictures, evidence/perf/uber-baseline.sh) */
+    bool uber;
+    bool uberDate;
+    bool uberPremul;
     /* group 2 of the passes' own reads by local read (RhiLimits.localRead
      * only): slot 1 an input attachment (the fog's depth, DATE's colour),
      * slot 2 a sampled texture (the fog's LUT; DATE's setup the dummy):

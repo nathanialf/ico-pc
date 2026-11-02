@@ -81,6 +81,18 @@
  *              fractional Enhanced scale (every vu_ps key's vu_np_ps twin),
  *              each under RD_PIPELINE_REACHABLE_MAX and inside the RHI's
  *              pipeline pool less its headroom (rhi_pipeline_pool.h)
+ *   uber set   GS state as shader data (rd_uber.c) under the raster-order
+ *              device's flags (g_rd.uber with the attachment read, the
+ *              twins assumed: no device here) on the tiler profile at the
+ *              phone's fractional scale, the pre-pass off: a LERP, a
+ *              premultiplied subtract, an unblended mask-7 pass and a DATE
+ *              pass plan to one key (blend off, mask 0xF in the cache's
+ *              key, Cs for the unblended, DATE from the read); the set at
+ *              least five times smaller than the fixed-function one, no
+ *              DATE key, every key the read can draw only as its image
+ *              (the overlay's plain keys aside), the VU family at most a
+ *              quarter of the fixed-function one's (the four blend paths
+ *              gone); the counts and families printed
  *   vu set     rd__vu_set_choose: the stock Adreno 740's table row and a
  *              Turnip driver's text ("turnip Mesa driver", "Turnip Mesa
  *              26.3.0") take the plain set, with the start line's words;
@@ -2051,6 +2063,177 @@ static void testTilerSet(RdPipeKeyInt *keys)
     rd__set_vu_prepass(keepPrepass);
 }
 
+/* GS state as shader data (rd_uber.c; docs/port/PIPELINES.md "GS state as
+ * data"): the planner's images and the start-up set under the raster-order
+ * device's flags.  No device: the twins' ids are not needed for the plans
+ * (rd__fs_has_dstatt assumes vu_np_ps's without one) and the tiler flags
+ * and modules are the stand-ins testTilerFracSet sets. */
+static void testUberSet(RdPipeKeyInt *keys)
+{
+    static RdPipeKeyInt fixedSet[RD_PIPELINE_REACHABLE_MAX];
+    static RdPipeKeyInt overlay[64];
+    static const uint16_t kFs[6] = {RD_FS_DATE_STENCIL, RD_FS_DATE_CLEAR, RD_FS_FOG_LOCAL,
+                                    RD_FS_FX_BLUR2,     RD_FS_FX_FRAME,   RD_FS_FX_LOCAL};
+    const RdProfile keepProfile = g_rd.profile;
+    const bool keepD = g_rd.dynDepth, keepB = g_rd.dynBlend, keepPrepass = g_rd.vuPrepass;
+    const bool keepUber = g_rd.uber, keepUberDate = g_rd.uberDate;
+    const uint8_t keepDst = g_rd.dstMode;
+    const RdPreset keepPreset = g_rd.settings.preset;
+    const float keepSx = g_rd.sceneSx, keepSy = g_rd.sceneSy;
+    const RhiBindGroupLayout keepLayout = g_rd.layoutLocal;
+    RhiShader keepFs[6];
+    for (int i = 0; i < 6; i++) {
+        keepFs[i] = g_rd.fs[kFs[i]];
+        if (g_rd.fs[kFs[i]].id == 0) {
+            g_rd.fs[kFs[i]].id = 0x7F000020u + (uint32_t)i; /* stand-ins: never made */
+        }
+    }
+    if (g_rd.layoutLocal.id == 0) {
+        g_rd.layoutLocal.id = 0x7F000030u;
+    }
+    g_rd.dynDepth = g_rd.dynBlend = false;
+    rd__set_vu_prepass(false);
+    memset(&g_rd.profile, 0, sizeof(g_rd.profile));
+    g_rd.profile.tiler = true;
+    g_rd.profile.blurFold = true;
+    g_rd.profile.localRead = true;
+    g_rd.profile.dateStencil = true;
+    g_rd.profile.fogLocal = true;
+    g_rd.profile.alphaPlan = true;
+    g_rd.profile.fxPlan = true;
+    g_rd.profile.fxDstLocal = true;
+    g_rd.profile.vuPlanesFrac = true;
+    g_rd.settings.preset = RD_PRESET_ENHANCED;
+    g_rd.sceneSx = 2.8125f; /* the phone's Resolution Auto */
+    g_rd.sceneSy = 2.41071f;
+
+    /* the planner: four passes of one vs/fs/Z state, every blend form */
+    g_rd.uber = g_rd.uberDate = true;
+    g_rd.dstMode = RD_BLEND_EXACT_ATTACHMENT;
+    CHECK(rd__uber_on(), "uber: not in force with the attachment read");
+    {
+        static const int kBlend[4] = {RD_BLEND_LERP_AS, RD_BLEND_CD_SUB_CS_AS, -1,
+                                      RD_BLEND_LERP_AS};
+        static const uint8_t kMask[4] = {0xF, 0xF, 0x7, 0xF};
+        RdPipeKeyInt first;
+        memset(&first, 0, sizeof(first));
+        for (int c = 0; c < 4; c++) {
+            RdStateBlock s;
+            rd__reset_state_block(&s);
+            s.ds.test = rd_test_from_gs(c == 3 ? RD_TEST_DATE1_Z_GEQUAL : RD_TEST_Z_GEQUAL);
+            s.ds.zwrite = RD_ZWRITE_OFF;
+            s.ds.abe = kBlend[c] >= 0;
+            s.ds.blend = (uint8_t)(kBlend[c] >= 0 ? kBlend[c] : 0);
+            s.ds.colorMask = kMask[c];
+            RdDrawPass dp[2], ex[4];
+            const int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
+                                                RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
+            CHECK(np == 1, "uber plan %d: %d passes", c, np);
+            const int ne = rd__expand_dst(dp, 1, RD_BLEND_EXACT_ATTACHMENT, ex);
+            CHECK(ne == 1, "uber plan %d: %d images", c, ne);
+            RdPipeKeyInt k = ex[0].key;
+            const uint32_t wmask = (ex[0].flags >> ICO_DF_WMASK_SHIFT) & 15u;
+            CHECK(k.dst == RHI_DST_READ_ATTACHMENT && k.gs.blend == RD_BLEND_COUNT &&
+                      k.gs.nodual == 0 && wmask == kMask[c] &&
+                      (ex[0].flags & (ICO_DF_FIX_FACTOR | ICO_DF_PREMUL | ICO_DF_C1_DST)) == 0,
+                  "uber plan %d: dst %u blend %u nodual %u wmask %X flags %08X", c, k.dst,
+                  k.gs.blend, k.gs.nodual, wmask, ex[0].flags);
+            CHECK(ex[0].csOnly == (kBlend[c] < 0), "uber plan %d: csOnly %u", c, ex[0].csOnly);
+            CHECK(((ex[0].flags & (uint32_t)ICO_DF_DATE_DST) != 0) == (c == 3),
+                  "uber plan %d: DATE from the read %d", c,
+                  (ex[0].flags & (uint32_t)ICO_DF_DATE_DST) != 0);
+            CHECK(rd__uber_normal(&k) == (kMask[c] != 0xF), "uber plan %d: the mask normalised", c);
+            rd__uber_normalise(&k);
+            if (c == 0) {
+                first = k;
+            }
+            CHECK(memcmp(&k, &first, sizeof(k)) == 0,
+                  "uber plan %d: another pipeline key than the LERP's", c);
+        }
+        /* the same passes with the read not in force: the plain keys */
+        g_rd.uber = false;
+        RdStateBlock s;
+        rd__reset_state_block(&s);
+        s.ds.test = rd_test_from_gs(RD_TEST_Z_GEQUAL);
+        s.ds.abe = 1;
+        s.ds.blend = RD_BLEND_CD_SUB_CS_AS;
+        RdDrawPass dp[2], ex[4];
+        (void)rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                                   RHI_FMT_D32F_S8, dp);
+        const int ne = rd__expand_dst(dp, 1, RD_BLEND_EXACT_ATTACHMENT, ex);
+        CHECK(ne == 1 && ex[0].key.dst == RHI_DST_READ_NONE,
+              "attachment read alone: the premultiplied subtract left on the blender");
+        g_rd.uber = true;
+    }
+
+    /* the sets: fixed-function, then GS state as shader data */
+    g_rd.uber = false;
+    g_rd.dstMode = RD_BLEND_EXACT_OFF;
+    const uint32_t m = rd__enumerate_reachable(fixedSet, RD_PIPELINE_REACHABLE_MAX);
+    g_rd.uber = true;
+    g_rd.dstMode = RD_BLEND_EXACT_ATTACHMENT;
+    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    const uint32_t no = rd__enumerate_reachable_overlay(overlay, 64, 0);
+    uint32_t famM[RD_KF_COUNT], famN[RD_KF_COUNT];
+    (void)rd__pipe_family_counts(fixedSet, m, RD_PIPELINE_REACHABLE_MAX, famM);
+    (void)rd__pipe_family_counts(keys, n, RD_PIPELINE_REACHABLE_MAX, famN);
+    uint32_t dstKeys = 0, badDst = 0, plainEligible = 0, dup = 0;
+    for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        const RdPipeKeyInt *k = &keys[i];
+        for (uint32_t j = i + 1; j < n && j < RD_PIPELINE_REACHABLE_MAX; j++) {
+            dup += rd__pipe_key_equal(k, &keys[j]);
+        }
+        if (k->dst == RHI_DST_READ_ATTACHMENT) {
+            dstKeys++;
+            badDst += k->gs.blend != RD_BLEND_COUNT || k->gs.colorMask != 0xF ||
+                      k->gs.nodual != 0 || k->gs.stencil != RD_STENCIL_OFF;
+        } else if (rd__uber_key_ok(k) && !keyIn(overlay, no, k)) {
+            plainEligible++; /* a plain twin of a key the read draws */
+        }
+    }
+    printf("  uber set (tiler, the pre-pass off, 2.8125x2.41071): %u keys instead of %u (%u "
+           "through the colour read)\n    families:",
+           n, m, dstKeys);
+    for (int f = 0; f < RD_KF_COUNT; f++) {
+        printf("%s %s %u (%u)", f ? "," : "", rd__pipe_family_name((RdKeyFamily)f), famN[f],
+               famM[f]);
+    }
+    printf("\n");
+    CHECK(n > 0 && n * 5u <= m, "uber set: %u keys against %u (want at least five times fewer)", n,
+          m);
+    CHECK(n < RD_PIPELINE_REACHABLE_MAX && m < RD_PIPELINE_REACHABLE_MAX,
+          "uber set: %u and %u keys under %d", n, m, RD_PIPELINE_REACHABLE_MAX);
+    CHECK(famN[RD_KF_DATE] == 0 && famM[RD_KF_DATE] > 0, "uber set: DATE keys %u (fixed %u)",
+          famN[RD_KF_DATE], famM[RD_KF_DATE]);
+    CHECK(famN[RD_KF_VU] > 0 && famN[RD_KF_VU] * 4u <= famM[RD_KF_VU],
+          "uber set: VU keys %u against %u (the four blend paths one)", famN[RD_KF_VU],
+          famM[RD_KF_VU]);
+    CHECK(famN[RD_KF_2D] > 0 && famN[RD_KF_2D] < famM[RD_KF_2D], "uber set: 2D keys %u against %u",
+          famN[RD_KF_2D], famM[RD_KF_2D]);
+    CHECK(dstKeys > 0 && badDst == 0 && plainEligible == 0 && dup == 0,
+          "uber set: %u read keys (%u not normalised), %u plain twins of read keys, %u twice",
+          dstKeys, badDst, plainEligible, dup);
+    CHECK(famN[RD_KF_FX] < famM[RD_KF_FX],
+          "uber set: fx keys %u against %u (the plan's own forms "
+          "of a destination-reading sprite unused)",
+          famN[RD_KF_FX], famM[RD_KF_FX]);
+
+    for (int i = 0; i < 6; i++) {
+        g_rd.fs[kFs[i]] = keepFs[i];
+    }
+    g_rd.layoutLocal = keepLayout;
+    g_rd.profile = keepProfile;
+    g_rd.dynDepth = keepD;
+    g_rd.dynBlend = keepB;
+    rd__set_vu_prepass(keepPrepass);
+    g_rd.uber = keepUber;
+    g_rd.uberDate = keepUberDate;
+    g_rd.dstMode = keepDst;
+    g_rd.settings.preset = keepPreset;
+    g_rd.sceneSx = keepSx;
+    g_rd.sceneSy = keepSy;
+}
+
 static void testEnumeration(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
@@ -2088,6 +2271,7 @@ static void testEnumeration(void)
     testEnumerationVu(keys);
     testDynamicNormalise(keys);
     testTilerSet(keys);
+    testUberSet(keys);
 }
 
 /* The native frame's region scale (rd__region_scale, FrameCB g_frame.x):

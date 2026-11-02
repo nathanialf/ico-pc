@@ -16,6 +16,13 @@
 # dump and setting fewer.  Each pair's draws are printed.  A missing list or
 # dump is named and skipped; no dump read, or no device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
+# [-DBLEND_ENV=<NAME=value>]: the blend both runs draw with, ICO_RD_BLEND=fixed
+# by default; ICO_RD_UBER=on (rd_vumerge_ab_uber, rd_vumerge_ab_pixel_uber): GS
+# state as shader data, the VU draws through the colour read and merged
+# (port/render/rd_uber.c, rd_replay_vu.c vuMergeDst)
+if(NOT DEFINED BLEND_ENV OR BLEND_ENV STREQUAL "")
+  set(BLEND_ENV "ICO_RD_BLEND=fixed")
+endif()
 if(NOT EXISTS "${LIST}")
   message(STATUS "SKIP: ${LIST}: no dump list")
   return()
@@ -74,7 +81,7 @@ foreach(dump IN LISTS dumps)
       set(dirOn "${OUT}/${index}-${path}-${s}-on")
       file(REMOVE_RECURSE "${dirOff}" "${dirOn}")
       file(MAKE_DIRECTORY "${dirOff}" "${dirOn}")
-      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_VU_MERGE=0
+      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${BLEND_ENV} ICO_RD_VU_MERGE=0
                               ${env_${path}} "${TOOL}" "${dump}" /dev/null --pass-dump "${dirOff}"
                               --stats ${args_${s}}
                       RESULT_VARIABLE rcOff OUTPUT_VARIABLE outOff ERROR_VARIABLE errOff)
@@ -87,7 +94,7 @@ foreach(dump IN LISTS dumps)
         message(STATUS "${dump} ${path} ${s}: skipped (${errOff})")
         continue()
       endif()
-      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ${env_${path}}
+      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${BLEND_ENV} ${env_${path}}
                               "${TOOL}" "${dump}" /dev/null --pass-dump "${dirOn}" --stats
                               ${args_${s}}
                       RESULT_VARIABLE rcOn OUTPUT_VARIABLE outOn ERROR_VARIABLE errOn)

@@ -139,13 +139,13 @@ int ico_ini_load_file(IcoIni *ini, const char *path);
    other libraries read from the environment (ICO_AUDIO, ICO_AUDIO_DUMP,
    ICO_AUDIO_VOLUME, ICO_FIXED_CLOCK, ICO_RD_DUMP_*). */
 const char *ico_config_ini_key(const char *toml_path);
-/* The [dev] A/B switches (blend=, fog_path=, date_path=, store_plan=,
+/* The [dev] A/B switches (blend=, uber=, fog_path=, date_path=, store_plan=,
    blur_fold=, uint_view=, alpha_plan=, fx_plan=, fx_dst_local=,
    vu_planes=, shadow_one=, shadow_bspline=, dynamic_state=, gpu_checkpoints=,
    gpu_robust=, pass_split=, attachment_read=, storage_pass_merge=,
    vu_prepass=, crack_fill=, joystick_directinput=, pipeline_set=): ico_dev_env_name
    gives the environment variable a key is exported as (ICO_RD_BLEND,
-   ICO_RD_FOG_PATH, ICO_RD_DATE_PATH, ICO_RD_STORE_PLAN, ICO_RD_BLUR_FOLD,
+   ICO_RD_UBER, ICO_RD_FOG_PATH, ICO_RD_DATE_PATH, ICO_RD_STORE_PLAN, ICO_RD_BLUR_FOLD,
    ICO_RD_UINT_VIEW, ICO_RD_ALPHA_PLAN, ICO_RD_FX_PLAN, ICO_RD_FX_DST_LOCAL,
    ICO_RD_VU_PLANES, ICO_RD_SHADOW_ONE, ICO_RD_SHADOW_BSPLINE, ICO_VK_FAKE_NO_DYNAMIC, ICO_GPU_CHECKPOINTS, ICO_GPU_ROBUST, ICO_RD_PASS_SPLIT,
    ICO_VK_ATTACHMENT_READ, ICO_RD_PASS_MERGE, ICO_RD_VU_PREPASS, ICO_RD_CRACK_FILL,
@@ -158,7 +158,8 @@ const char *ico_config_ini_key(const char *toml_path);
    value exported for an ini value, NULL when nothing is set: blend
    "fixed", "attachment", "storage" or "exact" as they are (the
    fixed-function blend is the default: nothing set; exact opts into the
-   device's best exact mode); fog_path local, inplace, copy or buffer as
+   device's best exact mode); uber "auto" as it is (else the default
+   branch's 1 / 0); fog_path local, inplace, copy or buffer as
    they are; date_path stencil or snapshot as they are; uint_view "work" as
    it is; dynamic_state true/on -> "0", false/off -> "1", depth -> "blend"
    (the variable names what is static); pipeline_set full, careful or lazy as they are;

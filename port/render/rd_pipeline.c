@@ -1292,15 +1292,18 @@ void rd__key_dynamic_normalise(RdPipeKeyInt *k)
 }
 
 /* drawKeyTurned's key with the dynamic state's fields normalised away
- * (rd__key_dynamic_normalise): the key the cache holds.  k itself, or tmp. */
+ * (rd__key_dynamic_normalise) and, under GS state as shader data, the
+ * attachment read's mask (rd__uber_normalise): the key the cache holds.  k
+ * itself, or tmp. */
 static const RdPipeKeyInt *drawKey(const RdPipeKeyInt *k, RdPipeKeyInt *tmp)
 {
     k = drawKeyTurned(k, tmp);
-    if (rd__key_dynamic_bits(k) != 0u) {
+    if (rd__key_dynamic_bits(k) != 0u || rd__uber_normal(k)) {
         if (k != tmp) {
             *tmp = *k;
         }
         rd__key_dynamic_normalise(tmp);
+        rd__uber_normalise(tmp);
         k = tmp;
     }
     return k;
@@ -2494,6 +2497,7 @@ uint32_t rd_precreate_pipelines(void)
         }
         rd__log("pipelines: the start-up set by family: %s", w);
     }
+    rd__uber_set_line(n); /* GS state as shader data: the set it replaces */
     if (n > m) {
         rd__log("pipelines: the reachable set has %u keys, more than the %u the cache holds: "
                 "the first %u are created",
@@ -3205,7 +3209,10 @@ static uint32_t enumerateAll(RdPipeKeyInt *out, uint32_t max)
  * families among them).  With the exact blend (rd_dst_read.c) the
  * destination-read images of the blended keys join them (the plain keys
  * stay: the MSAA epoch, other formats and the storage path's Z-writing
- * discarding draws keep the fixed-function blend). */
+ * discarding draws keep the fixed-function blend).  Under GS state as
+ * shader data (rd_uber.c) a key the attachment read draws is its image
+ * alone and DATE's stencil keys are gone (rd_dst_read.c
+ * rd__enumerate_uber). */
 uint32_t rd__enumerate_reachable(RdPipeKeyInt *out, uint32_t max)
 {
     const bool dyn = g_rd.dynDepth || g_rd.dynBlend;
@@ -3223,7 +3230,9 @@ uint32_t rd__enumerate_reachable(RdPipeKeyInt *out, uint32_t max)
     RdPipeKeyInt *dst = dyn ? planned : out;
     const uint32_t dmax = dyn ? RD_PIPELINE_CACHE_MAX : max;
     uint32_t n = 0;
-    if (!g_rd.noDual && g_rd.dstMode == RD_BLEND_EXACT_OFF) {
+    if (rd__uber_on()) {
+        n = rd__enumerate_uber(raw, nk, dst, dmax, n);
+    } else if (!g_rd.noDual && g_rd.dstMode == RD_BLEND_EXACT_OFF) {
         for (uint32_t i = 0; i < nk; i++) {
             n = rd__add_pipe_key(dst, dmax, n, &raw[i]);
         }
@@ -3730,31 +3739,8 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
         const RdPipeKeyInt clear = rd__date_setup_key(RD_STENCIL_DATE_CLEAR, RHI_FMT_RGBA8_UNORM);
         n = rd__add_pipe_key(out, max, n, &clear);
     }
-    /* the presentation overlay on the headless output and the
-     * swapchain (sprites and triangles; the popups' blend and the glow's) */
+    n = rd__enumerate_reachable_overlay(out, max, n);
     static const uint8_t kOverlayBlends[] = {RD_BLEND_LERP_AS, RD_BLEND_CS_AS_ADD_CD};
-    static const RhiFormat kOutFormats[] = {RHI_FMT_RGBA8_UNORM, RHI_FMT_BGRA8_UNORM};
-    for (size_t f = 0; f < 2; f++) {
-        for (size_t b = 0; b < 2; b++) {
-            RdStateBlock s;
-            rd__overlay_state(&s, kOverlayBlends[b]);
-            RdDrawPass dp[2];
-            const int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI, kOutFormats[f],
-                                                RHI_FMT_UNKNOWN, dp);
-            for (int i = 0; i < np; i++) {
-                n = rd__add_pipe_key(out, max, n, &dp[i].key);
-                /* the font atlas on the overlay (font_ps) */
-                dp[i].key.fs = RD_FS_FONT;
-                n = rd__add_pipe_key(out, max, n, &dp[i].key);
-                /* the popups' and the photo panel's sheet text
-                 * (font_sheet_ps; font_sheet_baked_ps at 1x) */
-                dp[i].key.fs = RD_FS_FONT_SHEET;
-                n = rd__add_pipe_key(out, max, n, &dp[i].key);
-                dp[i].key.fs = RD_FS_FONT_SHEET_BAKED;
-                n = rd__add_pipe_key(out, max, n, &dp[i].key);
-            }
-        }
-    }
     /* the port's text in the frame (port/ui/font.c setState:
      * TEST 0x30000, no Z write, ALPHA 0x44 or 0x48; UI_KEEP_STATE keeps the
      * layout packet's, which differs only in the alpha test, a uniform)
@@ -3802,6 +3788,36 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
         n = rd__add_pipe_key(out, max, n, &depthB);
     }
     n = rd__add_pipe_key(out, max, n, &exact);
+    return n;
+}
+
+/* the presentation overlay on the headless output and the swapchain
+ * (sprites and triangles; the popups' blend and the glow's) */
+uint32_t rd__enumerate_reachable_overlay(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+{
+    static const uint8_t kOverlayBlends[] = {RD_BLEND_LERP_AS, RD_BLEND_CS_AS_ADD_CD};
+    static const RhiFormat kOutFormats[] = {RHI_FMT_RGBA8_UNORM, RHI_FMT_BGRA8_UNORM};
+    for (size_t f = 0; f < 2; f++) {
+        for (size_t b = 0; b < 2; b++) {
+            RdStateBlock s;
+            rd__overlay_state(&s, kOverlayBlends[b]);
+            RdDrawPass dp[2];
+            const int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI, kOutFormats[f],
+                                                RHI_FMT_UNKNOWN, dp);
+            for (int i = 0; i < np; i++) {
+                n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                /* the font atlas on the overlay (font_ps) */
+                dp[i].key.fs = RD_FS_FONT;
+                n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                /* the popups' and the photo panel's sheet text
+                 * (font_sheet_ps; font_sheet_baked_ps at 1x) */
+                dp[i].key.fs = RD_FS_FONT_SHEET;
+                n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                dp[i].key.fs = RD_FS_FONT_SHEET_BAKED;
+                n = rd__add_pipe_key(out, max, n, &dp[i].key);
+            }
+        }
+    }
     return n;
 }
 

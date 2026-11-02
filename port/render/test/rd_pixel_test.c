@@ -709,7 +709,13 @@ static void testDateFlat(void)
  * though A cleared that alpha.  The frame replayed through the stencil bit and through the
  * snapshot gives SCENE byte for byte the same, the stencil run with no
  * snapshot taken and DATE draws through the bit, the snapshot run with no
- * stencil draws. */
+ * stencil draws.
+ * Under GS state as shader data (rd_uber.c, ctest rd_pixel_uber) the frame
+ * is replayed first with DATE in the shader against the alpha it reads
+ * (g_rd.uberDate): no snapshot, no stencil bit, and the GS's DATE per
+ * primitive: B fails over A where A cleared the alpha (rows 32..63 of
+ * columns 128..255 keep A's red), its other pixels as the snapshot's; the
+ * two replays above follow with it held off. */
 static void testDateStencil(void)
 {
     if (!rhi_limits()->localRead || !g_rd.fs[RD_FS_DATE_STENCIL].id ||
@@ -754,6 +760,41 @@ static void testDateStencil(void)
     static uint8_t viaBit[512 * 512 * 4], viaSnap[512 * 512 * 4];
     uint32_t w = 0, h = 0, bitDraws = 0, bitSnaps = 0, snapDraws = 0, snapSnaps = 0;
     bool okBit = false, okSnap = false;
+    const bool uberDate = g_rd.uberDate;
+    if (f && uberDate && rd__uber_on()) {
+        /* the colour read's DATE, primitive by primitive: (x, y) -> the colour */
+        static const struct {
+            uint32_t x, y;
+            const uint8_t *c;
+        } kWantGs[] = {{60, 10, red}, {200, 10, red},   {200, 50, red}, {300, 50, a0},
+                       {60, 80, a1},  {200, 80, green}, {300, 110, a0}, {450, 50, a0}};
+
+        const bool okU = rd__replay_frame(f, 0, false);
+        rhi_wait_idle();
+        const uint32_t dstDates = g_rdPerf.dateDstDraws, snaps = g_rdPerf.dateSnapshots,
+                       bits = g_rdPerf.dateStencilDraws;
+        uint32_t uw = 0, uh = 0;
+        const uint8_t *img = readTarget(RD_TARGET_SCENE, &uw, &uh);
+        int badU = 0;
+        for (size_t k = 0; k < sizeof(kWantGs) / sizeof(kWantGs[0]) && img && uw; k++) {
+            const uint8_t *p = &img[(kWantGs[k].y * uw + kWantGs[k].x) * 4];
+            if (memcmp(p, kWantGs[k].c, 4) != 0) {
+                printf("  DATE colour read (%u,%u): %u,%u,%u,%u, want %u,%u,%u,%u\n", kWantGs[k].x,
+                       kWantGs[k].y, p[0], p[1], p[2], p[3], kWantGs[k].c[0], kWantGs[k].c[1],
+                       kWantGs[k].c[2], kWantGs[k].c[3]);
+                badU++;
+            }
+        }
+        printf("  DATE colour read: %u DATE draws read the alpha, %u snapshots, %u through the "
+               "bit\n",
+               dstDates, snaps, bits);
+        CHECK(okU && img, "DATE colour read: the replay");
+        CHECK(badU == 0, "DATE colour read: %d samples off the GS's per-primitive DATE", badU);
+        CHECK(dstDates > 0 && snaps == 0 && bits == 0,
+              "DATE colour read: %u draws read the alpha, %u snapshots, %u through the bit",
+              dstDates, snaps, bits);
+    }
+    g_rd.uberDate = false; /* the bit and the snapshot, as without the colour read */
     if (f) {
         okBit = rd__replay_frame(f, 0, false);
         rhi_wait_idle();
@@ -805,6 +846,7 @@ static void testDateStencil(void)
           bitDraws, bitSnaps);
     CHECK(snapDraws == 0 && snapSnaps > 0, "DATE snapshot: %u draws through the bit, %u snapshots",
           snapDraws, snapSnaps);
+    g_rd.uberDate = uberDate;
     g_rd.profile.dateStencil = was;
     rd_reset_scene(512, 512);
     rhi_wait_idle();
@@ -3492,7 +3534,14 @@ static void testForestTint(void)
  *     fixed-function blend (Z write under Z GEQUAL with the alpha test or
  *     DATE, rd_dst_read.c);
  *   - each exact mode differs from the fixed-function blend somewhere (the
- *     rounding, FIX 0xA0 past 1.0, PABE, the Ad and mode 11 forms). */
+ *     rounding, FIX 0xA0 past 1.0, PABE, the Ad and mode 11 forms).
+ * Under GS state as shader data (rd_uber.c, ctest rd_pixel_uber) the
+ * attachment read also draws the premultiplied subtracts (modes 1 and 6:
+ * the GS's floor, one level under the blender where Cs*F is not a
+ * multiple of 128) and DATE per primitive (the two quads of a command
+ * see each other's alpha, where the snapshot holds the alpha before the
+ * command): those cells are left out of the hardware-exact and depth
+ * comparisons and counted (printed). */
 static void testExactModes(void)
 {
     enum { FRAMES = 3, BLENDS_PER = RD_BLEND_COUNT / FRAMES };
@@ -3533,22 +3582,32 @@ static void testExactModes(void)
     rd_set_blend_exact(was);
     const uint32_t perBlend = 2 * 2 * 2 * ND_AFAILS * 3 * 4; /* SCENE cells a blend */
     int badZ = 0, badSame = 0, badModes = 0, differ[RD_BLEND_EXACT_COUNT] = {0}, shown = 0;
+    int uberDate = 0, uberSub = 0; /* GS state as shader data's own cells, differing */
     for (int m = 1; m < RD_BLEND_EXACT_COUNT; m++) {
         if (!have[m]) {
             continue;
         }
+        const bool uber = m == RD_BLEND_EXACT_ATTACHMENT && g_rd.uber;
         for (int f = 0; f < FRAMES; f++) {
             for (uint32_t i = 0; i < 512 * 512; i++) {
                 const uint32_t cell = (i / 512 / ND_CELL) * 64 + (i % 512) / ND_CELL;
                 const uint32_t b = (uint32_t)(f * BLENDS_PER) + cell / perBlend;
                 const uint32_t k = cell % perBlend;
                 const uint32_t pabe = k / (perBlend / 2);
+                const uint32_t date = (k / (12 * ND_AFAILS)) % 2;
+                const int sub = b == 1 || b == 6;
                 const int exactInHw = (b == 0 || b == 1 || b == 5 || b == 6) && !pabe;
                 if (b >= RD_BLEND_COUNT) {
                     continue; /* the cells past the frame's blends: background */
                 }
                 const int mz = memcmp(&depth[0][f][i], &depth[m][f][i], sizeof(float)) != 0;
                 const int mc = memcmp(&scene[0][f][i * 4], &scene[m][f][i * 4], 4) != 0;
+                if (uber && (date || (sub && exactInHw))) {
+                    uberDate += date && (mz || mc);
+                    uberSub += !date && mc;
+                    differ[m] += mc;
+                    continue;
+                }
                 badZ += mz;
                 differ[m] += mc;
                 if (exactInHw && mc) {
@@ -3596,6 +3655,12 @@ static void testExactModes(void)
            have[RD_BLEND_EXACT_ATTACHMENT] ? ", attachment read" : "",
            differ[RD_BLEND_EXACT_STORAGE], differ[RD_BLEND_EXACT_ATTACHMENT], badZ, badSame,
            badModes);
+    if (g_rd.uber) {
+        printf("  exact modes, GS state as shader data: %d pixels of the DATE cells and %d of the "
+               "premultiplied subtracts off the fixed-function draw (per primitive, the GS's "
+               "floor)\n",
+               uberDate, uberSub);
+    }
     CHECK(badZ == 0, "exact: the depth differs from the fixed-function draw's (%d pixels)", badZ);
     CHECK(badSame == 0, "exact: %d pixels of blends the hardware does exactly differ", badSame);
     CHECK(badModes == 0, "exact: the storage path and the attachment read differ (%d)", badModes);

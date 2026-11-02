@@ -33,6 +33,13 @@
 # read, or no device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DEXTRA=<the phone's dump list>
 # -DOUT=<a folder the test may write>
+# [-DBLEND_ENV=<NAME=value>]: the blend both runs draw with, ICO_RD_BLEND=fixed
+# by default; ICO_RD_UBER=on (rd_vufuse_ab_uber, rd_vufuse_ab_pixel_uber): GS
+# state as shader data, the pair's two draws one pipeline through the colour
+# read, the kick's pixels the register 0x00 in the shader (port/render/rd_uber.c)
+if(NOT DEFINED BLEND_ENV OR BLEND_ENV STREQUAL "")
+  set(BLEND_ENV "ICO_RD_BLEND=fixed")
+endif()
 set(dumps "")
 set(phoneDumps "")
 foreach(list IN ITEMS "${LIST}" "${EXTRA}")
@@ -106,7 +113,7 @@ foreach(dump IN LISTS dumps)
     set(dirOn "${OUT}/${index}-${s}-on")
     file(REMOVE_RECURSE "${dirOff}" "${dirOn}")
     file(MAKE_DIRECTORY "${dirOff}" "${dirOn}")
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_VU_FUSE=0
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${BLEND_ENV} ICO_RD_VU_FUSE=0
                             ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dirOff}" --stats
                             ${args_${s}}
                     RESULT_VARIABLE rcOff OUTPUT_VARIABLE outOff ERROR_VARIABLE errOff)
@@ -119,7 +126,7 @@ foreach(dump IN LISTS dumps)
       message(STATUS "${dump} ${s}: skipped (${errOff})")
       continue()
     endif()
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ${env_${s}} "${TOOL}"
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${BLEND_ENV} ${env_${s}} "${TOOL}"
                             "${dump}" - --pass-dump "${dirOn}" --stats ${args_${s}}
                     RESULT_VARIABLE rcOn OUTPUT_VARIABLE outOn ERROR_VARIABLE errOn)
     if(NOT rcOff EQUAL 0 OR NOT rcOn EQUAL 0)

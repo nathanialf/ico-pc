@@ -377,6 +377,10 @@ uint32_t rd__fx_enumerate(RdPipeKeyInt *out, uint32_t max, uint32_t n)
     const bool frame = g_rd.fs[RD_FS_FX_FRAME].id != 0;
     const bool local =
         g_rd.profile.fxDstLocal && g_rd.fs[RD_FS_FX_LOCAL].id != 0 && g_rd.layoutLocal.id != 0;
+    /* under GS state as shader data (rd_uber.c: an exact blend) a sprite
+     * that reads the destination keeps its own path (rd__fx_plan_draw), so
+     * of these only the alpha alone is drawn */
+    const bool dstForms = !rd__uber_on();
     RdStateBlock s;
     rd__reset_state_block(&s);
     s.ds.colorMask = 0xF;
@@ -389,17 +393,23 @@ uint32_t rd__fx_enumerate(RdPipeKeyInt *out, uint32_t max, uint32_t n)
                 rd__blur_key(&s, RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, NULL, 0);
             RdPipeKeyInt k = base;
             k.gs.colorMask = 8; /* the constant fold: the alpha alone */
-            n = rd__add_pipe_key(out, max, n, &k);
+            if (dstForms) {
+                n = rd__add_pipe_key(out, max, n, &k);
+            }
             if (frame) {
                 k = base;
                 k.fs = RD_FS_FX_FRAME; /* the alpha alone */
                 n = rd__add_pipe_key(out, max, n, &k);
                 k.gs.blend = RD_BLEND_CS_AS_ADD_CD; /* the premultiplied add */
-                n = rd__add_pipe_key(out, max, n, &k);
+                if (dstForms) {
+                    n = rd__add_pipe_key(out, max, n, &k);
+                }
                 k.gs.blend = RD_BLEND_CD_SUB_CS_AS; /* and subtract */
-                n = rd__add_pipe_key(out, max, n, &k);
+                if (dstForms) {
+                    n = rd__add_pipe_key(out, max, n, &k);
+                }
             }
-            if (local) {
+            if (local && dstForms) {
                 k = base;
                 k.fs = RD_FS_FX_LOCAL;
                 n = rd__add_pipe_key(out, max, n, &k);

@@ -2134,6 +2134,10 @@ enum {
     RD_VU_FUSE_WHY_COUNT
 };
 
+/* RdPerfRecord.pipeFamily's counts: one per pipeline key family
+ * (rd_internal.h RdKeyFamily) */
+#define RD_PERF_PIPE_FAMILIES 8
+
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
     uint32_t frame;  /* the replayed frame's number */
@@ -2244,6 +2248,10 @@ typedef struct RdPerfRecord {
      * staticBlur pairs drawn as one pass (fx_blur2_ps, rd_replay.c
      * rd__replay_blur_fold) */
     uint32_t dateStencilDraws, dateStencilTakes, fogLocalDraws, blurFolds;
+    /* GS state as shader data (rd_uber.c): the DATE draws whose shader read
+     * the alpha from the colour attachment (rd_replay.c prepareDrawEx), no
+     * snapshot or stencil bit taken */
+    uint32_t dateDstDraws;
     /* The pixel diet (docs/port/RENDER.md, "The device profile"):
      * alphaOnePass the draws the alpha/blend planner drew in one pass where
      * their plan had the alpha test's two, alphaOpaque those it drew
@@ -2339,6 +2347,13 @@ typedef struct RdPerfRecord {
      * store dropped (ICO_RD_STORE_PLAN=all, tests) */
     uint32_t storePasses, storeDepthPasses, storeDepthDropped, storeColorDropped;
     uint8_t storePlanMode;
+    /* GS state as shader data (rd_uber.c): uber 1 while it is in force;
+     * pipeFamily the pipeline cache by family at the replay's end, in
+     * rd_internal.h RdKeyFamily's order (2D, VU, VU point, shadow, fog,
+     * CRT, fx, DATE): the 10 s summary's "pipelines by family"
+     * (rd_perf_backend_text) */
+    uint8_t uber;
+    uint16_t pipeFamily[RD_PERF_PIPE_FAMILIES];
     /* The per-pass timing (rd_perf_passes_of; docs/port/RENDER.md,
      * "Performance records").  passKinds: the pieces of GPU work begun, by
      * RD_PERF_PASS_* (every replay); passEffects: of the render passes, those
