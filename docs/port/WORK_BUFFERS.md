@@ -7,7 +7,8 @@ glow a tick's later presents paste from its first, the work clear that shows a t
 reflection block between ticks, and where the crack filler is drawn on the fog's local path, and
 (not work buffers, kept here because RENDER.md is at its size cap) how a screen sprite redrawn under
 a new key between ticks is paired, how desktop Vulkan decides on the local reads at start, how
-the shadow count is read from the stencil in one draw, how the shadow levels are composited above
+the shadow count is read from the stencil in one draw (and its colour left unstored while it is
+made), how the shadow levels are composited above
 1x, which passes leave a depth neither loaded nor stored (the store plan), a source that holds only its clear read as its colour, which full-frame reads stay at a large
 scale, and how the screen-prim triangles draw without the sprite planes (issue 161). The sprites themselves are drawn by the GS
 sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
@@ -511,8 +512,9 @@ through the depth's stencil view (`RHI_ASPECT_STENCIL`, the depth in DEPTH_READ,
 RGBA8_UNORM table holding the bytes above (`rd__shadow_table_texel`, uploaded once). Reading the
 table with `Load` gives each term the float the seven draws' count gives `box_reduce_ps` (an
 RGBA8_UNORM texel's conversion does not depend on which texture holds it), and the loop is
-`box_reduce_ps`'s, the same expressions in the same order over the same `DrawCB` (SPIR-V and DXIL of
-the two entries carry the same arithmetic instructions in the same sequence); at scale 1
+`box_reduce_ps`'s, the same expressions in the same order over the same `DrawCB` (each term it adds
+is `box_reduce_ps`'s term, in its order; the terms of m = 0, exact zeros, are left out: "The pass
+and its reads" below); at scale 1
 (f = 1) a pixel is its one table texel (v * 1 / 1 = v). So the bytes the levels read are the seven
 draws' and the reduction's. At scale 1 it writes the count target itself; above 1x it writes
 `s_shadowRed` and leaves the scaled count target undrawn (a per-frame temporary target nothing else
@@ -554,6 +556,84 @@ A difference turns `shadowOne` off (`(self-test)`); `[dev] shadow_one = true` ke
 [dev] shadow_one"); `ICO_RD_SHADOW_SABOTAGE=1` makes the table wrong at m = 1 so the failure path
 runs (ctest `rd_shadow_selftest_sabotage`). The self-test resolves under the running disc's step
 (below).
+
+**The pass and its reads.** The one draw's pass has one attachment, its destination at the
+GS size (848 x 448 on the phone, 1.4 MB), DONT_CARE at the load (every texel is written) and
+stored; no depth attachment: SCENE's depth is in DEPTH_READ and its stencil is a sampled texture
+(the view), so a tile-based GPU loads and stores nothing of the 2364 x 1080 depth for it. Per
+output pixel the box covers ceil(hi) - floor(lo) texels an axis, about f + 1 (3 or 4 at the
+phone's 2.788 x 2.411: about 12.9 texels a pixel, 4.9 M stencil reads a picture, each of the
+2.55 M stencil texels read about twice). The loop reads fewer of its table, the same sum:
+
+- a texel whose m is 0 adds nothing: the table's texel 0 is 0 0 0 0 for both steps
+  (`rd__shadow_table_texel`), so its term is +0.0, and sum + 0.0 is sum whether the driver fuses
+  the multiply and add or not (sum starts at +0.0, every term is a product of non-negative
+  values, so it never holds -0.0). Neither the table texel nor the column weight is computed for
+  it;
+- the table texel of a run of equal m is read once and held (`held`): the same texel of a
+  texture nothing writes during the pass, so the same float4.
+
+So every term that is added is the term `box_reduce_ps` adds, in its order, and the bytes are
+unchanged; the reads per pixel go from about 26 (a stencil texel and its dependent table texel
+each) to about 13 stencil reads and one table read per run of a non-zero m (none outside the
+shadows). The self-test's sabotage (m = 1) still shows: a non-zero m is always read from the table.
+
+The pass list names it `shadow count 848x448` (`RD_PERF_ID_SHADOW_COUNT`: the label `shadow`, the
+target `count`, [RENDER.md](RENDER.md); not the count target's `list 3 temporary`); the seven
+draws' reduction above 1x is named the same. `rd_replay_tool --stats` prints, after the counts:
+
+    shadow count: 1 in one draw, 0 in seven draws (profile one draw); the one draw's pass: colour 848x448 not loaded, stored (1.4 MB), no depth attachment; the stencil read as a texture, 2364x1080 (2.4 MB); the count target's colour neither loaded nor stored in 1 passes (2364x1080, 9.7 MB each way)
+
+(`RdPerfRecord.shadowOneW`, `shadowOneH`, `shadowReadW`, `shadowReadH`, `shadowColorDropped`,
+`shadowColorW`, `shadowColorH`).
+
+**Where the phone's 3.2 ms goes (not measured).** The PowerVR phone's log (stage 6, Resolution
+Auto) has the
+pass at 2.7-3.2 ms in every 10 s block while the scene pass after it (`list 3 SCENE`, the
+composites) is 2.5-3.1 ms; lavapipe's replay of the frame has it at 16.0 ms against 1.3 ms for
+SHADOW0's one draw of a quarter of the texels. Two parts, neither isolated on the device: the
+shader's reads (above: about 26 a pixel without the two cuts, a dependent pair each), and the tile
+work a tile-based GPU attributes to the next timed pass ("the last scene pass carries the earlier
+passes' tile work"): the volumes' pass before it loads and stores the count target's 2364 x 1080
+colour (9.7 MB each way, nothing read: next section) and SCENE's depth and stencil, and its stores
+end inside the count pass's stamps. Both cuts are byte-identical; their share of the 3.2 ms is for
+the phone's next log to say.
+
+## The shadow count's colour
+
+The count target (a temporary at the scene's scale, 2364 x 1080 on the phone) is the colour of the
+volumes' pass, and of the reset's own pass in a frame whose reset no volume pass took (`stencil
+clear` in the pass list). Its colour from the reset to the resolve is never read:
+
+- the volumes write only the stencil (`rd__shadow_volume_key`: colour mask 0);
+- the seven draws' pass clears the colour at its load (`doShadowResolve`: `RHI_LOAD_CLEAR`);
+- the one draw at scale 1 writes every texel of it (its load DONT_CARE); above 1x it leaves it
+  undrawn, and every texture read of the count target until the next reset takes the reduced
+  count instead (`resolveTexture`, `s_shadowRedFor`; `rd__shadow_count_read` reads the reduced
+  count too);
+- Shadow.c is its one user (`rd_shadow_count_target`: the reset, the volumes, the resolve and the
+  chain's level 0 after it), the premise the one draw already rests on.
+
+So, under the store plan, a pass on the count target while the stencil window of its depth is
+open (from the reset on; the resolve closes it) leaves the colour neither loaded nor stored when
+it would have loaded it (`port/render/rd_store_plan.c` (`rd__store_plan_count_color`), called from
+`beginPass` and `flushStencilClear`): `RHI_LOAD_DONT_CARE` and `RHI_STORE_DONT_CARE`. A colour the
+pass clears (a pending clear, the seven draws' pass) keeps its ops, and so does a named target as
+the count (the self-test's SCENE). On a tile-based GPU that is the count target's 9.7 MB read into
+the tiles and 9.7 MB written back at each such pass, a replay; the new-target clear before the
+walk still writes it once (`rd__clear_new_targets`, kept: it is the pool's rule for every
+temporary). `[dev] store_plan = false` keeps every colour as before (the A/B). The counts:
+`storeColorDropped` (the window's `; stores: N depth and M colour stores dropped ...`, now about
+1 a replay in gameplay) and `shadowColorDropped`; the log says once
+
+    rd: store plan: the shadow count's colour (2364x1080, 9.7 MB) is neither loaded nor stored while the count is made (the volumes write only the stencil; the resolve writes the colour, or the reduced count stands for it above 1x); reported once
+
+With `ICO_RD_STORE_POISON=1` the dropped load clears the colour to 0x5A instead (lavapipe keeps
+an attachment's contents whatever its ops say), so a reader would show it: `rd_shadow_test` case p
+(the count, the levels and SCENE byte for byte with the plan off and on, through both paths, at
+1x, 2x and 1931 x 1093 texels; above 1x on the one draw the count target holds the poison at every
+texel) and `rd_store_plan_ab` (every named target byte for byte over the corpus, the colour stores
+dropped the same under the plan and the wrong plan).
 
 ## The shadow count's step
 
@@ -692,7 +772,9 @@ either: the passes into SCENE_MS (the MSAA epoch), and the passes begun outside 
 targets' clears, the shadow reset's own pass, the crack filler's own pass, the MSAA resolves). The
 colour attachments are all stored: the colour's readers (texture reads of a target, copies, the
 present, the feedback kept across ticks, a keep frame's retained DISPLAY) are not provable at a
-pass's begin (`storeColorDropped` stays 0).
+pass's begin. The one exception is the shadow count's colour while the count is made, which no
+one reads ([The shadow count's colour](#the-shadow-counts-colour)): `storeColorDropped` counts
+those passes.
 
 On the PowerVR phone's 2x frame (`tools/vufuse_dumps.txt`, read from `rd_replay_tool --list`)
 the last touch of SCENE's depth is list 5's fog meshes (GEQUAL tested); after it SCENE's depth is

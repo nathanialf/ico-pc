@@ -2358,7 +2358,9 @@ The per-pass timing measures each piece of GPU work between stamps written outsi
 pass. The replay names each piece as it begins it (`rd__perf_pass`, before the piece records
 anything): the uploads at the head (`uploads`), the VU vertex pre-pass and its copies
 (`VU pre-pass`), every render pass of the lists (`render pass`: `beginPass`, a clear's own pass,
-the COLCLAMP 0 wrap's, the shadow count's reduction above 1x), a target copied into another
+the COLCLAMP 0 wrap's, the shadow count's one draw and its reduction above 1x, both named
+`shadow count WxH` in the lists below, not the count target's `list 3 temporary`:
+`RD_PERF_ID_SHADOW_COUNT`, [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-count-in-one-draw)), a target copied into another
 (`copy`, `doCopy`), a target copied into its snapshot (`snapshot`, `takeSnap`), the DATE
 snapshot's pass (`DATE snapshot`, `dateSnapshot`), the fog's depth read made ready (`fog depth
 read`: the copy path's copy, the buffer path's transfers, the table's upload, before the fog's

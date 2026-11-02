@@ -952,7 +952,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   under `fuse off F` with `ICO_RD_VU_FUSE=0` or the merge off;
   [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). And the store plan's: `stores: N
   depth and M colour stores dropped a replay of P passes (D with a depth; store plan on)`, N the
-  passes whose depth (and stencil) was neither loaded nor stored, M 0 (the plan keeps every colour),
+  passes whose depth (and stencil) was neither loaded nor stored, M the passes whose colour was
+  (the shadow count's while it is made, about one a replay; every other colour is kept),
   P the passes the walk began and D those with a depth outside the MSAA epoch (`store plan off`
   and N 0 with `ICO_RD_STORE_PLAN=0`, `all` and N = D with `ICO_RD_STORE_PLAN=all`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)).
@@ -1070,7 +1071,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   --resolution 2x --aspect 2.189 --present 2364x1080`; a narrower dump skips it) and the record at
   Enhanced 4:3 and 16:9 2x: with the plan every named target's PNG (and `PRESENT.png`) byte for
   byte against every store kept, `store plan off` with nothing dropped, `on` and `all` with the same
-  passes and passes with a depth, `all` dropping every one of those, the plan dropping some over the
+  passes and passes with a depth and the same colour stores dropped (the shadow count's colour,
+  poisoned to 0x5A: no named target may show it), `all` dropping every depth store, the plan dropping some over the
   whole list, and the wrong plan changing at least one target over the whole list (the poison shows
   a dropped store that a later pass reads); each run's counts printed (`rd_store_plan_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)). SKIP as `rd_vustage_ab`.
@@ -1544,8 +1546,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   Shadow.c's model and a rectangle at four sub-pixel offsets, at 1x, at scale 2 and at 1931 x 1093
   texels (fractional on both axes), each recording resolved by the path asked
   (`g_rdPerf.shadowOne`, `shadowSeven`); the one draw's table for n = 0, 1, 63, 64, 128 and 255
-  against 4 n mod 256 (`checkTable`, no device). Its `_gl` twin compares OpenGL's stencil view the
-  same way; without the view the comparison prints a line and is skipped. Case x
+  against 4 n mod 256 (`checkTable`, no device). Case p, with each case o run: the count target's
+  colour neither loaded nor stored between the reset and the resolve
+  (`rd__store_plan_count_color`), the synthetic volumes through the one draw and the seven draws
+  under `ICO_RD_STORE_POISON=1` (the dropped load clears the colour to 0x5A) with the store plan
+  off and on: the count, SHADOW0-2 and SCENE byte for byte, the colour dropped only with the plan
+  (`shadowColorDropped`, `storeColorDropped`), and above 1x on the one draw the scaled count
+  target poisoned at every texel (`poisonFrame`;
+  [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-counts-colour)). Its `_gl` twin compares OpenGL's
+  stencil view the same way; without the view the comparison prints a line and is skipped. Case x
   (`rd_shadow_test edges`, ctest `rd_shadow_edges` and its `_gl` twin): the shadow composites'
   two kernels at scale 2, the same frames (the synthetic volumes, Shadow.c's model, a rectangle at
   +7/16) recorded with one bilinear tap (the default) and with the B-spline (`shadowBspline`
@@ -1564,7 +1573,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   aura_kernel = gs` drops the box of the aura's read of SCENE into FEED128 alone; unset, empty or
   `box` keeps it), the aura's two-pass switch (`rd__aura_box_pick`, `testAuraBox`: unset, empty,
   `auto` or another word the profile's, the on and off words over it, never on and no key of it in
-  the set without a device, the pass list's name `ROWBOX`), dump version 14's ticks' cameras (none in a
+  the set without a device, the pass list's name `ROWBOX`), the shadow count's colour
+  (`rd__store_plan_count_color`, `testShadowCountColor`: under the plan the temporary count
+  target's loaded colour goes DONT_CARE at its load and store, counted; a CLEAR, SCENE as the
+  count, the plan off and no replay keep their ops; the pass list's `shadow count`), dump version 14's ticks' cameras (none in a
   tick's frame, a blended frame's round-trip), list order, defaults, state leakage,
   the alpha test's plan for every Z write, AFAIL, ATE and alpha mask (one draw where the test decides
   nothing, `testAlphaMerge`), the start-up set's VU keys by variant and with the VU vertex
@@ -2266,7 +2278,7 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_PREPASS_BATCH` | `rd_replay_vu.c` | 0: the VU pre-pass's draws one an entry and stage instead of batched (`[dev] vu_prepass_batch = false`; `rd_vubatch_ab`, `rd_vuprepass_selftest_unbatched`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)) |
 | `ICO_RD_VU_MERGE` | `rd_replay_vu.c` | 0: every VU draw a GPU draw of its own instead of the draw merge (`[dev] vu_merge = false`; `rd_vumerge_ab`, `rd_vuprepass_selftest_unmerged`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) |
 | `ICO_RD_STORE_PLAN` | `rd_profile.c`, `rd_store_plan.c` | 0: every depth store kept (`[dev] store_plan = false`); 1 the store plan (the default); `all`: every depth store dropped, a wrong plan for `rd_store_plan_ab` ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)) |
-| `ICO_RD_STORE_POISON` | `rd_store_plan.c` | 1: a depth or stencil load the store plan leaves undefined clears to 0.5 and 0x5A instead, the garbage a tile-based GPU may leave (`rd_store_plan_ab`) |
+| `ICO_RD_STORE_POISON` | `rd_store_plan.c` | 1: a depth or stencil load the store plan leaves undefined clears to 0.5 and 0x5A instead, and the shadow count's colour load it drops clears the colour to 0x5A, the garbage a tile-based GPU may leave (`rd_store_plan_ab`, `rd_shadow_test` case p) |
 | `ICO_RD_FAKE_MERGE_FAIL` | `rd_pipeline.c` | 1: the first pipeline made with a draw merge build is destroyed and kept as failed, as a build the driver refused; the merge goes off from the next replay (`rd_vumerge_fallback`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) |
 | `ICO_RD_VU_FUSE` | `rd_replay_vu.c` | 0: code 36's kick draws under their own pipelines instead of the fused scissor pair (`[dev] vu_fuse = false`; `rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)) |
 | `ICO_RD_CONSTANT_READS` | `rd_const_read.c` | 0: a post sprite whose source target holds only its last clear reads the target as before instead of being drawn in the clear's colour (`[dev] constant_reads = false`; `rd_constant_reads_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)) |
