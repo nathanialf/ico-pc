@@ -34,6 +34,7 @@
 #include "photo_ui.h"
 #include "popup.h"
 #include "strings.h"
+#include "subtitles.h"
 #include "sysconf.h"
 #include "touch_edit.h"        /* the touch layout edits (port/input) */
 #include "settings_graphics.h" /* the Graphics page's rows and Apply */
@@ -1356,6 +1357,60 @@ static const char *languageName(int game)
     return ui_str((UiStrId)ids[i >= 0 && i < 5 ? i : 0]);
 }
 
+static int subtitleGameLanguageCount(void)
+{
+    return ico_region_cur()->has_game_language ? 5 : 1;
+}
+
+static int subtitleLanguageCount(int source)
+{
+    const int gameCount = source == ICO_SUBTITLE_SOURCE_TEXT ? 0 : subtitleGameLanguageCount();
+    const int textCount = source == ICO_SUBTITLE_SOURCE_DISC
+                              ? 0
+                              : (int)ui_subtitle_pack_count();
+    return gameCount + textCount;
+}
+
+static int subtitleLanguageIndex(int source)
+{
+    const int gameCount = source == ICO_SUBTITLE_SOURCE_TEXT ? 0 : subtitleGameLanguageCount();
+    const char *language =
+        ui_subtitle_effective_language(source, ico_opt_subtitle_language());
+    if (strcmp(language, "game") == 0) {
+        if (gameCount <= 1) {
+            return 0;
+        }
+        const int index = gameLanguage() - ICO_GAME_LANGUAGE_ENGLISH;
+        return index >= 0 && index < gameCount ? index : 0;
+    }
+    const int pack = ui_subtitle_pack_index(language);
+    if (pack >= 0 && source != ICO_SUBTITLE_SOURCE_DISC) {
+        return gameCount + pack;
+    }
+    return 0;
+}
+
+static void setSubtitleLanguageIndex(int source, int index)
+{
+    const int gameCount = source == ICO_SUBTITLE_SOURCE_TEXT ? 0 : subtitleGameLanguageCount();
+    if (index < gameCount) {
+        ico_opt_set_subtitle_language("game");
+        if (gameCount > 1) {
+            setGameLanguage(ICO_GAME_LANGUAGE_ENGLISH + index);
+            ico_sysconf_set_language(ico_game_to_scf_language(gameLanguage()));
+            ui_settings_apply_language();
+        }
+    } else {
+        const int pack = index - gameCount;
+        const char *id = ui_subtitle_pack_id((size_t)pack);
+        if (id != NULL) {
+            ico_opt_set_subtitle_language(id);
+        }
+    }
+    ico_config_set_string("subtitles.language", ico_opt_subtitle_language());
+    s_dirtyConfig = 1;
+}
+
 /* the game's brightness step as gsb_controlBrightness clamps it */
 static int brightness(void)
 {
@@ -1978,11 +2033,26 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(ico_opt_natural_chains());
     case UI_OPT_SKIP_OPENING:
         return onOff(ico_opt_skip_opening());
-    case UI_OPT_LANGUAGE:
-        return languageName(gameLanguage());
+    case UI_OPT_LANGUAGE: {
+        const char *language = ui_subtitle_effective_language(
+            ico_opt_subtitle_source(), ico_opt_subtitle_language());
+        if (strcmp(language, "game") == 0) {
+            return gameLanguage() >= 0 ? languageName(gameLanguage())
+                                       : menuLanguageName(ico_region_cur()->ui_lang_default);
+        }
+        const int pack = ui_subtitle_pack_index(language);
+        const char *name = pack >= 0 ? ui_subtitle_pack_name((size_t)pack) : NULL;
+        return name != NULL ? name : language;
+    }
     case UI_OPT_MENU_LANGUAGE: {
         const int pref = ico_opt_ui_language();
         return pref < 0 ? ui_str(UI_STR_VAL_AUTO) : menuLanguageName(pref);
+    }
+    case UI_OPT_SUBTITLE_SOURCE: {
+        static const int sourceStr[ICO_SUBTITLE_SOURCE_COUNT] = {
+            UI_STR_SUBTITLE_SOURCE_ALL, UI_STR_SUBTITLE_SOURCE_DISC,
+            UI_STR_SUBTITLE_SOURCE_TEXT};
+        return ui_str(sourceStr[ico_opt_subtitle_source()]);
     }
     case UI_OPT_DISC: {
         static const UiStrId kDisc[ICO_REGION_COUNT] = {
@@ -2157,8 +2227,8 @@ static int optShown(int opt, int link)
         return discRowShown(); /* two or more discs' game data */
     }
     if (opt == UI_OPT_LANGUAGE) {
-        /* the game's own language: the European disc's five */
-        return ico_region_cur()->has_game_language;
+        const int source = ico_opt_subtitle_source();
+        return source != ICO_SUBTITLE_SOURCE_DISC || ico_region_cur()->has_game_language;
     }
     if (opt == UI_OPT_VIDEO_MODE || opt == UI_OPT_MODEL_PACK) {
         /* both change only from the title (onTitle): the video mode is
@@ -2629,19 +2699,35 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         ico_config_set_bool("gameplay.skip_opening", ico_opt_skip_opening());
         s_dirtyConfig = 1;
         break;
-    case UI_OPT_LANGUAGE: {
-        /* as kanbanBoot.c step 102 stores it; the game's text and subtitles
-           follow at their next load, the port's strings at once while the
-           menu language is Auto */
-        int i = gameLanguage() - ICO_GAME_LANGUAGE_ENGLISH;
-        if (gameLanguage() < 0) {
-            break; /* no language of the game's own (the row is hidden) */
+    case UI_OPT_SUBTITLE_SOURCE: {
+        const int source = stepIndex(ico_opt_subtitle_source(), ICO_SUBTITLE_SOURCE_COUNT, dir);
+        ico_opt_set_subtitle_source(source);
+        const char *language = ico_opt_subtitle_language();
+        if (source == ICO_SUBTITLE_SOURCE_DISC && strcmp(language, "game") != 0) {
+            language = "game";
+        } else if (source == ICO_SUBTITLE_SOURCE_TEXT &&
+                   ui_subtitle_pack_index(language) < 0) {
+            language = ui_subtitle_pack_id(0);
+        } else if (source == ICO_SUBTITLE_SOURCE_ALL && strcmp(language, "game") != 0 &&
+                   ui_subtitle_pack_index(language) < 0) {
+            language = "game";
         }
-        i = i < 0 || i > 4 ? 0 : stepIndex(i, 5, dir);
-        setGameLanguage(ICO_GAME_LANGUAGE_ENGLISH + i);
-        ui_settings_apply_language();
-        ico_sysconf_set_language(ico_game_to_scf_language(gameLanguage()));
+        ico_opt_set_subtitle_language(language);
+        ico_config_set_string("subtitles.source", ico_opt_subtitle_source_name(source));
+        ico_config_set_string("subtitles.language", ico_opt_subtitle_language());
         s_dirtyConfig = 1;
+        break;
+    }
+    case UI_OPT_LANGUAGE: {
+        /* Game languages still use the game's setting; text-pack languages
+           affect subtitles only. */
+        const int source = ico_opt_subtitle_source();
+        const int count = subtitleLanguageCount(source);
+        if (count <= 0) {
+            break;
+        }
+        setSubtitleLanguageIndex(source,
+                                 stepIndex(subtitleLanguageIndex(source), count, dir));
         break;
     }
     case UI_OPT_DISC: {
@@ -3225,6 +3311,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     switch (id) {
     case UI_PAGE_MAIN:
         addVersion(pg);
+        addNote(pg, UI_OPT_SUBTITLE_SOURCE, UI_STR_SUBTITLE_SOURCE_NOTE);
         addNote(pg, UI_OPT_LANGUAGE, UI_STR_LANGUAGE_NOTE);
         addNote(pg, UI_OPT_MENU_LANGUAGE, UI_STR_MENU_LANGUAGE_NOTE);
         addNote(pg, UI_OPT_DISC, UI_STR_DISC_NOTE);
@@ -3744,8 +3831,8 @@ static void build(void)
        and Dump models, shown while it is on) */
     static const int mainOpts[] = {
         UI_OPT_LINK,         UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK,           UI_OPT_LINK,
-        UI_OPT_LINK,         UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LANGUAGE,       UI_OPT_MENU_LANGUAGE,
-        UI_OPT_DISC,         UI_OPT_LINK, UI_OPT_LINK, UI_OPT_REPORT_PICTURE,
+        UI_OPT_LINK,         UI_OPT_LINK, UI_OPT_LINK, UI_OPT_SUBTITLE_SOURCE, UI_OPT_LANGUAGE,
+        UI_OPT_MENU_LANGUAGE, UI_OPT_DISC, UI_OPT_LINK, UI_OPT_LINK, UI_OPT_REPORT_PICTURE,
 #if ICO_RC_TOOLS
         UI_OPT_SHARE_REPORT,
 #endif
@@ -3758,6 +3845,7 @@ static void build(void)
                                    UI_STR_SECTION_AUDIO,
                                    UI_STR_SECTION_CONTROLS,
                                    UI_STR_SECTION_GAMEPLAY,
+                                   UI_STR_OPT_SUBTITLE_SOURCE,
                                    UI_STR_SECTION_LANGUAGE,
                                    UI_STR_OPT_MENU_LANGUAGE,
                                    UI_STR_OPT_DISC,
@@ -3777,6 +3865,7 @@ static void build(void)
                                     UI_PAGE_AUDIO,
                                     UI_PAGE_CONTROLS,
                                     UI_PAGE_GAMEPLAY,
+                                    -1,
                                     -1,
                                     -1,
                                     -1,

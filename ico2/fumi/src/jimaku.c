@@ -5,6 +5,7 @@
 #include "main.h"
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 #include "debug.h"
 #include "debug_exception.h"
 
@@ -44,6 +45,11 @@ static IosSema jimakuFrameSema; /* derived name */
 #include "layout_texture.h" /* jimaku's texProperty rows: 434, 435 (JPN and CN 410, 411; KOR 404, 405) */
 #include "layout_texture.h" /* jimaku's texProperty rows: 434, 435 (JPN 410, 411; KOR 404, 405) */
 #include "gflag.h"
+#if defined(ICO_HOST) && defined(ICO_RD)
+#include "menu_font.h"
+#include "options.h"
+#include "subtitles.h"
+#endif
 
 typedef struct JimCol { /* field names derived */
     unsigned char r;
@@ -104,6 +110,22 @@ extern void gif_HostDrawKey(const void *obj, int part, int ordinal);
    subtitles are left out of its pictures */
 extern int ico_photo_active(void);
 
+static void texture_destination(const LtProperty *t, int dst[4])
+{
+    dst[2] = t->dispW << 4;
+    dst[3] = t->dispH << 3;
+    if (dst[2] == 0)
+        dst[2] = t->texW << 4;
+    if (dst[3] == 0)
+        dst[3] = (t->texH << 4) >> 1;
+    dst[3] = dst[3] * 2;
+    if (t->centerX != 0)
+        dst[0] = (10240 - dst[2]) / 2 - 5120;
+    else
+        dst[0] = (t->dispX - 320) << 4;
+    dst[1] = (t->dispY - 112) << 4;
+}
+
 static void display_texture(LtProperty *t)
 {
     JimCol col = {128, 128, 128, 128};
@@ -118,18 +140,7 @@ static void display_texture(LtProperty *t)
     src[1] = (t->texV << 4) + 8;
     src[2] = t->texW << 4;
     src[3] = t->texH << 4;
-    dst[2] = t->dispW << 4;
-    dst[3] = t->dispH << 3;
-    if (dst[2] == 0)
-        dst[2] = src[2];
-    if (dst[3] == 0)
-        dst[3] = src[3] >> 1;
-    dst[3] = dst[3] * 2;
-    if (t->centerX != 0)
-        dst[0] = (10240 - dst[2]) / 2 - 5120;
-    else
-        dst[0] = (t->dispX - 320) << 4;
-    dst[1] = (t->dispY - 112) << 4;
+    texture_destination(t, dst);
     tex_TransTexture(t->texNo, 11);
     gif_StartPacketPri(11);
     gif_SetAlpha(1, 7, 0);
@@ -143,6 +154,74 @@ static void display_texture(LtProperty *t)
     gif_SetZWrite(1);
     gif_SetZTest(1);
     gif_EndPacket();
+}
+
+static void draw_subtitle(struct jWayGroup *g, LtProperty *first, LtProperty *second)
+{
+    first->texNo = g->tex;
+    second->texNo = g->tex;
+    if (jimakuOn == 0) {
+        return;
+    }
+#if defined(ICO_HOST) && defined(ICO_RD)
+    const int source = ico_opt_subtitle_source();
+    const char *language =
+        ui_subtitle_effective_language(source, ico_opt_subtitle_language());
+    if (source != ICO_SUBTITLE_SOURCE_DISC &&
+        (source == ICO_SUBTITLE_SOURCE_TEXT || strcmp(language, "game") != 0)) {
+        const char *text = ui_subtitle_text(language, g->block);
+        if (text != NULL && !ico_photo_active()) {
+            int firstDst[4], secondDst[4];
+            texture_destination(first, firstDst);
+            texture_destination(second, secondDst);
+            const int left = firstDst[0] < secondDst[0] ? firstDst[0] : secondDst[0];
+            const int top = firstDst[1] < secondDst[1] ? firstDst[1] : secondDst[1];
+            const int right1 = firstDst[0] + firstDst[2];
+            const int right2 = secondDst[0] + secondDst[2];
+            const int bottom1 = firstDst[1] + firstDst[3];
+            const int bottom2 = secondDst[1] + secondDst[3];
+            const int right = right1 > right2 ? right1 : right2;
+            const int bottom = bottom1 > bottom2 ? bottom1 : bottom2;
+            const float width = (float)(right - left) / 16.0f;
+            const float height = (float)(bottom - top) / 16.0f;
+            int lines = 1;
+            for (const char *p = text; *p != '\0'; p++) {
+                if (*p == '\n') {
+                    lines++;
+                }
+            }
+            float size = 25.0f;
+            const float heightSize = height / (float)lines;
+            if (size > heightSize) {
+                size = heightSize;
+            }
+            if (size > 0.0f && width > 0.0f) {
+                const float textWidth = ui_measure_menu_text(size, text);
+                if (textWidth > width) {
+                    size *= width / textWidth;
+                }
+                if (size > 0.0f) {
+                    static const unsigned char color[4] = {128, 128, 128, 128};
+                    const float x = 320.0f + (float)(left + right) / 32.0f;
+                    const float y = (float)(top + bottom) / 32.0f;
+                    JIM_HOST_KEY(g, 0);
+                    ui_draw_menu_text(x, y, size, color, text,
+                                      UI_ALIGN_CENTER | UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
+                    JIM_HOST_KEY(0, 0);
+                }
+            }
+        }
+        return;
+    }
+#endif
+    if (g->tex < 0) {
+        return;
+    }
+    JIM_HOST_KEY(g, 0);
+    display_texture(first);
+    JIM_HOST_KEY(g, 1);
+    display_texture(second);
+    JIM_HOST_KEY(0, 0);
 }
 
 void iosCdvdBackGroundReadJimaku(CdvdBgReq *self, void *buf, int size)
@@ -478,19 +557,7 @@ static void jimakuDisp_ntsc(JimakuArg *msg)
         }
     }
     if (jimakuDispOn != 0) {
-        int v = g->tex;
-        texProperty[383].texNo = v;
-        texProperty[382].texNo = v;
-        if (v < 0) {
-            return;
-        }
-        if (jimakuOn != 0) {
-            JIM_HOST_KEY(g, 0);
-            display_texture(&texProperty[382]);
-            JIM_HOST_KEY(g, 1);
-            display_texture(&texProperty[383]);
-            JIM_HOST_KEY(0, 0);
-        }
+        draw_subtitle(g, &texProperty[382], &texProperty[383]);
     }
 }
 
@@ -519,19 +586,7 @@ static void jimakuDisp_aug6jun26(JimakuArg *msg)
         }
     }
     if (jimakuDispOn != 0) {
-        int v = g->tex;
-        texProperty[383].texNo = v;
-        texProperty[382].texNo = v;
-        if (v < 0) {
-            return;
-        }
-        if (jimakuOn != 0) {
-            JIM_HOST_KEY(g, 0);
-            display_texture(&texProperty[382]);
-            JIM_HOST_KEY(g, 1);
-            display_texture(&texProperty[383]);
-            JIM_HOST_KEY(0, 0);
-        }
+        draw_subtitle(g, &texProperty[382], &texProperty[383]);
     }
 }
 
@@ -560,19 +615,7 @@ static void jimakuDisp_cn(JimakuArg *msg)
         }
     }
     if (jimakuDispOn != 0) {
-        int v = g->tex;
-        texProperty[411].texNo = v;
-        texProperty[410].texNo = v;
-        if (v < 0) {
-            return;
-        }
-        if (jimakuOn != 0) {
-            JIM_HOST_KEY(g, 0);
-            display_texture(&texProperty[410]);
-            JIM_HOST_KEY(g, 1);
-            display_texture(&texProperty[411]);
-            JIM_HOST_KEY(0, 0);
-        }
+        draw_subtitle(g, &texProperty[410], &texProperty[411]);
     }
 }
 
@@ -613,19 +656,8 @@ void jimakuDisp(JimakuArg *msg)
         }
     }
     if (jimakuDispOn != 0) {
-        int v = g->tex;
-        texProperty[PAL_JPN_KORCN(435, 411, 405)].texNo = v;
-        texProperty[PAL_JPN_KORCN(434, 410, 404)].texNo = v;
-        if (v < 0) {
-            return;
-        }
-        if (jimakuOn != 0) {
-            JIM_HOST_KEY(g, 0);
-            display_texture(&texProperty[PAL_JPN_KORCN(434, 410, 404)]);
-            JIM_HOST_KEY(g, 1);
-            display_texture(&texProperty[PAL_JPN_KORCN(435, 411, 405)]);
-            JIM_HOST_KEY(0, 0);
-        }
+        draw_subtitle(g, &texProperty[PAL_JPN_KORCN(434, 410, 404)],
+                      &texProperty[PAL_JPN_KORCN(435, 411, 405)]);
     }
 }
 

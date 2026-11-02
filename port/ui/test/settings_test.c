@@ -28,14 +28,16 @@
  */
 #include "settings_fixture.h"
 #include "popup.h"
+#include "subtitles.h"
 
 static void testBuild(void)
 {
     static const int mainOpts[] = {
         UI_OPT_LINK,     UI_OPT_LINK,           UI_OPT_LINK, UI_OPT_LINK,
         UI_OPT_LINK,     UI_OPT_LINK,           UI_OPT_LINK, UI_OPT_LINK,
-        UI_OPT_LANGUAGE, UI_OPT_MENU_LANGUAGE,  UI_OPT_DISC, UI_OPT_LINK,
-        UI_OPT_LINK,     UI_OPT_REPORT_PICTURE, UI_OPT_LINK, UI_OPT_BACK};
+        UI_OPT_SUBTITLE_SOURCE, UI_OPT_LANGUAGE, UI_OPT_MENU_LANGUAGE,
+        UI_OPT_DISC,     UI_OPT_LINK,           UI_OPT_LINK,
+        UI_OPT_REPORT_PICTURE, UI_OPT_LINK,     UI_OPT_BACK};
     static const int apiOpts[] = {UI_OPT_GRAPHICS_API,    UI_OPT_GRAPHICS_ADAPTER,
                                   UI_OPT_GRAPHICS_APPLY,  UI_OPT_GRAPHICS_KEEP,
                                   UI_OPT_GRAPHICS_REVERT, UI_OPT_BACK};
@@ -82,6 +84,7 @@ static void testBuild(void)
                                    UI_STR_SECTION_AUDIO,
                                    UI_STR_SECTION_CONTROLS,
                                    UI_STR_SECTION_GAMEPLAY,
+                                   UI_STR_OPT_SUBTITLE_SOURCE,
                                    UI_STR_SECTION_LANGUAGE,
                                    UI_STR_OPT_MENU_LANGUAGE,
                                    UI_STR_OPT_DISC,
@@ -140,7 +143,10 @@ static void testBuild(void)
     ui_settings_reset();
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
-    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
+    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 17), "main page rows");
+    CHECK(ui_settings_note_row_of(UI_PAGE_MAIN, UI_OPT_SUBTITLE_SOURCE) >= 0 &&
+              ui_settings_note_row_of(UI_PAGE_MAIN, UI_OPT_LANGUAGE) < 0,
+          "the source choice has one note, not separate notes for Language values");
     CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 6), "Graphics page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 9), "effects rows");
     CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 11), "picture rows");
@@ -900,9 +906,9 @@ static void testNavigation(void)
     press(0x40); /* Cross */
     int mainL = ui_settings_page_layout(UI_PAGE_MAIN);
     CHECK(settle(mainL, 60), "Cross opens the Settings menu (%d)", current_layout_id);
-    /* down to Language (past Picture, Effects, Audio, Controls, Gameplay; the
-       Graphics links are hidden here), right: French */
-    for (int i = 0; i < 6; i++) {
+    /* down to Language (past Picture, Effects, Audio, Controls, Gameplay and
+       Subtitle source; the Graphics links are hidden here), right: French */
+    for (int i = 0; i < 7; i++) {
         press(0x4000);
     }
     CHECK(lt_ext_layout(mainL)->curItem == ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_LANGUAGE),
@@ -1704,6 +1710,60 @@ static void testValues(void)
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
     IcoVideoOptions o;
+
+    CHECK(ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_SUBTITLE_SOURCE) >= 0,
+          "the subtitle source row");
+    CHECK(ui_settings_row_of(UI_PAGE_MAIN, UI_OPT_LANGUAGE) >= 0,
+          "the subtitle language row");
+    const int russianPack = ui_subtitle_pack_index("rus");
+    const char *russianPackName =
+        russianPack >= 0 ? ui_subtitle_pack_name((size_t)russianPack) : NULL;
+    CHECK(ico_opt_subtitle_source() == ICO_SUBTITLE_SOURCE_ALL &&
+              strcmp(ico_opt_subtitle_language(), "game") == 0,
+          "subtitle source defaults to all and language to the game's");
+    ui_settings_step(UI_OPT_SUBTITLE_SOURCE, 1);
+    CHECK(ico_opt_subtitle_source() == ICO_SUBTITLE_SOURCE_DISC,
+          "subtitle source selects the PS2 disc");
+    ui_settings_step(UI_OPT_SUBTITLE_SOURCE, 1);
+    CHECK(ico_opt_subtitle_source() == ICO_SUBTITLE_SOURCE_TEXT &&
+              strcmp(ico_opt_subtitle_language(), "rus") == 0 &&
+              russianPackName != NULL &&
+              strcmp(ui_settings_value_text(UI_OPT_LANGUAGE), russianPackName) == 0,
+          "text source filters Language to the available text-file language");
+    CHECK(ui_settings_save() == 0, "save subtitle source and language");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *subtitleConfig = ico_toml_load(p);
+    const char *savedSource = subtitleConfig ? ico_toml_get(subtitleConfig, "subtitles.source") : NULL;
+    const char *savedLanguage =
+        subtitleConfig ? ico_toml_get(subtitleConfig, "subtitles.language") : NULL;
+    CHECK(savedSource != NULL && strcmp(savedSource, "text") == 0,
+          "[subtitles] source = \"text\"");
+    CHECK(savedLanguage != NULL && strcmp(savedLanguage, "rus") == 0,
+          "[subtitles] language = \"rus\"");
+    if (subtitleConfig != NULL) {
+        ico_toml_free(subtitleConfig);
+    }
+    ui_settings_step(UI_OPT_SUBTITLE_SOURCE, 1);
+    CHECK(ico_opt_subtitle_source() == ICO_SUBTITLE_SOURCE_ALL &&
+              strcmp(ico_opt_subtitle_language(), "rus") == 0,
+          "All retains the text-file language among its choices");
+    ui_settings_step(UI_OPT_LANGUAGE, 1);
+    CHECK(strcmp(ico_opt_subtitle_language(), "game") == 0,
+          "All also cycles from text-file languages to the game's language");
+    {
+        static const int blocks[] = {0,  1,  2,  4,  5,  6,  7,  8,  9,  11, 12, 13, 19, 25,
+                                     26, 27, 29, 31, 34, 35, 36, 37, 38, 43, 48, 49, 86, 88,
+                                     91, 93, 96, 97, 98, 99, 100, 104, 105, 106, 109, 110, 111,
+                                     112};
+        for (size_t i = 0; i < sizeof(blocks) / sizeof(blocks[0]); i++) {
+            const char *text = ui_subtitle_text("rus", blocks[i]);
+            CHECK(text != NULL, "Russian subtitle block %d exists", blocks[i]);
+            if (text != NULL) {
+                CHECK(ui_measure_menu_text(25.0f, text) <= 600.0f,
+                      "Russian subtitle block %d fits the text area", blocks[i]);
+            }
+        }
+    }
 
     ui_settings_step(UI_OPT_PRESET, 1);
     ico_video_get(&o);
@@ -3729,7 +3789,8 @@ static void testNewGameStartFlags(void)
 /* settings_test DIR SLUG: the Japanese or Korean disc (ctests settings_jpn,
    settings_kor; port/core/region_<slug>.c) over the fixture's tables at that
    disc's numbers (the region row's title, pause and layout fields): the rows it has not (Video
-   mode, Language, Circle goes back) and the one both have (Menu language);
+   mode, disc language), the source-filtered text language, Circle goes back
+   and the one both have (Menu language);
    Circle confirms, Cross and Triangle go back on the port's pages, Circle
    does not; the title's rows (Continue, New Game twice, the
    copyright's two halves) placed on the menu's pitch; the pack and
@@ -3757,7 +3818,8 @@ static void testOtherDisc(void)
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
-    CHECK(jpnRowShown(UI_PAGE_MAIN, UI_OPT_LANGUAGE) == 0, "no game language row (%d)",
+    CHECK(jpnRowShown(UI_PAGE_MAIN, UI_OPT_LANGUAGE) == 1,
+          "All includes the text-file language when the disc has no language selector (%d)",
           jpnRowShown(UI_PAGE_MAIN, UI_OPT_LANGUAGE));
     CHECK(jpnRowShown(UI_PAGE_MAIN, UI_OPT_MENU_LANGUAGE) == 1, "the Menu language row (%d)",
           jpnRowShown(UI_PAGE_MAIN, UI_OPT_MENU_LANGUAGE));
@@ -3765,11 +3827,21 @@ static void testOtherDisc(void)
     CHECK(ui_get_language() == ri->ui_lang_default && ui_sheet_language() == ri->menu_sheet,
           "Auto: the port's text the disc's (%d), the sheets the disc's (%d)", ui_get_language(),
           ui_sheet_language());
-    CHECK(!ui_settings_opt_shown(UI_OPT_VIDEO_MODE) && !ui_settings_opt_shown(UI_OPT_LANGUAGE) &&
+    CHECK(!ui_settings_opt_shown(UI_OPT_VIDEO_MODE) && ui_settings_opt_shown(UI_OPT_LANGUAGE) &&
               ui_settings_opt_shown(UI_OPT_CIRCLE_BACK) == (ri->pad_back == LT_PAD_TRIANGLE) &&
               ui_settings_opt_shown(UI_OPT_MENU_LANGUAGE),
-          "no Video mode or Language row, Circle goes back only where Triangle cancels; Menu "
+          "no Video mode; Language follows source; Circle goes back only where Triangle cancels; Menu "
           "language");
+    ico_opt_set_subtitle_source(ICO_SUBTITLE_SOURCE_DISC);
+    for (int k = 0; k < 2; k++) {
+        frame(0);
+    }
+    CHECK(jpnRowShown(UI_PAGE_MAIN, UI_OPT_LANGUAGE) == 0,
+          "PS2 disc source has no selectable language on this disc");
+    ico_opt_set_subtitle_source(ICO_SUBTITLE_SOURCE_ALL);
+    for (int k = 0; k < 2; k++) {
+        frame(0);
+    }
     /* the confirm face opens Display, the other face goes back; the confirm
        face opens it again, Triangle goes back; the other face on the main
        page goes back to the title (Circle and Cross on the Japanese

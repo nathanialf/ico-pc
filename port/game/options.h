@@ -48,6 +48,10 @@
  *                                 auto (Japanese on the Japanese disc,
  *                                 the game's language on the European
  *                                 one) or en, fr, de, it, es, ja, ko, zh, ru
+ *   [subtitles] source     "all"   "all", "disc" or "text": which subtitle
+ *                                 sources are available in Settings
+ *   [subtitles] language   "game"  the game's language, or the ID of a text
+ *                                 subtitle pack
  *   [dev] debug_option     0      with developer mode: non-zero loads the
  *                                 debug option table the Debug Mode page saves
  *
@@ -221,6 +225,19 @@ const char *ico_opt_ui_language_name(int lang);
 /* Language-indexed game textures: until Russian game textures exist, use the
    English set when the port UI is Russian. */
 int ico_opt_texture_language(int gameLanguage);
+/* [subtitles] source: all available game and text-file languages, PS2 disc
+   only, or text files only. */
+#define ICO_SUBTITLE_SOURCE_ALL 0
+#define ICO_SUBTITLE_SOURCE_DISC 1
+#define ICO_SUBTITLE_SOURCE_TEXT 2
+#define ICO_SUBTITLE_SOURCE_COUNT 3
+int ico_opt_subtitle_source(void);
+void ico_opt_set_subtitle_source(int source);
+const char *ico_opt_subtitle_source_name(int source);
+/* [subtitles] language: "game", or a text pack ID (for example "rus").
+   Pack IDs are discovered from text files, not enumerated here. */
+const char *ico_opt_subtitle_language(void);
+void ico_opt_set_subtitle_language(const char *language);
 /* [audio] output: the
    PS2's stereo or mono choice, the game's soundOutputModeGet value (0
    stereo, 1 mono), which the memory card's system file keeps and the

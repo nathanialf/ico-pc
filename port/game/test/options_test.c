@@ -103,6 +103,18 @@ static void test_defaults(void)
 {
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_opt_reload();
+    CHECK(ico_opt_subtitle_source() == ICO_SUBTITLE_SOURCE_ALL);
+    CHECK(strcmp(ico_opt_subtitle_language(), "game") == 0);
+    ico_opt_set_subtitle_source(ICO_SUBTITLE_SOURCE_TEXT);
+    CHECK(ico_opt_subtitle_source() == ICO_SUBTITLE_SOURCE_TEXT);
+    CHECK(strcmp(ico_opt_subtitle_source_name(ICO_SUBTITLE_SOURCE_TEXT), "text") == 0);
+    ico_opt_set_subtitle_language("text_abc");
+    CHECK(strcmp(ico_opt_subtitle_language(), "text_abc") == 0);
+    ico_opt_set_subtitle_source(ICO_SUBTITLE_SOURCE_COUNT);
+    ico_opt_set_subtitle_language("invalid ID");
+    CHECK(ico_opt_subtitle_source() == ICO_SUBTITLE_SOURCE_ALL);
+    CHECK(strcmp(ico_opt_subtitle_language(), "game") == 0);
+    ico_opt_reload();
     /* the stick fix starts off on every platform; with no config.toml the
        option is that default */
     CHECK(ico_opt_stick_fix_default_for(1) == 0);
@@ -186,12 +198,14 @@ static void test_config(const char *dir)
     }
     fputs("[gameplay]\nstick_fix = true\nyorda_safe = true\ndoor_fix = true\nmirror = true\n"
           "developer_mode = true\nnatural_chains = true\nskip_opening = true\n[dev]\n"
-          "debug_option = 1\n",
+          "debug_option = 1\n[subtitles]\nsource = \"text\"\nlanguage = \"rus\"\n",
           f);
     fclose(f);
     ico_config_reset(path, "/nonexistent/options_test.ini");
     ico_opt_reload();
     CHECK(ico_opt_stick_fix() == 1);
+    CHECK(ico_opt_subtitle_source() == ICO_SUBTITLE_SOURCE_TEXT);
+    CHECK(strcmp(ico_opt_subtitle_language(), "rus") == 0);
     CHECK(ico_opt_yorda_safe() == 1);
     CHECK(ico_opt_door_fix() == 1);
     CHECK(ico_opt_natural_chains() == 1);

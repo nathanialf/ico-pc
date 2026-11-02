@@ -711,4 +711,10 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "「原版」讓遊戲本身影格的光暈沿用到其間顯示的影格；「平滑」則為顯示的每一格重新計算，能跟上快速的鏡頭轉動，但會多佔用顯示卡的時間。",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] = "僅在影格率高於「原版」且光暈開啟時有作用。",
+    [UI_STR_OPT_SUBTITLE_SOURCE] = "字幕來源",
+    [UI_STR_SUBTITLE_SOURCE_ALL] = "全部",
+    [UI_STR_SUBTITLE_SOURCE_DISC] = "PS2 光碟",
+    [UI_STR_SUBTITLE_SOURCE_TEXT] = "文字檔",
+    [UI_STR_SUBTITLE_SOURCE_NOTE] =
+        "PS2 光碟字幕以低解析度材質顯示；文字檔字幕則以字型繪製。",
 };

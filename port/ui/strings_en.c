@@ -729,4 +729,10 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "Original keeps the game’s own frame’s glow between frames. Smooth makes it again for every frame shown; it costs more graphics time.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] = "Only matters above Frame rate Original, with Glow on.",
+    [UI_STR_OPT_SUBTITLE_SOURCE] = "Subtitle source",
+    [UI_STR_SUBTITLE_SOURCE_ALL] = "All",
+    [UI_STR_SUBTITLE_SOURCE_DISC] = "PS2 disc",
+    [UI_STR_SUBTITLE_SOURCE_TEXT] = "Text files",
+    [UI_STR_SUBTITLE_SOURCE_NOTE] =
+        "PS2 disc subtitles use low-resolution textures; text-file subtitles are drawn with a font.",
 };

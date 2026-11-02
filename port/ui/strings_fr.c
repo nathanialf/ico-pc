@@ -739,4 +739,10 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "Original garde la lueur de l’image du jeu entre les images. Fluide la refait pour chaque image affichée ; cela coûte plus de temps graphique.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Ne compte qu’au-dessus de la fréquence d’images Original, avec la lueur activée.",
+    [UI_STR_OPT_SUBTITLE_SOURCE] = "Source des sous-titres",
+    [UI_STR_SUBTITLE_SOURCE_ALL] = "Toutes",
+    [UI_STR_SUBTITLE_SOURCE_DISC] = "Disque PS2",
+    [UI_STR_SUBTITLE_SOURCE_TEXT] = "Fichiers texte",
+    [UI_STR_SUBTITLE_SOURCE_NOTE] =
+        "Les sous-titres du disque PS2 utilisent des textures basse résolution ; ceux des fichiers texte sont dessinés avec une police.",
 };

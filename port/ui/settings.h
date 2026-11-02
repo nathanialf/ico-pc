@@ -587,8 +587,9 @@ typedef enum UiSettingsOpt {
     UI_OPT_ACH_POPUPS,     /* [game] achievements, On/Off: the achievement pop-ups, on the
                               Achievements page before Back */
     /* Main */
-    UI_OPT_LANGUAGE,      /* the game's own language (the European disc only) */
-    UI_OPT_MENU_LANGUAGE, /* [ui] language: the port's text, Auto or a UiLang */
+    UI_OPT_SUBTITLE_SOURCE, /* [subtitles] source: all, PS2 disc, or text files */
+    UI_OPT_LANGUAGE,        /* the game's language or a text subtitle language */
+    UI_OPT_MENU_LANGUAGE,   /* [ui] language: the port's text, Auto or a UiLang */
     UI_OPT_DISC,          /* [game] disc: the disc the next start plays; shown only with both
                              discs' game data (ui_settings_set_disc_handler) */
     UI_OPT_DUMP_TEXTURES, /* [video] dump_textures, for pack authors (developer mode) */

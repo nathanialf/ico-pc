@@ -734,4 +734,10 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
         "Originale mantiene il bagliore del fotogramma del gioco tra i fotogrammi. Fluido lo rifà per ogni fotogramma mostrato; costa più tempo grafico.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Conta solo sopra la frequenza fotogrammi Originale, con il bagliore attivo.",
+    [UI_STR_OPT_SUBTITLE_SOURCE] = "Fonte dei sottotitoli",
+    [UI_STR_SUBTITLE_SOURCE_ALL] = "Tutte",
+    [UI_STR_SUBTITLE_SOURCE_DISC] = "Disco PS2",
+    [UI_STR_SUBTITLE_SOURCE_TEXT] = "File di testo",
+    [UI_STR_SUBTITLE_SOURCE_NOTE] =
+        "I sottotitoli del disco PS2 usano texture a bassa risoluzione; quelli dei file di testo vengono disegnati con un font.",
 };

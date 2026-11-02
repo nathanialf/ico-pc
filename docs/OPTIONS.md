@@ -476,15 +476,18 @@ second controller does not rumble. Your choice is kept with each save, as on the
 other discs.
 ## Language
 
-- **Language** is the game's own language: English, French, German,
-  Italian or Spanish. The game starts in your system's language when it
-  has it. If you change it during play, the menus change at once and the
-  game's own text and subtitles change at the next area. This row is only
-  there with the European disc. The Japanese disc's signs, menus and
-  subtitles are in Japanese and the Korean disc's are in Korean, as on the
-  PS2; the North American disc, the August 2001 preview and the June 2001
-  magazine demo are in English, and the Asian disc's menus are in Chinese.
-  None of them has a language choice of its own.
+- **Subtitle source**, above **Language**, selects **All**, **PS2 disc** or
+  **Text files**. Its single note explains how the two sources are displayed:
+  PS2 subtitles use low-resolution textures, while text-file subtitles are
+  drawn with a font. **All** makes both game languages and languages in text
+  files available under **Language**; the other choices show only their
+  respective source.
+- **Language** selects a language made available by **Subtitle source**.
+  Game languages are English, French, German, Italian or Spanish; changing
+  one during play changes the game's text and disc subtitles at the next area.
+  Text-file languages use their text subtitle pack. A text-file block
+  without an entry is not displayed as a PS2 subtitle. On discs without a
+  game-language selector, **All** can still show text-file languages.
 - **Menu language** is the language of the menus this port adds (Options,
   the extras, photo mode's help, the messages): English, French, German,
   Italian, Spanish, Japanese (日本語), Korean (한국어) or Chinese (繁體中文,
@@ -493,6 +496,9 @@ other discs.
   European disc the game's language. The North American disc, the August 2001
   preview and the June 2001 magazine demo start on English. It does not
   change the game's own text, which is always the disc's.
+- The settings are `source = "all" | "disc" | "text"` and
+  `language = "game" | "<text-pack-id>"` under `[subtitles]` in `config.toml`.
+  The built-in Russian pack is selected with `language = "rus"`.
 - **Disc** shows only when more than one disc is set up. It is the disc the
   game plays: Europe (SCES-50760), Japan (SCPS-11003), Korea (SCPS-56001), USA
   (SCUS-97113), Preview 2001-08 (the August 2001 preview), Demo 2001-06

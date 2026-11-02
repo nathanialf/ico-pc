@@ -734,4 +734,10 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "Original conserva el resplandor del fotograma del juego entre fotogramas. Suave lo rehace en cada fotograma mostrado; cuesta más tiempo gráfico.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Solo importa por encima de la velocidad de fotogramas Original y con Resplandor activado.",
+    [UI_STR_OPT_SUBTITLE_SOURCE] = "Fuente de subtítulos",
+    [UI_STR_SUBTITLE_SOURCE_ALL] = "Todas",
+    [UI_STR_SUBTITLE_SOURCE_DISC] = "Disco de PS2",
+    [UI_STR_SUBTITLE_SOURCE_TEXT] = "Archivos de texto",
+    [UI_STR_SUBTITLE_SOURCE_NOTE] =
+        "Los subtítulos del disco de PS2 usan texturas de baja resolución; los de archivos de texto se dibujan con una fuente.",
 };

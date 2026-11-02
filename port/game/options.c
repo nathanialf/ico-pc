@@ -26,6 +26,9 @@ static int s_mirror = -1;
 static int s_developer_mode = -1;
 static int s_circle_back = -1;
 static int s_ui_language = -2; /* -2: not read yet */
+static int s_subtitle_source = -2;
+static int s_subtitle_language_read;
+static char s_subtitle_language[48];
 
 static int get_or(int *v, const char *path, int def)
 {
@@ -441,6 +444,81 @@ int ico_opt_texture_language(int gameLanguage)
     return strcmp(ico_opt_ui_language_name(ico_opt_ui_language()), "ru") == 0 ? 2 : gameLanguage;
 }
 
+static const char *const kSubtitleSources[ICO_SUBTITLE_SOURCE_COUNT] = {"all", "disc", "text"};
+
+static int subtitle_language_id_valid(const char *id)
+{
+    if (id == NULL || id[0] == '\0' || strlen(id) >= sizeof(s_subtitle_language)) {
+        return 0;
+    }
+    if (strcmp(id, "game") == 0) {
+        return 1;
+    }
+    for (const unsigned char *p = (const unsigned char *)id; *p != '\0'; p++) {
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '-' || *p == '_')) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int ico_opt_subtitle_source(void)
+{
+    if (s_subtitle_source < 0) {
+        const char *v = ico_config_get_string("subtitles.source", "all");
+        s_subtitle_source = ICO_SUBTITLE_SOURCE_ALL;
+        for (int i = 0; v != NULL && i < ICO_SUBTITLE_SOURCE_COUNT; i++) {
+            if (strcmp(v, kSubtitleSources[i]) == 0) {
+                s_subtitle_source = i;
+                break;
+            }
+        }
+        if (v != NULL && strcmp(v, kSubtitleSources[s_subtitle_source]) != 0) {
+            fprintf(stderr,
+                    "options: [subtitles] source = \"%s\" is not one of all, disc, text\n", v);
+        }
+    }
+    return s_subtitle_source;
+}
+
+void ico_opt_set_subtitle_source(int source)
+{
+    s_subtitle_source =
+        source >= 0 && source < ICO_SUBTITLE_SOURCE_COUNT ? source : ICO_SUBTITLE_SOURCE_ALL;
+}
+
+const char *ico_opt_subtitle_source_name(int source)
+{
+    return source >= 0 && source < ICO_SUBTITLE_SOURCE_COUNT
+               ? kSubtitleSources[source]
+               : kSubtitleSources[ICO_SUBTITLE_SOURCE_ALL];
+}
+
+const char *ico_opt_subtitle_language(void)
+{
+    if (!s_subtitle_language_read) {
+        const char *v = ico_config_get_string("subtitles.language", "game");
+        if (subtitle_language_id_valid(v)) {
+            snprintf(s_subtitle_language, sizeof(s_subtitle_language), "%s", v);
+        } else {
+            fprintf(stderr, "options: invalid [subtitles] language ID; using \"game\"\n");
+            snprintf(s_subtitle_language, sizeof(s_subtitle_language), "%s", "game");
+        }
+        s_subtitle_language_read = 1;
+    }
+    return s_subtitle_language;
+}
+
+void ico_opt_set_subtitle_language(const char *language)
+{
+    if (!subtitle_language_id_valid(language)) {
+        fprintf(stderr, "options: invalid subtitle language ID; using \"game\"\n");
+        language = "game";
+    }
+    snprintf(s_subtitle_language, sizeof(s_subtitle_language), "%s", language);
+    s_subtitle_language_read = 1;
+}
+
 int ico_opt_debug_option(void)
 {
     long long v = ico_config_get_int("dev.debug_option", 0);
@@ -620,6 +698,9 @@ void ico_opt_reload(void)
     s_natural_chains = s_skip_opening = -1;
     s_output = -2;
     s_ui_language = -2;
+    s_subtitle_source = -2;
+    s_subtitle_language_read = 0;
+    s_subtitle_language[0] = '\0';
     s_hold_choice = -1;
     /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();

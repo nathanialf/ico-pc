@@ -83,6 +83,8 @@ set(_ui_sources
     menu_font.c
     menu_text.c
     popup.c
+    subtitles.c
+    subtitles_rus.c
     ${_ui_string_srcs}
     ${_ui_font_srcs})
 
@@ -452,6 +454,17 @@ target_include_directories(ui_mouse_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ui_mouse_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(ICO_RUN_TESTS)
     add_test(NAME ui_mouse COMMAND ui_mouse_test)
+endif()
+
+# subtitles_test: text packs are discoverable by ID, lines are keyed by
+# game block, and unknown blocks remain absent. CPU only.
+add_executable(subtitles_test test/subtitles_test.c subtitles.c subtitles_rus.c)
+target_include_directories(subtitles_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/game")
+target_compile_options(subtitles_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(subtitles_test PRIVATE ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME subtitles COMMAND subtitles_test)
 endif()
 
 if(NOT TARGET ico_render)

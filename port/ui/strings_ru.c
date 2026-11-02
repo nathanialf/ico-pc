@@ -729,4 +729,10 @@ const char *const ui_strings_ru[UI_STR_COUNT] = {
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "«Оригинал» сохраняет свечение, создаваемое игрой. «Плавно» пересчитывает его для каждого кадра, повышая нагрузку на GPU.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] = "Работает только при частоте кадров выше «Оригинальной» и включенном свечении.",
+    [UI_STR_OPT_SUBTITLE_SOURCE] = "Источник субтитров",
+    [UI_STR_SUBTITLE_SOURCE_ALL] = "Все",
+    [UI_STR_SUBTITLE_SOURCE_DISC] = "С диска PS2",
+    [UI_STR_SUBTITLE_SOURCE_TEXT] = "Из текста",
+    [UI_STR_SUBTITLE_SOURCE_NOTE] =
+        "На диске PS2 субтитры отображаются низкокачественными текстурами, а текстовые файлы отрисовываются шрифтом.",
 };
