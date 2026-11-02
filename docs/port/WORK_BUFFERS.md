@@ -1051,7 +1051,7 @@ of the usual one, the set asks `ico_diag_low_memory_stop`, which now also reads 
 as at the system's low-memory signal (the rest made on first use, `set: stopped at the system's
 low-memory signal (<words>)` in the activity file, the next start lazy). The floor is 17 % of
 MemTotal, at most 2048 MB on a device of more than 8 GB (8192 MB) (`port/platform/memory_floor.c`:
-696 MB on a 4 GB phone, 522 MB on a 3 GB one, 1392 MB on an 8 GB one, 1536 MB on 12 GB and 16 GB;
+696 MB on a 4 GB phone, 522 MB on a 3 GB one, 1392 MB on an 8 GB one, 2048 MB on 12 GB and 16 GB;
 with the game running a 4 GB phone has 0.8 to 1.5 GB available, so an absolute 1536 MB would stop
 every start-up set there); `[dev] pipeline_memory_floor_mb` sets it in MB, 0 turns it off
 (exported as `ICO_PIPELINE_MEMORY_FLOOR_MB`). The floor in force is logged at the set's first ask,

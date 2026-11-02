@@ -103,8 +103,8 @@ memory the game was using.
 
 On a phone or a handheld the system tells the game when the device itself
 runs low on memory, and the game also checks how much memory the device has
-free (it stops when less than about 17 % of the device's memory is free, or
-on a device with more than 8 GB when less than 1.5 GB is free;
+free (it stops when less than about 17 % of the device's memory is free, but
+never asks for more than 2 GB free, on a device with more than 8 GB;
 `pipeline_memory_floor_mb` under `[dev]` in `config.toml` sets that in MB,
 0 turns the check off). If either happens while the game prepares its graphics,
 the game stops preparing, goes on to the title and prepares the rest the
@@ -140,8 +140,8 @@ graphics driver the game tries the usual way again. To try it yourself
 before that, set the line to `pipeline_skip = ""` or delete it.
 
 If your `config.toml` has a line `vu_plain_only = true` or
-`vu_extended = true`, the game ignores it: every device now prepares the
-same 3D graphics. You can delete the line.
+`vu_extended = true`, the game ignores it: the game picks the 3D graphics
+for each device itself. You can delete the line.
 
 If you had to restart the phone by force while an update was installing or
 while the game was on **Preparing graphics** for the first time after it,

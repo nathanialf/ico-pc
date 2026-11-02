@@ -71,7 +71,7 @@ one persistent state block. Within a list submission order is draw order; rd nev
 | 8, 9 | shine levels 2 and 3 |
 | 10 | the softening chain |
 | 11 | UI, subtitles, film noise, brightness, keep, fade, letterbox |
-| 12 | debug font; the reduction at its end (it applies list 11's last full-frame lerp sprites: [The fades fold](#the-fades-fold)) |
+| 12 | debug font; the reduction at its end (with `[dev] fades_fold = true` it also applies list 11's last full-frame lerp sprites: [The fades fold](#the-fades-fold)) |
 
 (`port/render/rd.h`, "Lists").
 
@@ -86,8 +86,12 @@ rd records them as they are; the replay converts them (`port/render/rd.h`, "Coor
 calls (`port/render/rd_core.c` (`recordDefaults`)). The values are in
 [GS.md](GS.md#the-gs-defaults-per-list).
 
-**Keep frames.** `rd_end_frame(1)` (`fbKeep`: pause and memory card screens) replays lists 11
-and 12 only, on top of the retained DISPLAY (`port/render/rd.h` (`rd_end_frame`)).
+**Keep frames.** `rd_end_frame(1)` replays lists 11 and 12 only, on top of the retained DISPLAY
+(`port/render/rd.h` (`rd_end_frame`)). The game sets `fbKeep` from a stage change's fade-out through
+the next stage's load (`ico2/common/src/StageManager.c`, the switch message) and on the boot's
+memory card and language screens (`ico2/common/src/kanbanBoot.c`); `ico2/seki/src/DisplayList.c`
+passes it to `rd_end_frame`. The pause menu is not a keep frame: a paused frame is recorded and
+drawn whole, the pause layout's backdrop and rows on top of the scene.
 
 **Threads.** Every `rd_*` call comes from the game fiber. The game's post passes are appended by the
 same code inside the [vsync](ARCHITECTURE.md#terms) before `rd_end_frame`, so there is one hand-off
@@ -1272,7 +1276,8 @@ draws in list 11: SCENE's colour and depth loaded and stored, about 2.65 ms at A
 phone. The fold draws them in the reduction instead: up to four steps (the lerp's colour, its
 factor C, the alpha it writes, the rows it covers) applied in the sprites' order to every SCENE
 texel the reduction reads, and the sprites are not drawn (`port/render/rd_fades_fold.c`, file
-comment; `port/render/rd_replay.c` (`doScreen`) asks `rd__fades_fold_skip`).
+comment; `port/render/rd_replay.c` (`doScreen`) asks `rd__fades_fold_skip`). It is an experiment,
+off by default (`[dev] fades_fold`, below).
 
 The plan (`rd__fades_fold_plan`, the frame read once before the walk from the store plan's scan,
 `rd__store_plan_scan`; the store plan does not count a folded sprite as a touch of the depth) takes
@@ -2596,8 +2601,25 @@ depth hid is at least 15 % of the list-0 draws and 10 % of the list-0 triangles 
 dumps and leaving those commands out takes at least 10 % off list 0's GPU time, with every compared
 pass dump identical. The report, a row a dump and setting with the medians and the verdict, is
 written beside the run's logs (`--out`, by default under
-`build-host/tmp/<release>/evidence/perf/occlusion.md` on the maintainer's machine); its findings go
-here once measured.
+`build-host/tmp/<release>/evidence/perf/occlusion.md` on the maintainer's machine).
+
+**What it found, and why there is no culler.** The corpus run (33 dumps of the list, each
+at both settings: 66 rows, every one timed and every compared pass dump identical) failed the gate
+by far. The median share of list 0's draw commands the depth hid was 1.6 % (1.9 % at Original, 1.5 %
+at Enhanced 2x) and of its triangles 0.7 %; leaving those commands out took a median 1.3 % off list
+0's GPU time (0.5 % and 3.4 %), inside lavapipe's noise (the 8-draw title dumps, which hide nothing,
+move from -20 % to +25 % between replays). On the gameplay dumps of 368 to 1802 draws (the phone's
+three, issues 164, 163, 173, 102, 91 and 146, the sandstorm sheets') the depth hid 0 to 4.9 % of the
+draw commands and 0 to 18.8 % of the triangles (the 18.8 % is five commands of one dump, issue 163's,
+9600 triangles); the godrays sequence's dumps 0 to 12.7 % and 0 to 9.7 %. Most of what draws nothing is hidden for another
+reason: a median 54.2 % of the commands and 41.9 % of the triangles draw nothing under every depth
+test too (outside the view, since the game drops only whole objects and parts and lets the GPU clip
+the rest, above; off the scissor; or every fragment discarded), which a test against the depth
+cannot save and which costs the GPU little. Judged on that share instead the gate would fail as
+well (no measured GPU gain). So occlusion culling is not built: the scene draws its far side little,
+the game's own frustum test already removes most of what lies outside the view, and an occlusion
+query or a depth pre-test per command would cost more than the 1-2 % it could take. The
+measurement (`--occlusion`, `tools/occlusion_corpus.py`) stays for a later corpus.
 
 ## Dumps and the replay tool
 
