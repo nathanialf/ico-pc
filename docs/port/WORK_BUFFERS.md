@@ -537,9 +537,13 @@ draw`, `shadow count seven draws`, with ` ([dev])` or ` (self-test)` after it wh
 run and again when SCENE is made at a new size): a frame of its own on SCENE (its colour as the
 count target) counts 71 bands, band k at k in the top half and -k in the bottom half, the edges a
 sub-pixel off the pixel grid, resolves it through both paths and compares the count at its GS size
-byte for byte, with every band centre against the table:
+byte for byte, with every band centre against the table. The one draw is replayed twice, its
+stencil read by gathers and then by loads; the gathers stay where their count is the seven draws',
+else the loads where theirs is (the result is then the loads'), else the seven draws:
 
     rd: shadow count: one draw (self-test: equal to the seven draws over 688x448, 142 band centres ok) on SCENE 688x448 at 1376x896 texels, step 4
+    rd: shadow count: the stencil read four texels a gather, equal to the seven draws byte for byte
+    rd: shadow count: the stencil read a texel a load, as the gathers' count differs at 17 of 308224 texels, the first (40,300)
     rd: shadow count: seven draws (self-test: one draw differs at 17 of 308224 texels, the first (40,300): 00040480 for 04040480) on SCENE 688x448 at 1376x896 texels, step 4
 
 A difference turns `shadowOne` off (`(self-test)`); `[dev] shadow_one = true` keeps it ("kept by
@@ -568,11 +572,26 @@ unchanged; the reads per pixel go from about 26 (a stencil texel and its depende
 each) to about 13 stencil reads and one table read per run of a non-zero m (none outside the
 shadows). The self-test's sabotage (m = 1) still shows: a non-zero m is always read from the table.
 
+The stencil is read four texels a gather (`shadow_count_gather`, `DrawCB.mode.y` 0): one
+`GatherRed` (or `GatherGreen`, the view's channel) at the corner the 2x2 texels (x, y) to (x + 1,
+y + 1) share, half a texel from any other footprint, so the four texels whatever the coordinate's
+rounding (the sampler nearest and clamped; a texel past the stencil's edge is never used: the box
+stops at it), as `font.hlsl`'s `sheet_cov4`. Two rows' m are gathered into registers (at most
+`SHADOW_GATHER_SPAN`, 8, a row: the box is 4 texels at 2.8125x and 6 at the phone's 4.62x; a wider
+box, above about 7x, takes the loads), then row y's terms are added left to right and then row y +
+1's: the texels, the terms and their order are the loads', so the bytes are. At the phone's 2.788 x
+2.411 that is about 4 gathers a pixel for about 13 loads (a box of 3 or 4 texels an axis: two
+rows a gather, two columns a gather). A driver whose gathers of a stencil view are wrong is caught
+by the self-test (below): its one draw then reads a texel a load (`g_rd.shadowLoad`,
+`DrawCB.mode.y` 1), and the seven draws stay only where the loads are wrong too. `rd_replay_tool
+--stats` ends the one draw's clause with `four texels a gather` or `a texel a load`
+(`RdPerfRecord.shadowGathered`).
+
 The pass list names it `shadow count 848x448` (`RD_PERF_ID_SHADOW_COUNT`: the label `shadow`, the
 target `count`, [RENDER.md](RENDER.md); not the count target's `list 3 temporary`); the seven
 draws' reduction above 1x is named the same. `rd_replay_tool --stats` prints, after the counts:
 
-    shadow count: 1 in one draw, 0 in seven draws (profile one draw); the one draw's pass: colour 848x448 not loaded, stored (1.4 MB), no depth attachment; the stencil read as a texture, 2364x1080 (2.4 MB); the count target's colour neither loaded nor stored in 1 passes (2364x1080, 9.7 MB each way)
+    shadow count: 1 in one draw, 0 in seven draws (profile one draw); the one draw's pass: colour 848x448 not loaded, stored (1.4 MB), no depth attachment; the stencil read as a texture, 2364x1080 (2.4 MB), four texels a gather; the count target's colour neither loaded nor stored in 1 passes (2364x1080, 9.7 MB each way)
 
 (`RdPerfRecord.shadowOneW`, `shadowOneH`, `shadowReadW`, `shadowReadH`, `shadowColorDropped`,
 `shadowColorW`, `shadowColorH`).

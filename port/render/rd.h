@@ -2402,6 +2402,9 @@ typedef struct RdPerfRecord {
      * shadowSeven through the seven stencil-tested draws (and the box
      * reduction above 1x) */
     uint32_t shadowOne, shadowSeven;
+    /* of shadowOne, the draws that read the stencil four texels a gather
+     * (the rest a texel a load: g_rd.shadowLoad, rd_shadow_selftest.c) */
+    uint32_t shadowGathered;
     /* The one draw's pass (rd_shadow_one.c): its colour, written whole,
      * shadowOneW x shadowOneH (no depth attachment), and the stencil it
      * reads through its view, shadowReadW x shadowReadH texels (the last

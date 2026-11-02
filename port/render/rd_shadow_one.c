@@ -16,7 +16,10 @@
  * reduced count above it); rd_shadow_selftest.c checks the result against
  * the seven draws on the device.  The shader skips the texels whose m is 0
  * (their term is +0.0) and reads the table texel of a run of equal m once:
- * the same sum, fewer reads (blit.hlsl).  The pass is "shadow count WxH" in
+ * the same sum, fewer reads (blit.hlsl), and reads the stencil four texels
+ * a gather (shadow_count_gather: the same texels and the same terms in the
+ * same order) unless its self-test found the gathers' count off on the
+ * device (g_rd.shadowLoad: a texel a load).  The pass is "shadow count WxH" in
  * the pass list (RD_PERF_ID_SHADOW_COUNT).  The count target's colour is
  * neither loaded nor stored while the count is made (rd_store_plan.c
  * rd__store_plan_count_color). */
@@ -212,7 +215,8 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
     const RhiRect all = {0, 0, tc->w, tc->h};
     rhi_cmd_set_scissor(cl, &all);
     IcoDrawCB cb = *reduceCb;
-    cb.mode[0] = lim->stencilViewChannel; /* the stencil's channel in its view */
+    cb.mode[0] = lim->stencilViewChannel;   /* the stencil's channel in its view */
+    cb.mode[1] = g_rd.shadowLoad ? 1u : 0u; /* the loads, else four texels a gather */
     rd__set_pipeline(cl, pipe, &k);
     rd__bind_uniform(cl, 0, rd__frame_group(tc->w, tc->h, 0.0f, 0.0f));
     rd__bind_uniform(cl, 1, rd__draw_group(&cb));
@@ -220,6 +224,7 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
     rd__replay_draw(cl, 3, 0, 1);
     rhi_cmd_end_render_pass(cl);
     g_rdPerf.shadowOne++;
+    g_rdPerf.shadowGathered += g_rd.shadowLoad ? 0u : 1u;
     g_rdPerf.shadowOneW = (uint16_t)tc->w;
     g_rdPerf.shadowOneH = (uint16_t)tc->h;
     g_rdPerf.shadowReadW = (uint16_t)td->tw;

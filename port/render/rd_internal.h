@@ -3042,6 +3042,11 @@ typedef struct RdContext {
     /* MSAA is requested but no way of reading the multisampled depth passed
      * the fog's self-test (rd__fog_aa_reconcile): rd__aa_mode gives Off */
     bool msaaBlocked;
+    /* the shadow count's one draw reads the stencil a texel a load
+     * (shadow_count_ps's g_mode.y 1) instead of four a gather: set by its
+     * self-test where the gathers' count differs from the seven draws'
+     * (rd_shadow_selftest.c); false, the gathers, until then */
+    bool shadowLoad;
     RhiSampler samplers[RD_SAMPLER_COUNT * RD_SAMPLER_SETS]; /* [set * 16 + index] */
     RhiTexture dummy;
     RhiState dummyState;

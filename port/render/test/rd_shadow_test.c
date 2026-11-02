@@ -54,7 +54,8 @@
  *      Shadow.c's model and a rectangle at sub-pixel offsets, at 1x, at
  *      scale 2 and at 1931 x 1093 texels (a fractional scale both ways);
  *      each recording resolved by the path asked (g_rdPerf.shadowOne,
- *      shadowSeven).  The count's bytes for n = 0, 1, 63, 64, 128 and 255
+ *      shadowSeven); the one draw's stencil read four texels a gather and
+ *      then a texel a load (g_rd.shadowLoad, g_rdPerf.shadowGathered).  The count's bytes for n = 0, 1, 63, 64, 128 and 255
  *      (rd__shadow_table_texel, the one draw's table) against 4 n mod 256
  *      and A = 0x80 where that is non-zero.  Without the view (a backend
  *      whose RhiLimits.stencilView is false) the comparison is skipped
@@ -1512,6 +1513,9 @@ static bool abRecord(int vol, bool one, AbPics *p, const char *what)
               : (g_rdPerf.shadowSeven >= 1 && g_rdPerf.shadowOne == 0),
           "(o) %s: the %s path resolved the count (one %u, seven %u)", what,
           one ? "one-draw" : "seven-draw", g_rdPerf.shadowOne, g_rdPerf.shadowSeven);
+    CHECK(g_rdPerf.shadowGathered == (g_rd.shadowLoad ? 0u : g_rdPerf.shadowOne),
+          "(o) %s: %u of %u one draws by gathers (loads asked %d)", what, g_rdPerf.shadowGathered,
+          g_rdPerf.shadowOne, (int)g_rd.shadowLoad);
     p->colorDropped = g_rdPerf.shadowColorDropped;
     p->storeColorDropped = g_rdPerf.storeColorDropped;
     const RdTargetRec *c = rd__target_rec(s_count.id);
@@ -1678,16 +1682,24 @@ static void abFrames(const char *scale)
     gif_HostForgetTextures();
     gif_HostFrameReset();
     dl_Clear();
-    snprintf(what, sizeof what, "%s, synthetic volumes", scale);
-    abFrame(VOL_SYNTH, what);
-    snprintf(what, sizeof what, "%s, Shadow.c's model", scale);
-    abFrame(VOL_MODEL, what);
-    for (int k = 0; k < 4; k++) {
-        s_subOff = 4 * k + 3;
-        snprintf(what, sizeof what, "%s, a rectangle at +%d/16", scale, s_subOff);
-        abFrame(VOL_SUB, what);
+    /* the one draw's stencil read four texels a gather (the default),
+     * then a texel a load (g_rd.shadowLoad, the self-test's fallback):
+     * both the seven draws' bytes */
+    for (int load = 0; load < 2; load++) {
+        const char *how = load ? "loads" : "gathers";
+        g_rd.shadowLoad = load != 0;
+        snprintf(what, sizeof what, "%s, synthetic volumes, %s", scale, how);
+        abFrame(VOL_SYNTH, what);
+        snprintf(what, sizeof what, "%s, Shadow.c's model, %s", scale, how);
+        abFrame(VOL_MODEL, what);
+        for (int k = 0; k < 4; k++) {
+            s_subOff = 4 * k + 3;
+            snprintf(what, sizeof what, "%s, a rectangle at +%d/16, %s", scale, s_subOff, how);
+            abFrame(VOL_SUB, what);
+        }
+        s_subOff = 0;
     }
-    s_subOff = 0;
+    g_rd.shadowLoad = false;
     snprintf(what, sizeof what, "%s, synthetic volumes", scale);
     poisonFrame(VOL_SYNTH, true, what);
     poisonFrame(VOL_SYNTH, false, what);

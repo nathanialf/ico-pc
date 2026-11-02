@@ -1310,7 +1310,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `-DEXTRA` and `-DEXTRA2`, regexes that must each match the log at least once. With
   `rd_shadow_selftest.cmake`, the shadow count's self-test, which the fog's first run and its run
   at the second scene size run: every `shadow count: one draw (self-test: equal to the seven draws
-  over WxH, 142 band centres ok)` line matched, at least one (`rd_shadow_selftest`); with
+  over WxH, 142 band centres ok)` line matched, at least one, and the line saying how the stencil
+  is read, `four texels a gather, equal to the seven draws byte for byte` or `a texel a load, as
+  the gathers' count ...` (`rd_shadow_selftest`); with
   `ICO_RD_SHADOW_SABOTAGE=1`, `shadow count: seven draws (self-test: one draw differs ...)` and
   `profile: shadow count one draw off (self-test)` (`rd_shadow_selftest_sabotage`); both with
   `_gl` twins. The desktop's
@@ -1648,7 +1650,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   size (`rd__shadow_count_read`), SHADOW0-2 and SCENE byte for byte for the synthetic volumes,
   Shadow.c's model and a rectangle at four sub-pixel offsets, at 1x, at scale 2 and at 1931 x 1093
   texels (fractional on both axes), each recording resolved by the path asked
-  (`g_rdPerf.shadowOne`, `shadowSeven`); the one draw's table for n = 0, 1, 63, 64, 128 and 255
+  (`g_rdPerf.shadowOne`, `shadowSeven`), the one draw with its stencil read four texels a gather
+  and again a texel a load (`g_rd.shadowLoad`, counted by `shadowGathered`); the one draw's table for n = 0, 1, 63, 64, 128 and 255
   against 4 n mod 256 (`checkTable`, no device). Case p, with each case o run: the count target's
   colour neither loaded nor stored between the reset and the resolve
   (`rd__store_plan_count_color`), the synthetic volumes through the one draw and the seven draws

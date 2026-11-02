@@ -490,7 +490,9 @@ float4 camera_probe_ps(BlitVSOut i) : SV_Target0
 // goes negative), so neither its table texel nor its weight is computed;
 // and the table texel of a run of equal m is read once (held: the same
 // texel of a texture the pass never writes, the same float4). Every term
-// that is added is the term box_reduce_ps adds, in its order.
+// that is added is the term box_reduce_ps adds, in its order. The stencil
+// is read by gathers, four texels a read, the same texels in the same order
+// (shadow_count_gather), unless g_mode.y asks for the loads.
 Texture2D<uint4> g_shadowStencil : ICO_REG(t1, 2);
 Texture2D<float4> g_shadowTable : ICO_REG(t2, 2);
 
@@ -499,6 +501,27 @@ uint shadow_count_m(int x, int y)
     uint4 s = g_shadowStencil.Load(int3(x, y, 0));
     return (g_mode.x != 0u ? s.y : s.x) & 0x3Fu;
 }
+
+// The stencil read four texels at a time (g_mode.y 0, the default; 1 the
+// texel loads below: rd_shadow_selftest.c keeps the gather only where its
+// count equals the seven draws' on the device): one gather at the corner
+// the 2x2 texels (x, y) .. (x + 1, y + 1) share (half a texel from any
+// other footprint, so the texels whatever the coordinate's rounding; the
+// sampler is nearest and clamps, and a texel past the stencil's edge is
+// never used: the box stops at it), as font.hlsl's sheet_cov4.  Gather's
+// order: x (x, y + 1), y (x + 1, y + 1), z (x + 1, y), w (x, y).
+uint4 shadow_count_gather(int x, int y, float2 inv)
+{
+    float2 uv = float2(float(x + 1), float(y + 1)) * inv;
+    uint4 s = g_mode.x != 0u ? g_shadowStencil.GatherGreen(g_sampler, uv)
+                             : g_shadowStencil.GatherRed(g_sampler, uv);
+    return s & 0x3Fu;
+}
+
+// the widest box the gather takes (two rows of SHADOW_GATHER_SPAN texels
+// held in registers): 6 texels at the phone's 4.62x, 4 at 2.8125x; a wider
+// box (scale above 7) takes the loads
+#define SHADOW_GATHER_SPAN 8
 
 float4 shadow_count_ps(BlitVSOut i) : SV_Target0
 {
@@ -509,6 +532,46 @@ float4 shadow_count_ps(BlitVSOut i) : SV_Target0
     float4 sum = float4(0.0, 0.0, 0.0, 0.0);
     float4 v = float4(0.0, 0.0, 0.0, 0.0);
     uint held = 64u; // the m whose table texel v holds; 64: none (m < 64)
+    if (g_mode.y == 0u && last.x - first.x <= SHADOW_GATHER_SPAN) {
+        // the same terms in the same order as the loads below (row by row,
+        // each row's texels left to right), each texel's m from a gather:
+        // two rows' m gathered, then row y's terms added, then row y + 1's
+        uint w, h;
+        g_shadowStencil.GetDimensions(w, h);
+        float2 inv = 1.0 / float2(float(w), float(h));
+        for (int y = first.y; y < last.y; y += 2) {
+            uint m0[SHADOW_GATHER_SPAN], m1[SHADOW_GATHER_SPAN];
+            [unroll] for (int k = 0; k < SHADOW_GATHER_SPAN; k += 2) {
+                uint4 g = uint4(0u, 0u, 0u, 0u);
+                if (first.x + k < last.x) {
+                    g = shadow_count_gather(first.x + k, y, inv);
+                }
+                m0[k] = g.w;
+                m0[k + 1] = g.z;
+                m1[k] = g.x;
+                m1[k + 1] = g.y;
+            }
+            [unroll] for (int r = 0; r < 2; r++) {
+                int yy = y + r;
+                if (yy < last.y) {
+                    float wy = min(hi.y, float(yy + 1)) - max(lo.y, float(yy));
+                    [unroll] for (int k = 0; k < SHADOW_GATHER_SPAN; k++) {
+                        int x = first.x + k;
+                        uint m = r == 0 ? m0[k] : m1[k];
+                        if (x < last.x && m != 0u) {
+                            if (m != held) {
+                                v = g_shadowTable.Load(int3(int(m), 0, 0));
+                                held = m;
+                            }
+                            float wx = min(hi.x, float(x + 1)) - max(lo.x, float(x));
+                            sum += v * (wx * wy);
+                        }
+                    }
+                }
+            }
+        }
+        return sum / (g_param.x * g_param.y);
+    }
     for (int y = first.y; y < last.y; y++) {
         float wy = min(hi.y, float(y + 1)) - max(lo.y, float(y));
         for (int x = first.x; x < last.x; x++) {

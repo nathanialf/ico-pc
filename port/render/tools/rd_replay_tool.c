@@ -2474,10 +2474,11 @@ int main(int argc, char **argv)
         if (pr->shadowOne) {
             const double mb = 1.0 / 1048576.0;
             printf("; the one draw's pass: colour %ux%u not loaded, stored (%.1f MB), no depth "
-                   "attachment; the stencil read as a texture, %ux%u (%.1f MB)",
+                   "attachment; the stencil read as a texture, %ux%u (%.1f MB), %s",
                    pr->shadowOneW, pr->shadowOneH,
                    (double)pr->shadowOneW * pr->shadowOneH * 4.0 * mb, pr->shadowReadW,
-                   pr->shadowReadH, (double)pr->shadowReadW * pr->shadowReadH * mb);
+                   pr->shadowReadH, (double)pr->shadowReadW * pr->shadowReadH * mb,
+                   pr->shadowGathered == pr->shadowOne ? "four texels a gather" : "a texel a load");
         }
         printf("; the count target's colour neither loaded nor stored in %u passes",
                pr->shadowColorDropped);

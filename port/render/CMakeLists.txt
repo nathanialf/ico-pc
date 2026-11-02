@@ -2289,7 +2289,9 @@ if(ICO_RUN_TESTS)
     # the shadow count's self-test (rd_shadow_selftest.c): the one draw
     # equal to the seven draws byte for byte at both scene sizes of the
     # tool (a wide scene at scale 2 with Full pixel's left-out texels, then
-    # another size), every band centre the count's colour; sabotaged (the
+    # another size), every band centre the count's colour, and the line that
+    # says how the stencil is read (four texels a gather, or a texel a load
+    # where the gathers' count differs); sabotaged (the
     # one draw's table wrong at m = 1), the one draw differs, the profile's
     # flag goes off and the seven draws resolve the count (no second line:
     # nothing to check then); [dev] shadow_one = false, no self-test and the
@@ -2299,6 +2301,7 @@ if(ICO_RUN_TESTS)
                      "-DPATH=one draw"
                      "-DRESULTS=equal to the seven draws over [0-9]+x[0-9]+, 142 band centres ok"
                      "-DEXTRA=profile: .*shadow count one draw"
+                     "-DEXTRA2=shadow count: the stencil read (four texels a gather, equal to the seven draws byte for byte|a texel a load, as the gathers' count)"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_selftest.cmake")
     set_tests_properties(rd_shadow_selftest PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                        ENVIRONMENT "${_env}")
