@@ -857,6 +857,8 @@ const char *rd_perf_target_name(int code)
         return "record";
     case RD_PERF_TARGET_ROWBOX:
         return "ROWBOX";
+    case RD_PERF_TARGET_SHADOW_COUNT:
+        return "count"; /* the label "shadow" (rd_perf_pass_label): "shadow count" */
     default:
         return code >= 0 && code < RD_TARGET_COUNT ? s_targetNames[code] : "none";
     }

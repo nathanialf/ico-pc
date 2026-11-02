@@ -3268,6 +3268,9 @@ enum {
 #define RD_PERF_ID_WINDOW 0xFFFFFFF1u
 /* ... and the aura's ROWBOX (rd_aura_box.c), a texture of its own */
 #define RD_PERF_ID_ROWBOX 0xFFFFFFF2u
+/* ... and the shadow count's passes at its GS size (rd_shadow_one.c, the
+ * reduction), named "shadow count" in the pass list */
+#define RD_PERF_ID_SHADOW_COUNT 0xFFFFFFF3u
 
 extern RdPerfRecord g_rdPerf;
 /* rd_perf.c's queues' lock, made before the render thread starts
@@ -3751,6 +3754,16 @@ void rd__store_plan_readback(uint32_t target);
 bool rd__store_plan_kept(uint32_t target);
 /* RdPerfRecord.storeWhy's words (RD_STORE_WHY_*), for the 10 s line */
 const char *rd__store_why_text(int why);
+/* The shadow count's colour (docs/port/WORK_BUFFERS.md "The shadow count's
+ * colour"): a pass on the count target c (the reset's colour) while the
+ * stencil window of the pass's depth is open, before the resolve: the
+ * reset's own pass (flushStencilClear) and the volumes' passes (beginPass).
+ * Under the plan (not [dev] store_plan = false), a temporary c and a
+ * colour a loaded (RHI_LOAD_LOAD): a's load and store go DONT_CARE (with
+ * ICO_RD_STORE_POISON=1 the load clears to 0x5A instead), counted in
+ * RdPerfRecord.storeColorDropped and shadowColorDropped.  A pending clear
+ * (CLEAR) and the seven draws' pass (CLEAR) keep theirs. */
+void rd__store_plan_count_color(const RdTargetRec *c, RhiColorAttachment *a);
 /* rd_replay.c helpers rd_upload.c shares: the alpha coverage a texture's
  * Enhanced mips keep, whether a target's passes begin readable, and
  * rd__stencil_ops with the depth copy's stencil load and store. */

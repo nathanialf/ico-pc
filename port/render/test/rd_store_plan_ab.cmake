@@ -20,7 +20,8 @@
 # equal the kept run's byte for byte; the kept run must say "store plan off"
 # with no store dropped, the planned run "store plan on" with the same passes
 # and passes with a depth, the wrong run "store plan all" with every pass with a
-# depth dropped; over every dump and setting the plan must drop depth stores,
+# depth dropped, both with the same colour stores dropped (the shadow count's
+# colour while it is made, poisoned to 0x5A: no named target may show it); over every dump and setting the plan must drop depth stores,
 # and the wrong plan must change at least one target (proof the poison shows a
 # dropped store that is read).  Each run's counts are printed.  A missing list
 # or dump is named and skipped; no dump read, or no device: SKIP (77).
@@ -131,7 +132,8 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     message(STATUS "${dump} ${s}: ${passes_on} passes, ${withDepth_on} with a depth; depth "
-                   "stores dropped: kept ${depth_off}, planned ${depth_on}, all ${depth_all}")
+                   "stores dropped: kept ${depth_off}, planned ${depth_on}, all ${depth_all}; "
+                   "the shadow count's colour: ${colour_on}")
     if(NOT state_off STREQUAL "off" OR NOT depth_off EQUAL 0 OR NOT colour_off EQUAL 0)
       message(SEND_ERROR "${dump} ${s}: ICO_RD_STORE_PLAN=0 says store plan ${state_off} with "
                          "${depth_off} depth and ${colour_off} colour stores dropped")
@@ -148,11 +150,13 @@ foreach(dump IN LISTS dumps)
                          "${passes_all} (${withDepth_all})")
       math(EXPR failures "${failures} + 1")
     endif()
+    # the colour stores dropped: the shadow count's colour while it is made
+    # (rd__store_plan_count_color), the same under the plan and the wrong one
     if(NOT depth_all EQUAL withDepth_all OR depth_on GREATER withDepth_on OR
-       NOT colour_on EQUAL 0)
+       NOT colour_on EQUAL colour_all)
       message(SEND_ERROR "${dump} ${s}: ${depth_all} of ${withDepth_all} depth stores dropped by "
-                         "the wrong plan, ${depth_on} of ${withDepth_on} (and ${colour_on} colour) "
-                         "by the plan")
+                         "the wrong plan, ${depth_on} of ${withDepth_on} by the plan; colour "
+                         "${colour_on} by the plan, ${colour_all} by the wrong one")
       math(EXPR failures "${failures} + 1")
     endif()
     math(EXPR dropped "${dropped} + ${depth_on}")

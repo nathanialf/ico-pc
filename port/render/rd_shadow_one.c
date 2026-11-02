@@ -14,7 +14,12 @@
  * box_reduce_ps's DrawCB (rd__shadow_reduce_cb).  rd_replay.c
  * shadowCountOne picks the destination (the count target at scale 1, the
  * reduced count above it); rd_shadow_selftest.c checks the result against
- * the seven draws on the device. */
+ * the seven draws on the device.  The shader skips the texels whose m is 0
+ * (their term is +0.0) and reads the table texel of a run of equal m once:
+ * the same sum, fewer reads (blit.hlsl).  The pass is "shadow count WxH" in
+ * the pass list (RD_PERF_ID_SHADOW_COUNT).  The count target's colour is
+ * neither loaded nor stored while the count is made (rd_store_plan.c
+ * rd__store_plan_count_color). */
 #include <stdlib.h>
 #include <string.h>
 
@@ -193,7 +198,10 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
     p.colorCount = 1;
     p.width = tc->w;
     p.height = tc->h;
-    rd__perf_pass(cl, RD_PERF_PASS_RENDER, r->st.color, tc->w, tc->h, r->perfPost);
+    /* "shadow count 848x448" in the pass list (not the count target's
+     * "list 3 temporary"): one colour attachment, not loaded, stored; no
+     * depth attachment (the stencil is a texture here) */
+    rd__perf_pass(cl, RD_PERF_PASS_RENDER, RD_PERF_ID_SHADOW_COUNT, tc->w, tc->h, r->perfPost);
     rhi_cmd_begin_render_pass(cl, &p);
     /* in the pass ring as the count target's pass at its GS size (the
      * device-loss report; the seven draws' pass was the target's) */
@@ -212,5 +220,9 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
     rd__replay_draw(cl, 3, 0, 1);
     rhi_cmd_end_render_pass(cl);
     g_rdPerf.shadowOne++;
+    g_rdPerf.shadowOneW = (uint16_t)tc->w;
+    g_rdPerf.shadowOneH = (uint16_t)tc->h;
+    g_rdPerf.shadowReadW = (uint16_t)td->tw;
+    g_rdPerf.shadowReadH = (uint16_t)td->th;
     return true;
 }

@@ -1196,6 +1196,7 @@ static void flushStencilClear(void)
     p.color[0].texture = tc->color;
     p.color[0].load = RHI_LOAD_LOAD;
     p.color[0].readable = readable;
+    rd__store_plan_count_color(tc, &p.color[0]); /* nothing reads it */
     p.colorCount = 1;
     p.depth.texture = td->depth;
     p.depth.readable = depthRead;
@@ -1327,6 +1328,9 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     p.color[0].readable = readable;
     if (clear) {
         memcpy(p.color[0].clear, clear, sizeof(p.color[0].clear));
+    }
+    if (cid == s_stencil.color && d && rd__stencil_live(&s_stencil.w, d->depth.id)) {
+        rd__store_plan_count_color(c, &p.color[0]); /* the shadow count's colour */
     }
     /* a storage pass: the target is the shaders' storage texture, no
      * attachment (its contents are kept: they are the texture's) */
@@ -4535,7 +4539,7 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
     p.colorCount = 1;
     p.width = tc->w;
     p.height = tc->h;
-    rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, r->st.color, tc->w, tc->h, r->perfPost);
+    rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, RD_PERF_ID_SHADOW_COUNT, tc->w, tc->h, r->perfPost);
     rhi_cmd_begin_render_pass(s_cl, &p);
     /* the ring as the one draw's */
     rhi_cmd_checkpoint(s_cl,

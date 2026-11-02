@@ -115,6 +115,9 @@ int rd_perf_pass_label(const RdPerfPass *p, char *buf, size_t n)
         if (p->post >= 0 && p->post < RD_PERF_POST_COUNT) {
             return snprintf(buf, n, "%s", rd_perf_post_name(p->post));
         }
+        if (p->target == RD_PERF_TARGET_SHADOW_COUNT) {
+            return snprintf(buf, n, "shadow"); /* "shadow count 848x448" */
+        }
         return snprintf(buf, n, "list %d", (int)p->list);
     }
     return snprintf(buf, n, "%s", rd_perf_pass_kind_name(p->kind));
@@ -520,6 +523,9 @@ static uint8_t passTarget(uint32_t id)
     }
     if (id == RD_PERF_ID_ROWBOX) {
         return RD_PERF_TARGET_ROWBOX;
+    }
+    if (id == RD_PERF_ID_SHADOW_COUNT) {
+        return RD_PERF_TARGET_SHADOW_COUNT;
     }
     return rd__target_code(id);
 }

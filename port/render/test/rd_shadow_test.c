@@ -59,6 +59,15 @@
  *      and A = 0x80 where that is non-zero.  Without the view (a backend
  *      whose RhiLimits.stencilView is false) the comparison is skipped
  *      with a line.
+ *   p  (with each (o) run) the count target's colour neither loaded nor
+ *      stored between the reset and the resolve (rd_store_plan.c
+ *      rd__store_plan_count_color): the synthetic volumes through the one
+ *      draw and the seven draws under ICO_RD_STORE_POISON=1 (the dropped
+ *      load clears the colour to 0x5A), the store plan off and on: the
+ *      count, the levels and SCENE byte for byte, the colour dropped only
+ *      with the plan (RdPerfRecord.shadowColorDropped, storeColorDropped),
+ *      and above 1x on the one draw the scaled count target poisoned at
+ *      every texel (nothing reads or redraws it).
  *   x  (`rd_shadow_test edges`, ctest rd_shadow_edges: this case alone)
  *      the two kernels at scene scale 2: the same frame (the synthetic
  *      volumes, Shadow.c's model, a rectangle at a sub-pixel offset, all
@@ -1476,6 +1485,9 @@ static void checkTable(void)
 typedef struct AbPics {
     uint8_t *cnt, *lv[3], *scene;
     uint32_t cw, ch, sw, sh;
+    /* the replay's count target colour passes left neither loaded nor
+     * stored (RdPerfRecord.shadowColorDropped), its colour stores dropped */
+    uint32_t colorDropped, storeColorDropped;
 } AbPics;
 
 static void abFree(AbPics *p)
@@ -1500,6 +1512,8 @@ static bool abRecord(int vol, bool one, AbPics *p, const char *what)
               : (g_rdPerf.shadowSeven >= 1 && g_rdPerf.shadowOne == 0),
           "(o) %s: the %s path resolved the count (one %u, seven %u)", what,
           one ? "one-draw" : "seven-draw", g_rdPerf.shadowOne, g_rdPerf.shadowSeven);
+    p->colorDropped = g_rdPerf.shadowColorDropped;
+    p->storeColorDropped = g_rdPerf.storeColorDropped;
     const RdTargetRec *c = rd__target_rec(s_count.id);
     const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!c || !sc) {
@@ -1584,6 +1598,79 @@ static void abFrame(int vol, const char *what)
     abFree(&seven);
 }
 
+/* (p) the count target's colour neither loaded nor stored while the count
+ * is made (rd_store_plan.c rd__store_plan_count_color): the frame through
+ * the path asked under ICO_RD_STORE_POISON=1 (such a load clears the colour
+ * to 0x5A instead: lavapipe keeps an attachment's contents whatever its
+ * ops say) with the store plan off and on: the count, the three levels and
+ * SCENE byte for byte; no colour dropped with the plan off, at least one
+ * (the volumes' pass) with it, each also a colour store dropped; on the one
+ * draw above 1x the scaled count target holds the poison at every texel
+ * (nothing drew it after: the levels read the reduced count) */
+static void setPoison(bool on)
+{
+#ifdef _WIN32
+    _putenv_s("ICO_RD_STORE_POISON", on ? "1" : "");
+#else
+    if (on) {
+        setenv("ICO_RD_STORE_POISON", "1", 1);
+    } else {
+        unsetenv("ICO_RD_STORE_POISON");
+    }
+#endif
+}
+
+static void poisonFrame(int vol, bool one, const char *what)
+{
+    char w2[96];
+    snprintf(w2, sizeof w2, "%s, %s, poisoned", what, one ? "one draw" : "seven draws");
+    const bool plan = g_rd.profile.storePlan;
+    setPoison(true);
+    AbPics kept, planned;
+    g_rd.profile.storePlan = false;
+    const bool okKept = abRecord(vol, one, &kept, w2);
+    g_rd.profile.storePlan = true;
+    const bool okPlan = abRecord(vol, one, &planned, w2);
+    CHECK(kept.colorDropped == 0 && kept.storeColorDropped == 0,
+          "(p) %s: the store plan off dropped the count's colour %u times (%u colour stores)", w2,
+          kept.colorDropped, kept.storeColorDropped);
+    CHECK(planned.colorDropped >= 1 && planned.storeColorDropped >= planned.colorDropped,
+          "(p) %s: the plan dropped the count's colour %u times (%u colour stores)", w2,
+          planned.colorDropped, planned.storeColorDropped);
+    if (okKept && okPlan) {
+        abCompareOne(kept.cnt, planned.cnt, kept.cw, kept.ch, w2, "the count");
+        for (int l = 0; l < 3; l++) {
+            char pic[16];
+            snprintf(pic, sizeof pic, "SHADOW%d", l);
+            abCompareOne(kept.lv[l], planned.lv[l], 256u >> l, 256u >> l, w2, pic);
+        }
+        abCompareOne(kept.scene, planned.scene, kept.sw, kept.sh, w2, "SCENE");
+    }
+    const RdTargetRec *c = rd__target_rec(s_count.id);
+    if (one && c && (c->tw != c->w || c->th != c->h)) {
+        const size_t n = (size_t)c->tw * c->th;
+        uint8_t *px = malloc(n * 4);
+        uint32_t rw = 0, rh = 0;
+        size_t poisoned = 0;
+        if (px && rd__read_target(s_count, px, n * 4, &rw, &rh) && (size_t)rw * rh == n) {
+            for (size_t i = 0; i < n; i++) {
+                poisoned += px[i * 4] == 0x5A && px[i * 4 + 1] == 0x5A && px[i * 4 + 2] == 0x5A &&
+                            px[i * 4 + 3] == 0x5A;
+            }
+        }
+        CHECK(poisoned == n,
+              "(p) %s: the scaled count target holds the poison at %zu of %zu texels", w2, poisoned,
+              n);
+        free(px);
+    }
+    printf("  (p) %s: the count's colour dropped %u times, the count, levels and SCENE the same\n",
+           w2, planned.colorDropped);
+    abFree(&kept);
+    abFree(&planned);
+    setPoison(false);
+    g_rd.profile.storePlan = plan;
+}
+
 /* the frames at the renderer's current scale */
 static void abFrames(const char *scale)
 {
@@ -1601,6 +1688,10 @@ static void abFrames(const char *scale)
         abFrame(VOL_SUB, what);
     }
     s_subOff = 0;
+    snprintf(what, sizeof what, "%s, synthetic volumes", scale);
+    poisonFrame(VOL_SYNTH, true, what);
+    poisonFrame(VOL_SYNTH, false, what);
+    g_rd.profile.shadowOne = true;
 }
 
 /* (o) above 1x: at scale 2 and at 1931 x 1093 texels (Enhanced) */

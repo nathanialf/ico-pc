@@ -2464,9 +2464,26 @@ int main(int argc, char **argv)
                "%u (fog path %s); blur pairs folded %u\n",
                dump, pr->dateSnapshots, pr->dateStencilDraws, pr->dateStencilTakes,
                pr->fogLocalDraws, rd__fog_path_name(g_rd.fogPath), pr->blurFolds);
-        /* the shadow count's resolves (rd_replay.c doShadowResolve) */
-        printf("%s: stats: shadow count: %u in one draw, %u in seven draws (profile %s)\n", dump,
+        /* the shadow count's resolves (rd_replay.c doShadowResolve), the
+         * one draw's pass and the count target's colour passes the store
+         * plan left neither loaded nor stored (rd_store_plan.c) */
+        printf("%s: stats: shadow count: %u in one draw, %u in seven draws (profile %s)", dump,
                pr->shadowOne, pr->shadowSeven, g_rd.profile.shadowOne ? "one draw" : "seven draws");
+        if (pr->shadowOne) {
+            const double mb = 1.0 / 1048576.0;
+            printf("; the one draw's pass: colour %ux%u not loaded, stored (%.1f MB), no depth "
+                   "attachment; the stencil read as a texture, %ux%u (%.1f MB)",
+                   pr->shadowOneW, pr->shadowOneH,
+                   (double)pr->shadowOneW * pr->shadowOneH * 4.0 * mb, pr->shadowReadW,
+                   pr->shadowReadH, (double)pr->shadowReadW * pr->shadowReadH * mb);
+        }
+        printf("; the count target's colour neither loaded nor stored in %u passes",
+               pr->shadowColorDropped);
+        if (pr->shadowColorDropped) {
+            printf(" (%ux%u, %.1f MB each way)", pr->shadowColorW, pr->shadowColorH,
+                   (double)pr->shadowColorW * pr->shadowColorH * 4.0 / 1048576.0);
+        }
+        printf("\n");
         /* the store plan (rd_replay.c storePlanScan): the depth stores (and
          * loads) dropped where no later command touches the depth */
         printf("%s: stats: stores: %u depth and %u colour stores dropped a replay of %u passes "

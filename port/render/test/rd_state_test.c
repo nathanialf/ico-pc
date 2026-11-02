@@ -60,6 +60,12 @@
  *              stores; the reset is the volumes' pass's stencil CLEAR, not
  *              a pass of its own (rd__stencil_ops); two depths' windows
  *              interleaved keep their own counts (rd__stencil_open/Close)
+ *   shadow colour rd__store_plan_count_color: under the store plan the
+ *              temporary count target's loaded colour goes DONT_CARE both
+ *              ways (counted in storeColorDropped and shadowColorDropped);
+ *              a CLEAR, a named target as the count, [dev] store_plan =
+ *              false and no replay keep their ops; the pass list's
+ *              "shadow count" (label "shadow", target "count")
  *   date area  the DATE snapshot of a screen-prim command covers its box
  *              (rd__screen_area: the vertices' box padded by two pixels, in
  *              the scissor), not the whole target; a sprite larger than the
@@ -3042,6 +3048,98 @@ static void testAuraKernelPick(void)
     CHECK(rd__aura_kernel_pick(0u, 1, "gs") == 0u, "aura kernel: no kernel at 1x either way");
 }
 
+/* ---- the shadow count's colour while it is made (rd_store_plan.c
+ * rd__store_plan_count_color) and its pass's name in the pass list ---- */
+static void testShadowCountColor(void)
+{
+    const RdTarget scene = rd_target(RD_TARGET_SCENE);
+    const RdTargetRec *sr = rd__target_rec(scene.id);
+    if (!sr || !sr->withDepth) {
+        CHECK(0, "shadow count colour: SCENE without depth");
+        return;
+    }
+    rd_begin_frame();
+    rd_select_list(3);
+    const RdTarget cnt = rd_shadow_count_target(sr->w, sr->h);
+    rd_set_target(cnt, scene, sr->w, sr->h, 0);
+    rd_shadow_reset();
+    rd_shadow_resolve();
+    rd_end_frame(0);
+    const RdFrame *f = rd__last_frame();
+    const RdTargetRec *cr = rd__target_rec(cnt.id);
+    if (!f || !cr) {
+        CHECK(0, "shadow count colour: no frame or count target");
+        return;
+    }
+    const bool keepPlan = g_rd.profile.storePlan, keepAll = g_rd.profile.storeAll;
+    RhiColorAttachment a;
+    for (int plan = 0; plan < 2; plan++) {
+        g_rd.profile.storePlan = plan != 0;
+        g_rd.profile.storeAll = false;
+        rd__store_plan_scan(f, (int)f->keep);
+        g_rdPerf.storeColorDropped = g_rdPerf.shadowColorDropped = 0;
+        /* the volumes' pass on the temporary count target: a loaded colour */
+        memset(&a, 0, sizeof(a));
+        a.load = RHI_LOAD_LOAD;
+        a.store = RHI_STORE_STORE;
+        rd__store_plan_count_color(cr, &a);
+        if (plan) {
+            CHECK(a.load == RHI_LOAD_DONT_CARE && a.store == RHI_STORE_DONT_CARE &&
+                      g_rdPerf.storeColorDropped == 1 && g_rdPerf.shadowColorDropped == 1 &&
+                      g_rdPerf.shadowColorW == cr->tw && g_rdPerf.shadowColorH == cr->th,
+                  "shadow count colour: under the plan the volumes' colour is neither loaded nor "
+                  "stored (load %d store %d, %u dropped)",
+                  (int)a.load, (int)a.store, g_rdPerf.shadowColorDropped);
+        } else {
+            CHECK(a.load == RHI_LOAD_LOAD && a.store == RHI_STORE_STORE &&
+                      g_rdPerf.storeColorDropped == 0,
+                  "shadow count colour: [dev] store_plan = false keeps the colour's load and "
+                  "store");
+        }
+        /* a cleared colour (a pending clear, the seven draws' pass) keeps its ops */
+        memset(&a, 0, sizeof(a));
+        a.load = RHI_LOAD_CLEAR;
+        rd__store_plan_count_color(cr, &a);
+        CHECK(a.load == RHI_LOAD_CLEAR && a.store == RHI_STORE_STORE,
+              "shadow count colour: a CLEAR keeps its load and store (plan %d)", plan);
+        /* a named target as the count (the self-test's SCENE) keeps its ops */
+        memset(&a, 0, sizeof(a));
+        a.load = RHI_LOAD_LOAD;
+        rd__store_plan_count_color(sr, &a);
+        rd__store_plan_count_color(NULL, &a);
+        CHECK(a.load == RHI_LOAD_LOAD && a.store == RHI_STORE_STORE &&
+                  g_rdPerf.shadowColorDropped == (plan ? 1u : 0u),
+              "shadow count colour: SCENE as the count keeps its load and store (plan %d)", plan);
+        rd__store_plan_end();
+    }
+    /* outside a replay (no plan): nothing changes */
+    memset(&a, 0, sizeof(a));
+    a.load = RHI_LOAD_LOAD;
+    rd__store_plan_count_color(cr, &a);
+    CHECK(a.load == RHI_LOAD_LOAD && a.store == RHI_STORE_STORE,
+          "shadow count colour: outside a replay the colour keeps its ops");
+    g_rd.profile.storePlan = keepPlan;
+    g_rd.profile.storeAll = keepAll;
+    g_rdPerf.storeColorDropped = g_rdPerf.shadowColorDropped = 0;
+    g_rdPerf.shadowColorW = g_rdPerf.shadowColorH = 0;
+    /* the pass list names the one draw's and the reduction's pass "shadow count" */
+    RdPerfPass pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.kind = RD_PERF_PASS_RENDER;
+    pp.list = 3;
+    pp.post = -1;
+    pp.target = RD_PERF_TARGET_SHADOW_COUNT;
+    char label[32];
+    rd_perf_pass_label(&pp, label, sizeof label);
+    CHECK(strcmp(label, "shadow") == 0 &&
+              strcmp(rd_perf_target_name(RD_PERF_TARGET_SHADOW_COUNT), "count") == 0,
+          "shadow count: the pass list says \"%s %s\" (\"shadow count\")", label,
+          rd_perf_target_name(RD_PERF_TARGET_SHADOW_COUNT));
+    pp.target = RD_PERF_TARGET_TEMP;
+    rd_perf_pass_label(&pp, label, sizeof label);
+    CHECK(strcmp(label, "list 3") == 0, "shadow count: another pass is \"%s\" (\"list 3\")", label);
+}
+
 /* ---- the aura's read in two passes (rd_aura_box.c) ---- */
 static void testAuraBox(RdPipeKeyInt *keys)
 {
@@ -3092,6 +3190,7 @@ int main(int argc, char **argv)
     testAuraFilter();
     testPassOps();
     testStencilOps();
+    testShadowCountColor();
     testDateArea();
     testVuSetPolicy();
     testPayloadPad();

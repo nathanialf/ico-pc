@@ -2082,7 +2082,8 @@ enum {
     RD_PERF_TARGET_NONE,                    /* none (the uploads), or gone */
     RD_PERF_TARGET_WINDOW,                  /* the window (the present) */
     RD_PERF_TARGET_RECORD,                  /* the VU pre-pass's record */
-    RD_PERF_TARGET_ROWBOX                   /* the aura's row sums (rd_aura_box.c) */
+    RD_PERF_TARGET_ROWBOX,                  /* the aura's row sums (rd_aura_box.c) */
+    RD_PERF_TARGET_SHADOW_COUNT             /* the shadow count at its GS size (rd_shadow_one.c) */
 };
 
 /* RdPerfPass.target as text: "SCENE", "block", "window", "ROWBOX", ... */
@@ -2114,7 +2115,8 @@ typedef struct RdPerfPass {
 } RdPerfPass;
 
 /* A piece's label as the window's summary writes it: the effect for a
- * render pass of one, "list N" for another render pass, else the kind
+ * render pass of one, "shadow" for the shadow count's (its target "count":
+ * "shadow count 848x448"), "list N" for another render pass, else the kind
  * ("DATE snapshot"); the length written, as snprintf */
 int rd_perf_pass_label(const RdPerfPass *p, char *buf, size_t n);
 
@@ -2307,6 +2309,16 @@ typedef struct RdPerfRecord {
      * shadowSeven through the seven stencil-tested draws (and the box
      * reduction above 1x) */
     uint32_t shadowOne, shadowSeven;
+    /* The one draw's pass (rd_shadow_one.c): its colour, written whole,
+     * shadowOneW x shadowOneH (no depth attachment), and the stencil it
+     * reads through its view, shadowReadW x shadowReadH texels (the last
+     * one draw of the replay).  The count target's colour passes the store
+     * plan left neither loaded nor stored between the reset and the
+     * resolve (shadowColorDropped, also in storeColorDropped; the reset's
+     * own pass and the volumes' passes), that colour shadowColorW x
+     * shadowColorH texels (rd_store_plan.c rd__store_plan_count_color) */
+    uint16_t shadowOneW, shadowOneH, shadowReadW, shadowReadH, shadowColorW, shadowColorH;
+    uint32_t shadowColorDropped;
     /* A cleared source read as its colour (rd_const_read.c): constReads the
      * staticBlur sprites drawn untextured in the colour of a target that
      * held only its clear, constKept those reading another target that
@@ -2372,8 +2384,9 @@ typedef struct RdPerfRecord {
      * outside it, docs/port/WORK_BUFFERS.md "The store plan"), those with a
      * depth outside the MSAA epoch (storeDepthPasses), the depth stores
      * dropped (storeDepthDropped: the depth and its stencil neither loaded
-     * nor stored) and the colour stores dropped (storeColorDropped: 0, the
-     * plan keeps every colour); storePlanMode 0 every store kept ([dev]
+     * nor stored) and the colour stores dropped (storeColorDropped: the
+     * shadow count's colour while it is made, rd__store_plan_count_color;
+     * every other colour is kept); storePlanMode 0 every store kept ([dev]
      * store_plan = false, or a pass window), 1 the plan, 2 every depth
      * store dropped (ICO_RD_STORE_PLAN=all, tests); storeKept the
      * replay's depths whose stores the plan keeps from an earlier replay on

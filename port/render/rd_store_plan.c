@@ -593,6 +593,45 @@ static void planNothingDropped(void)
             s_seen);
 }
 
+/* The shadow count's colour between its reset and its resolve
+ * (WORK_BUFFERS.md "The shadow count's colour").  The volumes write only the
+ * stencil (rd__shadow_volume_key: colour mask 0), and the count target's
+ * colour from its reset on is the resolve's: the seven draws' pass clears
+ * it at its load (doShadowResolve), the one draw at scale 1 writes every
+ * texel (rd_shadow_one.c, its load DONT_CARE), and above 1x the one draw
+ * leaves it undrawn and every read of it as a texture until the next reset
+ * takes the reduced count instead (resolveTexture, s_shadowRedFor; Shadow.c
+ * is its one user: the reset, the volumes, the resolve and the chain's
+ * level 0).  So nothing reads what a pass in the window loads or stores of
+ * it: on a tile-based GPU its 2364x1080 colour (10 MB) is read into the
+ * tiles and written back for nothing at each such pass. */
+void rd__store_plan_count_color(const RdTargetRec *c, RhiColorAttachment *a)
+{
+    if (s_plan.mode == 0 || !c || c->named || a->load != RHI_LOAD_LOAD) {
+        return;
+    }
+    a->load = RHI_LOAD_DONT_CARE;
+    a->store = RHI_STORE_DONT_CARE;
+    g_rdPerf.storeColorDropped++;
+    g_rdPerf.shadowColorDropped++;
+    g_rdPerf.shadowColorW = (uint16_t)c->tw;
+    g_rdPerf.shadowColorH = (uint16_t)c->th;
+    static bool s_said;
+    if (!s_said) {
+        s_said = true;
+        rd__log("store plan: the shadow count's colour (%ux%u, %.1f MB) is neither loaded nor "
+                "stored while the count is made (the volumes write only the stencil; the "
+                "resolve writes the colour, or the reduced count stands for it above 1x); "
+                "reported once",
+                c->tw, c->th, (double)c->tw * c->th * 4.0 / 1048576.0);
+    }
+    if (s_plan.poison) {
+        /* the tests' garbage where the colour is left undefined */
+        a->load = RHI_LOAD_CLEAR;
+        a->clear[0] = a->clear[1] = a->clear[2] = a->clear[3] = 90.0f / 255.0f; /* 0x5A */
+    }
+}
+
 void rd__store_plan_end(void)
 {
     rd__fades_fold_end(); /* a fold no reduction took (rd_fades_fold.c) */
