@@ -19,6 +19,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_replay.c` | a frame onto the RHI: every command's replay |
 | `port/render/rd_submit.c`, `rd_submit.h` | a replay's end: the present's pass recorded, the list ended and submitted, the picture presented and the capture it copied written out |
 | `port/render/rd_thread.c`, `rd_thread.h` | the renderer on the window's render thread: the picture and the calls posted there, the hand-over of the renderer's state (texLock), the retire list, the stats split, the renderer's own thread for the tools |
+| `port/render/rd_submit_thread.c`, `rd_submit_thread.h`, `rd_submit_queue.c`, `rd_submit_queue.h` | the submit thread: a picture handed over has its list ended and submitted and its image presented there (Vulkan, Direct3D 12), the render thread free once its walk ends; its queue (pure) |
 | `port/render/rd_replay_vu.c`, `rd_replay.h` | the replay's VU draws and the vertex and triangle pre-passes; what they share with `rd_replay.c` (the replay's state, a draw's setup, its helpers) |
 | `port/render/rd_vuprepass_selftest.c` | the vertex and triangle pre-passes' start-up self-test |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
@@ -108,8 +109,12 @@ pumps the window's events). A picture handed
 over owns the renderer's state until its walk and present's pass end (`rd__reads_done` in
 `rd__submit_frame`); every game-thread call that changes the frames, textures, meshes, targets or
 settings waits for that first (`rd__texlock_wait`), so the render thread reads the state as it
-was when the picture was posted. The submit and the present then overlap the game's step; the
-window makes a further picture of a frame already shown only when its reads would end before the
+was when the picture was posted. The submit and the present then overlap the game's step and,
+with Vulkan and Direct3D 12, the next picture's interpolation: they run on the submit thread
+(`port/render/rd_submit_thread.h`), whose work the render thread's next graphics call (the next
+picture's fence wait) waits for, so the backend still runs on one thread at a time and every
+picture's GPU work and present keep their order: one picture's interpolation on the render
+thread while the one before is submitted and presented on the submit thread. The window makes a further picture of a frame already shown only when its reads would end before the
 next step and its end before that step's end, and, with vsync off or mailbox, not while a picture
 runs past its estimate or the presents wait for the display or the GPU (PLATFORM.md, the render
 thread's further presents; the present call's time of each picture: `rd__thread_note_present`).

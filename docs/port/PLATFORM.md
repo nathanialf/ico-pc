@@ -319,8 +319,11 @@ between the two retained frames included, the fence wait, the acquire, the uploa
 its binds and lazy pipelines, the submit, the present and the capture's finish
 (`port/render/rd_thread.h` (`rd_present_post`); `port/platform/window_present.c`
 (`present_once`)). It runs with every backend: with OpenGL the context is the render thread's for
-its jobs, and with Direct3D 11 its immediate context is used by one thread at a time. The texture
-decode workers, the disc reader, the present-wait thread and the watchdog stay as they are.
+its jobs, and with Direct3D 11 its immediate context is used by one thread at a time. With Vulkan
+and Direct3D 12 a third thread, the submit thread, takes the end of a picture handed over: the
+list's end, its submit and the present (`port/render/rd_submit_thread.h`; the rule below). The
+texture decode workers, the disc reader, the present-wait thread and the watchdog stay as they
+are.
 
 The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header comments):
 
@@ -344,7 +347,10 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   (`pace_rt_further_late`)): posted once the picture in progress is done, its reads must end by
   the next step's due time (else the step waits for them: read waits) and the whole picture by
   that step's end (the step's own time after it; else the next new frame's present waits for it:
-  slot waits). The game thread's own cost of such a present is only the hand-over, so the rule
+  slot waits). With the submit thread (below) the whole picture is the render thread's job, which
+  ends with its walk: the submit and the present are outside it, and a further present waits
+  for them only where the next picture's interpolation is shorter (inside its reads, measured
+  there). The game thread's own cost of such a present is only the hand-over, so the rule
   before it (the present's cost past the deadline) never held one back. The times are the render
   thread's estimates (`port/platform/render_thread.c` (`ico_render_thread_plan`)): after each
   picture handed over, how long it held the renderer's state (`rd_thread_take_reads_ns`: the job's
@@ -380,6 +386,43 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   picture before it, never for its reads: the frame's close (`rd_end_frame`) already waited for
   those. So that wait is the picture's submit and present call, and on a driver whose present
   blocks behind the GPU's earlier pictures, the GPU's backlog.
+- The submit thread (`port/render/rd_submit_thread.h`, `rd_submit_thread.c`, its queue
+  `rd_submit_queue.h`). A picture handed over without waiting keeps its list open at the walk's
+  end (`rd__submit_defer`, from `rd__submit_frame` before the reads end), and the render thread's
+  job posts it at its end (`rd__submit_post_pending`, from `port/render/rd_thread.c`
+  (`runTramp`)): the submit thread ends it, submits it and presents the image. The render thread
+  is then free for the next picture as soon as its walk ends, and the game thread's next present
+  waits for that much only (`rd_present_post`'s drain is the render thread's alone). The backend
+  still runs on one thread at a time: the render thread's next call that changes the device's
+  state (its next picture's fence wait, `rd__wait_frame`, comes first) waits for the submit
+  thread (the call guard's busy on the render thread is `rd_thread_submit_busy`, its wait
+  `rd_thread_submit_drain`), and every other thread's call waits for both. What overlaps the
+  submit and the present is the next picture's interpolation (no graphics call) and the game's
+  step. The walk does not overlap them: Vulkan and Direct3D 12 key the frame slot, the command
+  list's handle (`vkr_get_cmd`'s generation), the acquired image's semaphores and the submit's
+  counters on one frame index (`port/rhi/vk/vk_cmd.c` (`rhi_wait_frame`, `vkr_submit_batch`),
+  `port/rhi/d3d12/d3d12_cmd.c`), so a list recorded while the one before is submitted would need
+  them per slot. The order holds by that rule too: the next acquire comes after the present
+  before it, a slot's command pool is reset only after its list was submitted, and the queue's
+  submits and presents keep their order (nothing relies on acquiring an image before the one
+  before is presented). A list kept open when a call of the render thread's own needs the backend
+  before the job ends (a readback, a pipeline) is ended, submitted and presented there first, after
+  what the submit thread had (counted as `submitted on the render thread`); the background
+  pipelines' step after a picture (`rd__pipe_finish_tick`) waits for the next picture's fence wait
+  instead (`rd__submit_pipe_tick`), one picture late. Only a picture handed over without waiting
+  and with no capture to finish goes there: the pictures that wait for their end (`sync`,
+  `rd_submit_hold`, a capture, the blended dump, `rd__replay_frame`) and the pictures made on the
+  game thread (parked, no host) end, submit and present where they are made, as before, so a
+  picture's bytes do not change. The queue holds at most two (`RD_SUBMIT_DEPTH`; with the rule
+  above one) pictures submitted and not presented, so the GPU's backlog stays the present
+  allowance's. A job's submit and present times go into its replay's record when a thread that
+  waited for it takes them (`rd__perf_submit_times`): the replays line keeps its columns, one
+  picture late. The thread runs at SDL's high priority (`RdThreadHost.submitBegin`). OpenGL and
+  Direct3D 11 have none (`RhiLimits.singleThreadCommands`); `ICO_RD_SUBMIT_THREAD=0` turns it off
+  for the tests' other arm; `[dev] render_thread = off` or `sync` has none either. Park waits for
+  it after the render thread parks (the surface goes after the last present), the stop ends it
+  with the host, and the heartbeat counts its job as the last picture's when the render thread has
+  none in progress (a present that hangs there ends the run through the GPU hang's path).
 - The overlay. The UI's layers of a picture the game thread posts (the popups, photo mode's HUD,
   the touch controls, the frame rate counter: `port/ui/ui_host.c` (`hostOverlay`,
   `hostOverlayTop`)) are collected on the game thread before the post (`port/render/rd_present.c`
@@ -448,7 +491,11 @@ window: render thread: on (interpolation, walk, submit and present off the game 
 window: render thread: on (...; OpenGL, [dev] render_thread = auto; every graphics call on the render thread)
 window: render thread: sync (interpolation, walk, submit and present on the render thread, [dev] render_thread = sync: the game thread waits for each picture)
 window: render thread: off ([dev] render_thread = off)
+rd: submit thread: on (the pictures handed to the render thread are submitted and presented on a thread of their own, Vulkan; ICO_RD_SUBMIT_THREAD=0 keeps them on the render thread)
+rd: submit thread: off (this graphics API takes every call on one thread: the render thread submits and presents its pictures)
 ```
+
+and its end `rd: submit thread: ended (N pictures ended, submitted and presented there in all)`.
 
 Every 10 s block adds the two threads' line: the game thread's mean step and, inside it, its own
 cost of closing a frame (`rd_end_frame` after its wait for a picture's reads: the frame's walk for
@@ -462,10 +509,15 @@ longest gap), and per picture its interpolation, its uploads and walk, its submi
 the GPU's and the display's waits inside them, the textures it destroyed for the game thread, and
 the further presents the plan above held back, by why (they would have run into the next step, a
 picture ran past its estimate, the presents waited for the display or the GPU), with the three
-estimates as the block ends:
+estimates as the block ends, then the submit thread's clause: its submit and present a picture
+(the pictures it finished, the longest), the most pictures queued and running at once, the render
+thread's waits for it (its next picture's first graphics call) and the other threads' (a drain),
+and the lists the render thread submitted itself (`; submit thread: off` without it). With the
+submit thread the render thread's `submit` is that thread's time, and `takes` (the whole picture)
+is the render thread's job, which ends with the walk:
 
 ```
-window: game thread: step 3.1 ms (closing a frame 0.4 ms of it, longest 1.2 ms, 300 frames), pump 0.4 ms, slot waits 12 (8.2 ms; 9 (7.9 ms) by a new frame's present, 2 (0.3 ms) by a further present's, 1 other), read waits 290 (610.4 ms, longest 6.9 ms); render thread: CPU 9.3 ms a picture, idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread; 0 further presents held back (0 would have run into the next step, 0 while a picture ran past its estimate, 0 while the presents waited for the display or the GPU; a picture holds the renderer for 4.1 ms, takes 9.3 ms, its present waits 0.3 ms)
+window: game thread: step 3.1 ms (closing a frame 0.4 ms of it, longest 1.2 ms, 300 frames), pump 0.4 ms, slot waits 12 (8.2 ms; 9 (7.9 ms) by a new frame's present, 2 (0.3 ms) by a further present's, 1 other), read waits 290 (610.4 ms, longest 6.9 ms); render thread: CPU 9.3 ms a picture, idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread; 0 further presents held back (0 would have run into the next step, 0 while a picture ran past its estimate, 0 while the presents waited for the display or the GPU; a picture holds the renderer for 4.1 ms, takes 9.3 ms, its present waits 0.3 ms); submit thread: 3.4 ms a picture (submit 2.7, present 0.7; 590 pictures, longest 12.6 ms), queue depth max 1, the render thread waited for it 41 times (22.3 ms), the others 3 times (0.4 ms, longest 2.1 ms), 0 submitted on the render thread
 ```
 
 The slot waits are the game thread's waits for the render thread to finish everything posted
