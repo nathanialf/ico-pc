@@ -767,8 +767,10 @@ shadow reset is recorded no earlier than the command that needs it, and the blur
 never back. So when a depth's last touch lies before k, nothing in that pass or after it reads or
 writes the depth: `beginPass` (through `rd__store_plan_pass`) sets its load and store to DONT_CARE
 (a pending clear stays a CLEAR load) and the stencil's with it, unless the shadow window is open on
-that depth (`rd__stencil_live`). Every other pass keeps its loads and stores, so the pass that holds
-the last touch still stores the depth (`beginPass` cannot know where its pass will end). Not planned
+that depth (`rd__stencil_live`). Every other pass keeps its loads and stores, but for the pass that
+holds the last touch: `beginPass` cannot know where the walk ends a pass, so it still stores the
+depth unless the last store (below, "Passes cut") proves the walk keeps that pass open until the
+touch is done. Not planned
 either: the passes into SCENE_MS (the MSAA epoch), and the passes begun outside `beginPass` (the new
 targets' clears, the shadow reset's own pass, the crack filler's own pass, the MSAA resolves). The
 colour attachments are all stored: the colour's readers (texture reads of a target, copies, the
@@ -996,6 +998,123 @@ corpus and the phone's frames with the areas off and on (`ICO_RD_PASS_AREA=0`, `
 to the area): every target byte for byte, some pass with an area on the phone's frames
 ([TESTING.md](TESTING.md)).
 
+## Passes cut
+
+Three passes of a play picture, or parts of them, moved bytes nothing looks at
+(`port/render/rd_pass_cut.c`; each behind its own `[dev]` key, `auto|on|off`, auto on on the
+tile-based classes, `RdProfile.passCut`). On the PowerVR phone each full-size load or store is about
+1 ms per 10 MB. The pass list of the phone's F12 frame of 2026-11-02 (`rd_replay_tool
+--pass-times`) shows all three: `reduction DISPLAY 0 draws` then `reduction DISPLAY 1 draws`, `aura AURA_WORK 0
+draws`, and the fog's pass storing SCENE's depth though no later pass reads it.
+
+**The clear carry** (`[dev] clear_carry`, `ICO_RD_CLEAR_CARRY`). A clear is pending until the next
+pass on its target takes it as its load op (`beginPass`, `rd__take_pending_clear`) or it is recorded
+as a pass of its own (`flushClear`), which `endPass` does for whoever ends a pass. A draw that samples
+a target not yet in SHADER_READ ends the open pass to put it there (`resolveTexture`,
+`doBlurSpriteDraw`), and that end flushed a pending clear of the draw's own target into a pass of
+its own just before the draw's pass on it began. The reduction does this every play replay: its
+black sprite is DISPLAY's clear (`rd__fx_reduction_clears`), its textured sprite then reads SCENE.
+With the carry (`endPassFor` in `port/render/rd_replay.c`), the clear stays pending across that end
+when the texture made readable is not its target, no shadow reset is pending and no MSAA epoch is
+wanted, and the reduction's pass takes it as its CLEAR load: one 2364x1080 pass fewer a picture
+(`reduction 1.0` in the 10 s `passes per replay` line). Exact: a pending clear is recorded before
+anything else touches its target (a pass begun on the target takes or flushes it, a transition of
+its textures flushes it, any later `endPass` flushes it), only the source's barrier lies between
+where it was flushed and where it now goes, and a CLEAR load of the same values over the whole
+target (a pass that takes a clear has no area) writes what the clear's own pass wrote.
+
+**The clear skip** (`[dev] clear_skip`, `ICO_RD_CLEAR_SKIP`). The constant read (above) draws
+WORK0's sprite in AURA_WORK's clear colour without reading AURA_WORK, and with no aura object nothing
+else touches AURA_WORK in the replay, yet its clear's pass stored 10 MB. `flushClear` asks
+`rd__clear_skip`, which leaves the clear unrecorded when all of these hold: the target is AURA_WORK
+or AURA_TAP (no code outside the command lists draws into them or reads them: the present, the glow
+hold, the water, the dumps and the interpolation read the other named targets, and the present
+SCENE and DISPLAY); the action now walked is the sprite the constant read drew from it
+(`rd__clear_skip_served`); the clear holds no depth; and the scan (`rd__pass_cut_scan`, from the
+store plan's scan) finds no later command of the replay touching it (a draw into it or on its depth,
+a texture of it, a copy or exact blend naming it, a command it does not know; a later clear of it
+overwrites it and is not a touch). The memory then holds what was there before the clear while the
+frame's picture of the target is the clear, so the clear is kept as a lazy clear (target, colour
+texture, colour) and drawn where anything could see the difference: at the start of a later replay
+whose first touch of the target is not a clear of it (`rd__clear_skip_begin`, from
+`rd__clear_new_targets`), and before a read of the target outside a replay
+(`rd__clear_skip_readback`, from `rd__read_target`: the replay tool's PNGs, the tests). A clear of the
+target recorded or taken later, a new texture (`clearPending`) or a new context forgets it. Every
+read of the target therefore sees the clear's bytes, as without the skip. Expected: one 2364x1080
+pass fewer a picture in play (the phone's 0.11 ms plus a tiler's cost of a pass).
+
+**The last store** (`[dev] last_store`, `ICO_RD_LAST_STORE`). The pass begun at command k on colour
+cid and depth did whose depth's last touch t lies at k or after has its depth and stencil stored
+DONT_CARE (loaded as before) when the walk is known to keep it open until command t is done; every
+later pass on that depth then begins after t, where the plan neither loads nor stores it. Known, by
+the walk's code, when:
+
+- the pass is a draw's own (`rd__last_store_arm` in `bindDrawEx` and in the crack filler's pass the
+  local fog keeps), its depth loaded (not a pending clear's pass), the plan in force, no shadow
+  window open on the depth, no command the plan does not know after k, the depth not kept past the
+  replay;
+- no MSAA epoch is wanted, the blend is fixed-function (no storage pass switch), GS state as shader
+  data is off, there is no pass split and no pass window;
+- command k is a screen-prim or VU draw on cid with did bound, DATE off, COLCLAMP 0's wrap off, not
+  textured from a target (after `bindDrawEx` begins its pass such a draw records only into it), or
+  the fog on the local read with no probe wanted and no edge read due (`rd__last_store_fog`, said by
+  `doFog` before it begins anything: those two end the pass after the draw to copy the depth);
+- every command after k up to t is a state change, a NOP, overlay text, or such a draw on cid with
+  did bound.
+
+Every other place the walk ends or begins a pass (`endPass`, `beginPass`, `takeSnap`,
+`dateSnapshot`, `doScreenWrap`, `doExact`, `doCopy`, the shadow commands, the fog's other paths,
+`blurSwapTarget`, `doBlurSpriteDraw`, the pass area's end, the fx plan, the blur border, the crack
+filler, the aura box, Motion blur: Smooth, the shadow's own pass, the pass split, `dstPassMode`, the
+MSAA epoch) lies on a path those commands do not take; the pass area ends a pass with an area only
+at a command no area run holds. A guard (`rd__last_store_end`, in `endPass`) turns the cut off for
+the run and logs it if such a pass ends before command t is done (a missed path; the store plan's
+poison shows the lost depth in `rd_pass_cut_ab`). On the phone's frame the fog's pass (pass 9) begins
+at the fog (the crack filler's pass, folded into the scene pass with the local fog) and holds the
+depth's last touch; passes 10 to 19 bind no SCENE depth but list 11's screen sprites, whose loads
+and stores the plan drops already: with the cut the fog's pass's store goes too (13 to 20 MB, about
+1.3 to 2 ms on the phone, an estimate). Like the plan's other drops, the depth is then undefined
+past the replay; a later replay that reads it before its clear is kept as the plan keeps it.
+
+**The lines.**
+
+      rd: pass cut: a clear carried past a source's barrier into the next pass on its target: on (a tile-based GPU's default; [dev] clear_carry = off draws it as before)
+      rd: pass cut: a clear nothing reads before it is cleared again not drawn: on (...)
+      rd: pass cut: the depth not stored by the pass holding its last touch: on (...)
+      rd: pass cut: DISPLAY's clear drawn as the load of its next pass, not a pass of its own (reported once)
+      rd: pass cut: AURA_WORK's clear not drawn (frame's command N: nothing reads it before it is cleared again; the sprite after it took its colour) (K so far)
+      rd: pass cut: a pass whose depth store was dropped at the last touch ended at command N, before the touch at command T was done: ... the cut is off for the rest of the run ([dev] last_store) (K so far)
+      window: ...; passes cut: C clears taken by the next pass, S clears skipped, D depth stores dropped at the last touch a replay ([dev] clear_carry, clear_skip, last_store)
+
+The skip's line is the first 8, then every 100th; the guard's the same. The 10 s `stores:` clause
+counts the last store's drops among the depth stores dropped. The replay tool's `--stats` prints
+`pass cut: clear carry on|off: C clears taken by the next pass; clear skip on|off: S clears
+skipped; last store on|off: D depth stores dropped at the last touch` (`RdPerfRecord.clearsCarried`,
+`clearsSkipped`, `storeLastDropped`).
+
+**Not cut: the reduction into the present.** The present (`rd__present_record`,
+`port/render/rd_present.c`) is not a copy of DISPLAY at its own pixels on the phone, so the
+reduction cannot draw the swapchain image in its place with the same bytes: under Full pixel
+DISPLAY holds `RD_FULL_PIXEL_GUARD` texels more at each side than the exact width
+(`rd__target_scale_of`, `port/render/rd_core.c`), 2366 texels for the 2364-pixel window, and the box
+blit leaves them out (`sourceCrop`), so the window's pixel x is DISPLAY's texel x + 1. Drawing the
+reduction one pixel to the left needs another viewport, and the GPU's viewport transform rounds
+`x + w / 2 + ndc * w / 2` in floating point with other operands, which is not the same position to
+the bit. Two attachments in one pass (DISPLAY and the swapchain) share their pixel coordinates, so
+they cannot hold the shift either. The present's pass also draws the deferred text, the overlay and
+the touch controls, flips the picture for the mirror mode, and its output is BGRA or another
+swapchain format the reduction's pipelines are not made for. The clear carry takes the reduction's
+own clear pass instead.
+
+**The tests.** `rd_pass_cut` (`port/render/test/rd_pass_cut_test.c`, lavapipe, under the poison): the
+carry on frames built there (one pass fewer, the same bytes), the skip's decision and its lazy clear
+(drawn on a read, at a later replay that draws on the target first, forgotten after one that clears
+it), the last store dropped and kept where a command the cut does not take lies between.
+`rd_pass_cut_ab` replays the corpus and the phone's frames (`tools/pass_cut_dumps.txt`) with every
+cut off, each alone and all on: every target and the present byte for byte, the passes fewer by the
+clears carried and skipped, the depth stores dropped more by those at the last touch, each cut
+cutting something on the phone's frames ([TESTING.md](TESTING.md)).
+
 ## A cleared source read as its colour
 
 The aura (`staticBlur.c` `auraInspireBefore`, list 8) clears AURA_WORK, the frame's size at the
@@ -1048,8 +1167,9 @@ target reads kept (the source drawn since its clear, or not cleared this replay)
 of ctest `rd_constant_reads_ab` (`port/render/test/rd_constant_reads_ab.cmake`: every named
 target's PNG equal byte for byte, the same target reads counted either way, the phone's frames of
 `tools/constant_reads_dumps.txt` served at the phone's settings). AURA_WORK's clear itself is still
-recorded (its pass, 1.27 ms on the phone, is the store of the cleared 10 MB; a target the frame
-never reads after its clear is the depth and colour store plan's question, not this one's).
+recorded here (its pass, 1.27 ms on the phone, is the store of the cleared 10 MB); the clear skip
+(below, "Passes cut") leaves that pass out when the sprite the constant read drew is its target's
+only reader in the replay.
 
 ## The full-frame reads at a large scale
 

@@ -431,6 +431,16 @@ command its box, `beginPass` asks for the union from its command on, and the wal
 before the first command past it (`rd__pass_area_due`) ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-pass-area);
 `port/render/rd_pass_area.c`, header comment; `[dev] pass_area`).
 
+**Passes cut.** On a tile-based GPU three passes, or parts of them, that moved bytes nothing looks
+at are cut, the picture the same bytes: a pending clear stays pending past the end of a pass for a
+source's barrier and is taken as the next pass's load (the reduction draws DISPLAY in one pass, not
+a clear's pass and a draw's), a clear whose only reader in the replay is a sprite the constant read
+drew in its colour is not drawn (AURA_WORK's; drawn later where anything reads the target before
+clearing it again), and the pass that holds a depth's last touch does not store it when the walk is
+known to keep that pass open until the touch is done (the fog's pass on the phone)
+([WORK_BUFFERS.md](WORK_BUFFERS.md#passes-cut); `port/render/rd_pass_cut.c`, header comment;
+`[dev] clear_carry`, `clear_skip`, `last_store`).
+
 **The exact viewport.** While a frame's lists replay, every pass has one viewport size, the
 largest power of two the GPU takes, centred on the target, and FrameCB maps positions to it; the
 scissor, always inside the target, bounds the drawing. Every step is exact for a GS position at an

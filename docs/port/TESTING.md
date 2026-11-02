@@ -1060,6 +1060,29 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   says `stores: 1 depth` (with the effects depth `stores: 0 depth` and `nothing dropped in N
   replays, N of them: kept for an effects program`). The drops' bytes are `rd_store_plan_ab`'s
   (next).
+- `rd_pass_cut_test.c` (`rd_pass_cut`, lavapipe, 77 without a device): the passes cut
+  (`rd_pass_cut.c`, [WORK_BUFFERS.md](WORK_BUFFERS.md#passes-cut)) at Enhanced 16:9 2x under
+  `ICO_RD_STORE_POISON=1`, each forced on against off (`rd__pass_cut_force`): a clear of WORK3 then
+  a sprite on it textured from WORK2 (drawn just before): the clear taken by WORK3's pass
+  (`clearsCarried` 1, one walk pass fewer), WORK3 and WORK2 byte for byte; the clear skip's
+  decision on a frame's scan (AURA_WORK cleared, WORK0's sprite reading it, the constant read's note
+  for it): skipped, but not with a later read, a depth or the cut off; after a skip a read of
+  AURA_WORK shows the clear's colour (its green fill gone), a later replay drawing its left half
+  leaves the right half the clear's colour, a later replay clearing it first leaves that clear; the
+  last store: list 0 clears SCENE and draws Z-tested, list 4 draws on WORK3, then on SCENE a sprite,
+  the depth's last touch and another sprite: `storeLastDropped` 1 on, 0 off, one depth store more
+  dropped, SCENE byte for byte; a copy or a draw on another target between: 1 (the pass begun at
+  the touch), a DATE draw or a draw textured from a target between: 0; no validation error.
+- `rd_pass_cut_ab.cmake`: the dumps of `tools/pass_cut_dumps.txt` (`tools/pass_area_dumps.txt`'s;
+  machine-local, a missing one skipped) replayed with `--pass-dump --stats` under
+  `ICO_RD_BLEND=fixed`, `ICO_RD_STORE_PLAN=1` and `ICO_RD_STORE_POISON=1` five times: every cut off
+  (`ICO_RD_CLEAR_CARRY=0`, `ICO_RD_CLEAR_SKIP=0`, `ICO_RD_LAST_STORE=0`), each alone on, all on; at
+  the phone's Resolution Auto with its paths (`ICO_RD_VU_PREPASS=0`, `ICO_RD_FOG_PATH=local`,
+  `ICO_RD_DATE_PATH=stencil`; a narrower dump skips it) and at Enhanced 2x 4:3: every PNG
+  (`PRESENT.png` and every named target) byte for byte against the off run, the off run cutting
+  nothing, the same draws, the passes fewer by the clears carried and skipped, the depth stores
+  dropped more by those at the last touch; over the phone's frames at its setting each cut must cut
+  something (`rd_pass_cut_ab`). SKIP as `rd_vustage_ab`.
 - `rd_store_plan_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` (the phone's three
   frames) three times under
   `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` (a depth or stencil load the plan leaves
@@ -2298,6 +2321,9 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_SET` | `rd_pipeline.c` | `plain` or `extended`: as `ICO_RD_VU_PLAIN=1` or `ICO_RD_VU_EXTENDED=1` (`[dev] vu_set`); `auto` or unset: the device table's |
 | `ICO_RD_SHEET_SHADER` | `rd_core.c` | 1: the menus' sheet text through `font_sheet_ps` at every scale, no bake (`[dev] sheet_shader = true`; the bake's A/B) |
 | `ICO_RD_PASS_AREA` | `rd_pass_area.c` | 1: a render pass on SCENE whose draws are all 2D with a known place takes the render area of the tiles they touch, 0: every pass its whole target, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] pass_area`; `rd_pass_area_ab`, `rd_state` `testPassArea`) |
+| `ICO_RD_CLEAR_CARRY` | `rd_pass_cut.c` | 1: a pending clear carried past a source's barrier into the next pass on its target, 0: flushed as before, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] clear_carry`; `rd_pass_cut_ab`, `rd_pass_cut`) |
+| `ICO_RD_CLEAR_SKIP` | `rd_pass_cut.c` | 1: a clear of AURA_WORK or AURA_TAP whose only reader is a constant read not drawn (drawn later where read), 0: drawn, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] clear_skip`; `rd_pass_cut_ab`, `rd_pass_cut`) |
+| `ICO_RD_LAST_STORE` | `rd_pass_cut.c` | 1: the depth store of the pass holding its last touch dropped where the walk keeps that pass open to the touch, 0: stored, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] last_store`; `rd_pass_cut_ab`, `rd_pass_cut`) |
 | `ICO_RD_AURA_BOX` | `rd_aura_box.c` | 1: the aura's read of SCENE into FEED128 above 1x in two passes (ROWBOX, then FEED128's sum), 0: in one, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] aura_box`; `rd_aura_box_ab`, `rd_blur` case `aura_box`) |
 | `ICO_RD_AURA_KERNEL` | `rd_aura_kernel.c` | `gs`: the aura's read of SCENE into FEED128 with the GS's own taps instead of the box above 1x, a measurement (`[dev] aura_kernel = gs`; the picture differs) |
 | `ICO_RD_VU_PREPASS` | `rd_replay_vu.c` | 0: no VU vertex pre-pass, every VU draw the old way (`[dev] vu_prepass = false`); the tests switch it with `rd__set_vu_prepass` ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) |

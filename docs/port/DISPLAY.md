@@ -1026,6 +1026,17 @@ and `effects_depth` `blit_depth_ps` writes the scene's depth beside it (`port/re
 The UI box is the 4:3 part of the presentation box (`port/render/rd_present.c` (`rd_ui_box_of`)).
 Movies draw their own box ([FMV.md](FMV.md#the-picture-on-screen)).
 
+**The reduction stays a pass of its own.** Even where the box is the window's size (the phone's
+Resolution Auto with Full pixel: DISPLAY 2366 texels, the window 2364 pixels), the present is not a
+copy of DISPLAY at its own pixels: Full pixel's DISPLAY holds one guard texel more at each side
+(`RD_FULL_PIXEL_GUARD`), which the box blit leaves out (`sourceCrop`), so the window's pixel x is
+DISPLAY's texel x + 1. The reduction drawn straight into the swapchain image would need its own
+viewport shifted by a pixel, which the GPU's floating-point viewport transform does not place to
+the bit, and two attachments in one pass cannot be a pixel apart; the present's pass also draws the
+text, the overlay and the touch controls, flips for the mirror mode and writes the swapchain's own
+format. So the present samples DISPLAY as before; what the picture saves is the reduction's own
+clear pass, now its draw's load ([WORK_BUFFERS.md](WORK_BUFFERS.md#passes-cut), the clear carry).
+
 **Captures.** Two requests copy a present's output before the overlay (so never the port's popups,
 hints or HUD; the deferred text and the CRT filter are in it), in one texture copy when both are
 armed at one present, read back after the submit (`port/render/rd_present.c` (`captureRecord`,
