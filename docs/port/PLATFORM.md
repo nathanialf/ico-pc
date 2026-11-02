@@ -740,15 +740,16 @@ be, left otherwise. Each distinct word is classed:
 | at a unit's start (a function pointer) | the unit; START | the unit; the same hash too when its name is not unique |
 | into the game's data or bss range (the end included) | nothing: the range moves whole | the same layout hash |
 | into a registered block | the block (every block is recorded: name, size, flags, old address, offset in its packed section) | the block by name, with the same size and flags; every block of either build in the other |
-| into a named variable of a unique name | the variable: name, ordinal, old start, size (exact when the file gave one) | the variable, still unique, of the same exact size |
+| into a named variable of a unique name | the variable: name, ordinal, old start, size (exact when the file gave one); without a size (a GNU ld map names globals only, so its span runs to the next item and may hold the object's statics) also its input section's size and its offset in it | the variable, still unique, of the same exact size; without one, in an input section of the same size at the same offset (`the data around the variable <name> changed`) |
 | at a value the game's data held at start-up (an initialised table's pointer, or one the game copied from it) | a point: the value's offset in the data range | its own start-up value at that offset, in its image |
 | at a C string in read-only data (printable, ending within 24 bytes) | a point: the bytes | the same bytes in its read-only data (the first place) |
 
 The start-up values are a copy of the game data range taken by a constructor in `state_host.c`,
 after the loader relocated the initialised pointers and before any game code. The section holds a
-64-byte header (magic `SYMS`, flags, the hash rules' version, the architecture, the counts, the
-layout hash, the first word nothing names), then the units (48 bytes each), variables (40), points
-(48) and blocks (40) and the names; the save's line gives its size.
+64-byte header (magic `SYMS`, its version 2, flags, the hash rules' version, the architecture,
+the counts, the layout hash, the first word nothing names and their count), then the units (48
+bytes each), variables (48; 40 without the input section in a version 1 record, which is read
+too), points (48) and blocks (40) and the names; the save's line gives its size.
 
 **Words nothing names.** Only a word the record confirms is translated: a word in a unit (the
 hash rule above), in a game range, a block or a unique variable, or at a start-up value or a

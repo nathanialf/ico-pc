@@ -37,7 +37,8 @@ enum {
 };
 
 #define UNIT_BYTES 48u
-#define DATA_BYTES 40u
+#define DATA_BYTES 48u /* 40 in a version 1 record: no input section */
+#define DATA_BYTES_V1 40u
 #define POINT_BYTES 48u
 #define BLOCK_BYTES 40u
 
@@ -48,6 +49,7 @@ enum {
 #define XU_UNIQUE 8u   /* its name is unique in the saving build */
 /* a data record's flags */
 #define XD_EXACT 1u
+#define XD_SECTION 2u /* the input section holding it: its size and the symbol's offset */
 /* a point's kinds */
 #define XP_SNAP 1u /* aux: the byte offset of the value in the game's data range */
 #define XP_TEXT 2u /* content: a C string */
@@ -490,7 +492,9 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
         put64(q + 16, d->name_hash);
         put32(q + 24, str_put(&strs, ico_symtab_name(t, d->name)));
         put32(q + 28, d->ordinal);
-        put32(q + 32, d->exact ? XD_EXACT : 0u);
+        put32(q + 32, (d->exact ? XD_EXACT : 0u) | (d->sec_size != 0 ? XD_SECTION : 0u));
+        put32(q + 36, (uint32_t)d->sec_off);
+        put64(q + 40, d->sec_size);
         nd++;
     }
     for (i = 0; i < (size_t)r->n_blocks; i++) {
@@ -690,7 +694,8 @@ static uint64_t find_text(const IcoStateImage *im, const unsigned char *b, size_
 int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *v)
 {
     const unsigned char *sec = (const unsigned char *)secv;
-    uint32_t flags, nu, nd, np, nb, ns;
+    uint32_t flags, nu, nd, np, nb, ns, ver;
+    size_t dbytes;
     const unsigned char *u, *d, *pt, *bl;
     const char *str;
     IcoSymTab *t = now->tab;
@@ -705,10 +710,12 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
         verdict(__VA_ARGS__);                                                                      \
         goto fail;                                                                                 \
     } while (0)
-    if (sec == NULL || n < H_BYTES || get32(sec + H_MAGIC) != ICO_XB_MAGIC ||
-        get32(sec + H_VERSION) != ICO_XB_VERSION) {
+    ver = sec != NULL && n >= H_BYTES ? get32(sec + H_VERSION) : 0;
+    if (sec == NULL || n < H_BYTES || get32(sec + H_MAGIC) != ICO_XB_MAGIC || ver < 1 ||
+        ver > ICO_XB_VERSION) {
         FAIL(v, ICO_XB_BAD, "the symbols record is missing or of another kind");
     }
+    dbytes = ver >= 2 ? DATA_BYTES : DATA_BYTES_V1;
     flags = get32(sec + H_FLAGS);
     nu = get32(sec + H_UNITS);
     nd = get32(sec + H_DATA);
@@ -717,14 +724,14 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
     ns = get32(sec + H_STR);
     if (nu > ICO_XB_MAX_UNITS || nd > ICO_XB_MAX_DATA || np > ICO_XB_MAX_POINTS ||
         nb > ICO_XB_MAX_BLOCKS || ns == 0 ||
-        (uint64_t)H_BYTES + (uint64_t)nu * UNIT_BYTES + (uint64_t)nd * DATA_BYTES +
+        (uint64_t)H_BYTES + (uint64_t)nu * UNIT_BYTES + (uint64_t)nd * dbytes +
                 (uint64_t)np * POINT_BYTES + (uint64_t)nb * BLOCK_BYTES + ns !=
             n) {
         FAIL(v, ICO_XB_BAD, "the symbols record does not hold what it says");
     }
     u = sec + H_BYTES;
     d = u + (size_t)nu * UNIT_BYTES;
-    pt = d + (size_t)nd * DATA_BYTES;
+    pt = d + (size_t)nd * dbytes;
     bl = pt + (size_t)np * POINT_BYTES;
     str = (const char *)(bl + (size_t)nb * BLOCK_BYTES);
     if (str[ns - 1] != '\0') {
@@ -845,9 +852,10 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
     }
     /* the named data */
     for (i = 0; i < nd; i++) {
-        const unsigned char *r = d + (size_t)i * DATA_BYTES;
+        const unsigned char *r = d + (size_t)i * dbytes;
         const char *nm = NAME_AT(get32(r + 24));
         const IcoSymData *w = ico_symtab_data_named(t, get64(r + 16), nm, get32(r + 28));
+        const unsigned df = get32(r + 32);
 
         if (w == NULL) {
             FAIL(v, ICO_XB_DATA, "the variable %s is missing here", nm);
@@ -855,8 +863,15 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
         if (!w->unique) {
             FAIL(v, ICO_XB_DATA, "the variable %s is not the only one of its name here", nm);
         }
-        if ((get32(r + 32) & XD_EXACT) != 0 && w->exact && w->size != get64(r + 8)) {
+        if ((df & XD_EXACT) != 0 && w->exact && w->size != get64(r + 8)) {
             FAIL(v, ICO_XB_DATA, "the variable %s changed size", nm);
+        }
+        /* a size the file did not give: a word past the symbol may point at
+           a static of its object, at the same offset only while the object's
+           section is laid out alike */
+        if (ver >= 2 && (df & XD_SECTION) != 0 &&
+            (w->sec_size != get64(r + 40) || w->sec_off != get32(r + 36))) {
+            FAIL(v, ICO_XB_DATA, "the data around the variable %s changed", nm);
         }
         span_add(&spans, get64(r), get64(r) + get64(r + 8), w->start);
         v->data++;

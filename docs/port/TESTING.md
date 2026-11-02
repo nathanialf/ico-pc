@@ -564,7 +564,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (into a repeated name, into the code outside every unit) counted and kept as a number, the state
   loading with the word unchanged; at Windows' fixed base, a state holding floats next to the
   integer 1 (2.0, 8.0 and 300.0, all inside the image's range) loading with them unchanged while
-  a pointer into the game's data beside them moves (`test_windows_numbers`); a block B adds that A's state lacks refused, loaded and
+  a pointer into the game's data beside them moves (`test_windows_numbers`); a GNU map's global
+  without a size: a word past it recorded with its object's input section, translated by a build
+  with the section laid out alike and refused by one where the section grew
+  (`test_unsized_data`); a block B adds that A's state lacks refused, loaded and
   left as it is (`ICO_XB_BLOCK_ABSENT`) when registered FRESH, still refused when FRESH with SCAN,
   FRESH on a block the state has loaded from it; a format 1 header read and refused as another
   build, a format 2 header of another build passing the other-build check, another disc still

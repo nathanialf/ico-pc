@@ -66,6 +66,11 @@ typedef struct IcoSymData {
     uint32_t name, ordinal;
     uint8_t exact; /* the file gave the size (else: to the next item) */
     uint8_t unique;
+    /* a symbol the file gave no size: the input section holding it, its
+       size (0: none found, or exact) and the symbol's offset in it; what
+       its span holds past the symbol (the file's statics, a GNU map naming
+       globals only) lies at the same offsets only while these are equal */
+    uint64_t sec_size, sec_off;
 } IcoSymData;
 
 typedef struct IcoSymTab {

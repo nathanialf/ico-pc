@@ -32,7 +32,11 @@
  *           may differ); a block missing on either side or of another size
  *           refuses the state.
  *   data    a word inside a named data symbol whose name is unique: by name,
- *           old start and size (exact when the file gave it).
+ *           old start and size (exact when the file gave it).  A symbol the
+ *           file gave no size (a GNU ld map names globals only) spans to
+ *           the next item, so a word past it may point at a static of the
+ *           same object: its input section's size and the symbol's offset
+ *           in it are recorded and must be the same in the later build.
  *   points  any other word: when it equals one of the game data's values at
  *           start-up (an initialised pointer of a game table, a string or a
  *           function the game copied from one), the offset of that value,
@@ -57,7 +61,8 @@
  * pins the one-delta path.
  *
  * The section (little-endian): a 64-byte header, then the units (48 bytes
- * each), data (40), points (48) and blocks (40) records, then the names.
+ * each), data (48; 40 in a version 1 record, without the input section),
+ * points (48) and blocks (40) records, then the names.
  * The header's last word counts the words nothing names (0 in a record
  * from before it was counted).
  */
@@ -71,7 +76,7 @@
 #include "state_syms.h"
 
 #define ICO_XB_MAGIC 0x534D5953u /* "SYMS" */
-#define ICO_XB_VERSION 1
+#define ICO_XB_VERSION 2         /* 1 is read too: its data records hold no input section */
 #define ICO_XB_MAX_UNITS 16384
 #define ICO_XB_MAX_DATA 4096
 #define ICO_XB_MAX_POINTS 4096
@@ -81,7 +86,7 @@
 #define ICO_XB_CONTENT 24
 /* the section's size at most (a load's bound before it inflates it) */
 #define ICO_XB_MAX_BYTES                                                                           \
-    (64u + ICO_XB_MAX_UNITS * 48u + ICO_XB_MAX_DATA * 40u + ICO_XB_MAX_POINTS * 48u +              \
+    (64u + ICO_XB_MAX_UNITS * 48u + ICO_XB_MAX_DATA * 48u + ICO_XB_MAX_POINTS * 48u +              \
      ICO_XB_MAX_BLOCKS * 40u + (4u << 20))
 
 /* the header's flags */

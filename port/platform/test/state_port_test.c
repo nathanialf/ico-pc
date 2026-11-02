@@ -36,6 +36,10 @@
  *            data layout, a block missing, new or resized, a text missing,
  *            a start-up value changed, no symbol table, the bounds'
  *            overflow, an image below 4 GB.
+ *   unsized  a GNU map's global without a size (Windows): a word past it
+ *            is recorded with its object's input section; a later build
+ *            with the section laid out alike translates it, one where the
+ *            section grew refuses it.
  *   numbers  a word nothing names (into a variable of a repeated name, a
  *            code address no unit holds) is counted, not a refusal: the
  *            state loads and the word stays as it is; at Windows' fixed
@@ -1049,6 +1053,129 @@ static void test_cross(void)
     free_build(&b);
 }
 
+/* a GNU ld map's global without a size (Windows): a word past it, as a
+   pointer to a static after it in the same object would be, is recorded
+   with the object's input section; a later build whose section is laid
+   out alike translates it, one where the section grew refuses */
+static void test_unsized_data(void)
+{
+    static const char mapA[] = "Linker script and memory map\n"
+                               "\n"
+                               ".text           0x0000000000401000     0x2000\n"
+                               " .text          0x0000000000401000      0x100 main.c.o\n"
+                               "                0x0000000000401000                ico_diag_init\n"
+                               "                0x0000000000401080                ico_diag_log\n"
+                               ".data           0x0000000000403000      0x200\n"
+                               " .data          0x0000000000403000      0x100 state.c.o\n"
+                               "                0x0000000000403040                g_state\n"
+                               " .data          0x0000000000403100      0x100 other.c.o\n"
+                               "                0x0000000000403100                g_other\n"
+                               "ico_gdata       0x0000000000405000      0x100\n"
+                               " ico_gdata      0x0000000000405000      0x100 game.c.o\n"
+                               "                0x0000000000405010                systemStatus\n";
+    char mapB[sizeof mapA], mapC[sizeof mapA];
+    IcoSymTabEnv e;
+    IcoSymTab *ta, *tb, *tc;
+    IcoXbProc p;
+    IcoXbRefs *r;
+    IcoXbStats st;
+    IcoXbNow now;
+    IcoXbVerdict v;
+    const IcoSymData *d;
+    char why[160], *q;
+    void *sec = NULL;
+    size_t n = 0;
+    int k;
+
+    memset(&e, 0, sizeof e);
+    e.anchor = "ico_diag_init";
+    e.anchor_addr = 0x401000;
+    e.check = "ico_diag_log";
+    e.check_addr = 0x401080;
+    e.image_lo = 0x400000;
+    e.image_hi = 0x500000;
+    e.text_lo = 0x401000;
+    e.text_hi = 0x403000;
+    e.game_lo[0] = 0x405000;
+    e.game_hi[0] = 0x405100;
+    e.arch = ICO_CODE_RAW;
+    /* B: the same objects one page higher; C: state.c.o's .data grown by
+       a static (other.c.o after it moves too) */
+    memcpy(mapB, mapA, sizeof mapA);
+    memcpy(mapC, mapA, sizeof mapA);
+    for (q = mapB; (q = strstr(q, "0x0000000000403")) != NULL; q++) {
+        q[14] = '4';
+    }
+    q = strstr(mapC, "0x0000000000403000      0x100 state.c.o");
+    CHECK(q != NULL);
+    if (q != NULL) {
+        q[27] = '8'; /* 0x180 */
+    }
+    for (q = mapC; (q = strstr(q, "0x0000000000403100")) != NULL; q++) {
+        q[16] = '8'; /* other.c.o at 0x403180 */
+    }
+    ta = ico_symtab_parse(mapA, sizeof mapA - 1, &e, why, sizeof why);
+    tb = ico_symtab_parse(mapB, sizeof mapB - 1, &e, why, sizeof why);
+    tc = ico_symtab_parse(mapC, sizeof mapC - 1, &e, why, sizeof why);
+    CHECK(ta != NULL && tb != NULL && tc != NULL, "the three maps parse: %s", why);
+    if (ta == NULL || tb == NULL || tc == NULL) {
+        ico_symtab_free(ta);
+        ico_symtab_free(tb);
+        ico_symtab_free(tc);
+        return;
+    }
+    d = ico_symtab_data_at(ta, 0x403080);
+    CHECK(d != NULL && strcmp(ico_symtab_name(ta, d->name), "g_state") == 0 && !d->exact &&
+              d->sec_size == 0x100 && d->sec_off == 0x40,
+          "g_state without a size: its object's section 0x100, at 0x40 in it");
+    d = ico_symtab_data_at(tc, 0x403080);
+    CHECK(d != NULL && d->sec_size == 0x180 && d->sec_off == 0x40,
+          "the grown object's section 0x180");
+    memset(&p, 0, sizeof p);
+    p.tab = ta;
+    p.image.lo = e.image_lo;
+    p.image.hi = e.image_hi;
+    p.image.text_lo = e.text_lo;
+    p.image.text_hi = e.text_hi;
+    p.game_lo[0] = e.game_lo[0];
+    p.game_hi[0] = e.game_hi[0];
+    p.any_address = 1; /* a synthetic image below 4 GB */
+    r = ico_xb_begin(&p);
+    if (r != NULL) {
+        ico_xb_word(r, 0x403080, 1); /* past g_state: a static of state.c */
+        CHECK(ico_xb_finish(r, &sec, &n, &st) == 0 && st.data == 1 && st.left == 0,
+              "the word past g_state recorded with g_state (%u data)", st.data);
+    }
+    memset(&now, 0, sizeof now);
+    now.image = p.image;
+    now.game_lo[0] = e.game_lo[0];
+    now.game_hi[0] = e.game_hi[0];
+    now.old_game_lo[0] = e.game_lo[0];
+    now.old_game_hi[0] = e.game_hi[0];
+    now.tab = tb;
+    k = sec != NULL ? ico_xb_check(sec, n, &now, &v) : ICO_XB_BAD;
+    {
+        uint64_t to = 0;
+        IcoStateXlate xl;
+
+        memset(&xl, 0, sizeof xl);
+        xl.span = v.span;
+        xl.n_span = v.n_span;
+        CHECK(k == ICO_XB_OK && ico_state_xlate(&xl, 0x403080, &to) && to == 0x404080,
+              "the object laid out alike: the word moves with it (%d %s)", k, v.why);
+    }
+    ico_xb_verdict_free(&v);
+    now.tab = tc;
+    k = sec != NULL ? ico_xb_check(sec, n, &now, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_DATA && strstr(v.why, "around the variable g_state") != NULL,
+          "the object's section grew: refused (%d %s)", k, v.why);
+    ico_xb_verdict_free(&v);
+    free(sec);
+    ico_symtab_free(ta);
+    ico_symtab_free(tb);
+    ico_symtab_free(tc);
+}
+
 /* an image below 4 GB (the Linux program's): pinned */
 static void test_low_image(void)
 {
@@ -1356,6 +1483,7 @@ int main(void)
     test_cross();
     test_low_image();
     test_windows_numbers();
+    test_unsized_data();
     test_format();
     test_keys();
     return ico_check_summary("state_port");

@@ -481,6 +481,28 @@ static uint64_t sec_end(const Pos *secs, size_t n, uint64_t a)
     return 0;
 }
 
+/* the section holding a: 1 and its [*lo, *hi), or 0 */
+static int sec_at(const Pos *secs, size_t n, uint64_t a, uint64_t *lo, uint64_t *hi)
+{
+    size_t l = 0, h = n;
+
+    while (l < h) {
+        const size_t mid = l + (h - l) / 2;
+
+        if (secs[mid].at <= a) {
+            l = mid + 1;
+        } else {
+            h = mid;
+        }
+    }
+    if (l > 0 && a < secs[l - 1].end) {
+        *lo = secs[l - 1].at;
+        *hi = secs[l - 1].end;
+        return 1;
+    }
+    return 0;
+}
+
 static void say(char *why, size_t n, const char *s)
 {
     if (why != NULL && n > 0) {
@@ -657,6 +679,15 @@ static int build_data(IcoSymTab *t, const Lists *l)
         d->size = end - p->at;
         d->name = p->name;
         d->exact = (uint8_t)exact;
+        d->sec_size = d->sec_off = 0;
+        {
+            uint64_t slo, shi;
+
+            if (!exact && sec_at(l->data_sec, l->n_data_sec, p->at, &slo, &shi)) {
+                d->sec_size = shi - slo;
+                d->sec_off = p->at - slo;
+            }
+        }
         k++;
     }
     t->n_data = k;
