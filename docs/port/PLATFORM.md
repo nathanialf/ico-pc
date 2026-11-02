@@ -40,6 +40,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/trace_host.c`, `trace_host.h` | the Main tick count, the heartbeat's state line, the trace file |
 | `port/platform/assert_host.c` | newlib's `__assert` as the game calls it |
 | `port/platform/window_host.c`, `window_host.h` | the SDL3 window, the renderer device, the real-time pacing, the stats lines (window build) |
+| `port/platform/window_present.c`, `window_present.h` | the presentation loop: the pace after each step under the vsync lock or on the timer path, the one present it makes at a time, the state it shares with `window_host.c` (window build) |
 | `port/platform/window_video.c`, `window_video.h` | window mode requests and their readback |
 | `port/platform/window_switch.c`, `window_switch.h` | Options > Graphics > Apply: the renderer switched to another backend or graphics card in the process, the Graphics page's host and its card names |
 | `port/platform/window_lifecycle.c`, `window_lifecycle.h` | the steps run when a mobile system moves the app |
@@ -296,15 +297,14 @@ paces (`port/platform/main_host.c` (`host_main`)).
 In the window build `ico_window_pace(hz)` runs after every simulated vsync. Outside the
 [vsync lock](ARCHITECTURE.md#terms) it presents until the vsync's deadline in real time (20 ms PAL,
 16.683 ms NTSC), as often as the frame rate option and vsync allow, then sleeps to it; more than
-100 ms behind, the lag is dropped instead of run off fast (`port/platform/window_host.c` (`pace`,
-`RESYNC_NS`, `resync`)). Under the vsync lock (vsync on, and a frame rate cap equal to the
+100 ms behind, the lag is dropped instead of run off fast (`port/platform/window_present.h` (`RESYNC_NS`); `port/platform/window_present.c` (`pace`, `resync`)). Under the vsync lock (vsync on, and a frame rate cap equal to the
 display's refresh and a whole multiple of the game's rate) the step is due on a grid of n display
 refreshes and is followed by n presents; more than `PACE_LOCK_DEBT_VSYNCS` (6) periods behind, the
-lag is dropped and the grid starts again (`port/platform/window_host.c` (`pace_locked`);
+lag is dropped and the grid starts again (`port/platform/window_present.c` (`pace_locked`);
 `port/platform/pace_policy.h` (`pace_lock_vsync`, `PACE_LOCK_DEBT_VSYNCS`)). Every decision free
 of SDL (the vsync lock and its display clocks, slow presents, the gap between presents, the FIFO
 hold, the first present on a new swapchain, the automatic resolution step) is in
-`port/platform/pace_policy.c`, tested by ctest `pace_policy` and `pace_loop`; `window_host.c` only
+`port/platform/pace_policy.c`, tested by ctest `pace_policy` and `pace_loop`; `window_present.c` only
 times and calls them. The [headless build](ARCHITECTURE.md#terms) has no pacing and runs vsyncs as
 fast as it can. [DISPLAY.md](DISPLAY.md#pacing) describes the paths and the vsync lock.
 

@@ -712,7 +712,7 @@ two ways, the pull path on the device's clock and the push on the game's
   `SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES`; the backends take it as a request).
 - Under the window's [vsync lock](ARCHITECTURE.md#terms) the display is the simulation's clock, so
   the simulation runs a little off 59.94 Hz. The window measures that rate every 10 s and hands the
-  ratio to `ico_audio_set_rate_ratio` (`port/platform/window_host.c` (`pace_log`); the nominal
+  ratio to `ico_audio_set_rate_ratio` (`port/platform/window_host.c` (`window_pace_log`); the nominal
   ratio at lock start in `pace_locked`), and the stream plays at it
   (`SDL_SetAudioStreamFrequencyRatio`); ratios outside 0.5..2 are taken as 1. On the pull path the
   SPU2's time then advances with the game's, so sequenced music keeps its tempo against the game
@@ -830,7 +830,7 @@ stays queued after each take, through `spu2_render` and the mirror swap
   the callbacks that came more than two periods after the one before (SDL's own thread ran late, so
   the device may have run dry), the silence, the part of it the bound held back, and the most it
   was ahead of the game. After the window's 10 s line (`ico_audio_sdl_log_summary`, called by
-  `pace_log`), with the time the trim played slower and the driver's ticks and the longest gap
+  `window_pace_log`), with the time the trim played slower and the driver's ticks and the longest gap
   between two of them (`port/audio/audio_lock.h` (`ico_audio_tick_note`), noted by the serve):
 
       audio: 1000 callbacks, 480000 frames; waited 0.21 ms at most for the driver (0 gave up), 0 callbacks late, 0 ms of silence (0 ms held back behind the game); ahead of the game by 28 ms at most, slowed for 0.0 s; the driver ticked 599 times, longest gap 17 ms (0 over 200 ms)

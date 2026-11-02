@@ -175,6 +175,7 @@ add_library(ico_render STATIC
     rd_png.c
     rd_post.c
     rd_present.c
+    rd_present_info.c # rd_last_present_info's record: what the last present drew
     rd_replay.c
     rd_replay_tiler.c # the replay's tiler passes: DATE through the stencil bit, the blur fold
     rd_replay_vu.c # the replay's VU draws
@@ -186,6 +187,7 @@ add_library(ico_render STATIC
     rd_shadow_one.c # the shadow count resolved in one draw from the stencil view
     rd_shadow_selftest.c # the shadow count's one draw: the start-up check on the device
     rd_store_plan.c # the depth stores and loads a replay drops: no later pass touches the depth
+    rd_submit.c # a replay's end: the present's pass, the submit and the present
     rd_tex.c
     rd_tex_decode.c # the texture decode pool: rdtex_store's decodes off the game thread
     rd_water.c # block targets, aliases, camera scopes

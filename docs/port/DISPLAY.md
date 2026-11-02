@@ -363,7 +363,7 @@ A lost device shows one message box and ends the session (`device_lost_quit`).
 ## The stats lines
 
 Every 10 s of real time (every second for 30 s after F11) the window logs a block of lines, in both
-presentation modes (`port/platform/window_host.c` (`pace_log`); `port/platform/hotkeys.h`
+presentation modes (`port/platform/window_host.c` (`window_pace_log`); `port/platform/hotkeys.h`
 (`ico_stats_period_ns`)).
 
 **The first line** (`window: N presents, ...`): the presents, the movie presents (and how many
@@ -395,7 +395,7 @@ steps, the frame rate option (with `(held to the display's X Hz)` while a cap ab
 presents once a refresh, [the present gap](#pacing)), the present mode, the display's refresh with presents a refresh, the
 window's pixel size, "step late max" (the latest a simulation step started against when it was due),
 "pump max" (the longest window event pump, [PLATFORM.md](PLATFORM.md#diagnostics)) and the lock's
-state (`pace_log`), one of:
+state (`window_pace_log`), one of:
 
 ```
 lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,
@@ -417,7 +417,7 @@ lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,
 - `lock off`.
 
 **Event lines.** The present allowance writes four, each one line, the first 8 then every 100th
-(`ico_log_limited`; `port/platform/window_host.c` (`budget_lines`), the words from
+(`ico_log_limited`; `port/platform/window_present.c` (`budget_lines`), the words from
 `port/platform/pace_policy.c` (`pace_budget_event_text`, unit-tested word for word)):
 
 - a drop: `window: presents held to A a step: the step ended L ms late after P presents, K steps
@@ -456,7 +456,7 @@ timed. Under mailbox with vsync off the 10 s line ends with the [FIFO fallback](
 count, `; k of 3 over 200 ms in 30 s toward FIFO`, and after its switch with `; K since presents went
 FIFO N s ago` (K: the presents over 50 ms since). A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
 is above the display's X Hz: presenting once a refresh (mailbox)` once after each settings change
-(`port/platform/window_host.c` (`pace`)).
+(`port/platform/window_present.c` (`pace`)).
 
 **The display line** (`window: display: ...`, under the lock only): the vblanks taken in the block,
 their mean interval with its minimum and maximum and the rate, the refresh SDL reports, the
@@ -596,10 +596,10 @@ the step's parts and the pump's, with the step's own card verdicts next to the g
 `ico_window_pace(hz)` runs after every simulated vsync: it presents until the vsync's deadline (50
 Hz PAL: 20 ms; NTSC: 16.683 ms) as often as the frame rate and vsync allow, then sleeps to it; more
 than 100 ms behind (`RESYNC_NS`) the lag is dropped and counted instead of run off fast
-(`port/platform/window_host.c` (`ico_window_pace`, `pace`, `resync`)). A pacing rule is written in
+(`port/platform/window_host.c` (`ico_window_pace`); `port/platform/window_present.c` (`pace`, `resync`)). A pacing rule is written in
 `port/platform/pace_policy.c`, which has no SDL, so `pace_policy_test` and `pace_loop_test` drive it
-with a fake clock and swapchain; `window_host.c` only supplies its I/O (`pace`, `pace_locked`, the
-`lock_io_*` callbacks of `PaceLockIo`). Three paths:
+with a fake clock and swapchain; the window only supplies its I/O (`port/platform/window_present.c`
+(`pace`, `pace_locked`, the `lock_io_*` callbacks of `PaceLockIo`)). Three paths:
 
 1. **Frame rate Original**: `rd_end_frame` replays and presents the frame once inside the step; the
    window only sleeps to the deadline (`pace`). The rule is a rate requirement: the game steps at
@@ -680,7 +680,7 @@ equal to the refresh takes the vsync lock when it is a whole multiple n of the s
 multiple (144 on 59.94) presents FIFO with no gap: the blocking present is the timer, and when the
 refresh is shorter than the period `pace_fifo_hold` holds back a present that would return on a
 vblank past the deadline, a new frame at most once and never once the deadline has passed
-(`port/platform/window_host.c` (`video_settings`, `pace`); `port/platform/pace_policy.c`
+(`port/platform/window_host.c` (`video_settings`); `port/platform/window_present.c` (`pace`); `port/platform/pace_policy.c`
 (`pace_fifo_hold`)). Any other cap prefers mailbox (`rhi_prefer_mailbox`).
 
 **A window smaller than the display** (Windowed) paces the same:
@@ -852,14 +852,13 @@ slots), and the k-th present since the last frame closed shows alpha `k / (n * p
 lock starts the audio at `pace_lock_nominal_ratio` (the simulation's period over n reported
 refreshes) and each 10 s block sets the measured `pace_lock_rate_ratio` (at least
 `PACE_LOCK_RATE_MIN_STEPS` (100) steps; 1 when lag was dropped in the block or the ratio is over 2 %
-from 1) through `ico_audio_set_rate_ratio` (`port/platform/window_host.c` (`pace_locked`,
-`pace_log`)).
+from 1) through `ico_audio_set_rate_ratio` (`port/platform/window_host.c` (`window_pace_log`); `port/platform/window_present.c` (`pace_locked`)).
 
-The grid's slot starts at the refresh the display reports (`display_refresh_ns`, from SDL's mode). A
+The grid's slot starts at the refresh the display reports (`window_refresh_ns`, from SDL's mode). A
 display clock moves it onto the display; the clock never steps the simulation itself and the loop
 never waits for it (`port/platform/pace_policy.h`, the vsync lock). `pace_locked` offers the clock
 kind when a lock starts: SHOWN when the backend times presents (`rhi_present_timing`), else VBLANK
-when the vblank clock started, else none (`port/platform/window_host.c` (`pace_locked`)). The
+when the vblank clock started, else none (`port/platform/window_present.c` (`pace_locked`)). The
 present mode follows: mailbox with SHOWN, FIFO otherwise (`video_settings`).
 
 **PACE_CLOCK_KIND_VBLANK** (Windows, the vblank clock, FIFO). Every vblank noted goes into
@@ -880,7 +879,7 @@ present mode follows: mailbox with SHOWN, FIFO otherwise (`video_settings`).
 wrong clock never runs the game more than 1 % off its speed; a stopped clock is left the same way
 (`PACE_CLOCK_LEFT_PERIOD`, `PACE_CLOCK_LEFT_ERROR`; `port/platform/pace_policy.c` (`clock_leave`)).
 The window then keeps the grid on the report until the display or the settings change
-(`port/platform/window_host.c` (`pace_locked`, `vblankGone`)). The noted times carry the thread's
+(`port/platform/window_present.c` (`pace_locked`, `vblankGone`)). The noted times carry the thread's
 wake-up (tens of microseconds), so the step sits that much later after the true vblank
 (`port/platform/pace_policy.h`).
 
@@ -894,8 +893,7 @@ than the median of the last `PACE_GRID_RING` (31), once `PACE_GRID_RING_MIN` (15
 `PACE_GRID_CLEAN` (300) pictures in a row are shown with the run, and half a refresh at most. A
 present that started half a slot late or took a whole slot is not counted
 (`port/platform/pace_policy.c` (`clock_take`, `clock_seen`)). When this clock stops or is left the
-window presents FIFO until the next settings change (`port/platform/window_host.c` (`pace_locked`,
-`clockGone`)).
+window presents FIFO until the next settings change (`port/platform/window_present.c` (`pace_locked`, `clockGone`)).
 
 **Without a clock** (every platform but Windows, and a Windows clock that did not start) the grid
 stays on the report and the presents go FIFO, which shows them in order whatever their phase against
@@ -906,7 +904,7 @@ was full) and is counted (`waited`, `waitedMaxNs`). The wait is the backend's ow
 it gives one, never more than the present's whole time: on Vulkan the acquire
 (`vkAcquireNextImageKHR`), `vkQueuePresentKHR` and the fence waits; on D3D12 the frame latency wait,
 `Present` and the fence waits; the whole present where the backend times nothing
-(`port/platform/window_host.c` (`present_once`, `lock_io_waited`); `port/rhi/rhi.h`
+(`port/platform/window_present.c` (`present_once`, `lock_io_waited`); `port/rhi/rhi.h`
 (`RhiStats`)).
 
 **The skip guard.** A step that ends past the next step's due time skips the rest of its presents (a
@@ -929,22 +927,21 @@ a second game (two 2.4 ms steps a frame) more than half the frames are presented
 row left out, and no lag is dropped, where presenting every frame falls behind by about 10 ms a
 frame (43.8 ms of work against 33.4) until a resync
 (`port/platform/test/pace_loop_test.c` (`testLateSkipLock`), which prints the counts). The window
-adds the lock's count to the first stats line's `late` (`pace_log`).
+adds the lock's count to the first stats line's `late` (`window_pace_log`).
 
 **Resync and off the screen.** More than `PACE_LOCK_DEBT_VSYNCS` (6) periods behind (a stage load)
 the lag is dropped and counted and the grid starts again from now. Off the screen (minimised,
 hidden, occluded, 0 x 0) nothing is presented and the grid goes on; back on the screen the lock
-starts again (`port/platform/pace_policy.c` (`pace_lock_vsync`); `port/platform/window_host.c`
+starts again (`port/platform/pace_policy.c` (`pace_lock_vsync`); `port/platform/window_present.c`
 (`pace`, `window_off_screen`)).
 
 **The pause on a swapchain rebuild.** Rebuilding the swapchain (a present mode change, a size event,
 fullscreen) idles the device, and the first acquire on the new chain can take ~140 ms on some
 drivers; that time is a pause of the host, not lag. `video_apply` times the rebuild;
 `pace_first_present_pause` takes the first present on a new swapchain's cost over a refresh
-(`RhiStats.swapchains` tells a new one); `pace_paused` moves the deadline, the frame times and the
+(`RhiStats.swapchains` tells a new one); `window_pace_paused` moves the deadline, the frame times and the
 present grid by it, and under the lock `pace_lock_pause` moves the grid and everything timed on it
-and has the vblank clock snap the phase again (`port/platform/window_host.c` (`present_once`,
-`pace_paused`); `port/platform/pace_policy.c` (`pace_lock_pause`)).
+and has the vblank clock snap the phase again (`port/platform/window_host.c` (`window_pace_paused`); `port/platform/window_present.c` (`present_once`); `port/platform/pace_policy.c` (`pace_lock_pause`)).
 
 **Log lines.** A new lock logs
 
@@ -960,14 +957,14 @@ compositor's refresh of the primary display as a cross-check, not a clock
 (`ico_display_dwm_refresh`). A clock that stops or is left logs one line, and the first 48 presents
 of a lock are logged as their intervals between returns, with the time from the slot to the refresh
 that showed each where the clock saw it (`PACE_LOCK_TRACE_FIRST`, `pace_lock_trace_text`)
-(`port/platform/window_host.c` (`pace_locked`, `lock_clock_words`)). The lock line, the DWM line,
+(`port/platform/window_present.c` (`pace_locked`, `lock_clock_words`)). The lock line, the DWM line,
 the trace and the display clock's start line are logged for the first 8 locks of a session, a clock
 change for the first 16 (`pace_locked`, `disp_clock_start`). Other pacing lines:
 `window: the cap equals the refresh: the game steps every X ms (n refreshes), present mode M` or
 `window: the cap ... the refresh: present mode ...` when `video_settings` changes its decision,
 `window: present mode M` once at start, `window: display clock: stopped (...)` when the vblank
 thread stops itself, and `window: off the screen` / `back on the screen`
-(`port/platform/window_host.c` (`video_settings`, `ico_window_open`, `disp_take`, `pace`)).
+(`port/platform/window_host.c` (`video_settings`, `ico_window_open`, `window_disp_take`); `port/platform/window_present.c` (`pace`)).
 
 ### The vblank clock
 
@@ -990,7 +987,7 @@ taken, 0 none yet, -1 not running), `_name` (the output's name for the log, `\\.
 The window starts the clock with each new lock and stops it when the lock ends and at close; a
 display change restarts it on the new output and starts the lock again. The lock takes the notes
 when its clock kind is VBLANK; otherwise the window drains them every locked vsync for the display
-line (`port/platform/window_host.c` (`disp_lock_start`, `disp_take`, `disp_vsync`,
+line (`port/platform/window_host.c` (`window_disp_lock_start`, `window_disp_take`, `window_disp_vsync`,
 `ico_window_pump`)).
 
 ## Presentation
@@ -1168,7 +1165,7 @@ the error a present; an error over half a tick, a pause of more than four steps 
 backwards resets it; `alpha = (clock - tickAt) / tick` in [0, 0.999], `tickAt` the simulated time
 the frame closed and `tick` the last two closes apart, held to one to four periods
 (`port/render/rd.h` (`RdPresentClock`); `port/render/rd_interp.c` (`rd_present_clock_alpha`);
-`port/platform/window_host.c` (`pace`)). `ICO_RD_S2_LEGACY=1` takes the raw measured time instead
+`port/platform/window_present.c` (`pace`)). `ICO_RD_S2_LEGACY=1` takes the raw measured time instead
 and turns off the finer blending (`port/render/rd_internal.h` (`rd__s2_legacy`)). Under the lock the
 alpha is the grid's exact `k / (n * perFrame)` (`pace_lock_alpha`).
 
@@ -1243,8 +1240,9 @@ line says `keep 0; the zip has no tick before to rebuild it from`. A keep frame'
 (`RdPresentInfo.keep`) shows DISPLAY again, not an interpolated frame: `keep 1: the picture shown
 again`;
 with interpolation off the present is `rd_end_frame`'s, alpha 1 (`port/platform/window_host.c`
-(`frame_dump`, `present_once`, `photo_pump`); `port/render/rd_interp.c` (`rd_present`,
-`rd__note_frame_present`)). The alpha says which kind of present it was: 1 the tick's own picture,
+(`frame_dump`, `photo_pump`); `port/platform/window_present.c` (`present_once`);
+`port/render/rd_interp.c` (`rd_present`); `port/render/rd_present_info.c`
+(`rd_last_present_info`, `rd__note_frame_present`)). The alpha says which kind of present it was: 1 the tick's own picture,
 below 1 one drawn between the tick before and the tick.
 
 With the tick before in the zip, F12 also arms the same present's own frame

@@ -6314,37 +6314,11 @@ static void presentLog(void)
  * clamp, NAN once rd_present has taken it */
 static double s_clockRaw = NAN;
 
-/* rd_last_present_info's record; valid once a present ran */
-static RdPresentInfo s_info;
-static bool s_infoValid;
-
 static void presentReset(void)
 {
     memset(&s_pres, 0, sizeof(s_pres));
-    memset(&s_info, 0, sizeof(s_info));
-    s_infoValid = false;
+    rd__present_info_reset(); /* rd_last_present_info's record (rd_present_info.c) */
     s_snapTopN = 0;
-}
-
-/* with interpolation off rd_end_frame presents each frame once, whole */
-void rd__note_frame_present(const RdFrame *f)
-{
-    s_info.frame = f->number;
-    s_info.keep = f->keep;
-    s_info.fade = f->fade;
-    s_info.snap = (uint32_t)rd__interp_snap(rd__prev_frame(), f);
-    s_info.firstOfTick = 1;
-    s_info.alpha = 1.0f; /* the tick's own picture */
-    s_infoValid = true;
-}
-
-bool rd_last_present_info(RdPresentInfo *out)
-{
-    if (!out || !s_infoValid) {
-        return false;
-    }
-    *out = s_info;
-    return true;
 }
 
 bool rd_interpolation_active(void)
@@ -6506,13 +6480,7 @@ bool rd_present(float alpha)
             s_pres.lowestRaw = raw;
         }
     }
-    s_info.frame = cur->number;
-    s_info.keep = cur->keep;
-    s_info.fade = cur->fade;
-    s_info.snap = (uint32_t)rd__interp_snap(rd__prev_frame(), cur);
-    s_info.firstOfTick = (uint32_t)first;
-    s_info.alpha = alpha;
-    s_infoValid = true;
+    rd__present_info_note(cur, (uint32_t)first, alpha);
     if (cur->keep) {
         /* a keep frame draws lists 11..12 over DISPLAY: once; the other
          * presents show DISPLAY again (an empty keep frame) */

@@ -2452,8 +2452,13 @@ int rd__alpha_bin(float alpha, double raw);
 bool rd__grid_screen_st(uint8_t kind, const float (*m)[4], const double eye[3], float sx, float sy,
                         const float pos[4], float h, float out[2]);
 /* rd_last_present_info's record for rd_end_frame's present of f
- * (interpolation off; rd_interp.c) */
+ * (interpolation off; rd_present_info.c) */
 void rd__note_frame_present(const RdFrame *f);
+/* rd_last_present_info's record (rd_present_info.c): a present of cur at
+ * alpha (rd_present's, after its clamp), firstOfTick whether it is the
+ * tick's first; and the record forgotten (rd_present's reset) */
+void rd__present_info_note(const RdFrame *cur, uint32_t firstOfTick, float alpha);
+void rd__present_info_reset(void);
 const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float alpha,
                                 int firstOfTick, RdInterpStats *stats);
 void rd__interp_shutdown(void);

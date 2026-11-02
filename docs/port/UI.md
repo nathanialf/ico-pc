@@ -883,7 +883,7 @@ screen, not the 4:3 picture: `pxToGrid` maps an output pixel to the font's grid,
 outside 0..640 on a wide screen). The number is made by `port/platform/fps_counter.c` (free of SDL
 and rd, `fps_counter_test`): the presents over the last second or more, the figure the 10 s line
 gives as "presents/s", 0 until the first second (nothing is drawn while it is 0). `window_host.c`
-only calls `ui_fps_tick(now)` at the top of `pace_log` and `ui_fps_present()` after a present
+only calls `ui_fps_tick(now)` at the top of `window_pace_log` and `ui_fps_present()` after a present
 (`window_host.c` is within a few hundred bytes of the 256 KiB per-file gate: the rest lives here and in
 `fps_counter.c`); `ui_fps_tick` passes the renderer's replay count (`rd_replay_time_max(0, ...)`,
 which the 10 s line zeroes: a smaller count than the last is a zeroing) and `rd_interpolation_active()`.
