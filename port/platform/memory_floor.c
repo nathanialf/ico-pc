@@ -32,7 +32,7 @@ const char *ico_memory_floor_rule(long setting_mb)
     if (setting_mb > 0) {
         return "[dev] pipeline_memory_floor_mb";
     }
-    return "17 % of total, at most 1536 MB above 8 GB";
+    return "17 % of total, at most 2048 MB above 8 GB";
 }
 
 int ico_memory_floor_stops(long avail_mb, long total_mb, long setting_mb)

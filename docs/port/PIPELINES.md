@@ -355,7 +355,7 @@ rule cannot fire while the system takes the process's pages back), logged once b
 `rd: pipelines: the start-up set stops at the system's low-memory signal (asked after each batch),
 the rest made on first use`. A batch in flight is not cut short: the careful batches are 8
 pipelines on one thread. The same function also says yes once the device's available memory is
-under the free-memory floor, 17 % of its memory and at most 1536 MB on a device of more than 8 GB
+under the free-memory floor, 17 % of its memory and at most 2048 MB on a device of more than 8 GB
 (`port/platform/memory_floor.h`; [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)): a
 phone with much memory reports little of it available while it runs well (2554 MB of 15552 MB on a
 PowerVR DXT-48-1536), and a plain 17 % (2643 MB) stopped that phone's set after 33 of 1193 keys,
