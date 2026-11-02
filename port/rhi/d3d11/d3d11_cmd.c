@@ -18,6 +18,7 @@
  * recorded (UpdateSubresource1 on the deferred context), so the rows must
  * be written before the copy is recorded, as every caller does. */
 #include "d3d11_internal.h"
+#include "../rhi_bind_cache.h"
 #include <assert.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -287,7 +288,8 @@ void rhi_cmd_set_viewport(RhiCommandList cl, const RhiViewport *v)
     }
     /* D3D's clip space is the RHI's: no flip (the Vulkan backend flips) */
     D3D11_VIEWPORT vp = {v->x, v->y, v->w, v->h, v->minDepth, v->maxDepth};
-    if ((c->st.known & D11_KNOW_VIEWPORT) && memcmp(&vp, &c->st.vp, sizeof(vp)) == 0) {
+    if (rhi_bind_cache_enabled() && (c->st.known & D11_KNOW_VIEWPORT) &&
+        memcmp(&vp, &c->st.vp, sizeof(vp)) == 0) {
         g_d11.counts.stateSetsSkipped++;
         return;
     }
@@ -303,7 +305,8 @@ void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *r)
         return;
     }
     D3D11_RECT sc = {r->x, r->y, r->x + (LONG)r->w, r->y + (LONG)r->h};
-    if ((c->st.known & D11_KNOW_SCISSOR) && memcmp(&sc, &c->st.sc, sizeof(sc)) == 0) {
+    if (rhi_bind_cache_enabled() && (c->st.known & D11_KNOW_SCISSOR) &&
+        memcmp(&sc, &c->st.sc, sizeof(sc)) == 0) {
         g_d11.counts.stateSetsSkipped++;
         return;
     }
@@ -317,7 +320,7 @@ void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *r)
  * stencil reference), set unless the context holds them; true when set */
 static bool d11_om_blend(D11CommandList *c, ID3D11BlendState *b, const float factor[4])
 {
-    if ((c->st.objKnown & D11_OBJ_BLEND) && c->st.blendSet == b &&
+    if (rhi_bind_cache_enabled() && (c->st.objKnown & D11_OBJ_BLEND) && c->st.blendSet == b &&
         memcmp(c->st.blendFactorSet, factor, sizeof(c->st.blendFactorSet)) == 0) {
         return false;
     }
@@ -330,7 +333,8 @@ static bool d11_om_blend(D11CommandList *c, ID3D11BlendState *b, const float fac
 
 static bool d11_om_ds(D11CommandList *c, ID3D11DepthStencilState *ds, uint8_t ref)
 {
-    if ((c->st.objKnown & D11_OBJ_DS) && c->st.dsSet == ds && c->st.stencilRefSet == ref) {
+    if (rhi_bind_cache_enabled() && (c->st.objKnown & D11_OBJ_DS) && c->st.dsSet == ds &&
+        c->st.stencilRefSet == ref) {
         return false;
     }
     ID3D11DeviceContext_OMSetDepthStencilState(c->ctx, ds, ref);
@@ -352,37 +356,39 @@ void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p)
         return;
     }
     c->st.pipeline = p.id;
-    if (c->st.pipelineSet == p.id) {
+    /* the bind cache off (rhi_bind_cache.h): every object set again */
+    const bool cache = rhi_bind_cache_enabled();
+    if (cache && c->st.pipelineSet == p.id) {
         g_d11.counts.pipelineBindsSkipped++;
         return;
     }
     D11CmdState *st = &c->st;
     uint32_t same = 0;
-    if ((st->objKnown & D11_OBJ_IL) && st->ilSet == pp->il) {
+    if (cache && (st->objKnown & D11_OBJ_IL) && st->ilSet == pp->il) {
         same++;
     } else {
         ID3D11DeviceContext_IASetInputLayout(c->ctx, pp->il);
         st->ilSet = pp->il;
     }
-    if ((st->objKnown & D11_OBJ_TOPO) && st->topoSet == pp->topo) {
+    if (cache && (st->objKnown & D11_OBJ_TOPO) && st->topoSet == pp->topo) {
         same++;
     } else {
         ID3D11DeviceContext_IASetPrimitiveTopology(c->ctx, pp->topo);
         st->topoSet = pp->topo;
     }
-    if ((st->objKnown & D11_OBJ_VS) && st->vsSet == pp->vs) {
+    if (cache && (st->objKnown & D11_OBJ_VS) && st->vsSet == pp->vs) {
         same++;
     } else {
         ID3D11DeviceContext_VSSetShader(c->ctx, pp->vs, NULL, 0);
         st->vsSet = pp->vs;
     }
-    if ((st->objKnown & D11_OBJ_PS) && st->psSet == pp->ps) {
+    if (cache && (st->objKnown & D11_OBJ_PS) && st->psSet == pp->ps) {
         same++;
     } else {
         ID3D11DeviceContext_PSSetShader(c->ctx, pp->ps, NULL, 0);
         st->psSet = pp->ps;
     }
-    if ((st->objKnown & D11_OBJ_RS) && st->rsSet == pp->rs) {
+    if (cache && (st->objKnown & D11_OBJ_RS) && st->rsSet == pp->rs) {
         same++;
     } else {
         ID3D11DeviceContext_RSSetState(c->ctx, pp->rs);
@@ -421,7 +427,7 @@ void rhi_cmd_set_bind_group_offsets(RhiCommandList cl, uint32_t group, RhiBindGr
     /* the group the slot holds with the same offsets, its registers not
      * written over since (groupStale): bound, or flushed at the next draw
      * (its dirty bit kept, as after a pass's start) */
-    if (c->st.groups[group] == bg.id && !(c->st.groupStale & bit) &&
+    if (rhi_bind_cache_enabled() && c->st.groups[group] == bg.id && !(c->st.groupStale & bit) &&
         memcmp(c->st.offsets[group], off, sizeof(off)) == 0) {
         g_d11.counts.bindGroupBindsSkipped++;
         return;
@@ -444,7 +450,8 @@ void rhi_cmd_set_vertex_buffer(RhiCommandList cl, uint32_t binding, RhiBuffer b,
         !buf->part[D11_PART_VI] || offset > 0xFFFFFFFFull) {
         return;
     }
-    if (c->st.vb[binding] == b.id && c->st.vbOffset[binding] == offset) {
+    if (rhi_bind_cache_enabled() && c->st.vb[binding] == b.id &&
+        c->st.vbOffset[binding] == offset) {
         /* the buffer the slot holds (or gets at the next draw) */
         g_d11.counts.stateSetsSkipped++;
         return;
@@ -461,8 +468,8 @@ void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, b
     if (!c || !buf || offset >= buf->size || !buf->part[D11_PART_VI] || offset > 0xFFFFFFFFull) {
         return;
     }
-    if ((c->st.known & D11_KNOW_INDEX) && c->st.ib == b.id && c->st.ibOffset == offset &&
-        c->st.ib32 == u32) {
+    if (rhi_bind_cache_enabled() && (c->st.known & D11_KNOW_INDEX) && c->st.ib == b.id &&
+        c->st.ibOffset == offset && c->st.ib32 == u32) {
         g_d11.counts.stateSetsSkipped++;
         return;
     }
@@ -483,7 +490,7 @@ void rhi_cmd_set_stencil_ref(RhiCommandList cl, uint8_t ref)
     if (!c) {
         return;
     }
-    if ((c->st.known & D11_KNOW_STENCIL) && c->st.stencilRef == ref) {
+    if (rhi_bind_cache_enabled() && (c->st.known & D11_KNOW_STENCIL) && c->st.stencilRef == ref) {
         g_d11.counts.stateSetsSkipped++;
         return;
     }
@@ -501,7 +508,7 @@ void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
     if (!c || !rgba) {
         return;
     }
-    if ((c->st.known & D11_KNOW_BLEND_CONSTANT) &&
+    if (rhi_bind_cache_enabled() && (c->st.known & D11_KNOW_BLEND_CONSTANT) &&
         memcmp(c->st.blendConstant, rgba, sizeof(c->st.blendConstant)) == 0) {
         g_d11.counts.stateSetsSkipped++;
         return;
@@ -559,7 +566,7 @@ static void d11_set_cb(D11CommandList *c, uint32_t stage, uint32_t slot, ID3D11B
                        UINT first, UINT num)
 {
     ID3D11Buffer **held = &c->st.cbSet[stage][slot];
-    if (*held == cb &&
+    if (rhi_bind_cache_enabled() && *held == cb &&
         (!cb || (c->st.cbFirst[stage][slot] == first && c->st.cbNum[stage][slot] == num))) {
         return;
     }
@@ -591,6 +598,8 @@ static void d11_bind_entry(D11CommandList *c, const D11BindEntry *e, const uint3
 {
     static bool s_slotLogged;
     const uint32_t stages = e->stages ? e->stages : (D11_STAGE_VS | D11_STAGE_PS);
+    /* the bind cache off (rhi_bind_cache.h): every register set again */
+    const bool cache = rhi_bind_cache_enabled();
     switch ((RhiBindType)e->type) {
     case RHI_BIND_UNIFORM_BUFFER:
     case RHI_BIND_UNIFORM_BUFFER_DYNAMIC: {
@@ -633,12 +642,13 @@ static void d11_bind_entry(D11CommandList *c, const D11BindEntry *e, const uint3
             d11_cmd_touch(c, e->buffer, D11_PART_SRV, e->lo, e->hi);
         }
         /* a register already holding the view is not set again */
-        if ((stages & D11_STAGE_VS) && c->st.srvSet[RHI_STAGE_VERTEX][e->slot] != srv) {
+        if ((stages & D11_STAGE_VS) && (!cache || c->st.srvSet[RHI_STAGE_VERTEX][e->slot] != srv)) {
             ID3D11DeviceContext_VSSetShaderResources(c->ctx, e->slot, 1, &srv);
             c->st.srvSet[RHI_STAGE_VERTEX][e->slot] = srv;
             c->st.srvMask[RHI_STAGE_VERTEX] |= 1u << e->slot;
         }
-        if ((stages & D11_STAGE_PS) && c->st.srvSet[RHI_STAGE_FRAGMENT][e->slot] != srv) {
+        if ((stages & D11_STAGE_PS) &&
+            (!cache || c->st.srvSet[RHI_STAGE_FRAGMENT][e->slot] != srv)) {
             ID3D11DeviceContext_PSSetShaderResources(c->ctx, e->slot, 1, &srv);
             c->st.srvSet[RHI_STAGE_FRAGMENT][e->slot] = srv;
             c->st.srvMask[RHI_STAGE_FRAGMENT] |= 1u << e->slot;
@@ -655,11 +665,12 @@ static void d11_bind_entry(D11CommandList *c, const D11BindEntry *e, const uint3
         }
         ID3D11SamplerState *smp = e->smp ? e->smp : g_d11.defaultSampler;
         /* a register already holding the sampler is not set again */
-        if ((stages & D11_STAGE_VS) && c->st.smpSet[RHI_STAGE_VERTEX][e->slot] != smp) {
+        if ((stages & D11_STAGE_VS) && (!cache || c->st.smpSet[RHI_STAGE_VERTEX][e->slot] != smp)) {
             ID3D11DeviceContext_VSSetSamplers(c->ctx, e->slot, 1, &smp);
             c->st.smpSet[RHI_STAGE_VERTEX][e->slot] = smp;
         }
-        if ((stages & D11_STAGE_PS) && c->st.smpSet[RHI_STAGE_FRAGMENT][e->slot] != smp) {
+        if ((stages & D11_STAGE_PS) &&
+            (!cache || c->st.smpSet[RHI_STAGE_FRAGMENT][e->slot] != smp)) {
             ID3D11DeviceContext_PSSetSamplers(c->ctx, e->slot, 1, &smp);
             c->st.smpSet[RHI_STAGE_FRAGMENT][e->slot] = smp;
         }

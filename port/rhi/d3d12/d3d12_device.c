@@ -5,6 +5,7 @@
 #include "rhi_d3d12.h"
 #include "../rhi_adapter.h"
 #include "../rhi_backend.h"
+#include "../rhi_bind_cache.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -865,6 +866,7 @@ bool rhi_init(const RhiDeviceDesc *desc)
     if (g_dx.memBudget == 0) {
         DX_LOG("video memory budget: not reported by this adapter");
     }
+    DX_LOG("bind cache: %s", rhi_bind_cache_words());
     dx_drain_messages();
     return true;
 }

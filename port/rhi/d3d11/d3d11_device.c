@@ -8,6 +8,7 @@
 #include "rhi_d3d11.h"
 #include "../rhi_adapter.h"
 #include "../rhi_backend.h"
+#include "../rhi_bind_cache.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -1396,6 +1397,7 @@ bool rhi_init(const RhiDeviceDesc *desc)
         rhi_shutdown();
         return false;
     }
+    D11_LOG("bind cache: %s", rhi_bind_cache_words());
     {
         /* the sampler an unbound sampler slot gets: point, clamp */
         D3D11_SAMPLER_DESC sd;

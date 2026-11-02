@@ -1601,6 +1601,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   draws with the new one's write mask, not the old one's (`rhi_vk` and its variants, `rhi_gl`,
   `rhi_gl_nodual`, `rhi_d3d12`, `rhi_d3d11`; the line `<label>: bind cache cell passed`). The
   dynamic state cell's two repeats count every command of their groups in `stateSetsSkipped`.
+  `rhi_vk_nobindcache` and `rhi_gl_nobindcache` run the same cells under `ICO_RHI_BIND_CACHE=0`
+  (the bind cache off, [RHI.md](RHI.md#the-bind-cache)): the bind cache cell then wants no skip,
+  the repeats' pipeline binds recorded (6 more) and the group binds the same, the same exact
+  pictures; the dynamic state cell's repeats send every command again (none counted) and the
+  dual-source leftover cell counts 3 commands and no leftover.
 - `rhi_d3d12_plan_test.c`: the D3D12 backend's state and barrier bookkeeping on the CPU
   (`rhi_d3d12_plan`).
 - `rhi_d3d11_shader_plan_test.c`: the Direct3D 11 backend's shader route on the CPU

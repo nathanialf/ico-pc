@@ -274,7 +274,7 @@ endif()
 
 # --- ico_rhi_vulkan -------------------------------------------------------------
 if(_ico_have_vk)
-    set(_ico_vk_sources rhi_adapter.c rhi_driver_version.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c
+    set(_ico_vk_sources rhi_adapter.c rhi_bind_cache.c rhi_driver_version.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c
                         vk/vk_pipeline.c vk/vk_present_mode.c vk/vk_renderpass.c vk/vk_resource.c
                         vk/vk_swapchain.c vk/vk_sync.c)
     if(ANDROID)
@@ -311,6 +311,7 @@ endif()
 if(_ico_have_d3d12)
     add_library(ico_rhi_d3d12 STATIC
         rhi_adapter.c
+        rhi_bind_cache.c
         d3d12/d3d12_cmd.c
         d3d12/d3d12_device.c
         d3d12/d3d12_pipeline.c
@@ -338,6 +339,7 @@ endif()
 if(_ico_have_d3d11)
     add_library(ico_rhi_d3d11 STATIC
         rhi_adapter.c
+        rhi_bind_cache.c
         d3d11/d3d11_cmd.c
         d3d11/d3d11_device.c
         d3d11/d3d11_pipeline.c
@@ -365,6 +367,7 @@ endif()
 # port/data); d3d12/d3d12_plan.c gives the handle pools and the layout rules.
 if(_ico_have_gl)
     set(_ico_gl_sources
+        rhi_bind_cache.c
         gl/gl_cmd.c
         gl/gl_device.c
         gl/gl_glsl.c
@@ -511,6 +514,15 @@ if(_ico_have_vk)
         set(_ico_vk_nodual_env ${_ico_vk_test_env} "ICO_VK_FAKE_NO_DUAL=1")
         set_tests_properties(rhi_vk_nodual PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_nodual_env}")
+        # the cells with the bind cache off (ICO_RHI_BIND_CACHE=0,
+        # rhi_bind_cache.c): every bind recorded as given, the same pictures,
+        # no skip counted (rhi_test_common.c bindCacheCell, dynamicCell)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/nobindcache")
+        add_test(NAME rhi_vk_nobindcache COMMAND rhi_vk_test
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/nobindcache")
+        set(_ico_vk_nobindcache_env ${_ico_vk_test_env} "ICO_RHI_BIND_CACHE=0")
+        set_tests_properties(rhi_vk_nobindcache PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_nobindcache_env}")
         # the D24S8 depth-stencil fallback (ICO_VK_FAKE_D24S8=1)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/d24s8")
         add_test(NAME rhi_vk_d24s8 COMMAND rhi_vk_test
@@ -633,6 +645,12 @@ if(_ico_have_gl)
         set(_ico_gl_nodual_env ${_ico_gl_test_env} "ICO_GL_FAKE_NO_DUAL=1")
         set_tests_properties(rhi_gl_nodual PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_gl_nodual_env}")
+        # the cells with the bind cache off (ICO_RHI_BIND_CACHE=0, as
+        # rhi_vk_nobindcache)
+        add_test(NAME rhi_gl_nobindcache COMMAND rhi_gl_test)
+        set(_ico_gl_nobindcache_env ${_ico_gl_test_env} "ICO_RHI_BIND_CACHE=0")
+        set_tests_properties(rhi_gl_nobindcache PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_gl_nobindcache_env}")
     endif()
 endif()
 

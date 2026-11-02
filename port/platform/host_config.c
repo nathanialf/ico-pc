@@ -540,6 +540,9 @@ static const struct {
        device offers it, depth the depth alone, false neither (every
        pipeline static; port/rhi/vk/vk_device.c) */
     {"dev.dynamic_state", "dynamic_state"},
+    /* the bind cache: true (the default), false records every bind and state
+       set as given, on every backend (port/rhi/rhi_bind_cache.c) */
+    {"dev.bind_cache", "bind_cache"},
     {"dev.gpu_checkpoints", "gpu_checkpoints"},
     {"dev.gpu_robust", "gpu_robust"},
     {"dev.pass_split", "pass_split"},
@@ -661,6 +664,7 @@ static const struct {
     /* port/rhi/vk/vk_device.c (the dynamic state): 1 both static, blend the
        blend static, 0 as the device offers */
     {"dynamic_state", "ICO_VK_FAKE_NO_DYNAMIC"},
+    {"bind_cache", "ICO_RHI_BIND_CACHE"},          /* port/rhi/rhi_bind_cache.c: 1 (on), 0 */
     {"gpu_checkpoints", "ICO_GPU_CHECKPOINTS"},    /* port/rhi vk_device.c, d3d12_device.c */
     {"gpu_robust", "ICO_GPU_ROBUST"},              /* port/rhi/vk/vk_device.c */
     {"pass_split", "ICO_RD_PASS_SPLIT"},           /* port/render/rd_replay_vu.c passSplit */

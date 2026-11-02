@@ -29,6 +29,7 @@
  * offset alignment (1/4 on Vulkan, 256/512 on D3D12). */
 #include "rhi_test_common.h"
 #include "rhi.h"
+#include "rhi_bind_cache.h"
 #include "rhi_test_dxil.h"
 #include "rhi_test_glsl.h"
 #include "rhi_test_hlsl.h"
@@ -1125,12 +1126,16 @@ static void dualLeftoverCell(const Ctx *c)
     const uint64_t sets = s1.dynamicSets - s0.dynamicSets;
     const uint64_t off = s1.blendEqOffSets - s0.blendEqOffSets;
     const uint64_t left = s1.dualLeftovers - s0.dualLeftovers;
+    /* the bind cache off (ICO_RHI_BIND_CACHE=0, rhi_vk_nobindcache): every
+     * command of the group sent again (3), the equation no leftover (nothing
+     * is kept to be left over) */
+    const bool cache = rhi_bind_cache_enabled();
     rhi_test_log("%s: dynamic state: an opaque draw after a dual-source one: %llu dynamic "
                  "commands, %llu equations for a draw without blending, %llu replacing a "
-                 "dual-source one (want 2, 1, 1)\n",
+                 "dual-source one (want %d, 1, %d)\n",
                  s_label, (unsigned long long)sets, (unsigned long long)off,
-                 (unsigned long long)left);
-    if (sets != 2 || off != 1 || left != 1) {
+                 (unsigned long long)left, cache ? 2 : 3, cache ? 1 : 0);
+    if (sets != (cache ? 2u : 3u) || off != 1 || left != (cache ? 1u : 0u)) {
         rhi_test_log("FAIL %s: dynamic state: the dual-source equation on a draw without "
                      "blending was not replaced\n",
                      s_label);
@@ -1389,19 +1394,25 @@ static void dynamicCell(const Ctx *c)
                  s_label, diff ? "differ" : "equal texel for texel", diff,
                  (unsigned long long)sets[1], (unsigned)NCASE, (unsigned long long)perDraw,
                  (unsigned long long)repeat);
-    if (diff || sets[0] != 0 || sets[1] != perDraw * NCASE || repeat != 0) {
+    /* the two repeats: nothing sent, every command of their groups counted
+     * in RhiStats.stateSetsSkipped (the bind cache's count); with the bind
+     * cache off (ICO_RHI_BIND_CACHE=0, rhi_vk_nobindcache, rhi_gl_nobindcache)
+     * every command is sent again and none is counted */
+    const bool cache = rhi_bind_cache_enabled();
+    const uint64_t wantRepeat = cache ? 0u : 2u * perDraw;
+    const uint64_t wantSkips = cache ? 2u * perDraw : 0u;
+    if (diff || sets[0] != 0 || sets[1] != perDraw * NCASE || repeat != wantRepeat) {
         rhi_test_log("FAIL %s: dynamic state: %u rows differ, %llu static and %llu dynamic "
-                     "commands (want 0 and %llu), %llu on the repeats (want 0)\n",
+                     "commands (want 0 and %llu), %llu on the repeats (want %llu)\n",
                      s_label, diff, (unsigned long long)sets[0], (unsigned long long)sets[1],
-                     (unsigned long long)(perDraw * NCASE), (unsigned long long)repeat);
+                     (unsigned long long)(perDraw * NCASE), (unsigned long long)repeat,
+                     (unsigned long long)wantRepeat);
         failures++;
     }
-    /* the bind cache's count: the two repeats' sets each found every
-     * command of their groups in force (RhiStats.stateSetsSkipped) */
-    if (repeatSkips != 2u * perDraw) {
+    if (repeatSkips != wantSkips) {
         rhi_test_log("FAIL %s: dynamic state: %llu commands of the repeats counted as skipped "
                      "(want %llu)\n",
-                     s_label, (unsigned long long)repeatSkips, (unsigned long long)(2u * perDraw));
+                     s_label, (unsigned long long)repeatSkips, (unsigned long long)wantSkips);
         failures++;
     }
     dualLeftoverCell(c);
@@ -1430,7 +1441,11 @@ static void dynamicCell(const Ctx *c)
  * texture (Direct3D 11 unbinds the shader resources at a pass's start); a
  * pipeline destroyed inside the list, a new one made in its pool slot (the
  * same index, a new id) and bound draws with the new one's write mask, not
- * the old one's (by id, not by the slot's pointer). */
+ * the old one's (by id, not by the slot's pointer).  With the bind cache
+ * off (ICO_RHI_BIND_CACHE=0: rhi_vk_nobindcache, rhi_gl_nobindcache) the
+ * same pictures, no skip counted, the repeated pipeline binds recorded
+ * (REP - 1 more at each of the three sites) and the group binds the same
+ * (a repeated set marks the slot dirty once). */
 static void bindCacheCell(const Ctx *c)
 {
     enum { UW = 8, UH = 2, CW = 4, CH = 1, REP = 3 };
@@ -1684,21 +1699,26 @@ static void bindCacheCell(const Ctx *c)
             memcmp(uimg[0] + (size_t)y * upitch[0], uimg[1] + (size_t)y * upitch[1], UW * 4u) == 0;
     }
     same = same && memcmp(cimg[0], cimg[1], CW * 4u) == 0;
-    static const uint64_t want[3] = {3u * (REP - 1), 4u * (REP - 1), 8u * (REP - 1)};
+    const bool cache = rhi_bind_cache_enabled();
+    const uint64_t want[3] = {cache ? 3u * (REP - 1) : 0u, cache ? 4u * (REP - 1) : 0u,
+                              cache ? 8u * (REP - 1) : 0u};
+    const uint64_t wantPipes = binds[0][0] + (cache ? 0u : 3u * (REP - 1));
     const uint64_t got[3] = {skip[1][0] - skip[0][0], skip[1][1] - skip[0][1],
                              skip[1][2] - skip[0][2]};
     rhi_test_log("%s: bind cache: repeats skipped %llu pipeline, %llu bind group and %llu state "
                  "binds more with each given %d times (want %llu, %llu, %llu); recorded binds "
-                 "%llu and %llu, then %llu and %llu; the pictures %s; the new pipeline %s\n",
+                 "%llu and %llu, then %llu and %llu (want %llu and the same); the pictures %s; "
+                 "the new pipeline %s; the cache %s\n",
                  s_label, (unsigned long long)got[0], (unsigned long long)got[1],
                  (unsigned long long)got[2], (int)REP, (unsigned long long)want[0],
                  (unsigned long long)want[1], (unsigned long long)want[2],
                  (unsigned long long)binds[0][0], (unsigned long long)binds[0][1],
                  (unsigned long long)binds[1][0], (unsigned long long)binds[1][1],
-                 same ? "equal texel for texel" : "differ",
-                 sameSlot ? "in the destroyed one's pool slot" : "in another pool slot");
+                 (unsigned long long)wantPipes, same ? "equal texel for texel" : "differ",
+                 sameSlot ? "in the destroyed one's pool slot" : "in another pool slot",
+                 cache ? "on" : "off (ICO_RHI_BIND_CACHE=0)");
     if (!same || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] ||
-        binds[0][0] != binds[1][0] || binds[0][1] != binds[1][1]) {
+        binds[1][0] != wantPipes || binds[0][1] != binds[1][1]) {
         rhi_test_log("FAIL %s: bind cache: the repeats changed what was recorded or drawn\n",
                      s_label);
         failures++;

@@ -301,6 +301,14 @@ without it ([the log file](#the-log-file)): its line starting with
 `window: render thread:` says which way the game ran. To go back, delete
 the line.
 
+If the problem is in what is drawn (an object with the wrong picture on
+it, the wrong colours, or a shape that is missing) and it stays with the
+render thread off, try `bind_cache = false` under the same `[dev]` line
+instead: the game then gives the graphics card every drawing setting
+again before each step, rather than only the ones that changed. If that
+helps, say so in the report; the log's line starting with `bind cache:`
+says which way the game ran. To go back, delete the line.
+
 ## The game runs on the slower graphics card of a laptop
 
 Many laptops have two graphics cards: a fast one and a power-saving one built into the processor.

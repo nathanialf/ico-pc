@@ -5,6 +5,7 @@
 #include "gl_internal.h"
 #include "rhi_gl.h"
 #include "../rhi_backend.h"
+#include "../rhi_bind_cache.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -888,6 +889,7 @@ bool rhi_init(const RhiDeviceDesc *desc)
     glf.GenFramebuffers(1, &g_gl.scratchRead);
     glf.GenFramebuffers(1, &g_gl.scratchDraw);
     gl_timestamps_init();
+    GL_LOG("bind cache: %s", rhi_bind_cache_words());
     g_gl.initialised = true;
     gl_cmd_init();
     if (g_gl.window) {

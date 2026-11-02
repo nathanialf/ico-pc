@@ -1,6 +1,7 @@
 /* d3d12_cmd.c: frames, command lists, submission, barriers, render passes,
  * draws, copies and readback for the D3D12 backend. */
 #include "d3d12_internal.h"
+#include "../rhi_bind_cache.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -677,7 +678,8 @@ void rhi_cmd_set_viewport(RhiCommandList cl, const RhiViewport *v)
     }
     /* D3D's clip space is the RHI's: no flip (the Vulkan backend flips) */
     D3D12_VIEWPORT vp = {v->x, v->y, v->w, v->h, v->minDepth, v->maxDepth};
-    if ((c->known & DX_KNOW_VIEWPORT) && memcmp(&vp, &c->vp, sizeof(vp)) == 0) {
+    if (rhi_bind_cache_enabled() && (c->known & DX_KNOW_VIEWPORT) &&
+        memcmp(&vp, &c->vp, sizeof(vp)) == 0) {
         g_dx.counts.stateSetsSkipped++;
         return;
     }
@@ -693,7 +695,8 @@ void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *r)
         return;
     }
     D3D12_RECT sc = {r->x, r->y, r->x + (LONG)r->w, r->y + (LONG)r->h};
-    if ((c->known & DX_KNOW_SCISSOR) && memcmp(&sc, &c->sc, sizeof(sc)) == 0) {
+    if (rhi_bind_cache_enabled() && (c->known & DX_KNOW_SCISSOR) &&
+        memcmp(&sc, &c->sc, sizeof(sc)) == 0) {
         g_dx.counts.stateSetsSkipped++;
         return;
     }
@@ -711,11 +714,14 @@ void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p)
     }
     /* by id: a pipeline destroyed and another made in its pool slot has the
      * same pointer but a new id (the slot's generation) */
-    if (c->pipelineId == p.id) {
+    /* the bind cache off (rhi_bind_cache.h): bound and every view set
+     * again at every pipeline bind */
+    const bool cache = rhi_bind_cache_enabled();
+    if (cache && c->pipelineId == p.id) {
         g_dx.counts.pipelineBindsSkipped++;
         return;
     }
-    if (!c->pipeline || c->pipeline == pp) {
+    if (!cache || !c->pipeline || c->pipeline == pp) {
         /* none bound, or a new pipeline in the bound one's slot (its
          * strides are the new ones): every view set again */
         c->vbDirty = 0xFFFFFFFFu;
@@ -757,7 +763,8 @@ void rhi_cmd_set_bind_group_offsets(RhiCommandList cl, uint32_t group, RhiBindGr
     }
     /* the group the slot holds with the same offsets: its root arguments
      * are set (or will be at the next draw, its dirty bit kept) */
-    if (c->groups[group] == bg.id && memcmp(c->offsets[group], off, sizeof(off)) == 0) {
+    if (rhi_bind_cache_enabled() && c->groups[group] == bg.id &&
+        memcmp(c->offsets[group], off, sizeof(off)) == 0) {
         g_dx.counts.bindGroupBindsSkipped++;
         return;
     }
@@ -777,12 +784,15 @@ static void dx_flush(DxCmdList *c)
 {
     DxPipeline *p = c->pipeline;
     DxRootSig *r = p->root;
-    if (c->rootSet != r->rs) {
+    /* the bind cache off (rhi_bind_cache.h): the root signature (and so
+     * every root argument) and the topology set again at every draw */
+    const bool cache = rhi_bind_cache_enabled();
+    if (!cache || c->rootSet != r->rs) {
         ID3D12GraphicsCommandList_SetGraphicsRootSignature(c->cl, r->rs);
         c->rootSet = r->rs;
         c->groupDirty = 0xFFu; /* root arguments are reset with the signature */
     }
-    if (c->topoSet != p->topo) {
+    if (!cache || c->topoSet != p->topo) {
         ID3D12GraphicsCommandList_IASetPrimitiveTopology(c->cl, p->topo);
         c->topoSet = p->topo;
     }
@@ -838,7 +848,7 @@ void rhi_cmd_set_vertex_buffer(RhiCommandList cl, uint32_t binding, RhiBuffer b,
     }
     const D3D12_GPU_VIRTUAL_ADDRESS addr = buf->gpu + offset;
     const uint32_t size = (uint32_t)(buf->size - offset);
-    if (c->vbAddr[binding] == addr && c->vbSize[binding] == size) {
+    if (rhi_bind_cache_enabled() && c->vbAddr[binding] == addr && c->vbSize[binding] == size) {
         /* the view the binding holds (or gets at the next draw) */
         g_dx.counts.stateSetsSkipped++;
         return;
@@ -857,8 +867,9 @@ void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, b
     }
     D3D12_INDEX_BUFFER_VIEW v = {buf->gpu + offset, (UINT)(buf->size - offset),
                                  u32 ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT};
-    if ((c->known & DX_KNOW_INDEX) && c->ib.BufferLocation == v.BufferLocation &&
-        c->ib.SizeInBytes == v.SizeInBytes && c->ib.Format == v.Format) {
+    if (rhi_bind_cache_enabled() && (c->known & DX_KNOW_INDEX) &&
+        c->ib.BufferLocation == v.BufferLocation && c->ib.SizeInBytes == v.SizeInBytes &&
+        c->ib.Format == v.Format) {
         g_dx.counts.stateSetsSkipped++;
         return;
     }
@@ -873,7 +884,7 @@ void rhi_cmd_set_stencil_ref(RhiCommandList cl, uint8_t ref)
     if (!c) {
         return;
     }
-    if ((c->known & DX_KNOW_STENCIL) && c->stencilRef == ref) {
+    if (rhi_bind_cache_enabled() && (c->known & DX_KNOW_STENCIL) && c->stencilRef == ref) {
         g_dx.counts.stateSetsSkipped++;
         return;
     }
@@ -888,7 +899,7 @@ void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
     if (!c || !rgba) {
         return;
     }
-    if ((c->known & DX_KNOW_BLEND_CONSTANT) &&
+    if (rhi_bind_cache_enabled() && (c->known & DX_KNOW_BLEND_CONSTANT) &&
         memcmp(c->blendConst, rgba, sizeof(c->blendConst)) == 0) {
         g_dx.counts.stateSetsSkipped++;
         return;

@@ -517,7 +517,8 @@ static void test_dev_env(void)
         "ICO_GPU_ROBUST",         "ICO_VK_ATTACHMENT_READ", "ICO_RD_DATE_PATH",
         "ICO_RD_STORE_PLAN",      "ICO_RD_BLUR_FOLD",       "ICO_RD_UINT_VIEW",
         "ICO_VK_FAKE_NO_DYNAMIC", "ICO_RD_ALPHA_PLAN",      "ICO_RD_FX_PLAN",
-        "ICO_RD_FX_DST_LOCAL",    "ICO_RD_VU_PLANES",       "ICO_RD_UBER"};
+        "ICO_RD_FX_DST_LOCAL",    "ICO_RD_VU_PLANES",       "ICO_RD_UBER",
+        "ICO_RHI_BIND_CACHE"};
     IcoIni ini;
     size_t i;
 
@@ -558,6 +559,14 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("uber", "false"), "0") == 0);
     CHECK(ico_dev_env_value("uber", "sometimes") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.uber"), "uber") == 0);
+    /* bind_cache: the bind cache's off switch (port/rhi/rhi_bind_cache.c),
+       true (the default) or false; the default branch's 1 / 0 */
+    CHECK(strcmp(ico_dev_env_name("bind_cache"), "ICO_RHI_BIND_CACHE") == 0);
+    CHECK(strcmp(ico_dev_env_value("bind_cache", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("bind_cache", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("bind_cache", "off"), "0") == 0);
+    CHECK(ico_dev_env_value("bind_cache", "sometimes") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.bind_cache"), "bind_cache") == 0);
     /* the switches: on and off words, anything else nothing */
     CHECK(strcmp(ico_dev_env_value("gpu_checkpoints", "true"), "1") == 0);
     CHECK(strcmp(ico_dev_env_value("gpu_checkpoints", "1"), "1") == 0);
@@ -893,13 +902,14 @@ static void test_dev_env(void)
         unset_env(vars[i]);
     }
     ico_ini_parse(&ini, "[dev]\nalpha_plan = false\nfx_plan = true\nfx_dst_local = on\n"
-                        "vu_planes = off\nuber = off\n");
+                        "vu_planes = off\nuber = off\nbind_cache = false\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
     CHECK(env_is("ICO_RD_ALPHA_PLAN", "0"));
     CHECK(env_is("ICO_RD_FX_PLAN", "1"));
     CHECK(env_is("ICO_RD_FX_DST_LOCAL", "1"));
     CHECK(env_is("ICO_RD_VU_PLANES", "0"));
     CHECK(env_is("ICO_RD_UBER", "0"));
+    CHECK(env_is("ICO_RHI_BIND_CACHE", "0"));
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);
     }

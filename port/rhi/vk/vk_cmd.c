@@ -12,6 +12,7 @@
  * submit or an empty batch in rhi_present signals (rhi_submit). */
 #include "vk_internal.h"
 #include "rhi_vk.h"
+#include "../rhi_bind_cache.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1231,7 +1232,8 @@ void rhi_cmd_set_viewport(RhiCommandList cl, const RhiViewport *v)
     /* Negative height (core since Vulkan 1.1) gives D3D's y-up NDC, so the
      * same HLSL runs on both backends without -fvk-invert-y. */
     VkViewport vp = {v->x, v->y + v->h, v->w, -v->h, v->minDepth, v->maxDepth};
-    if ((c->known & VKR_KNOW_VIEWPORT) && memcmp(&vp, &c->vp, sizeof(vp)) == 0) {
+    if (rhi_bind_cache_enabled() && (c->known & VKR_KNOW_VIEWPORT) &&
+        memcmp(&vp, &c->vp, sizeof(vp)) == 0) {
         g_vkr.stats.stateSetsSkipped++;
         return;
     }
@@ -1255,7 +1257,8 @@ void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *r)
         sc.extent.height = y >= c->areaH ? 0u : r->h < c->areaH - y ? r->h : c->areaH - y;
     }
     /* compared as recorded (cut to the pass's area) */
-    if ((c->known & VKR_KNOW_SCISSOR) && memcmp(&sc, &c->sc, sizeof(sc)) == 0) {
+    if (rhi_bind_cache_enabled() && (c->known & VKR_KNOW_SCISSOR) &&
+        memcmp(&sc, &c->sc, sizeof(sc)) == 0) {
         g_vkr.stats.stateSetsSkipped++;
         return;
     }
@@ -1294,8 +1297,12 @@ void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p)
     }
     /* by id: a pipeline destroyed and another made in its pool slot has the
      * same pointer but a new id (the slot's generation) */
-    if (c->pipelineId != p.id) {
-        c->groupDirty |= vkr_groups_disturbed(c->pipeline == pp ? NULL : c->pipeline, pp);
+    const bool cache = rhi_bind_cache_enabled();
+    if (!cache || c->pipelineId != p.id) {
+        /* the cache off (rhi_bind_cache.h): every group bound again at
+         * every pipeline bind, whatever the layouts share */
+        c->groupDirty |=
+            cache ? vkr_groups_disturbed(c->pipeline == pp ? NULL : c->pipeline, pp) : 0xFFu;
         c->pipeline = pp;
         c->pipelineId = p.id;
         vkr_flush_barriers(c);
@@ -1338,7 +1345,7 @@ void rhi_cmd_set_bind_group_offsets(RhiCommandList cl, uint32_t group, RhiBindGr
     }
     /* the set already bound with the same dynamic offsets is not bound
      * again */
-    if (c->groups[group] != s || c->dynCount[group] != dyn ||
+    if (!rhi_bind_cache_enabled() || c->groups[group] != s || c->dynCount[group] != dyn ||
         memcmp(c->offsets[group], off, dyn * sizeof(off[0])) != 0) {
         c->groups[group] = s;
         c->dynCount[group] = dyn;
@@ -1380,7 +1387,8 @@ void rhi_cmd_set_vertex_buffer(RhiCommandList cl, uint32_t binding, RhiBuffer b,
     VkDeviceSize off = offset;
     vkr_flush_barriers(c);
     const uint32_t bit = binding < RHI_MAX_VERTEX_ATTRS ? 1u << binding : 0u;
-    if (bit && (c->vbKnown & bit) && c->vbId[binding] == b.id && c->vbOff[binding] == offset) {
+    if (rhi_bind_cache_enabled() && bit && (c->vbKnown & bit) && c->vbId[binding] == b.id &&
+        c->vbOff[binding] == offset) {
         g_vkr.stats.stateSetsSkipped++;
         return;
     }
@@ -1400,7 +1408,8 @@ void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, b
         return;
     }
     vkr_flush_barriers(c);
-    if ((c->known & VKR_KNOW_INDEX) && c->ibId == b.id && c->ibOff == offset && c->ib32 == u32) {
+    if (rhi_bind_cache_enabled() && (c->known & VKR_KNOW_INDEX) && c->ibId == b.id &&
+        c->ibOff == offset && c->ib32 == u32) {
         g_vkr.stats.stateSetsSkipped++;
         return;
     }
@@ -1417,7 +1426,7 @@ void rhi_cmd_set_stencil_ref(RhiCommandList cl, uint8_t ref)
     VkrCmdList *c = vkr_get_cmd(cl);
     if (c) {
         vkr_flush_barriers(c);
-        if ((c->known & VKR_KNOW_STENCIL) && c->stencilRef == ref) {
+        if (rhi_bind_cache_enabled() && (c->known & VKR_KNOW_STENCIL) && c->stencilRef == ref) {
             g_vkr.stats.stateSetsSkipped++;
             return;
         }
@@ -1432,7 +1441,7 @@ void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
     VkrCmdList *c = vkr_get_cmd(cl);
     if (c && rgba) {
         vkr_flush_barriers(c);
-        if ((c->known & VKR_KNOW_BLEND_CONSTANT) &&
+        if (rhi_bind_cache_enabled() && (c->known & VKR_KNOW_BLEND_CONSTANT) &&
             memcmp(c->blendConst, rgba, sizeof(c->blendConst)) == 0) {
             g_vkr.stats.stateSetsSkipped++;
             return;
@@ -1500,6 +1509,8 @@ static void vkr_flush_dynamic(VkrCmdList *c)
     if (!dyn) {
         return;
     }
+    /* the cache off: every command of a dynamic group at every draw */
+    const bool cache = rhi_bind_cache_enabled();
     if ((dyn & ~c->dynSet) != 0u) {
         /* a bind site that does not set the state (rd binds through
          * rd__set_pipeline, which always does): the pipeline's own values,
@@ -1515,7 +1526,7 @@ static void vkr_flush_dynamic(VkrCmdList *c)
         }
     }
     if (dyn & RHI_DYN_DEPTH) {
-        const bool all = !(c->dynValid & RHI_DYN_DEPTH);
+        const bool all = !cache || !(c->dynValid & RHI_DYN_DEPTH);
         const VkrDepthDyn *w = &c->depthWant, *h = &c->depthHave;
         uint32_t sent = 0;
         if (all || w->test != h->test) {
@@ -1538,7 +1549,7 @@ static void vkr_flush_dynamic(VkrCmdList *c)
         c->dynValid |= RHI_DYN_DEPTH;
     }
     if (dyn & RHI_DYN_BLEND) {
-        const bool all = !(c->dynValid & RHI_DYN_BLEND);
+        const bool all = !cache || !(c->dynValid & RHI_DYN_BLEND);
         const VkrBlendDyn *w = &c->blendWant;
         VkrBlendDyn *h = &c->blendHave;
         const uint64_t before = g_vkr.stats.dynamicSets;

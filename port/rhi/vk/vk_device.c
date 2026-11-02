@@ -5,6 +5,7 @@
 #include "../rhi_backend.h"
 #include "../rhi_adapter.h"
 #include "../rhi_driver_version.h"
+#include "../rhi_bind_cache.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -2023,6 +2024,7 @@ static bool vkr_create_device(void)
         VKR_LOG("dynamic state: depth test, write and compare %s; blend enable, equation and "
                 "write mask %s",
                 depthSay, blendSay);
+        VKR_LOG("bind cache: %s", rhi_bind_cache_words());
         memset(&qEds, 0, sizeof(qEds));
         qEds.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
         qEds.extendedDynamicState = VK_TRUE;
