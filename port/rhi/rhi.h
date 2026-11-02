@@ -1001,8 +1001,10 @@ void rhi_cmd_set_bind_group(RhiCommandList cl, uint32_t group, RhiBindGroup bg);
  * order (count = their number), each a multiple of rhi_limits()->uniformAlign
  * and added to the binding's base offset.  rhi_cmd_set_bind_group is this call
  * with every offset 0.  Binding the group already bound with the same
- * offsets records nothing on Vulkan; D3D12 sets the group's root arguments
- * again at the next draw. */
+ * offsets records nothing on any backend (the bind cache: docs/port/RHI.md
+ * "The bind cache"; RhiStats.bindGroupBindsSkipped), nor does a bind of
+ * the pipeline bound (by its id) or a set of the viewport, scissor, vertex
+ * or index buffer, stencil reference or blend constant in force. */
 void rhi_cmd_set_bind_group_offsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
                                     const uint32_t *offsets, uint32_t count);
 void rhi_cmd_set_vertex_buffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, uint64_t offset);
@@ -1153,6 +1155,20 @@ typedef struct RhiStats {
      * Direct3D 11 and 12) */
     uint64_t blendEqOffSets, dualLeftovers;
     uint64_t bindGroupBinds; /* bind group changes recorded (likewise) */
+    /* The bind cache (docs/port/RHI.md "The bind cache"): the calls that
+     * found the command list already holding what they asked for and so
+     * recorded nothing.  pipelineBindsSkipped: rhi_cmd_set_pipeline with
+     * the pipeline bound (the same id); bindGroupBindsSkipped:
+     * rhi_cmd_set_bind_group(_offsets) with the group and dynamic offsets
+     * the slot holds; stateSetsSkipped: rhi_cmd_set_viewport, _scissor,
+     * _vertex_buffer, _index_buffer, _stencil_ref and _blend_constant equal
+     * to the value in force, the dynamic depth and blend commands a draw
+     * did not record because rhi_cmd_set_depth_state / _blend_state since
+     * the last draw asked for the value in force (Vulkan, OpenGL), and on
+     * Direct3D 11 the objects of a pipeline change that the list already
+     * had bound (its shaders, input layout, topology, rasterizer, blend
+     * and depth-stencil state) */
+    uint64_t pipelineBindsSkipped, bindGroupBindsSkipped, stateSetsSkipped;
     /* OpenGL: the entries of the groups bound (one bind each: a buffer
      * range, a texture and its sampler, an image) and of them those skipped
      * because their binding point already held the same (gl_cmd.c

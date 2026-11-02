@@ -1016,6 +1016,7 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
             return false;
         }
         sets[i] = l->layout;
+        p->setLayoutIds[i] = d->layouts[i].id;
     }
     VkPipelineLayoutCreateInfo lci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,

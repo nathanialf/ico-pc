@@ -123,6 +123,11 @@ typedef struct VkrPipeline {
     VkPipeline pipeline;
     VkPipelineLayout layout;
     uint32_t layoutCount;
+    /* the RhiBindGroupLayout id of each set of the layout: a pipeline
+     * change keeps the descriptor sets bound below the first set whose
+     * layout differs (Vulkan's pipeline layout compatibility: identical
+     * set layouts, no push constants; vk_cmd.c vkr_groups_disturbed) */
+    uint32_t setLayoutIds[RHI_MAX_BIND_SLOTS];
     uint8_t dstRead; /* RhiDstRead (vk_cmd.c vkr_dst_order) */
     /* the RHI_DYN_* states the pipeline leaves dynamic (only where the
      * device has them: g_vkr.dynDepth, dynBlend), their values in the
@@ -267,6 +272,28 @@ typedef struct VkrCmdList {
     /* the occlusion query open in the list (rhi_cmd_begin_occlusion),
      * its index + 1; 0 for none */
     uint32_t occOpen;
+    /* The bind cache (vk_cmd.c; docs/port/RHI.md "The bind cache"): the
+     * bound pipeline's id (pipeline above is its pool slot, which a
+     * destroyed pipeline's successor takes over), and what the set calls
+     * last recorded, valid for the VKR_KNOW_* bits of known (the vertex
+     * buffers per binding in vbKnown): a set equal to it records nothing.
+     * Zero at the slot's recycle; the viewport and scissor are forgotten
+     * at each pass's start.  dynFresh: the RHI_DYN_* groups set since the
+     * last draw (RhiStats.stateSetsSkipped counts their commands the draw
+     * found in force) */
+    uint32_t pipelineId;
+    uint32_t known;
+    VkViewport vp;
+    VkRect2D sc;
+    uint32_t vbId[RHI_MAX_VERTEX_ATTRS];
+    uint64_t vbOff[RHI_MAX_VERTEX_ATTRS];
+    uint32_t vbKnown;
+    uint32_t ibId;
+    uint64_t ibOff;
+    bool ib32;
+    uint8_t stencilRef;
+    float blendConst[4];
+    uint8_t dynFresh;
 } VkrCmdList;
 
 typedef struct VkrFrame {

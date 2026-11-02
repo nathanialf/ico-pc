@@ -341,6 +341,31 @@ typedef struct D11CmdState {
     uint32_t rtW, rtH, dsW, dsH;
     DXGI_FORMAT rtFmt;
     bool dsReadOnly;
+    /* The bind cache (d3d11_cmd.c; docs/port/RHI.md "The bind cache"),
+     * zero with the rest when a recording starts (the deferred context
+     * starts with nothing bound).  objKnown: the D11_OBJ_* objects below
+     * the context holds, set by the last pipeline change, so a change sets
+     * only those that differ (the blend state with its factor, the
+     * depth-stencil state with its reference); known: the D11_KNOW_*
+     * values (vp and sc above, the index buffer and the stencil reference
+     * and blend constant above) set by a call, so a set equal to them
+     * records nothing (the viewport and scissor forgotten at a pass's
+     * start).  groupRegs: per slot, the registers its group's last flush
+     * wrote ([stage][b, t, s], d11_flush); groupStale: the slots whose
+     * registers a later flush of another slot wrote over, so the same
+     * group bound again is flushed again */
+    uint32_t objKnown, known;
+    ID3D11InputLayout *ilSet;
+    D3D11_PRIMITIVE_TOPOLOGY topoSet;
+    ID3D11VertexShader *vsSet;
+    ID3D11PixelShader *psSet;
+    ID3D11RasterizerState *rsSet;
+    ID3D11BlendState *blendSet;
+    float blendFactorSet[4];
+    ID3D11DepthStencilState *dsSet;
+    uint8_t stencilRefSet;
+    uint32_t groupRegs[RHI_MAX_BIND_SLOTS][2][3];
+    uint32_t groupStale;
 } D11CmdState;
 
 typedef struct D11CommandList {

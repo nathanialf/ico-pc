@@ -211,6 +211,7 @@ static struct {
     double gpuPost[RD_PERF_POST_COUNT]; /* per picture effect (rd.h RD_PERF_POST_*) */
     unsigned gpuPostPartial;            /* replays whose effects were not all timed apart */
     uint64_t draws, passes, pipeBinds, groupBinds, groups, barriers, copies, bytes, meshBytes;
+    uint64_t pipeSkips, groupSkips, stateSkips; /* the bind cache's (RhiStats *Skipped) */
     uint64_t texUploads, meshUploads, dateSnaps, exact, pipeCreates;
     /* the exact blend's draws and passes, the glow's passes, the target
        snapshots copied and swapped (rd.h RdPerfRecord, issue 103) */
@@ -4406,6 +4407,9 @@ static void perf_drain(void)
         s_perf.passes += r.renderPasses;
         s_perf.pipeBinds += r.pipelineBinds;
         s_perf.groupBinds += r.bindGroupBinds;
+        s_perf.pipeSkips += r.pipelineBindsSkipped;
+        s_perf.groupSkips += r.bindGroupBindsSkipped;
+        s_perf.stateSkips += r.stateSetsSkipped;
         s_perf.groups += r.bindGroups;
         s_perf.barriers += r.barriers;
         s_perf.copies += r.copies;
@@ -4588,27 +4592,29 @@ static void perf_log(void)
                 s_perf.streamBytes / n / 1024.0, (other > 0.0 ? other : 0.0) / n / 1024.0,
                 rd_perf_backend_text());
     }
-    fprintf(stderr,
-            "window: per replay %.0f draws, %.0f passes, %.0f pipeline and %.0f bind group binds, "
-            "%.0f bind groups, %.0f barriers, %.0f copies, %.0f KB uploaded (%.0f KB meshes), "
-            "%.1f textures and %.1f meshes uploaded, %.1f DATE snapshots, %.1f exact blends, "
-            "%.0f destination-read draws, %.0f storage passes, %.0f pass switches for the exact "
-            "blend, glow %.0f passes, %.1f snapshots copied and %.1f swapped, %.1f draws "
-            "resampled above 1x, VU pre-pass %.0f vertices in %.0f draws (%.1f draws the old "
-            "way); in the block %llu buffers and %llu textures created, %llu and %llu "
-            "destroyed, %llu memory allocations, %llu pipelines created, %llu fence waits, "
-            "%llu wait-idles, %llu readbacks\n",
-            s_perf.draws / n, s_perf.passes / n, s_perf.pipeBinds / n, s_perf.groupBinds / n,
-            s_perf.groups / n, s_perf.barriers / n, s_perf.copies / n, s_perf.bytes / n / 1024.0,
-            s_perf.meshBytes / n / 1024.0, s_perf.texUploads / n, s_perf.meshUploads / n,
-            s_perf.dateSnaps / n, s_perf.exact / n, s_perf.dstDraws / n, s_perf.storagePasses / n,
-            s_perf.dstSwitches / n, s_perf.glowPasses / n, s_perf.snapshots / n,
-            s_perf.snapSwaps / n, s_perf.a1xDraws / n, s_perf.vuPreVerts / n, s_perf.vuPreDraws / n,
-            s_perf.vuPreFallbacks / n, (unsigned long long)s_perf.bufCreated,
-            (unsigned long long)s_perf.texCreated, (unsigned long long)s_perf.bufDestroyed,
-            (unsigned long long)s_perf.texDestroyed, (unsigned long long)s_perf.allocs,
-            (unsigned long long)s_perf.pipeCreates, (unsigned long long)s_perf.fenceWaits,
-            (unsigned long long)s_perf.waitIdles, (unsigned long long)s_perf.readbacks);
+    fprintf(
+        stderr,
+        "window: per replay %.0f draws, %.0f passes, %.0f pipeline and %.0f bind group binds "
+        "(repeats skipped: %.0f pipeline, %.0f bind group, %.0f state), %.0f bind groups, %.0f barriers, %.0f copies, %.0f KB uploaded (%.0f KB meshes), "
+        "%.1f textures and %.1f meshes uploaded, %.1f DATE snapshots, %.1f exact blends, "
+        "%.0f destination-read draws, %.0f storage passes, %.0f pass switches for the exact "
+        "blend, glow %.0f passes, %.1f snapshots copied and %.1f swapped, %.1f draws "
+        "resampled above 1x, VU pre-pass %.0f vertices in %.0f draws (%.1f draws the old "
+        "way); in the block %llu buffers and %llu textures created, %llu and %llu "
+        "destroyed, %llu memory allocations, %llu pipelines created, %llu fence waits, "
+        "%llu wait-idles, %llu readbacks\n",
+        s_perf.draws / n, s_perf.passes / n, s_perf.pipeBinds / n, s_perf.groupBinds / n,
+        s_perf.pipeSkips / n, s_perf.groupSkips / n, s_perf.stateSkips / n, s_perf.groups / n,
+        s_perf.barriers / n, s_perf.copies / n, s_perf.bytes / n / 1024.0,
+        s_perf.meshBytes / n / 1024.0, s_perf.texUploads / n, s_perf.meshUploads / n,
+        s_perf.dateSnaps / n, s_perf.exact / n, s_perf.dstDraws / n, s_perf.storagePasses / n,
+        s_perf.dstSwitches / n, s_perf.glowPasses / n, s_perf.snapshots / n, s_perf.snapSwaps / n,
+        s_perf.a1xDraws / n, s_perf.vuPreVerts / n, s_perf.vuPreDraws / n,
+        s_perf.vuPreFallbacks / n, (unsigned long long)s_perf.bufCreated,
+        (unsigned long long)s_perf.texCreated, (unsigned long long)s_perf.bufDestroyed,
+        (unsigned long long)s_perf.texDestroyed, (unsigned long long)s_perf.allocs,
+        (unsigned long long)s_perf.pipeCreates, (unsigned long long)s_perf.fenceWaits,
+        (unsigned long long)s_perf.waitIdles, (unsigned long long)s_perf.readbacks);
     /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c; the
        flags are the rd: profile line's) */
     fprintf(stderr,

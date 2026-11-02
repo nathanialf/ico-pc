@@ -794,6 +794,9 @@ void rd__perf_end(void)
         r->blendEqOffSets = D(blendEqOffSets);
         r->dualLeftovers = D(dualLeftovers);
         r->bindGroupBinds = D(bindGroupBinds);
+        r->pipelineBindsSkipped = D(pipelineBindsSkipped);
+        r->bindGroupBindsSkipped = D(bindGroupBindsSkipped);
+        r->stateSetsSkipped = D(stateSetsSkipped);
         r->draws = D(draws);
         r->renderPasses = D(renderPasses);
         r->barriers = D(barriers);

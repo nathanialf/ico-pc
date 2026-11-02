@@ -1288,7 +1288,7 @@ static void dynamicCell(const Ctx *c)
 
     static uint8_t img[2][DW * DH * 4];
     uint32_t pitch[2] = {0, 0};
-    uint64_t sets[2] = {0, 0}, repeat = 0;
+    uint64_t sets[2] = {0, 0}, repeat = 0, repeatSkips = 0;
     for (int run = 0; run < (dyn ? 2 : 1); run++) {
         RhiStats s0, s1;
         rhi_wait_frame();
@@ -1345,6 +1345,7 @@ static void dynamicCell(const Ctx *c)
             rhi_cmd_draw(cl, 3, NCASE * 18, 1);
             rhi_get_stats(&s1);
             repeat = s1.dynamicSets - s0.dynamicSets;
+            repeatSkips = s1.stateSetsSkipped - s0.stateSetsSkipped;
         }
         rhi_cmd_end_render_pass(cl);
         RhiTextureBarrier b1 = {col, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
@@ -1395,6 +1396,14 @@ static void dynamicCell(const Ctx *c)
                      (unsigned long long)(perDraw * NCASE), (unsigned long long)repeat);
         failures++;
     }
+    /* the bind cache's count: the two repeats' sets each found every
+     * command of their groups in force (RhiStats.stateSetsSkipped) */
+    if (repeatSkips != 2u * perDraw) {
+        rhi_test_log("FAIL %s: dynamic state: %llu commands of the repeats counted as skipped "
+                     "(want %llu)\n",
+                     s_label, (unsigned long long)repeatSkips, (unsigned long long)(2u * perDraw));
+        failures++;
+    }
     dualLeftoverCell(c);
     rhi_destroy_pipeline(pBase);
     rhi_destroy_pipeline(pProbe);
@@ -1404,6 +1413,299 @@ static void dynamicCell(const Ctx *c)
     }
     rhi_destroy_texture(col);
     rhi_destroy_texture(dep);
+    rhi_destroy_buffer(ring);
+}
+
+/* The bind cache (docs/port/RHI.md "The bind cache"): a bind or a state set
+ * equal to what the list holds records nothing, and nothing else is
+ * skipped.  The same list is recorded twice: run 0 gives each bind once,
+ * run 1 gives every one of them REP times in a row (the pipeline, a group
+ * with its offset, the viewport, the scissor, the stencil reference, the
+ * blend constant, the vertex and index buffers).  The two pictures are
+ * equal texel for texel and exact, the recorded binds are the same, and run
+ * 1 counts exactly REP - 1 more skips for each repeated call
+ * (RhiStats.*Skipped).  In both runs: the group bound again with another
+ * dynamic offset draws that offset's value and is not skipped; a second
+ * pass that binds the texture group the first pass bound draws the
+ * texture (Direct3D 11 unbinds the shader resources at a pass's start); a
+ * pipeline destroyed inside the list, a new one made in its pool slot (the
+ * same index, a new id) and bound draws with the new one's write mask, not
+ * the old one's (by id, not by the slot's pointer). */
+static void bindCacheCell(const Ctx *c)
+{
+    enum { UW = 8, UH = 2, CW = 4, CH = 1, REP = 3 };
+
+    const RhiLimits *lim = rhi_limits();
+    const uint32_t ua = lim->uniformAlign;
+    const RhiFormat CF = RHI_FMT_RGBA8_UNORM, UF = RHI_FMT_RGBA8_UINT;
+    rhi_wait_frame();
+    RhiTexture ut = rhi_create_texture(&(RhiTextureDesc){
+        UW, UH, 1, UF, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "bind cache uint", 0});
+    RhiTexture ct = rhi_create_texture(&(RhiTextureDesc){
+        CW, CH, 1, CF, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "bind cache colour", 0});
+    RhiTexture src = rhi_create_texture(&(RhiTextureDesc){
+        2, 2, 1, CF, RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED, "bind cache texture", 0});
+    const RhiSamplerDesc sd = {RHI_FILTER_NEAREST,
+                               RHI_FILTER_NEAREST,
+                               RHI_FILTER_NEAREST,
+                               RHI_WRAP_CLAMP,
+                               RHI_WRAP_CLAMP,
+                               1.0f,
+                               0.0f,
+                               0.0f,
+                               0.0f};
+    RhiSampler smp = rhi_create_sampler(&sd);
+    /* the ring: the uint target's column quads, the indexed column's four
+     * corners and six indices, the colour target's column quads, the
+     * uniforms at three offsets */
+    const uint64_t offVerts = 0, offIdxVerts = 2048, offIdx = 2304, offCVerts = 2560;
+    const uint64_t offUbo = (4096u + ua - 1u) / ua * ua;
+    RhiBuffer ring = rhi_create_buffer(
+        &(RhiBufferDesc){offUbo + 4u * ua, RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM,
+                         RHI_MEM_UPLOAD, "bind cache ring"});
+    uint8_t *map = ring.id ? rhi_map_buffer(ring) : NULL;
+    const RhiBlendState opaque = {.writeMask = 0xF};
+    RhiBlendState maskRG = opaque;
+    maskRG.writeMask = 0x3;
+    RhiPipeline pU = makePipeline(c, c->psUint, UF, RHI_FMT_UNKNOWN, &opaque, NULL, "bc uint");
+    RhiPipeline pT = makePipeline(c, c->psTex, CF, RHI_FMT_UNKNOWN, &opaque, NULL, "bc tex");
+    if (!ut.id || !ct.id || !src.id || !smp.id || !map || !pU.id || !pT.id) {
+        rhi_test_log("FAIL %s: bind cache: resources\n", s_label);
+        failures++;
+        return;
+    }
+    Vtx v[UW * 6];
+    for (int i = 0; i < UW; i++) {
+        quad(&v[i * 6], (float)i, 0.0f, (float)i + 1.0f, (float)UH, (float)UW, (float)UH, 0.0f, 0,
+             0, 0, 0);
+    }
+    memcpy(map + offVerts, v, sizeof(v));
+    const Vtx corners[4] = {v[6 * 6 + 0], v[6 * 6 + 1], v[6 * 6 + 2], v[6 * 6 + 5]};
+    memcpy(map + offIdxVerts, corners, sizeof(corners));
+    static const uint16_t idx[6] = {0, 1, 2, 2, 1, 3};
+    memcpy(map + offIdx, idx, sizeof(idx));
+    Vtx cv[CW * 6];
+    for (int i = 0; i < CW; i++) {
+        quad(&cv[i * 6], (float)i, 0.0f, (float)i + 1.0f, (float)CH, (float)CW, (float)CH, 0.0f, 0,
+             0, 0, 0);
+    }
+    memcpy(map + offCVerts, cv, sizeof(cv));
+    const TestCB cbA = {{0, 0, 0, 0}, {11, 22, 33, 44}}, cbB = {{0, 0, 0, 0}, {55, 66, 77, 88}};
+    memcpy(map + offUbo, &cbA, sizeof(cbA));
+    memcpy(map + offUbo + ua, &cbB, sizeof(cbB));
+    const uint32_t offA = 0, offB = ua;
+
+    /* the texture: a clear to magenta, then read by the shader */
+    {
+        RhiCommandList cl = rhi_begin_commands();
+        RhiTextureBarrier b0 = {src, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+        rhi_cmd_barrier(cl, &b0, 1);
+        RhiRenderPassDesc rp;
+        memset(&rp, 0, sizeof(rp));
+        rp.color[0].texture = src;
+        rp.color[0].load = RHI_LOAD_CLEAR;
+        rp.color[0].clear[0] = rp.color[0].clear[2] = rp.color[0].clear[3] = 1.0f;
+        rp.colorCount = 1;
+        rp.width = 2;
+        rp.height = 2;
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_end_render_pass(cl);
+        RhiTextureBarrier b1 = {src, RHI_STATE_RENDER_TARGET, RHI_STATE_SHADER_READ};
+        rhi_cmd_barrier(cl, &b1, 1);
+        rhi_end_commands(cl);
+        rhi_submit(cl);
+    }
+
+    static uint8_t uimg[2][UW * UH * 4], cimg[2][CW * CH * 4];
+    uint32_t upitch[2] = {0, 0}, cpitch[2] = {0, 0};
+    uint64_t skip[2][3], binds[2][2];
+    bool sameSlot = false;
+    for (int run = 0; run < 2; run++) {
+        const int rep = run ? REP : 1;
+        rhi_wait_frame();
+        RhiBinding b0 = {0};
+        b0.slot = 0;
+        b0.type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC;
+        b0.buffer = ring;
+        b0.offset = offUbo;
+        b0.size = sizeof(TestCB);
+        const RhiBindGroup g0 = rhi_create_bind_group(&(RhiBindGroupDesc){c->l0, &b0, 1});
+        RhiBinding tb[2] = {{0}, {0}};
+        tb[0].slot = 1;
+        tb[0].type = RHI_BIND_SAMPLED_TEXTURE;
+        tb[0].texture = src;
+        tb[1].slot = 1;
+        tb[1].type = RHI_BIND_SAMPLER;
+        tb[1].sampler = smp;
+        const RhiBindGroup gT = rhi_create_bind_group(&(RhiBindGroupDesc){c->l2, tb, 2});
+        RhiPipeline pOld = makePipeline(c, c->psUint, UF, RHI_FMT_UNKNOWN, &opaque, NULL, "bc old");
+        if (!g0.id || !gT.id || !pOld.id) {
+            rhi_test_log("FAIL %s: bind cache: run %d groups or pipeline\n", s_label, run);
+            failures++;
+            return;
+        }
+        RhiStats s0, s1;
+        rhi_get_stats(&s0);
+        RhiCommandList cl = rhi_begin_commands();
+        const RhiState was = run ? RHI_STATE_COPY_SRC : RHI_STATE_UNDEFINED;
+        RhiTextureBarrier pre[2] = {{ut, was, RHI_STATE_RENDER_TARGET},
+                                    {ct, was, RHI_STATE_RENDER_TARGET}};
+        rhi_cmd_barrier(cl, pre, 2);
+        RhiRenderPassDesc rp;
+        memset(&rp, 0, sizeof(rp));
+        rp.color[0].texture = ut;
+        rp.color[0].load = RHI_LOAD_CLEAR;
+        rp.color[0].clear[0] = 1.0f;
+        rp.color[0].clear[1] = 2.0f;
+        rp.color[0].clear[2] = 3.0f;
+        rp.color[0].clear[3] = 4.0f;
+        rp.colorCount = 1;
+        rp.width = UW;
+        rp.height = UH;
+        rhi_cmd_begin_render_pass(cl, &rp);
+        const RhiViewport vp = {0.0f, 0.0f, (float)UW, (float)UH, 0.0f, 1.0f};
+        const RhiRect sc = {0, 0, UW, UH};
+        static const float zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        /* column 0: the first binds */
+        for (int k = 0; k < rep; k++) {
+            rhi_cmd_set_vertex_buffer(cl, 0, ring, offVerts);
+            rhi_cmd_set_pipeline(cl, pU);
+            rhi_cmd_set_bind_group_offsets(cl, 0, g0, &offA, 1);
+        }
+        rhi_cmd_draw(cl, 6, 0 * 6, 1);
+        /* column 1: every one of them again, and the state in force */
+        for (int k = 0; k < rep; k++) {
+            rhi_cmd_set_pipeline(cl, pU);
+            rhi_cmd_set_bind_group_offsets(cl, 0, g0, &offA, 1);
+            rhi_cmd_set_viewport(cl, &vp);
+            rhi_cmd_set_scissor(cl, &sc);
+            rhi_cmd_set_stencil_ref(cl, 0);
+            rhi_cmd_set_blend_constant(cl, zero);
+            rhi_cmd_set_vertex_buffer(cl, 0, ring, offVerts);
+        }
+        rhi_cmd_draw(cl, 6, 1 * 6, 1);
+        /* column 2: the same group at another offset (bound), 3: back */
+        rhi_cmd_set_bind_group_offsets(cl, 0, g0, &offB, 1);
+        rhi_cmd_draw(cl, 6, 2 * 6, 1);
+        rhi_cmd_set_bind_group_offsets(cl, 0, g0, &offA, 1);
+        rhi_cmd_draw(cl, 6, 3 * 6, 1);
+        /* column 4: the old pipeline; 5: destroyed, a new one (red and
+           green only) made in its slot and bound */
+        rhi_cmd_set_pipeline(cl, pOld);
+        rhi_cmd_draw(cl, 6, 4 * 6, 1);
+        rhi_destroy_pipeline(pOld);
+        RhiPipeline pNew = makePipeline(c, c->psUint, UF, RHI_FMT_UNKNOWN, &maskRG, NULL, "bc new");
+        sameSlot = pNew.id && (pNew.id & 0xFFFFFu) == (pOld.id & 0xFFFFFu);
+        if (pNew.id == pOld.id) {
+            rhi_test_log("FAIL %s: bind cache: the new pipeline has the destroyed one's id %08x\n",
+                         s_label, pNew.id);
+            failures++;
+        }
+        rhi_cmd_set_pipeline(cl, pNew);
+        rhi_cmd_draw(cl, 6, 5 * 6, 1);
+        /* column 6: indexed, the index buffer given REP times */
+        rhi_cmd_set_pipeline(cl, pU);
+        rhi_cmd_set_vertex_buffer(cl, 0, ring, offIdxVerts);
+        for (int k = 0; k < rep; k++) {
+            rhi_cmd_set_index_buffer(cl, ring, offIdx, false);
+        }
+        rhi_cmd_draw_indexed(cl, 6, 0, 0, 1);
+        rhi_cmd_end_render_pass(cl);
+        /* the texture group in two passes: the second binds it again */
+        memset(&rp, 0, sizeof(rp));
+        rp.color[0].texture = ct;
+        rp.color[0].load = RHI_LOAD_CLEAR;
+        rp.colorCount = 1;
+        rp.width = CW;
+        rp.height = CH;
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_set_pipeline(cl, pT);
+        rhi_cmd_set_bind_group_offsets(cl, 0, g0, &offA, 1);
+        rhi_cmd_set_bind_group(cl, 2, gT);
+        rhi_cmd_set_vertex_buffer(cl, 0, ring, offCVerts);
+        rhi_cmd_draw(cl, 6, 0 * 6, 1);
+        rhi_cmd_end_render_pass(cl);
+        rp.color[0].load = RHI_LOAD_LOAD;
+        rhi_cmd_begin_render_pass(cl, &rp);
+        for (int k = 0; k < rep; k++) {
+            rhi_cmd_set_pipeline(cl, pT);
+            rhi_cmd_set_bind_group_offsets(cl, 0, g0, &offA, 1);
+            rhi_cmd_set_bind_group(cl, 2, gT);
+            rhi_cmd_set_vertex_buffer(cl, 0, ring, offCVerts);
+        }
+        rhi_cmd_draw(cl, 6, 1 * 6, 1);
+        rhi_cmd_end_render_pass(cl);
+        RhiTextureBarrier post[2] = {{ut, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
+                                     {ct, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC}};
+        rhi_cmd_barrier(cl, post, 2);
+        rhi_end_commands(cl);
+        rhi_submit(cl);
+        rhi_get_stats(&s1);
+        skip[run][0] = s1.pipelineBindsSkipped - s0.pipelineBindsSkipped;
+        skip[run][1] = s1.bindGroupBindsSkipped - s0.bindGroupBindsSkipped;
+        skip[run][2] = s1.stateSetsSkipped - s0.stateSetsSkipped;
+        binds[run][0] = s1.pipelineBinds - s0.pipelineBinds;
+        binds[run][1] = s1.bindGroupBinds - s0.bindGroupBinds;
+        const bool okU =
+            rhi_readback_texture(ut, RHI_ASPECT_COLOR, uimg[run], sizeof(uimg[run]), &upitch[run]);
+        const bool okC =
+            rhi_readback_texture(ct, RHI_ASPECT_COLOR, cimg[run], sizeof(cimg[run]), &cpitch[run]);
+        rhi_destroy_pipeline(pNew);
+        if (!okU || !okC) {
+            rhi_test_log("FAIL %s: bind cache: readback %d\n", s_label, run);
+            failures++;
+            return;
+        }
+    }
+    const int before = failures;
+    for (int run = 0; run < 2; run++) {
+        for (int y = 0; y < UH; y++) {
+            expectRGBA(uimg[run], upitch[run], 0, y, 11, 22, 33, 44, 400 + run); /* first binds */
+            expectRGBA(uimg[run], upitch[run], 1, y, 11, 22, 33, 44, 400 + run); /* repeats */
+            expectRGBA(uimg[run], upitch[run], 2, y, 55, 66, 77, 88, 400 + run); /* offset B */
+            expectRGBA(uimg[run], upitch[run], 3, y, 11, 22, 33, 44, 400 + run); /* back to A */
+            expectRGBA(uimg[run], upitch[run], 4, y, 11, 22, 33, 44, 400 + run); /* the old */
+            expectRGBA(uimg[run], upitch[run], 5, y, 11, 22, 3, 4, 400 + run);   /* the new: RG */
+            expectRGBA(uimg[run], upitch[run], 6, y, 11, 22, 33, 44, 400 + run); /* indexed */
+            expectRGBA(uimg[run], upitch[run], 7, y, 1, 2, 3, 4, 400 + run);     /* the clear */
+        }
+        expectRGBA(cimg[run], cpitch[run], 0, 0, 255, 0, 255, 255, 410 + run); /* first pass */
+        expectRGBA(cimg[run], cpitch[run], 1, 0, 255, 0, 255, 255, 410 + run); /* second */
+        expectRGBA(cimg[run], cpitch[run], 2, 0, 0, 0, 0, 0, 410 + run);
+    }
+    bool same = upitch[0] == upitch[1] && cpitch[0] == cpitch[1];
+    for (int y = 0; same && y < UH; y++) {
+        same =
+            memcmp(uimg[0] + (size_t)y * upitch[0], uimg[1] + (size_t)y * upitch[1], UW * 4u) == 0;
+    }
+    same = same && memcmp(cimg[0], cimg[1], CW * 4u) == 0;
+    static const uint64_t want[3] = {3u * (REP - 1), 4u * (REP - 1), 8u * (REP - 1)};
+    const uint64_t got[3] = {skip[1][0] - skip[0][0], skip[1][1] - skip[0][1],
+                             skip[1][2] - skip[0][2]};
+    rhi_test_log("%s: bind cache: repeats skipped %llu pipeline, %llu bind group and %llu state "
+                 "binds more with each given %d times (want %llu, %llu, %llu); recorded binds "
+                 "%llu and %llu, then %llu and %llu; the pictures %s; the new pipeline %s\n",
+                 s_label, (unsigned long long)got[0], (unsigned long long)got[1],
+                 (unsigned long long)got[2], (int)REP, (unsigned long long)want[0],
+                 (unsigned long long)want[1], (unsigned long long)want[2],
+                 (unsigned long long)binds[0][0], (unsigned long long)binds[0][1],
+                 (unsigned long long)binds[1][0], (unsigned long long)binds[1][1],
+                 same ? "equal texel for texel" : "differ",
+                 sameSlot ? "in the destroyed one's pool slot" : "in another pool slot");
+    if (!same || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] ||
+        binds[0][0] != binds[1][0] || binds[0][1] != binds[1][1]) {
+        rhi_test_log("FAIL %s: bind cache: the repeats changed what was recorded or drawn\n",
+                     s_label);
+        failures++;
+    } else if (failures == before) {
+        rhi_test_log("%s: bind cache cell passed\n", s_label);
+    }
+    rhi_destroy_pipeline(pU);
+    rhi_destroy_pipeline(pT);
+    rhi_destroy_sampler(smp);
+    rhi_destroy_texture(ut);
+    rhi_destroy_texture(ct);
+    rhi_destroy_texture(src);
     rhi_destroy_buffer(ring);
 }
 
@@ -1998,6 +2300,9 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     }
     if (!failures) {
         dynamicCell(&c);
+    }
+    if (!failures) {
+        bindCacheCell(&c);
     }
 
     /* destroys are deferred; the frames in flight retire them */

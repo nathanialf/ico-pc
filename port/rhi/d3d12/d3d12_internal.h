@@ -132,6 +132,19 @@ typedef struct DxCmdList {
     bool inPass;
     /* timestamp indices written in this list (rhi_cmd_write_timestamp) */
     uint32_t tsMask[RHI_TIMESTAMP_WORDS];
+    /* The bind cache (d3d12_cmd.c; docs/port/RHI.md "The bind cache"): the
+     * bound pipeline's id (pipeline above is its pool slot, which a
+     * destroyed pipeline's successor takes over) and what the set calls
+     * last recorded, valid for the DX_KNOW_* bits of known: a set equal to
+     * it records nothing.  Zero at the slot's recycle; the viewport and
+     * scissor are forgotten at each pass's start */
+    uint32_t pipelineId;
+    uint32_t known;
+    D3D12_VIEWPORT vp;
+    D3D12_RECT sc;
+    D3D12_INDEX_BUFFER_VIEW ib;
+    uint8_t stencilRef;
+    float blendConst[4];
 } DxCmdList;
 
 typedef struct DxFrame {

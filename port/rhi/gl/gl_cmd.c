@@ -326,9 +326,13 @@ static void gl_count_dynamic(GlCmdList *c, const GlPipeline *p)
     if (dyn & RHI_DYN_DEPTH) {
         const bool all = !(c->dynValid & RHI_DYN_DEPTH);
         const GlDepthDyn *w = &c->depthWant, *h = &c->depthHave;
-        g_gl.counts.dynamicSets += (uint64_t)(all || w->test != h->test) +
-                                   (uint64_t)(all || w->write != h->write) +
-                                   (uint64_t)(all || w->func != h->func);
+        const uint64_t sent = (uint64_t)(all || w->test != h->test) +
+                              (uint64_t)(all || w->write != h->write) +
+                              (uint64_t)(all || w->func != h->func);
+        g_gl.counts.dynamicSets += sent;
+        if (c->dynFresh & RHI_DYN_DEPTH) {
+            g_gl.counts.stateSetsSkipped += 3u - sent; /* the set's values in force */
+        }
         c->depthHave = *w;
         c->dynValid |= RHI_DYN_DEPTH;
     }
@@ -336,6 +340,7 @@ static void gl_count_dynamic(GlCmdList *c, const GlPipeline *p)
         const bool all = !(c->dynValid & RHI_DYN_BLEND);
         const GlBlendDyn *w = &c->blendWant;
         GlBlendDyn *h = &c->blendHave;
+        const uint64_t before = g_gl.counts.dynamicSets;
         if (all || w->enable != h->enable) {
             g_gl.counts.dynamicSets++;
             h->enable = w->enable;
@@ -363,8 +368,12 @@ static void gl_count_dynamic(GlCmdList *c, const GlPipeline *p)
             g_gl.counts.dynamicSets++;
             h->mask = w->mask;
         }
+        if (c->dynFresh & RHI_DYN_BLEND) {
+            g_gl.counts.stateSetsSkipped += 3u - (g_gl.counts.dynamicSets - before);
+        }
         c->dynValid |= RHI_DYN_BLEND;
     }
+    c->dynFresh = 0;
 }
 
 /* ------------------------------------------------------- framebuffers */
@@ -814,7 +823,10 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         glf.InvalidateFramebuffer(GL_FRAMEBUFFER, n, discard);
     }
     /* the store ops are not acted on: OpenGL keeps both aspects, which
-     * DONT_CARE allows (as D3D12) */
+     * DONT_CARE allows (as D3D12).  The defaults are given whatever the
+     * list held (the bind cache forgets the viewport and scissor at a
+     * pass's start) */
+    c->viewportSet = c->scissorSet = false;
     const RhiViewport vp = {0.0f, 0.0f, (float)areaW, (float)areaH, 0.0f, 1.0f};
     const RhiRect sc = {0, 0, areaW, areaH};
     rhi_cmd_set_viewport(cl, &vp);
@@ -843,6 +855,12 @@ void rhi_cmd_set_viewport(RhiCommandList cl, const RhiViewport *v)
     if (!c || !v) {
         return;
     }
+    /* the list's viewport is OpenGL's while the list is the active one
+     * (gl_cmd_activate gives it again on a switch) */
+    if (c->viewportSet && memcmp(&c->viewport, v, sizeof(*v)) == 0) {
+        g_gl.counts.stateSetsSkipped++;
+        return;
+    }
     c->viewport = *v;
     c->viewportSet = true;
     gl_apply_viewport(v);
@@ -852,6 +870,10 @@ void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *r)
 {
     GlCmdList *c = gl_cmd(cl);
     if (!c || !r) {
+        return;
+    }
+    if (c->scissorSet && memcmp(&c->scissor, r, sizeof(*r)) == 0) {
+        g_gl.counts.stateSetsSkipped++;
         return;
     }
     c->scissor = *r;
@@ -873,9 +895,12 @@ void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p)
         /* a group the new pipeline has static: its own values replace the
          * ones given before, which a later dynamic pipeline gives again */
         c->dynValid &= pp->dynamic;
+    } else {
+        g_gl.counts.pipelineBindsSkipped++;
     }
     /* the next draw's dynamic values: the pipeline's own until a set */
     c->dynSet = 0;
+    c->dynFresh = 0;
     const RhiDepthStencilState *ds = &pp->depthStencil;
     c->depthWant = gl_depth_dyn(ds->depthTest, ds->depthWrite, ds->depthCompare);
     c->blendWant =
@@ -909,6 +934,8 @@ void rhi_cmd_set_bind_group_offsets(RhiCommandList cl, uint32_t group, RhiBindGr
         c->groups[group] = bg.id;
         memcpy(c->offsets[group], off, sizeof(off));
         c->groupDirty |= 1u << group;
+    } else {
+        g_gl.counts.bindGroupBindsSkipped++;
     }
 }
 
@@ -928,6 +955,8 @@ void rhi_cmd_set_vertex_buffer(RhiCommandList cl, uint32_t binding, RhiBuffer b,
         c->vbName[binding] = buf->name;
         c->vbOffset[binding] = offset;
         c->vbDirty |= 1u << binding;
+    } else {
+        g_gl.counts.stateSetsSkipped++;
     }
 }
 
@@ -940,16 +969,27 @@ void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, b
     if (!c || !buf || offset >= buf->size) {
         return;
     }
+    if (c->ibName == buf->name && c->ibOffset == offset && c->ibU32 == u32) {
+        g_gl.counts.stateSetsSkipped++;
+        return;
+    }
+    /* the binding is the VAO's: bound again only for another buffer (a
+     * VAO change binds it again too, gl_flush); the offset and type are
+     * the draw's arguments */
+    if (c->ibName != buf->name) {
+        c->ibDirty = true;
+    }
     c->ibName = buf->name;
     c->ibOffset = offset;
     c->ibU32 = u32;
-    c->ibDirty = true;
 }
 
 void rhi_cmd_set_stencil_ref(RhiCommandList cl, uint8_t ref)
 {
     GlCmdList *c = gl_cmd(cl);
-    if (c) {
+    if (c && c->stencilRef == ref) {
+        g_gl.counts.stateSetsSkipped++; /* the next draw's already */
+    } else if (c) {
         c->stencilRef = ref; /* glStencilFuncSeparate at the next draw */
     }
 }
@@ -958,6 +998,10 @@ void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
 {
     GlCmdList *c = gl_cmd(cl);
     if (!c || !rgba) {
+        return;
+    }
+    if (c->blendConstSet && memcmp(c->blendConst, rgba, sizeof(c->blendConst)) == 0) {
+        g_gl.counts.stateSetsSkipped++;
         return;
     }
     memcpy(c->blendConst, rgba, sizeof(c->blendConst));
@@ -979,6 +1023,7 @@ void rhi_cmd_set_depth_state(RhiCommandList cl, bool test, bool write, RhiCompar
     }
     c->depthWant = gl_depth_dyn(test, write, cmp);
     c->dynSet |= RHI_DYN_DEPTH;
+    c->dynFresh |= RHI_DYN_DEPTH;
 }
 
 void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
@@ -993,6 +1038,7 @@ void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
     }
     c->blendWant = gl_blend_dyn(blend, p->colorCount ? p->colorFormats[0] : RHI_FMT_RGBA8_UNORM);
     c->dynSet |= RHI_DYN_BLEND;
+    c->dynFresh |= RHI_DYN_BLEND;
 }
 
 /* ------------------------------------------------------------------ draws */

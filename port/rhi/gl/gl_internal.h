@@ -262,6 +262,10 @@ typedef struct GlCmdList {
     uint32_t dynSet, dynValid;
     GlDepthDyn depthWant, depthHave;
     GlBlendDyn blendWant, blendHave;
+    /* the bind cache (docs/port/RHI.md "The bind cache"): the dynamic
+     * groups set since the last draw (RhiStats.stateSetsSkipped counts
+     * their commands found in force, gl_count_dynamic) */
+    uint32_t dynFresh;
 } GlCmdList;
 
 /* ---------------------------------------------------- deferred deletes

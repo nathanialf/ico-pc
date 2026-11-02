@@ -348,6 +348,13 @@ static void vkr_open_barrier(VkCommandBuffer cb);
 static void vkr_flush_barriers(VkrCmdList *c);
 static void vkr_occ_close(VkrCmdList *c);
 
+/* VkrCmdList.known: the bind cache's state the list holds (vk_internal.h) */
+#define VKR_KNOW_VIEWPORT 1u
+#define VKR_KNOW_SCISSOR 2u
+#define VKR_KNOW_INDEX 4u
+#define VKR_KNOW_STENCIL 8u
+#define VKR_KNOW_BLEND_CONSTANT 16u
+
 /* ---------------------------------------------------------- command lists
  * Handle id: (frame tag << 20) | (list index + 1). */
 VkrCmdList *vkr_get_cmd(RhiCommandList cl)
@@ -378,6 +385,12 @@ RhiCommandList rhi_begin_commands(void)
         return out;
     }
     c->recording = true;
+    /* the bind cache starts empty (the slot's recycle zeroed it too) */
+    c->pipeline = NULL;
+    c->pipelineId = 0;
+    c->known = 0;
+    c->vbKnown = 0;
+    c->dynFresh = 0;
     c->pendCount = 0;
     c->pendSrc = c->pendDst = 0;
     c->pendMemDst = 0;
@@ -1187,7 +1200,9 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
     c->storageDrawn = c->drawnInPass = false;
     g_vkr.stats.renderPasses++;
 
-    /* defaults: full-target viewport and scissor */
+    /* defaults: full-target viewport and scissor, recorded whatever the
+     * list held before (the bind cache forgets both at a pass's start) */
+    c->known &= ~(VKR_KNOW_VIEWPORT | VKR_KNOW_SCISSOR);
     RhiViewport vp = {0.0f, 0.0f, (float)areaW, (float)areaH, 0.0f, 1.0f};
     RhiRect sc = {0, 0, areaW, areaH};
     rhi_cmd_set_viewport(cl, &vp);
@@ -1216,7 +1231,13 @@ void rhi_cmd_set_viewport(RhiCommandList cl, const RhiViewport *v)
     /* Negative height (core since Vulkan 1.1) gives D3D's y-up NDC, so the
      * same HLSL runs on both backends without -fvk-invert-y. */
     VkViewport vp = {v->x, v->y + v->h, v->w, -v->h, v->minDepth, v->maxDepth};
+    if ((c->known & VKR_KNOW_VIEWPORT) && memcmp(&vp, &c->vp, sizeof(vp)) == 0) {
+        g_vkr.stats.stateSetsSkipped++;
+        return;
+    }
     vkCmdSetViewport(c->cb, 0, 1, &vp);
+    c->vp = vp;
+    c->known |= VKR_KNOW_VIEWPORT;
 }
 
 void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *r)
@@ -1233,7 +1254,35 @@ void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *r)
         sc.extent.width = x >= c->areaW ? 0u : r->w < c->areaW - x ? r->w : c->areaW - x;
         sc.extent.height = y >= c->areaH ? 0u : r->h < c->areaH - y ? r->h : c->areaH - y;
     }
+    /* compared as recorded (cut to the pass's area) */
+    if ((c->known & VKR_KNOW_SCISSOR) && memcmp(&sc, &c->sc, sizeof(sc)) == 0) {
+        g_vkr.stats.stateSetsSkipped++;
+        return;
+    }
     vkCmdSetScissor(c->cb, 0, 1, &sc);
+    c->sc = sc;
+    c->known |= VKR_KNOW_SCISSOR;
+}
+
+/* The groups a change from pipeline `from` (NULL: none known, or a new
+ * pipeline in the bound one's pool slot) to `to` must bind again: every
+ * group from the first whose set layout differs (or that `from` does not
+ * have) on.  Vulkan keeps a bound descriptor set valid for a pipeline whose
+ * layout is compatible for that set (the same set layouts up to it, and the
+ * same push constants: none here), so the groups below stay bound; the
+ * pipelines' VkPipelineLayout handles differ (one each), so comparing them
+ * would bind every group again at every change. */
+static uint32_t vkr_groups_disturbed(const VkrPipeline *from, const VkrPipeline *to)
+{
+    if (!from) {
+        return 0xFFu;
+    }
+    uint32_t g = 0;
+    while (g < to->layoutCount && g < from->layoutCount &&
+           from->setLayoutIds[g] == to->setLayoutIds[g]) {
+        g++;
+    }
+    return (0xFFu << g) & 0xFFu;
 }
 
 void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p)
@@ -1243,20 +1292,24 @@ void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p)
     if (!c || !pp) {
         return;
     }
-    if (c->pipeline != pp) {
-        if (!c->pipeline || c->pipeline->layout != pp->layout) {
-            c->groupDirty = 0xFFu; /* rebind against the new layout */
-        }
+    /* by id: a pipeline destroyed and another made in its pool slot has the
+     * same pointer but a new id (the slot's generation) */
+    if (c->pipelineId != p.id) {
+        c->groupDirty |= vkr_groups_disturbed(c->pipeline == pp ? NULL : c->pipeline, pp);
         c->pipeline = pp;
+        c->pipelineId = p.id;
         vkr_flush_barriers(c);
         vkCmdBindPipeline(c->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pp->pipeline);
         g_vkr.stats.pipelineBinds++;
         /* a group the new pipeline has static: its own values replaced the
          * ones set before, which a later dynamic pipeline must set again */
         c->dynValid &= pp->dynamic;
+    } else {
+        g_vkr.stats.pipelineBindsSkipped++;
     }
     /* the next draw's dynamic values: the pipeline's own until a set */
     c->dynSet = 0;
+    c->dynFresh = 0;
     c->depthWant = pp->depthDefault;
     c->blendWant = pp->blendDefault;
 }
@@ -1291,6 +1344,8 @@ void rhi_cmd_set_bind_group_offsets(RhiCommandList cl, uint32_t group, RhiBindGr
         c->dynCount[group] = dyn;
         memcpy(c->offsets[group], off, sizeof(off));
         c->groupDirty |= 1u << group;
+    } else {
+        g_vkr.stats.bindGroupBindsSkipped++;
     }
 }
 
@@ -1324,7 +1379,17 @@ void rhi_cmd_set_vertex_buffer(RhiCommandList cl, uint32_t binding, RhiBuffer b,
     }
     VkDeviceSize off = offset;
     vkr_flush_barriers(c);
+    const uint32_t bit = binding < RHI_MAX_VERTEX_ATTRS ? 1u << binding : 0u;
+    if (bit && (c->vbKnown & bit) && c->vbId[binding] == b.id && c->vbOff[binding] == offset) {
+        g_vkr.stats.stateSetsSkipped++;
+        return;
+    }
     vkCmdBindVertexBuffers(c->cb, binding, 1, &buf->buffer, &off);
+    if (bit) {
+        c->vbId[binding] = b.id;
+        c->vbOff[binding] = offset;
+        c->vbKnown |= bit;
+    }
 }
 
 void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool u32)
@@ -1335,8 +1400,16 @@ void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, b
         return;
     }
     vkr_flush_barriers(c);
+    if ((c->known & VKR_KNOW_INDEX) && c->ibId == b.id && c->ibOff == offset && c->ib32 == u32) {
+        g_vkr.stats.stateSetsSkipped++;
+        return;
+    }
     vkCmdBindIndexBuffer(c->cb, buf->buffer, offset,
                          u32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+    c->ibId = b.id;
+    c->ibOff = offset;
+    c->ib32 = u32;
+    c->known |= VKR_KNOW_INDEX;
 }
 
 void rhi_cmd_set_stencil_ref(RhiCommandList cl, uint8_t ref)
@@ -1344,16 +1417,29 @@ void rhi_cmd_set_stencil_ref(RhiCommandList cl, uint8_t ref)
     VkrCmdList *c = vkr_get_cmd(cl);
     if (c) {
         vkr_flush_barriers(c);
+        if ((c->known & VKR_KNOW_STENCIL) && c->stencilRef == ref) {
+            g_vkr.stats.stateSetsSkipped++;
+            return;
+        }
         vkCmdSetStencilReference(c->cb, VK_STENCIL_FACE_FRONT_AND_BACK, ref);
+        c->stencilRef = ref;
+        c->known |= VKR_KNOW_STENCIL;
     }
 }
 
 void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
 {
     VkrCmdList *c = vkr_get_cmd(cl);
-    if (c) {
+    if (c && rgba) {
         vkr_flush_barriers(c);
+        if ((c->known & VKR_KNOW_BLEND_CONSTANT) &&
+            memcmp(c->blendConst, rgba, sizeof(c->blendConst)) == 0) {
+            g_vkr.stats.stateSetsSkipped++;
+            return;
+        }
         vkCmdSetBlendConstants(c->cb, rgba);
+        memcpy(c->blendConst, rgba, sizeof(c->blendConst));
+        c->known |= VKR_KNOW_BLEND_CONSTANT;
     }
 }
 
@@ -1377,6 +1463,7 @@ void rhi_cmd_set_depth_state(RhiCommandList cl, bool test, bool write, RhiCompar
     c->depthWant.write = test && write ? VK_TRUE : VK_FALSE;
     c->depthWant.compare = g_vkr.depthAlways ? VK_COMPARE_OP_ALWAYS : vkr_compareMap[cmp].vk;
     c->dynSet |= RHI_DYN_DEPTH;
+    c->dynFresh |= RHI_DYN_DEPTH;
 }
 
 void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
@@ -1388,6 +1475,7 @@ void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
     const VkPipelineColorBlendAttachmentState a = vkr_blend_state(blend, c->pipeline->intTarget);
     vkr_blend_dyn(&a, &c->blendWant);
     c->dynSet |= RHI_DYN_BLEND;
+    c->dynFresh |= RHI_DYN_BLEND;
 }
 
 /* whether a blend equation reads the shader's second output (a SRC1
@@ -1429,17 +1517,22 @@ static void vkr_flush_dynamic(VkrCmdList *c)
     if (dyn & RHI_DYN_DEPTH) {
         const bool all = !(c->dynValid & RHI_DYN_DEPTH);
         const VkrDepthDyn *w = &c->depthWant, *h = &c->depthHave;
+        uint32_t sent = 0;
         if (all || w->test != h->test) {
             g_vkr.cmdSetDepthTestEnable(c->cb, w->test);
-            g_vkr.stats.dynamicSets++;
+            sent++;
         }
         if (all || w->write != h->write) {
             g_vkr.cmdSetDepthWriteEnable(c->cb, w->write);
-            g_vkr.stats.dynamicSets++;
+            sent++;
         }
         if (all || w->compare != h->compare) {
             g_vkr.cmdSetDepthCompareOp(c->cb, w->compare);
-            g_vkr.stats.dynamicSets++;
+            sent++;
+        }
+        g_vkr.stats.dynamicSets += sent;
+        if (c->dynFresh & RHI_DYN_DEPTH) {
+            g_vkr.stats.stateSetsSkipped += 3u - sent; /* the set's values in force */
         }
         c->depthHave = *w;
         c->dynValid |= RHI_DYN_DEPTH;
@@ -1448,6 +1541,7 @@ static void vkr_flush_dynamic(VkrCmdList *c)
         const bool all = !(c->dynValid & RHI_DYN_BLEND);
         const VkrBlendDyn *w = &c->blendWant;
         VkrBlendDyn *h = &c->blendHave;
+        const uint64_t before = g_vkr.stats.dynamicSets;
         if (all || w->enable != h->enable) {
             g_vkr.cmdSetColorBlendEnable(c->cb, 0, 1, &w->enable);
             g_vkr.stats.dynamicSets++;
@@ -1480,8 +1574,12 @@ static void vkr_flush_dynamic(VkrCmdList *c)
             g_vkr.stats.dynamicSets++;
             h->mask = w->mask;
         }
+        if (c->dynFresh & RHI_DYN_BLEND) {
+            g_vkr.stats.stateSetsSkipped += 3u - (g_vkr.stats.dynamicSets - before);
+        }
         c->dynValid |= RHI_DYN_BLEND;
     }
+    c->dynFresh = 0;
 }
 
 /* Inside the open pass (dynamic rendering local read): one by-region

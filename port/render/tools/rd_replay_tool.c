@@ -154,7 +154,11 @@
  *                         pipeline barriers and copies, the screen-prim
  *                         draws one per command and merged (on Direct3D
  *                         11 a line of the bytes its submits wrote to the
- *                         GPU, RdPerfRecord.backendWriteBytes); a second line:
+ *                         GPU, RdPerfRecord.backendWriteBytes), then "stats:
+ *                         bind cache: P pipeline, G bind group and S state
+ *                         repeats skipped" (the binds the RHI found in
+ *                         force and recorded nothing for: RhiStats
+ *                         *Skipped, docs/port/RHI.md); a second line:
  *                         the exact blend's destination-read draws, storage
  *                         passes and pass switches, the glow's passes, the
  *                         target snapshots copied and swapped, the draws
@@ -239,8 +243,10 @@
  *                         replays, CPU mean (min) ms: total, interp, wait,
  *                         acquire, upload, walk, bind, submit, present;
  *                         per replay: ring, uniform and interp KB, draws,
- *                         pipeline and bind group binds" (on Direct3D 11
- *                         a line of the KB its submits wrote to the GPU),
+ *                         pipeline and bind group binds", then "time: bind
+ *                         cache: P pipeline, G bind group and S state
+ *                         repeats skipped a replay" (on Direct3D 11 a line
+ *                         of the KB its submits wrote to the GPU),
  *                         then the first replay's interp alone; with
  *                         --interp DISPLAY after the first and the last of
  *                         them compared byte for byte ("pictures
@@ -1562,6 +1568,7 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
 
     double sum[P_COUNT] = {0}, low[P_COUNT] = {0};
     double ring = 0.0, uniform = 0.0, interp = 0.0, draws = 0.0, pipes = 0.0, groups = 0.0;
+    double skipPipes = 0.0, skipGroups = 0.0, skipStates = 0.0; /* the bind cache's */
     double d3d11 = 0.0;    /* RdPerfRecord.backendWriteBytes (Direct3D 11 only) */
     uint32_t glowHeld = 0; /* RdPerfRecord.glowHeld: replays that pasted the held glow */
     RdPerfRecord first;
@@ -1602,6 +1609,9 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
         draws += r.draws;
         pipes += r.pipelineBinds;
         groups += r.bindGroupBinds;
+        skipPipes += r.pipelineBindsSkipped;
+        skipGroups += r.bindGroupBindsSkipped;
+        skipStates += r.stateSetsSkipped;
         glowHeld += r.glowHeld;
         if (k == 0) {
             first = r;
@@ -1627,6 +1637,9 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
                sum[P_SUBMIT] / m, low[P_SUBMIT], sum[P_PRESENT] / m, low[P_PRESENT],
                ring / m / 1024.0, uniform / m / 1024.0, interp / m / 1024.0, draws / m, pipes / m,
                groups / m);
+        printf("%s: time: bind cache: %.1f pipeline, %.1f bind group and %.1f state repeats "
+               "skipped a replay\n",
+               dump, skipPipes / m, skipGroups / m, skipStates / m);
         if (d3d11 > 0.0) {
             /* the ring's bytes Direct3D 11's submits copied to the GPU */
             printf("%s: time: Direct3D 11 submits wrote %.1f KB to the GPU a replay\n", dump,
@@ -2407,6 +2420,8 @@ int main(int argc, char **argv)
                pr->textureGroups, pr->bindGroupBinds, pr->pipelineBinds,
                (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->screenCmds,
                pr->screenDraws);
+        printf("%s: stats: bind cache: %u pipeline, %u bind group and %u state repeats skipped\n",
+               dump, pr->pipelineBindsSkipped, pr->bindGroupBindsSkipped, pr->stateSetsSkipped);
         if (pr->backendWriteBytes) {
             printf("%s: stats: Direct3D 11 submits wrote %llu bytes to the GPU\n", dump,
                    (unsigned long long)pr->backendWriteBytes);

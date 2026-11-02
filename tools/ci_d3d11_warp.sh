@@ -184,6 +184,14 @@ run() {
     # runner: skipped), the swapchain on a hidden window, Vulkan (none:
     # skipped); --console: no message box, the log to stdout
     run_test rhi_d3d11 "$DIR/rhi_d3d11_test.exe" --console
+    # the bind cache cell on both WARP runs (rhi_test_common.c bindCacheCell,
+    # docs/port/RHI.md "The bind cache"): every repeated bind skipped and
+    # counted, the pictures equal, the texture group bound again after a
+    # pass's start (Direct3D 11 unbinds shader resources there) drawn
+    log_has rhi_d3d11_bind_cache "$LOGS/rhi_d3d11.log" \
+        "rhi_d3d11_test \(WARP\): bind cache cell passed" ""
+    log_has rhi_d3d11_bind_cache_mapped "$LOGS/rhi_d3d11.log" \
+        "rhi_d3d11_test \(WARP, mapped constants\): bind cache cell passed" ""
     # the blend's and the fog's self-tests, through the same cmake scripts
     # as ctest's rd_blend_selftest and rd_fog_selftest (without the Vulkan
     # profile line rd_blend_selftest also matches)
@@ -235,6 +243,9 @@ run() {
         # Direct3D 11 (the backend holds the colour targets to 32 bytes ...")
         log_has rd_replay_tool_prepass_on "$LOGS/rd_replay_tool.log" "rd: VU pre-pass: on: " \
             "VU pre-pass: off on Direct3D 11"
+        # the bind cache's counts on a real frame (v0.9.8): the --stats line
+        log_has rd_replay_tool_bind_cache "$LOGS/rd_replay_tool.log" \
+            "stats: bind cache: [0-9]+ pipeline, [0-9]+ bind group and [0-9]+ state repeats skipped" ""
         # a frame of VU draws through the record: its copies by the
         # backend's compute shader, no VU draw the old way
         if [ -f "$WORK/rd_pixel_vu.rddump" ]; then

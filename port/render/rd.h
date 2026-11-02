@@ -2137,6 +2137,10 @@ typedef struct RdPerfRecord {
     double fenceWaitMs; /* the backend's blocked time on GPU completion (inside wait, readback) */
     uint32_t buffersCreated, buffersDestroyed, texturesCreated, texturesDestroyed;
     uint32_t memoryAllocs, memoryFrees, bindGroups, pipelineBinds, bindGroupBinds;
+    /* the binds and state sets the RHI's bind cache found already in force
+     * and recorded nothing for (RhiStats.pipelineBindsSkipped,
+     * bindGroupBindsSkipped, stateSetsSkipped) */
+    uint32_t pipelineBindsSkipped, bindGroupBindsSkipped, stateSetsSkipped;
     uint32_t dynamicSets; /* dynamic depth and blend commands (RhiStats.dynamicSets) */
     /* of those, the blend equations for draws without blending and those
      * that replaced a dual-source one (RhiStats.blendEqOffSets,
