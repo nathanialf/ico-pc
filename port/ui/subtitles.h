@@ -25,6 +25,8 @@ typedef struct UiSubtitlePack {
 } UiSubtitlePack;
 
 extern const UiSubtitlePack ui_subtitle_pack_rus;
+extern const UiSubtitlePack ui_subtitle_pack_rus_2;
+extern const UiSubtitlePack subtitles_eng_glitterberri;
 
 /* The text subtitle packs included in the program. */
 size_t ui_subtitle_pack_count(void);

@@ -85,6 +85,8 @@ set(_ui_sources
     popup.c
     subtitles.c
     subtitles_rus.c
+    subtitles_rus_2.c
+    subtitles_eng_glitterberri.c
     ${_ui_string_srcs}
     ${_ui_font_srcs})
 
@@ -458,7 +460,7 @@ endif()
 
 # subtitles_test: text packs are discoverable by ID, lines are keyed by
 # game block, and unknown blocks remain absent. CPU only.
-add_executable(subtitles_test test/subtitles_test.c subtitles.c subtitles_rus.c)
+add_executable(subtitles_test test/subtitles_test.c subtitles.c subtitles_rus.c subtitles_rus_2.c subtitles_eng_glitterberri.c)
 target_include_directories(subtitles_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/game")
 target_compile_options(subtitles_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
