@@ -355,10 +355,10 @@ contributors: [`docs/port/ARCHITECTURE.md`](https://github.com/nathanialf/ico-pc
 
 ### Contributors
 
-- katsifolis, for the iOS and macOS support (iOS through LiveContainer).
-- braito4, for the audio and build fixes.
-- neetgon, for the second player's gamepad (two-player input).
-- KClough, for the arm64 Linux support.
+- katsifolis, for the iOS support (through LiveContainer).
+- braito4, for the Apple-silicon macOS app.
+- neetgon, for the second player's gamepad.
+- KClough, for the arm64 Linux build.
 
 ### Special thanks
 
