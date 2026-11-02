@@ -108,7 +108,9 @@ pumps the window's events). A picture handed
 over owns the renderer's state until its walk and present's pass end (`rd__reads_done` in
 `rd__submit_frame`); every game-thread call that changes the frames, textures, meshes, targets or
 settings waits for that first (`rd__texlock_wait`), so the render thread reads the state as it
-was when the picture was posted. The submit and the present then overlap the game's step.
+was when the picture was posted. The submit and the present then overlap the game's step; the
+window makes a further picture of a frame already shown only when its reads would end before the
+next step and its end before that step's end (PLATFORM.md, the render thread's further presents).
 The overlay's two layers (UI code: port/ui's font state and caches are the game thread's) of a
 picture the game thread posts are collected there before the post (`port/render/rd_present.c`
 (`rd__overlay_hand_over`)), and the picture's replay copies their batches after its deferred text

@@ -697,7 +697,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   3.5 ms on the render thread keeps every step on time, one present a step; `testAsyncRates`: the
   timer path paced by the GPU's time with the presents handed over, 9, 12, 17, 20 and 25 ms
   pictures give about a period over the picture time presents a step and 30 ms every new frame, a
-  9 ms present with a 3 ms step two presents a step against one) (`pace_loop`).
+  9 ms present with a 3 ms step two presents a step against one; `testRenderThreadPlan`: the
+  whole picture on the render thread, a step waiting for a picture's reads and a present for the
+  picture before, further presents planned by `pace_rt_further_late` with the render thread's
+  estimates (`pace_rt_estimate`, `pace_rt_busy_left`, their own cases first): at 3, 9 and 22 ms
+  pictures and a 2 s burst of 30 ms ones every frame is shown, the presents a second are what the
+  picture time allows (two a step and more, one a step, the new frames), no further present makes
+  a step wait, and without the plan the 9 and 22 ms pictures and the burst do; the burst's waits
+  with the plan, from the new frames' own pictures, under a quarter of those without) (`pace_loop`).
 - `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
   the first second, 50 presents a second give 50 at every whole second, a second that ran 1.5 s long
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays
