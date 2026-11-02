@@ -386,11 +386,11 @@ static void test_hold_discs(const char *dir)
 }
 
 /* [ui] language: auto (-1) by default and for a value that is not one of
-   the nine; each name its UiLang number (port/ui/strings.h order); the
+   the languages; each name its UiLang number (port/ui/strings.h order); the
    setter and the names the Settings menu writes */
 static void test_ui_language(const char *dir)
 {
-    static const char *const names[9] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru"};
+    static const char *const names[10] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru", "ptBR"};
     char path[512];
     char text[64];
     FILE *f;

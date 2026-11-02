@@ -361,7 +361,7 @@ static void testStrings(void)
        would give the English to a language without), the loanword as each
        language writes it */
     {
-        const char *const *tables[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it, ui_strings_es, ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru};
+        const char *const *tables[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it, ui_strings_es, ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru, ui_strings_ptBR};
         static const char *const deja[UI_LANG_COUNT] = {
             "Deja vu",
             "D\xc3\xa9j\xc3\xa0 vu",

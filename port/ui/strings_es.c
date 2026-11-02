@@ -627,6 +627,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_LANG_KO] = "한국어",
     [UI_STR_LANG_ZH] = "繁體中文",
     [UI_STR_LANG_RU] = "Русский",
+    [UI_STR_LANG_ptBR] = "Português (Brasil)",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Pantalla táctil",
     [UI_STR_OPT_TOUCH_EDIT] = "Editar disposición",

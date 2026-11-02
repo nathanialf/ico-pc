@@ -3668,7 +3668,7 @@ static void testMenuLanguage(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE), "Automatisch") == 0 ||
               ui_settings_value_text(UI_OPT_MENU_LANGUAGE)[0] != '\0',
           "the row's value: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
-    /* Auto, en, fr, de, it, es, ja, ko, zh, ru, Auto */
+    /* Auto and all menu languages */
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
     CHECK(ico_opt_ui_language() == UI_LANG_EN && ui_get_language() == UI_LANG_EN &&
               ui_sheet_language() == UI_LANG_DE,

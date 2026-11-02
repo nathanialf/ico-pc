@@ -1,4 +1,4 @@
-/* font_coverage_test.c: every character of the nine languages has a glyph
+/* font_coverage_test.c: every character of the languages has a glyph
  * in the port's faces.
  *
  * CPU only: font.c's cmap, no device.  Walks
@@ -70,7 +70,7 @@ static int s_lang; /* the language the walk is in */
         }                                                                                          \
     } while (0)
 
-static const char *const kLangs[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru"};
+static const char *const kLangs[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru", "ptBR"};
 
 #define BMP_SEEN 0x10000
 static unsigned char s_seen[UI_LANG_COUNT][BMP_SEEN]; /* distinct code points a language draws */
@@ -248,7 +248,7 @@ static void putCp(char *out, size_t *n, size_t cap, uint32_t cp)
     }
 }
 
-/* the characters the nine languages draw (tables, the roll's port lines,
+/* the characters the languages draw (tables, the roll's port lines,
    corpus) that the fonts serve (Arimo, then Noto Sans JP's subset, then
    Noto Sans KR's, then Noto Sans TC's) */
 static void reportFaces(void)

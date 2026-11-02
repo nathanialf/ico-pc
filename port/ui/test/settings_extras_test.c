@@ -248,7 +248,7 @@ static void testExtras(void)
         testCredits(mainL, exL);
     }
 
-    /* the strings, nine languages */
+    /* the strings languages */
     static const char *const want[UI_LANG_COUNT][5] = {
         {"Extras", "Music", "Models", "Credits", "Finish the game to unlock"},
         {"Extras", "Musique", "Mod\xC3\xA8les",

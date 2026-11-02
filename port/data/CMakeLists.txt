@@ -249,7 +249,7 @@ endif()
 # chosen disc image (port/platform/android/iso_import.c), on Linux with SDL's
 # memory streams for the content:// one: the copy byte for byte with its
 # progress, a cancel leaving nothing, a write failure's reason, the space
-# arithmetic, the 4.4 GB demo's boxes in the nine languages. The Linux window
+# arithmetic, the 4.4 GB demo's boxes in the languages. The Linux window
 # build only; SDL3 is found after this directory (port/rhi), so the target is
 # made at the end of the configure.
 function(_ico_data_iso_import_test)
@@ -259,7 +259,7 @@ function(_ico_data_iso_import_test)
     # the nine string tables (port/ui, plain data): the boxes' words in each language;
     # port/ui's "strings.h" by -iquote, so <strings.h> stays the C library's
     set(_iso_import_tables)
-    foreach(_lang en fr de it es ja ko zh ru)
+    foreach(_lang en fr de it es ja ko zh ru ptBR)
         list(APPEND _iso_import_tables "${CMAKE_SOURCE_DIR}/port/ui/strings_${_lang}.c")
     endforeach()
     add_executable(iso_import_test "${CMAKE_SOURCE_DIR}/port/data/test/iso_import_test.c"

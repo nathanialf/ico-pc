@@ -136,7 +136,7 @@ def main():
         for lit in literals(p):
             add(lit, os.path.relpath(p, ROOT))
     corpus = sorted(glob.glob(os.path.join(ROOT, "port/ui/test/font_corpus/*.txt")))
-    if len(corpus) < 9:
+    if len(corpus) < 10:
         print("font_audit: %d corpus files, expected one per language" % len(corpus))
         return 1
     for p in corpus:

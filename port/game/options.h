@@ -47,7 +47,7 @@
  *   [ui] language          auto   the language of the port's own text:
  *                                 auto (Japanese on the Japanese disc,
  *                                 the game's language on the European
- *                                 one) or en, fr, de, it, es, ja, ko, zh, ru
+ *                                 one) or en, fr, de, it, es, ja, ko, zh, ru, ptBR
  *   [subtitles] source     "all"   "all", "disc" or "text": which subtitle
  *                                 sources are available in Settings
  *   [subtitles] language   "game"  the game's language, or the ID of a text
@@ -215,7 +215,7 @@ void ico_opt_set_circle_back(int on);
 /* [ui] language: the language of the port's own text (the menus it adds,
    photo mode's help, the messages): "auto" (-1, the default: the disc's,
    port/ui/ui_lang.h ui_settings_resolve_language) or "en", "fr", "de",
-   "it", "es", "ja", "ko", "zh", "ru" (port/ui/strings.h UiLang order);
+   "it", "es", "ja", "ko", "zh", "ru", "ptBR" (port/ui/strings.h UiLang order);
    another value is "auto", logged once. The game's own text is always the
    disc's. ico_opt_ui_language_name gives the config value of one ("auto"
    for -1; the Settings menu writes it). */

@@ -9,7 +9,7 @@
 #define ICO_CONFIG_SYSCONF_H
 
 /* libscf's numbering (sceScfGetLanguage). The game has English, French,
-   Spanish, German and Italian screens; Japanese, Dutch and Portuguese are
+   Spanish, German and Italian screens; Japanese, Dutch are
    never answered. */
 #define ICO_SCF_LANGUAGE_JAPANESE 0
 #define ICO_SCF_LANGUAGE_ENGLISH 1

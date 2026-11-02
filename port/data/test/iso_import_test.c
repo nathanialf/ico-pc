@@ -304,8 +304,8 @@ static int hasTenths(const char *text, const char *dot)
 
 static void checkLarge(void)
 {
-    static const char *const *const tables[] = {ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it, ui_strings_es, ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru};
-    static const char *const names[] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru"};
+    static const char *const *const tables[] = {ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it, ui_strings_es, ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru, ui_strings_ptBR};
+    static const char *const names[] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru", "ptBR"};
     /* Ico_JUN26.iso, the June 2001 magazine demo (a DVD-9 image) */
     const uint64_t image = 4386521088ull;
     const uint64_t need = ico_iso_need_bytes(image);

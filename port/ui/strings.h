@@ -45,6 +45,7 @@ typedef enum UiLang {
     UI_LANG_KO,
     UI_LANG_ZH,
     UI_LANG_RU,
+    UI_LANG_ptBR,
     UI_LANG_COUNT
 } UiLang;
 
@@ -874,6 +875,8 @@ typedef enum UiStrId {
     UI_STR_EFFECT_GLOW_SMOOTH_LOCKED,
     /* Russian's own name in every table */
     UI_STR_LANG_RU,
+    /* Brazilian Portuguese's own name in every table */
+    UI_STR_LANG_ptBR,
     UI_STR_OPT_SUBTITLE_SOURCE,
     UI_STR_SUBTITLE_SOURCE_ALL,
     UI_STR_SUBTITLE_SOURCE_DISC,
@@ -952,6 +955,7 @@ extern const char *const ui_strings_ja[UI_STR_COUNT];
 extern const char *const ui_strings_ko[UI_STR_COUNT];
 extern const char *const ui_strings_zh[UI_STR_COUNT];
 extern const char *const ui_strings_ru[UI_STR_COUNT];
+extern const char *const ui_strings_ptBR[UI_STR_COUNT];
 
 #ifdef __cplusplus
 }

@@ -40,8 +40,8 @@ int ico_opt_ui_language(void)
     return s_choice;
 }
 
-static const char *const kNames[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru"};
-static const char *const *const kTables[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it, ui_strings_es, ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru};
+static const char *const kNames[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru", "ptBR"};
+static const char *const *const kTables[UI_LANG_COUNT] = {ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it, ui_strings_es, ui_strings_ja, ui_strings_ko, ui_strings_zh, ui_strings_ru, ui_strings_ptBR};
 
 /* s's printf conversions, their letters in order ("%%" is none) */
 static void conversions(const char *s, char *out, size_t n)
@@ -141,6 +141,8 @@ static void testSheetLanguage(void)
           ui_sheet_language());
     ui_set_language(UI_LANG_RU);
     CHECK(ui_sheet_language() == UI_LANG_EN, "Russian uses the English sheet language");
+    ui_set_language(UI_LANG_ptBR);
+    CHECK(ui_sheet_language() == UI_LANG_EN, "Brazilian Portuguese uses the English sheet language");
     ui_set_language(UI_LANG_JA);
     CHECK(ui_sheet_language() == UI_LANG_EN, "Japanese port text over the default sheets: %d",
           ui_sheet_language());

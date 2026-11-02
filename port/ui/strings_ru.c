@@ -624,6 +624,7 @@ const char *const ui_strings_ru[UI_STR_COUNT] = {
     [UI_STR_LANG_KO] = "Корейский",
     [UI_STR_LANG_ZH] = "Китайский (традиционный)",
     [UI_STR_LANG_RU] = "Русский",
+    [UI_STR_LANG_ptBR] = "Português (Brasil)",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Сенсорный экран",
     [UI_STR_OPT_TOUCH_EDIT] = "Изменить расположение",

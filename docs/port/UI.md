@@ -14,7 +14,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/settings_graphics.h`, `settings_graphics.c` | Settings > Graphics: the Graphics API and Graphics card rows' values and steps, Apply and its countdown |
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
 | `port/ui/ui_hint.h`, `ui_hint.c` | a line of button prompts (glyphs and words) |
-| `port/ui/strings.h`, `strings.c`, `strings_{en,fr,de,it,es,ja,ko,zh,ru}.c` | the UI strings, one table per language; the serial notes; the Japanese, Chinese and Korean line-break rules |
+| `port/ui/strings.h`, `strings.c`, `strings_{en,fr,de,it,es,ja,ko,zh,ru,ptBR}.c` | the UI strings, one table per language; the serial notes; the Japanese, Chinese and Korean line-break rules |
 | `port/ui/ui_lang.h`, `ui_lang.c` | the port text's language from `[ui] language` and the running disc |
 | `port/ui/font.h`, `font.c` | Arimo, then Noto Sans JP, then Noto Sans KR, then Noto Sans TC (first of the three while the language is Chinese), through stb_truetype: atlases, measuring, plain text, the presentation overlay mode, the sheet rasteriser |
 | `port/ui/menu_font.h`, `menu_font.c` | the menus' text in the look of the game's menu sheets: strip pages, inks, rims |
@@ -452,7 +452,7 @@ without a host and on the pause menu).
 ## Strings and languages
 
 Every word the port draws is a `UiStrId` into one table per language, `strings_en.c`, `fr`, `de`,
-`it`, `es`, `ja`, `ko`, `zh`, `ru`, `UI_LANG_COUNT` tables of `UI_STR_COUNT` UTF-8 entries
+`it`, `es`, `ja`, `ko`, `zh`, `ru`, `ptBR`, `UI_LANG_COUNT` tables of `UI_STR_COUNT` UTF-8 entries
 written with designated initialisers; the tables also hold the game's own menu words
 (`UI_STR_MT_*`) as each disc's sheets letter them (`port/ui/strings.h`, header comment). `ui_str`
 answers in the current language and
@@ -464,7 +464,7 @@ table names the languages in their own words (English, Français, Deutsch, Itali
 
 The first five languages, `UI_LANG_PAL_COUNT`, are the European disc's, in the order of the game's
 language numbers; Japanese (`UI_LANG_JA`), Korean (`UI_LANG_KO`), Traditional Chinese
-(`UI_LANG_ZH`), Russian (`UI_LANG_RU`) are additional port languages. The Japanese, Korean
+(`UI_LANG_ZH`), Russian (`UI_LANG_RU`) and Brazilian Portuguese (`UI_LANG_ptBR`) are additional port languages. The Japanese, Korean
 and Asian discs' own words are their sheets. Russian uses English as the sheet style only where
 the disc has no fixed regional sheet; language-specific game-text textures use English where
 those variants are available. The current language is set by `ui_settings_apply_language`, which
@@ -482,7 +482,7 @@ menus follow at once while the menu language is Auto, and writes `[game] languag
 the row is not shown there and the port never writes the word (`gameLanguage` is -1); `Main` sets it
 from `ico_boot_language`, which gives 0 on that disc (`port/config/sysconf.c`), so it stays 0.
 
-The menu language, `[ui] language` (`auto`, `en`, `fr`, `de`, `it`, `es`, `ja`, `ko`, `zh`, `ru`;
+The menu language, `[ui] language` (`auto`, `en`, `fr`, `de`, `it`, `es`, `ja`, `ko`, `zh`, `ru`, `ptBR`;
 `port/game/options.h` (`ico_opt_ui_language`)), is resolved by `ui_settings_resolve_language`: a
 chosen language wins on every disc; `auto`, the default, follows the disc: the language its region
 row names (`IcoRegionInfo.ui_lang_default`: `UI_LANG_JA` on the Japanese disc, `UI_LANG_KO` on the
@@ -1269,7 +1269,7 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   `kSheetInk[UI_SHEET_KO]` or `kSheetInk[UI_SHEET_ZH]` held to
   them, and the port's words' box against the disc's rows. 77 without them.
 - `font_coverage` (`test/font_coverage_test.c`, `test/font_corpus/`): every character the port
-  draws, in the nine languages, has a glyph in one of the four fonts; a Japanese character is
+  draws, in the languages, has a glyph in one of the four fonts; a Japanese character is
   Noto Sans JP's own glyph, a Hangul one Noto Sans KR's, a Chinese-only ideograph Noto Sans TC's,
   the Cyrillic alphabet is covered by Arimo, and the face order follows the language
   (`ui__font_prefer_chinese`). `font_audit`,

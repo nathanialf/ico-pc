@@ -75,7 +75,7 @@ add_custom_command(
     COMMENT "Embedding the UI font for Chinese"
     VERBATIM)
 set(_ui_font_srcs "${_ui_font_c}" "${_ui_font_ja_c}" "${_ui_font_ko_c}" "${_ui_font_zh_c}")
-set(_ui_string_srcs strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c strings_ja.c strings_ko.c strings_zh.c strings_ru.c)
+set(_ui_string_srcs strings.c strings_en.c strings_fr.c strings_de.c strings_it.c strings_es.c strings_ja.c strings_ko.c strings_zh.c strings_ru.c strings_ptBR.c)
 
 set(_ui_sources
     font.c

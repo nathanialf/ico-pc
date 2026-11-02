@@ -552,7 +552,7 @@ returns `[game] language` when it names one of the game's five languages, else t
 first of SDL's preferred locales the game has (window build), else `LC_ALL`, `LC_MESSAGES` or
 `LANG` (not `C` or `POSIX`), else English; the answer is cached (`port/config/sysconf.c`
 (`sceScfGetLanguage`); `port/config/sysconf.h` (`ico_sysconf_host_language`)). Japanese, Dutch and
-Portuguese are never answered. `sceScfGetTimeZone` and `sceScfGetSummerTime` return 0.
+Brazilian Portuguese are never answered. `sceScfGetTimeZone` and `sceScfGetSummerTime` return 0.
 
 The boot screens' choices come from the config: the port skips the language and 50/60 Hz screens,
 and `ico2/common/src/main.c` (`Main`) sets the language (`sceScfGetLanguage` mapped onto the game's
