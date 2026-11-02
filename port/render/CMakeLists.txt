@@ -78,6 +78,22 @@ add_executable(rd_bisect_plan_test test/rd_bisect_plan_test.c)
 target_compile_options(rd_bisect_plan_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(rd_bisect_plan_test PRIVATE ico_bisect_plan)
 
+# ico_cache_name: the Vulkan pipeline cache file's name from the shader set
+# and the pipeline format, not the build (rd_cache_name.h).  Pure C on
+# ico_texpack_name's XXH3-64, built in every configuration; ico_render walks
+# its own shader table through it (rd_pipeline.c rd_pipeline_cache_file).
+add_library(ico_cache_name STATIC rd_cache_name.c)
+target_include_directories(ico_cache_name PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ico_cache_name PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_cache_name PUBLIC ico_texpack_name)
+
+# rd_cache_name_test: the same modules give the same name whatever the build,
+# one byte, a length, a name, a stage, the order or the format changed gives
+# another, the name's form and its buffer (CPU only)
+add_executable(rd_cache_name_test test/rd_cache_name_test.c)
+target_compile_options(rd_cache_name_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(rd_cache_name_test PRIVATE ico_cache_name)
+
 # ico_gltf: glTF 2.0 for model packs (gltf.h), the dump's
 # .gltf + .bin writer and the .gltf/.glb reader.  CPU only, built in every
 # configuration: JSON through ico_json, files through host_fs (UTF-8 paths).
@@ -109,6 +125,7 @@ if(ICO_RUN_TESTS)
         CACHE PATH "A PCSX2 texture pack's replacements folder for the texture pack tests")
     add_test(NAME texpack_name COMMAND texpack_name_test)
     add_test(NAME rd_bisect_plan COMMAND rd_bisect_plan_test)
+    add_test(NAME rd_cache_name COMMAND rd_cache_name_test)
     add_test(NAME gltf COMMAND gltf_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME texpack_disc COMMAND texpack_disc_test "${ICO_DISC_IMAGE}" "${ICO_TEXPACK_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
@@ -181,7 +198,8 @@ target_include_directories(ico_render
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 target_compile_options(ico_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref ico_texpack_name)
+target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref ico_texpack_name
+                      ico_cache_name)
 # rd_tex_decode.c: the decode pool's threads (port/platform/ico_thread.h)
 target_link_libraries(ico_render PUBLIC ico_thread)
 # texpack.c, modelpack.c: the selected disc's pack folder (port/core)

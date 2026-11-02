@@ -276,7 +276,7 @@ static int fileExists(const char *dir, const char *name)
     return fp != NULL;
 }
 
-/* The other builds' caches: with the file pipelines-<build>.vkcache, every
+/* The other builds' caches: with the file pipelines-<key>.vkcache, every
  * other pipelines*.vkcache and pipelines*.vkcache.tmp in its folder goes
  * (one log name each), the current file, its own .tmp and unrelated files
  * stay; a missing folder and a file of another name drop nothing. */

@@ -633,6 +633,13 @@ void rd_end_frame(int keep);
  * the host FP mode and returns; NULL (the default, tests and tools) calls
  * fn directly. */
 typedef void (*RdHostCall)(void (*fn)(void *arg), void *arg);
+/* The Vulkan pipeline cache file's name for this build's shaders,
+ * "pipelines-<16 hex digits>.vkcache" (rd_cache_name.h: every module of
+ * the embedded table by name, stage, length and XXH3-64, and
+ * RD_PIPELINE_CACHE_FORMAT; not the build), into out (at least 35
+ * bytes; 0, or -1 with out "" when it is shorter).  Needs no device: the
+ * window names the file before rd_init.  The key is made once a run. */
+int rd_pipeline_cache_file(char *out, size_t cap);
 /* Creates every pipeline of the reachable set (rd__enumerate_reachable) now,
  * so the first frames that use them do not stall on the driver's pipeline
  * compile; logs the count, the time, the compiles and the threads.  The keys

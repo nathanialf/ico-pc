@@ -75,6 +75,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include "rd_cache_name.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "shader_consts.h"
@@ -2818,6 +2819,23 @@ static uint32_t vuLargest(const uint8_t *ids, uint32_t n, char *name, size_t siz
         snprintf(name, size, "none in this build");
     }
     return best;
+}
+
+int rd_pipeline_cache_file(char *out, size_t cap)
+{
+    static uint64_t key;
+    static bool made;
+    if (!made) {
+        RdCacheKey k;
+        rd_cache_key_begin(&k, RD_PIPELINE_CACHE_FORMAT);
+        for (unsigned i = 0; i < g_icoShaderCount; i++) {
+            rd_cache_key_module(&k, g_icoShaders[i].name, g_icoShaders[i].stage,
+                                g_icoShaders[i].spirv, g_icoShaders[i].spirv_len);
+        }
+        key = rd_cache_key_end(&k);
+        made = true;
+    }
+    return rd_cache_file_name(out, cap, key);
 }
 
 uint32_t rd__shader_words(const char *name)

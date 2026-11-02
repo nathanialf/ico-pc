@@ -589,11 +589,13 @@ static void d11_fill_limits(void)
 
 /* --------------------------------------------------------- the DXBC cache
  * rhi_set_pipeline_cache_path names the Vulkan cache file
- * (<pref>/pipelines-<build>.vkcache, window_host.c); the DXBC cache is the
- * folder beside it, <pref>/pipelines-<build>.d3d11, one file per shader
- * (d3d11_shader.c), keyed with <build>.  Another build's folder
- * (pipelines-*.d3d11) is removed at rhi_init, as the Vulkan backend drops
- * another build's file (vk_pipeline.c vkr_cache_drop_others).  Any other
+ * (<pref>/pipelines-<key>.vkcache, window_host.c; the key is the shader
+ * set's, port/render/rd_cache_name.h); the DXBC cache is the folder beside
+ * it, <pref>/pipelines-<key>.d3d11, one file per shader (d3d11_shader.c),
+ * keyed with <key> and the HLSL sources themselves.  Another key's folder
+ * (pipelines-*.d3d11, a per-build name of an older version among them) is
+ * removed at rhi_init, as the Vulkan backend drops another key's file
+ * (vk_pipeline.c vkr_cache_drop_others).  Any other
  * path (a test's): the folder <path>.d3d11, keyed with the file's name, and
  * nothing dropped.  Kept across rhi_init. */
 static char s_cachePath[1024];

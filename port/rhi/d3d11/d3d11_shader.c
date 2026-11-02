@@ -416,7 +416,7 @@ bool d3d11_shader_cache_folder(const char *path, char *dir, size_t dirn, char *b
     }
     const size_t len = strlen(path), blen = strlen(base);
     int n, m;
-    /* pipelines-<build>.vkcache: "pipelines-" is 10 characters, ".vkcache" 8 */
+    /* pipelines-<key>.vkcache: "pipelines-" is 10 characters, ".vkcache" 8 */
     if (strncmp(base, "pipelines-", 10) == 0 && blen > 18 && d3d11s_ends_with(base, ".vkcache")) {
         n = snprintf(dir, dirn, "%.*s.d3d11", (int)(len - 8), path);
         m = snprintf(build, buildn, "%.*s", (int)(blen - 18), base + 10);

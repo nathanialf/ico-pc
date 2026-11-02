@@ -18,7 +18,8 @@ uint32_t rhi_vk_validation_error_count(void);
 
 /* For rhi_vk_test's cache cell: the drop vkr_pipeline_cache_init makes.
  * `path` is the cache file as rhi_set_pipeline_cache_path takes it; when its
- * name is pipelines<...>.vkcache every other pipelines*.vkcache and
+ * name is pipelines<...>.vkcache (the window's pipelines-<key>.vkcache,
+ * port/render/rd_cache_name.h) every other pipelines*.vkcache and
  * pipelines*.vkcache.tmp in its folder is removed, with one log line each.
  * Returns the number removed; the removed names, one per line, are copied to
  * `log` (when not NULL; logCap bytes). */

@@ -21,7 +21,6 @@
 #include "host_loop.h"
 #include "hotkeys.h"
 #include "ico_credits.h"
-#include "ico_build_commit.h" /* ICO_BUILD_COMMIT, generated (port/platform/CMakeLists.txt) */
 #include "ico_version.h" /* ICO_VERSION_LABEL, generated (CMakeLists.txt; "" in a development build) */
 #include "input.h"
 #include "input_record.h"
@@ -1799,13 +1798,13 @@ static void window_attach(int mode)
        the host FP mode, not on the game's 256 KB fiber stacks */
     rd_set_host_call(ico_sched_call_on_host);
     rd_set_replay_gate(orig_gate);
-    /* the Vulkan pipeline cache in the per-user folder: a later start of
-       the same build creates the renderer's pipelines from it
-       (rhi_set_pipeline_cache_path;
-       D3D12 ignores it). Android: the app's cache folder, which the system
-       may empty when space runs low (android_paths.h) */
+    /* the Vulkan pipeline cache in the per-user folder: a later start of a
+       build with the same shaders creates the renderer's pipelines from it
+       (rhi_set_pipeline_cache_path; D3D12 ignores it). Android: the app's
+       cache folder, which the system may empty when space runs low
+       (android_paths.h) */
     {
-        char pref[ICO_PATH_MAX], cache[ICO_PATH_MAX + 96];
+        char pref[ICO_PATH_MAX], cache[ICO_PATH_MAX + 96], name[40];
 
 #ifdef __ANDROID__
         if (ico_android_cache_dir(pref, sizeof(pref)) != 0) {
@@ -1814,28 +1813,12 @@ static void window_attach(int mode)
 #else
         ico_host_pref_dir(pref, sizeof(pref));
 #endif
-        /* the file is this build's: another build's shader set does not
-           match a cache the driver wrote for it, so the renderer drops the
-           other pipelines*.vkcache files of the folder (vk_pipeline.c
-           vkr_cache_drop_others). The build is the commit
-           (ICO_BUILD_COMMIT, "git describe": the tag, the commits since and
-           the short hash; "unknown" without git, where every such build
-           shares a file), with every character a file name does not take
-           made "_" */
-        {
-            char build[64];
-            size_t i;
-
-            snprintf(build, sizeof(build), "%s", ICO_BUILD_COMMIT);
-            for (i = 0; build[i] != '\0'; i++) {
-                const char c = build[i];
-                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                      c == '.' || c == '-')) {
-                    build[i] = '_';
-                }
-            }
-            snprintf(cache, sizeof(cache), "%s/pipelines-%s.vkcache", pref, build);
-        }
+        /* the name is the shader set's and the pipeline format's, not the
+           build's (rd_cache_name.h): another set's file is dropped
+           (vk_pipeline.c vkr_cache_drop_others), the header's device and
+           driver are checked (vkr_cache_load) */
+        (void)rd_pipeline_cache_file(name, sizeof(name));
+        snprintf(cache, sizeof(cache), "%s/%s", pref, name);
         rhi_set_pipeline_cache_path(cache);
         ico_diag_set_pipeline_cache(0, cache);
     }
@@ -2423,9 +2406,10 @@ open_window:
         /* the set in the pipeline cache file now, not only at a clean exit:
            a phone's system ends the app without one, and a lost device
            skips it, so the next start would compile the set cold again
-           ("This happens once after an update"); one read of the cache's
-           data and one file write, its size and time logged, nothing when
-           the file already holds it. Not when the set was stopped */
+           (the screen's "This happens once after an update that changes
+           the graphics"); one read of the cache's data and one file write,
+           its size and time logged, nothing when the file already holds
+           it. Not when the set was stopped */
         if (!s_quitLatched && !rhi_device_lost()) {
             (void)rhi_pipeline_cache_save();
         }
@@ -4199,8 +4183,9 @@ static int pipeline_progress(void *ctx, uint32_t done, uint32_t total)
              (unsigned)total);
     estimate = pipe_estimate(left, sizeof(left), elapsedMs / 1000.0, done, total);
 #ifdef __ANDROID__
-    /* the driver keeps what it prepared: the next starts take seconds */
-    once = "This happens once after an update";
+    /* the driver keeps what it prepared, under a name an update keeps
+       while the shaders are the same (rd_cache_name.h) */
+    once = "This happens once after an update that changes the graphics";
 #endif
     p->drawn = 1;
     /* 1 from a screen that cannot stop: the device was lost */

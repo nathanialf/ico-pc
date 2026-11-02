@@ -38,10 +38,13 @@ void rhi_set_pipeline_cache_path(const char *path)
     }
 }
 
-/* ------------------------------------------------ the other builds' caches
- * The window names the file pipelines-<build>.vkcache, so a cache written by
- * another build (its shader set differs; the driver would be handed the stale
- * blob and every new pipeline) is never read.  This removes them. */
+/* ------------------------------------------------ the other shader sets' caches
+ * The window names the file pipelines-<key>.vkcache, the key a hash of the
+ * embedded SPIR-V modules and the pipeline format (port/render/rd_cache_name.h),
+ * so a build with the same shaders reads the cache the last one wrote and a
+ * cache written for another shader set (the driver would be handed its stale
+ * pipelines with every new one) is never read.  This removes those, and the
+ * per-build names pipelines-<commit>.vkcache of the builds before the key. */
 static const char *vkr_base_name(const char *path)
 {
     const char *b = path;
@@ -74,7 +77,7 @@ uint32_t vkr_cache_drop_others(const char *path, char *log, size_t logCap)
     if (log && logCap) {
         log[0] = '\0';
     }
-    /* only the pipelines-<build>.vkcache the window names: any other file
+    /* only the pipelines-<key>.vkcache the window names: any other file
        name (a test's) is left alone along with its neighbours */
     if (!path || strncmp(cur, "pipelines", 9) != 0 || !vkr_ends_with(cur, ".vkcache") ||
         (size_t)(cur - path) >= sizeof(dir)) {
@@ -134,8 +137,7 @@ uint32_t vkr_cache_drop_others(const char *path, char *log, size_t logCap)
         memcpy(full, path, plen);
         strcpy(full + plen, names[i]);
         if (remove(full) == 0) {
-            VKR_LOG("pipeline cache: dropped %s (another version of the game); this start "
-                    "prepares the graphics from nothing",
+            VKR_LOG("pipeline cache: dropped %s (made for other shaders, or named after a build)",
                     names[i]);
             if (log && logCap > strlen(log) + strlen(names[i]) + 2) {
                 strcat(log, names[i]);
@@ -199,11 +201,38 @@ bool rhi_pipeline_cache_loaded(void)
     return s_cacheLoaded;
 }
 
+/* the window's name, pipelines- + 16 hex digits + .vkcache (rd_cache_name.h) */
+static bool vkr_is_keyed_name(const char *name)
+{
+    if (strlen(name) != 34 || strncmp(name, "pipelines-", 10) != 0 ||
+        strcmp(name + 26, ".vkcache") != 0) {
+        return false;
+    }
+    for (int i = 10; i < 26; i++) {
+        const char c = name[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void vkr_pipeline_cache_init(void)
 {
     size_t size = 0;
     s_cacheLoaded = false;
     s_cacheFileSize = 0;
+    if (s_cachePath[0] && vkr_is_keyed_name(vkr_base_name(s_cachePath))) {
+        /* once a run: the key's source, so a log says why an update did or
+           did not start warm */
+        static bool told;
+        if (!told) {
+            told = true;
+            VKR_LOG("pipeline cache %s (keyed by the shader set and the pipeline format, not the "
+                    "build: a build with the same shaders starts warm)",
+                    vkr_base_name(s_cachePath));
+        }
+    }
     vkr_cache_drop_others(s_cachePath, NULL, 0);
     void *blob = vkr_cache_load(&size);
     VkPipelineCacheCreateInfo ci = {
