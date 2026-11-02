@@ -490,14 +490,21 @@ float4 camera_probe_ps(BlitVSOut i) : SV_Target0
 // DrawCB (g_param, g_scale.z); at scale 1 (g_param.xy 1) it is the table's
 // texel alone (v * 1 / 1 = v). Drawn with blit_vs into an RGBA8 target of
 // the GS size, the viewport the target.
+// Fewer reads, the same sum (docs/port/WORK_BUFFERS.md "The shadow
+// count in one draw"): a texel whose m is 0 adds nothing (the table's
+// texel 0 is 0 0 0 0, rd__shadow_table_texel, so its term v * (wx * wy) is
+// +0.0, and sum + 0.0 is sum, fused or not: sum starts at +0.0 and never
+// goes negative), so neither its table texel nor its weight is computed;
+// and the table texel of a run of equal m is read once (held: the same
+// texel of a texture the pass never writes, the same float4). Every term
+// that is added is the term box_reduce_ps adds, in its order.
 Texture2D<uint4> g_shadowStencil : ICO_REG(t1, 2);
 Texture2D<float4> g_shadowTable : ICO_REG(t2, 2);
 
-float4 shadow_count_texel(int x, int y)
+uint shadow_count_m(int x, int y)
 {
     uint4 s = g_shadowStencil.Load(int3(x, y, 0));
-    uint m = (g_mode.x != 0u ? s.y : s.x) & 0x3Fu;
-    return g_shadowTable.Load(int3(int(m), 0, 0));
+    return (g_mode.x != 0u ? s.y : s.x) & 0x3Fu;
 }
 
 float4 shadow_count_ps(BlitVSOut i) : SV_Target0
@@ -507,11 +514,20 @@ float4 shadow_count_ps(BlitVSOut i) : SV_Target0
     int2 first = max(int2(floor(lo)), int2(0, 0));
     int2 last = min(min(int2(ceil(hi)), int2(g_param.zw)), first + BLIT_SPAN_MAX);
     float4 sum = float4(0.0, 0.0, 0.0, 0.0);
+    float4 v = float4(0.0, 0.0, 0.0, 0.0);
+    uint held = 64u; // the m whose table texel v holds; 64: none (m < 64)
     for (int y = first.y; y < last.y; y++) {
         float wy = min(hi.y, float(y + 1)) - max(lo.y, float(y));
         for (int x = first.x; x < last.x; x++) {
-            float wx = min(hi.x, float(x + 1)) - max(lo.x, float(x));
-            sum += shadow_count_texel(x, y) * (wx * wy);
+            uint m = shadow_count_m(x, y);
+            if (m != 0u) {
+                if (m != held) {
+                    v = g_shadowTable.Load(int3(int(m), 0, 0));
+                    held = m;
+                }
+                float wx = min(hi.x, float(x + 1)) - max(lo.x, float(x));
+                sum += v * (wx * wy);
+            }
         }
     }
     return sum / (g_param.x * g_param.y);
