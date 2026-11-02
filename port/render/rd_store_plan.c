@@ -37,7 +37,10 @@
  * Past the replay a depth counts as touched (no pass drops it) when the
  * present reads SCENE's (RdSettings.effectsDepth), when a replay found it
  * read before its clear (a frame that draws on the depth the replay before
- * left: said once in the log, kept from then on), after a caller read it
+ * left: said once in the log, kept from then on; a target new this replay,
+ * cleared by rd__clear_new_targets before the walk, holds no earlier
+ * replay's depth: its read before the frame's own clear is not carried and
+ * keeps nothing, said in the log too), after a caller read it
  * back (rd__read_target_depth, the tests), and in every replay with a pass
  * window (the tool's bisect reads targets mid-frame: no plan).  The passes
  * dropped lie after the depth's last touch and draw nothing into it, so a
@@ -75,6 +78,11 @@ typedef struct PlanDepth {
     uint32_t last, firstRead, firstClear;
     int firstList;
     bool dropped; /* its last pass begun so far dropped the store */
+    /* fresh: its target is new this replay (clearPending: no replay before
+     * wrote it); frameClear: the frame's own first clear of it (PLAN_NONE:
+     * none), for the log's "not a carried read" */
+    bool fresh;
+    uint32_t frameClear;
 } PlanDepth;
 
 static struct {
@@ -89,6 +97,10 @@ static struct {
      * pass in the replay before dropped the store (the log's word), and
      * those the poison holds undefined (in this replay) */
     uint32_t keep[PLAN_DEPTHS], nKeep;
+    /* by the keep's entries: the target and the frame that kept each, for
+     * the 10 s line (RdPerfRecord.storeKept*) */
+    uint32_t keepTarget[PLAN_DEPTHS], keepFrame[PLAN_DEPTHS];
+    uint32_t scanFrame; /* the last scanned frame's number (a readback's keep) */
     uint32_t prevDropped[PLAN_DEPTHS], nPrevDropped;
     uint32_t undef[PLAN_DEPTHS], nUndef;
 } s_plan;
@@ -143,7 +155,9 @@ static PlanDepth *planDepth(uint32_t id, bool add)
     p->tex = t->depth.id;
     p->target = id;
     p->firstRead = PLAN_NONE;
-    p->firstClear = t->clearPending ? 0u : PLAN_NONE; /* rd__clear_new_targets clears it */
+    p->fresh = t->clearPending != 0;
+    p->firstClear = p->fresh ? 0u : PLAN_NONE; /* rd__clear_new_targets clears it */
+    p->frameClear = PLAN_NONE;
     p->firstList = -1;
     const bool effects = g_rd.settings.effectsDepth && id == RD_TARGET_SCENE + 1u;
     if (effects || planHas(s_plan.keep, s_plan.nKeep, p->tex)) {
@@ -184,6 +198,41 @@ static void planDraw(const RdStateBlock *st, uint32_t ord, int l)
     }
 }
 
+/* the keep's state in this replay's record: the depths of the replay the
+ * keep holds, and its first depth's target and frame where this replay has
+ * it (the window's 10 s line) */
+static void planKeepNote(void)
+{
+    g_rdPerf.storeKept = 0;
+    g_rdPerf.storeKeptTarget = RD_PERF_TARGET_NONE;
+    g_rdPerf.storeKeptFrame = 0;
+    uint32_t first = PLAN_DEPTHS;
+    for (uint32_t i = 0; i < s_plan.n; i++) {
+        for (uint32_t j = 0; j < s_plan.nKeep; j++) {
+            if (s_plan.keep[j] == s_plan.d[i].tex) {
+                g_rdPerf.storeKept++;
+                first = j < first ? j : first;
+                break;
+            }
+        }
+    }
+    if (first < PLAN_DEPTHS) {
+        g_rdPerf.storeKeptTarget = rd__target_code(s_plan.keepTarget[first]);
+        g_rdPerf.storeKeptFrame = s_plan.keepFrame[first];
+    }
+}
+
+/* tex kept from now on: the target and frame that kept it */
+static void planKeep(uint32_t tex, uint32_t target, uint32_t frame)
+{
+    const uint32_t at = s_plan.nKeep;
+    planAdd(s_plan.keep, &s_plan.nKeep, tex);
+    if (s_plan.nKeep > at) {
+        s_plan.keepTarget[at] = target;
+        s_plan.keepFrame[at] = frame;
+    }
+}
+
 void rd__store_plan_scan(const RdFrame *f, int keep)
 {
     rd__fades_fold_scan(f, keep); /* the sprites the reduction draws (rd_fades_fold.c) */
@@ -198,6 +247,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     const char *poison = getenv("ICO_RD_STORE_POISON");
     s_plan.poison = poison && strcmp(poison, "1") == 0;
     g_rdPerf.storePlanMode = s_plan.mode;
+    s_plan.scanFrame = f->number;
     if (s_plan.mode == 0) {
         return;
     }
@@ -221,6 +271,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
                 PlanDepth *p = c->b[4] ? planDepth(c->u[0], true) : NULL;
                 if (p && p->firstClear == PLAN_NONE) {
                     p->firstClear = ord;
+                }
+                if (p && p->frameClear == PLAN_NONE) {
+                    p->frameClear = ord;
                 }
                 break;
             }
@@ -259,16 +312,29 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
         }
     }
     /* a depth read before its clear reads what the replay before left: kept
-     * from now on (said for the first 4 a run) */
+     * from now on (said for the first 4 a run).  A target new this replay
+     * (rd__clear_new_targets clears it before the walk) holds no replay's
+     * work: a read before the frame's own clear reads that clear, not a
+     * carried depth (said for the first 8 a run, then every 100th) */
     static int s_carriedLogged;
+    static uint32_t s_freshSeen;
     for (uint32_t i = 0; i < s_plan.n; i++) {
         PlanDepth *p = &s_plan.d[i];
+        if (p->fresh && p->firstRead != PLAN_NONE &&
+            (p->frameClear == PLAN_NONE || p->firstRead < p->frameClear)) {
+            s_freshSeen++;
+            if (s_freshSeen <= 8u || s_freshSeen % 100u == 0u) {
+                rd__log("store plan: %s's depth is read in list %d before a clear in frame %u, "
+                        "the target new this replay: not a carried read (%u so far)",
+                        rd__target_name(p->target), p->firstList, f->number, s_freshSeen);
+            }
+        }
         const bool carried = p->firstRead != PLAN_NONE &&
                              (p->firstClear == PLAN_NONE || p->firstRead < p->firstClear);
         if (!carried || planHas(s_plan.keep, s_plan.nKeep, p->tex)) {
             continue;
         }
-        planAdd(s_plan.keep, &s_plan.nKeep, p->tex);
+        planKeep(p->tex, p->target, f->number);
         p->last = PLAN_AFTER;
         if (s_carriedLogged < 4) {
             s_carriedLogged++;
@@ -282,6 +348,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
                         : "");
         }
     }
+    planKeepNote();
 }
 
 void rd__store_plan_pass(const RdTargetRec *d, uint32_t did, RhiLoadOp *depthLoad,
@@ -353,6 +420,12 @@ void rd__store_plan_end(void)
     s_plan.n = s_plan.nUndef = 0;
 }
 
+bool rd__store_plan_kept(uint32_t target)
+{
+    const RdTargetRec *t = rd__target_rec(target);
+    return t && t->depth.id && planHas(s_plan.keep, s_plan.nKeep, t->depth.id);
+}
+
 void rd__store_plan_readback(uint32_t target)
 {
     const RdTargetRec *t = rd__target_rec(target);
@@ -362,7 +435,7 @@ void rd__store_plan_readback(uint32_t target)
     }
     /* this read sees what the last replay left: where the device keeps the
      * contents (lavapipe does) whatever the plan dropped */
-    planAdd(s_plan.keep, &s_plan.nKeep, t->depth.id);
+    planKeep(t->depth.id, target, s_plan.scanFrame);
     rd__log("store plan: %s's depth is read back: its stores are kept from now on",
             rd__target_name(target));
 }

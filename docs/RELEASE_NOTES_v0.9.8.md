@@ -17,6 +17,7 @@
 
 ## Fixed
 
+- On phones, the game kept writing the depth of every picture back to memory for the whole session after its first frame, which cost graphics time every picture; it now does so only while a frame needs it.
 - On Android, a save state made in an earlier session could not be loaded (the game closed). Save states made before you closed the app now load after you open it again.
 - A save state's picture showed the pause menu and was small. It now shows the game as it was when you paused, larger and in its own shape, without the menu. A state saved right after loading another one gets the loaded state's picture.
 - A wall could be seen through for an instant when the camera moved past it (with Frame rate above Original). The frames shown between the game's own frames no longer take the camera through a wall or a floor.

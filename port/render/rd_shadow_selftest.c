@@ -19,7 +19,8 @@
  * (rd__shadow_disc_step: 4, or 8 on the North American disc and the 2001
  * previews, which the reset and the resolve carry, so the one draw reads
  * that step's table).  The frame is replayed through the one draw and
- * through the seven draws, and the count at its GS size (the count target
+ * through the seven draws, each from SCENE's clear (run: the frame has no
+ * clear of its own), and the count at its GS size (the count target
  * at scale 1, the reduced count above it: rd__shadow_count_read) is read
  * back each time.  The one draw stays when its count equals the seven
  * draws' byte for byte and every band's centre holds the count's colour
@@ -136,10 +137,20 @@ static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, uint3
     return rv != NULL;
 }
 
-/* One replay of f, the count at its GS size into px (w * h * 4) */
+/* One replay of f, the count at its GS size into px (w * h * 4).  Each
+ * replay starts SCENE from its clear (rd__clear_new_targets): the frame has
+ * no clear of its own and reads SCENE's depth in list 3 (the volumes' Z
+ * test), so both replays read the same depth, and neither reads one an
+ * earlier replay left, which the store plan would take for a game frame's
+ * carried read and keep SCENE's depth stores for the whole run
+ * (rd_store_plan.c; docs/port/WORK_BUFFERS.md "After the replay") */
 static bool run(const RdFrame *f, uint32_t scene, uint8_t *px, size_t size, uint32_t w, uint32_t h)
 {
     uint32_t rw = 0, rh = 0;
+    RdTargetRec *t = rd__target_rec(scene);
+    if (t) {
+        t->clearPending = 1;
+    }
     return rd__replay_frame(f, 0, false) && rd__shadow_count_read(scene, px, size, &rw, &rh) &&
            rw == w && rh == h;
 }

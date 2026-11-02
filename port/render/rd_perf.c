@@ -194,6 +194,10 @@ static uint64_t s_fusePairs, s_fuseSame, s_fuseKept[RD_VU_FUSE_WHY_COUNT];
  * storeColorDropped) and the replays it planned */
 static uint64_t s_storePasses, s_storeDepth, s_storeColor;
 static uint32_t s_storePlanned;
+/* the store plan's keep as the last planned record had it (RdPerfRecord
+ * storeKept, storeKeptTarget, storeKeptFrame) */
+static uint8_t s_storeKept, s_storeKeptTarget;
+static uint32_t s_storeKeptFrame;
 /* the pipeline cache by family as the last record popped had it
  * (RdPerfRecord.pipeFamily, uber) */
 static uint16_t s_pipeFamily[RD_PERF_PIPE_FAMILIES];
@@ -225,6 +229,11 @@ bool rd_perf_pop(RdPerfRecord *out)
     s_storeDepth += s_queue[s_head].storeDepthDropped;
     s_storeColor += s_queue[s_head].storeColorDropped;
     s_storePlanned += s_queue[s_head].storePlanMode != 0;
+    if (s_queue[s_head].storePlanMode != 0) {
+        s_storeKept = s_queue[s_head].storeKept;
+        s_storeKeptTarget = s_queue[s_head].storeKeptTarget;
+        s_storeKeptFrame = s_queue[s_head].storeKeptFrame;
+    }
     memcpy(s_pipeFamily, s_queue[s_head].pipeFamily, sizeof(s_pipeFamily));
     s_pipeUber = s_queue[s_head].uber;
     if (out) {
@@ -321,12 +330,21 @@ const char *rd_perf_backend_text(void)
            loads) dropped and the colour stores dropped, of the walk's
            passes; "planned" when a replay of them planned */
         const double n = (double)s_backendReplays;
+        /* the keep in force at the last planned replay: its depths, the
+           first one's target and the frame that kept it (rd_store_plan.c) */
+        char kept[128] = "";
+        if (s_storePlanned && s_storeKept) {
+            snprintf(kept, sizeof(kept),
+                     "; %u depths' stores kept (a read before the clear or a readback), %s's "
+                     "since frame %u",
+                     s_storeKept, rd_perf_target_name(s_storeKeptTarget), s_storeKeptFrame);
+        }
         const int k =
             snprintf(s_text + at, sizeof(s_text) - at,
                      "; stores: %.0f depth and %.0f colour stores dropped a replay of "
-                     "%.0f passes (%s; [dev] store_plan)",
+                     "%.0f passes (%s%s; [dev] store_plan)",
                      (double)s_storeDepth / n, (double)s_storeColor / n, (double)s_storePasses / n,
-                     s_storePlanned ? "planned" : "every store kept");
+                     s_storePlanned ? "planned" : "every store kept", kept);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
     if (s_backendReplays) {

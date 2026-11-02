@@ -728,7 +728,25 @@ mask; DISPLAY is the frame's picture.
   frame of the dump corpus that touches a depth (`tools/vustage_dumps.txt` and the phone's, read with
   `rd_replay_tool --list`) clears SCENE's depth at list 0's head before any read, and the 2D frames
   touch none; one frame (the issue-95 loss frame) Z-tests list 11's text against SCENE's depth, so a
-  keep frame drawing such text would be the first case of this rule;
+  keep frame drawing such text would be the first case of this rule.
+
+  A target with `clearPending` set (made, made again at a new size, or handed back by a self-test)
+  is cleared by `rd__clear_new_targets` after the scan and before the walk, so no earlier replay's
+  depth is in it: a read before the frame's own clear reads that clear, is not a carried read and
+  keeps nothing (`planDepth` counts that clear as command 0). The log says so for the first eight a
+  run, then every 100th:
+
+      rd: store plan: SCENE's depth is read in list 3 before a clear in frame 0, the target new this replay: not a carried read (1 so far)
+
+  The shadow count's self-test (`port/render/rd_shadow_selftest.c`) is such a frame (frame 0, list
+  3: the reset, the volumes and the resolve, no clear of its own), replayed twice (the one draw, then
+  the seven draws). Each replay starts SCENE from its clear (`run` sets `clearPending`): were only
+  the first to find SCENE cleared, the second would read the depth the first left, a carried read,
+  and the keep would hold SCENE's depth stores for the whole run on every device (the line
+  `SCENE's depth is read in list 3 before this replay clears it (frame 0)` at the start, then
+  `stores: 0 depth ... dropped` in every 10 s line). A self-test frame that reads a depth before
+  clearing it starts the target from its clear the same way;
+  `rd_store_plan` (below) holds this for the start's self-tests at two scene sizes;
 - a caller read the depth back (`rd__read_target_depth`, the tests): kept from then on, logged
   `rd: store plan: SCENE's depth is read back: its stores are kept from now on`;
 - the replay has a pass window (`rd_replay_tool`'s bisect reads targets mid-frame): no plan at all.
@@ -754,12 +772,19 @@ every depth store and keeps the loads, a wrong plan (`depth stores all dropped (
 
     ; stores: N depth and M colour stores dropped a replay of P passes (planned; [dev] store_plan)
 
-(the means per replay; `every store kept` when no replay planned) and `rd_replay_tool --stats` prints
+(the means per replay; `every store kept` when no replay planned). While the keep holds depths of
+the last planned replay, the parenthesis also names them: `(planned; K depths' stores kept (a read
+before the clear or a readback), SCENE's since frame F; [dev] store_plan)`, the target and frame of
+the earliest such keep (`RdPerfRecord.storeKept`, `storeKeptTarget`, `storeKeptFrame`) and `rd_replay_tool --stats` prints
 `stores: N depth and M colour stores dropped a replay of P passes (D with a depth; store plan on)`
 (`RdPerfRecord.storeDepthDropped`, `storeColorDropped`, `storePasses`, `storeDepthPasses`,
 `storePlanMode`; [TESTING.md](TESTING.md)).
 
-**The test.** `rd_store_plan_ab` ([TESTING.md](TESTING.md)) replays the corpus and the phone's frame
+**The tests.** `rd_store_plan` ([TESTING.md](TESTING.md), `port/render/test/rd_store_plan_test.c`)
+runs the start's self-tests at two scene sizes and synthetic frames on lavapipe: no keep after the
+self-tests, a new SCENE read before the frame's clear not kept and the next frame's drop in force, a
+frame reading the depth the replay before left kept from then on, its record naming the keep.
+`rd_store_plan_ab` replays the corpus and the phone's frame
 with every store kept, with the plan and with every depth store dropped, under
 `ICO_RD_STORE_POISON=1`: a load the plan leaves undefined (a load it made DONT_CARE, or a load after a
 store it dropped) clears the depth to 0.5 and the stencil to 0x5A instead, the garbage a tile-based

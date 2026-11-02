@@ -2350,9 +2350,15 @@ typedef struct RdPerfRecord {
      * nor stored) and the colour stores dropped (storeColorDropped: 0, the
      * plan keeps every colour); storePlanMode 0 every store kept ([dev]
      * store_plan = false, or a pass window), 1 the plan, 2 every depth
-     * store dropped (ICO_RD_STORE_PLAN=all, tests) */
+     * store dropped (ICO_RD_STORE_PLAN=all, tests); storeKept the
+     * replay's depths whose stores the plan keeps from an earlier replay on
+     * (a read before the clear, a readback), and the first such depth's
+     * target (storeKeptTarget, RD_PERF_TARGET_* codes) and the frame that
+     * kept it (storeKeptFrame), where this replay has that depth */
     uint32_t storePasses, storeDepthPasses, storeDepthDropped, storeColorDropped;
     uint8_t storePlanMode;
+    uint8_t storeKept, storeKeptTarget;
+    uint32_t storeKeptFrame;
     /* GS state as shader data (rd_uber.c): uber 1 while it is in force;
      * pipeFamily the pipeline cache by family at the replay's end, in
      * rd_internal.h RdKeyFamily's order (2D, VU, VU point, shadow, fog,

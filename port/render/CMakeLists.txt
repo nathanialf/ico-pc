@@ -613,6 +613,16 @@ target_compile_options(rd_fog_selftest_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${IC
 target_include_directories(rd_fog_selftest_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_fog_selftest_test PRIVATE ico_render)
 
+# rd_store_plan_test: the store plan's keep (rd_store_plan.c): the start's
+# self-tests keep no depth (the shadow count's frame reads SCENE's depth with
+# no clear of its own), a fresh target read before the frame's clear is not
+# kept and the next frame drops its store, a frame reading the depth the
+# replay before left keeps it from then on.
+add_executable(rd_store_plan_test test/rd_store_plan_test.c)
+target_compile_options(rd_store_plan_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_store_plan_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_store_plan_test PRIVATE ico_render)
+
 # rd_local_probe_test: the desktop's local-read probe's verdict
 # (rd_local_probe.c rd__local_probe_keep) on synthetic times, no device.
 add_executable(rd_local_probe_test test/rd_local_probe_test.c)
@@ -2167,6 +2177,10 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_shadow_selftest_sabotage
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                     ENVIRONMENT "${_env};ICO_RD_SHADOW_SABOTAGE=1")
+    # the store plan's keep (rd_store_plan_test.c; rd_store_plan_ab below
+    # holds the drops byte for byte over the corpus)
+    add_test(NAME rd_store_plan COMMAND rd_store_plan_test)
+    set_tests_properties(rd_store_plan PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_env}")
 endif()
 
 # The desktop's local reads and their start-up cost probe (rd_local_probe.c):

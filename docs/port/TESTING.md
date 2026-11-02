@@ -1033,6 +1033,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd: VU merge: off: the driver could not compile <build> (<backend>); one GPU draw a VU draw
   from here`, and its timed replays draw what `ICO_RD_VU_MERGE=0` draws, more than the merge
   (`rd_replay_vu.c` `rd__vu_merge_fallback`).
+- `rd_store_plan_test.c` (`rd_store_plan`, lavapipe, 77 without a device): the store plan's keep
+  (`rd_store_plan.c`, [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)) at Enhanced 16:9 2x: after
+  the start's self-tests (`rd_fog_selftest`: DATE, the fx local read, the shadow count, the fog) and
+  again at a new scene size (`rd_reset_scene`), SCENE's depth is not kept (the shadow count's frame
+  reads it with no clear of its own and once kept it for the whole run); a new SCENE
+  (`clearPending`) read in list 3 before any clear is not kept, and the next frame (list 0's clear
+  and a Z-tested draw, then list 7 on WORK3 and on SCENE without touching the depth) drops at least
+  one depth store; a frame reading SCENE's depth with no clear keeps it, the cleared frame then drops
+  none and its record says `storeKept` 1, SCENE, since that frame; no validation error. The drops'
+  bytes are `rd_store_plan_ab`'s (next).
 - `rd_store_plan_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` (the phone's three
   frames) three times under
   `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` (a depth or stencil load the plan leaves
