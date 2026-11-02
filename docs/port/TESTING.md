@@ -865,8 +865,20 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   default (`port/render/CMakeLists.txt`). `rd_pixel_uber` runs `rd_pixel_test` under
   `ICO_RD_UBER=on` (GS state as shader data, [PIPELINES.md](PIPELINES.md#gs-state-as-data)): the
   attachment read's expectations, its exact-mode matrix leaving out and counting the cells the
-  read draws its own way (the premultiplied subtracts' floor, DATE per primitive),
-  `testDateStencil` checking the per-primitive DATE first, `testScreenRuns`' boundary case
+  read draws its own way (the premultiplied subtracts' floor, DATE per primitive) and holding the
+  subtracts within the blender's rounding of the fixed-function draw (each RGB channel the same or
+  a level under, two where the two quads overlap; the alpha and the depth the same),
+  `testUberSubtractOracle` (`port/render/test/rd_pixel_uber_test.inc`) comparing every pixel of
+  the premultiplied subtracts (ALPHA modes 1 and 6: FIX 0x10, 0x55, 0x80 and 0xC0, or As; FBA off
+  and on; a noise texture over another, both drawn 1:1 so every Cd, Cs and As is a texel the CPU
+  holds) against a CPU oracle of the GS's blend, per channel `clamp(Cd + (((0 - Cs) F) >> 7), 0,
+  255)` with the GS's arithmetic shift (`gs_blend_reg_ch`'s arithmetic, checked against the
+  formula), COLCLAMP on, PABE off, the alpha As with FBA's MSB: through the colour read 0 pixels
+  differ; on the blender (`rd_pixel`, `rd_pixel_attachment`, `rd_pixel_storage`, `rd_pixel_nodual`,
+  where the subtracts stay there) every pixel is `clamp(Cd - ((Cs F) >> 7), 0, 255)`, one level
+  above the oracle exactly where `Cs F` is not a multiple of 128 and never below (the first
+  differing pixel is printed with its cell, Cd, Cs and F), `testDateStencil` checking the
+  per-primitive DATE first, `testScreenRuns`' boundary case
   expecting its two DATE sprites in one draw (no snapshot to retake) and `testPipelines` looking
   each run-time key up as the read's normalised image. The pass-dump compare of the corpus
   under `ICO_RD_UBER=on` is made against baselines made with `ICO_RD_BLEND=attachment

@@ -884,7 +884,11 @@ writes the GS term `(Cs F) >> 7` and the blender adds two whole levels); the sub
 and 6) are one level above the GS wherever `Cs F` is not a multiple of 128, because the GS's term
 is `(0 - Cs) F >> 7`, an arithmetic shift that rounds the negative product down, while the blender
 subtracts the truncated `(Cs F) >> 7` (`port/shaders/common.hlsli` (`gs_dual_out`);
-`port/shaders/gs_math.hlsli` (`gs_blend_ch`)). The staticBlur sprites and `blend_int` keep their
+`port/shaders/gs_math.hlsli` (`gs_blend_ch`); ctest `rd_pixel_uber` asserts it:
+`testUberSubtractOracle` in `port/render/test/rd_pixel_uber_test.inc` holds every pixel of the
+subtracts through the colour read to `clamp(Cd + (((0 - Cs) F) >> 7), 0, 255)` and, on the
+blender, to the truncated form, one level above the GS exactly where `Cs F` is not a multiple of
+128). The staticBlur sprites and `blend_int` keep their
 own exact paths (`port/render/rd_dst_read.c`; `port/render/rd_replay.c` (`dstPassMode`,
 `rd__pass_wants_readable`)).
 

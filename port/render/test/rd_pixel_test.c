@@ -163,7 +163,19 @@
  *            blends (0, 1, 5, 6 without PABE) the same, the storage path
  *            and the attachment read the same bytes but in the storage
  *            path's fixed-function cells, each exact mode off the
- *            fixed-function blend somewhere
+ *            fixed-function blend somewhere; under GS state as shader data
+ *            its premultiplied subtract cells (modes 1, 6 without PABE)
+ *            stay within the blender's rounding of the fixed-function
+ *            draw (each RGB channel the same or a level under, two where
+ *            the quads overlap; the alpha and the depth the same)
+ *   ubersub  the premultiplied subtracts (modes 1 and 6, FIX 0x10, 0x55,
+ *            0x80, 0xC0 or As, FBA off and on; noise over noise, every
+ *            input a texel the CPU holds) against the GS's arithmetic
+ *            clamp(Cd + (((0 - Cs) F) >> 7)) with its arithmetic shift
+ *            (gs_blend_reg_ch): through the colour read (rd_pixel_uber)
+ *            every pixel is the GS's; on the blender every pixel is
+ *            clamp(Cd - ((Cs F) >> 7)), one level above the GS exactly
+ *            where Cs F is not a multiple of 128, never below
  *   pipes    every pipeline created is in the enumerated reachable set,
  *            whose screen and post part has fewer than 250 keys (with the
  *            sprite_texa_ps twins) and holds the colour mask 7 keys of the
@@ -3546,7 +3558,11 @@ static void testForestTint(void)
  * multiple of 128) and DATE per primitive (the two quads of a command
  * see each other's alpha, where the snapshot holds the alpha before the
  * command): those cells are left out of the hardware-exact and depth
- * comparisons and counted (printed). */
+ * comparisons and counted (printed); the subtracts are held within the
+ * blender's rounding (each RGB channel the same or a level under, two
+ * where the quads overlap, the alpha and the depth the same), and
+ * testUberSubtractOracle (rd_pixel_uber_test.inc) has them against the
+ * GS's bytes. */
 static void testExactModes(void)
 {
     enum { FRAMES = 3, BLENDS_PER = RD_BLEND_COUNT / FRAMES };
@@ -3588,6 +3604,7 @@ static void testExactModes(void)
     const uint32_t perBlend = 2 * 2 * 2 * ND_AFAILS * 3 * 4; /* SCENE cells a blend */
     int badZ = 0, badSame = 0, badModes = 0, differ[RD_BLEND_EXACT_COUNT] = {0}, shown = 0;
     int uberDate = 0, uberSub = 0; /* GS state as shader data's own cells, differing */
+    int uberSubBad = 0;            /* its subtract cells outside the blender's rounding */
     for (int m = 1; m < RD_BLEND_EXACT_COUNT; m++) {
         if (!have[m]) {
             continue;
@@ -3609,7 +3626,32 @@ static void testExactModes(void)
                 const int mc = memcmp(&scene[0][f][i * 4], &scene[m][f][i * 4], 4) != 0;
                 if (uber && (date || (sub && exactInHw))) {
                     uberDate += date && (mz || mc);
-                    uberSub += !date && mc;
+                    if (!date) {
+                        /* the read's floor against the blender's
+                         * truncation (rd_pixel_uber_test.inc has the GS's
+                         * bytes): each RGB channel the same or one level
+                         * under, two where quad B's subtract starts from
+                         * quad A's level-under result; the alpha (As,
+                         * FBA) and the depth the same */
+                        const uint8_t *a = &scene[0][f][i * 4], *c = &scene[m][f][i * 4];
+                        int under = 0;
+                        for (int ch = 0; ch < 3; ch++) {
+                            const int d = (int)c[ch] - (int)a[ch];
+                            under += d < -2 || d > 0;
+                        }
+                        uberSub += mc;
+                        if (under || c[3] != a[3] || mz) {
+                            uberSubBad++;
+                            if (shown++ < 8) {
+                                printf("FAIL exact (%s): SCENE (%u,%u) blend %u: %u %u %u %u (Z "
+                                       "%g) through the read, %u %u %u %u (Z %g) on the blender: "
+                                       "not within the blender's rounding\n",
+                                       rd__blend_exact_name(m), i % 512, i / 512, b, c[0], c[1],
+                                       c[2], c[3], (double)depth[m][f][i], a[0], a[1], a[2], a[3],
+                                       (double)depth[0][f][i]);
+                            }
+                        }
+                    }
                     differ[m] += mc;
                     continue;
                 }
@@ -3663,8 +3705,12 @@ static void testExactModes(void)
     if (g_rd.uber) {
         printf("  exact modes, GS state as shader data: %d pixels of the DATE cells and %d of the "
                "premultiplied subtracts off the fixed-function draw (per primitive, the GS's "
-               "floor)\n",
-               uberDate, uberSub);
+               "floor), %d of the subtracts outside the blender's rounding\n",
+               uberDate, uberSub, uberSubBad);
+        CHECK(uberSubBad == 0,
+              "exact: %d pixels of the premultiplied subtracts through the read are not within "
+              "the blender's rounding of the fixed-function draw",
+              uberSubBad);
     }
     CHECK(badZ == 0, "exact: the depth differs from the fixed-function draw's (%d pixels)", badZ);
     CHECK(badSame == 0, "exact: %d pixels of blends the hardware does exactly differ", badSame);
@@ -3677,6 +3723,10 @@ static void testExactModes(void)
     rhi_wait_idle();
     rd__pipeline_cache_clear(); /* outside the reachable set, as testNoDual's */
 }
+
+/* testUberSubtractOracle: the premultiplied subtracts against the GS's
+ * arithmetic, through the colour read and on the blender */
+#include "rd_pixel_uber_test.inc"
 
 /* -------------------------------------------------------------- pipelines */
 
@@ -5339,7 +5389,8 @@ int main(int argc, char **argv)
            rd__blend_exact_name(rd_blend_exact()));
     testNoDual(); /* first: it clears the pipeline cache */
     testForestTint();
-    testExactModes(); /* these two clear it too */
+    testExactModes(); /* these three clear it too */
+    testUberSubtractOracle();
     testOrder();
     testHalfOffset();
     testRailing(0);

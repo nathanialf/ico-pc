@@ -2086,7 +2086,8 @@ if(ICO_RUN_TESTS)
     # only): rd_pixel's cases and expectations as under the attachment read
     # (its exact-mode matrix leaves out and counts the cells the colour read
     # draws its own way: the premultiplied subtracts' floor and DATE per
-    # primitive; testDateStencil checks the per-primitive DATE)
+    # primitive; testUberSubtractOracle holds the subtracts to the GS's
+    # arithmetic, testDateStencil checks the per-primitive DATE)
     set(_env_uber ${_env} "ICO_RD_UBER=on")
     set(_bub "${CMAKE_CURRENT_BINARY_DIR}/uber")
     file(MAKE_DIRECTORY "${_bub}")
