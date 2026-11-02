@@ -2087,6 +2087,8 @@ driver) the twins `rd_pixel_vk10_nod32f`, `rd_present_vk10_nod32f` and `rd_inter
 the same expectations; `rd_present`'s `checkNoD32Keys` finds the effects depth's two keys in the
 reachable set exactly where `RhiLimits.depth32Attachment` is true, and its effects-depth cell finds the
 forced pass not drawn when it is false.
+`rd_present`'s `checkReduceKey` finds the present's box average (`aa_reduce_ps`, RGBA8) in the
+reachable set in both blend modes on every device.
 With `port/rhi`'s `rhi_vk_vk10` and `rhi_vk_swapchain_vk10` they are `ctest -j1 -L vk10`; CI's
 full `ctest` runs them. The shaders are SPIR-V 1.0 for every device (`spirv_check`'s version gate,
 [SHADERS.md](SHADERS.md)), so the validation layer sees no module newer than the device. A real

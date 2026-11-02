@@ -5689,6 +5689,25 @@ static void checkNoD32Keys(void)
     rd_shutdown();
 }
 
+/* The present's box average (aa_reduce_ps, rd_present.c reduceInto: the
+ * supersampled, the scaled-above-the-box and the downsampled presents) is in
+ * the start-up set in both blend modes, so none of them makes a pipeline on
+ * first use; the key is the one reduceInto asks for (rd__post_key, RGBA8). */
+static void checkReduceKey(void)
+{
+    RdSettings s = originalSettings();
+    if (!rd_init(512, 512, &s, NULL)) {
+        CHECK(0, "reduce key: rd_init");
+        return;
+    }
+    const RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_AA_REDUCE, RHI_FMT_RGBA8_UNORM);
+    for (int m = 0; m < 2; m++) {
+        CHECK(reachable(&k, m != 0), "reduce key: aa_reduce_ps is not in the start-up set%s",
+              m ? " (two-pass blend)" : "");
+    }
+    rd_shutdown();
+}
+
 /* ------------------------------------------------------------------ main */
 
 /* ------------------------------------------------------ the blank present */
@@ -5962,6 +5981,7 @@ int main(int argc, char **argv)
     checkPresentPasses(dir);
     checkEffectsDepth();
     checkNoD32Keys();
+    checkReduceKey();
     checkBlank();
     checkRingGrowth();
     checkRingShrink();

@@ -26,4 +26,5 @@
 - A wall could be seen through for an instant when the camera moved past it (with Frame rate above Original). The frames shown between the game's own frames no longer take the camera through a wall or a floor.
 - Walking into the next area, the walls of the room you were leaving could change to the next area's look for an instant before the screen faded. The room now keeps its own look until the fade.
 - On phones with a lot of memory, preparing the graphics at the first start stopped early, and the game then stuttered during play while it prepared the rest. It now finishes behind the progress bar before the game starts.
+- With anti-aliasing, Downsampling, or a Resolution larger than the window, the game could stutter once when it first showed a picture; what it needs for that is now prepared at the first start with the rest of the graphics.
 - From this version on, an update that does not change how the game draws keeps the graphics prepared before it, so its first start no longer prepares them all again. The first start of this version still prepares them once.

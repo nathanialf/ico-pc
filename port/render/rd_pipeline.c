@@ -3785,6 +3785,11 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
     n = rd__add_pipe_key(out, max, n, &dateSnap);
     n = rd__add_pipe_key(out, max, n, &blitA);
     n = rd__add_pipe_key(out, max, n, &blitB);
+    /* the present's box average of DISPLAY into an RGBA8 texture of the box's
+     * (or the game's own) size (rd_present.c reduceInto: supersampling, a
+     * scaled scene with more texels than the box has pixels, Downsampling) */
+    const RdPipeKeyInt reduce = rd__post_key(RD_VS_BLIT, RD_FS_AA_REDUCE, RHI_FMT_RGBA8_UNORM);
+    n = rd__add_pipe_key(out, max, n, &reduce);
     /* the box blit with the effects depth, on both outputs (not where the
      * device cannot draw to a D32F depth buffer: a render pass with that
      * attachment is invalid there) */
