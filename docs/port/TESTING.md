@@ -1199,7 +1199,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`build-host/tmp/v097/evidence/163/frame/`) at its present's alpha 0.999000013, 2x, full height,
   Full pixel (Not Run without the dumps). Both run the `--interp` again with `--render-thread
   sync` and `on` (`-DRT`): the interpolation and the replays on the render thread give the same
-  picture and the same saved blended frame, byte for byte.
+  picture and the same saved blended frame, byte for byte (the payload's alignment gaps are zeroed
+  for this: the first threaded run's dump differed in 3 padding bytes the main thread's heap left).
 - `rd_interp_test.c`: presentation between [ticks](ARCHITECTURE.md#terms) on two synthetic frames
   (`rd_interp`); the feedback head copies (`testFeedback`: `DISPLAY_HELD` and `FEED_HELD` at a
   tick's first present and the later ones, none for DISPLAY under Motion blur: Smooth, FEED128's
@@ -1451,7 +1452,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   composited level not constant over level texels i0 - 2 to i0 + 3, the kernels' joint support and
   a tie: N = 3 level texels), some texels differing; the |d| histogram printed (`checkEdges2x`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-edges-above-1x)).
-- `rd_state_test.c`: the recording half of rd without a GPU: the VU fallback's set
+- `rd_state_test.c`: the recording half of rd without a GPU: the payload arena's alignment gap
+  zeroed over a reused buffer's bytes (`testPayloadPad`), the VU fallback's set
   (`rd__vu_set_choose`, `testVuSetPolicy`: the stock Adreno 740's table row and two Turnip driver
   texts take the plain set with the start line's words, Qualcomm's driver without a row, lavapipe,
   RADV and NVIDIA the extended one, `ICO_RD_VU_PLAIN=1` and the host's reason the plain one,

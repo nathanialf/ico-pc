@@ -114,7 +114,10 @@ four words, two floats); variable data (vertices, transforms, post parameters) l
 payload arena (rd's own buffer, not the EE [arena](ARCHITECTURE.md#terms)), addressed by byte
 offset. Every field has a fixed width and there are no pointers, so a frame can be written to a file
 as it is and a dump reads the same on 32-bit and 64-bit builds (`port/render/rd_internal.h`
-(`RdCmd`, `RdCmdType`)).
+(`RdCmd`, `RdCmdType`)). An append is aligned (8 bytes in `rd__frame_payload`, 16 in the blended
+frame's `outAppend` and `shadowOut`, rd_interp.c) and the gap before it is zeroed: a reused buffer
+or a fresh heap block holds whatever was there, and the payload is dumped and hashed whole, so
+the same frame gives the same bytes on either thread (the render thread has its own malloc arena).
 
 | kind | commands |
 | --- | --- |

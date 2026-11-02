@@ -2797,6 +2797,31 @@ static void testVuSetPolicy(void)
     CHECK(!c.plain && !rd__driver_is_turnip(NULL), "vu set: no limits: plain %d", c.plain);
 }
 
+/* rd__frame_payload zeroes the alignment gap before an append: a reused
+ * frame's buffer keeps the last frame's bytes there otherwise, and a dump
+ * (rd__dump_frame) writes the payload whole, so the same frame would give
+ * different bytes by what the heap or the slot held before */
+static void testPayloadPad(void)
+{
+    RdFrame f;
+    memset(&f, 0, sizeof(f));
+    uint8_t junk[64];
+    memset(junk, 0xA5, sizeof(junk));
+    (void)rd__frame_payload(&f, junk, sizeof(junk));
+    f.payloadSize = 0; /* the slot reused (rd__frame_reset), its bytes kept */
+    const uint8_t three[3] = {1, 2, 3};
+    const uint32_t a = rd__frame_payload(&f, three, sizeof(three));
+    const uint32_t b = rd__frame_payload(&f, three, sizeof(three));
+    int gap = 0;
+    for (uint32_t i = 3; i < b; i++) {
+        gap += f.payload[i] != 0;
+    }
+    CHECK(a == 0 && b == 8 && gap == 0 && f.payloadSize == 11 &&
+              memcmp(f.payload + b, three, sizeof(three)) == 0,
+          "payload gap: offsets %u %u, %d stale byte(s) between them", a, b, gap);
+    rd__frame_free(&f);
+}
+
 int main(int argc, char **argv)
 {
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
@@ -2823,6 +2848,7 @@ int main(int argc, char **argv)
     testStencilOps();
     testDateArea();
     testVuSetPolicy();
+    testPayloadPad();
     rd_shutdown();
     if (failures) {
         printf("rd_state_test: %d failures\n", failures);

@@ -3739,6 +3739,17 @@ static bool alignPrisms(uint32_t np, uint32_t nc, const double *shift)
     return true;
 }
 
+/* the alignment gap before an append to s_out's payload, zeroed: realloc
+ * leaves it as the heap had it, and the frame is hashed (outHash) and
+ * dumped (rd__dump_frame) whole, so the same frame gives the same bytes on
+ * any thread (the render thread's malloc arena hands out fresh pages) */
+static void padZero(uint32_t at)
+{
+    if (at > s_out.payloadSize) {
+        memset(s_out.payload + s_out.payloadSize, 0, at - s_out.payloadSize);
+    }
+}
+
 /* space for n vertices in s_out's payload: cur's place when it fits, else
  * appended (the command is pointed there) */
 static RdScreenVtx *shadowOut(RdCmd *cc, uint8_t *op, uint32_t n)
@@ -3761,6 +3772,7 @@ static RdScreenVtx *shadowOut(RdCmd *cc, uint8_t *op, uint32_t n)
         s_out.payload = p;
         s_out.payloadCap = (uint32_t)(cap > UINT32_MAX ? end : cap);
     }
+    padZero(off);
     s_out.payloadSize = (uint32_t)end;
     cc->u[1] = off;
     return (RdScreenVtx *)(void *)(s_out.payload + off);
@@ -4613,6 +4625,7 @@ static uint8_t *outAppend(uint32_t n, uint32_t *off)
         s_out.payload = p;
         s_out.payloadCap = c32;
     }
+    padZero(at);
     s_out.payloadSize = (uint32_t)end;
     *off = at;
     return s_out.payload + at;

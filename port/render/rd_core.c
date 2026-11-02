@@ -527,6 +527,10 @@ uint32_t rd__frame_payload(RdFrame *f, const void *data, uint32_t size)
         f->payload = p;
         f->payloadCap = cap;
     }
+    /* the alignment gap zeroed: the frame is dumped and hashed whole */
+    if (off > f->payloadSize) {
+        memset(f->payload + f->payloadSize, 0, off - f->payloadSize);
+    }
     if (data && size) {
         memcpy(f->payload + off, data, size);
     } else if (size) {
