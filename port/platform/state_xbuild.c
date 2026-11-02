@@ -32,6 +32,7 @@ enum {
     H_LAYOUT = 40,
     H_UNNAMED = 48,
     H_VALUES = 56,
+    H_LEFT = 60,
     H_BYTES = 64
 };
 
@@ -308,7 +309,7 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     unsigned char *dflag = NULL;
     Out units = {NULL, 0, 0, 0}, data = {NULL, 0, 0, 0}, points = {NULL, 0, 0, 0},
         blocks = {NULL, 0, 0, 0}, strs = {NULL, 0, 0, 0};
-    unsigned flags = 0, nu = 0, nd = 0, np = 0, npos = 0;
+    unsigned flags = 0, nu = 0, nd = 0, np = 0, npos = 0, left = 0;
     uint64_t first_unnamed = 0;
     unsigned char *sec, *q;
     size_t i, total;
@@ -349,7 +350,11 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                                                 : w == u->start ? XU_START
                                                                 : XU_POSITION);
             } else if (strict) {
+                /* in the code but in no unit: nothing confirms it is an
+                   address (a float next to the integer 1 under Windows'
+                   0x140000000 is such a word), so it stays a number */
                 flags |= ICO_XB_UNNAMED;
+                left++;
                 if (first_unnamed == 0) {
                     first_unnamed = w;
                 }
@@ -427,7 +432,11 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
                 continue;
             }
         }
+        /* nothing names it: a number that lies in the image's range (a
+           float next to the integer 1 under Windows' 0x140000000, a word
+           into the image's headers), kept as it is */
         flags |= ICO_XB_UNNAMED;
+        left++;
         if (first_unnamed == 0) {
             first_unnamed = w;
         }
@@ -520,6 +529,7 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     put64(sec + H_LAYOUT, t != NULL ? t->layout_hash : 0);
     put64(sec + H_UNNAMED, first_unnamed);
     put32(sec + H_VALUES, (uint32_t)r->n_vals);
+    put32(sec + H_LEFT, left);
     q = sec + H_BYTES;
     memcpy(q, units.p, units.n);
     q += units.n;
@@ -539,6 +549,7 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     st->blocks = (unsigned)r->n_blocks;
     st->values = (unsigned)r->n_vals;
     st->flags = flags;
+    st->left = left;
     st->first_unnamed = first_unnamed;
     st->bytes = total;
     rc = 0;
@@ -782,10 +793,10 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
              "it points into the program in more places than the "
              "record holds");
     }
-    if ((flags & ICO_XB_UNNAMED) != 0) {
-        snprintf(name, sizeof name, "0x%llx", (unsigned long long)get64(sec + H_UNNAMED));
-        FAIL(v, ICO_XB_PINNED, "it holds a program address no symbol names (%s)", name);
-    }
+    /* words nothing names (ICO_XB_UNNAMED) are numbers: no span or point
+       holds them, so the load leaves them as they are */
+    v->left = get32(sec + H_LEFT);
+    v->first_left = get64(sec + H_UNNAMED);
     if (t == NULL) {
         FAIL(v, ICO_XB_PINNED, "this build has no symbol file");
     }

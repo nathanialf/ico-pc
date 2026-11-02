@@ -668,8 +668,10 @@ pinned) and `pobjImageTables`' host block (POBJ). A word matches a range when `l
   the guard) before anything changes (`ICO_STATE_OTHER_BUILD`, detail `no thread-pointer
   record`). x86-64 reads the guard from `%fs:0x28` at each use and the desktop builds have no
   protector, so both values are 0 there.
-- `ico_state_image_range` finds the image in this process: on Windows the module's headers
-  (`SizeOfImage`, the executable sections), on Linux and Android `dl_iterate_phdr`'s loadable
+- `ico_state_image_range` finds the image in this process: on Windows the module's headers and
+  sections, up to the end of the last section that is not discardable (the DWARF sections and
+  `.reloc`, which `SizeOfImage` maps and nothing points into, are left out; the read-only ranges
+  likewise), on Linux and Android `dl_iterate_phdr`'s loadable
   segments of the object holding this code, on Apple its segments through `_dyld`
   (`port/platform/state_check.c`).
 - `ico_state_reloc_check` are the typed self-checks after a load's restore and relocation, all
@@ -743,16 +745,31 @@ after the loader relocated the initialised pointers and before any game code. Th
 layout hash, the first word nothing names), then the units (48 bytes each), variables (40), points
 (48) and blocks (40) and the names; the save's line gives its size.
 
+**Words nothing names.** Only a word the record confirms is translated: a word in a unit (the
+hash rule above), in a game range, a block or a unique variable, or at a start-up value or a
+constant text. A word that lies in the image's range and that nothing in the table names (a code
+address outside every unit, a word into writable data that is no block and no unique variable, a
+word into the image's headers) is kept as the number it is: the save counts it (`ICO_XB_UNNAMED`,
+the count and the first such word in the header) and the load has no span or point for it, so it
+is left and counted with the words without a translation. Such words are data more often than
+addresses where the image's addresses have a small upper half: under Windows' fixed base
+0x140000000 (`--disable-dynamicbase`, `CMakeLists.txt`) any float from 2.0 to about 572 followed
+by the integer 1 lies in the image (2.0 then 1 is 0x140000000 itself); a headless PAL state laid
+against the Windows program's sections held 203 such words, 140 of them in the DWARF sections the
+range leaves out, none a pointer. What this leaves: a number that happens to land on named code
+or data is still read as an address (translated when that function or variable moved, or a
+refusal when the function a word lands in changed), and a real pointer to something the table
+does not name stays the old build's address.
+
 **Pinned states.** A state loads only into its own build when its record says so, and the save's
 line names why: no symbol table where it was made (`ICO_XB_TABLE` unset: macOS, iOS, a build
 without a map); its image below 4 GB (`ICO_XB_LOW_IMAGE`: the Linux program is linked at
 0x400000 with `ICO_STATE_FIXED_IMAGE`, and there a PS2 address or a size the game keeps, such as
-0x2000000, falls inside the program's range, so translating every word that looks like an address
-would change numbers; the Windows program sits at 0x140000000 and Android's library at a 64-bit
-address, where that cannot happen); more than the bounds (`ICO_XB_OVERFLOW`: 16,384 units, 4,096
-variables, 4,096 points, 128 blocks, 196,608 distinct words); or a strict word nothing names
-(`ICO_XB_UNNAMED`: a code address outside every unit, a pointer into writable data that is no
-block and no unique variable).
+0x2000000, falls inside the program's named code and data as well, so translating every word that
+looks like an address would change numbers; the Windows program sits at 0x140000000 and Android's
+library at a 64-bit address, where the game's own 32-bit numbers never reach); or more than the
+bounds (`ICO_XB_OVERFLOW`: 16,384 units, 4,096 variables, 4,096 points, 128 blocks, 196,608
+distinct words).
 
 **A load of another build** (`other_build`, `xb_probe` in `state_host.c`): the header passes
 `ico_state_header_check_other_build`; the `syms` and `ranges` sections are read alone and
@@ -769,7 +786,7 @@ the two game ranges with their end included, an overlap cut so the later start w
 points (exact words), and the load runs as for the same build with `rel.xlate` set: the reg and
 audio sections unpacked by the blocks' saved offsets, the conservative scan always on. A MODULE
 word without a translation is left as it was and counted (a dead frame's word into a unit this
-build lacks). A size the sections check then refuses (the scheduler's table, a fiber slot) is
+build lacks, a word nothing names). A size the sections check then refuses (the scheduler's table, a fiber slot) is
 another build's change, not damage: refused as `ICO_STATE_OTHER_BUILD`. The self-checks still run
 and the backup still comes back on a failure. The listing makes the same check for every slot of
 another build, so a slot that would translate shows as loadable.
@@ -955,9 +972,9 @@ the game lists the reads of unset locals the compiler sees (`camera-ico2.c`'s mo
 | `state: save states are off: <reason>` | once, instead of the line above |
 | `state: the game's data ranges are not bracketed on this build (<why>): save states are off` | once, the verify failed |
 | `state: saved slot N (<path>): arena <raw> -> <packed>, gdata ..., gbss ..., reg ..., audio ..., sched ..., fibers ..., pobj ..., ranges ..., syms ...; <k> fibers; copy <ms> ms, write <ms> ms, file <bytes> bytes` | a save written |
-| `state: slot N can carry over to a later version that keeps U functions (P with a thread inside), D data symbols, K start-up values and texts, B blocks and the game's data layout (W program words; record <bytes> bytes in <ms> ms)`, or `state: slot N loads only into this build: <why> (W program words, B blocks; first unnamed 0x..)` | after each `saved` line: the `syms` record ([Across versions](#across-versions)) |
+| `state: slot N can carry over to a later version that keeps U functions (P with a thread inside), D data symbols, K start-up values and texts, B blocks and the game's data layout (W program words, X of them naming nothing and kept as numbers, first 0x..; record <bytes> bytes in <ms> ms)`, or `state: slot N loads only into this build: <why> (W program words, B blocks; X naming nothing, first 0x..)` | after each `saved` line: the `syms` record ([Across versions](#across-versions)) |
 | `state: symbols: N functions, M data symbols, K game data items (layout <hash>) from <file> in T ms, S KB`, or `state: symbols: none (<file>: <why>); a state saved here loads only into this build, and no other build's state loads here` | once, at the first save, load or listing that needs the table |
-| `state: slot N was saved by version <v>, this is <v>: everything it points into is unchanged here, so it is translated (U functions, D data symbols, K start-up values and texts, S spans, P points; L dead-frame words without one)` and, after the `loaded` line, `state: slot N from version <commit>: M program words had no translation and were left as they were (first 0x..)` | a load of another build's state |
+| `state: slot N was saved by version <v>, this is <v>: everything it points into is unchanged here, so it is translated (U functions, D data symbols, K start-up values and texts, S spans, P points; L dead-frame words without one; X words naming nothing kept as numbers, first 0x..)` and, after the `loaded` line, `state: slot N from version <commit>: M program words had no translation and were left as they were (first 0x..)` | a load of another build's state |
 | `state: slot N (saved by <commit>) loads here`, or `... cannot be loaded here: <v> -> <v>: <blocker>` | each listing, per slot of another build |
 | `state: loaded slot N (saved at Main tick T, stage S): deltas module +0x0 (fixed image), arena +0x0 (pinned), pool +0x0 (pinned), pobj ... ; words rewritten [(nothing moved)] arena .., gdata .., gbss .., registry .., pobj ..; thread pointer 0x<old>->0x<new>[ unchanged\| not recorded\| not needed] (K words), stack guard[ unchanged\| not recorded\| not needed] (M words); checks P partitions, B blocks, T threads, H handlers; K fibers; apply <ms> ms` | a load done |
 | `state: refused <save\|load\|delete> slot N: <reason>[: <detail>]` | every refusal: save states off, not on the pause menu, a stage switch, the card, the disc, a movie, another mode (photo mode, the credits, the music gallery), the slot empty, a damaged file, another build (its commit; `no thread-pointer record` for a state without the saving process's thread pointer or stack guard where the platform needs them; for a state this build cannot translate `<saved commit> -> <commit here>: <blocker>`, the blocker as [Across versions](#across-versions) words it, or `made before save states could carry over to later versions (format 1)`), another disc, another platform, settings differ (`key=saved (now cur)`), the self-checks (the failing check; the backup restored), the file not written (why), busy |

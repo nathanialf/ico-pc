@@ -52,11 +52,21 @@ int ico_state_image_range(IcoStateImage *out)
     dos = (const IMAGE_DOS_HEADER *)m;
     nt = (const IMAGE_NT_HEADERS *)((const char *)m + dos->e_lfanew);
     out->lo = (uint64_t)(uintptr_t)m;
-    out->hi = out->lo + nt->OptionalHeader.SizeOfImage;
+    out->hi = out->lo + nt->OptionalHeader.SizeOfHeaders;
     sec = IMAGE_FIRST_SECTION(nt);
     for (i = 0; i < nt->FileHeader.NumberOfSections; i++) {
         const DWORD rw = IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_EXECUTE;
 
+        /* the DWARF sections and .reloc (discardable: SizeOfImage maps
+           them, nothing points into them) are not the program's: left
+           out, the range is where its code and data are (a number that
+           only looks like an address falls in it less often) */
+        if ((sec[i].Characteristics & IMAGE_SCN_MEM_DISCARDABLE) != 0) {
+            continue;
+        }
+        if (out->lo + sec[i].VirtualAddress + sec[i].Misc.VirtualSize > out->hi) {
+            out->hi = out->lo + sec[i].VirtualAddress + sec[i].Misc.VirtualSize;
+        }
         if ((sec[i].Characteristics & rw) == IMAGE_SCN_MEM_READ && out->n_ro < ICO_STATE_IMAGE_RO &&
             sec[i].Misc.VirtualSize != 0) {
             out->ro_lo[out->n_ro] = out->lo + sec[i].VirtualAddress;

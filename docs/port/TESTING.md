@@ -559,9 +559,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   function B lacks) checked by build B and every word translated (scanned and typed), the dead
   frame's word left and counted, the blocks mapped by name in B's order; the refusals, each naming
   its blocker (a changed function a frame sits in; a changed function only pointed at loads; the
-  data layout; a block missing, new or resized; a missing text; a changed start-up value; a word
-  into a repeated name or into the code outside every unit; no symbol table; the bounds' overflow;
-  an image below 4 GB; a damaged record); a block B adds that A's state lacks refused, loaded and
+  data layout; a block missing, new or resized; a missing text; a changed start-up value; no
+  symbol table; the bounds' overflow; an image below 4 GB; a damaged record); a word nothing names
+  (into a repeated name, into the code outside every unit) counted and kept as a number, the state
+  loading with the word unchanged; at Windows' fixed base, a state holding floats next to the
+  integer 1 (2.0, 8.0 and 300.0, all inside the image's range) loading with them unchanged while
+  a pointer into the game's data beside them moves (`test_windows_numbers`); a block B adds that A's state lacks refused, loaded and
   left as it is (`ICO_XB_BLOCK_ABSENT`) when registered FRESH, still refused when FRESH with SCAN,
   FRESH on a block the state has loaded from it; a format 1 header read and refused as another
   build, a format 2 header of another build passing the other-build check, another disc still

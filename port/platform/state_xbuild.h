@@ -41,17 +41,25 @@
  *           within ICO_XB_CONTENT), those bytes, found again in the later
  *           build's image outside the code and the game ranges.
  *
- * A word in the code that no unit holds, or in the image that nothing
- * above names, makes the state pinned to its build (ICO_XB_UNNAMED); so do
- * more references than the bounds (ICO_XB_OVERFLOW), a saving build without
- * a symbol file (no ICO_XB_TABLE) and a program image below 4 GB
- * (ICO_XB_LOW_IMAGE: there a program address cannot be told from a number,
- * such as the PS2 addresses the game keeps, so translating every word that
- * looks like one is not safe).  The same build never reads this section:
- * its build id pins the one-delta path.
+ * A word only these confirm is translated.  A word in the code that no
+ * unit holds, or in the image that nothing above names, is confirmed by
+ * nothing: it is kept as the number it is (ICO_XB_UNNAMED, counted, the
+ * first one recorded; the load has no span or point for it).  Such words
+ * are ordinary data where the image's addresses have a small upper half:
+ * under Windows' fixed base 0x140000000 any float from 2.0 to about 572
+ * followed by the integer 1 lies in the image.  A state is pinned to its
+ * build by more references than the bounds (ICO_XB_OVERFLOW), a saving
+ * build without a symbol file (no ICO_XB_TABLE) and a program image below
+ * 4 GB (ICO_XB_LOW_IMAGE: there a program address cannot be told from a
+ * number, such as the PS2 addresses the game keeps, which then land on
+ * named code and data too, so translating every word that looks like one
+ * is not safe).  The same build never reads this section: its build id
+ * pins the one-delta path.
  *
  * The section (little-endian): a 64-byte header, then the units (48 bytes
  * each), data (40), points (48) and blocks (40) records, then the names.
+ * The header's last word counts the words nothing names (0 in a record
+ * from before it was counted).
  */
 #ifndef ICO_PLATFORM_STATE_XBUILD_H
 #define ICO_PLATFORM_STATE_XBUILD_H
@@ -79,7 +87,7 @@
 /* the header's flags */
 #define ICO_XB_TABLE 1u     /* the saving build had a symbol table */
 #define ICO_XB_OVERFLOW 2u  /* more references than the bounds */
-#define ICO_XB_UNNAMED 4u   /* a word nothing in the table names */
+#define ICO_XB_UNNAMED 4u   /* words nothing in the table names: kept as numbers */
 #define ICO_XB_LOW_IMAGE 8u /* the saving program's image lies below 4 GB */
 
 /* --- saving ------------------------------------------------------------------- */
@@ -111,7 +119,8 @@ void ico_xb_block(IcoXbRefs *r, const char *name, uint64_t size, unsigned flags,
 typedef struct IcoXbStats {
     unsigned units, positions, data, points, blocks, values;
     unsigned flags;
-    uint64_t first_unnamed; /* the first word that made it ICO_XB_UNNAMED */
+    unsigned left;          /* the words nothing names (ICO_XB_UNNAMED) */
+    uint64_t first_unnamed; /* the first of them */
     size_t bytes;
 } IcoXbStats;
 
@@ -160,6 +169,10 @@ typedef struct IcoXbVerdict {
     uint64_t *block_off;
     unsigned units, data, points, searches, soft_left;
     unsigned fresh; /* the FRESH blocks the state lacks */
+    /* the words the save found nothing to name (kept as numbers), the
+       first of them */
+    unsigned left;
+    uint64_t first_left;
 } IcoXbVerdict;
 
 #define ICO_XB_BLOCK_ABSENT UINT64_MAX

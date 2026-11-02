@@ -891,9 +891,6 @@ static const char *pinned_why(unsigned flags)
     if ((flags & ICO_XB_OVERFLOW) != 0) {
         return "it points into the program in more places than the record holds";
     }
-    if ((flags & ICO_XB_UNNAMED) != 0) {
-        return "it holds a program address no symbol names";
-    }
     return "";
 }
 
@@ -984,16 +981,17 @@ static void save_finished(const IcoStateWriteResult *w)
         if (pin[0] != '\0') {
             fprintf(stderr,
                     "state: slot %d loads only into this build: %s (%u program words, %u "
-                    "blocks; first unnamed 0x%llx)\n",
-                    s_save.slot, pin, x->values, x->blocks, (unsigned long long)x->first_unnamed);
+                    "blocks; %u naming nothing, first 0x%llx)\n",
+                    s_save.slot, pin, x->values, x->blocks, x->left,
+                    (unsigned long long)x->first_unnamed);
         } else {
             fprintf(stderr,
                     "state: slot %d can carry over to a later version that keeps %u functions "
                     "(%u with a thread inside), %u data symbols, %u start-up values and texts, "
-                    "%u blocks and the game's data layout (%u program words; record %zu bytes "
-                    "in %.1f ms)\n",
+                    "%u blocks and the game's data layout (%u program words, %u of them naming "
+                    "nothing and kept as numbers, first 0x%llx; record %zu bytes in %.1f ms)\n",
                     s_save.slot, x->units, x->positions, x->data, x->points, x->blocks, x->values,
-                    x->bytes, s_save.syms_ms);
+                    x->left, (unsigned long long)x->first_unnamed, x->bytes, s_save.syms_ms);
         }
         done(0, s_save.slot, ICO_STATE_OK, "");
     } else {
@@ -1944,8 +1942,10 @@ static void perform_load(int slot)
         fprintf(stderr,
                 "state: slot %d was saved by version %s, this is %s: everything it points into is "
                 "unchanged here, so it is translated (%u functions, %u data symbols, %u start-up "
-                "values and texts, %zu spans, %zu points; %u dead-frame words without one)\n",
-                slot, sv, tv, xv.units, xv.data, xv.points, xv.n_span, xv.n_point, xv.soft_left);
+                "values and texts, %zu spans, %zu points; %u dead-frame words without one; %u "
+                "words naming nothing kept as numbers, first 0x%llx)\n",
+                slot, sv, tv, xv.units, xv.data, xv.points, xv.n_span, xv.n_point, xv.soft_left,
+                xv.left, (unsigned long long)xv.first_left);
         log_fresh_blocks(slot, &xv);
     }
     {

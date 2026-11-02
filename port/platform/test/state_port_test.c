@@ -34,9 +34,15 @@
  *   refuse   the first blocker named: a changed function a frame sits in,
  *            a changed function only pointed at (unique name: loads), the
  *            data layout, a block missing, new or resized, a text missing,
- *            a start-up value changed, a word into a variable of a repeated
- *            name, a code address no unit holds, no symbol table, the
- *            bounds' overflow, an image below 4 GB.
+ *            a start-up value changed, no symbol table, the bounds'
+ *            overflow, an image below 4 GB.
+ *   numbers  a word nothing names (into a variable of a repeated name, a
+ *            code address no unit holds) is counted, not a refusal: the
+ *            state loads and the word stays as it is; at Windows' fixed
+ *            base 0x140000000 a float next to the integer 1 (2.0f, 8.0f,
+ *            300.0f) in the image's headers or past its sections loads
+ *            unchanged while a pointer into the game's data beside it
+ *            moves.
  *   format   a format 1 header reads and is another build's; a format 2
  *            header of another build passes the other-build check.
  *   fresh    a block a later build adds that the state lacks: refused, but
@@ -952,22 +958,45 @@ static void test_cross(void)
     ico_xb_verdict_free(&v);
     free(sec);
 
-    /* states that load only into their own build */
+    /* words nothing names: counted and kept as numbers, not a refusal */
     {
         uint64_t extra[1];
 
         fill_build(&b, 1);
         extra[0] = a.lo + a.o_said + 8; /* said.0 is two variables */
         sec = save(&a, extra, 1, NULL, 0, &n, &st, 1);
-        CHECK((st.flags & ICO_XB_UNNAMED) != 0, "a word into a repeated name: unnamed");
+        CHECK((st.flags & ICO_XB_UNNAMED) != 0 && st.left == 1 && st.first_unnamed == extra[0],
+              "a word into a repeated name: named by nothing (%u)", st.left);
         k = check_into(sec, n, &b, &a, &v);
-        CHECK(k == ICO_XB_PINNED && strstr(v.why, "no symbol names") != NULL, "pinned: %s", v.why);
+        CHECK(k == ICO_XB_OK && v.left == 1 && v.first_left == extra[0],
+              "a word nothing names loads: %d %s", k, v.why);
+        if (k == ICO_XB_OK) {
+            uint64_t word = extra[0];
+
+            memset(&rel, 0, sizeof rel);
+            rel.range[ICO_RELOC_MODULE].lo = a.lo;
+            rel.range[ICO_RELOC_MODULE].hi = a.hi;
+            memset(&xl, 0, sizeof xl);
+            xl.span = v.span;
+            xl.n_span = v.n_span;
+            xl.point = v.point;
+            xl.n_point = v.n_point;
+            missed = first = 0;
+            xl.missed = &missed;
+            xl.first_missed = &first;
+            rel.xlate = &xl;
+            CHECK(ico_state_reloc_word(&rel, &word) == 0 && word == extra[0] && missed == 1,
+                  "the word nothing names stays as it is, counted");
+        }
         ico_xb_verdict_free(&v);
         free(sec);
         extra[0] = a.lo + TEXT_LO + 0x8; /* in the code before the first unit */
         sec = save(&a, extra, 1, NULL, 0, &n, &st, 1);
-        CHECK((st.flags & ICO_XB_UNNAMED) != 0 && st.first_unnamed == extra[0],
-              "a code address no unit holds: unnamed");
+        CHECK((st.flags & ICO_XB_UNNAMED) != 0 && st.left == 1 && st.first_unnamed == extra[0],
+              "a code address no unit holds: named by nothing");
+        k = check_into(sec, n, &b, &a, &v);
+        CHECK(k == ICO_XB_OK, "a code address no unit holds loads: %s", v.why);
+        ico_xb_verdict_free(&v);
         free(sec);
         extra[0] = a.lo + a.o_anchor + 0x10; /* inside ico_diag_init's padding: its unit */
         sec = save(&a, extra, 1, NULL, 0, &n, &st, 1);
@@ -1071,6 +1100,125 @@ static void test_low_image(void)
     /* a damaged record */
     CHECK(ico_xb_check("SYMS", 4, &now, &v) == ICO_XB_BAD, "a short record is damaged");
     ico_xb_verdict_free(&v);
+}
+
+/* Windows' fixed base: a float followed by the integer 1 is a word inside
+   the image (2.0f then 1 is 0x140000000, the image's first byte).  Such
+   words, confirmed by nothing the record names, load as they were; a
+   pointer into the game's data beside them moves with the range.  The
+   tables are nm text at fixed addresses (no memory is read: no unit and no
+   read-only range is touched) */
+static void test_windows_numbers(void)
+{
+    static const char nmA[] = "0000000140001000 T ico_diag_init\n"
+                              "0000000140001080 T ico_diag_log\n"
+                              "0000000140600000 0000000000000040 D systemStatus\n";
+    static const char nmB[] = "0000000140002000 T ico_diag_init\n"
+                              "0000000140002080 T ico_diag_log\n"
+                              "0000000140610000 0000000000000040 D systemStatus\n";
+    const uint64_t two = 0x0000000140000000ull;   /* 2.0f, then 1 */
+    const uint64_t eight = 0x0000000141000000ull; /* 8.0f, then 1: where nothing is named */
+    const uint64_t many = 0x0000000143960000ull;  /* 300.0f, then 1 */
+    IcoSymTabEnv ea, eb;
+    IcoXbProc p;
+    IcoXbRefs *r;
+    IcoXbStats st;
+    IcoXbNow now;
+    IcoXbVerdict v;
+    IcoStateReloc rel;
+    IcoStateXlate xl;
+    IcoSymTab *ta, *tb;
+    uint64_t words[4], missed = 0, first = 0;
+    char why[160];
+    void *sec = NULL;
+    size_t n = 0;
+    int k;
+
+    memset(&ea, 0, sizeof ea);
+    ea.anchor = "ico_diag_init";
+    ea.anchor_addr = 0x140001000ull;
+    ea.check = "ico_diag_log";
+    ea.check_addr = 0x140001080ull;
+    ea.image_lo = 0x140000000ull;
+    ea.image_hi = 0x1440ef000ull;
+    ea.text_lo = 0x140001000ull;
+    ea.text_hi = 0x140100000ull;
+    ea.game_lo[0] = 0x140600000ull;
+    ea.game_hi[0] = 0x140600100ull;
+    eb = ea;
+    eb.anchor_addr = 0x140002000ull;
+    eb.check_addr = 0x140002080ull;
+    eb.text_lo = 0x140002000ull;
+    eb.text_hi = 0x140101000ull;
+    eb.game_lo[0] = 0x140610000ull;
+    eb.game_hi[0] = 0x140610100ull;
+    ta = ico_symtab_parse(nmA, sizeof nmA - 1, &ea, why, sizeof why);
+    tb = ico_symtab_parse(nmB, sizeof nmB - 1, &eb, why, sizeof why);
+    CHECK(ta != NULL && tb != NULL, "the Windows-like tables: %s", why);
+    if (ta == NULL || tb == NULL) {
+        ico_symtab_free(ta);
+        ico_symtab_free(tb);
+        return;
+    }
+    CHECK(ta->layout_hash == tb->layout_hash, "one game data layout at two places");
+    memset(&p, 0, sizeof p);
+    p.tab = ta;
+    p.image.lo = ea.image_lo;
+    p.image.hi = ea.image_hi;
+    p.image.text_lo = ea.text_lo;
+    p.image.text_hi = ea.text_hi;
+    p.game_lo[0] = ea.game_lo[0];
+    p.game_hi[0] = ea.game_hi[0];
+    words[0] = two;
+    words[1] = eight;
+    words[2] = many;
+    words[3] = ea.game_lo[0] + 0x18; /* a pointer into the game's data */
+    r = ico_xb_begin(&p);
+    if (r != NULL) {
+        ico_xb_scan(r, words, sizeof words, (uint64_t)(uintptr_t)words, 1);
+        CHECK(ico_xb_finish(r, &sec, &n, &st) == 0, "ico_xb_finish");
+    }
+    CHECK(sec != NULL && (st.flags & ICO_XB_LOW_IMAGE) == 0 && (st.flags & ICO_XB_UNNAMED) != 0 &&
+              st.left == 3 && st.values == 4,
+          "the three numbers named by nothing (%u of %u words, flags %#x)", st.left, st.values,
+          st.flags);
+    memset(&now, 0, sizeof now);
+    now.tab = tb;
+    now.image.lo = eb.image_lo;
+    now.image.hi = eb.image_hi;
+    now.image.text_lo = eb.text_lo;
+    now.image.text_hi = eb.text_hi;
+    now.game_lo[0] = eb.game_lo[0];
+    now.game_hi[0] = eb.game_hi[0];
+    now.old_game_lo[0] = ea.game_lo[0];
+    now.old_game_hi[0] = ea.game_hi[0];
+    k = sec != NULL ? ico_xb_check(sec, n, &now, &v) : ICO_XB_BAD;
+    CHECK(k == ICO_XB_OK && v.left == 3, "a Windows state with floats next to a 1 loads: %d %s", k,
+          v.why);
+    if (k == ICO_XB_OK) {
+        memset(&rel, 0, sizeof rel);
+        rel.range[ICO_RELOC_MODULE].lo = ea.image_lo;
+        rel.range[ICO_RELOC_MODULE].hi = ea.image_hi;
+        memset(&xl, 0, sizeof xl);
+        xl.span = v.span;
+        xl.n_span = v.n_span;
+        xl.point = v.point;
+        xl.n_point = v.n_point;
+        xl.missed = &missed;
+        xl.first_missed = &first;
+        rel.xlate = &xl;
+        CHECK(ico_state_reloc_scan(&rel, words, sizeof words, NULL) == 1,
+              "one word moved: the pointer");
+        CHECK(words[0] == two && words[1] == eight && words[2] == many,
+              "the floats next to a 1 are unchanged");
+        CHECK(words[3] == eb.game_lo[0] + 0x18, "the game data pointer moved with its range");
+        CHECK(missed == 3, "the three numbers counted as without a translation (%llu)",
+              (unsigned long long)missed);
+    }
+    ico_xb_verdict_free(&v);
+    free(sec);
+    ico_symtab_free(ta);
+    ico_symtab_free(tb);
 }
 
 /* --- the format ---------------------------------------------------------------------- */
@@ -1207,6 +1355,7 @@ int main(void)
     test_symtab();
     test_cross();
     test_low_image();
+    test_windows_numbers();
     test_format();
     test_keys();
     return ico_check_summary("state_port");
