@@ -355,6 +355,24 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   wait. Not under the vsync lock, not in `sync` or `off` (the present's cost is the whole picture
   there), not before the first picture handed over. No step and no frame's bytes change: only
   which in-between pictures are made.
+- Further presents held while the presents wait. With vsync off or mailbox (the presents paced by
+  the GPU's time, `pace_budget_paced_mode`), where a present never waits for the display by design,
+  a further present is also held, before the rule above, while the render thread's picture in
+  progress has run as long as its estimate or longer (`PACE_RT_OVERRUN`: when it ends is not
+  known, so neither is the drain of a present posted now: a present blocked, a pipeline compiled
+  in the walk) and while the present call's own wait, estimated as the other two
+  (`rd_thread_take_present_ns`: rd_submit.c's present time, the backend's present call and a
+  capture's finish), is half a refresh or more (`PACE_RT_BEHIND`, `PACE_RT_BEHIND_DIV`: the
+  display or the GPU is behind; one more picture only deepens the GPU's backlog, its present
+  waits as long, and the next new frame's present waits for it) (`port/platform/pace_policy.h`
+  (`pace_rt_further_hold`)). A phone's log at a stage change shows why the first rule was
+  not enough: a PowerVR driver's mailbox present blocked 17-34 ms behind 21-35 ms GPU pictures
+  (its fence waits 0.0 ms: the present call waits for the GPU's earlier pictures), the render
+  thread's job ran past an estimate that falls by an eighth a picture, and 511 pictures for 300
+  frames (300 for 300 in play, with no waits) left `slot waits 88 (1003.2 ms), read waits 51
+  (533.3 ms, longest 16.6 ms)` with 411 further presents already held. Under FIFO a present waits
+  for the display by design, so only the first rule holds there. A new frame's present is never
+  held: a GPU picture longer than a frame of the game still makes the next new frame wait.
 - One picture at a time. A picture waits for the one before it to finish (its wait counted as the
   present's display wait, `rd_submit_waited_ns`). A picture whose capture or blended dump is armed
   (F12, a save state's picture) and every picture while the vsync lock uses the display's timing
@@ -435,11 +453,12 @@ a change of the renderer's state that waited for a picture's walk, with their ti
 longest), then the render thread's share of the block with no picture to do, its longest wait for
 one, its longest picture (the heartbeat's longest gap), and per picture its interpolation, its
 uploads and walk, its submit and present and the GPU's and the display's waits inside them, the
-textures it destroyed for the game thread, and the further presents the plan above held back with
-the two estimates as the block ends:
+textures it destroyed for the game thread, and the further presents the plan above held back, by
+why (they would have run into the next step, a picture ran past its estimate, the presents waited
+for the display or the GPU), with the three estimates as the block ends:
 
 ```
-window: game thread: step 3.1 ms, record 0.0 ms, pump 0.4 ms, slot waits 12 (8.2 ms), read waits 290 (610.4 ms, longest 6.9 ms); render thread: idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread; 0 further presents held back (each would have run into the next step: a picture holds the renderer for 4.1 ms, takes 9.3 ms)
+window: game thread: step 3.1 ms, record 0.0 ms, pump 0.4 ms, slot waits 12 (8.2 ms), read waits 290 (610.4 ms, longest 6.9 ms); render thread: idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread; 0 further presents held back (0 would have run into the next step, 0 while a picture ran past its estimate, 0 while the presents waited for the display or the GPU; a picture holds the renderer for 4.1 ms, takes 9.3 ms, its present waits 0.3 ms)
 ```
 
 The slot waits are the game thread's waits for the render thread to finish everything posted
@@ -450,7 +469,13 @@ frames only inside a hand-over the game thread's frame calls wait for). A phone'
 stage change (`slot waits 102 (1193.8 ms), read waits 63 (562.3 ms, longest 17.2 ms)` over 596
 presents for 300 frames, 9.3 ms of render-thread time a picture) is the pattern the plan removes:
 a further present posted late in a step, whose reads ran into the next step and whose end the next
-frame's present waited for.
+frame's present waited for. A later log's (`slot waits 88 (1003.2 ms)`, `411 further presents
+held back`) is the presents waiting for the GPU, which the holds above remove. At a stage change
+the slow replay lines name the rest: the one picture that makes the new stage's textures (`upload
+13.3`, `71 textures uploaded (7819 KB)`, `71 allocations`; up to 31.1 ms for 80) holds the
+renderer that long, once, and a pipeline compiled in the walk the first time a build draws a room
+(`rd: slow walk 2213.1 ms (...): pipelines made 2206.5 ms (3)`, read waits `longest 2216.8 ms`)
+holds it for the compile: the walk reads the state the step changes, so the step waits for both.
 
 `window: render thread: parked (...)` and `window: render thread: goes on` mark a park (the first
 16 of each); `window: render thread: a picture handed over was not presented (N so far): taken out

@@ -704,7 +704,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   pictures and a 2 s burst of 30 ms ones every frame is shown, the presents a second are what the
   picture time allows (two a step and more, one a step, the new frames), no further present makes
   a step wait, and without the plan the 9 and 22 ms pictures and the burst do; the burst's waits
-  with the plan, from the new frames' own pictures, under a quarter of those without) (`pace_loop`).
+  with the plan, from the new frames' own pictures, under a quarter of those without;
+  `testRenderThreadBehind`: `pace_rt_further_hold`'s own cases, then the model with the driver's
+  back-pressure (a present returning once the GPU finished the picture before it, the phone's
+  PowerVR): the holds change nothing on the loads above or on a light stage, and in a 4 s stage
+  of 26 or 20 ms GPU pictures they leave no slot or read wait where the plan alone leaves 40 and
+  more slot waits, every frame shown, at least 150 in-betweens kept; the numbers from a Python
+  port of the model, `build-host/tmp/v098/evidence/rthread-c/rtc_behind_sim.py`) (`pace_loop`).
 - `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
   the first second, 50 presents a second give 50 at every whole second, a second that ran 1.5 s long
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays

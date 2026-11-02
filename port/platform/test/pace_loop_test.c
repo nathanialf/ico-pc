@@ -91,7 +91,11 @@
  *   (pace_rt_further_late) never makes a step wait, at 3, 9 and 22 ms
  *   pictures and a burst of 30 ms ones the presents a second are what the
  *   picture time allows and every frame is shown; without the plan the 22
- *   ms pictures and the burst make the steps wait.
+ *   ms pictures and the burst make the steps wait; and the presents that
+ *   wait for the GPU (testRenderThreadBehind, a present returning once the
+ *   GPU finished the picture before it): with pace_rt_further_hold's holds
+ *   a stage of 26 or 20 ms GPU pictures makes no step wait, where the plan
+ *   alone leaves 40 and more slot waits.
  */
 #include <stdio.h>
 #include <string.h>
