@@ -225,24 +225,28 @@ void rd__scene_border_arm(const Replay *r);
  * not in force for this replay (the sprite is then drawn as recorded) */
 bool rd__blur_smooth_sprite(Replay *r, const RdFrame *f, const RdCmd *c);
 
-/* rd_crack_fill.c: the crack filler (rd_internal.h rd__crack_fill_*), from
- * doFog before the fog reads the depth (after the pass before the fog
- * ended, but on the local read): tc the fog's colour target, tz its
- * depth's (the filler draws when they are SCENE both), copy the fog's depth
- * copy object (filled here with SCENE's depth before the fill, as the copy
- * path fills it), msaa the MSAA epoch at the fog (RD_CRACK_MSAA_*: open,
- * not drawn then; closed this replay, drawn on the resolved picture; or
- * neither), local the fog draws by the local read (fogLocalFor): the
- * fill is drawn in a pass begun with the depth readable and left open, the
- * one the fog keeps */
+/* rd_crack_fill.c: the crack filler (rd_internal.h rd__crack_fill_*).
+ * rd__crack_fill, from doFog (after the pass before the fog ended, but on
+ * the local read): tc the fog's colour target, tz its depth's (the filler
+ * draws when they are SCENE both), msaa the MSAA epoch at the fog
+ * (RD_CRACK_MSAA_*: open, not drawn then; closed this replay, drawn on the
+ * resolved picture; or neither): arms the fill, drawn by
+ * rd__crack_fill_late at the start of list 7 of the same replay (from the
+ * walk's list loop, every list from 7 on; msaaOpen the epoch open there),
+ * after lists 4-6: the snapshot ends the pass open there.  rd__crack_fill_may
+ * (the store plan's scan): a fog under state st may arm it (its read of
+ * SCENE's depth at list 7 a touch) */
 enum {
     RD_CRACK_MSAA_NONE,     /* no MSAA, or the epoch not opened yet: single-sampled */
     RD_CRACK_MSAA_OPEN,     /* the epoch open at the fog (per-sample fog): not drawn */
     RD_CRACK_MSAA_RESOLVED, /* the epoch closed before the fog (msaaEnd's resolve) */
 };
 
-void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCopy *copy, int msaa,
-                    bool local);
+void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, int msaa);
+void rd__crack_fill_late(Replay *r, bool msaaOpen);
+bool rd__crack_fill_may(const RdStateBlock *st);
+/* the list the armed fill is drawn at the start of (rd_store_plan.c's touch) */
+#define RD_CRACK_LATE_LIST 7
 /* the target's passes readable for the exact blend's attachment read (exactReadable) */
 bool rd__replay_exact_readable(uint32_t target);
 

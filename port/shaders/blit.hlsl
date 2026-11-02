@@ -280,18 +280,19 @@ float depth_upsample_ps(BlitVSOut i) : SV_Depth
 //     to it (from the end and the texel beyond it) by more than the share,
 //     so the texels of a concave fold between two faces, each on one of the
 //     two planes, stay.
-// It then takes the nearer end's colour and depth, exact copies (the shorter
-// run of the two axes, the row's on a tie; the end before it on a tie within
-// the run). Every other texel is discarded. Depths grow with GS Z and are
-// linear in it on every format (gs_z_to_depth; the float form's top band,
+// It then takes the nearer end's colour, an exact copy (the shorter run of
+// the two axes, the row's on a tie; the end before it on a tie within the
+// run); the depth stays (the fill is drawn after lists 4-6, in a pass of
+// SCENE's colour alone, rd_crack_fill.c). Every other texel is discarded.
+// Depths grow with GS Z and are linear in it on every format (gs_z_to_depth; the float form's top band,
 // the UI's, only ever reads as nearer), so a share of a depth is that share
 // of GS Z.
 //   t1  a copy of SCENE's colour (crack_fill_ps), read with Load
-//   t2  a copy of SCENE's depth, read with Load (crack_fill_ps)
+//   t2  SCENE's depth, sampled where it is, read with Load (crack_fill_ps)
 //   g_param.xy  the reach across columns and across rows, 0..3 texels
 //               (ceil(scale / 2) on an axis above 1x, else 0)
 //   g_param.z   the share (1 / RD_CRACK_BEHIND)
-// crack_count_ps: the same test over a 16 x 16 block of the depth copy (t1
+// crack_count_ps: the same test over a 16 x 16 block of SCENE's depth (t1
 // there) per output texel, the count n of cracks written as (n & 255,
 // n >> 8) / 255 in R and G of an RGBA8 target (the filled pixels, read back
 // by rd_crack_fill.c for its counters).
@@ -405,12 +406,7 @@ bool crack_at(Texture2D<float> z, int2 p, int2 size, int2 reach, float share, ou
 }
 #endif
 
-struct CrackFillOut {
-    VK_LOC(0) float4 c : SV_Target0;
-    float d : SV_Depth;
-};
-
-CrackFillOut crack_fill_ps(BlitVSOut i)
+float4 crack_fill_ps(BlitVSOut i) : SV_Target0
 {
     uint w, h;
     g_sceneDepth.GetDimensions(w, h);
@@ -419,10 +415,7 @@ CrackFillOut crack_fill_ps(BlitVSOut i)
     if (!crack_at(g_sceneDepth, p, int2(int(w), int(h)), int2(g_param.xy), g_param.z, from)) {
         discard;
     }
-    CrackFillOut o;
-    o.c = g_texture.Load(int3(from, 0));
-    o.d = g_sceneDepth.Load(int3(from, 0));
-    return o;
+    return g_texture.Load(int3(from, 0));
 }
 
 float4 crack_count_ps(BlitVSOut i) : SV_Target0

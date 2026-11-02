@@ -13,25 +13,43 @@
  * along the seams of walls and floors (Goblan's 4K screenshots of v0.8.4).
  *
  * Under the Enhanced preset with SCENE's scale above 1 on either axis, the
- * fog of SCENE (rd_replay.c doFog, after the pass before it ends and before
- * the fog reads the depth) is preceded by one pass over SCENE with its
- * depth attached: crack_fill_ps (blit.hlsl) reads a copy of SCENE's colour
- * (its snapshot texture, rd__replay_take_snap) and of its depth (the fog's
- * depth copy object, rd__depth_copy_take: the copy path's own, made here on
- * the other paths).  A texel in a run of at most R texels along its row or
- * its column that has at each end a texel in front of it (written, and
- * nearer by more than 1 / RD_CRACK_BEHIND of its own depth) is a crack when
- * no draw covered it (depth 0), or when it is drawn behind both ends by a
- * step in depth: the ends within half the drop of each other (two parts of
- * one surface) and the texel behind each end's surface carried on to it by
- * more than the share (a concave fold between two faces stays).  The crack
- * takes the nearer end's colour and depth (SV_Depth, test ALWAYS); every
- * other texel is discarded.  R on an axis is ceil(scale / 2) above 1x, at
- * most 3, else 0: the 1/16 pixel crack is under one texel wide up to 16x,
- * and a slit of a GS pixel or more (2 texels at 2x) is the game's and
- * stays.  The depth goes with the colour so the fog paints the neighbour's
- * fog level, and the draws after the fog (the lists' Z tests) see a surface
- * there.  Exact copies: no filtering, no colour of its own.
+ * fog of SCENE (rd_replay.c doFog) arms the fill (rd__crack_fill) and the
+ * walk draws it at the start of list 7 (rd__crack_fill_late: after lists
+ * 4-6, the fog's own list and the two after it; before the glow, the depth
+ * of field, the motion blur and the aura, which read SCENE): the pass open
+ * there ends with SCENE's colour copied into its snapshot texture
+ * (rd__replay_take_snap), and one pass over SCENE's colour alone draws
+ * crack_fill_ps (blit.hlsl), which reads that copy and SCENE's depth
+ * itself, sampled where it is (RHI_STATE_DEPTH_READ; no depth attachment).
+ * A texel in a run of at most R texels along its row or its column that
+ * has at each end a texel in front of it (written, and nearer by more than
+ * 1 / RD_CRACK_BEHIND of its own depth) is a crack when no draw covered it
+ * (depth 0), or when it is drawn behind both ends by a step in depth: the
+ * ends within half the drop of each other (two parts of one surface) and
+ * the texel behind each end's surface carried on to it by more than the
+ * share (a concave fold between two faces stays).  The crack takes the
+ * nearer end's colour, as the fog and lists 4-6 left it; every other
+ * texel is discarded, and the depth is not written.  R on an axis is
+ * ceil(scale / 2) above 1x, at most 3, else 0: the 1/16 pixel crack is
+ * under one texel wide up to 16x, and a slit of a GS pixel or more (2
+ * texels at 2x) is the game's and stays.  An exact copy: no filtering, no
+ * colour of its own.
+ *
+ * Where it is drawn (DIVERGENCES.md VD-20 holds the measured bound): until
+ * v0.9.8 the fill was drawn before the fog with the colour and the depth,
+ * so the crack took the fog at its own place in the fog's dither and lists
+ * 4-6 tested and blended against the filled texel.  Drawn after lists 4-6
+ * a crack holds its neighbour's finished colour: the neighbour's dither
+ * cell, and lists 4-6's draws as they fell on the neighbour; the draws
+ * after list 7 that test the depth (the glow's mask, staticBlur.c
+ * cleanUpFB) see the crack's own depth.  The reason is the tile-based
+ * GPU's pass break: before the fog the copies ended the scene pass in the
+ * middle (SCENE's colour and depth stored, copied and loaded again, about
+ * 60 MB at 2366x1080 besides the depth's copy); after lists 4-6 the pass
+ * ends where it ends anyway, the depth is read in place (no copy), and the
+ * fill's pass holds SCENE's colour alone.  The store plan keeps the depth's
+ * store for that read (rd_store_plan.c: a fog that may arm the fill
+ * touches SCENE's depth again at list 7).
  *
  * What the cracks hold: the clear's depth where nothing lies behind the
  * seam (the sky of the castle's courtyard at 4K: 727 texels of the fog's
@@ -66,26 +84,11 @@
  * form's crack.  Gaps onto the clear the resolve already closed are
  * surfaces to the filler and stay.
  *
- * The fog's local read (RD_FOG_LOCAL, a tile-based GPU's path: the fog
- * draws in the scene pass, reading the depth as an input attachment): the
- * copies end the scene pass, and the fill is drawn in the pass begun again
- * over SCENE and its depth, both loaded, the depth readable
- * (rd__replay_begin_pass, as bindDraw begins it), which is left open: the
- * fog keeps it (doFog) and its local-read barrier holds the fill's depth
- * writes before the fog reads them.  The layout of a readable depth
- * (RENDERING_LOCAL_READ, vk_cmd.c rhi_cmd_begin_render_pass) is an
- * attachment the depth tests write, as every scene draw in that pass
- * does, so the fill's test-ALWAYS writes are allowed there.  SCENE's colour
- * and depth are stored and loaded once fewer than with a fill pass of its
- * own (about 36 MB a replay at 1664 x 896 where the depth and stencil take
- * 8 bytes a texel).  A pass begun without the depth readable is ended
- * after the fill, as on the other paths (its line once).
- *
  * On by default on every device class (RdProfile.crackFill); [dev]
  * crack_fill = false (ICO_RD_CRACK_FILL=0) turns it off, the A/B.  Its
- * GPU time is the effect "crack fill" (RD_PERF_POST_CRACK: the copies, the
- * count and the draw) in the 10 s "effects:" line, the replay tool's
- * --stats and --pass-times.
+ * GPU time is the effect "crack fill" (RD_PERF_POST_CRACK: the colour's
+ * copy, the count and the fill's pass) in the 10 s "effects:" line, the
+ * replay tool's --stats and --pass-times.
  *
  * The counters: the filled pixels are counted on the GPU only for the
  * tests and the replay tool's --stats (rd__crack_fill_count_all), never in
@@ -97,21 +100,18 @@
  * The lines:
  *   rd: crack fill: on above 1x (scale 2x2, reach 1x1 texels: a run of
  *       texels no draw covered, or drawn over 1/64 of the depth behind both
- *       its ends, with a texel in front at each end takes the nearer end);
+ *       its ends, with a texel in front at each end takes the nearer end's
+ *       colour after lists 4-6);
  *       [dev] crack_fill = false turns it off      (start, a new scale;
- *       " (drawn inside the scene pass with the local fog)" after it once
- *       a fill was drawn so, and again without it when one is not; the
- *       same for " (drawn after the MSAA resolve)")
+ *       " (drawn after the MSAA resolve)" after it once a fill was drawn
+ *       so, and again without it when one is not)
  *   rd: crack fill: T replays filled (scale SXxSY; reach RXxRY texels; not
- *       counted in the game[; F inside the scene pass with the local
- *       fog][; A after the MSAA resolve])          (10 s summary)
+ *       counted in the game[; F after lists 4-6][; A after the MSAA
+ *       resolve])                                  (10 s summary)
  *   rd: crack fill: N pixels filled over M replays counted of T filled
- *       (max K a replay; scale SXxSY; reach RXxRY texels[; F inside ...]
+ *       (max K a replay; scale SXxSY; reach RXxRY texels[; F after ...]
  *       [; A after ...])
  *       (the same, counting: the tests, the replay tool's --stats)
- *   rd: crack fill: the pass after the copies was not begun with the depth
- *       readable: the fill ends it and the fog begins it again (reported
- *       once)                                      (events)
  *   rd: crack fill: N fogged replays above 1x not filled (...)   (the same)
  *   rd: crack fill: not drawn ...: <reason> (reported once)   (events) */
 #include <math.h>
@@ -124,21 +124,19 @@
 /* crack_count_ps's block (blit.hlsl CRACK_BLOCK) */
 #define CRACK_BLOCK 16u
 
-enum { SKIP_MSAA, SKIP_DEPTH, SKIP_PIPES, SKIP_MEMORY, SKIP_PASS, SKIP_COUNT };
+enum { SKIP_MSAA, SKIP_DEPTH, SKIP_PIPES, SKIP_MEMORY, SKIP_COUNT };
 
 static const char *const kSkipWhy[SKIP_COUNT] = {
     ("the MSAA epoch is still open at the fog (a frame without a shadow: the fog may read the "
      "multisampled scene; the filler runs after the MSAA resolve: DIVERGENCES.md VD-22)"),
     "the scene's depth cannot be sampled on this device",
     "its shaders or pipelines are missing",
-    "no memory for the copies of the scene's colour and depth",
-    "the scene pass the fog keeps could not be begun after the copies",
+    "no memory for the copy of the scene's colour",
 };
 
 /* why the switch is what it is (the state line) */
 enum { WHY_PROFILE, WHY_DEV, WHY_FORCED };
 
-#define FOLD_TEXT " (drawn inside the scene pass with the local fog)"
 #define MSAA_TEXT " (drawn after the MSAA resolve)"
 
 static struct {
@@ -147,7 +145,6 @@ static struct {
     bool countAll;
     bool general;  /* tests: the general shader at a reach of 1 */
     int said1;     /* crack_fill1_ps's event: -1 not said, else 0/1 */
-    bool fold;     /* the last fill drawn in the pass the local fog keeps */
     bool resolved; /* the last fill drawn on the MSAA resolve's picture */
     /* the count's target and readback (one in flight) */
     RhiTexture countTex;
@@ -158,12 +155,12 @@ static struct {
     bool pending;
     uint32_t pendingReplay, pendingW, pendingH, pendingPitch;
     /* since start */
-    uint64_t filled, counted, pixels, skipped, folded, afterMsaa;
+    uint64_t filled, counted, pixels, skipped, late, afterMsaa;
     uint32_t last, max;
     float sx, sy;
     uint32_t rx, ry;
     /* the 10 s block's (rd__crack_fill_block) */
-    uint64_t bFilled, bCounted, bPixels, bFolded, bAfterMsaa, bSkip[SKIP_COUNT];
+    uint64_t bFilled, bCounted, bPixels, bLate, bAfterMsaa, bSkip[SKIP_COUNT];
     uint32_t bMax;
     bool skipSaid[SKIP_COUNT];
     char noted[448]; /* the last state line */
@@ -218,10 +215,10 @@ static void note(void)
         snprintf(line, sizeof(line),
                  "crack fill: on above 1x (scale %.4gx%.4g, reach %ux%u texels: a run of texels "
                  "no draw covered, or drawn over 1/%u of the depth behind both its ends, with a "
-                 "texel in front at each end takes the nearer end); [dev] crack_fill = false "
-                 "turns it off%s%s%s",
+                 "texel in front at each end takes the nearer end's colour after lists 4-6); [dev] "
+                 "crack_fill = false turns it off%s%s",
                  (double)sx, (double)sy, rd__crack_fill_reach(sx), rd__crack_fill_reach(sy),
-                 RD_CRACK_BEHIND, s_cf.fold ? FOLD_TEXT : "", s_cf.resolved ? MSAA_TEXT : "", dev);
+                 RD_CRACK_BEHIND, s_cf.resolved ? MSAA_TEXT : "", dev);
     }
     if (strcmp(line, s_cf.noted) != 0) {
         snprintf(s_cf.noted, sizeof(s_cf.noted), "%s", line);
@@ -345,7 +342,7 @@ void rd__crack_fill_counts(RdCrackCounts *out)
     out->last = s_cf.last;
     out->max = s_cf.max;
     out->skipped = s_cf.skipped;
-    out->folded = s_cf.folded;
+    out->late = s_cf.late;
     out->afterMsaa = s_cf.afterMsaa;
     out->sx = s_cf.sx;
     out->sy = s_cf.sy;
@@ -359,9 +356,8 @@ void rd__crack_fill_block(void)
     note();
     char fold[128] = "";
     int at = 0;
-    if (s_cf.bFolded) {
-        at = snprintf(fold, sizeof(fold), "; %llu inside the scene pass with the local fog",
-                      (unsigned long long)s_cf.bFolded);
+    if (s_cf.bLate) {
+        at = snprintf(fold, sizeof(fold), "; %llu after lists 4-6", (unsigned long long)s_cf.bLate);
     }
     if (s_cf.bAfterMsaa && at >= 0 && (size_t)at < sizeof(fold)) {
         snprintf(fold + at, sizeof(fold) - (size_t)at, "; %llu after the MSAA resolve",
@@ -381,18 +377,15 @@ void rd__crack_fill_block(void)
     }
     const uint64_t *k = s_cf.bSkip;
     /* MSAA is a choice (its own line once a run); the others are not */
-    if (k[SKIP_DEPTH] | k[SKIP_PIPES] | k[SKIP_MEMORY] | k[SKIP_PASS]) {
-        rd__log(
-            "crack fill: %llu fogged replays above 1x not filled (%llu in an open MSAA epoch, %llu "
-            "without a sampleable depth, %llu without its pipelines, %llu without memory for "
-            "its copies, %llu with the fog's pass not begun)",
-            (unsigned long long)(k[SKIP_MSAA] + k[SKIP_DEPTH] + k[SKIP_PIPES] + k[SKIP_MEMORY] +
-                                 k[SKIP_PASS]),
-            (unsigned long long)k[SKIP_MSAA], (unsigned long long)k[SKIP_DEPTH],
-            (unsigned long long)k[SKIP_PIPES], (unsigned long long)k[SKIP_MEMORY],
-            (unsigned long long)k[SKIP_PASS]);
+    if (k[SKIP_DEPTH] | k[SKIP_PIPES] | k[SKIP_MEMORY]) {
+        rd__log("crack fill: %llu fogged replays above 1x not filled (%llu in an open MSAA epoch, "
+                "%llu without a sampleable depth, %llu without its pipelines, %llu without memory "
+                "for the colour's copy)",
+                (unsigned long long)(k[SKIP_MSAA] + k[SKIP_DEPTH] + k[SKIP_PIPES] + k[SKIP_MEMORY]),
+                (unsigned long long)k[SKIP_MSAA], (unsigned long long)k[SKIP_DEPTH],
+                (unsigned long long)k[SKIP_PIPES], (unsigned long long)k[SKIP_MEMORY]);
     }
-    s_cf.bFilled = s_cf.bCounted = s_cf.bPixels = s_cf.bFolded = s_cf.bAfterMsaa = 0;
+    s_cf.bFilled = s_cf.bCounted = s_cf.bPixels = s_cf.bLate = s_cf.bAfterMsaa = 0;
     s_cf.bMax = 0;
     memset(s_cf.bSkip, 0, sizeof(s_cf.bSkip));
 }
@@ -470,15 +463,14 @@ static void fullscreen(RhiCommandList cl, const RdPipeKeyInt *k, RhiPipeline pip
 }
 
 /* the count (the tests and --stats only, with none in flight): reads the
- * depth copy zc alone, so it goes before the fill (whose pass the local
- * fog keeps open) */
-static void countPass(Replay *r, RhiCommandList cl, RhiPipeline pCount, const RdPipeKeyInt *kCount,
-                      RhiTexture zc, uint32_t w, uint32_t h)
+ * depth z alone (SCENE's, sampled where it is), before the fill's pass */
+static void countPass(RhiCommandList cl, RhiPipeline pCount, const RdPipeKeyInt *kCount,
+                      RhiTexture z, uint32_t w, uint32_t h)
 {
     if (!s_cf.countAll || !pCount.id || s_cf.pending) {
         return;
     }
-    const uint32_t scene = r->st.color;
+    const uint32_t scene = RD_TARGET_SCENE + 1u;
     const uint32_t cw = (w + CRACK_BLOCK - 1u) / CRACK_BLOCK,
                    ch = (h + CRACK_BLOCK - 1u) / CRACK_BLOCK;
     const uint32_t a = rhi_limits()->copyRowPitchAlign ? rhi_limits()->copyRowPitchAlign : 1u;
@@ -498,7 +490,7 @@ static void countPass(Replay *r, RhiCommandList cl, RhiPipeline pCount, const Rd
     p.width = cw;
     p.height = ch;
     rhi_cmd_begin_render_pass(cl, &p);
-    fullscreen(cl, kCount, pCount, cw, ch, zc, RHI_ASPECT_DEPTH, g_rd.dummy);
+    fullscreen(cl, kCount, pCount, cw, ch, z, RHI_ASPECT_DEPTH, g_rd.dummy);
     rhi_cmd_end_render_pass(cl);
     rd__transition(cl, s_cf.countTex, &s_cf.countState, RHI_STATE_COPY_SRC);
     rhi_cmd_copy_texture_to_buffer(cl, s_cf.countTex, RHI_ASPECT_COLOR, (RhiRect){0, 0, cw, ch},
@@ -511,89 +503,60 @@ static void countPass(Replay *r, RhiCommandList cl, RhiPipeline pCount, const Rd
     g_rdPerf.crackCountPasses++;
 }
 
-/* the copies, the count and the fill; fold: the fill in the pass the local
- * fog keeps.  Returns whether the fill was drawn so (the pass left open) */
-static bool fillWork(Replay *r, RdTargetRec *tc, RdDepthCopy *copy, RhiPipeline pFill,
-                     const RdPipeKeyInt *kFill, RhiPipeline pCount, const RdPipeKeyInt *kCount,
-                     bool fold, int fogPost)
+/* the fill's place: armed by rd__crack_fill at the fog, drawn by
+ * rd__crack_fill_late at the start of list 7 (after lists 4-6) of the same
+ * replay; resolved the MSAA epoch closed before the fog */
+static struct {
+    bool armed, resolved;
+    uint32_t replay;
+} s_late;
+
+/* the snapshot, the count and the fill: SCENE's colour into its snapshot
+ * (the pass before ends there), its depth sampled where it is, and the fill
+ * drawn in a pass of SCENE's colour alone, loaded and stored */
+static bool fillWork(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipeKeyInt *kFill,
+                     RhiPipeline pCount, const RdPipeKeyInt *kCount)
 {
     const uint32_t w = tc->tw, h = tc->th;
-    /* the pass before ends (the local read's scene pass among them); SCENE's
-     * colour into its snapshot, its depth into the copy */
     if (!rd__replay_take_snap(r, tc, (RhiRect){0, 0, w, h})) {
         skip(SKIP_MEMORY, tc);
         return false;
     }
     RhiCommandList cl = rd__replay_cl();
-    const RhiTexture zc = rd__depth_copy_take(cl, tc, copy, "rd fog depth");
-    if (!zc.id) {
-        skip(SKIP_MEMORY, tc);
-        return false;
-    }
+    /* no depth attachment in the fill's pass, so the depth is never sampled
+     * while it is bound; the next pass that binds it takes it back to
+     * DEPTH_WRITE (beginPass), as after the fog's read in place.  Its store
+     * at the pass before is kept by the store plan (rd_store_plan.c: the
+     * fill's read is a touch at the end of the fog's list run) */
+    rd__transition(cl, tc->depth, &tc->depthState, RHI_STATE_DEPTH_READ);
     s_cf.sx = tc->sx;
     s_cf.sy = tc->sy;
     s_cf.rx = rd__crack_fill_reach(tc->sx);
     s_cf.ry = rd__crack_fill_reach(tc->sy);
-    const uint32_t scene = r->st.color;
-    countPass(r, cl, pCount, kCount, zc, w, h);
-
-    if (fold) {
-        /* the pass the fog keeps: SCENE and its depth loaded, the depth
-         * readable (the stencil as beginPass has it), begun and counted as
-         * the fog's (the fill's draw is timed apart by the effect) */
-        r->perfPost = fogPost;
-        rd__last_store_arm(scene, scene); /* the fog's own pass (rd_pass_cut.c) */
-        rd__replay_begin_pass(r, tc, tc, scene, scene, RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f,
-                              false);
-        rd__last_store_arm(0, 0);
-        r->perfPost = RD_PERF_POST_CRACK;
-        if (!r->passOpen) {
-            skip(SKIP_PASS, tc);
-            return false; /* not begun: nothing drawn */
-        }
-        fold = r->passColor == scene && r->passDepth == scene && r->passDepthReadable;
-        if (!fold) {
-            static bool logged; /* once a run */
-            if (!logged) {
-                logged = true;
-                rd__log("crack fill: the pass after the copies was not begun with the depth "
-                        "readable: the fill ends it and the fog begins it again (reported once)");
-            }
-        }
-        fullscreen(cl, kFill, pFill, w, h, tc->snap, RHI_ASPECT_COLOR, zc);
-        if (!fold) {
-            rd__replay_end_pass(r);
-        }
-    } else {
-        /* the fill: SCENE and its depth, loaded and stored, stencil untouched */
-        rd__transition(cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
-        rd__transition(cl, tc->depth, &tc->depthState, RHI_STATE_DEPTH_WRITE);
-        rd__perf_pass(cl, RD_PERF_PASS_RENDER, scene, w, h, RD_PERF_POST_CRACK);
-        rhi_cmd_checkpoint(cl, rd__replay_pass_push(RD_PASSK_PASS, scene, w, h, scene, w, h, 0,
-                                                    RD_PERF_POST_CRACK));
-        RhiRenderPassDesc p;
-        memset(&p, 0, sizeof(p));
-        p.color[0].texture = tc->color;
-        p.color[0].load = RHI_LOAD_LOAD;
-        p.colorCount = 1;
-        p.depth.texture = tc->depth;
-        p.depth.depthLoad = RHI_LOAD_LOAD;
-        p.depth.stencilLoad = RHI_LOAD_LOAD;
-        p.width = w;
-        p.height = h;
-        rhi_cmd_begin_render_pass(cl, &p);
-        fullscreen(cl, kFill, pFill, w, h, tc->snap, RHI_ASPECT_COLOR, zc);
-        rhi_cmd_end_render_pass(cl);
-    }
+    const uint32_t scene = RD_TARGET_SCENE + 1u;
+    countPass(cl, pCount, kCount, tc->depth, w, h);
+    rd__transition(cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
+    rd__perf_pass(cl, RD_PERF_PASS_RENDER, scene, w, h, RD_PERF_POST_CRACK);
+    rhi_cmd_checkpoint(
+        cl, rd__replay_pass_push(RD_PASSK_PASS, scene, w, h, 0, 0, 0, 0, RD_PERF_POST_CRACK));
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = tc->color;
+    p.color[0].load = RHI_LOAD_LOAD;
+    p.colorCount = 1;
+    p.width = w;
+    p.height = h;
+    rhi_cmd_begin_render_pass(cl, &p);
+    fullscreen(cl, kFill, pFill, w, h, tc->snap, RHI_ASPECT_COLOR, tc->depth);
+    rhi_cmd_end_render_pass(cl);
     r->writeSerial++; /* SCENE's colour and alpha changed (DATE's snapshot) */
     g_rdPerf.crackFillPasses++;
     s_cf.filled++;
     s_cf.bFilled++;
-    return fold;
+    return true;
 }
 
-void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCopy *copy, int msaa,
-                    bool local)
+void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, int msaa)
 {
     harvest(false);
     /* SCENE's own fog above 1x under Enhanced; not the fog's self-test
@@ -610,6 +573,32 @@ void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCo
     if (!tc->withDepth || !tc->depth.id || !tc->depthSampled || !tc->color.id ||
         tc->format != RHI_FMT_RGBA8_UNORM) {
         skip(SKIP_DEPTH, tc);
+        return;
+    }
+    s_late.armed = true;
+    s_late.replay = g_rd.replayCounter;
+    s_late.resolved = msaa == RD_CRACK_MSAA_RESOLVED;
+}
+
+bool rd__crack_fill_may(const RdStateBlock *st)
+{
+    const RdTargetRec *tc = sceneRec();
+    return s_cf.enabled && g_rd.hasDevice && g_rd.settings.preset == RD_PRESET_ENHANCED && tc &&
+           st->color == RD_TARGET_SCENE + 1u && (tc->sx > 1.0f || tc->sy > 1.0f);
+}
+
+void rd__crack_fill_late(Replay *r, bool msaaOpen)
+{
+    if (!s_late.armed) {
+        return;
+    }
+    s_late.armed = false;
+    RdTargetRec *tc = sceneRec();
+    if (s_late.replay != g_rd.replayCounter || !tc || !tc->depth.id || !tc->color.id) {
+        return; /* armed in another replay (one that ended before list 7) */
+    }
+    if (msaaOpen) {
+        skip(SKIP_MSAA, tc); /* an epoch opened after the fog: SCENE_MS holds the picture */
         return;
     }
     /* a reach of at most 1 texel on both axes takes crack_fill1_ps (the
@@ -640,26 +629,23 @@ void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, RdDepthCo
         return;
     }
     /* the filler's GPU work is its own effect (RD_PERF_POST_CRACK), the
-     * fog's again after it */
-    const int fogPost = r->perfPost;
+     * list's again after it */
+    const int post = r->perfPost;
     r->perfPost = RD_PERF_POST_CRACK;
     rd__replay_perf_post(r, RD_PERF_POST_CRACK);
-    const uint64_t filled = s_cf.filled;
-    const bool fold = fillWork(r, tc, copy, pFill, &kFill, pCount, &kCount,
-                               local && (tc->dstUsage & RD_DST_USAGE_LOCAL_DEPTH) != 0, fogPost);
-    r->perfPost = fogPost;
-    rd__replay_perf_post(r, fogPost);
-    if (s_cf.filled == filled) {
+    const bool drawn = fillWork(r, tc, pFill, &kFill, pCount, &kCount);
+    r->perfPost = post;
+    rd__replay_perf_post(r, post);
+    if (!drawn) {
         return; /* not drawn (skipped for memory) */
     }
-    const bool resolved = msaa == RD_CRACK_MSAA_RESOLVED;
-    s_cf.folded += fold;
-    s_cf.bFolded += fold;
+    const bool resolved = s_late.resolved;
+    s_cf.late++;
+    s_cf.bLate++;
     s_cf.afterMsaa += resolved;
     s_cf.bAfterMsaa += resolved;
-    if (fold != s_cf.fold || resolved != s_cf.resolved) {
-        s_cf.fold = fold;
+    if (resolved != s_cf.resolved) {
         s_cf.resolved = resolved;
-        note(); /* the state line says where and on what the fill is drawn */
+        note(); /* the state line says on what the fill is drawn */
     }
 }

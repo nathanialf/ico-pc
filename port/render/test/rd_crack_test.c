@@ -15,8 +15,9 @@
  *           two node matrices): without the filler texels along the edge
  *           show the fog's colour of the clear (GS Z 0, the table's entry
  *           0) at 2x and above; with it none, each filled texel the colour
- *           (and, where the depth reads back, the depth) of a written
- *           texel at most the reach away on its row or its column;
+ *           of a written texel at most the reach away on its row or its
+ *           column after the fog (the fill is drawn after lists 4-6), its
+ *           depth unchanged (the fill writes no depth);
  *   slit    two sprites 1.5 GS pixels apart (3 texels at 2x, 6 at 4x, 4 at
  *           2.8125: wider than the reach): the slit (its texels half a
  *           texel in from its sides) keeps the clear's fog, filler or not;
@@ -31,7 +32,7 @@
  * the backdrop's depth and colour, not the clear's, and are filled the
  * same (the discontinuity form), while the slit keeps the backdrop;
  *   rest    every texel the first replay drew is the same in both, colour
- *           and depth: the pictures differ only at the cracks;
+ *           and depth: the pictures differ only at the cracks' colour;
  *   counts  the replay with the filler drew one fill pass and its count
  *           (rd__crack_fill_counts, every replay counted) equals the
  *           texels it changed;
@@ -47,16 +48,16 @@
  * samples lay in the crack, not when one did), and the slit,
  * wider than a pixel, keeps the clear's fog on every texel.  With fold (the
  * fog's local read: a tile-based profile, ICO_VK_FAKE_LIMITS=moltenvk, or
- * ICO_RD_FOG_PATH=local; 77 without local read) the fill is drawn in the
- * pass the fog keeps: the replay with the filler drew one fill, inside the
- * scene pass (RdCrackCounts.folded), the fog drew by the local read
- * (RdPerfRecord.fogLocalDraws) in that replay, and the replay has one
- * render pass more than without the filler (besides the count's), not
- * two; then the fog's path is set to the depth copy (the desktop's form:
- * the fill's own pass, the fog on the colour alone) and the frame
- * replayed with the filler: SCENE's colour and depth equal the folded
- * replay's byte for byte.  The log lines are matched by
- * test/rd_crack.cmake. */
+ * ICO_RD_FOG_PATH=local; 77 without local read; the name is the old
+ * fold's) the fog draws in the scene pass and the fill after lists 4-6:
+ * the replay with the filler drew one fill there (RdCrackCounts.late), the
+ * fog drew by the local read (RdPerfRecord.fogLocalDraws) in that replay,
+ * and the replay has one render pass more than without the filler
+ * (besides the count's: the fill's own, the scene pass not broken at the
+ * fog); then the fog's path is set to the depth copy (the desktop's form:
+ * the fog on the colour alone) and the frame replayed with the filler:
+ * SCENE's colour and depth equal the local read's replay byte for byte.
+ * The log lines are matched by test/rd_crack.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -366,8 +367,8 @@ int main(int argc, char **argv)
             changed++;
             changedDrawn += !clearA || (off.z && off.z[i] != refZ);
             /* a filled texel: a written texel within the reach on its row
-               or its column has its colour (and its depth) */
-            bool from = false, fromZ = false;
+               or its column has its colour; its depth is unchanged */
+            bool from = false;
             for (int k = 1; k <= (int)RD_CRACK_REACH_MAX && !from; k++) {
                 const int64_t nb[4][2] = {{(int64_t)x - k, y},
                                           {(int64_t)x + k, y},
@@ -382,12 +383,11 @@ int main(int argc, char **argv)
                     const size_t q = (size_t)nb[j][1] * w + (size_t)nb[j][0];
                     if (memcmp(&off.px[q * 4], ref, 4) != 0 && memcmp(&on.px[q * 4], b, 4) == 0) {
                         from = true;
-                        fromZ = !on.z || on.z[i] == on.z[q];
                     }
                 }
             }
             badFrom += !from;
-            badDepth += from && !fromZ;
+            badDepth += zDiff;
         }
     }
     printf("  cracks along the edge: %d texels of the clear's fog without the filler, %d with it, "
@@ -395,12 +395,12 @@ int main(int argc, char **argv)
            cracksOff, cracksOn, near);
     printf("  the slit: %d of %d texels the clear's fog without, %d with\n", slitOff, slitAll,
            slitOn);
-    printf("  %d texels changed (%d the first replay drew; %d not a neighbour's colour, %d not its "
-           "depth%s); fill passes %u and %u; counted %llu pixels over %llu replays (filled %llu)\n",
-           changed, changedDrawn, badFrom, badDepth, off.z ? "" : ", no depth readback", off.fills,
-           on.fills, (unsigned long long)(c1.pixels - c0.pixels),
-           (unsigned long long)(c1.counted - c0.counted),
-           (unsigned long long)(c1.filled - c0.filled));
+    printf(
+        "  %d texels changed (%d the first replay drew; %d not a neighbour's colour, %d with "
+        "their depth changed%s); fill passes %u and %u; counted %llu pixels over %llu replays (filled %llu)\n",
+        changed, changedDrawn, badFrom, badDepth, off.z ? "" : ", no depth readback", off.fills,
+        on.fills, (unsigned long long)(c1.pixels - c0.pixels),
+        (unsigned long long)(c1.counted - c0.counted), (unsigned long long)(c1.filled - c0.filled));
     CHECK(near > 100, "the edge's band holds %d texels", near);
     CHECK(fold > 20, "the fold's line holds %d texels", fold);
     if (off.z) {
@@ -416,7 +416,8 @@ int main(int argc, char **argv)
         CHECK(cracksOff > 0, "no crack without the filler at %gx%g", (double)sx, (double)sy);
         CHECK(cracksOn == 0, "%d cracks with the filler", cracksOn);
         CHECK(badFrom == 0 && badDepth == 0,
-              "%d filled texels not a neighbour's colour, %d not its depth", badFrom, badDepth);
+              "%d filled texels not a neighbour's colour, %d with their depth changed", badFrom,
+              badDepth);
         CHECK(on.fills == 1, "%u fill passes", on.fills);
         CHECK(c1.counted - c0.counted == 1 && c1.filled - c0.filled == 1 &&
                   c1.pixels - c0.pixels == (uint64_t)changed,
@@ -469,22 +470,22 @@ int main(int argc, char **argv)
         free(gen.z);
     }
     if (inPass) {
-        /* one fill in the scene pass the local fog keeps: one render pass
-           more than without the filler, the count's apart */
+        /* the fog in the scene pass, the fill after lists 4-6: one render
+           pass more than without the filler (the fill's own), the count's
+           apart */
         const int extra = (int)on.passes - (int)on.countPasses - (int)off.passes;
-        printf("  fold: %llu of %llu fills inside the scene pass; render passes %u without the "
+        printf("  late: %llu of %llu fills after lists 4-6; render passes %u without the "
                "filler, %u with it (%u the count's); fog draws by the local read %u and %u\n",
-               (unsigned long long)(c1.folded - c0.folded),
-               (unsigned long long)(c1.filled - c0.filled), off.passes, on.passes, on.countPasses,
-               off.fogLocal, on.fogLocal);
+               (unsigned long long)(c1.late - c0.late), (unsigned long long)(c1.filled - c0.filled),
+               off.passes, on.passes, on.countPasses, off.fogLocal, on.fogLocal);
         CHECK(active, "the filler does not draw here");
-        CHECK(c1.folded - c0.folded == 1, "%llu fills inside the scene pass",
-              (unsigned long long)(c1.folded - c0.folded));
+        CHECK(c1.late - c0.late == 1, "%llu fills after lists 4-6",
+              (unsigned long long)(c1.late - c0.late));
         CHECK(off.fogLocal > 0 && on.fogLocal > 0, "fog draws by the local read: %u and %u",
               off.fogLocal, on.fogLocal);
         CHECK(extra == 1, "%d render passes more with the filler, not 1", extra);
-        /* the desktop's form: the fog's depth copy (the fill in its own
-           pass), a replay for the switch first */
+        /* the desktop's form: the fog's depth copy (the fog on the colour
+           alone), a replay for the switch first */
         rd__set_fog_path(RD_FOG_COPY);
         Picture cp;
         memset(&cp, 0, sizeof(cp));
@@ -505,16 +506,16 @@ int main(int argc, char **argv)
             diffPx += memcmp(&cp.px[i * 4], &on.px[i * 4], 4) != 0;
             diffZ += on.z && cp.z && memcmp(&cp.z[i], &on.z[i], sizeof(float)) != 0;
         }
-        printf("  the depth copy's replay: %u fills (%llu inside the scene pass), fog draws by "
-               "the local read %u; %zu texels' colour and %zu depths differ from the folded "
+        printf("  the depth copy's replay: %u fills (%llu after lists 4-6), fog draws by the "
+               "local read %u; %zu texels' colour and %zu depths differ from the local read's "
                "replay\n",
-               cp.fills, (unsigned long long)(c3.folded - c2.folded), cp.fogLocal, diffPx, diffZ);
-        CHECK(cp.fills == 1 && c3.folded == c2.folded && cp.fogLocal == 0,
-              "the depth copy's replay: %u fills, %llu folded, %u local fog draws", cp.fills,
-              (unsigned long long)(c3.folded - c2.folded), cp.fogLocal);
+               cp.fills, (unsigned long long)(c3.late - c2.late), cp.fogLocal, diffPx, diffZ);
+        CHECK(cp.fills == 1 && c3.late - c2.late == 1 && cp.fogLocal == 0,
+              "the depth copy's replay: %u fills, %llu after lists 4-6, %u local fog draws",
+              cp.fills, (unsigned long long)(c3.late - c2.late), cp.fogLocal);
         CHECK(diffPx == 0 && diffZ == 0,
-              "the folded replay against the depth copy's: %zu colours, %zu depths differ", diffPx,
-              diffZ);
+              "the local read's replay against the depth copy's: %zu colours, %zu depths differ",
+              diffPx, diffZ);
         free(cp.px);
         free(cp.z);
     }

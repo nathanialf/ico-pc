@@ -1203,7 +1203,7 @@ if(ICO_RUN_TESTS)
     # replay tool's --no-crack-fill and --stats line on rd_pixel's dump
     set(_crk "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack.cmake")
     set(_crk_on "rd: crack fill: on above 1x \\(scale")
-    set(_crk_tail "texels: a run of texels no draw covered, or drawn over 1/64 of the depth behind both its ends, with a texel in front at each end takes the nearer end\\). \\[dev\\] crack_fill = false turns it off")
+    set(_crk_tail "texels: a run of texels no draw covered, or drawn over 1/64 of the depth behind both its ends, with a texel in front at each end takes the nearer end's colour after lists 4-6\\). \\[dev\\] crack_fill = false turns it off")
     set(_crk_one "rd: crack fill: the reach-1 shader \\(crack_fill1_ps: the four neighbours first\\) \\(scale 2x2, reach 1x1 texels\\)")
     foreach(_c "2|2x2, reach 1x1" "4|4x4, reach 2x2" "frac|2.81[23]x2.411, reach 2x2")
         string(REPLACE "|" ";" _cl "${_c}")
@@ -1278,10 +1278,11 @@ if(ICO_RUN_TESTS)
     # device profile): the filler on by default as on every class, the old
     # "off on this tile-based GPU until measured" line denied; [dev]
     # crack_fill = true (ICO_RD_CRACK_FILL=1) the same.  rd_crack_tiler_fold
-    # (rd_crack_test 2 fold, 77 without local read): on the fog's local read
-    # the fill is drawn in the scene pass the fog keeps (one pass more than
-    # without the filler, not two; the fog by the local read in the same
-    # replay) and SCENE equals the depth copy path's byte for byte; _mali
+    # (rd_crack_test 2 fold, 77 without local read; the old fold's name): on
+    # the fog's local read the fog draws in the scene pass and the fill after
+    # lists 4-6 (one pass more than without the filler, the fill's own; the
+    # fog by the local read in the same replay) and SCENE equals the depth
+    # copy path's byte for byte; _mali
     # the same under a phone GPU's limits (ICO_VK_FAKE_LIMITS=mali, the fog's
     # local read by ICO_RD_FOG_PATH=local on the desktop row)
     set(_crk_old_off "rd: crack fill: off on this tile-based GPU")
@@ -1296,8 +1297,8 @@ if(ICO_RUN_TESTS)
     foreach(_v tiler_fold tiler_fold_mali)
         add_test(NAME rd_crack_${_v}
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=2|fold"
-                         "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail} \\(drawn inside the scene pass with the local fog\\)"
-                         -P "${_crk}")
+                         "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail}"
+                         "-DDENY=drawn inside the scene pass with the local fog" -P "${_crk}")
     endforeach()
     set_tests_properties(rd_crack_tiler rd_crack_tiler_fold PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                    ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
@@ -1329,7 +1330,7 @@ if(ICO_RUN_TESTS)
                          "-DNEED_FILE=${_crk_room}"
                          "-DNEED=rd: msaa: ${_s} samples"
                          "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail} \\(drawn after the MSAA resolve\\)"
-                         "-DEXPECT2=stats: crack fill on: 1 passes, [1-9][0-9]* pixels filled \\(1 replays counted; scale 2x2, reach 1x1 texels; 0 fogged replays above 1x not filled; 0 fills inside the scene pass with the local fog; 1 fills after the MSAA resolve\\)"
+                         "-DEXPECT2=stats: crack fill on: 1 passes, [1-9][0-9]* pixels filled \\(1 replays counted; scale 2x2, reach 1x1 texels; 0 fogged replays above 1x not filled; 1 fills after lists 4-6; 1 fills after the MSAA resolve\\)"
                          "-DDENY=rd: crack fill: not drawn on SCENE" -P "${_crk}")
         set_tests_properties(rd_crack_resolved_msaa${_s} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                                      TIMEOUT 600)
@@ -2090,6 +2091,28 @@ if(ICO_RUN_TESTS)
                              TIMEOUT 3600)
         if(_env)
             set_tests_properties(rd_fades_fold_ab PROPERTIES ENVIRONMENT "${_env}")
+        endif()
+    endif()
+    # rd_crack_late_ab (test/rd_crack_late_ab.cmake): the dumps and baselines of
+    # tools/crack_late_dumps.txt (machine-local: the gate's Enhanced 2x pass
+    # dumps and the PowerVR phone's frames at its Resolution Auto, made by the
+    # build that drew the crack fill before the fog) replayed with the fill
+    # after lists 4-6 (rd_crack_fill.c): every target within the measured bound
+    # (DIVERGENCES.md VD-20), the fill drawn once after lists 4-6, at the
+    # phone's setting one copy fewer and no pass more; SKIP as rd_vustage_ab
+    if(Python3_FOUND)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab")
+        add_test(NAME rd_crack_late_ab
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/crack_late_dumps.txt"
+                         "-DPY=${Python3_EXECUTABLE}"
+                         "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/crack_late_ab"
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack_late_ab.cmake")
+        set_tests_properties(rd_crack_late_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                             TIMEOUT 3600)
+        if(_env)
+            set_tests_properties(rd_crack_late_ab PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
     # rd_aura_box_ab (test/rd_aura_box_ab.cmake): the dumps of

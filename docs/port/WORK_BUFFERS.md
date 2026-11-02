@@ -4,7 +4,7 @@ The targets `staticBlur.c`'s effects and the screen softening draw through on th
 SCENE, their sizes at each frame width, the glow chain's rectangles in them, the column the glow's
 blur leaves on a frame wider than the PS2's, what stays in them from one frame to the next, the
 glow a tick's later presents paste from its first, the work clear that shows a texel read before it was drawn, and how the puddle's ripples sample their
-reflection block between ticks, and where the crack filler is drawn on the fog's local path, and
+reflection block between ticks, and where the crack filler is drawn (after lists 4-6), and
 (not work buffers, kept here because RENDER.md is at its size cap) how a screen sprite redrawn under
 a new key between ticks is paired, how desktop Vulkan decides on the local reads at start, how
 the shadow count is read from the stencil in one draw (and its colour left unstored while it is
@@ -23,7 +23,7 @@ sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
 | `port/render/rd_blur_border.c` | the strip drawn after the blur's first pass (`glowEdge`, from `rd__blur_post_sprite`) |
 | `port/render/rd_glow_hold.c` | the glow between ticks: WORK3 kept in WORK3_HELD at a tick's first present, the chain skipped and the copy pasted at its later ones (`rd__glow_hold`) |
 | `ico2/sugipon/src/staticBlur.c` | the effects, their rectangles in the PS2's numbers and the port's widening (`SB_X`, `sbShrinkAt`, `sbShrinkSpan`, `sbWorkRect`) |
-| `port/render/rd_crack_fill.c` | the crack fill drawn inside the local fog's pass (`rd__crack_fill`'s `local`) |
+| `port/render/rd_crack_fill.c` | the crack fill armed at the fog and drawn after lists 4-6 (`rd__crack_fill`, `rd__crack_fill_late`) |
 | `port/render/rd_profile.c`, `port/render/rd_local_probe.c` | the desktop's local reads (`RdProfile.desktopLocal`) and their start-up cost probe (`rd__local_probe`) |
 | `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
 | `port/render/rd_replay.c`, `port/render/rd_shadow_one.c`, `port/render/rd_shadow_selftest.c`, `port/shaders/blit.hlsl` | the shadow count in one draw (`shadowCountOne` picks the destination, `rd__shadow_one_draw` draws `shadow_count_ps`) and its start-up self-test (`rd__shadow_selftest`) |
@@ -355,42 +355,31 @@ different keys and the same geometry draw the tick's bars once each at full alph
 another blend FIX, nothing pairs and both fade (0x40 each half way). `testUnmatched`'s fading
 sprites differ in colour between the ticks, so they still cross-fade.
 
-## The crack fill inside the local fog's pass
+## The crack fill after lists 4-6
 
-The crack filler is described in [RENDER.md](RENDER.md#crack-filling-above-1x). Where the fog
-draws by the local read (`RD_FOG_LOCAL`: a tile-based GPU, and desktop Vulkan where its probe kept
-the local reads, [below](#the-desktops-local-read-and-its-probe)), it draws inside the scene pass,
-reading the depth as an input attachment. The copies end
-that pass, so the fill is drawn in the pass begun again over SCENE and its depth, both loaded, the
-depth readable (`rd__replay_begin_pass`, as `bindDraw` begins it), and that pass is left open:
-`doFog` keeps it (`bindDrawKeep`: colour, depth and readability match) and its local-read barrier
-orders the fill's depth writes before the fog reads them. One pass stores and loads SCENE once
-fewer than a fill pass of its own followed by the fog's reopened pass (about 36 MB a replay at
-1664 x 896). A readable depth's layout (`RENDERING_LOCAL_READ`, `port/rhi/vk/vk_cmd.c`
-(`rhi_cmd_begin_render_pass`)) is an attachment the depth tests write, as every scene draw in that
-pass does, so the fill's test-ALWAYS writes are allowed; the fill samples the copies, never the
-attachment. The count moved before the fill (it reads the depth copy alone). A pass begun without
-the depth readable is ended after the fill as on the other paths, with a line once. The fill's GPU
-time, copies and draw, is the picture effect `crack fill` (`RD_PERF_POST_CRACK`): the 10 s
-`effects:` line, the perf CSV's `gpu_crack_fill_ms` and the tool's `gpu:` line. In `--pass-times`
-the folded pass is labelled `fog`. Tests: `rd_crack_tiler`, `rd_crack_tiler_on`,
-`rd_crack_tiler_fold`, `rd_crack_tiler_fold_mali` ([TESTING.md](TESTING.md)); the fold's SCENE
-equals the unfolded replay's byte for byte.
-
-The fold saves the fill's own pass, not the break. The scene's pass still ends for the copies and
-is begun again: SCENE's colour and depth are stored at list 3's end, copied, and loaded again
-(about 123 MB a replay at 2366 x 1080, 8 bytes a depth texel). On the PowerVR phone (its
-`[dev] perf_passes` CSV, 2079 replays with the fill) that is the `snapshot` entry at 1.10 ms and the pass labelled
-`fog` at 4.10 ms (the fill, the fog and lists 4-6). Moving the fill to the scene pass's end, or
-replacing it by conservative rasterisation, does not draw the same bytes: the fog above 1x dithers
-by each pixel's own position, and lists 4-6 test against the filled depth. Both were checked and
-left undone ([RENDER.md](RENDER.md#performance-notes), "The crack fill's pass break on
-a tile-based GPU").
-
-Nothing in `rd_crack_fill.c` asks for a tile-based GPU: the fold is taken whenever `doFog` draws by
-the local read (`fogLocalFor`, which reads the profile's `fogLocal` and the fog's path, not the
-class) and SCENE's depth was made for it (`RD_DST_USAGE_LOCAL_DEPTH`), so on desktop Vulkan it
-follows the probe's verdict.
+The crack filler is described in [RENDER.md](RENDER.md#crack-filling-above-1x). SCENE's own fog
+arms it (`rd__crack_fill` from `doFog`) and the walk draws it at the start of list 7
+(`rd__crack_fill_late` from the list loop in `port/render/rd_replay.c`, every list from 7 on, the
+same replay only): the snapshot of SCENE's colour (`rd__replay_take_snap`) ends the pass open there,
+SCENE's depth goes to `RHI_STATE_DEPTH_READ` and is sampled where it is, and the fill's own pass
+binds SCENE's colour alone, loaded and stored (`fillWork`); the next pass that binds the depth
+takes it back to DEPTH_WRITE. So nothing breaks the scene pass at the fog: on the fog's local read
+(`RD_FOG_LOCAL`: a tile-based GPU, and desktop Vulkan where its probe kept the local reads,
+[below](#the-desktops-local-read-and-its-probe)) the fog and lists 4-6 draw in the scene pass the
+draws before them opened, and the pass ends at list 7, where the glow's, the depth of field's or the
+aura's passes begin anyway; on the other paths the fog's own pass and lists 4-6's are as without
+the fill. Against the fill before the fog (which ended the scene pass for copies of SCENE's colour
+and depth and began it again with both loaded, then dropped the depth's store at its end): one copy
+fewer (the depth's, 8 bytes a texel), the store and load of colour and depth at the break gone, the
+fill's pass on the colour alone, and SCENE's depth stored at the scene pass's end for the fill's
+read (the store plan's `PlanDepth.late`, [below](#the-store-plan)): about 40 to 60 MB a replay less
+at 2366 x 1080. The fill's GPU time, the colour's copy and its pass, is the picture effect `crack
+fill` (`RD_PERF_POST_CRACK`): the 10 s `effects:` line, the perf CSV's `gpu_crack_fill_ms` and the
+tool's `gpu:` line. The picture differs from the fill before the fog at the cracks only (the bound:
+[RENDER.md](RENDER.md#crack-filling-above-1x), [DIVERGENCES.md](DIVERGENCES.md) VD-20). Tests:
+`rd_crack_tiler`, `rd_crack_tiler_on`, `rd_crack_tiler_fold`, `rd_crack_tiler_fold_mali` (the
+local read: one pass more than without the filler, the fill's own; SCENE equal to the depth copy
+path's byte for byte), `rd_crack_late_ab` ([TESTING.md](TESTING.md)).
 
 At a reach of 1 texel on both axes (2x on a whole scale) the fill draws `crack_fill1_ps`
 (`CRACK_REACH_1`, selected in `rd_crack_fill.c`): the four neighbours are read first and a texel
@@ -414,7 +403,7 @@ identical but the DATE snapshot, which the stencil path does not make; and `rd_b
 draws the motion blur through the local read on lavapipe with every target equal to the CPU model.
 On an immediate-mode GPU they save, a picture: the three R8 DATE snapshot
 passes and their pass breaks, the fog's two depth transitions and two pass breaks, the motion
-blur's copy of SCENE (4.9 MB at 2x), and fold the crack fill into the fog's pass. What they may
+blur's copy of SCENE (4.9 MB at 2x), and keep the fog and lists 4-6 in the scene pass. What they may
 cost there: SCENE's colour and depth are made with the input-attachment usage and sit in the
 local-read layout (`VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR`, `port/rhi/vk/vk_cmd.c`
 (`rhi_cmd_begin_render_pass`)) for the whole scene pass, which a driver may answer by giving up the
@@ -445,7 +434,7 @@ in place where the depth is sampled), SCENE's textures made again before each bl
 (`rd__scene_textures_remake`: the input-attachment usage follows the flags), a second round only
 while the first took under 20 ms of the CPU's clock. MSAA is held off (the local reads never draw
 inside the MSAA epoch); the fog's own probes do not take these replays (`rd__fog_timing`), and the
-fog draws as in a game frame (the crack fill before it above 1x under Enhanced). Each replay's GPU
+fog draws as in a game frame (the crack fill after lists 4-6 above 1x under Enhanced). Each replay's GPU
 time is its record's (`RdPerfRecord.gpuMs`, the first timestamp to the last list's), read once two
 more replays (a clear of SCENE: `RHI_FRAMES_IN_FLIGHT`) have brought the stamps in
 (`rd__perf_gpu_ms_of`); the least of each way counts.
@@ -759,8 +748,11 @@ touches its depth or stencil:
   hardware sprite on a scaled target is a `doScreen` draw, so its DATE stays a touch;
 - a draw whose texture is a target's depth view (`RD_VIEW_DEPTH`);
 - the three shadow commands (the stencil count and the volumes' Z test);
-- the fog: the state's depth, the colour target's (the crack filler copies and fills it) and a depth
-  view the texture names;
+- the fog: the state's depth, the colour target's and a depth view the texture names; a fog that may
+  arm the crack fill (`rd__crack_fill_may`) touches SCENE's depth again at the start of the next list
+  from 7 on, as the command before it (the fill reads the depth there), so every pass begun up to
+  there keeps the store, and the last store's cut (below) does not take the pass open there
+  (`PlanDepth.late`);
 - a command type the scan does not know: every depth.
 
 Copies, exact blends and clears touch none (a clear only writes). The walk counts the same numbers
@@ -777,7 +769,7 @@ holds the last touch: `beginPass` cannot know where the walk ends a pass, so it 
 depth unless the last store (below, "Passes cut") proves the walk keeps that pass open until the
 touch is done. Not planned
 either: the passes into SCENE_MS (the MSAA epoch), and the passes begun outside `beginPass` (the new
-targets' clears, the shadow reset's own pass, the crack filler's own pass, the MSAA resolves). The
+targets' clears, the shadow reset's own pass, the crack filler's own pass (it binds no depth), the MSAA resolves). The
 colour attachments are all stored: the colour's readers (texture reads of a target, copies, the
 present, the feedback kept across ticks, a keep frame's retained DISPLAY) are not provable at a
 pass's begin. The one exception is the shadow count's colour while the count is made, which no
@@ -962,7 +954,7 @@ reads the lists with their state once and gives every command a kind (`rd__pass_
 | --- | --- | --- |
 | none | state, NOP, the overlay's text, text the present draws (`g_rd.deferText`), a sprite the fades fold leaves to the reduction | nothing drawn in the walk |
 | box | a screen-prim command on a target with its own depth: `rd__screen_area` (the vertices' box padded by two GS pixels, three with PRIM.AA1, through the texel scale and Full pixel's crop, in the scissor; a UI command with and without the mirror's flip; a full-frame sprite widened to the frame's width, as `extendFullFrame` may widen it); the aura's sprite (`RD_POST_AURA`): `fx_rect_vs` covers the target and `fx_sprite_ps` keeps the GS pixels inside its rect, so the rect padded by two GS pixels in the scissor, the box `blurSnapArea` takes for its snapshot | the fragments lie inside the box before the GPU runs |
-| whole | the VU commands (meshes, skinned meshes, grids, particles), the shadow commands, the fog with the crack filler in its pass, every other post sprite, a screen command under DATE or COLCLAMP 0's wrap, a command on a target without a depth, or whose payload cannot be read | the vertex work decides the coverage; DATE's stencil setup draws over the scissor (`rd__replay_date_take`); a crack fill reaches past every uncovered run of texels anywhere; the reduction's open border, the glow's edge strips, the blur fold and Motion blur: Smooth draw past their rect |
+| whole | the VU commands (meshes, skinned meshes, grids, particles), the shadow commands, the fog, every other post sprite, a screen command under DATE or COLCLAMP 0's wrap, a command on a target without a depth, or whose payload cannot be read | the vertex work decides the coverage; DATE's stencil setup draws over the scissor (`rd__replay_date_take`); a crack fill reaches past every uncovered run of texels anywhere; the reduction's open border, the glow's edge strips, the blur fold and Motion blur: Smooth draw past their rect |
 | end | a clear, a copy, an exact blend, a command the walk does not replay | it records outside the pass |
 
 A pass beginning on target c at command k (`rd__pass_area_begin`, from `beginPass`) takes the
@@ -1091,8 +1083,7 @@ DONT_CARE (loaded as before) when the walk is known to keep it open until comman
 later pass on that depth then begins after t, where the plan neither loads nor stores it. Known, by
 the walk's code, when:
 
-- the pass is a draw's own (`rd__last_store_arm` in `bindDrawEx` and in the crack filler's pass the
-  local fog keeps), its depth loaded (not a pending clear's pass), the plan in force, no shadow
+- the pass is a draw's own (`rd__last_store_arm` in `bindDrawEx`), its depth loaded (not a pending clear's pass), the plan in force, no shadow
   window open on the depth, no command the plan does not know after k, the depth not kept past the
   replay;
 - no MSAA epoch is wanted, the blend is fixed-function (no storage pass switch), GS state as shader
@@ -1125,11 +1116,11 @@ filler, the aura box, Motion blur: Smooth, the shadow's own pass, the pass split
 MSAA epoch) lies on a path those commands do not take; the pass area ends a pass with an area only
 at a command no area run holds. A guard (`rd__last_store_end`, in `endPass`) turns the cut off for
 the run and logs it if such a pass ends before command t is done (a missed path; the store plan's
-poison shows the lost depth in `rd_pass_cut_ab`). On the phone's frame the fog's pass (pass 9) begins
-at the fog (the crack filler's pass, folded into the scene pass with the local fog) and holds the
-depth's last touch; passes 10 to 19 bind no SCENE depth but list 11's screen sprites, whose loads
-and stores the plan drops already: with the cut the fog's pass's store goes too (13 to 20 MB, about
-1.3 to 2 ms on the phone, an estimate). Like the plan's other drops, the depth is then undefined
+poison shows the lost depth in `rd_pass_cut_ab`). Above 1x under Enhanced the crack fill reads
+SCENE's depth at the start of list 7, after the scene pass that holds the fog and lists 4-6, so that
+pass keeps its store (`PlanDepth.late`, the scan above); at 1x and under Original, where nothing
+fills, the cut takes the pass holding the depth's last touch as before: on the phone's frame at 1x
+the fog's pass, whose store (13 to 20 MB, about 1.3 to 2 ms on the phone, an estimate) goes. Like the plan's other drops, the depth is then undefined
 past the replay; a later replay that reads it before its clear is kept as the plan keeps it.
 
 **How often, on the phone.** That log's stage 6 blocks say `1.0 depth stores dropped at the

@@ -1164,6 +1164,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   printed per target by `port/render/test/png_level_diff.py`;
   some dump must fold (`rd_fades_fold_ab`; [RENDER.md](RENDER.md#the-fades-fold),
   [DIVERGENCES.md](DIVERGENCES.md) VD-27). SKIP as `rd_vustage_ab`.
+- `rd_crack_late_ab.cmake`: the crack fill after lists 4-6 against pass dumps of the build that drew
+  it before the fog: each line of `tools/crack_late_dumps.txt` (`<setting> <dump> <baseline
+  folder>`, machine-local: six corpus dumps at the gate's Enhanced 2x 4:3 against
+  `build-host/tmp/v095/after/w3/pd`, and five of the PowerVR phone's frames at its Resolution Auto,
+  2364x1080 at 2.189 under its profile's fakes, against `build-host/tmp/v098/evidence/cheap/base-phone`)
+  replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0` (the
+  baselines' own): the stats line says `crack fill on: 1 passes` and `1 fills after lists 4-6`;
+  every target within 64 levels on at most 0.2 % of its pixels (the bound, the pixels apart and the
+  largest difference printed per target; [DIVERGENCES.md](DIVERGENCES.md) VD-20); at the phone's
+  setting the stats line's copies one fewer than the baseline log's and its passes no more. A
+  missing dump or baseline is skipped; none: SKIP. The baselines are pictures of the fill before the
+  fog; another change to the picture needs baselines of its own before this test can tell the two
+  apart.
 - `rd_aura_box_ab.cmake`: the dumps of `tools/aura_box_dumps.txt` (`tools/vustage_dumps.txt`'s and
   the PowerVR phone's three F12 zips `frame-20261028-{105852-v4103,151709-v2199,173610-v4657}`;
   machine-local) replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed` with the aura's
@@ -1214,8 +1227,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   falls steeply towards their shared line) and the fog, replayed with the filler off and then
   as the environment has it, SCENE read back: at 2x, 4x and 1800 x 1080 texels (2.8125 x 2.41;
   `rd_crack`, `rd_crack_4x`, `rd_crack_frac`) the edge shows texels of the clear's fog without
-  the filler and none with it, each filled texel the colour and the depth of a drawn texel
-  within the reach on its row or column, the slit keeps every texel of the clear's fog, nothing
+  the filler and none with it, each filled texel the colour of a drawn texel within the reach on
+  its row or column after the fog (the fill drawn after lists 4-6) and its depth unchanged, the slit keeps every texel of the clear's fog, nothing
   the first replay drew changes (the fold among it), one fill pass is drawn and its count equals
   the texels changed; with `backdrop` (`rd_crack_backdrop`, `rd_crack_backdrop_4x`,
   `rd_crack_backdrop_frac`) a far plane writes Z over the frame first and the two triangles lie
@@ -1236,13 +1249,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   Under the MoltenVK report (`ICO_VK_FAKE_LIMITS=moltenvk`, a tile-based profile) `rd_crack_tiler`
   and `rd_crack_tiler_on` (`ICO_RD_CRACK_FILL=1`) find the filler on by default, as on every
   class (the old `off on this tile-based GPU` line denied). `rd_crack_tiler_fold` (`rd_crack_test
-  2 fold`, 77 without local read) checks the fold on the fog's local read: one fill, drawn inside
-  the scene pass the fog keeps (`RdCrackCounts.folded`), the fog by the local read in the same
-  replay (`fogLocalDraws`), one render pass more than without the filler besides the count's (not
-  two), and SCENE's colour and depth byte-identical to a replay on the depth copy path (the fill in
-  its own pass); `rd_crack_tiler_fold_mali` the same under `ICO_VK_FAKE_LIMITS=mali` with
-  `ICO_RD_FOG_PATH=local`. Both match the state line's `(drawn inside the scene pass with the
-  local fog)`.
+  2 fold`, 77 without local read; the name is the old fold's) checks the fog's local read: one fill,
+  drawn after lists 4-6 (`RdCrackCounts.late`), the fog by the local read in the same replay
+  (`fogLocalDraws`), one render pass more than without the filler besides the count's (the fill's
+  own: nothing breaks the scene pass at the fog), and SCENE's colour and depth byte-identical to a
+  replay on the depth copy path; `rd_crack_tiler_fold_mali` the same under
+  `ICO_VK_FAKE_LIMITS=mali` with `ICO_RD_FOG_PATH=local`. Both deny the old state line's `drawn
+  inside the scene pass with the local fog`.
   Each run's `rd: crack fill:` state line is matched (`-DEXPECT`, `-DEXPECT2`; `-DDENY` must not
   match); `rd_replay_tool_crack` runs the tool on `rd_pixel`'s dump with `--enhanced --resolution
   2x --stats --no-crack-fill` and matches `crack fill: off (the replay tool's --no-crack-fill)`
@@ -1252,7 +1265,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   --resolution 2x --aa msaa2|msaa4 --stats`: its MSAA epoch closes at the shadow count's pass in
   list 3, before the fog, so the filler draws on the resolved picture: the state line ends `(drawn
   after the MSAA resolve)`, the stats line reads `crack fill on: 1 passes, M pixels filled` with M
-  above 0, no replay left unfilled and `1 fills after the MSAA resolve`, and no `not drawn` line
+  above 0, no replay left unfilled, `1 fills after lists 4-6` and `1 fills after the MSAA resolve`, and no `not drawn` line
   (`-DNEED_FILE`: SKIP without the dump; `-DNEED=rd: msaa: N samples`: SKIP where the device does
   not offer the count, which it then draws as off: lavapipe offers 4 only)
   ([MSAA.md](MSAA.md#the-crack-filler-after-the-resolve)).

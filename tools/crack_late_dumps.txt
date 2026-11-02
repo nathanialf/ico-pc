@@ -1,0 +1,25 @@
+# Dump list for rd_crack_late_ab (port/render/test/rd_crack_late_ab.cmake: the
+# crack fill drawn after lists 4-6 against the pass dumps of the build that
+# drew it before the fog).  MACHINE-LOCAL: these are paths on the maintainer's
+# machine; the dumps and the baselines are never committed.  Missing files are
+# reported and skipped (none at all: SKIP).  One line a run:
+#   <setting> <dump> <baseline folder: one PNG a target, rd_replay_tool --pass-dump>
+# settings: enh2x43 (Enhanced 2x at 4:3, presented at 1280x960: the pass-dump
+# gate's), phone (the PowerVR phone's Resolution Auto, 2364x1080 at 2.189, its
+# profile's fakes).  Relative paths are relative to this file.
+#
+# the gate's Enhanced 2x baselines (the v0.9.5 pass dumps, byte for byte the
+# build before the change on every one of them)
+enh2x43 /primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump /primary/dev/ico-pc/build-host/tmp/v095/after/w3/pd/frame-20261007-200706-v3086-enh2x43
+enh2x43 /primary/dev/ico-dumps/frame-20261007-210236-v1985.rddump /primary/dev/ico-pc/build-host/tmp/v095/after/w3/pd/frame-20261007-210236-v1985-enh2x43
+enh2x43 /primary/dev/ico-pc/build-host/tmp/corpus/dumps/queen/rd-00100.rddump /primary/dev/ico-pc/build-host/tmp/v095/after/w3/pd/queen-rd-00100-enh2x43
+enh2x43 /primary/dev/ico-pc/build-host/tmp/corpus/dumps/puddle/rd-00100.rddump /primary/dev/ico-pc/build-host/tmp/v095/after/w3/pd/puddle-rd-00100-enh2x43
+enh2x43 /primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181358-v1279.rddump /primary/dev/ico-pc/build-host/tmp/v095/after/w3/pd/rc1-frame-20261013-181358-v1279-enh2x43
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port/keep/rd-00720.rddump /primary/dev/ico-pc/build-host/tmp/v095/after/w3/pd/rd-00720-enh2x43
+# the phone's F12 frames at its Resolution Auto (baselines made by main at
+# e2484dfdd with the fill before the fog: build-host/tmp/v098/evidence/cheap/ab.sh base phone)
+phone /primary/dev/ico-pc/dist/frame-20261028-105852-v4103.zip /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/dist-frame-20261028-105852-v4103
+phone /primary/dev/ico-pc/dist/frame-20261028-173610-v4657.zip /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/dist-frame-20261028-173610-v4657
+phone /primary/dev/ico-pc/build-host/tmp/v098/evidence/rc3/frame-20261102-091017-v15677.zip /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/rc3-frame-20261102-091017-v15677
+phone /primary/dev/ico-pc/build-host/tmp/v098/evidence/rc5/frame-20261102-122555-v3347.zip /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/rc5-frame-20261102-122555-v3347
+phone /primary/dev/ico-pc/build-host/tmp/issue-drafts/deja/frame-20261013-125037-v2227.rddump /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/frame-20261013-125037-v2227

@@ -18,9 +18,12 @@
  *     local read, never through the stencil);
  *   - a draw whose texture is a target's depth view (RD_VIEW_DEPTH);
  *   - a shadow command (the stencil count, the volumes' Z test);
- *   - the fog (its depth read; the crack filler's copy and fill of the
- *     colour target's depth): the state's depth, the colour target's and
- *     a depth view the texture names;
+ *   - the fog (its depth read): the state's depth, the colour target's and
+ *     a depth view the texture names; a fog that may arm the crack fill
+ *     (rd__crack_fill_may) touches SCENE's depth again at the start of the
+ *     next list from 7 on, where the fill reads it (as the command before:
+ *     the passes begun up to there keep the store, and the last store's
+ *     cut does not take the pass open there, PlanDepth.late);
  *   - a command the plan does not know: every depth.
  * A copy, an exact blend and a clear touch none (a clear only writes).
  * The walk counts the same ordinals (g_rdStoreOrd), and a pass begun while
@@ -109,6 +112,11 @@ typedef struct PlanDepth {
     int8_t lastList;
     uint8_t why, afterWhy;
     uint32_t passes, afterPasses;
+    /* the crack fill's read (rd_crack_fill.c, drawn at the start of list 7
+     * after the fog armed it): the ordinal it reads at, 0 none.  A pass
+     * begun before it holds the depth the fill reads, so the last store's
+     * cut (rd_pass_cut.c) does not take that pass */
+    uint32_t late;
 } PlanDepth;
 
 static struct {
@@ -124,6 +132,9 @@ static struct {
     uint8_t curType, curPost;
     int8_t curList;
     uint32_t curCmd;
+    /* a fog that may arm the crack fill: its colour target (SCENE), whose
+     * depth the fill reads at the start of the next list from 7 on; 0 none */
+    uint32_t lateTarget;
     bool effects;        /* this replay's present reads SCENE's depth (rd__effects_depth_wanted) */
     uint32_t fullPasses; /* passes with a depth the full plan does not hold */
     uint32_t n;
@@ -349,8 +360,24 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     }
     RdStateBlock st = f->startState;
     uint32_t ord = 0;
+    s_plan.lateTarget = 0;
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
+        if (l >= RD_CRACK_LATE_LIST && s_plan.lateTarget && ord > 0) {
+            /* the crack fill reads SCENE's depth here, before command ord
+             * (rd__crack_fill_late, as the walk calls it): a touch by the
+             * command before, so every pass begun up to it keeps the store */
+            s_plan.curType = RDC_POST_STUB;
+            s_plan.curPost = RD_POST_FOG;
+            s_plan.curList = (int8_t)l;
+            s_plan.curCmd = 0;
+            planTouch(s_plan.lateTarget, ord - 1u, l, true);
+            PlanDepth *p = planDepth(s_plan.lateTarget, false);
+            if (p) {
+                p->late = ord;
+            }
+            s_plan.lateTarget = 0;
+        }
         for (uint32_t i = 0; i < list->count; i++, ord++) {
             const RdCmd *c = &list->cmds[i];
             if (rd__apply_state(&st, c)) {
@@ -389,6 +416,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
                     const RdTexRec *tv = rd__tex_rec(st.tex);
                     if (tv && tv->kind == RD_TEXKIND_TARGET && tv->view == RD_VIEW_DEPTH) {
                         planTouch(tv->target, ord, l, true);
+                    }
+                    if (rd__crack_fill_may(&st)) {
+                        s_plan.lateTarget = st.color; /* SCENE: read again at list 7 */
                     }
                     break;
                 }
@@ -498,7 +528,8 @@ void rd__store_plan_pass(const RdTargetRec *d, uint32_t did, RhiLoadOp *depthLoa
             *depthLoad = dl == RHI_LOAD_LOAD ? RHI_LOAD_DONT_CARE : dl;
             *stencilLoad = sl == RHI_LOAD_LOAD ? RHI_LOAD_DONT_CARE : sl;
         }
-    } else if (s_plan.mode == 1 && rd__last_store_drop(did, p->last, dl, live, s_plan.anyTouch)) {
+    } else if (s_plan.mode == 1 && !(p->late && g_rdStoreOrd < p->late) &&
+               rd__last_store_drop(did, p->last, dl, live, s_plan.anyTouch)) {
         /* the pass holding the last touch, kept open to its end by the walk
          * (rd_pass_cut.c): loaded, not stored */
         p->dropped = true;

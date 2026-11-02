@@ -4780,15 +4780,13 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
             return;
         }
     }
-    /* above 1x the pixels no draw covered between drawn ones (rd_crack_fill.c);
-     * not while the MSAA epoch is open (its snapshot of SCENE would close
-     * it ahead of the per-sample fog below), on the resolved picture once
-     * it closed (in gameplay at the shadow count's pass, list 3) */
-    rd__crack_fill(r, tc, tz, &s_fogDepth,
+    /* above 1x the pixels no draw covered between drawn ones: armed here,
+     * drawn after lists 4-6 (rd_crack_fill.c); not while the MSAA epoch is
+     * open, on the resolved picture once it closed (list 3's shadow count) */
+    rd__crack_fill(r, tc, tz,
                    s_ms.active  ? RD_CRACK_MSAA_OPEN
                    : s_ms.ended ? RD_CRACK_MSAA_RESOLVED
-                                : RD_CRACK_MSAA_NONE,
-                   local);
+                                : RD_CRACK_MSAA_NONE);
     /* the GS's BITBLT of the Z buffer to 0x2800: the depth in place, its
      * copy, its words or the pass's own depth attachment (g_rd.fogPath);
      * the pass below binds the colour target alone but on the local read,
@@ -5797,6 +5795,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     uint32_t planBase = 0; /* the list's first command, counted as the store plan counts */
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
+        if (l >= RD_CRACK_LATE_LIST) {
+            rd__crack_fill_late(&r, s_ms.active); /* armed by the fog (rd_crack_fill.c) */
+        }
         rd__passring_list(l);
         /* the list for the blur fold's look-ahead (rd_replay_tiler.c) */
         rd__replay_fold_list(list->cmds, list->count, l, headHalf);

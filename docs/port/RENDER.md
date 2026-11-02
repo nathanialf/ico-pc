@@ -28,7 +28,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_blur.c` | staticBlur.c's sprites and the reduction's, for `rd__blur_post_sprite`; the open border's strips |
 | `port/render/rd_blur_border.c` | the post sprites' replay (`rd__blur_post_sprite`): the fold, the reduction's open border and its outer columns, SCENE's outer columns repeated after the fog |
 | `port/render/rd_blur_smooth.c` | Motion blur: Smooth: the motion blur's accumulator, its two passes and the sprite drawn over it (`rd__blur_smooth_sprite`) |
-| `port/render/rd_crack_fill.c` | the crack filler above 1x: the pixels no draw covered (or a farther surface seen through a seam) between drawn ones filled before the fog, and their count ([Crack filling above 1x](#crack-filling-above-1x)) |
+| `port/render/rd_crack_fill.c` | the crack filler above 1x: the pixels no draw covered (or a farther surface seen through a seam) between drawn ones filled after lists 4-6, and their count ([Crack filling above 1x](#crack-filling-above-1x)) |
 | `port/render/rd_shadow.c` | the shadow count on the stencil |
 | `port/render/rd_water.c` | render-to-texture blocks, target aliases, camera scopes, pool STs |
 | `port/render/rd_fog_path.c` | how the fog reads the scene depth; the fog probe and self-test |
@@ -1979,16 +1979,14 @@ painted at its own, deeper fog level. At 1x those dots are the PS2's own. Above 
 the seams of walls and floors (issue 26: rows of them on a doorway's edge and a platform's top at
 4K).
 
-Under the Enhanced preset, with SCENE's scale above 1 on either axis, `doFog` calls
-`rd__crack_fill` for SCENE's own fog after the pass before it ends (the local read's scene pass
-too) and before the fog reads the depth
-(`port/render/rd_crack_fill.c`). It copies SCENE's colour into its snapshot texture
-(`rd__replay_take_snap`) and SCENE's depth into the fog's depth copy object
-(`rd__depth_copy_take`, the copy path's own texture, made on the other paths), and draws one
-triangle over SCENE with its depth attached: `crack_fill_ps` (`port/shaders/blit.hlsl`, behind
-`blit_vs`, key `rd__crack_fill_key(0)`: test ALWAYS with writes, no blend, the stencil loaded and
-stored untouched) gives a crack the colour and the depth (SV_Depth) of the nearer end of its run.
-A texel is a crack when a run of at most R texels along its row or its column, the texel among
+Under the Enhanced preset, with SCENE's scale above 1 on either axis, SCENE's own fog arms the fill
+(`doFog` calls `rd__crack_fill`) and the walk draws it at the start of list 7, after lists 4-6
+(`rd__crack_fill_late` from the list loop, `port/render/rd_crack_fill.c`): the pass open there ends
+with SCENE's colour copied into its snapshot texture (`rd__replay_take_snap`), and one triangle is
+drawn over SCENE's colour alone: `crack_fill_ps` (`port/shaders/blit.hlsl`, behind `blit_vs`, key
+`rd__crack_fill_key(0)`: no depth attached, no blend) reads that copy and SCENE's depth itself,
+sampled where it is (`RHI_STATE_DEPTH_READ`), and gives a crack the colour of the nearer end of
+its run; the depth is not written. A texel is a crack when a run of at most R texels along its row or its column, the texel among
 them, has at each end a texel in front of it (written, and nearer by more than 1/64 of its own
 depth, `RD_CRACK_BEHIND`, `crack_front`), and the texel is either at depth 0 (no draw covered it)
 or drawn behind both ends by a step in depth (`crack_behind`): the two ends within half the drop
@@ -2005,9 +2003,35 @@ Every other texel is discarded. R on an axis is
 ceil(scale / 2), at most 3, and 0 at a scale of 1 or less (`rd__crack_fill_reach`): 1 at 2x and
 1.154, 2 at 2.8125 and 4x, 3 from 6x. The crack is under a texel wide at every scale up to 16x,
 while a slit of a GS pixel or more (2 texels at 2x, 4 at 4x) is the game's and stays. The values
-are exact copies, nothing filtered; the depth goes with the colour, so the fog paints the
-neighbour's fog level there and the draws after the fog see a surface. The texels the first pass
-drew are not touched, so the picture differs from the one without the filler only at the cracks.
+are exact copies, nothing filtered: the crack takes its neighbour's colour as the fog and lists 4-6
+left it. The texels the first pass drew are not touched, so the picture differs from the one without
+the filler only at the cracks.
+
+**Where it is drawn, and the bound.** Until the fill moved after lists 4-6 it was drawn before the
+fog with the colour and the depth (SV_Depth, test ALWAYS), so the fog then painted the crack at its
+own place in the fog's dither (`fog_lut.hlsl`: the Bayer cell from the pixel's position above 1x)
+and lists 4-6 tested and blended against the filled texel. After lists 4-6 the crack holds its
+neighbour's finished colour: the neighbour's dither cell, and lists 4-6's draws as they fell on the
+neighbour; the draws after list 7 that test the depth (the glow's mask, `staticBlur.c` `cleanUpFB`)
+see the crack's own depth. The gain is the tile-based GPU's pass break: before the fog the copies
+ended the scene pass in the middle and it was begun again (SCENE's colour and depth stored, both
+copied and loaded again, about 120 MB a replay at 2366 x 1080 with 8 bytes a depth texel); after
+lists 4-6 the pass ends where it ends anyway, only the colour is copied (20 MB read and written),
+the depth is read in place (no copy), and the fill's pass loads and stores SCENE's colour alone (20
+MB): about 40 to 60 MB a replay less, and one copy fewer. The store plan keeps the depth's store
+for that read (`port/render/rd_store_plan.c`: a fog that may arm the fill touches SCENE's depth
+again at list 7, `PlanDepth.late`; the last store's cut does not take the pass open there).
+Measured with a model on lavapipe (main's replay tool, every command of lists 7-12 turned into a
+NOP, the fill before the fog against none; `build-host/tmp/v098/evidence/cheap/crack_late_model.py`:
+the picture without the fill is the late fill's before it, and each crack takes the colour of its
+end in it, the end the earlier fill copied): at Enhanced 2x 4:3 the corpus's cracks are 0 to 0.15 %
+of SCENE's texels and 65 to 100 % of them come out the same bytes as before, most others one to
+three levels apart, the largest 49 levels on two texels of a forest frame; at the PowerVR phone's
+Resolution Auto (2364 x 1080, its profile's fakes) the phone's seven F12 frames hold 112 to 285
+cracks (0.004 to 0.011 %), 98 to 99.6 % of them the same bytes, at most three a frame apart, by up
+to 20 levels; the deja vu 48:9 frame 469 cracks (0.018 %), most of them one to seven levels apart,
+the largest 14 ([DIVERGENCES.md](DIVERGENCES.md) VD-20). ctest `rd_crack_late_ab` measures the
+whole picture against the earlier build's pass dumps.
 
 What the cracks hold, measured on lavapipe with the replay tool and copies of the dumps (the
 clear's colour or the fog table's entries patched, every command after the fog NOPed): in the
@@ -2029,45 +2053,45 @@ for a fog of any target but SCENE, without a sampleable depth (`RhiLimits.depthS
 `[dev] crack_fill = false` (`ICO_RD_CRACK_FILL=0`; the replay tool's `--no-crack-fill`). On by
 default where the device profile has `crackFill`: every class, tile-based GPUs included. Its two
 keys join the fog's family in the start-up set (`rd__enumerate_reachable_fog`). Cost above 1x: a
-copy of SCENE's colour and of its depth (12 bytes a texel copied, 99 MB at 3840 x 2160) and one
-pass reading thirteen depth texels per texel (the runs' ends, both axes) and four more where a
-drawn texel lies behind both ends of a run (the texels beyond them); the depth copy texture (8 bytes a texel) is the copy path's own and is made on the other paths.
+copy of SCENE's colour (4 bytes a texel read and written, 66 MB at 3840 x 2160) and one pass over
+SCENE's colour, loaded and stored, reading thirteen depth texels per texel (the runs' ends, both
+axes) and four more where a drawn texel lies behind both ends of a run (the texels beyond them).
 
-On the local path the fill is drawn inside the scene pass the fog's local read keeps ([the fold](WORK_BUFFERS.md#the-crack-fill-inside-the-local-fogs-pass)). Its copies still end the scene's pass there and the pass is begun again with SCENE's colour and
-depth loaded; on the PowerVR phone at Auto that break is the `snapshot` entry (1.10 ms) and the
-reload and store of the pass labelled `fog`. Why it stays where it is, and what was measured, is in
-[Performance notes](#performance-notes) ("The crack fill's pass break on a tile-based GPU").
+On the local path (the fog read by the local read inside the scene pass) nothing breaks the scene
+pass at the fog any more: the fog, lists 4-6 and every draw before them on SCENE share it, and the
+fill's snapshot ends it at list 7, where the pass to the glow or the aura begins anyway.
 
 The count, only under `rd__crack_fill_count_all` (the tests, the replay tool's `--stats`; never in
 the game, and a missing count pipeline leaves the fill uncounted): `crack_count_ps` runs the
-same test over the depth copy, 16 x 16 texels a texel of a small RGBA8 target (n & 255 in R, n >> 8
+same test over SCENE's depth (read in place, before the fill's pass), 16 x 16 texels a texel of a small RGBA8 target (n & 255 in R, n >> 8
 in G), which is copied into a readback buffer and summed once the GPU is past that replay
 (RHI_FRAMES_IN_FLIGHT replays later, as the fog's edge probe; `rd__crack_fill_wait` waits for it).
 `RdPerfRecord.crackFillPasses` and `crackCountPasses` count the passes of a replay. The lines:
 
 - `rd: crack fill: on above 1x (scale 2x2, reach 1x1 texels: a run of texels no draw covered, or
   drawn over 1/64 of the depth behind both its ends, with a texel in front at each end takes the
-  nearer end); [dev] crack_fill = false turns it off` (with ` (drawn inside the scene pass with the
-  local fog)` after it once a fill was drawn so), or `... on above 1x, not drawn at scale 1x1 (the GS's own grid); ...`, `... on above 1x,
+  nearer end's colour after lists 4-6); [dev] crack_fill = false turns it off` (with ` (drawn after
+  the MSAA resolve)` after it once a fill was drawn so), or `... on above 1x, not drawn at scale 1x1 (the GS's own grid); ...`, `... on above 1x,
   not drawn under the Original preset; ...`, `rd: crack fill: off ([dev] crack_fill = false,
   ICO_RD_CRACK_FILL=0)`: at the start and whenever SCENE is made
   again or the state changes (one line for each change);
-- `rd: crack fill: T replays filled (scale SXxSY; reach RXxRY texels; not counted in the game[; F inside the scene pass with the local fog])`
+- `rd: crack fill: T replays filled (scale SXxSY; reach RXxRY texels; not counted in the game[; F after lists 4-6][; A after the MSAA resolve])`
   in the 10 s summary (`rd__crack_fill_block`, `rd_interp.c` `presentLog`), when it filled; when
   counting, `rd: crack fill: N pixels filled over M replays counted of T filled (max K a replay;
   scale SXxSY; reach RXxRY texels)`;
 - `rd: crack fill: not drawn on SCENE at scale SXxSY: <why> (reported once)`, once a run for each
-  reason (MSAA, no sampleable depth, its pipelines missing, no memory for the copies) and
-  `rd: crack fill: the pass after the copies was not begun with the depth readable: ...` (the fold
-  refused, once), and for the
-  last three `rd: crack fill: N fogged replays above 1x not filled (...)` in the 10 s summary;
+  reason (MSAA, no sampleable depth, its pipelines missing, no memory for the colour's copy), and
+  for the last three `rd: crack fill: N fogged replays above 1x not filled (...)` in the 10 s summary;
 - `--stats`: `<dump>: stats: crack fill on|off: P passes, N pixels filled (M replays counted;
-  scale SXxSY, reach RXxRY texels; S fogged replays above 1x not filled)`.
+  scale SXxSY, reach RXxRY texels; S fogged replays above 1x not filled; F fills after lists 4-6;
+  A fills after the MSAA resolve)`.
 
 `rd_crack_test` (`rd_crack`, `rd_crack_4x`, `rd_crack_frac`, `rd_crack_backdrop`,
 `rd_crack_backdrop_4x`, `rd_crack_backdrop_frac`, `rd_crack_1x`, `rd_crack_original`,
 `rd_crack_msaa`, `rd_crack_off`, `rd_crack_depth_copy`, `rd_crack_buffer`, `rd_crack_d24s8`,
-`rd_crack_nodual`, `rd_crack_tiler`, `rd_crack_tiler_on`) and `rd_replay_tool_crack` check it ([TESTING.md](TESTING.md)).
+`rd_crack_nodual`, `rd_crack_tiler`, `rd_crack_tiler_on`, `rd_crack_tiler_fold`,
+`rd_crack_tiler_fold_mali`), `rd_replay_tool_crack` and `rd_crack_late_ab` check it
+([TESTING.md](TESTING.md)).
 
 ## Content tables
 
@@ -2625,48 +2649,26 @@ Measured or worked out, not done:
   alone), so the columns of one source pixel are one run whose ends can be solved for; a scan
   from one before the run to one after it would visit the same hits in about half the steps.
   Not done: the ends' float rounding needs its own proof that no hit falls outside them.
-- **The crack fill's pass break on a tile-based GPU** (measured, not changed). On the fog's
-  local path the fill ends the scene's pass for its two copies and begins it again with SCENE's
-  colour and depth loaded (`port/render/rd_crack_fill.c` (`fillWork`)). The PowerVR phone's perf
-  CSV (`[dev] perf_passes`), Resolution Auto, SCENE 2366 x 1080, 2079 replays with the fill
-  (`build-host/tmp/v098/evidence/perf/crack-pass-summary.py`):
-  - list 3's last SCENE pass: 2.08 ms median;
-  - the copies (`snapshot`): 1.10 ms;
-  - the pass begun again, labelled `fog` (the fill, the fog and lists 4-6, 32 draws median): 4.10 ms.
-  - The bytes the break adds: the store of colour and depth at list 3's end (10.2 + 20.4 MB at 8
-    bytes a depth texel), the copies (61 MB read and written), and the load of both again
-    (30.7 MB). Of these, only the store and load pair (61 MB) could go by placing the fill
-    elsewhere; the copies are the fill's own.
-
-  Three ways out were checked by reading. None draws the same bytes, so none is done:
-  - *The fill at the end of the scene's pass, after lists 4-6.* Two things read the filled
-    texels before that point:
-    - The fog above 1x dithers by the pixel's own position (`port/shaders/fog_lut.hlsl` (the
-      `gs_bayer8` index from `i.pos`), `port/render/rd_replay.c` (`doFog`: `fogAbove1x`, the
-      dither origin)). The fill only draws above 1x, so this always holds there. A crack filled
-      after the fog would take its neighbour's dither cell, where today the fog dithers it at
-      its own position.
-    - Lists 4-6 Z-test against the filled depth and blend onto the filled colour (the reason
-      the fill writes the depth, `rd_crack_fill.c`'s header). Only 126 of the 2079 replays had
-      nothing of lists 4-6 in that pass.
-    - Even where the move held, it would save the store and load only when the next pass is on
-      SCENE with its depth. On the phone the next pass was the aura's on AURA_WORK in 1147
-      replays and the glow's on SCENE in 868.
-  - *Conservative rasterisation instead of the fill* (`VK_EXT_conservative_rasterization`;
-    lavapipe's driver lists it, the RHI does not use it). Overestimation grows every edge of
-    every triangle, silhouettes included. The fill draws only a run between two texels in front
-    with a depth step behind both. Overestimation would draw the texels outside an object's
-    outline as well and extrapolate UVs and depth at them; along a shared edge both triangles
-    draw, so a blended draw blends there twice.
-  - *The fill's copy from the reduced SCENE copy*: not the same texels (the half-texel offset
-    found when it was tried).
-
-  A copy-free variant remains: swap SCENE's colour with its snapshot (as `blurSwapTarget` does
-  for a whole-target staticBlur sprite) and have the fill write every texel. That saves the
-  colour copy and the colour load, about 30 MB. It is not done, for three reasons. Every texel
-  would make an RGBA8 round trip through a float output, which the Vulkan specification lets
-  round to either neighbour. The UINT view that would make it exact is off on tilers (the
-  profile). And the depth copy and the depth load stay.
+- **The crack fill's pass break on a tile-based GPU** (measured, then changed: the fill is drawn
+  after lists 4-6, [Crack filling above 1x](#crack-filling-above-1x)). Before the change, on the
+  fog's local path the fill ended the scene's pass for its two copies and began it again with
+  SCENE's colour and depth loaded. The PowerVR phone's perf CSV (`[dev] perf_passes`), Resolution
+  Auto, SCENE 2366 x 1080, 2079 replays with the fill
+  (`build-host/tmp/v098/evidence/perf/crack-pass-summary.py`): list 3's last SCENE pass 2.08 ms
+  median, the copies (`snapshot`) 1.10 ms, the pass begun again (labelled `fog`: the fill, the fog
+  and lists 4-6, 32 draws median) 4.10 ms; the break added the store of colour and depth at list
+  3's end (10.2 + 20.4 MB at 8 bytes a depth texel), the copies (61 MB read and written) and the
+  load of both again (30.7 MB). The move is not the same bytes: the fog above 1x dithers by the
+  pixel's own position (`port/shaders/fog_lut.hlsl`, the `gs_bayer8` index from `i.pos`) and lists
+  4-6 Z-test and blend against the filled texel; the difference is measured (the section above,
+  [DIVERGENCES.md](DIVERGENCES.md) VD-20). Not done, by reading: conservative rasterisation
+  instead of the fill (`VK_EXT_conservative_rasterization`: overestimation grows every edge,
+  silhouettes included, extrapolates UVs and depth there and blends a shared edge twice) and the
+  fill's copy from the reduced SCENE copy (the half-texel offset found when it was tried). The
+  colour swap (SCENE's colour swapped with its snapshot as `blurSwapTarget` does, the fill
+  writing every texel) would save the colour copy too, but every texel would make an RGBA8 round
+  trip through a float output, which the Vulkan specification lets round to either neighbour,
+  and the UINT view that would make it exact is off on tilers.
   `build-host/tmp/v098/evidence/perf/crack-pass.sh` measures the pass structure with and without
   the fill on lavapipe under the PowerVR and the Qualcomm-driver profiles.
 - **The fog's cost per frame.** On lavapipe the fog of the Mac frame costs several times the
@@ -2693,11 +2695,10 @@ class and desktop Vulkan after its probe (`port/render/rd_profile.c` (`rd__profi
 `fogLocal`)); the PowerVR phone's log says `fog: depth path local (self-test: local ok 1,
 ...)`. A device whose driver offers no local read takes the copy: Qualcomm's own driver (issue
 177's Adreno: `local read no`, `fog local off`, `fog: depth path copy`), and D3D12, D3D11 and
-OpenGL, which have none. Above 1x under Enhanced the crack filler still breaks the scene's pass at the fog on
-the local path: its neighbourhood reads need copies of SCENE's colour and depth, so the pass ends,
-the copies are made, and the pass is begun again with both loaded; that pass holds the fill, the
-fog and lists 4-6 ([the fold](WORK_BUFFERS.md#the-crack-fill-inside-the-local-fogs-pass)). That is
-the phone's `fog` pass (the crack fill's pass break in the list above). On a tiler, compare the sum of the
+OpenGL, which have none. Above 1x under Enhanced the crack filler is drawn after lists 4-6: its
+neighbourhood reads need a copy of SCENE's colour, made where the scene pass ends anyway, and its
+own pass holds SCENE's colour alone ([Crack filling above 1x](#crack-filling-above-1x)). On a
+tiler, compare the sum of the
 lists, not one list or effect (the log's GPU top passes and GPU ms per replay lines now say so).
 
 ### Culling

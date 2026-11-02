@@ -3762,17 +3762,13 @@ RdPipeKeyInt rd__msaa_resolve_key(int depthOnly)
 
 RdPipeKeyInt rd__crack_fill_key(int count)
 {
-    RdPipeKeyInt k = rd__post_key(RD_VS_BLIT,
-                                  count == 1 ? RD_FS_CRACK_COUNT
-                                  : count    ? RD_FS_CRACK_FILL1
-                                             : RD_FS_CRACK_FILL,
-                                  RHI_FMT_RGBA8_UNORM);
-    if (count != 1) {
-        k.depthFmt = RHI_FMT_D32F_S8;
-        k.gs.ztst = RD_ZTST_ALWAYS;
-        k.gs.zwrite = RD_ZWRITE_ON;
-    }
-    return k;
+    /* colour alone: the fill is drawn after lists 4-6 in a pass of SCENE's
+     * colour, its depth sampled (rd_crack_fill.c fillWork) */
+    return rd__post_key(RD_VS_BLIT,
+                        count == 1 ? RD_FS_CRACK_COUNT
+                        : count    ? RD_FS_CRACK_FILL1
+                                   : RD_FS_CRACK_FILL,
+                        RHI_FMT_RGBA8_UNORM);
 }
 
 /* --------------------------------------------------------------- DATE */

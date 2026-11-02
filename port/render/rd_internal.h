@@ -1410,9 +1410,10 @@ typedef enum RdFsId {
     RD_FS_FX_ACC_RESOLVE,
     /* the crack filler above 1x (rd_crack_fill.c), behind blit_vs, each
      * texel by Load: crack_fill_ps the pixels no draw covered between two
-     * drawn ones in SCENE given the nearer one's colour and depth
-     * (SV_Depth), crack_count_ps the pixels it fills counted a 16 x 16
-     * block a texel; keys rd__crack_fill_key, in the fog's family */
+     * drawn ones in SCENE given the nearer one's colour (after lists 4-6,
+     * SCENE's depth sampled, none written), crack_count_ps the pixels it
+     * fills counted a 16 x 16 block a texel; keys rd__crack_fill_key, in
+     * the fog's family */
     RD_FS_CRACK_FILL,
     RD_FS_CRACK_COUNT,
     /* shadow_count_ps: the shadow count read from the stencil in one draw
@@ -2234,10 +2235,10 @@ int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, int path, RdDrawPass
  * with both fragment shaders, and the crack filler's two keys where its
  * shaders are made; appends to out[0..n). */
 uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
-/* The crack filler's keys (rd_crack_fill.c), blit_vs into RGBA8: count 0
- * crack_fill_ps with the scene depth (D32F_S8) attached, its test ALWAYS with
- * writes (SV_Depth), no blend; count 2 crack_fill1_ps the same; count 1
- * crack_count_ps alone. */
+/* The crack filler's keys (rd_crack_fill.c), blit_vs into RGBA8 alone (no
+ * depth attached: the fill reads SCENE's depth as a texture and writes the
+ * colour only): count 0 crack_fill_ps, count 2 crack_fill1_ps, count 1
+ * crack_count_ps; no blend. */
 RdPipeKeyInt rd__crack_fill_key(int count);
 /* the MSAA epoch's resolve into SCENE (rd_replay.c msaaEnd): msaa_resolve_ps
  * into RGBA8 with D32F_S8 (depthOnly 0), depth_resolve_ps into D32F_S8 alone
@@ -4245,7 +4246,7 @@ void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *origi
  * rd__crack_fill_shutdown  rd_shutdown: the count's target and buffer */
 typedef struct RdCrackCounts {
     uint64_t filled, counted, pixels, skipped;
-    uint64_t folded;    /* of the filled, drawn in the pass the local fog keeps */
+    uint64_t late;      /* of the filled, drawn after lists 4-6 (rd__crack_fill_late) */
     uint64_t afterMsaa; /* of the filled, drawn on the MSAA resolve's picture */
     uint32_t last, max;
     float sx, sy;

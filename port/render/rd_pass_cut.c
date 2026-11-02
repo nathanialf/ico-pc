@@ -65,15 +65,18 @@
  *    drops a depth's loads and stores in every pass begun after its last
  *    touch; the pass that holds the touch still stored it, since beginPass
  *    cannot know where the walk will end the pass.  On the phone that is
- *    the fog's pass (SCENE's depth, 13-20 MB stored, then never read).  The
+ *    the fog's pass (SCENE's depth, 13-20 MB stored, then never read; above
+ *    1x the crack fill reads it at the start of list 7, rd_crack_fill.c, and
+ *    the passes begun before that read are not cut: rd_store_plan.c
+ *    PlanDepth.late).  The
  *    pass begun at command k on colour cid and depth did, whose depth's
  *    last touch is command t >= k, has its depth and stencil stored
  *    DONT_CARE when the walk is known to keep that pass open from its begin
  *    until command t is done: then every later pass on the depth begins at
  *    a command after t, where the plan neither loads nor stores it, and
  *    nothing reads it between.  Known, by the walk's code:
- *      - the pass is a draw's own (rd__last_store_arm: bindDrawEx, the
- *        crack filler's pass the local fog keeps), its depth loaded (not
+ *      - the pass is a draw's own (rd__last_store_arm: bindDrawEx), its
+ *        depth loaded (not
  *        a clear's pass, which the flush of a pending clear records inside
  *        another pass's begin), the plan in force (mode 1), no shadow
  *        window open on the depth, no command the plan does not know
@@ -90,7 +93,7 @@
  *        begins the pass): after that begin such a draw records only into
  *        it; or
  *        command k is the fog drawing on the local read (its pass the
- *        scene pass, kept open by doFog and the crack filler's fold) with
+ *        scene pass, kept open by doFog) with
  *        no probe wanted and no edge read due (both end the pass after the
  *        draw to copy the depth), said by doFog before it begins anything
  *        (rd__last_store_fog); or
