@@ -13,6 +13,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/settings.h`, `settings.c` | the Settings menu: the pages, the entry rows, the New Game and Quit screens, the values and their setters, the saves |
 | `port/ui/settings_graphics.h`, `settings_graphics.c` | Settings > Graphics: the Graphics API and Graphics card rows' values and steps, Apply and its countdown |
 | `port/ui/settings_backup.h`, `settings_backup.c` | Settings > Extras > Back up your data and Restore from a backup: the rows' words and notes, Cross, the confirmations, the popups |
+| `port/ui/settings_states.h`, `settings_states.c` | the Save states page's host, cards' texts and pictures, actions on a slot with their second press, and F6's latch (`settings.c` builds, opens, leaves and ticks the page) |
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
 | `port/ui/ui_hint.h`, `ui_hint.c` | a line of button prompts (glyphs and words) |
 | `port/ui/strings.h`, `strings.c`, `strings_{en,fr,de,it,es,ja,ko,zh}.c` | the UI strings, one table per language; the serial notes; the Japanese, Chinese and Korean line-break rules |
@@ -1217,7 +1218,11 @@ rows and layouts as before. Extras has no Save states row: the title's way in is
 screen.
 The page itself (`UI_PAGE_STATES`, `buildStatesPage`) is always built, with no way in; its layout
 costs one layout and 30 rows of the extension's budget (`testBudget`); with the host, the pause row
-and the prompt add three rows and one layout.
+and the prompt add three rows and one layout. `port/ui/settings.c` builds the page's rows, the ways
+in and out (`statesOpen`, `statesLeave`, `statesLeaveQuiet`, `statesKeyClose`, `contProc`) and the
+tick's shell (`statesProc`); `port/ui/settings_states.c` holds the host, the cards' texts
+(`ui__states_refresh`), the pictures, the actions (`statesPerform`) and F6's latch, through the
+`ui__states_*` calls of `settings_states.h`.
 
 - **Entry from the pause menu**: under Photo mode a pause menu row `UI_STR_STATES`, in the port
   layout chained after the pause menu (`s_statesRow`, built in `buildEntries` before the journey's
@@ -1255,7 +1260,7 @@ and the prompt add three rows and one layout.
   The boxes keep Options' height, so the letters stay where they are in them and overlap
   4 lines at the narrower pitch.
 - **Entry by F6** (`ui_settings_states_key`, the keyboard only: [PLATFORM.md](PLATFORM.md#hotkeys-and-dump-zips)):
-  the press is latched (`s_stKeyAt`, the flip it came at); in play the window taps Start first. The
+  the press is latched (`settings_states.c` `s_stKeyAt`, the flip it came at); in play the window taps Start first. The
   pause menu's `entryProc` takes the latch once the menu's fade-in is done (`lt_fade_status()`
   2, after its own default restore so nothing it sets is undone) and opens the page as the row does:
   the confirm sound, `lt_switch_layout`, the page's first tick then `statesOpen` from the pause menu
@@ -1311,7 +1316,7 @@ and the prompt add three rows and one layout.
   the frame after the save when there is none ([PLATFORM.md](PLATFORM.md#saving-and-loading)). A slot's picture is made from its `png_path` when the
   path or `saved_at` changes (`statesPictureSync`: `texpack_load_png` and `rd_create_texture`,
   `ico_fopen` for the file) and released with `rd_destroy_texture` after its row is set to 0 when
-  it changes, the slot empties, the page closes (Back, or any other layout's proc: `statesRelease`)
+  it changes, the slot empties, the page closes (Back, or any other layout's proc: `ui__states_release`)
   or `ui_settings_reset` runs. `ui_settings_set_states_tex_funcs` swaps the two calls for fakes (the
   tests; without `ICO_RD` the default makes none and the pictures stay empty). A picture that cannot
   be read logs `state: the picture of slot N could not be loaded (path)` once per change.

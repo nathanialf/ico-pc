@@ -91,7 +91,8 @@ set(_ui_sources
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
-set_source_files_properties(layout_ext.c menu_font.c menu_text.c popup.c settings.c ui_list.c
+set_source_files_properties(layout_ext.c menu_font.c menu_text.c popup.c settings.c
+                            settings_states.c ui_list.c
                             ui_hint.c gallery.c photo_ui.c ui_mouse.c touch_ui.c ui_fps.c
                             touch_edit_ui.c subtitle_text.c PROPERTIES
                             COMPILE_OPTIONS "-Wno-strict-prototypes")
@@ -127,9 +128,11 @@ function(ico_ui_settings name)
     # the Edit layout page's side of the touch layout editor (touch_edit_ui.c)
     # the Graphics page's rows and Apply (settings_graphics.c)
     # Extras' Back up your data and Restore from a backup (settings_backup.c)
+    # the Save states page's cards, actions and F6 latch (settings_states.c)
     # a community translation's subtitles as text (subtitle_text.c, jimaku.c's
     # hook, over port/game's tables: subtitles_ru_bobttz.c)
-    target_sources(${name} PRIVATE settings.c settings_graphics.c settings_backup.c ui_list.c
+    target_sources(${name} PRIVATE settings.c settings_graphics.c settings_backup.c
+                                   settings_states.c ui_list.c
                                    ui_hint.c gallery.c photo_ui.c ui_mouse.c ui_mouse_geom.c
                                    ui_lang.c touch_edit_ui.c subtitle_text.c
                                    "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_bobttz.c")
