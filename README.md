@@ -333,7 +333,8 @@ The title screen has an **Options** line and a **Quit to desktop** line
 the language and 50/60 Hz questions the European PS2 disc asks at first
 start live in Options instead, and the language can change in the middle of
 a game; the
-ending credits have one more heading and name, for this project; and the
+ending credits also name this project, its translators, its contributors
+and its special thanks; and the
 pause menu shows your journey's numbers. Everything else is meant to match
 the PS2: if the picture or the timing is different from the console, that
 is a bug worth reporting. The full list of differences, written for people
@@ -348,12 +349,22 @@ contributors: [`docs/port/ARCHITECTURE.md`](https://github.com/nathanialf/ico-pc
 
 ## Special thanks
 
+### Translation
+
+- bob-ttz and cobra838, for the Russian translation.
+
+### Contributors
+
+- katsifolis, for the iOS and macOS support (iOS through LiveContainer).
+- braito4, for the audio and build fixes.
+- neetgon, for the second player's gamepad (two-player input).
+- KClough, for the arm64 Linux support.
+
+### Special thanks
+
 - Sad Origami, for the [ICO PAL HD texture pack](https://ko-fi.com/s/7c0e3e044f),
   for the support and blessing to test the port with it, and for
   suggesting the download page.
-- katsifolis, for the iOS support (through LiveContainer).
-- braito4, for the Apple-silicon macOS app.
-- neetgon, for the second player's gamepad.
 
 ## Legal and licence
 

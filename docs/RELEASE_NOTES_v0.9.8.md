@@ -6,6 +6,7 @@
 - On a keyboard, F6 opens the Save states page. During play it pauses the game first, and pressed again on the page it takes you back to the game.
 
 - **Options > Extras > Back up your data** and **Restore from a backup**, on the title screen (Windows, Linux, the Steam Deck, Mac and Android): your memory card, save states, settings and achievements in one `.zip` file you choose where to save, and put back from such a file, to keep a copy, move to another computer or phone, or go back to an earlier point. On Android this works even where the game's folder is hidden (Android 13 and later).
+- The ending's credits now also name the translators, the contributors and the special thanks.
 
 ## Fixed
 

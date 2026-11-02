@@ -865,10 +865,19 @@ headless `gallery_sweep` test drives (`port/ui/gallery.c`, `scriptParse`; [TESTI
 
 The staff roll posts the lines of the disc's `staffRollNameData` and then the port's own lines, in
 every roll, the real ending's and the Extras playback's; the disc's table is not changed
-(`port/include/ico_credits.h`, header comment). The port lines are twelve blank lines, the heading
-`{R}< Decompilation and PC Port > `, four blank lines and the name `{R}Nathanial Fine `, in the
-roll's own forms and ASCII only, because the roll draws with `font_Print`'s bitmap font
-(`port/game/credits.c` (`s_lines`)). The game's side is three host lines in
+(`port/include/ico_credits.h`, header comment). The port lines are four blocks, each twelve blank
+lines, a heading, four blank lines and its names with two blank lines between them, as the disc's
+own `< Special Thanks >` spaces its names: `{R}< Decompilation and PC Port > ` and
+`{R}Nathanial Fine `; `{R}< Translation > `, `{R}bob-ttz ` and `{R}cobra838 `;
+`{R}< Contributors > `, `{R}katsifolis `, `{R}braito4 `, `{R}neetgon ` and `{R}KClough `;
+`{R}< Special Thanks > ` (the disc's own heading text) and `{R}Sad Origami `, 84 lines in all
+(`ICO_ROLL_PORT_LAST` 83). They are in the roll's own forms and ASCII without the backtick only,
+because the roll draws with `font_Print`'s bitmap font (`port/game/credits.c` (`s_lines`, a table
+of the non-blank lines at their indices, the others blank)). The roll logs
+`credits: the port credit is posted` at the port's first heading and
+`credits: the port's last line is posted` at Sad Origami. The 84 lines take about 15 s of the roll
+at its 60 units a second (11 units a line), so the ending's later scenes come that much later
+([DIVERGENCES.md](DIVERGENCES.md) GL-7). The game's side is three host lines in
 `ico2/common/src/staffroll.c`: `staffRollStart` logs the roll's length through `ico_roll_started`,
 `staffRollNameOut` takes `ico_roll_port_line(rollNameIdx - staffRollNameDataNum)` past the disc's
 lines, and the roll ends after `staffRollNameDataNum + ico_roll_port_count()` lines.

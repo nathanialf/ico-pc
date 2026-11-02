@@ -45,7 +45,7 @@ VIDEO_MODE = "60hz"
 TPS = {"pal50": 25, "60hz": 30}[VIDEO_MODE]
 # the roll is paced in seconds: the title was back about 240 s after the
 # Cross (Main tick 815), at Main tick 7,972 at 60 Hz (6,840 at 50 Hz), with
-# the port's 18 lines; the 84 lines of v0.9.8 (the translators, the
+# 18 port lines; the 84 port lines (the translators, the
 # contributors, the special thanks) add 66 lines of 11 units at the roll's
 # 60 units a second, about 12 s.  The run allows 255 s at TPS, then 1,500
 # ticks of title and 600 of margin
