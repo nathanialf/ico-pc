@@ -912,6 +912,11 @@ static bool depthWanted(void)
     return want;
 }
 
+bool rd__effects_depth_wanted(void)
+{
+    return depthWanted();
+}
+
 static struct {
     RhiTexture out; /* the output-size D32F */
     RhiState outState;

@@ -585,7 +585,7 @@ void rd__fades_fold_scan(const RdFrame *f, int keep)
     const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     RdFadesFoldEnv env;
     memset(&env, 0, sizeof(env));
-    env.effectsDepth = g_rd.settings.effectsDepth != 0;
+    env.effectsDepth = rd__effects_depth_wanted(); /* the present reads it */
     env.depthCarried = s_depthCarried;
     env.deferText = g_rd.deferText;
     env.exact = sceneBlendExact(sc);

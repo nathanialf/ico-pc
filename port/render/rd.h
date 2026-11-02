@@ -2141,6 +2141,26 @@ enum {
     RD_VU_FUSE_WHY_COUNT
 };
 
+/* Why a planned replay dropped no depth store (RdPerfRecord.storeWhy;
+ * rd_store_plan.c rd__store_plan_end, docs/port/WORK_BUFFERS.md "The store
+ * plan"), for the depth the line names (SCENE's where the replay has it):
+ * NONE a store was dropped, or no pass had a depth; EFFECTS the present
+ * reads SCENE's depth for an effects program ([video] effects_depth with
+ * one loaded); KEEP a read before the clear or a readback kept it; STENCIL
+ * a shadow window was open on it (rd__stencil_live); ANY a command the plan
+ * does not know came later; LAST no pass with the depth bound began after
+ * its last touch; FULL more depths than the plan holds */
+enum {
+    RD_STORE_WHY_NONE,
+    RD_STORE_WHY_EFFECTS,
+    RD_STORE_WHY_KEEP,
+    RD_STORE_WHY_STENCIL,
+    RD_STORE_WHY_ANY,
+    RD_STORE_WHY_LAST,
+    RD_STORE_WHY_FULL,
+    RD_STORE_WHY_COUNT
+};
+
 /* RdPerfRecord.pipeFamily's counts: one per pipeline key family
  * (rd_internal.h RdKeyFamily) */
 #define RD_PERF_PIPE_FAMILIES 8
@@ -2359,10 +2379,12 @@ typedef struct RdPerfRecord {
      * replay's depths whose stores the plan keeps from an earlier replay on
      * (a read before the clear, a readback), and the first such depth's
      * target (storeKeptTarget, RD_PERF_TARGET_* codes) and the frame that
-     * kept it (storeKeptFrame), where this replay has that depth */
+     * kept it (storeKeptFrame), where this replay has that depth;
+     * storeWhy, in a planned replay that dropped no depth store with a
+     * depth bound, why (RD_STORE_WHY_*; NONE otherwise) */
     uint32_t storePasses, storeDepthPasses, storeDepthDropped, storeColorDropped;
     uint8_t storePlanMode;
-    uint8_t storeKept, storeKeptTarget;
+    uint8_t storeKept, storeKeptTarget, storeWhy;
     uint32_t storeKeptFrame;
     /* GS state as shader data (rd_uber.c): uber 1 while it is in force;
      * pipeFamily the pipeline cache by family at the replay's end, in

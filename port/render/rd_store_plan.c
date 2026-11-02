@@ -35,7 +35,10 @@
  * crack filler's own pass, the MSAA resolves) keep theirs.
  *
  * Past the replay a depth counts as touched (no pass drops it) when the
- * present reads SCENE's (RdSettings.effectsDepth), when a replay found it
+ * present reads SCENE's (rd__effects_depth_wanted: [video] effects_depth
+ * with an effects program loaded; the setting alone, on by default, reads
+ * nothing: keeping on it kept SCENE's stores on every phone), when a
+ * replay found it
  * read before its clear (a frame that draws on the depth the replay before
  * left: said once in the log, kept from then on; a target new this replay,
  * cleared by rd__clear_new_targets before the walk, holds no earlier
@@ -47,6 +50,14 @@
  * device that skips the write-back leaves the memory as the last stored
  * pass wrote it.
  *
+ * A planned replay that drops no depth store while a pass had a depth says
+ * why at its end (rd__store_plan_end, the first 8 then every 100th; and
+ * RdPerfRecord.storeWhy for the 10 s line): the depth's last touch (its
+ * command's type, list and index), the passes begun after it with the
+ * depth bound, and what kept the first of them (the effects depth, the
+ * keep, the shadow window, a command the plan does not know) or that none
+ * began after it.
+ *
  * ICO_RD_STORE_POISON=1 (tests): lavapipe keeps an attachment's contents
  * whatever its load and store ops say (Mesa 25.0.7, measured), so a wrong
  * plan would not show there.  With the poison every load the plan leaves
@@ -55,6 +66,7 @@
  * tile-based GPU may leave: a plan that drops a store some later pass
  * reads changes the picture (rd_store_plan_ab; ICO_RD_STORE_PLAN=all, which
  * drops every depth store and keeps the loads, must change it). */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -83,6 +95,17 @@ typedef struct PlanDepth {
      * none), for the log's "not a carried read" */
     bool fresh;
     uint32_t frameClear;
+    /* the diagnosis of a replay that drops nothing: the last touch in the
+     * frame plus one (0: none; last is PLAN_AFTER past the replay), its
+     * command's type, post kind (RDC_POST_STUB), list and index in it; why
+     * last is PLAN_AFTER (RD_STORE_WHY_EFFECTS or _KEEP); the passes begun
+     * with it bound, those begun after lastIn, and what kept the first of
+     * those (RD_STORE_WHY_*) */
+    uint32_t lastIn, lastCmd;
+    uint8_t lastType, lastPost;
+    int8_t lastList;
+    uint8_t why, afterWhy;
+    uint32_t passes, afterPasses;
 } PlanDepth;
 
 static struct {
@@ -90,6 +113,16 @@ static struct {
     bool poison;  /* ICO_RD_STORE_POISON=1 */
     bool full;    /* more depths than PLAN_DEPTHS: those not listed keep their stores */
     uint32_t anyTouch; /* a command the plan does not know, plus one (0: none) */
+    /* the last such command's type, list and index in it (the line) */
+    uint8_t anyType;
+    int8_t anyList;
+    uint32_t anyCmd;
+    /* the command the scan reads (planTouch notes it) */
+    uint8_t curType, curPost;
+    int8_t curList;
+    uint32_t curCmd;
+    bool effects;        /* this replay's present reads SCENE's depth (rd__effects_depth_wanted) */
+    uint32_t fullPasses; /* passes with a depth the full plan does not hold */
     uint32_t n;
     PlanDepth d[PLAN_DEPTHS];
     /* across replays, by texture id: the depths touched after their replay
@@ -159,10 +192,12 @@ static PlanDepth *planDepth(uint32_t id, bool add)
     p->firstClear = p->fresh ? 0u : PLAN_NONE; /* rd__clear_new_targets clears it */
     p->frameClear = PLAN_NONE;
     p->firstList = -1;
-    const bool effects = g_rd.settings.effectsDepth && id == RD_TARGET_SCENE + 1u;
+    const bool effects = s_plan.effects && id == RD_TARGET_SCENE + 1u;
     if (effects || planHas(s_plan.keep, s_plan.nKeep, p->tex)) {
         p->last = PLAN_AFTER;
+        p->why = effects ? RD_STORE_WHY_EFFECTS : RD_STORE_WHY_KEEP;
     }
+    p->lastList = -1;
     return p;
 }
 
@@ -176,6 +211,11 @@ static void planTouch(uint32_t id, uint32_t ord, int l, bool read)
     if (p->last != PLAN_AFTER) {
         p->last = ord + 1u;
     }
+    p->lastIn = ord + 1u;
+    p->lastType = s_plan.curType;
+    p->lastPost = s_plan.curPost;
+    p->lastList = s_plan.curList;
+    p->lastCmd = s_plan.curCmd;
     if (read && p->firstRead == PLAN_NONE) {
         p->firstRead = ord;
         p->firstList = l;
@@ -239,6 +279,8 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     s_plan.n = s_plan.nUndef = 0;
     s_plan.full = false;
     s_plan.anyTouch = 0;
+    s_plan.anyList = -1;
+    s_plan.fullPasses = 0;
     g_rdStoreOrd = 0;
     s_plan.mode = !g_rd.profile.storePlan ? 0 : g_rd.profile.storeAll ? 2 : 1;
     if (g_rdWin.first) {
@@ -251,6 +293,21 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     if (s_plan.mode == 0) {
         return;
     }
+    s_plan.effects = rd__effects_depth_wanted();
+    if (g_rd.settings.effectsDepth) {
+        /* once a run each way: the setting is on by default, and reads
+         * nothing without an effects program */
+        static bool s_saidOn, s_saidOff;
+        bool *said = s_plan.effects ? &s_saidOn : &s_saidOff;
+        if (!*said) {
+            *said = true;
+            rd__log(s_plan.effects
+                        ? "store plan: the present reads SCENE's depth for an effects program "
+                          "([video] effects_depth): its stores are kept"
+                        : "store plan: [video] effects_depth is on but no effects program reads "
+                          "it: SCENE's depth stores are planned");
+        }
+    }
     RdStateBlock st = f->startState;
     uint32_t ord = 0;
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
@@ -260,6 +317,10 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
             if (rd__apply_state(&st, c)) {
                 continue;
             }
+            s_plan.curType = c->type;
+            s_plan.curPost = c->type == RDC_POST_STUB ? c->b[0] : 0;
+            s_plan.curList = (int8_t)l;
+            s_plan.curCmd = i;
             switch (c->type) {
             case RDC_NOP:
             case RDC_OVERLAY_TEXT:
@@ -307,6 +368,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
                 break;
             default:
                 s_plan.anyTouch = ord + 1u; /* unknown: every depth */
+                s_plan.anyType = c->type;
+                s_plan.anyList = (int8_t)l;
+                s_plan.anyCmd = i;
                 break;
             }
         }
@@ -336,6 +400,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
         }
         planKeep(p->tex, p->target, f->number);
         p->last = PLAN_AFTER;
+        p->why = RD_STORE_WHY_KEEP;
         if (s_carriedLogged < 4) {
             s_carriedLogged++;
             const bool was = planHas(s_plan.prevDropped, s_plan.nPrevDropped, p->tex);
@@ -365,6 +430,7 @@ void rd__store_plan_pass(const RdTargetRec *d, uint32_t did, RhiLoadOp *depthLoa
     }
     PlanDepth *p = planDepth(did, true);
     if (!p) {
+        s_plan.fullPasses++;
         return; /* the plan is full: kept */
     }
     const uint32_t tex = d->depth.id;
@@ -373,6 +439,17 @@ void rd__store_plan_pass(const RdTargetRec *d, uint32_t did, RhiLoadOp *depthLoa
         s_plan.mode == 2 || (!live && p->last <= g_rdStoreOrd && s_plan.anyTouch <= g_rdStoreOrd);
     const RhiLoadOp dl = *depthLoad, sl = *stencilLoad;
     p->dropped = drop;
+    p->passes++;
+    if (p->lastIn <= g_rdStoreOrd) {
+        /* begun after the depth's last touch in the frame: dropped, or kept
+         * by the first of these that holds (the drop's own order) */
+        p->afterPasses++;
+        if (!drop && p->afterWhy == RD_STORE_WHY_NONE) {
+            p->afterWhy = live                     ? RD_STORE_WHY_STENCIL
+                          : p->last > g_rdStoreOrd ? p->why
+                                                   : RD_STORE_WHY_ANY;
+        }
+    }
     if (drop) {
         *depthStore = RHI_STORE_DONT_CARE;
         *stencilStore = RHI_STORE_DONT_CARE;
@@ -407,9 +484,119 @@ void rd__store_plan_pass(const RdTargetRec *d, uint32_t did, RhiLoadOp *depthLoa
     }
 }
 
+const char *rd__store_why_text(int why)
+{
+    switch (why) {
+    case RD_STORE_WHY_EFFECTS:
+        return "kept for an effects program ([video] effects_depth)";
+    case RD_STORE_WHY_KEEP:
+        return "keep (a read before the clear or a readback)";
+    case RD_STORE_WHY_STENCIL:
+        return "stencil live (a shadow window open on it)";
+    case RD_STORE_WHY_ANY:
+        return "anyTouch (a command the plan does not know)";
+    case RD_STORE_WHY_LAST:
+        return "last touch in the last pass";
+    case RD_STORE_WHY_FULL:
+        return "more depths than the plan holds";
+    default:
+        return "none";
+    }
+}
+
+/* a command type's words for the line */
+static const char *cmdWords(uint8_t type, uint8_t post)
+{
+    switch (type) {
+    case RDC_SCREEN:
+        return "a screen draw";
+    case RDC_MESH:
+        return "a mesh draw";
+    case RDC_SKINNED:
+        return "a skinned mesh draw";
+    case RDC_GRID:
+        return "a grid draw";
+    case RDC_PARTICLES:
+        return "a particle draw";
+    case RDC_SHADOW_RESET:
+        return "the shadow reset";
+    case RDC_SHADOW_STRIP:
+        return "a shadow volume";
+    case RDC_SHADOW_RESOLVE:
+        return "the shadow resolve";
+    case RDC_POST_STUB:
+        return post == RD_POST_FOG ? "the fog" : "a post sprite";
+    default:
+        return "a command";
+    }
+}
+
+/* a planned replay with a depth bound that dropped no store: why, in the
+ * record (the 10 s line) and in the log (the first 8, then every 100th),
+ * for SCENE's depth where the replay has it, else the first with a pass */
+static void planNothingDropped(void)
+{
+    g_rdPerf.storeWhy = RD_STORE_WHY_NONE;
+    if (s_plan.mode != 1 || g_rdPerf.storeDepthDropped != 0 || g_rdPerf.storeDepthPasses == 0) {
+        return;
+    }
+    const PlanDepth *p = NULL;
+    for (uint32_t i = 0; i < s_plan.n; i++) {
+        const PlanDepth *q = &s_plan.d[i];
+        if (q->passes && (!p || q->target == RD_TARGET_SCENE + 1u)) {
+            p = q;
+            if (q->target == RD_TARGET_SCENE + 1u) {
+                break;
+            }
+        }
+    }
+    const uint8_t why = !p               ? RD_STORE_WHY_FULL
+                        : p->afterPasses ? (p->afterWhy ? p->afterWhy : RD_STORE_WHY_ANY)
+                                         : RD_STORE_WHY_LAST;
+    g_rdPerf.storeWhy = why;
+    static uint32_t s_seen;
+    s_seen++;
+    if (s_seen > 8u && s_seen % 100u != 0u) {
+        return;
+    }
+    if (!p) {
+        rd__log("store plan: nothing dropped (frame %u): %u passes with a depth the plan does not "
+                "hold: %s (%u so far)",
+                s_plan.scanFrame, s_plan.fullPasses, rd__store_why_text(why), s_seen);
+        return;
+    }
+    char touch[96];
+    if (p->lastIn) {
+        snprintf(touch, sizeof(touch), "last touched by %s in list %d at command %u",
+                 cmdWords(p->lastType, p->lastPost), p->lastList, p->lastCmd);
+    } else {
+        snprintf(touch, sizeof(touch), "not touched in the frame");
+    }
+    char reason[160];
+    if (why == RD_STORE_WHY_ANY && s_plan.anyTouch) {
+        snprintf(reason, sizeof(reason), "anyTouch from command type %u in list %d at command %u",
+                 (unsigned)s_plan.anyType, s_plan.anyList, s_plan.anyCmd);
+    } else if (why == RD_STORE_WHY_KEEP && rd__store_plan_kept(p->target)) {
+        uint32_t frame = 0;
+        for (uint32_t j = 0; j < s_plan.nKeep; j++) {
+            if (s_plan.keep[j] == p->tex) {
+                frame = s_plan.keepFrame[j];
+            }
+        }
+        snprintf(reason, sizeof(reason), "%s since frame %u", rd__store_why_text(why), frame);
+    } else {
+        snprintf(reason, sizeof(reason), "%s", rd__store_why_text(why));
+    }
+    rd__log("store plan: nothing dropped (frame %u): %s's depth %s; %u passes began after it with "
+            "the depth bound (%u in all): %s (%u so far)",
+            s_plan.scanFrame, rd__target_name(p->target), touch, p->afterPasses, p->passes, reason,
+            s_seen);
+}
+
 void rd__store_plan_end(void)
 {
     rd__fades_fold_end(); /* a fold no reduction took (rd_fades_fold.c) */
+    planNothingDropped();
     s_plan.nPrevDropped = 0;
     for (uint32_t i = 0; i < s_plan.n; i++) {
         if (s_plan.d[i].dropped) {

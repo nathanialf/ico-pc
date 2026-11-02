@@ -198,6 +198,9 @@ static uint32_t s_storePlanned;
  * storeKept, storeKeptTarget, storeKeptFrame) */
 static uint8_t s_storeKept, s_storeKeptTarget;
 static uint32_t s_storeKeptFrame;
+/* the planned replays that dropped no depth store with a depth bound, by
+ * why (RdPerfRecord.storeWhy, RD_STORE_WHY_*) */
+static uint32_t s_storeWhy[RD_STORE_WHY_COUNT];
 /* the pipeline cache by family as the last record popped had it
  * (RdPerfRecord.pipeFamily, uber) */
 static uint16_t s_pipeFamily[RD_PERF_PIPE_FAMILIES];
@@ -229,6 +232,9 @@ bool rd_perf_pop(RdPerfRecord *out)
     s_storeDepth += s_queue[s_head].storeDepthDropped;
     s_storeColor += s_queue[s_head].storeColorDropped;
     s_storePlanned += s_queue[s_head].storePlanMode != 0;
+    if (s_queue[s_head].storeWhy < RD_STORE_WHY_COUNT) {
+        s_storeWhy[s_queue[s_head].storeWhy]++;
+    }
     if (s_queue[s_head].storePlanMode != 0) {
         s_storeKept = s_queue[s_head].storeKept;
         s_storeKeptTarget = s_queue[s_head].storeKeptTarget;
@@ -339,12 +345,28 @@ const char *rd_perf_backend_text(void)
                      "since frame %u",
                      s_storeKept, rd_perf_target_name(s_storeKeptTarget), s_storeKeptFrame);
         }
+        /* the planned replays that dropped nothing, and the reason most of
+           them had (rd_store_plan.c planNothingDropped) */
+        char none[128] = "";
+        uint32_t nNone = 0, nMost = 0;
+        int most = RD_STORE_WHY_NONE;
+        for (int w = RD_STORE_WHY_NONE + 1; w < RD_STORE_WHY_COUNT; w++) {
+            nNone += s_storeWhy[w];
+            if (s_storeWhy[w] > nMost) {
+                nMost = s_storeWhy[w];
+                most = w;
+            }
+        }
+        if (nNone) {
+            snprintf(none, sizeof(none), "; nothing dropped in %u replays, %u of them: %s", nNone,
+                     nMost, rd__store_why_text(most));
+        }
         const int k =
             snprintf(s_text + at, sizeof(s_text) - at,
                      "; stores: %.0f depth and %.0f colour stores dropped a replay of "
-                     "%.0f passes (%s%s; [dev] store_plan)",
+                     "%.0f passes (%s%s%s; [dev] store_plan)",
                      (double)s_storeDepth / n, (double)s_storeColor / n, (double)s_storePasses / n,
-                     s_storePlanned ? "planned" : "every store kept", kept);
+                     s_storePlanned ? "planned" : "every store kept", kept, none);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
     if (s_backendReplays) {
@@ -375,6 +397,7 @@ const char *rd_perf_backend_text(void)
     memset(s_fuseKept, 0, sizeof(s_fuseKept));
     s_storePasses = s_storeDepth = s_storeColor = 0;
     s_storePlanned = 0;
+    memset(s_storeWhy, 0, sizeof(s_storeWhy));
     return s_text;
 }
 

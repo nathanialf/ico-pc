@@ -3749,6 +3749,8 @@ void rd__store_plan_pass(const RdTargetRec *d, uint32_t did, RhiLoadOp *depthLoa
 void rd__store_plan_end(void);
 void rd__store_plan_readback(uint32_t target);
 bool rd__store_plan_kept(uint32_t target);
+/* RdPerfRecord.storeWhy's words (RD_STORE_WHY_*), for the 10 s line */
+const char *rd__store_why_text(int why);
 /* rd_replay.c helpers rd_upload.c shares: the alpha coverage a texture's
  * Enhanced mips keep, whether a target's passes begin readable, and
  * rd__stencil_ops with the depth copy's stencil load and store. */
@@ -3891,6 +3893,11 @@ bool rd__read_present_depth(float *dst, size_t dstSize, uint32_t *w, uint32_t *h
  * loaded (rhi_injector_name); true runs it whenever RdSettings.effectsDepth
  * is on, as with a program (tests: lavapipe has no layer). */
 void rd__force_effects_depth(bool force);
+/* The present reads SCENE's depth (the effects depth runs: the setting on
+ * and an effects program loaded, or the tests' force): the store plan and
+ * the fades fold keep that depth for it.  [video] effects_depth alone
+ * (on by default) reads nothing without a program (never on Android). */
+bool rd__effects_depth_wanted(void);
 /* The photo capture's synchronous readback of an RHI texture (RGBA8 or BGRA8,
  * w x h, tightly packed), leaving it in COPY_SRC (*state follows) */
 bool rd__read_rhi_texture(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, void *dst,
