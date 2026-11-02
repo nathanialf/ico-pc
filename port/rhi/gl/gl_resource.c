@@ -31,6 +31,8 @@ static const GlFormat s_formats[RHI_FMT_COUNT] = {
     [RHI_FMT_R32_UINT] = {GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, 4, false, false, true, false},
     [RHI_FMT_RGBA32_UINT] = {GL_RGBA32UI, GL_RGBA_INTEGER, GL_UNSIGNED_INT, 16, false, false, true,
                              false},
+    [RHI_FMT_RGBA16_UINT] = {GL_RGBA16UI, GL_RGBA_INTEGER, GL_UNSIGNED_SHORT, 8, false, false, true,
+                             false},
 };
 
 const GlFormat *gl_format(RhiFormat f)

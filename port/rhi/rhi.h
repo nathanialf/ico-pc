@@ -118,6 +118,13 @@ typedef enum RhiFormat {
      * on every device, the specification's required format support;
      * D3D12: a render target at feature level 11_0) */
     RHI_FMT_RGBA32_UINT,
+    /* four 16-bit unsigned words a texel: the aura's row sums
+     * (port/render/rd_aura_box.c, ROWBOX), a colour target and sampled
+     * (Load only), never blended (Vulkan: a colour attachment and sampled
+     * on every device, the specification's required format support;
+     * D3D11 and D3D12 at feature level 10_0 and up; OpenGL 3.0 and
+     * OpenGL ES 3.0 colour-renderable) */
+    RHI_FMT_RGBA16_UINT,
     RHI_FMT_COUNT
 } RhiFormat;
 
