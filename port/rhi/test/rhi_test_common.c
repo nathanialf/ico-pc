@@ -1436,7 +1436,12 @@ static void bindCacheCell(const Ctx *c)
     enum { UW = 8, UH = 2, CW = 4, CH = 1, REP = 3 };
 
     const RhiLimits *lim = rhi_limits();
-    const uint32_t ua = lim->uniformAlign;
+    /* the uniforms' stride: a whole TestCB (32 bytes) in steps of the
+     * device's offset alignment, which may be 16 (llvmpipe: Vulkan and
+     * OpenGL), so the second block does not write over the first one's
+     * uint value */
+    const uint32_t ua = (uint32_t)((sizeof(TestCB) + lim->uniformAlign - 1u) / lim->uniformAlign *
+                                   lim->uniformAlign);
     const RhiFormat CF = RHI_FMT_RGBA8_UNORM, UF = RHI_FMT_RGBA8_UINT;
     rhi_wait_frame();
     RhiTexture ut = rhi_create_texture(&(RhiTextureDesc){
