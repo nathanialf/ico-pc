@@ -21,6 +21,7 @@
 - Every picture now skips a few steps that drew or saved nothing anyone looked at, which saves graphics time on phones; the picture is the same.
 - On phones, in places where the light glows, and with some of the glowing outline's effects, the graphics chip no longer saves the picture's depth after the last step that uses it; the picture is the same.
 - On phones, the glow around bright light is drawn with two or three fewer full-screen steps, so it takes less of the graphics chip's time; the picture is the same.
+- The screen fades, the letterbox bars and the brightness setting are now applied while the finished picture is copied to the screen, instead of being drawn over it as extra full-screen layers. On phones this saves a full-screen step whenever nothing else is drawn over the picture. It looks the same: measured within 2 levels of the old picture (out of 255), and the same at the phone's own resolution.
 - On graphics chips that can read the picture while drawing it (such as Adreno chips with the open Turnip driver, and many Mali chips), the game prepares several times fewer graphics pipelines at its first start and blends colours exactly as the PlayStation 2 did. Other chips, including PowerVR and Adreno with Qualcomm's own driver, draw as before.
 
 ## Fixed

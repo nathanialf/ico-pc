@@ -601,10 +601,6 @@ static const struct {
        reads the target as before instead of being drawn in the clear's
        colour (an A/B; port/render/rd_const_read.c) */
     {"dev.constant_reads", "constant_reads"},
-    /* true: list 11's last full-frame lerp sprites (the fade, the
-       letterbox bars, the brightness) applied by the reduction instead of
-       drawn into SCENE (off by default; port/render/rd_fades_fold.c) */
-    {"dev.fades_fold", "fades_fold"},
     /* false: the crack filler above 1x off (an A/B), true: on, as the
        device profile has it on every class (port/render/rd_crack_fill.c
        rd__crack_fill_init) */
@@ -720,10 +716,6 @@ static const struct {
     /* port/render/rd_const_read.c rd__const_reads_on: 0 reads a cleared
        source as before */
     {"constant_reads", "ICO_RD_CONSTANT_READS"},
-    /* port/render/rd_fades_fold.c rd__fades_fold_on: 1 applies list 11's
-       last sprites in the reduction; anything else (the default) draws them
-       into SCENE */
-    {"fades_fold", "ICO_RD_FADES_FOLD"},
     /* port/render/rd_crack_fill.c rd__crack_fill_init: 0 leaves the pixels
        no draw covered above 1x to the fog, 1 fills them on a tile-based GPU
        too */

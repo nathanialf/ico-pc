@@ -2071,10 +2071,11 @@ if(ICO_RUN_TESTS)
     # rd_fades_fold_ab (test/rd_fades_fold_ab.cmake): the fade dumps
     # (tools/fades_fold_dumps.txt) and, with ICO_BOOT_DUMP_DIR, the start-up's
     # frames 115 to 123, with list 11's last full-frame lerp sprites drawn
-    # into SCENE (ICO_RD_FADES_FOLD=0) and applied by the reduction
-    # (rd_fades_fold.c), under ICO_RD_BLEND=attachment and fixed, at Original,
-    # Enhanced 2x and the phone's Resolution Auto: every target but SCENE byte
-    # for byte under the exact blend at Original, within a level elsewhere
+    # into SCENE (ICO_RD_FADES_FOLD=0, the tests' way) and applied by the
+    # reduction (rd_fades_fold.c, the default on every device), under
+    # ICO_RD_BLEND=attachment and fixed, at Original, Enhanced 2x and the
+    # phone's Resolution Auto: every target but SCENE byte for byte under the
+    # exact blend at Original, within two levels elsewhere
     # (counted, port/render/test/png_level_diff.py); SKIP as rd_vustage_ab
     if(Python3_FOUND)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fades_fold_ab")

@@ -1,5 +1,7 @@
 /* rd_fades_fold.c: the fades fold (docs/port/RENDER.md, "The fades fold";
- * [dev] fades_fold, ICO_RD_FADES_FOLD; off unless it is true / 1).
+ * on every device, no setting: docs/port/DIVERGENCES.md VD-27 holds its
+ * measured bound; ICO_RD_FADES_FOLD=0 is the tests' way to draw the
+ * sprites as before, never a player's or a config key).
  *
  * List 11 ends with the game's full-frame post sprites (rd_post.c): the
  * brightness (a white sprite, ALPHA 0x44 at alpha = the step), the fade
@@ -111,12 +113,13 @@ bool rd__fades_fold_on(void)
 {
     static int on = -1;
     if (on < 0) {
-        /* off until its A/B is byte-identical on every corpus frame (the
-           first wave build found DISPLAY a level or two apart under the
-           exact blend and a fade drawn black in rd_gsbase); ICO_RD_FADES_FOLD=1
-           ([dev] fades_fold = true) turns it on */
+        /* how the game draws list 11's last sprites everywhere: measured
+           within two levels on DISPLAY against the sprites drawn
+           (rd_fades_fold_ab, VD-27); ICO_RD_FADES_FOLD=0 draws them into
+           SCENE for the tests that read SCENE back (rd_gsbase) or hold
+           golden bytes of a frame with the sprites, and for the A/B */
         const char *e = getenv("ICO_RD_FADES_FOLD");
-        on = e && e[0] == '1';
+        on = !(e && e[0] == '0');
     }
     return on != 0 && !s_off;
 }
@@ -630,8 +633,8 @@ void rd__fades_fold_scan(const RdFrame *f, int keep)
             }
         }
         rd__log("fades fold: %u of list 11's last sprites applied by the reduction instead of "
-                "drawn into SCENE (frame %u; %s; %s; SCENE %ux%u texels, rounding %s); "
-                "[dev] fades_fold = false draws them (reported once)",
+                "drawn into SCENE (frame %u; %s; %s; SCENE %ux%u texels, rounding %s; within two "
+                "levels of the sprites drawn: DIVERGENCES.md VD-27) (reported once)",
                 plan.sprites, f->number, steps,
                 plan.scaled ? "the steps after the hardware filter (above 1x)"
                             : "the steps on SCENE's texels before the GS filter",

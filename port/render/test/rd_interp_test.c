@@ -6110,6 +6110,15 @@ static void testEyeTicks(void)
 
 int main(void)
 {
+    /* the frames here hold golden bytes (or read SCENE back) with list
+       11's last sprites drawn into SCENE; the fades fold, how the game
+       draws them, is ctest rd_fades_fold's and rd_fades_fold_ab's
+       (rd_fades_fold.c): drawn here as before */
+#ifdef _WIN32
+    _putenv_s("ICO_RD_FADES_FOLD", "0");
+#else
+    setenv("ICO_RD_FADES_FOLD", "0", 1);
+#endif
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     if (!rd__init_record_only(512, 512)) {
         printf("rd_interp_test: no context\n");

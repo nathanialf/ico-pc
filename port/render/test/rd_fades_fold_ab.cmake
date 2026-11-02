@@ -7,8 +7,8 @@
 # commands (rd_replay_tool --list --no-device: which ones end with the
 # fade, the letterbox or the brightness), then rd_replay_tool's --pass-dump
 # with --stats twice, with ICO_RD_FADES_FOLD=0 (the sprites drawn, the
-# default) and with ICO_RD_FADES_FOLD=1 (the fold), under two blends and
-# three settings:
+# tests' way to draw them as before v0.9.8) and without it (the fold: how
+# the game draws, on every device), under two blends and three settings:
 #   blends    ICO_RD_BLEND=attachment (the exact GS blend through the
 #             destination read: the sprites store the GS's floor, and so
 #             does the fold: its log line must say "the GS's floor") and
@@ -142,7 +142,7 @@ foreach(dump IN LISTS dumps)
         message(STATUS "${dump} ${s}: skipped (drawn narrower than the setting's aspect)")
         continue()
       endif()
-      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=${blend} ICO_RD_FADES_FOLD=1
+      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=${blend}
                               ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dirOn}" --stats
                               ${args_${s}}
                       RESULT_VARIABLE rcOn OUTPUT_VARIABLE outOn ERROR_VARIABLE errOn)
@@ -170,7 +170,7 @@ foreach(dump IN LISTS dumps)
       set(nOn "${CMAKE_MATCH_2}")
       if(NOT stateOff STREQUAL "off" OR NOT nOff EQUAL 0 OR NOT stateOn STREQUAL "on")
         message(SEND_ERROR "${dump} ${s} ${blend}: ICO_RD_FADES_FOLD=0 says ${stateOff} with "
-                           "${nOff} folded, ICO_RD_FADES_FOLD=1 ${stateOn}")
+                           "${nOff} folded, the default ${stateOn}")
         math(EXPR failures "${failures} + 1")
         continue()
       endif()

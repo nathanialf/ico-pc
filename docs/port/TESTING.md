@@ -1150,8 +1150,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   with `ICO_BOOT_DUMP_DIR`, the start-up's frames 115 to 123, each first listed (`--list
   --no-device`: list 11's last twelve commands in the log, so it shows which dumps end with the
   fade, the letterbox or the brightness), then replayed with `--pass-dump --stats` with list 11's
-  last full-frame lerp sprites drawn into SCENE (`ICO_RD_FADES_FOLD=0`) and with the fold
-  (`ICO_RD_FADES_FOLD=1`; its log line must name the GS's floor under the exact blend and the
+  last full-frame lerp sprites drawn into SCENE (`ICO_RD_FADES_FOLD=0`, the tests' way to draw
+  them as before) and with the fold (the default; its log line must name the GS's floor under the exact blend and the
   nearest level under the fixed-function one, and a reduction that did not take a planned fold
   fails), under
   `ICO_RD_BLEND=attachment` and `fixed`, at Original (`--present 640x480`), Enhanced 2x
@@ -1159,8 +1159,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   --full-pixel --aspect 2.189`, `ICO_RD_VU_PREPASS=0`; a narrower dump skips it): `fades fold off`
   with none folded against `on`; every target's PNG but SCENE's (which holds the picture without
   the sprites by design) byte for byte where nothing folded and under the exact blend where the log
-  says the steps met SCENE's texels before the GS filter, elsewhere within one level on every
-  channel, the channels a level apart printed per target by `port/render/test/png_level_diff.py`;
+  says the steps met SCENE's texels before the GS filter, elsewhere within two levels on every
+  channel (the measured bound, [DIVERGENCES.md](DIVERGENCES.md) VD-27), the channels a level apart
+  printed per target by `port/render/test/png_level_diff.py`;
   some dump must fold (`rd_fades_fold_ab`; [RENDER.md](RENDER.md#the-fades-fold),
   [DIVERGENCES.md](DIVERGENCES.md) VD-27). SKIP as `rd_vustage_ab`.
 - `rd_aura_box_ab.cmake`: the dumps of `tools/aura_box_dumps.txt` (`tools/vustage_dumps.txt`'s and

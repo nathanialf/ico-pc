@@ -71,7 +71,7 @@ one persistent state block. Within a list submission order is draw order; rd nev
 | 8, 9 | shine levels 2 and 3 |
 | 10 | the softening chain |
 | 11 | UI, subtitles, film noise, brightness, keep, fade, letterbox |
-| 12 | debug font; the reduction at its end (with `[dev] fades_fold = true` it also applies list 11's last full-frame lerp sprites: [The fades fold](#the-fades-fold)) |
+| 12 | debug font; the reduction at its end (it also applies list 11's last full-frame lerp sprites: [The fades fold](#the-fades-fold)) |
 
 (`port/render/rd.h`, "Lists").
 
@@ -1402,8 +1402,9 @@ draws in list 11: SCENE's colour and depth loaded and stored, about 2.65 ms at A
 phone. The fold draws them in the reduction instead: up to four steps (the lerp's colour, its
 factor C, the alpha it writes, the rows it covers) applied in the sprites' order to every SCENE
 texel the reduction reads, and the sprites are not drawn (`port/render/rd_fades_fold.c`, file
-comment; `port/render/rd_replay.c` (`doScreen`) asks `rd__fades_fold_skip`). It is an experiment,
-off by default (`[dev] fades_fold`, below).
+comment; `port/render/rd_replay.c` (`doScreen`) asks `rd__fades_fold_skip`). It is how the game
+draws them on every device and backend, with no setting (the measured bound below,
+[DIVERGENCES.md](DIVERGENCES.md) VD-27).
 
 The plan (`rd__fades_fold_plan`, the frame read once before the walk from the store plan's scan,
 `rd__store_plan_scan`; the store plan does not count a folded sprite as a touch of the depth) takes
@@ -1448,8 +1449,9 @@ In the reduction:
   Under an exact blend (`[dev] blend = attachment|storage`) the sprites store the GS's floor and
   so does the step: DISPLAY and the present byte for byte. Under the fixed-function blend (the
   default) the sprites store the nearest level (VD-7); the step adds 64 before its shift, the
-  nearest level too, but for the blender's own ties and precision: at most a level
-  ([DIVERGENCES.md](DIVERGENCES.md) VD-27);
+  nearest level too, but for the blender's own ties and precision: a level on SCENE's texel, two
+  at most on DISPLAY after the reduction's filter (measured below; [DIVERGENCES.md](DIVERGENCES.md)
+  VD-27);
 - above 1x (the hardware sprite, `rd__blur_screen_fallback`; `sprite_ps` with `ICO_DF_FOLD`,
   `port/render/rd_pixel_plan.c` (`rd__fill_draw_cb_extra`), `rd__fades_fold_screen`) the steps
   follow the filter on the sampled texel (`port/shaders/sprite.hlsl` (`sprite_fold`)): with
@@ -1468,14 +1470,22 @@ frame without the sprites; it is logged and the fold is off from then on. With t
 pause menu's layout drawn after the fade) or film noise, the keep sprite or text drawn into SCENE
 after the sprites, nothing folds. The saving on a tiler is the list 11 pass's load and store of
 SCENE's colour and depth only when list 11 then has no other draw; elsewhere one full-frame draw.
-The fold is off by default (`[dev] fades_fold = true`, `ICO_RD_FADES_FOLD=1`, turns it on) until
-`rd_fades_fold_ab` passes on every corpus frame; off, the sprites are drawn as before. Each replay's
+The fold has no setting. Measured on lavapipe against the stored pass dumps of the corpus with the
+sprites drawn (`build-host/tmp/v095/after/w3/pd`, machine-local; the fixed-function blend; `build-host/tmp/v098/evidence/cheap/ab.sh`): at Original 4:3, 25 of the
+30 corpus dumps fold 1 to 4 sprites and DISPLAY differs on 24 of them, on 1.0 to 15.3 % of its
+pixels, by one level on most of those and two at most (none more); at Enhanced 2x 4:3 and at the phone's fractional
+scales (2364x1080 at 2.189 under the PowerVR profile fakes, eight dumps wide enough; 1440x1080 at
+4:3) only the 2D frame `plain/rd-00300` folds (two sprites, steady black bars) and DISPLAY and the
+present are the same bytes. `ICO_RD_FADES_FOLD=0` is the tests' way to draw the sprites into SCENE
+as before (`rd_gsbase` reads SCENE back; `rd_present`, `rd_crt`, `rd_interp`, `rd_pixel`,
+`rd_boot_present` and `menu_text` hold golden bytes of frames with them; and `rd_fades_fold_ab`'s
+drawn arm); it is no config key. Each replay's
 record counts the sprites folded (`RdPerfRecord.fadesFolded`; `rd_replay_tool --stats`: `fades fold
 on: N sprites folded into the reduction`; the window's 10 s `pixel diet` line: `fades fold N`), the
 summary line says `fades fold on` or `off`, and the log says:
 
 ```
-rd: fades fold: 3 of list 11's last sprites applied by the reduction instead of drawn into SCENE (frame 720; the whole frame (0, 0, 0) at 127/128, bars (0, 0, 0) at 64/128; the steps on SCENE's texels before the GS filter; SCENE 512x448 texels, rounding the nearest level (the fixed-function blend)); [dev] fades_fold = false draws them (reported once)
+rd: fades fold: 3 of list 11's last sprites applied by the reduction instead of drawn into SCENE (frame 720; the whole frame (0, 0, 0) at 127/128, bars (0, 0, 0) at 64/128; the steps on SCENE's texels before the GS filter; SCENE 512x448 texels, rounding the nearest level (the fixed-function blend); within two levels of the sprites drawn: DIVERGENCES.md VD-27) (reported once)
 rd: fades fold: list 11's last sprites are drawn into SCENE: a sprite writes SCENE's depth, which the effects depth reads (frame 720; the first 8, then every 100th: 1 so far)
 rd: fades fold: list 11's last sprites are drawn into SCENE: two steps between levels on one row under the fixed-function blend (frame 720; the first 8, then every 100th: 2 so far)
 rd: fades fold: list 11's last sprites are drawn into SCENE: a step between two levels after the hardware filter (above 1x), whose rounding is not the sprite's (frame 720; the first 8, then every 100th: 3 so far)
