@@ -914,14 +914,25 @@ byte; dropping every depth store must change some target.
 ## The pass area
 
 A tile-based GPU loads a pass's attachments into its tiles when the pass begins and writes them
-back when it ends, over the pass's render area. On the PowerVR phone at Resolution Auto (SCENE
-2364 x 1080) the aura's paste of FEED128 into SCENE is a pass of its own with one sprite of
-212 x 128 GS pixels, about 979 x 270 texels, 11 % of the picture, yet it loaded and stored all of
-SCENE's colour (10.2 MB each way) and depth (10.2 to 20.4 MB each way): `aura SCENE 2366x1080 1
-draws 2.89 ms` in a play block of the phone's log of 2026-11-02, a stage 6 room. List 11's pass on SCENE is often a
-small sprite or two the same way. The render area (`RhiRenderPassDesc.area`; Vulkan
+back when it ends, over the pass's render area. The render area (`RhiRenderPassDesc.area`; Vulkan
 `VkRenderingInfo` and `VkRenderPassBeginInfo` `renderArea`, offset and extent) bounds the tiles a
-pass loads and stores.
+pass loads and stores, so a pass whose draws leave whole 32 x 32 tile columns or rows of SCENE
+untouched moves only the tiles they touch.
+
+**What it was made for, and what it finds on the phone.** On the PowerVR phone at Resolution
+Auto (SCENE 2364 x 1080) the aura's paste into SCENE is a pass of its own with one draw (`aura
+SCENE 2366x1080 1 draws 2.83 ms` in a stage 6 block of the phone's log of 2026-11-02 at 11:42), and it was
+taken for a sprite of FEED128's 212 x 128 GS pixels, 11 % of the picture. It is not: FEED128 is
+the paste's texture, and the sprite is the frame's own rect (`staticBlur.c`
+`pasteFeedBackAreaToFB` and `addWork1ToFB` draw `rect`, the frame from -w/2 to w/2, with FEED128's
+UVs stretched over it). The phone's F12 dump of that session (frame 1186) holds it as list 8 command 55, rect
+(25984,29184)-(39552,36352) at 848 x 448 GS pixels, UV 8..3400 x 8..1800 (FEED128's 212 x 112
+texels); its blended twin holds the same. List 11's pass on SCENE starts with a full-frame sprite
+(command 26, (25984,29152)-(39552,36384)). So every pass on SCENE in that frame either draws
+over the whole picture or holds a VU draw, the fog or a clear's load, and no pass spares a tile:
+that log's `0.0 passes with an area` in every 10 s block is the area doing what it should, not
+a missed pass. The 10 s line and the replay tool now say why each pass on SCENE stayed whole
+(below); `its draws cover the picture` is the paste's and the fades' reason.
 
 **Why the picture is the same.** The Vulkan specification (`VkRenderPassBeginInfo`, and
 `VkRenderingInfo` the same) restricts "the effects of attachment load, store, and multisample
@@ -968,35 +979,53 @@ one tile column or row narrower than the target. On by default on the tile-based
 D3D11 and OpenGL; `[dev] pass_area = auto|on|off` (`ICO_RD_PASS_AREA`, [CONFIG.md](CONFIG.md)) over
 it.
 
+**Why a pass stays whole.** `rd__pass_area_begin` counts every pass on a target with its own
+depth that it leaves whole, by the first reason that holds (`RdPerfRecord.passAreaWhy`, rd.h
+`RD_AREA_WHY_*`; `rd__pass_area_why` for one command):
+
+| reason | words in the lines | when |
+| --- | --- | --- |
+| SCAN | no scan of its commands | no scan this replay (a pass window), or the command it began at is on another target or size than the scan saw |
+| CLEAR | a clear as its load | it takes a pending clear (colour, depth or stencil) as its load op |
+| MSAA | MSAA | in the MSAA epoch |
+| STORAGE | a storage pass | the exact blend's storage pass |
+| BEGIN | begun where no area starts | begun at a command that is not a box on its target (a clear, a fold's or a flush's draw) |
+| VU, FOG, SHADOW, POST, SCREEN | a 3D draw, the fog, a shadow command, a post sprite, a flat draw under DATE or the wrap | the first whole command of its run (at its start or before its end) |
+| EMPTY | nothing drawn | its boxes are empty |
+| LARGE | its draws cover the picture | the union, out to whole tiles, leaves no tile column or row of the target out |
+
 **The cost and the saving.** The scan is one walk of the lists' state with a box for each screen
-command and aura sprite on SCENE (none where the area is off); the passes hold the same draws. The
-paste's sprite at about 979 x 270 texels from 693, 405 (that frame's estimate) comes out to
-about 1024 x 320 from 672, 384 in whole tiles, 320 of SCENE's 2516 tiles (13 %), so about 87 % of
-the 23 to 30 MB that pass moves each way is not moved: 40 to 52 MB a picture both ways, 0.7
-to 0.9 ms at the device's 56 MB a millisecond, and more than the pass's measured 2.89 ms at the 10
-MB a millisecond the earlier passes on that phone came to, so most of those 2.89 ms (UNVERIFIED:
-the phone's 10 s lines and pass list measure it).
+command and aura sprite on SCENE (none where the area is off); the passes hold the same draws. On
+the phone's stage 6 frames it saves nothing (above); a pass of flat sprites that leave tile columns
+or rows of SCENE untouched (a menu's or a caption's) loads and stores only the tiles they touch.
 
 **The lines.**
 
       rd: pass area: on (a tile-based GPU's default; [dev] pass_area = off keeps every pass whole): a pass on the picture whose draws are all flat sprites and shapes with a known place loads and stores only the 32 x 32 tiles they touch (the same picture)
       rd: profile: ...; pass area: on
       rd: pass area: SCENE in list 8 (the aura's sprite): WxH at X,Y of 2364x1080 (N of 2516 tiles loaded and stored; the first 8 such passes a run are named)
-      window: per replay ...; P passes with an area (M % of the picture's tiles loaded, K ended early)
+      window: per replay ...; P passes with an area (M % of the picture's tiles loaded, K ended early); W passes kept whole a replay (A its draws cover the picture, B a 3D draw, C a clear as its load, ...)
 
-The replay tool's `--stats` prints `pass area on|off: N passes with an area (T of their A tiles
-loaded), E ended early`, and `--pass-times` adds ` area WxH at X,Y` after a pass's size
-(`RdPerfPass.ax`, `ay`, `aw`, `ah`).
+The kept-whole clause names only the reasons that held in the block, as means a replay, and is
+left out when no pass on SCENE was whole. The replay tool's `--stats` prints `pass area on|off: N
+passes with an area (T of their A tiles loaded), E ended early; W passes kept whole (A its draws
+cover the picture, ...)` (whole counts for the replay), and `--pass-times` adds ` area WxH at X,Y`
+after a pass's size (`RdPerfPass.ax`, `ay`, `aw`, `ah`).
 
 **The tests.** `rhi_vk` (`renderAreaCell`): a pass with an area over a cleared target leaves the
 texels outside it as they were after a draw over the whole target, its scissor set to the whole
 target and cut, and a CLEAR load with an area clears the area alone, on both pass paths.
 `rd_state` (`rd_state_pass_area_test.inc`): the boxes of a screen sprite and the aura's sprite at 1x,
 at the phone's 848 x 448 GS frame in 2364 x 1080 texels and under Full pixel's crop hold every texel
-they cover within the pad, and the run of a pass at the sprite. `rd_pass_area_ab` replays the
-corpus and the phone's frames with the areas off and on (`ICO_RD_PASS_AREA=0`, `1`; lavapipe clips
-to the area): every target byte for byte, some pass with an area on the phone's frames
-([TESTING.md](TESTING.md)).
+they cover within the pad, and the run of a pass at the sprite, with its reasons (none at the
+sprite, a 3D draw before a grid); the phone's paste and fade as the game records them (the frame's
+rect, a full-frame sprite) are boxes of the whole target whose passes stay whole because their draws
+cover the picture; the reasons' words. `rd_pass_cut` (its fourth cell): on lavapipe with the area
+forced on, a pass taking a clear and a pass of full-frame sprites counted as kept whole for those
+reasons, none with the area off. `rd_pass_area_ab` replays the corpus and the phone's frames with
+the areas off and on (`ICO_RD_PASS_AREA=0`, `1`; lavapipe clips to the area): every target byte
+for byte, and on the phone's frames at its setting some pass with an area or `its draws cover the
+picture` among the kept-whole reasons ([TESTING.md](TESTING.md)).
 
 ## Passes cut
 
@@ -1056,11 +1085,20 @@ the walk's code, when:
 - no MSAA epoch is wanted, the blend is fixed-function (no storage pass switch), GS state as shader
   data is off, there is no pass split and no pass window;
 - command k is a screen-prim or VU draw on cid with did bound, DATE off, COLCLAMP 0's wrap off, not
-  textured from a target (after `bindDrawEx` begins its pass such a draw records only into it), or
-  the fog on the local read with no probe wanted and no edge read due (`rd__last_store_fog`, said by
-  `doFog` before it begins anything: those two end the pass after the draw to copy the depth);
+  sampling its own target or a depth view (after `bindDrawEx` begins its pass such a draw records
+  only into it; a texture of another target was made readable by `prepareDraw` before the pass
+  began), or the fog on the local read with no probe wanted and no edge read due
+  (`rd__last_store_fog`, said by `doFog` before it begins anything: those two end the pass after the
+  draw to copy the depth);
 - every command after k up to t is a state change, a NOP, overlay text, or such a draw on cid with
-  did bound.
+  did bound whose texture, if it samples another target's colour, is that target's in SHADER_READ
+  when the pass begins (`drawOn`).
+
+The last condition is exact: `resolveTexture` ends the open pass for another target's colour only
+to put it in SHADER_READ (`endPassFor`, then the barrier); from the pass's begin to t only draws on
+cid with did bound run, and a draw's barriers only put its own texture in SHADER_READ, so a target
+already there stays there and no draw between ends the pass for it. A target not there yet (drawn
+since its last read) still ends the pass, and the pass begun at that draw is the one taken.
 
 Every other place the walk ends or begins a pass (`endPass`, `beginPass`, `takeSnap`,
 `dateSnapshot`, `doScreenWrap`, `doExact`, `doCopy`, the shadow commands, the fog's other paths,
@@ -1076,6 +1114,31 @@ and stores the plan drops already: with the cut the fog's pass's store goes too 
 1.3 to 2 ms on the phone, an estimate). Like the plan's other drops, the depth is then undefined
 past the replay; a later replay that reads it before its clear is kept as the plan keeps it.
 
+**How often, on the phone.** That log's stage 6 blocks say `1.0 depth stores dropped at the
+last touch a replay` with `fog 1.0` in `passes per replay`: every fogged replay. The block that
+read `0.3` (`0.5 clears taken by the next pass, 0.2 clears skipped, 0.3 depth stores dropped`)
+holds the title's menu and the load into stage 6, and its `passes per replay` has `fog 0.3`: the
+cut fired at every fogged replay there too; the rest of the replays were menu pictures and
+pictures shown again with no fog pass and no SCENE depth after its last touch. In that F12
+frame the fog is list 4 command 50 and the commands between it and the depth's last touch are one
+untextured screen sprite and 65 VU draws on SCENE with its depth, all of them image-textured, no
+DATE: the fog's pass is the one taken. Only the title block before it (stage 1: `fog 0.3`, `0.2`
+dropped) leaves a third of the fogged replays' stores kept for a reason the log did not say; the
+reasons line below says it from now on.
+
+**Why a last store is kept.** `rd__last_store_drop` notes, for each depth, the reason the last
+pass begun with it bound before its last touch was done could not drop the store, and
+`rd__last_store_replay_end` (from `rd__store_plan_end`) counts it once a depth a replay
+(`RdPerfRecord.lastStoreWhy`, rd.h `RD_LAST_WHY_*`): no scan; a setting (MSAA, the exact blend,
+GS state as shader data, the pass split, a pass window); a pass begun outside a draw on its colour
+and depth (a post sprite's, a clear's, a fold's); the depth cleared, not loaded; a shadow window
+open; a command the store plan does not know; and the first command at the pass's start or
+before the touch the walk may end it at: a DATE draw, a draw reading its own target, a depth or a
+target not ready, COLCLAMP 0's wrap, a post sprite, the fog with a probe, an edge read or not on
+the local read (or not at the pass's start), a draw on another target, a clear, a copy or another
+action. A depth whose last touch's pass dropped its store, or whose store the plan keeps past the
+replay, is not counted.
+
 **The lines.**
 
       rd: pass cut: a clear carried past a source's barrier into the next pass on its target: on (a tile-based GPU's default; [dev] clear_carry = off draws it as before)
@@ -1084,13 +1147,15 @@ past the replay; a later replay that reads it before its clear is kept as the pl
       rd: pass cut: DISPLAY's clear drawn as the load of its next pass, not a pass of its own (reported once)
       rd: pass cut: AURA_WORK's clear not drawn (frame's command N: nothing reads it before it is cleared again; the sprite after it took its colour) (K so far)
       rd: pass cut: a pass whose depth store was dropped at the last touch ended at command N, before the touch at command T was done: ... the cut is off for the rest of the run ([dev] last_store) (K so far)
-      window: ...; passes cut: C clears taken by the next pass, S clears skipped, D depth stores dropped at the last touch a replay ([dev] clear_carry, clear_skip, last_store)
+      window: ...; passes cut: C clears taken by the next pass, S clears skipped, D depth stores dropped at the last touch a replay ([dev] clear_carry, clear_skip, last_store); K last stores kept a replay (A a DATE draw, B a post sprite, ...)
 
 The skip's line is the first 8, then every 100th; the guard's the same. The 10 s `stores:` clause
 counts the last store's drops among the depth stores dropped. The replay tool's `--stats` prints
 `pass cut: clear carry on|off: C clears taken by the next pass; clear skip on|off: S clears
-skipped; last store on|off: D depth stores dropped at the last touch` (`RdPerfRecord.clearsCarried`,
-`clearsSkipped`, `storeLastDropped`).
+skipped; last store on|off: D depth stores dropped at the last touch; K last stores kept (A a DATE
+draw, ...)` (`RdPerfRecord.clearsCarried`, `clearsSkipped`, `storeLastDropped`, `lastStoreWhy`). The
+kept clause, in the 10 s line and the tool's, names only the reasons that held and is left out
+when none did.
 
 **Not cut: the reduction into the present.** The present (`rd__present_record`,
 `port/render/rd_present.c`) is not a copy of DISPLAY at its own pixels on the phone, so the
@@ -1109,7 +1174,10 @@ own clear pass instead.
 **The tests.** `rd_pass_cut` (`port/render/test/rd_pass_cut_test.c`, lavapipe, under the poison): the
 carry on frames built there (one pass fewer, the same bytes), the skip's decision and its lazy clear
 (drawn on a read, at a later replay that draws on the target first, forgotten after one that clears
-it), the last store dropped and kept where a command the cut does not take lies between.
+it), the last store dropped and kept where a command the cut does not take lies between, with the
+DATE frame's reason counted and the others' none, a draw reading a target made readable by the
+pass's first draw kept in the pass (the store dropped there, the guard not tripped), and the pass
+area's reasons (its fourth cell).
 `rd_pass_cut_ab` replays the corpus and the phone's frames (`tools/pass_cut_dumps.txt`) with every
 cut off, each alone and all on: every target and the present byte for byte, the passes fewer by the
 clears carried and skipped, the depth stores dropped more by those at the last touch, each cut

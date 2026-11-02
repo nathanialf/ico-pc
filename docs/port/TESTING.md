@@ -1079,7 +1079,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   last store: list 0 clears SCENE and draws Z-tested, list 4 draws on WORK3, then on SCENE a sprite,
   the depth's last touch and another sprite: `storeLastDropped` 1 on, 0 off, one depth store more
   dropped, SCENE byte for byte; a copy or a draw on another target between: 1 (the pass begun at
-  the touch), a DATE draw or a draw textured from a target between: 0; no validation error.
+  the touch), a DATE draw between: 0 with one last store counted as kept for a DATE draw
+  (`lastStoreWhy`, its words `1 last stores kept (1 a DATE draw)`), none counted for the others; a
+  draw textured from WORK3 between while WORK3 is not readable: 1 (the pass begun at that draw); the
+  pass's first draw and one between textured from WORK3 (readable from the first on): 1, the pass
+  begun at the first draw, and the guard's frame after it drops it again; the pass area forced on:
+  list 0's pass (it takes SCENE's clear) and list 4's (full-frame sprites, one the frame's height)
+  counted as kept whole (`passAreaWhy`: `2 passes kept whole (1 a clear as its load, 1 its draws
+  cover the picture)`), none with the area off, SCENE byte for byte; no validation error.
 - `rd_pass_cut_ab.cmake`: the dumps of `tools/pass_cut_dumps.txt` (`tools/pass_area_dumps.txt`'s;
   machine-local, a missing one skipped) replayed with `--pass-dump --stats` under
   `ICO_RD_BLEND=fixed`, `ICO_RD_STORE_PLAN=1` and `ICO_RD_STORE_POISON=1` five times: every cut off
@@ -1161,8 +1168,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   device: lavapipe clips every draw to the area, so an area that misses a texel shows), at the
   phone's Resolution Auto (as `rd_aura_box_ab`) and at Enhanced 2x 4:3: every PNG byte for byte,
   `pass area off: 0 passes` against `on`, the same draws, the on run's passes the off run's plus
-  at most its passes ended early; the phone's frames (`frame-20261028-*`, `frame-20261102-*`) must
-  give some pass an area at the phone's setting (`rd_pass_area_ab`). SKIP as `rd_vustage_ab`.
+  at most its passes ended early; the phone's frames (`frame-20261028-*`, `frame-20261102-*`, the
+  phone's F12 frame of 2026-11-02 11:42 and its blended twin among them) at the phone's setting
+  must give some pass an area or name `its draws cover the picture` among the passes kept whole
+  (the tool's `--stats` clause; the aura's paste and list 11's fades are full-frame sprites, so the
+  stage 6 frames have no area to give) (`rd_pass_area_ab`). SKIP as `rd_vustage_ab`.
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's
@@ -1624,7 +1634,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   on FEED128 and the sprite under DATE the whole target, a clear the end of a pass's commands; the
   pass begun at the sprite holds its box and the aura's, ends before the FEED128 draw, and its area
   is their union out to whole 32 x 32 tiles; none for a pass begun at a sprite the grid follows;
-  the switch's words), dump version 14's ticks' cameras (none in a
+  `rd__pass_area_why`: none at the sprite, a 3D draw at the sprite before the grid and at the grid;
+  the phone's paste (the aura's sprite over the frame's rect, FEED128's UVs) and list 11's
+  full-frame fade, at 1x, the phone's frame and Full pixel: boxes of the whole target, the paste's
+  run ending before the next FEED128 sprite, both kept whole because their draws cover the picture;
+  `rd_perf_why_text`'s words for one replay and a mean over two, and cut to a small buffer; the
+  switch's words), dump version 14's ticks' cameras (none in a
   tick's frame, a blended frame's round-trip), list order, defaults, state leakage,
   the alpha test's plan for every Z write, AFAIL, ATE and alpha mask (one draw where the test decides
   nothing, `testAlphaMerge`), the start-up set's VU keys by variant and with the VU vertex

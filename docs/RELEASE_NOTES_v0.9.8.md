@@ -16,7 +16,7 @@
 - At high resolutions (on phones at Resolution Auto or 2x), the pause menu's and the Options pages' words are drawn from letters prepared once instead of being worked out again for every pixel of every picture, so the menus take less of the graphics chip's time. They look exactly as before.
 - On phones, the glowing outline around Yorda and the shadows (the aura) is worked out in two shorter steps instead of one long one per pixel, which takes less of the graphics chip's time; the picture is the same.
 - On phones, the step that works out Yorda's and Ico's shadows reads less per pixel and no longer makes the graphics chip load and save a full-size picture that nothing looks at, so it takes less of the graphics chip's time; the picture is the same.
-- On phones, a picture step that draws into a small part of the screen (such as the glowing outline's last step) now has the graphics chip load and save only that part, which saves time on every picture; the picture is the same.
+- On phones, a picture step that draws into only a part of the screen now has the graphics chip load and save only that part; the picture is the same. Most steps during play cover the whole screen, and those stay as they were.
 - Every picture now skips a few steps that drew or saved nothing anyone looked at, which saves graphics time on phones; the picture is the same.
 - On graphics chips that can read the picture while drawing it (such as Adreno chips with the open Turnip driver, and many Mali chips), the game prepares several times fewer graphics pipelines at its first start and blends colours exactly as the PlayStation 2 did. Other chips, including PowerVR and Adreno with Qualcomm's own driver, draw as before.
 
