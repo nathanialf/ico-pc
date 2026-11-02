@@ -19,8 +19,8 @@
 #   ico_ui_font_rd      font.c alone with ICO_RD, for the render tests and
 #                       rd_replay_tool
 #
-# The font files (Arimo, Noto Sans JP's subset for the characters Arimo
-# has no glyph for: the Japanese text, the language names, the button
+# The font files (Arimo's Latin and Cyrillic subset, Noto Sans JP's subset
+# for the characters Arimo has no glyph for: the Japanese text, the language names, the button
 # marks, Noto Sans KR's for the Hangul neither has: the Korean text, and
 # Noto Sans TC's for the Chinese text's ideographs) are
 # embedded as C arrays generated at build time (embed_font.cmake), so the
