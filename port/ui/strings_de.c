@@ -592,6 +592,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_SKIP_OPENING] = "Vorspann überspringen",
     [UI_STR_OPT_SKIP_OPENING_NOTE] =
         "Das Spiel beginnt im Titelbildschirm, ohne das Sony-Schild und ohne die Eröffnungsszene. Gilt ab dem nächsten Start.",
+    [UI_STR_OPT_SECOND_CARD] = "Zweite Memory Card",
+    [UI_STR_OPT_SECOND_CARD_NOTE] =
+        "Aus: eine Memory Card, wie im Original. Ein: eine zweite Karte mit zehn weiteren Spielständen; Speichern und Laden bieten beide an.",
     [UI_STR_OPT_AA] = "Kantenglättung",
     [UI_STR_OPT_AA_NOTE] =
         "Glättet gezackte Kanten. Supersampling zeichnet 4mal (2x) oder 16mal (4x) so viele Pixel; wähle weniger, wenn die Anzeige auf 30 fällt.",

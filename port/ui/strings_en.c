@@ -586,6 +586,9 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_SKIP_OPENING] = "Skip the opening",
     [UI_STR_OPT_SKIP_OPENING_NOTE] =
         "The game starts at the title screen, without the Sony sign and the opening scene. Takes effect at the next start.",
+    [UI_STR_OPT_SECOND_CARD] = "Second memory card",
+    [UI_STR_OPT_SECOND_CARD_NOTE] =
+        "Off: one memory card, as the original. On: a second card with ten more saves; the game’s save and load screens offer both.",
     [UI_STR_OPT_AA] = "Anti-aliasing",
     [UI_STR_OPT_AA_NOTE] =
         "Smooths jagged edges. Supersampling draws 4 times (2x) or 16 times (4x) the pixels; lower it if the counter drops to 30.",

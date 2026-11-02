@@ -3436,6 +3436,86 @@ static void testSkipOpening(void)
     gFlagGameClear = 0;
 }
 
+/* Gameplay > Second memory card ([gameplay] second_memory_card): a row from
+   the title and the pause menu after Skip the opening, Off by default; a step
+   turns it on at once (the listener, which main_host.c points at the card's
+   port 1: host_config.h ico_host_set_second_card, mc_host.h
+   ico_mc_host_second_card_changed) and sets the key, the saved file has it,
+   its note shows on the cursor, a step back takes the card out, and the page
+   with the game finished (every row shown) still fits */
+static int s_cardCalls, s_cardLast = -1;
+
+static void cardListener(int on)
+{
+    s_cardCalls++;
+    s_cardLast = on;
+}
+
+static void testSecondCard(void)
+{
+    char p[1100];
+
+    gFlagGameClear = 0;
+    for (int title = 1; title >= 0; title--) {
+        stage_no = title ? 1 : 11;
+        const int mainL = enterMain(title);
+        openPage(mainL, 5, UI_PAGE_GAMEPLAY);
+        const int row = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_SECOND_CARD);
+        CHECK(row >= 0 && ui_settings_row_shown(row), "title %d: the Second memory card row",
+              title);
+        CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Second memory card") == 0,
+              "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
+        CHECK(row > ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_SKIP_OPENING) &&
+                  row < ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT),
+              "title %d: after Skip the opening, before the Film effect", title);
+        CHECK(ico_opt_second_memory_card() == 0 &&
+                  strcmp(ui_settings_value_text(UI_OPT_SECOND_CARD), "Off") == 0,
+              "title %d: Off by default", title);
+        press(0x10);
+        CHECK(settle(mainL, 60), "Gameplay: back");
+    }
+
+    s_cardCalls = 0;
+    ico_opt_set_second_memory_card_listener(cardListener);
+    CHECK(s_cardCalls == 1 && s_cardLast == 0, "the listener told the current value, Off (%d, %d)",
+          s_cardCalls, s_cardLast);
+    gFlagGameClear = 1;
+    stage_no = 11;
+    const int mainL = enterMain(0);
+    const int gameL = openPage(mainL, 5, UI_PAGE_GAMEPLAY);
+    checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (cleared, with Second memory card)");
+    const int row = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_SECOND_CARD);
+    lt_ext_layout(gameL)->curItem = row;
+    press(0x2000);
+    CHECK(ico_opt_second_memory_card() == 1 &&
+              strcmp(ui_settings_value_text(UI_OPT_SECOND_CARD), "On") == 0 &&
+              ico_config_get_bool("gameplay.second_memory_card", 0) == 1,
+          "Right: Second memory card On and the key set");
+    CHECK(s_cardCalls == 2 && s_cardLast == 1, "Right: the card put in at once (%d, %d)",
+          s_cardCalls, s_cardLast);
+    const int note = noteStarting(UI_PAGE_GAMEPLAY, "Off: one memory card");
+    CHECK(note >= 0 && !lt_ext_prop(note)->masked, "the Second memory card note on the cursor");
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get_bool(t, "gameplay.second_memory_card", 0) == 1,
+          "saved: gameplay.second_memory_card = true");
+    if (t != NULL) {
+        ico_toml_free(t);
+    }
+    press(0x8000);
+    CHECK(ico_opt_second_memory_card() == 0 &&
+              ico_config_get_bool("gameplay.second_memory_card", 1) == 0,
+          "Left: Second memory card Off again");
+    CHECK(s_cardCalls == 3 && s_cardLast == 0, "Left: the card taken out at once (%d, %d)",
+          s_cardCalls, s_cardLast);
+    press(0x10);
+    CHECK(settle(mainL, 60), "Gameplay: back");
+    ico_opt_set_second_memory_card_listener(NULL);
+    ico_opt_set_second_memory_card(0);
+    gFlagGameClear = 0;
+}
+
 /* Skip the opening at the boot (ico2/script/src/op.c actOpDemo01, GL-14) on
    the real layout_texture.c, with the disc's fade times (texLayout, the same
    on the three discs): the boot's layout (PAL 7, la_boot_memory_card_check:
@@ -5012,6 +5092,8 @@ int main(int argc, char **argv)
     testNaturalChains();
     testSkipOpening();
     testSkipOpeningTitle("pal");
+    /* Gameplay > Second memory card */
+    testSecondCard();
     /* Extras > Game variants */
     testVariants();
     /* the version in the Options menu */

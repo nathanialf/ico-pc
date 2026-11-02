@@ -1993,6 +1993,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(ico_opt_natural_chains());
     case UI_OPT_SKIP_OPENING:
         return onOff(ico_opt_skip_opening());
+    case UI_OPT_SECOND_CARD:
+        return onOff(ico_opt_second_memory_card());
     case UI_OPT_LANGUAGE:
         return languageName(gameLanguage());
     case UI_OPT_MENU_LANGUAGE: {
@@ -2652,6 +2654,13 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         /* read by the boot, so from the next start */
         ico_opt_set_skip_opening(!ico_opt_skip_opening());
         ico_config_set_bool("gameplay.skip_opening", ico_opt_skip_opening());
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_SECOND_CARD:
+        /* the card goes in or out at once (options.h): the game's next save
+           or load screen reads both ports */
+        ico_opt_set_second_memory_card(!ico_opt_second_memory_card());
+        ico_config_set_bool("gameplay.second_memory_card", ico_opt_second_memory_card());
         s_dirtyConfig = 1;
         break;
     case UI_OPT_LANGUAGE: {
@@ -3322,6 +3331,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_YORDA_TRIPS, UI_STR_OPT_YORDA_TRIPS_NOTE);
         addNote(pg, UI_OPT_NATURAL_CHAINS, UI_STR_OPT_NATURAL_CHAINS_NOTE);
         addNote(pg, UI_OPT_SKIP_OPENING, UI_STR_OPT_SKIP_OPENING_NOTE);
+        addNote(pg, UI_OPT_SECOND_CARD, UI_STR_OPT_SECOND_CARD_NOTE);
         addNote(pg, UI_OPT_PLAYERS, UI_STR_PLAYERS_NOTE);
         break;
     case UI_PAGE_EXTRAS:
@@ -3980,19 +3990,13 @@ static void build(void)
     /* the game's Film effect and Players, once the game is cleared */
     static const int gameOpts[] = {UI_OPT_YORDA,          UI_OPT_PIT_TIME,     UI_OPT_SHADOW_SPEED,
                                    UI_OPT_STICK_FIX,      UI_OPT_DOOR_FIX,     UI_OPT_YORDA_TRIPS,
-                                   UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING, UI_OPT_FILM_EFFECT,
-                                   UI_OPT_PLAYERS,        UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA,
-                                   UI_STR_OPT_PIT_TIME,
-                                   UI_STR_OPT_SHADOW_SPEED,
-                                   UI_STR_OPT_STICK_FIX,
-                                   UI_STR_OPT_DOOR_FIX,
-                                   UI_STR_OPT_YORDA_TRIPS,
-                                   UI_STR_OPT_NATURAL_CHAINS,
-                                   UI_STR_OPT_SKIP_OPENING,
-                                   UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS,
-                                   UI_STR_BACK};
+                                   UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING, UI_OPT_SECOND_CARD,
+                                   UI_OPT_FILM_EFFECT,    UI_OPT_PLAYERS,      UI_OPT_BACK};
+    static const int gameStrs[] = {
+        UI_STR_OPT_YORDA,          UI_STR_OPT_PIT_TIME,     UI_STR_OPT_SHADOW_SPEED,
+        UI_STR_OPT_STICK_FIX,      UI_STR_OPT_DOOR_FIX,     UI_STR_OPT_YORDA_TRIPS,
+        UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_SECOND_CARD,
+        UI_STR_OPT_FILM_EFFECT,    UI_STR_OPT_PLAYERS,      UI_STR_BACK};
     _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
                    "a string and a link for each Controls row");

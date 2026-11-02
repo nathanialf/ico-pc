@@ -589,6 +589,9 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_SKIP_OPENING] = "Salta l’introduzione",
     [UI_STR_OPT_SKIP_OPENING_NOTE] =
         "Il gioco parte dalla schermata del titolo, senza il cartello Sony e senza la scena d’apertura. Si applica al prossimo avvio.",
+    [UI_STR_OPT_SECOND_CARD] = "Seconda memory card",
+    [UI_STR_OPT_SECOND_CARD_NOTE] =
+        "Disattivato: una scheda, come l’originale. Attivato: una seconda scheda con dieci salvataggi in più, offerta al salvataggio e al caricamento.",
     [UI_STR_OPT_AA] = "Anti-aliasing",
     [UI_STR_OPT_AA_NOTE] =
         "Attenua i bordi seghettati. Il supersampling disegna 4 volte (2x) o 16 volte (4x) i pixel; abbassalo se il contatore scende a 30.",

@@ -699,6 +699,9 @@ typedef enum UiStrId {
     /* Gameplay > Skip the opening ([gameplay] skip_opening) and its explanation */
     UI_STR_OPT_SKIP_OPENING,
     UI_STR_OPT_SKIP_OPENING_NOTE,
+    /* Gameplay > Second memory card ([gameplay] second_memory_card) and its explanation */
+    UI_STR_OPT_SECOND_CARD,
+    UI_STR_OPT_SECOND_CARD_NOTE,
     /* Display > Anti-aliasing ([video] anti_aliasing), its note and values */
     UI_STR_OPT_AA,
     UI_STR_OPT_AA_NOTE,

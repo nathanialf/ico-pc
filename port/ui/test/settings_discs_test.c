@@ -48,7 +48,8 @@ static const Expect *expectFor(const char *slug)
 static const UiSettingsOpt kEveryDisc[] = {
     UI_OPT_MENU_LANGUAGE, UI_OPT_BRIGHTNESS,   UI_OPT_VIBRATION,    UI_OPT_STICK_FIX,
     UI_OPT_YORDA,         UI_OPT_PIT_TIME,     UI_OPT_SHADOW_SPEED, UI_OPT_DOOR_FIX,
-    UI_OPT_YORDA_TRIPS,   UI_OPT_SKIP_OPENING, UI_OPT_OUTPUT,       UI_OPT_DEVELOPER,
+    UI_OPT_YORDA_TRIPS,   UI_OPT_SKIP_OPENING, UI_OPT_SECOND_CARD,  UI_OPT_OUTPUT,
+    UI_OPT_DEVELOPER,
 };
 
 /* the rows the title shows and the pause menu does not (on every disc) */
@@ -82,8 +83,10 @@ static void checkTitleRows(const Expect *e)
           "%s title: Extras > Credits %d, want %d", e->slug,
           ui_settings_opt_shown(UI_OPT_EXTRAS_CREDITS), e->credits);
     CHECK(ui_settings_opt_shown(UI_OPT_MENU_LANGUAGE) && ui_settings_opt_shown(UI_OPT_STICK_FIX) &&
-              ui_settings_opt_shown(UI_OPT_SKIP_OPENING) && ui_settings_opt_shown(UI_OPT_YORDA),
-          "%s title: Menu language, stick fix, Skip the opening, Yorda", e->slug);
+              ui_settings_opt_shown(UI_OPT_SKIP_OPENING) && ui_settings_opt_shown(UI_OPT_YORDA) &&
+              ui_settings_opt_shown(UI_OPT_SECOND_CARD),
+          "%s title: Menu language, stick fix, Skip the opening, Yorda, Second memory card",
+          e->slug);
     ico_opt_set_developer_mode(1);
     CHECK(ui_settings_opt_shown(UI_OPT_VAR_DEBUG_MENU) == e->debugMenu,
           "%s: the Debug menu row %d, want %d", e->slug,
@@ -123,8 +126,8 @@ static void checkPauseRows(const Expect *e)
           film >= 0 ? lt_ext_prop(film)->defaultMask : -1, !e->film);
     /* Players is reached on every disc once cleared (the 2001 discs too:
        the port carries the second-pad Yorda into their arms).  With Yorda
-       trips and Film effect the cleared page has ten rows before Back, one
-       more than the window's slots: Players may open below the window
+       trips, Second memory card and Film effect the cleared page has up to
+       eleven rows before Back, more than the window's slots: Players may open below the window
        (masked as the window masks a row out of view), so it is shown by its
        rule and in view, unmasked, with the cursor on it */
     const int players = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS);

@@ -588,6 +588,9 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_OPT_SKIP_OPENING] = "Saltar la introducción",
     [UI_STR_OPT_SKIP_OPENING_NOTE] =
         "El juego empieza en la pantalla de título, sin el cartel de Sony ni la escena de apertura. Se aplica en el próximo inicio.",
+    [UI_STR_OPT_SECOND_CARD] = "Segunda memory card",
+    [UI_STR_OPT_SECOND_CARD_NOTE] =
+        "Desactivado: una memory card, como el original. Activado: una segunda con diez partidas más; guardar y cargar ofrecen las dos.",
     [UI_STR_OPT_AA] = "Antialiasing",
     [UI_STR_OPT_AA_NOTE] =
         "Suaviza los bordes dentados. El supermuestreo dibuja 4 veces (2x) o 16 veces (4x) los píxeles; reduce el valor si el contador baja a 30.",

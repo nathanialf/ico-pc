@@ -589,6 +589,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_SKIP_OPENING] = "オープニングをスキップ",
     [UI_STR_OPT_SKIP_OPENING_NOTE] =
         "ソニーのロゴとオープニングの場面を出さずに、タイトル画面から始まります。次回の起動から使われます。",
+    [UI_STR_OPT_SECOND_CARD] = "2つ目のメモリーカード",
+    [UI_STR_OPT_SECOND_CARD_NOTE] =
+        "オフ：オリジナルどおりメモリーカード1つ。オン：2つ目のカードにさらに10個セーブでき、セーブとロードで両方を選べます。",
     [UI_STR_OPT_AA] = "アンチエイリアス",
     [UI_STR_OPT_AA_NOTE] =
         "輪郭をなめらかにします。スーパーサンプリングは画素が4倍(2x)、16倍(4x)。30に下がるときは下げます。",
