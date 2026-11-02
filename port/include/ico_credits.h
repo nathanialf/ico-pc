@@ -13,8 +13,9 @@
  *
  * The port credit: the roll (common/src/staffroll.c) posts the lines of
  * staffRollNameData up to staffRollNameDataNum and then the port's lines,
- * ico_roll_port_line(0 .. ico_roll_port_count() - 1), in every roll (the
- * real ending's and the playback's).  The disc's table is not changed.
+ * ico_roll_port_line(0 .. ico_roll_port_count() - 1): the port's credit,
+ * the translators, the contributors and the special thanks, in every roll
+ * (the real ending's and the playback's).  The disc's table is not changed.
  *
  * The game's side (ico2/) includes this header unconditionally, as it does
  * ico_gamestate.h.
@@ -42,15 +43,21 @@ int ico_credits_active(void);
 
 /* --- the roll's port credit (credits.c) ---------------------------------- */
 
-/* the lines appended after staffRollNameData's: a gap of blank lines, the
-   heading in the roll's heading form ("{R}< ... > "), the roll's gap
-   between a heading and its name, the name ("{R}... "); each a char ** that
-   lives as long as the program, as staffroll.c keeps the pointer */
+/* the lines appended after staffRollNameData's, in four blocks: the port's
+   credit, the translators, the contributors and the special thanks; each
+   block a gap of blank lines (twelve), its heading in the roll's heading
+   form ("{R}< ... > "), the roll's gap between a heading and its first name
+   (four blank lines), its names ("{R}... ", two blank lines between them);
+   each a char ** that lives as long as the program, as staffroll.c keeps
+   the pointer (the table: credits.c s_lines) */
 int ico_roll_port_count(void);
 char **ico_roll_port_line(int k);
-/* the index (k) of the heading and of the name among those lines */
+/* the index (k) of the port credit's heading and name among those lines,
+   and of the last line (Sad Origami); ico_roll_port_count() is
+   ICO_ROLL_PORT_LAST + 1 */
 #define ICO_ROLL_PORT_HEADING 12
 #define ICO_ROLL_PORT_NAME 17
+#define ICO_ROLL_PORT_LAST 83
 /* staffRollStart's log line (the roll's length, the port lines' start) */
 void ico_roll_started(int discLines);
 

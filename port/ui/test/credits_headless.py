@@ -12,6 +12,7 @@ scene to the title.  The log must show, in order:
   credits: roll start ... (Extras > Credits)
   credits: the ending's song is playing
   credits: the port credit is posted (Extras > Credits)
+  credits: the port's last line is posted (Extras > Credits)
   credits: back at the title           the flags put back, the flag cleared
   stage_no 62 -> 1                     the title's stage after the last scene
 
@@ -42,12 +43,14 @@ from headless_common import PadScript, fresh_work  # noqa: E402
 # (the port's boot default since the boot lost its 50/60 Hz sign)
 VIDEO_MODE = "60hz"
 TPS = {"pal50": 25, "60hz": 30}[VIDEO_MODE]
-# the roll is paced in seconds: the title is back about 240 s after the
-# Cross (Main tick 815), at Main tick 7,972 at 60 Hz (6,840 at 50 Hz).  The
-# run allows those seconds at TPS, then 1,500 ticks of title and 600 of
-# margin
+# the roll is paced in seconds: the title was back about 240 s after the
+# Cross (Main tick 815), at Main tick 7,972 at 60 Hz (6,840 at 50 Hz), with
+# the port's 18 lines; the 84 lines of v0.9.8 (the translators, the
+# contributors, the special thanks) add 66 lines of 11 units at the roll's
+# 60 units a second, about 12 s.  The run allows 255 s at TPS, then 1,500
+# ticks of title and 600 of margin
 CROSS_TICK = 815
-ROLL_S = 240
+ROLL_S = 255
 TICKS = CROSS_TICK + ROLL_S * TPS + 1500 + 600
 
 
@@ -125,9 +128,10 @@ def main():
             fails.append(ln)
     want = ["credits: enter",
             "credits: stage 60 up",
-            "credits: roll start, 962 lines from the disc and 18 of the port's (Extras > Credits)",
+            "credits: roll start, 962 lines from the disc and 84 of the port's (Extras > Credits)",
             "credits: the ending's song is playing",
             "credits: the port credit is posted (Extras > Credits)",
+            "credits: the port's last line is posted (Extras > Credits)",
             "credits: back at the title",
             "stage_no 62 -> 1"]
     at = 0

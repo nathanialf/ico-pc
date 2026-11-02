@@ -60,7 +60,7 @@ int staffRollNameDataNum = (int)(sizeof(staffRollNameData) / sizeof(staffRollNam
 
 int systemStatus[12] = {1, 1}; /* PAL, frame step 1 */
 
-#define MAX_POSTED 64
+#define MAX_POSTED 128
 static const char *s_posted[MAX_POSTED];
 static int s_align[MAX_POSTED];
 static int s_nPosted;
@@ -103,8 +103,8 @@ int font_CheckAlign(SprCol *col, unsigned char *str)
     return s_fontAlign;
 }
 
-/* the lines font_Print drew: the port's heading and name among them */
-static int s_printed, s_printedHeading, s_printedName, s_printedDisc;
+/* the lines font_Print drew: the port's heading, name and last line among them */
+static int s_printed, s_printedHeading, s_printedName, s_printedLast, s_printedDisc;
 
 void font_Print(unsigned int color, unsigned char *str, float x, float y, int align, SprCol col)
 {
@@ -118,6 +118,7 @@ void font_Print(unsigned int color, unsigned char *str, float x, float y, int al
     s_printed++;
     s_printedHeading |= strcmp(s, "{R}< Decompilation and PC Port > ") == 0;
     s_printedName |= strcmp(s, "{R}Nathanial Fine ") == 0;
+    s_printedLast |= strcmp(s, "{R}Sad Origami ") == 0;
     s_printedDisc |= strcmp(s, "{R}Fumito Ueda ") == 0;
 }
 
@@ -239,24 +240,59 @@ unsigned int ico_host_main_ticks(void)
 
 /* --- the tests ------------------------------------------------------------- */
 
+/* what the roll's bitmap font draws: ASCII 0x20-0x7E without the backtick
+   (DisplayFont.c) */
 static int ascii(const char *s)
 {
     for (; *s; s++) {
-        if ((unsigned char)*s < 0x20 || (unsigned char)*s > 0x7E) {
+        if ((unsigned char)*s < 0x20 || (unsigned char)*s > 0x7E || *s == '`') {
             return 0;
         }
     }
     return 1;
 }
 
+/* the port's non-blank lines, each with the blank lines before it (the
+   user's lists, the handles as written): the port's credit, the
+   translators, the contributors, the special thanks (the disc's own
+   heading text) */
+static const struct {
+    int blanks;
+    const char *text;
+    int heading;
+} kPortRoll[] = {
+    {12, "{R}< Decompilation and PC Port > ", 1},
+    {4, "{R}Nathanial Fine ", 0},
+    {12, "{R}< Translation > ", 1},
+    {4, "{R}bob-ttz ", 0},
+    {2, "{R}cobra838 ", 0},
+    {12, "{R}< Contributors > ", 1},
+    {4, "{R}katsifolis ", 0},
+    {2, "{R}braito4 ", 0},
+    {2, "{R}neetgon ", 0},
+    {2, "{R}KClough ", 0},
+    {12, "{R}< Special Thanks > ", 1},
+    {4, "{R}Sad Origami ", 0},
+};
+
+#define PORT_ROLL_N ((int)(sizeof(kPortRoll) / sizeof(kPortRoll[0])))
+
 static void test_roll(void)
 {
     int n = staffRollNameDataNum;
     int port = ico_roll_port_count();
+    int expect = 0;
     int steps = 0;
-    int i;
+    int i, j;
 
-    CHECK(port == ICO_ROLL_PORT_NAME + 1);
+    for (j = 0; j < PORT_ROLL_N; j++) {
+        expect += kPortRoll[j].blanks + 1;
+    }
+    printf("roll: %d port lines, %d expected\n", port, expect);
+    CHECK(port == expect && port == 84);
+    CHECK(port == ICO_ROLL_PORT_LAST + 1);
+    CHECK(ICO_ROLL_PORT_HEADING == kPortRoll[0].blanks);
+    CHECK(ICO_ROLL_PORT_NAME == ICO_ROLL_PORT_HEADING + kPortRoll[1].blanks + 1);
     CHECK(ico_roll_port_line(-1) == NULL && ico_roll_port_line(port) == NULL);
     for (i = 0; i < port; i++) {
         CHECK(ico_roll_port_line(i) != NULL && *ico_roll_port_line(i) != NULL);
@@ -264,6 +300,17 @@ static void test_roll(void)
         /* the same storage each time: staffroll.c keeps the pointer */
         CHECK(ico_roll_port_line(i) == ico_roll_port_line(i));
     }
+    /* the table as ico_roll_port_line gives it, before any roll */
+    for (i = 0, j = 0; j < PORT_ROLL_N && i < port; j++) {
+        for (int b = 0; b < kPortRoll[j].blanks && i < port; b++, i++) {
+            CHECK(strcmp(*ico_roll_port_line(i), " ") == 0);
+        }
+        if (i < port) {
+            CHECK(strcmp(*ico_roll_port_line(i), kPortRoll[j].text) == 0);
+            i++;
+        }
+    }
+    CHECK(i == port && j == PORT_ROLL_N);
 
     staffRollStart(1.0f, 255);
     CHECK(staffRollStartFlag == 1);
@@ -281,35 +328,44 @@ static void test_roll(void)
     for (i = 0; i < n; i++) {
         CHECK(s_posted[i] == staffRollNameData[i]);
     }
-    /* then the port's: blank lines, the heading, blank lines, the name */
-    for (i = 0; i < port; i++) {
-        const char *s = s_posted[n + i];
+    /* then the port's: per block a gap of blank lines, the heading, four
+       blank lines, the names with two blank lines between them */
+    i = n;
+    for (j = 0; j < PORT_ROLL_N; j++) {
+        const char *s;
 
-        if (i == ICO_ROLL_PORT_HEADING) {
-            CHECK(strcmp(s, "{R}< Decompilation and PC Port > ") == 0);
+        for (int b = 0; b < kPortRoll[j].blanks; b++, i++) {
+            CHECK(strcmp(s_posted[i], " ") == 0);
+        }
+        s = s_posted[i];
+        CHECK(strcmp(s, kPortRoll[j].text) == 0);
+        /* every non-blank line is right-aligned by its {R} */
+        CHECK(strncmp(s, "{R}", 3) == 0 && s_align[i] == 2);
+        if (kPortRoll[j].heading) {
             /* the roll's heading form: {R}, "< ", " > " */
             CHECK(strncmp(s, "{R}< ", 5) == 0 && strstr(s, " > ") != NULL);
-            CHECK(s_align[n + i] == 2);
-        } else if (i == ICO_ROLL_PORT_NAME) {
-            CHECK(strcmp(s, "{R}Nathanial Fine ") == 0);
-            CHECK(s_align[n + i] == 2);
+            /* the gaps of the disc's rhythm: 7-20 blanks before a heading,
+               four after it */
+            CHECK(kPortRoll[j].blanks >= 7 && kPortRoll[j].blanks <= 20);
+            CHECK(j + 1 < PORT_ROLL_N && !kPortRoll[j + 1].heading && kPortRoll[j + 1].blanks == 4);
         } else {
-            CHECK(strcmp(s, " ") == 0);
+            CHECK(strstr(s, "< ") == NULL);
         }
+        i++;
     }
-    /* the heading and the name are the last non-blank lines, the name last */
-    CHECK(strstr(s_posted[s_nPosted - 1], "Nathanial Fine") != NULL);
-    for (i = n + ICO_ROLL_PORT_HEADING + 1; i < s_nPosted - 1; i++) {
-        CHECK(strcmp(s_posted[i], " ") == 0);
-    }
-    /* the roll's gap between a heading and its name: four blank lines */
-    CHECK(ICO_ROLL_PORT_NAME - ICO_ROLL_PORT_HEADING == 5);
+    CHECK(i == s_nPosted);
+    /* the port credit's indices among the port lines */
+    CHECK(strcmp(s_posted[n + ICO_ROLL_PORT_HEADING], "{R}< Decompilation and PC Port > ") == 0);
+    CHECK(strcmp(s_posted[n + ICO_ROLL_PORT_NAME], "{R}Nathanial Fine ") == 0);
+    /* Sad Origami is the roll's last line */
+    CHECK(strcmp(s_posted[n + ICO_ROLL_PORT_LAST], "{R}Sad Origami ") == 0);
+    CHECK(s_nPosted - 1 == n + ICO_ROLL_PORT_LAST);
     /* the copyright line, centred by the disc's {C}, stays as it was */
     CHECK(s_align[n - 1] == 0);
     /* every line is drawn by the roll's own bitmap font: the
        disc's and the port's */
     printf("roll: %d font_Print calls\n", s_printed);
-    CHECK(s_printed > 0 && s_printedDisc && s_printedHeading && s_printedName);
+    CHECK(s_printed > 0 && s_printedDisc && s_printedHeading && s_printedName && s_printedLast);
 }
 
 static void test_lock(const char *dir, const char *slug)
