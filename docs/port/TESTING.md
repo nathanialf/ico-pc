@@ -1412,6 +1412,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   once a layer a present; the test's own text in the font's overlay mode while the picture may
   still run gives all its quads; the output equals the one without the thread byte for byte;
   `rd_present_blank`'s layers are collected on the test's thread too (not on OpenGL);
+  `checkFailedPresent`: with a host of the test's own that runs each picture handed over at the
+  next drain, a present that presents is not counted by `rd_thread_failed_presents` and one that
+  fails there (a movie shown by then) is, once;
   the scene limit's fallback checks drive the Vulkan backend's `vkr_test_fail_texels_above` and
   are skipped on Direct3D 12, OpenGL and Direct3D 11, which have no such hook);
   the open border's outer columns (`rd_present_border_test.inc`, `checkOpenBorderEdges`): at

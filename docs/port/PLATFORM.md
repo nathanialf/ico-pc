@@ -420,7 +420,10 @@ window: game thread: step 3.1 ms, record 0.0 ms, pump 0.4 ms, slot waits 12 (8.2
 ```
 
 `window: render thread: parked (...)` and `window: render thread: goes on` mark a park (the first
-16 of each); `window: render thread: the high priority was refused (...)` says the system kept its
+16 of each); `window: render thread: a picture handed over was not presented (N so far): taken out
+of the block's present count` says a picture `rd_present_post` handed over failed on the render
+thread, known at the next present's drain (`rd_thread_failed_presents`; the first 8, then every
+100th: the frame rate counter and the vsync lock's slot keep it as presented); `window: render thread: the high priority was refused (...)` says the system kept its
 priority; `window: render thread: the game thread took the OpenGL context for its own calls (N
 times; ...)` (the first 8, then every 100th) counts OpenGL's take-overs, and `... could not be
 made current on the render|game thread (...)` a failed one.

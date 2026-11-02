@@ -55,6 +55,7 @@ static PresentArgs s_picPresent;
 static Tramp s_picTramp;
 static bool s_async, s_asyncPresent, s_lastOk = true, s_hold;
 static uint64_t s_waitedNs;
+static uint32_t s_failedPresents; /* rd_thread_failed_presents */
 
 static void lk(void)
 {
@@ -210,15 +211,18 @@ uint64_t rd_thread_drain(void)
     const uint64_t ns = s_host.drain(s_host.user);
     if (s_async) {
         s_lastOk = s_asyncPresent ? s_picPresent.ok : s_picReplay.ok;
+        if (s_asyncPresent && !s_lastOk) {
+            s_failedPresents++;
+        }
         s_async = false;
         s_asyncPresent = false;
     }
     return ns;
 }
 
-bool rd_thread_last_ok(void)
+uint32_t rd_thread_failed_presents(void)
 {
-    return s_lastOk;
+    return s_failedPresents;
 }
 
 void rd_submit_hold(bool wait)

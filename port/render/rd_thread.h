@@ -86,12 +86,16 @@ uint64_t rd_thread_drain(void);
 /* The present on the render thread (the window's present_once): rd_present
  * (alpha) whole there, the interpolation included; returns at once unless
  * the picture waits (see above).  True when a picture was handed over or
- * presented; a handed-over picture's own result comes one present late
- * (rd_thread_last_ok).  Without a host, or with nothing to present,
- * rd_present here. */
+ * presented; a handed-over picture's own result is known at the next drain
+ * (the next present's start), where a failure is counted
+ * (rd_thread_failed_presents).  Without a host, or with nothing to
+ * present, rd_present here. */
 bool rd_present_post(float alpha);
-/* The result of the last picture handed over, once it finished */
-bool rd_thread_last_ok(void);
+/* The presents rd_present_post handed over that then failed on the render
+ * thread (rd_present false: a failed acquire, the ring, the
+ * interpolation's memory), counted at the drain after each: the window
+ * counted each as presented when it was handed over */
+uint32_t rd_thread_failed_presents(void);
 
 /* The block's numbers for the window's 10 s line (render_thread.c), since
  * the last take: the pictures the render thread ran and their means in ms

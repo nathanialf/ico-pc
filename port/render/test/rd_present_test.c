@@ -107,6 +107,10 @@
  *             mode while the picture runs gives all its quads; the output
  *             is the same byte for byte; rd_present_blank's layers are
  *             collected on the test's thread too (skipped on OpenGL)
+ *   failed present  a host of the test's own runs each picture handed
+ *             over at the next drain: one that presents is not counted by
+ *             rd_thread_failed_presents, one that fails there (a movie
+ *             shown by then) is, once
  *   capture   rd_capture_presented: the rich frame at 800 x
  *             600 with the overlay's rectangles registered, CRT off and
  *             Consumer TV: the PNG is 800 x 600 RGB and holds exactly the
@@ -152,6 +156,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_submit.h"
 #include "rd_tex.h"
 #include "../../core/region.h" /* the Japanese disc's reduction crop */
 #include "shader_consts.h"
@@ -4937,6 +4942,71 @@ static void checkOverlayThread(void)
     free(on);
 }
 
+/* a present rd_present_post hands over that then fails is counted at the
+ * drain after it (rd_thread_failed_presents), one that presents is not: a
+ * host of the test's own that runs each job handed over at the next drain,
+ * on this thread */
+static struct {
+    void (*fn)(void *arg);
+    void *arg;
+} s_defer;
+
+static bool deferPost(void *u, void (*fn)(void *arg), void *arg, bool picture, bool wait)
+{
+    (void)u;
+    (void)picture;
+    if (wait) {
+        fn(arg);
+    } else {
+        s_defer.fn = fn;
+        s_defer.arg = arg;
+    }
+    return true;
+}
+
+static uint64_t deferDrain(void *u)
+{
+    (void)u;
+    void (*fn)(void *arg) = s_defer.fn;
+    s_defer.fn = NULL;
+    if (fn) {
+        fn(s_defer.arg);
+    }
+    return 0;
+}
+
+static void checkFailedPresent(void)
+{
+    static const RdThreadHost host = {NULL, deferPost, deferDrain, false};
+    makeNoiseScene();
+    RdSettings s = originalSettings();
+    s.interpolate = 1;
+    if (!rd_init(512, 512, &s, NULL)) {
+        return;
+    }
+    RdTex tex = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    recordRichFrame(tex, 1);
+    recordRichFrame(tex, 1);
+    rd_set_thread_host(&host);
+    const uint32_t f0 = rd_thread_failed_presents();
+    const bool a = rd_present_post(1.0f) && rd_submit_async();
+    (void)rd_thread_drain();
+    const uint32_t f1 = rd_thread_failed_presents();
+    /* the next one fails where it runs: a movie shown by then */
+    const bool b = rd_present_post(1.0f) && rd_submit_async();
+    g_rd.videoShown = 1;
+    (void)rd_thread_drain();
+    g_rd.videoShown = 0;
+    const uint32_t f2 = rd_thread_failed_presents();
+    rd_set_thread_host(NULL);
+    CHECK(a && b && f1 == f0 && f2 == f0 + 1,
+          "failed present: both handed over (%d %d), the one that presented not counted (%u), the "
+          "one that failed counted (%u)",
+          a, b, f1 - f0, f2 - f0);
+    rd_destroy_texture(tex);
+    rd_shutdown();
+}
+
 /* --------------------------------------------------------------- capture */
 
 static uint32_t be32At(const uint8_t *p)
@@ -5886,6 +5956,7 @@ int main(int argc, char **argv)
     checkOverlayCrt();
     checkOverlayTop();
     checkOverlayThread();
+    checkFailedPresent();
     checkCapture(dir);
     checkShot(dir);
     checkPresentPasses(dir);

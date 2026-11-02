@@ -72,6 +72,9 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
     RhiStats before, st;
     /* the replay's waits for the render thread's picture before (rd_submit.h) */
     const uint64_t handWait0 = rd_submit_waited_ns();
+    /* the presents handed over that failed there, known at this one's
+       drain (rd_thread.h) */
+    const uint32_t failed0 = rd_thread_failed_presents();
 
     /* under the vsync lock with the display's timing the lock reads the
        present's id right after it: those pictures wait for their present
@@ -86,6 +89,24 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
     const int ok = rd_present_post(a);
     ico_diag_present_leave();
     const Uint64 now = SDL_GetTicksNS();
+    {
+        /* the picture handed over before this one failed on the render
+           thread: it was counted as presented, so the block's count takes
+           it back (the frame rate counter and the lock's slot keep it) */
+        static unsigned s_failLines;
+        const uint32_t lost = rd_thread_failed_presents() - failed0;
+
+        if (lost != 0) {
+            s_pres.statPresents = s_pres.statPresents > lost ? s_pres.statPresents - lost : 0;
+            s_failLines += lost;
+            if (s_failLines <= 8 || s_failLines % 100 == 0) {
+                fprintf(stderr,
+                        "window: render thread: a picture handed over was not presented (%u so "
+                        "far): taken out of the block's present count\n",
+                        rd_thread_failed_presents());
+            }
+        }
+    }
 
     s_pres.cost = now - t0;
     {
