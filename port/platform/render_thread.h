@@ -1,23 +1,22 @@
 /*
  * port/platform/render_thread.h
  *
- * The window's render thread (window build; docs/port/PLATFORM.md
- * "Threads").  The game thread records each replay's command list; the
- * render thread then ends it, submits it and presents the picture
- * (port/render/rd_submit.c through rd_set_submit_host), so the submit's
- * and the present's time is off the game thread.  Vulkan and Direct3D 12
- * only: OpenGL and Direct3D 11 take every call on one thread
- * (RhiLimits.singleThreadCommands) and keep the game thread's path.
+ * The window's render thread (window build; docs/port/PLATFORM.md "The
+ * render thread").  The game thread records the frames; the render thread
+ * makes every picture: the present whole, the interpolation, the walk, the
+ * submit and the present (port/render/rd_thread.h, through the RdThreadHost
+ * this file installs), and runs the renderer's calls between pictures.
+ * Every backend: with OpenGL the context is this thread's for its jobs and
+ * a game-thread RHI call takes it over (the call guard's wait).
  *
- * The rules: while the render thread works on a picture, every RHI call
- * from another thread that changes the device's state waits for it first
+ * The rules: while the render thread works on a job, every RHI call from
+ * another thread that changes the device's state waits for it first
  * (rhi.h rhi_set_call_guard), so the backend never runs on two threads at
- * once; the next replay waits for the last one's submit before it waits its
- * fence (rd__wait_frame); a picture whose capture is armed (F12, a save
- * state's picture) waits for its present; the window's surface is made
- * again with the render thread parked (the lifecycle table's park step).
- * The state the two share is frame_mailbox.h's, under one mutex.  The render
- * thread runs at SDL's high priority.
+ * once; the renderer's own rules (the hand-over of its state, one picture
+ * at a time, the retire list) are rd_thread.h's; the window's surface is
+ * made again with the render thread parked (the lifecycle table's park
+ * step).  The state the two share is frame_mailbox.h's, under one mutex.
+ * The render thread has an 8 MB stack and runs at SDL's high priority.
  */
 #ifndef ICO_PLATFORM_RENDER_THREAD_H
 #define ICO_PLATFORM_RENDER_THREAD_H
