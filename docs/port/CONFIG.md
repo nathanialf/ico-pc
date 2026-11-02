@@ -22,6 +22,7 @@ files are written, and how libscf's system configuration is answered from them.
 | `port/render/texpack.h` | what the texture pack keys of `[video]` control |
 | `port/platform/main_host.c` | the start-up keys of `ico-pc.ini` and the command line |
 | `port/platform/window_host.c` | `[video] backend`, `[video] adapter`, `[dev] perf_log` and `slow_step_ms` |
+| `port/platform/render_thread.c` | `[dev] render_thread` |
 | `port/game/credits.c` | `[dev] unlock_credits` |
 | `port/platform/android/android_paths.h` | the Android build's file layout |
 | `tools/package_docs_lib.sh` | `pkg_write_ini`: the `ico-pc.ini` the packages ship |
@@ -46,7 +47,7 @@ the ini has it non-empty, else `config.toml`'s, else the caller's default (`port
 | `[audio] enabled` | `audio` |
 | `[video] backend` | `backend` |
 | `[video] adapter` | `adapter` |
-| `[dev] ticks`, `watchdog`, `watchdog_pump`, `trace`, `dump_every`, `dump_dir`, `dump_interp`, `dump_from`, `audio_dump`, `audio_sync`, `pad_script`, `input_record`, `verify`, `headless`, `fixed_clock`, `use_iso`, `write_config`, `start_stage`, `switch_to`, `switch_at`, `unlock_credits`, `popup_test`, `state_save_at`, `state_load_at`, `state_hash_at`, `state_dump_at` | the same names |
+| `[dev] ticks`, `watchdog`, `watchdog_pump`, `trace`, `dump_every`, `dump_dir`, `dump_interp`, `dump_from`, `audio_dump`, `audio_sync`, `pad_script`, `input_record`, `verify`, `headless`, `fixed_clock`, `use_iso`, `write_config`, `start_stage`, `switch_to`, `switch_at`, `unlock_credits`, `popup_test`, `state_save_at`, `state_load_at`, `state_hash_at`, `state_dump_at`, `render_thread` | the same names |
 
 The start-up code reads the ini the other way round: `ico_ini_load` loads the ini and fills its
 missing keys from those `config.toml` entries (a `true` or `false` there reads as `1` or `0`), then
@@ -451,6 +452,7 @@ under the same name (below). Read through the store:
 | `glow_redraw` | bool | `false` | |
 | `joystick_directinput` | bool | `true` | |
 | `present_fallback` | `auto`, `off` or `fifo` | `auto` | |
+| `render_thread` | `auto`, `on`, `off` or `sync` | `auto` | the window's render thread: `auto` and `on` submit and present on it with Vulkan and Direct3D 12 (never with OpenGL or Direct3D 11), `off` on the game thread as before, `sync` on it with the game thread waiting for each picture (the A/B); also `render_thread` in `ico-pc.ini` (`port/platform/render_thread.c` (`ico_render_thread_start`), `port/platform/frame_mailbox.c` (`fm_mode_choose`); [PLATFORM.md](PLATFORM.md#the-render-thread)) |
 | `disc_reader` | `thread` or `sync` | `thread` (the window build; `sync` without a window) | |
 | `disc_read_ahead_kb` | int | `256` (with the thread; `0` without one) | |
 | `pipeline_set` | string | `full` | |

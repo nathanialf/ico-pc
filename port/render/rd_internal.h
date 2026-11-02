@@ -2534,6 +2534,10 @@ bool rd__interp_copy_at(int l, uint32_t at, uint32_t from, uint32_t to, uint32_t
  * back and writes the PNG (after the submit). */
 bool rd__capture_armed(void);
 void rd__capture_finish(void);
+/* A capture this present's list copied, or a state picture it dropped: its
+ * finish (rd__capture_finish) has work, so the submit waits for it
+ * (rd_submit.c) */
+bool rd__capture_pending(void);
 /* The thresholds (world units are the game's centimetres) */
 #define RD_INTERP_JUMP_WORLD 300.0f  /* an object's or bone's origin, per tick */
 #define RD_INTERP_JUMP_SCREEN 256.0f /* GS pixels: screen prims, shadows, grids, particles */

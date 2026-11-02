@@ -176,6 +176,22 @@ void ico_diag_set_gpu_hang(int (*progress)(IcoDiagGpu *out), void (*dump)(void))
    finished D", the rest the GPU hang's above. Both ends run on the
    watchdog's thread, once: the first wins. */
 void ico_diag_set_gpu_hang_limit(double seconds);
+/* The window's render thread's heartbeat (port/platform/render_thread.c,
+   which submits and presents the pictures the main thread records): beat
+   fills the picture in progress (*seq; 0 none) and the last one finished
+   (*done) without a lock, any thread, and returns 1 (0: no render thread).
+   The watchdog's thread counts one picture that does not finish as it
+   counts a wait for the GPU (gpu_hang.h; the same limit, not while an
+   effects program is loaded, whose first presents prepare its effects):
+   with the render thread inside the driver's present the main thread
+   waits for it, not for the GPU, so the backend's progress names no wait.
+   At the limit the WATCHDOG line is "the render thread: picture P has not
+   finished its submit and present after W s (limit L s); the last
+   finished D" and the end is the GPU hang's above (the dump, the loss
+   noted, the device loss's box), its report line "the graphics driver
+   stopped responding (the render thread's picture P has not finished
+   after a W s wait)". NULL: none. */
+void ico_diag_set_render_heartbeat(int (*beat)(unsigned long long *seq, unsigned long long *done));
 /* A sentence the GPU hang's box ends with on Android, or NULL/"" for none
    (the window: the device's own Qualcomm driver names the Options route
    to a Turnip driver package); called on the watchdog's thread at the

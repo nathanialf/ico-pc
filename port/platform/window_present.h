@@ -115,8 +115,10 @@ typedef struct WindowPres {
        ico_input_sdl_update */
     double pumpEventsMs, pumpSettingsMs, pumpInputMs;
     unsigned pumpEvents;
-    /* the block's longest pump, for the 10 s line (issue 105) */
-    double pumpMaxMs;
+    /* the block's longest pump, for the 10 s line (issue 105), and the
+       block's pumps summed and counted (the game thread's line) */
+    double pumpMaxMs, pumpSumMs;
+    unsigned pumpCount;
     unsigned slowSteps, slowLogged;
     uint32_t decodes, pipeCreates;
     /* the present clock alpha is taken from (rd.h RdPresentClock) */

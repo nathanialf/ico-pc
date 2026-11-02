@@ -100,6 +100,7 @@ struct tags are CamelCase (`IcoVfsEntry`, `RdFrame`); macros and enum constants 
 | `dx_`, `d3dp_` | the Direct3D 12 backend and its header-free plan (`port/rhi/d3d12/`) |
 | `ui_`, `ui__`, `lt_ext_`, `gallery_` | `port/ui`: the menus, the layout extension, the gallery |
 | `pace_` | the frame pacing policy (`port/platform/pace_policy.c`) |
+| `fm_` | the render thread's hand-over (`port/platform/frame_mailbox.c`) |
 
 Names the game defines keep their spelling, including the host hooks the game files define for
 `port/` (`gif_Host*`, `pac_Host*`, `mc_Host*`, `tex_HostTextureId`), and so do generated files and

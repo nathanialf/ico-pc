@@ -2,7 +2,9 @@
  * port/platform/test/lifecycle_test.c
  *
  * The Android lifecycle's tables (window_lifecycle.h) on fake
- * operations that write down each call: the order of every event's steps,
+ * operations that write down each call: the order of every event's steps
+ * (the render thread parked before the GPU idles and the surface goes, and
+ * going on only after the surface is made again),
  * the settings saved only when changed, a missing operation skipped, a
  * failed surface or save logged, unknown events refused, and SDL's event
  * types mapped.
@@ -104,6 +106,11 @@ static void f_flush(void *u)
     note(u, "flush");
 }
 
+static void f_park(void *u, int parked)
+{
+    note(u, parked ? "park" : "unpark");
+}
+
 static IcoLifecycleOps ops_for(Fake *f)
 {
     IcoLifecycleOps o;
@@ -122,6 +129,7 @@ static IcoLifecycleOps ops_for(Fake *f)
     o.texture_low_memory = f_texture;
     o.log = f_log;
     o.log_flush = f_flush;
+    o.render_park = f_park;
     return o;
 }
 
@@ -139,25 +147,27 @@ int main(void)
     Fake f;
     IcoLifecycleOps o;
 
-    /* the background: idle before the surface goes, the watchdog and the
-       sound stopped, the log on the disc last */
+    /* the background: the render thread parked, then idle before the
+       surface goes, the watchdog and the sound stopped, the log on the disc
+       last */
     o = ops_for(&f);
-    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 6);
-    CHECK_CALLS(f, "log idle release watchdog-pause audio-pause flush");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 7);
+    CHECK_CALLS(f, "log park idle release watchdog-pause audio-pause flush");
     CHECK(strcmp(f.lastLog, "lifecycle: will enter background") == 0);
 
-    /* the foreground: the surface first, then the watchdog, the sound and
-       the pacer's deadline */
+    /* the foreground: the surface first (the render thread still parked),
+       then the render thread, the watchdog, the sound and the pacer's
+       deadline */
     o = ops_for(&f);
-    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_DID_ENTER_FOREGROUND, &o) == 5);
-    CHECK_CALLS(f, "recreate watchdog-resume audio-resume pace log");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_DID_ENTER_FOREGROUND, &o) == 6);
+    CHECK_CALLS(f, "recreate unpark watchdog-resume audio-resume pace log");
     CHECK(strcmp(f.lastLog, "lifecycle: did enter foreground") == 0);
 
     /* no surface yet: said in the log, the rest still runs */
     o = ops_for(&f);
     f.recreateFails = 1;
-    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_DID_ENTER_FOREGROUND, &o) == 5);
-    CHECK_CALLS(f, "recreate log watchdog-resume audio-resume pace log");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_DID_ENTER_FOREGROUND, &o) == 6);
+    CHECK_CALLS(f, "recreate log unpark watchdog-resume audio-resume pace log");
 
     /* terminating with unsaved settings: saved, the recording closed,
        then the flush */
@@ -188,8 +198,15 @@ int main(void)
     o = ops_for(&f);
     o.surface_release = NULL;
     o.audio_pause = NULL;
-    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 4);
-    CHECK_CALLS(f, "log idle watchdog-pause flush");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 5);
+    CHECK_CALLS(f, "log park idle watchdog-pause flush");
+    o = ops_for(&f);
+    o.render_park = NULL; /* no render thread's op (a build without one): as before */
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 6);
+    CHECK_CALLS(f, "log idle release watchdog-pause audio-pause flush");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_DID_ENTER_FOREGROUND, &o) == 5);
+    CHECK_CALLS(f, "log idle release watchdog-pause audio-pause flush recreate watchdog-resume "
+                   "audio-resume pace log");
     o = ops_for(&f);
     o.config_dirty = NULL; /* nothing says the settings changed: no save */
     f.dirty = 1;
@@ -205,6 +222,26 @@ int main(void)
     CHECK_CALLS(f, "");
     CHECK(ico_lifecycle_steps(ICO_LIFECYCLE_NONE) == NULL);
     CHECK(strcmp(ico_lifecycle_name(ICO_LIFECYCLE_COUNT), "none") == 0);
+
+    /* the park and its end in the tables: park before the GPU idles and
+       the surface goes, unpark after the surface is made */
+    {
+        const IcoLifecycleStep *b = ico_lifecycle_steps(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND);
+        const IcoLifecycleStep *g = ico_lifecycle_steps(ICO_LIFECYCLE_DID_ENTER_FOREGROUND);
+        int park = -1, idle = -1, release = -1, recreate = -1, unpark = -1;
+
+        for (int i = 0; b != NULL && b[i] != ICO_LC_END; i++) {
+            park = b[i] == ICO_LC_RENDER_PARK ? i : park;
+            idle = b[i] == ICO_LC_GPU_WAIT_IDLE ? i : idle;
+            release = b[i] == ICO_LC_SURFACE_RELEASE ? i : release;
+        }
+        for (int i = 0; g != NULL && g[i] != ICO_LC_END; i++) {
+            recreate = g[i] == ICO_LC_SURFACE_RECREATE ? i : recreate;
+            unpark = g[i] == ICO_LC_RENDER_UNPARK ? i : unpark;
+        }
+        CHECK(park >= 0 && park < idle && idle < release);
+        CHECK(recreate >= 0 && recreate < unpark);
+    }
 
     /* every table ends, and every step in it is a known one */
     for (int e = ICO_LIFECYCLE_NONE + 1; e < ICO_LIFECYCLE_COUNT; e++) {

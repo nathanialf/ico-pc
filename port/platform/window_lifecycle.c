@@ -8,23 +8,26 @@
 #include <stddef.h>
 #include <stdio.h>
 
-/* The order matters. Going to the background, the GPU finishes before the
-   surface it presents to goes; the watchdog stops counting before SDL
+/* The order matters. Going to the background, the render thread parks
+   first (no present of its own while the surface goes), then the GPU
+   finishes before the surface it presents to goes; the watchdog stops
+   counting before SDL
    blocks the pump; the log is on the disc last, in case the system ends
    the process while it waits. Coming back, the surface is made before the
-   watchdog counts again (it can take a moment), the sound resumes on an
+   render thread goes on (made on the game thread, as it was released) and
+   before the watchdog counts again (it can take a moment), the sound resumes on an
    empty queue (no stale half second), and the pacer starts from now. */
-static const IcoLifecycleStep k_background[] = {ICO_LC_LOG_LINE,
-                                                ICO_LC_GPU_WAIT_IDLE,
-                                                ICO_LC_SURFACE_RELEASE,
-                                                ICO_LC_WATCHDOG_PAUSE,
-                                                ICO_LC_AUDIO_PAUSE,
-                                                ICO_LC_LOG_FLUSH,
-                                                ICO_LC_END};
+static const IcoLifecycleStep k_background[] = {
+    ICO_LC_LOG_LINE,       ICO_LC_RENDER_PARK, ICO_LC_GPU_WAIT_IDLE, ICO_LC_SURFACE_RELEASE,
+    ICO_LC_WATCHDOG_PAUSE, ICO_LC_AUDIO_PAUSE, ICO_LC_LOG_FLUSH,     ICO_LC_END};
 
-static const IcoLifecycleStep k_foreground[] = {ICO_LC_SURFACE_RECREATE, ICO_LC_WATCHDOG_RESUME,
-                                                ICO_LC_AUDIO_RESUME,     ICO_LC_PACE_RESET,
-                                                ICO_LC_LOG_LINE,         ICO_LC_END};
+static const IcoLifecycleStep k_foreground[] = {ICO_LC_SURFACE_RECREATE,
+                                                ICO_LC_RENDER_UNPARK,
+                                                ICO_LC_WATCHDOG_RESUME,
+                                                ICO_LC_AUDIO_RESUME,
+                                                ICO_LC_PACE_RESET,
+                                                ICO_LC_LOG_LINE,
+                                                ICO_LC_END};
 
 /* the recording's closing line goes into the log flush that follows */
 static const IcoLifecycleStep k_terminating[] = {ICO_LC_LOG_LINE, ICO_LC_CONFIG_SAVE,
@@ -140,6 +143,13 @@ static int run_step(IcoLifecycleStep step, IcoLifecycleEvent event, const IcoLif
             return 0;
         }
         o->log_flush(u);
+        return 1;
+    case ICO_LC_RENDER_PARK:
+    case ICO_LC_RENDER_UNPARK:
+        if (o->render_park == NULL) {
+            return 0;
+        }
+        o->render_park(u, step == ICO_LC_RENDER_PARK);
         return 1;
     case ICO_LC_END:
     case ICO_LC_STEP_COUNT:

@@ -67,7 +67,24 @@
  *   the disc's excuse (testDiscWait126): every 150th step 100 ms long, the
  *   game thread waiting for a disc read the whole of it (issue 126), drops
  *   nothing and counts each in discExcused; the same steps without a disc
- *   wait count none.
+ *   wait count none;
+ *   the render thread (port/platform/render_thread.h; the fake's async
+ *   model: a present's own part, the interpolation and the record, on the
+ *   game thread, its submit and present on the render thread's timeline,
+ *   the picture handed over at the end of the game thread's part and ready
+ *   the GPU's time after the render thread's part; the next present waits
+ *   for the render thread's part before its own, as rd__wait_frame does):
+ *   testAsyncLock, the lock at 60 Hz with a 5 ms step and a 12.5 ms present
+ *   on the game thread falls behind and skips, the same present split 9 ms
+ *   on the game thread and 3.5 ms on the render thread keeps every step on
+ *   time, one present a step, the alphas on the grid; testAsyncRates, the
+ *   timer path paced by the GPU's time (vsync off or mailbox) with the
+ *   presents handed over: pictures of 9, 12, 17, 20 and 25 ms give about a
+ *   period over the picture time presents a step, never more than the GPU
+ *   draws, no step a quarter of a period late; 30 ms pictures every new
+ *   frame (30 a second); and a present whose CPU part is 9 ms (3
+ *   interpolated, 2 recorded, 4 submitted and presented) with a 3 ms step:
+ *   two presents a step with the render thread against one without.
  */
 #include <stdio.h>
 #include <string.h>
@@ -169,6 +186,12 @@ typedef struct Fake {
     int fence;
     uint64_t readyAt[4];
     uint64_t fenceWait, displayWait;
+    /* the render thread (mailbox and FIFO): cost is the game thread's part
+       of a present, rcost the render thread's (the submit and the
+       present), which starts when the game thread's ends; the next present
+       waits for it first (rd__wait_frame); rFree: when it is done */
+    int async;
+    uint64_t rcost, rFree;
 } Fake;
 
 static uint64_t f_now(void *u)
@@ -276,6 +299,13 @@ static uint64_t f_cost(Fake *f)
 
 static void f_present_mailbox(Fake *f)
 {
+    uint64_t handWait = 0;
+
+    if (f->async && f->rFree > f->now) {
+        /* the picture before's submit and present, on the render thread */
+        handWait = f->rFree - f->now;
+        f->now = f->rFree;
+    }
     const uint64_t acquire = f->now;
 
     f_display_to(f, f->now);
@@ -287,7 +317,7 @@ static void f_present_mailbox(Fake *f)
             f_display_to(f, f->now);
         }
     }
-    f->displayWait = f->now - acquire;
+    f->displayWait = f->now - acquire + handWait; /* as present_once counts it */
     f->fenceWait = 0;
     if (f->fence && f->nextId >= 2) {
         /* the picture two before the one made now (ids from 1) */
@@ -298,7 +328,14 @@ static void f_present_mailbox(Fake *f)
     }
     f->now += f_cost(f);
     f_display_to(f, f->now);
-    uint64_t ready = (f->fence && f->lastReady > f->now ? f->lastReady : f->now) + f->gpu +
+    uint64_t submitAt = f->now;
+
+    if (f->async) {
+        /* handed over: submitted and presented on the render thread */
+        f->rFree = f->now + f->rcost;
+        submitAt = f->rFree;
+    }
+    uint64_t ready = (f->fence && f->lastReady > submitAt ? f->lastReady : submitAt) + f->gpu +
                      (f->gpuJitter ? f_rand(f) % f->gpuJitter : 0);
 
     if (f->spikeEvery != 0 && (f->nextId + 1) % f->spikeEvery == 0) {
@@ -1938,6 +1975,182 @@ static void testDiscWait126(void)
     }
 }
 
+/* The lock at 60 Hz, a frame every two steps of 5 ms: a present of 12.5 ms
+   all on the game thread (the interpolation and the record 9 ms, the
+   submit and the present 3.5 ms) leaves the step past the period, so the
+   steps fall behind and presents are skipped; with the submit and the
+   present on the render thread the game thread's 9 ms and the step fit the
+   period: every step on time, one present a step, the alphas exact */
+static void testAsyncLock(void)
+{
+    for (int async = 0; async < 2; async++) {
+        Fake f = fake(D60);
+        Opt o = opt(1, R60, 30.0);
+        Run r;
+
+        f.async = async;
+        f.cost = async ? 9 * MS : 12500000ull;
+        f.rcost = 3500000ull;
+        f.gpu = 8 * MS;
+        o.step = 5 * MS;
+        r = run(&f, &o);
+        printf("the render thread %s: a 5 ms step and a present of 9 + 3.5 ms at 60 Hz: %.2f "
+               "presents a step after 1 s, latest step %.3f ms, %u skipped, %u late skips, %u "
+               "resyncs\n",
+               async ? "on" : "off", (double)r.presentsFrom / (double)r.stepsFrom,
+               (double)r.lateMaxFrom / 1e6, r.skippedFrom, r.L.skippedLate, r.resyncs);
+        CHECK(r.alphaOffGrid == 0);
+        if (async) {
+            CHECK(r.resyncs == 0 && r.skippedFrom == 0 && r.L.skippedLate == 0);
+            CHECK(r.lateMaxFrom < MS);
+            CHECK(r.presentsFrom * 100 >= r.stepsFrom * 99 && r.presentsFrom <= r.stepsFrom + 1);
+            CHECK(r.alphaBad == 0);
+        } else {
+            CHECK(r.lateMaxFrom >= MS / 2 || r.skippedFrom > 0 || r.L.skippedLate > 0);
+        }
+    }
+}
+
+typedef struct AsyncRun {
+    unsigned frames, presents, shown, resyncs;
+    uint64_t lateMax; /* the latest step after the first second */
+} AsyncRun;
+
+/* The timer path paced by the GPU's time (window_present.c pace, vsync off
+   or mailbox; pace_policy_test's budgetLoop with the render thread): steps
+   of stepNs, a frame every two; a present is the interpolation preNs, the
+   wait for the render thread's part of the one before (async: rd__wait_frame
+   at the replay's start), the fence (the picture two before), then the
+   walk recNs; its submit and present subNs on the render thread (async) or
+   on the game thread after the walk; the GPU draws gpuNs a picture, in
+   order, from the submit */
+static AsyncRun asyncTimerLoop(unsigned steps, uint64_t gpuNs, uint64_t preNs, uint64_t recNs,
+                               uint64_t subNs, uint64_t stepNs, bool async)
+{
+    PaceHist h;
+    PaceBudget b;
+    AsyncRun r;
+    uint64_t t = 0, deadline = 0, cost = 0, waitNs = 0, rFree = 0;
+    uint64_t ready[4] = {0, 0, 0, 0};
+    unsigned made = 0;
+    uint32_t frame = 0, presented = 0, skipFrame = 0;
+    bool skipOpen = false, slow = false;
+
+    memset(&h, 0, sizeof h);
+    memset(&r, 0, sizeof r);
+    pace_budget_reset_paced(&b, PACE_ALLOW_MAX); /* as window_host.c window_timer_budget_reset */
+    for (unsigned k = 0; k < steps; k++) {
+        t += stepNs;
+        if (k % 2 == 0) {
+            frame++;
+            r.frames++;
+        }
+        deadline += NTSC;
+        waitNs = 0;
+        for (;;) {
+            const bool newFrame = presented != frame;
+
+            if (pace_late_skip(newFrame, pace_skipped_last(skipOpen, skipFrame, frame), slow, t,
+                               deadline, NTSC) != PACE_SKIP_NONE) {
+                skipOpen = true;
+                skipFrame = frame;
+                break;
+            }
+            if (!newFrame) {
+                const bool old = t >= deadline || slow || t + cost > deadline;
+
+                if (old || !pace_budget_allows_paced(&b, false, gpuNs, NTSC)) {
+                    t = t < deadline ? deadline : t;
+                    break;
+                }
+            }
+            const uint64_t start = t;
+
+            t += preNs;
+            const uint64_t hand = async && rFree > t ? rFree - t : 0;
+
+            t += hand;
+            const uint64_t two = made >= 2 ? ready[(made - 2) % 4] : 0;
+            const uint64_t fence = two > t ? two - t : 0;
+
+            t += fence + recNs;
+            uint64_t submit;
+
+            if (async) {
+                rFree = t + subNs;
+                submit = rFree;
+            } else {
+                t += subNs;
+                submit = t;
+            }
+            const uint64_t prev = made >= 1 ? ready[(made - 1) % 4] : 0;
+
+            ready[made % 4] = (prev > submit ? prev : submit) + gpuNs;
+            made++;
+            cost = t - start;
+            waitNs = hand;
+            slow = pace_slow_present(&h, cost, R60, NTSC, false);
+            r.shown += newFrame ? 1u : 0u;
+            presented = frame;
+            skipOpen = false;
+            r.presents++;
+            pace_budget_present(&b, newFrame);
+        }
+        {
+            const uint64_t late = t > deadline ? t - deadline : 0;
+
+            if (k >= 60 && late > r.lateMax) {
+                r.lateMax = late;
+            }
+            (void)pace_budget_step(&b, late, NTSC, R60, waitNs, gpuNs, stepNs, 0);
+        }
+        if (t > deadline && t - deadline > 100 * MS) {
+            r.resyncs++;
+            deadline = t;
+        }
+    }
+    return r;
+}
+
+static void testAsyncRates(void)
+{
+    static const unsigned pictures[] = {9, 12, 17, 20, 25, 30};
+
+    for (unsigned i = 0; i < sizeof(pictures) / sizeof(pictures[0]); i++) {
+        const uint64_t gpu = pictures[i] * MS;
+        /* the present's CPU 1 ms: half recorded, half submitted and
+           presented on the render thread */
+        const AsyncRun r = asyncTimerLoop(600, gpu, 0, MS / 2, MS / 2, 3 * MS, true);
+
+        printf("the render thread on, paced, %u ms pictures: %u presents in 10 s (%.1f a "
+               "second, %.2f a step), %u frames, latest step %.1f ms, %u resyncs\n",
+               pictures[i], r.presents, (double)r.presents * 1e9 / (600.0 * (double)NTSC),
+               (double)r.presents / 600.0, r.frames, (double)r.lateMax / 1e6, r.resyncs);
+        CHECK(r.resyncs == 0 && r.lateMax < NTSC / 4 && r.shown == r.frames);
+        CHECK((uint64_t)r.presents * gpu <= 601u * NTSC);
+        if (pictures[i] < 30) {
+            CHECK((uint64_t)r.presents + 5 >= 600u * NTSC / gpu);
+        } else {
+            CHECK(r.presents == r.frames); /* the new frames: 30 a second */
+        }
+    }
+    {
+        /* a CPU-bound present: 9 ms (3 interpolated, 2 recorded, 4
+           submitted and presented), a 3 ms step, a 4 ms GPU: back to back
+           a present takes max(3, 4) + 2 ms with the render thread */
+        const AsyncRun off = asyncTimerLoop(600, 4 * MS, 3 * MS, 2 * MS, 4 * MS, 3 * MS, false);
+        const AsyncRun on = asyncTimerLoop(600, 4 * MS, 3 * MS, 2 * MS, 4 * MS, 3 * MS, true);
+
+        printf("a 9 ms present, a 3 ms step: %u presents with the render thread, %u without; "
+               "latest step %.1f and %.1f ms\n",
+               on.presents, off.presents, (double)on.lateMax / 1e6, (double)off.lateMax / 1e6);
+        CHECK(on.resyncs == 0 && off.resyncs == 0);
+        CHECK(on.shown == on.frames && off.shown == off.frames);
+        CHECK(off.presents <= 605u && on.presents >= 1150u);
+        CHECK(on.lateMax < NTSC / 4);
+    }
+}
+
 int main(void)
 {
     test60();
@@ -1967,6 +2180,8 @@ int main(void)
     test120Budget();
     testDiscWait126();
     testVblankClockLeft();
+    testAsyncLock();
+    testAsyncRates();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;

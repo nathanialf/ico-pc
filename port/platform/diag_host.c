@@ -160,6 +160,13 @@ static void (*volatile gpu_dump_fn)(void);
 static volatile unsigned int gpu_hang_limit_ms;
 /* ico_diag_set_gpu_hang_note: the sentence the Android hang box ends with */
 static const char *(*volatile gpu_hang_note_fn)(void);
+/* ico_diag_set_render_heartbeat: the render thread's picture in progress;
+   render_hang: the watchdog ends the run on it (the GPU hang's path), with
+   the picture and the time it was counted */
+static int (*volatile render_beat_fn)(unsigned long long *seq, unsigned long long *done);
+static volatile int render_hang;
+static unsigned long long render_hang_seq;
+static double render_hang_s;
 static void (*exit_hook)(const char *reason);
 
 #ifndef _WIN32
@@ -946,6 +953,11 @@ void ico_diag_set_gpu_hang_limit(double seconds)
 void ico_diag_set_gpu_hang_note(const char *(*note)(void))
 {
     gpu_hang_note_fn = note;
+}
+
+void ico_diag_set_render_heartbeat(int (*beat)(unsigned long long *seq, unsigned long long *done))
+{
+    render_beat_fn = beat;
 }
 
 /* the backend's progress into *g: 1 when it tracks it (no call into the
@@ -5018,10 +5030,16 @@ static void watchdog_fire(const char *reason)
     /* a GPU hang (diag_host.h ico_diag_set_gpu_hang): the main thread waits
        for work the GPU has not finished; the end is a device loss's */
     tracked = gpu_state(&gpu);
-    hang = tracked && gpu_hung(&gpu);
+    hang = (tracked && gpu_hung(&gpu)) || render_hang;
     flog("ico_pc: ======================================================================");
     flog("ico_pc: WATCHDOG: %s", reason);
-    if (hang) {
+    if (render_hang) {
+        flog("ico_pc: the graphics driver did not finish the picture (the render thread has been "
+             "inside picture %llu's submit and present for %.0f s; the main thread waits for it); "
+             "this end counts as a device loss (the loss dump; the next start counts the loss "
+             "and does not replay the frame)",
+             render_hang_seq, render_hang_s);
+    } else if (hang) {
         flog("ico_pc: the graphics driver did not finish the picture (submission %llu has not "
              "finished after a %.0f s wait)",
              gpu.waiting_for, gpu.waiting_s);
@@ -5103,7 +5121,12 @@ static void watchdog_fire(const char *reason)
     {
         char what[LINE_MAX_BYTES - 64];
 
-        if (hang) {
+        if (render_hang) {
+            snprintf(what, sizeof what,
+                     "the graphics driver stopped responding (the render thread's picture %llu "
+                     "has not finished after a %.0f s wait)",
+                     render_hang_seq, render_hang_s);
+        } else if (hang) {
             snprintf(what, sizeof what,
                      "the graphics driver stopped responding (submission %llu has not finished "
                      "after a %.0f s wait)",
@@ -5210,9 +5233,11 @@ static void watchdog_loop(void)
     unsigned int first_s = wd_first_s;
     unsigned int later_s = wd_later_s;
     char reason[200];
-    /* the GPU hang limit's watch (gpu_hang.h): the wait it counts */
-    IcoGpuHangWatch hang_watch;
+    /* the GPU hang limit's watch (gpu_hang.h): the wait it counts, and the
+       render thread's picture it counts the same way */
+    IcoGpuHangWatch hang_watch, render_watch;
     memset(&hang_watch, 0, sizeof hang_watch);
+    memset(&render_watch, 0, sizeof render_watch);
     for (;;) {
         double now;
         unsigned int ticks;
@@ -5359,6 +5384,25 @@ static void watchdog_loop(void)
                          "newest is %llu, the newest seen finished %llu",
                          g.waiting_for, g.waiting_s, (double)hang_ms / 1000.0, g.submitted,
                          g.finished);
+                watchdog_fire(reason);
+                continue;
+            }
+            /* the render thread (ico_diag_set_render_heartbeat): one picture
+               inside its submit and present for the limit's time, counted
+               the same way; not with an effects program, whose first
+               presents prepare its effects */
+            int (*beat)(unsigned long long *, unsigned long long *) = render_beat_fn;
+            unsigned long long rseq = 0, rdone = 0;
+            if (beat != NULL && !effects_program && beat(&rseq, &rdone) &&
+                ico_gpu_hang_step(&render_watch, (double)hang_ms / 1000.0, rseq, rdone, poll_dt,
+                                  poll_counted)) {
+                render_hang_seq = rseq;
+                render_hang_s = render_watch.counted_s;
+                render_hang = 1;
+                snprintf(reason, sizeof reason,
+                         "the render thread: picture %llu has not finished its submit and present "
+                         "after %.0f s (limit %.0f s); the last finished %llu",
+                         rseq, render_watch.counted_s, (double)hang_ms / 1000.0, rdone);
                 watchdog_fire(reason);
                 continue;
             }

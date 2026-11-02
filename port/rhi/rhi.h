@@ -750,6 +750,14 @@ typedef struct RhiLimits {
     const char *driverText;
     const char *robustText;
     bool robustDefaultOff;
+    /* Every RHI call must come from one thread: OpenGL runs each rhi_cmd_*
+     * at once on the context bound to the calling thread, Direct3D 11 on
+     * its immediate context (true there).  Vulkan and D3D12 (false) take a
+     * command list recorded on one thread and submitted and presented on
+     * another, the calls never at the same time (rhi_set_call_guard): the
+     * window's render thread is started only where this is false
+     * (port/platform/render_thread.c). */
+    bool singleThreadCommands;
 } RhiLimits;
 
 typedef struct RhiDeviceDesc {
@@ -1217,6 +1225,39 @@ typedef struct RhiStats {
 } RhiStats;
 
 void rhi_get_stats(RhiStats *out);
+
+/* The call guard (the window's render thread, port/platform/render_thread.c):
+ * a thread that submits and presents work recorded on another.  busy(user):
+ * work was handed to that thread and has not finished, and the calling
+ * thread is not it; wait(user) returns once it has finished.  Every rhi.h
+ * entry point that changes the device's state (every one but the queries
+ * below and the rhi_cmd_* recording calls, which only the thread that
+ * began the list makes, before it hands the list over) first waits while
+ * busy, so two threads never run inside the backend at once.  The queries
+ * that do not wait: rhi_limits, rhi_backend, the adapter calls,
+ * rhi_device_lost, rhi_gpu_progress, rhi_frame_slot, rhi_swapchain_format,
+ * rhi_swapchain_size, rhi_present_mailbox, rhi_present_mode_name,
+ * rhi_present_shown, rhi_present_timing, rhi_present_last_id,
+ * rhi_present_timing_next, rhi_present_statistics (the display line's
+ * counts: a present's last, at worst one present old), rhi_present_fifo_fallback_on,
+ * rhi_timestamps_supported, rhi_occlusion_supported,
+ * rhi_pipeline_cache_loaded, rhi_pipeline_cache_size, rhi_injector_name,
+ * rhi_overlay_name and rhi_get_stats, which while busy gives the counters
+ * as rhi_call_guard_snapshot took them (the hand-over's) instead of the
+ * ones the other thread is writing.  NULL: no guard (the default; every
+ * call runs at once).  Set and cleared on the thread that records, with
+ * the other thread idle. */
+typedef struct RhiCallGuard {
+    void *user;
+    bool (*busy)(void *user);
+    void (*wait)(void *user);
+} RhiCallGuard;
+
+void rhi_set_call_guard(const RhiCallGuard *guard);
+/* The counters now, for rhi_get_stats while the guard is busy: called by
+ * the recording thread right before it hands work over, the other thread
+ * idle */
+void rhi_call_guard_snapshot(void);
 
 /* GPU timestamps.  Each frame slot (rhi_wait_frame) has RHI_MAX_TIMESTAMPS
  * of them; rhi_cmd_write_timestamp(cl, i) records slot i when the GPU has

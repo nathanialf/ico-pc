@@ -8,6 +8,7 @@ target_sources(ico_platform PRIVATE
     diag_host.c
     fiber.c
     fps_counter.c
+    frame_mailbox.c
     game_data_range.c
     gpu_hang.c
     hotkeys.c
@@ -121,9 +122,13 @@ endif()
 # present_fallback: the FIFO fallback's decision over a log's present blocks
 # under mailbox, the driver's eligibility, the [dev] value and the lines
 # (present_fallback.c)
+# frame_mailbox: the game thread's and the render thread's hand-over
+# (frame_mailbox.c): the latest frame wins, the slot pins, park and quit with
+# a job queued, the submit's handshake, the heartbeat and the block's
+# numbers under a fake clock, the [dev] render_thread mode
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
           gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
-          present_fallback)
+          present_fallback frame_mailbox)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

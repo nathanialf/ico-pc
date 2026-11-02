@@ -93,6 +93,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_submit.h"
 #include "shader_consts.h"
 
 typedef struct RdPresentPreset {
@@ -548,6 +549,7 @@ static bool s_window;
 
 bool rd__present_acquire(void)
 {
+    rd__submit_drain(); /* the last picture's present reads what this sets (rd_submit.h) */
     s_backbuffer = (RhiTexture){0};
     s_window = rhi_swapchain_format() != RHI_FMT_UNKNOWN;
     if (s_window) {
@@ -1881,6 +1883,11 @@ static uint8_t *boxDownscale(const uint8_t *src, uint32_t w, uint32_t h, uint32_
 bool rd__capture_armed(void)
 {
     return s_cap.armed != 0 || s_shot.armed != 0;
+}
+
+bool rd__capture_pending(void)
+{
+    return s_cap.copied != 0 || s_shot.copied != 0 || s_shot.dropped != 0;
 }
 
 int rd_capture_result(char *path, uint32_t pathSize)

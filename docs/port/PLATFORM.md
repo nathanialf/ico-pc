@@ -41,6 +41,8 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/assert_host.c` | newlib's `__assert` as the game calls it |
 | `port/platform/window_host.c`, `window_host.h` | the SDL3 window, the renderer device, the real-time pacing, the stats lines (window build) |
 | `port/platform/window_present.c`, `window_present.h` | the presentation loop: the pace after each step under the vsync lock or on the timer path, the one present it makes at a time, the state it shares with `window_host.c` (window build) |
+| `port/platform/render_thread.c`, `render_thread.h` | the render thread: the submit and the present of the pictures the game thread records, park and unpark, the drain, the heartbeat, `[dev] render_thread` ([The render thread](#the-render-thread); window build) |
+| `port/platform/frame_mailbox.c`, `frame_mailbox.h` | what the game thread and the render thread hand each other, free of SDL and locks (the latest frame, the lock grid, the last present, slot pins, the job queue and its handshake, park and quit, the heartbeat, the mode); `frame_mailbox_test` |
 | `port/platform/window_video.c`, `window_video.h` | window mode requests and their readback |
 | `port/platform/window_switch.c`, `window_switch.h` | Options > Graphics > Apply: the renderer switched to another backend or graphics card in the process, the Graphics page's host and its card names |
 | `port/platform/window_lifecycle.c`, `window_lifecycle.h` | the steps run when a mobile system moves the app |
@@ -307,6 +309,78 @@ hold, the first present on a new swapchain, the automatic resolution step) is in
 `port/platform/pace_policy.c`, tested by ctest `pace_policy` and `pace_loop`; `window_present.c` only
 times and calls them. The [headless build](ARCHITECTURE.md#terms) has no pacing and runs vsyncs as
 fast as it can. [DISPLAY.md](DISPLAY.md#pacing) describes the paths and the vsync lock.
+
+## The render thread
+
+The window build has two threads that draw. The game thread runs the host loop (the step, the
+event pump, `ico_window_pace`), records each replay's command list and keeps the pacing; the
+render thread (`port/platform/render_thread.c`) then ends that list, submits it, presents the
+picture and writes out a capture the present copied. The submit's and the present's time (on the
+DXT-48 phone 2.5 ms and more a picture) is then off the game thread, behind its next step. It runs
+with Vulkan and Direct3D 12; OpenGL and Direct3D 11 take every call on one thread
+(`RhiLimits.singleThreadCommands`) and keep both on the game thread. The texture decode workers,
+the disc reader, the present-wait thread and the watchdog stay as they are.
+
+The rules (`port/platform/render_thread.h`, header comment):
+
+- One thread in the backend at a time. While the render thread works on a picture, every RHI call
+  another thread makes that changes the device's state first waits for it (`port/rhi/rhi.h`
+  (`rhi_set_call_guard`); `port/rhi/rhi_backend.c` (`RHI_GUARD`)). The queries that do not wait
+  are listed there; `rhi_get_stats` then gives the counters as they were at the hand-over
+  (`rhi_call_guard_snapshot`). The recording calls (`rhi_cmd_*`) do not wait: only the game
+  thread records, and only between hand-overs.
+- The handshake. A replay's list is job s of the queue (`port/platform/frame_mailbox.h`); the next
+  replay waits for job s to finish (submit and present) before it waits its own frame slot's fence
+  (`port/render/rd_replay.c` (`rd__wait_frame`); `port/render/rd_submit.c` (`rd__submit_drain`)),
+  so the backend's frame and the upload ring's slot it reuses are free. `rd__present_acquire`
+  waits the same way.
+- A picture whose capture is armed (F12, a save state's picture) and every picture while the
+  vsync lock uses the display's timing (it reads a present's id right after it) wait for their
+  present before the replay returns (`rd_submit_hold`, `rd__capture_pending`).
+- Device loss: `rhi_device_lost` is atomic; `device_lost_quit` waits for the render thread before
+  it reads the pass ring and the frames (`port/platform/window_host.c` (`device_lost_quit`)).
+- The swapchain's acquire, present and rebuilds hold a lock of their own in each backend
+  (`port/rhi/vk/vk_swapchain.c` (`vkr_swap_lock`), `port/rhi/d3d12/d3d12_swapchain.c`
+  (`dx_swap_lock`); recursive: a present that rebuilds resizes inside it).
+- Start and stop. `ico_window_open` starts the thread after the start-up set, the self-tests and
+  their screens; Options > Graphics > Apply stops it before `rd_suspend` and starts it again after
+  `rd_resume` (`ico_window_reopen`); `ico_window_close` stops it first. The thread runs at SDL's
+  high priority (`SDL_SetCurrentThreadPriority`), against a phone's scheduler moving it to a
+  little core.
+- Park. The lifecycle table parks the thread before the GPU idles and the surface goes, and lets it
+  go on after the surface is made again on the game thread ([Window lifecycle](#window-lifecycle));
+  while parked the pictures are submitted and presented on the game thread as without it.
+- The heartbeat. The watchdog's thread reads the picture in progress without a lock
+  (`ico_diag_set_render_heartbeat`) and counts one picture that does not finish as it counts a
+  wait for the GPU: at the GPU hang limit the run ends through the GPU hang's path
+  ([Diagnostics](#diagnostics)); not while an effects program is loaded.
+
+`[dev] render_thread` (config.toml, or `render_thread` in `ico-pc.ini`) picks it: `auto` (the
+default) and `on` run it with Vulkan and Direct3D 12, `off` keeps the submit and the present on
+the game thread as before, `sync` runs it with the game thread waiting for each picture (the A/B:
+the same pictures in the same order as `off`) (`port/platform/frame_mailbox.c`
+(`fm_mode_choose`)). The start says which:
+
+```
+window: render thread: on (submit and present off the game thread; Vulkan, [dev] render_thread = auto)
+window: render thread: off (the graphics API takes every call on one thread (OpenGL, Direct3D 11))
+window: render thread: sync (submit and present on the render thread, [dev] render_thread = sync: the game thread waits for each picture)
+```
+
+Every 10 s block adds the two threads' line: the game thread's mean step, replay (the record) and
+pump in ms and its waits for the render thread (the slot waits, with their time), and the render
+thread's share of the block with no picture to do, its longest wait for one and its longest
+picture (the heartbeat's longest gap):
+
+```
+window: game thread: step 3.1 ms, record 7.9 ms, pump 0.4 ms, slot waits 12 (8.2 ms); render thread: idle 71 %, waited for a frame 14.2 ms, heartbeat max 4.9 ms (590 pictures)
+```
+
+`window: render thread: parked (...)` and `window: render thread: goes on` mark a park (the first
+16 of each); `window: render thread: the high priority was refused (...)` says the system kept its
+priority. Handed over, a replay's perf record carries the last finished picture's submit and
+present times (one replay late; their means are the same), and its wait time holds the wait for
+the render thread (`port/render/rd_submit.c` (`rd__submit_frame`)).
 
 ## Arena, partitions and host extras
 
@@ -1713,6 +1787,21 @@ driver route to a Turnip package (`UI_STR_GPU_HANG_TURNIP`;
 `port/platform/android/gpu_driver_android.c` (`ico_gpu_driver_android_hang_note`), registered with
 `ico_diag_set_gpu_hang_note`).
 
+With the [render thread](#the-render-thread) presenting, a picture the driver never finishes
+leaves the render thread inside the driver's present and the main thread waiting for the render
+thread, not for the GPU, so the backend's progress names no wait. The render thread's heartbeat
+covers it: the watchdog's thread reads the picture in progress without a lock
+(`port/platform/diag_host.h` (`ico_diag_set_render_heartbeat`); `port/platform/render_thread.c`
+(`rt_heartbeat`)) and counts it through a second `IcoGpuHangWatch`, the same limit and the same
+counting rules (not with an effects program loaded, whose first presents prepare its effects); at
+the limit the WATCHDOG line is `the render thread: picture P has not finished its submit and
+present after W s (limit L s); the last finished D`, its second line `the graphics driver did not
+finish the picture (the render thread has been inside picture P's submit and present for W s; the
+main thread waits for it); this end counts as a device loss (...)`, and the rest (the dump, the loss
+line, the report's `the graphics driver stopped responding (the render thread's picture P has not
+finished after a W s wait)`, the box) is the GPU hang's (`port/platform/diag_host.c`
+(`watchdog_loop`, `watchdog_fire`, `render_hang`)).
+
 The window build logs a stats block every 10 s. A host step longer than `[dev] slow_step_ms`
 (default 8, 0 off) logs a slow-step line ([DISPLAY.md](DISPLAY.md#pacing);
 `port/platform/window_host.c` (`slow_step`); `port/platform/host_loop.h` (`IcoStepProfile`)).
@@ -2061,10 +2150,12 @@ When a mobile system moves the app, the window build runs one table of steps per
 operations it supplies, so `port/platform/test/lifecycle_test.c` checks the order with fakes
 (`port/platform/window_lifecycle.h` (`ico_lifecycle_on`)):
 
-- will enter background: a line, the GPU idle, the surface released (the device kept), the
-  watchdog paused, the sound paused, the log flushed;
-- did enter foreground: the surface and swapchain made again, the watchdog running, the sound
-  resumed with its queue emptied, the pacer's deadline reset to now, a line;
+- will enter background: a line, the [render thread](#the-render-thread) parked (what it has
+  finishes first), the GPU idle, the surface released (the device kept), the watchdog paused, the
+  sound paused, the log flushed;
+- did enter foreground: the surface and swapchain made again (on the game thread, the render
+  thread still parked), the render thread going on, the watchdog running, the sound resumed with
+  its queue emptied, the pacer's deadline reset to now, a line;
 - terminating: a line, the settings saved when changed, the pad recording closed, the log flushed;
 - low memory: the texture pack's read-ahead held, a line, the log flushed.
 

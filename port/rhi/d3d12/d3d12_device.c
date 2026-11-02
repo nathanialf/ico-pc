@@ -55,7 +55,9 @@ bool dx_check(HRESULT hr, const char *what, const char *file, int line)
      * another failure on a device whose removed reason is set */
     HRESULT reason = g_dx.device ? ID3D12Device_GetDeviceRemovedReason(g_dx.device) : S_OK;
     if (dx_is_loss_code(hr) || reason != S_OK) {
-        g_dx.deviceLost = true;
+        /* rhi_device_lost reads it on any thread (the window's and its render
+           thread's) */
+        __atomic_store_n(&g_dx.deviceLost, true, __ATOMIC_RELEASE);
         fprintf(stderr,
                 "rhi_d3d12: the device was lost (%s); removed reason 0x%08lx (%s). Rendering "
                 "stops; the session ends.\n",
@@ -939,7 +941,7 @@ void rhi_set_adapter_wanted(const char *name)
 
 bool rhi_device_lost(void)
 {
-    return g_dx.deviceLost;
+    return __atomic_load_n(&g_dx.deviceLost, __ATOMIC_ACQUIRE);
 }
 
 /* The performance entry points (rhi.h) on D3D12: the counts the Vulkan

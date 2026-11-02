@@ -13,6 +13,7 @@
 #include "diag_host.h"
 #include "display_clock.h"
 #include "host_loop.h"
+#include "rd_submit.h"
 #include "rhi.h"
 #include "ui_fps.h"
 #include "video_options.h"
@@ -68,7 +69,13 @@ static int frame_seen(Uint64 closeAt)
 static int present_once(float a, Uint64 refresh, Uint64 period)
 {
     RhiStats before, st;
+    /* the replay's waits for the render thread's picture before (rd_submit.h) */
+    const uint64_t handWait0 = rd_submit_waited_ns();
 
+    /* under the vsync lock with the display's timing the lock reads the
+       present's id right after it: those pictures wait for their present
+       on the render thread */
+    rd_submit_hold(s_pres.timingUse != 0);
     rhi_get_stats(&before);
     Uint64 t0 = SDL_GetTicksNS();
     ico_diag_present_enter();
@@ -115,7 +122,21 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
        wait where the fence waits hold the display's (pace_display_wait:
        OpenGL with vsync on, issue 126) */
     s_pres.fenceHoldsDisplay = st.fenceWaitsHoldDisplay && s_pres.vsync;
-    if (st.presents != before.presents && st.acquireNs + st.presentNs + st.fenceWaitNs != 0) {
+    if (rd_submit_async()) {
+        /* handed to the render thread, its present still to come (the
+           counters are the hand-over's, rhi.h rhi_set_call_guard): the
+           display's wait is this present's acquire and its wait for the
+           picture before it (that one's submit and present: FIFO's full
+           queue), the GPU's the fence waits; never more than the present */
+        const Uint64 disp = (st.acquireNs - before.acquireNs) + (rd_submit_waited_ns() - handWait0);
+        const Uint64 fence = st.fenceWaitNs - before.fenceWaitNs;
+
+        s_pres.lockWaitNs = disp + fence < s_pres.cost ? disp + fence : s_pres.cost;
+        s_pres.displayWaitNs =
+            pace_display_wait(disp, fence, s_pres.cost, s_pres.fenceHoldsDisplay);
+        s_pres.fenceWaitNs = fence < s_pres.cost ? fence : s_pres.cost;
+    } else if (st.presents != before.presents &&
+               st.acquireNs + st.presentNs + st.fenceWaitNs != 0) {
         const Uint64 disp = (st.acquireNs - before.acquireNs) + (st.presentNs - before.presentNs);
         const Uint64 fence = st.fenceWaitNs - before.fenceWaitNs;
 

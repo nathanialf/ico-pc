@@ -529,6 +529,7 @@ static void d11_fill_limits(void)
     o->depthStencilFormatName = "D32S8";
     o->depthSampled = true;
     o->tiler = false;
+    o->singleThreadCommands = true; /* rhi.h: the immediate context runs each call at once */
     /* buffer->texture copies are UpdateSubresource from the upload shadow:
      * any pitch; offsets of whole texels */
     o->copyRowPitchAlign = 1;

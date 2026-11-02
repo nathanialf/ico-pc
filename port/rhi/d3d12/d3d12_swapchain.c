@@ -11,6 +11,35 @@
 
 #define DX_SWAP_BUFFERS 3u
 
+/* The swapchain's lock: the acquire, the present and ResizeBuffers
+ * (rhi_resize_swapchain) hold it, so a present on the window's render
+ * thread (port/platform/render_thread.c) and an acquire or a resize on the
+ * window's thread never interleave.  A critical section is recursive: a
+ * present that follows the window's size calls rhi_resize_swapchain inside
+ * it.  Initialised once, by whichever thread comes first. */
+static CRITICAL_SECTION s_swapLock;
+static INIT_ONCE s_swapLockOnce = INIT_ONCE_STATIC_INIT;
+
+static BOOL CALLBACK dx_swap_lock_init(PINIT_ONCE once, PVOID param, PVOID *ctx)
+{
+    (void)once;
+    (void)param;
+    (void)ctx;
+    InitializeCriticalSection(&s_swapLock);
+    return TRUE;
+}
+
+static void dx_swap_lock(void)
+{
+    InitOnceExecuteOnce(&s_swapLockOnce, dx_swap_lock_init, NULL, NULL);
+    EnterCriticalSection(&s_swapLock);
+}
+
+static void dx_swap_unlock(void)
+{
+    LeaveCriticalSection(&s_swapLock);
+}
+
 static void dx_release_swap_buffers(void)
 {
     for (uint32_t i = 0; i < g_dx.swapCount; i++) {
@@ -161,7 +190,7 @@ bool dx_swapchain_create(uint32_t w, uint32_t h, bool vsync)
     return dx_register_swap_buffers(w, h);
 }
 
-bool rhi_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
+static bool dx_resize_swapchain_locked(uint32_t width, uint32_t height, bool vsync)
 {
     if (!g_dx.swapchain) {
         return false;
@@ -178,6 +207,14 @@ bool rhi_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
     g_dx.swapchains++;
     g_dx.vsync = vsync;
     return dx_register_swap_buffers(width, height);
+}
+
+bool rhi_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
+{
+    dx_swap_lock();
+    const bool ok = dx_resize_swapchain_locked(width, height, vsync);
+    dx_swap_unlock();
+    return ok;
 }
 
 RhiFormat rhi_swapchain_format(void)
@@ -208,7 +245,7 @@ bool rhi_present_shown(void)
     return s_presentShown;
 }
 
-RhiTexture rhi_acquire_backbuffer(void)
+static RhiTexture dx_acquire_backbuffer_locked(void)
 {
     RhiTexture out = {0};
     s_presentShown = false; /* until this frame's present shows it */
@@ -252,6 +289,14 @@ RhiTexture rhi_acquire_backbuffer(void)
         g_dx.swapAcquired = true;
     }
     out.id = g_dx.swapTextures[g_dx.swapIndex];
+    return out;
+}
+
+RhiTexture rhi_acquire_backbuffer(void)
+{
+    dx_swap_lock();
+    const RhiTexture out = dx_acquire_backbuffer_locked();
+    dx_swap_unlock();
     return out;
 }
 
@@ -312,7 +357,7 @@ bool rhi_present_statistics(uint64_t *presentCount, uint64_t *presentRefresh, ui
     return true;
 }
 
-void rhi_present(void)
+static void dx_present_locked(void)
 {
     s_presentShown = false;
     if (!g_dx.swapchain || !g_dx.swapAcquired) {
@@ -356,6 +401,13 @@ void rhi_present(void)
     if (w > 0 && h > 0 && ((uint32_t)w != g_dx.swapWidth || (uint32_t)h != g_dx.swapHeight)) {
         rhi_resize_swapchain((uint32_t)w, (uint32_t)h, g_dx.vsync);
     }
+}
+
+void rhi_present(void)
+{
+    dx_swap_lock();
+    dx_present_locked();
+    dx_swap_unlock();
 }
 
 /* rhi.h: the Android lifecycle's surface calls.  A DXGI

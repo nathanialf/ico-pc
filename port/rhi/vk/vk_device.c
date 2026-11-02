@@ -48,7 +48,9 @@ bool vkr_check(VkResult r, const char *what, const char *file, int line)
     }
     fprintf(stderr, "rhi_vk: %s failed (VkResult %d) at %s:%d\n", what, (int)r, file, line);
     if (r == VK_ERROR_DEVICE_LOST && !g_vkr.deviceLost) {
-        g_vkr.deviceLost = true;
+        /* rhi_device_lost reads it on any thread (the window's and its render
+           thread's) */
+        __atomic_store_n(&g_vkr.deviceLost, true, __ATOMIC_RELEASE);
         g_vkr.lostNs = vkr_now_ns();
         fprintf(stderr, "rhi_vk: device lost\n");
         vkr_lost_report();
@@ -2698,7 +2700,7 @@ void rhi_set_adapter_wanted(const char *name)
 
 bool rhi_device_lost(void)
 {
-    return g_vkr.deviceLost;
+    return __atomic_load_n(&g_vkr.deviceLost, __ATOMIC_ACQUIRE);
 }
 
 /* any thread (rhi.h): the values vk_cmd.c stores, no Vulkan call (the

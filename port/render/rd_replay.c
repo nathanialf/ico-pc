@@ -692,6 +692,7 @@ static uint32_t s_bindEpoch = 1;
 
 void rd__wait_frame(void)
 {
+    rd__submit_drain(); /* the last replay's submit, before its slot's fence (rd_submit.h) */
     rhi_wait_frame();
     s_bindEpoch++;
 }

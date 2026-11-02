@@ -632,7 +632,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `STGSTAFF1.DF`, the August 2001 preview's `STGST13C.DF` (`inflate_disc_cn`,
   `inflate_disc_cn_st02a`, `inflate_disc_kor`, `inflate_disc_aug6`; skipped without the image).
 - `memory_floor_test.c`: the start-up set's free-memory floor (`memory_floor.h`): the default is 17 % of the device's memory, at most 1536 MB on a device of more than 8 GB (696 MB on a 4 GB phone, 522 MB on a 3 GB one, 1392 MB on 8 GB, 1445 MB on 8500 MB, 1536 MB on 11265, 12288, 15552 and 16384 MB; a setting gives the floor, above the cap too, `0` none); the PowerVR DXT-48 phone's figures (15552 MB: 2554 MB available, where the plain 17 % stopped its set, and 2647 MB continue, 1535 MB stops, `[dev] pipeline_memory_floor_mb = 2643` stops at 2554); the issue 161 start on the Retroid Pocket 6 (11265 MB: 3340 MB and 1693 MB, where it stalled, continue under the default, 1535 MB stops, a setting of 1915 stops at 1693); a 4 GB phone at 1200 MB available continues, at 600 MB stops; a 3 GB phone at 700 MB continues; an unknown figure never stops; the log lines' words for the default, a setting and off (`ico_memory_floor_rule`); the `[dev] pipeline_memory_floor_mb` text ("" and "auto" unset, "0" off, "2048" a floor, "-1" and "x" not read) (`memory_floor`).
-- `lifecycle_test.c`: the mobile lifecycle's step tables on fake operations (`lifecycle`).
+- `lifecycle_test.c`: the mobile lifecycle's step tables on fake operations: the render thread
+  parked before the GPU idles and the surface goes, going on only after the surface is made again,
+  and the tables as before without that operation (`lifecycle`).
+- `frame_mailbox_test.c`: the game thread's and the render thread's hand-over
+  (`port/platform/frame_mailbox.h`) driven from one thread under a fake clock: the latest frame
+  wins (two replaced, counted), slot pins, the lock grid, the job queue in order and full, the
+  submit's handshake (the next replay waits until the job finished, not only started), park (the
+  queued job first, posts refused, then parked; unpark), quit with a job queued (it runs, then the
+  end; quit while parked), the heartbeat, the last present of picture jobs only, the 10 s block
+  (idle share, the longest wait and job over 600 pictures; a block taken inside a job), the
+  `[dev] render_thread` mode (`frame_mailbox`).
 - `memory_test.c`: the game's allocator over the arena, [partitions](ARCHITECTURE.md#terms) at the
   EE's offsets (`memory`).
 - `movie_pad_test.c`: the pad as a movie's skip check sees it from inside the player's loop
@@ -654,8 +664,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   one present a step after the first second, the lock's probes failing back to one with no step a
   period late, no climb refused, the alphas on the grid; a GPU-bound phone at 60 Hz presents its
   new frames and under 33 a second with the probes and keeps real time; both print the rule
-  before's numbers beside), and the disc's excuse (`testDiscWait126`: every 150th step 100 ms
-  long waiting for the disc drops nothing, each counted in `discExcused`) (`pace_loop`).
+  before's numbers beside), the disc's excuse (`testDiscWait126`: every 150th step 100 ms
+  long waiting for the disc drops nothing, each counted in `discExcused`), and the render thread's
+  asynchronous present (`testAsyncLock`: under the lock at 60 Hz a 5 ms step with a 12.5 ms
+  present on the game thread falls behind, the same present split 9 ms on the game thread and
+  3.5 ms on the render thread keeps every step on time, one present a step; `testAsyncRates`: the
+  timer path paced by the GPU's time with the presents handed over, 9, 12, 17, 20 and 25 ms
+  pictures give about a period over the picture time presents a step and 30 ms every new frame, a
+  9 ms present with a 3 ms step two presents a step against one) (`pace_loop`).
 - `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
   the first second, 50 presents a second give 50 at every whole second, a second that ran 1.5 s long
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays
@@ -1465,6 +1481,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 
 ### port/rhi/test
 
+- `rhi_test_common.c` (every backend's run): the thread submit cell (`threadSubmitCell`): a
+  list recorded on the test's thread and ended and submitted on another reads back byte for byte
+  as the same list submitted on the test's thread, and the readback after it waited for the other
+  thread through the call guard (`rhi_set_call_guard`); skipped where the backend takes every call
+  on one thread (OpenGL, Direct3D 11).
 - `rhi_vk_test.c`: the exact-texel RHI checks on Vulkan, a hazard cell, the render-area check (a
   pass larger than its attachments clamped with no validation error, `passAreaCell`), the
   pipeline cache file, and the pipeline pool filled: `RHI_PIPELINE_POOL_MAX` pipelines alive at
@@ -2304,6 +2325,9 @@ hand; on single files (`check_spirv.py a.spv b.spv`) it skips the variants gate.
   `port/render/test/texpack_load_test.c`), `texpack`, `texpack_e2e`, and with `ICO_TEXPACK_DIR`
   `texpack_pack_files`; `package_textures` when the shipped README changes
   ([PACKS.md](PACKS.md#tests)).
+- The render thread: `frame_mailbox`, `pace_loop`, `lifecycle`, `host_config` and `rhi_vk` (the
+  thread submit cell; `rhi_d3d12` on Windows); the device runs are the window's, with `[dev]
+  render_thread = sync` against `off` for the same pictures ([PLATFORM.md](PLATFORM.md#the-render-thread)).
 - A pacing change: `pace_policy`, `pace_loop` and `perf_block`
   (`ctest -L platform -R '^(pace_|perf_block)'`), and `rhi_vk_present_mode` for the present-mode choice. The Windows
   vblank clock (`port/platform/display_clock_win.c`) and the D3D12 waitable swap chain have no

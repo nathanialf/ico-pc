@@ -74,6 +74,18 @@ attachment (`RHI_BIND_INPUT_ATTACHMENT`, Vulkan only) sits behind its own limits
 per-frame resources outside the RHI. `rhi_wait_idle` idles the GPU; `rhi_collect_garbage_now` also
 carries out every deferred destroy (`port/rhi/rhi.h`, commands).
 
+**Threads.** A list may be recorded on one thread and ended, submitted and presented on another
+(the window's render thread, [PLATFORM.md](PLATFORM.md#the-render-thread)) on Vulkan and Direct3D 12;
+OpenGL and Direct3D 11 run each call at once on one context and set
+`RhiLimits.singleThreadCommands`. Two threads never run in the backend at once: with a call guard
+set (`rhi_set_call_guard`) every entry point that changes the device's state waits while the other
+thread works, the queries listed in `rhi.h` do not, and `rhi_get_stats` then answers with the
+counters the hand-over left (`rhi_call_guard_snapshot`) (`port/rhi/rhi_backend.c` (`RHI_GUARD`)).
+The swapchain's acquire, present and rebuilds also hold a recursive lock of their own
+(`port/rhi/vk/vk_swapchain.c` (`vkr_swap_lock`), `port/rhi/d3d12/d3d12_swapchain.c`
+(`dx_swap_lock`)), and `rhi_device_lost` reads an atomic flag. Without a guard every call runs at
+once, as the tests and the tools have it.
+
 **Formats** (`RhiFormat`): RGBA8 UNORM (alpha holds raw [GS](ARCHITECTURE.md#terms) alpha, 0x80 =
 1.0), RGBA8 UINT (the exact integer blend's targets), R8 UNORM and UINT, R16 UINT, RGBA16F, D32F,
 D32F_S8 (the scene's depth-stencil; the Vulkan backend may back it with D24S8,

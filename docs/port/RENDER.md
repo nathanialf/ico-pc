@@ -93,7 +93,14 @@ same code inside the [vsync](ARCHITECTURE.md#terms) before `rd_end_frame`, so th
 point. GPU work the game's calls cause (replay, pipeline creation, [present](ARCHITECTURE.md#terms))
 runs through `rd_set_host_call`, which the window sets to `ico_sched_call_on_host` so the driver
 runs on the host stack in the host FP mode (`port/render/rd.h` (`RdHostCall`);
-`port/render/rd_core.c` (`rd__on_host`)).
+`port/render/rd_core.c` (`rd__on_host`)). With the window's render thread on
+([PLATFORM.md](PLATFORM.md#the-render-thread)) a replay's end moves there: the game thread still
+interpolates, uploads and walks the lists into the command list, then hands it over, and the
+render thread ends it, submits it, presents and finishes a capture (`port/render/rd_submit.c`
+(`rd__submit_frame`, `rd_set_submit_host`)). The next replay waits for that hand-over before its
+fence (`rd__wait_frame`), a capture's picture waits for its present, and every other RHI call of
+the game thread waits for the render thread through the call guard ([RHI.md](RHI.md#the-interface)).
+No game code and no frame data change threads; the pictures are the same bytes.
 
 ## Recording
 
@@ -356,7 +363,9 @@ GS-level draws on the GS's grid` (`RdPerfRecord` `texaDraws`, `gridDraws`, per p
 
 `rd__replay_frame` records one RHI command list per replay. The lists are walked in order 0..12
 (11 and 12 for a keep frame) from the frame's start state; state commands update the state block
-and actions draw (`port/render/rd_replay.c`):
+and actions draw (`port/render/rd_replay.c`). The replay's end, the present's pass, the end of the
+list, the submit, the present and the capture's finish, is `rd__submit_frame`
+(`port/render/rd_submit.c`), which the render thread can run (above):
 
 | command | replay |
 | --- | --- |

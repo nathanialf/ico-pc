@@ -593,6 +593,12 @@ the step's parts and the pump's, with the step's own card verdicts next to the g
 
 ## Pacing
 
+The loop runs on the game thread; with the [render thread](PLATFORM.md#the-render-thread) on, each
+present it makes records the picture and hands its submit and present over, so the next step or
+the next present's interpolation runs while the render thread presents. Under the vsync lock with
+the display's timing (present wait) each picture waits for its present, since the lock reads the
+present's id right after it (`rd_submit_hold`).
+
 `ico_window_pace(hz)` runs after every simulated vsync: it presents until the vsync's deadline (50
 Hz PAL: 20 ms; NTSC: 16.683 ms) as often as the frame rate and vsync allow, then sleeps to it; more
 than 100 ms behind (`RESYNC_NS`) the lag is dropped and counted instead of run off fast
@@ -711,7 +717,12 @@ alpha stays the grid's.
   and the present: FIFO's full queue; not the fence waits, which are the GPU behind) and the step is
   less than a refresh late, the skip guard's exception restated. `present_once` takes the two waits
   from the backend's counts (`RhiStats`: `acquireNs` and `presentNs` against `fenceWaitNs`); where
-  the backend times nothing the whole present counts as the display's. A backend whose fence waits
+  the backend times nothing the whole present counts as the display's. A present handed to the
+  [render thread](PLATFORM.md#the-render-thread) (`rd_submit_async`) returns before its own
+  submit and present: its display wait is its acquire and its wait for the render thread's
+  picture before it (`rd_submit_waited_ns`: that one's present, FIFO's full queue), its GPU wait
+  the fence waits, its cost the game thread's time in it; the pacing rules read them as before
+  (`pace_loop`'s `testAsyncLock` and `testAsyncRates`). A backend whose fence waits
   hold the display's wait sets `RhiStats.fenceWaitsHoldDisplay` and the whole wait is the
   display's (`pace_display_wait`): OpenGL, whose swap returns at once while the driver waits for
   FIFO's queue inside the next `glClientWaitSync` (issue 126: a GTX 750 Ti under the n = 1 lock

@@ -358,6 +358,8 @@ static void gl_fill_limits(void)
     o->maxStorageRange = ssbo > 0 ? (uint64_t)ssbo : 0u;
     o->bcTextures = g_gl.hasS3tc && g_gl.hasBptc;
     o->tiler = false;
+    o->singleThreadCommands =
+        true; /* rhi.h: each rhi_cmd_* runs at once on the context this thread has current */
     o->msaaCounts = gl_msaa_counts();
     o->sampleRateShading = true; /* glMinSampleShading, core since 4.0 */
     /* the destination read through a storage image in rasterization order:

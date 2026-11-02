@@ -594,6 +594,11 @@ static const struct {
        with vsync off, off keeps mailbox, fifo presents FIFO from the start
        (port/platform/present_fallback.h, window_host.c present_blocked) */
     {"dev.present_fallback", "present_fallback"},
+    /* the window's render thread: auto (the default: on with Vulkan and
+       Direct3D 12), on, off (the submit and the present on the game thread,
+       as before) or sync (on, the game thread waiting for each picture: the
+       A/B; port/platform/render_thread.c, frame_mailbox.c fm_mode_choose) */
+    {"dev.render_thread", "render_thread"},
     /* "lazy": no start-up set, the pipelines made as the game needs them
        (issues 93 and 107; written by window_host.c after a start that
        ended while preparing them), "careful" the set under the careful

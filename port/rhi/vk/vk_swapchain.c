@@ -54,6 +54,46 @@ static uint64_t s_swapMadeNs, s_pollNs;
  * so the same pair is not rebuilt at every present */
 static uint32_t s_pollStuckW, s_pollStuckH, s_pollMadeW, s_pollMadeH;
 
+/* The swapchain's lock: the acquire, the present and the swapchain's
+ * making again (rhi_resize_swapchain, rhi_release_surface,
+ * rhi_recreate_surface) hold it, so a present on the window's render
+ * thread (port/platform/render_thread.c) and an acquire or a rebuild on the
+ * window's thread never interleave.  SDL's mutexes are recursive: a
+ * present that rebuilds calls rhi_resize_swapchain inside it.  Made at the
+ * first acquire or rebuild, on the window's thread before a render thread
+ * exists (the swap of a racing second creation keeps one); none without
+ * SDL (headless: no swapchain). */
+#ifdef ICO_RHI_HAVE_SDL
+static SDL_Mutex *s_swapLock;
+
+static void vkr_swap_lock(void)
+{
+    SDL_Mutex *m = (SDL_Mutex *)SDL_GetAtomicPointer((void **)&s_swapLock);
+    if (!m) {
+        SDL_Mutex *made = SDL_CreateMutex();
+        if (made && !SDL_CompareAndSwapAtomicPointer((void **)&s_swapLock, NULL, made)) {
+            SDL_DestroyMutex(made);
+        }
+        m = (SDL_Mutex *)SDL_GetAtomicPointer((void **)&s_swapLock);
+    }
+    if (m) {
+        SDL_LockMutex(m);
+    }
+}
+
+static void vkr_swap_unlock(void)
+{
+    SDL_Mutex *m = (SDL_Mutex *)SDL_GetAtomicPointer((void **)&s_swapLock);
+    if (m) {
+        SDL_UnlockMutex(m);
+    }
+}
+#else
+static void vkr_swap_lock(void) {}
+
+static void vkr_swap_unlock(void) {}
+#endif
+
 /* ------------------------------------------------- the display's timing
  * (rhi_present_timing; only with ICO_VK_PRESENT_WAIT=1, vk_device.c): a
  * thread waits on each present's id in turn (vkWaitForPresentKHR, which the
@@ -1000,7 +1040,7 @@ static bool vkr_surface_create(void)
 #endif
 }
 
-void rhi_release_surface(void)
+static void vkr_release_surface(void)
 {
     if (!g_vkr.device || !g_vkr.surface) {
         return;
@@ -1019,7 +1059,14 @@ void rhi_release_surface(void)
     VKR_LOG("surface released; the device is kept");
 }
 
-bool rhi_recreate_surface(void *window)
+void rhi_release_surface(void)
+{
+    vkr_swap_lock();
+    vkr_release_surface();
+    vkr_swap_unlock();
+}
+
+static bool vkr_recreate_surface(void *window)
 {
     if (!g_vkr.device) {
         return false;
@@ -1045,6 +1092,14 @@ bool rhi_recreate_surface(void *window)
     }
     VKR_LOG("surface and swapchain made again (%ux%u)", g_vkr.swapWidth, g_vkr.swapHeight);
     return true;
+}
+
+bool rhi_recreate_surface(void *window)
+{
+    vkr_swap_lock();
+    const bool ok = vkr_recreate_surface(window);
+    vkr_swap_unlock();
+    return ok;
 }
 
 /* The surface went away under the swapchain (VK_ERROR_SURFACE_LOST_KHR;
@@ -1077,7 +1132,7 @@ static bool vkr_swap_target_size(uint32_t *w, uint32_t *h)
     return *w != 0 && *h != 0;
 }
 
-bool rhi_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
+static bool vkr_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
 {
     if (!g_vkr.surface) {
         /* released (the background) or lost: made again when the window
@@ -1091,6 +1146,14 @@ bool rhi_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
     g_vkr.stats.waitIdles++;
     g_vkr.stats.fenceWaitNs += vkr_now_ns() - t0;
     return vkr_swapchain_create(width, height, vsync);
+}
+
+bool rhi_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
+{
+    vkr_swap_lock();
+    const bool ok = vkr_resize_swapchain(width, height, vsync);
+    vkr_swap_unlock();
+    return ok;
 }
 
 void rhi_prefer_mailbox(bool on)
@@ -1137,7 +1200,7 @@ bool rhi_swapchain_size(uint32_t *w, uint32_t *h)
     return true;
 }
 
-RhiTexture rhi_acquire_backbuffer(void)
+static RhiTexture vkr_acquire_backbuffer(void)
 {
     RhiTexture out = {0};
     s_presentShown = false; /* until this frame's present shows it */
@@ -1173,6 +1236,14 @@ RhiTexture rhi_acquire_backbuffer(void)
     g_vkr.acquireWaitPending = true;
     g_vkr.acquireSem = f->acquireSem;
     out.id = g_vkr.swapTextures[idx];
+    return out;
+}
+
+RhiTexture rhi_acquire_backbuffer(void)
+{
+    vkr_swap_lock();
+    const RhiTexture out = vkr_acquire_backbuffer();
+    vkr_swap_unlock();
     return out;
 }
 
@@ -1244,7 +1315,7 @@ bool rhi_present_shown(void)
     return s_presentShown;
 }
 
-void rhi_present(void)
+static void vkr_present(void)
 {
     s_presentShown = false;
     if (!g_vkr.swapchain || !g_vkr.swapAcquired) {
@@ -1324,4 +1395,11 @@ void rhi_present(void)
     if (!rebuild && (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)) {
         vkr_poll_surface(); /* a size change the present did not report */
     }
+}
+
+void rhi_present(void)
+{
+    vkr_swap_lock();
+    vkr_present();
+    vkr_swap_unlock();
 }

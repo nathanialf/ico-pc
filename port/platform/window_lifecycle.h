@@ -7,13 +7,16 @@
  * with fake operations (port/platform/test/lifecycle_test.c) and
  * window_host.c plugs in the real ones. Plain C, no SDL.
  *
- *   will enter background  a line, then the GPU idle, the window's
- *                          surface released (the device kept), the
+ *   will enter background  a line, then the render thread parked (what it
+ *                          has finishes; the pictures are the game
+ *                          thread's until it goes on), the GPU idle, the
+ *                          window's surface released (the device kept), the
  *                          watchdog paused, the sound paused, the log
  *                          flushed: SDL then blocks the event pump until
  *                          the app comes back
- *   did enter foreground   the surface and swapchain made again, the
- *                          watchdog running, the sound resumed with its
+ *   did enter foreground   the surface and swapchain made again (on the
+ *                          game thread, the render thread still parked),
+ *                          the render thread going on, the watchdog running, the sound resumed with its
  *                          queue emptied, the pacer's deadline reset to
  *                          now (the time away is not caught up), a line
  *   terminating            a line, then the settings saved when changed,
@@ -56,6 +59,8 @@ typedef enum IcoLifecycleStep {
     ICO_LC_TEXTURE_LOW_MEMORY, /* ops.texture_low_memory */
     ICO_LC_LOG_LINE,           /* ops.log with the event's line */
     ICO_LC_LOG_FLUSH,          /* ops.log_flush */
+    ICO_LC_RENDER_PARK,        /* ops.render_park(1) */
+    ICO_LC_RENDER_UNPARK,      /* ops.render_park(0) */
     ICO_LC_STEP_COUNT
 } IcoLifecycleStep;
 
@@ -76,6 +81,9 @@ typedef struct IcoLifecycleOps {
     void (*texture_low_memory)(void *user);
     void (*log)(void *user, const char *line);
     void (*log_flush)(void *user);
+    /* the window's render thread held (1) and going on (0)
+       (port/platform/render_thread.h) */
+    void (*render_park)(void *user, int parked);
 } IcoLifecycleOps;
 
 /* Runs the event's table in order. Returns the number of steps run (a

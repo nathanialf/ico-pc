@@ -17,7 +17,9 @@
  *   7  untouched (clear colour)
  *
  * Then cells of their own targets: BC textures, the fill rule (edges through
- * pixel centres), multisampling, the destination read, dynamic state.
+ * pixel centres), a list recorded on this thread and ended and submitted on
+ * another (the window's render thread, port/platform/render_thread.c),
+ * multisampling, the destination read, dynamic state.
  *
  * Plus an RGBA8_UINT target (integer clear and integer output), R8 texture
  * copies (a whole copy, then a second copy over part of it: same-state copy
@@ -31,6 +33,7 @@
 #include "rhi_test_glsl.h"
 #include "rhi_test_hlsl.h"
 #include "rhi_test_spv.h"
+#include "ico_thread.h"
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -472,6 +475,188 @@ static void fillRuleCell(const Ctx *c)
         }
     }
     rhi_destroy_pipeline(pipe);
+    rhi_destroy_texture(tgt);
+    rhi_destroy_buffer(ring);
+}
+
+/* A list recorded on this thread, ended and submitted on another (the
+ * window's render thread: port/platform/render_thread.c; Vulkan and D3D12,
+ * not a backend that takes every call on one thread,
+ * RhiLimits.singleThreadCommands).  The fill rule's two squares are drawn
+ * into a reference target whole on this thread, then the same list into a
+ * second target, whose end and submit go to a thread of their own; the
+ * call guard (rhi.h rhi_set_call_guard) says the other thread is busy, so
+ * the readback that follows waits for it (the guard's wait joins it) before
+ * it runs.  The two read back byte for byte equal, and the guard waited. */
+typedef struct ThreadSubmit {
+    RhiCommandList cl;
+    int done;
+} ThreadSubmit;
+
+static _Thread_local int t_submitter; /* set on the submitting thread */
+static IcoThread *s_submitThread;
+static int s_submitBusy, s_guardWaits;
+
+static void submitOnThread(void *arg)
+{
+    ThreadSubmit *s = arg;
+    t_submitter = 1;
+    rhi_end_commands(s->cl);
+    rhi_submit(s->cl);
+    __atomic_store_n(&s->done, 1, __ATOMIC_RELEASE);
+}
+
+static bool submitGuardBusy(void *u)
+{
+    (void)u;
+    return !t_submitter && __atomic_load_n(&s_submitBusy, __ATOMIC_ACQUIRE) != 0;
+}
+
+static void submitGuardWait(void *u)
+{
+    (void)u;
+    if (s_submitThread != NULL) {
+        ico_thread_join(s_submitThread);
+        s_submitThread = NULL;
+    }
+    __atomic_store_n(&s_submitBusy, 0, __ATOMIC_RELEASE);
+    s_guardWaits++;
+}
+
+/* the fill rule cell's two squares into tgt (RENDER_TARGET from UNDEFINED,
+ * then COPY_SRC); the list left open */
+static RhiCommandList threadCellRecord(RhiTexture tgt, RhiPipeline pipe, RhiBuffer ring, int fs)
+{
+    RhiCommandList cl = rhi_begin_commands();
+    RhiTextureBarrier pre = {tgt, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+    rhi_cmd_barrier(cl, &pre, 1);
+    RhiRenderPassDesc rp;
+    memset(&rp, 0, sizeof(rp));
+    rp.color[0].texture = tgt;
+    rp.color[0].load = RHI_LOAD_CLEAR;
+    rp.colorCount = 1;
+    rp.width = (uint32_t)fs;
+    rp.height = (uint32_t)fs;
+    rhi_cmd_begin_render_pass(cl, &rp);
+    rhi_cmd_set_pipeline(cl, pipe);
+    rhi_cmd_set_vertex_buffer(cl, 0, ring, 0);
+    rhi_cmd_draw(cl, 12, 0, 1);
+    rhi_cmd_end_render_pass(cl);
+    RhiTextureBarrier post = {tgt, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+    rhi_cmd_barrier(cl, &post, 1);
+    return cl;
+}
+
+/* h rows of w RGBA8 texels, pitch bytes apart, equal */
+static bool rowsEqual(const uint8_t *a, const uint8_t *b, uint32_t pitch, int w, int h)
+{
+    for (int y = 0; y < h; y++) {
+        if (memcmp(a + (size_t)y * pitch, b + (size_t)y * pitch, (size_t)w * 4) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void threadSubmitCell(const Ctx *c)
+{
+    enum { FS = 16 };
+
+    if (rhi_limits()->singleThreadCommands) {
+        rhi_test_log("%s: thread submit cell skipped (this backend takes every call on one "
+                     "thread)\n",
+                     s_label);
+        return;
+    }
+    const RhiFormat CF = RHI_FMT_RGBA8_UNORM;
+    RhiTexture ref = rhi_create_texture(&(RhiTextureDesc){
+        FS, FS, 1, CF, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "thread submit reference", 0});
+    RhiTexture tgt = rhi_create_texture(&(RhiTextureDesc){
+        FS, FS, 1, CF, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "thread submit target", 0});
+    RhiBuffer ring = rhi_create_buffer(
+        &(RhiBufferDesc){4096, RHI_BUF_VERTEX, RHI_MEM_UPLOAD, "thread submit verts"});
+    uint8_t *map = ring.id ? rhi_map_buffer(ring) : NULL;
+    RhiBlendState opaque = {.writeMask = 0xF};
+    RhiPipeline pipe =
+        makePipeline(c, c->psColor, CF, RHI_FMT_UNKNOWN, &opaque, NULL, "thread submit");
+    if (!ref.id || !tgt.id || !map || !pipe.id) {
+        rhi_test_log("FAIL %s: thread submit resources\n", s_label);
+        failures++;
+        return;
+    }
+    Vtx v[12];
+    quad(&v[0], 2.5f, 2.5f, 6.5f, 6.5f, FS, FS, 0.0f, 255, 0, 0, 255);
+    quad(&v[6], 2.5f, 6.5f, 6.5f, 10.5f, FS, FS, 0.0f, 0, 255, 0, 255);
+    memcpy(map, v, sizeof(v));
+
+    /* the reference: recorded, ended and submitted here */
+    RhiCommandList cl = threadCellRecord(ref, pipe, ring, FS);
+    rhi_end_commands(cl);
+    rhi_submit(cl);
+    static uint8_t want[FS * FS * 4], got[FS * FS * 4];
+    uint32_t pitchWant = 0, pitchGot = 0;
+    const bool haveRef =
+        rhi_readback_texture(ref, RHI_ASPECT_COLOR, want, sizeof(want), &pitchWant);
+
+    /* the same list into tgt, its end and submit on another thread */
+    ThreadSubmit job = {threadCellRecord(tgt, pipe, ring, FS), 0};
+    const RhiCallGuard guard = {NULL, submitGuardBusy, submitGuardWait};
+    s_guardWaits = 0;
+    rhi_set_call_guard(&guard);
+    __atomic_store_n(&s_submitBusy, 1, __ATOMIC_RELEASE);
+    s_submitThread = ico_thread_create(submitOnThread, &job);
+    if (s_submitThread == NULL) {
+        rhi_set_call_guard(NULL);
+        __atomic_store_n(&s_submitBusy, 0, __ATOMIC_RELEASE);
+        rhi_test_log("FAIL %s: thread submit: no thread\n", s_label);
+        failures++;
+        rhi_end_commands(job.cl);
+        rhi_submit(job.cl);
+        rhi_wait_idle();
+        rhi_destroy_pipeline(pipe);
+        rhi_destroy_texture(ref);
+        rhi_destroy_texture(tgt);
+        rhi_destroy_buffer(ring);
+        return;
+    }
+    /* the readback waits for the other thread through the guard */
+    const bool haveGot = rhi_readback_texture(tgt, RHI_ASPECT_COLOR, got, sizeof(got), &pitchGot);
+    rhi_set_call_guard(NULL);
+    if (s_submitThread != NULL) {
+        submitGuardWait(NULL); /* the guard did not wait: joined here (a failure below) */
+        s_guardWaits--;
+    }
+    if (!haveRef || !haveGot || pitchWant != pitchGot) {
+        rhi_test_log("FAIL %s: thread submit readback\n", s_label);
+        failures++;
+    } else if (s_guardWaits != 1 || !__atomic_load_n(&job.done, __ATOMIC_ACQUIRE)) {
+        rhi_test_log("FAIL %s: thread submit: the readback did not wait for the submitting "
+                     "thread (guard waits %d)\n",
+                     s_label, s_guardWaits);
+        failures++;
+    } else if (!rowsEqual(want, got, pitchGot, FS, FS)) {
+        rhi_test_log("FAIL %s: thread submit: the list submitted on another thread drew other "
+                     "pixels than the same list submitted here\n",
+                     s_label);
+        failures++;
+    } else {
+        const int before = failures;
+        for (int y = 0; y < FS && failures - before < 4; y++) {
+            for (int x = 0; x < FS && failures - before < 4; x++) {
+                const int in = x >= 2 && x <= 5;
+                const uint8_t r = in && y >= 2 && y <= 5 ? 255 : 0;
+                const uint8_t g = in && y >= 6 && y <= 9 ? 255 : 0;
+                expectRGBA(got, pitchGot, x, y, r, g, 0, (r | g) != 0 ? 255 : 0, 210);
+            }
+        }
+        if (failures == before) {
+            rhi_test_log("%s: thread submit cell passed (recorded here, ended and submitted on "
+                         "another thread, read back equal; the readback waited for it)\n",
+                         s_label);
+        }
+    }
+    rhi_destroy_pipeline(pipe);
+    rhi_destroy_texture(ref);
     rhi_destroy_texture(tgt);
     rhi_destroy_buffer(ring);
 }
@@ -1800,6 +1985,9 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     }
     if (!failures) {
         fillRuleCell(&c);
+    }
+    if (!failures) {
+        threadSubmitCell(&c);
     }
     if (!failures) {
         msaaCell(&c);

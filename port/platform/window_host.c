@@ -56,6 +56,7 @@
 #include "window_lines.h"
 #include "window_pipeline_skip.h"
 #include "window_present.h"
+#include "render_thread.h"
 #include "window_present_fallback.h"
 #include "window_disc.h"
 #include "window_blended.h"
@@ -1002,6 +1003,18 @@ static void lc_log_flush(void *u)
     ico_host_log_flush_all();
 }
 
+/* the render thread held while the surface goes and comes back
+   (render_thread.h) */
+static void lc_render_park(void *u, int parked)
+{
+    (void)u;
+    if (parked) {
+        ico_render_thread_park();
+    } else {
+        ico_render_thread_unpark();
+    }
+}
+
 static const IcoLifecycleOps k_lifecycle_ops = {
     NULL,
     lc_gpu_wait_idle,
@@ -1016,6 +1029,7 @@ static const IcoLifecycleOps k_lifecycle_ops = {
     lc_texture_low_memory,
     lc_log,
     lc_log_flush,
+    lc_render_park,
 };
 
 /* SDL's event watch: the four lifecycle events as they arrive (the queue
@@ -2334,6 +2348,9 @@ open_window:
     s_pres.cutSerial = ico_video_cut_serial();
     /* [dev] slow_step_ms (default 8; 0 off) */
     s_pres.slowMs = ico_config_get_float("dev.slow_step_ms", 8.0);
+    /* the submits and presents on the render thread from here
+       (render_thread.h): the start-up set and its screens ran on this one */
+    (void)ico_render_thread_start();
     s_deadline = SDL_GetTicksNS();
     s_open = 1;
     /* the port's runtime text and popups (port/ui) */
@@ -2434,6 +2451,7 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
             s_re.mode == ICO_WINDOW_WINDOWED && SDL_GetWindowPosition(s_window, &s_re.x, &s_re.y);
         s_re.clock = s_disp.clock == 1;
         s_re.disp = SDL_GetDisplayForWindow(s_window);
+        ico_render_thread_stop(); /* the renderer on this thread alone (render_thread.h) */
         rd_suspend();
         if (s_disp.clock != 0) {
             window_disp_clock_stop();
@@ -2499,6 +2517,7 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
     window_size_recheck("after the renderer was switched");
     fprintf(stderr, "window: %dx%d pixels, %s on %s, present mode %s\n", w, h,
             rhi_backend_kind_name(rhi_backend()), rhi_adapter_name(), rhi_present_mode_name());
+    (void)ico_render_thread_start(); /* the new backend's (render_thread.h) */
     s_pres.pausePendingNs += SDL_GetTicksNS() - t0;
     return 1;
 }
@@ -2759,6 +2778,9 @@ static int device_lost_quit(void)
     if (!rhi_device_lost()) {
         return 0;
     }
+    /* the render thread's picture in hand finishes first: the pass ring and
+       the frames below are read with nothing else running */
+    (void)ico_render_thread_drain();
     /* the start-up screens and the pump all ask: one line and one box */
     if (!s_shown) {
         s_shown = 1;
@@ -3762,6 +3784,8 @@ int ico_window_pump(void)
     ui_popup_set_vsync_hz(ico_host_vsync_hz());
     ui_host_vsync(ico_host_main_ticks());
     s_pres.pumpMs = (double)(SDL_GetTicksNS() - t0) / 1e6;
+    s_pres.pumpSumMs += s_pres.pumpMs;
+    s_pres.pumpCount++;
     if (s_pres.pumpMs > s_pres.pumpMaxMs) {
         s_pres.pumpMaxMs = s_pres.pumpMs;
     }
@@ -4922,6 +4946,10 @@ void window_pace_log(Uint64 now)
         s_pres.pumpMaxMs, lock);
     window_hold_block(s_pres.stepSumMs, s_pres.stepCount, s_pres.stepMaxMs, s_pres.paceHz,
                       s_perf.ph.total, s_perf.ph.n, !rd_interpolation_active(), fr);
+    /* the game thread's parts and the render thread's (render_thread.h) */
+    ico_render_thread_block_line(s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0,
+                                 s_perf.ph.n ? s_perf.ph.total / s_perf.ph.n : 0.0,
+                                 s_pres.pumpCount ? s_pres.pumpSumMs / s_pres.pumpCount : 0.0);
     /* the audio's 10 s line (out_sdl.c; the pull path's only) */
     ico_audio_sdl_log_summary();
     if (s_pres.lockN > 0) {
@@ -4938,7 +4966,8 @@ void window_pace_log(Uint64 now)
     s_pres.statMovieFail = movieFail;
     s_pres.slowSteps = s_pres.slowLogged = 0;
     s_pres.lateMaxNs = 0;
-    s_pres.pumpMaxMs = 0.0;
+    s_pres.pumpMaxMs = s_pres.pumpSumMs = 0.0;
+    s_pres.pumpCount = 0;
 }
 
 /* The start-up's presents, one log line each: the boot shows black (keep
@@ -5112,6 +5141,7 @@ void ico_window_close(void)
         return;
     }
     s_open = 0;
+    ico_render_thread_stop(); /* every picture handed over finished, the thread ended */
     /* a clean exit: a lazy run keeps the start-up activity file, so the
        next start of this version is lazy too; any other deletes it
        (diag_host.h) */

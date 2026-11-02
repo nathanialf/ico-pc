@@ -623,6 +623,10 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("present_fallback", "true") == NULL);
     CHECK(ico_dev_env_value("present_fallback", "mailbox") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.present_fallback"), "present_fallback") == 0);
+    /* render_thread: the window's render thread, read through the store
+       (render_thread.c), not exported */
+    CHECK(strcmp(ico_config_ini_key("dev.render_thread"), "render_thread") == 0);
+    CHECK(ico_dev_env_name("render_thread") == NULL);
     /* disc_reader: the disc's reads on a thread or the game thread, and the
        thread's read-ahead in KB (port/data/cdvd_host.c reader_choose) */
     CHECK(strcmp(ico_dev_env_name("disc_reader"), "ICO_DISC_READER") == 0);
