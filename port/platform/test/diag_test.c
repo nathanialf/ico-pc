@@ -2250,8 +2250,8 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(r == 0);
         CHECK(strstr(s, "ico_pc: the previous run ended while: " BATCH_NOTE
-                        " (version test 1); a Vulkan renderer drops the graphics cache of that "
-                        "version\n") != NULL);
+                        " (version test 1); a Vulkan renderer keeps that version's graphics "
+                        "cache when both have the same shaders\n") != NULL);
         CHECK(strstr(s, "trying the start-up set again") == NULL);
         CHECK(strstr(s, "test: lazy 0") != NULL);
         run(argv[0], "actrecord", log);
@@ -2264,8 +2264,8 @@ int main(int argc, char **argv)
             strstr(s,
                    "ico_pc: the previous run (version test 1) created the pipelines as the "
                    "frames needed them; trying the start-up set again on test 2 (a Vulkan renderer "
-                   "drops the graphics cache of that version; this start prepares the graphics "
-                   "from nothing)\n") != NULL);
+                   "keeps that version's graphics cache when both have the same shaders, else "
+                   "this start prepares the graphics from nothing)\n") != NULL);
         CHECK(strstr(s, "test: lazy 0") != NULL);
         {
             FILE *f = fopen(act, "rb");
@@ -2392,8 +2392,8 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "test: lazy 0\n") != NULL);
         CHECK(strstr(s, "ico_pc: the previous run ended while: " NOTE_2D
-                        " (version test 1); a Vulkan renderer drops the graphics cache of that "
-                        "version\n") != NULL);
+                        " (version test 1); a Vulkan renderer keeps that version's graphics "
+                        "cache when both have the same shaders\n") != NULL);
         CHECK(strstr(s, "trying the start-up set again") == NULL);
         CHECK(strstr(s, "this start only makes the pipelines as the game needs them") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);

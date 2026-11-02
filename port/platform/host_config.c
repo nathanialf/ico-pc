@@ -602,7 +602,7 @@ static const struct {
     {"dev.pipeline_set", "pipeline_set"},
     /* the start-up set's free-memory floor on Android in MB (issue 161;
        diag_host.c memory_floor_stop): auto, the default, 17 % of the
-       device's memory, at least 1536 MB above 8 GB only; 0 off */
+       device's memory, at most 1536 MB above 8 GB; 0 off */
     {"dev.pipeline_memory_floor_mb", "pipeline_memory_floor_mb"},
     /* the texture decode pool's worker threads: auto (the default: 2, 1 on
        a machine with 2 hardware threads or fewer), 0 every decode on the

@@ -2122,18 +2122,22 @@ static void low_memory_stop_note(int level)
 /* The free-memory floor (memory_floor.h, issue 161): on Android the set
    also stops once MemAvailable is under the floor ([dev]
    pipeline_memory_floor_mb, exported as ICO_PIPELINE_MEMORY_FLOOR_MB; the
-   default 17 % of MemTotal, at least 1536 MB above 8 GB only, 1915 MB on
-   the reporter's 11265 MB, 696 MB on a 4 GB phone), and is recorded as
-   the low-memory signal's stop (the next start makes no set). The v0.9.5
-   Retroid Pocket 6 start stalled in the driver at 1693 MB of 11265 MB
-   available with no onTrimMemory signal. floor_why: the stop's words, ""
-   until it stops (the set's thread only) */
+   default 17 % of MemTotal, at most 1536 MB above 8 GB: 696 MB on a 4 GB
+   phone, 1536 MB on the reporter's 11265 MB and on a 16 GB phone), and is
+   recorded as the low-memory signal's stop (the next start makes no set).
+   The v0.9.5 Retroid Pocket 6 start stalled in the driver at 1693 MB of
+   11265 MB available with no onTrimMemory signal; a 15552 MB PowerVR phone
+   ran the game with 2554 MB available, which the plain 17 % (2643 MB)
+   stopped.  The floor in force is logged once, at the first ask, with the
+   figures then.  floor_why: the stop's words, "" until it stops (the set's
+   thread only) */
 static char floor_why[96];
 
 static int memory_floor_stop(void)
 {
 #ifdef __ANDROID__
     static long setting = -3; /* -3: not read yet */
+    static int told;
     long avail_kb, total_kb, avail, total, floor;
     if (floor_why[0] != '\0') {
         return 1;
@@ -2153,16 +2157,22 @@ static int memory_floor_stop(void)
     }
     avail = avail_kb / 1024;
     total = total_kb / 1024;
+    floor = ico_memory_floor_mb(total, setting);
+    if (!told) {
+        told = 1;
+        ico_diag_log("ico_pc: pipelines: the free-memory floor is %ld MB (%s); %ld MB available "
+                     "of %ld MB now",
+                     floor, ico_memory_floor_rule(setting), avail, total);
+    }
     if (!ico_memory_floor_stops(avail, total, setting)) {
         return 0;
     }
-    floor = ico_memory_floor_mb(total, setting);
     snprintf(floor_why, sizeof floor_why, "%ld MB available of %ld MB, floor %ld MB", avail, total,
              floor);
     ico_diag_log(
         "ico_pc: pipelines: the start-up set stopped at %ld MB available of %ld MB (floor %ld "
-        "MB): the rest made on first use",
-        avail, total, floor);
+        "MB, %s): the rest made on first use",
+        avail, total, floor, ico_memory_floor_rule(setting));
     return 1;
 #else
     return 0;
@@ -2534,11 +2544,12 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
         if (ver[0] != '\0' && strcmp(ver, act_version) != 0) {
             /* another version's file with no note: only its loss line
                kept it (a clean end deletes the file); a Vulkan renderer
-               drops that version's graphics cache (vk_pipeline.c
-               vkr_cache_drop_others), Direct3D 12 has none */
+               keeps that version's graphics cache when both have the same
+               shaders and drops it else (port/render/rd_cache_name.h,
+               vk_pipeline.c vkr_cache_drop_others), Direct3D 12 has none */
             ico_diag_log("ico_pc: the previous start was version %s, this one is %s: a Vulkan "
-                         "renderer drops the graphics cache of that version; this start prepares "
-                         "the graphics from nothing",
+                         "renderer keeps that version's graphics cache when both have the same "
+                         "shaders, else this start prepares the graphics from nothing",
                          ver, act_version);
         }
         return 0;
@@ -2572,21 +2583,23 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
             ico_diag_log(
                 "ico_pc: the previous run (version %s) created the pipelines as the "
                 "frames needed them; trying the start-up set again on %s (a Vulkan renderer "
-                "drops the graphics cache of that version; this start prepares the graphics "
-                "from nothing)",
+                "keeps that version's graphics cache when both have the same shaders, else "
+                "this start prepares the graphics from nothing)",
                 ver[0] != '\0' ? ver : "unknown", act_version);
         } else if (act_end_n[ICO_DIAG_END_PIPELINES] != 0) {
             /* an end while making the pipelines counts whatever the
                version (the setting outlives it): the policy's line says
                what this start does (ico_diag_startup_end_persist) */
             ico_diag_log("ico_pc: the previous run ended while: %s (version %s); a Vulkan "
-                         "renderer drops the graphics cache of that version",
+                         "renderer keeps that version's graphics cache when both have the same "
+                         "shaders",
                          prev, ver[0] != '\0' ? ver : "unknown");
         } else {
             ico_diag_log(
                 "ico_pc: the previous run ended while: %s (version %s); trying the "
-                "start-up set again on %s (a Vulkan renderer drops the graphics cache of that "
-                "version; this start prepares the graphics from nothing)",
+                "start-up set again on %s (a Vulkan renderer keeps that version's graphics "
+                "cache when both have the same shaders, else this start prepares the graphics "
+                "from nothing)",
                 prev, ver[0] != '\0' ? ver : "unknown", act_version);
         }
         return 0;
