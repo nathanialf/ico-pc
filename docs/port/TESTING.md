@@ -603,8 +603,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `gpu_hang_test.c`: the GPU hang limit (`gpu_hang.h`, issue 123): half the watchdog (30 s gives
   15 s, 0 off, at least 2 s), the watch over four polls a second (issue 123's wait fires once at
   15 s, not before; a finished wait or none clears it; another submission's wait starts again
-  from 0; time not counted, paused or asleep, does not add; a limit of 0 never fires); pure
-  (`gpu_hang`).
+  from 0; time not counted, paused or asleep, does not add; a limit of 0 never fires), and the
+  render thread's watch (`ico_render_hang_step`: a picture that makes 60 pipelines of 250 ms each
+  is no hang, nor one inside a single creation for 20 s; with no creation a picture fires once at
+  15 s, counted from the last creation; between pictures nothing counts); pure (`gpu_hang`).
 - `gpu_driver_test.c`: the Android driver packages: `meta.json`, refusals, installs from zips made
   here, the trial marker, and `test_list_zips` (`ico_gpu_driver_list_zips`: `a.zip`, `B.ZIP`, `incoming.*`, a text file, a hidden zip and a folder named `.zip` give two names in byte order, the cap and a missing folder) (`gpu_driver`).
   The Android file picker ([PLATFORM.md](PLATFORM.md#the-file-picker): `IcoActivity.pickFile`,

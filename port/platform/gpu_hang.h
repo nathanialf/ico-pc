@@ -44,4 +44,25 @@ typedef struct IcoGpuHangWatch {
 int ico_gpu_hang_step(IcoGpuHangWatch *w, double limit_s, unsigned long long waiting_for,
                       unsigned long long finished, double dt_s, int count);
 
+/* The render thread's watch (diag_host.c, the window's render thread):
+   the same count over its picture in progress (seq, 0 none: a call between
+   pictures is not counted, render_thread.c) and the last one finished
+   (done), where the driver's pipeline creations are progress too: mark is
+   their counter (diag_host.c activity_seq: it moves at every creation's
+   start and end) and creating says one is in progress now.  A creation
+   started or ended since the last poll, or one in progress, starts the
+   count again, so a picture that makes its pipelines on first use (about
+   250 ms each on a phone) is not a hang however many it makes; one
+   creation that does not return is the watchdog's pipeline limit's and
+   its own to judge, as without the render thread.  Zero-initialise. */
+typedef struct IcoRenderHangWatch {
+    IcoGpuHangWatch w;
+    unsigned mark; /* the creations' counter at the last poll */
+    int seen;      /* mark is set */
+} IcoRenderHangWatch;
+
+int ico_render_hang_step(IcoRenderHangWatch *r, double limit_s, unsigned long long seq,
+                         unsigned long long done, unsigned mark, int creating, double dt_s,
+                         int count);
+
 #endif /* ICO_PLATFORM_GPU_HANG_H */

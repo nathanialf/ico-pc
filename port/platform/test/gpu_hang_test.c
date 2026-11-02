@@ -12,7 +12,13 @@
  *            frame's waits each short never add up);
  *   paused   time not counted (the watchdog paused, a suspend gap) does
  *            not reach the limit;
- *   off      a limit of 0 never fires, however long the wait.
+ *   off      a limit of 0 never fires, however long the wait;
+ *   render   the render thread's watch (ico_render_hang_step): a picture
+ *            that makes 60 pipelines of 250 ms each (the PowerVR DXT-48's
+ *            cold compiles, 15 s in all) is not a hang, nor one inside a
+ *            single creation for 20 s; a picture with no creation fires
+ *            at 15 s, once; between pictures (seq 0) nothing counts; the
+ *            count starts again after the last creation.
  */
 #include <stdio.h>
 #include "gpu_hang.h"
@@ -123,6 +129,55 @@ static void testOff(void)
     CHECK(first == 8); /* the noting poll, then 8 polls of 0.25 s */
 }
 
+/* the render thread's watch polled every 250 ms for seconds s with the
+   creations' counter moving by `step` a poll (0: still) and `creating`
+   held; the polls that fired */
+static int renderFor(IcoRenderHangWatch *r, unsigned long long seq, unsigned long long done,
+                     unsigned *mark, unsigned step, int creating, double s)
+{
+    int fired = 0;
+    for (int i = 0; i < (int)(s * 4.0 + 0.5); i++) {
+        *mark += step;
+        fired += ico_render_hang_step(r, 15.0, seq, done, *mark, creating, 0.25, 1);
+    }
+    return fired;
+}
+
+static void testRender(void)
+{
+    unsigned mark = 7;
+    /* picture 40 makes 60 pipelines of 250 ms on first use: each poll sees
+       a creation start or end (two notes a pipeline) */
+    IcoRenderHangWatch r = {0};
+    CHECK(renderFor(&r, 40, 39, &mark, 1, 0, 15.0) == 0);
+    CHECK(renderFor(&r, 40, 39, &mark, 2, 1, 5.0) == 0);
+    CHECK(!r.w.fired && r.w.counted_s == 0.0);
+    /* one creation that does not return for 20 s: the pipeline limit's,
+       not this one's */
+    CHECK(renderFor(&r, 40, 39, &mark, 0, 1, 20.0) == 0);
+    CHECK(!r.w.fired);
+    /* after the last creation the picture's own time counts from 0: 14 s
+       is not the limit, 15 s more fires once */
+    CHECK(renderFor(&r, 40, 39, &mark, 0, 0, 14.0) == 0);
+    CHECK(renderFor(&r, 40, 39, &mark, 0, 0, 2.0) == 1);
+    CHECK(r.w.fired);
+    CHECK(renderFor(&r, 40, 39, &mark, 0, 0, 10.0) == 0);
+    /* a picture with no creation at all fires at 15 s */
+    IcoRenderHangWatch q = {0};
+    int fired = 0, at = -1;
+    for (int i = 0; i < 70; i++) {
+        if (ico_render_hang_step(&q, 15.0, 41, 40, mark, 0, 0.25, 1)) {
+            fired++;
+            at = i;
+        }
+    }
+    CHECK(fired == 1 && at == 60); /* the noting poll, then 60 polls of 0.25 s */
+    /* between pictures (a call job, or idle) nothing counts */
+    IcoRenderHangWatch c = {0};
+    CHECK(renderFor(&c, 0, 41, &mark, 0, 0, 60.0) == 0);
+    CHECK(c.w.counted_s == 0.0 && !c.w.fired);
+}
+
 int main(void)
 {
     testLimit();
@@ -131,6 +186,7 @@ int main(void)
     testOther();
     testPaused();
     testOff();
+    testRender();
     printf("gpu_hang_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

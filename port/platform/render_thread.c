@@ -114,8 +114,14 @@ static int SDLCALL rt_main(void *u)
         }
         const Uint64 t0 = SDL_GetTicksNS();
 
-        __atomic_store_n(&s_rt.beatSeq, (unsigned long long)job.seq, __ATOMIC_RELAXED);
-        __atomic_store_n(&s_rt.beatSince, t0 != 0 ? t0 : 1, __ATOMIC_RELEASE);
+        /* the watchdog's heartbeat counts pictures only: a call between
+           pictures (the targets made again, a movie's picture) runs on this
+           thread as it ran on the game thread, under the watchdog's own
+           limit */
+        if (job.kind == FM_JOB_PICTURE) {
+            __atomic_store_n(&s_rt.beatSeq, (unsigned long long)job.seq, __ATOMIC_RELAXED);
+            __atomic_store_n(&s_rt.beatSince, t0 != 0 ? t0 : 1, __ATOMIC_RELEASE);
+        }
         SDL_UnlockMutex(s_rt.lock);
         if (s_gl.on && gl_owner() != GL_RENDER) {
             gl_bind(GL_RENDER); /* the game thread let it go when it posted */

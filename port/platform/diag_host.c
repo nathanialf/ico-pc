@@ -5235,7 +5235,8 @@ static void watchdog_loop(void)
     char reason[200];
     /* the GPU hang limit's watch (gpu_hang.h): the wait it counts, and the
        render thread's picture it counts the same way */
-    IcoGpuHangWatch hang_watch, render_watch;
+    IcoGpuHangWatch hang_watch;
+    IcoRenderHangWatch render_watch;
     memset(&hang_watch, 0, sizeof hang_watch);
     memset(&render_watch, 0, sizeof render_watch);
     for (;;) {
@@ -5389,20 +5390,24 @@ static void watchdog_loop(void)
             }
             /* the render thread (ico_diag_set_render_heartbeat): one picture
                inside its submit and present for the limit's time, counted
-               the same way; not with an effects program, whose first
-               presents prepare its effects */
+               the same way, the count started again whenever the driver
+               begins or ends a pipeline (activity_seq) and held at 0 inside
+               one (gpu_hang.h ico_render_hang_step: a picture that makes its
+               pipelines on first use is not a hang); not with an effects
+               program, whose first presents prepare its effects */
             int (*beat)(unsigned long long *, unsigned long long *) = render_beat_fn;
             unsigned long long rseq = 0, rdone = 0;
+            const int creating = strncmp(activity, "creating pipeline", 17) == 0;
             if (beat != NULL && !effects_program && beat(&rseq, &rdone) &&
-                ico_gpu_hang_step(&render_watch, (double)hang_ms / 1000.0, rseq, rdone, poll_dt,
-                                  poll_counted)) {
+                ico_render_hang_step(&render_watch, (double)hang_ms / 1000.0, rseq, rdone,
+                                     activity_seq, creating, poll_dt, poll_counted)) {
                 render_hang_seq = rseq;
-                render_hang_s = render_watch.counted_s;
+                render_hang_s = render_watch.w.counted_s;
                 render_hang = 1;
                 snprintf(reason, sizeof reason,
                          "the render thread: picture %llu has not finished its submit and present "
                          "after %.0f s (limit %.0f s); the last finished %llu",
-                         rseq, render_watch.counted_s, (double)hang_ms / 1000.0, rdone);
+                         rseq, render_watch.w.counted_s, (double)hang_ms / 1000.0, rdone);
                 watchdog_fire(reason);
                 continue;
             }

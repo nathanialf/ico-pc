@@ -390,7 +390,8 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
 - The heartbeat. The watchdog's thread reads the picture in progress without a lock
   (`ico_diag_set_render_heartbeat`) and counts one picture that does not finish as it counts a
   wait for the GPU: at the GPU hang limit the run ends through the GPU hang's path
-  ([Diagnostics](#diagnostics)); not while an effects program is loaded.
+  ([Diagnostics](#diagnostics)); not while an effects program is loaded, not for a call between
+  pictures, and started again by every pipeline the driver begins or ends.
 
 `[dev] render_thread` (config.toml, or `render_thread` in `ico-pc.ini`) picks it: `auto` (the
 default) and `on` run it, `off` makes every picture on the game thread as before, `sync` runs it
@@ -1836,8 +1837,14 @@ leaves the render thread inside the driver's present and the main thread waiting
 thread, not for the GPU, so the backend's progress names no wait. The render thread's heartbeat
 covers it: the watchdog's thread reads the picture in progress without a lock
 (`port/platform/diag_host.h` (`ico_diag_set_render_heartbeat`); `port/platform/render_thread.c`
-(`rt_heartbeat`)) and counts it through a second `IcoGpuHangWatch`, the same limit and the same
-counting rules (not with an effects program loaded, whose first presents prepare its effects); at
+(`rt_heartbeat`)) and counts it through `IcoRenderHangWatch`, the same limit and the same
+counting rules (not with an effects program loaded, whose first presents prepare its effects).
+Only pictures are counted (a call between pictures, such as the targets made again, runs under the
+watchdog's own limit, as it did on the main thread), and the driver's pipeline creations are
+progress: the count starts again whenever one begins or ends and stays at 0 while one is in
+progress (`port/platform/gpu_hang.h` (`ico_render_hang_step`), fed the activity note's counter),
+so a picture that makes many pipelines on first use (about 250 ms each on a phone) is not a hang,
+and one creation that does not return is left to the pipeline limit and the watchdog; at
 the limit the WATCHDOG line is `the render thread: picture P has not finished its submit and
 present after W s (limit L s); the last finished D`, its second line `the graphics driver did not
 finish the picture (the render thread has been inside picture P's submit and present for W s; the

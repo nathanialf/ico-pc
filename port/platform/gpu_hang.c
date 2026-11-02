@@ -39,3 +39,20 @@ int ico_gpu_hang_step(IcoGpuHangWatch *w, double limit_s, unsigned long long wai
     }
     return 0;
 }
+
+int ico_render_hang_step(IcoRenderHangWatch *r, double limit_s, unsigned long long seq,
+                         unsigned long long done, unsigned mark, int creating, double dt_s,
+                         int count)
+{
+    if (!r->seen || mark != r->mark || creating) {
+        /* the driver made progress, or is inside a creation: the picture's
+           time counts from this poll (the watch's fired mark kept) */
+        r->seen = 1;
+        r->mark = mark;
+        r->w.waiting_for = 0;
+        r->w.counted_s = 0.0;
+        (void)ico_gpu_hang_step(&r->w, limit_s, seq, done, 0.0, 0);
+        return 0;
+    }
+    return ico_gpu_hang_step(&r->w, limit_s, seq, done, dt_s, count);
+}
