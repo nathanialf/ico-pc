@@ -2983,13 +2983,13 @@ int main(void)
     clothPixels();
     ripplePixels();
 
-    static RdPipeKeyInt keys[1024];
-    const uint32_t n = rd__enumerate_reachable(keys, 1024);
+    static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
+    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
     printf("  pipelines: %u created, %u reachable\n", rd__pipeline_count(), n);
     for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
         const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         int found = 0;
-        for (uint32_t j = 0; j < n && j < 1024; j++) {
+        for (uint32_t j = 0; j < n && j < RD_PIPELINE_REACHABLE_MAX; j++) {
             found |= rd__pipe_key_equal(&keys[j], k);
         }
         CHECK(found, "created pipeline %u (prog %u vs %u blend %u z %u/%u) is not enumerated", i,
