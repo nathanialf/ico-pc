@@ -234,9 +234,10 @@ typedef struct VkrCmdList {
     uint32_t offsets[RHI_MAX_BIND_SLOTS][RHI_MAX_DYNAMIC_OFFSETS];
     uint32_t groupDirty; /* bit per group */
     bool inPass;
-    /* the open pass's render area (vk_cmd.c vkr_pass_area_fits): every
-     * scissor set inside it is cut to it */
-    uint32_t areaW, areaH;
+    /* the open pass's render area (vk_cmd.c vkr_pass_area_fits, and
+     * RhiRenderPassDesc.area inside it): offset areaX, areaY, extent areaW
+     * x areaH; every scissor set inside the pass is cut to it */
+    uint32_t areaX, areaY, areaW, areaH;
     /* a draw, and a RHI_DST_READ_STORAGE draw, recorded in the open
      * render pass (vk_cmd.c vkr_dst_order) */
     bool drawnInPass, storageDrawn;
@@ -330,8 +331,9 @@ typedef struct VkrFrame {
  * ops (a depth-stencil format's stencil ops in stencilLoad/stencilStore; a
  * colour target's are DONT_CARE) and the clear value; hasStencil: the depth
  * format has a stencil aspect; readOnlyDepth as asked; the render area
- * (vkr_pass_area_fits) and the framebuffer's size (the smallest
- * attachment's, the render area's without one). */
+ * (vkr_pass_area_fits, then RhiRenderPassDesc.area inside it: offset
+ * areaX, areaY, extent areaW x areaH) and the framebuffer's size (the
+ * smallest attachment's, the pass's own size without one). */
 typedef struct VkrPassAttach {
     VkrTexture *tex;
     VkImageView view;
@@ -348,7 +350,7 @@ typedef struct VkrPassDesc {
     VkrPassAttach color[RHI_MAX_COLOR_TARGETS];
     bool hasDepth, hasStencil, readOnlyDepth;
     VkrPassAttach depth;
-    uint32_t areaW, areaH;
+    uint32_t areaX, areaY, areaW, areaH;
     uint32_t fbW, fbH;
 } VkrPassDesc;
 

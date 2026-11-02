@@ -16,7 +16,10 @@
  * barriers), so the pass makes no layout transition and needs no
  * dependency: the barriers before it order it, as on the dynamic path.  A
  * pass without attachments (a storage pass) is a subpass without
- * attachments, its framebuffer the render area's size.
+ * attachments, its framebuffer the pass's size.  The framebuffer is the
+ * attachments' size whatever the pass's area (RhiRenderPassDesc.area):
+ * VkRenderPassBeginInfo.renderArea carries the area's offset and extent,
+ * inside the framebuffer, so one framebuffer serves every area.
  *
  * The caches are linear arrays, searched by memcmp of a zeroed key:
  *   render passes  VKR_RP_CACHE entries, keyed by the attachments' formats,
@@ -356,7 +359,9 @@ bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d)
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = rp,
             .framebuffer = fb,
-            .renderArea = {{0, 0}, {d->areaW, d->areaH}},
+            /* the area's offset too: the framebuffer stays the attachments'
+             * size (vk_cmd.c rhi_cmd_begin_render_pass) */
+            .renderArea = {{(int32_t)d->areaX, (int32_t)d->areaY}, {d->areaW, d->areaH}},
             .clearValueCount = n,
             .pClearValues = n ? clear : NULL,
         };
@@ -391,7 +396,7 @@ bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d)
     }
     VkRenderingInfo ri = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea = {{0, 0}, {d->areaW, d->areaH}},
+        .renderArea = {{(int32_t)d->areaX, (int32_t)d->areaY}, {d->areaW, d->areaH}},
         .layerCount = 1,
         .colorAttachmentCount = d->colorCount,
         .pColorAttachments = color,

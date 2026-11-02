@@ -1,6 +1,8 @@
 /* rhi_vk_test.c: the exact-texel RHI checks (rhi_test_common.c) on the
  * Vulkan backend, headless, then a hazard-tracking cell, the render-area
- * check (a pass larger than an attachment is clamped) and the pipeline
+ * check (a pass larger than an attachment is clamped), a pass with a
+ * render area inside its target (renderAreaCell: only the area's texels
+ * are loaded, drawn, cleared and stored) and the pipeline
  * cache file (rhi_set_pipeline_cache_path: written by rhi_pipeline_cache_save
  * while the device is up and at shutdown, each with a version
  * one header, read back at the next init, a file of another device or of
@@ -654,6 +656,166 @@ static int poolCell(void)
     return failures + (int)rhi_vk_validation_error_count();
 }
 
+/* A pass with a render area (rhi.h RhiRenderPassDesc.area; vk_cmd.c
+ * rhi_cmd_begin_render_pass): on a 16x16 target cleared blue by a pass of
+ * its own, a pass loaded with the area (4, 6) 5x3 draws a quad over the
+ * whole target in red, after a scissor set to the whole target (the
+ * backend cuts it to the area): the area's 15 texels red, every other
+ * texel still blue.  The Vulkan specification restricts "the effects of
+ * attachment load, store, and multisample resolve operations" to the
+ * pixels inside the render area (VkRenderPassBeginInfo, VkRenderingInfo)
+ * and asks that all rendering stay inside it ("using scissor if
+ * necessary": the cut scissor), so the texels outside keep the
+ * first pass's blue on every device, a tile-based one too.  A third pass
+ * with the area (10, 0) 6x2 and a CLEAR load to green, no draw: those 12
+ * texels green, the rest as the second pass left them (the clear is a
+ * load operation: the area only).  An area past the target's edge is cut
+ * to it, one that leaves nothing is the whole target (an extent above
+ * zero).  Both pass paths: dynamic rendering here, the VkRenderPass under
+ * ICO_VK_FAKE_API=1.0 / 1.1 (the rhi_vk_vk10 and rhi_vk_vk11 ctests).  No
+ * validation message. */
+static int renderAreaCell(void)
+{
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test render area"};
+    if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
+        rhi_test_log("FAIL render area cell: init\n");
+        return 1;
+    }
+    int failures = 0;
+#define AREA_CHECK(cond, ...)                                                                      \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            rhi_test_log("FAIL render area cell: " __VA_ARGS__);                                   \
+            failures++;                                                                            \
+        }                                                                                          \
+    } while (0)
+    const RhiShader vs = rhi_create_shader(&(RhiShaderDesc){.stage = RHI_STAGE_VERTEX,
+                                                            .bytecode = spv_vs_main,
+                                                            .bytecodeSize = sizeof(spv_vs_main),
+                                                            .entryPoint = "vs_main",
+                                                            .debugName = "area vs_main"});
+    const RhiShader ps = rhi_create_shader(&(RhiShaderDesc){.stage = RHI_STAGE_FRAGMENT,
+                                                            .bytecode = spv_ps_color,
+                                                            .bytecodeSize = sizeof(spv_ps_color),
+                                                            .entryPoint = "ps_color",
+                                                            .debugName = "area ps_color"});
+    static const RhiVertexBinding vb = {0, sizeof(PoolVtx), false};
+    static const RhiVertexAttr va[3] = {
+        {0, 0, RHI_VTX_F32x3, offsetof(PoolVtx, x)},
+        {1, 0, RHI_VTX_U8x4_UNORM, offsetof(PoolVtx, rgba)},
+        {2, 0, RHI_VTX_F32x2, offsetof(PoolVtx, u)},
+    };
+    RhiPipelineDesc d;
+    memset(&d, 0, sizeof(d));
+    d.vertex = vs;
+    d.fragment = ps;
+    d.vertexBindings = &vb;
+    d.vertexBindingCount = 1;
+    d.vertexAttrs = va;
+    d.vertexAttrCount = 3;
+    d.topology = RHI_TOPO_TRIANGLE_LIST;
+    d.cullNone = true;
+    d.blend[0].writeMask = 0xF;
+    d.colorFormats[0] = RHI_FMT_RGBA8_UNORM;
+    d.colorCount = 1;
+    d.debugName = "area";
+    const RhiPipeline pipe = vs.id && ps.id ? rhi_create_pipeline(&d) : (RhiPipeline){0};
+
+    enum { AW = 16, AH = 16 };
+
+    RhiTexture tgt = rhi_create_texture(&(RhiTextureDesc){
+        AW, AH, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "area", 0});
+    RhiBuffer vbuf = rhi_create_buffer(
+        &(RhiBufferDesc){6 * sizeof(PoolVtx), RHI_BUF_VERTEX, RHI_MEM_UPLOAD, "area verts"});
+    PoolVtx *v = vbuf.id ? rhi_map_buffer(vbuf) : NULL;
+    AREA_CHECK(pipe.id && tgt.id && v, "setup: pipeline %u, target %u, vertices %d\n", pipe.id,
+               tgt.id, v != NULL);
+    if (pipe.id && tgt.id && v) {
+        /* the whole target in red (two triangles over NDC -1..1) */
+        static const float qx[6] = {-1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f};
+        static const float qy[6] = {1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f};
+        for (int i = 0; i < 6; i++) {
+            v[i] = (PoolVtx){qx[i], qy[i], 0.0f, {255, 0, 0, 255}, 0.0f, 0.0f};
+        }
+        RhiCommandList cl = rhi_begin_commands();
+        RhiTextureBarrier pre = {tgt, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+        rhi_cmd_barrier(cl, &pre, 1);
+        RhiRenderPassDesc rp = {0};
+        rp.color[0].texture = tgt;
+        rp.color[0].load = RHI_LOAD_CLEAR;
+        rp.color[0].clear[2] = 1.0f; /* blue */
+        rp.color[0].clear[3] = 1.0f;
+        rp.colorCount = 1;
+        rp.width = AW;
+        rp.height = AH;
+        rhi_cmd_begin_render_pass(cl, &rp); /* the whole target blue */
+        rhi_cmd_end_render_pass(cl);
+        rp.color[0].load = RHI_LOAD_LOAD;
+        rp.area = (RhiRect){4, 6, 5, 3};
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_set_scissor(cl, &(RhiRect){0, 0, AW, AH}); /* cut to the area */
+        rhi_cmd_set_vertex_buffer(cl, 0, vbuf, 0);
+        rhi_cmd_set_pipeline(cl, pipe);
+        rhi_cmd_draw(cl, 6, 0, 1);
+        rhi_cmd_end_render_pass(cl);
+        rp.color[0].load = RHI_LOAD_CLEAR;
+        rp.color[0].clear[1] = 1.0f; /* green */
+        rp.color[0].clear[2] = 0.0f;
+        rp.area = (RhiRect){10, 0, 40, 2}; /* past the right edge: cut to 6 wide */
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_end_render_pass(cl);
+        RhiTextureBarrier post = {tgt, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+        rhi_cmd_barrier(cl, &post, 1);
+        rhi_end_commands(cl);
+        rhi_submit(cl);
+        static uint8_t img[AW * AH * 4];
+        uint32_t pitch = 0;
+        const bool read = rhi_readback_texture(tgt, RHI_ASPECT_COLOR, img, sizeof(img), &pitch);
+        AREA_CHECK(read && pitch == AW * 4, "readback %d, pitch %u\n", (int)read, pitch);
+        if (read && pitch == AW * 4) {
+            static const uint8_t red[4] = {255, 0, 0, 255}, blue[4] = {0, 0, 255, 255},
+                                 green[4] = {0, 255, 0, 255};
+            uint32_t bad = 0, nRed = 0, nGreen = 0, nBlue = 0;
+            for (uint32_t y = 0; y < AH; y++) {
+                for (uint32_t x = 0; x < AW; x++) {
+                    const bool inRed = x >= 4 && x < 9 && y >= 6 && y < 9;
+                    const bool inGreen = x >= 10 && y < 2;
+                    const uint8_t *want = inGreen ? green : inRed ? red : blue;
+                    const uint8_t *got = &img[y * pitch + x * 4];
+                    if (memcmp(got, want, 4) != 0) {
+                        if (bad++ < 4) {
+                            rhi_test_log("render area cell: texel (%u,%u) %u %u %u %u, want %u %u "
+                                         "%u %u\n",
+                                         x, y, got[0], got[1], got[2], got[3], want[0], want[1],
+                                         want[2], want[3]);
+                        }
+                    } else {
+                        nRed += inRed;
+                        nGreen += inGreen;
+                        nBlue += !inRed && !inGreen;
+                    }
+                }
+            }
+            rhi_test_log("render area cell: %u red (the area's draw), %u green (the area's clear), "
+                         "%u blue (outside both), %u wrong\n",
+                         nRed, nGreen, nBlue, bad);
+            AREA_CHECK(bad == 0 && nRed == 15 && nGreen == 12,
+                       "%u texels wrong; want 15 red inside the drawn area, 12 green inside the "
+                       "cleared one, the rest blue\n",
+                       bad);
+        }
+    }
+    rhi_wait_idle();
+    rhi_destroy_buffer(vbuf);
+    rhi_destroy_texture(tgt);
+    rhi_destroy_pipeline(pipe);
+    rhi_destroy_shader(vs);
+    rhi_destroy_shader(ps);
+#undef AREA_CHECK
+    rhi_shutdown();
+    return failures + (int)rhi_vk_validation_error_count();
+}
+
 /* The occlusion queries (rhi.h rhi_cmd_begin_occlusion, vk_cmd.c): on an
  * 8x8 target with a depth cleared to 0 and a GEQUAL test with writes, a
  * full quad at depth 0.5 (query 0), the same quad at 0.25 behind it (query
@@ -1052,7 +1214,8 @@ int main(void)
         return rc;
     }
     return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell() ||
-            poolCell() || occlusionCell() || syncCell() || d32fCell() || adapterCell())
+            poolCell() || renderAreaCell() || occlusionCell() || syncCell() || d32fCell() ||
+            adapterCell())
                ? 1
                : 0;
 }

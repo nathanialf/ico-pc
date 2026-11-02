@@ -1124,12 +1124,34 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
     }
     uint32_t areaW = pass->width, areaH = pass->height;
     vkr_pass_area_fits(&areaW, &areaH, colorTex, pass->colorCount, depthTex);
-    d.areaW = areaW;
-    d.areaH = areaH;
     /* the framebuffer (legacy path): the attachments' common size, the
-     * area's without one */
+     * pass's own without one */
     d.fbW = areaW;
     d.fbH = areaH;
+    /* the render area: RhiRenderPassDesc.area cut to the pass's size, the
+     * whole of it when the area is not given or leaves nothing (Vulkan
+     * wants an extent above zero).  The loads and stores apply inside it
+     * only; the pixels outside are not accessed and keep their contents */
+    const uint32_t passW = areaW, passH = areaH;
+    uint32_t areaX = 0, areaY = 0;
+    if (pass->area.w && pass->area.h) {
+        const int64_t x0 = pass->area.x > 0 ? pass->area.x : 0;
+        const int64_t y0 = pass->area.y > 0 ? pass->area.y : 0;
+        int64_t x1 = (int64_t)pass->area.x + pass->area.w;
+        int64_t y1 = (int64_t)pass->area.y + pass->area.h;
+        x1 = x1 < (int64_t)passW ? x1 : (int64_t)passW;
+        y1 = y1 < (int64_t)passH ? y1 : (int64_t)passH;
+        if (x1 > x0 && y1 > y0) {
+            areaX = (uint32_t)x0;
+            areaY = (uint32_t)y0;
+            areaW = (uint32_t)(x1 - x0);
+            areaH = (uint32_t)(y1 - y0);
+        }
+    }
+    d.areaX = areaX;
+    d.areaY = areaY;
+    d.areaW = areaW;
+    d.areaH = areaH;
     if (pass->colorCount || depthTex) {
         d.fbW = d.fbH = UINT32_MAX;
         for (uint32_t i = 0; i < pass->colorCount; i++) {
@@ -1196,16 +1218,20 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         return;
     }
     c->inPass = true;
+    c->areaX = areaX;
+    c->areaY = areaY;
     c->areaW = areaW;
     c->areaH = areaH;
     c->storageDrawn = c->drawnInPass = false;
     g_vkr.stats.renderPasses++;
 
-    /* defaults: full-target viewport and scissor, recorded whatever the
-     * list held before (the bind cache forgets both at a pass's start) */
+    /* defaults: the viewport the pass's whole size (an area does not move
+     * the draws' coordinates), the scissor its render area, recorded
+     * whatever the list held before (the bind cache forgets both at a
+     * pass's start) */
     c->known &= ~(VKR_KNOW_VIEWPORT | VKR_KNOW_SCISSOR);
-    RhiViewport vp = {0.0f, 0.0f, (float)areaW, (float)areaH, 0.0f, 1.0f};
-    RhiRect sc = {0, 0, areaW, areaH};
+    RhiViewport vp = {0.0f, 0.0f, (float)passW, (float)passH, 0.0f, 1.0f};
+    RhiRect sc = {(int32_t)areaX, (int32_t)areaY, areaW, areaH};
     rhi_cmd_set_viewport(cl, &vp);
     rhi_cmd_set_scissor(cl, &sc);
 }
@@ -1251,10 +1277,22 @@ void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *r)
     vkr_flush_barriers(c);
     VkRect2D sc = {{r->x, r->y}, {r->w, r->h}};
     if (c->inPass) {
-        /* within the render area (vkr_pass_area_fits) */
-        const uint32_t x = r->x > 0 ? (uint32_t)r->x : 0u, y = r->y > 0 ? (uint32_t)r->y : 0u;
-        sc.extent.width = x >= c->areaW ? 0u : r->w < c->areaW - x ? r->w : c->areaW - x;
-        sc.extent.height = y >= c->areaH ? 0u : r->h < c->areaH - y ? r->h : c->areaH - y;
+        /* within the render area (vkr_pass_area_fits, RhiRenderPassDesc.area):
+         * Vulkan leaves rendering outside it undefined, so the scissor is
+         * the two rectangles' intersection (an empty one keeps its offset,
+         * extent 0) */
+        const int64_t ax0 = c->areaX, ay0 = c->areaY;
+        const int64_t ax1 = ax0 + c->areaW, ay1 = ay0 + c->areaH;
+        int64_t x0 = r->x > 0 ? r->x : 0, y0 = r->y > 0 ? r->y : 0;
+        int64_t x1 = (int64_t)r->x + r->w, y1 = (int64_t)r->y + r->h;
+        x0 = x0 > ax0 ? x0 : ax0;
+        y0 = y0 > ay0 ? y0 : ay0;
+        x1 = x1 < ax1 ? x1 : ax1;
+        y1 = y1 < ay1 ? y1 : ay1;
+        sc.offset.x = (int32_t)x0;
+        sc.offset.y = (int32_t)y0;
+        sc.extent.width = x1 > x0 ? (uint32_t)(x1 - x0) : 0u;
+        sc.extent.height = y1 > y0 ? (uint32_t)(y1 - y0) : 0u;
     }
     /* compared as recorded (cut to the pass's area) */
     if (rhi_bind_cache_enabled() && (c->known & VKR_KNOW_SCISSOR) &&

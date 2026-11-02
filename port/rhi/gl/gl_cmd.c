@@ -710,6 +710,9 @@ static void gl_pass_area_check(uint32_t *w, uint32_t *h, GlTexture *const *colou
 
 void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
 {
+    /* pass->area (rhi.h RhiRenderPassDesc) is ignored: OpenGL has no render area; the
+     * pass covers its whole size, and the caller's draws lie inside the
+     * area anyway (a tile-based GPU's saving, Vulkan only) */
     GlCmdList *c = gl_cmd(cl);
     if (!c || !pass) {
         return;

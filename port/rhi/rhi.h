@@ -557,21 +557,38 @@ typedef struct RhiDepthAttachment {
     bool readable;
 } RhiDepthAttachment;
 
+typedef struct RhiRect {
+    int32_t x, y;
+    uint32_t w, h;
+} RhiRect;
+
+/* width x height: the pass's size (its default viewport, and its render
+ * area unless `area` says otherwise).  area: the part of it the pass loads,
+ * draws and stores, in pixels from the top-left corner; w or h 0 (a zeroed
+ * desc) is the whole size.  On a tile-based GPU only the tiles inside it
+ * are loaded and stored; the pixels outside it are not accessed and keep
+ * their contents (Vulkan: load and store operations apply within the
+ * render area only), whatever the load and store ops say, so a CLEAR load
+ * clears the area alone.  Every draw of the pass must lie inside it:
+ * rendering outside the render area is undefined in Vulkan, so the
+ * default scissor is the area and every rhi_cmd_set_scissor in the pass is
+ * cut to it; the default viewport stays width x height (the draws'
+ * coordinates do not move).  Vulkan: VkRenderingInfo /
+ * VkRenderPassBeginInfo renderArea (offset and extent), clamped to the
+ * attachments (an area that leaves nothing is the whole size).  D3D11,
+ * D3D12 and OpenGL have no tiles to spare: they ignore it (the pass covers
+ * the whole size, and the caller's draws lie inside the area anyway). */
 typedef struct RhiRenderPassDesc {
     RhiColorAttachment color[RHI_MAX_COLOR_TARGETS];
     uint32_t colorCount;
     RhiDepthAttachment depth;
     uint32_t width, height;
+    RhiRect area;
 } RhiRenderPassDesc;
 
 typedef struct RhiViewport {
     float x, y, w, h, minDepth, maxDepth;
 } RhiViewport;
-
-typedef struct RhiRect {
-    int32_t x, y;
-    uint32_t w, h;
-} RhiRect;
 
 /* ------------------------------------------------------------- device */
 typedef struct RhiLimits {

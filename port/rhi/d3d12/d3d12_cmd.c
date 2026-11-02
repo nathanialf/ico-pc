@@ -591,6 +591,9 @@ static void dx_pass_area_check(uint32_t *w, uint32_t *h, const RhiRenderPassDesc
 
 void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
 {
+    /* pass->area (rhi.h RhiRenderPassDesc) is ignored: D3D12 has no render pass objects here and no tiles to spare; the
+     * pass covers its whole size, and the caller's draws lie inside the
+     * area anyway (a tile-based GPU's saving, Vulkan only) */
     DxCmdList *c = dx_get_cmd(cl);
     if (!c || !pass || pass->colorCount > RHI_MAX_COLOR_TARGETS) {
         return;

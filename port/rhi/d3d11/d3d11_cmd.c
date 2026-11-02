@@ -166,6 +166,9 @@ static void d11_pair_size_note(const D11Texture *colour, const D11Texture *depth
 
 void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
 {
+    /* pass->area (rhi.h RhiRenderPassDesc) is ignored: D3D11 has no render area; the
+     * pass covers its whole size, and the caller's draws lie inside the
+     * area anyway (a tile-based GPU's saving, Vulkan only) */
     D11CommandList *c = d11_rec(cl);
     if (!c || !pass || pass->colorCount > RHI_MAX_COLOR_TARGETS) {
         return;
