@@ -6213,6 +6213,11 @@ void rd__replay_end_pass(Replay *r)
     endPass(r);
 }
 
+void rd__replay_end_pass_for(Replay *r, uint32_t tex)
+{
+    endPassFor(r, tex);
+}
+
 RhiBindGroup rd__replay_bind_draw(Replay *r, const DrawSetup *ds)
 {
     return bindDraw(r, ds);

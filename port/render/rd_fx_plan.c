@@ -43,6 +43,11 @@
  *             0 and no blend (the glow's mask, SCENE's alpha into WORK2):
  *             fx_frame_ps computes the alpha alone (FXF_ALPHA_ONLY), RGB 0
  *             as (t * 0) >> 7 is.  Not counted (it had no snapshot)
+ * A sprite whose source target is still an attachment ends the open pass
+ * for its read keeping a pending clear of another target
+ * (rd__replay_end_pass_for, rd_replay.c endPassFor, as doBlurSpriteDraw):
+ * the glow's WORK2 fill (fillWork2's sprite, a clear) is the load op of the
+ * mask's pass, not a full-size pass of its own.
  * A sprite that samples the target it draws into keeps doBlurSpriteDraw's
  * path, and so does every sprite that reads its destination in a frame
  * with the MSAA epoch or under an exact blend the player opted into
@@ -198,7 +203,10 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
     RhiTexture srcTex = x->srcTex;
     if (x->src) {
         if (x->src->colorState != RHI_STATE_SHADER_READ) {
-            rd__replay_end_pass(r);
+            /* as doBlurSpriteDraw: a pending clear of the target (the glow's
+             * WORK2 fill before its mask) stays the load op of the pass the
+             * draw begins, not a full-size pass of its own */
+            rd__replay_end_pass_for(r, x->src->color.id);
             rd__transition(rd__replay_cl(), x->src->color, &x->src->colorState,
                            RHI_STATE_SHADER_READ);
         }

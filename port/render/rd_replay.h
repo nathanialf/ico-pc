@@ -286,13 +286,18 @@ bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x);
  * rd__fx_reduction_clears  the reduction's black sprite on a scaled target
  *                    (the pair v as doBlurSpriteDraw draws it) is the clear
  *                    of colour col (doBlurSpriteDraw records it)
- * rd__replay_end_pass  rd_replay.c endPass */
+ * rd__replay_end_pass  rd_replay.c endPass
+ * rd__replay_end_pass_for  rd_replay.c endPassFor: the pass ended before
+ *                    texture tex is read or copied outside a pass, a pending
+ *                    clear of another target kept for that target's next
+ *                    pass to take as its load op (the clear carry) */
 bool rd__fx_fold(const RdDrawState *d, const uint8_t rgba[4], uint8_t *identity, uint8_t rgb[3]);
 uint32_t rd__a1x_sprite_steps(const Replay *r, const DrawSetup *ds, const IcoSpriteVertex *v,
                               uint32_t nv, uint8_t prim);
 int rd__sprite_above1x(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds, uint32_t redId);
 bool rd__fx_reduction_clears(Replay *r, const RdScreenVtx v[2], float col[4]);
 void rd__replay_end_pass(Replay *r);
+void rd__replay_end_pass_for(Replay *r, uint32_t tex);
 /* box_reduce_ps's DrawCB for the count target tc, its scaled texels into
  * its GS size (shadowReduce; shadow_count_ps reads the same fields): the
  * source texels per output pixel, the source size, a Full pixel source's

@@ -1056,6 +1056,14 @@ anything else touches its target (a pass begun on the target takes or flushes it
 its textures flushes it, any later `endPass` flushes it), only the source's barrier lies between
 where it was flushed and where it now goes, and a CLEAR load of the same values over the whole
 target (a pass that takes a clear has no area) writes what the clear's own pass wrote.
+The frame-size post sprites' plan (`fxDraw` in `port/render/rd_fx_plan.c`) and SCENE's border
+repeat (`sceneRepeat` in `port/render/rd_blur_border.c`) end the open pass for SCENE the same way
+(`rd__replay_end_pass_for`): the glow's WORK2 fill (`fillWork2`'s sprite, a clear) stays pending
+across the end the mask's read of SCENE makes (the repeat first where the border is open, the
+mask's own transition otherwise), and the mask's pass takes it: one full-size WORK2 pass fewer a
+glow picture (`glow WORK2 2.0 passes 1 draws` in the phone's rc3 log, the fill's 0-draw pass and
+the mask's, is one pass). Where the sun's fans draw into WORK2 before the mask (`dispSun`), their
+pass took the fill already, and the mask's own pass stays: SCENE's read ends the fans' pass.
 
 **The clear skip** (`[dev] clear_skip`, `ICO_RD_CLEAR_SKIP`). The constant read (above) draws
 WORK0's sprite in AURA_WORK's clear colour without reading AURA_WORK, and with no aura object nothing

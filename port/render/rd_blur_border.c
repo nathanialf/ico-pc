@@ -238,7 +238,10 @@ static void sceneRepeat(Replay *r)
     if (!colsEnsure((uint32_t)(cwL + cwR), th, t->format)) {
         return;
     }
-    rd__replay_end_pass(r);
+    /* a pending clear of another target (the glow's WORK2 fill: the mask
+     * after it is the post sprite this repeat comes before) stays pending
+     * for that target's next pass to take as its load op */
+    rd__replay_end_pass_for(r, t->color.id);
     const RhiCommandList cl = rd__replay_cl();
     rd__transition(cl, t->color, &t->colorState, RHI_STATE_COPY_SRC);
     rd__transition(cl, s_cols.tex, &s_cols.state, RHI_STATE_COPY_DST);
