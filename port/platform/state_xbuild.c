@@ -745,6 +745,14 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
             span_add(&spans, get64(b), get64(b) + get64(b + 8), now->block_addr[j]);
             break;
         }
+        if (!found &&
+            (now->block_flags[j] & (ICO_STATE_FRESH | ICO_STATE_SCAN)) == ICO_STATE_FRESH) {
+            /* a block the version that saved it did not have, which starts
+               from its initial value: this run's bytes are kept */
+            v->block_off[j] = ICO_XB_BLOCK_ABSENT;
+            v->fresh++;
+            continue;
+        }
         if (!found) {
             FAIL(v, ICO_XB_BLOCKS, "the block %s exists only here", now->block_name[j]);
         }

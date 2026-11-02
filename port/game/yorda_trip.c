@@ -16,13 +16,17 @@ static uint32_t s_last_tick;
 /* the count the last trip ended (the log's; not in a state) */
 static int s_last_run;
 
-/* The save state's blocks (state_port.h). */
+/* The save state's blocks (state_port.h).  FRESH: a state an earlier
+   version saved without them still loads, the count going on from this
+   run's (a stale stamp only starts it again from 0) */
 int ico_yorda_trip_state_register(void)
 {
     int rc = 0;
 
-    rc |= ico_state_register("yorda_trip.run_ticks", &s_run_ticks, sizeof s_run_ticks, 0);
-    rc |= ico_state_register("yorda_trip.last_tick", &s_last_tick, sizeof s_last_tick, 0);
+    rc |= ico_state_register("yorda_trip.run_ticks", &s_run_ticks, sizeof s_run_ticks,
+                             ICO_STATE_FRESH);
+    rc |= ico_state_register("yorda_trip.last_tick", &s_last_tick, sizeof s_last_tick,
+                             ICO_STATE_FRESH);
     return rc != 0 ? -1 : 0;
 }
 

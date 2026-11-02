@@ -288,6 +288,9 @@ static void init(void)
         }
     }
     ico_state_header_init(&s_now, ICO_BUILD_COMMIT);
+    /* a simulation key a later version added reads as its default in an
+       earlier version's state (sim_keys.h) */
+    ico_state_set_key_default(ico_sim_key_is_default);
     if (!s_on) {
         fprintf(stderr, "state: save states are off: %s\n", s_off_why);
         return;
@@ -434,7 +437,8 @@ static void *pack_reg(int audio, uint64_t *bytes)
 }
 
 /* off NULL: back to back in this build's order; else each block from its
-   offset in the saved section (another build's order, state_xbuild.h) */
+   offset in the saved section (another build's order, state_xbuild.h), a
+   FRESH block the state lacks (ICO_XB_BLOCK_ABSENT) left as it is */
 static void unpack_reg(int audio, const unsigned char *in, const uint64_t *off)
 {
     size_t at = 0;
@@ -444,6 +448,9 @@ static void unpack_reg(int audio, const unsigned char *in, const uint64_t *off)
         const IcoStateEntry *e = ico_state_registry_entry(i);
 
         if (((e->flags & ICO_STATE_AUDIO) != 0) == (audio != 0)) {
+            if (off != NULL && off[i] == ICO_XB_BLOCK_ABSENT) {
+                continue;
+            }
             memcpy(e->p, in + (off != NULL ? (size_t)off[i] : at), e->n);
             at += e->n;
         }
@@ -917,8 +924,10 @@ static struct {
    the pause menu's dark backdrop, taken from the present by rd_capture_shot
    when the menu opens from play, written to <dir>/pause.png on its own
    thread and copied to slot<n>.png by a save made before the game goes
-   back to play.  Without one a save takes the frame after it (the DISPLAY
-   frame, menu and all: ico_state_thumbnail). */
+   back to play.  A load puts the loaded slot's own picture there
+   (shot_from_slot), so a save in the same pause keeps the game as loaded.
+   Without one a save takes the frame after it (the DISPLAY frame, menu and
+   all: ico_state_thumbnail). */
 #ifndef ICO_HEADLESS
 enum { SHOT_NONE, SHOT_ARMED, SHOT_WRITING, SHOT_READY };
 
@@ -933,14 +942,16 @@ static struct {
     int w, h, dw, dh;
     double ms; /* the writer's time */
     unsigned taken;
+    int from_slot; /* n: the writer copies slot<n>.png, the loaded state's (0: a frame) */
     char path[ICO_PATH_MAX];
     char why[96]; /* why there is none, for the save's line */
 } s_shot = {.last = -1};
 
 static void shot_to_slot(int slot);
 static void shot_join(void);
-#endif
 static void shot_forget(const char *why);
+#endif
+static void shot_from_slot(int slot);
 
 static unsigned s_list_gen; /* a save, a load or a delete since the listing */
 
@@ -1246,6 +1257,7 @@ static void shot_taken(uint8_t *rgba, uint32_t w, uint32_t h, void *user)
     s_shot.px = rgba;
     s_shot.w = (int)w;
     s_shot.h = (int)h;
+    s_shot.from_slot = 0;
     ico_state_thumb_size(s_shot.w, s_shot.h, 0.0, &s_shot.dw, &s_shot.dh);
     s_shot.done = 0;
     s_shot.ok = 0;
@@ -1275,12 +1287,26 @@ static void shot_poll(void)
         shot_join();
         free(s_shot.px);
         s_shot.px = NULL;
-        if (!s_shot.ok) {
+        if (!s_shot.ok && s_shot.from_slot > 0) {
+            s_shot.state = SHOT_NONE;
+            snprintf(s_shot.why, sizeof s_shot.why, "the loaded slot %d has no picture to keep",
+                     s_shot.from_slot);
+            fprintf(stderr,
+                    "state: the pause picture: slot %d's picture could not be copied (none, or "
+                    "unreadable): a save before going back to play takes the frame after it\n",
+                    s_shot.from_slot);
+        } else if (!s_shot.ok) {
             s_shot.state = SHOT_NONE;
             snprintf(s_shot.why, sizeof s_shot.why, "the pause picture could not be written");
             fprintf(stderr, "state: the pause picture could not be written (%s)\n", s_shot.path);
         } else if (s_shot.stale) {
             s_shot.state = SHOT_NONE;
+        } else if (s_shot.from_slot > 0) {
+            s_shot.state = SHOT_READY;
+            fprintf(stderr,
+                    "state: the pause picture: slot %d's own, the game as loaded, %dx%d, copied in "
+                    "%.1f ms (%s)\n",
+                    s_shot.from_slot, s_shot.dw, s_shot.dh, s_shot.ms, s_shot.path);
         } else {
             s_shot.state = SHOT_READY;
             if (shot_log_now()) {
@@ -1362,6 +1388,50 @@ static void shot_to_slot(int slot)
     }
 }
 
+/* the writer's copy of the loaded slot's picture to pause.png */
+static void shot_copy(void *arg)
+{
+    const double t0 = ico_thread_now_ms();
+
+    (void)arg;
+    s_shot.ok =
+        ico_state_picture_to_pause(ico_state_dir(), s_shot.from_slot, &s_shot.dw, &s_shot.dh) == 0;
+    s_shot.ms = ico_thread_now_ms() - t0;
+    __atomic_store_n(&s_shot.done, 1, __ATOMIC_RELEASE);
+}
+
+/* after a load: the pause picture before it showed the game as it was, so
+   it goes; the loaded slot's own picture takes its place (copied on the
+   writer), so the next save in the same pause keeps the game as loaded */
+static void shot_from_slot(int slot)
+{
+    if (s_shot.state == SHOT_ARMED) {
+        rd_capture_shot_cancel();
+    }
+    if (s_shot.state == SHOT_WRITING) {
+        /* the last pause's still being written: it is the game before the
+           load, so it is waited for and dropped */
+        shot_join();
+        free(s_shot.px);
+        s_shot.px = NULL;
+    }
+    s_shot.state = SHOT_NONE;
+    snprintf(s_shot.why, sizeof s_shot.why, "a state was loaded since the pause menu opened");
+    if (ico_state_pause_path(s_shot.path, sizeof s_shot.path, ico_state_dir()) != 0) {
+        return;
+    }
+    s_shot.from_slot = slot;
+    s_shot.dw = s_shot.dh = 0;
+    s_shot.done = 0;
+    s_shot.ok = 0;
+    s_shot.stale = 0;
+    s_shot.state = SHOT_WRITING;
+    s_shot.th = ico_thread_create(shot_copy, NULL);
+    if (s_shot.th == NULL) {
+        shot_copy(NULL);
+    }
+}
+
 /* no pause picture any more (the game played on, a state was loaded): why
    for the next save's line */
 static void shot_forget(const char *why)
@@ -1379,9 +1449,9 @@ static void shot_forget(const char *why)
 #else
 static void shot_poll(void) {}
 
-static void shot_forget(const char *why)
+static void shot_from_slot(int slot)
 {
-    (void)why;
+    (void)slot;
 }
 #endif
 
@@ -1468,21 +1538,33 @@ static void *load_section(void *user, const IcoStateSectionInfo *s)
 }
 
 /* the saved sections against this build's sizes; 0 or -1 with why */
-static int check_sizes(const Copy *c, const StateRanges *rg, char *why, size_t n)
+/* block_off: another build's (state_xbuild.h): the reg and audio sections
+   hold every block but the FRESH ones the state lacks, each inside its
+   section; NULL: this build's, every block */
+static int check_sizes(const Copy *c, const StateRanges *rg, const uint64_t *block_off, char *why,
+                       size_t n)
 {
-    const uint64_t want[SEC_COUNT] = {ico_arena_size(),
-                                      s_gdata[ICO_GAME_DATA].hi - s_gdata[ICO_GAME_DATA].lo,
-                                      s_gdata[ICO_GAME_BSS].hi - s_gdata[ICO_GAME_BSS].lo,
-                                      s_reg_bytes,
-                                      s_audio_bytes,
-                                      0,
-                                      0,
-                                      rg != NULL ? rg->pobj_bytes : 0,
-                                      sizeof(StateRanges),
-                                      0};
+    uint64_t want[SEC_COUNT] = {ico_arena_size(),
+                                s_gdata[ICO_GAME_DATA].hi - s_gdata[ICO_GAME_DATA].lo,
+                                s_gdata[ICO_GAME_BSS].hi - s_gdata[ICO_GAME_BSS].lo,
+                                s_reg_bytes,
+                                s_audio_bytes,
+                                0,
+                                0,
+                                rg != NULL ? rg->pobj_bytes : 0,
+                                sizeof(StateRanges),
+                                0};
     const void *sched;
     size_t sched_n;
     int i;
+
+    for (i = 0; block_off != NULL && i < ico_state_registry_count(); i++) {
+        const IcoStateEntry *e = ico_state_registry_entry(i);
+
+        if (block_off[i] == ICO_XB_BLOCK_ABSENT) {
+            want[(e->flags & ICO_STATE_AUDIO) != 0 ? SEC_AUDIO : SEC_REG] -= e->n;
+        }
+    }
 
     ico_sched_state_block(&sched, &sched_n);
     (void)sched;
@@ -1496,6 +1578,16 @@ static int check_sizes(const Copy *c, const StateRanges *rg, char *why, size_t n
         if (i != SEC_FIBERS && i != SEC_SYMS && c->n[i] != w) {
             snprintf(why, n, "the %s section is %llu bytes, this build's %llu", sec_names[i],
                      (unsigned long long)c->n[i], (unsigned long long)w);
+            return -1;
+        }
+    }
+    for (i = 0; block_off != NULL && i < ico_state_registry_count(); i++) {
+        const IcoStateEntry *e = ico_state_registry_entry(i);
+        const int sec = (e->flags & ICO_STATE_AUDIO) != 0 ? SEC_AUDIO : SEC_REG;
+
+        if (block_off[i] != ICO_XB_BLOCK_ABSENT &&
+            (block_off[i] > c->n[sec] || c->n[sec] - block_off[i] < e->n)) {
+            snprintf(why, n, "the block %s lies outside the %s section", e->name, sec_names[sec]);
             return -1;
         }
     }
@@ -1594,6 +1686,32 @@ static int xb_probe(const char *path, IcoXbVerdict *v)
     k = ico_xb_check(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], &now, v);
     copy_free(&c);
     return k;
+}
+
+/* the FRESH blocks another build's state lacks (they keep this run's
+   bytes), named in one line */
+static void log_fresh_blocks(int slot, const IcoXbVerdict *v)
+{
+    char names[256];
+    size_t at = 0;
+    int i;
+
+    if (v->fresh == 0 || v->block_off == NULL) {
+        return;
+    }
+    names[0] = '\0';
+    for (i = 0; i < ico_state_registry_count() && at + 1 < sizeof names; i++) {
+        if (v->block_off[i] == ICO_XB_BLOCK_ABSENT) {
+            const int w = snprintf(names + at, sizeof names - at, "%s%s", at > 0 ? ", " : "",
+                                   ico_state_registry_entry(i)->name);
+
+            at = w < 0 ? at : at + (size_t)w < sizeof names ? at + (size_t)w : sizeof names - 1;
+        }
+    }
+    fprintf(stderr,
+            "state: slot %d was saved before %u of the blocks registered here existed (%s): they "
+            "start from this run's values\n",
+            slot, v->fresh, names);
 }
 
 /* A state that header_check called another build's: OK when it can be
@@ -1818,6 +1936,19 @@ static void perform_load(int slot)
                 "unchanged here, so it is translated (%u functions, %u data symbols, %u start-up "
                 "values and texts, %zu spans, %zu points; %u dead-frame words without one)\n",
                 slot, sv, tv, xv.units, xv.data, xv.points, xv.n_span, xv.n_point, xv.soft_left);
+        log_fresh_blocks(slot, &xv);
+    }
+    {
+        char keys[256];
+        const int nk = ico_state_keys_absent(saved.keys, s_now.keys, keys, sizeof keys);
+
+        if (nk > 0) {
+            fprintf(stderr,
+                    "state: slot %d was saved before the setting%s %s existed: read as %s default, "
+                    "which %s now\n",
+                    slot, nk > 1 ? "s" : "", keys, nk > 1 ? "their" : "its",
+                    nk > 1 ? "they have" : "it has");
+        }
     }
     t0 = ico_thread_now_ms();
     memset(&stage, 0, sizeof stage);
@@ -1831,7 +1962,8 @@ static void perform_load(int slot)
         r = ICO_STATE_BAD_FILE;
         snprintf(detail, sizeof detail, "%s", lc.why);
     } else if (r == ICO_STATE_OK &&
-               (rg == NULL || check_sizes(&stage, rg, detail, sizeof detail) != 0 ||
+               (rg == NULL ||
+                check_sizes(&stage, rg, xb ? xv.block_off : NULL, detail, sizeof detail) != 0 ||
                 parse_fibers(&stage, &img) != 0)) {
         r = ICO_STATE_BAD_FILE;
         if (detail[0] == '\0') {
@@ -2028,8 +2160,9 @@ static void perform_load(int slot)
     copy_free(&backup);
     s_list_gen++;
     ui_settings_sync_after_state_load();
-    /* the pause picture showed the game before the load */
-    shot_forget("a state was loaded since the pause menu opened");
+    /* the pause picture showed the game before the load: the loaded slot's
+       own picture takes its place */
+    shot_from_slot(slot);
     done(1, slot, ICO_STATE_OK, "");
 }
 

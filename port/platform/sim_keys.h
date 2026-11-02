@@ -7,7 +7,10 @@
  * ico_config_get_string gives it; "" when unset).  A state whose hash
  * differs is refused with the first differing key named.  Add a key here
  * when an option changes what the game computes (SPEED adds
- * gameplay.shadow_speed).
+ * gameplay.shadow_speed), with its default (sim_keys.c kDefaults): a state
+ * saved before the key existed lacks it and is accepted while the key is
+ * unset or at that default (state_file.c's header check, through
+ * ico_state_set_key_default).
  */
 #ifndef ICO_PLATFORM_SIM_KEYS_H
 #define ICO_PLATFORM_SIM_KEYS_H
@@ -21,7 +24,17 @@ extern const char *const ICO_SIM_KEYS[];
    text (when non-NULL, size bytes, truncated) for the state header. */
 uint64_t ico_sim_keys_hash(char *text, size_t size);
 /* The first key whose value in `saved_text` (the header's text) differs
-   from the current config; NULL when none.  out gets "key=saved (now cur)". */
+   from the current config; NULL when none.  out gets "key=saved (now cur)".
+   A key the saved text lacks reads as its default: equal while the key is
+   unset or at its default now, else "key=(absent) (now cur)". */
 const char *ico_sim_keys_first_diff(const char *saved_text, char *out, size_t size);
+/* A key's default as the config text gives it ("false", "original"), NULL
+   for a key without one fixed text (unset is the disc's or the device's
+   own) or a key not in the list. */
+const char *ico_sim_key_default(const char *key);
+/* 1 when `value` (value_n bytes) means the key's default: empty (unset) or
+   its default text; 0 otherwise and for a key not in the list.  The key is
+   key_n bytes (not NUL-terminated); state_file.h IcoStateKeyDefaultFn. */
+int ico_sim_key_is_default(const char *key, size_t key_n, const char *value, size_t value_n);
 
 #endif /* ICO_PLATFORM_SIM_KEYS_H */

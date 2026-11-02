@@ -154,10 +154,15 @@ typedef struct IcoXbVerdict {
     size_t n_span;
     IcoStateSpan *point;
     size_t n_point;
-    /* per this build's block: its offset in the saved packed section */
+    /* per this build's block: its offset in the saved packed section, or
+       ICO_XB_BLOCK_ABSENT for a FRESH block the state lacks (it keeps this
+       run's bytes) */
     uint64_t *block_off;
     unsigned units, data, points, searches, soft_left;
+    unsigned fresh; /* the FRESH blocks the state lacks */
 } IcoXbVerdict;
+
+#define ICO_XB_BLOCK_ABSENT UINT64_MAX
 
 /* Checks a saved section against this build and, when nothing blocks it,
    builds the translation.  Returns out->kind. */

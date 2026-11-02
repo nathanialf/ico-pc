@@ -15,8 +15,14 @@
  *               value does; an empty value hashes as an unset key
  *   first_diff  NULL against the current text; names the first key whose
  *               value differs ("key=saved (now cur)"), the earliest in the
- *               list when two differ; a key the saved text lacks reads as
- *               unset
+ *               list when two differ; a key the saved text lacks (a key a
+ *               later version added) reads as its default: equal while the
+ *               key is unset or at its default, else "key=(absent) (now cur)"
+ *   defaults    every key's default: unset is always the default, the
+ *               default's text is, another value is not, a key without one
+ *               fixed text only unset, a key not in the list never; the
+ *               first-run config.toml writes every listed key it holds at
+ *               that key's default
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -127,16 +133,112 @@ static void test_text_and_hash(void)
     CHECK(ico_sim_keys_hash(NULL, 0) == h0);
     CHECK(ico_sim_keys_first_diff(t0, NULL, 0) == NULL);
 
-    /* a saved text without a key reads it as unset */
+    /* a saved text without a key reads it as its default */
     CHECK(ico_sim_keys_first_diff("", out, sizeof out) == NULL);
     CHECK(ico_sim_keys_first_diff(NULL, out, sizeof out) == NULL);
     CHECK(ico_config_set_string("gameplay.pit_time", "dive") == 0);
     k = ico_sim_keys_first_diff("gameplay.mirror=\n", out, sizeof out);
     CHECK(k != NULL && strcmp(k, "gameplay.pit_time") == 0);
-    CHECK(strcmp(out, "gameplay.pit_time= (now dive)") == 0);
+    CHECK(strcmp(out, "gameplay.pit_time=(absent) (now dive)") == 0);
     /* a short out buffer is cut, NUL-terminated */
     k = ico_sim_keys_first_diff("", out, 8);
     CHECK(k != NULL && strlen(out) == 7);
+    /* the key at its default now: an older state without it is equal */
+    CHECK(ico_config_set_string("gameplay.pit_time", "original") == 0);
+    CHECK(ico_sim_keys_first_diff("gameplay.mirror=\n", out, sizeof out) == NULL && out[0] == '\0');
+    CHECK(ico_config_set_string("gameplay.pit_time", "") == 0);
+}
+
+/* the text of t without the line of key (a state saved before the key
+   existed) */
+static void drop_line(const char *t, const char *key, char *out, size_t size)
+{
+    const size_t kn = strlen(key);
+    size_t at = 0;
+    const char *line = t;
+
+    while (*line != '\0' && at + 1 < size) {
+        const char *end = strchr(line, '\n');
+        const size_t len = end != NULL ? (size_t)(end - line) + 1 : strlen(line);
+
+        if (!(len > kn && memcmp(line, key, kn) == 0 && line[kn] == '=') && at + len < size) {
+            memcpy(out + at, line, len);
+            at += len;
+        }
+        line += len;
+    }
+    out[at] = '\0';
+}
+
+static void test_defaults(const char *dir)
+{
+    static char t[4096], older[4096];
+    char out[160], toml[ICO_PATH_MAX];
+    const char *k;
+    int i;
+
+    /* every key: unset is its default; a key not in the list never is */
+    for (i = 0; ICO_SIM_KEYS[i] != NULL; i++) {
+        CHECK(ico_sim_key_is_default(ICO_SIM_KEYS[i], strlen(ICO_SIM_KEYS[i]), "", 0) == 1);
+    }
+    CHECK(ico_sim_key_is_default("gameplay.no_such", 16, "", 0) == 0);
+    CHECK(ico_sim_key_default("gameplay.no_such") == NULL && ico_sim_key_default(NULL) == NULL);
+    /* the default's text is, another value is not; the key's length counts */
+    CHECK(ico_sim_key_default("gameplay.yorda_trips") != NULL &&
+          strcmp(ico_sim_key_default("gameplay.yorda_trips"), "false") == 0);
+    CHECK(ico_sim_key_is_default("gameplay.yorda_trips", 20, "false", 5) == 1);
+    CHECK(ico_sim_key_is_default("gameplay.yorda_trips", 20, "true", 4) == 0);
+    CHECK(ico_sim_key_is_default("gameplay.yorda_tripsX", 20, "false", 5) == 1);
+    CHECK(ico_sim_key_is_default("gameplay.yorda_trip", 19, "false", 5) == 0);
+    CHECK(strcmp(ico_sim_key_default("gameplay.pit_time"), "original") == 0 &&
+          strcmp(ico_sim_key_default("gameplay.hold_type"), "disc") == 0 &&
+          strcmp(ico_sim_key_default("video.anti_aliasing"), "off") == 0 &&
+          strcmp(ico_sim_key_default("variants.aggression"), "own") == 0);
+    /* a key without one fixed text: only unset */
+    CHECK(ico_sim_key_default("variants.barrier_hits") == NULL &&
+          ico_sim_key_default("video.video_mode") == NULL);
+    CHECK(ico_sim_key_is_default("variants.barrier_hits", 21, "5", 1) == 0);
+
+    /* a state saved before gameplay.yorda_trips existed */
+    (void)ico_sim_keys_hash(t, sizeof t);
+    drop_line(t, "gameplay.yorda_trips", older, sizeof older);
+    CHECK(strstr(older, "gameplay.yorda_trips=") == NULL && strlen(older) < strlen(t));
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL); /* unset now: equal */
+    CHECK(ico_config_set_bool("gameplay.yorda_trips", 0) == 0);
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL); /* false, the default */
+    CHECK(ico_config_set_bool("gameplay.yorda_trips", 1) == 0);
+    k = ico_sim_keys_first_diff(older, out, sizeof out);
+    CHECK(k != NULL && strcmp(k, "gameplay.yorda_trips") == 0 &&
+          strcmp(out, "gameplay.yorda_trips=(absent) (now true)") == 0);
+    CHECK(ico_config_set_string("gameplay.yorda_trips", "") == 0);
+    /* a key without one fixed default, absent, set now: differs */
+    drop_line(t, "variants.barrier_hits", older, sizeof older);
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
+    CHECK(ico_config_set_string("variants.barrier_hits", "7") == 0);
+    k = ico_sim_keys_first_diff(older, out, sizeof out);
+    CHECK(k != NULL && strcmp(k, "variants.barrier_hits") == 0);
+    CHECK(ico_config_set_string("variants.barrier_hits", "") == 0);
+
+    /* the first-run config.toml: every listed key it writes is at its
+       default (the table and the file agree) */
+    snprintf(toml, sizeof toml, "%s/sim-keys-test-first-run.toml", dir);
+    remove(toml);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_write_first_run() == 0);
+    ico_config_reset(toml, "no-such.ini");
+    for (i = 0; ICO_SIM_KEYS[i] != NULL; i++) {
+        const char *v = ico_config_get_string(ICO_SIM_KEYS[i], NULL);
+
+        if (v != NULL &&
+            !ico_sim_key_is_default(ICO_SIM_KEYS[i], strlen(ICO_SIM_KEYS[i]), v, strlen(v))) {
+            printf("  the first run writes %s = %s, its default %s\n", ICO_SIM_KEYS[i], v,
+                   ico_sim_key_default(ICO_SIM_KEYS[i]) ? ico_sim_key_default(ICO_SIM_KEYS[i])
+                                                        : "(none)");
+            CHECK(0);
+        }
+    }
+    CHECK(ico_config_get_string("gameplay.yorda_trips", NULL) != NULL);
+    remove(toml);
 }
 
 int main(int argc, char **argv)
@@ -148,6 +250,7 @@ int main(int argc, char **argv)
     ico_config_reset(toml, "no-such.ini");
     test_list();
     test_text_and_hash();
+    test_defaults(argc > 1 ? argv[1] : ".");
     if (fails != 0) {
         printf("sim_keys_test: %d failure(s)\n", fails);
         return 1;

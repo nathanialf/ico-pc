@@ -5,7 +5,8 @@
  * design", Registry).  Each owner registers its blocks once at init, by
  * name; state_host.c copies every block at a save and restores every block
  * at a load, in registration order.  A block's name and size are part of
- * the state's validity (a missing or resized block refuses the load).
+ * the state's validity (a missing or resized block refuses the load; a
+ * FRESH block a state of an earlier version lacks keeps this run's bytes).
  */
 #ifndef ICO_PLATFORM_STATE_REGISTRY_H
 #define ICO_PLATFORM_STATE_REGISTRY_H
@@ -15,6 +16,12 @@
 #define ICO_STATE_SCAN 1u  /* may hold host pointers: the relocation scan runs over it */
 #define ICO_STATE_AUDIO 2u /* copied and restored under ico_audio_lock */
 #define ICO_STATE_CLOCK 4u /* a counter the load rewinds (main ticks, the pad script's cursor) */
+/* Starts from its initial value: a state saved before the block existed
+   (by an earlier version) still loads, and the block keeps this run's
+   bytes (state_xbuild.c).  Only for a block without host pointers (not
+   with SCAN) whose value the game can start over from (a counter, a
+   stamp). */
+#define ICO_STATE_FRESH 8u
 #define ICO_STATE_MAX_ENTRIES 96
 
 /* Registers [p, p+n) under `name` (a string literal; kept by pointer).

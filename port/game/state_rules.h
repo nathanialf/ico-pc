@@ -100,6 +100,15 @@ int ico_state_pause_path(char *out, size_t size, const char *dir);
    larger than 8 MB, or the copy cannot be written (no <to>.tmp left). */
 int ico_state_copy_file(const char *from, const char *to);
 
+/* After a load from the pause menu: the loaded slot's picture
+   (<dir>/slot<n>.png) copied to <dir>/pause.png (ico_state_copy_file), so a
+   save made in the same pause keeps a picture of the game as loaded, not
+   the frame after the save with the menu over it.  *w and *h get its size
+   from the PNG's header (0 when the header is not a PNG's).  0, or -1 when
+   the slot has no picture, a path does not fit or the copy fails (nothing
+   left behind; pause.png as it was). */
+int ico_state_picture_to_pause(const char *dir, int slot, int *w, int *h);
+
 /* The pause picture's step at a poll (state_host.c, once a host step):
    TAKE when the game went from play (layout_play at the last poll) to the
    pause menu (layout_pause now), so the tick that opened the menu has just

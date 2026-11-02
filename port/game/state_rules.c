@@ -275,6 +275,38 @@ int ico_state_copy_file(const char *from, const char *to)
     return -1;
 }
 
+int ico_state_picture_to_pause(const char *dir, int slot, int *w, int *h)
+{
+    static const unsigned char sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    char from[1100], to[1100];
+    unsigned char head[24];
+    FILE *f;
+    size_t n = 0;
+
+    *w = *h = 0;
+    if (ico_state_slot_path(from, sizeof from, dir, slot, ".png") != 0 ||
+        ico_state_pause_path(to, sizeof to, dir) != 0 || ico_state_copy_file(from, to) != 0) {
+        return -1;
+    }
+    /* the size, for the log: the signature, then IHDR's width and height
+       (big-endian) */
+    f = ico_fopen(to, "rb");
+    if (f != NULL) {
+        n = fread(head, 1, sizeof head, f);
+        fclose(f);
+    }
+    if (n == sizeof head && memcmp(head, sig, sizeof sig) == 0 &&
+        memcmp(head + 12, "IHDR", 4) == 0) {
+        *w = (int)(((uint32_t)head[16] << 24 | (uint32_t)head[17] << 16 | (uint32_t)head[18] << 8 |
+                    head[19]) &
+                   0x7FFFFFFFu);
+        *h = (int)(((uint32_t)head[20] << 24 | (uint32_t)head[21] << 16 | (uint32_t)head[22] << 8 |
+                    head[23]) &
+                   0x7FFFFFFFu);
+    }
+    return 0;
+}
+
 IcoStateShotStep ico_state_shot_step(int *last, int layout, int layout_play, int layout_pause)
 {
     const int was = *last;

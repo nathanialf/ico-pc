@@ -39,6 +39,13 @@
  *            bounds' overflow, an image below 4 GB.
  *   format   a format 1 header reads and is another build's; a format 2
  *            header of another build passes the other-build check.
+ *   fresh    a block a later build adds that the state lacks: refused, but
+ *            loaded and kept as it is when registered FRESH (not with SCAN).
+ *   keys     a simulation key a later build adds that the state lacks: at
+ *            its default now (the key-default function) the state loads, the
+ *            saved text whole by its own hash; changed from the default,
+ *            without the function, or with the saved hash off: refused; a
+ *            key only the state lists refused; the absent keys named.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -53,6 +60,7 @@
 #include "state_reloc.h"
 #include "state_syms.h"
 #include "state_xbuild.h"
+#include "xxh3.h"
 
 /* --- the x86 decoder ------------------------------------------------------------ */
 
@@ -292,10 +300,12 @@ typedef struct Build {
     uint64_t o_wait, o_ico;
     uint64_t o_tab, o_said;
     uint64_t o_gdata, o_gbss;
-    uint64_t o_blk[N_BLOCKS];
-    const char *blk_name[N_BLOCKS];
-    uint64_t blk_size[N_BLOCKS];
-    unsigned blk_flags[N_BLOCKS];
+    /* room for one block more than the program's (a later version's new
+       block) */
+    uint64_t o_blk[N_BLOCKS + 1];
+    const char *blk_name[N_BLOCKS + 1];
+    uint64_t blk_size[N_BLOCKS + 1];
+    unsigned blk_flags[N_BLOCKS + 1];
     int n_blocks;
     uint64_t stage_off;
     int frame, cb_variant, has_gone, has_wait;
@@ -504,7 +514,7 @@ static void proc_of(const Build *b, IcoXbProc *p)
     p->any_address = 1;
 }
 
-static uint64_t s_addr[N_BLOCKS];
+static uint64_t s_addr[N_BLOCKS + 1];
 
 static void now_of(const Build *b, const Build *old, IcoXbNow *n)
 {
@@ -891,6 +901,39 @@ static void test_cross(void)
     ico_xb_verdict_free(&v);
     b.blk_size[2] = 8;
 
+    /* a block B adds that A's state lacks: refused, unless its owner
+       registered it FRESH (it starts from its initial value: kept as it
+       is, ICO_XB_BLOCK_ABSENT); FRESH with SCAN (host pointers) still
+       refused; FRESH on a block the state has: loaded as any other */
+    b.n_blocks = 4;
+    b.blk_name[3] = "yorda_trip.run_ticks";
+    b.blk_size[3] = 4;
+    b.blk_flags[3] = 0;
+    b.o_blk[3] = 0xD000 + 0x200u * 3u;
+    k = check_into(sec, n, &b, &a, &v);
+    CHECK(k == ICO_XB_BLOCKS && strstr(v.why, "yorda_trip.run_ticks exists only here") != NULL,
+          "a new block without FRESH: %s", v.why);
+    ico_xb_verdict_free(&v);
+    b.blk_flags[3] = ICO_STATE_FRESH;
+    k = check_into(sec, n, &b, &a, &v);
+    CHECK(k == ICO_XB_OK && v.fresh == 1 && v.block_off != NULL &&
+              v.block_off[3] == ICO_XB_BLOCK_ABSENT && v.block_off[0] == 0 && v.block_off[1] == 0 &&
+              v.block_off[2] == 0x100,
+          "a new FRESH block: loads, kept (%d %u: %s)", k, v.fresh, v.why);
+    ico_xb_verdict_free(&v);
+    b.blk_flags[3] = ICO_STATE_FRESH | ICO_STATE_SCAN;
+    k = check_into(sec, n, &b, &a, &v);
+    CHECK(k == ICO_XB_BLOCKS && strstr(v.why, "yorda_trip.run_ticks exists only here") != NULL,
+          "a new FRESH block with host pointers: %s", v.why);
+    ico_xb_verdict_free(&v);
+    b.n_blocks = 3;
+    b.blk_flags[2] |= ICO_STATE_FRESH;
+    k = check_into(sec, n, &b, &a, &v);
+    CHECK(k == ICO_XB_OK && v.fresh == 0 && v.block_off != NULL && v.block_off[2] == 0x100,
+          "FRESH on a block the state has: loaded from it (%u)", v.fresh);
+    ico_xb_verdict_free(&v);
+    b.blk_flags[2] &= ~ICO_STATE_FRESH;
+
     /* a text and a start-up value B has not */
     free_build(&b);
     make_build(&b, 1);
@@ -1076,6 +1119,86 @@ static void test_format(void)
     remove(path);
 }
 
+/* --- the simulation keys across versions ---------------------------------------------- */
+
+/* the key-default function state_host.c sets (sim_keys.h), for two keys:
+   unset or "false" */
+static int fake_default(const char *key, size_t key_n, const char *value, size_t value_n)
+{
+    (void)key;
+    (void)key_n;
+    return value_n == 0 || (value_n == 5 && memcmp(value, "false", 5) == 0);
+}
+
+static void keys_header(IcoStateHeader *h, const char *keys)
+{
+    ico_state_header_init(h, "build-a");
+    snprintf(h->disc, sizeof h->disc, "pal");
+    snprintf(h->keys, sizeof h->keys, "%s", keys);
+    h->settings_hash = xxh3_64(h->keys, strlen(h->keys));
+}
+
+static void test_keys(void)
+{
+    IcoStateHeader sv, nw;
+    char detail[160], names[64];
+
+    /* a state saved before gameplay.trips existed */
+    keys_header(&sv, "gameplay.mirror=\n");
+    keys_header(&nw, "gameplay.mirror=\ngameplay.trips=false\n");
+    ico_state_set_key_default(NULL);
+    CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS &&
+              strcmp(detail, "gameplay.trips=(absent) (now false)") == 0,
+          "without the default function a key the state lacks differs (%s)", detail);
+    ico_state_set_key_default(fake_default);
+    CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OK &&
+              detail[0] == '\0',
+          "the key at its default now: the state loads (%s)", detail);
+    CHECK(ico_state_header_check_other_build(&sv, &nw, detail, sizeof detail) == ICO_STATE_OK,
+          "the other-build check too (%s)", detail);
+    CHECK(ico_state_keys_absent(sv.keys, nw.keys, names, sizeof names) == 1 &&
+              strcmp(names, "gameplay.trips") == 0,
+          "the absent key named for the log (%s)", names);
+    keys_header(&nw, "gameplay.mirror=\ngameplay.trips=\n");
+    CHECK(ico_state_header_check(&sv, &nw, NULL, 0) == ICO_STATE_OK, "unset now: loads");
+    keys_header(&nw, "gameplay.mirror=\ngameplay.trips=true\n");
+    CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS &&
+              strcmp(detail, "gameplay.trips=(absent) (now true)") == 0,
+          "changed from its default: refused naming it (%s)", detail);
+    /* the saved text must be whole: its own hash */
+    keys_header(&nw, "gameplay.mirror=\ngameplay.trips=false\n");
+    sv.settings_hash ^= 1;
+    CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS &&
+              strcmp(detail, "the settings differ") == 0,
+          "a saved text its hash does not cover: refused (%s)", detail);
+    /* a key present on both sides that differs is still named first */
+    keys_header(&sv, "gameplay.mirror=true\n");
+    CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS &&
+              strcmp(detail, "gameplay.mirror=true (now )") == 0,
+          "a differing key named (%s)", detail);
+    /* a key only the state lists (this version dropped it): refused */
+    keys_header(&sv, "gameplay.mirror=\ngameplay.old=1\n");
+    keys_header(&nw, "gameplay.mirror=\n");
+    CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS &&
+              strcmp(detail, "gameplay.old=1 (now absent)") == 0,
+          "a key this version lacks: refused (%s)", detail);
+    /* the same text: the hash decides, as before */
+    keys_header(&sv, "gameplay.mirror=\n");
+    CHECK(ico_state_header_check(&sv, &nw, NULL, 0) == ICO_STATE_OK, "the same keys");
+    sv.settings_hash ^= 1;
+    CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS &&
+              strcmp(detail, "the settings differ") == 0,
+          "the same text, another hash (%s)", detail);
+    /* two absent, listed in order; none */
+    CHECK(ico_state_keys_absent("a=\n", "a=\nb=false\nc=\n", names, sizeof names) == 2 &&
+              strcmp(names, "b, c") == 0,
+          "two absent keys (%s)", names);
+    CHECK(ico_state_keys_absent("a=\nb=\n", "a=\nb=\n", names, sizeof names) == 0 &&
+              names[0] == '\0',
+          "none absent");
+    ico_state_set_key_default(NULL);
+}
+
 int main(void)
 {
     test_x86_decoder();
@@ -1085,5 +1208,6 @@ int main(void)
     test_cross();
     test_low_image();
     test_format();
+    test_keys();
     return ico_check_summary("state_port");
 }

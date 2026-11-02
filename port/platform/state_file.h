@@ -111,7 +111,11 @@ void ico_state_header_init(IcoStateHeader *h, const char *commit);
    detail: the saved commit), ICO_STATE_OTHER_DISC (the saved slug) or
    ICO_STATE_OTHER_SETTINGS (the first key whose value differs, as
    "key=saved (now cur)"; the keys text decides it, the hash only when the
-   texts agree). */
+   texts agree).  A key this run lists that the saved text lacks (a key a
+   later version added) is equal when the key-default function (below)
+   says this run's value is its default; the saved text must then be whole
+   (its own hash is the saved settings_hash), else "the settings differ".
+   Without the function such a key differs ("key=(absent) (now cur)"). */
 IcoStateResult ico_state_header_check(const IcoStateHeader *saved, const IcoStateHeader *now,
                                       char *detail, size_t n);
 /* The same without the build id: what a state of another build of this
@@ -119,6 +123,19 @@ IcoStateResult ico_state_header_check(const IcoStateHeader *saved, const IcoStat
 IcoStateResult ico_state_header_check_other_build(const IcoStateHeader *saved,
                                                   const IcoStateHeader *now, char *detail,
                                                   size_t n);
+
+/* 1 when `value` (value_n bytes) means the simulation key's default (the
+   key is key_n bytes, not NUL-terminated): sim_keys.h
+   ico_sim_key_is_default, which state_host.c sets at its start (the
+   platform layer does not see the config).  NULL: no key reads as a
+   default (the tests' and tools' header checks). */
+typedef int (*IcoStateKeyDefaultFn)(const char *key, size_t key_n, const char *value,
+                                    size_t value_n);
+void ico_state_set_key_default(IcoStateKeyDefaultFn fn);
+
+/* The keys `now` lists that `saved` lacks, as "a, b" into out (size bytes,
+   truncated; "" for none); their count.  For the load's log line. */
+int ico_state_keys_absent(const char *saved, const char *now, char *out, size_t size);
 
 /* --- writing (the writer thread) --- */
 

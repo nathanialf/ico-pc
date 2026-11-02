@@ -28,7 +28,10 @@
  *   pause picture  pause.png's path (none without a folder or when it does
  *                not fit); the copy to a slot's picture (the bytes, a second
  *                copy replacing the first, a missing or empty source refused
- *                with nothing left behind); the steps: play to the pause
+ *                with nothing left behind); after a load the loaded slot's
+ *                picture copied to pause.png with its size from the PNG
+ *                header (none without one, no size for a header that is not
+ *                a PNG's), and on to a later save's slot; the steps: play to the pause
  *                menu takes it once, the pause menu, a port page and the way
  *                back keep it, the play layout drops it, a pause menu not
  *                reached from play (after a load, from a page) takes none
@@ -436,6 +439,43 @@ static void test_pause_picture(void)
     CHECK(file_bytes(pause, got, sizeof got) == 100, "the pause picture stays (another save)");
     (void)ico_remove(slot);
     (void)ico_remove(pause);
+
+    /* after a load: the loaded slot's picture becomes the pause picture,
+       its size read from the PNG's header for the log */
+    {
+        static const unsigned char png[37] = {
+            0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n', 0, 0,    0,    13, 'I',
+            'H',  'D', 'R', 0,   0,    0x03, 0xC0, 0,    0, 0x02, 0x1C, 8,  2,
+            0,    0,   0,   1,   2,    3,    4,    5,    6, 7,    8};
+        char slot3[700];
+        int w = -1, h = -1;
+
+        CHECK(ico_state_slot_path(slot3, sizeof slot3, dir, 3, ".png") == 0);
+        (void)ico_remove(slot3);
+        CHECK(ico_state_picture_to_pause(dir, 3, &w, &h) == -1 && w == 0 && h == 0 &&
+                  file_bytes(pause, got, sizeof got) < 0,
+              "a loaded slot without a picture: nothing copied");
+        put_file(slot3, png, sizeof png);
+        CHECK(ico_state_picture_to_pause(dir, 3, &w, &h) == 0 && w == 960 && h == 540 &&
+                  file_bytes(pause, got, sizeof got) == (int)sizeof png &&
+                  memcmp(got, png, sizeof png) == 0,
+              "the loaded slot's picture is the pause picture, byte for byte (%dx%d)", w, h);
+        CHECK(file_bytes(slot3, got, sizeof got) == (int)sizeof png, "the slot keeps its picture");
+        CHECK(ico_state_copy_file(pause, slot) == 0 &&
+                  file_bytes(slot, got, sizeof got) == (int)sizeof png &&
+                  memcmp(got, png, sizeof png) == 0,
+              "a save in the same pause copies it on to its own slot");
+        put_file(slot3, want, 100);
+        CHECK(ico_state_picture_to_pause(dir, 3, &w, &h) == 0 && w == 0 && h == 0 &&
+                  file_bytes(pause, got, sizeof got) == 100,
+              "a picture whose header is not a PNG's: copied, no size (%dx%d)", w, h);
+        CHECK(ico_state_picture_to_pause(dir, 0, &w, &h) == -1 &&
+                  ico_state_picture_to_pause("", 3, &w, &h) == -1,
+              "slot 0 and no folder: refused");
+        (void)ico_remove(slot3);
+        (void)ico_remove(slot);
+        (void)ico_remove(pause);
+    }
 
     /* the steps */
     CHECK(ico_state_shot_step(&last, play, play, pause_l) == ICO_STATE_SHOT_DROP && last == play,

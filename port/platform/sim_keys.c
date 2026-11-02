@@ -43,6 +43,70 @@ const char *const ICO_SIM_KEYS[] = {
     NULL,
 };
 
+/* Each key's default as the config text gives it (the value the game takes
+   when the key is unset), NULL where none is one fixed text (unset is the
+   disc's own or the device's choice).  A key absent from a saved state's
+   keys text (a key a later version added) reads as its default.  A key
+   added later gives its default here, in the same place as in the list. */
+static const char *const kDefaults[] = {
+    NULL,       /* video.video_mode: unset asks the memory card / the disc */
+    "auto",     /* game.language */
+    "false",    /* gameplay.mirror */
+    "false",    /* gameplay.stick_fix (Off on every platform, options.c) */
+    "false",    /* gameplay.yorda_safe */
+    "original", /* gameplay.pit_time */
+    "original", /* gameplay.shadow_speed */
+    "false",    /* gameplay.developer_mode */
+    NULL,       /* dev.start_stage */
+    "false",    /* gameplay.door_fix */
+    "false",    /* gameplay.yorda_trips */
+    "off",      /* video.anti_aliasing */
+    "disc",     /* gameplay.hold_type */
+    "false",    /* gameplay.hold_type_chosen */
+    "false",    /* gameplay.skip_opening */
+    "original", /* variants.shade_toughness */
+    "false",    /* variants.one_hit */
+    "false",    /* variants.never_dodge */
+    "own",      /* variants.aggression */
+    "false",    /* variants.no_hints */
+    NULL,       /* variants.barrier_hits: unset is the disc's own number */
+    "false",    /* variants.no_cutscene_look */
+    "false",    /* variants.ignore_cutscene_cameras */
+    NULL,
+};
+
+_Static_assert(sizeof(kDefaults) / sizeof(kDefaults[0]) ==
+                   sizeof(ICO_SIM_KEYS) / sizeof(ICO_SIM_KEYS[0]),
+               "every simulation key has its default (NULL: none)");
+
+const char *ico_sim_key_default(const char *key)
+{
+    int i;
+
+    for (i = 0; key != NULL && ICO_SIM_KEYS[i] != NULL; i++) {
+        if (strcmp(ICO_SIM_KEYS[i], key) == 0) {
+            return kDefaults[i];
+        }
+    }
+    return NULL;
+}
+
+int ico_sim_key_is_default(const char *key, size_t key_n, const char *value, size_t value_n)
+{
+    int i;
+
+    for (i = 0; key != NULL && ICO_SIM_KEYS[i] != NULL; i++) {
+        const char *k = ICO_SIM_KEYS[i];
+
+        if (strlen(k) == key_n && memcmp(k, key, key_n) == 0) {
+            /* unset, or the default's text */
+            return value_n == 0 || (kDefaults[i] != NULL && strlen(kDefaults[i]) == value_n &&
+                                    memcmp(kDefaults[i], value, value_n) == 0);
+        }
+    }
+    return 0;
+}
+
 /* "key=value\n" for every key, the value as the config gives it ("" when
    unset), into a malloc'd text; its length in *len.  NULL out of memory. */
 static char *keys_text(size_t *len)
@@ -135,9 +199,18 @@ const char *ico_sim_keys_first_diff(const char *saved_text, char *out, size_t si
         const char *v = "";
         size_t vn = 0;
 
-        /* a key the saved text lacks was unset there (an older build is
-           refused by its build id first) */
-        (void)saved_value(saved_text != NULL ? saved_text : "", k, &v, &vn);
+        /* a key the saved text lacks is one a later version added: the
+           state was made at its default, so it is equal while the key is
+           unset or at its default now */
+        if (!saved_value(saved_text != NULL ? saved_text : "", k, &v, &vn)) {
+            if (ico_sim_key_is_default(k, strlen(k), cur, strlen(cur))) {
+                continue;
+            }
+            if (out != NULL && size > 0) {
+                snprintf(out, size, "%s=(absent) (now %s)", k, cur);
+            }
+            return k;
+        }
         if (vn != strlen(cur) || memcmp(v, cur, vn) != 0) {
             if (out != NULL && size > 0) {
                 snprintf(out, size, "%s=%.*s (now %s)", k, (int)vn, v, cur);

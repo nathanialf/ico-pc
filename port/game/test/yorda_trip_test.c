@@ -619,7 +619,9 @@ static void testState(void)
         }
     }
     for (int k = 0; k < 2; k++) {
-        CHECK(e[k] != NULL && e[k]->n == 4 && e[k]->flags == 0, "block %s", names[k]);
+        /* FRESH: a state of an earlier version without them still loads
+           (state_registry.h), no host pointers (no SCAN) */
+        CHECK(e[k] != NULL && e[k]->n == 4 && e[k]->flags == ICO_STATE_FRESH, "block %s", names[k]);
         if (e[k] == NULL) {
             return;
         }
