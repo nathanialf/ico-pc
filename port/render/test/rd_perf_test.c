@@ -709,12 +709,13 @@ static void checkPassTexts(void)
           "csv header: %s", buf);
     const RdPerfPass p[4] = {
         {RD_PERF_PASS_RENDER, RD_TARGET_SCENE, 0, -1, 848, 448, 420, 300, 4120.0f, 900.0f, 0.0f, 0,
-         0, 0},
+         0, 0, 0, 0, 0, 0},
         {RD_PERF_PASS_RENDER, RD_TARGET_WORK1, 7, RD_PERF_POST_GLOW, 256, 128, 1, 1, 60.0f, 5.0f,
-         0.0f, 0, 0, 0},
+         0.0f, 0, 0, 0, 0, 0, 0, 0},
         {RD_PERF_PASS_RENDER, RD_TARGET_WORK1, 7, RD_PERF_POST_GLOW, 256, 128, 1, 1, 40.0f, 5.0f,
-         0.0f, 0, 0, 0},
-        {RD_PERF_PASS_DATE, RD_TARGET_SCENE, 3, -1, 848, 448, 1, 1, 30.0f, 2.0f, 0.0f, 0, 0, 0},
+         0.0f, 0, 0, 0, 0, 0, 0, 0},
+        {RD_PERF_PASS_DATE, RD_TARGET_SCENE, 3, -1, 848, 448, 1, 1, 30.0f, 2.0f, 0.0f, 0, 0, 0, 0,
+         0, 0, 0},
     };
     rd_perf_pass_csv_line(12, 34, 1, &p[1], buf, sizeof(buf));
     CHECK(strcmp(buf, "12,34,1,render pass,7,glow,WORK1,256,128,1,1,60.0,5.0\n") == 0,
