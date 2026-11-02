@@ -1928,7 +1928,7 @@ static bool isDateStencil(uint8_t m)
 /* The largest set a device meets (an Adreno 710 phone at 2340x1080,
  * Custom = Enhanced: 1153 keys, more than 1024): the tile class with local
  * read as rd_profile.c makes it (testTilerSet's flags and the alpha plan,
- * the fx plan and its local read, whose 30 keys rd_fx_plan.c
+ * the fx plan and its local read, whose 31 keys rd_fx_plan.c
  * rd__fx_enumerate adds: 977 at 2x, 1153 at the fractional scale),
  * the vertex pre-pass off (the eleven program entries under every depth,
  * Z write and blend), every state static, at a fractional Enhanced scale

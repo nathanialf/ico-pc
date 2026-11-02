@@ -18,9 +18,11 @@
  *             at 0), is gs_blend_reg_ch's COLCLAMP 1 result for every Cs, C
  *             and Cd of the four forms (0x68, 0x48, 0x62, 0x42)
  *   keys      rd__fx_enumerate adds nothing with the plan off and, without
- *             the frame and local modules, the constant fold's six keys
+ *             the frame and local modules, the constant fold's seven keys
  *             (fx_sprite_ps, the colour mask A, every depth state of
- *             rd__enumerate_reachable_blur)
+ *             rd__enumerate_reachable_blur, and the one with the depth
+ *             attached under Z ALWAYS without Z write: cleanUpFB's first
+ *             sprite in the fog's open pass, rd_fx_plan.c fxAttachDepth)
  *   device    without a device the plan draws nothing (rd__fx_plan_draw
  *             false) */
 #include "test/hlsl_shim.h"
@@ -175,10 +177,14 @@ static void checkKeys(void)
     CHECK(rd__fx_enumerate(keys, 64, 0) == 0, "keys with the plan off");
     g_rd.profile.fxPlan = true;
     const uint32_t n = rd__fx_enumerate(keys, 64, 0);
-    CHECK(n == 6, "keys without the frame and local modules: %u", n);
-    for (uint32_t i = 0; i < n; i++) {
+    CHECK(n == 7, "keys without the frame and local modules: %u", n);
+    uint32_t attached = 0;
+    for (uint32_t i = 0; i < n && i < 64; i++) {
         CHECK(keys[i].fs == RD_FS_FX_SPRITE && keys[i].gs.colorMask == 8, "key %u", i);
+        attached += keys[i].depthFmt == RHI_FMT_D32F_S8 && keys[i].gs.ztst == RD_ZTST_ALWAYS &&
+                    keys[i].gs.zwrite == RD_ZWRITE_OFF;
     }
+    CHECK(attached == 1, "the depth attached unused (Z ALWAYS, no Z write): %u keys", attached);
     Replay r;
     memset(&r, 0, sizeof(r));
     RdFxDraw x;

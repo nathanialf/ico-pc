@@ -1284,7 +1284,7 @@ which draws it inside the open pass, without the snapshot, where the same bytes 
 
 | sprite | condition | how it is drawn |
 | --- | --- | --- |
-| cleanUpFB's two sprites into SCENE, the glow's WORK0 fill | untextured, blending, no DATE, no AFAIL RGB_ONLY, and each colour channel's blend the destination for every Cd and Ad or one value for every Cd and Ad (`rd__fx_fold`, over the 256 values of each) | `fx_sprite_ps` without the blend and the destination read, the constant channels as RGBAQ, the destination channels masked (the colour mask A alone or whole), the depth state the sprite's |
+| cleanUpFB's two sprites into SCENE, the glow's WORK0 fill | untextured, blending, no DATE, no AFAIL RGB_ONLY, and each colour channel's blend the destination for every Cd and Ad or one value for every Cd and Ad (`rd__fx_fold`, over the 256 values of each) | `fx_sprite_ps` without the blend and the destination read, the constant channels as RGBAQ, the destination channels masked (the colour mask A alone or whole), the depth state the sprite's; the alpha alone without a Z test in the open pass with that pass's depth attached, its test ALWAYS and no Z write (`fxAttachDepth`), where the open pass is on the sprite's target with the state's depth: cleanUpFB's sprites stay in the fog's pass |
 | the glow's paste WORK3 into SCENE | Cs * FIX + Cd, Cs * As + Cd, Cd - Cs * FIX or Cd - Cs * As, COLCLAMP 1, no PABE, no DATE, no AFAIL RGB_ONLY | `fx_frame_ps` writing the magnitude of `(A - B) C >> 7` (`FXF_OUT_PREMUL`) through the premultiplied add (ONE, ONE) or reverse subtract, alpha ONE, ZERO: the UNORM8 sum is the GS's clamped integer sum, the subtract's term the GS's `ceil(Cs C / 128)` |
 | the motion blur DISPLAY into SCENE, any other destination read | `RdProfile.fxDstLocal` and the target's passes readable (the scene class under `dateStencil`), not sampling its own target | `fx_local_ps`, the destination as the input attachment (`SubpassLoad`) inside the open pass after a by-region barrier (`RHI_LOCAL_READ_COLOR`; `RHI_LOCAL_READ_BACK` after it); `fx_rect_vs` draws one triangle, so the texel read is the one before the sprite |
 | the glow's mask SCENE into WORK2 | MODULATE with RGBAQ's RGB 0, no blend, no destination read | `fx_frame_ps` computing the alpha alone (`FXF_ALPHA_ONLY`): RGB is `(t * 0) >> 7`, 0 |
@@ -1306,7 +1306,8 @@ A sprite that samples its own target keeps the snapshot; so does every sprite th
 destination under an exact blend the player opted into or in a frame with the MSAA epoch, and one
 whose key the pipeline cache cannot give (looked up before anything is recorded). The four forms
 share `fx_sprite_ps`'s coverage, UV and tests (`port/shaders/fx_sprite.hlsl`). Their keys are in the
-start-up set (`rd__fx_enumerate`: the colour mask A of `fx_sprite_ps`, `fx_frame_ps` without blend
+start-up set (`rd__fx_enumerate`: the colour mask A of `fx_sprite_ps`, once more with the depth
+attached under Z ALWAYS without Z write, `fx_frame_ps` without blend
 and with the premultiplied add and subtract, `fx_local_ps` where the profile has it, each in
 `rd__enumerate_reachable_blur`'s depth states). `fxDstLocal` is on where the profile has
 local read (`[dev] fx_dst_local`, `ICO_RD_FX_DST_LOCAL=1|0`); its self-test runs after DATE's
@@ -1325,6 +1326,7 @@ each way (`RdPerfRecord.fxConstant` with the black sprite's clear, `fxAdditive`,
 ```
 rd: fx plan: a staticBlur sprite drawn by the constant fold (a masked draw in the open pass), without its snapshot (reported once)
 rd: fx plan: the reduction's black sprite on a scaled DISPLAY drawn as its clear (reported once)
+rd: fx plan: a staticBlur sprite without a Z test drawn by the constant fold in the open pass on SCENE with its depth attached and unused, not in a pass of its own (the glow's cleanUpFB in the fog's pass; reported once)
 rd: fx local read: on (self-test: local ok 4, snapshot ok 4) on SCENE 512x512 at 1024x1024 texels
 ```
 

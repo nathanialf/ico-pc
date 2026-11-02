@@ -384,8 +384,9 @@ step (the `slow step` line's `texture decodes`) and the replay's texture and mes
 **The set against the pool.** The set's size depends on the device's profile and the scale: 446
 keys at Original 4:3 with the fixed-function blend and every state static (the pre-pass on); the
 tile-based profile ([The device profile](RENDER.md#the-device-profile)) adds the DATE, fog and fold keys, the
-fx plan's 30 (`rd_fx_plan.c` (`rd__fx_enumerate`): under six depth states the alpha-only key, three
-`fx_frame_ps` keys and, with local read, one `fx_local_ps` key) and,
+fx plan's 31 (`rd_fx_plan.c` (`rd__fx_enumerate`): under six depth states the alpha-only key, three
+`fx_frame_ps` keys and, with local read, one `fx_local_ps` key, and the alpha-only key once more with
+the depth attached under Z ALWAYS without Z write, for cleanUpFB's first sprite in the fog's pass) and,
 with the pre-pass off, the eleven program entries under every Z test, Z write and blend
 (`rd_mesh.c` (`enumerateVuDraws`)); without dynamic state those fields stay in every key; and at a
 fractional Enhanced scale every `vu_ps` key has its `vu_np_ps` twin (`rd_pixel_plan.c`

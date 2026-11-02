@@ -848,8 +848,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
   `gs_dst_channel` for every Cd and Ad, the premultiplied term through the fixed-function add and
   reverse subtract against `gs_blend_reg_ch` for every Cs, C and Cd of the four forms, and the keys
-  `rd__fx_enumerate` adds (none with the plan off, the constant fold's six without the frame and
-  local modules), with no draw made without a device (`rd_fx_frame`).
+  `rd__fx_enumerate` adds (none with the plan off, the constant fold's seven without the frame and
+  local modules, one of them the depth attached under Z ALWAYS without Z write), with no draw made
+  without a device (`rd_fx_frame`).
 - `rd_fades_fold_test.c`: the fades fold ([RENDER.md](RENDER.md#the-fades-fold)) on the CPU,
   without a device: `gs_fold_ch` (`gs_math.hlsli`) with no rounding term against `gs_blend_reg_ch`
   of ALPHA 0x44 and 0x64 for every Cs, Cd and factor 0 to 0x80 (a texel stepped at scale 1 is the

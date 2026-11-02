@@ -16,7 +16,13 @@
  *             sprites and the glow's WORK0 fill, alpha written over a
  *             picture the blend keeps).  The alpha is As (with FBA's bit)
  *             either way; DATE and AFAIL RGB_ONLY, which read the
- *             destination's alpha, are not taken
+ *             destination's alpha, are not taken.  A sprite of the alpha
+ *             alone without a Z test draws in the open pass on its target
+ *             with that pass's depth attached, its test ALWAYS and no
+ *             write (fxAttachDepth), instead of ending the pass for one
+ *             without the depth: cleanUpFB's two sprites stay in the fog's
+ *             pass on SCENE (on the PowerVR phone two of the glow's three
+ *             full-size SCENE passes, each the picture loaded and stored)
  *   additive  the four premultiplied forms Cs * FIX + Cd, Cs * As + Cd,
  *             Cd - Cs * FIX, Cd - Cs * As under COLCLAMP 1 without PABE
  *             (the glow's paste, WORK3 into SCENE through FIX 128):
@@ -215,8 +221,11 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
     DrawSetup ds;
     memset(&ds, 0, sizeof(ds));
     ds.tc = x->tc;
-    ds.tdId = x->useDepth ? r->st.depth : 0;
-    ds.depthFmt = x->useDepth ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
+    /* the depth the key has: the draw's own (x->useDepth), or the open
+     * pass's that the constant fold draws in without using it
+     * (fxDepthAttached) */
+    ds.tdId = key->depthFmt != RHI_FMT_UNKNOWN ? r->st.depth : 0;
+    ds.depthFmt = (RhiFormat)key->depthFmt;
     ds.tex = local ? g_rd.dummy : srcTex;
     ds.dateTex = g_rd.dummy;
     ds.tw = x->tw;
@@ -329,6 +338,47 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
     return true;
 }
 
+/* The constant fold's key in a pass with a depth it does not use: the
+ * depth attached, its test ALWAYS and its write off (rd_pipeline.c
+ * pipelineDesc: the test on with compare ALWAYS, which passes every
+ * fragment and writes nothing), so the same colour bytes as the key
+ * without the depth.  rd__fx_enumerate lists it. */
+static void fxDepthAttached(RdPipeKeyInt *k)
+{
+    k->depthFmt = (uint8_t)RHI_FMT_D32F_S8;
+    k->gs.ztst = RD_ZTST_ALWAYS;
+    k->gs.zwrite = RD_ZWRITE_OFF;
+}
+
+/* once a run: the constant fold drawn in the open pass with its depth
+ * attached (a reporter's log says the glow's SCENE passes went) */
+static void fxAttachedNote(const Replay *r)
+{
+    static bool said;
+    if (!said) {
+        said = true;
+        rd__log("fx plan: a staticBlur sprite without a Z test drawn by the constant fold in the "
+                "open pass on %s with its depth attached and unused, not in a pass of its own "
+                "(the glow's cleanUpFB in the fog's pass; reported once)",
+                rd__target_name(r->st.color));
+    }
+}
+
+/* Whether a sprite that uses no depth draws in the open pass with its
+ * depth attached (fxDepthAttached) instead of ending it and beginning one
+ * without the depth: the open pass is on the sprite's colour target with
+ * the state's depth (of the target's size: x->td), single-sampled, not a
+ * storage pass.  cleanUpFB's two sprites into SCENE after the fog
+ * (staticBlur.c: the first without the Z test, the second under GEQUAL)
+ * then stay in the fog's pass: on a tile-based GPU two passes fewer, each a
+ * load and a store of the whole picture (10 MB each way at 2364 x 1080) */
+static bool fxAttachDepth(const Replay *r, const RdFxDraw *x)
+{
+    return !x->useDepth && x->td && r->st.depth != 0 && r->passOpen &&
+           r->passColor == r->st.color && r->passDepth == r->st.depth && !r->passStorage &&
+           g_rd.passSamples <= 1u;
+}
+
 /* the constant fold of an untextured blending sprite: -1 not taken, else
  * whether it was drawn (1) */
 static int fxConstantDraw(Replay *r, const RdFxDraw *x)
@@ -348,7 +398,19 @@ static int fxConstantDraw(Replay *r, const RdFxDraw *x)
         return -1; /* a mask the start-up set has no key of */
     }
     k.gs.colorMask = mask;
-    return fxDraw(r, x, &k, 0, RD_FXF_ABE | RD_FXF_DST | RD_FXF_PABE, rgb, 0, FX_CONSTANT) ? 1 : -1;
+    /* the alpha alone in the open pass with its depth (the start-up set
+     * has that key: rd__fx_enumerate) */
+    const bool attached = mask == 8u && fxAttachDepth(r, x);
+    if (attached) {
+        fxDepthAttached(&k);
+    }
+    if (fxDraw(r, x, &k, 0, RD_FXF_ABE | RD_FXF_DST | RD_FXF_PABE, rgb, 0, FX_CONSTANT)) {
+        if (attached) {
+            fxAttachedNote(r);
+        }
+        return 1;
+    }
+    return -1;
 }
 
 bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x)
@@ -429,6 +491,13 @@ uint32_t rd__fx_enumerate(RdPipeKeyInt *out, uint32_t max, uint32_t n)
             k.gs.colorMask = 8; /* the constant fold: the alpha alone */
             if (dstForms) {
                 n = rd__add_pipe_key(out, max, n, &k);
+                if (z == 0 && !zw) {
+                    /* and in an open pass with the depth it does not use
+                     * (fxAttachDepth: cleanUpFB's first sprite in the fog's
+                     * pass) */
+                    fxDepthAttached(&k);
+                    n = rd__add_pipe_key(out, max, n, &k);
+                }
             }
             if (frame) {
                 k = base;
