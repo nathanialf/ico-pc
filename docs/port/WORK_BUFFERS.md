@@ -751,7 +751,12 @@ included, from the first replayed list), and records for every depth texture the
 touches its depth or stencil:
 
 - a draw (screen prims, the VU draws, a post sprite) on the state's depth with the Z test on (ZTE
-  and not ALWAYS), Z write on, DATE on (the stencil bit) or PRIM.AA1 (its stencil pairs);
+  and not ALWAYS), Z write on, DATE on (the stencil bit) or PRIM.AA1 (its stencil pairs); DATE on a
+  post sprite other than the reduction's is no touch (`planPost`): every such sprite is drawn
+  through the fx shaders, which test DATE against the destination alpha they read (the snapshot,
+  or the attachment by local read: [RENDER.md](RENDER.md#post-passes)) with no stencil test in
+  their pipelines, and only `doScreen` and the VU draws take DATE's stencil bit; the reduction's
+  hardware sprite on a scaled target is a `doScreen` draw, so its DATE stays a touch;
 - a draw whose texture is a target's depth view (`RD_VIEW_DEPTH`);
 - the three shadow commands (the stencil count and the volumes' Z test);
 - the fog: the state's depth, the colour target's (the crack filler copies and fills it) and a depth
@@ -1089,7 +1094,12 @@ the walk's code, when:
   only into it; a texture of another target was made readable by `prepareDraw` before the pass
   began), or the fog on the local read with no probe wanted and no edge read due
   (`rd__last_store_fog`, said by `doFog` before it begins anything: those two end the pass after the
-  draw to copy the depth);
+  draw to copy the depth), or a post sprite on cid with did bound (its Z test or Z write) that the
+  fx plan draws without the local read (the constant fold, the premultiplied blend, the alpha
+  alone: `rd__last_store_post`, said by `fxDraw` just before its `bindDraw`, whose begin is then
+  followed by the sprite's draw and nothing else of the command; not for the reduction, the motion
+  blur, or a textured flare's or bloom's sprite, whose callers may draw again in the command: the
+  border strips, Motion blur: Smooth, the glow's edge strip);
 - every command after k up to t is a state change, a NOP, overlay text, or such a draw on cid with
   did bound whose texture, if it samples another target's colour, is that target's in SHADER_READ
   when the pass begins (`drawOn`).
@@ -1126,6 +1136,24 @@ DATE: the fog's pass is the one taken. Only the title block before it (stage 1: 
 dropped) leaves a third of the fogged replays' stores kept for a reason the log did not say; the
 reasons line below says it from now on.
 
+**Post sprites and the last store.** In a frame with the glow, the glow's `cleanUpFB`
+(`ico2/sugipon/src/staticBlur.c`) draws two untextured sprites into SCENE: the first (Z ALWAYS,
+no Z write) writes alpha 0 over the picture, the second (Z GEQUAL at Z 1) alpha 192 where nothing
+nearer was drawn; the fx plan draws both as the constant fold (the colour the destination's, the
+colour mask A alone). The first binds no depth and ends the pass before it; the second, the
+depth's last touch, begins a pass of its own on SCENE with its depth, which kept its store with "a
+post sprite" before the post sprite's promise and drops it now (one depth store, 13 to 20 MB at
+2366x1080). A post sprite that binds no depth (no Z test, no Z write) still ends the pass open on
+the depth before it, so it is not taken between the pass's begin and the touch: a pass begun before
+it would end there with its store dropped, and the touch after it would load what was not stored.
+The aura's DATE sprites (`addWork1ToFBWithZ`'s TEST 0x34000 and the tint's 0x34003, aura modes 1
+and 3) bind no depth (Z ALWAYS, no Z write) but made the depth's last touch a post sprite after the
+scene's own while DATE counted as a stencil touch on them (where nothing after them reads the
+depth); with `planPost` the depth's last touch is the scene's, and the pass holding it drops its
+store as on frames without them. The PowerVR phone's three stage 6 F12 frames (aura mode 2)
+have no DATE anywhere after the fog: the aura's paste is LERP As (ALPHA 7) at Z ALWAYS without Z
+write, binding no depth.
+
 **Why a last store is kept.** `rd__last_store_drop` notes, for each depth, the reason the last
 pass begun with it bound before its last touch was done could not drop the store, and
 `rd__last_store_replay_end` (from `rd__store_plan_end`) counts it once a depth a replay
@@ -1147,6 +1175,8 @@ replay, is not counted.
       rd: pass cut: DISPLAY's clear drawn as the load of its next pass, not a pass of its own (reported once)
       rd: pass cut: AURA_WORK's clear not drawn (frame's command N: nothing reads it before it is cleared again; the sprite after it took its colour) (K so far)
       rd: pass cut: a pass whose depth store was dropped at the last touch ended at command N, before the touch at command T was done: ... the cut is off for the rest of the run ([dev] last_store) (K so far)
+      rd: pass cut: a post sprite's own pass (SCENE's depth, command K) holds the depth's last touch: its store dropped (reported once)
+      rd: store plan: a post sprite under DATE (list L command I) tests the destination alpha in its shader, not through the stencil: DATE is no touch of its depth (reported once)
       window: ...; passes cut: C clears taken by the next pass, S clears skipped, D depth stores dropped at the last touch a replay ([dev] clear_carry, clear_skip, last_store); K last stores kept a replay (A a DATE draw, B a post sprite, ...)
 
 The skip's line is the first 8, then every 100th; the guard's the same. The 10 s `stores:` clause

@@ -2081,6 +2081,9 @@ void rd__pass_area_why_counts(uint64_t why[RD_AREA_WHY_COUNT]);
  * fillWork: the pass begun next is a draw's own on cid and did; 0, 0 after),
  * rd__last_store_fog (rd_replay.c doFog: the fog in force now keeps the pass
  * it begins to its end: the local read, no probe, no edge read due),
+ * rd__last_store_post (rd_fx_plan.c fxDraw: the post sprite drawn now
+ * records its draw into the pass its bindDraw begins and nothing more of
+ * the command; false after),
  * rd__last_store_drop (rd_store_plan.c rd__store_plan_pass: the depth store
  * of the pass begun now may be dropped), rd__last_store_end (rd_replay.c
  * endPass, the walk's pass ending: the guard that it held its promise) */
@@ -2098,6 +2101,7 @@ void rd__clear_skip_begin(void);
 void rd__clear_skip_readback(uint32_t id);
 void rd__last_store_arm(uint32_t cid, uint32_t did);
 void rd__last_store_fog(bool holds);
+void rd__last_store_post(bool holds);
 bool rd__last_store_drop(uint32_t did, uint32_t last, RhiLoadOp depthLoad, bool live,
                          uint32_t anyTouch);
 void rd__last_store_end(void);

@@ -1091,7 +1091,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`lastStoreWhy`, its words `1 last stores kept (1 a DATE draw)`), none counted for the others; a
   draw textured from WORK3 between while WORK3 is not readable: 1 (the pass begun at that draw); the
   pass's first draw and one between textured from WORK3 (readable from the first on): 1, the pass
-  begun at the first draw, and the guard's frame after it drops it again; the pass area forced on:
+  begun at the first draw, and the guard's frame after it drops it again; post sprites
+  (`cellPost`): the glow's `cleanUpFB` pair into SCENE (constant fold; the second Z GEQUAL at Z 1,
+  the depth's last touch in a pass of its own) drops that pass's store (1 on, 0 off, no reason
+  counted), the same pair as a motion blur's keeps it (0, one reason: a post sprite), the aura's
+  DATE sprite (TEST 0x34000) after a Z GEQUAL screen sprite leaves that sprite the last touch (1,
+  no reason), SCENE byte for byte in each; the pass area forced on:
   list 0's pass (it takes SCENE's clear) and list 4's (full-frame sprites, one the frame's height)
   counted as kept whole (`passAreaWhy`: `2 passes kept whole (1 a clear as its load, 1 its draws
   cover the picture)`), none with the area off, SCENE byte for byte; no validation error.

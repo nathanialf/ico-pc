@@ -37,6 +37,19 @@
  *      walk reads it without ending the pass): the pass begun at the first
  *      draw drops it (1), the cut not turned off (the guard's frame after
  *      it drops it again);
+ *   3b. the last store with post sprites (rd_store_plan.c planPost,
+ *      rd_fx_plan.c fxDraw's promise): (a) the glow's cleanUpFB, two
+ *      untextured flare sprites into SCENE drawn by the fx plan's constant
+ *      fold, the first Z ALWAYS (no depth bound), the second Z GEQUAL at
+ *      Z 1 (the depth's last touch, a pass of its own): that pass's store
+ *      dropped (1) with the cut on, none off, no reason counted, SCENE the
+ *      same bytes; the same sprites as a motion blur's (a kind whose
+ *      caller may draw again, no promise): kept (0), one reason (a post
+ *      sprite); (b) the aura's DATE sprite (TEST 0x34000: DATE, DATM 0, Z
+ *      ALWAYS) after a Z GEQUAL screen sprite in a pass of its own: DATE
+ *      on a post sprite no touch of the depth, so that pass holds the
+ *      last touch and drops its store (1), no reason counted, SCENE the
+ *      same bytes;
  *   4. the pass area's reasons (the area forced on): the last store's
  *      frame keeps both its SCENE passes whole and says why
  *      (RdPerfRecord.passAreaWhy): list 0's takes SCENE's clear as its load
@@ -473,6 +486,124 @@ static void cellLast(uint32_t scene, uint32_t w, uint32_t h)
     rd__pass_cut_force(RD_CUT_LAST, -1);
 }
 
+/* ------------------------------------------ 3b. the last store and post sprites */
+
+/* an untextured staticBlur sprite of kind over the frame w x h at GS Z z,
+ * RGBAQ rgba, under ABE with the ALPHA register's mode blend */
+static bool pushPost(RdFrame *f, int list, uint8_t kind, uint32_t w, uint32_t h,
+                     const uint8_t rgba[4], uint8_t blend, uint32_t z)
+{
+    RdPostRec p;
+    memset(&p, 0, sizeof(p));
+    p.rect[0] = (float)((2048 - (int32_t)(w / 2)) * 16);
+    p.rect[1] = (float)((2048 - (int32_t)(h / 2)) * 16);
+    p.rect[2] = (float)((2048 + (int32_t)(w / 2)) * 16);
+    p.rect[3] = (float)((2048 + (int32_t)(h / 2)) * 16);
+    memcpy(p.rgba, rgba, 4);
+    p.z = z;
+    p.scalar[0] = p.scalar[1] = 1024.0f;
+    p.scalar[2] = 1.0f;
+    p.exactInt = 1;
+    p.lutOffset = ~0u;
+    RdCmd *a = rd__st_push(f, list, RDC_TEXTURE_OFF) ? rd__st_push(f, list, RDC_ALPHA) : NULL;
+    if (!a) {
+        return false;
+    }
+    a->b[0] = blend;
+    if (!rd__st_push1(f, list, RDC_ABE, 1)) {
+        return false;
+    }
+    RdCmd *c = rd__st_push(f, list, RDC_POST_STUB);
+    if (!c) {
+        return false;
+    }
+    c->b[0] = kind;
+    c->u[1] = rd__frame_payload(f, &p, (uint32_t)sizeof(p));
+    c->u[2] = (uint32_t)sizeof(p);
+    return true;
+}
+
+/* list 0: SCENE cleared, a Z GEQUAL sprite; list 4: a sprite on WORK3;
+ * then (date 0) list 7: cleanUpFB's two sprites of kind into SCENE
+ * (staticBlur.c: Cs * As + Cd, RGBAQ 0, 0, 0, 0 at Z ALWAYS, then 0, 0, 0,
+ * 192 Z GEQUAL at Z 1, Z write off), or (date 1) list 4: a Z GEQUAL
+ * screen sprite on SCENE, list 8: the aura's DATE sprite (TEST 0x34000,
+ * Cs * FIX + Cd); list 11: a Z ALWAYS screen sprite on SCENE (no touch) */
+static bool buildPost(RdFrame *f, uint32_t number, uint32_t scene, uint32_t w, uint32_t h,
+                      uint8_t kind, int date)
+{
+    static const uint8_t kNone[4] = {0, 0, 0, 0}, kMark[4] = {0, 0, 0, 192};
+    frameBegin(f, number, w, h);
+    bool ok = rd__st_target(f, 0, scene, w, h) && clearOf(f, 0, scene, kGrey, 1) &&
+              drawState(f, 0, RD_TEST_Z_GEQUAL) && pushSprite(f, 0, w, h, kGrey);
+    ok = ok && work(f, 4, RD_TARGET_WORK3, 256, 128) && drawState(f, 4, RD_TEST_Z_ALWAYS) &&
+         pushSprite(f, 4, 256, 128, kGreen);
+    if (date) {
+        ok = ok && rd__st_target(f, 4, scene, w, h) && drawState(f, 4, RD_TEST_Z_GEQUAL) &&
+             pushSpriteAt(f, 4, w, h, w / 4, w / 2, h, kGreen, false);
+        ok = ok && rd__st_target(f, 8, scene, w, h) && drawState(f, 8, RD_TEST_DATE0) &&
+             pushPost(f, 8, RD_POST_AURA, w, h, kGrey, RD_BLEND_CS_FIX_ADD_CD, 0);
+    } else {
+        ok = ok && rd__st_target(f, 7, scene, w, h) && drawState(f, 7, RD_TEST_Z_ALWAYS) &&
+             pushPost(f, 7, kind, w, h, kNone, RD_BLEND_CS_AS_ADD_CD, 0) &&
+             rd__st_test(f, 7, RD_TEST_Z_GEQUAL) &&
+             pushPost(f, 7, kind, w, h, kMark, RD_BLEND_CS_AS_ADD_CD, 1);
+    }
+    ok = ok && rd__st_target(f, 11, scene, w, h) && drawState(f, 11, RD_TEST_Z_ALWAYS) &&
+         pushSpriteAt(f, 11, w, h, 0, 32, 32, kGreen, false);
+    return ok;
+}
+
+static uint32_t whySum(void)
+{
+    uint32_t n = 0;
+    for (int k = 0; k < RD_LAST_WHY_COUNT; k++) {
+        n += g_rdPerf.lastStoreWhy[k];
+    }
+    return n;
+}
+
+/* one frame with the cut off then on: the stores dropped at the last touch
+ * on, the reasons on, SCENE's bytes the same */
+static void postFrame(const char *what, RdFrame *f, uint32_t wantOn, uint32_t wantPostWhy)
+{
+    rd__pass_cut_force(RD_CUT_LAST, 0);
+    CHECK(rd__replay_frame(f, 0, false), "%s replayed (off)", what);
+    const uint32_t lastOff = g_rdPerf.storeLastDropped, droppedOff = g_rdPerf.storeDepthDropped;
+    uint32_t tw = 0, th = 0;
+    uint8_t *was = readTarget(RD_TARGET_SCENE, &tw, &th);
+    rd__pass_cut_force(RD_CUT_LAST, 1);
+    CHECK(rd__replay_frame(f, 0, false), "%s replayed (on)", what);
+    const uint32_t lastOn = g_rdPerf.storeLastDropped, droppedOn = g_rdPerf.storeDepthDropped;
+    const uint32_t why = whySum(), postWhy = g_rdPerf.lastStoreWhy[RD_LAST_WHY_POST];
+    printf("  last store, %s: off %u (%u at the last touch), on %u (%u); %u kept (%u a post "
+           "sprite)\n",
+           what, droppedOff, lastOff, droppedOn, lastOn, why, postWhy);
+    CHECK(lastOff == 0 && lastOn == wantOn, "%s: %u off, %u on at the last touch (0, %u)", what,
+          lastOff, lastOn, wantOn);
+    CHECK(droppedOn == droppedOff + wantOn, "%s: depth stores dropped %u on, %u off", what,
+          droppedOn, droppedOff);
+    CHECK(why == wantPostWhy && postWhy == wantPostWhy, "%s: %u kept, %u for a post sprite (%u)",
+          what, why, postWhy, wantPostWhy);
+    CHECK(was && sameTarget(RD_TARGET_SCENE, was, tw, th), "%s: SCENE differs with the cut", what);
+    free(was);
+}
+
+static void cellPost(uint32_t scene, uint32_t w, uint32_t h)
+{
+    static RdFrame f;
+    CHECK(buildPost(&f, 60, scene, w, h, RD_POST_FLARE, 0), "the glow's frame built");
+    postFrame("the glow's Z-tested mark", &f, 1, 0);
+    rd__frame_free(&f);
+    CHECK(buildPost(&f, 61, scene, w, h, RD_POST_MOTION_BLUR, 0), "the motion blur's frame built");
+    postFrame("the same as a motion blur's", &f, 0, 1);
+    rd__frame_free(&f);
+    CHECK(buildPost(&f, 62, scene, w, h, RD_POST_AURA, 1), "the aura's frame built");
+    postFrame("the aura's DATE sprite after the last touch", &f, 1, 0);
+    rd__frame_free(&f);
+    rd__pass_cut_force(RD_CUT_LAST, -1);
+}
+
 /* ------------------------------------------------ 4. the pass area's whys */
 
 static void cellAreaWhy(uint32_t scene, uint32_t w, uint32_t h)
@@ -543,6 +674,7 @@ int main(void)
     cellCarry();
     cellSkip(gw, h);
     cellLast(scene, gw, h);
+    cellPost(scene, gw, h);
     cellAreaWhy(scene, gw, h);
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
           rhi_vk_validation_error_count());

@@ -12,7 +12,10 @@
  * is
  *   - a draw (screen prims, the VU draws, a post sprite) on the state's
  *     depth with the Z test on (ZTE and not ALWAYS), Z write on, DATE on
- *     (the stencil bit) or PRIM.AA1 (its stencil pairs);
+ *     (the stencil bit) or PRIM.AA1 (its stencil pairs); DATE on a post
+ *     sprite other than the reduction's is no touch (planPost: the sprite
+ *     tests the destination alpha in its shader, from the snapshot or the
+ *     local read, never through the stencil);
  *   - a draw whose texture is a target's depth view (RD_VIEW_DEPTH);
  *   - a shadow command (the stencil count, the volumes' Z test);
  *   - the fog (its depth read; the crack filler's copy and fill of the
@@ -223,12 +226,13 @@ static void planTouch(uint32_t id, uint32_t ord, int l, bool read)
 }
 
 /* a draw's touches under the state st: its depth by the Z test, Z write,
- * DATE or PRIM.AA1, and a depth view it samples */
-static void planDraw(const RdStateBlock *st, uint32_t ord, int l)
+ * DATE (when date: the stencil bit may hold it) or PRIM.AA1, and a depth
+ * view it samples */
+static void planDrawEx(const RdStateBlock *st, uint32_t ord, int l, bool date)
 {
     const RdDrawState *ds = &st->ds;
     const bool test = ds->test.zte && ds->test.ztst != RD_ZTST_ALWAYS;
-    const bool stencil = ds->test.date != RD_DATE_OFF || st->aa1;
+    const bool stencil = (date && ds->test.date != RD_DATE_OFF) || st->aa1;
     if (test || stencil || ds->zwrite == RD_ZWRITE_ON) {
         planTouch(st->depth, ord, l, test || stencil);
     }
@@ -236,6 +240,39 @@ static void planDraw(const RdStateBlock *st, uint32_t ord, int l)
     if (tv && tv->kind == RD_TEXKIND_TARGET && tv->view == RD_VIEW_DEPTH) {
         planTouch(tv->target, ord, l, true);
     }
+}
+
+static void planDraw(const RdStateBlock *st, uint32_t ord, int l)
+{
+    planDrawEx(st, ord, l, true);
+}
+
+/* A post sprite (not the fog): a draw, but DATE is no touch of the depth
+ * unless it is the reduction's.  Every staticBlur sprite but the
+ * reduction's is drawn by rd_replay.c doBlurSpriteDraw through fx_rect_vs
+ * and the fx shaders (the fx plan's forms, the snapshot's fx_sprite_ps,
+ * the aura's two passes, the blur fold, Motion blur: Smooth, the glow's
+ * edge strip), which test DATE in the shader against the destination alpha
+ * they read (FXF_DATE: the snapshot or the local read) with no stencil
+ * test in their pipelines (rd__blur_key), and set no DrawSetup.dateStencil;
+ * only doScreen and the VU draws (prepareDrawEx with dateStencil) take the
+ * stencil bit, and the reduction's hardware sprite on a scaled target goes
+ * through doScreen (rd__blur_screen_fallback), so its DATE stays a touch.
+ * The Z test, Z write, PRIM.AA1 and a depth view count as for any draw. */
+static void planPost(const RdStateBlock *st, uint8_t kind, uint32_t ord, int l)
+{
+    const bool date = kind == RD_POST_REDUCTION;
+    if (!date && st->ds.test.date != RD_DATE_OFF) {
+        static uint32_t s_said;
+        if (s_said < 1u) {
+            s_said++;
+            rd__log("store plan: a post sprite under DATE (list %d command %u) tests the "
+                    "destination alpha in its shader, not through the stencil: DATE is no touch "
+                    "of its depth (reported once)",
+                    l, s_plan.curCmd);
+        }
+    }
+    planDrawEx(st, ord, l, date);
 }
 
 /* the keep's state in this replay's record: the depths of the replay the
@@ -355,7 +392,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
                     }
                     break;
                 }
-                planDraw(&st, ord, l); /* a post sprite: a draw */
+                planPost(&st, c->b[0], ord, l); /* a post sprite: a draw */
                 break;
             case RDC_SCREEN:
                 if (!rd__fades_fold_skip(ord)) {

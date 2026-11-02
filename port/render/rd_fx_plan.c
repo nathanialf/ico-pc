@@ -68,7 +68,8 @@
  * with dateStencil is doScreen's and the VU draws' only), and with
  * fxDstLocal a DATE sprite needs no snapshot and no depth or stencil
  * bound for it: the pass binds the depth only for the sprite's Z test or
- * Z write (rd__blur_key). */
+ * Z write (rd__blur_key).  The store plan counts a post sprite's DATE as
+ * no touch of the depth (rd_store_plan.c planPost). */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -214,7 +215,18 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
     ds.th = x->th;
     ds.textured = x->textured;
     ds.screenCopy = 1; /* a post sprite: target texels onto screen pixels */
+    /* the last store (rd_pass_cut.c): without the local read the pass this
+     * bindDraw begins records the sprite's draw and nothing else of the
+     * command (every return below the bind is true, the source made
+     * readable above); not for a kind whose caller may draw again in the
+     * command (rd_blur_border.c: the reduction's strips, a textured flare's
+     * or bloom's glow edge; rd_blur_smooth.c: Motion blur: Smooth) */
+    const uint8_t post = x->c->b[0];
+    const bool alone = post != RD_POST_REDUCTION && post != RD_POST_MOTION_BLUR &&
+                       !(r->st.ds.texEnabled && (post == RD_POST_FLARE || post == RD_POST_BLOOM));
+    rd__last_store_post(!local && alone);
     RhiBindGroup g2 = rd__replay_bind_draw(r, &ds);
+    rd__last_store_post(false);
     if (!g2.id) {
         return true; /* the scissor leaves nothing: nothing drawn, as doBlurSpriteDraw */
     }

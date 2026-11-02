@@ -93,7 +93,23 @@
  *        scene pass, kept open by doFog and the crack filler's fold) with
  *        no probe wanted and no edge read due (both end the pass after the
  *        draw to copy the depth), said by doFog before it begins anything
- *        (rd__last_store_fog);
+ *        (rd__last_store_fog); or
+ *        command k is a post sprite on cid with did bound (its Z test or
+ *        Z write) that the fx plan draws in the open pass without the
+ *        destination by local read (rd_fx_plan.c fxDraw: the constant
+ *        fold, the premultiplied blend, the alpha alone), said by fxDraw
+ *        just before its bindDraw (rd__last_store_post): that bindDraw's
+ *        begin is followed by the sprite's draw and nothing else of the
+ *        command (no texture of a target is made readable after it, no
+ *        fallback to the snapshot: fxDraw returns false only before it),
+ *        and fxDraw says so only for a kind whose caller draws nothing
+ *        more for the command (not the reduction's strips, Motion blur:
+ *        Smooth or a textured flare's or bloom's glow edge strip,
+ *        rd_blur_border.c, rd_blur_smooth.c).  The glow's cleanUpFB marks
+ *        the picture's background in SCENE's alpha by a Z-tested sprite
+ *        (staticBlur.c: Z GEQUAL at Z 1, the colour the destination's):
+ *        the depth's last touch in a frame with the glow, in a pass of its
+ *        own on SCENE with its depth;
  *      - every command after k up to t is a state change, a NOP, overlay
  *        text, or such a draw on cid with did bound whose texture, when it
  *        samples another target's colour, is in SHADER_READ when the pass
@@ -191,6 +207,9 @@ static struct {
      * was dropped and the command it must last through */
     uint32_t armColor, armDepth;
     uint32_t fogReplay, fogOrd;
+    /* the post sprite's promise (rd__last_store_post): replay, command plus
+     * one */
+    uint32_t postReplay, postOrd;
     bool dropOpen;
     uint32_t dropReplay, dropUntil;
     bool broken;
@@ -618,6 +637,12 @@ void rd__last_store_fog(bool holds)
     s_cut.fogOrd = holds ? g_rdStoreOrd + 1u : 0u;
 }
 
+void rd__last_store_post(bool holds)
+{
+    s_cut.postReplay = g_rd.replayCounter;
+    s_cut.postOrd = holds ? g_rdStoreOrd + 1u : 0u;
+}
+
 /* e a draw the walk records into the open pass on cid and did: a plain
  * draw, or one sampling another target's colour that is in SHADER_READ
  * (resolveTexture then reads it as it is, no barrier, no end).  start: e
@@ -711,8 +736,22 @@ bool rd__last_store_drop(uint32_t did, uint32_t last, RhiLoadOp depthLoad, bool 
         const CutCmd *e = &s_cut.cmd[k];
         const bool fog = e->kind == CUT_FOG && s_cut.fogReplay == g_rd.replayCounter &&
                          s_cut.fogOrd == k + 1u && e->color == cid && did == cid;
-        if (!drawOn(e, cid, did, true) && !fog) {
+        /* a post sprite the fx plan draws into the pass it begins now and
+         * nothing more of the command (fxDraw's promise) */
+        const bool post = e->kind == CUT_OTHER && e->why == RD_LAST_WHY_POST &&
+                          s_cut.postReplay == g_rd.replayCounter && s_cut.postOrd == k + 1u &&
+                          e->color == cid && e->depth == did;
+        if (!drawOn(e, cid, did, true) && !fog && !post) {
             why = cmdWhy(e, cid, did); /* begun for work the walk may end before the touch */
+        }
+        if (why < 0 && post) {
+            static uint32_t s_said;
+            if (s_said < 1u) {
+                s_said++;
+                rd__log("pass cut: a post sprite's own pass (%s's depth, command %u) holds the "
+                        "depth's last touch: its store dropped (reported once)",
+                        rd__target_name(did), k);
+            }
         }
         for (uint32_t i = k + 1u; why < 0 && i < last; i++) {
             const CutCmd *q = &s_cut.cmd[i];
