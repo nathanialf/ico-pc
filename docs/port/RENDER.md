@@ -2633,6 +2633,26 @@ same values the shader computed per pixel.
 
 Measured or worked out, not done:
 
+- **The depth as D24S8 on every device** (measured, not done). A D24S8 depth would take 4 bytes a
+  texel to load or store against D32F_S8's 5 to 8 (a full-size load or store at 2366 x 1080 from
+  12.8-20.4 MB to 10.2 MB). It is not the same picture: every ZBUF the game writes is PSMZ32
+  (`port/render/rd.h` (`RdZFormat`), `ico2/seki/src/GsBase.c` (`gsb_SetFrame`): the PSM nibble 0),
+  and the game's Z spans far more than 24 bits (its Z row, `port/shaders/vu_common.hlsli`'s note
+  on `gsb_SetVSMatrixSub`: GS Z the ftoi4 of zf / z + zn, zf about 1.07e9, so about 2^24 some 1000
+  units from the eye, 2^28 at 64 and saturating at 0x7FFFFFFF within about 8; the UI at 0xFFFFFF9B
+  and 0xFFFFFFFF). The float depth holds z
+  exactly below 2^24 and to 24 significant bits above (`gs_z_to_depth`, GS_ZSCALE_32F); a 24-bit
+  integer depth holds 2^24 steps over the whole range, so `rd__target_z_scale`'s 2^-32 on D24S8
+  steps 256 GS units everywhere (the layers the Queen's mist and hair needed apart, the comment of
+  `gs_z_to_depth`), and no linear scale both keeps 1 GS unit below 2^24 and reaches the near
+  geometry and the UI band (the homogeneous clip form needs it linear). Measured on lavapipe with
+  the existing fallback (`ICO_VK_FAKE_D24S8=1`, main's replay tool against the stored pass dumps
+  of the corpus, `build-host/tmp/v098/evidence/cheap/ab.sh d24`): at Original 4:3, 25 of 30 dumps
+  change, SCENE on 0.002 to 0.17 % of its pixels by up to 214 levels, DISPLAY up to 120 (objects
+  showing through what should hide them, the Z test's outcome turned); at the PowerVR phone's
+  Resolution Auto (its profile's fakes, the eight wide dumps) the present on 0.007 to 0.04 % of its
+  pixels by up to 107 levels, the shadow levels too (the volumes' Z test). The D24S8 fallback stays
+  for devices without D32F_S8 (`port/rhi/vk/vk_device.c`), with that picture.
 - **One pass for a constant-alpha lerp without dual-source blending.** On such a device a LERP
   is two passes (`rd__expand_no_dual`). Where As is the same over the draw (untextured;
   textured with TCC RGB; a mesh whose vertex alphas are all equal) the blend factors could be
