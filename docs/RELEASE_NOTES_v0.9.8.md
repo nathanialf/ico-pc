@@ -12,6 +12,7 @@
 - The ending's credits now also name the translators, the contributors and the special thanks.
 - Options > Gameplay > Second memory card: ten more save slots on a second card; the game's own save and load screens offer both cards.
 - Options > Language > Русский (bob-ttz): the subtitles and the game's menus in Russian, translated by bob-ttz. The game plays its English version underneath, so saves work with every language. Menu language also offers it.
+- On graphics chips that can read the picture while drawing it (most Mali chips, and Adreno with the open driver), the game prepares about seven times fewer graphics pipelines at its first start and blends colours exactly as the PlayStation 2 did.
 
 ## Fixed
 

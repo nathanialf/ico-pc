@@ -23,7 +23,8 @@ dual-source blending the LERPs and mode 3 draw in two passes: colour with the fa
 when the mask has A an alpha pass with blending off and no Z write under a Z test that admits the
 colour pass's fragments (`port/render/rd_pipeline.c` (`rd__expand_no_dual`)). `ICO_RD_NO_DUAL=1`
 forces the two-pass form on any device (`port/render/rd_core.c` (`rd_init`)). Where the destination
-read is available these paths give way to it (next section).
+read is available these paths give way to it (next section), and where the device orders the
+colour read the key keeps none of them ([GS state as data](#gs-state-as-data)).
 
 **The AFAIL split.** An alpha-tested draw whose failing fragments write something other than its
 passing ones is two draws: the passing fragments with the draw's Z write and mask, then the failing
@@ -170,6 +171,97 @@ keys)` (or `depth (...)`, `blend (...)`, `none (every state in the pipeline keys
 start-up set's line carries ` (dynamic depth, blend)` after `created at start-up`; the first-use
 line prints the normalised key. `ICO_VK_FAKE_NO_DYNAMIC=1` (`=blend`: the blend alone) turns it off
 on a device that has it, for an A/B of the same frames.
+
+### GS state as data
+
+The fields above multiply out over the families into the start-up set: on a PowerVR DXT-48 phone
+1193 keys, of which the VU family's 264 are 11 vertex shaders x 2 Z writes x 4 blend paths x 3
+pixel shaders, DATE's 514 its stencil twins (the VU keys' 264, the screen's 224: 7 states x 2
+spaces x 2 topologies x 4 blends x 2 pixel shaders, and 26 more), the 2D family's 361 (blend x 4
+and mask x 2 the largest factors). The attachment read ([RENDER.md](RENDER.md#destination-reads-and-blend-paths))
+computes the GS's blend in the fragment shader from the pixel it reads in rasterization order, so
+where the device has that read the blend, the write mask and DATE can be shader data instead of
+key fields (`port/render/rd_uber.c`, its header comment; `g_rd.uber`, `rd__uber_on`):
+
+| field | under GS state as data | where |
+| --- | --- | --- |
+| blend path | every pass of a planned draw that the read can draw goes through the `_dstatt` twin with blending off (`RD_BLEND_COUNT`): the LERPs and the forms the exact blend took, and also the premultiplied adds and subtracts and the passes without GS blending (`RdDrawPass.csOnly`: the ALPHA register `0x00`, which is Cs); one pipeline draws every ALPHA register | `port/render/rd_dst_read.c` (`rd__expand_dst`, `uberPass`) |
+| write mask | in DrawCB's WMASK bits (the shader writes a masked channel's Cd back, a UNORM8 texel read and written back being the same byte); the cache's key takes the mask `0xF` | `rd__uber_normalise`, `port/render/rd_pipeline.c` (`drawKey`) |
+| DATE | tested against the alpha the fragment reads (`ICO_DF_DATE_DST`, `port/shaders/common.hlsli` (`GS_DATE_SNAP`, `gs_dst_date_snap`)); no R8 snapshot and no stencil bit are taken (`rd__uber_date`, `port/render/rd_replay.c` (`prepareDrawEx`)), so the DATE stencil keys and their setup keys are gone | `rd__uber_date` |
+| two-pass blend | not used for these passes (nothing to split: blending is off); `nodual` 0 | `rd__expand_no_dual` skips a key with a read |
+
+What stays in the key: the Z test and Z write, the formats, the topology and PRIM.AA1, the vertex
+shader, the pixel shader's family (now with `vu_np_ps`'s twin, `vu_np_ps_dstatt`, so the pixel diet
+at a fractional scale stays: `port/render/rd_pixel_plan.c` (`rd__vu_pixel_fs`, `rd__uber_np`)), the
+shadow volumes' stencil. What keeps the fixed-function blend: the MSAA epoch's passes (a
+multisampled attachment is not read), targets other than RGBA8, the presentation overlay
+(`port/render/rd_replay.c` draws it on the output with its own plan), the post and blit keys, the
+shadow counts. The fx plan's own forms of a sprite that reads the destination are not drawn under
+an exact blend (`port/render/rd_fx_plan.c` (`rd__fx_plan_draw`)), so the set leaves them out
+(`rd__fx_enumerate`); the fades fold is off under it (the reduction's sprite draws through the
+read, whose twin has no fold: `rd: fades fold: off under GS state as shader data ...`, once).
+
+**The start-up set.** `rd__enumerate_reachable` takes each key the families list and adds its
+image through the read alone, normalised, the DATE stencil keys left out, the keys the read never
+draws as the two-pass fallback makes them, and the overlay's plain keys
+(`port/render/rd_dst_read.c` (`rd__enumerate_uber`); `rd__enumerate_reachable_overlay`). ctest
+`rd_state` `testUberSet` holds the tiler profile's set at the phone's fractional scale (the
+pre-pass off) to at least five times fewer keys than the fixed-function one, with no DATE key, a
+VU family a quarter or less of the fixed-function one's, and no plain twin of a key the read draws;
+it prints the counts and the families (the plan's estimate: about 150 to 165 of 1193, the VU
+vertex shaders compiled 6 times each instead of 48, their 24 keys and the 24 DATE twins). The start-up set's log line is followed by
+`rd: pipelines: GS state as shader data (the colour read in order: N keys in the start-up set
+instead of M)`, M the fixed-function set the device would have made (`rd__uber_set_line`), and the
+window's 10 s summary carries the pipelines made so far by family, `pipelines made by family: 2D a,
+VU b, VU point c, shadow d, fog e, CRT f, fx g, DATE h (n, GS state as shader data)`
+(`rd__uber_perf_note`, `RdPerfRecord.pipeFamily`; `port/render/rd_perf.c`
+(`rd_perf_backend_text`)).
+
+**The pass.** Every pass on an RGBA8 target made for the read begins readable
+(`rd__exact_readable`, `rd__pass_wants_readable`) and takes a pending clear as its load op, as
+DATE's stencil path does, with a COLOR local-read barrier right after the pass begins so the
+first read sees the load op's write (`port/render/rd_replay.c` (`beginPass`);
+[RHI.md](RHI.md#local-read)); the exact mode's own clear pass is not needed there.
+
+**Merges.** The VU draw merge holds draws through the read where it is GS state as data
+(`port/render/rd_replay_vu.c` (`vuMergeDst`)): a merged draw is one draw whose triangles keep their
+order, and the read in rasterization order sees each earlier one's writes, as the draws one by one
+would. The merge still needs one pipeline and one DrawCB, and the DrawCB carries the ALPHA
+register, so draws of different blends do not merge. The fused scissor pair
+([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair); `vuFuseVerdict`) takes every blend
+form under it: the cut and the kick have one key, the cut's DrawCB its ALPHA register and the
+kick's own `0x00`; the kick drawn under the cut's DrawCB gives its marked pixels the register
+`0x00` in the shader (`port/shaders/vu_common.hlsli` (`VU_RETURN` under `ICO_DST_MODE` 2), the mark
+`VuVSOut.r.w` or the no-planes twin's negative plane), so its colour is Cs and its alpha, mask,
+PABE and FBA the pixel's own: what the kick's own pass stores, byte for byte.
+
+**The device rule.** Vulkan with `RhiLimits.rasterOrderAttachment` and local read: never on
+Qualcomm's own driver (issue 89), on PowerVR (no rasterization order: `rhi_vk: destination read:
+interlock no, rasterization-order attachment read no; local read yes`) or under MoltenVK; Mali
+(`VK_ARM_rasterization_order_attachment_access`) and Turnip have it; lavapipe has it, which the
+tests use. `[dev] uber` (`ICO_RD_UBER`): `auto` (the default) takes it on a tile-based GPU that has
+the read, `on` on any device that has it, `off` never; a `[dev] blend` other than `attachment` or
+`exact` turns it off, the start-up retry's `fixed` among them (`port/platform/startup_retry.h`). It
+asks for the attachment read itself (`rd__dst_asked_env`), so the read's layout and twins are made
+and `rd: blend: exact (attachment read) (GS state as shader data)` is the blend line. The log:
+`rd: pipelines: GS state as shader data: on (raster-order read): the blend, the write mask and
+DATE in the shader, the colour read in rasterization order`, or `off (<why>)` (`rd__uber_init`),
+and the profile line ends with `GS state as shader data (raster-order read)` or `GS state in the
+pipelines (shader data off (<why>))`. The blend's self-test checks the read before the set
+([RENDER.md](RENDER.md#destination-reads-and-blend-paths)): under `auto` a failure turns GS state
+as data off (`rd__uber_off`) and the fixed-function blend draws; DATE's self-test checks the
+per-primitive test, a failure leaving DATE to the stencil bit or the snapshot (`g_rd.uberDate`).
+`ICO_RD_UBER_DATE=0` and `ICO_RD_UBER_PREMUL=0` are the A/B switches against the attachment read's
+own pictures (DATE through the snapshot or the bit, the premultiplied forms on the blender): with
+both the collapse's machinery must draw the attachment read's bytes, which a `rd_replay_tool
+--pass-dump` of the corpus under `ICO_RD_UBER=on` against baselines made with
+`ICO_RD_BLEND=attachment ICO_RD_UBER=off` checks ([TESTING.md](TESTING.md)).
+
+The picture is the attachment exact mode's, the GS's integer arithmetic: the blend equals
+`ICO_RD_BLEND=attachment` ([DIVERGENCES.md](DIVERGENCES.md) VD-7 does not apply), the premultiplied
+subtracts too (the GS's floor, one level under the blender's where `Cs F` is not a multiple of
+128), and DATE is the GS's, primitive by primitive (VD-17 does not apply). No device here has the
+read in hardware: the user's Turnip tablet or a Mali reporter's log is the device proof.
 
 ### The start-up set
 

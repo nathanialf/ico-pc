@@ -466,6 +466,22 @@ self-test](#the-fog-path-and-its-self-test)) (`port/render/rd_replay.c` (`dateSt
 (`date_clear_ps`, `date_stencil_ps`)). `--stats`: `DATE snapshots N, DATE stencil draws M (K
 setups)`.
 
+**DATE through the colour read.** Under GS state as shader data ([GS state as shader
+data](#gs-state-as-shader-data)) a DATE draw of a screen-prim or VU command into an RGBA8 target
+made for the attachment read, outside the MSAA epoch, takes neither the snapshot nor the stencil
+bit: its passes go through the `_dstatt` twins with `ICO_DF_DATE_DST`, and the shader tests DATE
+against the alpha it reads from the attachment (`port/shaders/common.hlsli` (`GS_DATE_SNAP`,
+`gs_dst_date_snap`); `port/render/rd_uber.c` (`rd__uber_date`); `port/render/rd_replay.c`
+(`prepareDrawEx`: `Replay.dateDstNow`, `RdPerfRecord.dateDstDraws`)). The read is in
+rasterization order, so each fragment sees what the draw's earlier primitives wrote: the GS's
+DATE, primitive by primitive, where the snapshot and the stencil bit hold the alpha from before the
+draw's first primitive (DIVERGENCES.md VD-17). A PRIM.AA1 draw under DATE needs no primitive by
+primitive draws then (`doScreen`: `aa1Date` off). DATE's self-test checks it first ("colour read",
+its fifth sample a DATM 1 command whose second sprite fails over its first), then the stencil bit
+and the snapshot with it held off; a failure turns it off (`g_rd.uberDate`) and DATE draws as
+above. ctest `rd_pixel_uber` (`testDateStencil`: the overlap of two sprites of one DATE command
+takes the GS's colour), `rd_date_selftest_uber`.
+
 **DATE and AA1.** The GS tests DATE against the alpha as it writes each pixel (PCSX2
 `GSDrawScanline.cpp`), so in an AA1 strip under DATM 1 the edge pixel a triangle writes along a
 shared edge (alpha below 0x80) turns away the next triangle's pixel there; testing every primitive
@@ -897,10 +913,12 @@ its self-test](#the-fog-path-and-its-self-test)). A frame of its own (never reco
 presented) is drawn on SCENE at its real size and scale, MSAA held off, in a 256 x 96 GS pixel
 block in its middle: eight cells of PCSX2's forest pixels under the forest's tint sprite
 (`rd_pixel_test.c` `kTint`), a textured LERP quad whose clear texel must leave the colour behind it
-(the leaf case), two overlapping LERP draws (the second must blend over the first's result) and a
-glyph through the text sheet's shader, then an opaque cell read at an even and an odd texel column
-(a dual-source equation kept with blending off, [RHI.md](RHI.md#dynamic-state)). 21 samples are
-read back (one readback; its pipelines are keys of the start-up set). The fixed-function
+(the leaf case), two overlapping LERP draws (the second must blend over the first's result), one
+LERP command of two overlapping sprites (the second must blend over the first's result inside the
+one draw: the read's rasterization order, which the draw merge and GS state as shader data rely
+on) and a glyph through the text sheet's shader, then an opaque cell read at an even and an odd
+texel column (a dual-source equation kept with blending off, [RHI.md](RHI.md#dynamic-state)). 22
+samples are read back (one readback; its pipelines are keys of the start-up set). The fixed-function
 blend runs first, the reference, within 2 levels of the GS arithmetic; if it fails, the two-pass
 fallback (`rd_set_no_dual`) is tried and kept when it passes. Then, only when `[dev] blend` opted
 into an exact mode the device has (`rd__dst_asked`), that mode runs, within 1 level of the GS
@@ -922,6 +940,28 @@ A failing entry's worst sample, and a passing one's when it is not exact, gets a
 tests; a run that took the two-pass fallback starts from the dual-source blend again at the next
 SCENE size, so each line is whole (`port/render/rd_blend_selftest.c`; `port/render/rd.h`
 (`rd_blend_selftest`); `port/platform/window_host.c`).
+
+### GS state as shader data
+
+Where the device orders the attachment read (Vulkan with `RhiLimits.rasterOrderAttachment`: Mali
+with the ARM extension, Adreno on Turnip, lavapipe; not PowerVR, not Qualcomm's own driver, not
+MoltenVK), `[dev] uber = auto` (the default, on a tile-based GPU; `on` anywhere the read is) asks
+for the attachment read itself and draws every pass it can through it: the blend, the write mask
+and DATE become shader data and leave the pipeline key, so the start-up set is several times
+smaller ([PIPELINES.md](PIPELINES.md#gs-state-as-data) has the fields, the set, the device rule,
+the log lines and the tests; `port/render/rd_uber.c`). The passes: every pass on an RGBA8 target
+made for the read begins readable and takes a pending clear as its load op, a COLOR local-read
+barrier after it (`beginPass`); the premultiplied forms and the passes without GS blending go
+through the read too (`RdDrawPass.csOnly`: the register `0x00`), DATE reads the attachment's alpha
+(**DATE through the colour read**, above), the VU draw merge and the fused scissor pair take the
+read's draws (`port/render/rd_replay_vu.c` (`vuMergeDst`, `vuFuseVerdict`)). The picture is the
+attachment read's, the GS's integers, with the premultiplied subtracts the GS's floor and DATE per
+primitive; the MSAA epoch, other formats and the presentation overlay keep the fixed-function
+blend, as under the exact blend. The blend line is `rd: blend: exact (attachment read) (GS state as
+shader data)` and the self-test's `...; GS state as shader data)`; under `auto` a failing
+attachment entry turns it off (`rd__uber_off`: `; GS state as shader data off: the colour read
+failed`, the fixed-function blend); `[dev] uber = on` keeps it as `[dev] blend` keeps an asked
+mode. The fades fold is off under it.
 
 ### The storage pass merge
 
@@ -1762,15 +1802,24 @@ Its first run runs DATE's self-test first, where the profile has `dateStencil`
 draws a cell of alpha 0x80 on the left half and one of alpha 0 on the right, then a DATE sprite
 with DATM 1 over the top half and one with DATM 0 over the bottom, through the stencil bit and
 through the snapshot; the quadrants' centres are read back and compared with the GS's outcome,
-every channel exactly. Both replays run with MSAA held off (`g_rd.msaaBlocked`): the stencil bit
+every channel exactly. A fifth sample is the DATM 1 command's own overlap: a second, smaller
+sprite of the same command inside the top left quadrant, over the first sprite, which cleared the
+alpha's MSB there; the stencil bit and the snapshot hold the alpha from before the command, so
+the second sprite's colour shows (each path is judged by its own rule, the GS's per-primitive one
+for the colour read). Under GS state as shader data ([GS state as shader
+data](#gs-state-as-shader-data)) a third replay comes first, DATE through the colour read, whose
+fifth sample keeps the first sprite's colour (the GS's), its draws counted
+(`g_rdPerf.dateDstDraws`); its line is `rd: DATE: colour read path (self-test: colour read ok 5,
+stencil ok 5, snapshot ok 5) ...` (`stencil not tried` where the profile has the snapshot), and a
+failing colour read leaves DATE to the bit or the snapshot (`g_rd.uberDate`). Both replays run with MSAA held off (`g_rd.msaaBlocked`): the stencil bit
 is never taken inside the MSAA epoch (`port/render/rd_replay.c` (`dateStencilFor`)), so it is
 checked as it draws whatever the anti-aliasing setting, and the result holds when MSAA is turned
 off later. The stencil replay must have taken the bit (`g_rdPerf.dateStencilTakes` above 0), else
 it reports `stencil not run (no draw took the stencil bit)`, a failure. The stencil bit stays only
-with its four right, else `dateStencil` goes off (`rd: profile: DATE stencil off (self-test)`) and
+with its five right, else `dateStencil` goes off (`rd: profile: DATE stencil off (self-test)`) and
 the snapshot draws DATE; `ICO_RD_DATE_PATH=stencil` keeps it whatever it finds. One line: `rd:
-DATE: stencil path (self-test: stencil ok 4, snapshot ok 4) on SCENE ...`, or `rd: DATE: snapshot
-path (self-test: stencil fail 2 at sample 1: 28C85000 for FAFA0A40, snapshot ok 4) ...`.
+DATE: stencil path (self-test: stencil ok 5, snapshot ok 5) on SCENE ...`, or `rd: DATE: snapshot
+path (self-test: stencil fail 2 at sample 1: 28C85000 for FAFA0A40, snapshot ok 5) ...`.
 `ICO_RD_DATE_SABOTAGE=1` makes the setup write 0 into the bit where the alpha's MSB is 1 (logged:
 `rd: DATE: ICO_RD_DATE_SABOTAGE: ...`; `port/render/rd_replay_tiler.c` (`rd__date_sabotaged`);
 `rd_date_selftest_sabotage`).

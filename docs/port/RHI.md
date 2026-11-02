@@ -528,7 +528,13 @@ attachment reads, `RHI_LOCAL_READ_DEPTH` the early and late fragment tests and t
 writes to the same reads, `RHI_LOCAL_READ_BACK` those reads to the next draws' depth-stencil and
 colour writes. Outside a pass, or without local read, it records nothing. The exact blend's
 attachment read (`RHI_DST_READ_ATTACHMENT`) reads the colour in rasterization order instead and
-needs no barrier (`port/rhi/rhi.h` (`rhi_cmd_local_read_barrier`); `port/rhi/vk/vk_cmd.c`
+needs no barrier between draws, nor between the triangles of one draw (the order guarantees a
+fragment's read sees every earlier fragment's write of the pixel, primitive by primitive); the
+rasterization order covers fragment writes, not the pass's load op, so a pass begun with its
+colour `RHI_LOAD_CLEAR` and read that way gets one `RHI_LOCAL_READ_COLOR` barrier right after it
+begins (the renderer's GS state as shader data, which takes a pending clear as the load op of a
+readable pass: [PIPELINES.md](PIPELINES.md#gs-state-as-data); `port/render/rd_replay.c`
+(`beginPass`)) (`port/rhi/rhi.h` (`rhi_cmd_local_read_barrier`); `port/rhi/vk/vk_cmd.c`
 (`rhi_cmd_begin_render_pass`, `rhi_cmd_local_read_barrier`); `port/rhi/vk/vk_pipeline.c`
 (`rhi_create_bind_group`); `port/rhi/vk/vk_resource.c` (`createTexture`)). The renderer reads the
 fog's depth and DATE's alpha this way ([RENDER.md](RENDER.md#the-replay)).

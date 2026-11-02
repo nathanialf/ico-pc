@@ -445,7 +445,8 @@ With the merge (`g_rd.vuMerge`, the default; `port/render/rd_replay_vu.c` (`vuDr
 `rd__replay_vu_flush`)) such a draw is held in an open run instead of drawn. A draw joins the run
 when it has one planned pass (or, without dual-source blending, a colour pass and its alpha pass:
 [below](#the-draw-merge-without-dual-source-blending)), an index list, a merge build (below), no DATE through the stencil bit,
-no destination read, is outside the loss bisect's window and the pass split, and has the same pipeline key, group 1 (the stream buffer, the record, the ring),
+no destination read (but the attachment read under GS state as shader data, [PIPELINES.md](PIPELINES.md#gs-state-as-data):
+read in rasterization order, a merged draw's triangles see each earlier one's writes as the draws one by one would; `vuMergeDst`), is outside the loss bisect's window and the pass split, and has the same pipeline key, group 1 (the stream buffer, the record, the ring),
 group 2 (the textures and the sampler), DrawCB bytes, FrameCB, scissor, render pass and GPU timing
 effect as the run, up to 16 draws whose raised index values (below) stay within the device's
 (`maxDrawIndexedIndexValue`). Anything else that records ends the run first
@@ -570,8 +571,8 @@ that fails:
 | fuse off | `[dev] vu_fuse = false` (`ICO_RD_VU_FUSE=0`), or the draw merge off (`vu_merge = false`, a merge module missing) |
 | no merge build | the draw's vertex shader or the fallback's has no merge build (only those mark the kicks) |
 | passes | either state's plan is not one pass (the alpha test's split), the cut's two passes without dual-source blending excepted (a colour pass and its alpha pass, joined back for these rules; kept apart where the alpha pass's Z test is not the colour pass's: GREATER with Z write) |
-| dst/DATE | a destination read (the exact blend) or DATE through the stencil bit |
-| blend form | the cut's blend is not a lerp or Cd*FIX + Cs: the premultiplied adds and subtracts (ONE, ONE) and the Ad forms cannot drop Cd per pixel (`rd_pipeline.c` `keyBlendPath`, `blendState`) |
+| dst/DATE | a destination read (the exact blend) or DATE through the stencil bit; not the attachment read under GS state as shader data, where both draws go through it |
+| blend form | the cut's blend is not a lerp or Cd*FIX + Cs: the premultiplied adds and subtracts (ONE, ONE) and the Ad forms cannot drop Cd per pixel (`rd_pipeline.c` `keyBlendPath`, `blendState`); under GS state as shader data every form fuses: the cut and the kick have one key, and the kick's marked pixels take the ALPHA register `0x00` (Cs) in the shader, what the kick's own pass (`csOnly`) stores (`port/shaders/vu_common.hlsli` `VU_RETURN` under `ICO_DST_MODE` 2) |
 | no planes | the cut's pixel shader reads no mark: neither `vu_ps` / `vu_texa_ps` (`r.w`) nor a no-planes twin without `ICO_DF_PLANE` (the plane's sign). None expected: a twin never draws a clip plane's draw |
 | plans differ | the kick's plan is not the cut's with the blend off: the cut's pass with the key's blend, the flags `FIX_FACTOR`, `PREMUL` and `C1_DST`, the clamped FIX and `dstWant` as the alpha plan's blending off sets them (`rd_alpha_plan.c`) must equal the kick's pass in every other field (shaders, depth, mask, alpha test, flags) |
 

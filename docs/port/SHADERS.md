@@ -129,7 +129,11 @@ take from either ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
   destination (`port/render/rd_dst_read.c`), for the sprite entries, `fog_lut_ps`,
   `fog_lut_buffer_ps`, the font entries and `vu_ps`, `vu_texa_ps`. `_dstrov` reads and writes the
   target as a rasterizer-ordered view; `_dstatt` reads the colour attachment in rasterization order
-  (Vulkan only; its DXIL is the ROV build, never used).
+  (Vulkan only; its DXIL is the ROV build, never used). `vu_np_ps` has a `_dstatt` twin alone, for
+  GS state as shader data at a fractional scale ([PIPELINES.md](PIPELINES.md#gs-state-as-data)).
+  In the `_dstatt` builds DATE reads the attachment's alpha under `DF_DATE_DST` (`GS_DATE_SNAP`,
+  `common.hlsli`), and `vu_ps`'s, `vu_texa_ps`'s and `vu_np_ps`'s give a fused pair's kick pixels
+  the ALPHA register `0x00` (`VU_RETURN`, `vu_common.hlsli`).
 - the planes build (`ICO_SPRITE_PLANES=1`): `sprite.hlsl` with the screen-prim triangles' planes in
   `SpriteVSOut` and `SpriteStqVSOut` (`SPRITE_PLANES`, six `nointerpolation float4`). The four
   plane vertex entries exist only in it, and `sprite_ps`, `sprite_texa_ps` and `sprite_stq_ps` are
@@ -806,9 +810,9 @@ same binding: one unit, bound once. The vertex inputs keep their SPIR-V `locatio
 
 **What GLSL cannot express.** An input attachment (SPIR-V `OpTypeImage` with Dim SubpassData) has
 no GLSL, so the script writes an empty file for such a module and `embed_shaders.py` reads an empty
-file as none (glsl NULL, glsl_len 0). That is 18 entries: the `_dstatt` builds of the sprite, texa,
-aa1, stq, font, font_sheet, font_sheet_baked, fog_lut, fog_lut_buffer, vu and vu_texa pixel shaders
-(and the planes variants), `fog_lut_local_ps`, `fog_lut_local_ps_nodual`, `date_stencil_ps` and
+file as none (glsl NULL, glsl_len 0). That is 19 entries: the `_dstatt` builds of the sprite, texa,
+aa1, stq, font, font_sheet, font_sheet_baked, fog_lut, fog_lut_buffer, vu, vu_texa and vu_np pixel
+shaders (and the planes variants), `fog_lut_local_ps`, `fog_lut_local_ps_nodual`, `date_stencil_ps` and
 `fx_local_ps`. The
 `_dstrov` builds (a storage image under fragment-shader interlock) translate.
 A backend without fragment-shader interlock has no blend path from these modules (see the

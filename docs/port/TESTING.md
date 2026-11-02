@@ -848,16 +848,29 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   and the attachment read's Qualcomm rule; the mode left in force, the forest's tint under it, the
   targets without the attachment read where it is off, the self-test again at a new scene size;
   its log lines matched plain, sabotaged, under the fake Adreno, with each `ICO_RD_BLEND` and
-  without a destination read (`rd_blend_selftest*`); its 21 samples include the after cell, an
+  without a destination read (`rd_blend_selftest*`); its 22 samples include the after cell, an
   opaque cell drawn after the blended draws and read at an even and an odd texel column (`after
   cell, even column`, `after cell, odd column` in a failure line), which a driver that keeps a
-  dual-source equation with blending off fails. The fixed-function blend is the default
+  dual-source equation with blending off fails, and the overlap of two sprites of one LERP command
+  (`one draw, second over first`: the read's rasterization order inside a draw). Under GS state as
+  shader data (`ICO_RD_UBER=on`): the attachment read taken for it and kept
+  (`rd_blend_selftest_uber`, the profile line's and the start line's words), kept when sabotaged
+  (`rd_blend_selftest_uber_sabotage`: `[dev] uber = on` keeps it as `[dev] blend` does), and
+  `ICO_RD_BLEND=fixed` turning it off (`rd_blend_selftest_uber_blend_fixed`). The fixed-function blend is the default
   everywhere, so the exact paths are covered by opt-in runs: `rd_blend_selftest_blend_attachment`,
   `_blend_exact` and `_blend_storage` name the mode, and `rd_pixel_attachment`,
   `rd_fog_attachment`, `rd_present_attachment`, `rd_crt_attachment` and `rd_perf_attachment` run
   `rd_pixel_test`, `rd_fog_test`, `rd_present_test`, `rd_crt_test` and `rd_perf_test` under
   `ICO_RD_BLEND=attachment` with the same expectations and hashes the exact blend had as the
-  default (`port/render/CMakeLists.txt`).
+  default (`port/render/CMakeLists.txt`). `rd_pixel_uber` runs `rd_pixel_test` under
+  `ICO_RD_UBER=on` (GS state as shader data, [PIPELINES.md](PIPELINES.md#gs-state-as-data)): the
+  attachment read's expectations, its exact-mode matrix leaving out and counting the cells the
+  read draws its own way (the premultiplied subtracts' floor, DATE per primitive), and
+  `testDateStencil` checking the per-primitive DATE first. The pass-dump compare of the corpus
+  under `ICO_RD_UBER=on` is made against baselines made with `ICO_RD_BLEND=attachment
+  ICO_RD_UBER=off`: with `ICO_RD_UBER_PREMUL=0 ICO_RD_UBER_DATE=0` every target byte for byte at
+  the whole scales, as shipped only the premultiplied subtracts and the overlapping DATE draws
+  apart (a script of the release's evidence runs it; no ctest, the corpus is machine-local).
 - `rd_vuprepass_selftest_test.c` with `rd_vuprepass_selftest.cmake`: the VU vertex and triangle
   pre-passes' start-up self-test at Enhanced, 16:9, scale 2 and at Original, 4:3, 1x: the
   pre-pass left on (it passes on lavapipe), turned off when its first command's vertex records are
@@ -946,6 +959,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   every phone frame some fused at both phone settings; each pair's counts printed
   (`rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)). SKIP
   as `rd_vustage_ab`.
+- `rd_vumerge_ab.cmake` and `rd_vufuse_ab.cmake` take `-DBLEND_ENV=` (the blend both runs draw
+  with, `ICO_RD_BLEND=fixed` by default): `rd_vumerge_ab_uber`, `rd_vufuse_ab_uber` and their
+  `_pixel` twins on `rd_pixel`'s frames run them under `ICO_RD_UBER=on`, the VU draws through the
+  colour read, merged and fused (`port/render/rd_replay_vu.c` (`vuMergeDst`, `vuFuseVerdict`)).
 - `rd_vumerge_mali.cmake` (label `mali`): the dumps of `tools/vumerge_mali_dumps.txt` (the Mali-G52
   reporter's frame of issue 164 in `/primary/dev/ico-dumps/164/`, the two phone frames
   `rd_vufuse_ab` reads and a 2026-10-07 capture; a line is the dump, `expect=IN/GPU` and the
@@ -1118,8 +1135,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   matched for each path, MSAA counts, odd widths and [Full pixel](ARCHITECTURE.md#terms)
   (`rd_fog_selftest*`; the local read's first under `ICO_RD_FOG_PATH=local`,
   `rd_fog_selftest_local`). With `rd_date_selftest.cmake` and `ICO_RD_DATE_PATH=stencil`, DATE's
-  self-test, which the fog's first run runs first: `DATE: stencil path (self-test: stencil ok 4,
-  snapshot ok 4)` matched once (`rd_date_selftest`). The failure paths, under
+  self-test, which the fog's first run runs first: `DATE: stencil path (self-test: stencil ok 5,
+  snapshot ok 5)` matched once (`rd_date_selftest`; the fifth sample a DATM 1 command's own
+  overlap, the alpha before the draw), and under `ICO_RD_UBER=on` `DATE: colour read path
+  (self-test: colour read ok 5, stencil ok 5, snapshot ok 5)` (`rd_date_selftest_uber`: the
+  colour read's fifth sample the GS's per-primitive one). The failure paths, under
   `ICO_VK_FAKE_LIMITS=moltenvk` (the profile's Apple row: `fogLocal` and `dateStencil` the
   profile's own, not `[dev]`'s): with `ICO_RD_DATE_SABOTAGE=1`, `DATE: snapshot path (self-test:
   stencil fail ...` and `profile: DATE stencil off (self-test)` (`rd_date_selftest_sabotage`);
@@ -1418,7 +1438,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   2340x1080`, on the fake phone limits (`ICO_VK_FAKE_LIMITS=mali`) and again with the tile-based
   GPU's paths forced (`ICO_RD_DATE_PATH=stencil`, `ICO_RD_FOG_PATH=local`, `ICO_RD_BLUR_FOLD=1`;
   the fake limits drop the local read, so the two cannot be combined, and a device without local
-  read compares the desktop set again, which the test's output says). `--keys` walks the replay
+  read compares the desktop set again, which the test's output says), and with those paths under
+  GS state as shader data (`ICO_RD_UBER=on`: the collapsed set, config `uber`). `--keys` walks the replay
   with nothing drawn (`rd__pipeline_gather`), makes the keys it names and compares them with
   `rd__enumerate_reachable`; the test fails on a key the set lacks, which on a device is one
   first-use stall (`firstUseLine`), never a wrong picture. The union of the asked keys is left in
@@ -1474,7 +1495,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   class's largest set (its profile with local read and the fx plan, stand-in modules), the
   pre-pass off and every state static at 2.8125 x 2.41071, 1153 keys: the 2x set
   and the `vu_np_ps` keys (the DATE pass's twins of them too), each with its `vu_ps` key in the
-  set, under the same two bounds (`testTilerFracSet`), and a dump's menu text sheets loading as the renderer makes them, a sheet with
+  set, under the same two bounds (`testTilerFracSet`), GS state as shader data's planner and set
+  (`testUberSet`: a LERP, a premultiplied subtract, an unblended mask-7 pass and a DATE pass one
+  key through the read; the tiler set at the phone's fractional scale at least five times smaller
+  than the fixed-function one, no DATE key, the VU family at most a quarter, no plain twin of a key
+  the read draws, the counts and families printed), and a dump's menu text sheets loading as the renderer makes them, a sheet with
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never
