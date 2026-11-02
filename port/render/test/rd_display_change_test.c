@@ -18,6 +18,12 @@
  *             and neither replay after it makes one (RdPerfRecord.
  *             pipelineCreates 0, rd__pipeline_count unchanged); the second
  *             replay draws VU passes through vu_np_ps where it is loaded
+ *             The switch runs with the renderer's own thread (rd_thread.h;
+ *             not on OpenGL) and a display progress function
+ *             (rd_set_display_progress) that presents a blank frame as the
+ *             window's screen does: every call on the test's thread (the
+ *             game's), none inside a render-thread job, called when the
+ *             change made pipelines
  *   back      the Original preset at 1x again: no replay makes a pipeline;
  *             the second replay's draws, render passes, pipeline binds,
  *             blur folds, glow passes, no-planes passes, above-1x draws and
@@ -239,6 +245,26 @@ static void settings(RdSettings *st, bool enhanced)
     }
 }
 
+/* the display change's progress (rd_set_display_progress), as the window's
+   screen: where it was called, and a blank frame presented from it */
+static struct {
+    int calls, onRender, blanks;
+} s_prog;
+
+static int progress(void *ctx, uint32_t done, uint32_t total)
+{
+    (void)ctx;
+    (void)done;
+    (void)total;
+    s_prog.calls++;
+    s_prog.onRender += rd_thread_on_render();
+    if (s_prog.blanks == 0) {
+        s_prog.blanks++;
+        (void)rd_present_blank();
+    }
+    return 0;
+}
+
 /* the settings changed, then two frames: the first's rd_begin_frame applies
    them (Shot.beginMade: the pipelines the change made) */
 static void changeTo(bool enhanced, Shot *s)
@@ -302,9 +328,23 @@ int main(void)
     twoFrames(&start);
     checkNoneMade("the start at Original", &start);
 
+    /* the change with the renderer's own thread and a progress screen */
+    const bool thread = rhi_backend() != RHI_BACKEND_OPENGL && rd_thread_local_start(RD_THREAD_ON);
+    CHECK(thread || rhi_backend() == RHI_BACKEND_OPENGL, "the renderer's own thread did not start");
+    memset(&s_prog, 0, sizeof(s_prog));
+    rd_set_display_progress(progress, NULL);
     Shot enh;
     changeTo(true, &enh);
+    rd_set_display_progress(NULL, NULL);
+    if (thread) {
+        rd_thread_local_stop();
+    }
     const uint32_t madeEnh = enh.beginMade;
+    printf("Enhanced: the progress called %d times (%d on the render thread)%s\n", s_prog.calls,
+           s_prog.onRender, thread ? "" : ", without the renderer's own thread");
+    CHECK(s_prog.onRender == 0, "the display change's progress ran %d times on the render thread",
+          s_prog.onRender);
+    CHECK(madeEnh == 0 || s_prog.calls > 0, "%u pipelines made without a progress call", madeEnh);
     const float sx = g_rd.sceneSx, sy = g_rd.sceneSy;
     CHECK(sx != floorf(sx) || sy != floorf(sy), "Enhanced at %ux%u: scale %gx%g, not fractional",
           OUT_W, OUT_H, (double)sx, (double)sy);

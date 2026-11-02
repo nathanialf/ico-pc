@@ -34,9 +34,12 @@
  *                   while the game thread records; the picture's present
  *                   draws the batches collected.
  *   calls           rd__on_host's calls (the targets made again, the
- *                   display's pipelines, the movie's present, the fog's
- *                   probe) run there too, waited for: every GPU call moves
- *                   with no change where it is made.
+ *                   movie's present, the fog's probe) run there too,
+ *                   waited for: every GPU call moves with no change where
+ *                   it is made.  A display change's pipelines stay on the
+ *                   game thread with the render thread idle (rd_core.c
+ *                   onGameHost): their progress screen takes the window's
+ *                   events, which SDL gives the main thread only.
  *   retire          a GPU texture the game thread destroys is destroyed by
  *                   the render thread at the start of its next job, after
  *                   the submit of the list that may still use it.

@@ -102,7 +102,9 @@ runs on the host stack in the host FP mode (`port/render/rd.h` (`RdHostCall`);
 ([PLATFORM.md](PLATFORM.md#the-render-thread)) every picture is made there
 (`port/render/rd_thread.c`): the window's present posts `rd_present` whole (`rd_present_post`),
 the interpolation included, and `rd__on_host`'s calls, `rd__replay_frame`, `rd_read_display` and
-`rd_resize_output` run there with the game thread waiting (`rd__render_call`). A picture handed
+`rd_resize_output` run there with the game thread waiting (`rd__render_call`); a display change's
+pipelines stay on the game thread with the render thread idle (`onGameHost`: their progress screen
+pumps the window's events). A picture handed
 over owns the renderer's state until its walk and present's pass end (`rd__reads_done` in
 `rd__submit_frame`); every game-thread call that changes the frames, textures, meshes, targets or
 settings waits for that first (`rd__texlock_wait`), so the render thread reads the state as it

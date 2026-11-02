@@ -1142,7 +1142,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   fixed-function), and back at Original the second replay's draws, render passes, pipeline binds,
   blur folds, glow passes, no-planes passes, above-1x draws and crack fill passes are the fresh
   start's and DISPLAY is the fresh start's, byte for byte
-  ([DISPLAY.md](DISPLAY.md#video-options-and-presets), run-time changes). The window's half (the
+  ([DISPLAY.md](DISPLAY.md#video-options-and-presets), run-time changes). The switch runs with the
+  renderer's own thread on (not on OpenGL) and a display progress function that presents a blank
+  frame as the window's screen does: every call of it is on the test's thread, none inside a
+  render-thread job, and it is called when the change made pipelines. The window's half (the
   present allowance started again) has no test: the window is not run in the tests.
 - `rd_filter_test.c`: the model viewer's draw filter on synthetic keys (`rd_filter`).
 - `rd_fog_selftest_test.c` with `rd_fog_selftest.cmake`: the fog's self-test and probe; its log line

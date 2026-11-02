@@ -347,11 +347,17 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   picture's present draws the batches collected after its deferred text. The callbacks run on
   the render thread only inside a call the game thread waits for (the replay with the
   interpolation off, a movie's present).
-- Calls between pictures. `rd__on_host`'s calls (the targets made again, the display's pipelines,
-  the fog's probe, a movie's present, the replay with the interpolation off) run on the render
-  thread with the game thread waiting (`rd__render_call`), as do `rd_read_display` (a save's
-  picture, F11's PNG), `rd_resize_output` and every replay through `rd__replay_frame`. Every GPU
-  call the game's fiber causes therefore moves with no change where it is made.
+- Calls between pictures. `rd__on_host`'s calls (the targets made again, the fog's probe, a
+  movie's present, the replay with the interpolation off) run on the render thread with the game
+  thread waiting (`rd__render_call`), as do `rd_read_display` (a save's picture, F11's PNG),
+  `rd_resize_output` and every replay through `rd__replay_frame`. Every GPU call the game's fiber
+  causes therefore moves with no change where it is made. A display change's pipelines are the
+  exception: they are made on the game thread, on its host stack, with the render thread idle
+  (`port/render/rd_core.c` (`onGameHost`)), because their "Preparing graphics" screen
+  (`rd_set_display_progress`; `port/platform/window_host.c` (`display_progress`)) pumps the
+  window's events, which SDL allows on the main thread only, and a background event it takes parks
+  the render thread; the screen's pictures are posted to the render thread as any of the game
+  thread's, and the pipeline calls wait for it through the call guard.
 - The retire list. A GPU texture destroyed on the game thread (`rd_destroy_texture`, a temporary
   target's textures, a depth copy) is destroyed by the render thread at its next job, after the
   submit of the list that may still use it (`rd__retire_texture`).

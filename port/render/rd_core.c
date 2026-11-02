@@ -64,6 +64,16 @@ void rd_set_replay_gate(RdReplayGate gate)
     s_replayGate = gate;
 }
 
+/* fn(arg) on the host stack of the calling thread (rd_set_host_call) */
+static void onHostStack(void (*fn)(void *arg), void *arg)
+{
+    if (s_hostCall) {
+        s_hostCall(fn, arg);
+    } else {
+        fn(arg);
+    }
+}
+
 void rd__on_host(void (*fn)(void *arg), void *arg)
 {
     /* the window's render thread runs it between pictures, the game thread
@@ -71,11 +81,19 @@ void rd__on_host(void (*fn)(void *arg), void *arg)
     if (rd__render_call(fn, arg)) {
         return;
     }
-    if (s_hostCall) {
-        s_hostCall(fn, arg);
-    } else {
-        fn(arg);
-    }
+    onHostStack(fn, arg);
+}
+
+/* fn(arg) on the game thread's host stack with the render thread idle, never
+ * on the render thread: a call whose progress pumps the window's events
+ * (SDL's event calls are the main thread's), as a display change's
+ * pipelines do (rd_set_display_progress); its RHI calls wait for the render
+ * thread through the call guard, and the pictures its screen presents are
+ * posted there as any of the game thread's */
+static void onGameHost(void (*fn)(void *arg), void *arg)
+{
+    (void)rd_thread_drain();
+    onHostStack(fn, arg);
 }
 
 /* false in the game: a stub command is logged once and skipped; the tests
@@ -1960,9 +1978,10 @@ void rd_resume_frame(void)
     g_rd.discardOpen = true;
 }
 
-/* A display change's pipelines (rd__display_pipelines), on the host stack
- * as the driver's compiles need; arg non-NULL: the targets were made again
- * (the line even when nothing was missing) */
+/* A display change's pipelines (rd__display_pipelines), on the game
+ * thread's host stack as the driver's compiles need (onGameHost: the
+ * progress screen pumps the window's events); arg non-NULL: the targets
+ * were made again (the line even when nothing was missing) */
 static void displayPipelines(void *arg)
 {
     rd__display_pipelines(arg != NULL);
@@ -2002,7 +2021,7 @@ void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight)
         /* the scale the new width gives (aspect auto at the window's
            resolution): the pipelines it reaches, before a replay draws at
            it (rd__display_pipelines; a line only when it made some) */
-        rd__on_host(displayPipelines, NULL);
+        onGameHost(displayPipelines, NULL);
     }
 }
 
@@ -2347,7 +2366,7 @@ void rd_begin_frame(void)
         }
         if (g_rd.hasDevice) {
             static char recreatedMark;
-            rd__on_host(displayPipelines, recreated ? (void *)&recreatedMark : NULL);
+            onGameHost(displayPipelines, recreated ? (void *)&recreatedMark : NULL);
         }
     }
     /* A scene-sized texture made since the last frame did not fit
@@ -2365,7 +2384,7 @@ void rd_begin_frame(void)
             g_rd.sceneSy = ny;
             g_rd.sceneFellBack = true;
             rd__on_host(recreateTargets, NULL);
-            rd__on_host(displayPipelines, NULL); /* 3x halved is 1.5x: the twins */
+            onGameHost(displayPipelines, NULL); /* 3x halved is 1.5x: the twins */
             g_rd.interpFloor = g_rd.frameCounter + 1;
         }
     }
