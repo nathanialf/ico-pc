@@ -352,10 +352,11 @@ bool rd__replay_frame(const RdFrame *f, int keep, bool present)
     return r.ok;
 }
 
-/* a picture waits for its end when its result is read right after it */
+/* a picture waits for its end when its result is read right after it, and
+ * every picture under a host whose posts all wait (sync) */
 static bool pictureWaits(void)
 {
-    return s_hold || rd__capture_armed() || rd__blended_dump_armed();
+    return s_hold || s_host.sync || rd__capture_armed() || rd__blended_dump_armed();
 }
 
 /* the picture before finished: its result, the wait counted (the
@@ -626,7 +627,7 @@ bool rd_thread_mode_parse(const char *s, RdThreadMode *out)
 bool rd_thread_local_start(RdThreadMode mode)
 {
     static const RhiCallGuard guard = {NULL, locBusy, locWait};
-    static const RdThreadHost host = {NULL, locPost, locDrain};
+    const RdThreadHost host = {NULL, locPost, locDrain, mode == RD_THREAD_SYNC};
     if (mode == RD_THREAD_OFF || s_loc.th != NULL) {
         return false;
     }

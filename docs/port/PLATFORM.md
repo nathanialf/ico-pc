@@ -396,7 +396,9 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
 `[dev] render_thread` (config.toml, or `render_thread` in `ico-pc.ini`) picks it: `auto` (the
 default) and `on` run it, `off` makes every picture on the game thread as before, `sync` runs it
 with the game thread waiting for each picture (the A/B: the same pictures in the same order as
-`off`) (`port/platform/frame_mailbox.c` (`fm_mode_choose`)). The start says which:
+`off`) (`port/platform/frame_mailbox.c` (`fm_mode_choose`)). In `sync` no picture is handed over:
+each is posted as one that waits (`RdThreadHost.sync`), so `rd_submit_async` stays false and the
+window paces it by the present's own blocked time, as with the thread off. The start says which:
 
 ```
 window: render thread: on (interpolation, walk, submit and present off the game thread; [dev] render_thread = off keeps them on it; Vulkan, [dev] render_thread = auto)

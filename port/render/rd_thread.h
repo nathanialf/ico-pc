@@ -62,11 +62,15 @@ typedef struct RdFrame RdFrame;
  * heartbeat's picture count), else a call between pictures; wait: returns
  * once it ran.  False when not taken (no thread, parked, the queue full):
  * the caller runs fn itself.  drain: returns once everything posted has
- * finished, the ns it waited. */
+ * finished, the ns it waited.  sync: every post waits for its job
+ * ([dev] render_thread = sync), so no picture is handed over: each is
+ * posted as one that waits (rd_submit_async false, the present's own
+ * blocked time the window's, as with the thread off). */
 typedef struct RdThreadHost {
     void *user;
     bool (*post)(void *user, void (*fn)(void *arg), void *arg, bool picture, bool wait);
     uint64_t (*drain)(void *user);
+    bool sync;
 } RdThreadHost;
 
 /* Set (or NULL: removed) on the game thread with the render thread idle;

@@ -1542,7 +1542,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   thread without waiting (`rd__replay_frame_async`) while the test's thread, the game's side,
   records the next frame through the texture cache and updates a texture of its own (each change
   waiting for the replay's reads, `rd__texlock_wait`): every replay run there and SCENE as drawn on
-  one thread; the counts printed (not on OpenGL). It is the render thread's program to run under
+  one thread; the counts printed (not on OpenGL). `threadSync`: in the sync mode a picture is
+  waited for and not counted as handed over (`rd_submit_async` false), with the thread on it is
+  until the drain (not on OpenGL). It is the render thread's program to run under
   ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
   build folder of its own (`build-host/linux-x64-tsan`), `--target rd_tex_test`, run with
   `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`; a report is a failure.

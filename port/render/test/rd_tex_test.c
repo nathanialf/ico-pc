@@ -60,6 +60,11 @@
  *            through the same packets: the sprites show the replacements'
  *            texels at the same place; a 1024x1024 replacement (over the
  *            ring's 4 MB, its own upload buffer) reads back exactly.
+ *   thread   (not OpenGL) the frame replayed on the renderer's own thread
+ *            while this thread records and updates (threadPixels: the
+ *            same SCENE); in sync mode a picture is waited for and not
+ *            counted as handed over, with the thread on it is until the
+ *            drain (threadSync).
  *
  * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU
  * checks passed).
@@ -68,6 +73,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_submit.h"
 #include "rd_tex.h"
 #include "texpack.h"
 #include "vk/rhi_vk.h"
@@ -1201,6 +1207,36 @@ static void threadPixels(void)
     rd_thread_local_stop();
 }
 
+/* [dev] render_thread = sync (rd_thread.h RdThreadHost.sync): a picture is
+ * posted as one that waits and is not counted as handed over
+ * (rd_submit_async false after it, as with the thread off, so the window
+ * paces it by the present's own blocked time); with the thread on it is,
+ * until the drain */
+static void threadSync(void)
+{
+    if (rhi_backend() == RHI_BACKEND_OPENGL) {
+        return;
+    }
+    for (int on = 0; on < 2; on++) {
+        if (!rd_thread_local_start(on ? RD_THREAD_ON : RD_THREAD_SYNC)) {
+            CHECK(0, "render thread %s: the renderer's own thread could not start",
+                  on ? "on" : "sync");
+            return;
+        }
+        gif_HostFrameReset();
+        dl_Clear();
+        recordFrame();
+        const RdFrame *f = rd__last_frame();
+        const bool posted = f != NULL && rd__replay_frame_async(f, 0, false);
+        const bool handed = rd_submit_async();
+        (void)rd_thread_drain();
+        CHECK(posted && handed == (on != 0) && !rd_submit_async(),
+              "render thread %s: the picture %s handed over (posted %d)", on ? "on" : "sync",
+              handed ? "counted as" : "not counted as", posted);
+        rd_thread_local_stop();
+    }
+}
+
 /* ----------------------------------------------------------------- R8 */
 
 static uint8_t r8At(int x, int y)
@@ -1533,6 +1569,7 @@ int main(void)
     recordFrame();
     checkPixels();
     threadPixels();
+    threadSync();
     r8Pixels();
     replacementPixels();
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",

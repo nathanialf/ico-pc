@@ -272,7 +272,7 @@ static int rt_heartbeat(unsigned long long *seq, unsigned long long *done)
 FmMode ico_render_thread_start(void)
 {
     static const RhiCallGuard guard = {NULL, rt_busy, rt_wait};
-    static const RdThreadHost host = {NULL, rt_host_post, rt_host_drain};
+    RdThreadHost host = {NULL, rt_host_post, rt_host_drain, false};
     const RhiLimits *l = rhi_limits();
     const char *why = "";
     FmMode mode;
@@ -331,6 +331,7 @@ FmMode ico_render_thread_start(void)
         s_rt.tid = SDL_GetThreadID(s_rt.thread);
         s_rt.mode = mode;
         rhi_set_call_guard(&guard);
+        host.sync = mode == FM_MODE_SYNC; /* every picture waited: none counted as handed over */
         rd_set_thread_host(&host);
         ico_diag_set_render_heartbeat(rt_heartbeat);
     }
