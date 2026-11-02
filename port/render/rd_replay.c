@@ -5694,7 +5694,7 @@ bool rd__replay_frame_here(const RdFrame *f, int keep, bool present)
     if (present) {
         /* the stopped set's background batch (rd_pipeline.c), after the
            picture: its time less the pipelines made in it */
-        rd__pipe_finish_tick(ms - (rd__pipeline_create_ms() - made0));
+        rd__submit_pipe_tick(ms - (rd__pipeline_create_ms() - made0)); /* rd_submit.h */
     }
     return ok;
 }

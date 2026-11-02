@@ -601,7 +601,7 @@ static void threadSubmitCell(const Ctx *c)
 
     /* the same list into tgt, its end and submit on another thread */
     ThreadSubmit job = {threadCellRecord(tgt, pipe, ring, FS), 0};
-    const RhiCallGuard guard = {NULL, submitGuardBusy, submitGuardWait};
+    const RhiCallGuard guard = {NULL, submitGuardBusy, submitGuardWait, NULL};
     s_guardWaits = 0;
     rhi_set_call_guard(&guard);
     __atomic_store_n(&s_submitBusy, 1, __ATOMIC_RELEASE);

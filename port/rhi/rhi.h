@@ -1308,11 +1308,16 @@ void rhi_get_stats(RhiStats *out);
  * as rhi_call_guard_snapshot took them (the hand-over's) instead of the
  * ones the other thread is writing.  NULL: no guard (the default; every
  * call runs at once).  Set and cleared on the thread that records, with
- * the other thread idle. */
+ * the other thread idle.  stale(user) (NULL: busy's answer) is what
+ * rhi_get_stats asks instead of busy: another thread may be writing the
+ * counters now; a thread whose busy is true only for work of its own still
+ * to hand over (the render thread's list kept for the submit thread,
+ * port/render/rd_submit_thread.h) reads them live. */
 typedef struct RhiCallGuard {
     void *user;
     bool (*busy)(void *user);
     void (*wait)(void *user);
+    bool (*stale)(void *user);
 } RhiCallGuard;
 
 void rhi_set_call_guard(const RhiCallGuard *guard);

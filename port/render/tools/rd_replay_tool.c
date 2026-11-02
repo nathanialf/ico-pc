@@ -34,7 +34,10 @@
  * interpolation and the renderer's calls on a thread of their own, as the
  * window's render thread does (port/render/rd_thread.h): sync waits for
  * each, on hands the pictures over and reads back after them (the
- * rd_thread_ab test: the same PNGs as off, byte for byte).  Not with
+ * rd_thread_ab test: the same PNGs as off, byte for byte; a presented
+ * picture without --pass-dump, --occlusion, --save-blended or --dump-temps
+ * goes as the window's presents go, its submit and present on the submit
+ * thread, rd_submit_thread.h).  Not with
  * OpenGL (its context stays on the main thread; the line says so and the
  * replays stay on it).
  *
@@ -2343,7 +2346,17 @@ int main(int argc, char **argv)
         rd__set_screen_merge(false);
         rd__occlusion_arm(0);
     }
-    const bool replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
+    bool replayed;
+    if (rd_thread_host_on() && pw != 0 && !passDir && !occlusion && !saveBlended && !tempsDir) {
+        /* --render-thread: the presented picture handed over as the
+           window's are (sync: waited), its submit and present on the
+           submit thread (rd_submit_thread.h), read back after the drain */
+        (void)rd__replay_frame_async(rf, (int)rf->keep, true);
+        (void)rd_thread_drain();
+        replayed = rd_thread_last_ok();
+    } else {
+        replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
+    }
     if (occlusion) {
         /* the counts before anything else recycles a frame slot */
         RdOccResult occ;

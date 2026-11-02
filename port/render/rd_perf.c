@@ -808,9 +808,13 @@ void rd__perf_readback_ms(double ms)
     s_readbackMs += ms;
 }
 
+/* g_rdPerf is a replay's record being made: rd__perf_begin to rd__perf_end */
+static bool s_recOpen;
+
 void rd__perf_begin(const RdFrame *f, int keep, bool present)
 {
     memset(&g_rdPerf, 0, sizeof(g_rdPerf));
+    s_recOpen = true;
     g_rdPerf.replay = ++s_replay;
     g_rdPerf.frame = f ? f->number : 0;
     g_rdPerf.keep = (uint8_t)(keep != 0);
@@ -851,6 +855,28 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
         s_passLastMs = s_t0;
     }
 #endif
+}
+
+void rd__perf_submit_times(uint32_t replay, double submitMs, double presentMs)
+{
+    if (replay == 0) {
+        return;
+    }
+    if (g_rdPerf.replay == replay) {
+        g_rdPerf.submitMs = submitMs;
+        g_rdPerf.presentMs = presentMs;
+        if (!s_recOpen) {
+            g_rdPerf.totalMs += submitMs + presentMs; /* rd_last_replay_ms */
+        }
+    }
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        if (s_pendingValid[i] && s_pending[i].replay == replay) {
+            /* rd__perf_end left it here: the submit's times were not in it */
+            s_pending[i].submitMs = submitMs;
+            s_pending[i].presentMs = presentMs;
+            s_pending[i].totalMs += submitMs + presentMs;
+        }
+    }
 }
 
 /* timestamps of the slot just recycled: the replay RHI_FRAMES_IN_FLIGHT ago */
@@ -967,6 +993,7 @@ static void walkBreakdown(const RdPerfRecord *r)
 void rd__perf_end(void)
 {
     RdPerfRecord *r = &g_rdPerf;
+    s_recOpen = false;
     r->totalMs = rd__now_ms() - s_t0 + r->interpMs;
     r->pipelineCreates = rd__stats_here()->pipelineCreates - s_pipelineCreates;
     r->a1xDraws = g_rd.above1xDraws - s_a1xDraws;

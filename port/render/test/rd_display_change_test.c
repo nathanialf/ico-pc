@@ -363,7 +363,7 @@ int main(void)
           s_prog.onRender);
     CHECK(madeEnh == 0 || s_prog.calls > 0, "%u pipelines made without a progress call", madeEnh);
     {
-        const RhiCallGuard g = {NULL, guardBusy, guardWait};
+        const RhiCallGuard g = {NULL, guardBusy, guardWait, NULL};
         rhi_set_call_guard(&g);
         rhi_call_guard_settle();
         rhi_set_call_guard(NULL);

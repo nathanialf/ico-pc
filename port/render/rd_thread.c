@@ -7,6 +7,7 @@
 #include "ico_thread.h"
 #include "rd_internal.h"
 #include "rd_submit.h"
+#include "rd_submit_thread.h"
 
 static RdThreadHost s_host;
 static bool s_on;
@@ -146,6 +147,9 @@ static void runTramp(Tramp *t, bool picture)
     t->fn(t->arg);
     rd__reads_done();
     if (outer) {
+        /* the list kept for the submit thread (rd_submit_thread.h): its
+         * end, submit and present there, this thread free for the next */
+        rd__submit_post_pending();
         rd__overlay_hand_over_drop(); /* a picture whose present drew nothing */
         lk();
         publishLocked();
@@ -172,6 +176,7 @@ void rd_set_thread_host(const RdThreadHost *host)
 {
     if (s_on) {
         (void)rd_thread_drain();
+        rd__submit_thread_stop(); /* everything posted to it finished first */
         /* the render thread's counts back into g_rd.stats: the counters
          * the window takes deltas of keep going */
         g_rd.stats.draws += s_rStats.draws;
@@ -205,6 +210,10 @@ void rd_set_thread_host(const RdThreadHost *host)
         s_lastOk = true;
         s_lastPresentFrame = 0;
         s_on = true;
+        if (host->submit && !host->sync) {
+            /* the pictures' submit and present on a thread of their own */
+            (void)rd__submit_thread_start(host->submitBegin, host->user);
+        }
     }
 }
 
@@ -218,7 +227,10 @@ bool rd_thread_on_render(void)
     return t_onR != 0;
 }
 
-uint64_t rd_thread_drain(void)
+/* the render thread's jobs finished (the submit thread's may still run:
+ * a present's wait for the picture before, rd_present_post); 0 and
+ * nothing done on the render thread */
+static uint64_t renderDrain(void)
 {
     if (!s_on || t_onR) {
         return 0;
@@ -233,6 +245,27 @@ uint64_t rd_thread_drain(void)
         s_asyncPresent = false;
     }
     return ns;
+}
+
+uint64_t rd_thread_drain(void)
+{
+    if (!s_on) {
+        return 0;
+    }
+    /* the render thread's jobs, then the submit thread's (on the render
+     * thread: the submit thread's alone, its list kept included) */
+    const uint64_t ns = renderDrain();
+    return ns + rd_thread_submit_drain();
+}
+
+bool rd__thread_handed(void)
+{
+    return t_onR != 0 && t_handed;
+}
+
+bool rd_thread_last_ok(void)
+{
+    return s_lastOk;
 }
 
 uint32_t rd_thread_failed_presents(void)
@@ -264,9 +297,11 @@ uint64_t rd_thread_take_reads_ns(void)
 
 uint64_t rd_thread_take_present_ns(void)
 {
-    const uint64_t ns = t_presentNs;
+    uint64_t ns = t_presentNs;
     t_presentNs = 0;
-    return ns;
+    /* and the submit thread's presents finished since (rd_submit_thread.h) */
+    const uint64_t sub = rd_thread_submit_take_present_ns();
+    return sub > ns ? sub : ns;
 }
 
 void rd__thread_note_present(double ms)
@@ -409,7 +444,9 @@ static bool pictureWaits(void)
  * window's display wait, present_once) */
 void rd__thread_picture_begin(void)
 {
-    s_waitedNs += rd_thread_drain();
+    /* the render thread's picture before: its submit and present may go on
+     * on the submit thread (rd_submit_thread.h) */
+    s_waitedNs += renderDrain();
 }
 
 bool rd__replay_frame_async(const RdFrame *f, int keep, bool present)
@@ -479,7 +516,7 @@ double rd__thread_clock_raw(void)
  * (fresh) or a further one's */
 static void presentDrain(bool fresh)
 {
-    const uint64_t ns = rd_thread_drain();
+    const uint64_t ns = renderDrain(); /* the submit thread's job may go on */
     s_waitedNs += ns;
     if (ns != 0) {
         lk();
@@ -577,6 +614,16 @@ void rd__thread_note_replay(double walkMs, double submitMs, double waitMs)
     ulk();
 }
 
+void rd__thread_note_submit(double ms)
+{
+    if (!s_on) {
+        return;
+    }
+    lk();
+    s_block.submitMs += ms;
+    ulk();
+}
+
 void rd__thread_note_interp(double ms)
 {
     if (!s_on || !t_onR) {
@@ -668,16 +715,39 @@ static uint64_t locDrain(void *u)
     return (uint64_t)((ico_thread_now_ms() - t0) * 1e6);
 }
 
-/* the RHI call guard: a call from any other thread waits for the jobs */
+/* the RHI call guard: a call from any other thread waits for the jobs;
+ * the submit thread's calls never wait, the render thread's wait for the
+ * submit thread (rd_submit_thread.h) */
 static bool locBusy(void *u)
 {
     (void)u;
-    return t_onR == 0 && __atomic_load_n(&s_loc.busy, __ATOMIC_ACQUIRE) != 0;
+    if (rd_thread_on_submit()) {
+        return false;
+    }
+    if (t_onR != 0) {
+        return rd_thread_submit_busy();
+    }
+    return __atomic_load_n(&s_loc.busy, __ATOMIC_ACQUIRE) != 0 || rd_thread_submit_busy();
+}
+
+static bool locStale(void *u)
+{
+    (void)u;
+    if (rd_thread_on_submit()) {
+        return false;
+    }
+    if (t_onR != 0) {
+        return rd_thread_submit_stale();
+    }
+    return locBusy(u);
 }
 
 static void locWait(void *u)
 {
-    (void)locDrain(u);
+    if (t_onR == 0) {
+        (void)locDrain(u);
+    }
+    (void)rd_thread_submit_drain();
 }
 
 bool rd_thread_mode_parse(const char *s, RdThreadMode *out)
@@ -699,8 +769,8 @@ bool rd_thread_mode_parse(const char *s, RdThreadMode *out)
 
 bool rd_thread_local_start(RdThreadMode mode)
 {
-    static const RhiCallGuard guard = {NULL, locBusy, locWait};
-    const RdThreadHost host = {NULL, locPost, locDrain, mode == RD_THREAD_SYNC};
+    static const RhiCallGuard guard = {NULL, locBusy, locWait, locStale};
+    const RdThreadHost host = {NULL, locPost, locDrain, mode == RD_THREAD_SYNC, true, NULL};
     if (mode == RD_THREAD_OFF || s_loc.th != NULL) {
         return false;
     }

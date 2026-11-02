@@ -20,8 +20,15 @@
  *                   state the render thread reads is therefore the state
  *                   the game thread had when it posted, as if the picture
  *                   ran there.
+ *   the submit      a picture handed over has its list ended and
+ *                   submitted and its image presented on the submit thread
+ *                   (rd_submit_thread.h; Vulkan and Direct3D 12): its job
+ *                   here ends with its walk, and the next picture's
+ *                   interpolation runs while the submit thread works; its
+ *                   first graphics call waits for that thread.
  *   one picture     a picture waits for the one before to finish (the
- *                   drain); a picture whose capture or blended dump is
+ *                   drain: the render thread's job, not the submit
+ *                   thread's); a picture whose capture or blended dump is
  *                   armed, every picture while rd_submit_hold is on, and
  *                   every replay through rd__replay_frame wait for their
  *                   end.  The drain is not what keeps the frames apart:
@@ -73,12 +80,20 @@ typedef struct RdFrame RdFrame;
  * finished, the ns it waited.  sync: every post waits for its job
  * ([dev] render_thread = sync), so no picture is handed over: each is
  * posted as one that waits (rd_submit_async false, the present's own
- * blocked time the window's, as with the thread off). */
+ * blocked time the window's, as with the thread off).  submit: the
+ * pictures handed over are ended, submitted and presented on the submit
+ * thread (rd_submit_thread.h; not with sync), the host's call guard asking
+ * rd_thread_submit_busy, rd_thread_submit_stale and rd_thread_submit_drain
+ * as that header says; submitBegin(user) runs first on that thread (its
+ * priority; NULL: nothing).  drain is the render thread's own:
+ * rd_thread_drain waits for the submit thread after it. */
 typedef struct RdThreadHost {
     void *user;
     bool (*post)(void *user, void (*fn)(void *arg), void *arg, bool picture, bool wait);
     uint64_t (*drain)(void *user);
     bool sync;
+    bool submit;
+    void (*submitBegin)(void *user);
 } RdThreadHost;
 
 /* Set (or NULL: removed) on the game thread with the render thread idle;
@@ -87,9 +102,13 @@ void rd_set_thread_host(const RdThreadHost *host);
 bool rd_thread_host_on(void);
 /* The calling thread is running one of the render thread's jobs */
 bool rd_thread_on_render(void);
-/* Everything posted has finished (the game thread; 0 and nothing done on
- * the render thread or without a host); the ns waited */
+/* Everything posted has finished, the submit thread's jobs too (the game
+ * thread; on the render thread the submit thread's alone, its list kept
+ * for it included; 0 and nothing done without a host); the ns waited */
 uint64_t rd_thread_drain(void);
+/* The result of the last picture rd_present_post or rd__replay_frame_async
+ * handed over, once a drain after it returned (the replay tool) */
+bool rd_thread_last_ok(void);
 
 /* The present on the render thread (the window's present_once): rd_present
  * (alpha) whole there, the interpolation included; returns at once unless
@@ -165,6 +184,12 @@ void rd_thread_local_want(RdThreadMode mode);
 /* The game thread: the render thread's reads of a picture handed over have
  * ended (texLock; nothing on the render thread or without a host) */
 void rd__texlock_wait(void);
+/* The render thread inside a picture's job handed over whose reads are
+ * still open (rd__submit_defer asks before rd__reads_done) */
+bool rd__thread_handed(void);
+/* The submit thread's time of a picture (its submit and present), for the
+ * block, on the thread that took it (rd_submit_thread.c) */
+void rd__thread_note_submit(double ms);
 /* The render thread: this job's reads of the renderer's state end (the
  * game thread's calls go on); once a job, later calls do nothing */
 void rd__reads_done(void);

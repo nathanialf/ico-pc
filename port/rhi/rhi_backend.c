@@ -584,7 +584,8 @@ bool rhi_readback_texture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t 
 
 void rhi_get_stats(RhiStats *out)
 {
-    if (s_guardOn && s_guard.busy(s_guard.user)) {
+    if (s_guardOn &&
+        (s_guard.stale != NULL ? s_guard.stale(s_guard.user) : s_guard.busy(s_guard.user))) {
         *out = s_guardStats; /* the hand-over's counters (rhi.h rhi_set_call_guard) */
         return;
     }

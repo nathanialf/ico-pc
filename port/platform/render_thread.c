@@ -13,6 +13,7 @@
 #include "diag_host.h"
 #include "pace_policy.h"
 #include "rd.h"
+#include "rd_submit_thread.h"
 #include "rd_thread.h"
 #include "rhi.h"
 
@@ -190,20 +191,46 @@ static int SDLCALL rt_main(void *u)
     return 0;
 }
 
-/* the RHI guard (rhi.h rhi_set_call_guard): busy on any thread but this one
-   while a job runs, and with OpenGL while the context is not that thread's */
-static bool rt_busy(void *u)
+/* the render thread's part of the guard: a job runs, or with OpenGL the
+   context is not the game thread's */
+static bool rt_render_busy(void)
 {
-    (void)u;
-    if (SDL_GetCurrentThreadID() == s_rt.tid) {
-        return false;
-    }
     return __atomic_load_n(&s_rt.busy, __ATOMIC_ACQUIRE) != 0 || (s_gl.on && gl_owner() != GL_GAME);
 }
 
-uint64_t ico_render_thread_drain(void)
+/* the RHI guard (rhi.h rhi_set_call_guard): busy on any thread but this one
+   while a job runs, and with OpenGL while the context is not that thread's;
+   the submit thread's (rd_submit_thread.h) calls never wait, this thread's
+   wait for the submit thread's work, every other thread's for both */
+static bool rt_busy(void *u)
 {
-    if (s_rt.thread == NULL || !rt_busy(NULL)) {
+    (void)u;
+    if (rd_thread_on_submit()) {
+        return false;
+    }
+    if (SDL_GetCurrentThreadID() == s_rt.tid) {
+        return rd_thread_submit_busy();
+    }
+    return rt_render_busy() || rd_thread_submit_busy();
+}
+
+/* rhi_get_stats's question: the counters written by another thread now */
+static bool rt_stale(void *u)
+{
+    (void)u;
+    if (rd_thread_on_submit()) {
+        return false;
+    }
+    if (SDL_GetCurrentThreadID() == s_rt.tid) {
+        return rd_thread_submit_stale();
+    }
+    return rt_busy(u);
+}
+
+/* the render thread's jobs finished (the submit thread's may go on) */
+static uint64_t rt_drain_render(void)
+{
+    if (s_rt.thread == NULL || !rt_render_busy()) {
         return 0;
     }
     const Uint64 t0 = SDL_GetTicksNS();
@@ -218,6 +245,17 @@ uint64_t ico_render_thread_drain(void)
     __atomic_fetch_add(&s_rt.slotWaits, 1u, __ATOMIC_RELAXED);
     __atomic_fetch_add(&s_rt.slotWaitNs, waited, __ATOMIC_RELAXED);
     return waited;
+}
+
+uint64_t ico_render_thread_drain(void)
+{
+    if (s_rt.thread == NULL) {
+        return 0;
+    }
+    /* the render thread idle first: only it posts to the submit thread */
+    const uint64_t waited = rt_drain_render();
+
+    return waited + rd_thread_submit_drain();
 }
 
 /* OpenGL: the context to the calling thread (the render thread idle) */
@@ -242,6 +280,10 @@ static void gl_take(void)
 static void rt_wait(void *u)
 {
     (void)u;
+    if (SDL_GetCurrentThreadID() == s_rt.tid) {
+        (void)rd_thread_submit_drain(); /* its list kept for the submit thread first */
+        return;
+    }
     (void)ico_render_thread_drain();
     if (s_gl.on && gl_owner() != GL_GAME) {
         gl_take();
@@ -257,9 +299,10 @@ bool ico_render_thread_post(void (*fn)(void *arg), void *arg, FmJobKind kind, bo
         gl_unbind(); /* the render thread makes it current for the job */
     }
     SDL_LockMutex(s_rt.lock);
-    if (fm_idle(&s_rt.mb)) {
+    if (fm_idle(&s_rt.mb) && !rd_thread_submit_stale()) {
         /* the counters as the hand-over leaves them (rhi_get_stats while
-           the job runs); this thread alone is in the RHI now */
+           the job runs); this thread alone is in the RHI now (with the
+           submit thread at work, the last ones kept) */
         rhi_call_guard_snapshot();
     }
     const uint64_t seq = fm_post(&s_rt.mb, fn, arg, kind);
@@ -291,23 +334,39 @@ static bool rt_host_post(void *u, void (*fn)(void *arg), void *arg, bool picture
 static uint64_t rt_host_drain(void *u)
 {
     (void)u;
-    return ico_render_thread_drain();
+    return rt_drain_render(); /* rd_thread_drain waits for the submit thread after it */
 }
 
-/* diag_host.h ico_diag_set_render_heartbeat: no lock (the watchdog's thread) */
+/* the submit thread's first call (rd_submit_thread.h): this thread's priority */
+static void rt_submit_begin(void *u)
+{
+    (void)u;
+    if (!SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_HIGH)) {
+        fprintf(stderr, "window: submit thread: the high priority was refused (%s)\n",
+                SDL_GetError());
+    }
+}
+
+/* diag_host.h ico_diag_set_render_heartbeat: no lock (the watchdog's
+   thread); with no picture in progress here, the submit thread's job still
+   to finish is the last picture's (its submit and present) */
 static int rt_heartbeat(unsigned long long *seq, unsigned long long *done)
 {
     const Uint64 since = __atomic_load_n(&s_rt.beatSince, __ATOMIC_ACQUIRE);
 
     *seq = since != 0 ? __atomic_load_n(&s_rt.beatSeq, __ATOMIC_RELAXED) : 0;
     *done = __atomic_load_n(&s_rt.beatDone, __ATOMIC_ACQUIRE);
+    if (since == 0 && *done != 0 && rd_thread_submit_unfinished()) {
+        *seq = *done;
+        *done = *seq - 1;
+    }
     return 1;
 }
 
 FmMode ico_render_thread_start(void)
 {
-    static const RhiCallGuard guard = {NULL, rt_busy, rt_wait};
-    RdThreadHost host = {NULL, rt_host_post, rt_host_drain, false};
+    static const RhiCallGuard guard = {NULL, rt_busy, rt_wait, rt_stale};
+    RdThreadHost host = {NULL, rt_host_post, rt_host_drain, false, true, rt_submit_begin};
     const RhiLimits *l = rhi_limits();
     const char *why = "";
     FmMode mode;
@@ -400,9 +459,9 @@ void ico_render_thread_stop(void)
     }
     /* nothing more handed over: the renderer and the RHI back on this
        thread alone (the textures still to retire destroyed here) */
-    rd_set_thread_host(NULL);
-    rhi_set_call_guard(NULL);
     ico_diag_set_render_heartbeat(NULL);
+    rd_set_thread_host(NULL); /* the submit thread ended too */
+    rhi_set_call_guard(NULL);
     SDL_LockMutex(s_rt.lock);
     fm_quit(&s_rt.mb);
     SDL_BroadcastCondition(s_rt.cond);
@@ -436,6 +495,8 @@ void ico_render_thread_park(void)
         SDL_WaitCondition(s_rt.cond, s_rt.lock);
     }
     SDL_UnlockMutex(s_rt.lock);
+    /* and the submit thread's last present, before the surface goes */
+    (void)rd_thread_submit_drain();
     if (s_lines++ < 16) {
         fprintf(stderr, "window: render thread: parked (the pictures are submitted and presented "
                         "on the game thread until it goes on)\n");
@@ -508,14 +569,34 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
     const unsigned held = s_rt.held, heldLate = s_rt.heldLate;
     const unsigned heldOverrun = s_rt.heldOverrun, heldBehind = s_rt.heldBehind;
     RdThreadBlock tb;
+    RdSubmitBlock sb;
     unsigned closes;
     double closeMs, closeMaxMs;
-    char rt[1024];
+    char rt[1024], st[384];
 
     s_rt.held = s_rt.heldLate = s_rt.heldOverrun = s_rt.heldBehind = 0;
 
     rd_thread_block_take(&tb);
+    rd_thread_submit_block_take(&sb);
     rd_frame_close_take(&closes, &closeMs, &closeMaxMs);
+    /* the submit thread (rd_submit_thread.h): per picture its submit and
+       present, the most pictures queued and running at once, the render
+       thread's waits for it (its next picture's first graphics call) and
+       the others' (the game thread's drains), the lists the render thread
+       ended and submitted itself (a call of its own needed the backend
+       first) */
+    if (rd_thread_submit_on()) {
+        snprintf(st, sizeof(st),
+                 "; submit thread: %.1f ms a picture (submit %.1f, present %.1f; %u pictures, "
+                 "longest %.1f ms), queue depth max %u, the render thread waited for it %u times "
+                 "(%.1f ms), the others %u times (%.1f ms, longest %.1f ms), %u submitted on the "
+                 "render thread",
+                 sb.submitMs + sb.presentMs, sb.submitMs, sb.presentMs, sb.jobs, sb.longestMs,
+                 sb.depthMax, sb.renderWaits, sb.renderWaitMs, sb.waits - sb.renderWaits,
+                 sb.waitMs - sb.renderWaitMs, sb.waitMaxMs, sb.onRender);
+    } else {
+        snprintf(st, sizeof(st), "; submit thread: off");
+    }
     if (s_rt.thread != NULL) {
         FmBlock b;
 
@@ -557,9 +638,9 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
             "window: game thread: step %.1f ms (closing a frame %.1f ms of it, longest %.1f ms, "
             "%u frames), pump %.1f ms, slot waits %u (%.1f ms; %u (%.1f ms) by a new frame's "
             "present, %u (%.1f ms) by a further present's, %u other), read waits %u (%.1f ms, "
-            "longest %.1f ms); %s\n",
+            "longest %.1f ms); %s%s\n",
             stepMs, closeMs, closeMaxMs, closes, pumpMs, waits, (double)waitNs / 1e6, tb.freshWaits,
             tb.freshWaitMs, tb.furtherWaits, tb.furtherWaitMs,
             waits > byPresents ? waits - byPresents : 0u, tb.readWaits, tb.readWaitMs,
-            tb.readWaitMaxMs, rt);
+            tb.readWaitMaxMs, rt, st);
 }

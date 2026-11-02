@@ -2447,6 +2447,11 @@ void rd__present_finish(void)
     }
 }
 
+bool rd__present_will_show(void)
+{
+    return s_window && s_backbuffer.id;
+}
+
 void rd__present_shutdown(void)
 {
     if (g_rd.presentLines.id) {

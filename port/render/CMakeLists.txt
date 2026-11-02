@@ -109,6 +109,15 @@ add_executable(rd_pipe_finish_test test/rd_pipe_finish_test.c)
 target_compile_options(rd_pipe_finish_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(rd_pipe_finish_test PRIVATE ico_pipe_finish)
 
+# rd_submit_queue_test: the submit thread's queue (rd_submit_queue.h): jobs
+# in order, at most RD_SUBMIT_DEPTH queued and running, the running job
+# counted until it finishes, the finished times taken oldest first (the
+# oldest dropped past the depth), the present time taken once, the waits
+# and the block's means (CPU only)
+add_executable(rd_submit_queue_test test/rd_submit_queue_test.c rd_submit_queue.c)
+target_include_directories(rd_submit_queue_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(rd_submit_queue_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+
 # ico_gltf: glTF 2.0 for model packs (gltf.h), the dump's
 # .gltf + .bin writer and the .gltf/.glb reader.  CPU only, built in every
 # configuration: JSON through ico_json, files through host_fs (UTF-8 paths).
@@ -142,6 +151,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_bisect_plan COMMAND rd_bisect_plan_test)
     add_test(NAME rd_cache_name COMMAND rd_cache_name_test)
     add_test(NAME rd_pipe_finish COMMAND rd_pipe_finish_test)
+    add_test(NAME rd_submit_queue COMMAND rd_submit_queue_test)
     add_test(NAME gltf COMMAND gltf_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME texpack_disc COMMAND texpack_disc_test "${ICO_DISC_IMAGE}" "${ICO_TEXPACK_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
@@ -208,6 +218,8 @@ add_library(ico_render STATIC
     rd_shadow_selftest.c # the shadow count's one draw: the start-up check on the device
     rd_store_plan.c # the depth stores and loads a replay drops: no later pass touches the depth
     rd_submit.c # a replay's end: the present's pass, the submit and the present
+    rd_submit_queue.c # the submit thread's queue (pure)
+    rd_submit_thread.c # the pictures' submit and present on a thread of their own
     rd_thread.c # the renderer on the window's render thread: the hand-over, the retire list
     rd_tex.c
     rd_uber.c # GS state as shader data where the device orders the colour read

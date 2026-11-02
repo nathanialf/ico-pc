@@ -4983,7 +4983,7 @@ static uint64_t deferDrain(void *u)
 
 static void checkFailedPresent(void)
 {
-    static const RdThreadHost host = {NULL, deferPost, deferDrain, false};
+    static const RdThreadHost host = {NULL, deferPost, deferDrain, false, false, NULL};
     makeNoiseScene();
     RdSettings s = originalSettings();
     s.interpolate = 1;
@@ -5037,7 +5037,7 @@ static uint64_t tailDrain(void *u)
 
 static void checkWaitSplit(void)
 {
-    static const RdThreadHost host = {NULL, tailPost, tailDrain, false};
+    static const RdThreadHost host = {NULL, tailPost, tailDrain, false, false, NULL};
     makeNoiseScene();
     RdSettings s = originalSettings();
     s.interpolate = 1;

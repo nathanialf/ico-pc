@@ -3422,6 +3422,12 @@ void rd__perf_reset(void); /* a new device: its counters start at 0 */
 void rd__perf_begin(const RdFrame *f, int keep, bool present);
 void rd__perf_collect_gpu(void);
 void rd__perf_end(void);
+/* The submit thread's times of replay's list (rd_submit_thread.h): its
+ * record's submit and present times, the record's CPU time with them, in
+ * the record still being made or the one pending in its frame slot;
+ * nothing once that record was queued.  On the thread that waited for the
+ * submit thread, the render thread idle or the caller */
+void rd__perf_submit_times(uint32_t replay, double submitMs, double presentMs);
 void rd__perf_stamp(RhiCommandList cl, uint32_t index);
 /* the walk's end (the vertex pre-pass and the lists recorded, the present
  * recorded): the slow walk line counts the pipelines and creations from
@@ -3544,6 +3550,9 @@ bool rd__last_present_box(uint32_t *outW, uint32_t *outH, RhiRect *box);
  * the box).  False before the first present */
 bool rd__last_present_reduce(uint32_t down[4], uint32_t win[4]);
 void rd__present_finish(void);
+/* rd__present_finish would show an image (the window's, acquired): the
+ * submit thread's job presents it (rd_submit_thread.c) */
+bool rd__present_will_show(void);
 void rd__present_shutdown(void);
 
 /* A uniform block in the ring and the group that reads it: the

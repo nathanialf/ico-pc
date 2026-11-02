@@ -3,12 +3,33 @@
 
 #include "rd_internal.h"
 #include "rd_passring.h"
+#include "rd_submit_thread.h"
+
+/* the background pipelines' step kept for the render thread's next
+ * picture (rd__submit_pipe_tick; the render thread's own) */
+static _Thread_local bool t_tickKept;
+static _Thread_local double t_tickMs;
 
 void rd__submit_drain(void)
 {
     /* on the game thread with the render thread on, the replays are its
-     * (rd_thread.h): nothing of the last one may still run */
+     * (rd_thread.h): nothing of the last one may still run; on the render
+     * thread, the submit thread's list before (rd_submit_thread.h) */
     (void)rd_thread_drain();
+    if (t_tickKept && !rd_thread_submit_busy()) {
+        t_tickKept = false;
+        rd__pipe_finish_tick(t_tickMs);
+    }
+}
+
+void rd__submit_pipe_tick(double pictureMs)
+{
+    if (rd_thread_on_render() && rd_thread_submit_busy()) {
+        t_tickKept = true;
+        t_tickMs = pictureMs;
+        return;
+    }
+    rd__pipe_finish_tick(pictureMs);
 }
 
 void rd__submit_frame(RhiCommandList cl, bool present, double walkStart, double bind0)
@@ -29,10 +50,21 @@ void rd__submit_frame(RhiCommandList cl, bool present, double walkStart, double 
     g_rdPerf.walkMs = (t1 = rd__now_ms()) - t - (g_rdPerf.bindMs - bind0);
     rd__perf_walk_end(); /* the walk's pipelines and creations end here */
     g_rd.deferText = false;
+    /* a picture handed to the render thread: its end, submit and present
+     * on the submit thread, posted at the job's end (rd_submit_thread.h);
+     * asked before the reads end, which ends the hand-over */
+    const bool kept = rd__submit_defer(cl, present);
     /* the render thread's reads of the frames, textures, meshes and
      * targets end with the walk and the present's pass: the game thread's
      * calls that change them go on from here (rd_thread.h) */
     rd__reads_done();
+    if (kept) {
+        /* the times come with the submit thread's (rd__perf_submit_times) */
+        g_rdPerf.submitMs = g_rdPerf.presentMs = 0.0;
+        rd__thread_note_replay(g_rdPerf.uploadMs + g_rdPerf.walkMs, 0.0,
+                               g_rdPerf.waitMs + g_rdPerf.acquireMs);
+        return;
+    }
     t = rd__now_ms();
     rhi_end_commands(cl);
     rhi_submit(cl);

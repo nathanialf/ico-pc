@@ -22,8 +22,16 @@
  * leaves the binds out).  Sets g_rdPerf.walkMs, submitMs and presentMs. */
 void rd__submit_frame(RhiCommandList cl, bool present, double walkStart, double bind0);
 /* The pictures handed to the render thread finished (rd__wait_frame;
- * rd__present_acquire): nothing on the render thread itself */
+ * rd__present_acquire); on the render thread the submit thread's
+ * (rd_submit_thread.h), then the background pipelines' step a picture
+ * kept for it (rd__submit_pipe_tick) */
 void rd__submit_drain(void);
+/* rd__pipe_finish_tick(pictureMs) after a presented replay: at once, or,
+ * while the render thread keeps the replay's list for the submit thread
+ * (its graphics calls would wait for that thread, and the walk's end would
+ * not leave the backend to it), at the next rd__submit_drain there, the
+ * render thread's next picture's first graphics call: one picture late */
+void rd__submit_pipe_tick(double pictureMs);
 
 /* While on, each picture handed over waits for its present (the vsync
  * lock's display timing reads a present's id right after it,
