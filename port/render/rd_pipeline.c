@@ -2761,9 +2761,10 @@ const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i)
  * device of the table (RhiLimits.vuFallbackPlain, vk_device.c kVuPlainOnly)
  * and under Mesa's Turnip driver (rd__driver_is_turnip, issue 163)
  * vu_X_plain_vs (ICO_VU_PLAIN: no card test, no tick cameras), as
- * ICO_RD_VU_PLAIN=1 or the host (rd_set_vu_plain_only) ask anywhere
- * (rd__vu_set_choose);
- * ICO_RD_VU_EXTENDED=1 gives the extended ones whatever the others say.
+ * [dev] vu_set = plain (ICO_RD_VU_SET=plain), ICO_RD_VU_PLAIN=1 or the
+ * host (rd_set_vu_plain_only) ask anywhere (rd__vu_set_choose);
+ * [dev] vu_set = extended (ICO_RD_VU_SET=extended) or ICO_RD_VU_EXTENDED=1
+ * gives the extended ones whatever the others say.
  * One choice a run (g_rd.vsFallback), no key field: the program entries'
  * keys are in the start-up set only when the pre-pass is off. */
 /* Whether the picture is not the PS2's out of the box, the Original preset
@@ -2888,13 +2889,14 @@ void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, co
          * test and the tick cameras' re-test on the fallback's draws. */
         snprintf(out->why, sizeof(out->why),
                  "(Turnip driver: the extended set's clipped triangles showed a stray vertex "
-                 "there, issue 163; ICO_RD_VU_EXTENDED=1 asks for the extended one)");
+                 "there, issue 163; [dev] vu_set = extended asks for the extended one)");
         out->kind = "plain set";
         out->brief = "Turnip driver, issue 163";
     } else if (envPlain) {
-        snprintf(out->why, sizeof(out->why), "by ICO_RD_VU_PLAIN=1");
-        out->kind = "plain set by [dev] (ICO_RD_VU_PLAIN=1)";
-        out->brief = "[dev] ICO_RD_VU_PLAIN=1";
+        snprintf(out->why, sizeof(out->why),
+                 "(vu_set = plain: ICO_RD_VU_SET=plain or ICO_RD_VU_PLAIN=1)");
+        out->kind = "plain set by [dev]";
+        out->brief = "[dev] vu_set = plain";
     } else if (hostWhy && hostWhy[0]) {
         snprintf(out->why, sizeof(out->why), "(%s)", hostWhy);
         out->kind = "plain set after a lost start";
@@ -2904,7 +2906,8 @@ void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, co
     if (out->plain && envExtended) {
         out->plain = false;
         out->overridden = true;
-        out->kind = "extended set by [dev] (ICO_RD_VU_EXTENDED=1)";
+        out->kind = "extended set by [dev] (vu_set = extended, ICO_RD_VU_SET=extended or "
+                    "ICO_RD_VU_EXTENDED=1)";
         out->brief = "";
     }
 }
@@ -2943,15 +2946,24 @@ bool rd__vu_policy_init(const RhiLimits *lim)
     g_rd.vuPlainBrief = NULL;
     /* PC port: the reason's kind, for the start-up line (issues 163/164: a
      * report shows which set drew and why on its first VU line) */
+    /* [dev] vu_set (ICO_RD_VU_SET): auto (unset), plain or extended, the
+     * user's A/B of the two sets on a device the table leaves alone; the
+     * older variables ask the same */
+    const char *vuSet = getenv("ICO_RD_VU_SET");
+    const bool setPlain = vuSet && strcmp(vuSet, "plain") == 0;
+    const bool setExtended = vuSet && strcmp(vuSet, "extended") == 0;
+    if (vuSet && vuSet[0] && !setPlain && !setExtended && strcmp(vuSet, "auto") != 0) {
+        rd__log("VU shaders: ICO_RD_VU_SET=%s is not auto, plain or extended: auto", vuSet);
+    }
     RdVuSetChoice choice;
-    rd__vu_set_choose(lim, envOn("ICO_RD_VU_PLAIN"), envOn("ICO_RD_VU_EXTENDED"), s_vuHostWhy,
-                      &choice);
+    rd__vu_set_choose(lim, setPlain || envOn("ICO_RD_VU_PLAIN"),
+                      setExtended || envOn("ICO_RD_VU_EXTENDED"), s_vuHostWhy, &choice);
     const char *kind = choice.kind;
     snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "%s", choice.why);
     bool plain = choice.plain;
     if (choice.overridden) {
-        rd__log("VU shaders: the fallback's plain program entries %s, but ICO_RD_VU_EXTENDED=1: "
-                "the extended ones are used",
+        rd__log("VU shaders: the fallback's plain program entries %s, but [dev] vu_set = extended "
+                "(or ICO_RD_VU_EXTENDED=1): the extended ones are used",
                 g_rd.vuPlainWhy);
         g_rd.vuPlainWhy[0] = '\0';
     }

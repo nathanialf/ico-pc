@@ -547,6 +547,18 @@ static const struct {
        exported */
     {"dev.vu_plain_only", "vu_plain_only"},
     {"dev.vu_extended", "vu_extended"},
+    /* the VU vertex shaders' set for the draws without the pre-pass: auto
+       (the device table's), plain (no card test, no tick cameras) or
+       extended (an A/B; port/render/rd_pipeline.c rd__vu_policy_init) */
+    {"dev.vu_set", "vu_set"},
+    /* true: the menu text through the sheet shader at every scale instead
+       of its baked texels at 1x and 2x (an A/B; port/render/rd_core.c
+       rd_init, rd_tex.c rd__sheet_baked) */
+    {"dev.sheet_shader", "sheet_shader"},
+    /* gs: the aura's feedback read of the frame drawn with the GS's own taps
+       instead of the box above 1x, a measurement of the box's cost (the
+       picture differs; port/render/rd_aura_kernel.c) */
+    {"dev.aura_kernel", "aura_kernel"},
     /* false: the VU vertex pre-pass off, every VU draw the old way (an
        A/B; port/render/rd_replay_vu.c rd__vu_prepass_init) */
     {"dev.vu_prepass", "vu_prepass"},
@@ -653,6 +665,14 @@ static const struct {
     /* port/render/rd_replay_vu.c rd__vu_prepass_init: 0 draws without the
        vertex pre-pass */
     {"vu_prepass", "ICO_RD_VU_PREPASS"},
+    /* port/render/rd_pipeline.c rd__vu_policy_init: auto, plain or
+       extended (the program entries' set) */
+    {"vu_set", "ICO_RD_VU_SET"},
+    /* port/render/rd_core.c rd_init: 1 draws every menu text page through
+       font_sheet_ps (no bake) */
+    {"sheet_shader", "ICO_RD_SHEET_SHADER"},
+    /* port/render/rd_aura_kernel.c rd__aura_kernel_steps: gs or box */
+    {"aura_kernel", "ICO_RD_AURA_KERNEL"},
     /* port/render/rd_replay_vu.c preBatchInit: 0 draws the pre-pass one
        draw an entry and stage */
     {"vu_prepass_batch", "ICO_RD_VU_PREPASS_BATCH"},
@@ -746,6 +766,8 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const sets[] = {"full", "careful", "lazy", NULL};
     static const char *const fallbacks[] = {"auto", "off", "fifo", NULL};
     static const char *const readers[] = {"thread", "sync", NULL};
+    static const char *const vuSets[] = {"auto", "plain", "extended", NULL};
+    static const char *const auraKernels[] = {"box", "gs", NULL};
 
     if (key == NULL || value == NULL || ico_dev_env_name(key) == NULL) {
         return NULL;
@@ -776,6 +798,14 @@ const char *ico_dev_env_value(const char *key, const char *value)
     }
     if (strcmp(key, "pipeline_set") == 0) {
         return value_is(value, sets) ? value : NULL;
+    }
+    if (strcmp(key, "vu_set") == 0) {
+        /* auto, plain or extended as they are (no boolean form) */
+        return value_is(value, vuSets) ? value : NULL;
+    }
+    if (strcmp(key, "aura_kernel") == 0) {
+        /* box (the default) or gs as they are */
+        return value_is(value, auraKernels) ? value : NULL;
     }
     if (strcmp(key, "present_fallback") == 0) {
         /* auto, off or fifo as they are; false/0/no is off */

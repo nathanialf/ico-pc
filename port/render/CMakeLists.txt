@@ -140,6 +140,7 @@ endif()
 
 add_library(ico_render STATIC
     rd_alpha_plan.c # the alpha/blend planner: the passes a draw's alpha range can need
+    rd_aura_kernel.c # [dev] aura_kernel = gs: the aura's feedback read with the GS's taps (a measurement)
     rd_blend_selftest.c # the exact blend's start-up check on the device (issue 89)
     rd_blur.c # staticBlur.c's sprites
     rd_blur_border.c # the post sprites' replay: the reduction's open border, its outer columns

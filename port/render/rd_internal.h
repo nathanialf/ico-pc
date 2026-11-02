@@ -1881,6 +1881,15 @@ const char *rd__vu_fuse_text(void);
 /* A cleared source read as its colour (rd_const_read.c): false under [dev]
  * constant_reads = false (ICO_RD_CONSTANT_READS=0, the A/B) */
 bool rd__const_reads_on(void);
+/* The aura's feedback read as a measurement (rd_aura_kernel.c; [dev]
+ * aura_kernel = gs, ICO_RD_AURA_KERNEL=gs).  rd__aura_kernel_pick: steps
+ * (blurAbove1xSteps' packed steps) as they are, or 0 (the GS's own taps)
+ * when env is "gs", steps is not 0 and the sprite is the aura's read of
+ * SCENE into FEED128.  rd__aura_kernel_steps: the same for doBlurSpriteDraw's
+ * target tc and source src, ICO_RD_AURA_KERNEL read at the call, logged
+ * once. */
+uint32_t rd__aura_kernel_pick(uint32_t steps, int feedFromScene, const char *env);
+uint32_t rd__aura_kernel_steps(const RdTargetRec *tc, const RdTargetRec *src, uint32_t steps);
 /* The fades fold (rd_fades_fold.c, rd_replay.h): false under [dev]
  * fades_fold = false (ICO_RD_FADES_FOLD=0, the A/B) or after a reduction
  * did not take a planned fold */

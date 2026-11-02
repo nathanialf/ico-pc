@@ -594,6 +594,31 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("vu_extended", "1") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.vu_plain_only"), "vu_plain_only") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.vu_extended"), "vu_extended") == 0);
+    /* vu_set: the VU program entries' set, the user's A/B on a device the
+       table leaves to the extended set (port/render/rd_pipeline.c
+       rd__vu_policy_init reads ICO_RD_VU_SET) */
+    CHECK(strcmp(ico_dev_env_name("vu_set"), "ICO_RD_VU_SET") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_set", "plain"), "plain") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_set", "extended"), "extended") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_set", "auto"), "auto") == 0);
+    CHECK(ico_dev_env_value("vu_set", "true") == NULL);
+    CHECK(ico_dev_env_value("vu_set", "1") == NULL);
+    CHECK(ico_dev_env_value("vu_set", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_set"), "vu_set") == 0);
+    /* sheet_shader: the menu text's bake off (port/render/rd_core.c reads
+       ICO_RD_SHEET_SHADER=1) */
+    CHECK(strcmp(ico_dev_env_name("sheet_shader"), "ICO_RD_SHEET_SHADER") == 0);
+    CHECK(strcmp(ico_dev_env_value("sheet_shader", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("sheet_shader", "false"), "0") == 0);
+    CHECK(ico_dev_env_value("sheet_shader", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.sheet_shader"), "sheet_shader") == 0);
+    /* aura_kernel: the aura's feedback read as a measurement
+       (port/render/rd_aura_kernel.c reads ICO_RD_AURA_KERNEL) */
+    CHECK(strcmp(ico_dev_env_name("aura_kernel"), "ICO_RD_AURA_KERNEL") == 0);
+    CHECK(strcmp(ico_dev_env_value("aura_kernel", "gs"), "gs") == 0);
+    CHECK(strcmp(ico_dev_env_value("aura_kernel", "box"), "box") == 0);
+    CHECK(ico_dev_env_value("aura_kernel", "true") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.aura_kernel"), "aura_kernel") == 0);
     CHECK(ico_dev_env_value("pipeline_set", "true") == NULL);
     CHECK(ico_dev_env_value("pipeline_set", "") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.pipeline_set"), "pipeline_set") == 0);
@@ -828,6 +853,16 @@ static void test_dev_env(void)
     ico_ini_export(&ini, "dev-env-test.ini", 0);
     CHECK(env_is("ICO_RD_VU_PLAIN", NULL));
     CHECK(env_is("ICO_RD_VU_EXTENDED", NULL));
+    /* ... and vu_set is exported as it is (the retired keys stay unread) */
+    unset_env("ICO_RD_VU_SET");
+    ico_ini_parse(&ini, "[dev]\nvu_set = plain\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_VU_SET", "plain"));
+    CHECK(env_is("ICO_RD_VU_PLAIN", NULL));
+    unset_env("ICO_RD_VU_SET");
+    ico_ini_parse(&ini, "[dev]\nvu_set = maybe\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_VU_SET", NULL));
     /* blend=attachment and attachment_read=true (config.toml's [dev]) */
     ico_ini_parse(&ini, "[dev]\nblend = attachment\nattachment_read = true\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);

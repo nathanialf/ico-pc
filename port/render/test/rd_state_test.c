@@ -85,9 +85,13 @@
  *              Turnip driver's text ("turnip Mesa driver", "Turnip Mesa
  *              26.3.0") take the plain set, with the start line's words;
  *              Qualcomm's own driver without a row, lavapipe, RADV and
- *              NVIDIA the extended one; ICO_RD_VU_PLAIN=1 and the host's
- *              reason the plain one; ICO_RD_VU_EXTENDED=1 the extended one
+ *              NVIDIA the extended one; [dev] vu_set = plain (envPlain:
+ *              ICO_RD_VU_SET=plain or ICO_RD_VU_PLAIN=1) and the host's
+ *              reason the plain one; vu_set = extended the extended one
  *              over each of them
+ *   aura kernel rd__aura_kernel_pick: [dev] aura_kernel = gs drops the box
+ *              of the aura's read of SCENE into FEED128 only; unset, empty
+ *              or box keeps it
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
 #include <stdio.h>
@@ -2714,7 +2718,7 @@ static void testVuSetPolicy(void)
 {
     static const char kTurnipWhy[] =
         "(Turnip driver: the extended set's clipped triangles showed a stray vertex there, issue "
-        "163; ICO_RD_VU_EXTENDED=1 asks for the extended one)";
+        "163; [dev] vu_set = extended asks for the extended one)";
     RdVuSetChoice c;
     /* the stock Adreno 740: vk_device.c kVuPlainOnly's row */
     RhiLimits lim = vuSetLimits(0x5143u,
@@ -2756,7 +2760,8 @@ static void testVuSetPolicy(void)
         /* the dev override still wins */
         rd__vu_set_choose(&lim, false, true, "", &c);
         CHECK(!c.plain && c.overridden &&
-                  strcmp(c.kind, "extended set by [dev] (ICO_RD_VU_EXTENDED=1)") == 0 &&
+                  strcmp(c.kind, "extended set by [dev] (vu_set = extended, "
+                                 "ICO_RD_VU_SET=extended or ICO_RD_VU_EXTENDED=1)") == 0 &&
                   strcmp(c.why, kTurnipWhy) == 0,
               "vu set: \"%s\" with ICO_RD_VU_EXTENDED=1: plain %d, overridden %d, \"%s\"",
               turnip[i], c.plain, c.overridden, c.kind);
@@ -2780,7 +2785,11 @@ static void testVuSetPolicy(void)
                   strncmp(c.kind, "extended set (no device-table row", 33) == 0,
               "vu set: \"%s\": plain %d, \"%s\"", desk[i].text, c.plain, c.kind);
         rd__vu_set_choose(&lim, true, false, "", &c);
-        CHECK(c.plain && strcmp(c.why, "by ICO_RD_VU_PLAIN=1") == 0,
+        CHECK(c.plain &&
+                  strcmp(c.why, "(vu_set = plain: ICO_RD_VU_SET=plain or ICO_RD_VU_PLAIN=1)") ==
+                      0 &&
+                  strcmp(c.kind, "plain set by [dev]") == 0 &&
+                  strcmp(c.brief, "[dev] vu_set = plain") == 0,
               "vu set: \"%s\" with ICO_RD_VU_PLAIN=1: plain %d, \"%s\"", desk[i].text, c.plain,
               c.why);
         rd__vu_set_choose(&lim, false, false, "a lost start", &c);
@@ -2822,6 +2831,20 @@ static void testPayloadPad(void)
     rd__frame_free(&f);
 }
 
+/* ---- the aura's feedback read as a measurement (rd_aura_kernel.c) ---- */
+static void testAuraKernelPick(void)
+{
+    const uint32_t steps = 591u * 4096u + 270u; /* the phone's: 18.5 x 8.4 SCENE texels */
+    CHECK(rd__aura_kernel_pick(steps, 1, NULL) == steps &&
+              rd__aura_kernel_pick(steps, 1, "") == steps &&
+              rd__aura_kernel_pick(steps, 1, "box") == steps,
+          "aura kernel: the box by default");
+    CHECK(rd__aura_kernel_pick(steps, 1, "gs") == 0u, "aura kernel: gs drops the box");
+    CHECK(rd__aura_kernel_pick(steps, 0, "gs") == steps,
+          "aura kernel: gs leaves every other sprite its kernel");
+    CHECK(rd__aura_kernel_pick(0u, 1, "gs") == 0u, "aura kernel: no kernel at 1x either way");
+}
+
 int main(int argc, char **argv)
 {
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
@@ -2849,6 +2872,7 @@ int main(int argc, char **argv)
     testDateArea();
     testVuSetPolicy();
     testPayloadPad();
+    testAuraKernelPick();
     rd_shutdown();
     if (failures) {
         printf("rd_state_test: %d failures\n", failures);

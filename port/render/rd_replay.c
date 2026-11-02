@@ -5573,8 +5573,9 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     float uv[4];
     rd__blur_uv_rect(c->b[0], &p, uv); /* the reduction's UVs under the mirror */
     /* above 1x: a target source and a scaled target (blurAbove1xSteps) */
-    const uint32_t steps =
-        textured ? blurAbove1xSteps(tc, src, p.uv, p.rect, d->magFilter == RD_FILTER_LINEAR) : 0;
+    const uint32_t steps = rd__aura_kernel_steps(
+        tc, src,
+        textured ? blurAbove1xSteps(tc, src, p.uv, p.rect, d->magFilter == RD_FILTER_LINEAR) : 0);
     /* the frame-size post sprites' plan (rd_fx_plan.c): drawn without the snapshot */
     if (rd__fx_plan_draw(r, &(RdFxDraw){f, c, &p, d, tc, td, src, srcTex, &key, uv, tw, th, tfmt,
                                         steps, useDepth, textured, dstRead, selfSample})) {
