@@ -161,7 +161,7 @@ static int old_copies(void)
     return s_olds;
 }
 
-static const IcoBackupInfo kInfo = {"v0.9.8", "abc123", "linux-x64", "pal", 1793530000ll};
+static const IcoBackupInfo kInfo = {"v0.10.0", "abc123", "linux-x64", "pal", 1793530000ll};
 static const IcoBackupGates kIdle = {0, 0, 0};
 
 static void test_names(void)
@@ -275,7 +275,7 @@ static void test_round_trip(void)
 
     r = inspect("out/ico-pc-backup.zip", &m, &rep);
     CHECK(r == ICO_BACKUP_OK, "inspect: %s (%s)", ico_backup_result_text(r), rep.why);
-    CHECK(m.format == 1 && strcmp(m.version, "v0.9.8") == 0 && strcmp(m.commit, "abc123") == 0 &&
+    CHECK(m.format == 1 && strcmp(m.version, "v0.10.0") == 0 && strcmp(m.commit, "abc123") == 0 &&
               strcmp(m.platform, "linux-x64") == 0 && strcmp(m.disc, "pal") == 0 &&
               strcmp(m.discs, "pal jpn") == 0 && m.time == 1793530000ll && m.files == 9 &&
               !m.other_disc,
@@ -318,7 +318,7 @@ static void test_round_trip(void)
     r = ico_backup_apply_pending(user, 1000, &m, &rep);
     CHECK(r == ICO_BACKUP_OK, "apply: %s (%s)", ico_backup_result_text(r), rep.why);
     CHECK(rep.files == 9 && strcmp(m.from, "ico-pc-backup.zip") == 0 &&
-              strcmp(m.version, "v0.9.8") == 0,
+              strcmp(m.version, "v0.10.0") == 0,
           "apply: %d files from \"%s\" (%s)", rep.files, m.from, m.version);
     CHECK(kept_identical(), "apply: every file byte-identical to the backup's");
     CHECK(!there("user/memcard/added.bin") && !there("user/memcard/.hidden") &&
@@ -342,7 +342,7 @@ static void test_refusals(void)
     IcoBackupManifest m;
     IcoBackupReport rep;
     char user[1200], path[1200];
-    static const char kMan1[] = "ICO PC backup 1\nversion v0.9.8\nplatform linux-x64\ndisc "
+    static const char kMan1[] = "ICO PC backup 1\nversion v0.10.0\nplatform linux-x64\ndisc "
                                 "pal\ndiscs pal\ntime 1\nfiles 1\nbytes 4\n";
 
     {

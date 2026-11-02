@@ -12,7 +12,7 @@
  *      SCENE's depth is not kept.  The shadow count's frame reads SCENE's
  *      depth in list 3 with no clear of its own; its second replay (the
  *      seven draws) read the depth its first left, and the plan kept
- *      SCENE's stores for the whole run (the v0.9.8 rc1 phone log, "frame
+ *      SCENE's stores for the whole run (the v0.10.0 rc1 phone log, "frame
  *      0"): each of its replays now starts SCENE from its clear;
  *   2. a fresh SCENE (clearPending: rd__clear_new_targets clears it before
  *      the walk) read in list 3 before any clear of the frame's own: not a
@@ -20,7 +20,7 @@
  *   3. the next frame (list 0 clears SCENE's depth, a Z-tested draw, then
  *      list 7 draws on WORK3 and again on SCENE without touching its depth):
  *      the plan drops the depth store of list 7's SCENE pass, nothing kept;
- *   4. the v0.9.8 rc3 phone's frame 5354 in shape (rd_replay_tool's pass
+ *   4. the v0.10.0 rc3 phone's frame 5354 in shape (rd_replay_tool's pass
  *      list: list 0's Z-tested draws on SCENE, the fog's pass, the aura's
  *      passes on other targets, list 11's two screen sprites on SCENE
  *      without a Z test or Z write; here list 0 clears SCENE and draws Z

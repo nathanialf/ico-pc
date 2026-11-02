@@ -7,7 +7,7 @@
 # commands (rd_replay_tool --list --no-device: which ones end with the
 # fade, the letterbox or the brightness), then rd_replay_tool's --pass-dump
 # with --stats twice, with ICO_RD_FADES_FOLD=0 (the sprites drawn, the
-# tests' way to draw them as before v0.9.8) and without it (the fold: how
+# tests' way to draw them as before v0.10.0) and without it (the fold: how
 # the game draws, on every device), under two blends and three settings:
 #   blends    ICO_RD_BLEND=attachment (the exact GS blend through the
 #             destination read: the sprites store the GS's floor, and so

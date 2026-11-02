@@ -53,7 +53,7 @@ int lt_ext_game_property_count(void);
 #define LT_EXT_MAX_LAYOUTS 32
 /* room for every page's rows, the mouse rows, the Android driver page and
    the model viewer's rows among them, with 64 spare (settings_test); 706
-   used in v0.9.8 */
+   used in v0.10.0 */
 #define LT_EXT_MAX_PROPERTIES 1024
 
 /* The label of a port row. */

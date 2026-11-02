@@ -1924,7 +1924,7 @@ if(ICO_RUN_TESTS)
     # the same two A/Bs and rd_vustage_ab on the frames rd_pixel leaves
     # behind (every machine has them; CI's Direct3D 11 job runs them on WARP,
     # tools/ci_d3d11_warp.sh, where the pre-pass's record is copied by the
-    # backend's compute shader since v0.9.8):
+    # backend's compute shader since v0.10.0):
     # rd_pixel_vu.rddump (64 code-32 draws of one prelit mesh under one state,
     # a matrix each: the merge joins them), rd_pixel_vu36.rddump (a code-36
     # strip, its first triangle cut, its second kicked: a fused pair's

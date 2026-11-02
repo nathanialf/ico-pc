@@ -2665,7 +2665,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
                  "PowerVR phone; [dev] vu_prepass = true turns it on)");
     } else if (bytes != 0u && bytes < ICO_VU_REC_BYTES) {
         /* an Apple A9 or A10 GPU under MoltenVK (rhi_metal_color_bytes);
-         * Direct3D 11 reports 0 since v0.9.8 (its record copies are a
+         * Direct3D 11 reports 0 since v0.10.0 (its record copies are a
          * compute shader, d3d11_cmd.c), 32 only below feature level 11_0,
          * which its rhi_init never takes */
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),

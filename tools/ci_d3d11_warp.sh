@@ -204,7 +204,7 @@ run() {
         run_test rd_fog_selftest "$CMAKE_BIN" "-DTOOL=$W/rd_fog_selftest_test.exe" -DFOG_PATH=inplace \
             "-DRESULTS=inplace ok [0-2], copy not tried, buffer not tried" \
             -P "$(winpath "$SRC/port/render/test/rd_fog_selftest.cmake")"
-        # the VU vertex pre-pass's self-test (issue 126, v0.9.8: on on
+        # the VU vertex pre-pass's self-test (issue 126, v0.10.0: on on
         # Direct3D 11, its record copied by the backend's compute shader,
         # d3d11_cmd.c), through ctest's script (port/render/CMakeLists.txt
         # rd_vuprepass_selftest*): on and byte for byte in the pre-pass's
@@ -239,11 +239,11 @@ run() {
         # "off on Direct3D 11" and drew one GPU draw a VU draw)
         log_has rd_replay_tool_merge_on "$LOGS/rd_replay_tool.log" "rd: VU merge: on" \
             "VU merge: off on Direct3D 11"
-        # and the VU vertex pre-pass (v0.9.8; v0.9.7 and before said "off on
+        # and the VU vertex pre-pass (v0.10.0; v0.9.7 and before said "off on
         # Direct3D 11 (the backend holds the colour targets to 32 bytes ...")
         log_has rd_replay_tool_prepass_on "$LOGS/rd_replay_tool.log" "rd: VU pre-pass: on: " \
             "VU pre-pass: off on Direct3D 11"
-        # the bind cache's counts on a real frame (v0.9.8): the --stats line
+        # the bind cache's counts on a real frame (v0.10.0): the --stats line
         log_has rd_replay_tool_bind_cache "$LOGS/rd_replay_tool.log" \
             "stats: bind cache: [0-9]+ pipeline, [0-9]+ bind group and [0-9]+ state repeats skipped" ""
         # a frame of VU draws through the record: its copies by the

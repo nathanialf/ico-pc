@@ -36,7 +36,7 @@
  * colour of its own.
  *
  * Where it is drawn (DIVERGENCES.md VD-20 holds the measured bound): until
- * v0.9.8 the fill was drawn before the fog with the colour and the depth,
+ * v0.10.0 the fill was drawn before the fog with the colour and the depth,
  * so the crack took the fog at its own place in the fog's dither and lists
  * 4-6 tested and blended against the filled texel.  Drawn after lists 4-6
  * a crack holds its neighbour's finished colour: the neighbour's dither

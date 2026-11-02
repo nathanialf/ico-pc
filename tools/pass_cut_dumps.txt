@@ -21,7 +21,7 @@
 /primary/dev/ico-pc/dist/frame-20261028-105852-v4103.zip
 /primary/dev/ico-pc/dist/frame-20261028-151709-v2199.zip
 /primary/dev/ico-pc/dist/frame-20261028-173610-v4657.zip
-# the phone's v0.9.8 rc3 F12 frame (stage 6 in play: the reduction's two
+# the phone's v0.10.0 rc3 F12 frame (stage 6 in play: the reduction's two
 # passes, AURA_WORK's clear, the fog's pass holding the depth's last touch)
 /primary/dev/ico-pc/build-host/tmp/v098/evidence/rc3/f12/frame-20261102-091017-v15677.rddump
 # the phone's F12 frame of 2026-11-02 11:42 (stage 6, frame 1186), the tick

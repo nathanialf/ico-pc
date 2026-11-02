@@ -91,7 +91,7 @@
  * no UINT view on D3D11 (uintView false: both uint views off), the VU
  * vertex pre-pass on on both (colorBytesPerPixel 0, rd_replay_vu.c
  * rd__vu_prepass_init; on D3D11 its record copies are a compute shader,
- * d3d11_cmd.c, since v0.9.8), no local read on either
+ * d3d11_cmd.c, since v0.10.0), no local read on either
  * (docs/port/BACKENDS.md), so none of the local reads.
  *
  * The Mali row keeps the blur fold off: the G52 is bound by its ALU, which
