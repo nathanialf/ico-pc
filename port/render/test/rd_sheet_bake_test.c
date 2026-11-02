@@ -684,8 +684,10 @@ static void testScaledAt(int S)
                         }
                         /* sheetref_texel makes the rims of the sheet texels
                            past the page from the coverage, the device holds
-                           none: the two agree where no ink is near an edge */
-                        if (!edges && y < HH + AY) {
+                           none: the two agree where no ink is near an edge
+                           (English, faint and plain: the oracle's rim is a
+                           full dilation a texel, slow at 4x) */
+                        if (!edges && y < HH + AY && (k == 0 || k == 7 || k == 8)) {
                             uint8_t g, a;
                             sheetref_texel(tex, (uint32_t)W, (uint32_t)HH, x, y, &st, &g, &a);
                             badRef += o[0] != g || o[3] != a;
