@@ -155,6 +155,11 @@ void rhi_set_call_guard(const RhiCallGuard *guard)
     }
 }
 
+void rhi_call_guard_settle(void)
+{
+    RHI_GUARD();
+}
+
 void rhi_call_guard_snapshot(void)
 {
     if (s_up) {

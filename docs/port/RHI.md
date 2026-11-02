@@ -83,6 +83,10 @@ job. Two threads never run in the backend at once: with a call guard
 set (`rhi_set_call_guard`) every entry point that changes the device's state waits while the other
 thread works, the queries listed in `rhi.h` do not, and `rhi_get_stats` then answers with the
 counters the hand-over left (`rhi_call_guard_snapshot`) (`port/rhi/rhi_backend.c` (`RHI_GUARD`)).
+A callback a backend makes in the middle of an entry point (`RhiPipelineBatch.wait`) may hand work
+to the other thread (a display change's progress screen presents through it), so the renderer's
+wait function makes the guard's wait again before the batch goes on (`rhi_call_guard_settle`;
+`port/render/rd_pipeline.c` (`preWait`)): with OpenGL that takes the context back.
 The swapchain's acquire, present and rebuilds also hold a recursive lock of their own
 (`port/rhi/vk/vk_swapchain.c` (`vkr_swap_lock`), `port/rhi/d3d12/d3d12_swapchain.c`
 (`dx_swap_lock`)), and `rhi_device_lost` reads an atomic flag. Without a guard every call runs at

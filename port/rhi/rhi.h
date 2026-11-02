@@ -1275,6 +1275,13 @@ void rhi_set_call_guard(const RhiCallGuard *guard);
  * the recording thread right before it hands work over, the other thread
  * idle */
 void rhi_call_guard_snapshot(void);
+/* The guard's wait made now, as an entry point makes it: for a backend
+ * that calls back into its caller in the middle of an entry point
+ * (RhiPipelineBatch.wait), whose callback may have handed work to the
+ * guard's other thread (a progress screen's picture), so the backend is
+ * the calling thread's again (OpenGL: its context current here) before
+ * the entry point goes on */
+void rhi_call_guard_settle(void);
 
 /* GPU timestamps.  Each frame slot (rhi_wait_frame) has RHI_MAX_TIMESTAMPS
  * of them; rhi_cmd_write_timestamp(cl, i) records slot i when the GPU has

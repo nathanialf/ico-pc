@@ -357,7 +357,9 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   (`rd_set_display_progress`; `port/platform/window_host.c` (`display_progress`)) pumps the
   window's events, which SDL allows on the main thread only, and a background event it takes parks
   the render thread; the screen's pictures are posted to the render thread as any of the game
-  thread's, and the pipeline calls wait for it through the call guard.
+  thread's, and the pipeline calls wait for it through the call guard (inside a batch, after its
+  wait function, `rhi_call_guard_settle`: with OpenGL the context comes back to the game thread
+  before the batch's next pipeline).
 - The retire list. A GPU texture destroyed on the game thread (`rd_destroy_texture`, a temporary
   target's textures, a depth copy) is destroyed by the render thread at its next job, after the
   submit of the list that may still use it (`rd__retire_texture`).

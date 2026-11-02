@@ -23,7 +23,8 @@
  *             (rd_set_display_progress) that presents a blank frame as the
  *             window's screen does: every call on the test's thread (the
  *             game's), none inside a render-thread job, called when the
- *             change made pipelines
+ *             change made pipelines; rhi_call_guard_settle (the batch's
+ *             wait function's) makes a busy guard's wait
  *   back      the Original preset at 1x again: no replay makes a pipeline;
  *             the second replay's draws, render passes, pipeline binds,
  *             blur folds, glow passes, no-planes passes, above-1x draws and
@@ -265,6 +266,22 @@ static int progress(void *ctx, uint32_t done, uint32_t total)
     return 0;
 }
 
+/* rhi_call_guard_settle (the batch's wait function, rd_pipeline.c preWait)
+   makes the guard's wait while it is busy */
+static int s_guardWaits;
+
+static bool guardBusy(void *u)
+{
+    (void)u;
+    return true;
+}
+
+static void guardWait(void *u)
+{
+    (void)u;
+    s_guardWaits++;
+}
+
 /* the settings changed, then two frames: the first's rd_begin_frame applies
    them (Shot.beginMade: the pipelines the change made) */
 static void changeTo(bool enhanced, Shot *s)
@@ -345,6 +362,14 @@ int main(void)
     CHECK(s_prog.onRender == 0, "the display change's progress ran %d times on the render thread",
           s_prog.onRender);
     CHECK(madeEnh == 0 || s_prog.calls > 0, "%u pipelines made without a progress call", madeEnh);
+    {
+        const RhiCallGuard g = {NULL, guardBusy, guardWait};
+        rhi_set_call_guard(&g);
+        rhi_call_guard_settle();
+        rhi_set_call_guard(NULL);
+        CHECK(s_guardWaits == 1, "rhi_call_guard_settle made %d waits of a busy guard, not 1",
+              s_guardWaits);
+    }
     const float sx = g_rd.sceneSx, sy = g_rd.sceneSy;
     CHECK(sx != floorf(sx) || sy != floorf(sy), "Enhanced at %ux%u: scale %gx%g, not fractional",
           OUT_W, OUT_H, (double)sx, (double)sy);

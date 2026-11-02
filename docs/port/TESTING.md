@@ -1156,7 +1156,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   ([DISPLAY.md](DISPLAY.md#video-options-and-presets), run-time changes). The switch runs with the
   renderer's own thread on (not on OpenGL) and a display progress function that presents a blank
   frame as the window's screen does: every call of it is on the test's thread, none inside a
-  render-thread job, and it is called when the change made pipelines. The window's half (the
+  render-thread job, and it is called when the change made pipelines; `rhi_call_guard_settle`
+  makes a busy guard's wait. The window's half (the
   present allowance started again) has no test: the window is not run in the tests.
 - `rd_filter_test.c`: the model viewer's draw filter on synthetic keys (`rd_filter`).
 - `rd_fog_selftest_test.c` with `rd_fog_selftest.cmake`: the fog's self-test and probe; its log line

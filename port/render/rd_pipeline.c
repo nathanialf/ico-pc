@@ -1887,12 +1887,17 @@ static void noteBetween(uint32_t i, uint32_t m)
     }
 }
 
-/* rhi_create_pipelines' wait function */
+/* rhi_create_pipelines' wait function, inside the backend's call: a
+ * display change's progress screen may post its picture to the render
+ * thread (rd_core.c onGameHost), so the backend is this thread's again
+ * before the batch goes on (rhi_call_guard_settle: OpenGL's context back
+ * here) */
 static void preWait(void *ctx, uint32_t finished)
 {
     PreBatch *b = ctx;
     if (!b->stop) {
         b->stop = preProgress(b, b->base + finished);
+        rhi_call_guard_settle();
     }
     noteInflight(b); /* issue 161: after the frame's own notes */
 }
