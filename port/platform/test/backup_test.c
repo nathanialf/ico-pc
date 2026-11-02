@@ -25,6 +25,11 @@
  *   - a move that fails while the restore is put in place (each of the
  *     first moves in turn): every folder and file as it was, byte for
  *     byte, no old copy left, the staging deleted;
+ *   - a move that fails and the move back of that thing too: the thing
+ *     named with its old copy (the report's left), the copy holding the
+ *     player's data, the rest as it was; the next start names the copy;
+ *     an old copy of a place beside the data is named at every start
+ *     (the report's stale), another name is not;
  *   - an unpacking a run left unfinished is deleted at the next start;
  *   - ico_remove_tree takes hidden files too; the suggested file name.
  */
@@ -466,6 +471,64 @@ static void test_failed_apply(void)
     }
 }
 
+/* a move that fails and the move back of that thing failing too (moves 2
+   and 3: the first thing's own copy moved aside, the backup's not moved in,
+   the copy not moved back): that thing is named with its old copy, which
+   holds the player's data, and the rest is as it was; the next start names
+   the old copy; an old copy left beside the data is named at every start,
+   other names are not */
+static void test_failed_undo(void)
+{
+    char user[1200], zip[1200], name[64], oldName[128], rel[300];
+    IcoBackupReport rep;
+    IcoBackupManifest m;
+
+    fill_user();
+    at(user, sizeof(user), "user");
+    at(zip, sizeof(zip), "out/undo.zip");
+    CHECK(ico_backup_write(user, zip, &kInfo, &kIdle, NULL, NULL, &rep) == ICO_BACKUP_OK,
+          "undo: the backup");
+    put("user/config.toml", "a later config");
+    CHECK(ico_backup_restore(zip, "undo.zip", user, "pal", &kIdle, NULL, NULL, &m, &rep) ==
+              ICO_BACKUP_OK,
+          "undo: staged");
+    ico_backup_test_fail_move(2);
+    ico_backup_test_fail_also(3);
+    const IcoBackupResult r = ico_backup_apply_pending(user, 4000, &m, &rep);
+    ico_backup_test_fail_move(0);
+    name[0] = oldName[0] = '\0';
+    CHECK(r == ICO_BACKUP_WRITE &&
+              sscanf(rep.left, "%63s (yours is in %127[^)])", name, oldName) == 2,
+          "undo: the thing not moved back named with its copy (\"%s\")", rep.left);
+    CHECK(strchr(rep.left, ',') == NULL, "undo: one thing left (\"%s\")", rep.left);
+    snprintf(rel, sizeof(rel), "user/%s", name);
+    CHECK(name[0] != '\0' && !there(rel) && old_copies() == 1 && !there("user/" ICO_BACKUP_STAGING),
+          "undo: %s missing, its one old copy kept, the staging deleted", name);
+    /* the old copy holds the player's data; everything else as it was */
+    const size_t nl = strlen(name);
+    for (size_t i = 0; i < sizeof(kKept) / sizeof(kKept[0]); i++) {
+        const char *path = kKept[i][0] + 5; /* after "user/" */
+        const char *want = strcmp(path, "config.toml") == 0 ? "a later config" : kKept[i][1];
+        if (nl > 0 && strncmp(path, name, nl) == 0 && (path[nl] == '\0' || path[nl] == '/')) {
+            snprintf(rel, sizeof(rel), "user/%s%s", oldName, path + nl);
+        } else {
+            snprintf(rel, sizeof(rel), "user/%s", path);
+        }
+        CHECK(strcmp(get(rel), want) == 0, "undo: %s holds \"%s\" (\"%s\")", rel, want, get(rel));
+    }
+    /* the next start: nothing waits, the old copy named */
+    CHECK(ico_backup_apply_pending(user, 4001, &m, &rep) == ICO_BACKUP_NONE &&
+              strcmp(rep.stale, oldName) == 0,
+          "undo: the next start names the old copy (\"%s\")", rep.stale);
+    /* an old copy of a place beside the data is named; another name is not */
+    fill_user();
+    put("user/memcard.old-123/x", "an old card");
+    put("user/notes.old-5", "not ours");
+    CHECK(ico_backup_apply_pending(user, 4002, &m, &rep) == ICO_BACKUP_NONE &&
+              strcmp(rep.stale, "memcard.old-123") == 0,
+          "an old copy beside the data named at the start (\"%s\")", rep.stale);
+}
+
 static void test_leftover_and_tree(void)
 {
     char user[1200], path[1200], name[64];
@@ -501,6 +564,7 @@ int main(int argc, char **argv)
     test_round_trip();
     test_refusals();
     test_failed_apply();
+    test_failed_undo();
     test_leftover_and_tree();
     if (ico_check_failures == 0) {
         ico_remove_tree(s_root);

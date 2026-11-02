@@ -22,7 +22,10 @@
  * read) calls ico_backup_apply_pending, which moves each thing the backup
  * holds into place: the thing there now renamed to <name>.old-<time>, the
  * backup's moved in, and the old copies deleted once every move worked; a
- * move that fails puts every earlier one back, so the data is as it was.
+ * move that fails puts every earlier one back, so the data is as it was,
+ * and a thing whose move back fails too is named with where the player's
+ * own copy is (IcoBackupReport.left); the old copies an earlier start left
+ * are named at every start (IcoBackupReport.stale).
  * Doing the moves at the start rather than at once means nothing the
  * running game still writes on its way out (the settings saved on quit,
  * ui_settings_save_on_quit; the achievements' writer) can land over the
@@ -114,6 +117,15 @@ typedef struct IcoBackupReport {
     unsigned long long bytes; /* their size */
     int leftover;             /* apply: an unfinished unpacking was found and deleted */
     char why[300];            /* the failure in plain words, "" on success */
+    /* apply, a failed one: the things a move back also failed for, so they
+       are not as they were, each with where the player's own copy is
+       ("memcard (yours is in memcard.old-1793530000)"), "" when every move
+       was undone */
+    char left[300];
+    /* apply, at every start: the old copies an earlier restore left beside
+       the user data (<name>.old-<time>: a run that ended between the two
+       moves of one thing, or an undo that failed), "" none */
+    char stale[300];
 } IcoBackupReport;
 
 /* Called after each file, done of total, on the caller's thread. */
@@ -166,8 +178,10 @@ IcoBackupResult ico_backup_restore(const char *zip_path, const char *from_name,
    old copies, and the staging folder deleted: OK with *m (from, items,
    files) and out->files the files put in place; WRITE (out->why names the
    move) with every move undone and the staging folder deleted, so the
-   next start does not try again; DAMAGED when its manifest cannot be
-   read (the folder deleted). */
+   next start does not try again (out->left names any thing a move back
+   failed for, its old copy kept); DAMAGED when its manifest cannot be
+   read (the folder deleted).  Every call first lists the old copies
+   already beside the user data (out->stale). */
 IcoBackupResult ico_backup_apply_pending(const char *user_dir, long long now, IcoBackupManifest *m,
                                          IcoBackupReport *out);
 
@@ -177,8 +191,9 @@ void ico_backup_default_name(char *out, size_t size, long long t);
 
 /* Tests: the bounds above lowered (0 for a bound: its default again). */
 void ico_backup_test_bounds(int files, unsigned long long file_bytes, unsigned long long bytes);
-/* Tests: the nth move ico_backup_apply_pending makes (1 the first) fails
-   as a locked folder would; 0 none. */
+/* Tests: the nth move ico_backup_apply_pending makes (1 the first, up to
+   32) fails as a locked folder would; 0 none.  _also adds one more. */
 void ico_backup_test_fail_move(int nth);
+void ico_backup_test_fail_also(int nth);
 
 #endif /* ICO_PLATFORM_BACKUP_H */

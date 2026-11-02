@@ -2095,6 +2095,12 @@ static void apply_restore(void)
         return;
     }
     const IcoBackupResult r = ico_backup_apply_pending(user, (long long)time(NULL), &m, &rep);
+    if (rep.stale[0] != '\0') {
+        fprintf(stderr,
+                "backup: old copies an earlier restore left beside your data: %s (each holds "
+                "your data from before that restore; nothing reads them)\n",
+                rep.stale);
+    }
     if (rep.leftover) {
         fprintf(stderr, "backup: a restore the last run did not finish unpacking was deleted; "
                         "nothing changed\n");
@@ -2107,13 +2113,34 @@ static void apply_restore(void)
                 m.from, m.version, m.discs, rep.files, m.items);
         return;
     }
-    fprintf(stderr,
-            "backup: the backup from %s could not be put in place: %s (%s); the data is "
-            "as it was\n",
-            m.from[0] != '\0' ? m.from : "the last run", ico_backup_result_text(r), rep.why);
-    ico_host_message_box("The backup could not be put in place, so your data is as it was before. "
-                         "Try Restore from a backup again; the log says what stopped it.",
-                         1);
+    if (rep.left[0] == '\0') {
+        fprintf(stderr,
+                "backup: the backup from %s could not be put in place: %s (%s); the data is "
+                "as it was\n",
+                m.from[0] != '\0' ? m.from : "the last run", ico_backup_result_text(r), rep.why);
+        ico_host_message_box("The backup could not be put in place, so your data is as it was "
+                             "before. Try Restore from a backup again; the log says what stopped "
+                             "it.",
+                             1);
+        return;
+    }
+    {
+        /* a move back failed too: what is not as it was, and where the
+           player's own copy is */
+        char box[800];
+
+        fprintf(stderr,
+                "backup: the backup from %s could not be put in place: %s (%s); not moved back: "
+                "%s\n",
+                m.from[0] != '\0' ? m.from : "the last run", ico_backup_result_text(r), rep.why,
+                rep.left);
+        snprintf(box, sizeof(box),
+                 "The backup could not be put in place, and some of your data could not be put "
+                 "back as it was: %s. Your own copy is in the folder or file named there, in the "
+                 "game's user folder; the log says what stopped it.",
+                 rep.left);
+        ico_host_message_box(box, 1);
+    }
 }
 
 static void setup_states(const IcoIni *ini)

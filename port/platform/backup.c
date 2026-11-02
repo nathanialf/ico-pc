@@ -871,21 +871,71 @@ done:
 
 /* --- putting a restore in place ----------------------------------------------- */
 
-static int s_failMove, s_moves;
+static unsigned s_failMoves; /* bit n - 1: the nth move fails */
+static int s_moves;
 
 void ico_backup_test_fail_move(int nth)
 {
-    s_failMove = nth;
+    s_failMoves = nth > 0 && nth <= 32 ? 1u << (nth - 1) : 0u;
     s_moves = 0;
+}
+
+void ico_backup_test_fail_also(int nth)
+{
+    if (nth > 0 && nth <= 32) {
+        s_failMoves |= 1u << (nth - 1);
+    }
 }
 
 static int move_path(const char *from, const char *to)
 {
-    if (s_failMove > 0 && ++s_moves == s_failMove) {
+    if (s_failMoves != 0 && ++s_moves <= 32 && (s_failMoves >> (s_moves - 1) & 1u) != 0) {
         errno = EBUSY;
         return -1;
     }
     return ico_rename_replace(from, to);
+}
+
+/* a thing not as it was after the report's left list: "<name> (yours is
+   in <old copy's name>)", or with no old copy (old NULL: there was none)
+   "<name> (the backup's; you had none)" */
+static void left_add(IcoBackupReport *out, const char *name, const char *old)
+{
+    if (out == NULL) {
+        return;
+    }
+    const char *base = old != NULL ? strrchr(old, '/') : NULL;
+    const size_t have = strlen(out->left);
+    if (old != NULL) {
+        snprintf(out->left + have, sizeof(out->left) - have, "%s%s (yours is in %s)",
+                 have > 0 ? ", " : "", name, base != NULL ? base + 1 : old);
+    } else {
+        snprintf(out->left + have, sizeof(out->left) - have, "%s%s (the backup's; you had none)",
+                 have > 0 ? ", " : "", name);
+    }
+}
+
+/* the old copies (<place>.old-<digits>...) beside the user data, named in
+   out->stale */
+static int stale_visit(const char *name, int kind, void *user)
+{
+    IcoBackupReport *out = (IcoBackupReport *)user;
+    const char *o = strstr(name, ".old-");
+    char base[64];
+    (void)kind;
+    if (o == NULL || o[5] < '0' || o[5] > '9' || (size_t)(o - name) >= sizeof(base)) {
+        return 0;
+    }
+    memcpy(base, name, (size_t)(o - name));
+    base[o - name] = '\0';
+    if (!ico_backup_name_ok(base, 0) && !ico_backup_name_ok(base, 1)) {
+        return 0;
+    }
+    const size_t have = strlen(out->stale);
+    if (have + 2 + strlen(name) < sizeof(out->stale)) {
+        snprintf(out->stale + have, sizeof(out->stale) - have, "%s%s", have > 0 ? ", " : "", name);
+    }
+    return 0;
 }
 
 typedef struct Items {
@@ -927,6 +977,9 @@ IcoBackupResult ico_backup_apply_pending(const char *user_dir, long long now, Ic
     if (user_dir == NULL || join(part, sizeof(part), user_dir, ICO_BACKUP_STAGING_PART) != 0 ||
         join(staging, sizeof(staging), user_dir, ICO_BACKUP_STAGING) != 0) {
         return ICO_BACKUP_NONE;
+    }
+    if (out != NULL) {
+        ico_dir_entries(user_dir, 1, stale_visit, out);
     }
     if (exists(part)) {
         ico_remove_tree(part);
@@ -977,8 +1030,8 @@ IcoBackupResult ico_backup_apply_pending(const char *user_dir, long long now, Ic
         }
         if (move_path(src[k], target[k]) != 0) {
             say(out, "the backup's %s could not be moved in: %s", it.name[k], strerror(errno));
-            if (had[k]) {
-                move_path(old[k], target[k]);
+            if (had[k] && move_path(old[k], target[k]) != 0) {
+                left_add(out, it.name[k], old[k]); /* moved aside, not back */
             }
             r = ICO_BACKUP_WRITE;
             break;
@@ -986,11 +1039,14 @@ IcoBackupResult ico_backup_apply_pending(const char *user_dir, long long now, Ic
         moved = k + 1;
     }
     if (r != ICO_BACKUP_OK) {
-        /* every earlier move undone, newest first */
+        /* every earlier move undone, newest first; a thing whose move back
+           fails keeps its old copy, named for the log and the box (a file
+           moved back over the backup's own is as it was even when the
+           backup's could not go back to the staging folder first) */
         for (int k = moved - 1; k >= 0; k--) {
-            move_path(target[k], src[k]);
-            if (had[k]) {
-                move_path(old[k], target[k]);
+            const int out_ok = move_path(target[k], src[k]) == 0;
+            if (had[k] ? move_path(old[k], target[k]) != 0 : !out_ok) {
+                left_add(out, it.name[k], had[k] ? old[k] : NULL);
             }
         }
         ico_remove_tree(staging);

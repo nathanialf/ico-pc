@@ -1168,8 +1168,13 @@ renamed to `<name>.old-<seconds>` and the backup's is moved in (`ico_rename_repl
 one volume); once every move worked the old copies are deleted (`ico_remove_tree`, hidden files
 too, a link deleted, never followed) and then the staging folder. A move that fails undoes every
 earlier one, newest first, and deletes the staging folder (so the next start does not try again):
-the data is as it was, logged, and a box says so. What the backup does not hold stays as it is. A
-`backup-restore.part/` found at the start (a run that ended while unpacking) is deleted. The moves
+the data is as it was, logged, and a box says so. Each move back is checked: a thing whose move
+back fails too (the backup's copy still in place, or the player's copy moved aside and not back)
+keeps its old copy and is named with it (`IcoBackupReport.left`: `memcard (yours is in
+memcard.old-<seconds>)`), in the log line and in the box. What the backup does not hold stays as it
+is. A `backup-restore.part/` found at the start (a run that ended while unpacking) is deleted, and
+every start names the old copies already beside the user data (`IcoBackupReport.stale`: a run that
+ended between the two moves of one thing, or an undo that failed). The moves
 wait for the start because the run that unpacks still writes on its way out: the settings on quit
 (`ui_settings_save_on_quit`), the achievements' writer, the iOS background save; done at once,
 those would land over the restored files.
@@ -1217,8 +1222,10 @@ the backup in place[; the game starts again by itself]`, `backup: the restore of
 confirmed; nothing changed`, `backup: refused: <row>: <what> (<detail>)`, `backup: <row>: could
 not read|write <name>: <detail>`; at the start `backup: restored from <name> (version V, discs
 ...): N files replaced (<items>)`, `backup: the backup from <name> could not be put in place:
-<what> (<detail>); the data is as it was`, `backup: a restore the last run did not finish
-unpacking was deleted; nothing changed`; the menu's `extras: back up your data|restore from a
+<what> (<detail>); the data is as it was` or `...: <what> (<detail>); not moved back: <name> (yours
+is in <name>.old-<seconds>)[, ...]`, `backup: a restore the last run did not finish unpacking was
+deleted; nothing changed`, `backup: old copies an earlier restore left beside your data: <names>
+(each holds your data from before that restore; nothing reads them)`; the menu's `extras: back up your data|restore from a
 backup: started|ended: state S, D of T files, reason R`. The relaunch logs `ico_pc: starting the
 game again, as asked`.
 

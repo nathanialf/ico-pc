@@ -807,7 +807,12 @@ message:
 - **The backup could not be put in place** (a box when the game starts after a
   restore). Something kept a file or folder busy, for example a file manager
   or a cloud program that was syncing the game's folder. Your data is exactly
-  as it was. Close that program and restore again.
+  as it was. Close that program and restore again. If the box also says that
+  some of your data could not be put back, it names each such folder or file
+  and the copy beside it that holds your own data, such as
+  `memcard.old-1793530000` next to `memcard` in the game's user folder: close
+  the game, delete the folder or file it named (if it is there) and rename the
+  copy back to that name.
 
 The log has lines that start with `backup:` that say what happened, and a
 [problem report](#send-a-problem-report) carries them.
