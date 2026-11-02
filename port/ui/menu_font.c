@@ -183,7 +183,8 @@ typedef struct MfStrip {
     int used;
     uint64_t hash;
     char *text;          /* a port text's string; NULL for an item's */
-    int item, lang;      /* an item's index and language; -1 for a port text */
+    int item, lang;      /* an item's index and sheet language; -1 for a port text */
+    int textLang;        /* an item's string language */
     float em;            /* texel rows */
     MfGeo geo;           /* a port text's geometry */
     unsigned layout;     /* a port text's alignment flags */
@@ -476,12 +477,11 @@ static void embolden(uint8_t *cov, int w, int h, int scale, float bx, float by)
 /* ---------------------------------------------------------------- items */
 
 /* An item's words rasterised into cov (it->w x it->h bytes, zeroed by the
-   caller): the strip itemStrip caches, also the comparison test's
-   reference (ui__menu_strip_raster). */
-static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov, int scale)
+   caller): lang sets its sheet geometry; textLang selects its string. */
+static void rasterItem(const UiMenuTextItem *it, int lang, int textLang, uint8_t *cov, int scale)
 {
     const int w = it->w * scale, hgt = it->h * scale;
-    const char *str = ui_str_in((UiLang)lang, (UiStrId)it->str);
+    const char *str = ui_str_in((UiLang)textLang, (UiStrId)it->str);
     const char *start[MF_LINES];
     size_t len[MF_LINES];
     const int n = splitLines(str, start, len);
@@ -531,7 +531,7 @@ int ui__menu_strip_raster(const UiMenuTextItem *it, int lang, uint8_t *out, int 
         return -1;
     }
     memset(out, 0, (size_t)w * (size_t)h);
-    rasterItem(it, lang, out, 1);
+    rasterItem(it, lang, lang, out, 1);
     return 0;
 }
 
@@ -1276,11 +1276,13 @@ static uint64_t hashBytes(uint64_t h, const void *data, size_t n)
 
 /* ------------------------------------------------------- an item's strip */
 
-static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls, int sc)
+static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int textLang, int cls,
+                          int sc)
 {
     uint64_t h = 0xCBF29CE484222325ull;
     h = hashBytes(h, &item, sizeof(item));
     h = hashBytes(h, &lang, sizeof(lang));
+    h = hashBytes(h, &textLang, sizeof(textLang));
     h = hashBytes(h, &cls, sizeof(cls));
     if (sc > 1) {
         h = hashBytes(h, &sc, sizeof(sc));
@@ -1288,7 +1290,7 @@ static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls,
     for (int i = 0; i < MF_STRIPS; i++) {
         MfStrip *s = &s_mf.strips[i];
         if (s->used && s->hash == h && !s->text && s->item == item && s->lang == lang &&
-            s->cls == cls && s->scale == sc) {
+            s->textLang == textLang && s->cls == cls && s->scale == sc) {
             touchStrip(s);
             return s;
         }
@@ -1303,12 +1305,13 @@ static MfStrip *itemStrip(const UiMenuTextItem *it, int item, int lang, int cls,
     if (!cov) {
         return NULL;
     }
-    rasterItem(it, lang, cov, sc);
+    rasterItem(it, lang, textLang, cov, sc);
     memset(s, 0, sizeof(*s));
     s->used = 1;
     s->hash = h;
     s->item = item;
     s->lang = lang;
+    s->textLang = textLang;
     s->em = it->em[lang];
     s->scale = sc;
     s->cls = cls;
@@ -1477,10 +1480,10 @@ void ui_draw_menu_text(float x, float y, float size, const uint8_t rgba[4], cons
 /* ui_menu_word_draw with no room in the pages: the item's lines in the plain
    glyphs at the item's anchor, em and pitch, mapped through the sprite's
    box (the glow pass draws nothing) */
-static void itemFallback(const UiMenuTextItem *it, int lang, const int box[4], const int uv[4],
-                         const uint8_t col[4], int glow)
+static void itemFallback(const UiMenuTextItem *it, int lang, int textLang, const int box[4],
+                         const int uv[4], const uint8_t col[4], int glow)
 {
-    const char *text = ui_str_in((UiLang)lang, (UiStrId)it->str);
+    const char *text = ui_str_in((UiLang)textLang, (UiStrId)it->str);
     if (glow || !text || !*text) {
         return;
     }
@@ -1517,18 +1520,19 @@ void ui_menu_word_draw(const UiMenuTextItem *it, int lang, const int box[4], con
     }
     /* an item is a European sheet's word: its geometry per those languages */
     lang = lang >= 0 && lang < UI_LANG_PAL_COUNT ? lang : UI_LANG_EN;
+    const int textLang = ui_get_language();
     if (cls != MF_PLAIN) {
         styleLight(lang);
     }
     const int item = it >= ui_menu_text_items && it < ui_menu_text_items + ui_menu_text_item_count
                          ? (int)(it - ui_menu_text_items)
                          : -2;
-    const MfStrip *s = itemStrip(it, item, lang, cls, mfScale());
+    const MfStrip *s = itemStrip(it, item, lang, textLang, cls, mfScale());
     if (!s) {
         if (!glow) {
             noteFallback(); /* the glow pass of the same word draws nothing */
         }
-        itemFallback(it, lang, box, uv, col, glow);
+        itemFallback(it, lang, textLang, box, uv, col, glow);
         return;
     }
     const uint32_t tex = pageTex(s->cls, s->page, lang);
