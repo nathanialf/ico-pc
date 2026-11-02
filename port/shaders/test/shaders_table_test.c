@@ -67,6 +67,9 @@ static const char *const expectedSmooth[] = {"fx_acc_ps", "fx_acc_resolve_ps"};
 /* the crack filler above 1x (blit.hlsl; port/render/rd_crack_fill.c) */
 static const char *const expectedCrack[] = {"crack_fill_ps", "crack_count_ps", "crack_fill1_ps"};
 
+/* the aura's feedback read in two passes (fx_sprite.hlsl; port/render/rd_aura_box.c) */
+static const char *const expectedAuraBox[] = {"fx_aura_rows_ps", "fx_aura_sum_ps"};
+
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */
 static const char *const expectedPlain[] = {
@@ -406,6 +409,13 @@ int main(void)
     for (size_t i = 0; i < nCrack; i++) {
         if (!ico_find_shader(expectedCrack[i])) {
             printf("FAIL %s: not in the table\n", expectedCrack[i]);
+            failures++;
+        }
+    }
+    const size_t nAuraBox = sizeof(expectedAuraBox) / sizeof(expectedAuraBox[0]);
+    for (size_t i = 0; i < nAuraBox; i++) {
+        if (!ico_find_shader(expectedAuraBox[i])) {
+            printf("FAIL %s: not in the table\n", expectedAuraBox[i]);
             failures++;
         }
     }

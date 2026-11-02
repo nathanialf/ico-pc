@@ -245,6 +245,12 @@ ico_add_shader(shadow_count_ps blit.hlsl shadow_count_ps fragment)
 # fx_sprite_ps reading its textures through their RGBA8_UINT views
 # (RHI_TEX_UINT_VIEW; rd_replay.c doBlurSpriteDraw)
 ico_add_shader(fx_sprite_u_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_UINT_SRC=1)
+# The aura's feedback read in two passes (port/render/rd_aura_box.c): the
+# box's rows into ROWBOX (RGBA16_UINT), then FEED128's draw summing them
+# (the UINT build: t1 ROWBOX read as integers), behind fx_rect_vs; the same
+# bytes as fx_sprite_ps; used on every backend where it is on
+ico_add_shader(fx_aura_rows_ps fx_sprite.hlsl fx_aura_rows_ps fragment)
+ico_add_shader(fx_aura_sum_ps fx_sprite.hlsl fx_aura_sum_ps fragment DEFINES ICO_UINT_SRC=1)
 # The pixel-diet builds (vu_np_ps, vu_np_ps_dstatt, vu_texa_np_ps, fx_frame_ps, fx_local_ps)
 # vu_ps and vu_texa_ps without the planes' inputs, for a target at a
 # fractional scale (ICO_VU_NO_PLANES; port/render/rd_pixel_plan.c

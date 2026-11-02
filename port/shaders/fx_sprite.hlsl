@@ -37,6 +37,11 @@
 //                texture (rd's layoutLocal); never a self-sampling sprite.
 //                Its DXIL reads t1 as a texture (never used: D3D12 has no
 //                local read)
+//   fx_aura_rows_ps, fx_aura_sum_ps  the aura's SCENE -> FEED128 read
+//                above 1x in two passes, the same bytes as fx_sprite_ps
+//                (port/render/rd_aura_box.c; the comment above them): the
+//                box's rows into ROWBOX (RGBA16_UINT), then FEED128's draw
+//                summing them (the ICO_UINT_SRC build, t1 ROWBOX)
 //
 // Bindings: t1 the texture (UNORM8, read with Load; its UINT view in
 // fx_sprite_u_ps), t2 the destination as it was before the sprite (a copy
@@ -289,10 +294,31 @@ uint3 fx_premul(uint4 cs, uint reg, uint fix)
 }
 #endif
 
+// One row of the above-1x kernel (FXF_ABOVE1X): R' = (16 R + Dx / 2) / Dx,
+// R the sum over the axis ax's taps i (fx_axis_x of ax.first + i) of the
+// texel at that column of the addressed row y (fx_texel_at: TEXA) times its
+// weight, in the order i = 0, 1, ...; Dx = dx, the weights' sum.  At most
+// 4080 a channel (R <= 255 Dx).  The operations of fx_sprite_texel's inner
+// loop and its row's rounding for row j, there fx_texel(int2(ax.first + i,
+// ay.first + j)) = fx_texel_at(fx_axis_x(ax.first + i), fx_axis_y(ay.first
+// + j)), here y = that fx_axis_y: fx_aura_rows_ps's texel (the aura's
+// two-pass form, port/render/rd_aura_box.c)
+uint4 fx_kernel_row(GsAxis ax, uint dx, int y, uint flags)
+{
+    uint4 row = uint4(0u, 0u, 0u, 0u);
+    const int nx = min(ax.count, GS_RS_TAPS_MAX);
+    [loop] for (int i = 0; i < nx; i++) {
+        row += fx_texel_at(fx_axis_x(ax.first + i, flags), y) * gs_resample_weight(ax, i);
+    }
+    return (row * 16u + dx / 2u) / dx;
+}
+
 // The sprite's texel at (su, sv), t1's 12.4 texels: above 1x the step's
 // kernel (FXF_ABOVE1X, g_scale.w), else the GS's bilinear (FXF_LINEAR) or
 // nearest texel, each tap addressed by fx_texel's rules and TEXA'd before
-// filtering
+// filtering.  The kernel is separable with a rounding between its axes:
+// per row j the row's R' (fx_kernel_row's), then t = (sum(wy R') + 8 Dy) /
+// (16 Dy) over j = 0, 1, ... (sum(wy R') <= 24576 x 4080: within 32 bits)
 uint4 fx_sprite_texel(int su, int sv, uint flags)
 {
     uint4 t;
@@ -388,6 +414,104 @@ uint fx_alpha_only(int su, int sv, uint a, uint flags)
 }
 #endif
 
+// fx_sprite_ps's first lines as functions, for the aura's two passes
+// below (fx_sprite_ps keeps them inline, so its code is as it was): the
+// same operations on the same operands.
+//
+// The GS coordinates of the bound target's texel at pos (SV_Position.xy),
+// with the target's XYOFFSET (g_origin): gp the GS window coordinate of
+// the texel's centre, 12.4 (px * 16 at scale 1: the UV's X, Y), gb its GS
+// pixel's, 16 times a whole pixel (on a scaled target the texel's s x s
+// block, for the coverage).  Each axis's values come from that axis's
+// coordinate alone: the operations are per component, and the divides by
+// the scale ts, skipped only where both axes are at 1, return their
+// dividend on an axis at 1 (a divide by exactly 1.0)
+void fx_pixel_gs(float2 pos, out int2 gp, out int2 gb)
+{
+    const float2 ts = float2(g_z.y > 0.0 ? g_z.y : 1.0, g_z.z > 0.0 ? g_z.z : 1.0);
+    // the texel in the frame's texels: a Full pixel target's left-out
+    // texels added (g_vpo.z, 0 on every other target)
+    const float2 fp = pos + float2(g_vpo.z, 0.0);
+    // fp / ts: four divides by a per-draw value, skipped at scale 1, where
+    // a divide by exactly 1.0 returns its dividend (the reciprocal of 1.0
+    // is 1.0 and x * 1.0 is x)
+    float2 fb = fp - 0.5, fc = fp;
+    [branch] if (ts.x != 1.0 || ts.y != 1.0) {
+        fb = fb / ts;
+        fc = fc / ts;
+    }
+    const int2 b = int2(floor(fb)) * 16;
+    const int2 c = int2(floor((fc - 0.5) * 16.0 + 0.5));
+    const int ox = int(round(g_origin.x * 16.0)), oy = int(round(g_origin.y * 16.0));
+    gp = int2(ox + c.x, oy + c.y);
+    gb = int2(ox + b.x, oy + b.y);
+}
+
+// The GS's U(X) = u0 + (X - x0) (u1 - u0) / (x1 - x0), truncated, without
+// the integer divide or a float one (gs_div_trunc_rcp: the operands'
+// bounds, the reciprocals the CPU rounded), in t1's own texels, 12.4 (u at
+// scale 1; a Full pixel crop's left-out texels taken off): su
+int fx_sprite_su(int X)
+{
+    const int x0 = int(g_param.x), x1 = int(g_param.z);
+    const int u0 = int(g_uvRect.x), u1 = int(g_uvRect.z);
+    const int u = u0 + gs_div_trunc_rcp((X - x0) * (u1 - u0), x1 - x0, asfloat(g_aux1.x));
+    return int(round(float(u) * fx_src_scale().x)) - fx_src_crop16();
+}
+
+// fx_sprite_su's V(Y): sv
+int fx_sprite_sv(int Y)
+{
+    const int y0 = int(g_param.y), y1 = int(g_param.w);
+    const int v0 = int(g_uvRect.y), v1 = int(g_uvRect.w);
+    const int v = v0 + gs_div_trunc_rcp((Y - y0) * (v1 - v0), y1 - y0, asfloat(g_aux1.y));
+    return int(round(float(v) * fx_src_scale().y));
+}
+
+// fx_sprite_ps after the texture function (its own tail, and the aura's
+// sum's), at the fragment's texel px: the
+// alpha test, DATE, the blend, FBA, the destination alpha kept, as k / 255
+float4 fx_sprite_out(uint4 col, int2 px, uint flags)
+{
+    // alpha test
+    bool keepDestAlpha = false;
+    const bool ate = ((g_mode.z >> 8) & 1u) != 0u;
+    if (ate && !gs_alpha_pass(g_mode.z & 0xFFu, g_mode.w, col.a)) {
+        const uint afail = (g_mode.z >> 16) & 3u;
+        if (afail == AFAIL_KEEP || afail == AFAIL_ZB_ONLY) {
+            discard;
+        }
+        keepDestAlpha = afail == AFAIL_RGB_ONLY;
+    }
+
+    uint4 dst = uint4(0, 0, 0, 0);
+    if ((flags & FXF_DST) != 0u) {
+        dst = fx_dest(px);
+    }
+    if ((flags & FXF_DATE) != 0u) {
+        const bool msb = (dst.a & 0x80u) != 0u;
+        if (msb != ((flags & FXF_DATM) != 0u)) {
+            discard;
+        }
+    }
+
+    uint4 res = col;
+    const bool pabeOff = (flags & FXF_PABE) != 0u && (col.a & 0x80u) == 0u;
+#ifdef ICO_FX_FRAME
+    if ((flags & FXF_OUT_PREMUL) != 0u) {
+        res.rgb = fx_premul(col, g_blend.x, g_blend.y); // the pipeline adds or takes Cd
+    } else
+#endif
+    if ((flags & FXF_ABE) != 0u && !pabeOff) {
+        res.rgb = gs_blend_int(col, dst, g_blend.x, g_blend.y, g_blend.z).rgb;
+    }
+    res.a = col.a | ((flags & FXF_FBA) != 0u ? 0x80u : 0u);
+    if (keepDestAlpha) {
+        res.a = dst.a;
+    }
+    return float4(res) * (1.0 / 255.0);
+}
+
 float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
 {
     const uint flags = g_mode.x;
@@ -439,45 +563,71 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
             col = fx_tfx(fx_sprite_texel(su, sv, flags), col, flags);
         }
     }
-
-    // alpha test
-    bool keepDestAlpha = false;
-    const bool ate = ((g_mode.z >> 8) & 1u) != 0u;
-    if (ate && !gs_alpha_pass(g_mode.z & 0xFFu, g_mode.w, col.a)) {
-        const uint afail = (g_mode.z >> 16) & 3u;
-        if (afail == AFAIL_KEEP || afail == AFAIL_ZB_ONLY) {
-            discard;
-        }
-        keepDestAlpha = afail == AFAIL_RGB_ONLY;
-    }
-
-    uint4 dst = uint4(0, 0, 0, 0);
-    if ((flags & FXF_DST) != 0u) {
-        dst = fx_dest(px);
-    }
-    if ((flags & FXF_DATE) != 0u) {
-        const bool msb = (dst.a & 0x80u) != 0u;
-        if (msb != ((flags & FXF_DATM) != 0u)) {
-            discard;
-        }
-    }
-
-    uint4 res = col;
-    const bool pabeOff = (flags & FXF_PABE) != 0u && (col.a & 0x80u) == 0u;
-#ifdef ICO_FX_FRAME
-    if ((flags & FXF_OUT_PREMUL) != 0u) {
-        res.rgb = fx_premul(col, g_blend.x, g_blend.y); // the pipeline adds or takes Cd
-    } else
-#endif
-    if ((flags & FXF_ABE) != 0u && !pabeOff) {
-        res.rgb = gs_blend_int(col, dst, g_blend.x, g_blend.y, g_blend.z).rgb;
-    }
-    res.a = col.a | ((flags & FXF_FBA) != 0u ? 0x80u : 0u);
-    if (keepDestAlpha) {
-        res.a = dst.a;
-    }
-    return float4(res) * (1.0 / 255.0);
+    return fx_sprite_out(col, px, flags);
 }
+
+// The aura's feedback read in two passes (port/render/rd_aura_box.c;
+// docs/port/WORK_BUFFERS.md, "The aura's feedback read"): the one sprite
+// copyCurrentFBToFeedBackArea draws above 1x, SCENE through the area box
+// into FEED128 (FXF_TEXTURED, FXF_ABOVE1X; no destination read, no DATE),
+// split along fx_sprite_texel's own seam, the rounding between the axes.
+//   fx_aura_rows_ps (the default build) into ROWBOX, RGBA16_UINT, one texel
+//     a (FEED128 column c, SCENE row y), y every row of SCENE (0 .. its
+//     height - 1, the range of fx_axis_y): fx_kernel_row's R' for the
+//     column's own x taps (gs_resample_axis of fx_sprite_su(X), X the GS
+//     coordinate of FEED128's texel c: the same DrawCB, and a FrameCB of
+//     the same origin.x, scale 1 and no crop as FEED128's, so the same X,
+//     su, axis and Dx) on row y.  R' <= 4080: the target holds it.
+//     Columns outside the sprite's rect are discarded (never read).
+//   fx_aura_sum_ps (the UINT build: t1 ROWBOX, read as integers) FEED128's
+//     own draw: the coverage and V as fx_sprite_ps, then for j = 0, 1, ...
+//     sum += ROWBOX(c, fx_axis_y(ay.first + j)) wy(j), t = (sum + 8 Dy) /
+//     (16 Dy), and fx_tfx and fx_sprite_out as fx_sprite_ps.
+// Every R' fx_sprite_texel adds for FEED128's texel (c, r) is the one
+// ROWBOX holds at (c, its addressed row), added in the same order with the
+// same weights: the same integers, so the same bytes.
+#if !defined(ICO_UINT_SRC) && !defined(ICO_FX_DST_LOCAL) && !defined(ICO_FX_FRAME)
+uint4 fx_aura_rows_ps(float4 pos : SV_Position) : SV_Target0
+{
+    const uint flags = g_mode.x;
+    int2 gp, gb;
+    fx_pixel_gs(pos.xy, gp, gb); // x: FEED128's column; y unused
+    const int x0 = int(g_param.x), x1 = int(g_param.z);
+    if (gb.x < x0 || gb.x >= x1) {
+        discard;
+    }
+    const uint steps = uint(g_scale.w);
+    const GsAxis ax =
+        gs_resample_axis(fx_sprite_su(gp.x), int(steps >> 12), (flags & FXF_LINEAR) != 0u);
+    return fx_kernel_row(ax, gs_resample_div(ax), int(pos.y), flags);
+}
+#endif
+
+#ifdef ICO_UINT_SRC
+float4 fx_aura_sum_ps(float4 pos : SV_Position) : SV_Target0
+{
+    const uint flags = g_mode.x;
+    const int2 px = int2(pos.xy);
+    int2 gp, gb;
+    fx_pixel_gs(pos.xy, gp, gb);
+    const int x0 = int(g_param.x), y0 = int(g_param.y), x1 = int(g_param.z), y1 = int(g_param.w);
+    if (gb.x < x0 || gb.x >= x1 || gb.y < y0 || gb.y >= y1) {
+        discard;
+    }
+    const uint steps = uint(g_scale.w);
+    const GsAxis ay =
+        gs_resample_axis(fx_sprite_sv(gp.y), int(steps & 4095u), (flags & FXF_LINEAR) != 0u);
+    const uint dy = gs_resample_div(ay);
+    uint4 sum = uint4(0u, 0u, 0u, 0u);
+    const int ny = min(ay.count, GS_RS_TAPS_MAX);
+    [loop] for (int j = 0; j < ny; j++) {
+        sum += fx_load(g_texture, int2(px.x, fx_axis_y(ay.first + j, flags))) *
+               gs_resample_weight(ay, j);
+    }
+    const uint4 t = (sum + 8u * dy) / (16u * dy);
+    return fx_sprite_out(fx_tfx(t, g_col, flags), px, flags);
+}
+#endif
 
 // fx_blur2_ps: a pair of the blur's passes (staticBlur.c blur(n): pass 1
 // WORK0 -> WORK1 with the rect shrunk, pass 2 WORK1 -> WORK0 with the UVs
