@@ -641,8 +641,10 @@ static const struct {
        the careful one on a device of the table) */
     {"dev.pipeline_set", "pipeline_set"},
     /* the start-up set's free-memory floor on Android in MB (issue 161;
-       diag_host.c memory_floor_stop): auto, the default, 17 % of the
-       device's memory, at most 1536 MB above 8 GB; 0 off */
+       diag_host.c memory_floor_stop): auto, the default, by the driver
+       (memory_floor.h: 17 % of the device's memory, at most 2048 MB above
+       8 GB on Qualcomm's own driver, at most 512 MB above 8 GB on any
+       other); 0 off */
     {"dev.pipeline_memory_floor_mb", "pipeline_memory_floor_mb"},
     /* the texture decode pool's worker threads: auto (the default: 2, 1 on
        a machine with 2 hardware threads or fewer), 0 every decode on the

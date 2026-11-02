@@ -542,6 +542,30 @@ void ico_diag_note_low_memory(int level);
    ("running critical", "running low"), else 0. A 1 marks the stop for
    ico_diag_startup_activity_budget_stop. Any thread. */
 int ico_diag_low_memory_stop(char *why, size_t size);
+/* The free-memory floor's driver class (memory_floor.h
+   ico_memory_floor_driver: vendor id and driver text, the window's
+   rhi_limits() before the start-up set): Qualcomm's own driver keeps 17 %
+   of total, at most 2048 MB above 8 GB; any other driver at most 512 MB
+   above 8 GB; until set, the cautious rule.  A stop at the floor on
+   another driver is for this start only
+   (ico_diag_startup_activity_budget_stop: "the next start makes the set
+   again"). */
+void ico_diag_set_memory_floor_driver(unsigned vendor_id, const char *driver_text);
+/* The class set (IcoMemoryFloorDriver) */
+int ico_diag_memory_floor_driver(void);
+/* 1 when the start-up set stopped at the free-memory floor and no
+   low-memory signal has come (the window's background finisher may run),
+   else 0 */
+int ico_diag_floor_stopped(void);
+/* The background finisher's check before each batch (port/render/rd.h
+   rd_pipelines_background_start): 2 when the system's low-memory signal
+   came ("running critical" at any time of the run, "running low" once a
+   pipeline was made; the finisher ends), 1 when MemAvailable is under the floor now (the batch
+   waits), else 0; why holding the words ("the system's low-memory signal
+   (running low)", "N MB available of T MB, floor F MB", "N MB available of
+   T MB").  Reads MemAvailable each call (Android; elsewhere 0). Any
+   thread. */
+int ico_diag_background_memory(char *why, size_t size);
 /* On the main thread (the start-up screen's progress, the window's pump):
    a low-memory line waiting from ico_diag_note_low_memory goes into the
    activity file while it records. Cheap when none waits. */
@@ -578,6 +602,12 @@ void ico_diag_startup_activity_careful(int on);
    only (ICO_DIAG_ACTIVITY_LAZY, its notes and exit saying "for this start
    only", the "set: careful" line kept), so a freeze in a later creation is
    named and counted while the next start tries the set again.
+   A set stopped at the free-memory floor on another driver than
+   Qualcomm's own (ico_diag_set_memory_floor_driver) is for this start only
+   too ("ico_pc: the start-up set stopped at the free-memory floor (<words>)
+   on another driver than Qualcomm's own; the next start makes the set
+   again"); the window then finishes the set in the background
+   (window_pipe_finish.c).
    A set stopped at the system's low-memory signal (issue 128;
    ico_diag_low_memory_stop answered 1) records the rest of the run as a
    lazy run that is not for this start only, with the line "set: stopped

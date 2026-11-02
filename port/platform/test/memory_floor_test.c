@@ -2,29 +2,36 @@
  * port/platform/test/memory_floor_test.c
  *
  * The start-up set's free-memory floor (memory_floor.h, issue 161):
- *   floor    the default is 17 % of MemTotal, at most 2048 MB on a device
- *            of more than 8192 MB: 696 MB on a 4 GB (4096 MB) phone, 522 MB
- *            on a 3 GB one, 870 MB on 5120 MB, 1392 MB on 8 GB (8192 MB),
- *            1445 MB on 8500 MB (17 % under the cap), 2048 MB on 12 GB
- *            (12288 MB), 16 GB (16384 MB) and the Retroid Pocket 6's
- *            11265 MB; a setting above 0 is the floor (above the cap too),
- *            0 turns it off;
- *   dxt48    the v0.9.8-rc1 start on the PowerVR DXT-48 phone (15552 MB):
- *            2554 MB available (where the plain 17 %, 2643 MB, stopped the
- *            set after 33 of 1193) and 2647 MB (in play) continue under the
- *            2048 MB floor, 2047 MB stops; with [dev]
- *            pipeline_memory_floor_mb = 2643 the old stop comes back;
- *   reporter the v0.9.5 start's figures on the 11265 MB device: 3340 MB
- *            available (147 made) continues and 1693 MB (211 made, the
- *            stall) stops under the default floor of 1915 MB (17 %, under
- *            the cap); 1915 MB continues, 1914 MB stops; with [dev]
- *            pipeline_memory_floor_mb = 1915 1693 stops too;
+ *   floor    Qualcomm's own driver (Q, and a driver not known, U): 17 % of
+ *            MemTotal, at most 2048 MB on a device of more than 8192 MB:
+ *            696 MB on a 4 GB (4096 MB) phone, 522 MB on a 3 GB one, 870
+ *            MB on 5120 MB, 1392 MB on 8 GB, 1445 MB on 8500 MB, 1915 MB
+ *            on the Retroid Pocket 6's 11265 MB, 2048 MB on 12 GB and 16
+ *            GB; any other driver (O): the same 17 % up to 8 GB, at most
+ *            512 MB above (512 MB on 8500, 11265, 12288, 15552 and 16384
+ *            MB); a setting above 0 is the floor for every class, 0 turns
+ *            it off;
+ *   driver   the class from the vendor id and the driver text: 0x5143
+ *            with Qualcomm's own text Q, with "turnip Mesa driver" or
+ *            "Mesa 25.1.0" (any case) O, PowerVR (0x1010) and Mali
+ *            (0x13B5) O, vendor 0 U; the class's words;
+ *   dxt48    the PowerVR DXT-48 phone (15552 MB, class O): a start's
+ *            1823 MB (stopped under the 2048 MB cap: the rest made on first
+ *            use, a 2.2 s freeze in play) and another start's 2554 MB
+ *            continue under 512 MB, 511 MB stops; with [dev]
+ *            pipeline_memory_floor_mb = 2048 1823 stops again;
+ *   reporter the issue 161 start's figures on the 11265 MB device on
+ *            Qualcomm's own driver: 3340 MB available continues and 1693
+ *            MB (the stall) stops under its floor of 1915 MB; 1915 MB
+ *            continues, 1914 MB stops; with [dev] pipeline_memory_floor_mb
+ *            = 1600 1693 continues; the same figures on Turnip (class O)
+ *            continue;
  *   small    a 4 GB phone at 1200 MB available continues, at 600 MB stops
- *            (review finding 1: an absolute 1536 MB stopped it); a 3 GB
- *            phone at 700 MB continues; a 5 GB device at 1.5 GB continues,
- *            at 800 MB stops;
+ *            on every class (review finding 1: an absolute 1536 MB stopped
+ *            it); a 3 GB phone at 700 MB continues; a 5 GB device at 1.5
+ *            GB continues, at 800 MB stops;
  *   unknown  an unknown figure (below 0) never stops;
- *   rule     the log lines' words for the default, the setting and off;
+ *   rule     the log lines' words for each class, the setting and off;
  *   setting  "", "auto" unset; "0" off; "2048" 2048; "-1", "x", "12 MB"
  *            not read.
  */
@@ -42,67 +49,114 @@ static int failures;
         }                                                                                          \
     } while (0)
 
+enum {
+    U = ICO_MEMORY_FLOOR_DRIVER_UNKNOWN,
+    Q = ICO_MEMORY_FLOOR_DRIVER_QUALCOMM,
+    O = ICO_MEMORY_FLOOR_DRIVER_OTHER
+};
+
 static void testFloor(void)
 {
-    CHECK(ico_memory_floor_mb(4096, -1) == 696);
-    CHECK(ico_memory_floor_mb(3072, -1) == 522);
-    CHECK(ico_memory_floor_mb(5120, -1) == 870);
-    CHECK(ico_memory_floor_mb(8192, -1) == 1392);
-    CHECK(ico_memory_floor_mb(8500, -1) == 1445);
-    CHECK(ico_memory_floor_mb(11265, -1) == 1915);
-    CHECK(ico_memory_floor_mb(12288, -1) == 2048);
-    CHECK(ico_memory_floor_mb(15552, -1) == 2048);
-    CHECK(ico_memory_floor_mb(16384, -1) == 2048);
-    CHECK(ico_memory_floor_mb(11265, 0) == 0);
-    CHECK(ico_memory_floor_mb(16384, 0) == 0);
-    CHECK(ico_memory_floor_mb(11265, 1900) == 1900);
-    CHECK(ico_memory_floor_mb(16384, 2643) == 2643);
-    CHECK(ico_memory_floor_mb(4096, 1000) == 1000);
+    const int classes[2] = {Q, U};
+    for (int c = 0; c < 2; c++) {
+        const int d = classes[c];
+        CHECK(ico_memory_floor_mb(4096, -1, d) == 696);
+        CHECK(ico_memory_floor_mb(3072, -1, d) == 522);
+        CHECK(ico_memory_floor_mb(5120, -1, d) == 870);
+        CHECK(ico_memory_floor_mb(8192, -1, d) == 1392);
+        CHECK(ico_memory_floor_mb(8500, -1, d) == 1445);
+        CHECK(ico_memory_floor_mb(11265, -1, d) == 1915);
+        CHECK(ico_memory_floor_mb(12288, -1, d) == 2048);
+        CHECK(ico_memory_floor_mb(15552, -1, d) == 2048);
+        CHECK(ico_memory_floor_mb(16384, -1, d) == 2048);
+    }
+    CHECK(ico_memory_floor_mb(4096, -1, O) == 696);
+    CHECK(ico_memory_floor_mb(3072, -1, O) == 522);
+    CHECK(ico_memory_floor_mb(5120, -1, O) == 870);
+    CHECK(ico_memory_floor_mb(8192, -1, O) == 1392);
+    CHECK(ico_memory_floor_mb(8500, -1, O) == 512);
+    CHECK(ico_memory_floor_mb(11265, -1, O) == 512);
+    CHECK(ico_memory_floor_mb(12288, -1, O) == 512);
+    CHECK(ico_memory_floor_mb(15552, -1, O) == 512);
+    CHECK(ico_memory_floor_mb(16384, -1, O) == 512);
+    for (int d = U; d <= O; d++) {
+        CHECK(ico_memory_floor_mb(11265, 0, d) == 0);
+        CHECK(ico_memory_floor_mb(16384, 0, d) == 0);
+        CHECK(ico_memory_floor_mb(11265, 1900, d) == 1900);
+        CHECK(ico_memory_floor_mb(16384, 2643, d) == 2643);
+        CHECK(ico_memory_floor_mb(4096, 1000, d) == 1000);
+    }
+}
+
+static void testDriver(void)
+{
+    CHECK(ico_memory_floor_driver(0x5143u, "driver Qualcomm 512.676.53, version 512.676.53") == Q);
+    CHECK(ico_memory_floor_driver(0x5143u, NULL) == Q);
+    CHECK(ico_memory_floor_driver(0x5143u, "turnip Mesa driver") == O);
+    CHECK(ico_memory_floor_driver(0x5143u, "Turnip Mesa 26.3.0") == O);
+    CHECK(ico_memory_floor_driver(0x5143u, "Mesa 25.1.0") == O);
+    CHECK(ico_memory_floor_driver(0x1010u, "PowerVR D-Series Vulkan Driver 26.1@7036548") == O);
+    CHECK(ico_memory_floor_driver(0x13B5u, "Mali-G52") == O);
+    CHECK(ico_memory_floor_driver(0u, "anything") == U);
+    CHECK(strcmp(ico_memory_floor_driver_words(Q), "Qualcomm's own driver") == 0);
+    CHECK(strcmp(ico_memory_floor_driver_words(O), "another driver than Qualcomm's own") == 0);
+    CHECK(strcmp(ico_memory_floor_driver_words(U), "the driver not known yet") == 0);
 }
 
 static void testDxt48(void)
 {
-    CHECK(!ico_memory_floor_stops(2554, 15552, -1));
-    CHECK(!ico_memory_floor_stops(2647, 15552, -1));
-    CHECK(!ico_memory_floor_stops(2048, 15552, -1));
-    CHECK(ico_memory_floor_stops(2047, 15552, -1));
-    CHECK(ico_memory_floor_stops(2554, 15552, 2643));
-    CHECK(!ico_memory_floor_stops(2554, 15552, 0));
+    CHECK(!ico_memory_floor_stops(1823, 15552, -1, O));
+    CHECK(!ico_memory_floor_stops(2554, 15552, -1, O));
+    CHECK(!ico_memory_floor_stops(512, 15552, -1, O));
+    CHECK(ico_memory_floor_stops(511, 15552, -1, O));
+    CHECK(ico_memory_floor_stops(1823, 15552, -1, Q)); /* that stop, under the 2048 MB cap */
+    CHECK(ico_memory_floor_stops(1823, 15552, 2048, O));
+    CHECK(!ico_memory_floor_stops(1823, 15552, 0, O));
 }
 
 static void testReporter(void)
 {
-    CHECK(!ico_memory_floor_stops(3340, 11265, -1));
-    CHECK(ico_memory_floor_stops(1693, 11265, -1));
-    CHECK(!ico_memory_floor_stops(1915, 11265, -1));
-    CHECK(ico_memory_floor_stops(1914, 11265, -1));
-    CHECK(ico_memory_floor_stops(1693, 11265, 1915));
-    CHECK(ico_memory_floor_stops(1693, 11265, 1900));
-    CHECK(!ico_memory_floor_stops(1693, 11265, 1600));
-    CHECK(!ico_memory_floor_stops(3340, 11265, 1900));
-    CHECK(!ico_memory_floor_stops(100, 11265, 0));
+    CHECK(!ico_memory_floor_stops(3340, 11265, -1, Q));
+    CHECK(ico_memory_floor_stops(1693, 11265, -1, Q));
+    CHECK(!ico_memory_floor_stops(1915, 11265, -1, Q));
+    CHECK(ico_memory_floor_stops(1914, 11265, -1, Q));
+    CHECK(ico_memory_floor_stops(1693, 11265, -1, U));
+    CHECK(ico_memory_floor_stops(1693, 11265, 1900, Q));
+    CHECK(!ico_memory_floor_stops(1693, 11265, 1600, Q));
+    CHECK(!ico_memory_floor_stops(3340, 11265, 1900, Q));
+    CHECK(!ico_memory_floor_stops(100, 11265, 0, Q));
+    CHECK(!ico_memory_floor_stops(1693, 11265, -1, O)); /* Turnip on the same console */
 }
 
 static void testSmall(void)
 {
-    CHECK(!ico_memory_floor_stops(1200, 4096, -1));
-    CHECK(ico_memory_floor_stops(600, 4096, -1));
-    CHECK(!ico_memory_floor_stops(700, 3072, -1));
-    CHECK(!ico_memory_floor_stops(1500, 5120, -1));
-    CHECK(ico_memory_floor_stops(800, 5120, -1));
+    for (int d = U; d <= O; d++) {
+        CHECK(!ico_memory_floor_stops(1200, 4096, -1, d));
+        CHECK(ico_memory_floor_stops(600, 4096, -1, d));
+        CHECK(!ico_memory_floor_stops(700, 3072, -1, d));
+        CHECK(!ico_memory_floor_stops(1500, 5120, -1, d));
+        CHECK(ico_memory_floor_stops(800, 5120, -1, d));
+    }
 }
 
 static void testUnknown(void)
 {
-    CHECK(!ico_memory_floor_stops(-1, 11265, -1));
-    CHECK(!ico_memory_floor_stops(1000, -1, 2000));
+    CHECK(!ico_memory_floor_stops(-1, 11265, -1, Q));
+    CHECK(!ico_memory_floor_stops(1000, -1, 2000, O));
 }
 
 static void testRule(void)
 {
-    CHECK(strcmp(ico_memory_floor_rule(-1), "17 % of total, at most 2048 MB above 8 GB") == 0);
-    CHECK(strcmp(ico_memory_floor_rule(2643), "[dev] pipeline_memory_floor_mb") == 0);
-    CHECK(strcmp(ico_memory_floor_rule(0), "off") == 0);
+    CHECK(strcmp(ico_memory_floor_rule(-1, O),
+                 "the set's need with a margin: 17 % of total, at most 512 MB above 8 GB; "
+                 "Qualcomm's own driver keeps 17 % of total, at most 2048 MB above 8 GB") == 0);
+    CHECK(strcmp(ico_memory_floor_rule(-1, Q),
+                 "Qualcomm's own driver: 17 % of total, at most 2048 MB above 8 GB; other "
+                 "drivers at most 512 MB") == 0);
+    CHECK(strcmp(ico_memory_floor_rule(-1, U),
+                 "the driver not known yet: 17 % of total, at most 2048 MB above 8 GB") == 0);
+    CHECK(strcmp(ico_memory_floor_rule(2643, O), "[dev] pipeline_memory_floor_mb") == 0);
+    CHECK(strcmp(ico_memory_floor_rule(0, Q), "off") == 0);
 }
 
 static void testSetting(void)
@@ -120,6 +174,7 @@ static void testSetting(void)
 int main(void)
 {
     testFloor();
+    testDriver();
     testDxt48();
     testReporter();
     testSmall();

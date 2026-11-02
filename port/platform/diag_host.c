@@ -2134,61 +2134,151 @@ static void low_memory_stop_note(int level)
 /* The free-memory floor (memory_floor.h, issue 161): on Android the set
    also stops once MemAvailable is under the floor ([dev]
    pipeline_memory_floor_mb, exported as ICO_PIPELINE_MEMORY_FLOOR_MB; the
-   default 17 % of MemTotal, at most 2048 MB above 8 GB: 696 MB on a 4 GB
-   phone, 1915 MB on the reporter's 11265 MB, 2048 MB on a 16 GB phone), and is
-   recorded as the low-memory signal's stop (the next start makes no set).
-   The v0.9.5 Retroid Pocket 6 start stalled in the driver at 1693 MB of
-   11265 MB available with no onTrimMemory signal; a 15552 MB PowerVR phone
-   ran the game with 2554 MB available, which the plain 17 % (2643 MB)
-   stopped.  The floor in force is logged once, at the first ask, with the
-   figures then.  floor_why: the stop's words, "" until it stops (the set's
-   thread only) */
+   default by the driver class, ico_diag_set_memory_floor_driver: on
+   Qualcomm's own driver 17 % of MemTotal, at most 2048 MB above 8 GB, 1915
+   MB on the reporter's 11265 MB; on any other driver the set's need with
+   a margin, at most 512 MB above 8 GB).  A Retroid Pocket 6
+   start stalled in Qualcomm's driver at 1693 MB of 11265 MB available with
+   no onTrimMemory signal; a 15552 MB PowerVR phone ran the game with 1823
+   to 2647 MB available, which the 2048 MB cap stopped at 1823 MB.  A stop
+   at the floor on Qualcomm's own driver is recorded as the low-memory
+   signal's stop (the next start makes no set); on another driver it is for
+   this start only, and the window's finisher makes the rest in the
+   background (window_pipe_finish.c).  The floor in force is logged once,
+   at the first ask, with the driver class and the figures then.  floor_why:
+   the stop's words, "" until it stops (the set's thread only) */
 static char floor_why[96];
+/* the driver class (memory_floor.h IcoMemoryFloorDriver), set by the
+   window before the set */
+static volatile int floor_driver = ICO_MEMORY_FLOOR_DRIVER_UNKNOWN;
+/* the strongest low-memory level that asks the background finisher to end
+   (15 "running critical" at any time of the run, 10 "running low" once a
+   pipeline is made; ico_diag_note_low_memory), 0 none */
+static volatile int bg_signal_level;
+
+void ico_diag_set_memory_floor_driver(unsigned vendor_id, const char *driver_text)
+{
+    floor_driver = ico_memory_floor_driver(vendor_id, driver_text);
+}
+
+int ico_diag_memory_floor_driver(void)
+{
+    return floor_driver;
+}
+
+#ifdef __ANDROID__
+/* the floor setting: -3 not read yet, else ico_memory_floor_setting's value
+   (-2 read as the default) */
+static long floor_setting = -3;
+
+static long floor_setting_read(void)
+{
+    if (floor_setting == -3) {
+        const char *v = getenv("ICO_PIPELINE_MEMORY_FLOOR_MB");
+        floor_setting = ico_memory_floor_setting(v);
+        if (floor_setting == -2) {
+            ico_diag_log("ico_pc: [dev] pipeline_memory_floor_mb = \"%s\" is not a whole number "
+                         "of MB; the default floor",
+                         v);
+            floor_setting = -1;
+        }
+    }
+    return floor_setting;
+}
+#endif
 
 static int memory_floor_stop(void)
 {
 #ifdef __ANDROID__
-    static long setting = -3; /* -3: not read yet */
     static int told;
-    long avail_kb, total_kb, avail, total, floor;
+    long avail_kb, total_kb, avail, total, floor, setting;
+    const int driver = floor_driver;
     if (floor_why[0] != '\0') {
         return 1;
     }
-    if (setting == -3) {
-        const char *v = getenv("ICO_PIPELINE_MEMORY_FLOOR_MB");
-        setting = ico_memory_floor_setting(v);
-        if (setting == -2) {
-            ico_diag_log("ico_pc: [dev] pipeline_memory_floor_mb = \"%s\" is not a whole number of "
-                         "MB; the default floor",
-                         v);
-            setting = -1;
-        }
-    }
+    setting = floor_setting_read();
     if (setting == 0 || ico_diag_device_memory(&avail_kb, &total_kb) != 0) {
         return 0;
     }
     avail = avail_kb / 1024;
     total = total_kb / 1024;
-    floor = ico_memory_floor_mb(total, setting);
+    floor = ico_memory_floor_mb(total, setting, driver);
     if (!told) {
         told = 1;
-        ico_diag_log("ico_pc: pipelines: the free-memory floor is %ld MB (%s); %ld MB available "
-                     "of %ld MB now",
-                     floor, ico_memory_floor_rule(setting), avail, total);
+        ico_diag_log("ico_pc: pipelines: the free-memory floor is %ld MB (%s); %s; %ld MB "
+                     "available of %ld MB now",
+                     floor, ico_memory_floor_rule(setting, driver),
+                     ico_memory_floor_driver_words(driver), avail, total);
     }
-    if (!ico_memory_floor_stops(avail, total, setting)) {
+    if (!ico_memory_floor_stops(avail, total, setting, driver)) {
         return 0;
     }
     snprintf(floor_why, sizeof floor_why, "%ld MB available of %ld MB, floor %ld MB", avail, total,
              floor);
     ico_diag_log(
         "ico_pc: pipelines: the start-up set stopped at %ld MB available of %ld MB (floor %ld "
-        "MB, %s): the rest made on first use",
-        avail, total, floor, ico_memory_floor_rule(setting));
+        "MB, %s; %s): the rest made %s",
+        avail, total, floor, ico_memory_floor_rule(setting, driver),
+        ico_memory_floor_driver_words(driver),
+        driver == ICO_MEMORY_FLOOR_DRIVER_OTHER ? "in the background and on first use"
+                                                : "on first use");
     return 1;
 #else
     return 0;
 #endif
+}
+
+int ico_diag_floor_stopped(void)
+{
+    return floor_why[0] != '\0' && __atomic_load_n(&low_memory_stop_level, __ATOMIC_ACQUIRE) == 0 &&
+           bg_signal_level == 0;
+}
+
+/* a stop at the floor carries over to the next start (no set) on
+   Qualcomm's own driver, or a driver not known, only */
+static int floor_stop_persists(void)
+{
+    return floor_driver != ICO_MEMORY_FLOOR_DRIVER_OTHER;
+}
+
+int ico_diag_background_memory(char *why, size_t size)
+{
+    const int level = __atomic_load_n(&low_memory_stop_level, __ATOMIC_ACQUIRE);
+    const int bg = bg_signal_level;
+    if (why != NULL && size > 0) {
+        why[0] = '\0';
+    }
+    if (level != 0 || bg != 0) {
+        if (why != NULL && size > 0) {
+            snprintf(why, size, "the system's low-memory signal (%s)",
+                     trim_name(level > bg ? level : bg));
+        }
+        return 2;
+    }
+#ifdef __ANDROID__
+    {
+        long avail_kb, total_kb, avail, total, floor;
+        const long setting = floor_setting_read();
+        const int driver = floor_driver;
+        if (setting == 0 || ico_diag_device_memory(&avail_kb, &total_kb) != 0) {
+            return 0;
+        }
+        avail = avail_kb / 1024;
+        total = total_kb / 1024;
+        floor = ico_memory_floor_mb(total, setting, driver);
+        if (ico_memory_floor_stops(avail, total, setting, driver)) {
+            if (why != NULL && size > 0) {
+                snprintf(why, size, "%ld MB available of %ld MB, floor %ld MB", avail, total,
+                         floor);
+            }
+            return 1;
+        }
+        if (why != NULL && size > 0) {
+            snprintf(why, size, "%ld MB available of %ld MB", avail, total);
+        }
+    }
+#endif
+    return 0;
 }
 
 int ico_diag_low_memory_stop(char *why, size_t size)
@@ -2217,6 +2307,14 @@ void ico_diag_note_low_memory(int level)
     const unsigned int nth = ++low_memory_count;
     /* before the line: the set reads the flag between two batches */
     low_memory_stop_note(level);
+    /* the background finisher ends (ico_diag_background_memory): "running
+       critical" whenever it comes, "running low" once a pipeline is made
+       (one while the app is opened can be the system making room for it,
+       as low_memory_stop_note reads it) */
+    if ((level == 15 || (level == 10 && (pipes_done > 0 || pipes_made > 0))) &&
+        level > bg_signal_level) {
+        bg_signal_level = level;
+    }
     act_where(pipes, sizeof pipes);
     ico_diag_memory_text(mem, sizeof mem);
     if (mem[0] == '\0') {
@@ -2882,7 +2980,19 @@ void ico_diag_startup_activity_budget_stop(void)
        broken as at its finish; the rest of the run is a lazy run's, for
        this start only (the careful line kept) */
     ends_clean();
-    if (low_memory_stopped) {
+    if (low_memory_stopped && floor_why[0] != '\0' && !floor_stop_persists() &&
+        __atomic_load_n(&low_memory_stop_level, __ATOMIC_ACQUIRE) == 0) {
+        /* the free-memory floor on another driver than Qualcomm's own: the
+           floor is the set's need with a margin, not issue 161's guard
+           against that driver's compiler, so the stop is for this start
+           only (the next start makes the set again, from the cache) and
+           the window's finisher makes the rest in the background */
+        ico_diag_log("ico_pc: the start-up set stopped at the free-memory floor (%s) on %s; the "
+                     "next start makes the set again",
+                     floor_why, ico_memory_floor_driver_words(floor_driver));
+        act_nbatches = 0;
+        act_once = 1;
+    } else if (low_memory_stopped) {
         /* issue 128: stopped at the system's low-memory signal
            (ico_diag_low_memory_stop): the file's line says so for the rest
            of the run, and the lazy run is not for this start only, so the
