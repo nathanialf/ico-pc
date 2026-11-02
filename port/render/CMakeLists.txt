@@ -2127,6 +2127,31 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_pass_area_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_glow_cheap_ab (test/rd_glow_cheap_ab.cmake): the glow dumps of
+    # tools/glow_cheap_dumps.txt against the pass dumps the build before the
+    # glow's cheaper passes stored (machine-local: the phone's profile under
+    # build-host/tmp/v098/evidence/glow/pd-phone, Original and Enhanced 2x 4:3
+    # under build-host/tmp/v095/after/w3/pd): every target within 0 levels,
+    # at least two glow passes fewer at the phone's setting (WORK2's fill in
+    # the mask's pass, cleanUpFB in the fog's), none more elsewhere; SKIP
+    # without the dumps or their baselines
+    if(Python3_FOUND)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/glow_cheap_ab")
+        add_test(NAME rd_glow_cheap_ab
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                         "-DLIST=${CMAKE_SOURCE_DIR}/tools/glow_cheap_dumps.txt"
+                         "-DBASE_PHONE=${CMAKE_SOURCE_DIR}/build-host/tmp/v098/evidence/glow/pd-phone"
+                         "-DBASE_DESK=${CMAKE_SOURCE_DIR}/build-host/tmp/v095/after/w3/pd"
+                         "-DPY=${Python3_EXECUTABLE}"
+                         "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/glow_cheap_ab"
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_glow_cheap_ab.cmake")
+        set_tests_properties(rd_glow_cheap_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                             TIMEOUT 3600)
+        if(_env)
+            set_tests_properties(rd_glow_cheap_ab PROPERTIES ENVIRONMENT "${_env}")
+        endif()
+    endif()
     # rd_pass_cut_ab (test/rd_pass_cut_ab.cmake): the dumps of
     # tools/pass_cut_dumps.txt with every pass cut off and each on alone and
     # all on (rd_pass_cut.c: ICO_RD_CLEAR_CARRY, ICO_RD_CLEAR_SKIP,

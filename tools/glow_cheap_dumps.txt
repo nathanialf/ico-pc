@@ -1,0 +1,29 @@
+# Dump list for rd_glow_cheap_ab (port/render/test/rd_glow_cheap_ab.cmake: the
+# glow's cheaper passes against the stored pass dumps of the build before them,
+# level for level, and fewer glow passes at the phone's setting).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  Missing files are reported and skipped (no
+# dump at all: SKIP).  Relative paths are relative to this file; '*' globs are
+# allowed.  Every dump here draws the glow (rd_replay_tool --stats: "glow N
+# passes" above 0); a dump's baseline folder is named after the dump as
+# build-host/tmp/v098/gate-wave.sh names it (the dump's folder and its name).
+#
+# a Mac reporter's 16:9 frame, the issue 95 title (device loss), the forest
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/95/loss-20261015-100428-lost.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port/keep/rd-00720.rddump
+# the issue 91 rc1 frames
+/primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181358-v1279.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181400-v1358.rddump
+# the godrays frames
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01076.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01077.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01078.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01079.rddump
+/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01080.rddump
+# the issue 146 frame and its previous tick
+/primary/dev/ico-pc/build-host/tmp/v091/evidence/146/frame-20261025-221358-v2567/frame-20261025-221358-v2567.rddump
+/primary/dev/ico-pc/build-host/tmp/v091/evidence/146/frame-20261025-221358-v2567/frame-20261025-221358-v2567-prev.rddump
+# the issue 163 frames (3:2, the lamps' meshes drawn into WORK2)
+/primary/dev/ico-pc/build-host/tmp/v097/evidence/163/frame/frame-20261031-211530-v10103.rddump
+/primary/dev/ico-pc/build-host/tmp/v096/evidence/163/frame/frame-20261030-153517-v10250.rddump

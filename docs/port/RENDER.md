@@ -342,6 +342,66 @@ At 1x every target is equal before and after on the three dumps of that run.
 The other costs above 1x are the frame-sized draws (four, at the scene's scale) and the reduction
 WORK2 -> WORK0, a box of 4 x 8 texels at 2x (`blurAbove1xSteps`).
 
+### The glow's passes
+
+On a tile-based GPU each render pass costs its loads and stores (a 2364 x 1080 colour target is
+10.2 MB each way, about 1 ms per 10 MB on the PowerVR phone) and a fixed cost (about 0.24 ms for
+each small work-buffer pass there). The PowerVR phone's 10 s line in a glow room at Resolution Auto
+(2026-11-02): `glow 11.44` ms of a 31 ms picture, `glow WORK2 2366x1080 2.0 passes 1 draws 4.73 ms,
+glow SCENE 2366x1080 3.0 passes 3 draws 3.54 ms, glow WORK0 424x128 12.0 passes 12 draws 2.90 ms`,
+21 glow passes a replay. The chain at the phone's setting (`rd_replay_tool DUMP x --stats
+--pass-times --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080` with
+`ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_PREPASS=0`, the godrays frame rd-01077; `--list --no-device`
+for the commands), the bytes at 2364 x 1080:
+
+| pass | target | draws | what (`ico2/sugipon/src/staticBlur.c`) | reads | loads, stores |
+| --- | --- | --- | --- | --- | --- |
+| fog | SCENE | the fog's | list 4 | SCENE's depth (local) | |
+| 1 | SCENE | 1 | `cleanUpFB`'s first sprite: SCENE's alpha 0 (the constant fold, Z ALWAYS) | | 10.2 MB, 10.2 MB |
+| 2 | SCENE | 1 | `cleanUpFB`'s second: alpha 192 under Z GEQUAL (needs the depth) | SCENE's depth | 10.2 MB + the depth, 10.2 MB |
+| 3 | WORK2_PAD | 0 | `fillWork2`'s band (a clear) | | 0, 0.1 MB |
+| 4 | WORK2 | 0 | `fillWork2`'s fill (a clear) | | 0, 10.2 MB |
+| 5 | WORK2 | 1 | `makeMaskPatternToWork2`: SCENE's alpha into WORK2 (fx plan, the alpha alone) | SCENE | 10.2 MB, 10.2 MB |
+| 6 | WORK0 | 1 | `reduceWork2ToWork0` (the box above 1x) | WORK2 | 0.1 MB each way |
+| 7 .. 15 | WORK0 | 1 each | nine `blur(n)` pairs folded (`fx_blur2_ps`) | WORK0's snapshot | 0.1 MB each way each |
+| 16, 17 | WORK1, WORK0 | 1, 1 | the last pair as two passes (and the edge strip on a wide frame) | | |
+| 18 | WORK3 | 1 | `eyeBlur` (with the sun: its ghosts, shrink into WORK1 and tint) | WORK0 | |
+| 19 | WORK0 | 1 | `pasteWork0ToFB`: WORK0's alpha (the constant fold) | | |
+| 20 | SCENE | 1 or 2 | `pasteFullScreenFlare`: WORK3 onto SCENE (the premultiplied add) | WORK3 | 10.2 MB, 10.2 MB |
+
+Where the sun is on screen its fans (`dispSun`) draw into WORK2 between passes 4 and 5 and take the
+fill as their pass's load op (6 of the 14 corpus glow frames); the issue 163 frames draw the lamps'
+meshes into WORK2 after the mask, a pass of their own (they test SCENE's depth).
+
+Two of the breaks moved bytes nothing needed, and are gone (the same bytes; `rd_glow_cheap_ab`):
+
+- **WORK2's fill in the mask's pass** (pass 4). The mask reads SCENE, and the end of the open pass
+  for that read (the mask's transition of its source in `fxDraw`, and SCENE's border repeat before
+  it where the border is open) recorded the pending fill as a pass of its own. Both now end the pass
+  through `rd__replay_end_pass_for` (`endPassFor`, the clear carry: on on the tile class), so the
+  mask's pass takes the fill as its CLEAR load ([WORK_BUFFERS.md](WORK_BUFFERS.md#passes-cut)):
+  one full-size store and load fewer (about 2 ms of the 4.73 by the arithmetic). Where the fans
+  drew first nothing changes.
+- **cleanUpFB in the fog's pass** (passes 1 and 2). The first sprite uses no depth, so the constant
+  fold drew it in a pass without the depth, which ended the fog's pass, and the second (GEQUAL) began
+  a third. `fxAttachDepth` (`port/render/rd_fx_plan.c`) draws a constant fold that uses no depth in
+  the open pass on its target when that pass has the state's depth, through its key with the depth
+  attached under Z ALWAYS without Z write (the test passes every fragment and writes nothing), so the
+  second sprite's own key lands in the same pass: two full-size SCENE passes fewer where the fog's
+  pass has the depth (the tile class's local fog; about 2.4 ms of the 3.54 by the measured share).
+
+What is left: the mask's pass (SCENE read, WORK2 stored, then read by the reduction), the paste's
+SCENE pass (WORK3 is drawn after the fog's pass ends), and the twelve small WORK0 passes (the fixed
+cost). Not done, and why: the mask at half size (its alpha test makes a hard-edged mask, and the
+reduction's box over it moves by a whole texel at an edge: a difference no stored dump bounds
+yet); the mask folded into the reduction (exact, but `fx_sprite_ps`'s box would compute the mask's
+own bilinear and alpha test per texel it reads, a new shader form, and the fans and the lamps'
+meshes draw into WORK2 in 9 of the 14 frames); two blur pairs in one pass (exact needs pass 1's
+texels for pass 2's for pass 3's: 256 loads a texel or a window of intermediates per pixel; a blur
+of a blur in floats differs by the GS's truncation at each of the four steps, up to about 4 levels
+before the eye blur, and the twelve passes' fixed cost is about 2.9 ms). The glow pass count is the
+`--stats` `glow N passes` and the 10 s `passes per replay` line's `glow`.
+
 ## Textures
 
 The texture cache decodes the TIM2 bytes Texture.c keeps in memory into an rd texture when first

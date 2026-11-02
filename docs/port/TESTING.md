@@ -1187,6 +1187,20 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   must give some pass an area or name `its draws cover the picture` among the passes kept whole
   (the tool's `--stats` clause; the aura's paste and list 11's fades are full-frame sprites, so the
   stage 6 frames have no area to give) (`rd_pass_area_ab`). SKIP as `rd_vustage_ab`.
+- `rd_glow_cheap_ab.cmake`: the glow's cheaper passes ([RENDER.md](RENDER.md#the-glows-passes):
+  WORK2's fill in the mask's pass, cleanUpFB in the fog's) against stored pass dumps, as no switch
+  turns them off: the 14 glow dumps of `tools/glow_cheap_dumps.txt` (machine-local, a missing one
+  skipped) replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0` at
+  the PowerVR phone's profile on lavapipe (`ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_PREPASS=0`,
+  2364x1080, Full height, Full pixel, the dump's own aspect, presented at 2364x1080; baselines
+  `build-host/tmp/v098/evidence/glow/pd-phone`, made by the tool before the cuts) and at the gate's
+  Original and Enhanced 2x 4:3 (baselines `build-host/tmp/v095/after/w3/pd`, named as
+  `gate-wave.sh` names them): every baseline PNG the same bytes or within `-DBOUND` levels (0,
+  `png_level_diff.py`), the `glow N passes` count at least two fewer than the baseline's at the
+  phone's setting and no more at the others; each run's line prints the passes before and after
+  and its largest difference. A setting without a baseline is skipped; nothing compared: SKIP
+  (`rd_glow_cheap_ab`). A baseline refresh for a later change to the glow's drawing replaces both
+  folders.
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's
