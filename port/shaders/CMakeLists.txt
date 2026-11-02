@@ -245,16 +245,20 @@ ico_add_shader(shadow_count_ps blit.hlsl shadow_count_ps fragment)
 # fx_sprite_ps reading its textures through their RGBA8_UINT views
 # (RHI_TEX_UINT_VIEW; rd_replay.c doBlurSpriteDraw)
 ico_add_shader(fx_sprite_u_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_UINT_SRC=1)
-# The pixel-diet builds (vu_np_ps, vu_texa_np_ps, fx_frame_ps, fx_local_ps)
+# The pixel-diet builds (vu_np_ps, vu_np_ps_dstatt, vu_texa_np_ps, fx_frame_ps, fx_local_ps)
 # vu_ps and vu_texa_ps without the planes' inputs, for a target at a
 # fractional scale (ICO_VU_NO_PLANES; port/render/rd_pixel_plan.c
 # rd__vu_pixel_fs), with their two-pass twins; fx_sprite_ps's frame-size
 # forms (ICO_FX_FRAME: the alpha-only and premultiplied outputs) and its
 # destination read by local read (ICO_FX_DST_LOCAL; port/render/rd_fx_plan.c
-# rd__fx_plan_draw). No exact-blend twins
+# rd__fx_plan_draw). vu_np_ps also has the attachment read's twin
+# (vu_np_ps_dstatt: GS state as shader data at a fractional scale,
+# port/render/rd_uber.c; the storage read has none); no other exact-blend twins
 ico_add_shader(vu_np_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_VU_NO_PLANES=1)
 ico_add_shader(vu_np_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_VU_NO_PLANES=1 ICO_NO_DUAL=1
                SUFFIX _nodual)
+ico_add_shader(vu_np_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_VU_NO_PLANES=1 ICO_DST_READ=2
+               SUFFIX _dstatt)
 ico_add_shader(vu_texa_np_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_VU_NO_PLANES=1)
 ico_add_shader(vu_texa_np_ps vu_prelit.hlsl vu_texa_ps fragment DEFINES ICO_VU_NO_PLANES=1
                ICO_NO_DUAL=1 SUFFIX _nodual)

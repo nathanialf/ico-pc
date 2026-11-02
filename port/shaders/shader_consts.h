@@ -180,6 +180,13 @@ enum { ICO_DF_AA1_MSB_SET = 134217728, ICO_DF_AA1_MSB_CLEAR = 268435456 };
  * sprite_fold). */
 enum { ICO_DF_FOLD = 536870912 };
 
+/* DrawCB.mode[0] bit 30 (common.hlsli DF_DATE_DST): with ICO_DF_DATE, the
+ * *_dstatt entries test DATE against the alpha they read from the colour
+ * attachment (common.hlsli GS_DATE_SNAP), each fragment after the earlier
+ * primitives' writes in rasterization order, not against the R8 snapshot:
+ * GS state as shader data (port/render/rd_uber.c). */
+enum { ICO_DF_DATE_DST = 1073741824 };
+
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */
 enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 

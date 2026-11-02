@@ -53,11 +53,13 @@ static const char *const expectedTiler[] = {"date_clear_ps", "date_stencil_ps", 
                                             "fog_lut_local_ps_nodual", "fx_blur2_ps"};
 
 /* the pixel-diet builds: vu_ps and vu_texa_ps without the planes' inputs
- * (ICO_VU_NO_PLANES, with their two-pass twins) and fx_sprite_ps's
- * frame-size and local-read forms (ICO_FX_FRAME, ICO_FX_DST_LOCAL) */
-static const char *const expectedDiet[] = {"vu_np_ps",      "vu_np_ps_nodual",
-                                           "vu_texa_np_ps", "vu_texa_np_ps_nodual",
-                                           "fx_frame_ps",   "fx_local_ps"};
+ * (ICO_VU_NO_PLANES, with their two-pass twins, and vu_np_ps's attachment
+ * read twin for GS state as shader data, port/render/rd_uber.c) and
+ * fx_sprite_ps's frame-size and local-read forms (ICO_FX_FRAME,
+ * ICO_FX_DST_LOCAL) */
+static const char *const expectedDiet[] = {
+    "vu_np_ps",    "vu_np_ps_nodual", "vu_texa_np_ps",  "vu_texa_np_ps_nodual",
+    "fx_frame_ps", "fx_local_ps",     "vu_np_ps_dstatt"};
 
 /* Motion blur: Smooth's accumulator (fx_sprite.hlsl; port/render/rd_blur_smooth.c) */
 static const char *const expectedSmooth[] = {"fx_acc_ps", "fx_acc_resolve_ps"};
@@ -201,6 +203,7 @@ static const char *const expectedNoGlsl[] = {
     "sprite_texa_ps_planes_dstatt",
     "vu_ps_dstatt",
     "vu_texa_ps_dstatt",
+    "vu_np_ps_dstatt",
 };
 
 int main(void)

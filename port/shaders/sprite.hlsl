@@ -352,7 +352,7 @@ GS_PS_ATTR GS_PS_OUT sprite_ps(SpriteVSOut i)
     SPRITE_PLANE_ATTRS(i, i.col, st);
     i.uv = st.xy;
     if ((g_mode.x & DF_DATE) != 0u) {
-        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
+        if (gs_date_discard(g_mode.x, GS_DATE_SNAP(g_dateSnap, int2(i.pos.xy)))) {
             GS_DISCARD;
         }
     }
@@ -390,7 +390,7 @@ GS_PS_ATTR GS_PS_OUT sprite_texa_ps(SpriteVSOut i)
     SPRITE_PLANE_ATTRS(i, i.col, st);
     i.uv = st.xy;
     if ((g_mode.x & DF_DATE) != 0u) {
-        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
+        if (gs_date_discard(g_mode.x, GS_DATE_SNAP(g_dateSnap, int2(i.pos.xy)))) {
             GS_DISCARD;
         }
     }
@@ -414,7 +414,7 @@ GS_PS_ATTR GS_PS_OUT sprite_texa_ps(SpriteVSOut i)
 uint4 sprite_colour(float4 pos, float4 vcol, float2 uv, float q)
 {
     if ((g_mode.x & DF_DATE) != 0u) {
-        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(pos.xy), 0)))) {
+        if (gs_date_discard(g_mode.x, GS_DATE_SNAP(g_dateSnap, int2(pos.xy)))) {
             GS_DISCARD;
         }
     }

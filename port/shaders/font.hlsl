@@ -44,7 +44,7 @@ Texture2D<float> g_dateSnap : ICO_REG(t2, 2);
 GS_PS_ATTR GS_PS_OUT font_ps(SpriteVSOut i)
 {
     if ((g_mode.x & DF_DATE) != 0u) {
-        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
+        if (gs_date_discard(g_mode.x, GS_DATE_SNAP(g_dateSnap, int2(i.pos.xy)))) {
             GS_DISCARD;
         }
     }
@@ -142,7 +142,7 @@ void sheet_scaled(int2 p0, int2 size, uint4 style, uint dither, uint s, out floa
 GS_PS_ATTR GS_PS_OUT font_sheet_ps(SpriteVSOut i)
 {
     if ((g_mode.x & DF_DATE) != 0u) {
-        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
+        if (gs_date_discard(g_mode.x, GS_DATE_SNAP(g_dateSnap, int2(i.pos.xy)))) {
             GS_DISCARD;
         }
     }
@@ -227,7 +227,7 @@ float2 sheet_baked_texel(int2 p, int2 dim)
 GS_PS_ATTR GS_PS_OUT font_sheet_baked_ps(SpriteVSOut i)
 {
     if ((g_mode.x & DF_DATE) != 0u) {
-        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
+        if (gs_date_discard(g_mode.x, GS_DATE_SNAP(g_dateSnap, int2(i.pos.xy)))) {
             GS_DISCARD;
         }
     }

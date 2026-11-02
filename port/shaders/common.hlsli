@@ -334,6 +334,10 @@ cbuffer DrawCB : ICO_REG(b1, 1)
 // rows (gs_math.hlsli gs_fold_ch, gs_fold_applies).  shader_consts.h
 // ICO_DF_FOLD.
 #define DF_FOLD 536870912u
+// With DF_DATE, a *_dstatt entry tests DATE against the alpha it reads from
+// the colour attachment (GS_DATE_SNAP below): GS state as shader data
+// (port/render/rd_uber.c). shader_consts.h ICO_DF_DATE_DST.
+#define DF_DATE_DST 1073741824u
 
 // TEST.DATE. snap is the R8 DATE snapshot (1.0 where the destination alpha
 // had its MSB set when the snapshot was taken). Returns true when the
@@ -910,19 +914,27 @@ DualOut gs_dual_out(uint4 col, uint flags, uint fix)
 #define ICO_DST_MODE 0
 #endif
 
-// The pixel the GS stores for colour col (As in col.a) over dst.
-uint4 gs_dst_pixel(uint4 col, uint4 dst, uint flags)
+// The pixel the GS stores for colour col (As in col.a) over dst under the
+// ALPHA register reg (the draw's g_blend.x, or 0x00, Cs, for a fused pair's
+// kick pixel: vu_common.hlsli VU_RETURN).
+uint4 gs_dst_pixel_reg(uint4 col, uint4 dst, uint flags, uint reg)
 {
     const bool fba = (flags & DF_FBA) != 0u;
     const bool pabe = (flags & DF_PABE) != 0u;
     const uint wmask = (flags >> DF_WMASK_SHIFT) & 15u;
-    const uint reg = g_blend.x, fix = g_blend.y, cl = g_blend.z;
+    const uint fix = g_blend.y, cl = g_blend.z;
     uint4 o;
     o.r = gs_dst_channel(0u, col.r, dst.r, col.a, dst.a, reg, fix, cl, fba, pabe, wmask);
     o.g = gs_dst_channel(1u, col.g, dst.g, col.a, dst.a, reg, fix, cl, fba, pabe, wmask);
     o.b = gs_dst_channel(2u, col.b, dst.b, col.a, dst.a, reg, fix, cl, fba, pabe, wmask);
     o.a = gs_dst_channel(3u, col.a, dst.a, col.a, dst.a, reg, fix, cl, fba, pabe, wmask);
     return o;
+}
+
+// The same under the draw's own ALPHA register.
+uint4 gs_dst_pixel(uint4 col, uint4 dst, uint flags)
+{
+    return gs_dst_pixel_reg(col, dst, flags, g_blend.x);
 }
 
 #if ICO_DST_MODE == 1
@@ -967,12 +979,29 @@ struct DstOut {
     VK_LOC(0) float4 c0 : SV_Target0;
 };
 
-DstOut gs_dst_out(uint4 col)
+DstOut gs_dst_out_reg(uint4 col, uint reg)
 {
     const uint4 dst = uint4(floor(g_dstIn.SubpassLoad() * 255.0 + 0.5));
     DstOut o;
-    o.c0 = float4(gs_dst_pixel(col, dst, g_mode.x)) * (1.0 / 255.0);
+    o.c0 = float4(gs_dst_pixel_reg(col, dst, g_mode.x, reg)) * (1.0 / 255.0);
     return o;
+}
+
+DstOut gs_dst_out(uint4 col)
+{
+    return gs_dst_out_reg(col, g_blend.x);
+}
+
+// DATE from the attachment (DF_DATE_DST, GS state as shader data:
+// port/render/rd_uber.c): 1.0 where the alpha the fragment reads has its
+// MSB set (UNORM8 k / 255: k >= 128 exactly above 127.5 / 255), as the R8
+// snapshot holds it.  The read is ordered after every earlier primitive's
+// write to the pixel (rasterization order), the draw's own included: the
+// GS's DATE, primitive by primitive, where the snapshot (and the stencil
+// bit) hold the alpha from before the draw's first primitive.
+float gs_dst_date_snap()
+{
+    return g_dstIn.SubpassLoad().a >= (127.5 / 255.0) ? 1.0 : 0.0;
 }
 
 #define GS_PS_OUT DstOut
@@ -985,6 +1014,16 @@ DstOut gs_dst_out(uint4 col)
 #define GS_PS_ATTR
 #define GS_RETURN(col, pos) return gs_dual_out(col, g_mode.x, g_blend.y)
 #define GS_DISCARD discard
+#endif
+
+// The DATE test's source at pixel p: the snapshot snap (t2), or under
+// DF_DATE_DST in a *_dstatt build the alpha the fragment reads
+// (gs_dst_date_snap). Every other build never has DF_DATE_DST.
+#if ICO_DST_MODE == 2
+#define GS_DATE_SNAP(snap, p)                                                                     \
+    ((g_mode.x & DF_DATE_DST) != 0u ? gs_dst_date_snap() : (snap).Load(int3((p), 0)))
+#else
+#define GS_DATE_SNAP(snap, p) (snap).Load(int3((p), 0))
 #endif
 
 // ------------------------------------------------------- vertex helpers

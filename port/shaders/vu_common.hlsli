@@ -2226,9 +2226,23 @@ DualOut vu_dual_out_fused(float4 col, uint flags, uint fix, float fused)
 
 #define VU_RETURN(col, i) return vu_dual_out_fused(col, g_mode.x, g_blend.y, i.r.w)
 #endif
+#elif ICO_DST_MODE == 2
+// the attachment read's builds blend in the shader (gs_dst_pixel_reg), on
+// the integers; a fused pair's kick pixel (GS state as shader data: the
+// pair under the cut's pipeline, port/render/rd_replay_vu.c
+// vuFuseVerdict; marked as above, VuVSOut.r.w or the no-planes twin's
+// negative plane) takes the ALPHA register 0x00, (Cs - Cs) * As >> 7 + Cs:
+// Cs, the alpha As (FBA's MSB on it) and the mask as every pixel's, which
+// is what the kick's own pass (no GS blending: RdDrawPass.csOnly, the
+// register 0x00) stores, byte for byte
+#ifdef ICO_VU_NO_PLANES
+#define VU_RETURN(col, i) return gs_dst_out_reg(uint4(col), i.plane < 0.0 ? 0u : g_blend.x)
 #else
-// the destination-read builds blend in the shader (gs_dst_pixel), on the
-// integers (a fused pair has no destination read)
+#define VU_RETURN(col, i) return gs_dst_out_reg(uint4(col), i.r.w != 0.0 ? 0u : g_blend.x)
+#endif
+#else
+// the storage read's builds blend in the shader (gs_dst_pixel), on the
+// integers (a fused pair has no storage read)
 #define VU_RETURN(col, i) GS_RETURN(uint4(col), i.pos)
 #endif
 
@@ -2272,7 +2286,7 @@ void vu_pixel_tests(VuPSIn i)
         GS_DISCARD;
     }
     if ((g_mode.x & DF_DATE) != 0u) {
-        if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
+        if (gs_date_discard(g_mode.x, GS_DATE_SNAP(g_dateSnap, int2(i.pos.xy)))) {
             GS_DISCARD;
         }
     }
