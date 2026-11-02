@@ -372,11 +372,11 @@ static void test_hold_discs(const char *dir)
 }
 
 /* [ui] language: auto (-1) by default and for a value that is not one of
-   the eight; each name its UiLang number (port/ui/strings.h order); the
+   the nine; each name its UiLang number (port/ui/strings.h order); the
    setter and the names the Settings menu writes */
 static void test_ui_language(const char *dir)
 {
-    static const char *const names[8] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh"};
+    static const char *const names[9] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru"};
     char path[512];
     char text[64];
     FILE *f;
@@ -386,8 +386,8 @@ static void test_ui_language(const char *dir)
     CHECK(ico_opt_ui_language() == -1);
     CHECK(strcmp(ico_opt_ui_language_name(-1), "auto") == 0);
     snprintf(path, sizeof(path), "%s/options_test.toml", dir);
-    for (int i = 0; i < 8 + 2; i++) {
-        const char *v = i < 8 ? names[i] : i == 8 ? "auto" : "klingon";
+    for (int i = 0; i < 9 + 2; i++) {
+        const char *v = i < 9 ? names[i] : i == 9 ? "auto" : "klingon";
         f = fopen(path, "wb");
         if (f == NULL) {
             fprintf(stderr, "cannot write %s\n", path);
@@ -399,16 +399,16 @@ static void test_ui_language(const char *dir)
         fclose(f);
         ico_config_reset(path, "/nonexistent/options_test.ini");
         ico_opt_reload();
-        CHECK(ico_opt_ui_language() == (i < 8 ? i : -1));
-        CHECK(strcmp(ico_opt_ui_language_name(ico_opt_ui_language()), i < 8 ? v : "auto") == 0);
+        CHECK(ico_opt_ui_language() == (i < 9 ? i : -1));
+        CHECK(strcmp(ico_opt_ui_language_name(ico_opt_ui_language()), i < 9 ? v : "auto") == 0);
     }
     remove(path);
     ico_opt_set_ui_language(5);
     CHECK(ico_opt_ui_language() == 5);
     ico_opt_set_ui_language(8);
-    CHECK(ico_opt_ui_language() == -1);
+    CHECK(ico_opt_ui_language() == 8 && ico_opt_texture_language(6) == 2);
     ico_opt_set_ui_language(7);
-    CHECK(ico_opt_ui_language() == 7);
+    CHECK(ico_opt_ui_language() == 7 && ico_opt_texture_language(6) == 6);
     ico_opt_set_ui_language(9);
     CHECK(ico_opt_ui_language() == -1);
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");

@@ -401,7 +401,7 @@ void ico_opt_set_circle_back(int on)
 }
 
 /* [ui] language's names, UiLang order (port/ui/strings.h) */
-static const char *const kUiLanguages[] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh"};
+static const char *const kUiLanguages[] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru"};
 #define UI_LANGUAGES ((int)(sizeof(kUiLanguages) / sizeof(kUiLanguages[0])))
 
 int ico_opt_ui_language(void)
@@ -419,7 +419,7 @@ int ico_opt_ui_language(void)
         if (s_ui_language < 0 && v != NULL && strcmp(v, "auto") != 0) {
             fprintf(
                 stderr,
-                "options: [ui] language = \"%s\" is not one of auto, en, fr, de, it, es, ja, ko, zh\n",
+                "options: [ui] language = \"%s\" is not one of auto, en, fr, de, it, es, ja, ko, zh, ru\n",
                 v);
         }
     }
@@ -434,6 +434,11 @@ void ico_opt_set_ui_language(int lang)
 const char *ico_opt_ui_language_name(int lang)
 {
     return lang >= 0 && lang < UI_LANGUAGES ? kUiLanguages[lang] : "auto";
+}
+
+int ico_opt_texture_language(int gameLanguage)
+{
+    return strcmp(ico_opt_ui_language_name(ico_opt_ui_language()), "ru") == 0 ? 2 : gameLanguage;
 }
 
 int ico_opt_debug_option(void)

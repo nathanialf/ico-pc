@@ -630,6 +630,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "Der Ordner %s\nkonnte nicht beschrieben werden",
     [UI_STR_LANG_KO] = "한국어",
     [UI_STR_LANG_ZH] = "繁體中文",
+    [UI_STR_LANG_RU] = "Русский",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Touchscreen",
     [UI_STR_OPT_TOUCH_EDIT] = "Layout bearbeiten",

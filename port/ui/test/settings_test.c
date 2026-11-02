@@ -525,8 +525,7 @@ static void stripBlanks(const char *in, char *out)
 
 static void testNotesFit(void)
 {
-    static const char *const kLang[UI_LANG_COUNT] = {"en", "fr", "de", "it",
-                                                     "es", "ja", "ko", "zh"};
+    static const char *const kLang[UI_LANG_COUNT] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru"};
     int checked = 0;
     for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
         ui_set_language((UiLang)lang);

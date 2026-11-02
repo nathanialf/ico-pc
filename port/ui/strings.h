@@ -2,7 +2,8 @@
  * port/ui/strings.h
  *
  * The port's UI strings in the European disc's five languages, in
- * Japanese and in Korean: one table per language (port/ui/strings_<lang>.c), indexed by
+ * Japanese, Korean, Traditional Chinese and Russian: one table per language
+ * (port/ui/strings_<lang>.c), indexed by
  * UiStrId, UTF-8. Every word the port draws (the Settings menu, the popups, the achievements, the
  * galleries, photo mode, the model viewer, Characters, the Graphics driver
  * page), and the menus' words transcribed from the PAL sheets
@@ -31,8 +32,8 @@ extern "C" {
    game's language numbers as NonLinearCameraMove holds them after the
    boot screen (kanbanBoot.c 101-102) and texFile names them (2 EG, 3 FR,
    4 GR, 5 IT, 6 SP), then Japanese, Korean and Traditional Chinese (the
-   port's own text: the Japanese, Korean and Asian discs' own words are
-   their sheets); UI_LANG_COUNT
+   Japanese, Korean and Asian discs' own words are their sheets), and Russian
+   (the port's own text, using English game-text textures); UI_LANG_COUNT
    tables, each defining every UiStrId (ctest strings_complete). */
 typedef enum UiLang {
     UI_LANG_EN = 0,
@@ -43,6 +44,7 @@ typedef enum UiLang {
     UI_LANG_JA,
     UI_LANG_KO,
     UI_LANG_ZH,
+    UI_LANG_RU,
     UI_LANG_COUNT
 } UiLang;
 
@@ -870,6 +872,8 @@ typedef enum UiStrId {
     UI_STR_OPT_EFFECT_GLOW_SMOOTH,
     UI_STR_EFFECT_GLOW_SMOOTH_NOTE,
     UI_STR_EFFECT_GLOW_SMOOTH_LOCKED,
+    /* Russian's own name in every table */
+    UI_STR_LANG_RU,
     UI_STR_COUNT
 } UiStrId;
 
@@ -942,6 +946,7 @@ extern const char *const ui_strings_es[UI_STR_COUNT];
 extern const char *const ui_strings_ja[UI_STR_COUNT];
 extern const char *const ui_strings_ko[UI_STR_COUNT];
 extern const char *const ui_strings_zh[UI_STR_COUNT];
+extern const char *const ui_strings_ru[UI_STR_COUNT];
 
 #ifdef __cplusplus
 }

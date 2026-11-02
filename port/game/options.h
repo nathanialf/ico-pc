@@ -47,7 +47,7 @@
  *   [ui] language          auto   the language of the port's own text:
  *                                 auto (Japanese on the Japanese disc,
  *                                 the game's language on the European
- *                                 one) or en, fr, de, it, es, ja
+ *                                 one) or en, fr, de, it, es, ja, ko, zh, ru
  *   [dev] debug_option     0      with developer mode: non-zero loads the
  *                                 debug option table the Debug Mode page saves
  *
@@ -211,13 +211,16 @@ void ico_opt_set_circle_back(int on);
 /* [ui] language: the language of the port's own text (the menus it adds,
    photo mode's help, the messages): "auto" (-1, the default: the disc's,
    port/ui/ui_lang.h ui_settings_resolve_language) or "en", "fr", "de",
-   "it", "es", "ja", "ko", "zh" (0..7, port/ui/strings.h UiLang order); another value
-   is "auto", logged once.  The game's own text is always the disc's.
-   ico_opt_ui_language_name gives the config value of one ("auto" for -1;
-   the Settings menu writes it). */
+   "it", "es", "ja", "ko", "zh", "ru" (port/ui/strings.h UiLang order);
+   another value is "auto", logged once. The game's own text is always the
+   disc's. ico_opt_ui_language_name gives the config value of one ("auto"
+   for -1; the Settings menu writes it). */
 int ico_opt_ui_language(void);
 void ico_opt_set_ui_language(int lang);
 const char *ico_opt_ui_language_name(int lang);
+/* Language-indexed game textures: until Russian game textures exist, use the
+   English set when the port UI is Russian. */
+int ico_opt_texture_language(int gameLanguage);
 /* [audio] output: the
    PS2's stereo or mono choice, the game's soundOutputModeGet value (0
    stereo, 1 mono), which the memory card's system file keeps and the

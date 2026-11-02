@@ -613,6 +613,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "無法寫入資料夾\n%s",
     [UI_STR_LANG_KO] = "한국어",
     [UI_STR_LANG_ZH] = "繁體中文",
+    [UI_STR_LANG_RU] = "Русский",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "觸控螢幕",
     [UI_STR_OPT_TOUCH_EDIT] = "編輯配置",

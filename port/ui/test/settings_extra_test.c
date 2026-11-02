@@ -3653,8 +3653,8 @@ static void testVersion(void)
 }
 
 /* the Menu language row ([ui] language): Auto follows the game's language
-   on the European disc, a language of its own does not; the game's words
-   (the sheet language) follow the game whatever the menu language is */
+   on the European disc, a language of its own does not; Russian uses English
+   game-text textures until its own exist. */
 static void testMenuLanguage(void)
 {
     useConfig("version = 1\n");
@@ -3668,7 +3668,7 @@ static void testMenuLanguage(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE), "Automatisch") == 0 ||
               ui_settings_value_text(UI_OPT_MENU_LANGUAGE)[0] != '\0',
           "the row's value: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
-    /* Auto, en, fr, de, it, es, ja, ko, zh, Auto */
+    /* Auto, en, fr, de, it, es, ja, ko, zh, ru, Auto */
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
     CHECK(ico_opt_ui_language() == UI_LANG_EN && ui_get_language() == UI_LANG_EN &&
               ui_sheet_language() == UI_LANG_DE,
@@ -3701,6 +3701,13 @@ static void testMenuLanguage(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE),
                  "\xE7\xB9\x81\xE9\xAB\x94\xE4\xB8\xAD\xE6\x96\x87") == 0,
           "the row names Chinese in Chinese: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
+    ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
+    CHECK(ico_opt_ui_language() == UI_LANG_RU && ui_get_language() == UI_LANG_RU &&
+              ui_sheet_language() == UI_LANG_EN &&
+              ico_opt_texture_language(NonLinearCameraMove) == ICO_GAME_LANGUAGE_ENGLISH,
+          "Russian menus use English game-text textures and sheet styling");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE), "Русский") == 0,
+          "the row names Russian: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
     CHECK(!ui__font_chinese_first(), "Auto: the Japanese face is first again");
     CHECK(ico_opt_ui_language() == -1 && ui_get_language() == UI_LANG_IT, "Auto again: Italian");

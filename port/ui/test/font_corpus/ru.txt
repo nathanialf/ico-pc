@@ -1,0 +1,11 @@
+# Provenance: non-table text shared with en.txt (dynamic counters, formatting
+#   marks, asset names and staff-roll symbols).
+0123456789
+:/.-%()
+…
+0 1 2 3 4 5 6 7 8 9 12:34:56 2004/01/02 -1 0.50 100 %
+abcdefghijklmnopqrstuvwxyz0123456789/_. 
+sound/ICO_ADPCM/ sound/ICO_SE/ se 12 3/4
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+©¥
+▲▼

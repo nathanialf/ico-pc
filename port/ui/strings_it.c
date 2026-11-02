@@ -626,6 +626,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_EXPORT_TEXTURES_FAILED_BODY] = "Impossibile scrivere nella cartella\n%s",
     [UI_STR_LANG_KO] = "한국어",
     [UI_STR_LANG_ZH] = "繁體中文",
+    [UI_STR_LANG_RU] = "Русский",
     /* Controls > Touch screen and the touch layout editor */
     [UI_STR_SECTION_TOUCH] = "Schermo touch",
     [UI_STR_OPT_TOUCH_EDIT] = "Modifica disposizione",

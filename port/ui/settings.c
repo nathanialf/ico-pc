@@ -1327,9 +1327,7 @@ static void setGameLanguage(int game)
 /* a UiLang's own name (the Menu language row) */
 static const char *menuLanguageName(int lang)
 {
-    static const int ids[UI_LANG_COUNT] = {UI_STR_LANG_EN, UI_STR_LANG_FR, UI_STR_LANG_DE,
-                                           UI_STR_LANG_IT, UI_STR_LANG_ES, UI_STR_LANG_JA,
-                                           UI_STR_LANG_KO, UI_STR_LANG_ZH};
+    static const int ids[UI_LANG_COUNT] = {UI_STR_LANG_EN, UI_STR_LANG_FR, UI_STR_LANG_DE, UI_STR_LANG_IT, UI_STR_LANG_ES, UI_STR_LANG_JA, UI_STR_LANG_KO, UI_STR_LANG_ZH, UI_STR_LANG_RU};
     return ui_str((UiStrId)ids[lang >= 0 && lang < UI_LANG_COUNT ? lang : 0]);
 }
 
@@ -1344,7 +1342,8 @@ void ui_settings_apply_language(void)
        language's (the European disc's five sheets), whatever language the
        port's text is in */
     const int sheet = ico_region_cur()->menu_sheet;
-    ui_set_sheet_language(sheet >= 0            ? sheet
+    ui_set_sheet_language(sheet >= 0 ? sheet
+                          : ui_get_language() == UI_LANG_RU ? UI_LANG_EN
                           : gameLanguage() >= 0 ? (int)ui_lang_from_game(gameLanguage())
                                                 : (int)UI_LANG_EN);
 }

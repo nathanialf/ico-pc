@@ -287,10 +287,10 @@ static void testGlyphs(void)
     CHECK(glyphs > 300, "glyphs: %d found in the fonts (the Latin ranges alone have more)", glyphs);
 }
 
-/* corpus: each text line of the eight files, at em 11 and 14 */
+/* corpus: each text line of the nine files, at em 11 and 14 */
 static void testCorpus(const char *dir)
 {
-    static const char *const kLangs[] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh"};
+    static const char *const kLangs[] = {"en", "fr", "de", "it", "es", "ja", "ko", "zh", "ru"};
     Page p;
     if (!pageInit(&p, PAGE_W, PAGE_H)) {
         CHECK(0, "corpus page memory");
