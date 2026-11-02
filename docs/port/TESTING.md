@@ -1524,7 +1524,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd_present_blank`'s layers are collected on the test's thread too (not on OpenGL);
   `checkFailedPresent`: with a host of the test's own that runs each picture handed over at the
   next drain, a present that presents is not counted by `rd_thread_failed_presents` and one that
-  fails there (a movie shown by then) is, once;
+  fails there (a movie shown by then) is, once; `checkWaitSplit`: with a host of the test's own
+  whose picture ends at the next drain (5 ms), `rd_present_post`'s waits for the picture before
+  are counted by whose (`RdThreadBlock` `freshWaits`/`furtherWaits`: one new frame's present of
+  5 ms, two further presents' of 10 ms), another drain in neither, and `rd_frame_close_take`
+  counts the frames closed since its last take and starts again;
   the scene limit's fallback checks drive the Vulkan backend's `vkr_test_fail_texels_above` and
   are skipped on Direct3D 12, OpenGL and Direct3D 11, which have no such hook);
   the open border's outer columns (`rd_present_border_test.inc`, `checkOpenBorderEdges`): at
@@ -2634,7 +2638,7 @@ Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay op
   ([PACKS.md](PACKS.md#tests)).
 - The render thread: `frame_mailbox`, `pace_loop`, `lifecycle`, `host_config` and `rhi_vk` (the
   thread submit cell; `rhi_d3d12` on Windows), `rd_thread_ab`, `rd_tex` (and `rd_tex_test` under
-  the tsan build), `rd_present` (the deferred state picture), `rd_replay_tool_save_blended` (the
+  the tsan build), `rd_present` (the deferred state picture, the slot waits by whose), `rd_replay_tool_save_blended` (the
   interpolation on the render thread); the device runs are the window's, with `[dev]
   render_thread = sync` against `off` for the same pictures ([PLATFORM.md](PLATFORM.md#the-render-thread)).
 - A pacing change: `pace_policy`, `pace_loop` and `perf_block`

@@ -123,6 +123,16 @@ every 100th).
 A GPU texture the game thread destroys goes to the retire list the render thread empties at its
 next job (`rd__retire_texture`).
 No game code and no frame data change threads; the pictures are the same bytes.
+The hand-over, not the frame ring, is what the game thread waits on: `rd_begin_frame` and
+`rd_end_frame` wait for a picture's reads like every other call that changes the state, so three
+frame slots (`RD_FRAME_RING`: the two the interpolation blends and the one recorded) are never
+short and the render thread pins none. A new frame's present waits only for the end of the
+picture before it (its submit and present), and a present that did not wait would gain nothing:
+its own reads still come after that end, and the game's next step waits for them at its first
+call that changes a texture, a mesh or a frame. Taking the game thread off the GPU's backlog
+needs the state the walk reads in versions of its own (a frame ring of four with pins, the
+textures' and meshes' changes carried with the frame and applied by the render thread); the
+design is in PLATFORM.md's render thread section.
 
 ## Recording
 

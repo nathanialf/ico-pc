@@ -376,7 +376,10 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
 - One picture at a time. A picture waits for the one before it to finish (its wait counted as the
   present's display wait, `rd_submit_waited_ns`). A picture whose capture or blended dump is armed
   (F12, a save state's picture) and every picture while the vsync lock uses the display's timing
-  (`rd_submit_hold`) wait for their end.
+  (`rd_submit_hold`) wait for their end. A new frame's present can only wait for the end of the
+  picture before it, never for its reads: the frame's close (`rd_end_frame`) already waited for
+  those. So that wait is the picture's submit and present call, and on a driver whose present
+  blocks behind the GPU's earlier pictures, the GPU's backlog.
 - The overlay. The UI's layers of a picture the game thread posts (the popups, photo mode's HUD,
   the touch controls, the frame rate counter: `port/ui/ui_host.c` (`hostOverlay`,
   `hostOverlayTop`)) are collected on the game thread before the post (`port/render/rd_present.c`
@@ -447,25 +450,30 @@ window: render thread: sync (interpolation, walk, submit and present on the rend
 window: render thread: off ([dev] render_thread = off)
 ```
 
-Every 10 s block adds the two threads' line: the game thread's mean step, replay and pump in ms,
-its waits for the render thread (the slot waits: whole pictures, with their time; the read waits:
-a change of the renderer's state that waited for a picture's walk, with their time and the
-longest), then the render thread's share of the block with no picture to do, its longest wait for
-one, its longest picture (the heartbeat's longest gap), and per picture its interpolation, its
-uploads and walk, its submit and present and the GPU's and the display's waits inside them, the
-textures it destroyed for the game thread, and the further presents the plan above held back, by
-why (they would have run into the next step, a picture ran past its estimate, the presents waited
-for the display or the GPU), with the three estimates as the block ends:
+Every 10 s block adds the two threads' line: the game thread's mean step and, inside it, its own
+cost of closing a frame (`rd_end_frame` after its wait for a picture's reads: the frame's walk for
+its end state; `port/render/rd.h` (`rd_frame_close_take`)), its mean pump, its waits for the
+render thread (the slot waits: whole pictures, with their time, split by whose: a new frame's
+present, a further present's, the rest (a graphics call's, a settings change's, a load's); the
+read waits: a change of the renderer's state that waited for a picture's walk, with their time and
+the longest), then the render thread's CPU time a picture (the replays line's), its share of the
+block with no picture to do, its longest wait for one, its longest picture (the heartbeat's
+longest gap), and per picture its interpolation, its uploads and walk, its submit and present and
+the GPU's and the display's waits inside them, the textures it destroyed for the game thread, and
+the further presents the plan above held back, by why (they would have run into the next step, a
+picture ran past its estimate, the presents waited for the display or the GPU), with the three
+estimates as the block ends:
 
 ```
-window: game thread: step 3.1 ms, record 0.0 ms, pump 0.4 ms, slot waits 12 (8.2 ms), read waits 290 (610.4 ms, longest 6.9 ms); render thread: idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread; 0 further presents held back (0 would have run into the next step, 0 while a picture ran past its estimate, 0 while the presents waited for the display or the GPU; a picture holds the renderer for 4.1 ms, takes 9.3 ms, its present waits 0.3 ms)
+window: game thread: step 3.1 ms (closing a frame 0.4 ms of it, longest 1.2 ms, 300 frames), pump 0.4 ms, slot waits 12 (8.2 ms; 9 (7.9 ms) by a new frame's present, 2 (0.3 ms) by a further present's, 1 other), read waits 290 (610.4 ms, longest 6.9 ms); render thread: CPU 9.3 ms a picture, idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread; 0 further presents held back (0 would have run into the next step, 0 while a picture ran past its estimate, 0 while the presents waited for the display or the GPU; a picture holds the renderer for 4.1 ms, takes 9.3 ms, its present waits 0.3 ms)
 ```
 
 The slot waits are the game thread's waits for the render thread to finish everything posted
 (`ico_render_thread_drain`): a present's wait for the picture before it (`rd__thread_picture_begin`,
 counted as the present's display wait) and a game-thread RHI call's (the call guard's); there is no
 ring of frame slots behind them (`RD_FRAME_RING` is 3 and the render thread pins none: it reads the
-frames only inside a hand-over the game thread's frame calls wait for). A phone's log at a
+frames only inside a hand-over the game thread's frame calls wait for). The line splits the
+present's share by whose (a new frame's or a further one's) and leaves the rest as `other`. A phone's log at a
 stage change (`slot waits 102 (1193.8 ms), read waits 63 (562.3 ms, longest 17.2 ms)` over 596
 presents for 300 frames, 9.3 ms of render-thread time a picture) is the pattern the plan removes:
 a further present posted late in a step, whose reads ran into the next step and whose end the next
@@ -476,6 +484,46 @@ the slow replay lines name the rest: the one picture that makes the new stage's 
 renderer that long, once, and a pipeline compiled in the walk the first time a build draws a room
 (`rd: slow walk 2213.1 ms (...): pipelines made 2206.5 ms (3)`, read waits `longest 2216.8 ms`)
 holds it for the compile: the walk reads the state the step changes, so the step waits for both.
+
+A PowerVR phone's log at a door into a new stage shows what is left once the further presents are held:
+`slot waits 119 (1642.7 ms), read waits 75 (741.0 ms, longest 23.6 ms)` for 377 pictures and 300
+frames, 356 further presents held, the render thread idle 37 %, its CPU 16.8 ms a picture of which
+the present call 7.8 (the replays line's `present 7.82`, `longest present 40.1`) and GPU pictures
+of 20-42 ms (`GPU span 22.8 ms`). In play the same phone has 0 and 0: one picture a frame, the
+GPU's 26 ms inside the frame's 33 ms, the present 0.7 ms. At the door some GPU pictures take
+longer than a frame of the game, the driver's present blocks behind them, and the next new
+frame's present waits for that picture's end (a slot wait); the frame's picture then starts late,
+and its reads cross the next step's first call that changes the state (a read wait). Neither is
+the frame ring: `RD_FRAME_RING` 3 is enough because the frame calls wait for the reads, and a
+present that did not wait for the picture before would only move the wait into the next step
+(its picture's reads still follow that picture's end): a model of the timer path with the step's
+calls a few ms into it gave the same latest step and the same sum of waits either way
+(`build-host/tmp/v098/evidence/doorwait/dw_sim.py`). What would take these waits off the game
+thread is state the walk reads in versions of its own, so the step never waits for a picture's
+reads:
+
+- the frames: `RD_FRAME_RING` 4 with a pin a slot (the render thread pins the two frames of its
+  picture from the post to its reads' end; `rd_begin_frame` waits only on a pinned slot, counted
+  as a slot wait): the two being blended, the one just closed whose picture is queued, the one
+  recorded; a picture not started when a newer frame closes is replaced by the newer one's (the
+  mailbox's latest-wins), so four stay enough;
+- the textures: two tables. The game thread's (ids and generations, the CPU pixels, the texture
+  cache) is never read by the render thread; each create, update, level change and destroy is
+  added to the recording frame's change list (the pixels by reference, copied on the next write
+  while a change still holds them); the render thread's table (the GPU objects, their upload
+  state, the dirty count, the alpha scan's flags) is its own and takes a frame's list before that
+  frame's first picture. The ids stay the game thread's (`texAlloc`'s first free slot), so they
+  are the same with the thread off, where the list is taken at once on the game thread;
+  `texDirtyCount` is the render thread's alone, which answers the lost-create objection of the
+  first try. A GPU object is destroyed once no pinned frame is older than the destroy;
+- the VU meshes: the same, a stream version a frame (the interpolation already pairs streams by
+  version);
+- the decode workers' results and `rdtex_settle` feed the game thread's table only.
+
+That work spans rd_core.c's texture calls, rd_upload.c, rd_tex.c, rd_mesh.c and the walk's
+texture reads in rd_replay.c and rd_interp.c (both at their size caps), and is not built yet. The
+split slot waits say on the next log how many of a door's waits are a new frame's (the GPU's
+backlog) and how many a further present's (the pacing).
 
 `window: render thread: parked (...)` and `window: render thread: goes on` mark a park (the first
 16 of each); `window: render thread: a picture handed over was not presented (N so far): taken out
