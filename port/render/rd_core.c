@@ -115,7 +115,7 @@ void rd_summary_text(char *out, size_t size)
     snprintf(out, size,
              "blend %s; profile %s; index values dense (marks in the stream); fog %s; VU shaders "
              "%s%s%s%s; VU pre-pass %s%s; VU merge %s; VU fuse %s; constant reads %s; fades "
-             "fold %s; pipelines %s (pool %d, cache %d); menu text 1x %s",
+             "fold %s; pipelines %s (pool %d, cache %d); menu text %s",
              g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
              rd__profile_text()[0] ? rd__profile_text() : "(not decided)",
              g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
@@ -137,8 +137,8 @@ void rd_summary_text(char *out, size_t size)
              : careful                 ? "the careful start-up set"
                                        : "the start-up set",
              RHI_PIPELINE_POOL_MAX, RD_PIPELINE_CACHE_MAX,
-             /* the 1x sheets (rd_tex.c rd__sheet_baked) */
-             g_rd.sheetShader ? "shader" : "baked");
+             /* the sheets of scale 1 and 2 (rd_tex.c rd__sheet_baked) */
+             g_rd.sheetShader ? "shader" : "baked at 1x and 2x (the shader above)");
 }
 
 /* ------------------------------------------------ the VU index spans
@@ -1774,17 +1774,20 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (g_rd.noDual) {
         rd__log("blend: two-pass fallback (no dualSrcBlend)");
     }
-    /* the 1x menu text's texels baked on the CPU (rd_tex.c
-     * rd__sheet_baked; issue 173); ICO_RD_SHEET_SHADER=1 draws them
-     * through font_sheet_ps, as every scale above 1x is drawn (the A/B) */
+    /* the menu text's texels baked on the CPU at strip scales 1 and 2
+     * (rd_tex.c rd__sheet_baked; issue 173 at 1x, the phone's menus at 2x);
+     * ICO_RD_SHEET_SHADER=1 ([dev] sheet_shader) draws them through
+     * font_sheet_ps, as scales 3 and 4 are drawn (the A/B) */
     {
         const char *sheet = getenv("ICO_RD_SHEET_SHADER");
         g_rd.sheetShader = sheet != NULL && strcmp(sheet, "1") == 0;
         if (g_rd.sheetShader) {
-            rd__log("text: 1x menu text through the sheet shader (ICO_RD_SHEET_SHADER=1)");
+            rd__log("text: menu text through the sheet shader at every scale ([dev] sheet_shader "
+                    "= true, ICO_RD_SHEET_SHADER=1)");
         } else {
-            rd__log("text: 1x menu text baked on the CPU (RGBA8 pages; the sheet shader above "
-                    "1x)");
+            rd__log("text: menu text baked on the CPU at 1x and 2x (RGBA8 pages, four reads a "
+                    "pixel; the sheet shader at 3x and 4x; [dev] sheet_shader = true draws every "
+                    "scale through it)");
         }
     }
     /* the VU draws' index values carry nothing but the kick and corner, the

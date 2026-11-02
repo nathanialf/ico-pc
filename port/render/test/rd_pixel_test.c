@@ -56,7 +56,10 @@
  *            over each S x S cell, magnified it is within 1 of the
  *            reference, outside the letters it is the 1x strip of its sheet
  *            texels magnified S times within 1 (the rim is the sheets'
- *            look magnified), and its dump keeps the scale
+ *            look magnified), its frame drawn again through
+ *            font_sheet_ps is the same SCENE byte for byte (the 2x sheet's
+ *            texels baked on the CPU, rd__sheet_bake_scaled_rect; the 4x
+ *            one the shader both times), and its dump keeps the scale
  *   gs lod   a TIM2 picture with three authored levels (a dark base,
  *            then flat green and blue: rdtex_store_levels keeps them)
  *            drawn in strips of one Q each through the STQ shaders under
@@ -2549,35 +2552,69 @@ static void testSheetScaled(int S, const char *dir)
        sheet and reference side by side, RGB then RGBA */
     const int yA = 8 + H + 4, yM = yA + H + 8, mw = W * 3 / 2, mh = H * 3 / 2;
     const int yMA = yM + mh + 8;
-    sheetFrameBegin();
-    for (int k = 0; k < 2; k++) {
-        rd_texture(sheet, RD_TEXFN_MODULATE, k ? RD_TCC_RGBA : RD_TCC_RGB);
-        sprite(512, 512, 8 * 16, (k ? yA : 8) * 16, (8 + W) * 16, ((k ? yA : 8) + H) * 16, grey, 8,
-               8, W * 16 + 8, H * 16 + 8);
-    }
-    for (int k = 0; k < 4; k++) {
-        const int x = k & 1 ? 8 + mw + 8 : 8, y = k & 2 ? yMA : yM;
-        rd_texture(k & 1 ? ref : sheet, RD_TEXFN_MODULATE, k & 2 ? RD_TCC_RGBA : RD_TCC_RGB);
-        sprite(512, 512, x * 16, y * 16, (x + mw) * 16, (y + mh) * 16, grey, 0, 0, W * 16, H * 16);
-    }
     /* right of the 1:1 strip the 1x strip magnified S times, RGB
        then RGBA, nudged by half a pixel (8 / S sixteenths of a sheet
        texel: a pixel samples at its corner) so pixel x samples sheet
        texel position (x + 0.5) / S, where the scaled strip's texel x
        reads its rim; and the plain strip 1:1 (RGBA) */
     const int x1x = 8 + W + 8, xPl = x1x + W + 8, n1 = 8 / S;
-    for (int k = 0; k < 2; k++) {
-        rd_texture(sheet1, RD_TEXFN_MODULATE, k ? RD_TCC_RGBA : RD_TCC_RGB);
-        sprite(512, 512, x1x * 16, (k ? yA : 8) * 16, (x1x + W) * 16, ((k ? yA : 8) + H) * 16, grey,
-               n1, n1, SHEET_W * 16 + n1, SHEET_H * 16 + n1);
-    }
-    rd_texture(sheetPlain, RD_TEXFN_MODULATE, RD_TCC_RGBA);
-    sprite(512, 512, xPl * 16, yA * 16, (xPl + W) * 16, (yA + H) * 16, grey, 8, 8, W * 16 + 8,
-           H * 16 + 8);
-    rd_end_frame(0);
-    uint32_t w = 0, h = 0;
+    /* the frame twice: as drawn (a 2x sheet's texels baked on the CPU,
+     * rd__sheet_baked, font_sheet_baked_ps; 4x through font_sheet_ps),
+     * then every scale through font_sheet_ps (ICO_RD_SHEET_SHADER's switch,
+     * rd__set_sheet_shader): the same SCENE byte for byte */
+    uint32_t w = 0, h = 0, w2 = 0, h2 = 0;
     float fsx = 1.0f, fsy = 1.0f;
-    uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
+    uint8_t *img = NULL, *viaShader = NULL;
+    for (int pass = 0; pass < 2; pass++) {
+        if (pass == 1) {
+            CHECK(sr && sr->sheetBaked == (S == 2),
+                  "scaled sheet %d: the device texture holds %s (sheetBaked %d)", S,
+                  S == 2 ? "the baked texels" : "the coverage", sr ? sr->sheetBaked : -1);
+            rd__set_sheet_shader(true);
+        }
+        sheetFrameBegin();
+        for (int k = 0; k < 2; k++) {
+            rd_texture(sheet, RD_TEXFN_MODULATE, k ? RD_TCC_RGBA : RD_TCC_RGB);
+            sprite(512, 512, 8 * 16, (k ? yA : 8) * 16, (8 + W) * 16, ((k ? yA : 8) + H) * 16, grey,
+                   8, 8, W * 16 + 8, H * 16 + 8);
+        }
+        for (int k = 0; k < 4; k++) {
+            const int x = k & 1 ? 8 + mw + 8 : 8, y = k & 2 ? yMA : yM;
+            rd_texture(k & 1 ? ref : sheet, RD_TEXFN_MODULATE, k & 2 ? RD_TCC_RGBA : RD_TCC_RGB);
+            sprite(512, 512, x * 16, y * 16, (x + mw) * 16, (y + mh) * 16, grey, 0, 0, W * 16,
+                   H * 16);
+        }
+        for (int k = 0; k < 2; k++) {
+            rd_texture(sheet1, RD_TEXFN_MODULATE, k ? RD_TCC_RGBA : RD_TCC_RGB);
+            sprite(512, 512, x1x * 16, (k ? yA : 8) * 16, (x1x + W) * 16, ((k ? yA : 8) + H) * 16,
+                   grey, n1, n1, SHEET_W * 16 + n1, SHEET_H * 16 + n1);
+        }
+        rd_texture(sheetPlain, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        sprite(512, 512, xPl * 16, yA * 16, (xPl + W) * 16, (yA + H) * 16, grey, 8, 8, W * 16 + 8,
+               H * 16 + 8);
+        rd_end_frame(0);
+        if (pass == 0) {
+            img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
+        } else {
+            viaShader = readScaled(RD_TARGET_SCENE, &w2, &h2, &fsx, &fsy);
+            CHECK(sr && !sr->sheetBaked, "scaled sheet %d: under the switch the coverage", S);
+        }
+    }
+    rd__set_sheet_shader(false);
+    {
+        long differ = -1;
+        if (img && viaShader && w2 == w && h2 == h) {
+            differ = 0;
+            for (size_t i = 0; i < (size_t)w * h * 4; i++) {
+                differ += viaShader[i] != img[i];
+            }
+        }
+        printf("  scaled sheet %dx (%s): against font_sheet_ps, %ld bytes differ\n", S,
+               S == 2 ? "baked" : "the shader both times", differ);
+        CHECK(differ == 0, "scaled sheet %d: %ld bytes differ from font_sheet_ps's frame", S,
+              differ);
+        free(viaShader);
+    }
     if (!img) {
         CHECK(0, "scaled sheet %d: SCENE", S);
     } else {

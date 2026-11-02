@@ -1459,14 +1459,20 @@ void rd_update_texture_rect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_
  *                        font_sheet_baked_ps (RD_FS_FONT_SHEET_BAKED)
  *                        blends four of them as font_sheet_ps blends the
  *                        texels it rebuilds, so the bytes are the same at
- *                        a fraction of the cost (issue 173).
- *                        ICO_RD_SHEET_SHADER=1 draws 1x through
+ *                        a fraction of the cost (issue 173).  A
+ *                        scaled strip's page of scale 2 is baked the
+ *                        same way (rd_tex.c rd__sheet_bake_scaled_rect:
+ *                        its rim's magnification blends by odd 4ths,
+ *                        exact in the shader's floats), both halves'
+ *                        rows with the apron; 3 and 4 are drawn by
+ *                        font_sheet_ps.  ICO_RD_SHEET_SHADER=1 ([dev]
+ *                        sheet_shader) draws every scale through
  *                        font_sheet_ps instead (the A/B)
  * rd_set_texture_sheet_style  the style the next replays draw t with (the
  *                        language's rim level, without rasterising
  *                        again); ignored for any other texture.  The style
  *                        is read when a frame is replayed, not when its
- *                        draws are recorded (a 1x sheet is baked again
+ *                        draws are recorded (a baked sheet is baked again
  *                        whole at the next replay)
  * rd_update_texture_rect   takes a sheet texture's rectangles as R8's: w * h
  *                        bytes of coverage

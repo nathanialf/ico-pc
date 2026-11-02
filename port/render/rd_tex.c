@@ -1129,10 +1129,25 @@ static const uint32_t kSheetWy[ICO_SHEET_RY + 1] = {ICO_SHEET_WY_0, ICO_SHEET_WY
 _Static_assert(ICO_SHEET_BAKE_AX == ICO_SHEET_RX + 1 && ICO_SHEET_BAKE_AY == ICO_SHEET_RY + 1,
                "the apron's outermost texels are one past the rim's reach");
 
+int rd__sheet_bake_scale(uint32_t scale)
+{
+    /* 1 (the 1x bake) and 2.  Above 1x the bake is exact at the scales
+       whose magnified rim font_sheet_ps blends by fractions with a power of
+       two below them (2: odd 4ths, 4: odd 8ths): every lerp of its integer
+       levels, and the lerp of two such, is a float the shader computes
+       without a rounding, so the integers of rd__sheet_bake_scaled_rect are
+       its values on any device; 3 blends by 6ths, which round, and stays
+       the shader's.  4 is exact too but not baked: its pages are 4096 x
+       2048 (8 MB of coverage, 34 MB baked), a 4K desktop's, whose card
+       draws the shader anyway; 2 is the phone's (a scene 2.1 times the PS2's
+       height at Resolution Auto or 2x, port/ui/menu_font.c mfScale) */
+    return scale <= 1u || scale == 2u;
+}
+
 int rd__sheet_baked(const RdTexRec *t)
 {
-    return t && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET && t->sheetScale <= 1 &&
-           !g_rd.sheetShader && !t->sheetShader;
+    return t && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&
+           rd__sheet_bake_scale(t->sheetScale) && !g_rd.sheetShader && !t->sheetShader;
 }
 
 uint32_t rd__tex_device_w(const RdTexRec *t)
@@ -1288,6 +1303,177 @@ int rd__sheet_bake_rect(const uint8_t *cov, uint32_t w, uint32_t h, const uint8_
     return 1;
 }
 
+/* sheet_text.hlsli sheet_rim_level: the rim r's level alone (no letters)
+   under the style's weight at threshold th */
+static uint32_t sheetRimLevel(uint32_t r, const uint8_t style[4], uint32_t th)
+{
+    return sheetQuantise(style[0] != 0 ? (r * style[0] + 32u) / 64u : 0u, th);
+}
+
+/* floor(v / d) for d > 0, as the shader keeps its operands positive */
+static int32_t sheetFloorDiv(int32_t v, int32_t d)
+{
+    return v >= 0 ? v / d : -((-v + d - 1) / d);
+}
+
+int rd__sheet_bake_scaled_rect(const uint8_t *tex, uint32_t w, uint32_t h, const uint8_t style[4],
+                               uint32_t scale, int32_t x, int32_t y, int32_t rw, int32_t rh,
+                               uint8_t *out, size_t pitch)
+{
+    if (rw <= 0 || rh <= 0) {
+        return 1;
+    }
+    if (!tex || !style || !out || !w || h < 2 || w > 0x7FFFFFFFu || h > 0x7FFFFFFFu ||
+        (scale != 2u && scale != 4u)) {
+        return 0;
+    }
+    const int32_t W = (int32_t)w, HH = (int32_t)(h / 2u), S = (int32_t)scale;
+    /* the bilinear's denominator on an axis (2 s: font.hlsl sheet_scaled's
+       g = (n - 2 s q0) / (2 s)), and on both */
+    const uint32_t D = 2u * scale, DD = D * D;
+    /* a texel without coverage whose four rims are 0: c 0 and every level 0
+       (quantise(0, th) is 0 for th <= 31), so its grey is the rim level and
+       its alpha 0 at any threshold (sheet_texel_scaled with tq 0, cq 0) */
+    uint8_t blank[4];
+    blank[0] = blank[1] = blank[2] = (uint8_t)(((uint32_t)style[1] * 255u + 127u) / 255u);
+    blank[3] = 0;
+    for (int32_t yy = y; yy < y + rh; yy++) {
+        uint8_t *o = out + (size_t)(yy - y) * pitch;
+        /* the texel's centre in 2s-ths of a sheet texel, the sheet texel
+           before it and the weight of the one after (sheet_scaled: n, q0,
+           n - 2 s q0) */
+        const int32_t ny = 2 * yy + 1 - S;
+        const int32_t qy = sheetFloorDiv(ny, (int32_t)D);
+        const uint32_t gy = (uint32_t)(ny - (int32_t)D * qy);
+        /* the coverage row: the top half only (sheet_cov4 and the in-half
+           test), 0 outside the texture */
+        const uint8_t *crow = yy >= 0 && yy < HH ? tex + (size_t)yy * w : NULL;
+        /* a row whose coverage and the two rim rows it blends are 0 across
+           the page (most rows: the shelves' gaps, the empty bands) is
+           blank */
+        int ink = 0;
+        for (int32_t k = 0; crow && k < W && !ink; k++) {
+            ink = crow[k] != 0;
+        }
+        for (int j = 0; j < 2 && !ink; j++) {
+            const int32_t ty = (qy + j) * S;
+            const uint8_t *rr = ty >= 0 && ty < HH ? tex + (size_t)(HH + ty) * w : NULL;
+            for (int32_t k = 0; rr && k < W && !ink; k++) {
+                ink = rr[k] != 0;
+            }
+        }
+        if (!ink) {
+            for (int32_t i = 0; i < rw; i++, o += 4) {
+                memcpy(o, blank, 4);
+            }
+            continue;
+        }
+        for (int32_t i = 0; i < rw; i++, o += 4) {
+            const int32_t xx = x + i;
+            const int32_t nx = 2 * xx + 1 - S;
+            const int32_t qx = sheetFloorDiv(nx, (int32_t)D);
+            const uint32_t gx = (uint32_t)(nx - (int32_t)D * qx);
+            /* the four sheet texels' rim levels: sheet texel q's rim at
+               texel q s of the bottom half, 0 where q s is outside the top
+               half's texels; each at its own Bayer threshold */
+            uint32_t lq[2][2], la[2][2];
+            for (int j = 0; j < 2; j++) {
+                for (int k = 0; k < 2; k++) {
+                    const int32_t tx = (qx + k) * S, ty = (qy + j) * S;
+                    const uint32_t r = tx >= 0 && tx < W && ty >= 0 && ty < HH
+                                           ? tex[(size_t)(HH + ty) * w + (size_t)tx]
+                                           : 0u;
+                    const uint32_t l =
+                        sheetRimLevel(r, style, sheetThreshold(qx + k, qy + j, style[3]));
+                    lq[j][k] = l;
+                    la[j][k] = (l * 128u + 127u) / 255u;
+                }
+            }
+            const uint32_t c = crow && xx >= 0 && xx < W ? crow[xx] : 0u;
+            if (c == 0u && (lq[0][0] | lq[0][1] | lq[1][0] | lq[1][1]) == 0u) {
+                memcpy(o, blank, 4);
+                continue;
+            }
+            /* the two lerps in DD-ths (exact: the shader's floats hold
+               them without a rounding), then floor(v + 0.5) */
+            const uint32_t q = (lq[0][0] * (D - gx) + lq[0][1] * gx) * (D - gy) +
+                               (lq[1][0] * (D - gx) + lq[1][1] * gx) * gy;
+            const uint32_t qa = (la[0][0] * (D - gx) + la[0][1] * gx) * (D - gy) +
+                                (la[1][0] * (D - gx) + la[1][1] * gx) * gy;
+            const uint32_t rm = (2u * q + DD) / (2u * DD);
+            /* sheet_texel_scaled at the threshold of the sheet texel the
+               texel lies in */
+            const uint32_t th =
+                sheetThreshold(sheetFloorDiv(xx, S), sheetFloorDiv(yy, S), style[3]);
+            const uint32_t a = c > rm ? c : rm;
+            const uint32_t t = a != 0 ? (c * 255u + a / 2u) / a : 0u;
+            const uint32_t cq = sheetQuantise(c, th), tq = sheetQuantise(t, th);
+            const uint32_t grey =
+                ((uint32_t)style[1] * (255u - tq) + (uint32_t)style[2] * tq + 127u) / 255u;
+            const uint32_t af = (cq * 128u + 127u) / 255u;
+            const uint32_t m = qa > af * DD ? qa : af * DD;
+            o[0] = o[1] = o[2] = (uint8_t)grey;
+            o[3] = (uint8_t)((2u * m + DD) / (2u * DD));
+        }
+    }
+    return 1;
+}
+
+int rd__sheet_bake_texels(const RdTexRec *t, int32_t x, int32_t y, int32_t rw, int32_t rh,
+                          uint8_t *out, size_t pitch)
+{
+    if (!t) {
+        return 0;
+    }
+    return t->sheetScale > 1
+               ? rd__sheet_bake_scaled_rect(t->pixels, t->w, t->h, t->sheet, t->sheetScale, x, y,
+                                            rw, rh, out, pitch)
+               : rd__sheet_bake_rect(t->pixels, t->w, t->h, t->sheet, x, y, rw, rh, out, pitch);
+}
+
+void rd__sheet_bake_grow(const RdTexRec *t, uint32_t dw, uint32_t dh, uint32_t *rx, uint32_t *ry,
+                         uint32_t *rw, uint32_t *rh)
+{
+    /* the changed rectangle [x0, x1) x [y0, y1) in the texture's texels */
+    const int64_t x0 = *rx, y0 = *ry, x1 = x0 + *rw, y1 = y0 + *rh;
+    int64_t px0, px1, py0, py1; /* the page texels to bake again */
+    if (t->sheetScale <= 1) {
+        /* every texel whose rim reads a changed one: the apron's reach (the
+           rim's and one) round it */
+        px0 = x0 - ICO_SHEET_BAKE_AX;
+        px1 = x1 + ICO_SHEET_BAKE_AX;
+        py0 = y0 - ICO_SHEET_BAKE_AY;
+        py1 = y1 + ICO_SHEET_BAKE_AY;
+    } else {
+        /* a texel reads its own coverage and the rims of the sheet texels
+           q0, q0 + 1 around its centre, kept at texel q s of the bottom
+           half: a changed rim row hh + r moves the texels of rows r - s ..
+           r + 2 s (2 s each way, the bottom half's own texels with them) */
+        const int64_t g = 2 * (int64_t)t->sheetScale, hh = t->h / 2u;
+        px0 = x0 - g;
+        px1 = x1 + g;
+        py0 = y0 - g;
+        py1 = y1 + g;
+        if (y1 > hh) {
+            const int64_t r0 = (y0 > hh ? y0 : hh) - hh - g, r1 = y1 - hh + g;
+            py0 = r0 < py0 ? r0 : py0;
+            py1 = r1 > py1 ? r1 : py1;
+        }
+    }
+    /* in the device's texels (the page's (x, y) at (x + AX, y + AY)),
+       clipped to the texture */
+    int64_t dx0 = px0 + ICO_SHEET_BAKE_AX, dx1 = px1 + ICO_SHEET_BAKE_AX;
+    int64_t dy0 = py0 + ICO_SHEET_BAKE_AY, dy1 = py1 + ICO_SHEET_BAKE_AY;
+    dx0 = dx0 < 0 ? 0 : dx0;
+    dy0 = dy0 < 0 ? 0 : dy0;
+    dx1 = dx1 > dw ? dw : dx1;
+    dy1 = dy1 > dh ? dh : dy1;
+    *rx = (uint32_t)dx0;
+    *ry = (uint32_t)dy0;
+    *rw = dx1 > dx0 ? (uint32_t)(dx1 - dx0) : 0u;
+    *rh = dy1 > dy0 ? (uint32_t)(dy1 - dy0) : 0u;
+}
+
 /* t's texels uploaded whole at the next replay */
 static void sheetDirtyAll(RdTexRec *t)
 {
@@ -1309,7 +1495,7 @@ void rd__set_sheet_shader(bool on)
     for (uint32_t i = 0; g_rd.textures && i < RD_MAX_TEXTURES; i++) {
         RdTexRec *t = &g_rd.textures[i];
         if (t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&
-            t->sheetScale <= 1) {
+            rd__sheet_bake_scale(t->sheetScale)) {
             sheetDirtyAll(t);
         }
     }
@@ -1435,7 +1621,8 @@ void rd_set_texture_sheet_style(RdTex t, const RdSheetStyle *style)
         const uint8_t after[5] = {r->sheet[0], r->sheet[1], r->sheet[2], r->sheet[3],
                                   r->sheetScale};
         /* a baked page holds its style in its texels: baked again whole (a
-           menu-language change); above 1x the style is the draw's uniform */
+           menu-language change); a page the shader draws (scale 3, or under
+           ICO_RD_SHEET_SHADER) has the style as the draw's uniform */
         if ((baked || rd__sheet_baked(r)) && memcmp(before, after, sizeof(before)) != 0) {
             sheetDirtyAll(r);
         }

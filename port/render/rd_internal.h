@@ -765,11 +765,16 @@ RdTex rd__create_texture_replacement(struct TexpackImage *img, uint32_t uvW, uin
  * TexpackImage holding them; t->pending is null afterwards. */
 void rd__free_pending(RdTexRec *t);
 
-/* Sheet text at 1x, baked (rd_tex.c; issue 173).  rd__sheet_baked: t is a
- * sheet texture of scale 1 (or 0, not yet styled) and the bake is on
- * (g_rd.sheetShader and the texture's own sheetShader off): its RHI texture is RGBA8, (w + 2 ICO_SHEET_BAKE_AX)
- * x (h + 2 ICO_SHEET_BAKE_AY), the page's texel (x, y) at (x + AX, y + AY),
- * and rd__plan_screen_draw draws it with font_sheet_baked_ps.
+/* Sheet text, baked (rd_tex.c; issue 173 at 1x, the phone's menus above).
+ * rd__sheet_bake_scale: whether strips of that scale are baked (1 or 0,
+ * and 2: a scale whose magnified rim font_sheet_ps blends without a
+ * rounding; not 3, whose blend rounds, nor 4, exact but 34 MB a page).  rd__sheet_baked: t is a sheet texture of such a
+ * scale and the bake is on (g_rd.sheetShader and the texture's own
+ * sheetShader off): its RHI texture is RGBA8, (w + 2 ICO_SHEET_BAKE_AX)
+ * x (h + 2 ICO_SHEET_BAKE_AY), the page's texel (x, y) at (x + AX, y + AY)
+ * (above 1x h is both halves, coverage and rim, so font_sheet_baked_ps's
+ * page size is font_sheet_ps's texture size), and rd__plan_screen_draw
+ * draws it with font_sheet_baked_ps.
  * rd__tex_device_w/h and rd__tex_device_bytes: the RHI texture's size and
  * bytes a texel; rd__tex_rhi_format its format (rd__texel_rhi_format of
  * the CPU copy's for every other texture).
@@ -781,6 +786,7 @@ void rd__free_pending(RdTexRec *t);
  * grey, grey, alpha in GS units) into out, rows pitch bytes apart.  The rim
  * is the separable weighted dilation rd_sheet_rim makes at scale 1.  0
  * without the memory for its row window (nothing written), else 1. */
+int rd__sheet_bake_scale(uint32_t scale);
 int rd__sheet_baked(const RdTexRec *t);
 uint32_t rd__tex_device_w(const RdTexRec *t);
 uint32_t rd__tex_device_h(const RdTexRec *t);
@@ -788,8 +794,28 @@ uint32_t rd__tex_device_bytes(const RdTexRec *t);
 RhiFormat rd__tex_rhi_format(const RdTexRec *t);
 int rd__sheet_bake_rect(const uint8_t *cov, uint32_t w, uint32_t h, const uint8_t style[4],
                         int32_t x, int32_t y, int32_t rw, int32_t rh, uint8_t *out, size_t pitch);
-/* g_rd.sheetShader set to on, every 1x sheet texture marked for upload
- * again (its RHI texture is made in the other layout at the next replay) */
+/* rd__sheet_bake_scaled_rect: the texels font_sheet_ps makes above 1x
+ * (font.hlsl sheet_scaled: the texel's own coverage from the top half, the
+ * rim levels of the sheet texels q0 and q0 + 1 around its centre from
+ * texel q s of the bottom half, blended bilinearly, sheet_texel_scaled at
+ * the threshold of the sheet texel it lies in) for the texels [x, x + rw) x
+ * [y, y + rh) (any integers, both halves' rows) of a w x h sheet texture tex
+ * of strip scale scale (2 or 4; 0 for any other, nothing written), in
+ * integers: the shader's lerps by odd 4ths and 8ths are exact floats, so
+ * these are its values.  rd__sheet_bake_texels: t's texels by its scale.
+ * rd__sheet_bake_grow: t's changed rectangle (*rx, *ry, *rw, *rh, in the
+ * texture's texels) turned into the device rectangle of every baked texel
+ * that reads a changed one, clipped to the dw x dh device texture. */
+int rd__sheet_bake_scaled_rect(const uint8_t *tex, uint32_t w, uint32_t h, const uint8_t style[4],
+                               uint32_t scale, int32_t x, int32_t y, int32_t rw, int32_t rh,
+                               uint8_t *out, size_t pitch);
+int rd__sheet_bake_texels(const RdTexRec *t, int32_t x, int32_t y, int32_t rw, int32_t rh,
+                          uint8_t *out, size_t pitch);
+void rd__sheet_bake_grow(const RdTexRec *t, uint32_t dw, uint32_t dh, uint32_t *rx, uint32_t *ry,
+                         uint32_t *rw, uint32_t *rh);
+/* g_rd.sheetShader set to on, every baked sheet texture (scale 1, 2)
+ * marked for upload again (its RHI texture is made in the other layout at
+ * the next replay) */
 void rd__set_sheet_shader(bool on);
 
 /* --------------------------------------------------------------- meshes

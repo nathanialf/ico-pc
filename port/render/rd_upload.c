@@ -164,7 +164,7 @@ uint64_t rd__texture_ring_bytes(void)
             continue;
         }
         if (t->live && t->kind == RD_TEXKIND_IMAGE && (t->dirty || t->mipLevels != texLevels(t))) {
-            /* the device's texels: a baked 1x sheet's RGBA8 page and apron */
+            /* the device's texels: a baked sheet's RGBA8 page and apron */
             uint64_t pitch =
                 ((uint64_t)rd__tex_device_w(t) * rd__tex_device_bytes(t) + pitchA - 1) / pitchA *
                 pitchA;
@@ -501,8 +501,8 @@ void rd__upload_dirty_textures(void)
             continue;
         }
         const uint8_t levels = texLevels(t);
-        /* a sheet's texels baked at 1x (rd__sheet_baked), its coverage
-         * above */
+        /* a sheet's texels baked at 1x and 2x (rd__sheet_baked), its
+         * coverage at 3x and 4x */
         const uint8_t baked = (uint8_t)rd__sheet_baked(t);
         if (t->rhi.id && (t->mipLevels != levels || t->sheetBaked != baked)) {
             /* the filter option changed, or a sheet's layout (its scale,
@@ -545,14 +545,11 @@ void rd__upload_dirty_textures(void)
             rw = t->dirtyX1 - t->dirtyX0;
             rh = t->dirtyY1 - t->dirtyY0;
             if (baked) {
-                /* every texel whose rim reads a changed one: the rectangle
-                 * grown by the apron (the rim's reach and one), in the
-                 * page and its apron; the page's (x, y) is the device's
-                 * (x + AX, y + AY) */
-                const uint32_t x1 = rx + rw + 2u * ICO_SHEET_BAKE_AX;
-                const uint32_t y1 = ry + rh + 2u * ICO_SHEET_BAKE_AY;
-                rw = (x1 < dw ? x1 : dw) - rx;
-                rh = (y1 < dh ? y1 : dh) - ry;
+                /* every texel that reads a changed one (rd_tex.c
+                 * rd__sheet_bake_grow: at 1x the rim's reach and one, above
+                 * it the rims' sheet texels), in the page and its apron;
+                 * the page's (x, y) is the device's (x + AX, y + AY) */
+                rd__sheet_bake_grow(t, dw, dh, &rx, &ry, &rw, &rh);
             }
         }
         const uint32_t pitch = (rw * bpp + pitchA - 1) / pitchA * pitchA;
@@ -562,14 +559,14 @@ void rd__upload_dirty_textures(void)
             continue;
         }
         if (baked) {
-            /* the finished texels (rd_tex.c rd__sheet_bake_rect), in the
-             * page's coordinates */
-            if (!rd__sheet_bake_rect(t->pixels, t->w, t->h, t->sheet,
-                                     (int32_t)rx - ICO_SHEET_BAKE_AX,
-                                     (int32_t)ry - ICO_SHEET_BAKE_AY, (int32_t)rw, (int32_t)rh,
-                                     g_rd.ringMap[rd__ring_slot()] + off, pitch)) {
+            /* the finished texels (rd_tex.c rd__sheet_bake_rect at 1x,
+             * rd__sheet_bake_scaled_rect above), in the page's
+             * coordinates */
+            if (!rd__sheet_bake_texels(t, (int32_t)rx - ICO_SHEET_BAKE_AX,
+                                       (int32_t)ry - ICO_SHEET_BAKE_AY, (int32_t)rw, (int32_t)rh,
+                                       g_rd.ringMap[rd__ring_slot()] + off, pitch)) {
                 rdtex_text_upload_failed(t->name, t->w, t->h, t->format,
-                                         "no memory to bake the 1x text");
+                                         "no memory to bake the menu text");
                 continue;
             }
         } else {

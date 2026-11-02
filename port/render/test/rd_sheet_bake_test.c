@@ -27,7 +27,21 @@
  *            clamped read returns;
  *   rects    rectangles of any size and position bake the same texels as
  *            the whole page; an empty rectangle bakes nothing and returns
- *            1, a missing coverage returns 0.
+ *            1, a missing coverage returns 0;
+ *   scaled   a sheet texture of strip scale 2 and 4 (coverage in the top
+ *            half, rd_sheet_rim's rim in the bottom one) with blocks,
+ *            ramps, noise and ink on its four edges, baked whole (both
+ *            halves and the apron) by rd__sheet_bake_scaled_rect: every
+ *            texel is font.hlsl sheet_scaled's, transcribed here in floats
+ *            with lerp as x (1 - a) + y a and as x + a (y - x) (the two
+ *            forms a driver may compile: the same bits, as the blend
+ *            weights are odd 4ths and 8ths); away from the edges also
+ *            sheetref_texel's; past the apron the outermost texel's;
+ *            sub-rectangles the whole bake's; a strip placed as
+ *            menu_font.c placeCoverage places it (its coverage and rim
+ *            rectangles) and baked over rd__sheet_bake_grow's rectangle
+ *            gives a fresh bake's page; scale 3 (6ths, which round) and
+ *            the device rule (rd__sheet_bake_scale: 1 and 2 only) refused.
  */
 #include <math.h>
 #include <stdio.h>
@@ -516,10 +530,299 @@ static void testRects(void)
     free(p.cov);
 }
 
+/* ---- scaled: strips at 2 and 4 texels a sheet texel ---- */
+
+/* font.hlsl sheet_scaled for one texel p, in floats as the shader writes
+   it: c from the top half, the rim levels of the sheet texels q0, q0 + 1
+   around p's centre read at texel q s of the bottom half, the two lerps,
+   sheet_texel_scaled; form 0 lerps as x (1 - a) + y a, form 1 as
+   x + a (y - x) */
+static float lerpForm(float x, float y, float a, int form)
+{
+    return form ? x + a * (y - x) : x * (1.0f - a) + y * a;
+}
+
+static uint32_t refQuantise(uint32_t v, uint32_t th)
+{
+    const uint32_t n = ICO_SHEET_LEVELS - 1u;
+    const uint32_t q = (v * n * 32u + th * 255u) / (255u * 32u);
+    return ((q < n ? q : n) * 255u + n / 2u) / n;
+}
+
+static uint32_t refThreshold(int x, int y, uint32_t dither)
+{
+    static const uint32_t kRows[4] = {ICO_SHEET_BAYER_ROW0, ICO_SHEET_BAYER_ROW1,
+                                      ICO_SHEET_BAYER_ROW2, ICO_SHEET_BAYER_ROW3};
+    if (!dither) {
+        return ICO_SHEET_T_OFF;
+    }
+    return 2u * ((kRows[(uint32_t)y & 3u] >> (4u * ((uint32_t)x & 3u))) & 15u) + 1u;
+}
+
+static void shaderTexel(const uint8_t *tex, int w, int h, int si, const uint8_t st[4], int px,
+                        int py, int form, uint8_t *grey, uint8_t *alpha)
+{
+    const int hh = h / 2;
+    const uint32_t c = px >= 0 && px < w && py >= 0 && py < hh ? tex[(size_t)py * w + px] : 0u;
+    const int nx = 2 * px + 1 - si, ny = 2 * py + 1 - si;
+    const int q0x = (nx + 8192 * si) / (2 * si) - 4096, q0y = (ny + 8192 * si) / (2 * si) - 4096;
+    const float gx = (float)(nx - 2 * si * q0x) / (float)(2 * si);
+    const float gy = (float)(ny - 2 * si * q0y) / (float)(2 * si);
+    float rq[2][2], ra[2][2];
+    for (int j = 0; j < 2; j++) {
+        for (int i = 0; i < 2; i++) {
+            const int tx = (q0x + i) * si, ty = (q0y + j) * si;
+            const int inside = tx >= 0 && tx < w && ty >= 0 && ty < hh;
+            const uint32_t r = inside ? tex[(size_t)(hh + ty) * w + tx] : 0u;
+            const uint32_t l = refQuantise(st[0] != 0 ? (r * st[0] + 32u) / 64u : 0u,
+                                           refThreshold(q0x + i, q0y + j, st[3]));
+            rq[j][i] = (float)l;
+            ra[j][i] = (float)((l * 128u + 127u) / 255u);
+        }
+    }
+    const float rq0 = lerpForm(rq[0][0], rq[0][1], gx, form);
+    const float rq1 = lerpForm(rq[1][0], rq[1][1], gx, form);
+    const float ra0 = lerpForm(ra[0][0], ra[0][1], gx, form);
+    const float ra1 = lerpForm(ra[1][0], ra[1][1], gx, form);
+    const float rqv = lerpForm(rq0, rq1, gy, form), rav = lerpForm(ra0, ra1, gy, form);
+    const int qx = (px + 4096 * si) / si - 4096, qy = (py + 4096 * si) / si - 4096;
+    const uint32_t th = refThreshold(qx, qy, st[3]);
+    const uint32_t rm = (uint32_t)floorf(rqv + 0.5f);
+    const uint32_t a = c > rm ? c : rm;
+    const uint32_t t = a != 0u ? (c * 255u + a / 2u) / a : 0u;
+    const uint32_t cq = refQuantise(c, th), tq = refQuantise(t, th);
+    *grey = (uint8_t)((st[1] * (255u - tq) + st[2] * tq + 127u) / 255u);
+    const float af = (float)((cq * 128u + 127u) / 255u);
+    *alpha = (uint8_t)floorf((rav > af ? rav : af) + 0.5f);
+}
+
+/* the scaled test page: S times SW x SH sheet texels of coverage (blocks,
+   a ramp, noise at the strip's own texels; with edges, ink on the four
+   edges too) over the rim rd_sheet_rim makes; 2 S SH rows in all */
+enum { SW = 72, SH = 28 };
+
+static uint8_t *scaledPage(int S, int edges)
+{
+    const int W = SW * S, HH = SH * S;
+    uint8_t *tex = calloc((size_t)W * (size_t)HH * 2u, 1);
+    if (!tex) {
+        return NULL;
+    }
+    uint32_t seed = 777u + (uint32_t)S;
+    for (int y = 0; y < HH; y++) {
+        for (int x = 0; x < W; x++) {
+            const int qx = x / S, qy = y / S;
+            uint8_t v = 0;
+            if (qx >= 8 && qx < 14 && qy >= 7 && qy < 18) {
+                v = 255; /* a solid block */
+            } else if (qx >= 18 && qx < 34 && qy >= 9 && qy < 13) {
+                v = (uint8_t)(16 * (qx - 18) + x % S * 3); /* a ramp, finer than a sheet texel */
+            } else if (qx >= 40 && qx < 58 && qy >= 7 && qy < 20) {
+                seed = seed * 1664525u + 1013904223u;
+                v = (seed >> 24) < 90u ? (uint8_t)(seed >> 16) : 0u; /* noise */
+            } else if (edges && (x == 0 || y == 0 || x == W - 1 || y == HH - 1)) {
+                v = (uint8_t)(60 + (x * 7 + y * 13) % 190);
+            }
+            tex[(size_t)y * W + x] = v;
+        }
+    }
+    rd_sheet_rim(tex, (uint32_t)W, (uint32_t)HH, (uint32_t)S, 0, 0, W, HH,
+                 tex + (size_t)W * (size_t)HH);
+    return tex;
+}
+
+/* the whole device texture of a scaled page: (W + 2 AX) x (2 HH + 2 AY) */
+static uint8_t *bakeScaledWhole(const uint8_t *tex, int W, int H, int S, const uint8_t st[4])
+{
+    const int dw = W + 2 * AX, dh = H + 2 * AY;
+    uint8_t *dev = malloc((size_t)dw * (size_t)dh * 4);
+    if (dev && !rd__sheet_bake_scaled_rect(tex, (uint32_t)W, (uint32_t)H, st, (uint32_t)S, -AX, -AY,
+                                           dw, dh, dev, (size_t)dw * 4)) {
+        free(dev);
+        dev = NULL;
+    }
+    return dev;
+}
+
+static void testScaledAt(int S)
+{
+    const int W = SW * S, HH = SH * S, H = 2 * HH;
+    const int dw = W + 2 * AX, dh = H + 2 * AY;
+    long badShader = 0, badRef = 0, badFar = 0, refTexels = 0;
+    for (int edges = 0; edges < 2; edges++) {
+        uint8_t *tex = scaledPage(S, edges);
+        if (!tex) {
+            CHECK(0, "scaled %d: page memory", S);
+            return;
+        }
+        for (int k = 0; k < STYLE_COUNT; k++) {
+            for (int d = 0; d < 2; d++) {
+                RdSheetStyle st = kStyles[k].st;
+                st.dither = (uint8_t)d;
+                st.scale = (uint8_t)S;
+                uint8_t sb[4];
+                styleBytes(&st, sb);
+                uint8_t *dev = bakeScaledWhole(tex, W, H, S, sb);
+                if (!dev) {
+                    CHECK(0, "scaled %d: the whole bake", S);
+                    continue;
+                }
+                for (int y = -AY; y < H + AY; y++) {
+                    for (int x = -AX; x < W + AX; x++) {
+                        const uint8_t *o = &dev[((size_t)(y + AY) * dw + (size_t)(x + AX)) * 4];
+                        for (int form = 0; form < 2; form++) {
+                            uint8_t g, a;
+                            shaderTexel(tex, W, H, S, sb, x, y, form, &g, &a);
+                            if (o[0] != g || o[1] != g || o[2] != g || o[3] != a) {
+                                if (badShader < 8) {
+                                    printf("  scaled %d (%s, dither %d, form %d): texel (%d, %d) "
+                                           "baked %u %u, sheet_scaled %u %u\n",
+                                           S, kStyles[k].name, d, form, x, y, o[0], o[3], g, a);
+                                }
+                                badShader++;
+                            }
+                        }
+                        /* sheetref_texel makes the rims of the sheet texels
+                           past the page from the coverage, the device holds
+                           none: the two agree where no ink is near an edge */
+                        if (!edges && y < HH + AY) {
+                            uint8_t g, a;
+                            sheetref_texel(tex, (uint32_t)W, (uint32_t)HH, x, y, &st, &g, &a);
+                            badRef += o[0] != g || o[3] != a;
+                            refTexels++;
+                        }
+                    }
+                }
+                /* past the apron, any distance: the clamped read's texel */
+                for (int y = -AY - 30; y < H + AY + 30; y += 3) {
+                    for (int x = -AX - 40; x < W + AX + 40; x += 5) {
+                        const int cx = x < -AX ? -AX : x >= W + AX ? W + AX - 1 : x;
+                        const int cy = y < -AY ? -AY : y >= H + AY ? H + AY - 1 : y;
+                        uint8_t g, a;
+                        shaderTexel(tex, W, H, S, sb, x, y, 0, &g, &a);
+                        const uint8_t *o = &dev[((size_t)(cy + AY) * dw + (size_t)(cx + AX)) * 4];
+                        badFar += o[0] != g || o[3] != a;
+                    }
+                }
+                free(dev);
+            }
+        }
+        free(tex);
+    }
+    printf("  scaled %dx: %dx%d texture, bake against sheet_scaled %ld off, against sheetref_texel "
+           "%ld of %ld off, past the apron %ld off\n",
+           S, W, H, badShader, badRef, refTexels, badFar);
+    CHECK(badShader == 0, "scaled %d: %ld baked texels off font.hlsl sheet_scaled", S, badShader);
+    CHECK(badRef == 0, "scaled %d: %ld baked texels off sheetref_texel", S, badRef);
+    CHECK(badFar == 0, "scaled %d: %ld texels past the apron off the clamped read's", S, badFar);
+
+    /* sub-rectangles against the whole bake */
+    uint8_t *tex = scaledPage(S, 1);
+    if (!tex) {
+        return;
+    }
+    uint8_t sb[4];
+    styleBytes(&kStyles[1].st, sb);
+    uint8_t *whole = bakeScaledWhole(tex, W, H, S, sb);
+    uint32_t seed = 4242u;
+    long badRect = 0;
+    for (int t = 0; whole && t < 120; t++) {
+        seed = seed * 1664525u + 1013904223u;
+        const int rx = (int)(seed >> 8) % dw;
+        seed = seed * 1664525u + 1013904223u;
+        const int ry = (int)(seed >> 8) % dh;
+        seed = seed * 1664525u + 1013904223u;
+        const int rw = 1 + (int)(seed >> 8) % (dw - rx);
+        seed = seed * 1664525u + 1013904223u;
+        const int rh = 1 + (int)(seed >> 8) % (dh - ry);
+        const size_t pitch = (size_t)rw * 4 + 8;
+        uint8_t *out = malloc(pitch * (size_t)rh);
+        if (!out) {
+            break;
+        }
+        CHECK(rd__sheet_bake_scaled_rect(tex, (uint32_t)W, (uint32_t)H, sb, (uint32_t)S, rx - AX,
+                                         ry - AY, rw, rh, out, pitch),
+              "scaled %d: a rectangle baked", S);
+        for (int y = 0; y < rh; y++) {
+            badRect += memcmp(out + (size_t)y * pitch,
+                              whole + ((size_t)(ry + y) * (size_t)dw + (size_t)rx) * 4,
+                              (size_t)rw * 4) != 0;
+        }
+        free(out);
+    }
+    CHECK(whole && badRect == 0, "scaled %d: %ld rows of sub-rectangles off the whole bake", S,
+          badRect);
+
+    /* a strip placed as menu_font.c placeCoverage places one: its coverage
+       (and the sheet texel round it) and the rim below, two rectangles the
+       texture's dirty rectangle joins; rd__sheet_bake_grow's device
+       rectangle baked over the old device texture is a fresh bake */
+    {
+        const int sx = 20 * S, sy = 15 * S, sw = 9 * S, shh = 5 * S;
+        for (int y = 0; y < shh; y++) {
+            for (int x = 0; x < sw; x++) {
+                tex[(size_t)(sy + y) * W + sx + x] = (uint8_t)((x * 37 + y * 11) % 256);
+            }
+        }
+        const int rx = sx - S, ry = sy - S, rw = sw + 2 * S, rh = shh + 2 * S;
+        rd_sheet_rim(tex, (uint32_t)W, (uint32_t)HH, (uint32_t)S, rx, ry, rw, rh,
+                     tex + (size_t)W * (size_t)HH);
+        RdTexRec rec;
+        memset(&rec, 0, sizeof(rec));
+        rec.w = (uint32_t)W;
+        rec.h = (uint32_t)H;
+        rec.sheetScale = (uint8_t)S;
+        memcpy(rec.sheet, sb, 4);
+        rec.pixels = tex;
+        /* the dirty rectangle: the union of the two */
+        uint32_t ux = (uint32_t)rx, uy = (uint32_t)ry, uw = (uint32_t)rw, uh = (uint32_t)(HH + rh);
+        rd__sheet_bake_grow(&rec, (uint32_t)dw, (uint32_t)dh, &ux, &uy, &uw, &uh);
+        uint8_t *dev = whole;
+        if (dev && uw && uh) {
+            CHECK(rd__sheet_bake_texels(&rec, (int32_t)ux - AX, (int32_t)uy - AY, (int32_t)uw,
+                                        (int32_t)uh, dev + ((size_t)uy * dw + ux) * 4,
+                                        (size_t)dw * 4),
+                  "scaled %d: the grown rectangle baked", S);
+        }
+        uint8_t *fresh = bakeScaledWhole(tex, W, H, S, sb);
+        CHECK(dev && fresh && memcmp(dev, fresh, (size_t)dw * (size_t)dh * 4) == 0,
+              "scaled %d: a placed strip's grown rectangle (%u,%u %ux%u) bakes the fresh page", S,
+              ux, uy, uw, uh);
+        /* a rim row alone (the bottom half) reaches the texels 2 S round
+           its sheet row in the top half */
+        uint32_t gx = 10u * (uint32_t)S, gy = (uint32_t)(HH + 12 * S), gw = 1, gh = 1;
+        rd__sheet_bake_grow(&rec, (uint32_t)dw, (uint32_t)dh, &gx, &gy, &gw, &gh);
+        CHECK(gy <= (uint32_t)(12 * S - 2 * S + AY) && gy + gh >= (uint32_t)(12 * S + 3 * S + AY),
+              "scaled %d: a rim texel's rectangle reaches its sheet row's texels (%u+%u)", S, gy,
+              gh);
+        free(fresh);
+    }
+    free(whole);
+    free(tex);
+}
+
+static void testScaled(void)
+{
+    testScaledAt(2);
+    testScaledAt(4);
+    /* 3: the shader's blend by 6ths rounds; the bake refuses it, and the
+       device bakes 1x and 2x only (4x pages are 34 MB baked) */
+    uint8_t px[4] = {9, 9, 9, 9}, cov[16] = {0};
+    const uint8_t sb[4] = {64, 0, 255, 1};
+    CHECK(rd__sheet_bake_scaled_rect(cov, 2, 8, sb, 3, 0, 0, 1, 1, px, 4) == 0 && px[0] == 9,
+          "scaled: scale 3 refused, nothing written");
+    CHECK(rd__sheet_bake_scaled_rect(cov, 2, 8, sb, 1, 0, 0, 1, 1, px, 4) == 0,
+          "scaled: scale 1 is the 1x bake's");
+    CHECK(rd__sheet_bake_scale(0) && rd__sheet_bake_scale(1) && rd__sheet_bake_scale(2) &&
+              !rd__sheet_bake_scale(3) && !rd__sheet_bake_scale(4),
+          "scaled: the device bakes 1x and 2x");
+}
+
 int main(int argc, char **argv)
 {
     const char *corpus = argc > 1 ? argv[1] : "port/ui/test/font_corpus";
     CHECK(ui_font_init(), "the embedded fonts parse");
+    testScaled();
     testRects();
     testEdges();
     testUpdates();
