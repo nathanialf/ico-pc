@@ -2185,7 +2185,15 @@ static void testAsyncRates(void)
    plus that wait.  mode: RT_NONE no plan, RT_PLAN the plan's
    pace_rt_further_late alone (pace_rt_further_hold unpaced), RT_HOLDS the
    paced holds too (PACE_RT_OVERRUN, PACE_RT_BEHIND by the present call's
-   estimate, as render_thread.c keeps it) */
+   estimate, as render_thread.c keeps it).  interpNs (rtTimerLoopSplit; 0:
+   none, the model above) is the submit thread (port/render/
+   rd_submit_thread.h): a picture's job on the render thread ends with its
+   reads, its submit and present (restNs, and the back-pressure's wait) run
+   on the submit thread from there, and the render thread's next picture
+   makes no graphics call for its first interpNs (the interpolation), then
+   waits for the submit thread to be idle (subWaits) and for the fence of
+   the picture two before; the present estimate folded at a job's end is
+   the submit thread's last finished present (the picture before's) */
 typedef struct RtLoad {
     uint64_t stepNs, postNs, readsNs, restNs, gpuNs;
     uint64_t burstReads, burstRest;
@@ -2203,9 +2211,11 @@ typedef struct RtRun {
     uint64_t readWaitNs, slotWaitNs;
     uint64_t lateMax; /* a step's start past its due time, after the first second */
     unsigned overrun, behind, blocked; /* holds by why; presents that waited for the GPU */
+    unsigned subWaits; /* the render thread's waits for the submit thread, after the first second */
+    uint64_t subWaitNs;
 } RtRun;
 
-static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, int mode)
+static RtRun rtTimerLoopSplit(unsigned steps, const RtLoad *L, int mode, uint64_t interpNs)
 {
     PaceHist h;
     RtRun r;
@@ -2214,6 +2224,7 @@ static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, int mode)
     uint64_t t = 0, deadline = 0, cost = 0, nextPresent = 0;
     uint64_t rStart = 0, rReadsEnd = 0, rFree = 0, readsEst = 0, wholeEst = 0;
     uint64_t rPresent = 0, presentEst = 0;
+    uint64_t sFree = 0, sPresent = 0; /* the submit thread's (interpNs != 0) */
     uint64_t ready[4] = {0, 0, 0, 0};
     bool folded = true;
     unsigned made = 0;
@@ -2310,17 +2321,41 @@ static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, int mode)
                 const uint64_t two = made >= 2 ? ready[(made - 2) % 4] : 0;
                 const uint64_t fence = two > rStart ? two - rStart : 0;
                 const uint64_t prev = made >= 1 ? ready[(made - 1) % 4] : 0;
-
-                rReadsEnd = rStart + fence + readsNs;
                 /* the present returns once the GPU finished the picture
                    depth before (the driver's back-pressure) */
                 const uint64_t back =
                     L->depth != 0 && made >= L->depth ? ready[(made - L->depth) % 4] : 0;
-                const uint64_t end = rReadsEnd + restNs;
-                const uint64_t block = back > end ? back - end : 0;
+                uint64_t block;
 
-                rFree = end + block;
-                rPresent = L->presentBase + block;
+                if (interpNs == 0) {
+                    rReadsEnd = rStart + fence + readsNs;
+                    const uint64_t end = rReadsEnd + restNs;
+
+                    block = back > end ? back - end : 0;
+                    rFree = end + block;
+                    rPresent = L->presentBase + block;
+                } else {
+                    /* the interpolation, then the first graphics call:
+                       the submit thread idle, the fence */
+                    uint64_t at = rStart + interpNs;
+
+                    if (sFree > at) {
+                        if (k >= 60) {
+                            r.subWaits++;
+                            r.subWaitNs += sFree - at;
+                        }
+                        at = sFree;
+                    }
+                    at = two > at ? two : at;
+                    rReadsEnd = at + (readsNs > interpNs ? readsNs - interpNs : 0);
+                    rFree = rReadsEnd; /* the job ends with the walk */
+                    const uint64_t end = rReadsEnd + restNs;
+
+                    block = back > end ? back - end : 0;
+                    sFree = end + block;
+                    rPresent = sPresent; /* the one finished before this job ends */
+                    sPresent = L->presentBase + block;
+                }
                 if (block > 0 && k >= 60) {
                     r.blocked++;
                 }
@@ -2344,14 +2379,21 @@ static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, int mode)
     return r;
 }
 
+static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, int mode)
+{
+    return rtTimerLoopSplit(steps, L, mode, 0);
+}
+
 static void rtPrint(const char *what, const RtRun *r)
 {
     printf("%s: %u presents in 10 s for %u frames (%u shown), %u held back (%u past the "
            "estimate, %u behind); read waits %u (%.1f ms), slot waits %u (%.1f ms); latest step "
-           "%.1f ms, %u resyncs; %u presents waited for the GPU\n",
+           "%.1f ms, %u resyncs; %u presents waited for the GPU; %u waits for the submit "
+           "thread (%.1f ms)\n",
            what, r->presents, r->frames, r->shown, r->held, r->overrun, r->behind, r->readWaits,
            (double)r->readWaitNs / 1e6, r->slotWaits, (double)r->slotWaitNs / 1e6,
-           (double)r->lateMax / 1e6, r->resyncs, r->blocked);
+           (double)r->lateMax / 1e6, r->resyncs, r->blocked, r->subWaits,
+           (double)r->subWaitNs / 1e6);
 }
 
 /* The further presents planned by the render thread's times
@@ -2542,6 +2584,58 @@ static void testRenderThreadBehind(void)
     }
 }
 
+/* The submit thread (port/render/rd_submit_thread.h; the phone's rc7 log:
+   a 4.5 ms step, the render thread's pictures holding its state 10.3-13.9
+   ms and taking 13.4-19.3 ms with the driver's submit and the present,
+   374-399 further presents a block held back as running into the next
+   step, 30 presented fps).  The model: a 4.5 ms step, 10 ms reads (3 ms of
+   them the interpolation, which makes no graphics call), 8 ms of submit
+   and present, 8 ms GPU pictures (under a refresh: the GPU's side is
+   another rule's).  With the submit and present on the render thread the
+   picture takes 18 ms, so a further present posted after the second step
+   of a frame would run past the step after it: only the new frames are
+   shown (one present a frame).  With them on the submit thread the
+   render thread is free when its walk ends, the in-between picture fits:
+   two presents a frame, every step on time, nothing waits.  With a lighter
+   submit (4 ms) both give two a frame; at a stage whose GPU pictures take
+   26 ms with the driver's back-pressure the holds keep every wait away
+   with the submit thread too */
+static void testSubmitThread(void)
+{
+    {
+        const RtLoad L = {9 * MS / 2, MS / 10, 10 * MS, 8 * MS, 8 * MS, 0, 0, 0, 0, 0, 0, MS / 2};
+        const RtRun on = rtTimerLoopSplit(600, &L, RT_HOLDS, 3 * MS);
+        const RtRun off = rtTimerLoop(600, &L, RT_HOLDS);
+
+        rtPrint("render thread, 10 ms reads and 8 ms submit and present on it", &off);
+        rtPrint("render thread, 10 ms reads, 8 ms submit and present on the submit thread", &on);
+        CHECK(off.shown == off.frames && off.presents <= off.frames + 5u);
+        CHECK(on.shown == on.frames && on.presents + 10u >= 2u * on.frames);
+        CHECK(on.readWaits == 0 && on.slotWaits == 0 && on.subWaits == 0);
+        CHECK(on.resyncs == 0 && on.lateMax < MS);
+        CHECK(off.readWaits == 0 && off.slotWaits == 0 && off.lateMax < MS);
+    }
+    {
+        const RtLoad L = {9 * MS / 2, MS / 10, 10 * MS, 4 * MS, 8 * MS, 0, 0, 0, 0, 0, 0, MS / 2};
+        const RtRun on = rtTimerLoopSplit(600, &L, RT_HOLDS, 3 * MS);
+        const RtRun off = rtTimerLoop(600, &L, RT_HOLDS);
+
+        rtPrint("render thread, 10 ms reads, 4 ms submit and present on the submit thread", &on);
+        CHECK(off.presents + 10u >= 2u * off.frames && on.presents + 10u >= 2u * on.frames);
+        CHECK(on.readWaits == 0 && on.slotWaits == 0 && on.lateMax < MS);
+    }
+    {
+        const RtLoad L = {5 * MS, MS / 10, 4 * MS, 5 * MS,  3 * MS, 4 * MS,
+                          5 * MS, 120,     240,    26 * MS, 1,      MS / 2};
+        const RtRun on = rtTimerLoopSplit(600, &L, RT_HOLDS, 2 * MS);
+
+        rtPrint("render thread, a stage of 26 ms GPU pictures, holds, the submit thread", &on);
+        CHECK(on.slotWaits == 0 && on.readWaits == 0 && on.lateMax < MS);
+        CHECK(on.resyncs == 0 && on.shown == on.frames && on.behind > 0);
+        CHECK(on.presents >= on.frames + 150u);
+    }
+}
+
 int main(void)
 {
     test60();
@@ -2575,6 +2669,7 @@ int main(void)
     testAsyncRates();
     testRenderThreadPlan();
     testRenderThreadBehind();
+    testSubmitThread();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;

@@ -10,7 +10,9 @@
 # present between them, --interp 0.5 <zip>, presented, at Enhanced 2x.
 # Every target's PNG of sync and on must equal off's byte for byte, and the
 # sync and on runs must say "render thread: sync" / "render thread: on" (the
-# thread ran).  A missing list or dump is named and skipped; no dump read, or
+# thread ran); the blended present's on run must say "submit thread: ended
+# (N" with N above 0 (its submit and present ran on the submit thread,
+# port/render/rd_submit_thread.h).  A missing list or dump is named and skipped; no dump read, or
 # no device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DEXTRA=<a second dump list>
 # -DOUT=<a folder the test may write>
@@ -91,6 +93,14 @@ foreach(dump IN LISTS dumps)
       endif()
       if(NOT run STREQUAL "off" AND NOT "${out}${err}" MATCHES "render thread: ${run} ")
         message(SEND_ERROR "${dump} ${s} ${run}: the render thread did not say it ran:\n${err}")
+        set(ok FALSE)
+        break()
+      endif()
+      # the blended present handed over: its submit and present on the
+      # submit thread (rd_submit_thread.h), at least one picture there
+      if(run STREQUAL "on" AND s STREQUAL "interp" AND
+         NOT "${out}${err}" MATCHES "submit thread: ended \\([1-9]")
+        message(SEND_ERROR "${dump} ${s} on: no picture was submitted on the submit thread:\n${err}")
         set(ok FALSE)
         break()
       endif()
