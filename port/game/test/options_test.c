@@ -420,9 +420,9 @@ static void test_ui_language(const char *dir)
     ico_opt_set_ui_language(5);
     CHECK(ico_opt_ui_language() == 5);
     ico_opt_set_ui_language(8);
-    CHECK(ico_opt_ui_language() == 8 && ico_opt_texture_language(6) == 2);
+    CHECK(ico_opt_ui_language() == 8);
     ico_opt_set_ui_language(7);
-    CHECK(ico_opt_ui_language() == 7 && ico_opt_texture_language(6) == 6);
+    CHECK(ico_opt_ui_language() == 7);
     ico_opt_set_ui_language(9);
     CHECK(ico_opt_ui_language() == -1);
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");

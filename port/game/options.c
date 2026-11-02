@@ -439,11 +439,6 @@ const char *ico_opt_ui_language_name(int lang)
     return lang >= 0 && lang < UI_LANGUAGES ? kUiLanguages[lang] : "auto";
 }
 
-int ico_opt_texture_language(int gameLanguage)
-{
-    return strcmp(ico_opt_ui_language_name(ico_opt_ui_language()), "ru") == 0 ? 2 : gameLanguage;
-}
-
 static const char *const kSubtitleSources[ICO_SUBTITLE_SOURCE_COUNT] = {"all", "disc", "text"};
 
 static int subtitle_language_id_valid(const char *id)

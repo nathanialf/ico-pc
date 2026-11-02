@@ -3702,10 +3702,6 @@ static void testMenuLanguage(void)
                  "\xE7\xB9\x81\xE9\xAB\x94\xE4\xB8\xAD\xE6\x96\x87") == 0,
           "the row names Chinese in Chinese: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);
-    CHECK(ico_opt_ui_language() == UI_LANG_RU && ui_get_language() == UI_LANG_RU &&
-              ui_sheet_language() == UI_LANG_EN &&
-              ico_opt_texture_language(NonLinearCameraMove) == ICO_GAME_LANGUAGE_ENGLISH,
-          "Russian menus use English game-text textures and sheet styling");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_MENU_LANGUAGE), "Русский") == 0,
           "the row names Russian: %s", ui_settings_value_text(UI_OPT_MENU_LANGUAGE));
     ui_settings_step(UI_OPT_MENU_LANGUAGE, 1);

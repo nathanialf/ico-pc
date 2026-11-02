@@ -222,9 +222,6 @@ void ico_opt_set_circle_back(int on);
 int ico_opt_ui_language(void);
 void ico_opt_set_ui_language(int lang);
 const char *ico_opt_ui_language_name(int lang);
-/* Language-indexed game textures: until Russian game textures exist, use the
-   English set when the port UI is Russian. */
-int ico_opt_texture_language(int gameLanguage);
 /* [subtitles] source: all available game and text-file languages, PS2 disc
    only, or text files only. */
 #define ICO_SUBTITLE_SOURCE_ALL 0
