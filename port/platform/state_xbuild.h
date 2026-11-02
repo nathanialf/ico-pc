@@ -47,11 +47,15 @@
  *
  * A word only these confirm is translated.  A word in the code that no
  * unit holds, or in the image that nothing above names, is confirmed by
- * nothing: it is kept as the number it is (ICO_XB_UNNAMED, counted, the
- * first one recorded; the load has no span or point for it).  Such words
- * are ordinary data where the image's addresses have a small upper half:
- * under Windows' fixed base 0x140000000 any float from 2.0 to about 572
- * followed by the integer 1 lies in the image.  A state is pinned to its
+ * nothing (ICO_XB_UNNAMED, counted, the first one recorded).  Where the
+ * saving image's addresses have an upper half of 0 or 1 such words are
+ * ordinary data (under Windows' fixed base 0x140000000 any float from 2.0
+ * to about 572 followed by the integer 1 lies in the image), so they are
+ * kept as the numbers they are: the load has no span or point for them.
+ * Above that (Android's library at a randomised 64-bit base) no float
+ * next to a small integer reaches the image, so such a word is an address
+ * the table does not name and the state is refused, pinned to its build.
+ * A state is pinned to its
  * build by more references than the bounds (ICO_XB_OVERFLOW), a saving
  * build without a symbol file (no ICO_XB_TABLE) and a program image below
  * 4 GB (ICO_XB_LOW_IMAGE: there a program address cannot be told from a
@@ -148,6 +152,9 @@ typedef struct IcoXbNow {
     const unsigned *block_flags;
     const uint64_t *block_addr;
     uint64_t old_game_lo[2], old_game_hi[2]; /* the saving process's game ranges */
+    /* the saving process's image start (0: not known, the first word
+       nothing names stands for it) */
+    uint64_t old_image_lo;
 } IcoXbNow;
 
 /* what blocks a state (the first blocker found) */

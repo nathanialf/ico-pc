@@ -894,6 +894,16 @@ static const char *pinned_why(unsigned flags)
     return "";
 }
 
+/* the save's own image (state_xbuild.h): above an upper half of 1 a word
+   nothing names pins the state; at 0 or 1 it is a number */
+static int unnamed_pins(const IcoXbStats *x)
+{
+    IcoStateImage img;
+
+    return (x->flags & ICO_XB_UNNAMED) != 0 && ico_state_image_range(&img) == 0 &&
+           (img.lo >> 32) > 1u;
+}
+
 /* --- saving ------------------------------------------------------------------- */
 
 static struct {
@@ -972,6 +982,10 @@ static void save_finished(const IcoStateWriteResult *w)
     if (w->result == ICO_STATE_OK) {
         const IcoXbStats *x = &s_save.syms;
         const char *pin = pinned_why(x->flags);
+
+        if (pin[0] == '\0' && unnamed_pins(x)) {
+            pin = "it holds a program address no symbol names";
+        }
 
         fprintf(stderr,
                 "state: saved slot %d (%s): %s; %d fibers; copy %.1f ms, write %.1f ms, file %llu "
@@ -1691,6 +1705,7 @@ static int xb_probe(const char *path, IcoXbVerdict *v)
     now.old_game_hi[ICO_GAME_DATA] = rg->gdata_hi;
     now.old_game_lo[ICO_GAME_BSS] = rg->gbss_lo;
     now.old_game_hi[ICO_GAME_BSS] = rg->gbss_hi;
+    now.old_image_lo = rg->image_lo;
     k = ico_xb_check(c.p[SEC_SYMS], (size_t)c.n[SEC_SYMS], &now, v);
     copy_free(&c);
     return k;

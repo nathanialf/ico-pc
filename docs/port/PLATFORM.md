@@ -757,17 +757,25 @@ too), points (48) and blocks (40) and the names; the save's line gives its size.
 hash rule above), in a game range, a block or a unique variable, or at a start-up value or a
 constant text. A word that lies in the image's range and that nothing in the table names (a code
 address outside every unit, a word into writable data that is no block and no unique variable, a
-word into the image's headers) is kept as the number it is: the save counts it (`ICO_XB_UNNAMED`,
-the count and the first such word in the header) and the load has no span or point for it, so it
-is left and counted with the words without a translation. Such words are data more often than
-addresses where the image's addresses have a small upper half: under Windows' fixed base
-0x140000000 (`--disable-dynamicbase`, `CMakeLists.txt`) any float from 2.0 to about 572 followed
-by the integer 1 lies in the image (2.0 then 1 is 0x140000000 itself); a headless PAL state laid
-against the Windows program's sections held 203 such words, 140 of them in the DWARF sections the
-range leaves out, none a pointer. What this leaves: a number that happens to land on named code
-or data is still read as an address (translated when that function or variable moved, or a
-refusal when the function a word lands in changed), and a real pointer to something the table
-does not name stays the old build's address.
+word into the image's headers) is counted by the save (`ICO_XB_UNNAMED`, the count and the first
+such word in the header), and what it means depends on the saving image's upper half (the
+`ranges` record's image start; `ico_xb_check`):
+
+- 0 or 1 (Windows' fixed base 0x140000000, `--disable-dynamicbase` in `CMakeLists.txt`): such
+  words are data more often than addresses, since any float from 2.0 to about 572 followed by the
+  integer 1 lies in the image (2.0 then 1 is 0x140000000 itself); a headless PAL state laid
+  against the Windows program's sections held 203 such words, 140 of them in the DWARF sections
+  the range leaves out, none a pointer. They are kept as the numbers they are: the load has no
+  span or point for them, so each is left and counted with the words without a translation.
+- Above 1 (Android's library at a randomised 64-bit base): no float next to a small integer
+  reaches the image, so such a word is an address the table does not name, and the state is
+  refused, pinned to its build (`it holds a program address no symbol names (0x.., N such words):
+  the version that saved it left them unnamed`; the save's line already says it loads only into
+  its build).
+
+What the first case leaves: a number that happens to land on named code or data is still read as
+an address (translated when that function or variable moved, or a refusal when the function a
+word lands in changed).
 
 **Pinned states.** A state loads only into its own build when its record says so, and the save's
 line names why: no symbol table where it was made (`ICO_XB_TABLE` unset: macOS, iOS, a build
@@ -777,7 +785,7 @@ without a map); its image below 4 GB (`ICO_XB_LOW_IMAGE`: the Linux program is l
 looks like an address would change numbers; the Windows program sits at 0x140000000 and Android's
 library at a 64-bit address, where the game's own 32-bit numbers never reach); or more than the
 bounds (`ICO_XB_OVERFLOW`: 16,384 units, 4,096 variables, 4,096 points, 128 blocks, 196,608
-distinct words).
+distinct words); or, from an image above an upper half of 1, a word nothing names (above).
 
 **A load of another build** (`other_build`, `xb_probe` in `state_host.c`): the header passes
 `ico_state_header_check_other_build`; the `syms` and `ranges` sections are read alone and

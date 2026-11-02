@@ -800,10 +800,20 @@ int ico_xb_check(const void *secv, size_t n, const IcoXbNow *now, IcoXbVerdict *
              "it points into the program in more places than the "
              "record holds");
     }
-    /* words nothing names (ICO_XB_UNNAMED) are numbers: no span or point
-       holds them, so the load leaves them as they are */
+    /* words nothing names (ICO_XB_UNNAMED): numbers where the saving
+       image's upper half is 0 or 1 (no span or point holds them, so the
+       load leaves them as they are); above it, where no float next to a
+       small integer reaches the image, an address the table does not name */
     v->left = get32(sec + H_LEFT);
     v->first_left = get64(sec + H_UNNAMED);
+    if ((flags & ICO_XB_UNNAMED) != 0 &&
+        ((now->old_image_lo != 0 ? now->old_image_lo : v->first_left) >> 32) > 1u) {
+        snprintf(name, sizeof name, "0x%llx", (unsigned long long)v->first_left);
+        FAIL(v, ICO_XB_PINNED,
+             "it holds a program address no symbol names (%s, %u such words): the version that "
+             "saved it left them unnamed",
+             name, v->left);
+    }
     if (t == NULL) {
         FAIL(v, ICO_XB_PINNED, "this build has no symbol file");
     }

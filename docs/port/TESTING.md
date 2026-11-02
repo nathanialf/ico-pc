@@ -564,10 +564,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   its blocker (a changed function a frame sits in; a changed function only pointed at loads; the
   data layout; a block missing, new or resized; a missing text; a changed start-up value; no
   symbol table; the bounds' overflow; an image below 4 GB; a damaged record); a word nothing names
-  (into a repeated name, into the code outside every unit) counted and kept as a number, the state
-  loading with the word unchanged; at Windows' fixed base, a state holding floats next to the
-  integer 1 (2.0, 8.0 and 300.0, all inside the image's range) loading with them unchanged while
-  a pointer into the game's data beside them moves (`test_windows_numbers`); a GNU map's global
+  (into a repeated name, into the code outside every unit) counted and, under a high saving base,
+  refused as pinned; at Windows' fixed base, a state holding floats next to the integer 1 (2.0,
+  8.0 and 300.0, all inside the image's range) loading with them unchanged while a pointer into
+  the game's data beside them moves, and the same three words in an image at an upper half of
+  0x74 (Android's) refusing the state with the three counted, by the saving base and by the first
+  word's place when no base is given (`test_windows_numbers`); a GNU map's global
   without a size: a word past it recorded with its object's input section, translated by a build
   with the section laid out alike and refused by one where the section grew
   (`test_unsized_data`); a block B adds that A's state lacks refused, loaded and
