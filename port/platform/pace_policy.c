@@ -117,6 +117,32 @@ uint64_t pace_next_present(uint64_t nextPresent, uint64_t startNs, uint64_t gap)
     return n;
 }
 
+uint64_t pace_rt_estimate(uint64_t estNs, uint64_t sampleNs)
+{
+    if (sampleNs >= estNs) {
+        return sampleNs;
+    }
+    return estNs - (estNs - sampleNs) / 8u;
+}
+
+uint64_t pace_rt_busy_left(uint64_t nowNs, uint64_t sinceNs, uint64_t estNs)
+{
+    if (sinceNs == 0 || nowNs < sinceNs) {
+        return sinceNs == 0 ? 0 : estNs;
+    }
+    const uint64_t done = nowNs - sinceNs;
+
+    return done < estNs ? estNs - done : 0;
+}
+
+bool pace_rt_further_late(uint64_t nowNs, uint64_t deadlineNs, uint64_t stepNs, uint64_t busyLeftNs,
+                          uint64_t readsNs, uint64_t pictureNs)
+{
+    const uint64_t post = nowNs + busyLeftNs;
+
+    return post + readsNs > deadlineNs || post + pictureNs > deadlineNs + stepNs;
+}
+
 /* the median of n costs (n <= PACE_AUTO_SAMPLES; 0 with none) */
 static uint64_t median_of(const uint64_t *cost, unsigned n)
 {

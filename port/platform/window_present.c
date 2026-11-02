@@ -15,6 +15,7 @@
 #include "host_loop.h"
 #include "rd_submit.h"
 #include "rd_thread.h"
+#include "render_thread.h"
 #include "rhi.h"
 #include "ui_fps.h"
 #include "video_options.h"
@@ -61,6 +62,24 @@ static int frame_seen(Uint64 closeAt)
     }
     s_pres.statFrames++;
     return 1;
+}
+
+/* A further present of a frame already shown, handed to the render thread
+   now, would run into the next step (pace_policy.h pace_rt_further_late):
+   the step's calls would wait for its reads (the 10 s line's read waits)
+   or the next new frame's present for its end (the slot waits).  Its cost
+   on this thread (s_pres.cost) is only the hand-over; the render thread's
+   own times are its estimates (render_thread.h ico_render_thread_plan).
+   Never with the thread off or in sync mode, where the cost is the whole
+   picture */
+static int rt_further_late(Uint64 now)
+{
+    uint64_t left = 0, reads = 0, whole = 0;
+
+    if (!ico_render_thread_plan(now, &left, &reads, &whole)) {
+        return 0;
+    }
+    return pace_rt_further_late(now, s_deadline, s_pres.stepNs, left, reads, whole) ? 1 : 0;
 }
 
 /* One rd_present at alpha a, timed (s_pres.cost) and counted; false when
@@ -731,8 +750,9 @@ void window_present_pace(int hz)
             break;
         }
         /* nor a further present of a frame already shown that would
-           end past the deadline (its cost the last present's): the next
-           simulation step is never late for one */
+           end past the deadline (its cost the last present's; with the
+           render thread, the render thread's picture: rt_further_late): the
+           next simulation step is never late for one */
         /* off the screen: no present again */
         /* nor one past the present allowance (pace_policy.h PaceBudget):
            after a step that ended half a period late, the in-betweens a
@@ -741,9 +761,14 @@ void window_present_pace(int hz)
         if (s_pres.presentedFrame == s_pres.frame) {
             const int guard = now >= s_deadline || s_pres.paceSlow || s_pres.offScreen ||
                               (!s_pres.fifoLock && now + s_pres.cost > s_deadline);
+            const int rtLate = !guard && rt_further_late(now);
 
-            if (guard || !pace_budget_allows_paced(&s_pres.budget, false, s_pres.gpuNs, period)) {
-                if (!guard) {
+            if (rtLate) {
+                ico_render_thread_note_held();
+            }
+            if (guard || rtLate ||
+                !pace_budget_allows_paced(&s_pres.budget, false, s_pres.gpuNs, period)) {
+                if (!guard && !rtLate) {
                     s_pres.budget.refused++;
                 }
                 if (now < s_deadline) {

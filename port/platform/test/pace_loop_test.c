@@ -84,7 +84,14 @@
  *   draws, no step a quarter of a period late; 30 ms pictures every new
  *   frame (30 a second); and a present whose CPU part is 9 ms (3
  *   interpolated, 2 recorded, 4 submitted and presented) with a 3 ms step:
- *   two presents a step with the render thread against one without.
+ *   two presents a step with the render thread against one without;
+ *   the render thread's own times (testRenderThreadPlan, the whole picture
+ *   on the render thread, a step waiting for a picture's reads, the next
+ *   present for the picture before): a further present planned by them
+ *   (pace_rt_further_late) never makes a step wait, at 3, 9 and 22 ms
+ *   pictures and a burst of 30 ms ones the presents a second are what the
+ *   picture time allows and every frame is shown; without the plan the 22
+ *   ms pictures and the burst make the steps wait.
  */
 #include <stdio.h>
 #include <string.h>
@@ -2151,6 +2158,250 @@ static void testAsyncRates(void)
     }
 }
 
+/* The render thread as it is (S2 and S3, port/render/rd_thread.h): the
+   whole picture on the render thread.  A present on the game thread waits
+   for the picture before it to finish (the drain: the 10 s line's slot
+   waits), then hands its picture over (postNs).  The picture holds the
+   renderer's state for readsNs from its start (the fence wait for the
+   picture two before comes first and is part of it), then takes restNs
+   more (the submit and the present); the GPU draws gpuNs a picture from
+   the end of the reads.  A step that starts while a picture's reads are
+   open waits for them first (texLock: the read waits).  guard: the further
+   presents planned by pace_rt_further_late with the estimates as
+   render_thread.c keeps them (folded when a picture ends, the picture in
+   progress from its start).  The present allowance is left out (its GPU
+   gate is test120Budget's): only the plan and the window's own rules hold
+   a present.  From step burstFrom for burstLen steps every
+   picture holds the state burstReads and takes burstRest more (a stage
+   change's textures uploaded) */
+typedef struct RtLoad {
+    uint64_t stepNs, postNs, readsNs, restNs, gpuNs;
+    uint64_t burstReads, burstRest;
+    unsigned burstFrom, burstLen;
+} RtLoad;
+
+typedef struct RtRun {
+    unsigned frames, presents, shown, resyncs, held;
+    unsigned readWaits, slotWaits; /* after the first second, as lateMax */
+    uint64_t readWaitNs, slotWaitNs;
+    uint64_t lateMax; /* a step's start past its due time, after the first second */
+} RtRun;
+
+static RtRun rtTimerLoop(unsigned steps, const RtLoad *L, bool guard)
+{
+    PaceHist h;
+    RtRun r;
+    const uint64_t refresh = 8333333ull; /* a 120 Hz mailbox: one present a refresh */
+    const uint64_t gap = pace_present_gap(0, true, true, refresh);
+    uint64_t t = 0, deadline = 0, cost = 0, nextPresent = 0;
+    uint64_t rStart = 0, rReadsEnd = 0, rFree = 0, readsEst = 0, wholeEst = 0;
+    uint64_t ready[4] = {0, 0, 0, 0};
+    bool folded = true;
+    unsigned made = 0;
+    uint32_t frame = 0, presented = 0, skipFrame = 0;
+    bool skipOpen = false, slow = false;
+
+    memset(&h, 0, sizeof h);
+    memset(&r, 0, sizeof r);
+    for (unsigned k = 0; k < steps; k++) {
+        const bool burst = k >= L->burstFrom && k < L->burstFrom + L->burstLen;
+        const uint64_t readsNs = burst ? L->burstReads : L->readsNs;
+        const uint64_t restNs = burst ? L->burstRest : L->restNs;
+        const uint64_t due = deadline;
+
+        if (rReadsEnd > t) {
+            /* the step's first call that changes the renderer's state */
+            if (k >= 60) {
+                r.readWaits++;
+                r.readWaitNs += rReadsEnd - t;
+            }
+            t = rReadsEnd;
+        }
+        if (k >= 60 && t - due > r.lateMax) {
+            r.lateMax = t - due;
+        }
+        t += L->stepNs;
+        if (k % 2 == 0) {
+            frame++;
+            r.frames++;
+        }
+        deadline += NTSC;
+        for (;;) {
+            const bool newFrame = presented != frame;
+
+            if (!folded && rFree <= t) {
+                /* render_thread.c after the picture's job */
+                readsEst = pace_rt_estimate(readsEst, rReadsEnd - rStart);
+                wholeEst = pace_rt_estimate(wholeEst, rFree - rStart);
+                folded = true;
+            }
+            if (pace_late_skip(newFrame, pace_skipped_last(skipOpen, skipFrame, frame), slow, t,
+                               deadline, NTSC) != PACE_SKIP_NONE) {
+                skipOpen = true;
+                skipFrame = frame;
+                break;
+            }
+            if (!newFrame) {
+                const bool old = t >= deadline || slow || t + cost > deadline;
+                const uint64_t left = rFree > t ? pace_rt_busy_left(t, rStart, wholeEst) : 0;
+                const bool late =
+                    !old && guard && wholeEst != 0 &&
+                    pace_rt_further_late(t, deadline, L->stepNs, left, readsEst, wholeEst);
+
+                r.held += late ? 1u : 0u;
+                if (old || late) {
+                    t = t < deadline ? deadline : t;
+                    break;
+                }
+            }
+            if (nextPresent && t < nextPresent) {
+                if (nextPresent >= deadline) {
+                    t = t < deadline ? deadline : t;
+                    break;
+                }
+                t = nextPresent;
+                continue;
+            }
+            const uint64_t start = t;
+
+            if (rFree > t) {
+                /* rd__thread_picture_begin's drain */
+                if (k >= 60) {
+                    r.slotWaits++;
+                    r.slotWaitNs += rFree - t;
+                }
+                t = rFree;
+                if (!folded) {
+                    readsEst = pace_rt_estimate(readsEst, rReadsEnd - rStart);
+                    wholeEst = pace_rt_estimate(wholeEst, rFree - rStart);
+                    folded = true;
+                }
+            }
+            t += L->postNs;
+            rStart = t;
+            {
+                const uint64_t two = made >= 2 ? ready[(made - 2) % 4] : 0;
+                const uint64_t fence = two > rStart ? two - rStart : 0;
+                const uint64_t prev = made >= 1 ? ready[(made - 1) % 4] : 0;
+
+                rReadsEnd = rStart + fence + readsNs;
+                rFree = rReadsEnd + restNs;
+                ready[made % 4] = (prev > rReadsEnd ? prev : rReadsEnd) + L->gpuNs;
+            }
+            folded = false;
+            made++;
+            cost = t - start;
+            slow = pace_slow_present(&h, cost, refresh, NTSC, false);
+            r.shown += newFrame ? 1u : 0u;
+            presented = frame;
+            skipOpen = false;
+            r.presents++;
+            nextPresent = pace_next_present(nextPresent, start, gap);
+        }
+        if (t > deadline && t - deadline > 100 * MS) {
+            r.resyncs++;
+            deadline = t;
+        }
+    }
+    return r;
+}
+
+static void rtPrint(const char *what, const RtRun *r)
+{
+    printf("%s: %u presents in 10 s for %u frames (%u shown), %u held back; read waits %u (%.1f "
+           "ms), slot waits %u (%.1f ms); latest step %.1f ms, %u resyncs\n",
+           what, r->presents, r->frames, r->shown, r->held, r->readWaits,
+           (double)r->readWaitNs / 1e6, r->slotWaits, (double)r->slotWaitNs / 1e6,
+           (double)r->lateMax / 1e6, r->resyncs);
+}
+
+/* The further presents planned by the render thread's times
+   (pace_rt_further_late; the phone's stage changes, a 10 s block of its log with
+   102 slot waits for 1193.8 ms and 63 read waits for 562.3 ms): with it no
+   further present makes a step wait, every frame is shown, and the
+   presents a second are the rate the render thread's picture time allows:
+   two a step and more for 3 ms pictures, one a step for 9 ms ones, the new
+   frames for 22 ms ones; without it the 9 and 22 ms pictures and a burst
+   of slow ones (a stage's textures uploaded) make the steps wait.  What
+   the plan leaves: a new frame's present is never held, so one the gap
+   puts just before the next step (3 ms pictures: a few, under 0.1 ms
+   each) or one whose picture holds the state past it (the burst: one a
+   frame) still makes that step wait */
+static void testRenderThreadPlan(void)
+{
+    /* the estimates: a higher sample at once, a lower one an eighth of the
+       way a picture; the picture in progress */
+    CHECK(pace_rt_estimate(0, 9 * MS) == 9 * MS);
+    CHECK(pace_rt_estimate(9 * MS, 34 * MS) == 34 * MS);
+    CHECK(pace_rt_estimate(34 * MS, 10 * MS) == 31 * MS);
+    CHECK(pace_rt_busy_left(5 * MS, 0, 9 * MS) == 0);
+    CHECK(pace_rt_busy_left(5 * MS, 2 * MS, 9 * MS) == 6 * MS);
+    CHECK(pace_rt_busy_left(20 * MS, 2 * MS, 9 * MS) == 0);
+    /* posted at 10 with 2 left: reads 4 end at 16 (due 16.68), the picture
+       9 at 21 (the step's end 22.68): taken; reads 5 end past the due time,
+       a picture 11 past the step's end: held */
+    CHECK(!pace_rt_further_late(10 * MS, NTSC, 6 * MS, 2 * MS, 4 * MS, 9 * MS));
+    CHECK(pace_rt_further_late(10 * MS, NTSC, 6 * MS, 2 * MS, 5 * MS, 9 * MS));
+    CHECK(pace_rt_further_late(10 * MS, NTSC, 6 * MS, 2 * MS, 4 * MS, 11 * MS));
+    {
+        /* light pictures: two presents a step either way, nothing waits */
+        const RtLoad L = {3 * MS, MS / 10, 3 * MS / 2, 3 * MS / 2, 3 * MS, 0, 0, 0, 0};
+        const RtRun on = rtTimerLoop(600, &L, true);
+        const RtRun off = rtTimerLoop(600, &L, false);
+
+        rtPrint("render thread, 3 ms pictures, planned", &on);
+        rtPrint("render thread, 3 ms pictures, not planned", &off);
+        CHECK(on.readWaitNs < MS / 2 && on.resyncs == 0 && on.shown == on.frames);
+        CHECK(off.readWaitNs > 10 * on.readWaitNs);
+        CHECK(on.presents >= 1190u && on.presents + 5 >= off.presents);
+    }
+    {
+        /* 9 ms pictures (the phone's mean: 4 ms reads, 5 ms submit and
+           present), a 6 ms step: one present a step, 60 a second */
+        const RtLoad L = {6 * MS, MS / 10, 4 * MS, 5 * MS, 8 * MS, 0, 0, 0, 0};
+        const RtRun on = rtTimerLoop(600, &L, true);
+        const RtRun off = rtTimerLoop(600, &L, false);
+
+        rtPrint("render thread, 9 ms pictures, planned", &on);
+        rtPrint("render thread, 9 ms pictures, not planned", &off);
+        CHECK(on.readWaits == 0 && on.resyncs == 0 && on.shown == on.frames);
+        CHECK(on.presents >= 595u && on.lateMax < MS);
+        CHECK(off.readWaits > 100u && off.lateMax > MS);
+    }
+    {
+        /* 22 ms pictures (8 ms reads): more than a step; the new frames
+           are shown, the steps on time; without the plan the further
+           presents run into the steps */
+        const RtLoad L = {6 * MS, MS / 10, 8 * MS, 14 * MS, 8 * MS, 0, 0, 0, 0};
+        const RtRun on = rtTimerLoop(600, &L, true);
+        const RtRun off = rtTimerLoop(600, &L, false);
+
+        rtPrint("render thread, 22 ms pictures, planned", &on);
+        rtPrint("render thread, 22 ms pictures, not planned", &off);
+        CHECK(on.readWaits == 0 && on.resyncs == 0 && on.shown == on.frames);
+        CHECK(on.lateMax < MS && on.presents >= on.frames);
+        CHECK((uint64_t)on.presents * 22u * MS <= 601u * NTSC);
+        CHECK(off.readWaits > 50u && off.lateMax > on.lateMax);
+    }
+    {
+        /* the phone's stage change: 9 ms pictures, then for 2 s (120
+           steps) 30 ms ones holding the state 14 ms (the stage's textures
+           uploaded), then 9 ms again: planned, the new frames' own
+           pictures still run into the step after them (one a frame), the
+           further presents no more; the waits a sixth of the unplanned */
+        const RtLoad L = {6 * MS, MS / 10, 4 * MS, 5 * MS, 8 * MS, 14 * MS, 16 * MS, 240, 120};
+        const RtRun on = rtTimerLoop(600, &L, true);
+        const RtRun off = rtTimerLoop(600, &L, false);
+
+        rtPrint("render thread, a burst of 30 ms pictures, planned", &on);
+        rtPrint("render thread, a burst of 30 ms pictures, not planned", &off);
+        CHECK(on.resyncs == 0 && on.shown == on.frames);
+        CHECK(on.readWaits <= L.burstLen / 2u + 4u && off.readWaits > 4u * on.readWaits);
+        CHECK(on.readWaitNs * 4 < off.readWaitNs && on.slotWaitNs < off.slotWaitNs);
+        CHECK(on.presents >= on.frames);
+    }
+}
+
 int main(void)
 {
     test60();
@@ -2182,6 +2433,7 @@ int main(void)
     testVblankClockLeft();
     testAsyncLock();
     testAsyncRates();
+    testRenderThreadPlan();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;

@@ -11,6 +11,7 @@
 #include <string.h>
 #include "config.h"
 #include "diag_host.h"
+#include "pace_policy.h"
 #include "rd_thread.h"
 #include "rhi.h"
 
@@ -31,6 +32,14 @@ static struct {
     /* the game thread's waits for the render thread in the 10 s block */
     unsigned slotWaits;
     Uint64 slotWaitNs;
+    /* the pictures handed over as the game thread plans further presents
+       by them (ico_render_thread_plan): their reads (the hand-over) and
+       their whole time, estimated (pace_policy.h pace_rt_estimate); the
+       render thread writes them, the game thread reads them, no lock */
+    Uint64 readsEst, pictureEst;
+    /* the further presents the game thread held back by them in the 10 s
+       block (the game thread's) */
+    unsigned held;
 } s_rt;
 
 /* OpenGL's context is current on one thread at a time: the render thread's
@@ -129,6 +138,21 @@ static int SDLCALL rt_main(void *u)
         job.fn(job.arg);
         const Uint64 t1 = SDL_GetTicksNS();
         FmPresent p;
+
+        if (job.kind == FM_JOB_PICTURE) {
+            /* a picture handed over (rd_thread.h): how long it held the
+               renderer's state and how long it took, for the game thread's
+               next further presents */
+            const uint64_t reads = rd_thread_take_reads_ns();
+
+            if (reads != 0) {
+                const Uint64 r = __atomic_load_n(&s_rt.readsEst, __ATOMIC_RELAXED);
+                const Uint64 w = __atomic_load_n(&s_rt.pictureEst, __ATOMIC_RELAXED);
+
+                __atomic_store_n(&s_rt.readsEst, pace_rt_estimate(r, reads), __ATOMIC_RELAXED);
+                __atomic_store_n(&s_rt.pictureEst, pace_rt_estimate(w, t1 - t0), __ATOMIC_RELAXED);
+            }
+        }
 
         memset(&p, 0, sizeof(p));
         if (job.kind == FM_JOB_PICTURE) {
@@ -291,6 +315,8 @@ FmMode ico_render_thread_start(void)
         s_rt.beatSince = 0;
         s_rt.slotWaits = 0;
         s_rt.slotWaitNs = 0;
+        s_rt.readsEst = s_rt.pictureEst = 0;
+        s_rt.held = 0;
         memset(&s_gl, 0, sizeof(s_gl));
         if (rhi_backend() == RHI_BACKEND_OPENGL) {
             /* made current here at rhi_init: the render thread's from now */
@@ -434,12 +460,41 @@ bool ico_render_thread_last_present(FmPresent *out)
     return have;
 }
 
+bool ico_render_thread_plan(uint64_t nowNs, uint64_t *busyLeftNs, uint64_t *readsNs,
+                            uint64_t *pictureNs)
+{
+    if (s_rt.thread == NULL || s_rt.mode != FM_MODE_ON) {
+        return false;
+    }
+    const Uint64 reads = __atomic_load_n(&s_rt.readsEst, __ATOMIC_RELAXED);
+    const Uint64 whole = __atomic_load_n(&s_rt.pictureEst, __ATOMIC_RELAXED);
+
+    if (whole == 0) {
+        return false; /* no picture handed over yet */
+    }
+    /* the picture in progress, if any (the heartbeat's start: pictures only) */
+    const Uint64 since = __atomic_load_n(&s_rt.beatSince, __ATOMIC_ACQUIRE);
+
+    *busyLeftNs = pace_rt_busy_left(nowNs, since, whole);
+    *readsNs = reads;
+    *pictureNs = whole;
+    return true;
+}
+
+void ico_render_thread_note_held(void)
+{
+    s_rt.held++;
+}
+
 void ico_render_thread_block_line(double stepMs, double recordMs, double pumpMs)
 {
     const unsigned waits = __atomic_exchange_n(&s_rt.slotWaits, 0u, __ATOMIC_RELAXED);
     const Uint64 waitNs = __atomic_exchange_n(&s_rt.slotWaitNs, (Uint64)0, __ATOMIC_RELAXED);
+    const unsigned held = s_rt.held;
     RdThreadBlock tb;
-    char rt[320];
+    char rt[480];
+
+    s_rt.held = 0;
 
     rd_thread_block_take(&tb);
     if (s_rt.thread != NULL) {
@@ -454,10 +509,14 @@ void ico_render_thread_block_line(double stepMs, double recordMs, double pumpMs)
         snprintf(rt, sizeof(rt),
                  "render thread: idle %.0f %%, waited for a frame %.1f ms, heartbeat max %.1f ms "
                  "(%u pictures%s); interp %.1f ms, walk %.1f ms, submit %.1f ms, GPU and display "
-                 "waits %.1f ms a picture; %u textures destroyed for the game thread",
+                 "waits %.1f ms a picture; %u textures destroyed for the game thread; %u further "
+                 "presents held back (each would have run into the next step: a picture holds "
+                 "the renderer for %.1f ms, takes %.1f ms)",
                  b.idlePercent, b.waitMaxMs, b.busyMaxMs, b.pictures,
                  s_rt.mode == FM_MODE_SYNC ? ", sync" : "", tb.interpMs, tb.walkMs, tb.submitMs,
-                 tb.waitMs, tb.retired);
+                 tb.waitMs, tb.retired, held,
+                 (double)__atomic_load_n(&s_rt.readsEst, __ATOMIC_RELAXED) / 1e6,
+                 (double)__atomic_load_n(&s_rt.pictureEst, __ATOMIC_RELAXED) / 1e6);
     } else {
         snprintf(rt, sizeof(rt), "render thread: off");
     }

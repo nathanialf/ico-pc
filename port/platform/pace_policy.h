@@ -806,6 +806,37 @@ bool pace_original_present(bool keep, uint64_t nowNs, uint64_t dueNs, uint64_t p
  * past nextPresent (a stall) the grid restarts at startNs + gap. */
 uint64_t pace_next_present(uint64_t nextPresent, uint64_t startNs, uint64_t gap);
 
+/* The render thread (render_thread.h; docs/port/PLATFORM.md "The render
+ * thread"): a picture handed over holds the renderer's state until its
+ * reads end (its interpolation, the fence wait, the uploads and the walk:
+ * rd_thread.h's hand-over), and every game-thread call that changes that
+ * state waits for them; the next present waits for the whole picture
+ * before it (the drain).  The game thread plans a further present of a
+ * frame already shown by the render thread's times, which only the render
+ * thread measures.
+ *
+ * pace_rt_estimate: the estimate after a picture took sampleNs (its reads,
+ * or the whole picture): the sample when it is higher, else the estimate
+ * falling by an eighth of the difference a picture (one slow picture, a
+ * stage's textures uploaded, holds it a few pictures; 0: the sample).
+ *
+ * pace_rt_busy_left: how long the render thread's picture in progress
+ * still takes at nowNs: estNs less its time so far (sinceNs: when it
+ * started, 0: none in progress; 0 once past the estimate). */
+uint64_t pace_rt_estimate(uint64_t estNs, uint64_t sampleNs);
+uint64_t pace_rt_busy_left(uint64_t nowNs, uint64_t sinceNs, uint64_t estNs);
+
+/* True when a further present of a frame already shown, handed over at
+ * nowNs, would run into the next step: posted once the picture in progress
+ * is done (busyLeftNs), its reads (readsNs) would end past the next step's
+ * due time (deadlineNs: the step's calls would wait for them, the 10 s
+ * line's read waits), or the whole picture (pictureNs) past that step's
+ * end (deadlineNs + stepNs, the step's own time: the next new frame's
+ * present would wait for it, the slot waits).  A new frame's present is
+ * never held by it: every frame is shown. */
+bool pace_rt_further_late(uint64_t nowNs, uint64_t deadlineNs, uint64_t stepNs, uint64_t busyLeftNs,
+                          uint64_t readsNs, uint64_t pictureNs);
+
 /* The counts cleared; last kept, so the interval across two blocks counts
  * in the second (zero the struct to forget it too). */
 void pace_intervals_reset(PaceIntervals *s);

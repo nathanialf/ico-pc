@@ -15,6 +15,11 @@ static bool s_on;
  * where they are); the job's hand-over still open (rd__reads_done) */
 static _Thread_local int t_onR;
 static _Thread_local bool t_handed;
+/* the outer job's start (rd__now_ms) and the reads of the last picture
+ * handed over, from that start to rd__reads_done (rd_thread_take_reads_ns;
+ * both the render thread's own) */
+static _Thread_local double t_jobStartMs;
+static _Thread_local uint64_t t_readsNs;
 
 /* the hand-over's lock: the count of pictures whose reads have not ended,
  * the game thread's waits for them, the textures to retire, the block's
@@ -124,6 +129,7 @@ static void runTramp(Tramp *t, bool picture)
     t_onR++;
     t_handed = t->handed;
     if (outer) {
+        t_jobStartMs = rd__now_ms();
         retireDrain();
         if (picture) {
             s_rStats.draws = 0; /* the picture's draws, as rd_begin_frame's count was */
@@ -240,6 +246,13 @@ uint64_t rd_submit_waited_ns(void)
     return s_waitedNs;
 }
 
+uint64_t rd_thread_take_reads_ns(void)
+{
+    const uint64_t ns = t_readsNs;
+    t_readsNs = 0;
+    return ns;
+}
+
 void rd_thread_block_take(RdThreadBlock *out)
 {
     lk();
@@ -279,6 +292,10 @@ void rd__reads_done(void)
         return;
     }
     t_handed = false;
+    {
+        const double ms = rd__now_ms() - t_jobStartMs;
+        t_readsNs = ms > 0.0 ? (uint64_t)(ms * 1e6) : 1u;
+    }
     lk();
     publishLocked();
     __atomic_sub_fetch(&s_owned, 1, __ATOMIC_RELEASE);

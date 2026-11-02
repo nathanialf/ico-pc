@@ -113,6 +113,14 @@ typedef struct RdThreadBlock {
 
 void rd_thread_block_take(RdThreadBlock *out);
 
+/* The render thread, after a picture's job: how long the picture held the
+ * renderer's state (the hand-over, from the job's start to its reads' end,
+ * rd__reads_done), in ns; 0 when it handed nothing over (a picture that
+ * waited, a call).  Taken: the next call gives 0 until another picture
+ * hands its state back.  The window plans further presents by it
+ * (render_thread.c, pace_policy.h pace_rt_further_late). */
+uint64_t rd_thread_take_reads_ns(void);
+
 /* A render thread of the renderer's own, without SDL, for the replay tool
  * and the tests (rd_thread_ab, rd_tex_test): sync posts every job waited
  * (the game thread waits for each), on posts as the window does.  The RHI
