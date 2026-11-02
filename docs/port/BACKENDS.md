@@ -113,7 +113,7 @@ words.
 
 Pipeline cache: OpenGL keeps none (`rhi_pipeline_cache_loaded` false, size 0), so the crash
 order's `cache` step never applies there. Direct3D 11 keeps its compiled shaders in a folder,
-`pipelines-<build>.d3d11` beside where the Vulkan cache file would be, and reports it as loaded
+`pipelines-<key>.d3d11` beside where the Vulkan cache file would be, and reports it as loaded
 when a start had hits ([RHI.md](RHI.md#direct3d-11)).
 
 ## What Direct3D 11 costs the CPU a picture

@@ -12,3 +12,5 @@
 - On Android, a save state made in an earlier session could not be loaded (the game closed). Save states made before you closed the app now load after you open it again.
 - A save state's picture showed the pause menu and was small. It now shows the game as it was when you paused, larger and in its own shape, without the menu.
 - A wall could be seen through for an instant when the camera moved past it (with Frame rate above Original). The frames shown between the game's own frames no longer take the camera through a wall or a floor.
+- On phones with a lot of memory, preparing the graphics at the first start stopped early, and the game then stuttered during play while it prepared the rest. It now finishes behind the progress bar before the game starts.
+- From this version on, an update that does not change how the game draws keeps the graphics prepared before it, so its first start no longer prepares them all again. The first start of this version still prepares them once.

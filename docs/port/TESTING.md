@@ -621,7 +621,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   cleanly: the Asian disc's `STGST13C.DF` (stage 4) and `STGST02A.DF`, the Korean disc's
   `STGSTAFF1.DF`, the August 2001 preview's `STGST13C.DF` (`inflate_disc_cn`,
   `inflate_disc_cn_st02a`, `inflate_disc_kor`, `inflate_disc_aug6`; skipped without the image).
-- `memory_floor_test.c`: the start-up set's free-memory floor (`memory_floor.h`): the default is 17 % of the device's memory, at least 1536 MB on a device of more than 8 GB only (1915 MB on the Retroid Pocket 6's 11265 MB, 696 MB on a 4 GB phone: 1200 MB available continues, 600 MB stops; a 3 GB phone at 700 MB continues); the figures of the issue 161 start on that device (3340 MB available continues; 1693 MB, where it stalled, and 1900 MB, where the earlier start got Android's critical signal, stop; 1915 MB continues); an unknown figure never stops; the `[dev] pipeline_memory_floor_mb` text ("" and "auto" unset, "0" off, "2048" a floor, "-1" and "x" not read) (`memory_floor`).
+- `memory_floor_test.c`: the start-up set's free-memory floor (`memory_floor.h`): the default is 17 % of the device's memory, at most 1536 MB on a device of more than 8 GB (696 MB on a 4 GB phone, 522 MB on a 3 GB one, 1392 MB on 8 GB, 1445 MB on 8500 MB, 1536 MB on 11265, 12288, 15552 and 16384 MB; a setting gives the floor, above the cap too, `0` none); the PowerVR DXT-48 phone's figures (15552 MB: 2554 MB available, where the plain 17 % stopped its set, and 2647 MB continue, 1535 MB stops, `[dev] pipeline_memory_floor_mb = 2643` stops at 2554); the issue 161 start on the Retroid Pocket 6 (11265 MB: 3340 MB and 1693 MB, where it stalled, continue under the default, 1535 MB stops, a setting of 1915 stops at 1693); a 4 GB phone at 1200 MB available continues, at 600 MB stops; a 3 GB phone at 700 MB continues; an unknown figure never stops; the log lines' words for the default, a setting and off (`ico_memory_floor_rule`); the `[dev] pipeline_memory_floor_mb` text ("" and "auto" unset, "0" off, "2048" a floor, "-1" and "x" not read) (`memory_floor`).
 - `lifecycle_test.c`: the mobile lifecycle's step tables on fake operations (`lifecycle`).
 - `memory_test.c`: the game's allocator over the arena, [partitions](ARCHITECTURE.md#terms) at the
   EE's offsets (`memory`).
@@ -1371,6 +1371,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd__enumerate_reachable`; the test fails on a key the set lacks, which on a device is one
   first-use stall (`firstUseLine`), never a wrong picture. The union of the asked keys is left in
   `rd_replay_tool_keys/keys-<config>-<size>.txt` (`rd_replay_tool_keys`).
+- `rd_cache_name_test.c`: the Vulkan pipeline cache file's name (`rd_cache_name.h`): two builds' tables of the same modules, each in its own memory, name the same file (no build in the name); one byte of a module changed (its first, a middle one, its last), a module a word longer or shorter, renamed, its stage changed, two swapped, one dropped or added, or `RD_PIPELINE_CACHE_FORMAT` raised each name another; names joined differently do not collide; the form `pipelines-<16 hex digits>.vkcache` (34 characters), a 35-byte buffer taken, 34 and NULL refused; an empty table still names a file (`rd_cache_name`).
 - `rd_bisect_plan_test.c`: the loss bisect's second-level planner against oracles: a draw that
   faults with every draw before it (1, 731 and 1,312 of 1,312) found within 12 steps, the masked
   step's verdict, a killed step counted as lost, a step without a verdict planned again,
@@ -1774,7 +1775,7 @@ Not twinned: any test whose environment holds `ICO_VK_FAKE_*` or `ICO_VK_ATTACHM
 game or work on the replay tool's files (`rd_replay_tool*`, `rd_fog_depth_copy_dump*`,
 `rd_vustage_ab`, `rd_vubatch_ab`, `rd_fades_fold_ab`, the frame gates, `coverage_corpus`; the compare below covers the dumps), and the
 tests with no device (`rd_alpha_plan`, `rd_fx_frame`, `rd_vu_frac`, `rd_fades_fold`, `rd_mip`, `rd_passring`,
-`rd_filter`, `rd_bisect_plan`, `rd_stream_audit`, `rd_local_probe_rule`, `fog_lut*`, `gsb_cull*`, `texpack*`, `gltf`).
+`rd_filter`, `rd_bisect_plan`, `rd_cache_name`, `rd_stream_audit`, `rd_local_probe_rule`, `fog_lut*`, `gsb_cull*`, `texpack*`, `gltf`).
 The two-pass blend copies (`*_nodual`, `ICO_RD_NO_DUAL=1`, the renderer's own switch) are
 twinned. The sources decide what else skips: `ctest -L gl` output lists the skipped ones.
 

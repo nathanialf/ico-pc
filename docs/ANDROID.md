@@ -70,10 +70,11 @@ first ([where it is](#where-your-files-are)).
    graphics**, with a count and a bar. On some phones this takes a few
    minutes. After a few seconds the screen also says about how much time
    is left (a rough guess from how fast the count has gone so far) and
-   that this happens once after an update. Leave the game open until the
-   count is done. After an update the game starts this from nothing:
-   what was prepared before the update is thrown away. Later starts skip it or
-   show it only for a moment. If you
+   that this happens once after an update that changes the graphics. Leave
+   the game open until the count is done. After such an update the game
+   starts this from nothing: what was prepared for the old graphics is
+   thrown away; an update that leaves the graphics as they were keeps it.
+   Later starts skip it or show it only for a moment. If you
    close the game during it, the next start shows it again.
 2. The game asks you to choose your ICO disc image (any of the seven discs
    above), and opens your

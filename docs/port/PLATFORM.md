@@ -1245,8 +1245,9 @@ process is started): the step and its value (`blend:vulkan`, then `backend:d3d12
 relaunch fails (`port/platform/test/diag_test.c` (`loss_child`)).
 
 A start of another version than the activity file's (its version line) logs that a Vulkan renderer
-drops the other version's pipeline cache file (Direct3D 12 keeps none) and the graphics are prepared
-from nothing, with or without an ended run in the note; a file with no note is one only a loss line
+keeps the other version's pipeline cache file when both have the same shaders and otherwise drops
+it and prepares the graphics from nothing (Direct3D 12 keeps none; the file is named by the shader
+set, [RHI.md](RHI.md#vulkan)), with or without an ended run in the note; a file with no note is one only a loss line
 kept, as a clean end deletes it (`port/platform/diag_host.c` (`ico_diag_startup_activity_begin`); the drop itself is `vkr_cache_drop_others`,
 [RHI.md](RHI.md#vulkan)). An end without a crash report (the system or the driver ends the
 process) is caught by the start-up activity file, `logs/startup-activity.txt`: the version's line, then the activity note. While the

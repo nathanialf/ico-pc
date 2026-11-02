@@ -55,10 +55,12 @@ take a few minutes. After a few seconds the screen also says about how
 much time is left, worked out from how fast the count has gone so far, so
 it is only a rough guess. The game keeps working meanwhile: leave it open
 until the count is done. On a phone the screen also says that this happens
-once after an update: the first start after an update prepares the
-graphics from nothing, because what was prepared before the update is
-thrown away. The game keeps what it prepares now, and later starts skip this
-screen or show it only for a moment. If you close the game while
+once after an update that changes the graphics: the first start after
+such an update prepares the graphics from nothing, because what was
+prepared for the old graphics is thrown away. An update that leaves the
+graphics as they were keeps what was prepared, and the screen shows only
+for a moment. The game keeps what it prepares now, and later starts skip
+this screen or show it only for a moment. If you close the game while
 it says this, the next start shows it again. If the game closes by itself
 on this screen, see [The game closes by itself](#the-game-closes-by-itself).
 
@@ -101,8 +103,8 @@ memory the game was using.
 
 On a phone or a handheld the system tells the game when the device itself
 runs low on memory, and the game also checks how much memory the device has
-free (it stops below about 17 % of the device's memory, and at least 1.5 GB
-on a device with more than 8 GB;
+free (it stops when less than about 17 % of the device's memory is free, or
+on a device with more than 8 GB when less than 1.5 GB is free;
 `pipeline_memory_floor_mb` under `[dev]` in `config.toml` sets that in MB,
 0 turns the check off). If either happens while the game prepares its graphics,
 the game stops preparing, goes on to the title and prepares the rest the

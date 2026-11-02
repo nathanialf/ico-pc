@@ -630,15 +630,24 @@ again or destroyed the thread is held out of its waits for at most 100 ms (`vkr_
 still in a wait then stops the timing and the swapchain goes on; at shutdown a thread that does not
 end is left to end on its own (`port/rhi/vk/vk_swapchain.c`, the display's timing).
 
-**Pipeline cache.** The window sets `pipelines-<build>.vkcache` in the [user folder](ARCHITECTURE.md#terms)
-(Android: the app's cache folder), where `<build>` is `ICO_BUILD_COMMIT` (`git describe`: tag, commits since, short
-hash, `-dirty`) with every character but letters, digits, `.` and `-` made `_`
-(`port/platform/window_host.c` (`ico_window_open`)); a build without git names it `unknown`. `rhi_init`
+**Pipeline cache.** The window sets `pipelines-<key>.vkcache` in the [user folder](ARCHITECTURE.md#terms)
+(Android: the app's cache folder), where `<key>` is 16 hex digits of a 64-bit hash of what the
+driver's pipelines are made from, not of the build: every module of the embedded shader table
+(`g_icoShaders`) by its name, stage, length and the XXH3-64 of its SPIR-V, in the table's order,
+and `RD_PIPELINE_CACHE_FORMAT`, a number raised by hand when a change must not reuse the caches
+written before it (`port/render/rd_cache_name.h`, `rd_pipeline.c` (`rd_pipeline_cache_file`),
+`port/platform/window_host.c` (`ico_window_open`)). The driver's data holds its compiled pipelines,
+each found by the driver's own hash of the whole creation (the modules and every state), so a
+build whose shaders are the same as the last one's reads the file the last one wrote and starts
+warm, and a state that changed only makes new pipelines in it; the header check below keeps the
+data per device and driver. A build that changed any module names another file. The key's source
+is logged once a run, `pipeline cache pipelines-<key>.vkcache (keyed by the shader set and the
+pipeline format, not the build: a build with the same shaders starts warm)`. `rhi_init`
 first removes every other `pipelines*.vkcache` and `pipelines*.vkcache.tmp` in that folder (the current
 file and its `.tmp` stay, files of other names stay, a folder that cannot be listed logs
 `pipeline cache: could not list <dir>; no other cache dropped` and goes on, a missing one nothing), one
-line each: `pipeline cache: dropped <name> (another version of the game); this start prepares the graphics
-from nothing` (`port/rhi/vk/vk_pipeline.c` (`vkr_cache_drop_others`); not done for a path whose file name does
+line each: `pipeline cache: dropped <name> (made for other shaders, or named after a build)`, the build-named `pipelines-<commit>.vkcache` files among them
+(`port/rhi/vk/vk_pipeline.c` (`vkr_cache_drop_others`); not done for a path whose file name does
 not start `pipelines` and end `.vkcache`). It then loads the file when the file is 32 bytes to 64 MB and its
 header (`VkPipelineCacheHeaderVersionOne`: header size, version one, vendor id, device id,
 `pipelineCacheUUID`) names this device; anything else logs "is for another device or driver" and
@@ -1081,9 +1090,11 @@ texture; its RTV is made again after every `ResizeBuffers`. Creation logs
 `..., no waitable object`.
 
 **The shader cache folder** (`d3d11_device.c`, `d11_cache_setup`). The window's pipeline cache path
-`<pref>/pipelines-<build>.vkcache` becomes the folder `<pref>/pipelines-<build>.d3d11`, one DXBC
-file per shader, keyed with `<build>` among the rest ([SHADERS.md](SHADERS.md#direct3d-11-run-time-compile));
-another build's `pipelines-*.d3d11` folder is removed at `rhi_init` with
+`<pref>/pipelines-<key>.vkcache` becomes the folder `<pref>/pipelines-<key>.d3d11`, one DXBC
+file per shader, keyed with `<key>` and the HLSL sources themselves among the rest
+([SHADERS.md](SHADERS.md#direct3d-11-run-time-compile)), so a source change the SPIR-V does not show
+still compiles again; another key's `pipelines-*.d3d11` folder (a build-named one among them) is
+removed at `rhi_init` with
 `rhi_d3d11: shader cache: dropped <name> (another version of the game)`. Any other path (a test's)
 gets `<path>.d3d11`, nothing dropped. A folder that cannot be made logs
 `rhi_d3d11: shader cache folder <dir> could not be made: the shaders are compiled at every start`.

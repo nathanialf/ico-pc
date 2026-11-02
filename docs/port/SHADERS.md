@@ -706,7 +706,8 @@ nothing. Warnings do not fail the compile; the first warning text is logged once
 hit skips the compile) and written after (`<path>.<n>.tmp` renamed over the file, so workers that
 compile the same key at once leave one whole file). The key is FNV-1a 64 over the entry, the stage,
 the file name, the macros, every embedded source's name and text in the table's order, the
-compiler's file version and the program's version, each field length-prefixed
+compiler's file version and the cache folder's key (the shader set's, `pipelines-<key>.d3d11`,
+[RHI.md](RHI.md#direct3d-11)), each field length-prefixed
 (`d3d11_shader_cache_key`); FNV, not xxh3, because `port/rhi` does not depend on `port/render`.
 The file:
 

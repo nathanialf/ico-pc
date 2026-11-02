@@ -354,7 +354,14 @@ it after every batch but the last and stops there on a yes, before the budget's 
 rule cannot fire while the system takes the process's pages back), logged once before the set as
 `rd: pipelines: the start-up set stops at the system's low-memory signal (asked after each batch),
 the rest made on first use`. A batch in flight is not cut short: the careful batches are 8
-pipelines on one thread.
+pipelines on one thread. The same function also says yes once the device's available memory is
+under the free-memory floor, 17 % of its memory and at most 1536 MB on a device of more than 8 GB
+(`port/platform/memory_floor.h`; [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)): a
+phone with much memory reports little of it available while it runs well (2554 MB of 15552 MB on a
+PowerVR DXT-48-1536), and a plain 17 % (2643 MB) stopped that phone's set after 33 of 1193 keys,
+so the title waited 13.6 s for the pipelines made on first use. Under the cap the set runs on
+behind the "Preparing graphics" screen, its count and estimate, until it ends or the system's
+signal comes.
 
 The table's row (`port/rhi/vk/vk_device.c` `kVuPlainOnly`; the fallback rule of the next section
 stays on the same device):
@@ -363,7 +370,11 @@ stays on the same device):
 | --- | --- | --- |
 | Qualcomm Adreno 740 on Qualcomm's own driver (not Turnip) | vendor 0x5143, device 0x43050A01 (what both devices report; not Mesa's other 0x4305xxxx ids: 0x43050A00 the Adreno A32, 0x43050B00 the 740v3, 0x43051401 the Adreno 750) | issue 93 (AYN Odin 2 Portal) and issue 107 (AYN Thor), driver 512.676.53: both logs ended inside the set's 2D keys. The set was then ordered as enumerated: the 327 screen keys, the 176 VU keys, then the 24 shadow, fog, water, CRT and blur keys (527 at Original 4:3 with the fixed-function blend). The Odin 2 Portal stopped at 201 finished (the batch of keys 193 to 224 in flight), its memory falling from 194 MB to 47 MB over 22 s without progress until the system ended the app, with no crash report; the Thor froze the whole device at 307 or later (the batch of keys 289 to 320). No one module explains it (the font sheet's fragment shader, 70,444 words, and the movie decoder's, 47,609 words, were as large in a release that started on the Thor), so on this device the set is made under the careful policy (above) |
 
-**The pipeline cache.** Without the set the creations are counted into batches: a batch closes at
+**The pipeline cache.** The file is named by the shader set and the pipeline format, not the
+build (`pipelines-<key>.vkcache`, `port/render/rd_cache_name.h`; [RHI.md](RHI.md#vulkan)): an
+update whose shaders are the same reads the cache the last build wrote, so its start-up set is
+made of cache hits and the screen shows for a moment; an update that changed a module starts the
+set cold. Without the set the creations are counted into batches: a batch closes at
 the window's next pump once no pipeline was made for 0.5 s, or 2 s after its first
 (`rd_pipelines_lazy_tick`). The pipeline cache is then written to its file
 (`rhi_pipeline_cache_save`, `rhi_vk: pipeline cache: <n> bytes written to <path> in <t> ms`), so a

@@ -963,18 +963,29 @@ of the usual one, the set asks `ico_diag_low_memory_stop`, which now also reads 
 (`ico_diag_device_memory`, the "device N MB available of T MB" words): under the floor the set stops
 as at the system's low-memory signal (the rest made on first use, `set: stopped at the system's
 low-memory signal (<words>)` in the activity file, the next start lazy). The floor is 17 % of
-MemTotal, at least 1536 MB on a device of more than 8 GB (8192 MB) only (`port/platform/memory_floor.c`;
-a 4 GB phone's floor is 696 MB, a 3 GB one's 522 MB: with the game running such a phone has 0.8 to
-1.5 GB available, so an absolute 1536 MB stopped every start-up set there); `[dev] pipeline_memory_floor_mb` sets
-it in MB, 0 turns it off (exported as `ICO_PIPELINE_MEMORY_FLOOR_MB`). The lines:
+MemTotal, at most 1536 MB on a device of more than 8 GB (8192 MB) (`port/platform/memory_floor.c`:
+696 MB on a 4 GB phone, 522 MB on a 3 GB one, 1392 MB on an 8 GB one, 1536 MB on 12 GB and 16 GB;
+with the game running a 4 GB phone has 0.8 to 1.5 GB available, so an absolute 1536 MB would stop
+every start-up set there); `[dev] pipeline_memory_floor_mb` sets it in MB, 0 turns it off
+(exported as `ICO_PIPELINE_MEMORY_FLOOR_MB`). The floor in force is logged at the set's first ask,
+and the stop names it the same way:
 
-    ico_pc: pipelines: the start-up set stopped at N MB available of T MB (floor F MB): the rest made on first use
+    ico_pc: pipelines: the free-memory floor is F MB (17 % of total, at most 1536 MB above 8 GB); N MB available of T MB now
+    ico_pc: pipelines: the start-up set stopped at N MB available of T MB (floor F MB, 17 % of total, at most 1536 MB above 8 GB): the rest made on first use
     ico_pc: the start-up set stopped at the free-memory floor (N MB available of T MB, floor F MB); the next start makes the pipelines as the game needs them, with no start-up set
 
-On the Retroid Pocket 6's 11265 MB the default floor is 1915 MB: the 1693 MB reading at the
-stall in issue 161 is under it, as is the 1900 MB where the earlier start got the "running critical" signal, so the
-default stops that start before either point (17 % rather than 15 %, whose 1689 MB floor would
-have let the 1693 MB reading pass). `memory_floor_test` holds those figures.
+(`[dev] pipeline_memory_floor_mb` in place of the rule's words when the setting gives the floor).
+
+**Why the cap.** Android's MemAvailable is cautious on a phone with much memory: a PowerVR
+DXT-48-1536 phone of 15552 MB showed 2554 MB available at its start-up set and 2555 to 2647 MB
+while it ran the game, under a plain 17 % (2643 MB). That floor stopped its set after
+33 of 1193 pipelines, every later start of the build made none, and the title waited 13.6 s for 28
+pipelines made on first use, with the play's first minutes stopping for up to 0.9 s a pipeline.
+Under the cap that phone's floor is 1536 MB, a thousand MB under the readings. On the Retroid
+Pocket 6's 11265 MB the floor is 1536 MB too, so the 1693 MB reading at the stall in issue 161 does
+not stop the set by itself any more; the earlier start on that console got the system's "running
+critical" signal at 1900 MB (the signal stops the set as it did), and the careful set's budget, the
+careful order and the creation limit below cover the rest. `memory_floor_test` holds those figures.
 
 **The creation limit (Android).** The watchdog's limits are not in force before the game starts,
 and the GPU hang limit counts waits for the GPU, not a driver call. On Android a note that names a
