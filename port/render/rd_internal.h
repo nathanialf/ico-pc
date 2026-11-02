@@ -2043,6 +2043,13 @@ void rd__pass_area_begin(RhiRenderPassDesc *p, const RdTargetRec *c, uint32_t ci
                          bool ms, bool storage);
 bool rd__pass_area_due(uint32_t ord, uint32_t serial);
 void rd__pass_area_counts(uint64_t *passes, uint64_t *tiles, uint64_t *targetTiles, uint64_t *ends);
+/* rd__pass_area_why: why a pass on target cid (rec c) begun at command k
+ * gets no area from the scan (rd.h RD_AREA_WHY_*: SCAN, BEGIN, the whole
+ * kinds, EMPTY, LARGE), -1 when it gets one (tests);
+ * rd__pass_area_why_counts: since start, the passes on a target with its
+ * own depth begun whole, by why (RD_AREA_WHY_COUNT entries) */
+int rd__pass_area_why(uint32_t cid, const RdTargetRec *c, uint32_t k);
+void rd__pass_area_why_counts(uint64_t why[RD_AREA_WHY_COUNT]);
 
 /* Passes cut (rd_pass_cut.c; docs/port/WORK_BUFFERS.md "Passes cut"),
  * three switches, each [dev] <key> = auto|on|off (auto: RdProfile.passCut):
@@ -2087,6 +2094,13 @@ void rd__last_store_fog(bool holds);
 bool rd__last_store_drop(uint32_t did, uint32_t last, RhiLoadOp depthLoad, bool live,
                          uint32_t anyTouch);
 void rd__last_store_end(void);
+/* rd__last_store_replay_end (rd_store_plan.c rd__store_plan_end): each
+ * depth whose last touch's pass kept its store this replay counted by why
+ * (RdPerfRecord.lastStoreWhy, rd.h RD_LAST_WHY_*);
+ * rd__last_store_why_counts: since start, the same (RD_LAST_WHY_COUNT
+ * entries) */
+void rd__last_store_replay_end(void);
+void rd__last_store_why_counts(uint64_t why[RD_LAST_WHY_COUNT]);
 /* rd_fog_path.c: false when the fog's edge read (rd__fog_edge_due) is
  * surely not due at the next fog: its count is not at a multiple of
  * RD_FOG_EDGE_EVERY (rd_pass_cut.c's promise for the fog's pass) */

@@ -29,8 +29,24 @@
  *      SCENE's bytes the same; the same frame with a copy or a draw on
  *      another target between the pass's begin and the last touch: that
  *      pass keeps its store, the pass begun at the touch drops it (1); with
- *      a DATE draw or a draw textured from a target between: none (0);
- *   4. no validation error. */
+ *      a DATE draw between: none (0), and the reason counted (a DATE draw,
+ *      RdPerfRecord.lastStoreWhy); with a draw textured from WORK3 while
+ *      WORK3 is not readable: that draw ends the pass to read it and its
+ *      own pass drops the store (1); with the pass's first draw and one
+ *      between textured from WORK3 (readable from the first draw on: the
+ *      walk reads it without ending the pass): the pass begun at the first
+ *      draw drops it (1), the cut not turned off (the guard's frame after
+ *      it drops it again);
+ *   4. the pass area's reasons (the area forced on): the last store's
+ *      frame keeps both its SCENE passes whole and says why
+ *      (RdPerfRecord.passAreaWhy): list 0's takes SCENE's clear as its load
+ *      (RD_AREA_WHY_CLEAR), list 4's draws full-frame sprites (their box
+ *      widened to the frame's width, as extendFullFrame may widen them)
+ *      one of them the frame's height, the phone's case (the aura's paste
+ *      and list 11's fades): no tile column or row to spare
+ *      (RD_AREA_WHY_LARGE); none counted with the area off; SCENE the same
+ *      bytes;
+ *   5. no validation error. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -329,7 +345,7 @@ static void cellSkip(uint32_t gw, uint32_t gh)
 
 /* ---------------------------------------------------- 3. the last store */
 
-enum { BETWEEN_NONE, BETWEEN_COPY, BETWEEN_DATE, BETWEEN_TEX, BETWEEN_OTHER };
+enum { BETWEEN_NONE, BETWEEN_COPY, BETWEEN_DATE, BETWEEN_TEX, BETWEEN_OTHER, BETWEEN_READY };
 
 /* list 0: SCENE cleared, a Z GEQUAL sprite; list 4: WORK3, then SCENE: a
  * screen sprite Z ALWAYS (the pass's first draw), something between, a Z
@@ -342,8 +358,13 @@ static bool buildLast(RdFrame *f, uint32_t number, uint32_t scene, uint32_t w, u
               drawState(f, 0, RD_TEST_Z_GEQUAL) && pushSprite(f, 0, w, h, kGrey);
     ok = ok && work(f, 4, RD_TARGET_WORK3, 256, 128) && drawState(f, 4, RD_TEST_Z_ALWAYS) &&
          pushSprite(f, 4, 256, 128, kGreen);
+    /* BETWEEN_READY: the pass's first draw reads WORK3 (prepareDraw puts
+     * it in SHADER_READ before bindDrawEx begins the pass) */
+    const bool ready = between == BETWEEN_READY;
     ok = ok && rd__st_target(f, 4, scene, w, h) && drawState(f, 4, RD_TEST_Z_ALWAYS) &&
-         pushSpriteAt(f, 4, w, h, 0, w / 2, h / 2, kGreen, false);
+         (!ready || textured(f, 4, RD_TARGET_WORK3)) &&
+         pushSpriteAt(f, 4, w, h, 0, w / 2, h / 2, kGreen, ready) &&
+         (!ready || rd__st_push(f, 4, RDC_TEXTURE_OFF));
     switch (between) {
     case BETWEEN_COPY: {
         RdCmd *c = ok ? rd__st_push(f, 4, RDC_COPY) : NULL;
@@ -364,6 +385,7 @@ static bool buildLast(RdFrame *f, uint32_t number, uint32_t scene, uint32_t w, u
              pushSpriteAt(f, 4, w, h, 8, 16, 16, kGrey, false);
         break;
     case BETWEEN_TEX:
+    case BETWEEN_READY:
         ok = ok && textured(f, 4, RD_TARGET_WORK3) &&
              pushSpriteAt(f, 4, w, h, 8, 16, 16, kGrey, true) && rd__st_push(f, 4, RDC_TEXTURE_OFF);
         break;
@@ -401,22 +423,46 @@ static void cellLast(uint32_t scene, uint32_t w, uint32_t h)
     CHECK(was && sameTarget(RD_TARGET_SCENE, was, tw, th), "SCENE differs with the last store");
     free(was);
     rd__frame_free(&f);
-    static const char *const kBetween[] = {
-        "", "a copy", "a DATE draw", "a draw textured from a target", "a draw on another target"};
-    /* the pass begun before what lies between keeps its store; a copy or a
-     * draw on another target ends it, and the pass begun at the last touch
-     * itself holds it (its store dropped: 1); DATE's and the textured
-     * draw's own pass holds the touch after a command the cut does not
-     * take (0) */
-    static const uint32_t kWant[] = {1, 1, 0, 0, 1};
-    for (int b = BETWEEN_COPY; b <= BETWEEN_OTHER; b++) {
+    static const char *const kBetween[] = {"",
+                                           "a copy",
+                                           "a DATE draw",
+                                           "a draw textured from a target not readable",
+                                           "a draw on another target",
+                                           "a draw textured from a target readable"};
+    /* the pass begun before what lies between keeps its store; a copy, a
+     * draw on another target or a draw reading a target not in SHADER_READ
+     * ends it, and the pass begun there holds the last touch (its store
+     * dropped: 1); DATE's own pass holds the touch after a command the cut
+     * does not take (0, and the reason counted); a draw reading a target
+     * the pass's first draw made readable stays in the pass (1) */
+    static const uint32_t kWant[] = {1, 1, 0, 1, 1, 1};
+    for (int b = BETWEEN_COPY; b <= BETWEEN_READY; b++) {
         CHECK(buildLast(&f, 31u + (uint32_t)b, scene, w, h, b) && rd__replay_frame(&f, 0, false),
               "the frame with %s replayed", kBetween[b]);
-        printf("  last store with %s between: %u dropped at the last touch\n", kBetween[b],
-               g_rdPerf.storeLastDropped);
+        uint32_t why = 0;
+        for (int k = 0; k < RD_LAST_WHY_COUNT; k++) {
+            why += g_rdPerf.lastStoreWhy[k];
+        }
+        uint64_t whyAll[RD_LAST_WHY_COUNT];
+        for (int k = 0; k < RD_LAST_WHY_COUNT; k++) {
+            whyAll[k] = g_rdPerf.lastStoreWhy[k];
+        }
+        char text[512];
+        rd_perf_why_text(text, sizeof text, 1, whyAll, 1.0);
+        printf("  last store with %s between: %u dropped at the last touch; %s\n", kBetween[b],
+               g_rdPerf.storeLastDropped, text[0] ? text : "none kept");
         CHECK(g_rdPerf.storeLastDropped == kWant[b],
               "%s before the last touch: %u stores dropped at it, %u expected", kBetween[b],
               g_rdPerf.storeLastDropped, kWant[b]);
+        if (b == BETWEEN_DATE) {
+            CHECK(why == 1 && g_rdPerf.lastStoreWhy[RD_LAST_WHY_DATE] == 1 &&
+                      strcmp(text, "1 last stores kept (1 a DATE draw)") == 0,
+                  "the DATE frame's reason: %u kept, %u for a DATE draw ('%s')", why,
+                  g_rdPerf.lastStoreWhy[RD_LAST_WHY_DATE], text);
+        } else {
+            CHECK(why == 0, "%s between: %u last stores counted as kept, none expected",
+                  kBetween[b], why);
+        }
         rd__frame_free(&f);
     }
     /* the guard did not turn the cut off: the first frame drops it again */
@@ -425,6 +471,43 @@ static void cellLast(uint32_t scene, uint32_t w, uint32_t h)
           "the last store's frame again: %u dropped at the last touch", g_rdPerf.storeLastDropped);
     rd__frame_free(&f);
     rd__pass_cut_force(RD_CUT_LAST, -1);
+}
+
+/* ------------------------------------------------ 4. the pass area's whys */
+
+static void cellAreaWhy(uint32_t scene, uint32_t w, uint32_t h)
+{
+    static RdFrame f;
+    CHECK(buildLast(&f, 50, scene, w, h, BETWEEN_NONE), "the area's frame built");
+    rd__pass_area_force(0);
+    CHECK(rd__replay_frame(&f, 0, false), "the area's frame replayed (areas off)");
+    uint32_t tw = 0, th = 0;
+    uint8_t *was = readTarget(RD_TARGET_SCENE, &tw, &th);
+    uint32_t whyOff = 0;
+    for (int k = 0; k < RD_AREA_WHY_COUNT; k++) {
+        whyOff += g_rdPerf.passAreaWhy[k];
+    }
+    rd__pass_area_force(1);
+    CHECK(rd__replay_frame(&f, 0, false), "the area's frame replayed (areas on)");
+    uint64_t why[RD_AREA_WHY_COUNT];
+    for (int k = 0; k < RD_AREA_WHY_COUNT; k++) {
+        why[k] = g_rdPerf.passAreaWhy[k];
+    }
+    char text[512];
+    rd_perf_why_text(text, sizeof text, 0, why, 1.0);
+    printf("  pass area: %u passes with an area; %s\n", g_rdPerf.passAreas,
+           text[0] ? text : "none kept whole");
+    CHECK(whyOff == 0, "areas off: %u passes counted as kept whole, none expected", whyOff);
+    CHECK(g_rdPerf.passAreas == 0, "%u passes with an area, none expected", g_rdPerf.passAreas);
+    CHECK(why[RD_AREA_WHY_CLEAR] == 1 && why[RD_AREA_WHY_LARGE] == 1 &&
+              strcmp(text, "2 passes kept whole (1 a clear as its load, 1 its draws cover the "
+                           "picture)") == 0,
+          "list 0's pass kept whole for its clear, list 4's for its full-frame sprites: '%s'",
+          text);
+    CHECK(was && sameTarget(RD_TARGET_SCENE, was, tw, th), "SCENE differs with the areas on");
+    free(was);
+    rd__frame_free(&f);
+    rd__pass_area_force(-1);
 }
 
 int main(void)
@@ -460,6 +543,7 @@ int main(void)
     cellCarry();
     cellSkip(gw, h);
     cellLast(scene, gw, h);
+    cellAreaWhy(scene, gw, h);
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
           rhi_vk_validation_error_count());
     rd_shutdown();

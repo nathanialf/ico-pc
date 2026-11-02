@@ -2166,6 +2166,69 @@ enum {
     RD_STORE_WHY_COUNT
 };
 
+/* RdPerfRecord.passAreaWhy: why a render pass on a target with its own
+ * depth (SCENE) began whole, the first that holds (rd_pass_area.c
+ * rd__pass_area_begin; docs/port/WORK_BUFFERS.md "The pass area"): SCAN no
+ * scan entry for the command it began at (the switch off, a pass window,
+ * another replay's scan, the target's size changed); CLEAR it takes a clear
+ * as its load; MSAA in the MSAA epoch; STORAGE a storage pass; BEGIN begun
+ * at a command no area starts at (a clear's pass, a fold's or a flush's
+ * draw); VU, FOG, SHADOW, POST, SCREEN the first command of the pass's run
+ * whose texels only the GPU knows: a VU draw (mesh, skinned, grid,
+ * particles), the fog, a shadow command, a post sprite other than the
+ * aura's, a flat draw under DATE or COLCLAMP 0's wrap; EMPTY nothing drawn;
+ * LARGE the draws' tiles leave no tile column or row of the target out (a
+ * full-frame sprite: the aura's paste, list 11's fades) */
+enum {
+    RD_AREA_WHY_SCAN,
+    RD_AREA_WHY_CLEAR,
+    RD_AREA_WHY_MSAA,
+    RD_AREA_WHY_STORAGE,
+    RD_AREA_WHY_BEGIN,
+    RD_AREA_WHY_VU,
+    RD_AREA_WHY_FOG,
+    RD_AREA_WHY_SHADOW,
+    RD_AREA_WHY_POST,
+    RD_AREA_WHY_SCREEN,
+    RD_AREA_WHY_EMPTY,
+    RD_AREA_WHY_LARGE,
+    RD_AREA_WHY_COUNT
+};
+
+/* RdPerfRecord.lastStoreWhy: why the pass holding a depth's last touch kept
+ * its store (rd_pass_cut.c rd__last_store_drop, counted once a depth a
+ * replay at rd__store_plan_end: the reason of the last pass begun with the
+ * depth bound before its last touch was done; docs/port/WORK_BUFFERS.md
+ * "Passes cut"): NOSCAN no scan this replay; SETTING MSAA, the exact blend,
+ * GS state as shader data, the pass split or the tool's pass window; PASS
+ * the pass was not begun by a draw on its colour and this depth (a post
+ * sprite's, a clear's or a fold's pass); LOAD the depth not loaded (a
+ * clear's load); SHADOW a shadow window open on the depth; UNKNOWN a
+ * command the store plan does not know; and the first command of the pass
+ * (its start, or between it and the last touch) the walk may end the pass
+ * at: DATE a DATE draw; TARGET a draw sampling its own target, a depth
+ * view, or a target not readable when the pass began; WRAP a flat draw
+ * under COLCLAMP 0's wrap; POST a post sprite; FOG the fog other than at
+ * the pass's start on the local read with no probe and no edge read due;
+ * ELSEWHERE a draw on another colour or depth; OTHER a clear, a copy, an
+ * exact blend, a shadow command or another action */
+enum {
+    RD_LAST_WHY_NOSCAN,
+    RD_LAST_WHY_SETTING,
+    RD_LAST_WHY_PASS,
+    RD_LAST_WHY_LOAD,
+    RD_LAST_WHY_SHADOW,
+    RD_LAST_WHY_UNKNOWN,
+    RD_LAST_WHY_DATE,
+    RD_LAST_WHY_TARGET,
+    RD_LAST_WHY_WRAP,
+    RD_LAST_WHY_POST,
+    RD_LAST_WHY_FOG,
+    RD_LAST_WHY_ELSEWHERE,
+    RD_LAST_WHY_OTHER,
+    RD_LAST_WHY_COUNT
+};
+
 /* RdPerfRecord.pipeFamily's counts: one per pipeline key family
  * (rd_internal.h RdKeyFamily) */
 #define RD_PERF_PIPE_FAMILIES 8
@@ -2343,6 +2406,9 @@ typedef struct RdPerfRecord {
      * and the passes ended early at the end of their area's commands (the
      * walk would have gone on in the same pass: 0 in a usual replay) */
     uint32_t passAreas, passAreaTiles, passAreaTargetTiles, passAreaEnds;
+    /* the passes on a target with its own depth begun whole, by why
+     * (RD_AREA_WHY_*: the 10 s line's "kept whole" clause) */
+    uint16_t passAreaWhy[RD_AREA_WHY_COUNT];
     /* Passes cut (rd_pass_cut.c; docs/port/WORK_BUFFERS.md "Passes cut"):
      * clearsCarried the pending clears carried past a source's barrier
      * that the next pass on their target took as its load op (a pass
@@ -2352,6 +2418,9 @@ typedef struct RdPerfRecord {
      * read), storeLastDropped the depth stores dropped at the pass that
      * holds the depth's last touch (counted in storeDepthDropped too) */
     uint32_t clearsCarried, clearsSkipped, storeLastDropped;
+    /* the depths whose last touch's pass kept its store, by why
+     * (RD_LAST_WHY_*: the "last store kept" clause) */
+    uint16_t lastStoreWhy[RD_LAST_WHY_COUNT];
     /* The VU vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass;
      * docs/port/PIPELINES.md, "The vertex and triangle pre-passes"):
      * vuPrePasses their render passes (0, 1: the vertices and sprites, or 2:
@@ -2466,6 +2535,12 @@ bool rd_perf_pop(RdPerfRecord *out);
  * they wrote none (every other backend); the count starts again.  The
  * window's uploaded KB line ends with it (docs/port/DISPLAY.md). */
 const char *rd_perf_backend_text(void);
+/* "N passes kept whole (A <why>, B <why>, ...)" from per-reason counts
+ * over `replays` replays (the mean a replay; 1 the replay tool's one):
+ * which 0 the pass area's (RD_AREA_WHY_*, RD_AREA_WHY_COUNT counts), 1 the
+ * last store's (RD_LAST_WHY_*: "N last stores kept (...)"); the reasons
+ * that hold none are left out, "" with none at all.  Into buf (size). */
+void rd_perf_why_text(char *buf, size_t size, int which, const uint64_t *counts, double replays);
 
 /* The CPU time of the replay finished last (its RdPerfRecord.totalMs,
  * popped or not): with interpolation off the window's pacing reads the

@@ -84,18 +84,24 @@
  *      - command k is a screen-prim or VU draw on cid with its depth did
  *        bound (prepareDraw binds the state's depth on a target with
  *        one), DATE off (its snapshot or stencil take ends passes),
- *        COLCLAMP 0's wrap off (its own passes), not textured from a target
- *        (resolveTexture snapshots it or ends the pass to read it): after
- *        bindDrawEx begins the pass, such a draw records only into it; or
+ *        COLCLAMP 0's wrap off (its own passes), not sampling its own
+ *        target (resolveTexture's snapshot) or a depth view (another
+ *        target's colour prepareDraw makes readable before bindDrawEx
+ *        begins the pass): after that begin such a draw records only into
+ *        it; or
  *        command k is the fog drawing on the local read (its pass the
  *        scene pass, kept open by doFog and the crack filler's fold) with
  *        no probe wanted and no edge read due (both end the pass after the
  *        draw to copy the depth), said by doFog before it begins anything
  *        (rd__last_store_fog);
  *      - every command after k up to t is a state change, a NOP, overlay
- *        text, or such a draw on cid with did bound (no other kind of
- *        command is taken: a clear, a copy, a post sprite, the fog, a
- *        shadow command and anything else may end the pass).
+ *        text, or such a draw on cid with did bound whose texture, when it
+ *        samples another target's colour, is in SHADER_READ when the pass
+ *        begins (drawOn: resolveTexture ends the open pass for such a
+ *        texture only to put it there, and no draw between takes a target
+ *        out of it) (no other kind of command is taken: a clear, a copy, a
+ *        post sprite, the fog, a shadow command and anything else may end
+ *        the pass).
  *    Every other place the walk ends or begins a pass (endPass, beginPass,
  *    takeSnap, dateSnapshot, doScreenWrap, doExact, doCopy, the shadow
  *    commands, the fog's paths, blurSwapTarget, doBlurSpriteDraw, the
@@ -115,8 +121,12 @@
  *       ended before it ... (the first 8, then every 100th)
  *   window: per replay ... (rd_perf_backend_text) "; passes cut: C clears
  *       taken by the next pass, S clears skipped, D depth stores dropped
- *       at the last touch a replay"
- *   the replay tool: --stats "pass cut: clear carry on|off: C ..." */
+ *       at the last touch a replay ...; K last stores kept a replay (A a
+ *       DATE draw, ...)" (why the pass holding a depth's last touch kept
+ *       its store, once a depth a replay: rd.h RD_LAST_WHY_*,
+ *       RdPerfRecord.lastStoreWhy, rd__last_store_replay_end)
+ *   the replay tool: --stats "pass cut: clear carry on|off: C ...; K last
+ *       stores kept (...)" */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -131,13 +141,19 @@ static const char *const kWhat[RD_CUT_COUNT] = {
     "a clear nothing reads before it is cleared again not drawn",
     "the depth not stored by the pass holding its last touch"};
 
-/* a command's kind for the last store (the scan) */
-enum { CUT_NONE = 0, CUT_DRAW, CUT_FOG, CUT_OTHER };
+/* a command's kind for the last store (the scan): CUT_DRAW_TEX a draw
+ * like CUT_DRAW that samples the colour of another target (tex) */
+enum { CUT_NONE = 0, CUT_DRAW, CUT_DRAW_TEX, CUT_FOG, CUT_OTHER };
 
 typedef struct CutCmd {
     uint8_t kind;
+    uint8_t why;           /* CUT_OTHER: its RD_LAST_WHY_* (DATE, TARGET, WRAP, POST, OTHER) */
     uint32_t color, depth; /* st.color; st.depth when its target has a depth, else 0 */
+    uint32_t tex;          /* CUT_DRAW_TEX: the target whose colour it samples */
 } CutCmd;
+
+/* the depths a replay whose last touch's pass may keep its store */
+#define CUT_DEPTHS 4
 
 /* the targets the clear skip takes (no reader outside the lists) */
 #define CUT_SKIP_TARGETS 2
@@ -179,6 +195,19 @@ static struct {
     uint32_t dropReplay, dropUntil;
     bool broken;
     uint32_t brokenSeen;
+
+    /* why the pass holding a depth's last touch kept its store: per depth
+     * of replay trackReplay, the why of the last pass begun with it bound
+     * before the touch was done (-1 none), or dropped; counted at the
+     * replay's end (rd__last_store_replay_end); whyRun since start */
+    struct {
+        uint32_t did;
+        int why;
+        bool dropped;
+    } track[CUT_DEPTHS];
+
+    uint32_t nTrack, trackReplay;
+    uint64_t whyRun[RD_LAST_WHY_COUNT];
 } s_cut = {.forced = {-1, -1, -1}};
 
 static bool decide(int w, char *why, size_t size)
@@ -222,6 +251,8 @@ void rd__pass_cut_init(void)
     s_cut.carried = s_cut.armColor = s_cut.armDepth = 0;
     s_cut.fogReplay = s_cut.fogOrd = 0;
     s_cut.brokenSeen = 0;
+    s_cut.nTrack = 0;
+    memset(s_cut.whyRun, 0, sizeof(s_cut.whyRun));
 }
 
 bool rd__pass_cut_on(int which)
@@ -263,9 +294,13 @@ static uint32_t depthOf(const RdStateBlock *st)
     return td && td->withDepth && td->depth.id ? st->depth : 0u;
 }
 
-/* command c under st (not a state command): its kind for the last store */
-static uint8_t cutKind(const RdCmd *c, const RdStateBlock *st)
+/* command c under st (not a state command): its kind for the last store,
+ * *why a CUT_OTHER's reason (rd.h RD_LAST_WHY_*), *tex a CUT_DRAW_TEX's
+ * texture target */
+static uint8_t cutKind(const RdCmd *c, const RdStateBlock *st, uint8_t *why, uint32_t *tex)
 {
+    *why = RD_LAST_WHY_OTHER;
+    *tex = 0;
     switch (c->type) {
     case RDC_NOP:
     case RDC_OVERLAY_TEXT:
@@ -274,16 +309,39 @@ static uint8_t cutKind(const RdCmd *c, const RdStateBlock *st)
     case RDC_MESH:
     case RDC_SKINNED:
     case RDC_GRID:
-    case RDC_PARTICLES:
+    case RDC_PARTICLES: {
         if (c->type == RDC_SCREEN && rd__wrap_applies(st)) {
+            *why = RD_LAST_WHY_WRAP;
             return CUT_OTHER; /* doScreenWrap: passes of its own */
         }
-        if (st->ds.test.date != RD_DATE_OFF || (st->ds.texEnabled && texIsTarget(st, NULL))) {
-            return CUT_OTHER; /* DATE's snapshot or stencil; a target's read */
+        if (st->ds.test.date != RD_DATE_OFF) {
+            *why = RD_LAST_WHY_DATE;
+            return CUT_OTHER; /* DATE's snapshot or stencil */
+        }
+        uint32_t t = 0;
+        if (st->ds.texEnabled && texIsTarget(st, &t)) {
+            /* a target's read (rd_replay.c resolveTexture): its own (the
+             * snapshot, takeSnap) or a depth view: not taken; another
+             * target's colour ends the open pass only to put it in
+             * SHADER_READ, so the drop takes it where it is there already
+             * (drawOn) */
+            const RdTexRec *r = rd__tex_rec(st->tex);
+            if (!r || r->view == RD_VIEW_DEPTH || t == st->color || !rd__target_rec(t)) {
+                *why = RD_LAST_WHY_TARGET;
+                return CUT_OTHER;
+            }
+            *tex = t;
+            return CUT_DRAW_TEX;
         }
         return CUT_DRAW;
+    }
     case RDC_POST_STUB:
-        return c->b[0] == RD_POST_FOG ? CUT_FOG : CUT_OTHER;
+        if (c->b[0] == RD_POST_FOG) {
+            *why = RD_LAST_WHY_FOG;
+            return CUT_FOG;
+        }
+        *why = RD_LAST_WHY_POST;
+        return CUT_OTHER;
     default:
         return CUT_OTHER;
     }
@@ -363,7 +421,7 @@ void rd__pass_cut_scan(const RdFrame *f, int keep)
             if (rd__apply_state(&st, c)) {
                 continue; /* CUT_NONE */
             }
-            e->kind = cutKind(c, &st);
+            e->kind = cutKind(c, &st, &e->why, &e->tex);
             e->color = st.color;
             e->depth = depthOf(&st);
             for (int k = 0; k < CUT_SKIP_TARGETS; k++) {
@@ -560,39 +618,140 @@ void rd__last_store_fog(bool holds)
     s_cut.fogOrd = holds ? g_rdStoreOrd + 1u : 0u;
 }
 
-static bool drawOn(const CutCmd *e, uint32_t cid, uint32_t did)
+/* e a draw the walk records into the open pass on cid and did: a plain
+ * draw, or one sampling another target's colour that is in SHADER_READ
+ * (resolveTexture then reads it as it is, no barrier, no end).  start: e
+ * is the command the pass begins at, whose texture prepareDraw made
+ * readable before bindDrawEx began the pass.  Exact for the later ones:
+ * between the pass's begin and the last touch only such draws on cid run
+ * (the drop's loop), and none of them takes a target out of SHADER_READ
+ * (a draw's barriers put its texture in SHADER_READ; its own colour cid is
+ * never a texture here, CUT_OTHER); no MSAA epoch (its transitions close
+ * it) and no DATE (its snapshot) are in force. */
+static bool drawOn(const CutCmd *e, uint32_t cid, uint32_t did, bool start)
 {
-    return e->kind == CUT_DRAW && e->color == cid && e->depth == did;
+    if (e->color != cid || e->depth != did) {
+        return false;
+    }
+    if (e->kind == CUT_DRAW || (e->kind == CUT_DRAW_TEX && start)) {
+        return true;
+    }
+    if (e->kind != CUT_DRAW_TEX) {
+        return false;
+    }
+    const RdTargetRec *t = rd__target_rec(e->tex);
+    return t && t->color.id && e->tex != cid && t->colorState == RHI_STATE_SHADER_READ;
+}
+
+/* the reason a command keeps the pass from being known to last (rd.h
+ * RD_LAST_WHY_*) */
+static int cmdWhy(const CutCmd *q, uint32_t cid, uint32_t did)
+{
+    switch (q->kind) {
+    case CUT_DRAW:
+    case CUT_DRAW_TEX:
+        return q->color != cid || q->depth != did ? RD_LAST_WHY_ELSEWHERE : RD_LAST_WHY_TARGET;
+    case CUT_FOG:
+        return RD_LAST_WHY_FOG;
+    case CUT_OTHER:
+        return q->why < RD_LAST_WHY_COUNT ? q->why : RD_LAST_WHY_OTHER;
+    default:
+        return RD_LAST_WHY_OTHER;
+    }
+}
+
+/* depth did's pass begun before its last touch: kept for why (-1:
+ * dropped), this replay */
+static void lastNote(uint32_t did, int why)
+{
+    if (s_cut.trackReplay != g_rd.replayCounter) {
+        s_cut.trackReplay = g_rd.replayCounter;
+        s_cut.nTrack = 0;
+    }
+    uint32_t i = 0;
+    while (i < s_cut.nTrack && s_cut.track[i].did != did) {
+        i++;
+    }
+    if (i == s_cut.nTrack) {
+        if (s_cut.nTrack == CUT_DEPTHS) {
+            return; /* more depths than the count holds: not counted */
+        }
+        s_cut.nTrack++;
+        s_cut.track[i].did = did;
+        s_cut.track[i].dropped = false;
+    }
+    s_cut.track[i].why = why;
+    s_cut.track[i].dropped = why < 0;
 }
 
 bool rd__last_store_drop(uint32_t did, uint32_t last, RhiLoadOp depthLoad, bool live,
                          uint32_t anyTouch)
 {
     const uint32_t k = g_rdStoreOrd, cid = s_cut.armColor;
-    if (!s_cut.on[RD_CUT_LAST] || s_cut.broken || !scanHere() || !cid || s_cut.armDepth != did ||
-        !did || depthLoad != RHI_LOAD_LOAD || live || last == UINT32_MAX || last <= k ||
-        anyTouch > k || last > s_cut.n || k >= s_cut.n || g_rdWin.first ||
-        rd__replay_msaa_want() > 1u || g_rd.dstMode != RD_BLEND_EXACT_OFF || rd__uber_on() ||
-        g_rd.passSplit) {
-        return false;
+    if (!s_cut.on[RD_CUT_LAST] || s_cut.broken || !did || last == UINT32_MAX || last <= k) {
+        return false; /* off, or not begun before the depth's last touch was done */
     }
-    const CutCmd *e = &s_cut.cmd[k];
-    const bool fog = e->kind == CUT_FOG && s_cut.fogReplay == g_rd.replayCounter &&
-                     s_cut.fogOrd == k + 1u && e->color == cid && did == cid;
-    if (!drawOn(e, cid, did) && !fog) {
-        return false; /* begun for work the walk may end before the last touch */
-    }
-    for (uint32_t i = k + 1u; i < last; i++) {
-        const CutCmd *q = &s_cut.cmd[i];
-        if (q->kind != CUT_NONE && !drawOn(q, cid, did)) {
-            return false;
+    /* why not, the first that holds (counted at the replay's end for the
+     * pass that held the touch: the last such pass begun) */
+    int why = -1;
+    if (!scanHere() || last > s_cut.n || k >= s_cut.n) {
+        why = RD_LAST_WHY_NOSCAN;
+    } else if (g_rdWin.first || rd__replay_msaa_want() > 1u || g_rd.dstMode != RD_BLEND_EXACT_OFF ||
+               rd__uber_on() || g_rd.passSplit) {
+        why = RD_LAST_WHY_SETTING;
+    } else if (!cid || s_cut.armDepth != did) {
+        why = RD_LAST_WHY_PASS;
+    } else if (depthLoad != RHI_LOAD_LOAD) {
+        why = RD_LAST_WHY_LOAD;
+    } else if (live) {
+        why = RD_LAST_WHY_SHADOW;
+    } else if (anyTouch > k) {
+        why = RD_LAST_WHY_UNKNOWN;
+    } else {
+        const CutCmd *e = &s_cut.cmd[k];
+        const bool fog = e->kind == CUT_FOG && s_cut.fogReplay == g_rd.replayCounter &&
+                         s_cut.fogOrd == k + 1u && e->color == cid && did == cid;
+        if (!drawOn(e, cid, did, true) && !fog) {
+            why = cmdWhy(e, cid, did); /* begun for work the walk may end before the touch */
         }
+        for (uint32_t i = k + 1u; why < 0 && i < last; i++) {
+            const CutCmd *q = &s_cut.cmd[i];
+            if (q->kind != CUT_NONE && !drawOn(q, cid, did, false)) {
+                why = cmdWhy(q, cid, did);
+            }
+        }
+    }
+    lastNote(did, why);
+    if (why >= 0) {
+        return false;
     }
     s_cut.dropOpen = true;
     s_cut.dropReplay = g_rd.replayCounter;
     s_cut.dropUntil = last - 1u;
     g_rdPerf.storeLastDropped++;
     return true;
+}
+
+void rd__last_store_replay_end(void)
+{
+    if (s_cut.trackReplay == g_rd.replayCounter) {
+        for (uint32_t i = 0; i < s_cut.nTrack; i++) {
+            const int why = s_cut.track[i].why;
+            if (s_cut.track[i].dropped || why < 0 || why >= RD_LAST_WHY_COUNT) {
+                continue;
+            }
+            if (g_rdPerf.lastStoreWhy[why] < UINT16_MAX) {
+                g_rdPerf.lastStoreWhy[why]++;
+            }
+            s_cut.whyRun[why]++;
+        }
+    }
+    s_cut.nTrack = 0;
+}
+
+void rd__last_store_why_counts(uint64_t why[RD_LAST_WHY_COUNT])
+{
+    memcpy(why, s_cut.whyRun, sizeof(s_cut.whyRun));
 }
 
 void rd__last_store_end(void)

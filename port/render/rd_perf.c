@@ -198,7 +198,7 @@ static uint64_t s_fusePairs, s_fuseSame, s_fuseKept[RD_VU_FUSE_WHY_COUNT];
 static uint64_t s_storePasses, s_storeDepth, s_storeColor;
 /* the passes cut (rd_pass_cut.c; RdPerfRecord clearsCarried, clearsSkipped,
  * storeLastDropped) */
-static uint64_t s_cutCarried, s_cutSkipped, s_cutLast;
+static uint64_t s_cutCarried, s_cutSkipped, s_cutLast, s_cutLastWhy[RD_LAST_WHY_COUNT];
 static uint32_t s_storePlanned;
 /* the store plan's keep as the last planned record had it (RdPerfRecord
  * storeKept, storeKeptTarget, storeKeptFrame) */
@@ -237,6 +237,9 @@ bool rd_perf_pop(RdPerfRecord *out)
     s_cutCarried += s_queue[s_head].clearsCarried;
     s_cutSkipped += s_queue[s_head].clearsSkipped;
     s_cutLast += s_queue[s_head].storeLastDropped;
+    for (int k = 0; k < RD_LAST_WHY_COUNT; k++) {
+        s_cutLastWhy[k] += s_queue[s_head].lastStoreWhy[k];
+    }
     s_storePasses += s_queue[s_head].storePasses;
     s_storeDepth += s_queue[s_head].storeDepthDropped;
     s_storeColor += s_queue[s_head].storeColorDropped;
@@ -278,9 +281,79 @@ bool rd__perf_gpu_ms_of(uint32_t replay, double *ms)
     return found;
 }
 
+static const char *const kAreaWhy[RD_AREA_WHY_COUNT] = {
+    "no scan of its commands",
+    "a clear as its load",
+    "MSAA",
+    "a storage pass",
+    "begun where no area starts",
+    "a 3D draw",
+    "the fog",
+    "a shadow command",
+    "a post sprite",
+    "a flat draw under DATE or the wrap",
+    "nothing drawn",
+    "its draws cover the picture",
+};
+
+static const char *const kLastWhy[RD_LAST_WHY_COUNT] = {
+    "no scan",
+    "MSAA, the exact blend, GS state as shader data, the pass split or a pass window",
+    "begun outside a draw on its colour and depth",
+    "the depth cleared, not loaded",
+    "a shadow window open",
+    "a command the store plan does not know",
+    "a DATE draw",
+    "a draw reading its own target, a depth or a target not ready",
+    "COLCLAMP 0's wrap",
+    "a post sprite",
+    "the fog with a probe, an edge read or not on the local read",
+    "a draw on another target",
+    "a clear, a copy or another action",
+};
+
+void rd_perf_why_text(char *buf, size_t size, int which, const uint64_t *counts, double replays)
+{
+    if (!buf || size == 0) {
+        return;
+    }
+    buf[0] = '\0';
+    const int count = which ? RD_LAST_WHY_COUNT : RD_AREA_WHY_COUNT;
+    const char *const *words = which ? kLastWhy : kAreaWhy;
+    uint64_t all = 0;
+    for (int k = 0; k < count; k++) {
+        all += counts[k];
+    }
+    if (!all || !(replays > 0.0)) {
+        return;
+    }
+    const bool one = replays == 1.0; /* the tool's: whole numbers */
+    size_t at = 0;
+    int n = one ? snprintf(buf, size, "%llu %s (", (unsigned long long)all,
+                           which ? "last stores kept" : "passes kept whole")
+                : snprintf(buf, size, "%.1f %s a replay (", (double)all / replays,
+                           which ? "last stores kept" : "passes kept whole");
+    at = n > 0 && (size_t)n < size ? (size_t)n : size - 1;
+    bool first = true;
+    for (int k = 0; k < count && at < size - 1; k++) {
+        if (!counts[k]) {
+            continue;
+        }
+        n = one ? snprintf(buf + at, size - at, "%s%llu %s", first ? "" : ", ",
+                           (unsigned long long)counts[k], words[k])
+                : snprintf(buf + at, size - at, "%s%.1f %s", first ? "" : ", ",
+                           (double)counts[k] / replays, words[k]);
+        at += n > 0 && (size_t)n < size - at ? (size_t)n : size - 1 - at;
+        first = false;
+    }
+    if (at < size - 1) {
+        snprintf(buf + at, size - at, ")");
+    }
+}
+
 const char *rd_perf_backend_text(void)
 {
-    static char s_text[1536];
+    static char s_text[2048];
     size_t at = 0;
     s_text[0] = '\0';
     if (s_backendBytes && s_backendReplays) {
@@ -392,6 +465,14 @@ const char *rd_perf_backend_text(void)
                      "([dev] clear_carry, clear_skip, last_store)",
                      (double)s_cutCarried / n, (double)s_cutSkipped / n, (double)s_cutLast / n);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
+        /* why the others kept it (RD_LAST_WHY_*): "; 0.7 last stores kept a
+           replay (0.5 a DATE draw, 0.2 a post sprite)" */
+        char why[512];
+        rd_perf_why_text(why, sizeof why, 1, s_cutLastWhy, n);
+        if (why[0]) {
+            const int w = snprintf(s_text + at, sizeof(s_text) - at, "; %s", why);
+            at += w > 0 && (size_t)w < sizeof(s_text) - at ? (size_t)w : 0;
+        }
     }
     if (s_backendReplays) {
         /* the pipelines made so far by family (rd_uber.c rd__uber_perf_note:
@@ -420,6 +501,7 @@ const char *rd_perf_backend_text(void)
     s_fusePairs = s_fuseSame = 0;
     memset(s_fuseKept, 0, sizeof(s_fuseKept));
     s_cutCarried = s_cutSkipped = s_cutLast = 0;
+    memset(s_cutLastWhy, 0, sizeof(s_cutLastWhy));
     s_storePasses = s_storeDepth = s_storeColor = 0;
     s_storePlanned = 0;
     memset(s_storeWhy, 0, sizeof(s_storeWhy));

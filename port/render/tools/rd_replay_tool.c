@@ -2506,17 +2506,31 @@ int main(int argc, char **argv)
         /* the aura's read in two passes (rd_aura_box.c) */
         printf("%s: stats: aura box %s: %u feedback reads in two passes\n", dump,
                rd__aura_box_on() ? "on" : "off", pr->auraBoxDraws);
-        /* the passes' render areas (rd_pass_area.c) */
+        /* the passes' render areas (rd_pass_area.c), and why the others
+         * on a target with its own depth were whole (rd.h RD_AREA_WHY_*) */
+        uint64_t areaWhy[RD_AREA_WHY_COUNT], lastWhy[RD_LAST_WHY_COUNT];
+        for (int k = 0; k < RD_AREA_WHY_COUNT; k++) {
+            areaWhy[k] = pr->passAreaWhy[k];
+        }
+        for (int k = 0; k < RD_LAST_WHY_COUNT; k++) {
+            lastWhy[k] = pr->lastStoreWhy[k];
+        }
+        char whyText[512];
+        rd_perf_why_text(whyText, sizeof whyText, 0, areaWhy, 1.0);
         printf("%s: stats: pass area %s: %u passes with an area (%u of their %u tiles loaded), "
-               "%u ended early\n",
+               "%u ended early%s%s\n",
                dump, rd__pass_area_on() ? "on" : "off", pr->passAreas, pr->passAreaTiles,
-               pr->passAreaTargetTiles, pr->passAreaEnds);
-        /* the passes cut (rd_pass_cut.c) */
+               pr->passAreaTargetTiles, pr->passAreaEnds, whyText[0] ? "; " : "", whyText);
+        /* the passes cut (rd_pass_cut.c), and why a last touch's pass kept
+         * its store (rd.h RD_LAST_WHY_*) */
+        rd_perf_why_text(whyText, sizeof whyText, 1, lastWhy, 1.0);
         printf("%s: stats: pass cut: clear carry %s: %u clears taken by the next pass; clear skip "
-               "%s: %u clears skipped; last store %s: %u depth stores dropped at the last touch\n",
+               "%s: %u clears skipped; last store %s: %u depth stores dropped at the last "
+               "touch%s%s\n",
                dump, rd__pass_cut_on(RD_CUT_CARRY) ? "on" : "off", pr->clearsCarried,
                rd__pass_cut_on(RD_CUT_SKIP) ? "on" : "off", pr->clearsSkipped,
-               rd__pass_cut_on(RD_CUT_LAST) ? "on" : "off", pr->storeLastDropped);
+               rd__pass_cut_on(RD_CUT_LAST) ? "on" : "off", pr->storeLastDropped,
+               whyText[0] ? "; " : "", whyText);
         /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
         printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
                "additive, %u local; vu no-planes %u; sprite no-planes %u\n",

@@ -19,9 +19,14 @@
 # "pass area off: 0 passes", the other "pass area on"; both the same draws,
 # and the on run's passes the off run's plus at most its passes ended early
 # (a pass ended at its area's last command and begun again); the phone's
-# frames (frame-20261028-* and frame-20261102-*) must give some pass an
-# area at the phone's setting (else the gate saw nothing).  A missing list
-# or dump is named and skipped; no dump read, or no device: SKIP (77).
+# frames (frame-20261028-* and frame-20261102-*) at the phone's setting
+# must give some pass an area or say why their passes were kept whole with
+# "its draws cover the picture" among the reasons (the aura's paste and
+# list 11's fades are full-frame sprites: staticBlur.c pasteFeedBackAreaToFB
+# and addWork1ToFB draw the frame's rect, so a stage 6 frame of 2026-11-02
+# has no pass an area can spare a tile of; any other answer means the scan
+# no longer sees those sprites).  A missing list or dump is named and
+# skipped; no dump read, or no device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 set(dumps "")
 if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
@@ -69,6 +74,7 @@ set(areaRe "stats: pass area (on|off): ([0-9]+) passes with an area \\(([0-9]+) 
 set(failures 0)
 set(areas 0)
 set(phoneAreas 0)
+set(phoneCovered 0)
 set(phoneCompared 0)
 set(compared 0)
 set(index 0)
@@ -153,12 +159,20 @@ foreach(dump IN LISTS dumps)
       math(EXPR failures "${failures} + 1")
     endif()
     math(EXPR areas "${areas} + ${nOn}")
+    # why the others were whole (rd.h RD_AREA_WHY_*, rd_perf_why_text)
+    set(whyOn "")
+    if(flatOn MATCHES "ended early, ([0-9]+ passes kept whole \\([^)]*\\))")
+      set(whyOn "${CMAKE_MATCH_1}")
+    endif()
     if(phone AND s STREQUAL "phoneauto")
       math(EXPR phoneAreas "${phoneAreas} + ${nOn}")
       math(EXPR phoneCompared "${phoneCompared} + 1")
+      if(whyOn MATCHES "its draws cover the picture")
+        math(EXPR phoneCovered "${phoneCovered} + 1")
+      endif()
     endif()
     message(STATUS "${dump} ${s}: ${nOn} passes with an area (${tilesOn} of their ${allOn} "
-                   "tiles), ${endsOn} ended early; passes ${passesOff} -> ${passesOn}")
+                   "tiles), ${endsOn} ended early; passes ${passesOff} -> ${passesOn}; ${whyOn}")
     file(GLOB pngs RELATIVE "${dirOff}" "${dirOff}/*.png")
     list(LENGTH pngs npng)
     if(npng EQUAL 0)
@@ -194,9 +208,10 @@ if(compared EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} could be compared")
   return()
 endif()
-if(phoneCompared GREATER 0 AND phoneAreas EQUAL 0)
+if(phoneCompared GREATER 0 AND phoneAreas EQUAL 0 AND phoneCovered EQUAL 0)
   message(FATAL_ERROR "rd_pass_area_ab: the phone's ${phoneCompared} frames gave no pass an area "
-                      "at its setting: the gate saw nothing")
+                      "at its setting and none was kept whole because its draws cover the "
+                      "picture: the scan no longer sees the full-frame sprites")
 endif()
 message(STATUS "rd_pass_area_ab: ${compared} targets the same bytes over ${ndumps} dumps, ${areas} "
                "passes with an area in all (${phoneAreas} on the phone's frames at its setting)")

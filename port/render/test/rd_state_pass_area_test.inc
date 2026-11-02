@@ -24,7 +24,20 @@
  * begun at S1 holds S1's box and the aura's (rd__pass_area_of, the union)
  * and ends before the FEED128 sprite; its area (rd__pass_area_rect) is that
  * union out to whole 32 x 32 tiles; a pass begun at S2 has none (the grid
- * follows it on SCENE) and neither has one begun at the grid.  The switch's
+ * follows it on SCENE) and neither has one begun at the grid; why
+ * (rd__pass_area_why): none at S1, a 3D draw at S2 and at the grid.
+ *
+ * The phone's frame (testPassAreaPaste, the F12 dumps of 2026-11-02's
+ * list 8 and list 11 as the game records them): the aura's paste of
+ * FEED128 onto SCENE is the frame's rect (staticBlur.c pasteFeedBackAreaToFB
+ * and addWork1ToFB draw `rect`, the frame from -w/2 to w/2: in the rc4 dump
+ * list 8 command 55, rect (25984,29184)-(39552,36352) at 848 x 448, its UV
+ * FEED128's 212 x 112 texels), then FEED128's next sprite; list 11 a
+ * full-frame sprite (command 26: (25984,29152)-(39552,36384)).  Both are
+ * boxes (kind 1) holding the whole target, and a pass begun at either gets
+ * no area because its draws cover the picture (RD_AREA_WHY_LARGE): the
+ * cause of rc4's "0.0 passes with an area".  The reasons' words
+ * (rd_perf_why_text) for one replay and a mean over two.  The switch's
  * words (rd__pass_area_pick) as rd__aura_box_pick's. */
 
 typedef struct PaSeen {
@@ -254,9 +267,146 @@ static void testPassAreaAt(const char *at, uint32_t gsW, uint32_t gsH, uint32_t 
           "pass area %s: a pass begun at S2, the grid after it, has an area", at);
     CHECK(!rd__pass_area_of(RD_TARGET_SCENE + 1u, t, w.ord[4], &u, NULL),
           "pass area %s: a pass begun at the grid has an area", at);
+    CHECK(rd__pass_area_why(RD_TARGET_SCENE + 1u, t, w.ord[0]) == -1 &&
+              rd__pass_area_why(RD_TARGET_SCENE + 1u, t, w.ord[3]) == RD_AREA_WHY_VU &&
+              rd__pass_area_why(RD_TARGET_SCENE + 1u, t, w.ord[4]) == RD_AREA_WHY_VU,
+          "pass area %s: why %d at S1 (-1), %d at S2 and %d at the grid (%d, a 3D draw)", at,
+          rd__pass_area_why(RD_TARGET_SCENE + 1u, t, w.ord[0]),
+          rd__pass_area_why(RD_TARGET_SCENE + 1u, t, w.ord[3]),
+          rd__pass_area_why(RD_TARGET_SCENE + 1u, t, w.ord[4]), RD_AREA_WHY_VU);
     rd__pass_area_force(-1);
     rd__pass_area_scan(NULL, 0); /* nothing held */
     *t = keep;
+}
+
+/* the phone's list 8 paste and list 11 fade, full-frame (see the top) */
+static void testPassAreaPaste(const char *at, uint32_t gsW, uint32_t gsH, uint32_t tw, uint32_t th,
+                              float sx, float sy, float ox)
+{
+    RdTargetRec *t = rd__target_rec(RD_TARGET_SCENE + 1u);
+    CHECK(t != NULL, "pass area paste %s: SCENE's record", at);
+    if (!t) {
+        return;
+    }
+    const RdTargetRec keep = *t;
+    t->w = gsW;
+    t->h = gsH;
+    t->tw = tw;
+    t->th = th;
+    t->sx = sx;
+    t->sy = sy;
+    t->ox = ox;
+    t->withDepth = 1;
+    if (!t->color.id) {
+        t->color.id = 0x7F000001u;
+    }
+    if (!t->depth.id) {
+        t->depth.id = 0x7F000002u;
+    }
+    const RdTarget scene = rd_target(RD_TARGET_SCENE), feed = rd_target(RD_TARGET_FEED128);
+    const int ox16 = (2048 - (int)gsW / 2) * 16, oy16 = (2048 - (int)gsH / 2) * 16;
+    rd_begin_frame();
+    rd_select_list(8);
+    rd_set_target(scene, scene, gsW, gsH, 0);
+    rd_scissor(0, 0, (int32_t)gsW - 1, (int32_t)gsH - 1);
+    {
+        /* pasteFeedBackAreaToFB: FEED128 (212 x 112 texels at 848 GS wide)
+         * over the frame's rect, RGBA 64,64,64,128 */
+        RdPostParams p;
+        memset(&p, 0, sizeof(p));
+        p.rect[0] = (float)ox16;
+        p.rect[1] = (float)oy16;
+        p.rect[2] = (float)(ox16 + (int)gsW * 16);
+        p.rect[3] = (float)(oy16 + (int)gsH * 16);
+        p.uv[0] = 8.0f;
+        p.uv[1] = 8.0f;
+        p.uv[2] = (float)(gsW / 4u * 16u + 8u);
+        p.uv[3] = 1800.0f;
+        p.rgba[0] = p.rgba[1] = p.rgba[2] = 64;
+        p.rgba[3] = 128;
+        p.scalar[2] = 1.0f;
+        p.exactInt = 1;
+        rd_post(RD_POST_AURA, &p);
+    }
+    rd_set_target(feed, feed, 212, 128, 0); /* the next sprite: FEED128 */
+    rd_scissor(0, 0, 211, 127);
+    {
+        RdScreenVtx q[2] = {paVtx(212, 128, 0, 0), paVtx(212, 128, 20, 20)};
+        rd_screen_prims(RD_PRIM_SPRITES, q, 2, RD_SPACE_WORLD, 0, 0);
+    }
+    rd_select_list(11);
+    rd_set_target(scene, scene, gsW, gsH, 0);
+    rd_scissor(0, 0, (int32_t)gsW - 1, (int32_t)gsH - 1);
+    {
+        /* list 11's fade: the frame, two rows past it on each side */
+        RdScreenVtx q[2] = {paVtx(gsW, gsH, 0, -2), paVtx(gsW, gsH, (int)gsW, (int)gsH + 2)};
+        rd_screen_prims(RD_PRIM_SPRITES, q, 2, RD_SPACE_FULLFRAME, 0, 0);
+    }
+    rd_end_frame(0);
+    const RdFrame *f = rd__last_frame();
+    /* the paste, FEED128's sprite and the fade: lists 8 and 11's draws */
+    uint32_t ord[3], n = 0, base = 0;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count; i++) {
+            const uint8_t ty = f->lists[l].cmds[i].type;
+            if ((l == 8 || l == 11) && (ty == RDC_POST_STUB || ty == RDC_SCREEN) && n < 3) {
+                ord[n++] = base + i;
+            }
+        }
+        base += f->lists[l].count;
+    }
+    CHECK(n == 3, "pass area paste %s: %u draws in lists 8 and 11 (3)", at, n);
+    if (n == 3) {
+        rd__pass_area_force(1);
+        rd__pass_area_scan(f, 0);
+        RhiRect u;
+        uint32_t end = 0;
+        const bool got = rd__pass_area_of(RD_TARGET_SCENE + 1u, t, ord[0], &u, &end);
+        CHECK(got && u.x <= 0 && u.y <= 0 && u.x + (int)u.w >= (int)tw &&
+                  u.y + (int)u.h >= (int)th && end == ord[1],
+              "pass area paste %s: the paste's box (%d,%d) %ux%u, ending before %u: want the "
+              "whole %ux%u, ending before %u",
+              at, u.x, u.y, u.w, u.h, end, tw, th, ord[1]);
+        const int whyPaste = rd__pass_area_why(RD_TARGET_SCENE + 1u, t, ord[0]);
+        const int whyFade = rd__pass_area_why(RD_TARGET_SCENE + 1u, t, ord[2]);
+        CHECK(whyPaste == RD_AREA_WHY_LARGE && whyFade == RD_AREA_WHY_LARGE,
+              "pass area paste %s: why %d at the paste, %d at the fade (%d: its draws cover the "
+              "picture)",
+              at, whyPaste, whyFade, RD_AREA_WHY_LARGE);
+        printf("pass area paste %s: the paste's box (%d,%d) %ux%u of %ux%u: no area (why %d)\n", at,
+               u.x, u.y, u.w, u.h, tw, th, whyPaste);
+        rd__pass_area_force(-1);
+        rd__pass_area_scan(NULL, 0);
+    }
+    *t = keep;
+}
+
+/* rd_perf_why_text's words */
+static void testPassAreaWords(void)
+{
+    uint64_t area[RD_AREA_WHY_COUNT], last[RD_LAST_WHY_COUNT];
+    memset(area, 0, sizeof(area));
+    memset(last, 0, sizeof(last));
+    char text[512];
+    rd_perf_why_text(text, sizeof text, 0, area, 1.0);
+    CHECK(text[0] == '\0', "pass area words: none kept whole gives '%s', want nothing", text);
+    area[RD_AREA_WHY_VU] = 2;
+    area[RD_AREA_WHY_LARGE] = 1;
+    rd_perf_why_text(text, sizeof text, 0, area, 1.0);
+    CHECK(strcmp(text, "3 passes kept whole (2 a 3D draw, 1 its draws cover the picture)") == 0,
+          "pass area words, one replay: '%s'", text);
+    rd_perf_why_text(text, sizeof text, 0, area, 2.0);
+    CHECK(strcmp(text, "1.5 passes kept whole a replay (1.0 a 3D draw, 0.5 its draws cover the "
+                       "picture)") == 0,
+          "pass area words, two replays: '%s'", text);
+    last[RD_LAST_WHY_DATE] = 1;
+    last[RD_LAST_WHY_POST] = 3;
+    rd_perf_why_text(text, sizeof text, 1, last, 2.0);
+    CHECK(strcmp(text, "2.0 last stores kept a replay (0.5 a DATE draw, 1.5 a post sprite)") == 0,
+          "last store words, two replays: '%s'", text);
+    char small[24];
+    rd_perf_why_text(small, sizeof small, 1, last, 2.0);
+    CHECK(strlen(small) < sizeof small, "last store words cut to the buffer: '%s'", small);
 }
 
 static void testPassArea(void)
@@ -271,4 +421,9 @@ static void testPassArea(void)
     testPassAreaAt("phone", 848, 448, 2364, 1080, 2364.0f / 848.0f, 1080.0f / 448.0f, 0.0f);
     testPassAreaAt("full", 1024, 448, 2364, 1080, 1080.0f / 448.0f, 1080.0f / 448.0f,
                    (1024.0f * (1080.0f / 448.0f) - 2364.0f) * 0.5f);
+    testPassAreaPaste("1x", 512, 448, 512, 448, 1.0f, 1.0f, 0.0f);
+    testPassAreaPaste("phone", 848, 448, 2364, 1080, 2364.0f / 848.0f, 1080.0f / 448.0f, 0.0f);
+    testPassAreaPaste("full", 1024, 448, 2364, 1080, 1080.0f / 448.0f, 1080.0f / 448.0f,
+                      (1024.0f * (1080.0f / 448.0f) - 2364.0f) * 0.5f);
+    testPassAreaWords();
 }

@@ -232,6 +232,7 @@ static struct {
     /* the passes with a render area, their tiles, their targets' tiles and
        those ended early (rd.h RdPerfRecord.passAreas ..., rd_pass_area.c) */
     uint64_t passAreas, passAreaTiles, passAreaTargetTiles, passAreaEnds;
+    uint64_t passAreaWhy[RD_AREA_WHY_COUNT]; /* the passes kept whole, by why */
     /* draws that read a water block at a scale other than the scene's
        (rd.h RdPerfRecord.blockOtherScaleReads, issue 106) */
     uint64_t blockOtherScale;
@@ -4447,6 +4448,9 @@ static void perf_drain(void)
         s_perf.passAreaTiles += r.passAreaTiles;
         s_perf.passAreaTargetTiles += r.passAreaTargetTiles;
         s_perf.passAreaEnds += r.passAreaEnds;
+        for (int k = 0; k < RD_AREA_WHY_COUNT; k++) {
+            s_perf.passAreaWhy[k] += r.passAreaWhy[k];
+        }
         s_perf.pipeCreates += r.pipelineCreates;
         s_perf.msaaResolves += r.msaaResolves;
         if (r.msaaSamples > s_perf.msaaSamples) {
@@ -4599,6 +4603,10 @@ static void perf_log(void)
                 s_perf.streamBytes / n / 1024.0, (other > 0.0 ? other : 0.0) / n / 1024.0,
                 rd_perf_backend_text());
     }
+    char areaWhy[512]; /* "; 2.0 passes kept whole a replay (...)" (rd_perf_why_text) */
+    rd_perf_why_text(areaWhy + 2, sizeof(areaWhy) - 2, 0, s_perf.passAreaWhy, n);
+    areaWhy[0] = areaWhy[2] ? ';' : '\0';
+    areaWhy[1] = ' ';
     fprintf(
         stderr,
         "window: per replay %.0f draws, %.0f passes, %.0f pipeline and %.0f bind group binds "
@@ -4610,7 +4618,7 @@ static void perf_log(void)
         "way); in the block %llu buffers and %llu textures created, %llu and %llu "
         "destroyed, %llu memory allocations, %llu pipelines created, %llu fence waits, "
         "%llu wait-idles, %llu readbacks; %.1f passes with an area (%.0f %% of the picture's "
-        "tiles loaded, %.1f ended early)\n",
+        "tiles loaded, %.1f ended early)%s\n",
         s_perf.draws / n, s_perf.passes / n, s_perf.pipeBinds / n, s_perf.groupBinds / n,
         s_perf.pipeSkips / n, s_perf.groupSkips / n, s_perf.stateSkips / n, s_perf.groups / n,
         s_perf.barriers / n, s_perf.copies / n, s_perf.bytes / n / 1024.0,
@@ -4627,7 +4635,7 @@ static void perf_log(void)
         s_perf.passAreaTargetTiles
             ? 100.0 * (double)s_perf.passAreaTiles / (double)s_perf.passAreaTargetTiles
             : 100.0,
-        s_perf.passAreaEnds / n);
+        s_perf.passAreaEnds / n, areaWhy);
     /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c; the
        flags are the rd: profile line's) */
     fprintf(stderr,

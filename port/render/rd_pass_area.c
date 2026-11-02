@@ -5,12 +5,20 @@
  * tiles when the pass begins and writes every stored one back when it
  * ends, over the pass's render area.  SCENE at the PowerVR phone's
  * Resolution Auto (2364 x 1080) is 10.2 MB of colour and 10.2 to 20.4 MB
- * of depth and stencil each way, so a pass on it that draws one sprite
- * (the aura's paste of FEED128, 212 x 128 GS texels, about 979 x 270
- * texels: "aura SCENE 2366x1080 1 draws 2.89 ms" in the rc3 log) costs the
- * whole picture's traffic for 11 % of it.  With the render area
- * (RhiRenderPassDesc.area; Vulkan VkRenderingInfo / VkRenderPassBeginInfo
- * renderArea) only the tiles inside it are loaded and stored.
+ * of depth and stencil each way, so a pass on it whose draws leave tile
+ * columns or rows untouched still moves the whole picture.  With the
+ * render area (RhiRenderPassDesc.area; Vulkan VkRenderingInfo /
+ * VkRenderPassBeginInfo renderArea) only the tiles inside it are loaded
+ * and stored.
+ *
+ * Not the aura's paste: the pass "aura SCENE 2366x1080 1 draws" the area
+ * was aimed at draws FEED128 (212 x 112 texels, its texture) over the
+ * frame's whole rect (staticBlur.c pasteFeedBackAreaToFB and addWork1ToFB
+ * draw `rect`, the frame; the phone's F12 dump of 2026-11-02 11:42, list 8
+ * command 55: (25984,29184)-(39552,36352) at 848 x 448), and list 11's
+ * pass begins with a full-frame sprite: on the stage 6 frames no pass on
+ * SCENE spares a tile, which the 10 s line's kept-whole clause says
+ * ("its draws cover the picture", RD_AREA_WHY_LARGE).
  *
  * Exact by construction.  The Vulkan specification (VkRenderPassBeginInfo,
  * and VkRenderingInfo the same: "The effects of attachment load, store, and
@@ -101,9 +109,13 @@
  *   rd: pass area: SCENE in list 8 (the aura's sprite): WxH at X,Y of
  *       2364x1080 (N of 2516 tiles ...)            (the first 8 kinds a run)
  *   window: per replay ..., N passes with an area (M % of the picture's
- *       tiles loaded, K ended early)               (the 10 s summary)
- *   the replay tool: --stats "pass area on|off: N passes with an area ...",
- *       --pass-times "... area WxH at X,Y" on a pass that has one. */
+ *       tiles loaded, K ended early); W passes kept whole a replay (A its
+ *       draws cover the picture, B a 3D draw, ...)  (the 10 s summary: the
+ *       passes on a target with its own depth begun whole, by the first
+ *       reason that holds, rd.h RD_AREA_WHY_*, RdPerfRecord.passAreaWhy)
+ *   the replay tool: --stats "pass area on|off: N passes with an area ...;
+ *       W passes kept whole (...)", --pass-times "... area WxH at X,Y" on a
+ *       pass that has one. */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -247,8 +259,10 @@ static struct {
     bool open, ended;
     uint32_t openSerial, openEnd, openFor, openDepth, endFor, endDepth;
     /* since start: passes with an area, their tiles and their targets',
-     * passes ended early */
+     * passes ended early; the passes on a target with its own depth begun
+     * whole, by why (rd.h RD_AREA_WHY_*) */
     uint64_t passes, tiles, targetTiles, ends;
+    uint64_t whyRun[RD_AREA_WHY_COUNT];
     /* the kinds named in the log (target, list, command type), the first 8 */
     uint32_t said[8][3];
     uint32_t nSaid;
@@ -260,6 +274,7 @@ typedef struct PaCmd {
     uint32_t target; /* st.color */
     uint8_t kind;    /* PA_* */
     uint8_t type;    /* RdCmdType (the log's word) */
+    uint8_t whole;   /* PA_WHOLE: its RD_AREA_WHY_* (VU, FOG, SHADOW, POST, SCREEN) */
     uint32_t tw, th; /* the target's texture size at the scan */
     RhiRect box;     /* PA_BOX: the texels it can touch; w 0: none */
 } PaCmd;
@@ -331,6 +346,7 @@ void rd__pass_area_init(void)
     s_pa.on = decide();
     s_pa.valid = s_pa.open = false;
     s_pa.passes = s_pa.tiles = s_pa.targetTiles = s_pa.ends = 0;
+    memset(s_pa.whyRun, 0, sizeof(s_pa.whyRun));
     s_pa.nSaid = 0;
     note();
 }
@@ -361,6 +377,11 @@ void rd__pass_area_counts(uint64_t *passes, uint64_t *tiles, uint64_t *targetTil
     if (ends) {
         *ends = s_pa.ends;
     }
+}
+
+void rd__pass_area_why_counts(uint64_t why[RD_AREA_WHY_COUNT])
+{
+    memcpy(why, s_pa.whyRun, sizeof(s_pa.whyRun));
 }
 
 /* ------------------------------------------------------- one command's box */
@@ -512,6 +533,26 @@ int rd__pass_area_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, 
 
 /* ---------------------------------------------------------------- the scan */
 
+/* a PA_WHOLE command's reason (rd.h RD_AREA_WHY_*) */
+static int wholeWhy(const RdCmd *c)
+{
+    switch (c->type) {
+    case RDC_MESH:
+    case RDC_SKINNED:
+    case RDC_GRID:
+    case RDC_PARTICLES:
+        return RD_AREA_WHY_VU;
+    case RDC_SHADOW_RESET:
+    case RDC_SHADOW_STRIP:
+    case RDC_SHADOW_RESOLVE:
+        return RD_AREA_WHY_SHADOW;
+    case RDC_POST_STUB:
+        return c->b[0] == RD_POST_FOG ? RD_AREA_WHY_FOG : RD_AREA_WHY_POST;
+    default:
+        return RD_AREA_WHY_SCREEN; /* DATE, the wrap, a target or payload not read */
+    }
+}
+
 void rd__pass_area_scan(const RdFrame *f, int keep)
 {
     s_pa.valid = s_pa.open = s_pa.ended = false;
@@ -549,6 +590,7 @@ void rd__pass_area_scan(const RdFrame *f, int keep)
             e->tw = tc ? tc->tw : 0u;
             e->th = tc ? tc->th : 0u;
             e->kind = (uint8_t)rd__pass_area_cmd(f, c, &st, ord, &e->box);
+            e->whole = (uint8_t)wholeWhy(c);
         }
     }
     s_pa.n = ord;
@@ -556,14 +598,22 @@ void rd__pass_area_scan(const RdFrame *f, int keep)
     s_pa.valid = true;
 }
 
-bool rd__pass_area_of(uint32_t cid, const RdTargetRec *c, uint32_t k, RhiRect *area, uint32_t *end)
+/* rd__pass_area_of with why (RD_AREA_WHY_*) set when it is false */
+static bool areaOf(uint32_t cid, const RdTargetRec *c, uint32_t k, RhiRect *area, uint32_t *end,
+                   int *why)
 {
+    *why = RD_AREA_WHY_SCAN;
     if (!s_pa.valid || s_pa.replay != g_rd.replayCounter || !c || k >= s_pa.n) {
         return false;
     }
     const PaCmd *e = &s_pa.cmd[k];
-    if (e->kind != PA_BOX || e->target != cid || e->tw != c->tw || e->th != c->th) {
-        return false; /* begun for work the scan cannot bound */
+    if (e->target != cid || e->tw != c->tw || e->th != c->th) {
+        return false; /* begun for another target than the scan's command */
+    }
+    if (e->kind != PA_BOX) {
+        /* begun for work the scan cannot bound */
+        *why = e->kind == PA_WHOLE ? e->whole : RD_AREA_WHY_BEGIN;
+        return false;
     }
     RhiRect u = e->box;
     uint32_t i = k + 1u;
@@ -576,11 +626,13 @@ bool rd__pass_area_of(uint32_t cid, const RdTargetRec *c, uint32_t k, RhiRect *a
             break; /* the pass's commands end here at the latest */
         }
         if (e->kind == PA_WHOLE || e->tw != c->tw || e->th != c->th) {
+            *why = e->kind == PA_WHOLE ? e->whole : RD_AREA_WHY_SCAN;
             return false;
         }
         boxAdd(&u, &e->box);
     }
     if (!u.w || !u.h) {
+        *why = RD_AREA_WHY_EMPTY;
         return false; /* nothing drawn: the pass as it is */
     }
     *area = u;
@@ -588,6 +640,12 @@ bool rd__pass_area_of(uint32_t cid, const RdTargetRec *c, uint32_t k, RhiRect *a
         *end = i;
     }
     return true;
+}
+
+bool rd__pass_area_of(uint32_t cid, const RdTargetRec *c, uint32_t k, RhiRect *area, uint32_t *end)
+{
+    int why;
+    return areaOf(cid, c, k, area, end, &why);
 }
 
 /* the area aligned out to whole tiles, clamped to w x h */
@@ -608,19 +666,47 @@ static RhiRect tileAlign(RhiRect a, uint32_t w, uint32_t h)
     return (RhiRect){(int32_t)x0, (int32_t)y0, (uint32_t)(x1 - x0), (uint32_t)(y1 - y0)};
 }
 
-bool rd__pass_area_rect(uint32_t cid, const RdTargetRec *c, uint32_t k, RhiRect *area,
-                        uint32_t *end)
+/* rd__pass_area_rect with why (RD_AREA_WHY_*) set when it is false */
+static bool areaRect(uint32_t cid, const RdTargetRec *c, uint32_t k, RhiRect *area, uint32_t *end,
+                     int *why)
 {
     RhiRect u;
-    if (!c || !rd__pass_area_of(cid, c, k, &u, end)) {
+    *why = RD_AREA_WHY_SCAN;
+    if (!c || !areaOf(cid, c, k, &u, end, why)) {
         return false;
     }
     const RhiRect a = tileAlign(u, c->tw, c->th);
     if (a.w + RD_PASS_AREA_TILE > c->tw && a.h + RD_PASS_AREA_TILE > c->th) {
+        *why = RD_AREA_WHY_LARGE;
         return false; /* not a tile column or row narrower: nothing to spare */
     }
     *area = a;
     return true;
+}
+
+bool rd__pass_area_rect(uint32_t cid, const RdTargetRec *c, uint32_t k, RhiRect *area,
+                        uint32_t *end)
+{
+    int why;
+    return areaRect(cid, c, k, area, end, &why);
+}
+
+int rd__pass_area_why(uint32_t cid, const RdTargetRec *c, uint32_t k)
+{
+    RhiRect a;
+    int why;
+    return areaRect(cid, c, k, &a, NULL, &why) ? -1 : why;
+}
+
+/* a pass on a target with its own depth begun whole, by why */
+static void keptWhole(int why)
+{
+    if (why >= 0 && why < RD_AREA_WHY_COUNT) {
+        if (g_rdPerf.passAreaWhy[why] < UINT16_MAX) {
+            g_rdPerf.passAreaWhy[why]++;
+        }
+        s_pa.whyRun[why]++;
+    }
 }
 
 static uint32_t tilesOf(uint32_t w, uint32_t h)
@@ -645,16 +731,35 @@ void rd__pass_area_begin(RhiRenderPassDesc *p, const RdTargetRec *c, uint32_t ci
     }
     s_pa.open = s_pa.ended = false;
     p->area = (RhiRect){0, 0, 0, 0};
-    if (!s_pa.on || !s_pa.valid || ms || storage || !c || !c->withDepth || !c->depth.id ||
-        p->colorCount == 0 || p->color[0].load == RHI_LOAD_CLEAR ||
+    if (!s_pa.on || !c || !c->withDepth || !c->depth.id) {
+        return; /* off, or a target without its own depth: whole, not counted */
+    }
+    /* why the pass is whole, the first that holds (RD_AREA_WHY_*: the 10 s
+     * line's "kept whole" clause, the tool's --stats) */
+    if (!s_pa.valid) {
+        keptWhole(RD_AREA_WHY_SCAN);
+        return;
+    }
+    if (ms) {
+        keptWhole(RD_AREA_WHY_MSAA);
+        return;
+    }
+    if (storage || p->colorCount == 0) {
+        keptWhole(RD_AREA_WHY_STORAGE);
+        return;
+    }
+    if (p->color[0].load == RHI_LOAD_CLEAR ||
         (p->depth.texture.id &&
          (p->depth.depthLoad == RHI_LOAD_CLEAR || p->depth.stencilLoad == RHI_LOAD_CLEAR))) {
+        keptWhole(RD_AREA_WHY_CLEAR);
         return;
     }
     const uint32_t k = g_rdStoreOrd;
     RhiRect a;
     uint32_t end = 0;
-    if (!rd__pass_area_rect(cid, c, k, &a, &end)) {
+    int why = RD_AREA_WHY_SCAN;
+    if (!areaRect(cid, c, k, &a, &end, &why)) {
+        keptWhole(why);
         return;
     }
     p->area = a;

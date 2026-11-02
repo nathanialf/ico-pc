@@ -643,7 +643,8 @@ void rd__store_plan_count_color(const RdTargetRec *c, RhiColorAttachment *a)
 
 void rd__store_plan_end(void)
 {
-    rd__fades_fold_end(); /* a fold no reduction took (rd_fades_fold.c) */
+    rd__fades_fold_end();        /* a fold no reduction took (rd_fades_fold.c) */
+    rd__last_store_replay_end(); /* why a last touch's pass kept its store (rd_pass_cut.c) */
     planNothingDropped();
     s_plan.nPrevDropped = 0;
     for (uint32_t i = 0; i < s_plan.n; i++) {
