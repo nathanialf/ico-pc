@@ -4843,7 +4843,7 @@ static void threadSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex,
     (void)v;
     (void)tex;
     (void)blend;
-    s_threadQuads += n == 2;
+    s_threadQuads += (int)(n / 2); /* a sprite a glyph, two vertices each, a page a call */
 }
 
 /* one run: the rich frame twice, rd_present_post(1) and the output into
