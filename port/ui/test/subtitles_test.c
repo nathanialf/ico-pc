@@ -38,6 +38,12 @@ int main(void)
     CHECK(strcmp(ui_subtitle_effective_language(ICO_SUBTITLE_SOURCE_TEXT, "game"), "rus") == 0);
     CHECK(strcmp(ui_subtitle_effective_language(ICO_SUBTITLE_SOURCE_ALL, "missing"), "game") ==
           0);
+    static const int runicBlocks[] = {9, 29, 31, 48, 49, 86, 91, 112};
+    for (size_t i = 0; i < sizeof(runicBlocks) / sizeof(runicBlocks[0]); i++) {
+        CHECK(ui_subtitle_block_uses_disc(runicBlocks[i], 0));
+        CHECK(!ui_subtitle_block_uses_disc(runicBlocks[i], 1));
+    }
+    CHECK(!ui_subtitle_block_uses_disc(88, 0));
     const char *line = ui_subtitle_text("rus", 1);
     CHECK(line != NULL && strchr(line, '\n') != NULL);
 

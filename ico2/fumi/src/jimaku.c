@@ -167,7 +167,8 @@ static void draw_subtitle(struct jWayGroup *g, LtProperty *first, LtProperty *se
     const int source = ico_opt_subtitle_source();
     const char *language =
         ui_subtitle_effective_language(source, ico_opt_subtitle_language());
-    if (source != ICO_SUBTITLE_SOURCE_DISC &&
+    if (!ui_subtitle_block_uses_disc(g->block, gFlagGameClear != 0) &&
+        source != ICO_SUBTITLE_SOURCE_DISC &&
         (source == ICO_SUBTITLE_SOURCE_TEXT || strcmp(language, "game") != 0)) {
         const char *text = ui_subtitle_text(language, g->block);
         if (text != NULL && !ico_photo_active()) {

@@ -487,7 +487,8 @@ other discs.
   one during play changes the game's text and disc subtitles at the next area.
   Text-file languages use their text subtitle pack. A text-file block
   without an entry is not displayed as a PS2 subtitle. On discs without a
-  game-language selector, **All** can still show text-file languages.
+  game-language selector, **All** can still show text-file languages. In a new game, Runic blocks 9, 29, 31, 48, 49, 86, 91 and 112 use the game's disc subtitles, after clearing the game, text packs can translate them in
+  New Game+.
 - **Menu language** is the language of the menus this port adds (Options,
   the extras, photo mode's help, the messages): English, French, German,
   Italian, Spanish, Japanese (日本語), Korean (한국어) or Chinese (繁體中文,

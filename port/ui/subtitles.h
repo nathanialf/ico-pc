@@ -33,6 +33,8 @@ const char *ui_subtitle_pack_name(size_t index);
 int ui_subtitle_pack_index(const char *id);
 /* Resolve a configured language against the selected source. */
 const char *ui_subtitle_effective_language(int source, const char *language_id);
+/* In a new game, these Runic dialogue blocks use the disc subtitle instead of the text pack; after the game is cleared, the pack can translate them. */
+int ui_subtitle_block_uses_disc(int block, int game_cleared);
 /* NULL when this pack has no entry for the block. */
 const char *ui_subtitle_text(const char *language_id, int block);
 

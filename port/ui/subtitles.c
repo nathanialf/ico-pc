@@ -58,6 +58,20 @@ const char *ui_subtitle_effective_language(int source, const char *language_id)
     return "game";
 }
 
+int ui_subtitle_block_uses_disc(int block, int game_cleared)
+{
+    static const int kRunicDialogueBlocks[] = {9, 29, 31, 48, 49, 86, 91, 112};
+    if (game_cleared) {
+        return 0;
+    }
+    for (size_t i = 0; i < sizeof(kRunicDialogueBlocks) / sizeof(kRunicDialogueBlocks[0]); i++) {
+        if (block == kRunicDialogueBlocks[i]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 const char *ui_subtitle_text(const char *language_id, int block)
 {
     if (language_id == NULL || block < 0) {
