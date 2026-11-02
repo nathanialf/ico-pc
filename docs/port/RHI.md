@@ -427,6 +427,83 @@ column; [Tests](#tests)). OpenGL counts the equation the same way, in Vulkan's t
 (`gl_cmd.c` `gl_count_dynamic`); it already sent the blend function whenever it changed, whatever the
 enable.
 
+### The bind cache
+
+Every backend remembers, per command list, what the list has bound and returns at once from a bind
+or a state set that asks for what is already in force (issue 126's Direct3D 11 log showed
+743 pipeline binds and 2836 bind group binds for 945 draws in one 10 s window, issue 179's Mali log
+pipeline binds about equal to draws with a 14 to 33 ms walk). What is remembered, and how it is
+compared:
+
+- the pipeline, by its RHI id (`rhi_cmd_set_pipeline`). Not by the backend's object: a pipeline
+  destroyed and another made at once takes the freed pool slot (the pools hand slots back last in,
+  first out), so the slot's pointer is the same while the id is not (the slot's generation, bumped
+  at the release: `vk_device.c` `vkr_pool_release`, `d3d12_plan.c` `d3dp_pool_release`). Compared
+  by pointer, such a new pipeline would be taken for the bound one and its bind skipped; a new
+  pipeline found in the bound one's slot binds every group (Vulkan) and every vertex buffer view
+  (Direct3D 12) again, since its layout and strides are its own.
+- each bind group slot: the group's id and its dynamic offsets
+  (`rhi_cmd_set_bind_group_offsets`). The ids are the frame's (a transient group lives one frame),
+  so an id never names two groups inside one list. A skipped bind keeps the slot's dirty bit as it
+  was: a group still waiting for the next draw (after a pass's start on Direct3D 11, after a
+  pipeline change on Vulkan) is still bound then.
+- the viewport and the scissor (as recorded: on Vulkan the scissor cut to the pass's area), each
+  vertex buffer binding (the buffer's id and offset; Direct3D 12 the view's address and size), the
+  index buffer (id, offset and type; Direct3D 12 the view), the stencil reference and the blend
+  constant. Compared bit for bit (`memcmp`), so a -0.0 against a 0.0 is a change.
+- the dynamic depth and blend state (Vulkan and OpenGL): skipped per command at the draw
+  ([Dynamic state](#dynamic-state)); the bind cache counts the commands a set since the last draw
+  asked for and found in force.
+
+Byte-identical by construction: a skipped call is one that would have set what the list holds.
+When the memory is forgotten:
+
+- the list's start (`rhi_begin_commands`): everything (each backend also zeroes it at the frame
+  slot's recycle). Vulkan and Direct3D 12 command lists start with nothing bound; Direct3D 11's
+  deferred context is cleared by `FinishCommandList(FALSE)`; OpenGL forgets every binding at a
+  list's start already (`gl_forget_bindings`).
+- a pass's start (`rhi_cmd_begin_render_pass`): the viewport and scissor, which the pass then sets
+  to the whole target, recorded. Nothing else: Vulkan's pipeline, descriptor sets, vertex and index
+  buffers and dynamic state are command buffer state that a render pass does not reset, as are
+  Direct3D 12's (`OMSetRenderTargets` leaves them) and OpenGL's. Direct3D 11 unbinds the shader
+  resources the list bound at a pass's start and before its compute copy (`d11_unbind_srvs`: a
+  texture about to be a target must not stay a shader resource), which marks every group slot dirty,
+  so the next draw binds them again whether the caller's bind was skipped or not.
+- Direct3D 11's registers: the backend binds a group as registers of one flat namespace (b, t and s
+  per stage; the shaders keep them distinct across groups, `port/shaders/reg.hlsli`). Each slot
+  keeps the registers its last flush wrote (`D11CmdState.groupRegs`); a flush that writes one of
+  another slot's marks that slot stale (`groupStale`, `d3d11_cmd.c` `d11_group_regs_note`), and a
+  stale slot's group bound again is flushed again, as any changed bind is.
+- a pipeline change on Vulkan: the descriptor sets from the first set whose layout differs on (the
+  new pipeline's `setLayoutIds` against the old one's, `vk_cmd.c` `vkr_groups_disturbed`). Vulkan
+  keeps a set bound for every later pipeline whose layout is compatible for that set: the same set
+  layouts up to it and the same push constants (none here). Each pipeline has its own
+  `VkPipelineLayout`: comparing those would bind every group again at every pipeline change, while
+  the renderer's pipelines share their set layouts, so a change binds only the groups whose own
+  binds changed (on the 179 log's Mali every draw changed the pipeline).
+- a pipeline's destruction: nothing to forget, its id is never given again inside a list (the
+  generation wraps after 4096 releases of one slot).
+
+Direct3D 11 also sets only the objects of a pipeline change that differ from those the context holds
+(`rhi_cmd_set_pipeline`): the input layout, the topology, the two shaders, the rasterizer state, the
+blend state with the blend constant and the depth-stencil state with the stencil reference; the
+pipelines of one shader pair share their shaders and input layout, and the state tables their
+rasterizer, blend and depth-stencil objects. Its constant buffers, shader resources and samplers
+were already set per register only when they changed (`d11_set_cb`, `d11_bind_entry`), and OpenGL's
+units per binding point (`gl_bind_groups`); the bind cache spares the walk of a group whose bind
+changed nothing.
+
+`RhiStats.pipelineBindsSkipped`, `bindGroupBindsSkipped` and `stateSetsSkipped` count the calls
+that recorded nothing (state: the six setters, the dynamic commands found in force, and Direct3D
+11's pipeline objects already bound); `pipelineBinds` and `bindGroupBinds` still count what was
+recorded. The window's 10 s line shows them per replay (`window: per replay N draws, P passes, A
+pipeline and B bind group binds (repeats skipped: X pipeline, Y bind group, Z state), ...`), the
+replay tool's `--stats` (`<dump>: stats: bind cache: X pipeline, Y bind group and Z state repeats
+skipped`) and `--time` (`<dump>: time: bind cache: X pipeline, Y bind group and Z state repeats
+skipped a replay`) too. The cells' bind cache check ([Tests](#tests)) records one list twice, every
+bind once and then each three times, and wants the same pictures, the same binds recorded and
+exactly two more skips for each repeated call.
+
 ### Local read
 
 Where `RhiLimits.localRead` is true a pass's fragment shaders can read its own attachments as
@@ -1569,7 +1646,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 
 | test | checks |
 | --- | --- |
-| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), the fill rule (`fillRuleCell`: two quads with every edge through pixel centres, the top and left edges' pixels taken and the bottom and right ones left, the shared edge's row once), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state; then `dualLeftoverCell`, an opaque draw after a SRC1 lerp on one dynamic-blend pipeline: 2 commands, `blendEqOffSets` and `dualLeftovers` +1, the colour exact on an even and an odd column; skipped without dual-source blending or dynamic blend) |
+| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), the fill rule (`fillRuleCell`: two quads with every edge through pixel centres, the top and left edges' pixels taken and the bottom and right ones left, the shared edge's row once), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state; then `dualLeftoverCell`, an opaque draw after a SRC1 lerp on one dynamic-blend pipeline: 2 commands, `blendEqOffSets` and `dualLeftovers` +1, the colour exact on an even and an odd column; skipped without dual-source blending or dynamic blend; the repeats' sets counted in `stateSetsSkipped`, every command of their groups); the bind cache cell (`bindCacheCell`, [The bind cache](#the-bind-cache)): one list recorded with every bind once, then with each bind and state set given three times in a row: the same exact pictures, the same `pipelineBinds` and `bindGroupBinds`, and exactly 6 pipeline, 8 bind group and 16 state skips more; in both, the group bound again at another dynamic offset draws that offset's value, a second pass binding the first pass's texture group draws the texture, and a pipeline destroyed in the list with a new one made in its pool slot (a new id) draws with the new one's write mask |
 | `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored; the drop of other builds' cache files in a temporary folder: the current file, its `.tmp` and unrelated names stay), and the pipeline pool filled (`poolCell`, [The pipeline pool](#the-pipeline-pool); not under the fake switches); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
 | `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |

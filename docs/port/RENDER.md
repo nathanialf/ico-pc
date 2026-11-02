@@ -2581,8 +2581,12 @@ replayed N more times; with `--interp` the presenter's frame is built again befo
 time charged to the replay as `rd_present` charges it). The tool prints one line from the N
 records, each CPU phase's mean and least: `<dump>: time: N replays, CPU mean (min) ms: total,
 interp, wait, acquire, upload, walk, bind, submit, present; per replay: ring KB,
-uniform KB, interp KB, draws, pipeline binds, bind group binds`, then `<dump>: time: the first
-replay: interp X ms, total T`. With `--interp` it compares DISPLAY after the
+uniform KB, interp KB, draws, pipeline binds, bind group binds`, then `<dump>: time: bind cache: X
+pipeline, Y bind group and Z state repeats skipped a replay` (the binds the RHI found in force and
+recorded nothing for, [RHI.md](RHI.md#the-bind-cache); `--stats` prints the replay's own as
+`<dump>: stats: bind cache: ...`), then `<dump>: time: the first replay: interp X ms, total T`.
+The walk column is what the bind cache moves: `build-host/tmp/v098/evidence/perf/bindcache.sh`
+runs `--time 5` on three corpus dumps with two builds. With `--interp` it compares DISPLAY after the
 first and the last of the N replays byte for byte and prints `pictures identical`, or the bytes
 that differ and exits 1: a present later in a tick must draw the tick's first present's picture
 (`timeReplays`). The lavapipe numbers are for comparing two builds on one host, not a device's

@@ -559,7 +559,9 @@ plan's means per replay, `; stores: N depth and M colour stores dropped a replay
   the top passes line and the total are the numbers to compare, and a reporter on such a device
   should not be asked to explain the lists' split. The GPU ms per replay and top passes lines end with that sentence on a tile-based GPU, and say that uploads carries the wait for the display before the first colour write.
 - `window: per replay ...`: the counts (draws, passes, pipeline and bind group binds, barriers,
-  copies, uploads, DATE snapshots). Its exact-blend fields (`exact blends`, `destination-read
+  copies, uploads, DATE snapshots). After the binds, `(repeats skipped: X pipeline, Y bind group, Z
+  state)`: the binds and state sets the RHI found already in force and recorded nothing for
+  ([RHI.md](RHI.md#the-bind-cache)); the binds before it are what was recorded. Its exact-blend fields (`exact blends`, `destination-read
   draws`, `storage passes`, `pass switches for the exact blend`) are 0 unless the player opted into
   an exact blend with `[dev] blend`; nonzero ones on a log without that setting are a defect.
   `pipelines created` in the block should be 0 once the set is made (a pipeline made while playing
