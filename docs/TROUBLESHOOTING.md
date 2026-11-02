@@ -103,18 +103,28 @@ memory the game was using.
 
 On a phone or a handheld the system tells the game when the device itself
 runs low on memory, and the game also checks how much memory the device has
-free (it stops when less than about 17 % of the device's memory is free, but
-never asks for more than 2 GB free, on a device with more than 8 GB;
-`pipeline_memory_floor_mb` under `[dev]` in `config.toml` sets that in MB,
-0 turns the check off). If either happens while the game prepares its graphics,
-the game stops preparing, goes on to the title and prepares the rest the
-first time the game needs it. The next start then skips **Preparing
-graphics** and goes straight to the title; the first minutes of play can
-pause for a moment here and there while graphics are prepared. Apps left
-open in the background hold memory too: close them before you start the
-game. A new version of the game tries preparing everything at the start
-again. The log says how much memory the device had left each time the
-system asked the game to free some.
+free. On handhelds with a Snapdragon chip and Qualcomm's own graphics driver
+it stops when less than about 17 % of the device's memory is free (never
+asking for more than 2 GB free on a device with more than 8 GB); on every
+other phone it stops only when less than about 512 MB is free on a device
+with more than 8 GB (17 % on smaller ones), which is what preparing the
+graphics needs with room to spare. `pipeline_memory_floor_mb` under `[dev]`
+in `config.toml` sets that in MB, 0 turns the check off.
+
+If the free memory runs short while the game prepares its graphics, the
+game stops preparing and goes on to the title. On most phones it then
+finishes preparing quietly in the background while you play, a little at a
+time, and waits whenever the game is busy, so the first new rooms do not
+freeze for seconds; the next start prepares everything at the start again.
+On the Snapdragon handhelds above, and whenever the system itself said it
+was low on memory, the game prepares the rest the first time the game needs
+it instead: the next start then skips **Preparing graphics** and goes
+straight to the title, and the first minutes of play can pause for a moment
+here and there while graphics are prepared. Apps left open in the
+background hold memory too: close them before you start the game. A new
+version of the game tries preparing everything at the start again. The log
+says how much memory the device had left each time the system asked the
+game to free some, and how far the preparing in the background got.
 
 If the whole phone or handheld freezes on **Preparing graphics** and you
 have to restart it, restart the device and start the game again: the game

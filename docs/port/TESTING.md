@@ -657,7 +657,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   cleanly: the Asian disc's `STGST13C.DF` (stage 4) and `STGST02A.DF`, the Korean disc's
   `STGSTAFF1.DF`, the August 2001 preview's `STGST13C.DF` (`inflate_disc_cn`,
   `inflate_disc_cn_st02a`, `inflate_disc_kor`, `inflate_disc_aug6`; skipped without the image).
-- `memory_floor_test.c`: the start-up set's free-memory floor (`memory_floor.h`): the default is 17 % of the device's memory, at most 2048 MB on a device of more than 8 GB (696 MB on a 4 GB phone, 522 MB on a 3 GB one, 1392 MB on 8 GB, 1445 MB on 8500 MB, 1915 MB on the Retroid Pocket 6's 11265 MB, 2048 MB on 12288, 15552 and 16384 MB; a setting gives the floor, above the cap too, `0` none); the PowerVR DXT-48 phone's figures (15552 MB: 2554 MB available, where the plain 17 % (2643 MB) stopped its set, 2647 MB and 2048 MB continue, 2047 MB stops, `[dev] pipeline_memory_floor_mb = 2643` stops at 2554); the issue 161 start on the Retroid Pocket 6 (11265 MB: 3340 MB continues and 1693 MB, where it stalled, stops under the default floor of 1915 MB; 1915 MB continues, 1914 MB stops; a setting of 1915 or 1900 stops at 1693, 1600 does not); a 4 GB phone at 1200 MB available continues, at 600 MB stops; a 3 GB phone at 700 MB continues; an unknown figure never stops; the log lines' words for the default, a setting and off (`ico_memory_floor_rule`); the `[dev] pipeline_memory_floor_mb` text ("" and "auto" unset, "0" off, "2048" a floor, "-1" and "x" not read) (`memory_floor`).
+- `memory_floor_test.c`: the start-up set's free-memory floor (`memory_floor.h`) by driver class: on Qualcomm's own driver and a driver not known 17 % of the device's memory, at most 2048 MB on a device of more than 8 GB (696 MB on a 4 GB phone, 522 MB on a 3 GB one, 1392 MB on 8 GB, 1445 MB on 8500 MB, 1915 MB on the Retroid Pocket 6's 11265 MB, 2048 MB on 12288, 15552 and 16384 MB); on any other driver the same up to 8 GB and at most 512 MB above (8500 to 16384 MB); a setting gives the floor for every class, `0` none; the class from the vendor id and the driver text (0x5143 with Qualcomm's own text, with "turnip Mesa driver", "Turnip Mesa 26.3.0", "Mesa 25.1.0"; PowerVR, Mali, vendor 0) and its words; the PowerVR DXT-48 phone's figures (15552 MB, another driver: 1823 MB, where the 2048 MB cap stopped its set, and 2554 MB continue, 512 MB continues, 511 MB stops, a setting of 2048 stops at 1823); the issue 161 start on the Retroid Pocket 6 on Qualcomm's own driver (11265 MB: 3340 MB continues and 1693 MB, where it stalled, stops under 1915 MB; 1915 MB continues, 1914 MB stops; a driver not known stops at 1693 too; a setting of 1900 stops at 1693, 1600 does not; on Turnip 1693 continues); a 4 GB phone at 1200 MB available continues, at 600 MB stops, on every class; an unknown figure never stops; the log lines' words for each class, a setting and off (`ico_memory_floor_rule`); the `[dev] pipeline_memory_floor_mb` text ("" and "auto" unset, "0" off, "2048" a floor, "-1" and "x" not read) (`memory_floor`).
 - `lifecycle_test.c`: the mobile lifecycle's step tables on fake operations: the render thread
   parked before the GPU idles and the surface goes, going on only after the surface is made again,
   and the tables as before without that operation (`lifecycle`).
@@ -1429,7 +1429,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rd_native`).
 - `rd_perf_test.c`: the renderer's CPU cost per replay and its steady state, and the start-up set
   through `rhi_create_pipelines`: its progress calls (from 0, never back, the total once at the
-  end), a stop after the first batch and the rest made by the next call; the exact blend's
+  end), a stop after the first batch and the rest made by the next call; last, the background
+  finisher (`checkBackgroundSet`): the set stopped after its first batch by the low-memory function
+  is offered, `rd_pipelines_background_start` takes it once (a second start returns 0), the memory
+  function is asked once before the first batch, one batch adds at most 32 pipelines, the system's
+  signal (the function's 2) ends the finisher with nothing more made, and a second stopped set run
+  to the end leaves every key of the reachable set with a pipeline and none made on first use
+  after it; the exact blend's
   counters (`RdPerfRecord.dstDraws`, `storagePasses`, `dstSwitches`) under each blend path the
   device has (none under the fixed-function blend, no storage pass or switch under the attachment
   read) and, under the storage read, the storage pass merge's DISPLAY bytes equal to the unmerged
@@ -1583,6 +1589,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd__enumerate_reachable`; the test fails on a key the set lacks, which on a device is one
   first-use stall (`firstUseLine`), never a wrong picture. The union of the asked keys is left in
   `rd_replay_tool_keys/keys-<config>-<size>.txt` (`rd_replay_tool_keys`).
+- `rd_pipe_finish_test.c`: the background finisher's choices (`rd_pipe_finish.h`): a set of 1196 keys stopped after 33 gives its batches from key 33 in the set's order, 32 a batch, the keys made meanwhile and the failed ones skipped, a batch never mixing keys with and without a destination read (the other kind's key starts the next), every key not made taken exactly once, 37 batches for 1163 keys of one kind (the last of 11), none past the end; the step after a picture: a batch in flight waits, then is taken whatever the memory or a hold; the system's signal ends the finisher, no key left ends it, a hold (late step, slow picture) and a reading under the floor wait until their time, the memory is read only when nothing else holds the batch, then a batch begins; every step's words (`rd_pipe_finish`).
 - `rd_cache_name_test.c`: the Vulkan pipeline cache file's name (`rd_cache_name.h`): two builds' tables of the same modules, each in its own memory, name the same file (no build in the name); one byte of a module changed (its first, a middle one, its last), a module a word longer or shorter, renamed, its stage changed, two swapped, one dropped or added, or `RD_PIPELINE_CACHE_FORMAT` raised each name another; names joined differently do not collide; the form `pipelines-<16 hex digits>.vkcache` (34 characters), a 35-byte buffer taken, 34 and NULL refused; an empty table still names a file (`rd_cache_name`).
 - `rd_bisect_plan_test.c`: the loss bisect's second-level planner against oracles: a draw that
   faults with every draw before it (1, 731 and 1,312 of 1,312) found within 12 steps, the masked
@@ -1712,6 +1719,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 
 ### port/rhi/test
 
+- `rhi_test_common.c` (every backend's run, after the `rhi_create_pipelines` batch): the same eight descriptions through `rhi_create_pipelines_begin` with 2 threads at low priority and `rhi_create_pipelines_end` not waited until it is done: on Vulkan the seven made, the uncreatable one alone failed (time 0), on 1 or 2 threads, ids none of the batch's pipelines has; on the other backends NULL and an end of NULL false.
 - `rhi_test_common.c` (every backend's run): the thread submit cell (`threadSubmitCell`): a
   list recorded on the test's thread and ended and submitted on another reads back byte for byte
   as the same list submitted on the test's thread, and the readback after it waited for the other

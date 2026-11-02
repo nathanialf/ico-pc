@@ -454,13 +454,15 @@ rule cannot fire while the system takes the process's pages back), logged once b
 `rd: pipelines: the start-up set stops at the system's low-memory signal (asked after each batch),
 the rest made on first use`. A batch in flight is not cut short: the careful batches are 8
 pipelines on one thread. The same function also says yes once the device's available memory is
-under the free-memory floor, 17 % of its memory and at most 2048 MB on a device of more than 8 GB
-(`port/platform/memory_floor.h`; [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)): a
-phone with much memory reports little of it available while it runs well (2554 MB of 15552 MB on a
-PowerVR DXT-48-1536), and a plain 17 % (2643 MB) stopped that phone's set after 33 of 1193 keys,
-so the title waited 13.6 s for the pipelines made on first use. Under the cap the set runs on
-behind the "Preparing graphics" screen, its count and estimate, until it ends or the system's
-signal comes.
+under the free-memory floor: on Qualcomm's own driver 17 % of its memory and at most 2048 MB on a
+device of more than 8 GB (issue 161's guard against that driver's compiler), on any other driver
+the set's need with a margin, at most 512 MB above 8 GB (`port/platform/memory_floor.h`;
+[WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes) has the figures). A phone with much
+memory reports little of it available while it runs well (1823 to 2647 MB of 15552 MB on a PowerVR
+DXT-48-1536): a plain 17 % (2643 MB) stopped that phone's set after 33 of 1193 keys, so the title
+waited 13.6 s for the pipelines made on first use, and the 2048 MB cap stopped it again at 1823
+MB (a 2.2 s freeze in play). A stop at the floor on another driver than Qualcomm's own is for that
+start only, and the rest is finished in the background (next section).
 
 The table's row (`port/rhi/vk/vk_device.c` `kVuPlainOnly`; the fallback rule of the next section
 stays on the same device):
@@ -511,6 +513,86 @@ where the system does not say), the cache's size `rhi_pipeline_cache_size` (Vulk
 on Direct3D 12) on a phone or a tablet, on the lazy path and on a device of the table (`pipeline
 cache 3104 KB`), `not measured` in a desktop's set (the paragraph above). A start the system ended shows whether the memory grew with the batches, and the
 next start logs the last one again as `ico_pc: the previous run's last finished batch: <line>`.
+
+### The background finisher
+
+When the free-memory floor (not the system's signal) stopped the start-up set on another driver
+than Qualcomm's own, the keys the set had not made are not left to first use: the window calls
+`rd_pipelines_background_start(ico_diag_background_memory)` after the set
+(`port/platform/window_pipe_finish.c`), and the renderer compiles them in the background
+(`port/render/rd_pipeline.c`, the choices in `rd_pipe_finish.h`):
+
+- **the keys**: the set's own keys in its order from where it stopped (`finOffer`), the ones made
+  meanwhile on first use, failed or never made (sprite planes off) skipped; a batch is up to
+  `RD_FINISH_BATCH` (32) keys, all with a destination read or all without, as the set's
+  (`rd__finish_pick`). A display change re-enumerates the new state's reachable set and goes on
+  from its start (`finRestart`; `display change: the background set goes on with the new state's
+  keys (N of its M not made yet)`).
+- **the threads**: `rhi_create_pipelines_begin(descs, n, RD_FINISH_THREADS, true)` makes on the
+  calling thread what `rhi_create_pipelines` makes there (pool slots, layouts) and starts 4 worker
+  threads at `SDL_THREAD_PRIORITY_LOW` that only call `vkCreateGraphicsPipelines` through the
+  internally synchronised cache; `rhi_create_pipelines_end(jobs, false, ...)` takes them once every
+  compile has ended ([RHI.md](RHI.md#the-interface)). 4, not the set's 7: on the DXT-48 the set's
+  VU batches took the process to 694 MB of compilers' memory on 7 threads, and in play the game and
+  render threads keep their cores.
+- **when**: after each presenting replay, on the thread that draws (the render thread;
+  `rd__pipe_finish_tick` at the end of `rd__replay_frame_here`), one action a picture: a batch in
+  flight is taken once done; else the memory function is asked (`ico_diag_background_memory`: 2
+  when the system's "running critical" came at any time of the run or its "running low" once a
+  pipeline was made, then the finisher ends; 1 when MemAvailable is under the floor now, asked again 5 s later,
+  `RD_FINISH_FLOOR_MS`; 0 go) and the next batch begins. No batch begins for 1 s
+  (`RD_FINISH_HOLD_MS`) after a game step more than 100 ms late (`window_lines.c`
+  `window_hold_line`, the step lateness the window measures in `ico_window_pace`) or a picture over
+  100 ms less the pipelines made in it (the render thread's own time,
+  `rd_pipelines_background_hold`). A batch in flight is never cut.
+- **a draw meanwhile**: a key the finisher has not made yet is made at once on the render thread as
+  before (the same key compiling in the background is then destroyed when its batch ends); a
+  background batch in flight is taken first by any `createKeys` (a replay's gathered keys) and
+  destroyed with the cache (`rd__pipeline_cache_clear`: the shutdown, the VU merge's fallback).
+- **the cache file**: written by the game thread's `rd_pipelines_lazy_tick` every 30 s while the
+  finisher runs (`RD_FINISH_SAVE_MS`; a 39 MB file took 131 ms to write on the DXT-48) and at its
+  end.
+- **the crash note**: while a batch compiles the activity note is `creating pipelines A-B of M in the
+  background: <first> to <last>; <modules>` (the set's batch form, so an end inside it is read as
+  one inside the set's batch by the next start: `startup_retry.c`, `pipeline_skip.c`).
+
+The lines:
+
+    rd: pipelines: the stopped set resumes in the background (N left, keys A-M of M): batches of up to 32 on 4 threads at low priority, one at a time between pictures; the free memory and the system's low-memory signal asked before each, none begun for 1.0 s after a late game step or a picture over 100 ms; a draw that needs a key not made yet still makes it at once
+    rd: pipelines: compiled background VU batch 290-321 of 1196 (compiler ...): 32 pipelines ...
+    rd: pipelines: the background set waits (N MB available of T MB, floor F MB): asked again in 5 s (K such waits)
+    rd: pipelines: the background set is done: N pipelines made in B batches, F failed, X s compiling over Y s since it resumed (H waits for a late step or a slow picture, W for the free memory); K keys left to first use
+    rd: pipelines: the background set ends at the system's low-memory signal (running low): ...
+
+How long it takes: the DXT-48's set that stopped at 1823 MB stopped after 33 of 1196 keys, 1163
+left (2D 362, VU 264, DATE 514 and the small families). Cold (no cache), at the compile times of
+that phone's full set (about 0.35
+s a 2D or DATE key, 0.74 s a VU key, one thread), that is about 330 s for the 2D-like keys and 195 s
+for the VU ones, so about 130 s on 4 threads, 37 batches of 32: one batch every 3.5 s on average,
+about 2 s for a 2D batch and 6 s for a VU one, plus the holds. At the brief's one batch of 32 per 2
+s the 1163 keys take 37 batches, about 74 s. With the cache warm from an earlier start (the stopped start's
+case: the 33 keys of its first batch were cache hits at 0.00 s) every batch is cache hits and the whole
+remainder takes seconds.
+
+**A miss's compile on the pipeline threads (not built).** A pipeline a draw needs is made on the
+render thread while the game thread waits for the hand-over. Compiling that one pipeline on a
+worker with the render thread waiting on it gains nothing for that picture (the same 0.63-0.81 s).
+The gain would come from making all of a picture's missing pipelines in one threaded batch before
+its walk (in the phone's freeze 3 VU pipelines took 2.2 s one after another, about 0.8 s on 3 threads).
+That needs the picture's keys before the walk, and no pass has them: the store plan's scan
+(`rd_store_plan.c`) and the pass areas (`rd_pass_area.c`) read the commands' state but build no
+`RdPipeKeyInt`; the keys are built by the draw paths as they go (40 `rd__get_pipeline` calls in 12
+files: the VU merge and its fallback pairs, the two-pass blend's split, DATE, the shadow count, the
+crack filler, the aura box, the tiler's folds), a pipeline asked for only once another was made
+(the second pass of a fallback pair) among them. The one exact enumerator is a gathering replay
+(`rd__pipeline_gather`, the loss bisect's), a whole walk with nothing drawn, which on a live picture
+also runs its copies, clears, uploads and the frame's retained targets (the aura's FEED128, the
+blur trail, the store plan) a second time and costs a second walk (3.3-4.2 ms on the phone) on
+every picture to save a compile on a few. So it is not built: the finisher takes most misses away
+instead, and a miss's key that a background batch is compiling is made again on the spot. In that
+freeze the three keys were cache misses although the start before had compiled its whole set into
+the same cache file, and that start never went to stage 4: whether they belong to the start-up set (the finisher would
+have made them) or are keys outside it (made on first use either way) is not known from the logs.
 
 ### The fallback entries
 

@@ -1507,31 +1507,46 @@ batch's note until one is left). On Android the note goes to the disc before the
 **The free-memory floor (Android).** Before each pipeline of the careful set, and after each batch
 of the usual one, the set asks `ico_diag_low_memory_stop`, which now also reads MemAvailable
 (`ico_diag_device_memory`, the "device N MB available of T MB" words): under the floor the set stops
-as at the system's low-memory signal (the rest made on first use, `set: stopped at the system's
-low-memory signal (<words>)` in the activity file, the next start lazy). The floor is 17 % of
-MemTotal, at most 2048 MB on a device of more than 8 GB (8192 MB) (`port/platform/memory_floor.c`:
-696 MB on a 4 GB phone, 522 MB on a 3 GB one, 1392 MB on an 8 GB one, 2048 MB on 12 GB and 16 GB;
-with the game running a 4 GB phone has 0.8 to 1.5 GB available, so an absolute 1536 MB would stop
-every start-up set there); `[dev] pipeline_memory_floor_mb` sets it in MB, 0 turns it off
-(exported as `ICO_PIPELINE_MEMORY_FLOOR_MB`). The floor in force is logged at the set's first ask,
-and the stop names it the same way:
+as at the system's low-memory signal. The floor depends on the driver class
+(`port/platform/memory_floor.c` `ico_memory_floor_driver`, from `rhi_limits()`'s vendor id and
+driver text, set by the window before the set: `window_pipe_finish.c` `window_pipe_floor_driver`):
 
-    ico_pc: pipelines: the free-memory floor is F MB (17 % of total, at most 2048 MB above 8 GB); N MB available of T MB now
-    ico_pc: pipelines: the start-up set stopped at N MB available of T MB (floor F MB, 17 % of total, at most 2048 MB above 8 GB): the rest made on first use
+| driver | floor | a stop at it |
+| --- | --- | --- |
+| Qualcomm's own (vendor 0x5143, the driver text naming neither Mesa nor Turnip), and a driver not known yet | 17 % of MemTotal, at most 2048 MB on a device of more than 8 GB (696 MB on 4 GB, 1392 MB on 8 GB, 1915 MB on the Retroid Pocket 6's 11265 MB, 2048 MB on 12 and 16 GB) | as the low-memory signal's: the rest made on first use, `set: stopped at the system's low-memory signal (<words>)` in the activity file, the next start lazy |
+| any other (Turnip, PowerVR, Mali, Adreno under Mesa, ...) | the set's need with a margin: 17 % of MemTotal, at most 512 MB on a device of more than 8 GB | for this start only: the rest made in the background ([PIPELINES.md](PIPELINES.md#the-background-finisher)), the next start makes the set again |
+
+Up to 8 GB the two rules give the same 17 % (with the game running a 4 GB phone has 0.8 to 1.5 GB
+available, so an absolute floor would stop every set there). `[dev] pipeline_memory_floor_mb` sets it
+in MB for every class, 0 turns it off (exported as `ICO_PIPELINE_MEMORY_FLOOR_MB`). The floor in
+force is logged at the set's first ask with the class, and the stop names it the same way:
+
+    ico_pc: pipelines: the free-memory floor is 512 MB (the set's need with a margin: 17 % of total, at most 512 MB above 8 GB; Qualcomm's own driver keeps 17 % of total, at most 2048 MB above 8 GB); another driver than Qualcomm's own; N MB available of T MB now
+    ico_pc: pipelines: the free-memory floor is F MB (Qualcomm's own driver: 17 % of total, at most 2048 MB above 8 GB; other drivers at most 512 MB); Qualcomm's own driver; N MB available of T MB now
+    ico_pc: pipelines: the start-up set stopped at N MB available of T MB (floor F MB, <rule>; <class>): the rest made in the background and on first use
+    ico_pc: the start-up set stopped at the free-memory floor (N MB available of T MB, floor F MB) on another driver than Qualcomm's own; the next start makes the set again
     ico_pc: the start-up set stopped at the free-memory floor (N MB available of T MB, floor F MB); the next start makes the pipelines as the game needs them, with no start-up set
 
-(`[dev] pipeline_memory_floor_mb` in place of the rule's words when the setting gives the floor).
+(the last on Qualcomm's own driver; `[dev] pipeline_memory_floor_mb` in place of the rule's words
+when the setting gives the floor; `window: pipelines: the start-up set stopped at the free-memory
+floor on Qualcomm's own driver: the rest is made on first use, not in the background` after it).
 
-**Why the cap.** Android's MemAvailable is cautious on a phone with much memory: a PowerVR
-DXT-48-1536 phone of 15552 MB showed 2554 MB available at its start-up set and 2555 to 2647 MB
-while it ran the game, under a plain 17 % (2643 MB). That floor stopped its set after
-33 of 1193 pipelines, every later start of the build made none, and the title waited 13.6 s for 28
-pipelines made on first use, with the play's first minutes stopping for up to 0.9 s a pipeline.
-Under the cap that phone's floor is 2048 MB, five hundred MB under the readings. On the Retroid
-Pocket 6's 11265 MB the floor stays 1915 MB (17 %, under the cap), so the 1693 MB reading at the
-stall in issue 161 still stops the set there as before; the system's "running critical" signal
-(at 1900 MB on that console), the careful set's budget, the careful order and the creation limit
-below are unchanged. `memory_floor_test` holds those figures.
+**Why two rules.** The 17 % rule was tuned for issue 161: the Retroid Pocket 6 (11265 MB, Adreno
+740 on Qualcomm's own driver) stalled inside that driver's pipeline compiler at 1693 MB available
+with no system signal and was ended 18-20 s later, so on that driver the floor guards against the
+compiler itself, and the 1915 MB floor still stops that reading (`memory_floor_test`). Elsewhere
+Android's MemAvailable is cautious on a phone with much memory: the PowerVR DXT-48-1536 phone of
+15552 MB showed 2554 MB available at one start's set (under the plain 17 %, 2643 MB: the set
+stopped after 33 of 1193 and the title waited 13.6 s), 2283 MB at another's (which ran to its end)
+and 1823 MB at a third's, under the 2048 MB cap: that set stopped after 33 of 1196 too and in play three
+VU pipelines made on first use took 0.63-0.81 s each on the render thread, one 2.2 s freeze with
+the sound held back. What the set itself needs, from the log of the start that ran it to its end on that phone: the process held 183
+MB at the set's start and 251 MB at its end (about 70 MB resident for 1193 pipelines; the cache file
+is 39 MB), 415 MB at most in play with the set made, and 694 MB at most while the VU batches
+compiled on 7 threads (the compilers' working memory, about 70 MB a thread, given back after each
+batch). A 512 MB floor covers the set's resident growth about 7 times and the background
+finisher's 4 threads (about 280 MB) close to 2 times; the system's low-memory signal (asked after
+each batch, and before each of the finisher's) stays the real guard on every driver.
 
 **The creation limit (Android).** The watchdog's limits are not in force before the game starts,
 and the GPU hang limit counts waits for the GPU, not a driver call. On Android a note that names a

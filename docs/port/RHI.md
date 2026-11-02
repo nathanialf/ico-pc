@@ -200,6 +200,18 @@ careful start-up set taking 1 ([RENDER.md](PIPELINES.md#the-start-up-set)). `rhi
 (`port/rhi/rhi.h` (`rhi_create_pipelines`); `port/rhi/vk/vk_pipeline.c`,
 `port/rhi/d3d12/d3d12_pipeline.c`).
 
+**Several pipelines while the caller goes on.** `rhi_create_pipelines_begin(descs, n, maxThreads,
+lowPriority)` makes on the calling thread what `rhi_create_pipelines` makes there before its workers
+start, starts the workers (at most `maxThreads`, each at `SDL_THREAD_PRIORITY_LOW` with
+`lowPriority`) and returns at once; `rhi_create_pipelines_end(jobs, wait, out, ms, threads)`, on
+the thread that began, returns false at once while any compile goes on (`wait` false), else waits
+for the workers, fills the pipelines in as `rhi_create_pipelines` does after its workers (`out`
+NULL destroys them), frees the jobs and returns true. Only Vulkan offers it (a build without SDL, or
+no worker started, compiles at the begin and the end finds them done); Direct3D 12, Direct3D 11 and
+OpenGL return NULL and false. The renderer's background finisher uses it
+([PIPELINES.md](PIPELINES.md#the-background-finisher)); a begun set is ended before the device goes
+(`rd__pipeline_cache_clear`).
+
 **Commands.** Begin, end and submit a list; barriers; begin and end a render pass; viewport,
 scissor, pipeline, bind groups, vertex and index buffers, stencil reference, blend constant; draw
 and draw indexed; buffer, buffer-to-texture, texture and texture-to-buffer copies (outside passes,
