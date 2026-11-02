@@ -1573,7 +1573,7 @@ void ui_menu_word_draw(const UiMenuTextItem *it, int lang, const int box[4], con
     const unsigned flags = UI_KEEP_STATE | (glow ? UI_ADDITIVE : 0u);
     noteLast(s, tex, q.x0, q.y0);
     ui__draw_tex_quads(tex, &q, 1, col, flags, NULL,
-                       ui__text_key(ui_str_in((UiLang)lang, (UiStrId)it->str), flags, s->page));
+                       ui__text_key(ui_str_in((UiLang)textLang, (UiStrId)it->str), flags, s->page));
 #else
     (void)it;
     (void)lang;
