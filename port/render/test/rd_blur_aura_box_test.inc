@@ -69,8 +69,8 @@ static void zInit(const char *what, float scale, uint32_t sw, uint32_t sh)
 
 /* one run of the frames; on: the two-pass form; returns the reads drawn in
  * two passes and (*one) in one */
-static uint64_t zRun(const char *what, float scale, uint32_t sw, uint32_t sh, int on,
-                     uint64_t *one, uint8_t *buf, size_t size)
+static uint64_t zRun(const char *what, float scale, uint32_t sw, uint32_t sh, int on, uint64_t *one,
+                     uint8_t *buf, size_t size)
 {
     rd_shutdown();
     rd__aura_box_force(on);
@@ -125,8 +125,7 @@ static uint64_t zRun(const char *what, float scale, uint32_t sw, uint32_t sh, in
               first < 0 ? 0 : (first / 4) / 128, first < 0 ? 0 : first & 3,
               first < 0 ? 0u : feed[first], first < 0 ? 0u : s_zFeed[n][first]);
         CHECK(hs != 0 && hs == s_zScene[n] && hd != 0 && hd == s_zDisplay[n],
-              "%s frame %d mode %d: SCENE or DISPLAY differs from the one-pass run", what, n,
-              mode);
+              "%s frame %d mode %d: SCENE or DISPLAY differs from the one-pass run", what, n, mode);
     }
     uint64_t two1 = 0, one1 = 0;
     rd__aura_box_counts(&two1, &one1);
@@ -143,7 +142,8 @@ static void checkAuraBox(void)
         const char *what;
         float scale;
         uint32_t sw, sh;
-    } kZ[3] = {{"(z) 2x", 2.0f, 0, 0}, {"(z) phone 2364x1080", 0.0f, 2364, 1080},
+    } kZ[3] = {{"(z) 2x", 2.0f, 0, 0},
+               {"(z) phone 2364x1080", 0.0f, 2364, 1080},
                {"(z) 1.5x", 1.5f, 0, 0}};
 
     const int screenHeight = ScreenHeight, status0 = systemStatus[0], status5 = systemStatus[5];
