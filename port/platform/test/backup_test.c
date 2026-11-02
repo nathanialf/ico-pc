@@ -2,7 +2,8 @@
  * port/platform/test/backup_test.c
  *
  * ctest backup: Options > Extras' backup and restore (backup.h) on a user
- * folder of the test's own under argv[1] (the build folder):
+ * folder of the test's own, backup_test.d, under argv[1] (the build folder;
+ * not backup_test: that is the test program itself there):
  *   - the names a backup may hold (ico_backup_name_ok): its places, no
  *     "..", no absolute or drive path, no '\\', no empty part;
  *   - a backup holds the memory card folders, states/, config.toml and
@@ -493,7 +494,7 @@ static void test_leftover_and_tree(void)
 
 int main(int argc, char **argv)
 {
-    snprintf(s_root, sizeof(s_root), "%s/backup_test", argc > 1 ? argv[1] : ".");
+    snprintf(s_root, sizeof(s_root), "%s/backup_test.d", argc > 1 ? argv[1] : ".");
     ico_remove_tree(s_root);
     ico_mkdir(s_root);
     test_names();
