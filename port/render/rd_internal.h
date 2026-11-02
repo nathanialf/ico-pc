@@ -57,6 +57,7 @@
 #include <string.h>
 #include "rd.h"
 #include "rhi.h"
+#include "rd_thread.h"
 #include "rd_camera_blend.h"
 #include "../include/ico_frame.h"
 
@@ -2426,6 +2427,12 @@ void rd__interp_set_reproject(bool on);
  * noted for it, so a present the clock did not time, the vsync lock's,
  * finds none).  For the alpha histogram and the tests. */
 double rd__present_clock_raw(void);
+/* The same value taken: NAN after it (rd_thread.c rd_present_post, which
+ * hands it to the render thread's rd_present) */
+double rd__present_clock_raw_take(void);
+/* F12's blended dump is armed (rd_dump_blended_arm): the present that
+ * takes it waits for its end (rd_thread.c) */
+bool rd__blended_dump_armed(void);
 
 /* The bins of the alpha histogram (rd_interp.c, the 10 s summary): alpha 0
  * split by the clock's raw value (below 0: clamped from below; anything
@@ -2950,6 +2957,11 @@ void rd__gpu_shutdown(void);
 /* Replays f (lists 0..12, or 11..12 with keep) from f->startState and, with
  * present, runs the presenter.  The replay state block ends as f->endState. */
 bool rd__replay_frame(const RdFrame *f, int keep, bool present);
+/* rd__replay_frame's body (rd_replay.c), on the calling thread; with the
+ * window's render thread rd__replay_frame posts it there and waits, and
+ * rd__replay_frame_async (rd_thread.h: rd_present's and rd_reshow.c's
+ * replays) posts it without waiting */
+bool rd__replay_frame_here(const RdFrame *f, int keep, bool present);
 /* The pass window (the loss bisect, rd_dump.c rd_loss_bisect;
  * docs/port/RENDER.md, "The loss bisect"): every replay numbers its passes
  * 1, 2, ... in the order they begin (the VU vertex pre-pass first when it
@@ -3119,6 +3131,9 @@ enum {
 #define RD_PERF_ID_WINDOW 0xFFFFFFF1u
 
 extern RdPerfRecord g_rdPerf;
+/* rd_perf.c's queues' lock, made before the render thread starts
+ * (rd_set_thread_host) */
+void rd__perf_lock_init(void);
 void rd__perf_reset(void); /* a new device: its counters start at 0 */
 void rd__perf_begin(const RdFrame *f, int keep, bool present);
 void rd__perf_collect_gpu(void);

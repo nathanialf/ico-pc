@@ -280,7 +280,7 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
     if (local) {
         rhi_cmd_local_read_barrier(cl, RHI_LOCAL_READ_BACK);
     }
-    g_rd.stats.draws++;
+    rd__stats_here()->draws++;
     if (key->gs.colorMask & 8) {
         r->writeSerial++;
     }

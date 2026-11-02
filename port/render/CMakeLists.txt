@@ -188,6 +188,7 @@ add_library(ico_render STATIC
     rd_shadow_selftest.c # the shadow count's one draw: the start-up check on the device
     rd_store_plan.c # the depth stores and loads a replay drops: no later pass touches the depth
     rd_submit.c # a replay's end: the present's pass, the submit and the present
+    rd_thread.c # the renderer on the window's render thread: the hand-over, the retire list
     rd_tex.c
     rd_tex_decode.c # the texture decode pool: rdtex_store's decodes off the game thread
     rd_water.c # block targets, aliases, camera scopes
@@ -1912,6 +1913,23 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_store_plan_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_thread_ab (test/rd_thread_ab.cmake): the same dumps through
+    # rd_replay_tool --render-thread off, sync and on (the replays, the
+    # interpolation and the renderer's calls on a thread of their own,
+    # rd_thread.h), at Original and Enhanced 2x and, for the F12 zips, the
+    # blended present at 0.5: every target's PNG byte for byte; SKIP as
+    # rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/thread_ab")
+    add_test(NAME rd_thread_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/vufuse_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/thread_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_thread_ab.cmake")
+    set_tests_properties(rd_thread_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_thread_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
     # rd_constant_reads_ab (test/rd_constant_reads_ab.cmake): the same dumps
     # and the phone's frames (tools/constant_reads_dumps.txt) with every post
     # sprite reading its source (ICO_RD_CONSTANT_READS=0) and with a source
@@ -2296,7 +2314,7 @@ endif()
 #  * the tests that start the game (model_viewer_headless, gallery_sweep,
 #    credits_headless, state_roundtrip_headless(_settings)) or work on the replay tool's files (rd_replay_tool*,
 #    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, rd_vubatch_ab, rd_vumerge_ab,
-#    rd_vufuse_ab, rd_store_plan_ab, rd_constant_reads_ab, rd_fades_fold_ab,
+#    rd_vufuse_ab, rd_store_plan_ab, rd_constant_reads_ab, rd_fades_fold_ab, rd_thread_ab,
 #    the native frame gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
 #    on both backends)
 #  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_fades_fold, rd_mip,

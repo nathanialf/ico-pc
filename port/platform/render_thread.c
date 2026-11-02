@@ -11,7 +11,7 @@
 #include <string.h>
 #include "config.h"
 #include "diag_host.h"
-#include "rd_submit.h"
+#include "rd_thread.h"
 #include "rhi.h"
 
 static struct {
@@ -33,6 +33,59 @@ static struct {
     Uint64 slotWaitNs;
 } s_rt;
 
+/* OpenGL's context is current on one thread at a time: the render thread's
+   for its jobs; a game-thread RHI call takes it over (the call guard's
+   wait, gl_take) and the next job takes it back.  owner: GL_NONE, GL_GAME
+   (any thread but the render thread) or GL_RENDER */
+enum { GL_NONE = 0, GL_GAME, GL_RENDER };
+
+static struct {
+    bool on;
+    SDL_Window *win;
+    SDL_GLContext ctx;
+    int owner;
+    unsigned takes, fails;
+} s_gl;
+
+static int gl_owner(void)
+{
+    return __atomic_load_n(&s_gl.owner, __ATOMIC_ACQUIRE);
+}
+
+static void gl_set_owner(int owner)
+{
+    __atomic_store_n(&s_gl.owner, owner, __ATOMIC_RELEASE);
+}
+
+/* on the thread that is to make the calls: the context current there */
+static void gl_bind(int owner)
+{
+    if (!SDL_GL_MakeCurrent(s_gl.win, s_gl.ctx)) {
+        if (s_gl.fails++ < 8) {
+            fprintf(stderr,
+                    "window: render thread: the OpenGL context could not be made current "
+                    "on the %s thread (%s)\n",
+                    owner == GL_RENDER ? "render" : "game", SDL_GetError());
+        }
+    }
+    gl_set_owner(owner);
+}
+
+/* the thread that has it lets it go */
+static void gl_unbind(void)
+{
+    (void)SDL_GL_MakeCurrent(s_gl.win, NULL);
+    gl_set_owner(GL_NONE);
+}
+
+static void gl_release_job(void *u)
+{
+    (void)u;
+    if (gl_owner() == GL_RENDER) {
+        gl_unbind();
+    }
+}
+
 static int SDLCALL rt_main(void *u)
 {
     (void)u;
@@ -50,6 +103,10 @@ static int SDLCALL rt_main(void *u)
             break;
         }
         if (next != FM_NEXT_JOB) {
+            if (next == FM_NEXT_PARKED && s_gl.on && gl_owner() == GL_RENDER) {
+                /* the surface is made again on the game thread meanwhile */
+                gl_unbind();
+            }
             /* idle or parked: said to a game thread waiting for either */
             SDL_BroadcastCondition(s_rt.cond);
             SDL_WaitCondition(s_rt.cond, s_rt.lock);
@@ -60,6 +117,9 @@ static int SDLCALL rt_main(void *u)
         __atomic_store_n(&s_rt.beatSeq, (unsigned long long)job.seq, __ATOMIC_RELAXED);
         __atomic_store_n(&s_rt.beatSince, t0 != 0 ? t0 : 1, __ATOMIC_RELEASE);
         SDL_UnlockMutex(s_rt.lock);
+        if (s_gl.on && gl_owner() != GL_RENDER) {
+            gl_bind(GL_RENDER); /* the game thread let it go when it posted */
+        }
         job.fn(job.arg);
         const Uint64 t1 = SDL_GetTicksNS();
         FmPresent p;
@@ -89,12 +149,15 @@ static int SDLCALL rt_main(void *u)
     return 0;
 }
 
-/* the RHI guard (rhi.h rhi_set_call_guard): busy on any thread but this one */
+/* the RHI guard (rhi.h rhi_set_call_guard): busy on any thread but this one
+   while a job runs, and with OpenGL while the context is not that thread's */
 static bool rt_busy(void *u)
 {
     (void)u;
-    return __atomic_load_n(&s_rt.busy, __ATOMIC_ACQUIRE) != 0 &&
-           SDL_GetCurrentThreadID() != s_rt.tid;
+    if (SDL_GetCurrentThreadID() == s_rt.tid) {
+        return false;
+    }
+    return __atomic_load_n(&s_rt.busy, __ATOMIC_ACQUIRE) != 0 || (s_gl.on && gl_owner() != GL_GAME);
 }
 
 uint64_t ico_render_thread_drain(void)
@@ -116,16 +179,41 @@ uint64_t ico_render_thread_drain(void)
     return waited;
 }
 
+/* OpenGL: the context to the calling thread (the render thread idle) */
+static void gl_take(void)
+{
+    if (gl_owner() == GL_RENDER) {
+        (void)ico_render_thread_post(gl_release_job, NULL, FM_JOB_CALL, true);
+    }
+    if (gl_owner() == GL_RENDER) {
+        return; /* not taken (parked meanwhile: it let the context go) */
+    }
+    gl_bind(GL_GAME);
+    s_gl.takes++;
+    if (s_gl.takes <= 8 || s_gl.takes % 100 == 0) {
+        fprintf(stderr,
+                "window: render thread: the game thread took the OpenGL context for its own "
+                "calls (%u times; the render thread's next picture takes it back)\n",
+                s_gl.takes);
+    }
+}
+
 static void rt_wait(void *u)
 {
     (void)u;
     (void)ico_render_thread_drain();
+    if (s_gl.on && gl_owner() != GL_GAME) {
+        gl_take();
+    }
 }
 
 bool ico_render_thread_post(void (*fn)(void *arg), void *arg, FmJobKind kind, bool wait)
 {
     if (s_rt.thread == NULL || fn == NULL || SDL_GetCurrentThreadID() == s_rt.tid) {
         return false;
+    }
+    if (s_gl.on && gl_owner() == GL_GAME) {
+        gl_unbind(); /* the render thread makes it current for the job */
     }
     SDL_LockMutex(s_rt.lock);
     if (fm_idle(&s_rt.mb)) {
@@ -150,14 +238,16 @@ bool ico_render_thread_post(void (*fn)(void *arg), void *arg, FmJobKind kind, bo
     return true;
 }
 
-/* rd_submit.h RdSubmitHost: a replay's submit and present */
-static bool rt_submit_post(void *u, void (*job)(void *arg), void *arg, bool wait)
+/* rd_thread.h RdThreadHost: the replays, the presents and the renderer's
+   calls */
+static bool rt_host_post(void *u, void (*fn)(void *arg), void *arg, bool picture, bool wait)
 {
     (void)u;
-    return ico_render_thread_post(job, arg, FM_JOB_PICTURE, wait || s_rt.mode == FM_MODE_SYNC);
+    return ico_render_thread_post(fn, arg, picture ? FM_JOB_PICTURE : FM_JOB_CALL,
+                                  wait || s_rt.mode == FM_MODE_SYNC);
 }
 
-static uint64_t rt_submit_drain(void *u)
+static uint64_t rt_host_drain(void *u)
 {
     (void)u;
     return ico_render_thread_drain();
@@ -176,7 +266,7 @@ static int rt_heartbeat(unsigned long long *seq, unsigned long long *done)
 FmMode ico_render_thread_start(void)
 {
     static const RhiCallGuard guard = {NULL, rt_busy, rt_wait};
-    static const RdSubmitHost host = {NULL, rt_submit_post, rt_submit_drain};
+    static const RdThreadHost host = {NULL, rt_host_post, rt_host_drain};
     const RhiLimits *l = rhi_limits();
     const char *why = "";
     FmMode mode;
@@ -195,9 +285,29 @@ FmMode ico_render_thread_start(void)
         s_rt.beatSince = 0;
         s_rt.slotWaits = 0;
         s_rt.slotWaitNs = 0;
-        s_rt.thread = s_rt.lock != NULL && s_rt.cond != NULL
-                          ? SDL_CreateThread(rt_main, "ico render", NULL)
-                          : NULL;
+        memset(&s_gl, 0, sizeof(s_gl));
+        if (rhi_backend() == RHI_BACKEND_OPENGL) {
+            /* made current here at rhi_init: the render thread's from now */
+            s_gl.win = SDL_GL_GetCurrentWindow();
+            s_gl.ctx = SDL_GL_GetCurrentContext();
+            s_gl.on = s_gl.win != NULL && s_gl.ctx != NULL;
+            s_gl.owner = GL_GAME;
+        }
+        if (s_rt.lock != NULL && s_rt.cond != NULL) {
+            /* the walk's own stack: the main thread's size on every platform */
+            const SDL_PropertiesID props = SDL_CreateProperties();
+
+            SDL_SetPointerProperty(props, SDL_PROP_THREAD_CREATE_ENTRY_FUNCTION_POINTER,
+                                   (void *)rt_main);
+            SDL_SetStringProperty(props, SDL_PROP_THREAD_CREATE_NAME_STRING, "ico render");
+            SDL_SetNumberProperty(props, SDL_PROP_THREAD_CREATE_STACKSIZE_NUMBER, 8 * 1024 * 1024);
+            s_rt.thread = props != 0 ? SDL_CreateThreadWithProperties(props) : NULL;
+            if (props != 0) {
+                SDL_DestroyProperties(props);
+            }
+        } else {
+            s_rt.thread = NULL;
+        }
         if (s_rt.thread == NULL) {
             fprintf(stderr, "window: render thread: off (the thread could not be made: %s)\n",
                     SDL_GetError());
@@ -215,17 +325,20 @@ FmMode ico_render_thread_start(void)
         s_rt.tid = SDL_GetThreadID(s_rt.thread);
         s_rt.mode = mode;
         rhi_set_call_guard(&guard);
-        rd_set_submit_host(&host);
+        rd_set_thread_host(&host);
         ico_diag_set_render_heartbeat(rt_heartbeat);
     }
     s_rt.mode = mode;
     if (mode == FM_MODE_ON) {
         fprintf(stderr,
-                "window: render thread: on (submit and present off the game thread; %s, %s)\n",
+                "window: render thread: on (interpolation, walk, submit and present off the game "
+                "thread; [dev] render_thread = off keeps them on it; %s, %s)\n",
                 rhi_backend_kind_name(rhi_backend()), why);
     } else if (mode == FM_MODE_SYNC) {
         fprintf(stderr,
-                "window: render thread: sync (submit and present on the render thread, %s)\n", why);
+                "window: render thread: sync (interpolation, walk, submit and present on the "
+                "render thread, %s)\n",
+                why);
     } else {
         fprintf(stderr, "window: render thread: off (%s)\n", why);
     }
@@ -238,9 +351,12 @@ void ico_render_thread_stop(void)
         return;
     }
     (void)ico_render_thread_drain();
+    if (s_gl.on && gl_owner() != GL_GAME) {
+        gl_take(); /* the context back on this thread for good */
+    }
     /* nothing more handed over: the renderer and the RHI back on this
-       thread alone */
-    rd_set_submit_host(NULL);
+       thread alone (the textures still to retire destroyed here) */
+    rd_set_thread_host(NULL);
     rhi_set_call_guard(NULL);
     ico_diag_set_render_heartbeat(NULL);
     SDL_LockMutex(s_rt.lock);
@@ -254,6 +370,7 @@ void ico_render_thread_stop(void)
     s_rt.cond = NULL;
     s_rt.lock = NULL;
     s_rt.mode = FM_MODE_OFF;
+    s_gl.on = false;
 }
 
 FmMode ico_render_thread_mode(void)
@@ -314,24 +431,35 @@ void ico_render_thread_block_line(double stepMs, double recordMs, double pumpMs)
 {
     const unsigned waits = __atomic_exchange_n(&s_rt.slotWaits, 0u, __ATOMIC_RELAXED);
     const Uint64 waitNs = __atomic_exchange_n(&s_rt.slotWaitNs, (Uint64)0, __ATOMIC_RELAXED);
-    char rt[192];
+    RdThreadBlock tb;
+    char rt[320];
 
+    rd_thread_block_take(&tb);
     if (s_rt.thread != NULL) {
         FmBlock b;
 
         SDL_LockMutex(s_rt.lock);
         fm_block_take(&s_rt.mb, SDL_GetTicksNS(), &b);
         SDL_UnlockMutex(s_rt.lock);
+        /* per picture of its own: the interpolation, the uploads and the
+           walk, the submit and the present, and the GPU's and the display's
+           waits inside them */
         snprintf(rt, sizeof(rt),
                  "render thread: idle %.0f %%, waited for a frame %.1f ms, heartbeat max %.1f ms "
-                 "(%u pictures%s)",
+                 "(%u pictures%s); interp %.1f ms, walk %.1f ms, submit %.1f ms, GPU and display "
+                 "waits %.1f ms a picture; %u textures destroyed for the game thread",
                  b.idlePercent, b.waitMaxMs, b.busyMaxMs, b.pictures,
-                 s_rt.mode == FM_MODE_SYNC ? ", sync" : "");
+                 s_rt.mode == FM_MODE_SYNC ? ", sync" : "", tb.interpMs, tb.walkMs, tb.submitMs,
+                 tb.waitMs, tb.retired);
     } else {
         snprintf(rt, sizeof(rt), "render thread: off");
     }
+    /* reads waits: the game thread's calls that changed the renderer's
+       state and waited for the render thread's reads of a picture (its
+       interpolation and walk; rd_thread.h) */
     fprintf(stderr,
             "window: game thread: step %.1f ms, record %.1f ms, pump %.1f ms, slot waits %u "
-            "(%.1f ms); %s\n",
-            stepMs, recordMs, pumpMs, waits, (double)waitNs / 1e6, rt);
+            "(%.1f ms), read waits %u (%.1f ms, longest %.1f ms); %s\n",
+            stepMs, recordMs, pumpMs, waits, (double)waitNs / 1e6, tb.readWaits, tb.readWaitMs,
+            tb.readWaitMaxMs, rt);
 }

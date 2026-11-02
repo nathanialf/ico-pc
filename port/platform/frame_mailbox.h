@@ -181,9 +181,10 @@ typedef enum FmMode {
 } FmMode;
 
 /* The mode the window runs: value the setting, singleThread the backend's
-   RhiLimits.singleThreadCommands (OpenGL, Direct3D 11), window false
-   without a window; *why (never NULL on return) says why it is off, or
-   names the setting; a static string */
+   RhiLimits.singleThreadCommands (OpenGL, Direct3D 11: the same modes,
+   every call on the render thread, said in *why), window false without a
+   window; *why (never NULL on return) says why it is off, or names the
+   setting; a static string */
 FmMode fm_mode_choose(const char *value, bool singleThread, bool window, const char **why);
 const char *fm_mode_name(FmMode mode);
 

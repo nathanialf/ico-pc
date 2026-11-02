@@ -30,6 +30,14 @@
  * same dump can be rendered on Vulkan, D3D12, OpenGL and D3D11 and the PNGs
  * compared; a name the build does not link is an error (exit 1).
  *
+ * --render-thread off|sync|on runs every replay, the present's
+ * interpolation and the renderer's calls on a thread of their own, as the
+ * window's render thread does (port/render/rd_thread.h): sync waits for
+ * each, on hands the pictures over and reads back after them (the
+ * rd_thread_ab test: the same PNGs as off, byte for byte).  Not with
+ * OpenGL (its context stays on the main thread; the line says so and the
+ * replays stay on it).
+ *
  * The display options: a dump does not carry them, so the replay takes them
  * here, the PS2 picture by default:
  *   --enhanced            the Enhanced flag: the deferred text and UI scale,
@@ -1752,7 +1760,8 @@ int main(int argc, char **argv)
                 "[--border-mask] [--water-sharp] [--motion-blur original|smooth] [--no-crack-fill] "
                 "[--work-clear RRGGBB] [--no-glow-edge] "
                 "[--filter F] "
-                "[--mirror] [--overlay-test] [--backend vulkan|d3d12|opengl|d3d11] [--list] "
+                "[--mirror] [--overlay-test] [--backend vulkan|d3d12|opengl|d3d11] "
+                "[--render-thread off|sync|on] [--list] "
                 "[--nop L:A[-B][,...]|@FILE] [--occlusion [--occlusion-out FILE] "
                 "[--occlusion-csv FILE]] "
                 "[--gpu-repeat K] "
@@ -1853,6 +1862,13 @@ int main(int argc, char **argv)
             s.mirror = 1;
         } else if (strcmp(argv[i], "--pass-dump") == 0 && i + 1 < argc) {
             passDir = argv[++i];
+        } else if (strcmp(argv[i], "--render-thread") == 0 && i + 1 < argc) {
+            RdThreadMode m;
+            if (!rd_thread_mode_parse(argv[++i], &m)) {
+                fprintf(stderr, "bad --render-thread (off, sync or on)\n");
+                return 1;
+            }
+            rd_thread_local_want(m); /* every rd_init from here (rd_thread.h) */
         } else if (strcmp(argv[i], "--dump-temps") == 0 && i + 1 < argc) {
             tempsDir = argv[++i];
         } else if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {

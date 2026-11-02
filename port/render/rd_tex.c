@@ -501,6 +501,7 @@ static void freeEntry(RdTexEntry *e)
 
 RdTex rdtex_find(uint32_t id, uint32_t gen, int texa)
 {
+    rd__texlock_wait(); /* the render thread's reads of a picture ended (rd_thread.h) */
     RdTexEntry *e = entryOf(id, texa);
     const RdTexRec *r = e && e->gen == gen ? rd__tex_rec(e->tex.id) : NULL;
 
@@ -784,6 +785,7 @@ void rdtex__job_finish(RdTexJob *j)
 static RdTex store(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, uint32_t n,
                    const RdTexSampler *smp, const char *debugName)
 {
+    rd__texlock_wait();
     const RdTexImage *im = &ims[0];
     uint32_t pw = im->padW ? im->padW : im->w;
     uint32_t ph = im->padH ? im->padH : im->h;
@@ -922,6 +924,7 @@ const RdTexSampler *rdtex_sampler(uint32_t id, int texa)
 
 void rdtex_drop(uint32_t id)
 {
+    rd__texlock_wait();
     for (uint32_t i = 0; i < RDTEX_MAX_ENTRIES; i++) {
         if (s_tc.e[i].used && s_tc.e[i].id == id) {
             freeEntry(&s_tc.e[i]);
@@ -931,6 +934,7 @@ void rdtex_drop(uint32_t id)
 
 void rdtex_frame_tick(void)
 {
+    rd__texlock_wait();
     uint32_t keep = 0;
 
     s_tc.tick++;
@@ -946,6 +950,7 @@ void rdtex_frame_tick(void)
 
 void rdtex_reset(void)
 {
+    rd__texlock_wait();
     rdtex_settle(); /* no job outlives the entries (their textures are gone) */
     for (uint32_t i = 0; i < RDTEX_MAX_ENTRIES; i++) {
         if (s_tc.e[i].used) {
@@ -1024,6 +1029,7 @@ int rdtex_replacement_refused(RdTex t)
 
 RdTex rdtex_create_replacement(TexpackImage *img, uint32_t uvW, uint32_t uvH, const char *debugName)
 {
+    rd__texlock_wait();
     if (!g_rd.inited || !img || !img->blob || img->levels == 0 || img->w == 0 || img->h == 0) {
         return (RdTex){0};
     }
@@ -1084,6 +1090,7 @@ int rdtex_replace(uint32_t id, uint32_t gen, int texa, RdTex rep)
 
 void rdtex_revert_replacements(void)
 {
+    rd__texlock_wait();
     for (uint32_t i = 0; i < RDTEX_MAX_ENTRIES; i++) {
         if (s_tc.e[i].used && s_tc.e[i].replaced) {
             /* forgotten: the next bind misses (rdtex_find) and decodes the

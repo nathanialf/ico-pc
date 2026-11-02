@@ -1784,6 +1784,7 @@ bool rd_capture_shot(RdShotFn fn, void *user)
     if (!g_rd.hasDevice || !fn) {
         return false;
     }
+    (void)rd_thread_drain(); /* no present of the render thread reads the request now */
     if (s_shot.armed) {
         s_shot.armed = 0;
         shotHand(NULL, 0, 0); /* replaced before a present took it */
@@ -1795,8 +1796,58 @@ bool rd_capture_shot(RdShotFn fn, void *user)
     return true;
 }
 
+/* rd_capture_shot_arm's answer, stored by the present's thread; ready
+ * once written (the game thread takes it) */
+static struct {
+    uint8_t *px;
+    uint32_t w, h;
+    int ready;
+} s_shotDone;
+
+static void shotDeferred(uint8_t *rgba, uint32_t w, uint32_t h, void *user)
+{
+    (void)user;
+    s_shotDone.px = rgba;
+    s_shotDone.w = rgba ? w : 0;
+    s_shotDone.h = rgba ? h : 0;
+    __atomic_store_n(&s_shotDone.ready, 1, __ATOMIC_RELEASE);
+}
+
+static void shotDoneForget(void)
+{
+    if (__atomic_load_n(&s_shotDone.ready, __ATOMIC_ACQUIRE)) {
+        free(s_shotDone.px);
+        s_shotDone.px = NULL;
+        __atomic_store_n(&s_shotDone.ready, 0, __ATOMIC_RELEASE);
+    }
+}
+
+bool rd_capture_shot_arm(void)
+{
+    if (!g_rd.hasDevice) {
+        return false;
+    }
+    rd_capture_shot_cancel(); /* an earlier request and an answer not taken go */
+    return rd_capture_shot(shotDeferred, NULL);
+}
+
+int rd_capture_shot_take(uint8_t **rgba, uint32_t *w, uint32_t *h)
+{
+    if (!__atomic_load_n(&s_shotDone.ready, __ATOMIC_ACQUIRE)) {
+        return 0;
+    }
+    *rgba = s_shotDone.px;
+    *w = s_shotDone.w;
+    *h = s_shotDone.h;
+    s_shotDone.px = NULL;
+    __atomic_store_n(&s_shotDone.ready, 0, __ATOMIC_RELEASE);
+    return 1;
+}
+
 void rd_capture_shot_cancel(void)
 {
+    (void)rd_thread_drain();
+    shotDoneForget(); /* an answer not taken goes too */
     if (s_shot.armed) {
         s_shot.armed = 0;
         s_shot.fn = NULL;
@@ -1821,6 +1872,7 @@ bool rd_capture_presented(const char *png)
     if (!g_rd.hasDevice || !png || !png[0] || strlen(png) >= sizeof(s_cap.path)) {
         return false;
     }
+    (void)rd_thread_drain(); /* no present of the render thread reads the request now */
     strcpy(s_cap.path, png);
     s_cap.armed = 1;
     s_cap.maxW = 0;
@@ -2382,11 +2434,14 @@ static void setOutputSize(uint32_t width, uint32_t height)
     g_rd.pendingSettings.outputHeight = height;
 }
 
-void rd_resize_output(uint32_t width, uint32_t height)
+typedef struct ResizeOutput {
+    uint32_t w, h;
+} ResizeOutput;
+
+static void resizeOutputHere(void *arg)
 {
-    if (!g_rd.inited || width == 0 || height == 0) {
-        return;
-    }
+    const ResizeOutput *r = arg;
+    const uint32_t width = r->w, height = r->h;
     setOutputSize(width, height);
     if (g_rd.hasDevice && rhi_swapchain_format() != RHI_FMT_UNKNOWN) {
         rhi_resize_swapchain(width, height, g_rd.settings.vsync != 0);
@@ -2396,6 +2451,19 @@ void rd_resize_output(uint32_t width, uint32_t height)
      * (rd__apply_display recreates the targets if their scale changed; a
      * fixed scale or size never changes) */
     g_rd.settingsPending = true;
+}
+
+void rd_resize_output(uint32_t width, uint32_t height)
+{
+    if (!g_rd.inited || width == 0 || height == 0) {
+        return;
+    }
+    /* on the render thread between pictures: the output size its presents
+     * read and the swapchain its own (rd_thread.h) */
+    ResizeOutput r = {width, height};
+    if (!rd__render_call(resizeOutputHere, &r)) {
+        resizeOutputHere(&r);
+    }
 }
 
 /* The output follows the swapchain.  The backend rebuilds the

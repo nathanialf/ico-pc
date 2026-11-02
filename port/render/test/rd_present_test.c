@@ -4961,6 +4961,60 @@ static void armShotA(void)
     CHECK(rd_capture_shot(shotFn, &s_shotA), "shot: armed in the open frame");
 }
 
+static void armDeferred(void)
+{
+    CHECK(rd_capture_shot_arm(), "shot: the deferred one armed in the open frame");
+}
+
+/* rd_capture_shot_arm and rd_capture_shot_take (the state host's pause
+ * picture): the present's answer kept for the game thread, here and with
+ * the renderer's own thread presenting (rd_thread.h; the frame's present
+ * through rd__on_host on that thread) */
+static void checkShotDeferred(RdTex t, const RhiRect *box, int crt)
+{
+    for (int th = 0; th < 2; th++) {
+        uint8_t *px = NULL;
+        uint32_t dw = 0, dh = 0;
+        if (th && rhi_backend() == RHI_BACKEND_OPENGL) {
+            break; /* the renderer's own thread: not with OpenGL (rd_thread.h) */
+        }
+        const bool started = th && rd_thread_local_start(RD_THREAD_ON);
+        if (th && !started) {
+            CHECK(false, "shot (crt %d): the renderer's own thread", crt);
+            break;
+        }
+        s_afterBegin = armDeferred;
+        recordRichFrame(t, 1);
+        s_afterBegin = NULL;
+        (void)rd_thread_drain();
+        const int took = rd_capture_shot_take(&px, &dw, &dh);
+        CHECK(took == 1 && px && dw == box->w && dh == box->h,
+              "shot (crt %d, thread %d): the deferred answer %d, %ux%u (the box %ux%u)", crt, th,
+              took, dw, dh, box->w, box->h);
+        free(px);
+        px = NULL;
+        CHECK(rd_capture_shot_take(&px, &dw, &dh) == 0, "shot (thread %d): taken once", th);
+        /* replaced before a present: no NULL answer for the new request */
+        CHECK(rd_capture_shot_arm() && rd_capture_shot_arm() &&
+                  rd_capture_shot_take(&px, &dw, &dh) == 0,
+              "shot (thread %d): a replaced request leaves no answer", th);
+        rd_capture_shot_cancel();
+        recordRichFrame(t, 1);
+        (void)rd_thread_drain();
+        CHECK(rd_capture_shot_take(&px, &dw, &dh) == 0, "shot (thread %d): cancelled, no answer",
+              th);
+        /* armed between frames: the later frame's present drops it, as NULL */
+        CHECK(rd_capture_shot_arm(), "shot (thread %d): armed between frames", th);
+        recordRichFrame(t, 1);
+        (void)rd_thread_drain();
+        CHECK(rd_capture_shot_take(&px, &dw, &dh) == 1 && px == NULL,
+              "shot (thread %d): a later frame's present drops it", th);
+        if (started) {
+            rd_thread_local_stop();
+        }
+    }
+}
+
 static void checkShotAt(const char *dir, int crt)
 {
     const uint32_t w = 800, h = 450;
@@ -5034,6 +5088,8 @@ static void checkShotAt(const char *dir, int crt)
     s_afterBegin = NULL;
     CHECK(rd_capture_result(done, sizeof(done)) == 1 && s_shotA.calls == 1 && s_shotA.px,
           "shot (crt %d): the capture and the shot from one present", crt);
+
+    checkShotDeferred(t, &box, crt);
 
     /* a second arm tells the first NULL; cancel forgets; shutdown drops */
     shotForget(&s_shotA);

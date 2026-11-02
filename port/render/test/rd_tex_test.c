@@ -1133,6 +1133,56 @@ static void checkPixels(void)
     free(px);
 }
 
+/* The render thread (rd_thread.h): the same frame replayed on the
+ * renderer's own thread, each replay handed over without waiting
+ * (rd__replay_frame_async), while this thread, the game's side, records the
+ * next frame through the texture cache and updates a texture of its own
+ * between them (rd__texlock_wait holds each change until the replay's reads
+ * end).  The picture is the one replayed here, the pictures and the waits
+ * counted.  Under the tsan build (docs/port/TESTING.md) a report is a
+ * failure. */
+static void threadPixels(void)
+{
+    if (rhi_backend() == RHI_BACKEND_OPENGL) {
+        printf("render thread: not with OpenGL here (its context stays on the test's thread)\n");
+        return;
+    }
+    if (!rd_thread_local_start(RD_THREAD_ON)) {
+        CHECK(0, "render thread: the renderer's own thread could not start");
+        return;
+    }
+    RdThreadBlock b;
+    rd_thread_block_take(&b); /* the block from here */
+    uint8_t *pat = malloc(64 * 64 * 4);
+    RdTex u = rd_create_texture(64, 64, NULL, RD_TEXA_80_80, "updater");
+    const int frames = 30;
+    int handed = 0;
+    for (int k = 0; k < frames && pat; k++) {
+        gif_HostFrameReset();
+        dl_Clear();
+        recordFrame();
+        const RdFrame *f = rd__last_frame();
+        handed += f != NULL && rd__replay_frame_async(f, 0, false);
+        /* the game's side goes on while the replay runs */
+        for (int i = 0; i < 64 * 64 * 4; i++) {
+            pat[i] = (uint8_t)(hash((uint32_t)(k * 64 * 64 * 4 + i)) & 0xFF);
+        }
+        rd_update_texture(u, pat);
+    }
+    (void)rd_thread_drain();
+    rd_thread_block_take(&b);
+    CHECK(handed == frames && b.pictures >= (unsigned)frames,
+          "render thread: %d of %d replays handed over, %u pictures run there", handed, frames,
+          b.pictures);
+    printf("render thread: %u pictures, %u waits of the game's side for their reads (%.2f ms, "
+           "longest %.2f ms), %u textures retired\n",
+           b.pictures, b.readWaits, b.readWaitMs, b.readWaitMaxMs, b.retired);
+    checkPixels();         /* the last replay's SCENE: as on this thread */
+    rd_destroy_texture(u); /* to the retire list: destroyed at the stop below */
+    free(pat);
+    rd_thread_local_stop();
+}
+
 /* ----------------------------------------------------------------- R8 */
 
 static uint8_t r8At(int x, int y)
@@ -1404,6 +1454,7 @@ int main(void)
     dl_Clear();
     recordFrame();
     checkPixels();
+    threadPixels();
     r8Pixels();
     replacementPixels();
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",

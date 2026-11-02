@@ -69,9 +69,10 @@
 #include "video_options.h"
 
 #ifndef ICO_HEADLESS
-#include "rd.h"      /* rd_capture_shot, rd_present_box_size */
-#include "rd_mesh.h" /* rd_drop_vu_meshes, rd_vu_mesh_each_field */
-#include "rd_png.h"  /* rd_write_png */
+#include "rd.h"        /* rd_capture_shot, rd_present_box_size */
+#include "rd_mesh.h"   /* rd_drop_vu_meshes, rd_vu_mesh_each_field */
+#include "rd_thread.h" /* rd_thread_drain: a load with the render thread idle */
+#include "rd_png.h"    /* rd_write_png */
 #endif
 
 /* The game's (common/src/main.c, layout_texture.c, fumi/ios/ios.c) */
@@ -1241,7 +1242,8 @@ static void shot_write(void *arg)
     __atomic_store_n(&s_shot.done, 1, __ATOMIC_RELEASE);
 }
 
-/* rd_capture_shot's answer, after the present that took it (or dropped it) */
+/* rd_capture_shot_arm's answer, after the present that took it (or dropped
+   it), taken here on the game thread (shot_poll) */
 static void shot_taken(uint8_t *rgba, uint32_t w, uint32_t h, void *user)
 {
     (void)user;
@@ -1282,6 +1284,14 @@ static void shot_join(void)
 static void shot_poll(void)
 {
     const IcoRegionInfo *rg = ico_region_cur();
+    uint8_t *rgba = NULL;
+    uint32_t rw = 0, rh = 0;
+
+    /* the present's answer, deferred: the window's render thread presents
+       and hands nothing to this file's state itself */
+    if (rd_capture_shot_take(&rgba, &rw, &rh)) {
+        shot_taken(rgba, rw, rh, NULL);
+    }
 
     if (s_shot.state == SHOT_WRITING && __atomic_load_n(&s_shot.done, __ATOMIC_ACQUIRE)) {
         shot_join();
@@ -1336,7 +1346,7 @@ static void shot_poll(void)
         if (ico_state_pause_path(s_shot.path, sizeof s_shot.path, ico_state_dir()) != 0) {
             s_shot.state = SHOT_NONE;
             snprintf(s_shot.why, sizeof s_shot.why, "the pause picture's path does not fit");
-        } else if (rd_capture_shot(shot_taken, NULL)) {
+        } else if (rd_capture_shot_arm()) {
             s_shot.state = SHOT_ARMED;
         } else {
             s_shot.state = SHOT_NONE;
@@ -2097,6 +2107,9 @@ static void perform_load(int slot)
     /* committed: the old model tables go, the renderer's handles follow */
     free(live_pobj);
 #ifndef ICO_HEADLESS
+    /* the render thread idle while the renderer's textures and meshes go
+       (its next picture is of the restored game) */
+    (void)rd_thread_drain();
     tex_HostReserialAll(live_tex);
     rd_drop_vu_meshes(rg->mesh_gen_high);
     gsb_HostSceneRelatch();

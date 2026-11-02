@@ -228,9 +228,6 @@ FmMode fm_mode_choose(const char *value, bool singleThread, bool window, const c
 {
     static const char *const on[] = {"on", "true", "1", "yes", NULL};
     static const char *const off[] = {"off", "false", "0", "no", NULL};
-    const char *const single = "the graphics API takes every call on one thread (OpenGL, "
-                               "Direct3D 11)";
-
     if (!window) {
         *why = "no window";
         return FM_MODE_OFF;
@@ -239,20 +236,23 @@ FmMode fm_mode_choose(const char *value, bool singleThread, bool window, const c
         *why = "[dev] render_thread = off";
         return FM_MODE_OFF;
     }
-    if (singleThread) {
-        *why = single;
-        return FM_MODE_OFF;
-    }
+    /* OpenGL and Direct3D 11 take every call on one thread: from the
+       render thread's start that thread is the render thread, the game
+       thread's own calls taking the context over (render_thread.c) */
     if (value != NULL && strcmp(value, "sync") == 0) {
-        *why = "[dev] render_thread = sync: the game thread waits for each picture";
+        *why = singleThread ? "[dev] render_thread = sync: the game thread waits for each picture; "
+                              "every graphics call on the render thread"
+                            : "[dev] render_thread = sync: the game thread waits for each picture";
         return FM_MODE_SYNC;
     }
     if (value != NULL && word_is(value, on)) {
-        *why = "[dev] render_thread = on";
+        *why = singleThread ? "[dev] render_thread = on; every graphics call on the render thread"
+                            : "[dev] render_thread = on";
         return FM_MODE_ON;
     }
     if (value == NULL || value[0] == '\0' || strcmp(value, "auto") == 0) {
-        *why = "[dev] render_thread = auto";
+        *why = singleThread ? "[dev] render_thread = auto; every graphics call on the render thread"
+                            : "[dev] render_thread = auto";
         return FM_MODE_ON;
     }
     *why = "[dev] render_thread is not auto, on, off or sync: taken as auto";

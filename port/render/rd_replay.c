@@ -4060,7 +4060,7 @@ static RhiPipeline wrapPipeline(int resolve, uint8_t vs, uint8_t prim, RhiFormat
     s_wrapPipes[s_wrapPipeCount].key = key;
     s_wrapPipes[s_wrapPipeCount].pipe = p;
     s_wrapPipeCount++;
-    g_rd.stats.pipelineCreates++;
+    rd__stats_here()->pipelineCreates++;
     return p;
 }
 
@@ -4478,7 +4478,7 @@ static void doShadowStrip(Replay *r, const RdFrame *f, const RdCmd *c)
             rhi_cmd_set_bind_group(s_cl, 2, g2);
             rhi_cmd_set_stencil_ref(s_cl, 0);
             drawCmd(s_cl, count[decr], first, 1);
-            g_rd.stats.draws++;
+            rd__stats_here()->draws++;
         }
         first += count[decr];
     }
@@ -5033,7 +5033,7 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         dstBind(r, &dp[i].key);
         drawCmd(s_cl, nv, 0, 1);
         if (!rd__no_dual_second(dp, i)) {
-            g_rd.stats.draws++;
+            rd__stats_here()->draws++;
             if (local) {
                 g_rdPerf.fogLocalDraws++;
             }
@@ -5683,7 +5683,7 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(s_cl, 2, g2);
     drawCmd(s_cl, 3, 0, 1);
-    g_rd.stats.draws++;
+    rd__stats_here()->draws++;
     if (key.gs.colorMask & 8) {
         r->writeSerial++;
     }
@@ -5745,7 +5745,7 @@ static double s_replayMaxMs;
 
 static uint32_t s_replayCount;
 
-bool rd__replay_frame(const RdFrame *f, int keep, bool present)
+bool rd__replay_frame_here(const RdFrame *f, int keep, bool present)
 {
     const double t0 = rd__now_ms();
     rd__perf_begin(f, keep, present);
@@ -5970,10 +5970,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     rd__store_plan_end();
     s_ms.r = NULL;
     rd__diag_frame(f, s_ms.want);
-    s_vpExact = false;                           /* the present sets its own viewports */
+    s_vpExact = false; /* the present sets its own viewports */
+    rd__stats_here()->pipelines = rd__pipeline_count();
     rd__submit_frame(s_cl, doPresent, t, bind0); /* the present's pass, the submit, the present */
-    g_rd.stats.pipelines = rd__pipeline_count();
-    g_rd.deferText = false;
     return true;
 }
 

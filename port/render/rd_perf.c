@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "ico_thread.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
 
@@ -141,14 +142,42 @@ int rd__perf_post_of_kind(uint32_t kind)
     }
 }
 
+/* the queues' lock: the render thread closes the records, the game thread
+ * takes them (rd_perf_pop, rd_perf_passes_of; rd_thread.h).  Made before
+ * the render thread starts (rd__perf_lock_init) */
+static IcoMutex *s_qLock;
+
+void rd__perf_lock_init(void)
+{
+    if (!s_qLock) {
+        s_qLock = ico_mutex_create();
+    }
+}
+
+static void qLock(void)
+{
+    if (s_qLock) {
+        ico_mutex_lock(s_qLock);
+    }
+}
+
+static void qUnlock(void)
+{
+    if (s_qLock) {
+        ico_mutex_unlock(s_qLock);
+    }
+}
+
 static void push(const RdPerfRecord *r)
 {
+    qLock();
     if (s_count == RD_PERF_QUEUE) {
         s_head = (s_head + 1) % RD_PERF_QUEUE; /* the oldest is dropped */
         s_count--;
     }
     s_queue[(s_head + s_count) % RD_PERF_QUEUE] = *r;
     s_count++;
+    qUnlock();
 }
 
 /* Direct3D 11's submit writes of the records popped since the last
@@ -168,7 +197,9 @@ static uint32_t s_storePlanned;
 
 bool rd_perf_pop(RdPerfRecord *out)
 {
+    qLock();
     if (s_count == 0) {
+        qUnlock();
         return false;
     }
     s_backendBytes += s_queue[s_head].backendWriteBytes;
@@ -195,22 +226,26 @@ bool rd_perf_pop(RdPerfRecord *out)
     }
     s_head = (s_head + 1) % RD_PERF_QUEUE;
     s_count--;
+    qUnlock();
     return true;
 }
 
 bool rd__perf_gpu_ms_of(uint32_t replay, double *ms)
 {
+    bool found = false;
+    qLock();
     for (uint32_t k = 0; k < s_count; k++) {
         const RdPerfRecord *r = &s_queue[(s_head + k) % RD_PERF_QUEUE];
         if (r->replay == replay) {
-            if (!r->gpuValid) {
-                return false;
+            if (r->gpuValid) {
+                *ms = r->gpuMs;
+                found = true;
             }
-            *ms = r->gpuMs;
-            return true;
+            break;
         }
     }
-    return false;
+    qUnlock();
+    return found;
 }
 
 const char *rd_perf_backend_text(void)
@@ -491,6 +526,7 @@ static void passFinish(PassTable *t, const uint64_t *ts, uint32_t n, const uint6
             }
         }
     }
+    qLock();
     if (s_passCount == RD_PERF_PASS_QUEUE) {
         s_passHead = (s_passHead + 1u) % RD_PERF_PASS_QUEUE;
         s_passCount--;
@@ -501,24 +537,33 @@ static void passFinish(PassTable *t, const uint64_t *ts, uint32_t n, const uint6
     q->closed = t->closed;
     memcpy(q->pass, t->pass, (size_t)t->count * sizeof(t->pass[0]));
     s_passCount++;
+    qUnlock();
 }
 
 uint32_t rd_perf_passes_of(uint32_t replay, const RdPerfPass **out)
 {
+    /* a copy: the render thread may write the slot again meanwhile */
+    static PassTable s_passOut;
+    uint32_t n = 0;
     *out = NULL;
+    qLock();
     while (s_passCount) {
         const PassTable *t = &s_passQueue[s_passHead];
         if (t->replay > replay) {
-            return 0; /* a later replay's: kept for its record */
+            break; /* a later replay's: kept for its record */
         }
         s_passHead = (s_passHead + 1u) % RD_PERF_PASS_QUEUE;
         s_passCount--;
         if (t->replay == replay) {
-            *out = t->pass; /* the slot is written again only by a later replay */
-            return t->count;
+            s_passOut.count = t->count;
+            memcpy(s_passOut.pass, t->pass, (size_t)t->count * sizeof(t->pass[0]));
+            *out = s_passOut.pass;
+            n = t->count;
+            break;
         }
     }
-    return 0;
+    qUnlock();
+    return n;
 }
 
 void rd__perf_reset(void)
@@ -536,6 +581,7 @@ void rd__perf_reset(void)
 void rd__perf_interp_ms(double ms)
 {
     s_interpMs += ms;
+    rd__thread_note_interp(ms); /* the render thread's 10 s numbers */
 }
 
 /* the alpha of the present about to replay (rd_present) */
@@ -593,7 +639,7 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
         rhi_get_stats(&s_last);
         s_haveLast = true;
     }
-    s_pipelineCreates = g_rd.stats.pipelineCreates;
+    s_pipelineCreates = rd__stats_here()->pipelineCreates;
     s_a1xDraws = g_rd.above1xDraws;
     memset(&s_stamps, 0, sizeof(s_stamps));
     s_post = -1;
@@ -730,7 +776,7 @@ void rd__perf_end(void)
 {
     RdPerfRecord *r = &g_rdPerf;
     r->totalMs = rd__now_ms() - s_t0 + r->interpMs;
-    r->pipelineCreates = g_rd.stats.pipelineCreates - s_pipelineCreates;
+    r->pipelineCreates = rd__stats_here()->pipelineCreates - s_pipelineCreates;
     r->a1xDraws = g_rd.above1xDraws - s_a1xDraws;
     if (g_rd.hasDevice) {
         RhiStats s;
@@ -826,7 +872,7 @@ void rd__perf_stamp(RhiCommandList cl, uint32_t index)
     if (index == RD_PERF_TS_PREPASS) {
         /* the walk starts: the vertex pre-pass, then the lists */
         s_walkPipeMs = s_walkEndPipeMs = rd__pipeline_create_ms();
-        s_walkPipes = s_walkEndPipes = g_rd.stats.pipelineCreates;
+        s_walkPipes = s_walkEndPipes = rd__stats_here()->pipelineCreates;
         if (g_rd.hasDevice) {
             rhi_get_stats(&s_walkStats);
             s_walkEndStats = s_walkStats;
@@ -842,7 +888,7 @@ void rd__perf_stamp(RhiCommandList cl, uint32_t index)
 void rd__perf_walk_end(void)
 {
     s_walkEndPipeMs = rd__pipeline_create_ms();
-    s_walkEndPipes = g_rd.stats.pipelineCreates;
+    s_walkEndPipes = rd__stats_here()->pipelineCreates;
     if (g_rd.hasDevice) {
         rhi_get_stats(&s_walkEndStats);
     }

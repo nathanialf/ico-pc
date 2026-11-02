@@ -1518,7 +1518,7 @@ static RhiPipeline keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t a
     s_used++;
     s_count++;
     s_hash[at] = (uint16_t)s_used;
-    g_rd.stats.pipelineCreates++;
+    rd__stats_here()->pipelineCreates++;
     rd__passring_pipeline(p.id, k->vs, k->fs, k->dst);
     return p;
 }

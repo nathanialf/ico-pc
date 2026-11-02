@@ -6392,6 +6392,11 @@ bool rd_dump_blended_arm(const char *path)
     return true;
 }
 
+bool rd__blended_dump_armed(void)
+{
+    return s_blendedDump.armed != 0;
+}
+
 int rd_dump_blended_result(uint32_t *frame, float *alpha)
 {
     if (s_blendedDump.armed && !rd_interpolation_active()) {
@@ -6437,6 +6442,7 @@ static void blendedDumpTake(const RdFrame *f, bool tick, uint32_t number, float 
 
 bool rd_present(float alpha)
 {
+    rd__thread_picture_begin(); /* the picture before ended (rd_thread.h) */
     if (!rd_interpolation_active() || !g_rd.hasDevice || g_rd.videoShown) {
         blendedDumpExpire(!rd_interpolation_active() ? "interpolation off"
                           : g_rd.videoShown          ? "a movie shown"
@@ -6487,10 +6493,10 @@ bool rd_present(float alpha)
         rd__blur_smooth_arm(first, k);                   /* a keep frame draws no motion blur */
         blendedDumpTake(NULL, true, cur->number, alpha); /* the tick's own picture */
         if (first) {
-            return rd__replay_frame(cur, 1, true);
+            return rd__replay_frame_async(cur, 1, true);
         }
         static RdFrame empty;
-        return rd__replay_frame(&empty, 1, true);
+        return rd__replay_frame_async(&empty, 1, true);
     }
     const double t0 = rd__now_ms();
     s_track = first; /* the flap detector, once a frame */

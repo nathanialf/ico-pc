@@ -623,7 +623,7 @@ bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c)
     rd__bind_uniform(cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(cl, 2, g2);
     rd__replay_draw(cl, 3, 0, 1);
-    g_rd.stats.draws++;
+    rd__stats_here()->draws++;
     g_rdPerf.blurFolds++;
     r->writeSerial += 2; /* the two passes' alpha writes */
     static bool logged;  /* once a run: the count is the --stats line's and the profile's */

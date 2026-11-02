@@ -169,7 +169,7 @@ void rd_shadow_tris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount,
     c->u[3] = (triCount - inc) * 3;
     c->keyLo = (uint32_t)key;
     c->keyHi = (uint32_t)(key >> 32);
-    g_rd.stats.draws++;
+    rd__stats_here()->draws++;
 }
 
 /* ------------------------------------------- the stencil window's ops

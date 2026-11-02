@@ -754,8 +754,9 @@ typedef struct RhiLimits {
      * at once on the context bound to the calling thread, Direct3D 11 on
      * its immediate context (true there).  Vulkan and D3D12 (false) take a
      * command list recorded on one thread and submitted and presented on
-     * another, the calls never at the same time (rhi_set_call_guard): the
-     * window's render thread is started only where this is false
+     * another, the calls never at the same time (rhi_set_call_guard).  The
+     * window's render thread makes every call where this is true, the
+     * OpenGL context moved to a game-thread call's thread for it
      * (port/platform/render_thread.c). */
     bool singleThreadCommands;
 } RhiLimits;

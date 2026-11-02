@@ -227,7 +227,16 @@ void rdtex__decode_add(RdTexJob *j, int queued)
 
 void rdtex_settle(void)
 {
-    if (s_dp.head == NULL) {
+    /* the texels go into textures the render thread may be reading */
+    rd__texlock_wait();
+    if (s_dp.lock) {
+        ico_mutex_lock(s_dp.lock);
+    }
+    const bool none = s_dp.head == NULL;
+    if (s_dp.lock) {
+        ico_mutex_unlock(s_dp.lock);
+    }
+    if (none) {
         return;
     }
     const char *last = NULL;
@@ -256,18 +265,22 @@ void rdtex_settle(void)
             waited = ico_thread_now_ms() - t0;
         }
         s_dp.cursor = NULL;
-        ico_mutex_unlock(s_dp.lock);
     }
-    /* every job done: the pixels into their textures in the stores' order */
-    char name[32] = "";
-    if (last) {
-        snprintf(name, sizeof(name), "%s", last);
-    }
+    /* every job done: the list taken under the lock (a store on the game
+       thread adds behind it), then the pixels into their textures in the
+       stores' order */
     const uint32_t decoded = s_dp.sinceSettle;
     RdTexJob *j = s_dp.head;
     s_dp.head = s_dp.tail = NULL;
     s_dp.pending = 0;
     s_dp.sinceSettle = 0;
+    if (s_dp.lock) {
+        ico_mutex_unlock(s_dp.lock);
+    }
+    char name[32] = "";
+    if (last) {
+        snprintf(name, sizeof(name), "%s", last);
+    }
     while (j) {
         RdTexJob *next = j->next;
         rdtex__job_finish(j);

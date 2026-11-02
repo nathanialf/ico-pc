@@ -1179,6 +1179,15 @@ int rd_capture_result(char *path, uint32_t pathSize);
 typedef void (*RdShotFn)(uint8_t *rgba, uint32_t w, uint32_t h, void *user);
 bool rd_capture_shot(RdShotFn fn, void *user);
 void rd_capture_shot_cancel(void);
+/* The same picture as a deferred answer, for a caller on the game thread
+ * while the window's render thread presents (rd_thread.h): no fn runs on
+ * the presenting thread.  rd_capture_shot_arm arms it as rd_capture_shot
+ * does (false: no device); rd_capture_shot_take hands the answer once it
+ * came: 1 with *rgba the box (or NULL when the present dropped it, as fn's
+ * NULL), the caller owning the block; 0 while none is waiting.  An answer
+ * not taken is freed by the next arm and by rd_capture_shot_cancel */
+bool rd_capture_shot_arm(void);
+int rd_capture_shot_take(uint8_t **rgba, uint32_t *w, uint32_t *h);
 bool rd_present_box_size(uint32_t *w, uint32_t *h);
 
 /* --------------------------------------------------------- deferred text

@@ -136,13 +136,13 @@ bool rd__present_blended(const RdFrame *rf, int first, bool present)
         shown.startState = rf->startState;
         rd__overlay_reshow_text(rf);
         rd__perf_reshown();
-        const bool ok = rd__replay_frame(&shown, 1, true);
+        const bool ok = rd__replay_frame_async(&shown, 1, true);
         rd__overlay_reshow_text(NULL);
         s_ref.replay = g_rd.replayCounter;
         s_ref.have = ok;
         return ok;
     }
-    const bool ok = rd__replay_frame(rf, (int)rf->keep, present);
+    const bool ok = rd__replay_frame_async(rf, (int)rf->keep, present);
     s_ref.have = ok && hashOk && in.enabled;
     s_ref.number = rf->number;
     s_ref.hash = hash;

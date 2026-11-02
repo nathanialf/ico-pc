@@ -289,10 +289,13 @@ static void testMode(void)
     CHECK(fm_mode_choose("off", false, true, &why) == FM_MODE_OFF &&
           strcmp(why, "[dev] render_thread = off") == 0);
     CHECK(fm_mode_choose("false", false, true, &why) == FM_MODE_OFF);
-    /* OpenGL and Direct3D 11: off whatever the setting */
-    CHECK(fm_mode_choose("auto", true, true, &why) == FM_MODE_OFF && strstr(why, "OpenGL") != NULL);
-    CHECK(fm_mode_choose("on", true, true, &why) == FM_MODE_OFF);
-    CHECK(fm_mode_choose("sync", true, true, &why) == FM_MODE_OFF);
+    /* OpenGL and Direct3D 11: as the setting says, every call on the
+       render thread (the context its own) */
+    CHECK(fm_mode_choose("auto", true, true, &why) == FM_MODE_ON &&
+          strstr(why, "every graphics call on the render thread") != NULL);
+    CHECK(fm_mode_choose("on", true, true, &why) == FM_MODE_ON);
+    CHECK(fm_mode_choose("sync", true, true, &why) == FM_MODE_SYNC);
+    CHECK(fm_mode_choose("off", true, true, &why) == FM_MODE_OFF);
     /* no window: off */
     CHECK(fm_mode_choose("on", false, false, &why) == FM_MODE_OFF && strcmp(why, "no window") == 0);
     /* a word it does not know: auto, said so */

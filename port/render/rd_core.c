@@ -66,6 +66,11 @@ void rd_set_replay_gate(RdReplayGate gate)
 
 void rd__on_host(void (*fn)(void *arg), void *arg)
 {
+    /* the window's render thread runs it between pictures, the game thread
+     * waiting (rd_thread.h); parked or without it, as before */
+    if (rd__render_call(fn, arg)) {
+        return;
+    }
     if (s_hostCall) {
         s_hostCall(fn, arg);
     } else {
@@ -460,6 +465,7 @@ bool rd__apply_state(RdStateBlock *s, const RdCmd *c)
 
 void rd__frame_reset(RdFrame *f)
 {
+    rd__texlock_wait(); /* the render thread's reads of a picture ended (rd_thread.h) */
     for (int l = 0; l < RD_LIST_COUNT; l++) {
         f->lists[l].count = 0;
     }
@@ -961,9 +967,7 @@ RhiTexture rd__depth_copy_take(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *c
 
 void rd__depth_copy_free(RdDepthCopy *copy)
 {
-    if (copy->tex.id) {
-        rhi_destroy_texture(copy->tex);
-    }
+    rd__retire_texture(copy->tex);
     memset(copy, 0, sizeof(*copy));
 }
 
@@ -977,15 +981,10 @@ void rd__target_destroy_gpu(RdTargetRec *t)
     if (!g_rd.hasDevice) {
         return;
     }
-    if (t->color.id) {
-        rhi_destroy_texture(t->color);
-    }
-    if (t->depth.id) {
-        rhi_destroy_texture(t->depth);
-    }
-    if (t->snap.id) {
-        rhi_destroy_texture(t->snap);
-    }
+    /* on the game thread with the render thread on, at its next job */
+    rd__retire_texture(t->color);
+    rd__retire_texture(t->depth);
+    rd__retire_texture(t->snap);
     t->color = t->depth = t->snap = (RhiTexture){0};
 }
 
@@ -1138,6 +1137,7 @@ uint32_t rd__temp_target_alloc(uint32_t w, uint32_t h, int withDepth, int keepAc
 
 uint32_t rd__temp_target_alloc_ex(uint32_t w, uint32_t h, int withDepth, int keepAcross, int block)
 {
+    rd__texlock_wait();
     RdTargetRec want;
     memset(&want, 0, sizeof(want));
     want.w = w ? w : 1;
@@ -1189,17 +1189,18 @@ uint32_t rd__temp_target_alloc_ex(uint32_t w, uint32_t h, int withDepth, int kee
         t->dstUsage = keep.dstUsage; /* the texture's (rd__target_create_gpu) */
         t->snap = keep.snap;
         t->snapState = keep.snapState;
-        g_rd.stats.tempReused++;
+        rd__stats_here()->tempReused++;
     } else if (!rd__target_create_gpu(t, "temp target")) {
         rd__note_target_pressure(t); /* the shadow count, a screen-size alias */
     }
     t->clearPending = 1;
-    g_rd.stats.tempTargets++;
+    rd__stats_here()->tempTargets++;
     return (t->gen << 16) | (uint32_t)(pick + 1);
 }
 
 void rd__temp_target_free(uint32_t id)
 {
+    rd__texlock_wait();
     RdTargetRec *t = rd__target_rec(id);
     if (!t || t->named) {
         return;
@@ -1238,13 +1239,14 @@ void rd__temp_target_free(uint32_t id)
         t->snap = keep.snap;
         t->snapState = keep.snapState;
     }
-    if (g_rd.stats.tempTargets) {
-        g_rd.stats.tempTargets--;
+    if (rd__stats_here()->tempTargets) {
+        rd__stats_here()->tempTargets--;
     }
 }
 
 void rd__temp_target_pool_clear(void)
 {
+    rd__texlock_wait();
     for (int i = RD_TARGET_COUNT; i < RD_MAX_TARGETS; i++) {
         RdTargetRec *t = &g_rd.targets[i];
         if (!t->live && t->parked) {
@@ -1352,6 +1354,7 @@ static uint32_t s_texGenFloor;
 
 static uint32_t texAlloc(void)
 {
+    rd__texlock_wait();
     for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
         RdTexRec *t = &g_rd.textures[i];
         if (!t->live) {
@@ -1477,6 +1480,7 @@ RdTex rd_create_texture(uint32_t w, uint32_t h, const void *rgba8, RdTexA texaMo
 
 void rd_update_texture(RdTex tex, const void *rgba8)
 {
+    rd__texlock_wait();
     RdTexRec *t = rd__tex_rec(tex.id);
     if (!t || t->kind != RD_TEXKIND_IMAGE || !rgba8 || !t->pixels) {
         return; /* a pack replacement has no CPU texels to update */
@@ -1494,6 +1498,7 @@ void rd_update_texture(RdTex tex, const void *rgba8)
 
 bool rd__tex_take_pixels(RdTex tex, uint8_t *px)
 {
+    rd__texlock_wait();
     RdTexRec *t = rd__tex_rec(tex.id);
     if (!t || t->kind != RD_TEXKIND_IMAGE || t->replacement || t->format != RD_TEXEL_RGBA8 || !px) {
         return false;
@@ -1517,6 +1522,7 @@ size_t rd__gs_chain_bytes(uint32_t w, uint32_t h, uint32_t levels)
 
 void rd__tex_set_levels(RdTex tex, const uint8_t *chain, uint32_t levels)
 {
+    rd__texlock_wait();
     RdTexRec *t = rd__tex_rec(tex.id);
     if (!t || t->kind != RD_TEXKIND_IMAGE || t->replacement || t->format != RD_TEXEL_RGBA8) {
         return;
@@ -1556,6 +1562,7 @@ void rd__tex_set_levels(RdTex tex, const uint8_t *chain, uint32_t levels)
 void rd_update_texture_rect(RdTex tex, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
                             const void *px)
 {
+    rd__texlock_wait();
     RdTexRec *t = rd__tex_rec(tex.id);
     if (!t || t->kind != RD_TEXKIND_IMAGE || !px || !t->pixels || x >= t->w || y >= t->h || !w ||
         !h) {
@@ -1595,6 +1602,7 @@ void rd_update_texture_rect(RdTex tex, uint32_t x, uint32_t y, uint32_t w, uint3
 
 void rd_destroy_texture(RdTex tex)
 {
+    rd__texlock_wait();
     RdTexRec *t = rd__tex_rec(tex.id);
     if (!t) {
         return;
@@ -1606,7 +1614,7 @@ void rd_destroy_texture(RdTex tex)
         }
     }
     if (t->rhi.id && g_rd.hasDevice) {
-        rhi_destroy_texture(t->rhi);
+        rd__retire_texture(t->rhi); /* after the render thread's submit that may use it */
     }
     if (t->dirty && g_rd.texDirtyCount) {
         g_rd.texDirtyCount--;
@@ -1621,6 +1629,7 @@ void rd_destroy_texture(RdTex tex)
 
 RdTex rd_target_texture(RdTarget target, RdTexView view)
 {
+    rd__texlock_wait();
     RdTargetRec *tr = rd__target_rec(target.id);
     if (!tr || (unsigned)view > RD_VIEW_DEPTH) {
         return (RdTex){0};
@@ -1819,6 +1828,7 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     createNamedTargets();
     readDumpConfig();
     rdtex__decode_init(g_rd.windowed); /* the texture decode pool (rd_tex_decode.h) */
+    rd__thread_local_resume();         /* the tools' render thread, when asked (rd_thread.h) */
     return true;
 }
 
@@ -1827,6 +1837,7 @@ void rd_shutdown(void)
     if (!g_rd.inited) {
         return;
     }
+    rd__thread_local_pause(); /* the tools' render thread ends first */
     /* the decodes in flight into their textures, the pool's threads
        stopped, before the textures go */
     rdtex__decode_shutdown();
@@ -1958,6 +1969,7 @@ static void fogSceneRemade(void *arg)
 
 void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight)
 {
+    rd__texlock_wait();
     if (!g_rd.inited) {
         return;
     }
@@ -1989,6 +2001,7 @@ void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight)
 
 void rd_set_settings(const RdSettings *settings)
 {
+    rd__texlock_wait();
     if (settings) {
         g_rd.pendingSettings = *settings;
         g_rd.settingsPending = true;
@@ -2113,6 +2126,7 @@ int rd_scene_scale_lowered(void)
 
 void rd_set_mirror(int on)
 {
+    rd__texlock_wait();
     if (g_rd.mirrorRun != (on != 0)) {
         rd__log("mirror mode %s (frame %u)", on ? "on" : "off", g_rd.frameCounter);
     }
@@ -2248,6 +2262,7 @@ static void replayOnHost(void *arg)
 
 void rd_begin_frame(void)
 {
+    rd__texlock_wait();
     if (!g_rd.inited) {
         return;
     }
@@ -2372,6 +2387,7 @@ void rd_begin_frame(void)
 
 void rd_end_frame(int keep)
 {
+    rd__texlock_wait();
     RdFrame *f = rd__rec_frame();
     if (!f) {
         return;
@@ -2850,7 +2866,7 @@ void rd_screen_prims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace 
         c->f[1] = st[1];
     }
     setKey(c, key);
-    g_rd.stats.draws++;
+    rd__stats_here()->draws++;
 }
 
 /* ---------------------------------------------------------- deferred text */
@@ -2932,7 +2948,7 @@ static RdCmd *pushStub(uint8_t type, RdKey key, const void *const *parts, const 
     c->u[1] = off;
     c->u[2] = total;
     setKey(c, key);
-    g_rd.stats.draws++;
+    rd__stats_here()->draws++;
     return c;
 }
 
@@ -2972,7 +2988,7 @@ bool rd_dump_prev_frame(const char *path)
     return f && p && p->closed && p->number + 1 == f->number ? rd__dump_frame(p, path) : false;
 }
 
-bool rd_read_display(void *dst, uint32_t *w, uint32_t *h)
+static bool readDisplayHere(void *dst, uint32_t *w, uint32_t *h)
 {
     RdTargetRec *t = rd__target_rec(RD_TARGET_DISPLAY + 1);
     if (!t) {
@@ -3000,8 +3016,37 @@ bool rd_read_display(void *dst, uint32_t *w, uint32_t *h)
     return true;
 }
 
+typedef struct ReadDisplay {
+    void *dst;
+    uint32_t *w, *h;
+    bool ok;
+} ReadDisplay;
+
+static void readDisplayJob(void *arg)
+{
+    ReadDisplay *r = arg;
+    r->ok = readDisplayHere(r->dst, r->w, r->h);
+}
+
+bool rd_read_display(void *dst, uint32_t *w, uint32_t *h)
+{
+    /* the readback on the render thread between pictures (its device and
+     * DISPLAY's state are its own there) */
+    ReadDisplay r = {dst, w, h, false};
+    if (rd__render_call(readDisplayJob, &r)) {
+        return r.ok;
+    }
+    return readDisplayHere(dst, w, h);
+}
+
 const RdStats *rd_get_stats(void)
 {
-    g_rd.stats.pipelines = rd__pipeline_count();
-    return &g_rd.stats;
+    /* the game thread's view with the render thread on: the record's counts
+     * and the replays' as its last reads left them (rd_thread.h) */
+    if (rd_thread_host_on() && !rd_thread_on_render()) {
+        return rd__thread_stats();
+    }
+    RdStats *s = rd__stats_here();
+    s->pipelines = rd__pipeline_count();
+    return s;
 }

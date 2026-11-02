@@ -495,7 +495,7 @@ void rd__upload_dirty_textures(void)
             if (t->dirty && uploadReplacement(t)) {
                 t->dirty = 0;
                 stillDirty--;
-                g_rd.stats.textureUploads++;
+                rd__stats_here()->textureUploads++;
                 g_rdPerf.textureUploads++;
             }
             continue;
@@ -599,7 +599,7 @@ void rd__upload_dirty_textures(void)
         t->dirty = 0;
         t->dirtyX0 = t->dirtyY0 = t->dirtyX1 = t->dirtyY1 = 0;
         stillDirty--;
-        g_rd.stats.textureUploads++;
+        rd__stats_here()->textureUploads++;
         g_rdPerf.textureUploads++;
         /* a texture uploaded on 60 replays in a row is named once */
         t->uploadStreak = t->lastUpload + 2 >= g_rd.replayCounter ? t->uploadStreak + 1 : 0;

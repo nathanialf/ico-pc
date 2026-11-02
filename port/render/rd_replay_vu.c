@@ -381,7 +381,7 @@ static void passSplit(Replay *r)
  * vuMergeGpu, vuMergeAlone).  The last VU draw's tuple: a draw equal to it
  * on every key, with the predicates a merged draw needs, could join its run
  * in one GPU draw.  A new pass, a draw of anything else between
- * (g_rd.stats.draws moved past what the VU draws drew, s_mergeExpect) or a
+ * (rd__stats_here()->draws moved past what the VU draws drew, s_mergeExpect) or a
  * draw that cannot merge ends the run. */
 typedef struct VuMergeLast {
     bool valid;
@@ -392,14 +392,14 @@ typedef struct VuMergeLast {
 
 static VuMergeLast s_mergeLast;
 
-/* g_rd.stats.draws as it stands when nothing but the VU draws of this file
+/* rd__stats_here()->draws as it stands when nothing but the VU draws of this file
  * drew since the last note (ownDraw keeps it in step) */
 static uint32_t s_mergeExpect;
 
 /* a GPU draw of the VU draws: counted, and in step for the note */
 static void ownDraw(void)
 {
-    g_rd.stats.draws++;
+    rd__stats_here()->draws++;
     s_mergeExpect++;
 }
 
@@ -438,7 +438,7 @@ static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t 
     const VuMergeLast *l = &s_mergeLast;
     const bool samePass = l->valid && l->replay == t.replay && l->pass == t.pass;
     /* nothing drawn between but the VU draws' own */
-    const bool adjacent = samePass && g_rd.stats.draws == s_mergeExpect;
+    const bool adjacent = samePass && rd__stats_here()->draws == s_mergeExpect;
     if (adjacent && eligible && l->pipe == t.pipe && l->g2 == t.g2 && l->g1 == t.g1 &&
         l->cbHash == t.cbHash && l->frame == t.frame && l->frameOff == t.frameOff &&
         l->color == t.color && memcmp(&l->sc, &t.sc, sizeof(t.sc)) == 0) {
@@ -460,7 +460,7 @@ static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t 
         }
     }
     s_mergeLast = t;
-    s_mergeExpect = g_rd.stats.draws;
+    s_mergeExpect = rd__stats_here()->draws;
 }
 
 /* ------------------------------------------------------ the merge's run

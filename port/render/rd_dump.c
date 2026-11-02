@@ -284,6 +284,9 @@ bool rd__dump_frame(const RdFrame *f, const char *path)
     if (!f || !path) {
         return false;
     }
+    /* the frames, textures and meshes as no present of the render thread
+     * reads or changes them (rd_thread.h): the game thread's dump waits */
+    (void)rd_thread_drain();
     rdtex_settle(); /* the texels the decode pool still owes (rd_tex_decode.h) */
     static IdSet texs, temps, meshes;
     texs.n = temps.n = meshes.n = 0;

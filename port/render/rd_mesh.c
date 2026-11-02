@@ -291,6 +291,7 @@ static uint8_t s_floorPending[RD_MAX_MESHES / 8];
 
 static RdMeshRec *meshAlloc(uint32_t *id)
 {
+    rd__texlock_wait(); /* the render thread's reads of a picture ended (rd_thread.h) */
     if (!g_rd.meshes) {
         return NULL;
     }
@@ -1929,6 +1930,7 @@ const float (*rd__mesh_stream_at(const RdMeshRec *m, uint32_t frame))[4]
 
 bool rd_update_vu_mesh(RdMesh mesh, const float (*qw)[4])
 {
+    rd__texlock_wait();
     RdMeshRec *m = rd__mesh_rec(mesh.id);
     if (!m || !m->vu || !qw || m->replaced) {
         return false; /* a replaced mesh: its stream is not the packet's layout */
@@ -1951,6 +1953,7 @@ bool rd_update_vu_mesh(RdMesh mesh, const float (*qw)[4])
 
 void rd_destroy_vu_mesh(RdMesh mesh)
 {
+    rd__texlock_wait();
     RdMeshRec *m = rd__mesh_rec(mesh.id);
     if (m) {
         meshFree(m);
@@ -1977,6 +1980,7 @@ bool rd_vu_mesh_replaced(RdMesh mesh)
 
 void rd_vu_mesh_retire(bool (*pred)(uint64_t hash, bool replaced, void *user), void *user)
 {
+    rd__texlock_wait();
     if (!g_rd.meshes) {
         return;
     }
@@ -2090,6 +2094,7 @@ uint32_t rd_vu_mesh_gen_high(void)
 
 void rd_drop_vu_meshes(uint32_t savedGenHigh)
 {
+    rd__texlock_wait();
     const uint32_t high = rd_vu_mesh_gen_high();
     rd_vu_mesh_retire(NULL, NULL);
     s_genFloor = (savedGenHigh > high ? savedGenHigh : high) & 0xFFFF;
@@ -2107,6 +2112,7 @@ void rd_drop_vu_meshes(uint32_t savedGenHigh)
 
 void rd__vu_mesh_sweep_stale(void)
 {
+    rd__texlock_wait();
     if (s_staleCount == 0 || !g_rd.meshes) {
         return;
     }
@@ -2472,12 +2478,13 @@ static RdCmd *pushVu(uint8_t type, RdKey key, const RdVuPayload *p, const RdVuBl
     c->u[2] = total;
     c->keyLo = (uint32_t)key;
     c->keyHi = (uint32_t)(key >> 32);
-    g_rd.stats.draws++;
+    rd__stats_here()->draws++;
     return c;
 }
 
 void rd_draw_vu_mesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
 {
+    rd__texlock_wait();
     RdMeshRec *m = rd__mesh_rec(mesh.id);
     if (!m || !m->vu || !d || !rd__draw_filter_pass(key)) {
         return;

@@ -278,7 +278,7 @@ static RhiPipeline smoothPipe(int resolve)
     s_pipes[resolve] = rhi_create_pipeline(&d);
     rd__pipeline_note_end();
     if (s_pipes[resolve].id) {
-        g_rd.stats.pipelineCreates++;
+        rd__stats_here()->pipelineCreates++;
     }
     return s_pipes[resolve];
 }
