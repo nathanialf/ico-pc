@@ -2,8 +2,8 @@
 
 The port's own features that reach into the game: the gameplay options and the places in `ico2/`
 that read them, achievements over a read-only view of the game state, photo mode, the model
-viewer and the characters' colours, the music gallery, the credits, the title logo, Add to
-Steam (Windows and Linux) and the Android build's graphics driver packages. The menus that show
+viewer and the characters' colours, the music gallery, the credits, the title logo, the community
+translations, Add to Steam (Windows and Linux) and the Android build's graphics driver packages. The menus that show
 them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 
 ## Files
@@ -29,6 +29,9 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | `port/data/df_pack.h` | reading one member of a `DATA.DF` stage pack outside the game's disc thread |
 | `port/include/ico_credits.h`, `port/game/credits.c`, `credits_live.c` | the staff roll's port credit and the Extras credits playback |
 | `port/game/title_logo.h`, `title_logo.c` | the title logo hidden under the port's menus, the title's full-frame models |
+| `port/game/subtitles.h`, `subtitles_ru_bobttz.c` | a community translation's subtitle table: the words of each record it translates |
+| `port/ui/subtitle_text.h`, `subtitle_text.c` | the subtitles of the community translation in force, drawn as text in `jimakuDisp`'s place of the strips |
+| `port/ui/strings_ru_bobttz.c` | the Russian (bob-ttz) table of the port's strings and the European disc's menu words |
 | `port/platform/steam_shortcut.h` | Add to Steam |
 | `port/platform/gpu_driver.h` | the Android build's graphics driver packages |
 | `port/game/state_host.c`, `state_rules.h`, `state_rules.c` | save states: the save, the load, the slots, the picture, the [dev] keys; the conditions and the listing |
@@ -372,6 +375,7 @@ hold the rest.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Display: 50 Hz (title only) | W | H | H | H | H | H | H | `has_50hz_row`; `settings_discs`, `settings_<slug>` |
 | Main: Game language | W | H | H | H | H | H | H | `has_game_language`; `settings_discs`, `settings_<slug>` |
+| Main: Game language's community entries (Русский (bob-ttz)) | W | H | H | H | H | H | H | the row's own rule (`has_game_language`); in force only there with the game in English (`ui_settings_text_language`), so `[game] text_language` changes nothing on the other discs ([Community translations](#community-translations)); `subtitles_ru`, `subtitles_ru_<slug>` (jpn, kor, cn), `jimaku_text` |
 | Main: Menu language | W | W | W | W | W | W | W | Auto is `ui_lang_default`, the sheets `menu_sheet`; `settings_<slug>`, `settings_render_<slug>` |
 | Controls: Hold type | W | W | W | W | W | W | W | `hold_type_own`, the default `"disc"`: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 (the 2001 arms `_ACTCommonMailTest_<disc>` read `optionControlType` in the port); `settings_discs`, `options_<slug>`, `save` (per disc) |
 | Controls: Circle goes back | W | H | H | W | W | W | H | `pad_back` is Triangle (`lt_ext_has_circle_back`); the 2001 arms cancel through `LA_BACK` too; `settings_discs`, `settings_<slug>` |
@@ -924,6 +928,57 @@ screen, to the [native frame](ARCHITECTURE.md#terms) by scaling its node matrice
 `gsFrame.w / 512` when `ico_title_fullframe_model` names it (`port/game/title_logo.h`
 (`ico_title_fullframe_model`)).
 
+## Community translations
+
+A community translation is a player's translation of the game into a language the disc does not
+have, built into the port as text ([TRANSLATING.md](../TRANSLATING.md) for the contributor and the
+maintainer). Russian, by bob-ttz, is the first (`UI_LANG_RU_BOBTTZ`); the Language row offers it
+after the European disc's five, and choosing it sets the game's language to English
+(`NonLinearCameraMove` 2: the English subtitle files, menu sheets and stage animations, and the
+English language byte in the save's product file, so the saves are the English game's) and writes
+`[game] text_language = "ru-bobttz"` (`port/ui/settings.c` (`setLanguageEntry`, `languageEntry`)).
+The five disc languages keep their order, their values and their path. The translation is in force
+on a disc whose game has a language of its own (the European disc) while that language is English
+(`port/ui/ui_lang.h` (`ui_settings_text_language`)); a `[game] language` other than English, or any
+other disc, leaves the disc's own pictures, whatever the key says. In force:
+
+- the port's text follows it while the Menu language is Auto (`ui_settings_resolve_language`);
+- the game's own menu words (the European disc's menu text table, [UI.md](UI.md#the-games-own-menu-words))
+  are the translation's `UI_STR_MT_*` strings, laid out with the English sheet's geometry
+  (`port/ui/strings.h` (`ui_menu_words_language`), `port/ui/menu_font.c` (`itemWords`)); an id it
+  leaves untranslated is the English sheet's word;
+- the subtitles: `jimakuDisp` (`ico2/fumi/src/jimaku.c`, the arm the European, Japanese and Korean
+  discs share) asks `ui_subtitle_words` for the shown record's words before it draws the record's
+  two strips (texProperty 434 and 435), under the same conditions (the record shown, its picture
+  loaded, subtitles on); with words it opens `display_texture`'s packet (list 11, ALPHA
+  `(1, 7, 0)`, register 74, no Z) and calls `ui_subtitle_draw` with the strips' colour (the fade's
+  `~reductionCol`) instead of the two `display_texture` calls (`display_words`). The words are
+  centred in the band the strips cover (grid x 64 to 576, field lines 144 to 192), one or two
+  lines 44 y units apart about its middle, in the menus' look at `UI_SUBTITLE_EM` (the menu rows'
+  em), set smaller as a whole when the widest line passes 496 x units (`port/ui/subtitle_text.h`).
+  The record's picture is still read and made a texture, the semaphores and the display time are
+  the game's, photo mode shows neither. A record the table leaves out keeps its picture, and so
+  do Yorda's records on a first play: the disc's first-play files show her own script there and
+  the cleared game's files English (`IcoSubtitle.secondOnly`; records 9, 29, 31, 48, 49, 86, 91,
+  112). The North American disc, the 2001 previews and the Asian disc have their own `jimakuDisp`
+  arms, which do not ask.
+
+What stays in English under a translation: the pictures the menu text table leaves out (the
+"Sony Computer Entertainment Europe Presents" plate and the copyright line, the logos, the
+LANGUAGE and TV headers, the 50/60 Hz notes: [UI.md](UI.md#the-games-own-menu-words)), the language
+versions of the title and ending logo animations (`ico2/script/src/e3.c` (`actE3TitleFrameChk`),
+`ico2/script/src/end.c` (`actEndLogoChk`) pick by `NonLinearCameraMove`), and the staff roll, whose
+bitmap font has ASCII only ([The credits](#the-credits)).
+
+The log names the change of every subtitle record under a translation, the first eight and then
+every hundredth (`ui: subtitles: record N (first|second play) drawn as text|keeps the disc's
+picture (ru-bobttz, 42 entries)`), the Language row's step (`settings: Language ru-bobttz (game
+language 2, [game] text_language "ru-bobttz")`) and the key as read (`options: [game]
+text_language = "ru-bobttz": a community translation`, or the word it does not know).
+
+Russian (cobra838), the second translation offered on the issue, is not built: it is added the
+same way once its two files arrive ([TRANSLATING.md](../TRANSLATING.md#adding-a-translation)).
+
 ## Add to Steam
 
 Settings > Extras > Add to Steam writes a non-Steam shortcut named "ICO" for the program into the
@@ -982,9 +1037,9 @@ are [PLATFORM.md](PLATFORM.md#android-graphics-driver-packages)'s.
 Each is a ctest: `settings_discs` and its six other-disc runs (the rows each disc shows,
 [Options on each disc](#options-on-each-disc)), `options` (`port/game/test/options_test.c`: the defaults, the setters,
 `eBrainGetTarget` with Yorda safe), `door_grace`, `yorda_trip` and its six other-disc runs, `yorda_trip_disc`, `achievements`, `photo`, `appearance` and
-`appearance_disc`, `credits`, `title_logo`, `state_host` and `model_viewer_headless` (`port/game/CMakeLists.txt`);
+`appearance_disc`, `credits`, `title_logo`, `state_host`, `jimaku_text` (the subtitle hook) and `model_viewer_headless` (`port/game/CMakeLists.txt`);
 `gallery`, `gallery_sweep`, `credits_headless`, `model_viewer`, `model_viewer_cam`,
-`model_viewer_effects` and `model_viewer_effects_elf` (`port/ui/CMakeLists.txt`); `steam_shortcut` and `gpu_driver` (`port/platform/CMakeLists.txt`).
+`model_viewer_effects`, `model_viewer_effects_elf`, `subtitles_ru` and its three other-disc runs (`port/ui/CMakeLists.txt`); `steam_shortcut` and `gpu_driver` (`port/platform/CMakeLists.txt`).
 [TESTING.md](TESTING.md) has how to run them.
 
 ## Video options

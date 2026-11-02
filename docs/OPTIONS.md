@@ -499,14 +499,31 @@ other discs.
   PS2; the North American disc, the August 2001 preview and the June 2001
   magazine demo are in English, and the Asian disc's menus are in Chinese.
   None of them has a language choice of its own.
+
+  After the five comes **Русский (bob-ttz)**: Russian, translated by
+  bob-ttz, a player of the game. It is not on the disc: the game plays its
+  English version, and the port shows the words in Russian with its own
+  lettering, in the same look as the menus. The game's menus (the title, the
+  memory card screens, the pause menu), the menus this port adds and the
+  subtitles change at once. The saves are the English game's, so they work
+  with every language and on a PS2. Some things stay in English, because
+  they are pictures on the disc rather than words: the "Presents" sign and
+  the copyright line at the start, the language and TV headings, the words
+  that come with the title and ending logos, and the staff roll. Yorda's words are shown
+  in Russian on a second playthrough only, as the game shows her own script
+  the first time. A few long notes on the Options pages are in English
+  until they are translated again. More languages translated by players can
+  join this list; [Translating the game](TRANSLATING.md) says how.
 - **Menu language** is the language of the menus this port adds (Options,
   the extras, photo mode's help, the messages): English, French, German,
-  Italian, Spanish, Japanese (日本語), Korean (한국어) or Chinese (繁體中文,
-  Traditional Chinese). It starts on Auto: Japanese with the Japanese disc,
-  Korean with the Korean disc, Chinese with the Asian disc, and with the
-  European disc the game's language. The North American disc, the August 2001
-  preview and the June 2001 magazine demo start on English. It does not
-  change the game's own text, which is always the disc's.
+  Italian, Spanish, Japanese (日本語), Korean (한국어), Chinese (繁體中文,
+  Traditional Chinese) or Russian (Русский (bob-ttz)). It starts on Auto:
+  Japanese with the Japanese disc, Korean with the Korean disc, Chinese with
+  the Asian disc, and with the European disc the game's language (Russian
+  when Language is Русский (bob-ttz)). The North American disc, the August
+  2001 preview and the June 2001 magazine demo start on English. It does not
+  change the game's own text, which is always the disc's or the Language
+  row's translation.
 - **Disc** shows only when more than one disc is set up. It is the disc the
   game plays: Europe (SCES-50760), Japan (SCPS-11003), Korea (SCPS-56001), USA
   (SCUS-97113), Preview 2001-08 (the August 2001 preview), Demo 2001-06

@@ -337,6 +337,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`hand_ik`).
 - `ico_frame_test.c`: the [native frame](ARCHITECTURE.md#terms)'s widths for each aspect and the
   options' frame (`ico_frame`).
+- `jimaku_text_test.c`: `jimakuDisp`'s community-translation hook (`jimaku.c` compiled in, the hook's
+  two port calls stubbed): with no words the record's two strips as before, with words one packet in
+  `display_texture`'s state and colour around the text call and no strip, the semaphores and the
+  display time alike, nothing in photo mode, with subtitles off or without the picture; the Japanese
+  and Korean discs' shared arm asks too, the other discs' own arms never (`jimaku_text`).
 - `kanban_boot_test.c`: the boot's card check and signs (`kanbanBoot.c`) for a first and a later
   boot (`kanban_boot`); with `jpn` or `kor`, the Japanese program's check (`kanbanBootMcCheck_jpn`,
   which the Korean disc runs too): no language or video step, no read of the card's system file,
@@ -1657,7 +1662,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 ### port/ui/test
 
 - `credits_headless.py`: Extras > Credits in the headless game (`credits_headless`).
-- `font_coverage_test.c`: every character of the eight languages has a glyph in Arimo, in Noto
+- `font_coverage_test.c`: every character of the eight languages and the community translations
+  (their tables and subtitles) has a glyph in Arimo, in Noto
   Sans JP's subset, in Noto Sans KR's or in Noto Sans TC's, a Japanese character the second font's
   own, a Hangul one the third's and a Chinese-only ideograph the fourth's, the Chinese face first
   or last by the language (`font_coverage`); `font_corpus/` holds the per-language text, `ja.txt`,
@@ -1759,8 +1765,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `strings_complete_test.c`: every language's table defines every `UiStrId`, none empty but
   `UI_STR_NONE`, each with the English entry's printf conversions; the four pack notes filled
   with each disc's serial (`ui_str_serial`); the sheet language's default and setter; the menu
-  language's rule (`ui_lang.c`, its two inputs stubbed); the Japanese line-break rules
-  (`strings_complete`).
+  language's rule (`ui_lang.c`, its inputs stubbed); a community translation's table (an id it has
+  not translated NULL, English at run time, at least half translated, its name in every table),
+  the translation in force (`ui_lang_text_resolve`: the European disc in English only), Auto
+  following it, the menu words over the English sheet (`ui_menu_words_language`); the Japanese
+  line-break rules (`strings_complete`).
+- `subtitles_ru_test.c`: the Russian (bob-ttz) translation over the settings fixture: its 42
+  subtitles (the CSV's records, Yorda's eight second-play only, two lines of 50 characters at
+  most, a glyph each), the words `ui_subtitle_words` gives through `[game] text_language` and their
+  layout in the band, the Language row's entry after the five (the English game data, the key,
+  Auto, the menu words, back to English) and the five sheets' strips unchanged (`subtitles_ru`);
+  on the Japanese, Korean and Asian discs no entry and nothing in force (`subtitles_ru_jpn`,
+  `subtitles_ru_kor`, `subtitles_ru_cn`).
 - `ui_mouse_test.c`: the pointer's arithmetic in the menus (`ui_mouse`).
 - `ui_test.c`: the embedded fonts, UTF-8, the runtime text; each language's own Deja vu string
   (`UI_STR_PHOTO_FILM_DEJA`); a Japanese popup body wider than the panel takes a second line, an

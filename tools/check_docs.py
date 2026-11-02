@@ -21,7 +21,8 @@ Gates:
   todo     TODO, FIXME, XXX.
   package  every name in tools/package_docs_lib.sh `pkg_player_docs` exists
            as docs/<name>.md, and every docs/*.md README.md links is in that
-           list (LEGAL, THIRD_PARTY, BUILDING and the release notes aside).
+           list (LEGAL, THIRD_PARTY, BUILDING, TRANSLATING and the release
+           notes aside).
 The player set is README.md and the docs that pkg_player_docs names. Gates
 other than links read code blocks and code spans too: a player sees them.
 
@@ -111,7 +112,7 @@ JARGON_ANYCASE = [
 TODO = [r"\b(TODO|FIXME|XXX)\b"]
 
 # docs/*.md that README.md may link without being a packaged player guide
-NOT_PLAYER = {"LEGAL", "THIRD_PARTY", "BUILDING"}
+NOT_PLAYER = {"LEGAL", "THIRD_PARTY", "BUILDING", "TRANSLATING"}
 
 
 def compile_all(pats, flags=0):

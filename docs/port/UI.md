@@ -16,6 +16,8 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
 | `port/ui/ui_hint.h`, `ui_hint.c` | a line of button prompts (glyphs and words) |
 | `port/ui/strings.h`, `strings.c`, `strings_{en,fr,de,it,es,ja,ko,zh}.c` | the UI strings, one table per language; the serial notes; the Japanese, Chinese and Korean line-break rules |
+| `port/ui/strings_ru_bobttz.c` | a community translation's table: Russian, by bob-ttz ([Community translations](#community-translations)) |
+| `port/ui/subtitle_text.h`, `subtitle_text.c` | a community translation's subtitles drawn as text in the subtitle band (`jimakuDisp`'s hook) |
 | `port/ui/ui_lang.h`, `ui_lang.c` | the port text's language from `[ui] language` and the running disc |
 | `port/ui/font.h`, `font.c` | Arimo, then Noto Sans JP, then Noto Sans KR, then Noto Sans TC (first of the three while the language is Chinese), through stb_truetype: atlases, measuring, plain text, the presentation overlay mode, the sheet rasteriser |
 | `port/ui/menu_font.h`, `menu_font.c` | the menus' text in the look of the game's menu sheets: strip pages, inks, rims |
@@ -24,6 +26,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/embed_font.cmake` | a font file as a C array at build time; the subsets' code points |
 | `port/assets/fonts/Arimo-Regular.ttf`, `OFL.txt` | the font and its licence |
 | `port/assets/fonts/NotoSansJP-Regular-subset.ttf`, `NotoSansJP-OFL.txt` | the second font (the characters Arimo lacks) and its licence |
+| `tools/subset_font_arimo.py` | makes and checks Arimo's subset |
 | `tools/subset_font_ja.py` | makes and checks the second font's subset |
 | `port/assets/fonts/NotoSansKR-Regular-subset.ttf`, `NotoSansKR-OFL.txt` | the third font (the Hangul the other two lack) and its licence |
 | `tools/subset_font_ko.py` | makes and checks the third font's subset |
@@ -503,9 +506,10 @@ initialisers; the tables also hold the game's own menu words (`UI_STR_MT_*`) as 
 letter them (`port/ui/strings.h`, header comment). `ui_str` answers in the current language and
 falls back to English for a missing entry (`port/ui/strings.c` (`ui_str_in`)); ctest
 `strings_complete` fails on a missing or empty entry, and on an entry whose printf conversions are
-not the English one's, so the fallback never shows (`port/ui/test/strings_complete_test.c`). Every
-table names the languages in their own words (English, Français, Deutsch, Italiano, Español,
-日本語, 한국어, 繁體中文), so a player finds theirs whatever the menus are in.
+not the English one's, so the fallback never shows (`port/ui/test/strings_complete_test.c`); a
+community translation's table is the exception ([Community translations](#community-translations)).
+Every table names the languages in their own words (English, Français, Deutsch, Italiano, Español,
+日本語, 한국어, 繁體中文, Русский (bob-ttz)), so a player finds theirs whatever the menus are in.
 
 The first five languages, `UI_LANG_PAL_COUNT`, are the European disc's, in the order of the game's
 language numbers; Japanese (`UI_LANG_JA`), Korean (`UI_LANG_KO`) and Traditional Chinese (`UI_LANG_ZH`) are the
@@ -524,7 +528,8 @@ menus follow at once while the menu language is Auto, and writes `[game] languag
 the row is not shown there and the port never writes the word (`gameLanguage` is -1); `Main` sets it
 from `ico_boot_language`, which gives 0 on that disc (`port/config/sysconf.c`), so it stays 0.
 
-The menu language, `[ui] language` (`auto`, `en`, `fr`, `de`, `it`, `es`, `ja`, `ko` or `zh`;
+The menu language, `[ui] language` (`auto`, `en`, `fr`, `de`, `it`, `es`, `ja`, `ko`, `zh` or
+`ru-bobttz`;
 `port/game/options.h` (`ico_opt_ui_language`)), is resolved by `ui_settings_resolve_language`: a
 chosen language wins on every disc; `auto`, the default, follows the disc: the language its region
 row names (`IcoRegionInfo.ui_lang_default`: `UI_LANG_JA` on the Japanese disc, `UI_LANG_KO` on the
@@ -611,15 +616,41 @@ punctuation (，。？！：) in the port's sentences, which break between any t
 before the closing marks, as the Japanese text does (`ui_break_before`). Ico and Yorda stay in
 Latin letters, as the sheets never spell them. The language is named 繁體中文 in every table.
 
+### Community translations
+
+A community translation ([TRANSLATING.md](../TRANSLATING.md)) is a table past the eight complete ones:
+`UI_LANG_COMMUNITY_FIRST` (= `UI_LANG_COUNT`) to `UI_LANG_TABLES`, today `UI_LANG_RU_BOBTTZ`
+(`port/ui/strings_ru_bobttz.c`, converted once by hand from bob-ttz's CSV). Its table names every
+`UiStrId` but leaves NULL the ids it has not translated: the CSV's empty rows (the language,
+disc and button names, the units, the test popup, the digit and letter tiles), the ids newer than
+the CSV, a row whose English changed after the translation and the notes longer than a note's two
+lines and 255 bytes ([TRANSLATING.md](../TRANSLATING.md#what-the-maintainer-checks)); those are
+English at run time (`ui_str_in`). `strings_complete` holds such a table to its own rule: every
+entry it has non-empty with the English one's conversions, at least half translated, its name in
+every table. The tests that hold every table to a word of its own (the notes' fit aside, which
+`settings` checks for it too) walk the first `UI_LANG_COUNT`; `font_coverage` and `font_audit`
+walk every table and its subtitles.
+
+The Menu language row offers the community translations after the eight (`[ui] language`
+`ru-bobttz`), and its Auto resolves to the one in force (`port/ui/ui_lang.h`
+(`ui_settings_text_language`): the Language row's community entry, `[game] text_language`, on the
+European disc with the game in English). `ui_settings_apply_language` also sets the menu words'
+language to it (`ui_set_menu_words_language`), so the game's menu words over the English sheets
+are its `UI_STR_MT_*` strings with the English sheet's geometry, an item's strip hashed with that
+language so the five sheets' own strips stay byte for byte (`port/ui/menu_font.c` (`itemStrip`,
+`itemWords`); ctest `subtitles_ru`). Its subtitles are drawn by `port/ui/subtitle_text.c`
+([GAME_FEATURES.md](GAME_FEATURES.md#community-translations)).
+
 ## Text: the font and the sheet look
 
 ### The font
 
 The port's text is Arimo Regular (SIL OFL 1.1), embedded in the program: `embed_font.cmake` turns
 `port/assets/fonts/Arimo-Regular.ttf` into `ui_font_ttf[]` at build time, so no file sits beside
-the program (`port/ui/embed_font.cmake`; `port/ui/CMakeLists.txt`). The font is a subset; the
-code points it holds are listed on the `subset:` line of `embed_font.cmake`, which
-`tools/font_audit.py` checks the port's text against.
+the program (`port/ui/embed_font.cmake`; `port/ui/CMakeLists.txt`). The font is a subset (48,336
+bytes, 596 code points: ASCII, Latin-1, Latin Extended-A, Cyrillic U+0400-04FF and the
+typographic punctuation the tables use); the code points it holds are listed on the `subset:` line
+of `embed_font.cmake`, which `tools/font_audit.py` checks the port's text against.
 
 A character Arimo has no glyph for is drawn from a second embedded font, a subset of Noto Sans JP
 Regular (SIL OFL 1.1; `port/assets/fonts/NotoSansJP-Regular-subset.ttf` into `ui_font_ja_ttf[]`,
@@ -643,9 +674,19 @@ Japanese text use (返, 選) is then drawn in its Traditional form, not the Japa
 glyph cache keeps both (its key carries the face order's bit), and the menus' strips are hashed
 with it, so changing the Menu language between Japanese and Chinese draws each anew. The language
 name 繁體中文 every table holds is in the Japanese subset too (`subset_font_ja.py` reads every table
-but the Chinese one), so it is drawn from one font in every language. The fonts
-are for the port's own text only: every word of the game's is the disc's own picture, on every
-disc.
+but the Chinese one), so it is drawn from one font in every language. The fonts draw the port's own
+text and the European disc's menu words ([The game's own menu words](#the-games-own-menu-words)); the
+game's subtitles stay the disc's own pictures, except under a community translation
+([Community translations](#community-translations)), whose subtitles are drawn with Arimo.
+
+Arimo's subset is made the same way as the three below: `tools/fetch_deps.sh` (section 8c,
+`SKIP_ARIMO=1` skips it) fetches the variable `Arimo[wght].ttf` of `google/fonts` at a pinned
+commit into `tools/toolchain/deps/arimo/`, SHA-256 checked; `tools/subset_font_arimo.py` makes the
+wght 400 instance of the ranges it lists (`BASE_RANGES`) and every other character of a community
+translation's tables (`port/ui/strings_<lang>_<translator>.c`, `port/game/subtitles_*.c`), hinting
+dropped, the kerning feature kept (GPOS pair adjustments, which stb_truetype reads; an extension
+lookup is unwrapped), the name table whole and the source's timestamps, and writes the `subset:`
+line; `--check` (ctest `font_subset_arimo`) makes the same three comparisons as the Noto scripts'.
 
 The subset pipeline: `tools/fetch_deps.sh` (section 7, `SKIP_NOTO_JP=1` skips it) fetches the
 variable `NotoSansJP[wght].ttf` of `google/fonts` at a pinned commit into

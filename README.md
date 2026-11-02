@@ -332,7 +332,8 @@ The title screen has an **Options** line and a **Quit to desktop** line
 **Mirror mode** and **New Game+** ([more about them](docs/OPTIONS.md#starting-a-new-game));
 the language and 50/60 Hz questions the European PS2 disc asks at first
 start live in Options instead, and the language can change in the middle of
-a game; the
+a game; the language list also has Russian, a player's translation of the
+menus and subtitles drawn as text over the English game; the
 ending credits also name this project, its translators, its contributors
 and its special thanks; and the
 pause menu shows your journey's numbers. Everything else is meant to match
@@ -352,6 +353,10 @@ contributors: [`docs/port/ARCHITECTURE.md`](https://github.com/nathanialf/ico-pc
 ### Translation
 
 - bob-ttz and cobra838, for the Russian translation.
+
+Options > Language > Русский (bob-ttz) plays the game with bob-ttz's
+Russian menus and subtitles. To translate the game into your language, see
+[Translating the game](docs/TRANSLATING.md).
 
 ### Contributors
 

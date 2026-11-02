@@ -10,6 +10,7 @@
 - **Options > Extras > Back up your data** and **Restore from a backup**, on the title screen (Windows, Linux, the Steam Deck, Mac and Android): your memory card, save states, settings and achievements in one `.zip` file you choose where to save, and put back from such a file, to keep a copy, move to another computer or phone, or go back to an earlier point. On Android this works even where the game's folder is hidden (Android 13 and later).
 - The ending's credits now also name the translators, the contributors and the special thanks.
 - Options > Gameplay > Second memory card: ten more save slots on a second card; the game's own save and load screens offer both cards.
+- Options > Language > Русский (bob-ttz): the subtitles and the game's menus in Russian, translated by bob-ttz. The game plays its English version underneath, so saves work with every language. Menu language also offers it.
 
 ## Fixed
 
