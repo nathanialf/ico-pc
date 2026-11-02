@@ -237,8 +237,10 @@ static Lum measure(const uint8_t *px, uint32_t w, uint32_t h)
 
 static const char *snapName(int snap)
 {
-    static const char *const kNames[RD_SNAP_COUNT] = {
-        "blended", "no previous", "gap", "keep", "cut", "camera", "fade", "history", "size"};
+    static const char *const kNames[] = {"blended", "no previous", "gap",     "keep", "cut",
+                                         "camera",  "fade",        "history", "size", "wall"};
+    _Static_assert(sizeof(kNames) / sizeof(kNames[0]) == RD_SNAP_COUNT,
+                   "a name for every RD_SNAP_* (rd_internal.h)");
     return snap >= 0 && snap < RD_SNAP_COUNT ? kNames[snap] : "?";
 }
 
