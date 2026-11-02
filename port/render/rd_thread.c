@@ -63,6 +63,10 @@ static PresentArgs s_picPresent;
 static Tramp s_picTramp;
 static bool s_async, s_asyncPresent, s_lastOk = true, s_hold;
 static uint64_t s_waitedNs;
+/* the frame of the last present rd_present_post made (0: none since the
+ * host came): a present of another frame is a new frame's, for the 10 s
+ * line's split of the waits (RdThreadBlock.freshWaits) */
+static uint32_t s_lastPresentFrame;
 static uint32_t s_failedPresents; /* rd_thread_failed_presents */
 
 static void lk(void)
@@ -199,6 +203,7 @@ void rd_set_thread_host(const RdThreadHost *host)
         s_owned = 0;
         s_async = false;
         s_lastOk = true;
+        s_lastPresentFrame = 0;
         s_on = true;
     }
 }
@@ -469,12 +474,39 @@ double rd__thread_clock_raw(void)
     return rd__present_clock_raw_take();
 }
 
+/* rd_present_post's wait for the picture before: counted as
+ * rd__thread_picture_begin does, and by whose it is, a new frame's present
+ * (fresh) or a further one's */
+static void presentDrain(bool fresh)
+{
+    const uint64_t ns = rd_thread_drain();
+    s_waitedNs += ns;
+    if (ns != 0) {
+        lk();
+        if (fresh) {
+            s_block.freshWaits++;
+            s_block.freshWaitMs += (double)ns / 1e6;
+        } else {
+            s_block.furtherWaits++;
+            s_block.furtherWaitMs += (double)ns / 1e6;
+        }
+        ulk();
+    }
+}
+
 bool rd_present_post(float alpha)
 {
     if (!s_on || t_onR) {
         return rd_present(alpha);
     }
-    rd__thread_picture_begin();
+    {
+        /* the frames are the game thread's: no wait to read which */
+        const RdFrame *last = rd__last_frame();
+        const uint32_t number = last != NULL ? last->number : 0u;
+        const bool fresh = number != s_lastPresentFrame;
+        s_lastPresentFrame = number;
+        presentDrain(fresh);
+    }
     const RdFrame *cur = rd__last_frame();
     if (!rd_interpolation_active() || !g_rd.hasDevice || g_rd.videoShown || cur == NULL ||
         !cur->closed) {

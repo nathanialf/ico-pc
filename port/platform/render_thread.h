@@ -71,14 +71,20 @@ bool ico_render_thread_plan(IcoRtPlan *out);
 void ico_render_thread_note_held(int why);
 
 /* The 10 s line (window_host.c window_pace_log): the game thread's mean
-   step, record and pump per call in ms and the slot waits it made (waits
-   for the render thread), and the render thread's block:
-     window: game thread: step 3.1 ms, record 7.9 ms, pump 0.4 ms, slot waits 12 (8.2 ms);
-     render thread: idle 71 %, waited for a frame 14.2 ms, heartbeat max 4.9 ms (590 pictures);
-     ...; 0 further presents held back (0 would have run into the next step, 0 while a
-     picture ran past its estimate, 0 while the presents waited for the display or the GPU;
-     a picture holds the renderer for 4.1 ms, takes 9.3 ms, its present waits 0.3 ms)
-   or "...; render thread: off" with no thread */
-void ico_render_thread_block_line(double stepMs, double recordMs, double pumpMs);
+   step and pump per call in ms, its own cost of closing a frame
+   (rd_frame_close_take), the slot waits it made (waits for the render
+   thread, split by whose: a new frame's present, a further present's, the
+   rest) and the read waits, then the render thread's block with its CPU
+   time a picture (pictureCpuMs: the window's replays line):
+     window: game thread: step 3.1 ms (closing a frame 0.4 ms of it, longest 1.2 ms, 300
+     frames), pump 0.4 ms, slot waits 12 (8.2 ms; 9 (7.9 ms) by a new frame's present, 2
+     (0.3 ms) by a further present's, 1 other), read waits 0 (0.0 ms, longest 0.0 ms);
+     render thread: CPU 9.3 ms a picture, idle 71 %, waited for a frame 14.2 ms, heartbeat
+     max 4.9 ms (590 pictures); ...; 0 further presents held back (0 would have run into
+     the next step, 0 while a picture ran past its estimate, 0 while the presents waited
+     for the display or the GPU; a picture holds the renderer for 4.1 ms, takes 9.3 ms,
+     its present waits 0.3 ms)
+   or "...; render thread: off (CPU 9.3 ms a picture on the game thread)" with no thread */
+void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pumpMs);
 
 #endif /* ICO_PLATFORM_RENDER_THREAD_H */

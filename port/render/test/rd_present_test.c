@@ -111,6 +111,12 @@
  *             over at the next drain: one that presents is not counted by
  *             rd_thread_failed_presents, one that fails there (a movie
  *             shown by then) is, once
+ *   wait split  a host of the test's own whose picture's end comes at the
+ *             next drain (a 5 ms wait): rd_present_post's waits for the
+ *             picture before are counted by whose (RdThreadBlock: a new
+ *             frame's present, a further present's), the drains of others
+ *             in neither; rd_frame_close_take counts the frames closed
+ *             since its last take and starts again
  *   capture   rd_capture_presented: the rich frame at 800 x
  *             600 with the overlay's rectangles registered, CRT off and
  *             Consumer TV: the PNG is 800 x 600 RGB and holds exactly the
@@ -5007,6 +5013,79 @@ static void checkFailedPresent(void)
     rd_shutdown();
 }
 
+/* rd_present_post's waits for the picture before, by whose (RdThreadBlock
+ * freshWaits, furtherWaits): a host of the test's own runs each job when it
+ * is posted, and a picture handed over without waiting is still "in its
+ * submit and present" until the next drain, which reports 5 ms */
+static bool s_tailOpen;
+
+static bool tailPost(void *u, void (*fn)(void *arg), void *arg, bool picture, bool wait)
+{
+    (void)u;
+    fn(arg);
+    s_tailOpen = picture && !wait;
+    return true;
+}
+
+static uint64_t tailDrain(void *u)
+{
+    (void)u;
+    const bool open = s_tailOpen;
+    s_tailOpen = false;
+    return open ? 5000000u : 0u;
+}
+
+static void checkWaitSplit(void)
+{
+    static const RdThreadHost host = {NULL, tailPost, tailDrain, false};
+    makeNoiseScene();
+    RdSettings s = originalSettings();
+    s.interpolate = 1;
+    if (!rd_init(512, 512, &s, NULL)) {
+        return;
+    }
+    RdTex tex = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    unsigned closes;
+    double meanMs, maxMs;
+    rd_frame_close_take(&closes, &meanMs, &maxMs); /* the sums from here */
+    recordRichFrame(tex, 1);
+    recordRichFrame(tex, 1);
+    rd_frame_close_take(&closes, &meanMs, &maxMs);
+    const bool twoCloses = closes == 2 && meanMs >= 0.0 && maxMs >= meanMs;
+    rd_frame_close_take(&closes, &meanMs, &maxMs);
+    const bool restarted = closes == 0 && meanMs == 0.0 && maxMs == 0.0;
+    rd_set_thread_host(&host);
+    RdThreadBlock b;
+    rd_thread_block_take(&b);
+    /* frame 2's first present: nothing before it to wait for */
+    const bool a = rd_present_post(1.0f);
+    /* frame 2 again: a further present, waiting for the first one's end */
+    const bool c = rd_present_post(1.0f);
+    /* a drain of another kind (a load's, a settings change's): neither */
+    (void)rd_thread_drain();
+    recordRichFrame(tex, 1);
+    const bool d = rd_present_post(1.0f); /* frame 3: nothing open before it */
+    /* frame 3 again, then frame 4's first present: each waits for the one before */
+    const bool e = rd_present_post(1.0f);
+    recordRichFrame(tex, 1);
+    const bool f = rd_present_post(1.0f);
+    (void)rd_thread_drain();
+    rd_thread_block_take(&b);
+    rd_set_thread_host(NULL);
+    rd_frame_close_take(&closes, &meanMs, &maxMs);
+    CHECK(twoCloses && restarted && closes == 2,
+          "wait split: two frames' closes timed (%d), the sums started again (%d), two more (%u)",
+          twoCloses, restarted, closes);
+    CHECK(a && c && d && e && f, "wait split: every present made (%d %d %d %d %d)", a, c, d, e, f);
+    CHECK(b.freshWaits == 1 && b.furtherWaits == 2 && b.freshWaitMs > 4.9 && b.freshWaitMs < 5.1 &&
+              b.furtherWaitMs > 9.9 && b.furtherWaitMs < 10.1,
+          "wait split: a new frame's present waited %u times (%.1f ms), a further one's %u times "
+          "(%.1f ms); 1 (5 ms) and 2 (10 ms) expected",
+          b.freshWaits, b.freshWaitMs, b.furtherWaits, b.furtherWaitMs);
+    rd_destroy_texture(tex);
+    rd_shutdown();
+}
+
 /* --------------------------------------------------------------- capture */
 
 static uint32_t be32At(const uint8_t *p)
@@ -5976,6 +6055,7 @@ int main(int argc, char **argv)
     checkOverlayTop();
     checkOverlayThread();
     checkFailedPresent();
+    checkWaitSplit();
     checkCapture(dir);
     checkShot(dir);
     checkPresentPasses(dir);

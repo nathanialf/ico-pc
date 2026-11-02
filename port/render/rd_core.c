@@ -2454,6 +2454,27 @@ static void dumpEvery(void *arg)
     }
 }
 
+/* rd_frame_close_take's sums (the game thread's) */
+static struct {
+    unsigned n;
+    double sumMs, maxMs;
+} s_close;
+
+void rd_frame_close_take(unsigned *closes, double *meanMs, double *maxMs)
+{
+    *closes = s_close.n;
+    *meanMs = s_close.n ? s_close.sumMs / s_close.n : 0.0;
+    *maxMs = s_close.maxMs;
+    memset(&s_close, 0, sizeof(s_close));
+}
+
+static void closeNote(double ms)
+{
+    s_close.n++;
+    s_close.sumMs += ms;
+    s_close.maxMs = ms > s_close.maxMs ? ms : s_close.maxMs;
+}
+
 void rd_end_frame(int keep)
 {
     rd__texlock_wait();
@@ -2461,6 +2482,7 @@ void rd_end_frame(int keep)
     if (!f) {
         return;
     }
+    const double closeAt = rd__now_ms(); /* after the wait for a picture's reads */
     if (g_rd.discardOpen) {
         rd_discard_frame(); /* rd_resume_frame's: no picture */
         return;
@@ -2481,6 +2503,7 @@ void rd_end_frame(int keep)
     g_rd.recIndex = -1;
     g_rd.stats.bytesPayload = f->payloadSize;
     g_rd.videoShown = 0;
+    closeNote(rd__now_ms() - closeAt);
     /* with interpolation on (either preset) the host presents (rd_present);
      * with it off the frame is replayed and presented once here */
     if (g_rd.hasDevice && !rd_interpolation_active()) {

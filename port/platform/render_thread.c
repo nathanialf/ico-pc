@@ -12,6 +12,7 @@
 #include "config.h"
 #include "diag_host.h"
 #include "pace_policy.h"
+#include "rd.h"
 #include "rd_thread.h"
 #include "rhi.h"
 
@@ -500,50 +501,65 @@ void ico_render_thread_note_held(int why)
     }
 }
 
-void ico_render_thread_block_line(double stepMs, double recordMs, double pumpMs)
+void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pumpMs)
 {
     const unsigned waits = __atomic_exchange_n(&s_rt.slotWaits, 0u, __ATOMIC_RELAXED);
     const Uint64 waitNs = __atomic_exchange_n(&s_rt.slotWaitNs, (Uint64)0, __ATOMIC_RELAXED);
     const unsigned held = s_rt.held, heldLate = s_rt.heldLate;
     const unsigned heldOverrun = s_rt.heldOverrun, heldBehind = s_rt.heldBehind;
     RdThreadBlock tb;
-    char rt[768];
+    unsigned closes;
+    double closeMs, closeMaxMs;
+    char rt[1024];
 
     s_rt.held = s_rt.heldLate = s_rt.heldOverrun = s_rt.heldBehind = 0;
 
     rd_thread_block_take(&tb);
+    rd_frame_close_take(&closes, &closeMs, &closeMaxMs);
     if (s_rt.thread != NULL) {
         FmBlock b;
 
         SDL_LockMutex(s_rt.lock);
         fm_block_take(&s_rt.mb, SDL_GetTicksNS(), &b);
         SDL_UnlockMutex(s_rt.lock);
-        /* per picture of its own: the interpolation, the uploads and the
-           walk, the submit and the present, and the GPU's and the display's
-           waits inside them */
+        /* per picture of its own: its CPU time (the window's replays line),
+           the interpolation, the uploads and the walk, the submit and the
+           present, and the GPU's and the display's waits inside them */
         snprintf(rt, sizeof(rt),
-                 "render thread: idle %.0f %%, waited for a frame %.1f ms, heartbeat max %.1f ms "
-                 "(%u pictures%s); interp %.1f ms, walk %.1f ms, submit %.1f ms, GPU and display "
-                 "waits %.1f ms a picture; %u textures destroyed for the game thread; %u further "
-                 "presents held back (%u would have run into the next step, %u while a picture "
-                 "ran past its estimate, %u while the presents waited for the display or the GPU; "
-                 "a picture holds the renderer for %.1f ms, takes %.1f ms, its present waits "
-                 "%.1f ms)",
-                 b.idlePercent, b.waitMaxMs, b.busyMaxMs, b.pictures,
+                 "render thread: CPU %.1f ms a picture, idle %.0f %%, waited for a frame %.1f ms, "
+                 "heartbeat max %.1f ms (%u pictures%s); interp %.1f ms, walk %.1f ms, submit "
+                 "%.1f ms, GPU and display waits %.1f ms a picture; %u textures destroyed for the "
+                 "game thread; %u further presents held back (%u would have run into the next "
+                 "step, %u while a picture ran past its estimate, %u while the presents waited "
+                 "for the display or the GPU; a picture holds the renderer for %.1f ms, takes "
+                 "%.1f ms, its present waits %.1f ms)",
+                 pictureCpuMs, b.idlePercent, b.waitMaxMs, b.busyMaxMs, b.pictures,
                  s_rt.mode == FM_MODE_SYNC ? ", sync" : "", tb.interpMs, tb.walkMs, tb.submitMs,
                  tb.waitMs, tb.retired, held, heldLate, heldOverrun, heldBehind,
                  (double)__atomic_load_n(&s_rt.readsEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.pictureEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.presentEst, __ATOMIC_RELAXED) / 1e6);
     } else {
-        snprintf(rt, sizeof(rt), "render thread: off");
+        snprintf(rt, sizeof(rt), "render thread: off (CPU %.1f ms a picture on the game thread)",
+                 pictureCpuMs);
     }
-    /* reads waits: the game thread's calls that changed the renderer's
-       state and waited for the render thread's reads of a picture (its
-       interpolation and walk; rd_thread.h) */
+    /* slot waits: the game thread's waits for everything posted to end
+       (ico_render_thread_drain), by whose: a new frame's present (its
+       picture before still in its submit and present: the frame's close
+       already waited for that picture's reads), a further present's, the
+       rest (a graphics call's, a settings change's, a load's); read waits:
+       the game thread's calls that changed the renderer's state and waited
+       for the render thread's reads of a picture (its interpolation and
+       walk; rd_thread.h) */
+    const unsigned byPresents = tb.freshWaits + tb.furtherWaits;
+
     fprintf(stderr,
-            "window: game thread: step %.1f ms, record %.1f ms, pump %.1f ms, slot waits %u "
-            "(%.1f ms), read waits %u (%.1f ms, longest %.1f ms); %s\n",
-            stepMs, recordMs, pumpMs, waits, (double)waitNs / 1e6, tb.readWaits, tb.readWaitMs,
+            "window: game thread: step %.1f ms (closing a frame %.1f ms of it, longest %.1f ms, "
+            "%u frames), pump %.1f ms, slot waits %u (%.1f ms; %u (%.1f ms) by a new frame's "
+            "present, %u (%.1f ms) by a further present's, %u other), read waits %u (%.1f ms, "
+            "longest %.1f ms); %s\n",
+            stepMs, closeMs, closeMaxMs, closes, pumpMs, waits, (double)waitNs / 1e6, tb.freshWaits,
+            tb.freshWaitMs, tb.furtherWaits, tb.furtherWaitMs,
+            waits > byPresents ? waits - byPresents : 0u, tb.readWaits, tb.readWaitMs,
             tb.readWaitMaxMs, rt);
 }

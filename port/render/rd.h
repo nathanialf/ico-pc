@@ -2572,6 +2572,15 @@ void rd_perf_why_text(char *buf, size_t size, int which, const uint64_t *counts,
  * frame's one replay, rd_end_frame's present, after the step. */
 double rd_last_replay_ms(void);
 
+/* The game thread's own cost of closing a frame since the last take:
+ * rd_end_frame's walk of the frame for its end state and the rest of its
+ * bookkeeping, from after its wait for a picture's reads (the window's read
+ * waits) to before the replay it makes with interpolation off (that is the
+ * picture's); the record of the frame's draws is inside the game's step.
+ * The closes counted, their mean and the longest in ms; the sums start
+ * again.  The window's 10 s line gives it (render_thread.c). */
+void rd_frame_close_take(unsigned *closes, double *meanMs, double *maxMs);
+
 /* The pieces of timed replay `replay` (RdPerfRecord.passTimed): their
  * count, *out pointing at them until the next replay; 0 when that replay was
  * not timed or its pieces were dropped (the queue holds 8 replays).  Pieces

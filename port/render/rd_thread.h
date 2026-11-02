@@ -24,7 +24,15 @@
  *                   drain); a picture whose capture or blended dump is
  *                   armed, every picture while rd_submit_hold is on, and
  *                   every replay through rd__replay_frame wait for their
- *                   end.
+ *                   end.  The drain is not what keeps the frames apart:
+ *                   the game thread's frame calls already wait for the
+ *                   reads (the hand-over), so the three frame slots
+ *                   (RD_FRAME_RING) are never short.  A new frame's
+ *                   present that did not drain would still have its reads
+ *                   run after the picture before ends, and the game's next
+ *                   step waits for those reads at its first renderer call:
+ *                   the wait moves, it does not go (docs/port/RENDER.md
+ *                   "The render thread").
  *   the overlay     the UI's layers of a picture posted from the game
  *                   thread (the popups, the photo mode's HUD, the touch
  *                   controls, the frame rate counter) are collected there
@@ -102,13 +110,21 @@ uint32_t rd_thread_failed_presents(void);
  * (the interpolation, the uploads and the walk, the submit and the present,
  * the waits for the GPU and the display inside them), the game thread's
  * waits for the render thread's reads (texLock) and the GPU textures
- * retired */
+ * retired.  freshWaits/furtherWaits: rd_present_post's waits for the
+ * picture before (the drain; the window's slot waits), those of a new
+ * frame's present and those of a further present of a frame already
+ * presented, with their sums in ms: a new frame's present can only wait
+ * for the end of the picture before (its submit and present: the frame's
+ * close already waited for its reads), so these are that picture's present
+ * call and the GPU's backlog behind it */
 typedef struct RdThreadBlock {
     unsigned pictures;
     double interpMs, walkMs, submitMs, waitMs;
     unsigned readWaits;
     double readWaitMs, readWaitMaxMs;
     unsigned retired;
+    unsigned freshWaits, furtherWaits;
+    double freshWaitMs, furtherWaitMs;
 } RdThreadBlock;
 
 void rd_thread_block_take(RdThreadBlock *out);
