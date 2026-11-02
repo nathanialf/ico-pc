@@ -5,8 +5,9 @@ text's font's for the characters Arimo has none for, the Korean text's
 font's for Hangul and the Chinese text's font's for its own table's
 ideographs).
 
-Collects the code points of the string literals of port/ui/strings_*.c and
-port/game/model_viewer_table.c, and of the corpus
+Collects the code points of the string literals of port/ui/strings_*.c (the
+community translations' tables among them), port/game/subtitles_*.c (their
+subtitles, drawn as text) and port/game/model_viewer_table.c, and of the corpus
 (port/ui/test/font_corpus/*.txt, '#' lines are provenance), and compares them
 with the ranges recorded in port/ui/embed_font.cmake (the "# subset:" line,
 Arimo's, the "# subset-ja:" line, Noto Sans JP's subset that
@@ -131,6 +132,7 @@ def main():
             where.setdefault(ord(ch), name)
 
     files = sorted(glob.glob(os.path.join(ROOT, "port/ui/strings_*.c")))
+    files += sorted(glob.glob(os.path.join(ROOT, "port/game/subtitles_*.c")))
     files += [os.path.join(ROOT, "port/game/model_viewer_table.c")]
     for p in files:
         for lit in literals(p):
