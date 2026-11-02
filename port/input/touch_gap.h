@@ -32,6 +32,9 @@ extern "C" {
    - When no such x leaves room before the safe area's right edge, the first
      x that holds minW; when none does, the corner again (returns 1), drawn
      over.
+   cornerX and cornerY are the margins from the safe area's top-left corner
+   (the output's edge plus SDL's insets: a rounded corner or a notch is
+   outside them), and the outputs are output pixels from the output's edge.
    *x1 is the padded left edge of the next counted control in the band the
    text is in (the safe area's right edge for return 2 when none), 0 for no
    limit; the caller shrinks the text to fit before it. Returns 0 (outputs

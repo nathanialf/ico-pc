@@ -157,6 +157,34 @@ static void test_all_off(void)
     CHECK(p.x1 == 0.0f);
 }
 
+/* the phone's rounded corner: SDL's safe-area insets (the DXT-48 reports left 159, top 59
+   of 2364x1080); the corner is the margin inside them, with the controls off and on */
+static void test_safe_corner(void)
+{
+    IcoTouchEdits e;
+    const IcoTouchInsets in = {159.0f, 59.0f, 73.0f, 78.0f};
+    const IcoTouchEnv env = {0};
+
+    ico_touch_edits_defaults(&e);
+    for (int c = 0; c < ICO_TOUCH_CTL_COUNT; c++) {
+        set(&e, c, "off");
+    }
+    const IcoTouchLayout l = ico_touch_layout_edits(OUT_W, OUT_H, in, ICO_TOUCH_MEDIUM, &env, &e);
+    const Place p = ask(&l, 7.5f);
+
+    CHECK(p.ret == 1);
+    CHECK(near_(p.x0, 159.0f + p.cx) && near_(p.y0, 59.0f + p.cy));
+    CHECK(p.x1 == 0.0f);
+    /* with the default controls the counter still leaves the corner and lands on the keys'
+       row, inside the safe area */
+    ico_touch_edits_defaults(&e);
+    const IcoTouchLayout d = ico_touch_layout_edits(OUT_W, OUT_H, in, ICO_TOUCH_MEDIUM, &env, &e);
+    const Place pd = ask(&d, 7.5f);
+
+    CHECK(pd.ret == 2);
+    CHECK(pd.x0 >= 159.0f && pd.y0 >= 59.0f);
+}
+
 static void test_no_room_and_stick(void)
 {
     IcoTouchEdits e;
@@ -197,6 +225,7 @@ int main(void)
     test_start_top_left();
     test_all_off();
     test_no_room_and_stick();
+    test_safe_corner();
     if (failures) {
         fprintf(stderr, "touch_gap_test: %d failures\n", failures);
         return 1;

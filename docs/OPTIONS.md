@@ -133,7 +133,7 @@ The window, the picture's size and shape, and the speed.
   picture in time, pictures are dropped and the game keeps its pace.
 - **Frame rate counter** is Off or On, and starts Off. On shows how many
   pictures the game is putting on the screen each second, as a small
-  number such as "60 fps" in the top-left corner of the screen. It is
+  number such as "60 fps" in the top-left corner of the screen (inside a phone's rounded corner or notch). It is
   drawn over the picture at your screen's own sharpness, so the CRT filter
   does not touch it. With the touch controls showing, the number moves to
   the first place along the top edge that none of your visible controls

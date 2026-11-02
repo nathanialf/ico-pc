@@ -27,6 +27,7 @@
 - On graphics chips that can read the picture while drawing it (such as Adreno chips with the open Turnip driver, and many Mali chips), the game prepares several times fewer graphics pipelines at its first start and blends colours exactly as the PlayStation 2 did. Other chips, including PowerVR and Adreno with Qualcomm's own driver, draw as before.
 
 ## Fixed
+- On phones, the Frame rate counter sits inside the screen's safe area, so a rounded corner or a notch no longer cuts it off.
 
 - The game kept writing the depth of every picture back to memory for the whole session after its first frame, which cost graphics time every picture, most of all on phones; it now does so only while a frame needs it. The setting that hands the picture's depth to an effects program such as ReShade, on unless you turn it off, also kept it doing so on every phone and on computers without such a program; it now does only while such a program is running.
 - On Android, a save state made in an earlier session could not be loaded (the game closed). Save states made before you closed the app now load after you open it again.
