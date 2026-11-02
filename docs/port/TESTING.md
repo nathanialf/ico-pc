@@ -1048,8 +1048,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`clearPending`) read in list 3 before any clear is not kept, and the next frame (list 0's clear
   and a Z-tested draw, then list 7 on WORK3 and on SCENE without touching the depth) drops at least
   one depth store; a frame reading SCENE's depth with no clear keeps it, the cleared frame then drops
-  none and its record says `storeKept` 1, SCENE, since that frame; no validation error. The drops'
-  bytes are `rd_store_plan_ab`'s (next).
+  none and its record says `storeKept` 1, SCENE, since that frame and the reason
+  `RD_STORE_WHY_KEEP`; no validation error. Between those, the PowerVR phone's frame 5354 in shape
+  (list 0's Z-tested draws, the fog's touch in a pass of its own, the aura's passes on WORK3, list
+  11's two screen sprites on SCENE without a Z test or Z write) with [video] effects_depth on and no
+  effects program, as on the phone: exactly one depth store dropped (list 11's SCENE pass), as a whole
+  frame and as a keep frame; with `rd__force_effects_depth` (an effects program's stand-in) none, the
+  record's reason `RD_STORE_WHY_EFFECTS`, and no keep left after it; replayed with its presents,
+  every record `rd_perf_pop` returns holds the drops its replay counted and `rd_perf_backend_text`
+  says `stores: 1 depth` (with the effects depth `stores: 0 depth` and `nothing dropped in N
+  replays, N of them: kept for an effects program`). The drops' bytes are `rd_store_plan_ab`'s
+  (next).
 - `rd_store_plan_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` (the phone's three
   frames) three times under
   `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` (a depth or stencil load the plan leaves

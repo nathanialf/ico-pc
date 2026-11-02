@@ -1306,7 +1306,8 @@ alpha test that can fail, no DATE, no AA1, no Z test, the scissor the whole targ
 covered and every row or the rows from the top or to the bottom (a bar); two bars of one colour,
 factor and alpha are one step. The deferred text's quads (drawn on the output), the overlay text
 and NOPs between are passed over. A sprite that writes Z (the bars) folds only while the present
-does not read SCENE's depth (the effects depth) and no replay found SCENE's depth read before the
+does not read SCENE's depth (the effects depth with an effects program loaded,
+`rd__effects_depth_wanted`; the setting alone reads nothing) and no replay found SCENE's depth read before the
 frame clears it (a keep frame on the depth the frame before left; logged once, the bars drawn from
 then on); such a sprite is otherwise drawn and ends the run. List 12 must hold nothing but state,
 the overlay and deferred text, the reduction's black sprite into DISPLAY and its textured sprite

@@ -714,8 +714,17 @@ mask; DISPLAY is the frame's picture.
 
 **After the replay.** The plan treats a depth as touched after the replay (every pass keeps it) when:
 
-- the present reads SCENE's depth (Options' effects depth, `RdSettings.effectsDepth`: `depthBlit`
-  in `port/render/rd_present.c`, also on a re-shown present);
+- the present reads SCENE's depth: [video] effects_depth (`RdSettings.effectsDepth`) with an
+  effects program loaded (ReShade, vkBasalt: `rhi_injector_name`; never on Android), or the tests'
+  `rd__force_effects_depth` (`depthBlit` in `port/render/rd_present.c`, also on a re-shown present;
+  `rd__effects_depth_wanted` is the present's own test, `depthWanted`). The setting alone reads
+  nothing: it is on by default, and a plan that kept SCENE's depth on the setting alone dropped no
+  store on any phone (the PowerVR phone's log said `stores: 0 depth ... dropped` in every 10 s line
+  while `rd_replay_tool`, whose settings have it off, dropped list 11's on the same frame). The scan
+  says which holds, once a run: `rd: store plan: [video] effects_depth is on but no effects program
+  reads it: SCENE's depth stores are planned`, or `... the present reads SCENE's depth for an
+  effects program ([video] effects_depth): its stores are kept`. The fades fold asks the same
+  (`rd_fades_fold.c`);
 - a replay found the depth read before its clear (the head clear `RDC_CLEAR` with depth, or the new
   target's clear): a frame drawing on the depth the replay before left, as a keep frame
   (`rd__first_list`) would if its lists 11 and 12 tested SCENE's depth. That depth's stores are kept
@@ -751,6 +760,29 @@ mask; DISPLAY is the frame's picture.
   `rd: store plan: SCENE's depth is read back: its stores are kept from now on`;
 - the replay has a pass window (`rd_replay_tool`'s bisect reads targets mid-frame): no plan at all.
 
+**The live path.** The window's replays run on the render thread (`rd_thread.c`
+`rd__replay_frame_async`), an interpolated present's blended frame (`rd_interp.c`, then
+`rd__present_blended` in `rd_reshow.c`) as a game frame: the same `replayFrame`, the scan, the walk
+and the record (`g_rdPerf`, filled by the replay's thread and queued by `rd__perf_end`;
+`rd_perf_pop` on the window's side sums it under the queue's lock). A re-shown present replays the
+empty keep frame: no pass, nothing planned. So the live picture and `rd_replay_tool` on its dump
+plan the same passes where the settings agree.
+
+**Nothing dropped.** A planned replay that had a pass with a depth bound and dropped no store says
+why at its end (`rd__store_plan_end`, the first eight a run, then every 100th), for SCENE's depth
+where the replay has it, else the first depth with a pass:
+
+    rd: store plan: nothing dropped (frame N): SCENE's depth last touched by the fog in list L at command K; M passes began after it with the depth bound (P in all): kept for an effects program ([video] effects_depth) (C so far)
+
+The last touch is the command's type, its list and its index in the list (`not touched in the
+frame` without one); the passes counted are those begun after it with the depth bound; the reason
+is the first of those passes' (the drop's own order): `stencil live (a shadow window open on it)`,
+`kept for an effects program`, `keep (a read before the clear or a readback) since frame F`,
+`anyTouch from command type T in list L at command K` (a command the scan does not know), or `last
+touch in the last pass` when no pass began after it (`more depths than the plan holds` past 64).
+The record carries it (`RdPerfRecord.storeWhy`, `RD_STORE_WHY_*`), and the 10 s line's parenthesis
+adds `; nothing dropped in N replays, M of them: <reason>`, the block's most frequent.
+
 The passes the plan drops lie after the depth's last touch and draw nothing into it, so a device that
 skips the write-back leaves the memory as the last stored pass wrote it; Vulkan calls the contents
 undefined, which only matters to a reader the plan does not see (the next frame, above).
@@ -783,7 +815,10 @@ the earliest such keep (`RdPerfRecord.storeKept`, `storeKeptTarget`, `storeKeptF
 **The tests.** `rd_store_plan` ([TESTING.md](TESTING.md), `port/render/test/rd_store_plan_test.c`)
 runs the start's self-tests at two scene sizes and synthetic frames on lavapipe: no keep after the
 self-tests, a new SCENE read before the frame's clear not kept and the next frame's drop in force, a
-frame reading the depth the replay before left kept from then on, its record naming the keep.
+frame reading the depth the replay before left kept from then on, its record naming the keep; the
+phone's frame 5354 in shape dropping list 11's store with the effects depth setting on and no
+program, none with the effects depth in force (said why), and the records' drops reaching the 10 s
+text.
 `rd_store_plan_ab` replays the corpus and the phone's frame
 with every store kept, with the plan and with every depth store dropped, under
 `ICO_RD_STORE_POISON=1`: a load the plan leaves undefined (a load it made DONT_CARE, or a load after a
