@@ -460,6 +460,51 @@ void ico_mc_host_set_port_root(int port, const char *dir)
     mc.rootSet = 1;
 }
 
+int ico_mc_host_second_card_changed(void)
+{
+    char dir[MC_ROOT_MAX];
+    const char *sfx = ico_region_cur()->mc_card_suffix;
+    int r;
+
+    if (!mc.rootSet) {
+        return 0; /* sceMcInit reads it */
+    }
+    r = ico_host_saves2_dir(dir, sizeof(dir));
+    if (r < 0) {
+        fprintf(stderr, "mc: the second card's folder path is too long; port 1 has no card\n");
+        dir[0] = '\0';
+    }
+    /* the August 2001 preview's card folders are beside the others' (sceMcInit) */
+    if (dir[0] != '\0' && sfx != NULL && ico_host_card_dir_beside(dir, sizeof(dir), sfx) != 0) {
+        fprintf(stderr, "mc: the port 1 card folder path is too long with %s; port 1 has no card\n",
+                sfx);
+        dir[0] = '\0';
+    }
+    if (strcmp(dir, mc.root[1]) == 0) {
+        fprintf(stderr, "mc: Second memory card %s: port 1 unchanged (%s)\n",
+                ico_host_second_card() ? "on" : "off", dir[0] != '\0' ? dir : "empty");
+        return 0;
+    }
+    snprintf(mc.root[1], sizeof(mc.root[1]), "%s", dir);
+    /* a card put in or taken out: the next sceMcGetInfo on port 1 answers
+       "new card" once, as at the start; the game's save and load screens
+       read both ports each time they open (common/src/layout_action.c
+       _la_set_current_port_2, _la_set_current_port_new) */
+    mc.changed[1] = 1;
+    mc.unformatted[1] = 0;
+    mc.cwd[1][0] = '\0';
+    if (dir[0] != '\0') {
+        fprintf(stderr,
+                "mc: Second memory card on: port 1 holds the card %s; the next save or load "
+                "screen offers both cards\n",
+                dir);
+    } else {
+        fprintf(stderr,
+                "mc: Second memory card off: port 1 is empty (its saves stay in their folder)\n");
+    }
+    return 1;
+}
+
 const char *ico_mc_host_root(void)
 {
     return mc.root[0];
@@ -597,7 +642,11 @@ int sceMcInit(void)
                     mc.root[0]);
         }
         if (r2 == 1 && mc.root[1][0] != '\0') {
-            fprintf(stderr, "mc: two cards: port 0 %s, port 1 %s\n", mc.root[0], mc.root[1]);
+            fprintf(stderr, "mc: two cards: port 0 %s, port 1 %s (Second memory card %s)\n",
+                    mc.root[0], mc.root[1], ico_host_second_card() ? "on" : "off, saves2");
+        } else {
+            fprintf(stderr, "mc: one card: port 0 %s, port 1 empty (Second memory card off)\n",
+                    mc.root[0]);
         }
         mc.rootSet = 1;
     }

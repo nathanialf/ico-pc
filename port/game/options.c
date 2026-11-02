@@ -23,6 +23,7 @@ static int s_door_fix = -1;
 static int s_yorda_trips = -1;
 static int s_natural_chains = -1;
 static int s_skip_opening = -1;
+static int s_second_card = -1;
 static int s_mirror = -1;
 static int s_developer_mode = -1;
 static int s_circle_back = -1;
@@ -249,6 +250,36 @@ int ico_opt_skip_opening(void)
 void ico_opt_set_skip_opening(int on)
 {
     s_skip_opening = on != 0;
+}
+
+int ico_opt_second_memory_card(void)
+{
+    if (s_second_card < 0) {
+        s_second_card = ico_config_get_bool("gameplay.second_memory_card", 0) != 0;
+        fprintf(stderr, "gameplay: second memory card %s\n", s_second_card ? "on" : "off");
+    }
+    return s_second_card;
+}
+
+static void (*s_second_card_listener)(int on);
+
+void ico_opt_set_second_memory_card(int on)
+{
+    if ((on != 0) != s_second_card) {
+        fprintf(stderr, "gameplay: second memory card %s\n", on ? "on" : "off");
+    }
+    s_second_card = on != 0;
+    if (s_second_card_listener != NULL) {
+        s_second_card_listener(s_second_card);
+    }
+}
+
+void ico_opt_set_second_memory_card_listener(void (*fn)(int on))
+{
+    s_second_card_listener = fn;
+    if (fn != NULL) {
+        fn(ico_opt_second_memory_card());
+    }
 }
 
 int ico_opt_mirror(void)
@@ -630,7 +661,7 @@ void ico_opt_reload(void)
 {
     s_stick_fix = s_yorda_safe = s_door_fix = s_mirror = s_developer_mode = s_circle_back = -1;
     s_pit_time = s_shadow_speed = -1;
-    s_natural_chains = s_skip_opening = s_yorda_trips = -1;
+    s_natural_chains = s_skip_opening = s_yorda_trips = s_second_card = -1;
     s_output = -2;
     s_ui_language = -2;
     s_hold_choice = -1;

@@ -35,7 +35,10 @@
  *                    in the same way: port/core/region.h mc_save_dir);
  *                    default memcard beside the per-user folder
  *   saves2=PATH      a second card folder, the card in port 1; absent or
- *                    empty: port 1 has no card (the original behaviour)
+ *                    empty: port 1 has no card (the original behaviour),
+ *                    unless Options > Gameplay > Second memory card is on
+ *                    ([gameplay] second_memory_card): then memcard2 beside
+ *                    memcard in the per-user folder
  *   keep_image=1     Android: keep the copy of the disc image the first
  *                    start made in the app's folder (Ico_PAL, Ico_JPN or Ico_KOR:
  *                    .iso, .chd or .bin);
@@ -192,10 +195,21 @@ int ico_host_fixed_clock(const IcoIni *ini);
    read (ico_ini_load_layered). 0, or -1 (then out is "memcard"). */
 int ico_host_saves_dir(char *out, size_t size);
 /* The port-1 card folder: saves2= or [paths] saves2, read as saves=
-   (relative to the executable's folder).
+   (relative to the executable's folder); with neither, <pref dir>/memcard2
+   when the second card is on (ico_host_second_card). An explicit saves2
+   wins over the option.
    1 with out set, 0 when not configured (no card in port 1; out ""), -1 when
-   the path does not fit (out ""). A pure read, like ico_host_saves_dir. */
+   the path does not fit (out ""). A pure read, like ico_host_saves_dir: the
+   folder is made by the game's first Mkdir on the card (port/save/mc_host.c),
+   as memcard is. */
 int ico_host_saves2_dir(char *out, size_t size);
+/* Options > Gameplay > Second memory card ([gameplay] second_memory_card,
+   default false). The options module sets it (port/game/options.h
+   ico_opt_set_second_memory_card's listener, main_host.c) from the run's
+   settings store; until it does (-1: tools and tests), it is read from
+   config.toml in the per-user folder. */
+void ico_host_set_second_card(int on);
+int ico_host_second_card(void);
 /* PC port: a card folder's sibling for a disc whose saves cannot share the
    card (the August 2001 preview: port/core/region.h mc_card_suffix): dir
    with suffix appended after any trailing separators ("memcard" ->

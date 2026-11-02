@@ -133,6 +133,7 @@
 #include "tables.h"
 #include "trace_host.h"
 #include "options.h"       /* the recording's effective stick_fix */
+#include "mc_host.h"       /* ico_mc_host_second_card_changed */
 #include "video_options.h" /* the recording's frame: ico_video_frame */
 
 extern int ScreenHeight;   /* ico2/seki/include/GsBase.h */
@@ -2212,6 +2213,14 @@ static void setup_trace(const Args *a, const IcoIni *ini, const char *exe_dir, c
 }
 
 /* the game's thread functions, by name in the crash report */
+/* Options > Gameplay > Second memory card: the card folder of port 1
+   (host_config.h), put in or taken out at once (mc_host.h) */
+static void second_card_changed(int on)
+{
+    ico_host_set_second_card(on);
+    ico_mc_host_second_card_changed();
+}
+
 static void name_threads(void)
 {
     ico_diag_name_func((void *)Main, "Main");
@@ -2656,6 +2665,7 @@ static int host_main(int argc, char **argv)
     /* save states: the page's host and the popups before the menus are
        built in the boot, the [dev] keys (state.h) */
     setup_states(&ini);
+    ico_opt_set_second_memory_card_listener(second_card_changed);
     ico_diag_milestone("boot starts (ico_host_init)");
     ico_host_init();
     ico_diag_milestone("boot ran until every thread waits");

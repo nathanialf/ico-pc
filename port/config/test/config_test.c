@@ -477,6 +477,9 @@ static void test_first_run(void)
     CHECK(ico_config_get_bool("gameplay.natural_chains", 1) == 0); /* Natural chains, off */
     CHECK(ico_config_get_bool("gameplay.skip_opening", 1) == 0);   /* Skip the opening, off */
     CHECK(text != NULL && strstr(text, "skip_opening = false") != NULL);
+    /* Second memory card, off: port 1 empty, as the original */
+    CHECK(ico_config_get_bool("gameplay.second_memory_card", 1) == 0);
+    CHECK(text != NULL && strstr(text, "second_memory_card = false") != NULL);
     CHECK_STR(ico_config_get_string("gameplay.hold_type", "?"), "disc"); /* the disc's own */
     CHECK(text != NULL && strstr(text, "hold_type = \"disc\"") != NULL);
     CHECK_STR(ico_config_get_string("gameplay.pit_time", "?"), "original");

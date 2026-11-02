@@ -2472,6 +2472,33 @@ int ico_host_card_dir_beside(char *dir, size_t size, const char *suffix)
     return 0;
 }
 
+/* Options > Gameplay > Second memory card: -1 until the options module sets
+   it (host_config.h) */
+static int second_card = -1;
+
+void ico_host_set_second_card(int on)
+{
+    second_card = on < 0 ? -1 : on != 0;
+}
+
+int ico_host_second_card(void)
+{
+    char dir[ICO_PATH_MAX], toml_path[ICO_PATH_MAX];
+    IcoToml *t = NULL;
+    int on;
+
+    if (second_card >= 0) {
+        return second_card;
+    }
+    if (ico_host_pref_dir(dir, sizeof(dir)) == 0 &&
+        ico_path_join(toml_path, sizeof(toml_path), dir, "config.toml") == 0) {
+        t = ico_toml_load(toml_path);
+    }
+    on = t != NULL && ico_toml_get_bool(t, "gameplay.second_memory_card", 0) != 0;
+    ico_toml_free(t);
+    return on;
+}
+
 int ico_host_saves2_dir(char *out, size_t size)
 {
     char dir[ICO_PATH_MAX];
@@ -2490,6 +2517,13 @@ int ico_host_saves2_dir(char *out, size_t size)
     ico_ini_load_layered(ini, ini_path);
     r = card_dir_key(ini, dir, "saves2", out, size);
     free(ini);
+    /* no saves2: the Second memory card option's folder, beside memcard */
+    if (r == 0 && ico_host_second_card()) {
+        r = ico_host_pref_dir(dir, sizeof(dir)) == 0 &&
+                    ico_path_join(out, size, dir, "memcard2") == 0
+                ? 1
+                : -1;
+    }
     if (r < 0 && size > 0) {
         out[0] = '\0';
     }

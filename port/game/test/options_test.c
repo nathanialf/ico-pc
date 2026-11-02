@@ -143,6 +143,12 @@ static void test_defaults(void)
     ico_opt_set_skip_opening(1);
     ico_opt_reload();
     CHECK(ico_opt_skip_opening() == 0);
+    /* Second memory card: the same (off, the setter's 0 or 1, back on reload) */
+    CHECK(ico_opt_second_memory_card() == 0);
+    ico_opt_set_second_memory_card(3);
+    CHECK(ico_opt_second_memory_card() == 1);
+    ico_opt_reload();
+    CHECK(ico_opt_second_memory_card() == 0);
     /* Hold type: the disc's own by default (the region row's hold_type_own),
        the setter keeps 0 or 1, a reload goes back to the config's (absent:
        the disc's own) */
@@ -178,6 +184,15 @@ static void test_defaults(void)
     CHECK(ico_opt_developer_mode() == 0);
 }
 
+/* the Second memory card's listener (main_host.c points it at port 1) */
+static int s_card_heard = -1, s_card_count;
+
+static void card_listener(int on)
+{
+    s_card_heard = on;
+    s_card_count++;
+}
+
 static void test_config(const char *dir)
 {
     char path[512];
@@ -192,7 +207,7 @@ static void test_config(const char *dir)
     }
     fputs("[gameplay]\nstick_fix = true\nyorda_safe = true\ndoor_fix = true\nmirror = true\n"
           "developer_mode = true\nnatural_chains = true\nskip_opening = true\n"
-          "yorda_trips = true\n[dev]\n"
+          "yorda_trips = true\nsecond_memory_card = true\n[dev]\n"
           "debug_option = 1\n",
           f);
     fclose(f);
@@ -204,6 +219,18 @@ static void test_config(const char *dir)
     CHECK(ico_opt_natural_chains() == 1);
     CHECK(ico_opt_skip_opening() == 1);
     CHECK(ico_opt_yorda_trips() == 1);
+    CHECK(ico_opt_second_memory_card() == 1);
+    /* its listener hears the current value at registration, then each set
+       (a toggle puts the card in or takes it out at once) */
+    ico_opt_set_second_memory_card_listener(card_listener);
+    CHECK(s_card_heard == 1 && s_card_count == 1);
+    ico_opt_set_second_memory_card(0);
+    CHECK(s_card_heard == 0 && s_card_count == 2 && ico_opt_second_memory_card() == 0);
+    ico_opt_set_second_memory_card(1);
+    CHECK(s_card_heard == 1 && s_card_count == 3);
+    ico_opt_set_second_memory_card_listener(NULL);
+    ico_opt_set_second_memory_card(0);
+    CHECK(s_card_count == 3);
     CHECK(ico_opt_mirror() == 1);
     /* developer mode and the debug option file switch */
     CHECK(ico_opt_developer_mode() == 1);

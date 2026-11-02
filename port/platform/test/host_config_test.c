@@ -283,6 +283,72 @@ static void test_saves_dir_layered(void)
     remove(toml);
 }
 
+/* Options > Gameplay > Second memory card: with no saves2 the port-1 card is
+   memcard2 in the user folder (beside memcard) while the option is on, from
+   config.toml's [gameplay] second_memory_card until the options module sets
+   it (ico_host_set_second_card) and from that after; an explicit saves2
+   still wins; the read makes no folder (the game's first Mkdir does) */
+static void test_saves2_second_card(void)
+{
+    char ini_path[ICO_PATH_MAX], exe[ICO_PATH_MAX], pref[ICO_PATH_MAX], toml[ICO_PATH_MAX];
+    char out[ICO_PATH_MAX], want[ICO_PATH_MAX], card[ICO_PATH_MAX];
+    FILE *f;
+
+    ico_host_ini_path(ini_path, sizeof(ini_path));
+    CHECK(ico_host_exe_dir(exe, sizeof(exe)) == 0);
+    CHECK(ico_host_pref_dir(pref, sizeof(pref)) == 0);
+    ico_path_join(toml, sizeof(toml), pref, "config.toml");
+    ico_path_join(want, sizeof(want), pref, "memcard2");
+    if (ico_file_exists(ini_path) || ico_file_exists(toml) ||
+        ico_path_kind(want, NULL, NULL) >= 0) {
+        fprintf(stderr, "host_config_test: %s, %s or %s exists; the second card not tested\n",
+                ini_path, toml, want);
+        return;
+    }
+    ico_host_set_second_card(-1);
+    /* no config: off, no card */
+    CHECK(ico_host_second_card() == 0);
+    CHECK(ico_host_saves2_dir(out, sizeof(out)) == 0 && out[0] == '\0');
+    f = fopen(toml, "wb");
+    CHECK(f != NULL);
+    if (f == NULL) {
+        return;
+    }
+    fputs("[gameplay]\nsecond_memory_card = true\n", f);
+    fclose(f);
+    /* on in config.toml: memcard2 beside memcard, not made */
+    CHECK(ico_host_second_card() == 1);
+    CHECK(ico_host_saves2_dir(out, sizeof(out)) == 1 && strcmp(out, want) == 0);
+    CHECK(ico_host_saves_dir(card, sizeof(card)) == 0);
+    {
+        char beside[ICO_PATH_MAX];
+
+        ico_path_join(beside, sizeof(beside), pref, "memcard");
+        CHECK(strcmp(card, beside) == 0);
+    }
+    CHECK(ico_path_kind(want, NULL, NULL) < 0);
+    /* the options module's value wins over the file: off, then on again */
+    ico_host_set_second_card(0);
+    CHECK(ico_host_second_card() == 0);
+    CHECK(ico_host_saves2_dir(out, sizeof(out)) == 0 && out[0] == '\0');
+    ico_host_set_second_card(5);
+    CHECK(ico_host_second_card() == 1);
+    CHECK(ico_host_saves2_dir(out, sizeof(out)) == 1 && strcmp(out, want) == 0);
+    /* too small a buffer: -1 and "" */
+    CHECK(ico_host_saves2_dir(out, 4) == -1 && out[0] == '\0');
+    /* an explicit saves2 still wins */
+    f = fopen(toml, "wb");
+    CHECK(f != NULL);
+    if (f != NULL) {
+        fputs("[paths]\nsaves2 = \"own-cards-2\"\n[gameplay]\nsecond_memory_card = true\n", f);
+        fclose(f);
+        ico_path_join(want, sizeof(want), exe, "own-cards-2");
+        CHECK(ico_host_saves2_dir(out, sizeof(out)) == 1 && strcmp(out, want) == 0);
+    }
+    ico_host_set_second_card(-1);
+    remove(toml);
+}
+
 /* portable mode: portable=1 in the ini, or a userdata folder beside the
    program, makes the user folder <exe dir>/userdata; portable=0 turns it off */
 static void test_portable_value(void)
@@ -1156,6 +1222,7 @@ int main(void)
     test_join_overflow();
     test_saves_dir_pure();
     test_saves_dir_layered();
+    test_saves2_second_card();
     test_paths();
     test_portable_value();
     test_dev_env();

@@ -24,6 +24,15 @@ const char *ico_mc_host_root(void);
    for both (saves=, saves2=). */
 void ico_mc_host_set_port_root(int port, const char *dir);
 const char *ico_mc_host_port_root(int port);
+/* Options > Gameplay > Second memory card changed (host_config.h
+   ico_host_set_second_card): port 1's folder is asked again
+   (ico_host_saves2_dir, the preview's folder beside it as sceMcInit does).
+   A folder that differs is put in at once: port 1 answers "new card" once
+   (as at the start) and the game's next save or load screen, which reads
+   both ports each time it opens, offers both cards; an empty one takes the
+   card out (its files stay). Before sceMcInit nothing changes (sceMcInit
+   reads it). 1 when port 1 changed, else 0. Logs the change. */
+int ico_mc_host_second_card_changed(void);
 /* 1 while a request has been issued and its sceMcSync has not returned it */
 int ico_mc_host_pending(void);
 

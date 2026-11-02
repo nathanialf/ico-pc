@@ -34,6 +34,13 @@
  *                                 Sony presents sign and no opening scene
  *                                 (common/src/kanbanBoot.c, script/src/op.c);
  *                                 a pad-recording key (boot timing)
+ *   [gameplay] second_memory_card
+ *                          false  a second memory card in port 1, the
+ *                                 folder memcard2 beside memcard
+ *                                 (host_config.h ico_host_saves2_dir); the
+ *                                 game's own save and load screens offer
+ *                                 both cards. The card is the host's, not
+ *                                 the simulation's: no pad-recording key
  *   [gameplay] hold_type   "disc" Yorda's hand: "disc" plays the disc's own
  *                                 way (A on the European, Japanese, Korean and
  *                                 Asian discs, B on the three 2001 discs);
@@ -141,6 +148,16 @@ void ico_opt_set_natural_chains(int on);
    so a change takes effect at the next start */
 int ico_opt_skip_opening(void);
 void ico_opt_set_skip_opening(int on);
+/* [gameplay] second_memory_card (default false): Second memory card.  Logs
+   "gameplay: second memory card on|off" at its first read and on a change.
+   The listener (main_host.c: host_config.h ico_host_set_second_card and
+   port/save/mc_host.h ico_mc_host_second_card_changed) puts the card in or
+   takes it out at once. */
+int ico_opt_second_memory_card(void);
+void ico_opt_set_second_memory_card(int on);
+/* Called with the new value on every ico_opt_set_second_memory_card, and once
+   at registration with the current one.  NULL unregisters.  One listener. */
+void ico_opt_set_second_memory_card_listener(void (*fn)(int on));
 /* Mirror mode: ico_input negates the stick X (ico_input_mirror), the audio
    host swaps the pan (ico_audio_pan_mirror), the renderer flips the picture
    (rd.h rd_set_mirror, through the listener below).
