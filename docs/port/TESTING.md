@@ -2274,7 +2274,10 @@ against the generated header under each row's macro; `python3 -I tools/region_bl
 region rules and the region glue and exits 0, 2 (raw blocks remain, all hand items; the hook
 warns, CI fails) or 1 (a rule broken) ([GAME_CODE.md](GAME_CODE.md#regions)). Other tests check generated files and
 tables: `layout_asserts` (a program compiled from the generated asserts), `layout_asserts_fresh`,
-`font_audit`, `font_subset_ja` (`tools/subset_font_ja.py --check`: the Japanese font's recorded
+`font_audit`, `font_subset_arimo` (`tools/subset_font_arimo.py --check`: Arimo's recorded code
+points are the tool's ranges and the community translations' characters, its cmap the recorded
+ones and, with fontTools 4.63.0 and the download, the committed file byte for byte the tool's
+output), `font_subset_ja` (`tools/subset_font_ja.py --check`: the Japanese font's recorded
 code points are the tables', its cmap the recorded ones and, with fontTools 4.63.0 and the
 download from `tools/fetch_deps.sh`, the committed file byte for byte the tool's output),
 `font_subset_ko` (`tools/subset_font_ko.py --check`, the same for the Korean font),
@@ -2361,7 +2364,8 @@ hand; on single files (`check_spirv.py a.spv b.spv`) it skips the variants gate.
   in the eight languages; `strings_complete` fails until every table has the new strings. A new
   Japanese character needs `tools/subset_font_ja.py` run again (`font_subset_ja` fails until it
   is), a new Hangul syllable `tools/subset_font_ko.py` (`font_subset_ko`), a new character of the Chinese
-  table `tools/subset_font_zh.py` (`font_subset_zh`). A gameplay option also needs `options`
+  table `tools/subset_font_zh.py` (`font_subset_zh`), a community translation's character outside
+Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay option also needs `options`
   (`port/game/test/options_test.c`).
 - A new config key: `config` (the reader, writer and precedence, `port/config/test/config_test.c`),
   `host_config` when `ico-pc.ini` maps it (`port/platform/host_config.c`, `ini_map`), `settings`

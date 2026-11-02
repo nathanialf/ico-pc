@@ -44,6 +44,9 @@
 #   deps/noto-sans-tc/     Noto Sans TC (SIL OFL 1.1), the variable font the
 #                          port's Chinese text subset is made from
 #                          (tools/subset_font_zh.py); never built or shipped
+#   deps/arimo/            Arimo (SIL OFL 1.1), the variable font the port's
+#                          main font subset is made from
+#                          (tools/subset_font_arimo.py); never built or shipped
 #   deps/spirv-cross/      SPIRV-Cross (Apache-2.0 OR MIT) built from source at
 #                          the Vulkan SDK tag: the shader toolchain's SPIR-V to
 #                          GLSL translator for the OpenGL backend
@@ -65,12 +68,13 @@
 #   LIBCHDR_TAG, LIBCHDR_COMMIT, LIBCHDR_TAR_SHA256, ZSTD_LICENSE_SHA256
 #   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1, SKIP_SPIRV_CROSS=1,
 #   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1, SKIP_NOTO_JP=1, SKIP_NOTO_KR=1, SKIP_NOTO_TC=1,
-#   SKIP_APPIMAGE=1
+#   SKIP_ARIMO=1, SKIP_APPIMAGE=1
 #   APPIMAGETOOL_VERSION, APPIMAGETOOL_SHA256, APPIMAGE_RUNTIME_VERSION,
 #   APPIMAGE_RUNTIME_SHA256 (the host architecture's assets)
 #   NOTO_JP_COMMIT, NOTO_JP_SHA256, NOTO_JP_OFL_SHA256
 #   NOTO_KR_COMMIT, NOTO_KR_SHA256, NOTO_KR_OFL_SHA256
 #   NOTO_TC_COMMIT, NOTO_TC_SHA256, NOTO_TC_OFL_SHA256
+#   ARIMO_COMMIT, ARIMO_SHA256
 #   DEB_SNAPSHOT     snapshot.debian.org fallback for the Debian packages
 #   ICO_CMAKE        the CMake used for the SDL3 source build (default: the
 #                    pinned one in tools/toolchain/cmake, else the PATH's)
@@ -894,6 +898,29 @@ else
     cp "$TMP/NotoSansTC-OFL.txt" "$NOTO_TC_DIR/OFL.txt"
     echo "$NOTO_TC_COMMIT" > "$NOTO_TC_DIR/.ico-release"
     echo "==> Noto Sans TC at $NOTO_TC_DIR"
+fi
+# --- 8c. Arimo (the port's main font) ------------------------------------------
+# google/fonts (SIL OFL 1.1) ofl/arimo/Arimo[wght].ttf at commit
+# d7b3b07542b00e0ec7c48886d305eb8f08ef89d5 (2026-04-27, the file's last
+# change): the source tools/subset_font_arimo.py makes the vendored subset
+# port/assets/fonts/Arimo-Regular.ttf from; the build reads only the subset,
+# so a build never needs this download. The licence is the vendored
+# port/assets/fonts/OFL.txt (docs/THIRD_PARTY.md).
+ARIMO_COMMIT="${ARIMO_COMMIT:-d7b3b07542b00e0ec7c48886d305eb8f08ef89d5}"
+ARIMO_SHA256="${ARIMO_SHA256:-e43898b143ec826ac8cb4034816458a7047fbe0836558de2a1f8c6223ae3e0ca}"
+ARIMO_DIR="$DEST/arimo"
+if [[ "${SKIP_ARIMO:-0}" == "1" ]]; then
+    echo "==> SKIP_ARIMO=1; not fetching Arimo"
+elif stamped "$ARIMO_DIR" "$ARIMO_COMMIT"; then
+    echo "==> Arimo already at $ARIMO_DIR"
+else
+    base="https://raw.githubusercontent.com/google/fonts/${ARIMO_COMMIT}/ofl/arimo"
+    fetch "${base}/Arimo%5Bwght%5D.ttf" "$ARIMO_SHA256" "$TMP/Arimo-wght.ttf"
+    rm -rf "$ARIMO_DIR"
+    mkdir -p "$ARIMO_DIR"
+    cp "$TMP/Arimo-wght.ttf" "$ARIMO_DIR/Arimo[wght].ttf"
+    echo "$ARIMO_COMMIT" > "$ARIMO_DIR/.ico-release"
+    echo "==> Arimo at $ARIMO_DIR"
 fi
 # --- 9. SPIRV-Cross (build tool) ------------------------------------------------
 # KhronosGroup/SPIRV-Cross (Apache-2.0 OR MIT) at the Vulkan SDK tag the

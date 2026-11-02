@@ -5,9 +5,10 @@
 # by default: Arimo; ui_font_ja_ttf: the Japanese text's font; ui_font_ko_ttf:
 # the Korean text's font; ui_font_zh_ttf: the Chinese text's font).
 #
-# The font's subset (the recipe that made Arimo-Regular.ttf) holds these
-# code points; tools/font_audit.py checks the port's text against this line:
-# subset: U+0020-007E,U+00A0-017F,U+0192,U+02C6,U+02DC,U+2013-2014,U+2018-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+20AC,U+2122
+# Arimo's subset (port/assets/fonts/Arimo-Regular.ttf, made by
+# tools/subset_font_arimo.py, which writes the next line) holds these code
+# points; tools/font_audit.py checks the port's text against this line:
+# subset: U+0020-007E,U+00A0-017F,U+0192,U+02C6,U+02DC,U+0400-04FF,U+2013-2014,U+2018-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+20AC,U+2122
 # The Japanese text's font (port/assets/fonts/NotoSansJP-Regular-subset.ttf,
 # made by tools/subset_font_ja.py, which writes the next line) holds these;
 # font.c draws from it the characters Arimo has no glyph for:
