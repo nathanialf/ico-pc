@@ -704,7 +704,9 @@ shaders read a corner's and its triangle's record back and keep only what differ
 record stages, `vu_pre_out`, `vu_rec_vertex`, `vu_rec_planes`); `port/shaders/vu_tri.hlsl`,
 `port/shaders/vu_particle.hlsl`). The meshes (`RDC_MESH`, `RDC_SKINNED`), the grids (`RDC_GRID`)
 and the particles (`RDC_PARTICLES`: a sprite's verdict and planes, six invocations a sprite) take
-it.
+it. A command the visibility test left out of the replay (an `RDC_NOP` of the shadow frame,
+[RENDER.md](RENDER.md#culling)) has no entry, no record rows and no draw: the pre-pass walks the
+frame the replay walks.
 
 **The vertex record.** Twelve 32-bit words a vertex, in three planes of `RGBA32_UINT` texels, one
 texel a vertex (`shader_consts.h` (`ICO_VU_REC_*`)):

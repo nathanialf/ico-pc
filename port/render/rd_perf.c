@@ -193,6 +193,10 @@ static uint64_t s_backendBytes;
 static uint32_t s_backendReplays, s_reshownReplays, s_glowHeldReplays;
 static uint64_t s_mergeIn, s_mergeGpu, s_mergeAlone, s_mergeBlocked[5];
 static uint64_t s_fusePairs, s_fuseSame, s_fuseKept[RD_VU_FUSE_WHY_COUNT];
+/* the visibility test (rd_vis.c; RdPerfRecord cullDraws, cullSkipped,
+ * cullFrustum, cullOccluded, cullMs) */
+static uint64_t s_cullDraws, s_cullSkipped, s_cullFrustum, s_cullOccluded;
+static double s_cullMs;
 /* the store plan's (RdPerfRecord storePasses, storeDepthDropped,
  * storeColorDropped) and the replays it planned */
 static uint64_t s_storePasses, s_storeDepth, s_storeColor;
@@ -234,6 +238,11 @@ bool rd_perf_pop(RdPerfRecord *out)
         s_mergeBlocked[k] += s_queue[s_head].vuMergeBlocked[k];
     }
     s_fusePairs += s_queue[s_head].vuFusePairs;
+    s_cullDraws += s_queue[s_head].cullDraws;
+    s_cullSkipped += s_queue[s_head].cullSkipped;
+    s_cullFrustum += s_queue[s_head].cullFrustum;
+    s_cullOccluded += s_queue[s_head].cullOccluded;
+    s_cullMs += s_queue[s_head].cullMs;
     s_fuseSame += s_queue[s_head].vuFuseSame;
     for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
         s_fuseKept[k] += s_queue[s_head].vuFuseKept[k];
@@ -401,6 +410,18 @@ const char *rd_perf_backend_text(void)
                      (double)s_mergeBlocked[4] / n);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
+    if (s_cullDraws && s_backendReplays) {
+        /* the visibility test (rd_vis.c): per replay, the scene draws it
+           turned into NOPs of the VU draw commands, by which test, and its
+           CPU time */
+        const double n = (double)s_backendReplays;
+        const int k = snprintf(s_text + at, sizeof(s_text) - at,
+                               "; cull: %.0f of %.0f scene draws skipped a replay (%.0f frustum, "
+                               "%.0f occluded), %.2f ms ([dev] cull)",
+                               (double)s_cullSkipped / n, (double)s_cullDraws / n,
+                               (double)s_cullFrustum / n, (double)s_cullOccluded / n, s_cullMs / n);
+        at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
+    }
     uint64_t kept = 0;
     for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
         kept += s_fuseKept[k];
@@ -522,6 +543,8 @@ const char *rd_perf_backend_text(void)
     memset(s_mergeBlocked, 0, sizeof(s_mergeBlocked));
     s_fusePairs = s_fuseSame = 0;
     memset(s_fuseKept, 0, sizeof(s_fuseKept));
+    s_cullDraws = s_cullSkipped = s_cullFrustum = s_cullOccluded = 0;
+    s_cullMs = 0.0;
     s_cutCarried = s_cutSkipped = s_cutLast = 0;
     memset(s_cutLastWhy, 0, sizeof(s_cutLastWhy));
     s_smMerged = s_smArmed = s_smResets = s_smClears = 0;

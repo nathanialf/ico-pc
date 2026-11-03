@@ -11,7 +11,10 @@
 # byte for byte; the faked run must say both fakes took; the draw merge's
 # figures ("N draws in G GPU draws (IN merged into GPU, A alone") and the
 # fused pairs' count must be the plain run's, and with expect= the merged
-# draws and their GPU draws that figure.  A missing list or dump is named
+# draws and their GPU draws that figure.  Both runs replay every draw
+# (ICO_RD_CULL=off): the expect= figures count every VU draw of the frame,
+# and the visibility test's NOPs (rd_vis.c) would take some out of the runs
+# (rd_cull_ab is its gate).  A missing list or dump is named
 # and skipped; no dump read, or no device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 if(NOT EXISTS "${LIST}")
@@ -56,14 +59,16 @@ foreach(l IN LISTS lines)
   set(dirMali "${OUT}/${index}-mali")
   file(REMOVE_RECURSE "${dirPlain}" "${dirMali}")
   file(MAKE_DIRECTORY "${dirPlain}" "${dirMali}")
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed "${TOOL}" "${dump}"
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_CULL=off
+                          "${TOOL}" "${dump}"
                           /dev/null --pass-dump "${dirPlain}" --stats ${args}
                   RESULT_VARIABLE rcPlain OUTPUT_VARIABLE outPlain ERROR_VARIABLE errPlain)
   if(rcPlain EQUAL 77)
     message(STATUS "SKIP: no device: ${errPlain}")
     return()
   endif()
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_VK_FAKE_LIMITS=mali
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_CULL=off
+                          ICO_VK_FAKE_LIMITS=mali
                           ICO_VK_FAKE_NO_DUAL=1 "${TOOL}" "${dump}" /dev/null --pass-dump
                           "${dirMali}" --stats ${args}
                   RESULT_VARIABLE rcMali OUTPUT_VARIABLE outMali ERROR_VARIABLE errMali)

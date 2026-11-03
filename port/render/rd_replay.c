@@ -5771,6 +5771,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     g_rd.replayCounter++;
     rd__passring_frame(g_rdPerf.replay, f->number, keep); /* the loss report's names */
     rd__diag_frame(NULL, 0);
+    f = rd__vis_frame(f, keep); /* the scene draws off the target: NOPs (rd_vis.c) */
     /* the pass window's count starts again (rd__replay_set_window) */
     g_rdWin.passes = g_rdWin.lastDraws = g_rdWin.drawn = 0;
     memset(&g_rdWin.note, 0, sizeof(g_rdWin.note));

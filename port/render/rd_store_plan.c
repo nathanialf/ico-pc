@@ -260,6 +260,30 @@ static void planDraw(const RdStateBlock *st, uint32_t ord, int l)
     planDrawEx(st, ord, l, true);
 }
 
+/* A scene draw the visibility test skipped (rd_vis.c, an RDC_NOP of the
+ * shadow frame): no touch, since it draws nothing (the passes after the
+ * touches before it may drop the store), but a read of a depth before the
+ * depth's clear is the carried read it is in the frame as recorded, so the
+ * stores are kept from then on (the loop after the walk) exactly as
+ * without the test: a later replay whose draw reads that depth sees it. */
+static void planCulledRead(const RdStateBlock *st, uint32_t ord, int l)
+{
+    const RdDrawState *ds = &st->ds;
+    const bool test = ds->test.zte && ds->test.ztst != RD_ZTST_ALWAYS;
+    const bool stencil = ds->test.date != RD_DATE_OFF || st->aa1;
+    const RdTexRec *tv = ds->texEnabled ? rd__tex_rec(st->tex) : NULL;
+    const uint32_t ids[2] = {
+        test || stencil ? st->depth : 0u,
+        tv && tv->kind == RD_TEXKIND_TARGET && tv->view == RD_VIEW_DEPTH ? tv->target : 0u};
+    for (int k = 0; k < 2; k++) {
+        PlanDepth *p = ids[k] ? planDepth(ids[k], true) : NULL;
+        if (p && p->firstRead == PLAN_NONE) {
+            p->firstRead = ord;
+            p->firstList = l;
+        }
+    }
+}
+
 /* A post sprite (not the fog): a draw, but DATE is no touch of the depth
  * unless it is the reduction's.  Every staticBlur sprite but the
  * reduction's is drawn by rd_replay.c doBlurSpriteDraw through fx_rect_vs
@@ -420,6 +444,10 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
             s_plan.curCmd = i;
             switch (c->type) {
             case RDC_NOP:
+                if (rd__vis_culled(f, l, i)) {
+                    planCulledRead(&st, ord, l); /* a scene draw rd_vis.c skipped */
+                }
+                break;
             case RDC_OVERLAY_TEXT:
             case RDC_COPY:
             case RDC_EXACT_BLEND:

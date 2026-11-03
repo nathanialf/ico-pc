@@ -33,6 +33,7 @@
 #include "rd_mesh.h"
 #include "rd_tex.h"
 #include "rd_tex_decode.h"
+#include "rd_vis.h"
 #include "texpack.h"
 
 RdContext g_rd;
@@ -133,7 +134,7 @@ void rd_summary_text(char *out, size_t size)
     snprintf(out, size,
              "blend %s; profile %s; index values dense (marks in the stream); fog %s; VU shaders "
              "%s%s%s%s; VU pre-pass %s%s; VU merge %s; VU fuse %s; constant reads %s; fades "
-             "fold %s; pipelines %s (pool %d, cache %d); menu text %s",
+             "fold %s; cull %s; pipelines %s (pool %d, cache %d); menu text %s",
              g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
              rd__profile_text()[0] ? rd__profile_text() : "(not decided)",
              g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
@@ -149,6 +150,7 @@ void rd_summary_text(char *out, size_t size)
              rd__vu_fuse_text(),  /* the fused scissor pair (rd_replay_vu.c vuMergeInit) */
              rd__const_reads_on() ? "on" : "off", /* rd_const_read.c */
              rd__fades_fold_on() ? "on" : "off",  /* rd_fades_fold.c */
+             rd__vis_mode_name(rd__vis_mode()),   /* rd_vis.c */
              careful && rd__pipelines_lazy_on()
                  ? "the careful start-up set, stopped at its budget (the rest on first use)"
              : rd__pipelines_lazy_on() ? "on first use (no start-up set)"
@@ -1804,6 +1806,7 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     rd__aura_box_init();               /* the aura's read in two passes (rd_aura_box.c) */
     rd__pass_area_init();              /* the passes' render areas (rd_pass_area.c) */
     rd__pass_cut_init();               /* the passes cut (rd_pass_cut.c) */
+    rd__vis_init();                    /* the scene draws' visibility test (rd_vis.c) */
     rd__shadow_merge_init();           /* the volumes in the scene's pass (rd_shadow_merge.c) */
     rd__sprite_planes_init();          /* issue 161: the planes builds off (rd_screen_planes.c) */
     /* the two-pass blend without dual-source blending (a
