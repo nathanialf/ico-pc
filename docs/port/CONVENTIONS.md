@@ -236,7 +236,7 @@ to run them.
 | a new texture or model pack format | [PACKS.md](PACKS.md) |
 | a pacing change | [DISPLAY.md](DISPLAY.md#pacing); the decisions go in `port/platform/pace_policy.c` and only the timing and I/O in `window_host.c` ([PLATFORM.md](PLATFORM.md#pacing)) |
 | a host path in `ico2/` | [GAME_CODE.md](GAME_CODE.md#host-paths-in-the-game-sources) |
-| a new test | [Tests](#tests) above; [TESTING.md](TESTING.md) lists the programs by area |
+| a new test | [Tests](#tests) above; [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md) lists the programs by area |
 
 ## Documents
 

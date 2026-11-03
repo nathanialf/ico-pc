@@ -190,7 +190,7 @@ tripped at stage S after 3 s of running (trip N this run)`.
 
 `port/game/test/yorda_trip_test.c` runs the rule, the guards and the stage load on each disc;
 `yorda_trip_disc_test.c` lists the motions and their pack on the configured disc image
-([TESTING.md](TESTING.md)).
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 ### Natural chains
 

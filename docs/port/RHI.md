@@ -1725,5 +1725,5 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 
 The Vulkan tests exit 77 (skipped) without a device; under the fetched validation layer `rhi_vk`
 fails on any validation error (`port/rhi/CMakeLists.txt`; `port/rhi/test/*`, header comments).
-`ctest --test-dir <build> -R '^rhi_'` runs them; [TESTING.md](TESTING.md#portrhitest) lists every
-test of the tree.
+`ctest --test-dir <build> -R '^rhi_'` runs them;
+[TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portrhitest) lists every test of the tree.

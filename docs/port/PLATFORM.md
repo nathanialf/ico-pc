@@ -606,7 +606,7 @@ variable of the program's own) wholly outside; the text names the first offender
 states' start-up runs it once and, on a failure, logs it and turns save states off. Each range's
 size goes into the save state's build id. `tools/check_game_data_ranges.py` checks the same on the
 linked program's symbol table at test time, the game's file statics (`texTable`,
-`cdvdThreadStack`) included ([TESTING.md](TESTING.md#portplatformtest)).
+`cdvdThreadStack`) included ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portplatformtest)).
 
 ## Save states
 
@@ -2639,5 +2639,5 @@ on it.
 ## Tests
 
 `ctest -L platform` runs this layer's tests, together with those of `port/input`, `port/config` and
-the top level (`cmake/IcoTests.cmake` (`_ico_test_area`)); [TESTING.md](TESTING.md#portplatformtest)
-lists each program.
+the top level (`cmake/IcoTests.cmake` (`_ico_test_area`));
+[TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portplatformtest) lists each program.

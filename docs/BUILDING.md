@@ -496,7 +496,8 @@ in `port/render/rd_dst_read.c`).
 
 How the VU programs treat a triangle outside the GS region is in
 [port/VU1_PROGRAMS.md](port/VU1_PROGRAMS.md). The frame-dump checks, the coverage corpus, F12
-captures and `rd_replay_tool` are in [port/TESTING.md](port/TESTING.md).
+captures and `rd_replay_tool` are in [port/TESTING.md](port/TESTING.md), every test program in
+[port/TESTING_PROGRAMS.md](port/TESTING_PROGRAMS.md).
 
 ## Continuous integration
 

@@ -1122,7 +1122,8 @@ the Japanese program with Korean text, and every bullet below holds on it as wel
 row numbers (the title's copyright line is rows 12 and 13 there), its own sheets (`UI_SHEET_KO`)
 and Korean in place of Japanese where a bullet names the language; the Korean disc has not been
 run in the port yet, so those numbers are checked by the tests (`ui_kor`, `settings_kor` and the
-other `_kor` rows of [TESTING.md](TESTING.md)) and by reading its tables, not by play. The Asian
+other `_kor` rows of [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) and by reading its tables, not
+by play. The Asian
 disc (`region_cn.c`) is the Korean program on the Japanese disc's records: Circle confirms as there,
 and its menu sheets are Traditional Chinese, so its Menu language starts on Chinese
 (`ui_lang_default` `UI_LANG_ZH`) over its own sheets' look (`menu_sheet` `UI_SHEET_ZH`, the Japanese

@@ -1163,8 +1163,8 @@ static void checkPixels(void)
  * next frame through the texture cache and updates a texture of its own
  * between them (rd__texlock_wait holds each change until the replay's reads
  * end).  The picture is the one replayed here, the pictures and the waits
- * counted.  Under the tsan build (docs/port/TESTING.md) a report is a
- * failure. */
+ * counted.  Under the tsan build (docs/port/TESTING_PROGRAMS.md, rd_tex) a
+ * report is a failure. */
 static void threadPixels(void)
 {
     if (rhi_backend() == RHI_BACKEND_OPENGL) {

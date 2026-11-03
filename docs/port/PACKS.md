@@ -424,7 +424,7 @@ that the zip and tar assertions pass on a present entry and fail on a wrong path
 and goes on to the portable archives, `make_portable.sh`, the developer files kept out of the player
 archives, and the version information (`tools/test/package_textures_test.sh`, the `ok` lines;
 `CMakeLists.txt` (`package_textures`)). The loaders and names have their own C tests, listed in
-[TESTING.md](TESTING.md#test-programs-by-area): `texpack_name`, `texpack_load`,
+[TESTING_PROGRAMS.md](TESTING_PROGRAMS.md): `texpack_name`, `texpack_load`,
 `texpack_pack_files` (`texpack_load_test --pack` on the files of `ICO_TEXPACK_DIR`), `texpack`,
 `texpack_disc`, `texpack_e2e`, `gltf`, `modelpack`. The export has `texpack_export` (no disc:
 synthetic TIM2s through the core, the file set against the level-alone names, the PNG sizes, a file

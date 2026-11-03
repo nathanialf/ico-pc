@@ -269,7 +269,7 @@ rd: interp: glow between ticks: held: N later presents pasted the tick's glow wi
 
 and the `window:` uploaded-KB line's `; N between-tick pictures pasted the tick's glow without its
 chain ([dev] glow_redraw)`. ctest `rd_replay_tool_glow_hold` and `build-host/tmp/v094/after/v2-ab.sh`
-are the A/B ([TESTING.md](TESTING.md)).
+are the A/B ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 ## The work clear
 
@@ -379,7 +379,7 @@ tool's `gpu:` line. The picture differs from the fill before the fog at the crac
 [RENDER.md](RENDER.md#crack-filling-above-1x), [DIVERGENCES.md](DIVERGENCES.md) VD-20). Tests:
 `rd_crack_tiler`, `rd_crack_tiler_on`, `rd_crack_tiler_fold`, `rd_crack_tiler_fold_mali` (the
 local read: one pass more than without the filler, the fill's own; SCENE equal to the depth copy
-path's byte for byte), `rd_crack_late_ab` ([TESTING.md](TESTING.md)).
+path's byte for byte), `rd_crack_late_ab` ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 At a reach of 1 texel on both axes (2x on a whole scale) the fill draws `crack_fill1_ps`
 (`CRACK_REACH_1`, selected in `rd_crack_fill.c`): the four neighbours are read first and a texel
@@ -913,7 +913,8 @@ the earliest such keep (`RdPerfRecord.storeKept`, `storeKeptTarget`, `storeKeptF
 (`RdPerfRecord.storeDepthDropped`, `storeColorDropped`, `storePasses`, `storeDepthPasses`,
 `storePlanMode`; [TESTING.md](TESTING.md)).
 
-**The tests.** `rd_store_plan` ([TESTING.md](TESTING.md), `port/render/test/rd_store_plan_test.c`)
+**The tests.** `rd_store_plan` ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md),
+`port/render/test/rd_store_plan_test.c`)
 runs the start's self-tests at two scene sizes and synthetic frames on lavapipe: no keep after the
 self-tests, a new SCENE read before the frame's clear not kept and the next frame's drop in force, a
 frame reading the depth the replay before left kept from then on, its record naming the keep; the
@@ -1041,7 +1042,7 @@ forced on, a pass taking a clear and a pass of full-frame sprites counted as kep
 reasons, none with the area off. `rd_pass_area_ab` replays the corpus and the phone's frames with
 the areas off and on (`ICO_RD_PASS_AREA=0`, `1`; lavapipe clips to the area): every target byte
 for byte, and on the phone's frames at its setting some pass with an area or `its draws cover the
-picture` among the kept-whole reasons ([TESTING.md](TESTING.md)).
+picture` among the kept-whole reasons ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 ## Passes cut
 
@@ -1229,7 +1230,7 @@ area's reasons (its fourth cell).
 `rd_pass_cut_ab` replays the corpus and the phone's frames (`tools/pass_cut_dumps.txt`) with every
 cut off, each alone and all on: every target and the present byte for byte, the passes fewer by the
 clears carried and skipped, the depth stores dropped more by those at the last touch, each cut
-cutting something on the phone's frames ([TESTING.md](TESTING.md)).
+cutting something on the phone's frames ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 ## A cleared source read as its colour
 
@@ -1401,7 +1402,7 @@ What an exact cut can and cannot be:
   for 27 k of about 200), unmeasured until the phone's rc. Tests: `rd_aura_box_ab` (every target
   byte for byte on the dump corpus and the phone frames, one pass and one draw more a read) and
   `rd_blur` case `aura_box` (FEED128 byte for byte at 2x, 2364 x 1080 and 1.5x)
-  ([TESTING.md](TESTING.md)).
+  ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 - **The measurement**: `[dev] aura_kernel = gs` (`ICO_RD_AURA_KERNEL=gs`,
   `port/render/rd_aura_kernel.c`) draws that one sprite with the GS's own bilinear at its sample
   point (no box: the PS2's taps, the picture not the default's, the feedback shimmering above 1x;

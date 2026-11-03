@@ -185,7 +185,7 @@ The replay looks entries up by the names in `s_vsNames` and `s_fsNames` (`port/r
 5. Run `shaders_table`, `gs_math`, `shaders_pixel*`, `vu1*` (a VU entry), `rhi_d3d12_plan` (every
    vertex shader's DXIL inputs against its SPIR-V locations) and `rhi_d3d11_shader_plan`, and build
    `shaders_d3d11_check` (the entry under `ICO_D3D11`), then the render tests
-   ([TESTING.md](TESTING.md#portrendertest)).
+   ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portrendertest)).
 
 ## The binding scheme
 

@@ -592,7 +592,7 @@ one pipeline already, M kept apart (...)` with the same reasons (`RdPerfRecord.v
 `vu_texa_np_ps` 44 each (4,927 and 11,063); the other builds (the destination-read twins, every
 build without `ICO_VU_MERGE`) are the same word for word, and the `_nodual` twins 34 to 44 words
 more ([below](#the-draw-merge-without-dual-source-blending)). `rd_vufuse_ab` is its byte gate
-([TESTING.md](TESTING.md)).
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 ## The draw merge without dual-source blending
 

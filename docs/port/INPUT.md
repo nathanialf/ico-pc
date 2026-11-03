@@ -577,4 +577,4 @@ The editor is driven by the Edit layout page (`port/ui/touch_edit_ui.c` (`ui_tou
 The first five are registered in `port/input/CMakeLists.txt`, `pad_script` in
 `port/null/CMakeLists.txt`, `movie_pad` in `port/platform/CMakeLists.txt`. Run them with
 `ctest --preset linux-x64 -R '^(input|input_record|touch|touch_edit|mouse_camera|pad_script|movie_pad)$'`
-([TESTING.md](TESTING.md)).
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).

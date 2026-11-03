@@ -280,7 +280,7 @@ per-primitive test, a failure leaving DATE to the stencil bit or the snapshot (`
 own pictures (DATE through the snapshot or the bit, the premultiplied forms on the blender): with
 both the collapse's machinery must draw the attachment read's bytes, which a `rd_replay_tool
 --pass-dump` of the corpus under `ICO_RD_UBER=on` against baselines made with
-`ICO_RD_BLEND=attachment ICO_RD_UBER=off` checks ([TESTING.md](TESTING.md)).
+`ICO_RD_BLEND=attachment ICO_RD_UBER=off` checks ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 The picture is the attachment exact mode's, the GS's integer arithmetic: the blend equals
 `ICO_RD_BLEND=attachment` ([DIVERGENCES.md](DIVERGENCES.md) VD-7 does not apply), the premultiplied
@@ -960,8 +960,8 @@ pin. The ten mesh programs' entries and the pre-pass entries compile to the same
 record stages in the tree, and both ways draw with the one `vu_ps` (and `vu_texa_ps`) on the same
 flat varyings: the main shaders hand over the very words the programs' entries computed and
 carried. `vu1_test` draws every case both ways, probe and pictures, and compares them byte for
-byte ([TESTING.md](TESTING.md#portshaderstest)); `rd_vustage_ab` compares every target of the
-dump corpus both ways at Original 4:3 1x and Enhanced 4:3 2x.
+byte ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portshaderstest)); `rd_vustage_ab` compares every
+target of the dump corpus both ways at Original 4:3 1x and Enhanced 4:3 2x.
 
 **The saving.** Each vertex function runs once a vertex a command instead of three times an index
 of each of the command's draws, and each triangle's verdict and planes once a triangle instead of

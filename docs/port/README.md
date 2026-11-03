@@ -36,7 +36,8 @@ In reading order.
 | [UI.md](UI.md) | The port's menus: the layout extension, the Settings menu, strings, the font, popups, touch and mouse. |
 | [GAME_FEATURES.md](GAME_FEATURES.md) | Gameplay options and their hooks, achievements, photo mode, the model viewer, gallery and credits. |
 | [PACKS.md](PACKS.md) | Texture and model packs: names, loading, formats, log lines and dumping. |
-| [TESTING.md](TESTING.md) | The test framework, every test program, the render gates, dumps, traces and CI. |
+| [TESTING.md](TESTING.md) | The test framework, the render gates, the suites per backend, the disc tests, switches, dumps, traces, audits and CI. |
+| [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md) | Every test program by area: what it checks and its ctest names. |
 | [DIVERGENCES.md](DIVERGENCES.md) | Every known way the port's behaviour or output differs from the PS2 game. |
 
 ## Elsewhere

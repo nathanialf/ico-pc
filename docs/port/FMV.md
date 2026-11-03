@@ -265,7 +265,7 @@ the skip's log line (`port/platform/test/movie_pad_test.c`, header comment).
 
 The ctests `fmv`, `fmv_fields`, `rd_video`, `rd_video_mali` and `rd_video_window`
 (`port/fmv/test/`) cover the player's parts, the display and the window path;
-[TESTING.md](TESTING.md#portfmvtest) describes each. `movie_pad`
+[TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portfmvtest) describes each. `movie_pad`
 (`port/platform/test/movie_pad_test.c`) is the pad test above. The `fmv*` and `rd_video*` tests are
 registered in `port/fmv/CMakeLists.txt` (the `rd_video*` ones only with `ico_render`, and the
 window test only with Vulkan and SDL3), `movie_pad` in `port/platform/CMakeLists.txt`.

@@ -45,7 +45,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_dump.c`, `rd_png.c` | frame dumps; a minimal PNG writer |
 | `port/render/tools/rd_replay_tool.c` | [the replay tool](ARCHITECTURE.md#terms) |
 | `port/render/vu1_ref/` | the VU1 programs' CPU references ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-cpu-oracles)) |
-| `port/render/test/` | the renderer's tests ([TESTING.md](TESTING.md#portrendertest)) |
+| `port/render/test/` | the renderer's tests ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portrendertest)) |
 | `port/render/rd_interp.c`, `rd_present.c`, `rd_present_info.c`, `rd_crt.c`, `rd_video.c` | presentation ([DISPLAY.md](DISPLAY.md)); `rd_present_info.c` holds `rd_last_present_info`'s record |
 | `port/render/texpack*.c`, `modelpack.c`, `gltf.c`, `xxh3.c` | texture and model packs ([PACKS.md](PACKS.md)) |
 
@@ -1495,7 +1495,8 @@ rd: fades fold: the reduction took another way (the hardware sprite, not as plan
 
 ctest `rd_fades_fold` (the step against the GS blend, rd_gsbase's fade, brightness and letterbox
 cases stepped texel by texel against the sprites' bytes, the plan on recorded frames) and
-`rd_fades_fold_ab` (the fade dumps with and without the fold, [TESTING.md](TESTING.md)). Not built:
+`rd_fades_fold_ab` (the fade dumps with and without the fold,
+[TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)). Not built:
 a frame differing from the last only in a fade's level could rerun the reduction and the present
 alone (the still re-present shows a picture again only on an unchanged frame hash,
 `port/render/rd_reshow.c`).
@@ -2091,7 +2092,7 @@ in G), which is copied into a readback buffer and summed once the GPU is past th
 `rd_crack_msaa`, `rd_crack_off`, `rd_crack_depth_copy`, `rd_crack_buffer`, `rd_crack_d24s8`,
 `rd_crack_nodual`, `rd_crack_tiler`, `rd_crack_tiler_on`, `rd_crack_tiler_fold`,
 `rd_crack_tiler_fold_mali`), `rd_replay_tool_crack` and `rd_crack_late_ab` check it
-([TESTING.md](TESTING.md)).
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 ## Content tables
 
@@ -2870,7 +2871,7 @@ The families and what each entry draws are [SHADERS.md](SHADERS.md#the-families)
 ## Tests
 
 The renderer's tests are `port/render/test/`, listed with their ctest names in
-[TESTING.md](TESTING.md#portrendertest); the pixel gates on dumps are
+[TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portrendertest); the pixel gates on dumps are
 [TESTING.md](TESTING.md#render-gates). The variants run the same program under `ICO_RD_NO_DUAL=1`
 (`_nodual`), `ICO_VK_FAKE_LIMITS=min` (`_minlimits`) or `mali` (`_mali`), `ICO_RD_BLEND=fixed`
 (`_fixed`) or `storage` (`_storage`) and `ICO_VK_FAKE_D24S8=1` (`_d24s8`)
