@@ -29,7 +29,13 @@
  * pipeline with their pixels unblended (ICO_VU_FUSED: the fused pair,
  * vuFuseVerdict), so the draw merge joins the two. */
 
-static uint32_t s_zeroBonesFor; /* replay counter of s_zeroBones */
+/* replay counter of s_zeroBones.  g_rd.replayCounter starts again at every
+ * rd_init, so a context's replay N would take the block the last context's
+ * replay N wrote: an offset into another ring, never written in this one
+ * (garbage under OpenGL, whose ring is filled from the CPU) and maybe below
+ * this replay's t5 base, where the draw merge's run that holds it is not
+ * drawn at all (vuRunLost).  rd__vu_prepass_shutdown forgets it. */
+static uint32_t s_zeroBonesFor;
 
 static uint64_t s_zeroBones;
 
@@ -599,10 +605,14 @@ static void vuRunWrite(const VuRunDraw *d, uint32_t add, uint32_t *out)
  * without drawing it, which every endPass prevents): logged once */
 static void vuRunLost(uint32_t n, const char *why)
 {
-    static bool logged; /* once a run */
-    if (!logged) {
-        logged = true;
-        rd__log("VU merge: a run of %u draws not drawn (%s; reported once)", n, why);
+    /* the first 8, then every 100th: a run lost is draws missing from the
+     * picture, which one line a process hid (the lost run of the OpenGL
+     * twin of rd_native, a stale zero block below t5's base) */
+    static uint32_t s_lost;
+    s_lost++;
+    if (s_lost <= 8u || s_lost % 100u == 0u) {
+        rd__log("VU merge: a run of %u draws not drawn (%s; replay %u, %u runs so far)", n, why,
+                g_rd.replayCounter, s_lost);
     }
 }
 
@@ -2377,6 +2387,11 @@ static void vuMergeFree(void); /* the draw merge's modules (below) */
 
 void rd__vu_prepass_shutdown(void)
 {
+    /* the zero block and an unflushed run name the ring of this context:
+     * the next context's replays count from 1 again (s_zeroBonesFor) */
+    s_zeroBonesFor = 0;
+    s_zeroBones = 0;
+    s_run.n = 0;
     recFree();
     for (int v = 0; v < RD_VS_COUNT; v++) {
         if (g_rd.vsBatch[v].id) {

@@ -1312,8 +1312,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   off: 0 of 0`, the frustum run's `cull frustum: N of M` with N at most M, the full run's `cull
   full: N of M (F frustum, O occluded)` with the frustum run's M, F its N and N = F + O, and draws
   skipped over the corpus (the occluded total printed); each run's counts printed;
-  `-DMAX_DUMPS=n` takes the first n dumps (`rd_cull_ab`, TIMEOUT 5400;
-  [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
+  `-DMAX_DUMPS=n` takes the first n dumps (`rd_cull_ab`, TIMEOUT 5400, and its OpenGL twin
+  `rd_cull_ab_gl`; [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
 - `rd_thread_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` through
   `rd_replay_tool --render-thread off`, `sync` and `on` (every replay, the interpolation and the
   renderer's calls on a thread of the renderer's own, `port/render/rd_thread.h`), with

@@ -2728,7 +2728,8 @@ endif()
 #    rd_crack's replay, rd_fog_depth_copy_dump*, rd_vustage_ab, rd_vubatch_ab, rd_vumerge_ab,
 #    rd_vufuse_ab, rd_store_plan_ab, rd_constant_reads_ab, rd_fades_fold_ab, rd_thread_ab,
 #    the native frame gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
-#    on both backends)
+#    on both backends; rd_cull_ab is twinned: the culler's byte identity is proven on
+#    both lavapipe backends)
 #  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_fades_fold, rd_vis, rd_mip,
 #    rd_passring,
 #    rd_filter, rd_bisect_plan, rd_stream_audit, fog_lut*, gsb_cull*, texpack*, gltf)
@@ -2841,7 +2842,10 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         rd_vuprepass_selftest rd_vuprepass_selftest_plain
         rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off rd_vuprepass_selftest_ticks
         rd_vuprepass_selftest_sabotage_tri rd_vuprepass_selftest_unbatched
-        rd_vuprepass_selftest_unmerged)
+        rd_vuprepass_selftest_unmerged
+        # the scene draws' visibility test against every draw replayed, byte for
+        # byte on OpenGL too (rd_cull_ab.cmake: the tool takes ICO_RHI_BACKEND)
+        rd_cull_ab)
     foreach(_n IN LISTS _ico_rd_gl_tests)
         ico_rd_gl_twin(${_n})
     endforeach()
