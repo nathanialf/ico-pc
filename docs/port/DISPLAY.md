@@ -726,15 +726,43 @@ and its own slack is the whole test. The window knows which step closes a frame 
 frame length in steps (the last two frames' closes apart; past four, after a load or a pause, not
 known: every step is then planned as one that closes a frame) (`pace_step_closes`).
 
-Each kind's typical time is a decaying mean (an eighth of the way a step of that kind) and one
-deviation (`PaceStepTyp`, `pace_step_typ_note`). A step with the game's loading work (disc reads,
+Each kind's typical time is a decaying mean (an eighth of the way a step of that kind) and half
+its deviation, at most a quarter of the mean (`PaceStepTyp`, `pace_step_typ_note`,
+`pace_typ_share_ns`; the whole deviation planned a phone's 9 ms closing step at 9.9-12.0 ms, a
+deviation of 1-3 ms; a 15 ms one among 9 ms ones now plans the next at 10.7 ms where the whole
+deviation planned 11.7, back to 9.5 ms 16 steps later). A step with the game's loading work (disc reads,
 texture decodes, pipelines made: what `window_hold_line` names) is left out, and so is a step over
 the period whose kind's step before was not (an isolated long step: a bug report's capture, a
 stall); two in a row are the scene's time and count. Before this the plan was one recent maximum
 for every step (its longest lately, falling an eighth a step): on the phone 7.4-9.4 ms for the
 step between frames too, so its slack looked like 5 ms instead of 14, and nearly every in-between
 picture was held (30-31 presented fps where the GPU made 38-43). One mean of both kinds and its
-deviation would read 8.6 ms, no better; by kind the phone's load reads about 9.6 and 0.5 ms.
+deviation would read 8.6 ms, no better; by kind the phone's load reads about 9.2 and 0.5 ms.
+
+The render thread's times the rule plans by are typical times too, not the longest lately
+(`PaceRtTyp`, `pace_rt_typ_note`; `port/platform/render_thread.c`): a picture's reads (the
+hand-over), its whole job, its reads less their waits, its interpolation and the submit thread's
+job are each a decaying mean, a sixteenth of the way a picture (a picture's weight is under 2 %
+after 60), and half its deviation, at most a quarter of the mean. A picture over twice the mean
+whose picture before was not (a spike: a pipeline's first use, a stage's textures) counts as twice
+the mean, so it raises the plan by its share only (a 100 ms picture among 10 ms ones: 11.9 ms,
+back to 10.2 ms 60 pictures later); two in a row are the scene's time and count in full. The
+present call's wait keeps its recent longest (`pace_rt_estimate`), since its hold is for the long
+ones. Before this every one of them was its longest lately, falling an eighth a picture: on a
+PowerVR phone the rule planned reads of 10.2-17.7 ms, 5.0-8.7 ms of them the interpolation,
+where the same 10 s blocks' means were about 10 and 3.3-4.0, and held 529-589 pictures between
+frames a block (30-32 presented fps at 24-26 ms GPU pictures). A picture that runs longer than
+typical is what the back-off below is for: the floor, the widened margin, the third miss's strict
+plan. The model at that phone's numbers (reads of 10 ms with a deviation of 2.5 ms, the closing
+step 9 ms, the step between 1 ms, a submit of 8 ms, 24 / 25 / 26 ms GPU pictures, over 100 s)
+gives 41.0 / 39.5 / 38.1 presented fps where the longest gave 34.8 / 34.4 / 34.3 (the GPU makes
+41.7 / 40 / 38.5), 14 / 22 / 2 steps missing their period in 100 s (7 / 8 / 0 over the floor,
+the latest 2.8 / 3.5 / 1.3 ms past it), one fall-back of 120 steps in the first 10 s while the
+means learn, and the game's clock at most 8.3 ms behind, so the sound, up to 120 ms ahead, is
+never held back (`pace_loop_test` `testRc11`; `build-host/tmp/v098/evidence/pace4/`). The 10 s
+clause shows the plan's inputs: `a picture holds the renderer for R ms typically (its mean M ms and
+half its deviation of D ms; ...)` and `the steps planned at X ms closing a frame (its mean M ms, its
+deviation D ms) and Y ms between frames`.
 
 Over the game's frame this is the frame's budget: the closing step may start late by its own
 slack (period less its time and the margin, 5-6 ms on the phone), the step between by most of its
@@ -777,8 +805,9 @@ pictures' doubling the strict plan up to 1920 steps, misses of 0.0-0.6 ms among 
 every block's 600 steps ran the rule before at 30-41 presented fps where the GPU made 34-45. The
 model at that phone's numbers (a 4.5 ms step, 13 ms reads,
 25 ms GPU pictures, a picture 12-26 ms slower than its estimate every 250 steps) plans no step at
-the whole period where the rule before planned 5819 of 6000, and gives 39 presented fps where it
-gave 30 (`pace_loop_test` `testBackoffCause`; `build-host/tmp/v098/evidence/fixbackoff/`).
+the whole period where the rule before planned 5819 of 6000, and gives 39-40 presented fps where it
+gave 30 (`pace_loop_test` `testBackoffCause`; `build-host/tmp/v098/evidence/fixbackoff/`, re-run in
+`build-host/tmp/v098/evidence/pace4/c_cells.py`).
 
 A miss is the pictures' only when their holds on the step (the presents running past its start,
 its waits for a picture's reads) are at least the floor and at least its lateness
@@ -804,11 +833,14 @@ the submit thread: reads 10 / 12 / 13 / 15 / 17 ms give 700 / 600 / 550 / 447 / 
 there), past it as many as keep every step inside its period, and none misses it. `testFrameShape`
 asserts the frame's two kinds of step at the phone's load (12 ms reads, a 7 ms submit, the closing
 step 8-10 ms, the step between 0.5 ms with no renderer call): 450 / 423 / 392 / 376 presents at
-21.7 / 23 / 25 / 26 ms GPU pictures where one estimate for every step gives 338 (the GPU makes 461
-/ 435 / 400 / 385), and with 8 ms GPU pictures, a closing step of 8.5 / 9.5 ms and reads 8 / 10 /
-10.5 / 12 ms, 601 / 600 / 600 / 450 and 601 / 600 / 596 / 400 (one estimate: 601 / 600 / 600 / 338
-and 601 / 600 / 375 / 301); no step misses its period and none starts later than the closing
-step's slack.
+21.7 / 23 / 25 / 26 ms GPU pictures where one estimate for every step gives 390 / 389 / 376 / 374
+(the GPU makes 461 / 435 / 400 / 385), and with 8 ms GPU pictures, a closing step of 8.5 / 9.5 ms
+and reads 8 / 10 / 10.5 / 12 ms, 602 / 600 / 600 / 500 and 601 / 600 / 597 / 450 (one estimate:
+653 / 600 / 600 / 391 and 601 / 600 / 552 / 301); no step misses its period and none starts later
+than the closing step's slack. Those reads are measured with their waits for the GPU and the
+submit thread, which vary from picture to picture, so their typical time is under their longest
+even at a steady load (the recent longest gave 450 / 423 / 392 / 376 and 601 / 600 / 600 / 450,
+601 / 600 / 596 / 400).
 
 **Vsync off, uncapped.** With vsync off and the frame rate uncapped (the timer path, no FIFO lock,
 the render thread on: `pace_rt_as_made`) the pictures go as they are made, as on a PC with vsync

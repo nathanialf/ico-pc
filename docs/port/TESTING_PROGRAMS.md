@@ -657,26 +657,38 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   back-pressure keeps no wait and every frame with the holds (numbers from
   `build-host/tmp/v098/evidence/submitthread/st_sim.py`); `testBackoffCause`: the step rule's
   answer to a miss by its cause and size (`pace_step_by_pictures`, `PaceStepEst`): at the phone's
-  10 ms reads one game step 20, 40 or 700 ms longer (a load, a compile, a capture) gives 700 /
+  10 ms reads one game step 20, 40 or 700 ms longer (a load, a compile, a capture) gives 698 /
   698 / 701 presents in 10 s (the long step left out of its kind's typical time) and no step planned at the whole period (the 20 ms one's next step
   started late by the new frame's own picture: the pictures', over the floor, the margin
   widened), where arming on every miss gave 660 / 647 / 679 and 2 / 4 / 1 back-offs; the reads'
   jump's miss is the pictures' and widens the margin; and a phone's log's numbers over 100 s (a 4.5 ms step,
   13 ms reads, 25 ms GPU pictures, a picture 26 ms slower once and 12-18 ms slower every 250
-  steps): no step at the whole period (FIX-HANDOVER's back-off: 5819 of 6000) and 389-393
-  presents a block (its 300), every miss one surprise's; three misses over the floor within 300
+  steps): no step at the whole period (FIX-HANDOVER's back-off: 5819 of 6000) and 397-400
+  presents a block (its 300), every miss one surprise's (13 / 16 over the floor in its two cells,
+  each widening the margin); three misses over the floor within 300
   steps fall back once, for 120 steps (numbers from
   `build-host/tmp/v098/evidence/fixbackoff/backoff_cells.py` and its phone cells, re-run with the
-  rule by the frame's shape in `build-host/tmp/v098/evidence/pace3/rebase_cells.py`);
+  rule by the frame's shape in `build-host/tmp/v098/evidence/pace3/rebase_cells.py` and with the
+  render thread's typical times in `build-host/tmp/v098/evidence/pace4/c_cells.py`);
   `testFrameShape`: the game's frame as two kinds of step (the one closing a frame 8-10 ms, the
   one between 0.5 ms with no renderer call; `pace_step_plan_ns`, the step after by its own slack,
   `nextBetween`), a phone's load (12 ms reads, a 7 ms submit, vsync off on a 120 Hz mailbox):
-  450 / 423 / 392 / 376 presents at 21.7 / 23 / 25 / 26 ms GPU pictures where one estimate for
-  every step gives 338, 317 with the driver's back-pressure; with 8 ms GPU pictures, a closing
-  step of 8.5 / 9.5 ms and reads 8 / 10 / 10.5 / 12 ms 601 / 600 / 600 / 450 and 601 / 600 / 596 /
-  400; the step between calling the renderer 600 / 450 at 10 / 12 ms; no step missing its period,
-  every frame shown, no start later than the closing step's slack (numbers from
-  `build-host/tmp/v098/evidence/pace3/rc10_cells.py`) (`pace_loop`).
+  451 / 433 / 399 / 385 presents at 21.7 / 23 / 25 / 26 ms GPU pictures where one estimate for
+  every step gives 390 / 389 / 376 / 374, 318 with the driver's back-pressure; with 8 ms GPU
+  pictures, a closing step of 8.5 / 9.5 ms and reads 8 / 10 / 10.5 / 12 ms 602 / 600 / 600 / 500
+  and 601 / 600 / 597 / 450; the step between calling the renderer 600 / 487 at 10 / 12 ms; no
+  step missing its period, every frame shown, no start later than the closing step's slack
+  (numbers from `build-host/tmp/v098/evidence/pace3/rc10_cells.py`, re-run in
+  `build-host/tmp/v098/evidence/pace4/c_cells.py`); `testRc11`: the render thread's typical times
+  (`PaceRtTyp`) against their recent longest at a phone's load (each picture's reads from a table
+  of 61 with a mean of 10 ms and a deviation of 2.5 ms, its interpolation and its submit with
+  them, the closing step 7.5-14.4 ms in turn, 9 on average, the step between about 1 ms), over
+  100 s: 4098 / 3947 / 3814 presents at 24 / 25 / 26 ms GPU pictures where the longest gives 3482
+  / 3435 / 3429; 14 / 22 / 2 steps missing their period, all the pictures', 7 / 8 / 0 over the
+  floor and none later than 3.5 ms; one fall-back of 120 steps at 24 and 25 ms; the game's clock
+  at most 8.3 ms behind; 320 (317) with the driver's back-pressure and 397 (341) with the step
+  between calling the renderer, no miss (numbers from
+  `build-host/tmp/v098/evidence/pace4/c_cells.py`, `rc11_cells.py`) (`pace_loop`).
 - `cpu_place_test.c`: which core a thread runs on (`port/platform/cpu_place.h`): the histogram
   (by core, out of range and -1 as not known, the most-run core with the lowest on a tie, the take
   emptying it, the share on a mask), the cores' speeds from a fake sysfs under the build folder on
@@ -742,10 +754,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the pacer's wake; `pace_step_by_pictures`' edges, a hold under the floor the game's), and the
   step's typical time by kind (`testStepTyp`: the decaying mean and deviation to the nanosecond, an
   isolated step over the period left out and two in a row counted, a loading step left out, a
-  phone's frames giving 9.6 ms closing a frame and 0.5 ms between where one kind for both gives 8.6
-  and the recent maximum 8.4; `pace_step_plan_ns`' fall-backs and widening; `pace_step_closes`;
-  the step after the next planned by its own time, and none after a step between frames)
-  (`pace_policy`).
+  phone's frames giving 9.2 ms closing a frame and 0.5 ms between (the mean and half the
+  deviation, `pace_typ_share_ns`; one deviation gave 9.6) where one kind for both gives 5.5 and
+  the recent maximum 8.4; a 15 ms closing step among 9 ms ones raising the plan to 10.7 ms and
+  falling back, a run of 6 and 16 ms steps held at the mean and a quarter;
+  `pace_step_plan_ns`' fall-backs and widening; `pace_step_closes`;
+  the step after the next planned by its own time, and none after a step between frames), and a
+  render thread's typical time (`testRtTyp`, `PaceRtTyp`: the mean a sixteenth a picture and its
+  variance to the nanosecond, a 100 ms spike among 10 ms pictures raising the plan to 11.9 ms
+  (in full 19.5, the recent maximum 100) and 60 pictures later 10.2, two in a row over twice the
+  mean counted in full, a 0 counted and the way back from it, a stall counted at 250 ms; a
+  phone's reads (a mean of 10 ms, a deviation of 2.5) planned at 10.5-12.0 ms where the recent
+  maximum read 9.7-15.9) (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
 - `present_fallback_test.c`: the FIFO fallback's decision (`present_fallback.h`): the stock

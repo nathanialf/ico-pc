@@ -135,8 +135,9 @@ submit and present; destroyed at the first graphics call, the interpolation over
 picture, and the backend sees the same calls in the same order (the destroys after the submit
 thread's job, before `rhi_wait_frame`).
 
-What a picture holds the renderer for (the 10 s line's `a picture holds the renderer for R ms (C ms
-of its own, I ms of it the interpolation; ...)`, each a recent longest, `pace_rt_estimate`): from
+What a picture holds the renderer for (the 10 s line's `a picture holds the renderer for R ms
+typically (its mean M ms and half its deviation of D ms; C ms of its own, I ms of it the
+interpolation; ...)`, each a typical time, `PaceRtTyp`: [DISPLAY.md](DISPLAY.md#further-presents-and-the-game-step)): from
 its job's start to `rd__reads_done`, which is the interpolation, then the first graphics call's waits
 (the submit thread's job on the picture before, the slot's fence, the acquire: `waitMs` and
 `acquireMs`), then the uploads and the walk. C is R less those waits; I is the interpolation

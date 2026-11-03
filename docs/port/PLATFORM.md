@@ -352,8 +352,8 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   call waits for them and it still ends inside its period. The step after it, behind the next new
   frame's own picture (never held), must also start within its slack, unless it would start as
   late without the further picture. The step is its own time (the window's step less its read
-  waits, `rd_thread_read_wait_ns`), estimated as the render thread's times are (`PaceStepEst`:
-  the new value when higher, else falling an eighth a step), and a step that ended past its
+  waits, `rd_thread_read_wait_ns`), estimated by its kind's typical time (`PaceStepTyp`: a decaying
+  mean and half its deviation, as the render thread's times are, `PaceRtTyp`), and a step that ended past its
   deadline because of the pictures makes it the whole period for 120 steps (so the reads must end
   by the due time, the rule before), 240 at the next such miss and so on to 1920, halved by 1920
   steps without one. A miss is the pictures' (`pace_step_by_pictures`) when the presents' run past
