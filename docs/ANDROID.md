@@ -418,7 +418,14 @@ your phone, a newer graphics driver from the community can sometimes fix
 it. If you do not have a problem, you can skip this.
 
 1. On your phone, download a driver package. The community shares them on
-   GitHub as zip files (search for "AdrenoToolsDrivers"). Leave the file
+   GitHub as zip files, for example the releases of
+   [K11MCH1/AdrenoToolsDrivers](https://github.com/K11MCH1/AdrenoToolsDrivers/releases)
+   or [Weab-chan/freedreno_turnip-CI](https://github.com/Weab-chan/freedreno_turnip-CI/releases).
+   Builds differ by graphics chip: some are for the older Adreno 6xx chips
+   only and do not work on newer ones (a release's own text says which), and
+   a newer build is not always a better one for this game. These are other
+   people's builds, not made or tested by this game; try one, and if it does
+   not start the game goes back to the phone's own driver. Leave the file
    as a zip. Do not unpack it.
 2. In the game, open **Options > Graphics driver** and choose **Add a
    driver**. Pick the zip file you downloaded. The game says when the
@@ -436,9 +443,21 @@ it. If you do not have a problem, you can skip this.
    zips if there are several. The game deletes the zip once the driver has
    been added. If it says the chosen file could not be read, copy the zip
    onto the phone first and choose it again.
-3. In the same page, set the **Driver** row to the driver you added.
+3. In the same page, set the **Driver** row to the driver you added. The
+   note under the page starts with what the game last saw of that driver:
+   its name, version and Vulkan version ("Qualcomm's driver 512.676.1,
+   Vulkan 1.3" for the phone's own, "Turnip, Mesa 25.3.0, Vulkan 1.4" for a
+   Turnip package). The game learns these when it starts with a driver, so a
+   driver you have not started yet says so, and the phone's own driver shows
+   what it was at the last start without a package.
 4. Close the game completely and start it again. The new driver is used from
    that start.
+
+A driver package built for the older 4 KB memory pages does not run on a
+phone that uses 16 KB memory pages (many phones that came with Android 15
+or later). When you add such a package, the game says "this driver package
+is not built for this phone's 16 KB memory pages" and does not add it; get
+a build made for 16 KB pages (the release's text may say) or use another.
 
 To go back to the phone's own driver, set **Driver** to **Built-in**, or
 choose **Remove this driver** to delete it. Restart the game after either.
@@ -451,7 +470,9 @@ driver on some Snapdragon tablets does): after such a stop, the note under
 **Options > Graphics driver** names this route and the folder.
 
 If a driver does not start, the game falls back to the phone's own driver
-and tells you so. You can still play. The driver is not removed, so you can
+and tells you so. The same happens when the graphics stop responding within
+the first 30 seconds of playing with a driver you added: the next start uses
+the phone's own driver and says so. You can still play. The driver is not removed, so you can
 try another one, or remove it yourself: in **Options > Graphics driver**,
 set **Driver** to it, then choose **Remove this driver**.
 
