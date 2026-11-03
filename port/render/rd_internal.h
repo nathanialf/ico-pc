@@ -912,11 +912,21 @@ typedef struct RdMeshRec {
      * rd_replay_vu.c doVuDraw) */
     uint32_t *cardStrips;
     uint32_t cardStripCount, boneQwUsed;
+    /* The stream's serial (rd__mesh_stream_written): a new one at every
+     * write of the stream (its creation, rd_update_vu_mesh, the
+     * interpolation's scratch copies and their blend), so what is computed
+     * from the stream alone (the alpha plan's span, rd_alpha_plan.c; a
+     * skinned mesh's pivots, rd_interp.c) holds across replays while the
+     * serial is the same; 0 for a record never written through it (the
+     * tests' own records: kept for the replay alone, as before) */
+    uint64_t streamSerial;
 } RdMeshRec;
 
 /* The stream mesh m had when frame `frame` was recorded, NULL when no
  * kept version covers it */
 const float (*rd__mesh_stream_at(const RdMeshRec *m, uint32_t frame))[4];
+/* m's stream was written: a new RdMeshRec.streamSerial */
+void rd__mesh_stream_written(RdMeshRec *m);
 
 #define RD_MAX_MESHES 16384
 

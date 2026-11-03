@@ -4195,8 +4195,9 @@ static RdMeshRec *scratchFor(const RdMeshRec *c, const float (*stream)[4])
     s_scratchBytes +=
         size + (uint64_t)c->indexCount * 4u + (uint64_t)c->batchCount * sizeof(RdVuBatchRec);
     m->lastUsed = g_rd.frameCounter;
-    m->replaySeen = 0; /* upload again */
-    m->transient = 1;  /* from the ring, not the device arena */
+    rd__mesh_stream_written(m); /* cur's stream copied in (a new mesh has its own) */
+    m->replaySeen = 0;          /* upload again */
+    m->transient = 1;           /* from the ring, not the device arena */
     s_scratchUsed++;
     return m;
 }
@@ -4238,6 +4239,7 @@ static bool morphDraw(RdCmd *o, const RdFrame *prev, const RdCmd *pc, const RdFr
                 lerpFloats(s->stream[at], ps[at], cs[at], 3, t);
             }
         }
+        rd__mesh_stream_written(s); /* blended */
     }
     const uint32_t scr = s->gen << 16 | (uint32_t)(s - g_rd.meshes + 1);
     const uint64_t two[2] = {s_scrMix, (uint64_t)o->u[0] << 32 | scr};

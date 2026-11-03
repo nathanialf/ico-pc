@@ -180,17 +180,24 @@ static bool meshSpan(const RdMeshRec *m, uint8_t prog, uint8_t code, float fade,
     return true;
 }
 
-/* A mesh's span is the same for every draw of it in one replay: the
- * device copy (rd_upload.c rd__upload_meshes) and the ring copy
- * (rd_replay_vu.c vuSource) are both taken from the stream as the replay
- * finds it, and nothing rewrites a stream while a replay runs (the morphs
- * and the interpolation's blended copies are written before it).  Kept
- * per (mesh, replay, program, debug code and its fade) in a small
- * direct-mapped table. */
-#define MESH_MEMO 256
+/* A mesh's span is the same for every draw of it while its stream is
+ * unchanged: the device copy (rd_upload.c rd__upload_meshes) and the ring
+ * copy (rd_replay_vu.c vuSource) are both taken from the stream as the
+ * replay finds it, and nothing rewrites a stream while a replay runs (the
+ * morphs and the interpolation's blended copies are written before it).
+ * Every write of a stream gives it a new serial (RdMeshRec.streamSerial,
+ * rd__mesh_stream_written), so the span is kept per (mesh, serial, stream,
+ * vertex count, layout, program, debug code and its fade) across replays:
+ * a still world's meshes are read once, not at every replay (each read
+ * walks a cache line a vertex: about a quarter of the walk's CPU on
+ * lavapipe, RSCAN).  A record with no serial (a test's own) is kept for
+ * the replay alone, as before.  A small direct-mapped table. */
+#define MESH_MEMO 1024
 
 typedef struct MeshMemo {
-    uint32_t mesh, replay, fade;
+    uint64_t serial; /* RdMeshRec.streamSerial; 0: replay's alone */
+    const void *stream;
+    uint32_t mesh, replay, fade, vertices, qpv;
     uint8_t prog, debug, ok, lo, hi;
 } MeshMemo;
 
@@ -199,19 +206,29 @@ static MeshMemo s_meshMemo[MESH_MEMO];
 static bool meshSpanMemo(uint32_t id, const RdMeshRec *m, uint8_t prog, uint8_t code, float fade,
                          Span *s)
 {
+    if (!m) {
+        return false; /* meshSpan's answer: nothing to keep */
+    }
     const uint8_t debug = (uint8_t)(code == 24);
     uint32_t fadeBits = 0;
     if (debug) {
         memcpy(&fadeBits, &fade, sizeof(fadeBits));
     }
-    MeshMemo *e = &s_meshMemo[(id * 2654435761u) >> 24];
-    if (e->replay == 0 || e->replay != g_rd.replayCounter || e->mesh != id || e->prog != prog ||
-        e->debug != debug || e->fade != fadeBits) {
+    MeshMemo *e = &s_meshMemo[(id * 2654435761u) >> 22];
+    const bool same = e->mesh == id && e->serial == m->streamSerial && e->stream == m->stream &&
+                      e->vertices == m->vertexCount && e->qpv == m->qwPerVertex &&
+                      e->prog == prog && e->debug == debug && e->fade == fadeBits &&
+                      (m->streamSerial != 0 || (e->replay != 0 && e->replay == g_rd.replayCounter));
+    if (!same) {
         Span t = {0, 0, false};
         e->ok = (uint8_t)(meshSpan(m, prog, code, fade, &t) && t.any);
         e->lo = t.lo;
         e->hi = t.hi;
         e->mesh = id;
+        e->serial = m->streamSerial;
+        e->stream = m->stream;
+        e->vertices = m->vertexCount;
+        e->qpv = m->qwPerVertex;
         e->replay = g_rd.replayCounter;
         e->fade = fadeBits;
         e->prog = prog;

@@ -1609,6 +1609,18 @@ bool rd__vu_mesh_copy_marks(RdMeshRec *dst, const RdMeshRec *src)
     return dst->kickMark != NULL;
 }
 
+/* the last stream serial handed out (RdMeshRec.streamSerial); a write of a
+ * stream never overlaps a picture's reads (the hand-over, rd_thread.h), and
+ * the count is atomic for the two threads that write streams */
+static uint64_t s_streamSerial;
+
+void rd__mesh_stream_written(RdMeshRec *m)
+{
+    if (m) {
+        m->streamSerial = __atomic_add_fetch(&s_streamSerial, 1, __ATOMIC_RELAXED);
+    }
+}
+
 uint32_t rd__vu_mesh_create_raw(const float (*stream)[4], uint32_t vertexCount,
                                 uint32_t qwPerVertex, const uint32_t *index, uint32_t indexCount,
                                 const RdVuBatchRec *batches, uint32_t batchCount, const char *name)
@@ -1647,6 +1659,7 @@ uint32_t rd__vu_mesh_create_raw(const float (*stream)[4], uint32_t vertexCount,
     markContentHidden(m);
     markJoinedStrips(m);
     cardStrips(m);
+    rd__mesh_stream_written(m); /* the stream as created, a sheet's tiles with it */
     return id;
 }
 
@@ -1946,6 +1959,7 @@ bool rd_update_vu_mesh(RdMesh mesh, const float (*qw)[4])
     if (m->tiledFrom) {
         retileSheet(m);
     }
+    rd__mesh_stream_written(m);
     m->replaySeen = 0; /* upload again at the next replay */
     m->gpuDirty = 1;   /* the device copy too */
     return true;

@@ -42,7 +42,9 @@
  *             opaque), a lit mesh's alpha clamped at 255, a NaN alpha
  *             decides nothing, the cluster's debug code 24 scales by
  *             mem[2].w (both floats around an inexact product), the
- *             per-replay memo; a grid's batch colours and a particle
+ *             per-replay memo of a record with no stream serial and the
+ *             memo across replays of one with a serial (a new serial reads
+ *             the stream again); a grid's batch colours and a particle
  *             batch's alphas from the payload
  *   texscan   rdtex_alpha_range over RGBA32, RGB24 and RGBA16 sources under
  *             the three TEXA modes: the range holds every texel's
@@ -636,6 +638,28 @@ static void testRange(void)
     CHECK(rd__plan_screen_draw_alpha(&s, as, dp, &n) && n == 1 &&
               dp[0].key.gs.blend != RD_BLEND_COUNT,
           "prelit mesh 127: %d passes", n);
+    /* the memo across replays: a record whose stream has a serial
+     * (rd__mesh_stream_written, every write of a real mesh's stream) keeps
+     * its span from replay to replay until its stream is written again */
+    rd__mesh_stream_written(&m);
+    CHECK(m.streamSerial != 0, "a written stream has a serial");
+    as = meshRange(&s, &m, RD_PROG_PRELIT, 32, 1);
+    CHECK(as.lo == 0x7F && as.hi == 0x7F, "the memo: a serial's first read: %02X..%02X", as.lo,
+          as.hi);
+    for (int i = 0; i < NV; i++) {
+        stream[i * 3 + 2][3] = 64.0f; /* not through the hook: no real stream changes so */
+    }
+    g_rd.replayCounter++;
+    as = meshRange(&s, &m, RD_PROG_PRELIT, 32, 1);
+    CHECK(as.lo == 0x7F && as.hi == 0x7F, "the memo: the serial's span kept in a later replay");
+    rd__mesh_stream_written(&m);
+    as = meshRange(&s, &m, RD_PROG_PRELIT, 32, 1);
+    CHECK(as.lo == 0x40 && as.hi == 0x40, "the memo: a new serial reads the stream: %02X..%02X",
+          as.lo, as.hi);
+    as = meshRange(&s, &m, RD_PROG_LIT_SPEC, 32, 1);
+    CHECK(as.lo == 0 && as.hi == 0xFF, "the memo: another program reads it again: %02X..%02X",
+          as.lo, as.hi);
+    m.streamSerial = 0; /* the cases below: the replay's memo */
     /* lit: alpha min 255 */
     m.qwPerVertex = RD_VU_QW_LIT;
     for (int i = 0; i < NV; i++) {
