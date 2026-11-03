@@ -1462,7 +1462,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   at the second scene size run: every `shadow count: one draw (self-test: equal to the seven draws
   over WxH, 142 band centres ok)` line matched, at least one, and the line saying how the stencil
   is read, `four texels a gather, equal to the seven draws byte for byte` or `a texel a load, as
-  the gathers' count ...` (`rd_shadow_selftest`); with
+  the gathers' count ...` (`rd_shadow_selftest`; `rd_shadow_selftest_cropped` and
+  `rd_shadow_selftest_wide` the same lines at 624 wide with the display at 16:10, exact 614.40, and
+  at 2048 with 48:9, through `-DARGS` and the tool's aspect argument); with
   `ICO_RD_SHADOW_SABOTAGE=1`, `shadow count: seven draws (self-test: one draw differs ...)` and
   `profile: shadow count one draw off (self-test)` (`rd_shadow_selftest_sabotage`); both with
   `_gl` twins. The desktop's

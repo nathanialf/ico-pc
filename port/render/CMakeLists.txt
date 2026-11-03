@@ -2418,6 +2418,23 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_selftest.cmake")
     set_tests_properties(rd_shadow_selftest PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                        ENVIRONMENT "${_env}")
+    # the same on a cropped frame (624 wide at 16:10, exact 614.40: the last
+    # band's centre fell in the left-out columns and turned the one draw
+    # off) and on one exactly its width (2048 at 48:9)
+    foreach(_c IN ITEMS "cropped|624|448|1|0|0|0|0|0|1.6" "wide|2048|448|1|0|0|0|0|0|5.3333333")
+      string(REPLACE "|" ";" _p "${_c}")
+      list(GET _p 0 _n)
+      list(REMOVE_AT _p 0)
+      list(GET _p 0 _w)
+      string(REPLACE ";" "|" _a "${_p}")
+      add_test(NAME rd_shadow_selftest_${_n}
+               COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                       "-DPATH=one draw" "-DARGS=${_a}"
+                       "-DRESULTS=equal to the seven draws over ${_w}x448, 142 band centres ok"
+                       -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_selftest.cmake")
+      set_tests_properties(rd_shadow_selftest_${_n} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                           ENVIRONMENT "${_env}")
+    endforeach()
     add_test(NAME rd_shadow_selftest_sabotage
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
                      "-DPATH=seven draws"
@@ -2798,7 +2815,8 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         # has not (localRead false: the copy and inplace paths, DATE by snapshot);
         # nor rd_local_probe_kept and rd_local_probe_off (the desktop's probe of
         # Vulkan's local read: never on OpenGL)
-        rd_shadow_selftest rd_shadow_selftest_sabotage
+        rd_shadow_selftest rd_shadow_selftest_cropped rd_shadow_selftest_wide
+        rd_shadow_selftest_sabotage
         rd_vuprepass_selftest rd_vuprepass_selftest_plain
         rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off rd_vuprepass_selftest_ticks
         rd_vuprepass_selftest_sabotage_tri rd_vuprepass_selftest_unbatched
