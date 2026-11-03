@@ -3325,6 +3325,147 @@ static void testFrameShape(void)
     }
 }
 
+/* The render thread's typical times (pace_policy.h PaceRtTyp: a decaying
+   mean and half the deviation) against their recent maxima at rc11's load
+   (build-host/tmp/v098/evidence/rc11/ico-pc.log, a PowerVR phone, stage 6:
+   the clause planned by reads of 10.2-17.7 ms, 5.0-8.7 ms of them the
+   interpolation, the closing step at 9.9-12.0 ms, where the same blocks'
+   means were about 10, 3.3-4.0 and 9; 529-589 further presents held a
+   block, 30-32 presented fps at GPU spans of 24-26 ms).  The load
+   (build-host/tmp/v098/evidence/pace4/rc11_load.py, .out): each picture's
+   reads from a table of 61 (a mean of 10 ms, a deviation of 2.5 ms), its
+   interpolation 3.6 ms and 0.6 of the reads' deviation, the submit
+   thread's job 8 ms (a deviation of 1.5 ms), the closing step 8.5, 9.3,
+   7.8, 9.8, 8.4, 9.3, 7.5, 9.8, 8.0, 8.3, 9.3, 14.4, 8.4, 8.2, 7.6, 9.4 ms
+   in turn (9.0 on average), the step between 0.6, 1.4, 0.8, 1.2 ms with no
+   renderer call, the present 3 ms, vsync off uncapped on a 120 Hz mailbox.
+   Numbers from pace4/c_cells.py (.out; rc11_cells.out the same runs with
+   the estimates' averages), the C line for line.  Over 100 s:
+     GPU 24 / 25 / 26 ms: 4098 / 3947 / 3814 presents (41.0 / 39.5 / 38.1
+     a second) where the recent maxima give 3482 / 3435 / 3429 (34.8 /
+     34.4 / 34.3; the GPU makes 41.7 / 40 / 38.5);
+     the steps that missed their period, all the pictures': 14 / 22 / 2
+     (7 / 8 / 0 over the 2 ms floor, each widening the margin; the latest
+     2.8 / 3.5 / 1.3 ms past it), one fall-back of 120 steps at 24 and 25
+     ms, in the first 10 s while the means learn the load; the recent
+     maxima none;
+     the lag (a step's start past its due time) at most 8.3 / 7.0 / 6.7 ms
+     (the maxima 4.2 / 6.5 / 3.5): the sound, which the game feeds up to
+     120 ms ahead (docs/port/AUDIO.md: about 78-100 ms late before a hold),
+     is never held back by it.
+   In 10 s at 25 ms, the driver's back-pressure (depth 1): 320 (317); the
+   step between calling the renderer too: 397 (341), no miss. */
+static void testRc11(void)
+{
+    static const unsigned short readsT[61] = {
+        75,  107, 96,  56,  105, 121, 141, 80,  113, 113, 156, 124, 73, 109, 91,  128,
+        147, 80,  69,  91,  120, 72,  85,  109, 65,  93,  88,  66,  99, 79,  140, 125,
+        118, 87,  111, 58,  103, 119, 96,  159, 73,  108, 99,  91,  69, 150, 124, 94,
+        77,  106, 87,  136, 123, 64,  101, 83,  107, 66,  81,  93,  98};
+    static const unsigned short restT[61] = {
+        86, 59,  76,  73, 60, 79, 68,  104, 95, 91, 72, 87, 55,  82, 91, 78, 115, 64, 85, 80, 74,
+        61, 110, 95,  76, 66, 83, 72,  101, 94, 59, 81, 70, 84,  59, 69, 76, 79,  65, 84, 77, 54,
+        83, 92,  105, 68, 88, 88, 113, 94,  64, 86, 74, 97, 108, 68, 62, 75, 92,  63, 71};
+    static const unsigned short closeT[16] = {85, 93, 78, 98,  84, 93, 75, 98,
+                                              80, 83, 93, 144, 84, 82, 76, 94};
+    static const unsigned short fieldT[4] = {6, 14, 8, 12};
+
+    static const struct {
+        uint64_t gpuNs;
+        unsigned presents, misses, overFloor, backoffs, strict, before;
+        uint64_t missMax, lateMax, beforeLate;
+    } cells[] = {{24 * MS, 4098, 14, 7, 1, 120, 3482, 2790001u, 8333334u, 4153334u},
+                 {25 * MS, 3947, 22, 8, 1, 120, 3435, 3456669u, 7033334u, 6533334u},
+                 {26 * MS, 3814, 2, 0, 0, 0, 3429, 1270003u, 6693334u, 3493334u}};
+
+    static uint64_t reads[61], interp[61], rest[61], close[16], field[4];
+
+    for (unsigned i = 0; i < 61; i++) {
+        reads[i] = (uint64_t)readsT[i] * MS / 10u;
+        interp[i] =
+            (uint64_t)((int64_t)(36 * MS / 10) + ((int64_t)reads[i] - (int64_t)(10 * MS)) * 6 / 10);
+        rest[i] = (uint64_t)restT[i] * MS / 10u;
+    }
+    for (unsigned i = 0; i < 16; i++) {
+        close[i] = (uint64_t)closeT[i] * MS / 10u;
+    }
+    for (unsigned i = 0; i < 4; i++) {
+        field[i] = (uint64_t)fieldT[i] * MS / 10u;
+    }
+    for (unsigned c = 0; c < 5; c++) {
+        const uint64_t g = c < 3 ? cells[c].gpuNs : 25 * MS;
+        const unsigned depth = c == 3 ? 1u : 0u;
+        const unsigned steps = c < 3 ? 6000u : 600u;
+        const RtLoad L = {9 * MS / 2, MS / 10, 10 * MS, 8 * MS, g, 0, 0, 0, 0, 0, depth, 3 * MS};
+        RtRun now, before;
+        char what[160];
+
+        for (unsigned pass = 0; pass < 2; pass++) {
+            memset(&s_rtGame, 0, sizeof s_rtGame);
+            s_rtGame.frameSeq = close;
+            s_rtGame.frameSeqN = 16;
+            s_rtGame.fieldNs = MS;
+            s_rtGame.fieldSeq = field;
+            s_rtGame.fieldSeqN = 4;
+            s_rtGame.fieldQuiet = c != 4;
+            s_rtGame.readsSeq = reads;
+            s_rtGame.readsSeqN = 61;
+            s_rtGame.interpSeq = interp;
+            s_rtGame.interpSeqN = 61;
+            s_rtGame.restSeq = rest;
+            s_rtGame.restSeqN = 61;
+            s_rtGame.maxEst = pass == 1;
+            if (pass == 0) {
+                now = rtTimerLoopRule(steps, &L, RT_ASMADE, 36 * MS / 10, false);
+            } else {
+                before = rtTimerLoopRule(steps, &L, RT_ASMADE, 36 * MS / 10, false);
+            }
+        }
+        memset(&s_rtGame, 0, sizeof s_rtGame);
+        snprintf(what, sizeof what, "rc11's load, the typical times: GPU %.0f ms%s, %u s",
+                 (double)g / 1e6,
+                 c == 3   ? ", depth 1"
+                 : c == 4 ? ", the step between calling the renderer"
+                          : "",
+                 steps / 60u);
+        rtPrint(what, &now);
+        printf("  %u misses (%u the pictures', %u over the floor; latest %.1f ms), %u back-offs, "
+               "%u steps at the whole period, latest start %.1f ms; the recent maxima: %u "
+               "presents, %u misses, latest start %.1f ms\n",
+               now.misses, now.pictureMisses, now.overFloor, (double)now.missMax / 1e6,
+               now.backoffs, now.strict, (double)now.lateMax / 1e6, before.presents, before.misses,
+               (double)before.lateMax / 1e6);
+        CHECK(now.shown == now.frames && now.resyncs == 0 && now.behind == 0);
+        CHECK(before.shown == before.frames && before.resyncs == 0);
+        if (c < 3) {
+            CHECK(now.presents + 3u >= cells[c].presents && now.presents <= cells[c].presents + 3u);
+            CHECK(before.presents + 3u >= cells[c].before &&
+                  before.presents <= cells[c].before + 3u);
+            /* 3.5 a second more at least */
+            CHECK(now.presents >= before.presents + 350u);
+            CHECK(now.misses == cells[c].misses && now.pictureMisses == now.misses);
+            CHECK(now.overFloor == cells[c].overFloor && now.backoffs == cells[c].backoffs);
+            CHECK(now.strict == cells[c].strict && now.strictBlockMax == cells[c].strict);
+            CHECK(now.missMax == cells[c].missMax && now.lateMax == cells[c].lateMax);
+            CHECK(before.misses == 0 && before.lateMax == cells[c].beforeLate);
+            /* a few misses a 10 s block at most, a few ms each, and the
+               game's clock never more than 10 ms behind (the sound's lead
+               up to 120 ms) */
+            CHECK(now.misses <= 30u && now.missMax < 4 * MS && now.lateMax < 10 * MS);
+            /* the fewest presents in a block: the first, while the means
+               learn */
+            CHECK(now.blockPresentsMin + 3u >= (c == 0 ? 392u : c == 1 ? 378u : 381u));
+        } else if (c == 3) {
+            CHECK(now.presents + 3u >= 320u && now.presents <= 323u && now.misses == 0);
+            CHECK(before.presents + 3u >= 317u && before.presents <= 320u);
+        } else {
+            CHECK(now.presents + 3u >= 397u && now.presents <= 400u && now.misses == 0);
+            CHECK(before.presents + 3u >= 341u && before.presents <= 344u);
+            CHECK(now.lateMax < 13 * MS);
+        }
+    }
+}
+
 int main(void)
 {
     test60();
@@ -3362,6 +3503,7 @@ int main(void)
     testStepRule();
     testBackoffCause();
     testFrameShape();
+    testRc11();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;
