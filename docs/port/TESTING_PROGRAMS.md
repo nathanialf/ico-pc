@@ -836,7 +836,33 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `gltf_test.c`: the glTF reader and writer, bit-exact round trips, GLB, a Blender-style file,
   refusals (`gltf`).
 - `gsb_cull_test.c`: the game's cull against the blended pictures' cameras and the windows that
-  scale with the width; with the disc, a stage (`gsb_cull`, `gsb_cull_stage`).
+  scale with the width; with the disc, a stage (`gsb_cull`, `gsb_cull_stage`), and the disc-wide
+  sweep (`gsb_cull_sweep.1of8` .. `8of8`, 77 without the disc image). `--stage DISC` is st18a at
+  the camera of the reporter's dump i76 and the 768 camera steps about it (every part a picture
+  between the ticks shows is registered by this tick; the one-camera control leaves some out).
+  `--sweep DISC` generalises it to every stage folder of the disc (`object/sdf/stNN?/model/`, the
+  member index as the `rd_mesh` disc walk builds it, numbered in index order, shard q of 8 takes
+  the stages numbered q mod 8) at the camera of every line of `tools/sweep_cameras.txt` (stage,
+  dump path; a .rddump or an F12 zip; the dump's view and zoom; a line whose dump is absent is
+  skipped; `builtin:i76` is the i76 camera of st18a) and the 768 steps about each, every 4th pair
+  by default (`--sweep-step N`, 1 is the whole sweep), at 16:9 (688 GS pixels wide) and 48:9
+  (2048). Per stage and aspect it counts the mechanisms that leave an in-view part or triangle
+  undrawn: the box cull (parts a picture between the ticks shows that this tick did not
+  register: `box_gap` not drawn, `box_hidden` drawn as the tick before's), the blend span (parts
+  registered by three cameras against one, and the one-camera control's losses), and the region
+  rule's drops through the CPU oracle (`vu1ref_region_draw` with the corners' real region bits,
+  `extended` on as at every aspect wider than 4:3, the strip joins as `rd_mesh.c` joinStrips and
+  the card test): triangles dropped for a corner behind the eye (step 6) and cards (step 5), at
+  the ticks (`tick_behind`, `tick_card`) and at the pictures between (t = 1/16 .. 15/16 through the
+  blended camera, `between_behind` after the ticks' rescue, `between_card`); `--eye` adds the
+  rasteriser's hole pixels. The table prints at the end of each shard with its BASELINE LINES;
+  `tools/sweep_baseline.txt` holds them (`STAGE ASPECT MECH COUNT`, `sweep_step N`): a count above
+  its line fails, below prints "baseline can be lowered", a stage with no line is held to 0 once
+  the file has any. `--out DIR` (the folder exists) writes the report to `DIR/sweep-KofN.txt`,
+  `--only STAGE` runs one stage. The winding premise per stage is `rd_mesh`'s `winding_disc`
+  cases (`winding stage NAME` lines), not repeated here. The part's strip joins use the p2o's
+  strip records for the VU stream's strips and the models are placed at the identity; both are
+  approximations the table's reader should know.
 - `modelpack_test.c`: model packs end to end on synthetic models under the build tree
   (`modelpack`).
 - `rd_alpha_plan_test.c`: the alpha/blend planner on the CPU ([RENDER.md](PIPELINES.md),

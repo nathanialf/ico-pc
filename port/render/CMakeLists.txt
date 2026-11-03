@@ -427,13 +427,15 @@ target_link_libraries(rd_present_test PRIVATE ico_render ico_math ico_options)
 # GsBase.c as rd_present_test has it, with the display options; synthetic
 # cameras a tick apart (moves to 300 units, turns to 30 degrees) at three
 # widths: a box an in-between picture shows is never culled.  Records
-# only: no device.
+# only: no device.  --sweep DISC: every stage of the disc at the cameras of
+# the corpus dumps (tools/sweep_cameras.txt), against tools/sweep_baseline.txt.
 add_executable(gsb_cull_test test/gsb_cull_test.c
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GsBase.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"
-    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c"
+    ../platform/dump_zip.c)
 target_include_directories(gsb_cull_test PRIVATE ${_ico_seki_incs}
                            "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/shaders/test"
                            "${CMAKE_SOURCE_DIR}/port/math" "${CMAKE_SOURCE_DIR}/port/rhi"
@@ -441,7 +443,9 @@ target_include_directories(gsb_cull_test PRIVATE ${_ico_seki_incs}
 target_compile_definitions(gsb_cull_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(gsb_cull_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(gsb_cull_test PRIVATE ico_render ico_math ico_options ico_port_data)
+# (--sweep: the region rule through ico_vu1_ref, a dump's camera from a F12 zip)
+target_link_libraries(gsb_cull_test PRIVATE ico_render ico_vu1_ref ico_math ico_options
+                      ico_port_data ico_miniz ico_host_fs)
 
 # rd_crt_test: the CRT filter (rd_crt.c, crt.hlsl): its [video]
 # options with their config (host_config.c), the modes and overrides, and on
@@ -951,6 +955,16 @@ if(ICO_RUN_TESTS)
     # 77 without the disc image
     add_test(NAME gsb_cull_stage COMMAND gsb_cull_test --stage "${ICO_DISC_IMAGE}")
     set_tests_properties(gsb_cull_stage PROPERTIES SKIP_RETURN_CODE 77)
+    # every stage of the disc at the cameras of the corpus dumps (issue 29's regression gate):
+    # the box cull, the blend span and the region rule's drops per stage and aspect against
+    # tools/sweep_baseline.txt; eight shards, each the stages numbered k mod 8; main only (77
+    # without the disc image).  A manual full run: gsb_cull_test --sweep DISC --sweep-step 1 --eye
+    # --out DIR (docs/port/TESTING_PROGRAMS.md)
+    ico_add_sharded_test(gsb_cull_sweep 8 PROGRAM gsb_cull_test
+                         ARGS --sweep "${ICO_DISC_IMAGE}"
+                              --cameras "${CMAKE_SOURCE_DIR}/tools/sweep_cameras.txt"
+                              --baseline "${CMAKE_SOURCE_DIR}/tools/sweep_baseline.txt"
+                         PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1800)
     # 50 s of it is the disc's models, in four slices: four shards (port/test/ico_shard.h)
     ico_add_sharded_test(rd_mesh 4 PROGRAM rd_mesh_test ARGS "${ICO_DISC_IMAGE}"
                          PROPERTIES SKIP_RETURN_CODE 77)
