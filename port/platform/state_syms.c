@@ -360,6 +360,13 @@ static int pos_cmp(const void *a, const void *b)
     return x->seq < y->seq ? -1 : x->seq > y->seq;
 }
 
+static void pos_sort(Pos *p, size_t n)
+{
+    if (n > 1) {
+        qsort(p, n, sizeof(Pos), pos_cmp);
+    }
+}
+
 typedef struct NameKey {
     uint64_t hash;
     const char *name;
@@ -877,11 +884,13 @@ IcoSymTab *ico_symtab_parse(const char *text, size_t n, const IcoSymTabEnv *env,
         q->kind = it->kind;
         q->sized = it->sized;
     }
-    qsort(l.code, l.n_code, sizeof(Pos), pos_cmp);
-    qsort(l.code_sec, l.n_code_sec, sizeof(Pos), pos_cmp);
-    qsort(l.data, l.n_data, sizeof(Pos), pos_cmp);
-    qsort(l.data_sec, l.n_data_sec, sizeof(Pos), pos_cmp);
-    qsort(l.game, l.n_game, sizeof(Pos), pos_cmp);
+    /* an empty list has no array (NULL): qsort's base is declared non-null,
+       so an empty one is left alone (UBSan in CI's asan job, state_port) */
+    pos_sort(l.code, l.n_code);
+    pos_sort(l.code_sec, l.n_code_sec);
+    pos_sort(l.data, l.n_data);
+    pos_sort(l.data_sec, l.n_data_sec);
+    pos_sort(l.game, l.n_game);
     l.n_code = dedupe(l.code, l.n_code);
     l.n_code_sec = dedupe(l.code_sec, l.n_code_sec);
     l.n_data = dedupe(l.data, l.n_data);
