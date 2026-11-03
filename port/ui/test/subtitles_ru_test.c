@@ -209,12 +209,21 @@ static void testLanguageRow(int pal)
     CHECK(ui_subtitle_words(1, 0) == ico_subtitles_ru_bobttz[1].words, "entry 5: the subtitles");
     CHECK(strcmp(ui_str(UI_STR_SETTINGS), ui_strings_ru_bobttz[UI_STR_SETTINGS]) == 0,
           "entry 5: the Options menu in Russian");
-    /* a Menu language of the player's own wins over it */
+    /* a Menu language of the player's own wins over it, the game's menu
+       words too (New Game, Continue, the save tiles' words: PR 180) */
     ico_opt_set_ui_language(UI_LANG_DE);
     ui_settings_apply_language();
-    CHECK(ui_get_language() == UI_LANG_DE &&
-              ui_menu_words_language(UI_LANG_EN) == UI_LANG_RU_BOBTTZ,
-          "German menus, the game's words still Russian");
+    CHECK(ui_get_language() == UI_LANG_DE && ui_sheet_language() == UI_LANG_EN &&
+              ui_menu_words_language(UI_LANG_EN) == UI_LANG_DE &&
+              strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_NEW_GAME),
+                     "Neues Spiel") == 0,
+          "German menus, the game's words German over the English sheets");
+    ico_opt_set_ui_language(UI_LANG_EN);
+    ui_settings_apply_language();
+    CHECK(ui_get_language() == UI_LANG_EN && ui_menu_words_language(UI_LANG_EN) == UI_LANG_EN &&
+              strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_CONTINUE),
+                     "Continue") == 0,
+          "English menus, the game's words English");
     ico_opt_set_ui_language(-1);
     ui_settings_apply_language();
     /* entry 6, Russian (cobra838) (subtitles_ru_cobra838_test), entry 7,

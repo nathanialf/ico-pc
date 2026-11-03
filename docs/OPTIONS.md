@@ -545,8 +545,10 @@ other discs.
   translations by players).
   The North American disc, the August 2001 preview and the June 2001
   magazine demo start on English. It does not
-  change the game's own text, which is always the disc's or the Language
-  row's translation.
+  change the game's own text, which is always the disc's, except while
+  Language is one of the translations by players: then the game's own menu
+  words (New Game, Continue, the saves' places) follow the Menu language
+  too.
 - **Disc** shows only when more than one disc is set up. It is the disc the
   game plays: Europe (SCES-50760), Japan (SCPS-11003), Korea (SCPS-56001), USA
   (SCUS-97113), Preview 2001-08 (the August 2001 preview), Demo 2001-06

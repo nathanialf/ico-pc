@@ -1339,6 +1339,8 @@ static const char *menuLanguageName(int lang)
     return ui_str((UiStrId)ids[lang >= 0 && lang < UI_LANG_TABLES ? lang : 0]);
 }
 
+static int s_loggedWordsLang = -2; /* the menu words' language last logged */
+
 void ui_settings_apply_language(void)
 {
     /* the port's text: [ui] language, else the disc's (ui_lang.c) */
@@ -1353,9 +1355,19 @@ void ui_settings_apply_language(void)
     ui_set_sheet_language(sheet >= 0            ? sheet
                           : gameLanguage() >= 0 ? (int)ui_lang_from_game(gameLanguage())
                                                 : (int)UI_LANG_EN);
-    /* the game's menu words in a community translation over the English
-       sheets while one is in force (ui_lang.h ui_settings_text_language) */
-    ui_set_menu_words_language(ui_settings_text_language());
+    /* while a community translation is in force (ui_lang.h
+       ui_settings_text_language) the game's menu words over the English
+       sheets are the Menu language's, as the port's rows beside them (Auto:
+       the translation itself); a disc language keeps the sheets' own words */
+    const int wordsLang = ui_settings_text_language() >= 0 ? (int)ui_get_language() : -1;
+    if (wordsLang != s_loggedWordsLang) {
+        fprintf(stderr, "settings: the game's menu words in %s (%s)\n",
+                wordsLang >= 0 ? ico_opt_ui_language_name(wordsLang) : "the sheets' language",
+                wordsLang >= 0 ? "the Menu language over a community translation"
+                               : "no community translation in force");
+        s_loggedWordsLang = wordsLang;
+    }
+    ui_set_menu_words_language(wordsLang);
 }
 
 static const char *languageName(int game)

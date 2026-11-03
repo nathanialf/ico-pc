@@ -50,13 +50,14 @@ int ui_sheet_language(void)
 
 void ui_set_menu_words_language(int lang)
 {
-    s_wordsLang = lang >= UI_LANG_COMMUNITY_FIRST && lang < UI_LANG_TABLES ? lang : -1;
+    s_wordsLang = lang >= 0 && lang < UI_LANG_TABLES ? lang : -1;
 }
 
 UiLang ui_menu_words_language(int sheetLang)
 {
-    /* a community translation is drawn over the English disc data, so over
-       the English sheets' geometry */
+    /* a community translation is drawn over the English disc data, so the
+       words (the Menu language's while one is in force, settings.c) keep the
+       English sheets' geometry */
     if (s_wordsLang >= 0 && sheetLang == UI_LANG_EN) {
         return (UiLang)s_wordsLang;
     }

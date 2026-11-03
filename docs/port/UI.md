@@ -651,11 +651,20 @@ walk every table and its subtitles.
 The Menu language row offers the community translations after the eight (`[ui] language`
 `ru-bobttz`, `ru-cobra838`, `pt-br`), and its Auto resolves to the one in force (`port/ui/ui_lang.h`
 (`ui_settings_text_language`): the Language row's community entry, `[game] text_language`, on the
-European disc with the game in English). `ui_settings_apply_language` also sets the menu words'
-language to it (`ui_set_menu_words_language`), so the game's menu words over the English sheets
-are its `UI_STR_MT_*` strings with the English sheet's geometry, an item's strip hashed with that
-language so the five sheets' own strips stay byte for byte (`port/ui/menu_font.c` (`itemStrip`,
-`itemWords`); ctests `subtitles_ru`, `subtitles_ru_cobra838`, `subtitles_pt_br`). Its subtitles are drawn by `port/ui/subtitle_text.c`
+European disc with the game in English). Two languages are then apart: the Language row's
+translation (the subtitles, the game data stays English) and the Menu language (every menu word).
+While a translation is in force `ui_settings_apply_language` sets the menu words' language to the
+Menu language (`ui_set_menu_words_language(ui_get_language())`; Auto is the translation itself),
+so the game's menu words over the English sheets (New Game, Continue, the save tiles' words) are
+that language's `UI_STR_MT_*` strings, as the port's rows beside them are, with the English
+sheet's geometry: an item's strip carries its string language (`textLang`) apart from its sheet
+language (`lang`, which picks the em, width, anchor and halo), is hashed with `textLang` when the
+two differ so the five sheets' own strips stay byte for byte, and its draw key is made from the
+words it draws (`port/ui/menu_font.c` (`rasterItem`, `itemStrip`, `ui_menu_word_draw`); cobra838's
+fix on PR 180). With no translation in force a disc language keeps the sheets' own words whatever
+the Menu language. The log names each change: `settings: the game's menu words in <lang> (...)`.
+Ctests `subtitles_ru`, `subtitles_ru_cobra838` (`testMenuWordsApart`: Language his Russian, Menu
+language English or German), `subtitles_pt_br`, `strings_complete`. Its subtitles are drawn by `port/ui/subtitle_text.c`
 ([GAME_FEATURES.md](GAME_FEATURES.md#community-translations)).
 
 ## Text: the font and the sheet look

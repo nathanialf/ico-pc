@@ -31,7 +31,11 @@
  *     other discs the row is not shown and the key does nothing;
  *   - the menu words' strips (menu_font.c, ui__menu_strip_raster): the five
  *     sheets' own words byte for byte with or without the translation in
- *     force but for the English sheet, which takes his Russian words. */
+ *     force but for the English sheet, which takes his Russian words;
+ *   - Language = his Russian with another Menu language (PR 180): the game's
+ *     menu words over the English sheet are the Menu language's (English:
+ *     the English sheet's own strips byte for byte; German: Laden, Neues
+ *     Spiel), Auto his. */
 #include "settings_fixture.h"
 #include "subtitle_text.h"
 #include "ui_internal.h" /* ui__menu_strip_raster */
@@ -232,12 +236,21 @@ static void testLanguageRow(int pal)
     CHECK(ui_strings_ru_cobra838[UI_STR_EXTRAS_BACKUP] == NULL &&
               strcmp(ui_str(UI_STR_EXTRAS_BACKUP), ui_strings_en[UI_STR_EXTRAS_BACKUP]) == 0,
           "entry 6: an untranslated row in English");
-    /* a Menu language of the player's own wins over it */
+    /* a Menu language of the player's own wins over it, the game's menu
+       words too (New Game, Continue, the save tiles' words: PR 180) */
     ico_opt_set_ui_language(UI_LANG_DE);
     ui_settings_apply_language();
-    CHECK(ui_get_language() == UI_LANG_DE &&
-              ui_menu_words_language(UI_LANG_EN) == UI_LANG_RU_COBRA838,
-          "German menus, the game's words still his Russian");
+    CHECK(ui_get_language() == UI_LANG_DE && ui_sheet_language() == UI_LANG_EN &&
+              ui_menu_words_language(UI_LANG_EN) == UI_LANG_DE &&
+              strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_NEW_GAME),
+                     "Neues Spiel") == 0,
+          "German menus, the game's words German over the English sheets");
+    ico_opt_set_ui_language(UI_LANG_EN);
+    ui_settings_apply_language();
+    CHECK(ui_get_language() == UI_LANG_EN && ui_menu_words_language(UI_LANG_EN) == UI_LANG_EN &&
+              strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_CONTINUE),
+                     "Continue") == 0,
+          "English menus, the game's words English");
     ico_opt_set_ui_language(-1);
     ui_settings_apply_language();
     /* entry 7, Brazilian Portuguese (subtitles_pt_br_test), then English */
@@ -335,6 +348,56 @@ static void testStrips(void)
           differs);
 }
 
+/* Language = his Russian, Menu language another (PR 180): the title's
+   words and every other game word drawn over the English sheet are the Menu
+   language's, in the English sheet's geometry; Auto keeps his Russian */
+static void testMenuWordsApart(void)
+{
+    uint8_t a[512 * 64], b[512 * 64];
+    NonLinearCameraMove = 2;
+    ico_opt_set_text_language(UI_LANG_RU_COBRA838);
+    ico_opt_set_ui_language(UI_LANG_EN);
+    ui_settings_apply_language();
+    CHECK(ui_settings_text_language() == UI_LANG_RU_COBRA838 && ui_get_language() == UI_LANG_EN &&
+              ui_sheet_language() == UI_LANG_EN && ui_menu_words_language(UI_LANG_EN) == UI_LANG_EN,
+          "his Russian in force, English menus: English words (%d)",
+          ui_menu_words_language(UI_LANG_EN));
+    int items = 0, title = 0;
+    for (int i = 0; i < ui_menu_text_item_count; i++) {
+        const UiMenuTextItem *it = &ui_menu_text_items[i];
+        if ((int)it->w * (int)it->h > (int)sizeof(a)) {
+            continue;
+        }
+        const int rb = ui__menu_strip_raster(it, UI_LANG_EN, b, it->w, it->h);
+        ui_set_menu_words_language(-1);
+        const int ra = ui__menu_strip_raster(it, UI_LANG_EN, a, it->w, it->h);
+        ui_settings_apply_language();
+        CHECK(ra == 0 && rb == 0 && memcmp(a, b, (size_t)it->w * it->h) == 0,
+              "item %d: the English sheet's own words under English menus", i);
+        items++;
+        title += it->str == UI_STR_MT_CONTINUE || it->str == UI_STR_MT_NEW_GAME;
+    }
+    CHECK(items > 100 && title >= 2, "the strips compared (%d items, %d title words)", items,
+          title);
+    /* German menus: German words over the English sheet */
+    ico_opt_set_ui_language(UI_LANG_DE);
+    ui_settings_apply_language();
+    CHECK(strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_CONTINUE), "Laden") == 0 &&
+              strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_NEW_GAME),
+                     "Neues Spiel") == 0,
+          "German menus: Laden, Neues Spiel");
+    /* Auto: his Russian, the menus and the game's words together */
+    ico_opt_set_ui_language(-1);
+    ui_settings_apply_language();
+    CHECK(ui_get_language() == UI_LANG_RU_COBRA838 &&
+              strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_CONTINUE),
+                     ui_strings_ru_cobra838[UI_STR_MT_CONTINUE]) == 0,
+          "Auto: his Continue");
+    ico_opt_set_text_language(-1);
+    ui_settings_apply_language();
+    CHECK(ui_menu_words_language(UI_LANG_EN) == UI_LANG_EN, "no translation: the sheets' words");
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -352,6 +415,7 @@ int main(int argc, char **argv)
     testLanguageRow(pal);
     if (pal) {
         testStrips();
+        testMenuWordsApart();
     }
     ico_opt_set_ui_language(-1);
     ico_opt_set_text_language(-1);
