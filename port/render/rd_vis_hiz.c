@@ -652,7 +652,9 @@ int rd__vis_hiz_mesh(const RdMeshRec *m, const RdVuPayload *p, const float (*mem
         s_memo.cap = m->vertexCount;
     }
     if (++s_memo.now == 0u) {
-        memset(s_memo.stamp, 0, (size_t)s_memo.cap * 4u);
+        if (s_memo.cap) {
+            memset(s_memo.stamp, 0, (size_t)s_memo.cap * 4u);
+        }
         s_memo.now = 1u;
     }
     const float (*mm)[4] = &mem[16];
