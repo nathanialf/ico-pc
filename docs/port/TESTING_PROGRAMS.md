@@ -1508,7 +1508,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   function is asked once before the first batch, one batch adds at most 32 pipelines, the system's
   signal (the function's 2) ends the finisher with nothing more made, and a second stopped set run
   to the end leaves every key of the reachable set with a pipeline and none made on first use
-  after it; the exact blend's
+  after it; off Vulkan (`rd_perf_gl`, `rd_perf_attachment_gl`: no background creation) the start
+  returns 0 with the finisher off and the memory never asked, and every key is made on first use;
+  the exact blend's
   counters (`RdPerfRecord.dstDraws`, `storagePasses`, `dstSwitches`) under each blend path the
   device has (none under the fixed-function blend, no storage pass or switch under the attachment
   read) and, under the storage read, the storage pass merge's DISPLAY bytes equal to the unmerged

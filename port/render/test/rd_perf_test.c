@@ -749,6 +749,23 @@ static void bgTickUntil(uint32_t pipelines, bool toEnd)
     }
 }
 
+/* the graphics API's name for the background set's lines */
+static const char *bgApi(void)
+{
+    switch (rhi_backend()) {
+    case RHI_BACKEND_VULKAN:
+        return "Vulkan";
+    case RHI_BACKEND_D3D12:
+        return "Direct3D 12";
+    case RHI_BACKEND_OPENGL:
+        return "OpenGL";
+    case RHI_BACKEND_D3D11:
+        return "Direct3D 11";
+    default:
+        return "another API";
+    }
+}
+
 static void checkBackgroundSet(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
@@ -765,6 +782,31 @@ static void checkBackgroundSet(void)
           "background set: the stopped set made %u of %u (want one batch, lazy on)", stopped, n);
     s_bgMemory = 0;
     s_bgMemoryCalls = 0;
+    if (rhi_backend() != RHI_BACKEND_VULKAN) {
+        /* no background creation off Vulkan (rhi_create_pipelines_begin
+           returns NULL there): the start is refused, the memory never
+           asked, and the stopped set's rest made on first use */
+        const uint32_t none = rd_pipelines_background_start(bgMemory);
+        CHECK(none == 0 && !rd_pipelines_background_on() && s_bgMemoryCalls == 0,
+              "background set (%s): the start gave %u keys, on %d, the memory asked %d times "
+              "(want 0, off, 0)",
+              bgApi(), none, (int)rd_pipelines_background_on(), s_bgMemoryCalls);
+        CHECK(rd_pipelines_background_start(bgMemory) == 0 && rd__pipeline_count() == stopped,
+              "background set (%s): a second start was taken, %u pipelines (want %u)", bgApi(),
+              rd__pipeline_count(), stopped);
+        uint32_t missing = 0;
+        for (uint32_t i = 0; i < n; i++) {
+            missing += rd__get_pipeline(&keys[i]).id == 0;
+        }
+        CHECK(missing == 0 && rd__pipeline_count() > stopped,
+              "background set (%s): %u of %u keys without a pipeline on first use, %u pipelines "
+              "after it (stopped at %u)",
+              bgApi(), missing, n, rd__pipeline_count(), stopped);
+        printf("background set: %u keys, stopped at %u pipelines, not resumed on %s (%u made on "
+               "first use)\n",
+               n, stopped, bgApi(), rd__pipeline_count() - stopped);
+        return;
+    }
     const uint32_t left = rd_pipelines_background_start(bgMemory);
     CHECK(left > 0 && rd_pipelines_background_on(), "background set: %u keys left, on %d", left,
           (int)rd_pipelines_background_on());
