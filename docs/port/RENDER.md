@@ -1844,6 +1844,44 @@ reciprocals the CPU rounds once a draw (`gs_div_trunc_rcp`, [SHADERS.md](SHADERS
 and `fx_texel`'s wrap size as integers (`DrawCB.aux1`, `port/render/rd_replay.c` (`blurAux1`)), the
 same values the shader computed per pixel.
 
+**The heavy stage 6 room and the title menu on the PowerVR phone.** The phone's log of 2026-11-02
+(Resolution at the window's 2366 x 1080, the Enhanced preset) put the stage 6 room with Yorda at
+21 ms of GPU work a picture (top passes `list 3 SCENE 51 draws 6.20 ms`, `aura SCENE 2 draws 4.64`,
+`list 0 SCENE 280 draws 3.54`, `list 11 SCENE 2 draws 1.30`, `list 3 temporary 8 draws 1.18`) and
+the title menu at 10 ms (`list 3 SCENE 7 draws 2.00`, `glow WORK2 1 draw 1.23`, `list 11 SCENE 1
+draw 1.16`, `list 0 136 draws 1.06`, the present 0.97). The lists' and effects' times overlap (list
+8 is the aura; a pass's time carries the tile work of the draws before it), so the passes are the
+measure. Replayed on lavapipe at the phone's profile (its F12 dump of that room,
+`build-host/tmp/v098/evidence/gpuround/accounting-heavy.csv` on the maintainer's machine: each
+pass's draws, loads and stores), the room moves about 240 MB a picture through the tiles: list 0's
+pass stores SCENE's colour and depth (20 MB), the volumes' pass loaded and stored the depth again
+(23 MB), the pass after the shadow count loads and stores colour and depth (41 MB) and holds the
+three shadow composites, the fog, lists 4-6 and the stencil setups of DATE, the crack fill's copy
+of the colour (20 MB), the aura's paste pass (20 MB, with the fill's reads), the aura's feedback
+read of the whole picture (10 MB), list 11's pass (20 MB), the reduction (20 MB) and the present
+(20 MB). At about 16 MB a millisecond (list 11's two flat full-screen sprites, 20 MB in 1.30 ms)
+that is most of the 21 ms: the room is bandwidth-bound, and list 0's 280 draws are a small part of
+its 3.54 ms (the culling measurement below: not worth a culler). Two of those passes and a clear
+are cut: the shadow volumes are drawn in list 0's pass and the count target's new-target clear is
+left undrawn ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-volumes-in-the-scenes-pass): the
+volumes' pass, about 1.2 ms, and 9.7 MB written, the same picture) and the brightness step is applied by the
+reduction above 1x too ([the fades fold](RENDER_POST.md#the-fades-fold): list 11's pass in every
+frame of play and on the menus, about 1.2-1.3 ms, within a level at the phone's resolution). What
+was looked at and left:
+
+- The aura's paste (`aura SCENE`): in that room AURA_WORK holds only its clear in every frame (the
+  constant read's count, 1.0 a replay), so the paste's alpha is 0 and it leaves the colour as it
+  is; it still writes SCENE's alpha (0), which the reduction carries into DISPLAY, and its pass
+  holds the crack fill, so dropping it saves only its shading (a texel of FEED128 a pixel), not a
+  pass. The feedback read after it feeds the next frame's paste.
+- The pass after the shadow count (`list 3 SCENE`) cannot join list 0's: the count reads the
+  stencil as a texture into a target of its own size, which ends the pass. Its composites are
+  full-frame sprites whose alpha test (A > 0) keeps them to the shadow; drawn over the shadow's
+  box only they would shade fewer pixels but move the same bytes.
+- The title menu's glow mask (`glow WORK2`, 10 MB written and SCENE read at full size): folding the
+  mask into the reduction that reads it is exact but needs a shader that takes the mask's own
+  bilinear and alpha test inside the box ([the glow's passes](#the-glows-passes)), not done here.
+
 Measured or worked out, not done:
 
 - **The depth as D24S8 on every device** (measured, not done). A D24S8 depth would take 4 bytes a
