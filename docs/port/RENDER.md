@@ -48,6 +48,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/vu1_ref/` | the VU1 programs' CPU references ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-cpu-oracles)) |
 | `port/render/test/` | the renderer's tests ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portrendertest)) |
 | `port/render/rd_interp.c`, `rd_present.c`, `rd_present_info.c`, `rd_crt.c`, `rd_video.c` | presentation ([DISPLAY.md](DISPLAY.md)); `rd_present_info.c` holds `rd_last_present_info`'s record |
+| `port/render/rd_interp_mesh.c` | the interpolation's reads of a mesh's stream kept while its serial holds: a skinned mesh's bone pivots, a rigid mesh's centroid, the same-shape answer of two streams ([Performance notes](#performance-notes)) |
 | `port/render/texpack*.c`, `modelpack.c`, `gltf.c`, `xxh3.c` | texture and model packs ([PACKS.md](PACKS.md)) |
 
 ## The model
@@ -523,8 +524,8 @@ before it, as the GS reads the live buffer (`port/render/rd_replay.c`, header co
 shapes with a known place (screen prims, the aura's paste) takes a render area of the 32 x 32 tiles
 they touch (`RhiRenderPassDesc.area`, [RHI.md](RHI.md#vulkan)), so only those tiles are loaded and
 stored; the pixels outside are untouched, which no draw of the pass reaches, so the picture is the
-same bytes. The scan before the walk (`rd__pass_area_scan`, beside the store plan's) gives every
-command its box, `beginPass` asks for the union from its command on, and the walk ends such a pass
+same bytes. The scan before the walk (`rd__pass_area_scan_cmd` in the store plan's one walk of the
+lists, `rd__store_plan_scan`; [Performance notes](#performance-notes)) gives every command its box, `beginPass` asks for the union from its command on, and the walk ends such a pass
 before the first command past it (`rd__pass_area_due`) ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-pass-area);
 `port/render/rd_pass_area.c`, header comment; `[dev] pass_area`).
 
@@ -1737,6 +1738,44 @@ fewer instructions: no `OpSDiv` in `fx_sprite_ps` (a division is 19 straight-lin
 one of them a float divide), no `OpSRem` on a power-of-two size, no float divide at scale 1.
 
 ### Performance notes
+
+**The render thread's reads.** On the PowerVR phone a picture's interpolation, upload and walk took
+10.8 ms (4.24, 0.99 and 5.53 in its 10 s line), more than the second picture a frame leaves them.
+Sampled on lavapipe (the replay tool's main thread, 300 replays of the phone's F12 dumps at its
+profile), five things a picture redid that its inputs had not
+changed are kept or made once, each giving the same bytes:
+
+- **One walk before the replay.** The store plan, the pass area and the passes cut each walked the
+  replayed lists with their state; `rd__store_plan_scan` now applies each command's state once and
+  hands the command to `rd__pass_area_scan_cmd` and `rd__pass_cut_scan_cmd` beside its own notes
+  (each begun by its `_begin`, false when off or in a pass window, and closed by its `_end`;
+  `rd__pass_area_scan` and `rd__pass_cut_scan` are the three parts over a frame, for the tests).
+  The fades fold still plans first: the others read its sprites. These walks are timed in the
+  record's `upload`, not its `walk` (`replayFrame`: the upload phase ends after
+  `rd__clear_new_targets`); together they were about 0.06 ms of lavapipe's 0.27 ms upload.
+- **A stream's serial.** Every write of a mesh's stream (its creation, `rd_update_vu_mesh`, the
+  interpolation's scratch copy and its blend) gives the mesh a new `RdMeshRec.streamSerial`
+  (`port/render/rd_mesh.c` (`rd__mesh_stream_written`)), and what is computed from the stream
+  alone is kept while the serial holds. The alpha plan's span of a mesh (`rd_alpha_plan.c`
+  `meshSpanMemo`, a cache line a vertex) was read at every replay: 0.28 ms of lavapipe's 1.8 ms
+  walk. A skinned mesh's bone pivots (`rd__interp_skin_pivots`) were made at every present: 0.12
+  ms. A record with no serial (a test's own) keeps the old rule.
+- **The same shape.** `morphDraw` compared a matched mesh's two stream buffers whole at every
+  present; the answer is kept by both meshes, serials and buffers (`rd__interp_streams_same`). The
+  replay tool loads each dump's meshes on their own, so its `--interp` compares two copies of the
+  same bytes for every matched mesh (0.28 ms a present on lavapipe); the game shares one mesh
+  between ticks where it did not change and compares only a morphing part's twins.
+- **The shadow volumes' pairs.** The part of `blendPrisms` that t does not change (the two ticks'
+  prisms by tag, their medians, the banded alignment, the world shift: `prismSet`) is kept with a
+  copy of its inputs, and a later present of the tick whose inputs are the same bytes copies the
+  pairs back (`prismSetKept`): 0.35 ms a present on lavapipe.
+- **The draw-merge count.** `vuMergeNote` (counting only) compares the last VU draw's DrawCB byte
+  for byte instead of a 64-bit FNV made one byte a step at every VU draw: 0.12 ms a replay.
+
+The blends' per-vertex loops (`lerpFloats`) are vectorised by the Android build's clang at `-O2`
+(four lanes, `-Rpass=loop-vectorize`). What is left of the walk on lavapipe is mostly the driver's
+command recording (lavapipe's own code on the main thread); the phone's driver is another, so the
+phone's share of these cuts is not lavapipe's.
 
 **The UINT views of the RGBA8 targets.** `fx_sprite_ps` reads each texel as a float and turns
 it back into an integer (`floor(x * 255 + 0.5)` a channel, `fx_load`), which gives the stored byte

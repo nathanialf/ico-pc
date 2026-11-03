@@ -63,7 +63,9 @@ draws only what that outcome needs, byte for byte what the planned passes write
 (`port/render/rd_alpha_plan.c` (`rd__alpha_range_of_draw`, `rd__plan_screen_draw_alpha`), called
 after the plan by `port/render/rd_replay_vu.c` (`vuDraw`, the range once a command in `doVuDraw`)
 and `port/render/rd_replay.c` (`doScreen`), before the exact blend's and the two-pass blend's
-expansions). The rules, each a fact of the GS's integer arithmetic and of the fixed-function path:
+expansions; a mesh's vertex span is kept while its stream's serial holds, `meshSpanMemo`,
+[RENDER.md](RENDER.md#performance-notes)). The rules, each a fact of the GS's integer arithmetic and
+of the fixed-function path:
 
 | rule | condition over the range lo..hi | the plan | why the bytes are the same |
 | --- | --- | --- | --- |

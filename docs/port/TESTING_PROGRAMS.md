@@ -791,8 +791,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   identities over every Cs and Cd (`gs_blend_reg_ch`, `gs_dst_channel`), a model of the
   fixed-function path over every blend mode, PABE, FBA, COLCLAMP, FIX and range (the planned
   passes store the pixel the plan before stores), the ranges of screen prims, meshes, grids and
-  particles, and `rdtex_alpha_range` against every texel and two- and three-texel blends
-  (`rd_alpha_plan`).
+  particles (a mesh's span kept for its replay when its record has no stream serial, across
+  replays while its serial holds, read again under a new one), and `rdtex_alpha_range` against
+  every texel and two- and three-texel blends (`rd_alpha_plan`).
 - `rd_blur_test.c`: `staticBlur.c`'s full-screen effects on rd (`rd_blur`, sharded); its CPU
   part checks the open border's strips (`checkBorderStrips`: pixels 0, 1 and W - 2, W - 1 alone,
   each with column 2's or W - 3's U, plain and mirrored, the hardware sprite's S the same); the
@@ -1388,7 +1389,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd_interp_seams_test.inc`, included where they stood, and its bars case in
   `rd_interp_bars_test.inc` (`testBars`: the same screen sprite under another key in each tick is
   drawn once, whole; a taller one or another blend FIX still cross-fades,
-  [WORK_BUFFERS.md](WORK_BUFFERS.md#screen-sprites-redrawn-under-a-new-key-between-ticks));
+  [WORK_BUFFERS.md](WORK_BUFFERS.md#screen-sprites-redrawn-under-a-new-key-between-ticks)), and
+  its keeps in `rd_interp_memo_test.inc` (`testStreamMemos`, `port/render/rd_interp_mesh.c`: two
+  meshes of the same bytes compared once and the answer kept, a rewrite compared again, one
+  buffer the same shape uncompared, a record with no serial compared at every ask; a skinned
+  bone's pivot its bound vertices' centroid, the same at the next present and after another
+  mesh's, moved by a rewrite; a shadow volume paired at 0.75, then drawn at 0.25 and 0.75 from the
+  kept pairs, the 0.75 volume byte for byte the one paired anew);
   rotation continuity (`testRotationContinuity`): a rigid draw and a bone turning
   170 then 190 degrees a tick stand at 265 degrees half way (on forward the long way, not back to
   85), at 217.5 at alpha 0.25 and at the tick's pose at alpha 1; 190 degrees with no turn before
