@@ -331,8 +331,9 @@ void rd__shadow_merge_arm(RhiRenderPassDesc *p, uint32_t cid, uint32_t did, uint
         g_rd.passSplit) {
         return;
     }
-    if (p->depth.stencilLoad != RHI_LOAD_CLEAR || p->depth.clearStencil != 0) {
-        return; /* not a pass that cleared the stencil (to 0) */
+    if (p->depth.stencilLoad != RHI_LOAD_CLEAR || p->depth.clearStencil != 0 ||
+        rd__stencil_live(rd__replay_stencil(), p->depth.texture.id)) {
+        return; /* not a pass that cleared the stencil (to 0), or a shadow window's own */
     }
     const uint32_t k = g_rdStoreOrd;
     for (uint32_t i = 0; i < s_sm.nReset; i++) {
