@@ -72,7 +72,15 @@
  *      plank's face, rd_mesh.c markJoinedStrips) is drawn as the wall is,
  *      and so is the card joined through another packet of its part (the
  *      keys' object and part; rd_replay.c joinParts), not through
- *      another part's draw.
+ *      another part's draw.  The side bands (vu_common.hlsli
+ *      VU_RULE_CLIP_BESIDE): a strip whose failing triangle has a vertex
+ *      behind the eye and reaches into the picture across its left edge
+ *      (kEyeSide), made with the EE's facing table (RdVuMeshDesc.facing)
+ *      turning it to the eye, adds pixels beside the picture at W 688 and
+ *      2048 and none inside it (the picture's columns equal the frame
+ *      without it, byte for byte) nor at W 512; the same strip with the
+ *      table turning it away (the cliff) adds none anywhere; kEye (no
+ *      table: a prelit stream without one has no facing) adds none.
  *   a  the attribute planes' anchor (checkPlaneAnchor):
  *      a code-36 wall sliver whose first corner stands 60,000 GS pixels
  *      above the picture with its Z saturated reads the texels the exact
@@ -95,6 +103,7 @@
 #include "rd_mesh.h"
 #include "rd_tex.h"
 #include "vk/rhi_vk.h"
+#include "vu1_ref.h" /* vu1ref_region_facing: the side bands' table */
 
 static int failures;
 
@@ -833,7 +842,47 @@ static const StripMesh kEye = {"behind the eye",
                                 {-2300, 2000, 1006000, -1}},
                                {60, 60, 200}};
 
+/* triangle 2 passes; triangle 3 (corners 1, 2, 3) has a vertex behind
+ * the eye whose image lies right of the strip (GS (2500, 2050)), so what
+ * of it lies in front of the eye is the wedge from the edge 1-2 (GS X
+ * 1850, inside the picture) leftwards, across the picture's left edge
+ * (1792) into the band beside it at a wider frame (W 688: 1704..1792) */
+static const StripMesh kEyeSide = {"behind the eye, across the edge",
+                                   4,
+                                   0,
+                                   1,
+                                   {{1900, 2050, 1006000, 1},
+                                    {1850, 2000, 1006000, 1},
+                                    {1850, 2100, 1006000, 1},
+                                    {-2500, -2050, 1006000, -1}},
+                                   {200, 200, 60}};
+
+/* the EE's facing table of the first n vertices of an eye strip (the eye
+ * matrix's h = (x, y, Z w, w)) whose failing triangle 3 faces the eye
+ * (front 1) or not: bit 3 from the oracle's facing of the corners as
+ * kicked (vu1ref_region_facing), the others clear */
+static uint8_t eyeFacing(const StripMesh *m, int front)
+{
+    float h[3][4];
+    for (int j = 0; j < 3; j++) {
+        const float *v = m->v[1 + j];
+        h[j][0] = v[0];
+        h[j][1] = v[1];
+        h[j][2] = v[2] * v[3];
+        h[j][3] = v[3];
+    }
+    const int raw = vu1ref_region_facing(h[0], h[1], h[2], 0, 0);
+    return (uint8_t)((front ? !raw : raw) ? 1u << 3 : 0u);
+}
+
+static RdMesh stripMeshFacing(const StripMesh *m, int n, const uint8_t *facing);
+
 static RdMesh stripMesh(const StripMesh *m, int n)
+{
+    return stripMeshFacing(m, n, NULL);
+}
+
+static RdMesh stripMeshFacing(const StripMesh *m, int n, const uint8_t *facing)
 {
     float qw[1 + 8 * 3][4];
     memset(qw, 0, sizeof(qw));
@@ -861,14 +910,26 @@ static RdMesh stripMesh(const StripMesh *m, int n)
     md.qwPerVertex = RD_VU_QW_PRELIT;
     md.batchCount = 1;
     md.batches = &bd;
+    md.facing = facing; /* the EE's table (NULL: a prelit stream without facing) */
+    md.facingCount = facing ? (uint32_t)n : 0u;
     const RdMesh r = rd_create_vu_mesh(&md);
     CHECK(r.id != 0, "rd_create_vu_mesh (%s, %d vertices)", m->what, n);
     return r;
 }
 
+static int renderStripFacing(const Cfg *cfg, int W, const StripMesh *m, int n,
+                             const uint8_t *facing, Img *scene);
+
 /* SCENE of a frame at native width W under cfg holding the first n
  * vertices of m as one code-32 strip (n 0: the clear only) */
 static int renderStrip(const Cfg *cfg, int W, const StripMesh *m, int n, Img *scene)
+{
+    return renderStripFacing(cfg, W, m, n, NULL, scene);
+}
+
+/* the same with the EE's facing table (renderStrip: none) */
+static int renderStripFacing(const Cfg *cfg, int W, const StripMesh *m, int n,
+                             const uint8_t *facing, Img *scene)
 {
     memset(scene, 0, sizeof(*scene));
     RdSettings st;
@@ -884,7 +945,7 @@ static int renderStrip(const Cfg *cfg, int W, const StripMesh *m, int n, Img *sc
     if (W != BAND) {
         rd_reset_scene((uint32_t)W, GS_H);
     }
-    const RdMesh mesh = n ? stripMesh(m, n) : (RdMesh){0};
+    const RdMesh mesh = n ? stripMeshFacing(m, n, facing) : (RdMesh){0};
     rd_begin_frame();
     RdFrameHead h;
     memset(&h, 0, sizeof(h));
@@ -1018,6 +1079,31 @@ static bool drawnAt(const Img *im, int W, int x, int y)
     return memcmp(&im->px[(ty * im->w + tx) * 4], kBg, 3) != 0;
 }
 
+/* whether a and b agree byte for byte in the picture's columns (the 4:3
+ * band, GS 2048 -+ 256) and differ beside them in some pixel (*beside) */
+static bool sameBand(const Img *a, const Img *b, int W, size_t *beside)
+{
+    *beside = 0;
+    const uint32_t f = texelsPerPixel(a, W);
+    if (!a->px || !b->px || f == 0 || a->w != b->w || a->h != b->h) {
+        return false;
+    }
+    const uint32_t x0 = (uint32_t)(W / 2 - BAND / 2) * f, x1 = x0 + (uint32_t)BAND * f;
+    bool same = true;
+    for (uint32_t y = 0; y < a->h; y++) {
+        for (uint32_t x = 0; x < a->w; x++) {
+            const size_t o = ((size_t)y * a->w + x) * 4;
+            const bool d = memcmp(&a->px[o], &b->px[o], 4) != 0;
+            if (x >= x0 && x < x1) {
+                same = same && !d;
+            } else {
+                *beside += d;
+            }
+        }
+    }
+    return same;
+}
+
 /* The region rule's strip test (case s): out of the box the PS2's picture;
  * in every other state a wall's failing triangle drawn clipped, a card and
  * a triangle with a vertex behind the eye nowhere. */
@@ -1040,6 +1126,8 @@ static void checkStripRule(void)
         const int W = kStates[i].W;
         Img none = {0}, wall3 = {0}, wall4 = {0}, card = {0}, eye3 = {0}, eye4 = {0};
         Img joined3 = {0}, joined7 = {0};
+        Img side3 = {0}, sideFront = {0}, sideBack = {0};
+        const uint8_t front = eyeFacing(&kEyeSide, 1), back = eyeFacing(&kEyeSide, 0);
         if (renderStrip(cfg, W, &kWall, 0, &none) != R_OK ||
             renderStrip(cfg, W, &kWall, 3, &wall3) != R_OK ||
             renderStrip(cfg, W, &kWall, 4, &wall4) != R_OK ||
@@ -1047,7 +1135,10 @@ static void checkStripRule(void)
             renderStrip(cfg, W, &kEye, 3, &eye3) != R_OK ||
             renderStrip(cfg, W, &kEye, 4, &eye4) != R_OK ||
             renderStrip(cfg, W, &kJoined, 3, &joined3) != R_OK ||
-            renderStrip(cfg, W, &kJoined, 7, &joined7) != R_OK) {
+            renderStrip(cfg, W, &kJoined, 7, &joined7) != R_OK ||
+            renderStripFacing(cfg, W, &kEyeSide, 3, &front, &side3) != R_OK ||
+            renderStripFacing(cfg, W, &kEyeSide, 4, &front, &sideFront) != R_OK ||
+            renderStripFacing(cfg, W, &kEyeSide, 4, &back, &sideBack) != R_OK) {
             CHECK(0, "strip rule, %s, W %d: a frame could not be rendered", cfg->name, W);
         } else {
             /* the passing triangle is drawn in every state */
@@ -1083,7 +1174,36 @@ static void checkStripRule(void)
             CHECK(sameImg(&eye4, &eye3),
                   "strip rule, %s, W %d: the triangle with a vertex behind the eye is not drawn",
                   cfg->name, W);
+            /* the side bands: facing the eye, drawn beside the picture
+             * only, on a frame wider than it; facing away, nowhere */
+            size_t besideF = 0, besideB = 0;
+            const bool bandF = sameBand(&sideFront, &side3, W, &besideF);
+            const bool bandB = sameBand(&sideBack, &side3, W, &besideB);
+            printf("  strip rule, %s, W %d: side bands: %zu pixels beside the picture facing "
+                   "the eye, %zu facing away\n",
+                   cfg->name, W, besideF, besideB);
+            CHECK(bandF && bandB,
+                  "strip rule, %s, W %d: the side bands leave the picture's columns as the "
+                  "frame without the triangle",
+                  cfg->name, W);
+            if (W > BAND) {
+                CHECK(besideF > 0 && drawnAt(&sideFront, W, 1750, 2050) &&
+                          !drawnAt(&side3, W, 1750, 2050),
+                      "strip rule, %s, W %d: a triangle facing the eye with a vertex behind it "
+                      "is drawn beside the picture (%zu pixels)",
+                      cfg->name, W, besideF);
+            } else {
+                CHECK(sameImg(&sideFront, &side3),
+                      "strip rule, %s, W %d: at 4:3 the side bands add nothing", cfg->name, W);
+            }
+            CHECK(sameImg(&sideBack, &side3),
+                  "strip rule, %s, W %d: a triangle facing away (the cliff) is not drawn "
+                  "beside the picture",
+                  cfg->name, W);
         }
+        free(side3.px);
+        free(sideFront.px);
+        free(sideBack.px);
         /* the card joined through another packet of its part
          * (one object and part in the keys, rd_replay.c joinParts) is drawn
          * as the joined card is; through another part's draw it stays a
