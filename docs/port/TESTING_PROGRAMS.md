@@ -674,7 +674,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   one between 0.5 ms with no renderer call; `pace_step_plan_ns`, the step after by its own slack,
   `nextBetween`), a phone's load (12 ms reads, a 7 ms submit, vsync off on a 120 Hz mailbox):
   451 / 433 / 399 / 385 presents at 21.7 / 23 / 25 / 26 ms GPU pictures where one estimate for
-  every step gives 390 / 389 / 376 / 374, 318 with the driver's back-pressure; with 8 ms GPU
+  every step gives 390 / 389 / 376 / 374, 349 with the driver's back-pressure (318 while the
+  plan took the picture before's fence; `build-host/tmp/v098/evidence/pace5/c_cells.py`); with 8 ms GPU
   pictures, a closing step of 8.5 / 9.5 ms and reads 8 / 10 / 10.5 / 12 ms 602 / 600 / 600 / 500
   and 601 / 600 / 597 / 450; the step between calling the renderer 600 / 487 at 10 / 12 ms; no
   step missing its period, every frame shown, no start later than the closing step's slack
@@ -686,9 +687,21 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   100 s: 4098 / 3947 / 3814 presents at 24 / 25 / 26 ms GPU pictures where the longest gives 3482
   / 3435 / 3429; 14 / 22 / 2 steps missing their period, all the pictures', 7 / 8 / 0 over the
   floor and none later than 3.5 ms; one fall-back of 120 steps at 24 and 25 ms; the game's clock
-  at most 8.3 ms behind; 320 (317) with the driver's back-pressure and 397 (341) with the step
-  between calling the renderer, no miss (numbers from
-  `build-host/tmp/v098/evidence/pace4/c_cells.py`, `rc11_cells.py`) (`pace_loop`).
+  at most 8.3 ms behind; 343 (322) with the driver's back-pressure (320 / 317 while the plan took
+  the picture before's fence) and 397 (341) with the step between calling the renderer, no miss
+  (numbers from `build-host/tmp/v098/evidence/pace4/c_cells.py`, `rc11_cells.py`, the
+  back-pressure cells re-run in `build-host/tmp/v098/evidence/pace5/c_cells.py`); `testRc12`: a
+  phone's three stage-6 blocks (each picture's own reads, interpolation and submit from tables of
+  61 scaled from `testRc11`'s, the closing step from 16 and the step between from 4, their
+  typical times the clause's), with the pipe as before (the picture before's fence whenever the
+  present waited half a refresh, `pace_rt_step_trace` given that) at presents of 1 / 5 ms 410 /
+  302, 462 / 302 and 340 / 301 in 10 s (the phone's 44.6 near the first, 32.6 and 31.0 near the
+  second; every ask behind at 5 ms, held by the next step's start), and the pipe now 410, 462 and
+  340 whatever the present waited, B and C with no miss, A 2 (1 over the floor) and one fall-back
+  of 120 steps either way; over 100 s 4274 / 4601 / 3392, the fewest in a block 410 / 459 / 339,
+  no start later than 8.4 ms
+  (`build-host/tmp/v098/evidence/pace5/rc12_cells.py`, `c_cells.py`); the PowerVR mailbox at 26 ms
+  in `testStepRule` 376 where the picture before's fence gave 320 (`pace_loop`).
 - `cpu_place_test.c`: which core a thread runs on (`port/platform/cpu_place.h`): the histogram
   (by core, out of range and -1 as not known, the most-run core with the lowest on a tie, the take
   emptying it, the share on a mask), the cores' speeds from a fake sysfs under the build folder on
@@ -765,7 +778,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (in full 19.5, the recent maximum 100) and 60 pictures later 10.2, two in a row over twice the
   mean counted in full, a 0 counted and the way back from it, a stall counted at 250 ms; a
   phone's reads (a mean of 10 ms, a deviation of 2.5) planned at 10.5-12.0 ms where the recent
-  maximum read 9.7-15.9) (`pace_policy`).
+  maximum read 9.7-15.9), and the rule's decision trace (`testStepTrace`, `PaceRtTrace`: the
+  pipe's fence the picture before's only with the submit thread off and the presents behind
+  (`pace_rt_pipe_behind`); what set a reads' end, the measured reads, the interpolation, the
+  submit thread or the fence (`pace_rt_pipe_reads_end_parts`); a phone's further present 7 ms
+  before the closing step held by the next step's start 11.9 ms past its slack with the picture
+  before's fence and handed over with the submit thread's, every field to the nanosecond; the
+  step after holding it 1.3 ms past its slack; the trace line and the block's sum line word for
+  word, a block with no ask, a hold before the rule with no trace, a short buffer cut)
+  (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
 - `present_fallback_test.c`: the FIFO fallback's decision (`present_fallback.h`): the stock

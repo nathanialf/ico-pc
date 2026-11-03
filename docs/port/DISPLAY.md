@@ -842,6 +842,50 @@ submit thread, which vary from picture to picture, so their typical time is unde
 even at a steady load (the recent longest gave 450 / 423 / 392 / 376 and 601 / 600 / 600 / 450,
 601 / 600 / 596 / 400).
 
+**The fence the pipe predicts.** A further picture's reads wait for the GPU's slot fence of the
+picture two before it (2 in flight). The picture before's fence (one in flight) is predicted only
+with the submit thread off and the presents behind, the present call's wait at its recent longest
+half a refresh or more (`pace_rt_pipe_behind`): there a present that waits for the GPU's earlier
+pictures holds the render thread's next picture. With the submit thread on, the present and its
+wait are the submit thread's job, which the next picture's first graphics call already waits for,
+and the GPU keeps two pictures in flight. Before this the picture before's fence was predicted
+whenever the presents were behind, and on a phone in stage 6 the submit thread's present
+waited 2.2 ms on average and its recent longest 4.5-7.6 ms, over half the 120 Hz refresh most of
+a block: every further picture then waited in the plan for the frame's own picture's whole GPU
+time (21.7 ms and more) and was held, 32.6 and 31.0 presented fps at 21.7 and 29.5 ms GPU spans
+where the block with presents under half a refresh made 44.6 at 22.4 ms, the GPU's own rate. The
+model at those blocks' typical times gives 30.2 / 30.1 presented fps with the presents behind all
+the time, 41.0 / 46.2 / 34.0 with the fence at two in flight whatever the present waits (the GPU
+makes 44.6 / 46.1 / 33.9), with no step missing its period at the two slower blocks
+(`pace_loop_test` `testRc12`; `build-host/tmp/v098/evidence/pace5/`). With the driver's
+back-pressure itself (a present that returns only once the GPU finished the picture before), the
+submit thread's job carries the wait and the plan sees it there (26 ms pictures: 376 presents in
+10 s where the picture before's fence gave 320; the GPU makes 385; no step missing its period).
+
+**The decision trace.** Each further present the rule holds is traced in the log, the first 8 of
+a 10 s block and then every 100th, with every input and intermediate of `pace_rt_step_miss`
+(`pace_rt_step_trace`, `PaceRtTrace`, `pace_rt_trace_text`), every time against the next step's
+due time:
+`window: step rule: held (hold 3 in this 10 s block): asked 7.0 ms before the next step's due
+time, the picture in progress done in 0.0 ms, posted at -7.0; its reads would end at +17.4 ms, set
+by the GPU's slot fence [the measured reads +2.1, the interpolation -3.8, the submit thread free
+-3.0, the fence +12.0, then 5.4 ms of its own]; the fence the picture before's: the presents wait
+7.6 ms at the longest lately, at or over half a refresh; the next step closes a frame or is not
+known, planned at 9.2 ms and the 2.0 ms margin: it may start 5.5 ms late; held: its start past
+that by 11.9 ms; the inputs: reads 9.1 ms (8.6 its own, 3.2 the interpolation), the whole job 9.2,
+the submit thread's part 7.7, the GPU 21.7 a picture, the period 16.7`. When the next step passes
+and the step after it holds, the line goes on with `the step after: the next step ends at ... (...
+without the further picture), the next frame's picture posted at ..., its reads end at ... [...]
+(... without); the step after starts at ... against ... without, planned at ... ms: it may start
+... ms past its due time ...; held: its start past that by ... ms`. After the 10 s clause a line
+sums the block's asks (`PaceRtTraceSum`, `pace_rt_trace_sum_text`): `window: step rule: in 10 s N
+further presents asked of the rule, H held by a step's period (F the next step's start past its
+slack, by X ms on average; A the step after's, by Y ms), G passed by the rule; the held ones' reads
+ended by the measured reads a, the interpolation b, the submit thread c, the GPU's slot fence d;
+the presents waited half a refresh or more in K asks (the fence of the picture before predicted
+in J...); the asks' means: ...`, the inputs' means over the asks. So a reporter's log says which
+test held each picture, by how much, and which wait set it.
+
 **Vsync off, uncapped.** With vsync off and the frame rate uncapped (the timer path, no FIFO lock,
 the render thread on: `pace_rt_as_made`) the pictures go as they are made, as on a PC with vsync
 off: the [present allowance](#the-present-allowance) refuses nothing (it stays as a measurement,
@@ -855,8 +899,8 @@ thread for the render thread's job, which the fences do not bound). `testStepRul
 in 10 s, what the GPU makes (about `10 s / G`, two a step at most), no step missing its period. On
 a phone whose vsync off is a mailbox whose present blocks behind the GPU at a door (the PowerVR
 driver), the block lands on the submit thread and the render thread waits for it: the player sees
-about the GPU's rate (26 ms pictures: 32 a second of the GPU's 38, the rest held by the step
-rule), and that is the GPU, not a rule. A mailbox still presents once a refresh at most (the
+about the GPU's rate (26 ms pictures: 37.6 a second of the GPU's 38.5, the rest held by the step
+rule; 32 while the plan took the picture before's fence), and that is the GPU, not a rule. A mailbox still presents once a refresh at most (the
 display shows no more). With vsync on (the lock, the grid, FIFO, mailbox) and at Frame rate
 Original nothing changes.
 
