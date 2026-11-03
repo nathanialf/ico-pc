@@ -563,7 +563,7 @@ where the cores differ in speed, each thread's share on the slowest ones (`, on 
 (0-3) G 0 % R 12 % S 3 %`), so a render thread kept on a phone's little cores shows:
 
 ```
-window: game thread: step 3.1 ms (closing a frame 0.4 ms of it, longest 1.2 ms, 300 frames), pump 0.4 ms, slot waits 12 (8.2 ms; 9 (7.9 ms) by a new frame's present, 2 (0.3 ms) by a further present's, 1 other), read waits 290 (610.4 ms, longest 6.9 ms); render thread: CPU 9.3 ms a picture, idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread; 12 further presents held back (12 would have made the step miss its period, 0 while a picture ran past its estimate, 0 while the presents waited for the display or the GPU; a picture holds the renderer for 4.1 ms (3.6 ms of its own, 3.0 ms of it the interpolation; the rest its waits for the GPU and the submit thread), takes 4.2 ms, its present waits 0.3 ms, the submit thread's part 3.4 ms; the step planned at 3.9 ms); steps started late by the pictures: 290 (longest 6.9 ms); steps that missed their period: 0 (0 the pictures', 0 the game's own; latest 0.0 ms past it; 0 steps planned at the whole period after the pictures'); submit thread: 3.4 ms a picture (submit 2.7, present 0.7; 590 pictures, longest 12.6 ms), queue depth max 1, the render thread waited for it 41 times (22.3 ms), the others 3 times (0.4 ms, longest 2.1 ms), 0 submitted on the render thread; on cores G:4 (97 %) R:6 (88 %) S:5 (91 %), on the slowest cores (0-3) G 0 % R 2 % S 1 %
+window: game thread: step 3.1 ms (closing a frame 0.4 ms of it, longest 1.2 ms, 300 frames), pump 0.4 ms, slot waits 12 (8.2 ms; 9 (7.9 ms) by a new frame's present, 2 (0.3 ms) by a further present's, 1 other), read waits 290 (610.4 ms, longest 6.9 ms); render thread: CPU 9.3 ms a picture, idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread; 12 further presents held back (12 would have made the step miss its period, 0 while a picture ran past its estimate, 0 while the presents waited for the display or the GPU; a picture holds the renderer for 4.1 ms (3.6 ms of its own, 3.0 ms of it the interpolation; the rest its waits for the GPU and the submit thread), takes 4.2 ms, its present waits 0.3 ms, the submit thread's part 3.4 ms; the steps planned at 3.9 ms closing a frame and 3.9 ms between frames (their typical time, 0.0 ms of it the margin widened after a miss; 0 long steps of the game's own left out)); steps started late by the pictures: 290 (longest 6.9 ms); steps that missed their period: 0 (0 the pictures', 0 the game's own; latest 0.0 ms past it; 0 steps planned at the whole period after the pictures'); submit thread: 3.4 ms a picture (submit 2.7, present 0.7; 590 pictures, longest 12.6 ms), queue depth max 1, the render thread waited for it 41 times (22.3 ms), the others 3 times (0.4 ms, longest 2.1 ms), 0 submitted on the render thread; on cores G:4 (97 %) R:6 (88 %) S:5 (91 %), on the slowest cores (0-3) G 0 % R 2 % S 1 %
 ```
 
 The slot waits are the game thread's waits for the render thread to finish everything posted
@@ -646,6 +646,16 @@ fastest the only one above the slowest, both keep to the faster cores as before;
 is left to the system. The cores line then ends `; the render thread to the fastest core 7 alone,
 the submit thread to the next faster cores 2-6, the game thread left to the system`, and the
 threads' lines say `kept to the fastest core 7 alone` and `kept to the next faster cores 2-6`.
+A pin is judged by the cores read back after it (`cpu_place_pin_checked`, `CpuPinResult`), not by
+the call's answer: that phone's kernel said yes to core 7 alone and kept the render thread to 2-7
+(its line ended `may run on cores 2-7`, and every 10 s block had it on core 4 or 6), the cause on
+the kernel's side not known from a log (the Android common kernel lets a vendor's scheduler module
+hook `sched_setaffinity`, the likely one). When the fastest core alone is not kept the render
+thread keeps to the faster cores instead and says so: `could not be kept to the fastest core 7
+alone: the system said yes and keeps it to cores 2-7; kept to the faster cores 2-7 instead`; a
+refused call names its errno (`could not be kept to ... (errno 22: Invalid argument)`). Core 7 is
+not pursued further: an app cannot overrule the kernel's placement, and the gain would be the
+prime core's 20 % clock on 14-20 ms of CPU a picture, about 3 ms.
 `[dev] big_cores = false` leaves them where the system puts them. It is a
 diagnostic escape, not a performance switch; `window: render thread: the game thread took the OpenGL context for its own calls (N
 times; ...)` (the first 8, then every 100th) counts OpenGL's take-overs, and `... could not be

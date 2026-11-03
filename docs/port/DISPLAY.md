@@ -710,14 +710,49 @@ holds its phase there has not been measured on hardware: the 10 s `lock held` li
 With the [render thread](PLATFORM.md#the-render-thread) on, a further present (a picture between
 the game's frames, of a frame already shown) is held only when it would make a game step miss its
 own period: the user's rule, "just give pictures when they can". The game steps every vsync (16.7
-ms at 60 Hz, a game frame every two steps), and a step takes a few ms of its period (4.5 ms of
-16.7 on the PowerVR phone). A picture the render thread is making holds the renderer's state until
-its reads end, and the next step's first renderer call waits for them; a step that starts a few
-ms late that way still ends inside its period. So a further present may start the next step late
-by up to `period - (step + 2 ms)`, the step being its own recent time (its longest lately,
-falling an eighth a step) and 2 ms the margin for what that time does not see (the pump, the
-pacer's wake, the audio callback and other threads on the core). The step after it, behind the
-next new frame's own picture (never held: every frame is shown), must fit its period too.
+ms at 60 Hz), and its frame is two steps of different kinds: the step that closes a frame carries
+the game's work for the next one (8-10 ms of 16.7 on the PowerVR phone: every slow step line of
+its log is at the vsync that closes a frame), the step between frames under 1 ms, with no renderer
+call during play (4-17 read waits a 10 s block there, although the frame's own picture's reads ran
+past that step nearly every frame). A picture the render thread is making holds the renderer's
+state until its reads end, and the next step's first renderer call waits for them; a step that
+starts a few ms late that way still ends inside its period. So a further present may start the next
+step late by up to `period - (step + 2 ms)`, the step being the typical time of its own kind
+(`pace_step_plan_ns`) and 2 ms the margin for what that time does not see (the pump, the pacer's
+wake, the audio callback and other threads on the core). When the next step closes a frame, the
+step after it, behind that new frame's own picture (never held: every frame is shown), must fit
+its own period too; when the next step is one between frames, no new frame's picture follows it
+and its own slack is the whole test. The window knows which step closes a frame from the game's
+frame length in steps (the last two frames' closes apart; past four, after a load or a pause, not
+known: every step is then planned as one that closes a frame) (`pace_step_closes`).
+
+Each kind's typical time is a decaying mean (an eighth of the way a step of that kind) and one
+deviation (`PaceStepTyp`, `pace_step_typ_note`). A step with the game's loading work (disc reads,
+texture decodes, pipelines made: what `window_hold_line` names) is left out, and so is a step over
+the period whose kind's step before was not (an isolated long step: a bug report's capture, a
+stall); two in a row are the scene's time and count. Before this the plan was one recent maximum
+for every step (its longest lately, falling an eighth a step): on the phone 7.4-9.4 ms for the
+step between frames too, so its slack looked like 5 ms instead of 14, and nearly every in-between
+picture was held (30-31 presented fps where the GPU made 38-43). One mean of both kinds and its
+deviation would read 8.6 ms, no better; by kind the phone's load reads about 9.6 and 0.5 ms.
+
+Over the game's frame this is the frame's budget: the closing step may start late by its own
+slack (period less its time and the margin, 5-6 ms on the phone), the step between by most of its
+period. A frame's two pictures chain the closing step, the frame's own picture's reads, its submit
+on the submit thread and the further picture's reads past its interpolation (on the phone 9.5 +
+0.1 + 12 + 7 + 7.8 = 36.4 ms against the frame's 33.4 at 12 ms reads); the lateness that chain
+leaves past the frame's period carries into the next frame until a further picture is held. So no
+step ends past its period, the game's clock is never more than the closing step's slack behind
+(the 10 s line's `step late max`), and the sound, which the game feeds up to 120 ms ahead
+([AUDIO.md](AUDIO.md)), is never held back by it. Two stricter and looser readings were modelled
+at the phone's numbers and not taken: never starting the closing step late (the frame's chain
+must fit 33.4 ms with its margin: held at 12 ms reads, 30 presented fps, two pictures a frame only
+at reads under about 9.3 ms with a 9 ms closing step, or a closing step under about 4.5 ms at 12
+ms reads) and letting the game's clock fall up to a whole field
+behind (the closing step then ends past its own period by design and the miss counts move to the
+frame's end): at the phone's 25 ms GPU pictures 39.8 presented fps against the rule's 39.2, 45-54
+against 40-50 where the GPU has time to spare, for up to a field more input latency and the
+back-off's misses redefined (`build-host/tmp/v098/evidence/pace3/rc10_cells.py`, `lag_trace.py`).
 The render thread's times say how long a picture's reads will take: its interpolation, its waits
 for the submit thread and for the GPU's slot fences (2 pictures in flight at most), at the GPU's
 measured time a picture, and its own reads (`port/platform/pace_policy.h` (`pace_rt_further_ask`,
@@ -763,11 +798,17 @@ after the third miss the pictures caused within 300 steps (...)` and `window: th
 its period by ... the game's own time, not the pictures' ...`.
 
 The rule is a rate requirement ([Pacing](#pacing)): `pace_loop_test` (`testStepRule`) asserts the
-presents in 10 s for 300 game frames by the render thread's reads, at the phone's 4.5 ms step with
+presents in 10 s for 300 game frames by the render thread's reads, at a uniform 4.5 ms step with
 the submit thread: reads 10 / 12 / 13 / 15 / 17 ms give 700 / 600 / 550 / 447 / 301 (the rule before:
 600 / 600 / 301 / 301 / 301); two a game frame while the reads fit the period less the step (12.18 ms
-there), past it as many as keep every step inside its period, and none misses it. At the phone's
-logged reads (11.5-12.5 ms) that is 52-60 presented fps where the rule before gave 30.
+there), past it as many as keep every step inside its period, and none misses it. `testFrameShape`
+asserts the frame's two kinds of step at the phone's load (12 ms reads, a 7 ms submit, the closing
+step 8-10 ms, the step between 0.5 ms with no renderer call): 450 / 423 / 392 / 376 presents at
+21.7 / 23 / 25 / 26 ms GPU pictures where one estimate for every step gives 338 (the GPU makes 461
+/ 435 / 400 / 385), and with 8 ms GPU pictures, a closing step of 8.5 / 9.5 ms and reads 8 / 10 /
+10.5 / 12 ms, 601 / 600 / 600 / 450 and 601 / 600 / 596 / 400 (one estimate: 601 / 600 / 600 / 338
+and 601 / 600 / 375 / 301); no step misses its period and none starts later than the closing
+step's slack.
 
 **Vsync off, uncapped.** With vsync off and the frame rate uncapped (the timer path, no FIFO lock,
 the render thread on: `pace_rt_as_made`) the pictures go as they are made, as on a PC with vsync
