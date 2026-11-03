@@ -2203,7 +2203,7 @@ typedef struct RtLoad {
     uint64_t presentBase;
 } RtLoad;
 
-/* RT_STEP (rtTimerLoopRule): the window's rule from v0.10.0 (pace_policy.h
+/* RT_STEP (rtTimerLoopRule): the window's rule (pace_policy.h
    pace_rt_further_ask: the paced holds, then the step-deadline rule by the
    step's estimate and the pipeline's prediction, PaceStepEst's back-off);
    RT_ASMADE: the same with the pictures as made (vsync off, uncapped: no
@@ -2722,10 +2722,11 @@ static void testSubmitThread(void)
     }
 }
 
-/* The step-deadline rule (pace_policy.h pace_rt_further_ask, v0.10.0; the
-   user's "just give pictures when they can"; the phone's rc7 log: reads
-   10-14 ms, a 4.5 ms step, 30 presented fps while TEXLOCK's rule refused
-   the second picture a game frame by about 1 ms).  A further present is
+/* The step-deadline rule (pace_policy.h pace_rt_further_ask; the user's
+   "just give pictures when they can"; a PowerVR phone's log: reads 10-14
+   ms, a 4.5 ms step, 30 presented fps while the rule before, the reads by
+   the next step's due time, refused the second picture a game frame by
+   about 1 ms).  A further present is
    held only when it would make a step miss its period; the numbers are
    build-host/tmp/v098/evidence/pacerule/step_rule_cells.out (pr_sim.py,
    this model line for line).  The rate requirement, presents in 10 s for

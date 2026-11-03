@@ -881,7 +881,7 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
                                 uint64_t sinceNs, uint64_t readsNs, uint64_t pictureNs,
                                 uint64_t presentNs, uint64_t refreshNs, bool paced);
 
-/* The step-deadline rule (v0.10.0; docs/port/DISPLAY.md "Further presents
+/* The step-deadline rule (docs/port/DISPLAY.md "Further presents
  * and the game step"): a further present of a frame already shown is held
  * only when it would make a game step miss its own period, not whenever its
  * reads would touch the next step.  A step that starts a few ms late, its
@@ -890,7 +890,7 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
  * timer path asks it in every mode (the paced holds above it as before;
  * with vsync off and the frame rate uncapped only the overrun one,
  * pace_rt_as_made); pace_rt_further_late and pace_rt_further_hold are the
- * rule before it (TEXLOCK's and RTHREAD-C's), kept for the model's
+ * rule before it (the reads by the next step's due time), kept for the model's
  * comparisons (pace_loop_test.c).
  *
  * The step may start late by up to its slack, period - (step + margin):
@@ -899,7 +899,7 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
  * PACE_RT_STEP_MARGIN_NS the rest of a step's time the estimate does not
  * see (the pump between steps, the wake from the pacer's sleep, the audio
  * callback and the other threads taking the game thread's core, the
- * present's post: 0.1-0.5 ms each on the PowerVR phone, rc7). */
+ * present's post: 0.1-0.5 ms each in a PowerVR phone's log). */
 #define PACE_RT_STEP_MARGIN_NS 2000000ull
 
 /* The step's own time (the window's step less its waits for a picture's
