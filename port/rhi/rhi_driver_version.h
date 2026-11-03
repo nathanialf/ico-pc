@@ -58,6 +58,13 @@ int rhi_mesa_version_parse(const char *driverName, const char *driverInfo, RhiMe
 /* "Mesa 25.3.0" or "Mesa 25.3.0-devel" into buf; "" when not known. */
 char *rhi_mesa_version_text(const RhiMesaVersion *v, char *buf, size_t n);
 
+/* A driver's own text on one line (issue 123: Qualcomm's VkDriverInfo carries
+ * newlines, "Driver Build: ..., Date: 11/28/25\nCompiler Version: ...", which
+ * broke every log line that quoted it): each run of control characters
+ * (newline, carriage return, tab, ...) becomes one space, a leading and a
+ * trailing space are dropped.  In place; returns s. */
+char *rhi_text_one_line(char *s);
+
 /* 1 for Qualcomm's own Adreno driver: vendor 0x5143 with
  * VK_DRIVER_ID_QUALCOMM_PROPRIETARY, or with the id unknown (0).  Mesa's
  * Turnip on the same GPUs reports its own id (MESA_TURNIP) and is not

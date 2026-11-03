@@ -1038,10 +1038,6 @@ static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDevicePropertie
     rhi_driver_version_text(p->vendorID, (uint32_t)dp.driverID, p->driverVersion, ver, sizeof ver);
     g_vkr.driverID = (uint32_t)dp.driverID;
     snprintf(g_vkr.driverVersion, sizeof g_vkr.driverVersion, "%s", ver);
-    snprintf(g_vkr.driverName, sizeof g_vkr.driverName, "%s", dp.driverName);
-    /* a Mesa driver writes its Mesa version into driverInfo ("Mesa 25.3.0-devel
-     * (git-bbdd688)"); a build from Mesa's main branch carries "-devel" */
-    rhi_mesa_version_parse(dp.driverName, dp.driverInfo, &g_vkr.mesa);
     /* the compiler's own line (Qualcomm: "Compiler Version: E031.41.03.47"),
      * the driver's text up to the line's end */
     g_vkr.compilerVersion[0] = '\0';
@@ -1052,6 +1048,14 @@ static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDevicePropertie
             snprintf(g_vkr.compilerVersion, sizeof g_vkr.compilerVersion, "%.*s", (int)n, c);
         }
     }
+    /* one line in the log (issue 123: Qualcomm's text has newlines); the
+     * compiler line above was cut at the line's end first */
+    rhi_text_one_line(dp.driverName);
+    rhi_text_one_line(dp.driverInfo);
+    snprintf(g_vkr.driverName, sizeof g_vkr.driverName, "%s", dp.driverName);
+    /* a Mesa driver writes its Mesa version into driverInfo ("Mesa 25.3.0-devel
+     * (git-bbdd688)"); a build from Mesa's main branch carries "-devel" */
+    rhi_mesa_version_parse(dp.driverName, dp.driverInfo, &g_vkr.mesa);
     char mesaText[40] = "";
     if (g_vkr.mesa.known) {
         /* the summary line and the device line name the Mesa version apart

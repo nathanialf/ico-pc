@@ -29,6 +29,7 @@
 #include "options.h"
 #include "pace_policy.h"
 #include "perf_block.h"
+#include "present_hist.h"
 #include "photo_mode.h"
 #include "photo_ui.h"
 #include "pointer.h"
@@ -55,6 +56,7 @@
 #include "window_host.h"
 #include "window_lines.h"
 #include "window_pipeline_skip.h"
+#include "window_display_rate.h"
 #include "window_pipe_finish.h"
 #include "window_present.h"
 #include "render_thread.h"
@@ -251,7 +253,8 @@ static struct {
     /* present calls over 50 ms and the longest (present_blocked) */
     unsigned presentBlocked;
     double presentBlockedMaxMs;
-    PaceGpuGap gpuGap; /* the GPU's time between replays (rd.h RdPerfRecord.gpuGapNs) */
+    PresentHist presentHist; /* every presented replay's present call (present_hist.h) */
+    PaceGpuGap gpuGap;       /* the GPU's time between replays (rd.h RdPerfRecord.gpuGapNs) */
 } s_perf;
 
 /* The display under the vsync lock, for the 10 s display line
@@ -375,6 +378,7 @@ static void video_settings(RdSettings *rs, int w, int h)
         window_timer_budget_reset();
     }
     s_pres.framerate = ico_video_framerate();
+    window_frame_rate_pin(s_window, s_pres.framerate); /* Android: the cap as a fixed rate */
     rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
     /* presenting between ticks with vsync on, the swapchain prefers the
        mailbox mode: no tearing, and a present never waits for the display,
@@ -1721,6 +1725,7 @@ static void window_attach(int mode)
     }
     /* the window system's answer before the size is read */
     SDL_SyncWindow(s_window);
+    window_display_rate_start(s_window); /* the refresh rate in the log (issue 123) */
     s_fullscreen = window_fullscreen();
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
     if (mode == ICO_WINDOW_BORDERLESS) {
@@ -1847,7 +1852,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        start lazy (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY). The device table's careful rule
        (RhiLimits.carefulPipelines) is read after rd_init. */
     const char *pipeSetting = getenv("ICO_PIPELINE_SET");
-    const int pipePolicy =
+    int pipePolicy =
         ico_diag_startup_pipeline_set(retry != STARTUP_RETRY_NONE, lazyStart, pipeSetting, cfgName);
 #ifdef __ANDROID__
     /* issue 158: below Android 9 there is no driver package to fall back
@@ -2135,6 +2140,9 @@ open_window:
        StartupRetryRun.robustOffDefault; Direct3D 12: NULL, its own rules) */
     ico_diag_set_robust_off_default(rhi_limits() != NULL && rhi_limits()->robustDefaultOff);
     window_pipe_floor_driver(); /* the free-memory floor's rule (memory_floor.h) */
+    /* issue 123: after a stop at the floor on Qualcomm's own driver, the set again
+       when the cache file holds this shader set (window_pipe_finish.h) */
+    pipePolicy = window_pipe_floor_retry(pipePolicy);
     {
         /* the watchdog's GPU hang counts as a device loss where the
            backend tracks its submissions (rhi_gpu_progress), said once */
@@ -4374,6 +4382,9 @@ static void perf_drain(void)
                median of the last 8 (not the replays line's block mean) */
             s_pres.gpuNs = pace_hist_add(&s_pres.gpuHist, (Uint64)(r.gpuMs * 1e6));
         }
+        if (r.presented) {
+            present_hist_add(&s_perf.presentHist, r.presentMs);
+        }
         if (r.presented && r.presentMs > 50.0) {
             present_blocked(&r);
         }
@@ -4578,6 +4589,15 @@ static void perf_log(void)
                 "framerate %s)%s\n",
                 s_perf.presentBlocked, s_perf.presentBlockedMaxMs, rhi_present_mode_name(),
                 ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), window_fifo_block());
+    }
+    {
+        /* issue 123: the present call's sizes, and the screen's refresh rate */
+        char hist[200];
+
+        if (present_hist_text(&s_perf.presentHist, hist, sizeof(hist)) > 0) {
+            fprintf(stderr, "window: %s\n", hist);
+        }
+        window_display_rate_line(s_window);
     }
     if (s_perf.gpuN) {
         /* the GPU time per replay by list and by picture effect (each
@@ -5223,6 +5243,7 @@ void ico_window_close(void)
     }
     s_open = 0;
     ico_render_thread_stop(); /* every picture handed over finished, the thread ended */
+    window_display_rate_stop(s_window);
     /* a clean exit: a lazy run keeps the start-up activity file, so the
        next start of this version is lazy too; any other deletes it
        (diag_host.h) */

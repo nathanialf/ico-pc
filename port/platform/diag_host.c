@@ -2803,6 +2803,18 @@ int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *set
     return ICO_DIAG_PIPESET_LAZY_ONCE;
 }
 
+int ico_diag_startup_prev_floor_stop(void)
+{
+    return act_prev_low_memory && ico_memory_floor_line_is_floor(act_prev_low_memory_line);
+}
+
+void ico_diag_startup_floor_retry(void)
+{
+    /* this start makes the set again: its file does not say "stopped"
+       until it stops (ico_diag_startup_activity_budget_stop) */
+    act_low_memory[0] = '\0';
+}
+
 int ico_diag_startup_vu_prepass(void)
 {
     const unsigned int n = act_end_n[ICO_DIAG_END_VU_PRE];
@@ -3009,6 +3021,11 @@ void ico_diag_startup_activity_budget_stop(void)
             "ico_pc: the start-up set stopped at %s (%s); the next start makes the "
             "pipelines as the game needs them, with no start-up set",
             floor_why[0] != '\0' ? "the free-memory floor" : "the system's low-memory signal", lv);
+        if (floor_why[0] != '\0' && floor_driver == ICO_MEMORY_FLOOR_DRIVER_QUALCOMM) {
+            ico_diag_log("ico_pc: the next start makes the set again instead when the pipeline "
+                         "cache file for this shader set is on disk and not empty (the driver's "
+                         "compiler is not run for what the cache holds)");
+        }
     } else {
         act_nbatches = 0;
         act_once = 1;
@@ -3596,6 +3613,11 @@ void ico_diag_set_pipeline_cache(int loaded, const char *path)
 #endif
     }
     retry_cache_loaded = loaded != 0 && retry_cache_path[0] != '\0';
+}
+
+const char *ico_diag_pipeline_cache_path(void)
+{
+    return retry_cache_path;
 }
 
 /* ico_diag_prepare_relaunch: everything the relaunch needs, made at

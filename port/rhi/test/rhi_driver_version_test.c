@@ -133,5 +133,19 @@ int main(void)
         rhi_driver_version_text(RHI_VENDOR_NVIDIA, 0, nv58157, small, sizeof small);
         CHECK_STR(small, "581");
     }
+    /* issue 123: Qualcomm's driver text on one line */
+    {
+        char q[128] = "Driver Build: 9a8b7c, Date: 11/28/25\nCompiler Version: E031.41.03.47\n"
+                      "Driver Branch: \r\n";
+        CHECK_STR(rhi_text_one_line(q), "Driver Build: 9a8b7c, Date: 11/28/25 Compiler Version: "
+                                        "E031.41.03.47 Driver Branch:");
+        char two[16] = "\n\n a\r\n\tb \n";
+        CHECK_STR(rhi_text_one_line(two), "a b");
+        char none[8] = "\r\n";
+        CHECK_STR(rhi_text_one_line(none), "");
+        char same[16] = "NVIDIA 581.57";
+        CHECK_STR(rhi_text_one_line(same), "NVIDIA 581.57");
+        CHECK(rhi_text_one_line(NULL) == NULL);
+    }
     return ico_check_summary("rhi_driver_version");
 }

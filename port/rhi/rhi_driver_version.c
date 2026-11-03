@@ -154,3 +154,34 @@ char *rhi_mesa_version_text(const RhiMesaVersion *v, char *buf, size_t n)
     }
     return buf;
 }
+
+char *rhi_text_one_line(char *s)
+{
+    size_t w = 0;
+    int gap = 0;
+
+    if (s == NULL) {
+        return s;
+    }
+    for (size_t r = 0; s[r] != '\0'; r++) {
+        const unsigned char ch = (unsigned char)s[r];
+
+        if (ch < 0x20 || ch == 0x7f) {
+            gap = 1;
+            continue;
+        }
+        if (gap && w > 0) {
+            s[w++] = ' ';
+        }
+        if (ch == ' ' && w == 0) {
+            continue;
+        }
+        gap = 0;
+        s[w++] = (char)ch;
+    }
+    while (w > 0 && s[w - 1] == ' ') {
+        w--;
+    }
+    s[w] = '\0';
+    return s;
+}

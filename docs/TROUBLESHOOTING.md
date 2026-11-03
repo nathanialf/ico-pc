@@ -926,6 +926,15 @@ driver makes the game stutter, with long stops every few seconds, while a
 newer driver from the community does not. Try a Turnip driver package:
 **Options > Graphics driver**, **Add a driver**, then set **Driver** to it
 and restart ([the steps](ANDROID.md#using-a-different-graphics-driver)).
+The log line `window: a present blocked 360 ms in the driver's present
+call` means one picture waited that long inside the phone's graphics driver
+before it could be shown: the game was not slow, the driver or the screen
+held the picture. The line `window: present calls: ...` in every 10
+second block counts those waits by size, and `window: display refresh: ...`
+says what rate the screen ran at; if the rate changes just before such a
+wait, the screen changing its refresh rate is the cause. With **Frame
+rate** set to a number the game asks the phone to hold one rate
+([the details](ANDROID.md#a-fixed-refresh-rate-for-a-frame-rate-you-set)).
 On a tablet, a high **Resolution** with Vsync off and Frame rate
 Uncapped asks the most of the driver: set **Vsync** On, or **Frame rate**
 60, and lower the **Resolution** a step. If it still stutters, play for a
