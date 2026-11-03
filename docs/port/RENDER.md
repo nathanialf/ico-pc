@@ -2138,8 +2138,8 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   argument). In list 0, after the frustum test, a mesh or grid draw whose every sample lies behind
   what the opaque draws before it wrote to its depth buffer fails its GEQUAL test at every sample
   and writes nothing (colour, depth, alpha, stencil), so it is skipped too. The measured ceiling is
-  small (the depth hides 0.5 to 4.8 % of list 0's draws over the occlusion corpus, the table
-  above); the test is built exact and cheap.
+  small (the depth hides a median 1.6 % of list 0's draws over the occlusion corpus, "What it
+  found" above); the test is built exact, and is cheap only against what it could save (below).
   - *The record.* Cells of 2 x 2 GS pixels over the bound target (4 GS pixels round it), each a
     lower bound of the GS Z the depth buffer holds at every sample in it (0 nothing known; larger is
     nearer), in tiles of 8 x 8 cells keeping their least cell (worked out again when one of theirs
@@ -2206,11 +2206,28 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
     sort over the whole list); the walk then tests each kept draw of list 0 against the record and
     puts its own triangles in after. The reset touches only the tiles written. The test's time is
     its own figure in the lines below (its target: 0.4 ms a picture on a phone's big core).
+- *The numbers and the default.* Over the corpus of the gate (`rd_cull_ab`, 2026-11-03: 33 dumps,
+  every run of them) the frustum test left out 3137 of 12470 scene draws, 25 % of them, and the
+  occlusion test 3 more; 2838 targets of those runs equal the off run's byte for byte. The skipped
+  share is the draws that put nothing on the screen (above: a median 54 % of the commands of list 0,
+  77 % of the frame of issue 179: they cost a tile-based GPU 60 to 150 us each on a Mali-G52, whatever
+  they cover), so the saving is the CPU's per-draw walk, the vertex pre-pass and the GPU's vertex and
+  binning work of draws that cover nothing; it is largest on a phone that is draw-bound, and
+  unmeasured on one until a phone log with the test on sits beside one with `[dev] cull = off`:
+  `tools/cull_log_compare.py` reads list 0's GPU ms and the walk's ms from the two. The occlusion
+  test is far smaller and costs more: after the alpha proof of the occluders (a texture not
+  uploaded yet is scanned from the CPU copy), the replay tool's second replay on this machine
+  (lavapipe, x86) found 0 to 1 draw hidden a dump, at 0.5 to 2.3 ms a picture, above the 0.4 ms a
+  phone's big core can spare. The default therefore stays `frustum`; `full` becomes the default only
+  when a phone log shows its list 0 or walk time under frustum's. If it must pay, the next steps are
+  a union rule over adjacent triangles (a cell is covered today only by one triangle whole, so the
+  cells on a wall's internal diagonals never count) and the occludee's box per batch.
 - *The gate.* `rd_cull_ab` ([TESTING.md](TESTING.md)) replays the dumps of
   `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt` with the test off, frustum and
   full at Original 4:3, Enhanced 4:3 2x, Enhanced 2x at a wide dump's own aspect and once with MSAA
   4x: every target's PNG of both byte for byte the off run's, the full run's frustum count the
-  frustum run's, and draws skipped over the corpus (the occluded total reported). `rd_vis` holds the
+  frustum run's, and draws skipped over the corpus (the occluded total reported). The A/B is meant to run on both lavapipe backends, Vulkan and OpenGL (the OpenGL run waits on a
+  fix to the cull path under that backend, to be written up when it lands). `rd_vis` holds the
   bounds, the planes under random cameras and the VU references (`vu1_ref`) as the oracle, and the
   occlusion test's vertex and occludee bounds against the float product, the rasterisation's
   inner rule against every corner placement, its verdicts and the frame cases.
