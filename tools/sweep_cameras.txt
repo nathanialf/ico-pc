@@ -1,0 +1,40 @@
+# Cameras for the disc-wide cull sweep (port/render/test/gsb_cull_test.c --sweep, the
+# gsb_cull_sweep ctest; docs/port/TESTING_PROGRAMS.md).  One line per camera: the stage's folder name
+# (object/sdf/<stage>/), then the dump whose frame camera (its view and zoom) the sweep is about:
+# the stage is the prefix of the dump's mesh names (rd_replay_tool --no-device --list shows them:
+# `mesh st17a_p1 ...`).  MACHINE-LOCAL: these are paths on the maintainer's machine, the dumps are
+# never committed.  A line whose dump is absent is skipped and said so.  A relative path is
+# relative to this file.  Every line is a 768-step sweep (every 4th pair by default) at 16:9 and
+# 48:9 for its stage, so a stage with many lines (st17a has 14) costs that many sweeps: drop
+# lines of near-identical cameras if its shard runs long.  A stage with no line is not swept.
+#
+# The frames of the v0.7.x corpus, /primary/dev/ico-dumps/frame-20261007-*.rddump, show the
+# queenmodel only (the ending): no stage, left out.
+#
+# st18a, issue 29's stage: the camera of the reporter's dump i76 (no dump of it on this machine)
+st18a builtin:i76
+#
+# the phone captures, an F12 zip each (the first .rddump of the zip)
+st13d /primary/dev/ico-dumps/phone/frame-20261022-232809-v5601.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261028-105852-v4103.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261028-151709-v2199.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261028-204306-v2251.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261102-091017-v15677.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261102-114223-v2381.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261102-122555-v3347.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261102-134548-v4651.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261102-152033-v6818.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261102-165136-v4423.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261102-173730-v5611.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261102-181138-v2429.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261102-194450-v2877.zip
+st17a /primary/dev/ico-dumps/phone/frame-20261102-210456-v2349.zip
+# the Mali-G52 reporter's frame (issue 164)
+st13b /primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump
+# the issue 179 and 182 captures (v0.10.1)
+st13b /primary/dev/ico-pc/build-host/tmp/v0101/evidence/179/frame-20261103-125544-v2915.rddump
+st26a /primary/dev/ico-pc/build-host/tmp/v0101/evidence/182/frame-20261103-163115-v3225.rddump
+#
+# the 48:9 captures of issue 29 go here when they are on the machine
+# (/primary/dev/ico-dumps/29/): one line each, "STAGE /primary/dev/ico-dumps/29/<file>.rddump"

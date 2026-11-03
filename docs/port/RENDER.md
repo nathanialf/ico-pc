@@ -2009,6 +2009,12 @@ clear drawn as a quad, a fill) are counted apart and are not candidates. Only li
 the passes after it (the fog, glow, aura, fades, shadows and the present) draw the whole frame and
 no test against the scene's depth leaves them out.
 
+**The sweep.** The cull of every stage on the disc, not only st18a, is measured by `gsb_cull_test
+--sweep` (ctest `gsb_cull_sweep.*`, main only: it needs the disc image): per stage and aspect, the
+parts the box cull leaves out of a picture between the ticks, what the blend span saves, and the
+triangles the region rule does not draw at the ticks and between them, against the stored counts
+of `tools/sweep_baseline.txt` ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md), `gsb_cull_test.c`).
+
 **The gate and the numbers.** `tools/occlusion_corpus.py` runs the dumps of
 `tools/occlusion_corpus.txt` at Original 4:3 1x and Enhanced 4:3 2x: the measurement as drawn and
 without the depth, then the plain replay and the replays with the hidden commands left out (`--nop`
