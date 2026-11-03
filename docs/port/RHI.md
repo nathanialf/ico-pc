@@ -92,6 +92,44 @@ The swapchain's acquire, present and rebuilds also hold a recursive lock of thei
 (`dx_swap_lock`)), and `rhi_device_lost` reads an atomic flag. Without a guard every call runs at
 once, as the tests and the tools have it.
 
+**Frame slots and the submit thread.** With `RhiLimits.slotOverlap` (Vulkan with the timeline sync;
+`ICO_VK_SLOT_OVERLAP=0` turns it off, and Direct3D 12, Vulkan's fence ring, OpenGL and Direct3D 11
+keep one call at a time) the frame slots are apart: the submit thread
+([PLATFORM.md](PLATFORM.md#the-render-thread), `port/render/rd_submit_thread.h` "the slots") ends and
+submits picture N's list of slot A and presents its image while the render thread recycles slot B,
+acquires B's image and records B's list. The device line is followed by `rhi_vk: frame slots: apart
+(...)` or `one call at a time (<why>)`. The partition (`port/rhi/vk/vk_cmd.c`, header comment):
+
+| state | written by | how it stays apart |
+| --- | --- | --- |
+| `frameIndex`, slot B's command pool, lists, descriptor pools, sets, deferred destroys, query pools, submit tag, acquire record | the recording thread | a list's handle tag names its slot (`VkrFrame.gen`, `vkr_get_cmd`), the list carries it (`VkrCmdList.slot`); nothing of the submit thread asks for the current frame (`vkr_cur_frame`) |
+| slot A's lists (their end), `waitValue` and acquire record (`VkrAcquire`) | the submit thread | the slot guard lets the recording thread recycle slot A only when no job of A is queued or running |
+| `hzEpoch`, `stats`, `tsResult`, `occResult`, the textures' and buffers' tracking state | the recording thread | the submit thread's end, submit and present touch none of them |
+| the counters an end, a submit and a present add | either | `VkrState.late`, atomic adds; `rhi_get_stats` adds them in, so the recording thread reads live counters while the submit thread works |
+| the submission counter `timelineValue`, the submit history | the submit thread (any thread while it is idle) | the counter stored and read with `__atomic`; the history read only by the loss report |
+| the queue (`vkQueueSubmit`, `vkQueuePresentKHR`, `vkDeviceWaitIdle`) | the submit thread while it works | every call that submits or waits idle is a call the guard holds until the submit thread is idle; `rhi_cmd_begin_occlusion`'s first use (its reset submit) waits for the guard first |
+| the swapchain's acquire and present | the recording thread's acquire, the submit thread's present | the swapchain's lock (`vkr_swap_lock`); the present on the submit thread leaves a rebuild, a size change, the surface poll's size and a lost surface to the next acquire (`VKR_DEFER_*`, `vkr_take_deferred`, after the guard's wait), with the line `a present on the submit thread found <what>: the swapchain made again at the next acquire (N times so far)` (first 8, then every 100th) |
+| the object pools, the pipeline cache, the framebuffer and render pass caches | the recording thread | read only by the submit thread (a swapchain image's entry); a creation or destroy is not a slot call |
+
+The slot calls the guard lets through (`rhi.h` `rhi_set_slot_guard`, `port/rhi/rhi_backend.c`
+`RHI_GUARD_SLOT`): `rhi_wait_frame` (for the slot it recycles), `rhi_begin_commands`,
+`rhi_create_bind_group`, `rhi_map_buffer`, `rhi_unmap_buffer`, `rhi_read_timestamps`,
+`rhi_read_timestamps_busy`, `rhi_read_occlusion` and `rhi_acquire_backbuffer`, each when the slot
+guard's `free` says the calling thread is the render thread, keeps no list of its own for the submit
+thread and the submit thread has no job of that slot. Every other call that changes the device's
+state waits as before. The acquire may come before the present of the picture before while the
+swapchain has an image to spare (the spec's limit for an acquire without a timeout: no more images
+acquired than `swapImageCount - minImageCount`, `vkr_acquire_ahead_ok`), else it waits for the
+guard (`rhi_call_guard_settle`); the present shows the oldest image acquired, and an image a failed
+replay gave up in a slot with no job is taken over by the next acquire with its semaphore
+(`vkr_acquire_backbuffer`). The invariants: the queue receives picture N's list and present before
+anything of picture N+1 (the render thread submits nothing beside the submit thread), so every
+picture's bytes are those of one thread; a slot is recycled only after its own jobs were submitted
+and its fence passed; a command buffer is used by one thread at a time (recorded by the render
+thread, ended by the submit thread after the hand-over's lock). Tests: `rhi_test_common.c`
+`threadSlotsCell` (`rhi_vk*`), `rd_submit_queue`, `rd_thread_ab` (`--repeat 3`), and the TSan
+tree's `rd_tex_test`.
+
 **Formats** (`RhiFormat`): RGBA8 UNORM (alpha holds raw [GS](ARCHITECTURE.md#terms) alpha, 0x80 =
 1.0), RGBA8 UINT (the exact integer blend's targets), R8 UNORM and UINT, R16 UINT, RGBA16F, D32F,
 D32F_S8 (the scene's depth-stencil; the Vulkan backend may back it with D24S8,
@@ -816,8 +854,9 @@ window passes it to the crash diagnostics, whose start-up retry deletes the file
 shift (`port/rhi/vk/vk_enums.h` (`vkr_bindTypeMap`): b 0, t 16, s 32, u 48, the shifts DXC compiles
 with). Each frame slot owns a command pool, descriptor pools and the objects destroyed while it
 recorded; every submit takes the next number of the port's counter (`VkrState.timelineValue`), which
-`rhi_wait_frame` waits for; the first submit after an acquire waits on its semaphore and the present on
-the image's `renderDone` (`port/rhi/vk/vk_pipeline.c`; `port/rhi/vk/vk_cmd.c`, header comment). The
+`rhi_wait_frame` waits for; the first submit of a slot after its acquire waits on the slot's
+semaphore and the present on the image's `renderDone` ([Frame slots and the submit
+thread](#the-interface)) (`port/rhi/vk/vk_pipeline.c`; `port/rhi/vk/vk_cmd.c`, header comment). The
 submission sync behind the counter (`port/rhi/vk/vk_sync.c`, `VkrSyncKind`) is one timeline semaphore
 whose value is the number (Vulkan 1.2), or on a device without timeline semaphores a ring of 8
 fences, number n signalling the fence at slot n % 8: one queue signals in submission order, so the

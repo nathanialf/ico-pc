@@ -110,12 +110,28 @@ pumps the window's events). A picture handed
 over owns the renderer's state until its walk and present's pass end (`rd__reads_done` in
 `rd__submit_frame`); every game-thread call that changes the frames, textures, meshes, targets or
 settings waits for that first (`rd__texlock_wait`), so the render thread reads the state as it
-was when the picture was posted. The submit and the present then overlap the game's step and,
-with Vulkan and Direct3D 12, the next picture's interpolation: they run on the submit thread
-(`port/render/rd_submit_thread.h`), whose work the render thread's next graphics call (the next
-picture's fence wait) waits for, so the backend still runs on one thread at a time and every
-picture's GPU work and present keep their order: one picture's interpolation on the render
-thread while the one before is submitted and presented on the submit thread. The window makes a further picture of a frame already shown only when its reads would end before the
+was when the picture was posted. The submit and the present then overlap the game's step and the
+next picture on the render thread: they run on the submit thread
+(`port/render/rd_submit_thread.h`). With Vulkan's frame slots apart (`RhiLimits.slotOverlap`, the
+timeline sync; [RHI.md](RHI.md#the-interface), "Frame slots and the submit thread") the next
+picture's fence wait waits only for the picture two before, whose slot it recycles
+(`rd__submit_drain` -> `rd_thread_submit_wait_slot`), and its interpolation, recycle, acquire, uploads
+and walk all run while the picture before is ended, submitted and presented: a picture holds the
+render thread for its reads alone. The acquire waits for the picture before's present only where the
+swapchain has no image to spare. Every call that is not a slot call (a texture or pipeline made or
+destroyed, a readback, a submit, a swapchain rebuild) still waits for the submit thread, so the
+queue receives every picture's list and present in order and the bytes are those of one thread. With
+Direct3D 12, Vulkan's fence ring or `ICO_RD_SUBMIT_OVERLAP=0` the next picture's first graphics call
+(its fence wait) waits for the submit thread's whole job, so what overlaps there is the
+interpolation. The lines: `rd: submit thread: the frame slots apart (...)` or `the frame slots one at
+a time (<why>: ...)` at the start, `rd: submit thread: the render thread's picture waited X ms for
+frame slot S's picture two before to be submitted and presented (N such waits so far)` (first 8,
+then every 100th), and the end's line counts the pictures begun while the one before was still
+being submitted and those slot waits (`RdSubmitBlock.overlapped` has the 10 s count). At a PowerVR
+phone's numbers (reads 9 ms, submit and present 7.7 ms, interpolation 3 ms) the render thread was
+held 9 + 7.7 - 3 = 13.7 ms a picture, two pictures and the 9 ms closing step 36 ms of a 33.3 ms
+frame; with the slots apart it is held for the reads, 9 x 2 + 9 = 27 ms (a model, not measured).
+The window makes a further picture of a frame already shown only when its reads would end before the
 next step and its end before that step's end, and, with vsync off or mailbox, not while a picture
 runs past its estimate or the presents wait for the display or the GPU (PLATFORM.md, the render
 thread's further presents; the present call's time of each picture: `rd__thread_note_present`).
@@ -129,17 +145,20 @@ every 100th).
 A GPU texture the game thread destroys goes to the retire list the render thread empties in its
 next job (`rd__retire_texture`): a call's job at its start, a picture's at its first graphics call
 (`rd__thread_retire_kept` from `rd__submit_drain`, after that call's wait for the submit thread).
-A destroy is a graphics call, and on the render thread a graphics call waits for the submit thread,
-so destroying at a picture's start would make its interpolation wait behind the picture before's
-submit and present; destroyed at the first graphics call, the interpolation overlaps them on every
-picture, and the backend sees the same calls in the same order (the destroys after the submit
-thread's job, before `rhi_wait_frame`).
+A destroy is a graphics call that is not a slot call, and on the render thread it waits for the
+submit thread, so destroying at a picture's start would make its interpolation wait behind the
+picture before's submit and present; destroyed at the first graphics call, the interpolation
+overlaps them on every picture, and the backend sees the same calls in the same order (the destroys
+after the submit thread's job, before `rhi_wait_frame`). With the slots apart a picture after a
+destroy therefore waits for the picture before's submit and present at its fence wait, as every
+picture did before; so does one while the background pipelines finish (their step's calls).
 
 What a picture holds the renderer for (the 10 s line's `a picture holds the renderer for R ms
 typically (its mean M ms and half its deviation of D ms; C ms of its own, I ms of it the
 interpolation; ...)`, each a typical time, `PaceRtTyp`: [DISPLAY.md](DISPLAY.md#further-presents-and-the-game-step)): from
 its job's start to `rd__reads_done`, which is the interpolation, then the first graphics call's waits
-(the submit thread's job on the picture before, the slot's fence, the acquire: `waitMs` and
+(the submit thread's job on the picture before, or with the slots apart on the picture two before,
+the slot's fence, the acquire: `waitMs` and
 `acquireMs`), then the uploads and the walk. C is R less those waits; I is the interpolation
 (`rd_present`'s own timer around `rd__interp_frame`), not a wait. The submit thread's wait therefore
 counts in R only past the interpolation, and the line's `the render thread waited for it N times

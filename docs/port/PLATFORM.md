@@ -429,20 +429,30 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   job posts it at its end (`rd__submit_post_pending`, from `port/render/rd_thread.c`
   (`runTramp`)): the submit thread ends it, submits it and presents the image. The render thread
   is then free for the next picture as soon as its walk ends, and the game thread's next present
-  waits for that much only (`rd_present_post`'s drain is the render thread's alone). The backend
-  still runs on one thread at a time: the render thread's next call that changes the device's
-  state (its next picture's fence wait, `rd__wait_frame`, comes first) waits for the submit
-  thread (the call guard's busy on the render thread is `rd_thread_submit_busy`, its wait
-  `rd_thread_submit_drain`), and every other thread's call waits for both. What overlaps the
-  submit and the present is the next picture's interpolation (no graphics call) and the game's
-  step. The walk does not overlap them: Vulkan and Direct3D 12 key the frame slot, the command
-  list's handle (`vkr_get_cmd`'s generation), the acquired image's semaphores and the submit's
-  counters on one frame index (`port/rhi/vk/vk_cmd.c` (`rhi_wait_frame`, `vkr_submit_batch`),
-  `port/rhi/d3d12/d3d12_cmd.c`), so a list recorded while the one before is submitted would need
-  them per slot. The order holds by that rule too: the next acquire comes after the present
-  before it, a slot's command pool is reset only after its list was submitted, and the queue's
-  submits and presents keep their order (nothing relies on acquiring an image before the one
-  before is presented). A list kept open when a call of the render thread's own needs the backend
+  waits for that much only (`rd_present_post`'s drain is the render thread's alone). With
+  Vulkan's frame slots apart (`RhiLimits.slotOverlap`: the timeline sync; RHI.md, "Frame slots and
+  the submit thread") each job carries its list's slot and the submit thread installs the slot
+  guard (`rhi_set_slot_guard`): the render thread's next picture waits only for the jobs of the
+  slot its fence wait recycles, the picture two before (`rd__submit_drain` ->
+  `rd_thread_submit_wait_slot`), and its recycle, acquire, uploads and walk run while the picture
+  before is ended, submitted and presented, every slot call (`rhi_wait_frame`,
+  `rhi_begin_commands`, `rhi_create_bind_group`, the buffer maps, the timestamp and occlusion
+  reads, `rhi_acquire_backbuffer`) passing the call guard when no job of its slot is queued or
+  running. The acquire may come before the present of the picture before when the swapchain has
+  an image to spare (one over the surface's minimum, as made: always outside the FIFO fallback),
+  else it waits; a present on the submit thread that finds the swapchain out of date, another size
+  or the surface lost leaves the rebuild to the next acquire. Every other call that changes the
+  device's state (a texture or a pipeline made or destroyed, a readback, a submit, a rebuild)
+  waits for the submit thread as below, so the queue's submits and presents keep their order.
+  With Direct3D 12, Vulkan's fence ring or `ICO_RD_SUBMIT_OVERLAP=0` the backend runs on one
+  thread at a time: the render thread's next call that changes the device's state (its next
+  picture's fence wait, `rd__wait_frame`, comes first) waits for the submit thread (the call
+  guard's busy on the render thread is `rd_thread_submit_busy`, its wait
+  `rd_thread_submit_drain`), and every other thread's call waits for both; what overlaps the
+  submit and the present there is the next picture's interpolation (no graphics call) and the
+  game's step (Direct3D 12 keys the frame slot, the acquired image and the submit's counters on one
+  frame index, `port/rhi/d3d12/d3d12_cmd.c`). In both modes a slot's command pool is reset only
+  after its list was submitted and its fence passed. A list kept open when a call of the render thread's own needs the backend
   before the job ends (a readback, a pipeline) is ended, submitted and presented there first, after
   what the submit thread had (counted as `submitted on the render thread`); the background
   pipelines' step after a picture (`rd__pipe_finish_tick`) waits for the next picture's fence wait
@@ -530,9 +540,18 @@ window: render thread: sync (interpolation, walk, submit and present on the rend
 window: render thread: off ([dev] render_thread = off)
 rd: submit thread: on (the pictures handed to the render thread are submitted and presented on a thread of their own, Vulkan; ICO_RD_SUBMIT_THREAD=0 keeps them on the render thread)
 rd: submit thread: off (this graphics API takes every call on one thread: the render thread submits and presents its pictures)
+rd: submit thread: the frame slots apart (the render thread's next picture records while the one before is submitted and presented, and waits only for its own slot's picture two before; ICO_RD_SUBMIT_OVERLAP=0 keeps the submit thread's work and the render thread's graphics calls one at a time)
+rd: submit thread: the frame slots one at a time (this graphics API keys its frame slot on one index: the render thread's next picture's first graphics call waits for the submit thread)
 ```
 
-and its end `rd: submit thread: ended (N pictures ended, submitted and presented there in all)`.
+the line `rd: submit thread: the render thread's picture waited X ms for frame slot S's picture two
+before to be submitted and presented (N such waits so far)` (the first 8, then every 100th), and
+its end `rd: submit thread: ended (N pictures ended, submitted and presented there in all; P
+pictures of the render thread began while the one before was still being submitted, W waited for
+their own slot's picture two before, T ms in all)`. How to read a phone's log with the slots apart:
+`the render thread waited for it N times` small (those are the slot waits and the calls that are
+not slot calls), `takes` about the reads, and the end's `began while the one before was still
+being submitted` near the pictures' count.
 
 Every 10 s block adds the two threads' line: the game thread's mean step and, inside it, its own
 cost of closing a frame (`rd_end_frame` after its wait for a picture's reads: the frame's walk for

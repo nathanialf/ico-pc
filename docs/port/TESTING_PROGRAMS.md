@@ -1172,9 +1172,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   renderer's calls on a thread of the renderer's own, `port/render/rd_thread.h`), with
   `--pass-dump` at Original (640x480) and Enhanced 4:3 2x (1280x960), and for every F12 zip the
   blended present at 0.5 between its two frames: every target's PNG of `sync` and `on` byte for
-  byte `off`'s, and the threaded runs saying `render thread: sync` / `on`; the blended present's
-  `on` run hands its picture over as the window does, and must say `submit thread: ended (N` with
-  N above 0 (its submit and present on the submit thread, `port/render/rd_submit_thread.h`)
+  byte `off`'s, and the threaded runs saying `render thread: sync` / `on`; the blended present is
+  made three times in a row in every mode (`--repeat 3`), the `on` run handing the three over
+  back to back as the window does, and must say `submit thread: ended (N` with N at least 3
+  (their submit and present on the submit thread, `port/render/rd_submit_thread.h`) and, where
+  the device says `rhi_vk: frame slots: apart`, `submit thread: the frame slots apart` (the second
+  and third recorded while the one before is submitted, RHI.md "Frame slots and the submit
+  thread"); the last picture's PNG byte for byte `off`'s
   (`rd_thread_ab`; [PLATFORM.md](PLATFORM.md#the-render-thread)). SKIP as `rd_vustage_ab`.
 - `rd_constant_reads_ab.cmake`: the same dumps and those of `tools/constant_reads_dumps.txt` (the
   PowerVR phone's two frames, the aura with no aura object) twice, every post sprite reading
@@ -1694,7 +1698,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd__enumerate_reachable`; the test fails on a key the set lacks, which on a device is one
   first-use stall (`firstUseLine`), never a wrong picture. The union of the asked keys is left in
   `rd_replay_tool_keys/keys-<config>-<size>.txt` (`rd_replay_tool_keys`).
-- `rd_submit_queue_test.c`: the submit thread's queue (`port/render/rd_submit_queue.h`): jobs run in the order posted, numbered from 1, an empty one refused; at most `RD_SUBMIT_DEPTH` queued and running, the running job counted until it finishes (one at a time, a third post refused meanwhile); the finished jobs' times taken oldest first, once, the oldest dropped and counted past the depth; the longest present since the last take, once (1 ns for a 0 ms present, 0 for a job that presents nothing); the block's means, longest, depth, waits by the render thread and the others, lists submitted on the render thread, cleared by the take with the depth carried for the jobs still queued (`rd_submit_queue`).
+- `rd_submit_queue_test.c`: the submit thread's queue (`port/render/rd_submit_queue.h`): jobs run in the order posted, numbered from 1, an empty one refused; at most `RD_SUBMIT_DEPTH` queued and running, the running job counted until it finishes (one at a time, a third post refused meanwhile); the finished jobs' times taken oldest first, once, the oldest dropped and counted past the depth; the longest present since the last take, once (1 ns for a 0 ms present, 0 for a job that presents nothing); the block's means, longest, depth, waits by the render thread and the others, lists submitted on the render thread, cleared by the take with the depth carried for the jobs still queued; the jobs queued and running of each frame slot (a running job counted until it finishes, the other slot's queued job not counted for this one) and the pictures begun beside the other slot's job (`testSlots`) (`rd_submit_queue`).
 - `rd_pipe_finish_test.c`: the background finisher's choices (`rd_pipe_finish.h`): a set of 1196 keys stopped after 33 gives its batches from key 33 in the set's order, 32 a batch, the keys made meanwhile and the failed ones skipped, a batch never mixing keys with and without a destination read (the other kind's key starts the next), every key not made taken exactly once, 37 batches for 1163 keys of one kind (the last of 11), none past the end; the step after a picture: a batch in flight waits, then is taken whatever the memory or a hold; the system's signal ends the finisher, no key left ends it, a hold (late step, slow picture) and a reading under the floor wait until their time, the memory is read only when nothing else holds the batch, then a batch begins; every step's words (`rd_pipe_finish`).
 - `rd_cache_name_test.c`: the Vulkan pipeline cache file's name (`rd_cache_name.h`): two builds' tables of the same modules, each in its own memory, name the same file (no build in the name); one byte of a module changed (its first, a middle one, its last), a module a word longer or shorter, renamed, its stage changed, two swapped, one dropped or added, or `RD_PIPELINE_CACHE_FORMAT` raised each name another; names joined differently do not collide; the form `pipelines-<16 hex digits>.vkcache` (34 characters), a 35-byte buffer taken, 34 and NULL refused; an empty table still names a file (`rd_cache_name`).
 - `rd_bisect_plan_test.c`: the loss bisect's second-level planner against oracles: a draw that
@@ -1788,7 +1792,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   thread without waiting (`rd__replay_frame_async`) while the test's thread, the game's side,
   records the next frame through the texture cache and updates a texture of its own (each change
   waiting for the replay's reads, `rd__texlock_wait`): every replay run there and SCENE as drawn on
-  one thread; the counts printed (not on OpenGL). `threadSync`: in the sync mode a picture is
+  one thread; the counts printed (not on OpenGL). On lavapipe the frame slots are apart (the
+  timeline sync), so each replay's walk runs while the submit thread ends and submits the one
+  before (RHI.md "Frame slots and the submit thread"): the race check for that partition. `threadSync`: in the sync mode a picture is
   waited for and not counted as handed over (`rd_submit_async` false), with the thread on it is
   until the drain (not on OpenGL). It is the render thread's program to run under
   ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
@@ -1834,7 +1840,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   on one thread (OpenGL, Direct3D 11). Its sibling for the submit thread (`threadRecordCell`):
   the list recorded on a thread A, ended and submitted on a thread B, read back on the test's
   thread equal row by row to the same list made there and to the fill rule's squares, the readback
-  waiting for B through the guard.
+  waiting for B through the guard. The frame slots apart (`threadSlotsCell`, after it): a list of
+  one slot ended and submitted on a thread B while the test's thread recycles the other slot,
+  begins its list there and records it (B ends once that list has begun), with a test slot guard
+  (`rhi_set_slot_guard`) freeing the test thread's slot calls while B's job is of the other slot:
+  no guard wait while recycling and recording, one at the second list's end, and both targets
+  equal row by row to the same two lists made one after the other and to their squares (red and
+  green, and a blue one); skipped where the slots are not apart (`thread slots cell skipped`:
+  Direct3D 12, OpenGL, Direct3D 11, and Vulkan's fence ring: `ICO_VK_FAKE_API=1.0`, `1.0bare` and
+  `1.1`, which hide the timeline semaphores). The validation layers' thread checks see the two threads' use
+  of the two slots' command pools and the queue (`rhi_vk`).
 - `rhi_vk_test.c`: the exact-texel RHI checks on Vulkan, a hazard cell, the render-area check (a
   pass larger than its attachments clamped with no validation error, `passAreaCell`), a pass with
   a render area inside its target (`renderAreaCell`, under every switch: on a 16x16 target cleared
