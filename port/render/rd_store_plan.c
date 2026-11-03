@@ -5,10 +5,12 @@
  * pass begins and writes every stored one back when it ends: SCENE's depth
  * is 10 MB at 2364x1080, about 1 ms each way on the PowerVR phone, and
  * every pass on SCENE has its depth bound, read or not.  Before the walk
- * (rd__store_plan_scan) the replayed lists are read once with their state,
- * and for every depth texture the last command that may touch its depth or
- * stencil is found, by ordinal (the commands of the replayed lists counted
- * in order, state commands included).  A command touches a depth when it
+ * (rd__store_plan_scan) the replayed lists are read once with their state
+ * (the same walk notes each command for the pass area, rd_pass_area.c, and
+ * the passes cut, rd_pass_cut.c; the fades fold plans before it, its
+ * sprites decided first), and for every depth texture the last command
+ * that may touch its depth or stencil is found, by ordinal (the commands
+ * of the replayed lists counted in order, state commands included).  A command touches a depth when it
  * is
  *   - a draw (screen prims, the VU draws, a post sprite) on the state's
  *     depth with the Z test on (ZTE and not ALWAYS), Z write on, DATE on
@@ -324,8 +326,11 @@ static void planKeep(uint32_t tex, uint32_t target, uint32_t frame)
 void rd__store_plan_scan(const RdFrame *f, int keep)
 {
     rd__fades_fold_scan(f, keep); /* the sprites the reduction draws (rd_fades_fold.c) */
-    rd__pass_area_scan(f, keep);  /* the passes' areas, after the fold (rd_pass_area.c) */
-    rd__pass_cut_scan(f, keep);   /* the passes cut (rd_pass_cut.c) */
+    /* one walk of the lists for the passes' areas (after the fold, whose
+     * sprites draw nothing: rd_pass_area.c), the passes cut (rd_pass_cut.c)
+     * and the plan: each notes every command under the same state */
+    const bool area = rd__pass_area_scan_begin(f, keep);
+    const bool cut = rd__pass_cut_scan_begin(f, keep);
     s_plan.n = s_plan.nUndef = 0;
     s_plan.full = false;
     s_plan.anyTouch = 0;
@@ -340,11 +345,14 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     s_plan.poison = poison && strcmp(poison, "1") == 0;
     g_rdPerf.storePlanMode = s_plan.mode;
     s_plan.scanFrame = f->number;
-    if (s_plan.mode == 0) {
+    const bool plan = s_plan.mode != 0;
+    if (!plan && !area && !cut) {
         return;
     }
-    s_plan.effects = rd__effects_depth_wanted();
-    if (g_rd.settings.effectsDepth) {
+    if (plan) {
+        s_plan.effects = rd__effects_depth_wanted();
+    }
+    if (plan && g_rd.settings.effectsDepth) {
         /* once a run each way: the setting is on by default, and reads
          * nothing without an effects program */
         static bool s_saidOn, s_saidOff;
@@ -363,7 +371,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     s_plan.lateTarget = 0;
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
-        if (l >= RD_CRACK_LATE_LIST && s_plan.lateTarget && ord > 0) {
+        if (plan && l >= RD_CRACK_LATE_LIST && s_plan.lateTarget && ord > 0) {
             /* the crack fill reads SCENE's depth here, before command ord
              * (rd__crack_fill_late, as the walk calls it): a touch by the
              * command before, so every pass begun up to it keeps the store */
@@ -380,7 +388,14 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
         }
         for (uint32_t i = 0; i < list->count; i++, ord++) {
             const RdCmd *c = &list->cmds[i];
-            if (rd__apply_state(&st, c)) {
+            const bool state = rd__apply_state(&st, c);
+            if (area) {
+                rd__pass_area_scan_cmd(f, c, &st, state, ord);
+            }
+            if (cut) {
+                rd__pass_cut_scan_cmd(c, &st, state, ord);
+            }
+            if (state || !plan) {
                 continue;
             }
             s_plan.curType = c->type;
@@ -443,6 +458,15 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
                 break;
             }
         }
+    }
+    if (area) {
+        rd__pass_area_scan_end(ord);
+    }
+    if (cut) {
+        rd__pass_cut_scan_end(ord);
+    }
+    if (!plan) {
+        return;
     }
     /* a depth read before its clear reads what the replay before left: kept
      * from now on (said for the first 4 a run).  A target new this replay

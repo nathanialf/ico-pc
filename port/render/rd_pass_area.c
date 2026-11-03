@@ -43,9 +43,11 @@
  * (rd_store_plan.c's header) is that a pass begun while command k is
  * replayed (g_rdStoreOrd) holds the work of command k and later ones only
  * (a screen run or a VU merge is flushed into the pass it was recorded in;
- * a fold reads ahead, never back).  The scan (rd__pass_area_scan, from
- * rd__store_plan_scan before the walk) reads the lists with their state
- * once and gives every command a kind:
+ * a fold reads ahead, never back).  The scan (rd__pass_area_scan_cmd, in
+ * rd__store_plan_scan's one walk of the lists before the replay's walk,
+ * beside the pass cut's and the store plan's; rd__pass_area_scan alone in
+ * the tests) reads the lists with their state once and gives every command
+ * a kind:
  *   NONE   draws nothing in the walk: a state command, a NOP, the overlay's
  *          text, a text item the present draws (g_rd.deferText), a sprite
  *          the fades fold leaves to the reduction (rd__fades_fold_skip);
@@ -553,12 +555,12 @@ static int wholeWhy(const RdCmd *c)
     }
 }
 
-void rd__pass_area_scan(const RdFrame *f, int keep)
+bool rd__pass_area_scan_begin(const RdFrame *f, int keep)
 {
     s_pa.valid = s_pa.open = s_pa.ended = false;
     s_pa.n = 0;
     if (!s_pa.on || !f || g_rdWin.first) {
-        return; /* off, or a pass window (it reads targets mid-frame) */
+        return false; /* off, or a pass window (it reads targets mid-frame) */
     }
     uint32_t total = 0;
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
@@ -568,10 +570,42 @@ void rd__pass_area_scan(const RdFrame *f, int keep)
         const uint32_t cap = total + total / 4u + 64u;
         PaCmd *p = realloc(s_pa.cmd, (size_t)cap * sizeof(*p));
         if (!p) {
-            return; /* no memory: no areas this replay */
+            return false; /* no memory: no areas this replay */
         }
         s_pa.cmd = p;
         s_pa.cap = cap;
+    }
+    return true;
+}
+
+void rd__pass_area_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
+                            uint32_t ord)
+{
+    PaCmd *e = &s_pa.cmd[ord];
+    memset(e, 0, sizeof(*e));
+    e->type = c->type;
+    if (state) {
+        return; /* PA_NONE */
+    }
+    e->target = st->color;
+    const RdTargetRec *tc = rd__target_rec(st->color);
+    e->tw = tc ? tc->tw : 0u;
+    e->th = tc ? tc->th : 0u;
+    e->kind = (uint8_t)rd__pass_area_cmd(f, c, st, ord, &e->box);
+    e->whole = (uint8_t)wholeWhy(c);
+}
+
+void rd__pass_area_scan_end(uint32_t n)
+{
+    s_pa.n = n;
+    s_pa.replay = g_rd.replayCounter;
+    s_pa.valid = true;
+}
+
+void rd__pass_area_scan(const RdFrame *f, int keep)
+{
+    if (!rd__pass_area_scan_begin(f, keep)) {
+        return;
     }
     RdStateBlock st = f->startState;
     uint32_t ord = 0;
@@ -579,23 +613,11 @@ void rd__pass_area_scan(const RdFrame *f, int keep)
         const RdCmdList *list = &f->lists[l];
         for (uint32_t i = 0; i < list->count; i++, ord++) {
             const RdCmd *c = &list->cmds[i];
-            PaCmd *e = &s_pa.cmd[ord];
-            memset(e, 0, sizeof(*e));
-            e->type = c->type;
-            if (rd__apply_state(&st, c)) {
-                continue; /* PA_NONE */
-            }
-            e->target = st.color;
-            const RdTargetRec *tc = rd__target_rec(st.color);
-            e->tw = tc ? tc->tw : 0u;
-            e->th = tc ? tc->th : 0u;
-            e->kind = (uint8_t)rd__pass_area_cmd(f, c, &st, ord, &e->box);
-            e->whole = (uint8_t)wholeWhy(c);
+            const bool state = rd__apply_state(&st, c);
+            rd__pass_area_scan_cmd(f, c, &st, state, ord);
         }
     }
-    s_pa.n = ord;
-    s_pa.replay = g_rd.replayCounter;
-    s_pa.valid = true;
+    rd__pass_area_scan_end(ord);
 }
 
 /* rd__pass_area_of with why (RD_AREA_WHY_*) set when it is false */

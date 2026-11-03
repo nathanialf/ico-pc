@@ -2021,7 +2021,11 @@ void rd__aura_box_shutdown(void);
  *   rd__pass_area_on: in force; rd__pass_area_force: tests (-1, 0, 1)
  *   rd__pass_area_profile_words: "pass area: on" or "pass area: off"
  *   rd__pass_area_scan: the lists' commands' kinds and boxes before the walk
- *     (rd_store_plan.c rd__store_plan_scan calls it)
+ *     (the tests); rd_store_plan.c rd__store_plan_scan's one walk of the
+ *     lists takes its parts: rd__pass_area_scan_begin (false: no areas this
+ *     replay), rd__pass_area_scan_cmd for command ord under its state st
+ *     (state: a state command, rd__apply_state's answer),
+ *     rd__pass_area_scan_end with the commands' count
  *   rd__pass_area_cmd: one command's kind under the state st (0 none, 1 a
  *     box: *box the texels it can touch, w 0 none; 2 the whole target; 3
  *     the end of any pass's commands) (tests)
@@ -2042,6 +2046,10 @@ bool rd__pass_area_on(void);
 void rd__pass_area_force(int mode);
 const char *rd__pass_area_profile_words(void);
 void rd__pass_area_scan(const RdFrame *f, int keep);
+bool rd__pass_area_scan_begin(const RdFrame *f, int keep);
+void rd__pass_area_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
+                            uint32_t ord);
+void rd__pass_area_scan_end(uint32_t n);
 int rd__pass_area_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, uint32_t ord,
                       RhiRect *box);
 bool rd__pass_area_of(uint32_t cid, const RdTargetRec *c, uint32_t k, RhiRect *area, uint32_t *end);
@@ -2066,8 +2074,10 @@ void rd__pass_area_why_counts(uint64_t why[RD_AREA_WHY_COUNT]);
  *   rd__pass_cut_init: decided once after rd__profile_init, their lines;
  *     every lazy clear forgotten (a new context)
  *   rd__pass_cut_on / rd__pass_cut_force (tests: -1 the switch's own, 0, 1)
- *   rd__pass_cut_scan: the lists read once before the walk (from
- *     rd__store_plan_scan)
+ *   rd__pass_cut_scan: the lists read once before the walk (the tests);
+ *     rd__store_plan_scan's one walk takes its parts as the pass area's:
+ *     rd__pass_cut_scan_begin (false: nothing cut this replay),
+ *     rd__pass_cut_scan_cmd, rd__pass_cut_scan_end
  * The clear carry (rd_replay.c endPassFor): rd__clear_carry_note when a
  * pending clear of target id stays pending past a pass's end,
  * rd__clear_taken when a pass took target id's pending clear as its load.
@@ -2094,6 +2104,9 @@ void rd__pass_cut_init(void);
 bool rd__pass_cut_on(int which);
 void rd__pass_cut_force(int which, int mode);
 void rd__pass_cut_scan(const RdFrame *f, int keep);
+bool rd__pass_cut_scan_begin(const RdFrame *f, int keep);
+void rd__pass_cut_scan_cmd(const RdCmd *c, const RdStateBlock *st, bool state, uint32_t ord);
+void rd__pass_cut_scan_end(uint32_t n);
 void rd__clear_carry_note(uint32_t id);
 void rd__clear_taken(uint32_t id);
 void rd__clear_skip_served(uint32_t id);

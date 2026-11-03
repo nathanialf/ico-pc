@@ -296,7 +296,14 @@ void rd__pass_cut_force(int which, int mode)
     }
 }
 
-/* ------------------------------------------------------------- the scan */
+/* ------------------------------------------------------------- the scan
+ *
+ * rd__pass_cut_scan_cmd notes command ord under its state st (state: a
+ * state command), in rd_store_plan.c rd__store_plan_scan's one walk of the
+ * lists beside the pass area's and the store plan's, between
+ * rd__pass_cut_scan_begin (false: nothing to note this replay) and
+ * rd__pass_cut_scan_end; rd__pass_cut_scan is the three over a frame of its
+ * own (the tests). */
 
 static bool texIsTarget(const RdStateBlock *st, uint32_t *target)
 {
@@ -404,7 +411,7 @@ static bool touches(const RdCmd *c, const RdStateBlock *st, uint32_t id, bool *c
     }
 }
 
-void rd__pass_cut_scan(const RdFrame *f, int keep)
+bool rd__pass_cut_scan_begin(const RdFrame *f, int keep)
 {
     s_cut.valid = false;
     s_cut.served = false;
@@ -417,7 +424,7 @@ void rd__pass_cut_scan(const RdFrame *f, int keep)
         s_cut.firstClears[k] = false;
     }
     if (!f || g_rdWin.first || (!s_cut.on[RD_CUT_SKIP] && !s_cut.on[RD_CUT_LAST])) {
-        return; /* a pass window reads targets mid-frame: nothing cut */
+        return false; /* a pass window reads targets mid-frame: nothing cut */
     }
     uint32_t total = 0;
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
@@ -427,10 +434,48 @@ void rd__pass_cut_scan(const RdFrame *f, int keep)
         const uint32_t cap = total + total / 4u + 64u;
         CutCmd *p = realloc(s_cut.cmd, (size_t)cap * sizeof(*p));
         if (!p) {
-            return; /* no memory: nothing cut this replay */
+            return false; /* no memory: nothing cut this replay */
         }
         s_cut.cmd = p;
         s_cut.cap = cap;
+    }
+    return true;
+}
+
+void rd__pass_cut_scan_cmd(const RdCmd *c, const RdStateBlock *st, bool state, uint32_t ord)
+{
+    CutCmd *e = &s_cut.cmd[ord];
+    memset(e, 0, sizeof(*e));
+    if (state) {
+        return; /* CUT_NONE */
+    }
+    e->kind = cutKind(c, st, &e->why, &e->tex);
+    e->color = st->color;
+    e->depth = depthOf(st);
+    for (int k = 0; k < CUT_SKIP_TARGETS; k++) {
+        bool clears = false;
+        const bool touch = touches(c, st, s_cut.skipId[k], &clears);
+        if ((touch || clears) && !s_cut.first[k]) {
+            s_cut.first[k] = ord + 1u;
+            s_cut.firstClears[k] = clears;
+        }
+        if (touch) {
+            s_cut.last[k] = ord + 1u;
+        }
+    }
+}
+
+void rd__pass_cut_scan_end(uint32_t n)
+{
+    s_cut.n = n;
+    s_cut.replay = g_rd.replayCounter;
+    s_cut.valid = true;
+}
+
+void rd__pass_cut_scan(const RdFrame *f, int keep)
+{
+    if (!rd__pass_cut_scan_begin(f, keep)) {
+        return;
     }
     RdStateBlock st = f->startState;
     uint32_t ord = 0;
@@ -438,30 +483,11 @@ void rd__pass_cut_scan(const RdFrame *f, int keep)
         const RdCmdList *list = &f->lists[l];
         for (uint32_t i = 0; i < list->count; i++, ord++) {
             const RdCmd *c = &list->cmds[i];
-            CutCmd *e = &s_cut.cmd[ord];
-            memset(e, 0, sizeof(*e));
-            if (rd__apply_state(&st, c)) {
-                continue; /* CUT_NONE */
-            }
-            e->kind = cutKind(c, &st, &e->why, &e->tex);
-            e->color = st.color;
-            e->depth = depthOf(&st);
-            for (int k = 0; k < CUT_SKIP_TARGETS; k++) {
-                bool clears = false;
-                const bool touch = touches(c, &st, s_cut.skipId[k], &clears);
-                if ((touch || clears) && !s_cut.first[k]) {
-                    s_cut.first[k] = ord + 1u;
-                    s_cut.firstClears[k] = clears;
-                }
-                if (touch) {
-                    s_cut.last[k] = ord + 1u;
-                }
-            }
+            const bool state = rd__apply_state(&st, c);
+            rd__pass_cut_scan_cmd(c, &st, state, ord);
         }
     }
-    s_cut.n = ord;
-    s_cut.replay = g_rd.replayCounter;
-    s_cut.valid = true;
+    rd__pass_cut_scan_end(ord);
 }
 
 static bool scanHere(void)
