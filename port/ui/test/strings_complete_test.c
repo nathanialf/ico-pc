@@ -387,8 +387,13 @@ static void testCommunity(void)
               strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_NEW_GAME),
                      "Novo Jogo") == 0,
           "Brazilian Portuguese: his words over the English sheets only");
+    /* the Menu language over a translation (settings.c sets it): any table */
     ui_set_menu_words_language(UI_LANG_DE);
-    CHECK(ui_menu_words_language(UI_LANG_EN) == UI_LANG_EN, "a disc language is not one");
+    CHECK(ui_menu_words_language(UI_LANG_EN) == UI_LANG_DE &&
+              ui_menu_words_language(UI_LANG_FR) == UI_LANG_FR,
+          "German words over the English sheets only");
+    ui_set_menu_words_language(UI_LANG_TABLES);
+    CHECK(ui_menu_words_language(UI_LANG_EN) == UI_LANG_EN, "out of range: none");
     ui_set_menu_words_language(-1);
     CHECK(ui_menu_words_language(UI_LANG_EN) == UI_LANG_EN, "none: English");
 }

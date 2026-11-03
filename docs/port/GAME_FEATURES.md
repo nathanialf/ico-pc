@@ -947,9 +947,12 @@ other disc, leaves the disc's own pictures, whatever the key says. In force:
 
 - the port's text follows it while the Menu language is Auto (`ui_settings_resolve_language`);
 - the game's own menu words (the European disc's menu text table, [UI.md](UI.md#the-games-own-menu-words))
-  are the translation's `UI_STR_MT_*` strings, laid out with the English sheet's geometry
-  (`port/ui/strings.h` (`ui_menu_words_language`), `port/ui/menu_font.c` (`itemWords`)); an id it
-  leaves untranslated is the English sheet's word;
+  are the Menu language's `UI_STR_MT_*` strings (the translation's on Auto), laid out with the
+  English sheet's geometry, so New Game, Continue and the save tiles' words agree with the port's
+  rows beside them (PR 180, cobra838's fix; `port/ui/settings.c` (`ui_settings_apply_language`),
+  `port/ui/strings.h` (`ui_menu_words_language`), `port/ui/menu_font.c` (an item strip's
+  `textLang` apart from its sheet language `lang`, the draw key from the drawn words)); an id a
+  table leaves untranslated is the English sheet's word;
 - the subtitles: `jimakuDisp` (`ico2/fumi/src/jimaku.c`, the arm the European, Japanese and Korean
   discs share) asks `ui_subtitle_words` for the shown record's words before it draws the record's
   two strips (texProperty 434 and 435), under the same conditions (the record shown, its picture

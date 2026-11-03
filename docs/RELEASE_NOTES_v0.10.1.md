@@ -12,3 +12,5 @@
 - With Graphics API set to Direct3D 11, the shadows are worked out in a way every graphics card supports.
 - On 16:10 screens the shadows are counted in one step again.
 - On phones whose screen changes its refresh rate, the game now asks for a fixed one when a Frame rate is set.
+- With Language set to a translation by players, the game's own menu words (New Game, Continue, the saves' places) now follow the Menu language like the rest of the menus (fix by cobra838).
+- The Russian "Continue" on the title screen fits its row (fix by cobra838).

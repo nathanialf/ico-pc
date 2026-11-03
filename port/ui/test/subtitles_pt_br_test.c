@@ -240,11 +240,21 @@ static void testLanguageRow(int pal)
               ui_strings_pt_br[UI_STR_EXTRAS] == NULL &&
               strcmp(ui_str(UI_STR_EXTRAS), ui_strings_en[UI_STR_EXTRAS]) == 0,
           "entry 7: an untranslated row in English");
-    /* a Menu language of the player's own wins over it */
+    /* a Menu language of the player's own wins over it, the game's menu
+       words too (New Game, Continue, the save tiles' words: PR 180) */
     ico_opt_set_ui_language(UI_LANG_DE);
     ui_settings_apply_language();
-    CHECK(ui_get_language() == UI_LANG_DE && ui_menu_words_language(UI_LANG_EN) == UI_LANG_PT_BR,
-          "German menus, the game's words still his Portuguese");
+    CHECK(ui_get_language() == UI_LANG_DE && ui_sheet_language() == UI_LANG_EN &&
+              ui_menu_words_language(UI_LANG_EN) == UI_LANG_DE &&
+              strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_NEW_GAME),
+                     "Neues Spiel") == 0,
+          "German menus, the game's words German over the English sheets");
+    ico_opt_set_ui_language(UI_LANG_EN);
+    ui_settings_apply_language();
+    CHECK(ui_get_language() == UI_LANG_EN && ui_menu_words_language(UI_LANG_EN) == UI_LANG_EN &&
+              strcmp(ui_str_in(ui_menu_words_language(UI_LANG_EN), UI_STR_MT_CONTINUE),
+                     "Continue") == 0,
+          "English menus, the game's words English");
     ico_opt_set_ui_language(-1);
     ui_settings_apply_language();
     ui_settings_step(UI_OPT_LANGUAGE, 1);
