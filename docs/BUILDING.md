@@ -516,8 +516,9 @@ upload jobs alone may write to it. No secret, signing identity or game data is u
 `.github/workflows/ci.yml` runs on every push to main, every pull request and
 every pushed `v*` tag (which also packages for arm64, see
 [Packages](#packages)): the `linux` job (`ubuntu-24.04`), the `tests` matrix
-of eleven `ubuntu-24.04` runners, the `extra` job, the `linux-arm64` job
-(`ubuntu-24.04-arm`) and the `android` job side by side, then the `windows` job
+of eighteen `ubuntu-24.04` runners (five suites in 3 to 5 shards each), the `extra` job, the
+`linux-arm64` job and the `linux-arm64-filtered` job (two shards) on `ubuntu-24.04-arm` and the
+`android` job side by side, then the `windows` job
 (`windows-2022`) after `linux`, no secrets, no disc image. `linux` runs the
 hygiene checks and the `win-x64` cross build below in order. Each `tests`
 runner builds one preset and runs one shard of its `ctest` suite; `extra`
@@ -540,15 +541,15 @@ described after the table.
 | `tools/ci_shard.py --selftest` | the shard split runs every test once, keeps a fixture's tests together and gives the same split twice |
 | `gen_data_desc.py`, `gen_layout_asserts.py`, `gen_sources.py` with `--check` | the generated files are fresh |
 | `win-x64` | cross-compile the window build; `ico_pc.exe` and `SDL3.dll` must exist; the tests are built, and the renderer's Direct3D 11 set with `SDL3.dll` is uploaded as the artifact `win-x64-warp-tests` (`tools/ci_d3d11_warp.sh stage`) for the `windows` job |
-| `tests`: `linux-x64`, 2 shards | headless, configure with `-DICO_LINK_EXE=ON`, build `all tests` (the targets `all` and `tests`), `ctest` on the shard's tests; shard 1 also builds `shaders_d3d11_check` |
-| `tests`: `linux-x64-window`, 2 shards | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` into `build-host/linux-x64-window`, build, `ctest` on the shard's tests |
-| `tests`: `linux-x64-clang`, 2 shards | build, `ctest` on the shard's tests |
-| `tests`: `asan`, 3 shards | AddressSanitizer + UBSan (Debug, `-O1`), headless with `-DICO_LINK_EXE=ON`, build, `ctest` on the shard's tests |
-| `tests`: `fptrap`, 2 shards | float divide-by-zero and invalid trap, headless with `-DICO_LINK_EXE=ON`, build, `ctest` on the shard's tests |
+| `tests`: `linux-x64`, 3 shards | headless, configure with `-DICO_LINK_EXE=ON`, build `all tests` (the targets `all` and `tests`), `ctest` on the shard's tests; shard 1 also builds `shaders_d3d11_check` |
+| `tests`: `linux-x64-window`, 4 shards | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` into `build-host/linux-x64-window`, build, `ctest` on the shard's tests |
+| `tests`: `linux-x64-clang`, 3 shards | build, `ctest` on the shard's tests |
+| `tests`: `asan`, 5 shards | AddressSanitizer + UBSan (Debug, `-O1`), headless with `-DICO_LINK_EXE=ON`, build, `ctest` on the shard's tests |
+| `tests`: `fptrap`, 3 shards | float divide-by-zero and invalid trap, headless with `-DICO_LINK_EXE=ON`, build, `ctest` on the shard's tests |
 | `extra`: `win-x64-clang` | cross-compile the window build (`-DICO_HEADLESS=OFF`) with llvm-mingw clang; `ico_pc.exe` and `SDL3.dll` must exist |
 
 A shard's tests: `ctest --show-only=json-v1` lists the build's tests, `tools/ci_shard.py split`
-divides them into the suite's N shards by the seconds in `tools/ci_test_costs.txt` (heaviest
+divides them into the suite's N shards by the seconds in the suite's own table `tools/ci_costs/<suite>.txt` (heaviest
 first to the lightest shard; tests that share a fixture, such as `rd_pixel` and the
 `rd_replay_tool` tests that read its dump, in one shard; a test the table lacks at the table's
 median) and `ctest --tests-from-file` runs this shard's part at `--parallel 4`
@@ -572,8 +573,11 @@ that compare filtered pixels with a tolerance of 1 or 2 (`rd_pixel`,
 `rd_replay_tool` and `rd_replay_tool_list`, which need `rd_pixel`'s dump):
 lavapipe on an arm64 host filters a step differently from lavapipe on
 x86-64 and misses them by an LSB or two. A second step runs those tests
-alone and does not gate (`continue-on-error`), so their output is still in
-the log. The rest gate as on `linux`: `fog_lut` runs natively,
+alone, in the `linux-arm64-filtered` job (two shards of `ci_shard.py split --include`, the
+cost table `tools/ci_costs/linux-arm64.txt`, a build on each), and does not gate
+(`continue-on-error`), so their output is still in the log; the `linux-arm64` job itself
+(build, the gating tests, and on a release tag the package) is about 18 minutes before the
+packaging. The rest gate as on `linux`: `fog_lut` runs natively,
 `fog_lut_arm64` skips (it looks for an x86-64 NDK and qemu), and the tests
 that need the disc or saved frames skip (`fmv_fields`, `rd_boot_present`,
 `rd_fog_depth_copy_dump`) or run only their synthetic part (`shadow_spawn`,
