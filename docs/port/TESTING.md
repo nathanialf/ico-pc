@@ -805,9 +805,16 @@ sequence:
    two ways, so CI's asan shards are never a new test's first UBSan run. The regex is every test
    the release added or changed.
 3. **The chain, once.** With main at the integration branch, `chain.sh <tag>` builds main's
-   `linux-x64`, runs `gate.sh` (every test but the game-starting ones, then the native-frame
-   gate-a and the `--pass-dump` byte compare of the corpus), then the window build,
-   `offset_audit` on it and the fortify compile of the C files changed since the last tag.
+   `linux-x64`, runs `gate.sh` (every test but the game-starting ones as two `ctest` runs at the
+   same time: the lavapipe half at `-j1` and the CPU half at `-j3`, which share no
+   `RESOURCE_LOCK` and no fixture; then the native-frame gate-a and the `--pass-dump` byte
+   compare of the corpus), then the window build, `offset_audit` on it and the fortify compile of
+   the C files changed since the last tag. On the cost data of 2026-11-03 (the suite 10,215 s at
+   `-j1`; the lavapipe half 96 % of it by CI's asan times) the lavapipe half is the chain's length,
+   about 2.7 hours at `-j1`; the CPU half ends within minutes. `LVP_J` sets the lavapipe half's
+   parallelism: CI runs the whole suite at `--parallel 4` on a 4-core runner in about 55 minutes,
+   so `LVP_J=3` brings the chain toward an hour where the machine has the memory for three
+   lavapipe tests at once.
 4. **One push.** Every fix found in steps 1 to 3 is collected first; the push gate
    (`build-host/tmp/push-check.sh`) passes; main is pushed once. A fix is never pushed while
    another is still expected, since each push restarts CI.
