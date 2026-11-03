@@ -15,6 +15,8 @@ target_sources(ico_platform PRIVATE
     kernel_host.c
     pace_policy.c
     memory_floor.c
+    display_rate.c
+    present_hist.c
     perf_block.c
     pipeline_skip.c
     present_fallback.c
@@ -119,6 +121,10 @@ endif()
 # layout, a block), the bounds' fallback, the format 1 refusal; nothing of
 # the game starts
 # state_registry: the save state registry's table (state_registry.c)
+# display_rate: the refresh rate's log lines and the Android frame rate pin's
+# decisions (display_rate.c, issue 123)
+# present_hist: the 10 s block's histogram of the driver's present call
+# (present_hist.c, issue 123)
 # present_fallback: the FIFO fallback's decision over a log's present blocks
 # under mailbox, the driver's eligibility, the [dev] value and the lines
 # (present_fallback.c)
@@ -128,7 +134,7 @@ endif()
 # numbers under a fake clock, the [dev] render_thread mode
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
           gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
-          present_fallback frame_mailbox)
+          present_fallback frame_mailbox display_rate present_hist)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

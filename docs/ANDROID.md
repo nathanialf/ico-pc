@@ -283,6 +283,36 @@ pictures in time. It never steps back up while the game runs; the row shows
 where it ended up, for example **Auto (2x)**. The Enhanced preset uses the
 size of your screen; Auto is a choice you make in the Resolution row.
 
+### A fixed refresh rate for a Frame rate you set
+
+Some phones and tablets change the screen's refresh rate while you play (a
+panel that runs anywhere from 1 to 144 times a second). A game that shows
+pictures at a steady 60 a second can then be shown at an uneven pace, or a
+picture can stop for a third of a second while the screen changes over. When
+**Options > Display > Frame rate** is a number (30, 60, 120, 144 and so
+on), the game asks the phone to hold the screen to that rate, as Android's
+own games do (Android 11 and later; older phones are not asked). It lets go
+of the request when you choose **Uncapped** or **Original**, and when you
+leave the game. Phones that cannot switch the rate without a flash are left as
+they are. `frame_rate_pin = off` under `[dev]` in `config.toml` never asks.
+
+The log shows what happened:
+
+- `window: frame rate pin: asked 60 Hz (fixed source; the Frame rate row is
+  60) with ANativeWindow_setFrameRateWithChangeStrategy: returned 0` (a
+  return other than 0 says the phone refused it), and `window: frame rate pin:
+  released ...` after Uncapped. The first line of the run says whether the
+  phone offers the call at all.
+- `window: display refresh: 144.00 Hz, 3048x2032 "..." (run time 85.2 s, 2
+  changes this run)` in every 10 second block, and `window: display refresh
+  changed: 144.00 Hz -> 60.00 Hz ...` the moment the phone reports the screen
+  changed its rate. With the pin working, a Frame rate of 60 should show the
+  screen at 60 Hz.
+- `window: present calls: 755 timed (over 20 ms 5, over 50 ms 5, over 100 ms 5,
+  over 300 ms 5), longest 365 ms, total ...` in every block: how many times the
+  phone's graphics driver held up a picture, and for how long. A few over 300
+  ms with the screen's rate changing at the same time is what this pin is for.
+
 ## Send a problem report
 
 1. Copy `logs/ico-pc.log` from the game's folder (see above) to a
