@@ -854,7 +854,7 @@ static int cmdVerdict(VisWalk *w, int l, const RdCmd *c, const RdStateBlock *st,
         s_vis.whyCur = RD_VIS_WHY_CLIP_NONE;
         return RD_VIS_KEEP;
     }
-    if (p.clip != RD_VU_CLIP_REGION && p.clip != RD_VU_CLIP_SCISSOR) {
+    if (!none && p.clip != RD_VU_CLIP_REGION && p.clip != RD_VU_CLIP_SCISSOR) {
         w->n.unbounded++;
         s_vis.whyCur = RD_VIS_WHY_CLIP_UNKNOWN;
         return RD_VIS_KEEP;
