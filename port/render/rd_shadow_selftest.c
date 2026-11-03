@@ -24,7 +24,8 @@
  * at scale 1, the reduced count above it: rd__shadow_count_read) is read
  * back each time.  The one draw stays when its count equals the seven
  * draws' byte for byte and every band's centre holds the count's colour
- * (rd__shadow_table_texel of n mod 64 under the step); otherwise, or when
+ * (rd__shadow_table_texel of n mod 64 under the step, read inside the
+ * frame's exact width: rd__frame_wexact); otherwise, or when
  * the test cannot run (no SCENE, no frame), the flag goes off
  * (rd__profile_self_test_off: "(self-test)") and the seven draws resolve
  * the count.  The one draw is replayed twice, its stencil read four
@@ -170,14 +171,29 @@ static bool run(const RdFrame *f, uint32_t scene, uint8_t *px, size_t size, uint
 }
 
 /* the band centres the one draw got right: band k's centre column, the
- * middle of each half */
-static int centresOk(const uint8_t *px, uint32_t w, uint32_t h, uint32_t step, int *bad)
+ * middle of each half.  A cropped frame (rd__frame_cropped: 624 wide at
+ * 16:10, exact 614.40) leaves (w - wexact) / 2 columns at each side out of
+ * the picture, and the last band's centre lands in them: the centre is the
+ * middle of the band's columns inside the exact width, and a band with none
+ * there is not read (its centres count as right: the byte-for-byte
+ * comparison covers the columns) */
+static int centresOk(const uint8_t *px, uint32_t w, uint32_t h, uint32_t step, float wexact,
+                     int *bad)
 {
     int ok = 0;
     *bad = -1;
+    const float crop = wexact < (float)w ? ((float)w - wexact) / 2.0f : 0.0f;
+    const uint32_t cropUp = (uint32_t)crop + ((float)(uint32_t)crop < crop ? 1u : 0u);
+    const uint32_t lo = cropUp, hi = w - cropUp;
     for (int k = 0; k <= SB_BANDS; k++) {
-        const uint32_t x0 = bandEdge(w, k) / 16u + 1u;
-        const uint32_t x1 = (k == SB_BANDS ? w * 16u : bandEdge(w, k + 1)) / 16u;
+        uint32_t x0 = bandEdge(w, k) / 16u + 1u;
+        uint32_t x1 = (k == SB_BANDS ? w * 16u : bandEdge(w, k + 1)) / 16u;
+        x0 = x0 < lo ? lo : x0;
+        x1 = x1 > hi ? hi : x1;
+        if (x0 >= x1) {
+            ok += 2;
+            continue;
+        }
         const uint32_t x = (x0 + x1) / 2u;
         for (int half = 0; half < 2; half++) {
             const uint32_t y = half ? h * 3u / 4u : h / 4u;
@@ -270,8 +286,10 @@ bool rd__shadow_selftest(void)
         }
     }
     int bad = -1, badLoad = -1;
-    const int centres = doneOne ? centresOk(one, w, h, step, &bad) : 0;
-    const int centresLoad = doneLoad ? centresOk(load, w, h, step, &badLoad) : 0;
+    /* the frame's exact width, read after the replays (they set gsW) */
+    const float wexact = rd__frame_wexact();
+    const int centres = doneOne ? centresOk(one, w, h, step, wexact, &bad) : 0;
+    const int centresLoad = doneLoad ? centresOk(load, w, h, step, wexact, &badLoad) : 0;
     const int want = 2 * (SB_BANDS + 1);
     const bool gatherOk = doneOne && doneSeven && tookOne && diff == 0 && centres == want;
     const bool loadOk = doneLoad && doneSeven && tookLoad && diffLoad == 0 && centresLoad == want;

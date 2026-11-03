@@ -189,6 +189,7 @@ add_library(ico_render STATIC
     rd_interp.c # interpolation between the retained frames
     rd_interp_mesh.c # the interpolation's reads of a mesh's stream, kept while it is unchanged
     rd_reshow.c # a between-tick picture the same as the last rendered one's is shown again
+    rd_glow_fold.c # the glow's mask computed in its reduction: WORK2 neither drawn nor read ([dev] glow_fold)
     rd_glow_hold.c # the between-tick presents paste the glow of the tick's first present
     rd_join.c
     rd_local_probe.c # the desktop's local reads: the start-up cost probe
@@ -427,13 +428,15 @@ target_link_libraries(rd_present_test PRIVATE ico_render ico_math ico_options)
 # GsBase.c as rd_present_test has it, with the display options; synthetic
 # cameras a tick apart (moves to 300 units, turns to 30 degrees) at three
 # widths: a box an in-between picture shows is never culled.  Records
-# only: no device.
+# only: no device.  --sweep DISC: every stage of the disc at the cameras of
+# the corpus dumps (tools/sweep_cameras.txt), against tools/sweep_baseline.txt.
 add_executable(gsb_cull_test test/gsb_cull_test.c
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GsBase.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"
-    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c"
+    ../platform/dump_zip.c)
 target_include_directories(gsb_cull_test PRIVATE ${_ico_seki_incs}
                            "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/shaders/test"
                            "${CMAKE_SOURCE_DIR}/port/math" "${CMAKE_SOURCE_DIR}/port/rhi"
@@ -441,7 +444,9 @@ target_include_directories(gsb_cull_test PRIVATE ${_ico_seki_incs}
 target_compile_definitions(gsb_cull_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(gsb_cull_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(gsb_cull_test PRIVATE ico_render ico_math ico_options ico_port_data)
+# (--sweep: the region rule through ico_vu1_ref, a dump's camera from a F12 zip)
+target_link_libraries(gsb_cull_test PRIVATE ico_render ico_vu1_ref ico_math ico_options
+                      ico_port_data ico_miniz ico_host_fs)
 
 # rd_crt_test: the CRT filter (rd_crt.c, crt.hlsl): its [video]
 # options with their config (host_config.c), the modes and overrides, and on
@@ -952,6 +957,16 @@ if(ICO_RUN_TESTS)
     # 77 without the disc image
     add_test(NAME gsb_cull_stage COMMAND gsb_cull_test --stage "${ICO_DISC_IMAGE}")
     set_tests_properties(gsb_cull_stage PROPERTIES SKIP_RETURN_CODE 77)
+    # every stage of the disc at the cameras of the corpus dumps (issue 29's regression gate):
+    # the box cull, the blend span and the region rule's drops per stage and aspect against
+    # tools/sweep_baseline.txt; eight shards, each the stages numbered k mod 8; main only (77
+    # without the disc image).  A manual full run: gsb_cull_test --sweep DISC --sweep-step 1 --eye
+    # --out DIR (docs/port/TESTING_PROGRAMS.md)
+    ico_add_sharded_test(gsb_cull_sweep 8 PROGRAM gsb_cull_test
+                         ARGS --sweep "${ICO_DISC_IMAGE}"
+                              --cameras "${CMAKE_SOURCE_DIR}/tools/sweep_cameras.txt"
+                              --baseline "${CMAKE_SOURCE_DIR}/tools/sweep_baseline.txt"
+                         PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1800)
     # 50 s of it is the disc's models, in four slices: four shards (port/test/ico_shard.h)
     ico_add_sharded_test(rd_mesh 4 PROGRAM rd_mesh_test ARGS "${ICO_DISC_IMAGE}"
                          PROPERTIES SKIP_RETURN_CODE 77)
@@ -2420,6 +2435,27 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_selftest.cmake")
     set_tests_properties(rd_shadow_selftest PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                        ENVIRONMENT "${_env}")
+    # the same on a cropped frame (624 wide at 16:10, exact 614.40: the last
+    # band's centre fell in the left-out columns and turned the one draw
+    # off) and on one exactly its width (2048 at 48:9)
+    foreach(_c IN ITEMS "cropped|624|448|1|0|0|0|0|0|1.6" "wide|2048|448|1|0|0|0|0|0|5.3333333")
+      string(REPLACE "|" ";" _p "${_c}")
+      list(GET _p 0 _n)
+      list(REMOVE_AT _p 0)
+      list(GET _p 0 _w)
+      string(REPLACE ";" "|" _a "${_p}")
+      add_test(NAME rd_shadow_selftest_${_n}
+               COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                       "-DPATH=one draw" "-DARGS=${_a}"
+                       # the tool runs the self-test twice (its first scene, then the
+                       # one made at the asked size): every line one draw with its
+                       # 142 centres ok, and the asked width's line present
+                       "-DRESULTS=equal to the seven draws over [0-9]+x448, 142 band centres ok"
+                       "-DEXTRA=shadow count: one draw \\(self-test: equal to the seven draws over ${_w}x448, 142 band centres ok"
+                       -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_selftest.cmake")
+      set_tests_properties(rd_shadow_selftest_${_n} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                           ENVIRONMENT "${_env}")
+    endforeach()
     add_test(NAME rd_shadow_selftest_sabotage
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
                      "-DPATH=seven draws"
@@ -2800,7 +2836,8 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         # has not (localRead false: the copy and inplace paths, DATE by snapshot);
         # nor rd_local_probe_kept and rd_local_probe_off (the desktop's probe of
         # Vulkan's local read: never on OpenGL)
-        rd_shadow_selftest rd_shadow_selftest_sabotage
+        rd_shadow_selftest rd_shadow_selftest_cropped rd_shadow_selftest_wide
+        rd_shadow_selftest_sabotage
         rd_vuprepass_selftest rd_vuprepass_selftest_plain
         rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off rd_vuprepass_selftest_ticks
         rd_vuprepass_selftest_sabotage_tri rd_vuprepass_selftest_unbatched

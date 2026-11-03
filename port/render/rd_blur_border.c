@@ -481,6 +481,9 @@ void rd__blur_post_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
 static void blurPostSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     sceneRepeatDue(r); /* SCENE's outer columns before the first read of it */
+    if (rd__glow_fold_skip(r, f, c)) {
+        return; /* the glow's fill or mask: its reduction computes it (rd_glow_fold.c) */
+    }
     if (c->b[0] == RD_POST_MOTION_BLUR && rd__blur_smooth_sprite(r, f, c)) {
         return; /* Motion blur: Smooth (rd_blur_smooth.c) */
     }

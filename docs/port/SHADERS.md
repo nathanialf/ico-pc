@@ -89,7 +89,7 @@ each file's header comment):
 | `sprite.hlsl` | `sprite_ui_vs`, `sprite_world_vs`, `sprite_ps`, `sprite_texa_ps`, `date_snap_ps`, `sprite_aa1_*`, `sprite_stq_*`; the planes build: `sprite_plane_*_vs`, `sprite_stq_plane_*_vs`, `sprite_ps_planes`, `sprite_texa_ps_planes`, `sprite_stq_ps_planes` | screen-space prims in GS window coordinates: TEXA per texel before the filter, the DATE snapshot, PRIM.AA1 lines and triangles with a coverage attribute, perspective-correct STQ, and screen-prim triangles evaluated from their planes the same at every frame width |
 | `blit.hlsl` | `blit_vs`, `blit_ps`, `blit_depth_ps`, `box_reduce_ps`, `aa_reduce_ps`, `depth_resolve_ps`, `depth_upsample_ps`, `camera_probe_ps`, `crack_fill1_ps` (`CRACK_REACH_1`: the crack fill for a reach of 1 texel, [WORK_BUFFERS.md](WORK_BUFFERS.md)) | the present's box blit, the MSAA resolve's colour copy and the shadow count's resolve passes (`blit_ps`); the present's blit with the scene's depth (`blit_depth_ps`); the shadow count box-reduced to the GS size; the supersampled DISPLAY box-averaged; the MSAA depth resolved (smallest sample) and spread over samples; a test probe |
 | `blend_int.hlsl` | `blend_int_vs`, `blend_int_ps` | the GS integer blend between two RGBA8 UINT textures for feedback passes, no hardware blending |
-| `fx_sprite.hlsl` | `fx_rect_vs`, `fx_sprite_ps` and its `ICO_UINT_SRC` (`fx_sprite_u_ps`), `ICO_FX_FRAME` (`fx_frame_ps`) and `ICO_FX_DST_LOCAL` (`fx_local_ps`) builds, `fx_blur2_ps`, `fx_aura_rows_ps` and `fx_aura_sum_ps` (`ICO_UINT_SRC`) | one GS sprite of `staticBlur.c`'s passes in the GS integer arithmetic (`port/render/rd_blur.c`): through the RGBA8_UINT views; the frame-size forms the open pass draws (the alpha alone, `FXF_ALPHA_ONLY`; the premultiplied term for the fixed-function add or subtract, `FXF_OUT_PREMUL`); the destination by local read (`port/render/rd_fx_plan.c`); two blur passes folded; the aura's read of SCENE into FEED128 above 1x in two passes, the box's row sums into ROWBOX (RGBA16_UINT, `fx_kernel_row`) then FEED128's column sum, the same bytes as `fx_sprite_ps` (`port/render/rd_aura_box.c`) |
+| `fx_sprite.hlsl` | `fx_rect_vs`, `fx_sprite_ps` and its `ICO_UINT_SRC` (`fx_sprite_u_ps`), `ICO_FX_FRAME` (`fx_frame_ps`) and `ICO_FX_DST_LOCAL` (`fx_local_ps`) builds, `fx_blur2_ps`, `fx_aura_rows_ps` and `fx_aura_sum_ps` (`ICO_UINT_SRC`) | one GS sprite of `staticBlur.c`'s passes in the GS integer arithmetic (`port/render/rd_blur.c`): through the RGBA8_UINT views; the frame-size forms the open pass draws (the alpha alone, `FXF_ALPHA_ONLY`; the premultiplied term for the fixed-function add or subtract, `FXF_OUT_PREMUL`; the glow's reduction computing its mask, `FXF_GLOW_MASK`); the destination by local read (`port/render/rd_fx_plan.c`); two blur passes folded; the aura's read of SCENE into FEED128 above 1x in two passes, the box's row sums into ROWBOX (RGBA16_UINT, `fx_kernel_row`) then FEED128's column sum, the same bytes as `fx_sprite_ps` (`port/render/rd_aura_box.c`) |
 | `fog_lut.hlsl` | `fog_lut_ps` and its `FOG_BUFFER` (`fog_lut_buffer_ps`) and `FOG_MS` (`fog_lut_ms_ps`) builds | the depth fog: bits 16..23 of the 32-bit Z through the fog CLUT, from the depth, an R32 UINT copy of it, or per sample |
 | `raw_wrap.hlsl` | `wrap_acc_ps`, `wrap_resolve_ps` | COLCLAMP 0 prims (`darkVolume.c`): an RGBA16F accumulation, then the sum modulo 256 |
 | `font.hlsl` | `font_ps`, `font_sheet_ps`, `font_sheet_baked_ps` | R8 coverage textures (the port's font atlas) read as sprite_ps reads a texel; sheet text in the menu sheets' style, rebuilt from the coverage (above 1x) or read from the texels the renderer baked (1x) |
@@ -161,8 +161,11 @@ take from either ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
   ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)).
 - the frame-size sprite builds (`port/render/rd_fx_plan.c`): `fx_sprite_ps` built again with
   `ICO_FX_FRAME=1` as `fx_frame_ps` (the open pass's forms: `FXF_ALPHA_ONLY`, the alpha alone;
-  `FXF_OUT_PREMUL`, the premultiplied term for the fixed-function add or subtract; no blend and no
-  destination read of its own) and with `ICO_FX_DST_LOCAL=1` as `fx_local_ps` (the destination by
+  `FXF_OUT_PREMUL`, the premultiplied term for the fixed-function add or subtract; `FXF_GLOW_MASK`,
+  the glow's reduction with SCENE as its texture and each WORK2 texel it loads computed as the mask
+  stored it, `fx_glow_texel` and `fx_glow_mask`, its taps in one loop each
+  ([RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction)); no blend and no destination
+  read of its own) and with `ICO_FX_DST_LOCAL=1` as `fx_local_ps` (the destination by
   `SubpassLoad` of the input attachment, `layoutLocal`: slot 1 the attachment, slot 2 the texture).
   Neither has a `_nodual` or destination-read twin: `fx_local_ps` is in `rd__fs_local_read`, and
   an exact blend keeps the snapshot ([RENDER_POST.md](RENDER_POST.md#post-passes)).
@@ -665,7 +668,8 @@ in: `vu_prelit_pre_vs` 2,120 words (483 instructions, 36 blocks), `vu_lit_pre_vs
 shader of both ways, and the no-planes builds `vu_np_ps` 4,927 (1,187, 189) and `vu_texa_np_ps`
 11,063 (2,679, 475), and their `_nodual` twins `vu_np_ps_nodual` 4,952 (1,196, 193) and
 `vu_texa_np_ps_nodual` 11,088 (2,688, 479). The frame-size sprite modules (words, instructions,
-blocks): `fx_sprite_ps` 8,557 (2,087, 360), `fx_frame_ps` 11,439 (2,771, 476), `fx_local_ps` 8,561
+blocks): `fx_sprite_ps` 8,557 (2,087, 360), `fx_frame_ps` 17,750 (4,349, 802, with the glow's
+mask in its reduction), `fx_local_ps` 8,561
 (2,088, 360), `fx_blur2_ps` 14,883 (3,491, 558). By the live-path walk (the SPIR-V executed for one pixel, its arithmetic
 weighted by components) an opaque textured pixel of `vu_ps` runs 168 instructions and 127
 lane-operations, of `vu_np_ps` 124 and 80. The pixel side's colour arithmetic runs on the GS's
