@@ -997,6 +997,17 @@ uint64_t rd__mesh_join_part(RdMeshRec *const *ms, uint32_t n, uint64_t sig);
  * without the packet's ordinal) and joined with rd__mesh_join_part */
 void rd__join_parts(const RdFrame *f, int keep);
 
+/* The winding of the disc's prelit strips (rd_mesh.c markWinding,
+ * ICO_VU_MARK_FLIP): a prelit triangle k of a strip that starts at vertex s
+ * carries the mark when ((k - s) & 1) ^ RD_VU_WINDING_PHASE is 1, the
+ * convention the disc's lit strips follow, measured from their normals
+ * (rd_mesh_test's winding cases, docs/port/VU1_PROGRAMS.md "The winding
+ * mark"): 0 when the even triangles of a strip (k - s = 2, 4, ..) face the
+ * way cross(b - a, c - a) of their corners k-2, k-1, k points (share A),
+ * 1 for the reverse (share B).  0 until the disc's measurement is in: the
+ * measurement sets it */
+#define RD_VU_WINDING_PHASE 0u
+
 /* The marks of the triangle of kick k (ICO_VU_MARK_*; 0 past the bytes) */
 static inline uint32_t rd__mesh_kick_mark(const RdMeshRec *m, uint32_t k)
 {

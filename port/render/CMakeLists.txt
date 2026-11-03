@@ -277,7 +277,8 @@ endif()
 
 # rd_replay_tool: a dump to a PNG, headless.
 # (and a F12 .zip: platform/dump_zip.c reads it)
-add_executable(rd_replay_tool tools/rd_replay_tool.c ../platform/dump_zip.c)
+add_executable(rd_replay_tool tools/rd_replay_tool.c tools/rd_replay_region.c
+                              ../platform/dump_zip.c)
 target_compile_options(rd_replay_tool PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_replay_tool PRIVATE ../platform)
 target_link_libraries(rd_replay_tool PRIVATE ico_render ico_vu1_ref ico_miniz ico_host_fs)
@@ -1930,6 +1931,23 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_occlusion_tool PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
     if(_env)
         set_tests_properties(rd_occlusion_tool PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    # rd_region_stats (test/rd_region_stats.cmake, docs/port/VU1_PROGRAMS.md
+    # "The region rule"): rd_replay_tool --region-stats on the first two
+    # dumps of the machine-local list tools/occlusion_corpus.txt here, at
+    # Original 4:3 1x and Enhanced 4:3 2x: the lines' shapes, then the
+    # pass dumps of the plain replay and of the replay with the draws the
+    # CPU oracle says draw nothing NOPs (--region-out's spec), byte for
+    # byte; the orig setting's spec the same without a device; SKIP
+    # without the list, a dump or a device
+    add_test(NAME rd_region_stats
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/region_stats"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_region_stats.cmake")
+    set_tests_properties(rd_region_stats PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
+    if(_env)
+        set_tests_properties(rd_region_stats PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_noplanes_ab (test/rd_noplanes_ab.cmake, issue 161): the dumps of the
     # machine-local list tools/noplanes_dumps.txt (the title and the boot,
