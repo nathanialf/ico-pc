@@ -365,7 +365,9 @@ bool cpu_place_pin(uint64_t mask, char *why, size_t cap)
             }
         }
         if (syscall(SYS_sched_setaffinity, 0, sizeof(set), set) != 0) {
-            snprintf(why, cap, "%s", strerror(errno));
+            const int e = errno;
+
+            snprintf(why, cap, "errno %d: %s", e, strerror(e));
             return false;
         }
         return true;
@@ -398,6 +400,25 @@ uint64_t cpu_place_allowed(void)
 #else
     return 0;
 #endif
+}
+
+CpuPinResult cpu_place_pin_result(bool called, uint64_t asked, uint64_t readBack)
+{
+    if (!called) {
+        return CPU_PIN_REFUSED;
+    }
+    if (readBack == 0) {
+        return CPU_PIN_UNKNOWN;
+    }
+    return readBack == asked ? CPU_PIN_KEPT : CPU_PIN_OTHER;
+}
+
+CpuPinResult cpu_place_pin_checked(uint64_t mask, uint64_t *got, char *why, size_t cap)
+{
+    const bool called = cpu_place_pin(mask, why, cap);
+
+    *got = called ? cpu_place_allowed() : 0;
+    return cpu_place_pin_result(called, mask, *got);
 }
 
 size_t cpu_place_priority_text(char *out, size_t cap)

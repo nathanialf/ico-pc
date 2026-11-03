@@ -19,7 +19,13 @@
  *     one with no core known, the slowest-core shares, S left out;
  *   the calling thread: cpu_place_now inside the allowed cores, the
  *     priority text's shape, a pin to an empty mask refused, a pin to the
- *     cores already allowed taken (Linux).
+ *     cores already allowed taken (Linux);
+ *   the pin's result by the cores read back (cpu_place_pin_result): a
+ *     phone asked for core 7 alone, the call succeeded and the thread may
+ *     run on 2-7 (the system's other cores), the same mask read back
+ *     (kept), the call refused, nothing read back; on Linux the checked
+ *     pin to the cores already allowed reads them back (kept), and a pin
+ *     to a core past the system's is refused with its errno.
  */
 #include <stdio.h>
 #include <string.h>
@@ -271,6 +277,45 @@ static void testThread(void)
 #endif
 }
 
+static void testPinResult(void)
+{
+    char why[128];
+    uint64_t got = 1;
+
+    /* the phone: core 7 asked, the call's yes, 2-7 read back */
+    CHECK(cpu_place_pin_result(true, 0x80u, 0xfcu) == CPU_PIN_OTHER);
+    CHECK(cpu_place_pin_result(true, 0x80u, 0x80u) == CPU_PIN_KEPT);
+    CHECK(cpu_place_pin_result(true, 0x7cu, 0x7cu) == CPU_PIN_KEPT);
+    CHECK(cpu_place_pin_result(false, 0x80u, 0xffu) == CPU_PIN_REFUSED);
+    CHECK(cpu_place_pin_result(false, 0x80u, 0) == CPU_PIN_REFUSED);
+    CHECK(cpu_place_pin_result(true, 0x80u, 0) == CPU_PIN_UNKNOWN);
+    /* an empty mask: refused, nothing read back */
+    CHECK(cpu_place_pin_checked(0, &got, why, sizeof(why)) == CPU_PIN_REFUSED && got == 0);
+    CHECK_STR(why, "no cores to keep it to");
+#if defined(__linux__)
+    {
+        const uint64_t allowed = cpu_place_allowed();
+
+        if (allowed != 0) {
+            CHECK(cpu_place_pin_checked(allowed, &got, why, sizeof(why)) == CPU_PIN_KEPT);
+            CHECK(got == allowed);
+            if ((allowed >> 63) == 0) {
+                /* a core the system does not have: EINVAL, its number said */
+                const CpuPinResult r =
+                    cpu_place_pin_checked((uint64_t)1 << 63, &got, why, sizeof(why));
+
+                CHECK(r == CPU_PIN_REFUSED && got == 0);
+                CHECK(strncmp(why, "errno ", 6) == 0);
+                if (r != CPU_PIN_REFUSED) {
+                    (void)cpu_place_pin(allowed, why, sizeof(why)); /* put back */
+                }
+                CHECK(cpu_place_allowed() == allowed);
+            }
+        }
+    }
+#endif
+}
+
 int main(int argc, char **argv)
 {
     testHist();
@@ -283,6 +328,7 @@ int main(int argc, char **argv)
     testSplit();
     testText();
     testThread();
+    testPinResult();
     if (fails) {
         printf("cpu_place: %d failed\n", fails);
         return 1;

@@ -138,19 +138,52 @@ static void place_thread_begin(const char *who, bool render)
     const char *what = !s_place.split ? "the faster cores"
                        : render       ? "the fastest core"
                                       : "the next faster cores";
-    char err[160], pr[64], fast[96], cores[160], allowed[96], why[128], place[320];
+    char err[160], pr[64], fast[96], cores[160], allowed[96], why[128], place[768];
 
     snprintf(err, sizeof(err), "%s", granted ? "" : SDL_GetError());
     (void)cpu_place_priority_text(pr, sizeof(pr));
     (void)cpu_place_mask_text(mask, fast, sizeof(fast));
     snprintf(cores, sizeof(cores), "%s %s%s", what, fast, s_place.split && render ? " alone" : "");
     if (s_place.pin) {
-        if (cpu_place_pin(mask, why, sizeof(why))) {
+        /* the cores read back after the call, not the call's answer alone:
+           a phone's kernel may say yes and keep the thread elsewhere
+           (cpu_place.h CpuPinResult) */
+        uint64_t got = 0;
+        const CpuPinResult res = cpu_place_pin_checked(mask, &got, why, sizeof(why));
+        char gotText[96], fb[384];
+
+        (void)cpu_place_mask_text(got, gotText, sizeof(gotText));
+        fb[0] = '\0';
+        if (res != CPU_PIN_KEPT && res != CPU_PIN_UNKNOWN && s_place.split && render &&
+            s_place.fastMask != mask) {
+            /* the fastest core alone refused: the faster cores, as with
+               no split */
+            uint64_t got2 = 0;
+            char why2[128], fast2[96], got2Text[96];
+            const CpuPinResult res2 =
+                cpu_place_pin_checked(s_place.fastMask, &got2, why2, sizeof(why2));
+
+            (void)cpu_place_mask_text(s_place.fastMask, fast2, sizeof(fast2));
+            (void)cpu_place_mask_text(got2, got2Text, sizeof(got2Text));
+            snprintf(fb, sizeof(fb), "; kept to the faster cores %s instead%s%s%s", fast2,
+                     res2 == CPU_PIN_KEPT    ? ""
+                     : res2 == CPU_PIN_OTHER ? " (the system keeps it to cores "
+                                             : " (",
+                     res2 == CPU_PIN_KEPT    ? ""
+                     : res2 == CPU_PIN_OTHER ? got2Text
+                                             : (res2 == CPU_PIN_REFUSED ? why2 : "not read back"),
+                     res2 == CPU_PIN_KEPT ? "" : ")");
+        }
+        if (res == CPU_PIN_KEPT || res == CPU_PIN_UNKNOWN) {
             snprintf(place, sizeof(place),
-                     "kept to %s ([dev] big_cores = false leaves the placement to the system)",
-                     cores);
+                     "kept to %s%s ([dev] big_cores = false leaves the placement to the system)",
+                     cores, res == CPU_PIN_UNKNOWN ? " (the cores could not be read back)" : "");
+        } else if (res == CPU_PIN_OTHER) {
+            snprintf(place, sizeof(place),
+                     "could not be kept to %s: the system said yes and keeps it to cores %s%s",
+                     cores, gotText, fb);
         } else {
-            snprintf(place, sizeof(place), "could not be kept to %s (%s)", cores, why);
+            snprintf(place, sizeof(place), "could not be kept to %s (%s)%s", cores, why, fb);
         }
     } else {
         snprintf(place, sizeof(place), "placed by the system (%s)",

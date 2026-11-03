@@ -85,10 +85,30 @@ size_t cpu_place_part(char *out, size_t cap, const CpuPlaceHist *g, const CpuPla
                       const CpuPlaceHist *s, uint64_t slow);
 
 /* the calling thread kept to the cores of mask; false with why set (not
-   Linux, an empty mask, the system's refusal) */
+   Linux, an empty mask, the system's refusal: "errno N: its words") */
 bool cpu_place_pin(uint64_t mask, char *why, size_t cap);
 /* the cores the calling thread may run on; 0 when not known */
 uint64_t cpu_place_allowed(void);
+
+/* What a pin came to, by the call's answer and the cores read back after
+   it (cpu_place_allowed): a phone's kernel may answer yes and keep the
+   thread to other cores (a phone with one 3.8 GHz core: asked for core 7
+   alone, the call succeeded, the thread may run on 2-7 and ran on cores 4
+   and 6; why is not known, a vendor's scheduler hook on the call the
+   likely one) */
+typedef enum CpuPinResult {
+    CPU_PIN_KEPT = 0, /* the cores read back are the ones asked for */
+    CPU_PIN_REFUSED,  /* the call failed (its errno in why) */
+    CPU_PIN_OTHER,    /* the call succeeded, the cores read back differ */
+    CPU_PIN_UNKNOWN   /* the call succeeded, nothing could be read back */
+} CpuPinResult;
+
+/* the result of a pin of asked: called its answer, readBack the cores
+   read back (0: none) */
+CpuPinResult cpu_place_pin_result(bool called, uint64_t asked, uint64_t readBack);
+/* cpu_place_pin, then the cores read back into *got (0: not known) and
+   the result; why as cpu_place_pin's on CPU_PIN_REFUSED */
+CpuPinResult cpu_place_pin_checked(uint64_t mask, uint64_t *got, char *why, size_t cap);
 /* the calling thread's scheduling as the system has it: "nice -10" on
    Linux and Android (with ", real-time" under a real-time policy), "" where
    not known; the length written */
