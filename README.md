@@ -354,12 +354,12 @@ contributors: [`docs/port/ARCHITECTURE.md`](https://github.com/nathanialf/ico-pc
 ### Translation
 
 - bob-ttz and cobra838, for the Russian translation.
-- Igor Chagas (ichagas7), for the Brazilian Portuguese translation.
+- Igor Chagas (ichagas7), for the Brazilian Portuguese translation, with corrections by cobra838.
 
 Options > Language > Русский (bob-ttz) plays the game with bob-ttz's
 Russian menus and subtitles, and Options > Language > Русский (cobra838) with
 cobra838's own Russian translation of them, and Options > Language > Português (Brasil) (ichagas7)
-with Igor Chagas's Brazilian Portuguese ones. To translate the game into your language, see
+with Igor Chagas's Brazilian Portuguese ones (with corrections by cobra838). To translate the game into your language, see
 [Translating the game](docs/TRANSLATING.md).
 
 ### Contributors

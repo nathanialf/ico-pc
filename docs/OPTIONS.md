@@ -522,10 +522,10 @@ other discs.
   English.
 
   After that comes **Português (Brasil) (ichagas7)**: Brazilian Portuguese,
-  translated by Igor Chagas (ichagas7), another player of the game. It works
-  the same way as the Russian ones. The rows he has not translated (the
-  newest ones, such as the backups, and a few he left empty, such as the
-  colour names on the Characters page) and a few notes that are too long
+  translated by Igor Chagas (ichagas7), another player of the game, with
+  corrections by cobra838. It works the same way as the Russian ones. The
+  rows not translated yet (the newest ones, such as the backups, and a few
+  left empty, such as the names of the disc versions) and a few notes that are too long
   for their space are in English. More languages translated by players can
   join this list; [Translating the game](TRANSLATING.md) says how.
 - **Menu language** is the language of the menus this port adds (Options,

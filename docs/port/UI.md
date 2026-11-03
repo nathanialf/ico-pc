@@ -631,7 +631,13 @@ own script, are NULL; his "Longer" pit-time value, "x1", is the 1.5x step's "x1,
 empty rows, the rows the same as the English, the ids newer than his CSV, the one whose English
 changed since, three notes whose second half his spreadsheet lost, three rows without the
 English's `%s`, and six notes over two lines are NULL; where his sheet split a note at the
-English's `;` the two halves are joined). Its table names every
+English's `;` the two halves are joined; then 62 rows taken from cobra838's copy of the same
+table in PR 180, each marked `/* [cobra838] */`: 7 corrections (the Shadow's "Sombra", the
+leading space `UI_STR_AA_UNAVAILABLE` is appended with, the mouse range's "Total", Full pixel's
+name, the water note's value name, the full stop of the AA note, "nativo" for the device's own
+driver) and 55 fills (colours, CRT values, hold type, the graphics card and API rows, the driver
+messages, two of the three half notes and one of the `%s` rows whole); 569 of 707 translated, 138
+NULL). Its table names every
 `UiStrId` but leaves NULL the ids it has not translated: the CSV's empty rows (the language,
 disc and button names, the units, the test popup, the digit and letter tiles), the ids newer than
 the CSV, a row whose English changed after the translation and the notes longer than a note's two

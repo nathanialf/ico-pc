@@ -987,7 +987,9 @@ Russian (cobra838) came as C tables in pull request 180 (`port/ui/strings_ru.c`,
 Brazilian Portuguese came as the two CSV files of issue 157, saved from a spreadsheet that holds
 each template row in its first column (split in two where the English has a `;`) and the
 translation from its third; they were converted once into `strings_pt_br.c` and
-`subtitles_pt_br.c` by the same steps and checks, its log lines name `pt-br`. The language's
+`subtitles_pt_br.c` by the same steps and checks, its log lines name `pt-br`. cobra838's copy of
+the same menu table (PR 180) then corrected 7 of its rows and filled 55 of its NULL ones (marked
+`[cobra838]` in the table; the subtitles are Igor Chagas's alone). The language's
 letters (á â ã à ç é ê í ó ô õ ú and their capitals, …) were already in Arimo's subset (Latin-1),
 so the font did not change.
 

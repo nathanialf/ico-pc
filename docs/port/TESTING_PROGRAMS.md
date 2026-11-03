@@ -2007,7 +2007,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `UI_STR_NONE`, each with the English entry's printf conversions; the four pack notes filled
   with each disc's serial (`ui_str_serial`); the sheet language's default and setter; the menu
   language's rule (`ui_lang.c`, its inputs stubbed); a community translation's table (an id it has
-  not translated NULL, English at run time, at least half translated, its name in every table),
+  not translated NULL, English at run time, at least half translated, its name in every table;
+  in the Brazilian Portuguese one, rows cobra838 corrected or filled),
   the translation in force (`ui_lang_text_resolve`: the European disc in English only), Auto
   following it, the menu words over the English sheet (`ui_menu_words_language`); the Japanese
   line-break rules (`strings_complete`).

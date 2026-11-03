@@ -11,11 +11,13 @@ Translations so far:
 | --- | --- | --- |
 | Русский (bob-ttz) | Russian | bob-ttz |
 | Русский (cobra838) | Russian | cobra838 |
-| Português (Brasil) (ichagas7) | Brazilian Portuguese | Igor Chagas (ichagas7) |
+| Português (Brasil) (ichagas7) | Brazilian Portuguese | Igor Chagas (ichagas7), with corrections by cobra838 |
 
 cobra838's came as C tables in a pull request rather than the two CSV files; it was brought into
 the same two files below by hand, with the same checks. Igor Chagas's came as the two CSV files, saved
-from a spreadsheet with the template's row in its first column and his words in its third.
+from a spreadsheet with the template's row in its first column and his words in its third. cobra838
+then sent corrections and filled rows Igor had left empty (pull request 180); the ones taken are
+marked `[cobra838]` in `strings_pt_br.c`.
 
 A translation's files take the language's own name when it is the first in that language
 (`strings_pt_br.c`, `pt-br`), and the translator's beside it when there is more than one
