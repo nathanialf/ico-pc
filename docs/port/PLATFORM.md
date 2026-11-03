@@ -429,7 +429,17 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   PowerVR driver's mailbox present blocked 17-34 ms behind 21-35 ms GPU pictures (its fence waits
   0.0 ms: the present call waits for the GPU's earlier pictures), and 511 pictures for 300 frames
   left `slot waits 88 (1003.2 ms), read waits 51 (533.3 ms, longest 16.6 ms)`. Under FIFO a
-  present waits for the display by design, so only the step rule holds there.
+  present waits for the display by design, so only the step rule holds there. `PACE_RT_BEHIND`
+  holds only with the submit thread off (`PaceRtAsk.submitNs` 0 and `submitOn` false, as
+  `pace_rt_pipe_behind` reads them): with it on the present's wait blocks the submit thread, not
+  the render thread, and the next picture's first graphics call already waits for that job (or,
+  with the frame slots apart, for its own slot's fence), which the step rule's pipe predicts.
+  Before, the hold read the submit thread's present wait as the render thread's: Android's
+  defaults on a 120 Hz screen (vertical sync on, frame rate 60: no vsync lock, a mailbox, the
+  paced path) held every further present on the PowerVR phone, whose presents wait half a refresh
+  or more in most asks, so it showed about 30 pictures a second for 30 game frames
+  ([DISPLAY.md](DISPLAY.md#further-presents-and-the-game-step), `pace_loop_test`
+  `testDefaults`).
 - Pictures as made with vsync off and the frame rate uncapped (`pace_rt_as_made`: the timer path,
   no FIFO lock, the render thread on). The player expects pictures as fast as they are made, as on
   a PC with vsync off, so neither the [present allowance](DISPLAY.md#the-present-allowance) (kept

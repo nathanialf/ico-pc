@@ -2626,6 +2626,25 @@ static void testStepRule(void)
     q.presentNs = 34 * MS;
     q.paced = true;
     CHECK(pace_rt_further_ask(&q, &none) == PACE_RT_BEHIND);
+    /* the submit thread on (a job before the next picture, or the frame
+       slots apart with its job 0): the present's wait is its job's, no
+       hold by it; the step rule decides (Android's defaults on a 120 Hz
+       mailbox, vsync on with Frame rate 60: the paced path, not as made) */
+    q.submitOn = true;
+    CHECK(pace_rt_further_ask(&q, &none) == PACE_RT_GO);
+    q.submitNs = 6 * MS;
+    CHECK(pace_rt_further_ask(&q, &none) == PACE_RT_GO);
+    q.readsNs = q.pictureNs = 30 * MS;
+    CHECK(pace_rt_further_ask(&q, &none) == PACE_RT_MISS);
+    q.readsNs = MS;
+    q.pictureNs = 3 * MS;
+    q.sinceNs = MS; /* the overrun hold stays */
+    CHECK(pace_rt_further_ask(&q, &none) == PACE_RT_OVERRUN);
+    q.sinceNs = 0;
+    q.submitOn = false; /* a job of its own before the next picture: its wait */
+    CHECK(pace_rt_further_ask(&q, &none) == PACE_RT_GO);
+    q.submitNs = 0; /* the submit thread off: the render thread's own wait */
+    CHECK(pace_rt_further_ask(&q, &none) == PACE_RT_BEHIND);
     q.asMade = true;
     CHECK(pace_rt_further_ask(&q, &none) == PACE_RT_GO);
     q.readsNs = q.pictureNs = 30 * MS;

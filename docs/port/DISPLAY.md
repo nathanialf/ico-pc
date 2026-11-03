@@ -887,6 +887,27 @@ back-pressure itself (a present that returns only once the GPU finished the pict
 submit thread's job carries the wait and the plan sees it there (26 ms pictures: 376 presents in
 10 s where the picture before's fence gave 320; the GPU makes 385; no step missing its period).
 
+**The presents-behind hold reads the submit thread too.** On the paced path (vsync on with a
+mailbox, or vsync off with a cap; not as made) a further present is also held while the present
+call's wait at its recent longest is half a refresh or more (`PACE_RT_BEHIND`). That hold is for
+a blocking present on the render thread, which holds the next post's drain with it, so it
+applies only with the submit thread off, read as the pipe's fence reads it
+(`pace_rt_pipe_behind`: `submitNs` 0 and `submitOn` false). With the submit thread on the wait
+is the submit thread's job, which the next picture waits for already and the step rule predicts.
+Android's defaults are vertical sync on and frame rate 60; on a 120 Hz screen 60 is not the
+refresh, so there is no vsync lock: a mailbox present, the cap's gap of 1/60 s, the paced path.
+The PowerVR phone's presents wait half a refresh or more in most asks (a 10 s block of its log
+in stage 6 at the native picture: 703 of 1027, its present waits 5.6 ms on average, 31.8 at the
+longest), so with the hold reading every present wait as the render thread's those settings
+held every further present: the model of that block (the native 2364x1080 picture, the GPU 13.0 ms a replay, the reads 8.8 ms, the submit
+thread's job 8.3 ms, a 5.7 ms step) gives 30.1 presented fps for 30 game frames with that
+reading, 53.3 with it reading the submit thread (54.4 over 100 s, no step back-off, the fewest in
+a 10 s block 533), and 56.8 as made (vsync off, uncapped: the phone showed 60.7)
+(`pace_loop_test` `testDefaults`; `build-host/tmp/v098/evidence/fixreview2/dflt_cells.py`,
+`.out`). The phone's log says which reading the hold took: `window: step rule: the submit thread
+on (...): ..., the present's wait the submit thread's (none held for it)`, and in the game
+thread's 10 s line `0 while the presents waited for the display or the GPU`.
+
 **The decision trace.** Each further present the rule holds is traced in the log, the first 8 of
 a 10 s block and then every 100th, with every input and intermediate of `pace_rt_step_miss`
 (`pace_rt_step_trace`, `PaceRtTrace`, `pace_rt_trace_text`), every time against the next step's
