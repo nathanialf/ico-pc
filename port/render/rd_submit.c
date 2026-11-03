@@ -10,6 +10,21 @@
 static _Thread_local bool t_tickKept;
 static _Thread_local double t_tickMs;
 
+/* after rd__submit_drain's waits (or the slot ahead's, rd__submit_drain_kept) */
+static void drainKept(bool apart)
+{
+    /* a picture's first graphics call: the textures retired since the
+     * last job (rd_thread.h "retire"; a destroy's call guard waits for the
+     * submit thread where it still works) */
+    rd__thread_retire_kept();
+    if (t_tickKept && (apart || !rd_thread_submit_busy())) {
+        /* apart, the step runs now: its calls wait for the submit thread
+         * through the call guard (while the background pipelines finish) */
+        t_tickKept = false;
+        rd__pipe_finish_tick(t_tickMs);
+    }
+}
+
 void rd__submit_drain(void)
 {
     const bool apart = rd_thread_submit_apart();
@@ -26,16 +41,12 @@ void rd__submit_drain(void)
          * (rd_submit_thread.h) */
         (void)rd_thread_drain();
     }
-    /* a picture's first graphics call: the textures retired since the
-     * last job (rd_thread.h "retire"; a destroy's call guard waits for the
-     * submit thread where it still works) */
-    rd__thread_retire_kept();
-    if (t_tickKept && (apart || !rd_thread_submit_busy())) {
-        /* apart, the step runs now: its calls wait for the submit thread
-         * through the call guard (while the background pipelines finish) */
-        t_tickKept = false;
-        rd__pipe_finish_tick(t_tickMs);
-    }
+    drainKept(apart);
+}
+
+void rd__submit_drain_kept(void)
+{
+    drainKept(rd_thread_submit_apart());
 }
 
 void rd__submit_drain_acquire(void)

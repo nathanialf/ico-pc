@@ -133,7 +133,8 @@ uint32_t rd_thread_failed_presents(void);
  * for a picture's reads (RdThreadBlock.readWaitBy): the picture handed
  * over and not yet begun there (the hand-over), the job's start up to its
  * fence wait (a present's interpolation), the wait for its frame slot (the
- * submit thread's jobs of that slot and the GPU's fence), the swapchain's acquire,
+ * submit thread's jobs of that slot and the GPU's fence: a picture whose
+ * slot was not waited for ahead, rd__slot_ahead_take), the swapchain's acquire,
  * the ring and the uploads, the walk and the present's pass */
 typedef enum RdReadPhase {
     RD_READ_HANDOVER = 0,
@@ -157,6 +158,10 @@ typedef enum RdReadPhase {
  * for the end of the picture before (its submit and present: the frame's
  * close already waited for its reads), so these are that picture's present
  * call and the GPU's backlog behind it */
+/* aheads: the pictures whose job ended by waiting for the next picture's
+ * frame slot (the slot ahead, rd__slot_ahead_take: outside the hand-over), with the waits' sum
+ * and longest in ms; fenceInside: the pictures handed over that waited for
+ * their own slot inside their reads (no slot waited for ahead) */
 typedef struct RdThreadBlock {
     unsigned pictures;
     double interpMs, walkMs, submitMs, waitMs;
@@ -167,13 +172,17 @@ typedef struct RdThreadBlock {
     unsigned retired;
     unsigned freshWaits, furtherWaits;
     double freshWaitMs, furtherWaitMs;
+    unsigned aheads, fenceInside;
+    double aheadMs, aheadMaxMs;
 } RdThreadBlock;
 
 void rd_thread_block_take(RdThreadBlock *out);
 /* The block's read waits split by what the render thread was doing when
- * each began, as the window's 10 s line's clause after "read waits N
- * (...)": "; the render thread as each began: the hand-over N (X ms), ..."
- * (empty with no read wait); out always terminated */
+ * each began, and its slots waited for ahead, as the window's 10 s line's
+ * clause after "read waits N (...)": "; the render thread as each began: the hand-over N
+ * (X ms), ...; the next picture's frame slot waited for at the end of the
+ * one before N times (...), N pictures waited for their slot inside their
+ * reads" (the split left out with no read wait); out always terminated */
 void rd_thread_read_waits_text(const RdThreadBlock *b, char *out, size_t cap);
 
 /* The render thread, after a picture's job: how long the picture held the
@@ -231,9 +240,21 @@ bool rd__thread_handed(void);
  * here (RdReadPhase), for the game thread's read waits' split; nothing
  * elsewhere */
 void rd__thread_phase(RdReadPhase phase);
+/* The slot ahead: the render thread, at the end of a picture's job handed
+ * over (after its reads ended and its list went to the submit thread),
+ * waits for the next picture's frame slot (the submit thread's jobs of
+ * that slot, then rhi_wait_frame), so the next picture's reads begin
+ * without the GPU's fence wait inside them.  Not with the submit thread on
+ * and the frame slots one at a time (the wait would be the submit
+ * thread's whole job on this picture), not under ICO_RD_SLOT_AHEAD=0.
+ * rd__slot_ahead_take (rd__wait_frame, any thread: the render thread
+ * drained first elsewhere): true once when the current frame slot is the
+ * one waited for ahead, its fence and its jobs then done; false: wait as
+ * before. */
+bool rd__slot_ahead_take(void);
 /* The tests' seam (rd_tex_test): fn(at) on the render thread inside a
- * picture's open hand-over as it enters phase `at` (RdReadPhase); NULL:
- * none */
+ * picture's open hand-over as it enters phase `at` (RdReadPhase), and with
+ * at = RD_READ_PHASES in the slot ahead before its wait; NULL: none */
 void rd__thread_test_hook(void (*fn)(int at));
 /* The submit thread's time of a picture (its submit and present), for the
  * block, on the thread that took it (rd_submit_thread.c) */

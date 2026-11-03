@@ -683,10 +683,19 @@ static uint32_t s_bindEpoch = 1;
 
 void rd__wait_frame(void)
 {
-    rd__thread_phase(RD_READ_FENCE);
-    rd__submit_drain(); /* the last replay's submit, before its slot's fence (rd_submit.h) */
-    rhi_wait_frame();
+    if (rd__slot_ahead_take()) {
+        rd__submit_drain_kept(); /* the slot waited for ahead (rd_thread.h) */
+    } else {
+        rd__thread_phase(RD_READ_FENCE);
+        rd__submit_drain(); /* the last replay's submit, before its slot's fence (rd_submit.h) */
+        rhi_wait_frame();
+    }
     rd__thread_phase(RD_READ_UPLOAD);
+    s_bindEpoch++;
+}
+
+void rd__bind_epoch_next(void)
+{
     s_bindEpoch++;
 }
 
