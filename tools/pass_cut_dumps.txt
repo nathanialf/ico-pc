@@ -18,9 +18,9 @@
 /primary/dev/ico-pc/build-host/tmp/issue-drafts/deja/frame-20261013-125037-v2227.rddump
 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port/keep/rd-00720.rddump
 # the PowerVR phone's F12 frames (rc10 era, gameplay after the pause menu)
-/primary/dev/ico-pc/dist/frame-20261028-105852-v4103.zip
-/primary/dev/ico-pc/dist/frame-20261028-151709-v2199.zip
-/primary/dev/ico-pc/dist/frame-20261028-173610-v4657.zip
+/primary/dev/ico-dumps/phone/frame-20261028-105852-v4103.zip
+/primary/dev/ico-dumps/phone/frame-20261028-151709-v2199.zip
+/primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip
 # the phone's v0.10.0 rc3 F12 frame (stage 6 in play: the reduction's two
 # passes, AURA_WORK's clear, the fog's pass holding the depth's last touch)
 /primary/dev/ico-pc/build-host/tmp/v098/evidence/rc3/f12/frame-20261102-091017-v15677.rddump

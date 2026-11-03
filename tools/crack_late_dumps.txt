@@ -18,8 +18,8 @@ enh2x43 /primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261
 enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port/keep/rd-00720.rddump /primary/dev/ico-pc/build-host/tmp/v095/after/w3/pd/rd-00720-enh2x43
 # the phone's F12 frames at its Resolution Auto (baselines made by main at
 # e2484dfdd with the fill before the fog: build-host/tmp/v098/evidence/cheap/ab.sh base phone)
-phone /primary/dev/ico-pc/dist/frame-20261028-105852-v4103.zip /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/dist-frame-20261028-105852-v4103
-phone /primary/dev/ico-pc/dist/frame-20261028-173610-v4657.zip /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/dist-frame-20261028-173610-v4657
+phone /primary/dev/ico-dumps/phone/frame-20261028-105852-v4103.zip /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/dist-frame-20261028-105852-v4103
+phone /primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/dist-frame-20261028-173610-v4657
 phone /primary/dev/ico-pc/build-host/tmp/v098/evidence/rc3/frame-20261102-091017-v15677.zip /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/rc3-frame-20261102-091017-v15677
 phone /primary/dev/ico-pc/build-host/tmp/v098/evidence/rc5/frame-20261102-122555-v3347.zip /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/rc5-frame-20261102-122555-v3347
 phone /primary/dev/ico-pc/build-host/tmp/issue-drafts/deja/frame-20261013-125037-v2227.rddump /primary/dev/ico-pc/build-host/tmp/v098/evidence/cheap/base-phone/frame-20261013-125037-v2227
