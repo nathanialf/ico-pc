@@ -77,7 +77,12 @@ set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --as
 set(env_phone ICO_RD_VU_PREPASS=0 ICO_RD_FOG_PATH=local ICO_RD_DATE_PATH=stencil)
 set(args_enh2x --enhanced --aspect 4:3 --resolution 2x --present 1280x960)
 set(env_enh2x "")
-set(common ICO_RD_BLEND=fixed ICO_RD_STORE_PLAN=1 ICO_RD_STORE_POISON=1)
+# ICO_RD_FADES_FOLD=0: list 11's last sprites drawn into SCENE, as the pass-dump gate draws them.
+# With the fold (its brightness step above 1x too, rd_fades_fold.c) list 11's pass goes, and the
+# reduction's DISPLAY clear is then taken by the reduction's own pass with no barrier in between:
+# nothing is left for the carry to cut on the phone's frames (rc3's v15677 at the phone's setting:
+# 39 passes and 1 clear carried with the sprites drawn, 38 and 0 with the fold)
+set(common ICO_RD_BLEND=fixed ICO_RD_STORE_PLAN=1 ICO_RD_STORE_POISON=1 ICO_RD_FADES_FOLD=0)
 # the runs: name and the three switches (carry, skip, last)
 set(runs off carry skip last all)
 set(runsNoFill offnf lastnf)
