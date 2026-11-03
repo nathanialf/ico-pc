@@ -8,4 +8,5 @@
 
 - Turning on MSAA anti-aliasing no longer makes the game restart on NVIDIA graphics cards.
 - With Graphics API set to Direct3D 11, the shadows are worked out in a way every graphics card supports.
+- On 16:10 screens the shadows are counted in one step again.
 - On phones whose screen changes its refresh rate, the game now asks for a fixed one when a Frame rate is set.
