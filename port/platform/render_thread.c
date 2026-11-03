@@ -751,7 +751,12 @@ bool ico_render_thread_plan(IcoRtPlan *out)
     out->presentNs = __atomic_load_n(&s_rt.presentEst, __ATOMIC_RELAXED);
     out->cpuNs = __atomic_load_n(&s_rt.cpuEst, __ATOMIC_RELAXED);
     out->interpNs = __atomic_load_n(&s_rt.interpEst, __ATOMIC_RELAXED);
-    out->submitNs = rd_thread_submit_on() ? __atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED) : 0;
+    /* the submit thread's job is before the next picture only while the
+       frame slots are not apart (VKSLOTS: with them apart the next picture
+       records while the one before is ended and submitted) */
+    out->submitNs = rd_thread_submit_on() && !rd_thread_submit_slots_apart()
+                        ? __atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED)
+                        : 0;
     return true;
 }
 
