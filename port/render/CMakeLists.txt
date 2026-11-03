@@ -230,6 +230,7 @@ add_library(ico_render STATIC
     rd_water.c # block targets, aliases, camera scopes
     rd_video.c # the FMV picture (port/fmv/rd_video.h)
     rd_vis.c # the scene draws' visibility test: a draw off its target replayed as a NOP ([dev] cull)
+    rd_vis_hiz.c # its occlusion test: a draw of list 0 behind the depth written before it
     texpack_dds.c # texture packs: the DDS and PNG loaders (texpack.h)
     texpack_image.c
     texpack_png.c
@@ -528,9 +529,10 @@ target_link_libraries(rd_perf_test PRIVATE ico_render)
 # (issue 161); the fades fold's step against the GS blend, its bar rows and
 # its plan on recorded frames (the fade, the letterbox, the brightness, and
 # the frames it leaves alone).  rd_vis_test: the scene draws' visibility test
-# (rd_vis.c), CPU only: the bounds of synthetic streams, the plane test
-# under random matrices, the VU references (vu1_ref) as its oracle in both
-# rounding modes, and the shadow frame on recorded frames.
+# (rd_vis.c, rd_vis_hiz.c), CPU only: the bounds of synthetic streams, the
+# plane test under random matrices, the VU references (vu1_ref) as its
+# oracle in both rounding modes, the shadow frame on recorded frames, and the
+# occlusion test's bounds, rasterisation and verdicts.
 foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold rd_vis)
     add_executable(${_t}_test test/${_t}_test.c)
     target_compile_options(${_t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -2119,9 +2121,9 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_store_plan_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_cull_ab (test/rd_cull_ab.cmake): the scene draws' visibility test
-    # (rd_vis.c) against every draw replayed, byte for byte: the dumps of
-    # tools/occlusion_corpus.txt and tools/native_frame_dumps.txt that exist,
-    # under ICO_RD_BLEND=fixed, with ICO_RD_CULL=off and frustum, through
+    # (rd_vis.c, rd_vis_hiz.c) against every draw replayed, byte for byte: the
+    # dumps of tools/occlusion_corpus.txt and tools/native_frame_dumps.txt that
+    # exist, under ICO_RD_BLEND=fixed, with ICO_RD_CULL=off, frustum and full, through
     # --pass-dump --stats at Original 4:3 640x480, Enhanced 4:3 2x, Enhanced
     # 2x at the dump's own aspect where it is wider than 4:3, and one MSAA 4x
     # run: every target's PNG equal, the stats line read, draws skipped over
@@ -2133,7 +2135,7 @@ if(ICO_RUN_TESTS)
                      "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/native_frame_dumps.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/cull_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_cull_ab.cmake")
-    set_tests_properties(rd_cull_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    set_tests_properties(rd_cull_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 5400)
     if(_env)
         set_tests_properties(rd_cull_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()

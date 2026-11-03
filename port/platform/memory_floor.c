@@ -5,6 +5,7 @@
  */
 #include "memory_floor.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -106,4 +107,33 @@ long ico_memory_floor_setting(const char *text)
         return -2;
     }
     return v;
+}
+
+int ico_memory_floor_line_is_floor(const char *line)
+{
+    return line != NULL && strstr(line, " MB available of ") != NULL &&
+           strstr(line, ", floor ") != NULL;
+}
+
+int ico_memory_floor_retry(int prev_floor_stop, int driver, long long cache_bytes, char *why,
+                           size_t size)
+{
+    const char *words;
+    int retry = 0;
+
+    if (!prev_floor_stop) {
+        words = "the previous start did not stop at the free-memory floor";
+    } else if (driver != ICO_MEMORY_FLOOR_DRIVER_QUALCOMM) {
+        words = "not Qualcomm's own driver";
+    } else if (cache_bytes <= 0) {
+        words = "the pipeline cache file for this shader set is missing or empty (the driver's "
+                "compiler would run)";
+    } else {
+        words = "the pipeline cache file for this shader set is on disk";
+        retry = 1;
+    }
+    if (why != NULL && size > 0) {
+        snprintf(why, size, "%s", words);
+    }
+    return retry;
 }

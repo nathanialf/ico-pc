@@ -43,6 +43,8 @@
 #ifndef ICO_MEMORY_FLOOR_H
 #define ICO_MEMORY_FLOOR_H
 
+#include <stddef.h>
+
 /* the default floor's parts */
 #define ICO_MEMORY_FLOOR_PERCENT 17L
 /* the cap on Qualcomm's own driver (and a driver not known) */
@@ -81,5 +83,25 @@ const char *ico_memory_floor_rule(long setting_mb, int driver);
 /* [dev] pipeline_memory_floor_mb's value: "" or NULL (unset) or "auto" -1,
    a whole number 0 to 1048576 that number, anything else -2 (not read) */
 long ico_memory_floor_setting(const char *text);
+
+/* Issue 123: a start whose set stopped at the floor on Qualcomm's own
+ * driver makes no set at the next start (diag_host.c: the file's "set:
+ * stopped at the system's low-memory signal (<why>)" line, whose <why> for
+ * a floor stop is "N MB available of T MB, floor F MB").  The compiler's
+ * memory, not the set, is what ran the device low: with this shader set's
+ * pipeline cache file on disk and not empty the driver answers the set's
+ * creations from the cache and does not run the compiler, so that next
+ * start tries the set again (stopping at the floor again if it comes). */
+/* Whether an activity-file line of that kind names a floor stop (not the
+   system's own signal): the "MB available of" figures after the line's
+   words */
+int ico_memory_floor_line_is_floor(const char *line);
+/* The retry's decision: 1 only when the previous start stopped at the
+   floor (prev_floor_stop), the driver is Qualcomm's own, and the cache file
+   holds cache_bytes > 0 (a file that is not there or empty: a negative or
+   0 figure).  why: the decision's words for the log, either way (may be
+   NULL). */
+int ico_memory_floor_retry(int prev_floor_stop, int driver, long long cache_bytes, char *why,
+                           size_t size);
 
 #endif /* ICO_MEMORY_FLOOR_H */

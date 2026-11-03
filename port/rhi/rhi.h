@@ -25,6 +25,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "rhi_driver_version.h"
 #include "rhi_pipeline_pool.h"
 
 #ifdef RHI_BACKEND_PREFIX
@@ -783,6 +784,20 @@ typedef struct RhiLimits {
      * take the loss order's robust step (port/platform/window_host.c
      * ico_diag_set_robust_off_default) whatever the text's wording. */
     const char *driverText;
+    /* What the driver says of itself, for the Graphics driver page's
+     * last-seen line and the start-up lines (Vulkan only; the others leave
+     * these empty): driverName (VkPhysicalDeviceDriverProperties.driverName,
+     * "turnip Mesa driver", "Qualcomm Technologies Inc. Adreno Vulkan
+     * Driver"), driverVersion (the number as its vendor writes it,
+     * rhi_driver_version_text: "512.676.1", "25.3.0"), driverId (VkDriverId,
+     * 0 unknown), apiMajor and apiMinor (the Vulkan version the device is
+     * used at; 0 off Vulkan), and mesa, the version out of the driver's
+     * driverInfo when it is a Mesa driver (rhi_mesa_version_parse). */
+    const char *driverName;
+    const char *driverVersion;
+    uint32_t driverId;
+    uint32_t apiMajor, apiMinor;
+    RhiMesaVersion mesa;
     const char *robustText;
     bool robustDefaultOff;
     /* Every RHI call must come from one thread: OpenGL runs each rhi_cmd_*

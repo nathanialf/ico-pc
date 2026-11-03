@@ -797,6 +797,16 @@ void ico_diag_forget_startup_retry_env(void);
    (rhi_pipeline_cache_loaded), which the cache step deletes; path NULL
    keeps the path given before. */
 void ico_diag_set_pipeline_cache(int loaded, const char *path);
+/* the path given to ico_diag_set_pipeline_cache ("" before the window gave one) */
+const char *ico_diag_pipeline_cache_path(void);
+/* Issue 123 (memory_floor.h ico_memory_floor_retry): the previous start's
+   set stopped at the free-memory floor (its file's line carries the floor's
+   figures, not the system's signal level); valid after
+   ico_diag_startup_pipeline_set */
+int ico_diag_startup_prev_floor_stop(void);
+/* the window took the retry: this start's file does not carry the
+   previous start's "stopped" line (the set stopping again writes it) */
+void ico_diag_startup_floor_retry(void);
 /* Captures what starting the program again needs (Windows: the module
    path, GetCommandLineW and the environment block; Linux and macOS: the
    executable's path, argv and the environment's pointers), so the crash

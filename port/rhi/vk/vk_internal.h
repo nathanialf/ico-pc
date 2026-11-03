@@ -440,6 +440,10 @@ typedef struct VkrState {
     bool moltenvk;
     bool fakeMoltenvk;
     char driverVersion[32];
+    /* driverProperties.driverName and the Mesa version of its driverInfo
+     * (vkr_driver_text), for RhiLimits.driverName and .mesa */
+    char driverName[VK_MAX_DRIVER_NAME_SIZE];
+    RhiMesaVersion mesa;
     /* the driver's own "Compiler Version: ..." line from its driverInfo
      * (Qualcomm's Adreno driver writes one), "" when it has none, for
      * RhiLimits.compilerVersion (vkr_driver_text) */

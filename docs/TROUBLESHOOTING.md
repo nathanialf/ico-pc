@@ -567,6 +567,23 @@ the next start either, the game says so and the box comes back.
 later in Options > Graphics driver. See
 [Using a different graphics driver](ANDROID.md#using-a-different-graphics-driver).
 
+**"This driver package is not built for this phone's 16 KB memory pages."**
+(on a phone, after **Add a driver**) The phone uses 16 KB memory pages and
+the driver package was built for 4 KB ones, so it could not be loaded. The
+game did not add it. Download a build made for 16 KB pages (the release's
+text may say) or use another driver. See
+[Using a different graphics driver](ANDROID.md#using-a-different-graphics-driver).
+
+**The game uses the phone's own driver after the graphics stopped
+responding with a driver you added.** (on a phone) If the graphics stop responding within the first
+30 seconds of playing with a driver package, the game counts it against the
+driver: the next start uses the phone's own driver and says so, as when a
+driver does not start. The driver is not removed. To try it again, set
+**Driver** to it in Options > Graphics driver. If you report the stop,
+attach the report file: its log says how many seconds after the first
+picture it happened, and which driver and version ran
+(`gpu driver: this start runs ...`).
+
 **"The file picker could not be opened."** (on a phone, after **Add a
 driver**) The phone would not open its file picker. Copy the driver's zip
 file into `Android/data/com.defnf.icopc/files/drivers` (the `drivers` folder
@@ -909,6 +926,15 @@ driver makes the game stutter, with long stops every few seconds, while a
 newer driver from the community does not. Try a Turnip driver package:
 **Options > Graphics driver**, **Add a driver**, then set **Driver** to it
 and restart ([the steps](ANDROID.md#using-a-different-graphics-driver)).
+The log line `window: a present blocked 360 ms in the driver's present
+call` means one picture waited that long inside the phone's graphics driver
+before it could be shown: the game was not slow, the driver or the screen
+held the picture. The line `window: present calls: ...` in every 10
+second block counts those waits by size, and `window: display refresh: ...`
+says what rate the screen ran at; if the rate changes just before such a
+wait, the screen changing its refresh rate is the cause. With **Frame
+rate** set to a number the game asks the phone to hold one rate
+([the details](ANDROID.md#a-fixed-refresh-rate-for-a-frame-rate-you-set)).
 On a tablet, a high **Resolution** with Vsync off and Frame rate
 Uncapped asks the most of the driver: set **Vsync** On, or **Frame rate**
 60, and lower the **Resolution** a step. If it still stutters, play for a

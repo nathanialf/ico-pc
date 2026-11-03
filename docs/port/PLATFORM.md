@@ -2695,8 +2695,10 @@ replaced by the phone's own driver with a message box
 (`port/platform/android/gpu_driver_android.h` (`ico_gpu_driver_android_start`)). The package
 handling is pure C and tested on every platform (`port/platform/test/gpu_driver_test.c`).
 
-Add a driver ends in one of seven answers (`UI_GPU_INSTALL_*`, `port/ui/settings.h`), each its own
-popup: `ADDED`, `BAD` (the zip was read and is not a package), `NOSPACE`, `CANCELLED` (a popup that names
+Add a driver ends in one of eight answers (`UI_GPU_INSTALL_*`, `port/ui/settings.h`), each its own
+popup: `ADDED`, `BAD` (the zip was read and is not a package), `PAGES` (a library of the package has
+PT_LOAD segments aligned to less than the phone's page size on a phone with 16 KB pages: the popup holds the
+host's own English sentence, `UiGpuDriverHost.installWhy`), `NOSPACE`, `CANCELLED` (a popup that names
 the drivers folder),
 `NO_PICKER` (the picker could not be started for a reason other than a missing app, it answered
 without a file address, or there is no drivers root), `NO_PICKER_APP` (no installed app takes
@@ -2718,6 +2720,37 @@ the folder through `ico_gpu_driver_android_folder_text` (the start-up box's text
 `IcoAndroidPaths.drivers` without the internal storage root `/storage/emulated/<n>/`, as the phone's
 file apps show it), as a `%s` in the table strings (`NO_PICKER`, `NO_PICKER_APP`, `CANCELLED`,
 `NOTE_LOST`), put in by `settings.c` `fmtText` and wrapped (`UI_POPUP_TEXT` is 384 bytes).
+
+Page size check. `install_thread` passes `getpagesize()` to `ico_gpu_driver_install_zip_pages`:
+on a phone whose page is 16384 bytes or more, every file of the zip that ends in `.so` is read after it is
+unpacked into the staging folder (first 64 KB) and `ico_gpu_driver_elf_pages_ok` reads its ELF header and
+program header table (little-endian ELF32/ELF64); a PT_LOAD with `p_align` under the page size refuses the
+package with `ICO_GPU_DRIVER_PAGES_MESSAGE` and the staging folder goes. What cannot be read (not ELF, a table
+past the 64 KB, a 4 KB phone) is never refused. How Android treats a 4 KB-aligned driver loaded on 16 KB
+pages is not verified here (the research report marks it unverified): the check follows the library's
+declared alignment, which is what a 16 KB phone's loader needs. Log line: `gpu driver: the chosen file was
+not installed (memory page size N): <why>`.
+
+Last-seen lines. `ico_gpu_driver_android_device_up` writes what the device says of its driver (`RhiLimits`
+`driverName`, `driverVersion`, `driverId`, `apiMajor`/`apiMinor`, `mesa`) as `last_seen.json` in the running
+package's folder, or as `last_seen_system.json` in the drivers root for the phone's own driver
+(`ico_gpu_driver_seen_write`; the name `last_seen_system.json` is a reserved folder name), and logs `gpu driver:
+this start runs <folder|the phone's own driver>: <words> (driver ID N), <Mesa version>`. The Graphics driver
+page's `info(i)` reads them (cached until the list or a start changes them) as `ico_gpu_driver_seen_text`
+words: "Qualcomm's driver 512.676.1, Vulkan 1.3" (driver id 8, or a name with "qualcomm"), "Turnip, Mesa
+25.3.0-devel, Vulkan 1.4" (driver id 18 or "turnip"), else the name, its Mesa version or version, the Vulkan
+version and "driver ID n"; a driver never started says so. The page puts the chosen driver's line at the
+head of its note (English, as the driver names are; `settings.c` `gpuRefresh`), and drops it when it and the
+note would not fit the note's buffer.
+
+Loss in the first 30 s. `window_host.c` calls `ico_gpu_driver_android_device_lost` from `device_lost_quit`
+and from `window_gpu_hang` (the hang is treated as a loss): under a package, a loss within
+`ICO_GPU_DRIVER_LOSS_WINDOW_MS` (30 s) of the first present (`ico_gpu_driver_android_presented` stamps it) or
+before any writes the trial marker again (it went after 300 presents), so the next start falls back to the
+phone's own driver with the box like a crash inside the driver. Logged either way, once a run: `gpu driver:
+the graphics device was lost under <folder> (after the first present, N ms; inside the 30000 ms that count
+like a crash in the driver): the next start falls back ...`, or `... past the 30000 ms that count against
+the driver; the next start keeps it`.
 
 A pick that never answers ends as `CANCELLED` (`pick_watch`, called by `host_install_poll` and
 `install_busy`): `IcoActivity.onResume` counts into `ico_android_resume_count`

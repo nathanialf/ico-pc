@@ -8,7 +8,10 @@
  * unsafe ones (a path in a name, "..", a backslash, a directory, a file
  * over the size limit, no meta.json, the library missing) refused with
  * nothing left behind; the listing sorted with broken folders left out;
- * remove; the trial marker's states.
+ * remove; the trial marker's states; the ELF page-size check of a driver
+ * library (two synthetic ELF64 headers, 4 KB and 16 KB aligned, on a 4 KB
+ * and a 16 KB phone, at install too); the last-seen driver strings written,
+ * read back and put into the page's words; the loss window of the trial.
  *
  * argv[1]: a folder the test may write in (the build folder).
  */
@@ -432,6 +435,216 @@ static void test_trial(void)
     CHECK(ico_gpu_driver_trial_begin(s_root, "../x") != 0);
 }
 
+/* --- the 16 KB page check ----------------------------------------------------- */
+
+static void le(unsigned char *p, unsigned long long v, int bytes)
+{
+    for (int i = 0; i < bytes; i++) {
+        p[i] = (unsigned char)(v >> (8 * i));
+    }
+}
+
+/* a little-endian ELF64 header with a program header table of PT_LOAD
+   (twice, with the two alignments), PT_DYNAMIC after them; size 64 + 4 * 56 */
+static size_t make_elf64(unsigned char *b, unsigned long long align0, unsigned long long align1)
+{
+    memset(b, 0, 64 + 4 * 56);
+    memcpy(b, "\177ELF", 4);
+    b[4] = 2; /* 64-bit */
+    b[5] = 1; /* little-endian */
+    b[6] = 1;
+    le(b + 16, 3, 2);   /* ET_DYN */
+    le(b + 18, 183, 2); /* EM_AARCH64 */
+    le(b + 32, 64, 8);  /* e_phoff */
+    le(b + 52, 64, 2);  /* e_ehsize */
+    le(b + 54, 56, 2);  /* e_phentsize */
+    le(b + 56, 4, 2);   /* e_phnum */
+    const unsigned long long types[4] = {6 /* PT_PHDR */, 1, 1, 2 /* PT_DYNAMIC */};
+    const unsigned long long aligns[4] = {8, align0, align1, 8};
+    for (int i = 0; i < 4; i++) {
+        unsigned char *ph = b + 64 + i * 56;
+        le(ph, types[i], 4);
+        le(ph + 48, aligns[i], 8);
+    }
+    return 64 + 4 * 56;
+}
+
+static void test_pages(void)
+{
+    unsigned char e4k[300], e16k[300], e16kMixed[300];
+    const size_t n4 = make_elf64(e4k, 0x1000, 0x1000);
+    const size_t n16 = make_elf64(e16k, 0x4000, 0x10000);
+    make_elf64(e16kMixed, 0x4000, 0x1000); /* one segment still 4 KB aligned */
+    unsigned long long least = 99;
+
+    /* the 4 KB library: refused on 16 KB pages, fine on 4 KB pages */
+    CHECK(ico_gpu_driver_elf_pages_ok(e4k, n4, 16384, &least) == 0 && least == 0x1000);
+    CHECK(ico_gpu_driver_elf_pages_ok(e4k, n4, 4096, &least) == 1 && least == 0x1000);
+    CHECK(ico_gpu_driver_elf_pages_ok(e4k, n4, 0, NULL) == 1);
+    /* the 16 KB library (and a 64 KB one): fine on both */
+    CHECK(ico_gpu_driver_elf_pages_ok(e16k, n16, 16384, &least) == 1 && least == 0x4000);
+    CHECK(ico_gpu_driver_elf_pages_ok(e16k, n16, 4096, NULL) == 1);
+    /* one 4 KB segment among 16 KB ones is enough to refuse */
+    CHECK(ico_gpu_driver_elf_pages_ok(e16kMixed, n16, 16384, &least) == 0 && least == 0x1000);
+    /* what cannot be read is not refused: not ELF, big-endian, a table past
+       the bytes given, too short, NULL */
+    CHECK(ico_gpu_driver_elf_pages_ok(k_lib, sizeof(k_lib), 16384, NULL) == 1);
+    CHECK(ico_gpu_driver_elf_pages_ok(e4k, 40, 16384, NULL) == 1);
+    CHECK(ico_gpu_driver_elf_pages_ok(e4k, 64 + 56, 16384, NULL) == 1);
+    CHECK(ico_gpu_driver_elf_pages_ok(NULL, 0, 16384, NULL) == 1);
+    {
+        unsigned char be[300];
+        memcpy(be, e4k, n4);
+        be[5] = 2;
+        CHECK(ico_gpu_driver_elf_pages_ok(be, n4, 16384, NULL) == 1);
+    }
+
+    /* at install: the library and every other .so of the package */
+    {
+        char folder[160], zip[1200], why[256];
+        const Entry old4k[] = {{"meta.json", k_meta, sizeof(k_meta) - 1},
+                               {"vulkan.ad07XX.so", e4k, n4}};
+        CHECK(write_zip("pages.zip", old4k, 2, zip, sizeof(zip)) == 0);
+        const int before = files_under_root();
+        CHECK(ico_gpu_driver_install_zip_pages(s_root, zip, 34, 16384, folder, sizeof(folder), why,
+                                               sizeof(why)) == ICO_GPU_DRIVER_BAD);
+        CHECK(strcmp(why, ICO_GPU_DRIVER_PAGES_MESSAGE) == 0);
+        CHECK(strstr(why, "16 KB memory pages") != NULL && folder[0] == '\0');
+        CHECK(files_under_root() == before); /* nothing left behind */
+        /* the same package on a 4 KB phone (and with the plain call) installs */
+        CHECK(ico_gpu_driver_install_zip_pages(s_root, zip, 34, 4096, folder, sizeof(folder), why,
+                                               sizeof(why)) == ICO_GPU_DRIVER_OK);
+        CHECK(ico_gpu_driver_install_zip(s_root, zip, 34, folder, sizeof(folder), why,
+                                         sizeof(why)) == ICO_GPU_DRIVER_OK);
+        const Entry new16k[] = {{"meta.json", k_meta, sizeof(k_meta) - 1},
+                                {"vulkan.ad07XX.so", e16k, n16}};
+        CHECK(write_zip("pages16.zip", new16k, 2, zip, sizeof(zip)) == 0);
+        CHECK(ico_gpu_driver_install_zip_pages(s_root, zip, 34, 16384, folder, sizeof(folder), why,
+                                               sizeof(why)) == ICO_GPU_DRIVER_OK);
+        /* a helper library with 4 KB alignment is refused too */
+        const Entry dep4k[] = {{"meta.json", k_meta, sizeof(k_meta) - 1},
+                               {"vulkan.ad07XX.so", e16k, n16},
+                               {"notgsl.so", e4k, n4}};
+        CHECK(write_zip("pagesdep.zip", dep4k, 3, zip, sizeof(zip)) == 0);
+        CHECK(ico_gpu_driver_install_zip_pages(s_root, zip, 34, 16384, folder, sizeof(folder), why,
+                                               sizeof(why)) == ICO_GPU_DRIVER_BAD);
+        CHECK(ico_gpu_driver_install_zip_pages(s_root, zip, 34, 4096, folder, sizeof(folder), why,
+                                               sizeof(why)) == ICO_GPU_DRIVER_OK);
+    }
+}
+
+/* --- what a driver was last seen to be ------------------------------------------ */
+
+static void test_seen(void)
+{
+    IcoGpuDriverSeen w, r;
+    char t[256];
+
+    /* Qualcomm's own driver, as the Retroid Pocket 6's log writes it */
+    memset(&w, 0, sizeof(w));
+    snprintf(w.name, sizeof(w.name), "Qualcomm Technologies Inc. Adreno Vulkan Driver");
+    snprintf(w.version, sizeof(w.version), "512.676.1");
+    w.driverId = 8;
+    w.vulkanMajor = 1;
+    w.vulkanMinor = 3;
+    w.known = 1;
+    CHECK(ico_gpu_driver_seen_read(s_root, NULL, &r) == 0 && !r.known);
+    CHECK(ico_gpu_driver_seen_write(s_root, NULL, &w) == 0);
+    CHECK(exists(s_root, "last_seen_system.json") && !exists(s_root, "last_seen_system.json.tmp"));
+    CHECK(ico_gpu_driver_seen_read(s_root, NULL, &r) == 1 && r.known);
+    CHECK(strcmp(r.name, w.name) == 0 && strcmp(r.version, "512.676.1") == 0 && r.driverId == 8);
+    CHECK(r.vulkanMajor == 1 && r.vulkanMinor == 3 && r.mesa[0] == '\0');
+    ico_gpu_driver_seen_text(&r, t, sizeof(t));
+    CHECK(strcmp(t, "Qualcomm's driver 512.676.1, Vulkan 1.3") == 0);
+
+    /* Turnip in an installed package's folder (Mesa 25.3.0-devel) */
+    memset(&w, 0, sizeof(w));
+    snprintf(w.name, sizeof(w.name), "turnip Mesa driver");
+    snprintf(w.version, sizeof(w.version), "25.3.0");
+    snprintf(w.mesa, sizeof(w.mesa), "Mesa 25.3.0-devel");
+    w.driverId = 18;
+    w.vulkanMajor = 1;
+    w.vulkanMinor = 4;
+    w.known = 1;
+    CHECK(ico_gpu_driver_seen_read(s_root, "Turnip-24.1", &r) == 0);
+    CHECK(ico_gpu_driver_seen_write(s_root, "Turnip-24.1", &w) == 0);
+    CHECK(exists(s_root, "Turnip-24.1/last_seen.json"));
+    CHECK(ico_gpu_driver_seen_read(s_root, "Turnip-24.1", &r) == 1);
+    CHECK(strcmp(r.mesa, "Mesa 25.3.0-devel") == 0 && r.driverId == 18);
+    ico_gpu_driver_seen_text(&r, t, sizeof(t));
+    CHECK(strcmp(t, "Turnip, Mesa 25.3.0-devel, Vulkan 1.4") == 0);
+    /* the system driver's file is another file */
+    CHECK(ico_gpu_driver_seen_read(s_root, NULL, &r) == 1 && r.driverId == 8);
+    /* a Turnip that names no Mesa version shows its number */
+    w.mesa[0] = '\0';
+    ico_gpu_driver_seen_text(&w, t, sizeof(t));
+    CHECK(strcmp(t, "Turnip, 25.3.0, Vulkan 1.4") == 0);
+    /* any other driver: name, version, Vulkan, id */
+    memset(&w, 0, sizeof(w));
+    snprintf(w.name, sizeof(w.name), "Mali-G610");
+    snprintf(w.version, sizeof(w.version), "44.0.1");
+    w.driverId = 12;
+    w.vulkanMajor = 1;
+    w.vulkanMinor = 1;
+    w.known = 1;
+    ico_gpu_driver_seen_text(&w, t, sizeof(t));
+    CHECK(strcmp(t, "Mali-G610, 44.0.1, Vulkan 1.1, driver ID 12") == 0);
+    /* not known: empty; a short buffer is cut and terminated */
+    memset(&r, 0, sizeof(r));
+    ico_gpu_driver_seen_text(&r, t, sizeof(t));
+    CHECK(t[0] == '\0');
+    ico_gpu_driver_seen_text(&w, t, 10);
+    CHECK(strlen(t) < 10);
+    /* quotes and backslashes in a name survive; a bad folder is refused;
+       a damaged file and a file without a name read as not seen */
+    memset(&w, 0, sizeof(w));
+    snprintf(w.name, sizeof(w.name), "odd \"name\" \\ here");
+    w.known = 1;
+    CHECK(ico_gpu_driver_seen_write(s_root, NULL, &w) == 0);
+    CHECK(ico_gpu_driver_seen_read(s_root, NULL, &r) == 1 && strcmp(r.name, w.name) == 0);
+    CHECK(ico_gpu_driver_seen_write(s_root, "../x", &w) != 0);
+    CHECK(ico_gpu_driver_seen_write(s_root, "last_seen_system.json", &w) != 0);
+    write_file(s_root, "last_seen_system.json", "{not json");
+    CHECK(ico_gpu_driver_seen_read(s_root, NULL, &r) == 0 && !r.known);
+    write_file(s_root, "last_seen_system.json", "{\"version\": \"1\"}");
+    CHECK(ico_gpu_driver_seen_read(s_root, NULL, &r) == 0);
+    /* neither file lists as a driver, and a folder named like the system
+       file cannot be installed */
+    {
+        IcoGpuDriver d[8];
+        const int n = ico_gpu_driver_list(s_root, d, 8);
+        for (int i = 0; i < n; i++) {
+            CHECK(strcmp(d[i].folder, "last_seen_system.json") != 0);
+        }
+        CHECK(!ico_gpu_driver_folder_ok("last_seen_system.json"));
+    }
+}
+
+/* --- the loss window ----------------------------------------------------------- */
+
+static void test_loss(void)
+{
+    /* a loss under a package within 30 s of the first present counts */
+    CHECK(ico_gpu_driver_loss_counts(1, 0));
+    CHECK(ico_gpu_driver_loss_counts(1, 12000));
+    CHECK(ico_gpu_driver_loss_counts(1, ICO_GPU_DRIVER_LOSS_WINDOW_MS - 1));
+    CHECK(!ico_gpu_driver_loss_counts(1, ICO_GPU_DRIVER_LOSS_WINDOW_MS));
+    CHECK(!ico_gpu_driver_loss_counts(1, 600000));
+    /* the phone's own driver: never */
+    CHECK(!ico_gpu_driver_loss_counts(0, 0));
+    CHECK(!ico_gpu_driver_loss_counts(0, 5000));
+    CHECK(ICO_GPU_DRIVER_LOSS_WINDOW_MS == 30000ull);
+    /* what the start does with it: the marker written again after the
+       300-present trial removed it makes the next start see a crash */
+    ico_gpu_driver_trial_ok(s_root);
+    CHECK(!ico_gpu_driver_trial_crashed(s_root, "Turnip-24.1"));
+    if (ico_gpu_driver_loss_counts(1, 12000)) {
+        CHECK(ico_gpu_driver_trial_begin(s_root, "Turnip-24.1") == 0);
+    }
+    CHECK(ico_gpu_driver_trial_crashed(s_root, "Turnip-24.1"));
+    ico_gpu_driver_trial_ok(s_root);
+}
+
 /* --- cleanup ----------------------------------------------------------------- */
 
 static int rm_cb(const char *path, const char *name, void *user)
@@ -473,6 +686,9 @@ int main(int argc, char **argv)
     test_list();
     test_list_zips();
     test_trial();
+    test_pages();
+    test_seen();
+    test_loss();
 
     if (failures == 0) {
         rm_tree(s_work);
