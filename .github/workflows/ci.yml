@@ -426,6 +426,11 @@ jobs:
   linux-arm64:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
+    # contents: write for this job alone: a tag run attaches the arm64
+    # packages to the tag's release (the step "Attach the linux-arm64
+    # package to the release"); the workflow's own permissions stay read
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -541,6 +546,47 @@ jobs:
             build-host/pkg-linux-arm64-${{ inputs.tag || github.ref_name }}.log
           retention-days: 30
           if-no-files-found: error
+
+      # A pushed release tag: the six files above go onto the GitHub release
+      # of that tag as well (README.md lists them for every release). The
+      # release is made by hand from the maintainer's local packages, usually
+      # before this run ends: the step waits up to 20 minutes for it, then
+      # fails saying so (the artifact above still holds the files).
+      # --clobber replaces files a re-run or a hand upload put there.
+      - name: Attach the linux-arm64 package to the release (release tags only)
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          command -v gh > /dev/null || { echo "no gh on the runner: attach the artifact's files by hand"; exit 1; }
+          files=(dist/ico-pc-$TAG-linux-arm64.tar.gz dist/ico-pc-$TAG-linux-arm64.tar.gz.sha256
+                 dist/ico-pc-$TAG-linux-arm64-portable.tar.gz dist/ico-pc-$TAG-linux-arm64-portable.tar.gz.sha256
+                 dist/ico-pc-$TAG-linux-aarch64.AppImage dist/ico-pc-$TAG-linux-aarch64.AppImage.sha256)
+          for f in "${files[@]}"; do test -f "$f" || { echo "missing $f"; exit 1; }; done
+          waited=0
+          until gh release view "$TAG" > /dev/null 2>&1; do
+            if [ $waited -ge 1200 ]; then
+              echo "::error::no GitHub release named $TAG after 20 minutes: create it, then re-run this job or download the artifact ico-pc-$TAG-linux-arm64 and run: gh release upload $TAG <its six files> --clobber"
+              exit 1
+            fi
+            echo "waiting for the release $TAG (${waited} s)"
+            sleep 30; waited=$((waited + 30))
+          done
+          gh release upload "$TAG" "${files[@]}" --clobber
+          echo "attached to $TAG:"; printf '  %s\n' "${files[@]}"
+
+      # A dispatched run (the arm64 package of a tag whose own run failed a
+      # test): its release may not exist yet, so nothing is attached; the
+      # command to attach the artifact's files is printed instead.
+      - name: The command that attaches the dispatched package
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          echo "download the artifact ico-pc-$TAG-linux-arm64 of this run, then:"
+          echo "gh -R ${{ github.repository }} release upload $TAG ico-pc-$TAG-linux-arm64.tar.gz ico-pc-$TAG-linux-arm64.tar.gz.sha256 ico-pc-$TAG-linux-arm64-portable.tar.gz ico-pc-$TAG-linux-arm64-portable.tar.gz.sha256 ico-pc-$TAG-linux-aarch64.AppImage ico-pc-$TAG-linux-aarch64.AppImage.sha256 --clobber"
 
   # The Android APK (arm64-v8a), debug-signed, built with the Gradle project in
   # android/ and checked structurally; the game is not run. The toolchain

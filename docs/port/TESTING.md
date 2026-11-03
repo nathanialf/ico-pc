@@ -740,7 +740,7 @@ Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay op
 | `ci.yml` | `tests` | `ubuntu-24.04` | eleven runners: the `linux-x64` headless, `linux-x64` window and `linux-x64-clang` suites in 2 shards each, `asan` in 3, `fptrap` in 2; each builds its preset's `all tests` and runs one shard of its `ctest` ([below](#the-ci-shards)) |
 | `ci.yml` | `windows` | `windows-2022` | after `linux`: the renderer's tests from the `win-x64` build on Direct3D 11 through WARP, the debug layer tried ([above](#the-render-suite-on-direct3d-11-warp)) |
 | `ci.yml` | `extra` | `ubuntu-24.04` | the `win-x64-clang` cross build |
-| `ci.yml` | `linux-arm64` | `ubuntu-24.04-arm` | the no-disc-data check, the `linux-arm64` preset with `ctest`, the filtered-pixel render tests in a step that does not gate, the arm64 package on release tags |
+| `ci.yml` | `linux-arm64` | `ubuntu-24.04-arm` | the no-disc-data check, the `linux-arm64` preset with `ctest`, the filtered-pixel render tests in a step that does not gate, the arm64 package on release tags (kept as an artifact and attached to the tag's release) |
 | `ci.yml` | `android` | `ubuntu-24.04` | the debug APK (`assembleDebug`), `tools/check_android_flags.sh`, the APK structure checks |
 | `ios.yml` | `build`, `publish` | `macos-15`, `ubuntu-24.04` | the unsigned iPhone IPA for a published release, attached to it |
 | `ios.yml` | `build-macos`, `publish-macos` | `macos-15`, `ubuntu-24.04` | the macOS app for a published release, attached to it |
@@ -822,4 +822,11 @@ sequence:
    `linux-arm64` is the longest job. The release waits for main's run to finish green, every job
    counted.
 6. **The release.** The packages from the release commit, the tag, `gh release create`; the
-   tag's own run adds the arm64 packages ([../BUILDING.md](../BUILDING.md#packages)).
+   tag's own run adds the arm64 packages ([../BUILDING.md](../BUILDING.md#packages)): its
+   `linux-arm64` job keeps the six files (`linux-arm64.tar.gz`, `linux-arm64-portable.tar.gz`,
+   `linux-aarch64.AppImage`, each with its `.sha256`) as the run's artifact and attaches them to
+   the tag's release with `gh release upload --clobber` (`contents: write` for that job only). It
+   waits up to 20 minutes for the release to exist and then fails, saying so: create the release
+   before the tag's run reaches its packaging, or re-run the job after. A dispatched run
+   (`gh workflow run ci.yml -f tag=<tag>`) attaches nothing and prints the upload command for its
+   artifact's files.
