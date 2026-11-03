@@ -205,6 +205,9 @@
  *             (the load screen's bars at a change of layout) is drawn once,
  *             whole; other geometry or state still cross-fades
  *             (rd_interp_bars_test.inc)
+ *   memo      a stream's same-shape answer and a skinned mesh's pivots
+ *             kept while its serial holds, made again after a rewrite
+ *             (rd_interp_mesh.c; rd_interp_memo_test.inc)
  */
 #include <math.h>
 #include <stdio.h>
@@ -5870,6 +5873,7 @@ static void testNativeWidths(void)
 }
 
 #include "rd_interp_seams_test.inc"
+#include "rd_interp_memo_test.inc"
 
 static void runCpu(void)
 {
@@ -5916,6 +5920,7 @@ static void runCpu(void)
     testStillSeams();
     testStillSeamsAlpha0();
     testSeamsSizeTail();
+    testStreamMemos();
 }
 
 /* ------------------------------------------------------ the ticks' eyes

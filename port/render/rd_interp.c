@@ -843,84 +843,10 @@ static bool sameQw4(const float (*a)[4], const float (*b)[4], int at)
     return memcmp(a[at], b[at], 4 * 4 * sizeof(float)) == 0;
 }
 
-/* The pivots the rotations turn about.  A skinned draw's bone is the
- * node times the cluster (bind) inverse, so its translation is not the
- * joint: blended about it, a turning limb would leave its joint.  Each
- * bone's pivot is the weighted centroid of the mesh vertices bound to it
- * (the stream's weight qword: VU address bone * 4 + 16 and weight, twice);
- * a rigid mesh's is its vertices' centroid.  Both in the mesh's space, so
- * the part's middle follows the straight line between its two ticks, as an
- * element-wise blend has it, and the turn is blended about it. */
-#define RD_INTERP_BONES 60
-
-static double s_pivot[RD_INTERP_BONES][4]; /* x, y, z, weight */
-
-static uint32_t s_pivotMesh;
-
-static void skinPivots(uint32_t meshId)
-{
-    if (meshId == s_pivotMesh) {
-        return;
-    }
-    memset(s_pivot, 0, sizeof(s_pivot));
-    s_pivotMesh = meshId;
-    const RdMeshRec *m = rd__mesh_rec(meshId);
-    if (!m || !m->vu || m->qwPerVertex != RD_VU_QW_SKIN || !m->stream) {
-        return;
-    }
-    for (uint32_t v = 0; v < m->vertexCount; v++) {
-        const float *pos = m->stream[(size_t)v * RD_VU_QW_SKIN];
-        const float *wt = m->stream[(size_t)v * RD_VU_QW_SKIN + 2];
-        for (int k = 0; k < 2; k++) {
-            uint32_t addr;
-            memcpy(&addr, &wt[k * 2], 4);
-            const float w = wt[k * 2 + 1];
-            if (addr < 16u || ((addr - 16u) & 3u) != 0u || (addr - 16u) / 4u >= RD_INTERP_BONES ||
-                !(w > 0.0f) || !isfinite(pos[0]) || !isfinite(pos[1]) || !isfinite(pos[2])) {
-                continue;
-            }
-            double *pv = s_pivot[(addr - 16u) / 4u];
-            pv[0] += w * pos[0];
-            pv[1] += w * pos[1];
-            pv[2] += w * pos[2];
-            pv[3] += w;
-        }
-    }
-    for (int b = 0; b < RD_INTERP_BONES; b++) {
-        if (s_pivot[b][3] > 0.0) {
-            for (int k = 0; k < 3; k++) {
-                s_pivot[b][k] /= s_pivot[b][3];
-            }
-        }
-    }
-}
-
-/* a rigid mesh's vertex centroid; false without vertices */
-static bool meshCentroid(uint32_t meshId, double out[3])
-{
-    const RdMeshRec *m = rd__mesh_rec(meshId);
-    if (!m || !m->vu || !m->stream || m->vertexCount == 0 || m->qwPerVertex == 0) {
-        return false;
-    }
-    double s[3] = {0.0, 0.0, 0.0};
-    uint32_t n = 0;
-    for (uint32_t v = 0; v < m->vertexCount; v++) {
-        const float *pos = m->stream[(size_t)v * m->qwPerVertex];
-        if (isfinite(pos[0]) && isfinite(pos[1]) && isfinite(pos[2])) {
-            s[0] += pos[0];
-            s[1] += pos[1];
-            s[2] += pos[2];
-            n++;
-        }
-    }
-    if (n == 0) {
-        return false;
-    }
-    for (int k = 0; k < 3; k++) {
-        out[k] = s[k] / n;
-    }
-    return true;
-}
+/* The pivots the rotations turn about (rd_interp_mesh.c
+ * rd__interp_skin_pivots, rd__interp_mesh_centroid: a bone's the weighted
+ * centroid of the vertices bound to it, a rigid mesh's its vertices'
+ * centroid, in the mesh's space) */
 
 /* A bone (4 qwords, affine) blended as a rotation; false: left to the
  * element-wise blend */
@@ -2830,7 +2756,7 @@ static int s_sizeTail;
  * Between ticks a blended draw's block is a function of both ticks' blocks
  * and of its mesh: the element-wise blend of the two re-based blocks, then
  * rotateModel's composition C(t) W(t), whose turn of W is about the mesh's
- * own centroid (meshCentroid), while a draw that is cur's (unmatched,
+ * own centroid (rd__interp_mesh_centroid), while a draw that is cur's (unmatched,
  * jumped, unkeyed) takes cur's block through the blended camera
  * (camCurDraw).  Two pieces with the same model rows at both ticks can come
  * out with model rows that differ in their last bits (another pivot, or the
@@ -3079,7 +3005,7 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
         memcpy(vo[4], vcs[4], 24 * sizeof(vo[0]));
     } else if (cc->type == RDC_MESH && isNormalProg(cc->b[0]) && rot) {
         double centre[3];
-        const bool hasCentre = meshCentroid(cc->u[0], centre);
+        const bool hasCentre = rd__interp_mesh_centroid(cc->u[0], centre);
         s_rotated |= rotateModel(vo, vp, (const float (*)[4])vc, t, hasCentre ? centre : NULL,
                                  cc->b[0] == RD_PROG_LIT || cc->b[0] == RD_PROG_LIT_SPEC);
         s_drawTurn = fmax(s_drawTurn, s_turnDeg);
@@ -3087,15 +3013,16 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     if (hc.boneQw) {
         float tmp[4], cb[4][4];
         uint32_t q = 0;
+        const double (*pivots)[4] = NULL;
         if (rot && cc->type == RDC_SKINNED) {
-            skinPivots(cc->u[0]);
+            pivots = rd__interp_skin_pivots(cc->u[0]);
         }
         for (; rot && cc->type == RDC_SKINNED && q + 4 <= hc.boneQw; q += 4) {
             memcpy(cb, bo[q], sizeof(cb));
             if (sameQw4(bp + q, (const float (*)[4])cb, 0)) {
                 continue;
             }
-            const double *pv = q / 4u < RD_INTERP_BONES ? s_pivot[q / 4u] : NULL;
+            const double *pv = pivots && q / 4u < RD_INTERP_BONES ? pivots[q / 4u] : NULL;
             if (pv && pv[3] > 0.0 &&
                 rotateBone(bo + q, bp + q, (const float (*)[4])cb, t, pv, q / 4u)) {
                 s_rotated = 1;
@@ -4219,8 +4146,8 @@ static bool morphDraw(RdCmd *o, const RdFrame *prev, const RdCmd *pc, const RdFr
     if (pc && prev && t < 1.0f) {
         const RdMeshRec *mp = rd__mesh_rec(pc->u[0]);
         ps = mp ? rd__mesh_stream_at(mp, prev->number) : NULL;
-        if (ps == cs || (ps && memcmp(ps, cs, size) == 0)) {
-            ps = NULL; /* the same shape: nothing to blend */
+        if (ps && rd__interp_streams_same(pc->u[0], mp, ps, o->u[0], mc, cs, size)) {
+            ps = NULL; /* the same shape: nothing to blend (kept, rd_interp_mesh.c) */
         }
     }
     if (!ps && cs == (const float (*)[4])mc->stream) {
@@ -5819,7 +5746,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     s_lightRot = 0;
     s_turnFull = 0;
     s_lightPair = s_placed = s_gridSt = s_gridStCam = 0;
-    s_pivotMesh = 0; /* the pivots are recomputed per present */
+    rd__interp_pivots_present(); /* the last mesh's pivots asked again (rd_interp_mesh.c) */
     s_scrMix = 0;
     if (s_track) {
         memset(s_ord, 0, sizeof(s_ord));

@@ -927,6 +927,25 @@ typedef struct RdMeshRec {
 const float (*rd__mesh_stream_at(const RdMeshRec *m, uint32_t frame))[4];
 /* m's stream was written: a new RdMeshRec.streamSerial */
 void rd__mesh_stream_written(RdMeshRec *m);
+/* rd_interp_mesh.c: what the interpolation reads from a stream alone, kept
+ * while its serial is the same.
+ *   rd__interp_skin_pivots: skinned mesh meshId's bone pivots (x, y, z,
+ *     weight; weight 0: none), RD_INTERP_BONES of them; valid to the next
+ *     call; rd__interp_pivots_present at every present
+ *   rd__interp_mesh_centroid: a rigid mesh's vertex centroid; false without
+ *     vertices
+ *   rd__interp_streams_same: prev's stream ps (mesh pMesh, record mp) and
+ *     cur's cs (cMesh, mc) hold the same size bytes (memcmp's answer, kept
+ *     per both meshes, serials and buffers); rd__interp_streams_counts:
+ *     since start, the comparisons made and the answers kept (tests) */
+#define RD_INTERP_BONES 60
+const double (*rd__interp_skin_pivots(uint32_t meshId))[4];
+void rd__interp_pivots_present(void);
+bool rd__interp_mesh_centroid(uint32_t meshId, double out[3]);
+bool rd__interp_streams_same(uint32_t pMesh, const RdMeshRec *mp, const float (*ps)[4],
+                             uint32_t cMesh, const RdMeshRec *mc, const float (*cs)[4],
+                             size_t size);
+void rd__interp_streams_counts(uint32_t *compared, uint32_t *kept);
 
 #define RD_MAX_MESHES 16384
 

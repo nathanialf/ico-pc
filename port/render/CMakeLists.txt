@@ -186,6 +186,7 @@ add_library(ico_render STATIC
     rd_frame.c
     rd_fx_plan.c # the frame-size post sprites' plan: fixed-function forms, local read
     rd_interp.c # interpolation between the retained frames
+    rd_interp_mesh.c # the interpolation's reads of a mesh's stream, kept while it is unchanged
     rd_reshow.c # a between-tick picture the same as the last rendered one's is shown again
     rd_glow_hold.c # the between-tick presents paste the glow of the tick's first present
     rd_join.c
