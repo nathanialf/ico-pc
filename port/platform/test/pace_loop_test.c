@@ -2245,6 +2245,15 @@ static struct {
        and each step kind's mean and one deviation) in the window's rule
        too: the comparison's "before" (testRc11) */
     bool maxEst;
+    /* the present call's wait of each picture (cycled by the picture's
+       number; 0 entries: the load's presentBase), its time inside the
+       submit thread's job; and the pipe's fence as before PACE5
+       (oldBehind: the picture before's whenever the presents' wait is half
+       a refresh or more, the submit thread on or off; else
+       pace_rt_pipe_behind) */
+    const uint64_t *presentSeq;
+    unsigned presentSeqN;
+    bool oldBehind;
 } s_rtGame;
 
 /* The render thread's estimates as render_thread.c keeps them, folded when
@@ -2345,6 +2354,10 @@ typedef struct RtRun {
        (from the start), the most in a 10 s block (600 steps), and the
        fewest presents in a block; the margin's widenings in all */
     unsigned overFloor, strict, strictBlockMax, blockPresentsMin, widens;
+    /* the asks that reached the step rule (pace_policy.h PaceRtTrace), the
+       holds by its test, the asks whose pipe waited for the picture
+       before's fence */
+    unsigned asks, byNext, byAfter, fenceBefore;
 } RtRun;
 
 /* rtTimerLoopSplit with RT_STEP / RT_ASMADE (the window's rule: the step's
@@ -2513,7 +2526,25 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     q.gpuNs = gpuNs;
                     q.paced = true;
                     q.asMade = mode == RT_ASMADE;
-                    why = pace_rt_further_ask(&q, &pipe);
+                    {
+                        PaceRtTrace tr;
+
+                        why = pace_rt_further_trace(&q, &pipe, &tr);
+                        if (s_rtGame.oldBehind && why != PACE_RT_OVERRUN && why != PACE_RT_BEHIND) {
+                            /* the pipe as before PACE5 */
+                            why = pace_rt_step_trace(
+                                      &q, &pipe, pace_rt_busy_left(q.nowNs, q.sinceNs, q.pictureNs),
+                                      pace_rt_behind(q.presentNs, q.refreshNs), &tr)
+                                      ? PACE_RT_MISS
+                                      : PACE_RT_GO;
+                        }
+                        if (why == PACE_RT_GO || why == PACE_RT_MISS) {
+                            r.asks++;
+                            r.byNext += tr.test == PACE_RT_TEST_NEXT ? 1u : 0u;
+                            r.byAfter += tr.test == PACE_RT_TEST_AFTER ? 1u : 0u;
+                            r.fenceBefore += tr.fenceBefore ? 1u : 0u;
+                        }
+                    }
                 } else if (!old && mode != RT_NONE && E.whole != 0) {
                     why = pace_rt_further_hold(t, deadline, L->stepNs, rFree > t ? rStart : 0,
                                                E.reads, E.whole, E.present, refresh,
@@ -2606,7 +2637,10 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     block = back > end ? back - end : 0;
                     sFree = end + block;
                     rPresent = sPresent; /* the one finished before this job ends */
-                    sPresent = L->presentBase + block;
+                    sPresent = (s_rtGame.presentSeqN != 0
+                                    ? s_rtGame.presentSeq[made % s_rtGame.presentSeqN]
+                                    : L->presentBase) +
+                               block;
                     rSub = sSub; /* and its job */
                     sSub = pRest + block;
                 }
@@ -2622,9 +2656,13 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     q.interpNs = s_rtGame.interpSeqN != 0 ? E.interp : interpNs;
                     q.gpuNs = gpuNs;
                     q.submitNs = E.sub;
+                    q.presentNs = E.present;
+                    q.refreshNs = refresh;
                     pace_rt_pipe_post(&pipe,
-                                      pace_rt_pipe_reads_end(&pipe, rStart, &q,
-                                                             pace_rt_behind(E.present, refresh)),
+                                      pace_rt_pipe_reads_end(
+                                          &pipe, rStart, &q,
+                                          s_rtGame.oldBehind ? pace_rt_behind(E.present, refresh)
+                                                             : pace_rt_pipe_behind(&q)),
                                       &q);
                 }
                 if (block > 0 && k >= 60) {
@@ -2955,9 +2993,13 @@ static void testSubmitThread(void)
      4. vsync off on the PowerVR phone (a mailbox whose present returns
         once the GPU finished the picture before): the present's block on
         the submit thread, the render thread's wait for it inside the next
-        picture's reads; 26 ms GPU pictures give 320 (the GPU's 385 less
-        the pictures whose wait would make a step miss), as the BEHIND hold
-        gave; every frame shown, no step missing its period.
+        picture's reads; 26 ms GPU pictures give 376 (the GPU's 385 less
+        the pictures whose wait would make a step miss; PACE5, build-host/
+        tmp/v098/evidence/pace5/c_cells.out: the submit thread on, the
+        present's wait is its job's and the fences stay at two in flight,
+        pace_policy.h pace_rt_pipe_behind; with the picture before's fence
+        whenever the present waited half a refresh, 320, as the BEHIND hold
+        gave); every frame shown, no step missing its period.
    Frame rate Original makes no further present (window_present.c returns
    before the loop; pace_policy_test testOriginalLoop) */
 static void testStepRule(void)
@@ -3035,8 +3077,9 @@ static void testStepRule(void)
         const RtRun before = rtTimerLoopRule(600, &L, RT_HOLDS, 2 * MS, false);
 
         rtPrint("vsync off, uncapped: pictures as made, the PowerVR mailbox, 26 ms GPU", &asMade);
-        CHECK(asMade.presents + 3u >= 320u && asMade.presents <= 323u);
+        CHECK(asMade.presents + 3u >= 376u && asMade.presents <= 379u);
         CHECK(asMade.presents + 3u >= before.presents && before.behind > 0);
+        CHECK(asMade.fenceBefore == 0 && asMade.lateMax <= NTSC - 9 * MS / 2);
         CHECK(asMade.behind == 0 && asMade.misses == 0 && asMade.shown == asMade.frames);
         CHECK(asMade.blocked > 0 && asMade.resyncs == 0);
     }
@@ -3225,7 +3268,9 @@ static void testBackoffCause(void)
    1. By the GPU's time: 21.7 / 23 / 25 / 26 ms give 451 / 433 / 399 / 385
       presents in 10 s (the blind rule 390 / 389 / 376 / 374; the GPU
       makes 461 / 435 / 400 / 385); with the driver's back-pressure at 25
-      ms 318 (319).
+      ms 349 (337; PACE5's pipe, pace5/c_cells.out: the submit thread's
+      job carries the present's wait, the fences stay at two in flight;
+      318 and 319 with the picture before's fence).
    2. The CPU side alone (8 ms GPU pictures), the closing step 8.5 / 9.5 ms
       (an average step of 4.5 / 5 ms), reads 8 / 10 / 10.5 / 12 ms: 602 /
       600 / 600 / 500 and 601 / 600 / 597 / 450 (blind: 653 / 600 / 600 /
@@ -3252,7 +3297,7 @@ static void testFrameShape(void)
                {23 * MS, 0, 433, 389},
                {25 * MS, 0, 399, 376},
                {26 * MS, 0, 385, 374},
-               {25 * MS, 1, 318, 319}};
+               {25 * MS, 1, 349, 337}};
 
     static const struct {
         uint64_t closeNs, readsNs;
@@ -3325,6 +3370,19 @@ static void testFrameShape(void)
     }
 }
 
+/* rc11's load tables (tenths of a ms; build-host/tmp/v098/evidence/pace4/
+   rc11_load.py): each picture's reads, 100 + 25 Z, and its submit, 80 + 15
+   Z', Z a pseudo-random deviate of 1; testRc11's, and testRc12's scaled */
+static const unsigned short s_rc11ReadsT[61] = {
+    75,  107, 96,  56,  105, 121, 141, 80,  113, 113, 156, 124, 73, 109, 91,  128,
+    147, 80,  69,  91,  120, 72,  85,  109, 65,  93,  88,  66,  99, 79,  140, 125,
+    118, 87,  111, 58,  103, 119, 96,  159, 73,  108, 99,  91,  69, 150, 124, 94,
+    77,  106, 87,  136, 123, 64,  101, 83,  107, 66,  81,  93,  98};
+static const unsigned short s_rc11RestT[61] = {
+    86, 59,  76,  73, 60, 79, 68,  104, 95, 91, 72, 87, 55,  82, 91, 78, 115, 64, 85, 80, 74,
+    61, 110, 95,  76, 66, 83, 72,  101, 94, 59, 81, 70, 84,  59, 69, 76, 79,  65, 84, 77, 54,
+    83, 92,  105, 68, 88, 88, 113, 94,  64, 86, 74, 97, 108, 68, 62, 75, 92,  63, 71};
+
 /* The render thread's typical times (pace_policy.h PaceRtTyp: a decaying
    mean and half the deviation) against their recent maxima at rc11's load
    (build-host/tmp/v098/evidence/rc11/ico-pc.log, a PowerVR phone, stage 6:
@@ -3353,19 +3411,11 @@ static void testFrameShape(void)
      (the maxima 4.2 / 6.5 / 3.5): the sound, which the game feeds up to
      120 ms ahead (docs/port/AUDIO.md: about 78-100 ms late before a hold),
      is never held back by it.
-   In 10 s at 25 ms, the driver's back-pressure (depth 1): 320 (317); the
-   step between calling the renderer too: 397 (341), no miss. */
+   In 10 s at 25 ms, the driver's back-pressure (depth 1): 343 (322; PACE5's
+   pipe, pace5/c_cells.out, where the picture before's fence gave 320 /
+   317); the step between calling the renderer too: 397 (341), no miss. */
 static void testRc11(void)
 {
-    static const unsigned short readsT[61] = {
-        75,  107, 96,  56,  105, 121, 141, 80,  113, 113, 156, 124, 73, 109, 91,  128,
-        147, 80,  69,  91,  120, 72,  85,  109, 65,  93,  88,  66,  99, 79,  140, 125,
-        118, 87,  111, 58,  103, 119, 96,  159, 73,  108, 99,  91,  69, 150, 124, 94,
-        77,  106, 87,  136, 123, 64,  101, 83,  107, 66,  81,  93,  98};
-    static const unsigned short restT[61] = {
-        86, 59,  76,  73, 60, 79, 68,  104, 95, 91, 72, 87, 55,  82, 91, 78, 115, 64, 85, 80, 74,
-        61, 110, 95,  76, 66, 83, 72,  101, 94, 59, 81, 70, 84,  59, 69, 76, 79,  65, 84, 77, 54,
-        83, 92,  105, 68, 88, 88, 113, 94,  64, 86, 74, 97, 108, 68, 62, 75, 92,  63, 71};
     static const unsigned short closeT[16] = {85, 93, 78, 98,  84, 93, 75, 98,
                                               80, 83, 93, 144, 84, 82, 76, 94};
     static const unsigned short fieldT[4] = {6, 14, 8, 12};
@@ -3381,10 +3431,10 @@ static void testRc11(void)
     static uint64_t reads[61], interp[61], rest[61], close[16], field[4];
 
     for (unsigned i = 0; i < 61; i++) {
-        reads[i] = (uint64_t)readsT[i] * MS / 10u;
+        reads[i] = (uint64_t)s_rc11ReadsT[i] * MS / 10u;
         interp[i] =
             (uint64_t)((int64_t)(36 * MS / 10) + ((int64_t)reads[i] - (int64_t)(10 * MS)) * 6 / 10);
-        rest[i] = (uint64_t)restT[i] * MS / 10u;
+        rest[i] = (uint64_t)s_rc11RestT[i] * MS / 10u;
     }
     for (unsigned i = 0; i < 16; i++) {
         close[i] = (uint64_t)closeT[i] * MS / 10u;
@@ -3456,13 +3506,178 @@ static void testRc11(void)
                learn */
             CHECK(now.blockPresentsMin + 3u >= (c == 0 ? 392u : c == 1 ? 378u : 381u));
         } else if (c == 3) {
-            CHECK(now.presents + 3u >= 320u && now.presents <= 323u && now.misses == 0);
-            CHECK(before.presents + 3u >= 317u && before.presents <= 320u);
+            CHECK(now.presents + 3u >= 343u && now.presents <= 346u && now.misses == 0);
+            CHECK(before.presents + 3u >= 322u && before.presents <= 325u);
         } else {
             CHECK(now.presents + 3u >= 397u && now.presents <= 400u && now.misses == 0);
             CHECK(before.presents + 3u >= 341u && before.presents <= 344u);
             CHECK(now.lateMax < 13 * MS);
         }
+    }
+}
+
+/* rc12 (build-host/tmp/v098/evidence/rc12/ico-pc.log, a phone, stage 6,
+   vsync off uncapped on a 120 Hz mailbox): three 10 s blocks, the rule
+   holding 495-584 further presents each, at 44.6 / 32.6 / 31.0 presented
+   fps where the GPU's spans (22.4 / 21.7 / 29.5 ms) make 44.6 / 46.1 /
+   33.9.  The block of shorter reads and a shorter closing step (:654:
+   reads 9.1 ms typically against 13.4, the closing step 9.2 against 9.9)
+   held more.  The discrepancy (build-host/tmp/v098/evidence/pace5/
+   rc12_cells.py, .out, rc12_partly.out, c_cells.py, .out; the C line for
+   line): the present call's wait the rule reads is its recent longest
+   (5.2 / 7.6 / 4.5 ms at the blocks' ends), and at half the 120 Hz
+   refresh or more the pipe planned the fence of the picture before, one
+   picture in flight: every further picture then waits for the frame's own
+   picture's whole GPU time (21.7 ms and more) and is held, 30 fps.  With
+   the submit thread on, that wait is the submit thread's (its job, 7.7
+   ms, which the next picture's first graphics call waits for already),
+   and the GPU keeps two pictures in flight (block :601 made 44.6 fps at a
+   22.4 ms span, the GPU's own rate, with presents of 3.9 ms on average).
+   The loads (pace5/rc12_load.py): per picture its own reads, its
+   interpolation (the load's mean and half the reads' deviation) and the
+   submit thread's job, rc11's tables of 61 scaled (in integers), the
+   closing step from 16 and the step between from 4 (tenths of a ms
+   below), means chosen so the typical times the rule plans by are the
+   clause's (A: own reads 12.4 ms, interpolation 5.4, submit 7.7, closing
+   9.9, between 1.2; B: 8.7, 3.3, 7.6, 9.3, 0.6; C: 10.0, 3.1, 8.2, 8.0,
+   0.3).  In 10 s:
+     the pipe as before (the picture before's fence whenever the present
+     waited half a refresh): presents waiting 1 ms 410 / 462 / 340, 5 ms
+     302 / 302 / 301: the phone's 44.6 is A's presents under half a
+     refresh (the model 3.6 below it), its 32.6 and 31.0 B and C over it
+     most of the time (rc12_partly.out: B 34.9 at 77 % of the asks, C
+     30.5 at 50 %);
+     the pipe now: 410 / 462 / 340 whatever the present waited, B's and
+     C's the GPU's rates with no miss; A's load is the tight one (reads of
+     11 ms with a deviation of 2.8): 2 misses (1 over the floor) and one
+     fall-back of 120 steps in the first 10 s, with the present's wait
+     under half a refresh as much as over it; over 100 s 4274 / 4601 /
+     3392, the blocks after the first 428 / 459 / 339 at least, no start
+     later than 8.4 ms. */
+static void testRc12(void)
+{
+    static const unsigned short closeT[3][16] = {
+        {60, 128, 77, 66, 107, 87, 124, 106, 85, 104, 71, 84, 82, 81, 72, 86},
+        {47, 126, 66, 54, 102, 79, 122, 101, 77, 99, 60, 75, 73, 72, 60, 77},
+        {16, 127, 43, 26, 93, 61, 121, 91, 57, 88, 34, 55, 52, 51, 35, 58}};
+    static const unsigned short fieldT[3][4] = {{6, 14, 8, 12}, {3, 7, 4, 6}, {2, 3, 2, 4}};
+
+    static const struct {
+        const char *what;
+        uint64_t gpuNs, interpNs; /* the GPU's span, the interpolation's mean */
+        /* the reads' and the submit's mean and deviation (tenths of a ms) */
+        int readsMean, readsDev, restMean, restDev;
+        double phone;            /* the phone's presented fps */
+        unsigned near;           /* the run the phone's regime is (0: presents of 1 ms, 1: 5 ms) */
+        double nearFps;          /* how near */
+        unsigned low, high, now; /* presents before (1 ms, 5 ms presents), now (either) */
+        unsigned misses, overFloor, strict, long100, misses100, backoffs100, blockMin;
+    } cells[3] = {{"A (:601)", 22400000u, 4800000u, 110, 28, 70,  15,   44.6, 0, 4.0,
+                   410,        302,       410,      2,   1,  120, 4274, 39,   1, 410},
+                  {"B (:654)", 21700000u, 2800000u, 76, 22, 69, 15,   32.6, 1, 2.5,
+                   462,        302,       462,      0,  0,  0,  4601, 6,    0, 459},
+                  {"C (:772)", 29500000u, 2500000u, 88, 25, 73, 18,   31.0, 1, 1.0,
+                   340,        301,       340,      0,  0,  0,  3392, 0,    0, 339}};
+
+    static uint64_t reads[61], interp[61], rest[61], close[16], field[4], presLow[1], presHigh[1];
+
+    presLow[0] = MS;
+    presHigh[0] = 5 * MS;
+    for (unsigned c = 0; c < 3; c++) {
+        uint64_t sum = 0;
+
+        for (unsigned i = 0; i < 61; i++) {
+            /* rc12_load.py seq: rc11's tables scaled, the division
+               truncated toward zero */
+            const int r =
+                cells[c].readsMean + ((int)s_rc11ReadsT[i] - 100) * cells[c].readsDev / 25;
+            const int b = cells[c].restMean + ((int)s_rc11RestT[i] - 80) * cells[c].restDev / 15;
+
+            reads[i] = (uint64_t)(r > 1 ? r : 1) * MS / 10u;
+            rest[i] = (uint64_t)(b > 1 ? b : 1) * MS / 10u;
+            sum += reads[i];
+        }
+        for (unsigned i = 0; i < 61; i++) {
+            /* rc12_load.py lin: the mean and half the reads' deviation */
+            const int64_t v =
+                (int64_t)cells[c].interpNs + ((int64_t)reads[i] - (int64_t)(sum / 61u)) / 2;
+
+            interp[i] = v > (int64_t)(MS / 10) ? (uint64_t)v : MS / 10;
+        }
+        for (unsigned i = 0; i < 16; i++) {
+            close[i] = (uint64_t)closeT[c][i] * MS / 10u;
+        }
+        for (unsigned i = 0; i < 4; i++) {
+            field[i] = (uint64_t)fieldT[c][i] * MS / 10u;
+        }
+        const RtLoad L = {9 * MS / 2, MS / 10, 10 * MS, 7 * MS, cells[c].gpuNs, 0, 0, 0,
+                          0,          0,       0,       0};
+        RtRun run[5];
+
+        /* 0, 1: before, presents of 1 / 5 ms; 2, 3: now; 4: now over 100 s */
+        for (unsigned k = 0; k < 5; k++) {
+            memset(&s_rtGame, 0, sizeof s_rtGame);
+            s_rtGame.frameSeq = close;
+            s_rtGame.frameSeqN = 16;
+            s_rtGame.fieldNs = MS;
+            s_rtGame.fieldSeq = field;
+            s_rtGame.fieldSeqN = 4;
+            s_rtGame.fieldQuiet = true;
+            s_rtGame.readsSeq = reads;
+            s_rtGame.readsSeqN = 61;
+            s_rtGame.interpSeq = interp;
+            s_rtGame.interpSeqN = 61;
+            s_rtGame.restSeq = rest;
+            s_rtGame.restSeqN = 61;
+            s_rtGame.presentSeq = k == 0 || k == 2 ? presLow : presHigh;
+            s_rtGame.presentSeqN = 1;
+            s_rtGame.oldBehind = k < 2;
+            run[k] = rtTimerLoopRule(k == 4 ? 6000u : 600u, &L, RT_ASMADE, 3 * MS, false);
+        }
+        memset(&s_rtGame, 0, sizeof s_rtGame);
+        {
+            char what[160];
+
+            snprintf(what, sizeof what, "rc12 block %s, GPU %.1f ms, presents waiting 5 ms",
+                     cells[c].what, (double)cells[c].gpuNs / 1e6);
+            rtPrint(what, &run[3]);
+        }
+        printf("  the phone %.1f fps; before %u / %u presents (presents of 1 / 5 ms; %u / %u asks "
+               "with the picture before's fence, %u / %u held by the next step), now %u / %u (%u / "
+               "%u), over 100 s %u, %u misses\n",
+               cells[c].phone, run[0].presents, run[1].presents, run[0].fenceBefore,
+               run[1].fenceBefore, run[0].byNext, run[1].byNext, run[2].presents, run[3].presents,
+               run[2].fenceBefore, run[3].fenceBefore, run[4].presents, run[4].misses);
+        for (unsigned k = 0; k < 5; k++) {
+            CHECK(run[k].shown == run[k].frames && run[k].resyncs == 0 && run[k].behind == 0);
+        }
+        /* before: the phone's regime, every ask behind at 5 ms presents
+           held by the next step's start: 30 fps */
+        CHECK(run[0].presents + 3u >= cells[c].low && run[0].presents <= cells[c].low + 3u);
+        CHECK(run[1].presents + 3u >= cells[c].high && run[1].presents <= cells[c].high + 3u);
+        CHECK(run[0].fenceBefore == 0 && run[1].fenceBefore + 5u >= run[1].asks);
+        CHECK(run[1].byNext + run[1].byAfter + 40u >= run[1].held && run[1].misses == 0);
+        /* the phone's fps near the run of its regime (A's presents under
+           half a refresh, B's and C's over it most of the time) */
+        {
+            const double fps = run[cells[c].near].presents / 10.0;
+
+            CHECK(cells[c].phone >= fps - cells[c].nearFps &&
+                  cells[c].phone <= fps + cells[c].nearFps);
+        }
+        /* now: the present's wait changes nothing, the GPU's rate */
+        for (unsigned k = 2; k < 4; k++) {
+            CHECK(run[k].presents + 3u >= cells[c].now && run[k].presents <= cells[c].now + 3u);
+            CHECK(run[k].fenceBefore == 0 && run[k].misses == cells[c].misses);
+            CHECK(run[k].overFloor == cells[c].overFloor && run[k].strict == cells[c].strict);
+            CHECK((uint64_t)run[k].presents * cells[c].gpuNs <= 601u * NTSC + 3u * cells[c].gpuNs);
+        }
+        CHECK(run[2].presents == run[3].presents && run[2].lateMax == run[3].lateMax);
+        CHECK(run[4].presents + 3u >= cells[c].long100 && run[4].presents <= cells[c].long100 + 3u);
+        CHECK(run[4].misses == cells[c].misses100 && run[4].strict == cells[c].strict);
+        CHECK(run[4].backoffs == cells[c].backoffs100 && run[4].strictBlockMax == cells[c].strict);
+        CHECK(run[4].blockPresentsMin + 3u >= cells[c].blockMin && run[4].lateMax < 10 * MS);
+        CHECK(run[4].missMax < 4 * MS);
     }
 }
 
@@ -3504,6 +3719,7 @@ int main(void)
     testBackoffCause();
     testFrameShape();
     testRc11();
+    testRc12();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;
