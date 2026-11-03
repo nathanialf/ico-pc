@@ -2269,6 +2269,14 @@ static struct {
     uint64_t subPartNs;
     const uint64_t *gpuSeq;
     unsigned gpuSeqN;
+    /* the present gap (0: the mode's, the 120 Hz mailbox's one a refresh
+       or back to back; else the cap's, pace_present_gap: 1e9 / 60 for
+       Frame rate 60 on a 120 Hz mailbox), and the paced path's "presents
+       behind" hold as before the second review (oldHold: PACE_RT_BEHIND
+       whenever the presents wait half a refresh or more, the submit thread
+       on or off; else pace_rt_further_trace's, with it off only) */
+    uint64_t gapNs;
+    bool oldHold;
 } s_rtGame;
 
 /* The render thread's estimates as render_thread.c keeps them, folded when
@@ -2402,7 +2410,9 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
     PaceHist h;
     RtRun r;
     const uint64_t refresh = 8333333ull; /* a 120 Hz mailbox: one present a refresh */
-    const uint64_t gap = immediate ? 0 : pace_present_gap(0, true, true, refresh);
+    const uint64_t gap = s_rtGame.gapNs != 0 ? s_rtGame.gapNs
+                         : immediate         ? 0
+                                             : pace_present_gap(0, true, true, refresh);
     uint64_t t = 0, deadline = 0, cost = 0, nextPresent = 0;
     uint64_t rStart = 0, rReadsEnd = 0, rFree = 0;
     uint64_t rPresent = 0;
@@ -2569,6 +2579,11 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                         PaceRtTrace tr;
 
                         why = pace_rt_further_trace(&q, &pipe, &tr);
+                        if (s_rtGame.oldHold && !q.asMade && why != PACE_RT_OVERRUN &&
+                            pace_rt_behind(q.presentNs, q.refreshNs)) {
+                            /* the hold as before: the submit thread not read */
+                            why = PACE_RT_BEHIND;
+                        }
                         if (s_rtGame.oldBehind && why != PACE_RT_OVERRUN && why != PACE_RT_BEHIND) {
                             /* the pipe as before PACE5 */
                             why = pace_rt_step_trace(
@@ -3918,6 +3933,107 @@ static void testRc13(void)
     }
 }
 
+/* rc14's native regime (build-host/tmp/v098/evidence/rc14/ico-pc.log
+   :639-:644: stage 6, the Enhanced preset at the window's 2364x1080, the
+   PowerVR DXT-48 at 120 Hz, the frame slots apart, the submit thread on,
+   60.7 presented fps as made) under Android's default settings, Vertical
+   sync on and Frame rate 60 (port/game/video_options.c): 60 is not the
+   120 Hz refresh, so no vsync lock, a mailbox present (window_host.c), the
+   paced path not as made, the cap's gap of 1e9 / 60.  The present call's
+   wait 2.5 ms with one of 14 ms every 13 pictures (the phone's mean 5.6
+   ms, its longest 31.8): its recent longest at or over half the 4.17 ms
+   refresh in about 9 asks of 13 (the phone's 703 of 1027).  The loads:
+   reads mean 8.8 dev 2.8, the interpolation 1.4, the submit thread's job
+   8.3 (submit 2.7 + present 5.6), the GPU 13.0 a replay, the game's step
+   5.7 (closing 10.8, between 0.4).  As before the second review the paced
+   path held every further present while the presents waited half a
+   refresh (the submit thread's wait read as the render thread's): 30 a
+   second for 30 game frames; now that hold reads the submit thread as the
+   pipe's fence does (pace_rt_pipe_behind) and the step rule decides: 53
+   a second, under the cap's 60 by the steps the rule keeps whole.  The
+   numbers are the Python reference's
+   (build-host/tmp/v098/evidence/fixreview2/dflt_cells.py, .out). */
+static void testDefaults(void)
+{
+    static const unsigned short closeT[16] = {57,  177, 86, 68,  140, 105, 170, 138,
+                                              102, 135, 77, 100, 96,  95,  78,  103};
+    static uint64_t reads[61], interp[61], rest[61], close[16], field[4], pres[13];
+    uint64_t sum = 0;
+
+    for (unsigned i = 0; i < 61; i++) {
+        const int r = 88 + ((int)s_rc11ReadsT[i] - 100) * 28 / 25;
+        const int b = 83 + ((int)s_rc11RestT[i] - 80) * 15 / 15;
+
+        reads[i] = (uint64_t)(r > 1 ? r : 1) * MS / 10u;
+        rest[i] = (uint64_t)(b > 1 ? b : 1) * MS / 10u;
+        sum += reads[i];
+    }
+    for (unsigned i = 0; i < 61; i++) {
+        const int64_t v = (int64_t)(14 * MS / 10) + ((int64_t)reads[i] - (int64_t)(sum / 61u)) / 2;
+
+        interp[i] = v > (int64_t)(MS / 10) ? (uint64_t)v : MS / 10;
+    }
+    for (unsigned i = 0; i < 16; i++) {
+        close[i] = (uint64_t)closeT[i] * MS / 10u;
+    }
+    field[0] = 3 * MS / 10;
+    field[1] = 5 * MS / 10;
+    field[2] = field[3] = 4 * MS / 10;
+    pres[0] = 14 * MS;
+    for (unsigned i = 1; i < 13; i++) {
+        pres[i] = 25 * MS / 10;
+    }
+    const RtLoad L = {9 * MS / 2, MS / 10, 10 * MS, 7 * MS, 13 * MS, 0, 0, 0, 0, 0, 0, 0};
+    RtRun run[4];
+
+    /* 0: as rc14 ran (vsync off, uncapped: as made); 1: the defaults with
+       the hold as before; 2: the defaults now; 3: now over 100 s */
+    for (unsigned k = 0; k < 4; k++) {
+        memset(&s_rtGame, 0, sizeof s_rtGame);
+        s_rtGame.frameSeq = close;
+        s_rtGame.frameSeqN = 16;
+        s_rtGame.fieldNs = MS;
+        s_rtGame.fieldSeq = field;
+        s_rtGame.fieldSeqN = 4;
+        s_rtGame.fieldQuiet = true;
+        s_rtGame.readsSeq = reads;
+        s_rtGame.readsSeqN = 61;
+        s_rtGame.interpSeq = interp;
+        s_rtGame.interpSeqN = 61;
+        s_rtGame.restSeq = rest;
+        s_rtGame.restSeqN = 61;
+        s_rtGame.presentSeq = pres;
+        s_rtGame.presentSeqN = 13;
+        s_rtGame.slots = true;
+        s_rtGame.gpuRecords = true;
+        s_rtGame.subPartNs = 46 * MS / 10;
+        s_rtGame.gapNs = k == 0 ? 0 : pace_present_gap(60, false, true, 8333333ull);
+        s_rtGame.oldHold = k == 1;
+        run[k] =
+            rtTimerLoopRule(k == 3 ? 6000u : 600u, &L, k == 0 ? RT_ASMADE : RT_STEP, 3 * MS, false);
+    }
+    memset(&s_rtGame, 0, sizeof s_rtGame);
+    rtPrint("rc14 native, the defaults (vsync on, 60 on a 120 Hz mailbox), now", &run[2]);
+    printf("  as rc14 ran (as made) %u presents; the defaults before %u (%u held as behind), now "
+           "%u (%u misses, %u back-offs); now over 100 s %u, the fewest in a block %u\n",
+           run[0].presents, run[1].presents, run[1].behind, run[2].presents, run[2].misses,
+           run[2].backoffs, run[3].presents, run[3].blockPresentsMin);
+    CHECK(pace_present_gap(60, false, true, 8333333ull) == 16666666ull);
+    for (unsigned k = 0; k < 4; k++) {
+        CHECK(run[k].shown == run[k].frames && run[k].resyncs == 0 && run[k].fenceBefore == 0);
+    }
+    /* as rc14 ran: near the phone's 60.7 */
+    CHECK(run[0].presents + 3u >= 568u && run[0].presents <= 571u && run[0].behind == 0);
+    /* the hold as before: every further present held behind, 30 a second */
+    CHECK(run[1].presents + 3u >= 301u && run[1].presents <= 304u && run[1].behind >= 500u);
+    /* now: none held behind, the step rule's rate under the cap */
+    CHECK(run[2].presents + 3u >= 533u && run[2].presents <= 536u && run[2].behind == 0);
+    CHECK(run[2].presents >= run[1].presents + 200u && run[2].presents <= 601u);
+    CHECK(run[2].overFloor == 0 && run[2].backoffs == 0 && run[2].strict == 0);
+    CHECK(run[3].presents + 10u >= 5436u && run[3].presents <= 5446u && run[3].behind == 0);
+    CHECK(run[3].blockPresentsMin >= 530u);
+}
+
 int main(void)
 {
     test60();
@@ -3958,6 +4074,7 @@ int main(void)
     testRc11();
     testRc12();
     testRc13();
+    testDefaults();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;

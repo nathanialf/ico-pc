@@ -5107,20 +5107,17 @@ static void stall_mark_write(void)
     }
 }
 
-/* the creation's stall in seconds, or 0 while it moves */
-static double pipe_stall_step(double now, int counted)
+/* the creation's stall in seconds, or 0 while it moves (gpu_hang.h
+   ico_pipe_stall_step): the background set's compiles that return are
+   progress too, and its note counts only while some have not returned
+   (ico_pipe_note_creating), so a movie or a load that presents no
+   picture to take a finished batch is not a stall */
+static double pipe_stall_step(double now, int counted, const IcoDiagGpu *g)
 {
-    static unsigned int last_seq, last_done;
-    static double since;
-    const unsigned int seq = activity_seq, done = pipes_done;
-    const int creating = act_mode != 0 && strncmp(activity, "creating pipeline", 17) == 0;
-    if (!creating || !counted || gpu_hang_limit_ms == 0 || seq != last_seq || done != last_done) {
-        last_seq = seq;
-        last_done = done;
-        since = now;
-        return 0.0;
-    }
-    return now - since;
+    static IcoPipeStallWatch w;
+    const int creating = act_mode != 0 && ico_pipe_note_creating(activity, g->bg_pipes_left);
+    return ico_pipe_stall_step(&w, now, creating, counted, gpu_hang_limit_ms != 0, activity_seq,
+                               pipes_done, g->bg_pipes_done);
 }
 #endif
 
@@ -5503,11 +5500,13 @@ static void watchdog_loop(void)
                the same way, the count started again whenever the driver
                begins or ends a pipeline (activity_seq) and held at 0 inside
                one (gpu_hang.h ico_render_hang_step: a picture that makes its
-               pipelines on first use is not a hang); not with an effects
+               pipelines on first use is not a hang; the background set's note
+               only while its compiles run, ico_pipe_note_creating, so a
+               present hung after them is counted); not with an effects
                program, whose first presents prepare its effects */
             int (*beat)(unsigned long long *, unsigned long long *) = render_beat_fn;
             unsigned long long rseq = 0, rdone = 0;
-            const int creating = strncmp(activity, "creating pipeline", 17) == 0;
+            const int creating = ico_pipe_note_creating(activity, g.bg_pipes_left);
             if (beat != NULL && !effects_program && beat(&rseq, &rdone) &&
                 ico_render_hang_step(&render_watch, (double)hang_ms / 1000.0, rseq, rdone,
                                      activity_seq, creating, poll_dt, poll_counted)) {
@@ -5526,15 +5525,18 @@ static void watchdog_loop(void)
         {
             /* issue 161: a pipeline creation that has not returned
                (pipe_stall_step), in force before the game starts too */
-            const double stalled = pipe_stall_step(now, poll_counted);
+            IcoDiagGpu bg;
+            (void)gpu_state(&bg);
+            const double stalled = pipe_stall_step(now, poll_counted, &bg);
             const double stall_lim = ticks == 0 ? PIPE_STALL_START_S : PIPE_STALL_PLAY_S;
             if (stalled >= stall_lim) {
                 ico_diag_log("ico_pc: the graphics driver has not returned from creating a "
-                             "pipeline for %.0f s (pipelines %u of %u; the limit %.0f s %s): the "
-                             "run ends now, in order, so the next start can prepare the graphics "
-                             "another way",
-                             stalled, pipes_done, pipes_total, stall_lim,
-                             ticks == 0 ? "before the game starts" : "in play");
+                             "pipeline for %.0f s (pipelines %u of %u; the background set's "
+                             "compiles: %u returned, %u not; the limit %.0f s %s): the run ends "
+                             "now, in order, so the next start can prepare the graphics another "
+                             "way",
+                             stalled, pipes_done, pipes_total, bg.bg_pipes_done, bg.bg_pipes_left,
+                             stall_lim, ticks == 0 ? "before the game starts" : "in play");
                 snprintf(reason, sizeof reason,
                          "a pipeline creation has not returned for %.0f s (limit %.0f s)", stalled,
                          stall_lim);

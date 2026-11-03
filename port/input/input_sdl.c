@@ -530,6 +530,16 @@ int ico_input_sdl_touch_overlay(IcoTouchOverlay *out)
     return 1;
 }
 
+int ico_input_sdl_touch_safe_layout(IcoTouchLayout *out)
+{
+    if (out == NULL || !s_touchDevice || s_touchSnap.layout.outW == 0 ||
+        s_touchSnap.layout.outH == 0) {
+        return 0;
+    }
+    *out = s_touchSnap.layout;
+    return 1;
+}
+
 /* The menus by taps while the layout has the D-pad, Cross or Circle Off
    (ico_touch_menu_taps): a finger that goes down over a menu (the pointer's
    ico_pointer_menu) on no working control (ico_touch_blocks_menu_tap: a

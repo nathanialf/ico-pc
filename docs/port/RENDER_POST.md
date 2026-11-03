@@ -868,10 +868,22 @@ for that read (`port/render/rd_store_plan.c`: a fog that may arm the fill touche
 again at list 7, `PlanDepth.late`; the last store's cut does not take the pass open there).
 Measured with a model on lavapipe (main's replay tool, every command of lists 7-12 turned into a
 NOP, the fill before the fog against none; `build-host/tmp/v098/evidence/cheap/crack_late_model.py`:
-the picture without the fill is the late fill's before it, and each crack takes the colour of its
-end in it, the end the earlier fill copied): at Enhanced 2x 4:3 the corpus's cracks are 0 to 0.15 %
-of SCENE's texels and 65 to 100 % of them come out the same bytes as before, most others one to
-three levels apart, the largest 49 levels on two texels of a forest frame; at the PowerVR phone's
+the picture without the fill is the late fill's before it, and each crack takes the colour of
+whichever of its ends in it is nearest the earlier fill's, since the dumps hold no depth to pick the
+nearer end as the rule does: a best case, not a bound; the same model's farthest end gives 111
+levels on the loss-loss frame, of its 632 crack texels (0.06 %), and 231 to 244 on the godrays and forest frames (rd-00720, rd-01076 to rd-01079)): at Enhanced 2x 4:3 the corpus's
+cracks are 0 to 0.15 % of SCENE's texels and 65 to 100 % of them come out the same bytes as before,
+most others one to three levels apart, the model's largest 49 levels on two texels of a forest
+frame. The whole picture against the earlier build's pass dumps (the per-wave gate at Enhanced 2x
+4:3) measures past the model on the loss-loss frame, which has no glow, so its differences are the
+cracks' colours themselves: 218 of SCENE's texels apart, up to 109 levels; 9 at 8 levels or more,
+7 of them one crack's run along one row (x 138-144, y 279 of 1152 x 896), which the earlier fill
+gave the light grey of one end (204, 204, 204) and the late fill the darker surface of the other
+(117, 109, 95); 3 at 3 to 7 levels, 29 at 2 and 177 at 1 (the frames whose cracks did not change
+hold 74 to 79 one-level texels in SCENE against the same baseline); DISPLAY 177 pixels apart and
+PRESENT (1280 x 960) 544, up to 57 levels (7 and 23 of them at 8 or more: that run). On the
+godrays frame rd-00720 SCENE, DISPLAY and PRESENT are up to 10 levels apart on 1.2 % of the
+picture, the glow's mask flipping at the cracks (above); at the PowerVR phone's
 Resolution Auto (2364 x 1080, its profile's fakes) the phone's seven F12 frames hold 112 to 285
 cracks (0.004 to 0.011 %), 98 to 99.6 % of them the same bytes, at most three a frame apart, by up
 to 20 levels; the deja vu 48:9 frame 469 cracks (0.018 %), most of them one to seven levels apart,

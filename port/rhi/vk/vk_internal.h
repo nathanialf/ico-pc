@@ -862,6 +862,9 @@ void vkr_release_all_objects(void);
  * saved to the file and destroyed before the device goes */
 void vkr_pipeline_cache_init(void);
 void vkr_pipeline_cache_shutdown(void);
+/* vk_pipeline.c: the background sets' compiles (rhi.h RhiGpuProgress
+ * bgPipesDone, bgPipesLeft); any thread */
+void vkr_pipe_background_progress(uint32_t *done, uint32_t *left);
 /* vk_pipeline.c */
 VkDescriptorSet vkr_get_bind_group(RhiBindGroup bg);
 /* The number of dynamic uniform slots of a bind group's layout. */

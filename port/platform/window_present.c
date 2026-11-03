@@ -111,8 +111,9 @@ static void rt_ask(PaceRtAsk *q, const IcoRtPlan *p, Uint64 now, Uint64 refresh,
    (s_pres.gpuNs).  Paced (vsync off or mailbox), also held while the
    picture in progress runs past its estimate (PACE_RT_OVERRUN: the drain
    would hold this thread for an end not known) and, unless the pictures
-   go as made (vsync off, uncapped: pace_rt_as_made), while the presents
-   wait for the display or the GPU (PACE_RT_BEHIND).  Never with the thread
+   go as made (vsync off, uncapped: pace_rt_as_made) or the submit thread
+   runs (its job holds the present's wait), while the presents wait for
+   the display or the GPU (PACE_RT_BEHIND).  Never with the thread
    off or in sync mode, where the cost is the whole picture.  Every ask
    and the rule's working go to the 10 s line and the decision trace
    (render_thread.h ico_render_thread_note_ask).  The hold's why,
@@ -158,13 +159,15 @@ static void rt_pipe_posted(Uint64 now, Uint64 refresh, Uint64 period)
                 fprintf(stderr,
                         "window: step rule: the submit thread on (%s): the further pictures "
                         "planned with two pictures in flight, the present's wait the submit "
-                        "thread's\n",
+                        "thread's (none held for it)\n",
                         q.submitNs != 0 ? "the next picture waits for its job"
                                         : "the frame slots apart");
             } else {
-                fprintf(stderr, "window: step rule: the submit thread off: the further pictures "
-                                "planned with the picture before's fence while the presents wait "
-                                "half a refresh or more\n");
+                fprintf(stderr,
+                        "window: step rule: the submit thread off: the further pictures "
+                        "planned with the picture before's fence while the presents wait "
+                        "half a refresh or more (held then on the paced path: mailbox, or vsync "
+                        "off with a cap)\n");
             }
         }
     }

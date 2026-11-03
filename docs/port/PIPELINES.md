@@ -566,7 +566,10 @@ than Qualcomm's own, the keys the set had not made are not left to first use: th
   render threads keep their cores.
 - **when**: after each presenting replay, on the thread that draws (the render thread;
   `rd__pipe_finish_tick` at the end of `rd__replay_frame_here`), one action a picture: a batch in
-  flight is taken once done; else the memory function is asked (`ico_diag_background_memory`: 2
+  flight is taken once done (while some of its compiles have not returned the backend's count says
+  so, `RhiGpuProgress.bgPipesLeft`, a read that does not wait behind the call guard for the submit
+  thread's job as `rhi_create_pipelines_end` would even to answer "not yet"; only the begin and
+  the taking end wait for it, twice a batch); else the memory function is asked (`ico_diag_background_memory`: 2
   when the system's "running critical" came at any time of the run or its "running low" once a
   pipeline was made, then the finisher ends; 1 when MemAvailable is under the floor now, asked again 5 s later,
   `RD_FINISH_FLOOR_MS`; 0 go) and the next batch begins. No batch begins for 1 s
@@ -583,14 +586,18 @@ than Qualcomm's own, the keys the set had not made are not left to first use: th
   end.
 - **the crash note**: while a batch compiles the activity note is `creating pipelines A-B of M in the
   background: <first> to <last>; <modules>` (the set's batch form, so an end inside it is read as
-  one inside the set's batch by the next start: `startup_retry.c`, `pipeline_skip.c`).
+  one inside the set's batch by the next start: `startup_retry.c`, `pipeline_skip.c`). It stays
+  until the batch is taken, which needs a presented picture; the watchdog's pipeline limit counts
+  it as a creation only while some of the batch's compiles have not returned, and each one that
+  returns is progress (`gpu_hang.c` `ico_pipe_note_creating`, [WORK_BUFFERS.md](WORK_BUFFERS.md)),
+  so a movie or a long load over a finished batch does not end the run.
 
 The lines:
 
     rd: pipelines: the stopped set resumes in the background (N left, keys A-M of M): batches of up to 32 on 4 threads at low priority, one at a time between pictures; the free memory and the system's low-memory signal asked before each, none begun for 1.0 s after a late game step or a picture over 100 ms; a draw that needs a key not made yet still makes it at once
     rd: pipelines: compiled background VU batch 290-321 of 1196 (compiler ...): 32 pipelines ...
     rd: pipelines: the background set waits (N MB available of T MB, floor F MB): asked again in 5 s (K such waits)
-    rd: pipelines: the background set is done: N pipelines made in B batches, F failed, X s compiling over Y s since it resumed (H waits for a late step or a slow picture, W for the free memory); K keys left to first use
+    rd: pipelines: the background set is done: N pipelines made in B batches, F failed, X s compiling over Y s since it resumed (H waits for a late step or a slow picture, W for the free memory; P pictures found a batch still compiling without waiting for the submit thread); K keys left to first use
     rd: pipelines: the background set ends at the system's low-memory signal (running low): ...
 
 How long it takes: the DXT-48's set that stopped at 1823 MB stopped after 33 of 1196 keys, 1163

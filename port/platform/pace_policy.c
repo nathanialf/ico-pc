@@ -524,7 +524,13 @@ PaceRtHold pace_rt_further_trace(const PaceRtAsk *q, const PaceRtPipe *p, PaceRt
         if (q->sinceNs != 0 && q->nowNs >= q->sinceNs && q->nowNs - q->sinceNs >= q->pictureNs) {
             return PACE_RT_OVERRUN;
         }
-        if (!q->asMade && pace_rt_behind(q->presentNs, q->refreshNs)) {
+        /* the presents behind: with the submit thread off the present's
+           wait blocks the render thread, and the next post's drain with
+           it; with it on that wait is the submit thread's job, which the
+           next picture's first graphics call waits for already and the
+           step rule's pipe predicts (pace_rt_pipe_behind) */
+        if (!q->asMade && q->submitNs == 0 && !q->submitOn &&
+            pace_rt_behind(q->presentNs, q->refreshNs)) {
             return PACE_RT_BEHIND;
         }
     }

@@ -50,6 +50,8 @@
  *   ico_input_sdl_touch_overlay(out)  the copy the overlay draws from,
  *                               taken at the last update; 0 when there is
  *                               nothing to draw
+ *   ico_input_sdl_touch_safe_layout(out)  that copy's layout whatever the
+ *                               controls' opacity (the safe area)
  */
 #ifndef ICO_PORT_INPUT_INPUT_SDL_H
 #define ICO_PORT_INPUT_INPUT_SDL_H
@@ -69,6 +71,11 @@ void ico_input_sdl_set_touch_layout(int w, int h, int sx, int sy, int sw, int sh
 void ico_input_sdl_set_touch_env(const IcoTouchEnv *env);
 int ico_input_sdl_touch_present(void);
 int ico_input_sdl_touch_overlay(IcoTouchOverlay *out);
+/* The touch layout of the last update whatever the controls' opacity (its
+   safe area: the Frame rate counter's corner with the controls Hidden or
+   Off, touch_ui.h ui_touch_safe_corner); 0 before the first update of a
+   touch screen */
+int ico_input_sdl_touch_safe_layout(IcoTouchLayout *out);
 /* The layout editor behind the Edit layout page (settings.h UiTouchEditHost,
    touch_edit.h): its state, begin on the live layout's posture (the mapper's
    fingers cancelled, the layout rebuilt from the working copy), end (keep: the

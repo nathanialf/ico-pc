@@ -1290,7 +1290,18 @@ bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLef
  * paced, first PACE_RT_OVERRUN as pace_rt_further_hold (the present's drain
  * would hold the game thread for a picture whose end is not known: the
  * fences bound the GPU's pictures, not the render thread's job), then,
- * unless asMade, PACE_RT_BEHIND; then PACE_RT_MISS by pace_rt_step_miss. */
+ * unless asMade or the submit thread on (submitOn, or a job of its own
+ * before the next picture, submitNs: as pace_rt_pipe_behind reads it),
+ * PACE_RT_BEHIND; then
+ * PACE_RT_MISS by pace_rt_step_miss.  With the submit thread on the
+ * present's wait is inside the submit thread's job, which the next
+ * picture's first graphics call already waits for and the pipe predicts
+ * (pace_rt_pipe_behind), so the presents waiting half a refresh hold
+ * nothing by themselves: rc14 (build-host/tmp/v098/evidence/rc14/
+ * ico-pc.log :639) had them so in 703 of 1027 asks, which on the paced
+ * path (Android's defaults, vsync on with Frame rate 60 on a 120 Hz
+ * mailbox) held every further present, 30 a second for 30 game frames
+ * (pace_loop testDefaults). */
 PaceRtHold pace_rt_further_ask(const PaceRtAsk *q, const PaceRtPipe *p);
 
 /* pace_rt_further_ask with the rule's working in t (not NULL; zeroed, its

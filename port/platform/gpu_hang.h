@@ -65,4 +65,31 @@ int ico_render_hang_step(IcoRenderHangWatch *r, double limit_s, unsigned long lo
                          unsigned long long done, unsigned mark, int creating, double dt_s,
                          int count);
 
+/* The watchdog's pipeline limit (diag_host.c, issue 161): whether the
+   crash report's note says a pipeline creation is in progress now.  Every
+   creation's note starts "creating pipeline"; the background finisher's
+   (port/render/rd_pipeline.c finBegin: "creating pipelines A-B of M in
+   the background: ...") stays up from its batch's start until the next
+   presented picture takes the batch, which a movie or a long load does not
+   make, so it counts only while some of its compiles have not returned
+   (bg_left: the backend's background compiles begun and not finished,
+   rhi.h RhiGpuProgress.bgPipesLeft).  1: a creation in progress. */
+int ico_pipe_note_creating(const char *note, unsigned bg_left);
+
+/* The pipeline limit's watch: the time a creation was seen in progress
+   with nothing moving.  seq the notes' counter (diag_host.c activity_seq:
+   every note set or cleared), done the start-up set's count, bg_done the
+   background compiles finished (RhiGpuProgress.bgPipesDone: the finisher's
+   own heartbeat, each compile that returns); any of them moving, no
+   creation, the time not counted (counted 0) or the limit off (on 0)
+   starts it again.  Returns the stalled seconds (0 while it moves).
+   Zero-initialise. */
+typedef struct IcoPipeStallWatch {
+    unsigned seq, done, bg_done;
+    double since;
+} IcoPipeStallWatch;
+
+double ico_pipe_stall_step(IcoPipeStallWatch *w, double now, int creating, int counted, int on,
+                           unsigned seq, unsigned done, unsigned bg_done);
+
 #endif /* ICO_PLATFORM_GPU_HANG_H */

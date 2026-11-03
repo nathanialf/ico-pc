@@ -280,8 +280,8 @@ If it still stutters and you changed **Preset** to Enhanced or raised
 is the lightest. **Auto** does this for you: it starts at the size of your
 screen and steps down (3x, then 2x, then 1x) when the phone cannot draw the
 pictures in time. It never steps back up while the game runs; the row shows
-where it ended up, for example **Auto (2x)**. The Enhanced preset uses Auto
-on Android.
+where it ended up, for example **Auto (2x)**. The Enhanced preset uses the
+size of your screen; Auto is a choice you make in the Resolution row.
 
 ## Send a problem report
 

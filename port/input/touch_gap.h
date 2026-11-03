@@ -42,6 +42,15 @@ extern "C" {
 int ico_touch_fps_place(const IcoTouchLayout *l, float cornerX, float cornerY, float bandH,
                         float natW, float minW, float *x0, float *x1, float *y0);
 
+/* The Frame rate counter's corner whatever the touch controls show
+   (Hidden, Off, a gamepad's fade to nothing, opacity 0): cornerX and
+   cornerY from the safe area's top-left corner of l (the output's edge
+   plus SDL's insets), into *x and *y, output pixels from the output's
+   edge; with a NULL or empty layout the margins from the output's edge.
+   ico_touch_fps_place's corner is this one. */
+void ico_touch_fps_corner(const IcoTouchLayout *l, float cornerX, float cornerY, float *x,
+                          float *y);
+
 #ifdef __cplusplus
 }
 #endif

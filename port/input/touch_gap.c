@@ -85,6 +85,19 @@ static int slide(const Box *box, int n, float *x, float w, float y, float bandH,
     return *x + w <= right;
 }
 
+void ico_touch_fps_corner(const IcoTouchLayout *l, float cornerX, float cornerY, float *x, float *y)
+{
+    /* the corner is the margin inside the safe area, not the output's edge:
+       a phone's rounded corner or notch (the insets SDL reports) would cut
+       the number off (the DXT-48's left inset is 159 px of 2364) */
+    if (l != NULL && l->outW != 0 && l->outH != 0) {
+        cornerX += l->safeRect.x > 0.0f ? l->safeRect.x : 0.0f;
+        cornerY += l->safeRect.y > 0.0f ? l->safeRect.y : 0.0f;
+    }
+    *x = cornerX;
+    *y = cornerY;
+}
+
 int ico_touch_fps_place(const IcoTouchLayout *l, float cornerX, float cornerY, float bandH,
                         float natW, float minW, float *x0, float *x1, float *y0)
 {
@@ -98,11 +111,7 @@ int ico_touch_fps_place(const IcoTouchLayout *l, float cornerX, float cornerY, f
     const float rowY = l->region.y + ROW_Q * l->unit;
     int clear = 1;
 
-    /* the corner is the margin inside the safe area, not the output's edge:
-       a phone's rounded corner or notch (the insets SDL reports) would cut
-       the number off (the DXT-48's left inset is 159 px of 2364) */
-    cornerX += l->safeRect.x > 0.0f ? l->safeRect.x : 0.0f;
-    cornerY += l->safeRect.y > 0.0f ? l->safeRect.y : 0.0f;
+    ico_touch_fps_corner(l, cornerX, cornerY, &cornerX, &cornerY);
     float x = cornerX;
 
     for (int i = 0; i < n; i++) {
