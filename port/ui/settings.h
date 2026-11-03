@@ -192,6 +192,9 @@ void ui_settings_set_quit_is_game(int (*fn)(void));
 #define UI_GPU_INSTALL_NO_PICKER 5     /* the file picker could not be opened */
 #define UI_GPU_INSTALL_NO_PICKER_APP 6 /* no app on the device can choose a file */
 #define UI_GPU_INSTALL_UNREADABLE 7    /* the chosen file could not be opened or copied */
+#define UI_GPU_INSTALL_PAGES                                                                       \
+    8 /* the package is not built for this phone's memory pages
+                                          (installWhy has the sentence) */
 
 typedef struct UiGpuDriverHost {
     int (*count)(void);         /* drivers installed */
@@ -221,6 +224,15 @@ typedef struct UiGpuDriverHost {
        own Qualcomm driver (the Graphics driver row's note then names the
        driver package route). May be NULL (0). */
     int (*lostOnStock)(void);
+    /* the words for driver i (-1 the phone's own) as its last start saw it:
+       "Qualcomm's driver 512.676.1, Vulkan 1.3", "Turnip, Mesa 25.3.0,
+       Vulkan 1.4", or that it has not been started yet.  The page puts the
+       chosen driver's line at the head of its note.  May be NULL, and may
+       return NULL or "" (nothing to say). English: the driver's names are. */
+    const char *(*info)(int i);
+    /* the sentence for the last UI_GPU_INSTALL_PAGES, shown in the popup.
+       May be NULL. */
+    const char *(*installWhy)(void);
 } UiGpuDriverHost;
 
 /* NULL (or never called) hides the link and the page. The struct is copied. */

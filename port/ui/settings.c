@@ -701,12 +701,33 @@ static int gpuShowFailed(void)
     return 0;
 }
 
+/* the chosen driver's last-seen line and the page's note as one note
+   (gpuRefresh), "" when the host has no line or the two would not fit the
+   note's buffer; the main loop of the refresh writes it */
+static char s_gpuLiveNote[320];
+
+static const char *noteText(int strId, char *out, size_t size);
+
 static void gpuRefresh(Page *pg)
 {
     const int note = gpuShowFailed() ? UI_STR_GPU_DRIVER_FAILED
                      : s_gpuHostSet && s_gpuHost.lostOnStock != NULL && s_gpuHost.lostOnStock()
                          ? UI_STR_GPU_DRIVER_NOTE_LOST
                          : UI_STR_GPU_DRIVER_NOTE;
+    s_gpuLiveNote[0] = '\0';
+    if (s_gpuHostSet && s_gpuHost.info != NULL) {
+        const char *info = s_gpuHost.info(gpuSelected());
+        char text[256];
+        const size_t il = info != NULL ? strlen(info) : 0;
+        if (il > 0) {
+            const char *words = noteText(note, text, sizeof(text));
+            /* the wrapped note holds 255 bytes with its line breaks */
+            if (il + 2 + strlen(words) < 230) {
+                snprintf(s_gpuLiveNote, sizeof(s_gpuLiveNote), "%s%s%s", info,
+                         info[il - 1] == '.' ? " " : ". ", words);
+            }
+        }
+    }
     for (int k = 0; k < pg->count; k++) {
         if (pg->rows[k].note >= 0) {
             pg->rows[k].noteStr = note;
@@ -806,6 +827,13 @@ static void gpuPoll(void)
         gpuFolderPopup(UI_STR_GPU_DRIVER_NO_PICKER_APP);
     } else if (r == UI_GPU_INSTALL_UNREADABLE) {
         ui_popup_push(ui_str(UI_STR_GPU_DRIVER_UNREADABLE), "");
+    } else if (r == UI_GPU_INSTALL_PAGES) {
+        /* the host's own sentence (English, as the driver's names are) */
+        char body[UI_POPUP_TEXT];
+        const char *why = s_gpuHost.installWhy != NULL ? s_gpuHost.installWhy() : NULL;
+        wrapText(why != NULL && why[0] != '\0' ? why : ui_str(UI_STR_GPU_DRIVER_BAD), 21.0f, 540.0f,
+                 body, sizeof(body));
+        ui_popup_push(ui_str(UI_STR_SECTION_GPU_DRIVER), body);
     } else {
         /* the picker closed without a file (some phones' pickers answer so
            at once, or never open): the folder route is named */
@@ -6177,6 +6205,18 @@ static void refreshPage(Page *pg, int id, int cur)
             if (r->value >= 0) {
                 lt_ext_set_dim(r->value, locked);
             }
+        }
+        if (id == UI_PAGE_GPU_DRIVER && s_gpuLiveNote[0] != '\0' && r->note >= 0) {
+            /* the chosen driver's line, then the note (gpuRefresh); written
+               again only when it changed or another text took the note */
+            static char s_written[320];
+            const int ni = r->note - LT_GAME_PROPERTY_COUNT;
+            if (ni < 0 || ni >= LT_EXT_MAX_PROPERTIES || s_noteStr[ni] != -1 ||
+                strcmp(s_written, s_gpuLiveNote) != 0) {
+                liveNoteText(r->note, s_gpuLiveNote);
+                snprintf(s_written, sizeof(s_written), "%s", s_gpuLiveNote);
+            }
+            liveNote = 1;
         }
         if (r->note >= 0) {
             if (r->noteStr == UI_STR_GRAPHICS_KEEP_ASK) {
