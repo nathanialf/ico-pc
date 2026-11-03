@@ -570,7 +570,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   is on, from `config.toml` and then from `ico_host_set_second_card`, an explicit `saves2`
   winning, no folder made), portable mode, the `[dev]`
   keys exported as environment switches (`ico_dev_env_value`, `test_dev_env`; `present_fallback`
-  auto, off or fifo), a restart's
+  auto, off or fifo; `glow_fold` as `ICO_RD_GLOW_FOLD`), a restart's
   `ICO_RD_BLEND` and `ICO_RD_VU_PREPASS` over the ini's (`test_retry_blend`,
   `test_retry_prepass`), the disc choice's rules in order (`ico_host_choose_disc`,
   `test_choose_disc`), the logs folder set by `ico_host_set_logs_dir` (`test_logs_override`), and
@@ -897,7 +897,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   folded, every target against the CPU model (the strip in it), the same frame replayed with the
   fold off against the model again (the folded and unfolded chains the same bytes at every
   width), and with the strip off every target still the model's (`checkBlurFoldWide`;
-  [WORK_BUFFERS.md](WORK_BUFFERS.md#the-blur-fold-on-a-wide-frame)).
+  [WORK_BUFFERS.md](WORK_BUFFERS.md#the-blur-fold-on-a-wide-frame)). The `glow_fold` shard
+  (`rd_blur_glow_fold_test.inc`) runs the seven post modes without the shine into WORK2 at
+  Original, Enhanced 2x, the phone's 2364 x 1080 with the full height, and the phone's 848-pixel
+  frame (NTSC, aspect 2.189) at 2364 x 1080 with Full pixel (WORK2's crop printed), each frame
+  drawn with the glow's mask folded into its reduction (`rd__glow_fold_force(1)`) and the same
+  frame replayed with it off: every target but WORK2 the same bytes both ways, at Original and 2x
+  every target the CPU model's both ways (WORK2 too with the fold off), the fold counted in every
+  frame that draws the glow and none kept, (e)'s frame with the shine kept for the lamps' reason,
+  every pipeline created enumerated (`checkGlowFold`; [RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction));
+  the recording part plans the chain without a device (`rd__glow_fold_plan` on post mode 7: the
+  fill, the mask and the reduction in order, the fill's colour, the mask's test; the shine frame
+  kept, `checkGlowFoldPlan`). In every shard a replay that folded the mask leaves WORK2 out of
+  `compareAll` (the fold does not draw it; WORK0, its reduction, is compared).
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
   `gs_dst_channel` for every Cd and Ad, the premultiplied term through the fixed-function add and
@@ -1314,7 +1326,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   checked to have the no-fill replay's WORK2 and no target farther from the old baseline than
   that replay), the old baseline's log still giving the passes before. A setting without a
   baseline is skipped; nothing compared: SKIP (`rd_glow_cheap_ab`). A baseline refresh for a
-  later change to the glow's drawing replaces the folders.
+  later change to the glow's drawing replaces the folders. Those runs hold the glow's mask fold
+  off (`ICO_RD_GLOW_FOLD=0`), and each dump at each setting runs again with it on
+  (`ICO_RD_GLOW_FOLD=1`, into `<name>-<setting>-fold`): every PNG but `WORK2.png` (which the fold
+  leaves undrawn) the same bytes as the run without it, `PRESENT.png` too at the phone's setting;
+  a run whose stats say `glow: WORK2 fold on: 1 folded` has at least one glow pass fewer, a kept
+  one (the sun's fans or the lamps drawn into WORK2) as many; at each setting that ran, at least
+  one run folded ([RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction)).
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's

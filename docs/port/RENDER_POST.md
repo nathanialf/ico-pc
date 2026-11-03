@@ -158,7 +158,7 @@ which draws it inside the open pass, without the snapshot, where the same bytes 
 | cleanUpFB's two sprites into SCENE, the glow's WORK0 fill | untextured, blending, no DATE, no AFAIL RGB_ONLY, and each colour channel's blend the destination for every Cd and Ad or one value for every Cd and Ad (`rd__fx_fold`, over the 256 values of each) | `fx_sprite_ps` without the blend and the destination read, the constant channels as RGBAQ, the destination channels masked (the colour mask A alone or whole), the depth state the sprite's; the alpha alone without a Z test in the open pass with that pass's depth attached, its test ALWAYS and no Z write (`fxAttachDepth`), where the open pass is on the sprite's target with the state's depth: cleanUpFB's sprites stay in the fog's pass |
 | the glow's paste WORK3 into SCENE | Cs * FIX + Cd, Cs * As + Cd, Cd - Cs * FIX or Cd - Cs * As, COLCLAMP 1, no PABE, no DATE, no AFAIL RGB_ONLY | `fx_frame_ps` writing the magnitude of `(A - B) C >> 7` (`FXF_OUT_PREMUL`) through the premultiplied add (ONE, ONE) or reverse subtract, alpha ONE, ZERO: the UNORM8 sum is the GS's clamped integer sum, the subtract's term the GS's `ceil(Cs C / 128)` |
 | the motion blur DISPLAY into SCENE, any other destination read | `RdProfile.fxDstLocal` and the target's passes readable (the scene class under `dateStencil`), not sampling its own target | `fx_local_ps`, the destination as the input attachment (`SubpassLoad`) inside the open pass after a by-region barrier (`RHI_LOCAL_READ_COLOR`; `RHI_LOCAL_READ_BACK` after it); `fx_rect_vs` draws one triangle, so the texel read is the one before the sprite |
-| the glow's mask SCENE into WORK2 | MODULATE with RGBAQ's RGB 0, no blend, no destination read | `fx_frame_ps` computing the alpha alone (`FXF_ALPHA_ONLY`): RGB is `(t * 0) >> 7`, 0 |
+| the glow's mask SCENE into WORK2 | MODULATE with RGBAQ's RGB 0, no blend, no destination read | `fx_frame_ps` computing the alpha alone (`FXF_ALPHA_ONLY`): RGB is `(t * 0) >> 7`, 0; where the glow's chain allows, not drawn at all: its reduction computes it ([The glow's mask in its reduction](#the-glows-mask-in-its-reduction)) |
 
 DATE and AFAIL RGB_ONLY read the destination's alpha: the constant fold and the premultiplied
 blend do not take a sprite under them, the local read does, and `fx_local_ps` tests DATE
@@ -200,6 +200,95 @@ rd: fx plan: the reduction's black sprite on a scaled DISPLAY drawn as its clear
 rd: fx plan: a staticBlur sprite without a Z test drawn by the constant fold in the open pass on SCENE with its depth attached and unused, not in a pass of its own (the glow's cleanUpFB in the fog's pass; reported once)
 rd: fx local read: on (self-test: local ok 4, snapshot ok 4) on SCENE 512x512 at 1024x1024 texels
 ```
+
+### The glow's mask in its reduction
+
+List 7's glow (`ico2/sugipon/src/staticBlur.c` `makeFullScreenFlareBefore` and `After`) fills
+WORK2 (`fillWork2`: one untextured sprite over the frame), draws the mask into it
+(`makeMaskPatternToWork2`: SCENE 1:1, MODULATE by RGBAQ (0, 0, 0, 128), the GS bilinear of SCENE's
+alpha, ATST LESS AREF 129 AFAIL KEEP, no blend; the fx plan's alpha alone above), then reduces
+WORK2 into WORK0 (`reduceWork2ToWork0`: the box above 1x, the GS bilinear at 1x). WORK2 has the
+frame's size, so at the PowerVR phone's 2364 x 1080 the mask's pass stores 10.2 MB that the
+reduction loads again and nothing else reads (the title's `glow WORK2 1 draw 1.23 ms`, glow rooms
+up to 4.7 ms). The fold draws neither the fill nor the mask: the reduction is drawn with SCENE as
+its texture through `fx_frame_ps` with `FXF_GLOW_MASK` (`port/shaders/fx_sprite.hlsl`
+`fx_glow_texel`, `fx_glow_mask`), which computes every WORK2 texel its kernel loads as the mask's
+sprite stored it over the fill, where it loads it (`port/render/rd_glow_fold.c`, file comment):
+
+- the mask's fragment at that texel (its `SV_Position`, the texel's centre) through
+  `fx_sprite_ps`'s own lines in WORK2's FrameCB (the scale, the Full pixel crop's left-out texels,
+  XYOFFSET as `frameRefresh` gives the mask's pass), the coverage test against the mask's rect (the
+  fill outside it), U and V (`u0 + (X - x0)`: the mask's UV span is its rect's, and
+  `gs_div_trunc_rcp` of `n d` by `d` is `n`), the GS bilinear of SCENE's alpha times RGBAQ's alpha
+  (`fx_alpha_only`'s arithmetic, its taps in one loop), the alpha test (AFAIL KEEP and ZB_ONLY
+  leave the fill, FB_ONLY writes) and FBA;
+- then the reduction's own kernel over those texels (`fx_sprite_texel`'s: the above-1x box or
+  B-spline, the GS bilinear or nearest; integer sums in the same order), its TFX and its tail.
+
+The same operations on the same operands, so the same integers: what is left out is the RGBA8 store
+and load between the two draws (the mask wrote `k / 255`, the reduction read
+`floor(x * 255 + 0.5)`, which is `k` for every `k`). The half texel the pixel centre adds is read
+from the DrawCB (`g_tex.y`), so no compiler folds it with the 0.5 the sprite's lines take off
+after it; the sums before the divides are the mask's own, in its order. The mask's words ride in
+DrawCB fields the reduction does not read (`aux0`, `blend.xyz`, `tex.xy`;
+`port/render/rd_fx_plan.c` `fxGlowFold`). The key is the alpha alone's (the start-up set has it):
+no new pipeline. One full-frame pass fewer a glow picture on a tile-based GPU (the fill is the
+mask's CLEAR load there), two on a desktop (the fill's clear is a pass of its own), and WORK2 is
+neither stored nor read.
+
+Where it holds (the scan, in `rd__store_plan_scan`'s one walk of the lists; `rd__glow_fold_plan`
+over a frame of its own for the tests):
+
+- the frame touches WORK2 (a draw into it or on its depth, its texture, a copy or exact blend
+  naming it, a command the scan does not know) with three commands and no other, in order: the
+  fill, the mask and the reduction (a clear or a draw before the fill, which the fill covers,
+  aside);
+- the fill: a post sprite into WORK2, untextured, no blend, no alpha test that can fail, no DATE,
+  the colour mask whole, no Z test or Z write, the scissor whole, every texel's GS pixel inside its
+  rect: WORK2 holds its colour (with FBA's MSB) everywhere the mask leaves;
+- the mask: a post sprite into WORK2 textured from SCENE's colour (RGBA32), MODULATE with RGBAQ's
+  RGB 0, no blend, no DATE, AFAIL not RGB_ONLY, the colour mask whole, no Z test or Z write, the
+  scissor whole, its UV span its rect's on both axes, WORK2 and SCENE of one size, scale and crop
+  (so the mask is at the GS's own filter), no glow edge strip;
+- nothing between the mask and the reduction but state, NOPs, the overlay's text and the deferred
+  text's quads: SCENE is read by the reduction as the mask read it (its border repeat is done at
+  the mask, as without the fold; the crack fill is placed before the mask, its first reader of
+  SCENE);
+- the reduction: a post sprite (not the display's reduction) from WORK2's colour (RGBA32) into
+  another target, no destination read, the mask's TEX0 size, no glow edge strip;
+- the switch on, the fx plan on with `fx_frame_ps`, a device, no MSAA, no pass window.
+
+In 9 of the 14 corpus glow frames the sun's fans (`dispSun`, before the mask) or the lamps' meshes
+(after it) draw into WORK2: the chain is drawn there, and the frame counted kept with its reason.
+The replay: `blurPostSprite` (`port/render/rd_blur_border.c`) leaves the planned fill and mask
+undrawn (`rd__glow_fold_skip`, after SCENE's border repeat), their state kept; at the reduction
+`rd__fx_plan_draw` takes the fold (`rd__glow_fold_due`). A reduction that cannot take it (no
+pipeline, a target made again) has the fill and the mask drawn first with their states
+(`rd__glow_fold_undo`) and reads WORK2: the same bytes, and the fold off from then on.
+
+WORK2's own bytes are then not the mask. Nothing in the frame reads them, and the next frame's fill
+covers them; a frame that reads WORK2 before its fill after a folded one turns the fold off from
+then on (logged). A reader outside the replay (`rd__read_target`: the tests, `rd_replay_tool
+--target` and `--pass-dump`) would see them too, so without an output (a renderer whose targets
+its caller reads) the fold is off unless `ICO_RD_GLOW_FOLD=1` asks for it, and a read of WORK2
+after a folded replay is logged once. `[dev] glow_fold = true|false` (`ICO_RD_GLOW_FOLD=1|0`) is
+the A/B ([CONFIG.md](CONFIG.md#dev)); not set, the fold is on wherever the frame is presented,
+on every device and backend.
+
+```
+rd: glow: WORK2 fold: the glow's mask computed inside its reduction from SCENE's alpha (fx_frame_ps), WORK2 neither drawn nor read: one full-frame pass fewer (frame N; reported once)
+rd: glow: WORK2 fold: the mask drawn into WORK2 and read by its reduction: <reason> (<detail>; frame N; reported once for this reason)
+rd: glow: WORK2 fold: <why>: the fill and the mask drawn before the reduction after all (frame N); the fold is off from now on
+window: glow: WORK2 fold: N folded, M kept (<reason>)
+```
+
+The 10 s line counts the replays of its window (`RdPerfRecord.glowFolded`, `glowKept`, `glowWhy`,
+the last kept one's reason); `rd_replay_tool --stats` prints `glow: WORK2 fold on|off: N folded, M
+kept (reason)`; the glow pass count (`glow N passes`, the 10 s `passes per replay`) is one fewer
+where it folds. The reasons (`rd.h` `RD_GLOW_FOLD_WHY_*`): the sun's fans, the lamps, WORK2 drawn
+or read elsewhere, the chain not in the fold's form, MSAA, the fx plan off, a reduction that
+could not take it. Tests: `rd_blur` (k) and its (r) scan, `rd_glow_cheap_ab`
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portrendertest)).
 
 ### The fades fold
 

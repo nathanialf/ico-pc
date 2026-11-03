@@ -1373,7 +1373,7 @@ costs about 1 ms a 10 MB read or written. The effects' full-frame reads and what
 | aura: AURA_WORK into WORK0 (`reduceCopyAlphaChannelOfWork1ToWork0`, box 2 x 4 GS texels a texel) | WORK0 424 x 128, 1.65 ms | served by the clear's colour when no aura object is drawn ([above](#a-cleared-source-read-as-its-colour)) |
 | aura: SCENE into FEED128 (`copyCurrentFBToFeedBackArea`, the feedback, box 4 x 4 GS texels a texel) | FEED128 212 x 128, 4.9 ms (the pass after the paste; 1.6 ms was the mean of it and the alpha copy's pass before the paste) | kept: SCENE is the picture ([below](#the-auras-feedback-read)) |
 | shadows: the count at its GS size | temporary 848 x 448, 2.4 ms | kept: it reads SCENE's stencil, not a colour ([the shadow count in one draw](#the-shadow-count-in-one-draw)) |
-| glow: SCENE's alpha into WORK2 (`makeMaskPatternToWork2`) | WORK2 2366 x 1080, 2.9 ms | kept (below) |
+| glow: SCENE's alpha into WORK2 (`makeMaskPatternToWork2`) | WORK2 2366 x 1080, 2.9 ms | computed by the reduction where nothing else draws into WORK2 (below) |
 
 **A reduced copy of SCENE would not give the same bytes.** The FEED128 read's kernel above 1x is
 the area box of the step about the GS's own sample point (`common.hlsli` GS_RS_BOX, `fx_sprite_ps`):
@@ -1522,14 +1522,16 @@ lines with the pause menu up; `[dev] sheet_shader = true` draws them as before, 
 plan's alpha-only form, `FXF_ALPHA_ONLY`) and the alpha test LESS 0x81 with AFAIL KEEP: a texel holds
 SCENE's alpha (bilinear at the texel's own GS position) where that alpha is under 0x81, else the
 fill. `reduceWork2ToWork0` reads all of it into WORK0 through the box (2 x 3.5 GS texels a
-texel). It is not a snapshot for the paste (the paste reads WORK3) and not the blur fold's. Removing
-it byte for byte means the reduction computing each WORK2 texel it weighs from SCENE (four alpha
-loads, the coverage of the guard texels under Full pixel, the alpha test, the fill) in one new
-`fx_frame_ps` form with the mask's sprite in a second block, only where nothing else drew into WORK2
-since the fill and nothing reads WORK2 after the reduction; WORK2's own bytes would then differ
-from the reference (the pass dump's WORK2.png). Not done: the expected saving on the
-phone is the WORK2 pass (2.9 ms in a glow replay, about 1.3 ms a replay over the phone's capture) less
-the reduction's four loads a tap.
+texel). It is not a snapshot for the paste (the paste reads WORK3) and not the blur fold's. Where
+nothing else draws into WORK2 (no sun's fans, no lamps) and nothing else reads it, the reduction
+computes each WORK2 texel it weighs from SCENE instead, byte for byte (the mask's coverage, its
+four alpha loads, the alpha test, the fill; `fx_frame_ps` with `FXF_GLOW_MASK`): neither the fill
+nor the mask is drawn, and WORK2 holds no mask ([The glow's mask in its
+reduction](RENDER_POST.md#the-glows-mask-in-its-reduction); `[dev] glow_fold`). The expected
+saving on the phone is the WORK2 pass (2.9 ms in a glow replay, about 1.3 ms a replay over the
+phone's capture) less the reduction's extra loads (four SCENE alpha loads a WORK2 tap). The pass
+dump's WORK2.png is the mask only where the fold is off (the replay tool's `--pass-dump` keeps it off
+unless `ICO_RD_GLOW_FOLD=1`).
 
 ## The upload ring shrinks
 
