@@ -230,22 +230,50 @@ bool rd__blur_smooth_sprite(Replay *r, const RdFrame *f, const RdCmd *c);
  * the local read): tc the fog's colour target, tz its depth's (the filler
  * draws when they are SCENE both), msaa the MSAA epoch at the fog
  * (RD_CRACK_MSAA_*: open, not drawn then; closed this replay, drawn on the
- * resolved picture; or neither): arms the fill, drawn by
- * rd__crack_fill_late at the start of list 7 of the same replay (from the
- * walk's list loop, every list from 7 on; msaaOpen the epoch open there),
- * after lists 4-6: the snapshot ends the pass open there.  rd__crack_fill_may
- * (the store plan's scan): a fog under state st may arm it (its read of
- * SCENE's depth at list 7 a touch) */
+ * resolved picture; or neither): arms the fill for the same replay, drawn
+ * from list 7 on (after lists 4-6) where rd__crack_fill_place puts it:
+ *   rd__crack_fill_place  command c under state st (before c's own state):
+ *                   HOLD the fill can wait past it (state; a staticBlur
+ *                   sprite into another target that reads neither SCENE
+ *                   nor writes its depth; the glow's sprites of SCENE's
+ *                   alpha alone, *alpha set: the fill then writes RGB
+ *                   alone), HERE the fill before it in a pass of its own,
+ *                   PASTE the fill as the first draw of its pass (the
+ *                   aura's paste into SCENE).  The store plan's scan and
+ *                   the walk ask it the same, so the store the fill reads
+ *                   is kept up to that command; ICO_RD_CRACK_PLACE=7 (the
+ *                   tests' A/B) answers HERE always: the start of list 7
+ *   rd__crack_fill_at     the walk, before command c of list (msaaOpen the
+ *                   epoch open there): draws, holds or arms the paste
+ *                   (more checks than the place's: the glow's first alpha
+ *                   sprite over all of SCENE, the paste's pass readable and
+ *                   whole; any failing draws the fill here)
+ *   rd__crack_fill_late   the fill now if armed (the walk's end)
+ *   rd__crack_fill_paste_due  armed for the paste being drawn now
+ *   rd__crack_fill_in_pass   rd_fx_plan.c fxDraw's local read, before
+ *                   bindDraw: the snapshot and the count, the paste's pass
+ *                   begun (SCENE's colour alone; tdId the draw's depth, 0)
+ *                   and the fill drawn in it
+ *   rd__crack_fill_paste_late  the paste drawn another way: the fill's own
+ *                   pass first (why for the log)
+ * rd__crack_fill_may (the store plan's scan): a fog under state st may arm it */
 enum {
     RD_CRACK_MSAA_NONE,     /* no MSAA, or the epoch not opened yet: single-sampled */
     RD_CRACK_MSAA_OPEN,     /* the epoch open at the fog (per-sample fog): not drawn */
     RD_CRACK_MSAA_RESOLVED, /* the epoch closed before the fog (msaaEnd's resolve) */
 };
 
+enum { RD_CRACK_PLACE_HOLD, RD_CRACK_PLACE_HERE, RD_CRACK_PLACE_PASTE };
+
 void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, int msaa);
+int rd__crack_fill_place(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool *alpha);
+void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen);
 void rd__crack_fill_late(Replay *r, bool msaaOpen);
+bool rd__crack_fill_paste_due(void);
+void rd__crack_fill_in_pass(Replay *r, uint32_t tdId);
+void rd__crack_fill_paste_late(Replay *r, const char *why);
 bool rd__crack_fill_may(const RdStateBlock *st);
-/* the list the armed fill is drawn at the start of (rd_store_plan.c's touch) */
+/* the first list the armed fill may be drawn in (rd_store_plan.c's touch) */
 #define RD_CRACK_LATE_LIST 7
 /* the target's passes readable for the exact blend's attachment read (exactReadable) */
 bool rd__replay_exact_readable(uint32_t target);

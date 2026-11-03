@@ -5795,9 +5795,6 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     uint32_t planBase = 0; /* the list's first command, counted as the store plan counts */
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
-        if (l >= RD_CRACK_LATE_LIST) {
-            rd__crack_fill_late(&r, s_ms.active); /* armed by the fog (rd_crack_fill.c) */
-        }
         rd__passring_list(l);
         /* the list for the blur fold's look-ahead (rd_replay_tiler.c) */
         rd__replay_fold_list(list->cmds, list->count, l, headHalf);
@@ -5808,6 +5805,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 endPass(&r); /* past the open pass's area commands (rd_pass_area.c) */
             }
             rd__replay_fold_at(i);
+            rd__crack_fill_at(&r, f, c, l, s_ms.active); /* armed by the fog (rd_crack_fill.c) */
             if (g_rdWin.first) {
                 /* the draw note's place (rd__replay_set_window_draws) */
                 g_rdWin.list = (int8_t)l;
@@ -5907,6 +5905,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
         if (g_rdWin.stop) {
             break;
         }
+    }
+    if (!g_rdWin.stop) {
+        rd__crack_fill_late(&r, s_ms.active); /* held to the end */
     }
     msaaEnd(&r,
             RD_MSAA_CLOSE_END); /* an epoch still open: SCENE resolved before anything reads it */

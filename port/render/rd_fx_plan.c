@@ -242,6 +242,11 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
     const bool alone = post != RD_POST_REDUCTION && post != RD_POST_MOTION_BLUR &&
                        !(r->st.ds.texEnabled && (post == RD_POST_FLARE || post == RD_POST_BLOOM));
     rd__last_store_post(!local && alone);
+    if (local) {
+        /* the crack fill armed for this pass (the aura's paste): its first
+         * draw, the pass begun here as bindDraw would begin it */
+        rd__crack_fill_in_pass(r, ds.tdId);
+    }
     RhiBindGroup g2 = rd__replay_bind_draw(r, &ds);
     rd__last_store_post(false);
     if (!g2.id) {
@@ -413,7 +418,49 @@ static int fxConstantDraw(Replay *r, const RdFxDraw *x)
     return -1;
 }
 
+/* The way fxPlanDraw takes for a sprite that reads its destination is the
+ * local read (the constant fold and the premultiplied blend not before
+ * it): the crack fill armed for the aura's paste is then drawn first in
+ * that pass (fxDraw, rd_crack_fill.c rd__crack_fill_in_pass) */
+static bool fxLocalNext(const RdFxDraw *x)
+{
+    const RdDrawState *d = x->d;
+    const bool rgbOnly = d->test.ate && d->test.afail == RD_AFAIL_RGB_ONLY;
+    const bool dstAlpha = d->test.date != RD_DATE_OFF || rgbOnly;
+    if (!g_rd.profile.fxPlan || !g_rd.hasDevice || x->selfSample || !x->dstRead ||
+        g_rd.dstMode != RD_BLEND_EXACT_OFF || rd__replay_msaa_want() > 1u) {
+        return false;
+    }
+    uint8_t ident = 0, rgb[3];
+    if (!x->textured && d->abe && !dstAlpha && rd__fx_fold(d, x->p->rgba, &ident, rgb)) {
+        return false; /* the constant fold first */
+    }
+    const int form = d->abe ? fxPremulForm(d->blend) : 0;
+    if (form && !d->pabe && d->colclamp && !dstAlpha && g_rd.fs[RD_FS_FX_FRAME].id) {
+        return false; /* the premultiplied blend first */
+    }
+    return g_rd.profile.fxDstLocal && g_rd.fs[RD_FS_FX_LOCAL].id && g_rd.layoutLocal.id;
+}
+
+static bool fxPlanDraw(Replay *r, const RdFxDraw *x);
+
 bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x)
+{
+    /* the crack fill armed for this sprite's pass (rd_crack_fill.c: the
+     * aura's paste): taken by the local read's pass; drawn any other way
+     * the sprite comes after the fill's own pass */
+    const bool paste = rd__crack_fill_paste_due();
+    if (paste && !fxLocalNext(x)) {
+        rd__crack_fill_paste_late(r, "the paste reads its destination through a snapshot");
+    }
+    const bool drawn = fxPlanDraw(r, x);
+    if (paste) {
+        rd__crack_fill_paste_late(r, "the paste's local read was not taken");
+    }
+    return drawn;
+}
+
+static bool fxPlanDraw(Replay *r, const RdFxDraw *x)
 {
     if (!g_rd.profile.fxPlan || !g_rd.hasDevice || x->selfSample) {
         return false;

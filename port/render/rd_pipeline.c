@@ -3731,11 +3731,16 @@ uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n
     }
     /* the crack filler before the fog above 1x (rd_crack_fill.c) */
     if (g_rd.fs[RD_FS_CRACK_FILL].id && g_rd.fs[RD_FS_CRACK_COUNT].id) {
-        for (int c = 0; c < 3; c++) {
-            if (c == 2 && !g_rd.fs[RD_FS_CRACK_FILL1].id) {
+        /* the fills, the count, and each fill's RGB alone (after the
+         * glow's alpha) */
+        static const int kKinds[5] = {RD_CRACK_KEY_FILL, RD_CRACK_KEY_COUNT, RD_CRACK_KEY_FILL1,
+                                      RD_CRACK_KEY_FILL | RD_CRACK_KEY_RGB,
+                                      RD_CRACK_KEY_FILL1 | RD_CRACK_KEY_RGB};
+        for (int c = 0; c < 5; c++) {
+            if ((kKinds[c] & 3) == RD_CRACK_KEY_FILL1 && !g_rd.fs[RD_FS_CRACK_FILL1].id) {
                 continue;
             }
-            const RdPipeKeyInt k = rd__crack_fill_key(c);
+            const RdPipeKeyInt k = rd__crack_fill_key(kKinds[c]);
             n = rd__add_pipe_key(out, max, n, &k);
         }
     }
@@ -3760,15 +3765,21 @@ RdPipeKeyInt rd__msaa_resolve_key(int depthOnly)
     return k;
 }
 
-RdPipeKeyInt rd__crack_fill_key(int count)
+RdPipeKeyInt rd__crack_fill_key(int kind)
 {
     /* colour alone: the fill is drawn after lists 4-6 in a pass of SCENE's
-     * colour, its depth sampled (rd_crack_fill.c fillWork) */
-    return rd__post_key(RD_VS_BLIT,
-                        count == 1 ? RD_FS_CRACK_COUNT
-                        : count    ? RD_FS_CRACK_FILL1
-                                   : RD_FS_CRACK_FILL,
-                        RHI_FMT_RGBA8_UNORM);
+     * colour, its depth sampled (rd_crack_fill.c fillWork); after the
+     * glow's sprites of SCENE's alpha its RGB alone (RD_CRACK_KEY_RGB) */
+    const int k = kind & 3;
+    RdPipeKeyInt key = rd__post_key(RD_VS_BLIT,
+                                    k == RD_CRACK_KEY_COUNT   ? RD_FS_CRACK_COUNT
+                                    : k == RD_CRACK_KEY_FILL1 ? RD_FS_CRACK_FILL1
+                                                              : RD_FS_CRACK_FILL,
+                                    RHI_FMT_RGBA8_UNORM);
+    if ((kind & RD_CRACK_KEY_RGB) && k != RD_CRACK_KEY_COUNT) {
+        key.gs.colorMask = 7u;
+    }
+    return key;
 }
 
 /* --------------------------------------------------------------- DATE */

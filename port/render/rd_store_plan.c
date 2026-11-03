@@ -323,6 +323,29 @@ static void planKeep(uint32_t tex, uint32_t target, uint32_t frame)
     }
 }
 
+/* the crack fill reads SCENE's depth before command ord (list l, index i
+ * in it), where rd__crack_fill_place puts it as the walk does (the walk may
+ * draw it earlier, never later): a touch by the command before, so every
+ * pass begun up to it keeps the store, and the last store's cut does not
+ * take the pass open there (PlanDepth.late) */
+static void planLate(uint32_t ord, int l, uint32_t i)
+{
+    if (ord == 0) {
+        s_plan.lateTarget = 0;
+        return;
+    }
+    s_plan.curType = RDC_POST_STUB;
+    s_plan.curPost = RD_POST_FOG;
+    s_plan.curList = (int8_t)l;
+    s_plan.curCmd = i;
+    planTouch(s_plan.lateTarget, ord - 1u, l, true);
+    PlanDepth *p = planDepth(s_plan.lateTarget, false);
+    if (p) {
+        p->late = ord;
+    }
+    s_plan.lateTarget = 0;
+}
+
 void rd__store_plan_scan(const RdFrame *f, int keep)
 {
     rd__fades_fold_scan(f, keep); /* the sprites the reduction draws (rd_fades_fold.c) */
@@ -369,25 +392,16 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     RdStateBlock st = f->startState;
     uint32_t ord = 0;
     s_plan.lateTarget = 0;
-    for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
+    bool lateAlpha = false; /* rd__crack_fill_place's, as the walk's */
+    int l = rd__first_list(keep);
+    for (; l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
-        if (plan && l >= RD_CRACK_LATE_LIST && s_plan.lateTarget && ord > 0) {
-            /* the crack fill reads SCENE's depth here, before command ord
-             * (rd__crack_fill_late, as the walk calls it): a touch by the
-             * command before, so every pass begun up to it keeps the store */
-            s_plan.curType = RDC_POST_STUB;
-            s_plan.curPost = RD_POST_FOG;
-            s_plan.curList = (int8_t)l;
-            s_plan.curCmd = 0;
-            planTouch(s_plan.lateTarget, ord - 1u, l, true);
-            PlanDepth *p = planDepth(s_plan.lateTarget, false);
-            if (p) {
-                p->late = ord;
-            }
-            s_plan.lateTarget = 0;
-        }
         for (uint32_t i = 0; i < list->count; i++, ord++) {
             const RdCmd *c = &list->cmds[i];
+            if (plan && l >= RD_CRACK_LATE_LIST && s_plan.lateTarget &&
+                rd__crack_fill_place(f, c, &st, &lateAlpha) != RD_CRACK_PLACE_HOLD) {
+                planLate(ord, l, i); /* the fill before command ord, or in its pass */
+            }
             const bool state = rd__apply_state(&st, c);
             if (area) {
                 rd__pass_area_scan_cmd(f, c, &st, state, ord);
@@ -458,6 +472,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
                 break;
             }
         }
+    }
+    if (plan && s_plan.lateTarget) {
+        planLate(ord, l - 1, 0); /* held to the walk's end (rd__crack_fill_late) */
     }
     if (area) {
         rd__pass_area_scan_end(ord);

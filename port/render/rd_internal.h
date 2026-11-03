@@ -2289,11 +2289,22 @@ int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, int path, RdDrawPass
  * with both fragment shaders, and the crack filler's two keys where its
  * shaders are made; appends to out[0..n). */
 uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+
 /* The crack filler's keys (rd_crack_fill.c), blit_vs into RGBA8 alone (no
  * depth attached: the fill reads SCENE's depth as a texture and writes the
  * colour only): count 0 crack_fill_ps, count 2 crack_fill1_ps, count 1
  * crack_count_ps; no blend. */
-RdPipeKeyInt rd__crack_fill_key(int count);
+/* rd__crack_fill_key's kinds: the general fill, the count, the reach-1
+ * fill; RD_CRACK_KEY_RGB with a fill: its RGB alone (after the glow's
+ * alpha, rd_crack_fill.c) */
+enum {
+    RD_CRACK_KEY_FILL = 0,
+    RD_CRACK_KEY_COUNT = 1,
+    RD_CRACK_KEY_FILL1 = 2,
+    RD_CRACK_KEY_RGB = 4
+};
+
+RdPipeKeyInt rd__crack_fill_key(int kind);
 /* the MSAA epoch's resolve into SCENE (rd_replay.c msaaEnd): msaa_resolve_ps
  * into RGBA8 with D32F_S8 (depthOnly 0), depth_resolve_ps into D32F_S8 alone
  * (1); test ALWAYS with Z writes, in the fog's family and the start-up set */
@@ -4305,17 +4316,20 @@ void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *origi
  * rd__crack_fill_counts    since rd_init: replays filled, replays counted,
  *                          the pixels those filled, the last and the
  *                          largest count, the fogged replays above 1x not
- *                          filled, the filled ones drawn inside the scene
- *                          pass with the local fog, the last fill's scale
- *                          and reach
+ *                          filled, the filled ones drawn after lists 4-6
+ *                          (of them in the aura's paste pass, after the
+ *                          glow's alpha), after the MSAA resolve, the last
+ *                          fill's scale and reach
  * rd__crack_fill_block     the 10 s summary's lines (rd_interp.c presentLog)
  * rd__crack_fill_reach     the reach on an axis at scale s: ceil(s / 2)
  *                          above 1, at most RD_CRACK_REACH_MAX, else 0
  * rd__crack_fill_shutdown  rd_shutdown: the count's target and buffer */
 typedef struct RdCrackCounts {
     uint64_t filled, counted, pixels, skipped;
-    uint64_t late;      /* of the filled, drawn after lists 4-6 (rd__crack_fill_late) */
-    uint64_t afterMsaa; /* of the filled, drawn on the MSAA resolve's picture */
+    uint64_t late;       /* of the filled, drawn after lists 4-6 (rd__crack_fill_late) */
+    uint64_t afterMsaa;  /* of the filled, drawn on the MSAA resolve's picture */
+    uint64_t pasted;     /* of the late, drawn first in the aura's paste pass */
+    uint64_t afterAlpha; /* of the late, RGB alone after the glow's alpha sprites */
     uint32_t last, max;
     float sx, sy;
     uint32_t rx, ry;
@@ -4326,6 +4340,10 @@ void rd__crack_fill_init(void);
 void rd__crack_fill_scene_made(void);
 void rd__crack_fill_set_enabled(bool on);
 void rd__crack_fill_force_general(bool on); /* tests: crack_fill_ps at a reach of 1 */
+/* tests: the fill's place pinned to the start of list 7 (1, as
+ * ICO_RD_CRACK_PLACE=7), where rd__crack_fill_place puts it (0), or as the
+ * environment says (-1) */
+void rd__crack_fill_set_place(int pinned);
 void rd__crack_fill_count_all(bool on);
 void rd__crack_fill_wait(void);
 void rd__crack_fill_counts(RdCrackCounts *out);

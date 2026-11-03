@@ -2634,11 +2634,13 @@ int main(int argc, char **argv)
         rd__crack_fill_counts(&cc);
         printf("%s: stats: crack fill %s: %u passes, %llu pixels filled (%llu replays counted; "
                "scale %.4gx%.4g, reach %ux%u texels; %llu fogged replays above 1x not filled; "
-               "%llu fills after lists 4-6; %llu fills after the MSAA resolve)\n",
+               "%llu fills after lists 4-6; %llu fills after the MSAA resolve; %llu fills in "
+               "the aura's paste pass; %llu fills after the glow's alpha)\n",
                dump, cc.enabled ? "on" : "off", pr->crackFillPasses, (unsigned long long)cc.pixels,
                (unsigned long long)cc.counted, (double)cc.sx, (double)cc.sy, cc.rx, cc.ry,
                (unsigned long long)cc.skipped, (unsigned long long)cc.late,
-               (unsigned long long)cc.afterMsaa);
+               (unsigned long long)cc.afterMsaa, (unsigned long long)cc.pasted,
+               (unsigned long long)cc.afterAlpha);
         uint32_t satDraws = 0;
         const uint64_t sat = satZVertices(rf, &satDraws);
         printf("%s: stats: VU corners with a saturated GS Z: %llu vertices of region-mode meshes "
