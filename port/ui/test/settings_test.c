@@ -3568,7 +3568,8 @@ static int effectsRow(int opt)
     return -1;
 }
 
-/* the [video] effect_motion_blur_strength the file holds after a save, -1 */
+/* the [video] effect_motion_blur_strength the file holds after a save, -1 without
+   the key */
 static long long savedStrength(void)
 {
     char p[1100];
@@ -3607,7 +3608,11 @@ static void testMotionBlurStrength(void)
     CHECK(noteStarting(UI_PAGE_EFFECTS, "Lower values make the trail fade faster") >= 0,
           "strength: the note");
     checkPageFits(UI_PAGE_EFFECTS, "Effects with Motion blur strength (pause)");
-    CHECK(savedStrength() == 100, "strength: the file has 100");
+    /* nothing changed yet: ui_settings_save writes [video] only once a video
+       row was stepped (s_dirtyVideo), so the file keeps no key, which reads
+       as 100 */
+    CHECK(savedStrength() == -1 && ico_video_effect_motion_blur_strength() == 100,
+          "strength: no change, no key in the file (read as 100)");
 
     /* Right at 100 % stays; Left down to 10 % in tens, held there */
     ui_settings_step(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH, 1);
