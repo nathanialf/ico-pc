@@ -2581,9 +2581,9 @@ int main(int argc, char **argv)
                whyText[0] ? "; " : "", whyText);
         /* the shadow volumes in the scene's pass (rd_shadow_merge.c) */
         printf("%s: stats: shadow volumes in the scene's pass %s: %u of %u counts, %u passes "
-               "armed\n",
+               "armed; %u count targets' clears not drawn\n",
                dump, rd__shadow_merge_on() ? "on" : "off", pr->shadowMerged,
-               pr->shadowOne + pr->shadowSeven, pr->shadowMergeArmed);
+               pr->shadowOne + pr->shadowSeven, pr->shadowMergeArmed, pr->shadowClearSkipped);
         /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
         printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
                "additive, %u local (%u post sprites' DATE by local read); vu no-planes %u; "

@@ -413,6 +413,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
             if (state || !plan) {
                 continue;
             }
+            rd__shadow_merge_scan_cmd(c, &st); /* the count targets' clear (rd_shadow_merge.c) */
             s_plan.curType = c->type;
             s_plan.curPost = c->type == RDC_POST_STUB ? c->b[0] : 0;
             s_plan.curList = (int8_t)l;

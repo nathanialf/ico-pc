@@ -75,7 +75,9 @@
  *      the one draw, under ICO_RD_STORE_POISON=1: the count, the levels and
  *      SCENE byte for byte, list 0's pass armed and the reset taken in it
  *      with the merge on (RdPerfRecord.shadowMergeArmed, shadowMerged), one
- *      render pass fewer, nothing armed or taken with it off.
+ *      render pass fewer, the count target's new-target clear left
+ *      undrawn (shadowClearSkipped; the poison draws it as 0x5A, so a
+ *      reader would show), nothing armed, taken or left with it off.
  *   x  (`rd_shadow_test edges`, ctest rd_shadow_edges: this case alone)
  *      the two kernels at scene scale 2: the same frame (the synthetic
  *      volumes, Shadow.c's model, a rectangle at a sub-pixel offset, all
@@ -1499,7 +1501,7 @@ typedef struct AbPics {
     /* the shadow resets whose volumes were drawn in the scene's open pass,
      * the passes armed for it (RdPerfRecord.shadowMerged, shadowMergeArmed;
      * rd_shadow_merge.c) and the replay's passes (RhiStats) */
-    uint32_t merged, armed, passes;
+    uint32_t merged, armed, passes, clears;
 } AbPics;
 
 static void abFree(AbPics *p)
@@ -1532,6 +1534,7 @@ static bool abRecord(int vol, bool one, AbPics *p, const char *what)
     p->merged = g_rdPerf.shadowMerged;
     p->armed = g_rdPerf.shadowMergeArmed;
     p->passes = g_rdPerf.passKinds[RD_PERF_PASS_RENDER];
+    p->clears = g_rdPerf.shadowClearSkipped;
     const RdTargetRec *c = rd__target_rec(s_count.id);
     const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!c || !sc) {
@@ -1714,6 +1717,11 @@ static void mergeFrame(int vol, bool one, const char *what)
           w2, on.merged, on.armed);
     CHECK(on.passes + 1u == off.passes, "(m) %s: %u render passes on, %u off (want one fewer)", w2,
           on.passes, off.passes);
+    /* the count target's new-target clear: left undrawn on, drawn here with
+     * the poison's 0x5A (a reader would change the count or a level) */
+    CHECK(off.clears == 0 && on.clears == 1,
+          "(m) %s: the count target's clear left %u times off, %u on (want 0 and 1)", w2,
+          off.clears, on.clears);
     if (okOff && okOn) {
         abCompareOne(off.cnt, on.cnt, off.cw, off.ch, w2, "the count");
         for (int l = 0; l < 3; l++) {

@@ -17,10 +17,12 @@
 # Every PNG the first run writes (SCENE, the shadow levels, PRESENT and every
 # other named target) must be the second's byte for byte; the first run must
 # say "shadow volumes in the scene's pass off: 0 of R counts, 0 passes
-# armed", the second "on: M of R counts"; the second's draws must be the
-# first's and its passes the first's less M (the volumes' pass, one a reset
-# taken); some dump must take a reset at some setting (else the gate saw
-# nothing).  A missing list or dump is named and skipped; no dump read, or
+# armed; 0 count targets' clears not drawn", the second "on: M of R counts";
+# the second's draws must be the first's and its passes the first's less M
+# (the volumes' pass, one a reset taken; the count targets' clears it leaves
+# undrawn are drawn here with the poison's 0x5A, so a reader of them would
+# change a picture); some dump must take a reset at some setting (else the
+# gate saw nothing).  A missing list or dump is named and skipped; no dump read, or
 # no device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 set(dumps "")
@@ -65,7 +67,7 @@ set(env_phoneauto ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_PREPASS=0)
 set(args_enh2x --enhanced --aspect 4:3 --resolution 2x --present 1280x960)
 set(env_enh2x "")
 set(drawsRe "stats: ([0-9]+) draws, ([0-9]+) passes")
-set(mergeRe "stats: shadow volumes in the scene's pass (on|off): ([0-9]+) of ([0-9]+) counts, ([0-9]+) passes armed")
+set(mergeRe "stats: shadow volumes in the scene's pass (on|off): ([0-9]+) of ([0-9]+) counts, ([0-9]+) passes armed; ([0-9]+) count targets' clears not drawn")
 set(failures 0)
 set(taken 0)
 set(compared 0)
@@ -119,13 +121,14 @@ foreach(dump IN LISTS dumps)
       set(merged${run} "${CMAKE_MATCH_2}")
       set(counts${run} "${CMAKE_MATCH_3}")
       set(armed${run} "${CMAKE_MATCH_4}")
+      set(clears${run} "${CMAKE_MATCH_5}")
     endforeach()
     if(NOT ok)
       math(EXPR failures "${failures} + 1")
       continue()
     endif()
     if(NOT stateOff STREQUAL "off" OR NOT mergedOff EQUAL 0 OR NOT armedOff EQUAL 0 OR
-       NOT stateOn STREQUAL "on")
+       NOT clearsOff EQUAL 0 OR NOT stateOn STREQUAL "on")
       message(SEND_ERROR "${dump} ${s}: ICO_RD_SHADOW_MERGE=0 says ${stateOff} with ${mergedOff} "
                          "taken and ${armedOff} armed, ICO_RD_SHADOW_MERGE=1 ${stateOn}")
       math(EXPR failures "${failures} + 1")
@@ -140,7 +143,8 @@ foreach(dump IN LISTS dumps)
     endif()
     math(EXPR taken "${taken} + ${mergedOn}")
     message(STATUS "${dump} ${s}: ${mergedOn} of ${countsOn} resets in the scene's pass "
-                   "(${armedOn} armed); passes ${passesOff} -> ${passesOn}")
+                   "(${armedOn} armed), ${clearsOn} count clears left (poisoned here); passes "
+                   "${passesOff} -> ${passesOn}")
     file(GLOB pngs RELATIVE "${dirOff}" "${dirOff}/*.png")
     list(LENGTH pngs npng)
     if(npng EQUAL 0)

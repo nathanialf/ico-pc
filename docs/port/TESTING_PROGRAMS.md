@@ -1258,9 +1258,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   --stats` under `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` with the shadow volumes in a pass
   of their own (`ICO_RD_SHADOW_MERGE=0`) and in the scene's open pass (`=1`, `rd_shadow_merge.c`),
   at the phone's Resolution Auto under the MoltenVK fakes (a tile-based class) and at Enhanced 2x
-  4:3: every PNG byte for byte, `shadow volumes in the scene's pass off: 0 of R counts, 0 passes
-  armed` against `on: M of R`, the same draws, the on run's passes the off run's less M; some reset
-  must be taken (`rd_shadow_merge_ab`). SKIP as `rd_vustage_ab`.
+  4:3: every PNG byte for byte (the count targets' clears the on run leaves undrawn are drawn with
+  the poison's 0x5A there, so a reader would show), `shadow volumes in the scene's pass off: 0 of R
+  counts, 0 passes armed; 0 count targets' clears not drawn` against `on: M of R`, the same draws,
+  the on run's passes the off run's less M; some reset must be taken (`rd_shadow_merge_ab`). SKIP
+  as `rd_vustage_ab`.
 - `rd_pass_area_ab.cmake`: the dumps of `tools/pass_area_dumps.txt` (`tools/vustage_dumps.txt`'s,
   the PowerVR phone's three F12 zips and its F12 frame of 2026-11-02
   `frame-20261102-091017-v15677.rddump` in the effort's evidence folder; machine-local, a
@@ -1750,7 +1752,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rd__shadow_merge_force` off and on) under `ICO_RD_STORE_POISON=1`, the synthetic volumes
   through both paths and Shadow.c's model through the one draw: the count, SHADOW0-2 and SCENE
   byte for byte, list 0's pass armed and the reset taken with it on (`shadowMergeArmed`,
-  `shadowMerged` 1), one render pass fewer, nothing armed or taken off.
+  `shadowMerged` 1), one render pass fewer, the count target's new-target clear left undrawn
+  (`shadowClearSkipped` 1; drawn as 0x5A under the poison), nothing armed, taken or left off.
   Case o: the count resolved in one draw from the stencil view against the seven stencil-tested
   draws (`RdProfile.shadowOne` flipped between two recordings of one frame), the count at its GS
   size (`rd__shadow_count_read`), SHADOW0-2 and SCENE byte for byte for the synthetic volumes,

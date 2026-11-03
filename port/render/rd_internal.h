@@ -2170,6 +2170,15 @@ void rd__shadow_merge_arm(RhiRenderPassDesc *p, uint32_t cid, uint32_t did, uint
 bool rd__shadow_merge_take(bool open, uint32_t serial, uint32_t passColor, uint32_t passDepth,
                            const RdStateBlock *st, const char *blocked);
 uint32_t rd__shadow_merge_color(bool open, uint32_t serial, const RdStateBlock *st);
+/* the scan's every other command (rd_store_plan.c): which temporary
+ * targets a shadow window starts with its reset and nothing else touches
+ * before its resolve; rd__shadow_count_clear (rd_upload.c
+ * rd__clear_new_targets): 0 clear the new target as before, 1 leave it
+ * undrawn (such a count target: nothing reads it before its resolve, which
+ * writes or clears it or stands the reduced count for it), 2 clear it to
+ * the tests' 0x5A instead (ICO_RD_STORE_POISON=1) */
+void rd__shadow_merge_scan_cmd(const RdCmd *c, const RdStateBlock *st);
+int rd__shadow_count_clear(const RdTargetRec *t);
 void rd__pass_cut_force(int which, int mode);
 void rd__pass_cut_scan(const RdFrame *f, int keep);
 bool rd__pass_cut_scan_begin(const RdFrame *f, int keep);

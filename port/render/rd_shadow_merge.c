@@ -59,6 +59,19 @@
  * (the window is open), what the armed pass stored.  A pass armed for a
  * reset it did not reach stored its stencil for nothing (counted).
  *
+ * The count target's new-target clear (rd__shadow_count_clear, from
+ * rd_upload.c rd__clear_new_targets): the count target is a pooled
+ * temporary taken anew each frame, cleared before the walk (9.7 MB written
+ * at the phone's size).  The scan notes, for every temporary a shadow
+ * command draws on, whether its first touch in the replay is a reset and
+ * whether anything else touches it before its first resolve
+ * (rd__shadow_merge_scan_cmd).  Where its first is a reset, nothing else
+ * comes before the resolve and the resolve comes, nothing reads the clear:
+ * the volumes never write its colour, the seven draws clear it at their
+ * load, the one draw at scale 1 writes every texel and above 1x the reduced
+ * count stands for it after the resolve.  So it is left undrawn (under
+ * ICO_RD_STORE_POISON=1 cleared to 0x5A instead, the tests' garbage).
+ *
  * The lines:
  *   rd: shadow volumes: drawn in the scene's open pass (...)|in a pass of
  *       their own (...)                                   (start)
@@ -66,10 +79,12 @@
  *       (reported once)
  *   rd: shadow volumes: in a pass of their own in frame F: <why> (the first
  *       8, then every 100th: N so far)
- *   window: ...; shadow volumes in the scene's pass: M of R resets a
- *       replay (A passes armed)                           (the 10 s line)
- *   the replay tool: --stats "shadow volumes: in the scene's pass on|off:
- *       M of R resets, A passes armed" */
+ *   rd: shadow volumes: the count target's clear as a new target (WxH,
+ *       N MB) not drawn: ... (reported once)
+ *   window: ...; shadow volumes in the scene's pass: M of R counts, A
+ *       passes armed, C count clears not drawn a replay   (the 10 s line)
+ *   the replay tool: --stats "shadow volumes in the scene's pass on|off:
+ *       M of R counts, A passes armed; C count targets' clears not drawn" */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -95,6 +110,14 @@ static struct {
     /* the lines */
     bool saidMerged;
     uint32_t missed;
+    /* the count targets' new-target clear (the scan): each target a shadow
+     * command draws on, whether its first touch in the replay was a reset,
+     * whether anything else touched it before its first resolve, and
+     * whether it has one */
+    uint32_t cntId[MERGE_RESETS];
+    uint8_t cntFirstReset[MERGE_RESETS], cntTouched[MERGE_RESETS], cntResolved[MERGE_RESETS];
+    uint32_t nCnt;
+    bool cntFull, saidClear;
 } s_sm = {.forced = -1};
 
 static bool decide(char *why, size_t n)
@@ -151,6 +174,115 @@ void rd__shadow_merge_scan_begin(void)
 {
     s_sm.nReset = 0;
     s_sm.valid = false;
+    s_sm.nCnt = 0;
+    s_sm.cntFull = false;
+}
+
+/* the count clear's entry of target id (added when add), -1 none */
+static int cntSlot(uint32_t id, bool add)
+{
+    for (uint32_t i = 0; i < s_sm.nCnt; i++) {
+        if (s_sm.cntId[i] == id) {
+            return (int)i;
+        }
+    }
+    if (!add || !id) {
+        return -1;
+    }
+    if (s_sm.nCnt >= MERGE_RESETS) {
+        s_sm.cntFull = true; /* more targets than the scan holds: no clear left out */
+        return -1;
+    }
+    const uint32_t i = s_sm.nCnt++;
+    s_sm.cntId[i] = id;
+    s_sm.cntFirstReset[i] = s_sm.cntTouched[i] = s_sm.cntResolved[i] = 0;
+    return (int)i;
+}
+
+/* target id touched by a command that is not one of its shadow window's */
+static void cntTouch(uint32_t id)
+{
+    const RdTargetRec *t = rd__target_rec(id);
+    if (!t || t->named) {
+        return; /* a named target is never a count target here */
+    }
+    const int i = cntSlot(id, true);
+    if (i >= 0 && !s_sm.cntResolved[i]) {
+        s_sm.cntTouched[i] = 1;
+    }
+}
+
+void rd__shadow_merge_scan_cmd(const RdCmd *c, const RdStateBlock *st)
+{
+    switch (c->type) {
+    case RDC_NOP:
+    case RDC_OVERLAY_TEXT:
+        return;
+    case RDC_SHADOW_RESET:
+    case RDC_SHADOW_STRIP:
+    case RDC_SHADOW_RESOLVE: {
+        const int i = cntSlot(st->color, true);
+        if (i < 0) {
+            return;
+        }
+        if (c->type == RDC_SHADOW_RESET && !s_sm.cntResolved[i] && !s_sm.cntTouched[i] &&
+            !s_sm.cntFirstReset[i]) {
+            s_sm.cntFirstReset[i] = 1;
+        } else if (!s_sm.cntFirstReset[i]) {
+            s_sm.cntTouched[i] = 1; /* a strip or a resolve before any reset */
+        }
+        if (c->type == RDC_SHADOW_RESOLVE) {
+            s_sm.cntResolved[i] = 1;
+        }
+        return;
+    }
+    case RDC_CLEAR:
+        cntTouch(c->u[0]);
+        return;
+    case RDC_COPY:
+    case RDC_EXACT_BLEND:
+        cntTouch(c->u[0]);
+        cntTouch(c->u[1]);
+        return;
+    default:
+        break;
+    }
+    /* a draw, a post sprite, anything else: its targets and its texture */
+    cntTouch(st->color);
+    cntTouch(st->depth);
+    const RdTexRec *t = rd__tex_rec(st->tex);
+    if (t && t->kind == RD_TEXKIND_TARGET) {
+        cntTouch(t->target);
+    }
+}
+
+int rd__shadow_count_clear(const RdTargetRec *t)
+{
+    if (!s_sm.on || !s_sm.valid || s_sm.replay != g_rd.replayCounter || s_sm.cntFull || !t ||
+        t->named || t->withDepth) {
+        return 0;
+    }
+    for (uint32_t i = 0; i < s_sm.nCnt; i++) {
+        if (rd__target_rec(s_sm.cntId[i]) != t) {
+            continue;
+        }
+        if (!s_sm.cntFirstReset[i] || s_sm.cntTouched[i] || !s_sm.cntResolved[i]) {
+            return 0;
+        }
+        g_rdPerf.shadowClearSkipped++;
+        if (!s_sm.saidClear) {
+            s_sm.saidClear = true;
+            rd__log("shadow volumes: the count target's clear as a new target (%ux%u, %.1f MB) "
+                    "not drawn: nothing reads it before its resolve, which writes or clears it "
+                    "or stands the reduced count for it (reported once)",
+                    t->tw, t->th, (double)t->tw * t->th * 4.0 / 1048576.0);
+        }
+        /* the tests' garbage where it is left undrawn (ICO_RD_STORE_POISON=1:
+         * lavapipe keeps memory as it was): a reader would show 0x5A */
+        const char *poison = getenv("ICO_RD_STORE_POISON");
+        return poison && strcmp(poison, "1") == 0 ? 2 : 1;
+    }
+    return 0;
 }
 
 void rd__shadow_merge_scan_reset(const RdStateBlock *st, uint32_t ord)
