@@ -1234,9 +1234,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `gate-wave.sh` names them): every baseline PNG the same bytes or within `-DBOUND` levels (0,
   `png_level_diff.py`), the `glow N passes` count at least two fewer than the baseline's at the
   phone's setting and no more at the others; each run's line prints the passes before and after
-  and its largest difference. A setting without a baseline is skipped; nothing compared: SKIP
-  (`rd_glow_cheap_ab`). A baseline refresh for a later change to the glow's drawing replaces both
-  folders.
+  and its largest difference. Where the run's stats say the crack fill was drawn after lists 4-6
+  (it ends the fog's pass before the glow) the cuts are counted in a second replay with
+  `ICO_RD_CRACK_FILL=0`, and the run's own count is at most the baseline's. The seven frames the
+  crack fill changed (v4251, the loss frame, rd-00720, the two issue-91 frames, v2567 and its
+  previous frame) are compared at the phone's setting and Enhanced 2x with refreshed pictures
+  (`-DBASE_REFRESH`, `build-host/tmp/v098/evidence/glow/pd-w15`: main 7832a2e4f's, each first
+  checked to have the no-fill replay's WORK2 and no target farther from the old baseline than
+  that replay), the old baseline's log still giving the passes before. A setting without a
+  baseline is skipped; nothing compared: SKIP (`rd_glow_cheap_ab`). A baseline refresh for a
+  later change to the glow's drawing replaces the folders.
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's

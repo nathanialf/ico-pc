@@ -35,8 +35,27 @@
 # The lines print each dump's passes before and after and its largest
 # level.  A missing list, dump or baseline is named and skipped; nothing
 # compared, or no device: SKIP (77).
+# The crack fill after lists 4-6 (rd_crack_fill.c, CHEAPPASSES; DIVERGENCES.md
+# VD-20) came after these baselines: it ends the fog's pass at list 7 for its
+# snapshot and its own pass, so cleanUpFB's two sprites take passes of their
+# own again wherever it is drawn (above 1x with a fog: every phone frame), and
+# it leaves the crack's depth, which cleanUpFB's Z-tested sprite and so the
+# glow's mask (WORK2) read.  So:
+#   - a run whose stats say the fill was drawn ("1 fills after lists 4-6") is
+#     replayed once more with ICO_RD_CRACK_FILL=0 for the pass counts: that
+#     replay's glow passes must meet the rule above (at least 2 fewer at the
+#     phone's setting: the cuts themselves), the run's own at most the
+#     baseline's;
+#   - the PNGs of a frame the fill changed are compared with -DBASE_REFRESH/
+#     <name>-<setting> where that folder is (build-host/tmp/v098/evidence/glow/
+#     pd-w15: main 7832a2e4f's pictures, each checked first to have the
+#     no-fill replay's WORK2 and no target farther from the old baseline than
+#     the no-fill replay: verify.txt in build-host/tmp/v098/evidence/fixab/
+#     glow), the old baseline's log still giving the passes before; at 0
+#     levels as the rest.
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DBASE_PHONE=<dir> -DBASE_DESK=<dir>
-# -DPY=<python3> -DDIFF=<png_level_diff.py> -DOUT=<a folder the test may write>
+# -DBASE_REFRESH=<dir> -DPY=<python3> -DDIFF=<png_level_diff.py>
+# -DOUT=<a folder the test may write>
 if("${BOUND}" STREQUAL "")
   set(BOUND 0)
 endif()
@@ -83,6 +102,7 @@ set(env_orig "")
 set(args_enh2x43 --enhanced --aspect 4:3 --resolution 2x --present 1280x960)
 set(env_enh2x43 "")
 set(glowRe "glow ([0-9]+) passes")
+set(lateRe "stats: crack fill on: 1 passes, [0-9]+ pixels filled \\([^)]*, 1 fills after lists 4-6,")
 set(diffRe "png_level_diff: [0-9]+ x [0-9]+, [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, [0-9]+ more \\(largest ([0-9]+)\\), ([0-9]+) pixels differ")
 set(failures 0)
 set(compared 0)
@@ -139,22 +159,55 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     set(glowNew "${CMAKE_MATCH_1}")
-    if(s STREQUAL "phone")
-      math(EXPR most "${glowBase} - 2")
-      if(glowNew GREATER most)
-        message(SEND_ERROR "${name} ${s}: glow ${glowBase} passes before, ${glowNew} now: want at "
-                           "most ${most} (cleanUpFB in the fog's pass, the WORK2 fill in the "
-                           "mask's)")
+    # the passes the cuts are judged by: this run's, or with the crack fill
+    # drawn (it ends the fog's pass before the glow) a replay without it
+    set(glowCut "${glowNew}")
+    set(cutWhat "now")
+    if(flat MATCHES "${lateRe}")
+      set(dirNo "${OUT}/${name}-${s}-nofill")
+      file(REMOVE_RECURSE "${dirNo}")
+      file(MAKE_DIRECTORY "${dirNo}")
+      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+                              ${env_${s}} ICO_RD_CRACK_FILL=0 "${TOOL}" "${dump}"
+                              "${dirNo}/out.png" --stats ${args_${s}}
+                      RESULT_VARIABLE rcNo OUTPUT_VARIABLE outNo ERROR_VARIABLE errNo)
+      string(REPLACE ";" "," flatNo "${outNo}")
+      if(NOT rcNo EQUAL 0 OR NOT flatNo MATCHES "${glowRe}")
+        message(SEND_ERROR "${name} ${s}: the replay without the crack fill: exit ${rcNo}, no "
+                           "glow pass count:\n${errNo}")
+        math(EXPR failures "${failures} + 1")
+        continue()
+      endif()
+      set(glowCut "${CMAKE_MATCH_1}")
+      set(cutWhat "without the crack fill")
+      if(glowNew GREATER glowBase)
+        message(SEND_ERROR "${name} ${s}: glow ${glowBase} passes before, ${glowNew} now with the "
+                           "crack fill: want at most as many")
         math(EXPR failures "${failures} + 1")
       endif()
-    elseif(glowNew GREATER glowBase)
-      message(SEND_ERROR "${name} ${s}: glow ${glowBase} passes before, ${glowNew} now: want at "
-                         "most as many")
+    endif()
+    if(s STREQUAL "phone")
+      math(EXPR most "${glowBase} - 2")
+      if(glowCut GREATER most)
+        message(SEND_ERROR "${name} ${s}: glow ${glowBase} passes before, ${glowCut} ${cutWhat}: "
+                           "want at most ${most} (cleanUpFB in the fog's pass, the WORK2 fill in "
+                           "the mask's)")
+        math(EXPR failures "${failures} + 1")
+      endif()
+    elseif(glowCut GREATER glowBase)
+      message(SEND_ERROR "${name} ${s}: glow ${glowBase} passes before, ${glowCut} ${cutWhat}: "
+                         "want at most as many")
       math(EXPR failures "${failures} + 1")
     endif()
-    if(glowNew LESS glowBase)
+    if(glowCut LESS glowBase)
       math(EXPR fewer "${fewer} + 1")
     endif()
+    # the pictures: the refreshed baseline of a frame the crack fill changed
+    set(picDir "${baseDir}")
+    if(NOT "${BASE_REFRESH}" STREQUAL "" AND IS_DIRECTORY "${BASE_REFRESH}/${name}-${s}")
+      set(picDir "${BASE_REFRESH}/${name}-${s}")
+    endif()
+    set(baseDir "${picDir}")
     file(GLOB pngs RELATIVE "${baseDir}" "${baseDir}/*.png")
     set(largest 0)
     set(differ 0)
@@ -194,8 +247,9 @@ foreach(dump IN LISTS dumps)
         math(EXPR failures "${failures} + 1")
       endif()
     endforeach()
-    message(STATUS "${name} ${s}: glow ${glowBase} -> ${glowNew} passes; ${n} targets, largest "
-                   "difference ${largest} levels, ${differ} pixels differ")
+    message(STATUS "${name} ${s}: glow ${glowBase} -> ${glowNew} passes (${glowCut} ${cutWhat}); "
+                   "${n} targets against ${baseDir}, largest difference ${largest} levels, "
+                   "${differ} pixels differ")
   endforeach()
 endforeach()
 if(failures GREATER 0)

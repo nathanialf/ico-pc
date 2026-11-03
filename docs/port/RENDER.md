@@ -414,6 +414,11 @@ Two of the breaks moved bytes nothing needed, and are gone (the same bytes; `rd_
   attached under Z ALWAYS without Z write (the test passes every fragment and writes nothing), so the
   second sprite's own key lands in the same pass: two full-size SCENE passes fewer where the fog's
   pass has the depth (the tile class's local fog; about 2.4 ms of the 3.54 by the measured share).
+  Where the crack fill is drawn (above 1x with a fog: every phone frame; [RENDER_POST.md](RENDER_POST.md#crack-filling-above-1x))
+  it ends the fog's pass at the start of list 7 for its snapshot and its own pass, so there is no
+  open pass with the depth left for `cleanUpFB` and its two sprites take a pass each again: nine of
+  the glow frames on lavapipe at the phone's profile count 19-22 glow passes with the fill and 2
+  fewer without it (`ICO_RD_CRACK_FILL=0`). An open item, not yet changed.
 
 What is left: the mask's pass (SCENE read, WORK2 stored, then read by the reduction), the paste's
 SCENE pass (WORK3 is drawn after the fog's pass ends), and the twelve small WORK0 passes (the fixed

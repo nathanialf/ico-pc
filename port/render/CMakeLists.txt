@@ -2170,7 +2170,10 @@ if(ICO_RUN_TESTS)
     # build-host/tmp/v098/evidence/glow/pd-phone, Original and Enhanced 2x 4:3
     # under build-host/tmp/v095/after/w3/pd): every target within 0 levels,
     # at least two glow passes fewer at the phone's setting (WORK2's fill in
-    # the mask's pass, cleanUpFB in the fog's), none more elsewhere; SKIP
+    # the mask's pass, cleanUpFB in the fog's), none more elsewhere (counted
+    # in a replay without the crack fill where it is drawn: it ends the fog's
+    # pass before the glow); the frames the crack fill changed against their
+    # refreshed pictures (build-host/tmp/v098/evidence/glow/pd-w15); SKIP
     # without the dumps or their baselines
     if(Python3_FOUND)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/glow_cheap_ab")
@@ -2179,6 +2182,7 @@ if(ICO_RUN_TESTS)
                          "-DLIST=${CMAKE_SOURCE_DIR}/tools/glow_cheap_dumps.txt"
                          "-DBASE_PHONE=${CMAKE_SOURCE_DIR}/build-host/tmp/v098/evidence/glow/pd-phone"
                          "-DBASE_DESK=${CMAKE_SOURCE_DIR}/build-host/tmp/v095/after/w3/pd"
+                         "-DBASE_REFRESH=${CMAKE_SOURCE_DIR}/build-host/tmp/v098/evidence/glow/pd-w15"
                          "-DPY=${Python3_EXECUTABLE}"
                          "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/glow_cheap_ab"
