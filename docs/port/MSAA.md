@@ -107,12 +107,29 @@ scalar accumulators only: no array-typed value, which some drivers' compilers fa
 
 ## One resolve a picture
 
-The close records what is open into SCENE_MS first (the pass, a clear pending on SCENE) and a
-shadow reset pending on SCENE's depth (its stencil clear as a pass of its own), then resolves
-once (`port/render/rd_replay.c` (`msaaEnd`)). The reset's stencil clear transitions SCENE's depth,
-which is the hook that closes the epoch; `s_ms.closing` keeps that transition from closing it a
-second time from inside the first close. Without the guard every frame with a shadow resolved
-twice.
+The close records what is open into SCENE_MS first (the pass, a clear pending on SCENE), then
+resolves once (`port/render/rd_replay.c` (`msaaEnd`)); `s_ms.closing` keeps a transition of
+SCENE's textures during the close from closing it a second time (without the guard every frame
+with a shadow resolved twice). A shadow reset pending on SCENE's depth stays pending through the
+close (issue 182): the resolve loads and keeps the stencil, and the next pass on the depth, the
+volumes' pass, takes the reset as its stencil load op (CLEAR), as it does without anti-aliasing.
+Recording the reset first as an empty pass of its own (the count target's colour neither loaded
+nor stored, SCENE's depth loaded and stored, its stencil cleared) between the epoch's last pass
+and the resolve would be a pass sequence only MSAA makes; it was the last thing recorded before
+the three Vulkan device losses of issue 182 (an RTX 4060 laptop, MSAA 2x, NVIDIA 610.74:
+each at the first frame with a shadow, `msaa: the epoch closes at list 3 (the shadow count's
+pass ...)` the last renderer line). The sequence is valid Vulkan (the validation layer, with
+synchronisation checks, is silent on lavapipe at 4x) and the loss was not reproduced without the
+device, so removing it is a defensive change: the same bytes (`rd_msaa` `shadowreset`), one pass
+fewer, and the pass order the reporter's driver runs without MSAA.
+
+The shadow count after the close reads SCENE's own single-sampled stencil, never SCENE_MS's: the
+seven stencil-tested draws test SCENE's depth after the resolve, and the one draw's stencil view
+exists for single-sampled textures only (`RHI_ASPECT_STENCIL`, `port/rhi/rhi.h`). Where the view
+takes no gather (`RhiLimits.stencilGather` false: Direct3D's `X32_TYPELESS_G8X24_UINT`, on which
+the D3D11 debug layer stops any draw whose shader holds a gather, error 416, seen on the WARP run
+of `rd_msaa`) the one draw binds `shadow_count_load_ps`, the same entry built with
+no gather (`SHADOW_COUNT_LOAD`, `port/shaders/blit.hlsl`).
 
 With both the colour and the depth drawn in the epoch the resolve is one fullscreen pass of
 `msaa_resolve_ps` into SCENE's colour and depth (both loads DONT_CARE, the stencil loaded and
@@ -134,6 +151,7 @@ make either module offers no MSAA count, the supersampling ones stay (`port/rend
 | `msaa: the epoch closes at list L (why): lists 0-(L-1) anti-aliased and list L up to there, the fog and the glow run on the resolved picture (reported once a list and cause)` | the first close at each list for each cause (the shadow count's pass, a read or copy of SCENE, a pass on SCENE with another depth) |
 | `msaa: the epoch stays open to the replay's end: every list anti-aliased ... (reported once)` | a replay whose epoch lasted to its end |
 | `msaa: the epoch's depth was loaded from the scene, not cleared in it: ... (reported once)` | the rule off |
+| `shadow count: under MSAA Nx the count reads the scene's own single-sampled stencil after the epoch's resolve: FORM (reported once a form and count)` | the first count of each form under each sample count (`port/render/rd_shadow_one.c` (`rd__shadow_msaa_note`)); FORM is `the seven stencil-tested draws, the volumes' pass taking the shadow reset as its stencil clear`, `one draw, the stencil four texels a gather`, or `one draw, a texel a load (...)` |
 | `window: msaa: N samples, resolves R per replay, the last closed at list L` | the 10 s summary (`port/platform/window_host.c`); R is 1.0 or below |
 | `fog: in the MSAA epoch on the resolved picture (each pixel's smallest covered sample unless more than half its samples were uncovered: ...)` | once a run (`port/render/rd_replay.c` (`doFog`)) |
 | `msaa: msaa_resolve_ps was not made on this device ...` | start-up, a module missing |
@@ -143,7 +161,13 @@ make either module offers no MSAA count, the supersampling ones stay (`port/rend
 ## Tests
 
 `rd_msaa` (`port/render/test/rd_msaa_test.c`): `testShadowReset` (one resolve a replay with a
-shadow reset, the close at list 3, SCENE byte for byte the frame's without the reset) and
+shadow reset, the close at list 3, SCENE byte for byte the frame's without the reset, no stencil
+reset pass of its own under MSAA), `testShadowCount` (the count by the seven draws, the one draw's
+gathers and its loads, without anti-aliasing and with MSAA4: the forms byte for byte one count,
+MSAA4's equal to the count without anti-aliasing away from edges, gathers only where
+`RhiLimits.stencilGather`), run again as `rd_msaa_nvpath` with the reporter's NVIDIA profile
+forced (`ICO_RD_FOG_PATH=local`, `ICO_RD_DATE_PATH=stencil`, `ICO_RD_FX_DST_LOCAL=1`,
+`ICO_RD_SHADOW_ONE=0`) under the validation layer, and
 `testSkySlit` (the crack and `cleanUpFB`'s mask: no more glow sources along the crack with MSAA4
 than without anti-aliasing, the silhouettes still anti-aliased), beside the epoch's other cases.
 `rd_crack_msaa` (`port/render/test/rd_crack_test.c` `msaa`): along the crack the MSAA4 picture

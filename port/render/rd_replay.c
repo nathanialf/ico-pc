@@ -104,7 +104,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
     "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
     "crack_fill_ps", "crack_count_ps", "shadow_count_ps", "crack_fill1_ps", "fx_aura_rows_ps",
-    "fx_aura_sum_ps"};
+    "fx_aura_sum_ps", "shadow_count_load_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -1431,7 +1431,7 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
  *    the replay (dumps and readbacks then read the resolved SCENE);
  *    in gameplay the shadow count's pass in list 3 (rd__msaa_close_note);
  *  - closing (msaaEnd, once: s_ms.closing) records what is open into
- *    SCENE_MS and a pending shadow reset, then resolves (docs/port/MSAA.md):
+ *    SCENE_MS (a shadow reset stays pending), then resolves (MSAA.md):
  *    colour and depth by msaa_resolve_ps (the covered-majority rule against
  *    the epoch's clear depth), the colour alone by rhi_cmd_resolve_color,
  *    the depth alone by depth_resolve_ps.  Everything after draws
@@ -1643,16 +1643,21 @@ static bool msaaPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, ui
 }
 
 /* Closes the epoch: the open pass (and a clear pending on SCENE) recorded
- * into SCENE_MS, a shadow reset pending on SCENE's depth recorded on it,
- * then the colour and depth the epoch drew resolved into SCENE's own
- * textures, once (s_ms.closing) */
+ * into SCENE_MS, then the colour and depth the epoch drew resolved into
+ * SCENE's own textures, once (s_ms.closing) */
 static void msaaEnd(struct Replay *r, int cause)
 {
     if (!s_ms.active || s_ms.internal || s_ms.closing) {
         return;
     }
     s_ms.closing = true;
+    /* a pending shadow reset stays pending past the resolve: the volumes'
+     * pass takes it as its stencil clear, as without MSAA (issue 182) */
+    const uint32_t sc = s_stencil.colorTex, sd = s_stencil.depthTex;
+    s_stencil.colorTex = s_stencil.depthTex = 0;
     endPass(r); /* the run, the pass, a pending clear: still into SCENE_MS */
+    s_stencil.colorTex = sc;
+    s_stencil.depthTex = sd;
     s_ms.active = false;
     s_ms.ended = true;
     RdTargetRec *ts = rd__target_rec(RD_TARGET_SCENE + 1);
@@ -5766,6 +5771,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     g_rd.replayCounter++;
     rd__passring_frame(g_rdPerf.replay, f->number, keep); /* the loss report's names */
     rd__diag_frame(NULL, 0);
+    f = rd__vis_frame(f, keep); /* the scene draws off the target: NOPs (rd_vis.c) */
     /* the pass window's count starts again (rd__replay_set_window) */
     g_rdWin.passes = g_rdWin.lastDraws = g_rdWin.drawn = 0;
     memset(&g_rdWin.note, 0, sizeof(g_rdWin.note));

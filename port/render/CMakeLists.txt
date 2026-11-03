@@ -229,6 +229,7 @@ add_library(ico_render STATIC
     rd_tex_decode.c # the texture decode pool: rdtex_store's decodes off the game thread
     rd_water.c # block targets, aliases, camera scopes
     rd_video.c # the FMV picture (port/fmv/rd_video.h)
+    rd_vis.c # the scene draws' visibility test: a draw off its target replayed as a NOP ([dev] cull)
     texpack_dds.c # texture packs: the DDS and PNG loaders (texpack.h)
     texpack_image.c
     texpack_png.c
@@ -278,7 +279,8 @@ endif()
 
 # rd_replay_tool: a dump to a PNG, headless.
 # (and a F12 .zip: platform/dump_zip.c reads it)
-add_executable(rd_replay_tool tools/rd_replay_tool.c ../platform/dump_zip.c)
+add_executable(rd_replay_tool tools/rd_replay_tool.c tools/rd_replay_region.c
+                              ../platform/dump_zip.c)
 target_compile_options(rd_replay_tool PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_replay_tool PRIVATE ../platform)
 target_link_libraries(rd_replay_tool PRIVATE ico_render ico_vu1_ref ico_miniz ico_host_fs)
@@ -521,8 +523,11 @@ target_link_libraries(rd_perf_test PRIVATE ico_render)
 # rule's truth table and the VS->PS prefix match, and the sprite planes' skip
 # (issue 161); the fades fold's step against the GS blend, its bar rows and
 # its plan on recorded frames (the fade, the letterbox, the brightness, and
-# the frames it leaves alone).
-foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold)
+# the frames it leaves alone).  rd_vis_test: the scene draws' visibility test
+# (rd_vis.c), CPU only: the bounds of synthetic streams, the plane test
+# under random matrices, the VU references (vu1_ref) as its oracle in both
+# rounding modes, and the shadow frame on recorded frames.
+foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold rd_vis)
     add_executable(${_t}_test test/${_t}_test.c)
     target_compile_options(${_t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_include_directories(${_t}_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi"
@@ -902,7 +907,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_perf_test rd_display_change_test rd_boot_present_test rd_crt_test
                   texpack_load_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
-                  rd_fx_frame_test rd_vu_frac_test rd_crack_test rd_local_probe_test)
+                  rd_fx_frame_test rd_vu_frac_test rd_crack_test rd_local_probe_test rd_vis_test)
 
 if(ICO_RUN_TESTS)
     add_test(NAME rd_state COMMAND rd_state_test "${CMAKE_CURRENT_BINARY_DIR}")
@@ -1109,7 +1114,7 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_display_change COMMAND rd_display_change_test)
     set_tests_properties(rd_display_change PROPERTIES SKIP_RETURN_CODE 77)
-    foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold)
+    foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold rd_vis)
         add_test(NAME ${_t} COMMAND ${_t}_test)
         set_tests_properties(${_t} PROPERTIES SKIP_RETURN_CODE 77)
     endforeach()
@@ -1156,6 +1161,17 @@ if(ICO_RUN_TESTS)
                          rd_msaa_nodual
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_nd}"
                                     ENVIRONMENT "${_env_nodual}")
+    # issue 182 (the Vulkan device loss with MSAA on): rd_msaa with the
+    # reporter's NVIDIA profile forced (the fog's local read, DATE through
+    # the stencil, the effects' local read, the seven-draw shadow count by
+    # the profile), under the validation layer where it is installed:
+    # testShadowCount's counts by every form under MSAA4, no shadow reset
+    # pass of its own, no validation message
+    set(_env_nvpath ${_env} "ICO_RD_FOG_PATH=local" "ICO_RD_DATE_PATH=stencil"
+                    "ICO_RD_FX_DST_LOCAL=1" "ICO_RD_SHADOW_ONE=0")
+    add_test(NAME rd_msaa_nvpath COMMAND rd_msaa_test)
+    set_tests_properties(rd_msaa_nvpath PROPERTIES SKIP_RETURN_CODE 77
+                                                   ENVIRONMENT "${_env_nvpath}")
     # the exact GS blend (rd_dst_read.c) by each path: lavapipe has both
     # destination reads and takes the attachment read by default, so the
     # storage path (fragment shader interlock, the Deck's and the desktop
@@ -1921,6 +1937,23 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_occlusion_tool PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_region_stats (test/rd_region_stats.cmake, docs/port/VU1_PROGRAMS.md
+    # "The region rule"): rd_replay_tool --region-stats on the first two
+    # dumps of the machine-local list tools/occlusion_corpus.txt here, at
+    # Original 4:3 1x and Enhanced 4:3 2x: the lines' shapes, then the
+    # pass dumps of the plain replay and of the replay with the draws the
+    # CPU oracle says draw nothing NOPs (--region-out's spec), byte for
+    # byte; the orig setting's spec the same without a device; SKIP
+    # without the list, a dump or a device
+    add_test(NAME rd_region_stats
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/region_stats"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_region_stats.cmake")
+    set_tests_properties(rd_region_stats PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
+    if(_env)
+        set_tests_properties(rd_region_stats PROPERTIES ENVIRONMENT "${_env}")
+    endif()
     # rd_noplanes_ab (test/rd_noplanes_ab.cmake, issue 161): the dumps of the
     # machine-local list tools/noplanes_dumps.txt (the title and the boot,
     # each drawing one screen-prim triangle key with planes, and a capture
@@ -2070,6 +2103,25 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_store_plan_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
     if(_env)
         set_tests_properties(rd_store_plan_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    # rd_cull_ab (test/rd_cull_ab.cmake): the scene draws' visibility test
+    # (rd_vis.c) against every draw replayed, byte for byte: the dumps of
+    # tools/occlusion_corpus.txt and tools/native_frame_dumps.txt that exist,
+    # under ICO_RD_BLEND=fixed, with ICO_RD_CULL=off and frustum, through
+    # --pass-dump --stats at Original 4:3 640x480, Enhanced 4:3 2x, Enhanced
+    # 2x at the dump's own aspect where it is wider than 4:3, and one MSAA 4x
+    # run: every target's PNG equal, the stats line read, draws skipped over
+    # the corpus; SKIP as rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cull_ab")
+    add_test(NAME rd_cull_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
+                     "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/native_frame_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/cull_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_cull_ab.cmake")
+    set_tests_properties(rd_cull_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_cull_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_thread_ab (test/rd_thread_ab.cmake): the same dumps through
     # rd_replay_tool --render-thread off, sync and on (the replays, the
@@ -2640,7 +2692,7 @@ endif()
 #    rd_vufuse_ab, rd_store_plan_ab, rd_constant_reads_ab, rd_fades_fold_ab, rd_thread_ab,
 #    the native frame gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
 #    on both backends)
-#  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_fades_fold, rd_mip,
+#  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_fades_fold, rd_vis, rd_mip,
 #    rd_passring,
 #    rd_filter, rd_bisect_plan, rd_stream_audit, fog_lut*, gsb_cull*, texpack*, gltf)
 #

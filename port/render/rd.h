@@ -2522,6 +2522,13 @@ typedef struct RdPerfRecord {
      * (the state's ABE on, or the alpha plan's blending off); vuFuseKept
      * the others, by reason (RD_VU_FUSE_*) */
     uint32_t vuFusePairs, vuFuseSame, vuFuseKept[RD_VU_FUSE_WHY_COUNT];
+    /* The visibility test (rd_vis.c rd__vis_frame; [dev] cull): the VU draw
+     * commands of the replayed lists (cullDraws), those turned into NOPs
+     * (cullSkipped: by the frustum test, cullFrustum, or by occlusion,
+     * cullOccluded, 0 until the occlusion test is built), and the test's
+     * time on the CPU (cullMs) */
+    uint32_t cullDraws, cullSkipped, cullFrustum, cullOccluded;
+    double cullMs;
     uint32_t prepassBatches;
     double gpuPrepassMs;
     /* The store plan (rd_replay.c storePlanScan; RdProfile.storePlan): of

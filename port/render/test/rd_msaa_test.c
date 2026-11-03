@@ -40,7 +40,27 @@
  *            (two when the reset's pending stencil clear closes the epoch
  *            a second time from inside msaaEnd), the epoch
  *            closed at list 3 (RdPerfRecord.msaaCloseAt 4), and SCENE byte
- *            for byte the frame's without the reset;
+ *            for byte the frame's without the reset; under MSAA no shadow
+ *            reset is recorded as a pass of its own (passKinds
+ *            RD_PERF_PASS_STENCIL 0: msaaEnd keeps it pending and the
+ *            volumes' pass takes it as its stencil clear, as without
+ *            anti-aliasing; issue 182);
+ *   shadowcount the same frame's count (rd__shadow_count_read) by each
+ *            form: the seven stencil-tested draws, the one draw with the
+ *            stencil four texels a gather and a texel a load, without
+ *            anti-aliasing and with MSAA4: under each the three forms'
+ *            counts are byte for byte one count (the one draw's
+ *            self-test's proof, run here behind an MSAA epoch), and MSAA4's
+ *            equals the count without anti-aliasing wherever the frame
+ *            without it is one colour and one count over a pixel's 3x3;
+ *            no stencil reset pass under MSAA; the gathers taken only
+ *            where the stencil view takes them (RhiLimits.stencilGather:
+ *            never on Direct3D, whose debug layer stops a draw whose
+ *            shader holds a gather on the stencil plane, issue 182's CI
+ *            finding).  Run again as rd_msaa_nvpath with the reporter's
+ *            NVIDIA profile forced (the fog's local read, DATE through the
+ *            stencil, the effects' local read, the seven draws by the
+ *            profile) under the validation layer;
  *   skyslit  two triangles of one surface over the clear (depth 0) whose
  *            shared diagonal edge is 1/16 GS pixel apart (DIVERGENCES.md
  *            VD-20's crack), the shadow count closing the epoch, then
@@ -517,11 +537,14 @@ static void drainClose(uint32_t *resolvesMax, uint32_t *closeAt)
 /* list 3: the shadow count (Shadow.c's: the count's target with SCENE's
  * depth, a reset of its stencil, a volume, the count's resolve), as
  * rd_perf_test draws it */
+static RdTarget s_cntTarget; /* the last frame's count target (testShadowCount) */
+
 static void shadowCount(int reset)
 {
     const RdTarget scene = rd_target(RD_TARGET_SCENE);
     rd_select_list(3);
     const RdTarget cnt = rd_shadow_count_target(GW, GH);
+    s_cntTarget = cnt;
     rd_set_target(cnt, scene, GW, GH, 0);
     rd_z_write(0);
     rd_test_gs(0x30000);
@@ -594,6 +617,123 @@ static void testShadowReset(void)
            differ, resolves, closeAt);
     CHECK(resolves == 1, "shadowreset: %u resolves a replay (one expected)", resolves);
     CHECK(closeAt == 4, "shadowreset: the epoch closed at %u (list 3 + 1 expected)", closeAt);
+    /* the reset taken by the volumes' pass as its stencil clear, not
+     * recorded as an empty pass of its own between the epoch's last pass
+     * and its resolve (issue 182: the one pass sequence MSAA added) */
+    shadowFrame(1);
+    CHECK(g_rdPerf.passKinds[RD_PERF_PASS_STENCIL] == 0,
+          "shadowreset: %u shadow reset passes of their own under MSAA (0 expected: the volumes' "
+          "pass takes the reset)",
+          (unsigned)g_rdPerf.passKinds[RD_PERF_PASS_STENCIL]);
+    drainClose(&resolves, &closeAt);
+}
+
+/* testShadowCount: the count of shadowFrame(1) by form (0 the seven
+ * draws, 1 the one draw's gathers, 2 its loads) under aa, into dst; the
+ * replay's record's facts out.  0 when the form cannot run or the count
+ * is not read back. */
+typedef struct CountRun {
+    uint32_t one, seven, gathered, stencilPasses, closeAt;
+} CountRun;
+
+static uint8_t s_cnt[3][2][GW * GH * 4]; /* [form][aa: 0 off, 1 MSAA4] */
+static uint8_t s_cntScene[GW * GH * 4];  /* SCENE without anti-aliasing (the seven draws') */
+
+static int shadowCountRun(int aa, int form, uint8_t *dst, CountRun *o)
+{
+    memset(o, 0, sizeof(*o));
+    settings(RD_PRESET_ENHANCED, aa ? RD_AA_MSAA4 : RD_AA_OFF);
+    g_rd.profile.shadowOne = form != 0;
+    g_rd.shadowLoad = form == 2;
+    shadowFrame(1); /* the settings' first replay */
+    shadowFrame(1);
+    o->one = g_rdPerf.shadowOne;
+    o->seven = g_rdPerf.shadowSeven;
+    o->gathered = g_rdPerf.shadowGathered;
+    o->stencilPasses = g_rdPerf.passKinds[RD_PERF_PASS_STENCIL];
+    o->closeAt = g_rdPerf.msaaCloseAt;
+    rhi_wait_idle();
+    uint32_t w = 0, h = 0;
+    int ok = rd__shadow_count_read(s_cntTarget.id, dst, (size_t)GW * GH * 4, &w, &h) && w == GW &&
+             h == GH;
+    CHECK(ok, "shadowcount: form %d aa %d: the count read back (%u x %u)", form, aa, w, h);
+    if (ok && form == 0 && !aa) {
+        ok = readScene(s_cntScene);
+    }
+    return ok;
+}
+
+static void testShadowCount(void)
+{
+    const bool keepOne = g_rd.profile.shadowOne, keepLoad = g_rd.shadowLoad;
+    const RhiLimits *lim = rhi_limits();
+    /* the one draw needs the stencil view (not on Direct3D 12) */
+    const int forms = lim->stencilView && g_rd.fs[RD_FS_SHADOW_COUNT].id ? 3 : 1;
+    int done[3][2] = {{0}};
+    for (int aa = 0; aa < 2; aa++) {
+        for (int form = 0; form < forms; form++) {
+            CountRun o;
+            done[form][aa] = shadowCountRun(aa, form, s_cnt[form][aa], &o);
+            CHECK(form ? (o.one == 1 && o.seven == 0) : (o.seven == 1 && o.one == 0),
+                  "shadowcount: form %d aa %d: one %u seven %u", form, aa, o.one, o.seven);
+            /* a gather only where the view takes one, and only when asked */
+            const uint32_t wantGathered = form == 1 && lim->stencilGather ? 1u : 0u;
+            CHECK(o.gathered == wantGathered,
+                  "shadowcount: form %d aa %d: %u one draws by gathers (%u expected; the view "
+                  "takes gathers %d)",
+                  form, aa, o.gathered, wantGathered, (int)lim->stencilGather);
+            if (aa) {
+                CHECK(o.stencilPasses == 0,
+                      "shadowcount: form %d: %u shadow reset passes of their own under MSAA4", form,
+                      o.stencilPasses);
+                CHECK(o.closeAt == 4, "shadowcount: form %d: the epoch closed at %u (4 expected)",
+                      form, o.closeAt);
+            }
+        }
+    }
+    /* each aa: the forms' counts one count, byte for byte */
+    int formDiff = 0;
+    for (int aa = 0; aa < 2; aa++) {
+        for (int form = 1; form < forms; form++) {
+            if (done[0][aa] && done[form][aa]) {
+                for (size_t i = 0; i < (size_t)GW * GH * 4; i += 4) {
+                    formDiff += memcmp(&s_cnt[0][aa][i], &s_cnt[form][aa][i], 4) != 0;
+                }
+            }
+        }
+    }
+    CHECK(formDiff == 0,
+          "shadowcount: %d texels where a one draw's count differs from the seven "
+          "draws'",
+          formDiff);
+    /* MSAA4 against no anti-aliasing away from the edges (the scene's and
+     * the count's) */
+    int inner = 0, innerDiff = 0, firstX = -1, firstY = -1;
+    if (done[0][0] && done[0][1]) {
+        for (int y = 0; y < GH; y++) {
+            for (int x = 0; x < GW; x++) {
+                if (!uniform3x3(s_cntScene, x, y) || !uniform3x3(s_cnt[0][0], x, y)) {
+                    continue;
+                }
+                inner++;
+                const size_t i = ((size_t)y * GW + (size_t)x) * 4;
+                if (memcmp(&s_cnt[0][0][i], &s_cnt[0][1][i], 4) != 0 && !innerDiff++) {
+                    firstX = x;
+                    firstY = y;
+                }
+            }
+        }
+    }
+    printf("  shadowcount: %d forms; %d texels where a form's count differs; MSAA4 against no "
+           "anti-aliasing: %d of %d inner texels differ (first %d,%d); stencil gather %s\n",
+           forms, formDiff, innerDiff, inner, firstX, firstY,
+           lim->stencilGather ? "offered" : "not offered (the loads-only build)");
+    CHECK(inner > GW * GH / 2, "shadowcount: only %d inner texels compared", inner);
+    CHECK(innerDiff == 0,
+          "shadowcount: MSAA4's count differs at %d inner texels, the first (%d,%d)", innerDiff,
+          firstX, firstY);
+    g_rd.profile.shadowOne = keepOne;
+    g_rd.shadowLoad = keepLoad;
 }
 
 /* testSkySlit's frame: the crack's two triangles (colours a and b), the
@@ -813,6 +953,7 @@ int main(void)
     testFog();
     testRedraw();
     testShadowReset();
+    testShadowCount();
     testSkySlit();
     testOriginal();
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",

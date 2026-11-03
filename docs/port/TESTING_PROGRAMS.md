@@ -946,6 +946,27 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   quads leave it), a Z-testing sprite after the letterbox (one before it leaves the letterbox
   folding), the effects depth or a depth read by a later frame (the bars drawn, a fade after them
   folds), a draw into SCENE in list 12, MSAA, a factor above 0x80 (`rd_fades_fold`).
+- `rd_vis_test.c`: the scene draws' visibility test ([RENDER.md](RENDER.md#culling)) on the CPU,
+  without a device: `rd__vis_box` over synthetic prelit, lit (with a sheet's tiles past its own
+  count) and skinned streams (x, y, z and the pos.w range; a position not finite refused),
+  `rd__vis_grid_box` over a Mesh3D buffer (its header and MSCNT qwords left out, a buffer too short
+  refused), `rd__vis_skin`'s boxes by bone slot and largest `|w0 + w1 - 1|` (a weight outside
+  [0, 1] refused); an orthographic block: a box 2.5 GS pixels past each side of a 512 x 448 target
+  skipped beyond it, 1.5 kept, code 36's pos.w range, a box crossing w = 0 kept, one behind the
+  eye skipped under code 32 and kept under code 36; random perspective cameras and boxes at four
+  frame sizes in both rounding modes: every verdict seen, and every corner and 64 points inside a
+  skipped box through the program's float product beyond both planes of its side; two bones (the
+  blend inside the frame kept though one bone's box is outside it, outside skipped, weights summing
+  to 0.6 kept near the frame) and random bones and weights through `vu_skin.hlsl`'s product; the
+  VU references as the oracle: where the test skips a strip inside its box, `vu1ref_normal_c`
+  (code 32, and code 36 with `mem[16..19]` the viewport times `mem[20..23]`) puts every output
+  vertex in front of the eye, and every fan vertex, beyond the side (behind the eye for the near
+  verdict), in both rounding modes; and `rd__vis_frame` on a frame built with
+  `rd__init_record_only`: the skipped commands RDC_NOPs of a shadow copy with every other byte and
+  the lists without a skip shared, code 34, particles, no target and list 11 kept,
+  `rd__vis_culled` and `rd__vis_source`, the counts in the performance record, a stream written
+  again bounded again, and the frame itself returned with the mode off, a pass window, number 0 or
+  nothing skipped (`rd_vis`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
@@ -1087,7 +1108,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd_vufuse_ab` reads and a 2026-10-07 capture; a line is the dump, `expect=IN/GPU` and the
   tool's setting arguments) on the plain device and under `ICO_VK_FAKE_LIMITS=mali
   ICO_VK_FAKE_NO_DUAL=1` (a phone's limits, every lerp draw two passes), under
-  `ICO_RD_BLEND=fixed`: every named target's PNG byte for byte, both fakes' lines in the faked run,
+  `ICO_RD_BLEND=fixed` and `ICO_RD_CULL=off` (the `expect=` figures count every VU draw of the
+  frame; the visibility test would leave some out): every named target's PNG byte for byte, both
+  fakes' lines in the faked run,
   the `VU merge` figures (draws, GPU draws, merged, into, alone) and the fused pairs the plain
   device's, and `expect=` the plain run's merged figure (826 into 87 on the 164 frame)
   (`rd_vumerge_mali`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge-without-dual-source-blending)).
@@ -1109,6 +1132,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   and a line a command; then the plain replay and the replay with `--nop @SPEC`, each `--pass-dump`
   with `--present 640x480` under `ICO_RD_BLEND=fixed`: DISPLAY.png and PRESENT.png byte for byte
   (`rd_occlusion_tool`). SKIP without the list, a dump of it or a device.
+- `rd_region_stats.cmake`: `rd_replay_tool --region-stats`
+  ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the first two dumps of
+  `tools/occlusion_corpus.txt` that are here, each at Original 4:3 1x and Enhanced 4:3 2x with a
+  present: the frame's line (draws and triangles under the rule above 0, the draws drawing nothing a
+  `--nop` spec of lists 0-6 or `none`, as many items as it counts, `--region-out` holding it), a
+  draw's line and a list's in their shapes; then `--pass-dump` plain and with `--nop @SPEC`, every
+  PNG byte for byte (the draws the CPU oracle says draw nothing draw no pixel); at Original the same
+  spec with `--no-device` (`rd_region_stats`). SKIP without the list, a dump of it or a device.
 - `rd_vumerge_ab_pixel`, `rd_vufuse_ab_pixel` and `rd_vustage_ab_pixel`: the two scripts above and
   `rd_vustage_ab.cmake` on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):
@@ -1202,6 +1233,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   whole list, and the wrong plan changing at least one target over the whole list (the poison shows
   a dropped store that a later pass reads); each run's counts printed (`rd_store_plan_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)). SKIP as `rd_vustage_ab`.
+- `rd_cull_ab.cmake`: the dumps of `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt`
+  (the missing ones named and skipped) under `ICO_RD_BLEND=fixed` with `--pass-dump --stats`
+  twice, `ICO_RD_CULL=off` and `frustum`, at Original 4:3 presented at 640x480, Enhanced 4:3 2x,
+  Enhanced 2x at the dump's own aspect where `--no-device --list` says it is wider than 4:3, and on
+  the first dump once with `--aa msaa4`: every named target's PNG (and `PRESENT.png`) byte for
+  byte, the off run's `cull off: 0 of 0` and the frustum run's `cull frustum: N of M` with N at
+  most M, and draws skipped over the corpus; each run's counts printed; `-DMAX_DUMPS=n` takes the
+  first n dumps (`rd_cull_ab`; [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
 - `rd_thread_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` through
   `rd_replay_tool --render-thread off`, `sync` and `on` (every replay, the interpolation and the
   renderer's calls on a thread of the renderer's own, `port/render/rd_thread.h`), with
@@ -1573,7 +1612,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   columns beside it drawn (`sheetPixels`), and the `photo_veil` shard: the veil's two layers at
   60:9 drawing every pixel with the tiles (`photoVeilPixels`), and the `photo_reel` shard: the film
   reel's four specks of the deja dump at their places on the 16:9 frame, none tiled, every pixel
-  inside a speck's own place and in the 4:3 picture's columns (`photoReelPixels`).
+  inside a speck's own place and in the 4:3 picture's columns (`photoReelPixels`); in the
+  recording phase the winding marks (`windingMarkChecks`, `ICO_VU_MARK_FLIP`,
+  [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-winding-mark)): a prelit mesh of two strips marked at
+  `((k - s) & 1) ^ RD_VU_WINDING_PHASE` from each strip's start, a lit strip wound one way marked at
+  k - s = 2 and 4 from its normals, one of mixed normals triangle by triangle, a morph keeping the
+  creation's marks, no other mark made; and the `winding_disc_0` .. `winding_disc_3` shards (77
+  without the disc image): the disc's strips' winding, a quarter of the models each, one line
+  `winding: L lit triangles, A %, B %, C %; P prelit parts, E % edges consistent` and a line a
+  stage in counts (`windingDiscChecks`).
 - `rd_mip_test.c`: the Enhanced mip chain's size and its builder staying inside it (`rd_mip`).
 - `rd_mirror_test.c`: mirror mode's flag and the flipped presenter output (`rd_mirror`).
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
@@ -1587,8 +1634,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the supported mask holds the supersampling values only; `testShadowReset`: a frame whose list 3
   holds the shadow count with a reset on SCENE's depth resolves once a replay
   (`RdPerfRecord.msaaResolves` 1, two when the reset's stencil clear closes the epoch again from
-  inside `msaaEnd`), closes at list 3 (`msaaCloseAt` 4) and leaves SCENE byte for byte as the same
-  frame without the reset; `testSkySlit`: two triangles of one surface over the clear with a 1/16
+  inside `msaaEnd`), closes at list 3 (`msaaCloseAt` 4), records no shadow reset as a pass of its
+  own under MSAA (`passKinds[RD_PERF_PASS_STENCIL]` 0: the volumes' pass takes it, issue 182) and
+  leaves SCENE byte for byte as the same frame without the reset; `testShadowCount`: that frame's
+  count (`rd__shadow_count_read`) by the seven draws, the one draw's gathers and its loads,
+  without anti-aliasing and with MSAA4: the forms' counts byte for byte one count, MSAA4's equal
+  to the count without anti-aliasing wherever the frame without it is one colour and one count
+  over a 3x3, the epoch closed at list 3, no stencil reset pass, and gathers counted
+  (`shadowGathered`) only where the stencil view takes them (`RhiLimits.stencilGather`; never on
+  Direct3D, whose debug layer fails `rd_msaa` on a gather of the stencil plane); `rd_msaa_nvpath`
+  runs the program with the reporter's NVIDIA profile of issue 182 forced
+  (`ICO_RD_FOG_PATH=local`, `ICO_RD_DATE_PATH=stencil`, `ICO_RD_FX_DST_LOCAL=1`,
+  `ICO_RD_SHADOW_ONE=0`) under the validation layer with its synchronisation checks; `testSkySlit`: two triangles of one surface over the clear with a 1/16
   pixel crack along their shared edge, the shadow count, then `cleanUpFB`'s glow mask (a sprite
   at GS Z 1, alpha 192, alpha only, GEQUAL without Z writes): MSAA4 marks no more texels along the
   crack than the frame without anti-aliasing (the covered-majority resolve,

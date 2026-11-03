@@ -1526,9 +1526,12 @@ static bool abRecord(int vol, bool one, AbPics *p, const char *what)
               : (g_rdPerf.shadowSeven >= 1 && g_rdPerf.shadowOne == 0),
           "(o) %s: the %s path resolved the count (one %u, seven %u)", what,
           one ? "one-draw" : "seven-draw", g_rdPerf.shadowOne, g_rdPerf.shadowSeven);
-    CHECK(g_rdPerf.shadowGathered == (g_rd.shadowLoad ? 0u : g_rdPerf.shadowOne),
-          "(o) %s: %u of %u one draws by gathers (loads asked %d)", what, g_rdPerf.shadowGathered,
-          g_rdPerf.shadowOne, (int)g_rd.shadowLoad);
+    /* the loads where asked or where the stencil view takes no gather
+     * (RhiLimits.stencilGather: Direct3D) */
+    CHECK(g_rdPerf.shadowGathered == (rd__shadow_count_loads() ? 0u : g_rdPerf.shadowOne),
+          "(o) %s: %u of %u one draws by gathers (loads asked %d, gather offered %d)", what,
+          g_rdPerf.shadowGathered, g_rdPerf.shadowOne, (int)g_rd.shadowLoad,
+          (int)rhi_limits()->stencilGather);
     p->colorDropped = g_rdPerf.shadowColorDropped;
     p->storeColorDropped = g_rdPerf.storeColorDropped;
     p->merged = g_rdPerf.shadowMerged;

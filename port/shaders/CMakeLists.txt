@@ -241,6 +241,11 @@ ico_add_shader(crack_fill1_ps blit.hlsl crack_fill_ps fragment DEFINES CRACK_REA
 # shadowCountOne: the stencil view and the count's table, box_reduce_ps's
 # average above 1x), behind blit_vs; used on every backend with the view
 ico_add_shader(shadow_count_ps blit.hlsl shadow_count_ps fragment)
+# the same read a texel a load, with no gather in the module
+# (SHADOW_COUNT_LOAD): Direct3D's stencil view takes no gather
+# (RhiLimits.stencilGather), and the loads in force elsewhere
+# (rd_shadow_one.c); the same bytes
+ico_add_shader(shadow_count_load_ps blit.hlsl shadow_count_ps fragment DEFINES SHADOW_COUNT_LOAD=1)
 # The blur sprite's UINT-view build (fx_sprite_u_ps)
 # fx_sprite_ps reading its textures through their RGBA8_UINT views
 # (RHI_TEX_UINT_VIEW; rd_replay.c doBlurSpriteDraw)

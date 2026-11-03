@@ -1258,6 +1258,88 @@ static void markJoinedStrips(RdMeshRec *m)
     joinStrips(&m, 1);
 }
 
+/* ------------------------------------------------ the winding marks
+ *
+ * ICO_VU_MARK_FLIP (shader_consts.h; docs/port/VU1_PROGRAMS.md "The winding
+ * mark"): the GS draws a strip's triangles k-2, k-1, k with the winding
+ * alternating from one to the next (Packet.c pac_makeNormalStrip: a strip
+ * is the run from a vertex whose ST.w is 0 to the next), so a triangle's
+ * facing on screen is its kicked corners' order corrected by its place in
+ * the strip.  A lit or skinned triangle (a normal per vertex, the stream's
+ * second quadword) takes the mark from its normals, triangle by triangle:
+ * when cross(b - a, c - a) of its model positions a, b, c (corners k-2,
+ * k-1, k) points away from na + nb + nc (their dot product below 0).  A
+ * prelit one (no normals) from its place: ((k - s) & 1) ^
+ * RD_VU_WINDING_PHASE, s the first vertex of its strip, which starts at a
+ * vertex whose ST.w is below 1 or at its batch's first vertex (the strips
+ * markJoinedStrips and cardStrips walk).  Every kick of the index list is
+ * marked or not; a morph (rd_update_vu_mesh) keeps the creation's marks,
+ * as the joined strips do.  Nothing reads the mark yet: no picture
+ * changes. */
+static void markWinding(RdMeshRec *m)
+{
+    if (!joinLayout(m)) {
+        return;
+    }
+    const uint32_t qpv = m->qwPerVertex, nv = m->vertexCount, stAt = qpv - 2;
+    const bool normals = qpv == RD_VU_QW_LIT || qpv == RD_VU_QW_SKIN;
+    uint32_t *start = normals ? NULL : malloc((size_t)nv * sizeof(uint32_t));
+    if (!normals) {
+        if (!start) {
+            return;
+        }
+        /* each vertex's strip's first vertex; past every batch, itself */
+        for (uint32_t v = 0; v < nv; v++) {
+            start[v] = v;
+        }
+        for (uint32_t b = 0; b < m->batchCount; b++) {
+            const uint32_t fv = m->batches[b].firstVertex;
+            if (fv >= nv) {
+                continue;
+            }
+            const uint32_t ev =
+                m->batches[b].vertexCount < nv - fv ? fv + m->batches[b].vertexCount : nv;
+            uint32_t s = fv;
+            for (uint32_t v = fv; v < ev; v++) {
+                if (v > fv && m->stream[(size_t)v * qpv + stAt][3] < 1.0f) {
+                    s = v;
+                }
+                start[v] = s;
+            }
+        }
+    }
+    for (uint32_t i = 0; i + 2 < m->indexCount; i += 3) {
+        const uint32_t k = (m->index[i] & ICO_VU_INDEX_MASK) >> 2;
+        if (k < 2 || k >= nv) {
+            continue;
+        }
+        bool flip;
+        if (normals) {
+            const float *a = m->stream[(size_t)(k - 2) * qpv];
+            const float *b = m->stream[(size_t)(k - 1) * qpv];
+            const float *c = m->stream[(size_t)k * qpv];
+            const double e1[3] = {(double)b[0] - a[0], (double)b[1] - a[1], (double)b[2] - a[2]};
+            const double e2[3] = {(double)c[0] - a[0], (double)c[1] - a[1], (double)c[2] - a[2]};
+            const double x[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2],
+                                 e1[0] * e2[1] - e1[1] * e2[0]};
+            double d = 0.0;
+            for (int j = 0; j < 3; j++) {
+                const double n = (double)m->stream[(size_t)(k - 2) * qpv + 1][j] +
+                                 m->stream[(size_t)(k - 1) * qpv + 1][j] +
+                                 m->stream[(size_t)k * qpv + 1][j];
+                d += x[j] * n;
+            }
+            flip = d < 0.0;
+        } else {
+            flip = (((k - start[k]) & 1u) ^ RD_VU_WINDING_PHASE) != 0u;
+        }
+        if (flip && !markKick(m, k, ICO_VU_MARK_FLIP)) {
+            break; /* no memory for the marks: none was made, nothing else lost */
+        }
+    }
+    free(start);
+}
+
 uint64_t rd__mesh_join_part(RdMeshRec *const *ms, uint32_t n, uint64_t sig)
 {
     bool fresh = false;
@@ -1658,6 +1740,7 @@ uint32_t rd__vu_mesh_create_raw(const float (*stream)[4], uint32_t vertexCount,
     markLaterOverlaps(m);
     markContentHidden(m);
     markJoinedStrips(m);
+    markWinding(m);
     cardStrips(m);
     rd__mesh_stream_written(m); /* the stream as created, a sheet's tiles with it */
     return id;
