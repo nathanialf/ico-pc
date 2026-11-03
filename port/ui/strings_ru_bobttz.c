@@ -524,8 +524,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_GRAPHICS_API_NOTE] =
         "Принять переключает сразу; без принятия выбор используется со следующего запуска.",
     [UI_STR_OPT_GRAPHICS_ADAPTER] = "Графический адаптер",
-    [UI_STR_GRAPHICS_ADAPTER_NOTE] =
-        "Выбор видеокарты для отрисовки. Применить изменение сейчас; без применения изменения выбор будет использоваться со следующего запуска.", /* newer than the CSV: English */
+    /* longer than a note holds (two lines, 255 bytes): English until shortened */
+    [UI_STR_GRAPHICS_ADAPTER_NOTE] = NULL,
     [UI_STR_GRAPHICS_ADAPTER_FAILED] = "Не удалось запустить графический адаптер %s; %s остаётся",
     [UI_STR_GRAPHICS_APPLY] = "Принять",
     [UI_STR_GRAPHICS_APPLY_NOTE] =
@@ -584,8 +584,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
         "Сглаживает края. Суперсэмплинг рендерит в 4 раза (2x) или в 16 раз (4x) больше пикселей; снизьте значение, если счётчик кадров упадет до 30.",
     [UI_STR_OPT_DOWNSAMPLE] = "Понижение разрешения",
     [UI_STR_VAL_DOWNSAMPLE_BOX] = "К оригинальному размеру",
-    [UI_STR_OPT_DOWNSAMPLE_NOTE] =
-        "Рендеринг в повышенном разрешении со сжатием до размера игры. Требует разрешение от x2; не работает с ЭЛТ-фильтром или в оконном режиме.",
+    /* longer than a note holds (two lines, 255 bytes): English until shortened */
+    [UI_STR_OPT_DOWNSAMPLE_NOTE] = NULL,
     [UI_STR_AA_OFF] = "Выкл",
     [UI_STR_AA_SSAA2] = "2x суперсемплинг",
     [UI_STR_AA_SSAA4] = "4x суперсемплинг",
@@ -664,8 +664,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_BACKUP_WHY_NO_SPACE] = "На устройстве недостаточно свободного места.",
     [UI_STR_OPT_EFFECT_WATER] = "Отражения воды",
     [UI_STR_VAL_SHARP] = "Резкие",
-    [UI_STR_EFFECT_WATER_NOTE] =
-        "«Резкие» — отражения в воде имеют выбранное вами разрешение. «Исходные» — сохраняются более мягкие отражения, характерные для PS2.",
+    /* longer than a note holds (two lines, 255 bytes): English until shortened */
+    [UI_STR_EFFECT_WATER_NOTE] = NULL,
     [UI_STR_VAL_SMOOTH] = "Плавное",
     [UI_STR_OPT_SHOW_FPS] = "Счётчик кадров",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
@@ -781,8 +781,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_STATES_XB_PINNED] =
         "Это сохранение создано в версии %s.\nи могут использоваться только в этой версии.\nСохранения с карты памяти по-прежнему работают.",
     [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Свечение между кадрами",
-    [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
-        "В исходном режиме свечение кадра сохраняется между кадрами. В плавном — повторяется для каждого кадра, что требует больше ресурсов ГП.",
+    /* longer than a note holds (two lines, 255 bytes): English until shortened */
+    [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] = NULL,
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Имеет значение только при частоте кадров выше оригинальной, при включенном эффекте свечения.",
     [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "Интенсивность размытия движения",
