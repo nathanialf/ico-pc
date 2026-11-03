@@ -1413,9 +1413,14 @@ if(ICO_RUN_TESTS)
                      "-DEXPECT=Full pixel on, border mask off: [0-9]+ render-target reads clamped, 0 block reads kept on REPEAT"
                      -DSHA=613d1be7e8d7c1437ffa90c237eed6dfb7db2995e39a708270403afee18e1d28
                      ${_rip_py} -P "${_rip}")
+    # the pinned SHA-256s are of the pictures without the fades fold: above 1x the
+    # brightness step folded into the reduction (GPUROUND) moves the ripple frame's
+    # pixels by one level (591,187 of them on v83439), inside the fold's bound, which
+    # rd_fades_fold_ab tests; these tests pin the water's exact bytes
     set_tests_properties(rd_replay_tool_ripple rd_replay_tool_ripple_447 rd_replay_tool_ripple_436
                          rd_replay_tool_mirror_floor
-                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600
+                                    ENVIRONMENT "ICO_RD_FADES_FOLD=0")
     # the still re-present (rd_reshow.c): a corpus dump as its own tick before
     # (nothing moves), 4 presents at Enhanced 4:3 2x at 1280x960: presents
     # 1..3 shown again, all 4 pictures byte for byte the ones rendered with
