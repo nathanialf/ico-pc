@@ -1159,7 +1159,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   cover the picture)`), none with the area off, SCENE byte for byte; no validation error.
 - `rd_pass_cut_ab.cmake`: the dumps of `tools/pass_cut_dumps.txt` (`tools/pass_area_dumps.txt`'s;
   machine-local, a missing one skipped) replayed with `--pass-dump --stats` under
-  `ICO_RD_BLEND=fixed`, `ICO_RD_STORE_PLAN=1` and `ICO_RD_STORE_POISON=1` five times: every cut off
+  `ICO_RD_BLEND=fixed`, `ICO_RD_STORE_PLAN=1`, `ICO_RD_STORE_POISON=1` and `ICO_RD_FADES_FOLD=0`
+  (list 11's sprites drawn, as the gate draws them: with the fold list 11's pass goes and the
+  reduction's DISPLAY clear has no barrier left to be carried past) five times: every cut off
   (`ICO_RD_CLEAR_CARRY=0`, `ICO_RD_CLEAR_SKIP=0`, `ICO_RD_LAST_STORE=0`), each alone on, all on; at
   the phone's Resolution Auto with its paths (`ICO_RD_VU_PREPASS=0`, `ICO_RD_FOG_PATH=local`,
   `ICO_RD_DATE_PATH=stencil`; a narrower dump skips it) and at Enhanced 2x 4:3: every PNG
