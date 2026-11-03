@@ -7,7 +7,8 @@
  * rd__replay_blur_fold (rd_replay_tiler.c), every other sprite to
  * rd__replay_blur_sprite_draw (rd_replay.c doBlurSpriteDraw); the motion
  * blur's under Motion blur: Smooth goes to rd__blur_smooth_sprite
- * (rd_blur_smooth.c) first.  The
+ * (rd_blur_smooth.c) first; the motion blur's at a Motion blur strength
+ * under 100 % is drawn with its lower FIX in the state (both ways).  The
  * reduction's textured sprite with the border open (rd__replay_border_open:
  * Full pixel on, or the border mask on a cropped frame) is drawn with the
  * scissor the whole target and both axes on CLAMP, and where the frame is
@@ -455,7 +456,29 @@ static void glowEdge(Replay *r, const RdFrame *f, const RdCmd *c)
  * in the dumps); this replaces them for these draws and puts them back
  * after them, whichever way they return.  The black clear sprite before it
  * is not textured and covers everything already. */
+static void blurPostSprite(Replay *r, const RdFrame *f, const RdCmd *c);
+
+/* Options > Effects > Motion blur strength (rd_internal.h
+ * rd__blur_strength_fix): the motion blur's sprite drawn with the lower FIX
+ * in the state, which its pipeline key and DrawCB take (rd_replay.c
+ * doBlurSpriteDraw) and Smooth's k-root reads (rd__blur_smooth_sprite); the
+ * recorded FIX put back after it.  At 100 % the sprite is drawn as before */
 void rd__blur_post_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    const uint8_t fix = r->st.ds.blendFix;
+    const uint8_t eff =
+        c->b[0] == RD_POST_MOTION_BLUR ? rd__blur_strength_fix(fix, rd__blur_strength_pct()) : fix;
+    if (eff == fix) {
+        blurPostSprite(r, f, c);
+        return;
+    }
+    r->st.ds.blendFix = eff;
+    blurPostSprite(r, f, c);
+    r->st.ds.blendFix = fix;
+    rd__blur_strength_note(f->number, fix, eff);
+}
+
+static void blurPostSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     sceneRepeatDue(r); /* SCENE's outer columns before the first read of it */
     if (c->b[0] == RD_POST_MOTION_BLUR && rd__blur_smooth_sprite(r, f, c)) {

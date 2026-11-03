@@ -782,6 +782,8 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
         NULL, /* the CSV has only the first half of the note: English */
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Só tem efeito acima de Taxa de quadros: Original, com o brilho ativado.",
+    [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = NULL,  /* newer than the translation: English */
+    [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] = NULL, /* newer than the translation: English */
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

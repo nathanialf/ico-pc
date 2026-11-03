@@ -1747,6 +1747,19 @@ static void readDumpConfig(void)
     }
 }
 
+/* the line for Motion blur strength (rd_init below 100 %, a change) */
+static void logMotionBlurStrength(const char *when)
+{
+    const uint32_t pct = rd__blur_strength_pct();
+    if (pct >= 100u) {
+        rd__log("motion blur: strength 100 %% (the game's own FIX)%s", when);
+        return;
+    }
+    rd__log("motion blur: strength %u %% (the game's FIX scaled by %u / 100 and rounded, in "
+            "Original and Smooth alike: FIX 32 drawn as %u, a shorter trail)%s",
+            (unsigned)pct, (unsigned)pct, (unsigned)rd__blur_strength_fix(32u, pct), when);
+}
+
 /* the line for the motion blur's way (rd_init, a change) */
 static void logMotionBlur(const char *when)
 {
@@ -1852,6 +1865,9 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     }
     if (g_rd.settings.motionBlurSmooth) {
         logMotionBlur(""); /* made at its first sprite (rd_blur_smooth.c) */
+    }
+    if (rd__blur_strength_pct() < 100u) {
+        logMotionBlurStrength("");
     }
     if (g_rd.settings.glowSmooth) {
         logGlowBetween("");
@@ -2323,6 +2339,7 @@ void rd_begin_frame(void)
         const bool blurChanged =
             g_rd.settings.motionBlurSmooth != g_rd.pendingSettings.motionBlurSmooth;
         const bool glowChanged = g_rd.settings.glowSmooth != g_rd.pendingSettings.glowSmooth;
+        const uint32_t strengthWas = rd__blur_strength_pct();
         const bool presetChanged = g_rd.settings.preset != g_rd.pendingSettings.preset;
         g_rd.settings = g_rd.pendingSettings;
         g_rd.settingsPending = false;
@@ -2342,6 +2359,9 @@ void rd_begin_frame(void)
         }
         if (glowChanged) {
             logGlowBetween(", from the next present");
+        }
+        if (rd__blur_strength_pct() != strengthWas) {
+            logMotionBlurStrength(", from the next present");
         }
         if (blurChanged) {
             logMotionBlur(", from the next present");

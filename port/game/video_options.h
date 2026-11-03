@@ -76,6 +76,12 @@
  *                                       (Original) or with every frame shown, the same
  *                                       length of trail (Smooth); anything else is
  *                                       "original" (older builds ignore the key)
+ *   [video] effect_motion_blur_strength
+ *                           100         10..100 in tens: the motion blur's FIX scaled by it
+ *                                       (rd.h RdSettings.motionBlurStrength), in Original
+ *                                       and Smooth; 100 is the PS2's trail, lower fades
+ *                                       faster; a value off the tens is rounded to one,
+ *                                       outside 10..100 clamped
  *   [video] effect_water_sharp
  *                           false       the reflections in water (and the picture through
  *                                       the queen's barrier) at the scene's resolution;
@@ -201,6 +207,10 @@ typedef struct IcoVideoOptions {
        tick), 1 Smooth (rd.h RdSettings.motionBlurSmooth: moved on at every
        present); [video] effect_motion_blur_mode */
     int effectMotionBlurSmooth;
+    /* Motion blur strength, 10..100 in tens (100 the PS2's): the motion
+       blur's FIX scaled by it in either way (rd.h
+       RdSettings.motionBlurStrength); [video] effect_motion_blur_strength */
+    int effectMotionBlurStrength;
     /* the glow's way above Frame rate Original: 0 Original (the glow of the
        game's own frame is held for the frames shown between), 1 Smooth
        (rd.h RdSettings.glowSmooth: made again at every present); [video]
@@ -225,6 +235,13 @@ typedef struct IcoVideoOptions {
 /* IcoVideoOptions.texturePackCacheMb: 0 (automatic) or this range */
 #define ICO_TEXPACK_CACHE_MIN 128
 #define ICO_TEXPACK_CACHE_MAX 65536
+/* IcoVideoOptions.effectMotionBlurStrength: the range and the step (the
+   Effects page's Motion blur strength row); MAX, the PS2's, is the default */
+#define ICO_MOTION_BLUR_STRENGTH_MIN 10
+#define ICO_MOTION_BLUR_STRENGTH_MAX 100
+#define ICO_MOTION_BLUR_STRENGTH_STEP 10
+/* v clamped to MIN..MAX and rounded to the nearest step (half up) */
+int ico_video_motion_blur_strength_clamp(int v);
 
 /* IcoVideoOptions.crtMode (rd.h RdCrtMode is this + 1) */
 enum {
@@ -320,6 +337,10 @@ int ico_video_effect_water_sharp(void);
    renderer (window_host.c video_settings, RdSettings.motionBlurSmooth);
    0 for Off and Original */
 int ico_video_effect_motion_blur_smooth(void);
+/* [video] effect_motion_blur_strength, 10..100 in tens (100: the game's
+   own): the host hands it to the renderer (window_host.c video_settings,
+   RdSettings.motionBlurStrength) */
+int ico_video_effect_motion_blur_strength(void);
 /* 1 when the glow is on and Smooth ([video] effect_glow = true,
    effect_glow_mode = "smooth"): the host hands it to the renderer
    (window_host.c video_settings, RdSettings.glowSmooth); 0 for Off and

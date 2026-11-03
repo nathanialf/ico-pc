@@ -81,6 +81,11 @@
  *                         alone holds none (the trail starts with it); the
  *                         --prev dumps and --presents' PREV feed it, as
  *                         the presents of a run do
+ *   --motion-blur-strength N  10..100: Options > Effects > Motion blur
+ *                         strength (RdSettings.motionBlurStrength): the
+ *                         motion blur's FIX drawn as round(FIX N / 100), with
+ *                         either --motion-blur; 100 (the default) is the
+ *                         dump's own FIX
  *   --no-crack-fill       the crack filler off (rd_crack_fill.c; [dev]
  *                         crack_fill = false): above 1x under --enhanced the
  *                         pixels no draw covered between drawn ones keep the
@@ -1804,6 +1809,7 @@ int main(int argc, char **argv)
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] "
                 "[--border-mask] [--water-sharp] [--motion-blur original|smooth] [--no-crack-fill] "
+                "[--motion-blur-strength N] "
                 "[--work-clear RRGGBB] [--no-glow-edge] "
                 "[--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12|opengl|d3d11] "
@@ -1894,6 +1900,14 @@ int main(int argc, char **argv)
             }
             motionSmooth = strcmp(m, "smooth") == 0;
             s.motionBlurSmooth = motionSmooth ? 1 : 0;
+        } else if (strcmp(argv[i], "--motion-blur-strength") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            const long n = strtol(argv[++i], &end, 10);
+            if (!end || *end != '\0' || n < 10 || n > 100) {
+                fprintf(stderr, "bad --motion-blur-strength (10..100)\n");
+                return 1;
+            }
+            s.motionBlurStrength = (uint8_t)n;
         } else if (strcmp(argv[i], "--presents") == 0 && i + 1 < argc) {
             char *end = NULL;
             const long n = strtol(argv[++i], &end, 10);

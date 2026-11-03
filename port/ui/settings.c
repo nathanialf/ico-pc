@@ -1831,6 +1831,9 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return !o.effectMotionBlur        ? ui_str(UI_STR_OFF)
                : o.effectMotionBlurSmooth ? ui_str(UI_STR_VAL_SMOOTH)
                                           : ui_str(UI_STR_VAL_ORIGINAL);
+    case UI_OPT_EFFECT_MOTION_BLUR_STRENGTH:
+        snprintf(buf, size, "%d %%", o.effectMotionBlurStrength);
+        return buf;
     case UI_OPT_EFFECT_FOG:
         return onOff(o.effectFog);
     case UI_OPT_EFFECT_WATER:
@@ -2170,6 +2173,9 @@ static int optShown(int opt, int link)
     if (opt == UI_OPT_WINDOW_MODE) {
         return !ico_video_android(); /* the phone's window is the screen */
     }
+    if (opt == UI_OPT_EFFECT_MOTION_BLUR_STRENGTH) {
+        return ico_video_effect_motion_blur(); /* nothing to weaken with Motion blur Off */
+    }
     if (opt == UI_OPT_MOUSE_CAMERA || opt == UI_OPT_MOUSE_SENS || opt == UI_OPT_MOUSE_INVERT ||
         opt == UI_OPT_MOUSE_SPEED || opt == UI_OPT_MOUSE_RANGE || opt == UI_OPT_MOUSE_RETURN) {
         return !ico_video_android(); /* no mouse camera on a phone */
@@ -2426,6 +2432,17 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         if (i) {
             o.effectMotionBlurSmooth = i == 2;
         }
+        video = 1;
+        break;
+    }
+    case UI_OPT_EFFECT_MOTION_BLUR_STRENGTH: {
+        /* 10 .. 100 % in tens, held at both ends (as CRT strength) */
+        const int v = ico_video_motion_blur_strength_clamp(o.effectMotionBlurStrength +
+                                                           dir * ICO_MOTION_BLUR_STRENGTH_STEP);
+        if (v == o.effectMotionBlurStrength) {
+            return;
+        }
+        o.effectMotionBlurStrength = v;
         video = 1;
         break;
     }
@@ -3294,6 +3311,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_EFFECT_GLOW, UI_STR_EFFECTS_NOTE);
         addNote(pg, UI_OPT_EFFECT_GLOW_SMOOTH, UI_STR_EFFECT_GLOW_SMOOTH_NOTE);
         addNote(pg, UI_OPT_EFFECT_MOTION_BLUR, UI_STR_EFFECT_MOTION_BLUR_NOTE);
+        addNote(pg, UI_OPT_EFFECT_MOTION_BLUR_STRENGTH, UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE);
         addNote(pg, UI_OPT_EFFECT_WATER, UI_STR_EFFECT_WATER_NOTE);
         break;
     case UI_PAGE_GPU_DRIVER:
@@ -3872,15 +3890,22 @@ static void build(void)
     static const int gpuStrs[] = {UI_STR_OPT_GPU_DRIVER, UI_STR_GPU_DRIVER_ADD,
                                   UI_STR_GPU_DRIVER_ADD_FILE, UI_STR_GPU_DRIVER_REMOVE,
                                   UI_STR_BACK};
-    static const int fxOpts[] = {
-        UI_OPT_EFFECT_GLOW,      UI_OPT_EFFECT_GLOW_SMOOTH,    UI_OPT_EFFECT_DEPTH_OF_FIELD,
-        UI_OPT_EFFECT_SOFTENING, UI_OPT_EFFECT_MOTION_BLUR,    UI_OPT_EFFECT_FOG,
-        UI_OPT_EFFECT_WATER,     UI_OPT_EFFECT_CINEMATIC_BARS, UI_OPT_BACK};
+    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,
+                                 UI_OPT_EFFECT_GLOW_SMOOTH,
+                                 UI_OPT_EFFECT_DEPTH_OF_FIELD,
+                                 UI_OPT_EFFECT_SOFTENING,
+                                 UI_OPT_EFFECT_MOTION_BLUR,
+                                 UI_OPT_EFFECT_MOTION_BLUR_STRENGTH,
+                                 UI_OPT_EFFECT_FOG,
+                                 UI_OPT_EFFECT_WATER,
+                                 UI_OPT_EFFECT_CINEMATIC_BARS,
+                                 UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,
                                  UI_STR_OPT_EFFECT_GLOW_SMOOTH,
                                  UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
+                                 UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH,
                                  UI_STR_OPT_EFFECT_FOG,
                                  UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,

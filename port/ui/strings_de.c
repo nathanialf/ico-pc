@@ -804,6 +804,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Original behält das Leuchten des Spielbildes zwischen den Bildern. Flüssig berechnet es für jedes gezeigte Bild neu; das kostet mehr Grafikzeit.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Wirkt nur oberhalb der Bildrate Original und bei eingeschaltetem Leuchten.",
+    [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "Stärke der Unschärfe",
+    [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
+        "Niedrigere Werte lassen die Spur schneller verblassen; 100 ist die Spur der PS2.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

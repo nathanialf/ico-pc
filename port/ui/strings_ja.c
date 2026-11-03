@@ -794,6 +794,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "「オリジナル」はゲーム本来のフレームの光のにじみをその間も使います。「なめらか」は表示するフレームごとに作り直し、負荷が増えます。",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "フレームレートが「オリジナル」より高く、光のにじみがオンのときだけ働きます。",
+    [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "モーションブラーの強さ",
+    [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
+        "小さくするとブラーが速く消えます。100はPS2のままです。",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

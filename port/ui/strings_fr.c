@@ -809,6 +809,9 @@ const char *const
                 "Cette sauvegarde est plus grande que ce que le jeu accepte.",
             [UI_STR_BACKUP_WHY_NO_DIALOG] = "Aucun sélecteur de fichiers n’a pu s’ouvrir.",
             [UI_STR_BACKUP_WHY_NO_SPACE] = "Il n’y a pas assez d’espace libre sur l’appareil.",
+            [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "Intensité du flou",
+            [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
+                "Une valeur plus basse fait s’effacer la traînée plus vite ; 100 est celle de la PS2.",
             [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
             [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
             [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

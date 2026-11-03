@@ -310,6 +310,7 @@ static void video_settings(RdSettings *rs, int w, int h)
     /* Motion blur: Smooth, in either preset; Off and Original are the
        game's (staticBlur.c reads the switch) */
     rs->motionBlurSmooth = (uint8_t)(o.effectMotionBlur != 0 && o.effectMotionBlurSmooth != 0);
+    rs->motionBlurStrength = (uint8_t)o.effectMotionBlurStrength; /* 10..100, both ways */
     /* Glow between frames: Smooth, in either preset; Original and Off hold
        the tick's first present's glow (rd_glow_hold.c) */
     rs->glowSmooth = (uint8_t)(o.effectGlow != 0 && o.effectGlowSmooth != 0);

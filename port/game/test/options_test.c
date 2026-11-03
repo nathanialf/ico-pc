@@ -1299,6 +1299,77 @@ static void test_video_effects(const char *dir)
         text = read_text(path);
         CHECK(text != NULL && strstr(text, "effect_motion_blur_mode = \"original\"") != NULL);
     }
+    /* Motion blur strength ([video] effect_motion_blur_strength, issue 181):
+       100 by default and with no key (a file from before it), 10..100 read
+       as written in tens, a value off the tens rounded to the nearest (half
+       up), outside 10..100 clamped (each with a stderr line); the getter
+       reads it whatever Motion blur's way, Off keeps it; saved with every
+       save and read back; outside the preset */
+    {
+        static const struct {
+            const char *text;
+            int want;
+        } kStr[] = {{NULL, 100}, {"100", 100}, {"50", 50},  {"10", 10},   {"55", 60},
+                    {"54", 50},  {"0", 10},    {"-30", 10}, {"250", 100}, {"\"half\"", 100}};
+
+        ico_video_defaults(&d);
+        CHECK(d.effectMotionBlurStrength == 100);
+        for (size_t i = 0; i < sizeof(kStr) / sizeof(kStr[0]); i++) {
+            f = fopen(path, "wb");
+            if (f != NULL) {
+                fputs("[video]\neffect_motion_blur_mode = \"smooth\"\n", f);
+                if (kStr[i].text != NULL) {
+                    fprintf(f, "effect_motion_blur_strength = %s\n", kStr[i].text);
+                }
+                fclose(f);
+            }
+            ico_config_reset(path, "/nonexistent/options_test.ini");
+            ico_video_reload();
+            ico_video_get(&o);
+            CHECK(o.effectMotionBlurStrength == kStr[i].want &&
+                  ico_video_effect_motion_blur_strength() == kStr[i].want &&
+                  ico_video_effect_motion_blur_smooth() == 1 &&
+                  ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+        }
+        /* the clamp itself */
+        CHECK(ico_video_motion_blur_strength_clamp(5) == 10 &&
+              ico_video_motion_blur_strength_clamp(14) == 10 &&
+              ico_video_motion_blur_strength_clamp(15) == 20 &&
+              ico_video_motion_blur_strength_clamp(95) == 100 &&
+              ico_video_motion_blur_strength_clamp(1000) == 100 &&
+              ico_video_motion_blur_strength_clamp(70) == 70);
+        /* ico_video_set clamps; Off keeps the value; the save writes it */
+        ico_video_get(&o);
+        o.effectMotionBlur = 0;
+        o.effectMotionBlurStrength = 33;
+        ico_video_set(&o);
+        ico_video_get(&o);
+        CHECK(o.effectMotionBlurStrength == 30 && ico_video_effect_motion_blur_strength() == 30 &&
+              ico_video_effect_motion_blur() == 0);
+        CHECK(ico_video_save() == 0);
+        text = read_text(path);
+        CHECK(text != NULL && strstr(text, "effect_motion_blur_strength = 30\n") != NULL &&
+              strstr(text, "effect_motion_blur = false") != NULL);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        ico_video_get(&o);
+        CHECK(o.effectMotionBlurStrength == 30 && o.effectMotionBlur == 0);
+        ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+        CHECK(o.effectMotionBlurStrength == 30);
+        ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
+        CHECK(o.effectMotionBlurStrength == 30 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+        /* a file without the key saved by this build gains it as 100 */
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fputs("[video]\neffect_fog = false\n", f);
+            fclose(f);
+        }
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        CHECK(ico_video_save() == 0);
+        text = read_text(path);
+        CHECK(text != NULL && strstr(text, "effect_motion_blur_strength = 100\n") != NULL);
+    }
     /* Glow between frames ([video] effect_glow_mode): Original with no key
        under the Original rows, "original" and "smooth" read in any case,
        anything else Original (with a stderr line); Smooth beside the
@@ -2073,6 +2144,11 @@ static void test_video_changes_text(void)
     was.texturePack = !now.texturePack;
     (void)ico_video_changes_text(&was, &now, line, sizeof(line));
     CHECK(strstr(line, "vsync ") == line && strstr(line, ", texture pack ") != NULL);
+    /* Motion blur strength in the words (issue 181) */
+    was = now;
+    was.effectMotionBlurStrength = 50;
+    (void)ico_video_changes_text(&was, &now, line, sizeof(line));
+    CHECK(strcmp(line, "motion blur strength 50 % -> 100 %") == 0);
     /* cut at the size, never past it */
     CHECK(ico_video_changes_text(&was, &now, line, 8) < 8 && strlen(line) < 8);
 }

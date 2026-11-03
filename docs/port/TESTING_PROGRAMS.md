@@ -857,7 +857,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   Original: a still picture within 1 at 1, 4 and 10 presents a tick, a moving bar's four presents
   a tick one DISPLAY under Original and four under Smooth with the ghost after the tick within 2,
   and the restart after a tick without the motion blur holding no ghost
-  (`checkMotionBlurSmooth`); `motion_blur_smooth_scaled` the accumulator and its target at
+  (`checkMotionBlurSmooth`); the `motion_blur_strength` shard (`rd_blur_strength_test.inc`)
+  runs Motion blur strength over that bar under Original and Smooth: at 100 % the presents the
+  bytes of the zeroed setting's, at 50 % of FIX 32 the bytes of the sprite recorded at FIX 16
+  (every sprite counted, the last FIX 32 drawn as 16), Original's ghost after the tick within 1
+  of the GS formula's at FIX 16 and 32 and Smooth's within 2 of Original's
+  (`checkMotionBlurStrength`; `checkStrengthFix`, with the recording checks, the rounding's
+  cases); `motion_blur_smooth_scaled` the accumulator and its target at
   SCENE's size at Enhanced 2x with the full-height scene, freed by `rd_shutdown`
   (`checkMotionBlurSmoothScaled`); the `aura_box` shard (`rd_blur_aura_box_test.inc`) draws the
   `above1x` shard's aura frames (the three feedback modes over hard edges, gradients and, every

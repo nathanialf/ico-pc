@@ -948,6 +948,9 @@ typedef enum UiStrId {
     UI_STR_OPT_EFFECT_GLOW_SMOOTH,
     UI_STR_EFFECT_GLOW_SMOOTH_NOTE,
     UI_STR_EFFECT_GLOW_SMOOTH_LOCKED,
+    /* Effects > Motion blur strength (issue 181): the label and the note */
+    UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH,
+    UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE,
     /* the community translations' names (the Language and Menu language
        rows, after UI_STR_LANG_ZH), in their own language in every table */
     UI_STR_LANG_RU_BOBTTZ,

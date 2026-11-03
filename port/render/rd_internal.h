@@ -4282,6 +4282,29 @@ void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *origi
 #define RD_BLUR_SMOOTH_PIPES 2
 #define RD_BLUR_SMOOTH_K_MAX 64u
 
+/* rd_blur_smooth.c: Options > Effects > Motion blur strength
+ * (RdSettings.motionBlurStrength; docs/port/RENDER_POST.md, "The motion
+ * blur's strength").  The motion blur's sprite takes
+ * FIX_eff = round(FIX x strength / 100) for the game's FIX, in both of
+ * Motion blur's ways: rd_blur_border.c rd__blur_post_sprite puts it in the
+ * state for the sprite's draw (its pipeline key and DrawCB), and Smooth's
+ * k-root takes it (rd__blur_smooth_sprite reads the state's FIX).  The
+ * trail keeps FIX_eff / 128 of itself a tick: at 50 % half the PS2's share.
+ * rd__blur_strength_pct     the percentage in force: 100 (the game's FIX)
+ *                           for a RdSettings value of 0 or 100 and more
+ * rd__blur_strength_fix     FIX_eff of FIX at pct (pure; FIX at 100)
+ * rd__blur_strength_note    rd__blur_post_sprite, for every motion blur
+ *                           sprite drawn at a lower FIX: the counts and the
+ *                           event line (a new FIX or a new strength, the
+ *                           first 8 then every 100th)
+ * rd__blur_strength_counts  since start: those sprites, the last one's FIX
+ *                           as the game recorded it and as drawn (tests)
+ * The 10 s summary's line rides on rd__blur_smooth_block. */
+uint32_t rd__blur_strength_pct(void);
+uint8_t rd__blur_strength_fix(uint32_t fix, uint32_t pct);
+void rd__blur_strength_note(uint32_t frame, uint8_t fix, uint8_t fixEff);
+void rd__blur_strength_counts(uint64_t *drawn, uint8_t *fix, uint8_t *fixEff);
+
 /* rd_crack_fill.c: the crack filler above 1x (issue 26; docs/port/RENDER_POST.md,
  * "Crack filling above 1x").  Before the fog of SCENE (rd_replay.c doFog,
  * rd_replay.h rd__crack_fill), under Enhanced with SCENE's scale above 1 on

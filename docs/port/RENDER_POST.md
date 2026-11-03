@@ -392,6 +392,30 @@ smooth` sets it (its replays armed; the `--prev` dumps feed the trail) and `--pr
 `--interp T PREV`) replays PREV, then N presents at alpha `T (k + 1) / N` to `<out>-p<k>.png`
 (TESTING.md).
 
+### The motion blur's strength
+
+Options > Effects > Motion blur strength (`[video] effect_motion_blur_strength`, 10..100 in tens,
+`RdSettings.motionBlurStrength`; issue 181). `rd__blur_post_sprite` (`port/render/rd_blur_border.c`)
+draws the motion blur's sprite with `FIX_eff = round(FIX x strength / 100)`
+(`rd__blur_strength_fix`, `port/render/rd_blur_smooth.c`) in the state's `blendFix`, and puts the
+recorded FIX back after it. Under Original that is the FIX the sprite's pipeline key and DrawCB
+take (`doBlurSpriteDraw`); under Smooth `rd__blur_smooth_sprite` reads the state's FIX, so the
+k-root above is taken from FIX_eff. The trail keeps `FIX_eff / 128` of itself a tick (the old
+frame's share in `(Cs - Cd) FIX / 128 + Cd`), so at 50 % half the PS2's share and it fades
+faster; the sprite's spread, its texture, Original's H/2 stretch and every other sprite are
+unchanged. At 100 % (and in a zeroed `RdSettings`: 0, the dumps, the tests) the sprite is drawn
+as recorded, the same bytes. The replay tool's `--motion-blur-strength N` sets it. The log:
+
+```
+motion blur: strength N % (the game's FIX scaled by N / 100 and rounded, in Original and Smooth alike: FIX 32 drawn as F, a shorter trail)      (rd_init below 100 %, or with ", from the next present" on a change)
+motion blur: strength 100 % (the game's own FIX), from the next present      (a change back)
+motion blur: strength N %: the game's FIX F drawn as E from frame M (the trail keeps a % of itself a tick where the PS2 keeps b %[, spread over the presents of a tick]; change C)      (a new FIX or strength: the first 8, then every 100th)
+motion blur: strength N %: S sprites drawn at a lower FIX than the game's in this block, FIX F drawn as E (the last)      (with the interp summary, when it drew)
+```
+
+The Smooth summary's `FIX F drawn as F'` then names FIX_eff and its k-root; the window's
+`display changed` line names `motion blur strength A % -> B %`.
+
 ## Above 1x
 
 At scale 1 every pass samples as the GS does. On a scaled target a pass that steps over many

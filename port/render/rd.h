@@ -438,6 +438,15 @@ typedef struct RdSettings {
      * game's own (Original), as before this option; the replay tool's
      * --motion-blur smooth sets it */
     uint8_t motionBlurSmooth;
+    /* Options > Effects > Motion blur strength ([video]
+     * effect_motion_blur_strength, 10..100 in tens).  The motion blur's
+     * sprite is drawn with FIX x motionBlurStrength / 100 rounded in place of
+     * the game's FIX, under Original and Smooth alike (Smooth spreads that
+     * FIX over the tick's presents): the trail fades faster below 100
+     * (rd_blur_smooth.c rd__blur_strength_fix, rd_blur_border.c
+     * rd__blur_post_sprite).  0 in a zeroed RdSettings, and 100 or more: the
+     * game's own FIX, as before this option */
+    uint8_t motionBlurStrength;
     /* Glow between frames: Smooth ([video] effect_glow_mode = "smooth" with
      * effect_glow on).  Above Frame rate Original the glow's chain
      * (rd_glow_hold.c) is drawn again at every present instead of the

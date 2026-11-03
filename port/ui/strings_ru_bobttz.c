@@ -773,6 +773,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] = NULL,
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Имеет значение только при частоте кадров выше оригинальной, при включенном эффекте свечения.",
+    [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = NULL,  /* newer than the translation: English */
+    [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] = NULL, /* newer than the translation: English */
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
