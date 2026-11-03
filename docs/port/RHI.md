@@ -120,7 +120,11 @@ thread and the submit thread has no job of that slot. Every other call that chan
 state waits as before. The acquire may come before the present of the picture before while the
 swapchain has an image to spare (the spec's limit for an acquire without a timeout: no more images
 acquired than `swapImageCount - minImageCount`, `vkr_acquire_ahead_ok`), else it waits for the
-guard (`rhi_call_guard_settle`); the present shows the oldest image acquired, and an image a failed
+guard (`rhi_call_guard_settle`). Ahead it does not wait for an image (a timeout of 0, so it never
+holds the swapchain's lock, and with it the present before, while the presentation engine frees
+one); when none is free it waits for the guard and acquires again (`rhi_vk: an acquire beside the
+submit thread found no image free: it waits for the present before (N times so far)`, first 8,
+then every 100th). The present shows the oldest image acquired, and an image a failed
 replay gave up in a slot with no job is taken over by the next acquire with its semaphore
 (`vkr_acquire_backbuffer`). The invariants: the queue receives picture N's list and present before
 anything of picture N+1 (the render thread submits nothing beside the submit thread), so every
