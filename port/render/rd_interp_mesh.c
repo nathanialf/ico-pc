@@ -36,6 +36,37 @@
 #include "rd_internal.h"
 #include "rd_mesh.h"
 
+/* ------------------------------------------------------------- the line
+ *
+ * The 10 s line (rd_interp.c presentLog): of the asks since the last line,
+ * those an earlier present's work served */
+static uint64_t s_keepAsk[RD_KEEP_COUNT], s_keepHit[RD_KEEP_COUNT];
+
+void rd__interp_keep_note(int what, bool kept)
+{
+    if (what >= 0 && what < RD_KEEP_COUNT) {
+        s_keepAsk[what]++;
+        s_keepHit[what] += kept;
+    }
+}
+
+void rd__interp_keeps_log(void)
+{
+    const uint64_t *a = s_keepAsk, *h = s_keepHit;
+    uint64_t spans, spansKept;
+    rd__alpha_span_take(&spans, &spansKept);
+    rd__log("interp: kept from an earlier present (the rest made again): %llu of %llu "
+            "comparisons of two ticks' mesh streams, %llu of %llu skinned meshes' pivots, %llu "
+            "of %llu shadow volumes' prism pairs; the replays' mesh alpha spans: %llu of %llu "
+            "kept",
+            (unsigned long long)h[RD_KEEP_SHAPE], (unsigned long long)a[RD_KEEP_SHAPE],
+            (unsigned long long)h[RD_KEEP_PIVOTS], (unsigned long long)a[RD_KEEP_PIVOTS],
+            (unsigned long long)h[RD_KEEP_PRISMS], (unsigned long long)a[RD_KEEP_PRISMS],
+            (unsigned long long)spansKept, (unsigned long long)spans);
+    memset(s_keepAsk, 0, sizeof(s_keepAsk));
+    memset(s_keepHit, 0, sizeof(s_keepHit));
+}
+
 /* ---------------------------------------------------------------- pivots */
 
 #define PIVOT_MEMO 32
@@ -67,8 +98,11 @@ const double (*rd__interp_skin_pivots(uint32_t meshId))[4]
     const int at = ok && m->streamSerial ? (int)((meshId * 2654435761u) >> 27) : PIVOT_MEMO;
     double (*pivot)[4] = s_pivots[at].pivot;
     s_pivotAt = at;
-    if (at < PIVOT_MEMO && s_pivots[at].mesh == meshId && s_pivots[at].serial == m->streamSerial &&
-        s_pivots[at].stream == m->stream && s_pivots[at].vertices == m->vertexCount) {
+    const bool kept = at < PIVOT_MEMO && s_pivots[at].mesh == meshId &&
+                      s_pivots[at].serial == m->streamSerial && s_pivots[at].stream == m->stream &&
+                      s_pivots[at].vertices == m->vertexCount;
+    rd__interp_keep_note(RD_KEEP_PIVOTS, kept);
+    if (kept) {
         return (const double (*)[4])pivot; /* the same stream's */
     }
     memset(pivot, 0, sizeof(s_pivots[at].pivot));
@@ -158,6 +192,7 @@ bool rd__interp_streams_same(uint32_t pMesh, const RdMeshRec *mp, const float (*
     }
     if (!mp || !mc || !mp->streamSerial || !mc->streamSerial) {
         s_sameCompared++;
+        rd__interp_keep_note(RD_KEEP_SHAPE, false);
         return memcmp(ps, cs, size) == 0; /* no serial: nothing to keep it by */
     }
     const uint32_t h = (pMesh * 2654435761u) ^ (cMesh * 40503u);
@@ -166,9 +201,11 @@ bool rd__interp_streams_same(uint32_t pMesh, const RdMeshRec *mp, const float (*
         e->cSerial == mc->streamSerial && e->ps == (const void *)ps && e->cs == (const void *)cs &&
         e->size == size) {
         s_sameKept++;
+        rd__interp_keep_note(RD_KEEP_SHAPE, true);
         return e->same;
     }
     s_sameCompared++;
+    rd__interp_keep_note(RD_KEEP_SHAPE, false);
     e->same = memcmp(ps, cs, size) == 0;
     e->pMesh = pMesh;
     e->cMesh = cMesh;

@@ -3892,8 +3892,10 @@ static int prismSetKept(const RdScreenVtx *p, uint32_t nvp, uint32_t incP, const
             memcpy(s_prism[1], e->pr + e->set.np, e->set.nc * pb);
         }
         *o = e->set;
+        rd__interp_keep_note(RD_KEEP_PRISMS, true);
         return e->r;
     }
+    rd__interp_keep_note(RD_KEEP_PRISMS, false);
     memset(o, 0, sizeof(*o));
     const int r = prismSet(p, nvp, incP, c, nvc, incC, world, o);
     PrismKeep *e = &s_pk[s_pkNext++ % PRISM_KEEP];
@@ -6301,6 +6303,7 @@ static void presentLog(void)
             (unsigned long long)s_pres.mixedCur, (unsigned long long)s_pres.mixedMinority,
             (unsigned long long)s_pres.mixedWhy[RD_CAM_OFF_NO_CAMERA],
             (unsigned long long)s_pres.mixedWhy[RD_CAM_OFF_FAILED]);
+    rd__interp_keeps_log(); /* what earlier presents' work served (rd_interp_mesh.c) */
     /* a ninth line, only when a turn kept the tick's pose: why, and the
      * draws that did it most */
     if (s_pres.turnSnap || s_pres.turnFull) {

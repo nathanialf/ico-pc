@@ -1772,6 +1772,13 @@ changed are kept or made once, each giving the same bytes:
 - **The draw-merge count.** `vuMergeNote` (counting only) compares the last VU draw's DrawCB byte
   for byte instead of a 64-bit FNV made one byte a step at every VU draw: 0.12 ms a replay.
 
+The 10 s summary says how much of that work an earlier present's served (`port/render/rd_interp_mesh.c`
+(`rd__interp_keeps_log`), from `presentLog`; the spans counted since the line before):
+
+```
+interp: kept from an earlier present (the rest made again): A of B comparisons of two ticks' mesh streams, C of D skinned meshes' pivots, E of F shadow volumes' prism pairs; the replays' mesh alpha spans: G of H kept
+```
+
 The blends' per-vertex loops (`lerpFloats`) are vectorised by the Android build's clang at `-O2`
 (four lanes, `-Rpass=loop-vectorize`). What is left of the walk on lavapipe is mostly the driver's
 command recording (lavapipe's own code on the main thread); the phone's driver is another, so the

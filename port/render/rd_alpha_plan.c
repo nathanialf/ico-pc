@@ -203,6 +203,16 @@ typedef struct MeshMemo {
 
 static MeshMemo s_meshMemo[MESH_MEMO];
 
+/* the asks since the last rd__alpha_span_take, and those the table served */
+static uint64_t s_spanAsks, s_spanKept;
+
+void rd__alpha_span_take(uint64_t *asks, uint64_t *kept)
+{
+    *asks = s_spanAsks;
+    *kept = s_spanKept;
+    s_spanAsks = s_spanKept = 0;
+}
+
 static bool meshSpanMemo(uint32_t id, const RdMeshRec *m, uint8_t prog, uint8_t code, float fade,
                          Span *s)
 {
@@ -219,6 +229,8 @@ static bool meshSpanMemo(uint32_t id, const RdMeshRec *m, uint8_t prog, uint8_t 
                       e->vertices == m->vertexCount && e->qpv == m->qwPerVertex &&
                       e->prog == prog && e->debug == debug && e->fade == fadeBits &&
                       (m->streamSerial != 0 || (e->replay != 0 && e->replay == g_rd.replayCounter));
+    s_spanAsks++;
+    s_spanKept += same;
     if (!same) {
         Span t = {0, 0, false};
         e->ok = (uint8_t)(meshSpan(m, prog, code, fade, &t) && t.any);

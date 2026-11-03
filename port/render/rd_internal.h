@@ -947,6 +947,18 @@ bool rd__interp_streams_same(uint32_t pMesh, const RdMeshRec *mp, const float (*
                              size_t size);
 void rd__interp_streams_counts(uint32_t *compared, uint32_t *kept);
 
+/* the 10 s line's counts (rd_interp.c presentLog): rd__interp_keep_note an
+ * ask of kind what (RD_KEEP_*) and whether an earlier present's work served
+ * it; rd__interp_keeps_log writes the line "interp: kept from an earlier
+ * present ..." and starts the counts again */
+enum { RD_KEEP_SHAPE, RD_KEEP_PIVOTS, RD_KEEP_PRISMS, RD_KEEP_COUNT };
+
+void rd__interp_keep_note(int what, bool kept);
+void rd__interp_keeps_log(void);
+/* rd_alpha_plan.c: the mesh spans asked for since the last take, and those
+ * kept from an earlier ask (meshSpanMemo; the line above names them) */
+void rd__alpha_span_take(uint64_t *asks, uint64_t *kept);
+
 #define RD_MAX_MESHES 16384
 
 RdMeshRec *rd__mesh_rec(uint32_t id);
