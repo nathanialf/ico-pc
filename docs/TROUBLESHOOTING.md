@@ -103,8 +103,9 @@ memory the game was using.
 
 On a phone or a handheld the system tells the game when the device itself
 runs low on memory, and the game also checks how much memory the device has
-free. On handhelds with a Snapdragon chip and Qualcomm's own graphics driver
-it stops when less than about 17 % of the device's memory is free (never
+free. On a phone or handheld using Qualcomm's own graphics driver (most
+Snapdragon devices without a Turnip driver package) it stops when less than
+about 17 % of the device's memory is free (never
 asking for more than 2 GB free on a device with more than 8 GB); on every
 other phone it stops only when less than about 512 MB is free on a device
 with more than 8 GB (17 % on smaller ones), which is what preparing the
@@ -116,7 +117,8 @@ game stops preparing and goes on to the title. On most phones it then
 finishes preparing quietly in the background while you play, a little at a
 time, and waits whenever the game is busy, so the first new rooms do not
 freeze for seconds; the next start prepares everything at the start again.
-On the Snapdragon handhelds above, and whenever the system itself said it
+On a device using Qualcomm's own graphics driver (above), on one whose
+graphics driver the game cannot tell, and whenever the system itself said it
 was low on memory, the game prepares the rest the first time the game needs
 it instead: the next start then skips **Preparing graphics** and goes
 straight to the title, and the first minutes of play can pause for a moment
