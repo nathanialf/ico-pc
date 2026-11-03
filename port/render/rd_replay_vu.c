@@ -386,7 +386,9 @@ static void passSplit(Replay *r)
 typedef struct VuMergeLast {
     bool valid;
     uint32_t replay, pass, pipe, g1, g2, frame, frameOff, color;
-    uint64_t cbHash;
+    /* its DrawCB's bytes, compared whole (a 64-bit FNV of its 144 bytes, one
+     * byte a step, had cost 0.1 ms a replay of the walk on lavapipe) */
+    IcoDrawCB cb;
     RhiRect sc;
 } VuMergeLast;
 
@@ -403,16 +405,6 @@ static void ownDraw(void)
     s_mergeExpect++;
 }
 
-static uint64_t vuFnv(const void *data, size_t n)
-{
-    const uint8_t *b = data;
-    uint64_t h = 1469598103934665603ull;
-    for (size_t i = 0; i < n; i++) {
-        h = (h ^ b[i]) * 1099511628211ull;
-    }
-    return h;
-}
-
 /* eligible: single planned pass, no DATE stencil, no destination read, not
  * skinned.  Called once a VU draw is drawn or held in the merge's run */
 static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t g1, uint32_t g2,
@@ -422,36 +414,26 @@ static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t 
     if (list < 0 || list >= RD_LIST_COUNT) {
         return;
     }
-    VuMergeLast t;
-    memset(&t, 0, sizeof(t));
-    t.valid = eligible;
-    t.replay = g_rdPerf.replay;
-    t.pass = r->passSerial;
-    t.pipe = pipe;
-    t.g1 = g1;
-    t.g2 = g2;
-    t.frame = r->frameBG.group.id;
-    t.frameOff = r->frameBG.offset;
-    t.color = r->st.color;
-    t.cbHash = vuFnv(cb, sizeof(*cb));
-    t.sc = r->sc;
-    const VuMergeLast *l = &s_mergeLast;
-    const bool samePass = l->valid && l->replay == t.replay && l->pass == t.pass;
+    VuMergeLast *l = &s_mergeLast;
+    const uint32_t replay = g_rdPerf.replay, pass = r->passSerial;
+    const uint32_t frame = r->frameBG.group.id, frameOff = r->frameBG.offset, color = r->st.color;
+    const bool samePass = l->valid && l->replay == replay && l->pass == pass;
     /* nothing drawn between but the VU draws' own */
     const bool adjacent = samePass && rd__stats_here()->draws == s_mergeExpect;
-    if (adjacent && eligible && l->pipe == t.pipe && l->g2 == t.g2 && l->g1 == t.g1 &&
-        l->cbHash == t.cbHash && l->frame == t.frame && l->frameOff == t.frameOff &&
-        l->color == t.color && memcmp(&l->sc, &t.sc, sizeof(t.sc)) == 0) {
+    const bool sameCb = samePass && memcmp(&l->cb, cb, sizeof(*cb)) == 0;
+    if (adjacent && eligible && l->pipe == pipe && l->g2 == g2 && l->g1 == g1 && sameCb &&
+        l->frame == frame && l->frameOff == frameOff && l->color == color &&
+        memcmp(&l->sc, &r->sc, sizeof(l->sc)) == 0) {
         g_rdPerf.vuMergeDraws[list]++;
     } else {
         g_rdPerf.vuMergeRuns[list]++;
         if (samePass) {
             uint32_t why = 4;
-            if (l->pipe != t.pipe) {
+            if (l->pipe != pipe) {
                 why = 0;
-            } else if (l->g2 != t.g2 || l->g1 != t.g1) {
+            } else if (l->g2 != g2 || l->g1 != g1) {
                 why = 1;
-            } else if (l->cbHash != t.cbHash) {
+            } else if (!sameCb) {
                 why = 2;
             } else if (!eligible || !adjacent) {
                 why = 3;
@@ -459,7 +441,17 @@ static void vuMergeNote(const Replay *r, bool eligible, uint32_t pipe, uint32_t 
             g_rdPerf.vuMergeBlocked[why]++;
         }
     }
-    s_mergeLast = t;
+    l->valid = eligible;
+    l->replay = replay;
+    l->pass = pass;
+    l->pipe = pipe;
+    l->g1 = g1;
+    l->g2 = g2;
+    l->frame = frame;
+    l->frameOff = frameOff;
+    l->color = color;
+    memcpy(&l->cb, cb, sizeof(*cb));
+    l->sc = r->sc;
     s_mergeExpect = rd__stats_here()->draws;
 }
 
