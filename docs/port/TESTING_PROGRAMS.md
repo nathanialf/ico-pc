@@ -1096,7 +1096,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd_vufuse_ab` reads and a 2026-10-07 capture; a line is the dump, `expect=IN/GPU` and the
   tool's setting arguments) on the plain device and under `ICO_VK_FAKE_LIMITS=mali
   ICO_VK_FAKE_NO_DUAL=1` (a phone's limits, every lerp draw two passes), under
-  `ICO_RD_BLEND=fixed`: every named target's PNG byte for byte, both fakes' lines in the faked run,
+  `ICO_RD_BLEND=fixed` and `ICO_RD_CULL=off` (the `expect=` figures count every VU draw of the
+  frame; the visibility test would leave some out): every named target's PNG byte for byte, both
+  fakes' lines in the faked run,
   the `VU merge` figures (draws, GPU draws, merged, into, alone) and the fused pairs the plain
   device's, and `expect=` the plain run's merged figure (826 into 87 on the 164 frame)
   (`rd_vumerge_mali`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge-without-dual-source-blending)).
