@@ -125,8 +125,26 @@ instead of calling the callbacks (`overlayCollect`). `rd_overlay_prims` keeps pr
 a collect on the calling thread; others are dropped and logged (`rd: overlay: N prims given outside
 a present's overlay collect on this|the render thread were dropped (K times)`, the first 8, then
 every 100th).
-A GPU texture the game thread destroys goes to the retire list the render thread empties at its
-next job (`rd__retire_texture`).
+A GPU texture the game thread destroys goes to the retire list the render thread empties in its
+next job (`rd__retire_texture`): a call's job at its start, a picture's at its first graphics call
+(`rd__thread_retire_kept` from `rd__submit_drain`, after that call's wait for the submit thread).
+A destroy is a graphics call, and on the render thread a graphics call waits for the submit thread,
+so destroying at a picture's start would make its interpolation wait behind the picture before's
+submit and present; destroyed at the first graphics call, the interpolation overlaps them on every
+picture, and the backend sees the same calls in the same order (the destroys after the submit
+thread's job, before `rhi_wait_frame`).
+
+What a picture holds the renderer for (the 10 s line's `a picture holds the renderer for R ms (C ms
+of its own, I ms of it the interpolation; ...)`, each a recent longest, `pace_rt_estimate`): from
+its job's start to `rd__reads_done`, which is the interpolation, then the first graphics call's waits
+(the submit thread's job on the picture before, the slot's fence, the acquire: `waitMs` and
+`acquireMs`), then the uploads and the walk. C is R less those waits; I is the interpolation
+(`rd_present`'s own timer around `rd__interp_frame`), not a wait. The submit thread's wait therefore
+counts in R only past the interpolation, and the line's `the render thread waited for it N times
+(T ms)` says how much. On a PowerVR phone R and C differ by 0.5-2.7 ms (4 ms a picture where the
+driver's present blocked behind the GPU), so a hand-over longer than the interpolation, uploads and
+walk measured without the submit thread comes from the render thread's own CPU time, not from the
+submit thread; the 10 s line's cores (PLATFORM.md, the render thread) say where each thread ran.
 No game code and no frame data change threads; the pictures are the same bytes.
 The hand-over, not the frame ring, is what the game thread waits on: `rd_begin_frame` and
 `rd_end_frame` wait for a picture's reads like every other call that changes the state, so three

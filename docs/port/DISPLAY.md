@@ -722,14 +722,21 @@ The render thread's times say how long a picture's reads will take: its interpol
 for the submit thread and for the GPU's slot fences (2 pictures in flight at most), at the GPU's
 measured time a picture, and its own reads (`port/platform/pace_policy.h` (`pace_rt_further_ask`,
 `pace_rt_step_miss`, `PaceRtPipe`, `PaceStepEst`); [PLATFORM.md](PLATFORM.md#the-render-thread)).
-A step that ends past its deadline anyway (an estimate that was wrong: a stage's first textures,
-a burst of slow pictures) makes the rule plan the whole period for the next 120 steps, the rule
-before it (the reads by the next step's due time), 240 after another miss, up to 1920, halved by
-1920 steps without one: one late step, then two seconds of the strict rule, never the state of
-steps 40 ms late with the sound held back. The 10 s line's `game thread:` clause counts the
-holds (`would have made the step miss its period`), the steps started late by the pictures (with
-the longest) and the steps that missed their period; `window: the game step missed its period by
-...` names a miss (first 8, then every 100th).
+A step that ends past its deadline anyway because of the pictures (an estimate that was wrong: a
+stage's first textures, a burst of slow pictures) makes the rule plan the whole period for the next
+120 steps, the rule before it (the reads by the next step's due time), 240 after another such miss,
+up to 1920, halved by 1920 steps without one: one late step, then two seconds of the strict rule,
+never the state of steps 40 ms late with the sound held back. A miss is the pictures' only when
+their holds on the step (the presents running past its start, its waits for a picture's reads)
+are at least its lateness (`pace_step_by_pictures`); a miss of the game's own (a long step, a
+load, a compile, a bug report's capture, the disc, or the lateness a long step carries into the
+next start) arms nothing (`pace_loop_test` `testBackoffCause`). The 10 s line's `game thread:`
+clause counts the holds (`would have made the step miss its period`), the steps started late by
+the pictures (with the longest) and the steps that missed their period, the pictures' and the
+game's own apart; `window: step rule: back-off N steps after a miss the pictures caused (late by
+L ms, R ms of it waiting for a picture, P ms the presents ran past the step's start; ...)` names a
+back-off and `window: the game step missed its period by ... the game's own time, not the
+pictures' ...` a miss of the game's (each first 8, then every 100th).
 
 The rule is a rate requirement ([Pacing](#pacing)): `pace_loop_test` (`testStepRule`) asserts the
 presents in 10 s for 300 game frames by the render thread's reads, at the phone's 4.5 ms step with

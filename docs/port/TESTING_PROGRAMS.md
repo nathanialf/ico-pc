@@ -655,7 +655,22 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   with them on the render thread and two with them on the submit thread, no step, read, slot or
   submit-thread wait; 4 ms of submit and present give two either way; a 26 ms GPU stage with the
   back-pressure keeps no wait and every frame with the holds (numbers from
-  `build-host/tmp/v098/evidence/submitthread/st_sim.py`) (`pace_loop`).
+  `build-host/tmp/v098/evidence/submitthread/st_sim.py`); `testBackoffCause`: the step rule's
+  back-off armed only by a miss the pictures caused (`pace_step_by_pictures`): at the phone's
+  10 ms reads one game step 20, 40 or 700 ms longer (a load, a compile, a capture) gives 680 /
+  696 / 693 presents in 10 s and 1 / 0 / 0 back-offs (the 20 ms one's next step started late by
+  the new frame's own picture: the pictures'), where arming on every miss gave 660 / 647 / 679
+  and 2 / 4 / 1, and the reads' jump's miss is still the pictures' (numbers from
+  `build-host/tmp/v098/evidence/fixhandover/backoff_cells.py`) (`pace_loop`).
+- `cpu_place_test.c`: which core a thread runs on (`port/platform/cpu_place.h`): the histogram
+  (by core, out of range and -1 as not known, the most-run core with the lowest on a tie, the take
+  emptying it, the share on a mask), the cores' speeds from a fake sysfs under the build folder on
+  Linux (an 8-core phone `0-3 1.8 GHz, 4-6 2.6 GHz, 7 3.1 GHz`, an offline core with no file, an
+  unreadable one, one speed for all giving no slow or fast cores), the masks' text, the 10 s part
+  word for word (`on cores G:4 (78 %) R:7 (64 %) S:5 (90 %), on the slowest cores (0-3) G 0 % R
+  12 % S 10 %`, a thread with no samples, one with no core known, a short buffer), and the calling
+  thread (its core inside the cores it may run on, the priority text's `nice`, a pin to no core
+  refused, a pin to the cores already allowed taken) (`cpu_place`).
 - `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
   the first second, 50 presents a second give 50 at every whole second, a second that ran 1.5 s long
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays
@@ -696,8 +711,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   presents, the in-betweens held at 20 ms so no step ends half a period late, FIFO's return past
   the deadline excused), the FIFO fallback at 120 Hz (`testBudgetFifo120`: vsync off, a 28 ms GPU,
   every present waiting for the next vblank: 30 presents a second, nothing armed or dropped); the
-  clamp of a cap above the refresh in mailbox mode (`testPresentGap`, `testCapEqualsRefresh`)
-  (`pace_policy`).
+  clamp of a cap above the refresh in mailbox mode (`testPresentGap`, `testCapEqualsRefresh`),
+  and the step rule's back-off by whose miss (`testStepRule`: a game's miss arming nothing and
+  counted down inside a back-off as a step, a picture's arming it, `pace_step_start_late` past the
+  later of the due time and the step before's end less the pacer's wake, `pace_step_by_pictures`'
+  edges) (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
 - `present_fallback_test.c`: the FIFO fallback's decision (`present_fallback.h`): the stock

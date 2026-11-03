@@ -353,8 +353,16 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   late without the further picture. The step is its own time (the window's step less its read
   waits, `rd_thread_read_wait_ns`), estimated as the render thread's times are (`PaceStepEst`:
   the new value when higher, else falling an eighth a step), and a step that ended past its
-  deadline makes it the whole period for 120 steps (so the reads must end by the due time, the
-  rule before), 240 at the next miss and so on to 1920, halved by 1920 steps without one. The 2
+  deadline because of the pictures makes it the whole period for 120 steps (so the reads must end
+  by the due time, the rule before), 240 at the next such miss and so on to 1920, halved by 1920
+  steps without one. A miss is the pictures' (`pace_step_by_pictures`) when the presents' run past
+  the step's start (`pace_step_start_late`: past the later of its due time and the step before's
+  end, less 0.5 ms for the pacer's wake and the pump, `PACE_STEP_WAKE_NS`) plus its waits for a
+  picture's reads is at least its lateness: without them it would have ended inside its period.
+  Every other miss is the game's own (a long step, a load, a pipeline compile, a bug report's
+  capture, the disc, or the lateness a long step carries into the next start) and arms nothing,
+  since the further presents' plan cannot help it, and arming on every miss kept a phone's
+  whole session on the rule before (515-600 steps of every 10 s block planned at the period). The 2
   ms margin (`PACE_RT_STEP_MARGIN_NS`) is what the step's own time does not see: the pump between
   steps, the pacer's wake, the audio callback and other threads taking the game thread's core,
   the present's post (0.1-0.5 ms each in a PowerVR phone's log). The reads are predicted
@@ -537,19 +545,24 @@ longest gap), and per picture its interpolation, its uploads and walk, its submi
 the GPU's and the display's waits inside them, the textures it destroyed for the game thread, and
 the further presents the rules above held back, by why (they would have made the step miss its
 period, a picture ran past its estimate, the presents waited for the display or the GPU), with the
-estimates as the block ends (the reads, of them its own and the part before its first graphics
-call, the whole job, the present's wait, the submit thread's part, the step planned), the steps
+estimates as the block ends (the reads, of them its own and the interpolation, the rest being its
+waits for the GPU and the submit thread (RENDER.md, the render thread), the whole job, the present's wait, the submit thread's part, the step planned), the steps
 whose first renderer call waited for a picture's reads (`steps started late by the pictures`, the
-longest) and the steps that missed their period (the latest, and the steps the back-off planned
-at the whole period), then the submit thread's clause: its submit and present a picture
+longest) and the steps that missed their period (how many the pictures' and how many the game's own,
+the latest, and the steps the back-off planned at the whole period after the pictures'), then the
+submit thread's clause: its submit and present a picture
 (the pictures it finished, the longest), the most pictures queued and running at once, the render
 thread's waits for it (its next picture's first graphics call) and the other threads' (a drain),
 and the lists the render thread submitted itself (`; submit thread: off` without it). With the
 submit thread the render thread's `submit` is that thread's time, and `takes` (the whole picture)
-is the render thread's job, which ends with the walk:
+is the render thread's job, which ends with the walk. The line ends with the cores each thread
+ran on most (`on cores G:4 (78 %) R:7 (64 %) S:5 (90 %)`: one sample a step on the game thread,
+a picture on the render thread, a job on the submit thread, `port/platform/cpu_place.h`) and,
+where the cores differ in speed, each thread's share on the slowest ones (`, on the slowest cores
+(0-3) G 0 % R 12 % S 3 %`), so a render thread kept on a phone's little cores shows:
 
 ```
-window: game thread: step 3.1 ms (closing a frame 0.4 ms of it, longest 1.2 ms, 300 frames), pump 0.4 ms, slot waits 12 (8.2 ms; 9 (7.9 ms) by a new frame's present, 2 (0.3 ms) by a further present's, 1 other), read waits 290 (610.4 ms, longest 6.9 ms); render thread: CPU 9.3 ms a picture, idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread; 12 further presents held back (12 would have made the step miss its period, 0 while a picture ran past its estimate, 0 while the presents waited for the display or the GPU; a picture holds the renderer for 4.1 ms (3.6 ms of its own, 3.0 ms before its first graphics call), takes 4.2 ms, its present waits 0.3 ms, the submit thread's part 3.4 ms; the step planned at 3.9 ms); steps started late by the pictures: 290 (longest 6.9 ms); steps that missed their period: 0 (latest 0.0 ms past it; 0 steps planned at the whole period after them); submit thread: 3.4 ms a picture (submit 2.7, present 0.7; 590 pictures, longest 12.6 ms), queue depth max 1, the render thread waited for it 41 times (22.3 ms), the others 3 times (0.4 ms, longest 2.1 ms), 0 submitted on the render thread
+window: game thread: step 3.1 ms (closing a frame 0.4 ms of it, longest 1.2 ms, 300 frames), pump 0.4 ms, slot waits 12 (8.2 ms; 9 (7.9 ms) by a new frame's present, 2 (0.3 ms) by a further present's, 1 other), read waits 290 (610.4 ms, longest 6.9 ms); render thread: CPU 9.3 ms a picture, idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread; 12 further presents held back (12 would have made the step miss its period, 0 while a picture ran past its estimate, 0 while the presents waited for the display or the GPU; a picture holds the renderer for 4.1 ms (3.6 ms of its own, 3.0 ms of it the interpolation; the rest its waits for the GPU and the submit thread), takes 4.2 ms, its present waits 0.3 ms, the submit thread's part 3.4 ms; the step planned at 3.9 ms); steps started late by the pictures: 290 (longest 6.9 ms); steps that missed their period: 0 (0 the pictures', 0 the game's own; latest 0.0 ms past it; 0 steps planned at the whole period after the pictures'); submit thread: 3.4 ms a picture (submit 2.7, present 0.7; 590 pictures, longest 12.6 ms), queue depth max 1, the render thread waited for it 41 times (22.3 ms), the others 3 times (0.4 ms, longest 2.1 ms), 0 submitted on the render thread; on cores G:4 (97 %) R:6 (88 %) S:5 (91 %), on the slowest cores (0-3) G 0 % R 2 % S 1 %
 ```
 
 The slot waits are the game thread's waits for the render thread to finish everything posted
@@ -613,8 +626,18 @@ backlog) and how many a further present's (the pacing).
 16 of each); `window: render thread: a picture handed over was not presented (N so far): taken out
 of the block's present count` says a picture `rd_present_post` handed over failed on the render
 thread, known at the next present's drain (`rd_thread_failed_presents`; the first 8, then every
-100th: the frame rate counter and the vsync lock's slot keep it as presented); `window: render thread: the high priority was refused (...)` says the system kept its
-priority; `window: render thread: the game thread took the OpenGL context for its own calls (N
+100th: the frame rate counter and the vsync lock's slot keep it as presented); at the start `window: cores: 0-3 1.8 GHz, 4-6 2.6 GHz, 7 3.1 GHz; the game thread at nice 0 (not
+changed), may run on cores 0-7` gives the cores' top speeds (`cpufreq/cpuinfo_max_freq`, Linux and
+Android; `not known` elsewhere), and one line for each of the render and the submit thread says the
+high priority it asked for (`SDL_SetCurrentThreadPriority(HIGH)`) and what the kernel then has
+(`window: render thread: the high priority granted, nice -10; kept to the faster cores 4-7 ([dev]
+big_cores = false leaves the placement to the system); may run on cores 4-7`, or `refused (...)`,
+or `placed by the system (only on Android)`). Both threads ask for it: the render thread's next
+picture waits on the submit thread; the texture decode workers keep their priority as made and the
+background pipeline workers ask for the low one. On Android the two threads keep themselves to the
+cores faster than the slowest (`sched_setaffinity`), since a priority alone does not move a thread
+off a little core there; `[dev] big_cores = false` leaves them where the system puts them. It is a
+diagnostic escape, not a performance switch; `window: render thread: the game thread took the OpenGL context for its own calls (N
 times; ...)` (the first 8, then every 100th) counts OpenGL's take-overs, and `... could not be
 made current on the render|game thread (...)` a failed one.
 
