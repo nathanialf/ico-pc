@@ -1120,6 +1120,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   and a line a command; then the plain replay and the replay with `--nop @SPEC`, each `--pass-dump`
   with `--present 640x480` under `ICO_RD_BLEND=fixed`: DISPLAY.png and PRESENT.png byte for byte
   (`rd_occlusion_tool`). SKIP without the list, a dump of it or a device.
+- `rd_region_stats.cmake`: `rd_replay_tool --region-stats`
+  ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the first two dumps of
+  `tools/occlusion_corpus.txt` that are here, each at Original 4:3 1x and Enhanced 4:3 2x with a
+  present: the frame's line (draws and triangles under the rule above 0, the draws drawing nothing a
+  `--nop` spec of lists 0-6 or `none`, as many items as it counts, `--region-out` holding it), a
+  draw's line and a list's in their shapes; then `--pass-dump` plain and with `--nop @SPEC`, every
+  PNG byte for byte (the draws the CPU oracle says draw nothing draw no pixel); at Original the same
+  spec with `--no-device` (`rd_region_stats`). SKIP without the list, a dump of it or a device.
 - `rd_vumerge_ab_pixel`, `rd_vufuse_ab_pixel` and `rd_vustage_ab_pixel`: the two scripts above and
   `rd_vustage_ab.cmake` on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):
@@ -1586,7 +1594,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   columns beside it drawn (`sheetPixels`), and the `photo_veil` shard: the veil's two layers at
   60:9 drawing every pixel with the tiles (`photoVeilPixels`), and the `photo_reel` shard: the film
   reel's four specks of the deja dump at their places on the 16:9 frame, none tiled, every pixel
-  inside a speck's own place and in the 4:3 picture's columns (`photoReelPixels`).
+  inside a speck's own place and in the 4:3 picture's columns (`photoReelPixels`); in the
+  recording phase the winding marks (`windingMarkChecks`, `ICO_VU_MARK_FLIP`,
+  [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-winding-mark)): a prelit mesh of two strips marked at
+  `((k - s) & 1) ^ RD_VU_WINDING_PHASE` from each strip's start, a lit strip wound one way marked at
+  k - s = 2 and 4 from its normals, one of mixed normals triangle by triangle, a morph keeping the
+  creation's marks, no other mark made; and the `winding_disc_0` .. `winding_disc_3` shards (77
+  without the disc image): the disc's strips' winding, a quarter of the models each, one line
+  `winding: L lit triangles, A %, B %, C %; P prelit parts, E % edges consistent` and a line a
+  stage in counts (`windingDiscChecks`).
 - `rd_mip_test.c`: the Enhanced mip chain's size and its builder staying inside it (`rd_mip`).
 - `rd_mirror_test.c`: mirror mode's flag and the flipped presenter output (`rd_mirror`).
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
@@ -1600,8 +1616,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the supported mask holds the supersampling values only; `testShadowReset`: a frame whose list 3
   holds the shadow count with a reset on SCENE's depth resolves once a replay
   (`RdPerfRecord.msaaResolves` 1, two when the reset's stencil clear closes the epoch again from
-  inside `msaaEnd`), closes at list 3 (`msaaCloseAt` 4) and leaves SCENE byte for byte as the same
-  frame without the reset; `testSkySlit`: two triangles of one surface over the clear with a 1/16
+  inside `msaaEnd`), closes at list 3 (`msaaCloseAt` 4), records no shadow reset as a pass of its
+  own under MSAA (`passKinds[RD_PERF_PASS_STENCIL]` 0: the volumes' pass takes it, issue 182) and
+  leaves SCENE byte for byte as the same frame without the reset; `testShadowCount`: that frame's
+  count (`rd__shadow_count_read`) by the seven draws, the one draw's gathers and its loads,
+  without anti-aliasing and with MSAA4: the forms' counts byte for byte one count, MSAA4's equal
+  to the count without anti-aliasing wherever the frame without it is one colour and one count
+  over a 3x3, the epoch closed at list 3, no stencil reset pass, and gathers counted
+  (`shadowGathered`) only where the stencil view takes them (`RhiLimits.stencilGather`; never on
+  Direct3D, whose debug layer fails `rd_msaa` on a gather of the stencil plane); `rd_msaa_nvpath`
+  runs the program with the reporter's NVIDIA profile of issue 182 forced
+  (`ICO_RD_FOG_PATH=local`, `ICO_RD_DATE_PATH=stencil`, `ICO_RD_FX_DST_LOCAL=1`,
+  `ICO_RD_SHADOW_ONE=0`) under the validation layer with its synchronisation checks; `testSkySlit`: two triangles of one surface over the clear with a 1/16
   pixel crack along their shared edge, the shadow count, then `cleanUpFB`'s glow mask (a sprite
   at GS Z 1, alpha 192, alpha only, GEQUAL without Z writes): MSAA4 marks no more texels along the
   crack than the frame without anti-aliasing (the covered-majority resolve,

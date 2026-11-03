@@ -2,12 +2,13 @@
 # baserom/. Tests that need the user's disc exit 77 and ctest reports them as
 # skipped (SKIP_RETURN_CODE in the CMakeLists), which is not a failure.
 # docs/BUILDING.md ("Continuous integration") describes the jobs: `linux`
-# (the hygiene checks and the four main builds), `windows`, the renderer's
+# (the hygiene checks and the win-x64 cross build), `tests`, a matrix of the
+# Linux ctest suites (linux-x64 headless and window, linux-x64-clang, asan,
+# fptrap) each split into shards by measured cost, `windows`, the renderer's
 # tests from the `linux` job's win-x64 build run on Direct3D 11 through WARP
-# on a Windows runner (after `linux`), `extra`, a matrix of the
-# sanitizer, float-trap and Windows clang builds, `linux-arm64`, the arm64
-# Linux build and tests on an arm64 runner (and on a pushed v* tag the arm64
-# package), and `android`, the APK build and
+# on a Windows runner (after `linux`), `extra`, the Windows clang build,
+# `linux-arm64`, the arm64 Linux build and tests on an arm64 runner (and on a
+# pushed v* tag the arm64 package), and `android`, the APK build and
 # its structural checks; all but `windows` run side by side.
 name: ci
 
@@ -45,10 +46,12 @@ env:
   CCACHE_MAXSIZE: 5G
 
 jobs:
+  # The hygiene checks and the win-x64 cross build (for the `windows` job);
+  # the Linux test suites are the `tests` jobs below.
   linux:
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    timeout-minutes: 240
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -140,36 +143,17 @@ jobs:
       - name: Calls and declarations agree with the definitions
         run: python3 tools/check_call_types.py
 
+      # the CI shard split (tools/ci_shard.py) keeps every test once
+      - name: The test shard split
+        run: python3 -I tools/ci_shard.py --selftest
+
       - name: Generated files are fresh
         run: |
           .venv/bin/python tools/gen_data_desc.py --check
           .venv/bin/python tools/gen_layout_asserts.py --check
           .venv/bin/python tools/gen_sources.py --check
 
-      # ---- builds and tests ----
-      - name: linux-x64, headless
-        run: |
-          $CMAKE/cmake --preset linux-x64 -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC
-          $CMAKE/cmake --build build-host/linux-x64 --parallel --target all tests
-          $CMAKE/ctest --test-dir build-host/linux-x64 --output-on-failure --parallel 4
-          # every shader entry with the Direct3D 11 macro (ICO_D3D11=1): the
-          # flat-register preprocessing compiles (FXC itself runs on Windows only)
-          $CMAKE/cmake --build build-host/linux-x64 --parallel --target shaders_d3d11_check
-
-      - name: linux-x64, window build
-        run: |
-          $CMAKE/cmake --preset linux-x64 -DICO_HEADLESS=OFF -DICO_LINK_EXE=ON \
-            -DCMAKE_C_COMPILER=$ICO_CC \
-            -B build-host/linux-x64-window
-          $CMAKE/cmake --build build-host/linux-x64-window --parallel --target all tests
-          $CMAKE/ctest --test-dir build-host/linux-x64-window --output-on-failure --parallel 4
-
-      - name: linux-x64-clang
-        run: |
-          $CMAKE/cmake --preset linux-x64-clang -DICO_LINK_EXE=ON
-          $CMAKE/cmake --build build-host/linux-x64-clang --parallel --target all tests
-          $CMAKE/ctest --test-dir build-host/linux-x64-clang --output-on-failure --parallel 4
-
+      # ---- the win-x64 cross build (the tests run in the `tests` jobs) ----
       - name: win-x64 (cross-compiled; the tests are built, the `windows` job runs some)
         run: |
           $CMAKE/cmake --preset win-x64 -DICO_LINK_EXE=ON
@@ -194,6 +178,118 @@ jobs:
         with:
           path: ~/.cache/ccache
           key: ccache-linux-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-${{ github.sha }}
+
+  # The ctest suites, each split into shards that run on runners of their
+  # own: the build is made on every shard (from the suite's ccache), then
+  # tools/ci_shard.py splits the build's own test list by the measured cost
+  # in tools/ci_test_costs.txt (a fixture's tests kept together) and the
+  # shard runs its part with ctest --tests-from-file. The shards of a suite
+  # together run every test once (docs/port/TESTING.md, "CI"). Expected wall
+  # time a shard, from the 2026-11-03 run's times: linux-x64, its window
+  # build and linux-x64-clang about 35 minutes (about 55 minutes of tests a
+  # suite in two), asan about 45 (108 minutes of tests in three), fptrap
+  # about 35 (58 minutes in two). Shard 1 of each suite saves its ccache.
+  tests:
+    if: github.event_name != 'workflow_dispatch'
+    name: ${{ matrix.suite }} ${{ matrix.shard }}/${{ matrix.shards }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # headless with the exe linked
+          - {suite: linux-x64, preset: linux-x64, dir: build-host/linux-x64, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', shards: 2, shard: 1}
+          - {suite: linux-x64, preset: linux-x64, dir: build-host/linux-x64, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', shards: 2, shard: 2}
+          # the window build
+          - {suite: linux-x64-window, preset: linux-x64, dir: build-host/linux-x64-window, args: '-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', shards: 2, shard: 1}
+          - {suite: linux-x64-window, preset: linux-x64, dir: build-host/linux-x64-window, args: '-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', shards: 2, shard: 2}
+          - {suite: linux-x64-clang, preset: linux-x64-clang, dir: build-host/linux-x64-clang, args: '-DICO_LINK_EXE=ON', shards: 2, shard: 1}
+          - {suite: linux-x64-clang, preset: linux-x64-clang, dir: build-host/linux-x64-clang, args: '-DICO_LINK_EXE=ON', shards: 2, shard: 2}
+          # AddressSanitizer + UBSan (Debug, -O1), headless with the exe linked
+          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', shards: 3, shard: 1}
+          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', shards: 3, shard: 2}
+          - {suite: asan, preset: asan, dir: build-host/asan, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', shards: 3, shard: 3}
+          # float divide-by-zero and invalid trap, headless with the exe linked
+          - {suite: fptrap, preset: fptrap, dir: build-host/fptrap, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', shards: 2, shard: 1}
+          - {suite: fptrap, preset: fptrap, dir: build-host/fptrap, args: '-DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC', shards: 2, shard: 2}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Host packages
+        # the runner's package mirror sometimes hangs for an hour (2026-10-07,
+        # twice): a short step timeout and one retry instead of the job's 120
+        timeout-minutes: 10
+        run: |
+          for try in 1 2; do
+            sudo apt-get update && break
+            sleep 30
+          done
+          sudo apt-get install -y --no-install-recommends \
+            build-essential gcc-14 curl xz-utils python3 python3-venv \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
+            libpipewire-0.3-dev libspa-0.2-dev \
+            libdbus-1-dev libxss-dev \
+            libgl-dev libglx-dev libegl-dev libgl1 libegl1 libgl1-mesa-dri \
+            libvulkan1 mesa-vulkan-drivers
+          # lavapipe (mesa-vulkan-drivers): the render tests run on the CPU
+          # Vulkan driver instead of skipping
+          # llvmpipe (libgl1-mesa-dri, libgl1, libegl1): the OpenGL tests run on
+          # the CPU OpenGL driver; the GL headers build SDL with GLX and EGL
+
+      - name: Python tools (venv)
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r tools/requirements.txt
+
+      - name: Toolchain and dependency cache (restore)
+        uses: actions/cache/restore@v4
+        with:
+          path: tools/toolchain
+          key: toolchain-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}
+
+      - name: Fetch toolchain and dependencies
+        run: tools/fetch_toolchain.sh
+
+      # ccache (the presets' compiler launcher): one cache a suite, keyed as
+      # in `linux`; the first run of a suite without its own entry starts from
+      # the combined cache the `linux` job kept before the split
+      - name: ccache (restore)
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ matrix.suite }}-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ matrix.suite }}-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-
+            ccache-linux-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-
+
+      - name: ${{ matrix.suite }}, build
+        run: |
+          $CMAKE/cmake --preset ${{ matrix.preset }} -B ${{ matrix.dir }} ${{ matrix.args }}
+          $CMAKE/cmake --build ${{ matrix.dir }} --parallel --target all tests
+
+      - name: ccache (save)
+        if: ${{ !cancelled() && matrix.shard == 1 }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ matrix.suite }}-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-${{ github.sha }}
+
+      - name: ${{ matrix.suite }}, tests shard ${{ matrix.shard }} of ${{ matrix.shards }}
+        run: |
+          $CMAKE/ctest --test-dir ${{ matrix.dir }} --show-only=json-v1 > "$RUNNER_TEMP/tests.json"
+          python3 -I tools/ci_shard.py split --tests "$RUNNER_TEMP/tests.json" \
+            --costs tools/ci_test_costs.txt --shards ${{ matrix.shards }} \
+            --index ${{ matrix.shard }} --out "$RUNNER_TEMP/shard.txt"
+          $CMAKE/ctest --test-dir ${{ matrix.dir }} --output-on-failure --parallel 4 \
+            --no-tests=error --tests-from-file "$RUNNER_TEMP/shard.txt"
+
+      # every shader entry with the Direct3D 11 macro (ICO_D3D11=1): the
+      # flat-register preprocessing compiles (FXC itself runs on Windows only)
+      - name: Direct3D 11 shader preprocessing
+        if: matrix.suite == 'linux-x64' && matrix.shard == 1
+        run: $CMAKE/cmake --build ${{ matrix.dir }} --parallel --target shaders_d3d11_check
 
   # The renderer's tests on Direct3D 11 through WARP, Microsoft's software
   # adapter, on GitHub's Windows runner (issue 126: the Direct3D 11 backend
@@ -251,9 +347,9 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-  # The presets the main job does not build, one runner each so the job
-  # stays well inside its timeout. Each restores the toolchain the `linux`
-  # job caches (and fetches it on a miss); only `linux` saves it.
+  # The win-x64-clang cross build (asan and fptrap are `tests` suites). It
+  # restores the toolchain the `linux` job caches (and fetches it on a
+  # miss); only `linux` saves it.
   extra:
     if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -261,7 +357,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: [asan, fptrap, win-x64-clang]
+        preset: [win-x64-clang]
     steps:
       - uses: actions/checkout@v4
 
@@ -308,18 +404,7 @@ jobs:
           restore-keys: |
             ccache-${{ matrix.preset }}-${{ runner.os }}-${{ hashFiles('tools/fetch_toolchain.sh', 'tools/fetch_deps.sh', 'tools/fetch_common.sh', 'tools/fetch_android.sh') }}-
 
-      # asan: AddressSanitizer + UBSan (Debug, -O1); fptrap: float
-      # divide-by-zero and invalid trap. Headless with the exe linked, as the
-      # linux-x64 headless step.
-      - name: ${{ matrix.preset }}
-        if: matrix.preset != 'win-x64-clang'
-        run: |
-          $CMAKE/cmake --preset ${{ matrix.preset }} -DICO_LINK_EXE=ON -DCMAKE_C_COMPILER=$ICO_CC
-          $CMAKE/cmake --build build-host/${{ matrix.preset }} --parallel --target all tests
-          $CMAKE/ctest --test-dir build-host/${{ matrix.preset }} --output-on-failure --parallel 4
-
       - name: win-x64-clang (cross-compiled; the tests are built, not run)
-        if: matrix.preset == 'win-x64-clang'
         run: |
           # the window build, as win-x64 (the preset itself is headless)
           $CMAKE/cmake --preset win-x64-clang -DICO_HEADLESS=OFF -DICO_LINK_EXE=ON
@@ -341,6 +426,11 @@ jobs:
   linux-arm64:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
+    # contents: write for this job alone: a tag run attaches the arm64
+    # packages to the tag's release (the step "Attach the linux-arm64
+    # package to the release"); the workflow's own permissions stay read
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -456,6 +546,47 @@ jobs:
             build-host/pkg-linux-arm64-${{ inputs.tag || github.ref_name }}.log
           retention-days: 30
           if-no-files-found: error
+
+      # A pushed release tag: the six files above go onto the GitHub release
+      # of that tag as well (README.md lists them for every release). The
+      # release is made by hand from the maintainer's local packages, usually
+      # before this run ends: the step waits up to 20 minutes for it, then
+      # fails saying so (the artifact above still holds the files).
+      # --clobber replaces files a re-run or a hand upload put there.
+      - name: Attach the linux-arm64 package to the release (release tags only)
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          command -v gh > /dev/null || { echo "no gh on the runner: attach the artifact's files by hand"; exit 1; }
+          files=(dist/ico-pc-$TAG-linux-arm64.tar.gz dist/ico-pc-$TAG-linux-arm64.tar.gz.sha256
+                 dist/ico-pc-$TAG-linux-arm64-portable.tar.gz dist/ico-pc-$TAG-linux-arm64-portable.tar.gz.sha256
+                 dist/ico-pc-$TAG-linux-aarch64.AppImage dist/ico-pc-$TAG-linux-aarch64.AppImage.sha256)
+          for f in "${files[@]}"; do test -f "$f" || { echo "missing $f"; exit 1; }; done
+          waited=0
+          until gh release view "$TAG" > /dev/null 2>&1; do
+            if [ $waited -ge 1200 ]; then
+              echo "::error::no GitHub release named $TAG after 20 minutes: create it, then re-run this job or download the artifact ico-pc-$TAG-linux-arm64 and run: gh release upload $TAG <its six files> --clobber"
+              exit 1
+            fi
+            echo "waiting for the release $TAG (${waited} s)"
+            sleep 30; waited=$((waited + 30))
+          done
+          gh release upload "$TAG" "${files[@]}" --clobber
+          echo "attached to $TAG:"; printf '  %s\n' "${files[@]}"
+
+      # A dispatched run (the arm64 package of a tag whose own run failed a
+      # test): its release may not exist yet, so nothing is attached; the
+      # command to attach the artifact's files is printed instead.
+      - name: The command that attaches the dispatched package
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          echo "download the artifact ico-pc-$TAG-linux-arm64 of this run, then:"
+          echo "gh -R ${{ github.repository }} release upload $TAG ico-pc-$TAG-linux-arm64.tar.gz ico-pc-$TAG-linux-arm64.tar.gz.sha256 ico-pc-$TAG-linux-arm64-portable.tar.gz ico-pc-$TAG-linux-arm64-portable.tar.gz.sha256 ico-pc-$TAG-linux-aarch64.AppImage ico-pc-$TAG-linux-aarch64.AppImage.sha256 --clobber"
 
   # The Android APK (arm64-v8a), debug-signed, built with the Gradle project in
   # android/ and checked structurally; the game is not run. The toolchain

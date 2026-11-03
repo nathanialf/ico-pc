@@ -64,6 +64,16 @@
             }
         },
         {
+            "name": "linux-x64-asan",
+            "inherits": "asan",
+            "displayName": "Linux x86-64, AddressSanitizer + UBSan as CI's asan suite",
+            "description": "The asan preset with what CI's asan suite adds on its command line (gcc 14, the program linked): -fsanitize=address,undefined -fno-sanitize-recover=undefined at -O1. For the local run of new tests before a push (docs/port/TESTING.md, \"Release process\").",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "gcc-14",
+                "ICO_LINK_EXE": "ON"
+            }
+        },
+        {
             "name": "fptrap",
             "inherits": "linux-x64",
             "displayName": "Linux x86-64, float divide-by-zero and invalid trap",
@@ -188,6 +198,11 @@
             "configurePreset": "asan"
         },
         {
+            "name": "linux-x64-asan",
+            "configurePreset": "linux-x64-asan",
+            "targets": ["all", "tests"]
+        },
+        {
             "name": "fptrap",
             "configurePreset": "fptrap"
         },
@@ -243,6 +258,13 @@
         {
             "name": "asan",
             "configurePreset": "asan",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "linux-x64-asan",
+            "configurePreset": "linux-x64-asan",
             "output": {
                 "outputOnFailure": true
             }

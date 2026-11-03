@@ -32,6 +32,11 @@
  * g_rd.shadowLoad): the gathers stay where their count is the seven
  * draws' byte for byte and every centre right, else the loads where
  * theirs is (the result below is then the loads'), else the seven draws.
+ * Where the stencil view takes no gather (RhiLimits.stencilGather false:
+ * Direct3D) the gathers' replay is not run (their module would put a
+ * gather on a view that has none) and the loads are the one draw's form:
+ *   shadow count: the stencil read a texel a load, as the backend's
+ *     stencil view takes no gather
  * MSAA is held off for the replays (the count's pass closes the epoch in
  * the game; here SCENE's colour is the count target).  The lines:
  *   shadow count: one draw (self-test: equal to the seven draws over
@@ -231,9 +236,10 @@ bool rd__shadow_selftest(void)
     g_rd.msaaBlocked = true; /* SCENE's colour is this count's target */
     /* the one draw twice: the stencil four texels a gather, then a texel a
      * load (shadow_count_ps's g_mode.y), each against the seven draws */
+    const bool gatherAsked = rhi_limits()->stencilGather;
     g_rd.shadowLoad = false;
-    const bool doneOne = run(&f, scene, one, size, w, h);
-    const bool tookOne = g_rdPerf.shadowOne > 0; /* the replay's own record (rd__perf_begin) */
+    const bool doneOne = gatherAsked && run(&f, scene, one, size, w, h);
+    const bool tookOne = doneOne && g_rdPerf.shadowOne > 0; /* the replay's own record */
     g_rd.shadowLoad = true;
     const bool doneLoad = rhi_limits()->stencilView && run(&f, scene, load, size, w, h);
     const bool tookLoad = doneLoad && g_rdPerf.shadowOne > 0;
@@ -312,7 +318,9 @@ bool rd__shadow_selftest(void)
     if (passed) {
         /* how the one draw reads the stencil, and the gathers' outcome */
         char why[160] = "the gathers' count off at a band centre";
-        if (!doneOne || !tookOne) {
+        if (!gatherAsked) {
+            snprintf(why, sizeof why, "the backend's stencil view takes no gather");
+        } else if (!doneOne || !tookOne) {
             snprintf(why, sizeof why, "the gathers' count %s",
                      !doneOne ? "not read back" : "not drawn");
         } else if (diff) {

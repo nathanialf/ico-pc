@@ -28,6 +28,7 @@ tests a change needs. Every test program, by area, is
 | `tools/dev_build.sh` | build a few targets of one checkout and run a few tests |
 | `tools/check_docs.py`, `tools/check_docs_allow.txt` | the documentation gate and its allow-list |
 | `.github/workflows/ci.yml`, `ios.yml` | CI |
+| `tools/ci_shard.py`, `tools/ci_test_costs.txt` | CI's split of a ctest suite into shards and its cost table |
 
 ## The framework
 
@@ -742,15 +743,97 @@ Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay op
 
 | workflow | job | runner | what it runs |
 | --- | --- | --- | --- |
-| `ci.yml` | `linux` | `ubuntu-24.04` | the hygiene checks (no disc data, format, no `ICO_HOST` conditional, no region block, stack-layout, struct-cast and call-type audits, generated files fresh), then `linux-x64` headless and window builds with `ctest`, `linux-x64-clang` with `ctest`, and the `win-x64` cross build (tests built; the renderer's Direct3D 11 set uploaded for `windows`) |
+| `ci.yml` | `linux` | `ubuntu-24.04` | the hygiene checks (no disc data, format, no `ICO_HOST` conditional, no region block, stack-layout, struct-cast and call-type audits, the shard split's self-test, generated files fresh), then the `win-x64` cross build (tests built; the renderer's Direct3D 11 set uploaded for `windows`) |
+| `ci.yml` | `tests` | `ubuntu-24.04` | eleven runners: the `linux-x64` headless, `linux-x64` window and `linux-x64-clang` suites in 2 shards each, `asan` in 3, `fptrap` in 2; each builds its preset's `all tests` and runs one shard of its `ctest` ([below](#the-ci-shards)) |
 | `ci.yml` | `windows` | `windows-2022` | after `linux`: the renderer's tests from the `win-x64` build on Direct3D 11 through WARP, the debug layer tried ([above](#the-render-suite-on-direct3d-11-warp)) |
-| `ci.yml` | `extra` | `ubuntu-24.04` | a matrix of `asan` and `fptrap` (build `all tests`, `ctest`) and the `win-x64-clang` cross build |
-| `ci.yml` | `linux-arm64` | `ubuntu-24.04-arm` | the no-disc-data check, the `linux-arm64` preset with `ctest`, the filtered-pixel render tests in a step that does not gate, the arm64 package on release tags |
+| `ci.yml` | `extra` | `ubuntu-24.04` | the `win-x64-clang` cross build |
+| `ci.yml` | `linux-arm64` | `ubuntu-24.04-arm` | the no-disc-data check, the `linux-arm64` preset with `ctest`, the filtered-pixel render tests in a step that does not gate, the arm64 package on release tags (kept as an artifact and attached to the tag's release) |
 | `ci.yml` | `android` | `ubuntu-24.04` | the debug APK (`assembleDebug`), `tools/check_android_flags.sh`, the APK structure checks |
 | `ios.yml` | `build`, `publish` | `macos-15`, `ubuntu-24.04` | the unsigned iPhone IPA for a published release, attached to it |
 | `ios.yml` | `build-macos`, `publish-macos` | `macos-15`, `ubuntu-24.04` | the macOS app for a published release, attached to it |
 
-(`.github/workflows/ci.yml`, jobs `linux`, `windows`, `extra`, `linux-arm64`, `android`;
+(`.github/workflows/ci.yml`, jobs `linux`, `tests`, `windows`, `extra`, `linux-arm64`, `android`;
 `.github/workflows/ios.yml`.)
 
 The triggers, steps and caches are [../BUILDING.md](../BUILDING.md#continuous-integration)'s.
+
+### The CI shards
+
+A `tests` runner lists its build's tests with `ctest --show-only=json-v1`, and
+`tools/ci_shard.py split --shards N --index K` writes shard K's names for `ctest --tests-from-file`.
+The split is a pure function of the test list, the cost table and N, so the N runners of a suite
+agree without talking: tests that share a fixture (`FIXTURES_SETUP`, `FIXTURES_REQUIRED`:
+`rd_pixel` with the `rd_replay_tool*` and `rd_vu*_ab_pixel` tests that read its dump,
+`state_recover_files` with its readers, `texpack_disc` with its) form one group, so ctest never
+runs a setup twice; groups go heaviest first to the shard with the least cost so far; a test the
+table does not name (a new one) counts at the table's median. Each runner prints every shard's
+test count and seconds and the tests the table lacked (`tools/ci_shard.py`, header). `--selftest`
+(the `linux` job) checks that every test lands in exactly one shard, a fixture's tests together,
+the same split twice.
+
+The cost table `tools/ci_test_costs.txt` is `<name> <seconds>` per test, from the asan job of CI
+run 41631012198 (2026-11-03: 748 tests, 7.0 hours of test time, 108 minutes at `--parallel 4`).
+AddressSanitizer times are larger than the other builds' but in about the same proportion, which
+is all the split uses. Refresh it when the suite's shape changes (a new slow test, a shard far
+over the others in the printed seconds): `tools/ci_shard.py costs <job logs>... >
+tools/ci_test_costs.txt`, from the logs of a run's shards (every test of the suite appears in one
+of them). The build tree's `Testing/Temporary/CTestCostData.txt` is read too, but its averages
+cover every run since the tree was made, most of them before a test's present cost (on the
+development machine on 2026-11-03 it gave `settings_render` 0.26 s over 215 runs where the last
+run took 57 s, and 18 minutes for a suite that took 2.8 hours), so it is not used for the table.
+
+Expected wall time a runner, from that run's times: a `linux-x64`, window or clang shard about 35
+minutes (about 55 minutes of tests a suite at `--parallel 4`, halved, plus about 5 minutes of
+setup and a ccache build), an `asan` shard about 45 (108 minutes in three), an `fptrap` shard
+about 35 (58 minutes in two); `linux` about 15, then `windows` about 8; `linux-arm64`, unchanged,
+about 50, which is now the run's longest job. A shard much longer than its siblings means the
+table is stale.
+
+## Release process
+
+A push to main restarts every CI job, so a release pushes once, after every test that can run
+locally has run. The maintainer's scripts for it are in `build-host/tmp/release/` (outside the
+repository, like the rest of `build-host/`); each prints its usage when run without arguments. The
+sequence:
+
+1. **Each package at its merge.** `merge-check.sh <branch> "<regex>"` merges the package branch
+   into the integration branch's worktree (`INT_WT`), builds `all tests` in its own build
+   directory `build-host/int-linux-x64` (configured once from that worktree with the `linux-x64`
+   preset and `-DICO_LINK_EXE=ON`, no disc when the worktree has no `baserom/`) and runs the
+   package's own tests: the CPU half of the regex (every label but `render`, `rhi`, `gl`, `vk10`,
+   `vk11`, `mali`) at `-j2`, then the lavapipe/llvmpipe half at `-j1`, the six game-starting tests
+   left out. A failed build, a failed test or a regex that selects nothing resets the integration
+   branch to its commit before the merge: the package goes back to its author with the log, and
+   no other package waits on it.
+2. **The new tests under the sanitizers.** `asan-new-tests.sh "<regex>"` builds the
+   `linux-x64-asan` preset (CI's asan suite: gcc 14, `-O1`,
+   `-fsanitize=address,undefined -fno-sanitize-recover=undefined`, the program linked) from the
+   integration worktree into `build-host/int-linux-x64-asan` and runs the named tests the same
+   two ways, so CI's asan shards are never a new test's first UBSan run. The regex is every test
+   the release added or changed.
+3. **The chain, once.** With main at the integration branch, `chain.sh <tag>` builds main's
+   `linux-x64`, runs `gate.sh` (every test but the game-starting ones as two `ctest` runs at the
+   same time: the lavapipe half at `-j1` and the CPU half at `-j3`, which share no
+   `RESOURCE_LOCK` and no fixture; then the native-frame gate-a and the `--pass-dump` byte
+   compare of the corpus), then the window build, `offset_audit` on it and the fortify compile of
+   the C files changed since the last tag. On the cost data of 2026-11-03 (the suite 10,215 s at
+   `-j1`; the lavapipe half 96 % of it by CI's asan times) the lavapipe half is the chain's length,
+   about 2.7 hours at `-j1`; the CPU half ends within minutes. `LVP_J` sets the lavapipe half's
+   parallelism: CI runs the whole suite at `--parallel 4` on a 4-core runner in about 55 minutes,
+   so `LVP_J=3` brings the chain toward an hour where the machine has the memory for three
+   lavapipe tests at once.
+4. **One push.** Every fix found in steps 1 to 3 is collected first; the push gate
+   (`build-host/tmp/push-check.sh`) passes; main is pushed once. A fix is never pushed while
+   another is still expected, since each push restarts CI.
+5. **CI.** About 50 minutes a run with the shards ([The CI shards](#the-ci-shards)):
+   `linux-arm64` is the longest job. The release waits for main's run to finish green, every job
+   counted.
+6. **The release.** The packages from the release commit, the tag, `gh release create`; the
+   tag's own run adds the arm64 packages ([../BUILDING.md](../BUILDING.md#packages)): its
+   `linux-arm64` job keeps the six files (`linux-arm64.tar.gz`, `linux-arm64-portable.tar.gz`,
+   `linux-aarch64.AppImage`, each with its `.sha256`) as the run's artifact and attaches them to
+   the tag's release with `gh release upload --clobber` (`contents: write` for that job only). It
+   waits up to 20 minutes for the release to exist and then fails, saying so: create the release
+   before the tag's run reaches its packaging, or re-run the job after. A dispatched run
+   (`gh workflow run ci.yml -f tag=<tag>`) attaches nothing and prints the upload command for its
+   artifact's files.

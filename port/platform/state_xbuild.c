@@ -62,6 +62,15 @@ static void put32(unsigned char *p, uint32_t v)
     p[3] = (unsigned char)(v >> 24);
 }
 
+/* a byte run of a growable buffer: an empty one has a NULL pointer, and
+ * memcpy's source is declared non-null (CI's UBSan on state_port) */
+static void put_bytes(unsigned char *p, const void *src, size_t n)
+{
+    if (n != 0) {
+        memcpy(p, src, n);
+    }
+}
+
 static void put64(unsigned char *p, uint64_t v)
 {
     put32(p, (uint32_t)v);
@@ -535,15 +544,15 @@ int ico_xb_finish(IcoXbRefs *r, void **out, size_t *n, IcoXbStats *st)
     put32(sec + H_VALUES, (uint32_t)r->n_vals);
     put32(sec + H_LEFT, left);
     q = sec + H_BYTES;
-    memcpy(q, units.p, units.n);
+    put_bytes(q, units.p, units.n);
     q += units.n;
-    memcpy(q, data.p, data.n);
+    put_bytes(q, data.p, data.n);
     q += data.n;
-    memcpy(q, points.p, points.n);
+    put_bytes(q, points.p, points.n);
     q += points.n;
-    memcpy(q, blocks.p, blocks.n);
+    put_bytes(q, blocks.p, blocks.n);
     q += blocks.n;
-    memcpy(q, strs.p, strs.n);
+    put_bytes(q, strs.p, strs.n);
     *out = sec;
     *n = total;
     st->units = nu;

@@ -997,6 +997,17 @@ uint64_t rd__mesh_join_part(RdMeshRec *const *ms, uint32_t n, uint64_t sig);
  * without the packet's ordinal) and joined with rd__mesh_join_part */
 void rd__join_parts(const RdFrame *f, int keep);
 
+/* The winding of the disc's prelit strips (rd_mesh.c markWinding,
+ * ICO_VU_MARK_FLIP): a prelit triangle k of a strip that starts at vertex s
+ * carries the mark when ((k - s) & 1) ^ RD_VU_WINDING_PHASE is 1, the
+ * convention the disc's lit strips follow, measured from their normals
+ * (rd_mesh_test's winding cases, docs/port/VU1_PROGRAMS.md "The winding
+ * mark"): 0 when the even triangles of a strip (k - s = 2, 4, ..) face the
+ * way cross(b - a, c - a) of their corners k-2, k-1, k points (share A),
+ * 1 for the reverse (share B).  0 until the disc's measurement is in: the
+ * measurement sets it */
+#define RD_VU_WINDING_PHASE 0u
+
 /* The marks of the triangle of kick k (ICO_VU_MARK_*; 0 past the bytes) */
 static inline uint32_t rd__mesh_kick_mark(const RdMeshRec *m, uint32_t k)
 {
@@ -1475,6 +1486,11 @@ typedef enum RdFsId {
      * build); keys rd__aura_box_keys, in the fx family */
     RD_FS_FX_AURA_ROWS,
     RD_FS_FX_AURA_SUM,
+    /* shadow_count_load_ps: shadow_count_ps with the loads alone, no gather
+     * in the module (SHADOW_COUNT_LOAD): where the stencil view takes no
+     * gather (RhiLimits.stencilGather) or the loads are in force
+     * (g_rd.shadowLoad); key rd__shadow_count_key */
+    RD_FS_SHADOW_COUNT_LOAD,
     RD_FS_COUNT
 } RdFsId;
 
@@ -2280,6 +2296,16 @@ RdPipeKeyInt rd__shadow_reduce_key(void); /* box_reduce_ps: the count at the GS 
  * shadow_count_ps behind blit_vs into an RGBA8 target of the GS size, no
  * depth attachment, the stencil read through its view (RHI_ASPECT_STENCIL) */
 RdPipeKeyInt rd__shadow_count_key(void);
+/* Whether the one draw reads the stencil a texel a load: the self-test's
+ * choice (g_rd.shadowLoad) or a backend whose stencil view takes no
+ * gather (RhiLimits.stencilGather false: Direct3D), where the gathers'
+ * module is never bound (shadow_count_load_ps; rd_shadow_one.c) */
+bool rd__shadow_count_loads(void);
+/* The line naming how the count after an MSAA epoch reads the stencil
+ * (rd_shadow_one.c; rd_msaa.c at the close, rd__shadow_one_draw):
+ * one 1 the one draw, 0 the seven stencil-tested draws; samples the
+ * epoch's count.  Reported once a form and count. */
+void rd__shadow_msaa_note(int one, uint32_t samples);
 /* The table shadow_count_ps reads the count's bytes from: texel m (0..63)
  * the RGBA the seven draws write for a stencil whose bits 0-5 hold m:
  * RGB 4 m, A 0x80 where m != 0, else 0; under the step 8 RGB 8 (m mod 32),
