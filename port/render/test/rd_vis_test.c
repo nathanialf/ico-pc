@@ -486,7 +486,9 @@ static void checkPlanes(void)
     setRound(0);
     CHECK(bad == 0, "planes: %u of %u points of skipped boxes not beyond their planes", bad,
           points);
-    for (int v = 0; v < RD_VIS_VERDICTS; v++) {
+    /* the plane test's verdicts (RD_VIS_OCCLUDED is the occlusion test's,
+     * never rd__vis_test's) */
+    for (int v = 0; v <= RD_VIS_NEAR; v++) {
         CHECK(seen[0][v] > 0, "planes: verdict %d never seen (code 32)", v);
         CHECK(v == RD_VIS_NEAR || seen[1][v] > 0, "planes: verdict %d never seen (code 36)", v);
     }
