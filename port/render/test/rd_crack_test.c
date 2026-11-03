@@ -345,6 +345,12 @@ static void checkPlace(const Picture *on, RdCrackCounts c0, RdCrackCounts c1, bo
     const bool glow = s_after == AFTER_GLOW;
     CHECK(active, "the filler does not draw here");
     const uint64_t placed = glow ? c1.afterAlpha - c0.afterAlpha : c1.pasted - c0.pasted;
+    /* the counts just before the pinned replay: the replays between c1 and
+     * here (the general shader's on the same frame, unpinned) place the
+     * fill too and are counted in c1..now */
+    rd__crack_fill_wait();
+    RdCrackCounts cp;
+    rd__crack_fill_counts(&cp);
     rd__crack_fill_set_place(1);
     Picture pin;
     memset(&pin, 0, sizeof(pin));
@@ -367,10 +373,10 @@ static void checkPlace(const Picture *on, RdCrackCounts c0, RdCrackCounts c1, bo
            glow ? "glow" : "aura", (unsigned long long)placed,
            glow ? "after the glow's alpha" : "in the aura's paste pass", dPx, dZ, pin.passes,
            on->passes, fewer, pin.fills, on->fills,
-           (unsigned long long)(glow ? c2.afterAlpha - c1.afterAlpha : c2.pasted - c1.pasted));
+           (unsigned long long)(glow ? c2.afterAlpha - cp.afterAlpha : c2.pasted - cp.pasted));
     CHECK(placed == 1, "%llu fills placed %s", (unsigned long long)placed,
           glow ? "after the glow's alpha" : "in the aura's paste pass");
-    CHECK((glow ? c2.afterAlpha - c1.afterAlpha : c2.pasted - c1.pasted) == 0,
+    CHECK((glow ? c2.afterAlpha - cp.afterAlpha : c2.pasted - cp.pasted) == 0,
           "the pinned replay placed the fill later");
     CHECK(dPx == 0 && dZ == 0, "the place against list 7's start: %zu colours, %zu depths differ",
           dPx, dZ);
