@@ -189,6 +189,7 @@ add_library(ico_render STATIC
     rd_interp.c # interpolation between the retained frames
     rd_interp_mesh.c # the interpolation's reads of a mesh's stream, kept while it is unchanged
     rd_reshow.c # a between-tick picture the same as the last rendered one's is shown again
+    rd_glow_fold.c # the glow's mask computed in its reduction: WORK2 neither drawn nor read ([dev] glow_fold)
     rd_glow_hold.c # the between-tick presents paste the glow of the tick's first present
     rd_join.c
     rd_local_probe.c # the desktop's local reads: the start-up cost probe

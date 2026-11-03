@@ -231,6 +231,12 @@ static struct {
     /* the sprites drawn in a cleared source's colour and the target reads
        kept (rd.h RdPerfRecord.constReads, constKept) */
     uint64_t constReads, constKept, fadesFolded;
+    /* the glow's mask folded into its reduction: the replays that folded it
+       and the glow replays that drew it into WORK2, with the last one's
+       reason (rd.h RdPerfRecord.glowFolded, glowKept, glowWhy;
+       rd_glow_fold.c) */
+    uint64_t glowFolded, glowKept;
+    uint32_t glowWhy;
     /* the passes with a render area, their tiles, their targets' tiles and
        those ended early (rd.h RdPerfRecord.passAreas ..., rd_pass_area.c) */
     uint64_t passAreas, passAreaTiles, passAreaTargetTiles, passAreaEnds;
@@ -4459,6 +4465,11 @@ static void perf_drain(void)
         s_perf.constReads += r.constReads;
         s_perf.constKept += r.constKept;
         s_perf.fadesFolded += r.fadesFolded;
+        s_perf.glowFolded += r.glowFolded;
+        s_perf.glowKept += r.glowKept;
+        if (r.glowKept) {
+            s_perf.glowWhy = r.glowWhy;
+        }
         s_perf.passAreas += r.passAreas;
         s_perf.passAreaTiles += r.passAreaTiles;
         s_perf.passAreaTargetTiles += r.passAreaTargetTiles;
@@ -4669,6 +4680,16 @@ static void perf_log(void)
             s_perf.fxAdditive / n, s_perf.fxLocal / n, s_perf.fxLocalDate / n,
             s_perf.vuNoPlanes / n, s_perf.constReads / n, s_perf.constKept / n,
             s_perf.fadesFolded / n);
+    if (s_perf.glowFolded || s_perf.glowKept) {
+        /* the glow's mask computed in its reduction (one full-frame pass
+           fewer each) or drawn into WORK2, and why the last kept one was
+           (rd_glow_fold.c: the sun's fans or the lamps into WORK2, ...) */
+        fprintf(stderr, "window: glow: WORK2 fold: %llu folded, %llu kept%s%s%s\n",
+                (unsigned long long)s_perf.glowFolded, (unsigned long long)s_perf.glowKept,
+                s_perf.glowKept ? " (" : "",
+                s_perf.glowKept ? rd_glow_fold_why_text(s_perf.glowWhy) : "",
+                s_perf.glowKept ? ")" : "");
+    }
     window_pipeline_skip_line();
     if (s_perf.msaaSamples) {
         /* the anti-aliasing's cost: its resolves' GPU time is the effects'

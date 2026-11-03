@@ -34,6 +34,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_water.c` | render-to-texture blocks, target aliases, camera scopes, pool STs |
 | `port/render/rd_fog_path.c` | how the fog reads the scene depth; the fog probe and self-test |
 | `port/render/rd_fades_fold.c` | the fades fold: list 11's last full-frame lerp sprites applied by the reduction ([The fades fold](RENDER_POST.md#the-fades-fold)) |
+| `port/render/rd_glow_fold.c` | the glow's mask computed in the reduction that reads it: WORK2's fill and mask not drawn ([The glow's mask in its reduction](RENDER_POST.md#the-glows-mask-in-its-reduction)) |
 | `port/render/rd_content_hide.c` | the content table: stage faces the native frame must not show |
 | `port/render/rd_content_extend.c` | the content table's sheets: stage overlays continued to the frame's edges |
 | `port/render/rd_content_chain.c`, `rd_chain.h` | the chains drawn at their links' size |
@@ -419,6 +420,13 @@ Where the sun is on screen its fans (`dispSun`) draw into WORK2 between passes 4
 fill as their pass's load op (6 of the 14 corpus glow frames); the issue 163 frames draw the lamps'
 meshes into WORK2 after the mask, a pass of their own (they test SCENE's depth).
 
+In the other frames passes 4 and 5 are not drawn at all: pass 6 reads SCENE and computes each
+WORK2 texel its box loads as the mask stored it over the fill (the same bytes;
+[The glow's mask in its reduction](RENDER_POST.md#the-glows-mask-in-its-reduction)): one
+full-frame pass fewer on the tile class (the fill rides on the mask's pass there), two on a desktop,
+and WORK2's 10.2 MB neither stored nor read. The 10 s line `window: glow: WORK2 fold: N folded, M
+kept (reason)` says which frames took it.
+
 Two of the breaks moved bytes nothing needed, and are gone (the same bytes; `rd_glow_cheap_ab`):
 
 - **WORK2's fill in the mask's pass** (pass 4). The mask reads SCENE, and the end of the open pass
@@ -442,13 +450,13 @@ Two of the breaks moved bytes nothing needed, and are gone (the same bytes; `rd_
   ends the fog's pass there and the two sprites take a pass each again (v4251 at the phone's profile on lavapipe: 22
   glow passes with the fill, 20 without).
 
-What is left: the mask's pass (SCENE read, WORK2 stored, then read by the reduction), the paste's
-SCENE pass (WORK3 is drawn after the fog's pass ends), and the twelve small WORK0 passes (the fixed
-cost). Not done, and why: the mask at half size (its alpha test makes a hard-edged mask, and the
-reduction's box over it moves by a whole texel at an edge: a difference no stored dump bounds
-yet); the mask folded into the reduction (exact, but `fx_sprite_ps`'s box would compute the mask's
-own bilinear and alpha test per texel it reads, a new shader form, and the fans and the lamps'
-meshes draw into WORK2 in 9 of the 14 frames); two blur pairs in one pass (exact needs pass 1's
+What is left: the mask's pass where the sun's fans or the lamps draw into WORK2 (SCENE read, WORK2
+stored, then read by the reduction), the paste's SCENE pass (WORK3 is drawn after the fog's pass
+ends), and the twelve small WORK0 passes (the fixed cost). Not done, and why: the mask at half
+size (its alpha test makes a hard-edged mask, and the reduction's box over it moves by a whole
+texel at an edge: a difference no stored dump bounds yet); the fold with the fans or the lamps
+(SCENE's border repeat and transition hoisted before the fans' pass, the lamps' meshes tested
+against SCENE's depth in the mask's texels); two blur pairs in one pass (exact needs pass 1's
 texels for pass 2's for pass 3's: 256 loads a texel or a window of intermediates per pixel; a blur
 of a blur in floats differs by the GS's truncation at each of the four steps, up to about 4 levels
 before the eye blur, and the twelve passes' fixed cost is about 2.9 ms). The glow pass count is the

@@ -1,6 +1,7 @@
 ## New
 
 - Scenery outside the picture is no longer sent to the graphics chip: faster on phones and weak graphics chips, the same picture.
+- The glow around bright light is drawn with one full-screen step less, so it takes less of the graphics chip's time, most of all on phones; the picture is the same.
 
 ## Fixed
 

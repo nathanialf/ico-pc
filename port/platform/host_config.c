@@ -622,6 +622,9 @@ static const struct {
     /* true: every between-tick present draws the glow's chain again instead
        of pasting the tick's (an A/B; port/render/rd_glow_hold.c) */
     {"dev.glow_redraw", "glow_redraw"},
+    /* false: the glow's mask drawn into WORK2 and read by its reduction, as
+       before (an A/B; port/render/rd_glow_fold.c rd__glow_fold_on) */
+    {"dev.glow_fold", "glow_fold"},
     /* false: SDL's DirectInput controller scan off (issue 105; window_host.c
        joystick_scan_hints) */
     {"dev.joystick_directinput", "joystick_directinput"},
@@ -742,6 +745,9 @@ static const struct {
     {"still_represent", "ICO_RD_STILL_REPRESENT"},
     /* port/render/rd_glow_hold.c redrawOn: 1 draws the glow at every present */
     {"glow_redraw", "ICO_RD_GLOW_REDRAW"},
+    /* port/render/rd_glow_fold.c rd__glow_fold_on: 0 draws the glow's mask
+       into WORK2, 1 computes it in the reduction even without an output */
+    {"glow_fold", "ICO_RD_GLOW_FOLD"},
     /* port/platform/window_host.c joystick_scan_hints: 0 sets
        SDL_HINT_JOYSTICK_DIRECTINPUT to 0 before SDL_Init */
     {"joystick_directinput", "ICO_JOYSTICK_DIRECTINPUT"},

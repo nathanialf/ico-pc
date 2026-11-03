@@ -142,6 +142,13 @@
  *      rd_blur_aura_box_test.inc says what): x's frames at Enhanced 2x, the
  *      phone's 2364 x 1080 and 1.5x, with the two-pass form off and on:
  *      FEED128 the same bytes every frame, SCENE and DISPLAY too.
+ *   k  the glow's mask folded into its reduction (rd_glow_fold.c;
+ *      rd_blur_glow_fold_test.inc says what): post modes 1..7 without the
+ *      shine at 1x, 2x, the phone's 2364 x 1080 and its 848-pixel frame with
+ *      Full pixel, drawn with the fold and replayed without it: every target
+ *      but WORK2 the same bytes, at 1x and 2x the CPU model's both ways;
+ *      the scan on a recorded frame in (r).  Where a replay folds, WORK2 is
+ *      not compared (the fold leaves it undrawn) in any case.
  * Tolerance 0 everywhere (but q's scaled runs and s).  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
@@ -1692,6 +1699,9 @@ static int compareAll(const char *what, int verbose)
             free(s_gpu);
             s_gpuSize = cpuMaxBytes();
             s_gpu = malloc(s_gpuSize);
+        }
+        if (kCompared[k] == RD_TARGET_WORK2 && g_rdPerf.glowFolded) {
+            continue; /* the glow fold leaves WORK2 undrawn: the reduction's WORK0 is compared */
         }
         if (!rd__read_target(rd_target((RdTargetId)kCompared[k]), s_gpu, s_gpuSize, &w, &h) ||
             (int)w != c->w || (int)h != c->h) {
@@ -4009,6 +4019,7 @@ static void checkPipelines(void)
 }
 
 #include "rd_blur_aura_box_test.inc"
+#include "rd_blur_glow_fold_test.inc"
 
 /* the weights are each case's seconds in a whole run (255 s at -j2 on 4 cores); the
    aura case (600 frames, each fed by the one before) is the shortest a shard can be */
@@ -4038,6 +4049,7 @@ static const IcoShardCase k_cases[] = {
     {"effects_scaled", 4},
     {"motion_blur_smooth_scaled", 2},
     {"aura_box", 30},
+    {"glow_fold", 20},
 };
 
 int main(int argc, char **argv)
@@ -4095,6 +4107,7 @@ int main(int argc, char **argv)
               eye);
         CHECK(date == 1, "the backlight subtract into SCENE with DATE (DATM 0): %d", date);
     }
+    checkGlowFoldPlan(rd__last_frame()); /* the glow fold's scan (rd_blur_glow_fold_test.inc) */
     InitializeStaticBlur();
     checkRecordingMotionBlur(448);
     checkRecordingMotionBlur(512);
@@ -4206,6 +4219,9 @@ int main(int argc, char **argv)
     }
     if (ico_shard_take("aura_box")) {
         checkAuraBox(); /* re-initialises rd (Enhanced 2x, 2364x1080, 1.5x; rd_blur_aura_box_test.inc) */
+    }
+    if (ico_shard_take("glow_fold")) {
+        checkGlowFold(); /* re-initialises rd (1x, 2x, 2364x1080, the 848 frame; rd_blur_glow_fold_test.inc) */
     }
     if (ico_shard_finish() != 0) {
         return 1;
