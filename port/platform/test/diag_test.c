@@ -860,6 +860,7 @@ static void activity_child(const char *mode, const char *log)
         }
         ico_diag_log("test: vu prepass %d", pre);
         ico_diag_log("test: pipeline set %d", set);
+        ico_diag_log("test: prev floor stop %d", ico_diag_startup_prev_floor_stop());
         pipeset_then(set);
         child_quit(0);
     } else if (strcmp(mode, "actlossnext") == 0) {
@@ -2840,6 +2841,31 @@ int main(int argc, char **argv)
         r = run(argv[0], "actpipeset", log);
         s = read_file(log);
         CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
+        /* issue 123: the signal's stop is not a floor stop; a stop at the
+           free-memory floor (its figures in the line) is, and still no set
+           for the start (7): the window's retry (memory_floor.h) decides on
+           the driver and the cache file */
+        s = read_file(log);
+        CHECK(strstr(s, "test: prev floor stop 0\n") != NULL);
+        remove(ends);
+        {
+            FILE *f = fopen(act, "wb");
+            CHECK(f != NULL);
+            if (f != NULL) {
+                fputs("test 1\nexited with the pipelines created as the frames needed them\n"
+                      "set: stopped at the system's low-memory signal (1940 MB available of 11453 "
+                      "MB, floor 1947 MB)",
+                      f);
+                fclose(f);
+            }
+        }
+        setenv("ICO_TEST_THEN", "clean", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 7\n") != NULL);
+        CHECK(strstr(s, "test: prev floor stop 1\n") != NULL);
+        remove(act);
         /* ... another version tries the set again */
         remove(ends);
         setenv("ICO_TEST_THEN", "lowmemclean", 1);

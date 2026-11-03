@@ -65,3 +65,34 @@ uint32_t rhi_metal_color_bytes(const char *deviceName)
     }
     return n <= 10u ? 32u : n <= 13u ? 64u : 128u;
 }
+
+char *rhi_text_one_line(char *s)
+{
+    size_t w = 0;
+    int gap = 0;
+
+    if (s == NULL) {
+        return s;
+    }
+    for (size_t r = 0; s[r] != '\0'; r++) {
+        const unsigned char ch = (unsigned char)s[r];
+
+        if (ch < 0x20 || ch == 0x7f) {
+            gap = 1;
+            continue;
+        }
+        if (gap && w > 0) {
+            s[w++] = ' ';
+        }
+        if (ch == ' ' && w == 0) {
+            continue;
+        }
+        gap = 0;
+        s[w++] = (char)ch;
+    }
+    while (w > 0 && s[w - 1] == ' ') {
+        w--;
+    }
+    s[w] = '\0';
+    return s;
+}

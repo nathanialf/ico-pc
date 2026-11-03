@@ -1048,6 +1048,10 @@ static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDevicePropertie
             snprintf(g_vkr.compilerVersion, sizeof g_vkr.compilerVersion, "%.*s", (int)n, c);
         }
     }
+    /* one line in the log (issue 123: Qualcomm's text has newlines); the
+     * compiler line above was cut at the line's end first */
+    rhi_text_one_line(dp.driverName);
+    rhi_text_one_line(dp.driverInfo);
     snprintf(s_driverText, sizeof s_driverText, "; device %04x:%04x; driver %s%s%s, version %s",
              (unsigned)p->vendorID, (unsigned)p->deviceID,
              dp.driverName[0] ? dp.driverName : "(unnamed)", dp.driverInfo[0] ? " " : "",

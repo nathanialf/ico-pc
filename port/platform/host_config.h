@@ -168,6 +168,7 @@ const char *ico_config_ini_key(const char *toml_path);
    it is; dynamic_state true/on -> "0", false/off -> "1", depth -> "blend"
    (the variable names what is static); pipeline_set full, careful or lazy as they are;
    present_fallback auto, off or fifo as they are (0/false/no -> "off");
+   frame_rate_pin auto or off as they are (0/false/no -> "off");
    disc_reader thread or sync as they are (0/false/off/no -> "sync");
    disc_read_ahead_kb 0 to 4096 as it is (false/off/no -> "0"); pass_split a
    count; gpu_*, attachment_read, storage_pass_merge, store_plan,

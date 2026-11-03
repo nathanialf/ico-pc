@@ -19,6 +19,9 @@ are [RHI.md](RHI.md).
 | `port/platform/pace_policy.h`, `pace_policy.c` | the pacing decisions, free of SDL: slow presents, the gap, the vsync lock, the display's intervals, Auto resolution |
 | `port/platform/present_fallback.h`, `present_fallback.c` | the FIFO fallback's decision and lines, free of SDL ([The FIFO fallback](#the-fifo-fallback)) |
 | `port/platform/window_present_fallback.h`, `window_present_fallback.c` | the window's side of the FIFO fallback: the gate, the switch, the lines |
+| `port/platform/display_rate.h`, `display_rate.c` | the refresh rate's log lines and the frame rate pin's decisions, free of SDL ([The refresh rate and the frame rate pin](#the-refresh-rate-and-the-frame-rate-pin)) |
+| `port/platform/window_display_rate.h`, `window_display_rate.c` | the window's side: SDL's display mode in the log, the Android pin through the NDK |
+| `port/platform/present_hist.h`, `present_hist.c` | the 10 s block's histogram of the driver's present call (over 20, 50, 100 and 300 ms) |
 | `port/platform/window_disc.h`, `window_disc.c` | the window's side of the disc reader: the step's disc wait for the present allowance, the 10 s disc line |
 | `port/platform/window_blended.h`, `window_blended.c` | F12's blended present's frame: the arm after F12's zip (a result still to collect collected first) and the move into it |
 | `port/platform/display_clock.h` | the vblank clock's interface |
@@ -30,7 +33,7 @@ are [RHI.md](RHI.md).
 | `port/render/rd_interp.c` | presenting between ticks; the present clock |
 | `port/render/rd_crt.c`, `port/shaders/crt.hlsl` | the CRT filter |
 | `port/platform/fps_counter.h`, `fps_counter.c` | the Frame rate counter's presents per second, free of SDL and rd ([UI.md](UI.md#the-frame-rate-counter)) |
-| `port/platform/test/` | `fps_counter_test.c`, `pace_loop_test.c`, `pace_policy_test.c`, `present_fallback_test.c`, `perf_block_test.c`, `window_video_test.c`, `hotkeys_test.c` |
+| `port/platform/test/` | `fps_counter_test.c`, `pace_loop_test.c`, `pace_policy_test.c`, `present_fallback_test.c`, `display_rate_test.c`, `present_hist_test.c`, `perf_block_test.c`, `window_video_test.c`, `hotkeys_test.c` |
 
 ## The native frame
 
@@ -1343,6 +1346,40 @@ the window's side, called from `port/platform/window_host.c` (`video_settings`, 
   ([dev] present_fallback=off)` once; `fifo` presents FIFO from the start.
 
 The first two or three stutters (20 to 30 s) still happen before the switch.
+
+### The refresh rate and the frame rate pin
+
+Issue 123's log (Xiaomi Pad 6S Pro, 144 Hz LTPO panel, Qualcomm's own driver) shows a present blocking
+344 to 365 ms five times in 150 s under mailbox and under the FIFO fallback alike, with the GPU
+idle: not the GPU and not the present mode. What the log did not hold was the screen's refresh
+rate, so the next log carries it (`port/platform/display_rate.h`, `window_display_rate.c`):
+
+- `window: display refresh: 144.00 Hz, 3048x2032 "<display>" (run time 85.2 s, N changes this run)`
+  at the start and in every 10 s block (SDL's `SDL_GetCurrentDisplayMode`; the rate from its
+  numerator and denominator where it gives them), `window: display refresh changed: A Hz -> B Hz,
+  WxH (run time T s, change N of this run)` at each `SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED`, and
+  `window: display refresh changed without an event from SDL: B Hz` when the block's poll finds a
+  change no event announced. A change is more than 0.05 Hz.
+- `window: present calls: N timed (over 20 ms a, over 50 ms b, over 100 ms c, over 300 ms d), longest
+  M ms, total T ms` in every 10 s block, on every platform: each presented replay's present time
+  (the submit thread's own timing of its present call, `RdPerfRecord.presentMs`) in every row it
+  is over (`port/platform/present_hist.h`). The older `window: present blocked N times over 50 ms`
+  line and the first-8-then-every-100th `a present blocked` lines stay.
+- Android, 11 and later: while the Frame rate row is a number the window asks the system for that rate
+  as a fixed source (`window_frame_rate_pin`, from `video_settings`: `ANativeWindow_setFrameRateWithChangeStrategy`
+  with only-if-seamless, or `ANativeWindow_setFrameRate` where that is the only one the phone has;
+  both through `dlopen("libandroid.so")` and `dlsym`, so the APK keeps minSdk 29; the ANativeWindow
+  from `SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER`). Original, Uncapped, `[dev] frame_rate_pin = off`
+  and a rate above 1000 ask for none and release an earlier ask; the window closing releases it.
+  A seamless change only: a mode change that blinks the screen is not asked for. The decisions are
+  `display_pin_mode`, `display_pin_rate` and `display_pin_next` (pure; `display_rate_test`). The first
+  call says `window: frame rate pin: on ([dev] frame_rate_pin = auto); the device offers the call` (or
+  `does not offer`, or `(no native window from SDL)`), then one line each time the ask changes:
+  `window: frame rate pin: asked 60 Hz (fixed source; the Frame rate row is 60) with <call>:
+  returned 0` (`(refused)` after a return other than 0, tried again at the next change), and
+  `window: frame rate pin: released (the Frame rate row is Uncapped) with <call>: returned 0`.
+  Nothing runs on any other platform. It is a hint to the system's refresh rate governor: it does not
+  change the game's own pacing, and nothing about it is measured on a device yet.
 
 ### Downsampling
 

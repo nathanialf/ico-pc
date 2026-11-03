@@ -763,6 +763,16 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("present_fallback", "true") == NULL);
     CHECK(ico_dev_env_value("present_fallback", "mailbox") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.present_fallback"), "present_fallback") == 0);
+    /* frame_rate_pin: the Android frame rate pin auto or off
+       (window_display_rate.c, display_rate.h) */
+    CHECK(strcmp(ico_dev_env_name("frame_rate_pin"), "ICO_FRAME_RATE_PIN") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "off"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "false"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "no"), "off") == 0);
+    CHECK(ico_dev_env_value("frame_rate_pin", "true") == NULL);
+    CHECK(ico_dev_env_value("frame_rate_pin", "60") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.frame_rate_pin"), "frame_rate_pin") == 0);
     /* render_thread: the window's render thread, read through the store
        (render_thread.c), not exported */
     CHECK(strcmp(ico_config_ini_key("dev.render_thread"), "render_thread") == 0);
