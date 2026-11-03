@@ -377,7 +377,10 @@ the frames its late skip left out ([Pacing](#pacing), item 1), then the present
 allowance of the path in use (`presents held to A a step (lowest L, R refused, D drops, C climbs,
 climbs refused X)`, or `presents paced to N.N a step (...)` while the timer path's allowance is
 unbound and [paced by the GPU](#the-present-allowance) at under 8 a step (N.N the budget's presents
-a step, `period / G`), or `presents not held (...)` while it is unbound otherwise, and
+a step, `period / G`), or `presents not held (...)` while it is unbound otherwise, or `vsync off,
+uncapped: pictures as made (2 in flight at most[, the GPU's time would pace them to N.N a step])
+(...)` with vsync off, the frame rate uncapped and the render thread on, where the allowance only
+measures ([Further presents and the game step](#further-presents-and-the-game-step)), and
 `lowest not held` when it was unbound all block: the allowance now and its lowest in the block, the
 in-between presents it refused, its drops and climbs and the climbs its GPU gate refused in the
 block (the timer path's; under the lock every climb is a probe, none refused); then `GPU span G ms
@@ -702,10 +705,62 @@ display the window covers (`video_settings`), the presenter boxes the picture in
 shown one composition later, about one refresh more latency than a window flipped to the display; how well the lock
 holds its phase there has not been measured on hardware: the 10 s `lock held` line is the check.
 
+### Further presents and the game step
+
+With the [render thread](PLATFORM.md#the-render-thread) on, a further present (a picture between
+the game's frames, of a frame already shown) is held only when it would make a game step miss its
+own period: the user's rule, "just give pictures when they can". The game steps every vsync (16.7
+ms at 60 Hz, a game frame every two steps), and a step takes a few ms of its period (4.5 ms of
+16.7 on the PowerVR phone). A picture the render thread is making holds the renderer's state until
+its reads end, and the next step's first renderer call waits for them; a step that starts a few
+ms late that way still ends inside its period. So a further present may start the next step late
+by up to `period - (step + 2 ms)`, the step being its own recent time (its longest lately,
+falling an eighth a step) and 2 ms the margin for what that time does not see (the pump, the
+pacer's wake, the audio callback and other threads on the core). The step after it, behind the
+next new frame's own picture (never held: every frame is shown), must fit its period too.
+The render thread's times say how long a picture's reads will take: its interpolation, its waits
+for the submit thread and for the GPU's slot fences (2 pictures in flight at most), at the GPU's
+measured time a picture, and its own reads (`port/platform/pace_policy.h` (`pace_rt_further_ask`,
+`pace_rt_step_miss`, `PaceRtPipe`, `PaceStepEst`); [PLATFORM.md](PLATFORM.md#the-render-thread)).
+A step that ends past its deadline anyway (an estimate that was wrong: a stage's first textures,
+a burst of slow pictures) makes the rule plan the whole period for the next 120 steps, the rule
+before it (the reads by the next step's due time), 240 after another miss, up to 1920, halved by
+1920 steps without one: one late step, then two seconds of the strict rule, never the state of
+steps 40 ms late with the sound held back. The 10 s line's `game thread:` clause counts the
+holds (`would have made the step miss its period`), the steps started late by the pictures (with
+the longest) and the steps that missed their period; `window: the game step missed its period by
+...` names a miss (first 8, then every 100th).
+
+The rule is a rate requirement ([Pacing](#pacing)): `pace_loop_test` (`testStepRule`) asserts the
+presents in 10 s for 300 game frames by the render thread's reads, at the phone's 4.5 ms step with
+the submit thread: reads 10 / 12 / 13 / 15 / 17 ms give 700 / 600 / 501 / 421 / 301 (the rule before:
+600 / 600 / 301 / 301 / 301); two a game frame while the reads fit the period less the step (12.18 ms
+there), past it as many as keep every step inside its period, and none misses it. At the phone's
+logged reads (11.5-12.5 ms) that is 52-60 presented fps where the rule before gave 30.
+
+**Vsync off, uncapped.** With vsync off and the frame rate uncapped (the timer path, no FIFO lock,
+the render thread on: `pace_rt_as_made`) the pictures go as they are made, as on a PC with vsync
+off: the [present allowance](#the-present-allowance) refuses nothing (it stays as a measurement,
+its 10 s part `vsync off, uncapped: pictures as made (2 in flight at most, the GPU's time would
+pace them to N.N a step)`), and the hold while the presents wait for the display or the GPU is
+off. The GPU's own back-pressure is the limit: at most two pictures in flight (the slot fences),
+and the render thread waits there, inside a picture's reads, which the step rule above sees. The
+hold for a picture that ran past its estimate stays (the present's hand-over would hold the game
+thread for the render thread's job, which the fences do not bound). `testStepRule` at 9 / 12 / 13
+/ 15 / 17 / 25 ms GPU pictures, an immediate swapchain: 1080 / 834 / 770 / 668 / 587 / 400 presents
+in 10 s, what the GPU makes (about `10 s / G`, two a step at most), no step missing its period. On
+a phone whose vsync off is a mailbox whose present blocks behind the GPU at a door (the PowerVR
+driver), the block lands on the submit thread and the render thread waits for it: the player sees
+about the GPU's rate (26 ms pictures: 32 a second of the GPU's 38, the rest held by the step
+rule), and that is the GPU, not a rule. A mailbox still presents once a refresh at most (the
+display shows no more). With vsync on (the lock, the grid, FIFO, mailbox) and at Frame rate
+Original nothing changes.
+
 ### The present allowance
 
 On the timer path and under the lock a step's presents of a frame already shown (the in-between
-ones; a new frame's present is always made) are held to an allowance, so the simulation, whose clock
+ones; a new frame's present is always made) are held to an allowance (not with vsync off and the
+frame rate uncapped with the render thread on: [there it only measures](#further-presents-and-the-game-step)), so the simulation, whose clock
 the audio follows, is never held below real time by presents nobody needs
 (`port/platform/pace_policy.h` (`PaceBudget`); `port/platform/pace_policy.c` (`pace_budget_*`)).
 On the timer path it is the last term of the refusal after the cost guard above, which stays as it
@@ -1336,8 +1391,8 @@ one's pixels: for a measurement, not for play.
 
 | test | checks |
 | --- | --- |
-| `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), the present allowance with the fence (`test120Budget`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`) |
-| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`), the timer path's unbound start (`testBudgetUnbound`), the reporters' sequences (`testBudgetHitch130`, `testBudgetSustained`, `testBudgetGlWait126`), the window's allowance and clock words (`testBudgetLines`), the timer path with a GPU queue (`testBudgetTimerLoop`) and paced by the GPU (`testBudgetPaced`, `testBudgetPacedLoop`), vsync off under the FIFO fallback at 120 Hz (`testBudgetFifo120`) |
+| `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), the present allowance with the fence (`test120Budget`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`); the render thread's further presents: the step-deadline rule's rates and vsync off's pictures as made (`testStepRule`) |
+| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`), the timer path's unbound start (`testBudgetUnbound`), the reporters' sequences (`testBudgetHitch130`, `testBudgetSustained`, `testBudgetGlWait126`), the window's allowance and clock words (`testBudgetLines`), the timer path with a GPU queue (`testBudgetTimerLoop`) and paced by the GPU (`testBudgetPaced`, `testBudgetPacedLoop`), vsync off under the FIFO fallback at 120 Hz (`testBudgetFifo120`), the step-deadline rule's arithmetic, its back-off, the reads' prediction and the as-made line (`testStepRule`) |
 | `port/platform/test/present_fallback_test.c` | the FIFO fallback's decision over the stock driver's blocks (the third within 30 s switches, never a second time), blocks too far apart or too short, Turnip's driver text, `[dev] present_fallback=off`, the lines word for word |
 | `port/platform/test/perf_block_test.c` | a block's sums and maxima, the replays over the threshold, the longest-phase text, a reset |
 | `port/platform/test/window_video_test.c` | the window mode requests and their readback on SDL's offscreen driver (77 without one): fullscreen at the desktop's size, Borderless, Windowed back at 960 x 720; Fullscreen through `ico_window_video_mode` holds the desktop's mode (its size and refresh rate) or, where the driver takes none, no mode, and `ico_window_video_desktop_mode` returns which. Whether the display goes exclusive and the swapchain's `VK_EXT_full_screen_exclusive` request are the window system's and a Windows driver's: no test here sees them (lavapipe has no such extension) |

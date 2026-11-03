@@ -121,7 +121,8 @@ The window, the picture's size and shape, and the speed.
   sixty times a second, Vulkan usually still draws sixty a second (it
   depends on your graphics driver); Direct3D 12 always draws one picture for
   each refresh. With Vertical sync off, Uncapped draws as fast as your
-  computer can. A limit equal to your screen's refresh rate (60 on a 60 Hz
+  computer can (a picture between the game's own frames is left out only
+  when it would make the game itself run late). A limit equal to your screen's refresh rate (60 on a 60 Hz
   screen, 120 on a 120 Hz screen) follows the screen, so motion stays
   smooth. On a 144 Hz or 240 Hz screen the 144 or 240 limit counts as equal
   to it, even when the system reports 143 or 239. On phones and tablets it

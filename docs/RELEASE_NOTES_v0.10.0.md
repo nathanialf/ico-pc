@@ -29,6 +29,8 @@
 
 ## Fixed
 - On phones, the Frame rate counter sits inside the screen's safe area, so a rounded corner or a notch no longer cuts it off.
+- The pictures shown between the game's own frames are no longer held back whenever they might brush the next game step; they are held only when the step could not finish on time, so phones and PCs show more of them.
+- With Vertical sync off and Frame rate at Uncapped, the pictures between the game's own frames are shown as fast as the graphics chip makes them, as Vertical sync off means on a PC, instead of being held to what the game expected the chip to manage. Only a picture that would make the game itself run late is left out.
 
 - The game kept writing the depth of every picture back to memory for the whole session after its first frame, which cost graphics time every picture, most of all on phones; it now does so only while a frame needs it. The setting that hands the picture's depth to an effects program such as ReShade, on unless you turn it off, also kept it doing so on every phone and on computers without such a program; it now does only while such a program is running.
 - On Android, a save state made in an earlier session could not be loaded (the game closed). Save states made before you closed the app now load after you open it again.
