@@ -1186,9 +1186,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `build-host/tmp/v095/after/w3/pd`, and five of the PowerVR phone's frames at its Resolution Auto,
   2364x1080 at 2.189 under its profile's fakes, against `build-host/tmp/v098/evidence/cheap/base-phone`)
   replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0` (the
-  baselines' own): the stats line says `crack fill on: 1 passes` and `1 fills after lists 4-6`;
-  every target within 64 levels on at most 0.2 % of its pixels (the bound, the pixels apart and the
-  largest difference printed per target; [DIVERGENCES.md](DIVERGENCES.md) VD-20); at the phone's
+  baselines' own): the stats line says `crack fill on: 1 passes` and `1 fills after lists 4-6`,
+  or, on a dump with no fog of SCENE above 1x (`0 passes, 0 pixels filled (0 replays counted;
+  scale 0x0, ...; 0 fogged replays above 1x not filled; 0 fills after lists 4-6`: the v3086 and
+  v1985 frames), every target the baseline's bytes; every target within 64 levels on at most 0.2 %
+  of its pixels (the bound, the pixels apart and the largest difference printed per target;
+  [DIVERGENCES.md](DIVERGENCES.md) VD-20), or, past it, the run replayed once more with
+  `ICO_RD_CRACK_FILL=0` and the glow's mask (WORK2, `cleanUpFB`'s depth test: the late fill leaves
+  the crack's depth) that run's byte for byte, and each target past the bound no farther from the
+  baseline than the no-fill run's (no more pixels apart, no larger difference); at the phone's
   setting the stats line's copies one fewer than the baseline log's and its passes no more. A
   missing dump or baseline is skipped; none: SKIP. The baselines are pictures of the fill before the
   fog; another change to the picture needs baselines of its own before this test can tell the two

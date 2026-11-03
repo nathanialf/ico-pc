@@ -10,12 +10,26 @@
 #            fog, DATE's stencil, the store plan, the blur fold, the fx local read, no UINT
 #            views, the VU planes at whole scales only, the shadow count's one draw, the
 #            vertex pre-pass off, no dynamic state).
-# The run must say "crack fill on: 1 passes" and "1 fills after lists 4-6".  Every
+# The run must say "crack fill on: 1 passes" and "1 fills after lists 4-6", unless the
+# dump has no fog of SCENE above 1x at all (the stats line's "0 passes, 0 pixels filled (0
+# replays counted, scale 0x0, ..., 0 fogged replays above 1x not filled, 0 fills after
+# lists 4-6": the v3086-v1985 group, whose effects line times the fog at 0.000): neither
+# build armed a fill there, and every target must then be the baseline's bytes.  Every
 # target's PNG of the baseline is compared with the run's (png_level_diff.py): the
 # pixels that differ at most MAX_SHARE parts per million of the target, no channel more
 # than MAX_LEVEL levels apart (the measured bound, VD-20: the crack texels take their
 # neighbour's colour as the fog and lists 4-6 left it; the downstream effects that read
-# SCENE carry it on).  At the phone's setting the stats line's copies are one fewer than
+# SCENE carry it on).  The glow's mask (staticBlur.c cleanUpFB, MASK_TARGET) tests
+# SCENE's depth, which the old fill wrote at the cracks and the late fill leaves as it
+# was (VD-20), so on a frame with the glow the mask's texels at a crack flip (0 against
+# 255) and its reductions, blurs and the targets it is added into carry that over the
+# blur's footprint (the godrays frame rd-00720: WORK0-3 up to 31 levels on 3.4 %, SCENE,
+# DISPLAY and PRESENT up to 10 levels on 1.2 %).  A run with a target past the bound is
+# replayed once more without the fill (ICO_RD_CRACK_FILL=0) and passes only when its
+# mask is the no-fill run's byte for byte (the mechanism) and every target past the bound
+# is no farther from the baseline than the no-fill run's is (no more pixels apart, no
+# larger difference: the late fill never takes a target farther from the old fill's
+# picture than no fill does).  At the phone's setting the stats line's copies are one fewer than
 # the baseline's (the depth no longer copied for the fill) and its passes no more.  The
 # differing pixels and the largest difference are printed per target.  A line whose dump
 # or baseline is missing is named and skipped; none compared, or no device: SKIP.
@@ -23,6 +37,7 @@
 # -DOUT=<a folder the test may write>
 set(MAX_LEVEL 64)
 set(MAX_SHARE 2000) # parts per million: 0.2 % of a target's pixels
+set(MASK_TARGET WORK2.png) # the glow's mask (cleanUpFB), depth tested against SCENE
 set(runs "")
 if(NOT "${LIST}" STREQUAL "" AND EXISTS "${LIST}")
   get_filename_component(listDir "${LIST}" DIRECTORY)
@@ -72,6 +87,7 @@ set(env_phone ICO_RD_VU_PREPASS=0 ICO_VK_FAKE_NO_DYNAMIC=1 ICO_RD_FOG_PATH=local
 # (the outputs' semicolons read as commas: CMake's list separator replaced)
 set(lateRe "stats: crack fill on: 1 passes, [0-9]+ pixels filled \\([^)]*, 1 fills after lists 4-6,")
 set(countRe "stats: [0-9]+ draws, ([0-9]+) passes, [^\n]* ([0-9]+) copies,")
+set(unarmedRe "stats: crack fill on: 0 passes, 0 pixels filled \\(0 replays counted, scale 0x0, reach 0x0 texels, 0 fogged replays above 1x not filled, 0 fills after lists 4-6,")
 set(diffRe "png_level_diff: ([0-9]+) x ([0-9]+), [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, [0-9]+ more \\(largest ([0-9]+)\\), ([0-9]+) pixels differ")
 set(failures 0)
 set(compared 0)
@@ -100,7 +116,13 @@ foreach(run IN LISTS runs)
     continue()
   endif()
   string(REPLACE ";" "," flat "${out}")
-  if(NOT flat MATCHES "${lateRe}")
+  set(unarmed FALSE)
+  if(flat MATCHES "${unarmedRe}")
+    # no fog of SCENE above 1x in this dump: no fill armed, now or before
+    set(unarmed TRUE)
+    message(STATUS "${dump} ${s}: no fog of SCENE above 1x: no fill armed, every target the "
+                   "baseline's bytes")
+  elseif(NOT flat MATCHES "${lateRe}")
     message(SEND_ERROR "${dump} ${s}: the fill was not drawn once after lists 4-6:\n${out}")
     math(EXPR failures "${failures} + 1")
   endif()
@@ -127,6 +149,7 @@ foreach(run IN LISTS runs)
     endif()
   endif()
   file(GLOB pngs RELATIVE "${base}" "${base}/*.png")
+  set(over "")
   foreach(png IN LISTS pngs)
     if(NOT EXISTS "${dir}/${png}")
       message(SEND_ERROR "${dump} ${s}: ${png} in the baseline only")
@@ -137,6 +160,11 @@ foreach(run IN LISTS runs)
     execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${base}/${png}" "${dir}/${png}"
                     RESULT_VARIABLE same)
     if(same EQUAL 0)
+      continue()
+    endif()
+    if(unarmed)
+      message(SEND_ERROR "${dump} ${s}: ${png} differs from the baseline with no fill armed")
+      math(EXPR failures "${failures} + 1")
       continue()
     endif()
     execute_process(COMMAND "${PY}" -I "${DIFF}" "${base}/${png}" "${dir}/${png}"
@@ -158,9 +186,65 @@ foreach(run IN LISTS runs)
     message(STATUS "  ${dump} ${s} ${png}: ${pixels} pixels differ (${ppm} per million), the "
                    "largest ${largest} levels")
     if(largest GREATER MAX_LEVEL OR ppm GREATER MAX_SHARE)
+      list(APPEND over "${png}|${pixels}|${ppm}|${largest}")
+    endif()
+  endforeach()
+  if(over STREQUAL "")
+    continue()
+  endif()
+  # past the bound: the glow's mask?  The same replay without the fill
+  set(nofill "${dir}-nofill")
+  file(REMOVE_RECURSE "${nofill}")
+  file(MAKE_DIRECTORY "${nofill}")
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+                          ${env_${s}} ICO_RD_CRACK_FILL=0 "${TOOL}" "${dump}" - --pass-dump
+                          "${nofill}" --stats ${args_${s}}
+                  RESULT_VARIABLE rcNo OUTPUT_VARIABLE outNo ERROR_VARIABLE errNo)
+  set(maskSame 1)
+  if(rcNo EQUAL 0 AND EXISTS "${dir}/${MASK_TARGET}" AND EXISTS "${nofill}/${MASK_TARGET}")
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${dir}/${MASK_TARGET}"
+                            "${nofill}/${MASK_TARGET}" RESULT_VARIABLE maskSame)
+  endif()
+  if(NOT rcNo EQUAL 0 OR NOT maskSame EQUAL 0)
+    foreach(o IN LISTS over)
+      string(REPLACE "|" ";" o "${o}")
+      list(GET o 0 png)
+      list(GET o 1 pixels)
+      list(GET o 2 ppm)
+      list(GET o 3 largest)
       message(SEND_ERROR "${dump} ${s}: ${png} has ${pixels} pixels apart (${ppm} per million, "
                          "${MAX_SHARE} the bound), the largest ${largest} levels (${MAX_LEVEL} "
-                         "the bound)")
+                         "the bound); the glow's mask ${MASK_TARGET} is not the no-fill run's "
+                         "(exit ${rcNo}${errNo})")
+      math(EXPR failures "${failures} + 1")
+    endforeach()
+    continue()
+  endif()
+  foreach(o IN LISTS over)
+    string(REPLACE "|" ";" o "${o}")
+    list(GET o 0 png)
+    list(GET o 1 pixels)
+    list(GET o 2 ppm)
+    list(GET o 3 largest)
+    set(noPixels -1)
+    set(noLargest -1)
+    if(EXISTS "${nofill}/${png}")
+      execute_process(COMMAND "${PY}" -I "${DIFF}" "${base}/${png}" "${nofill}/${png}"
+                      RESULT_VARIABLE rcDiff OUTPUT_VARIABLE outDiff)
+      string(STRIP "${outDiff}" outDiff)
+      if(rcDiff EQUAL 0 AND outDiff MATCHES "${diffRe}")
+        set(noLargest "${CMAKE_MATCH_3}")
+        set(noPixels "${CMAKE_MATCH_4}")
+      endif()
+    endif()
+    message(STATUS "  ${dump} ${s} ${png}: past the bound with the glow's mask the no-fill "
+                   "run's; without the fill ${noPixels} pixels differ, the largest "
+                   "${noLargest} levels")
+    if(noPixels LESS 0 OR pixels GREATER noPixels OR largest GREATER noLargest)
+      message(SEND_ERROR "${dump} ${s}: ${png} has ${pixels} pixels apart (${ppm} per million, "
+                         "${MAX_SHARE} the bound), the largest ${largest} levels (${MAX_LEVEL} "
+                         "the bound), farther from the baseline than the run without the fill "
+                         "(${noPixels} pixels, the largest ${noLargest})")
       math(EXPR failures "${failures} + 1")
     endif()
   endforeach()
@@ -173,4 +257,5 @@ if(compared EQUAL 0)
   return()
 endif()
 message(STATUS "rd_crack_late_ab: ${compared} targets within ${MAX_LEVEL} levels on at most "
-               "${MAX_SHARE} pixels a million over ${nruns} runs (the largest ${worstLevel})")
+               "${MAX_SHARE} pixels a million, or past it with the glow's mask the no-fill "
+               "run's and no farther than it, over ${nruns} runs (the largest ${worstLevel})")
