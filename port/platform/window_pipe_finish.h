@@ -22,4 +22,14 @@ void window_pipe_floor_driver(void);
    would run again).  One line either way. */
 void window_pipe_finish_start(void);
 
+/* After window_pipe_floor_driver, before the set: pipePolicy as the window
+   has it; on Qualcomm's own driver a ICO_DIAG_PIPESET_LAZY_LOW_MEMORY start
+   whose previous start stopped at the free-memory floor becomes
+   ICO_DIAG_PIPESET_FULL (the careful set where the device table asks for
+   it) when this shader set's pipeline cache file exists and is not empty
+   (memory_floor.h ico_memory_floor_retry).  One line, the decision and its
+   reason, whenever the previous start stopped at the floor.  Returns the
+   policy to use. */
+int window_pipe_floor_retry(int pipePolicy);
+
 #endif

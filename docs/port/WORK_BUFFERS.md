@@ -543,7 +543,10 @@ draw`, `shadow count seven draws`, with ` ([dev])` or ` (self-test)` after it wh
 run and again when SCENE is made at a new size): a frame of its own on SCENE (its colour as the
 count target) counts 71 bands, band k at k in the top half and -k in the bottom half, the edges a
 sub-pixel off the pixel grid, resolves it through both paths and compares the count at its GS size
-byte for byte, with every band centre against the table. The one draw is replayed twice, its
+byte for byte, with every band centre against the table (read inside the frame's exact width,
+`rd__frame_wexact`: on a cropped frame, 624 wide at 16:10 with 614.40 exact, the last band's centre
+fell in the left-out columns and turned a correct one draw off; a band with no column inside is not
+read). The one draw is replayed twice, its
 stencil read by gathers and then by loads; the gathers stay where their count is the seven draws',
 else the loads where theirs is (the result is then the loads'), else the seven draws:
 
@@ -1381,7 +1384,7 @@ costs about 1 ms a 10 MB read or written. The effects' full-frame reads and what
 | aura: AURA_WORK into WORK0 (`reduceCopyAlphaChannelOfWork1ToWork0`, box 2 x 4 GS texels a texel) | WORK0 424 x 128, 1.65 ms | served by the clear's colour when no aura object is drawn ([above](#a-cleared-source-read-as-its-colour)) |
 | aura: SCENE into FEED128 (`copyCurrentFBToFeedBackArea`, the feedback, box 4 x 4 GS texels a texel) | FEED128 212 x 128, 4.9 ms (the pass after the paste; 1.6 ms was the mean of it and the alpha copy's pass before the paste) | kept: SCENE is the picture ([below](#the-auras-feedback-read)) |
 | shadows: the count at its GS size | temporary 848 x 448, 2.4 ms | kept: it reads SCENE's stencil, not a colour ([the shadow count in one draw](#the-shadow-count-in-one-draw)) |
-| glow: SCENE's alpha into WORK2 (`makeMaskPatternToWork2`) | WORK2 2366 x 1080, 2.9 ms | kept (below) |
+| glow: SCENE's alpha into WORK2 (`makeMaskPatternToWork2`) | WORK2 2366 x 1080, 2.9 ms | computed by the reduction where nothing else draws into WORK2 (below) |
 
 **A reduced copy of SCENE would not give the same bytes.** The FEED128 read's kernel above 1x is
 the area box of the step about the GS's own sample point (`common.hlsli` GS_RS_BOX, `fx_sprite_ps`):
@@ -1530,14 +1533,16 @@ lines with the pause menu up; `[dev] sheet_shader = true` draws them as before, 
 plan's alpha-only form, `FXF_ALPHA_ONLY`) and the alpha test LESS 0x81 with AFAIL KEEP: a texel holds
 SCENE's alpha (bilinear at the texel's own GS position) where that alpha is under 0x81, else the
 fill. `reduceWork2ToWork0` reads all of it into WORK0 through the box (2 x 3.5 GS texels a
-texel). It is not a snapshot for the paste (the paste reads WORK3) and not the blur fold's. Removing
-it byte for byte means the reduction computing each WORK2 texel it weighs from SCENE (four alpha
-loads, the coverage of the guard texels under Full pixel, the alpha test, the fill) in one new
-`fx_frame_ps` form with the mask's sprite in a second block, only where nothing else drew into WORK2
-since the fill and nothing reads WORK2 after the reduction; WORK2's own bytes would then differ
-from the reference (the pass dump's WORK2.png). Not done: the expected saving on the
-phone is the WORK2 pass (2.9 ms in a glow replay, about 1.3 ms a replay over the phone's capture) less
-the reduction's four loads a tap.
+texel). It is not a snapshot for the paste (the paste reads WORK3) and not the blur fold's. Where
+nothing else draws into WORK2 (no sun's fans, no lamps) and nothing else reads it, the reduction
+computes each WORK2 texel it weighs from SCENE instead, byte for byte (the mask's coverage, its
+four alpha loads, the alpha test, the fill; `fx_frame_ps` with `FXF_GLOW_MASK`): neither the fill
+nor the mask is drawn, and WORK2 holds no mask ([The glow's mask in its
+reduction](RENDER_POST.md#the-glows-mask-in-its-reduction); `[dev] glow_fold`). The expected
+saving on the phone is the WORK2 pass (2.9 ms in a glow replay, about 1.3 ms a replay over the
+phone's capture) less the reduction's extra loads (four SCENE alpha loads a WORK2 tap). The pass
+dump's WORK2.png is the mask only where the fold is off (the replay tool's `--pass-dump` keeps it off
+unless `ICO_RD_GLOW_FOLD=1`).
 
 ## The upload ring shrinks
 
@@ -1659,9 +1664,27 @@ force is logged at the set's first ask with the class, and the stop names it the
     ico_pc: the start-up set stopped at the free-memory floor (N MB available of T MB, floor F MB) on another driver than Qualcomm's own; the next start makes the set again
     ico_pc: the start-up set stopped at the free-memory floor (N MB available of T MB, floor F MB); the next start makes the pipelines as the game needs them, with no start-up set
 
-(the last on Qualcomm's own driver; `[dev] pipeline_memory_floor_mb` in place of the rule's words
+(the last on Qualcomm's own driver, followed on a floor stop by `ico_pc: the next start makes the set again instead when the pipeline cache file for this shader set is on disk and not empty ...`; `[dev] pipeline_memory_floor_mb` in place of the rule's words
 when the setting gives the floor; `window: pipelines: the start-up set stopped at the free-memory
 floor on Qualcomm's own driver: the rest is made on first use, not in the background` after it).
+
+**The retry on Qualcomm's own driver (issue 123).** A stop at the floor there made every later
+start skip the set (the pipelines made on first use), which never healed: on the Xiaomi Pad 6S Pro
+the set stopped at 485 of 671 with 1940 MB available of 11453 MB (floor 1947 MB) while that
+driver's compiler held about 3.1 GB, and the 1.4 MB cache file the stop had written held those
+485. The compiler is what ran the device low, and a pipeline the cache holds is created from it
+without the compiler. So the start after a floor stop (not after the system's signal: the file's
+line carries the floor's figures, `ico_memory_floor_line_is_floor`) makes the set again when the
+driver is Qualcomm's own and this shader set's cache file (`pipelines-<key>.vkcache`, the window's
+`ico_diag_pipeline_cache_path`) exists and is not empty (`ico_memory_floor_retry`, called by
+`window_pipe_floor_retry` in `port/platform/window_pipe_finish.c` after the device is made). If the
+set stops at the floor again the stop is written as before and the next start decides again. One
+line says which way and why, whenever the previous start stopped at the floor: `window: pipelines:
+the previous start stopped at the free-memory floor; this start makes the set again (the
+pipeline cache file for this shader set is on disk, N bytes, loaded by the renderer: yes): <path>`,
+or `this start makes no set (<why>, ...)`. The retry's start does not carry the old "stopped" line
+in its own activity file; a start that ends inside the retry steps as an end in the careful set
+does (`diag_host.c` `ico_diag_startup_pipeline_set`).
 
 **Why two rules.** The 17 % rule was tuned for issue 161: the Retroid Pocket 6 (11265 MB, Adreno
 740 on Qualcomm's own driver) stalled inside that driver's pipeline compiler at 1693 MB available

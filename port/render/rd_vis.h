@@ -12,8 +12,9 @@
  * drawn.  The picture is the same, byte for byte (rd_cull_ab).
  *
  * [dev] cull = off | frustum | full (ICO_RD_CULL: off or 0, frustum or 1,
- * full; default frustum).  full also asks for the occlusion test, which is
- * not built yet: it runs as frustum and says so at start. */
+ * full; default frustum).  full adds the occlusion test (rd_vis_hiz.c): a
+ * draw of list 0 whose every sample lies behind what the opaque draws
+ * before it wrote to its depth buffer is skipped too. */
 #ifndef PORT_RENDER_RD_VIS_H
 #define PORT_RENDER_RD_VIS_H
 
@@ -21,6 +22,7 @@
 #include <stdint.h>
 
 #include "rd_internal.h"
+#include "rd_mesh.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +40,7 @@ enum {
     RD_VIS_TOP,
     RD_VIS_BOTTOM,
     RD_VIS_NEAR,
+    RD_VIS_OCCLUDED, /* behind the depth list 0's occluders wrote (rd_vis_hiz.c) */
     RD_VIS_VERDICTS
 };
 
@@ -152,6 +155,12 @@ typedef struct RdVisCounts {
     uint32_t draws, skipped, frustum, occluded, exempt, unbounded;
     uint32_t byVerdict[RD_VIS_VERDICTS];
     double ms;
+    /* the occlusion test (full): the occluders' triangles rasterised and
+     * those left out past the budget, the cells they covered, the draws
+     * tested against the record, its resets, and its share of ms */
+    uint32_t hizTris, hizOverBudget, hizTested, hizResets;
+    uint64_t hizCells;
+    double hizMs;
 } RdVisCounts;
 
 void rd__vis_counts(RdVisCounts *out);
@@ -162,7 +171,8 @@ void rd__vis_counts(RdVisCounts *out);
  *   skipped: SKIP_WHOLE (the whole stream's box lies beyond a plane),
  *     SKIP_RANGE (only the box of the batches the draw reads does);
  *   exempt: PARTICLES, LIST_2D (lists 11 and 12), NO_TARGET, CLIP_NONE (code
- *     34);
+ *     34 skinned: its X and Y wrap to 16 bits);
+ *   occluded: OCCLUDED (list 0, behind the depth the occluders wrote);
  *   unbounded: NO_PAYLOAD (a payload too short or outside the frame),
  *     CLIP_UNKNOWN, NO_MESH (no mesh record, a program the layout does not
  *     fit, a batch range outside it), NO_BOX (no or a non-finite bound),
@@ -170,7 +180,9 @@ void rd__vis_counts(RdVisCounts *out);
  *     grid stream the bound refused);
  *   replayed because the bound reaches the rectangle: KEEP_SKIN, KEEP_GRID,
  *     KEEP_SCISSOR (a mesh under the scissor code), KEEP_MESH_N (a mesh draw
- *     of several batches), KEEP_MESH_1 (one batch). */
+ *     of several batches), KEEP_MESH_1 (one batch), KEEP_NONE (a mesh or grid
+ *     under code 34: never skipped by the frustum test, whose X and Y wrap,
+ *     only a candidate for the occlusion test). */
 enum {
     RD_VIS_WHY_SKIP_WHOLE = 0,
     RD_VIS_WHY_SKIP_RANGE,
@@ -189,6 +201,8 @@ enum {
     RD_VIS_WHY_KEEP_SCISSOR,
     RD_VIS_WHY_KEEP_MESH_N,
     RD_VIS_WHY_KEEP_MESH_1,
+    RD_VIS_WHY_KEEP_NONE,
+    RD_VIS_WHY_OCCLUDED,
     RD_VIS_WHY_COUNT
 };
 
@@ -196,6 +210,140 @@ enum {
  * (zeros when the walk did not run) */
 void rd__vis_why(uint32_t out[RD_VIS_WHY_COUNT]);
 const char *rd__vis_why_name(int why);
+
+/* The occlusion test's own breakdown (full; the last walk's), two groups.
+ * The occluder candidates: each RDC_MESH command of list 0, one reason
+ * (OCC_USED: it put triangles in the record; the others name the first
+ * admission rule that refused it).  The occludee candidates: each list-0 VU
+ * draw the frustum test kept, one reason (HZ_OCCLUDED, or why it was kept).
+ * rd_replay_tool --stats prints them as "cull occlusion". */
+enum {
+    RD_VIS_HZ_OCC_USED = 0,
+    RD_VIS_HZ_OCC_STATE,    /* Z write / test / ABE / DATE / mask not an occluder's */
+    RD_VIS_HZ_OCC_CHAIN,    /* carries the chain's clip plane (b[5]) */
+    RD_VIS_HZ_OCC_TARGET,   /* no PSMZ32 depth target with depth */
+    RD_VIS_HZ_OCC_BOUND,    /* skipped by the frustum test or no bound */
+    RD_VIS_HZ_OCC_PROG,     /* not a prelit or lit program */
+    RD_VIS_HZ_OCC_ALPHA,    /* the alpha plan cannot prove the alpha test passes */
+    RD_VIS_HZ_OCC_SMALL,    /* its box is under a 64th of the frame */
+    RD_VIS_HZ_OCC_NOTRI,    /* no triangle of it is exact, large enough and unmarked */
+    RD_VIS_HZ_HIDDEN,       /* occluded */
+    RD_VIS_HZ_NOT_ELIGIBLE, /* not a mesh or grid under GEQUAL, or no bound */
+    RD_VIS_HZ_NO_RECORD,    /* the target pair refused (not PSMZ32, no memory) */
+    RD_VIS_HZ_EMPTY,        /* no occluder written since the last reset */
+    RD_VIS_HZ_BOX,          /* the occludee's box refused (behind the eye, outside, Z) */
+    RD_VIS_HZ_OUTSIDE,      /* the box reaches outside the record */
+    RD_VIS_HZ_UNCOVERED,    /* a cell the box touches no occluder covered */
+    RD_VIS_HZ_MARGIN,       /* every cell covered, one not behind by the margin */
+    RD_VIS_HZ_COUNT
+};
+
+void rd__vis_hiz_why(uint32_t out[RD_VIS_HZ_COUNT]);
+const char *rd__vis_hiz_why_name(int why);
+
+/* rd__vis_hiz_hidden's verdict, why not hidden */
+enum { RD_VIS_HIZ_HIDDEN = 0, RD_VIS_HIZ_OUTSIDE, RD_VIS_HIZ_UNCOVERED, RD_VIS_HIZ_MARGIN };
+
+/* ------------------------------------------- the occlusion test (Hi-Z)
+ * rd_vis_hiz.c (its header comment holds the argument).  All positions are
+ * GS primitive coordinates (X / 16 of XYZ2), all depths GS Z (larger is
+ * nearer). */
+
+/* a cell's side in GS pixels; a tile is 8 x 8 cells */
+#define RD_VIS_HIZ_CELL 2.0
+/* the occluders' triangles a picture rasterises by default, the largest
+ * screen boxes first (ICO_RD_CULL_HIZ_TRIS) */
+#define RD_VIS_HIZ_TRIS 12000u
+
+/* An occluder's corner as the GPU draws it: within r GS pixels of (x, y)
+ * on each axis, its GS Z at least zlo. */
+typedef struct RdVisHizVtx {
+    double x, y, r, zlo;
+} RdVisHizVtx;
+
+/* An occluder's triangle: its corners' centres, their largest r, the lower
+ * bound of its depth (floor of the least zlo, less 1), its screen box's
+ * area, the list-0 index of its command and whether the budget took it. */
+typedef struct RdVisHizTri {
+    double x[3], y[3], r, area;
+    uint32_t lb, cmd;
+    uint8_t sel;
+} RdVisHizTri;
+
+typedef struct RdVisHizList {
+    RdVisHizTri *t;
+    uint32_t n, cap;
+} RdVisHizList;
+
+/* An occludee's samples' box (GS pixels) and the GS Z it can write at
+ * most. */
+typedef struct RdVisHizBox {
+    double x0, y0, x1, y1, zmax;
+} RdVisHizBox;
+
+/* The record: cells of RD_VIS_HIZ_CELL GS pixels from (gx0, gy0), tile by
+ * tile (64 cells a tile, row by row), each the least GS Z the depth buffer
+ * holds at its samples (0: nothing known); a tile's least cell (tmin,
+ * stale while HIZ_T_DIRTY), the tiles written since the last reset; the
+ * box (x0..x1, y0..y1) a draw's samples can lie in. */
+typedef struct RdVisHiz {
+    double gx0, gy0, x0, y0, x1, y1;
+    uint32_t ncx, ncy, ntx, nty;
+    uint32_t *cell, *tmin, *written;
+    uint8_t *tflag;
+    uint32_t nWritten, cap;
+} RdVisHiz;
+
+/* Vertex pos (qword 0 of a prelit or lit vertex) through m (VU memory
+ * 16..19), w = 1, or pos.w with code 36's clip matrix clip (VU memory
+ * 20..23; NULL under code 32): true when the program draws it at its GS
+ * position in every state (the region test or no clip flag, in front of the
+ * eye, GS Z inside ftoi4's range, each by the float rounding's margin), out
+ * then where the GPU puts it and its GS Z's lower bound. */
+bool rd__vis_hiz_vertex(const float (*m)[4], const float (*clip)[4], const float *pos,
+                        RdVisHizVtx *out);
+/* The triangle a, b, c (t->sel 1, t->cmd 0); false when its depth bound is
+ * below 1 (t->lb 0). */
+bool rd__vis_hiz_tri(const RdVisHizVtx *a, const RdVisHizVtx *b, const RdVisHizVtx *c,
+                     RdVisHizTri *t);
+/* A mesh or grid draw's samples' box and Z bound from its stream's bound b
+ * through m (code 36: w over b's pos.w range and 1, as rd__vis_test):
+ * false unless every corner is in front of the eye, the box inside
+ * (0, 4094) and the bound below gs_z_to_depth's top band. */
+bool rd__vis_hiz_occludee(const float (*m)[4], const RdVisBox *b, bool scissor, RdVisHizBox *out);
+/* The margin above an occludee's Z bound zmax its cells must clear (later:
+ * a mesh with the later mark, whose triangles' depth rises by up to
+ * vu_later_bias's cap) */
+double rd__vis_hiz_margin(double zmax, bool later);
+/* The record for the target rectangle r (rd__vis_rect), every cell 0;
+ * false (an empty record: nothing hidden) without memory or past 8192 x
+ * 4096 GS pixels. */
+bool rd__vis_hiz_setup(RdVisHiz *z, const RdVisRect *r);
+/* every cell to 0 (the tiles written only) */
+void rd__vis_hiz_reset(RdVisHiz *z);
+void rd__vis_hiz_free(RdVisHiz *z);
+/* Triangle t into the record: every cell whose square, grown by a GS pixel
+ * each way and half a GS pixel more up and down, lies inside clip (x0, y0,
+ * x1, y1: the samples the draw's scissor lets through) and inside t for
+ * every placement of its corners within t->r, by 0.25 GS pixel more, rises
+ * to t->lb; the cells covered. */
+uint32_t rd__vis_hiz_raster(RdVisHiz *z, const RdVisHizTri *t, const double clip[4]);
+/* Whether every cell box b touches inside the record's box holds more
+ * than thr (zmax + rd__vis_hiz_margin); false for a box outside it. */
+bool rd__vis_hiz_hidden(RdVisHiz *z, const RdVisHizBox *b, double thr);
+/* the same, and *why (may be NULL) the RD_VIS_HIZ_* it ended on */
+bool rd__vis_hiz_hidden_why(RdVisHiz *z, const RdVisHizBox *b, double thr, int *why);
+bool rd__vis_hiz_list_push(RdVisHizList *l, const RdVisHizTri *t);
+/* The triangles of an RDC_MESH draw of m (payload header p, VU memory
+ * mem) that count as occluders, in the index ranges rd_replay_vu.c
+ * doVuDraw draws: those drawn exactly (rd__vis_hiz_vertex), not hidden,
+ * not later-marked, not a sheet's tile, whose screen box covers minArea,
+ * appended to out with cmd.  *lbAll: the least depth bound over every
+ * triangle drawn (hidden ones aside).  1 when every triangle drawn is
+ * exact, 0 when one is not (a draw that may lower the depth then marks
+ * nothing), -1 without memory. */
+int rd__vis_hiz_mesh(const RdMeshRec *m, const RdVuPayload *p, const float (*mem)[4], uint32_t cmd,
+                     double minArea, RdVisHizList *out, uint32_t *lbAll);
 
 #ifdef __cplusplus
 }

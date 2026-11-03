@@ -27,6 +27,12 @@
 //                                only for the four forms A, B in {Cs, 0},
 //                                C in {As, FIX}, D Cd, COLCLAMP 1, no PABE
 //                                (the paste's Cs + Cd)
+//                FXF_GLOW_MASK   the glow's reduction WORK2 -> WORK0 with
+//                                SCENE as t1: each WORK2 texel it loads
+//                                computed as the mask's sprite stored it
+//                                over the fill (fx_glow_texel; port/render/
+//                                rd_glow_fold.c), so WORK2 is neither drawn
+//                                nor read
 //   fx_local_ps  (ICO_FX_DST_LOCAL=1) fx_sprite_ps reading the destination
 //                inside the open pass by local read: t1 the bound target
 //                as an input attachment (SubpassLoad: the fragment's own
@@ -106,6 +112,7 @@
 #define FXF_ALPHA_ONLY 16384u
 #define FXF_OUT_PREMUL 32768u
 #define FXF_FOLD 65536u
+#define FXF_GLOW_MASK 131072u
 
 #define AFAIL_KEEP 0u
 #define AFAIL_FB_ONLY 1u
@@ -414,6 +421,159 @@ uint fx_alpha_only(int su, int sv, uint a, uint flags)
 }
 #endif
 
+#ifdef ICO_FX_FRAME
+// The glow's reduction WORK2 -> WORK0 with its mask folded in
+// (FXF_GLOW_MASK; port/render/rd_glow_fold.c, docs/port/RENDER_POST.md):
+// drawn with SCENE as t1, every WORK2 texel the reduction's kernel loads
+// is computed where it loads it, as makeMaskPatternToWork2's sprite
+// (fx_frame_ps, FXF_ALPHA_ONLY) stored it over fillWork2's fill.  Every
+// value is the one the two draws compute, by the same operations on the
+// same operands: the mask's fragment at the texel (its SV_Position, the
+// texel's centre) through fx_sprite_ps's first lines, U and V, the alpha
+// of fx_alpha_only, fx_sprite_out's alpha test and FBA, then the
+// reduction's own kernel (fx_sprite_texel's: the above-1x box or B-spline,
+// the GS bilinear or nearest; integer sums in the same order), TFX and
+// tail.  Only the RGBA8 store and load between the draws is left out: the
+// mask wrote k / 255, the reduction read floor(x * 255 + 0.5), which is k
+// for every k (fx_load).  The taps are loaded in one loop each (one copy
+// of the mask in the module).
+//
+// WORK2 has SCENE's size, scale and crop and the mask SCENE's TEX0 size
+// (the CPU's conditions), so fx_src_scale (the mask pass's g_z.yz and the
+// mask's g_scale.xy), fx_src_crop16, g_tex.zw and g_aux1.zw are the
+// mask's own.  The rest is in DrawCB words the reduction does not read:
+//   g_aux0   x the fill, R | G << 8 | B << 16 | A << 24 (FBA's MSB in A);
+//            y the mask's rect x0 | x1 << 16, z y0 | y1 << 16 (12.4);
+//            w WORK2's XYOFFSET in sixteenths, x | y << 16 (the mask
+//            pass's g_origin times 16: whole numbers)
+//   g_blend  x u0 - x0 | (v0 - y0) << 16, signed 16-bit: the mask's UV span
+//            is its rect's, d, and gs_div_trunc_rcp(n d, d, 1 / d) is n, so
+//            U(X) = u0 + (X - x0); y RGBAQ's A | AREF << 8 | ATST << 16 |
+//            ATE << 20 | AFAIL << 24 (KEEP, FB_ONLY or ZB_ONLY); z the
+//            mask's flags (TCC, LINEAR, CLAMP_S, CLAMP_T, FBA)
+//   g_tex    x the mask pass's g_vpo.z (WORK2's Full pixel crop, else 0);
+//            y 0.5, the pixel centre's half, read from the DrawCB so that
+//            no compiler folds it with the 0.5 fx_sprite_ps takes off after
+//            it: the sums are the mask's own, in its order
+
+// fx_alpha_only's value with its taps in one loop: (t.a a) >> 7 with TCC,
+// t.a the GS bilinear (FXF_LINEAR) or nearest texel's alpha
+uint fx_glow_alpha(int su, int sv, uint a, uint flags)
+{
+    if ((flags & FXF_TCC) == 0u) {
+        return a;
+    }
+    const bool lin = (flags & FXF_LINEAR) != 0u;
+    const int uu = lin ? su - 8 : su, vv = lin ? sv - 8 : sv;
+    const int x0 = fx_axis_x(uu >> 4, flags), x1 = fx_axis_x((uu >> 4) + 1, flags);
+    const int y0 = fx_axis_y(vv >> 4, flags), y1 = fx_axis_y((vv >> 4) + 1, flags);
+    int t0 = 0, t1 = 0, t2 = 0, t3 = 0;
+    const uint n = lin ? 4u : 1u;
+    [loop] for (uint k = 0u; k < n; k++) {
+        const int v = int(fx_texel_alpha((k & 1u) != 0u ? x1 : x0, (k & 2u) != 0u ? y1 : y0));
+        t0 = k == 0u ? v : t0;
+        t1 = k == 1u ? v : t1;
+        t2 = k == 2u ? v : t2;
+        t3 = k == 3u ? v : t3;
+    }
+    uint ta = uint(t0);
+    if (lin) {
+        const uint fu = uint(uu & 15), fv = uint(vv & 15);
+        const int top = fx_lerp16(t0, t1, fu);
+        const int bot = fx_lerp16(t2, t3, fu);
+        ta = uint(fx_lerp16(top, bot, fv));
+    }
+    return min((ta * a) >> 7, 255u);
+}
+
+// WORK2's texel c (in its texels) as the mask left it
+uint4 fx_glow_mask(int2 c)
+{
+    const uint fill = g_aux0.x;
+    const uint4 kept = uint4(fill & 255u, (fill >> 8) & 255u, (fill >> 16) & 255u, fill >> 24);
+    // fx_sprite_ps's first lines at the mask's fragment of the texel, in
+    // WORK2's FrameCB (ts its scale, the vpo.z its crop's)
+    const float2 ts = fx_src_scale();
+    const float2 pos = float2(c) + g_tex.yy;
+    const float2 fp = pos + float2(g_tex.x, 0.0);
+    float2 fb = fp - 0.5, fc = fp;
+    [branch] if (ts.x != 1.0 || ts.y != 1.0) {
+        fb = fb / ts;
+        fc = fc / ts;
+    }
+    const int2 gb = int2(floor(fb)) * 16;
+    const int2 gp = int2(floor((fc - 0.5) * 16.0 + 0.5));
+    const int ox = int(g_aux0.w & 0xFFFFu), oy = int(g_aux0.w >> 16);
+    const int x0 = int(g_aux0.y & 0xFFFFu), x1 = int(g_aux0.y >> 16);
+    const int y0 = int(g_aux0.z & 0xFFFFu), y1 = int(g_aux0.z >> 16);
+    if (ox + gb.x < x0 || ox + gb.x >= x1 || oy + gb.y < y0 || oy + gb.y >= y1) {
+        return kept; // outside the sprite: the fill
+    }
+    // U(X) = u0 + (X - x0) with X = ox + gp.x; the UV in t1's texels, 12.4
+    const int du = asint(g_blend.x << 16) >> 16, dv = asint(g_blend.x) >> 16;
+    const float2 ss = fx_src_scale();
+    const int su = int(round(float(ox + gp.x + du) * ss.x)) - fx_src_crop16();
+    const int sv = int(round(float(oy + gp.y + dv) * ss.y));
+    const uint t = g_blend.y, mflags = g_blend.z;
+    const uint a = fx_glow_alpha(su, sv, t & 255u, mflags);
+    // fx_sprite_out's alpha test: AFAIL KEEP and ZB_ONLY write nothing,
+    // FB_ONLY the colour
+    if (((t >> 20) & 1u) != 0u && !gs_alpha_pass((t >> 16) & 15u, (t >> 8) & 255u, a)) {
+        const uint afail = (t >> 24) & 3u;
+        if (afail == AFAIL_KEEP || afail == AFAIL_ZB_ONLY) {
+            return kept;
+        }
+    }
+    return uint4(0u, 0u, 0u, a | ((mflags & FXF_FBA) != 0u ? 0x80u : 0u));
+}
+
+// fx_sprite_texel over WORK2's texels from fx_glow_mask (after TEXA, as
+// fx_texel_at): the above-1x kernel (FXF_ABOVE1X), the GS bilinear
+// (FXF_LINEAR) or the nearest texel, each tap addressed by fx_texel's
+// rules; the kernels' integer arithmetic as fx_sprite_texel's, the taps
+// in one loop
+uint4 fx_glow_texel(int su, int sv, uint flags)
+{
+    const bool a1x = (flags & FXF_ABOVE1X) != 0u, lin = (flags & FXF_LINEAR) != 0u;
+    const uint steps = uint(g_scale.w);
+    const GsAxis ax = gs_resample_axis(su, a1x ? int(steps >> 12) : 32, lin);
+    const GsAxis ay = gs_resample_axis(sv, a1x ? int(steps & 4095u) : 32, lin);
+    const uint dx = a1x ? gs_resample_div(ax) : 1u, dy = a1x ? gs_resample_div(ay) : 1u;
+    const int uu = lin ? su - 8 : su, vv = lin ? sv - 8 : sv;
+    const int x0 = fx_axis_x(uu >> 4, flags), x1 = fx_axis_x((uu >> 4) + 1, flags);
+    const int y0 = fx_axis_y(vv >> 4, flags), y1 = fx_axis_y((vv >> 4) + 1, flags);
+    const int nx = a1x ? min(ax.count, GS_RS_TAPS_MAX) : (lin ? 2 : 1);
+    const int ny = a1x ? min(ay.count, GS_RS_TAPS_MAX) : (lin ? 2 : 1);
+    uint4 sum = uint4(0u, 0u, 0u, 0u);
+    uint4 a = sum, b = sum, c = sum, d = sum;
+    [loop] for (int j = 0; j < ny; j++) {
+        uint4 row = uint4(0u, 0u, 0u, 0u);
+        const int ty = a1x ? fx_axis_y(ay.first + j, flags) : (j != 0 ? y1 : y0);
+        [loop] for (int i = 0; i < nx; i++) {
+            const int tx = a1x ? fx_axis_x(ax.first + i, flags) : (i != 0 ? x1 : x0);
+            const uint4 v =
+                gs_texa_expand(fx_glow_mask(int2(tx, ty)), g_mode.y & 0xFFu, g_mode.y >> 8);
+            if (a1x) {
+                row += v * gs_resample_weight(ax, i);
+            } else {
+                const int k = j * 2 + i;
+                a = k == 0 ? v : a;
+                b = k == 1 ? v : b;
+                c = k == 2 ? v : c;
+                d = k == 3 ? v : d;
+            }
+        }
+        if (a1x) {
+            sum += ((row * 16u + dx / 2u) / dx) * gs_resample_weight(ay, j);
+        }
+    }
+    if (a1x) {
+        return (sum + 8u * dy) / (16u * dy);
+    }
+    return lin ? gs_bilerp(a, b, c, d, uint(uu & 15), uint(vv & 15)) : a;
+}
+#endif
+
 // fx_sprite_ps's first lines as functions, for the aura's two passes
 // below (fx_sprite_ps keeps them inline, so its code is as it was): the
 // same operations on the same operands.
@@ -557,6 +717,8 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
 #ifdef ICO_FX_FRAME
         if ((flags & (FXF_ALPHA_ONLY | FXF_ABOVE1X)) == FXF_ALPHA_ONLY) {
             col = uint4(0u, 0u, 0u, fx_alpha_only(su, sv, col.a, flags));
+        } else if ((flags & FXF_GLOW_MASK) != 0u) {
+            col = fx_tfx(fx_glow_texel(su, sv, flags), col, flags); // the glow's mask folded
         } else
 #endif
         {

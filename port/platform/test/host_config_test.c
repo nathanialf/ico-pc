@@ -765,6 +765,13 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("glow_redraw", "true"), "1") == 0);
     CHECK(strcmp(ico_dev_env_value("glow_redraw", "false"), "0") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.glow_redraw"), "glow_redraw") == 0);
+    /* glow_fold: the glow's mask computed in its reduction, the A/B switch
+       (rd_glow_fold.c rd__glow_fold_on) */
+    CHECK(strcmp(ico_dev_env_name("glow_fold"), "ICO_RD_GLOW_FOLD") == 0);
+    CHECK(strcmp(ico_dev_env_value("glow_fold", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("glow_fold", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("glow_fold", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.glow_fold"), "glow_fold") == 0);
     /* present_fallback: the FIFO fallback auto, off or fifo (window_host.c
        ico_window_open, present_fallback.c) */
     CHECK(strcmp(ico_dev_env_name("present_fallback"), "ICO_PRESENT_FALLBACK") == 0);
@@ -775,6 +782,16 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("present_fallback", "true") == NULL);
     CHECK(ico_dev_env_value("present_fallback", "mailbox") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.present_fallback"), "present_fallback") == 0);
+    /* frame_rate_pin: the Android frame rate pin auto or off
+       (window_display_rate.c, display_rate.h) */
+    CHECK(strcmp(ico_dev_env_name("frame_rate_pin"), "ICO_FRAME_RATE_PIN") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "off"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "false"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "no"), "off") == 0);
+    CHECK(ico_dev_env_value("frame_rate_pin", "true") == NULL);
+    CHECK(ico_dev_env_value("frame_rate_pin", "60") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.frame_rate_pin"), "frame_rate_pin") == 0);
     /* render_thread: the window's render thread, read through the store
        (render_thread.c), not exported */
     CHECK(strcmp(ico_config_ini_key("dev.render_thread"), "render_thread") == 0);

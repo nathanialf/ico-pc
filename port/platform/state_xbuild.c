@@ -156,7 +156,9 @@ IcoXbRefs *ico_xb_begin(const IcoXbProc *p)
                     r->n_snap++;
                 }
             }
-            qsort(r->snap, r->n_snap, sizeof *r->snap, snap_cmp);
+            if (r->n_snap > 1) { /* an empty list's array is NULL */
+                qsort(r->snap, r->n_snap, sizeof *r->snap, snap_cmp);
+            }
         }
     }
     return r;
@@ -659,7 +661,10 @@ static void spans_settle(Spans *s, int points)
 {
     size_t i, k = 0;
 
-    qsort(s->p, s->n, sizeof *s->p, span_cmp);
+    if (s->n > 1) { /* an empty list's array is NULL: qsort's base is declared
+                     * non-null (CI's UBSan on state_port) */
+        qsort(s->p, s->n, sizeof *s->p, span_cmp);
+    }
     for (i = 0; i < s->n; i++) {
         if (k > 0 && s->p[i].lo <= s->p[k - 1].hi) {
             if (points || s->p[i].hi <= s->p[k - 1].hi) {

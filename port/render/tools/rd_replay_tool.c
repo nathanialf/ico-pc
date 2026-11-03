@@ -258,13 +258,19 @@
  *                         puts on the screen
  *   --cull MODE           the scene draws' visibility test (rd_vis.c, [dev]
  *                         cull): off, frustum (the default) or full (the
- *                         frustum test until the occlusion test is built);
- *                         sets ICO_RD_CULL.  --stats prints "stats: cull
- *                         MODE: N of M scene draws skipped (F frustum, O
- *                         occluded), T ms" (M the VU draw commands walked,
- *                         N those replayed as NOPs) and what it did not
- *                         test, then "stats: cull why: <reason> <count>; ..."
- *                         (one reason a command, rd_vis.h RD_VIS_WHY_*)
+ *                         frustum test and list 0's occlusion test,
+ *                         rd_vis_hiz.c); sets ICO_RD_CULL.  --stats prints
+ *                         "stats: cull MODE: N of M scene draws skipped (F
+ *                         frustum, O occluded), T ms" (M the VU draw
+ *                         commands walked, N those replayed as NOPs), what
+ *                         it did not test and the occlusion test's
+ *                         occluder triangles, cells, draws tested, resets
+ *                         and time, then "stats: cull why: <reason> <count>; ..."
+ *                         (one reason a command, rd_vis.h RD_VIS_WHY_*) and
+ *                         "stats: cull occlusion: <reason> <count>; ..."
+ *                         (list 0's occluder candidates by the rule that
+ *                         refused them, its occludee candidates by why they
+ *                         were kept, RD_VIS_HZ_*)
  *   --occlusion-out FILE  (with --occlusion) writes SPEC to FILE, for
  *                         --nop @FILE
  *   --occlusion-csv FILE  (with --occlusion) writes a line a command of the
@@ -2616,6 +2622,11 @@ int main(int argc, char **argv)
         /* the fades fold (rd_fades_fold.c) */
         printf("%s: stats: fades fold %s: %u sprites folded into the reduction\n", dump,
                rd__fades_fold_on() ? "on" : "off", pr->fadesFolded);
+        /* the glow's mask computed in its reduction (rd_glow_fold.c) */
+        printf("%s: stats: glow: WORK2 fold %s: %u folded, %u kept%s%s%s\n", dump,
+               rd__glow_fold_on() ? "on" : "off", pr->glowFolded, pr->glowKept,
+               pr->glowKept ? " (" : "", pr->glowKept ? rd_glow_fold_why_text(pr->glowWhy) : "",
+               pr->glowKept ? ")" : "");
         /* the aura's read in two passes (rd_aura_box.c) */
         printf("%s: stats: aura box %s: %u feedback reads in two passes\n", dump,
                rd__aura_box_on() ? "on" : "off", pr->auraBoxDraws);
@@ -2734,17 +2745,31 @@ int main(int argc, char **argv)
             rd__vis_counts(&vc);
             printf("%s: stats: cull %s: %u of %u scene draws skipped (%u frustum, %u occluded), "
                    "%.3f ms; not tested: %u exempt, %u unbounded; skipped beyond the left %u, "
-                   "right %u, top %u, bottom %u, behind the eye %u\n",
+                   "right %u, top %u, bottom %u, behind the eye %u; occlusion: %u occluder "
+                   "triangles (%u past the budget), %llu cells, %u draws tested, %u resets, "
+                   "%.3f ms\n",
                    dump, rd__vis_mode_name(rd__vis_mode()), pr->cullSkipped, pr->cullDraws,
                    pr->cullFrustum, pr->cullOccluded, pr->cullMs, vc.exempt, vc.unbounded,
                    vc.byVerdict[RD_VIS_LEFT], vc.byVerdict[RD_VIS_RIGHT], vc.byVerdict[RD_VIS_TOP],
-                   vc.byVerdict[RD_VIS_BOTTOM], vc.byVerdict[RD_VIS_NEAR]);
+                   vc.byVerdict[RD_VIS_BOTTOM], vc.byVerdict[RD_VIS_NEAR], vc.hizTris,
+                   vc.hizOverBudget, (unsigned long long)vc.hizCells, vc.hizTested, vc.hizResets,
+                   vc.hizMs);
             /* one reason a command, every reason named (the sum is M) */
             uint32_t why[RD_VIS_WHY_COUNT];
             rd__vis_why(why);
             printf("%s: stats: cull why:", dump);
             for (int k = 0; k < RD_VIS_WHY_COUNT; k++) {
                 printf("%s %s %u", k ? ";" : "", rd__vis_why_name(k), why[k]);
+            }
+            printf("\n");
+            /* the occlusion test (full): the occluder candidates of list 0
+             * by the rule that refused them, the occludee candidates by
+             * why they were kept */
+            uint32_t hz[RD_VIS_HZ_COUNT];
+            rd__vis_hiz_why(hz);
+            printf("%s: stats: cull occlusion:", dump);
+            for (int k = 0; k < RD_VIS_HZ_COUNT; k++) {
+                printf("%s %s %u", k ? ";" : "", rd__vis_hiz_why_name(k), hz[k]);
             }
             printf("\n");
         }

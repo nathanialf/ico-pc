@@ -570,7 +570,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   is on, from `config.toml` and then from `ico_host_set_second_card`, an explicit `saves2`
   winning, no folder made), portable mode, the `[dev]`
   keys exported as environment switches (`ico_dev_env_value`, `test_dev_env`; `present_fallback`
-  auto, off or fifo), a restart's
+  auto, off or fifo; `glow_fold` as `ICO_RD_GLOW_FOLD`), a restart's
   `ICO_RD_BLEND` and `ICO_RD_VU_PREPASS` over the ini's (`test_retry_blend`,
   `test_retry_prepass`), the disc choice's rules in order (`ico_host_choose_disc`,
   `test_choose_disc`), the logs folder set by `ico_host_set_logs_dir` (`test_logs_override`), and
@@ -594,7 +594,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   cleanly: the Asian disc's `STGST13C.DF` (stage 4) and `STGST02A.DF`, the Korean disc's
   `STGSTAFF1.DF`, the August 2001 preview's `STGST13C.DF` (`inflate_disc_cn`,
   `inflate_disc_cn_st02a`, `inflate_disc_kor`, `inflate_disc_aug6`; skipped without the image).
-- `memory_floor_test.c`: the start-up set's free-memory floor (`memory_floor.h`) by driver class: on Qualcomm's own driver and a driver not known 17 % of the device's memory, at most 2048 MB on a device of more than 8 GB (696 MB on a 4 GB phone, 522 MB on a 3 GB one, 1392 MB on 8 GB, 1445 MB on 8500 MB, 1915 MB on the Retroid Pocket 6's 11265 MB, 2048 MB on 12288, 15552 and 16384 MB); on any other driver the same up to 8 GB and at most 512 MB above (8500 to 16384 MB); a setting gives the floor for every class, `0` none; the class from the vendor id and the driver text (0x5143 with Qualcomm's own text, with "turnip Mesa driver", "Turnip Mesa 26.3.0", "Mesa 25.1.0"; PowerVR, Mali, vendor 0) and its words; the PowerVR DXT-48 phone's figures (15552 MB, another driver: 1823 MB, where the 2048 MB cap stopped its set, and 2554 MB continue, 512 MB continues, 511 MB stops, a setting of 2048 stops at 1823); the issue 161 start on the Retroid Pocket 6 on Qualcomm's own driver (11265 MB: 3340 MB continues and 1693 MB, where it stalled, stops under 1915 MB; 1915 MB continues, 1914 MB stops; a driver not known stops at 1693 too; a setting of 1900 stops at 1693, 1600 does not; on Turnip 1693 continues); a 4 GB phone at 1200 MB available continues, at 600 MB stops, on every class; an unknown figure never stops; the log lines' words for each class, a setting and off (`ico_memory_floor_rule`); the `[dev] pipeline_memory_floor_mb` text ("" and "auto" unset, "0" off, "2048" a floor, "-1" and "x" not read) (`memory_floor`).
+- `memory_floor_test.c`: the start-up set's free-memory floor (`memory_floor.h`) by driver class: on Qualcomm's own driver and a driver not known 17 % of the device's memory, at most 2048 MB on a device of more than 8 GB (696 MB on a 4 GB phone, 522 MB on a 3 GB one, 1392 MB on 8 GB, 1445 MB on 8500 MB, 1915 MB on the Retroid Pocket 6's 11265 MB, 2048 MB on 12288, 15552 and 16384 MB); on any other driver the same up to 8 GB and at most 512 MB above (8500 to 16384 MB); a setting gives the floor for every class, `0` none; the class from the vendor id and the driver text (0x5143 with Qualcomm's own text, with "turnip Mesa driver", "Turnip Mesa 26.3.0", "Mesa 25.1.0"; PowerVR, Mali, vendor 0) and its words; the PowerVR DXT-48 phone's figures (15552 MB, another driver: 1823 MB, where the 2048 MB cap stopped its set, and 2554 MB continue, 512 MB continues, 511 MB stops, a setting of 2048 stops at 1823); the issue 161 start on the Retroid Pocket 6 on Qualcomm's own driver (11265 MB: 3340 MB continues and 1693 MB, where it stalled, stops under 1915 MB; 1915 MB continues, 1914 MB stops; a driver not known stops at 1693 too; a setting of 1900 stops at 1693, 1600 does not; on Turnip 1693 continues); a 4 GB phone at 1200 MB available continues, at 600 MB stops, on every class; an unknown figure never stops; the log lines' words for each class, a setting and off (`ico_memory_floor_rule`); the `[dev] pipeline_memory_floor_mb` text ("" and "auto" unset, "0" off, "2048" a floor, "-1" and "x" not read); issue 123's retry (`ico_memory_floor_retry`): the next start's set again only after a stop at the floor (the activity line's figures tell it from the system's signal), on Qualcomm's own driver, with a cache file that is not empty (a missing or empty one, the system's signal, another driver and a driver not known make no set), the reporter's 1940 MB of 11453 MB and 1.4 MB file (`memory_floor`).
 - `lifecycle_test.c`: the mobile lifecycle's step tables on fake operations: the render thread
   parked before the GPU idles and the surface goes, going on only after the surface is made again,
   and the tables as before without that operation (`lifecycle`).
@@ -809,6 +809,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   nothing; Turnip's driver text is not eligible while the count still rises; `[dev]
   present_fallback=off` keeps mailbox with its line once; a count reached with vsync on switches at
   the next block once eligible; the driver texts and the `[dev]` values (`present_fallback`).
+- `display_rate_test.c`: the refresh rate's log lines and the Android frame rate pin's decisions
+  (`display_rate.h`, issue 123): the watch (first rate noted, 59.94 against 59.95 not a change, an
+  unknown rate not one, 144 -> 60 -> 120 two changes), the block's line and the change's line word
+  for word, `[dev] frame_rate_pin` (auto, off, false, 0, no, any case), the rate asked for each
+  Frame rate row (60, 120, 144; Original, Uncapped, off and above 1000 none), the sequence set,
+  nothing, set, release, nothing, a device without the call never asked, a refused ask tried
+  again, the pin's lines (`display_rate`).
+- `present_hist_test.c`: the 10 s histogram of the driver's present call (`present_hist.h`): a
+  limit is not over itself, a call is counted in every row it is over, issue 123's block
+  (750 presents of 9 to 15 ms and five of 344 to 365 ms: 5 in every row), the line word for
+  word, an empty block's empty text, a small buffer cut, negative and NaN times not counted
+  (`present_hist`).
 - `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
   (`sched`).
@@ -836,7 +848,33 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `gltf_test.c`: the glTF reader and writer, bit-exact round trips, GLB, a Blender-style file,
   refusals (`gltf`).
 - `gsb_cull_test.c`: the game's cull against the blended pictures' cameras and the windows that
-  scale with the width; with the disc, a stage (`gsb_cull`, `gsb_cull_stage`).
+  scale with the width; with the disc, a stage (`gsb_cull`, `gsb_cull_stage`), and the disc-wide
+  sweep (`gsb_cull_sweep.1of8` .. `8of8`, 77 without the disc image). `--stage DISC` is st18a at
+  the camera of the reporter's dump i76 and the 768 camera steps about it (every part a picture
+  between the ticks shows is registered by this tick; the one-camera control leaves some out).
+  `--sweep DISC` generalises it to every stage folder of the disc (`object/sdf/stNN?/model/`, the
+  member index as the `rd_mesh` disc walk builds it, numbered in index order, shard q of 8 takes
+  the stages numbered q mod 8) at the camera of every line of `tools/sweep_cameras.txt` (stage,
+  dump path; a .rddump or an F12 zip; the dump's view and zoom; a line whose dump is absent is
+  skipped; `builtin:i76` is the i76 camera of st18a) and the 768 steps about each, every 4th pair
+  by default (`--sweep-step N`, 1 is the whole sweep), at 16:9 (688 GS pixels wide) and 48:9
+  (2048). Per stage and aspect it counts the mechanisms that leave an in-view part or triangle
+  undrawn: the box cull (parts a picture between the ticks shows that this tick did not
+  register: `box_gap` not drawn, `box_hidden` drawn as the tick before's), the blend span (parts
+  registered by three cameras against one, and the one-camera control's losses), and the region
+  rule's drops through the CPU oracle (`vu1ref_region_draw` with the corners' real region bits,
+  `extended` on as at every aspect wider than 4:3, the strip joins as `rd_mesh.c` joinStrips and
+  the card test): triangles dropped for a corner behind the eye (step 6) and cards (step 5), at
+  the ticks (`tick_behind`, `tick_card`) and at the pictures between (t = 1/16 .. 15/16 through the
+  blended camera, `between_behind` after the ticks' rescue, `between_card`); `--eye` adds the
+  rasteriser's hole pixels. The table prints at the end of each shard with its BASELINE LINES;
+  `tools/sweep_baseline.txt` holds them (`STAGE ASPECT MECH COUNT`, `sweep_step N`): a count above
+  its line fails, below prints "baseline can be lowered", a stage with no line is held to 0 once
+  the file has any. `--out DIR` (the folder exists) writes the report to `DIR/sweep-KofN.txt`,
+  `--only STAGE` runs one stage. The winding premise per stage is `rd_mesh`'s `winding_disc`
+  cases (`winding stage NAME` lines), not repeated here. The part's strip joins use the p2o's
+  strip records for the VU stream's strips and the models are placed at the identity; both are
+  approximations the table's reader should know.
 - `modelpack_test.c`: model packs end to end on synthetic models under the build tree
   (`modelpack`).
 - `rd_alpha_plan_test.c`: the alpha/blend planner on the CPU ([RENDER.md](PIPELINES.md),
@@ -897,7 +935,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   folded, every target against the CPU model (the strip in it), the same frame replayed with the
   fold off against the model again (the folded and unfolded chains the same bytes at every
   width), and with the strip off every target still the model's (`checkBlurFoldWide`;
-  [WORK_BUFFERS.md](WORK_BUFFERS.md#the-blur-fold-on-a-wide-frame)).
+  [WORK_BUFFERS.md](WORK_BUFFERS.md#the-blur-fold-on-a-wide-frame)). The `glow_fold` shard
+  (`rd_blur_glow_fold_test.inc`) runs the seven post modes without the shine into WORK2 at
+  Original, Enhanced 2x, the phone's 2364 x 1080 with the full height, and the phone's 848-pixel
+  frame (NTSC, aspect 2.189) at 2364 x 1080 with Full pixel (WORK2's crop printed), each frame
+  drawn with the glow's mask folded into its reduction (`rd__glow_fold_force(1)`) and the same
+  frame replayed with it off: every target but WORK2 the same bytes both ways, at Original and 2x
+  every target the CPU model's both ways (WORK2 too with the fold off), the fold counted in every
+  frame that draws the glow and none kept, (e)'s frame with the shine kept for the lamps' reason,
+  every pipeline created enumerated (`checkGlowFold`; [RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction));
+  the recording part plans the chain without a device (`rd__glow_fold_plan` on post mode 7: the
+  fill, the mask and the reduction in order, the fill's colour, the mask's test; the shine frame
+  kept, `checkGlowFoldPlan`). In every shard a replay that folded the mask leaves WORK2 out of
+  `compareAll` (the fold does not draw it; WORK0, its reduction, is compared).
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
   `gs_dst_channel` for every Cd and Ad, the premultiplied term through the fixed-function add and
@@ -957,7 +1007,27 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the lists without a skip shared, code 34, particles, no target and list 11 kept,
   `rd__vis_culled` and `rd__vis_source`, the counts in the performance record, a stream written
   again bounded again, and the frame itself returned with the mode off, a pass window, number 0 or
-  nothing skipped (`rd_vis`).
+  nothing skipped; the occlusion test (`rd_vis_hiz.c`): random cameras' vertices through the float
+  product in both rounding modes, every one `rd__vis_hiz_vertex` takes inside the region test (code
+  36: without a clip flag) with its ftoi4 position and its unsnapped one within `r` of the centre
+  and its GS Z above the bound; random boxes, every corner and 64 points inside within
+  `rd__vis_hiz_occludee`'s box and under its Z bound; 300 random triangles rasterised, the two ends
+  of each row's covered run (one run a row) inside every placement of the corners within `r` (the
+  64 extremes and 16 inside) by 0.25 GS pixel, the square grown by a pixel each way and half a
+  pixel more up and down; the inner rule at a cell's corner (a right angle on it: the cells on its
+  legs not covered, the next in covered; a leg 0.3 pixel out of a cell's grown edge covers it, 0.2
+  does not); through the
+  orthographic block a wall then a box behind it hidden, one GS Z unit in front, coplanar, inside
+  the margin, inside the later mark's room, reaching past the wall's edge (a part-covered tile) and
+  beside it kept, nothing hidden by an empty or reset record; near 2^31 the margin 20480 and a box
+  hidden exactly when its bound and the margin stay under the wall's; and on a recorded frame under
+  full: the box behind an opaque wall an RDC_NOP, one in front kept, kept behind a wall under an
+  alpha test its As may fail (GREATER 0, alpha 0), blending, Z write off or a chain plane, under
+  its own Z test ALWAYS, after a clear or a draw that may lower the depth (particles under ALWAYS
+  with Z write), a wall under ALWAYS hiding, a wall under ATE GREATER 0x40 with AFAIL FB_ONLY whose
+  As is 127 at every vertex hiding (the alpha plan's range), the walls themselves drawn, list 5's
+  box kept; the counts (3 occluded, 4 tested, 5 resets); frustum alone hiding nothing; `ICO_RD_CULL_HIZ_TRIS` 0 (none) and 1 (the first wall's
+  first triangle alone); `ICO_VK_DEPTH_ALWAYS` hiding nothing (`rd_vis`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
@@ -1226,12 +1296,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)). SKIP as `rd_vustage_ab`.
 - `rd_cull_ab.cmake`: the dumps of `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt`
   (the missing ones named and skipped) under `ICO_RD_BLEND=fixed` with `--pass-dump --stats`
-  twice, `ICO_RD_CULL=off` and `frustum`, at Original 4:3 presented at 640x480, Enhanced 4:3 2x,
-  Enhanced 2x at the dump's own aspect where `--no-device --list` says it is wider than 4:3, and on
-  the first dump once with `--aa msaa4`: every named target's PNG (and `PRESENT.png`) byte for
-  byte, the off run's `cull off: 0 of 0` and the frustum run's `cull frustum: N of M` with N at
-  most M, and draws skipped over the corpus; each run's counts printed; `-DMAX_DUMPS=n` takes the
-  first n dumps (`rd_cull_ab`; [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
+  three times, `ICO_RD_CULL=off`, `frustum` and `full`, at Original 4:3 presented at 640x480,
+  Enhanced 4:3 2x, Enhanced 2x at the dump's own aspect where `--no-device --list` says it is wider
+  than 4:3, and on the first dump once with `--aa msaa4`: every named target's PNG (and
+  `PRESENT.png`) of the frustum and the full runs byte for byte the off run's, the off run's `cull
+  off: 0 of 0`, the frustum run's `cull frustum: N of M` with N at most M, the full run's `cull
+  full: N of M (F frustum, O occluded)` with the frustum run's M, F its N and N = F + O, and draws
+  skipped over the corpus (the occluded total printed); each run's counts printed;
+  `-DMAX_DUMPS=n` takes the first n dumps (`rd_cull_ab`, TIMEOUT 5400;
+  [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
 - `rd_thread_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` through
   `rd_replay_tool --render-thread off`, `sync` and `on` (every replay, the interpolation and the
   renderer's calls on a thread of the renderer's own, `port/render/rd_thread.h`), with
@@ -1356,7 +1429,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   checked to have the no-fill replay's WORK2 and no target farther from the old baseline than
   that replay), the old baseline's log still giving the passes before. A setting without a
   baseline is skipped; nothing compared: SKIP (`rd_glow_cheap_ab`). A baseline refresh for a
-  later change to the glow's drawing replaces the folders.
+  later change to the glow's drawing replaces the folders. Those runs hold the glow's mask fold
+  off (`ICO_RD_GLOW_FOLD=0`), and each dump at each setting runs again with it on
+  (`ICO_RD_GLOW_FOLD=1`, into `<name>-<setting>-fold`): every PNG but `WORK2.png` (which the fold
+  leaves undrawn) the same bytes as the run without it, `PRESENT.png` too at the phone's setting;
+  a run whose stats say `glow: WORK2 fold on: 1 folded` has at least one glow pass fewer, a kept
+  one (the sun's fans or the lamps drawn into WORK2) as many; at each setting that ran, at least
+  one run folded ([RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction)).
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's
@@ -1465,7 +1544,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   at the second scene size run: every `shadow count: one draw (self-test: equal to the seven draws
   over WxH, 142 band centres ok)` line matched, at least one, and the line saying how the stencil
   is read, `four texels a gather, equal to the seven draws byte for byte` or `a texel a load, as
-  the gathers' count ...` (`rd_shadow_selftest`); with
+  the gathers' count ...` (`rd_shadow_selftest`; `rd_shadow_selftest_cropped` and
+  `rd_shadow_selftest_wide` the same lines at 624 wide with the display at 16:10, exact 614.40, and
+  at 2048 with 48:9, through `-DARGS` and the tool's aspect argument); with
   `ICO_RD_SHADOW_SABOTAGE=1`, `shadow count: seven draws (self-test: one draw differs ...)` and
   `profile: shadow count one draw off (self-test)` (`rd_shadow_selftest_sabotage`); both with
   `_gl` twins. The desktop's
@@ -2048,7 +2129,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rhi_driver_version_test.c`: the driver version text of the adapter line
   (`port/rhi/rhi_driver_version.c`) for each vendor's packing, the Qualcomm and MoltenVK rules and
   the colour bytes a pixel of each Apple GPU family (`rhi_metal_color_bytes`)
-  (`rhi_driver_version`).
+  (`rhi_driver_version`); `rhi_text_one_line`: Qualcomm's driver text with newlines on one line
+  (issue 123).
 - `rhi_adapter_match_test.c`: the `[video] adapter` rules (`port/rhi/rhi_adapter.c`): the exact
   name's index, the first of two equal names, no match for another case, a part of a name, a
   longer name, `""`, NULL or a NULL entry; the device-list text with and without scores, the

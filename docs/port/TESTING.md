@@ -21,6 +21,7 @@ tests a change needs. Every test program, by area, is
 | `port/render/test/*.cmake` | script tests over the replay tool and the fog self-test |
 | `tools/native_frame_check.py`, `tools/native_frame_dumps.txt`, `docs/native_frame_baseline.json` | the native-frame gates, their dump list and their baseline |
 | `tools/coverage_check.py`, `tools/coverage_corpus.txt` | the regression renders and their corpus |
+| `tools/sweep_cameras.txt`, `tools/sweep_baseline.txt` | the disc-wide cull sweep's cameras (machine-local dump paths) and its stored counts (`gsb_cull_sweep`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `port/render/tools/rd_replay_tool.c` | the replay tool |
 | `tools/vu_variant_diff.py`, `tools/vu_variant_equiv.py`, `tools/test/vu1/` | the June 2001 demo's VU1 programs against the retail ones: the diff, its per-hunk table, the symbolic comparison |
 | `port/platform/hotkeys.h`, `port/platform/dump_zip.h`, `port/render/rd_dump.c` | F12, the aspect sweep, the dump format |
@@ -122,11 +123,12 @@ and `rd_vuprepass_selftest.cmake`, which matches the `VU pre-pass: on|off (self-
 of the pre-passes', and `rd_crack.cmake`, which matches the crack filler's `crack fill:` lines,
 and `rd_vustage_ab.cmake` and `rd_vubatch_ab.cmake` over the dump corpus, and `rd_cull_ab.cmake`
 over the dumps of `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt`: the scene draws'
-visibility test (`ICO_RD_CULL=frustum`) against every draw replayed (`off`) under
-`ICO_RD_BLEND=fixed`, `--pass-dump --stats` at Original 4:3 presented at 640x480, Enhanced 4:3 2x,
-Enhanced 2x at a wide dump's own aspect and once with `--aa msaa4`: every target's PNG byte for
-byte, the stats line's `cull off: 0 of 0` and `cull frustum: N of M`, and draws skipped over the
-corpus ([RENDER.md](RENDER.md#culling)) (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
+visibility test (`ICO_RD_CULL=frustum`, and `full` with list 0's occlusion test) against every draw
+replayed (`off`) under `ICO_RD_BLEND=fixed`, `--pass-dump --stats` at Original 4:3 presented at
+640x480, Enhanced 4:3 2x, Enhanced 2x at a wide dump's own aspect and once with `--aa msaa4`: every
+target's PNG of both runs byte for byte the off run's, the stats line's `cull off: 0 of 0`, `cull
+frustum: N of M` and `cull full: N of M (F frustum, O occluded)` with F the frustum run's N, and
+draws skipped over the corpus ([RENDER.md](RENDER.md#culling)) (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
 `--present 640x480`; it requires `rd_pixel` to have run first (`FIXTURES_REQUIRED rd_dump`), as
 does `rd_replay_tool_downsample`, which adds `--enhanced --resolution 2x --downsample --stats` and
 passes on `present: downsample 1024x512 -> 512x256, window reduce off`.
@@ -312,7 +314,7 @@ These cache variables point the tests at the player's files ([../BUILDING.md](..
 has their defaults; the registrations are in `port/*/CMakeLists.txt`):
 
 - `ICO_DISC_IMAGE`, the PAL image. Without it `vfs_disc`, `archive_disc`, `appearance_disc`,
-  `fmv_fields`, `gsb_cull_stage`, `texpack_disc`, `texpack_export_disc`, `df_index_disc`,
+  `fmv_fields`, `gsb_cull_stage`, `gsb_cull_sweep.*`, `texpack_disc`, `texpack_export_disc`, `df_index_disc`,
   `menu_look`, `menu_text`, `gallery`,
   `content_table_chains` and the headless game runs below skip; `sndn2`, `fmv`, `shadow_spawn` and
   `rd_mesh` run only their synthetic part, and `tables_loader` reads the base ELF instead.
@@ -441,7 +443,8 @@ switches the tests and their registrations use:
 | `ICO_RD_STORE_POISON` | `rd_store_plan.c` | 1: a depth or stencil load the store plan leaves undefined clears to 0.5 and 0x5A instead, and the shadow count's colour load it drops clears the colour to 0x5A, the garbage a tile-based GPU may leave (`rd_store_plan_ab`, `rd_shadow_test` case p) |
 | `ICO_RD_FAKE_MERGE_FAIL` | `rd_pipeline.c` | 1: the first pipeline made with a draw merge build is destroyed and kept as failed, as a build the driver refused; the merge goes off from the next replay (`rd_vumerge_fallback`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)) |
 | `ICO_RD_VU_FUSE` | `rd_replay_vu.c` | 0: code 36's kick draws under their own pipelines instead of the fused scissor pair (`[dev] vu_fuse = false`; `rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)) |
-| `ICO_RD_CULL` | `rd_vis.c` | `off` (or 0): every scene draw replayed; `frustum` (or 1; the default): a mesh, skinned or grid command of lists 0 to 10 wholly off its target or behind the eye replayed as an `RDC_NOP`; `full`: the occlusion test too, which is not built (frustum) (`[dev] cull`; `rd_cull_ab`; the replay tool's `--cull`, and its `--occlusion` sets 0; [RENDER.md](RENDER.md#culling)) |
+| `ICO_RD_CULL` | `rd_vis.c` | `off` (or 0): every scene draw replayed; `frustum` (or 1; the default): a mesh, skinned or grid command of lists 0 to 10 wholly off its target or behind the eye replayed as an `RDC_NOP`; `full`: list 0's occlusion test too, a mesh or grid draw of list 0 wholly behind the depth the opaque draws before it wrote replayed as an `RDC_NOP` (`rd_vis_hiz.c`) (`[dev] cull`; `rd_cull_ab`; the replay tool's `--cull`, and its `--occlusion` sets 0; [RENDER.md](RENDER.md#culling)) |
+| `ICO_RD_CULL_HIZ_TRIS` | `rd_vis.c` | under `ICO_RD_CULL=full`: the occluder triangles a picture rasterises into the occlusion test's record, the largest screen boxes first (a count up to 1000000, 0 none; default 12000; the stats line's `past the budget`; [RENDER.md](RENDER.md#culling)) |
 | `ICO_RD_CULL_RANGE` | `rd_vis.c` | `0` (or `off`): a draw of part of a mesh is tested with the whole stream's box alone, not its batches' box (a comparison; read at `rd_init`; [RENDER.md](RENDER.md#culling)) |
 | `ICO_RD_CONSTANT_READS` | `rd_const_read.c` | 0: a post sprite whose source target holds only its last clear reads the target as before instead of being drawn in the clear's colour (`[dev] constant_reads = false`; `rd_constant_reads_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)) |
 | `ICO_RD_NO_SPRITE_PLANES` | `rd_screen_planes.c` | 1: the sprite planes builds off for the run, the screen-prim triangles through the plain sprite builds, as `[dev] pipeline_skip` makes it on a device whose driver stopped creating them (issue 161; `rd_noplanes_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)) |

@@ -39,7 +39,27 @@
  *             rd__vis_source give the frame as recorded; the frame itself
  *             returned with the mode off, a pass window, a frame never
  *             recorded (number 0) or nothing skipped; a stream written
- *             again (a new serial) bounded again. */
+ *             again (a new serial) bounded again
+ *   occlusion the Hi-Z (rd_vis_hiz.c): random cameras' vertices through
+ *             the float product in both rounding modes, every one the test
+ *             takes inside the region test (or without a clip flag) with
+ *             its ftoi4 position within r of the centre and its GS Z above
+ *             the bound; random boxes, every corner and 64 points inside
+ *             within the occludee's box and under its Z bound; random
+ *             triangles rasterised, every covered cell's square (grown by
+ *             a pixel each way and the half line) inside every placement
+ *             of the corners by 0.25 GS pixel; the inner rule at a cell's
+ *             corner (0.3 pixel in counts, 0.2 not); a wall then a box
+ *             behind it hidden, one GS Z unit in front, coplanar, inside
+ *             the margin, the later mark's room and a half-covered tile
+ *             kept; the margin near 2^31 (hidden exactly when the bound
+ *             clears it); on a recorded frame under full: the draws behind
+ *             an opaque wall NOPs, kept behind a wall under an alpha test
+ *             its As may fail, ABE, Z write off or a chain plane, kept
+ *             under their own Z test ALWAYS, after a clear or a draw that
+ *             may lower the depth; an ALWAYS wall hides, and so does a
+ *             wall under ATE GREATER 0x40 whose As is 127 throughout (the
+ *             alpha plan's range); the budget (none, one triangle). */
 #include <fenv.h>
 #include <math.h>
 #include <stdio.h>
@@ -466,7 +486,9 @@ static void checkPlanes(void)
     setRound(0);
     CHECK(bad == 0, "planes: %u of %u points of skipped boxes not beyond their planes", bad,
           points);
-    for (int v = 0; v < RD_VIS_VERDICTS; v++) {
+    /* the plane test's verdicts (RD_VIS_OCCLUDED is the occlusion test's,
+     * never rd__vis_test's) */
+    for (int v = 0; v <= RD_VIS_NEAR; v++) {
         CHECK(seen[0][v] > 0, "planes: verdict %d never seen (code 32)", v);
         CHECK(v == RD_VIS_NEAR || seen[1][v] > 0, "planes: verdict %d never seen (code 36)", v);
     }
@@ -746,6 +768,359 @@ static void checkOracle(void)
            seen[0], seen[1], verts, fans);
 }
 
+/* --------------------------------------------------------------- occlusion */
+
+/* vu_ftoi4 on the CPU: truncation, saturating (a NaN to INT32_MIN) */
+static int32_t ftoi4f(float x)
+{
+    const float y = x * 16.0f;
+    if (!(y >= -2147483648.0f)) {
+        return INT32_MIN;
+    }
+    if (y >= 2147483648.0f) {
+        return INT32_MAX;
+    }
+    return (int32_t)y;
+}
+
+/* code 36's clip space for a camera matrix: x and y about the GS centre
+ * over 1024 GS units of w, z 0, w the same */
+static void clipOf(const float m[4][4], float c[4][4])
+{
+    for (int j = 0; j < 4; j++) {
+        c[j][0] = (m[j][0] - 2048.0f * m[j][3]) / 1024.0f;
+        c[j][1] = (m[j][1] - 2048.0f * m[j][3]) / 1024.0f;
+        c[j][2] = 0.0f;
+        c[j][3] = m[j][3];
+    }
+}
+
+static void checkHizVertex(void)
+{
+    uint32_t seen = 0, sc36 = 0, bad = 0;
+    for (int round = 0; round < 2; round++) {
+        setRound(round);
+        for (int n = 0; n < 4000; n++) {
+            Cam c;
+            randomCam(&c, uni(1500.0, 2600.0), uni(1600.0, 2500.0), uni(40.0, 4000.0));
+            float m[4][4], cl[4][4];
+            camMatrix(&c, m);
+            clipOf(m, cl);
+            const bool scissor = (n & 3) == 3;
+            const float pos[4] = {(float)uni(-200.0, 200.0), (float)uni(-200.0, 200.0),
+                                  (float)uni(-200.0, 200.0), scissor ? (float)uni(0.5, 2.0) : 1.0f};
+            RdVisHizVtx v;
+            if (!rd__vis_hiz_vertex((const float (*)[4])m, scissor ? (const float (*)[4])cl : NULL,
+                                    pos, &v)) {
+                continue;
+            }
+            seen++;
+            sc36 += scissor;
+            const float w = scissor ? pos[3] : 1.0f;
+            float h[4];
+            vuMat((const float (*)[4])m, pos, w, h);
+            const float q = 1.0f / h[3];
+            const float px = h[0] * q, py = h[1] * q, pz = h[2] * q;
+            const int32_t gx = ftoi4f(px), gy = ftoi4f(py), gz = ftoi4f(pz);
+            bool ok = h[3] > 0.0f && h[3] < 16777214.0f && px > 0.0f && px < 4094.0f && py > 0.0f &&
+                      py < 4094.0f && gz >= 0 && gz != INT32_MAX;
+            /* the GS position and ICO_RD_VU_OFFGRID's p within r */
+            ok = ok && fabs((double)gx / 16.0 - v.x) <= v.r &&
+                 fabs((double)gy / 16.0 - v.y) <= v.r && fabs((double)px - v.x) <= v.r &&
+                 fabs((double)py - v.y) <= v.r && (double)gz >= v.zlo;
+            if (scissor) {
+                float cc[4];
+                vuMat((const float (*)[4])cl, pos, pos[3], cc);
+                const float aw = fabsf(cc[3]);
+                ok = ok && !(cc[0] > aw || cc[0] < -aw || cc[1] > aw || cc[1] < -aw || cc[2] > aw ||
+                             cc[2] < -aw);
+            }
+            if (!ok && bad++ < 5) {
+                printf("    vertex %d: GS (%d, %d, %d) against (%g, %g) r %g, Z >= %g\n", n, gx, gy,
+                       gz, v.x, v.y, v.r, v.zlo);
+            }
+        }
+    }
+    setRound(0);
+    CHECK(bad == 0 && seen > 1000u && sc36 > 100u,
+          "occlusion: %u of %u vertices taken (%u code 36) not where the bound says", bad, seen,
+          sc36);
+    printf("  occlusion: %u vertices taken (%u under code 36), each at its bound\n", seen, sc36);
+}
+
+static void checkHizOccludee(void)
+{
+    uint32_t seen = 0, pts = 0, bad = 0;
+    for (int round = 0; round < 2; round++) {
+        setRound(round);
+        for (int n = 0; n < 3000; n++) {
+            Cam c;
+            randomCam(&c, uni(1700.0, 2400.0), uni(1800.0, 2300.0), uni(100.0, 4000.0));
+            float m[4][4];
+            camMatrix(&c, m);
+            const bool scissor = (n & 3) == 3;
+            const float lo[4] = {(float)-uni(1.0, 80.0), (float)-uni(1.0, 80.0),
+                                 (float)-uni(1.0, 80.0), scissor ? (float)uni(0.5, 1.0) : 1.0f};
+            const float hi[4] = {(float)uni(1.0, 80.0), (float)uni(1.0, 80.0),
+                                 (float)uni(1.0, 80.0), scissor ? (float)uni(1.0, 2.0) : 1.0f};
+            RdVisBox b;
+            boxOf(&b, lo, hi);
+            RdVisHizBox o;
+            if (!rd__vis_hiz_occludee((const float (*)[4])m, &b, scissor, &o)) {
+                continue;
+            }
+            seen++;
+            for (int k = 0; k < 16 + 64; k++) {
+                float p[4];
+                boxPoint(&b, k, p);
+                float h[4];
+                vuMat((const float (*)[4])m, p, scissor ? p[3] : 1.0f, h);
+                const float q = 1.0f / h[3];
+                const float px = h[0] * q, py = h[1] * q, pz = h[2] * q;
+                const int32_t gx = ftoi4f(px), gy = ftoi4f(py), gz = ftoi4f(pz);
+                pts++;
+                const bool ok = (double)gx / 16.0 >= o.x0 && (double)px <= o.x1 &&
+                                (double)gy / 16.0 >= o.y0 && (double)py <= o.y1 &&
+                                16.0 * (double)pz <= o.zmax && (double)gz <= o.zmax;
+                if (!ok && bad++ < 5) {
+                    printf("    box %d point %d: (%g, %g) Z %g outside (%g..%g, %g..%g) Z %g\n", n,
+                           k, (double)px, (double)py, 16.0 * (double)pz, o.x0, o.x1, o.y0, o.y1,
+                           o.zmax);
+                }
+            }
+        }
+    }
+    setRound(0);
+    CHECK(bad == 0 && seen > 500u, "occlusion: %u of %u points outside their occludee's box", bad,
+          pts);
+    printf("  occlusion: %u occludee boxes, %u points inside them\n", seen, pts);
+}
+
+/* cell (i, j) of the record (tile by tile) */
+static uint32_t hizCell(const RdVisHiz *z, uint32_t i, uint32_t j)
+{
+    const uint32_t t = (j >> 3) * z->ntx + (i >> 3);
+    return z->cell[((size_t)t << 6) | ((j & 7u) << 3) | (i & 7u)];
+}
+
+/* the least distance of point (x, y) inside the triangle (positive) to its
+ * edges; negative outside */
+static double triDist(const double tx[3], const double ty[3], double x, double y)
+{
+    const double a2 = (tx[1] - tx[0]) * (ty[2] - ty[0]) - (ty[1] - ty[0]) * (tx[2] - tx[0]);
+    const double s = a2 > 0.0 ? 1.0 : -1.0;
+    double d = 1e300;
+    for (int e = 0; e < 3; e++) {
+        const int n = (e + 1) % 3;
+        const double ux = tx[n] - tx[e], uy = ty[n] - ty[e];
+        const double f = s * (ux * (y - ty[e]) - uy * (x - tx[e])) / hypot(ux, uy);
+        d = f < d ? f : d;
+    }
+    return d;
+}
+
+static void checkHizRaster(void)
+{
+    static RdVisHiz z;
+    const RdVisRect r = rd__vis_rect(512, 448, 512, 448);
+    CHECK(rd__vis_hiz_setup(&z, &r), "occlusion: the record set up");
+    const double all[4] = {0.0, 0.0, 8192.0, 8192.0};
+    uint64_t cells = 0, checked = 0;
+    uint32_t bad = 0;
+    for (int n = 0; n < 300; n++) {
+        rd__vis_hiz_reset(&z);
+        RdVisHizTri t;
+        memset(&t, 0, sizeof(t));
+        for (int k = 0; k < 3; k++) {
+            t.x[k] = uni(r.x0 - 20.0, r.x1 + 20.0);
+            t.y[k] = uni(r.y0 - 20.0, r.y1 + 20.0);
+        }
+        t.r = uni(0.0, 0.25);
+        t.lb = 1000;
+        t.sel = 1;
+        const uint32_t got = rd__vis_hiz_raster(&z, &t, all);
+        cells += got;
+        uint32_t marked = 0;
+        /* a row's cells covered: one run (the triangle is convex), its two
+         * ends the nearest to the edges (the distance to a line is linear
+         * along the row), so they are the ones checked */
+        for (uint32_t j = 0; j < z.ncy; j++) {
+            int64_t first = -1, last = -1;
+            for (uint32_t i = 0; i < z.ncx; i++) {
+                if (hizCell(&z, i, j) == 1000u) {
+                    marked++;
+                    first = first < 0 ? (int64_t)i : first;
+                    if (last >= 0 && last != (int64_t)i - 1) {
+                        CHECK(false, "occlusion: triangle %d row %u covered in two runs", n, j);
+                    }
+                    last = (int64_t)i;
+                }
+            }
+            for (int end = 0; end < 2 && first >= 0; end++) {
+                const uint32_t i = (uint32_t)(end ? last : first);
+                const double X = z.gx0 + 2.0 * i, Y = z.gy0 + 2.0 * j;
+                /* the square grown by a pixel each way, half more up and down */
+                const double qx[4] = {X - 1.0, X + 3.0, X - 1.0, X + 3.0};
+                const double qy[4] = {Y - 1.5, Y - 1.5, Y + 3.5, Y + 3.5};
+                /* every corner placement at the extremes, and 16 inside */
+                for (int p = 0; p < 64 + 16; p++) {
+                    double mx[3], my[3];
+                    for (int k = 0; k < 3; k++) {
+                        if (p < 64) {
+                            mx[k] = t.x[k] + ((p >> (2 * k)) & 1 ? t.r : -t.r);
+                            my[k] = t.y[k] + ((p >> (2 * k + 1)) & 1 ? t.r : -t.r);
+                        } else {
+                            mx[k] = t.x[k] + uni(-t.r, t.r);
+                            my[k] = t.y[k] + uni(-t.r, t.r);
+                        }
+                    }
+                    for (int q = 0; q < 4; q++) {
+                        checked++;
+                        if (!(triDist(mx, my, qx[q], qy[q]) >= 0.25 - 1e-9) && bad++ < 5) {
+                            printf("    triangle %d cell (%u, %u): corner %d %g from an edge\n", n,
+                                   i, j, q, triDist(mx, my, qx[q], qy[q]));
+                        }
+                    }
+                }
+            }
+        }
+        CHECK(marked == got, "occlusion: triangle %d covered %u cells, %u counted", n, marked, got);
+    }
+    CHECK(bad == 0 && cells > 1000u, "occlusion: %u of %llu corner tests within 0.25 pixel", bad,
+          (unsigned long long)checked);
+
+    /* the inner rule at a cell's corner: a right angle on a cell's corner
+     * (r 0): the cells on its two legs not covered (the grown square
+     * reaches past them), the next ones in covered; a leg 0.3 pixel left of
+     * a cell's grown left edge (a pixel left of the cell) covers it, 0.2
+     * does not */
+    const uint32_t a = 40, b = 40;
+    const double X = z.gx0 + 2.0 * a, Y = z.gy0 + 2.0 * b;
+    RdVisHizTri t;
+    memset(&t, 0, sizeof(t));
+    t.lb = 7;
+    t.sel = 1;
+    const double xs[3] = {X, X + 300.0, X}, ys[3] = {Y, Y, Y + 300.0};
+    memcpy(t.x, xs, sizeof(xs));
+    memcpy(t.y, ys, sizeof(ys));
+    rd__vis_hiz_reset(&z);
+    rd__vis_hiz_raster(&z, &t, all);
+    CHECK(hizCell(&z, a + 1, b + 1) == 7u && hizCell(&z, a, b + 1) == 0u &&
+              hizCell(&z, a + 1, b) == 0u && hizCell(&z, a, b) == 0u,
+          "occlusion: the right angle's cells %u %u %u %u", hizCell(&z, a, b),
+          hizCell(&z, a + 1, b), hizCell(&z, a, b + 1), hizCell(&z, a + 1, b + 1));
+    for (int k = 0; k < 2; k++) {
+        const double in = k ? 0.2 : 0.3;
+        const double x0 = X + 2.0 - 1.0 - in;
+        const double xx[3] = {x0, x0 + 300.0, x0}, yy[3] = {Y, Y, Y + 300.0};
+        memcpy(t.x, xx, sizeof(xx));
+        memcpy(t.y, yy, sizeof(yy));
+        rd__vis_hiz_reset(&z);
+        rd__vis_hiz_raster(&z, &t, all);
+        CHECK((hizCell(&z, a + 1, b + 2) == 7u) == (k == 0) && hizCell(&z, a, b + 2) == 0u,
+              "occlusion: a leg %g pixel out of the cell's grown edge: %s", in,
+              k ? "covered" : "not covered");
+    }
+    rd__vis_hiz_free(&z);
+    printf("  occlusion: %llu cells covered, %llu corner placements inside by 0.25 pixel\n",
+           (unsigned long long)cells, (unsigned long long)checked);
+}
+
+/* the box lo..hi (w 1) through the orthographic block against the record:
+ * hidden (later: with the later mark's room) */
+static bool hizHides(RdVisHiz *z, double x0, double y0, double x1, double y1, float zlo, float zhi,
+                     bool later, RdVisHizBox *out)
+{
+    const float lo[4] = {(float)x0, (float)y0, zlo, 1.0f},
+                hi[4] = {(float)x1, (float)y1, zhi, 1.0f};
+    RdVisBox b;
+    boxOf(&b, lo, hi);
+    RdVisHizBox o;
+    if (!rd__vis_hiz_occludee(kOrtho, &b, false, &o)) {
+        return false;
+    }
+    if (out) {
+        *out = o;
+    }
+    return rd__vis_hiz_hidden(z, &o, o.zmax + rd__vis_hiz_margin(o.zmax, later));
+}
+
+/* a wall triangle at depth z (GS Z 16 z) through the orthographic block */
+static bool hizWall(RdVisHiz *z, float depth, RdVisHizTri *t)
+{
+    const float p[3][4] = {{1900, 1900, depth, 1}, {2300, 1900, depth, 1}, {1900, 2200, depth, 1}};
+    RdVisHizVtx v[3];
+    for (int k = 0; k < 3; k++) {
+        if (!rd__vis_hiz_vertex(kOrtho, NULL, p[k], &v[k])) {
+            return false;
+        }
+    }
+    if (!rd__vis_hiz_tri(&v[0], &v[1], &v[2], t)) {
+        return false;
+    }
+    const double all[4] = {0.0, 0.0, 8192.0, 8192.0};
+    return rd__vis_hiz_raster(z, t, all) > 0u;
+}
+
+static void checkHizHidden(void)
+{
+    static RdVisHiz z;
+    const RdVisRect r = rd__vis_rect(512, 448, 512, 448);
+    CHECK(rd__vis_hiz_setup(&z, &r), "occlusion: the record set up");
+    CHECK(!hizHides(&z, 1950, 1950, 2000, 2000, 400, 500, false, NULL),
+          "occlusion: nothing hidden by an empty record");
+    RdVisHizTri t;
+    CHECK(hizWall(&z, 1000.0f, &t), "occlusion: the wall covers cells");
+    CHECK(hizHides(&z, 1950, 1950, 2000, 2000, 400, 500, false, NULL),
+          "occlusion: a box behind the wall hidden");
+    CHECK(!hizHides(&z, 1950, 1950, 2000, 2000, 1000.0625f, 1000.0625f, false, NULL),
+          "occlusion: a box one GS Z unit in front kept");
+    CHECK(!hizHides(&z, 1950, 1950, 2000, 2000, 1000.0f, 1000.0f, false, NULL),
+          "occlusion: a coplanar box kept");
+    CHECK(!hizHides(&z, 1950, 1950, 2000, 2000, 800.0f, 800.0f, false, NULL),
+          "occlusion: a box behind by less than the margin kept");
+    CHECK(hizHides(&z, 1950, 1950, 2000, 2000, 690.0f, 690.0f, false, NULL) &&
+              !hizHides(&z, 1950, 1950, 2000, 2000, 690.0f, 690.0f, true, NULL),
+          "occlusion: the later mark's room");
+    CHECK(!hizHides(&z, 2140, 2000, 2180, 2040, 400, 500, false, NULL),
+          "occlusion: a box reaching past the wall's edge (a part-covered tile) kept");
+    CHECK(!hizHides(&z, 1800, 1950, 1850, 2000, 400, 500, false, NULL),
+          "occlusion: a box beside the wall kept");
+    rd__vis_hiz_reset(&z);
+    CHECK(!hizHides(&z, 1950, 1950, 2000, 2000, 400, 500, false, NULL),
+          "occlusion: nothing hidden after a reset");
+
+    /* near 2^31: the margin 4096 + 2^31 / 2^17; a box hidden exactly when
+     * its bound and the margin stay under the wall's */
+    CHECK(rd__vis_hiz_margin(2147483648.0, false) == 20480.0, "occlusion: the margin at 2^31 %g",
+          rd__vis_hiz_margin(2147483648.0, false));
+    const float zw = 134205728.0f; /* GS Z 2^31 - 200000 - 8192 */
+    CHECK(hizWall(&z, zw, &t), "occlusion: a wall near 2^31 covers cells (lb %u)", t.lb);
+    uint32_t hid = 0, kept = 0, wrong = 0;
+    double gapMin = 1e300;
+    for (int k = 0; k < 400; k++) {
+        const float zd = zw - 128.0f * (float)k;
+        RdVisHizBox o;
+        memset(&o, 0, sizeof(o)); /* a box the test refuses: counted wrong below */
+        const bool h = hizHides(&z, 1950, 1950, 2000, 2000, zd, zd, false, &o);
+        const bool want = o.zmax + rd__vis_hiz_margin(o.zmax, false) < (double)t.lb;
+        wrong += h != want;
+        hid += h;
+        kept += !h;
+        if (h) {
+            const double gap = (double)t.lb - 16.0 * (double)zd;
+            gapMin = gap < gapMin ? gap : gapMin;
+        }
+    }
+    CHECK(wrong == 0 && hid > 0 && kept > 0 && gapMin > 20480.0,
+          "occlusion near 2^31: %u hidden, %u kept, %u against the bound, least gap %g", hid, kept,
+          wrong, gapMin);
+    rd__vis_hiz_free(&z);
+    printf("  occlusion: behind hidden; in front, coplanar, inside the margin, the later room, a "
+           "part-covered tile kept; near 2^31 the least gap hidden %g\n",
+           gapMin);
+}
+
 /* ------------------------------------------------------------------- frame */
 
 static uint32_t makeMesh(uint32_t qpv, const float lo[3], const float hi[3], const char *name)
@@ -949,13 +1324,13 @@ static void checkFrame(void)
     }
     CHECK(whySum == vc.draws && why[RD_VIS_WHY_SKIP_WHOLE] == 5u &&
               why[RD_VIS_WHY_SKIP_RANGE] == 0u && why[RD_VIS_WHY_KEEP_MESH_1] == 1u &&
-              why[RD_VIS_WHY_CLIP_NONE] == 1u && why[RD_VIS_WHY_PARTICLES] == 1u &&
+              why[RD_VIS_WHY_KEEP_NONE] == 1u && why[RD_VIS_WHY_PARTICLES] == 1u &&
               why[RD_VIS_WHY_KEEP_SCISSOR] == 1u && why[RD_VIS_WHY_NO_TARGET] == 1u &&
               why[RD_VIS_WHY_LIST_2D] == 1u,
           "frame: the reasons (sum %u of %u): whole %u, one-batch %u, clip none %u, particles "
           "%u, scissor %u, no target %u, 2D %u",
           whySum, vc.draws, why[RD_VIS_WHY_SKIP_WHOLE], why[RD_VIS_WHY_KEEP_MESH_1],
-          why[RD_VIS_WHY_CLIP_NONE], why[RD_VIS_WHY_PARTICLES], why[RD_VIS_WHY_KEEP_SCISSOR],
+          why[RD_VIS_WHY_KEEP_NONE], why[RD_VIS_WHY_PARTICLES], why[RD_VIS_WHY_KEEP_SCISSOR],
           why[RD_VIS_WHY_NO_TARGET], why[RD_VIS_WHY_LIST_2D]);
     CHECK(rd__vis_why_name(RD_VIS_WHY_SKIP_RANGE)[0] != '?' && rd__vis_why_name(-1)[0] == '?' &&
               rd__vis_why_name(RD_VIS_WHY_COUNT)[0] == '?',
@@ -997,6 +1372,236 @@ static void checkFrame(void)
     rd__vis_set_mode(-1);
     rd__frame_free(&f);
     printf("  frame: 5 of 11 VU commands skipped into the shadow, the frame kept\n");
+}
+
+/* an environment switch to v (NULL: unset) */
+static void setEnvVar(const char *name, const char *v)
+{
+#ifdef _WIN32
+    _putenv_s(name, v ? v : "");
+#else
+    if (v) {
+        setenv(name, v, 1);
+    } else {
+        unsetenv(name);
+    }
+#endif
+}
+
+/* a wall of two triangles (a strip of four prelit vertices) at depth z,
+ * its vertices' colour alpha a */
+static uint32_t makeWall(float x0, float y0, float x1, float y1, float z, float a, const char *name)
+{
+    float st[4 * 3][4];
+    memset(st, 0, sizeof(st));
+    const float xy[4][2] = {{x0, y0}, {x1, y0}, {x0, y1}, {x1, y1}};
+    for (int v = 0; v < 4; v++) {
+        float *p = st[v * 3];
+        p[0] = xy[v][0];
+        p[1] = xy[v][1];
+        p[2] = z;
+        p[3] = 1.0f;
+        st[v * 3 + 1][3] = v == 0 ? 0.0f : 1.0f; /* ST.w: the strip flag */
+        st[v * 3 + 2][3] = a;                    /* the colour's alpha */
+    }
+    const uint32_t index[6] = {ICO_VU_INDEX(2, 0), ICO_VU_INDEX(2, 1), ICO_VU_INDEX(2, 2),
+                               ICO_VU_INDEX(3, 0), ICO_VU_INDEX(3, 1), ICO_VU_INDEX(3, 2)};
+    RdVuBatchRec batch;
+    memset(&batch, 0, sizeof(batch));
+    batch.indexCount = 6;
+    batch.vertexCount = 4;
+    return rd__vu_mesh_create_raw((const float (*)[4])st, 4, 3, index, 6, &batch, 1, name);
+}
+
+static void pushBlend(RdFrame *f, uint8_t abe)
+{
+    RdCmd *c = rd__st_push(f, 0, RDC_BLEND);
+    c->b[0] = RD_BLEND_LERP_AS;
+    c->b[1] = 0x80;
+    c->b[2] = abe;
+}
+
+static void pushClear(RdFrame *f, uint32_t id)
+{
+    RdCmd *c = rd__st_push(f, 0, RDC_CLEAR);
+    c->u[0] = id;
+    c->b[4] = 1;
+}
+
+/* the occlusion test on a recorded frame: list 0 a sequence of epochs,
+ * each a clear, a wall under some state and a box behind it */
+static void checkHizFrame(void)
+{
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
+    const uint32_t wall = makeWall(1800, 1830, 2300, 2260, 1000.0f, 0.0f, "hiz wall");
+    const uint32_t wallA = makeWall(1800, 1830, 2300, 2260, 1000.0f, 127.0f, "hiz wall alpha");
+    const float bLo[3] = {1850, 1870, 400}, bHi[3] = {1900, 1920, 500};
+    const float fLo[3] = {1850, 1870, 1100}, fHi[3] = {1900, 1920, 1200};
+    const uint32_t behind = makeMesh(3, bLo, bHi, "hiz behind");
+    const uint32_t front = makeMesh(3, fLo, fHi, "hiz front");
+    CHECK(wall && wallA && behind && front, "occlusion frame: meshes made");
+    /* the alpha plan's range of As (rd_alpha_plan.c), on as on every device
+     * class */
+    const bool alphaPlan = g_rd.profile.alphaPlan;
+    g_rd.profile.alphaPlan = true;
+    static RdFrame f;
+    memset(&f, 0, sizeof(f));
+    rd__reset_state_block(&f.startState);
+    f.number = 9;
+    pushTarget(&f, 0, scene);
+    rd__st_test(&f, 0, RD_TEST_Z_GEQUAL);
+
+    enum { NB = 12 };
+
+    uint32_t box[NB];
+    bool hidden[NB];
+    uint32_t walls[NB];
+    int nb = 0, nw = 0;
+#define WALL()                                                                                     \
+    do {                                                                                           \
+        pushVu(&f, 0, RDC_MESH, wall, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);      \
+        walls[nw++] = f.lists[0].count - 1;                                                        \
+    } while (0)
+#define BOX(mesh, hid)                                                                             \
+    do {                                                                                           \
+        pushVu(&f, 0, RDC_MESH, mesh, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);      \
+        box[nb] = f.lists[0].count - 1;                                                            \
+        hidden[nb++] = hid;                                                                        \
+    } while (0)
+    /* 0, 1: an opaque wall: behind hidden, in front kept */
+    WALL();
+    BOX(behind, true);
+    BOX(front, false);
+    /* 2: a wall under the alpha test (GREATER 0) whose As may be 0 */
+    pushClear(&f, scene);
+    rd__st_test(&f, 0, RD_TEST_AT_GT0_Z_GEQUAL);
+    WALL();
+    rd__st_test(&f, 0, RD_TEST_Z_GEQUAL);
+    BOX(behind, false);
+    /* 3: a blended wall */
+    pushClear(&f, scene);
+    pushBlend(&f, 1);
+    WALL();
+    pushBlend(&f, 0);
+    BOX(behind, false);
+    /* 4: a wall without Z write */
+    pushClear(&f, scene);
+    rd__st_push1(&f, 0, RDC_ZWRITE, RD_ZWRITE_OFF);
+    WALL();
+    rd__st_push1(&f, 0, RDC_ZWRITE, RD_ZWRITE_ON);
+    BOX(behind, false);
+    /* 5: the box under its own Z test ALWAYS */
+    pushClear(&f, scene);
+    WALL();
+    rd__st_test(&f, 0, RD_TEST_Z_ALWAYS);
+    BOX(behind, false);
+    /* 6: a wall under Z test ALWAYS (every triangle exact) hides */
+    pushClear(&f, scene);
+    WALL();
+    rd__st_test(&f, 0, RD_TEST_Z_GEQUAL);
+    BOX(behind, true);
+    /* 7: a draw that may lower the depth between them (particles under Z
+     * test ALWAYS with Z write) */
+    pushClear(&f, scene);
+    WALL();
+    rd__st_test(&f, 0, RD_TEST_Z_ALWAYS);
+    pushVu(&f, 0, RDC_PARTICLES, 0, RD_PROG_PARTICLE, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    rd__st_test(&f, 0, RD_TEST_Z_GEQUAL);
+    BOX(behind, false);
+    /* 8: a clear between them */
+    pushClear(&f, scene);
+    WALL();
+    pushClear(&f, scene);
+    BOX(behind, false);
+    /* 9: a wall with the chain's clip plane */
+    pushClear(&f, scene);
+    RdCmd *cp =
+        pushVu(&f, 0, RDC_MESH, wall, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    cp->b[5] = 1;
+    walls[nw++] = f.lists[0].count - 1;
+    BOX(behind, false);
+    /* 10: a wall under the alpha test (GREATER 0x40, AFAIL FB_ONLY, as the
+     * scene's meshes) whose As is 127 at every pixel: an occluder */
+    pushClear(&f, scene);
+    rd__st_test(&f, 0, RD_TEST_AT_GT64_FBONLY);
+    pushVu(&f, 0, RDC_MESH, wallA, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    walls[nw++] = f.lists[0].count - 1;
+    rd__st_test(&f, 0, RD_TEST_Z_GEQUAL);
+    BOX(behind, true);
+    /* 11: the same box in list 5 (list 0 alone is tested) */
+    pushTarget(&f, 5, scene);
+    rd__st_test(&f, 5, RD_TEST_Z_GEQUAL);
+    pushVu(&f, 5, RDC_MESH, behind, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    const uint32_t box5 = f.lists[5].count - 1;
+    f.closed = 1;
+#undef WALL
+#undef BOX
+    /* the walls' Z test: the state ahead of each, ALWAYS where case 6 set
+     * it (rd__st_test(GEQUAL) after the ALWAYS wall) */
+
+    rd__vis_set_mode(RD_VIS_FULL);
+    rd__vis_init();
+    const RdFrame *s = rd__vis_frame(&f, 0);
+    CHECK(s != &f, "occlusion frame: a shadow made");
+    RdVisCounts vc;
+    rd__vis_counts(&vc);
+    if (s != &f) {
+        for (int k = 0; k < nb; k++) {
+            CHECK((s->lists[0].cmds[box[k]].type == RDC_NOP) == hidden[k],
+                  "occlusion frame: box %d (command %u) %s", k, box[k],
+                  hidden[k] ? "not hidden" : "hidden");
+        }
+        for (int k = 0; k < nw; k++) {
+            CHECK(s->lists[0].cmds[walls[k]].type == RDC_MESH, "occlusion frame: wall %d drawn", k);
+        }
+        CHECK(s->lists[5].cmds == f.lists[5].cmds && f.lists[5].cmds[box5].type == RDC_MESH,
+              "occlusion frame: list 5's box kept");
+    }
+    CHECK(vc.occluded == 3u && vc.frustum == 0u && vc.byVerdict[RD_VIS_OCCLUDED] == 3u &&
+              g_rdPerf.cullOccluded == 3u,
+          "occlusion frame: %u occluded, %u frustum", vc.occluded, vc.frustum);
+    CHECK(vc.hizTris > 0u && vc.hizCells > 0u && vc.hizTested == 4u && vc.hizResets == 5u,
+          "occlusion frame: %u triangles, %llu cells, %u tested, %u resets", vc.hizTris,
+          (unsigned long long)vc.hizCells, vc.hizTested, vc.hizResets);
+    printf("  occlusion frame: %u of %d boxes hidden, %u occluder triangles, %llu cells, %u "
+           "tested, %u resets\n",
+           vc.occluded, nb, vc.hizTris, (unsigned long long)vc.hizCells, vc.hizTested,
+           vc.hizResets);
+
+    /* frustum alone: nothing occluded */
+    rd__vis_set_mode(RD_VIS_FRUSTUM);
+    s = rd__vis_frame(&f, 0);
+    rd__vis_counts(&vc);
+    CHECK(s == &f && vc.occluded == 0u, "occlusion frame: frustum hides nothing here");
+
+    /* the budget: none, then one triangle (the first wall's first, the
+     * largest box first and the earlier at a tie) */
+    rd__vis_set_mode(RD_VIS_FULL);
+    setEnvVar("ICO_RD_CULL_HIZ_TRIS", "0");
+    rd__vis_init();
+    s = rd__vis_frame(&f, 0);
+    rd__vis_counts(&vc);
+    CHECK(s == &f && vc.occluded == 0u && vc.hizTris == 0u, "occlusion frame: budget 0");
+    setEnvVar("ICO_RD_CULL_HIZ_TRIS", "1");
+    rd__vis_init();
+    s = rd__vis_frame(&f, 0);
+    rd__vis_counts(&vc);
+    CHECK(s != &f && vc.occluded == 1u && vc.hizTris == 1u && vc.hizOverBudget > 0u &&
+              s->lists[0].cmds[box[0]].type == RDC_NOP && s->lists[0].cmds[box[6]].type == RDC_MESH,
+          "occlusion frame: budget 1: %u occluded, %u rasterised, %u past it", vc.occluded,
+          vc.hizTris, vc.hizOverBudget);
+    setEnvVar("ICO_RD_CULL_HIZ_TRIS", NULL);
+    /* ICO_VK_DEPTH_ALWAYS: every depth test passes, nothing hidden */
+    setEnvVar("ICO_VK_DEPTH_ALWAYS", "1");
+    rd__vis_init();
+    s = rd__vis_frame(&f, 0);
+    rd__vis_counts(&vc);
+    CHECK(vc.occluded == 0u, "occlusion frame: ICO_VK_DEPTH_ALWAYS hides nothing");
+    setEnvVar("ICO_VK_DEPTH_ALWAYS", NULL);
+    rd__vis_set_mode(-1);
+    rd__vis_init();
+    g_rd.profile.alphaPlan = alphaPlan;
+    rd__frame_free(&f);
 }
 
 /* A mesh of two batches (the first in view, the second left of the frame)
@@ -1090,6 +1695,65 @@ static void checkRange(void)
     printf("  range: 2 of 4 draws of a two-batch mesh skipped by their batch's box\n");
 }
 
+/* Code 34 (clip none) draws are never skipped by the frustum test but take
+ * part in the occlusion test: a wall under code 34 hides a box behind it,
+ * a box under code 34 is hidden behind a wall, one in front is kept, and
+ * the breakdown names each outcome. */
+static void checkHizNone(void)
+{
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
+    const uint32_t wall = makeWall(1800, 1830, 2300, 2260, 1000.0f, 0.0f, "hiz wall34");
+    const float bLo[3] = {1850, 1870, 400}, bHi[3] = {1900, 1920, 500};
+    const float fLo[3] = {1850, 1870, 1100}, fHi[3] = {1900, 1920, 1200};
+    const uint32_t behind = makeMesh(3, bLo, bHi, "hiz behind34");
+    const uint32_t front = makeMesh(3, fLo, fHi, "hiz front34");
+    CHECK(wall && behind && front, "code 34: meshes made");
+    const bool alphaPlan = g_rd.profile.alphaPlan;
+    g_rd.profile.alphaPlan = true;
+    static RdFrame f;
+    memset(&f, 0, sizeof(f));
+    rd__reset_state_block(&f.startState);
+    f.number = 9;
+    pushTarget(&f, 0, scene);
+    rd__st_test(&f, 0, RD_TEST_Z_GEQUAL);
+    uint32_t at[3];
+    pushVu(&f, 0, RDC_MESH, wall, RD_PROG_PRELIT, RD_VU_CLIP_NONE, kOrtho, NULL, 0, 0);
+    pushVu(&f, 0, RDC_MESH, behind, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    at[0] = f.lists[0].count - 1; /* hidden behind the code-34 wall */
+    pushClear(&f, scene);
+    pushVu(&f, 0, RDC_MESH, wall, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    pushVu(&f, 0, RDC_MESH, behind, RD_PROG_PRELIT, RD_VU_CLIP_NONE, kOrtho, NULL, 0, 0);
+    at[1] = f.lists[0].count - 1; /* a code-34 box hidden behind the wall */
+    pushVu(&f, 0, RDC_MESH, front, RD_PROG_PRELIT, RD_VU_CLIP_NONE, kOrtho, NULL, 0, 0);
+    at[2] = f.lists[0].count - 1; /* in front: kept */
+    f.closed = 1;
+    rd__vis_set_mode(RD_VIS_FULL);
+    rd__vis_init();
+    const RdFrame *s = rd__vis_frame(&f, 0);
+    CHECK(s != &f, "code 34: a shadow made");
+    if (s != &f) {
+        CHECK(s->lists[0].cmds[at[0]].type == RDC_NOP, "code 34: the box behind a code-34 wall");
+        CHECK(s->lists[0].cmds[at[1]].type == RDC_NOP, "code 34: a code-34 box behind the wall");
+        CHECK(s->lists[0].cmds[at[2]].type == RDC_MESH, "code 34: the box in front kept");
+    }
+    uint32_t hz[RD_VIS_HZ_COUNT], why[RD_VIS_WHY_COUNT];
+    rd__vis_hiz_why(hz);
+    rd__vis_why(why);
+    CHECK(hz[RD_VIS_HZ_OCC_USED] == 2u && hz[RD_VIS_HZ_HIDDEN] == 2u && hz[RD_VIS_HZ_MARGIN] == 1u,
+          "code 34: occluders used %u, hidden %u, within the margin %u", hz[RD_VIS_HZ_OCC_USED],
+          hz[RD_VIS_HZ_HIDDEN], hz[RD_VIS_HZ_MARGIN]);
+    CHECK(why[RD_VIS_WHY_OCCLUDED] == 2u && why[RD_VIS_WHY_KEEP_NONE] >= 3u,
+          "code 34: reasons: occluded %u, code 34 reaches %u", why[RD_VIS_WHY_OCCLUDED],
+          why[RD_VIS_WHY_KEEP_NONE]);
+    /* the frustum alone never skips a code-34 draw */
+    rd__vis_set_mode(RD_VIS_FRUSTUM);
+    CHECK(rd__vis_frame(&f, 0) == &f, "code 34: the frustum test skips none");
+    rd__vis_set_mode(-1);
+    rd__vis_init();
+    g_rd.profile.alphaPlan = alphaPlan;
+    rd__frame_free(&f);
+}
+
 int main(void)
 {
     checkBounds();
@@ -1097,12 +1761,18 @@ int main(void)
     checkPlanes();
     checkSkinned();
     checkOracle();
+    checkHizVertex();
+    checkHizOccludee();
+    checkHizRaster();
+    checkHizHidden();
     if (!rd__init_record_only(512, 448)) {
         printf("rd_vis_test: no context\n");
         return 1;
     }
     checkFrame();
     checkRange();
+    checkHizFrame();
+    checkHizNone();
     rd_shutdown();
     return ico_check_summary("rd_vis_test");
 }
