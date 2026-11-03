@@ -40,6 +40,13 @@ void ui_touch_set_source(int (*fn)(struct IcoTouchOverlay *out))
     s_source = fn;
 }
 
+static int (*s_layoutSource)(struct IcoTouchLayout *out);
+
+void ui_touch_set_layout_source(int (*fn)(struct IcoTouchLayout *out))
+{
+    s_layoutSource = fn;
+}
+
 #ifdef ICO_RD
 
 #define SEGMENTS 32
@@ -1130,6 +1137,24 @@ int ui_touch_top_gap(const struct RdOverlayCtx *ctx, float margin, float bandH, 
     return 1;
 }
 
+int ui_touch_safe_corner(const struct RdOverlayCtx *ctx, float margin, float *x, float *y)
+{
+    IcoTouchLayout l;
+
+    if (!ctx || !s_layoutSource || !s_layoutSource(&l) || l.outW == 0 || l.outH == 0 ||
+        ctx->outW == 0 || ctx->outH == 0) {
+        return 0;
+    }
+    const float kx = (float)ctx->outW / (float)l.outW;
+    const float ky = (float)ctx->outH / (float)l.outH;
+    float lx, ly;
+
+    ico_touch_fps_corner(&l, margin / kx, margin / ky, &lx, &ly);
+    *x = lx * kx;
+    *y = ly * ky;
+    return 1;
+}
+
 #else
 
 void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx)
@@ -1148,6 +1173,15 @@ int ui_touch_top_gap(const struct RdOverlayCtx *ctx, float margin, float bandH, 
     (void)x0;
     (void)x1;
     (void)y0;
+    return 0;
+}
+
+int ui_touch_safe_corner(const struct RdOverlayCtx *ctx, float margin, float *x, float *y)
+{
+    (void)ctx;
+    (void)margin;
+    (void)x;
+    (void)y;
     return 0;
 }
 

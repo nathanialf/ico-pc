@@ -962,11 +962,17 @@ Up key hold the row up to 35 q (the old fixed place), Start moved to the top-lef
 Start's right edge plus 2 q. The text is shrunk by 8 % steps (to 12 pixels at least) until it fits
 before the next counted control's padded left edge (Select's less 2 q by default). When no gap holds
 the full width a gap that holds the shrunk floor is used, and with none the corner again, drawn
-over. With the overlay faded (`ico_input_sdl_touch_overlay` gives no snapshot) the counter is in the
-corner. `touch_gap_test` checks the default place, Start top-left drawn, Hidden and Off, every
-control Off, no room and the stick's ring. The log says "window: frame rate counter at the corner"
-or "at the touch controls' row, clear of the drawn controls" (x, y, the output's size) once per change
-of place, besides "window: frame rate counter on" or "off" when the option changes (and "on" at the start when it is
+over. The corner is the margin inside the screen's safe area (the output's edge plus SDL's insets: a
+rounded corner or a notch is outside it; `ico_touch_fps_corner`) in every touch mode: with the
+overlay faded (`ico_input_sdl_touch_overlay` gives no snapshot: a gamepad's fade to nothing, the
+Touch controls row Hidden or Off, opacity 0) `ui_fps.c` takes the corner from the layout alone
+(`ui_touch_safe_corner` over `ico_input_sdl_touch_safe_layout`, the same snapshot's layout whatever
+its opacity), and with no touch layout at all (a desktop without a touch screen) the margin from the
+output's edge. `touch_gap_test` checks the default place, Start top-left drawn, Hidden and Off, every
+control Off, no room, the stick's ring, and the safe corner with the controls drawn and not. The log
+says "window: frame rate counter at the corner", "at the corner inside the screen's safe area" or "at
+the touch controls' row, clear of the drawn controls" (x, y, the output's size) once per change of
+place, besides "window: frame rate counter on" or "off" when the option changes (and "on" at the start when it is
 on).
 
 ## The touch layout editor

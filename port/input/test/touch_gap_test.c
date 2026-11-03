@@ -13,7 +13,9 @@
  *   (c) that Start Hidden: the corner;
  *   (d) every control Off: the corner;
  *   (e) a text too wide for any gap on the row: the corner;
- *   (f) the left stick's resting ring counts while it is drawn.
+ *   (f) the left stick's resting ring counts while it is drawn;
+ *   (g) the controls not drawn at all (Hidden, Off, opacity 0): the corner
+ *       inside the safe area all the same (ico_touch_fps_corner).
  * Nothing here draws or links the renderer.
  */
 #include <stdio.h>
@@ -183,6 +185,22 @@ static void test_safe_corner(void)
 
     CHECK(pd.ret == 2);
     CHECK(pd.x0 >= 159.0f && pd.y0 >= 59.0f);
+    /* (g) the controls not drawn at all (Hidden, Off, a gamepad's fade to
+       nothing, opacity 0: ui_fps.c then never asks the layout's gaps):
+       the counter's corner is still the margin inside the safe area, the
+       same corner as the place's own; no layout, the output's edge */
+    float cx = -1.0f, cy = -1.0f;
+
+    ico_touch_fps_corner(&d, p.cx, p.cy, &cx, &cy);
+    CHECK(near_(cx, 159.0f + p.cx) && near_(cy, 59.0f + p.cy));
+    ico_touch_fps_corner(&l, p.cx, p.cy, &cx, &cy);
+    CHECK(near_(cx, p.x0) && near_(cy, p.y0));
+    ico_touch_fps_corner(NULL, 12.0f, 9.0f, &cx, &cy);
+    CHECK(cx == 12.0f && cy == 9.0f);
+    const IcoTouchLayout none = build(&e);
+
+    ico_touch_fps_corner(&none, 12.0f, 9.0f, &cx, &cy);
+    CHECK(cx == 12.0f && cy == 9.0f); /* no insets: the output's edge */
 }
 
 static void test_no_room_and_stick(void)

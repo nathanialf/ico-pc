@@ -2428,6 +2428,7 @@ open_window:
         ui_settings_set_touch_edit_host(&host);
     }
     ui_touch_set_source(ico_input_sdl_touch_overlay);
+    ui_touch_set_layout_source(ico_input_sdl_touch_safe_layout);
     return 0;
 }
 
@@ -5228,6 +5229,7 @@ void ico_window_close(void)
     ui_settings_set_quit_is_game(NULL);
 #endif
     ui_touch_set_source(NULL);
+    ui_touch_set_layout_source(NULL);
     ui_host_shutdown();
     window_disp_clock_stop();
     rd_set_host_call(NULL);

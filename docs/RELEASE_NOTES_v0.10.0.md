@@ -34,7 +34,7 @@
 
 ## Fixed
 - On Android, choosing the Enhanced preset no longer sets the Resolution to Auto, which lowered the picture's size on its own while the phone fell behind; the preset now uses the screen's size there as it does everywhere else, and Auto stays a choice you make in the Resolution row.
-- On phones, the Frame rate counter sits inside the screen's safe area, so a rounded corner or a notch no longer cuts it off.
+- On phones, the Frame rate counter sits inside the screen's safe area, so a rounded corner or a notch no longer cuts it off, whether the touch controls are showing, hidden, off or faded out for a gamepad.
 - The pictures shown between the game's own frames are no longer held back whenever they might brush the next game step; they are held only when the step could not finish on time, so phones and PCs show more of them.
 - With Vertical sync off and Frame rate at Uncapped, the pictures between the game's own frames are shown as fast as the graphics chip makes them, as Vertical sync off means on a PC, instead of being held to what the game expected the chip to manage. Only a picture that would make the game itself run late is left out.
 - After the game itself ran late once (loading, saving a bug report, a slow moment of its own), or the pictures between its frames made it a fraction of a millisecond late, those pictures were held back to the old, stricter rule for most of the session, so phones showed about 30 pictures a second where they could show about 40. Now a tiny delay changes nothing, a larger one the pictures caused makes them a little more careful for a moment, and only repeated ones bring back the stricter rule, for a few seconds.

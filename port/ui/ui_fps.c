@@ -81,24 +81,34 @@ void ui_fps_draw_overlay(const RdOverlayCtx *ctx)
     const float natW = ui_measure_text(size, text) * W / 640.0f;
     const float minW = ui_measure_text(floorSize < size ? floorSize : size, text) * W / 640.0f;
 
-    px = py = margin;
-    /* the player's actual touch layout decides: the corner when no drawn
-       control is in the way, else the first free place along the keys' row
-       (touch_gap.h) */
+    /* the corner: the margin inside the screen's safe area in every touch
+       mode (a rounded corner or a notch outside it), from the output's
+       edge with no touch layout */
+    float cx = margin, cy = margin;
+    const int safe = ui_touch_safe_corner(ctx, margin, &cx, &cy);
+
+    px = cx;
+    py = cy;
+    /* the player's actual touch layout decides while the controls show: the
+       corner when no drawn control is in the way, else the first free place
+       along the keys' row (touch_gap.h) */
     if (!ui_touch_top_gap(ctx, margin, emPx, natW, minW, &px, &x1, &py)) {
-        px = py = margin;
+        px = cx;
+        py = cy;
         x1 = 0.0f;
     }
     {
         /* once per change: where the counter sits (the log of a report that
-           says it covered a control) */
+           says it covered a control, or that a corner cut it off) */
         static int s_where = -1;
-        const int where = py > margin + 0.5f ? 1 : 0;
+        const int where = py > cy + 0.5f ? 2 : safe && (cx > margin + 0.5f || cy > margin + 0.5f);
 
         if (where != s_where) {
             s_where = where;
             fprintf(stderr, "window: frame rate counter at %s (x %d y %d of %ux%u)\n",
-                    where ? "the touch controls' row, clear of the drawn controls" : "the corner",
+                    where == 2   ? "the touch controls' row, clear of the drawn controls"
+                    : where == 1 ? "the corner inside the screen's safe area"
+                                 : "the corner",
                     (int)px, (int)py, ctx->outW, ctx->outH);
         }
     }
