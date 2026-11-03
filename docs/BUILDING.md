@@ -282,7 +282,7 @@ $CMAKE/cmake --preset win-x64
 $CMAKE/cmake --build --preset win-x64 --target all tests   # the test programs are built, not run
 ```
 
-The test presets are `linux-x64`, `linux-arm64`, `asan`, `fptrap` and `linux-x64-clang`
+The test presets are `linux-x64`, `linux-arm64`, `asan`, `linux-x64-asan`, `fptrap` and `linux-x64-clang`
 (`CMakePresets.json`, `testPresets`); a build preset's targets are `all` unless it names others, so
 `--target all tests` is what builds the test programs.
 
@@ -296,6 +296,7 @@ how several configurations of one preset live side by side under
 | `linux-x64` | Linux x86-64, headless by default | host `gcc` |
 | `win-x64` | Windows x64, window build | `mingw-gcc` x86-64 |
 | `asan` | Linux x86-64, `-fsanitize=address,undefined`, `-O1` | host `gcc` |
+| `linux-x64-asan` | `asan` as CI's asan suite configures it: the program linked (`ICO_LINK_EXE`), `-fno-sanitize-recover=undefined` (from `ICO_SANITIZE`, as every sanitizer build); its build preset builds `all` and `tests` | `gcc-14` |
 | `fptrap` | `linux-x64` with float divide-by-zero and invalid unmasked in the simulation | host `gcc` |
 | `linux-x64-clang`, `win-x64-clang` | the same two targets, headless | llvm-mingw clang 23 (the host glibc for Linux) |
 | `linux-arm64` | Linux arm64 (aarch64), built on an arm64 host ([below](#linux-arm64)); window build, `ICO_LINK_EXE=ON`, no Direct3D 12, no Direct3D 11 and no DXIL shaders | host `gcc` |
