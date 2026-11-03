@@ -41,6 +41,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_screen_planes.c` | the attribute planes of screen-prim triangles |
 | `port/render/rd_camera_blend.h` | the blended camera, shared with the game's cull |
 | `port/render/rd_perf.c` | the per-replay performance records |
+| `port/render/rd_vis.c`, `rd_vis.h` | the scene draws' visibility test: a mesh, skinned or grid command wholly off its target or behind the eye replayed as an `RDC_NOP` of a shadow frame ([Culling](#culling)) |
 | `port/render/rd_occlusion.c` | every GPU draw of a replay (`rd__replay_draw`, `rd__replay_draw_indexed`: the pass window's take) and the hidden-draw measurement around them ([Culling](#culling)) |
 | `port/render/rd_passring.h`, `rd_passring.c` | the pass ring: the last passes recorded, for the device-loss report |
 | `port/render/rd_dump.c`, `rd_png.c` | frame dumps; a minimal PNG writer |
@@ -2015,7 +2016,7 @@ pass dump identical. The report, a row a dump and setting with the medians and t
 written beside the run's logs (`--out`, by default under
 `build-host/tmp/<release>/evidence/perf/occlusion.md` on the maintainer's machine).
 
-**What it found, and why there is no culler.** The corpus run (33 dumps of the list, each
+**What it found.** The corpus run (33 dumps of the list, each
 at both settings: 66 rows, every one timed and every compared pass dump identical) failed the gate
 by far. The median share of list 0's draw commands the depth hid was 1.6 % (1.9 % at Original, 1.5 %
 at Enhanced 2x) and of its triangles 0.7 %; leaving those commands out took a median 1.3 % off list
@@ -2027,11 +2028,90 @@ draw commands and 0 to 18.8 % of the triangles (the 18.8 % is five commands of o
 reason: a median 54.2 % of the commands and 41.9 % of the triangles draw nothing under every depth
 test too (outside the view, since the game drops only whole objects and parts and lets the GPU clip
 the rest, above; off the scissor; or every fragment discarded), which a test against the depth
-cannot save and which costs the GPU little. Judged on that share instead the gate would fail as
-well (no measured GPU gain). So occlusion culling is not built: the scene draws its far side little,
-the game's own frustum test already removes most of what lies outside the view, and an occlusion
-query or a depth pre-test per command would cost more than the 1-2 % it could take. The
-measurement (`--occlusion`, `tools/occlusion_corpus.py`) stays for a later corpus.
+cannot save. On lavapipe those draws cost little (judged on that share the gate fails as well: no
+measured GPU gain), but a tile-based GPU pays each draw's vertex and binning work whatever it
+covers: 60 to 150 us a draw of list 0 on a Mali-G52, about 12 on the PowerVR phone, and issue 179's
+frame (a Mali-G52 MC2) has 1068 of its 1381 list-0 draws (77 %) and 70 % of its triangles outside
+the view. That share is the visibility test's below, on the CPU. The scene draws its far side
+little, so an occlusion query or a depth pre-test per command would cost more than the 1-2 % the
+depth hides; the measurement (`--occlusion`, `tools/occlusion_corpus.py`) is the ceiling any
+occlusion test is judged against.
+
+**The port's visibility test.** `port/render/rd_vis.c` (`rd_vis.h`) tests every mesh, skinned and
+grid command of lists 0 to 10 on the CPU once a picture, before anything else reads the frame
+(`replayFrame`, after `rd__diag_frame`: `f = rd__vis_frame(f, keep)`), and leaves out of the replay
+those whose every vertex lies wholly beyond one side of the bound target or behind the eye, so they
+cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
+
+- *The bound.* A mesh's positions are qword 0 of each vertex of its stream (the `RD_VU_QW_*`
+  layouts). The box of every vertex of the stream (the draws' batches and a sheet's tiles all lie in
+  it) and the range of the w lane are kept per mesh by its id, its stream serial
+  (`RdMeshRec.streamSerial`, new at every write of the stream: creation, `rd_update_vu_mesh`'s
+  morphs, the interpolation's scratch copies and their blend), its vertex count and layout; a record
+  whose serial is 0 is bounded at every draw. A skinned stream keeps a box per bone slot (the qwords
+  `vu_skin.hlsl` reads for a weight's VU address, `min(a - 16, 236)`), only when every weight lies in
+  [0, 1], with the largest `|w0 + w1 - 1|`. A grid's vertices are in the command's payload (the
+  frame's copy of the Mesh3D buffer: per strip the VIF qword, the tag and the colour, the vertices,
+  MSCNT), bounded at every draw.
+- *The test.* Every program gives a vertex the homogeneous position `h = M (x, y, z, w)` in the VU's
+  order (`vu_mat`; `M` VU memory 16..19, `w` 1, or `pos.w` under code 36; cluster
+  `mem[4..7] (w0 B0 (p, 1) + w1 B1 (p, 1), 1)`), linear in the position, so every vertex's `h` is a
+  convex combination of the box's corners' (8, or 16 over code 36's w range and 1), computed in
+  double. The target's rectangle is its GS extent in the programs' coordinates: XYOFFSET
+  (`2048 - gsW / 2`, `2048 - gsH / 2`, `frameRefresh`) to XYOFFSET plus the larger of the state's
+  size and the target record's, a row more down for the frame head's half pixel. A side is passed
+  when two planes through the eye, at 2 and at 1 GS pixel beyond the edge (left:
+  `h.x - (x0 - 2) h.w` and `h.x - (x0 - 1) h.w`), are both negative at every corner by more than
+  2^-18 of the sum of the absolute products (the shader's float rounding of `h` and of the
+  clip-space mapping, with room for a GPU whose sums round to within an ulp); behind the eye when
+  `h.w` is. For a skinned draw a corner is a slot's box corner through its bone and then `mem[4..7]`,
+  and a vertex whose weights sum to `s` lies `1 - s` of the way to the blend's origin, so a plane's
+  bound is `(1 - e) m + e |c|` (`m` the corners' largest value, `c` the plane at `mem[7]`, `e` the
+  largest `|w0 + w1 - 1|`, kept below 0.5).
+- *Why nothing it skips draws a pixel.* A corner the GPU gets at its GS position (every corner of a
+  triangle drawn exactly, and a clipped triangle's corner in front of the eye with X and Y not
+  saturated, `vu_vtx_position`) has `w > 0`: the region test needs `0 < w` (cluster: `mem[0].w < w`,
+  and a draw whose `mem[0].w` is negative is not skipped), the GS position and the extended snap
+  need `w > 0`, and code 36 is skipped only with every corner in front of the eye. So its `x / w`
+  is left of `x0 - 2`, its ftoi4 X within 1/16 of that (a saturated X keeps its side), and it lies
+  beyond the second plane. A corner in the homogeneous form (behind the eye, saturated, or below GS
+  Z 0, `vu_homogeneous_position`) is `h` through a linear map: beyond the second plane at any `w`.
+  The GPU draws the points of the clip-space triangle with `w > 0`, convex combinations of its
+  corners, so left of `x0 - 1`, a pixel and more from the target's first sample (GS `x0` on the
+  pixel-centre convention, `x0 - 0.5 / scale` at worst under MSAA or without the half-pixel origin).
+  Behind the eye every vertex has `w < 0`: no GS position, and every homogeneous corner is clipped
+  away. The chain plane, the later mark's depth bias, the card test, the tick cameras' rule and the
+  content table only leave out or move depth, never a position. So the verdict depends only on the
+  target's GS size and the payload, the same at every preset, scale and aspect.
+- *Not tested.* Particles; code 34 (clip mode none: X and Y wrap to 16 bits); code 36 behind the eye
+  (its triangles without a clip flag are drawn at their GS positions whatever `w` is); a draw with
+  no target, a payload or a layout the test does not read, or a bound not finite; lists 11 and 12;
+  a pass window (the bisect's and the tool's `--passes`: the passes as recorded) and a frame never
+  recorded (number 0: the self-tests' frames).
+- *The shadow frame.* The skipped commands are left out as the replay tool's `--nop` leaves them:
+  the type becomes `RDC_NOP` and every other field, every index and so every ordinal
+  (`g_rdStoreOrd`, the pre-pass entries' commands) stays. `rd__vis_frame` returns a copy of the
+  frame whose lists with a skipped command are copies (the payload and the other lists shared), and
+  every scan of the lists after it (the store plan, the passes' areas and cuts, the crack fill's
+  place, the ring's estimate, the meshes' upload, the vertex pre-pass, the blur fold, the constant
+  reads, the list loop) treats an `RDC_NOP` as nothing. What decides across draws or across replays
+  reads the frame as recorded (`rd__vis_source`, `rd__vis_culled`): the strip joining over a part's
+  packets (`rd_join.c`: a skipped packet's strips still join the others', so the card verdicts are
+  those of every replay), the fades fold's plan (its reads of SCENE's depth before the clear) and
+  the store plan's carried read (a skipped draw's read of a depth before its clear keeps the stores
+  from then on, as it does when the draw is replayed).
+- *The gate.* `rd_cull_ab` ([TESTING.md](TESTING.md)) replays the dumps of
+  `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt` with the test off and on at
+  Original 4:3, Enhanced 4:3 2x, Enhanced 2x at a wide dump's own aspect and once with MSAA 4x:
+  every target's PNG byte for byte, and draws skipped over the corpus. `rd_vis` holds the bounds,
+  the planes under random cameras and the VU references (`vu1_ref`) as the oracle.
+- *The key and the lines.* `[dev] cull = off | frustum | full` (`ICO_RD_CULL`; frustum by default;
+  full asks for the occlusion test too, which is not built: it runs as frustum and the start line
+  says so). The start line `rd: cull: frustum ([dev] cull, ICO_RD_CULL): ...`, the summary's `cull
+  frustum`, the backend's 10 s line `; cull: N of M scene draws skipped a replay (F frustum, O
+  occluded), T ms ([dev] cull)` and `rd_replay_tool --stats`'s `stats: cull frustum: N of M scene
+  draws skipped (F frustum, O occluded), T ms; not tested: E exempt, U unbounded; skipped beyond
+  the left ...` (`--cull off|frustum|full` sets the variable; `--occlusion` replays with it off).
 
 ## Dumps and the replay tool
 

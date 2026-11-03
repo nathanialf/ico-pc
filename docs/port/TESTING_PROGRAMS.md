@@ -934,6 +934,27 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   quads leave it), a Z-testing sprite after the letterbox (one before it leaves the letterbox
   folding), the effects depth or a depth read by a later frame (the bars drawn, a fade after them
   folds), a draw into SCENE in list 12, MSAA, a factor above 0x80 (`rd_fades_fold`).
+- `rd_vis_test.c`: the scene draws' visibility test ([RENDER.md](RENDER.md#culling)) on the CPU,
+  without a device: `rd__vis_box` over synthetic prelit, lit (with a sheet's tiles past its own
+  count) and skinned streams (x, y, z and the pos.w range; a position not finite refused),
+  `rd__vis_grid_box` over a Mesh3D buffer (its header and MSCNT qwords left out, a buffer too short
+  refused), `rd__vis_skin`'s boxes by bone slot and largest `|w0 + w1 - 1|` (a weight outside
+  [0, 1] refused); an orthographic block: a box 2.5 GS pixels past each side of a 512 x 448 target
+  skipped beyond it, 1.5 kept, code 36's pos.w range, a box crossing w = 0 kept, one behind the
+  eye skipped under code 32 and kept under code 36; random perspective cameras and boxes at four
+  frame sizes in both rounding modes: every verdict seen, and every corner and 64 points inside a
+  skipped box through the program's float product beyond both planes of its side; two bones (the
+  blend inside the frame kept though one bone's box is outside it, outside skipped, weights summing
+  to 0.6 kept near the frame) and random bones and weights through `vu_skin.hlsl`'s product; the
+  VU references as the oracle: where the test skips a strip inside its box, `vu1ref_normal_c`
+  (code 32, and code 36 with `mem[16..19]` the viewport times `mem[20..23]`) puts every output
+  vertex in front of the eye, and every fan vertex, beyond the side (behind the eye for the near
+  verdict), in both rounding modes; and `rd__vis_frame` on a frame built with
+  `rd__init_record_only`: the skipped commands RDC_NOPs of a shadow copy with every other byte and
+  the lists without a skip shared, code 34, particles, no target and list 11 kept,
+  `rd__vis_culled` and `rd__vis_source`, the counts in the performance record, a stream written
+  again bounded again, and the frame itself returned with the mode off, a pass window, number 0 or
+  nothing skipped (`rd_vis`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
@@ -1190,6 +1211,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   whole list, and the wrong plan changing at least one target over the whole list (the poison shows
   a dropped store that a later pass reads); each run's counts printed (`rd_store_plan_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)). SKIP as `rd_vustage_ab`.
+- `rd_cull_ab.cmake`: the dumps of `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt`
+  (the missing ones named and skipped) under `ICO_RD_BLEND=fixed` with `--pass-dump --stats`
+  twice, `ICO_RD_CULL=off` and `frustum`, at Original 4:3 presented at 640x480, Enhanced 4:3 2x,
+  Enhanced 2x at the dump's own aspect where `--no-device --list` says it is wider than 4:3, and on
+  the first dump once with `--aa msaa4`: every named target's PNG (and `PRESENT.png`) byte for
+  byte, the off run's `cull off: 0 of 0` and the frustum run's `cull frustum: N of M` with N at
+  most M, and draws skipped over the corpus; each run's counts printed; `-DMAX_DUMPS=n` takes the
+  first n dumps (`rd_cull_ab`; [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
 - `rd_thread_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` through
   `rd_replay_tool --render-thread off`, `sync` and `on` (every replay, the interpolation and the
   renderer's calls on a thread of the renderer's own, `port/render/rd_thread.h`), with
