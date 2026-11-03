@@ -854,13 +854,21 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `extended` on as at every aspect wider than 4:3, the strip joins as `rd_mesh.c` joinStrips and
   the card test): triangles dropped for a corner behind the eye (step 6) and cards (step 5), at
   the ticks (`tick_behind`, `tick_card`) and at the pictures between (t = 1/16 .. 15/16 through the
-  blended camera, `between_behind` after the ticks' rescue, `between_card`); `--eye` adds the
-  rasteriser's hole pixels. The table prints at the end of each shard with its BASELINE LINES;
+  blended camera, `between_behind` after the ticks' rescue, `between_card`), these four counting
+  only the drops that stay dropped; and the drops the region rule's side bands draw beside the 4:3
+  picture (`tick_beside`, `between_beside`: the rule's last step,
+  `VU1REF_DRAW_BESIDE`, on both swept aspects): a drop faces the eye by `vu1ref_region_facing` of
+  the corners' h (float) with the camera matrix's sign (`vu1ref_region_mirror`; the parts sit at the
+  identity) and the triangle's winding against the p2o strip records' normals (index at +6, summed,
+  against cross(b - a, c - a) in strip order: the EE's table); a part without normals is never
+  beside; the ticks' rescue comes first and a tick's "shown" never counts a beside draw. The two
+  beside counts are printed in the table and the BASELINE LINES and never held (the baseline's
+  beside lines are read and ignored); `--eye` adds the rasteriser's hole pixels. The table prints at the end of each shard with its BASELINE LINES;
   `tools/sweep_baseline.txt` holds them (`STAGE ASPECT MECH COUNT`, `sweep_step N`): a count above
   its line fails, below prints "baseline can be lowered", a stage with no line is held to 0 once
   the file has any. `--out DIR` (the folder exists) writes the report to `DIR/sweep-KofN.txt`,
-  `--only STAGE` runs one stage. The winding premise per stage is `rd_mesh`'s `winding_disc`
-  cases (`winding stage NAME` lines), not repeated here. The part's strip joins use the p2o's
+  `--only STAGE` runs one stage. The winding per stage is `rd_mesh`'s `winding_disc` cases
+  (`winding stage NAME` lines), not repeated here. The part's strip joins use the p2o's
   strip records for the VU stream's strips and the models are placed at the identity; both are
   approximations the table's reader should know.
 - `modelpack_test.c`: model packs end to end on synthetic models under the build tree
@@ -1165,7 +1173,27 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `--nop` spec of lists 0-6 or `none`, as many items as it counts, `--region-out` holding it), a
   draw's line and a list's in their shapes; then `--pass-dump` plain and with `--nop @SPEC`, every
   PNG byte for byte (the draws the CPU oracle says draw nothing draw no pixel); at Original the same
-  spec with `--no-device` (`rd_region_stats`). SKIP without the list, a dump of it or a device.
+  spec with `--no-device` (`rd_region_stats`). The frame and draw lines' patterns include the side
+  bands' group (`, beside N (behind-eye b, out-of-box x, card k)` after the drop's parenthesis) and
+  the draw line's closing `; beside N, dropped back M`; at the test's 4:3 settings beside is always
+  0. SKIP without the list, a dump of it or a device.
+- `rd_sideband_ab.cmake` (issue 29; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule), step 7):
+  the region rule's side bands against the PS2's drop on the wide dumps of the machine-local list
+  `tools/sideband_dumps.txt` (a path and the dump's own aspect a line: the PowerVR phone's 2.189
+  frames, issue 179's 16:9 frame, issue 182's 16:10 frame, the phone's one 4:3 frame as the
+  control, and the issue-29 48:9 and 16:9 captures when they arrive under
+  `/primary/dev/ico-dumps/29/`). Every dump at its own aspect, Original 1x and Enhanced 2x:
+  `rd_replay_tool --pass-dump` with `ICO_RD_VU_BESIDE=0` (every VU draw keeps the PS2's drop) and
+  without, then `tools/cmp_dirs_band.py A B --gs-width W --band-files SCENE.png --fog-from-a`, W the
+  replay's `frame W GS wide`: SCENE's centre 512 GS pixels (512 x scale texels) identical byte for
+  byte, the side columns reported (changed pixels, largest channel difference, bounding box), and
+  every side pixel B changes one A left at its fog colour (A's most common side-column colour); the
+  other targets are reported, not held (the post effects read across the band's edge). At 4:3 the
+  band is the frame, so the whole SCENE must be identical. A missing list or dump is named and
+  skipped; none here, or no device: SKIP (77). TIMEOUT 3600; serial like `rd_region_stats`
+  (`rd_sideband_ab`). The dumps from before dump version 15 carry no EE facing table, so their
+  prelit meshes have no side bands: only their lit and skinned drops can change there; the fresh
+  captures carry the table.
 - `rd_vumerge_ab_pixel`, `rd_vufuse_ab_pixel` and `rd_vustage_ab_pixel`: the two scripts above and
   `rd_vustage_ab.cmake` on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):
@@ -1642,13 +1670,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   reel's four specks of the deja dump at their places on the 16:9 frame, none tiled, every pixel
   inside a speck's own place and in the 4:3 picture's columns (`photoReelPixels`); in the
   recording phase the winding marks (`windingMarkChecks`, `ICO_VU_MARK_FLIP`,
-  [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-winding-mark)): a prelit mesh of two strips marked at
-  `((k - s) & 1) ^ RD_VU_WINDING_PHASE` from each strip's start, a lit strip wound one way marked at
-  k - s = 2 and 4 from its normals, one of mixed normals triangle by triangle, a morph keeping the
-  creation's marks, no other mark made; and the `winding_disc_0` .. `winding_disc_3` shards (77
-  without the disc image): the disc's strips' winding, a quarter of the models each, one line
-  `winding: L lit triangles, A %, B %, C %; P prelit parts, E % edges consistent` and a line a
-  stage in counts (`windingDiscChecks`).
+  [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-winding-mark)): a prelit mesh without the EE's facing
+  table unmarked (`facingFrom` none), with one marked on its kicks as the table says (the bits back
+  through `rd__mesh_facing_bits`, a table of another vertex count refused, a copy taking the marks
+  and their source), a lit strip wound one way marked at k - s = 2 and 4 from its normals, one of
+  mixed normals triangle by triangle, a morph keeping the creation's marks, a table replacing a lit
+  stream's own marks, the EE's builder (`rd_vu_facing_begin`, `_vertex`, `_attach`: a strip's
+  bits, the table kept under the stream's hash and found again, a vertex without a normal voiding
+  it, two tables under one hash leaving none), no other mark made; and the `winding_disc_0` ..
+  `winding_disc_3` shards (77 without the disc image): the disc's strips' winding, a quarter of the
+  models each, one line `winding: L lit triangles, A %, B %, C %; P prelit parts, E % edges
+  consistent` and a line a stage in counts, each also feeding the parts' strips through the EE's
+  builder and counting `facing marks M of N agree with the normals`, every one of them the check
+  (`windingDiscChecks`).
 - `rd_mip_test.c`: the Enhanced mip chain's size and its builder staying inside it (`rd_mip`).
 - `rd_mirror_test.c`: mirror mode's flag and the flipped presenter output (`rd_mirror`).
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
@@ -1683,8 +1717,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   before naming nothing, the DATE self-test's flag cleared, no frame open until
   `rd_resume_frame` opens one (once), whose temporary target is freed and which closes without
   a picture.
-- `rd_native_test.c`: the native frame's centre rule on a synthetic frame at five widths
-  (`rd_native`).
+- `rd_native_test.c`: the native frame's centre rule on a synthetic frame at five widths, and in
+  case s the region rule's strip test with the side bands (a behind-the-eye strip with the EE's
+  facing table turned to the eye: pixels beside the 4:3 picture at W 688 and 2048, the picture's
+  columns the frame without it, nothing at 512; turned away: nothing) (`rd_native`).
 - `rd_perf_test.c`: the renderer's CPU cost per replay and its steady state, and the start-up set
   through `rhi_create_pipelines`: its progress calls (from 0, never back, the total once at the
   end), a stop after the first batch and the rest made by the next call; last, the background
@@ -2141,8 +2177,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   case's sprites through `vu_particle_pre_vs`, and its probe and pictures through `vu_main_vs` or
   `vu_particle_main_vs` and `vu_ps` byte for byte the program entry's (with the same `vu_ps`), the
   probe within the CPU reference's bounds, the mesh, particle and tick-camera cases counted (part
-  b (4)); the pictures use the plain mapping (no exact viewport), so the planes stay the GPU's
-  there (`vu1`, `vu1_mali`).
+  b (4)); the side bands (part a's rule, between-ticks and facing rows; part b's `DEPART_EYE_EDGE`
+  cases at the picture's right edge, turned to the eye and away; every other case drawn with
+  `ICO_VU_NO_BESIDE`); the pictures use the plain mapping (no exact viewport), so the planes stay
+  the GPU's there (`vu1`, `vu1_mali`).
 
 ## port/test
 

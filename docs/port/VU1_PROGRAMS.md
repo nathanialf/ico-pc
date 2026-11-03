@@ -246,6 +246,34 @@ since the projection does not change with the width. What the port then draws of
    test](#the-card-test), `vu_strip_card`). A wall whose strip passes or is joined is drawn; an
    artist's card parked at the picture's edge stays out.
 6. A vertex behind the eye and reaching into the picture: not drawn in any state.
+7. The side bands (issue 29), last, on every triangle steps 4 to 6 drop (after the card test and,
+   between two ticks, the ticks' rescue): on a frame wider than the camera's picture, a triangle
+   that faces the eye is drawn clipped as in step 3, but only beside the picture
+   (`VU_RULE_CLIP_BESIDE`, `vu_rule_beside`): `VuVSOut.plane.y` is 1 on it and `vu_pixel_tests`
+   discards its pixels in the picture's columns (`vu_pixel_in_picture`: the band's edges are texel
+   edges at a whole scale, so no pixel centre lies on one), every VU pixel shader alike (the
+   `_nodual` twins, the no-planes twins `vu_np_ps` and `vu_texa_np_ps`, the `_dstatt` builds). A
+   discarded pixel writes no colour, depth or stencil, so inside the picture the PS2's drop stands
+   pixel for pixel; beside it the triangle fills what was a hole (the sea at the far left of the old
+   bridge at 48:9, whose only triangles there have a vertex behind the eye; walls beside the camera).
+   A triangle that faces away keeps the drop everywhere: the opening's cliff `st26a_p1`, filmed from
+   inside the rock, shows the eye its back faces. Facing (`vu_front_facing`; CPU mirror
+   `vu1ref_region_facing`): the sign of the homogeneous determinant of the three corners' h centred
+   on GS 2048 (rows `x - 2048 w`, `y - 2048 w`, `w`), which is the eye's side of the triangle's plane
+   times the sign of the matrix h is made with and stays exact across `w = 0`; turned by
+   `VU_F_MIRROR` (that matrix's 3x3 determinant of its x, y and w rows below 0: a reflection camera,
+   a mirrored model; `vu1ref_region_mirror`) and by the kick's `VU_MARK_FLIP` ([The winding
+   mark](#the-winding-mark)); front when the result is negative, never for an edge-on triangle. The
+   frame wider than the picture: `vu_frame_wider` (the bound target's GS extent, a Full pixel
+   target's less its left-out texels, against GS 2048 -+ the picture's half-width). Off
+   (`VU_F_NO_BESIDE`, `rd_replay_vu.c` `vuBesideOn` and `vuDraw`) on a frame not wider than 4:3
+   (the picture is the frame: the 4:3 picture is the PS2's by construction), for a grid (no winding
+   marks: its strips wind both ways), for a mesh without winding marks (`RdMeshRec.facingFrom`
+   none), for a pass whose pixel shader is a `_dstrov` build (the exact blend's storage read writes
+   depth before the shader runs, so a discarded pixel would leave its depth: the PS2's drop there),
+   and under `ICO_RD_VU_BESIDE=0` (the before/after compare). CPU strips and particles are
+   unchanged (no w left to clip; drawn whole). The free camera (step 2) draws everything clipped
+   already.
 
 A `VU_MARK_HIDE` triangle never reaches the rule (`vu_content_hidden`). A drawn triangle with a
 vertex outside takes code 36's corner rule (`vu_corner_cut_position`; in a state other than out of
@@ -271,13 +299,17 @@ than 512, or a scene scale above 1) and `VU_F_BEHIND_EYE` from the frame camera'
 
 **Where it is computed.** A command the pre-passes record has the rule evaluated once a triangle,
 before the lists, by the record stages, with the FrameCB its draws bind: `vu_tri_rule_pre_vs`
-steps 1 to 6 up to the tick cameras (the cut only for a triangle not wholly inside) and the card
-test's condition, `vu_tri_tick_pre_vs` one tick's `vu_tick_shown` a draw where the blended
+steps 1 to 6 up to the tick cameras (the cut only for a triangle not wholly inside), the card
+test's condition and step 7's (`VU_TF_BESIDE`: the draw has side bands, the frame is wider than the
+picture and the triangle faces the eye, stored where the verdict up to the ticks is a drop or the
+card test), `vu_tri_tick_pre_vs` one tick's `vu_tick_shown` a draw where the blended
 verdict can be `VU_RULE_DROP` (not under the card test with every corner in front of the eye); the
 triangle's draws
 then resolve the stored verdicts as integers in each corner (`vu_main_vs`: a tick that showed it
 clips a triangle the blended camera drops, a tick that sent it to the card test sends it there, the
-card verdict decides `VU_RULE_STRIP`). A sprite's drop is evaluated once by `vu_particle_pre_vs`
+card verdict decides `VU_RULE_STRIP`, then a final drop with `VU_TF_BESIDE` under a draw without
+`VU_F_NO_BESIDE`, which a `_dstrov` pass sets after the pre-pass, is drawn beside the picture).
+A sprite's drop is evaluated once by `vu_particle_pre_vs`
 and read by `vu_particle_main_vs`. A command drawn the old way evaluates the rule in every corner's
 invocation of the program's entry (`vu_mesh_out`, `vu_particle_vs`). Both give the same verdict
 from the same functions on the same values ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes);
@@ -303,14 +335,16 @@ picture) are hidden by the content table ([RENDER.md](RENDER.md#content-tables))
 
 **The two variants** (issue 107). Each VU vertex shader is built with the whole rule (`vu_X_vs`,
 the extended variant) and without the two steps out of the box never takes, the card test and the
-tick cameras (`vu_X_plain_vs`, `ICO_VU_PLAIN`). A draw with neither `VU_F_EXTENDED` nor
-`VU_F_TICKS` takes the plain one and gets the same picture. A device the renderer keeps to the
-plain ones (the Adreno 740 on Qualcomm's driver, whose driver froze the whole device compiling the
-extended ones; Mesa's Turnip driver, where the extended ones drew a stray vertex as a sliver; or
-`[dev] vu_set = plain`) draws every state with the plain variant: there a triangle that reaches into
-the picture and fails the region test is not drawn in any state (no card test: the wide picture's
-edge at the old 4:3 border may open), and the pictures between two ticks take the blended camera's
-rule alone ([RENDER.md](PIPELINES.md#the-fallback-entries)).
+tick cameras (`vu_X_plain_vs`, `ICO_VU_PLAIN`). Both have step 7, the side bands (the largest plain
+module, `vu_lit_merge_plain_vs`, is 24,871 words with them, under `tools/check_spirv.py`'s 25,700).
+A draw with neither `VU_F_EXTENDED` nor `VU_F_TICKS` takes the plain one and gets the same picture.
+A device the renderer keeps to the plain ones (the Adreno 740 on Qualcomm's driver, whose driver
+froze the whole device compiling the extended ones; Mesa's Turnip driver, where the extended ones
+drew a stray vertex as a sliver; or `[dev] vu_set = plain`) draws every state with the plain
+variant: there a triangle that reaches into the picture and fails the region test is not drawn
+inside the picture in any state (no card test: the wide picture's edge at the old 4:3 border may
+open), but one facing the eye is drawn beside it as everywhere (step 7), and the pictures between
+two ticks take the blended camera's rule alone ([RENDER.md](PIPELINES.md#the-fallback-entries)).
 
 ## The card test
 
@@ -380,49 +414,62 @@ winding alternating from one to the next, so of two neighbours in a strip one ha
 clockwise on the screen and the other counter-clockwise, front-facing both (`ico2/seki/src/Packet.c`
 (`pac_makeNormalStrip`): `ST.w` 0 on a strip's first vertex). Nothing culls back faces anywhere
 (`port/rhi/rhi.h` `cullNone`), so nothing needed the facing until the region rule's side bands
-(issue 29: a dropped triangle drawn beside the 4:3 band when it faces the camera, the opening's
-cliff `st26a_p1`, filmed from inside, kept dropped).
+(step 7 of [The region rule](#the-region-rule): a dropped triangle drawn beside the 4:3 band when it
+faces the camera, the opening's cliff `st26a_p1`, filmed from inside, kept dropped).
 
 `ICO_VU_MARK_FLIP` (`port/shaders/shader_consts.h`, `VU_MARK_FLIP` in
 `port/shaders/vu_common.hlsli`) is the fourth bit of a kick's mark byte, beside `JOINED` (1),
 `HIDE` (2) and `LATER` (4): the byte a kick holds eight bits, and the marks are bytes after the
 stream since issue 95's fix, not index bits, so the index values are unchanged. It says the corners
-k-2, k-1, k wind against the triangle's front: the triangle faces the camera when the sign of their
-area on the screen, reversed where the mark is set, is the front's (`port/render/rd_mesh.c`
-(`markWinding`), run after `markJoinedStrips` when a mesh is made):
+k-2, k-1, k wind against the triangle's front, the side its normals point to: the triangle is
+marked when `cross(b - a, c - a)` of the model positions of k-2, k-1, k in that order points away
+from the sum of their three normals (the dot product below 0, in double). The marks come from the
+normals for every program:
 
-- **lit and skinned meshes** (a normal per vertex): triangle by triangle, the mark is set when
-  `cross(b - a, c - a)` of the model positions of k-2, k-1, k points away from the sum of their
-  three normals (the dot product below 0);
-- **prelit meshes** (no normals): by the triangle's place in its strip, `((k - s) & 1) ^
-  RD_VU_WINDING_PHASE`, s the strip's first vertex (a vertex whose `ST.w` is below 1 or the batch's
-  first, as `markJoinedStrips` and `cardStrips` find the strips), `RD_VU_WINDING_PHASE` the
-  convention the disc's lit strips follow (`port/render/rd_internal.h`);
+- **the EE's table** (`ico2/seki/src/Packet.c` (`pac_hostFacing`), `port/render/rd_mesh.h`
+  (`rd_vu_facing_begin`, `rd_vu_facing_vertex`, `rd_vu_facing_attach`)): while a packet's strips
+  are written, each strip record's position (+4) and normal (+6) index give the bit of every kick, in
+  the order the strip writes its vertices (the title logo's reordered strips included). A prelit
+  part's stream has no normals, but its records do: every part on the disc has normals (0 prelit
+  parts in the disc's winding cases below), so the table covers every program. The table is kept
+  under the stream's mesh hash (`rd_vu_mesh_desc_hash`), so a mesh built again from the same packet
+  (an eviction, a morph copy, a model pack refusal) finds it; it goes to the mesh in
+  `RdVuMeshDesc.facing` (`port/render/rd_mesh.c` (`rd__mesh_set_facing`), `RdMeshRec.facingFrom`
+  `RD_MESH_FACING_TABLE`). A record whose normal index is outside the part's normals voids the
+  packet's table (logged); a hash two different tables were kept under has none (logged). The store
+  lives in the port's memory, not the game's, so a save state does not carry it: a state loaded into
+  a fresh run builds its meshes from packets this run never made, whose prelit meshes have no table
+  (lit and skinned ones use their normals). Dumps carry the table from version 15
+  (`port/render/rd_dump.c`), so a prelit mesh replays with its facing.
+- **without a table**, a lit or skinned stream's own normals (the same numbers: the stream's normal
+  qword is the record's; `markWinding`, `RD_MESH_FACING_NORMALS`); a prelit stream has no marks and
+  no facing (`RD_MESH_FACING_NONE`): its draws carry `VU_F_NO_BESIDE`, the PS2's drop.
 - a morph (`rd_update_vu_mesh`) keeps the creation's marks, as `JOINED` does; the interpolation's
-  copies take their source's (`rd__vu_mesh_copy_marks`).
+  copies take their source's and its `facingFrom` (`rd__vu_mesh_copy_marks`).
 
-No shader reads the mark yet, so no picture changes. Every strip mesh of two triangles or more now
-binds mark bytes (a byte a vertex, rounded up to a qword) where only the marked meshes did; the
+Every strip mesh with a marked kick binds mark bytes (a byte a vertex, rounded up to a qword); the
 bytes ride in the mesh's own upload.
 
-**The premise.** The prelit rule holds only if the disc's models are wound one way: in a strip
-built so, every triangle of one parity faces one side of `cross(b - a, c - a)`. `rd_mesh`'s
-`winding_disc_0` .. `winding_disc_3` cases measure it on the disc (`port/render/test/rd_mesh_test.c`
-(`windingDiscChecks`), each a quarter of the `*.p2o` models, 77 without the image): for each part
-with normals the share of triangles of strips wound A (the even triangles, k - s = 2, 4, .., face
-the way `cross(b - a, c - a)` points, the odd ones away), B (the reverse), C (a strip with both) and
-D (degenerate); for every part the edges two of its strips share, consistent when the two
-triangles, each as the GS winds it, traverse the edge in opposite directions (the prelit parts
-apart). The rule for the side bands: A or B on at least about 98 % of the lit triangles and the
-prelit parts' shared edges at least about 98 % consistent make `RD_VU_WINDING_PHASE` 0 (A) or 1 (B)
-and the mark is trusted for prelit parts too; otherwise a part whose vertex box holds the eye keeps
-the PS2's drop instead.
+**No parity rule.** A strip built one way would have every triangle of one parity face one side of
+`cross(b - a, c - a)`, so a prelit strip's facing could come from its triangles' places. The disc
+says otherwise. `rd_mesh`'s `winding_disc_0` .. `winding_disc_3` cases (`port/render/test/rd_mesh_test.c`
+(`windingDiscChecks`), each a quarter of the `*.p2o` models, 77 without the image) measure, for each
+part with normals, the share of triangles of strips wound A (the even triangles, k - s = 2, 4, ..,
+face the way `cross(b - a, c - a)` points, the odd ones away), B (the reverse), C (a strip with
+both) and D (degenerate), and the edges two strips of a part share, consistent when the two
+triangles, each as the GS winds it, traverse the edge in opposite directions. On the PAL disc
+(2026-11-03, the four slices summed):
 
-| disc | lit triangles | A | B | C | D | prelit parts | shared edges consistent |
+| disc | lit triangles | A | B | C | D | prelit parts | lit parts' shared edges consistent |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| PAL | not yet measured: the cases run where the disc image is | | | | | | |
+| PAL | 3,076,540 | 74.06 % | 25.36 % | 0.57 % | 0.00 % | 0 | 2,237,860 of 2,626,011 (85.22 %) |
 
-`RD_VU_WINDING_PHASE` is 0 until the measurement is in.
+The phase is per strip (a strip is almost never mixed: C under 1 %), A about 3 to 1, so no global
+phase marks a strip; every part has normals, so the facing comes from them for every program. The
+same cases feed every part's strips through the EE's builder, as `Packet.c` does, and count per
+stage how many non-degenerate triangles' bits agree with the normals' verdict
+(`winding stage NAME: ..; facing marks M of N agree with the normals`): all of them, which each
+slice's check holds.
 
 ## Region statistics
 
@@ -434,13 +481,25 @@ each corner's region test (`vu1ref_region_position`, `vu1ref_region_inside_at`),
 `ICO_VU_MARK_JOINED`, the part joins `rd__join_parts` makes before the replay) and the ticks'
 cameras (`vu_tick_shown`). Per draw: the triangles drawn exactly, clipped (free camera or beside
 the picture), clipped by the card test, dropped with the step that dropped them (a vertex behind the
-eye, step 6; out of the box, step 4; a card, step 5), and rescued by a tick's camera, and the sign of
-the determinant of the x, y and w rows of the draw's model-to-GS matrix (VU memory 16..18, the
-cluster's 4..6: negative where the projection mirrors the model). Totals per list and for the
-frame, which also names the draws that draw nothing as a `--nop` spec (`--region-out FILE` writes
-it). `--region-png FILE` paints the dropped triangles of the frame camera's draws as the GPU would
-have drawn them (red behind the eye, yellow out of the box, cyan a card) on the native frame, the
-4:3 band outlined. A triangle on the picture's edge to a rounding can take the other verdict than
+eye, step 6; out of the box, step 4; a card, step 5), and rescued by a tick's camera, the drops
+drawn beside the picture by step 7 by the step that dropped them, and the sign of the determinant
+of the x, y and w rows of the draw's model-to-GS matrix (VU memory 16..18, the cluster's 4..6:
+negative where the projection mirrors the model). The draw line reads `L:I mesh|skinned|grid NAME
+tris T: exact E clip C strip S drop D (behind-eye B, out-of-box X, card K; rescued at a tick R),
+beside N (behind-eye b, out-of-box x, card k) det -|+[; hidden H]; beside N, dropped back D[ (no
+side bands)]`: drop counts the triangles that stay dropped (facing away or edge-on, or the draw has
+no side bands), beside the front-facing drops (`vu1ref_region_facing` with the draw's det sign as
+`ICO_VU_MIRROR` and the kick's `ICO_VU_MARK_FLIP`). A draw has side bands when the replay's frame is
+wider than 4:3, the bound target's frame is wider than the camera's picture, its mesh's winding
+marks came from normals (`RdMeshRec.facingFrom` not none; never a grid) and `ICO_RD_VU_BESIDE` is
+not 0; the `_dstrov` passes' drop is not modelled. Totals per list and for the frame (the same
+beside group), which also names the draws that draw nothing as a `--nop` spec (`--region-out FILE`
+writes it; a beside triangle draws). `--region-png FILE` paints the dropped triangles of the frame
+camera's draws as the GPU would have drawn them (red behind the eye, yellow out of the box, cyan a
+card, magenta the whole cut polygon of a drop drawn beside the picture, whose part in the band the
+GPU discards) on the native frame, the 4:3 band outlined. The cliff: `rd_replay_tool DUMP
+--region-stats --mesh st26a_p1` on an opening capture at a wide aspect prints `beside 0` on every
+`st26a_p1` draw when its faces turn away from the eye there. A triangle on the picture's edge to a rounding can take the other verdict than
 the shader's; the `rd_region_stats` test checks the draws the stats say draw nothing against the
 replay ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
@@ -620,7 +679,7 @@ the vertex shader twice, once a draw); what goes is the GPU draws.
 At a fractional scale (the phone's Resolution Auto, 2364x1080 with Full height and Full pixel:
 4.617x2.109) the VU draws go through the no-planes twins `vu_np_ps` and `vu_texa_np_ps`
 (`port/render/rd_pixel_plan.c`), which read locations 0 to 2 of `VuVSOut` alone and so not `r`.
-Their mark is the plane distance's sign: `VuVSOut.plane` is the chain's clip-plane distance only
+Their mark is the plane distance's sign: `VuVSOut.plane.x` is the chain's clip-plane distance only
 where the draw has a clip plane (`vu_batch.z`, `ICO_DF_PLANE`), and otherwise 1 and read by nothing,
 so `vu_fused_out` sets it to -1 on a fused kick's triangles where `vu_batch.z` is 0. A constant over
 the triangle, its interpolation is negative exactly on those triangles. A twin never draws a
@@ -726,7 +785,16 @@ through the shipped entry and `vu_ps` against the reference's triangles drawn th
 shaders, every pixel within 1 LSB; and the port's rule over the VU (`vu1ref_region_draw`,
 `vu1ref_region_between`, `vu1ref_particle_draw`), checked by coverage, with the card verdicts
 handed to the shader as `doVuDraw` hands them; the CPU's card test (`vu1ref_region_inside`,
-`vu1ref_strip_card`) must agree with the reference on every vertex and strip. Part c: `RdVuCommon` against
+`vu1ref_strip_card`) must agree with the reference on every vertex and strip. The side bands
+(step 7): part a's rule rows (a vertex behind the eye facing the eye and away, out of the box, a
+card, the same at 4:3), the rule between two ticks with a drop beside the picture, and the facing
+(`vu1ref_region_facing`: winding, a corner at another w, a corner behind the eye, `MIRROR`, `FLIP`,
+edge-on) and the matrix's sign (`vu1ref_region_mirror`); part b's `DEPART_EYE_EDGE` cases (the
+target across the picture's right edge, GS 2272..2336, a vertex behind the eye, normal_c and
+normal_l, both presets) with the kicks' `FLIP` marks of a surface turned to the eye (its drops drawn
+beside the picture: pixels right of the edge, none left of it, by coverage against the cut polygons
+outside the picture's columns) and away from it (none drawn); every other case draws with
+`VU_F_NO_BESIDE`. Part c: `RdVuCommon` against
 the VU parameter block and the `VuCB` mirror. Exit 77 when parts a and c pass and there is no Vulkan
 device (`port/shaders/test/vu1_test.c`, header comment).
 
@@ -736,13 +804,19 @@ checks that the 4:3 columns equal the 512-wide render byte for byte, that a narr
 centre of a wider one, that SCENE has no step across either edge of the 4:3 band, the strip test (a
 wall drawn as the PS2 out of the box and clipped in every other state; a card and a behind-the-eye
 strip adding nothing; a card joined to a passing strip or through another packet of its part drawn
-as the wall), and the attribute planes' anchor (`port/render/test/rd_native_test.c`, header
+as the wall; the side bands: a behind-the-eye strip across the picture's left edge with the EE's
+facing table turned to the eye adds pixels beside the picture at W 688 and 2048 and none inside it
+or at 512, turned away none), and the attribute planes' anchor (`port/render/test/rd_native_test.c`, header
 comment). Running the tests is [TESTING.md](TESTING.md).
 
 `rd_mesh` (`port/render/test/rd_mesh_test.c`) checks the winding marks on synthetic strips (a
-prelit mesh of two strips alternating from each strip's start, a lit strip wound one way, one of
-mixed normals, a morph keeping the creation's marks) and, with the disc image, measures the disc's
-winding ([The winding mark](#the-winding-mark)). `rd_region_stats`
+prelit mesh without a table: no marks, no facing; with the EE's table: its kicks' bits, the table
+back for the dump, a table of another vertex count refused, a copy taking the marks and their
+source; a lit strip wound one way, one of mixed normals, a morph keeping the creation's marks, a
+table replacing a lit stream's own marks; the EE's builder over a strip, the table kept under the
+stream's hash and found again, a vertex without a normal voiding it, two tables under one hash
+leaving none) and, with the disc image, measures the disc's winding and the EE's table's agreement
+with the normals ([The winding mark](#the-winding-mark)). `rd_region_stats`
 (`port/render/test/rd_region_stats.cmake`) runs `rd_replay_tool --region-stats` on the first two
 dumps of `tools/occlusion_corpus.txt` at Original 4:3 1x and Enhanced 4:3 2x: the lines' shapes,
 and every pass dump the same with the draws the stats say draw nothing left out
