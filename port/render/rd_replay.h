@@ -465,6 +465,38 @@ void rd__fades_fold_screen(const Replay *r, const RdDrawPass *dp, const DrawSetu
                            IcoDrawCB *cb);
 void rd__fades_fold_end(void);
 bool rd__fades_fold_exact(int mode, uint32_t usage, bool rgba8);
+/* The glow's mask folded into its reduction (rd_glow_fold.c; rd_internal.h
+ * has the switch and the plan).
+ * rd__glow_fold_scan_begin  rd_store_plan.c rd__store_plan_scan: true when
+ *                      this replay's walk is to be read for the fold (the
+ *                      switch on, no pass window); the counters zeroed
+ * rd__glow_fold_scan_reset, rd__glow_fold_scan_cmd, rd__glow_fold_scan_end
+ *                      the walk's every command (state: a state command),
+ *                      then the verdict (logged once per reason, counted)
+ * rd__glow_fold_skip   rd_blur_border.c blurPostSprite: the planned fill or
+ *                      mask, not drawn (its state kept); true: skip it
+ * rd__glow_fold_due    rd_fx_plan.c rd__fx_plan_draw: the planned reduction
+ *                      x takes the fold: fx_glow_mask's words and SCENE's
+ *                      record; false otherwise (where it was planned but
+ *                      cannot take it, the fill and the mask are drawn
+ *                      first: rd__glow_fold_undo)
+ * rd__glow_fold_drawn  the reduction drawn with the fold (counted, logged
+ *                      once)
+ * rd__glow_fold_undo   the fill and the mask drawn now with their states,
+ *                      the fold off from now on (why: the log)
+ * rd__glow_fold_end    rd_store_plan.c rd__store_plan_end: a plan no
+ *                      reduction took is logged and turns the fold off */
+bool rd__glow_fold_scan_begin(const RdFrame *f);
+void rd__glow_fold_scan_reset(void);
+void rd__glow_fold_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
+                            uint32_t ord);
+void rd__glow_fold_scan_end(void);
+bool rd__glow_fold_skip(Replay *r, const RdFrame *f, const RdCmd *c);
+bool rd__glow_fold_due(Replay *r, const RdFxDraw *x, uint32_t words[RD_GLOW_FOLD_WORDS],
+                       RdTargetRec **scene);
+void rd__glow_fold_drawn(void);
+void rd__glow_fold_undo(Replay *r, const char *why);
+void rd__glow_fold_end(void);
 /* rd_replay_vu.c.
  * rd__replay_vu       a VU draw under its camera's picture
  * rd__vu_prepass      before list 0 (replayFrame, after the uploads and

@@ -6042,6 +6042,7 @@ bool rd__read_target(RdTarget target, void *dst, size_t dstSize, uint32_t *w, ui
         *h = t->th;
     }
     rd__clear_skip_readback(target.id); /* a clear not drawn, drawn first (rd_pass_cut.c) */
+    rd__glow_fold_readback(target.id);  /* WORK2 a fold left undrawn (rd_glow_fold.c) */
     return readTexture(t->color, &t->colorState, t->tw, t->th, dst, dstSize);
 }
 

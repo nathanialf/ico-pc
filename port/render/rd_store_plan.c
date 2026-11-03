@@ -6,9 +6,9 @@
  * is 10 MB at 2364x1080, about 1 ms each way on the PowerVR phone, and
  * every pass on SCENE has its depth bound, read or not.  Before the walk
  * (rd__store_plan_scan) the replayed lists are read once with their state
- * (the same walk notes each command for the pass area, rd_pass_area.c, and
- * the passes cut, rd_pass_cut.c; the fades fold plans before it, its
- * sprites decided first), and for every depth texture the last command
+ * (the same walk notes each command for the pass area, rd_pass_area.c, the
+ * passes cut, rd_pass_cut.c, and the glow's chain, rd_glow_fold.c; the
+ * fades fold plans before it, its sprites decided first), and for every depth texture the last command
  * that may touch its depth or stencil is found, by ordinal (the commands
  * of the replayed lists counted in order, state commands included).  A command touches a depth when it
  * is
@@ -355,6 +355,11 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
      * and the plan: each notes every command under the same state */
     const bool area = rd__pass_area_scan_begin(f, keep);
     const bool cut = rd__pass_cut_scan_begin(f, keep);
+    /* and the glow's chain, whose mask the reduction may compute
+     * (rd_glow_fold.c: WORK2's fill, mask and reduction and nothing else
+     * touching WORK2; the passes' area, cut and plan read its sprites as
+     * drawn, which only keeps more) */
+    const bool glow = rd__glow_fold_scan_begin(f);
     s_plan.n = s_plan.nUndef = 0;
     s_plan.full = false;
     s_plan.anyTouch = 0;
@@ -370,7 +375,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     g_rdPerf.storePlanMode = s_plan.mode;
     s_plan.scanFrame = f->number;
     const bool plan = s_plan.mode != 0;
-    if (!plan && !area && !cut) {
+    if (!plan && !area && !cut && !glow) {
         return;
     }
     if (plan) {
@@ -409,6 +414,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
             }
             if (cut) {
                 rd__pass_cut_scan_cmd(c, &st, state, ord);
+            }
+            if (glow) {
+                rd__glow_fold_scan_cmd(f, c, &st, state, ord);
             }
             if (state || !plan) {
                 continue;
@@ -486,6 +494,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     }
     if (cut) {
         rd__pass_cut_scan_end(ord);
+    }
+    if (glow) {
+        rd__glow_fold_scan_end(); /* the verdict (rd_glow_fold.c) */
     }
     if (!plan) {
         return;
@@ -759,6 +770,7 @@ void rd__store_plan_count_color(const RdTargetRec *c, RhiColorAttachment *a)
 void rd__store_plan_end(void)
 {
     rd__fades_fold_end();        /* a fold no reduction took (rd_fades_fold.c) */
+    rd__glow_fold_end();         /* the glow's likewise (rd_glow_fold.c) */
     rd__last_store_replay_end(); /* why a last touch's pass kept its store (rd_pass_cut.c) */
     planNothingDropped();
     s_plan.nPrevDropped = 0;

@@ -2211,6 +2211,43 @@ bool rd__fog_edge_may_be_due(void);
  * fades_fold = false (ICO_RD_FADES_FOLD=0, the A/B) or after a reduction
  * did not take a planned fold */
 bool rd__fades_fold_on(void);
+/* The glow's mask folded into its reduction (rd_glow_fold.c; rd_replay.h
+ * has the replay's hooks).
+ * rd__glow_fold_on     [dev] glow_fold (ICO_RD_GLOW_FOLD=1 on, 0 off; not
+ *                      set: on where the renderer has an output, off where
+ *                      its caller reads the targets), false after a frame
+ *                      read WORK2 before its fill or a reduction did not
+ *                      take a planned fold
+ * rd__glow_fold_force  the tests: 1 on, 0 off, -1 the switch's (and the
+ *                      fold on again after a refusal that turned it off)
+ * rd__glow_fold_plan   frame f's chain as the scan reads it (the walk of
+ *                      rd__store_plan_scan, here over a frame of its own):
+ *                      NULL with out->on, "" without a glow, else why not
+ *                      (*why RD_GLOW_FOLD_WHY_*); no device needed
+ * rd__glow_fold_readback  rd_replay.c rd__read_target: a read of WORK2
+ *                      after a folded replay is logged (it is not the mask)
+ * RdGlowFoldPlan       the chain's three commands (by the store plan's
+ *                      ordinals and pointers) and fx_glow_mask's words that
+ *                      the scan knows: the fill (R | G << 8 | B << 16 | A <<
+ *                      24 with FBA's MSB), the mask's rect (x0 | x1 << 16,
+ *                      y0 | y1 << 16), u0 - x0 | (v0 - y0) << 16, its alpha
+ *                      test (A | AREF << 8 | ATST << 16 | ATE << 20 | AFAIL
+ *                      << 24), its flags (RD_FXF_TCC, LINEAR, CLAMP_S,
+ *                      CLAMP_T, FBA) and TEX0 size */
+#define RD_GLOW_FOLD_WORDS 9
+
+typedef struct RdGlowFoldPlan {
+    bool on;
+    uint32_t fillOrd, maskOrd, reductionOrd;
+    const RdCmd *fillCmd, *maskCmd, *reductionCmd;
+    uint32_t fill, rectX, rectY, duv, test, flags;
+    float texW, texH;
+} RdGlowFoldPlan;
+
+bool rd__glow_fold_on(void);
+void rd__glow_fold_force(int on);
+const char *rd__glow_fold_plan(const RdFrame *f, int keep, RdGlowFoldPlan *out, uint32_t *why);
+void rd__glow_fold_readback(uint32_t id);
 
 /* rd_vuprepass_selftest's sabotage (ICO_RD_VU_PREPASS_SABOTAGE), while the
  * mode is not RD_VU_SABOTAGE_OFF: VERTEX the first mesh or grid command's
@@ -2963,7 +3000,11 @@ enum {
     RD_FXF_OUT_PREMUL = 32768,
     /* the reduction at scale 1: the fades fold's steps on its taps
      * (rd_fades_fold.c, fx_sprite.hlsl fx_fold4) */
-    RD_FXF_FOLD = 65536
+    RD_FXF_FOLD = 65536,
+    /* fx_frame_ps: the glow's reduction with SCENE as t1, WORK2's texels
+     * computed as the mask left them (rd_glow_fold.c, fx_sprite.hlsl
+     * fx_glow_texel) */
+    RD_FXF_GLOW_MASK = 131072
 };
 
 /* The steps at which fx_sprite_ps leaves the GS's own filter above 1x, in

@@ -753,6 +753,13 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("glow_redraw", "true"), "1") == 0);
     CHECK(strcmp(ico_dev_env_value("glow_redraw", "false"), "0") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.glow_redraw"), "glow_redraw") == 0);
+    /* glow_fold: the glow's mask computed in its reduction, the A/B switch
+       (rd_glow_fold.c rd__glow_fold_on) */
+    CHECK(strcmp(ico_dev_env_name("glow_fold"), "ICO_RD_GLOW_FOLD") == 0);
+    CHECK(strcmp(ico_dev_env_value("glow_fold", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("glow_fold", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("glow_fold", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.glow_fold"), "glow_fold") == 0);
     /* present_fallback: the FIFO fallback auto, off or fifo (window_host.c
        ico_window_open, present_fallback.c) */
     CHECK(strcmp(ico_dev_env_name("present_fallback"), "ICO_PRESENT_FALLBACK") == 0);
