@@ -2,8 +2,8 @@
 """Split a build's ctest suite into N shards of about equal measured cost.
 
     tools/ci_shard.py split --tests <ctest --show-only=json-v1 output> \
-        --costs tools/ci_test_costs.txt --shards N --index K --out <file>
-    tools/ci_shard.py costs <ctest output log>... > tools/ci_test_costs.txt
+        --costs tools/ci_costs/<suite>.txt --shards N --index K [--include RE] --out <file>
+    tools/ci_shard.py costs <ctest output log>... > tools/ci_costs/<suite>.txt
     tools/ci_shard.py --selftest
 
 `split` writes the names of shard K (1..N), one a line, for
@@ -19,6 +19,9 @@ test exactly once:
 - groups go heaviest first to the shard with the least cost so far (ties to
   the lower shard, then by the group's first test name), so the result is a
   pure function of the test list, the cost table and N;
+- with --include RE only the tests whose names match the regular expression
+  (re.search) are split (the linux-arm64 job's filtered tests); the other
+  tests are not in any shard;
 - a test the cost table does not name (a new test) costs the table's median.
 
 The cost table is "<name> <seconds>" lines ('#' starts a comment); a
@@ -30,7 +33,9 @@ comes from.
 """
 
 import argparse
+import glob
 import json
+import os
 import re
 import statistics
 import sys
@@ -146,6 +151,9 @@ def partition(tests, costs, shards):
 
 def cmd_split(args):
     tests = read_tests(args.tests)
+    if args.include:
+        keep = re.compile(args.include)
+        tests = [t for t in tests if keep.search(t[0])]
     if not tests:
         sys.exit(f"ci_shard: {args.tests} lists no test")
     costs = read_costs(args.costs)
@@ -210,6 +218,12 @@ def selftest():
     check(m is not None and m.group(1) == "texpack_disc" and m.group(2) == "0.07", "log line parse")
     m = _TEST_LINE.search("  1/9 Test   #1: fpenv ......   Passed    12.50 sec")
     check(m is not None and m.group(1) == "fpenv" and m.group(2) == "12.50", "log line parse, padded")
+    # the committed tables (one a suite) parse
+    here = os.path.dirname(os.path.abspath(__file__))
+    tables = sorted(glob.glob(os.path.join(here, "ci_costs", "*.txt")))
+    check(len(tables) >= 6, f"{len(tables)} cost tables in tools/ci_costs")
+    for t in tables:
+        check(len(read_costs(t)) > 100, f"{os.path.basename(t)} names more than 100 tests")
     print("ci_shard selftest: " + ("ok" if not fails else f"{fails} failed"))
     return 1 if fails else 0
 
@@ -224,6 +238,7 @@ def main():
     sp.add_argument("--costs", required=True, help="cost table (or CTestCostData.txt)")
     sp.add_argument("--shards", type=int, required=True)
     sp.add_argument("--index", type=int, required=True, help="1-based shard number")
+    sp.add_argument("--include", help="split only the tests whose name matches this regex")
     sp.add_argument("--out", required=True, help="file for ctest --tests-from-file")
     sp.set_defaults(func=cmd_split)
     cp = sub.add_parser("costs", help="a cost table from ctest output logs")
