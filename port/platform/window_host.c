@@ -2743,6 +2743,8 @@ static int window_gpu_progress(IcoDiagGpu *out)
     out->submitted_ago_s = (double)p.submittedAgoNs / 1e9;
     out->replay = p.replay;
     out->frame = p.frame;
+    out->bg_pipes_done = p.bgPipesDone;
+    out->bg_pipes_left = p.bgPipesLeft;
     return 1;
 }
 

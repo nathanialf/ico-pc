@@ -2739,6 +2739,7 @@ bool rhi_gpu_progress(RhiGpuProgress *out)
     out->waitingFor = __atomic_load_n(&g_vkr.progWaitingFor, __ATOMIC_ACQUIRE);
     out->replay = __atomic_load_n(&g_vkr.progReplay, __ATOMIC_RELAXED);
     out->frame = __atomic_load_n(&g_vkr.progFrame, __ATOMIC_RELAXED);
+    vkr_pipe_background_progress(&out->bgPipesDone, &out->bgPipesLeft);
     if (out->waitingFor != 0) {
         const uint64_t since = __atomic_load_n(&g_vkr.progWaitSinceNs, __ATOMIC_RELAXED);
         out->waitingNs = now > since ? now - since : 0;

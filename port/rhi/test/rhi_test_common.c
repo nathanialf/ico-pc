@@ -2310,6 +2310,8 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
         RhiPipeline bgPipe[8];
         float bgMs[8];
         uint32_t bgThreads = 0, bgMade = 0, polls = 0;
+        RhiGpuProgress gp0, gp1;
+        (void)rhi_gpu_progress(&gp0);
         RhiPipelineJobs *jobs = rhi_create_pipelines_begin(batchDesc, 8, 2, true);
         if (rhi_backend() != RHI_BACKEND_VULKAN) {
             if (jobs != NULL || rhi_create_pipelines_end(NULL, true, bgPipe, bgMs, &bgThreads)) {
@@ -2341,6 +2343,17 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
             }
             rhi_test_log("%s: rhi_create_pipelines_begin/end: %u of 8 on %u threads, %u polls\n",
                          s_label, bgMade, bgThreads, polls);
+            /* the watchdog's heartbeat of the background compiles (rhi.h
+               RhiGpuProgress): the eight returned (the failed one too),
+               none left once they have */
+            (void)rhi_gpu_progress(&gp1);
+            if (gp1.bgPipesDone != gp0.bgPipesDone + 8u || gp1.bgPipesLeft != 0 ||
+                gp0.bgPipesLeft != 0) {
+                rhi_test_log("FAIL rhi_gpu_progress: the background compiles %u -> %u returned, "
+                             "%u -> %u left (want 8 more returned, none left)\n",
+                             gp0.bgPipesDone, gp1.bgPipesDone, gp0.bgPipesLeft, gp1.bgPipesLeft);
+                failures++;
+            }
             if (bgMade != 7 || bgPipe[4].id != 0 || bgThreads < 1 || bgThreads > 2 ||
                 bgMs[4] != 0.0f) {
                 rhi_test_log("FAIL rhi_create_pipelines_end: %u made, the failed one %u, %u "

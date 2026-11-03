@@ -1154,7 +1154,14 @@ void rhi_set_submit_tag(uint32_t replay, uint32_t frame);
  *                 rhi_wait_idle, a readback), 0 when none is in progress;
  *   waitingNs     how long that wait has blocked so far;
  *   submittedAgoNs how long ago the newest submission was made;
- *   replay, frame the newest submission's rhi_set_submit_tag.
+ *   replay, frame the newest submission's rhi_set_submit_tag;
+ *   bgPipesDone   the compiles of rhi_create_pipelines_begin's sets that
+ *                 have returned since rhi_init (a count that only grows:
+ *                 the background set's own heartbeat while nothing takes
+ *                 its batch), bgPipesLeft those begun and not returned
+ *                 (0 when none is in progress, a set whose compiles have
+ *                 all returned and is not ended yet included); 0 and 0 on
+ *                 a backend with no background creation.
  * A wait in progress whose number is above finished is work the GPU has
  * not finished: while the wait has not returned, it is still running.
  * False (and *out zeroed) when the backend does not track it (Direct3D 12)
@@ -1163,6 +1170,7 @@ typedef struct RhiGpuProgress {
     uint64_t submitted, finished, waitingFor;
     uint64_t waitingNs, submittedAgoNs;
     uint32_t replay, frame;
+    uint32_t bgPipesDone, bgPipesLeft;
 } RhiGpuProgress;
 
 bool rhi_gpu_progress(RhiGpuProgress *out);

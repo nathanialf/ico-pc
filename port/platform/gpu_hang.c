@@ -1,5 +1,6 @@
 /* port/platform/gpu_hang.c: the GPU hang limit (gpu_hang.h). */
 #include "gpu_hang.h"
+#include <string.h>
 
 double ico_gpu_hang_limit_s(unsigned long watchdog_s)
 {
@@ -55,4 +56,31 @@ int ico_render_hang_step(IcoRenderHangWatch *r, double limit_s, unsigned long lo
         return 0;
     }
     return ico_gpu_hang_step(&r->w, limit_s, seq, done, dt_s, count);
+}
+
+int ico_pipe_note_creating(const char *note, unsigned bg_left)
+{
+    if (note == NULL || strncmp(note, "creating pipeline", 17) != 0) {
+        return 0;
+    }
+    /* the background set's note: a creation only while its compiles run
+       (a batch whose compiles have all returned waits for the next
+       presented picture to take it, and nothing is inside the driver) */
+    if (strstr(note, " in the background: ") != NULL) {
+        return bg_left > 0;
+    }
+    return 1;
+}
+
+double ico_pipe_stall_step(IcoPipeStallWatch *w, double now, int creating, int counted, int on,
+                           unsigned seq, unsigned done, unsigned bg_done)
+{
+    if (!creating || !counted || !on || seq != w->seq || done != w->done || bg_done != w->bg_done) {
+        w->seq = seq;
+        w->done = done;
+        w->bg_done = bg_done;
+        w->since = now;
+        return 0.0;
+    }
+    return now - w->since;
 }

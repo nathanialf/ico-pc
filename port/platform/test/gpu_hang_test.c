@@ -18,7 +18,19 @@
  *            cold compiles, 15 s in all) is not a hang, nor one inside a
  *            single creation for 20 s; a picture with no creation fires
  *            at 15 s, once; between pictures (seq 0) nothing counts; the
- *            count starts again after the last creation.
+ *            count starts again after the last creation;
+ *   note     ico_pipe_note_creating: a creation's note counts; the
+ *            background set's counts only while some of its compiles
+ *            have not returned; other notes never;
+ *   stall    the pipeline limit's watch (ico_pipe_stall_step): a
+ *            movie of 40 s (no presented picture, so the
+ *            background batch begun before it is never taken and its note
+ *            stays) with the background set's compiles returning for its
+ *            first 6 s and then none left is not a stall at the 30 s
+ *            limit; a background compile that does not return for 30 s
+ *            is, at 30 s; a first-use creation that does not return is,
+ *            whatever the background set does after its batch; the time
+ *            not counted, or the limit off, never stalls.
  */
 #include <stdio.h>
 #include "gpu_hang.h"
@@ -178,6 +190,90 @@ static void testRender(void)
     CHECK(c.w.counted_s == 0.0 && !c.w.fired);
 }
 
+#define BG_NOTE                                                                                    \
+    "creating pipelines 81-88 of 412 in the background: list 3 TRI blend 1 to list 9 SPRITE; "     \
+    "vs 212 words + fs 830 words"
+
+static void testNote(void)
+{
+    CHECK(ico_pipe_note_creating("creating pipeline 217 of 587 (in batch 212-219): k (m)", 0));
+    CHECK(ico_pipe_note_creating("creating pipeline list 2 TRI (vs 100 words)", 0));
+    CHECK(ico_pipe_note_creating("creating pipelines 1-8 of 587: a to b; m", 0));
+    CHECK(ico_pipe_note_creating(BG_NOTE, 3));
+    CHECK(!ico_pipe_note_creating(BG_NOTE, 0));
+    CHECK(!ico_pipe_note_creating("loading the texture pack", 3));
+    CHECK(!ico_pipe_note_creating("", 3));
+    CHECK(!ico_pipe_note_creating(NULL, 3));
+}
+
+/* polls every 250 ms from *t for seconds s with the note and the
+   background set's compiles as given (left[] a poll each, its last
+   held; the done count moving as left falls); the polls at or
+   over the limit and the first such poll's time */
+static int stallFor(IcoPipeStallWatch *w, double *t, const char *note, unsigned seq,
+                    unsigned *bgDone, const unsigned *left, unsigned nLeft, double s, int counted,
+                    int on, double limit, double *firstAt)
+{
+    int over = 0;
+    unsigned prev = nLeft > 0 ? left[0] : 0;
+    for (int i = 0; i < (int)(s * 4.0 + 0.5); i++) {
+        const unsigned l = nLeft == 0 ? 0 : left[(unsigned)i < nLeft ? (unsigned)i : nLeft - 1];
+        if (l < prev) {
+            *bgDone += prev - l;
+        }
+        prev = l;
+        *t += 0.25;
+        const double st = ico_pipe_stall_step(w, *t, ico_pipe_note_creating(note, l), counted, on,
+                                              seq, 120, *bgDone);
+        if (st >= limit) {
+            if (over == 0 && firstAt != NULL) {
+                *firstAt = st;
+            }
+            over++;
+        }
+    }
+    return over;
+}
+
+static void testStall(void)
+{
+    /* a movie: the batch of 8 begun at the last picture before it, its
+       compiles returning one each 0.75 s on two workers for its first 6 s,
+       then none left; the note stays for the 40 s (nothing takes the
+       batch) and the notes' counter does not move */
+    unsigned left[24];
+    for (unsigned i = 0; i < 24; i++) {
+        left[i] = 8u - (i + 1u) / 3u;
+    }
+    left[23] = 0;
+    IcoPipeStallWatch w = {0};
+    double t = 100.0;
+    unsigned done = 40;
+    CHECK(stallFor(&w, &t, BG_NOTE, 9, &done, left, 24, 40.0, 1, 1, 30.0, NULL) == 0);
+    CHECK(done == 48);
+    /* a background compile that does not return: two of the batch's left
+       for 30 s with nothing returning; the stall reaches the limit at 30 s
+       (the first poll notes it, then 120 polls of 0.25 s) */
+    const unsigned stuck[1] = {2};
+    IcoPipeStallWatch s = {0};
+    double firstAt = 0.0;
+    t = 200.0;
+    CHECK(stallFor(&s, &t, BG_NOTE, 9, &done, stuck, 1, 30.0, 1, 1, 30.0, &firstAt) == 0);
+    CHECK(stallFor(&s, &t, BG_NOTE, 9, &done, stuck, 1, 0.25, 1, 1, 30.0, &firstAt) == 1);
+    CHECK(firstAt >= 30.0 && firstAt < 30.3);
+    /* a first-use creation that does not return: its own note, the
+       background set idle (none left); a stall at 30 s */
+    IcoPipeStallWatch f = {0};
+    t = 300.0;
+    CHECK(stallFor(&f, &t, "creating pipeline list 2 TRI (vs 100 words)", 10, &done, NULL, 0, 31.0,
+                   1, 1, 30.0, NULL) > 0);
+    /* not counted (paused, asleep) or the limit off: never */
+    IcoPipeStallWatch p = {0};
+    t = 400.0;
+    CHECK(stallFor(&p, &t, BG_NOTE, 9, &done, stuck, 1, 120.0, 0, 1, 30.0, NULL) == 0);
+    CHECK(stallFor(&p, &t, BG_NOTE, 9, &done, stuck, 1, 120.0, 1, 0, 30.0, NULL) == 0);
+}
+
 int main(void)
 {
     testLimit();
@@ -187,6 +283,8 @@ int main(void)
     testPaused();
     testOff();
     testRender();
+    testNote();
+    testStall();
     printf("gpu_hang_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

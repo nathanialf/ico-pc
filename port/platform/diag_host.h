@@ -159,6 +159,11 @@ typedef struct IcoDiagGpu {
     unsigned long long submitted, finished, waiting_for;
     double waiting_s, submitted_ago_s;
     unsigned int replay, frame;
+    /* the background pipeline set's compiles (rhi.h RhiGpuProgress
+       bgPipesDone, bgPipesLeft): returned since the start, begun and not
+       returned; the watchdog's pipeline limit reads them (gpu_hang.h
+       ico_pipe_note_creating, ico_pipe_stall_step) */
+    unsigned int bg_pipes_done, bg_pipes_left;
 } IcoDiagGpu;
 
 void ico_diag_set_gpu_hang(int (*progress)(IcoDiagGpu *out), void (*dump)(void));

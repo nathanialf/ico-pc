@@ -2706,7 +2706,9 @@ static void finBegin(void)
         keyWords(&s_fin.bk[nb - 1], z, sizeof(z));
         batchModules(s_fin.bk, nb, mods, sizeof(mods));
         /* the crash report's note while the batch compiles (a lazy run's
-           creation puts it back after its own, activityDone); the result
+           creation puts it back after its own, activityDone; the
+           watchdog's pipeline limit tells it by " in the background: ",
+           port/platform/gpu_hang.c ico_pipe_note_creating); the result
            is read so gcc 14's -Wformat-truncation at -O2 sees the cut is
            meant */
         int w = snprintf(s_batchNote, sizeof(s_batchNote),

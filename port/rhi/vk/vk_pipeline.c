@@ -1257,6 +1257,7 @@ typedef struct VkrPipeWork {
     uint32_t n;
     RhiPipelineBatch *batch; /* its begin and end hooks (rhi.h), or NULL */
     bool lowPriority;        /* each worker at SDL_THREAD_PRIORITY_LOW (the background set) */
+    bool background;         /* rhi_create_pipelines_begin's: counted in s_bgDone/s_bgLeft */
 #ifdef ICO_RHI_HAVE_SDL
     SDL_AtomicInt next, finished;
     SDL_Semaphore *wake;
@@ -1268,6 +1269,17 @@ typedef struct VkrPipeWork {
  * Windows and Android) */
 #define VKR_PIPE_STACK_BYTES (8u * 1024u * 1024u)
 
+/* the background sets' compiles (rhi.h RhiGpuProgress bgPipesDone,
+ * bgPipesLeft): returned since the start, begun and not returned; any
+ * thread reads them (vkr_pipe_background_progress, the watchdog's) */
+static uint32_t s_bgDone, s_bgLeft;
+
+void vkr_pipe_background_progress(uint32_t *done, uint32_t *left)
+{
+    *done = __atomic_load_n(&s_bgDone, __ATOMIC_ACQUIRE);
+    *left = __atomic_load_n(&s_bgLeft, __ATOMIC_ACQUIRE);
+}
+
 /* job i's compile between the batch's begin and end hooks (rhi.h) */
 static void vkr_pipe_compile_hooked(VkrPipeWork *w, uint32_t i)
 {
@@ -1278,6 +1290,10 @@ static void vkr_pipe_compile_hooked(VkrPipeWork *w, uint32_t i)
     vkr_pipe_compile(&w->jobs[i]);
     if (b && b->end) {
         b->end(b->ctx, i);
+    }
+    if (w->background) {
+        __atomic_sub_fetch(&s_bgLeft, 1u, __ATOMIC_RELEASE);
+        __atomic_add_fetch(&s_bgDone, 1u, __ATOMIC_RELEASE);
     }
 }
 
@@ -1460,6 +1476,8 @@ RhiPipelineJobs *rhi_create_pipelines_begin(const RhiPipelineDesc *descs, uint32
     }
     j->w.n = n;
     j->w.lowPriority = lowPriority;
+    j->w.background = true;
+    __atomic_add_fetch(&s_bgLeft, n, __ATOMIC_RELEASE);
     memcpy(j->descs, descs, (size_t)n * sizeof(RhiPipelineDesc));
     for (uint32_t i = 0; i < n; i++) {
         vkr_pipe_prepare(&descs[i], &j->w.jobs[i]);

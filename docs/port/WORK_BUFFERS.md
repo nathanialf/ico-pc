@@ -1677,10 +1677,19 @@ and the GPU hang limit counts waits for the GPU, not a driver call. On Android a
 pipeline being created (the set's batch, a lazy run's single one) with neither the note nor the
 set's count moving for 10 s before the first Main tick (the start-up set, `PIPE_STALL_START_S`) or
 30 s in play (a lazy run's first-use creation, `PIPE_STALL_PLAY_S`: a Vulkan 1.0-era compiler may
-take over 10 s on a VU merge shader) (`port/platform/diag_host.c` `pipe_stall_step`; off with the
-GPU hang limit, `[dev] watchdog = 0`) ends the run in order: `ico_pc: the graphics driver has not
-returned from creating a pipeline for N s (pipelines D of T; the limit L s before the game starts|in
-play): the run ends now, ...`, the report, the box, an exit; the activity file keeps the note for the
+take over 10 s on a VU merge shader) (`port/platform/diag_host.c` `pipe_stall_step` over
+`port/platform/gpu_hang.c` `ico_pipe_note_creating` and `ico_pipe_stall_step`; off with the GPU hang
+limit, `[dev] watchdog = 0`) ends the run in order. The background finisher's note (`creating
+pipelines A-B of M in the background: ...`) stays up from its batch's start until the next presented
+picture takes the batch, which a movie or a long load does not make, so it counts as a creation only
+while some of the batch's compiles have not returned, and each compile that returns is progress too
+(the Vulkan backend's count of them, `rhi.h` `RhiGpuProgress.bgPipesDone`/`bgPipesLeft`, read by the
+watchdog through the window's GPU progress; the render thread's hang watch reads the note the same
+way). So a movie of any length over a finished batch is not a stall, and a background compile that
+does not return for the limit's time is (`gpu_hang_test` `testStall`). The line:
+`ico_pc: the graphics driver has not returned from creating a pipeline for N s (pipelines D of T; the
+background set's compiles: R returned, U not; the limit L s before the game starts|in play): the run
+ends now, ...`, the report, the box, an exit; the activity file keeps the note for the
 next start. The end also writes the stall mark `<activity file without .txt>-stall.txt` (the version,
 then the note): every start of that version, on any Android, takes the VU programs' plain entries
 (`ico_diag_startup_stall_end`, the window's `rd_set_vu_plain_only`; the `ico_pc: a run of ... ended
