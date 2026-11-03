@@ -173,13 +173,19 @@ static void recordAfter(RdTarget scene)
 {
     static const uint8_t kNone[4] = {0, 0, 0, 0}, kMark[4] = {0, 0, 0, 192};
     static const uint8_t kFeed[4] = {90, 160, 30, 0x20}, kPaste[4] = {64, 64, 64, 128};
+    /* the sprites' state recorded in their own list, as staticBlur.c sets
+     * it: lists 7 and 8 open with state of their own (this frame's dump:
+     * TEST, ZWRITE on, FBA and TEXA at their heads), so state recorded in
+     * list 4 after the fog never reached the sprites: they drew with Z
+     * write on, which no room's glow or aura paste does */
+    const int list = s_after == AFTER_GLOW ? 7 : 8;
+    rd_select_list(list);
     rd_texture_off();
     rd_pabe(0);
     rd_fba(0);
     rd_z_write(0);
     rd_gouraud(0);
     if (s_after == AFTER_GLOW) {
-        rd_select_list(7);
         rd_set_target(scene, scene, GW, GH, 0);
         rd_abe(1);
         rd_blend_func(RD_BLEND_CS_AS_ADD_CD, 0);
@@ -190,7 +196,6 @@ static void recordAfter(RdTarget scene)
         return;
     }
     const RdTarget work = rd_target(RD_TARGET_WORK0);
-    rd_select_list(8);
     rd_set_target(work, (RdTarget){0}, 256, 128, 0);
     rd_abe(0);
     rd_test_gs(RD_TEST_Z_ALWAYS);
