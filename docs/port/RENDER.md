@@ -2159,7 +2159,15 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
     failing pixel writes its colour but not its depth; every VU draw of list 0 in the corpus dumps
     v1700, v10103 and v5836), so without the range there would be no occluder; with it 63 of the
     65 prelit and lit code-32/36 meshes of v1700's list 0 and 99 of v5836's 132 have a texture
-    whose alpha stays above it (`rd_replay_tool --list`). Of
+    whose alpha stays above it (`rd_replay_tool --list`). The walk runs before the replay's
+    uploads (`replayFrame`: `rd__vis_frame`, then `rd__upload_dirty_textures`), so a texture not
+    uploaded yet (dirty: every texture of a dump's first replay, a texture new or changed this
+    picture in the game) has no scan for the plan; the occluder test then settles the decodes in
+    flight (`rdtex_settle`, which the ring's estimate does right after anyway) and takes the scan the
+    upload will make from the CPU copy (`rd__vis_hiz_pending_scan`: level 0 whole and the GS levels;
+    a box chain's alpha stays inside level 0's range, the kept alpha coverage, `rd__mip_boost`,
+    refused), composed with the vertices' range as the plan composes it, and the vertices' range
+    itself as well (a failed upload draws untextured). Of
     its triangles in the index ranges `doVuDraw` draws, those drawn exactly in every state: all
     three vertices inside the program's region test (code 32: `0 < x, y < 4094`, `0 < w <
     16777214`; code 36: no clip flag in `mem[20..23]`'s space) with a margin the float rounding
@@ -2239,10 +2247,13 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
 ## Dumps and the replay tool
 
 A [.rddump](ARCHITECTURE.md#terms) is the in-memory frame, little-endian, versioned by
-`RD_DUMP_VERSION` (14): the frame's native size and aspect, the disc it was drawn on (its region
+`RD_DUMP_VERSION` (15): the frame's native size and aspect, the disc it was drawn on (its region
 slug (`pal`, `jpn` or `kor`), version 12; an older dump is the European disc's), its camera, start and end states, the
 13 lists, the payload, the textures and temporary targets it references, its VU meshes and tick
-cameras. Target
+cameras, and (version 15) the EE's facing tables of the meshes that have one, a bit a vertex,
+which a prelit stream cannot rebuild (no normals in it; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-winding-mark)):
+a version 3 to 14 dump's prelit meshes load without facing, so the region rule's side bands are
+off for their draws. Target
 contents are not written: a frame that reads a retained target replays from what the loading
 context holds. Loading creates the textures and targets anew and rewrites every id, and gives the VU
 draws recorded without card verdicts theirs ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)), so
@@ -2297,8 +2308,8 @@ The options:
 | `--nop SPEC` | turns commands into NOPs, to find the draw behind a pixel; SPEC is `L:A[-B]`, several separated by commas (`0:12-14,0:40`), or `@FILE` for a spec in a file; the state commands in a range stay |
 | `--occlusion` | the hidden-draw measurement of list 0 ([Culling](#culling)): `<dump>: occlusion: hidden N of M list-0 draws, T of U triangles (index count / 3); hidden commands: SPEC` (SPEC a `--nop` spec, `none` when empty), then `<dump>: occlusion: H of K draw commands hidden; P % of the draws, Q % of the triangles; Q queries, X without a count, Y draws past the 8192 queries; Z draws of other commands not counted; measured under ...`; it sets `ICO_RD_VU_MERGE=0` and `ICO_RD_BLEND=fixed` and turns the screen-prim runs off (the `note:` line says so); Vulkan only (exit 77 elsewhere); not with `--presents`, `--loss-bisect`, `--keys` or `--no-device` |
 | `--occlusion-out FILE`, `--occlusion-csv FILE` | with `--occlusion`: the spec written to FILE (for `--nop @FILE`); a line a command of list 0 that made a GPU draw, `cmd,type,draws,counted,triangles,samples` |
-| `--region-stats` | the region rule's verdict on every triangle of the VU draws of lists 0-6 under it, on the CPU ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics); `port/render/tools/rd_replay_region.c`): a line a draw, `<dump>: region: L:I mesh NAME tris T: exact E clip C strip S drop D (behind-eye B, out-of-box X, card K; rescued at a tick R) det -\|+`, a line a list, and the frame's, which ends in the draws that draw nothing as a `--nop` spec; with `--mesh NAME` only that mesh's draws get a line; with `--interp` at the blended camera and the ticks'; also with `--no-device` (the Original preset at 1x there) |
-| `--region-png FILE`, `--region-out FILE` | imply `--region-stats`: the dropped triangles of the frame camera's draws painted as the GPU would draw them on the native frame (red a vertex behind the eye, yellow out of the box, cyan a card; the 4:3 band outlined in green); the draws that draw nothing written to FILE as a `--nop` spec (`none` for none) |
+| `--region-stats` | the region rule's verdict on every triangle of the VU draws of lists 0-6 under it, on the CPU ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics); `port/render/tools/rd_replay_region.c`): a line a draw, `<dump>: region: L:I mesh NAME tris T: exact E clip C strip S drop D (behind-eye B, out-of-box X, card K; rescued at a tick R), beside N (behind-eye b, out-of-box x, card k) det -\|+; beside N, dropped back D`, drop the triangles that stay dropped and beside the front-facing drops the side bands draw beside the 4:3 picture (` (no side bands)` after a draw without them), a line a list, and the frame's, which ends in the draws that draw nothing as a `--nop` spec; with `--mesh NAME` only that mesh's draws get a line; with `--interp` at the blended camera and the ticks'; also with `--no-device` (the Original preset at 1x there) |
+| `--region-png FILE`, `--region-out FILE` | imply `--region-stats`: the dropped triangles of the frame camera's draws painted as the GPU would draw them on the native frame (red a vertex behind the eye, yellow out of the box, cyan a card, magenta a drop drawn beside the picture, whose part in the band the GPU discards; the 4:3 band outlined in green); the draws that draw nothing written to FILE as a `--nop` spec (`none` for none) |
 | `--gpu-repeat K` | with `--stats`: RHI_FRAMES_IN_FLIGHT + 1 + K replays after the picture and, after the `gpu:` line, `<dump>: gpu median of R replays: total X ms, list 0 Y ms, VU pre-pass Z ms` over the warm records that came back (the first replay after the picture left out) |
 | `--mesh NAME` | a VU mesh vertex by vertex, with the kick, overlap and joined marks |
 | `--dump-textures DIR` | every image texture as decoded |

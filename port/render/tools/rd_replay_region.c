@@ -23,6 +23,17 @@
  *           preset at 4:3 and 1x, where the PS2 drew nothing), else its
  *           strip a card (card)
  *   rescued a drop drawn clipped because a tick's camera showed it
+ *   beside  a drop (after the ticks) drawn clipped beside the camera's
+ *           picture, its pixels in the picture's columns discarded (the
+ *           rule's last step, VU_RULE_CLIP_BESIDE): it faces the eye
+ *           (vu1ref_region_facing: the corners' homogeneous determinant,
+ *           the draw's matrix's sign "det" below, the kick's
+ *           ICO_VU_MARK_FLIP) and the draw has side bands: the frame is
+ *           wider than 4:3 and the bound target's frame wider than the
+ *           picture, the mesh's winding marks came from normals
+ *           (RdMeshRec.facingFrom; never a grid), ICO_RD_VU_BESIDE not 0
+ *           (rd_replay_vu.c's ICO_VU_NO_BESIDE; the exact blend's storage
+ *           read, which also keeps the drop, is not modelled)
  * and a HIDE triangle (the content table) is counted apart.  The cut is
  * made in double precision in GS pixels (a corner with a GS position at
  * it, w = 1, as vu_cut_position takes it; one without in the homogeneous
@@ -33,19 +44,30 @@
  *
  * Lines (each "<dump>: region: ..."): one a draw, "L:I mesh|skinned|grid
  * NAME tris T: exact E clip C strip S drop D (behind-eye B, out-of-box X,
- * card K; rescued at a tick R) det -|+" (det: the sign of the
+ * card K; rescued at a tick R), beside N (behind-eye b, out-of-box x, card
+ * k) det -|+[; hidden H]; beside N, dropped back D[ (no side bands)]" (the
+ * drop's counts are the triangles that stay dropped, back-facing or
+ * edge-on or without side bands, by reason; beside's the ones drawn
+ * beside, by the reason they were dropped; the closing field repeats the
+ * two sums so `--mesh NAME` shows at a glance whether every drop of a
+ * mesh is back-facing: the opening's cliff st26a_p1 must read "beside 0";
+ * det: the sign of the
  * determinant of the x, y and w rows of the draw's model-to-GS matrix,
  * VU memory 16..18 for the normal and grid programs, 4..6 for the cluster,
  * the columns as vu_mat reads them: negative where the projection mirrors
- * the model; "; hidden H" after it when the draw has HIDE triangles); one
+ * the model, ICO_VU_MIRROR; "; hidden H" after it when the draw has HIDE
+ * triangles); one
  * a list with its totals; the frame's with the state, the totals and the
- * draws whose every triangle is dropped or hidden, as a --nop spec
+ * draws whose every triangle is dropped or hidden (a beside triangle
+ * draws), as a --nop spec
  * (--region-out FILE writes it: replayed with --nop @FILE the pass dumps
  * are the same, the rd_region_stats test).  --region-png FILE paints each
  * dropped triangle of a draw on the frame's own target (its GS size the
  * frame's, the frame camera's picture) as the GPU would have drawn it,
  * cut to 0 <= z <= w and to the frame, on black at the native frame's
- * size: red behind-eye, yellow out-of-box, cyan card; the 4:3 band
+ * size: red behind-eye, yellow out-of-box, cyan card (the drops that
+ * stay), magenta a drop drawn beside (the whole polygon: the GPU keeps
+ * only its part outside the band); the 4:3 band
  * (GS 2048 -+ 256) outlined in green. */
 #include <math.h>
 #include <stdio.h>
@@ -58,7 +80,23 @@
 #include "../vu1_ref/vu1_ref.h"
 #include "../../shaders/shader_consts.h"
 
-enum { R_EXACT, R_CLIP, R_STRIP, R_EYE, R_BOX, R_CARD, R_RESCUED, R_HIDDEN, R_COUNT };
+/* R_EYE .. R_CARD: the drops that stay (back-facing or edge-on, or the draw
+ * has no facing); R_BESIDE_EYE .. R_BESIDE_CARD: the drops drawn beside the
+ * picture instead (facing the eye on a wide frame), by the same reasons */
+enum {
+    R_EXACT,
+    R_CLIP,
+    R_STRIP,
+    R_EYE,
+    R_BOX,
+    R_CARD,
+    R_RESCUED,
+    R_BESIDE_EYE,
+    R_BESIDE_BOX,
+    R_BESIDE_CARD,
+    R_HIDDEN,
+    R_COUNT
+};
 
 typedef struct RegionCount {
     uint64_t n[R_COUNT];
@@ -358,17 +396,29 @@ static uint64_t countTris(const RegionCount *c)
     return t;
 }
 
+static uint64_t countDropped(const RegionCount *c)
+{
+    return c->n[R_EYE] + c->n[R_BOX] + c->n[R_CARD];
+}
+
+static uint64_t countBeside(const RegionCount *c)
+{
+    return c->n[R_BESIDE_EYE] + c->n[R_BESIDE_BOX] + c->n[R_BESIDE_CARD];
+}
+
 static void countText(const RegionCount *c, char *buf, size_t cap)
 {
-    const uint64_t drop = c->n[R_EYE] + c->n[R_BOX] + c->n[R_CARD];
     snprintf(buf, cap,
              "tris %llu: exact %llu clip %llu strip %llu drop %llu (behind-eye %llu, out-of-box "
-             "%llu, card %llu; rescued at a tick %llu)",
+             "%llu, card %llu; rescued at a tick %llu), beside %llu (behind-eye %llu, "
+             "out-of-box %llu, card %llu)",
              (unsigned long long)countTris(c), (unsigned long long)c->n[R_EXACT],
              (unsigned long long)c->n[R_CLIP], (unsigned long long)c->n[R_STRIP],
-             (unsigned long long)drop, (unsigned long long)c->n[R_EYE],
+             (unsigned long long)countDropped(c), (unsigned long long)c->n[R_EYE],
              (unsigned long long)c->n[R_BOX], (unsigned long long)c->n[R_CARD],
-             (unsigned long long)c->n[R_RESCUED]);
+             (unsigned long long)c->n[R_RESCUED], (unsigned long long)countBeside(c),
+             (unsigned long long)c->n[R_BESIDE_EYE], (unsigned long long)c->n[R_BESIDE_BOX],
+             (unsigned long long)c->n[R_BESIDE_CARD]);
 }
 
 /* the program's kind for the oracle (rd_mesh.c cardKind): -1 not a draw
@@ -524,6 +574,15 @@ static void regionCmd(void *user, int l, uint32_t idx, const RdCmd *c, const RdS
     const int freeCam = f->camera.freeCamera != 0;
     const int ticks = f->hasTickCams && c->u[3] == RD_VU_TICK_CAMERAS;
     const int paint = w->canvas && !c->b[3] && !c->b[6] && st->gsW == f->gsW && st->gsH == f->gsH;
+    /* the side bands (rd_replay_vu.c doVuDraw's ICO_VU_NO_BESIDE, vu_common.hlsli
+       vu_frame_wider): a frame wider than 4:3 whose bound target's frame is wider than the
+       camera's picture, a mesh whose winding marks came from normals (not a grid, not a mesh
+       without them), the switch ICO_RD_VU_BESIDE not 0 */
+    const char *besideEnv = getenv("ICO_RD_VU_BESIDE");
+    const int wide = g_rd.gsW > ICO_SH_FRAME_BASE_W && (frame[0] < pic[0] || frame[1] > pic[1]) &&
+                     m && m->facingFrom != RD_MESH_FACING_NONE &&
+                     !(besideEnv && strcmp(besideEnv, "0") == 0);
+    const int det = regionDet(kind == VU1REF_CARD_CLUSTER ? mem + 4 : mem + 16);
     RegionCount d;
     memset(&d, 0, sizeof(d));
     for (uint32_t i = 0; i < kickCount; i++) {
@@ -573,13 +632,18 @@ static void regionCmd(void *user, int l, uint32_t idx, const RdCmd *c, const RdS
             }
         }
         static const uint8_t kRgb[3][3] = {{255, 64, 64}, {255, 220, 0}, {0, 200, 255}};
+        static const uint8_t kBeside[3] = {255, 0, 255};
         const int why = !front ? R_EYE : !w->extended ? R_BOX : R_CARD;
-        d.n[why]++;
+        /* VU_RULE_CLIP_BESIDE, the rule's last step on a final drop: facing the eye
+           (vu1ref_region_facing: the corners' determinant, the matrix's sign, the kick's
+           ICO_VU_MARK_FLIP) on a wide frame, drawn beside the picture */
+        const int beside = wide && vu1ref_region_facing(a->h, b->h, cc->h, det < 0,
+                                                        (marks & ICO_VU_MARK_FLIP) != 0u);
+        d.n[beside ? why - R_EYE + R_BESIDE_EYE : why]++;
         if (paint) {
-            regionPaint(w, (const double (*)[4])zp, n, kRgb[why - R_EYE]);
+            regionPaint(w, (const double (*)[4])zp, n, beside ? kBeside : kRgb[why - R_EYE]);
         }
     }
-    const int det = regionDet(kind == VU1REF_CARD_CLUSTER ? mem + 4 : mem + 16);
     d.draws = 1;
     d.mirrored = det < 0;
     w->tickDraws += ticks != 0;
@@ -590,13 +654,16 @@ static void regionCmd(void *user, int l, uint32_t idx, const RdCmd *c, const RdS
         if (d.n[R_HIDDEN]) {
             snprintf(hidden, sizeof(hidden), "; hidden %llu", (unsigned long long)d.n[R_HIDDEN]);
         }
-        printf("%s: region: %d:%u %s %.24s %s det %s%s\n", w->dump, l, idx,
+        printf("%s: region: %d:%u %s %.24s %s det %s%s; beside %llu, dropped back %llu%s\n",
+               w->dump, l, idx,
                c->type == RDC_MESH      ? "mesh"
                : c->type == RDC_SKINNED ? "skinned"
                                         : "grid",
-               name, text, det < 0 ? "-" : "+", hidden);
+               name, text, det < 0 ? "-" : "+", hidden, (unsigned long long)countBeside(&d),
+               (unsigned long long)countDropped(&d), wide ? "" : " (no side bands)");
     }
-    const uint64_t drawn = d.n[R_EXACT] + d.n[R_CLIP] + d.n[R_STRIP] + d.n[R_RESCUED];
+    const uint64_t drawn =
+        d.n[R_EXACT] + d.n[R_CLIP] + d.n[R_STRIP] + d.n[R_RESCUED] + countBeside(&d);
     if (drawn == 0 && countTris(&d) + d.n[R_HIDDEN] > 0) {
         specAdd(w, l, idx);
     }

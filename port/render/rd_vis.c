@@ -1015,12 +1015,39 @@ static bool hizAlphaPasses(const RdStateBlock *st, const RdFrame *f, const RdCmd
     if (!t->ate || t->atst == RD_ATST_ALWAYS) {
         return true;
     }
+    const RdAlphaSrc src = {
+        .kind = RD_ALPHA_SRC_VU, .prog = prog, .cmdType = c->type, .f = f, .c = c, .mesh = m};
     RdAlphaRange as;
-    rd__alpha_range_of_draw(
-        st,
-        &(RdAlphaSrc){
-            .kind = RD_ALPHA_SRC_VU, .prog = prog, .cmdType = c->type, .f = f, .c = c, .mesh = m},
-        &as);
+    rd__alpha_range_of_draw(st, &src, &as);
+    RdTexAlphaScan scan;
+    uint8_t tlo, thi;
+    const RdTexRec *tex =
+        st->ds.texEnabled && st->ds.tcc == RD_TCC_RGBA ? rd__tex_rec(st->tex) : NULL;
+    if (tex && rd__vis_hiz_pending_scan(st->tex, &scan) &&
+        rdtex_alpha_range(&scan, (RdTexSrc)tex->src, st->ds.texa, &tlo, &thi)) {
+        /* The texture is uploaded after the walk (rd_replay.c replayFrame:
+         * rd__vis_frame, then rd__upload_dirty_textures), so the alpha
+         * plan's scan (rd__tex_alpha_scan) does not have it yet: every
+         * texture of a dump's first replay, a texture new or changed this
+         * picture in a game.  Its range from the scan the upload will
+         * make, as rd__alpha_range_of_draw composes it with the vertices'
+         * (the plan untextured gives their range, widened as it widens
+         * it), and the vertices' range itself as well: an upload that
+         * fails leaves the draw untextured (resolveTexture's placeholder) */
+        RdStateBlock u = *st;
+        u.ds.texEnabled = 0;
+        RdAlphaRange v;
+        rd__alpha_range_of_draw(&u, &src, &v);
+        uint32_t lo = tlo, hi = thi;
+        if (st->ds.texFn != RD_TEXFN_DECAL) {
+            lo = ((uint32_t)tlo * v.lo) >> 7;
+            hi = ((uint32_t)thi * v.hi) >> 7;
+            lo = lo > 255u ? 255u : lo;
+            hi = hi > 255u ? 255u : hi;
+        }
+        as.lo = (uint8_t)(v.lo < lo ? v.lo : lo);
+        as.hi = (uint8_t)(v.hi > hi ? v.hi : hi);
+    }
     const uint32_t lo = as.lo, hi = as.hi, ref = t->aref;
     switch (t->atst) {
     case RD_ATST_LESS:
@@ -1203,6 +1230,10 @@ static void hizCollect(VisWalk *w, const RdFrame *f, int keep)
         return;
     }
     const double t0 = rd__now_ms();
+    /* the decodes in flight into their textures (rd_tex_decode.h), which
+     * the ring's estimate settles right after anyway: the occluders' alpha
+     * proof reads the texels a dirty texture is about to upload */
+    rdtex_settle();
     VisWalk scratch;
     memset(&scratch, 0, sizeof(scratch));
     scratch.f = f;

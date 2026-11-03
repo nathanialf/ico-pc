@@ -151,8 +151,9 @@ take from either ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
 - the no-planes build (`ICO_VU_NO_PLANES=1`): `vu_ps` and `vu_texa_ps` built again as `vu_np_ps`
   and `vu_texa_np_ps`, each with its `_nodual` twin, for a target at a fractional scale
   (`port/render/rd_pixel_plan.c` (`rd__vu_pixel_fs`), [RENDER.md](RENDER.md#screen-planes)). Their
-  input is `VuPSIn` (`vu_common.hlsli`): locations 0 to 2 of `VuVSOut` alone (the colour, S, T, Q
-  and the plane distance; 12 input components with the position, against 40), a prefix of every
+  input is `VuPSIn` (`vu_common.hlsli`): locations 0 to 2 of `VuVSOut` alone (the colour, S, T, Q,
+  the plane distance and the side bands' mark, `plane.y`, so the twins discard a beside triangle's
+  pixels in the 4:3 picture as `vu_ps` does; 13 input components with the position, against 41), a prefix of every
   VU vertex shader's output, so the main shaders and the programs' own entries feed it unchanged
   (DXC packs the prefix as the whole signature packs it: the same D3D12 registers). No
   destination-read twins: under an exact blend the draws keep `vu_ps`. A fused scissor pair's kick

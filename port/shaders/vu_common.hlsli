@@ -384,6 +384,14 @@ uint4 vu_stream_u(uint qw)
 // each of those.  No shader reads it yet.
 #define VU_F_JUN26 1024u
 #define g_vuVariant (((vu_draw.z & VU_F_JUN26) != 0u) ? 1u : 0u)
+// The matrix h is made with turns the eye's side over (shader_consts.h
+// ICO_VU_MIRROR: a reflection camera, a mirrored model): a triangle's
+// facing on screen reads the other way (vu_front_facing)
+#define VU_F_MIRROR 4096u
+// No side bands (shader_consts.h ICO_VU_NO_BESIDE): a triangle the region
+// rule drops stays dropped (VU_RULE_CLIP_BESIDE off): a frame not wider
+// than 4:3, a draw without winding marks, a _dstrov pass
+#define VU_F_NO_BESIDE 8192u
 // The marks of a triangle k-2, k-1, k (shader_consts.h ICO_VU_MARK_*,
 // rd_mesh.c RdMeshRec.kickMark): a byte a kick after the mesh's vertices
 // in the stream, where vu_mark says.
@@ -398,8 +406,9 @@ uint4 vu_stream_u(uint qw)
 //                   mesh in the same plane (static prelit and lit meshes,
 //                   rd_mesh.c markLaterOverlaps; vu_later_out)
 //   VU_MARK_FLIP    the corners k-2, k-1, k wind against the triangle's
-//                   front (rd_mesh.c markWinding; static prelit, lit and
-//                   skinned meshes); no shader reads it yet
+//                   front, the side its normals point to (the EE's table,
+//                   Packet.c; rd_mesh.c markWinding; static prelit, lit
+//                   and skinned meshes): vu_front_facing
 #define VU_MARK_JOINED 1u
 #define VU_MARK_HIDE 2u
 #define VU_MARK_LATER 4u
@@ -645,10 +654,13 @@ struct VuVSOut {
     VK_LOC(0) noperspective float4 col : COLOR0; // RGBA 0..255, the GS interpolates in screen space
     VK_LOC(1)
     noperspective float3 stq : TEXCOORD0; // S, T, Q linear in screen space, divided per pixel
-    // vu_plane_distance, drawn where >= 0 under a clip plane (DF_PLANE);
+    // x: vu_plane_distance, drawn where >= 0 under a clip plane (DF_PLANE);
     // without one 1, or -1 on the kick triangles of a fused scissor pair
-    // (vu_fused_out: the mark the no-planes twins read, which have no r)
-    VK_LOC(2) noperspective float plane : TEXCOORD1;
+    // (vu_fused_out: the mark the no-planes twins read, which have no r).
+    // y: 1 on a triangle drawn beside the picture (VU_RULE_CLIP_BESIDE),
+    // whose pixels in the picture's columns vu_pixel_tests discards, else 0
+    // (a constant over the triangle: the interpolation is 1 or 0 to an ulp)
+    VK_LOC(2) noperspective float2 plane : TEXCOORD1;
     // The triangle's attribute planes (vu_attr_planes): col, stq and plane
     // at its first corner (a0: col, a1: stq, plane) and per texel across
     // (x0, x1) and down (y0, y1); r.xy the corner in texels from the
@@ -1120,7 +1132,7 @@ VuVSOut vu_out_init()
     o.pos = VU_CULLED;
     o.col = float4(0.0, 0.0, 0.0, 0.0);
     o.stq = float3(0.0, 0.0, 1.0);
-    o.plane = 1.0;
+    o.plane = float2(1.0, 0.0);
     o.a0 = o.a1 = o.x0 = o.x1 = o.y0 = o.y1 = o.r = float4(0.0, 0.0, 0.0, 0.0);
     return o;
 }
@@ -1323,7 +1335,7 @@ VuVSOut vu_pixel_attrs(VuVSOut i)
     precise float4 sp = i.a1 + i.x1 * d.x + i.y1 * d.y;
     i.col = col;
     i.stq = sp.xyz;
-    i.plane = sp.w;
+    i.plane.x = sp.w;
     return i;
 }
 
@@ -1362,7 +1374,7 @@ VuVSOut vu_plane_out(VuVSOut o, VuPlaneTri t, uint kick, uint me)
     o.pos.y = past ? VU_CULLED.y : o.pos.y;
     o.pos.z = past ? VU_CULLED.z : o.pos.z;
     o.pos.w = past ? VU_CULLED.w : o.pos.w;
-    o.plane = me == 0u ? da : (me == 1u ? db : dc);
+    o.plane.x = me == 0u ? da : (me == 1u ? db : dc);
     if (o.r.z == 0.0) {
         return o;
     }
@@ -1385,6 +1397,10 @@ VuVSOut vu_plane_out(VuVSOut o, VuPlaneTri t, uint kick, uint me)
 // card, a free-standing strip (no VU_MARK_JOINED) none of whose
 // triangles passes the region test (vu_strip_card), else VU_RULE_CLIP
 #define VU_RULE_STRIP 3u
+// The side bands (vu_rule_beside): a triangle the rule drops, on a frame
+// wider than the picture, facing the eye: GPU-clipped as VU_RULE_CLIP and
+// drawn only beside the picture (VuVSOut.plane.y 1, vu_pixel_tests)
+#define VU_RULE_CLIP_BESIDE 4u
 
 // The region rule (docs/port/VU1_PROGRAMS.md, "The region rule").
 // On the PS2 any vertex outside the region sets ADC on itself and the next
@@ -1431,7 +1447,19 @@ VuVSOut vu_plane_out(VuVSOut o, VuPlaneTri t, uint kick, uint me)
 // - one with a vertex behind the eye that reaches into the picture: not
 //   drawn in any state (the opening's cliff st26a_p1, filmed from inside):
 //   a game made for a wide picture would not draw geometry behind the eye
-//   either. None is cut at the picture's edge (the waterfall's mist).
+//   either. None is cut at the picture's edge (the waterfall's mist);
+// - last, every triangle the steps above drop (after the card test and,
+//   between two ticks, the ticks' rescue): on a frame wider than the
+//   picture, one facing the eye (vu_front_facing: its winding on the
+//   screen, the matrix's sign, the EE's FLIP mark from its normals) is
+//   drawn clipped as the clipped ones, but only beside the picture
+//   (VU_RULE_CLIP_BESIDE, vu_rule_beside; its pixels in the picture's
+//   columns discarded, vu_pixel_tests): inside the picture the PS2's drop,
+//   beside it no hole (issue 29: the sea at the far left of the old
+//   bridge, walls beside the camera at 48:9).  One facing away keeps the
+//   drop (the opening's cliff, filmed from inside the rock, shows the eye
+//   its back faces).  Not at 4:3 (the frame is the picture), not for a
+//   draw without winding marks (VU_F_NO_BESIDE).
 // A drawn triangle with a vertex outside takes code 36's corner rule
 // (vu_corner_cut_position: the GS position where the vertex has one, the
 // homogeneous form of h where it is behind the eye, its X or Y saturated
@@ -1612,6 +1640,89 @@ uint vu_rule_card(uint rule, uint marks, uint kick)
     return VU_RULE_DROP;
 }
 
+// ------------------------------------------------------- the side bands
+// The region rule's last step (docs/port/VU1_PROGRAMS.md "The region
+// rule", step 7; vu1_ref.h vu1ref_region_draw's wide and facing): a
+// triangle every step above drops (behind the eye, out of the box, a card)
+// is drawn, GPU-clipped as VU_RULE_CLIP, but only beside the camera's
+// picture (VU_RULE_CLIP_BESIDE: VuVSOut.plane.y 1, its pixels in the
+// picture's columns discarded by vu_pixel_tests) when the frame is wider
+// than the picture and the triangle faces the eye.  Inside the picture
+// the PS2's drop stands, pixel for pixel; beside it the PS2 showed
+// nothing, and a dropped wall or sea there left a hole on a wide frame
+// (issue 29).  A triangle facing away keeps the drop everywhere: the
+// opening's cliff, filmed from inside the rock (st26a_p1), shows its back
+// faces to the eye.  At 4:3 the frame is the picture: never.
+
+// Whether the frame the bound target shows is wider than the camera's
+// picture, 1 or 0: vu_frame_ndc beyond vu_picture_ndc on a side, compared
+// in GS pixels (both map GS X to clip space by the same increasing map,
+// vu_ndc), the frame's edges its centre -+ its half-width (a Full pixel
+// target's less the texels it leaves out, g_vpo.z), the picture's 2048 -+
+// vu_picture_half
+uint vu_frame_wider()
+{
+    precise float c = g_origin.x + g_target.x * 0.5;
+    precise float hf = g_target.x * 0.5;
+    if (g_vp.x != 0.0 && g_vp.z > 0.0) {
+        hf = hf - g_vpo.z / g_vp.z;
+    }
+    const float hp = vu_picture_half().x;
+    precise float fl = c - hf;
+    precise float fr = c + hf;
+    return fl < 2048.0 - hp || fr > 2048.0 + hp ? 1u : 0u;
+}
+
+// 1 when the triangle a, b, c (the corners k-2, k-1, k, in that order)
+// shows its front to the eye (vu1_ref.h vu1ref_region_facing, the same
+// operations in the same order): the homogeneous determinant of the
+// corners' h centred on GS 2048 (rows x - 2048 w, y - 2048 w, w), whose
+// sign is the eye's side of the triangle's plane times the sign of the
+// matrix h is made with, exact across w = 0 (a corner behind the eye),
+// read the other way under VU_F_MIRROR (that sign negative) and under
+// VU_MARK_FLIP (the corners wind against the normals).  Front: det < 0
+// with neither.  An edge-on triangle (det 0) or a NaN is not front.  The
+// forms: scalars, flags as uints.
+uint vu_front_facing(VuVtx a, VuVtx b, VuVtx c, uint marks)
+{
+    precise float ax = a.h.x - 2048.0 * a.h.w;
+    precise float ay = a.h.y - 2048.0 * a.h.w;
+    precise float bx = b.h.x - 2048.0 * b.h.w;
+    precise float by = b.h.y - 2048.0 * b.h.w;
+    precise float cx = c.h.x - 2048.0 * c.h.w;
+    precise float cy = c.h.y - 2048.0 * c.h.w;
+    const float aw = a.h.w, bw = b.h.w, cw = c.h.w;
+    precise float m0 = by * cw - bw * cy;
+    precise float m1 = bx * cw - bw * cx;
+    precise float m2 = bx * cy - by * cx;
+    precise float det = ax * m0 - ay * m1 + aw * m2;
+    const uint neg = det < 0.0 ? 1u : 0u;
+    const uint nz = det < 0.0 || det > 0.0 ? 1u : 0u;
+    const uint mirror = (vu_draw.z & VU_F_MIRROR) != 0u ? 1u : 0u;
+    const uint flip = (marks & VU_MARK_FLIP) != 0u ? 1u : 0u;
+    return (neg + mirror + flip) & nz; // odd: front (no exclusive or in the envelope)
+}
+
+// Whether a triangle the rule drops is drawn beside the picture, 1 or 0:
+// the draw has side bands (no VU_F_NO_BESIDE), the frame is wider than the
+// picture, the triangle faces the eye
+uint vu_beside(VuVtx a, VuVtx b, VuVtx c, uint marks)
+{
+    if ((vu_draw.z & VU_F_NO_BESIDE) != 0u) {
+        return 0u;
+    }
+    return vu_frame_wider() & vu_front_facing(a, b, c, marks);
+}
+
+// The rule's last step on its final verdict (after vu_rule_card)
+uint vu_rule_beside(uint rule, VuVtx a, VuVtx b, VuVtx c, uint marks)
+{
+    if (rule != VU_RULE_DROP) {
+        return rule;
+    }
+    return vu_beside(a, b, c, marks) != 0u ? VU_RULE_CLIP_BESIDE : VU_RULE_DROP;
+}
+
 // The triangle k-2, k-1, k: what the GS draws of it (vu_triangle_out),
 // without the planes; exact 1: every corner drawn at its GS position.
 // Each position the corner can take is computed once (pme its
@@ -1655,7 +1766,7 @@ VuVSOut vu_triangle_out_pos(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode, uint
         if (rule == VU_RULE_EXACT) {
             at = 1u;
             exact = 1u;
-        } else if (rule == VU_RULE_CLIP) {
+        } else if (rule == VU_RULE_CLIP || rule == VU_RULE_CLIP_BESIDE) {
             at = 2u;
             exact = gsPos;
         }
@@ -1817,7 +1928,7 @@ VuVSOut vu_fused_out(VuVSOut o, uint mode)
         o.r.w = fused != 0u ? 1.0 : 0.0;
         // (1 or 0 each: flags combined after they are computed are uints)
         const uint mark = fused & (vu_batch.z == 0u ? 1u : 0u);
-        o.plane = mark != 0u ? -1.0 : o.plane;
+        o.plane.x = mark != 0u ? -1.0 : o.plane.x;
     }
 #endif
     return o;
@@ -1834,10 +1945,12 @@ VuVSOut vu_mesh_out(VuVtx a, VuVtx b, VuVtx c, uint kick, uint corner, uint mark
     VuVtx me = vu_pick(a, b, c, corner);
     uint rule = VU_RULE_EXACT;
     if (mode == VU_CLIP_REGION) {
-        rule = vu_rule_card(vu_region_rule(a, b, c, lo, hi), marks, kick);
+        rule = vu_rule_beside(vu_rule_card(vu_region_rule(a, b, c, lo, hi), marks, kick), a, b, c,
+                              marks);
     }
     uint exact;
     VuVSOut o = vu_triangle_out_pos(a, b, c, me, mode, rule, exact);
+    o.plane.y = rule == VU_RULE_CLIP_BESIDE ? 1.0 : 0.0; // the side bands' pixels
     VuPlaneTri t = vu_plane_tri(a, b, c);
     o = vu_attr_planes(o, t, a, b, c, exact);
     if (chain) {
@@ -1954,6 +2067,7 @@ VuPreOut vu_pre_out(uint id, VuVtx v)
 #define VU_TF_GSPOS 4096u   // every corner at its GS position (vu_has_gs_position)
 #define VU_TF_WRAP 8192u    // clip mode none: no corner's X or Y changed by the 16-bit wrap
 #define VU_TF_KEPT 16384u   // a sprite the port draws (vu_particle_vs's drop verdict)
+#define VU_TF_BESIDE 32768u // a drop would be drawn beside the picture (vu_beside; region mode)
 
 // A record stage's point: texel t of the three planes (vu_pre_out's mapping)
 VuPreOut vu_rec_point_out(uint t, uint4 r0, uint4 r1, uint4 r2)
@@ -2197,11 +2311,13 @@ DualOut vu_dual_out_f(float4 col, uint flags, uint fix VU_FUSED_ARG)
 // clip plane's draw, and under one a negative plane's pixel is discarded
 // before this)
 #if defined(ICO_NO_DUAL) && defined(ICO_VU_NO_PLANES)
-#define VU_RETURN(col, i) return vu_dual_out_f(col, g_mode.x, g_blend.y, i.plane < 0.0 ? 1.0 : 0.0)
+#define VU_RETURN(col, i)                                                                          \
+    return vu_dual_out_f(col, g_mode.x, g_blend.y, i.plane.x < 0.0 ? 1.0 : 0.0)
 #elif defined(ICO_NO_DUAL)
 #define VU_RETURN(col, i) return vu_dual_out_f(col, g_mode.x, g_blend.y, i.r.w)
 #elif defined(ICO_VU_NO_PLANES)
-#define VU_RETURN(col, i) return vu_dual_out_f(col, g_mode.x, g_blend.y, i.plane < 0.0 ? 1.0 : 0.0)
+#define VU_RETURN(col, i)                                                                          \
+    return vu_dual_out_f(col, g_mode.x, g_blend.y, i.plane.x < 0.0 ? 1.0 : 0.0)
 #else
 // A pixel of a fused pair's kick (fused not 0: VU_F_FUSED, VuVSOut.r.w or
 // the twins' negative plane),
@@ -2240,7 +2356,7 @@ DualOut vu_dual_out_fused(float4 col, uint flags, uint fix, float fused)
 // is what the kick's own pass (no GS blending: RdDrawPass.csOnly, the
 // register 0x00) stores, byte for byte
 #ifdef ICO_VU_NO_PLANES
-#define VU_RETURN(col, i) return gs_dst_out_reg(uint4(col), i.plane < 0.0 ? 0u : g_blend.x)
+#define VU_RETURN(col, i) return gs_dst_out_reg(uint4(col), i.plane.x < 0.0 ? 0u : g_blend.x)
 #else
 #define VU_RETURN(col, i) return gs_dst_out_reg(uint4(col), i.r.w != 0.0 ? 0u : g_blend.x)
 #endif
@@ -2267,7 +2383,7 @@ struct VuPSIn {
     float4 pos : SV_Position;
     VK_LOC(0) noperspective float4 col : COLOR0;
     VK_LOC(1) noperspective float3 stq : TEXCOORD0;
-    VK_LOC(2) noperspective float plane : TEXCOORD1;
+    VK_LOC(2) noperspective float2 plane : TEXCOORD1;
 };
 
 VuPSIn vu_pixel_in(VuPSIn i)
@@ -2283,10 +2399,45 @@ VuPSIn vu_pixel_in(VuPSIn i)
 }
 #endif
 
-// The clip plane's and DATE's discards
+// Whether the pixel at pos (SV_Position) lies in the camera's picture's
+// columns (vu_picture_half: GS 2048 -+ g_frame.y), which a triangle drawn
+// beside the picture (VuVSOut.plane.y, VU_RULE_CLIP_BESIDE) leaves to the
+// PS2's rule.  Under the exact viewport the pixel's offset from the
+// target's centre in texels (gs_plane_offset's: pixel centres k + 0.5, the
+// centre a whole or half texel) against the band's edges in the same
+// texels (gs_texel_offset, the planes' corners' mapping).  That mapping
+// puts a GS integer coordinate on a texel's centre (g_frame.w, the GS's
+// pixel-centre convention), so the band's left edge, GS 2048 - h, is the
+// centre of its first column: the band is lo <= q < hi, the columns the
+// 4:3 frame's own texels are (with the half texel off, g_frame.w 0, the
+// edges fall between centres and the same test holds).  The plain mapping
+// (the shader tests): the pixel's GS X from the texel, g_z.y texels a GS
+// pixel (0: 1), the same half-open range.
+bool vu_pixel_in_picture(float4 pos)
+{
+    const float h = vu_picture_half().x;
+    if (g_vp.x != 0.0) {
+        precise float c = g_target.x * g_vp.z * 0.5 - g_vpo.z;
+        precise float q = pos.x - c;
+        const float lo = gs_texel_offset(float2(2048.0 - h, 2048.0)).x;
+        const float hi = gs_texel_offset(float2(2048.0 + h, 2048.0)).x;
+        return q >= lo && q < hi;
+    }
+    const float k = g_z.y > 0.0 ? g_z.y : 1.0;
+    precise float x = pos.x / k + g_origin.x - g_origin.z;
+    return x >= 2048.0 - h && x < 2048.0 + h;
+}
+
+// The clip plane's, the side bands' and DATE's discards
 void vu_pixel_tests(VuPSIn i)
 {
-    if ((g_mode.x & DF_PLANE) != 0u && i.plane < 0.0) {
+    if ((g_mode.x & DF_PLANE) != 0u && i.plane.x < 0.0) {
+        GS_DISCARD;
+    }
+    // a triangle drawn beside the picture: none of its pixels inside it,
+    // where the PS2 dropped it (written nowhere: no colour, depth or
+    // stencil, as the drop)
+    if (i.plane.y > 0.5 && vu_pixel_in_picture(i.pos)) {
         GS_DISCARD;
     }
     if ((g_mode.x & DF_DATE) != 0u) {

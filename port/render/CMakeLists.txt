@@ -1970,6 +1970,25 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_region_stats PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_sideband_ab (test/rd_sideband_ab.cmake, issue 29, docs/port/VU1_PROGRAMS.md
+    # "The region rule"): the dumps of the machine-local list
+    # tools/sideband_dumps.txt at their own aspect, Original 1x and Enhanced
+    # 2x, with the PS2's drop on every VU draw (ICO_RD_VU_BESIDE=0) and with
+    # the side bands: tools/cmp_dirs_band.py holds SCENE's centre 512 GS
+    # pixels byte for byte and every changed side pixel to one the drop left
+    # at the fog colour; SKIP without the list, a dump or a device
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/sideband_ab")
+    add_test(NAME rd_sideband_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DPYTHON=${Python3_EXECUTABLE}"
+                     "-DCMP=${CMAKE_SOURCE_DIR}/tools/cmp_dirs_band.py"
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/sideband_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/sideband_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_sideband_ab.cmake")
+    set_tests_properties(rd_sideband_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_sideband_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
     # rd_noplanes_ab (test/rd_noplanes_ab.cmake, issue 161): the dumps of the
     # machine-local list tools/noplanes_dumps.txt (the title and the boot,
     # each drawing one screen-prim triangle key with planes, and a capture

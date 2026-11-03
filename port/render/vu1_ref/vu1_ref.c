@@ -138,8 +138,35 @@ int vu1ref_static_kicks(const float *stw, const int *batchFirst, int count, int 
     return n;
 }
 
+int vu1ref_region_facing(const float ha[4], const float hb[4], const float hc[4], int mirror,
+                         int flip)
+{
+    /* vu_front_facing: the corners centred on GS 2048, then the
+       determinant along its first row, every step rounded on its own */
+    const float ax = ha[0] - 2048.0f * ha[3], ay = ha[1] - 2048.0f * ha[3], aw = ha[3];
+    const float bx = hb[0] - 2048.0f * hb[3], by = hb[1] - 2048.0f * hb[3], bw = hb[3];
+    const float cx = hc[0] - 2048.0f * hc[3], cy = hc[1] - 2048.0f * hc[3], cw = hc[3];
+    const float m0 = by * cw - bw * cy;
+    const float m1 = bx * cw - bw * cx;
+    const float m2 = bx * cy - by * cx;
+    const float det = ax * m0 - ay * m1 + aw * m2;
+    const int neg = det < 0.0f;
+    const int nz = det < 0.0f || det > 0.0f;
+    return ((neg ^ (mirror != 0) ^ (flip != 0)) & nz) != 0;
+}
+
+int vu1ref_region_mirror(const float c0[4], const float c1[4], const float c2[4])
+{
+    /* rows x, y, w over the columns x, y, z */
+    const double d = (double)c0[0] * ((double)c1[1] * c2[3] - (double)c1[3] * c2[1]) -
+                     (double)c1[0] * ((double)c0[1] * c2[3] - (double)c0[3] * c2[1]) +
+                     (double)c2[0] * ((double)c0[1] * c1[3] - (double)c0[3] * c1[1]);
+    return d < 0.0;
+}
+
 int vu1ref_region_draw(int extended, int freeCamera, int insideA, int insideB, int insideC,
-                       int hide, int reaches, int front, int joined, int stripPasses)
+                       int hide, int reaches, int front, int joined, int stripPasses, int wide,
+                       int facing)
 {
     /* vu_content_hidden */
     if (hide) {
@@ -156,15 +183,18 @@ int vu1ref_region_draw(int extended, int freeCamera, int insideA, int insideB, i
     if (extended && front && (joined || stripPasses)) {
         return VU1REF_DRAW_CLIPPED;
     }
-    return VU1REF_DRAW_NONE;
+    /* VU_RULE_CLIP_BESIDE: the last step, on a final drop */
+    return wide && facing ? VU1REF_DRAW_BESIDE : VU1REF_DRAW_NONE;
 }
 
 int vu1ref_region_between(int drawT, int cardT, int shownPrev, int shownCur)
 {
-    if (drawT != VU1REF_DRAW_NONE || cardT) {
+    const int dropped = drawT == VU1REF_DRAW_NONE || drawT == VU1REF_DRAW_BESIDE;
+    if (!dropped || cardT) {
         return drawT;
     }
-    return shownPrev || shownCur ? VU1REF_DRAW_CLIPPED : VU1REF_DRAW_NONE;
+    /* the ticks first; a drop no tick showed stays as drawT (beside or not) */
+    return shownPrev || shownCur ? VU1REF_DRAW_CLIPPED : drawT;
 }
 
 /* whether static kick k (vertices k-2..k) is drawn: vu1ref_static_kicks */

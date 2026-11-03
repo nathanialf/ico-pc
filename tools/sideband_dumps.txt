@@ -1,0 +1,31 @@
+# Dump list for rd_sideband_ab (port/render/test/rd_sideband_ab.cmake): the
+# wide frames the region rule's side bands are compared on (issue 29), a path
+# and the dump's own aspect (its "dump: ... aspect A" line) a line; the replay
+# runs at that aspect.  MACHINE-LOCAL: these are paths on the maintainer's
+# machine; the dumps themselves are never committed.  Missing files are
+# reported and skipped.  Relative paths are relative to this file.
+#
+# the PowerVR phone's frames (v0.9.4 to v0.10.0 rcs), GS 848x448 at 2.189
+/primary/dev/ico-dumps/phone/frame-20261022-232809-v5601.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261028-105852-v4103.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261028-151709-v2199.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261028-204306-v2251.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261102-091017-v15677.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261102-114223-v2381.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261102-122555-v3347.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261102-134548-v4651.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261102-165136-v4423.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261102-173730-v5611.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261102-181138-v2429.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261102-194450-v2877.zip 2.189
+/primary/dev/ico-dumps/phone/frame-20261102-210456-v2349.zip 2.189
+# the phone's one 4:3 frame (GS 512x448): the control, the band is the frame
+/primary/dev/ico-dumps/phone/frame-20261102-152033-v6818.zip 4:3
+# issue 179 (Mali-G52, GS 688x512 at 16:9)
+/primary/dev/ico-pc/build-host/tmp/v0101/evidence/179/frame-20261103-125544-v2915.rddump 16:9
+# issue 182 (RTX 4060 laptop, GS 624x448 at 16:10)
+/primary/dev/ico-pc/build-host/tmp/v0101/evidence/182/frame-20261103-163115-v3225.rddump 16:10
+# issue 29: the user's 48:9 captures (old bridge water, trolley 2 wall,
+# chandelier hall) and 16:9 ones (Goblan's rooms) go under
+# /primary/dev/ico-dumps/29/ when they arrive, one line each at 48:9 or 16:9

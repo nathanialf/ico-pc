@@ -201,7 +201,7 @@ static RdMesh makeMesh(int i)
                                                "rd vu pre-pass self-test skin"};
     const uint32_t n = buildStream(i, q);
     const RdVuBatchDesc batch = {0, 0, 0};
-    const RdVuMeshDesc d = {(const float (*)[4])q, n, kQpv[i], 1, &batch, 0, kName[i]};
+    const RdVuMeshDesc d = {(const float (*)[4])q, n, kQpv[i], 1, &batch, 0, kName[i], NULL, 0};
     return rd_create_vu_mesh(&d);
 }
 
