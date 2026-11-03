@@ -165,6 +165,85 @@ typedef struct RdVisCounts {
 
 void rd__vis_counts(RdVisCounts *out);
 
+/* Why a scene draw command was skipped or replayed, one reason a command
+ * (the last rd__vis_frame's walk; the replay tool's --stats prints them as
+ * "cull why"; the names are rd__vis_why_name's):
+ *   skipped: SKIP_WHOLE (the whole stream's box lies beyond a plane),
+ *     SKIP_RANGE (only the box of the batches the draw reads does);
+ *   exempt: PARTICLES, LIST_2D (lists 11 and 12), NO_TARGET, CLIP_NONE (code
+ *     34 skinned: its X and Y wrap to 16 bits);
+ *   occluded: OCCLUDED (list 0, behind the depth the occluders wrote);
+ *   unbounded: NO_PAYLOAD (a payload too short or outside the frame),
+ *     CLIP_UNKNOWN, NO_MESH (no mesh record, a program the layout does not
+ *     fit, a batch range outside it), NO_BOX (no or a non-finite bound),
+ *     NO_SKIN (a skinned bound refused or a bone block short), NO_GRID (a
+ *     grid stream the bound refused);
+ *   replayed because the bound reaches the rectangle: KEEP_SKIN, KEEP_GRID,
+ *     KEEP_SCISSOR (a mesh under the scissor code), KEEP_MESH_N (a mesh draw
+ *     of several batches), KEEP_MESH_1 (one batch), KEEP_NONE (a mesh or grid
+ *     under code 34: never skipped by the frustum test, whose X and Y wrap,
+ *     only a candidate for the occlusion test). */
+enum {
+    RD_VIS_WHY_SKIP_WHOLE = 0,
+    RD_VIS_WHY_SKIP_RANGE,
+    RD_VIS_WHY_PARTICLES,
+    RD_VIS_WHY_LIST_2D,
+    RD_VIS_WHY_NO_TARGET,
+    RD_VIS_WHY_CLIP_NONE,
+    RD_VIS_WHY_NO_PAYLOAD,
+    RD_VIS_WHY_CLIP_UNKNOWN,
+    RD_VIS_WHY_NO_MESH,
+    RD_VIS_WHY_NO_BOX,
+    RD_VIS_WHY_NO_SKIN,
+    RD_VIS_WHY_NO_GRID,
+    RD_VIS_WHY_KEEP_SKIN,
+    RD_VIS_WHY_KEEP_GRID,
+    RD_VIS_WHY_KEEP_SCISSOR,
+    RD_VIS_WHY_KEEP_MESH_N,
+    RD_VIS_WHY_KEEP_MESH_1,
+    RD_VIS_WHY_KEEP_NONE,
+    RD_VIS_WHY_OCCLUDED,
+    RD_VIS_WHY_COUNT
+};
+
+/* the last rd__vis_frame's count of commands a reason; sums to counts.draws
+ * (zeros when the walk did not run) */
+void rd__vis_why(uint32_t out[RD_VIS_WHY_COUNT]);
+const char *rd__vis_why_name(int why);
+
+/* The occlusion test's own breakdown (full; the last walk's), two groups.
+ * The occluder candidates: each RDC_MESH command of list 0, one reason
+ * (OCC_USED: it put triangles in the record; the others name the first
+ * admission rule that refused it).  The occludee candidates: each list-0 VU
+ * draw the frustum test kept, one reason (HZ_OCCLUDED, or why it was kept).
+ * rd_replay_tool --stats prints them as "cull occlusion". */
+enum {
+    RD_VIS_HZ_OCC_USED = 0,
+    RD_VIS_HZ_OCC_STATE,    /* Z write / test / ABE / DATE / mask not an occluder's */
+    RD_VIS_HZ_OCC_CHAIN,    /* carries the chain's clip plane (b[5]) */
+    RD_VIS_HZ_OCC_TARGET,   /* no PSMZ32 depth target with depth */
+    RD_VIS_HZ_OCC_BOUND,    /* skipped by the frustum test or no bound */
+    RD_VIS_HZ_OCC_PROG,     /* not a prelit or lit program */
+    RD_VIS_HZ_OCC_ALPHA,    /* the alpha plan cannot prove the alpha test passes */
+    RD_VIS_HZ_OCC_SMALL,    /* its box is under a 64th of the frame */
+    RD_VIS_HZ_OCC_NOTRI,    /* no triangle of it is exact, large enough and unmarked */
+    RD_VIS_HZ_HIDDEN,       /* occluded */
+    RD_VIS_HZ_NOT_ELIGIBLE, /* not a mesh or grid under GEQUAL, or no bound */
+    RD_VIS_HZ_NO_RECORD,    /* the target pair refused (not PSMZ32, no memory) */
+    RD_VIS_HZ_EMPTY,        /* no occluder written since the last reset */
+    RD_VIS_HZ_BOX,          /* the occludee's box refused (behind the eye, outside, Z) */
+    RD_VIS_HZ_OUTSIDE,      /* the box reaches outside the record */
+    RD_VIS_HZ_UNCOVERED,    /* a cell the box touches no occluder covered */
+    RD_VIS_HZ_MARGIN,       /* every cell covered, one not behind by the margin */
+    RD_VIS_HZ_COUNT
+};
+
+void rd__vis_hiz_why(uint32_t out[RD_VIS_HZ_COUNT]);
+const char *rd__vis_hiz_why_name(int why);
+
+/* rd__vis_hiz_hidden's verdict, why not hidden */
+enum { RD_VIS_HIZ_HIDDEN = 0, RD_VIS_HIZ_OUTSIDE, RD_VIS_HIZ_UNCOVERED, RD_VIS_HIZ_MARGIN };
+
 /* ------------------------------------------- the occlusion test (Hi-Z)
  * rd_vis_hiz.c (its header comment holds the argument).  All positions are
  * GS primitive coordinates (X / 16 of XYZ2), all depths GS Z (larger is
@@ -252,6 +331,8 @@ uint32_t rd__vis_hiz_raster(RdVisHiz *z, const RdVisHizTri *t, const double clip
 /* Whether every cell box b touches inside the record's box holds more
  * than thr (zmax + rd__vis_hiz_margin); false for a box outside it. */
 bool rd__vis_hiz_hidden(RdVisHiz *z, const RdVisHizBox *b, double thr);
+/* the same, and *why (may be NULL) the RD_VIS_HIZ_* it ended on */
+bool rd__vis_hiz_hidden_why(RdVisHiz *z, const RdVisHizBox *b, double thr, int *why);
 bool rd__vis_hiz_list_push(RdVisHizList *l, const RdVisHizTri *t);
 /* The triangles of an RDC_MESH draw of m (payload header p, VU memory
  * mem) that count as occluders, in the index ranges rd_replay_vu.c

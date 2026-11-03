@@ -445,6 +445,7 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_FUSE` | `rd_replay_vu.c` | 0: code 36's kick draws under their own pipelines instead of the fused scissor pair (`[dev] vu_fuse = false`; `rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)) |
 | `ICO_RD_CULL` | `rd_vis.c` | `off` (or 0): every scene draw replayed; `frustum` (or 1; the default): a mesh, skinned or grid command of lists 0 to 10 wholly off its target or behind the eye replayed as an `RDC_NOP`; `full`: list 0's occlusion test too, a mesh or grid draw of list 0 wholly behind the depth the opaque draws before it wrote replayed as an `RDC_NOP` (`rd_vis_hiz.c`) (`[dev] cull`; `rd_cull_ab`; the replay tool's `--cull`, and its `--occlusion` sets 0; [RENDER.md](RENDER.md#culling)) |
 | `ICO_RD_CULL_HIZ_TRIS` | `rd_vis.c` | under `ICO_RD_CULL=full`: the occluder triangles a picture rasterises into the occlusion test's record, the largest screen boxes first (a count up to 1000000, 0 none; default 12000; the stats line's `past the budget`; [RENDER.md](RENDER.md#culling)) |
+| `ICO_RD_CULL_RANGE` | `rd_vis.c` | `0` (or `off`): a draw of part of a mesh is tested with the whole stream's box alone, not its batches' box (a comparison; read at `rd_init`; [RENDER.md](RENDER.md#culling)) |
 | `ICO_RD_CONSTANT_READS` | `rd_const_read.c` | 0: a post sprite whose source target holds only its last clear reads the target as before instead of being drawn in the clear's colour (`[dev] constant_reads = false`; `rd_constant_reads_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)) |
 | `ICO_RD_NO_SPRITE_PLANES` | `rd_screen_planes.c` | 1: the sprite planes builds off for the run, the screen-prim triangles through the plain sprite builds, as `[dev] pipeline_skip` makes it on a device whose driver stopped creating them (issue 161; `rd_noplanes_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)) |
 | `ICO_RD_PERF_LIST_STAMPS` | `rd_perf.c` | 0: no list or effect timestamp (`[dev] perf_list_stamps = false`); `rd_perf_test` switches it with `rd__set_perf_list_stamps` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
@@ -516,6 +517,20 @@ for each run, and writes the report and the culling gate's verdict, [RENDER.md](
 GPU), `--present WxH`, `--aspect`, `--enhanced`, `--aa`, `--interp T PREV` and with it
 `--save-blended DUMP` (the frame between the two written as F12's blended present's frame)
 (`port/render/tools/rd_replay_tool.c`, usage).
+
+### The culler over the corpus, and the phone's logs
+
+`tools/cull_corpus.py` ([RENDER.md](RENDER.md#culling)) runs `rd_replay_tool --stats --gpu-repeat K
+--time K` under `--cull off`, `frustum` and `full` for every dump of `tools/occlusion_corpus.txt`
+and `tools/native_frame_dumps.txt` that is here (Original 4:3, Enhanced 4:3 2x, and Enhanced 2x at
+the dump's own aspect for a dump wider than 4:3), and `--occlusion` once, under the replay lock for
+each run. The report `build-host/tmp/v0101/evidence/perf/cull.md` has a row a dump and setting
+(scene draws, skipped and its share, list 0's GPU median and the CPU walk by mode, the culler's own
+ms, the share hidden for any reason and what the skip leaves of it, the largest reasons a command
+was replayed), the reasons summed, the medians and one verdict line; `--selftest` parses built-in
+sample lines. `tools/cull_log_compare.py BASELINE.log NEW.log` (or `--pair ROOM=BASELINE:NEW`, once
+a room) prints the 10 s lines' medians of the `cull:` piece, list 0's GPU ms, the render thread's
+walk and CPU ms and their change; `--selftest` as above.
 
 ### Replaying a phone's loss dump as the phone drew it
 

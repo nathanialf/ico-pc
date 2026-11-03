@@ -2102,7 +2102,22 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   away. The chain plane, the later mark's depth bias, the card test, the tick cameras' rule and the
   content table only leave out or move depth, never a position. So the verdict depends only on the
   target's GS size and the payload, the same at every preset, scale and aspect.
-- *Not tested.* Particles; code 34 (clip mode none: X and Y wrap to 16 bits); code 36 behind the eye
+- *The batches' box.* A draw reads the batches `firstBatch` to `firstBatch + batchCount - 1` of its
+  mesh (all of them when `batchCount` is 0, as `doVuDraw` does), and a batch's indices lie in its
+  own vertices (`RdVuBatchRec`). A draw of part of a mesh whose whole stream's box reaches the
+  target is tested again with the union of its batches' boxes (kept per batch on the mesh's entry,
+  made again with the stream's serial); a mesh carrying a sheet's tiles (`tiledFrom`, which a draw
+  out of the box reads too) or a batch outside the stream keeps the whole stream's verdict. The
+  same test on a subset of the vertices, so the same argument. `ICO_RD_CULL_RANGE=0` turns it off
+  for a comparison (`rd_cull_ab` runs with it on).
+- *Code 34.* A mesh or grid draw under clip mode none (X and Y wrap to 16 bits) is never skipped by
+  the plane test. Under `full` it is a candidate for the occlusion test like any other mesh or grid
+  draw, as an occludee (its box must lie in front of the eye and inside the GS region 1 to 4094,
+  so no wrap can happen) and as an occluder (`rd__vis_hiz_mesh` admits it: a triangle counts only
+  with all three corners accepted by the same vertex rule as code 32, which keeps them inside the
+  region where the wrap changes nothing and the program draws them at their GS positions). A skinned
+  draw under it stays exempt.
+- *Not tested.* Particles; a skinned draw under code 34; code 36 behind the eye
   (its triangles without a clip flag are drawn at their GS positions whatever `w` is); a draw with
   no target, a payload or a layout the test does not read, or a bound not finite; lists 11 and 12;
   a pass window (the bisect's and the tool's `--passes`: the passes as recorded) and a frame never
@@ -2200,6 +2215,26 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   frustum, O occluded), T ms; not tested: E exempt, U unbounded; skipped beyond the left ...;
   occlusion: K occluder triangles (B past the budget), C cells, D draws tested, R resets, H ms`
   (`--cull off|frustum|full` sets the variable; `--occlusion` replays with it off).
+- *Why each command was or was not skipped.* `rd_replay_tool --stats` follows that line with
+  `stats: cull why: <reason> <count>; ...`: one reason a scene draw command, the counts summing to
+  M (`rd_vis.h`, `RD_VIS_WHY_*`). Skipped: by the stream's box, by the batches' box (what only the
+  batches' box took). Not tested: particles, the 2D lists (11, 12), no target, a skinned draw under clip none (code 34).
+  Occluded: by the occlusion test. A mesh or grid under code 34 is `code 34 reaches`.
+  Not bounded: no payload, clip unknown, no mesh (no record, a program the layout does not fit, a
+  batch range outside it), no bound (none or not finite), skinned refused, grid refused. Replayed
+  because the bound reaches the target: skinned, grid, scissor mesh (code 36, which is never
+  skipped behind the eye), mesh of several batches (a whole-mesh box too loose for the draw's
+  packets where the batches' box does not help), one-batch mesh (the draw is partly or wholly in
+  the rectangle, or its triangles are, through the box, outside it). `stats: cull occlusion:` follows
+  (`RD_VIS_HZ_*`): list 0's mesh commands as occluder candidates by the first rule that refused
+  them (state, chain plane, no PSMZ32 depth, skipped or unbounded, program, alpha test not proven,
+  box under a 64th of the frame, no exact triangle) or `occluder used`, and the list-0 draws the
+  frustum test kept by their outcome (occluded; not a mesh or grid under GEQUAL; no record; no
+  occluder yet; box refused; box outside the record; a cell uncovered; within the margin).
+  `tools/cull_corpus.py` runs
+  the corpus under `--cull off|frustum|full` with `--occlusion`'s count of the draws that put no
+  sample on the screen beside it, and writes `build-host/tmp/v0101/evidence/perf/cull.md`
+  ([TESTING.md](TESTING.md)).
 
 ## Dumps and the replay tool
 

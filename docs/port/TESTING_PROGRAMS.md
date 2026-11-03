@@ -994,7 +994,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   folding), the effects depth or a depth read by a later frame (the bars drawn, a fade after them
   folds), a draw into SCENE in list 12, MSAA, a factor above 0x80 (`rd_fades_fold`).
 - `rd_vis_test.c`: the scene draws' visibility test ([RENDER.md](RENDER.md#culling)) on the CPU,
-  without a device: `rd__vis_box` over synthetic prelit, lit (with a sheet's tiles past its own
+  without a device (also the reason counts `rd__vis_why` of the frame case, summing to the draws
+  walked, and a two-batch mesh drawn by batch ranges: the draw of the batch left of the frame
+  skipped by its own box and counted `SKIP_RANGE`, the draws of the other batch and of both kept,
+  the moved stream measured again): `rd__vis_box` over synthetic prelit, lit (with a sheet's tiles past its own
   count) and skinned streams (x, y, z and the pos.w range; a position not finite refused),
   `rd__vis_grid_box` over a Mesh3D buffer (its header and MSCNT qwords left out, a buffer too short
   refused), `rd__vis_skin`'s boxes by bone slot and largest `|w0 + w1 - 1|` (a weight outside

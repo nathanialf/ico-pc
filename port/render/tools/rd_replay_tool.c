@@ -265,7 +265,12 @@
  *                         commands walked, N those replayed as NOPs), what
  *                         it did not test and the occlusion test's
  *                         occluder triangles, cells, draws tested, resets
- *                         and time
+ *                         and time, then "stats: cull why: <reason> <count>; ..."
+ *                         (one reason a command, rd_vis.h RD_VIS_WHY_*) and
+ *                         "stats: cull occlusion: <reason> <count>; ..."
+ *                         (list 0's occluder candidates by the rule that
+ *                         refused them, its occludee candidates by why they
+ *                         were kept, RD_VIS_HZ_*)
  *   --occlusion-out FILE  (with --occlusion) writes SPEC to FILE, for
  *                         --nop @FILE
  *   --occlusion-csv FILE  (with --occlusion) writes a line a command of the
@@ -2749,6 +2754,24 @@ int main(int argc, char **argv)
                    vc.byVerdict[RD_VIS_BOTTOM], vc.byVerdict[RD_VIS_NEAR], vc.hizTris,
                    vc.hizOverBudget, (unsigned long long)vc.hizCells, vc.hizTested, vc.hizResets,
                    vc.hizMs);
+            /* one reason a command, every reason named (the sum is M) */
+            uint32_t why[RD_VIS_WHY_COUNT];
+            rd__vis_why(why);
+            printf("%s: stats: cull why:", dump);
+            for (int k = 0; k < RD_VIS_WHY_COUNT; k++) {
+                printf("%s %s %u", k ? ";" : "", rd__vis_why_name(k), why[k]);
+            }
+            printf("\n");
+            /* the occlusion test (full): the occluder candidates of list 0
+             * by the rule that refused them, the occludee candidates by
+             * why they were kept */
+            uint32_t hz[RD_VIS_HZ_COUNT];
+            rd__vis_hiz_why(hz);
+            printf("%s: stats: cull occlusion:", dump);
+            for (int k = 0; k < RD_VIS_HZ_COUNT; k++) {
+                printf("%s %s %u", k ? ";" : "", rd__vis_hiz_why_name(k), hz[k]);
+            }
+            printf("\n");
         }
         uint32_t satDraws = 0;
         const uint64_t sat = satZVertices(rf, &satDraws);

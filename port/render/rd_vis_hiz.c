@@ -509,8 +509,13 @@ static uint32_t tileMin(RdVisHiz *z, uint32_t t)
     return z->tmin[t];
 }
 
-bool rd__vis_hiz_hidden(RdVisHiz *z, const RdVisHizBox *b, double thr)
+bool rd__vis_hiz_hidden_why(RdVisHiz *z, const RdVisHizBox *b, double thr, int *why)
 {
+    int w0;
+    if (!why) {
+        why = &w0;
+    }
+    *why = RD_VIS_HIZ_OUTSIDE;
     if (!z->ncx || !b || !(thr >= 0.0)) {
         return false;
     }
@@ -530,6 +535,7 @@ bool rd__vis_hiz_hidden(RdVisHiz *z, const RdVisHizBox *b, double thr)
         for (int64_t tx = i0 >> 3; tx <= i1 >> 3; tx++) {
             const uint32_t t = (uint32_t)(ty * z->ntx + tx);
             if (!(z->tflag[t] & HIZ_T_WRITTEN)) {
+                *why = RD_VIS_HIZ_UNCOVERED;
                 return false;
             }
             const int64_t ci0 = tx * 8 > i0 ? tx * 8 : i0, ci1 = tx * 8 + 7 < i1 ? tx * 8 + 7 : i1;
@@ -537,6 +543,7 @@ bool rd__vis_hiz_hidden(RdVisHiz *z, const RdVisHizBox *b, double thr)
             if (ci0 == tx * 8 && ci1 == tx * 8 + 7 && cj0 == ty * 8 && cj1 == ty * 8 + 7) {
                 /* the whole tile: its least cell */
                 if (!((double)tileMin(z, t) > thr)) {
+                    *why = tileMin(z, t) == 0u ? RD_VIS_HIZ_UNCOVERED : RD_VIS_HIZ_MARGIN;
                     return false;
                 }
                 continue;
@@ -546,13 +553,21 @@ bool rd__vis_hiz_hidden(RdVisHiz *z, const RdVisHizBox *b, double thr)
             for (int64_t j = cj0; j <= cj1; j++) {
                 for (int64_t i = ci0; i <= ci1; i++) {
                     if (!((double)c[((j & 7) << 3) | (i & 7)] > thr)) {
+                        *why = c[((j & 7) << 3) | (i & 7)] == 0u ? RD_VIS_HIZ_UNCOVERED
+                                                                 : RD_VIS_HIZ_MARGIN;
                         return false;
                     }
                 }
             }
         }
     }
+    *why = RD_VIS_HIZ_HIDDEN;
     return true;
+}
+
+bool rd__vis_hiz_hidden(RdVisHiz *z, const RdVisHizBox *b, double thr)
+{
+    return rd__vis_hiz_hidden_why(z, b, thr, NULL);
 }
 
 /* ------------------------------------------------- an occluder's triangles */
@@ -642,7 +657,9 @@ int rd__vis_hiz_mesh(const RdMeshRec *m, const RdVuPayload *p, const float (*mem
 {
     *lbAll = UINT32_MAX;
     if (!m || !m->stream || !m->index || !m->batches || p->firstBatch >= m->batchCount ||
-        (p->clip != RD_VU_CLIP_REGION && p->clip != RD_VU_CLIP_SCISSOR)) {
+        (p->clip != RD_VU_CLIP_REGION && p->clip != RD_VU_CLIP_SCISSOR &&
+         p->clip != RD_VU_CLIP_NONE)) { /* NONE (code 34): drawn at the GS position unless X or Y
+                                         * wraps to 16 bits, which no vertex accepted below does */
         return 0;
     }
     if (m->vertexCount > s_memo.cap) {
