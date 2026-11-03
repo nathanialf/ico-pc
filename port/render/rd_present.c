@@ -549,7 +549,7 @@ static bool s_window;
 
 bool rd__present_acquire(void)
 {
-    rd__submit_drain(); /* the last picture's present reads what this sets (rd_submit.h) */
+    rd__submit_drain_acquire(); /* the last picture's present reads what this sets (rd_submit.h) */
     s_backbuffer = (RhiTexture){0};
     s_window = rhi_swapchain_format() != RHI_FMT_UNKNOWN;
     if (s_window) {

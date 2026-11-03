@@ -12,17 +12,43 @@ static _Thread_local double t_tickMs;
 
 void rd__submit_drain(void)
 {
-    /* on the game thread with the render thread on, the replays are its
-     * (rd_thread.h): nothing of the last one may still run; on the render
-     * thread, the submit thread's list before (rd_submit_thread.h) */
-    (void)rd_thread_drain();
+    const bool apart = rd_thread_submit_apart();
+    if (apart) {
+        /* the render thread with the frame slots apart (rd_submit_thread.h
+         * "the slots"): the jobs of the slot the next rhi_wait_frame
+         * recycles (the picture two before) finished; the picture before
+         * goes on being submitted and presented beside this one */
+        (void)rd_thread_submit_wait_slot((rhi_frame_slot() + 1u) % RHI_FRAMES_IN_FLIGHT);
+    } else {
+        /* on the game thread with the render thread on, the replays are its
+         * (rd_thread.h): nothing of the last one may still run; on the
+         * render thread, the submit thread's list before
+         * (rd_submit_thread.h) */
+        (void)rd_thread_drain();
+    }
     /* a picture's first graphics call: the textures retired since the
-     * last job, with the submit thread now idle (rd_thread.h "retire") */
+     * last job (rd_thread.h "retire"; a destroy's call guard waits for the
+     * submit thread where it still works) */
     rd__thread_retire_kept();
-    if (t_tickKept && !rd_thread_submit_busy()) {
+    if (t_tickKept && (apart || !rd_thread_submit_busy())) {
+        /* apart, the step runs now: its calls wait for the submit thread
+         * through the call guard (while the background pipelines finish) */
         t_tickKept = false;
         rd__pipe_finish_tick(t_tickMs);
     }
+}
+
+void rd__submit_drain_acquire(void)
+{
+    if (rd_thread_submit_apart()) {
+        /* the picture's own slot has no job left (rd__wait_frame waited
+         * for them); the picture before may still be presented: the
+         * backend's acquire waits for it where the swapchain has no image
+         * to spare (vk_swapchain.c rhi_acquire_backbuffer) */
+        rd_thread_submit_reap();
+        return;
+    }
+    rd__submit_drain();
 }
 
 void rd__submit_pipe_tick(double pictureMs)

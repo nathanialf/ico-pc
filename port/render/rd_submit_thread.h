@@ -11,22 +11,37 @@
  * waits for that much only (the drain of rd_present_post).
  *
  * The rules:
- *   one at a time   the backend's calls never run on two threads at once:
- *                   the render thread's next call that changes the
- *                   device's state (its next picture's fence wait,
- *                   rd__wait_frame, is the first) waits for the submit
- *                   thread first (the host's call guard asks
- *                   rd_thread_submit_busy; the wait is
- *                   rd_thread_submit_drain), and every other thread's call
- *                   waits for both threads.  What overlaps the submit and
- *                   the present is the next picture's interpolation, which
- *                   makes no graphics call, and the game thread's step.
- *                   Vulkan and Direct3D 12 key their frame slot, the
- *                   acquired image and its semaphores and the submit's
- *                   counters on one frame index (vk_cmd.c rhi_wait_frame,
- *                   vkr_get_cmd, vkr_submit_batch; d3d12_cmd.c), so a walk
- *                   recorded while the list before is submitted would need
- *                   those per slot: not done.
+ *   the slots       with the frame slots apart (RhiLimits.slotOverlap:
+ *                   Vulkan with the timeline sync; ICO_RD_SUBMIT_OVERLAP=0
+ *                   turns it off) each job carries its list's frame slot
+ *                   (RdSubmitJob.slot), and the render thread's next
+ *                   picture waits only for the jobs of the slot its
+ *                   rhi_wait_frame recycles, the picture two before
+ *                   (rd__submit_drain -> rd_thread_submit_wait_slot); the
+ *                   picture before goes on being ended, submitted and
+ *                   presented here while the render thread recycles its own
+ *                   slot, acquires its image and records its list.  The
+ *                   slot guard (rhi.h rhi_set_slot_guard; slotFree below)
+ *                   lets those slot calls through the call guard; every
+ *                   other call that changes the device's state (a texture
+ *                   or pipeline made or destroyed, a readback, a submit, a
+ *                   swapchain rebuild) still waits for this thread as
+ *                   below.  The backend's partition of its state between
+ *                   the two threads: port/rhi/vk/vk_cmd.c "Frame slots".
+ *   one at a time   otherwise (Direct3D 12, Vulkan's fence sync, and the
+ *                   calls the slot guard does not let through) the
+ *                   backend's calls never run on two threads at once: the
+ *                   render thread's next call that changes the device's
+ *                   state (its next picture's fence wait, rd__wait_frame,
+ *                   is the first) waits for the submit thread first (the
+ *                   host's call guard asks rd_thread_submit_busy; the wait
+ *                   is rd_thread_submit_drain), and every other thread's
+ *                   call waits for both threads.  What overlaps the submit
+ *                   and the present there is the next picture's
+ *                   interpolation, which makes no graphics call, and the
+ *                   game thread's step.  Direct3D 12 keys its frame slot,
+ *                   the acquired image and the submit's counters on one
+ *                   frame index (d3d12_cmd.c).
  *   which pictures  only a picture handed over without waiting (rd_thread.h
  *                   the hand-over), with no capture to finish
  *                   (rd__capture_pending); every picture that waits for its
@@ -41,6 +56,12 @@
  *                   "on the render thread"), so the GPU's work and the
  *                   presents keep their order: the bytes of every picture
  *                   are the same as with the submit on the render thread.
+ *                   With the slots apart the render thread submits nothing
+ *                   beside this thread (a submit is not a slot call), so
+ *                   the queue still takes picture N's list and present
+ *                   before anything of picture N+1; only N+1's acquire may
+ *                   come before N's present (the swapchain's lock orders
+ *                   the two calls; vk_swapchain.c).
  *   the depth       at most RD_SUBMIT_DEPTH jobs queued and running
  *                   (rd_submit_queue.h); with the rule above there is one.
  *   the times       a job's submit and present times go into its replay's
@@ -82,6 +103,19 @@ bool rd_thread_on_submit(void);
  * and with no thread. */
 bool rd_thread_submit_busy(void);
 bool rd_thread_submit_stale(void);
+/* The render thread's frame slots apart from the submit thread's: the
+ * calling thread is the render thread, the slots are apart (rd_submit_thread.h
+ * "the slots") and it keeps no list for the submit thread */
+bool rd_thread_submit_apart(void);
+/* The render thread, its next picture's fence wait (rd__submit_drain):
+ * returns once no job of frame slot `slot` is queued or running, the ns it
+ * waited, the finished jobs' times put into their records; the job of the
+ * other slot may go on.  Not apart (rd_thread_submit_apart):
+ * rd_thread_submit_drain */
+uint64_t rd_thread_submit_wait_slot(uint32_t slot);
+/* The finished jobs' times into their records, without waiting (any
+ * thread but the submit thread) */
+void rd_thread_submit_reap(void);
 /* Returns once the submit thread has nothing left, the ns it waited: on
  * the render thread a list kept for it is ended, submitted and presented
  * there first; the finished jobs' times then go into their records.  Any

@@ -26,6 +26,10 @@ void rd__submit_frame(RhiCommandList cl, bool present, double walkStart, double 
  * (rd_submit_thread.h), then the background pipelines' step a picture
  * kept for it (rd__submit_pipe_tick) */
 void rd__submit_drain(void);
+/* rd__present_acquire's: rd__submit_drain, but with the frame slots apart
+ * on the render thread nothing waits (the acquire is the picture's own
+ * slot's; rd_submit_thread.h "the slots") */
+void rd__submit_drain_acquire(void);
 /* rd__pipe_finish_tick(pictureMs) after a presented replay: at once, or,
  * while the render thread keeps the replay's list for the submit thread
  * (its graphics calls would wait for that thread, and the walk's end would

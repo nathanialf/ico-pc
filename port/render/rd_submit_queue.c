@@ -86,6 +86,17 @@ uint64_t rd__sq_take_present_ns(RdSubmitQ *q)
     return ns;
 }
 
+uint32_t rd__sq_slot_jobs(const RdSubmitQ *q, uint32_t slot)
+{
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < q->count; i++) {
+        if (q->ring[(q->head + i) % RD_SUBMIT_DEPTH].slot == slot) {
+            n++;
+        }
+    }
+    return n;
+}
+
 void rd__sq_note_wait(RdSubmitQ *q, double ms, bool byRender)
 {
     if (ms < 0.0) {
@@ -103,6 +114,11 @@ void rd__sq_note_wait(RdSubmitQ *q, double ms, bool byRender)
 void rd__sq_note_on_render(RdSubmitQ *q)
 {
     q->block.onRender++;
+}
+
+void rd__sq_note_overlap(RdSubmitQ *q)
+{
+    q->block.overlapped++;
 }
 
 void rd__sq_block_take(RdSubmitQ *q, RdSubmitBlock *out)

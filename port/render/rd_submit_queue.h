@@ -17,10 +17,16 @@
  *           the block, kept for rd__sq_take_finished (the oldest dropped,
  *           and counted, past RD_SUBMIT_DEPTH unread), its present time
  *           for rd__sq_take_present_ns;
- *   waits   rd__sq_note_wait: another thread waited for the queue to empty
- *           (the render thread at its next picture's first graphics call,
- *           the game thread at a drain); rd__sq_note_on_render: a list the
- *           render thread ended and submitted itself;
+ *   slots   rd__sq_slot_jobs: the jobs queued or running of one frame slot
+ *           (RdSubmitJob.slot): with the slots apart the render thread's
+ *           next picture waits for those of the slot it recycles only
+ *           (rd_submit_thread.h);
+ *   waits   rd__sq_note_wait: another thread waited for the queue to empty,
+ *           or for a slot's jobs (the render thread at its next picture's
+ *           fence wait, the game thread at a drain); rd__sq_note_on_render:
+ *           a list the render thread ended and submitted itself;
+ *           rd__sq_note_overlap: a picture of the render thread began its
+ *           graphics calls while a job of the other slot still ran;
  *   block   rd__sq_block_take: the block's numbers, the sums cleared.
  *
  * Pure C (no threads, no graphics calls): the caller holds its own lock
@@ -39,6 +45,7 @@
 
 typedef struct RdSubmitJob {
     uint32_t cl;      /* the list (RhiCommandList.id), recorded and left open */
+    uint8_t slot;     /* its frame slot (rhi_frame_slot when it was recorded) */
     bool present;     /* its image is presented after the submit */
     uint32_t replay;  /* its replay's perf record (RdPerfRecord.replay) */
     uint64_t seq;     /* rd__sq_post's number */
@@ -51,7 +58,8 @@ typedef struct RdSubmitJob {
    threads' waits for the queue (byRender: the render thread's), the jobs
    whose finished times were dropped unread, the lists the render thread
    ended and submitted itself instead (rd__sq_note_on_render: a call of its
-   own needed the backend before its job's end) */
+   own needed the backend before its job's end), the render thread's
+   pictures begun beside a job of the other slot (rd__sq_note_overlap) */
 typedef struct RdSubmitBlock {
     unsigned jobs;
     double submitMs, presentMs, longestMs;
@@ -59,6 +67,7 @@ typedef struct RdSubmitBlock {
     unsigned waits, renderWaits;
     double waitMs, renderWaitMs, waitMaxMs;
     unsigned dropped, onRender;
+    unsigned overlapped;
 } RdSubmitBlock;
 
 typedef struct RdSubmitQ {
@@ -83,8 +92,11 @@ bool rd__sq_take_finished(RdSubmitQ *q, RdSubmitJob *out);
 /* the longest present call of the jobs finished since the last take, in
    ns (0: none presented) */
 uint64_t rd__sq_take_present_ns(RdSubmitQ *q);
+/* the jobs queued or running of frame slot `slot` */
+uint32_t rd__sq_slot_jobs(const RdSubmitQ *q, uint32_t slot);
 void rd__sq_note_wait(RdSubmitQ *q, double ms, bool byRender);
 void rd__sq_note_on_render(RdSubmitQ *q);
+void rd__sq_note_overlap(RdSubmitQ *q);
 void rd__sq_block_take(RdSubmitQ *q, RdSubmitBlock *out);
 
 #endif /* RD_SUBMIT_QUEUE_H */

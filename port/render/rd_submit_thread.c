@@ -21,7 +21,22 @@ static struct {
     /* the longest job (its end, submit and present) finished since the last
        take, ns (rd_thread_submit_take_job_ns); under the lock */
     uint64_t jobMaxNs;
+    /* the frame slots apart (rd_submit_thread.h "the slots"): set at the
+       start, before the thread and the slot guard exist */
+    bool apart;
+    /* the pictures begun beside the other slot's job and the slot waits,
+       ever (the lines' rate limit and the end's line); under the lock */
+    uint64_t overlaps, slotWaits;
+    double slotWaitMs;
 } s_st;
+
+/* the jobs queued or running of each frame slot (rd__sq_slot_jobs's
+   count), for the slot guard's question without the lock (asked at every
+   slot call of the render thread while this thread works): added at a
+   post and taken at a finish, both under the lock as the queue's own; the
+   finish's release store makes the job's writes the render thread's once
+   it reads 0 with acquire */
+static uint32_t s_slotJobs[RHI_FRAMES_IN_FLIGHT];
 
 /* the cores the jobs ran on (cpu_place.h: atomic bins, no lock; kept
    across a restart of the thread) */
@@ -79,6 +94,7 @@ static void stMain(void *u)
                 s_st.jobMaxNs = ns > s_st.jobMaxNs ? ns : s_st.jobMaxNs;
             }
             rd__sq_finish(&s_st.q, &j);
+            __atomic_sub_fetch(&s_slotJobs[j.slot % RHI_FRAMES_IN_FLIGHT], 1u, __ATOMIC_RELEASE);
             if (rd__sq_idle(&s_st.q)) {
                 /* what the job wrote is the other threads' once they read this */
                 __atomic_store_n(&s_st.busy, 0, __ATOMIC_RELEASE);
@@ -93,6 +109,44 @@ static void stMain(void *u)
     }
     ico_cond_broadcast(s_st.c);
     ico_mutex_unlock(s_st.m);
+}
+
+/* the slot guard (rhi.h rhi_set_slot_guard): the render thread's slot
+   call of `slot` runs beside this thread's work when no job of that slot is
+   queued or running and it keeps no list of its own for this thread */
+static bool slotFree(void *u, uint32_t slot)
+{
+    (void)u;
+    return s_st.apart && !t_onS && !t_kept && rd_thread_on_render() &&
+           __atomic_load_n(&s_slotJobs[slot % RHI_FRAMES_IN_FLIGHT], __ATOMIC_ACQUIRE) == 0;
+}
+
+static bool slotPending(void *u, uint32_t slot)
+{
+    (void)u;
+    return __atomic_load_n(&s_slotJobs[slot % RHI_FRAMES_IN_FLIGHT], __ATOMIC_ACQUIRE) != 0;
+}
+
+static bool slotWorker(void *u)
+{
+    (void)u;
+    return t_onS;
+}
+
+/* the slots apart, and why not (NULL: apart) */
+static const char *apartWhy(const RhiLimits *l)
+{
+    const char *env = getenv("ICO_RD_SUBMIT_OVERLAP");
+    if (env != NULL && strcmp(env, "0") == 0) {
+        return "ICO_RD_SUBMIT_OVERLAP=0";
+    }
+    if (!l->slotOverlap) {
+        return rhi_backend() == RHI_BACKEND_VULKAN
+                   ? "the device's frame slots are not apart: no timeline semaphore, or "
+                     "ICO_VK_SLOT_OVERLAP=0"
+                   : "this graphics API keys its frame slot on one index";
+    }
+    return NULL;
 }
 
 bool rd__submit_thread_start(void (*begin)(void *user), void *user)
@@ -116,9 +170,12 @@ bool rd__submit_thread_start(void (*begin)(void *user), void *user)
         return false;
     }
     memset(&s_st, 0, sizeof(s_st));
+    memset(s_slotJobs, 0, sizeof(s_slotJobs));
     rd__sq_init(&s_st.q);
     s_st.begin = begin;
     s_st.user = user;
+    const char *notApart = apartWhy(l);
+    s_st.apart = notApart == NULL;
     s_st.m = ico_mutex_create();
     s_st.c = ico_cond_create();
     s_st.th = s_st.m && s_st.c ? ico_thread_create(stMain, NULL) : NULL;
@@ -138,6 +195,18 @@ bool rd__submit_thread_start(void (*begin)(void *user), void *user)
             "presented on a thread of their own, %s; ICO_RD_SUBMIT_THREAD=0 keeps them on the "
             "render thread)",
             rhi_backend_kind_name(rhi_backend()));
+    if (s_st.apart) {
+        static const RhiSlotGuard guard = {NULL, slotFree, slotPending, slotWorker};
+        rhi_set_slot_guard(&guard);
+        rd__log("submit thread: the frame slots apart (the render thread's next picture "
+                "records while the one before is submitted and presented, and waits only for "
+                "its own slot's picture two before; ICO_RD_SUBMIT_OVERLAP=0 keeps the "
+                "submit thread's work and the render thread's graphics calls one at a time)");
+    } else {
+        rd__log("submit thread: the frame slots one at a time (%s: the render thread's next "
+                "picture's first graphics call waits for the submit thread)",
+                notApart);
+    }
     return true;
 }
 
@@ -152,8 +221,14 @@ void rd__submit_thread_stop(void)
     ico_cond_broadcast(s_st.c);
     ico_mutex_unlock(s_st.m);
     ico_thread_join(s_st.th);
-    rd__log("submit thread: ended (%llu pictures ended, submitted and presented there in all)",
-            (unsigned long long)s_st.q.done);
+    if (s_st.apart) {
+        rhi_set_slot_guard(NULL); /* the thread idle: nothing asks it now */
+    }
+    rd__log("submit thread: ended (%llu pictures ended, submitted and presented there in all; "
+            "%llu pictures of the render thread began while the one before was still being "
+            "submitted, %llu waited for their own slot's picture two before, %.1f ms in all)",
+            (unsigned long long)s_st.q.done, (unsigned long long)s_st.overlaps,
+            (unsigned long long)s_st.slotWaits, s_st.slotWaitMs);
     ico_cond_destroy(s_st.c);
     ico_mutex_destroy(s_st.m);
     memset(&s_st, 0, sizeof(s_st));
@@ -182,7 +257,18 @@ bool rd_thread_submit_stale(void)
     if (s_st.th == NULL || t_onS) {
         return false;
     }
+    if (s_st.apart && rd_thread_on_render()) {
+        /* the counters this thread adds are the backend's late ones, added
+           atomically (vk_cmd.c "Frame slots"): the render thread reads them
+           live while it works */
+        return false;
+    }
     return __atomic_load_n(&s_st.busy, __ATOMIC_ACQUIRE) != 0;
+}
+
+bool rd_thread_submit_apart(void)
+{
+    return s_st.th != NULL && s_st.apart && !t_onS && !t_kept && rd_thread_on_render();
 }
 
 bool rd_thread_submit_unfinished(void)
@@ -229,6 +315,70 @@ uint64_t rd_thread_submit_drain(void)
     return waited ? (uint64_t)(ms * 1e6) : 0;
 }
 
+/* the finished jobs' times into their records, here (the lock held only to
+   take them) */
+static void reap(void)
+{
+    RdSubmitJob fin[RD_SUBMIT_DEPTH];
+    uint32_t n = 0;
+    ico_mutex_lock(s_st.m);
+    while (n < RD_SUBMIT_DEPTH && rd__sq_take_finished(&s_st.q, &fin[n])) {
+        n++;
+    }
+    ico_mutex_unlock(s_st.m);
+    for (uint32_t i = 0; i < n; i++) {
+        apply(&fin[i]);
+    }
+}
+
+uint64_t rd_thread_submit_wait_slot(uint32_t slot)
+{
+    if (s_st.th == NULL || t_onS) {
+        return 0;
+    }
+    if (!rd_thread_submit_apart()) {
+        return rd_thread_submit_drain();
+    }
+    slot %= RHI_FRAMES_IN_FLIGHT;
+    const double t0 = rd__now_ms();
+    bool waited = false;
+    double ms = 0.0;
+    uint64_t nWait = 0;
+    ico_mutex_lock(s_st.m);
+    if (!rd__sq_idle(&s_st.q) && rd__sq_slot_jobs(&s_st.q, slot) < s_st.q.count) {
+        /* a job of the other slot (the picture before) runs or waits: this
+           picture's graphics calls begin beside it */
+        rd__sq_note_overlap(&s_st.q);
+        s_st.overlaps++;
+    }
+    while (rd__sq_slot_jobs(&s_st.q, slot) != 0) {
+        waited = true;
+        ico_cond_wait(s_st.c, s_st.m);
+    }
+    if (waited) {
+        ms = rd__now_ms() - t0;
+        rd__sq_note_wait(&s_st.q, ms, true);
+        nWait = ++s_st.slotWaits;
+        s_st.slotWaitMs += ms;
+    }
+    ico_mutex_unlock(s_st.m);
+    if (waited && (nWait <= 8u || nWait % 100u == 0u)) {
+        rd__log("submit thread: the render thread's picture waited %.2f ms for frame slot %u's "
+                "picture two before to be submitted and presented (%llu such waits so far)",
+                ms, (unsigned)slot, (unsigned long long)nWait);
+    }
+    reap();
+    return waited ? (uint64_t)(ms * 1e6) : 0;
+}
+
+void rd_thread_submit_reap(void)
+{
+    if (s_st.th == NULL || t_onS) {
+        return;
+    }
+    reap();
+}
+
 uint64_t rd_thread_submit_take_present_ns(void)
 {
     if (s_st.th == NULL) {
@@ -271,6 +421,7 @@ bool rd__submit_defer(RhiCommandList cl, bool present)
     }
     memset(&t_job, 0, sizeof(t_job));
     t_job.cl = cl.id;
+    t_job.slot = (uint8_t)(rhi_frame_slot() % RHI_FRAMES_IN_FLIGHT);
     t_job.present = present && rd__present_will_show();
     t_job.replay = g_rdPerf.replay;
     t_kept = true;
@@ -289,6 +440,7 @@ void rd__submit_post_pending(void)
         ico_cond_wait(s_st.c, s_st.m); /* full: RD_SUBMIT_DEPTH jobs before it */
     }
     if (seq != 0) {
+        __atomic_add_fetch(&s_slotJobs[t_job.slot], 1u, __ATOMIC_RELAXED);
         __atomic_store_n(&s_st.busy, 1, __ATOMIC_RELEASE);
         ico_cond_broadcast(s_st.c);
         ico_mutex_unlock(s_st.m);
