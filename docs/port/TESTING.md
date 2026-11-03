@@ -99,6 +99,18 @@ file is reported and skipped, and every gate exits 77 when it has nothing to run
   of R pixels at each edge of the 4:3 picture (ctest `native_frame_gate_b`).
 - `selftest` checks the gate-b logic on synthetic pictures (ctest `native_frame_check_selftest`).
 
+Two more gates cover the wide frame's side bands (issue 29). `tools/cmp_dirs_band.py` compares two
+folders of the same dumps' pictures, one drawn with the side bands off (`ICO_RD_VU_BESIDE=0`) and
+one with them on: the centre 512-texel band (the 4:3 picture) must be identical byte for byte, hard;
+the side columns are reported, and a side pixel that changed must be one the picture without the
+bands left at the fog colour (never lose what was drawn). The ctest `rd_sideband_ab` runs it over
+`tools/sideband_dumps.txt`, which also takes each fresh issue-29 capture (dump version 15 or later:
+older dumps carry no facing for prelit meshes, so only lit and skinned drops can change). The
+disc-wide sweep `gsb_cull_sweep.*` (`gsb_cull_test --sweep`, main only, it needs the disc image)
+counts per stage and aspect the triangles the box cull, the blend span and the region rule leave
+out, against the stored counts of `tools/sweep_baseline.txt`; a count above its line fails, and the
+run prints "baseline can be lowered" when it falls ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
+
 The list is `tools/native_frame_dumps.txt`, or the list or folder `ICO_DUMPS` names; the ctests
 skip unless `ICO_DUMPS` is set. The baseline is updated by running `baseline` after a change whose
 pictures are accepted and committing the new manifest.
@@ -856,7 +868,10 @@ sequence:
    `linux-x64`, runs `gate.sh` (every test but the game-starting ones as two `ctest` runs at the
    same time: the lavapipe half at `-j1` and the CPU half at `-j3`, which share no
    `RESOURCE_LOCK` and no fixture; then the native-frame gate-a and the `--pass-dump` byte
-   compare of the corpus), then the window build, `offset_audit` on it and the fortify compile of
+   compare of the corpus; for a release that changes the picture beyond the 4:3 band, also the
+   band compare `rd_sideband_ab` over the wide captures and the disc-wide sweep
+   `gsb_cull_sweep.*`, whose printed counts are lowered into `tools/sweep_baseline.txt` when they
+   fall), then the window build, `offset_audit` on it and the fortify compile of
    the C files changed since the last tag. On the cost data of 2026-11-03 (the suite 10,215 s at
    `-j1`; the lavapipe half 96 % of it by CI's asan times) the lavapipe half is the chain's length,
    about 2.7 hours at `-j1`; the CPU half ends within minutes. `LVP_J` sets the lavapipe half's
