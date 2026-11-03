@@ -890,7 +890,11 @@ static bool alphaCovers(const Replay *r, const RdFrame *f, const RdCmd *c)
     int useDepth = 0;
     const RdPipeKeyInt key =
         rd__blur_key(&r->st, tc->format, td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN, &useDepth, 0);
-    return rd__replay_blur_covers(r, tc, &p, d, &key, useDepth);
+    /* as doBlurSpriteDraw: the sprite's scissor without the previous draw's
+     * mirror */
+    Replay q = *r;
+    q.mirror = 0;
+    return rd__replay_blur_covers(&q, tc, &p, d, &key, useDepth);
 }
 
 void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen)
