@@ -724,6 +724,17 @@ typedef struct RhiLimits {
      * once); the renderer then turns its one draw off (rd_shadow_one.c). */
     bool stencilView;
     uint8_t stencilViewChannel;
+    /* whether a shader may read the stencil view by Gather (four texels a
+     * read) as well as by Load.  Vulkan (a stencil-aspect view of an image
+     * with the sampled-image feature) and OpenGL (an unsigned-integer
+     * texture view in the stencil-index mode) take it; Direct3D does not:
+     * DXGI_FORMAT_X32_TYPELESS_G8X24_UINT has no shader-gather support, and
+     * the D3D11 debug layer stops every draw whose pixel shader holds a
+     * gather on such a view (error 416, the v0.10.0 tag's WARP run of
+     * rd_msaa), whether or not the shader's branch reaches it.  false: the
+     * renderer binds a build of its stencil reader with no gather in it
+     * (rd_shadow_one.c, shadow_count_load_ps) */
+    bool stencilGather;
     /* Why the VU fallback's program entries are the plain ones on this
      * device ("Adreno 740, issue 107": the driver hung the whole device
      * compiling the extended ones; Vulkan, vk_device.c kVuPlainOnly), NULL

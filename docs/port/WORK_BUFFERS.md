@@ -589,7 +589,15 @@ box, above about 7x, takes the loads), then row y's terms are added left to righ
 2.411 that is about 4 gathers a pixel for about 13 loads (a box of 3 or 4 texels an axis: two
 rows a gather, two columns a gather). A driver whose gathers of a stencil view are wrong is caught
 by the self-test (below): its one draw then reads a texel a load (`g_rd.shadowLoad`,
-`DrawCB.mode.y` 1), and the seven draws stay only where the loads are wrong too. `rd_replay_tool
+`DrawCB.mode.y` 1), and the seven draws stay only where the loads are wrong too. Where the loads
+are read, the draw binds `shadow_count_load_ps` (the entry built with `SHADOW_COUNT_LOAD`: the
+loads alone, no gather in the module; `rd__shadow_count_loads`). A backend whose stencil view
+takes no gather (`RhiLimits.stencilGather` false: Direct3D, whose `X32_TYPELESS_G8X24_UINT` has no
+shader-gather support; the D3D11 debug layer stops a draw whose pixel shader merely holds such a
+gather, error 416, on the WARP run of `rd_msaa`) always reads a texel a load, and its
+self-test skips the gathers' replay:
+
+    rd: shadow count: the stencil read a texel a load, as the backend's stencil view takes no gather `rd_replay_tool
 --stats` ends the one draw's clause with `four texels a gather` or `a texel a load`
 (`RdPerfRecord.shadowGathered`).
 

@@ -1155,6 +1155,17 @@ if(ICO_RUN_TESTS)
                          rd_msaa_nodual
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_nd}"
                                     ENVIRONMENT "${_env_nodual}")
+    # issue 182 (the Vulkan device loss with MSAA on): rd_msaa with the
+    # reporter's NVIDIA profile forced (the fog's local read, DATE through
+    # the stencil, the effects' local read, the seven-draw shadow count by
+    # the profile), under the validation layer where it is installed:
+    # testShadowCount's counts by every form under MSAA4, no shadow reset
+    # pass of its own, no validation message
+    set(_env_nvpath ${_env} "ICO_RD_FOG_PATH=local" "ICO_RD_DATE_PATH=stencil"
+                    "ICO_RD_FX_DST_LOCAL=1" "ICO_RD_SHADOW_ONE=0")
+    add_test(NAME rd_msaa_nvpath COMMAND rd_msaa_test)
+    set_tests_properties(rd_msaa_nvpath PROPERTIES SKIP_RETURN_CODE 77
+                                                   ENVIRONMENT "${_env_nvpath}")
     # the exact GS blend (rd_dst_read.c) by each path: lavapipe has both
     # destination reads and takes the attachment read by default, so the
     # storage path (fragment shader interlock, the Deck's and the desktop

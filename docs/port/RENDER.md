@@ -767,7 +767,10 @@ multisampled twin, SCENE_MS. The epoch opens at the first pass into SCENE (with 
 none) and every such pass draws into SCENE_MS; it closes at the first command that reads or writes
 SCENE's single-sampled colour or depth any other way (a texture read of SCENE, a DATE snapshot, a
 copy or exact blend, the wrap's snapshot, the shadow count's pass, the end of the replay). Closing
-resolves once under the covered-majority rule ([MSAA.md](MSAA.md)). Integer-aligned sprites drawn inside it are moved half a texel so they cover whole pixels; the
+resolves once under the covered-majority rule ([MSAA.md](MSAA.md)); a shadow reset pending then
+stays pending, and the volumes' pass takes it as its stencil clear, as without MSAA, so the shadow
+count after the close reads SCENE's own single-sampled stencil by the same passes (the line
+`shadow count: under MSAA Nx the count reads ...` names its form once). Integer-aligned sprites drawn inside it are moved half a texel so they cover whole pixels; the
 fog runs per sample inside the epoch when the device has sample-rate shading
 (`port/render/rd_replay.c`, "the MSAA epoch"; `msaaPass`, `msaaEnd`, `msaaSpriteExpand`). Otherwise
 the fog reads the resolved depth ([DIVERGENCES.md](DIVERGENCES.md) VD-22); the log says once a run which one ran (`fog: in the MSAA

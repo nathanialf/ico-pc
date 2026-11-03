@@ -2465,6 +2465,7 @@ static void vkr_fill_limits(void)
      * is the depth's sampled-image feature */
     o->stencilView = g_vkr.dsSampled;
     o->stencilViewChannel = 0;
+    o->stencilGather = o->stencilView; /* OpImageGather on the stencil aspect */
     /* the VU shader variants' device table (kVuPlainOnly) and the
      * compiler's line, for the renderer's log (rd__vu_policy_init) */
     vkr_vu_plain_only();
