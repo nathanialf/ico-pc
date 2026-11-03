@@ -71,6 +71,7 @@
 #define RD_THREAD_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include "rhi.h"
 
@@ -128,6 +129,22 @@ bool rd_present_post(float alpha);
  * counted each as presented when it was handed over */
 uint32_t rd_thread_failed_presents(void);
 
+/* What the render thread was doing when a game-thread call began to wait
+ * for a picture's reads (RdThreadBlock.readWaitBy): the picture handed
+ * over and not yet begun there (the hand-over), the job's start up to its
+ * fence wait (a present's interpolation), the wait for its frame slot (the
+ * submit thread's jobs of that slot and the GPU's fence), the swapchain's acquire,
+ * the ring and the uploads, the walk and the present's pass */
+typedef enum RdReadPhase {
+    RD_READ_HANDOVER = 0,
+    RD_READ_INTERP,
+    RD_READ_FENCE,
+    RD_READ_ACQUIRE,
+    RD_READ_UPLOAD,
+    RD_READ_WALK,
+    RD_READ_PHASES
+} RdReadPhase;
+
 /* The block's numbers for the window's 10 s line (render_thread.c), since
  * the last take: the pictures the render thread ran and their means in ms
  * (the interpolation, the uploads and the walk, the submit and the present,
@@ -145,12 +162,19 @@ typedef struct RdThreadBlock {
     double interpMs, walkMs, submitMs, waitMs;
     unsigned readWaits;
     double readWaitMs, readWaitMaxMs;
+    unsigned readWaitBy[RD_READ_PHASES];
+    double readWaitByMs[RD_READ_PHASES];
     unsigned retired;
     unsigned freshWaits, furtherWaits;
     double freshWaitMs, furtherWaitMs;
 } RdThreadBlock;
 
 void rd_thread_block_take(RdThreadBlock *out);
+/* The block's read waits split by what the render thread was doing when
+ * each began, as the window's 10 s line's clause after "read waits N
+ * (...)": "; the render thread as each began: the hand-over N (X ms), ..."
+ * (empty with no read wait); out always terminated */
+void rd_thread_read_waits_text(const RdThreadBlock *b, char *out, size_t cap);
 
 /* The render thread, after a picture's job: how long the picture held the
  * renderer's state (the hand-over, from the job's start to its reads' end,
@@ -203,6 +227,14 @@ void rd__texlock_wait(void);
 /* The render thread inside a picture's job handed over whose reads are
  * still open (rd__submit_defer asks before rd__reads_done) */
 bool rd__thread_handed(void);
+/* The render thread inside a picture's open hand-over: what it does from
+ * here (RdReadPhase), for the game thread's read waits' split; nothing
+ * elsewhere */
+void rd__thread_phase(RdReadPhase phase);
+/* The tests' seam (rd_tex_test): fn(at) on the render thread inside a
+ * picture's open hand-over as it enters phase `at` (RdReadPhase); NULL:
+ * none */
+void rd__thread_test_hook(void (*fn)(int at));
 /* The submit thread's time of a picture (its submit and present), for the
  * block, on the thread that took it (rd_submit_thread.c) */
 void rd__thread_note_submit(double ms);
