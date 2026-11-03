@@ -42,6 +42,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_camera_blend.h` | the blended camera, shared with the game's cull |
 | `port/render/rd_perf.c` | the per-replay performance records |
 | `port/render/rd_vis.c`, `rd_vis.h` | the scene draws' visibility test: a mesh, skinned or grid command wholly off its target or behind the eye replayed as an `RDC_NOP` of a shadow frame ([Culling](#culling)) |
+| `port/render/rd_vis_hiz.c` | its occlusion test (`[dev] cull = full`): a record of list 0's depth from the opaque draws' exact triangles, and a mesh or grid draw of list 0 wholly behind it replayed as an `RDC_NOP` ([Culling](#culling)) |
 | `port/render/rd_occlusion.c` | every GPU draw of a replay (`rd__replay_draw`, `rd__replay_draw_indexed`: the pass window's take) and the hidden-draw measurement around them ([Culling](#culling)) |
 | `port/render/rd_passring.h`, `rd_passring.c` | the pass ring: the last passes recorded, for the device-loss report |
 | `port/render/rd_dump.c`, `rd_png.c` | frame dumps; a minimal PNG writer |
@@ -2104,18 +2105,76 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   those of every replay), the fades fold's plan (its reads of SCENE's depth before the clear) and
   the store plan's carried read (a skipped draw's read of a depth before its clear keeps the stores
   from then on, as it does when the draw is replayed).
+- *The occlusion test* (`[dev] cull = full`; `port/render/rd_vis_hiz.c`, whose header holds the
+  argument). In list 0, after the frustum test, a mesh or grid draw whose every sample lies behind
+  what the opaque draws before it wrote to its depth buffer fails its GEQUAL test at every sample
+  and writes nothing (colour, depth, alpha, stencil), so it is skipped too. The measured ceiling is
+  small (the depth hides 0.5 to 4.8 % of list 0's draws over the occlusion corpus, the table
+  above); the test is built exact and cheap.
+  - *The record.* Cells of 2 x 2 GS pixels over the bound target (4 GS pixels round it), each a
+    lower bound of the GS Z the depth buffer holds at every sample in it (0 nothing known; larger is
+    nearer), in tiles of 8 x 8 cells keeping their least cell (worked out again when one of theirs
+    rose). Larger is nearer and GEQUAL only raises the depth, so the bounds hold until something
+    may lower it: the record starts at 0 at the head of list 0, and is reset to 0 (always a lower
+    bound) when the colour target, the depth target or the frame size changes, at every clear,
+    copy, exact blend, shadow command and post stub, and at every draw that writes Z under a test
+    other than GEQUAL, GREATER or NEVER (ZTE off is ALWAYS). Only a PSMZ32 depth buffer (the 24-
+    and 16-bit formats clamp at their top); off under `ICO_VK_DEPTH_ALWAYS`.
+  - *The occluders.* An RDC_MESH of the prelit or lit program (codes 32 and 36) the frustum test
+    keeps, with Z write on, Z test GEQUAL or ALWAYS, no blending, no alpha test (or ALWAYS), no
+    DATE, no PABE, every colour channel written (`colorMask` 0xF, FBMSK 0) and no chain plane. Of
+    its triangles in the index ranges `doVuDraw` draws, those drawn exactly in every state: all
+    three vertices inside the program's region test (code 32: `0 < x, y < 4094`, `0 < w <
+    16777214`; code 36: no clip flag in `mem[20..23]`'s space) with a margin the float rounding
+    cannot cross, in front of the eye, GS Z inside ftoi4's range; not hidden by the content table,
+    not raised by the later mark, not a sheet's tile. Such a triangle is `VU_RULE_EXACT` at its GS
+    positions in every state: each corner lies within `r` of `x / w - 1/32` on each axis (ftoi4's
+    truncation, the float product's error, the GPU's snap: 1/8 GS pixel covers a 4-bit sub-pixel
+    grid on texels up to two GS pixels). A cell counts as covered when its square, grown by half a
+    GS pixel up and down (a draw with the frame head's half line puts a sample half a pixel lower
+    in GS terms than one without), lies inside the triangle for every placement of its corners
+    within `r` and by 0.25 GS pixel more: then the GPU rasterises every pixel or MSAA sample in it,
+    at every scale (no face culling anywhere in the port). The cell rises to `floor(least corner
+    Z) - 1` (the triangle's depth there interpolates its corners'). Only triangles whose screen box
+    covers a 64th of the frame count, the largest first within `ICO_RD_CULL_HIZ_TRIS` (12000 a
+    picture), inside the draw's scissor. A wall under ALWAYS resets the record first and counts
+    only when every triangle it draws is exact, each cell at the least bound of them all (a sample
+    holds whichever triangle came last).
+  - *The occludees.* A mesh (prelit, lit, specular or reflection) or grid draw of list 0 under
+    GEQUAL whose stream's bound (above) has every corner in front of the eye: every vertex is a
+    convex combination of the corners, so its `x / w` and its `Z = 16 z / w` lie between the
+    corners' (the mediant), and so do the GPU's points (exact corners within 1/16 plus the snap,
+    homogeneous ones exactly, clipped points convex combinations). The corners' box, grown by
+    those amounts, holds every sample the draw can touch, inside `(0, 4094)`; `Zmax` bounds every
+    depth it can write, below 0xFFFF0000. It is hidden when every cell the box touches holds more
+    than `Zmax + 4096 + Zmax / 2^17` (the depth buffer's steps: 256 GS Z units on D24, 2^-24 of the
+    value on D32F; the interpolation's float error either way), with `max(Zmax / 256, 1024)` more
+    for a mesh with the later mark (`vu_later_bias`'s cap). Then at every sample `depth >= cell >
+    Zmax + margin`: GEQUAL fails at any rounding inside the margin. A coplanar decal or second pass
+    is kept (strict compare and margin), and so is a draw touching a cell no single triangle covered
+    whole (a cell is never the union of two triangles: a seam's samples may be neither's). Skinned
+    draws and particles are not tested.
+  - *Order and cost.* Before the walk, list 0 is read once for the occluders' triangles (the budget's
+    sort over the whole list); the walk then tests each kept draw of list 0 against the record and
+    puts its own triangles in after. The reset touches only the tiles written. The test's time is
+    its own figure in the lines below (its target: 0.4 ms a picture on a phone's big core).
 - *The gate.* `rd_cull_ab` ([TESTING.md](TESTING.md)) replays the dumps of
-  `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt` with the test off and on at
-  Original 4:3, Enhanced 4:3 2x, Enhanced 2x at a wide dump's own aspect and once with MSAA 4x:
-  every target's PNG byte for byte, and draws skipped over the corpus. `rd_vis` holds the bounds,
-  the planes under random cameras and the VU references (`vu1_ref`) as the oracle.
+  `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt` with the test off, frustum and
+  full at Original 4:3, Enhanced 4:3 2x, Enhanced 2x at a wide dump's own aspect and once with MSAA
+  4x: every target's PNG of both byte for byte the off run's, the full run's frustum count the
+  frustum run's, and draws skipped over the corpus (the occluded total reported). `rd_vis` holds the
+  bounds, the planes under random cameras and the VU references (`vu1_ref`) as the oracle, and the
+  occlusion test's vertex and occludee bounds against the float product, the rasterisation's
+  inner rule against every corner placement, its verdicts and the frame cases.
 - *The key and the lines.* `[dev] cull = off | frustum | full` (`ICO_RD_CULL`; frustum by default;
-  full asks for the occlusion test too, which is not built: it runs as frustum and the start line
-  says so). The start line `rd: cull: frustum ([dev] cull, ICO_RD_CULL): ...`, the summary's `cull
-  frustum`, the backend's 10 s line `; cull: N of M scene draws skipped a replay (F frustum, O
-  occluded), T ms ([dev] cull)` and `rd_replay_tool --stats`'s `stats: cull frustum: N of M scene
-  draws skipped (F frustum, O occluded), T ms; not tested: E exempt, U unbounded; skipped beyond
-  the left ...` (`--cull off|frustum|full` sets the variable; `--occlusion` replays with it off).
+  full adds the occlusion test). The start line `rd: cull: frustum ([dev] cull, ICO_RD_CULL): ...`
+  (under full a second, `rd: cull: the occlusion test: up to N occluder triangles a picture
+  (ICO_RD_CULL_HIZ_TRIS), cells of 2 GS pixels`), the summary's `cull frustum`, the backend's 10 s
+  line `; cull: N of M scene draws skipped a replay (F frustum, O occluded), T ms (occlusion H)
+  ([dev] cull)` and `rd_replay_tool --stats`'s `stats: cull frustum: N of M scene draws skipped (F
+  frustum, O occluded), T ms; not tested: E exempt, U unbounded; skipped beyond the left ...;
+  occlusion: K occluder triangles (B past the budget), C cells, D draws tested, R resets, H ms`
+  (`--cull off|frustum|full` sets the variable; `--occlusion` replays with it off).
 
 ## Dumps and the replay tool
 
