@@ -10,10 +10,15 @@
 # present between them, --interp 0.5 <zip>, presented, at Enhanced 2x.
 # Every target's PNG of sync and on must equal off's byte for byte, and the
 # sync and on runs must say "render thread: sync" / "render thread: on" (the
-# thread ran); the blended present's on run must say "submit thread: ended
-# (N" with N above 0 (its submit and present ran on the submit thread,
-# port/render/rd_submit_thread.h).  A missing list or dump is named and skipped; no dump read, or
-# no device: SKIP (77).
+# thread ran); the blended present is made three times in a row
+# (--repeat 3: on hands the three over back to back) and its on run must
+# say "submit thread: ended (N" with N at least 3 (their submit and present
+# ran on the submit thread, port/render/rd_submit_thread.h); where the
+# device's frame slots are apart ("rhi_vk: frame slots: apart") the on run
+# must also say "submit thread: the frame slots apart" (the second and
+# third pictures recorded while the one before was submitted: the slots
+# rule, "the slots" there).  A missing list or dump is named and skipped;
+# no dump read, or no device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DEXTRA=<a second dump list>
 # -DOUT=<a folder the test may write>
 set(dumps "")
@@ -76,7 +81,7 @@ foreach(dump IN LISTS dumps)
       file(MAKE_DIRECTORY "${dir_${run}}")
       if(s STREQUAL "interp")
         set(cmd "${TOOL}" "${dump}" "${dir_${run}}/PRESENT.png" --interp 0.5 "${dump}"
-                ${args_enh2x})
+                --repeat 3 ${args_enh2x})
       else()
         set(cmd "${TOOL}" "${dump}" - --pass-dump "${dir_${run}}" ${args_${s}})
       endif()
@@ -99,8 +104,17 @@ foreach(dump IN LISTS dumps)
       # the blended present handed over: its submit and present on the
       # submit thread (rd_submit_thread.h), at least one picture there
       if(run STREQUAL "on" AND s STREQUAL "interp" AND
-         NOT "${out}${err}" MATCHES "submit thread: ended \\([1-9]")
-        message(SEND_ERROR "${dump} ${s} on: no picture was submitted on the submit thread:\n${err}")
+         NOT "${out}${err}" MATCHES "submit thread: ended \\(([3-9]|[1-9][0-9])")
+        message(SEND_ERROR "${dump} ${s} on: fewer than the three pictures were submitted on "
+                           "the submit thread:\n${err}")
+        set(ok FALSE)
+        break()
+      endif()
+      if(run STREQUAL "on" AND s STREQUAL "interp" AND
+         "${out}${err}" MATCHES "rhi_vk: frame slots: apart" AND
+         NOT "${out}${err}" MATCHES "submit thread: the frame slots apart")
+        message(SEND_ERROR "${dump} ${s} on: the device's frame slots are apart but the submit "
+                           "thread kept them one at a time:\n${err}")
         set(ok FALSE)
         break()
       endif()

@@ -806,6 +806,226 @@ static void threadRecordCell(const Ctx *c)
     rhi_destroy_buffer(ring);
 }
 
+/* The frame slots apart (RhiLimits.slotOverlap; port/rhi/vk/vk_cmd.c
+ * "Frame slots", port/render/rd_submit_thread.h "the slots"): list A of
+ * one slot is ended and submitted on thread B while this thread recycles
+ * the other slot (rhi_wait_frame), begins list B there and records it, at
+ * the same time (B waits until this thread has begun list B, then ends and
+ * submits A).  The slot guard (rhi.h rhi_set_slot_guard) says the slot
+ * calls of this thread are free while B's job is of the other slot, so
+ * neither rhi_wait_frame nor rhi_begin_commands waits for B; list B's end,
+ * not a slot call, waits for it through the call guard (one wait).  Both
+ * targets read back row by row equal to the same two lists made one after
+ * the other on this thread, and to the squares each drew (A the fill rule
+ * cell's red and green squares, B a blue square of its own).  Skipped where
+ * the slots are not apart (Direct3D 12, OpenGL, Direct3D 11, Vulkan's fence
+ * sync, ICO_VK_SLOT_OVERLAP=0). */
+typedef struct ThreadSlots {
+    RhiCommandList cl;
+    int go, done;
+} ThreadSlots;
+
+static int s_slotsJob; /* the frame slot of thread B's job */
+
+static void slotsOnThread(void *arg)
+{
+    ThreadSlots *s = arg;
+    t_submitter = 1;
+    /* until this thread's next list has begun (a bound: a failure below) */
+    const double t0 = ico_thread_now_ms();
+    while (!__atomic_load_n(&s->go, __ATOMIC_ACQUIRE) && ico_thread_now_ms() - t0 < 5000.0) {}
+    rhi_end_commands(s->cl);
+    rhi_submit(s->cl);
+    __atomic_store_n(&s->done, 1, __ATOMIC_RELEASE);
+}
+
+static bool slotsFree(void *u, uint32_t slot)
+{
+    (void)u;
+    return !t_submitter && (int)slot != s_slotsJob;
+}
+
+static bool slotsPending(void *u, uint32_t slot)
+{
+    (void)u;
+    return __atomic_load_n(&s_submitBusy, __ATOMIC_ACQUIRE) != 0 && (int)slot == s_slotsJob;
+}
+
+static bool slotsWorker(void *u)
+{
+    (void)u;
+    return t_submitter != 0;
+}
+
+/* list B: a blue square (2..5, 10..13) from the ring's second quad, the
+ * list left open; begun by the caller */
+static void slotsRecordB(RhiCommandList cl, RhiTexture tgt, RhiPipeline pipe, RhiBuffer ring,
+                         int fs)
+{
+    RhiTextureBarrier pre = {tgt, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+    rhi_cmd_barrier(cl, &pre, 1);
+    RhiRenderPassDesc rp;
+    memset(&rp, 0, sizeof(rp));
+    rp.color[0].texture = tgt;
+    rp.color[0].load = RHI_LOAD_CLEAR;
+    rp.colorCount = 1;
+    rp.width = (uint32_t)fs;
+    rp.height = (uint32_t)fs;
+    rhi_cmd_begin_render_pass(cl, &rp);
+    rhi_cmd_set_pipeline(cl, pipe);
+    rhi_cmd_set_vertex_buffer(cl, 0, ring, 12u * sizeof(Vtx));
+    rhi_cmd_draw(cl, 6, 0, 1);
+    rhi_cmd_end_render_pass(cl);
+    RhiTextureBarrier post = {tgt, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+    rhi_cmd_barrier(cl, &post, 1);
+}
+
+static void threadSlotsCell(const Ctx *c)
+{
+    enum { FS = 16 };
+
+    if (rhi_limits()->singleThreadCommands || !rhi_limits()->slotOverlap) {
+        rhi_test_log("%s: thread slots cell skipped (the frame slots are not apart on this "
+                     "device: one call at a time)\n",
+                     s_label);
+        return;
+    }
+    const RhiFormat CF = RHI_FMT_RGBA8_UNORM;
+    const uint32_t use = RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC;
+    RhiTexture refA = rhi_create_texture(&(RhiTextureDesc){FS, FS, 1, CF, use, "slots ref A", 0});
+    RhiTexture refB = rhi_create_texture(&(RhiTextureDesc){FS, FS, 1, CF, use, "slots ref B", 0});
+    RhiTexture tgtA = rhi_create_texture(&(RhiTextureDesc){FS, FS, 1, CF, use, "slots A", 0});
+    RhiTexture tgtB = rhi_create_texture(&(RhiTextureDesc){FS, FS, 1, CF, use, "slots B", 0});
+    RhiBuffer ring = rhi_create_buffer(
+        &(RhiBufferDesc){4096, RHI_BUF_VERTEX, RHI_MEM_UPLOAD, "thread slots verts"});
+    uint8_t *map = ring.id ? rhi_map_buffer(ring) : NULL;
+    RhiBlendState opaque = {.writeMask = 0xF};
+    RhiPipeline pipe =
+        makePipeline(c, c->psColor, CF, RHI_FMT_UNKNOWN, &opaque, NULL, "thread slots");
+    if (!refA.id || !refB.id || !tgtA.id || !tgtB.id || !map || !pipe.id) {
+        rhi_test_log("FAIL %s: thread slots resources\n", s_label);
+        failures++;
+        return;
+    }
+    Vtx v[18];
+    quad(&v[0], 2.5f, 2.5f, 6.5f, 6.5f, FS, FS, 0.0f, 255, 0, 0, 255);
+    quad(&v[6], 2.5f, 6.5f, 6.5f, 10.5f, FS, FS, 0.0f, 0, 255, 0, 255);
+    quad(&v[12], 2.5f, 10.5f, 6.5f, 14.5f, FS, FS, 0.0f, 0, 0, 255, 255);
+    memcpy(map, v, sizeof(v));
+
+    /* the serial run: A then B, each in a slot of its own, on this thread */
+    static uint8_t wantA[FS * FS * 4], wantB[FS * FS * 4], gotA[FS * FS * 4], gotB[FS * FS * 4];
+    uint32_t pA = 0, pB = 0, qA = 0, qB = 0;
+    rhi_wait_frame();
+    RhiCommandList cl = threadCellRecord(refA, pipe, ring, FS);
+    rhi_end_commands(cl);
+    rhi_submit(cl);
+    rhi_wait_frame();
+    cl = rhi_begin_commands();
+    slotsRecordB(cl, refB, pipe, ring, FS);
+    rhi_end_commands(cl);
+    rhi_submit(cl);
+    const bool haveRef = rhi_readback_texture(refA, RHI_ASPECT_COLOR, wantA, sizeof(wantA), &pA) &&
+                         rhi_readback_texture(refB, RHI_ASPECT_COLOR, wantB, sizeof(wantB), &pB);
+
+    /* the slots apart: A recorded here in this slot, its end and submit on
+       thread B while this thread recycles the other slot and records B */
+    rhi_wait_frame();
+    s_slotsJob = (int)rhi_frame_slot();
+    ThreadSlots job = {threadCellRecord(tgtA, pipe, ring, FS), 0, 0};
+    const RhiCallGuard guard = {NULL, submitGuardBusy, submitGuardWait, NULL};
+    const RhiSlotGuard slots = {NULL, slotsFree, slotsPending, slotsWorker};
+    s_guardWaits = 0;
+    rhi_set_call_guard(&guard);
+    rhi_set_slot_guard(&slots);
+    __atomic_store_n(&s_submitBusy, 1, __ATOMIC_RELEASE);
+    s_submitThread = ico_thread_create(slotsOnThread, &job);
+    if (s_submitThread == NULL) {
+        rhi_set_slot_guard(NULL);
+        rhi_set_call_guard(NULL);
+        __atomic_store_n(&s_submitBusy, 0, __ATOMIC_RELEASE);
+        rhi_test_log("FAIL %s: thread slots: no second thread\n", s_label);
+        failures++;
+        rhi_end_commands(job.cl);
+        rhi_submit(job.cl);
+        rhi_wait_idle();
+        rhi_destroy_pipeline(pipe);
+        rhi_destroy_texture(refA);
+        rhi_destroy_texture(refB);
+        rhi_destroy_texture(tgtA);
+        rhi_destroy_texture(tgtB);
+        rhi_destroy_buffer(ring);
+        return;
+    }
+    rhi_wait_frame(); /* the other slot: a slot call the slot guard lets through */
+    const bool otherSlot = (int)rhi_frame_slot() != s_slotsJob;
+    RhiCommandList clB = rhi_begin_commands();
+    __atomic_store_n(&job.go, 1, __ATOMIC_RELEASE);
+    if (clB.id) {
+        slotsRecordB(clB, tgtB, pipe, ring, FS);
+    }
+    const int waitsRecording = s_guardWaits;
+    /* not a slot call: waits for thread B (the guard's wait joins it) */
+    if (clB.id) {
+        rhi_end_commands(clB);
+    }
+    const int waitsEnd = s_guardWaits;
+    rhi_set_slot_guard(NULL);
+    rhi_set_call_guard(NULL);
+    if (s_submitThread != NULL) {
+        submitGuardWait(NULL); /* the guard did not wait: joined here (a failure below) */
+        s_guardWaits--;
+    }
+    if (clB.id) {
+        rhi_submit(clB);
+    }
+    const bool haveGot = rhi_readback_texture(tgtA, RHI_ASPECT_COLOR, gotA, sizeof(gotA), &qA) &&
+                         rhi_readback_texture(tgtB, RHI_ASPECT_COLOR, gotB, sizeof(gotB), &qB);
+    if (!haveRef || !haveGot || !clB.id || pA != qA || pB != qB) {
+        rhi_test_log("FAIL %s: thread slots readback\n", s_label);
+        failures++;
+    } else if (!otherSlot || waitsRecording != 0 || waitsEnd != 1 ||
+               !__atomic_load_n(&job.done, __ATOMIC_ACQUIRE)) {
+        rhi_test_log("FAIL %s: thread slots: the recycle and the next list's recording waited "
+                     "for the other thread (waits %d while recording, %d at the end, other slot "
+                     "%d)\n",
+                     s_label, waitsRecording, waitsEnd, otherSlot ? 1 : 0);
+        failures++;
+    } else if (!rowsEqual(wantA, gotA, qA, FS, FS) || !rowsEqual(wantB, gotB, qB, FS, FS)) {
+        rhi_test_log("FAIL %s: thread slots: a list ended and submitted on another thread while "
+                     "the next slot's list was recorded here drew other pixels than the two "
+                     "made one after the other (A %s, B %s)\n",
+                     s_label, rowsEqual(wantA, gotA, qA, FS, FS) ? "equal" : "differs",
+                     rowsEqual(wantB, gotB, qB, FS, FS) ? "equal" : "differs");
+        failures++;
+    } else {
+        const int before = failures;
+        for (int y = 0; y < FS && failures - before < 4; y++) {
+            for (int x = 0; x < FS && failures - before < 4; x++) {
+                const int in = x >= 2 && x <= 5;
+                const uint8_t r = in && y >= 2 && y <= 5 ? 255 : 0;
+                const uint8_t g = in && y >= 6 && y <= 9 ? 255 : 0;
+                const uint8_t b = in && y >= 10 && y <= 13 ? 255 : 0;
+                expectRGBA(gotA, qA, x, y, r, g, 0, (r | g) != 0 ? 255 : 0, 210);
+                expectRGBA(gotB, qB, x, y, 0, 0, b, b, 211);
+            }
+        }
+        if (failures == before) {
+            rhi_test_log("%s: thread slots cell passed (slot %d's list ended and submitted on "
+                         "thread B while this thread recycled the other slot and recorded its "
+                         "list without waiting; both read back equal to the serial run; the "
+                         "next list's end waited once)\n",
+                         s_label, s_slotsJob);
+        }
+    }
+    rhi_destroy_pipeline(pipe);
+    rhi_destroy_texture(refA);
+    rhi_destroy_texture(refB);
+    rhi_destroy_texture(tgtA);
+    rhi_destroy_texture(tgtB);
+    rhi_destroy_buffer(ring);
+}
+
 /* Multisampling, for each of 2, 4 and 8 samples the device takes
  * (RhiLimits.msaaCounts; the others are skipped): a 16 x 16 multisampled
  * RGBA8 target with a multisampled D32F_S8 depth, cleared, a full quad at
@@ -2516,6 +2736,9 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     }
     if (!failures) {
         threadRecordCell(&c);
+    }
+    if (!failures) {
+        threadSlotsCell(&c);
     }
     if (!failures) {
         msaaCell(&c);

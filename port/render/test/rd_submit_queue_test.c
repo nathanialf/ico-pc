@@ -15,8 +15,13 @@
  *            once; a job that presents nothing leaves it 0;
  *   block    the jobs' means, the longest, the depth, the waits by the
  *            render thread and the others, the lists submitted on the
- *            render thread; the sums cleared by the take, the depth
- *            carried over for the jobs still queued.
+ *            render thread, the pictures begun beside the other slot's
+ *            job; the sums cleared by the take, the depth carried over for
+ *            the jobs still queued;
+ *   slots    the jobs queued and running of each frame slot (the render
+ *            thread's wait for the slot it recycles, the slots apart): a
+ *            running job counted until it finishes, a queued one of the
+ *            other slot not counted for this one.
  */
 #include <stdio.h>
 #include <string.h>
@@ -39,6 +44,7 @@ static RdSubmitJob job(uint32_t cl, bool present, uint32_t replay)
     j.cl = cl;
     j.present = present;
     j.replay = replay;
+    j.slot = (uint8_t)(replay % 2u);
     return j;
 }
 
@@ -99,7 +105,10 @@ static void testOrderDepth(void)
     rd__sq_note_wait(&q, 1.0, false);
     rd__sq_note_wait(&q, -1.0, false); /* a clock step back counts as 0 */
     rd__sq_note_on_render(&q);
+    rd__sq_note_overlap(&q);
+    rd__sq_note_overlap(&q);
     rd__sq_block_take(&q, &bl);
+    CHECK(bl.overlapped == 2);
     CHECK(bl.jobs == 3 && bl.depthMax == RD_SUBMIT_DEPTH && bl.dropped == 1);
     CHECK(bl.submitMs == 3.0 && bl.presentMs > 0.66 && bl.presentMs < 0.67);
     CHECK(bl.longestMs == 5.5);
@@ -107,6 +116,36 @@ static void testOrderDepth(void)
     CHECK(bl.waitMaxMs == 2.0 && bl.onRender == 1);
     rd__sq_block_take(&q, &bl);
     CHECK(bl.jobs == 0 && bl.waits == 0 && bl.depthMax == 0 && bl.submitMs == 0.0);
+    CHECK(bl.overlapped == 0);
+}
+
+/* the slots apart (rd_submit_thread.h): picture N of slot 0 running, N+1
+   of slot 1 queued; the render thread's picture N+2 recycles slot 0 and
+   waits for N alone, N+3 recycles slot 1 and waits for N+1 */
+static void testSlots(void)
+{
+    RdSubmitQ q;
+    rd__sq_init(&q);
+    CHECK(rd__sq_slot_jobs(&q, 0) == 0 && rd__sq_slot_jobs(&q, 1) == 0);
+    const RdSubmitJob n0 = job(31, true, 40); /* slot 0 */
+    const RdSubmitJob n1 = job(32, true, 41); /* slot 1 */
+    CHECK(rd__sq_post(&q, &n0) == 1);
+    CHECK(rd__sq_slot_jobs(&q, 0) == 1 && rd__sq_slot_jobs(&q, 1) == 0);
+    RdSubmitJob j;
+    CHECK(rd__sq_next(&q, &j) && j.slot == 0);
+    /* running: still counted for its slot */
+    CHECK(rd__sq_slot_jobs(&q, 0) == 1);
+    CHECK(rd__sq_post(&q, &n1) == 2);
+    CHECK(rd__sq_slot_jobs(&q, 0) == 1 && rd__sq_slot_jobs(&q, 1) == 1);
+    j.submitMs = 4.0;
+    j.presentMs = 2.0;
+    rd__sq_finish(&q, &j);
+    /* slot 0 free while slot 1's job is queued: N+2 may begin */
+    CHECK(rd__sq_slot_jobs(&q, 0) == 0 && rd__sq_slot_jobs(&q, 1) == 1 && !rd__sq_idle(&q));
+    CHECK(runOne(&q, 4.0, 2.0, NULL));
+    CHECK(rd__sq_slot_jobs(&q, 1) == 0 && rd__sq_idle(&q));
+    /* a slot past the ring's entries counts none */
+    CHECK(rd__sq_slot_jobs(&q, 7) == 0);
 }
 
 static void testCarry(void)
@@ -135,6 +174,7 @@ int main(void)
 {
     testOrderDepth();
     testCarry();
+    testSlots();
     printf("rd_submit_queue_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

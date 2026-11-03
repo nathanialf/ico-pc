@@ -39,7 +39,12 @@
  * goes as the window's presents go, its submit and present on the submit
  * thread, rd_submit_thread.h).  Not with
  * OpenGL (its context stays on the main thread; the line says so and the
- * replays stay on it).
+ * replays stay on it).  --repeat N (1..8) makes that picture N times in a
+ * row, the PNG read after the last: with --render-thread on the N are
+ * handed over back to back, so with the frame slots apart each one's end,
+ * submit and present on the submit thread go on while the next one
+ * records (rd_submit_thread.h "the slots"); off and sync make the same N
+ * one after the other, so the last picture's bytes compare as one.
  *
  * The display options: a dump does not carry them, so the replay takes them
  * here, the PS2 picture by default:
@@ -1066,6 +1071,8 @@ static bool noHalf;
  * and --presents N */
 static bool motionSmooth;
 static int presentsN;
+/* --repeat N: the presented picture made N times in a row (1: once) */
+static int repeatN = 1;
 
 /* --no-half: every TARGET command without the field's half pixel
    (RD_TARGET_HALF_Y), as a flip in the other field sends the frame */
@@ -1807,7 +1814,7 @@ int main(int argc, char **argv)
                 "[--work-clear RRGGBB] [--no-glow-edge] "
                 "[--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12|opengl|d3d11] "
-                "[--render-thread off|sync|on] [--list] "
+                "[--render-thread off|sync|on] [--repeat N] [--list] "
                 "[--nop L:A[-B][,...]|@FILE] [--occlusion [--occlusion-out FILE] "
                 "[--occlusion-csv FILE]] "
                 "[--gpu-repeat K] "
@@ -1915,6 +1922,13 @@ int main(int argc, char **argv)
                 return 1;
             }
             rd_thread_local_want(m); /* every rd_init from here (rd_thread.h) */
+        } else if (strcmp(argv[i], "--repeat") == 0 && i + 1 < argc) {
+            const int n = atoi(argv[++i]);
+            if (n < 1 || n > 8) {
+                fprintf(stderr, "bad --repeat (1..8)\n");
+                return 1;
+            }
+            repeatN = n;
         } else if (strcmp(argv[i], "--dump-temps") == 0 && i + 1 < argc) {
             tempsDir = argv[++i];
         } else if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {
@@ -2350,12 +2364,18 @@ int main(int argc, char **argv)
     if (rd_thread_host_on() && pw != 0 && !passDir && !occlusion && !saveBlended && !tempsDir) {
         /* --render-thread: the presented picture handed over as the
            window's are (sync: waited), its submit and present on the
-           submit thread (rd_submit_thread.h), read back after the drain */
-        (void)rd__replay_frame_async(rf, (int)rf->keep, true);
+           submit thread (rd_submit_thread.h), read back after the drain;
+           --repeat's pictures back to back, nothing drained between them */
+        for (int k = 0; k < repeatN; k++) {
+            (void)rd__replay_frame_async(rf, (int)rf->keep, true);
+        }
         (void)rd_thread_drain();
         replayed = rd_thread_last_ok();
     } else {
-        replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
+        replayed = true;
+        for (int k = 0; k < repeatN && replayed; k++) {
+            replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
+        }
     }
     if (occlusion) {
         /* the counts before anything else recycles a frame slot */
