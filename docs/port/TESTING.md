@@ -781,3 +781,38 @@ setup and a ccache build), an `asan` shard about 45 (108 minutes in three), an `
 about 35 (58 minutes in two); `linux` about 15, then `windows` about 8; `linux-arm64`, unchanged,
 about 50, which is now the run's longest job. A shard much longer than its siblings means the
 table is stale.
+
+## Release process
+
+A push to main restarts every CI job, so a release pushes once, after every test that can run
+locally has run. The maintainer's scripts for it are in `build-host/tmp/release/` (outside the
+repository, like the rest of `build-host/`); each prints its usage when run without arguments. The
+sequence:
+
+1. **Each package at its merge.** `merge-check.sh <branch> "<regex>"` merges the package branch
+   into the integration branch's worktree (`INT_WT`), builds `all tests` in its own build
+   directory `build-host/int-linux-x64` (configured once from that worktree with the `linux-x64`
+   preset and `-DICO_LINK_EXE=ON`, no disc when the worktree has no `baserom/`) and runs the
+   package's own tests: the CPU half of the regex (every label but `render`, `rhi`, `gl`, `vk10`,
+   `vk11`, `mali`) at `-j2`, then the lavapipe/llvmpipe half at `-j1`, the six game-starting tests
+   left out. A failed build, a failed test or a regex that selects nothing resets the integration
+   branch to its commit before the merge: the package goes back to its author with the log, and
+   no other package waits on it.
+2. **The new tests under the sanitizers.** `asan-new-tests.sh "<regex>"` builds the
+   `linux-x64-asan` preset (CI's asan suite: gcc 14, `-O1`,
+   `-fsanitize=address,undefined -fno-sanitize-recover=undefined`, the program linked) from the
+   integration worktree into `build-host/int-linux-x64-asan` and runs the named tests the same
+   two ways, so CI's asan shards are never a new test's first UBSan run. The regex is every test
+   the release added or changed.
+3. **The chain, once.** With main at the integration branch, `chain.sh <tag>` builds main's
+   `linux-x64`, runs `gate.sh` (every test but the game-starting ones, then the native-frame
+   gate-a and the `--pass-dump` byte compare of the corpus), then the window build,
+   `offset_audit` on it and the fortify compile of the C files changed since the last tag.
+4. **One push.** Every fix found in steps 1 to 3 is collected first; the push gate
+   (`build-host/tmp/push-check.sh`) passes; main is pushed once. A fix is never pushed while
+   another is still expected, since each push restarts CI.
+5. **CI.** About 50 minutes a run with the shards ([The CI shards](#the-ci-shards)):
+   `linux-arm64` is the longest job. The release waits for main's run to finish green, every job
+   counted.
+6. **The release.** The packages from the release commit, the tag, `gh release create`; the
+   tag's own run adds the arm64 packages ([../BUILDING.md](../BUILDING.md#packages)).
