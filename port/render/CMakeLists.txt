@@ -2430,7 +2430,11 @@ if(ICO_RUN_TESTS)
       add_test(NAME rd_shadow_selftest_${_n}
                COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
                        "-DPATH=one draw" "-DARGS=${_a}"
-                       "-DRESULTS=equal to the seven draws over ${_w}x448, 142 band centres ok"
+                       # the tool runs the self-test twice (its first scene, then the
+                       # one made at the asked size): every line one draw with its
+                       # 142 centres ok, and the asked width's line present
+                       "-DRESULTS=equal to the seven draws over [0-9]+x448, 142 band centres ok"
+                       "-DEXTRA=shadow count: one draw \\(self-test: equal to the seven draws over ${_w}x448, 142 band centres ok"
                        -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_selftest.cmake")
       set_tests_properties(rd_shadow_selftest_${_n} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                            ENVIRONMENT "${_env}")
