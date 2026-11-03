@@ -2159,7 +2159,15 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
     failing pixel writes its colour but not its depth; every VU draw of list 0 in the corpus dumps
     v1700, v10103 and v5836), so without the range there would be no occluder; with it 63 of the
     65 prelit and lit code-32/36 meshes of v1700's list 0 and 99 of v5836's 132 have a texture
-    whose alpha stays above it (`rd_replay_tool --list`). Of
+    whose alpha stays above it (`rd_replay_tool --list`). The walk runs before the replay's
+    uploads (`replayFrame`: `rd__vis_frame`, then `rd__upload_dirty_textures`), so a texture not
+    uploaded yet (dirty: every texture of a dump's first replay, a texture new or changed this
+    picture in the game) has no scan for the plan; the occluder test then settles the decodes in
+    flight (`rdtex_settle`, which the ring's estimate does right after anyway) and takes the scan the
+    upload will make from the CPU copy (`rd__vis_hiz_pending_scan`: level 0 whole and the GS levels;
+    a box chain's alpha stays inside level 0's range, the kept alpha coverage, `rd__mip_boost`,
+    refused), composed with the vertices' range as the plan composes it, and the vertices' range
+    itself as well (a failed upload draws untextured). Of
     its triangles in the index ranges `doVuDraw` draws, those drawn exactly in every state: all
     three vertices inside the program's region test (code 32: `0 < x, y < 4094`, `0 < w <
     16777214`; code 36: no clip flag in `mem[20..23]`'s space) with a margin the float rounding

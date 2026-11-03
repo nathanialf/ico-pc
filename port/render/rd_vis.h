@@ -23,6 +23,7 @@
 
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_tex.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -342,6 +343,18 @@ bool rd__vis_hiz_list_push(RdVisHizList *l, const RdVisHizTri *t);
  * triangle drawn (hidden ones aside).  1 when every triangle drawn is
  * exact, 0 when one is not (a draw that may lower the depth then marks
  * nothing), -1 without memory. */
+/* The alpha scan the upload will make (rd_upload.c rd__upload_dirty_textures)
+ * of texture id when it is dirty, so not uploaded yet when the walk runs
+ * (rd__vis_frame comes before the replay's uploads): a game RGBA8 image
+ * with its CPU copy, neither a pack replacement nor refused nor a baked
+ * sheet, whose levels are its own pixels (level 0 whole, as the upload
+ * scans it), its GS levels (scanned as uploadMips copies them) or the box
+ * chain (each alpha the rounded mean of four above it, so inside level 0's
+ * range) without the kept alpha coverage (rd__mip_boost, which may move
+ * alpha: refused).  The decodes in flight must have settled
+ * (rdtex_settle).  False for anything else (rd__tex_alpha_scan's case: a
+ * texture not dirty). */
+bool rd__vis_hiz_pending_scan(uint32_t id, RdTexAlphaScan *out);
 int rd__vis_hiz_mesh(const RdMeshRec *m, const RdVuPayload *p, const float (*mem)[4], uint32_t cmd,
                      double minArea, RdVisHizList *out, uint32_t *lbAll);
 

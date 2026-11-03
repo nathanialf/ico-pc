@@ -59,7 +59,9 @@
  *             under their own Z test ALWAYS, after a clear or a draw that
  *             may lower the depth; an ALWAYS wall hides, and so does a
  *             wall under ATE GREATER 0x40 whose As is 127 throughout (the
- *             alpha plan's range); the budget (none, one triangle). */
+ *             alpha plan's range); the budget (none, one triangle); a
+ *             wall whose texture is not uploaded yet (dirty) proven opaque
+ *             by the scan the upload will make, a cut-out one not. */
 #include <fenv.h>
 #include <math.h>
 #include <stdio.h>
@@ -1754,6 +1756,74 @@ static void checkHizNone(void)
     rd__frame_free(&f);
 }
 
+/* an occluder whose texture is not uploaded yet (dirty: every texture of
+ * a dump's first replay, as the walk runs before the replay's uploads):
+ * the alpha proof from the scan the upload will make (rd_vis_hiz.c
+ * rd__vis_hiz_pending_scan) */
+static void checkHizPendingTexture(void)
+{
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
+    uint8_t opaque[4 * 4 * 4], cut[4 * 4 * 4];
+    for (int k = 0; k < 16; k++) {
+        const uint8_t px[4] = {200, 180, 160, 0x80};
+        memcpy(&opaque[k * 4], px, 4);
+        memcpy(&cut[k * 4], px, 4);
+        cut[k * 4 + 3] = k == 5 ? 0x40 : 0x80; /* one texel below the reference */
+    }
+    const RdTex tOpaque = rd_create_texture(4, 4, opaque, RD_TEXA_80_80, "hiz opaque");
+    const RdTex tCut = rd_create_texture(4, 4, cut, RD_TEXA_80_80, "hiz cut");
+    RdTexAlphaScan scan;
+    CHECK(tOpaque.id && rd__vis_hiz_pending_scan(tOpaque.id, &scan) && scan.aLo == 0x80 &&
+              scan.aHi == 0x80,
+          "pending texture: the scan the upload will make (%u..%u)", scan.aLo, scan.aHi);
+    CHECK(tCut.id && rd__vis_hiz_pending_scan(tCut.id, &scan) && scan.aLo == 0x40,
+          "pending texture: the cut-out's least alpha %u", scan.aLo);
+    CHECK(!rd__vis_hiz_pending_scan(0, &scan), "pending texture: no texture");
+    const uint32_t wallA = makeWall(1800, 1830, 2300, 2260, 1000.0f, 127.0f, "hiz wall textured");
+    const float bLo[3] = {1850, 1870, 400}, bHi[3] = {1900, 1920, 500};
+    const uint32_t behind = makeMesh(3, bLo, bHi, "hiz behind textured");
+    static RdFrame f;
+    memset(&f, 0, sizeof(f));
+    rd__reset_state_block(&f.startState);
+    f.number = 11;
+    pushTarget(&f, 0, scene);
+    uint32_t box[2];
+    for (int k = 0; k < 2; k++) {
+        pushClear(&f, scene);
+        /* the scene's meshes: ATE GREATER 0x60, AFAIL FB_ONLY, Z GEQUAL */
+        rd__st_test(&f, 0, 0x5160Du);
+        RdCmd *tc = rd__st_push(&f, 0, RDC_TEXTURE);
+        tc->u[0] = k == 0 ? tOpaque.id : tCut.id;
+        tc->b[0] = RD_TEXFN_MODULATE;
+        tc->b[1] = RD_TCC_RGBA;
+        pushVu(&f, 0, RDC_MESH, wallA, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+        rd__st_push(&f, 0, RDC_TEXTURE_OFF);
+        pushVu(&f, 0, RDC_MESH, behind, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+        box[k] = f.lists[0].count - 1;
+    }
+    f.closed = 1;
+    const bool alphaPlan = g_rd.profile.alphaPlan;
+    g_rd.profile.alphaPlan = true;
+    rd__vis_set_mode(RD_VIS_FULL);
+    rd__vis_init();
+    const RdFrame *s = rd__vis_frame(&f, 0);
+    RdVisCounts vc;
+    rd__vis_counts(&vc);
+    /* As = 0x80 x 127 >> 7 = 127 > 0x60 at every pixel: an occluder; the
+     * cut-out's 0x40 x 127 >> 7 = 63 fails: none */
+    CHECK(s != &f && s->lists[0].cmds[box[0]].type == RDC_NOP &&
+              s->lists[0].cmds[box[1]].type == RDC_MESH && vc.occluded == 1u,
+          "pending texture: the box behind the opaque wall hidden, behind the cut-out kept "
+          "(%u occluded)",
+          vc.occluded);
+    rd__vis_set_mode(-1);
+    rd__vis_init();
+    g_rd.profile.alphaPlan = alphaPlan;
+    rd__frame_free(&f);
+    printf("  occlusion: a wall whose texture is not uploaded yet proven opaque by the scan the "
+           "upload will make\n");
+}
+
 int main(void)
 {
     checkBounds();
@@ -1772,6 +1842,7 @@ int main(void)
     checkFrame();
     checkRange();
     checkHizFrame();
+    checkHizPendingTexture();
     checkHizNone();
     rd_shutdown();
     return ico_check_summary("rd_vis_test");

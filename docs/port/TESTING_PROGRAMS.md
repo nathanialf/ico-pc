@@ -1036,7 +1036,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   with Z write), a wall under ALWAYS hiding, a wall under ATE GREATER 0x40 with AFAIL FB_ONLY whose
   As is 127 at every vertex hiding (the alpha plan's range), the walls themselves drawn, list 5's
   box kept; the counts (3 occluded, 4 tested, 5 resets); frustum alone hiding nothing; `ICO_RD_CULL_HIZ_TRIS` 0 (none) and 1 (the first wall's
-  first triangle alone); `ICO_VK_DEPTH_ALWAYS` hiding nothing (`rd_vis`).
+  first triangle alone); `ICO_VK_DEPTH_ALWAYS` hiding nothing; a wall under ATE GREATER 0x60 with
+  AFAIL FB_ONLY whose texture is not uploaded yet (record-only: dirty) hiding the box behind it when
+  the texture's alpha is 0x80 throughout (`rd__vis_hiz_pending_scan`'s scan 0x80..0x80), not when
+  one texel is 0x40 (`rd_vis`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
