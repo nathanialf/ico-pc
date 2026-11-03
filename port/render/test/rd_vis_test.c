@@ -54,10 +54,12 @@
  *             the margin, the later mark's room and a half-covered tile
  *             kept; the margin near 2^31 (hidden exactly when the bound
  *             clears it); on a recorded frame under full: the draws behind
- *             an opaque wall NOPs, kept behind a wall under ATE, ABE, Z
- *             write off or a chain plane, kept under their own Z test
- *             ALWAYS, after a clear or a draw that may lower the depth;
- *             an ALWAYS wall hides; the budget (none, one triangle). */
+ *             an opaque wall NOPs, kept behind a wall under an alpha test
+ *             its As may fail, ABE, Z write off or a chain plane, kept
+ *             under their own Z test ALWAYS, after a clear or a draw that
+ *             may lower the depth; an ALWAYS wall hides, and so does a
+ *             wall under ATE GREATER 0x40 whose As is 127 throughout (the
+ *             alpha plan's range); the budget (none, one triangle). */
 #include <fenv.h>
 #include <math.h>
 #include <stdio.h>
@@ -1364,8 +1366,9 @@ static void setEnvVar(const char *name, const char *v)
 #endif
 }
 
-/* a wall of two triangles (a strip of four prelit vertices) at depth z */
-static uint32_t makeWall(float x0, float y0, float x1, float y1, float z, const char *name)
+/* a wall of two triangles (a strip of four prelit vertices) at depth z,
+ * its vertices' colour alpha a */
+static uint32_t makeWall(float x0, float y0, float x1, float y1, float z, float a, const char *name)
 {
     float st[4 * 3][4];
     memset(st, 0, sizeof(st));
@@ -1377,6 +1380,7 @@ static uint32_t makeWall(float x0, float y0, float x1, float y1, float z, const 
         p[2] = z;
         p[3] = 1.0f;
         st[v * 3 + 1][3] = v == 0 ? 0.0f : 1.0f; /* ST.w: the strip flag */
+        st[v * 3 + 2][3] = a;                    /* the colour's alpha */
     }
     const uint32_t index[6] = {ICO_VU_INDEX(2, 0), ICO_VU_INDEX(2, 1), ICO_VU_INDEX(2, 2),
                                ICO_VU_INDEX(3, 0), ICO_VU_INDEX(3, 1), ICO_VU_INDEX(3, 2)};
@@ -1407,12 +1411,17 @@ static void pushClear(RdFrame *f, uint32_t id)
 static void checkHizFrame(void)
 {
     const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
-    const uint32_t wall = makeWall(1800, 1830, 2300, 2260, 1000.0f, "hiz wall");
+    const uint32_t wall = makeWall(1800, 1830, 2300, 2260, 1000.0f, 0.0f, "hiz wall");
+    const uint32_t wallA = makeWall(1800, 1830, 2300, 2260, 1000.0f, 127.0f, "hiz wall alpha");
     const float bLo[3] = {1850, 1870, 400}, bHi[3] = {1900, 1920, 500};
     const float fLo[3] = {1850, 1870, 1100}, fHi[3] = {1900, 1920, 1200};
     const uint32_t behind = makeMesh(3, bLo, bHi, "hiz behind");
     const uint32_t front = makeMesh(3, fLo, fHi, "hiz front");
-    CHECK(wall && behind && front, "occlusion frame: meshes made");
+    CHECK(wall && wallA && behind && front, "occlusion frame: meshes made");
+    /* the alpha plan's range of As (rd_alpha_plan.c), on as on every device
+     * class */
+    const bool alphaPlan = g_rd.profile.alphaPlan;
+    g_rd.profile.alphaPlan = true;
     static RdFrame f;
     memset(&f, 0, sizeof(f));
     rd__reset_state_block(&f.startState);
@@ -1441,7 +1450,7 @@ static void checkHizFrame(void)
     WALL();
     BOX(behind, true);
     BOX(front, false);
-    /* 2: a wall under the alpha test */
+    /* 2: a wall under the alpha test (GREATER 0) whose As may be 0 */
     pushClear(&f, scene);
     rd__st_test(&f, 0, RD_TEST_AT_GT0_Z_GEQUAL);
     WALL();
@@ -1489,7 +1498,15 @@ static void checkHizFrame(void)
     cp->b[5] = 1;
     walls[nw++] = f.lists[0].count - 1;
     BOX(behind, false);
-    /* 10: the same box in list 5 (list 0 alone is tested) */
+    /* 10: a wall under the alpha test (GREATER 0x40, AFAIL FB_ONLY, as the
+     * scene's meshes) whose As is 127 at every pixel: an occluder */
+    pushClear(&f, scene);
+    rd__st_test(&f, 0, RD_TEST_AT_GT64_FBONLY);
+    pushVu(&f, 0, RDC_MESH, wallA, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    walls[nw++] = f.lists[0].count - 1;
+    rd__st_test(&f, 0, RD_TEST_Z_GEQUAL);
+    BOX(behind, true);
+    /* 11: the same box in list 5 (list 0 alone is tested) */
     pushTarget(&f, 5, scene);
     rd__st_test(&f, 5, RD_TEST_Z_GEQUAL);
     pushVu(&f, 5, RDC_MESH, behind, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
@@ -1518,10 +1535,10 @@ static void checkHizFrame(void)
         CHECK(s->lists[5].cmds == f.lists[5].cmds && f.lists[5].cmds[box5].type == RDC_MESH,
               "occlusion frame: list 5's box kept");
     }
-    CHECK(vc.occluded == 2u && vc.frustum == 0u && vc.byVerdict[RD_VIS_OCCLUDED] == 2u &&
-              g_rdPerf.cullOccluded == 2u,
+    CHECK(vc.occluded == 3u && vc.frustum == 0u && vc.byVerdict[RD_VIS_OCCLUDED] == 3u &&
+              g_rdPerf.cullOccluded == 3u,
           "occlusion frame: %u occluded, %u frustum", vc.occluded, vc.frustum);
-    CHECK(vc.hizTris > 0u && vc.hizCells > 0u && vc.hizTested == 3u && vc.hizResets == 5u,
+    CHECK(vc.hizTris > 0u && vc.hizCells > 0u && vc.hizTested == 4u && vc.hizResets == 5u,
           "occlusion frame: %u triangles, %llu cells, %u tested, %u resets", vc.hizTris,
           (unsigned long long)vc.hizCells, vc.hizTested, vc.hizResets);
     printf("  occlusion frame: %u of %d boxes hidden, %u occluder triangles, %llu cells, %u "
@@ -1561,6 +1578,7 @@ static void checkHizFrame(void)
     setEnvVar("ICO_VK_DEPTH_ALWAYS", NULL);
     rd__vis_set_mode(-1);
     rd__vis_init();
+    g_rd.profile.alphaPlan = alphaPlan;
     rd__frame_free(&f);
 }
 

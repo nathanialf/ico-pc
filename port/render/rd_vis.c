@@ -804,15 +804,55 @@ static bool hizLowers(const RdStateBlock *st)
 }
 
 /* an occluder's state: its depth written wherever it is rasterised (Z
- * write, GEQUAL or ALWAYS, no alpha test, no DATE, no clip of the pixel),
- * opaque and unmasked */
+ * write, GEQUAL or ALWAYS, no DATE, no clip of the pixel), opaque and
+ * unmasked; the alpha test is hizAlphaPasses' */
 static bool hizOccluderState(const RdStateBlock *st)
 {
     const RdDrawState *d = &st->ds;
     return d->zwrite == RD_ZWRITE_ON && d->test.zte &&
            (d->test.ztst == RD_ZTST_GEQUAL || d->test.ztst == RD_ZTST_ALWAYS) && d->abe == 0 &&
-           (d->test.ate == 0 || d->test.atst == RD_ATST_ALWAYS) && d->test.date == RD_DATE_OFF &&
-           d->colorMask == 0xF && d->fbmsk == 0 && d->pabe == 0;
+           d->test.date == RD_DATE_OFF && d->colorMask == 0xF && d->fbmsk == 0 && d->pabe == 0;
+}
+
+/* Whether the alpha test passes at every pixel of the mesh draw c (so the
+ * depth is written wherever it is rasterised): no test, ALWAYS, or the
+ * alpha plan's range of As (rd_alpha_plan.c rd__alpha_range_of_draw, what
+ * doVuDraw plans the same draw's passes with: the texture's alpha over
+ * every level the device holds under the state's TEXA, the function and
+ * every vertex's alpha) passing the test whole.  The scene's opaque
+ * meshes draw under ATE GREATER 0x60 with AFAIL FB_ONLY (a failing pixel
+ * writes colour, not depth), so without the range no list-0 draw of the
+ * corpus would be an occluder. */
+static bool hizAlphaPasses(const RdStateBlock *st, const RdFrame *f, const RdCmd *c,
+                           const RdMeshRec *m, uint8_t prog)
+{
+    const RdTestState *t = &st->ds.test;
+    if (!t->ate || t->atst == RD_ATST_ALWAYS) {
+        return true;
+    }
+    RdAlphaRange as;
+    rd__alpha_range_of_draw(
+        st,
+        &(RdAlphaSrc){
+            .kind = RD_ALPHA_SRC_VU, .prog = prog, .cmdType = c->type, .f = f, .c = c, .mesh = m},
+        &as);
+    const uint32_t lo = as.lo, hi = as.hi, ref = t->aref;
+    switch (t->atst) {
+    case RD_ATST_LESS:
+        return hi < ref;
+    case RD_ATST_LEQUAL:
+        return hi <= ref;
+    case RD_ATST_EQUAL:
+        return lo == ref && hi == ref;
+    case RD_ATST_GEQUAL:
+        return lo >= ref;
+    case RD_ATST_GREATER:
+        return lo > ref;
+    case RD_ATST_NOTEQUAL:
+        return hi < ref || lo > ref;
+    default:
+        return false; /* NEVER */
+    }
 }
 
 static void hizReset(VisWalk *w)
@@ -978,7 +1018,8 @@ static void hizCollect(VisWalk *w, const RdFrame *f, int keep)
         RdVuPayload p;
         memcpy(&p, f->payload + c->u[1], sizeof(p)); /* cmdVerdict read the sizes */
         const RdMeshRec *m = rd__mesh_rec(c->u[0]);
-        if (!m || (p.prog != RD_PROG_PRELIT && p.prog != RD_PROG_LIT)) {
+        if (!m || (p.prog != RD_PROG_PRELIT && p.prog != RD_PROG_LIT) ||
+            !hizAlphaPasses(&st, f, c, m, p.prog)) {
             continue;
         }
         const double minArea = (double)st.gsW * (double)st.gsH / 64.0;

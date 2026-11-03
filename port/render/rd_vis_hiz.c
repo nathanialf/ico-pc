@@ -20,7 +20,8 @@
  * draw only ever raises the depth, so between two resets every bound holds.
  *
  * The occluders.  The triangles of an opaque prelit or lit mesh draw (code
- * 32 or 36: rd_vis.c says which states) that the program draws exactly in
+ * 32 or 36: rd_vis.c says which states, among them an alpha test the
+ * alpha plan proves passes at every pixel) that the program draws exactly in
  * every state: all three vertices pass its region test (code 32: 0 < x, y <
  * 4094 and 0 < w < 16777214 after the divide; code 36: no clip flag in
  * mem[20..23]'s space) with a margin the float rounding cannot cross, in

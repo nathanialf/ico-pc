@@ -2121,8 +2121,16 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
     other than GEQUAL, GREATER or NEVER (ZTE off is ALWAYS). Only a PSMZ32 depth buffer (the 24-
     and 16-bit formats clamp at their top); off under `ICO_VK_DEPTH_ALWAYS`.
   - *The occluders.* An RDC_MESH of the prelit or lit program (codes 32 and 36) the frustum test
-    keeps, with Z write on, Z test GEQUAL or ALWAYS, no blending, no alpha test (or ALWAYS), no
-    DATE, no PABE, every colour channel written (`colorMask` 0xF, FBMSK 0) and no chain plane. Of
+    keeps, with Z write on, Z test GEQUAL or ALWAYS, no blending, no DATE, no PABE, every colour
+    channel written (`colorMask` 0xF, FBMSK 0), no chain plane, and an alpha test that passes at
+    every pixel: none, ALWAYS, or the alpha plan's range of As for the draw (`rd_alpha_plan.c
+    rd__alpha_range_of_draw`, what `doVuDraw` plans the same draw's passes with: the texture's
+    alpha over every level the device holds, the function and every vertex's alpha) passing the
+    test whole. The scene's opaque meshes draw under ATE GREATER 0x60 with AFAIL FB_ONLY (a
+    failing pixel writes its colour but not its depth; every VU draw of list 0 in the corpus dumps
+    v1700, v10103 and v5836), so without the range there would be no occluder; with it 63 of the
+    65 prelit and lit code-32/36 meshes of v1700's list 0 and 99 of v5836's 132 have a texture
+    whose alpha stays above it (`rd_replay_tool --list`). Of
     its triangles in the index ranges `doVuDraw` draws, those drawn exactly in every state: all
     three vertices inside the program's region test (code 32: `0 < x, y < 4094`, `0 < w <
     16777214`; code 36: no clip flag in `mem[20..23]`'s space) with a margin the float rounding

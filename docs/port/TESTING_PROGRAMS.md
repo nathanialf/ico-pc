@@ -967,11 +967,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the margin, inside the later mark's room, reaching past the wall's edge (a part-covered tile) and
   beside it kept, nothing hidden by an empty or reset record; near 2^31 the margin 20480 and a box
   hidden exactly when its bound and the margin stay under the wall's; and on a recorded frame under
-  full: the box behind an opaque wall an RDC_NOP, one in front kept, kept behind a wall under the
-  alpha test, blending, Z write off or a chain plane, under its own Z test ALWAYS, after a clear
-  or a draw that may lower the depth (particles under ALWAYS with Z write), a wall under ALWAYS
-  hiding, the walls themselves drawn, list 5's box kept; the counts (2 occluded, 3 tested, 5
-  resets); frustum alone hiding nothing; `ICO_RD_CULL_HIZ_TRIS` 0 (none) and 1 (the first wall's
+  full: the box behind an opaque wall an RDC_NOP, one in front kept, kept behind a wall under an
+  alpha test its As may fail (GREATER 0, alpha 0), blending, Z write off or a chain plane, under
+  its own Z test ALWAYS, after a clear or a draw that may lower the depth (particles under ALWAYS
+  with Z write), a wall under ALWAYS hiding, a wall under ATE GREATER 0x40 with AFAIL FB_ONLY whose
+  As is 127 at every vertex hiding (the alpha plan's range), the walls themselves drawn, list 5's
+  box kept; the counts (3 occluded, 4 tested, 5 resets); frustum alone hiding nothing; `ICO_RD_CULL_HIZ_TRIS` 0 (none) and 1 (the first wall's
   first triangle alone); `ICO_VK_DEPTH_ALWAYS` hiding nothing (`rd_vis`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
