@@ -637,7 +637,16 @@ or `placed by the system (only on Android)`). Both threads ask for it: the rende
 picture waits on the submit thread; the texture decode workers keep their priority as made and the
 background pipeline workers ask for the low one. On Android the two threads keep themselves to the
 cores faster than the slowest (`sched_setaffinity`), since a priority alone does not move a thread
-off a little core there; `[dev] big_cores = false` leaves them where the system puts them. It is a
+off a little core there. Where the fastest speed is one core's alone and other cores are faster
+than the slowest (a phone with `0-1 2.2 GHz, 2-6 3.1 GHz, 7 3.8 GHz`, whose log had core 7 used by no thread),
+the render thread keeps to that core alone and the submit thread to the other faster ones
+(`cpu_place_split`): the render thread's 14-20 ms of CPU a picture is the ceiling the step rule
+plans by, and the prime core's clock is 20 % above the next. With two fastest cores or more, or the
+fastest the only one above the slowest, both keep to the faster cores as before; the game thread
+is left to the system. The cores line then ends `; the render thread to the fastest core 7 alone,
+the submit thread to the next faster cores 2-6, the game thread left to the system`, and the
+threads' lines say `kept to the fastest core 7 alone` and `kept to the next faster cores 2-6`.
+`[dev] big_cores = false` leaves them where the system puts them. It is a
 diagnostic escape, not a performance switch; `window: render thread: the game thread took the OpenGL context for its own calls (N
 times; ...)` (the first 8, then every 100th) counts OpenGL's take-overs, and `... could not be
 made current on the render|game thread (...)` a failed one.

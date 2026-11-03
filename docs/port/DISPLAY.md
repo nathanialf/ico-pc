@@ -723,24 +723,48 @@ for the submit thread and for the GPU's slot fences (2 pictures in flight at mos
 measured time a picture, and its own reads (`port/platform/pace_policy.h` (`pace_rt_further_ask`,
 `pace_rt_step_miss`, `PaceRtPipe`, `PaceStepEst`); [PLATFORM.md](PLATFORM.md#the-render-thread)).
 A step that ends past its deadline anyway because of the pictures (an estimate that was wrong: a
-stage's first textures, a burst of slow pictures) makes the rule plan the whole period for the next
-120 steps, the rule before it (the reads by the next step's due time), 240 after another such miss,
-up to 1920, halved by 1920 steps without one: one late step, then two seconds of the strict rule,
-never the state of steps 40 ms late with the sound held back. A miss is the pictures' only when
-their holds on the step (the presents running past its start, its waits for a picture's reads)
-are at least its lateness (`pace_step_by_pictures`); a miss of the game's own (a long step, a
-load, a compile, a bug report's capture, the disc, or the lateness a long step carries into the
-next start) arms nothing (`pace_loop_test` `testBackoffCause`). The 10 s line's `game thread:`
-clause counts the holds (`would have made the step miss its period`), the steps started late by
-the pictures (with the longest) and the steps that missed their period, the pictures' and the
-game's own apart; `window: step rule: back-off N steps after a miss the pictures caused (late by
-L ms, R ms of it waiting for a picture, P ms the presents ran past the step's start; ...)` names a
-back-off and `window: the game step missed its period by ... the game's own time, not the
-pictures' ...` a miss of the game's (each first 8, then every 100th).
+stage's first textures, a burst of slow pictures) is answered in proportion to its lateness L
+(`pace_step_est_note`, `PaceStepEst`):
+- L under the floor, 2 ms (the rule's own margin, `PACE_STEP_MISS_FLOOR_NS`), changes nothing:
+  it is the scheduling noise the margin is there for.
+- L over it widens the margin by L: the step's time the rule plans by is its estimate plus the
+  widening, so the slack is `period - (step + 2 ms + widening)` and the next pictures are held
+  that much earlier; the widening falls an eighth a step (gone under 1 us), so a 15 ms miss's
+  widening is under 2 ms after 17 steps.
+- Only the third such miss within 300 steps (`PACE_STEP_MISS_WINDOW`) plans the whole period, the
+  rule before it (the reads by the next step's due time), for 120 steps; a further fall-back
+  doubles it, to 480 at most; 300 steps without a miss over the floor halve it, then forget it.
+
+So a wrong estimate costs one late step and a few steps of a wider margin, and a load that keeps
+the pictures' misses coming costs 2, 4, then 8 seconds of the strict rule at most, never the state
+of steps 40 ms late with the sound held back. A phone's log is why: with every miss of the
+pictures' doubling the strict plan up to 1920 steps, misses of 0.0-0.6 ms among them, 478-600 of
+every block's 600 steps ran the rule before at 30-41 presented fps where the GPU made 34-45. The
+model at that phone's numbers (a 4.5 ms step, 13 ms reads,
+25 ms GPU pictures, a picture 12-26 ms slower than its estimate every 250 steps) plans no step at
+the whole period where the rule before planned 5819 of 6000, and gives 39 presented fps where it
+gave 30 (`pace_loop_test` `testBackoffCause`; `build-host/tmp/v098/evidence/fixbackoff/`).
+
+A miss is the pictures' only when their holds on the step (the presents running past its start,
+its waits for a picture's reads) are at least the floor and at least its lateness
+(`pace_step_by_pictures`): misses of 0.0-0.1 ms with the presents 0.3-0.4 ms past the step's
+start and no wait (that phone's log) are noise, the game's. A miss of the game's own (a long step, a load, a compile,
+a bug report's capture, the disc, or the lateness a long step carries into the next start) changes
+nothing (`pace_loop_test` `testBackoffCause`). The 10 s line's `game thread:` clause counts the
+holds (`would have made the step miss its period`), the steps started late by the pictures (with
+the longest) and the steps that missed their period: `N (P the pictures': S under 2 ms, W widened
+the margin, B the third in 300 steps; G the game's own; latest L ms past it; Y steps planned at the
+whole period after the pictures')`. Each miss names what it did (each first 8, then every 100th):
+`window: step rule: a miss the pictures caused under 2 ms (late by L ms, R ms of it waiting for a
+picture, P ms the presents ran past the step's start): inside the rule's margin, nothing changed;
+...`, `window: step rule: the margin widened by L ms to W ms after a miss the pictures caused (...;
+K of the pictures' over 2 ms in the last 300 steps): ...`, `window: step rule: back-off N steps
+after the third miss the pictures caused within 300 steps (...)` and `window: the game step missed
+its period by ... the game's own time, not the pictures' ...`.
 
 The rule is a rate requirement ([Pacing](#pacing)): `pace_loop_test` (`testStepRule`) asserts the
 presents in 10 s for 300 game frames by the render thread's reads, at the phone's 4.5 ms step with
-the submit thread: reads 10 / 12 / 13 / 15 / 17 ms give 700 / 600 / 501 / 421 / 301 (the rule before:
+the submit thread: reads 10 / 12 / 13 / 15 / 17 ms give 700 / 600 / 550 / 447 / 301 (the rule before:
 600 / 600 / 301 / 301 / 301); two a game frame while the reads fit the period less the step (12.18 ms
 there), past it as many as keep every step inside its period, and none misses it. At the phone's
 logged reads (11.5-12.5 ms) that is 52-60 presented fps where the rule before gave 30.
