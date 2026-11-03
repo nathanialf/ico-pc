@@ -68,7 +68,7 @@ The window, the picture's size and shape, and the speed.
   starts at the size of your window and steps down (3x, then 2x, then 1x)
   when your computer or phone cannot draw the pictures in time. It never
   steps back up while the game runs; the row then reads, for example,
-  **Auto (2x)**. On phones and tablets, the Enhanced preset uses Auto. It
+  **Auto (2x)**. The Enhanced preset uses the window's size on every device; Auto is a choice you make here, never the preset's. It
   stays at 1x while the CRT filter is on: the filter draws the PS2's own
   picture dots with dark lines between them, and over a sharper picture it
   would look like a fine mesh.

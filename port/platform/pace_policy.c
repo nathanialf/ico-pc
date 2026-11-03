@@ -383,7 +383,11 @@ bool pace_rt_behind(uint64_t presentNs, uint64_t refreshNs)
 
 bool pace_rt_pipe_behind(const PaceRtAsk *q)
 {
-    return q->submitNs == 0 && pace_rt_behind(q->presentNs, q->refreshNs);
+    /* with the submit thread off the present's wait is the render thread's own
+       and the picture before's fence binds; with it on (a job before the next
+       picture, or the frame slots apart) that wait is inside the submit thread's
+       job and two pictures stay in flight */
+    return q->submitNs == 0 && !q->submitOn && pace_rt_behind(q->presentNs, q->refreshNs);
 }
 
 uint64_t pace_rt_pipe_reads_end_parts(const PaceRtPipe *p, uint64_t postNs, const PaceRtAsk *q,

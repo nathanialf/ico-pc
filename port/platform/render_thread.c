@@ -754,6 +754,7 @@ bool ico_render_thread_plan(IcoRtPlan *out)
     /* the submit thread's job is before the next picture only while the
        frame slots are not apart (VKSLOTS: with them apart the next picture
        records while the one before is ended and submitted) */
+    out->submitOn = rd_thread_submit_on();
     out->submitNs = rd_thread_submit_on() && !rd_thread_submit_slots_apart()
                         ? __atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED)
                         : 0;

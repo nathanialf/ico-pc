@@ -308,10 +308,9 @@ int ico_video_preset_rows(const IcoVideoOptions *o)
         !o->fullHeight) {
         return ICO_VIDEO_ORIGINAL;
     }
-    /* Enhanced's resolution: the window's, "auto" on Android; on
-       Android a saved Enhanced with "window" (a file written before "auto"
-       existed) is still Enhanced, so the player keeps the preset's name (the shortcut writes
-       "auto") */
+    /* Enhanced's resolution: the window's; on Android a saved Enhanced with
+       "auto" (a file written while the preset chose Auto there, v0.9.x) is
+       still Enhanced, so the player keeps the preset's name */
     if ((o->resScale == 0 || (s_android && o->resScale == ICO_RES_AUTO)) &&
         o->aspect == ICO_ASPECT_AUTO && o->filter == ICO_FILTER_ANISOTROPIC && o->fullHeight) {
         return ICO_VIDEO_ENHANCED;
@@ -347,11 +346,14 @@ static void set_preset(IcoVideoOptions *o, int preset, int android)
         o->fullPixel = 0;
         o->effectGlowSmooth = 0;
     } else if (preset == ICO_VIDEO_ENHANCED) {
-        /* the window's size (on Android "auto": the window's, lowered
-           while the phone falls behind), its aspect, anisotropic, full
-           height */
+        /* the window's size on every platform (Android included: Auto, the
+           size lowered while the phone falls behind, is a choice the player
+           makes in the Resolution row, never the preset's: a picture that
+           changes size on its own confuses more than it helps), its aspect,
+           anisotropic, full height */
+        (void)android;
         o->resW = o->resH = 0;
-        o->resScale = android ? ICO_RES_AUTO : 0;
+        o->resScale = 0;
         o->aspect = ICO_ASPECT_AUTO;
         o->filter = ICO_FILTER_ANISOTROPIC;
         o->fullHeight = 1;
@@ -472,9 +474,9 @@ static void read_config(void)
     int glowKey; /* effect_glow_mode is in the file */
 
     ico_video_defaults(&o);
-    /* no key: Enhanced's resolution ("auto" on Android) */
+    /* no key: Enhanced's resolution, the window's size on every platform */
     {
-        const char *dres = s_android ? "auto" : "window";
+        const char *dres = "window";
 
         if (ico_video_parse_resolution(ico_config_get_string("video.resolution", dres), &o) != 0) {
             ico_video_parse_resolution(dres, &o);

@@ -1123,7 +1123,10 @@ typedef struct PaceRtAsk {
     uint64_t refreshNs; /* the display's refresh (0: not known) */
     uint64_t cpuNs;     /* its reads less their waits (0: not known: readsNs alone) */
     uint64_t interpNs;  /* its interpolation, before its first graphics call */
-    uint64_t submitNs;  /* the submit thread's job (0: none) */
+    uint64_t submitNs;  /* the submit thread's job before the next picture (0: none, or
+                           the frame slots apart: the next picture records meanwhile) */
+    bool submitOn;      /* the submit thread runs (its present's wait is inside the job the
+                           next picture waits for: pace_rt_pipe_behind) */
     uint64_t gpuNs;     /* the GPU's time a picture (0: not known) */
     bool paced;         /* vsync off or mailbox (pace_budget_paced_mode) */
     bool asMade;        /* vsync off and uncapped (pace_rt_as_made) */

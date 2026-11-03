@@ -31,6 +31,7 @@
 - On graphics chips that can read the picture while drawing it (such as Adreno chips with the open Turnip driver, and many Mali chips), the game prepares several times fewer graphics pipelines at its first start and blends colours exactly as the PlayStation 2 did. Other chips, including PowerVR and Adreno with Qualcomm's own driver, draw as before.
 
 ## Fixed
+- On Android, choosing the Enhanced preset no longer sets the Resolution to Auto, which lowered the picture's size on its own while the phone fell behind; the preset now uses the screen's size there as it does everywhere else, and Auto stays a choice you make in the Resolution row.
 - On phones, the Frame rate counter sits inside the screen's safe area, so a rounded corner or a notch no longer cuts it off.
 - The pictures shown between the game's own frames are no longer held back whenever they might brush the next game step; they are held only when the step could not finish on time, so phones and PCs show more of them.
 - With Vertical sync off and Frame rate at Uncapped, the pictures between the game's own frames are shown as fast as the graphics chip makes them, as Vertical sync off means on a PC, instead of being held to what the game expected the chip to manage. Only a picture that would make the game itself run late is left out.
