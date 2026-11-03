@@ -144,7 +144,7 @@ const char *ico_config_ini_key(const char *toml_path);
    vu_planes=, shadow_one=, shadow_bspline=, dynamic_state=, gpu_checkpoints=,
    gpu_robust=, pass_split=, attachment_read=, storage_pass_merge=,
    vu_prepass=, crack_fill=, joystick_directinput=, pipeline_set=, bind_cache=,
-   aura_box=, pass_area=, clear_carry=, clear_skip=, last_store=):
+   aura_box=, pass_area=, clear_carry=, clear_skip=, last_store=, glow_fold=):
    ico_dev_env_name
    gives the environment variable a key is exported as (ICO_RD_BLEND,
    ICO_RD_UBER, ICO_RD_FOG_PATH, ICO_RD_DATE_PATH, ICO_RD_STORE_PLAN, ICO_RD_BLUR_FOLD,
@@ -153,7 +153,8 @@ const char *ico_config_ini_key(const char *toml_path);
    ICO_VK_ATTACHMENT_READ, ICO_RD_PASS_MERGE, ICO_RD_VU_PREPASS, ICO_RD_CRACK_FILL,
    ICO_JOYSTICK_DIRECTINPUT, ICO_PIPELINE_SET, ICO_DISC_READER,
    ICO_DISC_READ_AHEAD_KB, ICO_RHI_BIND_CACHE, ICO_RD_AURA_BOX, ICO_RD_PASS_AREA,
-   ICO_RD_CLEAR_CARRY, ICO_RD_CLEAR_SKIP, ICO_RD_LAST_STORE), NULL for any other key (the
+   ICO_RD_CLEAR_CARRY, ICO_RD_CLEAR_SKIP, ICO_RD_LAST_STORE, ICO_RD_GLOW_FOLD), NULL for any
+   other key (the
    retired vu_plain_only= and vu_extended= among them: read, logged by
    ico_ini_export as "ico_pc: [dev] <key> = <value> is not used (every
    device compiles one set of 3D shaders); ignored", not exported);
@@ -173,7 +174,7 @@ const char *ico_config_ini_key(const char *toml_path);
    disc_read_ahead_kb 0 to 4096 as it is (false/off/no -> "0"); pass_split a
    count; gpu_*, attachment_read, storage_pass_merge, store_plan,
    blur_fold, uint_view, alpha_plan, fx_plan, fx_dst_local, vu_planes,
-   shadow_one, shadow_bspline, vu_prepass, vu_prepass_batch, still_represent, glow_redraw,
+   shadow_one, shadow_bspline, vu_prepass, vu_prepass_batch, still_represent, glow_redraw, glow_fold,
    crack_fill, joystick_directinput and bind_cache (every other key: the default branch) 1/true/on/yes ->
    "1", 0/false/off/no -> "0". ico_ini_export sets them. */
 const char *ico_dev_env_name(const char *key);

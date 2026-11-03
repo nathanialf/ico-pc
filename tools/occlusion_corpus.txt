@@ -1,5 +1,7 @@
-# Dump list for tools/occlusion_corpus.py and the rd_occlusion_tool ctest
-# (port/render/test/rd_occlusion_tool.cmake, its first dump here): the
+# Dump list for tools/occlusion_corpus.py, the rd_occlusion_tool ctest
+# (port/render/test/rd_occlusion_tool.cmake, its first dump here) and the
+# rd_region_stats ctest (port/render/test/rd_region_stats.cmake, its first
+# two): the
 # gameplay frames the hidden-draw measurement of list 0 runs over
 # (docs/port/RENDER.md, "Culling").  MACHINE-LOCAL: these are paths on the
 # maintainer's machine; the dumps themselves are never committed.  Missing

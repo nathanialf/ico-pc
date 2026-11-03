@@ -278,6 +278,16 @@ enum {
  * first; the cluster's weights in v[2], the bone addresses as raw ints). */
 int vu1ref_region_inside(int kind, const float (*mem)[4], const float (*bones)[4],
                          const float (*v)[4]);
+/* The same vertex's clip position h (VuVtx.h: the GS X, Y and Z before the
+ * divide, and w) and, when lo and hi are not NULL, the bounds its kind's
+ * test reads (VU memory 0 and 1 for the cluster, else 0 and (4094, 4094,
+ * -, 16777214)); vu1ref_region_inside_at is the test on h, the divide
+ * included, so vu1ref_region_inside(kind, mem, bones, v) is
+ * vu1ref_region_inside_at(h, lo, hi) (rd_replay_tool --region-stats: the
+ * rule's cut and the ticks' cameras need h) */
+void vu1ref_region_position(int kind, const float (*mem)[4], const float (*bones)[4],
+                            const float (*v)[4], float h[4], float lo[4], float hi[4]);
+int vu1ref_region_inside_at(const float h[4], const float lo[4], const float hi[4]);
 /* Whether the vertex, through the same transform, lies in front of the eye
  * (w > 0) with its ftoi4 Z saturated (0x7FFFFFFF) and X and Y not
  * (vu_ftoi4 of the divided position): a corner vu_common.hlsli

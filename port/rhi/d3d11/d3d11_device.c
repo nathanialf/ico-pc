@@ -584,6 +584,10 @@ static void d11_fill_limits(void)
      * stencil plane (d3d11_resource.c), the value in green */
     o->stencilView = true;
     o->stencilViewChannel = 1;
+    /* the format has no shader-gather support: the debug layer's error
+     * 416 on every draw of a pixel shader that gathers from it (the
+     * v0.10.0 tag's WARP run); the renderer reads it a texel a load */
+    o->stencilGather = false;
     o->vuFallbackPlain = NULL;
     o->carefulPipelines = NULL;
     o->compilerVersion = NULL;

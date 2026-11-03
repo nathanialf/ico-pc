@@ -22,12 +22,56 @@
  * device (g_rd.shadowLoad: a texel a load).  The pass is "shadow count WxH" in
  * the pass list (RD_PERF_ID_SHADOW_COUNT).  The count target's colour is
  * neither loaded nor stored while the count is made (rd_store_plan.c
- * rd__store_plan_count_color). */
+ * rd__store_plan_count_color).
+ *
+ * Where the stencil view takes no gather (RhiLimits.stencilGather false:
+ * Direct3D's X32_TYPELESS_G8X24_UINT has no shader-gather support, and the
+ * D3D11 debug layer stops every draw whose pixel shader holds a gather on
+ * it, reached or not: the v0.10.0 tag's WARP run of rd_msaa, 16 errors
+ * 416), and wherever the loads are in force, the draw binds
+ * shadow_count_load_ps, the same entry built without the gathers
+ * (rd__shadow_count_loads).  The stencil read is never multisampled: the
+ * view exists for single-sampled textures only (rhi.h RHI_ASPECT_STENCIL),
+ * and under MSAA the count's passes close the epoch first, so the count
+ * reads SCENE's own depth after msaaEnd's resolve.  The line, once a form
+ * and sample count (rd__shadow_msaa_note):
+ *   shadow count: under MSAA 2x the count reads the scene's own
+ *     single-sampled stencil after the epoch's resolve: one draw, a texel
+ *     a load (the backend's stencil view takes no gather)   (events) */
 #include <stdlib.h>
 #include <string.h>
 
 #include "rd_internal.h"
 #include "rd_replay.h"
+
+bool rd__shadow_count_loads(void)
+{
+    const RhiLimits *lim = g_rd.hasDevice ? rhi_limits() : NULL;
+    return g_rd.shadowLoad || (lim && !lim->stencilGather);
+}
+
+void rd__shadow_msaa_note(int one, uint32_t samples)
+{
+    /* bit (form, samples / 2 - 1): forms seven, gather, load; 2x 4x 8x */
+    static uint32_t s_said;
+    const int form = !one ? 0 : rd__shadow_count_loads() ? 2 : 1;
+    const int si = samples >= 8u ? 2 : samples >= 4u ? 1 : 0;
+    const uint32_t bit = 1u << (form * 3 + si);
+    if (samples <= 1u || (s_said & bit)) {
+        return;
+    }
+    s_said |= bit;
+    const RhiLimits *lim = rhi_limits();
+    rd__log("shadow count: under MSAA %ux the count reads the scene's own single-sampled stencil "
+            "after the epoch's resolve: %s (reported once a form and count)",
+            samples,
+            form == 0   ? "the seven stencil-tested draws, the volumes' pass taking the shadow "
+                          "reset as its stencil clear"
+            : form == 1 ? "one draw, the stencil four texels a gather"
+            : !lim->stencilGather
+                ? "one draw, a texel a load (the backend's stencil view takes no gather)"
+                : "one draw, a texel a load (the self-test's choice)");
+}
 
 /* the tables, [0] the step 4's, [1] the step 8's, each uploaded once a
  * renderer, at its first use */
@@ -163,6 +207,12 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
     if (!g_rd.fs[RD_FS_SHADOW_COUNT].id || !lim->stencilView || !td->depthSampled || !dst.id) {
         return false;
     }
+    /* no gather may reach a view that takes none: without the loads-only
+     * module there the seven draws resolve the count */
+    const bool load = rd__shadow_count_loads();
+    if (!lim->stencilGather && k.fs != RD_FS_SHADOW_COUNT_LOAD) {
+        return false;
+    }
     RhiPipeline pipe = rd__get_pipeline_held(&k);
     if (!pipe.id) {
         return false;
@@ -215,8 +265,8 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
     const RhiRect all = {0, 0, tc->w, tc->h};
     rhi_cmd_set_scissor(cl, &all);
     IcoDrawCB cb = *reduceCb;
-    cb.mode[0] = lim->stencilViewChannel;   /* the stencil's channel in its view */
-    cb.mode[1] = g_rd.shadowLoad ? 1u : 0u; /* the loads, else four texels a gather */
+    cb.mode[0] = lim->stencilViewChannel; /* the stencil's channel in its view */
+    cb.mode[1] = load ? 1u : 0u;          /* the loads, else four texels a gather */
     rd__set_pipeline(cl, pipe, &k);
     rd__bind_uniform(cl, 0, rd__frame_group(tc->w, tc->h, 0.0f, 0.0f));
     rd__bind_uniform(cl, 1, rd__draw_group(&cb));
@@ -224,7 +274,8 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
     rd__replay_draw(cl, 3, 0, 1);
     rhi_cmd_end_render_pass(cl);
     g_rdPerf.shadowOne++;
-    g_rdPerf.shadowGathered += g_rd.shadowLoad ? 0u : 1u;
+    g_rdPerf.shadowGathered += load ? 0u : 1u;
+    rd__shadow_msaa_note(1, g_rdPerf.msaaSamples);
     g_rdPerf.shadowOneW = (uint16_t)tc->w;
     g_rdPerf.shadowOneH = (uint16_t)tc->h;
     g_rdPerf.shadowReadW = (uint16_t)td->tw;

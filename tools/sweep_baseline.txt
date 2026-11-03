@@ -1,0 +1,13 @@
+# The disc-wide cull sweep's baseline (port/render/test/gsb_cull_test.c --sweep, the
+# gsb_cull_sweep ctest; docs/port/TESTING_PROGRAMS.md "gsb_cull_sweep").  The counts the sweep
+# found at the sweep step below, per stage, aspect and mechanism: a count ABOVE its line fails
+# the test, a count below prints "baseline can be lowered".  The run prints its counts as
+# "BASELINE LINES" in this form; run every shard once on main (the disc) and paste them here
+# (sorted by stage).  While this file holds no stage line the test reports and holds nothing; once
+# it holds any, a stage or mechanism without a line is held to 0.
+#   box_gap, box_hidden   parts a picture between the ticks shows that this tick did not register
+#   tick_behind, tick_card        triangles the region rule drops at the ticks' cameras
+#   between_behind, between_card  the same at the pictures between (behind: after the ticks' rescue)
+# The region rule's parity drops are expected until the winding mark is read (SIDEBAND-1);
+# after it the step 4/5/6 counts should fall to the back-facing ones only: lower the lines then.
+sweep_step 4
