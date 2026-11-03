@@ -28,6 +28,9 @@ static _Thread_local uint64_t t_presentNs;
  * and the submit thread, and the acquire) and its interpolation
  * (rd_thread_take_reads_parts; the render thread's own) */
 static _Thread_local uint64_t t_waitNs, t_interpNs;
+/* a picture's job: the textures to retire still kept for its first
+ * graphics call (rd__thread_retire_kept; the render thread's own) */
+static _Thread_local bool t_retireKept;
 /* the game thread's read waits in all, ns (rd_thread_read_wait_ns) */
 static uint64_t s_readWaitTotalNs;
 
@@ -146,13 +149,25 @@ static void runTramp(Tramp *t, bool picture)
         t_jobStartMs = rd__now_ms();
         t_presentNs = 0; /* this job's presents only */
         t_waitNs = t_interpNs = 0;
-        retireDrain();
         if (picture) {
+            /* a picture's interpolation makes no graphics call: the
+             * textures are destroyed at its first one, after the submit
+             * thread's wait there (rd__thread_retire_kept), so the
+             * interpolation runs while the submit thread works and not
+             * behind it (a destroy's call guard waits for that thread) */
+            t_retireKept = true;
             s_rStats.draws = 0; /* the picture's draws, as rd_begin_frame's count was */
+        } else {
+            retireDrain();
         }
     }
     t->fn(t->arg);
     rd__reads_done();
+    if (outer && t_retireKept) {
+        /* a picture that made no graphics call (nothing to blend) */
+        t_retireKept = false;
+        retireDrain();
+    }
     if (outer) {
         /* the list kept for the submit thread (rd_submit_thread.h): its
          * end, submit and present there, this thread free for the next */
@@ -364,6 +379,14 @@ void rd__texlock_wait(void)
     s_block.readWaitMs += ms;
     s_block.readWaitMaxMs = ms > s_block.readWaitMaxMs ? ms : s_block.readWaitMaxMs;
     ulk();
+}
+
+void rd__thread_retire_kept(void)
+{
+    if (t_retireKept && t_onR != 0) {
+        t_retireKept = false;
+        retireDrain();
+    }
 }
 
 void rd__reads_done(void)

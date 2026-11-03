@@ -16,6 +16,9 @@ void rd__submit_drain(void)
      * (rd_thread.h): nothing of the last one may still run; on the render
      * thread, the submit thread's list before (rd_submit_thread.h) */
     (void)rd_thread_drain();
+    /* a picture's first graphics call: the textures retired since the
+     * last job, with the submit thread now idle (rd_thread.h "retire") */
+    rd__thread_retire_kept();
     if (t_tickKept && !rd_thread_submit_busy()) {
         t_tickKept = false;
         rd__pipe_finish_tick(t_tickMs);

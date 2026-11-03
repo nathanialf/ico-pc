@@ -56,8 +56,12 @@
  *                   onGameHost): their progress screen takes the window's
  *                   events, which SDL gives the main thread only.
  *   retire          a GPU texture the game thread destroys is destroyed by
- *                   the render thread at the start of its next job, after
- *                   the submit of the list that may still use it.
+ *                   the render thread in its next job, after the submit of
+ *                   the list that may still use it: a call's job at its
+ *                   start, a picture's at its first graphics call (after
+ *                   its interpolation, which makes none, and after that
+ *                   call's wait for the submit thread), so a picture's
+ *                   interpolation never waits behind the submit thread.
  *   stats           RdStats as the game thread reads it (rd_get_stats):
  *                   the record's counts live, the replays' as the render
  *                   thread left them at its last reads' end.
@@ -208,6 +212,10 @@ void rd__reads_done(void);
 /* rhi_destroy_texture now, or with a host on the game thread at the render
  * thread's next job */
 void rd__retire_texture(RhiTexture t);
+/* The render thread at a picture's first graphics call (rd__submit_drain,
+ * after its wait for the submit thread): the textures the game thread
+ * retired destroyed, once a job (nothing elsewhere or later) */
+void rd__thread_retire_kept(void);
 /* fn(arg) on the render thread, waited for (rd__on_host); false when not
  * taken (no host: the caller runs it its own way) */
 bool rd__render_call(void (*fn)(void *arg), void *arg);
