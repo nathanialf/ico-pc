@@ -960,9 +960,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   and its GS Z above the bound; random boxes, every corner and 64 points inside within
   `rd__vis_hiz_occludee`'s box and under its Z bound; 300 random triangles rasterised, the two ends
   of each row's covered run (one run a row) inside every placement of the corners within `r` (the
-  64 extremes and 16 inside) by 0.25 GS pixel, the square grown by half a pixel up and down; the
-  inner rule at a cell's corner (a right angle on it: the cells on its legs not covered, the next
-  in covered; a leg 0.3 pixel out of a cell's edge covers it, 0.2 does not); through the
+  64 extremes and 16 inside) by 0.25 GS pixel, the square grown by a pixel each way and half a
+  pixel more up and down; the inner rule at a cell's corner (a right angle on it: the cells on its
+  legs not covered, the next in covered; a leg 0.3 pixel out of a cell's grown edge covers it, 0.2
+  does not); through the
   orthographic block a wall then a box behind it hidden, one GS Z unit in front, coplanar, inside
   the margin, inside the later mark's room, reaching past the wall's edge (a part-covered tile) and
   beside it kept, nothing hidden by an empty or reset record; near 2^31 the margin 20480 and a box

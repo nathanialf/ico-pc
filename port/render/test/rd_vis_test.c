@@ -47,9 +47,9 @@
  *             the bound; random boxes, every corner and 64 points inside
  *             within the occludee's box and under its Z bound; random
  *             triangles rasterised, every covered cell's square (grown by
- *             the half line) inside every placement of the corners by 0.25
- *             GS pixel; the inner rule at a cell's corner (0.3 pixel in
- *             counts, 0.2 not, the half line above); a wall then a box
+ *             a pixel each way and the half line) inside every placement
+ *             of the corners by 0.25 GS pixel; the inner rule at a cell's
+ *             corner (0.3 pixel in counts, 0.2 not); a wall then a box
  *             behind it hidden, one GS Z unit in front, coplanar, inside
  *             the margin, the later mark's room and a half-covered tile
  *             kept; the margin near 2^31 (hidden exactly when the bound
@@ -957,8 +957,9 @@ static void checkHizRaster(void)
             for (int end = 0; end < 2 && first >= 0; end++) {
                 const uint32_t i = (uint32_t)(end ? last : first);
                 const double X = z.gx0 + 2.0 * i, Y = z.gy0 + 2.0 * j;
-                const double qx[4] = {X, X + 2.0, X, X + 2.0};
-                const double qy[4] = {Y - 0.5, Y - 0.5, Y + 2.5, Y + 2.5};
+                /* the square grown by a pixel each way, half more up and down */
+                const double qx[4] = {X - 1.0, X + 3.0, X - 1.0, X + 3.0};
+                const double qy[4] = {Y - 1.5, Y - 1.5, Y + 3.5, Y + 3.5};
                 /* every corner placement at the extremes, and 16 inside */
                 for (int p = 0; p < 64 + 16; p++) {
                     double mx[3], my[3];
@@ -987,9 +988,10 @@ static void checkHizRaster(void)
           (unsigned long long)checked);
 
     /* the inner rule at a cell's corner: a right angle on a cell's corner
-     * (r 0): the cells on its two legs not covered (the half line above
-     * reaches past the top leg), the next ones in covered; a leg 0.3 pixel
-     * left of a cell's left edge covers it, 0.2 does not */
+     * (r 0): the cells on its two legs not covered (the grown square
+     * reaches past them), the next ones in covered; a leg 0.3 pixel left of
+     * a cell's grown left edge (a pixel left of the cell) covers it, 0.2
+     * does not */
     const uint32_t a = 40, b = 40;
     const double X = z.gx0 + 2.0 * a, Y = z.gy0 + 2.0 * b;
     RdVisHizTri t;
@@ -1007,14 +1009,14 @@ static void checkHizRaster(void)
           hizCell(&z, a + 1, b), hizCell(&z, a, b + 1), hizCell(&z, a + 1, b + 1));
     for (int k = 0; k < 2; k++) {
         const double in = k ? 0.2 : 0.3;
-        const double x0 = X + 2.0 - in;
+        const double x0 = X + 2.0 - 1.0 - in;
         const double xx[3] = {x0, x0 + 300.0, x0}, yy[3] = {Y, Y, Y + 300.0};
         memcpy(t.x, xx, sizeof(xx));
         memcpy(t.y, yy, sizeof(yy));
         rd__vis_hiz_reset(&z);
         rd__vis_hiz_raster(&z, &t, all);
         CHECK((hizCell(&z, a + 1, b + 2) == 7u) == (k == 0) && hizCell(&z, a, b + 2) == 0u,
-              "occlusion: a leg %g pixel out of the cell's edge: %s", in,
+              "occlusion: a leg %g pixel out of the cell's grown edge: %s", in,
               k ? "covered" : "not covered");
     }
     rd__vis_hiz_free(&z);

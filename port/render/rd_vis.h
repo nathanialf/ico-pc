@@ -243,11 +243,11 @@ bool rd__vis_hiz_setup(RdVisHiz *z, const RdVisRect *r);
 /* every cell to 0 (the tiles written only) */
 void rd__vis_hiz_reset(RdVisHiz *z);
 void rd__vis_hiz_free(RdVisHiz *z);
-/* Triangle t into the record: every cell whose square, grown by half a GS
- * pixel up and down, lies inside clip (x0, y0, x1, y1: the samples the
- * draw's scissor lets through) and inside t for every placement of its
- * corners within t->r, by 0.25 GS pixel more, rises to t->lb; the cells
- * covered. */
+/* Triangle t into the record: every cell whose square, grown by a GS pixel
+ * each way and half a GS pixel more up and down, lies inside clip (x0, y0,
+ * x1, y1: the samples the draw's scissor lets through) and inside t for
+ * every placement of its corners within t->r, by 0.25 GS pixel more, rises
+ * to t->lb; the cells covered. */
 uint32_t rd__vis_hiz_raster(RdVisHiz *z, const RdVisHizTri *t, const double clip[4]);
 /* Whether every cell box b touches inside the record's box holds more
  * than thr (zmax + rd__vis_hiz_margin); false for a box outside it. */

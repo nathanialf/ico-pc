@@ -37,10 +37,13 @@
  * than the frame: 1/8 GS pixel covers texels up to two GS pixels).  So the
  * corner lies within r of the centre p - 1/32 on each axis
  * (rd__vis_hiz_vertex).  A cell
- * counts as covered by the triangle when the cell's square, grown by half
- * a GS pixel up and down (a draw positioned with the frame's half-line
- * offset and one without it put the same sample half a pixel apart in GS
- * terms: rd_replay.c sceneKeepsHalf), lies inside the triangle by a margin
+ * counts as covered by the triangle when the cell's square, grown by a GS
+ * pixel each way (a sample's depth may come from a sample up to a GS pixel
+ * away: a texel's samples about its centre, which the MSAA epoch loads from
+ * the scene and resolves into it) and by half a GS pixel more up and down
+ * (a draw positioned with the frame's half-line offset and one without it
+ * put the same sample half a pixel apart in GS terms: rd_replay.c
+ * sceneKeepsHalf), lies inside the triangle by a margin
  * that holds for every placement of the corners within r and leaves 0.25 GS
  * pixel to the GPU's rasterisation rules (rd__vis_hiz_raster): then the
  * GPU rasterises every pixel or MSAA sample centre in it, at every scale,
@@ -103,6 +106,12 @@
 /* the frame head's half line (RD_TARGET_HALF_Y) one draw may have and
  * another not */
 #define HIZ_HALF_Y 0.5
+/* how far a sample's depth may come from: a texel's samples lie within
+ * half a texel (a GS pixel at most, two texels a GS pixel at least but
+ * under Full pixel in a narrow window) of its centre, and the MSAA epoch
+ * loads a pixel's depth into its samples and resolves them into it
+ * (rd_replay.c msaaAttach, rd_msaa.c) */
+#define HIZ_RESAMPLE 1.0
 /* the cells beyond the target's rectangle on each side (GS pixels) */
 #define HIZ_PAD 4.0
 /* the largest record (cells): 8192 x 4096 GS pixels */
@@ -434,16 +443,18 @@ uint32_t rd__vis_hiz_raster(RdVisHiz *z, const RdVisHizTri *t, const double clip
         /* the solve's own rounding */
         k[e] += 1e-9 * (fabs(fa[e]) + fabs(fb[e])) * 4096.0;
     }
-    /* the cells' square grown by the half line up and down must lie inside
-     * every edge and the clip rectangle (x0, y0, x1, y1) */
+    /* the cells' square grown by HIZ_RESAMPLE each way and the half line
+     * up and down must lie inside every edge and the clip rectangle (x0,
+     * y0, x1, y1) */
+    const double gx = HIZ_RESAMPLE, gy = HIZ_RESAMPLE + HIZ_HALF_Y;
     double ylo = dmin(t->y[0], dmin(t->y[1], t->y[2]));
     double yhi = dmax(t->y[0], dmax(t->y[1], t->y[2]));
     double xlo = dmin(t->x[0], dmin(t->x[1], t->x[2]));
     double xhi = dmax(t->x[0], dmax(t->x[1], t->x[2]));
-    ylo = dmax(ylo, clip[1] + HIZ_HALF_Y);
-    yhi = dmin(yhi, clip[3] - HIZ_HALF_Y);
-    xlo = dmax(xlo, clip[0]);
-    xhi = dmin(xhi, clip[2]);
+    ylo = dmax(ylo, clip[1]) + gy;
+    yhi = dmin(yhi, clip[3]) - gy;
+    xlo = dmax(xlo, clip[0]) + gx;
+    xhi = dmin(xhi, clip[2]) - gx;
     if (!(yhi - ylo >= RD_VIS_HIZ_CELL) || !(xhi - xlo >= RD_VIS_HIZ_CELL)) {
         return 0;
     }
@@ -456,21 +467,22 @@ uint32_t rd__vis_hiz_raster(RdVisHiz *z, const RdVisHizTri *t, const double clip
     i1 = i1 >= (int64_t)z->ncx ? (int64_t)z->ncx - 1 : i1;
     uint32_t n = 0;
     for (int64_t j = j0; j <= j1; j++) {
-        const double Y0 = z->gy0 + cs * (double)j - HIZ_HALF_Y;
-        const double Y1 = Y0 + cs + 2.0 * HIZ_HALF_Y;
+        const double Y0 = z->gy0 + cs * (double)j - gy;
+        const double Y1 = Y0 + cs + 2.0 * gy;
         if (Y0 < clip[1] || Y1 > clip[3]) {
             continue;
         }
-        /* the cells' left edges X = gx0 + cs i: per edge f's least over the
-         * square is at X (fa >= 0) or X + cs, and Y0 (fb >= 0) or Y1 */
+        /* the cells' left edges X = gx0 + cs i, the grown square's X - gx
+         * .. X + cs + gx: per edge f's least over it is at its left (fa >=
+         * 0) or right, and at Y0 (fb >= 0) or Y1 */
         double lo = (double)i0, hi = (double)i1;
         for (int e = 0; e < 3 && lo <= hi; e++) {
             const double yy = fb[e] >= 0.0 ? Y0 : Y1;
             const double rest = k[e] - fc[e] - fb[e] * yy; /* need fa X* >= rest */
             if (fa[e] > 0.0) {
-                lo = dmax(lo, ceil((rest / fa[e] - z->gx0) / cs));
+                lo = dmax(lo, ceil((rest / fa[e] + gx - z->gx0) / cs));
             } else if (fa[e] < 0.0) {
-                hi = dmin(hi, floor((rest / fa[e] - cs - z->gx0) / cs));
+                hi = dmin(hi, floor((rest / fa[e] - cs - gx - z->gx0) / cs));
             } else if (rest > 0.0) {
                 hi = lo - 1.0;
             }

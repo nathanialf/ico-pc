@@ -2138,9 +2138,12 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
     not raised by the later mark, not a sheet's tile. Such a triangle is `VU_RULE_EXACT` at its GS
     positions in every state: each corner lies within `r` of `x / w - 1/32` on each axis (ftoi4's
     truncation, the float product's error, the GPU's snap: 1/8 GS pixel covers a 4-bit sub-pixel
-    grid on texels up to two GS pixels). A cell counts as covered when its square, grown by half a
-    GS pixel up and down (a draw with the frame head's half line puts a sample half a pixel lower
-    in GS terms than one without), lies inside the triangle for every placement of its corners
+    grid on texels up to two GS pixels). A cell counts as covered when its square, grown by a GS
+    pixel each way (a sample's depth may come from a sample up to a GS pixel away: a texel's
+    samples about its centre, which the MSAA epoch loads from the scene and resolves into it, the
+    epoch closing in the middle of list 0 when something reads SCENE) and by half a GS pixel more
+    up and down (a draw with the frame head's half line puts a sample half a pixel lower in GS
+    terms than one without), lies inside the triangle for every placement of its corners
     within `r` and by 0.25 GS pixel more: then the GPU rasterises every pixel or MSAA sample in it,
     at every scale (no face culling anywhere in the port). The cell rises to `floor(least corner
     Z) - 1` (the triangle's depth there interpolates its corners'). Only triangles whose screen box
