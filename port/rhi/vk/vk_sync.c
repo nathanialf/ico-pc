@@ -260,7 +260,9 @@ bool vkr_sync_submit(const VkrSubmitDesc *d, uint64_t *outValue)
     if (!timeline) {
         g_vkr.fenceValue[value % VKR_SYNC_FENCE_RING] = value;
     }
-    g_vkr.timelineValue = value;
+    /* the recording thread may read it while the submit thread submits
+     * (vkr_wait_value's line; vk_cmd.c "Frame slots"): stored atomically */
+    __atomic_store_n(&g_vkr.timelineValue, value, __ATOMIC_RELEASE);
     *outValue = value;
     return true;
 }

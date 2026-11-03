@@ -226,6 +226,11 @@ typedef struct VkrCmdList {
     VkCommandBuffer cb;
     bool recording;
     bool submitted;
+    /* the frame slot whose pool the list came from (rhi_begin_commands):
+     * the end and the submit find the slot's own acquire, fence value and
+     * query pools through it, not through the current frame index, which
+     * the recording thread may have moved on ("Frame slots" in vk_cmd.c) */
+    uint8_t slot;
     /* draw-time state */
     VkrPipeline *pipeline;
     VkDescriptorSet groups[RHI_MAX_BIND_SLOTS];
@@ -297,8 +302,37 @@ typedef struct VkrCmdList {
     uint8_t dynFresh;
 } VkrCmdList;
 
+/* A frame slot's swapchain image (vk_swapchain.c): acquired, not yet
+ * presented; waitPending: its acquire semaphore (the slot's acquireSem)
+ * not yet waited on by a submit of the slot; signalled: renderDone[image]
+ * is signalled by the submit of the slot's list that moved the image to
+ * PRESENT (rhi_submit), so rhi_present submits nothing before presenting;
+ * seq: the acquire's number (VkrState.acqSeq), the present takes the
+ * oldest acquired.  Written under the swapchain's lock by the acquire and
+ * the present, and by the submit of the slot's own list (signalled,
+ * waitPending), which the acquire's thread handed over after the acquire;
+ * cleared for every slot where the swapchain is made again or released
+ * (vkr_acq_reset_all), the device idle and the submit thread with it. */
+typedef struct VkrAcquire {
+    bool acquired;
+    bool waitPending;
+    bool signalled;
+    uint32_t image;
+    uint64_t seq;
+} VkrAcquire;
+
 typedef struct VkrFrame {
     uint64_t waitValue; /* timeline value of the frame's last submit */
+    /* the frame index the slot was last recycled at, masked as a command
+     * list handle's tag (VKR_GEN_MASK): vkr_get_cmd checks a list's tag
+     * against its own slot's */
+    uint32_t gen;
+    /* the slot's swapchain image (VkrAcquire) */
+    VkrAcquire acq;
+    /* rhi_set_submit_tag's numbers for the slot's submits (the loss
+     * report's and rhi_gpu_progress's names), set by the recording thread
+     * after the slot's recycle and read by the slot's submits */
+    uint32_t tagReplay, tagFrame;
     VkCommandPool cmdPool;
     VkrCmdList lists[VKR_MAX_CMD_LISTS];
     uint32_t listCount;
@@ -476,7 +510,6 @@ typedef struct VkrState {
     } submits[VKR_SUBMIT_HISTORY];
 
     uint32_t submitCount; /* ever; the newest is submits[(submitCount - 1) % N] */
-    uint32_t tagReplay, tagFrame;
     /* the timeline value of the wait that failed, 0: none (vkr_wait_value) */
     uint64_t lostWaitValue;
     /* rhi_gpu_progress (rhi.h; read from any thread): the newest
@@ -568,14 +601,22 @@ typedef struct VkrState {
     uint32_t swapImageCount;
     uint32_t swapTextures[VKR_MAX_SWAP_IMAGES];  /* texture ids */
     VkSemaphore renderDone[VKR_MAX_SWAP_IMAGES]; /* per image */
-    uint32_t swapImage;                          /* acquired index */
-    bool swapAcquired;                           /* image acquired, not yet presented */
-    bool acquireWaitPending; /* acquire semaphore not yet waited on by a submit */
-    /* renderDone[swapImage] is signalled by the submit of the list that
-     * moved the image to PRESENT (rhi_submit): rhi_present submits nothing
-     * before presenting.  Cleared wherever swapAcquired is. */
-    bool presentSignalled;
-    VkSemaphore acquireSem; /* the semaphore that acquire signals */
+    /* the surface's minImageCount the swapchain was made with: a second
+     * image may be acquired before the first is presented while
+     * swapImageCount - swapMinImages is at least 1 (the spec's limit for an
+     * acquire without a timeout; vk_swapchain.c vkr_acquire_ahead_ok) */
+    uint32_t swapMinImages;
+    /* the acquires' numbers (VkrAcquire.seq), under the swapchain's lock */
+    uint64_t acqSeq;
+    /* a present on the submit thread does not make the swapchain or the
+     * surface again (the recording thread may run beside it,
+     * rhi_slot_guard_worker): what it found is kept here, under the
+     * swapchain's lock, and done at the next acquire, with the submit
+     * thread idle (vk_swapchain.c vkr_take_deferred).  VKR_DEFER_* bits;
+     * deferW/H the size the poll found (VKR_DEFER_POLL) */
+    uint32_t deferred;
+    uint32_t deferW, deferH;
+    uint64_t deferredCount; /* ever, for the line */
 
     /* one-shot command pool for readback */
     VkCommandPool oneShotPool;
@@ -583,8 +624,21 @@ typedef struct VkrState {
     /* every pipeline is created through it (vkr_pipeline_cache_init) */
     VkPipelineCache pipelineCache;
 
-    /* counters (rhi_get_stats), timestamps, the mailbox option */
+    /* counters (rhi_get_stats), timestamps, the mailbox option.  stats is
+     * written by the recording thread alone (and by any thread while the
+     * submit thread is idle); the counters a list's end, a submit and a
+     * present add go into late with __atomic adds, from whichever thread
+     * makes them, and rhi_get_stats adds them in (vk_device.c): the submit
+     * thread's end, submit and present run beside the next picture's
+     * recording (RhiLimits.slotOverlap) */
     RhiStats stats;
+
+    struct {
+        uint64_t barriers, submits, presents, presentNs;
+    } late;
+
+    /* RhiLimits.slotOverlap's answer and why not, for the device line */
+    bool slotOverlap;
     bool timestamps;        /* the queue writes timestamps */
     float timestampPeriod;  /* ns per tick */
     uint64_t timestampMask; /* the valid bits */
@@ -685,16 +739,38 @@ bool vkr_check(VkResult r, const char *what, const char *file, int line);
 /* A monotonic clock in ns, for the blocked-time counters (RhiStats). */
 uint64_t vkr_now_ns(void);
 
+/* The recording thread's frame slot (rhi_frame_slot).  Only the thread
+ * that calls rhi_wait_frame may ask: the end, the submit and the present of
+ * a list take the list's own slot (VkrCmdList.slot, the acquire's), as the
+ * submit thread makes them while the recording thread has moved on */
 static inline VkrFrame *vkr_cur_frame(void)
 {
     return &g_vkr.frames[g_vkr.frameIndex % RHI_FRAMES_IN_FLIGHT];
 }
 
+/* a handle's tag names its slot: the slot is the tag modulo the slots */
+_Static_assert(((VKR_GEN_MASK + 1u) % RHI_FRAMES_IN_FLIGHT) == 0u,
+               "a command list's frame tag must name its slot");
+
+/* VkrState.deferred: what a present on the submit thread left for the next
+ * acquire (vk_swapchain.c) */
+#define VKR_DEFER_REBUILD 1u      /* out of date (or suboptimal on the desktop) */
+#define VKR_DEFER_SIZE 2u         /* Android's suboptimal with another size */
+#define VKR_DEFER_POLL 4u         /* the poll found another size (deferW x deferH) */
+#define VKR_DEFER_SURFACE_LOST 8u /* the surface went away */
+
+/* the late counters (VkrState.late) */
+static inline void vkr_late_add(uint64_t *counter, uint64_t n)
+{
+    __atomic_fetch_add(counter, n, __ATOMIC_RELAXED);
+}
+
 /* vk_device.c: the device-loss report (VkrState, "GPU loss diagnostics"),
  * once, from vkr_check at the first VK_ERROR_DEVICE_LOST */
 void vkr_lost_report(void);
-/* vk_cmd.c: a submission into VkrState.submits */
-void vkr_note_submit(uint64_t value, uint32_t lists, bool present);
+/* vk_cmd.c: a submission of slot f into VkrState.submits, with the slot's
+ * tag (rhi_set_submit_tag) */
+void vkr_note_submit(const VkrFrame *f, uint64_t value, uint32_t lists, bool present);
 /* vk_cmd.c: blocks until submission `value` of the port's counter has
  * finished (0, or a lost device: returns at once), counted and seen by the
  * watchdog (rhi_gpu_progress); a failed wait is logged and noted
@@ -771,7 +847,8 @@ void vkr_defer_memory(VkDeviceMemory memory, VkDeviceSize size);
 /* vkFreeMemory and the live counts (every free goes through it) */
 void vkr_free_memory(VkDeviceMemory memory, VkDeviceSize size);
 void vkr_destroy_garbage(VkrFrame *f);
-bool vkr_submit_empty(void); /* vk_cmd.c: an empty submit that waits on a pending acquire */
+/* vk_cmd.c: an empty submit that waits on slot f's pending acquire */
+bool vkr_submit_empty(VkrFrame *f);
 VkrBuffer *vkr_get_buffer(RhiBuffer b);
 VkrTexture *vkr_get_texture(RhiTexture t);
 
@@ -791,10 +868,10 @@ VkDescriptorSet vkr_get_bind_group(RhiBindGroup bg);
 uint32_t vkr_bind_group_dynamic_count(RhiBindGroup bg);
 /* vk_cmd.c */
 bool vkr_frames_init(void);
-/* Empty submit after the frame's work that signals the image's present
+/* Empty submit after slot f's work that signals its image's present
  * semaphore (rhi_present), when no list's submit signalled it
- * (presentSignalled). */
-bool vkr_submit_present_signal(void);
+ * (VkrAcquire.signalled). */
+bool vkr_submit_present_signal(VkrFrame *f);
 void vkr_frames_shutdown(void);
 VkrCmdList *vkr_get_cmd(RhiCommandList cl);
 void vkr_image_barrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState after);

@@ -31,6 +31,9 @@ static RhiCallGuard s_guard;
 static bool s_guardOn;
 /* rhi_call_guard_snapshot's counters, rhi_get_stats's answer while busy */
 static RhiStats s_guardStats;
+/* rhi_set_slot_guard's (rhi.h): copied as the call guard is */
+static RhiSlotGuard s_slotGuard;
+static bool s_slotOn;
 static bool s_up; /* rhi_init succeeded and rhi_shutdown has not run */
 /* [video] adapter (rhi_set_adapter_wanted): handed to the backend at each
    rhi_init, whichever backend is selected then */
@@ -144,6 +147,48 @@ static const RhiBackendTable *be(void)
         }                                                                                          \
     } while (0)
 
+/* a slot call (rhi.h rhi_set_slot_guard) on frame slot `slot`: the call
+ * guard's wait, but where the slot guard lets the calling thread run beside
+ * the other thread's work of another slot (the backend's slots apart) */
+static bool slotFree(uint32_t slot)
+{
+    return s_slotOn && s_up && be()->limits()->slotOverlap &&
+           s_slotGuard.free(s_slotGuard.user, slot);
+}
+
+#define RHI_GUARD_SLOT(slot)                                                                       \
+    do {                                                                                           \
+        if (s_guardOn && s_guard.busy(s_guard.user) && !slotFree(slot)) {                          \
+            s_guard.wait(s_guard.user);                                                            \
+        }                                                                                          \
+    } while (0)
+
+/* the recording thread's slot, and the one its next rhi_wait_frame
+ * recycles */
+#define RHI_SLOT_NOW() (s_up ? be()->frame_slot() : 0u)
+#define RHI_SLOT_NEXT() ((RHI_SLOT_NOW() + 1u) % RHI_FRAMES_IN_FLIGHT)
+
+void rhi_set_slot_guard(const RhiSlotGuard *guard)
+{
+    if (guard != NULL && guard->free != NULL && guard->pending != NULL && guard->worker != NULL) {
+        s_slotGuard = *guard;
+        s_slotOn = true;
+    } else {
+        s_slotOn = false;
+        memset(&s_slotGuard, 0, sizeof(s_slotGuard));
+    }
+}
+
+bool rhi_slot_guard_pending(uint32_t slot)
+{
+    return s_slotOn && s_slotGuard.pending(s_slotGuard.user, slot);
+}
+
+bool rhi_slot_guard_worker(void)
+{
+    return s_slotOn && s_slotGuard.worker(s_slotGuard.user);
+}
+
 void rhi_set_call_guard(const RhiCallGuard *guard)
 {
     if (guard != NULL && guard->busy != NULL && guard->wait != NULL) {
@@ -245,7 +290,7 @@ void rhi_surface_poll_restart(void)
 
 RhiTexture rhi_acquire_backbuffer(void)
 {
-    RHI_GUARD();
+    RHI_GUARD_SLOT(RHI_SLOT_NOW());
     return be()->acquire_backbuffer();
 }
 
@@ -281,13 +326,13 @@ void rhi_destroy_buffer(RhiBuffer b)
 
 void *rhi_map_buffer(RhiBuffer b)
 {
-    RHI_GUARD();
+    RHI_GUARD_SLOT(RHI_SLOT_NOW());
     return be()->map_buffer(b);
 }
 
 void rhi_unmap_buffer(RhiBuffer b)
 {
-    RHI_GUARD();
+    RHI_GUARD_SLOT(RHI_SLOT_NOW());
     be()->unmap_buffer(b);
 }
 
@@ -346,7 +391,7 @@ void rhi_destroy_bind_group_layout(RhiBindGroupLayout l)
 
 RhiBindGroup rhi_create_bind_group(const RhiBindGroupDesc *desc)
 {
-    RHI_GUARD();
+    RHI_GUARD_SLOT(RHI_SLOT_NOW());
     return be()->create_bind_group(desc);
 }
 
@@ -385,7 +430,7 @@ void rhi_destroy_pipeline(RhiPipeline p)
 
 RhiCommandList rhi_begin_commands(void)
 {
-    RHI_GUARD();
+    RHI_GUARD_SLOT(RHI_SLOT_NOW());
     return be()->begin_commands();
 }
 
@@ -403,7 +448,7 @@ void rhi_submit(RhiCommandList cl)
 
 void rhi_wait_frame(void)
 {
-    RHI_GUARD();
+    RHI_GUARD_SLOT(RHI_SLOT_NEXT());
     be()->wait_frame();
 }
 
@@ -604,13 +649,13 @@ void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
 
 uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
 {
-    RHI_GUARD();
+    RHI_GUARD_SLOT(RHI_SLOT_NOW());
     return be()->read_timestamps(ns, max);
 }
 
 uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
 {
-    RHI_GUARD();
+    RHI_GUARD_SLOT(RHI_SLOT_NOW());
     return be()->read_timestamps_busy(ns, max);
 }
 
@@ -631,7 +676,7 @@ void rhi_cmd_end_occlusion(RhiCommandList cl, uint32_t index)
 
 uint32_t rhi_read_occlusion(uint64_t *samples, uint32_t max)
 {
-    RHI_GUARD();
+    RHI_GUARD_SLOT(RHI_SLOT_NOW());
     return be()->read_occlusion(samples, max);
 }
 

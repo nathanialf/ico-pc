@@ -678,34 +678,43 @@ static void vkr_present_mode_list(char *out, size_t size, const VkPresentModeKHR
     }
 }
 
+/* Every slot's image dropped (the swapchain made again or released, the
+ * device idle and the submit thread with it) */
+static void vkr_acq_reset_all(void)
+{
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        memset(&g_vkr.frames[i].acq, 0, sizeof(g_vkr.frames[i].acq));
+    }
+}
+
 /* An acquire's semaphore no submit waited on (an image acquired, then the
- * swapchain recreated or released before the frame was drawn): an empty
- * submit waits on it, so it is unsignalled before it is used again */
+ * swapchain recreated or released before the frame was drawn), of any
+ * slot: an empty submit waits on it, so it is unsignalled before it is used
+ * again */
 static void vkr_drain_acquire_wait(void)
 {
-    if (g_vkr.acquireWaitPending && !vkr_submit_empty()) {
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        VkrFrame *f = &g_vkr.frames[i];
+        if (!f->acq.waitPending || vkr_submit_empty(f)) {
+            continue;
+        }
         /* the wait could not be queued: the device is idle, so recreate the
-         * frame's semaphore instead of leaving it signalled */
+         * slot's semaphore instead of leaving it signalled */
         VkSemaphoreCreateInfo asci = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
         VkSemaphore fresh;
         if (VKR_CHECK(vkCreateSemaphore(g_vkr.device, &asci, NULL, &fresh))) {
-            for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
-                if (g_vkr.frames[i].acquireSem == g_vkr.acquireSem) {
-                    vkDestroySemaphore(g_vkr.device, g_vkr.acquireSem, NULL);
-                    g_vkr.frames[i].acquireSem = fresh;
-                    fresh = VK_NULL_HANDLE;
-                    break;
-                }
-            }
-            if (fresh) {
-                vkDestroySemaphore(g_vkr.device, fresh, NULL);
-            }
+            vkDestroySemaphore(g_vkr.device, f->acquireSem, NULL);
+            f->acquireSem = fresh;
         }
+        f->acq.waitPending = false;
     }
 }
 
 bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
 {
+    /* a rebuild the submit thread's present left is this one (the device
+     * idle, rhi_resize_swapchain; vkr_take_deferred) */
+    g_vkr.deferred = 0;
     if (!g_vkr.surface) {
         return false;
     }
@@ -859,9 +868,7 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
             vkr_destroy_retired();
             vkDestroySwapchainKHR(g_vkr.device, old, NULL);
             g_vkr.swapchain = VK_NULL_HANDLE;
-            g_vkr.swapAcquired = false;
-            g_vkr.presentSignalled = false;
-            g_vkr.acquireWaitPending = false;
+            vkr_acq_reset_all();
         }
         return false;
     }
@@ -900,9 +907,7 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
         VKR_LOG("swapchain has %u images, more than %u", n, (unsigned)VKR_MAX_SWAP_IMAGES);
         vkDestroySwapchainKHR(g_vkr.device, sc, NULL);
         g_vkr.swapchain = VK_NULL_HANDLE;
-        g_vkr.swapAcquired = false;
-        g_vkr.presentSignalled = false;
-        g_vkr.acquireWaitPending = false;
+        vkr_acq_reset_all();
         return false;
     }
     vkGetSwapchainImagesKHR(g_vkr.device, sc, &n, images);
@@ -917,20 +922,17 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
         }
     }
     g_vkr.swapImageCount = n;
+    g_vkr.swapMinImages = caps.minImageCount;
     if (!semaphoresMade) {
         /* a present on that image would have nothing to wait on: no
          * swapchain, as for too many images above */
         vkr_destroy_swap_resources();
         vkDestroySwapchainKHR(g_vkr.device, sc, NULL);
         g_vkr.swapchain = VK_NULL_HANDLE;
-        g_vkr.swapAcquired = false;
-        g_vkr.presentSignalled = false;
-        g_vkr.acquireWaitPending = false;
+        vkr_acq_reset_all();
         return false;
     }
-    g_vkr.swapAcquired = false;
-    g_vkr.presentSignalled = false;
-    g_vkr.acquireWaitPending = false;
+    vkr_acq_reset_all();
     vkr_pw_resume(sc);
     /* a line when the present mode, the image count or the size differs
        from the last swapchain (always the first).  The size counts so a
@@ -1045,15 +1047,14 @@ static void vkr_release_surface(void)
     if (!g_vkr.device || !g_vkr.surface) {
         return;
     }
+    g_vkr.deferred = 0; /* the surface goes: no rebuild left for the next acquire */
     vkr_drain_acquire_wait();
     const uint64_t t0 = vkr_now_ns();
     vkDeviceWaitIdle(g_vkr.device);
     g_vkr.stats.waitIdles++;
     g_vkr.stats.fenceWaitNs += vkr_now_ns() - t0;
     vkr_swapchain_destroy();
-    g_vkr.swapAcquired = false;
-    g_vkr.presentSignalled = false;
-    g_vkr.acquireWaitPending = false;
+    vkr_acq_reset_all();
     vkDestroySurfaceKHR(g_vkr.instance, g_vkr.surface, NULL);
     g_vkr.surface = VK_NULL_HANDLE;
     VKR_LOG("surface released; the device is kept");
@@ -1200,53 +1201,6 @@ bool rhi_swapchain_size(uint32_t *w, uint32_t *h)
     return true;
 }
 
-static RhiTexture vkr_acquire_backbuffer(void)
-{
-    RhiTexture out = {0};
-    s_presentShown = false; /* until this frame's present shows it */
-    if (!g_vkr.swapchain) {
-        return out;
-    }
-    if (g_vkr.swapAcquired) {
-        out.id = g_vkr.swapTextures[g_vkr.swapImage];
-        return out;
-    }
-    VkrFrame *f = vkr_cur_frame();
-    uint32_t idx = 0;
-    const uint64_t t0 = vkr_now_ns();
-    VkResult r = vkAcquireNextImageKHR(g_vkr.device, g_vkr.swapchain, UINT64_MAX, f->acquireSem,
-                                       VK_NULL_HANDLE, &idx);
-    g_vkr.stats.acquireNs += vkr_now_ns() - t0;
-    if (r == VK_ERROR_OUT_OF_DATE_KHR) {
-        return out; /* rd_present recreates via rhi_resize_swapchain */
-    }
-    if (r == VK_ERROR_SURFACE_LOST_KHR) {
-        /* this frame is skipped (the semaphore was not signalled; the
-         * caller's retry acquires on the new swapchain) */
-        vkr_surface_lost("acquire");
-        return out;
-    }
-    if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR) {
-        VKR_CHECK(r);
-        return out;
-    }
-    g_vkr.swapImage = idx;
-    g_vkr.swapAcquired = true;
-    g_vkr.presentSignalled = false;
-    g_vkr.acquireWaitPending = true;
-    g_vkr.acquireSem = f->acquireSem;
-    out.id = g_vkr.swapTextures[idx];
-    return out;
-}
-
-RhiTexture rhi_acquire_backbuffer(void)
-{
-    vkr_swap_lock();
-    const RhiTexture out = vkr_acquire_backbuffer();
-    vkr_swap_unlock();
-    return out;
-}
-
 /* Android, or ICO_VK_POLL_SURFACE=1 (the tests) */
 static bool vkr_poll_surface_on(void)
 {
@@ -1271,13 +1225,35 @@ static bool vkr_poll_surface_on(void)
  * after a swapchain is made, then once a second; a different size rebuilds
  * the swapchain as a suboptimal present with a size change does, and the
  * renderer's output follows it at the next acquire
- * (rd__output_follow_swapchain). */
+ * (rd__output_follow_swapchain).  A present on the submit thread asks the
+ * same and leaves the rebuild to the next acquire (VKR_DEFER_POLL). */
 void rhi_surface_poll_restart(void)
 {
     s_swapMadeNs = vkr_now_ns();
 }
 
-static void vkr_poll_surface(void)
+/* the poll's rebuild at the size it found */
+static void vkr_poll_resize(uint32_t w, uint32_t h)
+{
+    if (w == g_vkr.swapWidth && h == g_vkr.swapHeight) {
+        return;
+    }
+    const uint32_t ow = g_vkr.swapWidth, oh = g_vkr.swapHeight;
+    if (!rhi_resize_swapchain(w, h, g_vkr.vsync)) {
+        return; /* the next acquire finds no swapchain and rd_present retries */
+    }
+    VKR_LOG("swapchain %ux%u follows the surface (was %ux%u)", g_vkr.swapWidth, g_vkr.swapHeight,
+            ow, oh);
+    s_pollStuckW = s_pollStuckH = s_pollMadeW = s_pollMadeH = 0;
+    if (g_vkr.swapWidth != w || g_vkr.swapHeight != h) {
+        s_pollStuckW = w;
+        s_pollStuckH = h;
+        s_pollMadeW = g_vkr.swapWidth;
+        s_pollMadeH = g_vkr.swapHeight;
+    }
+}
+
+static void vkr_poll_surface(bool defer)
 {
     if (!vkr_poll_surface_on() || !g_vkr.swapchain) {
         return;
@@ -1295,44 +1271,205 @@ static void vkr_poll_surface(void)
         g_vkr.swapHeight == s_pollMadeH) {
         return; /* this size was tried and the surface's limits gave another */
     }
-    const uint32_t ow = g_vkr.swapWidth, oh = g_vkr.swapHeight;
-    if (!rhi_resize_swapchain(w, h, g_vkr.vsync)) {
-        return; /* the next acquire finds no swapchain and rd_present retries */
+    if (defer) {
+        g_vkr.deferred |= VKR_DEFER_POLL;
+        g_vkr.deferW = w;
+        g_vkr.deferH = h;
+        return;
     }
-    VKR_LOG("swapchain %ux%u follows the surface (was %ux%u)", g_vkr.swapWidth, g_vkr.swapHeight,
-            ow, oh);
-    s_pollStuckW = s_pollStuckH = s_pollMadeW = s_pollMadeH = 0;
-    if (g_vkr.swapWidth != w || g_vkr.swapHeight != h) {
-        s_pollStuckW = w;
-        s_pollStuckH = h;
-        s_pollMadeW = g_vkr.swapWidth;
-        s_pollMadeH = g_vkr.swapHeight;
+    vkr_poll_resize(w, h);
+}
+
+/* The swapchain's work a present on the submit thread left (VkrState.
+ * deferred), done now: at an acquire, the swapchain's lock held and the
+ * submit thread idle (rhi_acquire_backbuffer).  The same rebuilds the
+ * present makes on the thread that records */
+static void vkr_take_deferred(void)
+{
+    const uint32_t d = g_vkr.deferred;
+    if (d == 0) {
+        return;
     }
+    g_vkr.deferred = 0;
+    const uint64_t n = ++g_vkr.deferredCount;
+    if (n <= 8u || n % 100u == 0u) {
+        VKR_LOG("a present on the submit thread found %s: the swapchain made again at the next "
+                "acquire (%llu times so far)",
+                (d & VKR_DEFER_SURFACE_LOST) ? "the surface lost"
+                : (d & VKR_DEFER_REBUILD)    ? "the swapchain out of date"
+                : (d & VKR_DEFER_SIZE)       ? "another size (suboptimal)"
+                                             : "another surface size (the poll)",
+                (unsigned long long)n);
+    }
+    if (d & VKR_DEFER_SURFACE_LOST) {
+        vkr_surface_lost("present");
+        return;
+    }
+    if (d & VKR_DEFER_REBUILD) {
+        int w = (int)g_vkr.swapWidth, h = (int)g_vkr.swapHeight;
+#ifdef ICO_RHI_HAVE_SDL
+        SDL_GetWindowSizeInPixels((SDL_Window *)g_vkr.window, &w, &h);
+#endif
+        rhi_resize_swapchain((uint32_t)w, (uint32_t)h, g_vkr.vsync);
+        return;
+    }
+    if (d & VKR_DEFER_SIZE) {
+        uint32_t w = 0, h = 0;
+        if (vkr_swap_target_size(&w, &h) && (w != g_vkr.swapWidth || h != g_vkr.swapHeight)) {
+            rhi_resize_swapchain(w, h, g_vkr.vsync);
+        }
+        return;
+    }
+    if (d & VKR_DEFER_POLL) {
+        vkr_poll_resize(g_vkr.deferW, g_vkr.deferH);
+    }
+}
+
+/* The images acquired by slots other than the recording thread's and not
+ * yet presented: the submit thread's job still holds them (an image of a
+ * slot with no such job was given up: a replay that failed after its
+ * acquire, adopted by the next acquire, vkr_acquire_backbuffer) */
+static uint32_t vkr_acquired_ahead(const VkrFrame *cur)
+{
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        const VkrFrame *o = &g_vkr.frames[i];
+        if (o != cur && o->acq.acquired && rhi_slot_guard_pending(i)) {
+            n++;
+        }
+    }
+    return n;
+}
+
+/* An acquire may go on while the submit thread still holds n images: the
+ * spec lets an acquire without a timeout run while no more images are
+ * acquired than swapImageCount - minImageCount (the swapchain's one over the
+ * minimum, vkr_swapchain_create, makes that 1; the FIFO fallback's exact
+ * minimum makes it 0) */
+static bool vkr_acquire_ahead_ok(const VkrFrame *cur)
+{
+    const uint32_t n = vkr_acquired_ahead(cur);
+    return n == 0 || (g_vkr.swapImageCount > g_vkr.swapMinImages &&
+                      n <= g_vkr.swapImageCount - g_vkr.swapMinImages);
+}
+
+static RhiTexture vkr_acquire_backbuffer(void)
+{
+    RhiTexture out = {0};
+    __atomic_store_n(&s_presentShown, false, __ATOMIC_RELAXED); /* until its present shows it */
+    if (!g_vkr.swapchain) {
+        return out;
+    }
+    VkrFrame *f = vkr_cur_frame();
+    if (f->acq.acquired) {
+        out.id = g_vkr.swapTextures[f->acq.image];
+        return out;
+    }
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        VkrFrame *o = &g_vkr.frames[i];
+        if (o != f && o->acq.acquired && !rhi_slot_guard_pending(i)) {
+            /* given up by a replay of slot o that failed after its acquire
+             * (no submit thread's job will present it): this slot takes it,
+             * with the semaphore its acquire signalled, as the one slot
+             * took its own image again before the slots were apart */
+            const VkSemaphore sem = f->acquireSem;
+            f->acquireSem = o->acquireSem;
+            o->acquireSem = sem;
+            f->acq = o->acq;
+            memset(&o->acq, 0, sizeof(o->acq));
+            out.id = g_vkr.swapTextures[f->acq.image];
+            return out;
+        }
+    }
+    uint32_t idx = 0;
+    const uint64_t t0 = vkr_now_ns();
+    VkResult r = vkAcquireNextImageKHR(g_vkr.device, g_vkr.swapchain, UINT64_MAX, f->acquireSem,
+                                       VK_NULL_HANDLE, &idx);
+    g_vkr.stats.acquireNs += vkr_now_ns() - t0;
+    if (r == VK_ERROR_OUT_OF_DATE_KHR) {
+        return out; /* rd_present recreates via rhi_resize_swapchain */
+    }
+    if (r == VK_ERROR_SURFACE_LOST_KHR) {
+        /* this frame is skipped (the semaphore was not signalled; the
+         * caller's retry acquires on the new swapchain) */
+        vkr_surface_lost("acquire");
+        return out;
+    }
+    if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR) {
+        VKR_CHECK(r);
+        return out;
+    }
+    f->acq.image = idx;
+    f->acq.acquired = true;
+    f->acq.signalled = false;
+    f->acq.waitPending = true;
+    f->acq.seq = ++g_vkr.acqSeq;
+    out.id = g_vkr.swapTextures[idx];
+    return out;
+}
+
+/* The recording thread's slot's image.  With the submit thread presenting
+ * the picture before (RhiLimits.slotOverlap) it may be acquired before that
+ * present, when the swapchain has an image to spare; otherwise, and when
+ * that thread's present left the swapchain to be made again, the call
+ * guard's wait first (rhi_call_guard_settle: the submit thread idle) */
+RhiTexture rhi_acquire_backbuffer(void)
+{
+    vkr_swap_lock();
+    if (g_vkr.deferred != 0 || !vkr_acquire_ahead_ok(vkr_cur_frame())) {
+        vkr_swap_unlock();
+        rhi_call_guard_settle();
+        vkr_swap_lock();
+        vkr_take_deferred();
+    }
+    const RhiTexture out = vkr_acquire_backbuffer();
+    vkr_swap_unlock();
+    return out;
 }
 
 bool rhi_present_shown(void)
 {
-    return s_presentShown;
+    return __atomic_load_n(&s_presentShown, __ATOMIC_RELAXED);
 }
 
-static void vkr_present(void)
+/* The slot whose image the present shows: the oldest acquired (with the
+ * submit thread, the picture before the one the render thread acquired
+ * since; vkr_acquire_backbuffer adopts an image given up, so an older one
+ * is never left behind); NULL when none */
+static VkrFrame *vkr_present_slot(void)
 {
-    s_presentShown = false;
-    if (!g_vkr.swapchain || !g_vkr.swapAcquired) {
+    VkrFrame *best = NULL;
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        VkrFrame *o = &g_vkr.frames[i];
+        if (o->acq.acquired && (best == NULL || o->acq.seq < best->acq.seq)) {
+            best = o;
+        }
+    }
+    return best;
+}
+
+/* defer: the submit thread's present (rhi_slot_guard_worker with the
+ * slots apart): what would make the swapchain or the surface again is left
+ * to the next acquire (vkr_take_deferred) */
+static void vkr_present(bool defer)
+{
+    __atomic_store_n(&s_presentShown, false, __ATOMIC_RELAXED);
+    VkrFrame *f = vkr_present_slot();
+    if (!g_vkr.swapchain || f == NULL) {
         return;
     }
     /* the presenting list's submit signalled the semaphore already
-     * (rhi_submit); otherwise an empty batch after the frame's work */
-    if (!g_vkr.presentSignalled && !vkr_submit_present_signal()) {
+     * (rhi_submit); otherwise an empty batch after the slot's work */
+    if (!f->acq.signalled && !vkr_submit_present_signal(f)) {
         return;
     }
     VkPresentInfoKHR pi = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &g_vkr.renderDone[g_vkr.swapImage],
+        .pWaitSemaphores = &g_vkr.renderDone[f->acq.image],
         .swapchainCount = 1,
         .pSwapchains = &g_vkr.swapchain,
-        .pImageIndices = &g_vkr.swapImage,
+        .pImageIndices = &f->acq.image,
     };
     /* the display's timing: an id the thread waits on (rhi_present_timing) */
     uint64_t presentId = 0;
@@ -1346,10 +1483,10 @@ static void vkr_present(void)
     }
     const uint64_t t0 = vkr_now_ns();
     VkResult r = vkQueuePresentKHR(g_vkr.queue, &pi);
-    g_vkr.stats.presentNs += vkr_now_ns() - t0;
-    g_vkr.stats.presents++;
-    g_vkr.swapAcquired = false;
-    g_vkr.presentSignalled = false;
+    vkr_late_add(&g_vkr.late.presentNs, vkr_now_ns() - t0);
+    vkr_late_add(&g_vkr.late.presents, 1u);
+    f->acq.acquired = false;
+    f->acq.signalled = false;
     if (g_vkr.retired && (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)) {
         /* the new swapchain's picture is on its way to the screen: the one
          * it replaced can go */
@@ -1368,11 +1505,15 @@ static void vkr_present(void)
     const bool rebuild = r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR;
 #endif
     if (rebuild) {
-        int w = (int)g_vkr.swapWidth, h = (int)g_vkr.swapHeight;
+        if (defer) {
+            g_vkr.deferred |= VKR_DEFER_REBUILD;
+        } else {
+            int w = (int)g_vkr.swapWidth, h = (int)g_vkr.swapHeight;
 #ifdef ICO_RHI_HAVE_SDL
-        SDL_GetWindowSizeInPixels((SDL_Window *)g_vkr.window, &w, &h);
+            SDL_GetWindowSizeInPixels((SDL_Window *)g_vkr.window, &w, &h);
 #endif
-        rhi_resize_swapchain((uint32_t)w, (uint32_t)h, g_vkr.vsync);
+            rhi_resize_swapchain((uint32_t)w, (uint32_t)h, g_vkr.vsync);
+        }
     } else if (r == VK_SUBOPTIMAL_KHR) {
         /* Android only: the image was shown.  Recreated only when the size
          * changed: with the identity transform on a rotated Android display
@@ -1380,26 +1521,38 @@ static void vkr_present(void)
          * would change nothing */
         uint32_t w = 0, h = 0;
         if (vkr_swap_target_size(&w, &h) && (w != g_vkr.swapWidth || h != g_vkr.swapHeight)) {
-            rhi_resize_swapchain(w, h, g_vkr.vsync);
+            if (defer) {
+                g_vkr.deferred |= VKR_DEFER_SIZE;
+            } else {
+                rhi_resize_swapchain(w, h, g_vkr.vsync);
+            }
         }
     } else if (r == VK_ERROR_SURFACE_LOST_KHR) {
-        vkr_surface_lost("present");
+        if (defer) {
+            g_vkr.deferred |= VKR_DEFER_SURFACE_LOST;
+        } else {
+            vkr_surface_lost("present");
+        }
     } else if (r != VK_SUCCESS) {
         VKR_CHECK(r);
     }
     /* an image queued for the display (a suboptimal one too: it is shown) */
-    s_presentShown = r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR;
-    if (presentId != 0 && s_presentShown && !rebuild) {
+    const bool shown = r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR;
+    __atomic_store_n(&s_presentShown, shown, __ATOMIC_RELAXED);
+    if (presentId != 0 && shown && !rebuild) {
         vkr_pw_posted(presentId);
     }
     if (!rebuild && (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)) {
-        vkr_poll_surface(); /* a size change the present did not report */
+        vkr_poll_surface(defer); /* a size change the present did not report */
     }
 }
 
+/* The oldest acquired image presented (vkr_present_slot).  On the submit
+ * thread with the slots apart (vk_device.c g_vkr.slotOverlap) a rebuild it
+ * asks for waits for the next acquire */
 void rhi_present(void)
 {
     vkr_swap_lock();
-    vkr_present();
+    vkr_present(g_vkr.slotOverlap && rhi_slot_guard_worker());
     vkr_swap_unlock();
 }

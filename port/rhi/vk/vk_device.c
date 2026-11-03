@@ -48,10 +48,14 @@ bool vkr_check(VkResult r, const char *what, const char *file, int line)
         return true;
     }
     fprintf(stderr, "rhi_vk: %s failed (VkResult %d) at %s:%d\n", what, (int)r, file, line);
-    if (r == VK_ERROR_DEVICE_LOST && !g_vkr.deviceLost) {
+    bool was = false;
+    if (r == VK_ERROR_DEVICE_LOST &&
+        __atomic_compare_exchange_n(&g_vkr.deviceLost, &was, true, false, __ATOMIC_ACQ_REL,
+                                    __ATOMIC_ACQUIRE)) {
         /* rhi_device_lost reads it on any thread (the window's and its render
-           thread's) */
-        __atomic_store_n(&g_vkr.deviceLost, true, __ATOMIC_RELEASE);
+           thread's); the first of the recording thread and the submit thread
+           to find the loss (they may run at once, vk_cmd.c "Frame slots")
+           writes the report */
         g_vkr.lostNs = vkr_now_ns();
         fprintf(stderr, "rhi_vk: device lost\n");
         vkr_lost_report();
@@ -2492,6 +2496,25 @@ static void vkr_fill_limits(void)
                 o->uniformAlign, (unsigned long long)o->maxStorageRange, o->maxTextureSize,
                 o->maxDynamicUniforms);
     }
+    /* RhiLimits.slotOverlap: a list of one frame slot ended, submitted and
+     * presented on the submit thread while the next slot's is recorded
+     * (vk_cmd.c "Frame slots").  The timeline sync only: its waits
+     * (vkWaitSemaphores) need no lock against a submit, where the fence
+     * path's ring is reset and rescanned by both sides.
+     * ICO_VK_SLOT_OVERLAP=0 keeps the calls one at a time */
+    {
+        const char *e = getenv("ICO_VK_SLOT_OVERLAP");
+        const bool off = e != NULL && strcmp(e, "0") == 0;
+        g_vkr.slotOverlap = !off && g_vkr.syncKind == VKR_SYNC_TIMELINE;
+        o->slotOverlap = g_vkr.slotOverlap;
+        VKR_LOG("frame slots: %s",
+                g_vkr.slotOverlap
+                    ? "apart (a picture's list may be submitted and presented on another thread "
+                      "while the next one records; ICO_VK_SLOT_OVERLAP=0 keeps the calls one at a "
+                      "time)"
+                : off ? "one call at a time (ICO_VK_SLOT_OVERLAP=0)"
+                      : "one call at a time (the fence sync: no timeline semaphore)");
+    }
 }
 
 /* ------------------------------------------------------------- lifecycle */
@@ -2731,6 +2754,12 @@ void rhi_get_stats(RhiStats *out)
 {
     if (out) {
         *out = g_vkr.stats;
+        /* what a list's end, a submit and a present added, from either
+           thread (VkrState.late) */
+        out->barriers += __atomic_load_n(&g_vkr.late.barriers, __ATOMIC_RELAXED);
+        out->submits += __atomic_load_n(&g_vkr.late.submits, __ATOMIC_RELAXED);
+        out->presents += __atomic_load_n(&g_vkr.late.presents, __ATOMIC_RELAXED);
+        out->presentNs += __atomic_load_n(&g_vkr.late.presentNs, __ATOMIC_RELAXED);
         out->memoryLive = g_vkr.memLive;
         out->memoryPeak = g_vkr.memPeak;
         out->memoryLiveBytes = g_vkr.memLiveBytes;

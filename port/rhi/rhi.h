@@ -783,6 +783,13 @@ typedef struct RhiLimits {
      * OpenGL context moved to a game-thread call's thread for it
      * (port/platform/render_thread.c). */
     bool singleThreadCommands;
+    /* The frame slots are apart (Vulkan with the timeline sync; false
+     * elsewhere and under ICO_VK_SLOT_OVERLAP=0): a list of slot A ended,
+     * submitted and its image presented on one thread while another
+     * recycles slot B, acquires B's image and records B's lists.  The call
+     * guard then lets the slot calls (rhi_set_slot_guard) of the thread
+     * that records run beside the other thread's work of another slot. */
+    bool slotOverlap;
 } RhiLimits;
 
 typedef struct RhiDeviceDesc {
@@ -1295,7 +1302,10 @@ void rhi_get_stats(RhiStats *out);
  * entry point that changes the device's state (every one but the queries
  * below and the rhi_cmd_* recording calls, which only the thread that
  * began the list makes, before it hands the list over) first waits while
- * busy, so two threads never run inside the backend at once.  The queries
+ * busy, so two threads never run inside the backend at once, but for the
+ * slot calls the slot guard lets through with the frame slots apart
+ * (rhi_set_slot_guard, RhiLimits.slotOverlap), which run beside the other
+ * thread's end, submit and present of another slot.  The queries
  * that do not wait: rhi_limits, rhi_backend, the adapter calls,
  * rhi_device_lost, rhi_gpu_progress, rhi_frame_slot, rhi_swapchain_format,
  * rhi_swapchain_size, rhi_present_mailbox, rhi_present_mode_name,
@@ -1321,6 +1331,40 @@ typedef struct RhiCallGuard {
 } RhiCallGuard;
 
 void rhi_set_call_guard(const RhiCallGuard *guard);
+
+/* The slot guard (port/render/rd_submit_thread.c; docs/port/RHI.md "Frame
+ * slots and the submit thread"): with RhiLimits.slotOverlap, the call
+ * guard's wait is skipped for a slot call when free(user, slot) says the
+ * calling thread may make it beside the other thread's work: the thread
+ * that records (the render thread), no list of its own kept for the other
+ * thread, and none of the other thread's jobs of that frame slot queued or
+ * running.  The slot calls and their slot: rhi_wait_frame (the slot it
+ * recycles: (rhi_frame_slot() + 1) % RHI_FRAMES_IN_FLIGHT),
+ * rhi_begin_commands, rhi_create_bind_group, rhi_map_buffer,
+ * rhi_unmap_buffer, rhi_read_timestamps, rhi_read_timestamps_busy,
+ * rhi_read_occlusion and rhi_acquire_backbuffer (rhi_frame_slot()).  Each
+ * touches the recording thread's slot and nothing the other thread's end,
+ * submit and present of another slot write (the backend's partition,
+ * port/rhi/vk/vk_cmd.c "Frame slots"); every other call that changes the
+ * device's state waits as before, so the queue, the swapchain's making,
+ * the object pools, the pipeline cache and the deferred destroys stay one
+ * thread's at a time.  pending(user, slot): the other thread has work of
+ * that slot (any thread may ask; the backend's acquire, which takes an
+ * image a failed replay gave up only from a slot with none); worker(user):
+ * the calling thread is that other thread (its present leaves a swapchain
+ * rebuild to the next acquire).  Set and cleared with the other thread
+ * idle; NULL: none (every slot call waits as the call guard says). */
+typedef struct RhiSlotGuard {
+    void *user;
+    bool (*free)(void *user, uint32_t slot);
+    bool (*pending)(void *user, uint32_t slot);
+    bool (*worker)(void *user);
+} RhiSlotGuard;
+
+void rhi_set_slot_guard(const RhiSlotGuard *guard);
+/* The slot guard's answers for a backend (false with none) */
+bool rhi_slot_guard_pending(uint32_t slot);
+bool rhi_slot_guard_worker(void);
 /* The counters now, for rhi_get_stats while the guard is busy: called by
  * the recording thread right before it hands work over, the other thread
  * idle */
@@ -1415,7 +1459,8 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max);
  * returns 1 + the highest index written (0 = none, or not supported).
  * Vulkan: a VK_QUERY_TYPE_OCCLUSION pool per slot, made at the first begin
  * (the game never asks for one), reset in the slot's first command list from
- * then on (the first slot by a one-time submit at that begin), precise where
+ * then on (the first slot by a one-time submit at that begin, after the
+ * call guard's wait like any call that submits), precise where
  * the device offers occlusionQueryPrecise; without it a count is exact only
  * as zero or not zero.  Direct3D 12, Direct3D 11 and OpenGL: not supported
  * (false, the calls do nothing, reads 0); their forms would be an occlusion

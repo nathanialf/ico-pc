@@ -9,7 +9,36 @@
  * of a slot's last submit before it reuses the slot.  The first submit
  * after a swapchain acquire waits on the acquire semaphore; the present
  * waits on the image's renderDone semaphore, which the presenting list's
- * submit or an empty batch in rhi_present signals (rhi_submit). */
+ * submit or an empty batch in rhi_present signals (rhi_submit).
+ *
+ * Frame slots (docs/port/RHI.md "Frame slots and the submit thread"): a
+ * command list belongs to the slot whose pool it came from
+ * (VkrCmdList.slot, and its handle's tag names the slot), and its end and
+ * submit take that slot's fence value, acquire and query pools, never the
+ * current frame index.  So with RhiLimits.slotOverlap the submit thread
+ * (port/render/rd_submit_thread.h) ends and submits picture N's list of
+ * slot A and presents its image while the render thread recycles slot B
+ * (rhi_wait_frame: B's own fence), acquires B's image and records B's
+ * list.  What each side writes then:
+ *   recording thread  frameIndex, slot B (its pool, lists, descriptor
+ *                     pools, sets, garbage, queries, tag, acquire),
+ *                     hzEpoch, stats, tsResult and occResult (the recycled
+ *                     slot's results), the texture and buffer tracking
+ *                     state of what its list touches;
+ *   submit thread     slot A's lists (their end), A's waitValue and
+ *                     acquire record, the submission counter
+ *                     (timelineValue, stored with __atomic), the submit
+ *                     history, late (atomic adds), and under the
+ *                     swapchain's lock the present's state;
+ *   both, read only   the object pools' live entries, the swapchain's
+ *                     images and semaphores (made again only with the
+ *                     submit thread idle: vk_swapchain.c defers a rebuild
+ *                     its present asks for to the next acquire).
+ * The queue (vkQueueSubmit, vkQueuePresentKHR, vkDeviceWaitIdle) is the
+ * submit thread's while it works: every call of the recording thread that
+ * submits or waits idle is one the call guard holds until the submit
+ * thread is idle (rhi_backend.c), and rhi_cmd_begin_occlusion's first use,
+ * which submits the pools' reset, asks the guard first. */
 #include "vk_internal.h"
 #include "rhi_vk.h"
 #include "../rhi_bind_cache.h"
@@ -72,6 +101,7 @@ bool vkr_frames_init(void)
                 g_vkr.timestamps = false;
             }
         }
+        f->gen = i & VKR_GEN_MASK; /* the frame index the slot would hold first */
     }
     g_vkr.frameIndex = 0;
     return true;
@@ -170,8 +200,9 @@ void vkr_wait_value(uint64_t value)
         VKR_LOG("waited %.1f s for submission %llu (the last submitted is %llu; sync %s); the "
                 "GPU reached %llu%s",
                 (double)waited / 1e9, (unsigned long long)value,
-                (unsigned long long)g_vkr.timelineValue, vkr_sync_name(),
-                (unsigned long long)reached, known ? "" : " (the counter read failed too)");
+                (unsigned long long)__atomic_load_n(&g_vkr.timelineValue, __ATOMIC_ACQUIRE),
+                vkr_sync_name(), (unsigned long long)reached,
+                known ? "" : " (the counter read failed too)");
         if (!g_vkr.lostWaitValue) {
             g_vkr.lostWaitValue = value;
         }
@@ -181,24 +212,27 @@ void vkr_wait_value(uint64_t value)
     g_vkr.stats.fenceWaitNs += waited;
 }
 
-void vkr_note_submit(uint64_t value, uint32_t lists, bool present)
+void vkr_note_submit(const VkrFrame *f, uint64_t value, uint32_t lists, bool present)
 {
     const uint32_t i = g_vkr.submitCount++ % VKR_SUBMIT_HISTORY;
-    __atomic_store_n(&g_vkr.progReplay, g_vkr.tagReplay, __ATOMIC_RELAXED);
-    __atomic_store_n(&g_vkr.progFrame, g_vkr.tagFrame, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_vkr.progReplay, f->tagReplay, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_vkr.progFrame, f->tagFrame, __ATOMIC_RELAXED);
     __atomic_store_n(&g_vkr.progSubmitNs, vkr_now_ns(), __ATOMIC_RELAXED);
     __atomic_store_n(&g_vkr.progSubmitted, value, __ATOMIC_RELEASE);
     g_vkr.submits[i].value = value;
-    g_vkr.submits[i].replay = g_vkr.tagReplay;
-    g_vkr.submits[i].frame = g_vkr.tagFrame;
+    g_vkr.submits[i].replay = f->tagReplay;
+    g_vkr.submits[i].frame = f->tagFrame;
     g_vkr.submits[i].lists = (uint8_t)(lists > 255u ? 255u : lists);
     g_vkr.submits[i].present = present ? 1u : 0u;
 }
 
+/* the recording thread's slot's tag: its submits carry it, wherever they
+ * are made (vkr_note_submit) */
 void rhi_set_submit_tag(uint32_t replay, uint32_t frame)
 {
-    g_vkr.tagReplay = replay;
-    g_vkr.tagFrame = frame;
+    VkrFrame *f = vkr_cur_frame();
+    f->tagReplay = replay;
+    f->tagFrame = frame;
 }
 
 /* the finished slot's timestamps into g_vkr.tsResult (the slot is complete:
@@ -300,10 +334,20 @@ static void vkr_recycle_frame(VkrFrame *f)
     f->setCount = 0;
 }
 
+/* The next slot, recycled: its own last submit waited for.  The call guard
+ * (rhi_backend.c) lets it run beside the submit thread only when none of
+ * that thread's jobs is of this slot (RhiSlotGuard), so the slot's lists
+ * were all submitted and its waitValue is the last. */
 void rhi_wait_frame(void)
 {
+    const VkrFrame *prev = vkr_cur_frame();
     g_vkr.frameIndex++;
-    vkr_recycle_frame(vkr_cur_frame());
+    VkrFrame *f = vkr_cur_frame();
+    vkr_recycle_frame(f);
+    f->gen = (uint32_t)(g_vkr.frameIndex & VKR_GEN_MASK);
+    /* the tag in force goes on until the next rhi_set_submit_tag */
+    f->tagReplay = prev->tagReplay;
+    f->tagFrame = prev->tagFrame;
 }
 
 uint32_t rhi_frame_slot(void)
@@ -357,13 +401,17 @@ static void vkr_occ_close(VkrCmdList *c);
 #define VKR_KNOW_BLEND_CONSTANT 16u
 
 /* ---------------------------------------------------------- command lists
- * Handle id: (frame tag << 20) | (list index + 1). */
+ * Handle id: (frame tag << 20) | (list index + 1).  The tag is the frame
+ * index the list's slot was recycled at (masked), so it names the slot
+ * (tag % RHI_FRAMES_IN_FLIGHT) and goes stale when that slot is recycled
+ * again: a list of slot A stays valid for the submit thread while the
+ * recording thread has moved on to slot B. */
 VkrCmdList *vkr_get_cmd(RhiCommandList cl)
 {
-    VkrFrame *f = vkr_cur_frame();
+    const uint32_t tag = cl.id >> VKR_GEN_SHIFT;
+    VkrFrame *f = &g_vkr.frames[tag % RHI_FRAMES_IN_FLIGHT];
     uint32_t idx = cl.id & VKR_INDEX_MASK;
-    if (idx == 0 || idx > f->listCount ||
-        (cl.id >> VKR_GEN_SHIFT) != (uint32_t)(g_vkr.frameIndex & VKR_GEN_MASK)) {
+    if (idx == 0 || idx > f->listCount || tag != f->gen) {
         return NULL;
     }
     return &f->lists[idx - 1];
@@ -386,6 +434,7 @@ RhiCommandList rhi_begin_commands(void)
         return out;
     }
     c->recording = true;
+    c->slot = (uint8_t)(f - g_vkr.frames);
     /* the bind cache starts empty (the slot's recycle zeroed it too) */
     c->pipeline = NULL;
     c->pipelineId = 0;
@@ -422,17 +471,22 @@ RhiCommandList rhi_begin_commands(void)
         vkCmdResetQueryPool(c->cb, f->occPool, 0, RHI_MAX_OCCLUSION);
         f->occReset = true;
     }
-    out.id = ((uint32_t)(g_vkr.frameIndex & VKR_GEN_MASK) << VKR_GEN_SHIFT) | f->listCount;
+    out.id = (f->gen << VKR_GEN_SHIFT) | f->listCount;
     return out;
 }
 
+static void vkr_flush_barriers_to(VkrCmdList *c, bool late);
+
+/* On the submit thread with RhiLimits.slotOverlap: its own list only, and
+ * the barriers it sends counted in late (the recording thread writes
+ * stats) */
 void rhi_end_commands(RhiCommandList cl)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
     if (!c || !c->recording) {
         return;
     }
-    vkr_flush_barriers(c);
+    vkr_flush_barriers_to(c, true);
     if (c->inPass) {
         VKR_LOG("rhi_end_commands inside a render pass");
         vkr_occ_close(c);
@@ -459,12 +513,13 @@ void rhi_end_commands(RhiCommandList cl)
  * semaphore (renderDone), either as an empty batch after all frame work
  * (vkr_submit_present_signal) or as the submit of the list that moved the
  * image to PRESENT (rhi_submit). */
-static bool vkr_submit_batch(const VkCommandBuffer *cbs, uint32_t count, bool forPresent)
+static bool vkr_submit_batch(VkrFrame *f, const VkCommandBuffer *cbs, uint32_t count,
+                             bool forPresent)
 {
     VkrSubmitDesc d = {.cbs = cbs, .cbCount = count};
     bool tookAcquire = false;
 
-    if (g_vkr.acquireWaitPending) {
+    if (f->acq.waitPending) {
         /* The first submit after an acquire waits for the image.  With
          * commands, at COLOR_ATTACHMENT_OUTPUT: the image's first use after
          * an acquire is a barrier out of UNDEFINED or PRESENT, and such a
@@ -475,11 +530,12 @@ static bool vkr_submit_batch(const VkCommandBuffer *cbs, uint32_t count, bool fo
          * (rd__clear_new_targets, the uploads piece) are the first colour
          * output when they come first, so on a tile-based GPU the display
          * wait lands in the uploads piece's time (the 10 s GPU lines say so).
-         * An empty batch keeps ALL_COMMANDS. */
-        d.wait = g_vkr.acquireSem;
+         * An empty batch keeps ALL_COMMANDS.  The slot's own acquire: a
+         * submit of slot A never takes the image slot B acquired since. */
+        d.wait = f->acquireSem;
         d.waitStage = count ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
                             : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-        g_vkr.acquireWaitPending = false;
+        f->acq.waitPending = false;
         tookAcquire = true;
     }
     if (forPresent) {
@@ -490,36 +546,36 @@ static bool vkr_submit_batch(const VkCommandBuffer *cbs, uint32_t count, bool fo
         d.afterAll = count == 0;
         /* the binary semaphore the present waits on; a semaphore signal
          * covers the batch's commands and every earlier submission */
-        d.signal = g_vkr.renderDone[g_vkr.swapImage];
+        d.signal = g_vkr.renderDone[f->acq.image];
     }
     uint64_t value = 0;
     if (!vkr_sync_submit(&d, &value)) {
         /* a failed submit other than a device loss leaves its semaphores
          * as they were: the acquire semaphore is still signalled, and the
          * next submit must wait on it before the next acquire reuses it */
-        if (tookAcquire && !g_vkr.deviceLost) {
-            g_vkr.acquireWaitPending = true;
+        if (tookAcquire && !__atomic_load_n(&g_vkr.deviceLost, __ATOMIC_ACQUIRE)) {
+            f->acq.waitPending = true;
         }
         return false;
     }
-    g_vkr.stats.submits++;
-    vkr_cur_frame()->waitValue = value;
-    vkr_note_submit(value, count, forPresent);
+    vkr_late_add(&g_vkr.late.submits, 1u);
+    f->waitValue = value;
+    vkr_note_submit(f, value, count, forPresent);
     return true;
 }
 
-/* Submits nothing but the wait on a pending acquire semaphore, then waits
- * for it: a swapchain recreate drops acquireWaitPending, and the semaphore
- * must not stay signalled for the frame's next acquire. */
-bool vkr_submit_empty(void)
+/* Submits nothing but the wait on slot f's pending acquire semaphore, then
+ * waits for it: a swapchain recreate drops the acquire, and the semaphore
+ * must not stay signalled for the slot's next acquire. */
+bool vkr_submit_empty(VkrFrame *f)
 {
-    if (!g_vkr.acquireWaitPending) {
+    if (!f->acq.waitPending) {
         return true;
     }
-    if (!vkr_submit_batch(NULL, 0, false)) {
+    if (!vkr_submit_batch(f, NULL, 0, false)) {
         return false;
     }
-    vkr_wait_value(g_vkr.timelineValue);
+    vkr_wait_value(f->waitValue);
     return true;
 }
 
@@ -541,19 +597,20 @@ void rhi_submit(RhiCommandList cl)
      * backbuffer again and moves it back to PRESENT is not covered by the
      * present's wait.  Today rd_replay.c (rd__present_record) and
      * rd_video.c each present from one list. */
+    VkrFrame *f = &g_vkr.frames[c->slot];
     bool signal = false;
-    if (c->presentImage != VK_NULL_HANDLE && g_vkr.swapAcquired && !g_vkr.presentSignalled) {
-        const VkrTexture *bb = vkr_get_texture((RhiTexture){g_vkr.swapTextures[g_vkr.swapImage]});
+    if (c->presentImage != VK_NULL_HANDLE && f->acq.acquired && !f->acq.signalled) {
+        const VkrTexture *bb = vkr_get_texture((RhiTexture){g_vkr.swapTextures[f->acq.image]});
         signal = bb && bb->image == c->presentImage;
     }
-    if (vkr_submit_batch(&c->cb, 1, signal) && signal) {
-        g_vkr.presentSignalled = true;
+    if (vkr_submit_batch(f, &c->cb, 1, signal) && signal) {
+        f->acq.signalled = true;
     }
 }
 
-bool vkr_submit_present_signal(void)
+bool vkr_submit_present_signal(VkrFrame *f)
 {
-    return vkr_submit_batch(NULL, 0, true);
+    return vkr_submit_batch(f, NULL, 0, true);
 }
 
 /* ---------------------------------------------------------------- barriers
@@ -572,6 +629,13 @@ bool vkr_submit_present_signal(void)
  * at once.  stats.barriers counts vkCmdPipelineBarrier calls. */
 static void vkr_flush_barriers(VkrCmdList *c)
 {
+    vkr_flush_barriers_to(c, false);
+}
+
+/* late: counted in VkrState.late (a list's end, which the submit thread
+ * may make), else in stats */
+static void vkr_flush_barriers_to(VkrCmdList *c, bool late)
+{
     if (c->pendCount == 0 && c->pendMemDst == 0) {
         return;
     }
@@ -582,7 +646,11 @@ static void vkr_flush_barriers(VkrCmdList *c)
     };
     vkCmdPipelineBarrier(c->cb, c->pendSrc, c->pendDst, 0, c->pendMemDst ? 1u : 0u, &mb, 0, NULL,
                          c->pendCount, c->pendImg);
-    g_vkr.stats.barriers++;
+    if (late) {
+        vkr_late_add(&g_vkr.late.barriers, 1u);
+    } else {
+        g_vkr.stats.barriers++;
+    }
     c->pendCount = 0;
     c->pendSrc = c->pendDst = 0;
     c->pendMemDst = 0;
@@ -2039,7 +2107,7 @@ bool rhi_readback_texture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t 
         ok = vkr_sync_submit(&(VkrSubmitDesc){.cbs = &cb, .cbCount = 1}, &value);
         if (ok) {
             vkr_cur_frame()->waitValue = value;
-            vkr_note_submit(value, 1, false);
+            vkr_note_submit(vkr_cur_frame(), value, 1, false);
             vkr_wait_value(value);
             const void *mapped = rhi_map_buffer(rb); /* NULL when vkMapMemory failed */
             ok = mapped != NULL;
@@ -2154,7 +2222,7 @@ static bool vkr_occ_make(void)
         uint64_t value = 0;
         if (vkr_sync_submit(&(VkrSubmitDesc){.cbs = &cb, .cbCount = 1}, &value)) {
             f->waitValue = value;
-            vkr_note_submit(value, 1, false);
+            vkr_note_submit(f, value, 1, false);
             vkr_wait_value(value);
             f->occReset = true;
         }
@@ -2171,8 +2239,16 @@ static bool vkr_occ_make(void)
 void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
-    if (!c || !c->inPass || c->occOpen || index >= RHI_MAX_OCCLUSION || g_vkr.deviceLost ||
-        !vkr_occ_make()) {
+    if (!c || !c->inPass || c->occOpen || index >= RHI_MAX_OCCLUSION || g_vkr.deviceLost) {
+        return;
+    }
+    if (!g_vkr.occUsed && !g_vkr.occBroken) {
+        /* the first use submits the pools' reset: the queue is the submit
+         * thread's while it works, so the call guard's wait first, as an
+         * entry point that submits makes it ("Frame slots" above) */
+        rhi_call_guard_settle();
+    }
+    if (!vkr_occ_make()) {
         return;
     }
     VkrFrame *f = vkr_cur_frame();
@@ -2188,7 +2264,7 @@ void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index)
 static void vkr_occ_close(VkrCmdList *c)
 {
     if (c->occOpen) {
-        vkCmdEndQuery(c->cb, vkr_cur_frame()->occPool, c->occOpen - 1u);
+        vkCmdEndQuery(c->cb, g_vkr.frames[c->slot].occPool, c->occOpen - 1u);
         c->occOpen = 0;
     }
 }
