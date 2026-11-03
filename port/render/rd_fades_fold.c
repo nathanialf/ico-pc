@@ -55,7 +55,9 @@
  *     the same level under any blend and filter; of the steps between, on
  *     each kind of row (between the bars, in a bar) after the last k 0x80
  *     one, any number at scale 1 under an exact blend, one at scale 1 under
- *     the fixed-function blend, none above 1x.
+ *     the fixed-function blend, one above 1x (the brightness setting's
+ *     white step, drawn in every frame of play: on a tile-based GPU its own
+ *     pass on SCENE, 1.2-1.3 ms on the PowerVR phone at its resolution).
  *
  * The reduction (rd_replay.c doBlurSpriteDraw, rd__fades_fold_fx; or its
  * hardware sprite above 1x, rd_pixel_plan.c rd__fill_draw_cb_extra,
@@ -74,13 +76,18 @@
  *     row (two would add their levels);
  *   - above 1x (sprite_ps, ICO_DF_FOLD) the hardware filters SCENE first
  *     and the steps follow on the sampled texel (sprite.hlsl sprite_fold).
- *     Only steps of k 0 or 0x80 are taken there: the rows such a step
- *     covers hold one value, which any filter keeps, so the filter of the
- *     stepped texels is the stepped filter byte for byte.  A step between
- *     levels is not: the filter rounds its sum and the step its own
- *     product, and the two orders end two levels apart on some channels
- *     (a CPU model of a rounding and of a truncating bilinear, even for
- *     one step of a small k).  Where the filter's two rows straddle a
+ *     A step of k 0 or 0x80 gives the same bytes there: the rows such a
+ *     step covers hold one value, which any filter keeps, so the filter of
+ *     the stepped texels is the stepped filter byte for byte.  A step
+ *     between levels is not: the filter rounds its sum and the step its
+ *     own product, and the two orders can end apart on some channels (a CPU
+ *     model of a rounding and of a truncating bilinear: two levels, even
+ *     for one step of a small k).  One such step a row is taken (the
+ *     brightness), within the bound measured (VD-27); where the reduction
+ *     reads SCENE texel for texel (the phone's Resolution Auto: DISPLAY
+ *     the same texels as SCENE, a column over) the filter is a fetch and
+ *     the step is the sprite's but for the blender's own level.  Where the
+ *     filter's two rows straddle a
  *     bar's edge, each row is sampled alone, stepped by its own steps and
  *     weighed as the filter weighs them (the shader's weighing against the
  *     hardware's: a level at most, on those rows alone);
@@ -332,9 +339,13 @@ static bool readsSceneDepth(const RdCmd *c, const RdStateBlock *st, uint32_t sce
  * held, byte for byte); under the fixed-function blend one (each rounds to
  * the nearest level where the blender rounds by its own precision: a level
  * apart at most for one step, two after two); after the hardware filter
- * (scaled) none (the filter's rounding and the step's do not commute: two
- * levels apart on some channels for a single step whatever the filter's
- * own rounding). */
+ * (scaled) one under either blend (the filter's rounding and the step's do
+ * not commute: a CPU model of a rounding and of a truncating bilinear puts
+ * them two levels apart on some channels for a single step; measured on the
+ * corpus and the phone's frames, docs/port/DIVERGENCES.md VD-27: a level at
+ * most, on a small share of the pixels, and at the phone's own resolution,
+ * where the reduction reads SCENE texel for texel, only the blender's own
+ * level), two after two. */
 static const char *roundingRefusal(const RdFadesFold *p, bool exact, int scaled)
 {
     if (exact && !scaled) {
@@ -353,12 +364,10 @@ static const char *roundingRefusal(const RdFadesFold *p, bool exact, int scaled)
                 between++;
             }
         }
-        if (scaled && between > 0) {
-            return "a step between two levels after the hardware filter (above 1x), whose "
-                   "rounding is not the sprite's";
-        }
         if (between > 1) {
-            return "two steps between levels on one row under the fixed-function blend";
+            return scaled ? "two steps between levels on one row after the hardware filter "
+                            "(above 1x)"
+                          : "two steps between levels on one row under the fixed-function blend";
         }
     }
     return NULL;

@@ -13,7 +13,9 @@
  *             taps as two lerps of 8-bit weights (rounded, or truncated):
  *             a step of k 0 or 0x80 gives the same bytes before or after it;
  *             a step between levels two levels apart on some channels (the
- *             count printed: why the plan takes none above 1x)
+ *             count printed: the model's worst case; the plan takes one such
+ *             step a row above 1x, within the bound measured on the dumps,
+ *             docs/port/DIVERGENCES.md VD-27)
  *   exact     rd__fades_fold_exact: the asked exact mode's own usage bit
  *             (the attachment read's under attachment) on an RGBA8 target
  *   gsbase    rd_gsbase_test.c's post cases (the fade (200, 100, 7) at 50,
@@ -36,7 +38,9 @@
  *               blend drawn, but with black bars; at scale 2 a black fade
  *               and black bars with the rows snapped as rd_replay.c snapAxis
  *               draws them (116, 2 H - 114) and the hardware sprite's way, a
- *               fade between levels drawn; at full height 1x black bars
+ *               fade between levels folded after the filter under either
+ *               blend (one step a row), with bars between levels too drawn
+ *               (two steps on the bars' rows); at full height 1x black bars
  *               folded, drawn with rd__set_a1x_gs_keep off (the above-1x
  *               kernels foreseen);
  *               the brightness, the fade and the letterbox (an exact
@@ -389,14 +393,25 @@ static void checkPlan(void)
               why ? why : "folded", p.scaled);
         CHECK(p.bars == (116u | ((2u * H - 114u) << 16)), "fade + letterbox at 2x: bars 0x%08x",
               p.bars);
+        /* one step between levels a row above 1x (the brightness, a fade):
+         * folded after the filter, within VD-27's bound; two on one row
+         * (a fade between levels and bars between levels on the bars'
+         * rows) are not */
         why = plan(F_FADE, 0x60, &env, &p, NULL);
-        CHECK(why != NULL && strstr(why, "after the hardware filter"),
-              "a fade between levels at 2x: %s", why ? why : "folded");
+        CHECK(why == NULL && p.scaled && p.n == 1 && (p.meta & 8u),
+              "a fade between levels at 2x: %s, scaled %d, %u steps", why ? why : "folded",
+              p.scaled, p.n);
         env.exact = true;
         why = plan(F_FADE, 0x60, &env, &p, NULL);
-        CHECK(why != NULL && strstr(why, "after the hardware filter"),
+        CHECK(why == NULL && p.scaled && !(p.meta & 8u),
               "a fade between levels at 2x, the exact blend: %s", why ? why : "folded");
         env.exact = false;
+        s_letterFix = 0x40;
+        why = plan(F_FADE | F_LETTER, 0x60, &env, &p, NULL);
+        CHECK(why != NULL && strstr(why, "two steps between levels on one row after the hardware "
+                                         "filter"),
+              "a fade and bars between levels at 2x: %s", why ? why : "folded");
+        s_letterFix = 0x80;
         *sc = s0;
         *dc = d0;
         /* Full height at 1x (DISPLAY sy 2): the hardware sprite keeps the

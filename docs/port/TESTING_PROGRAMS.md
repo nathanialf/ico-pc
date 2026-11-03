@@ -912,7 +912,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `gs_fold_applies`'s rows (the count, a bar step on the bars' rows only, no bar); above 1x, a
   bilinear of four taps modelled as two lerps of 8-bit weights (rounded, then truncated): a step
   of factor 0 or 0x80 the same bytes before or after it (the count of channels two levels apart
-  for a step between levels printed, why the plan takes none above 1x); `rd__fades_fold_exact`'s
+  for a step between levels printed: the model's worst case; the plan takes one such step a row
+  above 1x, and refuses a fade and bars both between levels on the bars' rows there);
+  `rd__fades_fold_exact`'s
   table (the attachment read's usage bit under attachment, the storage read's under storage); the
   cases of `rd_gsbase` (the fade (200, 100, 7) at 50, the brightness at 12, the letterbox at 25 over
   rows 0 to 57 and from 455 on, and their chains) recorded through `rd_post`, planned, and every
@@ -1265,6 +1267,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   own texture, never written) byte for byte, `aura box off: 0` against `on`, the two-pass run's
   passes and draws the other's plus one each a read in two passes; some dump must read in two
   passes (`rd_aura_box_ab`). SKIP as `rd_vustage_ab`.
+- `rd_shadow_merge_ab.cmake`: the dumps of `tools/shadow_merge_dumps.txt` (`tools/vustage_dumps.txt`'s,
+  the PowerVR phone's three F12 zips and its F12 frame of the heavy stage 6 room `frame-20261102-222516-v2325.zip` in
+  the effort's evidence folder; machine-local, a missing one skipped) replayed with `--pass-dump
+  --stats` under `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` with the shadow volumes in a pass
+  of their own (`ICO_RD_SHADOW_MERGE=0`) and in the scene's open pass (`=1`, `rd_shadow_merge.c`),
+  at the phone's Resolution Auto under the MoltenVK fakes (a tile-based class) and at Enhanced 2x
+  4:3: every PNG byte for byte (the count targets' clears the on run leaves undrawn are drawn with
+  the poison's 0x5A there, so a reader would show), `shadow volumes in the scene's pass off: 0 of R
+  counts, 0 passes armed; 0 count targets' clears not drawn` against `on: M of R`, the same draws,
+  the on run's passes the off run's less M; some reset must be taken (`rd_shadow_merge_ab`). SKIP
+  as `rd_vustage_ab`.
 - `rd_pass_area_ab.cmake`: the dumps of `tools/pass_area_dumps.txt` (`tools/vustage_dumps.txt`'s,
   the PowerVR phone's three F12 zips and its F12 frame of 2026-11-02
   `frame-20261102-091017-v15677.rddump` in the effort's evidence folder; machine-local, a
@@ -1750,6 +1763,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `RdProfile.shadowBspline` ([dev] `shadow_bspline`) against the CPU B-spline within 3 (4 on the
   fixed-function blender) and a row across the shadow falling and rising once, the softening's AA0 (at its GS size) the area box of SCENE and its composite back the
   bilinear between AA0's texels, not counted above 1x (`checkComposite4x`, `checkSoftening4x`).
+  Case m (with each case o run): the shadow volumes in the scene's open pass
+  (`rd__shadow_merge_force` off and on) under `ICO_RD_STORE_POISON=1`, the synthetic volumes
+  through both paths and Shadow.c's model through the one draw: the count, SHADOW0-2 and SCENE
+  byte for byte, list 0's pass armed and the reset taken with it on (`shadowMergeArmed`,
+  `shadowMerged` 1), one render pass fewer, the count target's new-target clear left undrawn
+  (`shadowClearSkipped` 1; drawn as 0x5A under the poison), nothing armed, taken or left off.
   Case o: the count resolved in one draw from the stencil view against the seven stencil-tested
   draws (`RdProfile.shadowOne` flipped between two recordings of one frame), the count at its GS
   size (`rd__shadow_count_read`), SHADOW0-2 and SCENE byte for byte for the synthetic volumes,

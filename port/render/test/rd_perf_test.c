@@ -1483,6 +1483,11 @@ int main(int argc, char **argv)
         return dumpMode(argc, argv);
     }
     checkPassTexts(); /* pure: before any device */
+    /* the shadow volumes in their own pass and the count target cleared
+     * (rd_shadow_merge.c, on on the tile-based classes: rd_perf_mali's):
+     * the barrier and pass counts below are those of that frame; the merge
+     * has its own tests (rd_shadow case m, rd_shadow_merge_ab) */
+    rd__shadow_merge_force(0);
     const int rc = synthetic();
     if (rc != 0) {
         return rc;

@@ -690,6 +690,12 @@ void rd__clear_new_targets(void)
             continue;
         }
         t->clearPending = 0;
+        /* a shadow count target nothing reads before its resolve: left
+         * undrawn (rd_shadow_merge.c; the tests' poison clears it to 0x5A) */
+        const int cnt = i >= RD_TARGET_COUNT ? rd__shadow_count_clear(t) : 0;
+        if (cnt == 1) {
+            continue;
+        }
         /* in the state the target's passes take (rd_replay.c beginPass): no transition
          * back and forth between this pass and the next */
         const bool readable = rd__pass_wants_readable(t);
@@ -700,6 +706,10 @@ void rd__clear_new_targets(void)
         p.color[0].texture = t->color;
         p.color[0].load = RHI_LOAD_CLEAR;
         p.color[0].readable = readable;
+        if (cnt == 2) {
+            p.color[0].clear[0] = p.color[0].clear[1] = p.color[0].clear[2] = p.color[0].clear[3] =
+                90.0f / 255.0f; /* 0x5A */
+        }
         p.colorCount = 1;
         if (t->withDepth && t->depth.id) {
             rd__transition(rd__replay_cl(), t->depth, &t->depthState, RHI_STATE_DEPTH_WRITE);

@@ -2457,6 +2457,18 @@ typedef struct RdPerfRecord {
      * read), storeLastDropped the depth stores dropped at the pass that
      * holds the depth's last touch (counted in storeDepthDropped too) */
     uint32_t clearsCarried, clearsSkipped, storeLastDropped;
+    /* The shadow volumes in the scene's pass (rd_shadow_merge.c;
+     * docs/port/WORK_BUFFERS.md "The shadow volumes in the scene's pass"):
+     * shadowMerged the shadow resets whose volumes were drawn in the
+     * scene's open pass (a pass fewer each, and the scene's depth not
+     * stored and loaded again), shadowMergeArmed the passes begun with
+     * their stencil stored for a later reset (those not taken stored it
+     * for nothing) */
+    uint32_t shadowMerged, shadowMergeArmed;
+    /* the shadow count targets whose new-target clear was not drawn
+     * (rd_shadow_merge.c rd__shadow_count_clear: nothing reads them before
+     * their resolve; 9.7 MB written fewer each at the phone's size) */
+    uint32_t shadowClearSkipped;
     /* the depths whose last touch's pass kept its store, by why
      * (RD_LAST_WHY_*: the "last store kept" clause) */
     uint16_t lastStoreWhy[RD_LAST_WHY_COUNT];
