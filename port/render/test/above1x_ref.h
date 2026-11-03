@@ -3,7 +3,7 @@
  * common.hlsli's kernels compiled as C (shaders_pixel_test).  Written from
  * the definitions, not from the shader's code: the B-spline from its
  * distance form, the Bayer matrix by its recursion, the box by overlap.
- * docs/port/RENDER.md "Above 1x" says what is modelled.
+ * docs/port/RENDER_POST.md "Above 1x" says what is modelled.
  *
  * a1x_bayer8      the 8x8 ordered-dither threshold 0..63 at (x, y), built
  *                 by the matrix's recursion

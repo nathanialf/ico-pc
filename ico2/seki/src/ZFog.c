@@ -215,7 +215,7 @@ void fog_MakeFogClut(void)
  *   BITBLTBUF/TRXPOS/TRXREG/TRXDIR, the CLUT image and the PSMT4 copies
  *                  not recorded: the Z copy and its byte copy are what
  *                  rd_post(RD_POST_FOG) folds into its index (bits 16..23
- *                  of the GS Z: docs/port/RENDER.md, "The fog path and its
+ *                  of the GS Z: docs/port/RENDER_POST.md, "The fog path and its
  *                  self-test"), the CLUT is
  *                  passed to it in index order
  *   TEXFLUSH       nothing to do

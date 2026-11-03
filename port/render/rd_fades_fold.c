@@ -1,4 +1,4 @@
-/* rd_fades_fold.c: the fades fold (docs/port/RENDER.md, "The fades fold";
+/* rd_fades_fold.c: the fades fold (docs/port/RENDER_POST.md, "The fades fold";
  * on every device, no setting: docs/port/DIVERGENCES.md VD-27 holds its
  * measured bound; ICO_RD_FADES_FOLD=0 is the tests' way to draw the
  * sprites as before, never a player's or a config key).

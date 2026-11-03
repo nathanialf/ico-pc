@@ -796,7 +796,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd__fx_enumerate` adds (none with the plan off, the constant fold's seven without the frame and
   local modules, one of them the depth attached under Z ALWAYS without Z write), with no draw made
   without a device (`rd_fx_frame`).
-- `rd_fades_fold_test.c`: the fades fold ([RENDER.md](RENDER.md#the-fades-fold)) on the CPU,
+- `rd_fades_fold_test.c`: the fades fold ([RENDER_POST.md](RENDER_POST.md#the-fades-fold)) on the CPU,
   without a device: `gs_fold_ch` (`gs_math.hlsli`) with no rounding term against `gs_blend_reg_ch`
   of ALPHA 0x44 and 0x64 for every Cs, Cd and factor 0 to 0x80 (a texel stepped at scale 1 is the
   texel the sprite stored under the exact blend), with the term 64 against the nearest level;
@@ -1109,7 +1109,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   says the steps met SCENE's texels before the GS filter, elsewhere within two levels on every
   channel (the measured bound, [DIVERGENCES.md](DIVERGENCES.md) VD-27), the channels a level apart
   printed per target by `port/render/test/png_level_diff.py`;
-  some dump must fold (`rd_fades_fold_ab`; [RENDER.md](RENDER.md#the-fades-fold),
+  some dump must fold (`rd_fades_fold_ab`; [RENDER_POST.md](RENDER_POST.md#the-fades-fold),
   [DIVERGENCES.md](DIVERGENCES.md) VD-27). SKIP as `rd_vustage_ab`.
 - `rd_crack_late_ab.cmake`: the crack fill after lists 4-6 against pass dumps of the build that drew
   it before the fog: each line of `tools/crack_late_dumps.txt` (`<setting> <dump> <baseline
@@ -1168,7 +1168,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   layout, twins and `SCENE` usage, and a start-up set that grows when the mode is switched on
   (`rd_dst_usage`; 77 without a Vulkan device).
 - `rd_crack_test.c` with `rd_crack.cmake`: the crack filler above 1x
-  ([RENDER.md](RENDER.md#crack-filling-above-1x)). A 640 x 448 frame under Enhanced, two flat
+  ([RENDER_POST.md](RENDER_POST.md#crack-filling-above-1x)). A 640 x 448 frame under Enhanced, two flat
   triangles sharing a long diagonal edge, the second one's edge one 12.4 step (1/16 GS pixel) to
   the right, two sprites 1.5 GS pixels apart, below them a concave fold (two strips whose depth
   falls steeply towards their shared line) and the fog, replayed with the filler off and then

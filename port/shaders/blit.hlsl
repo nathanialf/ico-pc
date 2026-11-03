@@ -262,7 +262,7 @@ float depth_upsample_ps(BlitVSOut i) : SV_Depth
     return g_ssDepth.Load(int3(int2(i.pos.xy), 0));
 }
 
-// The crack filler above 1x (port/render/rd_crack_fill.c; docs/port/RENDER.md,
+// The crack filler above 1x (port/render/rd_crack_fill.c; docs/port/RENDER_POST.md,
 // "Crack filling above 1x"), behind blit_vs over SCENE's texels, before the
 // fog. The VU truncates each part's vertices to the GS's 1/16 pixel grid
 // apart (DIVERGENCES.md VD-19, VD-20): above 1x the crack between two parts

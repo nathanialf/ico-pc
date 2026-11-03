@@ -1,5 +1,5 @@
 # rd_crack_late_ab: the crack fill drawn after lists 4-6 (port/render/rd_crack_fill.c;
-# docs/port/RENDER.md, "Crack filling above 1x"; docs/port/DIVERGENCES.md VD-20)
+# docs/port/RENDER_POST.md, "Crack filling above 1x"; docs/port/DIVERGENCES.md VD-20)
 # against pass dumps of the build that drew it before the fog.  Each line of the list
 # (tools/crack_late_dumps.txt: "<setting> <dump> <baseline folder>") is replayed with
 # rd_replay_tool --pass-dump --stats under ICO_RD_BLEND=fixed and ICO_RD_FADES_FOLD=0

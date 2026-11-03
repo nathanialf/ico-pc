@@ -383,7 +383,7 @@ width (`ico2/seki/src/Primitive.c` (`prim_InitParticleByPartition`)).
 counted +1 or -1 by its last vertex's colour, one call per object), and `shadow_Draw` records
 `rd_shadow_resolve` and then the blur chain's writes and sprites into SHADOW0..2 and SCENE, so
 their state leaks into the rest of list 3 as on the GS (`ico2/seki/src/Shadow.c`
-(`shadowHostFlush`)). The stencil count is [RENDER.md](RENDER.md#shadows).
+(`shadowHostFlush`)). The stencil count is [RENDER_POST.md](RENDER_POST.md#shadows).
 
 ## Effects recorded on rd directly
 

@@ -19,7 +19,7 @@
 
 /* ===================================================================== *
  * PC port (docs/port/GS.md, "Effects recorded on rd directly";
- * docs/port/RENDER.md, "Shadows").
+ * docs/port/RENDER_POST.md, "Shadows").
  *
  * The packets below are still built (the DMA bookkeeping and the heap use
  * stay as they are), but nothing on the host reads them: shadow_Reset's is

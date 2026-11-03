@@ -366,7 +366,7 @@ void rd__replay_fold_list(const RdCmd *cmds, uint32_t count, int list, uint32_t 
 void rd__replay_fold_at(uint32_t index);
 uint32_t rd__replay_fold_skip(void);
 int rd__replay_glow_edge_columns(const Replay *r, const RdFrame *f, const RdCmd *c);
-/* rd_fades_fold.c (docs/port/RENDER.md, "The fades fold"): list 11's last
+/* rd_fades_fold.c (docs/port/RENDER_POST.md, "The fades fold"): list 11's last
  * full-frame lerp sprites (the brightness, the fade, the letterbox bars)
  * applied by the reduction to the SCENE texels it reads instead of drawn
  * into SCENE.

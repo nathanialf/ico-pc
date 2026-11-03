@@ -11,7 +11,7 @@ the shadow count is read from the stencil in one draw (and its colour left unsto
 made), how the shadow levels are composited above
 1x, which passes leave a depth neither loaded nor stored (the store plan), which passes load and store only the tiles their draws touch (the pass area), a source that holds only its clear read as its colour, which full-frame reads stay at a large
 scale, and how the screen-prim triangles draw without the sprite planes (issue 161). The sprites themselves are drawn by the GS
-sprite model ([RENDER.md](RENDER.md#post-passes), "The staticBlur sprites").
+sprite model ([RENDER_POST.md](RENDER_POST.md#post-passes), "The staticBlur sprites").
 
 ## Files
 
@@ -208,7 +208,7 @@ DISPLAY_HELD and FEED_HELD (a tick's later presents, [DISPLAY.md](DISPLAY.md)), 
 glow of a tick's first present that its later presents paste
 ([The glow between ticks](#the-glow-between-ticks)); the motion blur's
 Smooth accumulator is a texture of its own, not a target, and the RGBA8 target it resolves into is
-drawn before the sprite reads it ([RENDER.md](RENDER.md#the-motion-blur-under-smooth)). Anywhere
+drawn before the sprite reads it ([RENDER_POST.md](RENDER_POST.md#the-motion-blur-under-smooth)). Anywhere
 else, a texel read before the frame drew it is a bug of this kind.
 
 ### After a save state's load
@@ -357,7 +357,7 @@ sprites differ in colour between the ticks, so they still cross-fade.
 
 ## The crack fill after lists 4-6
 
-The crack filler is described in [RENDER.md](RENDER.md#crack-filling-above-1x). SCENE's own fog
+The crack filler is described in [RENDER_POST.md](RENDER_POST.md#crack-filling-above-1x). SCENE's own fog
 arms it (`rd__crack_fill` from `doFog`) and the walk draws it at the start of list 7
 (`rd__crack_fill_late` from the list loop in `port/render/rd_replay.c`, every list from 7 on, the
 same replay only): the snapshot of SCENE's colour (`rd__replay_take_snap`) ends the pass open there,
@@ -376,7 +376,7 @@ read (the store plan's `PlanDepth.late`, [below](#the-store-plan)): about 40 to 
 at 2366 x 1080. The fill's GPU time, the colour's copy and its pass, is the picture effect `crack
 fill` (`RD_PERF_POST_CRACK`): the 10 s `effects:` line, the perf CSV's `gpu_crack_fill_ms` and the
 tool's `gpu:` line. The picture differs from the fill before the fog at the cracks only (the bound:
-[RENDER.md](RENDER.md#crack-filling-above-1x), [DIVERGENCES.md](DIVERGENCES.md) VD-20). Tests:
+[RENDER_POST.md](RENDER_POST.md#crack-filling-above-1x), [DIVERGENCES.md](DIVERGENCES.md) VD-20). Tests:
 `rd_crack_tiler`, `rd_crack_tiler_on`, `rd_crack_tiler_fold`, `rd_crack_tiler_fold_mali` (the
 local read: one pass more than without the filler, the fill's own; SCENE equal to the depth copy
 path's byte for byte), `rd_crack_late_ab` ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
@@ -471,7 +471,7 @@ GPU is measured by the probe line of a reporter's log; no hardware number exists
 ## The shadow count in one draw
 
 The shadow volumes count on the stencil of SCENE's depth, bits 0-5 holding n mod 64 for n the net
-count of faces in front of the scene ([RENDER.md](RENDER.md#shadows)). The resolve
+count of faces in front of the scene ([RENDER_POST.md](RENDER_POST.md#shadows)). The resolve
 (`RDC_SHADOW_RESOLVE`, `port/render/rd_replay.c` (`doShadowResolve`)) turned that into the colour
 the GS sum leaves in FBP 0x142 with seven full-frame draws on the count target at the scene's
 scale, its colour cleared to 0 at the pass's load: draw k (0..5) `blit_ps` with colour 4 << k,
@@ -690,9 +690,9 @@ the green-grey floors).
 `shadow_Draw` composites the three blur levels into SCENE in list 3, SHADOW2, SHADOW1 and SHADOW0
 in that order (the v4251 frame: commands 3:42, 3:47 and 3:52), each a sprite over the whole frame,
 LERP by the texel's alpha (ALPHA blend 4), the alpha test GREATER 0 and DATE against the receiver
-mask ([RENDER.md](RENDER.md#shadows)). A level texel covers 2, 4 or 8 GS pixels on each axis
+mask ([RENDER_POST.md](RENDER_POST.md#shadows)). A level texel covers 2, 4 or 8 GS pixels on each axis
 (SHADOW0 is W / 2 x 256 for a frame of W x 448, `namedTargetDesc`), and the levels stay at scale 1
-at every scale ([RENDER.md](RENDER.md#above-1x), "Left as they are"). On a SCENE at scale s each
+at every scale ([RENDER_POST.md](RENDER_POST.md#above-1x), "Left as they are"). On a SCENE at scale s each
 composite therefore steps 1 / (2 s), 1 / (4 s) or 1 / (8 s) level texels a texel, under half a
 texel on both axes whenever s > 1.
 
@@ -762,7 +762,7 @@ touches its depth or stencil:
   and not ALWAYS), Z write on, DATE on (the stencil bit) or PRIM.AA1 (its stencil pairs); DATE on a
   post sprite other than the reduction's is no touch (`planPost`): every such sprite is drawn
   through the fx shaders, which test DATE against the destination alpha they read (the snapshot,
-  or the attachment by local read: [RENDER.md](RENDER.md#post-passes)) with no stencil test in
+  or the attachment by local read: [RENDER_POST.md](RENDER_POST.md#post-passes)) with no stencil test in
   their pipelines, and only `doScreen` and the VU draws take DATE's stencil bit; the reduction's
   hardware sprite on a scaled target is a `doScreen` draw, so its DATE stays a touch;
 - a draw whose texture is a target's depth view (`RD_VIEW_DEPTH`);
@@ -801,7 +801,7 @@ bound by list 11's screen sprites (a screen draw binds the state's depth whateve
 sprite without a Z test or Z write binds none, `rd__blur_key`), so those are the passes the plan
 drops on that frame. The fog's own pass and list 5's keep their stores.
 
-The fades fold ([RENDER.md](RENDER.md#the-fades-fold), `port/render/rd_fades_fold.c`) plans before
+The fades fold ([RENDER_POST.md](RENDER_POST.md#the-fades-fold), `port/render/rd_fades_fold.c`) plans before
 the scan from it (`rd__fades_fold_scan` at the head of `rd__store_plan_scan`): list 11's last
 full-frame lerp sprites (the brightness, the fade, the letterbox bars) are applied by the reduction
 and not drawn, and the scan does not count them (`rd__fades_fold_skip` on their numbers). Where
@@ -1433,7 +1433,7 @@ In the game list 11 is 1.15 ms (the fades: brightness, fade, letterbox). The pas
 same per pass: list 11 with the fades' 2 to 4 draws 1.0 to 3.0 ms, with the menus' 7 or 8 draws 9.3 to
 10.0 ms. With the menus up list 11 holds the fade sprites, the layout's own sprites and the menus'
 words as sheet text (`ui_draw_menu_text`): the fades fold does not take that list (the pause menu's
-layout is drawn after the fade, [RENDER.md](RENDER.md#the-fades-fold)), and the 1x bake did not
+layout is drawn after the fade, [RENDER_POST.md](RENDER_POST.md#the-fades-fold)), and the 1x bake did not
 cover it, because the phone's scene is 2.109 times the PS2's height and its strips are at scale 2
 (`mfScale`: `ceil(2.109 - 0.25)`), which `font_sheet_ps` rebuilt per pixel (a gather, nine loads,
 about sixteen integer divisions). 2x pages are now baked too, byte for byte

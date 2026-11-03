@@ -1,4 +1,4 @@
-/* rd_crack_fill.c: the crack filler above 1x (issue 26; docs/port/RENDER.md,
+/* rd_crack_fill.c: the crack filler above 1x (issue 26; docs/port/RENDER_POST.md,
  * "Crack filling above 1x").
  *
  * The VU truncates every vertex to the GS's 1/16 pixel grid, each part of

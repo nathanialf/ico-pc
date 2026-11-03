@@ -1,5 +1,5 @@
 /* rd_blur_smooth.c: Options > Effects > Motion blur: Smooth
- * (RdSettings.motionBlurSmooth; docs/port/RENDER.md, "The motion blur under
+ * (RdSettings.motionBlurSmooth; docs/port/RENDER_POST.md, "The motion blur under
  * Smooth").
  *
  * The game's motion blur (staticBlur.c MotionBlur) is one sprite in list 7:

@@ -71,12 +71,12 @@ cropped; the reduction draws over its border (`port/render/rd_blur_border.c`
 `rd__frame_cropped` false) nothing of it is cropped, so the PS2's hidden columns, GS 0, 1, W - 2 and
 W - 1, would be on the screen; the game does not always draw them (issue 129: a bright band at a
 phone's left edge, the fog's colour at depth 0 spread by the glow), so the reduction draws them
-again as columns 2 and W - 3, bit for bit in the GS model ([RENDER.md](RENDER.md#post-passes), the
+again as columns 2 and W - 3, bit for bit in the GS model ([RENDER_POST.md](RENDER_POST.md#post-passes), the
 open border's outer columns). The glow reads SCENE before the reduction, so a fogged frame's SCENE
 has those columns repeated from columns 2 and W - 3 first, wherever the border is open or the
 frame cropped (issue 26: the same band at 16:9, where the present leaves the columns out but the
 glow had spread them about ten GS pixels in); with the border closed (Full pixel off at 4:3 and
-48:9) SCENE stays the game's, the PS2's picture ([RENDER.md](RENDER.md#post-passes), SCENE's outer
+48:9) SCENE stays the game's, the PS2's picture ([RENDER_POST.md](RENDER_POST.md#post-passes), SCENE's outer
 columns). The rows the reduction's scissor kept black at the top and bottom show what SCENE
 holds.
 Without it the picture is the same: the same box, scale, crop and replay (the host sets
@@ -1141,7 +1141,7 @@ the sprite add (the aura, the brightness step, the reduction's tint, a fade) is 
 back into the trail, and the old frame's vertical halving (DISPLAY's H / 2 lines) is gone; a
 still picture is the same within a level. k is the present clock's tick over its step on the
 timer path, the presents the tick before counted under the vsync lock, 1 for the first tick; at
-one present a tick FIX' is FIX ([RENDER.md](RENDER.md#the-motion-blur-under-smooth)).
+one present a tick FIX' is FIX ([RENDER_POST.md](RENDER_POST.md#the-motion-blur-under-smooth)).
 
 **The still re-present.** A between-tick present whose frame would draw the bytes of the tick's last
 rendered present shows that picture again instead of replaying it (`port/render/rd_reshow.c`,

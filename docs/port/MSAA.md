@@ -74,7 +74,7 @@ The resolve closes gaps onto the clear thinner than half a pixel, not wider ones
 surface seen through a seam: a pixel any of whose samples lies on that surface takes its depth
 (the smallest covered sample), and the fog paints it at that surface's deeper level. Above 1x those pixels run along the seams as
 dotted lines of mist, as without MSAA before the crack filler (issue 26 with MSAA on: a ledge's
-top edge). The crack filler ([RENDER.md](RENDER.md#crack-filling-above-1x),
+top edge). The crack filler ([RENDER_POST.md](RENDER_POST.md#crack-filling-above-1x),
 `port/render/rd_crack_fill.c`) therefore runs on the resolved picture: `doFog`
 (`port/render/rd_replay.c`) passes the epoch's state at the fog (`RD_CRACK_MSAA_OPEN`,
 `RD_CRACK_MSAA_RESOLVED` or `RD_CRACK_MSAA_NONE`, `port/render/rd_replay.h`), and the fill armed

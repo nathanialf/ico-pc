@@ -165,7 +165,7 @@ take from either ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
   destination read of its own) and with `ICO_FX_DST_LOCAL=1` as `fx_local_ps` (the destination by
   `SubpassLoad` of the input attachment, `layoutLocal`: slot 1 the attachment, slot 2 the texture).
   Neither has a `_nodual` or destination-read twin: `fx_local_ps` is in `rd__fs_local_read`, and
-  an exact blend keeps the snapshot ([RENDER.md](RENDER.md#post-passes)).
+  an exact blend keeps the snapshot ([RENDER_POST.md](RENDER_POST.md#post-passes)).
 
 The replay looks entries up by the names in `s_vsNames` and `s_fsNames` (`port/render/rd_replay.c`).
 

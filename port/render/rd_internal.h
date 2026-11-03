@@ -4219,7 +4219,7 @@ void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *origi
 #define RD_BLUR_SMOOTH_PIPES 2
 #define RD_BLUR_SMOOTH_K_MAX 64u
 
-/* rd_crack_fill.c: the crack filler above 1x (issue 26; docs/port/RENDER.md,
+/* rd_crack_fill.c: the crack filler above 1x (issue 26; docs/port/RENDER_POST.md,
  * "Crack filling above 1x").  Before the fog of SCENE (rd_replay.c doFog,
  * rd_replay.h rd__crack_fill), under Enhanced with SCENE's scale above 1 on
  * an axis, a texel no draw covered (depth 0, the fog's table entry 0), or

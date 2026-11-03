@@ -1,6 +1,6 @@
 /* rd_fx_plan.c: the frame-size post sprites' plan (rd_replay.h RdFxDraw,
  * rd__fx_plan_draw; rd_internal.h rd__fx_enumerate; RdProfile.fxPlan,
- * fxDstLocal; docs/port/RENDER.md "Post passes").
+ * fxDstLocal; docs/port/RENDER_POST.md "Post passes").
  *
  * A staticBlur sprite (rd_replay.c doBlurSpriteDraw) that reads its
  * destination takes a snapshot of its target, or swaps it, and draws in a

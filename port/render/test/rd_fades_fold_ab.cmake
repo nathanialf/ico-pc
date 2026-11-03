@@ -1,5 +1,5 @@
 # rd_fades_fold_ab: the fades fold (port/render/rd_fades_fold.c;
-# docs/port/RENDER.md, "The fades fold") against list 11's sprites drawn
+# docs/port/RENDER_POST.md, "The fades fold") against list 11's sprites drawn
 # into SCENE.  For every dump the list names (tools/fades_fold_dumps.txt,
 # read as rd_constant_reads_ab.cmake reads its lists) and, with -DBOOT=<dir>
 # (the cmake cache variable ICO_BOOT_DUMP_DIR), the start-up's frames
