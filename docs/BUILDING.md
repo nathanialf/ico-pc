@@ -514,19 +514,21 @@ upload jobs alone may write to it. No secret, signing identity or game data is u
 
 `.github/workflows/ci.yml` runs on every push to main, every pull request and
 every pushed `v*` tag (which also packages for arm64, see
-[Packages](#packages)): two Linux
-jobs (`ubuntu-24.04`), the `linux-arm64` job (`ubuntu-24.04-arm`) and the
-`android` job side by side, then the `windows` job (`windows-2022`) after `linux`, no secrets, no
-disc image. `linux` runs the steps
-below in order; `extra` is a matrix of three runners, each with the same host
-packages, venv and (restored, never saved) toolchain cache, that builds one
-more preset; `linux-arm64` and `android` are described after the table.
+[Packages](#packages)): the `linux` job (`ubuntu-24.04`), the `tests` matrix
+of eleven `ubuntu-24.04` runners, the `extra` job, the `linux-arm64` job
+(`ubuntu-24.04-arm`) and the `android` job side by side, then the `windows` job
+(`windows-2022`) after `linux`, no secrets, no disc image. `linux` runs the
+hygiene checks and the `win-x64` cross build below in order. Each `tests`
+runner builds one preset and runs one shard of its `ctest` suite; `extra`
+cross-builds `win-x64-clang`. Both have `linux`'s host packages and venv and
+the (restored, never saved) toolchain cache; `linux-arm64` and `android` are
+described after the table.
 
 | step | what |
 | --- | --- |
 | host packages, venv | gcc 14 (the runner's default gcc 13 also configures, since `cmake/IcoFlags.cmake` drops warning flags a compiler does not know), the X11, ALSA, PulseAudio and PipeWire (`libpipewire-0.3-dev`, `libspa-0.2-dev`) headers SDL3 builds against, lavapipe (`mesa-vulkan-drivers`, `libvulkan1`) so the render tests run on a CPU Vulkan device, the GL headers (`libgl-dev`, `libglx-dev`, `libegl-dev`) and llvmpipe (`libgl1-mesa-dri`, `libgl1`, `libegl1`) so the OpenGL tests run on a CPU OpenGL device, `tools/requirements.txt` |
 | cache and `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh`, `fetch_deps.sh`, `fetch_common.sh` and `fetch_android.sh`, restored and saved as separate steps so a cold fetch is saved even when a later step fails |
-| ccache | `~/.cache/ccache` is restored before the builds and saved after them (also when a build fails), keyed by the job or preset and the same four scripts' hash, with the commit as the last part so every run saves its entries, each capped at 5 GiB (`CCACHE_MAXSIZE` in the workflow's `env`; `tools/fetch_toolchain.sh` sets the same cap for a local ccache); the `linux-arm64` job has no ccache |
+| ccache | `~/.cache/ccache` is restored before the builds and saved after them (also when a build fails), keyed by the job or suite and the same four scripts' hash, with the commit as the last part so every run saves its entries, each capped at 5 GiB (`CCACHE_MAXSIZE` in the workflow's `env`; `tools/fetch_toolchain.sh` sets the same cap for a local ccache); a suite's shard 1 saves its cache, the other shards only restore it, and a suite with no entry of its own yet starts from `linux`'s; the `linux-arm64` job has no ccache |
 | `tools/check_no_rom.sh` | the IP scan over every tracked file |
 | `tools/format.sh --check` | clang-format over the tracked C |
 | `tools/strip_host_gates.py --check` | no `ICO_HOST` conditional in `ico2/` or `sce/` |
@@ -534,14 +536,22 @@ more preset; `linux-arm64` and `android` are described after the table.
 | `tools/stack_overread_audit.py` (`--selftest`, then the tree) | no game code in `ico2/` that relies on the PS2's stack layout: a matrix or vector call that reads or writes past the local it is given, or a local that is only written; checked exceptions are in `tools/stack_overread_allow.txt` |
 | `tools/struct_cast_audit.py` (`--selftest`, then the tree) | no fixed array, buffer or smaller record in `ico2/` cast to a struct whose host size is larger (records holding pointers are wider on the host than the [EE](port/ARCHITECTURE.md#terms)'s 4-byte pointers: `ClipWork` is 0xF0 bytes, not 0xC0), sized by compiling the file with the host compiler; checked exceptions are in `tools/struct_cast_allow.txt` |
 | `tools/check_call_types.py` | no call through a function-pointer cast that passes fewer arguments than the function it reaches reads, and no `extern` in an `ico2/` `.c` file that differs from its definition in parameter count, integer width or return width; checked exceptions are in `tools/check_call_types_allow.txt` |
+| `tools/ci_shard.py --selftest` | the shard split runs every test once, keeps a fixture's tests together and gives the same split twice |
 | `gen_data_desc.py`, `gen_layout_asserts.py`, `gen_sources.py` with `--check` | the generated files are fresh |
-| `linux-x64` headless | configure with `-DICO_LINK_EXE=ON`, build `all tests` (the targets `all` and `tests`), `ctest` |
-| `linux-x64` window | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` into `build-host/linux-x64-window`, build, `ctest` |
-| `linux-x64-clang` | build, `ctest` |
 | `win-x64` | cross-compile the window build; `ico_pc.exe` and `SDL3.dll` must exist; the tests are built, and the renderer's Direct3D 11 set with `SDL3.dll` is uploaded as the artifact `win-x64-warp-tests` (`tools/ci_d3d11_warp.sh stage`) for the `windows` job |
-| `extra`: `asan` | AddressSanitizer + UBSan (Debug, `-O1`), headless with `-DICO_LINK_EXE=ON`, build, `ctest` |
-| `extra`: `fptrap` | float divide-by-zero and invalid trap, headless with `-DICO_LINK_EXE=ON`, build, `ctest` |
+| `tests`: `linux-x64`, 2 shards | headless, configure with `-DICO_LINK_EXE=ON`, build `all tests` (the targets `all` and `tests`), `ctest` on the shard's tests; shard 1 also builds `shaders_d3d11_check` |
+| `tests`: `linux-x64-window`, 2 shards | `-DICO_HEADLESS=OFF -DICO_LINK_EXE=ON` into `build-host/linux-x64-window`, build, `ctest` on the shard's tests |
+| `tests`: `linux-x64-clang`, 2 shards | build, `ctest` on the shard's tests |
+| `tests`: `asan`, 3 shards | AddressSanitizer + UBSan (Debug, `-O1`), headless with `-DICO_LINK_EXE=ON`, build, `ctest` on the shard's tests |
+| `tests`: `fptrap`, 2 shards | float divide-by-zero and invalid trap, headless with `-DICO_LINK_EXE=ON`, build, `ctest` on the shard's tests |
 | `extra`: `win-x64-clang` | cross-compile the window build (`-DICO_HEADLESS=OFF`) with llvm-mingw clang; `ico_pc.exe` and `SDL3.dll` must exist |
+
+A shard's tests: `ctest --show-only=json-v1` lists the build's tests, `tools/ci_shard.py split`
+divides them into the suite's N shards by the seconds in `tools/ci_test_costs.txt` (heaviest
+first to the lightest shard; tests that share a fixture, such as `rd_pixel` and the
+`rd_replay_tool` tests that read its dump, in one shard; a test the table lacks at the table's
+median) and `ctest --tests-from-file` runs this shard's part at `--parallel 4`
+([TESTING.md](port/TESTING.md#ci)).
 
 The `windows` job (`windows-2022`) starts when `linux` has finished: it downloads
 `win-x64-warp-tests`, tries to add the Direct3D 11 debug layer (Windows' optional feature

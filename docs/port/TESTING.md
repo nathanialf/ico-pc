@@ -28,6 +28,7 @@ tests a change needs. Every test program, by area, is
 | `tools/dev_build.sh` | build a few targets of one checkout and run a few tests |
 | `tools/check_docs.py`, `tools/check_docs_allow.txt` | the documentation gate and its allow-list |
 | `.github/workflows/ci.yml`, `ios.yml` | CI |
+| `tools/ci_shard.py`, `tools/ci_test_costs.txt` | CI's split of a ctest suite into shards and its cost table |
 
 ## The framework
 
@@ -735,15 +736,48 @@ Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay op
 
 | workflow | job | runner | what it runs |
 | --- | --- | --- | --- |
-| `ci.yml` | `linux` | `ubuntu-24.04` | the hygiene checks (no disc data, format, no `ICO_HOST` conditional, no region block, stack-layout, struct-cast and call-type audits, generated files fresh), then `linux-x64` headless and window builds with `ctest`, `linux-x64-clang` with `ctest`, and the `win-x64` cross build (tests built; the renderer's Direct3D 11 set uploaded for `windows`) |
+| `ci.yml` | `linux` | `ubuntu-24.04` | the hygiene checks (no disc data, format, no `ICO_HOST` conditional, no region block, stack-layout, struct-cast and call-type audits, the shard split's self-test, generated files fresh), then the `win-x64` cross build (tests built; the renderer's Direct3D 11 set uploaded for `windows`) |
+| `ci.yml` | `tests` | `ubuntu-24.04` | eleven runners: the `linux-x64` headless, `linux-x64` window and `linux-x64-clang` suites in 2 shards each, `asan` in 3, `fptrap` in 2; each builds its preset's `all tests` and runs one shard of its `ctest` ([below](#the-ci-shards)) |
 | `ci.yml` | `windows` | `windows-2022` | after `linux`: the renderer's tests from the `win-x64` build on Direct3D 11 through WARP, the debug layer tried ([above](#the-render-suite-on-direct3d-11-warp)) |
-| `ci.yml` | `extra` | `ubuntu-24.04` | a matrix of `asan` and `fptrap` (build `all tests`, `ctest`) and the `win-x64-clang` cross build |
+| `ci.yml` | `extra` | `ubuntu-24.04` | the `win-x64-clang` cross build |
 | `ci.yml` | `linux-arm64` | `ubuntu-24.04-arm` | the no-disc-data check, the `linux-arm64` preset with `ctest`, the filtered-pixel render tests in a step that does not gate, the arm64 package on release tags |
 | `ci.yml` | `android` | `ubuntu-24.04` | the debug APK (`assembleDebug`), `tools/check_android_flags.sh`, the APK structure checks |
 | `ios.yml` | `build`, `publish` | `macos-15`, `ubuntu-24.04` | the unsigned iPhone IPA for a published release, attached to it |
 | `ios.yml` | `build-macos`, `publish-macos` | `macos-15`, `ubuntu-24.04` | the macOS app for a published release, attached to it |
 
-(`.github/workflows/ci.yml`, jobs `linux`, `windows`, `extra`, `linux-arm64`, `android`;
+(`.github/workflows/ci.yml`, jobs `linux`, `tests`, `windows`, `extra`, `linux-arm64`, `android`;
 `.github/workflows/ios.yml`.)
 
 The triggers, steps and caches are [../BUILDING.md](../BUILDING.md#continuous-integration)'s.
+
+### The CI shards
+
+A `tests` runner lists its build's tests with `ctest --show-only=json-v1`, and
+`tools/ci_shard.py split --shards N --index K` writes shard K's names for `ctest --tests-from-file`.
+The split is a pure function of the test list, the cost table and N, so the N runners of a suite
+agree without talking: tests that share a fixture (`FIXTURES_SETUP`, `FIXTURES_REQUIRED`:
+`rd_pixel` with the `rd_replay_tool*` and `rd_vu*_ab_pixel` tests that read its dump,
+`state_recover_files` with its readers, `texpack_disc` with its) form one group, so ctest never
+runs a setup twice; groups go heaviest first to the shard with the least cost so far; a test the
+table does not name (a new one) counts at the table's median. Each runner prints every shard's
+test count and seconds and the tests the table lacked (`tools/ci_shard.py`, header). `--selftest`
+(the `linux` job) checks that every test lands in exactly one shard, a fixture's tests together,
+the same split twice.
+
+The cost table `tools/ci_test_costs.txt` is `<name> <seconds>` per test, from the asan job of CI
+run 41631012198 (2026-11-03: 748 tests, 7.0 hours of test time, 108 minutes at `--parallel 4`).
+AddressSanitizer times are larger than the other builds' but in about the same proportion, which
+is all the split uses. Refresh it when the suite's shape changes (a new slow test, a shard far
+over the others in the printed seconds): `tools/ci_shard.py costs <job logs>... >
+tools/ci_test_costs.txt`, from the logs of a run's shards (every test of the suite appears in one
+of them). The build tree's `Testing/Temporary/CTestCostData.txt` is read too, but its averages
+cover every run since the tree was made, most of them before a test's present cost (on the
+development machine on 2026-11-03 it gave `settings_render` 0.26 s over 215 runs where the last
+run took 57 s, and 18 minutes for a suite that took 2.8 hours), so it is not used for the table.
+
+Expected wall time a runner, from that run's times: a `linux-x64`, window or clang shard about 35
+minutes (about 55 minutes of tests a suite at `--parallel 4`, halved, plus about 5 minutes of
+setup and a ccache build), an `asan` shard about 45 (108 minutes in three), an `fptrap` shard
+about 35 (58 minutes in two); `linux` about 15, then `windows` about 8; `linux-arm64`, unchanged,
+about 50, which is now the run's longest job. A shard much longer than its siblings means the
+table is stale.

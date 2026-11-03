@@ -771,7 +771,7 @@ that is not a DXBC container is a miss, and the compile writes over it
 
 **The DXC check.** `shaders_d3d11_check` (option `ICO_SHADERS_D3D11_CHECK`, on; outside `all`)
 compiles every entry again with DXC, `-HV 2018 -D ICO_D3D11=1` and its own macros, to blobs under
-`<build>/shaders/d3d11_check` that nothing embeds; the CI's linux job builds it. It proves the
+`<build>/shaders/d3d11_check` that nothing embeds; CI's first `linux-x64` test shard builds it. It proves the
 D3D11 preprocessing compiles on the build hosts. Only Windows runs FXC itself, so an FXC-only
 error (shader model 5.0 limits, FXC's own warnings) shows first in a Windows player's log
 (`cmake/IcoShaders.cmake`).
