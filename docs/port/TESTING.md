@@ -180,7 +180,8 @@ game or work on the replay tool's files (`rd_replay_tool*`, `rd_fog_depth_copy_d
 tests with no device (`rd_alpha_plan`, `rd_fx_frame`, `rd_vu_frac`, `rd_fades_fold`, `rd_mip`, `rd_passring`,
 `rd_filter`, `rd_bisect_plan`, `rd_cache_name`, `rd_stream_audit`, `rd_local_probe_rule`, `fog_lut*`, `gsb_cull*`, `texpack*`, `gltf`).
 The two-pass blend copies (`*_nodual`, `ICO_RD_NO_DUAL=1`, the renderer's own switch) are
-twinned. The sources decide what else skips: `ctest -L gl` output lists the skipped ones.
+twinned, and so is `rd_cull_ab` (`rd_cull_ab_gl`: the replay tool takes `ICO_RHI_BACKEND`, so the
+visibility test's byte identity is proven on both backends). The sources decide what else skips: `ctest -L gl` output lists the skipped ones.
 
 The tolerance table is `ICO_RD_GL_TOLERANCE` (entries `<name>_gl|<VARIABLE>=<value>`, added to
 that twin's environment). It may name only a test's own tolerance switch on a filtered or float
