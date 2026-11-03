@@ -245,6 +245,7 @@ static struct {
     /* present calls over 50 ms and the longest (present_blocked) */
     unsigned presentBlocked;
     double presentBlockedMaxMs;
+    PaceGpuGap gpuGap; /* the GPU's time between replays (rd.h RdPerfRecord.gpuGapNs) */
 } s_perf;
 
 /* The display under the vsync lock, for the 10 s display line
@@ -4412,6 +4413,9 @@ static void perf_drain(void)
                 s_perf.gpuPost[p] += r.gpuPostMs[p];
             }
             s_perf.gpuPostPartial += r.gpuPostPartial;
+            if (r.gpuGapValid) {
+                pace_gpu_gap_add(&s_perf.gpuGap, (uint64_t)(r.gpuMs * 1e6), r.gpuGapNs);
+            }
         }
         s_perf.draws += r.draws;
         s_perf.passes += r.renderPasses;
@@ -4577,6 +4581,14 @@ static void perf_log(void)
                 "pre-pass %.2f%s\n",
                 lists, posts, partial, s_perf.gpuPresent / g, s_perf.gpuPrepass / g,
                 window_tiler_words());
+    }
+    if (s_perf.gpuGap.n) {
+        /* whether the spans overlap (the step rule's GPU time a picture
+           over the GPU's own) or the GPU waited between replays */
+        char gap[384];
+
+        pace_gpu_gap_text(&s_perf.gpuGap, gap, sizeof(gap));
+        fprintf(stderr, "window: GPU between replays: %s\n", gap);
     }
     if (s_perf.passAgg.replays) {
         /* the timed replays' most expensive passes, each timed between

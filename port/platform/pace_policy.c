@@ -803,6 +803,43 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs)
     return median(h);
 }
 
+void pace_gpu_gap_add(PaceGpuGap *g, uint64_t spanNs, int64_t gapNs)
+{
+    g->n++;
+    g->spanNs += spanNs;
+    if (gapNs > PACE_GPU_IDLE_NS) {
+        g->idle++;
+        g->idleNs += (uint64_t)gapNs;
+        g->idleMaxNs = (uint64_t)gapNs > g->idleMaxNs ? (uint64_t)gapNs : g->idleMaxNs;
+    } else if (gapNs < 0) {
+        const uint64_t o = (uint64_t)(-gapNs);
+
+        g->overlap++;
+        g->overlapNs += o < spanNs ? o : spanNs;
+    }
+}
+
+int pace_gpu_gap_text(const PaceGpuGap *g, char *out, unsigned len)
+{
+    if (len != 0) {
+        out[0] = '\0';
+    }
+    if (g->n == 0) {
+        return 0;
+    }
+    const double n = (double)g->n;
+
+    return snprintf(out, len,
+                    "%u timed replays after the one before: the GPU idle before %u of them (%.1f "
+                    "ms on average, the longest %.1f ms), %u begun before the one before ended "
+                    "(by %.1f ms on average: their spans count that end too); the GPU's time a "
+                    "replay past the one before's end %.2f ms, its span %.2f ms",
+                    g->n, g->idle, g->idle != 0 ? ns_ms(g->idleNs) / g->idle : 0.0,
+                    ns_ms(g->idleMaxNs), g->overlap,
+                    g->overlap != 0 ? ns_ms(g->overlapNs) / g->overlap : 0.0,
+                    ns_ms(g->spanNs - g->overlapNs) / n, ns_ms(g->spanNs) / n);
+}
+
 /* the present allowance (pace_policy.h PaceBudget) */
 void pace_budget_reset(PaceBudget *b, unsigned max)
 {
