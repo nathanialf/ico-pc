@@ -5121,6 +5121,7 @@ void ico_window_pace(int hz)
         s_pres.stepSumMs += ms;
         s_pres.stepMaxMs = ms > s_pres.stepMaxMs ? ms : s_pres.stepMaxMs;
         s_pres.stepCount++;
+        ico_render_thread_note_game_core(); /* the 10 s line's cores */
         if (s_pres.slowMs > 0.0 && ms > s_pres.slowMs) {
             slow_step(ms);
         }

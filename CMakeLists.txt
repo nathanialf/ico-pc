@@ -215,8 +215,10 @@ target_link_libraries(ico_platform PUBLIC ico_host_fs)
 # ico_thread.c: the port's OS thread, mutex, condition and clock. Its own
 # library because the renderer's texture decode pool (port/render
 # rd_tex_decode.c) uses it and ico_render does not link ico_platform.
+# cpu_place.c beside it: the core a thread runs on, sampled by the submit
+# thread (port/render/rd_submit_thread.c) and the window's threads.
 find_package(Threads REQUIRED)
-add_library(ico_thread STATIC port/platform/ico_thread.c)
+add_library(ico_thread STATIC port/platform/ico_thread.c port/platform/cpu_place.c)
 target_include_directories(ico_thread PUBLIC port/platform PRIVATE "${ICO_COMPAT_DIR}")
 target_compile_options(ico_thread PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_thread PUBLIC Threads::Threads)

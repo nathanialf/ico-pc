@@ -630,6 +630,11 @@ static const struct {
        as before) or sync (on, the game thread waiting for each picture: the
        A/B; port/platform/render_thread.c, frame_mailbox.c fm_mode_choose) */
     {"dev.render_thread", "render_thread"},
+    /* false: on Android the render thread and the submit thread are left
+       where the system places them instead of kept to the faster cores (a
+       diagnostic escape, not a performance switch; port/platform/
+       render_thread.c place_init, cpu_place.h) */
+    {"dev.big_cores", "big_cores"},
     /* "lazy": no start-up set, the pipelines made as the game needs them
        (issues 93 and 107; written by window_host.c after a start that
        ended while preparing them), "careful" the set under the careful

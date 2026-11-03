@@ -71,6 +71,10 @@ typedef struct IcoRtPlan {
     uint64_t cpuNs, interpNs, submitNs;
 } IcoRtPlan;
 
+/* The game thread, once a step: the core it ran on, for the 10 s line's
+   cores (cpu_place.h) */
+void ico_render_thread_note_game_core(void);
+
 bool ico_render_thread_plan(IcoRtPlan *out);
 /* A further present held back by that plan (why: pace_policy.h
    PaceRtHold, not PACE_RT_GO), counted for the 10 s line */

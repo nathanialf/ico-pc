@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "config.h"
+#include "cpu_place.h"
 #include "diag_host.h"
 #include "pace_policy.h"
 #include "rd.h"
@@ -57,6 +58,84 @@ static struct {
     unsigned lateStarts, misses, backoffSteps;
     Uint64 lateStartMaxNs, missMaxNs, stepPlanNs;
 } s_rt;
+
+/* the cores (cpu_place.h): their speeds, read once at the first start, the
+   slowest ones and the faster ones; whether the render and submit threads
+   keep to the faster ones (Android, [dev] big_cores) and why not; the
+   cores the game thread and the render thread ran on (one sample a step,
+   one a picture: atomic bins, no lock), written before the threads start */
+static struct {
+    bool read;
+    CpuClasses classes;
+    uint64_t slowMask, fastMask;
+    bool pin;
+    const char *noPin;
+    CpuPlaceHist game, render;
+} s_place;
+
+/* the cores' speeds and the placement rule, once (the game thread, before
+   the render thread starts) */
+static void place_init(void)
+{
+    char cls[384], allowed[96], pr[64];
+
+    if (s_place.read) {
+        return;
+    }
+    s_place.read = true;
+    (void)cpu_place_classes_read(NULL, &s_place.classes);
+    s_place.slowMask = cpu_place_slow_mask(&s_place.classes);
+    s_place.fastMask = cpu_place_fast_mask(&s_place.classes);
+#if defined(__ANDROID__)
+    if (!ico_config_get_bool("dev.big_cores", 1)) {
+        s_place.noPin = "[dev] big_cores = false";
+    } else if (s_place.fastMask == 0) {
+        s_place.noPin = "the cores are of one speed, or their speeds are not known";
+    } else {
+        s_place.pin = true;
+    }
+#else
+    s_place.noPin = "only on Android";
+#endif
+    (void)cpu_place_classes_text(&s_place.classes, cls, sizeof(cls));
+    (void)cpu_place_mask_text(cpu_place_allowed(), allowed, sizeof(allowed));
+    (void)cpu_place_priority_text(pr, sizeof(pr));
+    /* the game thread's own priority is not changed: said as it is */
+    fprintf(stderr, "window: cores: %s; the game thread %s%s%s, may run on cores %s\n", cls,
+            pr[0] ? "at " : "at its priority as made", pr, pr[0] ? " (not changed)" : "",
+            cpu_place_allowed() != 0 ? allowed : "not known");
+}
+
+/* a thread the pictures wait on (the render thread, the submit thread), at
+   its start: the high priority asked and what the system made of it, and
+   with the rule on the faster cores; one line */
+static void place_thread_begin(const char *who)
+{
+    const bool granted = SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_HIGH);
+    char err[160], pr[64], fast[96], allowed[96], why[128], place[320];
+
+    snprintf(err, sizeof(err), "%s", granted ? "" : SDL_GetError());
+    (void)cpu_place_priority_text(pr, sizeof(pr));
+    (void)cpu_place_mask_text(s_place.fastMask, fast, sizeof(fast));
+    if (s_place.pin) {
+        if (cpu_place_pin(s_place.fastMask, why, sizeof(why))) {
+            snprintf(place, sizeof(place),
+                     "kept to the faster cores %s ([dev] big_cores = false leaves the placement "
+                     "to the system)",
+                     fast);
+        } else {
+            snprintf(place, sizeof(place), "could not be kept to the faster cores %s (%s)", fast,
+                     why);
+        }
+    } else {
+        snprintf(place, sizeof(place), "placed by the system (%s)",
+                 s_place.noPin != NULL ? s_place.noPin : "no rule");
+    }
+    (void)cpu_place_mask_text(cpu_place_allowed(), allowed, sizeof(allowed));
+    fprintf(stderr, "window: %s thread: the high priority %s%s%s%s%s; %s; may run on cores %s\n",
+            who, granted ? "granted" : "refused (", err, granted ? "" : ")", pr[0] ? ", " : "", pr,
+            place, cpu_place_allowed() != 0 ? allowed : "not known");
+}
 
 /* OpenGL's context is current on one thread at a time: the render thread's
    for its jobs; a game-thread RHI call takes it over (the call guard's
@@ -114,11 +193,9 @@ static void gl_release_job(void *u)
 static int SDLCALL rt_main(void *u)
 {
     (void)u;
-    if (!SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_HIGH)) {
-        /* a phone's scheduler may still move it to a little core */
-        fprintf(stderr, "window: render thread: the high priority was refused (%s)\n",
-                SDL_GetError());
-    }
+    /* a phone's scheduler may still move it to a little core: the 10 s
+       line's cores say where it ran */
+    place_thread_begin("render");
     SDL_LockMutex(s_rt.lock);
     for (;;) {
         FmJob job;
@@ -154,6 +231,10 @@ static int SDLCALL rt_main(void *u)
         job.fn(job.arg);
         const Uint64 t1 = SDL_GetTicksNS();
         FmPresent p;
+
+        if (job.kind == FM_JOB_PICTURE) {
+            cpu_place_note(&s_place.render, cpu_place_now()); /* the 10 s line's cores */
+        }
 
         if (job.kind == FM_JOB_PICTURE) {
             /* a picture handed over (rd_thread.h): how long it held the
@@ -373,10 +454,7 @@ static uint64_t rt_host_drain(void *u)
 static void rt_submit_begin(void *u)
 {
     (void)u;
-    if (!SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_HIGH)) {
-        fprintf(stderr, "window: submit thread: the high priority was refused (%s)\n",
-                SDL_GetError());
-    }
+    place_thread_begin("submit"); /* the render thread's next picture waits on it */
 }
 
 /* diag_host.h ico_diag_set_render_heartbeat: no lock (the watchdog's
@@ -406,6 +484,7 @@ FmMode ico_render_thread_start(void)
     if (s_rt.thread != NULL) {
         return s_rt.mode;
     }
+    place_init(); /* before either thread starts: they read the rule */
     mode = fm_mode_choose(ico_config_get_string("dev.render_thread", "auto"),
                           l == NULL || l->singleThreadCommands, true, &why);
     if (mode != FM_MODE_OFF) {
@@ -615,6 +694,11 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
     s_rt.stepPlanNs = planNs;
 }
 
+void ico_render_thread_note_game_core(void)
+{
+    cpu_place_note(&s_place.game, cpu_place_now());
+}
+
 void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pumpMs)
 {
     const unsigned waits = __atomic_exchange_n(&s_rt.slotWaits, 0u, __ATOMIC_RELAXED);
@@ -629,12 +713,20 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
     RdSubmitBlock sb;
     unsigned closes;
     double closeMs, closeMaxMs;
-    char rt[1280], st[384];
+    char rt[1280], st[384], cores[320];
+    CpuPlaceHist gc, rc, sc;
 
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
     s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = 0;
     s_rt.lateStartMaxNs = s_rt.missMaxNs = 0;
 
+    /* the cores each thread ran on most in the block (cpu_place.h), and
+       their share on the slowest cores where the cores differ */
+    cpu_place_take(&s_place.game, &gc);
+    cpu_place_take(&s_place.render, &rc);
+    rd_thread_submit_take_cores(&sc);
+    (void)cpu_place_part(cores, sizeof(cores), &gc, &rc, rd_thread_submit_on() ? &sc : NULL,
+                         s_place.slowMask);
     rd_thread_block_take(&tb);
     rd_thread_submit_block_take(&sb);
     rd_frame_close_take(&closes, &closeMs, &closeMaxMs);
@@ -707,9 +799,9 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
             "window: game thread: step %.1f ms (closing a frame %.1f ms of it, longest %.1f ms, "
             "%u frames), pump %.1f ms, slot waits %u (%.1f ms; %u (%.1f ms) by a new frame's "
             "present, %u (%.1f ms) by a further present's, %u other), read waits %u (%.1f ms, "
-            "longest %.1f ms); %s%s\n",
+            "longest %.1f ms); %s%s; %s\n",
             stepMs, closeMs, closeMaxMs, closes, pumpMs, waits, (double)waitNs / 1e6, tb.freshWaits,
             tb.freshWaitMs, tb.furtherWaits, tb.furtherWaitMs,
             waits > byPresents ? waits - byPresents : 0u, tb.readWaits, tb.readWaitMs,
-            tb.readWaitMaxMs, rt, st);
+            tb.readWaitMaxMs, rt, st, cores);
 }

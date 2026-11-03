@@ -60,6 +60,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "cpu_place.h"
 #include "rd_submit_queue.h"
 #include "rhi.h"
 
@@ -99,6 +100,9 @@ uint64_t rd_thread_submit_take_present_ns(void);
 uint64_t rd_thread_submit_take_job_ns(void);
 /* The 10 s block (the window's line) */
 void rd_thread_submit_block_take(RdSubmitBlock *out);
+/* The cores the submit thread ran its jobs on since the last take (one
+ * sample a job, cpu_place.h), for the 10 s line; empty with no thread */
+void rd_thread_submit_take_cores(CpuPlaceHist *out);
 
 /* The render thread, rd__submit_frame before the reads end: the list kept
  * open for the submit thread (true), else false and the caller ends,

@@ -767,6 +767,10 @@ static void test_dev_env(void)
        (render_thread.c), not exported */
     CHECK(strcmp(ico_config_ini_key("dev.render_thread"), "render_thread") == 0);
     CHECK(ico_dev_env_name("render_thread") == NULL);
+    /* big_cores: Android's render and submit threads kept to the faster
+       cores, read through the store (render_thread.c), not exported */
+    CHECK(strcmp(ico_config_ini_key("dev.big_cores"), "big_cores") == 0);
+    CHECK(ico_dev_env_name("big_cores") == NULL);
     /* disc_reader: the disc's reads on a thread or the game thread, and the
        thread's read-ahead in KB (port/data/cdvd_host.c reader_choose) */
     CHECK(strcmp(ico_dev_env_name("disc_reader"), "ICO_DISC_READER") == 0);

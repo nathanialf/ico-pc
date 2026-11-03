@@ -146,6 +146,16 @@ if(ICO_RUN_TESTS)
     set_tests_properties(diag PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
+# cpu_place: the cores a thread ran on most, the cores' speeds from a fake
+# sysfs under the build folder (Linux and Android only), the 10 s part's
+# words, the masks' text, the calling thread's priority and allowed cores
+add_executable(cpu_place_test test/cpu_place_test.c)
+target_compile_options(cpu_place_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(cpu_place_test PRIVATE ico_thread)
+if(ICO_RUN_TESTS)
+    add_test(NAME cpu_place COMMAND cpu_place_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 # The Android build's file layout (android/android_paths.c), pure C, so it
 # is tested here on the native builds.
 add_executable(android_paths_test test/android_paths_test.c android/android_paths.c)

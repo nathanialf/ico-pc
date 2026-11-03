@@ -23,6 +23,10 @@ static struct {
     uint64_t jobMaxNs;
 } s_st;
 
+/* the cores the jobs ran on (cpu_place.h: atomic bins, no lock; kept
+   across a restart of the thread) */
+static CpuPlaceHist s_cores;
+
 /* the calling thread is the submit thread */
 static _Thread_local bool t_onS;
 /* the render thread's list kept open for it (rd__submit_defer), posted at
@@ -66,6 +70,7 @@ static void stMain(void *u)
         if (rd__sq_next(&s_st.q, &j)) {
             ico_mutex_unlock(s_st.m);
             tail(&j);
+            cpu_place_note(&s_cores, cpu_place_now());
             ico_mutex_lock(s_st.m);
             {
                 const double ms = j.submitMs + j.presentMs;
@@ -292,4 +297,9 @@ void rd__submit_post_pending(void)
     ico_mutex_unlock(s_st.m);
     tail(&t_job); /* the thread ends: here */
     apply(&t_job);
+}
+
+void rd_thread_submit_take_cores(CpuPlaceHist *out)
+{
+    cpu_place_take(&s_cores, out);
 }
