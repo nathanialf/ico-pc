@@ -451,6 +451,9 @@ static void test_first_run(void)
     /* the motion blur's way: Original, written with the file */
     CHECK_STR(ico_config_get_string("video.effect_motion_blur_mode", "?"), "original");
     CHECK(text != NULL && strstr(text, "effect_motion_blur_mode = \"original\"") != NULL);
+    /* Motion blur strength (issue 181): 100, the game's own */
+    CHECK(ico_config_get_int("video.effect_motion_blur_strength", 0) == 100);
+    CHECK(text != NULL && strstr(text, "effect_motion_blur_strength = 100\n") != NULL);
     /* the glow's way between frames: Original, written with the file */
     CHECK_STR(ico_config_get_string("video.effect_glow_mode", "?"), "original");
     CHECK(text != NULL && strstr(text, "effect_glow_mode = \"original\"") != NULL);

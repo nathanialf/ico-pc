@@ -51,7 +51,16 @@
  * 3840 x 2160), made only while Smooth draws; a texture the GPU refuses
  * leaves the run on Original (logged).  The two pipelines are a private
  * cache (RD_BLUR_SMOOTH_PIPES, as the COLCLAMP 0 wrap's), so the
- * rd__get_pipeline set (RD_PIPELINE_REACHABLE_MAX) does not change. */
+ * rd__get_pipeline set (RD_PIPELINE_REACHABLE_MAX) does not change.
+ *
+ * Options > Effects > Motion blur strength (RdSettings.motionBlurStrength,
+ * issue 181) is here too: rd__blur_post_sprite (rd_blur_border.c) draws the
+ * game's sprite with FIX_eff = round(FIX x strength / 100) in the state, in
+ * both ways; Smooth's FIX' above is taken from FIX_eff (the sprite's state
+ * is what rd__blur_smooth_sprite reads).  The trail keeps FIX_eff / 128 of
+ * itself a tick, so at 50 % half the PS2's share: it fades faster, and its
+ * spread and Original's H / 2 stretch are as they were.  At 100 % (and a
+ * zeroed RdSettings) nothing is changed: the recorded FIX, the same bytes. */
 #include <math.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -102,6 +111,68 @@ uint8_t rd__blur_smooth_fix(uint32_t fix, uint32_t presentsPerTick)
         r = (long)fix;
     }
     return (uint8_t)r;
+}
+
+/* Motion blur strength's counts and event line (rd__blur_strength_note) */
+static struct {
+    uint64_t drawn, bDrawn; /* since start, the 10 s block's */
+    uint8_t fix, fixEff;    /* the last sprite's, recorded and drawn */
+    uint8_t evFix;          /* the event line's last FIX, */
+    uint32_t evPct;         /* and its strength */
+    uint32_t events;
+} s_str;
+
+uint32_t rd__blur_strength_pct(void)
+{
+    const uint32_t s = g_rd.settings.motionBlurStrength;
+    return s == 0u || s >= 100u ? 100u : s;
+}
+
+uint8_t rd__blur_strength_fix(uint32_t fix, uint32_t pct)
+{
+    if (fix > 255u) {
+        fix = 255u;
+    }
+    if (pct == 0u || pct >= 100u) {
+        return (uint8_t)fix;
+    }
+    return (uint8_t)((fix * pct + 50u) / 100u); /* round half up, as the docs' round() */
+}
+
+void rd__blur_strength_note(uint32_t frame, uint8_t fix, uint8_t fixEff)
+{
+    const uint32_t pct = rd__blur_strength_pct();
+    s_str.drawn++;
+    s_str.bDrawn++;
+    s_str.fix = fix;
+    s_str.fixEff = fixEff;
+    if (fix == s_str.evFix && pct == s_str.evPct) {
+        return;
+    }
+    s_str.evFix = fix;
+    s_str.evPct = pct;
+    s_str.events++;
+    if (s_str.events <= 8u || s_str.events % 100u == 0u) {
+        rd__log("motion blur: strength %u %%: the game's FIX %u drawn as %u from frame %u (the "
+                "trail keeps %.1f %% of itself a tick where the PS2 keeps %.1f %%%s; change %u)",
+                (unsigned)pct, (unsigned)fix, (unsigned)fixEff, (unsigned)frame,
+                (double)fixEff * 100.0 / 128.0, (double)fix * 100.0 / 128.0,
+                g_rd.settings.motionBlurSmooth ? ", spread over the presents of a tick" : "",
+                (unsigned)s_str.events);
+    }
+}
+
+void rd__blur_strength_counts(uint64_t *drawn, uint8_t *fix, uint8_t *fixEff)
+{
+    if (drawn) {
+        *drawn = s_str.drawn;
+    }
+    if (fix) {
+        *fix = s_str.fix;
+    }
+    if (fixEff) {
+        *fixEff = s_str.fixEff;
+    }
 }
 
 bool rd__blur_smooth_active(void)
@@ -240,6 +311,13 @@ void rd__blur_smooth_block(void)
                 (unsigned long long)s_sm.bRestarts, (unsigned long long)more,
                 (unsigned long long)s_sm.bOriginal);
     }
+    if (s_str.bDrawn) {
+        rd__log("motion blur: strength %u %%: %llu sprites drawn at a lower FIX than the game's "
+                "in this block, FIX %u drawn as %u (the last)",
+                (unsigned)rd__blur_strength_pct(), (unsigned long long)s_str.bDrawn,
+                (unsigned)s_str.fix, (unsigned)s_str.fixEff);
+    }
+    s_str.bDrawn = 0;
     s_sm.bPresents = s_sm.bDrawn = s_sm.bRestarts = s_sm.bOriginal = 0;
     s_sm.bLogged = s_sm.bKMin = s_sm.bKMax = 0;
 }

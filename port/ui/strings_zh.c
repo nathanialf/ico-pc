@@ -765,6 +765,8 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_EFFECT_GLOW_SMOOTH_NOTE] =
         "「原版」讓遊戲本身影格的光暈沿用到其間顯示的影格；「平滑」則為顯示的每一格重新計算，能跟上快速的鏡頭轉動，但會多佔用顯示卡的時間。",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] = "僅在影格率高於「原版」且光暈開啟時有作用。",
+    [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "動態模糊強度",
+    [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] = "調小後殘影消失得更快；100 為 PS2 原本的殘影。",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

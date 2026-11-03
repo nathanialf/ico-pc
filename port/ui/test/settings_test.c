@@ -43,15 +43,22 @@ static void testBuild(void)
     static const int apiStrs[] = {UI_STR_OPT_GRAPHICS_API, UI_STR_OPT_GRAPHICS_ADAPTER,
                                   UI_STR_GRAPHICS_APPLY,   UI_STR_GRAPHICS_KEEP,
                                   UI_STR_GRAPHICS_REVERT,  UI_STR_BACK};
-    static const int fxOpts[] = {
-        UI_OPT_EFFECT_GLOW,      UI_OPT_EFFECT_GLOW_SMOOTH,    UI_OPT_EFFECT_DEPTH_OF_FIELD,
-        UI_OPT_EFFECT_SOFTENING, UI_OPT_EFFECT_MOTION_BLUR,    UI_OPT_EFFECT_FOG,
-        UI_OPT_EFFECT_WATER,     UI_OPT_EFFECT_CINEMATIC_BARS, UI_OPT_BACK};
+    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,
+                                 UI_OPT_EFFECT_GLOW_SMOOTH,
+                                 UI_OPT_EFFECT_DEPTH_OF_FIELD,
+                                 UI_OPT_EFFECT_SOFTENING,
+                                 UI_OPT_EFFECT_MOTION_BLUR,
+                                 UI_OPT_EFFECT_MOTION_BLUR_STRENGTH,
+                                 UI_OPT_EFFECT_FOG,
+                                 UI_OPT_EFFECT_WATER,
+                                 UI_OPT_EFFECT_CINEMATIC_BARS,
+                                 UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,
                                  UI_STR_OPT_EFFECT_GLOW_SMOOTH,
                                  UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
+                                 UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH,
                                  UI_STR_OPT_EFFECT_FOG,
                                  UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
@@ -143,7 +150,7 @@ static void testBuild(void)
     ui_settings_install();
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
     CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 6), "Graphics page rows");
-    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 9), "effects rows");
+    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 10), "effects rows");
     CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 11), "picture rows");
     CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 4), "developer rows");
     {
@@ -3548,6 +3555,110 @@ static void testGlowSmooth(void)
     useConfig("version = 1\n");
 }
 
+/* the label of the Effects page's row for opt, -1 */
+static int effectsRow(int opt)
+{
+    int labels[24], opts[24];
+    const int n = ui_settings_page_rows(UI_PAGE_EFFECTS, labels, opts, NULL, 24);
+    for (int i = 0; i < n; i++) {
+        if (opts[i] == opt) {
+            return labels[i];
+        }
+    }
+    return -1;
+}
+
+/* the [video] effect_motion_blur_strength the file holds after a save, -1 */
+static long long savedStrength(void)
+{
+    char p[1100];
+    CHECK(ui_settings_save() == 0, "motion blur strength: save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    const long long v = t ? ico_toml_get_int(t, "video.effect_motion_blur_strength", -1) : -1;
+    ico_toml_free(t);
+    return v;
+}
+
+/* Effects > Motion blur strength (issue 181): right under Motion blur,
+   100 % by default (the PS2's), 10 % to 100 % in tens held at both ends,
+   each step the getter at once and the file's [video]
+   effect_motion_blur_strength when saved; the row hidden (masked, the
+   cursor's links past it) while Motion blur is Off and shown again with
+   Original or Smooth, its value kept; its note on the page */
+static void testMotionBlurStrength(void)
+{
+    IcoVideoOptions o;
+    useConfig("version = 1\n");
+    const int fxL = openPage(enterMain(0), 1, UI_PAGE_EFFECTS);
+    CHECK(fxL == ui_settings_page_layout(UI_PAGE_EFFECTS), "strength: the Effects page");
+    const int row = effectsRow(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH);
+    const int blurRow = effectsRow(UI_OPT_EFFECT_MOTION_BLUR);
+    CHECK(row >= 0 && blurRow >= 0, "strength: the row (%d) and Motion blur's (%d)", row, blurRow);
+    CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Motion blur strength") == 0,
+          "strength: the label \"%s\"", row >= 0 ? lt_ext_row_text(row) : "");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH), "100 %") == 0 &&
+              ico_video_effect_motion_blur_strength() == 100,
+          "strength: 100 %% by default (%s)",
+          ui_settings_value_text(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH));
+    CHECK(ui_settings_opt_shown(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH) &&
+              (row < 0 || ui_settings_row_shown(row)),
+          "strength: shown with Motion blur Original");
+    CHECK(noteStarting(UI_PAGE_EFFECTS, "Lower values make the trail fade faster") >= 0,
+          "strength: the note");
+    checkPageFits(UI_PAGE_EFFECTS, "Effects with Motion blur strength (pause)");
+    CHECK(savedStrength() == 100, "strength: the file has 100");
+
+    /* Right at 100 % stays; Left down to 10 % in tens, held there */
+    ui_settings_step(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH, 1);
+    CHECK(ico_video_effect_motion_blur_strength() == 100, "strength: held at 100 %%");
+    for (int want = 90; want >= 0; want -= 10) {
+        ui_settings_step(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH, -1);
+        const int w = want < 10 ? 10 : want;
+        char text[16];
+        snprintf(text, sizeof(text), "%d %%", w);
+        CHECK(ico_video_effect_motion_blur_strength() == w &&
+                  strcmp(ui_settings_value_text(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH), text) == 0,
+              "strength: Left to %s (%d, \"%s\")", text, ico_video_effect_motion_blur_strength(),
+              ui_settings_value_text(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH));
+    }
+    CHECK(savedStrength() == 10, "strength: the file has 10");
+    for (int k = 0; k < 4; k++) {
+        ui_settings_step(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH, 1);
+    }
+    CHECK(ico_video_effect_motion_blur_strength() == 50 && savedStrength() == 50,
+          "strength: Right four times to 50 %%, saved as 50");
+    ico_video_get(&o);
+    CHECK(o.effectMotionBlur == 1 && o.effectMotionBlurSmooth == 0 && o.effectFog == 1,
+          "strength: Motion blur and Fog untouched");
+
+    /* Motion blur Off: the row goes (masked, not the cursor's), the value
+       kept; Smooth (Left from Off): the row again at 50 % */
+    lt_ext_layout(fxL)->curItem = blurRow;
+    ui_settings_step(UI_OPT_EFFECT_MOTION_BLUR, -1); /* Original -> Off */
+    frame(0);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_MOTION_BLUR), "Off") == 0 &&
+              !ui_settings_opt_shown(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH) &&
+              (row < 0 || (!ui_settings_row_shown(row) && lt_ext_prop(row)->defaultMask)),
+          "strength: hidden with Motion blur Off");
+    CHECK(blurRow < 0 || row < 0 || lt_ext_prop(blurRow)->downItem != row,
+          "strength: Down from Motion blur skips the hidden row");
+    checkPageFits(UI_PAGE_EFFECTS, "Effects with Motion blur Off (pause)");
+    CHECK(savedStrength() == 50, "strength: kept in the file with Motion blur Off");
+    ui_settings_step(UI_OPT_EFFECT_MOTION_BLUR, -1); /* Off -> Smooth (around) */
+    frame(0);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_MOTION_BLUR), "Smooth") == 0 &&
+              ui_settings_opt_shown(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH) &&
+              (row < 0 || ui_settings_row_shown(row)) &&
+              ico_video_effect_motion_blur_strength() == 50,
+          "strength: shown again with Smooth, at 50 %% (%s)",
+          ui_settings_value_text(UI_OPT_EFFECT_MOTION_BLUR_STRENGTH));
+    checkPageFits(UI_PAGE_EFFECTS, "Effects with Motion blur Smooth (pause)");
+    press(0x10);
+    useConfig("version = 1\n");
+    CHECK(ico_video_effect_motion_blur_strength() == 100, "strength: a file without the key: 100");
+}
+
 /* Options > Effects.  The link sits under Display on the main page,
    the six rows read On by default, a step flips one and ui_settings_save
    writes [video] effect_*; the Main page fits in all four entries */
@@ -3634,6 +3745,7 @@ static void testEffects(void)
         }
         ico_toml_free(t);
     }
+    testMotionBlurStrength();
     /* the note under the row, and the page with it from both menus */
     {
         int fl = openPage(enterMain(1), 1, UI_PAGE_EFFECTS);

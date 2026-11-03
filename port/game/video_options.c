@@ -87,6 +87,7 @@ void ico_video_defaults_for(IcoVideoOptions *o, int android)
     o->effectSoftening = 1;
     o->effectMotionBlur = 1;
     o->effectMotionBlurSmooth = 0;
+    o->effectMotionBlurStrength = ICO_MOTION_BLUR_STRENGTH_MAX;
     o->effectGlowSmooth = 0;
     o->effectFog = 1;
     o->effectCinematicBars = 1;
@@ -459,6 +460,7 @@ static void sanitize(IcoVideoOptions *o)
     o->effectSoftening = !!o->effectSoftening;
     o->effectMotionBlur = !!o->effectMotionBlur;
     o->effectMotionBlurSmooth = !!o->effectMotionBlurSmooth;
+    o->effectMotionBlurStrength = ico_video_motion_blur_strength_clamp(o->effectMotionBlurStrength);
     o->effectGlowSmooth = !!o->effectGlowSmooth;
     o->effectFog = !!o->effectFog;
     o->effectCinematicBars = !!o->effectCinematicBars;
@@ -577,6 +579,19 @@ static void read_config(void)
             &o.effectMotionBlurSmooth) != 0) {
         o.effectMotionBlurSmooth = 0;
         fprintf(stderr, "video: effect_motion_blur_mode not understood; \"original\" used\n");
+    }
+    {
+        /* no key (a file from before the row): 100, the game's own */
+        const long long v =
+            ico_config_get_int("video.effect_motion_blur_strength", ICO_MOTION_BLUR_STRENGTH_MAX);
+        o.effectMotionBlurStrength = ico_video_motion_blur_strength_clamp(v < -1000  ? -1000
+                                                                          : v > 1000 ? 1000
+                                                                                     : (int)v);
+        if ((long long)o.effectMotionBlurStrength != v) {
+            fprintf(stderr,
+                    "video: effect_motion_blur_strength %lld is not 10..100 in tens; %d used\n", v,
+                    o.effectMotionBlurStrength);
+        }
     }
     o.effectFog = ico_config_get_bool("video.effect_fog", 1);
     o.effectCinematicBars = ico_config_get_bool("video.effect_cinematic_bars", 1);
@@ -729,6 +744,7 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.effect_motion_blur", o.effectMotionBlur);
     r |= ico_config_set_string("video.effect_motion_blur_mode",
                                o.effectMotionBlurSmooth ? "smooth" : "original");
+    r |= ico_config_set_int("video.effect_motion_blur_strength", o.effectMotionBlurStrength);
     r |=
         ico_config_set_string("video.effect_glow_mode", o.effectGlowSmooth ? "smooth" : "original");
     r |= ico_config_set_bool("video.effect_fog", o.effectFog);
@@ -837,6 +853,26 @@ int ico_video_effect_motion_blur_smooth(void)
         read_config();
     }
     return s_opt.effectMotionBlur && s_opt.effectMotionBlurSmooth;
+}
+
+int ico_video_effect_motion_blur_strength(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.effectMotionBlurStrength;
+}
+
+int ico_video_motion_blur_strength_clamp(int v)
+{
+    if (v <= ICO_MOTION_BLUR_STRENGTH_MIN) {
+        return ICO_MOTION_BLUR_STRENGTH_MIN;
+    }
+    if (v >= ICO_MOTION_BLUR_STRENGTH_MAX) {
+        return ICO_MOTION_BLUR_STRENGTH_MAX;
+    }
+    return (v + ICO_MOTION_BLUR_STRENGTH_STEP / 2) / ICO_MOTION_BLUR_STRENGTH_STEP *
+           ICO_MOTION_BLUR_STRENGTH_STEP;
 }
 
 int ico_video_effect_glow_smooth(void)
@@ -1046,6 +1082,9 @@ int ico_video_changes_text(const IcoVideoOptions *was, const IcoVideoOptions *no
                   o->dumpModels ? "on" : "off");
     changes_field(out, size, "motion blur", ico_video_motion_blur_name(p),
                   ico_video_motion_blur_name(o));
+    snprintf(a, sizeof(a), "%d %%", p->effectMotionBlurStrength);
+    snprintf(b, sizeof(b), "%d %%", o->effectMotionBlurStrength);
+    changes_field(out, size, "motion blur strength", a, b);
     changes_field(out, size, "glow", ico_video_glow_name(p), ico_video_glow_name(o));
     return (int)strlen(out);
 }

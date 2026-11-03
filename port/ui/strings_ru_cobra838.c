@@ -776,6 +776,8 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
         "«Оригинал» сохраняет свечение, создаваемое игрой. «Плавно» пересчитывает его для каждого кадра, повышая нагрузку на GPU.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Работает только при частоте кадров выше «Оригинальной» и включенном свечении.",
+    [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = NULL,  /* newer than the translation: English */
+    [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] = NULL, /* newer than the translation: English */
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

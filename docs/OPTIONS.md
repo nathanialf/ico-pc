@@ -234,8 +234,8 @@ The game's own effects are each On or Off (Motion blur is Off, Original
 or Smooth, Water reflections is Original or Sharp, and Glow between frames
 is Original or Smooth). All On, with Motion blur, Water reflections and
 Glow between frames at Original, is the picture the PS2 gives you, and that
-is how the game starts. The Preset does not change these rows, except Glow
-between frames.
+is how the game starts, with Motion blur strength at 100 %. The Preset does
+not change these rows, except Glow between frames.
 
 - **Glow:** the soft glow around bright light, and the flare of the sun.
   It is drawn at the PlayStation 2's size at every Resolution and spread
@@ -260,6 +260,12 @@ between frames.
   Original's. Smooth costs a little more of the graphics card's time and
   memory, which you may notice on a phone. At Frame rate Original the two
   look nearly the same. Original is how the game starts.
+- **Motion blur strength:** shown while Motion blur is Original or Smooth,
+  from 10 % to 100 % in steps of 10. Lower values make the trail fade
+  faster, so a moving camera leaves a shorter, fainter trail; 100 % is the
+  PS2's own trail, and how the game starts. It changes only how long the
+  trail lasts, not how far it spreads, and works the same with Original and
+  Smooth.
 - **Fog:** the haze that hides the distance.
 - **Water reflections:** Original or Sharp. Original is the PS2's
   reflection in puddles, pools and the water at the mill, which looks soft
@@ -871,6 +877,7 @@ Under `[video]`:
 | `effect_glow = true` and the five other `effect_` lines | The six switches of the Effects page. |
 | `effect_glow_mode = "original"` | How the glow is made for the frames shown between the game's own: `"original"` or `"smooth"`. It only matters above Frame rate Original, with `effect_glow = true`. The Enhanced Preset writes `"smooth"`. A file without this line gets `"smooth"` when its Display rows are the Enhanced Preset's, and `"original"` otherwise. |
 | `effect_motion_blur_mode = "original"` | How Motion blur moves while it is on: `"original"` or `"smooth"`. `effect_motion_blur = false` is Off whatever this says. |
+| `effect_motion_blur_strength = 100` | The Motion blur strength row: `10` to `100` in steps of 10. Lower values make the trail fade faster; `100` is the PS2's. A number between the steps is rounded to the nearest step. |
 | `effect_water_sharp = false` | Water reflections on the Effects page: `false` is Original, `true` is Sharp. |
 | `crt = false`, `crt_mode = "consumer"`, `crt_strength = 1.0` | The CRT filter and CRT strength rows. `crt_mode` is `"scanlines"`, `"consumer"`, `"trinitron"`, `"pvm"` or `"shadow"`. `crt_strength` goes from `0.0` to `1.0`. |
 | `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom` | Fine tuning of the CRT filter, each from `0.0` to `1.0`: how strong the dark lines are, how strong the fine pattern of dots or stripes is, how much glow surrounds bright spots and how much bright areas spread softly. A line that is missing, or a negative number, keeps the chosen style's own value. |

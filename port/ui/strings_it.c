@@ -792,6 +792,9 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
         "Originale mantiene il bagliore del fotogramma del gioco tra i fotogrammi. Fluido lo rifà per ogni fotogramma mostrato; costa più tempo grafico.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "Conta solo sopra la frequenza fotogrammi Originale, con il bagliore attivo.",
+    [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "Intensità della sfocatura",
+    [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
+        "Valori più bassi fanno svanire la scia più in fretta; 100 è quella della PS2.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

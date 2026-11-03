@@ -789,6 +789,9 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "‘오리지널’은 게임 본래 프레임의 빛 번짐을 그 사이에도 그대로 씁니다. ‘부드럽게’는 표시되는 프레임마다 다시 만들어 부담이 늘어납니다.",
     [UI_STR_EFFECT_GLOW_SMOOTH_LOCKED] =
         "프레임 레이트가 ‘오리지널’보다 높고 빛 번짐이 켜져 있을 때만 적용됩니다.",
+    [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "모션 블러 강도",
+    [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
+        "값을 줄이면 블러가 더 빠르게 사라집니다. 100은 PS2 그대로입니다.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

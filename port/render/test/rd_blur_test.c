@@ -134,6 +134,10 @@
  *      its ghost after a tick within 2 of Original's, the restart after a
  *      tick without the motion blur holding no ghost; then (s2) at Enhanced
  *      2x with the full-height scene the accumulator at SCENE's size.
+ *   t  Motion blur strength (rd_blur_strength_test.inc says what): FIX_eff
+ *      = round(FIX x strength / 100) on the CPU; on the device (s b)'s bar
+ *      under Original and Smooth, 100 % the game's own bytes, 50 % of FIX
+ *      32 the bytes of FIX 16, the ghost after a tick the GS formula's.
  *   z  the aura's read of SCENE into FEED128 in two passes (rd_aura_box.c;
  *      rd_blur_aura_box_test.inc says what): x's frames at Enhanced 2x, the
  *      phone's 2364 x 1080 and 1.5x, with the two-pass form off and on:
@@ -3235,6 +3239,7 @@ static void checkMotionBlurPresentsScaled(void)
 }
 
 #include "rd_blur_smooth_test.inc"
+#include "rd_blur_strength_test.inc"
 
 /* ================== (w) the aura's feedback chain on a wide frame
  *
@@ -4017,6 +4022,7 @@ static const IcoShardCase k_cases[] = {
     {"motion_blur_presents", 40},
     {"fix128_skip", 1},
     {"motion_blur_smooth", 6},
+    {"motion_blur_strength", 4},
     {"uint_view", 2},
     {"blur_fold", 2},
     {"fx_plan", 8},
@@ -4095,6 +4101,7 @@ int main(int argc, char **argv)
     checkRecordingMotionBlurOff();
     checkRecordingWide();
     checkBorderStrips();
+    checkStrengthFix(); /* Motion blur strength's FIX (rd_blur_strength_test.inc) */
     rd_shutdown();
     printf("  (r) recording checks: %s\n", failures ? "FAILED" : "ok");
     if (failures) {
@@ -4144,6 +4151,9 @@ int main(int argc, char **argv)
     }
     if (ico_shard_take("motion_blur_smooth")) {
         checkMotionBlurSmooth(); /* Motion blur: Smooth (rd_blur_smooth_test.inc) */
+    }
+    if (ico_shard_take("motion_blur_strength")) {
+        checkMotionBlurStrength(); /* Motion blur strength (rd_blur_strength_test.inc) */
     }
 
     /* the pipelines the cases above created (this shard's) are all in the
