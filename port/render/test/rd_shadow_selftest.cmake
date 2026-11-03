@@ -6,10 +6,15 @@
 # line matches PATH and RESULTS, and there is at least one.
 # -DTOOL=<rd_fog_selftest_test> -DPATH=<one draw|seven draws>
 # -DRESULTS=<regex of the self-test's result>
+# -DARGS=<w|h|scale|aa|0|0|0|0|aspect> (optional: the tool's arguments after the
+#   path, "|" separated; the 624-wide 16:10 frame, exact 614.40, and 2048 at 48:9)
 # -DEXTRA=, -DEXTRA2=<regex> (optional: each must match the log at least once;
 #   rd_shadow_selftest_sabotage's switch line and "profile: shadow count one
 #   draw off (self-test)")
-execute_process(COMMAND "${TOOL}" inplace RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+if(ARGS)
+  string(REPLACE "|" ";" ARGS "${ARGS}")
+endif()
+execute_process(COMMAND "${TOOL}" inplace ${ARGS} RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
 message(STATUS "${out}")
 if(rc EQUAL 77)
   # ctest's SKIP_REGULAR_EXPRESSION maps this to Not Run

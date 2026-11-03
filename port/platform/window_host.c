@@ -29,6 +29,7 @@
 #include "options.h"
 #include "pace_policy.h"
 #include "perf_block.h"
+#include "present_hist.h"
 #include "photo_mode.h"
 #include "photo_ui.h"
 #include "pointer.h"
@@ -55,6 +56,7 @@
 #include "window_host.h"
 #include "window_lines.h"
 #include "window_pipeline_skip.h"
+#include "window_display_rate.h"
 #include "window_pipe_finish.h"
 #include "window_present.h"
 #include "render_thread.h"
@@ -231,6 +233,12 @@ static struct {
     /* the sprites drawn in a cleared source's colour and the target reads
        kept (rd.h RdPerfRecord.constReads, constKept) */
     uint64_t constReads, constKept, fadesFolded;
+    /* the glow's mask folded into its reduction: the replays that folded it
+       and the glow replays that drew it into WORK2, with the last one's
+       reason (rd.h RdPerfRecord.glowFolded, glowKept, glowWhy;
+       rd_glow_fold.c) */
+    uint64_t glowFolded, glowKept;
+    uint32_t glowWhy;
     /* the passes with a render area, their tiles, their targets' tiles and
        those ended early (rd.h RdPerfRecord.passAreas ..., rd_pass_area.c) */
     uint64_t passAreas, passAreaTiles, passAreaTargetTiles, passAreaEnds;
@@ -245,7 +253,8 @@ static struct {
     /* present calls over 50 ms and the longest (present_blocked) */
     unsigned presentBlocked;
     double presentBlockedMaxMs;
-    PaceGpuGap gpuGap; /* the GPU's time between replays (rd.h RdPerfRecord.gpuGapNs) */
+    PresentHist presentHist; /* every presented replay's present call (present_hist.h) */
+    PaceGpuGap gpuGap;       /* the GPU's time between replays (rd.h RdPerfRecord.gpuGapNs) */
 } s_perf;
 
 /* The display under the vsync lock, for the 10 s display line
@@ -369,6 +378,7 @@ static void video_settings(RdSettings *rs, int w, int h)
         window_timer_budget_reset();
     }
     s_pres.framerate = ico_video_framerate();
+    window_frame_rate_pin(s_window, s_pres.framerate); /* Android: the cap as a fixed rate */
     rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
     /* presenting between ticks with vsync on, the swapchain prefers the
        mailbox mode: no tearing, and a present never waits for the display,
@@ -1715,6 +1725,7 @@ static void window_attach(int mode)
     }
     /* the window system's answer before the size is read */
     SDL_SyncWindow(s_window);
+    window_display_rate_start(s_window); /* the refresh rate in the log (issue 123) */
     s_fullscreen = window_fullscreen();
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
     if (mode == ICO_WINDOW_BORDERLESS) {
@@ -1841,7 +1852,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        start lazy (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY). The device table's careful rule
        (RhiLimits.carefulPipelines) is read after rd_init. */
     const char *pipeSetting = getenv("ICO_PIPELINE_SET");
-    const int pipePolicy =
+    int pipePolicy =
         ico_diag_startup_pipeline_set(retry != STARTUP_RETRY_NONE, lazyStart, pipeSetting, cfgName);
 #ifdef __ANDROID__
     /* issue 158: below Android 9 there is no driver package to fall back
@@ -2129,6 +2140,9 @@ open_window:
        StartupRetryRun.robustOffDefault; Direct3D 12: NULL, its own rules) */
     ico_diag_set_robust_off_default(rhi_limits() != NULL && rhi_limits()->robustDefaultOff);
     window_pipe_floor_driver(); /* the free-memory floor's rule (memory_floor.h) */
+    /* issue 123: after a stop at the floor on Qualcomm's own driver, the set again
+       when the cache file holds this shader set (window_pipe_finish.h) */
+    pipePolicy = window_pipe_floor_retry(pipePolicy);
     {
         /* the watchdog's GPU hang counts as a device loss where the
            backend tracks its submissions (rhi_gpu_progress), said once */
@@ -2767,6 +2781,11 @@ static void window_gpu_hang(void)
 
     fprintf(stderr, "window: the graphics driver stopped responding (a GPU hang); what was being "
                     "drawn follows, as for a device loss\n");
+#ifdef __ANDROID__
+    /* within 30 s of the first present under a driver package: counted
+       against the package like a crash in it (a file write, no device call) */
+    ico_gpu_driver_android_device_lost();
+#endif
     rd_index_span_text(span, sizeof(span));
     fprintf(stderr, "window: at the hang: %s\n", span);
     rd_passring_print(stderr, rd_perf_post_name);
@@ -2801,6 +2820,9 @@ static int device_lost_quit(void)
     if (!s_shown) {
         s_shown = 1;
         fprintf(stderr, "window: the graphics device was lost; quitting\n");
+#ifdef __ANDROID__
+        ico_gpu_driver_android_device_lost(); /* a package's first 30 s count as a crash in it */
+#endif
         {
             /* issue 95: Mali's loss came from index spans past 2^24 - 1 */
             char span[256];
@@ -4360,6 +4382,9 @@ static void perf_drain(void)
                median of the last 8 (not the replays line's block mean) */
             s_pres.gpuNs = pace_hist_add(&s_pres.gpuHist, (Uint64)(r.gpuMs * 1e6));
         }
+        if (r.presented) {
+            present_hist_add(&s_perf.presentHist, r.presentMs);
+        }
         if (r.presented && r.presentMs > 50.0) {
             present_blocked(&r);
         }
@@ -4459,6 +4484,11 @@ static void perf_drain(void)
         s_perf.constReads += r.constReads;
         s_perf.constKept += r.constKept;
         s_perf.fadesFolded += r.fadesFolded;
+        s_perf.glowFolded += r.glowFolded;
+        s_perf.glowKept += r.glowKept;
+        if (r.glowKept) {
+            s_perf.glowWhy = r.glowWhy;
+        }
         s_perf.passAreas += r.passAreas;
         s_perf.passAreaTiles += r.passAreaTiles;
         s_perf.passAreaTargetTiles += r.passAreaTargetTiles;
@@ -4559,6 +4589,15 @@ static void perf_log(void)
                 "framerate %s)%s\n",
                 s_perf.presentBlocked, s_perf.presentBlockedMaxMs, rhi_present_mode_name(),
                 ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), window_fifo_block());
+    }
+    {
+        /* issue 123: the present call's sizes, and the screen's refresh rate */
+        char hist[200];
+
+        if (present_hist_text(&s_perf.presentHist, hist, sizeof(hist)) > 0) {
+            fprintf(stderr, "window: %s\n", hist);
+        }
+        window_display_rate_line(s_window);
     }
     if (s_perf.gpuN) {
         /* the GPU time per replay by list and by picture effect (each
@@ -4669,6 +4708,16 @@ static void perf_log(void)
             s_perf.fxAdditive / n, s_perf.fxLocal / n, s_perf.fxLocalDate / n,
             s_perf.vuNoPlanes / n, s_perf.constReads / n, s_perf.constKept / n,
             s_perf.fadesFolded / n);
+    if (s_perf.glowFolded || s_perf.glowKept) {
+        /* the glow's mask computed in its reduction (one full-frame pass
+           fewer each) or drawn into WORK2, and why the last kept one was
+           (rd_glow_fold.c: the sun's fans or the lamps into WORK2, ...) */
+        fprintf(stderr, "window: glow: WORK2 fold: %llu folded, %llu kept%s%s%s\n",
+                (unsigned long long)s_perf.glowFolded, (unsigned long long)s_perf.glowKept,
+                s_perf.glowKept ? " (" : "",
+                s_perf.glowKept ? rd_glow_fold_why_text(s_perf.glowWhy) : "",
+                s_perf.glowKept ? ")" : "");
+    }
     window_pipeline_skip_line();
     if (s_perf.msaaSamples) {
         /* the anti-aliasing's cost: its resolves' GPU time is the effects'
@@ -5194,6 +5243,7 @@ void ico_window_close(void)
     }
     s_open = 0;
     ico_render_thread_stop(); /* every picture handed over finished, the thread ended */
+    window_display_rate_stop(s_window);
     /* a clean exit: a lazy run keeps the start-up activity file, so the
        next start of this version is lazy too; any other deletes it
        (diag_host.h) */

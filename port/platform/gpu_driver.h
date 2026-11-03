@@ -128,6 +128,69 @@ int ico_gpu_driver_list_zips(const char *dir, char (*names)[160], int max);
    something could not be deleted). */
 int ico_gpu_driver_remove(const char *root, const char *folder);
 
+/* Install-time check of a library's ELF program headers against the
+   phone's memory page size (Android 15 on a phone with 16 KB pages loads a
+   library only when its PT_LOAD segments are aligned to the page: a driver
+   built with 4 KB alignment does not load there).  bytes is the start of
+   the file (its first n bytes, 64 KB is plenty: the program header table
+   sits right after the ELF header).  0 only when the file is a
+   little-endian ELF whose program header table lies in the n bytes and has a
+   PT_LOAD with p_align under pageSize, and pageSize is 16384 or more; 1 in
+   every other case (a 4 KB page size, a file that is not ELF, a table past
+   the n bytes: nothing is refused on what cannot be read).  *minAlign (may
+   be NULL) gets the smallest PT_LOAD p_align read, 0 when none was. */
+#define ICO_GPU_DRIVER_PAGES_MESSAGE                                                               \
+    "this driver package is not built for this phone's 16 KB memory pages"
+int ico_gpu_driver_elf_pages_ok(const void *bytes, size_t n, unsigned pageSize,
+                                unsigned long long *minAlign);
+/* The same for the file at path (its first 64 KB read); 1 when it cannot be
+   read. */
+int ico_gpu_driver_file_pages_ok(const char *path, unsigned pageSize);
+/* ico_gpu_driver_install_zip_max with the page size of the phone checked
+   (pageSize 0 or under 16384: not checked): every file of the package that
+   ends in ".so" must pass ico_gpu_driver_elf_pages_ok, else the install is
+   ICO_GPU_DRIVER_BAD with ICO_GPU_DRIVER_PAGES_MESSAGE in why and nothing
+   left under root. */
+int ico_gpu_driver_install_zip_pages(const char *root, const char *zipPath, int apiLevel,
+                                     unsigned pageSize, char *folder, size_t folderN, char *why,
+                                     size_t whyN);
+int ico_gpu_driver_install_zip_pages_max(const char *root, const char *zipPath, int apiLevel,
+                                         unsigned pageSize, uint64_t entryMax, char *folder,
+                                         size_t folderN, char *why, size_t whyN);
+
+/* What a driver said of itself the last time it ran, kept so the Graphics
+   driver page can show it without loading the driver: written at a start
+   that made a device (name, version, Mesa version, Vulkan version, driver
+   id from RhiLimits), as <root>/<folder>/last_seen.json for a package and
+   <root>/last_seen_system.json for the phone's own driver (folder NULL). */
+typedef struct IcoGpuDriverSeen {
+    int known;        /* 1 once read or filled */
+    char name[96];    /* driverName: "turnip Mesa driver" */
+    char version[48]; /* the number as its vendor writes it: "512.676.1" */
+    char mesa[40];    /* "Mesa 25.3.0-devel" of a Mesa driver, "" otherwise */
+    int driverId;     /* VkDriverId, 0 unknown */
+    int vulkanMajor, vulkanMinor;
+} IcoGpuDriverSeen;
+
+/* 0, or -1 (a bad folder name, the file cannot be written) */
+int ico_gpu_driver_seen_write(const char *root, const char *folder, const IcoGpuDriverSeen *s);
+/* 1 with *out filled, or 0 with *out zeroed (no file, not JSON, no name) */
+int ico_gpu_driver_seen_read(const char *root, const char *folder, IcoGpuDriverSeen *out);
+/* The page's words: "Qualcomm's driver 512.676.1, Vulkan 1.3", "Turnip,
+   Mesa 25.3.0, Vulkan 1.4", or, for any other driver, its name, its Mesa
+   version or version, "Vulkan 1.3" and "driver ID n"; "" when not known.
+   (English: the driver's names are.) */
+void ico_gpu_driver_seen_text(const IcoGpuDriverSeen *s, char *out, size_t n);
+
+/* A device loss within this many milliseconds of the first present under a
+   package counts like a crash inside the driver (the trial marker is written
+   again so the next start falls back to the phone's own driver). */
+#define ICO_GPU_DRIVER_LOSS_WINDOW_MS 30000ull
+/* 1 when a loss sinceFirstPresentMs after the first present (and a package
+   was loaded, hadPackage) is such a loss; a loss before any present is
+   asked with 0. */
+int ico_gpu_driver_loss_counts(int hadPackage, unsigned long long sinceFirstPresentMs);
+
 /* The trial marker <root>/starting.  _begin writes folder into it (0, or
    -1); _ok deletes it; _marker reads it into out (1 when there is one, 0
    with out emptied when not); _crashed is 1 when the marker names folder:

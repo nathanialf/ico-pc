@@ -1048,10 +1048,27 @@ static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDevicePropertie
             snprintf(g_vkr.compilerVersion, sizeof g_vkr.compilerVersion, "%.*s", (int)n, c);
         }
     }
-    snprintf(s_driverText, sizeof s_driverText, "; device %04x:%04x; driver %s%s%s, version %s",
+    /* one line in the log (issue 123: Qualcomm's text has newlines); the
+     * compiler line above was cut at the line's end first */
+    rhi_text_one_line(dp.driverName);
+    rhi_text_one_line(dp.driverInfo);
+    snprintf(g_vkr.driverName, sizeof g_vkr.driverName, "%s", dp.driverName);
+    /* a Mesa driver writes its Mesa version into driverInfo ("Mesa 25.3.0-devel
+     * (git-bbdd688)"); a build from Mesa's main branch carries "-devel" */
+    rhi_mesa_version_parse(dp.driverName, dp.driverInfo, &g_vkr.mesa);
+    char mesaText[40] = "";
+    if (g_vkr.mesa.known) {
+        /* the summary line and the device line name the Mesa version apart
+         * from the driver's own text: a build's driverInfo may carry only a
+         * commit, and the version is what a report is compared by */
+        char m[32];
+        snprintf(mesaText, sizeof mesaText, ", %s",
+                 rhi_mesa_version_text(&g_vkr.mesa, m, sizeof m));
+    }
+    snprintf(s_driverText, sizeof s_driverText, "; device %04x:%04x; driver %s%s%s, version %s%s",
              (unsigned)p->vendorID, (unsigned)p->deviceID,
              dp.driverName[0] ? dp.driverName : "(unnamed)", dp.driverInfo[0] ? " " : "",
-             dp.driverInfo, ver);
+             dp.driverInfo, ver, mesaText);
 }
 
 /* Whether the device has timeline semaphores at the version it is used at
@@ -2441,6 +2458,12 @@ static void vkr_fill_limits(void)
     o->colorBytesPerPixel = g_vkr.moltenvk ? rhi_metal_color_bytes(g_vkr.props.deviceName) : 0u;
     /* the summary line's (s_driverText starts "; ") */
     o->driverText = s_driverText[0] == ';' ? s_driverText + 2 : NULL;
+    o->driverName = g_vkr.driverName[0] ? g_vkr.driverName : NULL;
+    o->driverVersion = g_vkr.driverVersion[0] ? g_vkr.driverVersion : NULL;
+    o->driverId = g_vkr.driverID;
+    o->apiMajor = VK_API_VERSION_MAJOR(g_vkr.apiVersion);
+    o->apiMinor = VK_API_VERSION_MINOR(g_vkr.apiVersion);
+    o->mesa = g_vkr.mesa;
     o->robustText = s_robustText[0] ? s_robustText : NULL;
     o->robustDefaultOff = s_robustDefaultOff;
     /* texture packs: the BC formats (vkr_create_device enabled the feature) */
@@ -2465,6 +2488,7 @@ static void vkr_fill_limits(void)
      * is the depth's sampled-image feature */
     o->stencilView = g_vkr.dsSampled;
     o->stencilViewChannel = 0;
+    o->stencilGather = o->stencilView; /* OpImageGather on the stencil aspect */
     /* the VU shader variants' device table (kVuPlainOnly) and the
      * compiler's line, for the renderer's log (rd__vu_policy_init) */
     vkr_vu_plain_only();

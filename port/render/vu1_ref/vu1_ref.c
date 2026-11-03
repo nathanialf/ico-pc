@@ -320,6 +320,24 @@ int vu1ref_region_inside(int kind, const float (*mem)[4], const float (*bones)[4
     Vec4 h;
     const float *lo, *hi;
     regionVertex(kind, mem, bones, v, h, &lo, &hi);
+    return vu1ref_region_inside_at(h, lo, hi);
+}
+
+void vu1ref_region_position(int kind, const float (*mem)[4], const float (*bones)[4],
+                            const float (*v)[4], float h[4], float lo[4], float hi[4])
+{
+    const float *l, *u;
+    regionVertex(kind, mem, bones, v, h, &l, &u);
+    if (lo) {
+        memcpy(lo, l, sizeof(Vec4));
+    }
+    if (hi) {
+        memcpy(hi, u, sizeof(Vec4));
+    }
+}
+
+int vu1ref_region_inside_at(const float h[4], const float lo[4], const float hi[4])
+{
     const float q = cardRcp(h[3]);
     const float px = h[0] * q, py = h[1] * q;
     /* vu_inside */

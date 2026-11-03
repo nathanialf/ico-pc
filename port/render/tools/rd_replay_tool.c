@@ -154,6 +154,30 @@
  *                         and is drawn in front of it; then 'j'
  *                         where its strip is joined to another strip of
  *                         the mesh, ICO_VU_MARK_JOINED: not a card)
+ *   --region-stats        the region rule's verdict on every triangle of the
+ *                         VU draws of lists 0-6 under it (prelit, lit,
+ *                         skinned, grid), through the CPU oracle at the
+ *                         replayed frame's camera (with --interp the blended
+ *                         one and the ticks' cameras): a line a draw
+ *                         ("<dump>: region: L:I mesh NAME tris T: exact E
+ *                         clip C strip S drop D (behind-eye B, out-of-box X,
+ *                         card K; rescued at a tick R) det -|+"), a line a
+ *                         list and the frame's, which ends in the draws
+ *                         that draw nothing as a --nop spec
+ *                         (rd_replay_region.c); with --mesh NAME only that
+ *                         mesh's draws get a line.  With --no-device too,
+ *                         in the record-only renderer's state (the
+ *                         display options not applied: the Original
+ *                         preset at 1x, so extended only on a frame wider
+ *                         than 4:3)
+ *   --region-png FILE     (implies --region-stats) the dropped triangles of
+ *                         the frame camera's draws as the GPU would draw
+ *                         them, on black at the native frame's size (red a
+ *                         vertex behind the eye, yellow out of the box, cyan
+ *                         a card), the 4:3 band outlined in green
+ *   --region-out FILE     (implies --region-stats) writes the draws that draw
+ *                         nothing as a --nop spec ("none" for none): replayed
+ *                         with --nop @FILE the pass dumps are the same
  *   --dump-textures DIR   writes every image texture of the dump to
  *                         DIR/tex-<id>-<w>x<h>.png as decoded (RGBA8, the
  *                         alpha byte as stored: GS 0x80 = 1.0; an R8
@@ -229,6 +253,19 @@
  *                         pixel), and under --stats --gpu-repeat K says what
  *                         leaving the hidden draws out takes off list 0's
  *                         GPU time (tools/occlusion_corpus.py)
+ *                         The measurement replays with the visibility test
+ *                         off (ICO_RD_CULL=0): it counts what every draw
+ *                         puts on the screen
+ *   --cull MODE           the scene draws' visibility test (rd_vis.c, [dev]
+ *                         cull): off, frustum (the default) or full (the
+ *                         frustum test and list 0's occlusion test,
+ *                         rd_vis_hiz.c); sets ICO_RD_CULL.  --stats prints
+ *                         "stats: cull MODE: N of M scene draws skipped (F
+ *                         frustum, O occluded), T ms" (M the VU draw
+ *                         commands walked, N those replayed as NOPs), what
+ *                         it did not test and the occlusion test's
+ *                         occluder triangles, cells, draws tested, resets
+ *                         and time
  *   --occlusion-out FILE  (with --occlusion) writes SPEC to FILE, for
  *                         --nop @FILE
  *   --occlusion-csv FILE  (with --occlusion) writes a line a command of the
@@ -370,10 +407,12 @@
 #include "dump_zip.h" /* port/platform: the F12 zip */
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_vis.h"
 #include "../core/region.h"              /* the dump's disc (version 12) */
 #include "../vu1_ref/vu1_ref.h"          /* --vu-ref: the CPU mirror of the VU programs */
 #include "../../shaders/shader_consts.h" /* ICO_VU_MARK_*: the marks --mesh shows */
 #include "font.h"                        /* port/ui: the overlay test's text */
+#include "rd_replay_region.h"            /* --region-stats */
 
 static const char *const kNames[] = {
     "SCENE",    "DISPLAY",   "SHADOW0",   "SHADOW1",      "SHADOW2",   "WORK0", "WORK1",
@@ -1822,8 +1861,9 @@ int main(int argc, char **argv)
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12|opengl|d3d11] "
                 "[--render-thread off|sync|on] [--repeat N] [--list] "
                 "[--nop L:A[-B][,...]|@FILE] [--occlusion [--occlusion-out FILE] "
-                "[--occlusion-csv FILE]] "
+                "[--occlusion-csv FILE]] [--cull off|frustum|full] "
                 "[--gpu-repeat K] "
+                "[--region-stats] [--region-png FILE] [--region-out FILE] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
                 "[--time N] [--keys] "
                 "[--pass-dump DIR] "
@@ -1849,6 +1889,9 @@ int main(int argc, char **argv)
     const char *occlusionOut = NULL; /* --occlusion-out FILE */
     const char *occlusionCsv = NULL; /* --occlusion-csv FILE */
     bool occFailed = false;          /* the spec could not be written */
+    bool regionStats = false;        /* --region-stats (rd_replay_region.c) */
+    RdRegionOpts regionOpts = {NULL, NULL, NULL};
+    bool regionFailed = false; /* its picture or spec could not be written */
     bool noDevice = false, aspectGiven = false;
     bool keysCheck = false;
     int vuRefL[8], vuRefCount = 0;
@@ -2104,12 +2147,27 @@ int main(int argc, char **argv)
                 fprintf(stderr, "bad %s\n", argv[i - 1]);
                 return 1;
             }
+        } else if (strcmp(argv[i], "--cull") == 0 && i + 1 < argc) {
+            const char *v = argv[++i];
+            if (strcmp(v, "off") != 0 && strcmp(v, "frustum") != 0 && strcmp(v, "full") != 0) {
+                fprintf(stderr, "bad --cull (off, frustum or full)\n");
+                return 1;
+            }
+            setEnv("ICO_RD_CULL", v); /* read at rd_init (rd_vis.c rd__vis_init) */
         } else if (strcmp(argv[i], "--occlusion") == 0) {
             occlusion = true;
         } else if (strcmp(argv[i], "--occlusion-out") == 0 && i + 1 < argc) {
             occlusionOut = argv[++i];
         } else if (strcmp(argv[i], "--occlusion-csv") == 0 && i + 1 < argc) {
             occlusionCsv = argv[++i];
+        } else if (strcmp(argv[i], "--region-stats") == 0) {
+            regionStats = true;
+        } else if (strcmp(argv[i], "--region-png") == 0 && i + 1 < argc) {
+            regionStats = true;
+            regionOpts.png = argv[++i];
+        } else if (strcmp(argv[i], "--region-out") == 0 && i + 1 < argc) {
+            regionStats = true;
+            regionOpts.out = argv[++i];
         } else if (strcmp(argv[i], "--gpu-repeat") == 0 && i + 1 < argc) {
             char *end = NULL;
             const long n = strtol(argv[++i], &end, 10);
@@ -2163,8 +2221,11 @@ int main(int argc, char **argv)
            settings whatever the environment says */
         setEnv("ICO_RD_VU_MERGE", "0");
         setEnv("ICO_RD_BLEND", "fixed");
-        printf("note: --occlusion: the replays run under ICO_RD_VU_MERGE=0, ICO_RD_BLEND=fixed and "
-               "the screen-prim runs off (one GPU draw a command)\n");
+        /* every draw replayed: the visibility test's NOPs would hide the
+           draws it measures (rd_vis.c) */
+        setEnv("ICO_RD_CULL", "0");
+        printf("note: --occlusion: the replays run under ICO_RD_VU_MERGE=0, ICO_RD_BLEND=fixed, "
+               "ICO_RD_CULL=0 and the screen-prim runs off (one GPU draw a command)\n");
     }
     uint32_t gw = 0, gh = 0;
     if (!unzipDump(&dump, 0) || (interpPrev && !unzipDump(&interpPrev, 1))) {
@@ -2239,8 +2300,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "--keys needs a device\n");
         return 77;
     }
-    if (noDevice && !list && !texDir && !meshName && !vuRefCount) {
-        fprintf(stderr, "--no-device renders nothing: give --list, --mesh or --dump-textures\n");
+    if (noDevice && !list && !texDir && !meshName && !vuRefCount && !regionStats) {
+        fprintf(stderr, "--no-device renders nothing: give --list, --mesh, --dump-textures or "
+                        "--region-stats\n");
         return 1;
     }
     if (noDevice || !rd_init(gw, gh, &s, NULL)) {
@@ -2327,12 +2389,16 @@ int main(int argc, char **argv)
     if (meshName) {
         listMesh(meshName);
     }
+    if (regionStats) {
+        regionOpts.mesh = meshName;
+        regionFailed = !rd_replay_region(dump, rf, &regionOpts);
+    }
     int rc = 1;
     if (noDevice) {
         rd__frame_free(&f);
         rd__frame_free(&pf);
         rd_shutdown();
-        return 0;
+        return regionFailed ? 1 : 0;
     }
     if (keysCheck) {
         const int krc = checkKeys(dump, rf);
@@ -2551,6 +2617,11 @@ int main(int argc, char **argv)
         /* the fades fold (rd_fades_fold.c) */
         printf("%s: stats: fades fold %s: %u sprites folded into the reduction\n", dump,
                rd__fades_fold_on() ? "on" : "off", pr->fadesFolded);
+        /* the glow's mask computed in its reduction (rd_glow_fold.c) */
+        printf("%s: stats: glow: WORK2 fold %s: %u folded, %u kept%s%s%s\n", dump,
+               rd__glow_fold_on() ? "on" : "off", pr->glowFolded, pr->glowKept,
+               pr->glowKept ? " (" : "", pr->glowKept ? rd_glow_fold_why_text(pr->glowWhy) : "",
+               pr->glowKept ? ")" : "");
         /* the aura's read in two passes (rd_aura_box.c) */
         printf("%s: stats: aura box %s: %u feedback reads in two passes\n", dump,
                rd__aura_box_on() ? "on" : "off", pr->auraBoxDraws);
@@ -2660,6 +2731,25 @@ int main(int argc, char **argv)
                (unsigned long long)cc.skipped, (unsigned long long)cc.late,
                (unsigned long long)cc.afterMsaa, (unsigned long long)cc.pasted,
                (unsigned long long)cc.afterAlpha);
+        /* the scene draws' visibility test (rd_vis.c rd__vis_frame): the VU
+         * draw commands walked, those replayed as NOPs, and those it did not
+         * test (particles, clip mode none, lists 11 and 12, no target: exempt;
+         * no bound or a layout it does not read: unbounded) */
+        {
+            RdVisCounts vc;
+            rd__vis_counts(&vc);
+            printf("%s: stats: cull %s: %u of %u scene draws skipped (%u frustum, %u occluded), "
+                   "%.3f ms; not tested: %u exempt, %u unbounded; skipped beyond the left %u, "
+                   "right %u, top %u, bottom %u, behind the eye %u; occlusion: %u occluder "
+                   "triangles (%u past the budget), %llu cells, %u draws tested, %u resets, "
+                   "%.3f ms\n",
+                   dump, rd__vis_mode_name(rd__vis_mode()), pr->cullSkipped, pr->cullDraws,
+                   pr->cullFrustum, pr->cullOccluded, pr->cullMs, vc.exempt, vc.unbounded,
+                   vc.byVerdict[RD_VIS_LEFT], vc.byVerdict[RD_VIS_RIGHT], vc.byVerdict[RD_VIS_TOP],
+                   vc.byVerdict[RD_VIS_BOTTOM], vc.byVerdict[RD_VIS_NEAR], vc.hizTris,
+                   vc.hizOverBudget, (unsigned long long)vc.hizCells, vc.hizTested, vc.hizResets,
+                   vc.hizMs);
+        }
         uint32_t satDraws = 0;
         const uint64_t sat = satZVertices(rf, &satDraws);
         printf("%s: stats: VU corners with a saturated GS Z: %llu vertices of region-mode meshes "
@@ -2843,7 +2933,7 @@ int main(int argc, char **argv)
     if (rc == 0 && timeN > 0 && !timeReplays(dump, &pf, &f, rf, timeN, pw != 0)) {
         rc = 1;
     }
-    if (occFailed) {
+    if (occFailed || regionFailed) {
         rc = 1;
     }
     rd__frame_free(&f);

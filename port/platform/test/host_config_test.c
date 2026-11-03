@@ -700,6 +700,18 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_fuse", "true"), "1") == 0);
     CHECK(ico_dev_env_value("vu_fuse", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.vu_fuse"), "vu_fuse") == 0);
+    /* cull: the scene draws' visibility test (port/render/rd_vis.c
+       rd__vis_init reads ICO_RD_CULL: off, frustum or full) */
+    CHECK(strcmp(ico_dev_env_name("cull"), "ICO_RD_CULL") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "off"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "frustum"), "frustum") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "full"), "full") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "false"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "0"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "true"), "frustum") == 0);
+    CHECK(ico_dev_env_value("cull", "occlusion") == NULL);
+    CHECK(ico_dev_env_value("cull", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.cull"), "cull") == 0);
     /* constant_reads: a cleared source read as its colour, the A/B switch
        (port/render/rd_const_read.c rd__const_reads_on) */
     CHECK(strcmp(ico_dev_env_name("constant_reads"), "ICO_RD_CONSTANT_READS") == 0);
@@ -753,6 +765,13 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("glow_redraw", "true"), "1") == 0);
     CHECK(strcmp(ico_dev_env_value("glow_redraw", "false"), "0") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.glow_redraw"), "glow_redraw") == 0);
+    /* glow_fold: the glow's mask computed in its reduction, the A/B switch
+       (rd_glow_fold.c rd__glow_fold_on) */
+    CHECK(strcmp(ico_dev_env_name("glow_fold"), "ICO_RD_GLOW_FOLD") == 0);
+    CHECK(strcmp(ico_dev_env_value("glow_fold", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("glow_fold", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("glow_fold", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.glow_fold"), "glow_fold") == 0);
     /* present_fallback: the FIFO fallback auto, off or fifo (window_host.c
        ico_window_open, present_fallback.c) */
     CHECK(strcmp(ico_dev_env_name("present_fallback"), "ICO_PRESENT_FALLBACK") == 0);
@@ -763,6 +782,16 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("present_fallback", "true") == NULL);
     CHECK(ico_dev_env_value("present_fallback", "mailbox") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.present_fallback"), "present_fallback") == 0);
+    /* frame_rate_pin: the Android frame rate pin auto or off
+       (window_display_rate.c, display_rate.h) */
+    CHECK(strcmp(ico_dev_env_name("frame_rate_pin"), "ICO_FRAME_RATE_PIN") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "off"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "false"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("frame_rate_pin", "no"), "off") == 0);
+    CHECK(ico_dev_env_value("frame_rate_pin", "true") == NULL);
+    CHECK(ico_dev_env_value("frame_rate_pin", "60") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.frame_rate_pin"), "frame_rate_pin") == 0);
     /* render_thread: the window's render thread, read through the store
        (render_thread.c), not exported */
     CHECK(strcmp(ico_config_ini_key("dev.render_thread"), "render_thread") == 0);
@@ -916,6 +945,15 @@ static void test_dev_env(void)
     ico_ini_parse(&ini, "[dev]\nvu_set = maybe\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
     CHECK(env_is("ICO_RD_VU_SET", NULL));
+    /* ... and cull is exported as its word (rd_vis.c reads it) */
+    unset_env("ICO_RD_CULL");
+    ico_ini_parse(&ini, "[dev]\ncull = off\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_CULL", "off"));
+    unset_env("ICO_RD_CULL");
+    ico_ini_parse(&ini, "[dev]\ncull = maybe\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_CULL", NULL));
     /* blend=attachment and attachment_read=true (config.toml's [dev]) */
     ico_ini_parse(&ini, "[dev]\nblend = attachment\nattachment_read = true\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);

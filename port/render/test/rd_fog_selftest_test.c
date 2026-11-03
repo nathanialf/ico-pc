@@ -1,7 +1,7 @@
 /* rd_fog_selftest_test.c: the fog's self-test and probe (rd_fog_path.c).
  *
  *   rd_fog_selftest test/rd_fog_selftest_test <path> [<w> <h> [<scale> [<aa> [<texels w> <texels h>
- *                                               [<out w> <out h>]]]]]
+ *                                               [<out w> <out h> [<aspect>]]]]]]
  *
  * <texels w> <texels h> a scene of exactly that many texels (scale 0), as
  * the window's size gives; <aa> an RdAntiAlias value (default 0, off); with an MSAA count the device
@@ -13,7 +13,8 @@
  * Enhanced window resolution in that output at 16:9, Full pixel on: SCENE
  * the window's exact pixels, the frame's exact width and a guard texel a
  * side (RdTargetRec.ox, RD_FULL_PIXEL_GUARD; rd_fog_selftest_fullpixel*:
- * 688 x 448 in 1920 x 1080).
+ * 688 x 448 in 1920 x 1080).  <aspect> (default 16:9): the display aspect, so
+ * a frame is cropped (624 wide at 1.6: exact 614.40) or exact (2048 at 48:9).
  *
  * On a Vulkan device (77 without one), at a wide scene (16:9, scale 2,
  * Full pixel) so the self-test runs on a SCENE whose texels are not its GS
@@ -209,10 +210,11 @@ int main(int argc, char **argv)
     const uint32_t sceneH = argc > 7 ? (uint32_t)atoi(argv[7]) : 0;
     const uint32_t outW = argc > 9 ? (uint32_t)atoi(argv[8]) : 0;
     const uint32_t outH = argc > 9 ? (uint32_t)atoi(argv[9]) : 0;
+    const float aspect = argc > 10 ? (float)atof(argv[10]) : 16.0f / 9.0f;
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ENHANCED;
-    st.aspect = 16.0f / 9.0f;
+    st.aspect = aspect;
     st.sceneScale = sceneW || outW ? 0.0f : scale;
     st.sceneWidth = sceneW;
     st.sceneHeight = sceneH;

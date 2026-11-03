@@ -6,9 +6,9 @@
  * is 10 MB at 2364x1080, about 1 ms each way on the PowerVR phone, and
  * every pass on SCENE has its depth bound, read or not.  Before the walk
  * (rd__store_plan_scan) the replayed lists are read once with their state
- * (the same walk notes each command for the pass area, rd_pass_area.c, and
- * the passes cut, rd_pass_cut.c; the fades fold plans before it, its
- * sprites decided first), and for every depth texture the last command
+ * (the same walk notes each command for the pass area, rd_pass_area.c, the
+ * passes cut, rd_pass_cut.c, and the glow's chain, rd_glow_fold.c; the
+ * fades fold plans before it, its sprites decided first), and for every depth texture the last command
  * that may touch its depth or stencil is found, by ordinal (the commands
  * of the replayed lists counted in order, state commands included).  A command touches a depth when it
  * is
@@ -260,6 +260,30 @@ static void planDraw(const RdStateBlock *st, uint32_t ord, int l)
     planDrawEx(st, ord, l, true);
 }
 
+/* A scene draw the visibility test skipped (rd_vis.c, an RDC_NOP of the
+ * shadow frame): no touch, since it draws nothing (the passes after the
+ * touches before it may drop the store), but a read of a depth before the
+ * depth's clear is the carried read it is in the frame as recorded, so the
+ * stores are kept from then on (the loop after the walk) exactly as
+ * without the test: a later replay whose draw reads that depth sees it. */
+static void planCulledRead(const RdStateBlock *st, uint32_t ord, int l)
+{
+    const RdDrawState *ds = &st->ds;
+    const bool test = ds->test.zte && ds->test.ztst != RD_ZTST_ALWAYS;
+    const bool stencil = ds->test.date != RD_DATE_OFF || st->aa1;
+    const RdTexRec *tv = ds->texEnabled ? rd__tex_rec(st->tex) : NULL;
+    const uint32_t ids[2] = {
+        test || stencil ? st->depth : 0u,
+        tv && tv->kind == RD_TEXKIND_TARGET && tv->view == RD_VIEW_DEPTH ? tv->target : 0u};
+    for (int k = 0; k < 2; k++) {
+        PlanDepth *p = ids[k] ? planDepth(ids[k], true) : NULL;
+        if (p && p->firstRead == PLAN_NONE) {
+            p->firstRead = ord;
+            p->firstList = l;
+        }
+    }
+}
+
 /* A post sprite (not the fog): a draw, but DATE is no touch of the depth
  * unless it is the reduction's.  Every staticBlur sprite but the
  * reduction's is drawn by rd_replay.c doBlurSpriteDraw through fx_rect_vs
@@ -355,6 +379,11 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
      * and the plan: each notes every command under the same state */
     const bool area = rd__pass_area_scan_begin(f, keep);
     const bool cut = rd__pass_cut_scan_begin(f, keep);
+    /* and the glow's chain, whose mask the reduction may compute
+     * (rd_glow_fold.c: WORK2's fill, mask and reduction and nothing else
+     * touching WORK2; the passes' area, cut and plan read its sprites as
+     * drawn, which only keeps more) */
+    const bool glow = rd__glow_fold_scan_begin(f);
     s_plan.n = s_plan.nUndef = 0;
     s_plan.full = false;
     s_plan.anyTouch = 0;
@@ -370,7 +399,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     g_rdPerf.storePlanMode = s_plan.mode;
     s_plan.scanFrame = f->number;
     const bool plan = s_plan.mode != 0;
-    if (!plan && !area && !cut) {
+    if (!plan && !area && !cut && !glow) {
         return;
     }
     if (plan) {
@@ -410,6 +439,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
             if (cut) {
                 rd__pass_cut_scan_cmd(c, &st, state, ord);
             }
+            if (glow) {
+                rd__glow_fold_scan_cmd(f, c, &st, state, ord);
+            }
             if (state || !plan) {
                 continue;
             }
@@ -420,6 +452,10 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
             s_plan.curCmd = i;
             switch (c->type) {
             case RDC_NOP:
+                if (rd__vis_culled(f, l, i)) {
+                    planCulledRead(&st, ord, l); /* a scene draw rd_vis.c skipped */
+                }
+                break;
             case RDC_OVERLAY_TEXT:
             case RDC_COPY:
             case RDC_EXACT_BLEND:
@@ -486,6 +522,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     }
     if (cut) {
         rd__pass_cut_scan_end(ord);
+    }
+    if (glow) {
+        rd__glow_fold_scan_end(); /* the verdict (rd_glow_fold.c) */
     }
     if (!plan) {
         return;
@@ -759,6 +798,7 @@ void rd__store_plan_count_color(const RdTargetRec *c, RhiColorAttachment *a)
 void rd__store_plan_end(void)
 {
     rd__fades_fold_end();        /* a fold no reduction took (rd_fades_fold.c) */
+    rd__glow_fold_end();         /* the glow's likewise (rd_glow_fold.c) */
     rd__last_store_replay_end(); /* why a last touch's pass kept its store (rd_pass_cut.c) */
     planNothingDropped();
     s_plan.nPrevDropped = 0;

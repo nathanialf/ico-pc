@@ -397,9 +397,13 @@ uint4 vu_stream_u(uint qw)
 //   VU_MARK_LATER   a triangle that overlaps an earlier triangle of its
 //                   mesh in the same plane (static prelit and lit meshes,
 //                   rd_mesh.c markLaterOverlaps; vu_later_out)
+//   VU_MARK_FLIP    the corners k-2, k-1, k wind against the triangle's
+//                   front (rd_mesh.c markWinding; static prelit, lit and
+//                   skinned meshes); no shader reads it yet
 #define VU_MARK_JOINED 1u
 #define VU_MARK_HIDE 2u
 #define VU_MARK_LATER 4u
+#define VU_MARK_FLIP 8u
 
 // vu_rec.w, the triangle stage's program rule (shader_consts.h
 // ICO_VU_TRI_*), above its clip mode in bits 0..1: VU_TRI_CHAIN the chain

@@ -525,10 +525,24 @@ enum {
  *   ICO_VU_MARK_LATER   a triangle that overlaps an earlier triangle of its
  *                       mesh in the same plane (static prelit and lit
  *                       meshes; rd_mesh.c markLaterOverlaps), which
- *                       vu_later_out draws in front of it */
+ *                       vu_later_out draws in front of it
+ *   ICO_VU_MARK_FLIP    the triangle's corners k-2, k-1, k wind against its
+ *                       front (rd_mesh.c markWinding: a lit or skinned
+ *                       triangle whose face, cross(b - a, c - a), points
+ *                       away from the sum of its three normals; a prelit
+ *                       one by its place in its strip, RD_VU_WINDING_PHASE),
+ *                       so its facing on screen is the sign of the area of
+ *                       k-2, k-1, k, reversed where the mark is set.  Static
+ *                       prelit, lit and skinned meshes; a morph keeps the
+ *                       creation's.
+ *                       No shader reads it yet (the region rule's side
+ *                       bands will, docs/port/VU1_PROGRAMS.md "The winding
+ *                       mark")
+ * A byte a kick holds eight; four are used. */
 #define ICO_VU_MARK_JOINED 1u
 #define ICO_VU_MARK_HIDE 2u
 #define ICO_VU_MARK_LATER 4u
+#define ICO_VU_MARK_FLIP 8u
 #define ICO_VU_MARKS_PER_QW 16u
 /* The kick and corner bits of an index value: what an older dump could
  * carry besides them were the three old mark bits (28..30), which its

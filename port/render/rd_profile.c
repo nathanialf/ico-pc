@@ -223,6 +223,21 @@ bool rd__driver_is_turnip(const RhiLimits *lim)
     return lim != NULL && hasWord(lim->driverText, "turnip");
 }
 
+void rd__turnip_note(const RhiLimits *lim, char *out, size_t n)
+{
+    char mesa[32];
+    if (n == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (!rd__driver_is_turnip(lim)) {
+        return;
+    }
+    snprintf(out, n, "; turnip: %s",
+             lim->mesa.known ? rhi_mesa_version_text(&lim->mesa, mesa, sizeof mesa)
+                             : "Mesa version not named by the driver");
+}
+
 static ProfileClass classOf(const RhiLimits *lim)
 {
     switch (rhi_backend()) {
@@ -501,32 +516,37 @@ void rd__profile_init(void)
     const int asked = rd__dst_asked_env();
     const bool exact = (asked == RD_BLEND_EXACT_ATTACHMENT && lim->rasterOrderAttachment) ||
                        (asked == RD_BLEND_EXACT_STORAGE && (lim->fragmentInterlock || lim->rov));
+    /* Turnip: the Mesa version its driverInfo names, which a report of the
+     * extended set's sliver (issue 163) is compared by; the plain set stays
+     * for every Turnip whatever it is (rd_pipeline.c rd__vu_set_choose) */
+    char turnip[112];
+    rd__turnip_note(lim, turnip, sizeof turnip);
     /* the ask is [dev] blend's, or GS state as shader data's (rd_uber.c) */
     const char *blendAsk = getenv("ICO_RD_BLEND");
     const char *exactMark = blendAsk && blendAsk[0] ? " ([dev])" : " (GS state as shader data)";
-    rd__log("profile: %s: blend %s%s; fog local %s%s; DATE %s%s; depth stores %s%s; blur fold "
-            "%s%s; robust access %s; local read %s; uint views %s%s; alpha plan %s%s; fx plan "
-            "%s%s; fx local read %s%s; VU planes %s%s; shadow count %s%s; shadow edges: %s%s; "
-            "pipelines the start-up set%s%s%s; %s; %s; %s",
-            p->cls, exact ? rd__blend_exact_name(asked) : "fixed-function", exact ? exactMark : "",
-            p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
-            p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
-            storeWords(p), mark(p, RD_PROFILE_STORE_PLAN), p->blurFold ? "on" : "off",
-            mark(p, RD_PROFILE_BLUR_FOLD),
-            lim->robustText ? lim->robustText
-            : c == PC_D3D11 ? "D3D11's own"
-            : d3d           ? "D3D12's own"
-                            : "off",
-            d3d            ? "n/a"
-            : p->localRead ? "yes"
-                           : "no",
-            uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",
-            mark(p, RD_PROFILE_ALPHA_PLAN), p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN),
-            p->fxDstLocal ? "on" : "off", mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p),
-            mark(p, RD_PROFILE_VU_PLANES), shadowWords(p), mark(p, RD_PROFILE_SHADOW_ONE),
-            edgeWords(p), mark(p, RD_PROFILE_SHADOW_BSPLINE), p->carefulSet ? " (careful)" : "",
-            p->localWords[0] ? "; desktop local read " : "", p->localWords,
-            rd__uber_profile_words(), rd__aura_box_profile_words(), rd__pass_area_profile_words());
+    rd__log(
+        "profile: %s: blend %s%s; fog local %s%s; DATE %s%s; depth stores %s%s; blur fold "
+        "%s%s; robust access %s; local read %s; uint views %s%s; alpha plan %s%s; fx plan "
+        "%s%s; fx local read %s%s; VU planes %s%s; shadow count %s%s; shadow edges: %s%s; "
+        "pipelines the start-up set%s%s%s; %s; %s; %s%s",
+        p->cls, exact ? rd__blend_exact_name(asked) : "fixed-function", exact ? exactMark : "",
+        p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
+        p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL), storeWords(p),
+        mark(p, RD_PROFILE_STORE_PLAN), p->blurFold ? "on" : "off", mark(p, RD_PROFILE_BLUR_FOLD),
+        lim->robustText ? lim->robustText
+        : c == PC_D3D11 ? "D3D11's own"
+        : d3d           ? "D3D12's own"
+                        : "off",
+        d3d            ? "n/a"
+        : p->localRead ? "yes"
+                       : "no",
+        uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",
+        mark(p, RD_PROFILE_ALPHA_PLAN), p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN),
+        p->fxDstLocal ? "on" : "off", mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p),
+        mark(p, RD_PROFILE_VU_PLANES), shadowWords(p), mark(p, RD_PROFILE_SHADOW_ONE), edgeWords(p),
+        mark(p, RD_PROFILE_SHADOW_BSPLINE), p->carefulSet ? " (careful)" : "",
+        p->localWords[0] ? "; desktop local read " : "", p->localWords, rd__uber_profile_words(),
+        rd__aura_box_profile_words(), rd__pass_area_profile_words(), turnip);
     if (notHere) {
         rd__log("profile: %s: not on this device, the flag stays off", notHere);
     }
