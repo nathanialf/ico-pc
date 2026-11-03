@@ -18,6 +18,9 @@ static struct {
     int busy;
     void (*begin)(void *user);
     void *user;
+    /* the longest job (its end, submit and present) finished since the last
+       take, ns (rd_thread_submit_take_job_ns); under the lock */
+    uint64_t jobMaxNs;
 } s_st;
 
 /* the calling thread is the submit thread */
@@ -64,6 +67,12 @@ static void stMain(void *u)
             ico_mutex_unlock(s_st.m);
             tail(&j);
             ico_mutex_lock(s_st.m);
+            {
+                const double ms = j.submitMs + j.presentMs;
+                const uint64_t ns = ms > 0.0 ? (uint64_t)(ms * 1e6) : 1u; /* 0 is "none" */
+
+                s_st.jobMaxNs = ns > s_st.jobMaxNs ? ns : s_st.jobMaxNs;
+            }
             rd__sq_finish(&s_st.q, &j);
             if (rd__sq_idle(&s_st.q)) {
                 /* what the job wrote is the other threads' once they read this */
@@ -222,6 +231,18 @@ uint64_t rd_thread_submit_take_present_ns(void)
     }
     ico_mutex_lock(s_st.m);
     const uint64_t ns = rd__sq_take_present_ns(&s_st.q);
+    ico_mutex_unlock(s_st.m);
+    return ns;
+}
+
+uint64_t rd_thread_submit_take_job_ns(void)
+{
+    if (s_st.th == NULL) {
+        return 0;
+    }
+    ico_mutex_lock(s_st.m);
+    const uint64_t ns = s_st.jobMaxNs;
+    s_st.jobMaxNs = 0;
     ico_mutex_unlock(s_st.m);
     return ns;
 }

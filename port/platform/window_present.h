@@ -157,6 +157,15 @@ typedef struct WindowPres {
        allowance they are of (the timer path's or the lock's) */
     const PaceBudget *budgetAtOf;
     unsigned budgetRefusedAt, budgetDropsAt, budgetClimbsAt, budgetClimbRefusalsAt;
+    /* the step-deadline rule (pace_policy.h pace_rt_further_ask): the step's
+       own time and its back-off, the render thread's pipeline as predicted
+       from the presents handed over, rd_thread_read_wait_ns at the last
+       step's end (a step's own time is the step less its read waits), and
+       the timer path's last pace in the vsync-off uncapped mode (pace_rt_as_made) */
+    PaceStepEst stepEst;
+    PaceRtPipe rtPipe;
+    uint64_t readWaitAt;
+    int asMade;
 } WindowPres;
 
 /* the loop's state (window_present.c), and the deadline: when the

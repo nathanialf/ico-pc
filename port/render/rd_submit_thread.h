@@ -92,6 +92,11 @@ bool rd_thread_submit_unfinished(void);
 /* The longest present call of the jobs finished since the last take, ns
  * (0: none; render_thread.c's present estimate, pace_rt_further_hold) */
 uint64_t rd_thread_submit_take_present_ns(void);
+/* The longest job (a picture's list ended and submitted, and its present)
+ * finished since the last take, ns (0: none; render_thread.c's submit
+ * estimate: the window predicts when the render thread's next picture may
+ * make its first graphics call, pace_policy.h PaceRtPipe) */
+uint64_t rd_thread_submit_take_job_ns(void);
 /* The 10 s block (the window's line) */
 void rd_thread_submit_block_take(RdSubmitBlock *out);
 

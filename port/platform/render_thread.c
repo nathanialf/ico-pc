@@ -41,9 +41,21 @@ static struct {
     Uint64 readsEst, pictureEst;
     /* and the present call's wait of those pictures (the same estimate) */
     Uint64 presentEst;
+    /* and their reads less the waits inside them (the fence, the submit
+       thread, the acquire), their interpolation and the submit thread's
+       job: the game thread predicts a further picture's reads by them
+       (pace_policy.h PaceRtPipe) */
+    Uint64 cpuEst, interpEst, submitEst;
     /* the further presents the game thread held back by them in the 10 s
        block, by why (pace_policy.h PaceRtHold; the game thread's) */
-    unsigned held, heldLate, heldOverrun, heldBehind;
+    unsigned held, heldMiss, heldOverrun, heldBehind;
+    /* the game thread's steps in the block (ico_render_thread_note_step):
+       those whose first renderer call waited for a picture's reads and the
+       longest wait, those that missed their period and the latest, the
+       steps planned at the whole period after a miss, the step's own time
+       as last planned */
+    unsigned lateStarts, misses, backoffSteps;
+    Uint64 lateStartMaxNs, missMaxNs, stepPlanNs;
 } s_rt;
 
 /* OpenGL's context is current on one thread at a time: the render thread's
@@ -149,6 +161,17 @@ static int SDLCALL rt_main(void *u)
                next further presents */
             const uint64_t reads = rd_thread_take_reads_ns();
             const uint64_t pres = rd_thread_take_present_ns();
+            const uint64_t sub = rd_thread_submit_take_job_ns();
+            uint64_t waits = 0, interp = 0;
+
+            rd_thread_take_reads_parts(&waits, &interp);
+            if (sub != 0) {
+                /* the submit thread's job finished since (the picture
+                   before's, one picture late) */
+                const Uint64 e = __atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED);
+
+                __atomic_store_n(&s_rt.submitEst, pace_rt_estimate(e, sub), __ATOMIC_RELAXED);
+            }
 
             if (pres != 0) {
                 /* how long its present waited: the display or the GPU
@@ -163,6 +186,15 @@ static int SDLCALL rt_main(void *u)
 
                 __atomic_store_n(&s_rt.readsEst, pace_rt_estimate(r, reads), __ATOMIC_RELAXED);
                 __atomic_store_n(&s_rt.pictureEst, pace_rt_estimate(w, t1 - t0), __ATOMIC_RELAXED);
+                /* the reads of its own: less the waits (at least 1 ns, 0 is
+                   "not known") */
+                const Uint64 c = __atomic_load_n(&s_rt.cpuEst, __ATOMIC_RELAXED);
+                const Uint64 i = __atomic_load_n(&s_rt.interpEst, __ATOMIC_RELAXED);
+                const uint64_t own = reads > waits ? reads - waits : 1u;
+
+                __atomic_store_n(&s_rt.cpuEst, pace_rt_estimate(c, own), __ATOMIC_RELAXED);
+                __atomic_store_n(&s_rt.interpEst, pace_rt_estimate(i, interp < own ? interp : own),
+                                 __ATOMIC_RELAXED);
             }
         }
 
@@ -386,7 +418,10 @@ FmMode ico_render_thread_start(void)
         s_rt.slotWaits = 0;
         s_rt.slotWaitNs = 0;
         s_rt.readsEst = s_rt.pictureEst = s_rt.presentEst = 0;
-        s_rt.held = s_rt.heldLate = s_rt.heldOverrun = s_rt.heldBehind = 0;
+        s_rt.cpuEst = s_rt.interpEst = s_rt.submitEst = 0;
+        s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
+        s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = 0;
+        s_rt.lateStartMaxNs = s_rt.missMaxNs = s_rt.stepPlanNs = 0;
         memset(&s_gl, 0, sizeof(s_gl));
         if (rhi_backend() == RHI_BACKEND_OPENGL) {
             /* made current here at rhi_init: the render thread's from now */
@@ -547,6 +582,9 @@ bool ico_render_thread_plan(IcoRtPlan *out)
     out->readsNs = __atomic_load_n(&s_rt.readsEst, __ATOMIC_RELAXED);
     out->pictureNs = whole;
     out->presentNs = __atomic_load_n(&s_rt.presentEst, __ATOMIC_RELAXED);
+    out->cpuNs = __atomic_load_n(&s_rt.cpuEst, __ATOMIC_RELAXED);
+    out->interpNs = __atomic_load_n(&s_rt.interpEst, __ATOMIC_RELAXED);
+    out->submitNs = rd_thread_submit_on() ? __atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED) : 0;
     return true;
 }
 
@@ -558,23 +596,44 @@ void ico_render_thread_note_held(int why)
     } else if (why == PACE_RT_BEHIND) {
         s_rt.heldBehind++;
     } else {
-        s_rt.heldLate++;
+        s_rt.heldMiss++; /* PACE_RT_MISS */
     }
+}
+
+void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t missNs, bool backedOff,
+                                 uint64_t planNs)
+{
+    if (readWaitNs != 0) {
+        s_rt.lateStarts++;
+        s_rt.lateStartMaxNs = readWaitNs > s_rt.lateStartMaxNs ? readWaitNs : s_rt.lateStartMaxNs;
+    }
+    if (missed) {
+        s_rt.misses++;
+        s_rt.missMaxNs = missNs > s_rt.missMaxNs ? missNs : s_rt.missMaxNs;
+    }
+    s_rt.backoffSteps += backedOff ? 1u : 0u;
+    s_rt.stepPlanNs = planNs;
 }
 
 void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pumpMs)
 {
     const unsigned waits = __atomic_exchange_n(&s_rt.slotWaits, 0u, __ATOMIC_RELAXED);
     const Uint64 waitNs = __atomic_exchange_n(&s_rt.slotWaitNs, (Uint64)0, __ATOMIC_RELAXED);
-    const unsigned held = s_rt.held, heldLate = s_rt.heldLate;
+    const unsigned held = s_rt.held, heldMiss = s_rt.heldMiss;
     const unsigned heldOverrun = s_rt.heldOverrun, heldBehind = s_rt.heldBehind;
+    const unsigned lateStarts = s_rt.lateStarts, misses = s_rt.misses;
+    const unsigned backoffSteps = s_rt.backoffSteps;
+    const double lateStartMaxMs = (double)s_rt.lateStartMaxNs / 1e6;
+    const double missMaxMs = (double)s_rt.missMaxNs / 1e6;
     RdThreadBlock tb;
     RdSubmitBlock sb;
     unsigned closes;
     double closeMs, closeMaxMs;
-    char rt[1024], st[384];
+    char rt[1280], st[384];
 
-    s_rt.held = s_rt.heldLate = s_rt.heldOverrun = s_rt.heldBehind = 0;
+    s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
+    s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = 0;
+    s_rt.lateStartMaxNs = s_rt.missMaxNs = 0;
 
     rd_thread_block_take(&tb);
     rd_thread_submit_block_take(&sb);
@@ -610,16 +669,25 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
                  "render thread: CPU %.1f ms a picture, idle %.0f %%, waited for a frame %.1f ms, "
                  "heartbeat max %.1f ms (%u pictures%s); interp %.1f ms, walk %.1f ms, submit "
                  "%.1f ms, GPU and display waits %.1f ms a picture; %u textures destroyed for the "
-                 "game thread; %u further presents held back (%u would have run into the next "
-                 "step, %u while a picture ran past its estimate, %u while the presents waited "
-                 "for the display or the GPU; a picture holds the renderer for %.1f ms, takes "
-                 "%.1f ms, its present waits %.1f ms)",
+                 "game thread; %u further presents held back (%u would have made the step miss "
+                 "its period, %u while a picture ran past its estimate, %u while the presents "
+                 "waited for the display or the GPU; a picture holds the renderer for %.1f ms "
+                 "(%.1f ms of its own, %.1f ms before its first graphics call), takes %.1f ms, "
+                 "its present waits %.1f ms, the submit thread's part %.1f ms; the step planned "
+                 "at %.1f ms); steps started late by the pictures: %u (longest %.1f ms); steps "
+                 "that missed their period: %u (latest %.1f ms past it; %u steps planned at the "
+                 "whole period after them)",
                  pictureCpuMs, b.idlePercent, b.waitMaxMs, b.busyMaxMs, b.pictures,
                  s_rt.mode == FM_MODE_SYNC ? ", sync" : "", tb.interpMs, tb.walkMs, tb.submitMs,
-                 tb.waitMs, tb.retired, held, heldLate, heldOverrun, heldBehind,
+                 tb.waitMs, tb.retired, held, heldMiss, heldOverrun, heldBehind,
                  (double)__atomic_load_n(&s_rt.readsEst, __ATOMIC_RELAXED) / 1e6,
+                 (double)__atomic_load_n(&s_rt.cpuEst, __ATOMIC_RELAXED) / 1e6,
+                 (double)__atomic_load_n(&s_rt.interpEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.pictureEst, __ATOMIC_RELAXED) / 1e6,
-                 (double)__atomic_load_n(&s_rt.presentEst, __ATOMIC_RELAXED) / 1e6);
+                 (double)__atomic_load_n(&s_rt.presentEst, __ATOMIC_RELAXED) / 1e6,
+                 (double)__atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED) / 1e6,
+                 (double)s_rt.stepPlanNs / 1e6, lateStarts, lateStartMaxMs, misses, missMaxMs,
+                 backoffSteps);
     } else {
         snprintf(rt, sizeof(rt), "render thread: off (CPU %.1f ms a picture on the game thread)",
                  pictureCpuMs);

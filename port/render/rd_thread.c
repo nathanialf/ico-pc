@@ -24,6 +24,12 @@ static _Thread_local uint64_t t_readsNs;
 /* the longest present call of the job's replays (rd_thread_take_present_ns;
  * the render thread's own) */
 static _Thread_local uint64_t t_presentNs;
+/* the job's waits inside its reads (its replays' waits for the slot's fence
+ * and the submit thread, and the acquire) and its interpolation
+ * (rd_thread_take_reads_parts; the render thread's own) */
+static _Thread_local uint64_t t_waitNs, t_interpNs;
+/* the game thread's read waits in all, ns (rd_thread_read_wait_ns) */
+static uint64_t s_readWaitTotalNs;
 
 /* the hand-over's lock: the count of pictures whose reads have not ended,
  * the game thread's waits for them, the textures to retire, the block's
@@ -139,6 +145,7 @@ static void runTramp(Tramp *t, bool picture)
     if (outer) {
         t_jobStartMs = rd__now_ms();
         t_presentNs = 0; /* this job's presents only */
+        t_waitNs = t_interpNs = 0;
         retireDrain();
         if (picture) {
             s_rStats.draws = 0; /* the picture's draws, as rd_begin_frame's count was */
@@ -295,6 +302,18 @@ uint64_t rd_thread_take_reads_ns(void)
     return ns;
 }
 
+void rd_thread_take_reads_parts(uint64_t *waitNs, uint64_t *interpNs)
+{
+    *waitNs = t_waitNs;
+    *interpNs = t_interpNs;
+    t_waitNs = t_interpNs = 0;
+}
+
+uint64_t rd_thread_read_wait_ns(void)
+{
+    return __atomic_load_n(&s_readWaitTotalNs, __ATOMIC_RELAXED);
+}
+
 uint64_t rd_thread_take_present_ns(void)
 {
     uint64_t ns = t_presentNs;
@@ -340,6 +359,7 @@ void rd__texlock_wait(void)
         ico_cond_wait(s_cv, s_lk);
     }
     const double ms = rd__now_ms() - t0;
+    __atomic_fetch_add(&s_readWaitTotalNs, ms > 0.0 ? (uint64_t)(ms * 1e6) : 0u, __ATOMIC_RELAXED);
     s_block.readWaits++;
     s_block.readWaitMs += ms;
     s_block.readWaitMaxMs = ms > s_block.readWaitMaxMs ? ms : s_block.readWaitMaxMs;
@@ -607,6 +627,7 @@ void rd__thread_note_replay(double walkMs, double submitMs, double waitMs)
     if (!s_on || !t_onR) {
         return;
     }
+    t_waitNs += waitMs > 0.0 ? (uint64_t)(waitMs * 1e6) : 0u;
     lk();
     s_block.walkMs += walkMs;
     s_block.submitMs += submitMs;
@@ -629,6 +650,7 @@ void rd__thread_note_interp(double ms)
     if (!s_on || !t_onR) {
         return;
     }
+    t_interpNs += ms > 0.0 ? (uint64_t)(ms * 1e6) : 0u;
     lk();
     s_block.interpMs += ms;
     ulk();

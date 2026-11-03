@@ -195,6 +195,9 @@ typedef struct PaceBudget {
                              with a GPU time (PACE_PACED_HIGH: not held; PACE_PACED_UNKNOWN) */
     unsigned pacedChanges; /* the changes of pacedTenths (the caller's event line) */
     unsigned discExcused;  /* late steps excused by the step's disc wait (the rule above) */
+    unsigned asMade;       /* the window's: vsync off and uncapped, pictures as made
+                              (pace_rt_as_made): the allowance gates nothing, a
+                              measurement; the pictures in flight at most (0: not) */
 } PaceBudget;
 
 /* allow = max, the counts cleared (the lock: max n). */
@@ -305,7 +308,10 @@ int pace_budget_event_text(const PaceBudget *b, int kind, const PaceBudgetWaits 
  * median of the last 8 timed presented replays (window_host.c perf_drain),
  * not the block's mean; gpuIsSpan as PaceBudgetWaits.  "paced to" while
  * unbound, paced, the GPU's time known and pacedTenths under
- * PACE_PACED_HIGH.  The length written, as snprintf. */
+ * PACE_PACED_HIGH.  With asMade set, "; vsync off, uncapped: pictures as
+ * made (N in flight at most[, the GPU's time would pace them to N.N a
+ * step]) (...)": the allowance refused nothing and is only measured.  The
+ * length written, as snprintf. */
 int pace_budget_block_text(const PaceBudget *b, unsigned refusedAt, unsigned dropsAt,
                            unsigned climbsAt, unsigned climbRefusalsAt, uint64_t gpuNs,
                            bool gpuIsSpan, const char *noGpu, char *out, unsigned size);
@@ -843,7 +849,8 @@ typedef enum PaceRtHold {
     PACE_RT_GO = 0,  /* handed over */
     PACE_RT_LATE,    /* it would run into the next step (pace_rt_further_late) */
     PACE_RT_OVERRUN, /* the picture in progress ran past its estimate: when it ends is not known */
-    PACE_RT_BEHIND   /* the presents wait for the display or the GPU */
+    PACE_RT_BEHIND,  /* the presents wait for the display or the GPU */
+    PACE_RT_MISS     /* it would make a step miss its period (pace_rt_step_miss) */
 } PaceRtHold;
 
 /* A present that waits a refresh over this (half a refresh) or more is one
@@ -873,6 +880,138 @@ typedef enum PaceRtHold {
 PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t stepNs,
                                 uint64_t sinceNs, uint64_t readsNs, uint64_t pictureNs,
                                 uint64_t presentNs, uint64_t refreshNs, bool paced);
+
+/* The step-deadline rule (v0.10.0; docs/port/DISPLAY.md "Further presents
+ * and the game step"): a further present of a frame already shown is held
+ * only when it would make a game step miss its own period, not whenever its
+ * reads would touch the next step.  A step that starts a few ms late, its
+ * first renderer call waiting for the picture's reads, still ends inside
+ * its period: the phone's step takes 4.5 ms of its 16.7.  The window's
+ * timer path asks it in every mode (the paced holds above it as before;
+ * with vsync off and the frame rate uncapped only the overrun one,
+ * pace_rt_as_made); pace_rt_further_late and pace_rt_further_hold are the
+ * rule before it (TEXLOCK's and RTHREAD-C's), kept for the model's
+ * comparisons (pace_loop_test.c).
+ *
+ * The step may start late by up to its slack, period - (step + margin):
+ * stepNs is the step's own time as estimated (PaceStepEst: its recent
+ * maximum, falling an eighth a step, the whole period while backed off),
+ * PACE_RT_STEP_MARGIN_NS the rest of a step's time the estimate does not
+ * see (the pump between steps, the wake from the pacer's sleep, the audio
+ * callback and the other threads taking the game thread's core, the
+ * present's post: 0.1-0.5 ms each on the PowerVR phone, rc7). */
+#define PACE_RT_STEP_MARGIN_NS 2000000ull
+
+/* The step's own time (the window's step less its waits for a picture's
+ * reads) as the rule plans by, and its back-off: a step that ended past its
+ * deadline (its period's end) makes the estimate the whole period for
+ * backoff steps (so a further present must end its reads by the next
+ * step's due time, the rule before), PACE_STEP_BACKOFF_MIN at first,
+ * doubled by every miss up to PACE_STEP_BACKOFF_MAX, halved again by
+ * PACE_STEP_BACKOFF_MAX steps without one (to none from the least): a
+ * wrong estimate costs one late step, then two seconds of the old rule,
+ * then four, never the rc2 state of steps 40 ms late with the sound held
+ * back.  misses and backoffs count for the 10 s line (the caller clears
+ * them). */
+#define PACE_STEP_BACKOFF_MIN 120u
+#define PACE_STEP_BACKOFF_MAX 1920u
+
+typedef struct PaceStepEst {
+    uint64_t estNs;      /* pace_rt_estimate of the step's own time (0: none yet) */
+    unsigned backoff;    /* steps left planned at the whole period */
+    unsigned backoffLen; /* the last back-off's length (0: none since a clean spell) */
+    unsigned clean;      /* steps since the last back-off ended without a miss */
+    unsigned misses;     /* steps that missed their period */
+    unsigned backoffs;   /* back-offs begun (one a miss) */
+    uint64_t missMaxNs;  /* the latest of them past its deadline */
+} PaceStepEst;
+
+/* One step: its own time ownNs (0: not known, the estimate kept); missed:
+ * it ended lateNs past its deadline */
+void pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs);
+
+/* The step's time the rule plans by: the estimate, or the whole period
+ * while backed off or before the first step (at least the estimate) */
+uint64_t pace_step_est_ns(const PaceStepEst *e, uint64_t periodNs);
+
+/* The render thread's pipeline as the game thread predicts it (PaceRtPipe):
+ * a picture handed over makes no graphics call for its interpolation
+ * (interpNs), then waits for the submit thread to finish the picture
+ * before it (its submit and present, submitNs: submitFreeNs) and for the
+ * GPU to finish the picture two before it (the slot fences,
+ * RHI_FRAMES_IN_FLIGHT 2 pictures in flight: gpuDoneNs[0]; the picture
+ * before, gpuDoneNs[1], when the presents wait for the GPU, the driver's
+ * back-pressure), the GPU finishing a picture every gpuNs (the window's GPU
+ * span; 0: not known, no fence predicted), then reads cpuNs of its own (the
+ * reads less those waits).  The reads end there, and never before the reads
+ * as measured with their waits (readsNs). */
+typedef struct PaceRtPipe {
+    uint64_t submitFreeNs;
+    uint64_t gpuDoneNs[2]; /* the older and the newer picture's predicted GPU end */
+} PaceRtPipe;
+
+/* A further present's question (the window's estimates; render_thread.h
+ * IcoRtPlan, window_present.c) */
+typedef struct PaceRtAsk {
+    uint64_t nowNs;     /* when it would be handed over */
+    uint64_t dueNs;     /* the next step's due time */
+    uint64_t periodNs;  /* the step's period */
+    uint64_t stepNs;    /* the step's time to plan by (pace_step_est_ns) */
+    uint64_t sinceNs;   /* the render thread's picture in progress started (0: none) */
+    uint64_t readsNs;   /* a picture's reads, waits included (the hand-over) */
+    uint64_t pictureNs; /* its whole job on the render thread */
+    uint64_t presentNs; /* its present call's wait */
+    uint64_t refreshNs; /* the display's refresh (0: not known) */
+    uint64_t cpuNs;     /* its reads less their waits (0: not known: readsNs alone) */
+    uint64_t interpNs;  /* its interpolation, before its first graphics call */
+    uint64_t submitNs;  /* the submit thread's job (0: none) */
+    uint64_t gpuNs;     /* the GPU's time a picture (0: not known) */
+    bool paced;         /* vsync off or mailbox (pace_budget_paced_mode) */
+    bool asMade;        /* vsync off and uncapped (pace_rt_as_made) */
+} PaceRtAsk;
+
+/* When the reads of a picture handed over at postNs end (the pipeline p
+ * and the estimates in q; behind: the presents wait for the GPU) */
+uint64_t pace_rt_pipe_reads_end(const PaceRtPipe *p, uint64_t postNs, const PaceRtAsk *q,
+                                bool behind);
+
+/* A picture handed over whose reads end at readsEndNs: the submit thread
+ * busy until readsEndNs + submitNs, the GPU's newer picture ending gpuNs
+ * after the later of those reads and the picture before it (gpuNs 0: the
+ * GPU's ends kept) */
+void pace_rt_pipe_post(PaceRtPipe *p, uint64_t readsEndNs, const PaceRtAsk *q);
+
+/* The presents wait for the display or the GPU: the present call's wait
+ * half a refresh or more (PACE_RT_BEHIND_DIV) */
+bool pace_rt_behind(uint64_t presentNs, uint64_t refreshNs);
+
+/* True when a further present handed over once the picture in progress is
+ * done (busyLeftNs) would make a step miss its period: the next step,
+ * which starts when the further picture's reads end (or at its due time),
+ * would start later than its slack past its due time; or the step after
+ * it, behind the next new frame's own picture (posted when the next step
+ * ends, after the further picture's whole job; never held, every frame is
+ * shown), would start later than its slack past its due time, and later
+ * than it would without the further picture.  Both with the slack
+ * period - (stepNs + PACE_RT_STEP_MARGIN_NS), 0 when the step needs the
+ * whole period (then only the further picture's own delay is held). */
+bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLeftNs);
+
+/* The render thread's hold on a further present (the window, every mode):
+ * paced, first PACE_RT_OVERRUN as pace_rt_further_hold (the present's drain
+ * would hold the game thread for a picture whose end is not known: the
+ * fences bound the GPU's pictures, not the render thread's job), then,
+ * unless asMade, PACE_RT_BEHIND; then PACE_RT_MISS by pace_rt_step_miss. */
+PaceRtHold pace_rt_further_ask(const PaceRtAsk *q, const PaceRtPipe *p);
+
+/* Vsync off and the frame rate uncapped, the timer path (no FIFO lock),
+ * the render thread on: pictures as they are made, as on a PC with vsync
+ * off.  No allowance refusal (the allowance a measurement only) and no
+ * PACE_RT_BEHIND hold; the step-deadline rule and the overrun hold stay,
+ * and the GPU's own back-pressure (the slot fences, RHI_FRAMES_IN_FLIGHT
+ * pictures in flight at most) is the limit.  Frame rate Original never
+ * presents a frame again and vsync on keeps its rules: false there. */
+bool pace_rt_as_made(bool vsync, bool uncapped, bool fifoLock, bool renderThread);
 
 /* The counts cleared; last kept, so the interval across two blocks counts
  * in the second (zero the struct to forget it too). */

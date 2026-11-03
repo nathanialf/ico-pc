@@ -64,28 +64,107 @@ static int frame_seen(Uint64 closeAt)
     return 1;
 }
 
+/* The rule's question at now from the render thread's estimates p */
+static void rt_ask(PaceRtAsk *q, const IcoRtPlan *p, Uint64 now, Uint64 refresh, Uint64 period,
+                   bool asMade)
+{
+    memset(q, 0, sizeof(*q));
+    q->nowNs = now;
+    q->dueNs = s_deadline;
+    q->periodNs = period;
+    q->stepNs = pace_step_est_ns(&s_pres.stepEst, period);
+    q->sinceNs = p->sinceNs;
+    q->readsNs = p->readsNs;
+    q->pictureNs = p->pictureNs;
+    q->presentNs = p->presentNs;
+    q->refreshNs = refresh;
+    q->cpuNs = p->cpuNs;
+    q->interpNs = p->interpNs;
+    q->submitNs = p->submitNs;
+    q->gpuNs = s_pres.gpuNs;
+    q->paced = s_pres.budget.paced;
+    q->asMade = asMade;
+}
+
 /* A further present of a frame already shown, handed to the render thread
-   now, would run into the next step (pace_policy.h pace_rt_further_hold:
-   PACE_RT_LATE): the step's calls would wait for its reads (the 10 s line's
-   read waits) or the next new frame's present for its end (the slot
-   waits).  Its cost on this thread (s_pres.cost) is only the hand-over; the
-   render thread's own times are its estimates (render_thread.h
-   ico_render_thread_plan).  Paced (vsync off or mailbox), also held while
-   the picture in progress runs past its estimate (PACE_RT_OVERRUN) or while
-   the presents wait for the display or the GPU (PACE_RT_BEHIND): a
-   picture more would deepen the GPU's backlog and the next new frame's
-   present would wait for it.  Never with the thread off or in sync mode,
-   where the cost is the whole picture.  The hold's why, PACE_RT_GO for
-   none */
-static PaceRtHold rt_further_late(Uint64 now, Uint64 refresh)
+   now (pace_policy.h pace_rt_further_ask): held when it would make a game
+   step miss its period (PACE_RT_MISS: the next step, whose first renderer
+   call waits for its reads, or the one after it, behind the next new
+   frame's own picture, would start later than its slack past its due
+   time), not whenever it would touch the next step.  Its cost on this
+   thread (s_pres.cost) is only the hand-over; the render thread's own
+   times are its estimates (render_thread.h ico_render_thread_plan), the
+   step's its own (s_pres.stepEst), the pipeline's the prediction from the
+   presents handed over (s_pres.rtPipe) with the GPU's time a picture
+   (s_pres.gpuNs).  Paced (vsync off or mailbox), also held while the
+   picture in progress runs past its estimate (PACE_RT_OVERRUN: the drain
+   would hold this thread for an end not known) and, unless the pictures
+   go as made (vsync off, uncapped: pace_rt_as_made), while the presents
+   wait for the display or the GPU (PACE_RT_BEHIND).  Never with the thread
+   off or in sync mode, where the cost is the whole picture.  The hold's
+   why, PACE_RT_GO for none */
+static PaceRtHold rt_further_hold(Uint64 now, Uint64 refresh, Uint64 period, bool asMade)
 {
     IcoRtPlan p;
+    PaceRtAsk q;
 
     if (!ico_render_thread_plan(&p)) {
         return PACE_RT_GO;
     }
-    return pace_rt_further_hold(now, s_deadline, s_pres.stepNs, p.sinceNs, p.readsNs, p.pictureNs,
-                                p.presentNs, refresh, s_pres.budget.paced);
+    rt_ask(&q, &p, now, refresh, period, asMade);
+    return pace_rt_further_ask(&q, &s_pres.rtPipe);
+}
+
+/* A present handed to the render thread at now: the pipeline's prediction
+   (pace_policy.h PaceRtPipe) takes it, its reads' end by the estimates */
+static void rt_pipe_posted(Uint64 now, Uint64 refresh, Uint64 period)
+{
+    IcoRtPlan p;
+    PaceRtAsk q;
+
+    if (!ico_render_thread_plan(&p)) {
+        memset(&s_pres.rtPipe, 0, sizeof(s_pres.rtPipe));
+        return;
+    }
+    rt_ask(&q, &p, now, refresh, period, false);
+    pace_rt_pipe_post(
+        &s_pres.rtPipe,
+        pace_rt_pipe_reads_end(&s_pres.rtPipe, now, &q, pace_rt_behind(q.presentNs, refresh)), &q);
+}
+
+/* The step that ran before this pace (the timer path, s_deadline its
+   deadline now): its own time (the step less its waits for a picture's
+   reads) into the step's estimate, a miss of its period into the back-off
+   (pace_policy.h PaceStepEst), both into the 10 s line; a miss with the
+   further presents planned by the render thread is named, the first 8 then
+   every 100th */
+static void step_note(Uint64 period)
+{
+    const Uint64 now = SDL_GetTicksNS();
+    const uint64_t waits = rd_thread_read_wait_ns();
+    const uint64_t waited = waits >= s_pres.readWaitAt ? waits - s_pres.readWaitAt : 0;
+
+    s_pres.readWaitAt = waits;
+    if (s_pres.paceEnd == 0) {
+        return; /* no step measured yet */
+    }
+    const uint64_t own = s_pres.stepNs > waited ? s_pres.stepNs - waited : 0;
+    const bool missed = now > s_deadline;
+    const uint64_t late = missed ? now - s_deadline : 0;
+    const bool backedOff = s_pres.stepEst.backoff != 0;
+
+    pace_step_est_note(&s_pres.stepEst, own, missed, late);
+    ico_render_thread_note_step(waited, missed, late, backedOff,
+                                pace_step_est_ns(&s_pres.stepEst, period));
+    if (missed && rd_interpolation_active() && ico_render_thread_mode() == FM_MODE_ON) {
+        ico_log_limited("window: step missed its period",
+                        "window: the game step missed its period by %.1f ms (it took %.1f ms, "
+                        "%.1f ms of it waiting for a picture): the pictures between frames are "
+                        "planned as if a step took the whole period for the next %u steps (%u "
+                        "misses so far)",
+                        (double)late / 1e6, (double)s_pres.stepNs / 1e6, (double)waited / 1e6,
+                        s_pres.stepEst.backoff, s_pres.stepEst.misses);
+    }
 }
 
 /* One rd_present at alpha a, timed (s_pres.cost) and counted; false when
@@ -611,12 +690,31 @@ void window_present_pace(int hz)
         timing_use(0); /* the presents below as without the timing */
         window_disp_clock_stop();
     }
+    /* vsync off, uncapped, the render thread on: pictures as made, the
+       allowance a measurement (pace_policy.h pace_rt_as_made); in or out
+       of it the allowance starts again */
+    const bool asMade =
+        pace_rt_as_made(s_pres.vsync != 0, s_pres.framerate == ICO_FRAMERATE_UNCAPPED,
+                        s_pres.fifoLock != 0, ico_render_thread_mode() == FM_MODE_ON);
+    if ((int)asMade != s_pres.asMade) {
+        s_pres.asMade = asMade;
+        window_timer_budget_reset();
+        fprintf(stderr,
+                asMade ? "window: vsync off, uncapped: pictures between frames as the render "
+                         "thread and the GPU make them (%u in flight at most); each held only "
+                         "when it would make a game step miss its period\n"
+                       : "window: pictures between frames paced by the present allowance and "
+                         "the display (%u in flight at most)\n",
+                (unsigned)RHI_FRAMES_IN_FLIGHT);
+    }
+    s_pres.budget.asMade = asMade ? (unsigned)RHI_FRAMES_IN_FLIGHT : 0u;
     s_pres.budget.presents = 0; /* the step's presents (pace_budget_step) */
     s_pres.budget.optional = 0;
     /* paced by the GPU's time: vsync off or mailbox in use (pace_policy.h) */
     s_pres.budget.paced = pace_budget_paced_mode(s_pres.vsync, rhi_present_mailbox());
     s_deadline += period;
     s_pres.statVsyncs++;
+    step_note(period);
     const int newFrame = frame_seen(s_deadline - period);
     if (!rd_interpolation_active()) {
         /* framerate "original": rd_end_frame presented the frame once; the
@@ -757,24 +855,29 @@ void window_present_pace(int hz)
         }
         /* nor a further present of a frame already shown that would
            end past the deadline (its cost the last present's; with the
-           render thread, the render thread's picture: rt_further_late): the
-           next simulation step is never late for one */
+           render thread, one that would make a step miss its period:
+           rt_further_hold): the game's step keeps its period */
         /* off the screen: no present again */
         /* nor one past the present allowance (pace_policy.h PaceBudget):
            after a step that ended half a period late, the in-betweens a
            step are held below what that step made; paced, one more only
-           while the GPU has the time for it (pace_policy.h) */
+           while the GPU has the time for it (pace_policy.h).  Not with the
+           pictures as made (vsync off, uncapped): there the GPU's own
+           back-pressure (the slot fences) is the limit and the allowance
+           only measures */
         if (s_pres.presentedFrame == s_pres.frame) {
             const int guard = now >= s_deadline || s_pres.paceSlow || s_pres.offScreen ||
                               (!s_pres.fifoLock && now + s_pres.cost > s_deadline);
-            const PaceRtHold rtWhy = guard ? PACE_RT_GO : rt_further_late(now, refresh);
+            const PaceRtHold rtWhy =
+                guard ? PACE_RT_GO : rt_further_hold(now, refresh, period, asMade);
             const int rtLate = rtWhy != PACE_RT_GO;
 
             if (rtLate) {
                 ico_render_thread_note_held((int)rtWhy);
             }
             if (guard || rtLate ||
-                !pace_budget_allows_paced(&s_pres.budget, false, s_pres.gpuNs, period)) {
+                (!asMade &&
+                 !pace_budget_allows_paced(&s_pres.budget, false, s_pres.gpuNs, period))) {
                 if (!guard && !rtLate) {
                     s_pres.budget.refused++;
                 }
@@ -816,6 +919,7 @@ void window_present_pace(int hz)
         if (ok) {
             s_pres.skipOpen = false;
             pace_budget_present(&s_pres.budget, fresh);
+            rt_pipe_posted(now, refresh, period);
         }
         if (!ok) {
             /* a movie on the output, or nothing closed yet */

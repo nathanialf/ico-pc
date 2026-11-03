@@ -162,6 +162,18 @@ uint64_t rd_thread_take_reads_ns(void);
  * above.  The window holds further presents back while the presents wait
  * (render_thread.c, pace_policy.h pace_rt_further_hold). */
 uint64_t rd_thread_take_present_ns(void);
+/* The render thread, after a picture's job, with rd_thread_take_reads_ns:
+ * the waits inside its reads (waitNs: its replays' waits for the slot's
+ * fence and the submit thread, and the acquire; rd_replay.c's wait time)
+ * and its interpolation (interpNs, which makes no graphics call), in ns;
+ * taken as above.  The window predicts a further picture's reads by the
+ * reads less those waits (render_thread.c, pace_policy.h PaceRtPipe). */
+void rd_thread_take_reads_parts(uint64_t *waitNs, uint64_t *interpNs);
+/* The game thread's waits for a picture's reads in all since the start,
+ * ns (the 10 s line's read waits, summed): the window takes a step's
+ * share out of its own time and counts the steps that started late by
+ * them (window_present.c) */
+uint64_t rd_thread_read_wait_ns(void);
 
 /* A render thread of the renderer's own, without SDL, for the replay tool
  * and the tests (rd_thread_ab, rd_tex_test): sync posts every job waited

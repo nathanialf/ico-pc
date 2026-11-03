@@ -161,6 +161,127 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
                : PACE_RT_GO;
 }
 
+void pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs)
+{
+    if (ownNs != 0) {
+        e->estNs = pace_rt_estimate(e->estNs, ownNs);
+    }
+    if (missed) {
+        e->misses++;
+        e->backoffs++;
+        e->missMaxNs = lateNs > e->missMaxNs ? lateNs : e->missMaxNs;
+        e->backoffLen = e->backoffLen == 0                           ? PACE_STEP_BACKOFF_MIN
+                        : e->backoffLen >= PACE_STEP_BACKOFF_MAX / 2 ? PACE_STEP_BACKOFF_MAX
+                                                                     : 2u * e->backoffLen;
+        e->backoff = e->backoffLen;
+        e->clean = 0;
+    } else if (e->backoff != 0) {
+        e->backoff--;
+    } else if (++e->clean >= PACE_STEP_BACKOFF_MAX && e->backoffLen != 0) {
+        /* a clean spell: the next back-off shorter, from the least none */
+        e->backoffLen = e->backoffLen > PACE_STEP_BACKOFF_MIN ? e->backoffLen / 2u : 0u;
+        e->clean = 0;
+    }
+}
+
+uint64_t pace_step_est_ns(const PaceStepEst *e, uint64_t periodNs)
+{
+    if (e->estNs == 0 || e->backoff != 0) {
+        return e->estNs > periodNs ? e->estNs : periodNs;
+    }
+    return e->estNs;
+}
+
+bool pace_rt_behind(uint64_t presentNs, uint64_t refreshNs)
+{
+    return refreshNs != 0 && presentNs * PACE_RT_BEHIND_DIV >= refreshNs;
+}
+
+uint64_t pace_rt_pipe_reads_end(const PaceRtPipe *p, uint64_t postNs, const PaceRtAsk *q,
+                                bool behind)
+{
+    const uint64_t measured = postNs + q->readsNs;
+
+    if (q->cpuNs == 0) {
+        return measured;
+    }
+    /* the interpolation, then the first graphics call: the submit thread
+       idle, the fence of the picture two before (one before, behind) */
+    uint64_t at = postNs + q->interpNs;
+
+    at = p->submitFreeNs > at ? p->submitFreeNs : at;
+    if (q->gpuNs != 0) {
+        const uint64_t fence = behind ? p->gpuDoneNs[1] : p->gpuDoneNs[0];
+
+        at = fence > at ? fence : at;
+    }
+    const uint64_t end = at + (q->cpuNs > q->interpNs ? q->cpuNs - q->interpNs : 0);
+
+    return end > measured ? end : measured;
+}
+
+void pace_rt_pipe_post(PaceRtPipe *p, uint64_t readsEndNs, const PaceRtAsk *q)
+{
+    p->submitFreeNs = readsEndNs + q->submitNs;
+    if (q->gpuNs != 0) {
+        const uint64_t start = readsEndNs > p->gpuDoneNs[1] ? readsEndNs : p->gpuDoneNs[1];
+
+        p->gpuDoneNs[0] = p->gpuDoneNs[1];
+        p->gpuDoneNs[1] = start + q->gpuNs;
+    }
+}
+
+bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLeftNs)
+{
+    const uint64_t need = q->stepNs + PACE_RT_STEP_MARGIN_NS;
+    const uint64_t slack = q->periodNs > need ? q->periodNs - need : 0;
+    const uint64_t due = q->dueNs, period = q->periodNs;
+    const bool behind = pace_rt_behind(q->presentNs, q->refreshNs);
+    const uint64_t post = q->nowNs + busyLeftNs;
+    const uint64_t readsEnd = pace_rt_pipe_reads_end(p, post, q, behind);
+    const uint64_t tail = q->pictureNs > q->readsNs ? q->pictureNs - q->readsNs : 0;
+    const uint64_t pictureEnd = readsEnd + tail;
+
+    /* the next step starts when the reads end */
+    if (readsEnd > due + slack) {
+        return true;
+    }
+    /* the step after it, behind the next new frame's picture: posted when
+       the next step ends, once the further picture's job is done */
+    const uint64_t endA = (readsEnd > due ? readsEnd : due) + q->stepNs;
+    const uint64_t endA0 = due + q->stepNs; /* without the further picture */
+    PaceRtPipe after = *p;
+
+    pace_rt_pipe_post(&after, readsEnd, q);
+    const uint64_t newPost = pictureEnd > endA ? pictureEnd : endA;
+    const uint64_t newEnd = pace_rt_pipe_reads_end(&after, newPost, q, behind);
+    const uint64_t newEnd0 = pace_rt_pipe_reads_end(p, endA0, q, behind);
+    const uint64_t startB = newEnd > due + period ? newEnd : due + period;
+    const uint64_t startB0 = newEnd0 > due + period ? newEnd0 : due + period;
+
+    return startB > startB0 && startB > due + period + slack;
+}
+
+PaceRtHold pace_rt_further_ask(const PaceRtAsk *q, const PaceRtPipe *p)
+{
+    if (q->paced) {
+        if (q->sinceNs != 0 && q->nowNs >= q->sinceNs && q->nowNs - q->sinceNs >= q->pictureNs) {
+            return PACE_RT_OVERRUN;
+        }
+        if (!q->asMade && pace_rt_behind(q->presentNs, q->refreshNs)) {
+            return PACE_RT_BEHIND;
+        }
+    }
+    return pace_rt_step_miss(q, p, pace_rt_busy_left(q->nowNs, q->sinceNs, q->pictureNs))
+               ? PACE_RT_MISS
+               : PACE_RT_GO;
+}
+
+bool pace_rt_as_made(bool vsync, bool uncapped, bool fifoLock, bool renderThread)
+{
+    return !vsync && uncapped && !fifoLock && renderThread;
+}
+
 /* the median of n costs (n <= PACE_AUTO_SAMPLES; 0 with none) */
 static uint64_t median_of(const uint64_t *cost, unsigned n)
 {
@@ -621,11 +742,24 @@ int pace_budget_block_text(const PaceBudget *b, unsigned refusedAt, unsigned dro
                            unsigned climbsAt, unsigned climbRefusalsAt, uint64_t gpuNs,
                            bool gpuIsSpan, const char *noGpu, char *out, unsigned size)
 {
-    char held[40], lowest[24], gpu[48];
+    char held[144], lowest[24], gpu[48];
 
     /* the timer path before its first drop, or back where it started:
        unbound, nothing held */
-    if (b->allow == PACE_ALLOW_NONE && b->paced && gpuNs != 0 && b->pacedTenths < PACE_PACED_HIGH) {
+    if (b->asMade != 0) {
+        /* vsync off, uncapped: the GPU's own back-pressure is the limit,
+           the allowance's pace only measured */
+        if (b->paced && gpuNs != 0 && b->pacedTenths < PACE_PACED_HIGH) {
+            snprintf(held, sizeof(held),
+                     "vsync off, uncapped: pictures as made (%u in flight at most, the GPU's "
+                     "time would pace them to %u.%u a step)",
+                     b->asMade, b->pacedTenths / 10, b->pacedTenths % 10);
+        } else {
+            snprintf(held, sizeof(held),
+                     "vsync off, uncapped: pictures as made (%u in flight at most)", b->asMade);
+        }
+    } else if (b->allow == PACE_ALLOW_NONE && b->paced && gpuNs != 0 &&
+               b->pacedTenths < PACE_PACED_HIGH) {
         snprintf(held, sizeof(held), "presents paced to %u.%u a step", b->pacedTenths / 10,
                  b->pacedTenths % 10);
     } else if (b->allow == PACE_ALLOW_NONE) {
