@@ -2732,7 +2732,9 @@ static void testStepTyp(void)
     }
     {
         /* a rare long closing step raises the plan by its share; a run of
-           long ones by a quarter of the mean at most */
+           long ones by half the deviation (a quarter of the mean at most:
+           6 / 16 ms in turn plan 13.20 ms, half the 4.99 ms deviation under
+           the 2.68 ms cap; pace4/typ_cells.out) */
         PaceStepTyp t;
 
         memset(&t, 0, sizeof t);
@@ -2754,7 +2756,8 @@ static void testStepTyp(void)
             pace_step_typ_note(&t, 16 * MS, P, false);
         }
         CHECK(t.meanNs == 10703642u && pace_step_typ_dev_ns(&t) == 4991209u);
-        CHECK(pace_step_typ_ns(&t) == 10703642u + 10703642u / 4u);
+        CHECK(pace_step_typ_ns(&t) == 10703642u + 4991209u / 2u);
+        CHECK(pace_step_typ_ns(&t) == 13199246u && 4991209u / 2u < 10703642u / 4u);
         CHECK(pace_typ_share_ns(9 * MS, 4 * MS * MS) == MS);
         CHECK(pace_typ_share_ns(4 * MS, 9 * MS * MS) == MS); /* the quarter */
         CHECK(pace_typ_share_ns(0, 9 * MS * MS) == 0);
