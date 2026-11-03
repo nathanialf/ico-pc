@@ -3302,7 +3302,20 @@ void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, co
         out->kind = "plain set by the device table";
         out->brief = lim->vuFallbackPlain;
     } else if (rd__driver_is_turnip(lim)) {
-        /* Mesa's Turnip on an Adreno: a skinned draw's vertex thrown far off
+        /* The shape of a gate on the Mesa version (lim->mesa, parsed from the
+         * driver's driverInfo, logged in the profile line's "turnip:" note):
+         * this branch would read `rd__driver_is_turnip(lim) &&
+         * !turnip_sliver_fixed(&lim->mesa)`, true for a build that is not
+         * known fixed, where turnip_sliver_fixed is true for a version a
+         * device test showed free of the sliver with the extended set ([dev]
+         * vu_set = extended on a 740 or 750: Mesa 25.x, "-devel" builds
+         * included, are unverified).  No version is known fixed yet, so the
+         * plain set stays for every Turnip, a build that names no version
+         * included; a build of Mesa's main branch ("-devel") is a version
+         * between two releases, so the gate would name the build's commit
+         * with it, not the number alone.
+         *
+         * Mesa's Turnip on an Adreno: a skinned draw's vertex thrown far off
          * Ico showed as a sliver through the extended set's clipped
          * triangles between ticks (issue 163).  The plain set drops a
          * triangle that fails the region test and reaches into the picture

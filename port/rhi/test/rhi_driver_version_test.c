@@ -3,7 +3,8 @@
  * (by driver id, and by vendor id when the id is unknown), Mesa's NVK on an
  * NVIDIA GPU (the Vulkan packing), Intel's Windows driver, and the Vulkan
  * packing of everyone else; the Qualcomm and MoltenVK rules; the colour
- * bytes a pixel of the Apple GPUs MoltenVK names (rhi_metal_color_bytes).
+ * bytes a pixel of the Apple GPUs MoltenVK names (rhi_metal_color_bytes); the
+ * Mesa version of a Mesa driver's driverInfo (rhi_mesa_version_parse).
  * Exit 0 on success, 1 on a failure. */
 #include "rhi_driver_version.h"
 #include "../../test/ico_check.h"
@@ -70,6 +71,62 @@ int main(void)
     CHECK(rhi_metal_color_bytes("Intel(R) UHD Graphics 630") == 0u);
     CHECK(rhi_metal_color_bytes("Apple Paravirtual device") == 0u);
     CHECK(rhi_metal_color_bytes(NULL) == 0u);
+    /* the Mesa version out of driverName and driverInfo, in the forms Mesa
+       drivers write */
+    {
+        RhiMesaVersion v;
+        char t[32];
+        /* Turnip built from Mesa's main branch (Weab-chan/freedreno_turnip-CI
+           25.3.0-devel, the port's own log forms) */
+        CHECK(rhi_mesa_version_parse("turnip Mesa driver", "Mesa 25.3.0-devel (git-bbdd688)", &v));
+        CHECK(v.known && v.major == 25 && v.minor == 3 && v.patch == 0 && v.devel);
+        CHECK_STR(rhi_mesa_version_text(&v, t, sizeof t), "Mesa 25.3.0-devel");
+        /* the issue 163 tablet's Turnip (driverVersion 26.2.99, the number
+           of a build before 26.3.0) */
+        CHECK(
+            rhi_mesa_version_parse("turnip Mesa driver", "Mesa 26.3.0-devel (git-a995eaeda4)", &v));
+        CHECK(v.major == 26 && v.minor == 3 && v.patch == 0 && v.devel);
+        /* a release */
+        CHECK(rhi_mesa_version_parse("turnip Mesa driver", "Mesa 24.2.8", &v));
+        CHECK(v.major == 24 && v.minor == 2 && v.patch == 8 && !v.devel);
+        CHECK_STR(rhi_mesa_version_text(&v, t, sizeof t), "Mesa 24.2.8");
+        /* llvmpipe of a distribution's package (this host's log): the
+           package revision is no devel mark */
+        CHECK(rhi_mesa_version_parse("llvmpipe", "Mesa 25.0.7-2 (LLVM 19.1.7)", &v));
+        CHECK(v.major == 25 && v.minor == 0 && v.patch == 7 && !v.devel);
+        /* a release candidate is not devel */
+        CHECK(rhi_mesa_version_parse("turnip Mesa driver", "Mesa 26.0.0-rc2 (git-1a2b3c4)", &v));
+        CHECK(v.major == 26 && v.minor == 0 && v.patch == 0 && !v.devel);
+        /* the word in the name's place too (a text of name and info joined),
+           other cases and separators, a "v", two parts only */
+        CHECK(rhi_mesa_version_parse(NULL, "turnip Mesa driver Mesa 25.1.0", &v));
+        CHECK(v.major == 25 && v.minor == 1 && v.patch == 0);
+        CHECK(rhi_mesa_version_parse(NULL, "mesa-25.1", &v));
+        CHECK(v.major == 25 && v.minor == 1 && v.patch == 0 && !v.devel);
+        CHECK(rhi_mesa_version_parse(NULL, "MESA v24.2.8-DEVEL", &v));
+        CHECK(v.major == 24 && v.minor == 2 && v.patch == 8 && v.devel);
+        /* a build that writes the bare version under a Mesa driver name */
+        CHECK(rhi_mesa_version_parse("turnip Mesa driver", "25.3.0-devel", &v));
+        CHECK(v.major == 25 && v.minor == 3 && v.devel);
+        /* a Mesa word with no number after it, then one that has */
+        CHECK(rhi_mesa_version_parse(NULL, "Mesa driver, Mesa 25.2.1", &v));
+        CHECK(v.major == 25 && v.minor == 2 && v.patch == 1);
+        /* none: Qualcomm's driver, NVIDIA's, empty, a bare version under a
+           non-Mesa name, a lone major, NULL */
+        CHECK(!rhi_mesa_version_parse("Qualcomm Technologies Inc. Adreno Vulkan Driver",
+                                      "Vulkan Driver Compiler Version: E031.41.03.47", &v));
+        CHECK(!v.known);
+        CHECK_STR(rhi_mesa_version_text(&v, t, sizeof t), "");
+        CHECK(!rhi_mesa_version_parse("NVIDIA", "581.57", &v));
+        CHECK(!rhi_mesa_version_parse("turnip Mesa driver", "", &v));
+        CHECK(!rhi_mesa_version_parse("turnip Mesa driver", "Mesa 25", &v));
+        CHECK(!rhi_mesa_version_parse(NULL, NULL, &v));
+        CHECK(!rhi_mesa_version_parse(NULL, "Mesa", &v));
+        /* a short buffer is cut and terminated */
+        CHECK(rhi_mesa_version_parse(NULL, "Mesa 25.3.0-devel", &v));
+        rhi_mesa_version_text(&v, t, 5);
+        CHECK_STR(t, "Mesa");
+    }
     /* a short buffer is cut and terminated */
     {
         char small[4];
