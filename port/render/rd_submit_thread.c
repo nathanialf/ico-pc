@@ -266,6 +266,11 @@ bool rd_thread_submit_stale(void)
     return __atomic_load_n(&s_st.busy, __ATOMIC_ACQUIRE) != 0;
 }
 
+bool rd_thread_submit_slots_apart(void)
+{
+    return s_st.th != NULL && s_st.apart;
+}
+
 bool rd_thread_submit_apart(void)
 {
     return s_st.th != NULL && s_st.apart && !t_onS && !t_kept && rd_thread_on_render();

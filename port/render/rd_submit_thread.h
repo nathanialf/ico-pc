@@ -103,6 +103,11 @@ bool rd_thread_on_submit(void);
  * and with no thread. */
 bool rd_thread_submit_busy(void);
 bool rd_thread_submit_stale(void);
+/* The submit thread runs with the frame slots apart (any thread; the
+ * window's pacing: the render thread's next picture then waits for the
+ * picture two before, not for the submit thread's job on the one before,
+ * pace_policy.h PaceRtPipe) */
+bool rd_thread_submit_slots_apart(void);
 /* The render thread's frame slots apart from the submit thread's: the
  * calling thread is the render thread, the slots are apart (rd_submit_thread.h
  * "the slots") and it keeps no list for the submit thread */
