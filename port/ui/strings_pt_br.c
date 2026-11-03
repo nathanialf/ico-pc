@@ -6,7 +6,8 @@
  * UTF-8: a community translation (strings.h UI_LANG_COMMUNITY_FIRST,
  * docs/TRANSLATING.md).  An id the translation leaves empty, one newer than
  * its CSV, one whose English changed since, or a note longer than its space
- * is NULL and takes English at run time (strings.c ui_str_in).
+ * is NULL and takes English at run time (strings.c ui_str_in).  The rows
+ * marked [cobra838] were corrected or filled by cobra838 (GitHub PR 180).
  */
 #include <stddef.h>
 
@@ -115,7 +116,8 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_ACH_LIGHT_BLADE] = "Uma Luz Estranha",
     [UI_STR_ACH_LIGHT_BLADE_DESC] = "Empunhe a Espada da Luz",
     [UI_STR_ACH_NO_CAPTURE] = "Jamais Capturada",
-    [UI_STR_ACH_NO_CAPTURE_DESC] = "Termine um novo jogo sem que uma Sobra capture a Yorda",
+    [UI_STR_ACH_NO_CAPTURE_DESC] =
+        "Termine um novo jogo sem que uma Sombra capture a Yorda", /* [cobra838] */
     [UI_STR_ACH_NO_GAMEOVER] = "Intacto",
     [UI_STR_ACH_NO_GAMEOVER_DESC] = "Termine um novo jogo sem nenhuma morte",
     [UI_STR_ACH_FAST] = "Escapada",
@@ -150,9 +152,11 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_DISC_CN] = NULL,    /* empty in the CSV: English */
     [UI_STR_REMAP_KEYBOARD] = "Teclado",
     [UI_STR_REMAP_GAMEPAD] = "Controle",
-    [UI_STR_REMAP_HINT] = NULL,        /* empty in the CSV: English */
-    [UI_STR_REMAP_HINT_CIRCLE] = NULL, /* empty in the CSV: English */
-    [UI_STR_REMAP_MENU_NOTE] = NULL,   /* empty in the CSV: English */
+    [UI_STR_REMAP_HINT] = "Cruz: alterar    Quadrado: limpar    Triângulo: voltar", /* [cobra838] */
+    [UI_STR_REMAP_HINT_CIRCLE] =
+        "Círculo: alterar    Quadrado: limpar    Triângulo: voltar", /* [cobra838] */
+    [UI_STR_REMAP_MENU_NOTE] =
+        "Nos menus, os botões de face e o direcional do controle sempre seguem a posição.", /* [cobra838] */
     [UI_STR_REMAP_PRESS] = "Aperte uma tecla ou botão…",
     [UI_STR_REMAP_RESET] = "Restaurar os padrões",
     [UI_STR_OPT_TOUCH_MODE] = "Controles de Toque",
@@ -212,13 +216,14 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
         NULL, /* longer than its space (170 bytes): English until shortened */
     [UI_STR_OPT_CRT] = "Filtro CRT",
     [UI_STR_OPT_CRT_STRENGTH] = "Intensidade do Filtro CRT",
-    [UI_STR_VAL_CRT_SCANLINES] = NULL, /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_CONSUMER] = NULL,  /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_TRINITRON] = NULL, /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_PVM] = NULL,       /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_SHADOW] = NULL,    /* empty in the CSV: English */
+    [UI_STR_VAL_CRT_SCANLINES] = "Linhas de varredura", /* [cobra838] */
+    [UI_STR_VAL_CRT_CONSUMER] = "TV de consumo",        /* [cobra838] */
+    [UI_STR_VAL_CRT_TRINITRON] = NULL,                  /* empty in the CSV: English */
+    [UI_STR_VAL_CRT_PVM] = NULL,                        /* empty in the CSV: English */
+    [UI_STR_VAL_CRT_SHADOW] = "Máscara de sombra",      /* [cobra838] */
     [UI_STR_VAL_CUSTOM] = "Customizado",
-    [UI_STR_RESOLUTION_CRT_NOTE] = NULL, /* empty in the CSV: English */
+    [UI_STR_RESOLUTION_CRT_NOTE] =
+        "Filtro CRT: os pixels originais do PS2, 1x enquanto ativado.", /* [cobra838] */
     [UI_STR_QUIT_DESKTOP] = "Voltar à Área de Trabalho",
     [UI_STR_QUIT_CONFIRM] = "Voltar à Área de Trabalho?",
     [UI_STR_OPT_CIRCLE_BACK] = "Use Círculo para Voltar",
@@ -272,7 +277,8 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_MT_NEED_360] = "(São necessários 360KB ou mais)",
     [UI_STR_MT_SELECT_SAVE] = "Selecione o arquivo para salvar",
     [UI_STR_MT_OVERWRITE] = "Salvar irá sobrescrever\nos dados neste arquivo.\nProceder?",
-    [UI_STR_MT_NOT_FORMATTED] = NULL, /* empty in the CSV: English */
+    [UI_STR_MT_NOT_FORMATTED] =
+        "O Cartão de Memória (PS2)\nnão está formatado.\nFormatar?", /* [cobra838] */
     [UI_STR_MT_FORMATTING] = "Formatando",
     [UI_STR_MT_SAVING] = "Salvando",
     [UI_STR_MT_FILE_SAVED] = "Arquivo Salvo.",
@@ -288,8 +294,8 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_MT_FILM_EFFECT] = "Efeito de Filme",
     [UI_STR_MT_SOUND] = "Som",
     [UI_STR_MT_STEREO] = "Estéreo",
-    [UI_STR_MT_MONO] = NULL,      /* the same as the English */
-    [UI_STR_MT_HOLD_TYPE] = NULL, /* empty in the CSV: English */
+    [UI_STR_MT_MONO] = NULL,                   /* the same as the English */
+    [UI_STR_MT_HOLD_TYPE] = "Tipo de Segurar", /* [cobra838] */
     [UI_STR_MT_BUTTON_CONFIG] = "Configuração dos Botões",
     [UI_STR_MT_BRIGHTNESS] = "Brilho",
     [UI_STR_MT_PLAYERS] = "Jogadores",
@@ -359,7 +365,7 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_MV_HINT_ZOOM] = NULL, /* the same as the English */
     [UI_STR_MV_HINT_MOVE] = "Mover",
     [UI_STR_MV_HINT_SAVE] = "Salvar arquivos de Modelos",
-    [UI_STR_MV_SAVED_FMT] = NULL, /* empty in the CSV: English */
+    [UI_STR_MV_SAVED_FMT] = "%d arquivos salvos em %s", /* [cobra838] */
     [UI_STR_MV_SAVED_NONE] = "Nenhum arquivo Salvo",
     [UI_STR_MV_ICO] = NULL,   /* the same as the English */
     [UI_STR_MV_YORDA] = NULL, /* the same as the English */
@@ -385,25 +391,25 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_MV_MAGIC_SWORD] = "Espada Mágica (Espada da Rainha)",
     [UI_STR_MV_COUCH] = "Sofá de Pedra",
     [UI_STR_PHOTO_MODE] = "Modo Foto",
-    [UI_STR_PHOTO_FOV] = NULL, /* empty in the CSV: English */
+    [UI_STR_PHOTO_FOV] = "Campo de visão %d°", /* [cobra838] */
     [UI_STR_PHOTO_SAVED] = "Foto salva",
     [UI_STR_PHOTO_FAILED] = "Foto não foi salva",
     [UI_STR_PHOTO_CAM_FREE] = "Câmera Livre",
     [UI_STR_PHOTO_CAM_ORBIT] = "Câmera Orbital",
-    [UI_STR_PHOTO_SPEED] = NULL, /* empty in the CSV: English */
+    [UI_STR_PHOTO_SPEED] = "velocidade %s", /* [cobra838] */
     [UI_STR_PHOTO_SPEED_SLOW] = "Lento",
     [UI_STR_PHOTO_SPEED_NORMAL] = NULL, /* the same as the English */
     [UI_STR_PHOTO_SPEED_FAST] = "Rápido",
     [UI_STR_OPT_BRIGHTNESS] = "Brilho",
-    [UI_STR_OPT_HOLD_TYPE] = NULL, /* empty in the CSV: English */
+    [UI_STR_OPT_HOLD_TYPE] = "Tipo de Segurar", /* [cobra838] */
     [UI_STR_OPT_BUTTON_CONFIG] = "Configuração dos botões",
     [UI_STR_OPT_FILM_EFFECT] = "Efeito de Filme",
     [UI_STR_OPT_PLAYERS] = "Jogadores",
     [UI_STR_OPT_ACH_POPUPS] = "Pop-up de Conquistas",
     [UI_STR_VAL_HOLD_A] = "A (segurar)",
     [UI_STR_VAL_HOLD_B] = "B (alternar)",
-    [UI_STR_VAL_HOLD_DISC_A] = NULL, /* empty in the CSV: English */
-    [UI_STR_VAL_HOLD_DISC_B] = NULL, /* empty in the CSV: English */
+    [UI_STR_VAL_HOLD_DISC_A] = "Original do disco (A)", /* [cobra838] */
+    [UI_STR_VAL_HOLD_DISC_B] = "Original do disco (B)", /* [cobra838] */
     [UI_STR_HOLD_TYPE_NOTE] =
         "A: segure R1 para segurar a mão da Yorda. B: aperte R1 uma vez para segurar a mão da Yorda; aperte novamente para soltar.",
     [UI_STR_STICK_FIX_ALSO_NOTE] = "Também presente na aba \"Jogo\"",
@@ -413,11 +419,11 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
         "A disposição de botões no seu save. Se aplica sobre \"remapear controles.\"",
     [UI_STR_OPT_TEXTURE_PACK] = "Pacote de Texturas",
     [UI_STR_VAL_NONE_INSTALLED] = "Nenhum instalado",
-    [UI_STR_TEXTURE_PACK_NOTE] = NULL, /* empty in the CSV: English */
+    [UI_STR_TEXTURE_PACK_NOTE] = "Pacotes PCSX2: copie %s para textures.", /* [cobra838] */
     [UI_STR_OPT_DUMP_TEXTURES] = "Exportar Texturas",
     [UI_STR_DUMP_TEXTURES_NOTE] = NULL, /* its % codes differ from English's */
     [UI_STR_OPT_MODEL_PACK] = "Pacote de Modelos",
-    [UI_STR_MODEL_PACK_NOTE] = NULL, /* empty in the CSV: English */
+    [UI_STR_MODEL_PACK_NOTE] = "Pacotes de modelos: copie %s para models.", /* [cobra838] */
     [UI_STR_OPT_DUMP_MODELS] = "Exportar Modelos",
     [UI_STR_DUMP_MODELS_NOTE] = NULL, /* its % codes differ from English's */
     [UI_STR_OPT_REPORT_PICTURE] = "Salvar uma imagem para um relatório de erro",
@@ -427,8 +433,9 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_REPORT_PICTURE_ARMED_BODY] =
         "Sai do menu agora.\nO arquivo zip vai para a pasta dumps.",
 #if ICO_RC_TOOLS
-    [UI_STR_OPT_SHARE_REPORT] = NULL,  /* newer than the CSV: English */
-    [UI_STR_SHARE_REPORT_NOTE] = NULL, /* newer than the CSV: English */
+    [UI_STR_OPT_SHARE_REPORT] = "Compartilhar relatório de erro", /* [cobra838] */
+    [UI_STR_SHARE_REPORT_NOTE] =
+        "Abre o menu de compartilhamento com o log e o zip de imagem mais recente, para enviar por e-mail ou aplicativo de mensagens.", /* [cobra838] */
 #endif
     [UI_STR_SECTION_EFFECTS] = "Efeitos",
     [UI_STR_SECTION_PICTURE] = "Imagem",
@@ -478,35 +485,35 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_CHAR_YORDA_DRESS] = "Yorda: Vestido",
     [UI_STR_CHAR_RANDOMIZE] = "Aleatório",
     [UI_STR_CHAR_RESET] = "Restaurar para Original",
-    [UI_STR_CHAR_TONE] = NULL, /* empty in the CSV: English */
+    [UI_STR_CHAR_TONE] = "Matiz %d", /* [cobra838] */
     [UI_STR_CHAR_NOTE_TITLE] = "As cores se aplicam ao jogo de uma vez.",
     [UI_STR_CHAR_NOTE_PAUSE] = "As cores mudam atrás deste menu conforme sua escolha.",
     [UI_STR_CHAR_NOTE_PACK] =
         "Um pacote de textura está ativado. Se houverem texturas para Ico e Yorda, elas substituem essas cores.",
-    [UI_STR_COLOUR_RED] = NULL,     /* empty in the CSV: English */
-    [UI_STR_COLOUR_CRIMSON] = NULL, /* empty in the CSV: English */
-    [UI_STR_COLOUR_ROSE] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_PINK] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_MAGENTA] = NULL, /* empty in the CSV: English */
-    [UI_STR_COLOUR_PLUM] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_VIOLET] = NULL,  /* empty in the CSV: English */
-    [UI_STR_COLOUR_INDIGO] = NULL,  /* empty in the CSV: English */
-    [UI_STR_COLOUR_NAVY] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_BLUE] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_SKY] = NULL,     /* empty in the CSV: English */
-    [UI_STR_COLOUR_TEAL] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_CYAN] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_GREEN] = NULL,   /* empty in the CSV: English */
-    [UI_STR_COLOUR_MOSS] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_OLIVE] = NULL,   /* empty in the CSV: English */
-    [UI_STR_COLOUR_GOLD] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_ORANGE] = NULL,  /* empty in the CSV: English */
-    [UI_STR_COLOUR_RUST] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_BROWN] = NULL,   /* empty in the CSV: English */
-    [UI_STR_COLOUR_SAND] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_WHITE] = NULL,   /* empty in the CSV: English */
-    [UI_STR_COLOUR_GREY] = NULL,    /* empty in the CSV: English */
-    [UI_STR_COLOUR_BLACK] = NULL,   /* empty in the CSV: English */
+    [UI_STR_COLOUR_RED] = "Vermelho",       /* [cobra838] */
+    [UI_STR_COLOUR_CRIMSON] = "Carmesim",   /* [cobra838] */
+    [UI_STR_COLOUR_ROSE] = "Rosa",          /* [cobra838] */
+    [UI_STR_COLOUR_PINK] = "Rosa choque",   /* [cobra838] */
+    [UI_STR_COLOUR_MAGENTA] = NULL,         /* empty in the CSV: English */
+    [UI_STR_COLOUR_PLUM] = "Ameixa",        /* [cobra838] */
+    [UI_STR_COLOUR_VIOLET] = "Violeta",     /* [cobra838] */
+    [UI_STR_COLOUR_INDIGO] = "Índigo",      /* [cobra838] */
+    [UI_STR_COLOUR_NAVY] = "Azul marinho",  /* [cobra838] */
+    [UI_STR_COLOUR_BLUE] = "Azul",          /* [cobra838] */
+    [UI_STR_COLOUR_SKY] = "Azul-céu",       /* [cobra838] */
+    [UI_STR_COLOUR_TEAL] = "Azul-petróleo", /* [cobra838] */
+    [UI_STR_COLOUR_CYAN] = "Ciano",         /* [cobra838] */
+    [UI_STR_COLOUR_GREEN] = "Verde",        /* [cobra838] */
+    [UI_STR_COLOUR_MOSS] = "Musgo",         /* [cobra838] */
+    [UI_STR_COLOUR_OLIVE] = "Oliva",        /* [cobra838] */
+    [UI_STR_COLOUR_GOLD] = "Dourado",       /* [cobra838] */
+    [UI_STR_COLOUR_ORANGE] = "Laranja",     /* [cobra838] */
+    [UI_STR_COLOUR_RUST] = "Ferrugem",      /* [cobra838] */
+    [UI_STR_COLOUR_BROWN] = "Marrom",       /* [cobra838] */
+    [UI_STR_COLOUR_SAND] = "Areia",         /* [cobra838] */
+    [UI_STR_COLOUR_WHITE] = "Branco",       /* [cobra838] */
+    [UI_STR_COLOUR_GREY] = "Cinza",         /* [cobra838] */
+    [UI_STR_COLOUR_BLACK] = "Preto",        /* [cobra838] */
     [UI_STR_CHAR_SWITCH_YORDA] = "Mudar para Yorda",
     [UI_STR_CHAR_SWITCH_ICO] = "Mudar para Ico",
     [UI_STR_CHAR_HINT_COLOUR] = "Cor",
@@ -515,20 +522,25 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_VAL_WINDOWED] = "Em janela",
     [UI_STR_VAL_BORDERLESS] = "Sem bordas",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Barras cinematográficas",
-    [UI_STR_OPT_FULL_PIXEL] = "Preencher até as bordas",
+    [UI_STR_OPT_FULL_PIXEL] = "Pixel cheio (pixels exatos da tela)", /* [cobra838] */
     [UI_STR_SECTION_GRAPHICS] = "Gráficos",
     [UI_STR_OPT_GRAPHICS_API] = "API Gráfica",
     [UI_STR_VAL_GRAPHICS_AUTOMATIC] = "Automático",
-    [UI_STR_GRAPHICS_API_NOTE] = NULL,    /* the CSV has only the first half of the note: English */
-    [UI_STR_OPT_GRAPHICS_ADAPTER] = NULL, /* newer than the CSV: English */
-    [UI_STR_GRAPHICS_ADAPTER_NOTE] = NULL,   /* newer than the CSV: English */
-    [UI_STR_GRAPHICS_ADAPTER_FAILED] = NULL, /* newer than the CSV: English */
+    [UI_STR_GRAPHICS_API_NOTE] =
+        "Aplicar alterna agora; sem Aplicar, a escolha é usada na próxima inicialização.", /* [cobra838] */
+    [UI_STR_OPT_GRAPHICS_ADAPTER] = "Placa de vídeo", /* [cobra838] */
+    [UI_STR_GRAPHICS_ADAPTER_NOTE] =
+        "Qual placa de vídeo desenha o jogo. Aplicar alterna agora; sem Aplicar, a escolha é usada na próxima inicialização.", /* [cobra838] */
+    [UI_STR_GRAPHICS_ADAPTER_FAILED] =
+        "A placa de vídeo %s não pôde iniciar; %s foi mantida", /* [cobra838] */
     [UI_STR_GRAPHICS_APPLY] = "Aplicar",
-    [UI_STR_GRAPHICS_APPLY_NOTE] = NULL, /* empty in the CSV: English */
-    [UI_STR_GRAPHICS_KEEP_ASK] = NULL,   /* empty in the CSV: English */
+    [UI_STR_GRAPHICS_APPLY_NOTE] =
+        "Aplica agora, sem sair do jogo. Uma pequena pausa é normal.",             /* [cobra838] */
+    [UI_STR_GRAPHICS_KEEP_ASK] = "Manter estas configurações? Revertendo em %d s", /* [cobra838] */
     [UI_STR_GRAPHICS_KEEP] = "Manter",
     [UI_STR_GRAPHICS_REVERT] = "Reverter",
-    [UI_STR_GRAPHICS_FAILED] = NULL, /* empty in the CSV: English */
+    [UI_STR_GRAPHICS_FAILED] =
+        "O renderizador %s não pôde iniciar; %s foi mantido", /* [cobra838] */
     [UI_STR_SECTION_GPU_DRIVER] = "Driver Gráfico",
     [UI_STR_OPT_GPU_DRIVER] = NULL, /* the same as the English */
     [UI_STR_VAL_GPU_BUILTIN] = "Incorporado",
@@ -542,12 +554,15 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_FAILED] =
         "O driver selecionado não iniciou na última execução. O driver nativo do dispositivo está em uso.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "Não há espaço suficiente para adicionar o driver",
-    [UI_STR_GPU_DRIVER_NO_PICKER] = NULL,     /* empty in the CSV: English */
-    [UI_STR_GPU_DRIVER_NO_PICKER_APP] = NULL, /* empty in the CSV: English */
+    [UI_STR_GPU_DRIVER_NO_PICKER] =
+        "Não foi possível abrir o seletor de arquivos. Você pode copiar o arquivo zip do driver para a pasta drivers do jogo: %s", /* [cobra838] */
+    [UI_STR_GPU_DRIVER_NO_PICKER_APP] =
+        "Nenhum aplicativo neste dispositivo pode escolher um arquivo. Copie o arquivo zip do driver para a pasta drivers do jogo: %s", /* [cobra838] */
     [UI_STR_GPU_DRIVER_UNREADABLE] =
         "Não foi possível ler o arquivo selecionado. Copie-o primeiro para este dispositivo e tente selecioná-lo novamente.",
     [UI_STR_GPU_DRIVER_ADD_FILE] = "Adicionar da pasta de drivers",
-    [UI_STR_GPU_DRIVER_CANCELLED] = NULL, /* empty in the CSV: English */
+    [UI_STR_GPU_DRIVER_CANCELLED] =
+        "Nenhum arquivo foi escolhido. Se o seletor de arquivos não aparecer neste dispositivo, copie o arquivo zip do driver para a pasta drivers do jogo e use Adicionar da pasta de drivers: %s", /* [cobra838] */
     [UI_STR_GPU_DRIVER_NOTE_LOST] = NULL, /* empty in the CSV: English */
     [UI_STR_QUIT_GAME] = "Encerrar o jogo",
     [UI_STR_QUIT_GAME_CONFIRM] = "Encerrar o jogo?",
@@ -555,8 +570,8 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_MOUSE_SPEED] = "Velocidade da Câmera no Mouse",
     [UI_STR_OPT_MOUSE_RANGE] = "Alcance da câmera pelo mouse",
     [UI_STR_OPT_MOUSE_RETURN] = "Retorno automático da câmera",
-    [UI_STR_VAL_RANGE_NORMAL] = NULL, /* the same as the English */
-    [UI_STR_VAL_RANGE_FULL] = "Rápido",
+    [UI_STR_VAL_RANGE_NORMAL] = NULL,  /* the same as the English */
+    [UI_STR_VAL_RANGE_FULL] = "Total", /* [cobra838] */
     [UI_STR_VAL_INSTANT] = "Instantâneo",
     [UI_STR_OPT_DOOR_FIX] = "Correção da Porta do Refletor Leste",
     [UI_STR_OPT_DOOR_FIX_NOTE] =
@@ -573,7 +588,7 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_SECOND_CARD_NOTE] = NULL, /* newer than the CSV: English */
     [UI_STR_OPT_AA] = "Antisserrilhado",
     [UI_STR_OPT_AA_NOTE] =
-        "Suaviza as bordas serrilhadas. A superamostragem renderiza 4 vezes (2×) ou 16 vezes (4×) mais pixels. Reduza se o contador de FPS chegar a 30",
+        "Suaviza as bordas serrilhadas. A superamostragem renderiza 4 vezes (2×) ou 16 vezes (4×) mais pixels. Reduza se o contador de FPS chegar a 30.", /* [cobra838] */
     [UI_STR_OPT_DOWNSAMPLE] = "Redução de resolução",
     [UI_STR_VAL_DOWNSAMPLE_BOX] = "Para o tamanho original",
     [UI_STR_OPT_DOWNSAMPLE_NOTE] =
@@ -581,10 +596,10 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_AA_OFF] = "Desligado",
     [UI_STR_AA_SSAA2] = "Superamostragem 2x",
     [UI_STR_AA_SSAA4] = "Superamostragem 4x",
-    [UI_STR_AA_MSAA2] = NULL, /* the same as the English */
-    [UI_STR_AA_MSAA4] = NULL, /* the same as the English */
-    [UI_STR_AA_MSAA8] = NULL, /* the same as the English */
-    [UI_STR_AA_UNAVAILABLE] = "(desativado: indisponível)",
+    [UI_STR_AA_MSAA2] = NULL,                                /* the same as the English */
+    [UI_STR_AA_MSAA4] = NULL,                                /* the same as the English */
+    [UI_STR_AA_MSAA8] = NULL,                                /* the same as the English */
+    [UI_STR_AA_UNAVAILABLE] = " (desativado: indisponível)", /* [cobra838] */
     [UI_STR_EXTRAS_STEAM] = "Adicionar à Steam",
     [UI_STR_STEAM_ADDED] = "Adicionado à Steam",
     [UI_STR_STEAM_ADDED_BODY] = "Inicie a Steam e procure por ICO\nna sua biblioteca.",
@@ -650,7 +665,7 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_WATER] = "Reflexos da água",
     [UI_STR_VAL_SHARP] = "Nítidos",
     [UI_STR_EFFECT_WATER_NOTE] =
-        "Renderiza os reflexos na água na resolução selecionada. \"Original\" mantém os reflexos suaves do PS2.",
+        "Nítidos renderiza os reflexos na água na resolução selecionada. \"Original\" mantém os reflexos suaves do PS2.", /* [cobra838] */
     [UI_STR_VAL_SMOOTH] = "Suave",
     [UI_STR_OPT_SHOW_FPS] = "Contador de FPS",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
@@ -686,7 +701,8 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
         "Toque em um botão para selecioná-lo. Arraste para movê-lo. Faça o movimento de pinça para redimensioná-lo.",
     [UI_STR_TED_OVERLAP] = "Botões sobrepostos: o que for desenhado primeiro terá prioridade.",
     [UI_STR_TED_COVERED] = "Um botão não pode cobrir o centro de outro.",
-    [UI_STR_ISO_NEED_SPACE] = NULL, /* its % codes differ from English's */
+    [UI_STR_ISO_NEED_SPACE] =
+        "Esta imagem de disco precisa de %llu.%llu GB livres em %s; %llu.%llu GB está livre.\nLibere espaço (aplicativos, vídeos ou downloads) e inicie o jogo novamente.", /* [cobra838] */
     [UI_STR_ISO_COPY_FAILED] =
         "Não foi possível copiar a imagem de disco para %s.\nVerifique se há aproximadamente %llu.%llu GB livres e se o arquivo ainda está lá. Em seguida, reinicie o jogo. Consulte o registro para saber o motivo.",
     [UI_STR_ISO_COPYING] = "Copiando a imagem de disco para o aplicativo",
@@ -725,7 +741,7 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
         "O analógico direito não controlará mais a câmera durante as cenas. As conquistas continuam ativadas.",
     [UI_STR_OPT_VAR_IGNORE_CAMS] = "Ignorar câmeras das cenas",
     [UI_STR_OPT_VAR_IGNORE_CAMS_NOTE] =
-        NULL, /* the CSV has only the first half of the note: English */
+        "As cenas podem apresentar problemas visuais; o jogo pode mostrar lugares que nunca deveriam ser vistos. Desativa as conquistas.", /* [cobra838] */
     [UI_STR_OPT_VAR_DEBUG_MENU] = "Menu de depuração",
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
         "Menu de depuração original do jogo, destinado aos desenvolvedores. Desativa as conquistas.",
@@ -736,7 +752,7 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "Esta versão do jogo não permite movimentar a câmera durante as cenas, portanto esta opção não altera nada. As conquistas continuam ativadas.",
     [UI_STR_GPU_HANG_TURNIP] =
-        "No driver Qualcomm original deste dispositivo, um pacote de driver Turnip pode ajudar: adicione-o em Opções > Driver gráfico > Adicionar driver. Será utilizado na próxima inicialização.",
+        "No driver Qualcomm nativo deste dispositivo, um pacote de driver Turnip pode ajudar: adicione-o em Opções > Driver gráfico > Adicionar driver. Será utilizado na próxima inicialização.", /* [cobra838] */
     [UI_STR_STATES] = "Save States",
     [UI_STR_STATES_SLOT] = NULL, /* empty in the CSV: English */
     [UI_STR_STATES_EMPTY] = "Vazio",

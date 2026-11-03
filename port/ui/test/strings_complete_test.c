@@ -158,9 +158,21 @@ static void testTables(void)
               strcmp(ui_strings_pt_br[UI_STR_MT_NEW_GAME], "Novo Jogo") == 0,
           "pt-br: his words (%s, %s)", ui_strings_pt_br[UI_STR_SETTINGS],
           ui_strings_pt_br[UI_STR_MT_NEW_GAME]);
+    /* cobra838's corrections and fills (PR 180): the Shadow's typo, the
+       leading space the AA value is appended with, the mouse range's Full, a
+       note his table has whole, a row Igor's CSV left empty, an id newer
+       than the CSV */
+    CHECK(strstr(ui_strings_pt_br[UI_STR_ACH_NO_CAPTURE_DESC], "uma Sombra") != NULL &&
+              strcmp(ui_strings_pt_br[UI_STR_AA_UNAVAILABLE], " (desativado: indisponível)") == 0 &&
+              strcmp(ui_strings_pt_br[UI_STR_VAL_RANGE_FULL], "Total") == 0 &&
+              ui_strings_pt_br[UI_STR_GRAPHICS_API_NOTE] != NULL &&
+              strcmp(ui_strings_pt_br[UI_STR_COLOUR_RED], "Vermelho") == 0 &&
+              ui_strings_pt_br[UI_STR_OPT_GRAPHICS_ADAPTER] != NULL,
+          "pt-br: cobra838's rows (%s, [%s], %s)", ui_strings_pt_br[UI_STR_ACH_NO_CAPTURE_DESC],
+          ui_strings_pt_br[UI_STR_AA_UNAVAILABLE], ui_strings_pt_br[UI_STR_VAL_RANGE_FULL]);
     CHECK(ui_strings_pt_br[UI_STR_EXTRAS] == NULL &&
               ui_strings_pt_br[UI_STR_VAL_ORIGINAL] == NULL &&
-              ui_strings_pt_br[UI_STR_GRAPHICS_API_NOTE] == NULL &&
+              ui_strings_pt_br[UI_STR_EFFECT_GLOW_SMOOTH_NOTE] == NULL &&
               ui_strings_pt_br[UI_STR_DUMP_TEXTURES_NOTE] == NULL &&
               ui_strings_pt_br[UI_STR_OPT_DOWNSAMPLE_NOTE] == NULL &&
               ui_strings_pt_br[UI_STR_EXTRAS_BACKUP] == NULL &&
