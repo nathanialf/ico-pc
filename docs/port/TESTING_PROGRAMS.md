@@ -1004,7 +1004,27 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the lists without a skip shared, code 34, particles, no target and list 11 kept,
   `rd__vis_culled` and `rd__vis_source`, the counts in the performance record, a stream written
   again bounded again, and the frame itself returned with the mode off, a pass window, number 0 or
-  nothing skipped (`rd_vis`).
+  nothing skipped; the occlusion test (`rd_vis_hiz.c`): random cameras' vertices through the float
+  product in both rounding modes, every one `rd__vis_hiz_vertex` takes inside the region test (code
+  36: without a clip flag) with its ftoi4 position and its unsnapped one within `r` of the centre
+  and its GS Z above the bound; random boxes, every corner and 64 points inside within
+  `rd__vis_hiz_occludee`'s box and under its Z bound; 300 random triangles rasterised, the two ends
+  of each row's covered run (one run a row) inside every placement of the corners within `r` (the
+  64 extremes and 16 inside) by 0.25 GS pixel, the square grown by a pixel each way and half a
+  pixel more up and down; the inner rule at a cell's corner (a right angle on it: the cells on its
+  legs not covered, the next in covered; a leg 0.3 pixel out of a cell's grown edge covers it, 0.2
+  does not); through the
+  orthographic block a wall then a box behind it hidden, one GS Z unit in front, coplanar, inside
+  the margin, inside the later mark's room, reaching past the wall's edge (a part-covered tile) and
+  beside it kept, nothing hidden by an empty or reset record; near 2^31 the margin 20480 and a box
+  hidden exactly when its bound and the margin stay under the wall's; and on a recorded frame under
+  full: the box behind an opaque wall an RDC_NOP, one in front kept, kept behind a wall under an
+  alpha test its As may fail (GREATER 0, alpha 0), blending, Z write off or a chain plane, under
+  its own Z test ALWAYS, after a clear or a draw that may lower the depth (particles under ALWAYS
+  with Z write), a wall under ALWAYS hiding, a wall under ATE GREATER 0x40 with AFAIL FB_ONLY whose
+  As is 127 at every vertex hiding (the alpha plan's range), the walls themselves drawn, list 5's
+  box kept; the counts (3 occluded, 4 tested, 5 resets); frustum alone hiding nothing; `ICO_RD_CULL_HIZ_TRIS` 0 (none) and 1 (the first wall's
+  first triangle alone); `ICO_VK_DEPTH_ALWAYS` hiding nothing (`rd_vis`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
@@ -1273,12 +1293,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-store-plan)). SKIP as `rd_vustage_ab`.
 - `rd_cull_ab.cmake`: the dumps of `tools/occlusion_corpus.txt` and `tools/native_frame_dumps.txt`
   (the missing ones named and skipped) under `ICO_RD_BLEND=fixed` with `--pass-dump --stats`
-  twice, `ICO_RD_CULL=off` and `frustum`, at Original 4:3 presented at 640x480, Enhanced 4:3 2x,
-  Enhanced 2x at the dump's own aspect where `--no-device --list` says it is wider than 4:3, and on
-  the first dump once with `--aa msaa4`: every named target's PNG (and `PRESENT.png`) byte for
-  byte, the off run's `cull off: 0 of 0` and the frustum run's `cull frustum: N of M` with N at
-  most M, and draws skipped over the corpus; each run's counts printed; `-DMAX_DUMPS=n` takes the
-  first n dumps (`rd_cull_ab`; [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
+  three times, `ICO_RD_CULL=off`, `frustum` and `full`, at Original 4:3 presented at 640x480,
+  Enhanced 4:3 2x, Enhanced 2x at the dump's own aspect where `--no-device --list` says it is wider
+  than 4:3, and on the first dump once with `--aa msaa4`: every named target's PNG (and
+  `PRESENT.png`) of the frustum and the full runs byte for byte the off run's, the off run's `cull
+  off: 0 of 0`, the frustum run's `cull frustum: N of M` with N at most M, the full run's `cull
+  full: N of M (F frustum, O occluded)` with the frustum run's M, F its N and N = F + O, and draws
+  skipped over the corpus (the occluded total printed); each run's counts printed;
+  `-DMAX_DUMPS=n` takes the first n dumps (`rd_cull_ab`, TIMEOUT 5400;
+  [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
 - `rd_thread_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` through
   `rd_replay_tool --render-thread off`, `sync` and `on` (every replay, the interpolation and the
   renderer's calls on a thread of the renderer's own, `port/render/rd_thread.h`), with

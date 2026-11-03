@@ -2,19 +2,22 @@
 # "Culling") against every draw replayed, byte for byte.  For every dump the
 # lists name (tools/occlusion_corpus.txt and tools/native_frame_dumps.txt, read
 # as rd_store_plan_ab.cmake reads them; the missing ones named and skipped),
-# under ICO_RD_BLEND=fixed, rd_replay_tool's --pass-dump with --stats twice:
-# with ICO_RD_CULL=off (every scene draw replayed) and ICO_RD_CULL=frustum (the
-# draws wholly off their target or behind the eye replayed as NOPs), at the
-# settings
+# under ICO_RD_BLEND=fixed, rd_replay_tool's --pass-dump with --stats three
+# times: with ICO_RD_CULL=off (every scene draw replayed), ICO_RD_CULL=frustum
+# (the draws wholly off their target or behind the eye replayed as NOPs) and
+# ICO_RD_CULL=full (those, and the draws of list 0 wholly behind the depth the
+# opaque draws before them wrote: rd_vis_hiz.c), at the settings
 #   orig43   the Original preset at 4:3, presented at 640x480 (PRESENT.png too);
 #   enh2x43  Enhanced 4:3 2x;
 #   wide     Enhanced 2x at the dump's own aspect, for a dump drawn wider than
 #            4:3 (its aspect read from --no-device --list);
 # and once, on the first dump, msaa (Enhanced 4:3 2x with --aa msaa4).
-# Every named target's PNG of the frustum run must equal the off run's byte for
-# byte; the off run's stats line must say "cull off: 0 of 0", the frustum run's
-# "cull frustum: N of M" with N <= M; over the corpus the frustum runs must
-# skip draws.  Each run's counts are printed.  No dump read, or no device: SKIP
+# Every named target's PNG of the frustum and the full runs must equal the off
+# run's byte for byte; the off run's stats line must say "cull off: 0 of 0",
+# the frustum run's "cull frustum: N of M" with N <= M, the full run's "cull
+# full: N of M (F frustum, O occluded)" with F the frustum run's N and
+# N = F + O; over the corpus the frustum runs must skip draws (the occluded
+# total is reported, 0 allowed).  Each run's counts are printed.  No dump read, or no device: SKIP
 # (77).  -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DEXTRA=<a second list>
 # -DOUT=<a folder the test may write> [-DMAX_DUMPS=<n>: the first n dumps only]
 set(dumps "")
@@ -65,12 +68,13 @@ set(args_orig43 --aspect 4:3 --present 640x480)
 set(args_enh2x43 --enhanced --aspect 4:3 --resolution 2x)
 set(args_wide --enhanced --resolution 2x)
 set(args_msaa --enhanced --aspect 4:3 --resolution 2x --aa msaa4)
-set(runs "off" "frustum")
+set(runs "off" "frustum" "full")
 set(cullRe "stats: cull (off|frustum|full): ([0-9]+) of ([0-9]+) scene draws skipped \\(([0-9]+) frustum, ([0-9]+) occluded\\), ([0-9.]+) ms")
 set(aspectRe "dump: version [0-9]+, GS [0-9]+x[0-9]+, aspect ([0-9.]+)")
 set(compared 0)
 set(failures 0)
 set(skippedTotal 0)
+set(occludedTotal 0)
 set(drawsTotal 0)
 set(index 0)
 foreach(dump IN LISTS dumps)
@@ -127,6 +131,8 @@ foreach(dump IN LISTS dumps)
       set(mode_${run} "${CMAKE_MATCH_1}")
       set(skip_${run} "${CMAKE_MATCH_2}")
       set(draws_${run} "${CMAKE_MATCH_3}")
+      set(frustum_${run} "${CMAKE_MATCH_4}")
+      set(occluded_${run} "${CMAKE_MATCH_5}")
       set(ms_${run} "${CMAKE_MATCH_6}")
     endforeach()
     if(skipped)
@@ -137,7 +143,8 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     message(STATUS "${dump} ${s}: ${skip_frustum} of ${draws_frustum} scene draws skipped "
-                   "(${ms_frustum} ms)")
+                   "(${ms_frustum} ms); full: ${skip_full} (${occluded_full} occluded, "
+                   "${ms_full} ms)")
     if(NOT mode_off STREQUAL "off" OR NOT skip_off EQUAL 0 OR NOT draws_off EQUAL 0)
       message(SEND_ERROR "${dump} ${s}: ICO_RD_CULL=off says cull ${mode_off}, ${skip_off} of "
                          "${draws_off}")
@@ -148,7 +155,16 @@ foreach(dump IN LISTS dumps)
                          "${skip_frustum} of ${draws_frustum}")
       math(EXPR failures "${failures} + 1")
     endif()
+    math(EXPR fullSum "${frustum_full} + ${occluded_full}")
+    if(NOT mode_full STREQUAL "full" OR NOT draws_full EQUAL draws_frustum OR
+       NOT frustum_full EQUAL skip_frustum OR NOT skip_full EQUAL fullSum)
+      message(SEND_ERROR "${dump} ${s}: ICO_RD_CULL=full says cull ${mode_full}, ${skip_full} of "
+                         "${draws_full} (${frustum_full} frustum, ${occluded_full} occluded) "
+                         "against the frustum run's ${skip_frustum} of ${draws_frustum}")
+      math(EXPR failures "${failures} + 1")
+    endif()
     math(EXPR skippedTotal "${skippedTotal} + ${skip_frustum}")
+    math(EXPR occludedTotal "${occludedTotal} + ${occluded_full}")
     math(EXPR drawsTotal "${drawsTotal} + ${draws_frustum}")
     file(GLOB pngs RELATIVE "${dir_off}" "${dir_off}/*.png")
     list(LENGTH pngs npng)
@@ -156,27 +172,30 @@ foreach(dump IN LISTS dumps)
       message(SEND_ERROR "${dump} ${s}: no target written")
       math(EXPR failures "${failures} + 1")
     endif()
-    file(GLOB pngsOn RELATIVE "${dir_frustum}" "${dir_frustum}/*.png")
-    foreach(png IN LISTS pngsOn)
-      if(NOT EXISTS "${dir_off}/${png}")
-        message(SEND_ERROR "${dump} ${s}: ${png} written with the test only")
-        math(EXPR failures "${failures} + 1")
-      endif()
-    endforeach()
-    foreach(png IN LISTS pngs)
-      if(NOT EXISTS "${dir_frustum}/${png}")
-        message(SEND_ERROR "${dump} ${s}: ${png} written with every draw replayed only")
-        math(EXPR failures "${failures} + 1")
-        continue()
-      endif()
-      execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${dir_off}/${png}"
-                              "${dir_frustum}/${png}" RESULT_VARIABLE same)
-      math(EXPR compared "${compared} + 1")
-      if(NOT same EQUAL 0)
-        message(SEND_ERROR "${dump} ${s}: ${png} differs between every draw replayed and the "
-                           "visibility test")
-        math(EXPR failures "${failures} + 1")
-      endif()
+    foreach(on IN ITEMS "frustum" "full")
+      file(GLOB pngsOn RELATIVE "${dir_${on}}" "${dir_${on}}/*.png")
+      foreach(png IN LISTS pngsOn)
+        if(NOT EXISTS "${dir_off}/${png}")
+          message(SEND_ERROR "${dump} ${s}: ${png} written with the test (${on}) only")
+          math(EXPR failures "${failures} + 1")
+        endif()
+      endforeach()
+      foreach(png IN LISTS pngs)
+        if(NOT EXISTS "${dir_${on}}/${png}")
+          message(SEND_ERROR "${dump} ${s}: ${png} written with every draw replayed only "
+                             "(against ${on})")
+          math(EXPR failures "${failures} + 1")
+          continue()
+        endif()
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${dir_off}/${png}"
+                                "${dir_${on}}/${png}" RESULT_VARIABLE same)
+        math(EXPR compared "${compared} + 1")
+        if(NOT same EQUAL 0)
+          message(SEND_ERROR "${dump} ${s}: ${png} differs between every draw replayed and the "
+                             "visibility test (${on})")
+          math(EXPR failures "${failures} + 1")
+        endif()
+      endforeach()
     endforeach()
   endforeach()
 endforeach()
@@ -184,7 +203,8 @@ if(compared EQUAL 0 AND failures EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} or ${EXTRA} could be compared")
   return()
 endif()
-message(STATUS "rd_cull_ab: ${skippedTotal} of ${drawsTotal} scene draws skipped over the runs")
+message(STATUS "rd_cull_ab: ${skippedTotal} of ${drawsTotal} scene draws skipped over the runs "
+               "by the frustum test, ${occludedTotal} more by the occlusion test")
 if(NOT skippedTotal GREATER 0)
   message(SEND_ERROR "rd_cull_ab: the visibility test skipped no scene draw over ${ndumps} dumps")
   math(EXPR failures "${failures} + 1")
