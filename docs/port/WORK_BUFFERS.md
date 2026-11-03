@@ -543,7 +543,10 @@ draw`, `shadow count seven draws`, with ` ([dev])` or ` (self-test)` after it wh
 run and again when SCENE is made at a new size): a frame of its own on SCENE (its colour as the
 count target) counts 71 bands, band k at k in the top half and -k in the bottom half, the edges a
 sub-pixel off the pixel grid, resolves it through both paths and compares the count at its GS size
-byte for byte, with every band centre against the table. The one draw is replayed twice, its
+byte for byte, with every band centre against the table (read inside the frame's exact width,
+`rd__frame_wexact`: on a cropped frame, 624 wide at 16:10 with 614.40 exact, the last band's centre
+fell in the left-out columns and turned a correct one draw off; a band with no column inside is not
+read). The one draw is replayed twice, its
 stencil read by gathers and then by loads; the gathers stay where their count is the seven draws',
 else the loads where theirs is (the result is then the loads'), else the seven draws:
 
