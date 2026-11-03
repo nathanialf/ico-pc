@@ -69,6 +69,7 @@ CULL_RE = re.compile(
     r"([0-9.]+) ms; not tested: (\d+) exempt, (\d+) unbounded"
 )
 WHY_RE = re.compile(r"stats: cull why:(.*)$", re.M)
+OCCW_RE = re.compile(r"stats: cull occlusion:(.*)$", re.M)
 OCC_RE = re.compile(
     r"occlusion: hidden (\d+) of (\d+) list-0 draws, (\d+) of (\d+) triangles "
     r"\(index count / 3\); hidden commands: (\S+)"
@@ -124,15 +125,15 @@ def parse_run(text):
         r.update(mode=m.group(1), skipped=int(m.group(2)), draws=int(m.group(3)),
                  frustum=int(m.group(4)), occluded=int(m.group(5)), cullms=float(m.group(6)),
                  exempt=int(m.group(7)), unbounded=int(m.group(8)))
-    m = WHY_RE.search(text)
-    if m:
-        why = {}
-        for part in m.group(1).split(";"):
-            part = part.strip()
-            k = part.rsplit(" ", 1)
-            if len(k) == 2 and k[1].isdigit():
-                why[k[0]] = int(k[1])
-        r["why"] = why
+    for key, rx in (("why", WHY_RE), ("occ", OCCW_RE)):
+        m = rx.search(text)
+        if m:
+            d = {}
+            for part in m.group(1).split(";"):
+                k = part.strip().rsplit(" ", 1)
+                if len(k) == 2 and k[1].isdigit():
+                    d[k[0]] = int(k[1])
+            r[key] = d
     return r
 
 
@@ -158,6 +159,7 @@ def fmt(x, nd=3):
 SELFTEST_TEXT = """\
 dump.rddump: stats: cull frustum: 312 of 980 scene draws skipped (312 frustum, 0 occluded), 0.210 ms; not tested: 40 exempt, 61 unbounded; skipped beyond the left 100, right 90, top 20, bottom 30, behind the eye 72
 dump.rddump: stats: cull why: skipped by the stream's box 300; skipped by the batches' box 12; particles 30; 2D lists 10; no target 0; clip none 0; no payload 0; clip unknown 0; no mesh 5; no bound 6; skinned refused 50; grid refused 0; skinned reaches 80; grid reaches 3; scissor mesh reaches 120; mesh of batches reaches 200; one-batch mesh reaches 164
+dump.rddump: stats: cull occlusion: occluder used 3; occluder refused: state 4; occluded 2; kept: no occluder yet 7
 dump.rddump: time: 5 replays, CPU mean (min) ms: total 9.000 (8.000), interp 0.000 (0.000), wait 0.000 (0.000), acquire 0.000 (0.000), upload 1.000 (1.000), walk 3.250 (3.100), bind 0.1 (0.1), submit 1.0 (1.0), present 0.1 (0.1); per replay: ring 1.0 KB
 dump.rddump: gpu median of 5 replays: total 12.500 ms, list 0 6.250 ms, VU pre-pass 0.500 ms
 dump.rddump: occlusion: hidden 400 of 900 list-0 draws, 5000 of 90000 triangles (index count / 3); hidden commands: 0:1,0:2
@@ -169,7 +171,7 @@ def selftest():
     ok = (r.get("l0") == 6.25 and r.get("walk") == 3.25 and r.get("walkmin") == 3.1
           and r.get("draws") == 980 and r.get("skipped") == 312 and r.get("cullms") == 0.21
           and r.get("exempt") == 40 and r.get("unbounded") == 61
-          and sum(r["why"].values()) == 980 and len(r["why"]) == 17
+          and sum(r["why"].values()) == 980 and len(r["why"]) == 17 and r["occ"]["occluded"] == 2
           and r["why"]["skipped by the batches' box"] == 12
           and parse_occlusion(SELFTEST_TEXT) == (400, 900))
     print("selftest:", "ok" if ok else "FAILED", r)
@@ -273,6 +275,10 @@ def main():
     for r in measured:
         for name, n in run_of(r, cull_mode).get("why", {}).items():
             reasons[name] = reasons.get(name, 0) + n
+    occ_reasons = {}
+    for r in rows:
+        for name, n in run_of(r, "full").get("occ", {}).items():
+            occ_reasons[name] = occ_reasons.get(name, 0) + n
     tot_draws = sum(run_of(r, cull_mode)["draws"] for r in measured)
     tot_skip = sum(run_of(r, cull_mode)["skipped"] for r in measured)
 
@@ -317,6 +323,12 @@ def main():
               f"`--cull {cull_mode}`)", "", "| reason | commands | % of scene draws |", "|---|---|---|"]
     for name, v in sorted(reasons.items(), key=lambda kv: -kv[1]):
         lines.append(f"| {name} | {v} | {pct(v, tot_draws):.1f} |")
+
+    if occ_reasons:
+        lines += ["", "## The occlusion test (`--cull full`, summed over the rows)", "",
+                  "| outcome | commands |", "|---|---|"]
+        for name, v in occ_reasons.items():
+            lines.append(f"| {name} | {v} |")
 
     def drop(r, mode):
         a, b = run_of(r, "off").get("l0"), run_of(r, mode).get("l0")
