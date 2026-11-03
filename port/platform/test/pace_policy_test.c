@@ -2963,7 +2963,16 @@ static void testStepTrace(void)
     CHECK(pace_rt_behind(q.presentNs, q.refreshNs) && pace_rt_pipe_behind(&q));
     q.submitNs = 7700000ull;
     CHECK(!pace_rt_pipe_behind(&q));
+    /* the frame slots apart (VKSLOTS): the submit thread on with no job
+       before the next picture (render_thread.c ico_render_thread_plan's
+       submitNs 0 and submitOn, which window_present.c rt_ask hands on: rc13
+       predicted the picture before's fence in 595 of 770 asks, 540 held,
+       45.6 presented fps at the Original preset) */
     q.submitNs = 0;
+    q.submitOn = true;
+    CHECK(!pace_rt_pipe_behind(&q));
+    q.submitOn = false;
+    CHECK(pace_rt_pipe_behind(&q));
     q.presentNs = 4 * MS;
     CHECK(!pace_rt_pipe_behind(&q));
 
@@ -3109,11 +3118,45 @@ static void testStepTrace(void)
     }
 }
 
+/* The GPU's time between timed replays (pace_policy.h PaceGpuGap,
+   pace_gpu_gap_text: the 10 s 'window: GPU between replays' line).  rc13's
+   Original preset (build-host/tmp/v098/evidence/rc13/ico-pc.log :768-:779):
+   consecutive replays' spans of 21.2 and 8.2 ms; here the first after a
+   4.0 ms idle GPU, the second right behind it (a 0.02 ms gap, under the
+   idle floor), and a third whose first stamp came 3.0 ms before the one
+   before ended (a driver that writes its first stamp early: its 10.0 ms
+   span counts 3.0 ms of the one before); an overlap past the span counts
+   the span alone */
+static void testGpuGap(void)
+{
+    PaceGpuGap g;
+    char text[384];
+
+    memset(&g, 0, sizeof g);
+    CHECK(pace_gpu_gap_text(&g, text, sizeof text) == 0 && text[0] == '\0');
+    pace_gpu_gap_add(&g, 21200000ull, 4000000ll);
+    pace_gpu_gap_add(&g, 8200000ull, 20000ll);
+    pace_gpu_gap_add(&g, 10000000ull, -3000000ll);
+    CHECK(g.n == 3 && g.idle == 1 && g.overlap == 1);
+    CHECK(g.idleNs == 4000000ull && g.idleMaxNs == 4000000ull && g.overlapNs == 3000000ull);
+    CHECK(g.spanNs == 39400000ull);
+    pace_gpu_gap_text(&g, text, sizeof text);
+    CHECK(textIs(text, "3 timed replays after the one before: the GPU idle before 1 of them (4.0 "
+                       "ms on average, the longest 4.0 ms), 1 begun before the one before ended "
+                       "(by 3.0 ms on average: their spans count that end too); the GPU's time a "
+                       "replay past the one before's end 12.13 ms, its span 13.13 ms"));
+    pace_gpu_gap_add(&g, 2000000ull, -5000000ll);
+    CHECK(g.overlap == 2 && g.overlapNs == 5000000ull && g.spanNs == 41400000ull);
+    /* a short buffer: cut, the whole length returned */
+    CHECK(pace_gpu_gap_text(&g, text, 16) > 16 && strlen(text) == 15);
+}
+
 int main(void)
 {
     PaceHist h = {0};
     testStepRule();
     testStepTrace();
+    testGpuGap();
     testStepTyp();
     testRtTyp();
     testBudgetDiscWait126();

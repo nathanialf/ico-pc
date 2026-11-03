@@ -2564,6 +2564,16 @@ typedef struct RdPerfRecord {
      * gpuMs counts both) */
     uint8_t gpuBusyValid;
     double gpuBusyMs;
+    /* gpuGapValid: the replay before's record came just before this one
+     * with its timestamps; gpuGapNs this replay's first stamp less that
+     * one's last (the same GPU clock): over 0 the GPU idle between them
+     * (waiting for this replay's submit), under 0 this replay's first
+     * stamp written before the one before ended, so gpuMs counts that end
+     * too (the window's 10 s 'GPU between replays' line, pace_policy.h
+     * PaceGpuGap; the step rule's GPU time a picture is the median of
+     * gpuMs) */
+    uint8_t gpuGapValid;
+    int64_t gpuGapNs;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

@@ -43,6 +43,39 @@ bool pace_slow_present(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_
  * time a timed presented replay for the present allowance's GPU gate. */
 uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
 
+/* The GPU's time between timed replays in a 10 s block (window_host.c
+ * perf_drain; the line 'window: GPU between replays: ...',
+ * pace_gpu_gap_text): each replay's GPU span (rd.h RdPerfRecord.gpuMs,
+ * its first timestamp to its last) and its first stamp less the replay
+ * before's last (gpuGapNs).  Over PACE_GPU_IDLE_NS the GPU was idle before
+ * it (waiting for its submit: the CPU side); under 0 its first stamp was
+ * written before the one before ended, so its span counts that end too and
+ * the GPU's own time a replay is the span less the overlap.  A replay's
+ * first stamp is a bottom-of-pipe stamp (the Vulkan backend's every
+ * stamp), written once the earlier commands are done, so a driver that
+ * keeps that rule shows no overlap and the step rule's GPU time a picture
+ * (the median span, PaceRtAsk.gpuNs) is the GPU's whole time per picture,
+ * any wait inside the replay (the display's image at its first colour
+ * write) included */
+#define PACE_GPU_IDLE_NS 50000ll
+
+typedef struct PaceGpuGap {
+    unsigned n;       /* replays with a gap */
+    unsigned idle;    /* of them, after an idle GPU */
+    unsigned overlap; /* of them, begun before the one before ended */
+    uint64_t idleNs, idleMaxNs, overlapNs, spanNs;
+} PaceGpuGap;
+
+/* One replay's span and gap into the block's sums */
+void pace_gpu_gap_add(PaceGpuGap *g, uint64_t spanNs, int64_t gapNs);
+
+/* "N timed replays after the one before: the GPU idle before I of them (A
+ * ms on average, the longest L ms), K begun before the one before ended
+ * (by O ms on average: their spans count that end too); the GPU's time a
+ * replay past the one before's end E ms, its span S ms" ("" with none);
+ * the length snprintf would write */
+int pace_gpu_gap_text(const PaceGpuGap *g, char *out, unsigned len);
+
 /* ------------------------------------------------------------------------
  * The present allowance (docs/port/DISPLAY.md "Pacing"): the presents of a
  * frame already shown (the in-between ones, optional) a simulation step may

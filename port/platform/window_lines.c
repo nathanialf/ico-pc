@@ -264,6 +264,7 @@ const char *window_tiler_words(void)
 {
     return rhi_limits()->tiler
                ? " (tile-based GPU: the last scene pass carries the earlier passes' tile work; "
-                 "uploads carries the wait for the display before the first colour write)"
+                 "the first pass that writes colour, uploads when new targets are cleared, else "
+                 "list 0's, carries the wait for the display's image)"
                : "";
 }

@@ -879,6 +879,28 @@ void rd__perf_submit_times(uint32_t replay, double submitMs, double presentMs)
     }
 }
 
+/* the last record's last timestamp and its replay, for the next one's
+   gpuGapNs (0: none, or the last record had no timestamps) */
+static uint64_t s_gapLastNs;
+static uint32_t s_gapLastReplay;
+
+/* the GPU's time between this replay and the one before (rd.h
+   RdPerfRecord.gpuGapNs): only for the replay right after it, both timed,
+   within a second (a clock that jumped is no gap) */
+static void gpuGap(RdPerfRecord *r, uint64_t t0, uint64_t last)
+{
+    if (s_gapLastReplay != 0 && r->replay == s_gapLastReplay + 1u) {
+        const int64_t gap = (int64_t)(t0 - s_gapLastNs);
+
+        if (gap > -1000000000ll && gap < 1000000000ll) {
+            r->gpuGapNs = gap;
+            r->gpuGapValid = 1;
+        }
+    }
+    s_gapLastNs = last;
+    s_gapLastReplay = r->replay;
+}
+
 /* timestamps of the slot just recycled: the replay RHI_FRAMES_IN_FLIGHT ago */
 void rd__perf_collect_gpu(void)
 {
@@ -937,11 +959,14 @@ void rd__perf_collect_gpu(void)
         }
         r->gpuMs = (double)(last - t0) / 1e6;
         r->gpuValid = 1;
+        gpuGap(r, t0, last);
         if (lastIndex < nb && busy[RD_PERF_TS_BEGIN] != 0 &&
             busy[lastIndex] >= busy[RD_PERF_TS_BEGIN]) {
             r->gpuBusyMs = (double)(busy[lastIndex] - busy[RD_PERF_TS_BEGIN]) / 1e6;
             r->gpuBusyValid = 1;
         }
+    } else {
+        s_gapLastReplay = 0; /* no stamps: the next record has no gap */
     }
     if (r->passTimed) {
         passFinish(&s_passPending[slot], ts, n, busy, nb);

@@ -2254,6 +2254,21 @@ static struct {
     const uint64_t *presentSeq;
     unsigned presentSeqN;
     bool oldBehind;
+    /* VKSLOTS' world (slots: the frame slots apart): the render thread's
+       next picture waits for the submit thread only for the picture two
+       before's job, the submit thread runs the jobs one after another, the
+       GPU starts a picture once the submit thread has run subPartNs of its
+       job, and the pipe reads the submit thread's job 0 with submitOn
+       (render_thread.c ico_render_thread_plan), not with it when asRun
+       (rc13's build: the rule took the job's 0 for the thread off).  The
+       GPU's time per picture gpuSeq (cycled by the picture's number; 0
+       entries: the load's); gpuRecords: the pipe's GPU time a picture the
+       median of the last 8 records, each two pictures late (window_host.c
+       perf_drain), else the load's */
+    bool slots, asRun, gpuRecords;
+    uint64_t subPartNs;
+    const uint64_t *gpuSeq;
+    unsigned gpuSeqN;
 } s_rtGame;
 
 /* The render thread's estimates as render_thread.c keeps them, folded when
@@ -2327,6 +2342,20 @@ static void rtOldBackoffNote(RtOldBackoff *o, bool missed, bool byPictures)
     }
 }
 
+/* The pipe's GPU time a picture for the picture made next (s_rtGame.
+   gpuRecords): the median of the last 8 records of the pictures up to two
+   before it (window_host.c perf_drain: a record comes two pictures late;
+   0 before the first) */
+static uint64_t rtGpuIn(PaceHist *h, const uint64_t *rec, unsigned *added, uint64_t *median,
+                        unsigned made)
+{
+    while (*added + 2u <= made) {
+        *median = pace_hist_add(h, rec[*added % 4u]);
+        (*added)++;
+    }
+    return *median;
+}
+
 /* RT_STEP (rtTimerLoopRule): the window's rule (pace_policy.h
    pace_rt_further_ask: the paced holds, then the step-deadline rule by the
    step's estimate and the pipeline's prediction, PaceStepEst's back-off);
@@ -2390,6 +2419,12 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
     PaceRtPipe pipe;
     uint64_t prevEnd = 0; /* the step before's end (pace_step_start_late) */
     unsigned blockPresents = 0, blockStrict = 0, nextSpike = 0;
+    /* s_rtGame.slots: each picture's submit job's end; gpuRecords: the GPU
+       times by picture (a ring: the records two pictures late) into the
+       median */
+    uint64_t subEnd[4] = {0, 0, 0, 0}, gpuRec[4] = {0, 0, 0, 0}, gpuMedian = 0;
+    unsigned gpuAdded = 0;
+    PaceHist gpuHist;
 
     memset(&h, 0, sizeof h);
     memset(&r, 0, sizeof r);
@@ -2397,6 +2432,7 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
     memset(&oldBo, 0, sizeof oldBo);
     memset(&pipe, 0, sizeof pipe);
     memset(&E, 0, sizeof E);
+    memset(&gpuHist, 0, sizeof gpuHist);
     E.typ = mode >= RT_STEP && !s_rtGame.maxEst;
     r.blockPresentsMin = ~0u;
     for (unsigned k = 0; k < steps; k++) {
@@ -2522,8 +2558,11 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     q.refreshNs = refresh;
                     q.cpuNs = E.cpu;
                     q.interpNs = s_rtGame.interpSeqN != 0 ? E.interp : interpNs;
-                    q.submitNs = E.sub;
-                    q.gpuNs = gpuNs;
+                    q.submitNs = s_rtGame.slots ? 0 : E.sub;
+                    q.submitOn = s_rtGame.slots && !s_rtGame.asRun;
+                    q.gpuNs = s_rtGame.gpuRecords
+                                  ? rtGpuIn(&gpuHist, gpuRec, &gpuAdded, &gpuMedian, made)
+                                  : gpuNs;
                     q.paced = true;
                     q.asMade = mode == RT_ASMADE;
                     {
@@ -2605,6 +2644,7 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                                              : interpNs;
                 const uint64_t reads = pReads + spike;
                 uint64_t block;
+                uint64_t sBegin = 0; /* when the submit thread begins its job */
 
                 rInterp = pInterp;
 
@@ -2621,21 +2661,29 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     /* the interpolation, then the first graphics call:
                        the submit thread idle, the fence */
                     uint64_t at = rStart + pInterp;
+                    /* the submit thread's job the picture waits for: the
+                       one before's, or with the frame slots apart the one
+                       two before's (its own slot's) */
+                    const uint64_t subWait = !s_rtGame.slots ? sFree
+                                             : made >= 2     ? subEnd[(made - 2) % 4]
+                                                             : 0;
 
-                    if (sFree > at) {
+                    if (subWait > at) {
                         if (k >= 60) {
                             r.subWaits++;
-                            r.subWaitNs += sFree - at;
+                            r.subWaitNs += subWait - at;
                         }
-                        at = sFree;
+                        at = subWait;
                     }
                     at = two > at ? two : at;
                     rReadsEnd = at + (reads > pInterp ? reads - pInterp : 0);
                     rFree = rReadsEnd; /* the job ends with the walk */
-                    const uint64_t end = rReadsEnd + pRest;
+                    sBegin = s_rtGame.slots && sFree > rReadsEnd ? sFree : rReadsEnd;
+                    const uint64_t end = sBegin + pRest;
 
                     block = back > end ? back - end : 0;
                     sFree = end + block;
+                    subEnd[made % 4] = sFree;
                     rPresent = sPresent; /* the one finished before this job ends */
                     sPresent = (s_rtGame.presentSeqN != 0
                                     ? s_rtGame.presentSeq[made % s_rtGame.presentSeqN]
@@ -2654,8 +2702,11 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     q.readsNs = E.reads;
                     q.cpuNs = E.cpu;
                     q.interpNs = s_rtGame.interpSeqN != 0 ? E.interp : interpNs;
-                    q.gpuNs = gpuNs;
-                    q.submitNs = E.sub;
+                    q.gpuNs = s_rtGame.gpuRecords
+                                  ? rtGpuIn(&gpuHist, gpuRec, &gpuAdded, &gpuMedian, made)
+                                  : gpuNs;
+                    q.submitNs = s_rtGame.slots ? 0 : E.sub;
+                    q.submitOn = s_rtGame.slots && !s_rtGame.asRun;
                     q.presentNs = E.present;
                     q.refreshNs = refresh;
                     pace_rt_pipe_post(&pipe,
@@ -2668,7 +2719,17 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                 if (block > 0 && k >= 60) {
                     r.blocked++;
                 }
-                ready[made % 4] = (prev > rReadsEnd ? prev : rReadsEnd) + gpuNs;
+                {
+                    /* the GPU's time for this picture, from its submit
+                       with the frame slots apart */
+                    const uint64_t gi =
+                        s_rtGame.gpuSeqN != 0 ? s_rtGame.gpuSeq[made % s_rtGame.gpuSeqN] : gpuNs;
+                    const uint64_t gs =
+                        s_rtGame.slots && interpNs != 0 ? sBegin + s_rtGame.subPartNs : rReadsEnd;
+
+                    ready[made % 4] = (prev > gs ? prev : gs) + gi;
+                    gpuRec[made % 4] = gi;
+                }
             }
             folded = false;
             made++;
@@ -3516,6 +3577,14 @@ static void testRc11(void)
     }
 }
 
+/* rc12's three blocks' closing steps and steps between (tenths of a ms;
+   pace5/rc12_load.py frame): testRc12's, and testRc13's native cells */
+static const unsigned short s_rc12CloseT[3][16] = {
+    {60, 128, 77, 66, 107, 87, 124, 106, 85, 104, 71, 84, 82, 81, 72, 86},
+    {47, 126, 66, 54, 102, 79, 122, 101, 77, 99, 60, 75, 73, 72, 60, 77},
+    {16, 127, 43, 26, 93, 61, 121, 91, 57, 88, 34, 55, 52, 51, 35, 58}};
+static const unsigned short s_rc12FieldT[3][4] = {{6, 14, 8, 12}, {3, 7, 4, 6}, {2, 3, 2, 4}};
+
 /* rc12 (build-host/tmp/v098/evidence/rc12/ico-pc.log, a phone, stage 6,
    vsync off uncapped on a 120 Hz mailbox): three 10 s blocks, the rule
    holding 495-584 further presents each, at 44.6 / 32.6 / 31.0 presented
@@ -3556,11 +3625,8 @@ static void testRc11(void)
      later than 8.4 ms. */
 static void testRc12(void)
 {
-    static const unsigned short closeT[3][16] = {
-        {60, 128, 77, 66, 107, 87, 124, 106, 85, 104, 71, 84, 82, 81, 72, 86},
-        {47, 126, 66, 54, 102, 79, 122, 101, 77, 99, 60, 75, 73, 72, 60, 77},
-        {16, 127, 43, 26, 93, 61, 121, 91, 57, 88, 34, 55, 52, 51, 35, 58}};
-    static const unsigned short fieldT[3][4] = {{6, 14, 8, 12}, {3, 7, 4, 6}, {2, 3, 2, 4}};
+    const unsigned short (*closeT)[16] = s_rc12CloseT;
+    const unsigned short (*fieldT)[4] = s_rc12FieldT;
 
     static const struct {
         const char *what;
@@ -3681,6 +3747,177 @@ static void testRc12(void)
     }
 }
 
+/* PACE6: rc13's blocks (build-host/tmp/v098/evidence/rc13/ico-pc.log, the
+   PowerVR phone, stage 6, vsync off uncapped on a 120 Hz mailbox) in
+   VKSLOTS' world (s_rtGame.slots: the frame slots apart, the pipe's GPU
+   time the median of the records).  O (:572-:579) the Original preset,
+   512x448: reads of 8.7 ms on average (9.1 of its own typical, 2.2 the
+   interpolation), the submit thread's job 7.2 ms (4.6 before the GPU can
+   start), the closing step 3.4 ms, the GPU 14.8 ms a picture (the block's
+   mean of 14.76; the window line's 'GPU span 1.9 ms' is the last 8's
+   median at the block's end, the loading pictures after it), 45.6
+   presented fps on the phone; E (:977-:981) the Enhanced preset at the
+   window's 1x (848x448), 45.5; X (:909-:913) the Enhanced preset at 2x
+   (1696x896) for part of its block, 34.3; and rc12's native blocks
+   (2364x1080, testRc12's loads) in the same world.  "As run" is rc13's
+   build: the rule read the submit thread's job of 0 (the slots apart) as
+   the thread off and planned the picture before's fence with the presents
+   waiting 5 ms (half the refresh or more): 46.0 / 45.1 / 30.2 presented
+   fps, the phone's 45.6 / 45.5 (X's block changed resolution inside it);
+   now (render_thread.h IcoRtPlan.submitOn, handed on by window_present.c
+   rt_ask) 67.1 / 65.3 / 54.5 and 43.1 / 45.8 / 33.9 for rc12's, about the
+   GPU's own rate (67.6 / 68.5 / 56.2, 44.6 / 46.1 / 33.9): the Original
+   preset past the display's 60.  With the GPU's time alternating 21.0 /
+   8.6 ms by the picture (the slow replay lines :768-:779: 21.2, 8.2, 21.1,
+   8.1 on consecutive replays, the same mean) 63.3.  Numbers from
+   build-host/tmp/v098/evidence/pace6/c_cells_rc13.py (.out), the loop's
+   port */
+static void testRc13(void)
+{
+    /* O, E, X (rc13_load.py frame); rc12's from s_rc12CloseT */
+    static const unsigned short closeT[3][16] = {
+        {20, 52, 28, 23, 42, 33, 50, 41, 32, 41, 25, 31, 30, 30, 25, 32},
+        {19, 119, 43, 28, 88, 59, 113, 86, 56, 84, 36, 54, 51, 50, 36, 57},
+        {69, 125, 83, 74, 108, 92, 122, 107, 90, 106, 79, 89, 87, 87, 79, 91}};
+    static const unsigned short fieldT[3][4] = {{5, 8, 6, 10}, {3, 5, 4, 4}, {3, 5, 4, 4}};
+
+    static const struct {
+        const char *what;
+        uint64_t gpuNs, interpNs, subPartNs;        /* the GPU's time, the interpolation's mean */
+        int readsMean, readsDev, restMean, restDev; /* tenths of a ms */
+        double phone;                               /* the phone's presented fps (0: none) */
+        double near;                                /* how near the run as run */
+        unsigned asRun, now, misses, overFloor, strict, backoffs;
+    } cells[6] = {{"O (rc13 :572, the Original preset, 512x448)", 14800000u, 2200000u, 4600000u, 78,
+                   26, 72, 15, 45.6, 0.5, 460, 671, 0, 0, 0, 0},
+                  {"E (rc13 :977, Enhanced, 848x448)", 14600000u, 2500000u, 4300000u, 76, 24, 69,
+                   15, 45.5, 0.5, 451, 653, 6, 3, 120, 1},
+                  {"X (rc13 :909, Enhanced, 1696x896)", 17800000u, 2900000u, 4500000u, 79, 25, 69,
+                   15, 34.3, 4.5, 302, 545, 3, 1, 0, 0},
+                  {"rc12 A (:601, 2364x1080)", 22400000u, 4800000u, 4600000u, 110, 28, 70, 15, 0.0,
+                   0.0, 302, 431, 2, 0, 0, 0},
+                  {"rc12 B (:654, 2364x1080)", 21700000u, 2800000u, 4600000u, 76, 22, 69, 15, 0.0,
+                   0.0, 302, 458, 0, 0, 0, 0},
+                  {"rc12 C (:772, 2364x1080)", 29500000u, 2500000u, 4600000u, 88, 25, 73, 18, 0.0,
+                   0.0, 301, 339, 2, 0, 120, 1}};
+
+    static uint64_t reads[61], interp[61], rest[61], close[16], field[4], pres[1], alt[2];
+
+    pres[0] = 5 * MS;
+    alt[0] = 21 * MS;
+    alt[1] = 86 * MS / 10;
+    for (unsigned c = 0; c < 6; c++) {
+        uint64_t sum = 0;
+
+        for (unsigned i = 0; i < 61; i++) {
+            /* rc12_load.py seq */
+            const int r =
+                cells[c].readsMean + ((int)s_rc11ReadsT[i] - 100) * cells[c].readsDev / 25;
+            const int b = cells[c].restMean + ((int)s_rc11RestT[i] - 80) * cells[c].restDev / 15;
+
+            reads[i] = (uint64_t)(r > 1 ? r : 1) * MS / 10u;
+            rest[i] = (uint64_t)(b > 1 ? b : 1) * MS / 10u;
+            sum += reads[i];
+        }
+        for (unsigned i = 0; i < 61; i++) {
+            /* rc12_load.py lin */
+            const int64_t v =
+                (int64_t)cells[c].interpNs + ((int64_t)reads[i] - (int64_t)(sum / 61u)) / 2;
+
+            interp[i] = v > (int64_t)(MS / 10) ? (uint64_t)v : MS / 10;
+        }
+        for (unsigned i = 0; i < 16; i++) {
+            close[i] = (uint64_t)(c < 3 ? closeT[c][i] : s_rc12CloseT[c - 3][i]) * MS / 10u;
+        }
+        for (unsigned i = 0; i < 4; i++) {
+            field[i] = (uint64_t)(c < 3 ? fieldT[c][i] : s_rc12FieldT[c - 3][i]) * MS / 10u;
+        }
+        const RtLoad L = {9 * MS / 2, MS / 10, 10 * MS, 7 * MS, cells[c].gpuNs, 0, 0, 0,
+                          0,          0,       0,       0};
+        RtRun run[5];
+        const unsigned runs = c == 0 ? 5u : 2u;
+
+        /* 0: as run, 1: now; O also 2, 3: the GPU's time alternating as
+           run and now, 4: now over 100 s */
+        for (unsigned k = 0; k < runs; k++) {
+            memset(&s_rtGame, 0, sizeof s_rtGame);
+            s_rtGame.frameSeq = close;
+            s_rtGame.frameSeqN = 16;
+            s_rtGame.fieldNs = MS;
+            s_rtGame.fieldSeq = field;
+            s_rtGame.fieldSeqN = 4;
+            s_rtGame.fieldQuiet = true;
+            s_rtGame.readsSeq = reads;
+            s_rtGame.readsSeqN = 61;
+            s_rtGame.interpSeq = interp;
+            s_rtGame.interpSeqN = 61;
+            s_rtGame.restSeq = rest;
+            s_rtGame.restSeqN = 61;
+            s_rtGame.presentSeq = pres;
+            s_rtGame.presentSeqN = 1;
+            s_rtGame.slots = true;
+            s_rtGame.asRun = k == 0 || k == 2;
+            s_rtGame.gpuRecords = true;
+            s_rtGame.subPartNs = cells[c].subPartNs;
+            s_rtGame.gpuSeq = k == 2 || k == 3 ? alt : NULL;
+            s_rtGame.gpuSeqN = k == 2 || k == 3 ? 2u : 0u;
+            run[k] = rtTimerLoopRule(k == 4 ? 6000u : 600u, &L, RT_ASMADE, 3 * MS, false);
+        }
+        memset(&s_rtGame, 0, sizeof s_rtGame);
+        {
+            char what[160];
+
+            snprintf(what, sizeof what, "rc13 %s, GPU %.1f ms, slots apart, now", cells[c].what,
+                     (double)cells[c].gpuNs / 1e6);
+            rtPrint(what, &run[1]);
+        }
+        printf("  as run %u presents (%u of %u asks with the picture before's fence), now %u (%u; "
+               "%u misses, %u over the floor, %u back-offs)%s\n",
+               run[0].presents, run[0].fenceBefore, run[0].asks, run[1].presents,
+               run[1].fenceBefore, run[1].misses, run[1].overFloor, run[1].backoffs,
+               c == 0 ? "; the GPU alternating:" : "");
+        if (c == 0) {
+            printf("  as run %u, now %u (%u misses, %u over the floor); now over 100 s %u, the "
+                   "fewest in a block %u, %u misses\n",
+                   run[2].presents, run[3].presents, run[3].misses, run[3].overFloor,
+                   run[4].presents, run[4].blockPresentsMin, run[4].misses);
+        }
+        for (unsigned k = 0; k < runs; k++) {
+            CHECK(run[k].shown == run[k].frames && run[k].resyncs == 0 && run[k].behind == 0);
+        }
+        /* as run: nearly every ask planned the picture before's fence, the
+           phone's fps */
+        for (unsigned k = 0; k < runs; k += 2) {
+            if (k == 4) {
+                break;
+            }
+            CHECK(run[k].presents + 3u >= cells[c].asRun && run[k].presents <= cells[c].asRun + 3u);
+            CHECK(run[k].fenceBefore + 5u >= run[k].asks && run[k].misses == 0);
+        }
+        if (cells[c].phone != 0.0) {
+            const double fps = run[0].presents / 10.0;
+
+            CHECK(cells[c].phone >= fps - cells[c].near && cells[c].phone <= fps + cells[c].near);
+        }
+        /* now: two in flight, the GPU's rate */
+        CHECK(run[1].presents + 3u >= cells[c].now && run[1].presents <= cells[c].now + 3u);
+        CHECK(run[1].fenceBefore == 0 && run[1].misses == cells[c].misses);
+        CHECK(run[1].overFloor == cells[c].overFloor && run[1].strict == cells[c].strict);
+        CHECK(run[1].backoffs == cells[c].backoffs);
+        CHECK((uint64_t)run[1].presents * cells[c].gpuNs <= 601u * NTSC + 3u * cells[c].gpuNs);
+        CHECK(run[1].presents >= run[0].presents + 35u);
+        if (c == 0) {
+            /* the Original preset past the display's 60 a second */
+            CHECK(run[1].presents >= 600u && run[3].presents >= 600u);
+            CHECK(run[3].presents + 3u >= 633u && run[3].presents <= 636u);
+            CHECK(run[3].fenceBefore == 0 && run[3].misses == 6 && run[3].overFloor == 2);
+            CHECK(run[3].strict == 0);
+            CHECK(run[4].presents + 3u >= 6725u && run[4].presents <= 6728u);
+            CHECK(run[4].misses == 0 && run[4].strict == 0 && run[4].blockPresentsMin + 3u >= 671u);
+        }
+    }
+}
+
 int main(void)
 {
     test60();
@@ -3720,6 +3957,7 @@ int main(void)
     testFrameShape();
     testRc11();
     testRc12();
+    testRc13();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;

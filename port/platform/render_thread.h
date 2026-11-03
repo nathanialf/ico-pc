@@ -62,11 +62,13 @@ bool ico_render_thread_last_present(FmPresent *out);
    the render thread's own (cpuNs: less the waits for the slot's fence, the
    submit thread and the acquire), the interpolation before the first
    graphics call (interpNs) and the submit thread's job (submitNs, 0 with
-   none or with the frame slots apart; submitOn: the thread runs), by which
-   the game thread predicts a further picture's reads
-   (pace_policy.h PaceRtPipe).  False with the thread off or in sync mode
-   (every picture waited for: the present's own cost holds it) and before
-   the first picture handed over. */
+   none or with the frame slots apart, when the next picture records while
+   it runs), by which the game thread predicts a further picture's reads
+   (pace_policy.h PaceRtPipe); submitOn: the submit thread runs (the
+   present's wait is inside its job: the pipe keeps two pictures in flight,
+   pace_policy.h pace_rt_pipe_behind).  False with the thread off or in sync
+   mode (every picture waited for: the present's own cost holds it) and
+   before the first picture handed over. */
 typedef struct IcoRtPlan {
     uint64_t sinceNs, readsNs, pictureNs, presentNs;
     uint64_t cpuNs, interpNs, submitNs;
