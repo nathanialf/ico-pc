@@ -122,7 +122,11 @@ graphics driver the game cannot tell, and whenever the system itself said it
 was low on memory, the game prepares the rest the first time the game needs
 it instead: the next start then skips **Preparing graphics** and goes
 straight to the title, and the first minutes of play can pause for a moment
-here and there while graphics are prepared. Apps left open in the
+here and there while graphics are prepared. (On Qualcomm's own driver the
+next start tries the preparation again when the game's saved graphics file
+from the earlier start is on the phone and not empty, since the driver then
+has less to build; if memory runs short again it stops again and says so in
+the log.) Apps left open in the
 background hold memory too: close them before you start the game. A new
 version of the game tries preparing everything at the start again. The log
 says how much memory the device had left each time the system asked the

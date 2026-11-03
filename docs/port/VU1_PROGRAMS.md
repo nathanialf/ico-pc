@@ -255,10 +255,11 @@ since the projection does not change with the width. What the port then draws of
    centre, so the band's left edge is its first column's centre and belongs to the band), every VU pixel shader alike (the
    `_nodual` twins, the no-planes twins `vu_np_ps` and `vu_texa_np_ps`, the `_dstatt` builds). A
    discarded pixel writes no colour, depth or stencil, so inside the picture the PS2's drop stands
-   pixel for pixel; beside it the triangle fills what was a hole (the sea at the far left of the old
-   bridge at 48:9, whose only triangles there have a vertex behind the eye; walls beside the camera).
-   A triangle that faces away keeps the drop everywhere: the opening's cliff `st26a_p1`, filmed from
-   inside the rock, shows the eye its back faces. Facing (`vu_front_facing`; CPU mirror
+   pixel for pixel; beside it the triangle fills what was a hole (the kind of hole reporters showed
+   at 48:9: water at the old bridge, walls beside the camera; no 48:9 capture has yet confirmed that
+   a given spot is this case, [DIVERGENCES.md](DIVERGENCES.md)). A triangle that faces away keeps the
+   drop everywhere (the opening's cliff `st26a_p1` is expected to show the eye its back faces from
+   inside the rock; not yet checked on a capture). Facing (`vu_front_facing`; CPU mirror
    `vu1ref_region_facing`): the sign of the homogeneous determinant of the three corners' h centred
    on GS 2048 (rows `x - 2048 w`, `y - 2048 w`, `w`), which is the eye's side of the triangle's plane
    times the sign of the matrix h is made with and stays exact across `w = 0`; turned by
@@ -416,7 +417,7 @@ clockwise on the screen and the other counter-clockwise, front-facing both (`ico
 (`pac_makeNormalStrip`): `ST.w` 0 on a strip's first vertex). Nothing culls back faces anywhere
 (`port/rhi/rhi.h` `cullNone`), so nothing needed the facing until the region rule's side bands
 (step 7 of [The region rule](#the-region-rule): a dropped triangle drawn beside the 4:3 band when it
-faces the camera, the opening's cliff `st26a_p1`, filmed from inside, kept dropped).
+faces the camera; a triangle that faces away stays dropped).
 
 `ICO_VU_MARK_FLIP` (`port/shaders/shader_consts.h`, `VU_MARK_FLIP` in
 `port/shaders/vu_common.hlsli`) is the fourth bit of a kick's mark byte, beside `JOINED` (1),
