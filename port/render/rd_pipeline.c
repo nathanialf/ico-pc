@@ -2492,8 +2492,9 @@ static struct {
     RhiStats st0; /* the RHI's counts at its begin (failReason) */
     double t0, floorMs, savedMs, startMs;
     uint32_t batches, made, failed, waitsFloor;
-    uint32_t holds0; /* s_finHolds at the start */
-    double busyMs;   /* the batches' wall time */
+    uint32_t holds0;     /* s_finHolds at the start */
+    uint32_t pollsQuiet; /* pictures a batch was still compiling, read without the backend */
+    double busyMs;       /* the batches' wall time */
 } s_fin;
 
 static RdPipeKeyInt s_finKeys[RD_PIPELINE_CACHE_MAX];
@@ -2606,11 +2607,12 @@ static void finStop(const char *why)
     __atomic_store_n(&s_finSave, true, __ATOMIC_RELEASE);
     rd__log("pipelines: the background set %s: %u pipelines made in %u batches, %u failed, %.1f s "
             "compiling over %.1f s since it resumed (%u waits for a late step or a slow picture, "
-            "%u for the free memory); %u keys left to first use",
+            "%u for the free memory; %u pictures found a batch still compiling without waiting "
+            "for the submit thread); %u keys left to first use",
             why, s_fin.made, s_fin.batches, s_fin.failed, s_fin.busyMs / 1000.0,
             (rd__now_ms() - s_fin.startMs) / 1000.0,
             __atomic_load_n(&s_finHolds, __ATOMIC_RELAXED) - s_fin.holds0, s_fin.waitsFloor,
-            finLeft());
+            s_fin.pollsQuiet, finLeft());
 }
 
 static void finClear(void)
@@ -2751,7 +2753,7 @@ uint32_t rd_pipelines_background_start(RdBackgroundMemoryFn memory)
     s_fin.memory = memory;
     s_fin.startMs = s_fin.savedMs = rd__now_ms();
     s_fin.floorMs = 0.0;
-    s_fin.batches = s_fin.made = s_fin.failed = s_fin.waitsFloor = 0;
+    s_fin.batches = s_fin.made = s_fin.failed = s_fin.waitsFloor = s_fin.pollsQuiet = 0;
     s_fin.holds0 = __atomic_load_n(&s_finHolds, __ATOMIC_RELAXED);
     s_fin.busyMs = 0.0;
     rd__log("pipelines: the stopped set resumes in the background (%u left, keys %u-%u of %u): "
@@ -2806,7 +2808,17 @@ void rd__pipe_finish_tick(double pictureMs)
     in.memory = -1;
     if (in.inflight) {
         /* taken now when its compiles have ended (end without waiting);
-           one action a picture */
+           one action a picture.  While some have not returned the
+           backend's count says so without a call that waits for the
+           submit thread's job (rhi.h RhiGpuProgress.bgPipesLeft: the one
+           background set in flight is this one's; rhi_create_pipelines_end
+           waits behind the call guard even to answer "not yet") */
+        RhiGpuProgress gp;
+
+        if (rhi_gpu_progress(&gp) && gp.bgPipesLeft > 0) {
+            s_fin.pollsQuiet++;
+            return;
+        }
         (void)finEnd(false);
         return;
     }
