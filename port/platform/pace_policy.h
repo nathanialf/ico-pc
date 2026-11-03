@@ -904,15 +904,21 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
 
 /* The step's own time (the window's step less its waits for a picture's
  * reads) as the rule plans by, and its back-off: a step that ended past its
- * deadline (its period's end) makes the estimate the whole period for
- * backoff steps (so a further present must end its reads by the next
+ * deadline (its period's end) because of the pictures (pace_step_by_pictures:
+ * without its waits for a picture's reads and the presents' run past its
+ * due time it would have ended inside its period) makes the estimate the
+ * whole period for backoff steps (so a further present must end its reads by the next
  * step's due time, the rule before), PACE_STEP_BACKOFF_MIN at first,
  * doubled by every miss up to PACE_STEP_BACKOFF_MAX, halved again by
  * PACE_STEP_BACKOFF_MAX steps without one (to none from the least): a
  * wrong estimate costs one late step, then two seconds of the old rule,
  * then four, never the rc2 state of steps 40 ms late with the sound held
- * back.  misses and backoffs count for the 10 s line (the caller clears
- * them). */
+ * back.  A miss the game caused (its own step too long: a load, a pipeline
+ * compile, a bug report's capture, the disc, or the lateness a long step
+ * carries into the next start) arms nothing: the further presents' plan
+ * cannot help it, and a back-off there kept a whole session on the old
+ * rule.  misses (every one), pictureMisses, gameMisses and backoffs count
+ * for the 10 s line (the caller clears them). */
 #define PACE_STEP_BACKOFF_MIN 120u
 #define PACE_STEP_BACKOFF_MAX 1920u
 
@@ -922,13 +928,32 @@ typedef struct PaceStepEst {
     unsigned backoffLen; /* the last back-off's length (0: none since a clean spell) */
     unsigned clean;      /* steps since the last back-off ended without a miss */
     unsigned misses;     /* steps that missed their period */
-    unsigned backoffs;   /* back-offs begun (one a miss) */
-    uint64_t missMaxNs;  /* the latest of them past its deadline */
+    unsigned pictureMisses, gameMisses; /* of them: the pictures', the game's own */
+    unsigned backoffs;                  /* back-offs begun (one a miss) */
+    uint64_t missMaxNs;                 /* the latest of them past its deadline */
 } PaceStepEst;
 
 /* One step: its own time ownNs (0: not known, the estimate kept); missed:
- * it ended lateNs past its deadline */
-void pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs);
+ * it ended lateNs past its deadline; byPictures: the pictures caused it
+ * (pace_step_by_pictures), the back-off armed (doubled) only then */
+void pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs,
+                        bool byPictures);
+
+/* The part of a step's late start the presents made: its start startNs past
+ * the later of its due time and the step before's end (a step that ran late
+ * carries its lateness into the next start: the game's, not the
+ * pictures'), less PACE_STEP_WAKE_NS (the pacer's wake from its sleep to
+ * the due time and the pump: 0.1 ms in a PowerVR phone's log, not a
+ * picture's); 0 when not past them */
+#define PACE_STEP_WAKE_NS 500000ull
+uint64_t pace_step_start_late(uint64_t startNs, uint64_t dueNs, uint64_t prevEndNs);
+
+/* A step that missed its period by lateNs is the pictures' when it was held
+ * by them (presentsLateNs, pace_step_start_late, plus waitedNs, its waits
+ * for a picture's reads) and would have ended inside its period without
+ * that: lateNs <= presentsLateNs + waitedNs; never with no picture's hold */
+bool pace_step_by_pictures(bool missed, uint64_t lateNs, uint64_t presentsLateNs,
+                           uint64_t waitedNs);
 
 /* The step's time the rule plans by: the estimate, or the whole period
  * while backed off or before the first step (at least the estimate) */

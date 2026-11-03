@@ -143,8 +143,10 @@ static void step_note(Uint64 period)
     const Uint64 now = SDL_GetTicksNS();
     const uint64_t waits = rd_thread_read_wait_ns();
     const uint64_t waited = waits >= s_pres.readWaitAt ? waits - s_pres.readWaitAt : 0;
+    const Uint64 prevEnd = s_pres.stepEndAt;
 
     s_pres.readWaitAt = waits;
+    s_pres.stepEndAt = now;
     if (s_pres.paceEnd == 0) {
         return; /* no step measured yet */
     }
@@ -152,18 +154,37 @@ static void step_note(Uint64 period)
     const bool missed = now > s_deadline;
     const uint64_t late = missed ? now - s_deadline : 0;
     const bool backedOff = s_pres.stepEst.backoff != 0;
+    /* whose miss: the pictures' only when their holds on this step (the
+       presents' run past its due time, its waits for a picture's reads)
+       made it; a long step of the game's own (a load, a compile, a bug
+       report's capture, the disc), or the lateness one carries into the
+       next start, is the game's and arms no back-off */
+    const uint64_t presentsLate =
+        pace_step_start_late(s_pres.paceEnd, s_deadline - period, prevEnd);
+    const bool byPictures = pace_step_by_pictures(missed, late, presentsLate, waited);
 
-    pace_step_est_note(&s_pres.stepEst, own, missed, late);
+    pace_step_est_note(&s_pres.stepEst, own, missed, late, byPictures);
     ico_render_thread_note_step(waited, missed, late, backedOff,
-                                pace_step_est_ns(&s_pres.stepEst, period));
+                                pace_step_est_ns(&s_pres.stepEst, period), byPictures);
     if (missed && rd_interpolation_active() && ico_render_thread_mode() == FM_MODE_ON) {
-        ico_log_limited("window: step missed its period",
-                        "window: the game step missed its period by %.1f ms (it took %.1f ms, "
-                        "%.1f ms of it waiting for a picture): the pictures between frames are "
-                        "planned as if a step took the whole period for the next %u steps (%u "
-                        "misses so far)",
-                        (double)late / 1e6, (double)s_pres.stepNs / 1e6, (double)waited / 1e6,
-                        s_pres.stepEst.backoff, s_pres.stepEst.misses);
+        if (byPictures) {
+            ico_log_limited("window: step rule back-off",
+                            "window: step rule: back-off %u steps after a miss the pictures "
+                            "caused (late by %.1f ms, %.1f ms of it waiting for a picture, "
+                            "%.1f ms the presents ran past the step's start; %u such misses so "
+                            "far, %u the game's own)",
+                            s_pres.stepEst.backoff, (double)late / 1e6, (double)waited / 1e6,
+                            (double)presentsLate / 1e6, s_pres.stepEst.pictureMisses,
+                            s_pres.stepEst.gameMisses);
+        } else {
+            ico_log_limited("window: step missed its period",
+                            "window: the game step missed its period by %.1f ms (it took %.1f "
+                            "ms, %.1f ms of it waiting for a picture): the game's own time, not "
+                            "the pictures': the pictures between frames are planned as before "
+                            "(%u such misses so far, %u the pictures')",
+                            (double)late / 1e6, (double)s_pres.stepNs / 1e6, (double)waited / 1e6,
+                            s_pres.stepEst.gameMisses, s_pres.stepEst.pictureMisses);
+        }
     }
 }
 

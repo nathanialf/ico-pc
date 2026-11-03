@@ -56,6 +56,7 @@ static struct {
        steps planned at the whole period after a miss, the step's own time
        as last planned */
     unsigned lateStarts, misses, backoffSteps;
+    unsigned pictureMisses; /* of the misses, the pictures' (the rest the game's own) */
     Uint64 lateStartMaxNs, missMaxNs, stepPlanNs;
 } s_rt;
 
@@ -499,7 +500,7 @@ FmMode ico_render_thread_start(void)
         s_rt.readsEst = s_rt.pictureEst = s_rt.presentEst = 0;
         s_rt.cpuEst = s_rt.interpEst = s_rt.submitEst = 0;
         s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
-        s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = 0;
+        s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = s_rt.pictureMisses = 0;
         s_rt.lateStartMaxNs = s_rt.missMaxNs = s_rt.stepPlanNs = 0;
         memset(&s_gl, 0, sizeof(s_gl));
         if (rhi_backend() == RHI_BACKEND_OPENGL) {
@@ -680,7 +681,7 @@ void ico_render_thread_note_held(int why)
 }
 
 void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t missNs, bool backedOff,
-                                 uint64_t planNs)
+                                 uint64_t planNs, bool byPictures)
 {
     if (readWaitNs != 0) {
         s_rt.lateStarts++;
@@ -688,6 +689,7 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
     }
     if (missed) {
         s_rt.misses++;
+        s_rt.pictureMisses += byPictures ? 1u : 0u;
         s_rt.missMaxNs = missNs > s_rt.missMaxNs ? missNs : s_rt.missMaxNs;
     }
     s_rt.backoffSteps += backedOff ? 1u : 0u;
@@ -706,6 +708,7 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
     const unsigned held = s_rt.held, heldMiss = s_rt.heldMiss;
     const unsigned heldOverrun = s_rt.heldOverrun, heldBehind = s_rt.heldBehind;
     const unsigned lateStarts = s_rt.lateStarts, misses = s_rt.misses;
+    const unsigned pictureMisses = s_rt.pictureMisses;
     const unsigned backoffSteps = s_rt.backoffSteps;
     const double lateStartMaxMs = (double)s_rt.lateStartMaxNs / 1e6;
     const double missMaxMs = (double)s_rt.missMaxNs / 1e6;
@@ -717,7 +720,7 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
     CpuPlaceHist gc, rc, sc;
 
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
-    s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = 0;
+    s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = s_rt.pictureMisses = 0;
     s_rt.lateStartMaxNs = s_rt.missMaxNs = 0;
 
     /* the cores each thread ran on most in the block (cpu_place.h), and
@@ -768,8 +771,8 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
                  "the GPU and the submit thread), takes %.1f ms, "
                  "its present waits %.1f ms, the submit thread's part %.1f ms; the step planned "
                  "at %.1f ms); steps started late by the pictures: %u (longest %.1f ms); steps "
-                 "that missed their period: %u (latest %.1f ms past it; %u steps planned at the "
-                 "whole period after them)",
+                 "that missed their period: %u (%u the pictures', %u the game's own; latest %.1f "
+                 "ms past it; %u steps planned at the whole period after the pictures')",
                  pictureCpuMs, b.idlePercent, b.waitMaxMs, b.busyMaxMs, b.pictures,
                  s_rt.mode == FM_MODE_SYNC ? ", sync" : "", tb.interpMs, tb.walkMs, tb.submitMs,
                  tb.waitMs, tb.retired, held, heldMiss, heldOverrun, heldBehind,
@@ -779,8 +782,8 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
                  (double)__atomic_load_n(&s_rt.pictureEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.presentEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED) / 1e6,
-                 (double)s_rt.stepPlanNs / 1e6, lateStarts, lateStartMaxMs, misses, missMaxMs,
-                 backoffSteps);
+                 (double)s_rt.stepPlanNs / 1e6, lateStarts, lateStartMaxMs, misses, pictureMisses,
+                 misses - pictureMisses, missMaxMs, backoffSteps);
     } else {
         snprintf(rt, sizeof(rt), "render thread: off (CPU %.1f ms a picture on the game thread)",
                  pictureCpuMs);

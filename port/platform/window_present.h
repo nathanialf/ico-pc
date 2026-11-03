@@ -165,6 +165,10 @@ typedef struct WindowPres {
     PaceStepEst stepEst;
     PaceRtPipe rtPipe;
     uint64_t readWaitAt;
+    /* when the step before ended (step_note's now; 0: none yet): the
+       presents' part of a late start is measured past it (pace_policy.h
+       pace_step_start_late) */
+    Uint64 stepEndAt;
     int asMade;
 } WindowPres;
 

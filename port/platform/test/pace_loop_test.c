@@ -2203,6 +2203,17 @@ typedef struct RtLoad {
     uint64_t presentBase;
 } RtLoad;
 
+/* rtTimerLoopRule's game (testBackoffCause sets it, then clears it): step
+   slowAt takes slowNs more (0: none), the game's own long step (a load, a
+   compile, a bug report's capture); anyMiss: every miss arms the back-off,
+   as the rule did before it asked whose miss it was (pace_policy.h
+   pace_step_by_pictures) */
+static struct {
+    unsigned slowAt;
+    uint64_t slowNs;
+    bool anyMiss;
+} s_rtGame;
+
 /* RT_STEP (rtTimerLoopRule): the window's rule (pace_policy.h
    pace_rt_further_ask: the paced holds, then the step-deadline rule by the
    step's estimate and the pipeline's prediction, PaceStepEst's back-off);
@@ -2224,6 +2235,7 @@ typedef struct RtRun {
        back-offs begun in all (PaceStepEst) */
     unsigned miss, misses, backoffs;
     uint64_t missMax;
+    unsigned pictureMisses, gameMisses; /* the misses after the first second, by whose */
 } RtRun;
 
 /* rtTimerLoopSplit with RT_STEP / RT_ASMADE (the window's rule: the step's
@@ -2252,6 +2264,7 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
     bool skipOpen = false, slow = false;
     PaceStepEst se;
     PaceRtPipe pipe;
+    uint64_t prevEnd = 0; /* the step before's end (pace_step_start_late) */
 
     memset(&h, 0, sizeof h);
     memset(&r, 0, sizeof r);
@@ -2263,6 +2276,11 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
         const uint64_t restNs = burst ? L->burstRest : L->restNs;
         const uint64_t gpuNs = burst && L->burstGpu ? L->burstGpu : L->gpuNs;
         const uint64_t due = deadline;
+        /* the presents' part of a late start, before the read wait */
+        const uint64_t presentsLate = pace_step_start_late(t, due, prevEnd);
+        const uint64_t own =
+            L->stepNs + (s_rtGame.slowNs != 0 && k == s_rtGame.slowAt ? s_rtGame.slowNs : 0);
+        uint64_t waited = 0;
 
         if (rReadsEnd > t) {
             /* the step's first call that changes the renderer's state */
@@ -2270,12 +2288,14 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                 r.readWaits++;
                 r.readWaitNs += rReadsEnd - t;
             }
+            waited = rReadsEnd - t;
             t = rReadsEnd;
         }
         if (k >= 60 && t - due > r.lateMax) {
             r.lateMax = t - due;
         }
-        t += L->stepNs;
+        t += own;
+        prevEnd = t;
         if (k % 2 == 0) {
             frame++;
             r.frames++;
@@ -2284,12 +2304,18 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
         {
             /* window_present.c step_note: the step's own time, a miss */
             const bool missed = t > deadline;
+            const uint64_t late = missed ? t - deadline : 0;
+            const bool byPictures = s_rtGame.anyMiss
+                                        ? missed
+                                        : pace_step_by_pictures(missed, late, presentsLate, waited);
 
             if (missed && k >= 60) {
                 r.misses++;
-                r.missMax = t - deadline > r.missMax ? t - deadline : r.missMax;
+                r.missMax = late > r.missMax ? late : r.missMax;
+                r.pictureMisses += byPictures ? 1u : 0u;
+                r.gameMisses += byPictures ? 0u : 1u;
             }
-            pace_step_est_note(&se, L->stepNs, missed, missed ? t - deadline : 0);
+            pace_step_est_note(&se, own, missed, late, byPictures);
         }
         for (;;) {
             const bool newFrame = presented != frame;
@@ -2830,6 +2856,58 @@ static void testStepRule(void)
     }
 }
 
+/* The back-off's cause (pace_policy.h pace_step_by_pictures): the phone's
+   load at 10 ms reads (testStepRule's first cell: 700 presents, no miss)
+   with one long step of the game's own at step 300 arms no back-off, where
+   the rule before (every miss) planned the next 120 steps at the whole
+   period; the reads' jump's miss (the pictures') still arms it.  Numbers
+   from build-host/tmp/v098/evidence/fixhandover/backoff_cells.py (pr_sim.py
+   with the cause) */
+static void testBackoffCause(void)
+{
+    static const struct {
+        unsigned slowMs, presents, misses, pictures, before, beforeBackoffs;
+    } slow[] = {{20, 680, 2, 1, 660, 2}, {40, 696, 4, 0, 647, 4}, {700, 693, 1, 0, 679, 1}};
+
+    for (unsigned i = 0; i < sizeof(slow) / sizeof(slow[0]); i++) {
+        const RtLoad L = {9 * MS / 2, MS / 10, 10 * MS, 16 * MS / 5, 8 * MS, 0,
+                          0,          0,       0,       0,           0,      MS / 2};
+        RtRun now, before;
+        char what[96];
+
+        s_rtGame.slowAt = 300;
+        s_rtGame.slowNs = slow[i].slowMs * MS;
+        s_rtGame.anyMiss = false;
+        now = rtTimerLoopRule(600, &L, RT_STEP, 3 * MS, false);
+        s_rtGame.anyMiss = true;
+        before = rtTimerLoopRule(600, &L, RT_STEP, 3 * MS, false);
+        memset(&s_rtGame, 0, sizeof s_rtGame);
+        snprintf(what, sizeof what, "the back-off's cause: one game step %u ms longer",
+                 slow[i].slowMs);
+        rtPrint(what, &now);
+        printf("  %u misses (%u the pictures', %u the game's), %u back-offs; every miss: %u "
+               "presents, %u back-offs\n",
+               now.misses, now.pictureMisses, now.gameMisses, now.backoffs, before.presents,
+               before.backoffs);
+        CHECK(now.misses == slow[i].misses && now.pictureMisses == slow[i].pictures);
+        CHECK(now.gameMisses == slow[i].misses - slow[i].pictures);
+        /* the game's own misses arm nothing; a picture's miss after one does */
+        CHECK(now.backoffs == slow[i].pictures);
+        CHECK(now.presents + 3u >= slow[i].presents && now.presents <= slow[i].presents + 3u);
+        CHECK(before.presents + 3u >= slow[i].before && before.presents <= slow[i].before + 3u);
+        CHECK(before.backoffs == slow[i].beforeBackoffs && now.presents >= before.presents);
+        CHECK(now.shown == now.frames);
+    }
+    {
+        /* the reads' jump (testStepRule): the miss is the pictures' */
+        const RtLoad L = {9 * MS / 2,  MS / 10, 10 * MS, 16 * MS / 5, 8 * MS, 16 * MS,
+                          16 * MS / 5, 240,     120,     0,           0,      MS / 2};
+        const RtRun r = rtTimerLoopRule(600, &L, RT_STEP, 3 * MS, false);
+
+        CHECK(r.misses == 1 && r.pictureMisses == 1 && r.gameMisses == 0 && r.backoffs == 1);
+    }
+}
+
 int main(void)
 {
     test60();
@@ -2865,6 +2943,7 @@ int main(void)
     testRenderThreadBehind();
     testSubmitThread();
     testStepRule();
+    testBackoffCause();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;

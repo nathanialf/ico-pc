@@ -2382,36 +2382,73 @@ static void testStepRule(void)
 
         memset(&e, 0, sizeof e);
         CHECK(pace_step_est_ns(&e, P) == P); /* none yet: the whole period */
-        pace_step_est_note(&e, step, false, 0);
+        pace_step_est_note(&e, step, false, 0, false);
         CHECK(e.estNs == step && pace_step_est_ns(&e, P) == step);
-        pace_step_est_note(&e, 10 * MS, false, 0);
+        pace_step_est_note(&e, 10 * MS, false, 0, false);
         CHECK(e.estNs == 10 * MS);
-        pace_step_est_note(&e, step, false, 0);
+        pace_step_est_note(&e, step, false, 0, false);
         CHECK(e.estNs == 9312500ull);
-        pace_step_est_note(&e, 0, true, 3 * MS);
+        pace_step_est_note(&e, 0, true, 3 * MS, true);
         CHECK(e.estNs == 9312500ull && e.backoff == PACE_STEP_BACKOFF_MIN);
         CHECK(e.misses == 1 && e.backoffs == 1 && e.missMaxNs == 3 * MS);
         CHECK(pace_step_est_ns(&e, P) == P);
         for (unsigned i = 0; i < PACE_STEP_BACKOFF_MIN; i++) {
-            pace_step_est_note(&e, step, false, 0);
+            pace_step_est_note(&e, step, false, 0, false);
         }
         CHECK(e.backoff == 0 && e.estNs == 4500007ull && pace_step_est_ns(&e, P) == 4500007ull);
-        pace_step_est_note(&e, step, true, MS);
+        pace_step_est_note(&e, step, true, MS, true);
         CHECK(e.backoff == 2 * PACE_STEP_BACKOFF_MIN && e.missMaxNs == 3 * MS);
         for (unsigned i = 0; i < 2 * PACE_STEP_BACKOFF_MIN + PACE_STEP_BACKOFF_MAX; i++) {
-            pace_step_est_note(&e, step, false, 0);
+            pace_step_est_note(&e, step, false, 0, false);
         }
         CHECK(e.backoff == 0 && e.backoffLen == PACE_STEP_BACKOFF_MIN && e.clean == 0);
         for (unsigned i = 0; i < PACE_STEP_BACKOFF_MAX; i++) {
-            pace_step_est_note(&e, step, false, 0);
+            pace_step_est_note(&e, step, false, 0, false);
         }
         CHECK(e.backoffLen == 0);
         /* at most PACE_STEP_BACKOFF_MAX */
         for (unsigned i = 0; i < 6; i++) {
-            pace_step_est_note(&e, step, true, MS);
+            pace_step_est_note(&e, step, true, MS, true);
         }
         CHECK(e.backoff == PACE_STEP_BACKOFF_MAX && e.backoffs == 8);
+        CHECK(e.pictureMisses == 8 && e.gameMisses == 0);
     }
+
+    /* the back-off's cause: a miss the game made (a long step, a load, a
+       capture, the lateness a long step carries) arms nothing and counts
+       as the game's; the back-off counts it down as a step; a miss the
+       pictures made arms it */
+    {
+        PaceStepEst e;
+
+        memset(&e, 0, sizeof e);
+        pace_step_est_note(&e, step, false, 0, false);
+        pace_step_est_note(&e, 30 * MS, true, 13 * MS, false);
+        CHECK(e.misses == 1 && e.gameMisses == 1 && e.pictureMisses == 0);
+        CHECK(e.backoff == 0 && e.backoffs == 0 && e.backoffLen == 0);
+        CHECK(e.missMaxNs == 13 * MS && e.estNs == 30 * MS); /* the estimate sees the long step */
+        pace_step_est_note(&e, step, true, 2 * MS, true);
+        CHECK(e.backoff == PACE_STEP_BACKOFF_MIN && e.backoffs == 1 && e.pictureMisses == 1);
+        pace_step_est_note(&e, 30 * MS, true, 13 * MS, false); /* inside the back-off */
+        CHECK(e.backoff == PACE_STEP_BACKOFF_MIN - 1 && e.backoffs == 1 && e.gameMisses == 2);
+        CHECK(e.misses == 3);
+    }
+    /* which miss is the pictures': the presents' run past the later of the
+       due time and the step before's end (less the pacer's wake), plus the
+       read waits, at least the lateness */
+    CHECK(pace_step_start_late(10 * MS, 10 * MS, 0) == 0);
+    CHECK(pace_step_start_late(12 * MS, 10 * MS, 0) == 2 * MS - PACE_STEP_WAKE_NS);
+    CHECK(pace_step_start_late(12 * MS, 10 * MS, 11 * MS) ==
+          MS - PACE_STEP_WAKE_NS); /* the step before ran late */
+    CHECK(pace_step_start_late(12 * MS, 10 * MS, 13 * MS) == 0);
+    CHECK(pace_step_start_late(10 * MS + PACE_STEP_WAKE_NS, 10 * MS, 0) == 0); /* the wake */
+    CHECK(pace_step_start_late(10 * MS + PACE_STEP_WAKE_NS + 1, 10 * MS, 0) == 1);
+    CHECK(!pace_step_by_pictures(false, 0, 5 * MS, 5 * MS));
+    CHECK(!pace_step_by_pictures(true, 3 * MS, 0, 0));      /* no picture held it: the game's */
+    CHECK(pace_step_by_pictures(true, 3 * MS, 0, 3 * MS));  /* a read wait of the lateness */
+    CHECK(pace_step_by_pictures(true, 3 * MS, 2 * MS, MS)); /* the presents' run plus a wait */
+    CHECK(!pace_step_by_pictures(true, 3 * MS, MS, MS));    /* late beyond the holds: the game's */
+    CHECK(!pace_step_by_pictures(true, 700 * MS, 0, MS));   /* a capture's stall */
 
     /* the next step: its start at most the slack past its due time */
     memset(&q, 0, sizeof q);

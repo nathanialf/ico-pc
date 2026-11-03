@@ -161,27 +161,50 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
                : PACE_RT_GO;
 }
 
-void pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs)
+void pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs,
+                        bool byPictures)
 {
     if (ownNs != 0) {
         e->estNs = pace_rt_estimate(e->estNs, ownNs);
     }
     if (missed) {
         e->misses++;
-        e->backoffs++;
         e->missMaxNs = lateNs > e->missMaxNs ? lateNs : e->missMaxNs;
+        if (byPictures) {
+            e->pictureMisses++;
+        } else {
+            e->gameMisses++;
+        }
+    }
+    if (missed && byPictures) {
+        e->backoffs++;
         e->backoffLen = e->backoffLen == 0                           ? PACE_STEP_BACKOFF_MIN
                         : e->backoffLen >= PACE_STEP_BACKOFF_MAX / 2 ? PACE_STEP_BACKOFF_MAX
                                                                      : 2u * e->backoffLen;
         e->backoff = e->backoffLen;
         e->clean = 0;
     } else if (e->backoff != 0) {
+        /* a step, the game's own misses among them: the back-off counts down */
         e->backoff--;
     } else if (++e->clean >= PACE_STEP_BACKOFF_MAX && e->backoffLen != 0) {
         /* a clean spell: the next back-off shorter, from the least none */
         e->backoffLen = e->backoffLen > PACE_STEP_BACKOFF_MIN ? e->backoffLen / 2u : 0u;
         e->clean = 0;
     }
+}
+
+uint64_t pace_step_start_late(uint64_t startNs, uint64_t dueNs, uint64_t prevEndNs)
+{
+    const uint64_t ref = dueNs > prevEndNs ? dueNs : prevEndNs;
+
+    return startNs > ref + PACE_STEP_WAKE_NS ? startNs - ref - PACE_STEP_WAKE_NS : 0;
+}
+
+bool pace_step_by_pictures(bool missed, uint64_t lateNs, uint64_t presentsLateNs, uint64_t waitedNs)
+{
+    const uint64_t held = presentsLateNs + waitedNs;
+
+    return missed && held != 0 && lateNs <= held;
 }
 
 uint64_t pace_step_est_ns(const PaceStepEst *e, uint64_t periodNs)
