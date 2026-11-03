@@ -46,9 +46,10 @@
  *     exactly), WORK2 and SCENE of one size, scale and Full pixel crop (so
  *     the mask is at the GS's own filter, never the above-1x kernels), and
  *     no glow edge strip (rd_blur_border.c glowEdge);
- *   - nothing between the mask and the reduction but state, NOPs, the
- *     overlay's text and the deferred text's quads (the present draws
- *     them): SCENE is read by the reduction as the mask read it;
+ *   - nothing between the mask and the reduction writes SCENE's colour (a
+ *     draw into it, a clear, a copy or exact blend naming it, a command
+ *     the scan does not know; draws into other targets may come between):
+ *     SCENE is read by the reduction as the mask read it;
  *   - the reduction: a post sprite (not the display's reduction) from
  *     WORK2's colour (RGBA32) into another target, no destination read (no
  *     blend, no DATE, AFAIL not RGB_ONLY), the mask's TEX0 size, no glow
@@ -121,7 +122,8 @@ static bool s_work2Stale;
 static const char *const kWhy[RD_GLOW_FOLD_WHY_COUNT] = {
     [RD_GLOW_FOLD_WHY_NONE] = "folded",
     [RD_GLOW_FOLD_WHY_FANS] = "drawn into WORK2 between its fill and the mask (the sun's fans)",
-    [RD_GLOW_FOLD_WHY_LAMPS] = "drawn between the mask and its reduction (the lamps into WORK2)",
+    [RD_GLOW_FOLD_WHY_LAMPS] = "drawn into WORK2 between the mask and its reduction (the lamps)",
+    [RD_GLOW_FOLD_WHY_SCENE] = "SCENE drawn between the mask and its reduction",
     [RD_GLOW_FOLD_WHY_OTHER] = "WORK2 drawn or read elsewhere in the frame",
     [RD_GLOW_FOLD_WHY_FORM] = "the fill, the mask or the reduction not in the fold's form",
     [RD_GLOW_FOLD_WHY_MSAA] = "anti-aliasing (MSAA)",
@@ -229,12 +231,36 @@ static void touch(const RdCmd *c, const RdStateBlock *st, uint32_t id, bool *rea
     }
 }
 
-/* a command that draws nothing (passed over between the mask and the
- * reduction) */
-static bool drawsNothing(const RdCmd *c)
+/* whether command c under st may write target id's colour (a draw into
+ * it, a clear, a copy or exact blend naming it, a command the scan does not
+ * know); the overlay's text and the deferred text's quads (the present
+ * draws them) write nothing */
+static bool writesColor(const RdCmd *c, const RdStateBlock *st, uint32_t id)
 {
-    return c->type == RDC_NOP || c->type == RDC_OVERLAY_TEXT ||
-           (c->type == RDC_SCREEN && g_rd.deferText && c->b[3] == RD_SCREEN_TEXT_QUADS);
+    switch (c->type) {
+    case RDC_NOP:
+    case RDC_OVERLAY_TEXT:
+        return false;
+    case RDC_CLEAR:
+        return c->u[0] == id;
+    case RDC_COPY:
+    case RDC_EXACT_BLEND:
+        return c->u[0] == id || c->u[1] == id;
+    case RDC_SCREEN:
+        return st->color == id && !(g_rd.deferText && c->b[3] == RD_SCREEN_TEXT_QUADS);
+    case RDC_MESH:
+    case RDC_SKINNED:
+    case RDC_GRID:
+    case RDC_PARTICLES:
+    case RDC_POST_STUB:
+    case RDC_SHADOW_RESET:
+    case RDC_SHADOW_STRIP:
+    case RDC_SHADOW_RESOLVE:
+    case RDC_WORLD_PRIMS:
+        return st->color == id;
+    default:
+        return true;
+    }
 }
 
 static bool noDepth(const RdDrawState *d)
@@ -445,8 +471,10 @@ void rd__glow_fold_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock
     touch(c, st, w2, &reads, &writes);
     s_gf.glow = s_gf.glow || (writes && c->type == RDC_POST_STUB); /* staticBlur's sprites */
     if (!reads && !writes) {
-        if (s_gf.phase == PHASE_MASK && !drawsNothing(c)) {
-            refuse(RD_GLOW_FOLD_WHY_LAMPS, "a command between the mask and its reduction");
+        /* SCENE as the mask read it, for the reduction to read: draws
+         * into other targets may come between */
+        if (s_gf.phase == PHASE_MASK && writesColor(c, st, idOf(RD_TARGET_SCENE))) {
+            refuse(RD_GLOW_FOLD_WHY_SCENE, "a draw into SCENE between the mask and its reduction");
         }
         return;
     }

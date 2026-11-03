@@ -2611,8 +2611,9 @@ void rd_perf_why_text(char *buf, size_t size, int which, const uint64_t *counts,
 /* RdPerfRecord.glowWhy (rd_glow_fold.c): why a glow frame drew its mask into
  * WORK2 (docs/port/RENDER_POST.md, "The glow's mask in its reduction"):
  * FANS a draw into WORK2 between the fill and the mask (the sun's fans),
- * LAMPS a draw between the mask and the reduction (the lamps' meshes into
- * WORK2), OTHER WORK2 drawn or read elsewhere in the frame, FORM the fill,
+ * LAMPS a draw into WORK2 between the mask and the reduction (the lamps'
+ * meshes), SCENE a draw into SCENE between them, OTHER WORK2 drawn or read
+ * elsewhere in the frame, FORM the fill,
  * the mask or the reduction not in the fold's form, MSAA the MSAA epoch,
  * PLAN the fx plan off or no fx_frame_ps, UNDONE a reduction that could not
  * take a planned fold (the fill and the mask drawn after all).
@@ -2626,6 +2627,7 @@ enum {
     RD_GLOW_FOLD_WHY_MSAA,
     RD_GLOW_FOLD_WHY_PLAN,
     RD_GLOW_FOLD_WHY_UNDONE,
+    RD_GLOW_FOLD_WHY_SCENE,
     RD_GLOW_FOLD_WHY_COUNT
 };
 

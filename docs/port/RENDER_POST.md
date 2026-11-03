@@ -250,10 +250,11 @@ over a frame of its own for the tests):
   RGB 0, no blend, no DATE, AFAIL not RGB_ONLY, the colour mask whole, no Z test or Z write, the
   scissor whole, its UV span its rect's on both axes, WORK2 and SCENE of one size, scale and crop
   (so the mask is at the GS's own filter), no glow edge strip;
-- nothing between the mask and the reduction but state, NOPs, the overlay's text and the deferred
-  text's quads: SCENE is read by the reduction as the mask read it (its border repeat is done at
-  the mask, as without the fold; the crack fill is placed before the mask, its first reader of
-  SCENE);
+- nothing between the mask and the reduction writes SCENE's colour (a draw into it, a clear, a
+  copy or exact blend naming it, a command the scan does not know; draws into other targets may
+  come between): SCENE is read by the reduction as the mask read it (its
+  border repeat is done at the mask, as without the fold; the crack fill is placed before the
+  mask, its first reader of SCENE);
 - the reduction: a post sprite (not the display's reduction) from WORK2's colour (RGBA32) into
   another target, no destination read, the mask's TEX0 size, no glow edge strip;
 - the switch on, the fx plan on with `fx_frame_ps`, a device, no MSAA, no pass window.
@@ -285,8 +286,8 @@ window: glow: WORK2 fold: N folded, M kept (<reason>)
 The 10 s line counts the replays of its window (`RdPerfRecord.glowFolded`, `glowKept`, `glowWhy`,
 the last kept one's reason); `rd_replay_tool --stats` prints `glow: WORK2 fold on|off: N folded, M
 kept (reason)`; the glow pass count (`glow N passes`, the 10 s `passes per replay`) is one fewer
-where it folds. The reasons (`rd.h` `RD_GLOW_FOLD_WHY_*`): the sun's fans, the lamps, WORK2 drawn
-or read elsewhere, the chain not in the fold's form, MSAA, the fx plan off, a reduction that
+where it folds. The reasons (`rd.h` `RD_GLOW_FOLD_WHY_*`): the sun's fans, the lamps, SCENE drawn
+between the mask and the reduction, WORK2 drawn or read elsewhere, the chain not in the fold's form, MSAA, the fx plan off, a reduction that
 could not take it. Tests: `rd_blur` (k) and its (r) scan, `rd_glow_cheap_ab`
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portrendertest)).
 
