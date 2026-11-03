@@ -3300,6 +3300,32 @@ typedef struct ShPrism {
     int32_t match;    /* the other tick's prism, -1 */
 } ShPrism;
 
+/* prismSet's answer (blendPrisms: PRISM_GO goes on) and its keep
+ * (prismSetKept) */
+enum { PRISM_GO = 3 };
+
+typedef struct PrismSet {
+    uint32_t np, nc;
+    double mp[3], mc[3], wp[3], wc[3];
+    bool wShift;
+} PrismSet;
+
+#define PRISM_KEEP 8
+
+typedef struct PrismKeep {
+    bool valid, world;
+    int r;
+    uint32_t nvp, nvc, incP, incC, inCap, prCap;
+    double ip[16], ic[16];
+    PrismSet set;
+    RdScreenVtx *in;
+    ShPrism *pr;
+} PrismKeep;
+
+static PrismKeep s_pk[PRISM_KEEP];
+
+static uint32_t s_pkNext;
+
 /* emitVolumeStrip's order[0..9]: the vertex at each strip position */
 static const uint8_t kStripVtx[10] = {0, 1, 3, 4, 5, 1, 2, 0, 5, 3};
 
@@ -3337,6 +3363,11 @@ static uint32_t s_wptCap;
 
 static void prismFree(void)
 {
+    for (int i = 0; i < PRISM_KEEP; i++) {
+        free(s_pk[i].in);
+        free(s_pk[i].pr);
+    }
+    memset(s_pk, 0, sizeof(s_pk));
     free(s_wpt);
     s_wpt = NULL;
     s_wptCap = 0;
@@ -3805,6 +3836,91 @@ static void reprojShadow(RdCmd *c, RdScreenVtx *v, const double *inv)
     c->u[3] = nv - inc * 3;
 }
 
+/* blendPrisms' part t does not change: both ticks' prisms paired (s_prism,
+ * .match), their medians and the volumes' world shift; -1, R_JUMP or
+ * PRISM_GO */
+static int prismSet(const RdScreenVtx *p, uint32_t nvp, uint32_t incP, const RdScreenVtx *c,
+                    uint32_t nvc, uint32_t incC, bool world, PrismSet *o)
+{
+    if (nvp % 3 != 0 || nvc % 3 != 0 || !prismsOf(p, incP / 3, nvp / 3, 0) ||
+        !prismsOf(c, incC / 3, nvc / 3, 1)) {
+        return -1;
+    }
+    const uint32_t np = o->np = nvp / 3 / RD_SHADOW_PRISM_TRIS;
+    const uint32_t nc = o->nc = nvc / 3 / RD_SHADOW_PRISM_TRIS;
+    for (int k = 0; k < 3; k++) {
+        if (!prismMedian(0, np, k, &o->mp[k]) || !prismMedian(1, nc, k, &o->mc[k])) {
+            return -1;
+        }
+    }
+    const double lim = RD_INTERP_JUMP_SCREEN * 16.0;
+    if (fabs(o->mp[0] - o->mc[0]) > lim || fabs(o->mp[1] - o->mc[1]) > lim) {
+        return R_JUMP;
+    }
+    const double shift[2] = {o->mc[0] - o->mp[0], o->mc[1] - o->mp[1]};
+    if (!alignPrisms(np, nc, shift)) {
+        return -1;
+    }
+    o->wShift = world && worldMedian(0, np, s_rp.ip, o->wp) && worldMedian(1, nc, s_rp.ic, o->wc);
+    return PRISM_GO;
+}
+
+/* prismSet's answers kept for the tick's later presents: the same inputs
+ * (both ticks' vertices, their increment counts, the world flag and the
+ * ticks' inverse screens, compared byte for byte) give the same pairs, so a
+ * later present copies them back (the selections and the banded alignment
+ * cost 0.35 ms a present on lavapipe, RSCAN) */
+static int prismSetKept(const RdScreenVtx *p, uint32_t nvp, uint32_t incP, const RdScreenVtx *c,
+                        uint32_t nvc, uint32_t incC, bool world, PrismSet *o)
+{
+    const size_t vb = sizeof(RdScreenVtx), pb = sizeof(ShPrism);
+    for (int i = 0; i < PRISM_KEEP; i++) {
+        PrismKeep *e = &s_pk[i];
+        if (!e->valid || e->nvp != nvp || e->nvc != nvc || e->incP != incP || e->incC != incC ||
+            e->world != world ||
+            (world && (memcmp(e->ip, s_rp.ip, sizeof(e->ip)) != 0 ||
+                       memcmp(e->ic, s_rp.ic, sizeof(e->ic)) != 0)) ||
+            memcmp(e->in, p, nvp * vb) != 0 || memcmp(e->in + nvp, c, nvc * vb) != 0) {
+            continue;
+        }
+        if (e->r == PRISM_GO && (!growTo((void **)&s_prism[0], &s_prismCap[0], e->set.np, pb) ||
+                                 !growTo((void **)&s_prism[1], &s_prismCap[1], e->set.nc, pb))) {
+            break;
+        }
+        if (e->r == PRISM_GO) {
+            memcpy(s_prism[0], e->pr, e->set.np * pb);
+            memcpy(s_prism[1], e->pr + e->set.np, e->set.nc * pb);
+        }
+        *o = e->set;
+        return e->r;
+    }
+    memset(o, 0, sizeof(*o));
+    const int r = prismSet(p, nvp, incP, c, nvc, incC, world, o);
+    PrismKeep *e = &s_pk[s_pkNext++ % PRISM_KEEP];
+    e->valid = false;
+    if (nvp + nvc == 0 || !growTo((void **)&e->in, &e->inCap, nvp + nvc, vb) ||
+        (r == PRISM_GO && !growTo((void **)&e->pr, &e->prCap, o->np + o->nc, pb))) {
+        return r;
+    }
+    memcpy(e->in, p, nvp * vb);
+    memcpy(e->in + nvp, c, nvc * vb);
+    if (r == PRISM_GO) {
+        memcpy(e->pr, s_prism[0], o->np * pb);
+        memcpy(e->pr + o->np, s_prism[1], o->nc * pb);
+    }
+    memcpy(e->ip, s_rp.ip, sizeof(e->ip));
+    memcpy(e->ic, s_rp.ic, sizeof(e->ic));
+    e->nvp = nvp;
+    e->nvc = nvc;
+    e->incP = incP;
+    e->incC = incC;
+    e->world = world;
+    e->r = r;
+    e->set = *o;
+    e->valid = true;
+    return r;
+}
+
 /* R_LERP, R_JUMP, or -1 when the volumes are not tagged prisms (the caller
  * then blends them vertex by vertex or, across a topology change, moves
  * cur's by the median shift: shiftShadow) */
@@ -3813,25 +3929,17 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
     const uint32_t nvp = pc->u[0] + pc->u[3], nvc = cc->u[0] + cc->u[3];
     const RdScreenVtx *p = payloadAt(prev, pc->u[1], nvp * (uint32_t)sizeof(RdScreenVtx));
     const RdScreenVtx *c = (const RdScreenVtx *)(const void *)op;
-    if (!p || nvp % 3 != 0 || nvc % 3 != 0 || !prismsOf(p, pc->u[0] / 3, nvp / 3, 0) ||
-        !prismsOf(c, cc->u[0] / 3, nvc / 3, 1)) {
+    if (!p) {
         return -1;
     }
-    double mp[3], mc[3];
-    const uint32_t np = nvp / 3 / RD_SHADOW_PRISM_TRIS, nc = nvc / 3 / RD_SHADOW_PRISM_TRIS;
-    for (int k = 0; k < 3; k++) {
-        if (!prismMedian(0, np, k, &mp[k]) || !prismMedian(1, nc, k, &mc[k])) {
-            return -1;
-        }
+    const bool world = s_rp.on && frameProjected(pc) && frameProjected(cc);
+    PrismSet ps;
+    const int set = prismSetKept(p, nvp, pc->u[0], c, nvc, cc->u[0], world, &ps);
+    if (set != PRISM_GO) {
+        return set;
     }
-    const double lim = RD_INTERP_JUMP_SCREEN * 16.0;
-    if (fabs(mp[0] - mc[0]) > lim || fabs(mp[1] - mc[1]) > lim) {
-        return R_JUMP;
-    }
-    const double shift[2] = {mc[0] - mp[0], mc[1] - mp[1]};
-    if (!alignPrisms(np, nc, shift)) {
-        return -1;
-    }
+    const uint32_t np = ps.np, nc = ps.nc;
+    const double *mp = ps.mp, *mc = ps.mc;
     /* the prisms drawn: every pair, and the nearer tick's unmatched ones */
     const int prevSide = t < 0.5f;
     uint32_t out = 0, alone = 0;
@@ -3857,11 +3965,10 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
      * the world and are seen through the blended camera (the floor they
      * fall on is), a prism of one tick only moved by the volume's shift in
      * the world; a vertex with no world point keeps the screen-space rule */
-    const bool world = s_rp.on && frameProjected(pc) && frameProjected(cc);
-    double wp[3], wc[3], wd[3];
-    const bool wShift = world && worldMedian(0, np, s_rp.ip, wp) && worldMedian(1, nc, s_rp.ic, wc);
+    double wd[3];
+    const bool wShift = ps.wShift;
     for (int k = 0; k < 3; k++) {
-        wd[k] = wShift ? w * (wc[k] - wp[k]) : 0.0;
+        wd[k] = wShift ? w * (ps.wc[k] - ps.wp[k]) : 0.0;
     }
     uint32_t inc = 0, o = 0;
     for (int pass = 0; pass < 2; pass++) {

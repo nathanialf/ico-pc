@@ -8,7 +8,10 @@
  *         record with no serial is compared at every ask.
  *         rd__interp_skin_pivots: a skinned mesh's bone pivot is its bound
  *         vertices' centroid, the same at the next present and after
- *         another mesh's, and moves with the stream when it is rewritten */
+ *         another mesh's, and moves with the stream when it is rewritten.
+ *         The shadow prisms' pairs (rd_interp.c prismSetKept): a present
+ *         of the tick after its first takes the kept pairs, and draws the
+ *         volume a present that pairs them again draws, byte for byte */
 
 /* the rising draw's skinned stream (makeRisingSkinMesh) moved dx in x */
 static void memoSkinQw(float (*qw)[4], float dx)
@@ -122,4 +125,31 @@ static void testStreamMemos(void)
           "memo: the pivot moves with the rewritten stream");
     rd_destroy_vu_mesh(s1);
     rd_destroy_vu_mesh(s2);
+
+    /* the prism pairs: new frames (no kept pairs for them), 0.75 paired,
+     * then 0.25 and 0.75 again from the kept pairs */
+    static const int xs2[2] = {14, 114}, xs3[3] = {14, 64, 114};
+    static const int dSame[3][2] = {{10, 30}, {10, 30}, {10, 30}};
+    const RdKey key = RD_KEY(&kObjE, 9, 0);
+    int incP, incC;
+    prismFrame(xs2, dSame, 2, 0, &incP);
+    prismFrame(xs3, dSame, 3, 8, &incC);
+    static uint8_t first[4096];
+    size_t n = 0;
+    const RdFrame *f = built(0.75f);
+    const RdCmd *hc = findKey(f, 3, key, 0);
+    if (hc) {
+        n = (size_t)(hc->u[0] + hc->u[3]) * sizeof(RdScreenVtx);
+        n = n <= sizeof(first) ? n : 0;
+        memcpy(first, f->payload + hc->u[1], n);
+    }
+    f = built(0.25f);
+    int closed = 0;
+    CHECK(closedPrisms(f, key, &closed) == 2 && closed == 2,
+          "memo: kept pairs at 0.25: 2 prisms, %d closed", closed);
+    f = built(0.75f);
+    hc = findKey(f, 3, key, 0);
+    CHECK(n && hc && (size_t)(hc->u[0] + hc->u[3]) * sizeof(RdScreenVtx) == n &&
+              memcmp(first, f->payload + hc->u[1], n) == 0,
+          "memo: kept pairs at 0.75: the volume paired anew, byte for byte (%zu bytes)", n);
 }
