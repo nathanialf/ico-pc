@@ -15,6 +15,7 @@ static const UiSubtitlePack *const kPacks[] = {
     &ui_subtitle_pack_rus,
     &ui_subtitle_pack_rus_2,
     &subtitles_eng_glitterberri,
+    &subtitles_ptBR,
 };
 
 size_t ui_subtitle_pack_count(void)
