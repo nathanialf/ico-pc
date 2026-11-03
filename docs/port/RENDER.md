@@ -1772,8 +1772,15 @@ changed are kept or made once, each giving the same bytes:
 - **The draw-merge count.** `vuMergeNote` (counting only) compares the last VU draw's DrawCB byte
   for byte instead of a 64-bit FNV made one byte a step at every VU draw: 0.12 ms a replay.
 
-The 10 s summary says how much of that work an earlier present's served (`port/render/rd_interp_mesh.c`
-(`rd__interp_keeps_log`), from `presentLog`; the spans counted since the line before):
+The interpolation's summary says how much of that work an earlier present's served
+(`port/render/rd_interp_mesh.c` (`rd__interp_keeps_log`), from `presentLog`; the spans counted
+since the line before). It is one of the `rd: interp:` lines that `presentLog` writes every 250
+interpolated game frames (`RD_INTERP_LOG_FRAMES`, after the `presents drew a mixed picture` line),
+not a part of the window's 10 s block, and it is written with zeros too; with interpolation off
+(Frame rate Original) there is no such summary and the spans' counts wait for the next one. A
+phone's log has it at each summary: `204 of 3000 comparisons of two ticks' mesh streams,
+2273 of 9244 skinned meshes' pivots, 67 of 979 shadow volumes' prism pairs; the replays' mesh
+alpha spans: 46190 of 54853 kept`:
 
 ```
 interp: kept from an earlier present (the rest made again): A of B comparisons of two ticks' mesh streams, C of D skinned meshes' pivots, E of F shadow volumes' prism pairs; the replays' mesh alpha spans: G of H kept
