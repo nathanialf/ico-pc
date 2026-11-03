@@ -14,6 +14,7 @@
 #include "rd_passring.h"
 #include "rd_replay.h"
 #include "shader_consts.h"
+#include "vu1_ref.h" /* vu1ref_region_mirror: ICO_VU_MIRROR */
 
 /* -------------------------------------------------------------- VU draws
  * RDC_MESH / RDC_SKINNED (rd_draw_vu_mesh), RDC_GRID (rd_draw_vu_grid) and
@@ -1032,6 +1033,14 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     const uint64_t ua = rhi_limits()->uniformAlign;
     RdDrawPass dp[8];
     const int np = vuPlan(r, s, ds, prog, vs, vcb, dp);
+    for (int i = 0; i < np; i++) {
+        if (dp[i].key.dst == RHI_DST_READ_STORAGE) {
+            /* the _dstrov build writes depth before its shader runs, so a
+             * pixel the side bands discard would leave its depth: the
+             * PS2's drop (vu_common.hlsli VU_RULE_CLIP_BESIDE) */
+            vcbAt.draw[2] |= ICO_VU_NO_BESIDE;
+        }
+    }
     /* each pass's pipeline: the main shader's, or (it could not be made)
      * the program's own entry, which ignores the record (logged once) */
     RdPipeKeyInt keys[8];
@@ -1190,6 +1199,32 @@ typedef struct VuSource {
     RhiBuffer streamBuf, indexBuf;
     uint8_t vs;
 } VuSource;
+
+/* The region rule's side bands (vu_common.hlsli VU_RULE_CLIP_BESIDE,
+ * docs/port/VU1_PROGRAMS.md "The region rule", step 7): a triangle the
+ * rule drops that faces the eye is drawn clipped beside the 4:3 picture on
+ * a wider frame.  Off (ICO_VU_NO_BESIDE) where the draw cannot say which
+ * side faces the eye or where nothing lies beside the picture: a frame
+ * not wider than 4:3 (the picture is the frame: the PS2's, byte for
+ * byte), a grid (no winding marks: its strips wind both ways), a mesh
+ * without winding marks (RdMeshRec.facingFrom none: a prelit stream the
+ * EE gave no table, an older dump's prelit meshes), and ICO_RD_VU_BESIDE=0
+ * (the before/after compare, rd_sideband_ab).  vuDraw adds it for a pass
+ * whose pixel shader writes depth before it runs (_dstrov). */
+static int s_besideEnv = -1;
+
+static bool vuBesideOn(const RdCmd *c, const RdMeshRec *m)
+{
+    if (s_besideEnv < 0) {
+        const char *e = getenv("ICO_RD_VU_BESIDE");
+        s_besideEnv = !(e && e[0] == '0' && e[1] == 0);
+        rd__log("VU side bands: %s (a front-facing triangle the region rule drops is drawn "
+                "beside the 4:3 picture on a wider frame; ICO_RD_VU_BESIDE=0 turns them off)",
+                s_besideEnv ? "on" : "off (ICO_RD_VU_BESIDE=0)");
+    }
+    return s_besideEnv && g_rd.gsW > ICO_SH_FRAME_BASE_W && c->type != RDC_GRID && m &&
+           m->facingFrom != RD_MESH_FACING_NONE;
+}
 
 static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
 {
@@ -1350,6 +1385,18 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
                     "triangle the region test drops is drawn clipped unless it is a card, and a "
                     "clipped triangle's corner whose GS Z saturated (within about 8 units of the "
                     "eye) keeps its GS position, as the exact triangle beside it has it");
+        }
+    }
+    if (c->type != RDC_PARTICLES) {
+        /* the side bands' facing: the sign of the matrix h is made with
+         * (normal_c, normal_l, mesh: VU memory 16..18; cluster: 4..6) and
+         * whether the draw has them at all (vuBesideOn) */
+        const unsigned at = c->type == RDC_SKINNED ? 4u : 16u;
+        if (vu1ref_region_mirror(vcb.mem[at], vcb.mem[at + 1], vcb.mem[at + 2])) {
+            vcb.draw[2] |= ICO_VU_MIRROR;
+        }
+        if (!vuBesideOn(c, m)) {
+            vcb.draw[2] |= ICO_VU_NO_BESIDE;
         }
     }
     if (m && m->kickMark) {

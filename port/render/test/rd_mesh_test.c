@@ -3387,10 +3387,15 @@ static void boxDiscChecks(const char *disc, int slice)
  * One line a slice, "winding: L lit triangles, A %, B %, C %; P prelit
  * parts, E % edges consistent", then the details and a line a stage (the
  * member's name up to its first '_': st26a, ico), in counts so the four
- * slices add up.  The decision it feeds (SIDEBAND-1): A or B at least 98 %
- * of the lit triangles and E at least 98 % make RD_VU_WINDING_PHASE the
- * prelit marks' phase (0 for A, 1 for B); else a part whose box holds the
- * eye keeps the PS2's drop.  Without the image: SKIP. */
+ * slices add up.  The disc's answer (v0.10.1): the phase is per strip (A
+ * 73 to 76 %, B 23 to 26 %, C under 1 %) and every part has normals (0
+ * prelit parts), so no parity marks the prelit strips: the facing comes
+ * from the normals for every program (the EE's table, Packet.c
+ * pac_hostFacing, rd_mesh.h rd_vu_facing_vertex).  So the walk also feeds
+ * every part's strips through that builder, as Packet.c does, and counts
+ * per stage how many of the non-degenerate triangles' bits agree with the
+ * normals' verdict here ("facing marks M of N agree"): all of them, which
+ * the slice's CHECK holds.  Without the image: SKIP. */
 
 typedef struct WindTally {
     char stage[16];
@@ -3399,6 +3404,9 @@ typedef struct WindTally {
     long strips[4];                      /* the lit strips by class */
     long prelitParts, edges, consistent; /* the parts without normals */
     long litParts, litEdges, litConsistent; /* the parts with them */
+    /* the EE's facing table (rd_vu_facing_vertex, Packet.c's builder) on
+       the non-degenerate triangles with normals: its bit against dot < 0 */
+    long markTris, markAgree;
 } WindTally;
 
 #define WIND_STAGES 256
@@ -3518,10 +3526,15 @@ static void windModel(const PObjModel *m, const unsigned char *lo, const unsigne
         /* normals: every strip vertex's normal index inside the list */
         int normals = pt->nrm != NULL && pt->nrmCount > 0;
         long tris = 0, cls[4] = {0, 0, 0, 0}, triA = 0, triB = 0, strips[4] = {0, 0, 0, 0};
+        long markTris = 0, markAgree = 0;
+        uint32_t built = 0; /* the vertices given to the EE's builder */
         s_windEdgeCount = 0;
         uint32_t stripNo = 0;
         for (int pass = 0; pass < 2; pass++) {
             /* pass 0 checks the normal indices, pass 1 counts */
+            if (pass == 1) {
+                rd_vu_facing_begin(); /* the part's strips as one packet */
+            }
             for (unsigned int sl = 0; sl < pt->stripCount; sl++) {
                 const unsigned char *r = ((unsigned char *const *)pt->strips)[sl];
                 for (;;) {
@@ -3559,6 +3572,13 @@ static void windModel(const PObjModel *m, const unsigned char *lo, const unsigne
                             normals = normals && e[3] >= 0 && (unsigned int)e[3] < pt->nrmCount;
                             continue;
                         }
+                        if (normals) {
+                            /* the EE's builder, as Packet.c pac_hostFacing feeds it */
+                            rd_vu_facing_vertex(i == 0,
+                                                (const float *)(const void *)(pt->vtx + e[2] * 16),
+                                                (const float *)(const void *)(pt->nrm + e[3] * 16));
+                            built++;
+                        }
                         if (i < 2) {
                             continue;
                         }
@@ -3594,6 +3614,11 @@ static void windModel(const PObjModel *m, const unsigned char *lo, const unsigne
                                  ((const float *)(const void *)(pt->nrm + ni[2] * 16))[c]);
                         }
                         tris++;
+                        if (!(degenerate || dot == 0.0 || dot != dot)) {
+                            const int bit = rd__vu_facing_bit(built - 1u);
+                            markTris++;
+                            markAgree += bit == (dot < 0.0 ? 1 : 0);
+                        }
                         if (degenerate || dot == 0.0 || dot != dot) {
                             d++;
                         } else if ((dot > 0.0) == (p == 0)) {
@@ -3650,6 +3675,8 @@ static void windModel(const PObjModel *m, const unsigned char *lo, const unsigne
             t->litParts++;
             t->litEdges += edges;
             t->litConsistent += consistent;
+            t->markTris += markTris;
+            t->markAgree += markAgree;
         } else {
             t->prelitParts++;
             t->edges += edges;
@@ -3667,12 +3694,14 @@ static void windLine(const char *head, const WindTally *t)
 {
     printf("  %s: %ld lit triangles, A %.2f %%, B %.2f %%, C %.2f %% (D %.2f %%; strips A %ld, B "
            "%ld, C %ld, D %ld; triangle by triangle A %ld, B %ld); %ld prelit parts, %ld of %ld "
-           "shared edges consistent (%.2f %%); %ld lit parts, %ld of %ld consistent (%.2f %%)\n",
+           "shared edges consistent (%.2f %%); %ld lit parts, %ld of %ld consistent (%.2f %%); "
+           "facing marks %ld of %ld agree with the normals (%.2f %%)\n",
            head, t->litTris, windPct(t->cls[0], t->litTris), windPct(t->cls[1], t->litTris),
            windPct(t->cls[2], t->litTris), windPct(t->cls[3], t->litTris), t->strips[0],
            t->strips[1], t->strips[2], t->strips[3], t->triA, t->triB, t->prelitParts,
            t->consistent, t->edges, windPct(t->consistent, t->edges), t->litParts, t->litConsistent,
-           t->litEdges, windPct(t->litConsistent, t->litEdges));
+           t->litEdges, windPct(t->litConsistent, t->litEdges), t->markAgree, t->markTris,
+           windPct(t->markAgree, t->markTris));
 }
 
 static void windingDiscChecks(const char *disc, int slice)
@@ -3744,6 +3773,8 @@ static void windingDiscChecks(const char *disc, int slice)
         sum.litParts += t->litParts;
         sum.litEdges += t->litEdges;
         sum.litConsistent += t->litConsistent;
+        sum.markTris += t->markTris;
+        sum.markAgree += t->markAgree;
         char head[48];
         snprintf(head, sizeof(head), "winding stage %s", t->stage);
         if (t->litTris || t->prelitParts || t->litParts) {
@@ -3760,6 +3791,12 @@ static void windingDiscChecks(const char *disc, int slice)
           "winding: the slice's %ld models measured (%ld lit triangles, %ld shared edges, %ld "
           "models not loaded)",
           models, sum.litTris, sum.edges, tooBig);
+    /* the EE's table (the region rule's facing, every program) is the
+       normals' verdict on every triangle that has one */
+    CHECK(sum.markTris > 0 && sum.markAgree == sum.markTris,
+          "winding: the EE's facing marks agree with the normals on %ld of %ld non-degenerate "
+          "triangles",
+          sum.markAgree, sum.markTris);
 }
 
 static void setup(void)
@@ -3931,20 +3968,36 @@ static void joinedStripChecks(void)
 }
 
 /* ------------------------------------------------- the winding marks */
-/* rd_mesh.c markWinding (ICO_VU_MARK_FLIP): a lit triangle k-2, k-1, k is
- * marked when cross(b - a, c - a) of its positions points away from the
- * sum of its three normals, triangle by triangle; a prelit one when
- * ((k - s) & 1) ^ RD_VU_WINDING_PHASE is 1, s its strip's first vertex.
- *   - prelit: two strips in one batch (vertices 0..4 and 5..8): kicks 2,
- *     3, 4 and 7, 8 alternate from each strip's start, whatever the
- *     corners
+/* rd_mesh.c markWinding and rd__mesh_set_facing (ICO_VU_MARK_FLIP): a
+ * triangle k-2, k-1, k is marked when cross(b - a, c - a) of its positions
+ * points away from the sum of its three normals, triangle by triangle, from
+ * the EE's table (RdVuMeshDesc.facing: Packet.c, every program) or, without
+ * one, from a lit or skinned stream's own normals; a prelit stream without
+ * a table has no marks (RdMeshRec.facingFrom NONE: no side bands).
+ *   - prelit, no table: two strips in one batch (vertices 0..4, 5..8): no
+ *     kick marked, facingFrom NONE (no parity rule: the disc's strips start
+ *     on either phase)
+ *   - prelit, a table: the same strips, bits at 3, 4, 7 (and 5, 6, which
+ *     no kick ends at): kicks 3, 4, 7 marked, 2 and 8 not, facingFrom
+ *     TABLE; rd__mesh_facing_bits gives the kicks' bits back (5 and 6
+ *     clear); a table of another vertex count is refused (marks kept)
  *   - lit, wound consistently: a flat zig-zag in z = 0, every normal +z:
  *     the triangles at k - s = 2 and 4 face -z as kicked (marked), 3 and
- *     5 face +z (not); then a morph (rd_update_vu_mesh) with every normal
- *     turned keeps the creation's marks
+ *     5 face +z (not), facingFrom NORMALS; then a morph
+ *     (rd_update_vu_mesh) with every normal turned keeps the creation's
+ *     marks
  *   - lit, mixed: the same corners, vertices 4 and 5's normals -5 z: the
  *     sums at kicks 4 and 5 turn (-3 z, -9 z), so kicks 2 and 5 are
  *     marked, 3 and 4 not
+ *   - lit with a table that says the reverse of its normals: the table's
+ *     marks (TABLE)
+ *   - the EE's builder (rd_vu_facing_begin, _vertex, _attach): the
+ *     zig-zag's six vertices with +z normals give bits 2 and 4; attach
+ *     keeps them under the desc's hash and hands them to the desc; a
+ *     second desc of the same stream after a fresh begin (nothing built)
+ *     finds them; a build with a vertex without a normal keeps nothing; a
+ *     second, different table under the same hash leaves the hash none
+ *   - a copy (rd__vu_mesh_copy_marks) takes the marks' source with them
  *   - no other mark is made on any of them (nothing joined, hidden or
  *     overlapping) */
 
@@ -4005,23 +4058,85 @@ static RdMesh windingLit(const float nz[6], float (*qw)[4])
     return m;
 }
 
+/* a prelit mesh of joinMesh's strips with a facing table (NULL: none) */
+static RdMesh windingPrelit(const float (*xy)[2], const uint8_t *start, int n,
+                            const uint8_t *facing, uint32_t facingCount)
+{
+    float qw[1 + 16 * 3][4];
+    memset(qw, 0, sizeof(qw));
+    const uint32_t tag = 0x8000u | (uint32_t)n;
+    memcpy(&qw[0][0], &tag, 4);
+    for (int k = 0; k < n; k++) {
+        qw[1 + k * 3][0] = xy[k][0];
+        qw[1 + k * 3][1] = xy[k][1];
+        qw[1 + k * 3][3] = 1.0f;
+        qw[2 + k * 3][2] = 1.0f;
+        qw[2 + k * 3][3] = start[k] ? 0.0f : 1.0f;
+        qw[3 + k * 3][0] = qw[3 + k * 3][1] = qw[3 + k * 3][2] = 100.0f;
+        qw[3 + k * 3][3] = 127.0f;
+    }
+    const RdVuBatchDesc bd = {0, 0, 0};
+    RdVuMeshDesc md;
+    memset(&md, 0, sizeof(md));
+    md.qw = (const float (*)[4])qw;
+    md.qwCount = (uint32_t)(1 + n * 3);
+    md.qwPerVertex = RD_VU_QW_PRELIT;
+    md.batchCount = 1;
+    md.batches = &bd;
+    md.materialCount = 1;
+    md.debugName = "winding prelit";
+    md.facing = facing;
+    md.facingCount = facingCount;
+    const RdMesh m = rd_create_vu_mesh(&md);
+    CHECK(m.id != 0, "winding marks: rd_create_vu_mesh (prelit)");
+    return m;
+}
+
 static void windingMarkChecks(void)
 {
-    const uint32_t p = RD_VU_WINDING_PHASE;
     /* prelit: two strips, far apart (nothing joined) */
     static const float kTwo[9][2] = {{0, 0},   {1, 0},   {0, 1},   {1, 1},  {0, 2},
                                      {50, 50}, {51, 50}, {50, 51}, {51, 51}};
     static const uint8_t kTwoStart[9] = {1, 0, 0, 0, 0, 1, 0, 0, 0};
-    const RdMesh two = joinMesh(kTwo, kTwoStart, 9);
+    const RdMesh two = windingPrelit(kTwo, kTwoStart, 9, NULL, 0);
     const RdMeshRec *t = rd__mesh_rec(two.id);
-    CHECK(t && flipAt(t, 2) == (int)p && flipAt(t, 3) == (int)!p && flipAt(t, 4) == (int)p &&
-              flipAt(t, 7) == (int)p && flipAt(t, 8) == (int)!p && flipAt(t, 5) == -1 &&
-              flipAt(t, 6) == -1 && onlyFlips(t),
-          "winding marks: prelit strips alternate from each strip's start, phase %u (%d %d %d, "
-          "%d %d)",
-          p, t ? flipAt(t, 2) : -2, t ? flipAt(t, 3) : -2, t ? flipAt(t, 4) : -2,
-          t ? flipAt(t, 7) : -2, t ? flipAt(t, 8) : -2);
+    CHECK(t && flipAt(t, 2) == 0 && flipAt(t, 3) == 0 && flipAt(t, 4) == 0 && flipAt(t, 7) == 0 &&
+              flipAt(t, 8) == 0 && flipAt(t, 5) == -1 && flipAt(t, 6) == -1 && onlyFlips(t) &&
+              t->facingFrom == RD_MESH_FACING_NONE,
+          "winding marks: a prelit stream without a table has no marks and no facing (%d %d %d, "
+          "%d %d; from %d)",
+          t ? flipAt(t, 2) : -2, t ? flipAt(t, 3) : -2, t ? flipAt(t, 4) : -2,
+          t ? flipAt(t, 7) : -2, t ? flipAt(t, 8) : -2, t ? (int)t->facingFrom : -1);
     rd_destroy_vu_mesh(two);
+
+    /* prelit with a table: bits 3, 4, 5, 6, 7 */
+    const uint8_t kBits[2] = {0xF8u, 0x00u};
+    const RdMesh tab = windingPrelit(kTwo, kTwoStart, 9, kBits, 9);
+    RdMeshRec *tb = rd__mesh_rec(tab.id);
+    uint8_t back[2] = {0xFFu, 0xFFu};
+    CHECK(tb && flipAt(tb, 2) == 0 && flipAt(tb, 3) == 1 && flipAt(tb, 4) == 1 &&
+              flipAt(tb, 7) == 1 && flipAt(tb, 8) == 0 && onlyFlips(tb) &&
+              tb->facingFrom == RD_MESH_FACING_TABLE && rd__mesh_facing_bits(tb, back, 2) &&
+              back[0] == 0x98u && back[1] == 0x00u,
+          "winding marks: a prelit stream takes the EE's table on its kicks (%d %d %d %d %d; "
+          "from %d; bits back %02x %02x)",
+          tb ? flipAt(tb, 2) : -2, tb ? flipAt(tb, 3) : -2, tb ? flipAt(tb, 4) : -2,
+          tb ? flipAt(tb, 7) : -2, tb ? flipAt(tb, 8) : -2, tb ? (int)tb->facingFrom : -1, back[0],
+          back[1]);
+    if (tb) {
+        const uint8_t none[2] = {0, 0};
+        CHECK(!rd__mesh_set_facing(tb, none, 8) && flipAt(tb, 3) == 1 &&
+                  tb->facingFrom == RD_MESH_FACING_TABLE,
+              "winding marks: a table of another vertex count is refused, the marks kept");
+        /* a copy takes the marks and their source */
+        const RdMesh cp = windingPrelit(kTwo, kTwoStart, 9, NULL, 0);
+        RdMeshRec *c = rd__mesh_rec(cp.id);
+        CHECK(c && rd__vu_mesh_copy_marks(c, tb) && flipAt(c, 3) == 1 && flipAt(c, 8) == 0 &&
+                  c->facingFrom == RD_MESH_FACING_TABLE,
+              "winding marks: a copy takes its source's marks and their source");
+        rd_destroy_vu_mesh(cp);
+    }
+    rd_destroy_vu_mesh(tab);
 
     /* lit, wound consistently */
     static float qw[1 + 6 * 4][4];
@@ -4029,11 +4144,11 @@ static void windingMarkChecks(void)
     const RdMesh lit = windingLit(kUp, qw);
     RdMeshRec *l = rd__mesh_rec(lit.id);
     CHECK(l && flipAt(l, 2) == 1 && flipAt(l, 3) == 0 && flipAt(l, 4) == 1 && flipAt(l, 5) == 0 &&
-              onlyFlips(l),
+              onlyFlips(l) && l->facingFrom == RD_MESH_FACING_NORMALS,
           "winding marks: a consistently wound lit strip is marked at k - s = 2 and 4 (%d %d %d "
-          "%d)",
+          "%d; from %d)",
           l ? flipAt(l, 2) : -2, l ? flipAt(l, 3) : -2, l ? flipAt(l, 4) : -2,
-          l ? flipAt(l, 5) : -2);
+          l ? flipAt(l, 5) : -2, l ? (int)l->facingFrom : -1);
     if (l) {
         /* the morph: every normal turned, the marks the creation's */
         for (int k = 0; k < 6; k++) {
@@ -4042,6 +4157,11 @@ static void windingMarkChecks(void)
         CHECK(rd_update_vu_mesh(lit, (const float (*)[4])qw) && flipAt(l, 2) == 1 &&
                   flipAt(l, 3) == 0 && flipAt(l, 4) == 1 && flipAt(l, 5) == 0,
               "winding marks: a morph keeps the creation's marks");
+        /* a table saying the reverse wins over the normals */
+        const uint8_t rev[1] = {0x28u}; /* kicks 3 and 5 */
+        CHECK(rd__mesh_set_facing(l, rev, 6) && flipAt(l, 2) == 0 && flipAt(l, 3) == 1 &&
+                  flipAt(l, 4) == 0 && flipAt(l, 5) == 1 && l->facingFrom == RD_MESH_FACING_TABLE,
+              "winding marks: the EE's table replaces a lit stream's own marks");
     }
     rd_destroy_vu_mesh(lit);
 
@@ -4056,6 +4176,84 @@ static void windingMarkChecks(void)
           x ? flipAt(x, 2) : -2, x ? flipAt(x, 3) : -2, x ? flipAt(x, 4) : -2,
           x ? flipAt(x, 5) : -2);
     rd_destroy_vu_mesh(mixed);
+
+    /* the EE's builder over the zig-zag (one strip, normals +z), a prelit
+     * stream of its six vertices as the packet */
+    static const float kZig[6][2] = {{0, 0}, {0, 1}, {1, 0}, {1, 1}, {2, 0}, {2, 1}};
+    static const uint8_t kZigStart[6] = {1, 0, 0, 0, 0, 0};
+    const float up[4] = {0, 0, 1, 1};
+    float pos[6][4];
+    for (int k = 0; k < 6; k++) {
+        pos[k][0] = kZig[k][0];
+        pos[k][1] = kZig[k][1];
+        pos[k][2] = 0.0f;
+        pos[k][3] = 1.0f;
+    }
+    float zq[1 + 6 * 3][4];
+    memset(zq, 0, sizeof(zq));
+    const uint32_t ztag = 0x8000u | 6u;
+    memcpy(&zq[0][0], &ztag, 4);
+    for (int k = 0; k < 6; k++) {
+        memcpy(zq[1 + k * 3], pos[k], sizeof(pos[k]));
+        zq[2 + k * 3][2] = 1.0f;
+        zq[2 + k * 3][3] = kZigStart[k] ? 0.0f : 1.0f;
+        zq[3 + k * 3][3] = 127.0f;
+    }
+    const RdVuBatchDesc zb = {0, 0, 0};
+    RdVuMeshDesc zd;
+    memset(&zd, 0, sizeof(zd));
+    zd.qw = (const float (*)[4])zq;
+    zd.qwCount = 1 + 6 * 3;
+    zd.qwPerVertex = RD_VU_QW_PRELIT;
+    zd.batchCount = 1;
+    zd.batches = &zb;
+    zd.materialCount = 1;
+    zd.debugName = "winding builder";
+    rd_vu_facing_begin();
+    for (int k = 0; k < 6; k++) {
+        rd_vu_facing_vertex(k == 0, pos[k], up);
+    }
+    rd_vu_facing_attach(&zd);
+    CHECK(zd.facing && zd.facingCount == 6 && zd.facing[0] == 0x14u,
+          "winding marks: the EE's builder marks k - s = 2 and 4 of a +z zig-zag (%02x, %u)",
+          zd.facing ? zd.facing[0] : 0xEEu, zd.facingCount);
+    RdVuMeshDesc again = zd;
+    again.facing = NULL;
+    again.facingCount = 0;
+    rd_vu_facing_begin(); /* nothing built: the kept table */
+    rd_vu_facing_attach(&again);
+    CHECK(again.facing && again.facingCount == 6 && again.facing[0] == 0x14u,
+          "winding marks: a stream built again finds the table kept under its hash");
+    const RdMesh zm = rd_create_vu_mesh(&again);
+    const RdMeshRec *z = rd__mesh_rec(zm.id);
+    CHECK(z && flipAt(z, 2) == 1 && flipAt(z, 3) == 0 && flipAt(z, 4) == 1 && flipAt(z, 5) == 0 &&
+              z->facingFrom == RD_MESH_FACING_TABLE,
+          "winding marks: a prelit mesh from the EE's table is marked as the lit one");
+    rd_destroy_vu_mesh(zm);
+    /* a vertex without a normal: nothing kept for a new stream */
+    zq[1][2] = 0.25f; /* another stream (hash) */
+    RdVuMeshDesc vd = zd;
+    vd.facing = NULL;
+    vd.facingCount = 0;
+    rd_vu_facing_begin();
+    for (int k = 0; k < 6; k++) {
+        rd_vu_facing_vertex(k == 0, pos[k], k == 3 ? NULL : up);
+    }
+    rd_vu_facing_attach(&vd);
+    CHECK(vd.facing == NULL, "winding marks: a strip with a vertex without a normal: no table");
+    /* the same stream (zq as first) with another table: the hash has none */
+    zq[1][2] = 0.0f;
+    const float down[4] = {0, 0, -1, 1};
+    RdVuMeshDesc cd = zd;
+    cd.facing = NULL;
+    cd.facingCount = 0;
+    rd_vu_facing_begin();
+    for (int k = 0; k < 6; k++) {
+        rd_vu_facing_vertex(k == 0, pos[k], down);
+    }
+    rd_vu_facing_attach(&cd);
+    CHECK(cd.facing == NULL,
+          "winding marks: two different tables under one stream's hash leave it none");
 }
 
 static void recordingChecks(void)

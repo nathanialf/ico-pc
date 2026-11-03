@@ -171,9 +171,12 @@ enum {
 };
 
 enum {
-    VU1REF_DRAW_NONE = 0,   /* not drawn */
-    VU1REF_DRAW_EXACT = 1,  /* drawn at its GS positions, as the GS draws it */
-    VU1REF_DRAW_CLIPPED = 2 /* drawn, clipped by the GPU at the native frustum */
+    VU1REF_DRAW_NONE = 0,    /* not drawn */
+    VU1REF_DRAW_EXACT = 1,   /* drawn at its GS positions, as the GS draws it */
+    VU1REF_DRAW_CLIPPED = 2, /* drawn, clipped by the GPU at the native frustum */
+    VU1REF_DRAW_BESIDE = 3   /* drawn, clipped by the GPU, only beside the camera's picture:
+                                its pixels in the picture's columns discarded (a front-facing
+                                triangle the rule drops on a frame wider than the picture) */
 };
 
 /* The state the region rule reads (ICO_VU_EXTENDED, rd_replay.c
@@ -184,6 +187,25 @@ static inline int vu1ref_extended(int preset, int frameW, float scale)
 {
     return preset != VU1REF_ORIGINAL || frameW > 512 || scale > 1.0f;
 }
+
+/* The region rule's facing (vu_common.hlsli vu_front_facing): 1 when the
+ * triangle with clip positions ha, hb, hc (VuVtx.h of the corners k-2, k-1,
+ * k, in that order) shows its front to the eye, else 0.  The homogeneous
+ * determinant of the corners centred on GS 2048 (rows x - 2048 w,
+ * y - 2048 w, w), each product and sum on its own in the shader's order,
+ * IEEE single precision; its sign is the eye's side of the triangle's
+ * plane, exact across w = 0 (a corner behind the eye), times the sign of
+ * the draw's matrix (mirror: ICO_VU_MIRROR, det(A3) < 0, rd_replay_vu.c)
+ * and turned by the kick's mark (flip: ICO_VU_MARK_FLIP, the corners wind
+ * against the triangle's normals).  Front: (det < 0) ^ mirror ^ flip; an
+ * edge-on triangle (det 0) or a NaN is not front. */
+int vu1ref_region_facing(const float ha[4], const float hb[4], const float hc[4], int mirror,
+                         int flip);
+/* The draw's matrix's sign (ICO_VU_MIRROR): 1 when the 3x3 determinant of
+ * the x, y and w rows over the x, y and z columns of the matrix the
+ * program's h is made with (columns c0..c2: VU memory 16..18 for normal_c,
+ * normal_l and mesh, 4..6 for the cluster) is below 0, in double */
+int vu1ref_region_mirror(const float c0[4], const float c1[4], const float c2[4]);
 
 /* A strip triangle whose vertices' region tests are insideA..C: all inside,
  * drawn exactly; one outside: clipped under photo mode's free camera
@@ -199,9 +221,15 @@ static inline int vu1ref_extended(int preset, int frameW, float scale)
  * carries ICO_VU_MARK_JOINED, rd_mesh.c markJoinedStrips) or a triangle
  * of its strip passes the region test (stripPasses, vu1ref_strip_passes);
  * else not drawn.  hide: the triangle carries ICO_VU_MARK_HIDE (never
- * drawn). */
+ * drawn).  A triangle the steps above do not draw (not a hidden one) is
+ * drawn beside the picture (VU1REF_DRAW_BESIDE) when the frame is wider
+ * than the picture (wide: vu_frame_ndc beyond vu_picture_ndc, the draw
+ * without ICO_VU_NO_BESIDE) and it faces the eye (facing:
+ * vu1ref_region_facing); else not drawn (the cliff filmed from inside, and
+ * every 4:3 picture: the PS2's). */
 int vu1ref_region_draw(int extended, int freeCamera, int insideA, int insideB, int insideC,
-                       int hide, int reaches, int front, int joined, int stripPasses);
+                       int hide, int reaches, int front, int joined, int stripPasses, int wide,
+                       int facing);
 /* The rule at a camera blended between two ticks' (ICO_VU_TICKS;
  * vu_common.hlsli vu_region_rule): drawT what vu1ref_region_draw gives at
  * the blended camera; cardT 1 when its verdict there was the card test's
@@ -215,7 +243,11 @@ int vu1ref_region_draw(int extended, int freeCamera, int insideA, int insideB, i
  * target's rectangle: at 4:3 the picture, so a triangle wholly beside the
  * picture at a tick was never seen).  A triangle the rule does not draw at
  * the blended camera is drawn clipped when a tick showed it, else not
- * drawn; the rest as drawT. */
+ * drawn; the rest as drawT.  drawT VU1REF_DRAW_BESIDE is a triangle the
+ * blended camera drops that faces the eye on a wide frame: the ticks come
+ * first (clipped whole when a tick showed it), else it stays beside.  A
+ * tick shows a triangle only when the rule there gives EXACT or CLIPPED
+ * (never BESIDE: compute shownPrev and shownCur with wide 0). */
 int vu1ref_region_between(int drawT, int cardT, int shownPrev, int shownCur);
 /* Whether a triangle of the strip of static kick k passes the region test
  * (the card test, rd_mesh.h RdVuCards, vu_common.hlsli vu_strip_card): the

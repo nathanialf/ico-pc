@@ -864,6 +864,12 @@ typedef struct RdMeshRec {
      * vu_common.hlsli vu_kick_marks) */
     uint8_t *kickMark;
     uint32_t markCount;
+    /* Where the triangles' ICO_VU_MARK_FLIP came from (RD_MESH_FACING_*,
+     * rd_mesh.c markWinding): none (the region rule's side bands are off
+     * for the mesh's draws: ICO_VU_NO_BESIDE), the stream's normals (lit
+     * and skinned) or the EE's table (rd_mesh.h RdVuMeshDesc.facing,
+     * Packet.c, every program: the p2o strip records' normals) */
+    uint8_t facingFrom;
     uint32_t indexCount;
     RdVuBatchRec *batches;
     uint32_t lastUsed;   /* g_rd.frameCounter of the last draw recorded */
@@ -997,16 +1003,32 @@ uint64_t rd__mesh_join_part(RdMeshRec *const *ms, uint32_t n, uint64_t sig);
  * without the packet's ordinal) and joined with rd__mesh_join_part */
 void rd__join_parts(const RdFrame *f, int keep);
 
-/* The winding of the disc's prelit strips (rd_mesh.c markWinding,
- * ICO_VU_MARK_FLIP): a prelit triangle k of a strip that starts at vertex s
- * carries the mark when ((k - s) & 1) ^ RD_VU_WINDING_PHASE is 1, the
- * convention the disc's lit strips follow, measured from their normals
- * (rd_mesh_test's winding cases, docs/port/VU1_PROGRAMS.md "The winding
- * mark"): 0 when the even triangles of a strip (k - s = 2, 4, ..) face the
- * way cross(b - a, c - a) of their corners k-2, k-1, k points (share A),
- * 1 for the reverse (share B).  0 until the disc's measurement is in: the
- * measurement sets it */
-#define RD_VU_WINDING_PHASE 0u
+/* RdMeshRec.facingFrom: where a mesh's winding marks (ICO_VU_MARK_FLIP)
+ * came from.  The disc's strips do not wind by a parity convention (the
+ * strip-start phase is about 3 to 1 across the disc and per strip:
+ * rd_mesh_test's winding cases, docs/port/VU1_PROGRAMS.md "The winding
+ * mark"), so a mark comes from normals or not at all: the EE's table
+ * computed from the p2o strip records' normals when the packet is built
+ * (every program, prelit included: Packet.c), else a lit or skinned
+ * stream's own normals, else none */
+enum { RD_MESH_FACING_NONE = 0, RD_MESH_FACING_NORMALS = 1, RD_MESH_FACING_TABLE = 2 };
+
+/* rd_mesh.c: m's winding marks from the EE's table bits (bit v of
+ * bits[v >> 3], LSB first: the triangle kicked at vertex v winds against
+ * its normals) over count vertices, which must be m's own vertex count:
+ * every FLIP mark cleared and set again from the table, facingFrom
+ * RD_MESH_FACING_TABLE (gpuDirty when a device copy holds the old marks).
+ * false (nothing changed) when count is not m's vertex count, m is not a
+ * strip mesh (prelit, lit or skinned) or memory runs out */
+bool rd__mesh_set_facing(RdMeshRec *m, const uint8_t *bits, uint32_t count);
+/* The table rd__mesh_set_facing takes, back from m's marks (bit v set
+ * when kick v carries ICO_VU_MARK_FLIP; the dump's writer: rd_dump.c) into
+ * out[(m->vertexCount + 7) / 8]; false when m's marks are not the table's */
+bool rd__mesh_facing_bits(const RdMeshRec *m, uint8_t *out, uint32_t bytes);
+/* The EE's facing table being built (rd_mesh.h rd_vu_facing_vertex): vertex
+ * v's bit, -1 when the build holds no such vertex or is void (the tests:
+ * rd_mesh_test's winding cases) */
+int rd__vu_facing_bit(uint32_t v);
 
 /* The marks of the triangle of kick k (ICO_VU_MARK_*; 0 past the bytes) */
 static inline uint32_t rd__mesh_kick_mark(const RdMeshRec *m, uint32_t k)
@@ -4273,7 +4295,7 @@ bool rd__read_texture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t 
  * dump before 10 loads as the 4:3 frame (aspect 4/3, wExact 512, cullW 512).
  * A dump holds the picture as drawn at its width: a replay can crop it to a
  * narrower aspect, never widen it (rd_replay_tool). */
-#define RD_DUMP_VERSION 14u
+#define RD_DUMP_VERSION 15u
 #define RD_DUMP_REGION_BYTES 8
 bool rd__dump_frame(const RdFrame *f, const char *path);
 bool rd__load_frame(const char *path, RdFrame *out);

@@ -1570,6 +1570,11 @@ typedef struct StagePart {
        per strip whether it is joined (see joinedStrips) */
     int *strip;
     unsigned char *degen;
+    /* the triangle's winding against its normals, as the EE's table has it (Packet.c
+       pac_hostFacing; rd_mesh.c markWinding): 1 when cross(b - a, c - a) of its corners in strip
+       order points away from the sum of their normals (the strip records' normal index at +6),
+       0 when not, 2 when the part has no normals (no facing: never drawn beside) */
+    unsigned char *flip;
     int strips;
     unsigned char *joined;
 } StagePart;
@@ -1638,6 +1643,24 @@ static unsigned char triDegenerate(const float (*v)[3])
    that no draw has (the capture frame 4219's drawn st18a_p1 parts
    hold 14,382 triangles, its VU meshes' 43,146 indices;
    checkStageLoader) */
+/* the EE's facing bit (Packet.c pac_hostFacing; rd_mesh.c markWinding): whether
+   cross(b - a, c - a) of the corners t[0..2] in their strip order points away from the sum of
+   their normals n[0..2], in double */
+static int triFlip(const float (*t)[3], const float (*n)[4])
+{
+    const double e1[3] = {(double)t[1][0] - t[0][0], (double)t[1][1] - t[0][1],
+                          (double)t[1][2] - t[0][2]};
+    const double e2[3] = {(double)t[2][0] - t[0][0], (double)t[2][1] - t[0][1],
+                          (double)t[2][2] - t[0][2]};
+    const double x[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2],
+                         e1[0] * e2[1] - e1[1] * e2[0]};
+    double d = 0.0;
+    for (int j = 0; j < 3; j++) {
+        d += x[j] * ((double)n[0][j] + n[1][j] + n[2][j]);
+    }
+    return d < 0.0;
+}
+
 static int loadModel(StageModel *m, const unsigned char *f, uint32_t size)
 {
     if (size < 0x18 || memcmp(f, "PS2O", 4) != 0) {
@@ -1662,6 +1685,8 @@ static int loadModel(StageModel *m, const unsigned char *f, uint32_t size)
         }
         const uint32_t vtx = le32(f, rec + 0x90), vc = le32(f, rec + 0x94);
         const uint32_t strips = le32(f, rec + 0x100), sc = le32(f, rec + 0x104);
+        const uint32_t nrm = le32(f, rec + 0xA0), nc = le32(f, rec + 0xA4);
+        const int hasNrm = nc > 0 && nrm + nc * 16 <= size;
         float mn[3] = {16777215.0f, 16777215.0f, 16777215.0f};
         float mx[3] = {-16777215.0f, -16777215.0f, -16777215.0f};
         if (vtx + vc * 16 > size) {
@@ -1702,6 +1727,19 @@ static int loadModel(StageModel *m, const unsigned char *f, uint32_t size)
                             }
                             sp->strip[t] = sidx;
                             sp->degen[t] = triDegenerate(sp->tri[t]);
+                            sp->flip[t] = 2;
+                            const int nx[3] = {le16s(f, at + 16 + (uint32_t)(i - 2) * 16 + 6),
+                                               le16s(f, at + 16 + (uint32_t)(i - 1) * 16 + 6),
+                                               le16s(f, at + 16 + (uint32_t)i * 16 + 6)};
+                            if (hasNrm && nx[0] >= 0 && nx[1] >= 0 && nx[2] >= 0 &&
+                                (uint32_t)nx[0] < nc && (uint32_t)nx[1] < nc &&
+                                (uint32_t)nx[2] < nc) {
+                                float n[3][4];
+                                for (int v = 0; v < 3; v++) {
+                                    memcpy(n[v], f + nrm + (uint32_t)nx[v] * 16, sizeof(n[v]));
+                                }
+                                sp->flip[t] = (unsigned char)triFlip(sp->tri[t], n);
+                            }
                         }
                         t++;
                     }
@@ -1714,7 +1752,8 @@ static int loadModel(StageModel *m, const unsigned char *f, uint32_t size)
                 sp->tri = calloc(t ? (size_t)t : 1u, sizeof(*sp->tri));
                 sp->strip = calloc(t ? (size_t)t : 1u, sizeof(*sp->strip));
                 sp->degen = calloc(t ? (size_t)t : 1u, 1);
-                if (!sp->tri || !sp->strip || !sp->degen) {
+                sp->flip = calloc(t ? (size_t)t : 1u, 1);
+                if (!sp->tri || !sp->strip || !sp->degen || !sp->flip) {
                     return 0;
                 }
             } else {
@@ -2448,6 +2487,14 @@ static void eyePicture(const double *vp, const double *pp, const double *vc, con
  *   passes   a triangle of its strip is wholly inside (vu1ref_strip_passes)
  *   extended 1: the sweep's frames are wider than 4:3 (688 and 2048 GS
  *            pixels), the state the Enhanced preset has at every aspect
+ *   wide     1 for the same reason: the frame has side bands, where a drop
+ *            that faces the eye is drawn (VU1REF_DRAW_BESIDE, the rule's
+ *            last step)
+ *   facing   vu1ref_region_facing of the three h (float) with the camera
+ *            matrix's sign (rgMirror) and the triangle's winding against
+ *            its normals (StagePart.flip: the p2o strip records' normals,
+ *            as the EE's table makes the renderer's ICO_VU_MARK_FLIP); a
+ *            part without normals has none (never beside)
  *
  * A triangle not wholly inside and reaching the picture is dropped (the
  * oracle's DRAW_NONE) in two ways: with a corner behind the eye (the rule's
@@ -2459,7 +2506,11 @@ static void eyePicture(const double *vp, const double *pp, const double *vc, con
  * a "behind" drop is rescued when a tick showed the triangle
  * (vu1ref_region_between; a card never is): "between behind (raw)" counts
  * the blended camera's drops, "between behind" what is left after the
- * ticks.  Only the parts registered by this tick are tested (a part the box
+ * ticks.  A drop that faces the eye is counted apart, as drawn beside the
+ * picture (tick_beside, between_beside: after the ticks' rescue, which
+ * draws a triangle whole and comes first); "behind" and "card" count the
+ * drops that stay (back-facing, edge-on, no normals).  Only the parts
+ * registered by this tick are tested (a part the box
  * cull does not register is the box mechanism's).  A part whose box has
  * every corner inside is skipped, as is one whose corners all lie in front
  * of the eye and beside the picture's columns or rows on one side: no
@@ -2470,8 +2521,12 @@ typedef struct RegionStats {
     long betBehindRaw;         /* dropped by a blended camera for a corner behind the eye */
     long betBehind;            /* of them, shown by no tick */
     long betCard;              /* dropped by a blended camera as a card */
-    long picsDrop;             /* pictures between with a triangle in betBehind or betCard */
-    int shown;                 /* lines printed */
+    /* drops that face the eye on the wide frame, drawn beside the picture (VU1REF_DRAW_BESIDE:
+       the rule's last step), not in the counts above: at a tick, and between the ticks after
+       the ticks' rescue (informational, never a failure) */
+    long tickBeside, betBeside;
+    long picsDrop; /* pictures between with a triangle in betBehind or betCard */
+    int shown;     /* lines printed */
 } RegionStats;
 
 static RegionStats *s_rg;
@@ -2531,16 +2586,45 @@ static int rgReach(const double (*h)[4])
     return vu1ref_polygon_reaches_picture((const float (*)[2])poly, n, pic);
 }
 
+/* the screen matrix m's sign (ICO_VU_MIRROR, rd_replay_vu.c doVuDraw: the parts are placed
+   at the identity, so the draw's matrix is the camera's): its x, y and w rows over its x, y
+   and z columns */
+static int rgMirror(const double *m)
+{
+    float c[3][4];
+    for (int i = 0; i < 3; i++) {
+        for (int r = 0; r < 4; r++) {
+            c[i][r] = (float)m[4 * i + r];
+        }
+    }
+    return vu1ref_region_mirror(c[0], c[1], c[2]);
+}
+
 /* the rule's verdict on the triangle with corners h at a camera: the oracle's DRAW_*;
-   *front is 1 when every corner has w > 0 */
-static int rgVerdict(const double (*h)[4], int joined, int passes, int *front)
+   *front is 1 when every corner has w > 0.  wide: the frame is wider than the picture (the
+   side bands: a drop that faces the eye is drawn beside, VU1REF_DRAW_BESIDE; 0 at a tick
+   whose "shown" is asked, where a beside draw does not count); flip: the triangle's
+   StagePart.flip (2: no facing, never beside); mirror: rgMirror of the camera's matrix */
+static int rgVerdict(const double (*h)[4], int joined, int passes, int flip, int mirror, int wide,
+                     int *front)
 {
     const int in0 = rgInside(h[0]), in1 = rgInside(h[1]), in2 = rgInside(h[2]);
     *front = h[0][3] > 0.0 && h[1][3] > 0.0 && h[2][3] > 0.0;
     if (in0 && in1 && in2) {
         return VU1REF_DRAW_EXACT;
     }
-    return vu1ref_region_draw(1, 0, in0, in1, in2, 0, rgReach(h), *front, joined, passes);
+    int facing = 0;
+    if (wide && flip != 2) {
+        float hf[3][4];
+        for (int k = 0; k < 3; k++) {
+            for (int a = 0; a < 4; a++) {
+                hf[k][a] = (float)h[k][a];
+            }
+        }
+        facing = vu1ref_region_facing(hf[0], hf[1], hf[2], mirror, flip);
+    }
+    return vu1ref_region_draw(1, 0, in0, in1, in2, 0, rgReach(h), *front, joined, passes, wide,
+                              facing);
 }
 
 /* whether the tick whose screen matrix is m showed the triangle: the rule at that camera (with
@@ -2552,7 +2636,8 @@ static int rgShown(const double *m, const float (*tri)[3], int joined, int passe
     for (int k = 0; k < 3; k++) {
         rgClip(m, tri[k], h[k]);
     }
-    return rgVerdict((const double (*)[4])h, joined, passes, &front) != VU1REF_DRAW_NONE &&
+    /* wide 0: a tick shows what its rule draws whole (EXACT or CLIPPED), never a beside draw */
+    return rgVerdict((const double (*)[4])h, joined, passes, 2, 0, 0, &front) != VU1REF_DRAW_NONE &&
            frameReach((const double (*)[4])h, gsFrame.w, ScreenHeight);
 }
 
@@ -2610,7 +2695,9 @@ static void rgPart(const StagePart *sp, const char *name, int part, const double
             s_rgPass[sp->strip[q]] = 1;
         }
     }
-    long behind = 0, card = 0, behindRaw = 0;
+    long behind = 0, card = 0, behindRaw = 0, beside = 0;
+    const int mirror = rgMirror(m);
+    const int wide = gsFrame.w > 512; /* the side bands (the sweep's 688 and 2048: both) */
     for (int q = 0; q < sp->tris; q++) {
         if (s_rgIn[q] == 7 || sp->degen[q]) {
             continue;
@@ -2621,27 +2708,41 @@ static void rgPart(const StagePart *sp, const char *name, int part, const double
             rgClip(m, sp->tri[q][k], h[k]);
         }
         const int joined = sp->joined[sp->strip[q]], passes = s_rgPass[sp->strip[q]];
-        if (rgVerdict((const double (*)[4])h, joined, passes, &front) != VU1REF_DRAW_NONE) {
+        const int v =
+            rgVerdict((const double (*)[4])h, joined, passes, sp->flip[q], mirror, wide, &front);
+        if (v != VU1REF_DRAW_NONE && v != VU1REF_DRAW_BESIDE) {
             continue;
         }
         if (front) {
-            card++; /* step 5: a card; no tick shows it */
+            /* step 5: a card; no tick shows it.  Facing the eye on a wide frame: beside */
+            if (v == VU1REF_DRAW_BESIDE) {
+                beside++;
+            } else {
+                card++;
+            }
             continue;
         }
         behindRaw++;
+        int d = v;
         if (mode == RG_BETWEEN) {
             const int sp0 = rgShown(mPrev, (const float (*)[3])sp->tri[q], joined, passes);
             const int sp1 = rgShown(mCur, (const float (*)[3])sp->tri[q], joined, passes);
-            if (vu1ref_region_between(VU1REF_DRAW_NONE, 0, sp0, sp1) != VU1REF_DRAW_NONE) {
+            d = vu1ref_region_between(v, 0, sp0, sp1);
+            if (d != VU1REF_DRAW_NONE && d != VU1REF_DRAW_BESIDE) {
                 continue; /* drawn, clipped, as a tick showed it */
             }
         }
-        behind++; /* step 6: a corner behind the eye */
+        if (d == VU1REF_DRAW_BESIDE) {
+            beside++; /* step 6's drop, facing the eye: drawn beside the picture */
+        } else {
+            behind++; /* step 6: a corner behind the eye, back-facing or edge-on */
+        }
     }
     if (mode == RG_BETWEEN) {
         s_rg->betBehindRaw += behindRaw;
         s_rg->betBehind += behind;
         s_rg->betCard += card;
+        s_rg->betBeside += beside;
         if ((behind > 0 || card > 0) && s_rg->shown < 8) {
             s_rg->shown++;
             printf("  %s: %s part %d: %ld triangles dropped behind the eye, %ld cards at t %.4f "
@@ -2651,6 +2752,7 @@ static void rgPart(const StagePart *sp, const char *name, int part, const double
     } else {
         s_rg->tickBehind += behind;
         s_rg->tickCard += card;
+        s_rg->tickBeside += beside;
         if (behind > 0 && s_rg->shown < 8) {
             s_rg->shown++;
             printf("  %s: %s part %d: %ld triangles dropped behind the eye at the %s (%s)\n",
@@ -3452,13 +3554,16 @@ static int checkStage(const char *disc)
  *                     above): at the ticks, behind the eye (step 6) and
  *                     cards (step 5); between the ticks, the same through
  *                     the blended camera, behind the eye before and after a
- *                     tick's rescue
+ *                     tick's rescue; the drops that face the eye are drawn
+ *                     beside the picture (tick_beside, between_beside:
+ *                     printed, never held)
  *            eye      with --eye, the rasteriser's hole pixels (eyePicture)
  *            winding  not here: rd_mesh's winding_disc cases print it per
  *                     stage (`winding stage NAME`)
  *   baseline FILE (tools/sweep_baseline.txt): "STAGE ASPECT MECH COUNT" lines
  *            and "sweep_step N"; the run prints the same lines.  A count above
- *            its line fails; below prints "baseline can be lowered".  A stage
+ *            its line fails (the six held mechanisms; tick_beside and
+ *            between_beside lines are printed and read, never held); below prints "baseline can be lowered".  A stage
  *            with no line is held to 0 once the file holds any line.  Counts
  *            are compared only at the file's sweep step. */
 
@@ -3473,7 +3578,9 @@ typedef struct SweepAspect {
 
 static const SweepAspect kSweepAspects[2] = {{"16:9", 1920, 1080, 688}, {"48:9", 4800, 900, 2048}};
 
-/* the counts the baseline holds */
+/* the counts the baseline holds (the first MECH_HELD: a count above its line fails), then the
+   informational ones the BASELINE LINES print too (never held: the side bands' beside draws,
+   which a fix in the rule's favour raises) */
 enum {
     MECH_BOX_GAP,
     MECH_BOX_HIDDEN,
@@ -3481,11 +3588,15 @@ enum {
     MECH_TICK_CARD,
     MECH_BET_BEHIND,
     MECH_BET_CARD,
+    MECH_HELD,
+    MECH_TICK_BESIDE = MECH_HELD,
+    MECH_BET_BESIDE,
     MECH_COUNT
 };
 
-static const char *const kMechName[MECH_COUNT] = {"box_gap",   "box_hidden",     "tick_behind",
-                                                  "tick_card", "between_behind", "between_card"};
+static const char *const kMechName[MECH_COUNT] = {"box_gap",     "box_hidden",     "tick_behind",
+                                                  "tick_card",   "between_behind", "between_card",
+                                                  "tick_beside", "between_beside"};
 
 typedef struct SweepRow {
     char stage[16];
@@ -3515,6 +3626,8 @@ static void rowCounts(const SweepRow *r, long *c)
     c[MECH_TICK_CARD] = r->rg.tickCard;
     c[MECH_BET_BEHIND] = r->rg.betBehind;
     c[MECH_BET_CARD] = r->rg.betCard;
+    c[MECH_TICK_BESIDE] = r->rg.tickBeside;
+    c[MECH_BET_BESIDE] = r->rg.betBeside;
 }
 
 static void freeStageData(void)
@@ -3524,6 +3637,7 @@ static void freeStageData(void)
             free(s_stage[m].part[j].tri);
             free(s_stage[m].part[j].strip);
             free(s_stage[m].part[j].degen);
+            free(s_stage[m].part[j].flip);
             free(s_stage[m].part[j].joined);
         }
         free(s_stage[m].part);
@@ -3701,6 +3815,7 @@ static int loadStageDir(IcoVfs *vfs, const char *stage, int *capped)
                 free(m->part[j].tri);
                 free(m->part[j].strip);
                 free(m->part[j].degen);
+                free(m->part[j].flip);
             }
             free(m->part);
             memset(m, 0, sizeof(*m));
@@ -3977,28 +4092,32 @@ static void printSweepTable(FILE *f, int step)
         "               control: what the blend span saves); reg3/reg1 parts registered with\n"
         "               three cameras / one\n"
         "  tick_behind  triangles the rule drops at a tick for a corner behind the eye (step 6)\n"
-        "  tick_card    triangles it drops at a tick as cards (step 5)\n"
+        "               that stay dropped: back-facing or edge-on (or no normals)\n"
+        "  tick_card    triangles it drops at a tick as cards (step 5) that stay dropped\n"
+        "  tick_beside  the drops at a tick that face the eye: drawn beside the picture (the\n"
+        "               wide frame's side bands; informational, never held)\n"
         "  bet_behind   triangles the blended camera's rule drops behind the eye that no tick\n"
-        "               shows (raw: before the ticks' rescue); bet_card its cards; pics_drop\n"
-        "               pictures with either\n"
+        "               shows and that stay dropped (raw: every behind-the-eye drop before the\n"
+        "               ticks' rescue); bet_card its cards; bet_beside the drops no tick shows\n"
+        "               that face the eye, drawn beside; pics_drop pictures with a drop\n"
         "  eye_holes    with --eye, hole pixels the rasteriser leaves (eye_pops: pops)\n"
         "  winding: rd_mesh's winding_disc cases, `winding stage NAME` lines\n");
     fprintf(f,
-            "%-8s %-5s %4s %5s %6s | %7s %7s | %7s %8s %8s | %11s %9s | %10s %11s %8s %9s | "
-            "%9s %8s\n",
+            "%-8s %-5s %4s %5s %6s | %7s %7s | %7s %8s %8s | %11s %9s %11s | %10s %11s %8s "
+            "%10s %9s | %9s %8s\n",
             "stage", "asp", "cams", "pairs", "pics", "box_gap", "box_hid", "one_cam", "reg3",
-            "reg1", "tick_behind", "tick_card", "bet_behind", "(raw)", "bet_card", "pics_drop",
-            "eye_holes", "eye_pops");
+            "reg1", "tick_behind", "tick_card", "tick_beside", "bet_behind", "(raw)", "bet_card",
+            "bet_beside", "pics_drop", "eye_holes", "eye_pops");
     for (int i = 0; i < s_rowCount; i++) {
         const SweepRow *r = &s_rows[i];
         fprintf(f,
-                "%-8s %-5s %4d %5d %6d | %7d %7d | %7d %8d %8d | %11ld %9ld | %10ld %11ld %8ld "
-                "%9ld | %9ld %8ld%s%s\n",
+                "%-8s %-5s %4d %5d %6d | %7d %7d | %7d %8d %8d | %11ld %9ld %11ld | %10ld %11ld "
+                "%8ld %10ld %9ld | %9ld %8ld%s%s\n",
                 r->stage, kSweepAspects[r->aspect].name, r->cams, r->box.pairs, r->box.pictures,
                 r->box.gaps, r->box.hidden, r->one.hidden + r->one.gaps, r->box.regCur,
-                r->box.regOne, r->rg.tickBehind, r->rg.tickCard, r->rg.betBehind,
-                r->rg.betBehindRaw, r->rg.betCard, r->rg.picsDrop, r->eyeHoles, r->eyePops,
-                r->cams == 0 ? "  (no camera: not swept)" : "",
+                r->box.regOne, r->rg.tickBehind, r->rg.tickCard, r->rg.tickBeside, r->rg.betBehind,
+                r->rg.betBehindRaw, r->rg.betCard, r->rg.betBeside, r->rg.picsDrop, r->eyeHoles,
+                r->eyePops, r->cams == 0 ? "  (no camera: not swept)" : "",
                 r->capped ? "  (models past the cap)" : "");
     }
     fprintf(f, "BASELINE LINES (paste into tools/sweep_baseline.txt; stages of this shard)\n");
@@ -4030,7 +4149,7 @@ static void checkBaseline(int step)
         const SweepRow *r = &s_rows[i];
         long c[MECH_COUNT];
         rowCounts(r, c);
-        for (int k = 0; k < MECH_COUNT; k++) {
+        for (int k = 0; k < MECH_HELD; k++) {
             long want = 0;
             int found = 0;
             for (int b = 0; b < s_baseCount; b++) {

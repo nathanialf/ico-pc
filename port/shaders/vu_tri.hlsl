@@ -58,6 +58,11 @@ VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
         if ((marks & VU_MARK_JOINED) == 0u && vu_strip_card(kick)) {
             f |= VU_TF_CARD;
         }
+        // the side bands' conditions (vu_beside) where the final verdict
+        // can be a drop: vu_main_vs applies them to it
+        if ((r == VU_RULE_DROP || r == VU_RULE_STRIP) && vu_beside(a, b, c, marks) != 0u) {
+            f |= VU_TF_BESIDE;
+        }
     } else if (mode == VU_CLIP_NONE) {
         // vu_triangle_out_pos's exact for clip mode none
         uint wrap = (a.gx & 0xFFFF) == a.gx && (a.gy & 0xFFFF) == a.gy && (b.gx & 0xFFFF) == b.gx &&
@@ -192,6 +197,7 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
     o.stq = me.stq;
     uint at = 0u;
     uint exact = 0u;
+    uint beside = 0u;
     if (mode == VU_CLIP_NONE) {
         at = (me.gx & 0xFFFF) != me.gx || (me.gy & 0xFFFF) != me.gy ? 3u : 1u;
         exact = (f & VU_TF_EXACT) != 0u ? 1u : 0u;
@@ -208,10 +214,16 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
             // vu_rule_card
             r = (f & VU_TF_CARD) != 0u ? VU_RULE_DROP : VU_RULE_CLIP;
         }
+        if (r == VU_RULE_DROP && (f & VU_TF_BESIDE) != 0u && (vu_draw.z & VU_F_NO_BESIDE) == 0u) {
+            // vu_rule_beside (the draw's flag again: a _dstrov pass sets it
+            // after the pre-pass)
+            r = VU_RULE_CLIP_BESIDE;
+            beside = 1u;
+        }
         if (r == VU_RULE_EXACT) {
             at = 1u;
             exact = 1u;
-        } else if (r == VU_RULE_CLIP) {
+        } else if (r == VU_RULE_CLIP || r == VU_RULE_CLIP_BESIDE) {
             at = 2u;
             exact = (f & VU_TF_GSPOS) != 0u ? 1u : 0u;
         }
@@ -226,6 +238,7 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
         }
     }
     o.pos = vu_corner_position(me, mode, at);
+    o.plane.y = beside != 0u ? 1.0 : 0.0; // the side bands' pixels (vu_pixel_tests)
     if ((rule & VU_TRI_CHAIN) != 0u) {
         if (vu_batch.z != 0u) {
             // vu_plane_out: culled value by value, the corner's distance
@@ -234,7 +247,7 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
             o.pos.y = past ? VU_CULLED.y : o.pos.y;
             o.pos.z = past ? VU_CULLED.z : o.pos.z;
             o.pos.w = past ? VU_CULLED.w : o.pos.w;
-            o.plane = vu_plane_distance(kick - 2u + corner);
+            o.plane.x = vu_plane_distance(kick - 2u + corner);
         }
         if ((f & VU_TF_LATER) != 0u) {
             // vu_later_out (its condition is the flag's)
