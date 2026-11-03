@@ -134,8 +134,10 @@ static void rt_pipe_posted(Uint64 now, Uint64 refresh, Uint64 period)
 
 /* The step that ran before this pace (the timer path, s_deadline its
    deadline now): its own time (the step less its waits for a picture's
-   reads) into the step's estimate, a miss of its period into the back-off
-   (pace_policy.h PaceStepEst), both into the 10 s line; a miss with the
+   reads) into the step's estimate, a miss of its period into the plan
+   (pace_policy.h PaceStepEst: nothing under the floor, the margin widened
+   over it, the whole period after the third in the window), both into the
+   10 s line; a miss with the
    further presents planned by the render thread is named, the first 8 then
    every 100th */
 static void step_note(Uint64 period)
@@ -156,35 +158,63 @@ static void step_note(Uint64 period)
     const bool backedOff = s_pres.stepEst.backoff != 0;
     /* whose miss: the pictures' only when their holds on this step (the
        presents' run past its due time, its waits for a picture's reads)
-       made it; a long step of the game's own (a load, a compile, a bug
-       report's capture, the disc), or the lateness one carries into the
-       next start, is the game's and arms no back-off */
+       made it, by at least the floor (2 ms); a long step of the game's own
+       (a load, a compile, a bug report's capture, the disc), the lateness
+       one carries into the next start, or a hold under the floor, is the
+       game's and changes nothing */
     const uint64_t presentsLate =
         pace_step_start_late(s_pres.paceEnd, s_deadline - period, prevEnd);
     const bool byPictures = pace_step_by_pictures(missed, late, presentsLate, waited);
+    const PaceStepAct act = pace_step_est_note(&s_pres.stepEst, own, missed, late, byPictures);
+    const PaceStepEst *e = &s_pres.stepEst;
 
-    pace_step_est_note(&s_pres.stepEst, own, missed, late, byPictures);
     ico_render_thread_note_step(waited, missed, late, backedOff,
-                                pace_step_est_ns(&s_pres.stepEst, period), byPictures);
-    if (missed && rd_interpolation_active() && ico_render_thread_mode() == FM_MODE_ON) {
-        if (byPictures) {
-            ico_log_limited("window: step rule back-off",
-                            "window: step rule: back-off %u steps after a miss the pictures "
-                            "caused (late by %.1f ms, %.1f ms of it waiting for a picture, "
-                            "%.1f ms the presents ran past the step's start; %u such misses so "
-                            "far, %u the game's own)",
-                            s_pres.stepEst.backoff, (double)late / 1e6, (double)waited / 1e6,
-                            (double)presentsLate / 1e6, s_pres.stepEst.pictureMisses,
-                            s_pres.stepEst.gameMisses);
-        } else {
-            ico_log_limited("window: step missed its period",
-                            "window: the game step missed its period by %.1f ms (it took %.1f "
-                            "ms, %.1f ms of it waiting for a picture): the game's own time, not "
-                            "the pictures': the pictures between frames are planned as before "
-                            "(%u such misses so far, %u the pictures')",
-                            (double)late / 1e6, (double)s_pres.stepNs / 1e6, (double)waited / 1e6,
-                            s_pres.stepEst.gameMisses, s_pres.stepEst.pictureMisses);
-        }
+                                pace_step_est_ns(&s_pres.stepEst, period), (int)act);
+    if (!missed || !rd_interpolation_active() || ico_render_thread_mode() != FM_MODE_ON) {
+        return;
+    }
+    /* what the miss did to the plan (pace_policy.h PaceStepEst) */
+    if (act == PACE_STEP_STRICT) {
+        ico_log_limited("window: step rule back-off",
+                        "window: step rule: back-off %u steps after the third miss the pictures "
+                        "caused within %u steps (late by %.1f ms, %.1f ms of it waiting for a "
+                        "picture, %.1f ms the presents ran past the step's start): the pictures "
+                        "between frames planned at the whole period; %u such fall-backs so far, "
+                        "%u misses of the pictures' (%u under %.0f ms), %u the game's own",
+                        e->backoff, PACE_STEP_MISS_WINDOW, (double)late / 1e6, (double)waited / 1e6,
+                        (double)presentsLate / 1e6, e->backoffs, e->pictureMisses, e->smallMisses,
+                        (double)PACE_STEP_MISS_FLOOR_NS / 1e6, e->gameMisses);
+    } else if (act == PACE_STEP_WIDEN) {
+        ico_log_limited("window: step rule margin",
+                        "window: step rule: the margin widened by %.1f ms to %.1f ms after a miss "
+                        "the pictures caused (late by %.1f ms, %.1f ms of it waiting for a "
+                        "picture, %.1f ms the presents ran past the step's start; %u of the "
+                        "pictures' over %.0f ms in the last %u steps): the next pictures are "
+                        "held that much earlier, the widening falling an eighth a step; %u "
+                        "misses of the pictures' so far (%u under %.0f ms), %u the game's own",
+                        (double)late / 1e6, (double)e->widenNs / 1e6, (double)late / 1e6,
+                        (double)waited / 1e6, (double)presentsLate / 1e6, e->recent,
+                        (double)PACE_STEP_MISS_FLOOR_NS / 1e6, PACE_STEP_MISS_WINDOW,
+                        e->pictureMisses, e->smallMisses, (double)PACE_STEP_MISS_FLOOR_NS / 1e6,
+                        e->gameMisses);
+    } else if (act == PACE_STEP_SMALL) {
+        ico_log_limited("window: step rule small miss",
+                        "window: step rule: a miss the pictures caused under %.0f ms (late by %.1f "
+                        "ms, %.1f ms of it waiting for a picture, %.1f ms the presents ran past "
+                        "the step's start): inside the rule's margin, nothing changed; %u such "
+                        "misses so far, %u of the pictures' in all, %u the game's own",
+                        (double)PACE_STEP_MISS_FLOOR_NS / 1e6, (double)late / 1e6,
+                        (double)waited / 1e6, (double)presentsLate / 1e6, e->smallMisses,
+                        e->pictureMisses, e->gameMisses);
+    } else {
+        ico_log_limited("window: step missed its period",
+                        "window: the game step missed its period by %.1f ms (it took %.1f "
+                        "ms, %.1f ms of it waiting for a picture, %.1f ms the presents ran past "
+                        "its start): the game's own time, not the pictures': the pictures "
+                        "between frames are planned as before (%u such misses so far, %u the "
+                        "pictures')",
+                        (double)late / 1e6, (double)s_pres.stepNs / 1e6, (double)waited / 1e6,
+                        (double)presentsLate / 1e6, e->gameMisses, e->pictureMisses);
     }
 }
 

@@ -895,7 +895,8 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
  *
  * The step may start late by up to its slack, period - (step + margin):
  * stepNs is the step's own time as estimated (PaceStepEst: its recent
- * maximum, falling an eighth a step, the whole period while backed off),
+ * maximum, falling an eighth a step, with the margin's widening after a
+ * miss of the pictures', the whole period while backed off),
  * PACE_RT_STEP_MARGIN_NS the rest of a step's time the estimate does not
  * see (the pump between steps, the wake from the pacer's sleep, the audio
  * callback and the other threads taking the game thread's core, the
@@ -903,41 +904,72 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
 #define PACE_RT_STEP_MARGIN_NS 2000000ull
 
 /* The step's own time (the window's step less its waits for a picture's
- * reads) as the rule plans by, and its back-off: a step that ended past its
- * deadline (its period's end) because of the pictures (pace_step_by_pictures:
- * without its waits for a picture's reads and the presents' run past its
- * due time it would have ended inside its period) makes the estimate the
- * whole period for backoff steps (so a further present must end its reads by the next
- * step's due time, the rule before), PACE_STEP_BACKOFF_MIN at first,
- * doubled by every miss up to PACE_STEP_BACKOFF_MAX, halved again by
- * PACE_STEP_BACKOFF_MAX steps without one (to none from the least): a
- * wrong estimate costs one late step, then two seconds of the old rule,
- * then four, never the rc2 state of steps 40 ms late with the sound held
- * back.  A miss the game caused (its own step too long: a load, a pipeline
- * compile, a bug report's capture, the disc, or the lateness a long step
- * carries into the next start) arms nothing: the further presents' plan
- * cannot help it, and a back-off there kept a whole session on the old
- * rule.  misses (every one), pictureMisses, gameMisses and backoffs count
- * for the 10 s line (the caller clears them). */
+ * reads) as the rule plans by, and what a miss of its period does to the
+ * plan.  A miss is the pictures' (pace_step_by_pictures) when their holds
+ * on the step made it; else the game's own (its own step too long: a load,
+ * a pipeline compile, a bug report's capture, the disc, or the lateness a
+ * long step carries into the next start): counted, never changing the
+ * plan, since the further presents' plan cannot help it.
+ *
+ * A miss of the pictures' is answered in proportion (rc9, a phone: misses
+ * of 0.0-0.6 ms, each doubling a strict plan up to 1920 steps, kept the
+ * rule before in force nearly all session at 30-41 presented fps where the
+ * GPU made 34-45):
+ *   - under PACE_STEP_MISS_FLOOR_NS (the rule's own margin, 2 ms) it
+ *     changes nothing: scheduling noise the margin is there for;
+ *   - over it, the rule's margin widens by the lateness (widenNs, added to
+ *     the step's time the rule plans by: the next pictures are held that
+ *     much earlier), decaying an eighth a step (under 1 us: gone);
+ *   - only the third such miss within PACE_STEP_MISS_WINDOW steps (300)
+ *     plans the whole period (the rule before: a further present must end
+ *     its reads by the next step's due time) for backoff steps,
+ *     PACE_STEP_BACKOFF_MIN (120) at first, doubled by each further
+ *     fall-back up to PACE_STEP_BACKOFF_MAX (480), halved again by
+ *     PACE_STEP_BACKOFF_CLEAN (300) steps without a miss over the floor
+ *     (to none from the least).
+ * So a wrong estimate costs one late step and a few steps of a wider
+ * margin; a load that keeps the pictures' misses coming costs 2 s of the
+ * strict plan, then 4, then 8 at most.  misses (every one), pictureMisses,
+ * gameMisses, smallMisses (the pictures' under the floor), widens and
+ * backoffs count for the 10 s line (the caller clears them). */
+#define PACE_STEP_MISS_FLOOR_NS PACE_RT_STEP_MARGIN_NS
+#define PACE_STEP_MISS_WINDOW 300u
 #define PACE_STEP_BACKOFF_MIN 120u
-#define PACE_STEP_BACKOFF_MAX 1920u
+#define PACE_STEP_BACKOFF_MAX 480u
+#define PACE_STEP_BACKOFF_CLEAN 300u
+/* the most the margin widens to (a long miss plans the whole period while
+   it decays) */
+#define PACE_STEP_WIDEN_MAX_NS 100000000ull
 
 typedef struct PaceStepEst {
     uint64_t estNs;      /* pace_rt_estimate of the step's own time (0: none yet) */
+    uint64_t widenNs;    /* the margin's widening (0: none) */
     unsigned backoff;    /* steps left planned at the whole period */
     unsigned backoffLen; /* the last back-off's length (0: none since a clean spell) */
-    unsigned clean;      /* steps since the last back-off ended without a miss */
+    unsigned clean;      /* steps since the last back-off ended without a miss over the floor */
+    unsigned recent;     /* the pictures' misses over the floor in the window (0-2) */
+    unsigned since[2];   /* steps since the latest of them and the one before */
     unsigned misses;     /* steps that missed their period */
     unsigned pictureMisses, gameMisses; /* of them: the pictures', the game's own */
-    unsigned backoffs;                  /* back-offs begun (one a miss) */
+    unsigned smallMisses;               /* of the pictures': under the floor */
+    unsigned widens;                    /* the pictures' over the floor (each widened the margin) */
+    unsigned backoffs;                  /* back-offs begun (each a third miss in the window) */
     uint64_t missMaxNs;                 /* the latest of them past its deadline */
 } PaceStepEst;
 
+/* What one step's note did to the plan (pace_step_est_note) */
+typedef enum PaceStepAct {
+    PACE_STEP_NONE = 0, /* no miss of the pictures' */
+    PACE_STEP_SMALL,    /* the pictures' miss under the floor: nothing changed */
+    PACE_STEP_WIDEN,    /* the margin widened by its lateness */
+    PACE_STEP_STRICT    /* the third in the window: the whole period for backoff steps */
+} PaceStepAct;
+
 /* One step: its own time ownNs (0: not known, the estimate kept); missed:
  * it ended lateNs past its deadline; byPictures: the pictures caused it
- * (pace_step_by_pictures), the back-off armed (doubled) only then */
-void pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs,
-                        bool byPictures);
+ * (pace_step_by_pictures), the rule above only then */
+PaceStepAct pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs,
+                               bool byPictures);
 
 /* The part of a step's late start the presents made: its start startNs past
  * the later of its due time and the step before's end (a step that ran late
@@ -950,13 +982,16 @@ uint64_t pace_step_start_late(uint64_t startNs, uint64_t dueNs, uint64_t prevEnd
 
 /* A step that missed its period by lateNs is the pictures' when it was held
  * by them (presentsLateNs, pace_step_start_late, plus waitedNs, its waits
- * for a picture's reads) and would have ended inside its period without
- * that: lateNs <= presentsLateNs + waitedNs; never with no picture's hold */
+ * for a picture's reads) for at least PACE_STEP_MISS_FLOOR_NS and would
+ * have ended inside its period without that: lateNs <= presentsLateNs +
+ * waitedNs.  A hold under the floor is noise (rc9: the presents 0.3-0.4 ms
+ * past the step's start, no wait, the step 0.0-0.1 ms late): the game's */
 bool pace_step_by_pictures(bool missed, uint64_t lateNs, uint64_t presentsLateNs,
                            uint64_t waitedNs);
 
-/* The step's time the rule plans by: the estimate, or the whole period
- * while backed off or before the first step (at least the estimate) */
+/* The step's time the rule plans by: the estimate and the margin's
+ * widening, or the whole period while backed off or before the first step
+ * (at least the estimate) */
 uint64_t pace_step_est_ns(const PaceStepEst *e, uint64_t periodNs);
 
 /* The render thread's pipeline as the game thread predicts it (PaceRtPipe):

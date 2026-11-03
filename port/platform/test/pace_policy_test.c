@@ -2374,50 +2374,128 @@ static void testStepRule(void)
     CHECK(!pace_rt_as_made(false, true, true, true));
     CHECK(!pace_rt_as_made(false, true, false, false)); /* the render thread off: its cost guards */
 
-    /* the step's estimate: up at once, down an eighth a step; a miss plans
-       the whole period for 120 steps, the next for 240, a clean spell of
-       1920 steps halves it and then forgets it */
+    /* the step's estimate: up at once, down an eighth a step.  A miss of
+       the pictures' under the floor (2 ms) changes nothing; over it the
+       margin widens by its lateness, falling an eighth a step; the third
+       over it within 300 steps plans the whole period for 120 steps, the
+       next fall-back 240, then 480 at most; 300 steps without one over
+       the floor halve it, then forget it */
     {
         PaceStepEst e;
 
         memset(&e, 0, sizeof e);
         CHECK(pace_step_est_ns(&e, P) == P); /* none yet: the whole period */
-        pace_step_est_note(&e, step, false, 0, false);
+        CHECK(pace_step_est_note(&e, step, false, 0, false) == PACE_STEP_NONE);
         CHECK(e.estNs == step && pace_step_est_ns(&e, P) == step);
         pace_step_est_note(&e, 10 * MS, false, 0, false);
         CHECK(e.estNs == 10 * MS);
         pace_step_est_note(&e, step, false, 0, false);
         CHECK(e.estNs == 9312500ull);
-        pace_step_est_note(&e, 0, true, 3 * MS, true);
-        CHECK(e.estNs == 9312500ull && e.backoff == PACE_STEP_BACKOFF_MIN);
-        CHECK(e.misses == 1 && e.backoffs == 1 && e.missMaxNs == 3 * MS);
-        CHECK(pace_step_est_ns(&e, P) == P);
+        /* under the floor (rc9: 0.0-0.6 ms): nothing changed */
+        CHECK(pace_step_est_note(&e, 0, true, MS, true) == PACE_STEP_SMALL);
+        CHECK(pace_step_est_note(&e, 0, true, PACE_STEP_MISS_FLOOR_NS - 1, true) ==
+              PACE_STEP_SMALL);
+        CHECK(e.widenNs == 0 && e.backoff == 0 && e.recent == 0 && e.backoffs == 0);
+        CHECK(e.misses == 2 && e.pictureMisses == 2 && e.smallMisses == 2 && e.widens == 0);
+        CHECK(pace_step_est_ns(&e, P) == 9312500ull);
+        /* over it: the margin wider by the lateness, an eighth less a step */
+        CHECK(pace_step_est_note(&e, 0, true, 3 * MS, true) == PACE_STEP_WIDEN);
+        CHECK(e.widenNs == 3 * MS && e.recent == 1 && e.widens == 1 && e.backoff == 0);
+        CHECK(pace_step_est_ns(&e, P) == 9312500ull + 3 * MS);
+        CHECK(pace_step_est_note(&e, 0, false, 0, false) == PACE_STEP_NONE);
+        CHECK(e.widenNs == 2625000ull && pace_step_est_ns(&e, P) == 11937500ull);
+        /* the game's own miss widens nothing */
+        CHECK(pace_step_est_note(&e, 0, true, 13 * MS, false) == PACE_STEP_NONE);
+        CHECK(e.widenNs == 2296875ull && e.gameMisses == 1 && e.recent == 1);
+        /* a second over the floor: wider again */
+        CHECK(pace_step_est_note(&e, 0, true, 4 * MS, true) == PACE_STEP_WIDEN);
+        CHECK(e.widenNs == 6009766ull && e.recent == 2 && e.backoff == 0);
+        /* the third within the window: the whole period for 120 steps */
+        CHECK(pace_step_est_note(&e, 0, true, 2 * MS, true) == PACE_STEP_STRICT);
+        CHECK(e.backoff == PACE_STEP_BACKOFF_MIN && e.backoffs == 1 && e.widens == 3);
+        CHECK(pace_step_est_ns(&e, P) == P && e.missMaxNs == 13 * MS);
         for (unsigned i = 0; i < PACE_STEP_BACKOFF_MIN; i++) {
             pace_step_est_note(&e, step, false, 0, false);
         }
-        CHECK(e.backoff == 0 && e.estNs == 4500007ull && pace_step_est_ns(&e, P) == 4500007ull);
-        pace_step_est_note(&e, step, true, MS, true);
-        CHECK(e.backoff == 2 * PACE_STEP_BACKOFF_MIN && e.missMaxNs == 3 * MS);
-        for (unsigned i = 0; i < 2 * PACE_STEP_BACKOFF_MIN + PACE_STEP_BACKOFF_MAX; i++) {
+        /* the widening gone, the estimate back down */
+        CHECK(e.backoff == 0 && e.estNs == 4500007ull && e.widenNs == 0);
+        CHECK(pace_step_est_ns(&e, P) == 4500007ull);
+        CHECK(e.recent == 2 && e.since[0] == 120u && e.since[1] == 121u);
+        /* a fourth inside the window: 240 */
+        CHECK(pace_step_est_note(&e, step, true, 3 * MS, true) == PACE_STEP_STRICT);
+        CHECK(e.backoff == 2 * PACE_STEP_BACKOFF_MIN && e.backoffLen == 2 * PACE_STEP_BACKOFF_MIN);
+        for (unsigned i = 0; i < 2 * PACE_STEP_BACKOFF_MIN; i++) {
             pace_step_est_note(&e, step, false, 0, false);
         }
-        CHECK(e.backoff == 0 && e.backoffLen == PACE_STEP_BACKOFF_MIN && e.clean == 0);
+        /* the one before it out of the window: the next widens only */
+        CHECK(e.backoff == 0 && e.recent == 1 && e.since[0] == 240u);
+        CHECK(pace_step_est_note(&e, step, true, 3 * MS, true) == PACE_STEP_WIDEN);
+        CHECK(e.recent == 2);
+        CHECK(pace_step_est_note(&e, step, true, 3 * MS, true) == PACE_STEP_STRICT);
+        CHECK(e.backoff == PACE_STEP_BACKOFF_MAX); /* 240 doubled */
+        /* at most PACE_STEP_BACKOFF_MAX */
+        CHECK(pace_step_est_note(&e, step, true, 3 * MS, true) == PACE_STEP_STRICT);
+        CHECK(e.backoff == PACE_STEP_BACKOFF_MAX && e.backoffLen == PACE_STEP_BACKOFF_MAX);
+        CHECK(e.backoffs == 4 && e.pictureMisses == 9 && e.gameMisses == 1);
         for (unsigned i = 0; i < PACE_STEP_BACKOFF_MAX; i++) {
             pace_step_est_note(&e, step, false, 0, false);
         }
-        CHECK(e.backoffLen == 0);
-        /* at most PACE_STEP_BACKOFF_MAX */
-        for (unsigned i = 0; i < 6; i++) {
-            pace_step_est_note(&e, step, true, MS, true);
+        CHECK(e.backoff == 0 && e.recent == 0 && e.clean == 0);
+        /* clean spells of 300 steps: 480, 240, 120, none */
+        for (unsigned i = 0; i < PACE_STEP_BACKOFF_CLEAN; i++) {
+            pace_step_est_note(&e, step, false, 0, false);
         }
-        CHECK(e.backoff == PACE_STEP_BACKOFF_MAX && e.backoffs == 8);
-        CHECK(e.pictureMisses == 8 && e.gameMisses == 0);
+        CHECK(e.backoffLen == PACE_STEP_BACKOFF_MAX / 2 && e.clean == 0);
+        /* a miss under the floor or the game's breaks no clean spell */
+        pace_step_est_note(&e, step, true, MS, true);
+        pace_step_est_note(&e, step, true, 30 * MS, false);
+        for (unsigned i = 2; i < PACE_STEP_BACKOFF_CLEAN; i++) {
+            pace_step_est_note(&e, step, false, 0, false);
+        }
+        CHECK(e.backoffLen == PACE_STEP_BACKOFF_MIN);
+        for (unsigned i = 0; i < PACE_STEP_BACKOFF_CLEAN; i++) {
+            pace_step_est_note(&e, step, false, 0, false);
+        }
+        CHECK(e.backoffLen == 0 && e.backoff == 0);
+    }
+
+    /* rc9's pattern (build-host/tmp/v098/evidence/rc9/ico-pc.log): 15.1 ms,
+       then 0.6, 4.6 and 7.1 ms within 30 steps, 0.0 (the game's now), 12.2,
+       3.4 ms 300 steps apart, 0.1 (the game's): the rule before planned
+       the whole period for 120, 240, 480, 960 then 1920 steps; now one
+       fall-back at most (the 4.6 and 7.1 ms after the 15.1 ms were not
+       within 300 steps of it: none) */
+    {
+        PaceStepEst e;
+
+        static const struct {
+            unsigned gap;  /* steps since the one before */
+            uint64_t late; /* past the deadline */
+            bool pictures;
+            PaceStepAct act;
+        } seq[] = {
+            {300, 15100000ull, true, PACE_STEP_WIDEN}, {430, 600000ull, true, PACE_STEP_SMALL},
+            {15, 4600000ull, true, PACE_STEP_WIDEN},   {13, 7100000ull, true, PACE_STEP_WIDEN},
+            {670, 100000ull, false, PACE_STEP_NONE},   {800, 12200000ull, true, PACE_STEP_WIDEN},
+            {320, 3400000ull, true, PACE_STEP_WIDEN},  {10, 100000ull, false, PACE_STEP_NONE}};
+
+        unsigned strict = 0;
+
+        memset(&e, 0, sizeof e);
+        for (unsigned i = 0; i < sizeof(seq) / sizeof(seq[0]); i++) {
+            for (unsigned k = 1; k < seq[i].gap; k++) {
+                pace_step_est_note(&e, step, false, 0, false);
+                strict += e.backoff != 0 ? 1u : 0u;
+            }
+            CHECK(pace_step_est_note(&e, step, true, seq[i].late, seq[i].pictures) == seq[i].act);
+        }
+        CHECK(strict == 0 && e.backoffs == 0 && e.widens == 5 && e.smallMisses == 1);
+        CHECK(e.gameMisses == 2 && e.misses == 8);
     }
 
     /* the back-off's cause: a miss the game made (a long step, a load, a
-       capture, the lateness a long step carries) arms nothing and counts
-       as the game's; the back-off counts it down as a step; a miss the
-       pictures made arms it */
+       capture, the lateness a long step carries) changes nothing and
+       counts as the game's; a back-off counts it down as a step */
     {
         PaceStepEst e;
 
@@ -2425,13 +2503,15 @@ static void testStepRule(void)
         pace_step_est_note(&e, step, false, 0, false);
         pace_step_est_note(&e, 30 * MS, true, 13 * MS, false);
         CHECK(e.misses == 1 && e.gameMisses == 1 && e.pictureMisses == 0);
-        CHECK(e.backoff == 0 && e.backoffs == 0 && e.backoffLen == 0);
+        CHECK(e.backoff == 0 && e.backoffs == 0 && e.widenNs == 0 && e.recent == 0);
         CHECK(e.missMaxNs == 13 * MS && e.estNs == 30 * MS); /* the estimate sees the long step */
-        pace_step_est_note(&e, step, true, 2 * MS, true);
-        CHECK(e.backoff == PACE_STEP_BACKOFF_MIN && e.backoffs == 1 && e.pictureMisses == 1);
+        for (unsigned i = 0; i < 3; i++) {
+            pace_step_est_note(&e, step, true, 2 * MS, true);
+        }
+        CHECK(e.backoff == PACE_STEP_BACKOFF_MIN && e.backoffs == 1 && e.pictureMisses == 3);
         pace_step_est_note(&e, 30 * MS, true, 13 * MS, false); /* inside the back-off */
         CHECK(e.backoff == PACE_STEP_BACKOFF_MIN - 1 && e.backoffs == 1 && e.gameMisses == 2);
-        CHECK(e.misses == 3);
+        CHECK(e.misses == 5);
     }
     /* which miss is the pictures': the presents' run past the later of the
        due time and the step before's end (less the pacer's wake), plus the
@@ -2449,6 +2529,11 @@ static void testStepRule(void)
     CHECK(pace_step_by_pictures(true, 3 * MS, 2 * MS, MS)); /* the presents' run plus a wait */
     CHECK(!pace_step_by_pictures(true, 3 * MS, MS, MS));    /* late beyond the holds: the game's */
     CHECK(!pace_step_by_pictures(true, 700 * MS, 0, MS));   /* a capture's stall */
+    /* a hold under the floor is noise (rc9: 0.0-0.1 ms late, the presents
+       0.3-0.4 ms past the step's start, no wait): the game's */
+    CHECK(!pace_step_by_pictures(true, 100000ull, 400000ull, 0));
+    CHECK(!pace_step_by_pictures(true, MS, MS / 2, MS));
+    CHECK(pace_step_by_pictures(true, 600000ull, 0, PACE_STEP_MISS_FLOOR_NS)); /* rc9's 0.6 ms */
 
     /* the next step: its start at most the slack past its due time */
     memset(&q, 0, sizeof q);

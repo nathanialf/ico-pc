@@ -57,19 +57,25 @@ static struct {
        as last planned */
     unsigned lateStarts, misses, backoffSteps;
     unsigned pictureMisses; /* of the misses, the pictures' (the rest the game's own) */
+    /* of the pictures': under the floor (nothing changed), the margin
+       widened, the third in the window (the whole period) */
+    unsigned smallMisses, widens, fallbacks;
     Uint64 lateStartMaxNs, missMaxNs, stepPlanNs;
 } s_rt;
 
 /* the cores (cpu_place.h): their speeds, read once at the first start, the
    slowest ones and the faster ones; whether the render and submit threads
-   keep to the faster ones (Android, [dev] big_cores) and why not; the
+   keep to the faster ones (Android, [dev] big_cores) and why not, and the
+   cores each keeps to (cpu_place_split: the render thread alone on a
+   single fastest core, the submit thread on the next ones; else both on
+   the faster ones); the
    cores the game thread and the render thread ran on (one sample a step,
    one a picture: atomic bins, no lock), written before the threads start */
 static struct {
     bool read;
     CpuClasses classes;
-    uint64_t slowMask, fastMask;
-    bool pin;
+    uint64_t slowMask, fastMask, renderMask, submitMask;
+    bool pin, split;
     const char *noPin;
     CpuPlaceHist game, render;
 } s_place;
@@ -78,7 +84,7 @@ static struct {
    the render thread starts) */
 static void place_init(void)
 {
-    char cls[384], allowed[96], pr[64];
+    char cls[384], allowed[96], pr[64], rm[96], sm[96], split[256];
 
     if (s_place.read) {
         return;
@@ -87,6 +93,7 @@ static void place_init(void)
     (void)cpu_place_classes_read(NULL, &s_place.classes);
     s_place.slowMask = cpu_place_slow_mask(&s_place.classes);
     s_place.fastMask = cpu_place_fast_mask(&s_place.classes);
+    s_place.split = cpu_place_split(&s_place.classes, &s_place.renderMask, &s_place.submitMask);
 #if defined(__ANDROID__)
     if (!ico_config_get_bool("dev.big_cores", 1)) {
         s_place.noPin = "[dev] big_cores = false";
@@ -101,32 +108,49 @@ static void place_init(void)
     (void)cpu_place_classes_text(&s_place.classes, cls, sizeof(cls));
     (void)cpu_place_mask_text(cpu_place_allowed(), allowed, sizeof(allowed));
     (void)cpu_place_priority_text(pr, sizeof(pr));
+    (void)cpu_place_mask_text(s_place.renderMask, rm, sizeof(rm));
+    (void)cpu_place_mask_text(s_place.submitMask, sm, sizeof(sm));
+    split[0] = '\0';
+    if (s_place.pin) {
+        snprintf(split, sizeof(split),
+                 s_place.split ? "; the render thread to the fastest core %s alone, the submit "
+                                 "thread to the next faster cores %s, the game thread left to "
+                                 "the system"
+                               : "; the render and the submit thread to the faster cores %s%s, "
+                                 "the game thread left to the system",
+                 rm, s_place.split ? sm : "");
+    }
     /* the game thread's own priority is not changed: said as it is */
-    fprintf(stderr, "window: cores: %s; the game thread %s%s%s, may run on cores %s\n", cls,
+    fprintf(stderr, "window: cores: %s; the game thread %s%s%s, may run on cores %s%s\n", cls,
             pr[0] ? "at " : "at its priority as made", pr, pr[0] ? " (not changed)" : "",
-            cpu_place_allowed() != 0 ? allowed : "not known");
+            cpu_place_allowed() != 0 ? allowed : "not known", split);
 }
 
 /* a thread the pictures wait on (the render thread, the submit thread), at
    its start: the high priority asked and what the system made of it, and
    with the rule on the faster cores; one line */
-static void place_thread_begin(const char *who)
+static void place_thread_begin(const char *who, bool render)
 {
     const bool granted = SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_HIGH);
-    char err[160], pr[64], fast[96], allowed[96], why[128], place[320];
+    const uint64_t mask = render ? s_place.renderMask : s_place.submitMask;
+    /* which cores (cpu_place_split): the fastest alone, the next ones, or
+       the faster ones */
+    const char *what = !s_place.split ? "the faster cores"
+                       : render       ? "the fastest core"
+                                      : "the next faster cores";
+    char err[160], pr[64], fast[96], cores[160], allowed[96], why[128], place[320];
 
     snprintf(err, sizeof(err), "%s", granted ? "" : SDL_GetError());
     (void)cpu_place_priority_text(pr, sizeof(pr));
-    (void)cpu_place_mask_text(s_place.fastMask, fast, sizeof(fast));
+    (void)cpu_place_mask_text(mask, fast, sizeof(fast));
+    snprintf(cores, sizeof(cores), "%s %s%s", what, fast, s_place.split && render ? " alone" : "");
     if (s_place.pin) {
-        if (cpu_place_pin(s_place.fastMask, why, sizeof(why))) {
+        if (cpu_place_pin(mask, why, sizeof(why))) {
             snprintf(place, sizeof(place),
-                     "kept to the faster cores %s ([dev] big_cores = false leaves the placement "
-                     "to the system)",
-                     fast);
+                     "kept to %s ([dev] big_cores = false leaves the placement to the system)",
+                     cores);
         } else {
-            snprintf(place, sizeof(place), "could not be kept to the faster cores %s (%s)", fast,
-                     why);
+            snprintf(place, sizeof(place), "could not be kept to %s (%s)", cores, why);
         }
     } else {
         snprintf(place, sizeof(place), "placed by the system (%s)",
@@ -196,7 +220,7 @@ static int SDLCALL rt_main(void *u)
     (void)u;
     /* a phone's scheduler may still move it to a little core: the 10 s
        line's cores say where it ran */
-    place_thread_begin("render");
+    place_thread_begin("render", true);
     SDL_LockMutex(s_rt.lock);
     for (;;) {
         FmJob job;
@@ -455,7 +479,7 @@ static uint64_t rt_host_drain(void *u)
 static void rt_submit_begin(void *u)
 {
     (void)u;
-    place_thread_begin("submit"); /* the render thread's next picture waits on it */
+    place_thread_begin("submit", false); /* the render thread's next picture waits on it */
 }
 
 /* diag_host.h ico_diag_set_render_heartbeat: no lock (the watchdog's
@@ -501,6 +525,7 @@ FmMode ico_render_thread_start(void)
         s_rt.cpuEst = s_rt.interpEst = s_rt.submitEst = 0;
         s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
         s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = s_rt.pictureMisses = 0;
+        s_rt.smallMisses = s_rt.widens = s_rt.fallbacks = 0;
         s_rt.lateStartMaxNs = s_rt.missMaxNs = s_rt.stepPlanNs = 0;
         memset(&s_gl, 0, sizeof(s_gl));
         if (rhi_backend() == RHI_BACKEND_OPENGL) {
@@ -681,8 +706,10 @@ void ico_render_thread_note_held(int why)
 }
 
 void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t missNs, bool backedOff,
-                                 uint64_t planNs, bool byPictures)
+                                 uint64_t planNs, int act)
 {
+    const bool byPictures = act != PACE_STEP_NONE;
+
     if (readWaitNs != 0) {
         s_rt.lateStarts++;
         s_rt.lateStartMaxNs = readWaitNs > s_rt.lateStartMaxNs ? readWaitNs : s_rt.lateStartMaxNs;
@@ -690,6 +717,9 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
     if (missed) {
         s_rt.misses++;
         s_rt.pictureMisses += byPictures ? 1u : 0u;
+        s_rt.smallMisses += act == PACE_STEP_SMALL ? 1u : 0u;
+        s_rt.widens += act == PACE_STEP_WIDEN ? 1u : 0u;
+        s_rt.fallbacks += act == PACE_STEP_STRICT ? 1u : 0u;
         s_rt.missMaxNs = missNs > s_rt.missMaxNs ? missNs : s_rt.missMaxNs;
     }
     s_rt.backoffSteps += backedOff ? 1u : 0u;
@@ -709,6 +739,8 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
     const unsigned heldOverrun = s_rt.heldOverrun, heldBehind = s_rt.heldBehind;
     const unsigned lateStarts = s_rt.lateStarts, misses = s_rt.misses;
     const unsigned pictureMisses = s_rt.pictureMisses;
+    const unsigned smallMisses = s_rt.smallMisses, widens = s_rt.widens;
+    const unsigned fallbacks = s_rt.fallbacks;
     const unsigned backoffSteps = s_rt.backoffSteps;
     const double lateStartMaxMs = (double)s_rt.lateStartMaxNs / 1e6;
     const double missMaxMs = (double)s_rt.missMaxNs / 1e6;
@@ -721,6 +753,7 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
 
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
     s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = s_rt.pictureMisses = 0;
+    s_rt.smallMisses = s_rt.widens = s_rt.fallbacks = 0;
     s_rt.lateStartMaxNs = s_rt.missMaxNs = 0;
 
     /* the cores each thread ran on most in the block (cpu_place.h), and
@@ -771,8 +804,9 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
                  "the GPU and the submit thread), takes %.1f ms, "
                  "its present waits %.1f ms, the submit thread's part %.1f ms; the step planned "
                  "at %.1f ms); steps started late by the pictures: %u (longest %.1f ms); steps "
-                 "that missed their period: %u (%u the pictures', %u the game's own; latest %.1f "
-                 "ms past it; %u steps planned at the whole period after the pictures')",
+                 "that missed their period: %u (%u the pictures': %u under %.0f ms, %u widened "
+                 "the margin, %u the third in %u steps; %u the game's own; latest %.1f ms past "
+                 "it; %u steps planned at the whole period after the pictures')",
                  pictureCpuMs, b.idlePercent, b.waitMaxMs, b.busyMaxMs, b.pictures,
                  s_rt.mode == FM_MODE_SYNC ? ", sync" : "", tb.interpMs, tb.walkMs, tb.submitMs,
                  tb.waitMs, tb.retired, held, heldMiss, heldOverrun, heldBehind,
@@ -783,7 +817,8 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
                  (double)__atomic_load_n(&s_rt.presentEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED) / 1e6,
                  (double)s_rt.stepPlanNs / 1e6, lateStarts, lateStartMaxMs, misses, pictureMisses,
-                 misses - pictureMisses, missMaxMs, backoffSteps);
+                 smallMisses, (double)PACE_STEP_MISS_FLOOR_NS / 1e6, widens, fallbacks,
+                 PACE_STEP_MISS_WINDOW, misses - pictureMisses, missMaxMs, backoffSteps);
     } else {
         snprintf(rt, sizeof(rt), "render thread: off (CPU %.1f ms a picture on the game thread)",
                  pictureCpuMs);

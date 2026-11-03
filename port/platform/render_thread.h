@@ -84,10 +84,11 @@ void ico_render_thread_note_held(int why);
    none: not started late by the pictures), it missed its period (ended
    missNs past its deadline), it was planned at the whole period after a
    miss (backedOff: pace_policy.h PaceStepEst), the step's time the rule
-   plans further presents by (planNs); byPictures: the miss was the
-   pictures' (pace_policy.h pace_step_by_pictures), else the game's own */
+   plans further presents by (planNs); act: what a miss of the pictures'
+   did to the plan (pace_policy.h PaceStepAct: PACE_STEP_NONE for none, a
+   miss then the game's own) */
 void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t missNs, bool backedOff,
-                                 uint64_t planNs, bool byPictures);
+                                 uint64_t planNs, int act);
 
 /* The 10 s line (window_host.c window_pace_log): the game thread's mean
    step and pump per call in ms, its own cost of closing a frame

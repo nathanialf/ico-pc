@@ -161,36 +161,67 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
                : PACE_RT_GO;
 }
 
-void pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs,
-                        bool byPictures)
+PaceStepAct pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs,
+                               bool byPictures)
 {
+    const bool over = missed && byPictures && lateNs >= PACE_STEP_MISS_FLOOR_NS;
+    bool third = false;
+
     if (ownNs != 0) {
         e->estNs = pace_rt_estimate(e->estNs, ownNs);
+    }
+    /* the widening decays an eighth a step; the misses in the window age */
+    e->widenNs -= e->widenNs / 8u;
+    e->widenNs = e->widenNs < 1000u ? 0u : e->widenNs;
+    for (unsigned i = 0; i < 2u && i < e->recent; i++) {
+        e->since[i] += e->since[i] <= PACE_STEP_MISS_WINDOW ? 1u : 0u; /* saturated past it */
+    }
+    if (e->recent == 2u && e->since[1] > PACE_STEP_MISS_WINDOW) {
+        e->recent = 1u;
+    }
+    if (e->recent == 1u && e->since[0] > PACE_STEP_MISS_WINDOW) {
+        e->recent = 0u;
     }
     if (missed) {
         e->misses++;
         e->missMaxNs = lateNs > e->missMaxNs ? lateNs : e->missMaxNs;
         if (byPictures) {
             e->pictureMisses++;
+            e->smallMisses += over ? 0u : 1u;
         } else {
             e->gameMisses++;
         }
     }
-    if (missed && byPictures) {
+    if (over) {
+        /* the margin wider by the lateness; the third in the window falls
+           back to the whole period */
+        e->widens++;
+        e->widenNs += lateNs;
+        e->widenNs = e->widenNs > PACE_STEP_WIDEN_MAX_NS ? PACE_STEP_WIDEN_MAX_NS : e->widenNs;
+        third = e->recent == 2u;
+        e->since[1] = e->since[0];
+        e->since[0] = 0;
+        e->recent = e->recent < 2u ? e->recent + 1u : 2u;
+        e->clean = 0;
+    }
+    if (third) {
         e->backoffs++;
         e->backoffLen = e->backoffLen == 0                           ? PACE_STEP_BACKOFF_MIN
                         : e->backoffLen >= PACE_STEP_BACKOFF_MAX / 2 ? PACE_STEP_BACKOFF_MAX
                                                                      : 2u * e->backoffLen;
         e->backoff = e->backoffLen;
-        e->clean = 0;
-    } else if (e->backoff != 0) {
-        /* a step, the game's own misses among them: the back-off counts down */
+        return PACE_STEP_STRICT;
+    }
+    if (e->backoff != 0) {
+        /* a step, the game's own misses and the small ones among them: the
+           back-off counts down */
         e->backoff--;
-    } else if (++e->clean >= PACE_STEP_BACKOFF_MAX && e->backoffLen != 0) {
+    } else if (!over && ++e->clean >= PACE_STEP_BACKOFF_CLEAN && e->backoffLen != 0) {
         /* a clean spell: the next back-off shorter, from the least none */
         e->backoffLen = e->backoffLen > PACE_STEP_BACKOFF_MIN ? e->backoffLen / 2u : 0u;
         e->clean = 0;
     }
+    return over ? PACE_STEP_WIDEN : missed && byPictures ? PACE_STEP_SMALL : PACE_STEP_NONE;
 }
 
 uint64_t pace_step_start_late(uint64_t startNs, uint64_t dueNs, uint64_t prevEndNs)
@@ -204,7 +235,7 @@ bool pace_step_by_pictures(bool missed, uint64_t lateNs, uint64_t presentsLateNs
 {
     const uint64_t held = presentsLateNs + waitedNs;
 
-    return missed && held != 0 && lateNs <= held;
+    return missed && held >= PACE_STEP_MISS_FLOOR_NS && lateNs <= held;
 }
 
 uint64_t pace_step_est_ns(const PaceStepEst *e, uint64_t periodNs)
@@ -212,7 +243,7 @@ uint64_t pace_step_est_ns(const PaceStepEst *e, uint64_t periodNs)
     if (e->estNs == 0 || e->backoff != 0) {
         return e->estNs > periodNs ? e->estNs : periodNs;
     }
-    return e->estNs;
+    return e->estNs + e->widenNs;
 }
 
 bool pace_rt_behind(uint64_t presentNs, uint64_t refreshNs)
