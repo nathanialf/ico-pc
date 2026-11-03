@@ -2520,10 +2520,10 @@ typedef struct RdPerfRecord {
     /* The visibility test (rd_vis.c rd__vis_frame; [dev] cull): the VU draw
      * commands of the replayed lists (cullDraws), those turned into NOPs
      * (cullSkipped: by the frustum test, cullFrustum, or by occlusion,
-     * cullOccluded, 0 until the occlusion test is built), and the test's
-     * time on the CPU (cullMs) */
+     * cullOccluded, under [dev] cull = full), and the test's time on the CPU
+     * (cullMs; cullHizMs of it the occlusion test's) */
     uint32_t cullDraws, cullSkipped, cullFrustum, cullOccluded;
-    double cullMs;
+    double cullMs, cullHizMs;
     uint32_t prepassBatches;
     double gpuPrepassMs;
     /* The store plan (rd_replay.c storePlanScan; RdProfile.storePlan): of
