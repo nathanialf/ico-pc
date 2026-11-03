@@ -21,10 +21,19 @@
 # first, as any read of it is) must be each other run's byte for byte; the off
 # run must cut nothing; each run's draws must be the off run's; the passes the
 # off run's less the clears carried and the clears skipped; the depth stores
-# dropped the off run's plus those dropped at the last touch.  Over the phone's
-# frames (frame-20261028-* and frame-20261102-*) at the phone's setting, each
-# cut must cut something (the reduction's DISPLAY clear, AURA_WORK's clear,
-# the fog's pass's depth store), else the gate saw nothing.  A missing list or
+# dropped the off run's plus those dropped at the last touch, less at most one a
+# clear carried or skipped (a clear's own pass whose depth store the plan dropped
+# goes with the carry: queen rd-00100 at enh2x, 'a replay of 4 passes (2 with a
+# depth)' and 2 dropped off, '2 passes (1 with a depth)' and 1 dropped with its two
+# clears carried).  Over the phone's frames (frame-20261028-* and
+# frame-20261102-*) at the phone's setting, each cut must cut something (the
+# reduction's DISPLAY clear, AURA_WORK's clear, the fog's pass's depth store),
+# else the gate saw nothing.  The crack fill after lists 4-6 reads SCENE's depth
+# at list 7 on every such frame, and the store plan keeps the fog's pass's depth
+# store for that read (rd_store_plan.c, PlanDepth.late), so the last-touch drop
+# is counted on two more runs of those frames, every cut off and the last store
+# alone on, both with ICO_RD_CRACK_FILL=0 (offnf, lastnf: compared with each
+# other as the five are with off).  A missing list or
 # dump is named and skipped; no dump read, or no device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 set(dumps "")
@@ -71,14 +80,26 @@ set(env_enh2x "")
 set(common ICO_RD_BLEND=fixed ICO_RD_STORE_PLAN=1 ICO_RD_STORE_POISON=1)
 # the runs: name and the three switches (carry, skip, last)
 set(runs off carry skip last all)
+set(runsNoFill offnf lastnf)
 set(sw_off 0 0 0)
 set(sw_carry 1 0 0)
 set(sw_skip 0 1 0)
 set(sw_last 0 0 1)
 set(sw_all 1 1 1)
+set(sw_offnf 0 0 0)
+set(sw_lastnf 0 0 1)
+# each run's crack fill switch and the run it is compared with
+foreach(r IN LISTS runs)
+  set(fill_${r} 1)
+  set(ref_${r} off)
+endforeach()
+foreach(r IN LISTS runsNoFill)
+  set(fill_${r} 0)
+  set(ref_${r} offnf)
+endforeach()
 set(drawsRe "stats: ([0-9]+) draws, ([0-9]+) passes")
 set(storesRe "stats: stores: ([0-9]+) depth and ([0-9]+) colour stores dropped")
-set(cutRe "stats: pass cut: clear carry (on|off): ([0-9]+) clears taken by the next pass; clear skip (on|off): ([0-9]+) clears skipped; last store (on|off): ([0-9]+) depth stores dropped at the last touch")
+set(cutRe "stats: pass cut: clear carry (on|off): ([0-9]+) clears taken by the next pass, clear skip (on|off): ([0-9]+) clears skipped, last store (on|off): ([0-9]+) depth stores dropped at the last touch")
 set(failures 0)
 set(compared 0)
 set(phoneCompared 0)
@@ -89,13 +110,17 @@ set(index 0)
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
   get_filename_component(dumpName "${dump}" NAME)
-  set(phone FALSE)
+  set(phoneFrame FALSE)
   if(dumpName MATCHES "^frame-2026(1028|1102)-")
-    set(phone TRUE)
+    set(phoneFrame TRUE)
   endif()
   foreach(s IN LISTS settings)
     set(skipped FALSE)
-    foreach(run IN LISTS runs)
+    set(theRuns ${runs})
+    if(phoneFrame AND s STREQUAL "phone")
+      list(APPEND theRuns ${runsNoFill})
+    endif()
+    foreach(run IN LISTS theRuns)
       if(skipped)
         break()
       endif()
@@ -105,8 +130,13 @@ foreach(dump IN LISTS dumps)
       set(dir "${OUT}/${index}-${s}-${run}")
       file(REMOVE_RECURSE "${dir}")
       file(MAKE_DIRECTORY "${dir}")
+      set(fillEnv "")
+      if(NOT fill_${run})
+        set(fillEnv ICO_RD_CRACK_FILL=0)
+      endif()
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ICO_RD_CLEAR_CARRY=${carry}
-                              ICO_RD_CLEAR_SKIP=${skip} ICO_RD_LAST_STORE=${last} ${env_${s}}
+                              ICO_RD_CLEAR_SKIP=${skip} ICO_RD_LAST_STORE=${last} ${fillEnv}
+                              ${env_${s}}
                               "${TOOL}" "${dump}" - --pass-dump "${dir}" --stats ${args_${s}}
                       RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
       if(rc EQUAL 77)
@@ -163,10 +193,11 @@ foreach(dump IN LISTS dumps)
       message(STATUS "${dump} ${s} ${run}: ${passes_${run}} passes, ${draws_${run}} draws, "
                      "${depth_${run}} depth stores dropped; ${carried_${run}} clears carried, "
                      "${skipped_${run}} skipped, ${last_${run}} stores dropped at the last touch")
-      if(run STREQUAL "off")
-        if(NOT carried_off EQUAL 0 OR NOT skipped_off EQUAL 0 OR NOT last_off EQUAL 0)
-          message(SEND_ERROR "${dump} ${s}: every cut off cut ${carried_off}, ${skipped_off} and "
-                             "${last_off}")
+      set(ref "${ref_${run}}")
+      if(run STREQUAL ref)
+        if(NOT carried_${ref} EQUAL 0 OR NOT skipped_${ref} EQUAL 0 OR NOT last_${ref} EQUAL 0)
+          message(SEND_ERROR "${dump} ${s} ${run}: every cut off cut ${carried_${ref}}, "
+                             "${skipped_${ref}} and ${last_${ref}}")
           math(EXPR failures "${failures} + 1")
         endif()
         file(GLOB pngs RELATIVE "${dir}" "${dir}/*.png")
@@ -177,32 +208,36 @@ foreach(dump IN LISTS dumps)
         endif()
         continue()
       endif()
-      math(EXPR wantPasses "${passes_off} - ${carried_${run}} - ${skipped_${run}}")
-      math(EXPR wantDepth "${depth_off} + ${last_${run}}")
-      if(NOT draws_${run} EQUAL draws_off OR NOT passes_${run} EQUAL wantPasses OR
-         NOT depth_${run} EQUAL wantDepth)
+      math(EXPR wantPasses "${passes_${ref}} - ${carried_${run}} - ${skipped_${run}}")
+      math(EXPR wantDepth "${depth_${ref}} + ${last_${run}}")
+      math(EXPR leastDepth "${wantDepth} - ${carried_${run}} - ${skipped_${run}}")
+      if(NOT draws_${run} EQUAL draws_${ref} OR NOT passes_${run} EQUAL wantPasses OR
+         depth_${run} GREATER wantDepth OR depth_${run} LESS leastDepth)
         message(SEND_ERROR "${dump} ${s} ${run}: ${passes_${run}} passes, ${draws_${run}} draws, "
                            "${depth_${run}} depth stores dropped; want ${wantPasses}, "
-                           "${draws_off} and ${wantDepth}")
+                           "${draws_${ref}} and ${leastDepth} to ${wantDepth}")
         math(EXPR failures "${failures} + 1")
       endif()
-      if(phone AND s STREQUAL "phone" AND run STREQUAL "all")
+      if(phoneFrame AND s STREQUAL "phone" AND run STREQUAL "all")
         math(EXPR phoneCompared "${phoneCompared} + 1")
         math(EXPR phoneCarried "${phoneCarried} + ${carried_all}")
         math(EXPR phoneSkipped "${phoneSkipped} + ${skipped_all}")
-        math(EXPR phoneLast "${phoneLast} + ${last_all}")
       endif()
-      set(dirOff "${OUT}/${index}-${s}-off")
+      if(phoneFrame AND s STREQUAL "phone" AND run STREQUAL "lastnf")
+        math(EXPR phoneLast "${phoneLast} + ${last_lastnf}")
+      endif()
+      set(dirOff "${OUT}/${index}-${s}-${ref}")
       file(GLOB pngsOn RELATIVE "${dir}" "${dir}/*.png")
       list(LENGTH pngsOn npngOn)
       if(NOT npngOn EQUAL npng)
-        message(SEND_ERROR "${dump} ${s}: ${npng} targets written with every cut off, ${npngOn} "
-                           "with ${run}")
+        message(SEND_ERROR "${dump} ${s}: ${npng} targets written with every cut off (${ref}), "
+                           "${npngOn} with ${run}")
         math(EXPR failures "${failures} + 1")
       endif()
       foreach(png IN LISTS pngs)
         if(NOT EXISTS "${dir}/${png}")
-          message(SEND_ERROR "${dump} ${s}: ${png} written with every cut off only (${run})")
+          message(SEND_ERROR "${dump} ${s}: ${png} written with every cut off only (${run}, "
+                             "against ${ref})")
           math(EXPR failures "${failures} + 1")
           continue()
         endif()
@@ -210,7 +245,8 @@ foreach(dump IN LISTS dumps)
         execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${dirOff}/${png}"
                                 "${dir}/${png}" RESULT_VARIABLE same)
         if(NOT same EQUAL 0)
-          message(SEND_ERROR "${dump} ${s} ${run}: ${png} differs: it must be the same bytes")
+          message(SEND_ERROR "${dump} ${s} ${run}: ${png} differs from ${ref}: it must be the "
+                             "same bytes")
           math(EXPR failures "${failures} + 1")
         endif()
       endforeach()
@@ -228,8 +264,9 @@ if(phoneCompared GREATER 0 AND
    (phoneCarried EQUAL 0 OR phoneSkipped EQUAL 0 OR phoneLast EQUAL 0))
   message(FATAL_ERROR "rd_pass_cut_ab: the phone's ${phoneCompared} frames at its setting "
                       "carried ${phoneCarried} clears, skipped ${phoneSkipped} and dropped "
-                      "${phoneLast} stores at the last touch: each must cut something")
+                      "${phoneLast} stores at the last touch (without the crack fill): each must "
+                      "cut something")
 endif()
 message(STATUS "rd_pass_cut_ab: ${compared} targets the same bytes over ${ndumps} dumps; the "
                "phone's frames: ${phoneCarried} clears carried, ${phoneSkipped} skipped, "
-               "${phoneLast} stores dropped at the last touch")
+               "${phoneLast} stores dropped at the last touch without the crack fill")

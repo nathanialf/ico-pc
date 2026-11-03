@@ -1123,8 +1123,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `ICO_RD_DATE_PATH=stencil`; a narrower dump skips it) and at Enhanced 2x 4:3: every PNG
   (`PRESENT.png` and every named target) byte for byte against the off run, the off run cutting
   nothing, the same draws, the passes fewer by the clears carried and skipped, the depth stores
-  dropped more by those at the last touch; over the phone's frames at its setting each cut must cut
-  something (`rd_pass_cut_ab`). SKIP as `rd_vustage_ab`.
+  dropped more by those at the last touch and fewer by at most one a clear carried or skipped (a
+  cleared pass whose depth store the plan dropped goes with its carry: queen rd-00100 at Enhanced
+  2x, 2 dropped with every cut off and 1 with its two clears carried); over the phone's frames at
+  its setting each cut must cut something, the last touch counted on two more runs of those frames
+  with `ICO_RD_CRACK_FILL=0` (every cut off, the last store alone on; compared byte for byte with
+  each other), as the crack fill's read of SCENE's depth at list 7 keeps the fog's pass's depth
+  store wherever it is drawn (`rd_pass_cut_ab`). SKIP as `rd_vustage_ab`.
 - `rd_store_plan_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` (the phone's three
   frames) three times under
   `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` (a depth or stencil load the plan leaves
