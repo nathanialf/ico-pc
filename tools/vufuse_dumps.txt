@@ -13,4 +13,4 @@
 # the mark)
 /primary/dev/ico-pc/build-host/tmp/v094/evidence/android-dump/frame-20261028-105852-v4103.rddump
 # the PowerVR phone's v0.9.4-rc3 frame (the [dev] perf_passes run's dump)
-/primary/dev/ico-pc/dist/frame-20261028-173610-v4657.zip
+/primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip

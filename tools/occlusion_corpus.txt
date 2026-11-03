@@ -12,9 +12,9 @@
 # the Mali-G52 reporter's frame (issue 164)
 /primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump
 # the phone frames
-/primary/dev/ico-pc/dist/frame-20261028-105852-v4103.zip
-/primary/dev/ico-pc/dist/frame-20261028-151709-v2199.zip
-/primary/dev/ico-pc/dist/frame-20261028-173610-v4657.zip
+/primary/dev/ico-dumps/phone/frame-20261028-105852-v4103.zip
+/primary/dev/ico-dumps/phone/frame-20261028-151709-v2199.zip
+/primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip
 # the issue 163 and 173 frames (v0.9.7)
 /primary/dev/ico-pc/build-host/tmp/v097/evidence/163/frame/frame-20261031-211530-v10103.rddump
 /primary/dev/ico-pc/build-host/tmp/v097/evidence/173/frame/frame-20261031-092256-v1700.rddump
