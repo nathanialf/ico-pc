@@ -297,6 +297,11 @@ static bool coversTarget(const RdTargetRec *t, const float rect[4], int32_t ox16
     if (t->w == 0 || t->h == 0 || t->tw == 0 || t->th == 0 || !(t->sx > 0.0f) || !(t->sy > 0.0f)) {
         return false;
     }
+    for (int k = 0; k < 4; k++) {
+        if (!(rect[k] >= -1048576.0f && rect[k] <= 1048576.0f)) {
+            return false; /* NaN or past the 12.4 range */
+        }
+    }
     /* the last texel's pixel (its left or top edge, plus the crop) inside
      * the frame, with room for the divide's rounding */
     if (((float)(t->tw - 1) + t->ox) / t->sx + 0.01f >= (float)t->w ||
