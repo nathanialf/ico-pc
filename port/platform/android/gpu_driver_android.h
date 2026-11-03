@@ -31,6 +31,16 @@
  * the game again, since a package cannot be loaded after the phone's own
  * driver in the same process) or Quit.
  *
+ * The last-seen lines: ico_gpu_driver_android_device_up writes what the
+ * device says of its driver (RhiLimits driverName, driverVersion, driverId,
+ * the Vulkan version and the Mesa version) into the running package's folder,
+ * or the drivers folder's last_seen_system.json for the phone's own driver
+ * (gpu_driver.h), and the host's info(i) reads them for the Graphics driver
+ * page.  A device loss within 30 s of the first present under a package
+ * counts like a crash in it (ico_gpu_driver_android_device_lost).  Adding a
+ * package checks its libraries' ELF alignment against getpagesize(): a
+ * 4 KB-aligned driver on a 16 KB-page phone is refused.
+ *
  * ico_gpu_driver_android_host: the Settings page's host (settings.h
  * UiGpuDriverHost): the installed drivers (<files>/drivers/ in the app's
  * internal folder, the only place the system lets the app load a library
@@ -91,6 +101,13 @@ void ico_gpu_driver_android_device_up(int customDriver);
 const char *ico_gpu_driver_android_hang_note(void);
 /* After each present that reached the screen. */
 void ico_gpu_driver_android_presented(void);
+/* The graphics device was lost (window_host.c device_lost_quit) or a present
+   hung (the watchdog's hang, which the window treats as a loss), under a
+   driver package: within ICO_GPU_DRIVER_LOSS_WINDOW_MS (30 s) of the first
+   present it counts like a crash inside the driver, the trial marker written
+   again so the next start falls back to the phone's own driver with the box.
+   Logged either way; acts once a run. Any thread. */
+void ico_gpu_driver_android_device_lost(void);
 /* At a normal end, before the renderer shuts down: a trial still running
    ends as passed (the marker removed). */
 void ico_gpu_driver_android_end(void);

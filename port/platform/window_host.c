@@ -2767,6 +2767,11 @@ static void window_gpu_hang(void)
 
     fprintf(stderr, "window: the graphics driver stopped responding (a GPU hang); what was being "
                     "drawn follows, as for a device loss\n");
+#ifdef __ANDROID__
+    /* within 30 s of the first present under a driver package: counted
+       against the package like a crash in it (a file write, no device call) */
+    ico_gpu_driver_android_device_lost();
+#endif
     rd_index_span_text(span, sizeof(span));
     fprintf(stderr, "window: at the hang: %s\n", span);
     rd_passring_print(stderr, rd_perf_post_name);
@@ -2801,6 +2806,9 @@ static int device_lost_quit(void)
     if (!s_shown) {
         s_shown = 1;
         fprintf(stderr, "window: the graphics device was lost; quitting\n");
+#ifdef __ANDROID__
+        ico_gpu_driver_android_device_lost(); /* a package's first 30 s count as a crash in it */
+#endif
         {
             /* issue 95: Mali's loss came from index spans past 2^24 - 1 */
             char span[256];
