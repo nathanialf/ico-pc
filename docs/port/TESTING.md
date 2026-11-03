@@ -691,7 +691,11 @@ Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay op
   ([PACKS.md](PACKS.md#tests)).
 - The render thread: `frame_mailbox`, `pace_loop`, `lifecycle`, `host_config` and `rhi_vk` (the
   thread submit and thread record cells; `rhi_d3d12` on Windows), `rd_submit_queue` (the submit
-  thread's queue), `rd_thread_ab`, `rd_tex` (and `rd_tex_test` under
+  thread's queue), `rd_thread_ab`, `rd_tex` (its `threadSlotAhead`: the slot ahead held as a fence
+  that does not pass, the game side's texture calls do not wait, the next picture takes that slot,
+  as the device has it, with `ICO_RD_SUBMIT_THREAD=0` and with `ICO_RD_SLOT_AHEAD=0`; its
+  `threadFair`: a call waiting for one picture's reads runs before the next picture's begin, the
+  wait counted in the walk; and `rd_tex_test` under
   the tsan build), `rd_present` (the deferred state picture, the slot waits by whose), `rd_replay_tool_save_blended` (the
   interpolation on the render thread); the device runs are the window's, with `[dev]
   render_thread = sync` against `off` for the same pictures ([PLATFORM.md](PLATFORM.md#the-render-thread)).
