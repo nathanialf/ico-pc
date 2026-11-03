@@ -547,7 +547,17 @@ static uint32_t s_outW, s_outH;
 
 static bool s_window;
 
+static bool presentAcquire(void);
+
 bool rd__present_acquire(void)
+{
+    rd__thread_phase(RD_READ_ACQUIRE); /* the read waits' split (rd_thread.h) */
+    const bool ok = presentAcquire();
+    rd__thread_phase(RD_READ_UPLOAD);
+    return ok;
+}
+
+static bool presentAcquire(void)
 {
     rd__submit_drain_acquire(); /* the last picture's present reads what this sets (rd_submit.h) */
     s_backbuffer = (RhiTexture){0};

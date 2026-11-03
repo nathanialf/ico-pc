@@ -927,16 +927,20 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
        for the render thread's reads of a picture (its interpolation and
        walk; rd_thread.h) */
     const unsigned byPresents = tb.freshWaits + tb.furtherWaits;
+    /* the read waits by what the render thread was doing as each began,
+       and the frame slots it waited for outside the hand-over (rd_thread.h) */
+    char rw[640];
 
+    rd_thread_read_waits_text(&tb, rw, sizeof(rw));
     fprintf(stderr,
             "window: game thread: step %.1f ms (closing a frame %.1f ms of it, longest %.1f ms, "
             "%u frames), pump %.1f ms, slot waits %u (%.1f ms; %u (%.1f ms) by a new frame's "
             "present, %u (%.1f ms) by a further present's, %u other), read waits %u (%.1f ms, "
-            "longest %.1f ms); %s%s; %s\n",
+            "longest %.1f ms%s); %s%s; %s\n",
             stepMs, closeMs, closeMaxMs, closes, pumpMs, waits, (double)waitNs / 1e6, tb.freshWaits,
             tb.freshWaitMs, tb.furtherWaits, tb.furtherWaitMs,
             waits > byPresents ? waits - byPresents : 0u, tb.readWaits, tb.readWaitMs,
-            tb.readWaitMaxMs, rt, st, cores);
+            tb.readWaitMaxMs, rw, rt, st, cores);
     if (s_rt.asks.asks != 0) {
         /* the step rule's asks in the block: which test held them, by how
            much, what set the reads' end, the inputs' means */

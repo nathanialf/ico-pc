@@ -64,7 +64,16 @@
  *            while this thread records and updates (threadPixels: the
  *            same SCENE); in sync mode a picture is waited for and not
  *            counted as handed over, with the thread on it is until the
- *            drain (threadSync).
+ *            drain (threadSync).  The slot ahead (threadSlotAhead): with
+ *            the render thread held in its wait for the next picture's
+ *            frame slot, this thread's rd_update_texture and rdtex_find
+ *            do not wait; the next picture takes that slot (no wait inside
+ *            its reads), SCENE the same; as the device has it, with the
+ *            render thread submitting, and with ICO_RD_SLOT_AHEAD=0 (every
+ *            picture inside).  Fairness (threadFair): a call that waits
+ *            for picture 1's reads (its walk held open) runs before
+ *            picture 2's reads begin, one wait of one picture's reads,
+ *            counted in the walk.
  *
  * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU
  * checks passed).
@@ -72,8 +81,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "ico_thread.h"
 #include "rd_internal.h"
 #include "rd_submit.h"
+#include "rd_submit_thread.h"
 #include "rd_tex.h"
 #include "texpack.h"
 #include "vk/rhi_vk.h"
@@ -1207,6 +1218,286 @@ static void threadPixels(void)
     rd_thread_local_stop();
 }
 
+/* An environment variable set (v) or removed (NULL) */
+static void setEnv(const char *name, const char *v)
+{
+#ifdef _WIN32
+    _putenv_s(name, v ? v : "");
+#else
+    if (v) {
+        setenv(name, v, 1);
+    } else {
+        unsetenv(name);
+    }
+#endif
+}
+
+/* The render thread's hook (rd_thread.h rd__thread_test_hook): mode 1
+ * holds the slot ahead (at RD_READ_PHASES) until this thread releases it,
+ * as a GPU fence that does not pass; mode 2 holds the first picture's walk
+ * open for holdMs (its reads go on) and numbers each picture's start
+ * (RD_READ_INTERP) in one sequence with this thread's calls */
+static struct {
+    IcoMutex *m;
+    IcoCond *c;
+    int mode;
+    int entered, release, held;
+    unsigned seq, begun[4], nBegun;
+    double holdMs;
+} s_hk;
+
+static void hookWait(int *flag)
+{
+    ico_mutex_lock(s_hk.m);
+    while (!*flag) {
+        ico_cond_wait(s_hk.c, s_hk.m);
+    }
+    ico_mutex_unlock(s_hk.m);
+}
+
+static void hookSet(int *flag)
+{
+    ico_mutex_lock(s_hk.m);
+    *flag = 1;
+    ico_cond_broadcast(s_hk.c);
+    ico_mutex_unlock(s_hk.m);
+}
+
+static unsigned hookSeq(void)
+{
+    ico_mutex_lock(s_hk.m);
+    const unsigned n = ++s_hk.seq;
+    ico_mutex_unlock(s_hk.m);
+    return n;
+}
+
+static void testHook(int at)
+{
+    if (s_hk.mode == 1 && at == RD_READ_PHASES) {
+        hookSet(&s_hk.entered);
+        hookWait(&s_hk.release);
+    } else if (s_hk.mode == 2 && at == RD_READ_INTERP) {
+        const unsigned n = hookSeq();
+        if (s_hk.nBegun < 4) {
+            s_hk.begun[s_hk.nBegun++] = n;
+        }
+    } else if (s_hk.mode == 2 && at == RD_READ_WALK && !s_hk.held) {
+        s_hk.held = 1;
+        hookSet(&s_hk.entered);
+        const double t0 = ico_thread_now_ms();
+        while (ico_thread_now_ms() - t0 < s_hk.holdMs) {
+            /* the picture's reads held open */
+        }
+    }
+}
+
+static bool hookStart(int mode)
+{
+    memset(&s_hk, 0, sizeof(s_hk));
+    s_hk.m = ico_mutex_create();
+    s_hk.c = ico_cond_create();
+    s_hk.mode = mode;
+    s_hk.holdMs = 300.0;
+    if (!s_hk.m || !s_hk.c) {
+        CHECK(0, "render thread: the hook's lock");
+        return false;
+    }
+    rd__thread_test_hook(testHook);
+    return true;
+}
+
+static void hookStop(void)
+{
+    rd__thread_test_hook(NULL);
+    ico_cond_destroy(s_hk.c);
+    ico_mutex_destroy(s_hk.m);
+    memset(&s_hk, 0, sizeof(s_hk));
+}
+
+/* The slot ahead (rd_thread.h rd__slot_ahead_take): a picture handed over
+ * ends by waiting for the next picture's frame slot outside its reads.
+ * With that wait held (the hook, as a fence that does not pass), this
+ * thread's calls that change the renderer's state (rd_update_texture,
+ * rdtex_find: rd__texlock_wait) return at once: no read wait while the
+ * render thread still waits; the next picture then takes the slot waited
+ * for (no wait inside its reads) and its SCENE is the same.  Under
+ * ICO_RD_SLOT_AHEAD=0 every picture waits inside its reads, none ahead.
+ * Run as the device has it (the submit thread with the frame slots apart
+ * or one at a time, where nothing is waited for ahead) and with
+ * ICO_RD_SUBMIT_THREAD=0 (the render thread submits: always ahead). */
+static void threadSlotAhead(void)
+{
+    if (rhi_backend() == RHI_BACKEND_OPENGL) {
+        return;
+    }
+    for (int run = 0; run < 3; run++) {
+        setEnv("ICO_RD_SUBMIT_THREAD", run == 1 ? "0" : NULL);
+        setEnv("ICO_RD_SLOT_AHEAD", run == 2 ? "0" : NULL);
+        const char *name = run == 0   ? "as the device has it"
+                           : run == 1 ? "ICO_RD_SUBMIT_THREAD=0"
+                                      : "ICO_RD_SLOT_AHEAD=0";
+        if (!rd_thread_local_start(RD_THREAD_ON)) {
+            CHECK(0, "slot ahead, %s: the renderer's own thread could not start", name);
+            break;
+        }
+        /* nothing waited for ahead with the submit thread on and the frame
+           slots one at a time, or with the switch off */
+        const bool ahead = run != 2 && !(rd_thread_submit_on() && !rd_thread_submit_slots_apart());
+        RdThreadBlock b, mid;
+        uint8_t *pat = malloc(64 * 64 * 4);
+        RdTex u = rd_create_texture(64, 64, NULL, RD_TEXA_80_80, "slot ahead");
+        rd_thread_block_take(&b); /* the block from here */
+        memset(&mid, 0, sizeof(mid));
+        if (!pat || !hookStart(ahead ? 1 : 0)) {
+            free(pat);
+            rd_thread_local_stop();
+            break;
+        }
+        gif_HostFrameReset();
+        dl_Clear();
+        recordFrame();
+        const RdFrame *f = rd__last_frame();
+        const bool posted = f != NULL && rd__replay_frame_async(f, 0, false);
+        CHECK(posted, "slot ahead, %s: picture 1 handed over", name);
+        if (posted && ahead) {
+            hookWait(&s_hk.entered); /* the render thread in the slot ahead, held */
+            for (int i = 0; i < 64 * 64 * 4; i++) {
+                pat[i] = (uint8_t)(hash((uint32_t)(i + 77)) & 0xFF);
+            }
+            const double t0 = ico_thread_now_ms();
+            rd_update_texture(u, pat);
+            (void)rdtex_find((uint32_t)s_t8.id, 1u, RDTEX_TEXA_REPLAY);
+            const double ms = ico_thread_now_ms() - t0;
+            rd_thread_block_take(&mid);
+            CHECK(mid.readWaits == 0 && !s_hk.release,
+                  "slot ahead, %s: with the slot's wait held, the game side's calls waited %u "
+                  "times (%.2f ms)",
+                  name, mid.readWaits, ms);
+            hookSet(&s_hk.release);
+        }
+        (void)rd_thread_drain();
+        rd_thread_block_take(&b);
+        if (ahead) {
+            /* picture 1, the first: its own slot inside its reads */
+            CHECK(mid.fenceInside + b.fenceInside == 1 && mid.aheads + b.aheads == 1 &&
+                      mid.readWaits + b.readWaits == 0,
+                  "slot ahead, %s: picture 1 waited for its own slot inside its reads (%u, the "
+                  "first), then for the next slot ahead (%u), no read wait (%u)",
+                  name, mid.fenceInside + b.fenceInside, mid.aheads + b.aheads,
+                  mid.readWaits + b.readWaits);
+        }
+        s_hk.mode = 0;
+        /* picture 2: the slot waited for ahead, no wait inside its reads */
+        gif_HostFrameReset();
+        dl_Clear();
+        recordFrame();
+        f = rd__last_frame();
+        CHECK(f != NULL && rd__replay_frame_async(f, 0, false),
+              "slot ahead, %s: picture 2 handed over", name);
+        (void)rd_thread_drain();
+        rd_thread_block_take(&b);
+        if (ahead) {
+            CHECK(b.pictures == 1 && b.fenceInside == 0 && b.aheads == 1,
+                  "slot ahead, %s: picture 2 took the slot waited for (%u inside its reads, %u "
+                  "ahead after it, %u pictures)",
+                  name, b.fenceInside, b.aheads, b.pictures);
+        } else {
+            CHECK(b.aheads == 0 && b.fenceInside == b.pictures,
+                  "slot ahead, %s: nothing waited for ahead (%u), each picture's slot inside its "
+                  "reads (%u of %u)",
+                  name, b.aheads, b.fenceInside, b.pictures);
+        }
+        {
+            char text[640];
+            rd_thread_read_waits_text(&b, text, sizeof(text));
+            CHECK(strstr(text, "; the next picture's frame slot waited for at the end of the one "
+                               "before") != NULL,
+                  "slot ahead, %s: the 10 s line's clause: %s", name, text);
+            printf("slot ahead, %s: %s\n", name, text);
+        }
+        hookStop();
+        checkPixels(); /* the last replay's SCENE: as on this thread */
+        rd_destroy_texture(u);
+        free(pat);
+        rd_thread_local_stop();
+    }
+    setEnv("ICO_RD_SUBMIT_THREAD", NULL);
+    setEnv("ICO_RD_SLOT_AHEAD", NULL);
+}
+
+/* One picture's reads at most: a call of this thread's that waits for
+ * picture 1's reads (held open in its walk) runs before picture 2's reads
+ * begin (the hand-over is this thread's, at its post, after the call), so
+ * the wait is that one picture's, counted by what the render thread was
+ * doing (the walk); and the split's text names each part */
+static void threadFair(void)
+{
+    if (rhi_backend() == RHI_BACKEND_OPENGL) {
+        return;
+    }
+    if (!rd_thread_local_start(RD_THREAD_ON)) {
+        CHECK(0, "fairness: the renderer's own thread could not start");
+        return;
+    }
+    RdThreadBlock b;
+    uint8_t *pat = malloc(64 * 64 * 4);
+    RdTex u = rd_create_texture(64, 64, NULL, RD_TEXA_80_80, "fair");
+    rd_thread_block_take(&b);
+    if (!pat || !hookStart(2)) {
+        free(pat);
+        rd_thread_local_stop();
+        return;
+    }
+    gif_HostFrameReset();
+    dl_Clear();
+    recordFrame();
+    const RdFrame *f = rd__last_frame();
+    const bool p1 = f != NULL && rd__replay_frame_async(f, 0, false);
+    unsigned callDone = 0;
+    if (p1) {
+        hookWait(&s_hk.entered); /* picture 1 in its walk, held */
+        for (int i = 0; i < 64 * 64 * 4; i++) {
+            pat[i] = (uint8_t)(hash((uint32_t)(i + 991)) & 0xFF);
+        }
+        rd_update_texture(u, pat); /* waits for picture 1's reads */
+        callDone = hookSeq();
+    }
+    gif_HostFrameReset();
+    dl_Clear();
+    recordFrame();
+    f = rd__last_frame();
+    const bool p2 = f != NULL && rd__replay_frame_async(f, 0, false);
+    (void)rd_thread_drain();
+    rd_thread_block_take(&b);
+    CHECK(p1 && p2 && s_hk.nBegun == 2, "fairness: two pictures handed over (%u begun)",
+          s_hk.nBegun);
+    CHECK(s_hk.nBegun < 2 || (s_hk.begun[0] < callDone && callDone < s_hk.begun[1]),
+          "fairness: the waiting call ran (%u) after picture 1 began (%u) and before picture 2's "
+          "reads began (%u)",
+          callDone, s_hk.begun[0], s_hk.nBegun == 2 ? s_hk.begun[1] : 0u);
+    CHECK(b.readWaits <= 1, "fairness: %u read waits, one picture's at most", b.readWaits);
+    if (b.readWaits == 1) {
+        CHECK(b.readWaitBy[RD_READ_WALK] == 1 && b.readWaitMaxMs < 2.0 * s_hk.holdMs,
+              "fairness: the wait began in the walk (%u) and lasted one picture's reads (%.1f "
+              "ms, the walk held %.0f ms)",
+              b.readWaitBy[RD_READ_WALK], b.readWaitMaxMs, s_hk.holdMs);
+        char text[640];
+        rd_thread_read_waits_text(&b, text, sizeof(text));
+        CHECK(strstr(text, "; the render thread as each began: the hand-over (the picture not yet "
+                           "begun there) 0 (0.0 ms), the interpolation 0") != NULL &&
+                  strstr(text, ", the walk 1 (") != NULL,
+              "fairness: the split's text: %s", text);
+        printf("fairness: read waits 1 (%.1f ms)%s\n", b.readWaitMs, text);
+    } else {
+        printf("fairness: the call came after picture 1's reads (no wait): the order still "
+               "checked\n");
+    }
+    hookStop();
+    rd_destroy_texture(u);
+    free(pat);
+    rd_thread_local_stop();
+}
+
 /* [dev] render_thread = sync (rd_thread.h RdThreadHost.sync): a picture is
  * posted as one that waits and is not counted as handed over
  * (rd_submit_async false after it, as with the thread off, so the window
@@ -1570,6 +1861,8 @@ int main(void)
     checkPixels();
     threadPixels();
     threadSync();
+    threadSlotAhead();
+    threadFair();
     r8Pixels();
     replacementPixels();
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",

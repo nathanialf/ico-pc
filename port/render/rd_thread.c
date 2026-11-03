@@ -33,6 +33,16 @@ static _Thread_local uint64_t t_waitNs, t_interpNs;
 static _Thread_local bool t_retireKept;
 /* the game thread's read waits in all, ns (rd_thread_read_wait_ns) */
 static uint64_t s_readWaitTotalNs;
+/* what the render thread does in the open hand-over (RdReadPhase: set at
+ * the hand-over on the game thread, then by the render thread; read when a
+ * game-thread call begins to wait) */
+static int s_phase;
+/* the slot ahead (rd__slot_ahead_take): the frame slot waited for at the
+ * end of the picture before, -1 none (the render thread's inside its jobs,
+ * the game thread's after a drain); ICO_RD_SLOT_AHEAD=0; the tests' hook */
+static int s_aheadSlot = -1;
+static bool s_aheadOff;
+static void (*s_testHook)(int at);
 
 /* the hand-over's lock: the count of pictures whose reads have not ended,
  * the game thread's waits for them, the textures to retire, the block's
@@ -120,9 +130,16 @@ static void retireDrain(void)
     }
 }
 
+/* The ownership is handed over here, on the game thread, as it posts a
+ * picture (rd_present_post, rd__replay_frame_async), with the render
+ * thread drained first: the only thread whose calls wait for the reads is
+ * this one, so a call that waited for the picture before has run before
+ * this picture's reads can begin (no second picture's reads behind a
+ * waiting call) */
 static void handOver(void)
 {
     lk();
+    __atomic_store_n(&s_phase, RD_READ_HANDOVER, __ATOMIC_RELAXED);
     __atomic_add_fetch(&s_owned, 1, __ATOMIC_RELEASE);
     ulk();
 }
@@ -137,6 +154,75 @@ static void giveBack(void)
     ulk();
 }
 
+/* The slot ahead (rd_thread.h rd__slot_ahead_take): at the end of a
+ * picture's job handed over, its reads ended and its list posted to the
+ * submit thread, the next picture's frame slot waited for here, outside
+ * the hand-over: the game thread's calls go on meanwhile (they change the
+ * textures, meshes and frames; this reads none of them: the submit
+ * thread's jobs of that slot, the slot's fence and its recycling, the bind
+ * groups' epoch); a game-thread graphics call waits for this job through
+ * the call guard as for any job */
+static void slotAhead(void)
+{
+    if (s_aheadOff || s_aheadSlot >= 0 || !g_rd.hasDevice || rhi_device_lost()) {
+        return;
+    }
+    const bool apart = rd_thread_submit_apart();
+    if (rd_thread_submit_on() && !apart) {
+        return; /* one at a time: the wait would be the submit thread's whole job on this picture */
+    }
+    const double t0 = rd__now_ms();
+    if (s_testHook) {
+        s_testHook(RD_READ_PHASES);
+    }
+    if (apart) {
+        /* as rd__submit_drain: the jobs of the slot rhi_wait_frame recycles */
+        (void)rd_thread_submit_wait_slot((rhi_frame_slot() + 1u) % RHI_FRAMES_IN_FLIGHT);
+    }
+    rhi_wait_frame();
+    rd__bind_epoch_next(); /* as rd__wait_frame's: the slot's bind groups anew */
+    s_aheadSlot = (int)rhi_frame_slot();
+    const double ms = rd__now_ms() - t0;
+    lk();
+    s_block.aheads++;
+    s_block.aheadMs += ms;
+    s_block.aheadMaxMs = ms > s_block.aheadMaxMs ? ms : s_block.aheadMaxMs;
+    ulk();
+}
+
+bool rd__slot_ahead_take(void)
+{
+    if (s_on && t_onR == 0) {
+        (void)rd_thread_drain(); /* the render thread's slot ahead ended: its record read below */
+    }
+    const int slot = s_aheadSlot;
+    s_aheadSlot = -1;
+    if (slot >= 0 && (uint32_t)slot == rhi_frame_slot()) {
+        return true;
+    }
+    if (s_on && t_onR != 0 && t_handed) {
+        lk();
+        s_block.fenceInside++; /* the wait in this picture's reads, as before */
+        ulk();
+    }
+    return false;
+}
+
+void rd__thread_test_hook(void (*fn)(int at))
+{
+    s_testHook = fn;
+}
+
+void rd__thread_phase(RdReadPhase phase)
+{
+    if (t_onR != 0 && t_handed) {
+        __atomic_store_n(&s_phase, (int)phase, __ATOMIC_RELAXED);
+        if (s_testHook) {
+            s_testHook((int)phase);
+        }
+    }
+}
+
 /* a job on the render thread: its reads handed over or not, the textures
  * the game thread destroyed since the last job destroyed first */
 static void runTramp(Tramp *t, bool picture)
@@ -145,6 +231,7 @@ static void runTramp(Tramp *t, bool picture)
     const bool handed = t_handed;
     t_onR++;
     t_handed = t->handed;
+    rd__thread_phase(RD_READ_INTERP); /* begun here: up to its fence wait */
     if (outer) {
         t_jobStartMs = rd__now_ms();
         t_presentNs = 0; /* this job's presents only */
@@ -179,6 +266,9 @@ static void runTramp(Tramp *t, bool picture)
             s_block.pictures++;
         }
         ulk();
+        if (picture && t->handed) {
+            slotAhead(); /* the next picture's slot, the hand-over ended */
+        }
     }
     t_handed = handed;
     t_onR--;
@@ -210,7 +300,8 @@ void rd_set_thread_host(const RdThreadHost *host)
     }
     s_on = false;
     s_host = (RdThreadHost){0};
-    retireDrain(); /* here: nothing is posted any more */
+    s_aheadSlot = -1; /* the next replay waits for its own slot */
+    retireDrain();    /* here: nothing is posted any more */
     if (host != NULL && host->post != NULL && host->drain != NULL) {
         if (!s_lk) {
             s_lk = ico_mutex_create();
@@ -228,6 +319,25 @@ void rd_set_thread_host(const RdThreadHost *host)
         memset(&s_block, 0, sizeof(s_block));
         ulk();
         s_owned = 0;
+        {
+            /* the slot ahead's switch, its line on each start (the first
+               8, then every 100th) */
+            static unsigned s_aheadLines;
+            const char *e = getenv("ICO_RD_SLOT_AHEAD");
+            s_aheadOff = e != NULL && strcmp(e, "0") == 0;
+            if (++s_aheadLines <= 8 || s_aheadLines % 100 == 0) {
+                rd__log("render thread: %s",
+                        s_aheadOff ? "the next picture waits for its frame slot inside its reads "
+                                     "(ICO_RD_SLOT_AHEAD=0: the game thread's calls wait through "
+                                     "the GPU's fence)"
+                                   : "the next picture's frame slot is waited for at the end of "
+                                     "the picture before, outside the hand-over (the game "
+                                     "thread's calls that change the renderer's state no longer "
+                                     "wait through the GPU's fence in a picture's reads; with "
+                                     "the submit thread and the frame slots one at a time, inside "
+                                     "as before; ICO_RD_SLOT_AHEAD=0 keeps it inside)");
+            }
+        }
         s_async = false;
         s_lastOk = true;
         s_lastPresentFrame = 0;
@@ -361,6 +471,37 @@ void rd_thread_block_take(RdThreadBlock *out)
     }
 }
 
+void rd_thread_read_waits_text(const RdThreadBlock *b, char *out, size_t cap)
+{
+    static const char *const names[RD_READ_PHASES] = {
+        "the hand-over (the picture not yet begun there)",
+        "the interpolation",
+        "its frame slot's fence",
+        "the acquire",
+        "the ring and the uploads",
+        "the walk",
+    };
+    size_t n = 0;
+    if (cap == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (b->readWaits != 0) {
+        n += (size_t)snprintf(out + n, cap - n, "; the render thread as each began:");
+        for (int i = 0; i < RD_READ_PHASES && n < cap; i++) {
+            n += (size_t)snprintf(out + n, cap - n, "%s %s %u (%.1f ms)", i ? "," : "", names[i],
+                                  b->readWaitBy[i], b->readWaitByMs[i]);
+        }
+    }
+    if (n < cap) {
+        (void)snprintf(out + n, cap - n,
+                       "; the next picture's frame slot waited for at the end of the one before "
+                       "%u times (%.1f ms in all, longest %.1f ms), %u pictures waited for their "
+                       "slot inside their reads",
+                       b->aheads, b->aheadMs, b->aheadMaxMs, b->fenceInside);
+    }
+}
+
 /* ------------------------------------------------------------ texLock */
 
 void rd__texlock_wait(void)
@@ -369,6 +510,11 @@ void rd__texlock_wait(void)
         return;
     }
     const double t0 = rd__now_ms();
+    /* what the render thread was doing as this wait began (RdReadPhase) */
+    int phase = __atomic_load_n(&s_phase, __ATOMIC_RELAXED);
+    if (phase < 0 || phase >= RD_READ_PHASES) {
+        phase = RD_READ_HANDOVER;
+    }
     lk();
     while (__atomic_load_n(&s_owned, __ATOMIC_ACQUIRE) != 0) {
         ico_cond_wait(s_cv, s_lk);
@@ -378,6 +524,8 @@ void rd__texlock_wait(void)
     s_block.readWaits++;
     s_block.readWaitMs += ms;
     s_block.readWaitMaxMs = ms > s_block.readWaitMaxMs ? ms : s_block.readWaitMaxMs;
+    s_block.readWaitBy[phase]++;
+    s_block.readWaitByMs[phase] += ms;
     ulk();
 }
 

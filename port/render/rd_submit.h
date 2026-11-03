@@ -26,6 +26,10 @@ void rd__submit_frame(RhiCommandList cl, bool present, double walkStart, double 
  * (rd_submit_thread.h), then the background pipelines' step a picture
  * kept for it (rd__submit_pipe_tick) */
 void rd__submit_drain(void);
+/* rd__wait_frame's for a slot waited for ahead (rd_thread.h
+ * rd__slot_ahead_take): the waits were made then; what rd__submit_drain
+ * does after them here (the textures to retire, the kept pipelines' step) */
+void rd__submit_drain_kept(void);
 /* rd__present_acquire's: rd__submit_drain, but with the frame slots apart
  * on the render thread nothing waits (the acquire is the picture's own
  * slot's; rd_submit_thread.h "the slots") */

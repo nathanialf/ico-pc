@@ -3932,6 +3932,9 @@ bool rd__stencil_ops(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp d
  * the camera probe): also starts a new epoch of the bind group caches
  * (rd_replay.c), since bind groups live one frame slot. */
 void rd__wait_frame(void);
+/* The bind group caches' next epoch alone (rd_thread.c's slot ahead, whose
+ * rhi_wait_frame recycled the slot their groups may live in) */
+void rd__bind_epoch_next(void);
 /* A frame of the renderer's own outside a replay (the films,
  * rd_video.c): rd__wait_frame, then the next slot of the upload ring (at
  * least ringBytes) as a replay takes it, so the ring's slot keeps pace

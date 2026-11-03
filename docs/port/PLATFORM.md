@@ -341,7 +341,40 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   walk (the 10 s line's read waits). Nearly every step changes that state (`rdtex_find` for each
   textured draw, `rd_draw_vu_mesh`, `rdtex_frame_tick`, `rd_begin_frame`), so a step that starts
   inside a picture's reads waits for them at its first such call, whichever it is; the later calls
-  find them ended (one wait a picture at most).
+  find them ended (one wait a picture at most). The ownership is handed over on the game thread
+  itself as it posts (`handOver` in `rd_present_post` / `rd__replay_frame_async`, the render thread
+  drained first), and only the game thread's calls wait for it, so a call that waited for one
+  picture has run before the next picture's reads can begin: a wait is one picture's reads, never
+  two (`rd_tex_test`'s `threadFair`).
+- The window and the slot ahead. A present's job runs the interpolation (reads the retained
+  frames), its wait for its frame slot (`rd__wait_frame`: the submit thread's jobs of that slot and
+  the GPU's fence of the picture two before; reads nothing the game thread changes), the ring, the
+  acquire (reads nothing the game changes: the settings change only with the render thread
+  drained), the uploads and the walk (read the textures, meshes and targets), then the present's
+  pass and `rd__reads_done`. The fence wait was inside the hand-over: a PowerVR phone at its native size had
+  `read waits 76 (1285.7 ms, longest 33.0 ms)` with 7.6-10 ms of reads a picture, the slow replays
+  `wait 23.4 (fence 22.9)`. Now a picture handed over ends its job by waiting for the next
+  picture's slot (`port/render/rd_thread.c` (`slotAhead`): after `rd__reads_done` and the list's
+  post to the submit thread, the slot's submit-thread jobs, `rhi_wait_frame`, the bind groups'
+  epoch); the next `rd__wait_frame` takes that slot without waiting (`rd__slot_ahead_take`, true
+  once while the current slot is that one; on any other thread after the render thread's drain).
+  So the hand-over spans the interpolation, the acquire, the uploads and the walk only, and the
+  fence wait overlaps the game's step. The game thread sees nothing new between the reads' end and
+  the next picture's: the slot ahead touches only the frame slot (the retained frames are
+  immutable once closed, the destroys are deferred to the retire list and `rdtex_frame_tick`'s
+  "two frames later"), and a game-thread graphics call waits for that job through the call guard
+  as for any job. The same calls are made on the render thread, the slot's wait earlier, so the
+  pictures' bytes are unchanged. Not done: with the submit thread on and the frame slots one at a
+  time (the wait would be the submit thread's whole job on this picture), for the pictures that
+  wait (the vsync lock's, sync, captures), and under `ICO_RD_SLOT_AHEAD=0`; there the picture waits
+  inside its reads as before. The acquire stays inside (0.0-0.1 ms in that phone's slow replays; an image
+  acquired ahead would be held across the step and across a swapchain change). Where a post finds
+  the render thread still in its slot ahead, the post's drain waits for the rest of it (a slot wait,
+  the present's cost, which the further-present rules see through the heartbeat: the slot ahead is
+  part of the picture's job and of `takes`), not the step's first call. The line at each start:
+  `rd: render thread: the next picture's frame slot is waited for at the end of the picture before,
+  outside the hand-over (...)` (with `ICO_RD_SLOT_AHEAD=0`: `the next picture waits for its frame
+  slot inside its reads (...)`).
 - Further presents held only when a step would miss its period (the step-deadline rule;
   [DISPLAY.md](DISPLAY.md#further-presents-and-the-game-step) has it in words). On the timer path
   a further present of a frame already shown is held when it would make a game step miss its own
@@ -558,8 +591,14 @@ cost of closing a frame (`rd_end_frame` after its wait for a picture's reads: th
 its end state; `port/render/rd.h` (`rd_frame_close_take`)), its mean pump, its waits for the
 render thread (the slot waits: whole pictures, with their time, split by whose: a new frame's
 present, a further present's, the rest (a graphics call's, a settings change's, a load's); the
-read waits: a change of the renderer's state that waited for a picture's walk, with their time and
-the longest), then the render thread's CPU time a picture (the replays line's), its share of the
+read waits: a change of the renderer's state that waited for a picture's reads, with their time and
+the longest, then split by what the render thread was doing as each began: `; the render thread as
+each began: the hand-over (the picture not yet begun there) N (X ms), the interpolation N (X ms),
+its frame slot's fence N (X ms), the acquire N (X ms), the ring and the uploads N (X ms), the walk
+N (X ms)` (`rd_thread_read_waits_text`; the phase set at the hand-over and by `rd__thread_phase`
+in `rd__wait_frame`, `rd__present_acquire` and at the walk's start), and the slot ahead's `; the
+next picture's frame slot waited for at the end of the one before N times (X ms in all, longest Y
+ms), P pictures waited for their slot inside their reads`), then the render thread's CPU time a picture (the replays line's), its share of the
 block with no picture to do, its longest wait for one, its longest picture (the heartbeat's
 longest gap), and per picture its interpolation, its uploads and walk, its submit and present and
 the GPU's and the display's waits inside them, the textures it destroyed for the game thread, and
