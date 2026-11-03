@@ -22,6 +22,7 @@ shaders, and what the port draws of what the programs drop.
 | `port/shaders/vu_{prelit,lit,skin,grid,particle}.hlsl` | one shader per program |
 | `port/shaders/test/vu1_test.c` | the references against hand traces and against the shaders |
 | `port/render/test/rd_native_test.c` | the native frame's centre rule, the region rule's strip test |
+| `port/render/tools/rd_replay_region.c` | `rd_replay_tool --region-stats`: the region rule's verdict on every triangle of a dump, on the CPU |
 
 ## How the programs run
 
@@ -372,6 +373,77 @@ one at either tick, so a card never enters the picture between the ticks
 triangles, T ms a step`), and a slow step's line the step's own, inside the game threads' time
 ([DISPLAY.md](DISPLAY.md#the-stats-lines); `rd_vu_card_counts`, `port/render/rd.h`).
 
+## The winding mark
+
+A triangle's facing is not in its kick: the GS draws a strip's triangles k-2, k-1, k with the
+winding alternating from one to the next, so of two neighbours in a strip one has its corners
+clockwise on the screen and the other counter-clockwise, front-facing both (`ico2/seki/src/Packet.c`
+(`pac_makeNormalStrip`): `ST.w` 0 on a strip's first vertex). Nothing culls back faces anywhere
+(`port/rhi/rhi.h` `cullNone`), so nothing needed the facing until the region rule's side bands
+(issue 29: a dropped triangle drawn beside the 4:3 band when it faces the camera, the opening's
+cliff `st26a_p1`, filmed from inside, kept dropped).
+
+`ICO_VU_MARK_FLIP` (`port/shaders/shader_consts.h`, `VU_MARK_FLIP` in
+`port/shaders/vu_common.hlsli`) is the fourth bit of a kick's mark byte, beside `JOINED` (1),
+`HIDE` (2) and `LATER` (4): the byte a kick holds eight bits, and the marks are bytes after the
+stream since issue 95's fix, not index bits, so the index values are unchanged. It says the corners
+k-2, k-1, k wind against the triangle's front: the triangle faces the camera when the sign of their
+area on the screen, reversed where the mark is set, is the front's (`port/render/rd_mesh.c`
+(`markWinding`), run after `markJoinedStrips` when a mesh is made):
+
+- **lit and skinned meshes** (a normal per vertex): triangle by triangle, the mark is set when
+  `cross(b - a, c - a)` of the model positions of k-2, k-1, k points away from the sum of their
+  three normals (the dot product below 0);
+- **prelit meshes** (no normals): by the triangle's place in its strip, `((k - s) & 1) ^
+  RD_VU_WINDING_PHASE`, s the strip's first vertex (a vertex whose `ST.w` is below 1 or the batch's
+  first, as `markJoinedStrips` and `cardStrips` find the strips), `RD_VU_WINDING_PHASE` the
+  convention the disc's lit strips follow (`port/render/rd_internal.h`);
+- a morph (`rd_update_vu_mesh`) keeps the creation's marks, as `JOINED` does; the interpolation's
+  copies take their source's (`rd__vu_mesh_copy_marks`).
+
+No shader reads the mark yet, so no picture changes. Every strip mesh of two triangles or more now
+binds mark bytes (a byte a vertex, rounded up to a qword) where only the marked meshes did; the
+bytes ride in the mesh's own upload.
+
+**The premise.** The prelit rule holds only if the disc's models are wound one way: in a strip
+built so, every triangle of one parity faces one side of `cross(b - a, c - a)`. `rd_mesh`'s
+`winding_disc_0` .. `winding_disc_3` cases measure it on the disc (`port/render/test/rd_mesh_test.c`
+(`windingDiscChecks`), each a quarter of the `*.p2o` models, 77 without the image): for each part
+with normals the share of triangles of strips wound A (the even triangles, k - s = 2, 4, .., face
+the way `cross(b - a, c - a)` points, the odd ones away), B (the reverse), C (a strip with both) and
+D (degenerate); for every part the edges two of its strips share, consistent when the two
+triangles, each as the GS winds it, traverse the edge in opposite directions (the prelit parts
+apart). The rule for the side bands: A or B on at least about 98 % of the lit triangles and the
+prelit parts' shared edges at least about 98 % consistent make `RD_VU_WINDING_PHASE` 0 (A) or 1 (B)
+and the mark is trusted for prelit parts too; otherwise a part whose vertex box holds the eye keeps
+the PS2's drop instead.
+
+| disc | lit triangles | A | B | C | D | prelit parts | shared edges consistent |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| PAL | not yet measured: the cases run where the disc image is | | | | | | |
+
+`RD_VU_WINDING_PHASE` is 0 until the measurement is in.
+
+## Region statistics
+
+`rd_replay_tool --region-stats` (`port/render/tools/rd_replay_region.c`) runs the region rule on the
+CPU over every VU draw of lists 0..6 under it (prelit, lit, skinned and grid draws whose clip mode is
+`REGION`), at the replayed frame's camera (with `--interp` the blended camera and the ticks'):
+each corner's region test (`vu1ref_region_position`, `vu1ref_region_inside_at`), the cut
+(`vu_cut_z`, `vu_cut_rows` in double precision in GS pixels), the card test (`vu1ref_strip_passes`,
+`ICO_VU_MARK_JOINED`, the part joins `rd__join_parts` makes before the replay) and the ticks'
+cameras (`vu_tick_shown`). Per draw: the triangles drawn exactly, clipped (free camera or beside
+the picture), clipped by the card test, dropped with the step that dropped them (a vertex behind the
+eye, step 6; out of the box, step 4; a card, step 5), and rescued by a tick's camera, and the sign of
+the determinant of the x, y and w rows of the draw's model-to-GS matrix (VU memory 16..18, the
+cluster's 4..6: negative where the projection mirrors the model). Totals per list and for the
+frame, which also names the draws that draw nothing as a `--nop` spec (`--region-out FILE` writes
+it). `--region-png FILE` paints the dropped triangles of the frame camera's draws as the GPU would
+have drawn them (red behind the eye, yellow out of the box, cyan a card) on the native frame, the
+4:3 band outlined. A triangle on the picture's edge to a rounding can take the other verdict than
+the shader's; the `rd_region_stats` test checks the draws the stats say draw nothing against the
+replay ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
+
 ## The pre-pass's batches
 
 The vertex and triangle pre-passes ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) make
@@ -666,6 +738,15 @@ wall drawn as the PS2 out of the box and clipped in every other state; a card an
 strip adding nothing; a card joined to a passing strip or through another packet of its part drawn
 as the wall), and the attribute planes' anchor (`port/render/test/rd_native_test.c`, header
 comment). Running the tests is [TESTING.md](TESTING.md).
+
+`rd_mesh` (`port/render/test/rd_mesh_test.c`) checks the winding marks on synthetic strips (a
+prelit mesh of two strips alternating from each strip's start, a lit strip wound one way, one of
+mixed normals, a morph keeping the creation's marks) and, with the disc image, measures the disc's
+winding ([The winding mark](#the-winding-mark)). `rd_region_stats`
+(`port/render/test/rd_region_stats.cmake`) runs `rd_replay_tool --region-stats` on the first two
+dumps of `tools/occlusion_corpus.txt` at Original 4:3 1x and Enhanced 4:3 2x: the lines' shapes,
+and every pass dump the same with the draws the stats say draw nothing left out
+([Region statistics](#region-statistics)).
 
 `rd_vubatch_ab` (`port/render/test/rd_vubatch_ab.cmake`) replays the dumps of
 `tools/vustage_dumps.txt` through the record one draw an entry (`ICO_RD_VU_PREPASS_BATCH=0`) and in

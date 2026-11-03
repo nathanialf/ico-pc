@@ -1097,6 +1097,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   and a line a command; then the plain replay and the replay with `--nop @SPEC`, each `--pass-dump`
   with `--present 640x480` under `ICO_RD_BLEND=fixed`: DISPLAY.png and PRESENT.png byte for byte
   (`rd_occlusion_tool`). SKIP without the list, a dump of it or a device.
+- `rd_region_stats.cmake`: `rd_replay_tool --region-stats`
+  ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the first two dumps of
+  `tools/occlusion_corpus.txt` that are here, each at Original 4:3 1x and Enhanced 4:3 2x with a
+  present: the frame's line (draws and triangles under the rule above 0, the draws drawing nothing a
+  `--nop` spec of lists 0-6 or `none`, as many items as it counts, `--region-out` holding it), a
+  draw's line and a list's in their shapes; then `--pass-dump` plain and with `--nop @SPEC`, every
+  PNG byte for byte (the draws the CPU oracle says draw nothing draw no pixel); at Original the same
+  spec with `--no-device` (`rd_region_stats`). SKIP without the list, a dump of it or a device.
 - `rd_vumerge_ab_pixel`, `rd_vufuse_ab_pixel` and `rd_vustage_ab_pixel`: the two scripts above and
   `rd_vustage_ab.cmake` on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):
@@ -1555,7 +1563,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   columns beside it drawn (`sheetPixels`), and the `photo_veil` shard: the veil's two layers at
   60:9 drawing every pixel with the tiles (`photoVeilPixels`), and the `photo_reel` shard: the film
   reel's four specks of the deja dump at their places on the 16:9 frame, none tiled, every pixel
-  inside a speck's own place and in the 4:3 picture's columns (`photoReelPixels`).
+  inside a speck's own place and in the 4:3 picture's columns (`photoReelPixels`); in the
+  recording phase the winding marks (`windingMarkChecks`, `ICO_VU_MARK_FLIP`,
+  [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-winding-mark)): a prelit mesh of two strips marked at
+  `((k - s) & 1) ^ RD_VU_WINDING_PHASE` from each strip's start, a lit strip wound one way marked at
+  k - s = 2 and 4 from its normals, one of mixed normals triangle by triangle, a morph keeping the
+  creation's marks, no other mark made; and the `winding_disc_0` .. `winding_disc_3` shards (77
+  without the disc image): the disc's strips' winding, a quarter of the models each, one line
+  `winding: L lit triangles, A %, B %, C %; P prelit parts, E % edges consistent` and a line a
+  stage in counts (`windingDiscChecks`).
 - `rd_mip_test.c`: the Enhanced mip chain's size and its builder staying inside it (`rd_mip`).
 - `rd_mirror_test.c`: mirror mode's flag and the flipped presenter output (`rd_mirror`).
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
