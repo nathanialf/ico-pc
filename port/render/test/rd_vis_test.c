@@ -942,6 +942,24 @@ static void checkFrame(void)
     CHECK(vc.exempt == 4u, "frame: %u exempt (code 34, particles, no target, list 11)", vc.exempt);
     CHECK(g_rdPerf.cullDraws == 11u && g_rdPerf.cullSkipped == 5u && g_rdPerf.cullFrustum == 5u,
           "frame: the performance record's counts");
+    uint32_t why[RD_VIS_WHY_COUNT], whySum = 0;
+    rd__vis_why(why);
+    for (int k = 0; k < RD_VIS_WHY_COUNT; k++) {
+        whySum += why[k];
+    }
+    CHECK(whySum == vc.draws && why[RD_VIS_WHY_SKIP_WHOLE] == 5u &&
+              why[RD_VIS_WHY_SKIP_RANGE] == 0u && why[RD_VIS_WHY_KEEP_MESH_1] == 1u &&
+              why[RD_VIS_WHY_CLIP_NONE] == 1u && why[RD_VIS_WHY_PARTICLES] == 1u &&
+              why[RD_VIS_WHY_KEEP_SCISSOR] == 1u && why[RD_VIS_WHY_NO_TARGET] == 1u &&
+              why[RD_VIS_WHY_LIST_2D] == 1u,
+          "frame: the reasons (sum %u of %u): whole %u, one-batch %u, clip none %u, particles "
+          "%u, scissor %u, no target %u, 2D %u",
+          whySum, vc.draws, why[RD_VIS_WHY_SKIP_WHOLE], why[RD_VIS_WHY_KEEP_MESH_1],
+          why[RD_VIS_WHY_CLIP_NONE], why[RD_VIS_WHY_PARTICLES], why[RD_VIS_WHY_KEEP_SCISSOR],
+          why[RD_VIS_WHY_NO_TARGET], why[RD_VIS_WHY_LIST_2D]);
+    CHECK(rd__vis_why_name(RD_VIS_WHY_SKIP_RANGE)[0] != '?' && rd__vis_why_name(-1)[0] == '?' &&
+              rd__vis_why_name(RD_VIS_WHY_COUNT)[0] == '?',
+          "frame: the reason names");
 
     /* a stream written again (a new serial) is bounded again: mLeft's
      * positions moved into view, the lit draws kept */
@@ -981,6 +999,97 @@ static void checkFrame(void)
     printf("  frame: 5 of 11 VU commands skipped into the shadow, the frame kept\n");
 }
 
+/* A mesh of two batches (the first in view, the second left of the frame)
+ * drawn by batch ranges: the stream's box reaches the frame, the second
+ * batch's own box does not, so a draw of it alone is skipped (SKIP_RANGE),
+ * a draw of the first or of both is kept; a stream written again is
+ * measured again. */
+static void checkRange(void)
+{
+    enum { NV = 8, QPV = 3 };
+
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
+    static float st[NV * QPV][4];
+    memset(st, 0, sizeof(st));
+    for (int v = 0; v < NV; v++) {
+        float *p = st[v * QPV];
+        p[0] = (v < 4 ? 2000.0f : 1000.0f) + (float)(v & 1) * 50.0f;
+        p[1] = 2000.0f + (float)((v >> 1) & 1) * 50.0f;
+        p[2] = 1.0f + (float)(v & 3);
+        p[3] = 1.0f;
+        st[v * QPV + QPV - 2][3] = v == 0 || v == 4 ? 0.0f : 1.0f;
+    }
+    uint32_t index[4 * 3];
+    for (int b = 0; b < 2; b++) {
+        for (int k = 0; k < 2; k++) {
+            for (int c = 0; c < 3; c++) {
+                index[(b * 2 + k) * 3 + c] = ICO_VU_INDEX(b * 4 + 2 + k, c);
+            }
+        }
+    }
+    RdVuBatchRec br[2];
+    memset(br, 0, sizeof(br));
+    for (int b = 0; b < 2; b++) {
+        br[b].firstIndex = (uint32_t)b * 6u;
+        br[b].indexCount = 6;
+        br[b].firstVertex = (uint32_t)b * 4u;
+        br[b].vertexCount = 4;
+    }
+    const uint32_t mesh = rd__vu_mesh_create_raw((const float (*)[4])st, NV, QPV, index, 12, br, 2,
+                                                 "vis two batches");
+    CHECK(mesh != 0, "range: the mesh made");
+    static RdFrame f;
+    memset(&f, 0, sizeof(f));
+    rd__reset_state_block(&f.startState);
+    f.number = 9;
+    pushTarget(&f, 0, scene);
+    static const uint32_t ranges[4][2] = {{0, 1}, {1, 1}, {0, 2}, {1, 0}};
+    uint32_t at[4];
+    for (int k = 0; k < 4; k++) {
+        const RdCmd *c =
+            pushVu(&f, 0, RDC_MESH, mesh, RD_PROG_PRELIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+        at[k] = f.lists[0].count - 1;
+        RdVuPayload p;
+        memcpy(&p, f.payload + c->u[1], sizeof(p));
+        p.firstBatch = ranges[k][0];
+        p.batchCount = ranges[k][1];
+        memcpy(f.payload + c->u[1], &p, sizeof(p));
+    }
+    f.closed = 1;
+    static const bool skipped[4] = {false, true, false, true};
+    rd__vis_set_mode(RD_VIS_FRUSTUM);
+    const RdFrame *s = rd__vis_frame(&f, 0);
+    CHECK(s != &f, "range: a shadow made");
+    if (s != &f) {
+        for (int k = 0; k < 4; k++) {
+            CHECK((s->lists[0].cmds[at[k]].type == RDC_NOP) == skipped[k],
+                  "range: draw %d of batches %u + %u %s", k, ranges[k][0], ranges[k][1],
+                  skipped[k] ? "not skipped" : "skipped");
+        }
+    }
+    uint32_t why[RD_VIS_WHY_COUNT];
+    rd__vis_why(why);
+    CHECK(why[RD_VIS_WHY_SKIP_RANGE] == 2u && why[RD_VIS_WHY_SKIP_WHOLE] == 0u &&
+              why[RD_VIS_WHY_KEEP_MESH_1] == 1u && why[RD_VIS_WHY_KEEP_MESH_N] == 1u,
+          "range: reasons: range %u, whole %u, one batch %u, batches %u",
+          why[RD_VIS_WHY_SKIP_RANGE], why[RD_VIS_WHY_SKIP_WHOLE], why[RD_VIS_WHY_KEEP_MESH_1],
+          why[RD_VIS_WHY_KEEP_MESH_N]);
+    /* the second batch moved into view: the per-batch boxes are made again */
+    RdMeshRec *m = rd__mesh_rec(mesh);
+    CHECK(m != NULL, "range: the record");
+    if (m) {
+        for (uint32_t v = 4; v < NV; v++) {
+            m->stream[(size_t)v * QPV][0] += 1000.0f;
+        }
+        rd__mesh_stream_written(m);
+        s = rd__vis_frame(&f, 0);
+        CHECK(s == &f, "range: the moved batch's draws kept");
+    }
+    rd__vis_set_mode(-1);
+    rd__frame_free(&f);
+    printf("  range: 2 of 4 draws of a two-batch mesh skipped by their batch's box\n");
+}
+
 int main(void)
 {
     checkBounds();
@@ -993,6 +1102,7 @@ int main(void)
         return 1;
     }
     checkFrame();
+    checkRange();
     rd_shutdown();
     return ico_check_summary("rd_vis_test");
 }

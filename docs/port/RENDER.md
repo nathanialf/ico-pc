@@ -2087,6 +2087,14 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   away. The chain plane, the later mark's depth bias, the card test, the tick cameras' rule and the
   content table only leave out or move depth, never a position. So the verdict depends only on the
   target's GS size and the payload, the same at every preset, scale and aspect.
+- *The batches' box.* A draw reads the batches `firstBatch` to `firstBatch + batchCount - 1` of its
+  mesh (all of them when `batchCount` is 0, as `doVuDraw` does), and a batch's indices lie in its
+  own vertices (`RdVuBatchRec`). A draw of part of a mesh whose whole stream's box reaches the
+  target is tested again with the union of its batches' boxes (kept per batch on the mesh's entry,
+  made again with the stream's serial); a mesh carrying a sheet's tiles (`tiledFrom`, which a draw
+  out of the box reads too) or a batch outside the stream keeps the whole stream's verdict. The
+  same test on a subset of the vertices, so the same argument. `ICO_RD_CULL_RANGE=0` turns it off
+  for a comparison (`rd_cull_ab` runs with it on).
 - *Not tested.* Particles; code 34 (clip mode none: X and Y wrap to 16 bits); code 36 behind the eye
   (its triangles without a clip flag are drawn at their GS positions whatever `w` is); a draw with
   no target, a payload or a layout the test does not read, or a bound not finite; lists 11 and 12;
@@ -2116,6 +2124,19 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   occluded), T ms ([dev] cull)` and `rd_replay_tool --stats`'s `stats: cull frustum: N of M scene
   draws skipped (F frustum, O occluded), T ms; not tested: E exempt, U unbounded; skipped beyond
   the left ...` (`--cull off|frustum|full` sets the variable; `--occlusion` replays with it off).
+- *Why each command was or was not skipped.* `rd_replay_tool --stats` follows that line with
+  `stats: cull why: <reason> <count>; ...`: one reason a scene draw command, the counts summing to
+  M (`rd_vis.h`, `RD_VIS_WHY_*`). Skipped: by the stream's box, by the batches' box (what only the
+  batches' box took). Not tested: particles, the 2D lists (11, 12), no target, clip none (code 34).
+  Not bounded: no payload, clip unknown, no mesh (no record, a program the layout does not fit, a
+  batch range outside it), no bound (none or not finite), skinned refused, grid refused. Replayed
+  because the bound reaches the target: skinned, grid, scissor mesh (code 36, which is never
+  skipped behind the eye), mesh of several batches (a whole-mesh box too loose for the draw's
+  packets where the batches' box does not help), one-batch mesh (the draw is partly or wholly in
+  the rectangle, or its triangles are, through the box, outside it). `tools/cull_corpus.py` runs
+  the corpus under `--cull off|frustum|full` with `--occlusion`'s count of the draws that put no
+  sample on the screen beside it, and writes `build-host/tmp/v0101/evidence/perf/cull.md`
+  ([TESTING.md](TESTING.md)).
 
 ## Dumps and the replay tool
 

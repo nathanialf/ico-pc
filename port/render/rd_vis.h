@@ -156,6 +156,47 @@ typedef struct RdVisCounts {
 
 void rd__vis_counts(RdVisCounts *out);
 
+/* Why a scene draw command was skipped or replayed, one reason a command
+ * (the last rd__vis_frame's walk; the replay tool's --stats prints them as
+ * "cull why"; the names are rd__vis_why_name's):
+ *   skipped: SKIP_WHOLE (the whole stream's box lies beyond a plane),
+ *     SKIP_RANGE (only the box of the batches the draw reads does);
+ *   exempt: PARTICLES, LIST_2D (lists 11 and 12), NO_TARGET, CLIP_NONE (code
+ *     34);
+ *   unbounded: NO_PAYLOAD (a payload too short or outside the frame),
+ *     CLIP_UNKNOWN, NO_MESH (no mesh record, a program the layout does not
+ *     fit, a batch range outside it), NO_BOX (no or a non-finite bound),
+ *     NO_SKIN (a skinned bound refused or a bone block short), NO_GRID (a
+ *     grid stream the bound refused);
+ *   replayed because the bound reaches the rectangle: KEEP_SKIN, KEEP_GRID,
+ *     KEEP_SCISSOR (a mesh under the scissor code), KEEP_MESH_N (a mesh draw
+ *     of several batches), KEEP_MESH_1 (one batch). */
+enum {
+    RD_VIS_WHY_SKIP_WHOLE = 0,
+    RD_VIS_WHY_SKIP_RANGE,
+    RD_VIS_WHY_PARTICLES,
+    RD_VIS_WHY_LIST_2D,
+    RD_VIS_WHY_NO_TARGET,
+    RD_VIS_WHY_CLIP_NONE,
+    RD_VIS_WHY_NO_PAYLOAD,
+    RD_VIS_WHY_CLIP_UNKNOWN,
+    RD_VIS_WHY_NO_MESH,
+    RD_VIS_WHY_NO_BOX,
+    RD_VIS_WHY_NO_SKIN,
+    RD_VIS_WHY_NO_GRID,
+    RD_VIS_WHY_KEEP_SKIN,
+    RD_VIS_WHY_KEEP_GRID,
+    RD_VIS_WHY_KEEP_SCISSOR,
+    RD_VIS_WHY_KEEP_MESH_N,
+    RD_VIS_WHY_KEEP_MESH_1,
+    RD_VIS_WHY_COUNT
+};
+
+/* the last rd__vis_frame's count of commands a reason; sums to counts.draws
+ * (zeros when the walk did not run) */
+void rd__vis_why(uint32_t out[RD_VIS_WHY_COUNT]);
+const char *rd__vis_why_name(int why);
+
 #ifdef __cplusplus
 }
 #endif

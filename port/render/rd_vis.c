@@ -450,6 +450,11 @@ typedef struct VisEntry {
     bool boxOk, skinTried;
     RdVisBox box;
     RdVisSkin *skin; /* skinned meshes: made on their first skinned draw */
+    /* the box of each batch's vertices (batchN of them; bbOk: every batch
+     * bounded), made on the first draw of a part of the mesh */
+    RdVisBox *bb;
+    uint32_t batchN;
+    bool bbTried, bbOk;
 } VisEntry;
 
 static struct {
@@ -469,7 +474,38 @@ static struct {
     VisEntry scratch;
     RdVisSkin scratchSkin;
     RdVisCounts last;
-} s_vis = {.forced = -1};
+    uint32_t why[RD_VIS_WHY_COUNT]; /* the last walk's, by reason */
+    int whyCur;                     /* the command being decided */
+    bool range;                     /* the batch-range box (ICO_RD_CULL_RANGE) */
+} s_vis = {.forced = -1, .range = true};
+
+static const char *const s_whyNames[RD_VIS_WHY_COUNT] = {"skipped by the stream's box",
+                                                         "skipped by the batches' box",
+                                                         "particles",
+                                                         "2D lists",
+                                                         "no target",
+                                                         "clip none",
+                                                         "no payload",
+                                                         "clip unknown",
+                                                         "no mesh",
+                                                         "no bound",
+                                                         "skinned refused",
+                                                         "grid refused",
+                                                         "skinned reaches",
+                                                         "grid reaches",
+                                                         "scissor mesh reaches",
+                                                         "mesh of batches reaches",
+                                                         "one-batch mesh reaches"};
+
+const char *rd__vis_why_name(int why)
+{
+    return why >= 0 && why < RD_VIS_WHY_COUNT ? s_whyNames[why] : "?";
+}
+
+void rd__vis_why(uint32_t out[RD_VIS_WHY_COUNT])
+{
+    memcpy(out, s_vis.why, sizeof(s_vis.why));
+}
 
 static int modeOf(const char *v)
 {
@@ -497,6 +533,9 @@ void rd__vis_init(void)
     s_vis.inited = true;
     s_vis.src = NULL;
     memset(&s_vis.last, 0, sizeof(s_vis.last));
+    memset(s_vis.why, 0, sizeof(s_vis.why));
+    const char *rg = getenv("ICO_RD_CULL_RANGE"); /* 0: the stream's box alone, a comparison */
+    s_vis.range = !(rg && (strcmp(rg, "0") == 0 || strcmp(rg, "off") == 0));
     rd__log("cull: %s ([dev] cull, ICO_RD_CULL%s%s)%s", rd__vis_mode_name(s_vis.mode),
             e && e[0] ? " = " : "", e && e[0] ? e : "",
             s_vis.mode == RD_VIS_OFF ? ": every scene draw replayed"
@@ -574,7 +613,68 @@ static VisEntry *entryOf(uint32_t id, const RdMeshRec *m)
     e->stream = m->stream;
     e->boxOk = rd__vis_box((const float (*)[4])m->stream, m->vertexCount, m->qwPerVertex, &e->box);
     e->skinTried = false;
+    free(e->bb);
+    e->bb = NULL;
+    e->batchN = 0;
+    e->bbTried = e->bbOk = false;
     return e;
+}
+
+/* The box of the vertices of batches first .. last - 1 of mesh m (the ones a
+ * draw reads: its indices lie in its batches' own vertices, rd_internal.h
+ * RdVuBatchRec); false when a batch lies outside the stream, the mesh
+ * carries a sheet's tiles (a draw out of the box reads them too), or the
+ * range holds no vertex. Per-batch boxes are kept on the entry; the scratch
+ * entry (a stream never written through the serial) is measured each time. */
+static bool rangeBox(VisEntry *e, const RdMeshRec *m, uint32_t first, uint32_t last, RdVisBox *out)
+{
+    memset(out, 0, sizeof(*out));
+    if (!m->batches || m->tiledFrom || first >= last || last > m->batchCount) {
+        return false;
+    }
+    const uint32_t qpv = m->qwPerVertex;
+    const bool keep = e != &s_vis.scratch;
+    if (keep && !e->bbTried) {
+        e->bbTried = true;
+        e->bb = calloc(m->batchCount, sizeof(RdVisBox));
+        e->batchN = e->bb ? m->batchCount : 0;
+        e->bbOk = e->bb != NULL;
+        for (uint32_t b = 0; e->bbOk && b < m->batchCount; b++) {
+            const RdVuBatchRec *br = &m->batches[b];
+            e->bbOk = (uint64_t)br->firstVertex + br->vertexCount <= m->vertexCount &&
+                      rd__vis_box((const float (*)[4])m->stream + (size_t)br->firstVertex * qpv,
+                                  br->vertexCount, qpv, &e->bb[b]);
+        }
+    }
+    if (keep && (!e->bbOk || e->batchN != m->batchCount)) {
+        return false;
+    }
+    for (uint32_t b = first; b < last; b++) {
+        RdVisBox t;
+        const RdVisBox *bx = keep ? &e->bb[b] : &t;
+        if (!keep) {
+            const RdVuBatchRec *br = &m->batches[b];
+            if ((uint64_t)br->firstVertex + br->vertexCount > m->vertexCount ||
+                !rd__vis_box((const float (*)[4])m->stream + (size_t)br->firstVertex * qpv,
+                             br->vertexCount, qpv, &t)) {
+                memset(out, 0, sizeof(*out));
+                return false;
+            }
+        }
+        if (bx->n == 0) {
+            continue;
+        }
+        if (out->n == 0) {
+            *out = *bx;
+        } else {
+            for (int k = 0; k < 4; k++) {
+                out->lo[k] = bx->lo[k] < out->lo[k] ? bx->lo[k] : out->lo[k];
+                out->hi[k] = bx->hi[k] > out->hi[k] ? bx->hi[k] : out->hi[k];
+            }
+            out->n += bx->n;
+        }
+    }
+    return out->n != 0;
 }
 
 static const RdVisSkin *skinOf(VisEntry *e, const RdMeshRec *m)
@@ -606,16 +706,19 @@ static int cmdVerdict(VisWalk *w, int l, const RdCmd *c, const RdStateBlock *st)
     const RdFrame *f = w->f;
     if (c->type == RDC_PARTICLES || l > VIS_LAST_LIST) {
         w->n.exempt++; /* the particles (v1), the 2D layer's lists */
+        s_vis.whyCur = c->type == RDC_PARTICLES ? RD_VIS_WHY_PARTICLES : RD_VIS_WHY_LIST_2D;
         return RD_VIS_KEEP;
     }
     const RdTargetRec *tc = st->color ? rd__target_rec(st->color) : NULL;
     if (!tc) {
         w->n.exempt++;
+        s_vis.whyCur = RD_VIS_WHY_NO_TARGET;
         return RD_VIS_KEEP;
     }
     const uint64_t after = sizeof(RdVuPayload) + sizeof(RdVuBlock);
     if (!f->payload || c->u[2] < after || (uint64_t)c->u[1] + c->u[2] > f->payloadSize) {
         w->n.unbounded++;
+        s_vis.whyCur = RD_VIS_WHY_NO_PAYLOAD;
         return RD_VIS_KEEP;
     }
     const uint8_t *pay = f->payload + c->u[1];
@@ -623,10 +726,12 @@ static int cmdVerdict(VisWalk *w, int l, const RdCmd *c, const RdStateBlock *st)
     memcpy(&p, pay, sizeof(p));
     if (p.clip == RD_VU_CLIP_NONE) {
         w->n.exempt++; /* code 34: X and Y wrap to 16 bits */
+        s_vis.whyCur = RD_VIS_WHY_CLIP_NONE;
         return RD_VIS_KEEP;
     }
     if (p.clip != RD_VU_CLIP_REGION && p.clip != RD_VU_CLIP_SCISSOR) {
         w->n.unbounded++;
+        s_vis.whyCur = RD_VIS_WHY_CLIP_UNKNOWN;
         return RD_VIS_KEEP;
     }
     const bool scissor = p.clip == RD_VU_CLIP_SCISSOR;
@@ -635,6 +740,7 @@ static int cmdVerdict(VisWalk *w, int l, const RdCmd *c, const RdStateBlock *st)
     const RdVisRect r = rd__vis_rect(st->gsW, st->gsH, tc->w, tc->h);
     int v = RD_VIS_KEEP;
     bool bounded = false;
+    int why = RD_VIS_WHY_NO_MESH; /* until a bound is made */
     if (c->type == RDC_MESH || c->type == RDC_SKINNED) {
         const bool skin = c->type == RDC_SKINNED;
         const bool progOk = skin ? (p.prog == RD_PROG_SKIN || p.prog == RD_PROG_SKIN_SPEC)
@@ -644,9 +750,31 @@ static int cmdVerdict(VisWalk *w, int l, const RdCmd *c, const RdStateBlock *st)
             p.firstBatch < m->batchCount) {
             VisEntry *e = entryOf(c->u[0], m);
             w->noMemory = w->noMemory || !e;
+            why = skin ? RD_VIS_WHY_NO_SKIN : RD_VIS_WHY_NO_BOX;
             if (e && !skin && e->boxOk && e->box.n) {
                 bounded = true;
                 v = rd__vis_test((const float (*)[4]) & mem[16], &e->box, scissor, &r);
+                why = scissor            ? RD_VIS_WHY_KEEP_SCISSOR
+                      : p.batchCount > 1 ? RD_VIS_WHY_KEEP_MESH_N
+                                         : RD_VIS_WHY_KEEP_MESH_1;
+                /* the draw reads some of the mesh's batches (doVuDraw's
+                 * range): their own box may lie off the target when the
+                 * whole stream's does not */
+                uint32_t last = p.firstBatch + p.batchCount;
+                if (last > m->batchCount || p.batchCount == 0) {
+                    last = m->batchCount;
+                }
+                RdVisBox rb;
+                if (v == RD_VIS_KEEP && s_vis.range &&
+                    (p.firstBatch != 0 || last != m->batchCount) &&
+                    rangeBox(e, m, p.firstBatch, last, &rb)) {
+                    v = rd__vis_test((const float (*)[4]) & mem[16], &rb, scissor, &r);
+                    if (v != RD_VIS_KEEP) {
+                        why = RD_VIS_WHY_SKIP_RANGE;
+                    }
+                } else if (v != RD_VIS_KEEP) {
+                    why = RD_VIS_WHY_SKIP_WHOLE;
+                }
             } else if (e && skin && (uint64_t)after + (uint64_t)p.boneQw * 16u <= c->u[2]) {
                 const RdVisSkin *s = skinOf(e, m);
                 w->noMemory = w->noMemory || !s;
@@ -654,10 +782,12 @@ static int cmdVerdict(VisWalk *w, int l, const RdCmd *c, const RdStateBlock *st)
                     bounded = true;
                     const float (*bones)[4] = (const float (*)[4])(const void *)(pay + after);
                     v = rd__vis_test_skin((const float (*)[4])mem, bones, p.boneQw, s, &r);
+                    why = v == RD_VIS_KEEP ? RD_VIS_WHY_KEEP_SKIN : RD_VIS_WHY_SKIP_WHOLE;
                 }
             }
         }
     } else if (c->type == RDC_GRID) {
+        why = RD_VIS_WHY_NO_GRID;
         const uint64_t at = after + (uint64_t)p.boneQw * 16u;
         if ((p.prog == RD_PROG_GRID || p.prog == RD_PROG_GRID_LIT) &&
             at + (uint64_t)p.streamQw * 16u <= c->u[2]) {
@@ -668,12 +798,14 @@ static int cmdVerdict(VisWalk *w, int l, const RdCmd *c, const RdStateBlock *st)
                 b.n) {
                 bounded = true;
                 v = rd__vis_test((const float (*)[4]) & mem[16], &b, scissor, &r);
+                why = v == RD_VIS_KEEP ? RD_VIS_WHY_KEEP_GRID : RD_VIS_WHY_SKIP_WHOLE;
             }
         }
     }
     if (!bounded) {
         w->n.unbounded++;
     }
+    s_vis.whyCur = why;
     return v;
 }
 
@@ -686,6 +818,7 @@ static void visWalk(void *user, int list, uint32_t index, const RdCmd *c, const 
     w->n.draws++;
     const int v = cmdVerdict(w, list, c, st);
     w->n.byVerdict[v]++;
+    s_vis.why[s_vis.whyCur]++;
     if (v == RD_VIS_KEEP) {
         return;
     }
@@ -703,6 +836,8 @@ static void visWalk(void *user, int list, uint32_t index, const RdCmd *c, const 
             w->noMemory = true;
             w->n.byVerdict[v]--;
             w->n.byVerdict[RD_VIS_KEEP]++;
+            s_vis.why[s_vis.whyCur]--;
+            s_vis.why[RD_VIS_WHY_KEEP_MESH_1]++;
             return; /* drawn */
         }
         s_vis.capSkip = cap;
@@ -731,8 +866,10 @@ const RdFrame *rd__vis_frame(const RdFrame *f, int keep)
     s_vis.src = NULL;
     if (!f || rd__vis_mode() == RD_VIS_OFF || g_rdWin.first || f->number == 0) {
         memset(&s_vis.last, 0, sizeof(s_vis.last));
+        memset(s_vis.why, 0, sizeof(s_vis.why));
         return f;
     }
+    memset(s_vis.why, 0, sizeof(s_vis.why));
     const double t0 = rd__now_ms();
     VisWalk w;
     memset(&w, 0, sizeof(w));
@@ -781,6 +918,9 @@ const RdFrame *rd__vis_frame(const RdFrame *f, int keep)
             w.noMemory = true;
             w.n.byVerdict[RD_VIS_KEEP] += w.n.skipped;
             w.n.skipped = w.n.frustum = 0;
+            s_vis.why[RD_VIS_WHY_KEEP_MESH_1] +=
+                s_vis.why[RD_VIS_WHY_SKIP_WHOLE] + s_vis.why[RD_VIS_WHY_SKIP_RANGE];
+            s_vis.why[RD_VIS_WHY_SKIP_WHOLE] = s_vis.why[RD_VIS_WHY_SKIP_RANGE] = 0;
         }
     }
     if (w.noMemory) {

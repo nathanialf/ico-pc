@@ -263,7 +263,8 @@
  *                         MODE: N of M scene draws skipped (F frustum, O
  *                         occluded), T ms" (M the VU draw commands walked,
  *                         N those replayed as NOPs) and what it did not
- *                         test
+ *                         test, then "stats: cull why: <reason> <count>; ..."
+ *                         (one reason a command, rd_vis.h RD_VIS_WHY_*)
  *   --occlusion-out FILE  (with --occlusion) writes SPEC to FILE, for
  *                         --nop @FILE
  *   --occlusion-csv FILE  (with --occlusion) writes a line a command of the
@@ -2738,6 +2739,14 @@ int main(int argc, char **argv)
                    pr->cullFrustum, pr->cullOccluded, pr->cullMs, vc.exempt, vc.unbounded,
                    vc.byVerdict[RD_VIS_LEFT], vc.byVerdict[RD_VIS_RIGHT], vc.byVerdict[RD_VIS_TOP],
                    vc.byVerdict[RD_VIS_BOTTOM], vc.byVerdict[RD_VIS_NEAR]);
+            /* one reason a command, every reason named (the sum is M) */
+            uint32_t why[RD_VIS_WHY_COUNT];
+            rd__vis_why(why);
+            printf("%s: stats: cull why:", dump);
+            for (int k = 0; k < RD_VIS_WHY_COUNT; k++) {
+                printf("%s %s %u", k ? ";" : "", rd__vis_why_name(k), why[k]);
+            }
+            printf("\n");
         }
         uint32_t satDraws = 0;
         const uint64_t sat = satZVertices(rf, &satDraws);
