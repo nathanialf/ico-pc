@@ -821,16 +821,62 @@ uint64_t pace_next_present(uint64_t nextPresent, uint64_t startNs, uint64_t gap)
  * frame already shown by the render thread's times, which only the render
  * thread measures.
  *
- * pace_rt_estimate: the estimate after a picture took sampleNs (its reads,
- * or the whole picture): the sample when it is higher, else the estimate
- * falling by an eighth of the difference a picture (one slow picture, a
- * stage's textures uploaded, holds it a few pictures; 0: the sample).
+ * pace_rt_estimate: the estimate after a picture took sampleNs (its present
+ * call's wait, PACE_RT_BEHIND's): the sample when it is higher, else the
+ * estimate falling by an eighth of the difference a picture (one slow
+ * picture, a stage's textures uploaded, holds it a few pictures; 0: the
+ * sample).  A recent maximum: the reads, the whole job, the interpolation
+ * and the submit thread's job the rule plans by are typical times instead
+ * (PaceRtTyp).
  *
  * pace_rt_busy_left: how long the render thread's picture in progress
  * still takes at nowNs: estNs less its time so far (sinceNs: when it
  * started, 0: none in progress; 0 once past the estimate). */
 uint64_t pace_rt_estimate(uint64_t estNs, uint64_t sampleNs);
 uint64_t pace_rt_busy_left(uint64_t nowNs, uint64_t sinceNs, uint64_t estNs);
+
+/* The share of the deviation a typical time takes over its mean (PaceRtTyp,
+ * PaceStepTyp): half the deviation (the square root of varNs), at most a
+ * quarter of the mean.  Not the mean and one deviation: on the phone that
+ * planned a step closing a frame of about 9 ms at 9.9-12.0 ms (a deviation
+ * of 1-3 ms) and a picture's reads of about 10 ms at their recent longest,
+ * 10-18 ms; the pictures' misses past a typical time are the back-off's
+ * (PaceStepEst: the floor, the widened margin, the third miss's strict
+ * plan), and the quarter keeps a run of long ones from planning every
+ * frame at their longest. */
+uint64_t pace_typ_share_ns(uint64_t meanNs, uint64_t varNs);
+
+/* A render thread's time as the rule plans by (render_thread.c: a picture's
+ * reads, its whole job, its reads less their waits, its interpolation, the
+ * submit thread's job): a decaying mean, a sixteenth of the way a picture
+ * (a picture's weight under 2 % after 60), its decaying variance, the plan
+ * the mean and pace_typ_share_ns.  A sample over PACE_RT_TYP_CLAMP times the
+ * mean whose sample before was not over it counts as that much (a spike: a
+ * pipeline's first use, a stage's textures; it raises the plan by its share
+ * only); two in a row are the scene's time and count in full.  Samples over
+ * PACE_RT_TYP_MAX_NS count as that (a stall; and the square in range).  The
+ * phone (rc11, a PowerVR phone's log): reads of 9.5-10.5 ms on average with
+ * a deviation of about 2.5 ms planned at their recent longest, 10.2-17.7 ms,
+ * the interpolation's 3.3-4.0 at 5.0-8.7 ms, held nearly every picture
+ * between frames.  A recent maximum (pace_rt_estimate) stays for the
+ * present call's wait, whose hold (PACE_RT_BEHIND) is for the long ones. */
+#define PACE_RT_TYP_SHIFT 4u
+#define PACE_RT_TYP_CLAMP 2u
+#define PACE_RT_TYP_MAX_NS 250000000ull
+
+typedef struct PaceRtTyp {
+    uint64_t meanNs; /* the decaying mean (n 0: none yet) */
+    uint64_t varNs;  /* its decaying variance, ns squared */
+    unsigned n;      /* samples taken */
+    bool over;       /* the last sample was over PACE_RT_TYP_CLAMP times the mean */
+} PaceRtTyp;
+
+/* One picture's time sampleNs (0 counts: an interpolation not made) */
+void pace_rt_typ_note(PaceRtTyp *t, uint64_t sampleNs);
+/* The typical time: the mean and its share of the deviation (0: no sample) */
+uint64_t pace_rt_typ_ns(const PaceRtTyp *t);
+/* The deviation (the square root of the variance), for the 10 s line */
+uint64_t pace_rt_typ_dev_ns(const PaceRtTyp *t);
 
 /* True when a further present of a frame already shown, handed over at
  * nowNs, would run into the next step: posted once the picture in progress
@@ -946,7 +992,9 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
 /* The step's typical own time, for the steps of one kind (pace_step_typ_note):
  * a decaying mean (an eighth of the way a step of that kind) and its
  * deviation (the square root of the variance decaying the same way), the
- * plan their sum.  The game's frame is two steps (a frame every two
+ * plan the mean and the deviation's share (pace_typ_share_ns: half of it,
+ * at most a quarter of the mean; the whole deviation planned the phone's
+ * 9 ms step closing a frame at 9.9-12.0 ms).  The game's frame is two steps (a frame every two
  * vsyncs): the one that closes the frame carries the game's work (8-10 ms
  * on a PowerVR phone in play, every slow step of its log at the vsync
  * that closes a frame), the one between frames under 1 ms; a recent
@@ -969,8 +1017,11 @@ typedef struct PaceStepTyp {
 /* One step of t's kind, its own time ownNs (0: not known, nothing done),
  * load: it did the game's loading work */
 void pace_step_typ_note(PaceStepTyp *t, uint64_t ownNs, uint64_t periodNs, bool load);
-/* The kind's typical time: the mean and one deviation (0: no sample yet) */
+/* The kind's typical time: the mean and the deviation's share (0: no sample
+ * yet) */
 uint64_t pace_step_typ_ns(const PaceStepTyp *t);
+/* The kind's deviation (the square root of the variance), for the 10 s line */
+uint64_t pace_step_typ_dev_ns(const PaceStepTyp *t);
 
 /* Whether the step ahead steps from now closes a game frame: the last
  * step closed one sinceClose steps ago (0: the step just run closed one),

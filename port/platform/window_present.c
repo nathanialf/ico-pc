@@ -198,10 +198,10 @@ static void step_note(Uint64 period, bool closed)
     const PaceStepAct act = pace_step_est_note(&s_pres.stepEst, own, missed, late, byPictures);
     const PaceStepEst *e = &s_pres.stepEst;
 
-    ico_render_thread_note_step(waited, missed, late, backedOff,
-                                pace_step_plan_ns(&s_pres.stepEst, true, period),
-                                pace_step_plan_ns(&s_pres.stepEst, false, period), e->widenNs,
-                                typ->skipped != skipped0, (int)act);
+    ico_render_thread_note_step(
+        waited, missed, late, backedOff, pace_step_plan_ns(&s_pres.stepEst, true, period),
+        pace_step_plan_ns(&s_pres.stepEst, false, period), e->widenNs, e->typ[1].meanNs,
+        pace_step_typ_dev_ns(&e->typ[1]), typ->skipped != skipped0, (int)act);
     if (!missed || !rd_interpolation_active() || ico_render_thread_mode() != FM_MODE_ON) {
         return;
     }

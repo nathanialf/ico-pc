@@ -301,9 +301,63 @@ void pace_step_typ_note(PaceStepTyp *t, uint64_t ownNs, uint64_t periodNs, bool 
     t->n++;
 }
 
+uint64_t pace_typ_share_ns(uint64_t meanNs, uint64_t varNs)
+{
+    const uint64_t half = isqrt_u64(varNs) / 2u;
+    const uint64_t quarter = meanNs / 4u;
+
+    return half < quarter ? half : quarter;
+}
+
 uint64_t pace_step_typ_ns(const PaceStepTyp *t)
 {
-    return t->n != 0 ? t->meanNs + isqrt_u64(t->varNs) : 0;
+    return t->n != 0 ? t->meanNs + pace_typ_share_ns(t->meanNs, t->varNs) : 0;
+}
+
+void pace_rt_typ_note(PaceRtTyp *t, uint64_t sampleNs)
+{
+    uint64_t x = sampleNs > PACE_RT_TYP_MAX_NS ? PACE_RT_TYP_MAX_NS : sampleNs;
+
+    if (t->n == 0) {
+        t->meanNs = x;
+        t->varNs = 0;
+        t->over = false;
+        t->n = 1;
+        return;
+    }
+    if (x > PACE_RT_TYP_CLAMP * t->meanNs) {
+        if (!t->over) {
+            /* a spike: counted at the clamp, its share only */
+            t->over = true;
+            x = PACE_RT_TYP_CLAMP * t->meanNs;
+        }
+    } else {
+        t->over = false;
+    }
+    {
+        const uint64_t w = 1ull << PACE_RT_TYP_SHIFT;
+        const uint64_t d = x > t->meanNs ? x - t->meanNs : t->meanNs - x;
+
+        t->meanNs = x > t->meanNs ? t->meanNs + (d >> PACE_RT_TYP_SHIFT)
+                                  : t->meanNs - (d >> PACE_RT_TYP_SHIFT);
+        t->varNs = t->varNs - (t->varNs >> PACE_RT_TYP_SHIFT) + d * d * (w - 1u) / (w * w);
+    }
+    t->n++;
+}
+
+uint64_t pace_rt_typ_ns(const PaceRtTyp *t)
+{
+    return t->n != 0 ? t->meanNs + pace_typ_share_ns(t->meanNs, t->varNs) : 0;
+}
+
+uint64_t pace_rt_typ_dev_ns(const PaceRtTyp *t)
+{
+    return t->n != 0 ? isqrt_u64(t->varNs) : 0;
+}
+
+uint64_t pace_step_typ_dev_ns(const PaceStepTyp *t)
+{
+    return t->n != 0 ? isqrt_u64(t->varNs) : 0;
 }
 
 bool pace_step_closes(unsigned sinceClose, unsigned ahead, unsigned frameSteps)

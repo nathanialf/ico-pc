@@ -2658,11 +2658,17 @@ static void testStepRule(void)
    (pace_policy.h PaceStepTyp, pace_step_plan_ns, pace_step_closes,
    pace_rt_step_miss's afterNs / nextBetween).  Numbers from
    build-host/tmp/v098/evidence/pace3/typ_cells.py (.out), the C line for
-   line.  A phone's steps (its 10 s line: step 4.4-5.1 ms; every slow step
-   line at the vsync that closes a frame, 8-10.8 ms): the step that closes a
-   frame carries the game's work, the one between frames under 1 ms.  The
-   recent maximum of both (pace_rt_estimate) plans every step at 8.4 ms, one
-   mean of both and its deviation at 8.6 ms; by kind 9.6 ms and 0.5 ms */
+   line, the plans re-run with the deviation's share (pace_typ_share_ns:
+   half the deviation, at most a quarter of the mean;
+   build-host/tmp/v098/evidence/pace4/typ_cells.py, .out).  A phone's steps
+   (its 10 s line: step 4.4-5.1 ms; every slow step line at the vsync that
+   closes a frame, 8-10.8 ms): the step that closes a frame carries the
+   game's work, the one between frames under 1 ms.  The recent maximum of
+   both (pace_rt_estimate) plans every step at 8.4 ms; by kind 9.2 ms and
+   0.5 ms (the mean and one deviation: 9.6 ms).  A 15 ms closing step among
+   9 ms ones plans the next at 10.7 ms (one deviation: 11.7), 9.5 ms 16
+   steps later; a run of 6 and 16 ms steps in turn at the mean and a
+   quarter of it (13.2 ms; one deviation: 15.7) */
 static void testStepTyp(void)
 {
     const uint64_t P = 16683333ull;
@@ -2678,21 +2684,23 @@ static void testStepTyp(void)
         CHECK(t.meanNs == 9 * MS && t.varNs == 0 && pace_step_typ_ns(&t) == 9 * MS);
         pace_step_typ_note(&t, 10 * MS, P, false);
         CHECK(t.meanNs == 9125000u && t.varNs == 109375000000ull);
-        CHECK(pace_step_typ_ns(&t) == 9455718u);
+        CHECK(pace_step_typ_ns(&t) == 9290359u);
+        CHECK(pace_step_typ_dev_ns(&t) == 330718u);
         pace_step_typ_note(&t, 8 * MS, P, false);
         CHECK(t.meanNs == 8984375u && t.varNs == 234130859375ull);
-        CHECK(pace_step_typ_ns(&t) == 9468245u);
+        CHECK(pace_step_typ_ns(&t) == 9226310u);
         /* an isolated step over the period: the game's, left out */
         pace_step_typ_note(&t, 40 * MS, P, false);
         CHECK(t.meanNs == 8984375u && t.varNs == 234130859375ull && t.skipped == 1 && t.over);
         pace_step_typ_note(&t, 9 * MS, P, false);
         CHECK(t.meanNs == 8986328u && t.varNs == 204891204834ull && !t.over);
-        CHECK(pace_step_typ_ns(&t) == 9438977u);
+        CHECK(pace_step_typ_ns(&t) == 9212652u);
         /* two over it in a row: the scene's time, the second counts */
         pace_step_typ_note(&t, 20 * MS, P, false);
         pace_step_typ_note(&t, 20 * MS, P, false);
         CHECK(t.skipped == 2 && t.meanNs == 10363037u && t.varNs == 13446573498997ull);
-        CHECK(pace_step_typ_ns(&t) == 14029993u);
+        CHECK(pace_step_typ_ns(&t) == 12196515u);
+        CHECK(pace_step_typ_dev_ns(&t) == 3666956u);
         /* the game's loading work: left out */
         pace_step_typ_note(&t, 9 * MS, P, true);
         CHECK(t.skipped == 3 && t.meanNs == 10363037u);
@@ -2717,10 +2725,39 @@ static void testStepTyp(void)
             old = pace_rt_estimate(old, MS / 2);
         }
         CHECK(close.meanNs == 8777902u && close.varNs == 674988560645ull);
-        CHECK(pace_step_typ_ns(&close) == 9599478u);
+        CHECK(pace_step_typ_ns(&close) == 9188690u);
         CHECK(pace_step_typ_ns(&between) == MS / 2);
-        CHECK(both.meanNs == 4390129u && pace_step_typ_ns(&both) == 8589957u);
+        CHECK(both.meanNs == 4390129u && pace_step_typ_ns(&both) == 5487661u);
         CHECK(old == 8375000u);
+    }
+    {
+        /* a rare long closing step raises the plan by its share; a run of
+           long ones by a quarter of the mean at most */
+        PaceStepTyp t;
+
+        memset(&t, 0, sizeof t);
+        for (unsigned i = 0; i < 40; i++) {
+            pace_step_typ_note(&t, 9 * MS, P, false);
+        }
+        CHECK(pace_step_typ_ns(&t) == 9 * MS);
+        pace_step_typ_note(&t, 15 * MS, P, false);
+        CHECK(pace_step_typ_ns(&t) == 10742156u && pace_step_typ_dev_ns(&t) == 1984313u);
+        pace_step_typ_note(&t, 9 * MS, P, false);
+        CHECK(pace_step_typ_ns(&t) == 10592577u);
+        for (unsigned i = 0; i < 15; i++) {
+            pace_step_typ_note(&t, 9 * MS, P, false);
+        }
+        CHECK(pace_step_typ_ns(&t) == 9450307u);
+        memset(&t, 0, sizeof t);
+        for (unsigned i = 0; i < 8; i++) {
+            pace_step_typ_note(&t, 6 * MS, P, false);
+            pace_step_typ_note(&t, 16 * MS, P, false);
+        }
+        CHECK(t.meanNs == 10703642u && pace_step_typ_dev_ns(&t) == 4991209u);
+        CHECK(pace_step_typ_ns(&t) == 10703642u + 10703642u / 4u);
+        CHECK(pace_typ_share_ns(9 * MS, 4 * MS * MS) == MS);
+        CHECK(pace_typ_share_ns(4 * MS, 9 * MS * MS) == MS); /* the quarter */
+        CHECK(pace_typ_share_ns(0, 9 * MS * MS) == 0);
     }
     {
         /* the plan by kind: the estimate before a sample, the widening
@@ -2778,11 +2815,122 @@ static void testStepTyp(void)
     }
 }
 
+/* A render thread's time as the rule plans by (pace_policy.h PaceRtTyp:
+   the decaying mean, a sixteenth a picture, and half its deviation, at most
+   a quarter of the mean; a lone sample over twice the mean counted at twice
+   the mean).  Numbers from build-host/tmp/v098/evidence/pace4/typ_cells.py
+   (.out), the C line for line.  rc11 (a PowerVR phone's log): reads of
+   about 10 ms with a deviation of 2.5 ms planned at their recent longest,
+   10.2-17.7 ms; the typical time of the same reads 10.5-12.0 ms */
+static void testRtTyp(void)
+{
+    {
+        PaceRtTyp t;
+
+        memset(&t, 0, sizeof t);
+        CHECK(pace_rt_typ_ns(&t) == 0 && pace_rt_typ_dev_ns(&t) == 0);
+        pace_rt_typ_note(&t, 10 * MS);
+        CHECK(t.n == 1 && t.meanNs == 10 * MS && t.varNs == 0 && pace_rt_typ_ns(&t) == 10 * MS);
+        pace_rt_typ_note(&t, 12 * MS);
+        CHECK(t.meanNs == 10125000u && t.varNs == 234375000000ull);
+        CHECK(pace_rt_typ_ns(&t) == 10367061u);
+        pace_rt_typ_note(&t, 8 * MS);
+        CHECK(t.meanNs == 9992188u && t.varNs == 484313964843ull);
+        CHECK(pace_rt_typ_ns(&t) == 10340151u && pace_rt_typ_dev_ns(&t) == 695926u);
+        /* a 100 ms spike counts as twice the mean: the plan rises by its
+           share (11.9 ms), not to the spike (a recent maximum: 100 ms; the
+           spike in full: 19.5 ms) */
+        pace_rt_typ_note(&t, 100 * MS);
+        CHECK(t.over && t.meanNs == 10616699u && t.varNs == 6304268230361ull);
+        CHECK(pace_rt_typ_ns(&t) == 11872114u);
+        pace_rt_typ_note(&t, 10 * MS);
+        CHECK(!t.over && t.meanNs == 10578156u && pace_rt_typ_ns(&t) == 11795995u);
+        /* the decay: 60 pictures after it, 0.2 ms over the 10 ms */
+        for (unsigned i = 0; i < 59; i++) {
+            pace_rt_typ_note(&t, 10 * MS);
+        }
+        CHECK(t.meanNs == 10012840u && t.varNs == 138943463880ull);
+        CHECK(pace_rt_typ_ns(&t) == 10199215u);
+    }
+    {
+        /* two in a row over twice the mean: the scene's time, the second
+           counted in full */
+        PaceRtTyp t;
+
+        memset(&t, 0, sizeof t);
+        for (unsigned i = 0; i < 10; i++) {
+            pace_rt_typ_note(&t, 10 * MS);
+        }
+        pace_rt_typ_note(&t, 30 * MS);
+        CHECK(t.meanNs == 10625000u && t.over);
+        pace_rt_typ_note(&t, 30 * MS);
+        CHECK(t.meanNs == 11835937u && t.varNs == 27488708496093ull && t.over);
+        CHECK(pace_rt_typ_ns(&t) == 14457420u);
+    }
+    {
+        /* 0 counts (no interpolation made), and the way back from it */
+        PaceRtTyp t;
+
+        memset(&t, 0, sizeof t);
+        pace_rt_typ_note(&t, 0);
+        pace_rt_typ_note(&t, 0);
+        CHECK(t.n == 2 && t.meanNs == 0 && pace_rt_typ_ns(&t) == 0);
+        pace_rt_typ_note(&t, 4 * MS);
+        CHECK(t.meanNs == 0 && t.over);
+        pace_rt_typ_note(&t, 4 * MS);
+        CHECK(t.n == 4 && t.meanNs == 250000u && t.varNs == 937500000000ull);
+        CHECK(pace_rt_typ_ns(&t) == 312500u);
+    }
+    {
+        /* a stall counts as PACE_RT_TYP_MAX_NS at most */
+        PaceRtTyp t;
+
+        memset(&t, 0, sizeof t);
+        pace_rt_typ_note(&t, 10 * MS);
+        pace_rt_typ_note(&t, 900 * MS);
+        pace_rt_typ_note(&t, 900 * MS);
+        CHECK(t.meanNs == 25585937u && t.varNs == 3362937927246093ull);
+        CHECK(pace_rt_typ_ns(&t) == 31982421u);
+    }
+    {
+        /* rc11's reads (pace4/rc11_load.py: 61 pictures in tenths of a ms,
+           a mean of 10 ms and a deviation of 2.5 ms), 300 pictures */
+        static const unsigned short reads[61] = {
+            75,  107, 96,  56,  105, 121, 141, 80,  113, 113, 156, 124, 73, 109, 91,  128,
+            147, 80,  69,  91,  120, 72,  85,  109, 65,  93,  88,  66,  99, 79,  140, 125,
+            118, 87,  111, 58,  103, 119, 96,  159, 73,  108, 99,  91,  69, 150, 124, 94,
+            77,  106, 87,  136, 123, 64,  101, 83,  107, 66,  81,  93,  98};
+        PaceRtTyp t;
+        uint64_t old = 0, lo = UINT64_MAX, hi = 0, oldLo = UINT64_MAX, oldHi = 0;
+
+        memset(&t, 0, sizeof t);
+        for (unsigned i = 0; i < 300; i++) {
+            const uint64_t x = (uint64_t)reads[i % 61u] * MS / 10u;
+
+            pace_rt_typ_note(&t, x);
+            old = pace_rt_estimate(old, x);
+            if (i >= 60) {
+                const uint64_t p = pace_rt_typ_ns(&t);
+
+                lo = p < lo ? p : lo;
+                hi = p > hi ? p : hi;
+                oldLo = old < oldLo ? old : oldLo;
+                oldHi = old > oldHi ? old : oldHi;
+            }
+        }
+        CHECK(t.meanNs == 10027194u && pace_rt_typ_dev_ns(&t) == 2495688u);
+        CHECK(pace_rt_typ_ns(&t) == 11275038u);
+        CHECK(lo == 10514577u && hi == 11963847u);
+        CHECK(oldLo == 9650000u && oldHi == 15900000u);
+    }
+}
+
 int main(void)
 {
     PaceHist h = {0};
     testStepRule();
     testStepTyp();
+    testRtTyp();
     testBudgetDiscWait126();
     testBudgetRule();
     testBudgetUnbound();

@@ -37,16 +37,23 @@ static struct {
     Uint64 slotWaitNs;
     /* the pictures handed over as the game thread plans further presents
        by them (ico_render_thread_plan): their reads (the hand-over) and
-       their whole time, estimated (pace_policy.h pace_rt_estimate); the
-       render thread writes them, the game thread reads them, no lock */
+       their whole time, their typical times (pace_policy.h PaceRtTyp: a
+       decaying mean and half its deviation); the render thread writes
+       them, the game thread reads them, no lock */
     Uint64 readsEst, pictureEst;
-    /* and the present call's wait of those pictures (the same estimate) */
+    /* and the present call's wait of those pictures (its recent longest,
+       pace_rt_estimate: PACE_RT_BEHIND's) */
     Uint64 presentEst;
     /* and their reads less the waits inside them (the fence, the submit
        thread, the acquire), their interpolation and the submit thread's
-       job: the game thread predicts a further picture's reads by them
-       (pace_policy.h PaceRtPipe) */
+       job, typical times too: the game thread predicts a further picture's
+       reads by them (pace_policy.h PaceRtPipe) */
     Uint64 cpuEst, interpEst, submitEst;
+    /* the reads' mean and deviation, for the 10 s line */
+    Uint64 readsMean, readsDev;
+    /* the estimates' state, the render thread's alone: reads, whole job,
+       own reads, interpolation, the submit thread's job */
+    PaceRtTyp readsTyp, pictureTyp, cpuTyp, interpTyp, submitTyp;
     /* the further presents the game thread held back by them in the 10 s
        block, by why (pace_policy.h PaceRtHold; the game thread's) */
     unsigned held, heldMiss, heldOverrun, heldBehind;
@@ -65,6 +72,8 @@ static struct {
        widening; the steps left out of the typical times in the block */
     Uint64 stepPlanBetweenNs, stepWidenNs;
     unsigned leftOut;
+    /* the closing step's mean and deviation as last noted */
+    Uint64 stepCloseMean, stepCloseDev;
 } s_rt;
 
 /* the cores (cpu_place.h): their speeds, read once at the first start, the
@@ -311,9 +320,9 @@ static int SDLCALL rt_main(void *u)
             if (sub != 0) {
                 /* the submit thread's job finished since (the picture
                    before's, one picture late) */
-                const Uint64 e = __atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED);
-
-                __atomic_store_n(&s_rt.submitEst, pace_rt_estimate(e, sub), __ATOMIC_RELAXED);
+                pace_rt_typ_note(&s_rt.submitTyp, sub);
+                __atomic_store_n(&s_rt.submitEst, pace_rt_typ_ns(&s_rt.submitTyp),
+                                 __ATOMIC_RELAXED);
             }
 
             if (pres != 0) {
@@ -324,19 +333,23 @@ static int SDLCALL rt_main(void *u)
                 __atomic_store_n(&s_rt.presentEst, pace_rt_estimate(e, pres), __ATOMIC_RELAXED);
             }
             if (reads != 0) {
-                const Uint64 r = __atomic_load_n(&s_rt.readsEst, __ATOMIC_RELAXED);
-                const Uint64 w = __atomic_load_n(&s_rt.pictureEst, __ATOMIC_RELAXED);
-
-                __atomic_store_n(&s_rt.readsEst, pace_rt_estimate(r, reads), __ATOMIC_RELAXED);
-                __atomic_store_n(&s_rt.pictureEst, pace_rt_estimate(w, t1 - t0), __ATOMIC_RELAXED);
-                /* the reads of its own: less the waits (at least 1 ns, 0 is
-                   "not known") */
-                const Uint64 c = __atomic_load_n(&s_rt.cpuEst, __ATOMIC_RELAXED);
-                const Uint64 i = __atomic_load_n(&s_rt.interpEst, __ATOMIC_RELAXED);
+                /* the typical times, not the longest (pace_policy.h
+                   PaceRtTyp): the reads of its own less the waits (at
+                   least 1 ns, 0 is "not known") */
                 const uint64_t own = reads > waits ? reads - waits : 1u;
 
-                __atomic_store_n(&s_rt.cpuEst, pace_rt_estimate(c, own), __ATOMIC_RELAXED);
-                __atomic_store_n(&s_rt.interpEst, pace_rt_estimate(i, interp < own ? interp : own),
+                pace_rt_typ_note(&s_rt.readsTyp, reads);
+                pace_rt_typ_note(&s_rt.pictureTyp, t1 - t0);
+                pace_rt_typ_note(&s_rt.cpuTyp, own);
+                pace_rt_typ_note(&s_rt.interpTyp, interp < own ? interp : own);
+                __atomic_store_n(&s_rt.readsEst, pace_rt_typ_ns(&s_rt.readsTyp), __ATOMIC_RELAXED);
+                __atomic_store_n(&s_rt.pictureEst, pace_rt_typ_ns(&s_rt.pictureTyp),
+                                 __ATOMIC_RELAXED);
+                __atomic_store_n(&s_rt.cpuEst, pace_rt_typ_ns(&s_rt.cpuTyp), __ATOMIC_RELAXED);
+                __atomic_store_n(&s_rt.interpEst, pace_rt_typ_ns(&s_rt.interpTyp),
+                                 __ATOMIC_RELAXED);
+                __atomic_store_n(&s_rt.readsMean, s_rt.readsTyp.meanNs, __ATOMIC_RELAXED);
+                __atomic_store_n(&s_rt.readsDev, pace_rt_typ_dev_ns(&s_rt.readsTyp),
                                  __ATOMIC_RELAXED);
             }
         }
@@ -560,6 +573,13 @@ FmMode ico_render_thread_start(void)
         s_rt.slotWaitNs = 0;
         s_rt.readsEst = s_rt.pictureEst = s_rt.presentEst = 0;
         s_rt.cpuEst = s_rt.interpEst = s_rt.submitEst = 0;
+        s_rt.readsMean = s_rt.readsDev = 0;
+        memset(&s_rt.readsTyp, 0, sizeof(s_rt.readsTyp));
+        memset(&s_rt.pictureTyp, 0, sizeof(s_rt.pictureTyp));
+        memset(&s_rt.cpuTyp, 0, sizeof(s_rt.cpuTyp));
+        memset(&s_rt.interpTyp, 0, sizeof(s_rt.interpTyp));
+        memset(&s_rt.submitTyp, 0, sizeof(s_rt.submitTyp));
+        s_rt.stepCloseMean = s_rt.stepCloseDev = 0;
         s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
         s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = s_rt.pictureMisses = 0;
         s_rt.smallMisses = s_rt.widens = s_rt.fallbacks = 0;
@@ -746,7 +766,7 @@ void ico_render_thread_note_held(int why)
 
 void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t missNs, bool backedOff,
                                  uint64_t planCloseNs, uint64_t planBetweenNs, uint64_t widenNs,
-                                 bool leftOut, int act)
+                                 uint64_t closeMeanNs, uint64_t closeDevNs, bool leftOut, int act)
 {
     const bool byPictures = act != PACE_STEP_NONE;
 
@@ -766,6 +786,8 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
     s_rt.stepPlanNs = planCloseNs;
     s_rt.stepPlanBetweenNs = planBetweenNs;
     s_rt.stepWidenNs = widenNs;
+    s_rt.stepCloseMean = closeMeanNs;
+    s_rt.stepCloseDev = closeDevNs;
     s_rt.leftOut += leftOut ? 1u : 0u;
 }
 
@@ -845,10 +867,12 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
                  "game thread; %u further presents held back (%u would have made the step miss "
                  "its period, %u while a picture ran past its estimate, %u while the presents "
                  "waited for the display or the GPU; a picture holds the renderer for %.1f ms "
-                 "(%.1f ms of its own, %.1f ms of it the interpolation; the rest its waits for "
-                 "the GPU and the submit thread), takes %.1f ms, "
-                 "its present waits %.1f ms, the submit thread's part %.1f ms; the steps planned "
-                 "at %.1f ms closing a frame and %.1f ms between frames (their typical time, %.1f "
+                 "typically (its mean %.1f ms and half its deviation of %.1f ms; %.1f ms of its "
+                 "own, %.1f ms of it the interpolation; the rest its waits for the GPU and the "
+                 "submit thread), takes %.1f ms, "
+                 "its present waits %.1f ms at the longest lately, the submit thread's part %.1f "
+                 "ms; the steps planned at %.1f ms closing a frame (its mean %.1f ms, its "
+                 "deviation %.1f ms) and %.1f ms between frames (their typical time, %.1f "
                  "ms of it the margin widened after a miss; %u long steps of the game's own left "
                  "out)); steps started late by the pictures: %u (longest %.1f ms); steps "
                  "that missed their period: %u (%u the pictures': %u under %.0f ms, %u widened "
@@ -858,12 +882,15 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
                  s_rt.mode == FM_MODE_SYNC ? ", sync" : "", tb.interpMs, tb.walkMs, tb.submitMs,
                  tb.waitMs, tb.retired, held, heldMiss, heldOverrun, heldBehind,
                  (double)__atomic_load_n(&s_rt.readsEst, __ATOMIC_RELAXED) / 1e6,
+                 (double)__atomic_load_n(&s_rt.readsMean, __ATOMIC_RELAXED) / 1e6,
+                 (double)__atomic_load_n(&s_rt.readsDev, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.cpuEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.interpEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.pictureEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.presentEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED) / 1e6,
-                 (double)s_rt.stepPlanNs / 1e6, (double)s_rt.stepPlanBetweenNs / 1e6,
+                 (double)s_rt.stepPlanNs / 1e6, (double)s_rt.stepCloseMean / 1e6,
+                 (double)s_rt.stepCloseDev / 1e6, (double)s_rt.stepPlanBetweenNs / 1e6,
                  (double)s_rt.stepWidenNs / 1e6, leftOut, lateStarts, lateStartMaxMs, misses,
                  pictureMisses, smallMisses, (double)PACE_STEP_MISS_FLOOR_NS / 1e6, widens,
                  fallbacks, PACE_STEP_MISS_WINDOW, misses - pictureMisses, missMaxMs, backoffSteps);
