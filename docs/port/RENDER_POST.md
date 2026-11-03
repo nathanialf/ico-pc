@@ -243,11 +243,15 @@ level under every blend and every filter, one value over the rows it covers; a s
 rounds. Counting, on each kind of row (between the bars, in a bar), the steps between levels after
 the last 0x80 one, the plan takes any number at scale 1 under an exact blend, one at scale 1 under
 the fixed-function blend (each such step a level from the blender's at most; two would add their
-levels), and none above 1x (the filter rounds its sum and the step its product: in either order
-some channels end two levels apart even for one step of a small factor, by a CPU model of a
-rounding and of a truncating bilinear in `rd_fades_fold_test.c`). So above 1x the steady letterbox
-bars and a fade at full black fold, a fade or the bars on their way in or out and a stage's
-brightness step are drawn. Whether the sprites blend exactly is the asked exact mode's own usage
+levels), and one above 1x under either blend (the filter rounds its sum and the step its product:
+by a CPU model of a rounding and of a truncating bilinear in `rd_fades_fold_test.c` some channels
+can end two levels apart for one step of a small factor; measured on the dumps, below, one level
+at most on a small share of the pixels). So above 1x the steady letterbox bars, a fade at full
+black and the brightness setting's step fold; a fade between levels with the bars between levels
+on their rows (two steps there) is drawn. The brightness step is in every frame of play (white at
+7/128 at the phone's setting), so above 1x on a tile-based GPU list 11's pass on SCENE went with it
+whenever nothing else drew in list 11: 1.2-1.3 ms a picture on the PowerVR phone in play and on the
+menus (its log of 2026-11-02). Whether the sprites blend exactly is the asked exact mode's own usage
 bit on SCENE (`rd__fades_fold_exact`: `RD_DST_USAGE_STORAGE` under storage,
 `RD_DST_USAGE_ATTACHMENT` under attachment).
 
@@ -287,7 +291,11 @@ sprites drawn (`build-host/tmp/v095/after/w3/pd`, machine-local; the fixed-funct
 pixels, by one level on most of those and two at most (none more); at Enhanced 2x 4:3 and at the phone's fractional
 scales (2364x1080 at 2.189 under the PowerVR profile fakes, eight dumps wide enough; 1440x1080 at
 4:3) only the 2D frame `plain/rd-00300` folds (two sprites, steady black bars) and DISPLAY and the
-present are the same bytes. `ICO_RD_FADES_FOLD=0` is the tests' way to draw the sprites into SCENE
+present are the same bytes. The brightness step above 1x, modelled the same way on main's tool (the
+step applied to DISPLAY replayed without the sprites, against DISPLAY with them;
+`build-host/tmp/v098/evidence/gpuround/scripts/foldsweep.sh`, the PowerVR fakes): at the phone's
+Resolution Auto on its 16 F12 frames within one level on 0.17 to 15 % of DISPLAY's pixels, at
+Enhanced 2x 4:3 within one level (one pixel two) on 5 to 30 %, at a 1920x1080 window's Resolution (2.26 x 2.41, the reduction again texel for texel) within one level on 0.17 to 15 % (four dumps); under the exact blend (`[dev] blend = attachment`) at the phone's setting byte for byte and at Enhanced 2x 4:3 within one level on 4.6 %. `ICO_RD_FADES_FOLD=0` is the tests' way to draw the sprites into SCENE
 as before (`rd_gsbase` reads SCENE back; `rd_present`, `rd_crt`, `rd_interp`, `rd_pixel`,
 `rd_boot_present` and `menu_text` hold golden bytes of frames with them; and `rd_fades_fold_ab`'s
 drawn arm); it is no config key. Each replay's

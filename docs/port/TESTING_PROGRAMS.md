@@ -899,7 +899,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `gs_fold_applies`'s rows (the count, a bar step on the bars' rows only, no bar); above 1x, a
   bilinear of four taps modelled as two lerps of 8-bit weights (rounded, then truncated): a step
   of factor 0 or 0x80 the same bytes before or after it (the count of channels two levels apart
-  for a step between levels printed, why the plan takes none above 1x); `rd__fades_fold_exact`'s
+  for a step between levels printed: the model's worst case; the plan takes one such step a row
+  above 1x, and refuses a fade and bars both between levels on the bars' rows there);
+  `rd__fades_fold_exact`'s
   table (the attachment read's usage bit under attachment, the storage read's under storage); the
   cases of `rd_gsbase` (the fade (200, 100, 7) at 50, the brightness at 12, the letterbox at 25 over
   rows 0 to 57 and from 455 on, and their chains) recorded through `rd_post`, planned, and every
