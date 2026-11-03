@@ -16,7 +16,9 @@
  * cpu_place_pin keeps the calling thread to a set of cores
  * (sched_setaffinity; Linux and Android only: elsewhere it does nothing and
  * says so).  The window uses it on Android only, for the render thread and
- * the submit thread, with [dev] big_cores = false as the diagnostic escape.
+ * the submit thread (the render thread alone on a single fastest core, the
+ * submit thread on the next ones: cpu_place_split), with [dev] big_cores =
+ * false as the diagnostic escape.
  */
 #ifndef ICO_CPU_PLACE_H
 #define ICO_CPU_PLACE_H
@@ -63,6 +65,15 @@ size_t cpu_place_classes_text(const CpuClasses *c, char *out, size_t cap);
    every known core has one speed or none is known */
 uint64_t cpu_place_slow_mask(const CpuClasses *c);
 uint64_t cpu_place_fast_mask(const CpuClasses *c);
+/* The cores for the render thread and the submit thread when the fastest
+   speed is a single core's and other cores are faster than the slowest
+   (a phone's prime core: "0-1 2.2 GHz, 2-6 3.1 GHz, 7 3.8 GHz"): render
+   that core alone, submit the other faster cores (the next class), true.
+   Else both the faster cores (cpu_place_fast_mask; 0 with one speed or
+   none known), false: two fastest cores or more, or the fastest the only
+   one faster than the slowest (the submit thread is not put on the
+   slowest cores, nor two threads on one core) */
+bool cpu_place_split(const CpuClasses *c, uint64_t *render, uint64_t *submit);
 /* "0-3, 7"; "none" for 0; the length written */
 size_t cpu_place_mask_text(uint64_t mask, char *out, size_t cap);
 

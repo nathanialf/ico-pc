@@ -227,6 +227,30 @@ uint64_t cpu_place_fast_mask(const CpuClasses *c)
     return m;
 }
 
+bool cpu_place_split(const CpuClasses *c, uint64_t *render, uint64_t *submit)
+{
+    const uint64_t fast = cpu_place_fast_mask(c);
+    uint32_t hi = 0;
+    int top = -1, tops = 0;
+
+    *render = *submit = fast;
+    for (int i = 0; i < c->count && i < CPU_PLACE_MAX; i++) {
+        hi = c->khz[i] > hi ? c->khz[i] : hi;
+    }
+    for (int i = 0; hi != 0 && i < c->count && i < CPU_PLACE_MAX; i++) {
+        if (c->khz[i] == hi) {
+            top = i;
+            tops++;
+        }
+    }
+    if (fast == 0 || tops != 1 || (fast & ~((uint64_t)1 << top)) == 0) {
+        return false;
+    }
+    *render = (uint64_t)1 << top;
+    *submit = fast & ~*render;
+    return true;
+}
+
 size_t cpu_place_mask_text(uint64_t mask, char *out, size_t cap)
 {
     size_t len = 0;

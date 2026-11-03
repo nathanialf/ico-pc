@@ -9,6 +9,11 @@
  *     an 8-core phone (0-3 1.8 GHz, 4-6 2.6 GHz, 7 3.1 GHz) with core 5's
  *     file missing (offline) and a core past the last; the text, the
  *     slowest and the faster masks; one speed for all gives no masks;
+ *   the split (cpu_place_split): rc9's phone (0-1 2.2 GHz, 2-6 3.1 GHz, 7
+ *     3.8 GHz) gives the render thread core 7 alone and the submit thread
+ *     2-6; an 8-core 4+3+1 phone 7 and 4-6; no split with two fastest
+ *     cores, with the fastest the only one faster than the slowest, with
+ *     one speed, or with none known;
  *   the masks' text: runs, single cores, none;
  *   the 10 s part word for word: three threads, a thread with no samples,
  *     one with no core known, the slowest-core shares, S left out;
@@ -136,6 +141,50 @@ static void testClasses(const char *dir)
 }
 #endif
 
+/* the classes from speeds in MHz (0: not known) */
+static void classesOf(CpuClasses *c, const unsigned *mhz, int n)
+{
+    memset(c, 0, sizeof(*c));
+    c->count = n;
+    for (int i = 0; i < n; i++) {
+        c->khz[i] = mhz[i] * 1000u;
+    }
+}
+
+static void testSplit(void)
+{
+    static const unsigned rc9[] = {2200, 2200, 3100, 3100, 3100, 3100, 3100, 3800};
+    static const unsigned phone[] = {1800, 1800, 1800, 1800, 2600, 2600, 2600, 3100};
+    static const unsigned twoTop[] = {1800, 1800, 1800, 1800, 2600, 2600, 3100, 3100};
+    static const unsigned oneFast[] = {1800, 1800, 1800, 1800, 1800, 1800, 1800, 3100};
+    static const unsigned flat[] = {2000, 2000, 2000, 2000};
+    static const unsigned unknownTop[] = {1800, 1800, 2600, 2600, 0, 3100, 2600, 2600};
+    CpuClasses c;
+    uint64_t r, s;
+    char t[64];
+
+    classesOf(&c, rc9, 8);
+    CHECK(cpu_place_split(&c, &r, &s) && r == 0x80u && s == 0x7cu);
+    (void)cpu_place_mask_text(s, t, sizeof(t));
+    CHECK_STR(t, "2-6");
+    classesOf(&c, phone, 8);
+    CHECK(cpu_place_split(&c, &r, &s) && r == 0x80u && s == 0x70u);
+    /* a core whose speed is not known is in neither */
+    classesOf(&c, unknownTop, 8);
+    CHECK(cpu_place_split(&c, &r, &s) && r == 0x20u && s == 0xccu);
+    /* two fastest cores: both threads on the faster cores, as before */
+    classesOf(&c, twoTop, 8);
+    CHECK(!cpu_place_split(&c, &r, &s) && r == 0xf0u && s == 0xf0u);
+    /* the fastest the only one faster than the slowest: not the submit
+       thread on the slowest, not both on one core: as before */
+    classesOf(&c, oneFast, 8);
+    CHECK(!cpu_place_split(&c, &r, &s) && r == 0x80u && s == 0x80u);
+    classesOf(&c, flat, 4);
+    CHECK(!cpu_place_split(&c, &r, &s) && r == 0 && s == 0);
+    memset(&c, 0, sizeof(c));
+    CHECK(!cpu_place_split(&c, &r, &s) && r == 0 && s == 0);
+}
+
 static void testText(void)
 {
     char s[256];
@@ -231,6 +280,7 @@ int main(int argc, char **argv)
     (void)argc;
     (void)argv;
 #endif
+    testSplit();
     testText();
     testThread();
     if (fails) {
