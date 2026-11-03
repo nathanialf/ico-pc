@@ -102,6 +102,17 @@ typedef struct RdVuMeshDesc {
     const RdVuBatchDesc *batches;
     uint32_t materialCount;
     const char *debugName;
+    /* The triangles' facing, from the EE (Packet.c, the packet's build: the
+     * p2o strip records' normals, prelit parts included): bit v (of
+     * facing[v >> 3], LSB first) set when the triangle the strip kicks at
+     * vertex v (its corners v-2, v-1, v in the stream's order, numbered
+     * across the batches without their GIF tags) winds against the sum of
+     * its three normals; facingCount the stream's vertex count.  NULL when
+     * the EE has none: a lit or skinned mesh takes its marks from the
+     * stream's normals, a prelit one has none (rd_mesh.c markWinding,
+     * ICO_VU_MARK_FLIP; the region rule's side bands are off for it) */
+    const uint8_t *facing;
+    uint32_t facingCount;
 } RdVuMeshDesc;
 
 /* Builds, once:
@@ -131,6 +142,29 @@ RdMesh rd_create_vu_mesh(const RdVuMeshDesc *desc);
  * seki side to build it again from its packet; false too for a mesh
  * rd_vu_mesh_retire marked stale). */
 bool rd_update_vu_mesh(RdMesh m, const float (*qw)[4]);
+
+/* The EE's facing tables (RdVuMeshDesc.facing; Packet.c's packet builder,
+ * the game thread only).  A packet's table is made while its strips are
+ * written: rd_vu_facing_begin when the packet starts, then
+ * rd_vu_facing_vertex for every vertex in the stream's order (stripFirst
+ * on the first vertex of each strip; pos the p2o record's position, nrm
+ * its normal, NULL when the record has none, which voids the packet's
+ * table).  Bit v is set when the triangle kicked at vertex v (v-2, v-1, v,
+ * the third vertex of its strip or later) winds against na + nb + nc:
+ * dot(cross(b - a, c - a), na + nb + nc) < 0 in double, rd_mesh.c's
+ * markWinding's test.  rd_vu_facing_attach, where the packet's mesh desc
+ * is made: the table being made, when it has d's vertex count, is kept
+ * under d's mesh hash (rd_vu_mesh_desc_hash), so a mesh built again later
+ * from the same packet (an eviction, a morph copy, a model pack refusal)
+ * finds it; d->facing and d->facingCount are set from the table kept under
+ * d's hash (none: left as they are).  A hash two different tables were
+ * kept under has none (counted and logged).  The tables live until the
+ * process ends (about a bit a vertex of every packet built: the whole
+ * disc's geometry is about half a megabyte; the store is emptied past
+ * 32 MiB, logged). */
+void rd_vu_facing_begin(void);
+void rd_vu_facing_vertex(int stripFirst, const float *pos, const float *nrm);
+void rd_vu_facing_attach(RdVuMeshDesc *d);
 void rd_destroy_vu_mesh(RdMesh m);
 bool rd_vu_mesh_valid(RdMesh m);
 

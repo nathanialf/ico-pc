@@ -32,6 +32,9 @@
  *              are recreated
  *   dump v14   a tick's frame loads without the ticks' cameras; a blended
  *              frame's (hasTickCams, tickCams) round-trip
+ *   dump v15   a prelit mesh's EE facing table (its FLIP marks,
+ *              facingFrom RD_MESH_FACING_TABLE) round-trips; the same file
+ *              as version 14 loads the mesh without facing
  *   dump v10   the native frame (aspect, wExact, cullW) after gsH round-trips
  *              and peeks (rd__dump_peek); a version 9 dump loads as the 4:3
  *              frame; a header the renderer cannot size is refused; the
@@ -1032,6 +1035,99 @@ static void testDumpBlock(const char *dir)
         CHECK(0, "tick cameras: dump loaded");
     }
     remove(path);
+}
+
+/* Dump version 15: a prelit mesh made with the EE's facing table
+ * (RdVuMeshDesc.facing: the region rule's side bands' only facing for a
+ * stream without normals) keeps its FLIP marks through a dump; the same
+ * file with its version word 14 loads the mesh without them (the section
+ * after the ticks' cameras is not read), as an older dump's prelit meshes */
+static void testDumpFacing(const char *dir)
+{
+    static float qw[1 + 5 * 3][4];
+    memset(qw, 0, sizeof(qw));
+    const uint32_t tag = 0x8005u;
+    memcpy(&qw[0][0], &tag, 4);
+    for (int k = 0; k < 5; k++) {
+        qw[1 + k * 3][0] = (float)(k / 2);
+        qw[1 + k * 3][1] = (float)(k & 1);
+        qw[1 + k * 3][3] = 1.0f;
+        qw[1 + k * 3 + 1][2] = 1.0f;
+        qw[1 + k * 3 + 1][3] = k == 0 ? 0.0f : 1.0f; /* strip flag */
+        qw[1 + k * 3 + 2][3] = 127.0f;
+    }
+    const uint8_t bits = 0x18u; /* kicks 3 and 4 wind against their normals */
+    const RdVuBatchDesc bd = {0, 0, 0};
+    RdVuMeshDesc md;
+    memset(&md, 0, sizeof(md));
+    md.qw = (const float (*)[4])qw;
+    md.qwCount = 1 + 5 * 3;
+    md.qwPerVertex = RD_VU_QW_PRELIT;
+    md.batchCount = 1;
+    md.batches = &bd;
+    md.materialCount = 1;
+    md.facing = &bits;
+    md.facingCount = 5;
+    const RdMesh m = rd_create_vu_mesh(&md);
+    const RdMeshRec *mr = rd__mesh_rec(m.id);
+    CHECK(mr && mr->facingFrom == RD_MESH_FACING_TABLE &&
+              (rd__mesh_kick_mark(mr, 3) & ICO_VU_MARK_FLIP) != 0u &&
+              (rd__mesh_kick_mark(mr, 2) & ICO_VU_MARK_FLIP) == 0u,
+          "facing: the mesh takes the EE's table");
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 32;
+    RdXform xf;
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_draw_vu_mesh(m, &d, RD_KEY(&xf, 0, 0));
+    rd_end_frame(0);
+    char path[1100];
+    snprintf(path, sizeof(path), "%s/rd_state_test_facing.rddump", dir);
+    CHECK(rd__dump_frame(rd__last_frame(), path), "facing: dump written");
+    for (int pass = 0; pass < 2; pass++) {
+        if (pass == 1) {
+            /* the same file as version 14 */
+            long size = 0;
+            uint8_t *buf = slurp(path, &size);
+            const uint32_t v14 = 14u;
+            if (!buf || size < 12) {
+                CHECK(0, "facing: dump read back");
+                free(buf);
+                break;
+            }
+            memcpy(buf + 8, &v14, 4);
+            CHECK(spit(path, buf, size), "facing: version 14 written");
+            free(buf);
+        }
+        RdFrame g;
+        if (!rd__load_frame(path, &g)) {
+            CHECK(0, "facing: dump loaded (version %u)", pass ? 14u : RD_DUMP_VERSION);
+            continue;
+        }
+        const RdMeshRec *lr = NULL;
+        for (uint32_t i = 0; i < g.lists[0].count && !lr; i++) {
+            if (g.lists[0].cmds[i].type == RDC_MESH) {
+                lr = rd__mesh_rec(g.lists[0].cmds[i].u[0]);
+            }
+        }
+        if (pass == 0) {
+            CHECK(lr && lr->facingFrom == RD_MESH_FACING_TABLE &&
+                      (rd__mesh_kick_mark(lr, 3) & ICO_VU_MARK_FLIP) != 0u &&
+                      (rd__mesh_kick_mark(lr, 4) & ICO_VU_MARK_FLIP) != 0u &&
+                      (rd__mesh_kick_mark(lr, 2) & ICO_VU_MARK_FLIP) == 0u,
+                  "facing: the table round-trips (from %d)", lr ? (int)lr->facingFrom : -1);
+        } else {
+            CHECK(lr && lr->facingFrom == RD_MESH_FACING_NONE &&
+                      (rd__mesh_kick_mark(lr, 3) & ICO_VU_MARK_FLIP) == 0u,
+                  "facing: a version 14 dump's prelit mesh has no facing (from %d)",
+                  lr ? (int)lr->facingFrom : -1);
+        }
+        rd__frame_free(&g);
+    }
+    remove(path);
+    rd_destroy_vu_mesh(m);
 }
 
 /* Dump version 10: the native frame after gsH (aspect, wExact, cullW) round
@@ -3322,6 +3418,7 @@ int main(int argc, char **argv)
     testDump(dir);
     testDumpV10(dir);
     testDumpBlock(dir);
+    testDumpFacing(dir);
     testDumpSheetV11(dir);
     testAa1Plans();
     testAa1DatePairs();
