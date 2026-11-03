@@ -23,7 +23,7 @@ sprite model ([RENDER_POST.md](RENDER_POST.md#post-passes), "The staticBlur spri
 | `port/render/rd_blur_border.c` | the strip drawn after the blur's first pass (`glowEdge`, from `rd__blur_post_sprite`) |
 | `port/render/rd_glow_hold.c` | the glow between ticks: WORK3 kept in WORK3_HELD at a tick's first present, the chain skipped and the copy pasted at its later ones (`rd__glow_hold`) |
 | `ico2/sugipon/src/staticBlur.c` | the effects, their rectangles in the PS2's numbers and the port's widening (`SB_X`, `sbShrinkAt`, `sbShrinkSpan`, `sbWorkRect`) |
-| `port/render/rd_crack_fill.c` | the crack fill armed at the fog and drawn after lists 4-6 (`rd__crack_fill`, `rd__crack_fill_late`) |
+| `port/render/rd_crack_fill.c` | the crack fill armed at the fog and drawn after lists 4-6 where `rd__crack_fill_place` puts it (`rd__crack_fill`, `rd__crack_fill_at`, `rd__crack_fill_in_pass`, `rd__crack_fill_late`) |
 | `port/render/rd_profile.c`, `port/render/rd_local_probe.c` | the desktop's local reads (`RdProfile.desktopLocal`) and their start-up cost probe (`rd__local_probe`) |
 | `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
 | `port/render/rd_replay.c`, `port/render/rd_shadow_one.c`, `port/render/rd_shadow_selftest.c`, `port/shaders/blit.hlsl` | the shadow count in one draw (`shadowCountOne` picks the destination, `rd__shadow_one_draw` draws `shadow_count_ps`) and its start-up self-test (`rd__shadow_selftest`) |
@@ -358,16 +358,20 @@ sprites differ in colour between the ticks, so they still cross-fade.
 ## The crack fill after lists 4-6
 
 The crack filler is described in [RENDER_POST.md](RENDER_POST.md#crack-filling-above-1x). SCENE's own fog
-arms it (`rd__crack_fill` from `doFog`) and the walk draws it at the start of list 7
-(`rd__crack_fill_late` from the list loop in `port/render/rd_replay.c`, every list from 7 on, the
-same replay only): the snapshot of SCENE's colour (`rd__replay_take_snap`) ends the pass open there,
+arms it (`rd__crack_fill` from `doFog`) and the walk draws it from the start of list 7 on, the
+same replay only, where `rd__crack_fill_place` puts it (`rd__crack_fill_at` before each command of
+the list loop in `port/render/rd_replay.c`: after the glow's `cleanUpFB` with RGB alone, or as the
+first draw of the aura's paste pass, else before the first command that may read or write SCENE;
+[RENDER_POST.md](RENDER_POST.md#the-fills-place-after-list-7)): the snapshot of SCENE's colour
+(`rd__replay_take_snap`) ends the pass open there,
 SCENE's depth goes to `RHI_STATE_DEPTH_READ` and is sampled where it is, and the fill's own pass
 binds SCENE's colour alone, loaded and stored (`fillWork`); the next pass that binds the depth
 takes it back to DEPTH_WRITE. So nothing breaks the scene pass at the fog: on the fog's local read
 (`RD_FOG_LOCAL`: a tile-based GPU, and desktop Vulkan where its probe kept the local reads,
 [below](#the-desktops-local-read-and-its-probe)) the fog and lists 4-6 draw in the scene pass the
-draws before them opened, and the pass ends at list 7, where the glow's, the depth of field's or the
-aura's passes begin anyway; on the other paths the fog's own pass and lists 4-6's are as without
+draws before them opened (and the glow's `cleanUpFB` after them), and the pass ends where the
+glow's, the depth of field's or the aura's passes end it anyway; in the aura's rooms the fill is
+drawn in the paste's pass, no pass of its own; on the other paths the fog's own pass and lists 4-6's are as without
 the fill. Against the fill before the fog (which ended the scene pass for copies of SCENE's colour
 and depth and began it again with both loaded, then dropped the depth's store at its end): one copy
 fewer (the depth's, 8 bytes a texel), the store and load of colour and depth at the break gone, the
@@ -379,7 +383,9 @@ tool's `gpu:` line. The picture differs from the fill before the fog at the crac
 [RENDER_POST.md](RENDER_POST.md#crack-filling-above-1x), [DIVERGENCES.md](DIVERGENCES.md) VD-20). Tests:
 `rd_crack_tiler`, `rd_crack_tiler_on`, `rd_crack_tiler_fold`, `rd_crack_tiler_fold_mali` (the
 local read: one pass more than without the filler, the fill's own; SCENE equal to the depth copy
-path's byte for byte), `rd_crack_late_ab` ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
+path's byte for byte), `rd_crack_glow` and `rd_crack_aura` (the place: SCENE the bytes of the fill
+at the start of list 7, two and one passes fewer), `rd_crack_late_ab`, `rd_glow_cheap_ab`
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 At a reach of 1 texel on both axes (2x on a whole scale) the fill draws `crack_fill1_ps`
 (`CRACK_REACH_1`, selected in `rd_crack_fill.c`): the four neighbours are read first and a texel
@@ -768,10 +774,11 @@ touches its depth or stencil:
 - a draw whose texture is a target's depth view (`RD_VIEW_DEPTH`);
 - the three shadow commands (the stencil count and the volumes' Z test);
 - the fog: the state's depth, the colour target's and a depth view the texture names; a fog that may
-  arm the crack fill (`rd__crack_fill_may`) touches SCENE's depth again at the start of the next list
-  from 7 on, as the command before it (the fill reads the depth there), so every pass begun up to
-  there keeps the store, and the last store's cut (below) does not take the pass open there
-  (`PlanDepth.late`);
+  arm the crack fill (`rd__crack_fill_may`) touches SCENE's depth again from list 7 on, at the first
+  command `rd__crack_fill_place` does not let the fill wait past (or the walk's end), as the command
+  before it (the fill reads the depth there; the walk may draw it earlier, never later), so every
+  pass begun up to there keeps the store, and the last store's cut (below) does not take the pass
+  open there (`PlanDepth.late`);
 - a command type the scan does not know: every depth.
 
 Copies, exact blends and clears touch none (a clear only writes). The walk counts the same numbers
@@ -1137,8 +1144,8 @@ MSAA epoch) lies on a path those commands do not take; the pass area ends a pass
 at a command no area run holds. A guard (`rd__last_store_end`, in `endPass`) turns the cut off for
 the run and logs it if such a pass ends before command t is done (a missed path; the store plan's
 poison shows the lost depth in `rd_pass_cut_ab`). Above 1x under Enhanced the crack fill reads
-SCENE's depth at the start of list 7, after the scene pass that holds the fog and lists 4-6, so that
-pass keeps its store (`PlanDepth.late`, the scan above); at 1x and under Original, where nothing
+SCENE's depth from list 7 on (after the glow's `cleanUpFB`, or in the aura's paste pass), after the
+scene pass that holds the fog and lists 4-6, so that pass keeps its store (`PlanDepth.late`, the scan above); at 1x and under Original, where nothing
 fills, the cut takes the pass holding the depth's last touch as before: on the phone's frame at 1x
 the fog's pass, whose store (13 to 20 MB, about 1.3 to 2 ms on the phone, an estimate) goes. Like the plan's other drops, the depth is then undefined
 past the replay; a later replay that reads it before its clear is kept as the plan keeps it.

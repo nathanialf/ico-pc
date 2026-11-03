@@ -792,11 +792,12 @@ the seams of walls and floors (issue 26: rows of them on a doorway's edge and a 
 4K).
 
 Under the Enhanced preset, with SCENE's scale above 1 on either axis, SCENE's own fog arms the fill
-(`doFog` calls `rd__crack_fill`) and the walk draws it at the start of list 7, after lists 4-6
-(`rd__crack_fill_late` from the list loop, `port/render/rd_crack_fill.c`): the pass open there ends
+(`doFog` calls `rd__crack_fill`) and the walk draws it after lists 4-6, from the start of list 7
+on where `rd__crack_fill_place` puts it (`rd__crack_fill_at` before each command of the list loop,
+`port/render/rd_crack_fill.c`; [its place](#the-fills-place-after-list-7)): the pass open there ends
 with SCENE's colour copied into its snapshot texture (`rd__replay_take_snap`), and one triangle is
 drawn over SCENE's colour alone: `crack_fill_ps` (`port/shaders/blit.hlsl`, behind `blit_vs`, key
-`rd__crack_fill_key(0)`: no depth attached, no blend) reads that copy and SCENE's depth itself,
+`rd__crack_fill_key(RD_CRACK_KEY_FILL)`: no depth attached, no blend) reads that copy and SCENE's depth itself,
 sampled where it is (`RHI_STATE_DEPTH_READ`), and gives a crack the colour of the nearer end of
 its run; the depth is not written. A texel is a crack when a run of at most R texels along its row or its column, the texel among
 them, has at each end a texel in front of it (written, and nearer by more than 1/64 of its own
@@ -845,6 +846,52 @@ to 20 levels; the deja vu 48:9 frame 469 cracks (0.018 %), most of them one to s
 the largest 14 ([DIVERGENCES.md](DIVERGENCES.md) VD-20). ctest `rd_crack_late_ab` measures the
 whole picture against the earlier build's pass dumps.
 
+### The fill's place after list 7
+
+The fill needs a pass of its own only where nothing else breaks SCENE's pass. Two effects break it
+on nearly every frame, so the walk asks, before each command from list 7 on, whether
+the fill can wait past it (`rd__crack_fill_place`; the store plan's scan asks the same, so the depth
+store the fill reads is kept up to that command, `PlanDepth.late`):
+
+- **state** (the commands `rd__apply_state` takes): it waits.
+- **a staticBlur sprite into another target** that reads neither SCENE's colour nor its depth view
+  as a texture, writes no Z into SCENE's depth and has no DATE (the aura's `AURA_WORK`, `WORK0`
+  and `FEED128` sprites before the paste): it waits. The fill's inputs (SCENE's colour, its depth)
+  and its texels are untouched, so it is the same bytes later.
+- **the glow's `cleanUpFB`** (`staticBlur.c`): untextured sprites into SCENE whose blend keeps RGB
+  for every destination (`rd__fx_fold`, Cs * As + Cd with RGBAQ 0) and no alpha test: they write
+  SCENE's alpha alone. The first one, with no Z test, writes every texel's alpha (the walk checks
+  that it covers the whole target, `alphaCovers` through `blurCoversTarget`; else the fill goes
+  before it, said in the log), so the alpha the fill would have written before it is overwritten
+  wherever it lay. The fill then waits past both sprites and is drawn with RGB alone (the colour
+  mask, `RD_CRACK_KEY_RGB`): the same bytes as at the start of list 7. The two sprites stay in the
+  fog's pass ([RENDER.md](RENDER.md#the-glows-passes): `fxAttachDepth`), so the glow keeps its cut.
+  After them the fill waits for nothing else (the mask that reads SCENE follows).
+- **the aura's paste** (`pasteFeedBackAreaToFB`: FEED128 blended over SCENE through its
+  destination, no Z test): the fill is the first draw of the paste's own pass. Where the fx plan
+  draws the paste by the local read (`rd_fx_plan.c` `fxDraw`), `rd__crack_fill_in_pass` copies
+  SCENE's colour, begins the pass the paste would begin (SCENE's colour loaded, no depth) and draws
+  the fill in it; the paste's draw lands in the same pass after the local read's barrier. Where it
+  cannot (the snapshot path, an MSAA epoch, the scene's passes not readable, a pass area on part of
+  the picture, a pass on SCENE already open), the fill takes its own pass before the paste, with a
+  line in the log.
+- **anything else** (a draw, a clear, a copy, a shadow command, a sprite that reads SCENE or writes
+  its depth, the motion blur into SCENE): the fill before it, in its own pass, as at the start of
+  list 7. At the walk's end a fill still waiting is drawn (`rd__crack_fill_late`).
+
+The depth the fill reads is the one it read at the start of list 7: on every corpus and phone frame
+the post sprites after list 7 draw with Z write off (the replay tool's `--list` prints `zwrite 1`,
+`RD_ZWRITE_OFF`); the draws that write SCENE's depth after list 7 (the sun's fans and the lamps'
+meshes into `WORK2`, characters drawn into the aura's buffer, list 11's screen sprites) end the wait
+(`build-host/tmp/v098/evidence/crackaura/zscan.txt`). The bound is unchanged: every place gives the
+bytes of the fill at the start of list 7 (`ICO_RD_CRACK_PLACE=7` draws it there, the tests' A/B).
+
+What it saves on a tile-based GPU, from the PowerVR phone's log (UNVERIFIED as a measurement): in the
+glow's rooms the two `cleanUpFB` passes on SCENE (each SCENE's colour loaded and stored, the second
+with the depth loaded; about 2.4 ms by the glow's share); in the aura's rooms the fill's own pass
+(`crack fill SCENE 1 draws 2.09-2.18 ms`, SCENE's colour loaded and stored, 10 MB each way at
+2366 x 1080), its shader moving into the aura's pass. Elsewhere nothing changes.
+
 What the cracks hold, measured on lavapipe with the replay tool and copies of the dumps (the
 clear's colour or the fog table's entries patched, every command after the fog NOPed): in the
 issue-91 4K dumps (scale 5.581 x 4.821) the sky is the clear, and 727 texels of the fog's entry
@@ -863,15 +910,17 @@ Not drawn at scale 1 on both axes, under the Original preset, while the MSAA epo
 fog (it draws after the resolve: [MSAA.md](MSAA.md#the-crack-filler-after-the-resolve)), in the fog's self-test (`rd__fog_exact` without the probe),
 for a fog of any target but SCENE, without a sampleable depth (`RhiLimits.depthSampled`), and with
 `[dev] crack_fill = false` (`ICO_RD_CRACK_FILL=0`; the replay tool's `--no-crack-fill`). On by
-default where the device profile has `crackFill`: every class, tile-based GPUs included. Its two
-keys join the fog's family in the start-up set (`rd__enumerate_reachable_fog`). Cost above 1x: a
+default where the device profile has `crackFill`: every class, tile-based GPUs included. Its keys
+(the general and reach-1 fills, the count, each fill with RGB alone) join the fog's family in the
+start-up set (`rd__enumerate_reachable_fog`). Cost above 1x: a
 copy of SCENE's colour (4 bytes a texel read and written, 66 MB at 3840 x 2160) and one pass over
 SCENE's colour, loaded and stored, reading thirteen depth texels per texel (the runs' ends, both
 axes) and four more where a drawn texel lies behind both ends of a run (the texels beyond them).
 
 On the local path (the fog read by the local read inside the scene pass) nothing breaks the scene
-pass at the fog any more: the fog, lists 4-6 and every draw before them on SCENE share it, and the
-fill's snapshot ends it at list 7, where the pass to the glow or the aura begins anyway.
+pass at the fog any more: the fog, lists 4-6 and every draw before them on SCENE share it (and the
+glow's `cleanUpFB` after them), and the fill's snapshot ends it where the pass to the glow or the
+aura ends it anyway.
 
 The count, only under `rd__crack_fill_count_all` (the tests, the replay tool's `--stats`; never in
 the game, and a missing count pipeline leaves the fill uncounted): `crack_count_ps` runs the
@@ -887,16 +936,25 @@ in G), which is copied into a readback buffer and summed once the GPU is past th
   not drawn under the Original preset; ...`, `rd: crack fill: off ([dev] crack_fill = false,
   ICO_RD_CRACK_FILL=0)`: at the start and whenever SCENE is made
   again or the state changes (one line for each change);
-- `rd: crack fill: T replays filled (scale SXxSY; reach RXxRY texels; not counted in the game[; F after lists 4-6][; A after the MSAA resolve])`
+- `rd: crack fill: T replays filled (scale SXxSY; reach RXxRY texels; not counted in the game[; F after lists 4-6[, K of them in the aura's paste pass][, G after the glow's alpha]][; A after the MSAA resolve])`
   in the 10 s summary (`rd__crack_fill_block`, `rd_interp.c` `presentLog`), when it filled; when
   counting, `rd: crack fill: N pixels filled over M replays counted of T filled (max K a replay;
   scale SXxSY; reach RXxRY texels)`;
 - `rd: crack fill: not drawn on SCENE at scale SXxSY: <why> (reported once)`, once a run for each
   reason (MSAA, no sampleable depth, its pipelines missing, no memory for the colour's copy), and
   for the last three `rd: crack fill: N fogged replays above 1x not filled (...)` in the 10 s summary;
+- once a run: `rd: crack fill: drawn as the first draw of the aura's paste pass on SCENE (the
+  paste's own pass, its draw after it), not in a pass of its own (reported once)` and `rd: crack
+  fill: drawn after the glow's sprites that write SCENE's alpha alone (staticBlur.c cleanUpFB), its
+  RGB alone: the sprites stay in the fog's pass (reported once)`;
+- `rd: crack fill: the aura's paste cannot take the fill as its pass's first draw (<why>): its own
+  pass before the paste (...)` and `rd: crack fill: the glow's first sprite of SCENE's alpha does
+  not write every texel's alpha: the fill before it, in its own pass (...)`, the first 8 then every
+  100th;
 - `--stats`: `<dump>: stats: crack fill on|off: P passes, N pixels filled (M replays counted;
   scale SXxSY, reach RXxRY texels; S fogged replays above 1x not filled; F fills after lists 4-6;
-  A fills after the MSAA resolve)`.
+  A fills after the MSAA resolve; K fills in the aura's paste pass; G fills after the glow's
+  alpha)` (P counts the fill's own passes: 0 for a fill in the paste's pass).
 
 `rd_crack_test` (`rd_crack`, `rd_crack_4x`, `rd_crack_frac`, `rd_crack_backdrop`,
 `rd_crack_backdrop_4x`, `rd_crack_backdrop_frac`, `rd_crack_1x`, `rd_crack_original`,

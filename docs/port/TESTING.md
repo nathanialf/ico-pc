@@ -151,7 +151,7 @@ context is missing.
 
 Not twinned: any test whose environment holds `ICO_VK_FAKE_*` or `ICO_VK_ATTACHMENT_READ`
 (OpenGL ignores them: `*_mali`, `*_minlimits`, `*_d24s8`, `*_static`, `rd_crack_d24s8`,
-`rd_crack_tiler`, `rd_crack_tiler_on`, `rd_blend_selftest*`, `rd_date_selftest_sabotage`,
+`rd_crack_tiler`, `rd_crack_tiler_on`, `rd_crack_glow`, `rd_crack_aura`, `rd_blend_selftest*`, `rd_date_selftest_sabotage`,
 `rd_fog_selftest_local_sabotage`; `ico_rd_gl_twin` skips these itself), the tests that start the
 game or work on the replay tool's files (`rd_replay_tool*`, `rd_fog_depth_copy_dump*`,
 `rd_vustage_ab`, `rd_vubatch_ab`, `rd_fades_fold_ab`, the frame gates, `coverage_corpus`; the compare below covers the dumps), and the

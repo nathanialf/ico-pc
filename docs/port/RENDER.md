@@ -433,11 +433,12 @@ Two of the breaks moved bytes nothing needed, and are gone (the same bytes; `rd_
   attached under Z ALWAYS without Z write (the test passes every fragment and writes nothing), so the
   second sprite's own key lands in the same pass: two full-size SCENE passes fewer where the fog's
   pass has the depth (the tile class's local fog; about 2.4 ms of the 3.54 by the measured share).
-  Where the crack fill is drawn (above 1x with a fog: every phone frame; [RENDER_POST.md](RENDER_POST.md#crack-filling-above-1x))
-  it ends the fog's pass at the start of list 7 for its snapshot and its own pass, so there is no
-  open pass with the depth left for `cleanUpFB` and its two sprites take a pass each again: nine of
-  the glow frames on lavapipe at the phone's profile count 19-22 glow passes with the fill and 2
-  fewer without it (`ICO_RD_CRACK_FILL=0`). An open item, not yet changed.
+  Where the crack fill is drawn (above 1x with a fog: every phone frame) it waits past the two
+  sprites (they write SCENE's alpha alone) and is drawn after them with RGB alone, the same bytes
+  ([the fill's place](RENDER_POST.md#the-fills-place-after-list-7)), so the sprites stay in the
+  fog's pass with the fill as well. Drawn at the start of list 7 (`ICO_RD_CRACK_PLACE=7`) the fill
+  ends the fog's pass there and the two sprites take a pass each again (v4251 at the phone's profile on lavapipe: 22
+  glow passes with the fill, 20 without).
 
 What is left: the mask's pass (SCENE read, WORK2 stored, then read by the reduction), the paste's
 SCENE pass (WORK3 is drawn after the fog's pass ends), and the twelve small WORK0 passes (the fixed
@@ -1929,7 +1930,8 @@ class and desktop Vulkan after its probe (`port/render/rd_profile.c` (`rd__profi
 177's Adreno: `local read no`, `fog local off`, `fog: depth path copy`), and D3D12, D3D11 and
 OpenGL, which have none. Above 1x under Enhanced the crack filler is drawn after lists 4-6: its
 neighbourhood reads need a copy of SCENE's colour, made where the scene pass ends anyway, and its
-own pass holds SCENE's colour alone ([Crack filling above 1x](RENDER_POST.md#crack-filling-above-1x)). On a
+own pass holds SCENE's colour alone, or it is the first draw of the aura's paste pass
+([Crack filling above 1x](RENDER_POST.md#the-fills-place-after-list-7)). On a
 tiler, compare the sum of the
 lists, not one list or effect (the log's GPU top passes and GPU ms per replay lines now say so).
 

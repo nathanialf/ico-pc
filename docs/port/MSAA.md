@@ -78,7 +78,9 @@ top edge). The crack filler ([RENDER_POST.md](RENDER_POST.md#crack-filling-above
 `port/render/rd_crack_fill.c`) therefore runs on the resolved picture: `doFog`
 (`port/render/rd_replay.c`) passes the epoch's state at the fog (`RD_CRACK_MSAA_OPEN`,
 `RD_CRACK_MSAA_RESOLVED` or `RD_CRACK_MSAA_NONE`, `port/render/rd_replay.h`), and the fill armed
-there is drawn after lists 4-6 (not when an epoch is open at that point either). In gameplay the
+there is drawn after lists 4-6 (not when an epoch is open at that point either), at the start of
+list 7: with an MSAA setting the fill does not wait for the glow's `cleanUpFB` or the aura's paste
+([its place](RENDER_POST.md#the-fills-place-after-list-7)). In gameplay the
 epoch has closed at the shadow count's pass in list 3, so the filler reads SCENE's single-sampled
 colour and depth as `msaa_resolve_ps` wrote them (SCENE's own textures: `depthSampled` is as SCENE
 was made) and fills exactly as at the same scale without MSAA. The rules agree: the game clears

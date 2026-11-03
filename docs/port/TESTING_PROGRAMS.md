@@ -1216,7 +1216,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `build-host/tmp/v095/after/w3/pd`, and five of the PowerVR phone's frames at its Resolution Auto,
   2364x1080 at 2.189 under its profile's fakes, against `build-host/tmp/v098/evidence/cheap/base-phone`)
   replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0` (the
-  baselines' own): the stats line says `crack fill on: 1 passes` and `1 fills after lists 4-6`,
+  baselines' own): the stats line says `crack fill on: P passes` (P 0 where the fill was the
+  first draw of the aura's paste pass, else 1) and `1 fills after lists 4-6`,
   or, on a dump with no fog of SCENE above 1x (`0 passes, 0 pixels filled (0 replays counted;
   scale 0x0, ...; 0 fogged replays above 1x not filled; 0 fills after lists 4-6`: the v3086 and
   v1985 frames), every target the baseline's bytes; every target within 64 levels on at most 0.2 %
@@ -1225,7 +1226,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `ICO_RD_CRACK_FILL=0` and the glow's mask (WORK2, `cleanUpFB`'s depth test: the late fill leaves
   the crack's depth) that run's byte for byte, and each target past the bound no farther from the
   baseline than the no-fill run's (no more pixels apart, no larger difference); at the phone's
-  setting the stats line's copies one fewer than the baseline log's and its passes no more. A
+  setting the stats line's copies one fewer than the baseline log's and its passes no more. Every
+  run that drew the fill is replayed again with `ICO_RD_CRACK_PLACE=7` (the fill at the start of
+  list 7, the place before `rd__crack_fill_place` moved it after the glow's `cleanUpFB` or
+  into the aura's paste pass): every PNG that replay's bytes, the run's passes no more than its,
+  and at the phone's setting a run whose stats place the fill later (`1 fills in the aura's paste
+  pass` or `1 fills after the glow's alpha`) at least one pass fewer. A
   missing dump or baseline is skipped; none: SKIP. The baselines are pictures of the fill before the
   fog; another change to the picture needs baselines of its own before this test can tell the two
   apart.
@@ -1264,9 +1270,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `gate-wave.sh` names them): every baseline PNG the same bytes or within `-DBOUND` levels (0,
   `png_level_diff.py`), the `glow N passes` count at least two fewer than the baseline's at the
   phone's setting and no more at the others; each run's line prints the passes before and after
-  and its largest difference. Where the run's stats say the crack fill was drawn after lists 4-6
-  (it ends the fog's pass before the glow) the cuts are counted in a second replay with
-  `ICO_RD_CRACK_FILL=0`, and the run's own count is at most the baseline's. The seven frames the
+  and its largest difference. The run's own count meets the rule with the crack fill drawn (it
+  is drawn after `cleanUpFB`'s two sprites, which stay in the fog's pass: [the fill's
+  place](RENDER_POST.md#the-fills-place-after-list-7)), and at the phone's setting a run whose
+  stats say the fill was drawn says `1 fills after the glow's alpha`. The seven frames the
   crack fill changed (v4251, the loss frame, rd-00720, the two issue-91 frames, v2567 and its
   previous frame) are compared at the phone's setting and Enhanced 2x with refreshed pictures
   (`-DBASE_REFRESH`, `build-host/tmp/v098/evidence/glow/pd-w15`: main 7832a2e4f's, each first
@@ -1314,7 +1321,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   own: nothing breaks the scene pass at the fog), and SCENE's colour and depth byte-identical to a
   replay on the depth copy path; `rd_crack_tiler_fold_mali` the same under
   `ICO_VK_FAKE_LIMITS=mali` with `ICO_RD_FOG_PATH=local`. Both deny the old state line's `drawn
-  inside the scene pass with the local fog`.
+  inside the scene pass with the local fog`. The fill's place under the MoltenVK report:
+  `rd_crack_glow` (`rd_crack_test 2 glow`) adds the glow's `cleanUpFB` after the fog (list 7: two
+  untextured sprites into SCENE, Cs * As + Cd with RGBAQ 0, 0, 0, 0 under Z ALWAYS, then alpha 192
+  at Z 1 under Z GEQUAL), so the fill is drawn after them with RGB alone (`RdCrackCounts.afterAlpha`
+  1; the filled texel's RGB its neighbour's, its alpha `cleanUpFB`'s); `rd_crack_aura` (`2 aura`)
+  adds the aura's paste (list 8: one colour into WORK0 by a sprite, then WORK0 over SCENE through
+  (Cs - Cd) * As + Cd at As 32), so the fill is the first draw of the paste's pass (`pasted` 1, no
+  fill pass of its own). Each replays the frame with the place pinned to the start of list 7
+  (`rd__crack_fill_set_place(1)`): SCENE's colour and depth the same bytes, one fill pass there,
+  and two render passes fewer (glow, on the fog's local read; at least one otherwise) or one (aura)
+  with the place; the once lines are matched (`EXPECT2`), and `rd_crack_aura` denies the line that
+  says the paste could not take the fill.
   Each run's `rd: crack fill:` state line is matched (`-DEXPECT`, `-DEXPECT2`; `-DDENY` must not
   match); `rd_replay_tool_crack` runs the tool on `rd_pixel`'s dump with `--enhanced --resolution
   2x --stats --no-crack-fill` and matches `crack fill: off (the replay tool's --no-crack-fill)`
