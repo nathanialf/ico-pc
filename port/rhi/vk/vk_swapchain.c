@@ -1353,7 +1353,9 @@ static bool vkr_acquire_ahead_ok(const VkrFrame *cur)
                       n <= g_vkr.swapImageCount - g_vkr.swapMinImages);
 }
 
-static RhiTexture vkr_acquire_backbuffer(void)
+/* *lost: the surface went away (the caller makes it again, the submit
+ * thread idle first) */
+static RhiTexture vkr_acquire_backbuffer(bool *lost)
 {
     RhiTexture out = {0};
     __atomic_store_n(&s_presentShown, false, __ATOMIC_RELAXED); /* until its present shows it */
@@ -1392,7 +1394,7 @@ static RhiTexture vkr_acquire_backbuffer(void)
     if (r == VK_ERROR_SURFACE_LOST_KHR) {
         /* this frame is skipped (the semaphore was not signalled; the
          * caller's retry acquires on the new swapchain) */
-        vkr_surface_lost("acquire");
+        *lost = true;
         return out;
     }
     if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR) {
@@ -1422,7 +1424,16 @@ RhiTexture rhi_acquire_backbuffer(void)
         vkr_swap_lock();
         vkr_take_deferred();
     }
-    const RhiTexture out = vkr_acquire_backbuffer();
+    bool lost = false;
+    const RhiTexture out = vkr_acquire_backbuffer(&lost);
+    if (lost) {
+        /* the surface made again waits for the device: the submit thread
+         * idle first, as for the deferred rebuilds above */
+        vkr_swap_unlock();
+        rhi_call_guard_settle();
+        vkr_swap_lock();
+        vkr_surface_lost("acquire");
+    }
     vkr_swap_unlock();
     return out;
 }
