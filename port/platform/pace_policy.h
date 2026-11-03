@@ -1097,9 +1097,10 @@ uint64_t pace_step_plan_ns(const PaceStepEst *e, bool closes, uint64_t periodNs)
  * GPU to finish the picture two before it (the slot fences,
  * RHI_FRAMES_IN_FLIGHT 2 pictures in flight: gpuDoneNs[0]; the picture
  * before, gpuDoneNs[1], when the presents wait for the GPU, the driver's
- * back-pressure), the GPU finishing a picture every gpuNs (the window's GPU
- * span; 0: not known, no fence predicted), then reads cpuNs of its own (the
- * reads less those waits).  The reads end there, and never before the reads
+ * back-pressure, with the submit thread off: pace_rt_pipe_behind), the
+ * GPU finishing a picture every gpuNs (the window's GPU span; 0: not
+ * known, no fence predicted), then reads cpuNs of its own (the reads less
+ * those waits).  The reads end there, and never before the reads
  * as measured with their waits (readsNs). */
 typedef struct PaceRtPipe {
     uint64_t submitFreeNs;
@@ -1143,6 +1144,83 @@ void pace_rt_pipe_post(PaceRtPipe *p, uint64_t readsEndNs, const PaceRtAsk *q);
  * half a refresh or more (PACE_RT_BEHIND_DIV) */
 bool pace_rt_behind(uint64_t presentNs, uint64_t refreshNs);
 
+/* The pipe's fence when it predicts a further picture's reads: the
+ * picture before's (behind: the driver's back-pressure, a present that
+ * waits for the GPU's earlier pictures, holding the render thread's next
+ * picture) only with the submit thread off (q->submitNs 0) and the
+ * presents behind (pace_rt_behind).  With the submit thread on, the
+ * present and its wait are the submit thread's job (submitNs, the
+ * pipeline's submitFreeNs): the next picture's first graphics call waits
+ * for that already, and the slot fences stay at RHI_FRAMES_IN_FLIGHT
+ * pictures in flight.  rc12 (build-host/tmp/v098/evidence/rc12/
+ * ico-pc.log :648-:654, a phone, stage 6): the submit thread's present
+ * waited 2.2 ms on average, its recent longest 7.6 ms, over half the 120
+ * Hz refresh nearly all the block, so the pipe planned one picture in
+ * flight: every further picture waited for the frame's own picture's 21.7
+ * ms on the GPU, 581 held, 32.6 presented fps where the GPU makes 46
+ * (build-host/tmp/v098/evidence/pace5/rc12_cells.out) */
+bool pace_rt_pipe_behind(const PaceRtAsk *q);
+
+/* Which end set a picture's predicted reads' end (pace_rt_pipe_reads_end):
+ * the reads as measured (their waits in), or the later of its
+ * interpolation, the submit thread free and the GPU's slot fence, then
+ * its own reads past the interpolation */
+typedef enum PaceRtBound {
+    PACE_RT_BY_READS = 0, /* the reads as measured */
+    PACE_RT_BY_INTERP,    /* its interpolation: no wait before its first graphics call */
+    PACE_RT_BY_SUBMIT,    /* the submit thread busy with the picture before */
+    PACE_RT_BY_FENCE      /* the GPU's slot fence */
+} PaceRtBound;
+
+#define PACE_RT_BOUNDS 4
+
+/* A predicted reads' end and its parts (absolute times, the ask's clock) */
+typedef struct PaceRtEnd {
+    uint64_t measuredNs; /* the post and the reads as measured (readsNs) */
+    uint64_t interpNs;   /* the post and the interpolation (0: cpuNs not known) */
+    uint64_t submitNs;   /* the submit thread free (0: idle or none) */
+    uint64_t fenceNs;    /* the slot fence waited for (0: none predicted) */
+    uint64_t endNs;      /* the reads' end */
+    PaceRtBound bound;
+} PaceRtEnd;
+
+/* pace_rt_pipe_reads_end with its parts in e */
+uint64_t pace_rt_pipe_reads_end_parts(const PaceRtPipe *p, uint64_t postNs, const PaceRtAsk *q,
+                                      bool behind, PaceRtEnd *e);
+
+/* The test of pace_rt_step_miss that held a further present */
+typedef enum PaceRtTest {
+    PACE_RT_TEST_NONE = 0, /* none: handed over (or held before the rule) */
+    PACE_RT_TEST_NEXT,     /* the next step would start past its slack */
+    PACE_RT_TEST_AFTER     /* the step after it, behind the next frame's picture */
+} PaceRtTest;
+
+/* pace_rt_step_miss's working, every input's use and every intermediate
+ * (absolute times, the ask's clock): the decision trace of a further
+ * present (window_present.c, the log line pace_rt_trace_text) */
+typedef struct PaceRtTrace {
+    uint64_t busyLeftNs; /* the picture in progress's time left */
+    uint64_t postNs;     /* the further picture handed over */
+    uint64_t tailNs;     /* its job past its reads (pictureNs - readsNs) */
+    uint64_t slackNs;    /* the next step's slack, period - (stepNs + margin) */
+    uint64_t slackBNs;   /* the step after's */
+    bool behind;         /* the presents' wait half a refresh or more (pace_rt_behind) */
+    bool fenceBefore;    /* the pipe waited for the picture before's fence (pace_rt_pipe_behind) */
+    PaceRtEnd reads;     /* the further picture's reads */
+    /* the second test (afterAsked: it ran): the next step's end with the
+       further picture and without, the next frame's picture posted, its
+       reads with and without, the step after's start with and without */
+    bool afterAsked;
+    uint64_t endANs, endA0Ns, newPostNs, startBNs, startB0Ns;
+    PaceRtEnd newReads, newReads0;
+    PaceRtTest test; /* the test that held it */
+} PaceRtTrace;
+
+/* pace_rt_step_miss with the pipe's fence chosen by behind (true: the
+ * picture before's) and its working in t (not NULL) */
+bool pace_rt_step_trace(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLeftNs, bool behind,
+                        PaceRtTrace *t);
+
 /* True when a further present handed over once the picture in progress is
  * done (busyLeftNs) would make a step miss its period: the next step,
  * which starts when the further picture's reads end (or at its due time),
@@ -1178,6 +1256,59 @@ bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLef
  * fences bound the GPU's pictures, not the render thread's job), then,
  * unless asMade, PACE_RT_BEHIND; then PACE_RT_MISS by pace_rt_step_miss. */
 PaceRtHold pace_rt_further_ask(const PaceRtAsk *q, const PaceRtPipe *p);
+
+/* pace_rt_further_ask with the rule's working in t (not NULL; zeroed, its
+ * test PACE_RT_TEST_NONE when held before the rule or handed over) */
+PaceRtHold pace_rt_further_trace(const PaceRtAsk *q, const PaceRtPipe *p, PaceRtTrace *t);
+
+/* The decision trace of a further present held by the rule (q the ask, t
+ * its working; n the hold's number in the 10 s block), every time against
+ * the next step's due time, the line after "window: step rule: ":
+ *   held (hold 3 in this 10 s block): asked 9.4 ms before the next step's
+ *   due time, the picture in progress done in 0.0 ms, posted at -9.3; its
+ *   reads would end at +6.3 ms, set by the GPU's slot fence (the picture
+ *   before's: the presents wait 7.6 ms at the longest lately, half a
+ *   refresh or more, the submit thread off) [the measured reads -0.2, the
+ *   interpolation -6.1, the submit thread free -1.6, the fence +0.9, then
+ *   5.4 ms of its own]; the next step closes a frame, planned at 9.2 ms
+ *   and the 2.0 ms margin: it may start 5.5 ms late; held: its start
+ *   past that by 0.8 ms; [the step after: ...]; the inputs: reads 9.1 ms
+ *   (8.6 its own, 3.2 the interpolation), the whole job 9.2, the submit
+ *   thread's part 7.7, the GPU 21.7 a picture, the period 16.7
+ * The length snprintf gives (out NUL-terminated within len). */
+int pace_rt_trace_text(const PaceRtAsk *q, const PaceRtTrace *t, unsigned n, char *out,
+                       unsigned len);
+
+/* The rule's asks in a 10 s block, for the line after them: how many, how
+ * many held by which test and by how much past its slack, which end set
+ * the held ones' reads' end, how often the presents were behind and the
+ * fence the picture before's; the inputs' sums (means at the line) */
+typedef struct PaceRtTraceSum {
+    unsigned asks, held, byNext, byAfter, behind, fenceBefore;
+    unsigned bound[PACE_RT_BOUNDS];   /* of the held ones */
+    uint64_t overNextNs, overAfterNs; /* past the slack, summed by test */
+    uint64_t busyLeftNs, readsNs, cpuNs, interpNs, submitNs, gpuNs, presentNs, stepNs, afterNs;
+} PaceRtTraceSum;
+
+/* One ask of the rule (why its answer: PACE_RT_MISS held by t->test) */
+void pace_rt_trace_sum_add(PaceRtTraceSum *s, const PaceRtAsk *q, const PaceRtTrace *t,
+                           PaceRtHold why);
+
+/* The block's line after "window: step rule: " (nothing asked: the
+ * count alone):
+ *   in 10 s 1214 further presents asked of the rule, 581 held by a step's
+ *   period (575 the next step's start past its slack, by 6.1 ms on
+ *   average; 6 the step after's, by 1.2 ms), 633 passed by the rule; the held
+ *   ones' reads ended by the measured reads 10, the interpolation 3, the
+ *   submit thread 50, the GPU's slot fence 518; the presents waited half
+ *   a refresh or more in 1100 asks (the fence of the picture before
+ *   predicted in 0: the submit thread on); the asks' means: the picture in
+ *   progress done in 2.1 ms, reads 9.1 ms (8.6 its own, 3.2 the
+ *   interpolation), the submit thread's part 7.7 ms, the GPU 21.7 ms a
+ *   picture, the present's wait 7.6 ms at the longest lately, the next
+ *   step planned at 5.0 ms, the step after at 5.0 ms
+ * The length snprintf gives. */
+int pace_rt_trace_sum_text(const PaceRtTraceSum *s, double seconds, char *out, unsigned len);
 
 /* Vsync off and the frame rate uncapped, the timer path (no FIFO lock),
  * the render thread on: pictures as they are made, as on a PC with vsync

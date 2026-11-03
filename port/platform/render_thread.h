@@ -79,6 +79,16 @@ bool ico_render_thread_plan(IcoRtPlan *out);
 /* A further present held back by that plan (why: pace_policy.h
    PaceRtHold, not PACE_RT_GO), counted for the 10 s line */
 void ico_render_thread_note_held(int why);
+struct PaceRtAsk;
+struct PaceRtTrace;
+/* A further present asked of the step rule (window_present.c
+   rt_further_hold; q the ask, t the rule's working, why its answer:
+   PACE_RT_GO or PACE_RT_MISS, pace_policy.h): into the block's sums
+   (pace_rt_trace_sum_add, the line after the 10 s clause), and a hold's
+   decision trace, the block's first 8 then every 100th:
+     window: step rule: held (hold 3 in this 10 s block): asked 9.4 ms
+     before the next step's due time, ... (pace_policy.h pace_rt_trace_text) */
+void ico_render_thread_note_ask(const struct PaceRtAsk *q, const struct PaceRtTrace *t, int why);
 /* One game step on the timer path, for the 10 s line (window_present.c):
    its first renderer call waited readWaitNs for a picture's reads (0:
    none: not started late by the pictures), it missed its period (ended
@@ -113,7 +123,11 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
      0.3 ms, the submit thread's part 3.2 ms; the step planned at 6.1 ms); steps started
      late by the pictures: 280 (longest 9.6 ms); steps that missed their period: 0 (latest
      0.0 ms past it; 0 steps planned at the whole period after them)
-   or "...; render thread: off (CPU 9.3 ms a picture on the game thread)" with no thread */
+   or "...; render thread: off (CPU 9.3 ms a picture on the game thread)" with no thread;
+   then, when the step rule was asked in the block, its sums (pace_policy.h
+   pace_rt_trace_sum_text):
+     window: step rule: in 10 s 1214 further presents asked of the rule, 581 held by a
+     step's period (575 the next step's start past its slack, by 6.1 ms on average; ...) */
 void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pumpMs);
 
 #endif /* ICO_PLATFORM_RENDER_THREAD_H */

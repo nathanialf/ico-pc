@@ -5,6 +5,7 @@
  */
 #include "pace_policy.h"
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -380,27 +381,58 @@ bool pace_rt_behind(uint64_t presentNs, uint64_t refreshNs)
     return refreshNs != 0 && presentNs * PACE_RT_BEHIND_DIV >= refreshNs;
 }
 
-uint64_t pace_rt_pipe_reads_end(const PaceRtPipe *p, uint64_t postNs, const PaceRtAsk *q,
-                                bool behind)
+bool pace_rt_pipe_behind(const PaceRtAsk *q)
+{
+    return q->submitNs == 0 && pace_rt_behind(q->presentNs, q->refreshNs);
+}
+
+uint64_t pace_rt_pipe_reads_end_parts(const PaceRtPipe *p, uint64_t postNs, const PaceRtAsk *q,
+                                      bool behind, PaceRtEnd *e)
 {
     const uint64_t measured = postNs + q->readsNs;
 
+    memset(e, 0, sizeof(*e));
+    e->measuredNs = measured;
+    e->endNs = measured;
+    e->bound = PACE_RT_BY_READS;
     if (q->cpuNs == 0) {
         return measured;
     }
     /* the interpolation, then the first graphics call: the submit thread
        idle, the fence of the picture two before (one before, behind) */
     uint64_t at = postNs + q->interpNs;
+    PaceRtBound by = PACE_RT_BY_INTERP;
 
-    at = p->submitFreeNs > at ? p->submitFreeNs : at;
+    e->interpNs = at;
+    e->submitNs = p->submitFreeNs;
+    if (p->submitFreeNs > at) {
+        at = p->submitFreeNs;
+        by = PACE_RT_BY_SUBMIT;
+    }
     if (q->gpuNs != 0) {
         const uint64_t fence = behind ? p->gpuDoneNs[1] : p->gpuDoneNs[0];
 
-        at = fence > at ? fence : at;
+        e->fenceNs = fence;
+        if (fence > at) {
+            at = fence;
+            by = PACE_RT_BY_FENCE;
+        }
     }
     const uint64_t end = at + (q->cpuNs > q->interpNs ? q->cpuNs - q->interpNs : 0);
 
-    return end > measured ? end : measured;
+    if (end > measured) {
+        e->endNs = end;
+        e->bound = by;
+    }
+    return e->endNs;
+}
+
+uint64_t pace_rt_pipe_reads_end(const PaceRtPipe *p, uint64_t postNs, const PaceRtAsk *q,
+                                bool behind)
+{
+    PaceRtEnd e;
+
+    return pace_rt_pipe_reads_end_parts(p, postNs, q, behind, &e);
 }
 
 void pace_rt_pipe_post(PaceRtPipe *p, uint64_t readsEndNs, const PaceRtAsk *q)
@@ -414,7 +446,8 @@ void pace_rt_pipe_post(PaceRtPipe *p, uint64_t readsEndNs, const PaceRtAsk *q)
     }
 }
 
-bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLeftNs)
+bool pace_rt_step_trace(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLeftNs, bool behind,
+                        PaceRtTrace *t)
 {
     const uint64_t need = q->stepNs + PACE_RT_STEP_MARGIN_NS;
     const uint64_t slack = q->periodNs > need ? q->periodNs - need : 0;
@@ -422,14 +455,23 @@ bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLef
     const uint64_t needB = (q->afterNs != 0 ? q->afterNs : q->stepNs) + PACE_RT_STEP_MARGIN_NS;
     const uint64_t slackB = q->periodNs > needB ? q->periodNs - needB : 0;
     const uint64_t due = q->dueNs, period = q->periodNs;
-    const bool behind = pace_rt_behind(q->presentNs, q->refreshNs);
     const uint64_t post = q->nowNs + busyLeftNs;
-    const uint64_t readsEnd = pace_rt_pipe_reads_end(p, post, q, behind);
+
+    memset(t, 0, sizeof(*t));
+    t->busyLeftNs = busyLeftNs;
+    t->postNs = post;
+    t->slackNs = slack;
+    t->slackBNs = slackB;
+    t->behind = pace_rt_behind(q->presentNs, q->refreshNs);
+    t->fenceBefore = behind;
+    const uint64_t readsEnd = pace_rt_pipe_reads_end_parts(p, post, q, behind, &t->reads);
     const uint64_t tail = q->pictureNs > q->readsNs ? q->pictureNs - q->readsNs : 0;
     const uint64_t pictureEnd = readsEnd + tail;
 
+    t->tailNs = tail;
     /* the next step starts when the reads end */
     if (readsEnd > due + slack) {
+        t->test = PACE_RT_TEST_NEXT;
         return true;
     }
     if (q->nextBetween) {
@@ -446,16 +488,34 @@ bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLef
 
     pace_rt_pipe_post(&after, readsEnd, q);
     const uint64_t newPost = pictureEnd > endA ? pictureEnd : endA;
-    const uint64_t newEnd = pace_rt_pipe_reads_end(&after, newPost, q, behind);
-    const uint64_t newEnd0 = pace_rt_pipe_reads_end(p, endA0, q, behind);
+    const uint64_t newEnd = pace_rt_pipe_reads_end_parts(&after, newPost, q, behind, &t->newReads);
+    const uint64_t newEnd0 = pace_rt_pipe_reads_end_parts(p, endA0, q, behind, &t->newReads0);
     const uint64_t startB = newEnd > due + period ? newEnd : due + period;
     const uint64_t startB0 = newEnd0 > due + period ? newEnd0 : due + period;
 
-    return startB > startB0 && startB > due + period + slackB;
+    t->afterAsked = true;
+    t->endANs = endA;
+    t->endA0Ns = endA0;
+    t->newPostNs = newPost;
+    t->startBNs = startB;
+    t->startB0Ns = startB0;
+    if (startB > startB0 && startB > due + period + slackB) {
+        t->test = PACE_RT_TEST_AFTER;
+        return true;
+    }
+    return false;
 }
 
-PaceRtHold pace_rt_further_ask(const PaceRtAsk *q, const PaceRtPipe *p)
+bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLeftNs)
 {
+    PaceRtTrace t;
+
+    return pace_rt_step_trace(q, p, busyLeftNs, pace_rt_pipe_behind(q), &t);
+}
+
+PaceRtHold pace_rt_further_trace(const PaceRtAsk *q, const PaceRtPipe *p, PaceRtTrace *t)
+{
+    memset(t, 0, sizeof(*t));
     if (q->paced) {
         if (q->sinceNs != 0 && q->nowNs >= q->sinceNs && q->nowNs - q->sinceNs >= q->pictureNs) {
             return PACE_RT_OVERRUN;
@@ -464,9 +524,210 @@ PaceRtHold pace_rt_further_ask(const PaceRtAsk *q, const PaceRtPipe *p)
             return PACE_RT_BEHIND;
         }
     }
-    return pace_rt_step_miss(q, p, pace_rt_busy_left(q->nowNs, q->sinceNs, q->pictureNs))
+    return pace_rt_step_trace(q, p, pace_rt_busy_left(q->nowNs, q->sinceNs, q->pictureNs),
+                              pace_rt_pipe_behind(q), t)
                ? PACE_RT_MISS
                : PACE_RT_GO;
+}
+
+PaceRtHold pace_rt_further_ask(const PaceRtAsk *q, const PaceRtPipe *p)
+{
+    PaceRtTrace t;
+
+    return pace_rt_further_trace(q, p, &t);
+}
+
+/* the trace's text: a time against the due time, signed ms */
+static double rel_ms(uint64_t at, uint64_t due)
+{
+    return at >= due ? (double)(at - due) / 1e6 : -(double)(due - at) / 1e6;
+}
+
+static double ns_ms(uint64_t ns)
+{
+    return (double)ns / 1e6;
+}
+
+/* snprintf onto out at *at, the length kept as snprintf's */
+#ifdef __GNUC__
+static void trace_put(char *out, unsigned len, int *at, const char *fmt, ...)
+    __attribute__((format(printf, 4, 5)));
+#endif
+
+static void trace_put(char *out, unsigned len, int *at, const char *fmt, ...)
+{
+    va_list ap;
+    const unsigned used = *at < 0 ? len : (unsigned)*at;
+    int n;
+
+    va_start(ap, fmt);
+    n = vsnprintf(used < len ? out + used : NULL, used < len ? len - used : 0, fmt, ap);
+    va_end(ap);
+    if (n > 0 && *at >= 0) {
+        *at += n;
+    }
+}
+
+static const char *bound_words(PaceRtBound b)
+{
+    switch (b) {
+    case PACE_RT_BY_INTERP:
+        return "its interpolation (no wait before its first graphics call)";
+    case PACE_RT_BY_SUBMIT:
+        return "the submit thread, busy with the picture before";
+    case PACE_RT_BY_FENCE:
+        return "the GPU's slot fence";
+    default:
+        return "the reads as measured";
+    }
+}
+
+/* a predicted reads' end and its parts, against due */
+static void trace_end(char *out, unsigned len, int *at, const PaceRtEnd *e, uint64_t due,
+                      const PaceRtAsk *q)
+{
+    trace_put(out, len, at, "%+.1f ms, set by %s [the measured reads %+.1f", rel_ms(e->endNs, due),
+              bound_words(e->bound), rel_ms(e->measuredNs, due));
+    if (e->interpNs != 0) {
+        trace_put(out, len, at, ", the interpolation %+.1f", rel_ms(e->interpNs, due));
+        if (e->submitNs != 0) {
+            trace_put(out, len, at, ", the submit thread free %+.1f", rel_ms(e->submitNs, due));
+        } else {
+            trace_put(out, len, at, ", the submit thread idle");
+        }
+        if (e->fenceNs != 0) {
+            trace_put(out, len, at, ", the fence %+.1f", rel_ms(e->fenceNs, due));
+        } else {
+            trace_put(out, len, at, ", no fence predicted");
+        }
+        trace_put(out, len, at, ", then %.1f ms of its own",
+                  ns_ms(q->cpuNs > q->interpNs ? q->cpuNs - q->interpNs : 0));
+    } else {
+        trace_put(out, len, at, "; its own reads not known");
+    }
+    trace_put(out, len, at, "]");
+}
+
+int pace_rt_trace_text(const PaceRtAsk *q, const PaceRtTrace *t, unsigned n, char *out,
+                       unsigned len)
+{
+    const uint64_t due = q->dueNs;
+    int at = 0;
+
+    if (len != 0) {
+        out[0] = '\0';
+    }
+    trace_put(out, len, &at,
+              "held (hold %u in this 10 s block): asked %.1f ms %s the next step's "
+              "due time, the picture in progress done in %.1f ms, posted at %+.1f; its reads would "
+              "end at ",
+              n, ns_ms(q->nowNs <= due ? due - q->nowNs : q->nowNs - due),
+              q->nowNs <= due ? "before" : "after", ns_ms(t->busyLeftNs), rel_ms(t->postNs, due));
+    trace_end(out, len, &at, &t->reads, due, q);
+    if (q->gpuNs != 0) {
+        trace_put(out, len, &at,
+                  "; the fence the picture %s's: the presents wait %.1f ms at "
+                  "the longest lately, %s half a refresh%s",
+                  t->fenceBefore ? "before" : "two before", ns_ms(q->presentNs),
+                  t->behind ? "at or over" : "under",
+                  t->behind && !t->fenceBefore ? ", that wait the submit thread's" : "");
+    }
+    trace_put(out, len, &at,
+              "; the next step %s, planned at %.1f ms and the %.1f ms margin: it "
+              "may start %.1f ms late",
+              q->nextBetween ? "is between frames" : "closes a frame or is not known",
+              ns_ms(q->stepNs), ns_ms(PACE_RT_STEP_MARGIN_NS), ns_ms(t->slackNs));
+    if (t->test == PACE_RT_TEST_NEXT) {
+        trace_put(out, len, &at, "; held: its start past that by %.1f ms",
+                  rel_ms(t->reads.endNs, due + t->slackNs));
+    } else if (t->afterAsked) {
+        trace_put(out, len, &at,
+                  "; the step after: the next step ends at %+.1f (%+.1f without the "
+                  "further picture), the next frame's picture posted at %+.1f, its reads end at ",
+                  rel_ms(t->endANs, due), rel_ms(t->endA0Ns, due), rel_ms(t->newPostNs, due));
+        trace_end(out, len, &at, &t->newReads, due, q);
+        trace_put(out, len, &at,
+                  " (%+.1f without); the step after starts at %+.1f against %+.1f "
+                  "without, planned at %.1f ms: it may start %.1f ms past its due time %+.1f",
+                  rel_ms(t->newReads0.endNs, due), rel_ms(t->startBNs, due),
+                  rel_ms(t->startB0Ns, due), ns_ms(q->afterNs != 0 ? q->afterNs : q->stepNs),
+                  ns_ms(t->slackBNs), rel_ms(due + q->periodNs, due));
+        if (t->test == PACE_RT_TEST_AFTER) {
+            trace_put(out, len, &at, "; held: its start past that by %.1f ms",
+                      rel_ms(t->startBNs, due + q->periodNs + t->slackBNs));
+        }
+    }
+    trace_put(out, len, &at,
+              "; the inputs: reads %.1f ms (%.1f its own, %.1f the interpolation), "
+              "the whole job %.1f, the submit thread's part %.1f, the GPU %.1f a picture, the "
+              "period %.1f",
+              ns_ms(q->readsNs), ns_ms(q->cpuNs), ns_ms(q->interpNs), ns_ms(q->pictureNs),
+              ns_ms(q->submitNs), ns_ms(q->gpuNs), ns_ms(q->periodNs));
+    return at;
+}
+
+void pace_rt_trace_sum_add(PaceRtTraceSum *s, const PaceRtAsk *q, const PaceRtTrace *t,
+                           PaceRtHold why)
+{
+    s->asks++;
+    s->behind += t->behind ? 1u : 0u;
+    s->fenceBefore += t->fenceBefore ? 1u : 0u;
+    s->busyLeftNs += t->busyLeftNs;
+    s->readsNs += q->readsNs;
+    s->cpuNs += q->cpuNs;
+    s->interpNs += q->interpNs;
+    s->submitNs += q->submitNs;
+    s->gpuNs += q->gpuNs;
+    s->presentNs += q->presentNs;
+    s->stepNs += q->stepNs;
+    s->afterNs += q->afterNs != 0 ? q->afterNs : q->stepNs;
+    if (why != PACE_RT_MISS) {
+        return;
+    }
+    s->held++;
+    if (t->test == PACE_RT_TEST_NEXT) {
+        s->byNext++;
+        s->bound[t->reads.bound]++;
+        s->overNextNs += t->reads.endNs - (q->dueNs + t->slackNs);
+    } else if (t->test == PACE_RT_TEST_AFTER) {
+        s->byAfter++;
+        s->bound[t->newReads.bound]++;
+        s->overAfterNs += t->startBNs - (q->dueNs + q->periodNs + t->slackBNs);
+    }
+}
+
+int pace_rt_trace_sum_text(const PaceRtTraceSum *s, double seconds, char *out, unsigned len)
+{
+    const double n = s->asks != 0 ? (double)s->asks : 1.0;
+    int at = 0;
+
+    if (len != 0) {
+        out[0] = '\0';
+    }
+    trace_put(out, len, &at, "in %.0f s %u further presents asked of the rule", seconds, s->asks);
+    if (s->asks == 0) {
+        return at;
+    }
+    trace_put(
+        out, len, &at,
+        ", %u held by a step's period (%u the next step's start past its "
+        "slack, by %.1f ms on average; %u the step after's, by %.1f ms), %u passed by the rule; "
+        "the held ones' reads ended by the measured reads %u, the interpolation %u, the "
+        "submit thread %u, the GPU's slot fence %u; the presents waited half a refresh or "
+        "more in %u asks (the fence of the picture before predicted in %u%s); the asks' "
+        "means: the picture in progress done in %.1f ms, reads %.1f ms (%.1f its own, %.1f "
+        "the interpolation), the submit thread's part %.1f ms, the GPU %.1f ms a picture, "
+        "the present's wait %.1f ms at the longest lately, the next step planned at %.1f "
+        "ms, the step after at %.1f ms",
+        s->held, s->byNext, s->byNext != 0 ? ns_ms(s->overNextNs) / s->byNext : 0.0, s->byAfter,
+        s->byAfter != 0 ? ns_ms(s->overAfterNs) / s->byAfter : 0.0, s->asks - s->held,
+        s->bound[PACE_RT_BY_READS], s->bound[PACE_RT_BY_INTERP], s->bound[PACE_RT_BY_SUBMIT],
+        s->bound[PACE_RT_BY_FENCE], s->behind, s->fenceBefore,
+        s->behind > s->fenceBefore ? ": the rest the submit thread's wait" : "",
+        ns_ms(s->busyLeftNs) / n, ns_ms(s->readsNs) / n, ns_ms(s->cpuNs) / n,
+        ns_ms(s->interpNs) / n, ns_ms(s->submitNs) / n, ns_ms(s->gpuNs) / n,
+        ns_ms(s->presentNs) / n, ns_ms(s->stepNs) / n, ns_ms(s->afterNs) / n);
+    return at;
 }
 
 bool pace_rt_as_made(bool vsync, bool uncapped, bool fifoLock, bool renderThread)

@@ -2925,10 +2925,195 @@ static void testRtTyp(void)
     }
 }
 
+static bool textHas(const char *got, const char *want)
+{
+    if (strstr(got, want) != NULL) {
+        return true;
+    }
+    printf("  text: %s\n  lacks: %s\n", got, want);
+    return false;
+}
+
+/* The decision trace (pace_policy.h PaceRtTrace, pace_rt_step_trace,
+   pace_rt_trace_text, PaceRtTraceSum) and the pipe's fence with the submit
+   thread on (pace_rt_pipe_behind; PACE5, rc12's block :654,
+   build-host/tmp/v098/evidence/rc12/ico-pc.log: the typical times the
+   clause read, reads 9.1 ms, 8.6 of its own, 3.2 the interpolation, the
+   submit thread's part 7.7, the GPU span 21.7, the present's wait 7.6 ms
+   at the longest lately over half the 120 Hz refresh, the closing step
+   planned at 9.2 ms).  A further present asked 7 ms before the closing
+   step's due time D, the render thread idle, the frame's own picture's
+   submit done at D - 3, the picture two before on the GPU until D - 5,
+   the frame's picture until D + 12 */
+static void testStepTrace(void)
+{
+    const uint64_t P = 16683333ull, D = 100 * MS;
+    const PaceRtPipe p = {D - 3 * MS, {D - 5 * MS, D + 12 * MS}};
+    PaceRtAsk q;
+    PaceRtTrace t;
+    PaceRtEnd e;
+    PaceRtTraceSum sum;
+    char text[1536];
+
+    /* the pipe's fence: the picture before's only with the submit thread
+       off and the presents behind */
+    memset(&q, 0, sizeof q);
+    q.refreshNs = 8333333ull;
+    q.presentNs = 7600000ull;
+    CHECK(pace_rt_behind(q.presentNs, q.refreshNs) && pace_rt_pipe_behind(&q));
+    q.submitNs = 7700000ull;
+    CHECK(!pace_rt_pipe_behind(&q));
+    q.submitNs = 0;
+    q.presentNs = 4 * MS;
+    CHECK(!pace_rt_pipe_behind(&q));
+
+    /* the reads' end and what set it (testStepRule's pipe) */
+    {
+        const PaceRtPipe a = {5 * MS, {8 * MS, 20 * MS}}, idle = {0, {0, 0}};
+
+        memset(&q, 0, sizeof q);
+        q.readsNs = 10 * MS;
+        q.interpNs = 3 * MS;
+        q.cpuNs = 10 * MS;
+        q.submitNs = 2 * MS;
+        q.gpuNs = 8 * MS;
+        CHECK(pace_rt_pipe_reads_end_parts(&a, 0, &q, false, &e) == 15 * MS);
+        CHECK(e.bound == PACE_RT_BY_FENCE && e.fenceNs == 8 * MS && e.submitNs == 5 * MS);
+        CHECK(e.interpNs == 3 * MS && e.measuredNs == 10 * MS && e.endNs == 15 * MS);
+        CHECK(pace_rt_pipe_reads_end_parts(&a, 0, &q, true, &e) == 27 * MS);
+        CHECK(e.bound == PACE_RT_BY_FENCE && e.fenceNs == 20 * MS);
+        q.cpuNs = 4 * MS; /* the measured reads bound it */
+        CHECK(pace_rt_pipe_reads_end_parts(&a, 0, &q, false, &e) == 10 * MS);
+        CHECK(e.bound == PACE_RT_BY_READS);
+        q.cpuNs = 10 * MS;
+        q.gpuNs = 0; /* no fence predicted: the submit thread */
+        CHECK(pace_rt_pipe_reads_end_parts(&a, 0, &q, true, &e) == 12 * MS);
+        CHECK(e.bound == PACE_RT_BY_SUBMIT && e.fenceNs == 0);
+        q.cpuNs = 11 * MS; /* nothing to wait for: the interpolation */
+        CHECK(pace_rt_pipe_reads_end_parts(&idle, 0, &q, false, &e) == 11 * MS);
+        CHECK(e.bound == PACE_RT_BY_INTERP && e.submitNs == 0);
+        q.cpuNs = 0; /* not known: the reads as measured alone */
+        CHECK(pace_rt_pipe_reads_end_parts(&a, 0, &q, true, &e) == 10 * MS);
+        CHECK(e.bound == PACE_RT_BY_READS && e.interpNs == 0 && e.fenceNs == 0);
+    }
+
+    memset(&q, 0, sizeof q);
+    q.nowNs = D - 7 * MS;
+    q.dueNs = D;
+    q.periodNs = P;
+    q.stepNs = 9200000ull;
+    q.afterNs = 600000ull;
+    q.readsNs = 9100000ull;
+    q.pictureNs = 9200000ull;
+    q.presentNs = 7600000ull;
+    q.refreshNs = 8333333ull;
+    q.cpuNs = 8600000ull;
+    q.interpNs = 3200000ull;
+    q.submitNs = 7700000ull;
+    q.gpuNs = 21700000ull;
+    q.paced = q.asMade = true;
+    memset(&sum, 0, sizeof sum);
+
+    /* the pipe as before PACE5 (the picture before's fence, the presents
+       behind): the further picture waits for the frame's picture's GPU,
+       its reads end 17.4 ms past D, 11.9 ms past the closing step's slack
+       of 5.48: held, as rc12's 581 a block */
+    CHECK(pace_rt_step_trace(&q, &p, 0, true, &t));
+    CHECK(t.test == PACE_RT_TEST_NEXT && t.behind && t.fenceBefore && !t.afterAsked);
+    CHECK(t.postNs == D - 7 * MS && t.busyLeftNs == 0 && t.tailNs == 100000u);
+    CHECK(t.slackNs == 5483333u && t.slackBNs == 14083333u);
+    CHECK(t.reads.endNs == D + 17400000u && t.reads.bound == PACE_RT_BY_FENCE);
+    CHECK(t.reads.fenceNs == D + 12 * MS && t.reads.submitNs == D - 3 * MS);
+    CHECK(t.reads.interpNs == D - 3800000u && t.reads.measuredNs == D + 2100000u);
+    (void)pace_rt_trace_text(&q, &t, 3, text, sizeof text);
+    CHECK(textIs(text,
+                 "held (hold 3 in this 10 s block): asked 7.0 ms before the next step's due "
+                 "time, the picture in progress done in 0.0 ms, posted at -7.0; its reads would "
+                 "end at +17.4 ms, set by the GPU's slot fence [the measured reads +2.1, the "
+                 "interpolation -3.8, the submit thread free -3.0, the fence +12.0, then 5.4 ms of "
+                 "its own]; the fence the picture before's: the presents wait 7.6 ms at the "
+                 "longest lately, at or over half a refresh; the next step closes a frame or is "
+                 "not known, planned at 9.2 ms and the 2.0 ms margin: it may start 5.5 ms late; "
+                 "held: its start past that by 11.9 ms; the inputs: reads 9.1 ms (8.6 its own, "
+                 "3.2 the interpolation), the whole job 9.2, the submit thread's part 7.7, the GPU "
+                 "21.7 a picture, the period 16.7"));
+    pace_rt_trace_sum_add(&sum, &q, &t, PACE_RT_MISS);
+
+    /* now (the submit thread on: the picture two before's fence): its
+       reads end 2.4 ms past D, set by the submit thread; the step after
+       starts at D + 20.7 (18.3 without it), inside its slack: handed over */
+    CHECK(pace_rt_further_trace(&q, &p, &t) == PACE_RT_GO);
+    CHECK(pace_rt_further_ask(&q, &p) == PACE_RT_GO && !pace_rt_step_miss(&q, &p, 0));
+    CHECK(t.test == PACE_RT_TEST_NONE && t.behind && !t.fenceBefore && t.afterAsked);
+    CHECK(t.reads.endNs == D + 2400000u && t.reads.bound == PACE_RT_BY_SUBMIT);
+    CHECK(t.reads.fenceNs == D - 5 * MS);
+    CHECK(t.endANs == D + 11600000u && t.endA0Ns == D + 9200000u && t.newPostNs == D + 11600000u);
+    CHECK(t.newReads.endNs == D + 20700000u && t.newReads.bound == PACE_RT_BY_READS);
+    CHECK(t.newReads.submitNs == D + 10100000u && t.newReads.fenceNs == D + 12 * MS);
+    CHECK(t.newReads0.endNs == D + 18300000u && t.newReads0.bound == PACE_RT_BY_READS);
+    CHECK(t.startBNs == D + 20700000u && t.startB0Ns == D + 18300000u);
+    pace_rt_trace_sum_add(&sum, &q, &t, PACE_RT_GO);
+
+    /* the step after planned at 12 ms (its slack 2.68): held by it, 1.3 ms
+       past */
+    q.afterNs = 12 * MS;
+    CHECK(pace_rt_further_trace(&q, &p, &t) == PACE_RT_MISS);
+    CHECK(t.test == PACE_RT_TEST_AFTER && t.slackBNs == 2683333u && t.startBNs == D + 20700000u);
+    (void)pace_rt_trace_text(&q, &t, 100, text, sizeof text);
+    CHECK(textHas(text, "held (hold 100 in this 10 s block): asked 7.0 ms before"));
+    CHECK(textHas(text, "its reads would end at +2.4 ms, set by the submit thread, busy with the "
+                        "picture before [the measured reads +2.1, the interpolation -3.8, the "
+                        "submit thread free -3.0, the fence -5.0, then 5.4 ms of its own]; the "
+                        "fence the picture two before's: the presents wait 7.6 ms at the longest "
+                        "lately, at or over half a refresh, that wait the submit thread's;"));
+    CHECK(textHas(text, "; the step after: the next step ends at +11.6 (+9.2 without the further "
+                        "picture), the next frame's picture posted at +11.6, its reads end at "
+                        "+20.7 ms, set by the reads as measured [the measured reads +20.7, the "
+                        "interpolation +14.8, the submit thread free +10.1, the fence +12.0, then "
+                        "5.4 ms of its own] (+18.3 without); the step after starts at +20.7 "
+                        "against +18.3 without, planned at 12.0 ms: it may start 2.7 ms past its "
+                        "due time +16.7; held: its start past that by 1.3 ms; the inputs:"));
+    pace_rt_trace_sum_add(&sum, &q, &t, PACE_RT_MISS);
+
+    /* the block's sums and line */
+    CHECK(sum.asks == 3 && sum.held == 2 && sum.byNext == 1 && sum.byAfter == 1);
+    CHECK(sum.behind == 3 && sum.fenceBefore == 1);
+    CHECK(sum.bound[PACE_RT_BY_FENCE] == 1 && sum.bound[PACE_RT_BY_READS] == 1);
+    CHECK(sum.overNextNs == 11916667u && sum.overAfterNs == 1333334u);
+    (void)pace_rt_trace_sum_text(&sum, 10.0, text, sizeof text);
+    CHECK(textIs(
+        text,
+        "in 10 s 3 further presents asked of the rule, 2 held by a step's period (1 the "
+        "next step's start past its slack, by 11.9 ms on average; 1 the step after's, by "
+        "1.3 ms), 1 passed by the rule; the held ones' reads ended by the measured reads 1, the "
+        "interpolation 0, the submit thread 0, the GPU's slot fence 1; the presents "
+        "waited half a refresh or more in 3 asks (the fence of the picture before "
+        "predicted in 1: the rest the submit thread's wait); the asks' means: the "
+        "picture in progress done in 0.0 ms, reads 9.1 ms (8.6 its own, 3.2 the "
+        "interpolation), the submit thread's part 7.7 ms, the GPU 21.7 ms a picture, the "
+        "present's wait 7.6 ms at the longest lately, the next step planned at 9.2 ms, "
+        "the step after at 4.4 ms"));
+    memset(&sum, 0, sizeof sum);
+    (void)pace_rt_trace_sum_text(&sum, 10.0, text, sizeof text);
+    CHECK(textIs(text, "in 10 s 0 further presents asked of the rule"));
+
+    /* held before the rule: no trace */
+    q.sinceNs = q.nowNs - 10 * MS; /* the picture in progress past its estimate */
+    CHECK(pace_rt_further_trace(&q, &p, &t) == PACE_RT_OVERRUN && t.test == PACE_RT_TEST_NONE);
+    /* a short buffer: cut, NUL-terminated, the length snprintf gives */
+    {
+        char small[32];
+        const int n = pace_rt_trace_text(&q, &t, 1, small, sizeof small);
+
+        CHECK(n > 32 && strlen(small) == sizeof small - 1);
+    }
+}
+
 int main(void)
 {
     PaceHist h = {0};
     testStepRule();
+    testStepTrace();
     testStepTyp();
     testRtTyp();
     testBudgetDiscWait126();

@@ -112,18 +112,26 @@ static void rt_ask(PaceRtAsk *q, const IcoRtPlan *p, Uint64 now, Uint64 refresh,
    would hold this thread for an end not known) and, unless the pictures
    go as made (vsync off, uncapped: pace_rt_as_made), while the presents
    wait for the display or the GPU (PACE_RT_BEHIND).  Never with the thread
-   off or in sync mode, where the cost is the whole picture.  The hold's
-   why, PACE_RT_GO for none */
+   off or in sync mode, where the cost is the whole picture.  Every ask
+   and the rule's working go to the 10 s line and the decision trace
+   (render_thread.h ico_render_thread_note_ask).  The hold's why,
+   PACE_RT_GO for none */
 static PaceRtHold rt_further_hold(Uint64 now, Uint64 refresh, Uint64 period, bool asMade)
 {
     IcoRtPlan p;
     PaceRtAsk q;
+    PaceRtTrace t;
 
     if (!ico_render_thread_plan(&p)) {
         return PACE_RT_GO;
     }
     rt_ask(&q, &p, now, refresh, period, asMade);
-    return pace_rt_further_ask(&q, &s_pres.rtPipe);
+    const PaceRtHold why = pace_rt_further_trace(&q, &s_pres.rtPipe, &t);
+
+    if (why == PACE_RT_GO || why == PACE_RT_MISS) {
+        ico_render_thread_note_ask(&q, &t, (int)why);
+    }
+    return why;
 }
 
 /* A present handed to the render thread at now: the pipeline's prediction
@@ -138,9 +146,10 @@ static void rt_pipe_posted(Uint64 now, Uint64 refresh, Uint64 period)
         return;
     }
     rt_ask(&q, &p, now, refresh, period, false);
-    pace_rt_pipe_post(
-        &s_pres.rtPipe,
-        pace_rt_pipe_reads_end(&s_pres.rtPipe, now, &q, pace_rt_behind(q.presentNs, refresh)), &q);
+    /* the fence of the picture before only with the submit thread off
+       (pace_policy.h pace_rt_pipe_behind) */
+    pace_rt_pipe_post(&s_pres.rtPipe,
+                      pace_rt_pipe_reads_end(&s_pres.rtPipe, now, &q, pace_rt_pipe_behind(&q)), &q);
 }
 
 /* The step that ran before this pace (the timer path, s_deadline its

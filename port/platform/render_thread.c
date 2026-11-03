@@ -57,6 +57,9 @@ static struct {
     /* the further presents the game thread held back by them in the 10 s
        block, by why (pace_policy.h PaceRtHold; the game thread's) */
     unsigned held, heldMiss, heldOverrun, heldBehind;
+    /* the step rule's asks in the block and their working (pace_policy.h
+       PaceRtTraceSum; the game thread's) */
+    PaceRtTraceSum asks;
     /* the game thread's steps in the block (ico_render_thread_note_step):
        those whose first renderer call waited for a picture's reads and the
        longest wait, those that missed their period and the latest, the
@@ -764,6 +767,17 @@ void ico_render_thread_note_held(int why)
     }
 }
 
+void ico_render_thread_note_ask(const struct PaceRtAsk *q, const struct PaceRtTrace *t, int why)
+{
+    pace_rt_trace_sum_add(&s_rt.asks, q, t, (PaceRtHold)why);
+    if (why == PACE_RT_MISS && (s_rt.asks.held <= 8u || s_rt.asks.held % 100u == 0)) {
+        char line[1536];
+
+        (void)pace_rt_trace_text(q, t, s_rt.asks.held, line, sizeof(line));
+        fprintf(stderr, "window: step rule: %s\n", line);
+    }
+}
+
 void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t missNs, bool backedOff,
                                  uint64_t planCloseNs, uint64_t planBetweenNs, uint64_t widenNs,
                                  uint64_t closeMeanNs, uint64_t closeDevNs, bool leftOut, int act)
@@ -917,4 +931,13 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
             tb.freshWaitMs, tb.furtherWaits, tb.furtherWaitMs,
             waits > byPresents ? waits - byPresents : 0u, tb.readWaits, tb.readWaitMs,
             tb.readWaitMaxMs, rt, st, cores);
+    if (s_rt.asks.asks != 0) {
+        /* the step rule's asks in the block: which test held them, by how
+           much, what set the reads' end, the inputs' means */
+        char ask[1536];
+
+        (void)pace_rt_trace_sum_text(&s_rt.asks, 10.0, ask, sizeof(ask));
+        fprintf(stderr, "window: step rule: %s\n", ask);
+    }
+    memset(&s_rt.asks, 0, sizeof(s_rt.asks));
 }
