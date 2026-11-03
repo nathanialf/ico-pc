@@ -1320,7 +1320,9 @@ static void hookStop(void)
  * thread's calls that change the renderer's state (rd_update_texture,
  * rdtex_find: rd__texlock_wait) return at once: no read wait while the
  * render thread still waits; the next picture then takes the slot waited
- * for (no wait inside its reads) and its SCENE is the same.  Under
+ * for (no wait inside its reads; the same frame again, as a frame closed
+ * between would be replayed by rd_end_frame under the Original preset and
+ * take that slot first) and its SCENE is the same.  Under
  * ICO_RD_SLOT_AHEAD=0 every picture waits inside its reads, none ahead.
  * Run as the device has it (the submit thread with the frame slots apart
  * or one at a time, where nothing is waited for ahead) and with
@@ -1387,11 +1389,12 @@ static void threadSlotAhead(void)
                   mid.readWaits + b.readWaits);
         }
         s_hk.mode = 0;
-        /* picture 2: the slot waited for ahead, no wait inside its reads */
-        gif_HostFrameReset();
-        dl_Clear();
-        recordFrame();
-        f = rd__last_frame();
+        /* picture 2: the slot waited for ahead, no wait inside its reads.
+           The same closed frame again, nothing recorded between: under the
+           test's Original preset (interpolation off) rd_end_frame replays
+           each frame it closes on the render thread (rd__on_host, a call
+           the game side waits for), and that replay would take the slot
+           waited for ahead first, as any replay after it does */
         CHECK(f != NULL && rd__replay_frame_async(f, 0, false),
               "slot ahead, %s: picture 2 handed over", name);
         (void)rd_thread_drain();
