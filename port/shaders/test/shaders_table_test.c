@@ -67,6 +67,10 @@ static const char *const expectedSmooth[] = {"fx_acc_ps", "fx_acc_resolve_ps"};
 /* the crack filler above 1x (blit.hlsl; port/render/rd_crack_fill.c) */
 static const char *const expectedCrack[] = {"crack_fill_ps", "crack_count_ps", "crack_fill1_ps"};
 
+/* the shadow count's loads-only build (blit.hlsl SHADOW_COUNT_LOAD: no gather
+ * in the module, for Direct3D's stencil view; port/render/rd_shadow_one.c) */
+static const char *const expectedShadowLoad[] = {"shadow_count_load_ps"};
+
 /* the aura's feedback read in two passes (fx_sprite.hlsl; port/render/rd_aura_box.c) */
 static const char *const expectedAuraBox[] = {"fx_aura_rows_ps", "fx_aura_sum_ps"};
 
@@ -409,6 +413,13 @@ int main(void)
     for (size_t i = 0; i < nCrack; i++) {
         if (!ico_find_shader(expectedCrack[i])) {
             printf("FAIL %s: not in the table\n", expectedCrack[i]);
+            failures++;
+        }
+    }
+    const size_t nShadowLoad = sizeof(expectedShadowLoad) / sizeof(expectedShadowLoad[0]);
+    for (size_t i = 0; i < nShadowLoad; i++) {
+        if (!ico_find_shader(expectedShadowLoad[i])) {
+            printf("FAIL %s: not in the table\n", expectedShadowLoad[i]);
             failures++;
         }
     }

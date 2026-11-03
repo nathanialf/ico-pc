@@ -1569,8 +1569,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the supported mask holds the supersampling values only; `testShadowReset`: a frame whose list 3
   holds the shadow count with a reset on SCENE's depth resolves once a replay
   (`RdPerfRecord.msaaResolves` 1, two when the reset's stencil clear closes the epoch again from
-  inside `msaaEnd`), closes at list 3 (`msaaCloseAt` 4) and leaves SCENE byte for byte as the same
-  frame without the reset; `testSkySlit`: two triangles of one surface over the clear with a 1/16
+  inside `msaaEnd`), closes at list 3 (`msaaCloseAt` 4), records no shadow reset as a pass of its
+  own under MSAA (`passKinds[RD_PERF_PASS_STENCIL]` 0: the volumes' pass takes it, issue 182) and
+  leaves SCENE byte for byte as the same frame without the reset; `testShadowCount`: that frame's
+  count (`rd__shadow_count_read`) by the seven draws, the one draw's gathers and its loads,
+  without anti-aliasing and with MSAA4: the forms' counts byte for byte one count, MSAA4's equal
+  to the count without anti-aliasing wherever the frame without it is one colour and one count
+  over a 3x3, the epoch closed at list 3, no stencil reset pass, and gathers counted
+  (`shadowGathered`) only where the stencil view takes them (`RhiLimits.stencilGather`; never on
+  Direct3D, whose debug layer fails `rd_msaa` on a gather of the stencil plane); `rd_msaa_nvpath`
+  runs the program with the reporter's NVIDIA profile of issue 182 forced
+  (`ICO_RD_FOG_PATH=local`, `ICO_RD_DATE_PATH=stencil`, `ICO_RD_FX_DST_LOCAL=1`,
+  `ICO_RD_SHADOW_ONE=0`) under the validation layer with its synchronisation checks; `testSkySlit`: two triangles of one surface over the clear with a 1/16
   pixel crack along their shared edge, the shadow count, then `cleanUpFB`'s glow mask (a sprite
   at GS Z 1, alpha 192, alpha only, GEQUAL without Z writes): MSAA4 marks no more texels along the
   crack than the frame without anti-aliasing (the covered-majority resolve,

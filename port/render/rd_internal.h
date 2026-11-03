@@ -1475,6 +1475,11 @@ typedef enum RdFsId {
      * build); keys rd__aura_box_keys, in the fx family */
     RD_FS_FX_AURA_ROWS,
     RD_FS_FX_AURA_SUM,
+    /* shadow_count_load_ps: shadow_count_ps with the loads alone, no gather
+     * in the module (SHADOW_COUNT_LOAD): where the stencil view takes no
+     * gather (RhiLimits.stencilGather) or the loads are in force
+     * (g_rd.shadowLoad); key rd__shadow_count_key */
+    RD_FS_SHADOW_COUNT_LOAD,
     RD_FS_COUNT
 } RdFsId;
 
@@ -2280,6 +2285,16 @@ RdPipeKeyInt rd__shadow_reduce_key(void); /* box_reduce_ps: the count at the GS 
  * shadow_count_ps behind blit_vs into an RGBA8 target of the GS size, no
  * depth attachment, the stencil read through its view (RHI_ASPECT_STENCIL) */
 RdPipeKeyInt rd__shadow_count_key(void);
+/* Whether the one draw reads the stencil a texel a load: the self-test's
+ * choice (g_rd.shadowLoad) or a backend whose stencil view takes no
+ * gather (RhiLimits.stencilGather false: Direct3D), where the gathers'
+ * module is never bound (shadow_count_load_ps; rd_shadow_one.c) */
+bool rd__shadow_count_loads(void);
+/* The line naming how the count after an MSAA epoch reads the stencil
+ * (rd_shadow_one.c; rd_msaa.c at the close, rd__shadow_one_draw):
+ * one 1 the one draw, 0 the seven stencil-tested draws; samples the
+ * epoch's count.  Reported once a form and count. */
+void rd__shadow_msaa_note(int one, uint32_t samples);
 /* The table shadow_count_ps reads the count's bytes from: texel m (0..63)
  * the RGBA the seven draws write for a stencil whose bits 0-5 hold m:
  * RGB 4 m, A 0x80 where m != 0, else 0; under the step 8 RGB 8 (m mod 32),
