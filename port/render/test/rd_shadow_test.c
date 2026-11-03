@@ -1647,6 +1647,10 @@ static void poisonFrame(int vol, bool one, const char *what)
     snprintf(w2, sizeof w2, "%s, %s, poisoned", what, one ? "one draw" : "seven draws");
     const bool plan = g_rd.profile.storePlan;
     setPoison(true);
+    /* the volumes in their own pass on the count target, whose colour this
+     * case is about (rd_shadow_mali runs on a tile-based class, where they
+     * would go into the scene's pass: case m) */
+    rd__shadow_merge_force(0);
     AbPics kept, planned;
     g_rd.profile.storePlan = false;
     const bool okKept = abRecord(vol, one, &kept, w2);
@@ -1689,6 +1693,7 @@ static void poisonFrame(int vol, bool one, const char *what)
     abFree(&kept);
     abFree(&planned);
     setPoison(false);
+    rd__shadow_merge_force(-1);
     g_rd.profile.storePlan = plan;
 }
 
