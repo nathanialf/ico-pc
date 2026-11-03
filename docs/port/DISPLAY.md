@@ -385,8 +385,11 @@ measures ([Further presents and the game step](#further-presents-and-the-game-st
 in-between presents it refused, its drops and climbs and the climbs its GPU gate refused in the
 block (the timer path's; under the lock every climb is a probe, none refused); then `GPU span G ms
 a timed replay`, the median of the last 8 timed presented replays' GPU time (`perf_drain`,
-`pace_hist_add`) that the timer path's climb gate and the paced budget read, not the block's
-mean. It is the replay's stamp span on every backend (`RdPerfRecord.gpuMs`, the first stamp to
+`pace_hist_add`) that the timer path's climb gate, the paced budget and the step rule's pipe read,
+not the block's mean: it is the value at the block's end, so a block that ends on a stage's loading
+pictures reads low (a phone at the Original preset: `GPU span 1.9 ms` where the block's replays
+averaged 14.76 ms and the step rule's asks read 13.4 on average, its sum line's `the GPU 13.4 ms a
+picture`). It is the replay's stamp span on every backend (`RdPerfRecord.gpuMs`, the first stamp to
 the present's end: the GPU's waits for the CPU's submissions are in it), hence `span`; a busy
 time would read `GPU busy` (`pace_budget_block_text`'s `gpuIsSpan`), and OpenGL's busy clock is
 only in the replays line's pass-timed replays (the replays line's `GPU` is the mean over the block's replays: issue 130's log had this
@@ -560,7 +563,8 @@ plan's means per replay, `; stores: N depth and M colour stores dropped a replay
   is done where the pass ends, not where its commands were recorded, so a list's or an effect's time
   there is where the work ended and not its own cost ([RENDER.md](RENDER.md#the-per-pass-timing));
   the top passes line and the total are the numbers to compare, and a reporter on such a device
-  should not be asked to explain the lists' split. The GPU ms per replay and top passes lines end with that sentence on a tile-based GPU, and say that uploads carries the wait for the display before the first colour write.
+  should not be asked to explain the lists' split. The GPU ms per replay and top passes lines end with that sentence on a tile-based GPU, and say that the first pass that writes colour carries the wait for the display's image: the Vulkan acquire's wait (`COLOR_ATTACHMENT_OUTPUT`) holds every colour write of the replay's batch, not only the window's image, so it lands in uploads when new targets are cleared first and otherwise in list 0's first pass (a phone at the Original preset in play: uploads 0.53 ms, list 0 6.91 of 14.76).
+- `window: GPU between replays: N timed replays after the one before: the GPU idle before I of them (A ms on average, the longest L ms), K begun before the one before ended (by O ms on average: their spans count that end too); the GPU's time a replay past the one before's end E ms, its span S ms`: each replay's first stamp against the replay before's last (`RdPerfRecord.gpuGapNs`, the same GPU clock; `PaceGpuGap`, `pace_gpu_gap_text`). Every Vulkan stamp is bottom-of-pipe, written once the earlier commands are done, so K is 0 on a driver that keeps the rule and a span then holds its replay's whole GPU time, any wait inside the replay (the display's image) included: that is the time from the replay's start on the GPU to its fence, what the step rule's pipe needs. K above 0 is a driver that writes the first stamp early: the spans count the replay before's end too and E is the GPU's own time a replay, the one to compare with the span the rule reads. I is the GPU waiting for the CPU's submissions.
 - `window: per replay ...`: the counts (draws, passes, pipeline and bind group binds, barriers,
   copies, uploads, DATE snapshots). After the binds, `(repeats skipped: X pipeline, Y bind group, Z
   state)`: the binds and state sets the RHI found already in force and recorded nothing for
@@ -857,7 +861,28 @@ where the block with presents under half a refresh made 44.6 at 22.4 ms, the GPU
 model at those blocks' typical times gives 30.2 / 30.1 presented fps with the presents behind all
 the time, 41.0 / 46.2 / 34.0 with the fence at two in flight whatever the present waits (the GPU
 makes 44.6 / 46.1 / 33.9), with no step missing its period at the two slower blocks
-(`pace_loop_test` `testRc12`; `build-host/tmp/v098/evidence/pace5/`). With the driver's
+(`pace_loop_test` `testRc12`; `build-host/tmp/v098/evidence/pace5/`). With the frame slots apart
+(the Vulkan backend with the timeline sync) the submit thread's job is not before the next
+picture, so the render thread's plan gives it as 0 and says the thread is on beside it
+(`IcoRtPlan.submitOn`, `PaceRtAsk.submitOn`); a build that read the 0 as the thread off planned
+the picture before's fence again: a phone at the Original preset (512x448, the GPU 14.8 ms a
+picture, the reads 8.7 ms, a 3.4 ms closing step, the presents waiting 8.4 ms at the longest)
+predicted it in 595 of 770 asks, held 540 and showed 45.6 presented fps, the Enhanced preset at
+848x448 45.5. The model of those blocks gives 46.0 / 45.1 with that reading and 67.1 / 65.3 with
+the thread on, the GPU's own 67.6 / 68.5 (63.3 at the Original preset with the GPU's time
+alternating 21 / 8.6 ms a picture, as that phone's slow replay lines show), 54.5 at 1696x896
+(the GPU's 56.2) and 43.1 / 45.8 / 33.9 at the native blocks above (`pace_loop_test` `testRc13`;
+`build-host/tmp/v098/evidence/pace6/`). The line `window: step rule: the submit thread on (the
+frame slots apart|the next picture waits for its job): the further pictures planned with two
+pictures in flight, ...` (or `... off: ... the picture before's fence ...`) says which reading the
+rule took, once each time it changes; the sum line's `the fence of the picture before predicted
+in 0: the rest the submit thread's wait` says the same per block. The pipe's GPU time a picture
+is the median span (above): from the replay's start on the GPU to its fence when the spans do not
+overlap (`window: GPU between replays`), which is what the pipe adds to the later of the reads'
+end and the picture before's fence. If the GPU's real time were under the spans (a wait the spans
+counted that did not delay the fence), the rule would hold at the spans' rate and no lower: at the
+Original preset 67.7 presented fps with 2 or 8 ms GPU pictures read as 14.8
+(`build-host/tmp/v098/evidence/pace6/overstate.py`). With the driver's
 back-pressure itself (a present that returns only once the GPU finished the picture before), the
 submit thread's job carries the wait and the plan sees it there (26 ms pictures: 376 presents in
 10 s where the picture before's fence gave 320; the GPU makes 385; no step missing its period).

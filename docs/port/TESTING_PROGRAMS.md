@@ -701,7 +701,18 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   of 120 steps either way; over 100 s 4274 / 4601 / 3392, the fewest in a block 410 / 459 / 339,
   no start later than 8.4 ms
   (`build-host/tmp/v098/evidence/pace5/rc12_cells.py`, `c_cells.py`); the PowerVR mailbox at 26 ms
-  in `testStepRule` 376 where the picture before's fence gave 320 (`pace_loop`).
+  in `testStepRule` 376 where the picture before's fence gave 320; `testRc13`: the loop in the
+  frame slots apart's world (`s_rtGame.slots`: the render thread waits for the submit thread only
+  for the picture two before's job, the GPU starts a picture once the submit thread has run its
+  submit, the pipe reads the job as 0 with `submitOn`; `gpuSeq` the GPU's time per picture;
+  `gpuRecords` the pipe's GPU time the median of the last 8 records, two pictures late, as
+  `perf_drain`) at a phone's blocks: the Original preset at 512x448 (14.8 ms GPU pictures, 8.7 ms
+  reads, a 3.4 ms closing step) 460 presents in 10 s with the rule as that phone's build ran it
+  (the job's 0 read as the thread off: the picture before's fence in 747 of 749 asks; the phone
+  45.6 fps) and 671 now, 633 with the GPU's time alternating 21.0 / 8.6 ms, 6725 over 100 s with no
+  miss; the Enhanced preset at 848x448 451 / 653 (the phone 45.5) and at 1696x896 302 / 545;
+  `testRc12`'s native blocks 302 / 431, 302 / 458, 301 / 339 (the GPU makes 446 / 461 / 339)
+  (`build-host/tmp/v098/evidence/pace6/c_cells_rc13.py`) (`pace_loop`).
 - `cpu_place_test.c`: which core a thread runs on (`port/platform/cpu_place.h`): the histogram
   (by core, out of range and -1 as not known, the most-run core with the lowest on a tie, the take
   emptying it, the share on a mask), the cores' speeds from a fake sysfs under the build folder on
@@ -785,8 +796,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   before the closing step held by the next step's start 11.9 ms past its slack with the picture
   before's fence and handed over with the submit thread's, every field to the nanosecond; the
   step after holding it 1.3 ms past its slack; the trace line and the block's sum line word for
-  word, a block with no ask, a hold before the rule with no trace, a short buffer cut)
-  (`pace_policy`).
+  word, a block with no ask, a hold before the rule with no trace, a short buffer cut; the frame
+  slots apart, the submit thread's job 0 with `submitOn`, not behind), and the GPU's time between
+  timed replays (`testGpuGap`, `PaceGpuGap`: the idle floor of 0.05 ms, an overlap capped at the
+  span, the `window: GPU between replays` part word for word, a short buffer) (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
 - `present_fallback_test.c`: the FIFO fallback's decision (`present_fallback.h`): the stock
