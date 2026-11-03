@@ -886,7 +886,8 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
  * only when it would make a game step miss its own period, not whenever its
  * reads would touch the next step.  A step that starts a few ms late, its
  * first renderer call waiting for the picture's reads, still ends inside
- * its period: the phone's step takes 4.5 ms of its 16.7.  The window's
+ * its period: the phone's step closing a frame takes 9 ms of its 16.7, the
+ * one between frames under 1 ms.  The window's
  * timer path asks it in every mode (the paced holds above it as before;
  * with vsync off and the frame rate uncapped only the overrun one,
  * pace_rt_as_made); pace_rt_further_late and pace_rt_further_hold are the
@@ -894,9 +895,10 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
  * comparisons (pace_loop_test.c).
  *
  * The step may start late by up to its slack, period - (step + margin):
- * stepNs is the step's own time as estimated (PaceStepEst: its recent
- * maximum, falling an eighth a step, with the margin's widening after a
- * miss of the pictures', the whole period while backed off),
+ * stepNs is the step's own time as planned (pace_step_plan_ns: the typical
+ * time of its kind, closing a frame or between frames, with the margin's
+ * widening after a miss of the pictures', the whole period while backed
+ * off),
  * PACE_RT_STEP_MARGIN_NS the rest of a step's time the estimate does not
  * see (the pump between steps, the wake from the pacer's sleep, the audio
  * callback and the other threads taking the game thread's core, the
@@ -941,7 +943,44 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
    it decays) */
 #define PACE_STEP_WIDEN_MAX_NS 100000000ull
 
+/* The step's typical own time, for the steps of one kind (pace_step_typ_note):
+ * a decaying mean (an eighth of the way a step of that kind) and its
+ * deviation (the square root of the variance decaying the same way), the
+ * plan their sum.  The game's frame is two steps (a frame every two
+ * vsyncs): the one that closes the frame carries the game's work (8-10 ms
+ * on a PowerVR phone in play, every slow step of its log at the vsync
+ * that closes a frame), the one between frames under 1 ms; a recent
+ * maximum of both kinds (pace_rt_estimate) planned the short one at the
+ * long one's time, and a mean of both kinds and its deviation would too
+ * (4.75 + 4.25 ms).  So each kind has its own.  A step with the game's
+ * loading work (disc reads, texture decodes, pipelines made: the ones
+ * window_hold_line names) is left out, and so is a step over the period
+ * whose kind's step before was not over it (an isolated long step: a bug
+ * report's capture, a stall); two in a row are the scene's time and count.
+ * skipped counts the steps left out (the caller's 10 s line). */
+typedef struct PaceStepTyp {
+    uint64_t meanNs; /* the decaying mean (0: none yet) */
+    uint64_t varNs;  /* its decaying variance, ns squared */
+    unsigned n;      /* samples taken */
+    unsigned skipped;
+    bool over; /* the last step of this kind was over the period */
+} PaceStepTyp;
+
+/* One step of t's kind, its own time ownNs (0: not known, nothing done),
+ * load: it did the game's loading work */
+void pace_step_typ_note(PaceStepTyp *t, uint64_t ownNs, uint64_t periodNs, bool load);
+/* The kind's typical time: the mean and one deviation (0: no sample yet) */
+uint64_t pace_step_typ_ns(const PaceStepTyp *t);
+
+/* Whether the step ahead steps from now closes a game frame: the last
+ * step closed one sinceClose steps ago (0: the step just run closed one),
+ * a frame every frameSteps steps (0 or 1: every step) */
+bool pace_step_closes(unsigned sinceClose, unsigned ahead, unsigned frameSteps);
+
 typedef struct PaceStepEst {
+    /* the typical time by kind: [0] a step between frames, [1] one that
+       closes a frame (pace_step_plan_ns plans by them) */
+    PaceStepTyp typ[2];
     uint64_t estNs;      /* pace_rt_estimate of the step's own time (0: none yet) */
     uint64_t widenNs;    /* the margin's widening (0: none) */
     unsigned backoff;    /* steps left planned at the whole period */
@@ -994,6 +1033,12 @@ bool pace_step_by_pictures(bool missed, uint64_t lateNs, uint64_t presentsLateNs
  * (at least the estimate) */
 uint64_t pace_step_est_ns(const PaceStepEst *e, uint64_t periodNs);
 
+/* The step's time the rule plans by for a step that closes a frame or not:
+ * that kind's typical time (pace_step_typ_ns) and the margin's widening,
+ * the whole period while backed off; pace_step_est_ns while the kind has
+ * no sample yet */
+uint64_t pace_step_plan_ns(const PaceStepEst *e, bool closes, uint64_t periodNs);
+
 /* The render thread's pipeline as the game thread predicts it (PaceRtPipe):
  * a picture handed over makes no graphics call for its interpolation
  * (interpNs), then waits for the submit thread to finish the picture
@@ -1016,7 +1061,9 @@ typedef struct PaceRtAsk {
     uint64_t nowNs;     /* when it would be handed over */
     uint64_t dueNs;     /* the next step's due time */
     uint64_t periodNs;  /* the step's period */
-    uint64_t stepNs;    /* the step's time to plan by (pace_step_est_ns) */
+    uint64_t stepNs;    /* the next step's time to plan by (pace_step_plan_ns) */
+    uint64_t afterNs;   /* the step after it's (0: stepNs) */
+    bool nextBetween;   /* the next step closes no frame (false: it does, or not known) */
     uint64_t sinceNs;   /* the render thread's picture in progress started (0: none) */
     uint64_t readsNs;   /* a picture's reads, waits included (the hand-over) */
     uint64_t pictureNs; /* its whole job on the render thread */
@@ -1048,13 +1095,30 @@ bool pace_rt_behind(uint64_t presentNs, uint64_t refreshNs);
 /* True when a further present handed over once the picture in progress is
  * done (busyLeftNs) would make a step miss its period: the next step,
  * which starts when the further picture's reads end (or at its due time),
- * would start later than its slack past its due time; or the step after
- * it, behind the next new frame's own picture (posted when the next step
- * ends, after the further picture's whole job; never held, every frame is
- * shown), would start later than its slack past its due time, and later
- * than it would without the further picture.  Both with the slack
- * period - (stepNs + PACE_RT_STEP_MARGIN_NS), 0 when the step needs the
- * whole period (then only the further picture's own delay is held). */
+ * would start later than its slack past its due time; or, when the next
+ * step closes a frame (not nextBetween), the step after it, behind the
+ * next new frame's own picture (posted when the next step ends, after the
+ * further picture's whole job; never held, every frame is shown), would
+ * start later than its slack past its due time, and later than it would
+ * without the further picture.  Each step's slack is its own: period -
+ * (its time + PACE_RT_STEP_MARGIN_NS), stepNs the next one's, afterNs the
+ * one after's, 0 when the step needs the whole period (then only the
+ * further picture's own delay is held).  When the next step closes no
+ * frame there is no new frame's picture after it, and the step after it
+ * starts past its due time only by the next one's end, which the first
+ * test keeps inside the period.
+ *
+ * Over the game's frame (two steps at 60 Hz) this is the frame's budget:
+ * the step closing a frame (its work, 9 ms on a phone) may start late by
+ * its own slack (period less its time and the margin, 5-6 ms), the step
+ * between (under 1 ms) by most of its period; a frame's two pictures
+ * chain the closing step, the frame's own picture's reads, its submit and
+ * the further picture's reads, and the lateness that chain leaves past the
+ * frame's period carries into the next frame until a further picture is
+ * held: no step ends past its period, the lag stays under the closing
+ * step's slack, and the sound, up to 120 ms ahead of the game, is never
+ * held back by it (docs/port/DISPLAY.md "Further presents and the game
+ * step"). */
 bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLeftNs);
 
 /* The render thread's hold on a further present (the window, every mode):

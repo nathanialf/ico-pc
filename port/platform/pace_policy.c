@@ -246,6 +246,81 @@ uint64_t pace_step_est_ns(const PaceStepEst *e, uint64_t periodNs)
     return e->estNs + e->widenNs;
 }
 
+/* the integer square root (floor) */
+static uint64_t isqrt_u64(uint64_t v)
+{
+    uint64_t r = 0, bit = (uint64_t)1 << 62;
+
+    while (bit > v) {
+        bit >>= 2;
+    }
+    while (bit != 0) {
+        if (v >= r + bit) {
+            v -= r + bit;
+            r = (r >> 1) + bit;
+        } else {
+            r >>= 1;
+        }
+        bit >>= 2;
+    }
+    return r;
+}
+
+void pace_step_typ_note(PaceStepTyp *t, uint64_t ownNs, uint64_t periodNs, bool load)
+{
+    if (ownNs == 0) {
+        return;
+    }
+    if (load) {
+        t->skipped++;
+        return;
+    }
+    if (ownNs > periodNs) {
+        if (!t->over) {
+            /* an isolated long step: the game's, left out */
+            t->over = true;
+            t->skipped++;
+            return;
+        }
+    } else {
+        t->over = false;
+    }
+    /* kept in range for the square (a step past four periods is the
+       game's stall either way) */
+    const uint64_t x = ownNs > 4u * periodNs ? 4u * periodNs : ownNs;
+
+    if (t->n == 0) {
+        t->meanNs = x;
+        t->varNs = 0;
+    } else {
+        const uint64_t d = x > t->meanNs ? x - t->meanNs : t->meanNs - x;
+
+        t->meanNs = x > t->meanNs ? t->meanNs + d / 8u : t->meanNs - d / 8u;
+        t->varNs = t->varNs - t->varNs / 8u + d * d * 7u / 64u;
+    }
+    t->n++;
+}
+
+uint64_t pace_step_typ_ns(const PaceStepTyp *t)
+{
+    return t->n != 0 ? t->meanNs + isqrt_u64(t->varNs) : 0;
+}
+
+bool pace_step_closes(unsigned sinceClose, unsigned ahead, unsigned frameSteps)
+{
+    return frameSteps <= 1u || (sinceClose + ahead) % frameSteps == 0;
+}
+
+uint64_t pace_step_plan_ns(const PaceStepEst *e, bool closes, uint64_t periodNs)
+{
+    const PaceStepTyp *t = &e->typ[closes ? 1 : 0];
+
+    if (t->n == 0 || e->backoff != 0) {
+        return pace_step_est_ns(e, periodNs);
+    }
+    return pace_step_typ_ns(t) + e->widenNs;
+}
+
 bool pace_rt_behind(uint64_t presentNs, uint64_t refreshNs)
 {
     return refreshNs != 0 && presentNs * PACE_RT_BEHIND_DIV >= refreshNs;
@@ -289,6 +364,9 @@ bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLef
 {
     const uint64_t need = q->stepNs + PACE_RT_STEP_MARGIN_NS;
     const uint64_t slack = q->periodNs > need ? q->periodNs - need : 0;
+    /* the step after's own slack */
+    const uint64_t needB = (q->afterNs != 0 ? q->afterNs : q->stepNs) + PACE_RT_STEP_MARGIN_NS;
+    const uint64_t slackB = q->periodNs > needB ? q->periodNs - needB : 0;
     const uint64_t due = q->dueNs, period = q->periodNs;
     const bool behind = pace_rt_behind(q->presentNs, q->refreshNs);
     const uint64_t post = q->nowNs + busyLeftNs;
@@ -299,6 +377,12 @@ bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLef
     /* the next step starts when the reads end */
     if (readsEnd > due + slack) {
         return true;
+    }
+    if (q->nextBetween) {
+        /* the next step closes no frame: no new frame's picture after it,
+           and the step after starts past its due time only by the next
+           one's end, inside the period by the test above */
+        return false;
     }
     /* the step after it, behind the next new frame's picture: posted when
        the next step ends, once the further picture's job is done */
@@ -313,7 +397,7 @@ bool pace_rt_step_miss(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLef
     const uint64_t startB = newEnd > due + period ? newEnd : due + period;
     const uint64_t startB0 = newEnd0 > due + period ? newEnd0 : due + period;
 
-    return startB > startB0 && startB > due + period + slack;
+    return startB > startB0 && startB > due + period + slackB;
 }
 
 PaceRtHold pace_rt_further_ask(const PaceRtAsk *q, const PaceRtPipe *p)

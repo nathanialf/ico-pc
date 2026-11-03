@@ -13,7 +13,9 @@
 #include "diag_host.h"
 #include "display_clock.h"
 #include "host_loop.h"
+#include "rd.h"
 #include "rd_submit.h"
+#include "rd_tex.h"
 #include "rd_thread.h"
 #include "render_thread.h"
 #include "rhi.h"
@@ -72,7 +74,16 @@ static void rt_ask(PaceRtAsk *q, const IcoRtPlan *p, Uint64 now, Uint64 refresh,
     q->nowNs = now;
     q->dueNs = s_deadline;
     q->periodNs = period;
-    q->stepNs = pace_step_est_ns(&s_pres.stepEst, period);
+    /* each step by its own kind: the next one and the one after, closing a
+       frame or between frames (pace_policy.h pace_step_plan_ns) */
+    {
+        const bool next = pace_step_closes(s_pres.sinceClose, 1, s_pres.frameSteps);
+        const bool after = pace_step_closes(s_pres.sinceClose, 2, s_pres.frameSteps);
+
+        q->stepNs = pace_step_plan_ns(&s_pres.stepEst, next, period);
+        q->afterNs = pace_step_plan_ns(&s_pres.stepEst, after, period);
+        q->nextBetween = !next;
+    }
     q->sinceNs = p->sinceNs;
     q->readsNs = p->readsNs;
     q->pictureNs = p->pictureNs;
@@ -140,7 +151,7 @@ static void rt_pipe_posted(Uint64 now, Uint64 refresh, Uint64 period)
    10 s line; a miss with the
    further presents planned by the render thread is named, the first 8 then
    every 100th */
-static void step_note(Uint64 period)
+static void step_note(Uint64 period, bool closed)
 {
     const Uint64 now = SDL_GetTicksNS();
     const uint64_t waits = rd_thread_read_wait_ns();
@@ -165,11 +176,32 @@ static void step_note(Uint64 period)
     const uint64_t presentsLate =
         pace_step_start_late(s_pres.paceEnd, s_deadline - period, prevEnd);
     const bool byPictures = pace_step_by_pictures(missed, late, presentsLate, waited);
+    /* the step's typical time by its kind (closing a frame or between
+       frames), the game's loading work left out: disc reads, texture
+       decodes, pipelines made in the step (window_host.c keeps their counts
+       at the last pace's end; window_hold_line names the same) */
+    bool load;
+    {
+        IcoStepProfile prof;
+        const RdTexCacheStats *tc = rdtex_stats();
+        const RdStats *rs = rd_get_stats();
+
+        ico_host_step_profile(&prof);
+        load = prof.cdReads != 0 || prof.loading != 0 ||
+               (tc != NULL && tc->decodes != s_pres.decodes) ||
+               (rs != NULL && rs->pipelineCreates != s_pres.pipeCreates);
+    }
+    PaceStepTyp *typ = &s_pres.stepEst.typ[closed ? 1 : 0];
+    const unsigned skipped0 = typ->skipped;
+
+    pace_step_typ_note(typ, own, period, load);
     const PaceStepAct act = pace_step_est_note(&s_pres.stepEst, own, missed, late, byPictures);
     const PaceStepEst *e = &s_pres.stepEst;
 
     ico_render_thread_note_step(waited, missed, late, backedOff,
-                                pace_step_est_ns(&s_pres.stepEst, period), (int)act);
+                                pace_step_plan_ns(&s_pres.stepEst, true, period),
+                                pace_step_plan_ns(&s_pres.stepEst, false, period), e->widenNs,
+                                typ->skipped != skipped0, (int)act);
     if (!missed || !rd_interpolation_active() || ico_render_thread_mode() != FM_MODE_ON) {
         return;
     }
@@ -765,8 +797,22 @@ void window_present_pace(int hz)
     s_pres.budget.paced = pace_budget_paced_mode(s_pres.vsync, rhi_present_mailbox());
     s_deadline += period;
     s_pres.statVsyncs++;
-    step_note(period);
     const int newFrame = frame_seen(s_deadline - period);
+
+    step_note(period, newFrame != 0);
+    /* the game's frame in steps: the closes apart (pace_policy.h
+       pace_step_closes); past four (a load, a pause) not known, every
+       step then planned as one that closes a frame */
+    if (newFrame) {
+        const unsigned n = s_pres.tickPrev != 0 && s_pres.tickAt > s_pres.tickPrev
+                               ? (unsigned)((s_pres.tickAt - s_pres.tickPrev + period / 2) / period)
+                               : 0u;
+
+        s_pres.frameSteps = n <= 4u ? n : 0u;
+        s_pres.sinceClose = 0;
+    } else {
+        s_pres.sinceClose++;
+    }
     if (!rd_interpolation_active()) {
         /* framerate "original": rd_end_frame presented the frame once; the
            picture is held until the next.  That present's start-up log line

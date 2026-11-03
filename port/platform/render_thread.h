@@ -83,12 +83,17 @@ void ico_render_thread_note_held(int why);
    its first renderer call waited readWaitNs for a picture's reads (0:
    none: not started late by the pictures), it missed its period (ended
    missNs past its deadline), it was planned at the whole period after a
-   miss (backedOff: pace_policy.h PaceStepEst), the step's time the rule
-   plans further presents by (planNs); act: what a miss of the pictures'
-   did to the plan (pace_policy.h PaceStepAct: PACE_STEP_NONE for none, a
-   miss then the game's own) */
+   miss (backedOff: pace_policy.h PaceStepEst), the steps' times the rule
+   plans further presents by (pace_step_plan_ns: planCloseNs a step that
+   closes a frame, planBetweenNs one between frames, widenNs the margin's
+   widening inside both), leftOut: the step was left out of its kind's
+   typical time (the game's loading work, an isolated long step:
+   pace_step_typ_note); act: what a miss of the pictures' did to the plan
+   (pace_policy.h PaceStepAct: PACE_STEP_NONE for none, a miss then the
+   game's own) */
 void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t missNs, bool backedOff,
-                                 uint64_t planNs, int act);
+                                 uint64_t planCloseNs, uint64_t planBetweenNs, uint64_t widenNs,
+                                 bool leftOut, int act);
 
 /* The 10 s line (window_host.c window_pace_log): the game thread's mean
    step and pump per call in ms, its own cost of closing a frame

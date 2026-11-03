@@ -2222,6 +2222,18 @@ static struct {
     const unsigned *spikeAt;
     const uint64_t *spikeNs;
     unsigned spikes;
+    /* the game's frame (fieldNs 0: every step L->stepNs): the step that
+       closes a frame (the even ones) takes frameSeq[i % frameSeqN] for the
+       i-th frame, the step between fieldNs; fieldQuiet: the step between
+       makes no renderer call (no read wait; a phone's in play) */
+    const uint64_t *frameSeq;
+    unsigned frameSeqN;
+    uint64_t fieldNs;
+    bool fieldQuiet;
+    /* the rule blind to the frame's shape (before pace_policy.h
+       PaceStepTyp: every step planned by the one recent maximum, the step
+       after the next always behind a new frame's picture) */
+    bool blind;
 } s_rtGame;
 
 /* RT_RULE_HANDOVER's back-off (FIX-HANDOVER's pace_step_est_note) */
@@ -2317,8 +2329,14 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
         const uint64_t due = deadline;
         /* the presents' part of a late start, before the read wait */
         const uint64_t presentsLate = pace_step_start_late(t, due, prevEnd);
+        const bool closes = k % 2 == 0; /* this step closes a frame */
+        const uint64_t base =
+            s_rtGame.fieldNs == 0
+                ? L->stepNs
+                : (closes ? s_rtGame.frameSeq[(k / 2) % s_rtGame.frameSeqN] : s_rtGame.fieldNs);
+        const bool touches = closes || s_rtGame.fieldNs == 0 || !s_rtGame.fieldQuiet;
         const uint64_t own =
-            L->stepNs + (s_rtGame.slowNs != 0 && k == s_rtGame.slowAt ? s_rtGame.slowNs : 0);
+            base + (s_rtGame.slowNs != 0 && k == s_rtGame.slowAt ? s_rtGame.slowNs : 0);
         uint64_t waited = 0;
         /* the first picture posted in this step reads spike longer */
         uint64_t spike = 0;
@@ -2326,7 +2344,7 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
         if (nextSpike < s_rtGame.spikes && s_rtGame.spikeAt[nextSpike] == k) {
             spike = s_rtGame.spikeNs[nextSpike++];
         }
-        if (rReadsEnd > t) {
+        if (rReadsEnd > t && touches) {
             /* the step's first call that changes the renderer's state */
             if (k >= 60) {
                 r.readWaits++;
@@ -2361,6 +2379,10 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                 r.pictureMisses += byPictures ? 1u : 0u;
                 r.gameMisses += byPictures ? 0u : 1u;
                 r.overFloor += byPictures && late >= PACE_STEP_MISS_FLOOR_NS ? 1u : 0u;
+            }
+            if (!s_rtGame.blind) {
+                /* window_present.c step_note: the step's kind's typical time */
+                pace_step_typ_note(&se.typ[closes ? 1 : 0], own, NTSC, false);
             }
             if (s_rtGame.rule == RT_RULE_NOW) {
                 pace_step_est_note(&se, own, missed, late, byPictures);
@@ -2404,9 +2426,17 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     q.nowNs = t;
                     q.dueNs = deadline;
                     q.periodNs = NTSC;
-                    q.stepNs = s_rtGame.rule == RT_RULE_NOW || oldBo.backoff == 0
-                                   ? pace_step_est_ns(&se, NTSC)
-                                   : (se.estNs > NTSC ? se.estNs : NTSC);
+                    if (s_rtGame.rule != RT_RULE_NOW && oldBo.backoff != 0) {
+                        q.stepNs = se.estNs > NTSC ? se.estNs : NTSC;
+                        q.afterNs = s_rtGame.blind ? 0 : q.stepNs;
+                    } else if (s_rtGame.blind) {
+                        q.stepNs = pace_step_est_ns(&se, NTSC);
+                    } else {
+                        /* each step by its own kind (window_present.c rt_ask) */
+                        q.stepNs = pace_step_plan_ns(&se, (k + 1u) % 2u == 0, NTSC);
+                        q.afterNs = pace_step_plan_ns(&se, (k + 2u) % 2u == 0, NTSC);
+                    }
+                    q.nextBetween = !s_rtGame.blind && (k + 1u) % 2u != 0;
                     q.sinceNs = rFree > t ? rStart : 0;
                     q.readsNs = readsEst;
                     q.pictureNs = wholeEst;
@@ -2935,7 +2965,11 @@ static void testStepRule(void)
 /* The back-off's cause and size (pace_policy.h pace_step_by_pictures,
    PaceStepEst).  Numbers from build-host/tmp/v098/evidence/fixbackoff/
    (pr_sim.py with the rule now and the rules before; backoff_cells.out,
-   rc9_test_cells.out).
+   rc9_test_cells.out), re-run with each step planned by its kind's typical
+   time (build-host/tmp/v098/evidence/pace3/rebase_cells.out): the game's
+   long step is left out of the typical time where the recent maximum took
+   it in, so cell 1 gives 700 / 698 / 701 presents where it gave 696 / 696
+   / 693; every other count is the same.
    1. The phone's load at 10 ms reads (testStepRule's first cell: 700
       presents, no miss) with one long step of the game's own at step 300:
       no back-off and no fall-back, where the rule before every miss's
@@ -2960,7 +2994,7 @@ static void testBackoffCause(void)
 {
     static const struct {
         unsigned slowMs, presents, misses, pictures, before, beforeBackoffs;
-    } slow[] = {{20, 696, 2, 1, 660, 2}, {40, 696, 4, 0, 647, 4}, {700, 693, 1, 0, 679, 1}};
+    } slow[] = {{20, 700, 2, 1, 660, 2}, {40, 698, 4, 0, 647, 4}, {700, 701, 1, 0, 679, 1}};
 
     for (unsigned i = 0; i < sizeof(slow) / sizeof(slow[0]); i++) {
         const RtLoad L = {9 * MS / 2, MS / 10, 10 * MS, 16 * MS / 5, 8 * MS, 0,
@@ -3084,6 +3118,121 @@ static void testBackoffCause(void)
     }
 }
 
+/* The rule by the game's frame (pace_policy.h PaceStepTyp,
+   pace_step_plan_ns; pace_rt_step_miss's afterNs and nextBetween).  The
+   game's frame is two steps: the one that closes it carries the game's
+   work, the one between frames under 1 ms and no renderer call in play (a
+   PowerVR phone's log, build-host/tmp/v098/evidence/rc10/ico-pc.log: step
+   4.4-5.1 ms on average, every slow step line, 8-10.8 ms, at the vsync that
+   closes a frame, 4-17 read waits a block although the frame's own
+   picture's reads ran past the step between nearly every frame).  The rule
+   blind to that (s_rtGame.blind: one recent maximum, 8.4-8.8 ms, for every
+   step, and the step after the next always behind a new frame's picture)
+   held the in-between picture whenever the frame's picture would start the
+   step between a few ms late.  Numbers from build-host/tmp/v098/evidence/
+   pace3/rc10_cells.py (.out), the C line for line.  rc10's load: reads 12
+   ms (4.2 ms interpolation), the submit thread's job 7 ms, its present 3
+   ms, vsync off uncapped on a 120 Hz mailbox, the closing step 8-10 ms in
+   turn, the step between 0.5 ms.
+   1. By the GPU's time: 21.7 / 23 / 25 / 26 ms give 450 / 423 / 392 / 376
+      presents in 10 s (the blind rule 338 at each; the GPU makes 461 /
+      435 / 400 / 385); with the driver's back-pressure at 25 ms 317 (319).
+   2. The CPU side alone (8 ms GPU pictures), the closing step 8.5 / 9.5 ms
+      (an average step of 4.5 / 5 ms), reads 8 / 10 / 10.5 / 12 ms: 601 /
+      600 / 600 / 450 and 601 / 600 / 596 / 400 (blind: 601 / 600 / 600 /
+      338 and 601 / 600 / 375 / 301).  A frame's two pictures chain the
+      closing step, the frame's picture's reads, its submit and the further
+      picture's reads past its interpolation (9.5 + 0.1 + 12 + 7 + 7.8 =
+      36.4 ms against the frame's 33.4 at reads 12): the lateness left
+      carries into the next frame until a further picture is held.
+   Every cell: no step misses its period, every frame shown, no resync,
+   and no step starts later than the closing step's slack (period less its
+   time and the margin) and 0.1 ms.
+   3. The step between calling the renderer too (the rule's assumption
+      when it cannot know): reads 10 / 12 ms give 600 / 450 (blind 600 /
+      374), no miss, no step later than the step between's own slack. */
+static void testFrameShape(void)
+{
+    static const uint64_t w[8] = {8 * MS,      9 * MS,      17 * MS / 2, 10 * MS,
+                                  15 * MS / 2, 19 * MS / 2, 17 * MS / 2, 9 * MS};
+
+    static const struct {
+        uint64_t gpuNs;
+        unsigned depth, shape, blind;
+    } gpu[] = {{21700000u, 0, 450, 338},
+               {23 * MS, 0, 423, 338},
+               {25 * MS, 0, 392, 338},
+               {26 * MS, 0, 376, 338},
+               {25 * MS, 1, 317, 319}};
+
+    static const struct {
+        uint64_t closeNs, readsNs;
+        unsigned shape, blind;
+    } cpu[] = {{17 * MS / 2, 8 * MS, 601, 601},      {17 * MS / 2, 10 * MS, 600, 600},
+               {17 * MS / 2, 21 * MS / 2, 600, 600}, {17 * MS / 2, 12 * MS, 450, 338},
+               {19 * MS / 2, 8 * MS, 601, 601},      {19 * MS / 2, 10 * MS, 600, 600},
+               {19 * MS / 2, 21 * MS / 2, 596, 375}, {19 * MS / 2, 12 * MS, 400, 301}};
+
+    static const struct {
+        uint64_t readsNs;
+        unsigned shape, blind;
+    } loud[] = {{10 * MS, 600, 600}, {12 * MS, 450, 374}};
+
+    for (unsigned c = 0; c < 3; c++) {
+        const unsigned n = c == 0   ? (unsigned)(sizeof(gpu) / sizeof(gpu[0]))
+                           : c == 1 ? (unsigned)(sizeof(cpu) / sizeof(cpu[0]))
+                                    : (unsigned)(sizeof(loud) / sizeof(loud[0]));
+
+        for (unsigned i = 0; i < n; i++) {
+            const uint64_t reads = c == 0 ? 12 * MS : c == 1 ? cpu[i].readsNs : loud[i].readsNs;
+            const uint64_t g = c == 0 ? gpu[i].gpuNs : 8 * MS;
+            const unsigned depth = c == 0 ? gpu[i].depth : 0;
+            const unsigned want = c == 0 ? gpu[i].shape : c == 1 ? cpu[i].shape : loud[i].shape;
+            const unsigned wantBlind = c == 0   ? gpu[i].blind
+                                       : c == 1 ? cpu[i].blind
+                                                : loud[i].blind;
+            const uint64_t one = c == 1 ? cpu[i].closeNs : 0;
+            const RtLoad L = {9 * MS / 2, MS / 10, reads, 7 * MS, g, 0, 0, 0, 0, 0, depth, 3 * MS};
+            RtRun shape, blind;
+            char what[160];
+
+            s_rtGame.frameSeq = c == 1 ? &one : w;
+            s_rtGame.frameSeqN = c == 1 ? 1u : 8u;
+            s_rtGame.fieldNs = MS / 2;
+            s_rtGame.fieldQuiet = c != 2;
+            shape = rtTimerLoopRule(600, &L, RT_ASMADE, 21 * MS / 5, false);
+            s_rtGame.blind = true;
+            blind = rtTimerLoopRule(600, &L, RT_ASMADE, 21 * MS / 5, false);
+            memset(&s_rtGame, 0, sizeof s_rtGame);
+            snprintf(what, sizeof what,
+                     "the frame's shape: reads %.1f ms, GPU %.1f ms, depth %u, closing step %s",
+                     (double)reads / 1e6, (double)g / 1e6, depth,
+                     c == 1 ? (one == 17 * MS / 2 ? "8.5 ms" : "9.5 ms") : "8-10 ms");
+            rtPrint(what, &shape);
+            printf("  %u presents blind to the shape; %u steps missed their period, latest start "
+                   "%.1f ms\n",
+                   blind.presents, shape.misses, (double)shape.lateMax / 1e6);
+            CHECK(shape.presents + 3u >= want && shape.presents <= want + 3u);
+            CHECK(blind.presents + 3u >= wantBlind && blind.presents <= wantBlind + 3u);
+            CHECK(shape.misses == 0 && shape.resyncs == 0 && shape.shown == shape.frames);
+            CHECK(shape.behind == 0);
+            {
+                /* the lag: under the closing step's slack (its plan at most
+                   9.6 ms here), the step between's when it calls the
+                   renderer too */
+                const uint64_t closeMax = c == 1 ? one : 9600000u;
+                const uint64_t bound = c == 2 ? NTSC - MS / 2 - PACE_RT_STEP_MARGIN_NS
+                                              : NTSC - closeMax - PACE_RT_STEP_MARGIN_NS;
+
+                CHECK(shape.lateMax <= bound + MS / 10);
+            }
+            if (c != 0 || gpu[i].depth == 0) {
+                CHECK(shape.presents + 3u >= blind.presents);
+            }
+        }
+    }
+}
+
 int main(void)
 {
     test60();
@@ -3120,6 +3269,7 @@ int main(void)
     testSubmitThread();
     testStepRule();
     testBackoffCause();
+    testFrameShape();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;

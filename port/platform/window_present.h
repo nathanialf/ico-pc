@@ -170,6 +170,11 @@ typedef struct WindowPres {
        pace_step_start_late) */
     Uint64 stepEndAt;
     int asMade;
+    /* the game's frame as the steps run it (pace_policy.h pace_step_closes):
+       the steps since the last one that closed a frame (0: the step just
+       run closed one) and a frame's length in steps (the last two frames'
+       closes apart; 0 not known) */
+    unsigned sinceClose, frameSteps;
 } WindowPres;
 
 /* the loop's state (window_present.c), and the deadline: when the

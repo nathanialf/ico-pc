@@ -2654,10 +2654,135 @@ static void testStepRule(void)
     }
 }
 
+/* The step's typical time by kind and the rule by the game's frame
+   (pace_policy.h PaceStepTyp, pace_step_plan_ns, pace_step_closes,
+   pace_rt_step_miss's afterNs / nextBetween).  Numbers from
+   build-host/tmp/v098/evidence/pace3/typ_cells.py (.out), the C line for
+   line.  A phone's steps (its 10 s line: step 4.4-5.1 ms; every slow step
+   line at the vsync that closes a frame, 8-10.8 ms): the step that closes a
+   frame carries the game's work, the one between frames under 1 ms.  The
+   recent maximum of both (pace_rt_estimate) plans every step at 8.4 ms, one
+   mean of both and its deviation at 8.6 ms; by kind 9.6 ms and 0.5 ms */
+static void testStepTyp(void)
+{
+    const uint64_t P = 16683333ull;
+
+    {
+        PaceStepTyp t;
+
+        memset(&t, 0, sizeof t);
+        CHECK(pace_step_typ_ns(&t) == 0);
+        pace_step_typ_note(&t, 0, P, false); /* not known: nothing */
+        CHECK(t.n == 0 && t.skipped == 0);
+        pace_step_typ_note(&t, 9 * MS, P, false);
+        CHECK(t.meanNs == 9 * MS && t.varNs == 0 && pace_step_typ_ns(&t) == 9 * MS);
+        pace_step_typ_note(&t, 10 * MS, P, false);
+        CHECK(t.meanNs == 9125000u && t.varNs == 109375000000ull);
+        CHECK(pace_step_typ_ns(&t) == 9455718u);
+        pace_step_typ_note(&t, 8 * MS, P, false);
+        CHECK(t.meanNs == 8984375u && t.varNs == 234130859375ull);
+        CHECK(pace_step_typ_ns(&t) == 9468245u);
+        /* an isolated step over the period: the game's, left out */
+        pace_step_typ_note(&t, 40 * MS, P, false);
+        CHECK(t.meanNs == 8984375u && t.varNs == 234130859375ull && t.skipped == 1 && t.over);
+        pace_step_typ_note(&t, 9 * MS, P, false);
+        CHECK(t.meanNs == 8986328u && t.varNs == 204891204834ull && !t.over);
+        CHECK(pace_step_typ_ns(&t) == 9438977u);
+        /* two over it in a row: the scene's time, the second counts */
+        pace_step_typ_note(&t, 20 * MS, P, false);
+        pace_step_typ_note(&t, 20 * MS, P, false);
+        CHECK(t.skipped == 2 && t.meanNs == 10363037u && t.varNs == 13446573498997ull);
+        CHECK(pace_step_typ_ns(&t) == 14029993u);
+        /* the game's loading work: left out */
+        pace_step_typ_note(&t, 9 * MS, P, true);
+        CHECK(t.skipped == 3 && t.meanNs == 10363037u);
+    }
+    {
+        /* the phone's frame, 30 frames: the closing step 8, 9, 8.5, 10, 7.5,
+           9.5, 8.5, 9 ms in turn, the step between 0.5 ms */
+        static const uint64_t w[8] = {8 * MS,      9 * MS,      17 * MS / 2, 10 * MS,
+                                      15 * MS / 2, 19 * MS / 2, 17 * MS / 2, 9 * MS};
+        PaceStepTyp close, between, both;
+        uint64_t old = 0;
+
+        memset(&close, 0, sizeof close);
+        memset(&between, 0, sizeof between);
+        memset(&both, 0, sizeof both);
+        for (unsigned f = 0; f < 30; f++) {
+            pace_step_typ_note(&close, w[f % 8], P, false);
+            pace_step_typ_note(&both, w[f % 8], P, false);
+            old = pace_rt_estimate(old, w[f % 8]);
+            pace_step_typ_note(&between, MS / 2, P, false);
+            pace_step_typ_note(&both, MS / 2, P, false);
+            old = pace_rt_estimate(old, MS / 2);
+        }
+        CHECK(close.meanNs == 8777902u && close.varNs == 674988560645ull);
+        CHECK(pace_step_typ_ns(&close) == 9599478u);
+        CHECK(pace_step_typ_ns(&between) == MS / 2);
+        CHECK(both.meanNs == 4390129u && pace_step_typ_ns(&both) == 8589957u);
+        CHECK(old == 8375000u);
+    }
+    {
+        /* the plan by kind: the estimate before a sample, the widening
+           added, the whole period while backed off */
+        PaceStepEst e;
+
+        memset(&e, 0, sizeof e);
+        CHECK(pace_step_plan_ns(&e, true, P) == P);
+        pace_step_est_note(&e, 9 * MS, false, 0, false);
+        CHECK(pace_step_plan_ns(&e, false, P) == 9 * MS); /* no sample of its kind yet */
+        pace_step_typ_note(&e.typ[0], MS / 2, P, false);
+        pace_step_typ_note(&e.typ[1], 9 * MS, P, false);
+        CHECK(pace_step_plan_ns(&e, false, P) == MS / 2);
+        CHECK(pace_step_plan_ns(&e, true, P) == 9 * MS);
+        e.widenNs = 3 * MS;
+        CHECK(pace_step_plan_ns(&e, false, P) == MS / 2 + 3 * MS);
+        e.backoff = 5;
+        CHECK(pace_step_plan_ns(&e, false, P) == P && pace_step_plan_ns(&e, true, P) == P);
+    }
+    /* which step closes a frame: a frame every two steps, every step,
+       three, not known (every step) */
+    CHECK(!pace_step_closes(0, 1, 2) && pace_step_closes(0, 2, 2));
+    CHECK(pace_step_closes(1, 1, 2) && !pace_step_closes(1, 2, 2));
+    CHECK(pace_step_closes(0, 1, 1) && pace_step_closes(5, 2, 1));
+    CHECK(!pace_step_closes(0, 1, 3) && !pace_step_closes(0, 2, 3) && pace_step_closes(1, 2, 3));
+    CHECK(pace_step_closes(0, 1, 0) && pace_step_closes(3, 2, 0));
+    {
+        /* the step after the next by its own time: the next step closes a
+           frame (9.5 ms), 10 ms reads from now, the next step due in 5 ms.
+           Behind the new frame's picture the step after starts 7.8 ms past
+           its due time: past a 9.5 ms step's slack (5.2 ms), inside a 0.5
+           ms step's (14.2 ms).  With the next step between frames, no new
+           frame's picture follows it: only its own slack counts */
+        const PaceRtPipe none = {0, {0, 0}};
+        PaceRtAsk q;
+
+        memset(&q, 0, sizeof q);
+        q.dueNs = 5 * MS;
+        q.periodNs = P;
+        q.stepNs = 19 * MS / 2;
+        q.readsNs = q.pictureNs = 10 * MS;
+        CHECK(pace_rt_step_miss(&q, &none, 0)); /* afterNs 0: the next step's time */
+        q.afterNs = 19 * MS / 2;
+        CHECK(pace_rt_step_miss(&q, &none, 0));
+        q.afterNs = MS / 2;
+        CHECK(!pace_rt_step_miss(&q, &none, 0));
+        q.afterNs = 0;
+        q.nextBetween = true;
+        CHECK(!pace_rt_step_miss(&q, &none, 0));
+        /* the next step's own slack still holds: 1 ns past it */
+        q.readsNs = q.pictureNs = 5 * MS + (P - 19 * MS / 2 - PACE_RT_STEP_MARGIN_NS) + 1u;
+        CHECK(pace_rt_step_miss(&q, &none, 0));
+        q.readsNs = q.pictureNs = q.readsNs - 1u;
+        CHECK(!pace_rt_step_miss(&q, &none, 0));
+    }
+}
+
 int main(void)
 {
     PaceHist h = {0};
     testStepRule();
+    testStepTyp();
     testBudgetDiscWait126();
     testBudgetRule();
     testBudgetUnbound();

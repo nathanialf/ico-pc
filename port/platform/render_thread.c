@@ -61,6 +61,10 @@ static struct {
        widened, the third in the window (the whole period) */
     unsigned smallMisses, widens, fallbacks;
     Uint64 lateStartMaxNs, missMaxNs, stepPlanNs;
+    /* the plan's parts as last noted: a step between frames, the margin's
+       widening; the steps left out of the typical times in the block */
+    Uint64 stepPlanBetweenNs, stepWidenNs;
+    unsigned leftOut;
 } s_rt;
 
 /* the cores (cpu_place.h): their speeds, read once at the first start, the
@@ -560,6 +564,8 @@ FmMode ico_render_thread_start(void)
         s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = s_rt.pictureMisses = 0;
         s_rt.smallMisses = s_rt.widens = s_rt.fallbacks = 0;
         s_rt.lateStartMaxNs = s_rt.missMaxNs = s_rt.stepPlanNs = 0;
+        s_rt.stepPlanBetweenNs = s_rt.stepWidenNs = 0;
+        s_rt.leftOut = 0;
         memset(&s_gl, 0, sizeof(s_gl));
         if (rhi_backend() == RHI_BACKEND_OPENGL) {
             /* made current here at rhi_init: the render thread's from now */
@@ -739,7 +745,8 @@ void ico_render_thread_note_held(int why)
 }
 
 void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t missNs, bool backedOff,
-                                 uint64_t planNs, int act)
+                                 uint64_t planCloseNs, uint64_t planBetweenNs, uint64_t widenNs,
+                                 bool leftOut, int act)
 {
     const bool byPictures = act != PACE_STEP_NONE;
 
@@ -756,7 +763,10 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
         s_rt.missMaxNs = missNs > s_rt.missMaxNs ? missNs : s_rt.missMaxNs;
     }
     s_rt.backoffSteps += backedOff ? 1u : 0u;
-    s_rt.stepPlanNs = planNs;
+    s_rt.stepPlanNs = planCloseNs;
+    s_rt.stepPlanBetweenNs = planBetweenNs;
+    s_rt.stepWidenNs = widenNs;
+    s_rt.leftOut += leftOut ? 1u : 0u;
 }
 
 void ico_render_thread_note_game_core(void)
@@ -775,19 +785,21 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
     const unsigned smallMisses = s_rt.smallMisses, widens = s_rt.widens;
     const unsigned fallbacks = s_rt.fallbacks;
     const unsigned backoffSteps = s_rt.backoffSteps;
+    const unsigned leftOut = s_rt.leftOut;
     const double lateStartMaxMs = (double)s_rt.lateStartMaxNs / 1e6;
     const double missMaxMs = (double)s_rt.missMaxNs / 1e6;
     RdThreadBlock tb;
     RdSubmitBlock sb;
     unsigned closes;
     double closeMs, closeMaxMs;
-    char rt[1280], st[384], cores[320];
+    char rt[1536], st[384], cores[320];
     CpuPlaceHist gc, rc, sc;
 
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
     s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = s_rt.pictureMisses = 0;
     s_rt.smallMisses = s_rt.widens = s_rt.fallbacks = 0;
     s_rt.lateStartMaxNs = s_rt.missMaxNs = 0;
+    s_rt.leftOut = 0;
 
     /* the cores each thread ran on most in the block (cpu_place.h), and
        their share on the slowest cores where the cores differ */
@@ -835,8 +847,10 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
                  "waited for the display or the GPU; a picture holds the renderer for %.1f ms "
                  "(%.1f ms of its own, %.1f ms of it the interpolation; the rest its waits for "
                  "the GPU and the submit thread), takes %.1f ms, "
-                 "its present waits %.1f ms, the submit thread's part %.1f ms; the step planned "
-                 "at %.1f ms); steps started late by the pictures: %u (longest %.1f ms); steps "
+                 "its present waits %.1f ms, the submit thread's part %.1f ms; the steps planned "
+                 "at %.1f ms closing a frame and %.1f ms between frames (their typical time, %.1f "
+                 "ms of it the margin widened after a miss; %u long steps of the game's own left "
+                 "out)); steps started late by the pictures: %u (longest %.1f ms); steps "
                  "that missed their period: %u (%u the pictures': %u under %.0f ms, %u widened "
                  "the margin, %u the third in %u steps; %u the game's own; latest %.1f ms past "
                  "it; %u steps planned at the whole period after the pictures')",
@@ -849,9 +863,10 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
                  (double)__atomic_load_n(&s_rt.pictureEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.presentEst, __ATOMIC_RELAXED) / 1e6,
                  (double)__atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED) / 1e6,
-                 (double)s_rt.stepPlanNs / 1e6, lateStarts, lateStartMaxMs, misses, pictureMisses,
-                 smallMisses, (double)PACE_STEP_MISS_FLOOR_NS / 1e6, widens, fallbacks,
-                 PACE_STEP_MISS_WINDOW, misses - pictureMisses, missMaxMs, backoffSteps);
+                 (double)s_rt.stepPlanNs / 1e6, (double)s_rt.stepPlanBetweenNs / 1e6,
+                 (double)s_rt.stepWidenNs / 1e6, leftOut, lateStarts, lateStartMaxMs, misses,
+                 pictureMisses, smallMisses, (double)PACE_STEP_MISS_FLOOR_NS / 1e6, widens,
+                 fallbacks, PACE_STEP_MISS_WINDOW, misses - pictureMisses, missMaxMs, backoffSteps);
     } else {
         snprintf(rt, sizeof(rt), "render thread: off (CPU %.1f ms a picture on the game thread)",
                  pictureCpuMs);
