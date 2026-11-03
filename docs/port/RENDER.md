@@ -1183,7 +1183,7 @@ One renderer with device-class profiles: after `rd__gpu_init`, `rd__profile_init
 vendor-dependent choice of the renderer reads one of its flags; no other file of the renderer
 branches on a vendor (`port/render/rd_profile.c`). The classes: D3D12 (the backend), Apple /
 MoltenVK (`RhiLimits.moltenvk`), Adreno on Qualcomm's driver and Adreno on Turnip (vendor 0x5143;
-Turnip names itself in the driver text), Mali (0x13B5), PowerVR (0x1010), any other tile-based GPU
+Turnip names itself in the driver text, and the profile line ends with `; turnip: Mesa 25.3.0-devel` from `RhiLimits.mesa`, or `; turnip: Mesa version not named by the driver`), Mali (0x13B5), PowerVR (0x1010), any other tile-based GPU
 (`RhiLimits.tiler`: Samsung, Broadcom, every Android GPU) on the PowerVR row, and the desktop
 immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3D 11:
 [BACKENDS.md](BACKENDS.md#the-device-profile-on-opengl-and-direct3d-11).

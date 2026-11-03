@@ -567,6 +567,23 @@ the next start either, the game says so and the box comes back.
 later in Options > Graphics driver. See
 [Using a different graphics driver](ANDROID.md#using-a-different-graphics-driver).
 
+**"This driver package is not built for this phone's 16 KB memory pages."**
+(on a phone, after **Add a driver**) The phone uses 16 KB memory pages and
+the driver package was built for 4 KB ones, so it could not be loaded. The
+game did not add it. Download a build made for 16 KB pages (the release's
+text may say) or use another driver. See
+[Using a different graphics driver](ANDROID.md#using-a-different-graphics-driver).
+
+**The game uses the phone's own driver after the graphics stopped
+responding with a driver you added.** (on a phone) If the graphics stop responding within the first
+30 seconds of playing with a driver package, the game counts it against the
+driver: the next start uses the phone's own driver and says so, as when a
+driver does not start. The driver is not removed. To try it again, set
+**Driver** to it in Options > Graphics driver. If you report the stop,
+attach the report file: its log says how many seconds after the first
+picture it happened, and which driver and version ran
+(`gpu driver: this start runs ...`).
+
 **"The file picker could not be opened."** (on a phone, after **Add a
 driver**) The phone would not open its file picker. Copy the driver's zip
 file into `Android/data/com.defnf.icopc/files/drivers` (the `drivers` folder
