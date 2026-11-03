@@ -941,7 +941,11 @@ void window_present_pace(int hz)
         (void)pace_budget_step(&s_pres.budget, now > s_deadline ? now - s_deadline : 0, period,
                                refresh, s_pres.displayWaitNs, s_pres.gpuNs, s_pres.stepNs,
                                window_disc_wait_ns());
-        budget_lines(&s_pres.budget, drops, climbs, refusals, paced, period);
+        if (!asMade) {
+            /* as made the allowance holds nothing: its drop, climb and
+               pace lines would say it did (its 10 s part says what it measured) */
+            budget_lines(&s_pres.budget, drops, climbs, refusals, paced, period);
+        }
     }
     window_pace_log(now);
     if (now > s_deadline && now - s_deadline > RESYNC_NS) {
