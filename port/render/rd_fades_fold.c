@@ -574,6 +574,10 @@ static bool sceneBlendExact(const RdTargetRec *sc)
 
 void rd__fades_fold_scan(const RdFrame *f, int keep)
 {
+    /* the frame as recorded (rd_vis.c): a scene draw the visibility test
+     * skipped still reads SCENE's depth here (the plan's depthRead, kept
+     * across replays); the ordinals are the shadow's */
+    f = rd__vis_source(f);
     s_fold.on = false;
     s_applied = 0;
     g_rdPerf.fadesFolded = 0;

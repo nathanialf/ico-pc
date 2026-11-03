@@ -490,4 +490,17 @@ void rd__replay_vu_flush_post(Replay *r, int post);
 void rd__vu_prepass(const RdFrame *f, int keep);
 void rd__vu_prepass_shutdown(void);
 
+/* rd_vis.c (rd_vis.h): the port's visibility test per scene draw.
+ * rd__vis_frame       the frame replayFrame walks: f, or its shadow with
+ *                     the scene draws wholly off their target or behind
+ *                     the eye turned into RDC_NOPs (after rd__diag_frame,
+ *                     before every scan of the lists)
+ * rd__vis_source      the frame a shadow was made from (what decides
+ *                     across draws or replays: rd_join.c, rd_fades_fold.c)
+ * rd__vis_culled      a shadow's NOP at (l, i) as recorded, or NULL
+ *                     (rd_store_plan.c's carried depth read) */
+const RdFrame *rd__vis_frame(const RdFrame *f, int keep);
+const RdFrame *rd__vis_source(const RdFrame *f);
+const RdCmd *rd__vis_culled(const RdFrame *f, int l, uint32_t i);
+
 #endif /* PORT_RENDER_RD_REPLAY_H */

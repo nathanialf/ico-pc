@@ -229,6 +229,17 @@
  *                         pixel), and under --stats --gpu-repeat K says what
  *                         leaving the hidden draws out takes off list 0's
  *                         GPU time (tools/occlusion_corpus.py)
+ *                         The measurement replays with the visibility test
+ *                         off (ICO_RD_CULL=0): it counts what every draw
+ *                         puts on the screen
+ *   --cull MODE           the scene draws' visibility test (rd_vis.c, [dev]
+ *                         cull): off, frustum (the default) or full (the
+ *                         frustum test until the occlusion test is built);
+ *                         sets ICO_RD_CULL.  --stats prints "stats: cull
+ *                         MODE: N of M scene draws skipped (F frustum, O
+ *                         occluded), T ms" (M the VU draw commands walked,
+ *                         N those replayed as NOPs) and what it did not
+ *                         test
  *   --occlusion-out FILE  (with --occlusion) writes SPEC to FILE, for
  *                         --nop @FILE
  *   --occlusion-csv FILE  (with --occlusion) writes a line a command of the
@@ -370,6 +381,7 @@
 #include "dump_zip.h" /* port/platform: the F12 zip */
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_vis.h"
 #include "../core/region.h"              /* the dump's disc (version 12) */
 #include "../vu1_ref/vu1_ref.h"          /* --vu-ref: the CPU mirror of the VU programs */
 #include "../../shaders/shader_consts.h" /* ICO_VU_MARK_*: the marks --mesh shows */
@@ -1822,7 +1834,7 @@ int main(int argc, char **argv)
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12|opengl|d3d11] "
                 "[--render-thread off|sync|on] [--repeat N] [--list] "
                 "[--nop L:A[-B][,...]|@FILE] [--occlusion [--occlusion-out FILE] "
-                "[--occlusion-csv FILE]] "
+                "[--occlusion-csv FILE]] [--cull off|frustum|full] "
                 "[--gpu-repeat K] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
                 "[--time N] [--keys] "
@@ -2104,6 +2116,13 @@ int main(int argc, char **argv)
                 fprintf(stderr, "bad %s\n", argv[i - 1]);
                 return 1;
             }
+        } else if (strcmp(argv[i], "--cull") == 0 && i + 1 < argc) {
+            const char *v = argv[++i];
+            if (strcmp(v, "off") != 0 && strcmp(v, "frustum") != 0 && strcmp(v, "full") != 0) {
+                fprintf(stderr, "bad --cull (off, frustum or full)\n");
+                return 1;
+            }
+            setEnv("ICO_RD_CULL", v); /* read at rd_init (rd_vis.c rd__vis_init) */
         } else if (strcmp(argv[i], "--occlusion") == 0) {
             occlusion = true;
         } else if (strcmp(argv[i], "--occlusion-out") == 0 && i + 1 < argc) {
@@ -2163,8 +2182,11 @@ int main(int argc, char **argv)
            settings whatever the environment says */
         setEnv("ICO_RD_VU_MERGE", "0");
         setEnv("ICO_RD_BLEND", "fixed");
-        printf("note: --occlusion: the replays run under ICO_RD_VU_MERGE=0, ICO_RD_BLEND=fixed and "
-               "the screen-prim runs off (one GPU draw a command)\n");
+        /* every draw replayed: the visibility test's NOPs would hide the
+           draws it measures (rd_vis.c) */
+        setEnv("ICO_RD_CULL", "0");
+        printf("note: --occlusion: the replays run under ICO_RD_VU_MERGE=0, ICO_RD_BLEND=fixed, "
+               "ICO_RD_CULL=0 and the screen-prim runs off (one GPU draw a command)\n");
     }
     uint32_t gw = 0, gh = 0;
     if (!unzipDump(&dump, 0) || (interpPrev && !unzipDump(&interpPrev, 1))) {
@@ -2660,6 +2682,21 @@ int main(int argc, char **argv)
                (unsigned long long)cc.skipped, (unsigned long long)cc.late,
                (unsigned long long)cc.afterMsaa, (unsigned long long)cc.pasted,
                (unsigned long long)cc.afterAlpha);
+        /* the scene draws' visibility test (rd_vis.c rd__vis_frame): the VU
+         * draw commands walked, those replayed as NOPs, and those it did not
+         * test (particles, clip mode none, lists 11 and 12, no target: exempt;
+         * no bound or a layout it does not read: unbounded) */
+        {
+            RdVisCounts vc;
+            rd__vis_counts(&vc);
+            printf("%s: stats: cull %s: %u of %u scene draws skipped (%u frustum, %u occluded), "
+                   "%.3f ms; not tested: %u exempt, %u unbounded; skipped beyond the left %u, "
+                   "right %u, top %u, bottom %u, behind the eye %u\n",
+                   dump, rd__vis_mode_name(rd__vis_mode()), pr->cullSkipped, pr->cullDraws,
+                   pr->cullFrustum, pr->cullOccluded, pr->cullMs, vc.exempt, vc.unbounded,
+                   vc.byVerdict[RD_VIS_LEFT], vc.byVerdict[RD_VIS_RIGHT], vc.byVerdict[RD_VIS_TOP],
+                   vc.byVerdict[RD_VIS_BOTTOM], vc.byVerdict[RD_VIS_NEAR]);
+        }
         uint32_t satDraws = 0;
         const uint64_t sat = satZVertices(rf, &satDraws);
         printf("%s: stats: VU corners with a saturated GS Z: %llu vertices of region-mode meshes "

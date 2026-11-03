@@ -700,6 +700,18 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_fuse", "true"), "1") == 0);
     CHECK(ico_dev_env_value("vu_fuse", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.vu_fuse"), "vu_fuse") == 0);
+    /* cull: the scene draws' visibility test (port/render/rd_vis.c
+       rd__vis_init reads ICO_RD_CULL: off, frustum or full) */
+    CHECK(strcmp(ico_dev_env_name("cull"), "ICO_RD_CULL") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "off"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "frustum"), "frustum") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "full"), "full") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "false"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "0"), "off") == 0);
+    CHECK(strcmp(ico_dev_env_value("cull", "true"), "frustum") == 0);
+    CHECK(ico_dev_env_value("cull", "occlusion") == NULL);
+    CHECK(ico_dev_env_value("cull", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.cull"), "cull") == 0);
     /* constant_reads: a cleared source read as its colour, the A/B switch
        (port/render/rd_const_read.c rd__const_reads_on) */
     CHECK(strcmp(ico_dev_env_name("constant_reads"), "ICO_RD_CONSTANT_READS") == 0);
@@ -916,6 +928,15 @@ static void test_dev_env(void)
     ico_ini_parse(&ini, "[dev]\nvu_set = maybe\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
     CHECK(env_is("ICO_RD_VU_SET", NULL));
+    /* ... and cull is exported as its word (rd_vis.c reads it) */
+    unset_env("ICO_RD_CULL");
+    ico_ini_parse(&ini, "[dev]\ncull = off\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_CULL", "off"));
+    unset_env("ICO_RD_CULL");
+    ico_ini_parse(&ini, "[dev]\ncull = maybe\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_CULL", NULL));
     /* blend=attachment and attachment_read=true (config.toml's [dev]) */
     ico_ini_parse(&ini, "[dev]\nblend = attachment\nattachment_read = true\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
