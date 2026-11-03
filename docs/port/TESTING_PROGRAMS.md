@@ -1252,6 +1252,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   own texture, never written) byte for byte, `aura box off: 0` against `on`, the two-pass run's
   passes and draws the other's plus one each a read in two passes; some dump must read in two
   passes (`rd_aura_box_ab`). SKIP as `rd_vustage_ab`.
+- `rd_shadow_merge_ab.cmake`: the dumps of `tools/shadow_merge_dumps.txt` (`tools/vustage_dumps.txt`'s,
+  the PowerVR phone's three F12 zips and its F12 frame of the heavy stage 6 room `frame-20261102-222516-v2325.zip` in
+  the effort's evidence folder; machine-local, a missing one skipped) replayed with `--pass-dump
+  --stats` under `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` with the shadow volumes in a pass
+  of their own (`ICO_RD_SHADOW_MERGE=0`) and in the scene's open pass (`=1`, `rd_shadow_merge.c`),
+  at the phone's Resolution Auto under the MoltenVK fakes (a tile-based class) and at Enhanced 2x
+  4:3: every PNG byte for byte, `shadow volumes in the scene's pass off: 0 of R counts, 0 passes
+  armed` against `on: M of R`, the same draws, the on run's passes the off run's less M; some reset
+  must be taken (`rd_shadow_merge_ab`). SKIP as `rd_vustage_ab`.
 - `rd_pass_area_ab.cmake`: the dumps of `tools/pass_area_dumps.txt` (`tools/vustage_dumps.txt`'s,
   the PowerVR phone's three F12 zips and its F12 frame of 2026-11-02
   `frame-20261102-091017-v15677.rddump` in the effort's evidence folder; machine-local, a
@@ -1737,6 +1746,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `RdProfile.shadowBspline` ([dev] `shadow_bspline`) against the CPU B-spline within 3 (4 on the
   fixed-function blender) and a row across the shadow falling and rising once, the softening's AA0 (at its GS size) the area box of SCENE and its composite back the
   bilinear between AA0's texels, not counted above 1x (`checkComposite4x`, `checkSoftening4x`).
+  Case m (with each case o run): the shadow volumes in the scene's open pass
+  (`rd__shadow_merge_force` off and on) under `ICO_RD_STORE_POISON=1`, the synthetic volumes
+  through both paths and Shadow.c's model through the one draw: the count, SHADOW0-2 and SCENE
+  byte for byte, list 0's pass armed and the reset taken with it on (`shadowMergeArmed`,
+  `shadowMerged` 1), one render pass fewer, nothing armed or taken off.
   Case o: the count resolved in one draw from the stencil view against the seven stencil-tested
   draws (`RdProfile.shadowOne` flipped between two recordings of one frame), the count at its GS
   size (`rd__shadow_count_read`), SHADOW0-2 and SCENE byte for byte for the synthetic volumes,

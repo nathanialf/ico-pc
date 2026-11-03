@@ -170,6 +170,7 @@ add_library(ico_render STATIC
     rd_aura_box.c # the aura's feedback read in two passes, the same bytes ([dev] aura_box)
     rd_pass_area.c # the passes' render areas: the tiles their 2D draws touch ([dev] pass_area)
     rd_pass_cut.c # passes cut: a clear carried, a clear nothing reads, the last touch's store ([dev] clear_carry, clear_skip, last_store)
+    rd_shadow_merge.c # the shadow volumes drawn in the scene's open pass (tile-based GPUs; ICO_RD_SHADOW_MERGE the tests')
     rd_blend_selftest.c # the exact blend's start-up check on the device (issue 89)
     rd_blur.c # staticBlur.c's sprites
     rd_blur_border.c # the post sprites' replay: the reduction's open border, its outer columns
@@ -2163,6 +2164,25 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_aura_box_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
     if(_env)
         set_tests_properties(rd_aura_box_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    # rd_shadow_merge_ab (test/rd_shadow_merge_ab.cmake): the dumps of
+    # tools/shadow_merge_dumps.txt (vustage_dumps.txt's, the PowerVR phone's
+    # F12 frames and the heavy stage 6 room of 2026-11-02) with the shadow volumes in a pass
+    # of their own (ICO_RD_SHADOW_MERGE=0) and in the scene's open pass (=1,
+    # rd_shadow_merge.c), under ICO_RD_BLEND=fixed and ICO_RD_STORE_POISON=1
+    # at the phone's Resolution Auto (the MoltenVK fakes) and Enhanced 2x
+    # 4:3: every target byte for byte, the same draws, one pass fewer a reset
+    # taken, some reset taken; SKIP as rd_vustage_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shadow_merge_ab")
+    add_test(NAME rd_shadow_merge_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/shadow_merge_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/shadow_merge_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_shadow_merge_ab.cmake")
+    set_tests_properties(rd_shadow_merge_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         TIMEOUT 3600)
+    if(_env)
+        set_tests_properties(rd_shadow_merge_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_pass_area_ab (test/rd_pass_area_ab.cmake): the dumps of
     # tools/pass_area_dumps.txt (vustage_dumps.txt's, the PowerVR phone's

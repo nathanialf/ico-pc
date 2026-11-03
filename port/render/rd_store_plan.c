@@ -348,7 +348,8 @@ static void planLate(uint32_t ord, int l, uint32_t i)
 
 void rd__store_plan_scan(const RdFrame *f, int keep)
 {
-    rd__fades_fold_scan(f, keep); /* the sprites the reduction draws (rd_fades_fold.c) */
+    rd__fades_fold_scan(f, keep);  /* the sprites the reduction draws (rd_fades_fold.c) */
+    rd__shadow_merge_scan_begin(); /* the resets the volumes' merge looks for */
     /* one walk of the lists for the passes' areas (after the fold, whose
      * sprites draw nothing: rd_pass_area.c), the passes cut (rd_pass_cut.c)
      * and the plan: each notes every command under the same state */
@@ -434,6 +435,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
                 break;
             }
             case RDC_SHADOW_RESET:
+                rd__shadow_merge_scan_reset(&st, ord); /* rd_shadow_merge.c */
+                planTouch(st.depth, ord, l, true);
+                break;
             case RDC_SHADOW_STRIP:
             case RDC_SHADOW_RESOLVE:
                 planTouch(st.depth, ord, l, true);
@@ -485,6 +489,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     if (!plan) {
         return;
     }
+    rd__shadow_merge_scan_end();
     /* a depth read before its clear reads what the replay before left: kept
      * from now on (said for the first 4 a run).  A target new this replay
      * (rd__clear_new_targets clears it before the walk) holds no replay's

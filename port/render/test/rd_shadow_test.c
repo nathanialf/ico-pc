@@ -69,6 +69,13 @@
  *      with the plan (RdPerfRecord.shadowColorDropped, storeColorDropped),
  *      and above 1x on the one draw the scaled count target poisoned at
  *      every texel (nothing reads or redraws it).
+ *   m  (with each (o) run) the shadow volumes drawn in the scene's open
+ *      pass (rd_shadow_merge.c, forced off and on): the synthetic volumes
+ *      through the one draw and the seven draws, Shadow.c's model through
+ *      the one draw, under ICO_RD_STORE_POISON=1: the count, the levels and
+ *      SCENE byte for byte, list 0's pass armed and the reset taken in it
+ *      with the merge on (RdPerfRecord.shadowMergeArmed, shadowMerged), one
+ *      render pass fewer, nothing armed or taken with it off.
  *   x  (`rd_shadow_test edges`, ctest rd_shadow_edges: this case alone)
  *      the two kernels at scene scale 2: the same frame (the synthetic
  *      volumes, Shadow.c's model, a rectangle at a sub-pixel offset, all
@@ -1489,6 +1496,10 @@ typedef struct AbPics {
     /* the replay's count target colour passes left neither loaded nor
      * stored (RdPerfRecord.shadowColorDropped), its colour stores dropped */
     uint32_t colorDropped, storeColorDropped;
+    /* the shadow resets whose volumes were drawn in the scene's open pass,
+     * the passes armed for it (RdPerfRecord.shadowMerged, shadowMergeArmed;
+     * rd_shadow_merge.c) and the replay's passes (RhiStats) */
+    uint32_t merged, armed, passes;
 } AbPics;
 
 static void abFree(AbPics *p)
@@ -1518,6 +1529,9 @@ static bool abRecord(int vol, bool one, AbPics *p, const char *what)
           g_rdPerf.shadowOne, (int)g_rd.shadowLoad);
     p->colorDropped = g_rdPerf.shadowColorDropped;
     p->storeColorDropped = g_rdPerf.storeColorDropped;
+    p->merged = g_rdPerf.shadowMerged;
+    p->armed = g_rdPerf.shadowMergeArmed;
+    p->passes = g_rdPerf.passKinds[RD_PERF_PASS_RENDER];
     const RdTargetRec *c = rd__target_rec(s_count.id);
     const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!c || !sc) {
@@ -1675,6 +1689,48 @@ static void poisonFrame(int vol, bool one, const char *what)
     g_rd.profile.storePlan = plan;
 }
 
+/* (m) the shadow volumes in the scene's open pass (rd_shadow_merge.c): the
+ * frame through the path asked with the merge off and on
+ * (rd__shadow_merge_force), under ICO_RD_STORE_POISON=1: the count, the
+ * three levels and SCENE byte for byte; off, no reset taken and no pass
+ * armed; on, list 0's pass (it took the frame's clear of SCENE's depth, the
+ * stencil with it) armed and the reset taken, one render pass fewer */
+static void mergeFrame(int vol, bool one, const char *what)
+{
+    char w2[96];
+    snprintf(w2, sizeof w2, "%s, %s, merge", what, one ? "one draw" : "seven draws");
+    setPoison(true);
+    AbPics off, on;
+    rd__shadow_merge_force(0);
+    const bool okOff = abRecord(vol, one, &off, w2);
+    rd__shadow_merge_force(1);
+    const bool okOn = abRecord(vol, one, &on, w2);
+    rd__shadow_merge_force(-1);
+    CHECK(off.merged == 0 && off.armed == 0, "(m) %s: off, %u resets taken, %u passes armed", w2,
+          off.merged, off.armed);
+    CHECK(on.merged == 1 && on.armed == 1,
+          "(m) %s: on, %u resets taken, %u passes armed (want 1 "
+          "and 1)",
+          w2, on.merged, on.armed);
+    CHECK(on.passes + 1u == off.passes, "(m) %s: %u render passes on, %u off (want one fewer)", w2,
+          on.passes, off.passes);
+    if (okOff && okOn) {
+        abCompareOne(off.cnt, on.cnt, off.cw, off.ch, w2, "the count");
+        for (int l = 0; l < 3; l++) {
+            char pic[16];
+            snprintf(pic, sizeof pic, "SHADOW%d", l);
+            abCompareOne(off.lv[l], on.lv[l], 256u >> l, 256u >> l, w2, pic);
+        }
+        abCompareOne(off.scene, on.scene, off.sw, off.sh, w2, "SCENE");
+    }
+    printf("  (m) %s: %u reset taken in the scene's pass, render passes %u -> %u, the count, "
+           "levels and SCENE the same\n",
+           w2, on.merged, off.passes, on.passes);
+    abFree(&off);
+    abFree(&on);
+    setPoison(false);
+}
+
 /* the frames at the renderer's current scale */
 static void abFrames(const char *scale)
 {
@@ -1703,6 +1759,10 @@ static void abFrames(const char *scale)
     snprintf(what, sizeof what, "%s, synthetic volumes", scale);
     poisonFrame(VOL_SYNTH, true, what);
     poisonFrame(VOL_SYNTH, false, what);
+    mergeFrame(VOL_SYNTH, true, what);
+    mergeFrame(VOL_SYNTH, false, what);
+    snprintf(what, sizeof what, "%s, Shadow.c's model", scale);
+    mergeFrame(VOL_MODEL, true, what);
     g_rd.profile.shadowOne = true;
 }
 

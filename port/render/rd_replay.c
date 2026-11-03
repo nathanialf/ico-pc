@@ -1371,6 +1371,7 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     p.height = c->th;
     rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, cid, c->tw, c->th, r->perfPost);
     rd__pass_area_begin(&p, c, cid, r->passSerial + 1u, ms, storage); /* rd_pass_area.c */
+    rd__shadow_merge_arm(&p, cid, d ? did : 0u, r->passSerial + 1u, ms, storage);
     rhi_cmd_begin_render_pass(s_cl, &p);
     if (uber && readable && colorLoad == RHI_LOAD_CLEAR) {
         rhi_cmd_local_read_barrier(s_cl, RHI_LOCAL_READ_COLOR); /* the clear, then reads */
@@ -4317,9 +4318,20 @@ static void doShadowReset(Replay *r)
     if (!tc) {
         return;
     }
-    endPass(r);
     s_shadowRedFor = 0; /* a new count starts */
     s_shadowCountFor = 0;
+    /* the volumes in the scene's open pass, whose stencil is the reset's
+     * (rd_shadow_merge.c): no pass of their own, nothing pending */
+    if (rd__shadow_merge_take(r->passOpen, r->passSerial, r->passColor, r->passDepth, &r->st,
+                              s_pend.p.target || s_stencil.depthTex    ? "a clear or reset pending"
+                              : r->passStorage || g_rd.passSamples > 1 ? "a storage or MSAA pass"
+                                                                       : NULL)) {
+        rd__stencil_open(&s_stencil.w, td->depth.id);
+        s_stencil.color = r->st.color;
+        s_stencil.depth = r->st.depth;
+        return;
+    }
+    endPass(r);
     /* The stencil clear is not recorded yet: the next pass on the depth
      * takes it as its stencil load op (beginPass), else it is recorded as
      * its own pass (flushStencilClear) at the next endPass or transition
@@ -4338,7 +4350,7 @@ static void doShadowReset(Replay *r)
 
 /* RDC_SHADOW_STRIP: rd_shadow_tris's two triangle lists, or rd_shadow_strip's
  * float strip with one sign. */
-static void doShadowStrip(Replay *r, const RdFrame *f, const RdCmd *c)
+static void doShadowStripIn(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     RdTargetRec *td;
     if (!shadowTargets(r, &td)) {
@@ -4413,6 +4425,17 @@ static void doShadowStrip(Replay *r, const RdFrame *f, const RdCmd *c)
         }
         first += count[decr];
     }
+}
+
+/* in the scene's open pass when the reset was taken there (rd_shadow_merge.c):
+ * the strip drawn on its colour target, which it never writes */
+static void doShadowStrip(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    const uint32_t keep = r->st.color,
+                   in = rd__shadow_merge_color(r->passOpen, r->passSerial, &r->st);
+    r->st.color = in ? in : keep;
+    doShadowStripIn(r, f, c);
+    r->st.color = keep;
 }
 
 void rd__shadow_shutdown(void)

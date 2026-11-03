@@ -650,6 +650,58 @@ an attachment's contents whatever its ops say), so a reader would show it: `rd_s
 texel) and `rd_store_plan_ab` (every named target byte for byte over the corpus, the colour stores
 dropped the same under the plan and the wrong plan).
 
+## The shadow volumes in the scene's pass
+
+The reset ended the scene's pass and the volumes drew in a pass of their own, the count target
+with SCENE's depth: on a tile-based GPU that pass loaded SCENE's depth into its tiles and stored
+it again with the stencil, after list 0's pass had stored the same depth (the PowerVR phone's
+log of 2026-11-02, the heavy stage 6 room: `list 3 temporary 2366x1080 8 draws 1.18 ms`, about 23 MB a
+replay). Now, on the tile-based classes (`RdProfile.shadowMerge`), the volumes are drawn in the
+scene's pass that is open at the reset, when that pass began with the stencil cleared to 0 (the
+frame's clear of the depth taken as its load op) (`port/render/rd_shadow_merge.c`, header
+comment):
+
+- **The arm.** `beginPass` (after the pass area) hands every pass to `rd__shadow_merge_arm`. A
+  pass on a target with its own depth whose stencil load is a clear to 0, with a shadow reset on
+  that depth later in the replay (the store plan's scan notes the resets,
+  `rd__shadow_merge_scan_reset`), single-sampled, without an area, outside a pass window, the
+  exact blend, GS state as shader data and the VU pass split, stores its stencil (2.6 MB at the
+  phone's size; list 0's pass stored none before).
+- **The take.** `doShadowReset` asks `rd__shadow_merge_take`: the reset the pass was armed for,
+  that pass still open, no clear or reset pending, not a storage or MSAA pass, the count target of
+  the pass target's size, scale and format. Then the reset opens the stencil window and records
+  nothing: the stencil the pass cleared stands for the reset's clear.
+- **The volumes.** `doShadowStrip` draws each strip on the open pass's colour target
+  (`rd__shadow_merge_color`), which it never writes (`rd__shadow_volume_key`: colour mask 0),
+  with the same pipeline but for that attachment's format (the same RGBA8), FrameCB and scissor
+  (the same geometry). A strip under DATE or sampling a target, or a pass ended among the
+  strips, sends the rest to the volumes' own pass, whose stencil is loaded (the window is open):
+  what the armed pass stored.
+- **The resolve** ends the pass before it reads the stencil, as before (`rd__shadow_one_draw`,
+  or the seven draws' pass).
+
+Why the same bytes: the stencil's bits 0-5 are what the reset would have left (cleared to 0 when
+the pass began; the only pipelines that write those bits are the volumes', `shadowStencil`, and a
+reset window on the depth before this one would have ended the pass at its resolve; DATE's set
+and clear write bit 6 alone, which neither the count nor the seven draws read, and `INCR_WRAP` /
+`DECR_WRAP` under the write mask 0x3F give the same bits 0-5 whatever bit 6 holds); the depth is
+the same values tested the same way (stored and loaded back bit for bit before); SCENE's colour is
+never written and the count target's is not touched, whose old pass contents nothing read (the
+section above). The draws are the same commands in the same order. A pass armed for a reset it did
+not reach stored its stencil for nothing: counted, and logged with why.
+
+The lines: `rd: shadow volumes: drawn in the scene's open pass where it cleared the stencil (...)`
+or `... in a pass of their own (...)` at start; `rd: shadow volumes: drawn in SCENE's pass (frame
+F, command N): ... (reported once)` at the first; `rd: shadow volumes: in a pass of their own in
+frame F: <why> (the first 8, then every 100th: N so far)` for an armed pass not taken; the window's
+10 s line `; shadow volumes in the scene's pass: M of R counts, A passes armed a replay`
+(`RdPerfRecord.shadowMerged`, `shadowMergeArmed`); the replay tool's `--stats` `shadow volumes in
+the scene's pass on|off: M of R counts, A passes armed`. There is no setting: on the
+immediate-mode classes the volumes keep their own pass (it moves nothing through tiles);
+`ICO_RD_SHADOW_MERGE=0|1` is the tests' way. The tests: `rd_shadow_test` case m (the count, the
+levels and SCENE byte for byte off and on, one render pass fewer) and `rd_shadow_merge_ab` (every
+pass dump of the corpus and the phone's frames byte for byte, one pass fewer a reset taken).
+
 ## The shadow count's step
 
 The European, Japanese, Korean and Chinese discs draw the volume faces with the colours 0x04 and 0xFC;

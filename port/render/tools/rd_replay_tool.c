@@ -2579,6 +2579,11 @@ int main(int argc, char **argv)
                rd__pass_cut_on(RD_CUT_SKIP) ? "on" : "off", pr->clearsSkipped,
                rd__pass_cut_on(RD_CUT_LAST) ? "on" : "off", pr->storeLastDropped,
                whyText[0] ? "; " : "", whyText);
+        /* the shadow volumes in the scene's pass (rd_shadow_merge.c) */
+        printf("%s: stats: shadow volumes in the scene's pass %s: %u of %u counts, %u passes "
+               "armed\n",
+               dump, rd__shadow_merge_on() ? "on" : "off", pr->shadowMerged,
+               pr->shadowOne + pr->shadowSeven, pr->shadowMergeArmed);
         /* the pixel diet (rd_alpha_plan.c, rd_fx_plan.c, rd_pixel_plan.c) */
         printf("%s: stats: pixel diet: alpha plan %u one-pass, %u opaque; fx plan %u constant, %u "
                "additive, %u local (%u post sprites' DATE by local read); vu no-planes %u; "

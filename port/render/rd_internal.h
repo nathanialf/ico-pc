@@ -1186,6 +1186,12 @@ typedef struct RdProfile {
      * tile-based classes; [dev] clear_carry, clear_skip, last_store over
      * it, read there */
     bool passCut;
+    /* the shadow volumes drawn in the scene's open pass (rd_shadow_merge.c)
+     * where it cleared the stencil: no pass of their own, the scene's depth
+     * not stored and loaded again for them; on on the tile-based classes,
+     * off on the immediate-mode ones (no key: the same picture;
+     * ICO_RD_SHADOW_MERGE=0|1 is the tests' way) */
+    bool shadowMerge;
     /* rd_profile.c: the device class's name for the lines; per flag
      * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
      * turned it off (rd__profile_self_test_off) */
@@ -2143,6 +2149,27 @@ enum { RD_CUT_CARRY, RD_CUT_SKIP, RD_CUT_LAST, RD_CUT_COUNT };
 
 void rd__pass_cut_init(void);
 bool rd__pass_cut_on(int which);
+/* rd_shadow_merge.c: the shadow volumes drawn in the scene's open pass
+ * where it cleared the stencil (docs/port/WORK_BUFFERS.md, "The shadow
+ * volumes in the scene's pass").  _init at rd_init (the start line);
+ * _force the tests' switch (-1 the profile's); the scan notes the replay's
+ * shadow resets (rd_store_plan.c rd__store_plan_scan); _arm from beginPass
+ * after the pass area stores the stencil of a pass that cleared it and
+ * holds a later reset's depth; _take at the reset (blocked: why the open
+ * pass cannot take it, NULL none) draws the volumes in that pass;
+ * _color at each strip: the armed pass's colour target to draw into, 0 for
+ * the volumes' own pass */
+void rd__shadow_merge_init(void);
+bool rd__shadow_merge_on(void);
+void rd__shadow_merge_force(int mode);
+void rd__shadow_merge_scan_begin(void);
+void rd__shadow_merge_scan_reset(const RdStateBlock *st, uint32_t ord);
+void rd__shadow_merge_scan_end(void);
+void rd__shadow_merge_arm(RhiRenderPassDesc *p, uint32_t cid, uint32_t did, uint32_t serial,
+                          bool ms, bool storage);
+bool rd__shadow_merge_take(bool open, uint32_t serial, uint32_t passColor, uint32_t passDepth,
+                           const RdStateBlock *st, const char *blocked);
+uint32_t rd__shadow_merge_color(bool open, uint32_t serial, const RdStateBlock *st);
 void rd__pass_cut_force(int which, int mode);
 void rd__pass_cut_scan(const RdFrame *f, int keep);
 bool rd__pass_cut_scan_begin(const RdFrame *f, int keep);

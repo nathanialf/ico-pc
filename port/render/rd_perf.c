@@ -200,6 +200,9 @@ static uint64_t s_storePasses, s_storeDepth, s_storeColor;
  * storeLastDropped) */
 static uint64_t s_cutCarried, s_cutSkipped, s_cutLast, s_cutLastWhy[RD_LAST_WHY_COUNT];
 static uint32_t s_storePlanned;
+/* the shadow volumes in the scene's pass (rd_shadow_merge.c; RdPerfRecord
+ * shadowMerged, shadowMergeArmed) and the shadow resets replayed */
+static uint64_t s_smMerged, s_smArmed, s_smResets;
 /* the store plan's keep as the last planned record had it (RdPerfRecord
  * storeKept, storeKeptTarget, storeKeptFrame) */
 static uint8_t s_storeKept, s_storeKeptTarget;
@@ -237,6 +240,9 @@ bool rd_perf_pop(RdPerfRecord *out)
     s_cutCarried += s_queue[s_head].clearsCarried;
     s_cutSkipped += s_queue[s_head].clearsSkipped;
     s_cutLast += s_queue[s_head].storeLastDropped;
+    s_smMerged += s_queue[s_head].shadowMerged;
+    s_smArmed += s_queue[s_head].shadowMergeArmed;
+    s_smResets += s_queue[s_head].shadowOne + s_queue[s_head].shadowSeven;
     for (int k = 0; k < RD_LAST_WHY_COUNT; k++) {
         s_cutLastWhy[k] += s_queue[s_head].lastStoreWhy[k];
     }
@@ -474,6 +480,19 @@ const char *rd_perf_backend_text(void)
             at += w > 0 && (size_t)w < sizeof(s_text) - at ? (size_t)w : 0;
         }
     }
+    if (s_backendReplays && (s_smMerged || s_smArmed || rd__shadow_merge_on())) {
+        /* the shadow volumes in the scene's pass (rd_shadow_merge.c): per
+           replay, the counts resolved, how many of them had their volumes
+           drawn in the scene's open pass (a pass fewer each), the passes
+           that stored their stencil for it */
+        const double n = (double)s_backendReplays;
+        const int k =
+            snprintf(s_text + at, sizeof(s_text) - at,
+                     "; shadow volumes in the scene's pass: %.1f of %.1f counts, %.1f "
+                     "passes armed a replay",
+                     (double)s_smMerged / n, (double)s_smResets / n, (double)s_smArmed / n);
+        at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
+    }
     if (s_backendReplays) {
         /* the pipelines made so far by family (rd_uber.c rd__uber_perf_note:
            where GS state as shader data shrinks the set, which part) */
@@ -502,6 +521,7 @@ const char *rd_perf_backend_text(void)
     memset(s_fuseKept, 0, sizeof(s_fuseKept));
     s_cutCarried = s_cutSkipped = s_cutLast = 0;
     memset(s_cutLastWhy, 0, sizeof(s_cutLastWhy));
+    s_smMerged = s_smArmed = s_smResets = 0;
     s_storePasses = s_storeDepth = s_storeColor = 0;
     s_storePlanned = 0;
     memset(s_storeWhy, 0, sizeof(s_storeWhy));

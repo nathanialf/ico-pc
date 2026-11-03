@@ -22,6 +22,7 @@
 - On phones, the glowing outline around Yorda and the shadows (the aura) is worked out in two shorter steps instead of one long one per pixel, which takes less of the graphics chip's time; the picture is the same.
 - On phones, the step that works out Yorda's and Ico's shadows reads less per pixel and no longer makes the graphics chip load and save a full-size picture that nothing looks at, so it takes less of the graphics chip's time; the picture is the same.
 - The step that works out the shadows now reads its data four pixels at a time where the graphics chip can do that correctly (checked when the game starts), which takes less of the graphics chip's time, most of all on phones; the picture is the same.
+- On phones, Yorda's and Ico's shadow shapes are now drawn inside the step that draws the scene instead of in a full-screen step of their own, so the graphics chip no longer saves the scene's depth and loads it back just for them; the picture is the same.
 - On phones, a picture step that draws into only a part of the screen now has the graphics chip load and save only that part; the picture is the same. Most steps during play cover the whole screen, and those stay as they were.
 - Every picture now skips a few steps that drew or saved nothing anyone looked at, which saves graphics time on phones; the picture is the same.
 - On phones, in places where the light glows, and with some of the glowing outline's effects, the graphics chip no longer saves the picture's depth after the last step that uses it; the picture is the same.
