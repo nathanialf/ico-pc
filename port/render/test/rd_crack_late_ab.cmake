@@ -10,7 +10,8 @@
 #            fog, DATE's stencil, the store plan, the blur fold, the fx local read, no UINT
 #            views, the VU planes at whole scales only, the shadow count's one draw, the
 #            vertex pre-pass off, no dynamic state).
-# The run must say "crack fill on: 1 passes" and "1 fills after lists 4-6", unless the
+# The run must say "crack fill on: P passes" (P 0 where the fill was the first draw of the
+# aura's paste pass, else 1) and "1 fills after lists 4-6", unless the
 # dump has no fog of SCENE above 1x at all (the stats line's "0 passes, 0 pixels filled (0
 # replays counted, scale 0x0, ..., 0 fogged replays above 1x not filled, 0 fills after
 # lists 4-6": the v3086-v1985 group, whose effects line times the fog at 0.000): neither
@@ -31,7 +32,13 @@
 # larger difference: the late fill never takes a target farther from the old fill's
 # picture than no fill does).  At the phone's setting the stats line's copies are one fewer than
 # the baseline's (the depth no longer copied for the fill) and its passes no more.  The
-# differing pixels and the largest difference are printed per target.  A line whose dump
+# differing pixels and the largest difference are printed per target.  Every run that
+# drew the fill is replayed once more with ICO_RD_CRACK_PLACE=7 (the fill at the start of
+# list 7, its place before; rd_crack_fill.c rd__crack_fill_place moves it after the
+# glow's sprites of SCENE's alpha alone, or into the aura's paste pass): every PNG must
+# be that replay's bytes, and the run's passes no more than its; at the phone's setting a
+# run whose stats place the fill later ("1 fills in the aura's paste pass" or "1 fills
+# after the glow's alpha") has at least one pass fewer.  A line whose dump
 # or baseline is missing is named and skipped; none compared, or no device: SKIP.
 # -DTOOL=<rd_replay_tool> -DLIST=<the list> -DPY=<python3> -DDIFF=<png_level_diff.py>
 # -DOUT=<a folder the test may write>
@@ -85,7 +92,8 @@ set(env_phone ICO_RD_VU_PREPASS=0 ICO_VK_FAKE_NO_DYNAMIC=1 ICO_RD_FOG_PATH=local
               ICO_RD_DATE_PATH=stencil ICO_RD_STORE_PLAN=1 ICO_RD_BLUR_FOLD=1
               ICO_RD_FX_DST_LOCAL=1 ICO_RD_UINT_VIEW=0 ICO_RD_VU_PLANES=0 ICO_RD_SHADOW_ONE=1)
 # (the outputs' semicolons read as commas: CMake's list separator replaced)
-set(lateRe "stats: crack fill on: 1 passes, [0-9]+ pixels filled \\([^)]*, 1 fills after lists 4-6,")
+set(lateRe "stats: crack fill on: [01] passes, [0-9]+ pixels filled \\([^)]*, 1 fills after lists 4-6,")
+set(placedRe ", 1 fills in the aura's paste pass,|, 1 fills after the glow's alpha\\)")
 set(countRe "stats: [0-9]+ draws, ([0-9]+) passes, [^\n]* ([0-9]+) copies,")
 set(unarmedRe "stats: crack fill on: 0 passes, 0 pixels filled \\(0 replays counted, scale 0x0, reach 0x0 texels, 0 fogged replays above 1x not filled, 0 fills after lists 4-6,")
 set(diffRe "png_level_diff: ([0-9]+) x ([0-9]+), [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, [0-9]+ more \\(largest ([0-9]+)\\), ([0-9]+) pixels differ")
@@ -125,6 +133,51 @@ foreach(run IN LISTS runs)
   elseif(NOT flat MATCHES "${lateRe}")
     message(SEND_ERROR "${dump} ${s}: the fill was not drawn once after lists 4-6:\n${out}")
     math(EXPR failures "${failures} + 1")
+  endif()
+  if(NOT unarmed AND flat MATCHES "${lateRe}")
+    # the same replay with the fill at the start of list 7: the same bytes
+    set(pin "${dir}-pin")
+    file(REMOVE_RECURSE "${pin}")
+    file(MAKE_DIRECTORY "${pin}")
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+                            ${env_${s}} ICO_RD_CRACK_PLACE=7 "${TOOL}" "${dump}" - --pass-dump
+                            "${pin}" --stats ${args_${s}}
+                    RESULT_VARIABLE rcPin OUTPUT_VARIABLE outPin ERROR_VARIABLE errPin)
+    string(REPLACE ";" "," flatPin "${outPin}")
+    if(NOT rcPin EQUAL 0 OR NOT flatPin MATCHES "${countRe}" OR NOT flat MATCHES "${countRe}")
+      message(SEND_ERROR "${dump} ${s}: the replay with the fill at the start of list 7: exit "
+                         "${rcPin}, no pass count:\n${errPin}")
+      math(EXPR failures "${failures} + 1")
+    else()
+      string(REGEX MATCH "${countRe}" m "${flat}")
+      set(runPasses "${CMAKE_MATCH_1}")
+      string(REGEX MATCH "${countRe}" m "${flatPin}")
+      set(pinPasses "${CMAKE_MATCH_1}")
+      set(placed FALSE)
+      if(flat MATCHES "${placedRe}")
+        set(placed TRUE)
+      endif()
+      file(GLOB pinPngs RELATIVE "${pin}" "${pin}/*.png")
+      set(pinDiffer 0)
+      foreach(png IN LISTS pinPngs)
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${pin}/${png}"
+                                "${dir}/${png}" RESULT_VARIABLE samePin)
+        if(NOT samePin EQUAL 0)
+          math(EXPR pinDiffer "${pinDiffer} + 1")
+          message(SEND_ERROR "${dump} ${s}: ${png} differs from the replay with the fill at the "
+                             "start of list 7")
+          math(EXPR failures "${failures} + 1")
+        endif()
+      endforeach()
+      message(STATUS "${dump} ${s}: ${runPasses} passes, ${pinPasses} with the fill at the start "
+                     "of list 7 (placed later: ${placed}); ${pinDiffer} PNGs differ from it")
+      if(runPasses GREATER pinPasses OR
+         (placed AND s STREQUAL "phone" AND NOT runPasses LESS pinPasses))
+        message(SEND_ERROR "${dump} ${s}: ${runPasses} passes against ${pinPasses} with the fill "
+                           "at the start of list 7 (placed later: ${placed})")
+        math(EXPR failures "${failures} + 1")
+      endif()
+    endif()
   endif()
   if(s STREQUAL "phone" AND EXISTS "${base}.log")
     # the baseline's own run log (ab.sh writes <baseline>.log next to the folder)

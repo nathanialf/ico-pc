@@ -57,6 +57,14 @@
  * fog); then the fog's path is set to the depth copy (the desktop's form:
  * the fog on the colour alone) and the frame replayed with the filler:
  * SCENE's colour and depth equal the local read's replay byte for byte.
+ * With glow (list 7: the glow's cleanUpFB, two sprites into SCENE that
+ * write its alpha alone) or aura (list 8: one colour into WORK0, pasted
+ * over SCENE through (Cs - Cd) * As + Cd; the fx local read on) the fill
+ * goes where rd__crack_fill_place puts it, after cleanUpFB with RGB alone
+ * or as the first draw of the paste's pass, and the frame replayed with the
+ * place pinned to the start of list 7 (rd__crack_fill_set_place, the
+ * place the fill had before) has SCENE's colour and depth the same bytes and
+ * more render passes (checkPlace).
  * The log lines are matched by test/rd_crack.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -106,6 +114,12 @@ static const uint8_t kBack[4] = {120, 90, 30, 0x80};
 
 static bool s_backdrop; /* the far plane first (argv[2] backdrop) */
 
+/* argv[2] glow or aura: after the fog the glow's cleanUpFB (list 7) or the
+ * aura's paste (list 8) as staticBlur.c draws them */
+enum { AFTER_NONE, AFTER_GLOW, AFTER_AURA };
+
+static int s_after;
+
 static RdScreenVtx vtx(double x, double y, uint32_t z, const uint8_t c[4])
 {
     RdScreenVtx v;
@@ -125,6 +139,68 @@ static void lutOf(int i, uint8_t out[4])
     out[1] = (uint8_t)(i * 97 + 13);
     out[2] = (uint8_t)(255 - i);
     out[3] = (uint8_t)(0x10 + i * 0x70 / 255);
+}
+
+/* a staticBlur sprite over the w x h GS pixels of the target in force */
+static void blurSprite(RdPostKind kind, uint32_t w, uint32_t h, const uint8_t rgba[4], uint32_t z,
+                       float tw, float th)
+{
+    RdPostParams q;
+    memset(&q, 0, sizeof(q));
+    memcpy(q.rgba, rgba, 4);
+    q.z = z;
+    q.rect[0] = (float)(0x8000 - w * 8);
+    q.rect[1] = (float)(0x8000 - h * 8);
+    q.rect[2] = (float)(0x8000 + w * 8);
+    q.rect[3] = (float)(0x8000 + h * 8);
+    q.uv[0] = q.uv[1] = 8.0f;
+    q.uv[2] = tw * 16.0f - 8.0f;
+    q.uv[3] = th * 16.0f - 8.0f;
+    q.scalar[0] = tw > 1.0f ? tw : 1024.0f;
+    q.scalar[1] = th > 1.0f ? th : 1024.0f;
+    q.scalar[2] = 1.0f;
+    q.exactInt = 1;
+    rd_post(kind, &q);
+}
+
+/* after the fog: s_after's sprites.  glow (staticBlur.c cleanUpFB, list 7):
+ * into SCENE, untextured, Cs * As + Cd with RGBAQ 0, 0, 0, 0 under Z ALWAYS
+ * (the alpha 0 everywhere, RGB kept), then 0, 0, 0, 192 at Z 1 under Z
+ * GEQUAL, Z write off.  aura (list 8): WORK0 filled with one colour by a
+ * sprite, then pasteFeedBackAreaToFB: WORK0 over SCENE, MODULATE, RGBAQ
+ * 64, 64, 64, 128, (Cs - Cd) * As + Cd, Z ALWAYS, Z write off */
+static void recordAfter(RdTarget scene)
+{
+    static const uint8_t kNone[4] = {0, 0, 0, 0}, kMark[4] = {0, 0, 0, 192};
+    static const uint8_t kFeed[4] = {90, 160, 30, 0x20}, kPaste[4] = {64, 64, 64, 128};
+    rd_texture_off();
+    rd_pabe(0);
+    rd_fba(0);
+    rd_z_write(0);
+    rd_gouraud(0);
+    if (s_after == AFTER_GLOW) {
+        rd_select_list(7);
+        rd_set_target(scene, scene, GW, GH, 0);
+        rd_abe(1);
+        rd_blend_func(RD_BLEND_CS_AS_ADD_CD, 0);
+        rd_test_gs(RD_TEST_Z_ALWAYS);
+        blurSprite(RD_POST_FLARE, GW, GH, kNone, 0, 0.0f, 0.0f);
+        rd_test_gs(RD_TEST_Z_GEQUAL);
+        blurSprite(RD_POST_FLARE, GW, GH, kMark, 1, 0.0f, 0.0f);
+        return;
+    }
+    const RdTarget work = rd_target(RD_TARGET_WORK0);
+    rd_select_list(8);
+    rd_set_target(work, (RdTarget){0}, 256, 128, 0);
+    rd_abe(0);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    blurSprite(RD_POST_AURA, 256, 128, kFeed, 0, 0.0f, 0.0f);
+    rd_set_target(scene, scene, GW, GH, 0);
+    rd_texture(rd_target_texture(work, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_sampler_filter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+    rd_abe(1);
+    rd_blend_func(RD_BLEND_LERP_AS_ALT, 0);
+    blurSprite(RD_POST_AURA, GW, GH, kPaste, 0, 256.0f, 128.0f);
 }
 
 static void recordFrame(void)
@@ -198,6 +274,9 @@ static void recordFrame(void)
     pp.uv[2] = (float)(8 + GW * 16);
     pp.uv[3] = (float)(8 + GH * 16);
     rd_post(RD_POST_FOG, &pp);
+    if (s_after != AFTER_NONE) {
+        recordAfter(scene);
+    }
     rd_end_frame(0); /* replayed here: interpolation is off */
 }
 
@@ -248,11 +327,64 @@ static double gsX(uint32_t x, float sx)
     return (double)x / sx;
 }
 
+/* glow and aura: the fill where rd__crack_fill_place puts it (on) against
+ * the same frame with the place pinned to the start of list 7 (the
+ * place it had before): SCENE's colour and depth byte for byte, the place's
+ * counter, and the passes: glow two fewer on the fog's local read
+ * (cleanUpFB's two sprites in the fog's pass, not a pass each after the
+ * fill's), at least one fewer otherwise (the first sprite in the fog's pass
+ * without the depth); aura one fewer (the fill the first draw of the
+ * paste's pass, not a pass of its own), the snapshot's copy the same */
+static void checkPlace(const Picture *on, RdCrackCounts c0, RdCrackCounts c1, bool active)
+{
+    const bool glow = s_after == AFTER_GLOW;
+    CHECK(active, "the filler does not draw here");
+    const uint64_t placed = glow ? c1.afterAlpha - c0.afterAlpha : c1.pasted - c0.pasted;
+    rd__crack_fill_set_place(1);
+    Picture pin;
+    memset(&pin, 0, sizeof(pin));
+    const bool ok = replay(true, &pin) && pin.w == on->w && pin.h == on->h;
+    rd__crack_fill_set_place(-1);
+    rd__crack_fill_wait();
+    RdCrackCounts c2;
+    rd__crack_fill_counts(&c2);
+    CHECK(ok, "SCENE readback with the place pinned");
+    size_t dPx = 0, dZ = 0;
+    for (size_t i = 0; ok && i < (size_t)on->w * on->h; i++) {
+        dPx += memcmp(&pin.px[i * 4], &on->px[i * 4], 4) != 0;
+        dZ += on->z && pin.z && memcmp(&pin.z[i], &on->z[i], sizeof(float)) != 0;
+    }
+    const int fewer = (int)pin.passes - (int)on->passes;
+    const bool local = on->fogLocal > 0;
+    printf("  %s: %llu fills %s; at the start of list 7 instead: %zu texels' colour and %zu "
+           "depths differ, %u render passes against %u (%d fewer), fill passes %u and %u, %llu "
+           "placed so then\n",
+           glow ? "glow" : "aura", (unsigned long long)placed,
+           glow ? "after the glow's alpha" : "in the aura's paste pass", dPx, dZ, pin.passes,
+           on->passes, fewer, pin.fills, on->fills,
+           (unsigned long long)(glow ? c2.afterAlpha - c1.afterAlpha : c2.pasted - c1.pasted));
+    CHECK(placed == 1, "%llu fills placed %s", (unsigned long long)placed,
+          glow ? "after the glow's alpha" : "in the aura's paste pass");
+    CHECK((glow ? c2.afterAlpha - c1.afterAlpha : c2.pasted - c1.pasted) == 0,
+          "the pinned replay placed the fill later");
+    CHECK(dPx == 0 && dZ == 0, "the place against list 7's start: %zu colours, %zu depths differ",
+          dPx, dZ);
+    CHECK(pin.fills == 1, "the pinned replay drew %u fill passes", pin.fills);
+    if (glow) {
+        CHECK(local ? fewer == 2 : fewer >= 1, "%d render passes fewer than pinned (%s)", fewer,
+              local ? "2 on the fog's local read" : "at least 1");
+    } else {
+        CHECK(fewer == 1, "%d render passes fewer than pinned, not 1", fewer);
+    }
+    free(pin.px);
+    free(pin.z);
+}
+
 int main(int argc, char **argv)
 {
     printf("rd_crack_test\n");
     if (argc < 2) {
-        printf("usage: rd_crack_test 2|4|1|frac|original [msaa|backdrop|fold]\n");
+        printf("usage: rd_crack_test 2|4|1|frac|original [msaa|backdrop|fold|glow|aura]\n");
         return 2;
     }
     const bool original = strcmp(argv[1], "original") == 0;
@@ -260,6 +392,9 @@ int main(int argc, char **argv)
     const bool msaa = argc > 2 && strcmp(argv[2], "msaa") == 0;
     s_backdrop = argc > 2 && strcmp(argv[2], "backdrop") == 0;
     const bool inPass = argc > 2 && strcmp(argv[2], "fold") == 0;
+    s_after = argc > 2 && strcmp(argv[2], "glow") == 0   ? AFTER_GLOW
+              : argc > 2 && strcmp(argv[2], "aura") == 0 ? AFTER_AURA
+                                                         : AFTER_NONE;
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = original ? RD_PRESET_ORIGINAL : RD_PRESET_ENHANCED;
@@ -381,7 +516,10 @@ int main(int argc, char **argv)
                         continue;
                     }
                     const size_t q = (size_t)nb[j][1] * w + (size_t)nb[j][0];
-                    if (memcmp(&off.px[q * 4], ref, 4) != 0 && memcmp(&on.px[q * 4], b, 4) == 0) {
+                    /* after the glow the crack's alpha is its own (cleanUpFB's
+                       Z-tested mark): its RGB the neighbour's */
+                    if (memcmp(&off.px[q * 4], ref, 4) != 0 &&
+                        memcmp(&on.px[q * 4], b, s_after == AFTER_GLOW ? 3 : 4) == 0) {
                         from = true;
                     }
                 }
@@ -418,7 +556,8 @@ int main(int argc, char **argv)
         CHECK(badFrom == 0 && badDepth == 0,
               "%d filled texels not a neighbour's colour, %d with their depth changed", badFrom,
               badDepth);
-        CHECK(on.fills == 1, "%u fill passes", on.fills);
+        /* in the aura's paste pass: no pass of its own */
+        CHECK(on.fills == (s_after == AFTER_AURA ? 0u : 1u), "%u fill passes", on.fills);
         CHECK(c1.counted - c0.counted == 1 && c1.filled - c0.filled == 1 &&
                   c1.pixels - c0.pixels == (uint64_t)changed,
               "counted %llu pixels over %llu replays (%llu filled), %d texels changed",
@@ -518,6 +657,9 @@ int main(int argc, char **argv)
               diffPx, diffZ);
         free(cp.px);
         free(cp.z);
+    }
+    if (s_after != AFTER_NONE) {
+        checkPlace(&on, c0, c1, active);
     }
     if (msaa) {
         /* the same frame without anti-aliasing and without the filler (a

@@ -1319,6 +1319,25 @@ if(ICO_RUN_TESTS)
                                                       ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_CRACK_FILL=1")
     set_tests_properties(rd_crack_tiler_fold_mali PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                              ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=mali;ICO_RD_FOG_PATH=local")
+    # the fill's place (rd_crack_fill.c rd__crack_fill_place) on the tile
+    # class's fakes: rd_crack_glow after the glow's cleanUpFB (its two
+    # sprites of SCENE's alpha alone stay in the fog's pass, the fill writes
+    # RGB alone after them), rd_crack_aura the first draw of the aura's
+    # paste pass; each against the same frame with the place pinned to the
+    # start of list 7: SCENE's bytes the same, two (glow) or one (aura)
+    # render passes fewer; the once lines matched
+    add_test(NAME rd_crack_glow
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=2|glow"
+                     "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail}"
+                     "-DEXPECT2=rd: crack fill: drawn after the glow's sprites that write SCENE's alpha alone"
+                     -P "${_crk}")
+    add_test(NAME rd_crack_aura
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=2|aura"
+                     "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail}"
+                     "-DEXPECT2=rd: crack fill: drawn as the first draw of the aura's paste pass on SCENE"
+                     "-DDENY=rd: crack fill: the aura's paste cannot take the fill" -P "${_crk}")
+    set_tests_properties(rd_crack_glow rd_crack_aura PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
     add_test(NAME rd_replay_tool_crack
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DARGS=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump|${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_crack.png|--enhanced|--resolution|2x|--stats|--no-crack-fill"
@@ -1343,7 +1362,7 @@ if(ICO_RUN_TESTS)
                          "-DNEED_FILE=${_crk_room}"
                          "-DNEED=rd: msaa: ${_s} samples"
                          "-DEXPECT=${_crk_on} 2x2, reach 1x1 ${_crk_tail} \\(drawn after the MSAA resolve\\)"
-                         "-DEXPECT2=stats: crack fill on: 1 passes, [1-9][0-9]* pixels filled \\(1 replays counted; scale 2x2, reach 1x1 texels; 0 fogged replays above 1x not filled; 1 fills after lists 4-6; 1 fills after the MSAA resolve\\)"
+                         "-DEXPECT2=stats: crack fill on: 1 passes, [1-9][0-9]* pixels filled \\(1 replays counted; scale 2x2, reach 1x1 texels; 0 fogged replays above 1x not filled; 1 fills after lists 4-6; 1 fills after the MSAA resolve; 0 fills in the aura's paste pass; 0 fills after the glow's alpha\\)"
                          "-DDENY=rd: crack fill: not drawn on SCENE" -P "${_crk}")
         set_tests_properties(rd_crack_resolved_msaa${_s} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                                      TIMEOUT 600)
@@ -2586,7 +2605,8 @@ endif()
 # Not twinned:
 #  * a test whose environment holds a Vulkan fake (ICO_VK_FAKE_*, ICO_VK_ATTACHMENT_READ),
 #    which OpenGL ignores: *_mali, *_minlimits, *_d24s8, *_static, rd_crack_d24s8,
-#    rd_crack_tiler(_on, _fold, _fold_mali), rd_blend_selftest*, rd_date_selftest_sabotage,
+#    rd_crack_tiler(_on, _fold, _fold_mali), rd_crack_glow, rd_crack_aura, rd_blend_selftest*,
+#    rd_date_selftest_sabotage,
 #    rd_fog_selftest_local_sabotage (ico_rd_gl_twin skips these by itself)
 #  * the tests that start the game (model_viewer_headless, gallery_sweep,
 #    credits_headless, state_roundtrip_headless(_settings)) or work on the replay tool's files (rd_replay_tool*,

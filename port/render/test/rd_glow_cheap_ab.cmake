@@ -36,16 +36,15 @@
 # level.  A missing list, dump or baseline is named and skipped; nothing
 # compared, or no device: SKIP (77).
 # The crack fill after lists 4-6 (rd_crack_fill.c, CHEAPPASSES; DIVERGENCES.md
-# VD-20) came after these baselines: it ends the fog's pass at list 7 for its
-# snapshot and its own pass, so cleanUpFB's two sprites take passes of their
-# own again wherever it is drawn (above 1x with a fog: every phone frame), and
-# it leaves the crack's depth, which cleanUpFB's Z-tested sprite and so the
-# glow's mask (WORK2) read.  So:
-#   - a run whose stats say the fill was drawn ("1 fills after lists 4-6") is
-#     replayed once more with ICO_RD_CRACK_FILL=0 for the pass counts: that
-#     replay's glow passes must meet the rule above (at least 2 fewer at the
-#     phone's setting: the cuts themselves), the run's own at most the
-#     baseline's;
+# VD-20) came after these baselines.  It is drawn after cleanUpFB's two
+# sprites (rd__crack_fill_place: they write SCENE's alpha alone, so the fill
+# after them writes RGB alone, the same bytes), which stay in the fog's pass,
+# and it leaves the crack's depth, which cleanUpFB's Z-tested sprite and so
+# the glow's mask (WORK2) read.  So:
+#   - the run's own glow passes meet the rule above with the fill drawn (at
+#     least 2 fewer at the phone's setting), and at the phone's setting a run
+#     whose stats say the fill was drawn ("1 fills after lists 4-6") says it
+#     was drawn after the glow's alpha ("1 fills after the glow's alpha");
 #   - the PNGs of a frame the fill changed are compared with -DBASE_REFRESH/
 #     <name>-<setting> where that folder is (build-host/tmp/v098/evidence/glow/
 #     pd-w15: main 7832a2e4f's pictures, each checked first to have the
@@ -102,7 +101,8 @@ set(env_orig "")
 set(args_enh2x43 --enhanced --aspect 4:3 --resolution 2x --present 1280x960)
 set(env_enh2x43 "")
 set(glowRe "glow ([0-9]+) passes")
-set(lateRe "stats: crack fill on: 1 passes, [0-9]+ pixels filled \\([^)]*, 1 fills after lists 4-6,")
+set(lateRe "stats: crack fill on: [01] passes, [0-9]+ pixels filled \\([^)]*, 1 fills after lists 4-6,")
+set(alphaRe ", 1 fills after the glow's alpha\\)")
 set(diffRe "png_level_diff: [0-9]+ x [0-9]+, [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, [0-9]+ more \\(largest ([0-9]+)\\), ([0-9]+) pixels differ")
 set(failures 0)
 set(compared 0)
@@ -159,30 +159,16 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     set(glowNew "${CMAKE_MATCH_1}")
-    # the passes the cuts are judged by: this run's, or with the crack fill
-    # drawn (it ends the fog's pass before the glow) a replay without it
+    # the passes the cuts are judged by: this run's, the crack fill drawn
+    # (rd_crack_fill.c rd__crack_fill_place: after cleanUpFB's two sprites,
+    # which stay in the fog's pass, its RGB alone)
     set(glowCut "${glowNew}")
     set(cutWhat "now")
     if(flat MATCHES "${lateRe}")
-      set(dirNo "${OUT}/${name}-${s}-nofill")
-      file(REMOVE_RECURSE "${dirNo}")
-      file(MAKE_DIRECTORY "${dirNo}")
-      execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
-                              ${env_${s}} ICO_RD_CRACK_FILL=0 "${TOOL}" "${dump}"
-                              "${dirNo}/out.png" --stats ${args_${s}}
-                      RESULT_VARIABLE rcNo OUTPUT_VARIABLE outNo ERROR_VARIABLE errNo)
-      string(REPLACE ";" "," flatNo "${outNo}")
-      if(NOT rcNo EQUAL 0 OR NOT flatNo MATCHES "${glowRe}")
-        message(SEND_ERROR "${name} ${s}: the replay without the crack fill: exit ${rcNo}, no "
-                           "glow pass count:\n${errNo}")
-        math(EXPR failures "${failures} + 1")
-        continue()
-      endif()
-      set(glowCut "${CMAKE_MATCH_1}")
-      set(cutWhat "without the crack fill")
-      if(glowNew GREATER glowBase)
-        message(SEND_ERROR "${name} ${s}: glow ${glowBase} passes before, ${glowNew} now with the "
-                           "crack fill: want at most as many")
+      set(cutWhat "with the crack fill")
+      if(s STREQUAL "phone" AND NOT flat MATCHES "${alphaRe}")
+        message(SEND_ERROR "${name} ${s}: the crack fill was drawn but not after the glow's "
+                           "alpha (cleanUpFB):\n${out}")
         math(EXPR failures "${failures} + 1")
       endif()
     endif()
