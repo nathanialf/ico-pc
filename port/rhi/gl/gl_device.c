@@ -384,6 +384,7 @@ static void gl_fill_limits(void)
      * in red */
     o->stencilView = true;
     o->stencilViewChannel = 0;
+    o->stencilGather = true; /* textureGather on the usampler2D view */
     o->vuFallbackPlain = NULL;
     o->compilerVersion = NULL;
     o->carefulPipelines = NULL;

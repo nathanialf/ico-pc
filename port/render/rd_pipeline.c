@@ -3513,6 +3513,7 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     switch (k->fs) {
     case RD_FS_BOX_REDUCE:
     case RD_FS_SHADOW_COUNT:
+    case RD_FS_SHADOW_COUNT_LOAD:
         return RD_KF_SHADOW;
     case RD_FS_FOG:
     case RD_FS_FOG_BUFFER:
@@ -3975,10 +3976,13 @@ RdPipeKeyInt rd__shadow_reduce_key(void)
 }
 
 /* The count in one draw (rd_replay.c shadowCountOne): RGBA8 like the
- * count, no depth attachment (the stencil is read through its view) */
+ * count, no depth attachment (the stencil is read through its view); the
+ * loads-only build where the loads are read (rd__shadow_count_loads) */
 RdPipeKeyInt rd__shadow_count_key(void)
 {
-    return rd__post_key(RD_VS_BLIT, RD_FS_SHADOW_COUNT, RHI_FMT_RGBA8_UNORM);
+    const bool load = rd__shadow_count_loads() && g_rd.fs[RD_FS_SHADOW_COUNT_LOAD].id;
+    return rd__post_key(RD_VS_BLIT, load ? RD_FS_SHADOW_COUNT_LOAD : RD_FS_SHADOW_COUNT,
+                        RHI_FMT_RGBA8_UNORM);
 }
 
 RdPipeKeyInt rd__shadow_resolve_key(int pass, uint32_t step)
@@ -4026,6 +4030,13 @@ uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_
     if (g_rd.profile.shadowOne && g_rd.fs[RD_FS_SHADOW_COUNT].id) {
         const RdPipeKeyInt k1 = rd__shadow_count_key();
         n = rd__add_pipe_key(out, max, n, &k1);
+        /* the loads-only build too: the self-test's second replay, and
+         * the form a device whose gathers it finds wrong keeps */
+        if (g_rd.fs[RD_FS_SHADOW_COUNT_LOAD].id) {
+            const RdPipeKeyInt kl =
+                rd__post_key(RD_VS_BLIT, RD_FS_SHADOW_COUNT_LOAD, RHI_FMT_RGBA8_UNORM);
+            n = rd__add_pipe_key(out, max, n, &kl);
+        }
         /* the self-test's volumes (rd_shadow_selftest.c SB_TEST: TEST
          * 0x30000, every face counts), into SCENE's RGBA8 colour: the
          * phone's two first-use lines in list 3 at start (ztst 1, stencil 1

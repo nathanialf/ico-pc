@@ -9,7 +9,11 @@
  *       it: ... (reported once)                               (events)
  *   rd: msaa: the resolve pipeline is not there (or its texture group
  *       could not be made): ... the colour resolve and the depth resolve
- *       instead (reported once)                               (events) */
+ *       instead (reported once)                               (events)
+ *   rd: shadow count: under MSAA Nx the count reads the scene's own
+ *       single-sampled stencil after the epoch's resolve: ... (once a form
+ *       and count; rd_shadow_one.c rd__shadow_msaa_note, called here at a
+ *       close by the shadow count's pass)                      (events) */
 #include <stdio.h>
 #include <string.h>
 
@@ -107,8 +111,9 @@ bool rd__msaa_resolve(RhiCommandList cl, RdTargetRec *ts, RhiTexture color, RhiS
     rd__transition(cl, depth, depthState, RHI_STATE_SHADER_READ);
     rd__transition(cl, ts->color, &ts->colorState, RHI_STATE_RENDER_TARGET);
     rd__transition(cl, ts->depth, &ts->depthState, RHI_STATE_DEPTH_WRITE);
-    /* SCENE's colour and depth written whole; the stencil (a shadow
-     * reset's clear recorded before the resolve) loaded and kept */
+    /* SCENE's colour and depth written whole; the stencil loaded and
+     * kept (a shadow reset pending on it stays pending: msaaEnd, the next
+     * pass on the depth takes it as its stencil clear) */
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
     p.color[0].texture = ts->color;
@@ -134,6 +139,11 @@ uint8_t rd__msaa_close_note(int cause)
     const int l = cause == RD_MSAA_CLOSE_END ? RD_LIST_COUNT : rd__passring_list_now();
     if (l < 0 || l > RD_LIST_COUNT || cause < 0 || cause >= RD_MSAA_CLOSE_COUNT) {
         return 0;
+    }
+    if (cause == RD_MSAA_CLOSE_SHADOW) {
+        /* the seven draws' passes on SCENE's depth closed it: the stencil
+         * they test is SCENE's own, single-sampled (rd_shadow_one.c) */
+        rd__shadow_msaa_note(0, g_rdPerf.msaaSamples);
     }
     const uint32_t bit = 1u << (uint32_t)l;
     if (s_closeLogged[cause] & bit) {

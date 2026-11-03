@@ -997,6 +997,17 @@ uint64_t rd__mesh_join_part(RdMeshRec *const *ms, uint32_t n, uint64_t sig);
  * without the packet's ordinal) and joined with rd__mesh_join_part */
 void rd__join_parts(const RdFrame *f, int keep);
 
+/* The winding of the disc's prelit strips (rd_mesh.c markWinding,
+ * ICO_VU_MARK_FLIP): a prelit triangle k of a strip that starts at vertex s
+ * carries the mark when ((k - s) & 1) ^ RD_VU_WINDING_PHASE is 1, the
+ * convention the disc's lit strips follow, measured from their normals
+ * (rd_mesh_test's winding cases, docs/port/VU1_PROGRAMS.md "The winding
+ * mark"): 0 when the even triangles of a strip (k - s = 2, 4, ..) face the
+ * way cross(b - a, c - a) of their corners k-2, k-1, k points (share A),
+ * 1 for the reverse (share B).  0 until the disc's measurement is in: the
+ * measurement sets it */
+#define RD_VU_WINDING_PHASE 0u
+
 /* The marks of the triangle of kick k (ICO_VU_MARK_*; 0 past the bytes) */
 static inline uint32_t rd__mesh_kick_mark(const RdMeshRec *m, uint32_t k)
 {
@@ -1479,6 +1490,11 @@ typedef enum RdFsId {
      * build); keys rd__aura_box_keys, in the fx family */
     RD_FS_FX_AURA_ROWS,
     RD_FS_FX_AURA_SUM,
+    /* shadow_count_load_ps: shadow_count_ps with the loads alone, no gather
+     * in the module (SHADOW_COUNT_LOAD): where the stencil view takes no
+     * gather (RhiLimits.stencilGather) or the loads are in force
+     * (g_rd.shadowLoad); key rd__shadow_count_key */
+    RD_FS_SHADOW_COUNT_LOAD,
     RD_FS_COUNT
 } RdFsId;
 
@@ -2215,6 +2231,43 @@ bool rd__fog_edge_may_be_due(void);
  * fades_fold = false (ICO_RD_FADES_FOLD=0, the A/B) or after a reduction
  * did not take a planned fold */
 bool rd__fades_fold_on(void);
+/* The glow's mask folded into its reduction (rd_glow_fold.c; rd_replay.h
+ * has the replay's hooks).
+ * rd__glow_fold_on     [dev] glow_fold (ICO_RD_GLOW_FOLD=1 on, 0 off; not
+ *                      set: on where the renderer has an output, off where
+ *                      its caller reads the targets), false after a frame
+ *                      read WORK2 before its fill or a reduction did not
+ *                      take a planned fold
+ * rd__glow_fold_force  the tests: 1 on, 0 off, -1 the switch's (and the
+ *                      fold on again after a refusal that turned it off)
+ * rd__glow_fold_plan   frame f's chain as the scan reads it (the walk of
+ *                      rd__store_plan_scan, here over a frame of its own):
+ *                      NULL with out->on, "" without a glow, else why not
+ *                      (*why RD_GLOW_FOLD_WHY_*); no device needed
+ * rd__glow_fold_readback  rd_replay.c rd__read_target: a read of WORK2
+ *                      after a folded replay is logged (it is not the mask)
+ * RdGlowFoldPlan       the chain's three commands (by the store plan's
+ *                      ordinals and pointers) and fx_glow_mask's words that
+ *                      the scan knows: the fill (R | G << 8 | B << 16 | A <<
+ *                      24 with FBA's MSB), the mask's rect (x0 | x1 << 16,
+ *                      y0 | y1 << 16), u0 - x0 | (v0 - y0) << 16, its alpha
+ *                      test (A | AREF << 8 | ATST << 16 | ATE << 20 | AFAIL
+ *                      << 24), its flags (RD_FXF_TCC, LINEAR, CLAMP_S,
+ *                      CLAMP_T, FBA) and TEX0 size */
+#define RD_GLOW_FOLD_WORDS 9
+
+typedef struct RdGlowFoldPlan {
+    bool on;
+    uint32_t fillOrd, maskOrd, reductionOrd;
+    const RdCmd *fillCmd, *maskCmd, *reductionCmd;
+    uint32_t fill, rectX, rectY, duv, test, flags;
+    float texW, texH;
+} RdGlowFoldPlan;
+
+bool rd__glow_fold_on(void);
+void rd__glow_fold_force(int on);
+const char *rd__glow_fold_plan(const RdFrame *f, int keep, RdGlowFoldPlan *out, uint32_t *why);
+void rd__glow_fold_readback(uint32_t id);
 
 /* rd_vuprepass_selftest's sabotage (ICO_RD_VU_PREPASS_SABOTAGE), while the
  * mode is not RD_VU_SABOTAGE_OFF: VERTEX the first mesh or grid command's
@@ -2284,6 +2337,16 @@ RdPipeKeyInt rd__shadow_reduce_key(void); /* box_reduce_ps: the count at the GS 
  * shadow_count_ps behind blit_vs into an RGBA8 target of the GS size, no
  * depth attachment, the stencil read through its view (RHI_ASPECT_STENCIL) */
 RdPipeKeyInt rd__shadow_count_key(void);
+/* Whether the one draw reads the stencil a texel a load: the self-test's
+ * choice (g_rd.shadowLoad) or a backend whose stencil view takes no
+ * gather (RhiLimits.stencilGather false: Direct3D), where the gathers'
+ * module is never bound (shadow_count_load_ps; rd_shadow_one.c) */
+bool rd__shadow_count_loads(void);
+/* The line naming how the count after an MSAA epoch reads the stencil
+ * (rd_shadow_one.c; rd_msaa.c at the close, rd__shadow_one_draw):
+ * one 1 the one draw, 0 the seven stencil-tested draws; samples the
+ * epoch's count.  Reported once a form and count. */
+void rd__shadow_msaa_note(int one, uint32_t samples);
 /* The table shadow_count_ps reads the count's bytes from: texel m (0..63)
  * the RGBA the seven draws write for a stencil whose bits 0-5 hold m:
  * RGB 4 m, A 0x80 where m != 0, else 0; under the step 8 RGB 8 (m mod 32),
@@ -2967,7 +3030,11 @@ enum {
     RD_FXF_OUT_PREMUL = 32768,
     /* the reduction at scale 1: the fades fold's steps on its taps
      * (rd_fades_fold.c, fx_sprite.hlsl fx_fold4) */
-    RD_FXF_FOLD = 65536
+    RD_FXF_FOLD = 65536,
+    /* fx_frame_ps: the glow's reduction with SCENE as t1, WORK2's texels
+     * computed as the mask left them (rd_glow_fold.c, fx_sprite.hlsl
+     * fx_glow_texel) */
+    RD_FXF_GLOW_MASK = 131072
 };
 
 /* The steps at which fx_sprite_ps leaves the GS's own filter above 1x, in

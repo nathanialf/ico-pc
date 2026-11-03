@@ -2433,6 +2433,11 @@ typedef struct RdPerfRecord {
     /* The fades fold (rd_fades_fold.c): list 11's last full-frame lerp
      * sprites the reduction applied instead of drawing them into SCENE */
     uint32_t fadesFolded;
+    /* The glow's mask folded into its reduction (rd_glow_fold.c): glowFolded
+     * 1 when this replay's reduction computed the mask in its box (WORK2
+     * neither drawn nor read), glowKept 1 when a glow frame drew the mask
+     * into WORK2 instead, glowWhy why (RD_GLOW_FOLD_WHY_*) */
+    uint32_t glowFolded, glowKept, glowWhy;
     /* The aura's read of SCENE into FEED128 in two passes (rd_aura_box.c):
      * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
      * a replay; none while the game is paused) */
@@ -2517,6 +2522,13 @@ typedef struct RdPerfRecord {
      * (the state's ABE on, or the alpha plan's blending off); vuFuseKept
      * the others, by reason (RD_VU_FUSE_*) */
     uint32_t vuFusePairs, vuFuseSame, vuFuseKept[RD_VU_FUSE_WHY_COUNT];
+    /* The visibility test (rd_vis.c rd__vis_frame; [dev] cull): the VU draw
+     * commands of the replayed lists (cullDraws), those turned into NOPs
+     * (cullSkipped: by the frustum test, cullFrustum, or by occlusion,
+     * cullOccluded, 0 until the occlusion test is built), and the test's
+     * time on the CPU (cullMs) */
+    uint32_t cullDraws, cullSkipped, cullFrustum, cullOccluded;
+    double cullMs;
     uint32_t prepassBatches;
     double gpuPrepassMs;
     /* The store plan (rd_replay.c storePlanScan; RdProfile.storePlan): of
@@ -2602,6 +2614,31 @@ const char *rd_perf_backend_text(void);
  * last store's (RD_LAST_WHY_*: "N last stores kept (...)"); the reasons
  * that hold none are left out, "" with none at all.  Into buf (size). */
 void rd_perf_why_text(char *buf, size_t size, int which, const uint64_t *counts, double replays);
+
+/* RdPerfRecord.glowWhy (rd_glow_fold.c): why a glow frame drew its mask into
+ * WORK2 (docs/port/RENDER_POST.md, "The glow's mask in its reduction"):
+ * FANS a draw into WORK2 between the fill and the mask (the sun's fans),
+ * LAMPS a draw into WORK2 between the mask and the reduction (the lamps'
+ * meshes), SCENE a draw into SCENE between them, OTHER WORK2 drawn or read
+ * elsewhere in the frame, FORM the fill,
+ * the mask or the reduction not in the fold's form, MSAA the MSAA epoch,
+ * PLAN the fx plan off or no fx_frame_ps, UNDONE a reduction that could not
+ * take a planned fold (the fill and the mask drawn after all).
+ * rd_glow_fold_why_text gives the words the 10 s line and --stats print. */
+enum {
+    RD_GLOW_FOLD_WHY_NONE,
+    RD_GLOW_FOLD_WHY_FANS,
+    RD_GLOW_FOLD_WHY_LAMPS,
+    RD_GLOW_FOLD_WHY_OTHER,
+    RD_GLOW_FOLD_WHY_FORM,
+    RD_GLOW_FOLD_WHY_MSAA,
+    RD_GLOW_FOLD_WHY_PLAN,
+    RD_GLOW_FOLD_WHY_UNDONE,
+    RD_GLOW_FOLD_WHY_SCENE,
+    RD_GLOW_FOLD_WHY_COUNT
+};
+
+const char *rd_glow_fold_why_text(uint32_t why);
 
 /* The CPU time of the replay finished last (its RdPerfRecord.totalMs,
  * popped or not): with interpolation off the window's pacing reads the

@@ -597,6 +597,11 @@ static const struct {
        so the merge joins them (an A/B; port/render/rd_replay_vu.c
        vuFuseVerdict) */
     {"dev.vu_fuse", "vu_fuse"},
+    /* the scene draws' visibility test: frustum (the default: a draw wholly
+       off its target or behind the eye is not replayed, the same picture),
+       full (the occlusion test too, once it is built; frustum until then)
+       or off (port/render/rd_vis.c) */
+    {"dev.cull", "cull"},
     /* false: a post sprite whose source target holds only its last clear
        reads the target as before instead of being drawn in the clear's
        colour (an A/B; port/render/rd_const_read.c) */
@@ -617,6 +622,9 @@ static const struct {
     /* true: every between-tick present draws the glow's chain again instead
        of pasting the tick's (an A/B; port/render/rd_glow_hold.c) */
     {"dev.glow_redraw", "glow_redraw"},
+    /* false: the glow's mask drawn into WORK2 and read by its reduction, as
+       before (an A/B; port/render/rd_glow_fold.c rd__glow_fold_on) */
+    {"dev.glow_fold", "glow_fold"},
     /* false: SDL's DirectInput controller scan off (issue 105; window_host.c
        joystick_scan_hints) */
     {"dev.joystick_directinput", "joystick_directinput"},
@@ -718,6 +726,8 @@ static const struct {
     /* port/render/rd_replay_vu.c vuMergeInit: 0 draws code 36's kicks
        under their own pipeline (no fused pair) */
     {"vu_fuse", "ICO_RD_VU_FUSE"},
+    /* port/render/rd_vis.c rd__vis_init: off, frustum or full */
+    {"cull", "ICO_RD_CULL"},
     /* port/render/rd_const_read.c rd__const_reads_on: 0 reads a cleared
        source as before */
     {"constant_reads", "ICO_RD_CONSTANT_READS"},
@@ -735,6 +745,9 @@ static const struct {
     {"still_represent", "ICO_RD_STILL_REPRESENT"},
     /* port/render/rd_glow_hold.c redrawOn: 1 draws the glow at every present */
     {"glow_redraw", "ICO_RD_GLOW_REDRAW"},
+    /* port/render/rd_glow_fold.c rd__glow_fold_on: 0 draws the glow's mask
+       into WORK2, 1 computes it in the reduction even without an output */
+    {"glow_fold", "ICO_RD_GLOW_FOLD"},
     /* port/platform/window_host.c joystick_scan_hints: 0 sets
        SDL_HINT_JOYSTICK_DIRECTINPUT to 0 before SDL_Init */
     {"joystick_directinput", "ICO_JOYSTICK_DIRECTINPUT"},
@@ -800,6 +813,7 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const readers[] = {"thread", "sync", NULL};
     static const char *const vuSets[] = {"auto", "plain", "extended", NULL};
     static const char *const auraKernels[] = {"box", "gs", NULL};
+    static const char *const culls[] = {"off", "frustum", "full", NULL};
 
     if (key == NULL || value == NULL || ico_dev_env_name(key) == NULL) {
         return NULL;
@@ -848,6 +862,14 @@ const char *ico_dev_env_value(const char *key, const char *value)
     if (strcmp(key, "vu_set") == 0) {
         /* auto, plain or extended as they are (no boolean form) */
         return value_is(value, vuSets) ? value : NULL;
+    }
+    if (strcmp(key, "cull") == 0) {
+        /* off, frustum or full as they are; false/0/no is off, true/1/on/yes
+           the default, frustum */
+        if (value_is(value, culls)) {
+            return value;
+        }
+        return value_is(value, off) ? "off" : value_is(value, on) ? "frustum" : NULL;
     }
     if (strcmp(key, "aura_kernel") == 0) {
         /* box (the default) or gs as they are */

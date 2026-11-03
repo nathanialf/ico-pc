@@ -493,6 +493,13 @@ float4 camera_probe_ps(BlitVSOut i) : SV_Target0
 // that is added is the term box_reduce_ps adds, in its order. The stencil
 // is read by gathers, four texels a read, the same texels in the same order
 // (shadow_count_gather), unless g_mode.y asks for the loads.
+// shadow_count_load_ps is this entry built with SHADOW_COUNT_LOAD: the loads
+// alone, no gather anywhere in the module, for a backend whose stencil view
+// takes no gather (RhiLimits.stencilGather: Direct3D's
+// X32_TYPELESS_G8X24_UINT, where the D3D11 debug layer stops a draw whose
+// shader merely holds the gather) and wherever the loads are in force
+// (rd_shadow_one.c). The stencil it reads is always single-sampled: SCENE's
+// own depth, the MSAA epoch resolved before the count (rd_replay.c msaaEnd).
 Texture2D<uint4> g_shadowStencil : ICO_REG(t1, 2);
 Texture2D<float4> g_shadowTable : ICO_REG(t2, 2);
 
@@ -510,6 +517,7 @@ uint shadow_count_m(int x, int y)
 // sampler is nearest and clamps, and a texel past the stencil's edge is
 // never used: the box stops at it), as font.hlsl's sheet_cov4.  Gather's
 // order: x (x, y + 1), y (x + 1, y + 1), z (x + 1, y), w (x, y).
+#ifndef SHADOW_COUNT_LOAD
 uint4 shadow_count_gather(int x, int y, float2 inv)
 {
     float2 uv = float2(float(x + 1), float(y + 1)) * inv;
@@ -522,6 +530,7 @@ uint4 shadow_count_gather(int x, int y, float2 inv)
 // held in registers): 6 texels at the phone's 4.62x, 4 at 2.8125x; a wider
 // box (scale above 7) takes the loads
 #define SHADOW_GATHER_SPAN 8
+#endif
 
 float4 shadow_count_ps(BlitVSOut i) : SV_Target0
 {
@@ -532,6 +541,7 @@ float4 shadow_count_ps(BlitVSOut i) : SV_Target0
     float4 sum = float4(0.0, 0.0, 0.0, 0.0);
     float4 v = float4(0.0, 0.0, 0.0, 0.0);
     uint held = 64u; // the m whose table texel v holds; 64: none (m < 64)
+#ifndef SHADOW_COUNT_LOAD
     if (g_mode.y == 0u && last.x - first.x <= SHADOW_GATHER_SPAN) {
         // the same terms in the same order as the loads below (row by row,
         // each row's texels left to right), each texel's m from a gather:
@@ -572,6 +582,7 @@ float4 shadow_count_ps(BlitVSOut i) : SV_Target0
         }
         return sum / (g_param.x * g_param.y);
     }
+#endif
     for (int y = first.y; y < last.y; y++) {
         float wy = min(hi.y, float(y + 1)) - max(lo.y, float(y));
         for (int x = first.x; x < last.x; x++) {

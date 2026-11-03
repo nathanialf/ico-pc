@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "rd_internal.h"
+#include "rd_vis.h"
 
 /* The card test's joined strips over a part's meshes (RENDER.md "Strip
  * joining").
@@ -53,6 +54,10 @@ static int joinDrawCmp(const void *a, const void *b)
 
 void rd__join_parts(const RdFrame *f, int keep)
 {
+    /* the frame as recorded (rd_vis.c): a packet the visibility test
+     * skipped still joins its part's other packets' strips, so their marks,
+     * and the card verdicts they decide, are those of every replay */
+    f = rd__vis_source(f);
     static JoinDraw *draws;
     static RdMeshRec **ms;
     static uint32_t cap;
