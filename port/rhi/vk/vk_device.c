@@ -1011,7 +1011,7 @@ static VkFormat vkr_choose_depth_stencil(VkPhysicalDevice pd, bool *fake)
  * without the extension has neither: "driver (unnamed)", driverID 0, which
  * rhi_driver_version.h reads as unknown, the vendor id deciding), and
  * driverVersion decoded the vendor's way (rhi_driver_version.h) */
-static char s_driverText[600];
+static char s_driverText[768];
 /* the robust access in force, for RhiLimits.robustText, and whether it is
    off by the default (RhiLimits.robustDefaultOff) */
 static char s_robustText[160];
