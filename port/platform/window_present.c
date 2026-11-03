@@ -92,6 +92,7 @@ static void rt_ask(PaceRtAsk *q, const IcoRtPlan *p, Uint64 now, Uint64 refresh,
     q->cpuNs = p->cpuNs;
     q->interpNs = p->interpNs;
     q->submitNs = p->submitNs;
+    q->submitOn = p->submitOn;
     q->gpuNs = s_pres.gpuNs;
     q->paced = s_pres.budget.paced;
     q->asMade = asMade;
@@ -146,6 +147,27 @@ static void rt_pipe_posted(Uint64 now, Uint64 refresh, Uint64 period)
         return;
     }
     rt_ask(&q, &p, now, refresh, period, false);
+    {
+        /* the plan's reading of the submit thread, when it changes (the
+           log says which fence the further pictures were planned by) */
+        static int s_on = -1;
+
+        if ((int)q.submitOn != s_on) {
+            s_on = (int)q.submitOn;
+            if (q.submitOn) {
+                fprintf(stderr,
+                        "window: step rule: the submit thread on (%s): the further pictures "
+                        "planned with two pictures in flight, the present's wait the submit "
+                        "thread's\n",
+                        q.submitNs != 0 ? "the next picture waits for its job"
+                                        : "the frame slots apart");
+            } else {
+                fprintf(stderr, "window: step rule: the submit thread off: the further pictures "
+                                "planned with the picture before's fence while the presents wait "
+                                "half a refresh or more\n");
+            }
+        }
+    }
     /* the fence of the picture before only with the submit thread off
        (pace_policy.h pace_rt_pipe_behind) */
     pace_rt_pipe_post(&s_pres.rtPipe,

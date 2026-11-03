@@ -2963,7 +2963,16 @@ static void testStepTrace(void)
     CHECK(pace_rt_behind(q.presentNs, q.refreshNs) && pace_rt_pipe_behind(&q));
     q.submitNs = 7700000ull;
     CHECK(!pace_rt_pipe_behind(&q));
+    /* the frame slots apart (VKSLOTS): the submit thread on with no job
+       before the next picture (render_thread.c ico_render_thread_plan's
+       submitNs 0 and submitOn, which window_present.c rt_ask hands on: rc13
+       predicted the picture before's fence in 595 of 770 asks, 540 held,
+       45.6 presented fps at the Original preset) */
     q.submitNs = 0;
+    q.submitOn = true;
+    CHECK(!pace_rt_pipe_behind(&q));
+    q.submitOn = false;
+    CHECK(pace_rt_pipe_behind(&q));
     q.presentNs = 4 * MS;
     CHECK(!pace_rt_pipe_behind(&q));
 
