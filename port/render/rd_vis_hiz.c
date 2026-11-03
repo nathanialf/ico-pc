@@ -570,6 +570,36 @@ bool rd__vis_hiz_hidden(RdVisHiz *z, const RdVisHizBox *b, double thr)
     return rd__vis_hiz_hidden_why(z, b, thr, NULL);
 }
 
+/* ------------------------------------------- a texture not uploaded yet */
+
+bool rd__vis_hiz_pending_scan(uint32_t id, RdTexAlphaScan *out)
+{
+    const RdTexRec *t = rd__tex_rec(id);
+    if (!t || !t->live || t->kind != RD_TEXKIND_IMAGE || !t->dirty || t->replacement ||
+        t->refused || t->format != RD_TEXEL_RGBA8 || !t->pixels || !t->w || !t->h ||
+        rd__sheet_baked(t)) {
+        return false;
+    }
+    const bool gs = t->gsLevels > 1 && t->gsChain;
+    uint8_t ref;
+    if (!gs && rd__mip_boost(t, &ref)) {
+        return false; /* rdtex_keep_alpha_coverage may move the levels' alpha */
+    }
+    rdtex_alpha_scan_begin(out);
+    rdtex_alpha_scan(out, t->pixels, (size_t)t->w * t->h);
+    if (gs) {
+        const uint8_t *src = t->gsChain;
+        uint32_t w = t->w, h = t->h;
+        for (uint32_t l = 1; l < t->gsLevels; l++) {
+            w = w > 1 ? w / 2 : 1;
+            h = h > 1 ? h / 2 : 1;
+            rdtex_alpha_scan(out, src, (size_t)w * h);
+            src += (size_t)w * h * 4;
+        }
+    }
+    return out->any != 0;
+}
+
 /* ------------------------------------------------- an occluder's triangles */
 
 static struct {
