@@ -1742,7 +1742,7 @@ static void checkHizNone(void)
     CHECK(hz[RD_VIS_HZ_OCC_USED] == 2u && hz[RD_VIS_HZ_HIDDEN] == 2u && hz[RD_VIS_HZ_MARGIN] == 1u,
           "code 34: occluders used %u, hidden %u, within the margin %u", hz[RD_VIS_HZ_OCC_USED],
           hz[RD_VIS_HZ_HIDDEN], hz[RD_VIS_HZ_MARGIN]);
-    CHECK(why[RD_VIS_WHY_OCCLUDED] == 2u && why[RD_VIS_WHY_KEEP_NONE] >= 3u,
+    CHECK(why[RD_VIS_WHY_OCCLUDED] == 2u && why[RD_VIS_WHY_KEEP_NONE] == 2u,
           "code 34: reasons: occluded %u, code 34 reaches %u", why[RD_VIS_WHY_OCCLUDED],
           why[RD_VIS_WHY_KEEP_NONE]);
     /* the frustum alone never skips a code-34 draw */
