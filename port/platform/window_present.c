@@ -92,6 +92,7 @@ static void rt_ask(PaceRtAsk *q, const IcoRtPlan *p, Uint64 now, Uint64 refresh,
     q->cpuNs = p->cpuNs;
     q->interpNs = p->interpNs;
     q->submitNs = p->submitNs;
+    q->submitOn = p->submitOn;
     q->gpuNs = s_pres.gpuNs;
     q->paced = s_pres.budget.paced;
     q->asMade = asMade;
