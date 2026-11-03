@@ -33,7 +33,12 @@
  *   unknown  an unknown figure (below 0) never stops;
  *   rule     the log lines' words for each class, the setting and off;
  *   setting  "", "auto" unset; "0" off; "2048" 2048; "-1", "x", "12 MB"
- *            not read.
+ *            not read;
+ *   retry    issue 123 (ico_memory_floor_retry): the next start's set again
+ *            only after a stop at the floor, on Qualcomm's own driver, with a
+ *            cache file that is not empty; the activity line told from the
+ *            system's own signal by its floor figures; the reporter's
+ *            1940 MB of 11453 MB against the floor of 1947 MB.
  */
 #include <stdio.h>
 #include <string.h>
@@ -171,6 +176,40 @@ static void testSetting(void)
     CHECK(ico_memory_floor_setting("12 MB") == -2);
 }
 
+static void testRetry(void)
+{
+    char why[200];
+    const char *floorLine = "set: stopped at the system's low-memory signal (1940 MB available "
+                            "of 11453 MB, floor 1947 MB)";
+    const char *sigLine = "set: stopped at the system's low-memory signal (running critical)";
+
+    CHECK(ico_memory_floor_line_is_floor(floorLine));
+    CHECK(!ico_memory_floor_line_is_floor(sigLine));
+    CHECK(!ico_memory_floor_line_is_floor(""));
+    CHECK(!ico_memory_floor_line_is_floor(NULL));
+    /* the reporter: floor stop, Qualcomm's own, the 1.4 MB cache file */
+    CHECK(ico_memory_floor_stops(1940, 11453, -1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM));
+    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 1400000, why, sizeof why) ==
+          1);
+    CHECK(strstr(why, "on disk") != NULL);
+    /* no file, an empty file */
+    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, -1, why, sizeof why) == 0);
+    CHECK(strstr(why, "missing or empty") != NULL);
+    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 0, why, sizeof why) == 0);
+    /* the system's own signal, another driver, a driver not known */
+    CHECK(ico_memory_floor_retry(0, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 1400000, why, sizeof why) ==
+          0);
+    CHECK(strstr(why, "did not stop") != NULL);
+    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_OTHER, 1400000, why, sizeof why) == 0);
+    CHECK(strstr(why, "not Qualcomm") != NULL);
+    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_UNKNOWN, 1400000, why, sizeof why) ==
+          0);
+    /* no words wanted; a small buffer cuts */
+    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 5, NULL, 0) == 1);
+    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 5, why, 8) == 1);
+    CHECK(strlen(why) == 7);
+}
+
 int main(void)
 {
     testFloor();
@@ -181,6 +220,7 @@ int main(void)
     testUnknown();
     testRule();
     testSetting();
+    testRetry();
     printf("memory_floor_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

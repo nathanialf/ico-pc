@@ -14,6 +14,8 @@
 #include "miniz.h"
 
 #define MARKER_NAME "starting"
+#define SEEN_SYSTEM_NAME "last_seen_system.json"
+#define SEEN_NAME "last_seen.json"
 
 static void say(char *why, size_t n, const char *fmt, ...)
 {
@@ -180,7 +182,8 @@ static void appendSafe(char *out, size_t n, size_t *at, const char *s, size_t ma
 /* the root's own files (the marker, the picker's copy) */
 static int reservedName(const char *s)
 {
-    return strcmp(s, MARKER_NAME) == 0 || strcmp(s, "incoming.zip") == 0;
+    return strcmp(s, MARKER_NAME) == 0 || strcmp(s, "incoming.zip") == 0 ||
+           strcmp(s, SEEN_SYSTEM_NAME) == 0;
 }
 
 void ico_gpu_driver_folder_name(const IcoGpuDriverMeta *m, char *out, size_t n)
@@ -344,6 +347,22 @@ int ico_gpu_driver_install_zip_max(const char *root, const char *zipPath, int ap
                                    uint64_t entryMax, char *folder, size_t folderN, char *why,
                                    size_t whyN)
 {
+    return ico_gpu_driver_install_zip_pages_max(root, zipPath, apiLevel, 0, entryMax, folder,
+                                                folderN, why, whyN);
+}
+
+int ico_gpu_driver_install_zip_pages(const char *root, const char *zipPath, int apiLevel,
+                                     unsigned pageSize, char *folder, size_t folderN, char *why,
+                                     size_t whyN)
+{
+    return ico_gpu_driver_install_zip_pages_max(
+        root, zipPath, apiLevel, pageSize, ICO_GPU_DRIVER_ENTRY_MAX, folder, folderN, why, whyN);
+}
+
+int ico_gpu_driver_install_zip_pages_max(const char *root, const char *zipPath, int apiLevel,
+                                         unsigned pageSize, uint64_t entryMax, char *folder,
+                                         size_t folderN, char *why, size_t whyN)
+{
     mz_zip_archive zip;
     IcoGpuDriverMeta meta;
     char name[256], dirName[160], dir[1024], stage[1024], path[1200];
@@ -490,6 +509,14 @@ int ico_gpu_driver_install_zip_max(const char *root, const char *zipPath, int ap
         }
         if (!ok) {
             say(why, whyN, "\"%s\" in the zip is damaged", name);
+            goto done; /* BAD */
+        }
+        /* a library the phone's loader would refuse: said now, not at the
+           first start with it */
+        const size_t nl = strlen(name);
+        if (pageSize >= 16384u && nl >= 3 && strcmp(name + nl - 3, ".so") == 0 &&
+            !ico_gpu_driver_file_pages_ok(path, pageSize)) {
+            say(why, whyN, "%s", ICO_GPU_DRIVER_PAGES_MESSAGE);
             goto done; /* BAD */
         }
     }
@@ -692,4 +719,218 @@ int ico_gpu_driver_trial_crashed(const char *root, const char *folder)
     char marked[256];
     return folder != NULL && folder[0] != '\0' &&
            ico_gpu_driver_trial_marker(root, marked, sizeof(marked)) && strcmp(marked, folder) == 0;
+}
+
+/* --- the page size check ------------------------------------------------------ */
+
+static unsigned long long rdLe(const unsigned char *p, int bytes)
+{
+    unsigned long long v = 0;
+    for (int i = bytes - 1; i >= 0; i--) {
+        v = (v << 8) | p[i];
+    }
+    return v;
+}
+
+int ico_gpu_driver_elf_pages_ok(const void *bytes, size_t n, unsigned pageSize,
+                                unsigned long long *minAlign)
+{
+    const unsigned char *b = bytes;
+    unsigned long long least = 0;
+    int bad = 0;
+
+    if (minAlign != NULL) {
+        *minAlign = 0;
+    }
+    /* little-endian ELF (the phone's CPUs): 64-bit as the drivers are, 32-bit
+       read too */
+    if (b == NULL || n < 52 ||
+        memcmp(b,
+               "\x7f"
+               "ELF",
+               4) != 0 ||
+        b[5] != 1 || (b[4] != 1 && b[4] != 2)) {
+        return 1;
+    }
+    const int is64 = b[4] == 2;
+    if (is64 && n < 64) {
+        return 1;
+    }
+    const unsigned long long phoff = is64 ? rdLe(b + 32, 8) : rdLe(b + 28, 4);
+    const unsigned long long phentsize = rdLe(b + (is64 ? 54 : 42), 2);
+    const unsigned long long phnum = rdLe(b + (is64 ? 56 : 44), 2);
+    if (phentsize < (is64 ? 56u : 32u) || phnum == 0 || phoff > n ||
+        phnum * phentsize > n - phoff) {
+        return 1;
+    }
+    for (unsigned long long i = 0; i < phnum; i++) {
+        const unsigned char *ph = b + phoff + i * phentsize;
+        if (rdLe(ph, 4) != 1u) { /* PT_LOAD */
+            continue;
+        }
+        const unsigned long long align = is64 ? rdLe(ph + 48, 8) : rdLe(ph + 28, 4);
+        if (least == 0 || align < least) {
+            least = align;
+        }
+        if (align < pageSize) {
+            bad = 1;
+        }
+    }
+    if (minAlign != NULL) {
+        *minAlign = least;
+    }
+    return pageSize >= 16384u && bad ? 0 : 1;
+}
+
+int ico_gpu_driver_file_pages_ok(const char *path, unsigned pageSize)
+{
+    unsigned char head[65536];
+    FILE *f = ico_fopen(path, "rb");
+    if (f == NULL) {
+        return 1;
+    }
+    const size_t got = fread(head, 1, sizeof(head), f);
+    fclose(f);
+    return ico_gpu_driver_elf_pages_ok(head, got, pageSize, NULL);
+}
+
+/* --- what a driver was last seen to be ------------------------------------------ */
+
+static int seenPath(char *out, size_t n, const char *root, const char *folder)
+{
+    char dir[1024];
+    if (folder == NULL) {
+        return joinPath(out, n, root, SEEN_SYSTEM_NAME);
+    }
+    if (!ico_gpu_driver_folder_ok(folder) || joinPath(dir, sizeof(dir), root, folder) != 0) {
+        return -1;
+    }
+    return joinPath(out, n, dir, SEEN_NAME);
+}
+
+/* s as a JSON string body: quotes, backslashes and control characters out */
+static void putJsonStr(FILE *f, const char *s)
+{
+    for (; *s; s++) {
+        const unsigned char c = (unsigned char)*s;
+        if (c == '"' || c == '\\') {
+            fputc('\\', f);
+            fputc(c, f);
+        } else if (c < 0x20 || c == 0x7f) {
+            fputc(' ', f);
+        } else {
+            fputc(c, f);
+        }
+    }
+}
+
+int ico_gpu_driver_seen_write(const char *root, const char *folder, const IcoGpuDriverSeen *s)
+{
+    char path[1100], tmp[1120];
+    if (s == NULL || seenPath(path, sizeof(path), root, folder) != 0) {
+        return -1;
+    }
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *f = ico_fopen(tmp, "wb");
+    if (f == NULL) {
+        return -1;
+    }
+    fputs("{\"name\": \"", f);
+    putJsonStr(f, s->name);
+    fputs("\", \"version\": \"", f);
+    putJsonStr(f, s->version);
+    fputs("\", \"mesa\": \"", f);
+    putJsonStr(f, s->mesa);
+    fprintf(f, "\", \"driverId\": %d, \"vulkanMajor\": %d, \"vulkanMinor\": %d}\n", s->driverId,
+            s->vulkanMajor, s->vulkanMinor);
+    const int ok = ferror(f) == 0 && ico_fsync(f) == 0;
+    if (fclose(f) != 0 || !ok || ico_rename_replace(tmp, path) != 0) {
+        ico_remove(tmp);
+        return -1;
+    }
+    return 0;
+}
+
+int ico_gpu_driver_seen_read(const char *root, const char *folder, IcoGpuDriverSeen *out)
+{
+    char path[1100];
+    size_t len = 0;
+    IcoJson j;
+    int ok = 0;
+
+    memset(out, 0, sizeof(*out));
+    if (seenPath(path, sizeof(path), root, folder) != 0) {
+        return 0;
+    }
+    char *text = readSmall(path, 4096, &len);
+    if (text == NULL) {
+        return 0;
+    }
+    if (ico_json_parse(text, len, &j) == 0 && j.root != NULL && j.root->type == ICO_JSON_OBJ) {
+        int id = 0, vmaj = 0, vmin = 0;
+        if (copyField(j.root, "name", out->name, sizeof(out->name), 1) == 0 &&
+            copyField(j.root, "version", out->version, sizeof(out->version), 1) == 0 &&
+            copyField(j.root, "mesa", out->mesa, sizeof(out->mesa), 1) == 0 &&
+            intField(j.root, "driverId", &id) == 0 && intField(j.root, "vulkanMajor", &vmaj) == 0 &&
+            intField(j.root, "vulkanMinor", &vmin) == 0 && out->name[0] != '\0') {
+            out->driverId = id;
+            out->vulkanMajor = vmaj;
+            out->vulkanMinor = vmin;
+            out->known = 1;
+            ok = 1;
+        }
+    }
+    ico_json_free(&j);
+    free(text);
+    if (!ok) {
+        memset(out, 0, sizeof(*out));
+    }
+    return ok;
+}
+
+static int hasWordNoCase(const char *s, const char *w)
+{
+    const size_t n = strlen(w);
+    for (; *s; s++) {
+        size_t i = 0;
+        while (i < n && s[i] != '\0' && (s[i] | 0x20) == w[i]) {
+            i++;
+        }
+        if (i == n) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void ico_gpu_driver_seen_text(const IcoGpuDriverSeen *s, char *out, size_t n)
+{
+    char vk[24] = "", ver[96];
+    if (n == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (s == NULL || !s->known) {
+        return;
+    }
+    if (s->vulkanMajor > 0) {
+        snprintf(vk, sizeof(vk), ", Vulkan %d.%d", s->vulkanMajor, s->vulkanMinor);
+    }
+    /* VK_DRIVER_ID_QUALCOMM_PROPRIETARY 8, VK_DRIVER_ID_MESA_TURNIP 18 */
+    if (s->driverId == 8 || (s->driverId == 0 && hasWordNoCase(s->name, "qualcomm"))) {
+        snprintf(out, n, "Qualcomm's driver %s%s", s->version, vk);
+    } else if (s->driverId == 18 || hasWordNoCase(s->name, "turnip")) {
+        snprintf(out, n, "Turnip, %s%s", s->mesa[0] ? s->mesa : s->version, vk);
+    } else {
+        snprintf(ver, sizeof(ver), "%s", s->mesa[0] ? s->mesa : s->version);
+        snprintf(out, n, "%s%s%s%s", s->name, ver[0] ? ", " : "", ver, vk);
+        if (s->driverId != 0 && strlen(out) + 20 < n) {
+            snprintf(out + strlen(out), n - strlen(out), ", driver ID %d", s->driverId);
+        }
+    }
+}
+
+int ico_gpu_driver_loss_counts(int hadPackage, unsigned long long sinceFirstPresentMs)
+{
+    return hadPackage && sinceFirstPresentMs < ICO_GPU_DRIVER_LOSS_WINDOW_MS;
 }

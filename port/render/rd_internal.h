@@ -1131,6 +1131,10 @@ bool rd__vu_extended(void);
  * "turnip Mesa driver" or "Turnip Mesa 26.3.0") has the word in any case;
  * Qualcomm's own driver does not (rd_profile.c) */
 bool rd__driver_is_turnip(const RhiLimits *lim);
+/* The profile line's Turnip note: "; turnip: Mesa 25.3.0-devel" (the Mesa
+ * version RhiLimits.mesa holds, from the driver's driverInfo) or "; turnip:
+ * Mesa version not named by the driver"; "" for any other driver */
+void rd__turnip_note(const RhiLimits *lim, char *out, size_t n);
 /* A vertex shader's embedded name (RD_VS_*; rd_replay.c s_vsNames) */
 const char *rd__vs_name(uint8_t vs);
 /* A fragment shader's embedded name (RD_FS_*; rd_replay.c s_fsNames) */

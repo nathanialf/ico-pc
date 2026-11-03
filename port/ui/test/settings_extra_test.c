@@ -329,9 +329,29 @@ static int gpuLostOnStock(void)
     return s_gpuLost;
 }
 
-static const UiGpuDriverHost kGpuHost = {
-    gpuCount, gpuName,   gpuSelected,  gpuSelect,   gpuLastFailed, gpuAdreno,     gpuBegin,
-    gpuPoll,  gpuRemove, gpuFileCount, gpuFileName, gpuFileBegin,  gpuFolderPath, gpuLostOnStock};
+/* the last-seen words per driver (-1 the phone's own); "" for the second
+   driver, which has not been started */
+static int s_gpuInfoOn = 0;
+
+static const char *gpuInfo(int i)
+{
+    if (!s_gpuInfoOn) {
+        return NULL;
+    }
+    return i < 0    ? "Qualcomm's driver 512.676.1, Vulkan 1.3"
+           : i == 0 ? "Turnip, Mesa 25.3.0, Vulkan 1.4"
+                    : "Not started yet, so its version is not known.";
+}
+
+static const char *gpuInstallWhy(void)
+{
+    return "this driver package is not built for this phone's 16 KB memory pages";
+}
+
+static const UiGpuDriverHost kGpuHost = {gpuCount,      gpuName,        gpuSelected, gpuSelect,
+                                         gpuLastFailed, gpuAdreno,      gpuBegin,    gpuPoll,
+                                         gpuRemove,     gpuFileCount,   gpuFileName, gpuFileBegin,
+                                         gpuFolderPath, gpuLostOnStock, gpuInfo,     gpuInstallWhy};
 
 static int an22bShown(UiSettingsPage page, UiSettingsOpt opt)
 {
@@ -473,6 +493,56 @@ static void testGpuDriver(void)
         CHECK(note >= 0 && strstr(lt_ext_row_text(note), "Adreno") != NULL,
               "a new choice: the note is the Adreno line again");
     }
+    /* each driver's last-seen words head the note: the phone's own, the
+       first driver, the one never started; a failed driver's note keeps
+       its words after the line, and with no line the note is as before */
+    s_gpuInfoOn = 1;
+    s_gpuSel = -1;
+    s_gpuFailed = -1;
+    frame(0);
+    {
+        const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        const char *t = note >= 0 ? lt_ext_row_text(note) : "";
+        CHECK(strstr(t, "512.676.1") != NULL && strstr(t, "Vulkan 1.3") != NULL &&
+                  strstr(t, "Adreno") != NULL,
+              "the phone's own driver: its line, then the Adreno note (%s)", t);
+        CHECK(strstr(t, "Mesa 25.3.0") == NULL, "the phone's own driver: not the Turnip line");
+    }
+    ui_settings_step(UI_OPT_GPU_DRIVER, 1);
+    frame(0);
+    {
+        const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        const char *t = note >= 0 ? lt_ext_row_text(note) : "";
+        CHECK(s_gpuSel == 0 && strstr(t, "Turnip, Mesa 25.3.0") != NULL &&
+                  strstr(t, "Vulkan 1.4") != NULL && strstr(t, "512.676.1") == NULL &&
+                  strstr(t, "Adreno") != NULL,
+              "the first driver: the Turnip line (%s)", t);
+    }
+    ui_settings_step(UI_OPT_GPU_DRIVER, 1);
+    frame(0);
+    {
+        const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        const char *t = note >= 0 ? lt_ext_row_text(note) : "";
+        CHECK(s_gpuSel == 1 && strstr(t, "Not started yet") != NULL && strstr(t, "Adreno") != NULL,
+              "a driver never started: the sentence says so (%s)", t);
+    }
+    s_gpuFailed = 1;
+    frame(0);
+    {
+        const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        const char *t = note >= 0 ? lt_ext_row_text(note) : "";
+        CHECK(strstr(t, "did not start") != NULL, "a failed driver: its note stays (%s)", t);
+    }
+    s_gpuFailed = -1;
+    s_gpuInfoOn = 0;
+    s_gpuSel = 0;
+    frame(0);
+    {
+        const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        const char *t = note >= 0 ? lt_ext_row_text(note) : "";
+        CHECK(strstr(t, "Turnip, Mesa") == NULL && strstr(t, "Adreno") != NULL,
+              "no line from the host: the note alone again (%s)", t);
+    }
     /* a loss on the phone's own Qualcomm driver: the note names the driver
        package route and the folder's path; a failed driver's note wins */
     s_gpuLost = 1;
@@ -516,6 +586,9 @@ static void testGpuDriver(void)
     } kAnswers[] = {
         {UI_GPU_INSTALL_BAD, "This file is not a driver package.", ""},
         {UI_GPU_INSTALL_NOSPACE, "Not enough space to add this driver.", ""},
+        /* a package built for 4 KB pages on a 16 KB phone: the host's sentence */
+        {UI_GPU_INSTALL_PAGES, "Graphics driver",
+         "this driver package is not built for this phone's 16 KB memory pages"},
         /* the folder routes: the page's name, the sentence and the folder's
            path (this host's own) */
         {UI_GPU_INSTALL_NO_PICKER, "Graphics driver",

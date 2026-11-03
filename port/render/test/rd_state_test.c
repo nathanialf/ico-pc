@@ -3240,6 +3240,30 @@ static void testVuSetPolicy(void)
         CHECK(!c.plain && c.overridden, "vu set: \"%s\" both settings: plain %d", desk[i].text,
               c.plain);
     }
+    /* the profile line's Turnip note: the Mesa version when the driver names
+     * one (the issue 163 tablet's "Mesa 26.3.0-devel (git-a995eaeda4)"), a
+     * line saying it names none, and nothing off Turnip */
+    {
+        char note[128];
+        RhiMesaVersion mv;
+        rhi_mesa_version_parse("turnip Mesa driver", "Mesa 26.3.0-devel (git-a995eaeda4)", &mv);
+        lim = vuSetLimits(0x5143u, turnip[1], NULL);
+        lim.mesa = mv;
+        rd__turnip_note(&lim, note, sizeof(note));
+        CHECK(strcmp(note, "; turnip: Mesa 26.3.0-devel") == 0, "turnip note: \"%s\"", note);
+        lim.mesa.known = 0;
+        rd__turnip_note(&lim, note, sizeof(note));
+        CHECK(strcmp(note, "; turnip: Mesa version not named by the driver") == 0,
+              "turnip note without a version: \"%s\"", note);
+        lim = vuSetLimits(0x5143u,
+                          "device 5143:43050a01; driver Qualcomm Technologies Inc. Adreno Vulkan "
+                          "Driver, version 512.676.53",
+                          NULL);
+        rd__turnip_note(&lim, note, sizeof(note));
+        CHECK(note[0] == '\0', "turnip note on Qualcomm's driver: \"%s\"", note);
+        rd__turnip_note(NULL, note, sizeof(note));
+        CHECK(note[0] == '\0', "turnip note without limits");
+    }
     /* no device's limits: the extended set */
     rd__vu_set_choose(NULL, false, false, NULL, &c);
     CHECK(!c.plain && !rd__driver_is_turnip(NULL), "vu set: no limits: plain %d", c.plain);

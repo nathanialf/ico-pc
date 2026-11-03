@@ -32,6 +32,39 @@
 char *rhi_driver_version_text(uint32_t vendorId, uint32_t driverId, uint32_t driverVersion,
                               char *buf, size_t n);
 
+/* The Mesa version a Mesa driver (Turnip, RADV, ANV, llvmpipe, NVK) names in
+ * VK_KHR_driver_properties' driverInfo: "Mesa 25.3.0-devel (git-bbdd688)"
+ * on a Turnip build from Mesa's main branch, "Mesa 24.2.8" on a release,
+ * "Mesa 25.0.7-2 (LLVM 19.1.7)" on a distribution's package.  known is 0
+ * when the driver names none (every non-Mesa driver); devel is 1 for a
+ * "-devel" version (a build of Mesa's main branch, which is no release of
+ * its number: its code lies between that release and the one before). */
+typedef struct RhiMesaVersion {
+    int known;
+    unsigned major, minor, patch;
+    int devel;
+} RhiMesaVersion;
+
+/* Reads the Mesa version out of driverName ("turnip Mesa driver") and
+ * driverInfo (either may be NULL).  Tolerant: the word Mesa in any case
+ * followed by a space, '-', '_' or 'v' and major.minor[.patch] in driverInfo
+ * ("Mesa 25.3.0-devel (git-bbdd688)", "mesa-25.1", "Mesa v24.2.8"); else,
+ * when driverName holds the word Mesa and driverInfo is a bare version
+ * ("25.3.0-devel"), that.  Anything else (Qualcomm's "Compiler Version:
+ * E031.41.03.47" text, an empty one) leaves *out unknown.  Returns
+ * out->known. */
+int rhi_mesa_version_parse(const char *driverName, const char *driverInfo, RhiMesaVersion *out);
+
+/* "Mesa 25.3.0" or "Mesa 25.3.0-devel" into buf; "" when not known. */
+char *rhi_mesa_version_text(const RhiMesaVersion *v, char *buf, size_t n);
+
+/* A driver's own text on one line (issue 123: Qualcomm's VkDriverInfo carries
+ * newlines, "Driver Build: ..., Date: 11/28/25\nCompiler Version: ...", which
+ * broke every log line that quoted it): each run of control characters
+ * (newline, carriage return, tab, ...) becomes one space, a leading and a
+ * trailing space are dropped.  In place; returns s. */
+char *rhi_text_one_line(char *s);
+
 /* 1 for Qualcomm's own Adreno driver: vendor 0x5143 with
  * VK_DRIVER_ID_QUALCOMM_PROPRIETARY, or with the id unknown (0).  Mesa's
  * Turnip on the same GPUs reports its own id (MESA_TURNIP) and is not

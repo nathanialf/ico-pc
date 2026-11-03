@@ -1059,6 +1059,16 @@ buffers** below)
 A failed call logs `rhi_d3d11: <call> failed (HRESULT 0x...) at <file>:<line>`; a lost device is
 logged once with its removed reason and the last eight submissions (`d11_check`).
 
+**Driver text (Vulkan).** `vkr_driver_text` reads VK_KHR_driver_properties into the device line
+(`; device vvvv:dddd; driver <name> <info>, version <v>`) and, for a Mesa driver, appends `, Mesa
+25.3.0-devel`: the Mesa version `rhi_mesa_version_parse` finds in `driverInfo` (`Mesa 25.3.0-devel
+(git-bbdd688)`; tolerant of case, `-`, `_` and `v` after the word; `RhiMesaVersion` in
+`rhi_driver_version.h` holds major, minor, patch and a devel flag for `-devel`). The summary line carries
+the same text. `RhiLimits` also holds `driverName`, `driverVersion`, `driverId`, `apiMajor`, `apiMinor`
+and `mesa` for the Android Graphics driver page's last-seen line and the profile line's `turnip:` note;
+the other backends leave them empty. No behaviour reads the Mesa version yet (the plain VU set stays
+for every Turnip, `rd__vu_set_choose`).
+
 **Limits** (`d11_fill_limits`). As D3D12's except: `copyRowPitchAlign` 1 and `copyOffsetAlign` 4
 (uploads to textures are `UpdateSubresource` from the CPU copy), `maxDynamicUniforms` 4, `rov`
 false (Direct3D 11.3 has rasterizer-ordered views; they stay off, untested), and
