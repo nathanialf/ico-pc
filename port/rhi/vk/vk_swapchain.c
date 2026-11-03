@@ -1354,8 +1354,12 @@ static bool vkr_acquire_ahead_ok(const VkrFrame *cur)
 }
 
 /* *lost: the surface went away (the caller makes it again, the submit
- * thread idle first) */
-static RhiTexture vkr_acquire_backbuffer(bool *lost)
+ * thread idle first).  ahead: the submit thread still holds the picture
+ * before's image: the acquire does not wait for an image (a timeout of 0),
+ * so it never holds the swapchain's lock, and with it that present, while
+ * the presentation engine frees one; *busy: none was free (the caller
+ * waits for the present before and acquires again) */
+static RhiTexture vkr_acquire_backbuffer(bool ahead, bool *lost, bool *busy)
 {
     RhiTexture out = {0};
     __atomic_store_n(&s_presentShown, false, __ATOMIC_RELAXED); /* until its present shows it */
@@ -1385,9 +1389,13 @@ static RhiTexture vkr_acquire_backbuffer(bool *lost)
     }
     uint32_t idx = 0;
     const uint64_t t0 = vkr_now_ns();
-    VkResult r = vkAcquireNextImageKHR(g_vkr.device, g_vkr.swapchain, UINT64_MAX, f->acquireSem,
-                                       VK_NULL_HANDLE, &idx);
+    VkResult r = vkAcquireNextImageKHR(g_vkr.device, g_vkr.swapchain, ahead ? 0u : UINT64_MAX,
+                                       f->acquireSem, VK_NULL_HANDLE, &idx);
     g_vkr.stats.acquireNs += vkr_now_ns() - t0;
+    if (ahead && (r == VK_NOT_READY || r == VK_TIMEOUT)) {
+        *busy = true; /* nothing signalled: the semaphore stays as it was */
+        return out;
+    }
     if (r == VK_ERROR_OUT_OF_DATE_KHR) {
         return out; /* rd_present recreates via rhi_resize_swapchain */
     }
@@ -1424,8 +1432,23 @@ RhiTexture rhi_acquire_backbuffer(void)
         vkr_swap_lock();
         vkr_take_deferred();
     }
-    bool lost = false;
-    const RhiTexture out = vkr_acquire_backbuffer(&lost);
+    bool lost = false, busy = false;
+    RhiTexture out = vkr_acquire_backbuffer(vkr_acquired_ahead(vkr_cur_frame()) != 0, &lost, &busy);
+    if (busy) {
+        /* no image free beside the picture before's: after its present */
+        static uint64_t s_aheadBusy;
+        const uint64_t n = ++s_aheadBusy;
+        if (n <= 8u || n % 100u == 0u) {
+            VKR_LOG("an acquire beside the submit thread found no image free: it waits for the "
+                    "present before (%llu times so far)",
+                    (unsigned long long)n);
+        }
+        vkr_swap_unlock();
+        rhi_call_guard_settle();
+        vkr_swap_lock();
+        vkr_take_deferred();
+        out = vkr_acquire_backbuffer(false, &lost, &busy);
+    }
     if (lost) {
         /* the surface made again waits for the device: the submit thread
          * idle first, as for the deferred rebuilds above */
