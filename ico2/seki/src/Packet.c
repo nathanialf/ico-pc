@@ -190,6 +190,10 @@ static void pac_hostBuild(PacHeader *pk, const char *name, const PacHostIdent *i
     if (!pac_hostDesc(pk, &d, name)) {
         return;
     }
+    /* the triangles' facing from the p2o normals (pac_hostFacing): the
+       table pac_makeStrip just made, kept under the stream's hash, or the
+       one kept for this stream before */
+    rd_vu_facing_attach(&d);
     /* no hash without a pack, dumping or a shot; a morph part is never replaced */
     h = modelpack_hash_wanted() && (id == 0 || !id->morph) ? rd_vu_mesh_desc_hash(&d, 0, 0) : 0;
     e = h != 0 ? modelpack_lookup(h) : -1;
@@ -616,6 +620,33 @@ static short *pac_hostStripEntry(short *strip, int num, int i)
     return strip + pac_HostStripOrder(pacWork.name, strip + 2, 8, num, i) * 8;
 }
 
+#ifdef ICO_RD
+
+/* PC port: the facing of the triangles a strip kicks (rd_mesh.h
+   rd_vu_facing_vertex), from its records as the strip writes them
+   (ordered: pac_makeNormalStrip's order, pac_hostStripEntry; else the
+   cluster strip's, as stored): each record's position (+4) and normal
+   (+6) index.  The packet's stream drops the normals of a prelit part;
+   the records keep them, so every program's triangles get their front
+   from the same normals the lit ones are shaded by.  A record whose normal
+   index is outside the part's normals voids the packet's table. */
+static void pac_hostFacing(PObjPart *obj, short *strip, int num, int ordered)
+{
+    int i;
+
+    for (i = 0; i < num; i++) {
+        short *v = ordered ? pac_hostStripEntry(strip, num, i) : strip + i * 8;
+        const float *nrm = 0;
+
+        if (obj->nrm != 0 && v[3] >= 0 && (unsigned int)v[3] < obj->nrmCount) {
+            nrm = (const float *)(obj->nrm + v[3] * 16);
+        }
+        rd_vu_facing_vertex(i == 0, (const float *)(obj->vtx + v[2] * 16), nrm);
+    }
+}
+
+#endif
+
 static int pac_makeNormalStrip(PObjPart *obj, short *strip, int num)
 {
     char buf[256];
@@ -673,6 +704,9 @@ static int pac_makeNormalStrip(PObjPart *obj, short *strip, int num)
             *pacWork.cursor.f++ = 127.0f;
         }
     }
+#ifdef ICO_RD
+    pac_hostFacing(obj, strip, num, 1);
+#endif
     return num - 2;
 }
 
@@ -810,6 +844,9 @@ static int pac_makeClusterStrip(PObjPart *obj, short *strip, int num)
             *pacWork.cursor.f++ = 127.0f;
         }
     }
+#ifdef ICO_RD
+    pac_hostFacing(obj, strip, num, 0);
+#endif
     return num - 2;
 }
 
@@ -1125,6 +1162,9 @@ static int pac_makeStrip(char **out, PObjPart *obj, PObjGroup *tbl, int matno, i
     if (pkt == 0)
         debug_Assert("pac_makeStrip:No Memory To Convert.\n");
     pac_openDmaTag(pkt);
+#ifdef ICO_RD
+    rd_vu_facing_begin(); /* the packet's facing table (pac_hostFacing) */
+#endif
     t0 = debug_GetTimerSec();
     for (i = 0; i < num; i++) {
         p = ((short **)obj->strips)[i];

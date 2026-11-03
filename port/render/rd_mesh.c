@@ -251,6 +251,7 @@ static void meshFree(RdMeshRec *m)
     m->index = NULL;
     m->kickMark = NULL;
     m->markCount = 0;
+    m->facingFrom = RD_MESH_FACING_NONE;
     m->batches = NULL;
     m->live = 0;
     m->vu = 0;
@@ -1263,81 +1264,297 @@ static void markJoinedStrips(RdMeshRec *m)
  * ICO_VU_MARK_FLIP (shader_consts.h; docs/port/VU1_PROGRAMS.md "The winding
  * mark"): the GS draws a strip's triangles k-2, k-1, k with the winding
  * alternating from one to the next (Packet.c pac_makeNormalStrip: a strip
- * is the run from a vertex whose ST.w is 0 to the next), so a triangle's
- * facing on screen is its kicked corners' order corrected by its place in
- * the strip.  A lit or skinned triangle (a normal per vertex, the stream's
- * second quadword) takes the mark from its normals, triangle by triangle:
- * when cross(b - a, c - a) of its model positions a, b, c (corners k-2,
- * k-1, k) points away from na + nb + nc (their dot product below 0).  A
- * prelit one (no normals) from its place: ((k - s) & 1) ^
- * RD_VU_WINDING_PHASE, s the first vertex of its strip, which starts at a
- * vertex whose ST.w is below 1 or at its batch's first vertex (the strips
- * markJoinedStrips and cardStrips walk).  Every kick of the index list is
- * marked or not; a morph (rd_update_vu_mesh) keeps the creation's marks,
- * as the joined strips do.  Nothing reads the mark yet: no picture
- * changes. */
+ * is the run from a vertex whose ST.w is 0 to the next), and the disc's
+ * strips start on either phase (rd_mesh_test's winding cases: 73 to 76 %
+ * of the lit triangles on one, the rest on the other, strip by strip), so
+ * no parity says which side of a triangle is its front.  Its normals do: a
+ * triangle carries the mark when cross(b - a, c - a) of its corners k-2,
+ * k-1, k in that order points away from na + nb + nc (their dot product
+ * below 0, in double).  The EE computes it for every program when it
+ * builds the packet, from the p2o strip records (a prelit part's stream
+ * has no normals, its records do: every part on the disc has them) and
+ * hands the table over (RdVuMeshDesc.facing: rd__mesh_set_facing); a lit
+ * or skinned stream without a table takes it from the stream's own
+ * normals (the same numbers: the stream's normal qword is the record's
+ * normal); a prelit one without a table has none (facingFrom NONE: the
+ * region rule's side bands are off for its draws, rd_replay_vu.c).  Every
+ * kick of the index list is marked or not; a morph (rd_update_vu_mesh)
+ * keeps the creation's marks, as the joined strips do. */
+static bool windingFlip(const float *a, const float *b, const float *c, const float *na,
+                        const float *nb, const float *nc)
+{
+    const double e1[3] = {(double)b[0] - a[0], (double)b[1] - a[1], (double)b[2] - a[2]};
+    const double e2[3] = {(double)c[0] - a[0], (double)c[1] - a[1], (double)c[2] - a[2]};
+    const double x[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2],
+                         e1[0] * e2[1] - e1[1] * e2[0]};
+    double d = 0.0;
+    for (int j = 0; j < 3; j++) {
+        d += x[j] * ((double)na[j] + nb[j] + nc[j]);
+    }
+    return d < 0.0;
+}
+
 static void markWinding(RdMeshRec *m)
 {
+    m->facingFrom = RD_MESH_FACING_NONE;
     if (!joinLayout(m)) {
         return;
     }
-    const uint32_t qpv = m->qwPerVertex, nv = m->vertexCount, stAt = qpv - 2;
-    const bool normals = qpv == RD_VU_QW_LIT || qpv == RD_VU_QW_SKIN;
-    uint32_t *start = normals ? NULL : malloc((size_t)nv * sizeof(uint32_t));
-    if (!normals) {
-        if (!start) {
-            return;
-        }
-        /* each vertex's strip's first vertex; past every batch, itself */
-        for (uint32_t v = 0; v < nv; v++) {
-            start[v] = v;
-        }
-        for (uint32_t b = 0; b < m->batchCount; b++) {
-            const uint32_t fv = m->batches[b].firstVertex;
-            if (fv >= nv) {
-                continue;
-            }
-            const uint32_t ev =
-                m->batches[b].vertexCount < nv - fv ? fv + m->batches[b].vertexCount : nv;
-            uint32_t s = fv;
-            for (uint32_t v = fv; v < ev; v++) {
-                if (v > fv && m->stream[(size_t)v * qpv + stAt][3] < 1.0f) {
-                    s = v;
-                }
-                start[v] = s;
-            }
-        }
+    const uint32_t qpv = m->qwPerVertex, nv = m->vertexCount;
+    if (qpv != RD_VU_QW_LIT && qpv != RD_VU_QW_SKIN) {
+        return; /* prelit: the EE's table or nothing */
     }
     for (uint32_t i = 0; i + 2 < m->indexCount; i += 3) {
         const uint32_t k = (m->index[i] & ICO_VU_INDEX_MASK) >> 2;
         if (k < 2 || k >= nv) {
             continue;
         }
-        bool flip;
-        if (normals) {
-            const float *a = m->stream[(size_t)(k - 2) * qpv];
-            const float *b = m->stream[(size_t)(k - 1) * qpv];
-            const float *c = m->stream[(size_t)k * qpv];
-            const double e1[3] = {(double)b[0] - a[0], (double)b[1] - a[1], (double)b[2] - a[2]};
-            const double e2[3] = {(double)c[0] - a[0], (double)c[1] - a[1], (double)c[2] - a[2]};
-            const double x[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2],
-                                 e1[0] * e2[1] - e1[1] * e2[0]};
-            double d = 0.0;
-            for (int j = 0; j < 3; j++) {
-                const double n = (double)m->stream[(size_t)(k - 2) * qpv + 1][j] +
-                                 m->stream[(size_t)(k - 1) * qpv + 1][j] +
-                                 m->stream[(size_t)k * qpv + 1][j];
-                d += x[j] * n;
-            }
-            flip = d < 0.0;
-        } else {
-            flip = (((k - start[k]) & 1u) ^ RD_VU_WINDING_PHASE) != 0u;
-        }
-        if (flip && !markKick(m, k, ICO_VU_MARK_FLIP)) {
-            break; /* no memory for the marks: none was made, nothing else lost */
+        const float (*q)[4] = m->stream;
+        const size_t a = (size_t)(k - 2) * qpv, b = (size_t)(k - 1) * qpv, c = (size_t)k * qpv;
+        if (windingFlip(q[a], q[b], q[c], q[a + 1], q[b + 1], q[c + 1]) &&
+            !markKick(m, k, ICO_VU_MARK_FLIP)) {
+            return; /* no memory for the marks: none was made, nothing else lost */
         }
     }
-    free(start);
+    m->facingFrom = RD_MESH_FACING_NORMALS;
+}
+
+bool rd__mesh_set_facing(RdMeshRec *m, const uint8_t *bits, uint32_t count)
+{
+    if (!m || !bits || !joinLayout(m) || m->tiledFrom != 0 || count != m->vertexCount) {
+        return false;
+    }
+    const uint32_t nv = m->vertexCount;
+    bool had = false;
+    for (uint32_t k = 0; k < m->markCount; k++) {
+        had |= (m->kickMark[k] & ICO_VU_MARK_FLIP) != 0;
+        m->kickMark[k] &= (uint8_t)~ICO_VU_MARK_FLIP;
+    }
+    m->facingFrom = RD_MESH_FACING_NONE;
+    bool any = false;
+    for (uint32_t i = 0; i + 2 < m->indexCount; i += 3) {
+        const uint32_t k = (m->index[i] & ICO_VU_INDEX_MASK) >> 2;
+        if (k < 2 || k >= nv || ((bits[k >> 3] >> (k & 7u)) & 1u) == 0) {
+            continue;
+        }
+        if (!markKick(m, k, ICO_VU_MARK_FLIP)) {
+            /* no memory: no table, no normals' marks (none is left) */
+            for (uint32_t j = 0; j < m->markCount; j++) {
+                m->kickMark[j] &= (uint8_t)~ICO_VU_MARK_FLIP;
+            }
+            m->gpuDirty = m->gpuChunk != 0 ? 1 : m->gpuDirty;
+            return false;
+        }
+        any = true;
+    }
+    if ((had || any) && m->gpuChunk != 0) {
+        m->gpuDirty = 1;
+    }
+    m->facingFrom = RD_MESH_FACING_TABLE;
+    return true;
+}
+
+bool rd__mesh_facing_bits(const RdMeshRec *m, uint8_t *out, uint32_t bytes)
+{
+    if (!m || m->facingFrom != RD_MESH_FACING_TABLE || bytes < (m->vertexCount + 7u) / 8u) {
+        return false;
+    }
+    memset(out, 0, bytes);
+    for (uint32_t k = 0; k < m->vertexCount && k < m->markCount; k++) {
+        if ((m->kickMark[k] & ICO_VU_MARK_FLIP) != 0) {
+            out[k >> 3] |= (uint8_t)(1u << (k & 7u));
+        }
+    }
+    return true;
+}
+
+/* ------------------------------------------- the EE's facing tables
+ * (rd_mesh.h rd_vu_facing_begin): the packet being built, and the tables
+ * kept by mesh hash.  The game thread alone builds packets. */
+typedef struct FacingBuild {
+    uint8_t *bits;
+    uint32_t cap, count;    /* bytes held, vertices so far */
+    uint32_t inStrip;       /* vertices of the current strip so far */
+    bool ok;                /* every vertex had a position and a normal */
+    float p[2][3], n[2][3]; /* the strip's last two vertices */
+} FacingBuild;
+
+typedef struct FacingEntry {
+    uint64_t hash; /* 0: an empty slot */
+    uint8_t *bits;
+    uint32_t count;
+    bool conflict; /* two different tables under the hash: none */
+} FacingEntry;
+
+static FacingBuild s_facingBuild;
+static FacingEntry *s_facing;
+static uint32_t s_facingCap, s_facingUsed;
+static uint64_t s_facingBytes;
+static uint32_t s_facingVoid, s_facingConflicts;
+
+void rd_vu_facing_begin(void)
+{
+    s_facingBuild.count = 0;
+    s_facingBuild.inStrip = 0;
+    s_facingBuild.ok = true;
+}
+
+void rd_vu_facing_vertex(int stripFirst, const float *pos, const float *nrm)
+{
+    FacingBuild *b = &s_facingBuild;
+    if (!b->ok) {
+        return;
+    }
+    if (!pos || !nrm) {
+        b->ok = false;
+        return;
+    }
+    const uint32_t need = b->count / 8u + 1u;
+    if (need > b->cap) {
+        const uint32_t cap = need < 256u ? 256u : need * 2u;
+        uint8_t *nb = realloc(b->bits, cap);
+        if (!nb) {
+            b->ok = false;
+            return;
+        }
+        memset(nb + b->cap, 0, cap - b->cap);
+        b->bits = nb;
+        b->cap = cap;
+    }
+    b->inStrip = stripFirst ? 1u : b->inStrip + 1u;
+    const uint32_t v = b->count++;
+    if ((v & 7u) == 0u) {
+        b->bits[v >> 3] = 0; /* a new byte: no earlier packet's bits past the count */
+    }
+    if (b->inStrip >= 3u && windingFlip(b->p[0], b->p[1], pos, b->n[0], b->n[1], nrm)) {
+        b->bits[v >> 3] |= (uint8_t)(1u << (v & 7u));
+    }
+    memcpy(b->p[0], b->p[1], sizeof(b->p[0]));
+    memcpy(b->n[0], b->n[1], sizeof(b->n[0]));
+    memcpy(b->p[1], pos, sizeof(b->p[1]));
+    memcpy(b->n[1], nrm, sizeof(b->n[1]));
+}
+
+int rd__vu_facing_bit(uint32_t v)
+{
+    const FacingBuild *b = &s_facingBuild;
+    if (!b->ok || v >= b->count) {
+        return -1;
+    }
+    return (b->bits[v >> 3] >> (v & 7u)) & 1;
+}
+
+static FacingEntry *facingSlot(uint64_t hash)
+{
+    if (!s_facingCap) {
+        return NULL;
+    }
+    uint32_t i = (uint32_t)(hash ^ (hash >> 32)) & (s_facingCap - 1u);
+    while (s_facing[i].hash != 0 && s_facing[i].hash != hash) {
+        i = (i + 1u) & (s_facingCap - 1u);
+    }
+    return &s_facing[i];
+}
+
+static void facingClear(void)
+{
+    for (uint32_t i = 0; i < s_facingCap; i++) {
+        free(s_facing[i].bits);
+    }
+    free(s_facing);
+    s_facing = NULL;
+    s_facingCap = s_facingUsed = 0;
+    s_facingBytes = 0;
+}
+
+/* keeps the table being built under hash (nv vertices) */
+static void facingKeep(uint64_t hash, uint32_t nv)
+{
+    const uint32_t bytes = (nv + 7u) / 8u;
+    if (s_facingBytes + bytes > (32u << 20)) {
+        rd__log("VU facing: the EE's tables passed 32 MiB (%u packets): emptied; meshes built "
+                "again from older packets draw without side bands",
+                s_facingUsed);
+        facingClear();
+    }
+    if ((s_facingUsed + 1u) * 2u > s_facingCap) {
+        const uint32_t cap = s_facingCap ? s_facingCap * 2u : 1024u;
+        FacingEntry *old = s_facing;
+        const uint32_t oldCap = s_facingCap;
+        s_facing = calloc(cap, sizeof(FacingEntry));
+        if (!s_facing) {
+            s_facing = old;
+            return;
+        }
+        s_facingCap = cap;
+        for (uint32_t i = 0; i < oldCap; i++) {
+            if (old[i].hash != 0) {
+                *facingSlot(old[i].hash) = old[i];
+            }
+        }
+        free(old);
+    }
+    FacingEntry *e = facingSlot(hash);
+    if (!e) {
+        return; /* no memory for the store */
+    }
+    const uint8_t *bits = s_facingBuild.bits;
+    if (e->hash == hash) {
+        if (!e->conflict && (e->count != nv || memcmp(e->bits, bits, bytes) != 0)) {
+            e->conflict = true;
+            s_facingConflicts++;
+            if (s_facingConflicts <= 8u || s_facingConflicts % 100u == 0u) {
+                rd__log("VU facing: mesh %016llx built from packets whose normals disagree (%u "
+                        "so far): its draws have no side bands",
+                        (unsigned long long)hash, s_facingConflicts);
+            }
+        }
+        return;
+    }
+    uint8_t *copy = malloc(bytes ? bytes : 1u);
+    if (!copy) {
+        return;
+    }
+    memcpy(copy, bits, bytes);
+    e->hash = hash;
+    e->bits = copy;
+    e->count = nv;
+    e->conflict = false;
+    s_facingUsed++;
+    s_facingBytes += bytes;
+    if (s_facingUsed == 1u) {
+        rd__log("VU facing: the EE's tables (the p2o strip records' normals, every program): "
+                "a triangle's front is the side its normals point to (ICO_VU_MARK_FLIP)");
+    }
+}
+
+void rd_vu_facing_attach(RdVuMeshDesc *d)
+{
+    FacingBuild *b = &s_facingBuild;
+    uint32_t nv = 0;
+    const uint64_t hash = d ? rd_vu_mesh_desc_hash(d, &nv, NULL) : 0;
+    if (hash != 0 && b->count != 0) {
+        if (b->ok && b->count == nv) {
+            facingKeep(hash, nv);
+        } else {
+            s_facingVoid++;
+            if (s_facingVoid <= 8u || s_facingVoid % 100u == 0u) {
+                rd__log("VU facing: mesh %s (%016llx): no table (%s; %u so far): its draws "
+                        "have no side bands unless its stream has normals",
+                        d->debugName ? d->debugName : "?", (unsigned long long)hash,
+                        b->ok ? "the strips wrote another vertex count"
+                              : "a vertex without a normal",
+                        s_facingVoid);
+            }
+        }
+    }
+    b->count = 0; /* used once */
+    b->ok = true;
+    const FacingEntry *e = hash != 0 ? facingSlot(hash) : NULL;
+    if (e && e->hash == hash && !e->conflict && e->count == nv) {
+        d->facing = e->bits;
+        d->facingCount = nv;
+    }
 }
 
 uint64_t rd__mesh_join_part(RdMeshRec *const *ms, uint32_t n, uint64_t sig)
@@ -1680,6 +1897,10 @@ bool rd__vu_mesh_copy_marks(RdMeshRec *dst, const RdMeshRec *src)
     free(dst->kickMark);
     dst->kickMark = NULL;
     dst->markCount = 0;
+    /* the facing marks' source with them (a copy without its source's
+     * marks keeps its own: none on the failures below) */
+    dst->facingFrom =
+        src->kickMark && dst->indexCount != src->indexCount ? RD_MESH_FACING_NONE : src->facingFrom;
     if (!src->kickMark || dst->indexCount != src->indexCount) {
         return !src->kickMark;
     }
@@ -1907,6 +2128,10 @@ RdMesh rd_create_vu_mesh(const RdVuMeshDesc *d)
         m->materialCount = d->materialCount;
         m->srcQw = d->qwCount;
         m->hash = xxh3_64(buf, bytes);
+        if (d->facing) {
+            /* the EE's facing table (Packet.c): the marks of every program */
+            (void)rd__mesh_set_facing(m, d->facing, d->facingCount);
+        }
     }
     free(buf);
     free(index);

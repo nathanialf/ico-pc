@@ -22,6 +22,7 @@ tests a change needs. Every test program, by area, is
 | `tools/native_frame_check.py`, `tools/native_frame_dumps.txt`, `docs/native_frame_baseline.json` | the native-frame gates, their dump list and their baseline |
 | `tools/coverage_check.py`, `tools/coverage_corpus.txt` | the regression renders and their corpus |
 | `tools/sweep_cameras.txt`, `tools/sweep_baseline.txt` | the disc-wide cull sweep's cameras (machine-local dump paths) and its stored counts (`gsb_cull_sweep`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
+| `tools/sideband_dumps.txt`, `tools/cmp_dirs_band.py` | the wide dumps (machine-local paths and their aspects) the side bands' before/after compare replays, and the compare: the 4:3 band byte for byte, the side columns reported, a side pixel changed only over the fog (`rd_sideband_ab`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `port/render/tools/rd_replay_tool.c` | the replay tool |
 | `tools/vu_variant_diff.py`, `tools/vu_variant_equiv.py`, `tools/test/vu1/` | the June 2001 demo's VU1 programs against the retail ones: the diff, its per-hunk table, the symbolic comparison |
 | `port/platform/hotkeys.h`, `port/platform/dump_zip.h`, `port/render/rd_dump.c` | F12, the aspect sweep, the dump format |

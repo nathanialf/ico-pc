@@ -104,6 +104,16 @@
  *            of a blended present's frame (rd_interp.c, the draws marked
  *            RD_VU_TICK_CAMERAS; rd.h rd_dump_blended_arm), 0 and zeros
  *            for a tick's frame.  A version 3 to 13 dump has none)
+ *   (version 15: u32 facing table count; per table: u32 mesh id (one of
+ *            the meshes above), u32 vertexCount, then (vertexCount + 7) / 8
+ *            bytes, bit v (LSB first) set when the triangle kicked at
+ *            vertex v winds against its normals: the EE's facing table
+ *            the mesh was made with (rd_mesh.h RdVuMeshDesc.facing,
+ *            RdMeshRec.facingFrom RD_MESH_FACING_TABLE), which a prelit
+ *            stream cannot rebuild (no normals in it).  A mesh without
+ *            one loads as the stream says (lit and skinned: their normals;
+ *            prelit: no facing, no side bands: the region rule's
+ *            VU_RULE_CLIP_BESIDE).  A version 3 to 14 dump has none)
  *
  * Only the textures and temporary targets the frame references are written.
  * Target contents are not: a frame that reads a retained target (keep,
@@ -404,6 +414,24 @@ bool rd__dump_frame(const RdFrame *f, const char *path)
         for (int j = 0; ok && j < 16; j++) {
             ok = wf32(fp, f->hasTickCams ? f->tickCams[k][j] : 0.0f);
         }
+    }
+    /* version 15: the EE's facing tables of the meshes written above */
+    uint32_t nf = 0;
+    for (uint32_t i = 0; i < meshes.n; i++) {
+        const RdMeshRec *m = rd__mesh_rec(meshes.ids[i]);
+        nf += m && m->vu && !m->tiledFrom && m->facingFrom == RD_MESH_FACING_TABLE;
+    }
+    ok = ok && w32(fp, nf);
+    for (uint32_t i = 0; ok && i < meshes.n; i++) {
+        const RdMeshRec *m = rd__mesh_rec(meshes.ids[i]);
+        if (!m || !m->vu || m->tiledFrom || m->facingFrom != RD_MESH_FACING_TABLE) {
+            continue;
+        }
+        const uint32_t bytes = (m->vertexCount + 7u) / 8u;
+        uint8_t *bits = malloc(bytes ? bytes : 1u);
+        ok = bits && rd__mesh_facing_bits(m, bits, bytes ? bytes : 1u) && w32(fp, meshes.ids[i]) &&
+             w32(fp, m->vertexCount) && wraw(fp, bits, bytes);
+        free(bits);
     }
     ok = fclose(fp) == 0 && ok;
     if (!ok) {
@@ -851,6 +879,27 @@ bool rd__load_frame(const char *path, RdFrame *out)
             }
         }
         out->hasTickCams = ok && has;
+    }
+    if (ok && ver >= 15u) {
+        /* the EE's facing tables (a prelit mesh's only facing) */
+        uint32_t nf = 0;
+        ok = r32(fp, &nf) && nf <= MAX_REFS;
+        for (uint32_t i = 0; ok && i < nf; i++) {
+            uint32_t id = 0, nv = 0;
+            ok = r32(fp, &id) && r32(fp, &nv) && nv < (1u << 22);
+            const uint32_t bytes = ok ? (nv + 7u) / 8u : 0u;
+            uint8_t *bits = ok ? malloc(bytes ? bytes : 1u) : NULL;
+            ok = ok && bits && rraw(fp, bits, bytes);
+            if (ok) {
+                RdMeshRec *m = rd__mesh_rec(mapId(&meshMap, id));
+                if (!m || !rd__mesh_set_facing(m, bits, nv)) {
+                    rd__log("load: mesh %u: its facing table (%u vertices) does not fit it; drawn "
+                            "without side bands",
+                            id, nv);
+                }
+            }
+            free(bits);
+        }
     }
     fclose(fp);
     for (uint32_t i = 0; ok && i < nViews; i++) {

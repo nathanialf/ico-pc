@@ -480,12 +480,23 @@ enum {
                               * g_vuVariant 1; port/render/vu1_ref/vu1_ref.h VU1_VARIANT_JUN26).
                               * Set by rd_replay_vu.c from ico_region; the shaders do not read
                               * it yet */
-    ICO_VU_FUSED = 2048      /* scissor, with ICO_VU_KICK_ONLY: the kick draw of a fused pair,
+    ICO_VU_FUSED = 2048,     /* scissor, with ICO_VU_KICK_ONLY: the kick draw of a fused pair,
                               * drawn under its cut draw's pipeline (PRIM.ABE on), its
                               * triangles' pixels written unblended (the merge builds set
                               * VuVSOut.r.w, vu_ps writes Cs as a PABE pixel; rd_replay_vu.c
                               * vuFuseVerdict, docs/port/VU1_PROGRAMS.md "The fused scissor
                               * pair") */
+    ICO_VU_MIRROR = 4096,    /* region test: the matrix h is made with turns the eye's side
+                              * over (the 3x3 determinant of its x, y and w rows over the x, y
+                              * and z columns below 0: a reflection camera, a mirrored model;
+                              * rd_replay_vu.c vuSource), so a triangle's facing on screen is
+                              * read the other way (vu_common.hlsli vu_front_facing) */
+    ICO_VU_NO_BESIDE = 8192  /* region test: no side bands, a triangle the rule drops stays
+                              * dropped as on the PS2 (VU_RULE_CLIP_BESIDE off): a frame not
+                              * wider than 4:3, a draw without facing (a grid, a mesh without
+                              * winding marks: RdMeshRec.facingFrom), a pass whose pixel
+                              * shader writes depth before it runs (the exact blend's _dstrov
+                              * builds), ICO_RD_VU_BESIDE=0 */
 };
 
 /* The native frame's constants (port/include/ico_frame.h ICO_FRAME_BASE_W,
@@ -527,17 +538,17 @@ enum {
  *                       meshes; rd_mesh.c markLaterOverlaps), which
  *                       vu_later_out draws in front of it
  *   ICO_VU_MARK_FLIP    the triangle's corners k-2, k-1, k wind against its
- *                       front (rd_mesh.c markWinding: a lit or skinned
- *                       triangle whose face, cross(b - a, c - a), points
- *                       away from the sum of its three normals; a prelit
- *                       one by its place in its strip, RD_VU_WINDING_PHASE),
- *                       so its facing on screen is the sign of the area of
- *                       k-2, k-1, k, reversed where the mark is set.  Static
- *                       prelit, lit and skinned meshes; a morph keeps the
- *                       creation's.
- *                       No shader reads it yet (the region rule's side
- *                       bands will, docs/port/VU1_PROGRAMS.md "The winding
- *                       mark")
+ *                       front: its face, cross(b - a, c - a), points away
+ *                       from the sum of its three normals (the EE's table
+ *                       from the p2o strip records, every program: Packet.c,
+ *                       RdVuMeshDesc.facing; else a lit or skinned stream's
+ *                       own normals: rd_mesh.c markWinding), so its facing
+ *                       on screen is the sign of the area of k-2, k-1, k,
+ *                       reversed where the mark is set (vu_common.hlsli
+ *                       vu_front_facing: the region rule's side bands,
+ *                       docs/port/VU1_PROGRAMS.md "The winding mark").
+ *                       Static prelit, lit and skinned meshes; a morph
+ *                       keeps the creation's
  * A byte a kick holds eight; four are used. */
 #define ICO_VU_MARK_JOINED 1u
 #define ICO_VU_MARK_HIDE 2u

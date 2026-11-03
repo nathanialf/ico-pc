@@ -748,7 +748,10 @@ a corner has a clip flag (the scissor mode's cut triangles), bit 6 the card test
 later bias applies (`vu_later_out`'s condition under the mark), bit 9 the content table hides it
 (`VU_TRI_HIDE`), bits 10..11 the anchor (`vu_plane_anchor`), bit 12 every corner has its GS
 position, bit 13 no corner's X or Y changed by clip mode none's 16-bit wrap, bit 14 a sprite the
-port draws. A tick's verdict is `vu_tick_shown`'s (0 not shown, 1 through the card test, 2
+port draws, bit 15 a drop of the triangle is drawn beside the picture (`VU_TF_BESIDE`, the region
+rule's side bands: the draw has them, the frame is wider than the picture and the triangle faces
+the eye, set where the verdict up to the ticks is a drop or the card test; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule),
+step 7). A tick's verdict is `vu_tick_shown`'s (0 not shown, 1 through the card test, 2
 drawn). The values a plane word holds are those `vu_attr_planes` and `vu_plane_out` (a sprite:
 `vu_attr_planes_at`) compute; the anchor's colour is a whole number 0..255 a channel, so its bytes
 carry it exactly. Each stage takes whole halves of the gradient basis (`vu_grad_basis`): a lane
@@ -836,8 +839,9 @@ planes. Every stage is a point draw of the pre-pass entries' shape (three `RGBA3
 it reads its corner's vertex record (three loads), slot A's first texel (one: the flags) and,
 where the blended verdict is `VU_RULE_DROP` under the tick cameras, slot C (one); resolves the rule as
 `vu_region_rule`'s tail and `vu_rule_card` do (a tick that drew the triangle clips it, one that
-sent it to the card test sends it there, the card test's verdict decides `VU_RULE_STRIP`), applies
-the scissor draw's `ICO_VU_CUT_ONLY` / `ICO_VU_KICK_ONLY` to the stored corner code, chooses the
+sent it to the card test sends it there, the card test's verdict decides `VU_RULE_STRIP`, a final
+drop with `VU_TF_BESIDE` under a draw without `ICO_VU_NO_BESIDE` is drawn clipped beside the
+picture with `VuVSOut.plane.y` 1, the side bands' discard's mark), applies the scissor draw's `ICO_VU_CUT_ONLY` / `ICO_VU_KICK_ONLY` to the stored corner code, chooses the
 position value by value as `vu_triangle_out_pos` does (`vu_corner_position`: the GS position, the
 cut position of `vu_corner_cut_position`, clip mode none's wrapped one), culls past the chain plane and takes its corner's
 distance (`vu_plane_distance`, one stream load), and adds the later bias from the three corners'
