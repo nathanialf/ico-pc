@@ -1090,11 +1090,18 @@ static bool sameBand(const Img *a, const Img *b, int W, size_t *beside)
     }
     const uint32_t x0 = (uint32_t)(W / 2 - BAND / 2) * f, x1 = x0 + (uint32_t)BAND * f;
     bool same = true;
+    int shown = 0;
     for (uint32_t y = 0; y < a->h; y++) {
         for (uint32_t x = 0; x < a->w; x++) {
             const size_t o = ((size_t)y * a->w + x) * 4;
             const bool d = memcmp(&a->px[o], &b->px[o], 4) != 0;
             if (x >= x0 && x < x1) {
+                if (d && shown++ < 6) {
+                    printf("  side bands, W %d: band pixel (%u,%u) differs (band columns %u..%u): "
+                           "%u %u %u %u, without the triangle %u %u %u %u\n",
+                           W, x, y, x0, x1 - 1, a->px[o], a->px[o + 1], a->px[o + 2], a->px[o + 3],
+                           b->px[o], b->px[o + 1], b->px[o + 2], b->px[o + 3]);
+                }
                 same = same && !d;
             } else {
                 *beside += d;

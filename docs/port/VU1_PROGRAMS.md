@@ -250,8 +250,9 @@ since the projection does not change with the width. What the port then draws of
    between two ticks, the ticks' rescue): on a frame wider than the camera's picture, a triangle
    that faces the eye is drawn clipped as in step 3, but only beside the picture
    (`VU_RULE_CLIP_BESIDE`, `vu_rule_beside`): `VuVSOut.plane.y` is 1 on it and `vu_pixel_tests`
-   discards its pixels in the picture's columns (`vu_pixel_in_picture`: the band's edges are texel
-   edges at a whole scale, so no pixel centre lies on one), every VU pixel shader alike (the
+   discards its pixels in the picture's columns (`vu_pixel_in_picture`: the half-open range of
+   the 4:3 frame's own columns; the exact viewport puts a GS integer coordinate on a texel's
+   centre, so the band's left edge is its first column's centre and belongs to the band), every VU pixel shader alike (the
    `_nodual` twins, the no-planes twins `vu_np_ps` and `vu_texa_np_ps`, the `_dstatt` builds). A
    discarded pixel writes no colour, depth or stencil, so inside the picture the PS2's drop stands
    pixel for pixel; beside it the triangle fills what was a hole (the sea at the far left of the old

@@ -2405,10 +2405,14 @@ VuPSIn vu_pixel_in(VuPSIn i)
 // PS2's rule.  Under the exact viewport the pixel's offset from the
 // target's centre in texels (gs_plane_offset's: pixel centres k + 0.5, the
 // centre a whole or half texel) against the band's edges in the same
-// texels (gs_texel_offset, the planes' corners' mapping): at a whole scale
-// the edges are texel edges, so no pixel centre lies on one.  The plain
-// mapping (the shader tests): the pixel's GS X from the texel, g_z.y
-// texels a GS pixel (0: 1).
+// texels (gs_texel_offset, the planes' corners' mapping).  That mapping
+// puts a GS integer coordinate on a texel's centre (g_frame.w, the GS's
+// pixel-centre convention), so the band's left edge, GS 2048 - h, is the
+// centre of its first column: the band is lo <= q < hi, the columns the
+// 4:3 frame's own texels are (with the half texel off, g_frame.w 0, the
+// edges fall between centres and the same test holds).  The plain mapping
+// (the shader tests): the pixel's GS X from the texel, g_z.y texels a GS
+// pixel (0: 1), the same half-open range.
 bool vu_pixel_in_picture(float4 pos)
 {
     const float h = vu_picture_half().x;
@@ -2417,11 +2421,11 @@ bool vu_pixel_in_picture(float4 pos)
         precise float q = pos.x - c;
         const float lo = gs_texel_offset(float2(2048.0 - h, 2048.0)).x;
         const float hi = gs_texel_offset(float2(2048.0 + h, 2048.0)).x;
-        return q > lo && q < hi;
+        return q >= lo && q < hi;
     }
     const float k = g_z.y > 0.0 ? g_z.y : 1.0;
     precise float x = pos.x / k + g_origin.x - g_origin.z;
-    return x > 2048.0 - h && x < 2048.0 + h;
+    return x >= 2048.0 - h && x < 2048.0 + h;
 }
 
 // The clip plane's, the side bands' and DATE's discards

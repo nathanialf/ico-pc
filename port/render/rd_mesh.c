@@ -1423,7 +1423,9 @@ void rd_vu_facing_vertex(int stripFirst, const float *pos, const float *nrm)
     }
     b->inStrip = stripFirst ? 1u : b->inStrip + 1u;
     const uint32_t v = b->count++;
-    b->bits[v >> 3] &= (uint8_t)~(1u << (v & 7u));
+    if ((v & 7u) == 0u) {
+        b->bits[v >> 3] = 0; /* a new byte: no earlier packet's bits past the count */
+    }
     if (b->inStrip >= 3u && windingFlip(b->p[0], b->p[1], pos, b->n[0], b->n[1], nrm)) {
         b->bits[v >> 3] |= (uint8_t)(1u << (v & 7u));
     }

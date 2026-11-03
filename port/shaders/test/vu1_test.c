@@ -2283,7 +2283,7 @@ static int checkPortTriangles(const Case *c, const CaseRef *cr, const uint32_t *
     for (int y = 0; y < RT; y++) {
         for (int x = 0; x < RT; x++) {
             const float px = (float)x + 0.5f;
-            const int inPicture = px > pic[0] && px < pic[1];
+            const int inPicture = px >= pic[0] && px < pic[1]; /* vu_pixel_in_picture */
             float d = -1e30f, db = -1e30f;
             for (int p = 0; p < np; p++) {
                 const float e = pb[p] && inPicture ? -1e30f
