@@ -80,7 +80,12 @@
  *      2048 and none inside it (the picture's columns equal the frame
  *      without it, byte for byte) nor at W 512; the same strip with the
  *      table turning it away (the cliff) adds none anywhere; kEye (no
- *      table: a prelit stream without one has no facing) adds none.
+ *      table: a prelit stream without one has no facing) adds none.  The
+ *      same kEyeSide strip without a table adds nothing either, and on a
+ *      frame wider than 4:3 its replay counts its draw in
+ *      RdPerfRecord.vuBesideNoFacing as RD_VU_NOFACE_NO_TABLE (the 10 s
+ *      line's "side bands: N draws without facing data"); a draw with its
+ *      table counts none.
  *   a  the attribute planes' anchor (checkPlaneAnchor):
  *      a code-36 wall sliver whose first corner stands 60,000 GS pixels
  *      above the picture with its Z saturated reads the texels the exact
@@ -927,6 +932,11 @@ static int renderStrip(const Cfg *cfg, int W, const StripMesh *m, int n, Img *sc
     return renderStripFacing(cfg, W, m, n, NULL, scene);
 }
 
+/* the replay's draws without side bands for want of facing data, by why
+ * (RdPerfRecord.vuBesideNoFacing), as renderStripFacing's last replay
+ * counted them */
+static uint32_t s_stripNoFacing[RD_VU_NOFACE_COUNT];
+
 /* the same with the EE's facing table (renderStrip: none) */
 static int renderStripFacing(const Cfg *cfg, int W, const StripMesh *m, int n,
                              const uint8_t *facing, Img *scene)
@@ -985,6 +995,7 @@ static int renderStripFacing(const Cfg *cfg, int W, const StripMesh *m, int n,
         triDraw(mesh, &t, 0);
     }
     rd_end_frame(0);
+    memcpy(s_stripNoFacing, g_rdPerf.vuBesideNoFacing, sizeof(s_stripNoFacing));
     const bool ok = readImg(RD_TARGET_SCENE, scene);
     if (mesh.id) {
         rd_destroy_vu_mesh(mesh);
@@ -1207,6 +1218,38 @@ static void checkStripRule(void)
                   "strip rule, %s, W %d: a triangle facing away (the cliff) is not drawn "
                   "beside the picture",
                   cfg->name, W);
+            /* sideBack's draw had its table: none counted without facing */
+            uint32_t counted = 0;
+            for (int k = 0; k < RD_VU_NOFACE_COUNT; k++) {
+                counted += s_stripNoFacing[k];
+            }
+            CHECK(counted == 0,
+                  "strip rule, %s, W %d: a draw with its facing table counted %u draws without "
+                  "facing data",
+                  cfg->name, W, counted);
+            /* the same strip without a table: nothing beside the picture,
+             * and on a wider frame its draw counted by why (NO_TABLE) */
+            Img sideNone = {0};
+            if (renderStripFacing(cfg, W, &kEyeSide, 4, NULL, &sideNone) != R_OK) {
+                CHECK(0, "strip rule, %s, W %d: the frame without a table could not be rendered",
+                      cfg->name, W);
+            } else {
+                CHECK(sameImg(&sideNone, &side3),
+                      "strip rule, %s, W %d: a prelit strip without a table adds nothing beside "
+                      "the picture",
+                      cfg->name, W);
+                const uint32_t want = W > BAND ? 1u : 0u;
+                CHECK((want ? s_stripNoFacing[RD_VU_NOFACE_NO_TABLE] >= 1u
+                            : s_stripNoFacing[RD_VU_NOFACE_NO_TABLE] == 0u) &&
+                          s_stripNoFacing[RD_VU_NOFACE_REPLACED] == 0 &&
+                          s_stripNoFacing[RD_VU_NOFACE_COPY] == 0 &&
+                          s_stripNoFacing[RD_VU_NOFACE_OTHER] == 0,
+                      "strip rule, %s, W %d: the draw without a table counted %u %u %u %u "
+                      "without facing data (want %s no-table)",
+                      cfg->name, W, s_stripNoFacing[0], s_stripNoFacing[1], s_stripNoFacing[2],
+                      s_stripNoFacing[3], want ? "at least 1" : "0");
+            }
+            free(sideNone.px);
         }
         free(side3.px);
         free(sideFront.px);

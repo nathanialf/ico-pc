@@ -1208,6 +1208,9 @@ typedef struct VuSource {
     uint64_t bonesOff, streamBufSize, streamOff, streamSize, indexOff;
     RhiBuffer streamBuf, indexBuf;
     uint8_t vs;
+    /* the side bands off because the mesh has no facing data:
+     * RD_VU_NOFACE_* + 1 (0: on, or off for another reason; vuBesideOn) */
+    uint8_t noFacing;
 } VuSource;
 
 /* The region rule's side bands (vu_common.hlsli VU_RULE_CLIP_BESIDE,
@@ -1227,8 +1230,9 @@ typedef struct VuSource {
  * whose pixel shader writes depth before it runs (_dstrov). */
 static int s_besideEnv = -1;
 
-static bool vuBesideOn(const RdCmd *c, const RdMeshRec *m)
+static bool vuBesideOn(const RdCmd *c, const RdMeshRec *m, uint8_t *noFacing)
 {
+    *noFacing = 0;
     if (s_besideEnv < 0) {
         const char *e = getenv("ICO_RD_VU_BESIDE");
         s_besideEnv = !(e && e[0] == '0' && e[1] == 0);
@@ -1236,8 +1240,18 @@ static bool vuBesideOn(const RdCmd *c, const RdMeshRec *m)
                 "beside the 4:3 picture on a wider frame; ICO_RD_VU_BESIDE=0 turns them off)",
                 s_besideEnv ? "on" : "off (ICO_RD_VU_BESIDE=0)");
     }
-    return s_besideEnv && !g_rd.vuNoBeside && g_rd.gsW > ICO_SH_FRAME_BASE_W &&
-           c->type != RDC_GRID && m && m->facingFrom != RD_MESH_FACING_NONE;
+    if (!s_besideEnv || g_rd.vuNoBeside || g_rd.gsW <= ICO_SH_FRAME_BASE_W || c->type == RDC_GRID ||
+        !m) {
+        return false;
+    }
+    if (m->facingFrom == RD_MESH_FACING_NONE) {
+        /* the one reason a report cannot see from the start lines: counted
+         * by why in the 10 s line (doVuDraw) */
+        *noFacing =
+            (uint8_t)(1u + (m->facingWhy < RD_VU_NOFACE_COUNT ? m->facingWhy : RD_VU_NOFACE_OTHER));
+        return false;
+    }
+    return true;
 }
 
 static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
@@ -1409,7 +1423,7 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
         if (vu1ref_region_mirror(vcb.mem[at], vcb.mem[at + 1], vcb.mem[at + 2])) {
             vcb.draw[2] |= ICO_VU_MIRROR;
         }
-        if (!vuBesideOn(c, m)) {
+        if (!vuBesideOn(c, m, &s->noFacing)) {
             vcb.draw[2] |= ICO_VU_NO_BESIDE;
         }
     }
@@ -2804,6 +2818,10 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     /* a draw under the ticks' cameras (vuSource), once a draw */
     g_rdPerf.vuTickDraws += (src->vcb.draw[2] & ICO_VU_TICKS) != 0u;
+    if (src->noFacing) {
+        /* no side bands: its mesh has no facing data (vuBesideOn) */
+        g_rdPerf.vuBesideNoFacing[src->noFacing - 1u]++;
+    }
     DrawSetup ds;
     if (!rd__replay_prepare_draw(r, &ds, NULL)) {
         return;

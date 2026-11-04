@@ -197,6 +197,9 @@ static uint64_t s_fusePairs, s_fuseSame, s_fuseKept[RD_VU_FUSE_WHY_COUNT];
  * cullFrustum, cullOccluded, cullMs, cullHizMs) */
 static uint64_t s_cullDraws, s_cullSkipped, s_cullFrustum, s_cullOccluded;
 static double s_cullMs, s_cullHizMs;
+/* the VU draws without side bands for want of facing data, by why
+ * (RdPerfRecord.vuBesideNoFacing, RD_VU_NOFACE_*) */
+static uint64_t s_besideNoFacing[RD_VU_NOFACE_COUNT];
 /* the store plan's (RdPerfRecord storePasses, storeDepthDropped,
  * storeColorDropped) and the replays it planned */
 static uint64_t s_storePasses, s_storeDepth, s_storeColor;
@@ -244,6 +247,9 @@ bool rd_perf_pop(RdPerfRecord *out)
     s_cullOccluded += s_queue[s_head].cullOccluded;
     s_cullMs += s_queue[s_head].cullMs;
     s_cullHizMs += s_queue[s_head].cullHizMs;
+    for (int k = 0; k < RD_VU_NOFACE_COUNT; k++) {
+        s_besideNoFacing[k] += s_queue[s_head].vuBesideNoFacing[k];
+    }
     s_fuseSame += s_queue[s_head].vuFuseSame;
     for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
         s_fuseKept[k] += s_queue[s_head].vuFuseKept[k];
@@ -424,6 +430,27 @@ const char *rd_perf_backend_text(void)
                      (double)s_cullOccluded / n, s_cullMs / n, s_cullHizMs / n);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
+    uint64_t noFacing = 0;
+    for (int k = 0; k < RD_VU_NOFACE_COUNT; k++) {
+        noFacing += s_besideNoFacing[k];
+    }
+    if (noFacing) {
+        /* the side bands (rd_replay_vu.c vuBesideOn): the draws on a frame
+           wider than 4:3 that had none because their mesh has no facing
+           data, by why (RD_VU_NOFACE_*): a report shows why the sides of
+           the picture are empty where they should not be */
+        const int k = snprintf(
+            s_text + at, sizeof(s_text) - at,
+            "; side bands: %llu draws without facing data (%llu prelit rebuilt without the "
+            "EE's table: a save state or a morph, %llu model pack replacements, %llu copies, "
+            "%llu other)",
+            (unsigned long long)noFacing,
+            (unsigned long long)s_besideNoFacing[RD_VU_NOFACE_NO_TABLE],
+            (unsigned long long)s_besideNoFacing[RD_VU_NOFACE_REPLACED],
+            (unsigned long long)s_besideNoFacing[RD_VU_NOFACE_COPY],
+            (unsigned long long)s_besideNoFacing[RD_VU_NOFACE_OTHER]);
+        at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
+    }
     uint64_t kept = 0;
     for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
         kept += s_fuseKept[k];
@@ -547,6 +574,7 @@ const char *rd_perf_backend_text(void)
     memset(s_fuseKept, 0, sizeof(s_fuseKept));
     s_cullDraws = s_cullSkipped = s_cullFrustum = s_cullOccluded = 0;
     s_cullMs = s_cullHizMs = 0.0;
+    memset(s_besideNoFacing, 0, sizeof(s_besideNoFacing));
     s_cutCarried = s_cutSkipped = s_cutLast = 0;
     memset(s_cutLastWhy, 0, sizeof(s_cutLastWhy));
     s_smMerged = s_smArmed = s_smResets = s_smClears = 0;

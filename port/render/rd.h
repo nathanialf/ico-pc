@@ -2180,6 +2180,25 @@ enum {
     RD_VU_FUSE_WHY_COUNT
 };
 
+/* Why a mesh has no facing data, so its draws have no side bands on a frame
+ * wider than 4:3 (RdMeshRec.facingWhy; RdPerfRecord.vuBesideNoFacing, the 10
+ * s line's "side bands:" clause; docs/port/VU1_PROGRAMS.md "The winding
+ * mark"): NO_TABLE a prelit mesh built without the EE's table (rebuilt from
+ * its packet where no strip records were written and none was kept for its
+ * stream in this run: a save state loaded into a fresh run, a morphed
+ * stream, the store emptied past 32 MiB, a vertex without a normal; an older
+ * dump's prelit mesh), REPLACED a model pack's prelit replacement (no
+ * normals, no table), COPY a copy whose index list differs from its
+ * source's (rd__vu_mesh_copy_marks), OTHER no memory for the marks or a
+ * stream the marks do not fit (a sheet) */
+enum {
+    RD_VU_NOFACE_NO_TABLE,
+    RD_VU_NOFACE_REPLACED,
+    RD_VU_NOFACE_COPY,
+    RD_VU_NOFACE_OTHER,
+    RD_VU_NOFACE_COUNT
+};
+
 /* Why a planned replay dropped no depth store (RdPerfRecord.storeWhy;
  * rd_store_plan.c rd__store_plan_end, docs/port/WORK_BUFFERS.md "The store
  * plan"), for the depth the line names (SCENE's where the replay has it):
@@ -2522,6 +2541,10 @@ typedef struct RdPerfRecord {
      * (the state's ABE on, or the alpha plan's blending off); vuFuseKept
      * the others, by reason (RD_VU_FUSE_*) */
     uint32_t vuFusePairs, vuFuseSame, vuFuseKept[RD_VU_FUSE_WHY_COUNT];
+    /* The VU draws on a frame wider than 4:3, with the side bands not
+     * turned off for the whole run, that had none because their mesh has no
+     * facing data, by why (RD_VU_NOFACE_*; rd_replay_vu.c vuBesideOn) */
+    uint32_t vuBesideNoFacing[RD_VU_NOFACE_COUNT];
     /* The visibility test (rd_vis.c rd__vis_frame; [dev] cull): the VU draw
      * commands of the replayed lists (cullDraws), those turned into NOPs
      * (cullSkipped: by the frustum test, cullFrustum, or by occlusion,

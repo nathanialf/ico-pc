@@ -870,6 +870,9 @@ typedef struct RdMeshRec {
      * and skinned) or the EE's table (rd_mesh.h RdVuMeshDesc.facing,
      * Packet.c, every program: the p2o strip records' normals) */
     uint8_t facingFrom;
+    /* why facingFrom is none (RD_VU_NOFACE_*, rd.h; 0 otherwise): the 10 s
+     * line counts the draws without side bands by it */
+    uint8_t facingWhy;
     uint32_t indexCount;
     RdVuBatchRec *batches;
     uint32_t lastUsed;   /* g_rd.frameCounter of the last draw recorded */
@@ -1021,6 +1024,11 @@ enum { RD_MESH_FACING_NONE = 0, RD_MESH_FACING_NORMALS = 1, RD_MESH_FACING_TABLE
  * false (nothing changed) when count is not m's vertex count, m is not a
  * strip mesh (prelit, lit or skinned) or memory runs out */
 bool rd__mesh_set_facing(RdMeshRec *m, const uint8_t *bits, uint32_t count);
+/* rd_mesh.c: the prelit packets rd_vu_facing_attach saw built again without
+ * strip records and without a table kept for their stream (a save state
+ * loaded into a fresh run, a morphed stream; its "VU facing: mesh ... built
+ * again without its strip records" line, the first 8 then every 100th) */
+uint32_t rd__vu_facing_misses(void);
 /* The table rd__mesh_set_facing takes, back from m's marks (bit v set
  * when kick v carries ICO_VU_MARK_FLIP; the dump's writer: rd_dump.c) into
  * out[(m->vertexCount + 7) / 8]; false when m's marks are not the table's */

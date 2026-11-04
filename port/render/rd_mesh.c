@@ -1297,12 +1297,16 @@ static bool windingFlip(const float *a, const float *b, const float *c, const fl
 static void markWinding(RdMeshRec *m)
 {
     m->facingFrom = RD_MESH_FACING_NONE;
+    m->facingWhy = RD_VU_NOFACE_OTHER;
     if (!joinLayout(m)) {
         return;
     }
     const uint32_t qpv = m->qwPerVertex, nv = m->vertexCount;
     if (qpv != RD_VU_QW_LIT && qpv != RD_VU_QW_SKIN) {
-        return; /* prelit: the EE's table or nothing */
+        /* prelit: the EE's table (rd__mesh_set_facing, after this) or
+         * nothing */
+        m->facingWhy = qpv == RD_VU_QW_PRELIT ? RD_VU_NOFACE_NO_TABLE : RD_VU_NOFACE_OTHER;
+        return;
     }
     for (uint32_t i = 0; i + 2 < m->indexCount; i += 3) {
         const uint32_t k = (m->index[i] & ICO_VU_INDEX_MASK) >> 2;
@@ -1317,6 +1321,7 @@ static void markWinding(RdMeshRec *m)
         }
     }
     m->facingFrom = RD_MESH_FACING_NORMALS;
+    m->facingWhy = 0;
 }
 
 bool rd__mesh_set_facing(RdMeshRec *m, const uint8_t *bits, uint32_t count)
@@ -1343,6 +1348,7 @@ bool rd__mesh_set_facing(RdMeshRec *m, const uint8_t *bits, uint32_t count)
                 m->kickMark[j] &= (uint8_t)~ICO_VU_MARK_FLIP;
             }
             m->gpuDirty = m->gpuChunk != 0 ? 1 : m->gpuDirty;
+            m->facingWhy = RD_VU_NOFACE_OTHER;
             return false;
         }
         any = true;
@@ -1351,6 +1357,7 @@ bool rd__mesh_set_facing(RdMeshRec *m, const uint8_t *bits, uint32_t count)
         m->gpuDirty = 1;
     }
     m->facingFrom = RD_MESH_FACING_TABLE;
+    m->facingWhy = 0;
     return true;
 }
 
@@ -1391,6 +1398,15 @@ static FacingEntry *s_facing;
 static uint32_t s_facingCap, s_facingUsed;
 static uint64_t s_facingBytes;
 static uint32_t s_facingVoid, s_facingConflicts;
+/* the prelit packets built again without strip records and without a table
+ * kept for their stream (rd_vu_facing_attach's miss line), and the times the
+ * store was emptied past 32 MiB (the miss line's reason) */
+static uint32_t s_facingMiss, s_facingEmptied;
+
+uint32_t rd__vu_facing_misses(void)
+{
+    return s_facingMiss;
+}
 
 void rd_vu_facing_begin(void)
 {
@@ -1476,6 +1492,7 @@ static void facingKeep(uint64_t hash, uint32_t nv)
                 "again from older packets draw without side bands",
                 s_facingUsed);
         facingClear();
+        s_facingEmptied++;
     }
     if ((s_facingUsed + 1u) * 2u > s_facingCap) {
         const uint32_t cap = s_facingCap ? s_facingCap * 2u : 1024u;
@@ -1548,12 +1565,33 @@ void rd_vu_facing_attach(RdVuMeshDesc *d)
             }
         }
     }
+    const bool built = b->count != 0;
     b->count = 0; /* used once */
     b->ok = true;
     const FacingEntry *e = hash != 0 ? facingSlot(hash) : NULL;
     if (e && e->hash == hash && !e->conflict && e->count == nv) {
         d->facing = e->bits;
         d->facingCount = nv;
+    } else if (hash != 0 && !built && !d->facing && d->qwPerVertex == RD_VU_QW_PRELIT) {
+        /* a prelit packet's mesh built again (Packet.c pac_HostMeshFor: its
+         * id stale or evicted; a morph's rebuild) with no strip records
+         * written and no table kept for this stream in this run: its draws
+         * have no side bands (RD_VU_NOFACE_NO_TABLE, counted in the 10 s
+         * line).  A conflict was logged when it was found. */
+        const bool conflict = e && e->hash == hash && e->conflict;
+        s_facingMiss++;
+        if (!conflict && (s_facingMiss <= 8u || s_facingMiss % 100u == 0u)) {
+            rd__log("VU facing: mesh %s (%016llx) built again without its strip records and no "
+                    "table kept for its stream (%s; %u so far): its draws have no side bands "
+                    "until the stage is loaded again",
+                    d->debugName ? d->debugName : "?", (unsigned long long)hash,
+                    e && e->hash == hash ? "the kept table has another vertex count"
+                    : s_facingEmptied    ? "the store was emptied past 32 MiB, or a save state "
+                                           "loaded into this run, or a morphed stream"
+                                         : "a save state loaded into this run, or a morphed "
+                                           "stream",
+                    s_facingMiss);
+        }
     }
 }
 
@@ -1901,6 +1939,9 @@ bool rd__vu_mesh_copy_marks(RdMeshRec *dst, const RdMeshRec *src)
      * marks keeps its own: none on the failures below) */
     dst->facingFrom =
         src->kickMark && dst->indexCount != src->indexCount ? RD_MESH_FACING_NONE : src->facingFrom;
+    dst->facingWhy = dst->facingFrom != RD_MESH_FACING_NONE   ? 0
+                     : src->facingFrom != RD_MESH_FACING_NONE ? RD_VU_NOFACE_COPY
+                                                              : src->facingWhy;
     if (!src->kickMark || dst->indexCount != src->indexCount) {
         return !src->kickMark;
     }
@@ -2198,6 +2239,11 @@ RdMesh rd_create_vu_mesh_replacement(const RdVuMeshDesc *orig, const RdVuReplace
         m->srcQw = orig->qwCount;
         m->hash = hash;
         m->replaced = 1;
+        if (m->facingFrom == RD_MESH_FACING_NONE) {
+            /* a prelit replacement: no normals, and the EE's table is the
+             * original's (another vertex count): no side bands, counted */
+            m->facingWhy = RD_VU_NOFACE_REPLACED;
+        }
     }
     free(stream);
     free(index);

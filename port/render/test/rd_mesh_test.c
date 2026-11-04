@@ -3997,6 +3997,13 @@ static void joinedStripChecks(void)
  *     second desc of the same stream after a fresh begin (nothing built)
  *     finds them; a build with a vertex without a normal keeps nothing; a
  *     second, different table under the same hash leaves the hash none
+ *   - why a mesh has no facing (RdMeshRec.facingWhy, the 10 s line's
+ *     reasons): a prelit stream without a table NO_TABLE; a prelit stream
+ *     built again with no strip records and no table kept for it (a save
+ *     state in a fresh run) counted as a miss (rd__vu_facing_misses, its
+ *     log line) and NO_TABLE; a prelit model pack replacement REPLACED; a
+ *     copy of a marked mesh with another index list COPY; a lit stream's
+ *     own marks and a table none
  *   - a copy (rd__vu_mesh_copy_marks) takes the marks' source with them
  *   - no other mark is made on any of them (nothing joined, hidden or
  *     overlapping) */
@@ -4107,6 +4114,9 @@ static void windingMarkChecks(void)
           "%d %d; from %d)",
           t ? flipAt(t, 2) : -2, t ? flipAt(t, 3) : -2, t ? flipAt(t, 4) : -2,
           t ? flipAt(t, 7) : -2, t ? flipAt(t, 8) : -2, t ? (int)t->facingFrom : -1);
+    CHECK(t && t->facingWhy == RD_VU_NOFACE_NO_TABLE,
+          "winding marks: a prelit stream without a table: why %d (want no table)",
+          t ? (int)t->facingWhy : -1);
     rd_destroy_vu_mesh(two);
 
     /* prelit with a table: bits 3, 4, 5, 6, 7 */
@@ -4132,9 +4142,18 @@ static void windingMarkChecks(void)
         const RdMesh cp = windingPrelit(kTwo, kTwoStart, 9, NULL, 0);
         RdMeshRec *c = rd__mesh_rec(cp.id);
         CHECK(c && rd__vu_mesh_copy_marks(c, tb) && flipAt(c, 3) == 1 && flipAt(c, 8) == 0 &&
-                  c->facingFrom == RD_MESH_FACING_TABLE,
+                  c->facingFrom == RD_MESH_FACING_TABLE && c->facingWhy == 0,
               "winding marks: a copy takes its source's marks and their source");
         rd_destroy_vu_mesh(cp);
+        /* a copy with another index list (the first strip alone) keeps no
+         * marks: no facing, why COPY */
+        const RdMesh cp5 = windingPrelit(kTwo, kTwoStart, 5, NULL, 0);
+        RdMeshRec *c5 = rd__mesh_rec(cp5.id);
+        CHECK(c5 && !rd__vu_mesh_copy_marks(c5, tb) && c5->facingFrom == RD_MESH_FACING_NONE &&
+                  c5->facingWhy == RD_VU_NOFACE_COPY,
+              "winding marks: a copy of another index list has no facing, why %d (want copy)",
+              c5 ? (int)c5->facingWhy : -1);
+        rd_destroy_vu_mesh(cp5);
     }
     rd_destroy_vu_mesh(tab);
 
@@ -4144,7 +4163,7 @@ static void windingMarkChecks(void)
     const RdMesh lit = windingLit(kUp, qw);
     RdMeshRec *l = rd__mesh_rec(lit.id);
     CHECK(l && flipAt(l, 2) == 1 && flipAt(l, 3) == 0 && flipAt(l, 4) == 1 && flipAt(l, 5) == 0 &&
-              onlyFlips(l) && l->facingFrom == RD_MESH_FACING_NORMALS,
+              onlyFlips(l) && l->facingFrom == RD_MESH_FACING_NORMALS && l->facingWhy == 0,
           "winding marks: a consistently wound lit strip is marked at k - s = 2 and 4 (%d %d %d "
           "%d; from %d)",
           l ? flipAt(l, 2) : -2, l ? flipAt(l, 3) : -2, l ? flipAt(l, 4) : -2,
@@ -4254,6 +4273,52 @@ static void windingMarkChecks(void)
     rd_vu_facing_attach(&cd);
     CHECK(cd.facing == NULL,
           "winding marks: two different tables under one stream's hash leave it none");
+    /* a prelit stream built again with no strip records written and no
+     * table kept for it (a save state loaded into a fresh run): a miss,
+     * logged and counted, and the mesh's why NO_TABLE */
+    zq[1][2] = 0.5f; /* a stream no table was kept for */
+    RdVuMeshDesc sd = zd;
+    sd.facing = NULL;
+    sd.facingCount = 0;
+    const uint32_t missBefore = rd__vu_facing_misses();
+    rd_vu_facing_begin(); /* nothing built */
+    rd_vu_facing_attach(&sd);
+    CHECK(sd.facing == NULL && rd__vu_facing_misses() == missBefore + 1u,
+          "winding marks: a prelit stream rebuilt without its strip records is a miss (%u -> %u)",
+          missBefore, rd__vu_facing_misses());
+    const RdMesh sm = rd_create_vu_mesh(&sd);
+    const RdMeshRec *s = rd__mesh_rec(sm.id);
+    CHECK(s && s->facingFrom == RD_MESH_FACING_NONE && s->facingWhy == RD_VU_NOFACE_NO_TABLE,
+          "winding marks: the rebuilt prelit mesh has no facing, why %d (want no table)",
+          s ? (int)s->facingWhy : -1);
+    rd_destroy_vu_mesh(sm);
+    /* the first stream again, whose hash two tables were kept under (the
+     * conflict above): no table, counted (its line was the conflict's) */
+    zq[1][2] = 0.0f;
+    RdVuMeshDesc kd = zd;
+    kd.facing = NULL;
+    kd.facingCount = 0;
+    rd_vu_facing_begin();
+    rd_vu_facing_attach(&kd);
+    CHECK(kd.facing == NULL && rd__vu_facing_misses() == missBefore + 2u,
+          "winding marks: a stream whose table is void (a conflict) is counted once more (%u)",
+          rd__vu_facing_misses());
+    /* a prelit model pack replacement: no normals, no table: REPLACED */
+    const RdVuReplacementBatch rb = {0, 6};
+    RdVuReplacement rep;
+    memset(&rep, 0, sizeof(rep));
+    rep.qw = (const float (*)[4]) & zq[1];
+    rep.vertexCount = 6;
+    rep.qwPerVertex = RD_VU_QW_PRELIT;
+    rep.batches = &rb;
+    rep.batchCount = 1;
+    const RdMesh rm = rd_create_vu_mesh_replacement(&zd, &rep, "winding replacement");
+    const RdMeshRec *r = rd__mesh_rec(rm.id);
+    CHECK(r && r->replaced && r->facingFrom == RD_MESH_FACING_NONE &&
+              r->facingWhy == RD_VU_NOFACE_REPLACED,
+          "winding marks: a prelit replacement has no facing, why %d (want replaced)",
+          r ? (int)r->facingWhy : -1);
+    rd_destroy_vu_mesh(rm);
 }
 
 static void recordingChecks(void)
