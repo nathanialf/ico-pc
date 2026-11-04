@@ -1,7 +1,7 @@
 ## New
 
 - Options > Controls > Touch controls has a new choice, Always, Start only in scenes: during a scene only the Start button stays on screen, so it can be skipped.
-- On phones, the log now records the graphics chip's clock speed, how warm the phone was and whether the screen was being recorded whenever a picture is held back, so stutters can be told apart.
+- On phones, the log now records the graphics chip's clock speed, how warm the phone was and whether the screen was being recorded whenever a picture is held back, and which part of the game (a scene, play, a menu) each ten seconds were in, so stutters can be told apart.
 
 ## Fixed
 

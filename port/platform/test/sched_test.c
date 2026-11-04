@@ -11,6 +11,7 @@
 
 #include <eekernel.h>
 
+#include "diag_host.h"
 #include "fiber.h"
 #include "fpenv.h"
 #include "kernel_host.h"
@@ -596,6 +597,39 @@ static void test_call_on_host(void)
     ico_fpenv_host_enter();
 }
 
+/* --- the longest single switch --------------------------------------------- */
+
+/* a thread that holds the CPU for arg milliseconds, then sleeps */
+static void holder(void *arg)
+{
+    const unsigned long long until =
+        ico_diag_now_ns() + (unsigned long long)(*(int *)arg) * 1000000ull;
+
+    while (ico_diag_now_ns() < until) {}
+    SleepThread();
+}
+
+static void test_switch_max(void)
+{
+    static int shortMs = 1, longMs = 30;
+    int id = 0, shortId, longId;
+    unsigned long long ns;
+
+    begin("the longest switch");
+    ico_sched_switch_max_reset();
+    CHECK(ico_sched_switch_max(&id) == 0 && id == 0);
+    shortId = start(holder, 40, &shortMs);
+    longId = start(holder, 50, &longMs);
+    ico_sched_switch_max_reset();
+    ico_sched_run();
+    ns = ico_sched_switch_max(&id);
+    CHECK(id == longId && id != shortId);
+    CHECK(ns >= 30000000ull && ns < 2000000000ull);
+    ico_sched_switch_max_reset();
+    CHECK(ico_sched_switch_max(&id) == 0 && id == 0);
+    CHECK(ico_sched_switch_max(NULL) == 0);
+}
+
 int main(void)
 {
     printf("fiber backend: %s\n", ico_fiber_backend());
@@ -612,6 +646,7 @@ int main(void)
     test_suspend();
     test_boot();
     test_call_on_host();
+    test_switch_max();
     ico_sched_reset();
     if (fails != 0) {
         printf("%d failure(s)\n", fails);

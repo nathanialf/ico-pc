@@ -37,7 +37,8 @@ target_sources(ico_platform PRIVATE
     symmap.c
     vm_reserve.c
     vsync_hooks.c
-    window_lifecycle.c)
+    window_lifecycle.c
+    window_scene.c)
 # diag_host.c's heartbeat and watchdog thread (pthreads on POSIX).
 find_package(Threads REQUIRED)
 target_link_libraries(ico_platform PUBLIC Threads::Threads)
@@ -144,7 +145,7 @@ endif()
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
           gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
           present_fallback frame_mailbox display_rate present_hist gpu_sysfs
-          thermal_text)
+          thermal_text window_scene)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
