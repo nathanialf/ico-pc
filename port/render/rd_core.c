@@ -1796,6 +1796,13 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (!g_rd.textures || !g_rd.meshes) {
         return false;
     }
+    if (sdlWindow) {
+        /* the window's start and switch: written out at once (stderr is
+         * fully buffered on Windows), so a hang in the driver's start or in
+         * a shader compile leaves the step in the log */
+        rd__log("starting the device and making its shaders (the backend's lines follow)");
+        fflush(stderr);
+    }
     if (!rd__gpu_init(sdlWindow)) {
         rd__gpu_shutdown();
         free(g_rd.textures);

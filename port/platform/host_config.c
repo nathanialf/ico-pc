@@ -484,6 +484,9 @@ static const struct {
        ico_dev_switch_stage) */
     {"dev.switch_to", "switch_to"},
     {"dev.switch_at", "switch_at"},
+    /* Options > Graphics > Apply to each renderer in turn, the window
+       build's switch test (port/platform/window_switch.c) */
+    {"dev.backend_switch_test", "backend_switch_test"},
     /* Settings > Extras > Credits unlocked whatever the achievements say
        (port/game/credits.c) */
     {"dev.unlock_credits", "unlock_credits"},

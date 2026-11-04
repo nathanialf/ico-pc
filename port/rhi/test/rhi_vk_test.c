@@ -65,7 +65,7 @@ static int hazardCell(void)
     if (!rhi_create_backend("vulkan")) {
         return 0;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test hazards"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test hazards", NULL};
     if (!rhi_init(&dd)) {
         return 0;
     }
@@ -115,7 +115,7 @@ static int passAreaCell(void)
     if (!rhi_create_backend("vulkan")) {
         return 0;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test pass area"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test pass area", NULL};
     if (!rhi_init(&dd)) {
         return 0;
     }
@@ -221,7 +221,7 @@ static int cacheCell(void)
                 fclose(fp);
             }
         }
-        RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test cache"};
+        RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test cache", NULL};
         if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
             rhi_test_log("FAIL cache cell: init %d\n", pass);
             failures++;
@@ -331,7 +331,7 @@ static int cacheDropCell(void)
     /* rhi_init does it: the old file is gone after the init */
     snprintf(path, sizeof(path), "%s/pipelines-now.vkcache", dir);
     rhi_set_pipeline_cache_path(path);
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test cache drop"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test cache drop", NULL};
     if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
         rhi_test_log("FAIL cache drop cell: init\n");
         failures++;
@@ -367,7 +367,7 @@ static int limitsCell(void)
     if (!e || strcmp(e, "mali") != 0) {
         return 0;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test limits"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test limits", NULL};
     if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
         rhi_test_log("FAIL limits cell: init\n");
         return 1;
@@ -488,7 +488,7 @@ static int poolCell(void)
     if (envOn("ICO_VK_FAKE_NO_DUAL") || envOn("ICO_VK_FAKE_D24S8") || envOn("ICO_VK_FAKE_LIMITS")) {
         return 0;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test pool"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test pool", NULL};
     if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
         rhi_test_log("FAIL pool cell: init\n");
         return 1;
@@ -676,7 +676,7 @@ static int poolCell(void)
  * validation message. */
 static int renderAreaCell(void)
 {
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test render area"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test render area", NULL};
     if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
         rhi_test_log("FAIL render area cell: init\n");
         return 1;
@@ -842,7 +842,7 @@ static void testSetEnv(const char *name, const char *value)
 
 static int occlusionRun(bool always)
 {
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test occlusion"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test occlusion", NULL};
     if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
         rhi_test_log("FAIL occlusion cell: init\n");
         return 1;
@@ -1016,7 +1016,7 @@ static int syncCell(void)
     const char *api = getenv("ICO_VK_FAKE_API");
     const bool vk10 = api && (strcmp(api, "1.0") == 0 || strcmp(api, "1.0bare") == 0);
     const bool fences = api && (strcmp(api, "1.1") == 0 || vk10);
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test sync"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test sync", NULL};
     if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
         rhi_test_log("FAIL sync cell: init\n");
         return 1;
@@ -1120,7 +1120,7 @@ static int d32fCell(void)
 {
     const char *e = getenv("ICO_VK_FAKE_NO_D32F_ATTACHMENT");
     const bool fake = e && e[0] && e[0] != '0';
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test d32f"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test d32f", NULL};
     if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
         rhi_test_log("FAIL d32f cell: init\n");
         return 1;
@@ -1144,7 +1144,7 @@ static int d32fCell(void)
  * ICO_VK_DEVICE the variable wins and the cell checks only the start. */
 static int adapterCell(void)
 {
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test adapter"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test adapter", NULL};
     char plain[256];
     RhiAdapterInfo list[RHI_MAX_ADAPTERS];
     int failures = 0;

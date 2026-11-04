@@ -36,7 +36,9 @@
  *   ico_window_switch_install() the Graphics page's host and its card names
  *                               (installed again after every switch)
  *   ico_window_switch_pump()    a switch the page asked for, from
- *                               ico_window_pump, the watchdog paused; 0, or
+ *                               ico_window_pump, under the switch's own
+ *                               watchdog limit (diag_host.h
+ *                               ico_diag_watchdog_switch); 0, or
  *                               -1 when no renderer is left (the pump ends
  *                               the run)
  *   ico_window_switch_end_text() after that -1: the box's text naming both
@@ -46,6 +48,17 @@
  *                               ico_window_open's choice once the renderer
  *                               is up (the player's, or Automatic's with
  *                               its fallback or restart backend)
+ *   ico_window_switch_wait_hooks()
+ *                               the renderer's wait hooks (rhi.h
+ *                               RhiWaitHooks), set once before the first
+ *                               rd_init: a long driver call (an OpenGL
+ *                               shader compile on its own thread, a fence
+ *                               wait) takes the window's events on this
+ *                               thread meanwhile, is held to the GPU hang
+ *                               limit, and each shader and pipeline made
+ *                               is progress for the switch's limit; a
+ *                               compile given up on makes the switch go
+ *                               back with a box naming the shader
  *   ico_window_reopen(backend, backendExplicit)
  *                               window_host.c's part: 1 up, 0 not (no
  *                               window then; the next call makes one);
@@ -64,5 +77,6 @@ int ico_window_switch_pump(void);
 const char *ico_window_switch_end_text(void);
 void ico_window_switch_started(bool backendExplicit, const char *backend);
 int ico_window_reopen(const char *backend, bool backendExplicit);
+void ico_window_switch_wait_hooks(void);
 
 #endif /* ICO_PLATFORM_WINDOW_SWITCH_H */

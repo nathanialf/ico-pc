@@ -38,6 +38,8 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/gl/gl_internal.h` | the OpenGL backend's shared state, its records and which file defines which entry point |
 | `port/rhi/gl/gl_loader.h`, `gl_loader.c` | the OpenGL entry points, fetched through `SDL_GL_GetProcAddress` |
 | `port/rhi/gl/gl_device.c` | the context, the version and extension checks, the debug output, limits, frames, timestamps, the stats entry points |
+| `port/rhi/gl/gl_compile.c` | the shader compiles: the compile thread with a context of the device's share group, the window's pump between the waits, the limit and the abandoned compile, the parallel-compile poll |
+| `port/rhi/gl/gl_sync_wait.h`, `gl_sync_wait.c` | the fence wait held to a limit in slices, apart from GL for its test |
 | `port/rhi/gl/gl_resource.c` | buffers, textures, samplers, separable programs, bind group layouts and bind groups, deferred deletes, readback |
 | `port/rhi/gl/gl_swapchain.c` | the backbuffer texture, its blit to the window and the swap |
 | `port/rhi/gl/gl_pipeline.c` | pipelines: program pipeline objects, vertex array objects, the fixed-function state; the enum maps |
@@ -674,6 +676,23 @@ run time: `RhiShaderDesc` brings it the HLSL file, the entry, the macros and the
 rather than a blob, and `d3d11_shader_compile` (`port/rhi/d3d11/d3d11_shader.c`) turns them into
 DXBC with `d3dcompiler_47.dll`, cached on disk per shader. The route, the cache file, its key and
 its log lines are in [SHADERS.md](SHADERS.md#direct3d-11-run-time-compile).
+
+### Wait hooks
+
+`rhi_set_wait_hooks(&hooks)` (the dispatcher's, kept across `rhi_create_backend` as the wanted card
+is) gives every later `rhi_init` the window's part in a driver call that may take long
+(`RhiWaitHooks`, handed over as `RhiDeviceDesc.waits` when the caller leaves it NULL): `pump(ctx,
+what, heldNs)` about every 50 ms while the calling thread waits, `stalled(ctx, what, heldNs)` once
+when the call passed `limitNs` and the backend gave up on it, and `made(ctx)`, which the dispatcher
+calls after every `rhi_create_shader` and `rhi_create_pipeline` on every backend. Only OpenGL waits
+this way: its shader compiles and its fence waits ([OpenGL](#opengl)); the Vulkan and Direct3D
+backends read nothing of it. The window sets them once before its first `rd_init`
+(`port/platform/window_switch.c` (`ico_window_switch_wait_hooks`)): the pump takes the window's
+events with `SDL_PumpEvents` when the waiting thread is the window's own (the render thread's waits
+take none), `stalled` keeps the shader's name for the switch's box, `made` is progress for the
+switch's watchdog limit ([PLATFORM.md](PLATFORM.md#diagnostics)), and `limitNs` is the GPU hang
+limit (`ico_diag_gpu_hang_limit`: half `watchdog=`, 15 s by default, 0 none). The tests and tools
+set none, so their OpenGL compiles run on the calling thread.
 
 ### Choosing the device
 
@@ -1385,8 +1404,8 @@ whether the device runs on WARP, and the feature level.
 
 OpenGL 4.3 core with `ARB_clip_control` and `ARB_buffer_storage` (both core in 4.5), on Windows and
 Linux. The backend links no GL library: SDL3 makes the context and `SDL_GL_GetProcAddress` gives
-every entry point (`port/rhi/gl/gl_loader.h` `GL_FUNCS`: 139, the 4.3 core ones required, clip
-control, buffer storage and texture barrier optional), called as `glf.Name` (not `gl`, the
+every entry point (`port/rhi/gl/gl_loader.h` `GL_FUNCS`: 141, the 4.3 core ones required, clip
+control, buffer storage, texture barrier, multi bind and `glMaxShaderCompilerThreadsKHR` optional), called as `glf.Name` (not `gl`, the
 backend's `RHI_BACKEND_PREFIX`).
 
 **Context** (`port/rhi/gl/gl_device.c` (`gl_create_context`)). With a window, the window must have
@@ -1404,8 +1423,11 @@ from a 4.3 driver with `rhi_gl: the driver has no glName (OpenGL 4.3 core)`. The
 `rhi_gl: <renderer> (OpenGL M.m core|compatibility, <GL_VERSION>; GLSL <version>)[, headless];
 index values up to N`, followed by `rhi_gl: limits: uniform align N, dual-source yes|no, MSAA
 1|2|4|8, interlock yes|no (image units N), texture barrier yes|no, BC yes|no, anisotropy N, max
-texture N, entry points 139 (N optional missing), debug output on|off, clip origin lower left (vertex
-y negated)`.
+texture N, entry points 141 (N optional missing), debug output on|off, clip origin lower left (vertex
+y negated)`. With a window, `rhi_gl: creating the OpenGL 4.3 core context on the window` comes
+before the context is asked for, and these start lines (the context's failure lines too) are
+written out at once (`GL_LOG_DIRECT`: stderr is fully buffered on Windows and flushed by the host
+loop, so a hang in the driver's start would keep them).
 
 **Clip space** (`gl_defaults`). `glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE)` with every vertex
 program's `gl_Position.y` negated after its `main` (`gl_resource.c` `gl_flip_vertex_y`: a
@@ -1459,11 +1481,62 @@ commands queued with it but may hand its name out again at once, and a bind grou
 the frame holds names. `rhi_readback_texture` waits with `glFinish` and reads level 0 through a
 scratch framebuffer with `glReadPixels` (depth as 32-bit floats), the rows from the top.
 
+**Shader compiles** (`port/rhi/gl/gl_compile.c`). OpenGL compiles a program on the thread that asks
+for it, inside `glCreateShaderProgramv` (or at the link status read after it), so a driver that
+takes long holds that thread: Options > Graphics > Apply to OpenGL on an RTX 3090 (driver 610.88)
+left the window's thread inside NVIDIA's GLSL compiler on `sprite_aa1_ps`, the window black and
+"Not Responding" (a Task Manager dump; the whole switch is in [PLATFORM.md](PLATFORM.md#the-renderer-switched-from-the-menu)). With
+the window's [wait hooks](#wait-hooks) the compiles move to a thread of their own:
+
+- At `rhi_init`'s end (`gl_compile_init`) a second context is made with
+  `SDL_GL_SHARE_WITH_CURRENT_CONTEXT` (the device's share group, so a program it makes is the
+  device's) and the device's context made current again at once; a thread `ico_gl_compile` makes
+  the new one current without a surface where SDL allows it (EGL with
+  `KHR_surfaceless_context`) and on the game's window otherwise (WGL, GLX: a drawable may be current
+  in two contexts on two threads). The thread keeps its own copies of the five entry points it
+  calls (`rhi_shutdown` clears `glf`). Its context current within 5 s, or the thread is left.
+- `rhi_create_shader` hands it the text (`gl_compile_program`); the thread makes the program, reads
+  its link status and its log, and calls `glFinish` so the program is complete before the device's
+  context uses it. The calling thread waits in 50 ms slices with the hooks' pump between them.
+- One compile is held to `limitNs`. Past it the compile is abandoned: the thread stays inside the
+  driver (a thread blocked in a driver call cannot be stopped safely), its context and state block
+  are never freed, the thread is detached, and the OpenGL library is loaded once more
+  (`SDL_GL_LoadLibrary`: SDL unloads it with the last OpenGL window, which would unmap the code the
+  thread runs in), all for the rest of the run. Should the compile return later the thread deletes
+  the program, logs it and ends. The device's start fails: every later compile returns no program
+  at once, `rd_init` fails, and the switch goes back with a box naming the shader.
+- Without a thread (`ICO_GL_COMPILE_THREAD=0`, or no shared context) and with
+  `KHR_parallel_shader_compile` or `ARB_parallel_shader_compile`, `glMaxShaderCompilerThreadsKHR`
+  is set to the driver's choice and the calling thread polls `GL_COMPLETION_STATUS_KHR` with the
+  same pump and limit (the program deleted past it); a driver that compiles inside
+  `glCreateShaderProgramv` anyway still holds the thread. Without either the compile blocks.
+
+Lines (written at once): `rhi_gl: shaders: compiled on a thread of their own (a context of the
+same share group, without a surface|on the window); the window takes its events meanwhile; one
+compile may take N s (the GPU hang limit|no limit), past it OpenGL does not start`, or `rhi_gl:
+shaders: no compile thread (<why>); the driver's parallel compile ... is polled ...|each compile
+blocks the window until it returns`; `rhi_gl: shader <name>: compiling for 2.0 s (the window takes
+its events meanwhile; the limit N s)` once a compile; `rhi_gl: shader <name>: compiled in N s` at
+2 s or more; `rhi_gl: shader <name>: the graphics driver has compiled it for N s, past the limit of
+N s (the GPU hang limit): the compile is abandoned on its thread (left inside the driver; its
+context and the OpenGL library are kept for the rest of the run), and OpenGL does not start`;
+`rhi_gl: shader <name>: not made (the driver stalled compiling <name>; OpenGL does not start)` (the
+first 8, then every 100th); `rhi_gl: the abandoned compile of <name> returned after N s; its thread
+ends`; at `rhi_shutdown` `rhi_gl: shaders: N compiled in N s, the longest <name> N ms (on the
+compile thread)`. Not verified on NVIDIA (nothing here runs on it); the window build's switch test
+runs the thread on llvmpipe ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
+
 **Frames** (`gl_device.c`). Command lists execute while they are recorded; `rhi_submit` places the
 slot's fence (`gl_frame_fence`: `glFenceSync`, then `glFlush`). `rhi_wait_frame` moves to the next
 slot, waits for its fence (`glClientWaitSync`, counted into `fenceWaits` and `fenceWaitNs` when it
-blocks; after 2 s it logs `rhi_gl: a frame's fence has not signalled after 2 s; still waiting`),
-then runs the slot's deletes, resets its bind group arena and reads its timestamps. A
+blocks; after 2 s it logs `rhi_gl: a frame's fence has not signalled after 2.0 s; still waiting`).
+The wait is held to the hooks' `limitNs`, else `ICO_GPU_HANG_LIMIT`'s seconds where set, else none
+(the tests), in 50 ms slices with the pump between them where the hooks are set (1 s slices
+otherwise; `gl_sync_wait_limited`); past the limit the device counts as lost (`rhi_device_lost`,
+the window's loss path, or an OpenGL switch going back when it happens during its start), no wait
+is made again and `rhi_wait_idle`'s and `rhi_shutdown`'s `glFinish` are skipped: `rhi_gl: a frame's
+fence has not signalled after N s (the limit N s, the GPU hang limit): the GPU or its driver
+stopped; the device counts as lost from now on (replay R, frame F)`. Then it runs the slot's deletes, resets its bind group arena and reads its timestamps. A
 `glFenceSync` that fails (`rhi_gl: glFenceSync failed (N so far): the frame slot waits with
 glFinish`) leaves the slot without a fence; unless a later submit of the slot places one, its
 recycle waits with `glFinish` (`GlFrame.needFinish`). GPU timestamps
@@ -1635,6 +1708,7 @@ shader storage blocks N (3 needed), texture units N (21 needed); the draws that 
 | `ICO_GL_FAKE_NO_DST` | 1 reports no fragment interlock |
 | `ICO_GL_FAKE_NO_MSAA` | 1 reports single sampling only |
 | `ICO_GL_FAKE_NO_TIMESTAMPS` | 1 turns GPU timestamps off |
+| `ICO_GL_COMPILE_THREAD` | 0 makes no compile thread with the window's hooks set: the parallel-compile poll where offered, else the compile blocks ([Shader compiles](#opengl)) |
 
 The debug output counts the driver's errors and undefined-behaviour messages
 (`rhi_gl_debug_error_count`) and prints `rhi_gl: debug: <type> #N (id 0x...): <message>` for the

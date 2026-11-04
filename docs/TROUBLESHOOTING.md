@@ -546,6 +546,18 @@ under `[video]` in `config.toml` ([more](OPTIONS.md#choosing-the-renderer)). Ope
 renderer, so if it fails or looks wrong, send `logs/ico-pc.log` (the lines starting `window:`
 and `rhi_gl:`) with your graphics card and driver.
 
+**The window goes black and "Not Responding" after switching the Graphics API to OpenGL.**
+Some graphics drivers take a very long time, or never finish, getting OpenGL's graphics ready.
+The game now keeps its window responding meanwhile. If the driver gives no answer for about 15
+seconds, the game goes back to the Graphics API you had before and shows a message that says
+"OpenGL could not start: the graphics driver stalled compiling ...". Keep the Graphics API you
+had, or update the graphics driver and try again. If the game stops responding during a switch
+for a whole minute, it closes itself with a message and writes a report file. Either way the log
+says how far the switch got: its last lines start with `window: switch` and name each step, and
+a line with `compiling for` in it names what the driver was busy with. Send the
+newest file in `logs` that starts with `report-` (or `ico-pc.log`) with your graphics card and
+driver.
+
 **I chose Direct3D 11 and the game does not start.** Direct3D 11 has not been tried on any
 Windows computer, so this can happen. Open `ico-pc.ini` in the `x64` folder with Notepad and
 delete the line `backend=d3d11` (or change it to `backend=` with nothing after it, which is
