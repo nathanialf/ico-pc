@@ -2032,6 +2032,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
                                                       UI_STR_VAL_SPEED_FASTEST};
         return ui_str(speedStr[ico_opt_shadow_speed()]);
     }
+    case UI_OPT_SHADOWS_TOGETHER:
+        return onOff(ico_opt_shadows_together());
     case UI_OPT_DOOR_FIX:
         return onOff(ico_opt_door_fix());
     case UI_OPT_YORDA_TRIPS:
@@ -2692,6 +2694,12 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         /* Slower, Original, Faster, Fastest around; read every game tick (options.h) */
         ico_opt_set_shadow_speed(stepIndex(ico_opt_shadow_speed(), ICO_SPEED_COUNT, dir));
         ico_config_set_string("gameplay.shadow_speed", kSpeedWords[ico_opt_shadow_speed()]);
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_SHADOWS_TOGETHER:
+        /* read at each Shadow's turn check (enemy_act.c), so it acts at once */
+        ico_opt_set_shadows_together(!ico_opt_shadows_together());
+        ico_config_set_bool("gameplay.shadows_together", ico_opt_shadows_together());
         s_dirtyConfig = 1;
         break;
     case UI_OPT_DOOR_FIX:
@@ -3392,6 +3400,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
         addNote(pg, UI_OPT_PIT_TIME, UI_STR_OPT_PIT_TIME_NOTE);
         addNote(pg, UI_OPT_SHADOW_SPEED, UI_STR_OPT_SHADOW_SPEED_NOTE);
+        addNote(pg, UI_OPT_SHADOWS_TOGETHER, UI_STR_OPT_SHADOWS_TOGETHER_NOTE);
         addNote(pg, UI_OPT_DOOR_FIX, UI_STR_OPT_DOOR_FIX_NOTE);
         addNote(pg, UI_OPT_YORDA_TRIPS, UI_STR_OPT_YORDA_TRIPS_NOTE);
         addNote(pg, UI_OPT_NATURAL_CHAINS, UI_STR_OPT_NATURAL_CHAINS_NOTE);
@@ -4086,15 +4095,24 @@ static void build(void)
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
     static const int touchLinks[] = {-1, -1, -1, UI_PAGE_TOUCH_LAYOUT, -1, -1, -1, -1, -1};
     /* the game's Film effect and Players, once the game is cleared */
-    static const int gameOpts[] = {UI_OPT_YORDA,          UI_OPT_PIT_TIME,     UI_OPT_SHADOW_SPEED,
-                                   UI_OPT_STICK_FIX,      UI_OPT_DOOR_FIX,     UI_OPT_YORDA_TRIPS,
-                                   UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING, UI_OPT_SECOND_CARD,
-                                   UI_OPT_FILM_EFFECT,    UI_OPT_PLAYERS,      UI_OPT_BACK};
-    static const int gameStrs[] = {
-        UI_STR_OPT_YORDA,          UI_STR_OPT_PIT_TIME,     UI_STR_OPT_SHADOW_SPEED,
-        UI_STR_OPT_STICK_FIX,      UI_STR_OPT_DOOR_FIX,     UI_STR_OPT_YORDA_TRIPS,
-        UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_SECOND_CARD,
-        UI_STR_OPT_FILM_EFFECT,    UI_STR_OPT_PLAYERS,      UI_STR_BACK};
+    static const int gameOpts[] = {
+        UI_OPT_YORDA,        UI_OPT_PIT_TIME,    UI_OPT_SHADOW_SPEED, UI_OPT_SHADOWS_TOGETHER,
+        UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_YORDA_TRIPS,  UI_OPT_NATURAL_CHAINS,
+        UI_OPT_SKIP_OPENING, UI_OPT_SECOND_CARD, UI_OPT_FILM_EFFECT,  UI_OPT_PLAYERS,
+        UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA,
+                                   UI_STR_OPT_PIT_TIME,
+                                   UI_STR_OPT_SHADOW_SPEED,
+                                   UI_STR_OPT_SHADOWS_TOGETHER,
+                                   UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_DOOR_FIX,
+                                   UI_STR_OPT_YORDA_TRIPS,
+                                   UI_STR_OPT_NATURAL_CHAINS,
+                                   UI_STR_OPT_SKIP_OPENING,
+                                   UI_STR_OPT_SECOND_CARD,
+                                   UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,
+                                   UI_STR_BACK};
     _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
                    "a string and a link for each Controls row");

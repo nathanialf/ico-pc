@@ -592,6 +592,9 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_SECOND_CARD] = "Seconda memory card",
     [UI_STR_OPT_SECOND_CARD_NOTE] =
         "Disattivato: una scheda, come l’originale. Attivato: una seconda scheda con dieci salvataggi in più, offerta al salvataggio e al caricamento.",
+    [UI_STR_OPT_SHADOWS_TOGETHER] = "Le ombre attaccano insieme",
+    [UI_STR_OPT_SHADOWS_TOGETHER_NOTE] =
+        "Disattivato: come l’originale, le ombre attaccano a turno. Attivato: più ombre possono attaccare nello stesso momento.",
     [UI_STR_OPT_AA] = "Anti-aliasing",
     [UI_STR_OPT_AA_NOTE] =
         "Attenua i bordi seghettati. Il supersampling disegna 4 volte (2x) o 16 volte (4x) i pixel; abbassalo se il contatore scende a 30.",

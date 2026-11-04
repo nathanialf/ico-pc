@@ -40,6 +40,7 @@ const char *const ICO_SIM_KEYS[] = {
     "variants.barrier_hits",
     "variants.no_cutscene_look",
     "variants.ignore_cutscene_cameras",
+    "gameplay.shadows_together", /* the Shadows' turns (enemy_act.c) */
     NULL,
 };
 
@@ -72,6 +73,7 @@ static const char *const kDefaults[] = {
     NULL,       /* variants.barrier_hits: unset is the disc's own number */
     "false",    /* variants.no_cutscene_look */
     "false",    /* variants.ignore_cutscene_cameras */
+    "false",    /* gameplay.shadows_together */
     NULL,
 };
 

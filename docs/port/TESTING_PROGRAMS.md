@@ -327,7 +327,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   key) loads it and must log `state: refused load slot 1: settings differ: gameplay.yorda_safe=...`
   and go on to its last tick. Both skip without the disc image and on a sanitizer build ([Tests
   that need the disc](TESTING.md#tests-that-need-the-disc)).
-- `options_test.c`: `test_shadow_speed_motions` selects each of the seven discs and checks the motions Shadow speed scales (the walk, run, fly and carry loops by their motion-table names) and the ones it leaves (the stand, the fly start, the run's end, an attack, the grab, a hit, the dissolve, the pit dive; review finding 15); the gameplay options' defaults and setters (Hold type: the disc's own by default, `toggle`
+- `options_test.c`: `test_shadows_together` (Shadows attack together, issue 185): off by default
+  and from the file, `ico_opt_shadow_waits` 1 for a Shadow while another attacks with the option
+  off and 0 with it on, the turns it skipped counted (200) and logged (the change line, the first
+  8, then the 100th and 200th, the line back off), and the source scans: `enemy_act.c`'s eleven
+  `EnemyUtil_isOtherStatus(self, 0)` callers, the game's scan renamed `EnemyUtil_isOtherStatus_disc`
+  and called once by the wrapper that returns its result only when the Shadow waits, and the
+  simulation key; `test_shadow_speed_motions` selects each of the seven discs and checks the motions Shadow speed scales (the walk, run, fly and carry loops by their motion-table names) and the ones it leaves (the stand, the fly start, the run's end, an attack, the grab, a hit, the dissolve, the pit dive; review finding 15); the gameplay options' defaults and setters (Hold type: the disc's own by default, `toggle`
   from the file, an unknown word as the disc's own; `test_hold_discs` selects each of the seven
   discs and checks the resolve: A on pal/jpn/kor/cn, B on ntsc/aug6/jun26 for no key, `"disc"`, a
   bare `"hold"` and `hold_type_chosen = false`, A for a chosen `"hold"`, B for `"toggle"`, and the
@@ -546,7 +552,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `key=saved (now cur)` text on a short buffer too; a key the saved text lacks read as its default
   (equal unset or at the default, `key=(absent) (now cur)` otherwise; only unset for a key without
   one fixed default); every key's default (`ico_sim_key_default`, `ico_sim_key_is_default`), and
-  the first-run `config.toml` writing every listed key it holds at that default (`sim_keys`).
+  the first-run `config.toml` writing every listed key it holds at that default (`sim_keys`); a
+  state saved before `gameplay.shadows_together` existed equal with the option off and differing
+  (`gameplay.shadows_together=(absent) (now true)`) with it on.
 - `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 and the
   Continue screen's Square prompt ([UI.md](UI.md#save-states)), the pictures' box at their own
   shape, and F6 (the page from play and from the pause menu, back to the game, a late press, each
@@ -2395,8 +2403,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   registered listener hears the current value, Right turns it on with one call and sets
   `gameplay.second_memory_card`, the saved file has it, its note shows on the cursor, Left turns
   it off with one more call; the cleared page still fits. `settings_test.c`'s `testBuild` reads
-  the Gameplay page's twelve rows, `testGameOptions` nine Downs from Yorda to Film effect, and
+  the Gameplay page's thirteen rows, `testGameOptions` ten Downs from Yorda to Film effect, and
   `settings_discs` (every disc) shows the row from both entries.
+- `settings_extra_test.c`'s `testShadowsTogether`: Options > Gameplay > Shadows attack together
+  from the title and the pause menu, right after Shadow speed and before the stick fix, Off by
+  default; Right turns it on (`ico_opt_shadows_together`, and a Shadow does not wait:
+  `ico_opt_shadow_waits(1)` is 0) and sets `gameplay.shadows_together`, the saved file has it,
+  its note shows on the cursor, Left turns it off (the game's turns again); the cleared page still
+  fits. `settings_discs` shows the row on every disc from both entries.
 - `settings_extra_test.c`'s `testScroll` (the Options window, [UI.md](UI.md#the-window)): Controls
   from the pause menu, with a touch screen, opens at the top with the down mark only (Effects and Display fit in the window and do not scroll); Down on the window's last row scrolls one
   row, Up on its first scrolls back; Up on the first row wraps to Back and Up on Back shows the end

@@ -423,7 +423,7 @@ The six mouse rows do not show on phones and tablets.
 
 ## Gameplay
 
-The first five are off unless you turn them on, on a phone too.
+Every row here plays as the original until you change it, on a phone too.
 
 - **Shadows never take Yorda** makes the game gentler. A few scenes in the
   story still show her being taken.
@@ -441,6 +441,13 @@ The first five are off unless you turn them on, on a phone too.
   speed. It does not change how often they attack, how long they wait before
   they do, or how long a shadow takes to pull Yorda into a pit (Time to rescue
   Yorda sets that).
+- **Shadows attack together** lets several shadows attack Ico at the same
+  time. In the original game they take turns: while one shadow is attacking,
+  the others hold back and wait. With this on, none of them waits for the
+  others. How they come at you, how long they wait before they strike and how
+  they go after Yorda stay as in the original, and still only one shadow at a
+  time can carry Yorda away (several can already go after her at once). It
+  takes effect at once. Off unless you turn it on.
 - **Analogue stick fix** lets Ico run in any direction you push the stick,
   not only the eight the original game knows. It is also on the Controls
   page, and it is the same switch.

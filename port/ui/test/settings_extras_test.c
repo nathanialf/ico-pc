@@ -600,7 +600,7 @@ static void testCharactersRestart(void)
         {
             /* the first run's lines kept, [characters] added */
             FILE *f = fopen(p, "rb");
-            char text[8192];
+            char text[16384]; /* the first-run text is 8.7 KB; [characters] follows it */
             size_t got = f ? fread(text, 1, sizeof(text) - 1, f) : 0;
             text[got] = '\0';
             if (f) {

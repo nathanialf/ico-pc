@@ -35,7 +35,9 @@ endif()
 # yorda_safe hook, and pit_time's ratio and its four hooks in enemy_act.c (a text scan),
 # and shadow_speed's hook in act-game.c, its three pushes in commonact.c and its record key in
 # main_host.c (text scans), and yorda_trips' four hooks in girl_act.c (this disc's mail
-# among them), its two in icoMisc.c and its simulation key (text scans).
+# among them), its two in icoMisc.c and its simulation key (text scans), and shadows_together's
+# answer, count and log lines, its hook and eleven callers in enemy_act.c and its simulation key
+# (text scans).
 add_executable(options_test test/options_test.c ../platform/host_config.c)
 ico_include_dirs(omori _ico_options_incs)
 target_include_directories(options_test PRIVATE ${_ico_options_incs}

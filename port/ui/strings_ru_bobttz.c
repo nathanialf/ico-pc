@@ -579,6 +579,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_OPT_SKIP_OPENING] = "Пропуск вступительной заставки",
     [UI_STR_OPT_SKIP_OPENING_NOTE] =
         "Игра начинается со стартового экрана, без логотипа Sony и вступительной сцены. Изменения вступят в силу при следующем запуске.",
+    [UI_STR_OPT_SHADOWS_TOGETHER] = NULL,      /* newer than the CSV: English */
+    [UI_STR_OPT_SHADOWS_TOGETHER_NOTE] = NULL, /* newer than the CSV: English */
     [UI_STR_OPT_AA] = "Сглаживание",
     [UI_STR_OPT_AA_NOTE] =
         "Сглаживает края. Суперсэмплинг рендерит в 4 раза (2x) или в 16 раз (4x) больше пикселей; снизьте значение, если счётчик кадров упадет до 30.",

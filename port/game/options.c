@@ -21,6 +21,8 @@ static int s_stick_fix = -1;
 static int s_yorda_safe = -1;
 static int s_door_fix = -1;
 static int s_yorda_trips = -1;
+static int s_shadows_together = -1;
+static unsigned long s_shadows_together_went; /* the turns the option skipped, this run */
 static int s_natural_chains = -1;
 static int s_skip_opening = -1;
 static int s_second_card = -1;
@@ -251,6 +253,55 @@ void ico_opt_set_yorda_trips(int on)
         fprintf(stderr, "gameplay: yorda trips %s\n", on ? "on" : "off");
     }
     s_yorda_trips = on != 0;
+}
+
+static void log_shadows_together(int on)
+{
+    if (on) {
+        fprintf(stderr, "gameplay: shadows attack together: all at once (no turns)\n");
+    } else {
+        fprintf(stderr, "gameplay: shadows attack together: 1 at once (the game's turns)\n");
+    }
+}
+
+int ico_opt_shadows_together(void)
+{
+    if (s_shadows_together < 0) {
+        s_shadows_together = ico_config_get_bool("gameplay.shadows_together", 0) != 0;
+        log_shadows_together(s_shadows_together);
+    }
+    return s_shadows_together;
+}
+
+void ico_opt_set_shadows_together(int on)
+{
+    if ((on != 0) != s_shadows_together) {
+        log_shadows_together(on != 0);
+    }
+    s_shadows_together = on != 0;
+}
+
+int ico_opt_shadow_waits(int other_attacking)
+{
+    if (!other_attacking) {
+        return 0;
+    }
+    if (!ico_opt_shadows_together()) {
+        return 1; /* the game's turn */
+    }
+    s_shadows_together_went++;
+    if (s_shadows_together_went <= 8 || s_shadows_together_went % 100 == 0) {
+        fprintf(stderr,
+                "gameplay: shadows attack together: a shadow did not wait for another's attack "
+                "(%lu this run)\n",
+                s_shadows_together_went);
+    }
+    return 0;
+}
+
+unsigned long ico_opt_shadows_together_went(void)
+{
+    return s_shadows_together_went;
 }
 
 int ico_opt_natural_chains(void)
@@ -727,6 +778,7 @@ void ico_opt_reload(void)
     s_stick_fix = s_yorda_safe = s_door_fix = s_mirror = s_developer_mode = s_circle_back = -1;
     s_pit_time = s_shadow_speed = -1;
     s_natural_chains = s_skip_opening = s_yorda_trips = s_second_card = -1;
+    s_shadows_together = -1;
     s_output = -2;
     s_ui_language = -2;
     s_text_language = -2;

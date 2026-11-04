@@ -589,6 +589,9 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_SECOND_CARD] = "Second memory card",
     [UI_STR_OPT_SECOND_CARD_NOTE] =
         "Off: one memory card, as the original. On: a second card with ten more saves; the game’s save and load screens offer both.",
+    [UI_STR_OPT_SHADOWS_TOGETHER] = "Shadows attack together",
+    [UI_STR_OPT_SHADOWS_TOGETHER_NOTE] =
+        "Off: as the original, the shadows take turns to attack. On: several shadows may attack at the same time.",
     [UI_STR_OPT_AA] = "Anti-aliasing",
     [UI_STR_OPT_AA_NOTE] =
         "Smooths jagged edges. Supersampling draws 4 times (2x) or 16 times (4x) the pixels; lower it if the counter drops to 30.",

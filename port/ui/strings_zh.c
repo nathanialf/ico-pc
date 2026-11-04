@@ -580,6 +580,9 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_SECOND_CARD] = "第二張記憶卡",
     [UI_STR_OPT_SECOND_CARD_NOTE] =
         "關：與原作相同，只有一張記憶卡。開：第二張記憶卡可再保存10個遊戲進度，遊戲的保存與讀取畫面會同時提供兩張。",
+    [UI_STR_OPT_SHADOWS_TOGETHER] = "影子同時攻擊",
+    [UI_STR_OPT_SHADOWS_TOGETHER_NOTE] =
+        "關：與原作相同，影子一個接一個攻擊。開：多個影子可以同時攻擊。",
     [UI_STR_OPT_AA] = "抗鋸齒",
     [UI_STR_OPT_AA_NOTE] =
         "讓鋸齒狀的邊緣變平滑。超取樣會繪製 4 倍（2x）或 16 倍（4x）的像素；若計數器降為 30，請改小。",

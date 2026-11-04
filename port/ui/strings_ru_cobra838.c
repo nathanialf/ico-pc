@@ -577,8 +577,10 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_OPT_SKIP_OPENING] = "Пропустить вступление",
     [UI_STR_OPT_SKIP_OPENING_NOTE] =
         "Игра запускается с главного меню, без логотипа Sony и вступительной сцены. Изменение вступит в силу при следующем запуске.",
-    [UI_STR_OPT_SECOND_CARD] = NULL,      /* newer than his table: English */
-    [UI_STR_OPT_SECOND_CARD_NOTE] = NULL, /* newer than his table: English */
+    [UI_STR_OPT_SECOND_CARD] = NULL,           /* newer than his table: English */
+    [UI_STR_OPT_SECOND_CARD_NOTE] = NULL,      /* newer than his table: English */
+    [UI_STR_OPT_SHADOWS_TOGETHER] = NULL,      /* newer than his table: English */
+    [UI_STR_OPT_SHADOWS_TOGETHER_NOTE] = NULL, /* newer than his table: English */
     [UI_STR_OPT_AA] = "Сглаживание",
     [UI_STR_OPT_AA_NOTE] =
         "Сглаживает зубчатые края. Суперсэмплинг увеличивает число пикселей в 4 (2x) или 16 (4x) раз. При падении FPS до 30 снизьте значение.",
