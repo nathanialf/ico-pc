@@ -57,6 +57,7 @@
 #include <string.h>
 #include "rd.h"
 #include "rhi.h"
+#include "rd_submit_queue.h"
 #include "rd_thread.h"
 #include "rd_camera_blend.h"
 #include "../include/ico_frame.h"
@@ -3663,7 +3664,12 @@ void rd__perf_end(void);
  * the record still being made or the one pending in its frame slot;
  * nothing once that record was queued.  On the thread that waited for the
  * submit thread, the render thread idle or the caller */
-void rd__perf_submit_times(uint32_t replay, double submitMs, double presentMs);
+void rd__perf_submit_times(const RdSubmitJob *j);
+/* The calling thread's present just made, timed apart (rhi.h
+ * rhi_present_split) into j's present fields (rd_submit_queue.h
+ * RdSubmitJob.presentSplit ...), presentEndMs now; presented false: the
+ * fields zeroed (nothing was presented) */
+void rd__present_split_take(RdSubmitJob *j, bool presented);
 void rd__perf_stamp(RhiCommandList cl, uint32_t index);
 /* the walk's end (the vertex pre-pass and the lists recorded, the present
  * recorded): the slow walk line counts the pipelines and creations from

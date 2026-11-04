@@ -26,9 +26,12 @@ const char *window_fifo_words(void);
 /* window_host.c present_blocked: a present's time in the driver's present
    call (over 50 ms) noted now; over 250 ms the line naming the driver
    (issue 123: 363-583 ms in Qualcomm's vkQueuePresentKHR; replay and the
-   frame rate's name for it); the switch's line (the switch itself at the
-   step's end) or the kept line once */
-void window_fifo_note(double presentMs, unsigned replay, const char *framerateName);
+   frame rate's name for it, and after ": " `split`, the call timed apart
+   and the replay's GPU span, window_stall.h window_stall_split); the
+   switch's line (the switch itself at the step's end) or the kept line
+   once */
+void window_fifo_note(double presentMs, unsigned replay, const char *framerateName,
+                      const char *split);
 /* ico_window_pace at the step's end: the switch present_blocked asked for,
    the swapchain made again at its own size (rd_resize_output, as
    video_apply on a present mode change) and the present mode line again;

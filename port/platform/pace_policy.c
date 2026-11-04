@@ -809,9 +809,10 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs)
     return median(h);
 }
 
-void pace_gpu_gap_add(PaceGpuGap *g, uint64_t spanNs, int64_t gapNs)
+void pace_gpu_gap_add(PaceGpuGap *g, uint64_t spanNs, int64_t gapNs, unsigned skipped)
 {
     g->n++;
+    g->across += skipped != 0;
     g->spanNs += spanNs;
     if (gapNs > PACE_GPU_IDLE_NS) {
         g->idle++;
@@ -825,8 +826,18 @@ void pace_gpu_gap_add(PaceGpuGap *g, uint64_t spanNs, int64_t gapNs)
     }
 }
 
+void pace_gpu_gap_stall(PaceGpuGap *g, int64_t gapNs)
+{
+    if (g->stalls < PACE_GPU_GAP_STALLS) {
+        g->stallNs[g->stalls] = gapNs;
+    }
+    g->stalls++;
+}
+
 int pace_gpu_gap_text(const PaceGpuGap *g, char *out, unsigned len)
 {
+    char across[64] = "", stalls[192] = "";
+
     if (len != 0) {
         out[0] = '\0';
     }
@@ -835,15 +846,42 @@ int pace_gpu_gap_text(const PaceGpuGap *g, char *out, unsigned len)
     }
     const double n = (double)g->n;
 
+    if (g->across != 0) {
+        snprintf(across, sizeof across, "; %u of them timed across untimed replays", g->across);
+    }
+    if (g->stalls != 0) {
+        const unsigned kept = g->stalls < PACE_GPU_GAP_STALLS ? g->stalls : PACE_GPU_GAP_STALLS;
+        size_t at;
+
+        if (g->stalls > PACE_GPU_GAP_STALLS) {
+            snprintf(stalls, sizeof stalls,
+                     "; across the first %u of the %u stalls: the GPU was idle ", kept, g->stalls);
+        } else {
+            snprintf(stalls, sizeof stalls, "; across the %u stall%s: the GPU was idle ", g->stalls,
+                     g->stalls == 1 ? "" : "s");
+        }
+        at = strlen(stalls);
+        for (unsigned i = 0; i < kept && at < sizeof stalls; i++) {
+            const int w = snprintf(stalls + at, sizeof stalls - at, "%s%.1f", i ? ", " : "",
+                                   (double)g->stallNs[i] / 1e6);
+            if (w < 0) {
+                break;
+            }
+            at += (size_t)w;
+        }
+        if (at < sizeof stalls) {
+            snprintf(stalls + at, sizeof stalls - at, " ms before the next replay");
+        }
+    }
     return snprintf(out, len,
                     "%u timed replays after the one before: the GPU idle before %u of them (%.1f "
                     "ms on average, the longest %.1f ms), %u begun before the one before ended "
                     "(by %.1f ms on average: their spans count that end too); the GPU's time a "
-                    "replay past the one before's end %.2f ms, its span %.2f ms",
+                    "replay past the one before's end %.2f ms, its span %.2f ms%s%s",
                     g->n, g->idle, g->idle != 0 ? ns_ms(g->idleNs) / g->idle : 0.0,
                     ns_ms(g->idleMaxNs), g->overlap,
                     g->overlap != 0 ? ns_ms(g->overlapNs) / g->overlap : 0.0,
-                    ns_ms(g->spanNs - g->overlapNs) / n, ns_ms(g->spanNs) / n);
+                    ns_ms(g->spanNs - g->overlapNs) / n, ns_ms(g->spanNs) / n, across, stalls);
 }
 
 /* the present allowance (pace_policy.h PaceBudget) */

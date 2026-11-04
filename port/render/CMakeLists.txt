@@ -109,6 +109,13 @@ add_executable(rd_pipe_finish_test test/rd_pipe_finish_test.c)
 target_compile_options(rd_pipe_finish_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(rd_pipe_finish_test PRIVATE ico_pipe_finish)
 
+# rd_perf_gap_test: the GPU's time between two timed replays (rd_perf_gap.h,
+# issue 123): kept across untimed replays and counted, refused past 60 s, the
+# first replay and a restart without one, a gap under 0 kept (CPU only)
+add_executable(rd_perf_gap_test test/rd_perf_gap_test.c rd_perf_gap.c)
+target_include_directories(rd_perf_gap_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(rd_perf_gap_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+
 # rd_submit_queue_test: the submit thread's queue (rd_submit_queue.h): jobs
 # in order, at most RD_SUBMIT_DEPTH queued and running, the running job
 # counted until it finishes, the finished times taken oldest first (the
@@ -152,6 +159,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_cache_name COMMAND rd_cache_name_test)
     add_test(NAME rd_pipe_finish COMMAND rd_pipe_finish_test)
     add_test(NAME rd_submit_queue COMMAND rd_submit_queue_test)
+    add_test(NAME rd_perf_gap COMMAND rd_perf_gap_test)
     add_test(NAME gltf COMMAND gltf_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME texpack_disc COMMAND texpack_disc_test "${ICO_DISC_IMAGE}" "${ICO_TEXPACK_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
@@ -203,6 +211,7 @@ add_library(ico_render STATIC
     rd_content_chain.c # Natural chains: the chains a stage animation lets down
     modelpack.c # model packs, the index, the glTF conversion, the dump
     rd_perf.c # per-replay performance records
+    rd_perf_gap.c # the GPU's time between timed replays (pure)
     rd_pixel_plan.c # the VU pixel side at a fractional scale
     rd_pipeline.c
     rd_png.c

@@ -245,6 +245,13 @@ bool rhi_present_shown(void)
     return s_presentShown;
 }
 
+/* rhi.h: the present is not timed apart here */
+bool rhi_present_split(RhiPresentSplit *out)
+{
+    memset(out, 0, sizeof(*out));
+    return false;
+}
+
 /* rhi.h: the frame latency wait stays in the acquire (the submit thread
  * presents here, port/render/rd_submit_thread.h) */
 bool rhi_wait_present_room(void)

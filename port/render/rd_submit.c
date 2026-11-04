@@ -110,11 +110,24 @@ void rd__submit_frame(RhiCommandList cl, bool present, double walkStart, double 
     rhi_submit(cl);
     g_rdPerf.submitMs = (t1 = rd__now_ms()) - t;
     t = t1;
+    const bool shows = present && rd__present_will_show(); /* rhi_present is called */
     if (present) {
         rd__present_finish();
         rd__capture_finish(); /* a capture this present copied */
     }
     g_rdPerf.presentMs = rd__now_ms() - t;
+    {
+        /* the present timed apart, as the submit thread's (rd_submit_thread.c tail) */
+        RdSubmitJob sj;
+        memset(&sj, 0, sizeof(sj));
+        sj.replay = g_rdPerf.replay;
+        rd__present_split_take(&sj, shows);
+        g_rdPerf.presentSplit = (uint8_t)sj.presentSplit;
+        g_rdPerf.presentLockMs = sj.presentLockMs;
+        g_rdPerf.presentCallMs = sj.presentCallMs;
+        g_rdPerf.presentPollMs = sj.presentPollMs;
+        g_rdPerf.presentEndMs = sj.presentEndMs;
+    }
     if (present) {
         /* the window's hold on further presents while they wait (rd_thread.h) */
         rd__thread_note_present(g_rdPerf.presentMs);

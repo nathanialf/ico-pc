@@ -21,7 +21,9 @@ are [RHI.md](RHI.md).
 | `port/platform/window_present_fallback.h`, `window_present_fallback.c` | the window's side of the FIFO fallback: the gate, the switch, the lines |
 | `port/platform/display_rate.h`, `display_rate.c` | the refresh rate's log lines and the frame rate pin's decisions, free of SDL ([The refresh rate and the frame rate pin](#the-refresh-rate-and-the-frame-rate-pin)) |
 | `port/platform/window_display_rate.h`, `window_display_rate.c` | the window's side: SDL's display mode in the log, the Android pin through the NDK |
-| `port/platform/present_hist.h`, `present_hist.c` | the 10 s block's histogram of the driver's present call (over 20, 50, 100 and 300 ms) |
+| `port/platform/present_hist.h`, `present_hist.c` | the 10 s block's histogram of the driver's present call (over 20, 50, 100 and 300 ms); the texts of the lines around a present that blocked (its split, the replay after it) |
+| `port/platform/window_stall.h`, `window_stall.c` | the window's lines around a present that blocked (issue 123), from the replays' records as they pop; the kernel GPU driver's lines on Android |
+| `port/platform/gpu_sysfs.h`, `gpu_sysfs.c` | the kernel GPU driver's nodes, the pure part: the parser, the ring of samples, the block and around reductions, the lines ([PLATFORM.md](PLATFORM.md#diagnostics) has the sampler) |
 | `port/platform/window_disc.h`, `window_disc.c` | the window's side of the disc reader: the step's disc wait for the present allowance, the 10 s disc line |
 | `port/platform/window_blended.h`, `window_blended.c` | F12's blended present's frame: the arm after F12's zip (a result still to collect collected first) and the move into it |
 | `port/platform/display_clock.h` | the vblank clock's interface |
@@ -475,7 +477,54 @@ X)` (`perf_log`; issue 123: the Adreno 740 on Qualcomm's driver spent 363-583 ms
 `vkQueuePresentKHR`). Both read the replay records' present time (`perf_drain`); nothing new is
 timed. Under mailbox with vsync off the 10 s line ends with the [FIFO fallback](#the-fifo-fallback)'s
 count, `; k of 3 over 200 ms in 30 s toward FIFO`, and after its switch with `; K since presents went
-FIFO N s ago` (K: the presents over 50 ms since). A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
+FIFO N s ago` (K: the presents over 50 ms since).
+
+The blocked line goes on past its parenthesis with the present timed apart (issue 123;
+`rhi_present_split`, Vulkan; `RdPerfRecord.presentLockMs`, `presentCallMs`, `presentPollMs`,
+carried from the submit thread's job, `RdSubmitJob`) and the replay's GPU numbers: `: inside
+vkQueuePresentKHR 351.6 ms, the swapchain lock 0.0 ms, the surface poll 0.0 ms; the replay's GPU
+span 71.3 ms against the block's 27.0 ms so far, the GPU idle 0.4 ms before it`
+(`present_split_text`). Elsewhere the first part reads `the call not timed apart on this graphics
+API`; a replay without timestamps `the replay's GPU span not timed`; the first timed replay of a
+block `(the block's first timed replay)`; a first stamp written before the replay before ended
+`begun X ms before the one before ended`. The record popped after any present over 50 ms writes
+`window: after the present that blocked (replay N, 352 ms): replay N+1 waited 0.3 ms for its frame
+slot (fence 0.2), acquired its image in 298.7 ms, GPU span 26.9 ms, the GPU idle 301.2 ms before
+it` (the first 8, then every 100th; `present_after_text`, `port/platform/window_stall.c`). Read
+together: the call holding the whole time with the lock and the poll near 0 puts the wait inside
+the driver; a stalled replay's GPU span far over the block's is the GPU running slow while the
+present waited (a clock drop, another GPU client); a GPU idle about as long as the stall before the
+next replay is the queue draining behind the present, the driver waiting on something other than
+this replay's work.
+
+On Android the kernel GPU driver's state is sampled every 250 ms ([PLATFORM.md](PLATFORM.md#diagnostics);
+`port/platform/gpu_sysfs.h`, `port/platform/window_stall.c`), and three lines come from it. At the
+window's open, once a run: `window: kernel GPU driver: /sys/class/kgsl/kgsl-3d0: readable gpuclk,
+gpu_busy_percentage, reset_count (3 so far), thermal_pwrlevel, ...; not readable temp (EACCES); not
+present clock_mhz, devfreq/cur_freq; the fastest clock 905 MHz, power levels 0 (fastest) to 8;
+sampled every 250 ms`, or `... kgsl-3d0: not readable (EACCES)` (every node denied: nothing
+sampled) or `... kgsl-3d0 not present` (not a Qualcomm GPU). Each 10 s block, after the `present
+calls` line: `window: kernel GPU driver: clock 285-905 MHz (average 612) over 40 samples, busy 71 %
+on average, resets 0 in the block (3 in all), thermal power level at most 0` (a temperature where
+`temp` is readable). For every present that blocked over 50 ms, once the sample after it came (or a
+second passed): `window: kernel GPU driver around the present that blocked (replay N): 0.12 s
+before: clock 905 MHz, busy 74 %, resets 3, thermal power level 0; 1 during: clock 285 MHz, busy 9
+%, resets 3; 0.03 s after: clock 285 MHz, busy 12 %, resets 3, thermal power level 0` (the first 8,
+then every 100th; the parts whose node is not readable left out). Nothing is written on other
+platforms. How the lines tell the stall's causes apart, from one log:
+
+| Reading | the GPU's clock or a thermal step | another GPU client | a GPU fault's recovery | the driver's present path | the screen recorder |
+| --- | --- | --- | --- | --- | --- |
+| clock before / after the stall | drops (905 to 285 MHz), thermal level above 0 | unchanged | unchanged | unchanged | unchanged |
+| busy during | high | high | any | low | low to moderate |
+| resets | none | none | one more per stall | none | none |
+| the stalled replay's passes | all about 3x | one or a few grown | one by hundreds of ms | mildly, alike | mildly |
+| the stalled replay's first pass against the others (`the first pass X ms (the block's Y: it waits for the display's image), the other N timed passes Z ms`) | the others grown too | the others grown in places | one later pass grown by hundreds of ms | the first pass grown alone: the display held the image | the first pass grown alone |
+| the GPU idle before the next replay | small | small | large | about the stall | about the stall |
+| the present's split | the call holds it | the call holds it | the call holds it | the call, lock and poll near 0 | the call holds it |
+| `[dev] render_thread` / `submit_thread` = off | unchanged | unchanged | unchanged | the stall's length or period changes | unchanged |
+
+A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
 is above the display's X Hz: presenting once a refresh (mailbox)` once after each settings change
 (`port/platform/window_present.c` (`pace`)).
 
@@ -579,7 +628,7 @@ plan's means per replay, `; stores: N depth and M colour stores dropped a replay
   there is where the work ended and not its own cost ([RENDER.md](RENDER.md#the-per-pass-timing));
   the top passes line and the total are the numbers to compare, and a reporter on such a device
   should not be asked to explain the lists' split. The GPU ms per replay and top passes lines end with that sentence on a tile-based GPU, and say that the first pass that writes colour carries the wait for the display's image: the Vulkan acquire's wait (`COLOR_ATTACHMENT_OUTPUT`) holds every colour write of the replay's batch, not only the window's image, so it lands in uploads when new targets are cleared first and otherwise in list 0's first pass (a phone at the Original preset in play: uploads 0.53 ms, list 0 6.91 of 14.76).
-- `window: GPU between replays: N timed replays after the one before: the GPU idle before I of them (A ms on average, the longest L ms), K begun before the one before ended (by O ms on average: their spans count that end too); the GPU's time a replay past the one before's end E ms, its span S ms`: each replay's first stamp against the replay before's last (`RdPerfRecord.gpuGapNs`, the same GPU clock; `PaceGpuGap`, `pace_gpu_gap_text`). Every Vulkan stamp is bottom-of-pipe, written once the earlier commands are done, so K is 0 on a driver that keeps the rule and a span then holds its replay's whole GPU time, any wait inside the replay (the display's image) included: that is the time from the replay's start on the GPU to its fence, what the step rule's pipe needs. K above 0 is a driver that writes the first stamp early: the spans count the replay before's end too and E is the GPU's own time a replay, the one to compare with the span the rule reads. I is the GPU waiting for the CPU's submissions.
+- `window: GPU between replays: N timed replays after the one before: the GPU idle before I of them (A ms on average, the longest L ms), K begun before the one before ended (by O ms on average: their spans count that end too); the GPU's time a replay past the one before's end E ms, its span S ms`: each replay's first stamp against the replay before's last (`RdPerfRecord.gpuGapNs`, the same GPU clock; `PaceGpuGap`, `pace_gpu_gap_text`). Every Vulkan stamp is bottom-of-pipe, written once the earlier commands are done, so K is 0 on a driver that keeps the rule and a span then holds its replay's whole GPU time, any wait inside the replay (the display's image) included: that is the time from the replay's start on the GPU to its fence, what the step rule's pipe needs. K above 0 is a driver that writes the first stamp early: the spans count the replay before's end too and E is the GPU's own time a replay, the one to compare with the span the rule reads. I is the GPU waiting for the CPU's submissions. A replay's gap is measured from the timed replay before it across any replays without timestamps between (their GPU work then inside it; refused only past 60 s), and when any were, the line goes on `; C of them timed across untimed replays`; the gaps of the replays right after a present that blocked over 50 ms are listed too, `; across the 3 stalls: the GPU was idle 301.2, 298.0, 310.5 ms before the next replay` (the first 8 of a block, `the first 8 of the 11 stalls` past them; a negative one is a replay begun before the stalled one ended) (issue 123; `rd_perf_gap.h`, `pace_gpu_gap_stall`, `port/platform/window_stall.c`). A gap about the stall's length is a GPU that sat idle while the present blocked: the wait was not this picture's GPU work. From the first such present on every replay is timed pass by pass and a stalled replay gets `window: stalled replay N (...)` ([RENDER.md](RENDER.md#the-per-pass-timing)).
 - `window: per replay ...`: the counts (draws, passes, pipeline and bind group binds, barriers,
   copies, uploads, DATE snapshots). After the binds, `(repeats skipped: X pipeline, Y bind group, Z
   state)`: the binds and state sets the RHI found already in force and recorded nothing for

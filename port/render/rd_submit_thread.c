@@ -62,13 +62,14 @@ static void tail(RdSubmitJob *j)
         rhi_present();
     }
     j->presentMs = rd__now_ms() - t1;
+    rd__present_split_take(j, j->present);
 }
 
 /* a finished job's times into its replay's record and the render thread's
    block (on the thread that waited for it) */
 static void apply(const RdSubmitJob *j)
 {
-    rd__perf_submit_times(j->replay, j->submitMs, j->presentMs);
+    rd__perf_submit_times(j);
     rd__thread_note_submit(j->submitMs + j->presentMs);
 }
 
@@ -192,8 +193,8 @@ bool rd__submit_thread_start(void (*begin)(void *user), void *user)
         return false;
     }
     rd__log("submit thread: on (the pictures handed to the render thread are submitted and "
-            "presented on a thread of their own, %s; ICO_RD_SUBMIT_THREAD=0 keeps them on the "
-            "render thread)",
+            "presented on a thread of their own, %s; [dev] submit_thread = false "
+            "(ICO_RD_SUBMIT_THREAD=0) keeps them on the render thread)",
             rhi_backend_kind_name(rhi_backend()));
     if (s_st.apart) {
         static const RhiSlotGuard guard = {NULL, slotFree, slotPending, slotWorker};

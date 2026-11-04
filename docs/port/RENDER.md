@@ -43,6 +43,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_screen_planes.c` | the attribute planes of screen-prim triangles |
 | `port/render/rd_camera_blend.h` | the blended camera, shared with the game's cull |
 | `port/render/rd_perf.c` | the per-replay performance records |
+| `port/render/rd_perf_gap.h`, `rd_perf_gap.c` | the GPU's time between two timed replays, across untimed ones (pure) |
 | `port/render/rd_vis.c`, `rd_vis.h` | the scene draws' visibility test: a mesh, skinned or grid command wholly off its target or behind the eye replayed as an `RDC_NOP` of a shadow frame ([Culling](#culling)) |
 | `port/render/rd_vis_hiz.c` | its occlusion test (`[dev] cull = full`): a record of list 0's depth from the opaque draws' exact triangles, and a mesh or grid draw of list 0 wholly behind it replayed as an `RDC_NOP` ([Culling](#culling)) |
 | `port/render/rd_occlusion.c` | every GPU draw of a replay (`rd__replay_draw`, `rd__replay_draw_indexed`: the pass window's take) and the hidden-draw measurement around them ([Culling](#culling)) |
@@ -1615,6 +1616,19 @@ into its 10 s statistics line, and `[dev] perf_log` writes one line per replay
 ([DISPLAY.md](DISPLAY.md#the-perf-csv)). The [replay tool](ARCHITECTURE.md#terms)'s `--stats` prints
 the same record.
 
+The record also carries the GPU's time before its replay (`gpuGapNs`: its first stamp less the
+last stamp of the timed replay before it, the same GPU clock) and, issue 123, how many replays
+without timestamps came between (`gpuGapSkipped`: a record whose slot was recycled before its stamps
+were read is queued without them, and those are the stall's neighbours); the gap is kept across
+them, then holding their GPU work too, and refused only past 60 s either way (`rd_perf_gap_step`,
+`port/render/rd_perf_gap.h`; a new device starts it again). The present is timed apart where the
+backend can (`presentSplit`, `presentLockMs`, `presentCallMs`, `presentPollMs`: the swapchain
+lock's wait, `vkQueuePresentKHR`, the surface poll, `rhi_present_split` on Vulkan) with its end on
+the renderer's monotonic clock (`presentEndMs`, the clock of `startMs` and of the window's kernel
+GPU driver samples), carried from the submit thread's job (`RdSubmitJob`, `rd__perf_submit_times`)
+or filled by the render thread's own present (`rd__present_split_take`). The window's lines around
+a present that blocked read them ([DISPLAY.md](DISPLAY.md#the-stats-lines)).
+
 A present's interpolation time (`interpMs`) is measured around `rd__interp_frame` by `rd_present`
 and charged to the replay that follows (`port/render/rd_perf.c` (`rd__perf_interp_ms`);
 `port/render/rd_interp.c` (`rd_present`)); every present does all of its work at its alpha.
@@ -1709,8 +1723,12 @@ passes").
 
 Which replays are timed: every replay with `[dev] perf_passes = true` (`ICO_RD_PERF_PASSES=1`,
 [CONFIG.md](CONFIG.md)); otherwise the first replay at least 250 ms after the last timed one
-(`RD_PERF_PASS_EVERY_MS`), at most 40 in a 10 s block, for the window's summary. Not on iOS (as
-the effect stamps). At start the renderer says which:
+(`RD_PERF_PASS_EVERY_MS`), at most 40 in a 10 s block, for the window's summary, until the first
+present that blocks over 50 ms (issue 123): from then on every replay is timed for the rest of the
+run (`rd_perf_passes_arm`, no CSV; the window says so once, `window: every replay timed pass by
+pass from here (a present blocked 359 ms at replay 2941): the next stalled replay's passes are
+compared with the block's`), so the next stalled replay has its pieces. Not on iOS (as the effect
+stamps). At start the renderer says which:
 
 ```
 rd: GPU pass timing: one replay every 250 ms, each pass timed apart, for the 10 s summary; [dev] perf_passes = true times every replay
@@ -1728,7 +1746,24 @@ window: passes per replay 47.0: render passes 32.0 (lists 9.0, reduction 1.0, fo
 window: CPU walk ms per replay by list 0-12: 1.10 0.05 ... 0.20; uploaded KB per replay: textures 57, meshes 27 (interpolated 20), uniform blocks 820, VU streams 30, other 61
 ```
 
-(the numbers show the fields, not a measurement). The top passes are the timed replays' pieces
+(the numbers show the fields, not a measurement). A timed replay whose present blocked over 50 ms
+also gets, before its pieces join the block's, `window: stalled replay 2941 (present 352 ms, GPU
+71.3 ms against the block's 27.0): the first pass 52.1 ms (the block's 1.2: it waits for the
+display's image), the other 46 timed passes 27.0 ms (the block's 25.8); list 0 SCENE 3048x2032 52.1
+ms (the block's 1.2), ...; 31 of
+45 passes over 2x their block mean, the rest within 1.3x; 2 under 0.05 ms left out (16 timed
+replays in the block so far)` (the first 8, then every 100th; `rd_perf_pass_grow_text`,
+`rd_perf_pass_agg_mean`; `port/platform/window_stall.c`): its first render pass apart, since the
+GPU's wait for the display's image (the acquire's semaphore at the first colour write) lands inside
+that pass's stamps, against the other timed pieces summed with the sum of their block means (the
+first pass grown alone is the display holding the image, not a slow GPU), then its five most
+expensive pieces each with
+the block's mean of a piece like it (`(new to the block)` for one the block has none like), then
+how many of its pieces with a block mean of 0.05 ms or more took over twice that mean, and the
+largest ratio of the rest. Every piece grown about alike is the GPU running slow as a whole (its
+clock, another client between its passes); one or a few grown by hundreds of ms is one piece of
+work the GPU stopped in (a fault's recovery); none grown with the replay's span long is time
+outside the pieces, before the first (the display's image) or after the last. The top passes are the timed replays' pieces
 summed by what they are (label, target, size; the label is the effect for a render pass of one,
 `list N` for another render pass, else the kind), the five most expensive, each per timed replay
 with its passes (where it is not one a replay) and draws; the tail says how many pieces a replay
