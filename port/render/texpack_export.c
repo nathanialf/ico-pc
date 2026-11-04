@@ -18,6 +18,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "cpu_place.h"
 #include "host_fs.h"
 #include "rd_png.h"
 #include "rd_tex.h"
@@ -744,6 +745,8 @@ static int SDLCALL jobMain(void *arg)
     TexpackExportHooks h = {jobCancelled, jobProgress, NULL};
     TexpackExportStatus st;
     (void)arg;
+    /* the process's cores, not its creator's (cpu_place.h cpu_place_thread_free) */
+    (void)cpu_place_thread_free();
     (void)SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_LOW);
     int state = texpack_export_run(s_job.vfs, s_job.dir, s_job.serial, 0, &h, &st);
     jobStore(&st);

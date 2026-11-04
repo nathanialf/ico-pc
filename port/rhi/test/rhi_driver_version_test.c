@@ -161,21 +161,20 @@ int main(void)
     {
         /* one compile at a time (issue 188): the reporter's B-Series text at
            Vulkan 1.1 (the issue 188 log's device line, its driver part), the
-           driver name alone at 1.3, a Rogue at 1.1 (a made-up text of the
-           same shape); not the D-Series DXT-48 at 1.4 (the user's phone's
-           log), not another vendor naming a B-Series, not an unknown
-           version */
+           driver name alone at 1.3; not a Rogue at 1.1 (a made-up text of
+           the same shape: no source says it has the fault), not the
+           D-Series DXT-48 at 1.4 (the user's phone's log), not another
+           vendor naming a B-Series, not an unknown version */
         const char *g54 = "device 1010:35010101; driver PowerVR B-Series Vulkan Driver "
                           "1.15@6133110, version 1.473.1398";
         CHECK_STR(rhi_driver_compiler_serial(RHI_VENDOR_IMGTEC, g54, 1, 1), "PowerVR B-Series");
         CHECK_STR(
             rhi_driver_compiler_serial(RHI_VENDOR_IMGTEC, "PowerVR B-Series Vulkan Driver", 1, 3),
             "PowerVR B-Series");
-        CHECK_STR(rhi_driver_compiler_serial(RHI_VENDOR_IMGTEC,
-                                             "device 1010:22104218; driver PowerVR Rogue "
-                                             "Vulkan Driver 1.13@5776728",
-                                             1, 1),
-                  "PowerVR, Vulkan 1.1");
+        CHECK(rhi_driver_compiler_serial(RHI_VENDOR_IMGTEC,
+                                         "device 1010:22104218; driver PowerVR Rogue "
+                                         "Vulkan Driver 1.13@5776728",
+                                         1, 1) == NULL);
         CHECK(rhi_driver_compiler_serial(RHI_VENDOR_IMGTEC,
                                          "device 1010:71061212; driver PowerVR D-Series Vulkan "
                                          "Driver 26.1@7036548, version 1.693.3716",

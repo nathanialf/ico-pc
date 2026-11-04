@@ -1802,6 +1802,10 @@ static char act_bg_path[1024 + 16];
    (ico_diag_startup_stall_end); a start of another version deletes it */
 static char act_stall_path[1024 + 16];
 static int act_prev_stall;
+/* "-watchdog.txt": the mark of a run the watchdog ended with the main
+   thread not waiting for the GPU (ico_diag_startup_prev_watchdog) */
+static char act_wd_path[1024 + 16];
+static int act_prev_wd;
 static char act_prev_stall_note[sizeof activity];
 /* the previous run's mark (ico_diag_startup_activity_begin) */
 static int act_prev_background;
@@ -2554,6 +2558,43 @@ int ico_diag_startup_stall_end(void)
     return act_prev_stall;
 }
 
+/* ico_diag_startup_activity_begin: the watchdog mark read and deleted */
+static void watchdog_mark_read(void)
+{
+    char buf[sizeof act_version + 1 + 256];
+    char *nl;
+    size_t k;
+    FILE *f = act_wd_path[0] != '\0' ? ico_fopen(act_wd_path, "rb") : NULL;
+    if (f == NULL) {
+        return;
+    }
+    k = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[k] = '\0';
+    (void)ico_remove(act_wd_path);
+    nl = strchr(buf, '\n');
+    act_prev_wd = 1;
+    ico_diag_log("ico_pc: the previous run (version %.*s) was ended by the watchdog: %.*s",
+                 nl != NULL ? (int)(nl - buf) : (int)strcspn(buf, "\r"), buf,
+                 nl != NULL ? (int)strcspn(nl + 1, "\r\n") : 0, nl != NULL ? nl + 1 : "");
+}
+
+int ico_diag_startup_prev_watchdog(void)
+{
+    return act_prev_wd;
+}
+
+/* the watchdog mark written (the watchdog's thread, a main-thread end) */
+static void watchdog_mark_write(const char *reason)
+{
+    FILE *f;
+    if (act_wd_path[0] == '\0' || (f = ico_fopen(act_wd_path, "wb")) == NULL) {
+        return;
+    }
+    fprintf(f, "%s\n%.200s\n", act_version, reason != NULL ? reason : "");
+    (void)fclose(f);
+}
+
 const char *ico_diag_startup_activity_prev(void)
 {
     return act_prev;
@@ -2594,6 +2635,8 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_bg_path[0] = '\0';
     act_stall_path[0] = '\0';
     act_prev_stall = 0;
+    act_wd_path[0] = '\0';
+    act_prev_wd = 0;
     if (path == NULL || strlen(path) >= sizeof act_path) {
         return 0;
     }
@@ -2602,6 +2645,8 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_sibling(act_bg_path, sizeof act_bg_path, "-background.txt");
     act_sibling(act_stall_path, sizeof act_stall_path, "-stall.txt");
     stall_read();
+    act_sibling(act_wd_path, sizeof act_wd_path, "-watchdog.txt");
+    watchdog_mark_read();
     /* the previous run's background mark: its line, and the system's lines
        that came there (logged below unless the activity file has them) */
     static char bgbuf[ACT_BG_TEXT];
@@ -5247,7 +5292,11 @@ static const char *os_wait_name(void)
    ico_pipe_stall_limit_s.  On every driver the limit does not count while
    the process's memory grew by 2 MB or more since the last heartbeat (the
    compiler at work, gpu_hang.h ico_pipe_mem_moving: the issue 188 phone
-   went 147, 251, 275, 296 MB before it stood still). */
+   went 147, 251, 275, 296 MB before it stood still), for at most three
+   times the limit in one creation, and never with the free memory under
+   the floor or a low-memory level from the system (gpu_hang.h
+   ico_pipe_mem_hold: a call that never returns and keeps growing would
+   otherwise hold it until Android's low-memory killer ended the run). */
 static volatile int pipe_stall;
 /* the heartbeat's memory rule (watchdog thread): the last heartbeat's
    resident KB, whether it grew past the rule's step, by how much, and the
@@ -5292,24 +5341,41 @@ static void stall_mark_write(void)
    progress too, and its note counts only while some have not returned
    (ico_pipe_note_creating), so a movie or a load that presents no
    picture to take a finished batch is not a stall */
-static double pipe_stall_step(double now, int counted, const IcoDiagGpu *g)
+static double pipe_stall_step(double now, int counted, const IcoDiagGpu *g, double limit_s)
 {
     static IcoPipeStallWatch w;
+    static unsigned refused;
     const int creating = act_mode != 0 && ico_pipe_note_creating(activity, g->bg_pipes_left);
-    if (creating && pipe_mem_moving && pipe_mem_logged_beat != pipe_mem_beat &&
-        gpu_hang_limit_ms != 0) {
-        /* the compiler at work: the limit waits (issue 188) */
+    const int on = gpu_hang_limit_ms != 0;
+    /* the free memory under the floor, or the system's low-memory level:
+       read here, inside the creation, not only by the set between batches
+       (ico_diag_background_memory has no side effect on the set's stop) */
+    char low[128];
+    const int memoryLow =
+        creating && pipe_mem_moving && on && ico_diag_background_memory(low, sizeof low) != 0;
+    const int hold = ico_pipe_mem_hold(&w, now, creating, pipe_mem_moving, on, memoryLow, limit_s);
+    if (creating && pipe_mem_moving && on && pipe_mem_logged_beat != pipe_mem_beat) {
         pipe_mem_logged_beat = pipe_mem_beat;
-        pipe_mem_holds++;
-        if (pipe_mem_holds <= 8 || pipe_mem_holds % 100 == 0) {
+        if (hold) {
+            /* the compiler at work: the limit waits (issue 188) */
+            pipe_mem_holds++;
+            if (pipe_mem_holds <= 8 || pipe_mem_holds % 100 == 0) {
+                ico_diag_log("ico_pc: a pipeline creation in progress, the process grew %ld MB "
+                             "since the last heartbeat (the driver's compiler at work): the "
+                             "pipeline limit waits (%u times; %.0f s held of at most %.0f s)",
+                             pipe_mem_grew_kb / 1024, pipe_mem_holds, w.held_s,
+                             ICO_PIPE_MEM_HOLD_LIMITS * limit_s);
+            }
+        } else if (++refused <= 8 || refused % 100 == 0) {
             ico_diag_log("ico_pc: a pipeline creation in progress, the process grew %ld MB since "
-                         "the last heartbeat (the driver's compiler at work): the pipeline limit "
-                         "waits (%u times)",
-                         pipe_mem_grew_kb / 1024, pipe_mem_holds);
+                         "the last heartbeat, but the pipeline limit does not wait for it (%s; "
+                         "%u times)",
+                         pipe_mem_grew_kb / 1024, memoryLow ? low : "held for its longest already",
+                         refused);
         }
     }
-    return ico_pipe_stall_step(&w, now, creating, counted && !pipe_mem_moving,
-                               gpu_hang_limit_ms != 0, activity_seq, pipes_done, g->bg_pipes_done);
+    return ico_pipe_stall_step(&w, now, creating, counted && !hold, on, activity_seq, pipes_done,
+                               g->bg_pipes_done);
 }
 #endif
 
@@ -5435,6 +5501,8 @@ static void watchdog_fire(const char *reason)
                      gpu.waiting_for, gpu.waiting_s);
         } else {
             snprintf(what, sizeof what, "the watchdog: %s", reason);
+            /* not a clean start for the robust step (review 2 N5) */
+            watchdog_mark_write(reason);
         }
         report_file(what, 1);
     }
@@ -5800,8 +5868,8 @@ static void watchdog_loop(void)
                (pipe_stall_step), in force before the game starts too */
             IcoDiagGpu bg;
             (void)gpu_state(&bg);
-            const double stalled = pipe_stall_step(now, poll_counted, &bg);
             const double stall_lim = ico_pipe_stall_limit_s(ticks != 0, pipe_serial);
+            const double stalled = pipe_stall_step(now, poll_counted, &bg, stall_lim);
             if (stalled >= stall_lim) {
                 /* the box's "another way" only when the next start does
                    something else (issue 188: the self-test's pipeline came

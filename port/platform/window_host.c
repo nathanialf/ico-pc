@@ -1133,26 +1133,75 @@ static int display_progress(void *ctx, uint32_t done, uint32_t total);
 static int progress_present_notes(const char *title, const char *phase, int pct, int allowCancel,
                                   const char *note0, const char *note1);
 
-/* Issue 188: the start-up screen before the blend and VU pre-pass
+/* the start-up screen appears only once a wait is noticeable (the set's
+   rule, pipeline_progress below; the self-tests' too) */
+#define PIPE_SCREEN_AFTER_MS 250.0
+
+/* Issue 188: the start-up screen around the blend and VU pre-pass
    self-tests, in every branch (the set, the lazy start, Apply's switch):
    their pipelines are compiled on this thread before the set, and on a
    PowerVR B-Series phone the first did not return for 10 s with nothing on
-   the screen.  One picture, drawn now (the set's own screen waits 250 ms
-   and then moves with the count); the watchdog told the self-tests run
-   (diag_host.h ico_diag_set_selftest) until selftests_done */
-static void selftests_screen(void)
+   the screen.  At a start the set's rule holds: nothing is drawn when they
+   are quick (every desktop start, a warm phone start), and the screen is
+   drawn between the two self-tests once they have run PIPE_SCREEN_AFTER_MS
+   (this thread is inside the driver while one compiles, so it cannot draw
+   sooner; never inside a self-test, whose frames hold the renderer's state
+   under test).  Apply's switch (drawNow) draws it at once: the old picture
+   is gone there.  The Android note "This happens once after an update..."
+   only when a set follows (setWillRun: the careful or full start; a lazy
+   run makes nothing at the start, and a switch is not an update).  The
+   watchdog is told the self-tests run (diag_host.h ico_diag_set_selftest)
+   until selftests_done, whose line says how long they took and whether
+   the screen was drawn */
+static struct {
+    uint64_t startNs;
+    int pending, drawn, once;
+} s_selftests;
+
+static void selftests_draw(void)
 {
     const char *once = NULL;
 #ifdef __ANDROID__
-    once = "This happens once after an update that changes the graphics";
+    if (s_selftests.once) {
+        once = "This happens once after an update that changes the graphics";
+    }
 #endif
     (void)progress_present_notes(s_pipeTitle, "Preparing graphics", -1, 0, NULL, once);
+    s_selftests.pending = 0;
+    s_selftests.drawn = 1;
+}
+
+static void selftests_screen(int drawNow, int setWillRun)
+{
+    s_selftests.startNs = SDL_GetTicksNS();
+    s_selftests.pending = 1;
+    s_selftests.drawn = 0;
+    s_selftests.once = setWillRun;
+    if (drawNow) {
+        selftests_draw();
+    }
     ico_diag_set_selftest(1);
+}
+
+/* between the blend and the VU pre-pass self-tests: the screen when they
+   have run PIPE_SCREEN_AFTER_MS */
+static void selftests_between(void)
+{
+    if (s_selftests.pending &&
+        (double)(SDL_GetTicksNS() - s_selftests.startNs) / 1e6 >= PIPE_SCREEN_AFTER_MS) {
+        selftests_draw();
+    }
 }
 
 static void selftests_done(void)
 {
     ico_diag_set_selftest(0);
+    fprintf(stderr,
+            "window: start: the blend and VU pre-pass self-tests took %.0f ms; the start-up "
+            "screen %s\n",
+            (double)(SDL_GetTicksNS() - s_selftests.startNs) / 1e6,
+            s_selftests.drawn ? "drawn" : "not drawn (the blend self-test took under 250 ms)");
+    s_selftests.pending = 0;
 }
 
 #ifdef __ANDROID__
@@ -2281,8 +2330,9 @@ open_window:
         /* the blend checked on this GPU (rd.h rd_blend_selftest), then the
            VU vertex pre-pass (rd_vuprepass_selftest) */
         ico_diag_step("window: start: the blend and VU pre-pass self-tests");
-        selftests_screen();
+        selftests_screen(0, 0); /* no set follows: no "once after an update" */
         rd_blend_selftest();
+        selftests_between();
         rd_vuprepass_selftest();
         selftests_done();
     } else {
@@ -2324,8 +2374,9 @@ open_window:
            set is made so the set is the chosen way's; logged ("blend: ...
            (self-test: ...)"). A crash in it is noted as the set's would be */
         ico_diag_step("window: start: the blend and VU pre-pass self-tests");
-        selftests_screen();
+        selftests_screen(0, 1);
         rd_blend_selftest();
+        selftests_between();
         /* whether the VU vertex pre-pass draws right on this GPU, tried
            before the set so the set holds the pre-pass's keys or the
            programs' ("VU pre-pass: on|off (self-test: ...)"); a crash in
@@ -2359,7 +2410,6 @@ open_window:
         } else {
             ico_diag_startup_activity_record(0);
         }
-        window_robust_reached();
         /* a stop at the free-memory floor: the rest in the background */
         window_pipe_finish_start();
         /* the set in the pipeline cache file now, not only at a clean exit:
@@ -2373,6 +2423,13 @@ open_window:
             (void)rhi_pipeline_cache_save();
         }
     }
+    /* this start reached the game, whichever way it prepares the
+       pipelines: after the set (full or careful) or after the self-tests
+       of a run that makes them on first use (lazy: by the settings, after
+       an end while preparing them, after a low-memory stop, a restart);
+       the next start counts it as a clean start when it ended without a
+       loss (window_robust.h, robust_persist.h) */
+    window_robust_reached();
     /* a device loss from here takes the loss order's lossnoprepass step
        first when the run draws with the VU vertex pre-pass (its self-test
        above may have turned it off) */
@@ -2599,7 +2656,7 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
                                backend);
     ico_diag_step("window: switch to %s: the blend self-test", backend);
     s_pipeTitle = "Changing the graphics";
-    selftests_screen();
+    selftests_screen(1, 0);
     s_pipeTitle = "Starting ICO";
     rd_blend_selftest();
     ico_diag_step("window: switch to %s: the VU pre-pass self-test", backend);
@@ -4164,7 +4221,6 @@ int ico_window_progress_notes(const char *title, const char *phase, int pct, con
    the rate so far joins once there is a rate to go by.  Returns 1 when the
    game is closing (a quit or close request came in): the renderer stops the
    set after the batch in flight. */
-#define PIPE_SCREEN_AFTER_MS 250.0
 #define PIPE_SCREEN_EVERY_MS 100.0
 /* the estimate from this much time and this many pipelines on */
 #define PIPE_ESTIMATE_AFTER_S 3.0
@@ -4642,6 +4698,9 @@ static void perf_drain(void)
 }
 
 /* A new block's sums (the CSVs stay open) */
+/* The block's steps' time by the game's layout (window_scene.h) */
+static SceneShare s_sceneShare;
+
 static void perf_reset(void)
 {
     FILE *csv = s_perf.csv, *passCsv = s_perf.passCsv;
@@ -4654,6 +4713,9 @@ static void perf_reset(void)
     s_perf.passCsvTried = passTried;
     s_pres.stepSumMs = s_pres.stepMaxMs = 0.0;
     s_pres.stepCount = 0;
+    /* the layout shares start with the block's steps (stepSumMs), not at
+       the last layout line (review 2 N6) */
+    window_scene_reset(&s_sceneShare);
     rd_vu_card_counts(&s_pres.cardStrips, &s_pres.cardTris, &s_pres.cardMs);
 }
 
@@ -5032,9 +5094,6 @@ static void disp_block_reset(void)
     s_disp.shown.shown = s_disp.shown.refreshes = s_disp.shown.repeats = 0;
     s_disp.statsSeen = 0;
 }
-
-/* The block's steps' time by the game's layout (window_scene.h) */
-static SceneShare s_sceneShare;
 
 static void scene_note_step(double ms)
 {

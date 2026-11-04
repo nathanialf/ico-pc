@@ -3817,7 +3817,9 @@ void rd__present_shutdown(void);
  * RHI_STATE_RENDER_TARGET.  The twin: rd__prerotate_twin draws the headless
  * picture turned into a texture of its own; rd_read_presented then reads it
  * back turned back (rd__prerotate_twin_read, while rd__prerotate_twin_
- * pending: from that present to the next acquire, rd__prerotate_twin_clear) */
+ * pending: from that present to the next acquire, rd__prerotate_twin_clear).
+ * rd__prerotate_blank: no target made after an acquire: the image (w x h
+ * turned) cleared and left in RHI_STATE_PRESENT, to be presented */
 uint32_t rd__prerotate_turns(void);
 bool rd__prerotate_target(uint32_t w, uint32_t h, RhiFormat fmt, RhiTexture *tex, RhiState **state);
 void rd__prerotate_record(RhiCommandList cl, RhiTexture src, RhiState *srcState, uint32_t w,
@@ -3825,6 +3827,8 @@ void rd__prerotate_record(RhiCommandList cl, RhiTexture src, RhiState *srcState,
                           uint32_t turns);
 void rd__prerotate_twin(RhiCommandList cl, RhiTexture src, RhiState *srcState, uint32_t w,
                         uint32_t h, uint32_t turns);
+void rd__prerotate_blank(RhiCommandList cl, RhiTexture image, RhiState *state, uint32_t w,
+                         uint32_t h, uint32_t turns);
 void rd__prerotate_twin_clear(void);
 bool rd__prerotate_twin_pending(void);
 bool rd__prerotate_twin_read(void *dst, size_t dstSize, uint32_t w, uint32_t h);

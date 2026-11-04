@@ -12,8 +12,13 @@
  *     "losses; <version>; <clean starts so far>; <run or ->"
  * e.g. "losses; 0.10.2; 1; -": the losses were on that version of the
  * game, 1 clean start has followed, and "run" is written when a start
- * reaches the game (the start-up set made) and read by the next start,
- * which then knows whether that start ended cleanly.  A gpu_robust the
+ * reaches the game and read by the next start, which then knows whether
+ * that start ended cleanly.  Every way of preparing the pipelines writes
+ * it (window_host.c, one call after both branches): after the start-up
+ * set (full or careful), and after the self-tests on a run that makes
+ * them on first use (lazy: the setting, an end while preparing them, a
+ * low-memory stop, a restart), the phones that lost the device being
+ * often the same ones whose set failed.  A gpu_robust the
  * player wrote has no such mark and is never touched.
  *
  * Every start with the mark reads the previous start's end:

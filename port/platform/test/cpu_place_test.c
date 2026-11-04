@@ -30,11 +30,19 @@
  *     run on 2-7 (the system's other cores), the same mask read back
  *     (kept), the call refused, nothing read back; on Linux the checked
  *     pin to the cores already allowed reads them back (kept), and a pin
- *     to a core past the system's is refused with its errno.
+ *     to a core past the system's is refused with its errno;
+ *   a thread made after a pin (Linux, two or more cores allowed): the
+ *     test thread kept to one allowed core, an ico_thread made then starts
+ *     on that one core when no mask is kept (the inheritance, the
+ *     submit thread's case on the Helio G85) and on every allowed core when
+ *     the process's cores were kept (cpu_place_keep_free) before the pin;
+ *     cpu_place_thread_free on the kept thread itself resets it, then
+ *     finds it already there; nothing done with no mask kept.
  */
 #include <stdio.h>
 #include <string.h>
 #include "cpu_place.h"
+#include "ico_thread.h"
 
 #if defined(__linux__)
 #include <sys/stat.h>
@@ -370,6 +378,72 @@ static void testPinResult(void)
 #endif
 }
 
+#if defined(__linux__)
+static uint64_t s_seen;
+
+static void seeCores(void *u)
+{
+    (void)u;
+    s_seen = cpu_place_allowed();
+}
+
+static uint64_t coresOfNewThread(void)
+{
+    IcoThread *t;
+
+    s_seen = 0;
+    t = ico_thread_create(seeCores, NULL);
+    CHECK(t != NULL);
+    ico_thread_join(t);
+    return s_seen;
+}
+#endif
+
+static void testFree(void)
+{
+    CHECK(cpu_place_free_mask() == 0);
+    CHECK(cpu_place_thread_free() == CPU_FREE_NONE);
+#if defined(__linux__)
+    {
+        const uint64_t allowed = cpu_place_allowed();
+        uint64_t one;
+        unsigned resets0, fails0, resets1, fails1;
+        char why[128];
+
+        if (allowed == 0 || (allowed & (allowed - 1)) == 0) {
+            printf("cpu_place: one core allowed here: the thread-after-a-pin case left out\n");
+            return;
+        }
+        one = allowed & (~allowed + 1); /* the lowest allowed core */
+        cpu_place_free_counts(&resets0, &fails0);
+        CHECK(cpu_place_pin(one, why, sizeof(why)));
+        CHECK(cpu_place_allowed() == one);
+        /* no mask kept: the new thread has its creator's one core */
+        CHECK(coresOfNewThread() == one);
+        CHECK(cpu_place_thread_free() == CPU_FREE_NONE);
+        /* the process's cores kept: the new thread puts itself back */
+        cpu_place_keep_free(allowed);
+        CHECK(cpu_place_free_mask() == allowed);
+        CHECK(coresOfNewThread() == allowed);
+        cpu_place_free_counts(&resets1, &fails1);
+        CHECK(resets1 == resets0 + 1 && fails1 == fails0);
+        /* the kept thread itself */
+        CHECK(cpu_place_allowed() == one);
+        CHECK(cpu_place_thread_free() == CPU_FREE_RESET);
+        CHECK(cpu_place_allowed() == allowed);
+        CHECK(cpu_place_thread_free() == CPU_FREE_ALREADY);
+        /* a thread made from a free thread: already there */
+        CHECK(coresOfNewThread() == allowed);
+        cpu_place_free_counts(&resets1, &fails1);
+        CHECK(resets1 == resets0 + 2 && fails1 == fails0);
+        cpu_place_keep_free(0);
+        if (cpu_place_allowed() != allowed) {
+            (void)cpu_place_pin(allowed, why, sizeof(why)); /* put back */
+        }
+    }
+#endif
+}
+
 int main(int argc, char **argv)
 {
     testHist();
@@ -384,6 +458,7 @@ int main(int argc, char **argv)
     testText();
     testThread();
     testPinResult();
+    testFree();
     if (fails) {
         printf("cpu_place: %d failed\n", fails);
         return 1;

@@ -743,7 +743,7 @@ high priority it asked for (`SDL_SetCurrentThreadPriority(HIGH)`) and what the k
 big_cores = false leaves the placement to the system); may run on cores 4-7`, or `refused (...)`,
 or `placed by the system (only on Android)`). Both threads ask for it: the render thread's next
 picture waits on the submit thread; the texture decode workers keep their priority as made and the
-background pipeline workers ask for the low one. On Android the two threads keep themselves to the
+background pipeline workers ask for the low one (both run on every core: see below). On Android the two threads keep themselves to the
 cores faster than the slowest (`sched_setaffinity`), since a priority alone does not move a thread
 off a little core there. Where the fastest speed is one core's alone and other cores are faster
 than the slowest (a phone with `0-1 2.2 GHz, 2-6 3.1 GHz, 7 3.8 GHz`, whose log had core 7 used by no thread),
@@ -772,7 +772,24 @@ faster core the render thread keeps to it alone and the other two are left to th
 line says which: `window: big cores: 2 fast of 8: game and render threads on them (6-7), the submit
 thread free; the game thread kept` (or `NOT kept: the system keeps it to cores ...`, or the
 refused call's errno); with three or more the line reads `big cores: N fast of M: render and submit
-threads on them, the game thread free`. The 10 s line's cores per thread are unchanged.
+threads on them, the game thread free`. A new thread starts with the cores of the thread that
+makes it (pthread_create(3): it "inherits ... CPU affinity mask"; bionic's `pthread_create` goes
+through clone(2), which copies it the same way), so a pin on the game thread would hold the
+submit thread and every worker the game thread makes afterwards to the same two cores, and a pin
+on the render thread (alone on a prime core) every worker it makes to that one core. Before any
+pin the game thread keeps the process's cores (`cpu_place_keep_free`), and every thread the rule
+leaves free puts itself back on them at its entry (`cpu_place_thread_free`): every
+`ico_thread_create` thread in `ico_thread.c` (the submit thread, the texture decode pool, the
+save-state writers, the achievements writer, the disc reader), the RHI's threads through
+`rhi_set_thread_begin` (Vulkan's pipeline workers and present-wait thread, OpenGL's compile
+thread), and the SDL-made pack loader, texture export, backup, GPU sysfs sampler and driver
+install threads. The start line says it: `window: big cores: kept to the faster cores: the game
+and the render thread; every other thread the game makes runs on every core it may (0-7)`; the
+submit thread's line under the two-core rule reads `free (the game and render threads have the
+two faster cores): on the process's cores 0-7`; the 10 s line's cores part ends `, threads put
+back on every core N (M could not be)`, and a failed reset says `cpu: a worker thread could not
+be put back on cores ...` (the first 8, then every 100th). The 10 s line's cores per thread are
+unchanged.
 `[dev] big_cores = false` leaves them where the system puts them. It is a
 diagnostic escape, not a performance switch; `window: render thread: the game thread took the OpenGL context for its own calls (N
 times; ...)` (the first 8, then every 100th) counts OpenGL's take-overs, and `... could not be
@@ -1924,7 +1941,7 @@ without a loss ends it. So the second in a row is a loss in the robust start its
 start after it, with robust access off again: it writes `[dev] gpu_robust = true` and logs `ico_pc:
 the graphics device was lost in two starts in a row; this start and every start after it check the
 bounds of every buffer and image read ([dev] gpu_robust = true in <path>); delete that line to turn
-it off again`; the game takes it off again itself (`robust_persist.h`: the mark `[dev] gpu_robust_by`, 3 clean starts in a row or a new version, each start's `ico_pc: robust access on (set by the game after 2 lost starts on <version>): N clean starts of 3 before it turns off` line). With `gpu_robust` set by the player (the variable already in the environment)
+it off again`; the game takes it off again itself (`robust_persist.h`: the mark `[dev] gpu_robust_by`, 3 clean starts in a row or a new version; a clean start is one that reached the game, after the set or after the self-tests of a run on first use, and ended without a loss, an end while preparing the graphics or a watchdog end, the last read from the mark `<activity file>-watchdog.txt` the watchdog writes as it ends a run with the main thread not waiting for the GPU and the next start reads, logs (`ico_pc: the previous run (version V) was ended by the watchdog: <reason>`) and deletes (`ico_diag_startup_prev_watchdog`); each start's `ico_pc: robust access on (set by the game after 2 lost starts on <version>): N clean starts of 3 before it turns off` line). With `gpu_robust` set by the player (the variable already in the environment)
 nothing is written and the row is cleared (`ico_pc: the previous start lost the graphics device;
 nothing is counted or written to <path>: robust access is as the settings say ([dev]
 gpu_robust)`). A restart after a crash or a loss (desktop) counts nothing. The rest of the row's
@@ -2266,8 +2283,16 @@ resident memory grew by 2 MB or more since the last heartbeat (`ico_pipe_mem_mov
 compiler at work; the issue 188 phone went 147, 251, 275 and 296 MB at its heartbeats before it
 stood still), with a line while a creation is held so (`ico_pc: a pipeline creation in progress,
 the process grew N MB since the last heartbeat (the driver's compiler at work): the pipeline limit
-waits (K times)`, the first 8, then every 100th); the free-memory floor and the system's
-low-memory signal still stop a compiler that grows without end. `<next>` and the box say the next
+waits (K times; H s held of at most C s)`, the first 8, then every 100th). The hold has a cap
+and a floor (`ico_pipe_mem_hold`): it ends after three times the limit held in one creation (30 s
+before the game starts, 180 s on a serial compiler, 90 s in play; the limit then runs, so such a
+creation ends the run at four times the limit at the latest), and it never holds while the free
+memory is under the floor or the system has sent a low-memory level (`ico_diag_background_memory`,
+read by the watchdog at every poll inside the creation: the set's own stops between batches
+cannot interrupt a call inside the driver, and a call that never returns but keeps growing would
+otherwise be ended only by Android's low-memory killer, with no box and no stall mark); a growth
+not held says `... but the pipeline limit does not wait for it (<the floor's figures|the
+system's low-memory signal (<level>)|held for its longest already>; K times)`. `<next>` and the box say the next
 start prepares the graphics another way only when it does (`ico_pipe_stall_next_differs`): not
 when the creation was inside the blend and VU pre-pass self-tests, which run first at every start
 whatever the set (the window tells the watchdog, `ico_diag_set_selftest`), nor on a run already
@@ -2275,10 +2300,17 @@ making its pipelines on first use, unless the note names only a family the rende
 or a VU shader while the plain VU shaders are not yet in force: then `and the next start prepares
 them the same way (the self-tests run first at every start)` or `(this run made them on first use
 already)`, and the box asks for a report if it happens at every start (issue 188: every start
-ended the same way inside the self-test while the box promised another way). The window
-shows the start-up screen (`Preparing graphics`) before the self-tests in every branch, the set's,
-the lazy start's and Apply's switch, so a slow first compile is not a black screen
-(`port/platform/window_host.c` (`selftests_screen`)).
+ended the same way inside the self-test while the box promised another way). At a start the
+self-tests keep the set's rule for the start-up screen (`Preparing graphics`): nothing is drawn
+while they are quick (every desktop start, a warm phone start), and the screen is drawn between
+the blend and the VU pre-pass self-tests once they have run 250 ms (the window's thread is inside
+the driver while a self-test's pipeline compiles, so it cannot draw sooner, and never inside a
+self-test, whose frames hold the renderer's state under test); Apply's switch draws it at once
+(`Changing the graphics`: the old picture is gone there). On Android its note `This happens once
+after an update that changes the graphics` is shown only before a set (the careful or full start),
+not on a lazy start or a switch. The line `window: start: the blend and VU pre-pass self-tests
+took N ms; the start-up screen drawn|not drawn (the blend self-test took under 250 ms)` says
+which (`port/platform/window_host.c` (`selftests_screen`, `selftests_between`)).
 
 The window build logs a stats block every 10 s. A host step longer than `[dev] slow_step_ms`
 (default 8, 0 off) logs a slow-step line ([DISPLAY.md](DISPLAY.md#pacing);

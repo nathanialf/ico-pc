@@ -177,6 +177,9 @@ typedef struct VideoOut {
     uint32_t turns;
     RhiTexture bb;
     RhiState bbState;
+    /* the image acquired but no texture before the turn made: presented
+     * blank (rd__prerotate_blank) */
+    bool turnFailed;
 } VideoOut;
 
 static bool acquireOut(VideoOut *o)
@@ -205,7 +208,10 @@ static bool acquireOut(VideoOut *o)
             o->bb = o->tex;
             o->bbState = RHI_STATE_UNDEFINED;
             if (!rd__prerotate_target(o->w, o->h, o->fmt, &o->tex, &o->state)) {
-                return false;
+                o->tex = o->bb;
+                o->state = &o->bbState;
+                o->turnFailed = true;
+                return true;
             }
         }
         return o->tex.id && o->w && o->h;
@@ -486,6 +492,17 @@ static int presentVideo(const RdVideoPicture *pics, uint32_t w, uint32_t h, uint
      * above would have left a swapchain image acquired and never presented) */
     VideoOut out;
     if (!acquireOut(&out)) {
+        return -1;
+    }
+    if (out.turnFailed) {
+        /* the image acquired is presented, blank */
+        RhiCommandList bl = rhi_begin_commands();
+        if (bl.id) {
+            rd__prerotate_blank(bl, out.bb, &out.bbState, out.w, out.h, out.turns);
+            rhi_end_commands(bl);
+            rhi_submit(bl);
+            rhi_present();
+        }
         return -1;
     }
 

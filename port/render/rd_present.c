@@ -554,6 +554,10 @@ static bool s_window;
 static uint32_t s_turns;
 static RhiTexture s_pic;
 static RhiState *s_picState;
+/* the swapchain image acquired, the texture before the turn not made: the
+ * present clears the image and presents it (rd__prerotate_blank), never
+ * leaving an acquired image unpresented */
+static bool s_turnFailed;
 
 static bool presentAcquire(void);
 
@@ -599,6 +603,7 @@ static bool presentAcquire(void)
     s_backbuffer = (RhiTexture){0};
     s_window = rhi_swapchain_format() != RHI_FMT_UNKNOWN;
     s_turns = 0;
+    s_turnFailed = false;
     rd__prerotate_twin_clear(); /* rd_read_presented reads the twin of this present only */
     if (s_window) {
         s_backbuffer = rhi_acquire_backbuffer();
@@ -616,11 +621,12 @@ static bool presentAcquire(void)
         s_outW = g_rd.settings.outputWidth;
         s_outH = g_rd.settings.outputHeight;
         /* a swapchain in the surface's turn: the picture at the window's
-         * size first (rd_prerotate.c); none made, the picture is skipped
-         * (the image is the turned size, which no pass here draws at) */
+         * size first (rd_prerotate.c); none made, the image is presented
+         * blank (it is the turned size, which no pass here draws at) */
         s_turns = rd__prerotate_turns();
         if (s_turns && !rd__prerotate_target(s_outW, s_outH, s_outFormat, &s_pic, &s_picState)) {
-            return false;
+            s_turnFailed = true;
+            return true;
         }
         return s_outW && s_outH;
     }
@@ -2334,6 +2340,10 @@ static void blankRecord(RhiCommandList cl, RhiTexture out, RhiState *outState)
 
 void rd__present_record(RhiCommandList cl)
 {
+    if (s_turnFailed) {
+        rd__prerotate_blank(cl, s_backbuffer, &s_backbufferState, s_outW, s_outH, s_turns);
+        return;
+    }
     if (s_blank) {
         blankRecord(cl, outTex(), outStateOf());
         return;

@@ -20,6 +20,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <SDL3/SDL.h>
+#include "cpu_place.h"
 #include "diag_host.h"
 #include "ico_thread.h"
 
@@ -135,6 +136,8 @@ static void sample(void)
 static int sampler_main(void *u)
 {
     (void)u;
+    /* the process's cores, not its creator's (cpu_place.h cpu_place_thread_free) */
+    (void)cpu_place_thread_free();
     SDL_LockMutex(s_waitLock);
     while (!s_stop) {
         SDL_WaitConditionTimeout(s_wake, s_waitLock, (Sint32)GPU_SYSFS_PERIOD_MS);

@@ -197,6 +197,24 @@ bool rhi_slot_guard_worker(void)
     return s_slotOn && s_slotGuard.worker(s_slotGuard.user);
 }
 
+/* rhi_set_thread_begin (rhi.h): set once before the first rhi_init, read
+   by the threads the backend makes */
+static void (*s_threadBegin)(void);
+
+void rhi_set_thread_begin(void (*fn)(void))
+{
+    __atomic_store_n(&s_threadBegin, fn, __ATOMIC_RELEASE);
+}
+
+void rhi_thread_begin(void)
+{
+    void (*fn)(void) = __atomic_load_n(&s_threadBegin, __ATOMIC_ACQUIRE);
+
+    if (fn != NULL) {
+        fn();
+    }
+}
+
 void rhi_set_call_guard(const RhiCallGuard *guard)
 {
     if (guard != NULL && guard->busy != NULL && guard->wait != NULL) {

@@ -1481,14 +1481,23 @@ degrees) at a suboptimal present: the swapchain made again (N times so far)` (th
 every 100th); the renderer's first picture in a turn `rd: present: the 2400x1080 picture turned 90
 degrees into the swapchain's 1080x2400 images in one pass (pre-rotated: the compositor shows them
 as they are)`; with the escape, the old `rhi_vk: surface transform 0x2 (offered 0x1ff): presenting
-with identity, the compositor rotates ([dev] prerotate = false, ICO_VK_PREROTATE=0)`.
+with identity, the compositor rotates ([dev] prerotate = false, ICO_VK_PREROTATE=0)`. When the
+texture before the turn cannot be made after an image was acquired, the image is cleared at its
+own size and presented (`rd__prerotate_blank`: an acquired image is never left unpresented, the
+films' rule), and `rd: present: no WxH texture for the picture before the turn; a blank image is
+presented in its place (N times)` says so (the first 8, then every 100th).
 
 **The twin.** A headless device has no swapchain to turn, so the tests use a twin: under
 `ICO_VK_FAKE_TRANSFORM=90`, `180` or `270` a headless Vulkan device answers that turn
 (`rhi_swapchain_rotation`), the present draws its picture as always and then turns it, in the same
 pass, into a texture of the turned size, and `rd_read_presented` reads that texture back and turns
 it back on the CPU by the table above (`rd__prerotate_twin_read`); `rd_replay_tool_prerotate`
-holds the result to the identity present byte for byte ([Tests](#tests)).
+holds the result to the identity present byte for byte ([Tests](#tests)). The twin turns back by
+the shader's own table, so it cannot tell a 90 from a 270 swapped on both sides; the direction
+itself is pinned in `shaders_pixel` (`checkTurns` in `port/shaders/test/shaders_pixel_test.c`):
+`blit_vs` turning a 3x2 picture 90, 180 and 270 degrees against images written out by hand from
+the spec's words and Google's sample (the picture's top-left at the image's top-right at 90).
+Only a phone shows whether the spec's reading is the device's.
 
 ### The FIFO fallback
 

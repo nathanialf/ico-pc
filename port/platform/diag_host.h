@@ -647,6 +647,16 @@ const char *ico_diag_startup_activity_prev(void);
    (rd_set_vu_plain_only), so a slow compiler cannot end the same pipeline
    every run. */
 int ico_diag_startup_stall_end(void);
+/* The previous run was ended by the watchdog with the main thread not
+   waiting for the GPU (the game stopped responding; a GPU hang counts as a
+   device loss instead, ICO_DIAG_END_LOSS): the mark "<activity file
+   without .txt>-watchdog.txt" ("<version>\n<reason>\n"), written by the
+   watchdog's thread as it ends the run, read and deleted by
+   ico_diag_startup_activity_begin, which logs "ico_pc: the previous run
+   (version V) was ended by the watchdog: <reason>".  1 then: the window's
+   robust step (window_robust.c) counts that start as an unclean end, not
+   a clean one (review 2 N5). */
+int ico_diag_startup_prev_watchdog(void);
 /* This start's set is made under the careful policy (on != 0; the window,
    before ICO_DIAG_ACTIVITY_STARTUP): while the file records it holds the
    line "set: careful" after the note, so an end inside that set makes the
