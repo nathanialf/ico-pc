@@ -592,6 +592,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_SECOND_CARD] = "2つ目のメモリーカード",
     [UI_STR_OPT_SECOND_CARD_NOTE] =
         "オフ：オリジナルどおりメモリーカード1つ。オン：2つ目のカードにさらに10個セーブでき、セーブとロードで両方を選べます。",
+    [UI_STR_OPT_SHADOWS_TOGETHER] = "影がいっせいに攻撃",
+    [UI_STR_OPT_SHADOWS_TOGETHER_NOTE] =
+        "オフ：オリジナルどおり、影は1体ずつ攻撃します。オン：複数の影が同時に攻撃できます。",
     [UI_STR_OPT_AA] = "アンチエイリアス",
     [UI_STR_OPT_AA_NOTE] =
         "輪郭をなめらかにします。スーパーサンプリングは画素が4倍(2x)、16倍(4x)。30に下がるときは下げます。",

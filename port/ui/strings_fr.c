@@ -602,6 +602,9 @@ const char *const
             [UI_STR_OPT_SECOND_CARD] = "Seconde memory card",
             [UI_STR_OPT_SECOND_CARD_NOTE] =
                 "Désactivé : une carte, comme l’original. Activé : une seconde carte de dix sauvegardes de plus, proposée en sauvegarde et en chargement.",
+            [UI_STR_OPT_SHADOWS_TOGETHER] = "Les ombres attaquent ensemble",
+            [UI_STR_OPT_SHADOWS_TOGETHER_NOTE] =
+                "Désactivé : comme l’original, les ombres attaquent à tour de rôle. Activé : plusieurs à la fois.",
             [UI_STR_OPT_AA] = "Anticrénelage",
             [UI_STR_OPT_AA_NOTE] =
                 "Atténue les bords crénelés. Le supersampling dessine 4 fois (2x) ou 16 fois (4x) plus de pixels ; baissez-le si le compteur tombe à 30.",
@@ -749,7 +752,8 @@ const char *const
             [UI_STR_STATES_SAVE_FAILED] = "L'état n'a pas pu être enregistré",
             [UI_STR_STATES_XB_OLD] =
                 "Cet état a été créé par la version %s,\navant que les états sauvegardés puissent\npasser aux versions plus récentes.\nVos sauvegardes sur memory card fonctionnent toujours.",
-            [UI_STR_STATES_XB_CODE] = "Cet état a été créé par la version %s.\nLa version %s a modifié la partie du jeu\noù il a été sauvegardé, il ne peut donc pas\nêtre repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
+            [UI_STR_STATES_XB_CODE] =
+                "Cet état a été créé par la version %s.\nLa version %s a modifié la partie du jeu\noù il a été sauvegardé, il ne peut donc pas\nêtre repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_STATES_XB_DATA] =
                 "Cet état a été créé par la version %s.\nLa version %s a modifié la façon dont le jeu\ngarde sa progression en mémoire, il ne peut\ndonc pas être repris.\nVos sauvegardes sur memory card fonctionnent toujours.",
             [UI_STR_STATES_XB_PINNED] =

@@ -670,16 +670,17 @@ typedef enum UiSettingsOpt {
     /* Gameplay */
     UI_OPT_STICK_FIX,
     UI_OPT_YORDA,
-    UI_OPT_PIT_TIME,       /* [gameplay] pit_time: Half, Original, Longer, Double, Triple */
-    UI_OPT_SHADOW_SPEED,   /* [gameplay] shadow_speed: Slower, Original, Faster, Fastest */
-    UI_OPT_DOOR_FIX,       /* [gameplay] door_fix, the doorway fix */
-    UI_OPT_YORDA_TRIPS,    /* [gameplay] yorda_trips (port/game/yorda_trip.h) */
-    UI_OPT_NATURAL_CHAINS, /* [gameplay] natural_chains (port/render/rd_chain.h) */
-    UI_OPT_SKIP_OPENING,   /* [gameplay] skip_opening: the boot starts at the title */
-    UI_OPT_SECOND_CARD,    /* [gameplay] second_memory_card: a card in port 1 */
-    UI_OPT_FILM_EFFECT,    /* the game's optionScreenMode 0..4, once cleared */
-    UI_OPT_PLAYERS,        /* the game's girlControlMode, 1 or 2, once cleared */
-    UI_OPT_ACH_POPUPS,     /* [game] achievements, On/Off: the achievement pop-ups, on the
+    UI_OPT_PIT_TIME,         /* [gameplay] pit_time: Half, Original, Longer, Double, Triple */
+    UI_OPT_SHADOW_SPEED,     /* [gameplay] shadow_speed: Slower, Original, Faster, Fastest */
+    UI_OPT_SHADOWS_TOGETHER, /* [gameplay] shadows_together: no turns between the Shadows */
+    UI_OPT_DOOR_FIX,         /* [gameplay] door_fix, the doorway fix */
+    UI_OPT_YORDA_TRIPS,      /* [gameplay] yorda_trips (port/game/yorda_trip.h) */
+    UI_OPT_NATURAL_CHAINS,   /* [gameplay] natural_chains (port/render/rd_chain.h) */
+    UI_OPT_SKIP_OPENING,     /* [gameplay] skip_opening: the boot starts at the title */
+    UI_OPT_SECOND_CARD,      /* [gameplay] second_memory_card: a card in port 1 */
+    UI_OPT_FILM_EFFECT,      /* the game's optionScreenMode 0..4, once cleared */
+    UI_OPT_PLAYERS,          /* the game's girlControlMode, 1 or 2, once cleared */
+    UI_OPT_ACH_POPUPS,       /* [game] achievements, On/Off: the achievement pop-ups, on the
                               Achievements page before Back */
     /* Main */
     UI_OPT_LANGUAGE,      /* the game's own language (the European disc only) */

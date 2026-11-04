@@ -178,6 +178,21 @@ static void testTables(void)
               ui_strings_pt_br[UI_STR_EXTRAS_BACKUP] == NULL &&
               ui_strings_pt_br[UI_STR_STATES_NOTE] == NULL,
           "pt-br: the rows kept in English");
+    /* Shadows attack together (issue 185), newer than the three community
+       tables: English there until a translator sends it; the eight tables
+       have it in their own words */
+    for (int l = UI_LANG_COMMUNITY_FIRST; l < UI_LANG_TABLES; l++) {
+        CHECK(kTables[l][UI_STR_OPT_SHADOWS_TOGETHER] == NULL &&
+                  kTables[l][UI_STR_OPT_SHADOWS_TOGETHER_NOTE] == NULL &&
+                  strcmp(ui_str_in((UiLang)l, UI_STR_OPT_SHADOWS_TOGETHER),
+                         "Shadows attack together") == 0,
+              "%s: Shadows attack together in English", kNames[l]);
+    }
+    for (int l = 0; l < UI_LANG_COMMUNITY_FIRST; l++) {
+        CHECK(kTables[l][UI_STR_OPT_SHADOWS_TOGETHER] != NULL &&
+                  kTables[l][UI_STR_OPT_SHADOWS_TOGETHER_NOTE] != NULL,
+              "%s: Shadows attack together in its own words", kNames[l]);
+    }
 }
 
 static void testSerial(void)

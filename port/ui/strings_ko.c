@@ -591,6 +591,9 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_SECOND_CARD] = "두 번째 메모리 카드",
     [UI_STR_OPT_SECOND_CARD_NOTE] =
         "끔: 원작 그대로 메모리 카드 1장. 켬: 두 번째 카드에 10개 더 저장할 수 있고, 저장과 불러오기에서 둘 다 고릅니다.",
+    [UI_STR_OPT_SHADOWS_TOGETHER] = "그림자가 함께 공격",
+    [UI_STR_OPT_SHADOWS_TOGETHER_NOTE] =
+        "끔: 원작 그대로 그림자가 번갈아 공격합니다. 켬: 여러 그림자가 동시에 공격할 수 있습니다.",
     [UI_STR_OPT_AA] = "안티에일리어싱",
     [UI_STR_OPT_AA_NOTE] =
         "윤곽을 매끄럽게 합니다. 슈퍼샘플링은 점이 4배(2x), 16배(4x). 카운터가 30이 되면 줄이세요.",

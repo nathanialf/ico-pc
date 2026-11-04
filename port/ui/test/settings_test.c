@@ -129,15 +129,24 @@ static void testBuild(void)
         UI_STR_OPT_TOUCH_MODE, UI_STR_OPT_TOUCH_SIZE,  UI_STR_OPT_TOUCH_OPACITY,
         UI_STR_OPT_TOUCH_EDIT, UI_STR_OPT_TOUCH_SNAP,  UI_STR_OPT_TOUCH_GRID,
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
-    static const int gameOpts[] = {UI_OPT_YORDA,          UI_OPT_PIT_TIME,     UI_OPT_SHADOW_SPEED,
-                                   UI_OPT_STICK_FIX,      UI_OPT_DOOR_FIX,     UI_OPT_YORDA_TRIPS,
-                                   UI_OPT_NATURAL_CHAINS, UI_OPT_SKIP_OPENING, UI_OPT_SECOND_CARD,
-                                   UI_OPT_FILM_EFFECT,    UI_OPT_PLAYERS,      UI_OPT_BACK};
-    static const int gameStrs[] = {
-        UI_STR_OPT_YORDA,          UI_STR_OPT_PIT_TIME,     UI_STR_OPT_SHADOW_SPEED,
-        UI_STR_OPT_STICK_FIX,      UI_STR_OPT_DOOR_FIX,     UI_STR_OPT_YORDA_TRIPS,
-        UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_SECOND_CARD,
-        UI_STR_OPT_FILM_EFFECT,    UI_STR_OPT_PLAYERS,      UI_STR_BACK};
+    static const int gameOpts[] = {
+        UI_OPT_YORDA,        UI_OPT_PIT_TIME,    UI_OPT_SHADOW_SPEED, UI_OPT_SHADOWS_TOGETHER,
+        UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_YORDA_TRIPS,  UI_OPT_NATURAL_CHAINS,
+        UI_OPT_SKIP_OPENING, UI_OPT_SECOND_CARD, UI_OPT_FILM_EFFECT,  UI_OPT_PLAYERS,
+        UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA,
+                                   UI_STR_OPT_PIT_TIME,
+                                   UI_STR_OPT_SHADOW_SPEED,
+                                   UI_STR_OPT_SHADOWS_TOGETHER,
+                                   UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_DOOR_FIX,
+                                   UI_STR_OPT_YORDA_TRIPS,
+                                   UI_STR_OPT_NATURAL_CHAINS,
+                                   UI_STR_OPT_SKIP_OPENING,
+                                   UI_STR_OPT_SECOND_CARD,
+                                   UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,
+                                   UI_STR_BACK};
     static const int listOpts[8] = {UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST,
                                     UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST};
     static const int listStrs[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -208,7 +217,7 @@ static void testBuild(void)
                   lt_ext_prop(cl[12])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
               "Touch screen opens its page");
     }
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 12), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 13), "gameplay rows");
     /* the pop-ups switch is an item of the list (first, before the achievements), not a row of its own */
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
     CHECK(labelsAre(UI_PAGE_REMAP, listOpts, listStrs, 8), "remap slots");
@@ -2894,13 +2903,13 @@ static void testGameOptions(void)
               rowShown(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS),
           "cleared: Film effect and Players");
     checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (cleared)");
-    for (int k = 0; k < 9; k++) {
+    for (int k = 0; k < 10; k++) {
         press(0x4000);
     }
     CHECK(lt_ext_layout(gameL)->curItem == film,
-          "down nine times from Yorda (past Time to rescue Yorda, Shadow speed, the stick fix, "
-          "the door fix, Yorda trips, Natural chains, Skip the opening and Second memory card): "
-          "Film effect");
+          "down ten times from Yorda (past Time to rescue Yorda, Shadow speed, Shadows attack "
+          "together, the stick fix, the door fix, Yorda trips, Natural chains, Skip the opening "
+          "and Second memory card): Film effect");
     optionScreenMode = 0;
     s_filmCalls = 0;
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FILM_EFFECT), "Off") == 0, "film effect Off (%s)",
