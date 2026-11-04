@@ -157,8 +157,11 @@ void rd_summary_text(char *out, size_t size)
              : careful                 ? "the careful start-up set"
                                        : "the start-up set",
              RHI_PIPELINE_POOL_MAX, RD_PIPELINE_CACHE_MAX,
-             /* the sheets of scale 1 and 2 (rd_tex.c rd__sheet_baked) */
-             g_rd.sheetShader ? "shader" : "baked at 1x and 2x (the shader above)");
+             /* the sheets of scale 1, and 2 on the tile-based classes (rd_tex.c
+                rd__sheet_baked) */
+             g_rd.sheetShader           ? "shader"
+             : g_rd.profile.sheetBake2x ? "baked at 1x and 2x (the shader above)"
+                                        : "baked at 1x (the shader above)");
 }
 
 /* ------------------------------------------------ the VU index spans
@@ -1816,8 +1819,9 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (g_rd.noDual) {
         rd__log("blend: two-pass fallback (no dualSrcBlend)");
     }
-    /* the menu text's texels baked on the CPU at strip scales 1 and 2
-     * (rd_tex.c rd__sheet_baked; issue 173 at 1x, the phone's menus at 2x);
+    /* the menu text's texels baked on the CPU at strip scale 1 (issue 173)
+     * and, on the tile-based classes, 2 (the phone's menus; rd_tex.c
+     * rd__sheet_baked, the profile's sheetBake2x, issue 126);
      * ICO_RD_SHEET_SHADER=1 ([dev] sheet_shader) draws them through
      * font_sheet_ps, as scales 3 and 4 are drawn (the A/B) */
     {
@@ -1827,9 +1831,11 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
             rd__log("text: menu text through the sheet shader at every scale ([dev] sheet_shader "
                     "= true, ICO_RD_SHEET_SHADER=1)");
         } else {
-            rd__log("text: menu text baked on the CPU at 1x and 2x (RGBA8 pages, four reads a "
-                    "pixel; the sheet shader at 3x and 4x; [dev] sheet_shader = true draws every "
-                    "scale through it)");
+            rd__log("text: %s (RGBA8 pages, four reads a pixel; the sheet shader %s; [dev] "
+                    "sheet_shader = true draws every scale through it)",
+                    g_rd.profile.sheetBake2x ? "menu text baked at 1x and 2x"
+                                             : "menu text baked at 1x; 2x through the sheet shader",
+                    g_rd.profile.sheetBake2x ? "at 3x and 4x" : "at 2x, 3x and 4x");
         }
     }
     /* the VU draws' index values carry nothing but the kick and corner, the
