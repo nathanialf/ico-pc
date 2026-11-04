@@ -1270,6 +1270,16 @@ typedef struct RdProfile {
      * (issue 126).  No [dev] key: [dev] sheet_shader turns every bake off;
      * rd__set_sheet_bake_2x is the tests' */
     bool sheetBake2x;
+    /* the glow's mask computed inside its reduction (rd_glow_fold.c): on by
+     * default on the immediate-mode classes, where the mask's full-frame
+     * pass costs more than the mask's arithmetic in the reduction; off on
+     * the tile-based ones, where the pass is cheap (its tiles never leave
+     * the chip until their store) and the folded reduction, a small pass
+     * running the mask for about 70 taps a texel, cost the PowerVR phone
+     * 8 ms more a glow picture than the two draws (v0.10.1 to v0.10.2-rc4,
+     * glow WORK0 10.4-11.4 ms against 2.3-3.3 ms in v0.10.0).  [dev]
+     * glow_fold = true|false (ICO_RD_GLOW_FOLD=1|0) sets it either way */
+    bool glowFold;
     /* rd_profile.c: the device class's name for the lines; per flag
      * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
      * turned it off (rd__profile_self_test_off) */
@@ -1302,6 +1312,7 @@ enum {
     RD_PROFILE_VU_PLANES = 1u << 9,
     RD_PROFILE_SHADOW_ONE = 1u << 10,
     RD_PROFILE_SHADOW_BSPLINE = 1u << 11,
+    RD_PROFILE_GLOW_FOLD = 1u << 12,
 };
 
 /* fills g_rd.profile from the device (rd_profile.c); called by rd_init after
@@ -2305,8 +2316,10 @@ bool rd__fades_fold_on(void);
 /* The glow's mask folded into its reduction (rd_glow_fold.c; rd_replay.h
  * has the replay's hooks).
  * rd__glow_fold_on     [dev] glow_fold (ICO_RD_GLOW_FOLD=1 on, 0 off; not
- *                      set: on where the renderer has an output, off where
- *                      its caller reads the targets), false after a frame
+ *                      set: the profile's default, RdProfile.glowFold (off
+ *                      on the tile-based classes), where the renderer has
+ *                      an output, off where its caller reads the targets),
+ *                      false after a frame
  *                      read WORK2 before its fill or a reduction did not
  *                      take a planned fold
  * rd__glow_fold_force  the tests: 1 on, 0 off, -1 the switch's (and the

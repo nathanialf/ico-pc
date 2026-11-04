@@ -21,6 +21,19 @@
  *                 store; ICO_RD_STORE_PLAN=all (tests) drops every depth
  *                 store (storeAll)
  *   blurFold      on       on      on        on       off   on       on
+ *   glowFold      on       on      off       off      off   off      off
+ *                 (the glow's mask computed inside its reduction,
+ *                 rd_glow_fold.c: on the immediate-mode classes, D3D11 and
+ *                 OpenGL too, off on every tile-based one, another tiler
+ *                 too; [dev] glow_fold = true|false, ICO_RD_GLOW_FOLD=1|0,
+ *                 over it.  The fold leaves out a full-frame pass, which on
+ *                 a tile-based GPU costs little (its tiles stay on the chip
+ *                 until their store), and runs the mask's arithmetic and
+ *                 its four reads of SCENE at every tap of the reduction's
+ *                 box, about 70 a WORK0 texel at the phone's 2364 x 1080:
+ *                 the PowerVR phone's folded reduction measured 8 ms more
+ *                 a glow picture than the mask's pass and the plain
+ *                 reduction together, v0.10.1 to v0.10.2-rc4)
  *   robust access off: the Vulkan backend's default (vk_device.c;
  *                 gpu_robust = true turns it on); D3D12 and D3D11 their
  *                 own bounds; OpenGL the backend's RhiLimits.robustText
@@ -105,7 +118,7 @@
  * The [dev] keys override one flag at a time, through the environment the
  * host exports (port/platform/host_config.c): ICO_RD_FOG_PATH=local
  * (fogLocal on; inplace, copy or buffer: off), ICO_RD_DATE_PATH=stencil|
- * snapshot, ICO_RD_STORE_PLAN=1|0|all, ICO_RD_BLUR_FOLD=1|0, ICO_RD_UINT_VIEW=
+ * snapshot, ICO_RD_STORE_PLAN=1|0|all, ICO_RD_BLUR_FOLD=1|0, ICO_RD_GLOW_FOLD=1|0, ICO_RD_UINT_VIEW=
  * 1|work|0 (both views, the work buffers' only, none), ICO_RD_ALPHA_PLAN=
  * 1|0, ICO_RD_FX_PLAN=1|0, ICO_RD_FX_DST_LOCAL=1|0, ICO_RD_VU_PLANES=1|0,
  * ICO_RD_SHADOW_ONE=1|0 (1 asks for the one draw, held to the view),
@@ -118,15 +131,16 @@
  * three local-read flags on the desktop class leaves the probe out.
  *
  *   rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function;
- *     fog local on; DATE stencil; depth stores planned; blur fold on; robust
- *     access off (the default; gpu_robust = true turns it on); local read
- *     yes; uint views off; alpha plan on; fx plan on; fx local read on;
+ *     fog local on; DATE stencil; depth stores planned; blur fold on; glow
+ *     fold off; robust access off (the default; gpu_robust = true turns it
+ *     on); local read yes; uint views off; alpha plan on; fx plan on; fx
+ *     local read on;
  *     VU planes whole scales only; shadow count one draw; shadow edges:
  *     bilinear; pipelines the start-up set
  *
  * and the summary's words (rd__profile_text, after the blend's):
  *   tile-based GPU (Imagination, Vulkan): fog local on, DATE stencil, depth
- *   stores planned, blur fold on, local read yes, uint views off, alpha
+ *   stores planned, blur fold on, glow fold off, local read yes, uint views off, alpha
  *   plan on, fx plan on, fx local on, VU planes whole scales only, shadow
  *   count one draw, shadow edges: bilinear
  *
@@ -330,13 +344,15 @@ static const char *edgeWords(const RdProfile *p)
 static void makeText(RdProfile *p)
 {
     snprintf(p->text, sizeof p->text,
-             "%s: fog local %s%s, DATE %s%s, depth stores %s%s, blur fold %s%s, local read %s, "
+             "%s: fog local %s%s, DATE %s%s, depth stores %s%s, blur fold %s%s, glow fold %s%s, "
+             "local read %s, "
              "uint views %s%s, alpha plan %s%s, fx plan %s%s, fx local %s%s, VU planes %s%s, "
              "shadow count %s%s, shadow edges: %s%s%s%s",
              p->cls, p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
              p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
              storeWords(p), mark(p, RD_PROFILE_STORE_PLAN), p->blurFold ? "on" : "off",
-             mark(p, RD_PROFILE_BLUR_FOLD), p->localRead ? "yes" : "no", uintWords(p),
+             mark(p, RD_PROFILE_BLUR_FOLD), p->glowFold ? "on" : "off",
+             mark(p, RD_PROFILE_GLOW_FOLD), p->localRead ? "yes" : "no", uintWords(p),
              mark(p, UINT_BITS), p->alphaPlan ? "on" : "off", mark(p, RD_PROFILE_ALPHA_PLAN),
              p->fxPlan ? "on" : "off", mark(p, RD_PROFILE_FX_PLAN), p->fxDstLocal ? "on" : "off",
              mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p), mark(p, RD_PROFILE_VU_PLANES),
@@ -370,6 +386,9 @@ void rd__profile_init(void)
     p->dateStencil = local;
     p->storePlan = true; /* rd_store_plan.c; nothing changes where the device keeps the contents */
     p->blurFold = c != PC_MALI;
+    /* the glow's mask in its reduction on the immediate-mode classes only
+     * (the table's glowFold row; rd_glow_fold.c reads it) */
+    p->glowFold = !tile;
     p->uintViewWork = !tile && lim->uintView;
     p->uintViewScene = !tile && lim->uintView;
     p->carefulSet = false;
@@ -437,6 +456,14 @@ void rd__profile_init(void)
     if (fold >= 0) {
         p->blurFold = fold == 1;
         p->devSet |= RD_PROFILE_BLUR_FOLD;
+    }
+    /* [dev] glow_fold: rd_glow_fold.c rd__glow_fold_on reads the key
+       itself as well (it forces the fold on even without an output, the
+       A/B); here for the lines' "([dev])" */
+    const int glow = envBool("ICO_RD_GLOW_FOLD");
+    if (glow >= 0) {
+        p->glowFold = glow == 1;
+        p->devSet |= RD_PROFILE_GLOW_FOLD;
     }
     const char *uv = getenv("ICO_RD_UINT_VIEW");
     if (uv && uv[0]) {
@@ -530,13 +557,15 @@ void rd__profile_init(void)
     const char *exactMark = blendAsk && blendAsk[0] ? " ([dev])" : " (GS state as shader data)";
     rd__log(
         "profile: %s: blend %s%s; fog local %s%s; DATE %s%s; depth stores %s%s; blur fold "
-        "%s%s; robust access %s; local read %s; uint views %s%s; alpha plan %s%s; fx plan "
+        "%s%s; glow fold %s%s; robust access %s; local read %s; uint views %s%s; alpha plan "
+        "%s%s; fx plan "
         "%s%s; fx local read %s%s; VU planes %s%s; shadow count %s%s; shadow edges: %s%s; "
         "pipelines the start-up set%s%s%s; %s; %s; %s%s%s",
         p->cls, exact ? rd__blend_exact_name(asked) : "fixed-function", exact ? exactMark : "",
         p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
         p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL), storeWords(p),
         mark(p, RD_PROFILE_STORE_PLAN), p->blurFold ? "on" : "off", mark(p, RD_PROFILE_BLUR_FOLD),
+        p->glowFold ? "on" : "off", mark(p, RD_PROFILE_GLOW_FOLD),
         lim->robustText ? lim->robustText
         : c == PC_D3D11 ? "D3D11's own"
         : d3d           ? "D3D12's own"

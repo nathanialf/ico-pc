@@ -28,8 +28,14 @@
  * target but WORK2 the same bytes with the fold and without it, the fold
  * counted in every frame that draws the glow (RdPerfRecord.glowFolded) and
  * none kept, none with it off; then at 1x and 2x (e)'s own frame, the
- * shine drawn into WORK2 after the mask, kept for the lamps' reason.  Every pipeline
- * created enumerated; no validation error. */
+ * shine drawn into WORK2 after the mask, kept for the lamps' reason.  At
+ * every setting post mode 7 once more with the switch as it is (not
+ * forced), without and with the fans: folded exactly where the device
+ * profile says glow fold on (RdProfile.glowFold: off on the tile-based
+ * classes, [dev] glow_fold over it), the same bytes as drawn; with
+ * --glow-fold-default on|off (the tile twins, rd_blur_glow_fold_tile and
+ * _tile_on under ICO_VK_FAKE_LIMITS=moltenvk) the profile's value
+ * checked too.  Every pipeline created enumerated; no validation error. */
 
 static uint8_t *s_gfBuf[2][RD_TARGET_COUNT];
 static size_t s_gfSize[2][RD_TARGET_COUNT];
@@ -131,15 +137,23 @@ static bool gfInit(const char *what, int preset, float scale, uint32_t sw, uint3
     return true;
 }
 
+/* the fold's default the run expects (rd_blur_test --glow-fold-default
+ * on|off, the tile twins: -1 not asked, the profile's whatever it is) */
+static int s_gfExpect = -1;
+
 /* one frame of post mode post (the sun on) at the frame's width, its glow
  * with nothing drawn into WORK2 between the mask and the reduction: drawn
- * with the fold, then replayed without it; model: both against the CPU
- * model.  The folds counted into *folds, the bytes that differ into
+ * with the fold (dflt: as the switch has it, not forced: the device
+ * profile's default, RdProfile.glowFold, or the [dev] key's), then
+ * replayed without it; model: both against the CPU model.  The folds
+ * counted into *folds (not with dflt), the bytes that differ into
  * *differ */
-static void gfFrame(const char *cfg, int post, int model, int fans, uint32_t *folds, int *differ)
+static void gfFrame(const char *cfg, int post, int model, int fans, int dflt, uint32_t *folds,
+                    int *differ)
 {
-    char what[96], again[128];
-    snprintf(what, sizeof(what), "(k) %s post mode %d%s", cfg, post, fans ? ", the fans" : "");
+    char what[112], again[144];
+    snprintf(what, sizeof(what), "(k) %s post mode %d%s%s", cfg, post, fans ? ", the fans" : "",
+             dflt ? ", the default" : "");
     snprintf(again, sizeof(again), "%s, the fold off", what);
     setStage(post, 0, 64);
     makeImage((uint32_t)post, 0);
@@ -159,7 +173,7 @@ static void gfFrame(const char *cfg, int post, int model, int fans, uint32_t *fo
     FullScreenEffectBefore();
     s_fanWork2 = 0;
     FullScreenEffectAfter();
-    rd__glow_fold_force(1);
+    rd__glow_fold_force(dflt ? -1 : 1);
     if (model) {
         (void)runFrame(what, failures < 10);
     } else {
@@ -184,9 +198,20 @@ static void gfFrame(const char *cfg, int post, int model, int fans, uint32_t *fo
     CHECK(off == 0, "%s: folded with the fold forced off", again);
     CHECK(!on || read == (uint32_t)(fans && s_fanDraws > 0), "%s: the fold %s WORK2 as drawn", what,
           read ? "read" : "did not read");
+    if (dflt) {
+        /* the switch follows the profile (or the key): a tile-based class
+           draws the mask's pass, an immediate-mode one folds it */
+        CHECK(on == (g_rd.profile.glowFold ? 1u : 0u),
+              "%s: %s by default where the profile says glow fold %s (%s)", what,
+              on ? "folded" : "not folded", g_rd.profile.glowFold ? "on" : "off",
+              rd__profile_text());
+        CHECK(s_gfExpect < 0 || (int)g_rd.profile.glowFold == s_gfExpect,
+              "%s: the profile's glow fold %s, the run expects %s (%s)", what,
+              g_rd.profile.glowFold ? "on" : "off", s_gfExpect ? "on" : "off", rd__profile_text());
+    }
     printf("  %s: %s, %d bytes differ from the chain drawn\n", what,
-           on ? "folded" : (kept ? "kept" : "no glow"), d);
-    *folds += on;
+           on ? "folded" : (kept ? "kept" : (dflt ? "not folded" : "no glow")), d);
+    *folds += dflt ? 0u : on;
     *differ += d;
     rd__glow_fold_force(-1);
 }
@@ -201,9 +226,13 @@ static void glowFoldSetting(const char *name, int model)
     uint32_t folds = 0;
     int differ = 0;
     for (int post = 1; post <= 7 && failures <= 20; post++) {
-        gfFrame(name, post, model, 0, &folds, &differ);
-        gfFrame(name, post, model, 1, &folds, &differ); /* the sun's fans into WORK2 */
+        gfFrame(name, post, model, 0, 0, &folds, &differ);
+        gfFrame(name, post, model, 1, 0, &folds, &differ); /* the sun's fans into WORK2 */
     }
+    /* the default (not forced): folded or drawn as the profile says, the
+       same bytes either way; with and without the fans */
+    gfFrame(name, 7, model, 0, 1, &folds, &differ);
+    gfFrame(name, 7, model, 1, 1, &folds, &differ);
     if (model) {
         /* (e)'s frame (against the model): the shine drawn into WORK2
            after the mask */

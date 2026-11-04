@@ -13,5 +13,6 @@
 - The text effect now takes phones a fraction of the time to prepare; the picture is the same.
 - On phones with an older PowerVR graphics driver (Motorola with a MediaTek Dimensity 7020, for one) the game no longer stops before it starts: the first thing it prepared was a text effect the phone's menus do not use at this size, and the game now gives this driver more time.
 - On phones the picture is now handed to the screen already turned the way the screen is held, so the system no longer turns it again on the graphics chip.
+- On phones the glow around bright light is drawn the way it was in v0.10.0 again: a change made for computers in v0.10.1 cost phones up to a third of a picture.
 - Near the exit of the cave (stage 32), a wide picture no longer shows lighter grey bars at its sides: the mist now covers the whole picture, in the middle as at the sides.
 - At the castle's main gate, seen from the sofa in a wide picture, the gate's bottom beam no longer shows a strip of the stone step behind it: a beam corner very close to the camera made the beam look further away than it is.

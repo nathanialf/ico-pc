@@ -269,7 +269,8 @@ over a frame of its own for the tests):
   mask, its first reader of SCENE);
 - the reduction: a post sprite (not the display's reduction) from WORK2's colour (RGBA32) into
   another target, no destination read, the mask's TEX0 size, no glow edge strip;
-- the switch on, the fx plan on with `fx_frame_ps`, a device, no MSAA, no pass window.
+- the switch on (by default on the immediate-mode device classes only, below), the fx plan on
+  with `fx_frame_ps`, a device, no MSAA, no pass window.
 
 In 3 of the 14 corpus glow frames (the issue 163 rooms) the lamps' meshes draw into WORK2 after
 the mask, blending over its texels: the chain is drawn there, and the frame counted kept with its
@@ -285,8 +286,27 @@ then on (logged). A reader outside the replay (`rd__read_target`: the tests, `rd
 --target` and `--pass-dump`) would see them too, so without an output (a renderer whose targets
 its caller reads) the fold is off unless `ICO_RD_GLOW_FOLD=1` asks for it, and a read of WORK2
 after a folded replay is logged once. `[dev] glow_fold = true|false` (`ICO_RD_GLOW_FOLD=1|0`) is
-the A/B ([CONFIG.md](CONFIG.md#dev)); not set, the fold is on wherever the frame is presented,
-on every device and backend.
+the A/B ([CONFIG.md](CONFIG.md#dev)); not set, the fold follows the device profile's `glowFold`
+wherever the frame is presented: on on the immediate-mode classes (desktop Vulkan, D3D12, D3D11,
+OpenGL), off on every tile-based one (Adreno, Mali, PowerVR, Apple, another tiler;
+[RENDER.md](RENDER.md#the-device-profile)). The profile's start line and the summary say `glow
+fold on` or `glow fold off` (`([dev])` after it where the key set it).
+
+**Why not on a tile-based GPU.** The fold trades a full-frame pass for arithmetic in a small one.
+On a tile-based GPU the mask's pass is cheap: 2.55 M fragments at 2364 x 1080, each four reads of
+SCENE's alpha, its tiles written on the chip and stored once. The folded reduction is a 424 x 128
+pass (54 K fragments) whose box loads about 7 x 10 WORK2 texels a WORK0 texel (5.58 x 8.44 texels
+of WORK2 each), and runs the mask at every one of them: about 3.8 M mask evaluations (each texel
+of WORK2 about 1.5 times, the boxes overlapping), each with its four dependent SCENE reads, in a
+loop with branches, over too few fragments to hide their latency. On the PowerVR phone (DXT-48,
+2364 x 1080 Enhanced) every 10 s block that folded without the sun's fans has `glow WORK0
+424x128 12.0 passes` at 10.42 to 11.41 ms, against 2.28 to 3.27 ms for 9.5 to 11.3 passes before
+the fold and about 0.25 ms a WORK0 pass in the blocks that kept the chain: the folded reduction
+pass alone about 8 ms, against the mask's pass's 1.2 to 3.7 ms it saved (`glow WORK2` before the
+fold and on the title). Lavapipe, which has no tiles, shows the trade the other
+way on the phone's dump of a glow room (frame 2426 at 2364 x 1080, `ICO_VK_FAKE_LIMITS=moltenvk`): the folded
+reduction 66.2 ms against the mask's 50.5 ms and the plain reduction's 24.5 ms, the presented
+picture the same bytes.
 
 ```
 rd: glow: WORK2 fold: the glow's mask computed inside its reduction from SCENE's alpha (fx_frame_ps), WORK2 neither drawn nor read: one full-frame pass fewer (frame N; reported once)

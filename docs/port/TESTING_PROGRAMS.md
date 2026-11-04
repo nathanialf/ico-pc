@@ -1070,7 +1070,14 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   every pipeline created enumerated (`checkGlowFold`; [RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction));
   the recording part plans the chain without a device (`rd__glow_fold_plan` on post mode 7: the
   fill, the mask and the reduction in order, the fill's colour, the mask's test; with the fans the
-  mask alone; the shine frame kept, `checkGlowFoldPlan`). In every shard a replay that folded the mask leaves WORK2 out of
+  mask alone; the shine frame kept, `checkGlowFoldPlan`). At every setting post mode 7 runs once
+  more without and with the fans with the switch not forced: folded exactly where the device
+  profile's `glowFold` is on (off on the tile-based classes), the same bytes as the chain drawn.
+  `rd_blur_glow_fold_tile` runs the case alone (`--only glow_fold`) under
+  `ICO_VK_FAKE_LIMITS=moltenvk` (the Apple row) with `--glow-fold-default off`: the profile's glow
+  fold off and the unforced frames drawn, not folded; `rd_blur_glow_fold_tile_on` the same with
+  `ICO_RD_GLOW_FOLD=1` and `--glow-fold-default on` (the key folds them); the forced frames as in
+  the shard both times. In every shard a replay that folded the mask leaves WORK2 out of
   `compareAll` (the fold does not draw it; WORK0, its reduction, is compared).
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against

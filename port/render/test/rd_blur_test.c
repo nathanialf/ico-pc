@@ -147,8 +147,13 @@
  *      shine at 1x, 2x, the phone's 2364 x 1080 and its 848-pixel frame with
  *      Full pixel, drawn with the fold and replayed without it: every target
  *      but WORK2 the same bytes, at 1x and 2x the CPU model's both ways;
- *      the scan on a recorded frame in (r).  Where a replay folds, WORK2 is
- *      not compared (the fold leaves it undrawn) in any case.
+ *      the scan on a recorded frame in (r); post mode 7 not forced: folded
+ *      exactly where the device profile's glow fold is on (off on the
+ *      tile-based classes; rd_blur_glow_fold_tile and _tile_on run the case
+ *      alone, --only glow_fold, under ICO_VK_FAKE_LIMITS=moltenvk with
+ *      --glow-fold-default off and, with ICO_RD_GLOW_FOLD=1, on).  Where a
+ *      replay folds, WORK2 is not compared (the fold leaves it undrawn) in
+ *      any case.
  * Tolerance 0 everywhere (but q's scaled runs and s).  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
@@ -4089,6 +4094,13 @@ int main(int argc, char **argv)
 {
     if (ico_shard_start(argc, argv, k_cases, ICO_SHARD_COUNT(k_cases))) {
         return ico_shard_exit();
+    }
+    for (int i = 1; i + 1 < argc; i++) {
+        /* the glow fold's default the run expects (the tile twins;
+           rd_blur_glow_fold_test.inc) */
+        if (strcmp(argv[i], "--glow-fold-default") == 0) {
+            s_gfExpect = strcmp(argv[i + 1], "on") == 0 ? 1 : 0;
+        }
     }
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     printf("rd_blur_test\n");

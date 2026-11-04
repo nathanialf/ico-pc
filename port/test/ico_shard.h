@@ -20,7 +20,8 @@
  * Which shard owns a case is a pure function of the table and N: the cases go,
  * heaviest first (ties by position), to the shard with the least weight so far.
  * A shard with no --shard argument owns every case, so the program still runs
- * whole by hand. ico_shard_take() stops the program when the call does not match
+ * whole by hand. --only <name> runs that one case alone (a twin of one case under
+ * another environment); the others are passed over as another shard's. ico_shard_take() stops the program when the call does not match
  * the table's next entry, and ico_shard_finish() fails when a case of the table
  * was never reached, so the table cannot drift from main(). --list-cases prints
  * "<shard> <name>" per case for the cmake check (cmake/IcoShardCheck.cmake) that
@@ -54,6 +55,7 @@ static int ico_shard_ran;
 static int ico_shard_list;
 static double ico_shard_t0;
 static const char *ico_shard_cur;
+static const char *ico_shard_only; /* --only <name>: that case alone */
 
 static inline double ico_shard_now(void)
 {
@@ -116,6 +118,8 @@ static inline int ico_shard_start(int argc, char **argv, const IcoShardCase *cas
             ico_shard_n = n;
         } else if (strcmp(argv[i], "--list-cases") == 0) {
             ico_shard_list = 1;
+        } else if (strcmp(argv[i], "--only") == 0 && i + 1 < argc) {
+            ico_shard_only = argv[++i];
         }
     }
     ico_shard_assign();
@@ -125,7 +129,19 @@ static inline int ico_shard_start(int argc, char **argv, const IcoShardCase *cas
         }
         return 1;
     }
-    if (ico_shard_n > 1) {
+    if (ico_shard_only) {
+        int known = 0;
+        for (int i = 0; i < ncases; i++) {
+            known |= strcmp(cases[i].name, ico_shard_only) == 0;
+        }
+        if (!known) {
+            fprintf(stderr, "ico_shard: --only \"%s\" is not a case of the table\n",
+                    ico_shard_only);
+            ico_shard_list = 2;
+            return 1;
+        }
+        printf("the case %s alone\n", ico_shard_only);
+    } else if (ico_shard_n > 1) {
         printf("shard %d of %d\n", ico_shard_k, ico_shard_n);
     }
     return 0;
@@ -156,7 +172,9 @@ static inline int ico_shard_take(const char *name)
                                                   : "(its end)");
         exit(1);
     }
-    const int mine = ico_shard_owner[ico_shard_next++] == ico_shard_k;
+    const int mine = ico_shard_only ? strcmp(name, ico_shard_only) == 0
+                                    : ico_shard_owner[ico_shard_next] == ico_shard_k;
+    ico_shard_next++;
     if (mine) {
         ico_shard_ran++;
         ico_shard_cur = name;

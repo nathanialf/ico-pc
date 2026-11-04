@@ -423,7 +423,9 @@ Where the sun is on screen its fans (`dispSun`) draw into WORK2 between passes 4
 fill as their pass's load op (6 of the 14 corpus glow frames); the issue 163 frames draw the lamps'
 meshes into WORK2 after the mask, a pass of their own (they test SCENE's depth).
 
-Passes 4 and 5 are not drawn at all where the fans are not: pass 6 reads SCENE and computes each
+Where the profile's `glowFold` is on (the immediate-mode classes; off on every tile-based GPU,
+[The device profile](#the-device-profile)), passes 4 and 5 are not drawn at all where the fans are
+not: pass 6 reads SCENE and computes each
 WORK2 texel its box loads as the mask stored it over the fill (the same bytes;
 [The glow's mask in its reduction](RENDER_POST.md#the-glows-mask-in-its-reduction)): one
 full-frame pass fewer on the tile class (the fill rides on the mask's pass there), two on a desktop,
@@ -1216,6 +1218,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | `dateStencil` | on (probe) | off | on where local read is offered | same | same | same | same |
 | `storePlan` | on | on | on | on | on | on | on |
 | `blurFold` | on | on | on | on | off (the G52 is bound by its ALU) | on | on |
+| `glowFold` (`[dev] glow_fold`) | on | on | off | off | off | off (the folded reduction cost the PowerVR phone 8 ms a glow picture) | off |
 | robust access | off | its own bounds rules | off | off | off | off | off |
 | `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
 | `uintViewWork`, `uintViewScene` | on where the backend has the view | off (`RhiLimits.uintView` false on D3D12) | off | off | off | off | off |
@@ -1235,7 +1238,9 @@ paths](#destination-reads-and-blend-paths)), robust access the Vulkan backend's
 (`port/rhi/vk/vk_device.c`; [RHI.md](RHI.md#device-loss)); the profile reports both. The other
 flags are decisions: `fogLocal` offers the fog's `local` path, tried first by its self-test,
 `dateStencil` DATE through the stencil bit, decided by its self-test, `blurFold` the folded
-staticBlur pairs ([The replay](#the-replay)); `storePlan` [the store plan](WORK_BUFFERS.md#the-store-plan). `alphaPlan` offers the alpha/blend
+staticBlur pairs ([The replay](#the-replay)), `glowFold` the glow's mask computed in its reduction
+([The glow's mask in its reduction](RENDER_POST.md#the-glows-mask-in-its-reduction); D3D11 and
+OpenGL take the desktop column); `storePlan` [the store plan](WORK_BUFFERS.md#the-store-plan). `alphaPlan` offers the alpha/blend
 planner ([The alpha plan](#pipelines)), `fxPlan` the frame-size post sprites drawn without their snapshot
 ([Post passes](RENDER_POST.md#post-passes)), `fxDstLocal` the post sprites that read their destination by the local read
 inside the open pass (it needs `fx_local_ps` and is decided
@@ -1256,7 +1261,7 @@ version is capped at 1.3, so a 1.4 driver that lists only the core feature has n
 Each flag has a `[dev]` key, exported by the host ([CONFIG.md](CONFIG.md)): `fog_path = "local"`
 (`ICO_RD_FOG_PATH=local`: `fogLocal` on; `inplace`, `copy` or `buffer`: off), `date_path =
 "stencil"|"snapshot"` (`ICO_RD_DATE_PATH`), `store_plan` (`ICO_RD_STORE_PLAN=1|0`), `blur_fold`
-(`ICO_RD_BLUR_FOLD=1|0`), `uint_view` (`ICO_RD_UINT_VIEW=1|work|0`: both views, the work buffers'
+(`ICO_RD_BLUR_FOLD=1|0`), `glow_fold` (`ICO_RD_GLOW_FOLD=1|0`), `uint_view` (`ICO_RD_UINT_VIEW=1|work|0`: both views, the work buffers'
 only, none), `alpha_plan` (`ICO_RD_ALPHA_PLAN=1|0`), `fx_plan` (`ICO_RD_FX_PLAN=1|0`), `fx_dst_local`
 (`ICO_RD_FX_DST_LOCAL=1|0`), `vu_planes` (`ICO_RD_VU_PLANES=1|0`: 1 is `vuPlanesFrac` on, the planes dropped at a
 fractional scale), `gpu_robust` (`ICO_GPU_ROBUST`). A flag a key set is marked `([dev])`; a key that
@@ -1267,7 +1272,7 @@ wrong turns the flag off (`rd__profile_self_test_off`): the flag is marked `(sel
 line `rd: profile: <flag> off (self-test)` is logged. The start line, once a run (abridged):
 
 ```
-rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores planned; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; alpha plan on; fx plan on; fx local read on; VU planes whole scales only; pipelines the start-up set
+rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores planned; blur fold on; glow fold off; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; alpha plan on; fx plan on; fx local read on; VU planes whole scales only; pipelines the start-up set
 ```
 
 On desktop Vulkan with local read, "(probe)" marks the three local-read flags where the start-up cost probe
@@ -1275,8 +1280,8 @@ found them slower, and both lines end with its words: [WORK_BUFFERS.md](WORK_BUF
 
 and the `ico_pc: summary:` line (abridged) carries the flags as in force after the blend's text
 (`rd__profile_text`; `port/render/rd_core.c` (`rd_summary_text`)): `profile tile-based GPU
-(Imagination, Vulkan): fog local on, DATE stencil, depth stores planned, blur fold on, local read
-yes, uint views off, alpha plan on, fx plan on, fx local on, VU planes whole scales only`. The four planner flags read
+(Imagination, Vulkan): fog local on, DATE stencil, depth stores planned, blur fold on, glow fold
+off, local read yes, uint views off, alpha plan on, fx plan on, fx local on, VU planes whole scales only`. The four planner flags read
 `on`/`off` and `whole scales only`/`every scale` (`vuPlanesFrac` off); a flag a key or a self-test changed is marked as the others are. The Vulkan version is not in the class name (`RhiLimits` does not carry
 it); the `rhi_vk:` device line has it.
 
