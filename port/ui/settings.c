@@ -388,10 +388,6 @@ static int stepIndex(int i, int n, int dir)
     return ((i + dir) % n + n) % n;
 }
 
-/* [gameplay] pit_time's words, in ICO_PIT_* order */
-static const char *const kPitWords[ICO_PIT_COUNT] = {"half", "original", "longer", "double",
-                                                     "triple"};
-
 /* [gameplay] shadow_speed's words, in ICO_SPEED_* order */
 static const char *const kSpeedWords[ICO_SPEED_COUNT] = {"slower", "original", "faster", "fastest"};
 
@@ -1991,9 +1987,10 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return ui_str(toggle ? UI_STR_VAL_HOLD_B : UI_STR_VAL_HOLD_A);
     }
     case UI_OPT_TOUCH_MODE: {
-        static const int modeStr[3] = {UI_STR_OFF, UI_STR_VAL_AUTO, UI_STR_VAL_ALWAYS};
+        static const int modeStr[4] = {UI_STR_OFF, UI_STR_VAL_AUTO, UI_STR_VAL_ALWAYS,
+                                       UI_STR_VAL_ALWAYS_SCENES};
         const int m = touchModeInForce();
-        return ui_str(modeStr[m >= 0 && m < 3 ? m : 1]);
+        return ui_str(modeStr[m >= 0 && m < 4 ? m : 1]);
     }
     case UI_OPT_TOUCH_SIZE: {
         static const int sizeStr[3] = {UI_STR_VAL_SMALL, UI_STR_VAL_MEDIUM, UI_STR_VAL_LARGE};
@@ -2020,12 +2017,15 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return girlControlMode != 0 ? "2" : "1";
     case UI_OPT_YORDA:
         return onOff(ico_opt_yorda_safe());
-    case UI_OPT_PIT_TIME: {
-        static const int pitStr[ICO_PIT_COUNT] = {UI_STR_VAL_PIT_HALF, UI_STR_VAL_ORIGINAL,
-                                                  UI_STR_VAL_PIT_LONGER, UI_STR_VAL_PIT_DOUBLE,
-                                                  UI_STR_VAL_PIT_TRIPLE};
-        return ui_str(pitStr[ico_opt_pit_time()]);
-    }
+    case UI_OPT_PIT_TIME:
+        /* whole seconds; Original shows the disc's own time with the word */
+        if (ico_opt_pit_time() == ICO_PIT_ORIGINAL) {
+            snprintf(buf, size, "%d s (%s)", ico_opt_pit_base_seconds(),
+                     ui_str(UI_STR_VAL_ORIGINAL));
+        } else {
+            snprintf(buf, size, "%d s", ico_opt_pit_time());
+        }
+        return buf;
     case UI_OPT_SHADOW_SPEED: {
         static const int speedStr[ICO_SPEED_COUNT] = {UI_STR_VAL_SPEED_SLOWER, UI_STR_VAL_ORIGINAL,
                                                       UI_STR_VAL_SPEED_FASTER,
@@ -2618,15 +2618,22 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_TOUCH_MODE: {
         /* live from the next vsync (input_sdl.c reads the table); a phone
-           steps between Auto and Always only: Off there would leave no
-           way to turn the buttons back on (ico_touch_effective_mode) */
+           steps Auto, Always, Always with Start only in scenes and back:
+           Off there would leave no way to turn the buttons back on
+           (ico_touch_effective_mode) */
         IcoBindings *b = liveBindings();
         const int m = touchModeInForce();
 
         if (ico_video_android()) {
-            b->touch_mode = m == ICO_TOUCH_MODE_AUTO ? ICO_TOUCH_MODE_ALWAYS : ICO_TOUCH_MODE_AUTO;
+            /* Auto, Always, Always with Start only in scenes: the order is
+               the enum's, Off (0) left out */
+            const int at =
+                m >= ICO_TOUCH_MODE_AUTO && m < ICO_TOUCH_MODE_COUNT ? m - ICO_TOUCH_MODE_AUTO : 0;
+
+            b->touch_mode = ICO_TOUCH_MODE_AUTO + stepIndex(at, ICO_TOUCH_MODE_COUNT - 1, dir);
         } else {
-            b->touch_mode = stepIndex(m >= 0 && m < 3 ? m : 1, 3, dir);
+            b->touch_mode =
+                stepIndex(m >= 0 && m < ICO_TOUCH_MODE_COUNT ? m : 1, ICO_TOUCH_MODE_COUNT, dir);
         }
         s_dirtyBindings = 1;
         break;
@@ -2683,13 +2690,26 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         ico_config_set_bool("gameplay.yorda_safe", ico_opt_yorda_safe());
         s_dirtyConfig = 1;
         break;
-    case UI_OPT_PIT_TIME:
-        /* Half, Original, Longer, Double, Triple around; the factor is read at the
-           next dive (options.h) */
-        ico_opt_set_pit_time(stepIndex(ico_opt_pit_time(), ICO_PIT_COUNT, dir));
-        ico_config_set_string("gameplay.pit_time", kPitWords[ico_opt_pit_time()]);
+    case UI_OPT_PIT_TIME: {
+        /* a second a step from the seconds shown (Original is the disc's own, 15), held
+           at 4 and 30; the base itself is Original again.  The factor is read every tick
+           of the dive (options.h) */
+        int v = ico_opt_pit_seconds() + dir;
+        v = v < ICO_PIT_MIN_SECONDS   ? ICO_PIT_MIN_SECONDS
+            : v > ICO_PIT_MAX_SECONDS ? ICO_PIT_MAX_SECONDS
+                                      : v;
+        if (v == ico_opt_pit_seconds()) {
+            return;
+        }
+        ico_opt_set_pit_time(v);
+        if (ico_opt_pit_time() == ICO_PIT_ORIGINAL) {
+            ico_config_set_string("gameplay.pit_time", "original");
+        } else {
+            ico_config_set_int("gameplay.pit_time", ico_opt_pit_time());
+        }
         s_dirtyConfig = 1;
         break;
+    }
     case UI_OPT_SHADOW_SPEED:
         /* Slower, Original, Faster, Fastest around; read every game tick (options.h) */
         ico_opt_set_shadow_speed(stepIndex(ico_opt_shadow_speed(), ICO_SPEED_COUNT, dir));

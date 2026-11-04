@@ -34,11 +34,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
         "Per una partita meno stressante. Alcune scene scriptate mostrano ancora il rapimento.",
     [UI_STR_OPT_PIT_TIME] = "Tempo per salvare Yorda",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "Quanto tempo impiega un’ombra a trascinare Yorda in una fossa. La riga Yorda qui sopra lo impedisce del tutto.",
-    [UI_STR_VAL_PIT_HALF] = "Metà",
-    [UI_STR_VAL_PIT_LONGER] = "Più lungo",
-    [UI_STR_VAL_PIT_DOUBLE] = "Doppio",
-    [UI_STR_VAL_PIT_TRIPLE] = "Triplo",
+        "Secondi da quando un’ombra inizia a sprofondare con Yorda a quando la porta via. La riga Yorda qui sopra lo impedisce del tutto.",
     [UI_STR_OPT_SHADOW_SPEED] = "Velocità delle ombre",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "Quanto velocemente le ombre camminano, corrono e volano. Non cambia la frequenza dei loro attacchi.",
@@ -154,6 +150,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_TOUCH_SIZE] = "Dimensione comandi",
     [UI_STR_OPT_TOUCH_OPACITY] = "Opacità comandi",
     [UI_STR_VAL_ALWAYS] = "Sempre",
+    [UI_STR_VAL_ALWAYS_SCENES] = "Sempre, Start solo nelle scene",
     [UI_STR_VAL_SMALL] = "Piccola",
     [UI_STR_VAL_MEDIUM] = "Media",
     [UI_STR_VAL_LARGE] = "Grande",

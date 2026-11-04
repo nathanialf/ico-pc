@@ -137,11 +137,11 @@ static void testTables(void)
                   strcmp(kTables[l][UI_STR_LANG_PT_BR], "Português (Brasil) (ichagas7)") == 0,
               "%s names Brazilian Portuguese in Portuguese", kNames[l]);
     }
-    /* cobra838's table (PR 180): his rows, not bob-ttz's; the Yorda pit
-       time's 1.5x step (his "x1" was the 1x one) */
-    CHECK(strcmp(ui_strings_ru_cobra838[UI_STR_VAL_PIT_LONGER], "x1,5") == 0 &&
-              strcmp(ui_strings_ru_cobra838[UI_STR_VAL_PIT_DOUBLE], "x2") == 0,
-          "cobra838: Longer is x1,5 (%s)", ui_strings_ru_cobra838[UI_STR_VAL_PIT_LONGER]);
+    /* cobra838's table (PR 180): his rows, not bob-ttz's (the Yorda pit time's
+       steps it checked are seconds since v0.10.2, no words) */
+    CHECK(strcmp(ui_strings_ru_cobra838[UI_STR_OPT_SHADOW_SPEED_NOTE],
+                 ui_strings_ru_bobttz[UI_STR_OPT_SHADOW_SPEED_NOTE]) != 0,
+          "cobra838: his own Shadow speed note");
     /* English: the rows his table left in English, a note over its space,
        an id newer than his table, one whose English changed since */
     CHECK(ui_strings_ru_cobra838[UI_STR_OPT_GRAPHICS_ADAPTER] == NULL &&

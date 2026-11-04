@@ -223,7 +223,7 @@ original game's behaviour (`port/game/options.h`, header comment).
 | --- | --- | --- | --- |
 | `stick_fix` | bool | `false` | the stick fix (`ico_opt_stick_fix_default`); the input layer reads it too |
 | `yorda_safe` | bool | `false` | the shadows never take Yorda |
-| `pit_time` | string | `"original"` | how long a shadow takes to pull Yorda into a pit: `"half"`, `"original"`, `"longer"`, `"double"` or `"triple"` (time factors 0.5, 1, 1.5, 2, 3; the dive's play speed is 1/factor, the camera effect's 5 s timeout scales with it); an unknown word reads `"original"` and logs; recorded in the pad recording's header |
+| `pit_time` | integer or string | `"original"` | how long a shadow takes to pull Yorda into a pit, in whole seconds `4` to `30` (the Settings menu writes an integer), or `"original"`: the pull-in is the five SINK motions A to E (`port/game/pit_time.h`: 462 game ticks = 15.4 s on every released disc and the August 2001 preview, 463 on the June 2001 demo), the time factor is seconds x 30 / ticks and their play speed is 1/factor, so the whole pull-in lasts the seconds set; the camera effect's 5 s timeout scales by the same factor; `15` (the base in whole seconds) reads as `"original"`; the earlier words still read: `"half"`, `"longer"`, `"double"`, `"triple"` are 1/2, 1.5, 2, 3 times the disc's time in whole seconds held to the range (8, 23, 30, 30); an unknown word or a number out of range logs and reads `"original"` or the nearest end; logs `gameplay: pit time <value> (this disc's pull-in <ticks> ticks = <s> s, shown as 15 s; x<factor>)` at load and on change; recorded in the pad recording's header |
 | `shadow_speed` | string | `"original"` | how fast shadows walk, run and fly: `"slower"`, `"original"`, `"faster"` or `"fastest"` (factors 0.75, 1, 1.25, 1.5), on each disc's locomotion motions only (`port/game/options.h` `ico_opt_shadow_speed_motion`: attacks, grabs, hits, the dissolve and the pit dive keep the game's speed); an unknown word reads `"original"` and logs; recorded in the pad recording's header |
 | `shadows_together` | bool | `false` | no turns between the shadows: the game holds a shadow back from its attack while another is attacking (`enemy_act.c` `EnemyUtil_isOtherStatus`); with this on none is held back ([GAME_FEATURES.md](GAME_FEATURES.md#shadows-attack-together)); read at each check, so a change acts at once; a simulation key (pad recording header, save state check) |
 | `door_fix` | bool | `false` | an arrival holding hands does not send the pair back through the door |
@@ -324,7 +324,7 @@ The bindings and the input switches, applied over the defaults at start
 | `mouse_camera_speed` | float | `1.0` | 0.5..10 |
 | `mouse_full_range` | bool | `false` | |
 | `mouse_return` | bool | `true` | |
-| `touch_mode` | string | `"auto"` | `off`, `auto`, `always` |
+| `touch_mode` | string | `"auto"` | `off`, `auto`, `always`, `always_scenes` |
 | `touch_size` | string | `"medium"` | `small`, `medium`, `large` |
 | `touch_opacity` | number | `75` | 10..100 |
 

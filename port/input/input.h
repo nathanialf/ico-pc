@@ -325,7 +325,7 @@ const char *ico_bindings_row_text(const IcoBindings *b, int kind, int target, ch
                                   unsigned size);
 /* The config names of the touch overlay's settings by value ("off",
    "auto", "always"; "small", "medium", "large"; bindings.c). */
-extern const char *const ico_touch_mode_names[3];
+extern const char *const ico_touch_mode_names[4];
 extern const char *const ico_touch_size_names[3];
 /* A mouse button's config name ("left", "right", "middle", "x1", "x2"). */
 const char *ico_mouse_name(int button);

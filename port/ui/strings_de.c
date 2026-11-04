@@ -34,11 +34,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Für ein entspannteres Spiel. Einige geskriptete Szenen zeigen die Entführung weiterhin.",
     [UI_STR_OPT_PIT_TIME] = "Zeit zur Rettung Yordas",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "Wie lange ein Schatten braucht, um Yorda in eine Grube zu ziehen. Die Yorda-Zeile darüber verhindert es ganz.",
-    [UI_STR_VAL_PIT_HALF] = "Halb",
-    [UI_STR_VAL_PIT_LONGER] = "Länger",
-    [UI_STR_VAL_PIT_DOUBLE] = "Doppelt",
-    [UI_STR_VAL_PIT_TRIPLE] = "Dreifach",
+        "Sekunden vom Versinken eines Schattens mit Yorda, bis sie fort ist. Die Yorda-Zeile darüber verhindert es ganz.",
     [UI_STR_OPT_SHADOW_SPEED] = "Tempo der Schatten",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "Wie schnell Schatten gehen, rennen und fliegen. Wie oft sie angreifen, ändert sich nicht.",
@@ -154,6 +150,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_TOUCH_SIZE] = "Touch-Größe",
     [UI_STR_OPT_TOUCH_OPACITY] = "Touch-Deckkraft",
     [UI_STR_VAL_ALWAYS] = "Immer",
+    [UI_STR_VAL_ALWAYS_SCENES] = "Immer, Start nur in Szenen",
     [UI_STR_VAL_SMALL] = "Klein",
     [UI_STR_VAL_MEDIUM] = "Mittel",
     [UI_STR_VAL_LARGE] = "Groß",

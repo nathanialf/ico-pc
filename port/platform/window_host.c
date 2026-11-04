@@ -3865,7 +3865,15 @@ int ico_window_pump(void)
         state_thumb_pump();          /* a save state's picture */
         window_sweep_pump();         /* Shift+F12's aspect sweep */
         set_capture(capture_mode()); /* play and photo mode */
-        pointer_visibility();        /* the pointer in the menus */
+        {
+            /* Touch controls "Always, Start only in scenes": a scene's empty
+               layout or a movie, the signal the letterbox keys on too */
+            IcoCaptureState cs;
+
+            capture_state(&cs);
+            ico_input_sdl_set_touch_scene(cs.layout == ICO_CAPTURE_LAYOUT_SCENE || cs.movie);
+        }
+        pointer_visibility(); /* the pointer in the menus */
         pump_slow("captures and the pointer", t1);
     }
     {

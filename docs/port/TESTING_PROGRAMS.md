@@ -231,6 +231,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   from its ELF, the names and exits, the main gate stages' packs and their HETARI members with their
   sizes, the copies the game's side reads; nothing starts the game; 77 without the disc
   (`yorda_trip_disc`).
+- `pit_dive_base_test.c`: Time to rescue Yorda's base on each disc image the build names: the
+  disc's tables from its ELF, EN1 SINK_A to SINK_E by name at the numbers the `enemy_act.c` hooks
+  use, each at play speed 1 (`playSpeedRatio`, `palSpeedRatio`), without a blend row and with flag
+  bit 26 clear, the motion-orient chain (CARRY_LOOP's row of the dive's kind into SINK_A, that
+  kind's rows A to E at each last frame, E holding), every `.mob` copy's frame count in DATA.DF's
+  packs (all copies equal), and (A-1)+(B-1)+(C-1)+(D-1)+51 against `ico_pit_chain_ticks_for`
+  (`port/game/pit_time.h`: 462, the June 2001 demo 463); nothing starts the game; 77 without the
+  image (`pit_dive_base` for `ICO_DISC_IMAGE`, `pit_dive_base_<disc>` for each other image set).
 - `env_bits_test.c`: where each disc's wall-reach read in `act-env.c` takes its two bits of a motion record (a shift of 6 on every disc, the host layout), every `config/motion_bits.*.txt` row naming the field at bit 24 for two bits, and a synthetic word read through the shift (the June 2001 demo once read the item-mode bits) (`env_bits`).
 - `keep_flags_test.c`: the twenty words a load's keep and restore walk reads on each disc, exactly as that disc's objects have them (issue 160's new-game flag), with the key-config slots as at start and after a Button configuration visit; one argument selects the disc (`keep_flags`, `keep_flags_<disc>`).
 - `eye_trail_test.c`: the shadows' eye trails rebuilt from their world points
@@ -327,7 +335,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   key) loads it and must log `state: refused load slot 1: settings differ: gameplay.yorda_safe=...`
   and go on to its last tick. Both skip without the disc image and on a sanitizer build ([Tests
   that need the disc](TESTING.md#tests-that-need-the-disc)).
-- `options_test.c`: `test_shadows_together` (Shadows attack together, issue 185): off by default
+- `options_test.c`: `test_pit_time` (Time to rescue Yorda in seconds, issue 186: the pull-in's ticks per disc, the parser's seconds, words and range, the factor seconds x 30 / ticks and the ratios 1/factor and 2/factor for 4 to 30 s with the whole pull-in lasting the seconds, Original bit for bit, and the source scan: four hooks over each copy's five SINK motions, this disc's among them, the three camera timeouts, the frame-50 test); `test_shadows_together` (Shadows attack together, issue 185): off by default
   and from the file, `ico_opt_shadow_waits` 1 for a Shadow while another attacks with the option
   off and 0 with it on, the turns it skipped counted (200) and logged (the change line, the first
   8, then the 100th and 200th, the line back off), and the source scans: `enemy_act.c`'s eleven
@@ -396,6 +404,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   420 dpi: with the disc's confirm (Cross, or Circle) Off a point in the look pad's area and one in
   the stick's area are taken by the mapper but do not block the menus' click, the stick's does
   while the confirm works (the D-pad Off), and a working or Hidden button always blocks (`touch`).
+- `touch_scene_test.c`: Touch controls "Always, Start only in scenes" (`touch.c`
+  `ico_touch_scene_alpha`, [INPUT.md](INPUT.md)): the other modes and a scene-free fourth mode
+  leave every alpha, the scene fades every control without the Start bit (D-pad, faces, shoulders,
+  Select, stick, look pad) to 0 over 300 ms both ways and keeps Start (a Hidden Start stays 0, a
+  dimmer one keeps its alpha, selection is by the pad bit), the original layout is untouched, the
+  mode maps and draws like Always, and the Frame rate counter's place on the faded copy equals
+  that with the other controls dropped (`touch_scene`).
 - `touch_gap_test.c`: the Frame rate counter's place among the player's actual touch controls
   (`touch_gap.c`, [UI.md](UI.md#the-frame-rate-counter)): the default layout's old place, Start at
   the top-left drawn, Hidden and Off, every control Off, no room on the row, the stick's resting

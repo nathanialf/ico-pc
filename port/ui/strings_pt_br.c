@@ -43,10 +43,6 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_PIT_TIME] = "Tempo para resgatar a Yorda",
     [UI_STR_OPT_PIT_TIME_NOTE] =
         "Quanto tempo leva para uma sombra levar a Yorda para um abismo. A opção acima pode impedir que isso aconteça.",
-    [UI_STR_VAL_PIT_HALF] = "Metade",
-    [UI_STR_VAL_PIT_LONGER] = "Mais longo",
-    [UI_STR_VAL_PIT_DOUBLE] = "Dobro",
-    [UI_STR_VAL_PIT_TRIPLE] = "Triplo",
     [UI_STR_OPT_SHADOW_SPEED] = "Velocidade das Sombras",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "Quão rápido as Sombras se andam, correm e voam. Não altera a frequência dos ataques.",

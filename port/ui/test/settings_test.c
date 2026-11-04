@@ -1897,11 +1897,10 @@ static void testValues(void)
           "stick fix on");
     ui_settings_step(UI_OPT_YORDA, 1);
     CHECK(ico_opt_yorda_safe() == 1, "yorda_safe on");
-    /* Time to rescue Yorda: Original, then Longer, Double, Triple, Half, Original around */
+    /* Time to rescue Yorda: whole seconds a step from the 15 s Original shows, held at 4
+       and 30, the base Original again; the file keeps "original" or the integer */
     {
-        static const char *const kWord[5] = {"half", "original", "longer", "double", "triple"};
-        static const char *const kText[5] = {"Half", "Original", "Longer", "Double", "Triple"};
-        static const float kFactor[5] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f};
+        char want[32];
         int k;
 
         CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PIT_TIME) >
@@ -1909,20 +1908,43 @@ static void testValues(void)
                   ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PIT_TIME) <
                       ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX),
               "the Time to rescue Yorda row sits between Yorda's and Stick fix's");
-        CHECK(strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), "Original") == 0, "pit time default");
-        for (k = 2; k < 8; k++) {
-            ui_settings_step(UI_OPT_PIT_TIME, 1);
-            CHECK(ico_opt_pit_time() == k % 5 && ico_opt_pit_time_factor() == kFactor[k % 5] &&
-                      strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), kText[k % 5]) == 0 &&
-                      strcmp(ico_config_get_string("gameplay.pit_time", ""), kWord[k % 5]) == 0,
-                  "pit time step %d", k);
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), "15 s (Original)") == 0,
+              "pit time default (%s)", ui_settings_value_text(UI_OPT_PIT_TIME));
+        for (k = 14; k >= 2; k--) {
+            const int v = k < ICO_PIT_MIN_SECONDS ? ICO_PIT_MIN_SECONDS : k;
+
+            ui_settings_step(UI_OPT_PIT_TIME, -1);
+            snprintf(want, sizeof(want), "%d s", v);
+            CHECK(ico_opt_pit_time() == v &&
+                      strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), want) == 0 &&
+                      ico_config_get_int("gameplay.pit_time", 0) == v,
+                  "pit time step down to %d (%s)", v, ui_settings_value_text(UI_OPT_PIT_TIME));
         }
-        /* six steps from Original end on Longer; back twice is Half */
+        /* back up past the base: 14 is seconds, 15 Original, 16 seconds */
+        for (k = 5; k <= 16; k++) {
+            ui_settings_step(UI_OPT_PIT_TIME, 1);
+        }
+        CHECK(ico_opt_pit_time() == 16, "pit time 16 (%d)", ico_opt_pit_time());
         ui_settings_step(UI_OPT_PIT_TIME, -1);
-        ui_settings_step(UI_OPT_PIT_TIME, -1);
-        CHECK(ico_opt_pit_time() == ICO_PIT_HALF, "pit time steps back");
-        ui_settings_step(UI_OPT_PIT_TIME, 1);
-        CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL, "pit time back to Original");
+        CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL &&
+                  strcmp(ico_config_get_string("gameplay.pit_time", ""), "original") == 0 &&
+                  ico_opt_pit_time_factor() == 1.0f,
+              "pit time back to Original");
+        for (k = 16; k <= 40; k++) {
+            ui_settings_step(UI_OPT_PIT_TIME, 1);
+        }
+        CHECK(ico_opt_pit_time() == ICO_PIT_MAX_SECONDS &&
+                  strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), "30 s") == 0,
+              "pit time held at 30 s");
+        /* the 8 s of issue 186: the whole pull-in over 8 s */
+        for (k = 30; k > 8; k--) {
+            ui_settings_step(UI_OPT_PIT_TIME, -1);
+        }
+        CHECK(ico_opt_pit_time() == 8 &&
+                  ico_opt_pit_time_factor() == 240.0f / (float)ico_opt_pit_chain_ticks(),
+              "pit time 8 s");
+        ico_opt_set_pit_time(ICO_PIT_ORIGINAL);
+        ico_config_set_string("gameplay.pit_time", "original");
     }
     /* Shadow speed: right after Time to rescue Yorda; Original, Faster, Fastest, Slower, Original */
     {
