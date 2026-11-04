@@ -2768,9 +2768,14 @@ bool rd_perf_pass_agg_mean(const RdPerfPassAgg *a, const RdPerfPass *p, double *
 /* Issue 123: a timed replay whose present blocked against the block's
  * timed replays before it (a, without it), the window's line:
  *   "stalled replay 2941 (present 352 ms, GPU 71.3 ms against the block's
- *   27.0): list 0 SCENE 3048x2032 12.4 ms (the block's 4.1), ...; 31 of 47
+ *   27.0): the first pass 52.1 ms (the block's 1.2: it waits for the
+ *   display's image), the other 46 timed passes 27.0 ms (the block's 25.8);
+ *   list 0 SCENE 3048x2032 52.1 ms (the block's 1.2), ...; 31 of 47
  *   passes over 2x their block mean, the rest within 1.3x (16 timed
  *   replays in the block so far)"
+ * first its first render pass apart (the GPU's wait for the display's
+ * image lands inside it: grown alone, the display held the image) and the
+ * other timed pieces summed against the sum of their block means; then
  * its `top` most expensive pieces, each with the block's mean of one like
  * it ("(new to the block)" for one the block has none like), then of its
  * pieces the block has a mean of 0.05 ms or more for, how many took over

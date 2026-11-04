@@ -1748,10 +1748,16 @@ window: CPU walk ms per replay by list 0-12: 1.10 0.05 ... 0.20; uploaded KB per
 
 (the numbers show the fields, not a measurement). A timed replay whose present blocked over 50 ms
 also gets, before its pieces join the block's, `window: stalled replay 2941 (present 352 ms, GPU
-71.3 ms against the block's 27.0): list 0 SCENE 3048x2032 12.4 ms (the block's 4.1), ...; 31 of
+71.3 ms against the block's 27.0): the first pass 52.1 ms (the block's 1.2: it waits for the
+display's image), the other 46 timed passes 27.0 ms (the block's 25.8); list 0 SCENE 3048x2032 52.1
+ms (the block's 1.2), ...; 31 of
 45 passes over 2x their block mean, the rest within 1.3x; 2 under 0.05 ms left out (16 timed
 replays in the block so far)` (the first 8, then every 100th; `rd_perf_pass_grow_text`,
-`rd_perf_pass_agg_mean`; `port/platform/window_stall.c`): its five most expensive pieces each with
+`rd_perf_pass_agg_mean`; `port/platform/window_stall.c`): its first render pass apart, since the
+GPU's wait for the display's image (the acquire's semaphore at the first colour write) lands inside
+that pass's stamps, against the other timed pieces summed with the sum of their block means (the
+first pass grown alone is the display holding the image, not a slow GPU), then its five most
+expensive pieces each with
 the block's mean of a piece like it (`(new to the block)` for one the block has none like), then
 how many of its pieces with a block mean of 0.05 ms or more took over twice that mean, and the
 largest ratio of the rest. Every piece grown about alike is the GPU running slow as a whole (its

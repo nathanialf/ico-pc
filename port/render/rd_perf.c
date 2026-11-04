@@ -1476,6 +1476,44 @@ int rd_perf_pass_grow_text(const RdPerfPassAgg *a, const RdPerfPass *p, uint32_t
         at += (size_t)w;                                                                           \
         w = snprintf(buf + at, n - at, __VA_ARGS__);                                               \
     } while (0)
+    /* the first render pass apart: the GPU's wait for the display's image
+       (the acquire's semaphore, COLOR_ATTACHMENT_OUTPUT) lands inside its
+       stamps, so a stall there alone is the display holding the image, not
+       a slow GPU; the other timed pieces summed against their block means */
+    int first = -1;
+    for (uint32_t i = 0; i < count; i++) {
+        if (p[i].kind == RD_PERF_PASS_RENDER && p[i].gpuUs >= 0.0f) {
+            first = (int)i;
+            break;
+        }
+    }
+    if (first >= 0) {
+        double m, otherMs = 0.0, otherMean = 0.0;
+        unsigned others = 0;
+        char fm[48] = "", om[40] = "";
+        for (uint32_t i = 0; i < count; i++) {
+            if ((int)i == first || p[i].gpuUs < 0.0f) {
+                continue;
+            }
+            others++;
+            otherMs += (double)p[i].gpuUs / 1e3;
+            if (rd_perf_pass_agg_mean(a, &p[i], &m)) {
+                otherMean += m;
+            }
+        }
+        if (a->replays != 0 && rd_perf_pass_agg_mean(a, &p[first], &m)) {
+            snprintf(fm, sizeof(fm), "the block's %.1f: ", m);
+        }
+        if (a->replays != 0) {
+            snprintf(om, sizeof(om), " (the block's %.1f)", otherMean);
+        }
+        ADD("the first pass %.1f ms (%sit waits for the display's image)",
+            (double)p[first].gpuUs / 1e3, fm);
+        if (others) {
+            ADD(", the other %u timed passes %.1f ms%s", others, otherMs, om);
+        }
+        ADD("; ");
+    }
     /* the most expensive pieces, each with the block's mean of one like it */
     bool used[RD_PERF_PASS_MAX];
     memset(used, 0, sizeof(used));

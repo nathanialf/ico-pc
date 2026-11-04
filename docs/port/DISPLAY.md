@@ -519,6 +519,7 @@ platforms. How the lines tell the stall's causes apart, from one log:
 | busy during | high | high | any | low | low to moderate |
 | resets | none | none | one more per stall | none | none |
 | the stalled replay's passes | all about 3x | one or a few grown | one by hundreds of ms | mildly, alike | mildly |
+| the stalled replay's first pass against the others (`the first pass X ms (the block's Y: it waits for the display's image), the other N timed passes Z ms`) | the others grown too | the others grown in places | one later pass grown by hundreds of ms | the first pass grown alone: the display held the image | the first pass grown alone |
 | the GPU idle before the next replay | small | small | large | about the stall | about the stall |
 | the present's split | the call holds it | the call holds it | the call holds it | the call, lock and poll near 0 | the call holds it |
 | `[dev] render_thread` / `submit_thread` = off | unchanged | unchanged | unchanged | the stall's length or period changes | unchanged |

@@ -956,9 +956,10 @@ static void checkPassTexts(void)
     q[4].gpuUs = -1.0f;
     rd_perf_pass_agg_reset(&agg);
     rd_perf_pass_grow_text(&agg, q, 5, 7, 60.0, 1, 30.0, -1.0, 1, buf, sizeof(buf));
-    CHECK(strcmp(buf, "stalled replay 7 (present 60 ms, GPU 30.0 ms, the block's first): list 0 "
-                      "SCENE 848x448 12.4 ms; no timed replay in the block before it to "
-                      "compare") == 0,
+    CHECK(strcmp(buf, "stalled replay 7 (present 60 ms, GPU 30.0 ms, the block's first): the "
+                      "first pass 12.4 ms (it waits for the display's image), the other 3 timed "
+                      "passes 1.9 ms; list 0 SCENE 848x448 12.4 ms; no timed replay in the block "
+                      "before it to compare") == 0,
           "stalled replay, empty block: %s", buf);
     rd_perf_pass_agg_add(&agg, b, 3);
     rd_perf_pass_agg_add(&agg, b, 3);
@@ -966,18 +967,25 @@ static void checkPassTexts(void)
     CHECK(rd_perf_pass_agg_mean(&agg, &b[0], &mean) && mean == 4.0, "block mean: %f", mean);
     CHECK(!rd_perf_pass_agg_mean(&agg, &q[3], &mean), "a piece new to the block has no mean");
     rd_perf_pass_grow_text(&agg, q, 5, 2941, 352.0, 1, 71.3, 27.0, 3, buf, sizeof(buf));
-    CHECK(strcmp(buf, "stalled replay 2941 (present 352 ms, GPU 71.3 ms against the block's 27.0): "
-                      "list 0 SCENE 848x448 12.4 ms (the block's 4.0), glow WORK1 256x128 1.3 ms "
-                      "(the block's 1.0), list 2 WORK0 64x64 0.5 ms (new to the block); 1 of 2 "
-                      "passes over 2x their block mean, the rest within 1.3x; 1 under 0.05 ms "
-                      "left out; 1 new to the block; 1 not timed (2 timed replays in the block so "
-                      "far)") == 0,
-          "stalled replay: %s", buf);
+    CHECK(
+        strcmp(
+            buf,
+            "stalled replay 2941 (present 352 ms, GPU 71.3 ms against the block's 27.0): "
+            "the first pass 12.4 ms (the block's 4.0: it waits for the display's "
+            "image), the other 3 timed passes 1.9 ms (the block's 1.0); list 0 SCENE 848x448 12.4 ms (the block's 4.0), glow WORK1 256x128 1.3 ms "
+            "(the block's 1.0), list 2 WORK0 64x64 0.5 ms (new to the block); 1 of 2 "
+            "passes over 2x their block mean, the rest within 1.3x; 1 under 0.05 ms "
+            "left out; 1 new to the block; 1 not timed (2 timed replays in the block so "
+            "far)") == 0,
+        "stalled replay: %s", buf);
     rd_perf_pass_grow_text(&agg, q, 1, 2941, 352.0, 0, 0.0, 27.0, 1, buf, sizeof(buf));
-    CHECK(strcmp(buf, "stalled replay 2941 (present 352 ms, GPU not timed): list 0 SCENE 848x448 "
-                      "12.4 ms (the block's 4.0); 1 of 1 passes over 2x their block mean (2 timed "
-                      "replays in the block so far)") == 0,
-          "stalled replay, every piece over: %s", buf);
+    CHECK(
+        strcmp(buf,
+               "stalled replay 2941 (present 352 ms, GPU not timed): the first pass 12.4 "
+               "ms (the block's 4.0: it waits for the display's image); list 0 SCENE "
+               "848x448 12.4 ms (the block's 4.0); 1 of 1 passes over 2x their block mean (2 timed "
+               "replays in the block so far)") == 0,
+        "stalled replay, every piece over: %s", buf);
     memset(small, 'x', sizeof(small));
     const int g = rd_perf_pass_grow_text(&agg, q, 5, 2941, 352.0, 1, 71.3, 27.0, 3, small, 20);
     CHECK(g == 19 && small[19] == '\0' && small[20] == 'x', "stalled replay cut: %d", g);
