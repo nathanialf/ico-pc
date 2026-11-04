@@ -6,6 +6,7 @@
 - The glow around bright light is drawn with one full-screen step less, so it takes less of the graphics chip's time, most of all on phones; the picture is the same.
 - Options > Graphics driver shows each driver's name and version, refuses a driver package built for the wrong memory page size, and goes back to the phone's own driver when the graphics stop responding in the first 30 seconds with a driver you added.
 - Phones with a Qualcomm graphics driver prepare their graphics again at the next start where an earlier start had to stop for lack of memory, when the game's saved graphics file is there and the driver accepts it; if that start has to stop too, later starts prepare the graphics as they are needed, as before.
+- Options > Gameplay > Shadows attack together: several shadows may attack at the same time instead of taking turns. Off unless you turn it on.
 
 ## Fixed
 

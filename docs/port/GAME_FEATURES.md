@@ -54,6 +54,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | --- | --- |
 | `[gameplay] stick_fix` | `port/input/pad_host.c` |
 | `[gameplay] yorda_safe` | `ebrain.c`, `enemy_act.c`, `backStage.c` |
+| `[gameplay] shadows_together` | `enemy_act.c` (`EnemyUtil_isOtherStatus`, through `ico_opt_shadow_waits`) |
 | `[gameplay] door_fix` | `door_grace.c`, from `boyact.c` |
 | `[gameplay] yorda_trips` | `yorda_trip_live.c`, from `icoMisc.c` and `girl_act.c` |
 | `[gameplay] natural_chains` | `BgAnimation.c` (window build) |
@@ -191,6 +192,53 @@ tripped at stage S after 3 s of running (trip N this run)`.
 `port/game/test/yorda_trip_test.c` runs the rule, the guards and the stage load on each disc;
 `yorda_trip_disc_test.c` lists the motions and their pack on the configured disc image
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
+
+### Shadows attack together
+
+The shadows take turns in the original game, and the rule is one function,
+`EnemyUtil_isOtherStatus` (`ico2/fumi/src/enemy_act.c`): it scans every object of kind 4 (the
+enemies) but the asking one and returns the first that is in act mode 15 (`ACTCheckFlagAttack`
+in `commonact.c`: the attack, entered by `actEnemyAttack`) or has its attack-mail flag set (the
+flag `enemyDodgeSendMail` raises as it mails the attack: the mail numbers are the ones
+`actEnemyAttack` sends on a follow-up, 0xCD on pal/jpn/kor/cn, 189 ntsc, 186 aug6, 183 jun26).
+Its eleven callers hold the asking shadow back while that is non-zero:
+
+- `subEnemyBrain_ToBoy` (and `_ntsc`, `_aug6jun26`), three arms each: after the approach and the
+  wait at the battle ring (`Battle_isCurrentStatus`), the change to the ATTACK brain
+  (`ChangeBrain_ToAttack`) only when no other shadow attacks; one arm also asks to be the
+  shadow nearest Ico (`isNearestEnemyToBoy`), which the option keeps;
+- `enemyDodgeSendMail` (and `_jun26`): the attack mails of the ATTACK brain
+  (`subEnemyBrain_Attack`, its first sixth of a second and, but on the June 2001 demo, its next
+  half second) and of the strike a shadow on its way to Yorda makes when Ico, close by, turns to
+  face it (`enemy_dodge`: a shadow whose enemy flags' bit 1 is clear, within 200 units on
+  pal/jpn/kor/cn, and on ntsc/aug6/jun26 only one not of size class 0; the others dodge there,
+  which no turn limits), only when no other shadow attacks.
+
+So one shadow attacks at a time; the rest wait at their ring and try again each frame. Nothing
+else limits them: the enemy brain (`ico2/omori/src/ebrain.c`) sends up to 31 shadows after Ico and
+up to 31 after Yorda at once (`eBrainGetTarget`'s `<= 31`), and the per-disc enemy tables
+(`ico2/sugipon/src/enemyKind.c`: life, scale, fly type, battle type) and the start records'
+attack chances carry no turn value. Yorda has one carrier (`carrier` in her act record, the
+brain's `girlHolder`): when one shadow holds her, the others chasing her become its bodyguards
+(brain status 5, `BODYGUARD`). That is physical, not a turn, and the option leaves it alone.
+
+`[gameplay] shadows_together` puts one check after the scan: `EnemyUtil_isOtherStatus` is the
+game's scan under the name `EnemyUtil_isOtherStatus_disc`, and the function the callers keep
+calling returns its result only when `ico_opt_shadow_waits(other != 0)` says the shadow waits
+(`port/game/options.c`): off, whenever another attacks (the game's value); on, never. The approach,
+the ring, the wait, the attack chances (`attackChance`, `attackChance2`), the dodges, the nearest
+rule, the kidnap and the escort are the game's. The value is read at each check, so a change acts
+at once. `gameplay.shadows_together` is a simulation key (`port/platform/sim_keys.c`, default
+`false`): a state saved before the key existed loads while the option is off.
+
+Log lines: `gameplay: shadows attack together: 1 at once (the game's turns)` or `...: all at once
+(no turns)` at the first read and on a change; with the option on, each turn it skipped (a shadow
+that the game would have held back), the first 8 then every 100th: `gameplay: shadows attack
+together: a shadow did not wait for another's attack (N this run)`.
+
+`port/game/test/options_test.c` (`test_shadows_together`) runs the answer off and on, its count
+and log lines, and scans `enemy_act.c` for the eleven callers and the hook; `settings_extra`
+(`testShadowsTogether`) the row.
 
 ### Natural chains
 
@@ -384,6 +432,7 @@ hold the rest.
 | Gameplay: stick fix, Yorda, door fix, natural chains | W | W | W | W | W | W | W | the hooks sit in every disc's arm (`backStage.c`, `ebrain.c`, `enemy_act.c`, `boyact.c` `CheckCollisionAttr_ntscaug6jun26`, `BgAnimation.c` `bga_CalcAnimation_<disc>`); `options_<slug>` |
 | Gameplay: Time to rescue Yorda | W | W | W | W | W | W | W | one hook in each `actEnemyKidnapEnd` copy (`enemy_act.c`: motion 952 on pal/jpn/kor/cn, 903 ntsc, 905 aug6, 938 jun26): the dive's play speed is reserved at priority 0 as `1/factor` (`2/factor` under a stage camera effect, which the demo has none of) and the camera's 5 s timeout is scaled by the factor; the frame-50 test, the dissolve and the freeze (priority 9) are the game's; `options_<slug>` (the hook scan), `settings_discs` |
 | Gameplay: Shadow speed | W | W | W | W | W | W | W | `ACTGame_SetMotionPlaySpeedRatio_Exec` (`act-game.c`, one copy for every disc) multiplies the resolved play-speed ratio of a `kind == 4` actor by the factor (0.75, 1, 1.25, 1.5), except the freeze (ratio <= 0.001) and this disc's kidnap-end motion (the pit dive, `pit_time`'s); walking and running are root motion, so the ground speed scales in step; the forward push of `flyCoreLoop` and its two per-disc copies (`commonact.c`) is multiplied for `kind == 4`; brain and wait timers, turn smoothing and path finding are untouched; log `gameplay: shadow speed <name> (x<factor>)`; `options_<slug>` (the source scan), `settings` |
+| Gameplay: Shadows attack together | W | W | W | W | W | W | W | `EnemyUtil_isOtherStatus` (`enemy_act.c`), one copy for every disc with the June 2001 demo's own scan (`EnemyUtil_isOtherStatus_jun26`: the attack-mail flag is `flags18` bit 62 there, `flags20` bit 10, 1 or 0 on pal/jpn/kor/cn, ntsc, aug6); the eleven callers are the same on every disc (`subEnemyBrain_ToBoy` and its two copies, both `enemyDodgeSendMail` copies); `options_<slug>` (the hook scan), `settings_discs` |
 | Gameplay: Yorda trips | W | W | W | W | W | K | W | each `actGirlHand` copy's run-pulled tick with the disc's mail (109 on pal/jpn/kor/cn, 102 ntsc, 101 aug6, 100 jun26) and both `InitIcoMisc` copies; the motions found by name; the June 2001 demo's `DATA.DF` holds no pack with her fall, so nothing is added and she never trips there (logged); `options_<slug>` (the hook scan), `yorda_trip_<slug>`, `settings_discs` |
 | Gameplay: Skip the opening | W | W | W | W | W | W | W | `kanbanBootMain`/`_jun26`, `actOpDemo01`/`_ntsc`/`_aug6jun26`; `kanban_boot_<slug>`, `settings_extra_<slug>` |
 | Gameplay: Second memory card | W | W | W | W | W | W | W | no game hook: port 1's folder (`ico_host_saves2_dir`, `memcard2-preview` on the preview); every disc's `_la_memory_card_check` (and `_jun26`) reads both ports when a save or load screen opens; `save_<slug>`, `settings_discs_<slug>` |

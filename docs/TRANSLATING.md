@@ -117,6 +117,10 @@ can go missing.
   letter is two bytes): `NULL`, and the translator is asked for a shorter one. A row's words are
   held to 255 bytes the same way, a message to 383.
 - The `%` codes are the English row's, in the same order (ctest `strings_complete`).
+- A row the port gains after a translation came in (Options > Gameplay > Shadows attack together,
+  for one) is `NULL` in that translation's table, with the comment `newer than the CSV: English`,
+  and shows in English until the translator sends its words; the eight languages of the program's
+  own text get it with the row.
 - Every character has a glyph (ctests `font_audit`, `font_coverage`).
 - The subtitles: one or two lines of at most 50 characters, the CSV's records and second-play rows
   (the new `subtitles_*` ctest).
